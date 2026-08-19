@@ -1,0 +1,68 @@
+# Azimuth Worker — wrangler config. Mirrors the LIVE bindings (read from Cloudflare 19 Aug 2026).
+# Default (top-level) env = meeting-capture (Kendall). Named env `azimuth2` = the second user.
+# Deploy:  wrangler deploy            (meeting-capture)
+#          wrangler deploy --env azimuth2   (azimuth-2)
+#
+# SECRETS ARE NOT IN THIS FILE. They already exist on both live workers and wrangler PRESERVES
+# secrets across `wrangler deploy` (they are managed separately via `wrangler secret put`).
+# See MIGRATION.md for the secret inventory and the verify-don't-reset rule.
+
+name = "meeting-capture"
+main = "src/index.js"
+compatibility_date = "2026-06-29"
+account_id = "76bc08573538d7426fce444cf7ef7645"
+workers_dev = true
+
+kv_namespaces = [
+  { binding = "MEETINGS", id = "6c0ee59206f748f78f3d5572b539f9d8" }
+]
+
+ai = { binding = "AI" }
+
+services = [
+  { binding = "AZIMUTH_2", service = "azimuth-2" }
+]
+
+[vars]
+CAPTURED_URL = "https://meeting-capture.digitalchemy.workers.dev/?key=daRadar_rd_4Tn8pB3z"
+MS_CLIENT_ID = "d5f8e208-64ef-4dae-be40-f44137a5e051"
+MS_TENANT_ID = "0d6748c6-97d7-44f0-b920-7a9db8925d4f"
+WA_ALLOWED = "971562276093"
+WA_PHONE_ID = "1178276628713333"
+WA_ROUTE_971565484397 = "AZIMUTH_2"
+
+[triggers]
+crons = ["*/5 3-18 * * *"]
+
+# secrets on meeting-capture (set already; DO NOT re-enter unless a fresh worker):
+#   ANTHROPIC_API_KEY CF_RENDER_TOKEN GH_PAT INGEST_TOKEN MISTRAL_API_KEY MS_CLIENT_SECRET
+#   READ_KEY TELEGRAM_CHAT_ID TELEGRAM_TOKEN WA_APP_SECRET WA_FORWARD_TOKEN WA_VERIFY_TOKEN
+#   WEBHOOK_SECRET WHATSAPP_TOKEN
+
+# ──────────────────────────────────────────────────────────────────────────────
+# azimuth-2 (second user) — named environment. Redeclare everything (wrangler
+# named envs do NOT inherit top-level bindings/vars).
+[env.azimuth2]
+name = "azimuth-2"
+compatibility_date = "2026-08-16"
+account_id = "76bc08573538d7426fce444cf7ef7645"
+workers_dev = true
+
+kv_namespaces = [
+  { binding = "MEETINGS", id = "2cdf36a27f834b5f9c726294d36770fb" }
+]
+
+ai = { binding = "AI" }
+
+[env.azimuth2.vars]
+ADD_TO = ""
+BOARD_BG = "off"
+MAILBOXES = ""
+WA_ALLOWED = "971565484397"
+
+[env.azimuth2.triggers]
+crons = ["0,30 3-18 * * *"]
+
+# secrets on azimuth-2 (set already; note WA_PHONE_ID is a SECRET here, not a var):
+#   ANTHROPIC_API_KEY INGEST_TOKEN READ_KEY WA_FORWARD_TOKEN WA_PHONE_ID
+#   WA_VERIFY_TOKEN WEBHOOK_SECRET WHATSAPP_TOKEN
