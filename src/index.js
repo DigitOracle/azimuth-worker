@@ -1771,6 +1771,35 @@ export default {
       }
       if (url.searchParams.get("scan") === env.READ_KEY) { const mins = parseInt(url.searchParams.get("mins") || "45", 10) || 45; let n = 0; try { const tok = await msToken(env); const _r = await scanEmails(env, tok, mins, 40); n = _r.sent; } catch (e) { return new Response("scan error: " + (e && e.message ? e.message : String(e)), { status: 500 }); } return new Response("scan complete — alerts sent this run: " + n); }
       if (url.pathname === "/scan_sent" && url.searchParams.get("key") === env.READ_KEY) { const mins = parseInt(url.searchParams.get("mins") || "1440", 10) || 1440; try { const tok = await msToken(env); const _r = await scanSent(env, tok, { sinceMin: mins, cap: 60 }); return new Response(JSON.stringify(_r), { headers: { "Content-Type": "application/json" } }); } catch (e) { return new Response("scan_sent error: " + (e && e.message ? e.message : String(e)), { status: 500 }); } }
+      if (url.pathname === "/li_connect") {                    // v36.6 — start LinkedIn OAuth (free native posting; token ~60 days)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!env.LI_CLIENT_ID) return new Response("LinkedIn app not configured yet", { status: 503 });
+        const st = rid();
+        await env.MEETINGS.put("li_state_" + st, "1", { expirationTtl: 600 });
+        const auth = "https://www.linkedin.com/oauth/v2/authorization?response_type=code" +
+          "&client_id=" + encodeURIComponent(env.LI_CLIENT_ID) +
+          "&redirect_uri=" + encodeURIComponent(url.origin + "/li_callback") +
+          "&state=" + st + "&scope=" + encodeURIComponent("openid profile w_member_social");
+        return Response.redirect(auth, 302);
+      }
+      if (url.pathname === "/li_callback") {                   // v36.6 — LinkedIn OAuth return: exchange code, store member token
+        const st = url.searchParams.get("state") || "";
+        if (!(await env.MEETINGS.get("li_state_" + st))) return new Response("state mismatch — start again from the connect link", { status: 400 });
+        await env.MEETINGS.delete("li_state_" + st);
+        const code = url.searchParams.get("code");
+        if (!code) return new Response("LinkedIn declined: " + (url.searchParams.get("error_description") || url.searchParams.get("error") || "no code"), { status: 400 });
+        const tr = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: url.origin + "/li_callback", client_id: env.LI_CLIENT_ID, client_secret: env.LI_CLIENT_SECRET }),
+        });
+        const tj = await tr.json();
+        if (!tj.access_token) return new Response("token exchange failed: " + JSON.stringify(tj).slice(0, 200), { status: 502 });
+        const ui = await (await fetch("https://api.linkedin.com/v2/userinfo", { headers: { Authorization: "Bearer " + tj.access_token } })).json();
+        if (!ui.sub) return new Response("could not read the LinkedIn profile id", { status: 502 });
+        await env.MEETINGS.put("li_auth", JSON.stringify({ token: tj.access_token, sub: ui.sub, name: ui.name || "", expiresAt: Date.now() + (tj.expires_in ? (tj.expires_in - 86400) * 1000 : 59 * 86400000) }));
+        try { await waSend(env, env.WA_ALLOWED, "🔗 LinkedIn connected" + (ui.name ? " as " + ui.name : "") + " — one-tap posting is live for ~2 months."); } catch (e) {}
+        return new Response('<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem;text-align:center"><h2 style="color:#C5A56A">Connected ✓</h2><p>LinkedIn posting is live. You can close this and go back to WhatsApp.</p>', { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
       if (url.pathname === "/brief_test") {                    // v36.3 — force the Sunday brief + content buttons now (live demo / recovery)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         try { await marketBriefTick(env, true); } catch (e) { return new Response("brief error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
@@ -2323,31 +2352,48 @@ async function draftFromAngle(env, to, kind, n) {
   }
 }
 
-// v36.5 — publish the stored LinkedIn draft via Ayrshare. Fires ONLY from Naj's explicit
-// button tap; without AYRSHARE_KEY it explains what's missing instead of failing.
+// v36.6 — publish the stored LinkedIn draft DIRECTLY via LinkedIn's own free API.
+// Fires ONLY from Naj's explicit button tap. Auth: the worker runs its own OAuth flow
+// (/li_connect -> LinkedIn consent -> /li_callback stores the member token in KV, ~60 days).
+// No third-party posting service, no subscription.
+const LI_ORIGIN = (env2) => "https://azimuth-2.digitalchemy.workers.dev";
 async function publishDraft(env, to) {
   const draft = await env.MEETINGS.get("mkt_lastdraft_li");
   if (!draft) { await waSend(env, to, "That draft expired — ask for a fresh one (“draft linkedin 1”)."); return; }
-  if (!env.AYRSHARE_KEY) {
-    await waSend(env, to, "🔌 Direct posting isn't connected yet — it needs the Ayrshare link-up (a one-time setup on DigitAlchemy's side, then your LinkedIn connected once). Until then: copy the draft above and paste it into LinkedIn — 20 seconds. I'll tell you the moment one-tap posting is live.");
+  if (!env.LI_CLIENT_ID || !env.LI_CLIENT_SECRET) {
+    await waSend(env, to, "🔌 Direct posting isn't switched on yet — a free one-time setup on DigitAlchemy's side. Until then: copy the draft above and paste it into LinkedIn — 20 seconds. You'll get a “connect LinkedIn” link here the moment it's ready.");
+    return;
+  }
+  let auth = null; try { auth = JSON.parse((await env.MEETINGS.get("li_auth")) || "null"); } catch (e) {}
+  if (!auth || !auth.token || (auth.expiresAt && Date.now() > auth.expiresAt)) {
+    await waSend(env, to, "🔗 LinkedIn needs a (re)connect — it's one tap and a sign-in, then posting works for ~2 months:\n" + LI_ORIGIN(env) + "/li_connect?key=" + env.READ_KEY + "\n\nYour draft is saved; tap Post again after connecting.");
     return;
   }
   try {
-    const r = await fetch("https://api.ayrshare.com/api/post", {
+    const r = await fetch("https://api.linkedin.com/v2/ugcPosts", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + env.AYRSHARE_KEY },
-      body: JSON.stringify({ post: draft, platforms: ["linkedin"] }),
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + auth.token, "X-Restli-Protocol-Version": "2.0.0" },
+      body: JSON.stringify({
+        author: "urn:li:person:" + auth.sub,
+        lifecycleState: "PUBLISHED",
+        specificContent: { "com.linkedin.ugc.ShareContent": { shareCommentary: { text: draft }, shareMediaCategory: "NONE" } },
+        visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
+      }),
     });
-    const j = await r.json();
-    if (r.ok && j && (j.status === "success" || (j.postIds && j.postIds.length))) {
+    if (r.status === 401) {
+      await waSend(env, to, "🔗 LinkedIn signed the connection out — reconnect (one tap + sign-in):\n" + LI_ORIGIN(env) + "/li_connect?key=" + env.READ_KEY + "\n\nYour draft is saved; tap Post again after.");
+      return;
+    }
+    if (r.ok || r.status === 201) {
+      const pid = r.headers.get("x-restli-id") || "";
       await env.MEETINGS.delete("mkt_lastdraft_li");
-      const link = (j.postIds && j.postIds[0] && (j.postIds[0].postUrl || j.postIds[0].id)) || "";
-      await waSend(env, to, "🚀 Posted to LinkedIn." + (link ? "\n" + link : ""));
+      await waSend(env, to, "🚀 Posted to LinkedIn." + (pid ? "\nhttps://www.linkedin.com/feed/update/" + pid : ""));
     } else {
-      await waSend(env, to, "⚠ LinkedIn didn't accept the post — " + ((j && (j.message || (j.errors && JSON.stringify(j.errors).slice(0, 140)))) || ("status " + r.status)) + ". The draft is still saved; try again in a minute.");
+      let msg = ""; try { const j = await r.json(); msg = (j && j.message) || ""; } catch (e) {}
+      await waSend(env, to, "⚠ LinkedIn didn't accept the post — " + (msg || ("status " + r.status)) + ". The draft is still saved; try again in a minute.");
     }
   } catch (e) {
-    await waSend(env, to, "⚠ Couldn't reach the posting service — the draft is still saved; try again in a minute.");
+    await waSend(env, to, "⚠ Couldn't reach LinkedIn — the draft is still saved; try again in a minute.");
   }
 }
 
