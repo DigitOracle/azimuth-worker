@@ -2093,7 +2093,8 @@ function renderMarket(latestRaw, prevRaw) {
 async function marketBriefTick(env) {
   if ((env.MARKET_BRIEF || "") !== "on") return;                                   // opt-in per instance
   const n = gstNow();
-  if (n.getUTCDay() !== 0 || n.getUTCHours() !== 9 || n.getUTCMinutes() >= 30) return;   // Sunday ~09:00 GST
+  if (n.getUTCHours() !== 9 || n.getUTCMinutes() >= 30) return;                    // daily check ~09:00 GST
+  const isSunday = n.getUTCDay() === 0;                                            // Sunday = full roundup regardless
   const bk = "mktbrief_" + gstDateStr(n);
   if (await env.MEETINGS.get(bk)) return;
   await env.MEETINGS.put(bk, "1", { expirationTtl: 3 * 86400 });
@@ -2101,14 +2102,35 @@ async function marketBriefTick(env) {
   if (!raw) return;
   let d; try { d = JSON.parse(raw); } catch (e) { return; }
   const ageDays = (Date.now() - Date.parse(d.generatedAt || 0)) / 86400000;
-  if (!(ageDays < 4)) { try { await waSend(env, env.WA_ALLOWED, "Market brief skipped this week — the data feed is " + Math.round(ageDays) + " days old and I will not brief from stale numbers. The collector needs attention."); } catch (e) {} return; }
+  if (!(ageDays < 4)) { if (isSunday) { try { await waSend(env, env.WA_ALLOWED, "Market brief skipped this week — the data feed is " + Math.round(ageDays) + " days old and I will not brief from stale numbers. The collector needs attention."); } catch (e) {} } return; }
   const m = d.meed || {};
-  const sys = "You draft a weekly WhatsApp market brief for a Dubai real-estate professional who makes short advisory videos. Plain English, construction-literate, no hype, at most one emoji. Use ONLY the figures provided — never invent, extrapolate or round beyond one decimal. Structure: THREE candidate story angles ranked by how unusual the movement is, each with its exact figure and a one-line source tag; then one line per angle on what it means for a buyer; then a final WHAT NOT TO CLAIM line reminding that this is project-supply data (MEED corpus), not sales transactions — no price, rent or yield claims from it. Under 280 words. Plain text.";
-  const user = JSON.stringify({ generatedAt: d.generatedAt, source: m.source, corpusVersion: m.corpusVersion, country: m.country, byStage: m.byStage, recentBigUpdates: m.recentBigUpdates, largestUnderConstruction: (m.largestUnderConstruction || []).slice(0, 5), gccTotals: m.gcc && m.gcc.totals, byCountry: m.gcc && m.gcc.byCountry });
+  // ── event gate: weekdays speak ONLY when something moved ──
+  if (!isSunday) {
+    let moved = [];
+    try {
+      const prawv = await env.MEETINGS.get("mkt_prev");
+      const pd = prawv ? JSON.parse(prawv) : null;
+      const ps = {}; if (pd && pd.meed && pd.meed.byStage) for (const s of pd.meed.byStage) ps[s.stage] = s;
+      for (const s of (m.byStage || [])) {
+        const pv = ps[s.stage];
+        if (pv && Math.abs(s.count - pv.count) >= 5) moved.push(`${s.stage}: ${pv.count} -> ${s.count}`);
+      }
+      const today = gstDateStr(n), yd = gstDateStr(new Date(n.getTime() - 86400000));
+      for (const r of (m.recentBigUpdates || [])) {
+        if ((r.valueUsdM || 0) >= 250 && (r.updated === today || r.updated === yd)) moved.push(`updated: ${r.title} (${r.valueUsdM}m, ${r.updated})`);
+      }
+    } catch (e) {}
+    if (!moved.length) return;                                                     // quiet day — say nothing
+    d._movement = moved.slice(0, 8);                                               // pass the triggers to the drafter
+  }
+  const sys = isSunday
+    ? "You draft a weekly WhatsApp market brief for a Dubai real-estate professional who makes short advisory videos. Plain English, construction-literate, no hype, at most one emoji. Use ONLY the figures provided — never invent, extrapolate or round beyond one decimal. Structure: THREE candidate story angles ranked by how unusual the movement is, each with its exact figure and a one-line source tag; then one line per angle on what it means for a buyer; then a final WHAT NOT TO CLAIM line reminding that this is project-supply data (MEED corpus), not sales transactions — no price, rent or yield claims from it. Under 280 words. Plain text."
+    : "You draft a SHORT same-day market alert for a Dubai real-estate professional. Something moved in the construction-supply data TODAY — the movement triggers are provided. ONE angle only: the single most story-worthy movement, its exact figure, one line on what it means for a buyer, one line on why today. Use ONLY the figures provided. End with: (Supply data, MEED corpus — not sales transactions.) Under 110 words. Plain text, at most one emoji.";
+  const user = JSON.stringify({ generatedAt: d.generatedAt, movementTriggers: d._movement || null, source: m.source, corpusVersion: m.corpusVersion, country: m.country, byStage: m.byStage, recentBigUpdates: m.recentBigUpdates, largestUnderConstruction: (m.largestUnderConstruction || []).slice(0, 5), gccTotals: m.gcc && m.gcc.totals, byCountry: m.gcc && m.gcc.byCountry });
   let brief = null;
   try { brief = await claudeText(env, sys, user, null, 900); } catch (e) {}
   if (!brief) return;
-  const head = "🏗️ Weekly Market Pulse — supply side (corpus v" + (m.corpusVersion || "?") + ", " + String(d.generatedAt || "").slice(0, 10) + ")\n\n";
+  const head = (isSunday ? "🏗️ Weekly Market Pulse — supply side" : "🏗️ Market movement — supply side") + " (corpus v" + (m.corpusVersion || "?") + ", " + String(d.generatedAt || "").slice(0, 10) + ")\n\n";
   try { await waSend(env, env.WA_ALLOWED, head + brief); } catch (e) {}
 }
 
