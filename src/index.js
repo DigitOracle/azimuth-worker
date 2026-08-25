@@ -517,7 +517,7 @@ h1{font-size:${n >= 4 ? 36 : 42}px;line-height:1.08;font-weight:800;margin:12px 
 </div></body></html>`;
 }
 function srcLink(a, key) { if (!a || !a.src || (a.src.type !== "email" && a.src.type !== "meeting-invite")) return ""; return '·<a class="src" target="_blank" rel="noopener" style="color:#B98B3E;text-decoration:none" href="/src?key=' + encodeURIComponent(key || "") + "&id=" + encodeURIComponent(a.id) + '">📧 source</a>'; }
-function renderBoard(meetings, actions, key, env) {
+function renderBoard(meetings, actions, key, env, mkt) {
   const gn = gstNow();
   const today = gstDateStr(gn);
   const tomo = gstDateStr(new Date(gn.getTime() + 86400000));
@@ -605,6 +605,16 @@ a.card{text-decoration:none;color:inherit;-webkit-tap-highlight-color:transparen
 <div class="brand"><div class="mark"><span class="glyph"><span></span><span></span></span>Azimuth</div><div class="today">${th.dow[0]+th.dow.slice(1).toLowerCase()} · ${th.dt}</div></div>
 ${pulse}
 <section><div class="sec"><h2>This week</h2><span class="rule"></span></div>${daysHtml}${nextLine}</section>
+${(() => {                                                      // v36.2 — Najma market strip (only when pulse data exists)
+    if (!mkt || !mkt.transactions) return "";
+    const t2 = mkt.transactions, r2 = mkt.rents || null;
+    const off2 = t2.offPlanSplit ? Math.round(100 * (t2.offPlanSplit["Off-Plan"] || 0) / (((t2.offPlanSplit["Off-Plan"] || 0) + (t2.offPlanSplit["Ready"] || 0)) || 1)) : null;
+    const y2 = r2 && r2.grossYieldPctByArea && r2.grossYieldPctByArea[0];
+    return '<section><a href="/market?key=' + encodeURIComponent(key) + '" style="display:block;text-decoration:none;color:inherit;background:#FFF;border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:var(--radius);padding:.8rem .95rem">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-weight:700;letter-spacing:.02em">Najma <span style="color:var(--gold)">نجمة</span> · market pulse</span><span style="color:var(--gold);font-weight:600;font-size:.8rem">open →</span></div>' +
+      '<div style="color:var(--muted);font-size:.8rem;margin-top:.25rem">AED ' + t2.salesValueAedBn + 'bn registered · ' + (off2 == null ? "" : off2 + "% off-plan") + (y2 ? " · top yield " + y2.area + " " + y2.yieldPct + "%" : "") + '</div>' +
+      '<div style="color:var(--muted);font-size:.68rem;margin-top:.15rem">DLD Open Data · ' + String(t2.periodFrom || "") + " → " + String(t2.periodTo || "") + '</div></a></section>';
+  })()}
 <section><div class="plate-h"><div class="l"><span class="n num">${acts.length}</span><span class="cap">on your plate</span></div><div class="hint">${(env && env.TELEGRAM_TOKEN) ? "clear in Telegram ✓" : "tap a circle to clear ✓"}</div></div>${tasksHtml}
 <div class="legend"><span><i style="background:#0A4F4A"></i>Abu Dhabi</span><span><i style="background:#B98B3E"></i>Dubai</span><span><i style="background:#7A4A93"></i>Sharjah</span><span><i style="background:#3E7C8C"></i>Online</span></div>
 <div class="foot">Live · ${(env && MB(env).length) ? "meetings from Outlook · actions from your inbox" : "captured from WhatsApp"} · ${upd} GST</div>
@@ -1710,7 +1720,8 @@ export default {
         try { meetings = meetings.concat(await capturedMeetings(env)); } catch (e) {}
         try { meetings = dedup(meetings); } catch (e) {}
         try { actions = await openActions(env); } catch (e) {}
-        return new Response(renderBoard(meetings, actions, url.searchParams.get("key"), env), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        let mkt = null; try { mkt = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+        return new Response(renderBoard(meetings, actions, url.searchParams.get("key"), env, mkt), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/card.png") {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
