@@ -1869,6 +1869,8 @@ export default {
           }
           else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + env.READ_KEY); }
           else if (/^mkt:(pod|li|ig):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); }
+          else if (bid === "mkt:post:li") { await publishDraft(env, from); }
+          else if (bid === "mkt:discard") { await env.MEETINGS.delete("mkt_lastdraft_li"); await waSend(env, from, "✖️ Dropped. Ask for another angle any time — “draft linkedin 2”."); }
           else if (bid.indexOf("pno:") === 0) { await env.MEETINGS.delete("pimg_" + bid.slice(4)); await waSend(env, from, "OK — nothing filed."); }
           else if (bid.indexOf("pimg:") === 0) {
             const _p = JSON.parse((await env.MEETINGS.get("pimg_" + bid.slice(5))) || "null");
@@ -2285,7 +2287,7 @@ async function marketBriefTick(env, force) {
     try {
       await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief, data: user }), { expirationTtl: 8 * 86400 });
       await waSendButtons(env, env.WA_ALLOWED, "Turn an angle into content — or say e.g. “draft linkedin 3” for any angle:", [
-        { id: "mkt:pod:1", title: "🎙 Podcast — Angle 1" },
+        { id: "mkt:ig:1", title: "📸 Instagram — Angle 1" },
         { id: "mkt:li:2", title: "✍️ LinkedIn — Angle 2" },
         { id: "mkt:dash", title: "📊 Dashboard" }]);
     } catch (e) {}
@@ -2309,6 +2311,43 @@ async function draftFromAngle(env, to, kind, n) {
   try { out = await claudeText(env, sys, user2, null, 900); } catch (e) {}
   if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
   const label = kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram reel + caption" : "✍️ LinkedIn draft";
-  await waSend(env, to, label + " — Angle " + n + "\n\n" + out + "\n\n— a draft to make your own, not to post as-is.");
+  await waSend(env, to, label + " — Angle " + n + "\n\n" + out + (kind === "li" ? "" : "\n\n— a draft to make your own, not to post as-is."));
+  if (kind === "li") {                                                             // v36.5 — one-tap publish (LinkedIn is pure text; Instagram needs her recorded video first)
+    await env.MEETINGS.put("mkt_lastdraft_li", out, { expirationTtl: 2 * 86400 });
+    await waSendButtons(env, to, "Post it as-is, or tell me what to change and I'll redraft.", [
+      { id: "mkt:post:li", title: "🚀 Post to LinkedIn" },
+      { id: "mkt:discard", title: "✖️ Not this one" }]);
+  }
+  if (kind === "ig") {
+    await waSend(env, to, "🎬 Record the script (30-45s, phone vertical) — the caption above is ready to paste. One-tap reel posting switches on once video upload is connected.");
+  }
+}
+
+// v36.5 — publish the stored LinkedIn draft via Ayrshare. Fires ONLY from Naj's explicit
+// button tap; without AYRSHARE_KEY it explains what's missing instead of failing.
+async function publishDraft(env, to) {
+  const draft = await env.MEETINGS.get("mkt_lastdraft_li");
+  if (!draft) { await waSend(env, to, "That draft expired — ask for a fresh one (“draft linkedin 1”)."); return; }
+  if (!env.AYRSHARE_KEY) {
+    await waSend(env, to, "🔌 Direct posting isn't connected yet — it needs the Ayrshare link-up (a one-time setup on DigitAlchemy's side, then your LinkedIn connected once). Until then: copy the draft above and paste it into LinkedIn — 20 seconds. I'll tell you the moment one-tap posting is live.");
+    return;
+  }
+  try {
+    const r = await fetch("https://api.ayrshare.com/api/post", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + env.AYRSHARE_KEY },
+      body: JSON.stringify({ post: draft, platforms: ["linkedin"] }),
+    });
+    const j = await r.json();
+    if (r.ok && j && (j.status === "success" || (j.postIds && j.postIds.length))) {
+      await env.MEETINGS.delete("mkt_lastdraft_li");
+      const link = (j.postIds && j.postIds[0] && (j.postIds[0].postUrl || j.postIds[0].id)) || "";
+      await waSend(env, to, "🚀 Posted to LinkedIn." + (link ? "\n" + link : ""));
+    } else {
+      await waSend(env, to, "⚠ LinkedIn didn't accept the post — " + ((j && (j.message || (j.errors && JSON.stringify(j.errors).slice(0, 140)))) || ("status " + r.status)) + ". The draft is still saved; try again in a minute.");
+    }
+  } catch (e) {
+    await waSend(env, to, "⚠ Couldn't reach the posting service — the draft is still saved; try again in a minute.");
+  }
 }
 
