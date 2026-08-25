@@ -1950,6 +1950,29 @@ export default {
             if (gs.length) { await waSend(env, from, "Couldn't find a group matching “" + gm[1].trim() + "”. Say “list groups” to see the names I know."); return new Response("ok"); }
           }
         }
+        {                                                      // v36.1 — board / market / help intents (routed BEFORE question-recall, which
+          // can only answer from filed items and says so — the "I only do tasks" trap for new users)
+          if (/^(?:show\s+|open\s+|what(?:'|’| i)?s\s+on\s+)?(?:my\s+|the\s+)?(?:board|dashboard)\s*\??$/i.test(text)) {
+            await waSend(env, from, "🖥 Your board:" + NL10 + url.origin + "/board?key=" + env.READ_KEY + NL10 + NL10 + "Open it and use “Add to Home Screen” — it becomes an app icon and updates live as we talk.");
+            return new Response("ok");
+          }
+          if (/^(?:show\s+|open\s+)?(?:my\s+|the\s+)?(?:najma|market(?:\s+pulse)?|pulse)\s*\??$/i.test(text)) {
+            await waSend(env, from, "📈 Najma — your market pulse:" + NL10 + url.origin + "/market?key=" + env.READ_KEY + NL10 + NL10 + "Built from the official registers. Your weekly brief lands here every Sunday morning, and I'll flag same-day movements when something shifts.");
+            return new Response("ok");
+          }
+          if (/^(?:help|menu|commands|what\s+can\s+you\s+do|what\s+do\s+you\s+do|how\s+do(?:es)?\s+(?:i|you|this)\s+(?:use\s+)?(?:you|this|work))\s*\??$/i.test(text)) {
+            await waSend(env, from, "🧭 Here's what I can do:" + NL10 +
+              "📋 Tasks — just tell me (“call Sara tomorrow 3pm”)" + NL10 +
+              "🗓 Meetings — text or voice note, I file them with reminders" + NL10 +
+              "📷 Photos — flyers, invites, whiteboards; I read them and file what's in them" + NL10 +
+              "❓ Questions — ask about anything I've filed for you" + NL10 +
+              "🤝 “who owes me” · “what do I owe” · “status with <name>”" + NL10 +
+              "👀 “list groups” · “watch <name>” — what I listen to" + NL10 +
+              "🖥 “board” — your live board link" + NL10 +
+              "📈 “market” — your Najma market pulse");
+            return new Response("ok");
+          }
+        }
         { const cx = await waHandleCancel(env, from, text); if (cx !== null) { await waSend(env, from, cx); return new Response("ok"); } }
         if (isCalendarQuery(text)) { const ca = await calendarAnswer(env, text); if (ca) { await waSend(env, from, ca); return new Response("ok"); } }
         if (isQuestion(text)) { const rr = await recall(env, text); let out = "🧭 " + rr.answer; if (rr.sources && rr.sources.length) { out += NL10 + NL10 + "Sources:" + NL10 + rr.sources.map((s, i) => (i + 1) + ". " + ((s.subject || s.kind || "item") + (s.from ? " — " + s.from : ""))).join(NL10); } await waSend(env, from, out); return new Response("ok"); }
