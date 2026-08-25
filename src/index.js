@@ -1771,6 +1771,11 @@ export default {
       }
       if (url.searchParams.get("scan") === env.READ_KEY) { const mins = parseInt(url.searchParams.get("mins") || "45", 10) || 45; let n = 0; try { const tok = await msToken(env); const _r = await scanEmails(env, tok, mins, 40); n = _r.sent; } catch (e) { return new Response("scan error: " + (e && e.message ? e.message : String(e)), { status: 500 }); } return new Response("scan complete — alerts sent this run: " + n); }
       if (url.pathname === "/scan_sent" && url.searchParams.get("key") === env.READ_KEY) { const mins = parseInt(url.searchParams.get("mins") || "1440", 10) || 1440; try { const tok = await msToken(env); const _r = await scanSent(env, tok, { sinceMin: mins, cap: 60 }); return new Response(JSON.stringify(_r), { headers: { "Content-Type": "application/json" } }); } catch (e) { return new Response("scan_sent error: " + (e && e.message ? e.message : String(e)), { status: 500 }); } }
+      if (url.pathname === "/brief_test") {                    // v36.3 — force the Sunday brief + content buttons now (live demo / recovery)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        try { await marketBriefTick(env, true); } catch (e) { return new Response("brief error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
+        return new Response("brief fired — check WhatsApp");
+      }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _ml = await env.MEETINGS.get("mkt_latest");
@@ -1862,6 +1867,8 @@ export default {
             await waSend(env, from, _on ? ("👀 Watching “" + _gr.name + "”. Commitments and meetings from it will land on your ledger. Reply “stop watching " + _gr.name + "” anytime.")
                                         : ("🙈 Ignoring “" + _gr.name + "”. Azimuth won't read it. If you change your mind, tell me “watch " + _gr.name + "”."));
           }
+          else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + env.READ_KEY); }
+          else if (/^mkt:(pod|li):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); }
           else if (bid.indexOf("pno:") === 0) { await env.MEETINGS.delete("pimg_" + bid.slice(4)); await waSend(env, from, "OK — nothing filed."); }
           else if (bid.indexOf("pimg:") === 0) {
             const _p = JSON.parse((await env.MEETINGS.get("pimg_" + bid.slice(5))) || "null");
@@ -1977,6 +1984,17 @@ export default {
             await waSend(env, from, "📈 Najma — your market pulse:" + NL10 + url.origin + "/market?key=" + env.READ_KEY + NL10 + NL10 + "Built from the official registers. Your weekly brief lands here every Sunday morning, and I'll flag same-day movements when something shifts.");
             return new Response("ok");
           }
+          const _dm = text.match(/^draft\s+(?:a\s+)?(podcast|video|script|linkedin|post)(?:\s+(?:script|post))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d))?\s*$/i);
+          if (_dm) {
+            const _kind = /podcast|video|script/i.test(_dm[1]) ? "pod" : "li";
+            await draftFromAngle(env, from, _kind, _dm[2] ? parseInt(_dm[2], 10) : 1);
+            return new Response("ok");
+          }
+          if (/^market\s+brief$/i.test(text)) {
+            await waSend(env, from, "🕐 Running your market brief now — give me a moment…");
+            try { await marketBriefTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the brief just now — try again shortly."); }
+            return new Response("ok");
+          }
           if (/^(?:help|menu|commands|what\s+can\s+you\s+do|what\s+do\s+you\s+do|how\s+do(?:es)?\s+(?:i|you|this)\s+(?:use\s+)?(?:you|this|work))\s*\??$/i.test(text)) {
             await waSend(env, from, "🧭 Here's what I can do:" + NL10 +
               "📋 Tasks — just tell me (“call Sara tomorrow 3pm”)" + NL10 +
@@ -1986,7 +2004,9 @@ export default {
               "🤝 “who owes me” · “what do I owe” · “status with <name>”" + NL10 +
               "👀 “list groups” · “watch <name>” — what I listen to" + NL10 +
               "🖥 “board” — your live board link" + NL10 +
-              "📈 “market” — your Najma market pulse");
+              "📈 “market” — your Najma market pulse" + NL10 +
+              "🕐 “market brief” — your weekly brief, on demand" + NL10 +
+              "🎙 “draft podcast 1” · ✍️ “draft linkedin 2” — content from an angle");
             return new Response("ok");
           }
         }
@@ -2210,14 +2230,16 @@ function renderMarket(latestRaw, prevRaw) {
     "Every source passes a fail-closed sanity gate; a failing source is quarantined, never averaged in. Refreshed " + esc2(String(d.generatedAt || "").slice(0, 16)) + "Z." +
     "</div></body></html>";
 }
-async function marketBriefTick(env) {
+async function marketBriefTick(env, force) {
   if ((env.MARKET_BRIEF || "") !== "on") return;                                   // opt-in per instance
   const n = gstNow();
-  if (n.getUTCHours() !== 9 || n.getUTCMinutes() >= 30) return;                    // daily check ~09:00 GST
-  const isSunday = n.getUTCDay() === 0;                                            // Sunday = full roundup regardless
-  const bk = "mktbrief_" + gstDateStr(n);
-  if (await env.MEETINGS.get(bk)) return;
-  await env.MEETINGS.put(bk, "1", { expirationTtl: 3 * 86400 });
+  if (!force && (n.getUTCHours() !== 9 || n.getUTCMinutes() >= 30)) return;        // daily check ~09:00 GST
+  const isSunday = force ? true : n.getUTCDay() === 0;                             // Sunday = full roundup; force = full roundup now
+  if (!force) {
+    const bk = "mktbrief_" + gstDateStr(n);
+    if (await env.MEETINGS.get(bk)) return;
+    await env.MEETINGS.put(bk, "1", { expirationTtl: 3 * 86400 });
+  }
   const raw = await env.MEETINGS.get("mkt_latest");
   if (!raw) return;
   let d; try { d = JSON.parse(raw); } catch (e) { return; }
@@ -2256,7 +2278,34 @@ async function marketBriefTick(env) {
   let brief = null;
   try { brief = await claudeText(env, sys, user, null, 900); } catch (e) {}
   if (!brief) return;
-  const head = (isSunday ? "🏗️ Weekly Market Pulse — supply side" : "🏗️ Market movement — supply side") + " (corpus v" + (m.corpusVersion || "?") + ", " + String(d.generatedAt || "").slice(0, 10) + ")\n\n";
+  const hasDld = !!d.transactions;
+  const head = (isSunday ? (hasDld ? "🕐 Najma weekly — the pulse is in" : "🏗️ Weekly Market Pulse — supply side") : "🏗️ Market movement — supply side") + " (" + String(d.generatedAt || "").slice(0, 10) + ")\n\n";
   try { await waSend(env, env.WA_ALLOWED, head + brief); } catch (e) {}
+  if (isSunday) {                                                                  // v36.3 — tap-to-draft: store the brief + its figures, offer content buttons
+    try {
+      await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief, data: user }), { expirationTtl: 8 * 86400 });
+      await waSendButtons(env, env.WA_ALLOWED, "Turn an angle into content — or say e.g. “draft linkedin 3” for any angle:", [
+        { id: "mkt:pod:1", title: "🎙 Podcast — Angle 1" },
+        { id: "mkt:li:2", title: "✍️ LinkedIn — Angle 2" },
+        { id: "mkt:dash", title: "📊 Dashboard" }]);
+    } catch (e) {}
+  }
+}
+
+// v36.3 — draft content from one angle of the stored weekly brief. The draft inherits the
+// brief's discipline: only the stored figures, every claim source-tagged. It is a DRAFT for
+// Naj to approve and record — never something that posts itself anywhere.
+async function draftFromAngle(env, to, kind, n) {
+  const raw = await env.MEETINGS.get("mkt_briefctx");
+  if (!raw) { await waSend(env, to, "No weekly brief on file yet — say “market brief” and I'll run one now."); return; }
+  let ctx; try { ctx = JSON.parse(raw); } catch (e) { return; }
+  const sys = kind === "pod"
+    ? "You write a 60-90 second to-camera video script for Najjuko ('Naj'), a Dubai property broker. Spoken, warm, plain English, construction-literate, no hype, no emojis, no stage directions, no greetings like 'hey guys'. Open with the chosen angle's hook in one sentence. Use ONLY figures from the provided brief and data; every figure carries its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'). One practical takeaway for a buyer to close. 140-210 words, plain text."
+    : "You write a LinkedIn post for Najjuko, a Dubai property broker. First line is the angle's hook — specific, no clickbait. Short paragraphs. Use ONLY figures from the provided brief and data; every figure carries its source and period. One practical buyer takeaway. End with one question inviting comments. At most 3 hashtags. Under 140 words, plain text.";
+  const user2 = "DRAFT FROM ANGLE " + n + " of this brief.\n\nTHE BRIEF:\n" + ctx.brief + "\n\nTHE FIGURES (the only numbers you may use):\n" + ctx.data;
+  let out = null;
+  try { out = await claudeText(env, sys, user2, null, 900); } catch (e) {}
+  if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
+  await waSend(env, to, (kind === "pod" ? "🎙 Podcast script — Angle " + n : "✍️ LinkedIn draft — Angle " + n) + "\n\n" + out + "\n\n— a draft to make your own, not to post as-is.");
 }
 
