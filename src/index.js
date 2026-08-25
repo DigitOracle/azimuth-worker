@@ -1774,10 +1774,16 @@ export default {
         const _mh = request.headers.get("X-Azimuth-Ingest");
         if (!env.INGEST_TOKEN || !_mh || !ctEq(_mh, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
         let _mb; try { _mb = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
-        if (!_mb || !_mb.generatedAt || !_mb.meed) return new Response("bad payload", { status: 400 });
-        try { const _old = await env.MEETINGS.get("mkt_latest"); if (_old) await env.MEETINGS.put("mkt_prev", _old); } catch (e) {}
-        await env.MEETINGS.put("mkt_latest", JSON.stringify(_mb));
-        return new Response(JSON.stringify({ ok: true, bytes: JSON.stringify(_mb).length }), { headers: { "Content-Type": "application/json" } });
+        if (!_mb || !_mb.generatedAt || !(_mb.meed || _mb.transactions)) return new Response("bad payload", { status: 400 });
+        // MERGE, don't replace: the daily MEED collector and the weekly Najma pulse feed
+        // different sections of one dashboard. `meed` deep-merges (corpus stats + development
+        // cards have disjoint keys); everything else merges at top level.
+        let _prev0 = null; try { _prev0 = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+        if (_prev0) { try { await env.MEETINGS.put("mkt_prev", JSON.stringify(_prev0)); } catch (e) {} }
+        const _merged = Object.assign({}, _prev0 || {}, _mb);
+        if (_prev0 && _prev0.meed && _mb.meed) _merged.meed = Object.assign({}, _prev0.meed, _mb.meed);
+        await env.MEETINGS.put("mkt_latest", JSON.stringify(_merged));
+        return new Response(JSON.stringify({ ok: true, bytes: JSON.stringify(_merged).length, sections: Object.keys(_merged).filter(k => typeof _merged[k] === "object") }), { headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/ingest") {                        // v30 — passive group-chat ingest (READ-ONLY, writes cmt_ only)
         const _ih = request.headers.get("X-Azimuth-Ingest");
@@ -2099,19 +2105,99 @@ function renderMarket(latestRaw, prevRaw) {
   const esc2 = (s) => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
   const stageRows = (m.byStage || []).map(s => {
     const pv = prevStage[s.stage]; let delta = "";
-    if (pv && pv.count !== s.count) { const df = s.count - pv.count; delta = ' <span style="color:' + (df > 0 ? "#7fd6a4" : "#e0a06a") + '">' + (df > 0 ? "▲" : "▼") + Math.abs(df) + "</span>"; }
+    if (pv && pv.count !== s.count) { const df = s.count - pv.count; delta = ' <span style="color:' + (df > 0 ? "#56B584" : "#D9A441") + '">' + (df > 0 ? "▲" : "▼") + Math.abs(df) + "</span>"; }
     return "<tr><td>" + esc2(s.stage) + delta + '</td><td style="text-align:right">' + s.count + '</td><td style="text-align:right">' + mkFmtM(s.valueUsdM) + "</td></tr>";
   }).join("");
   const projRows = (list) => (list || []).map(r => "<tr><td>" + esc2(r.title) + "</td><td>" + esc2(r.stage) + '</td><td style="text-align:right">' + mkFmtM(r.valueUsdM) + '</td><td style="text-align:right;white-space:nowrap">' + esc2(r.updated || "") + "</td></tr>").join("");
-  const ctyRows = ((m.gcc && m.gcc.byCountry) || []).map(c => "<tr><td>" + esc2(c.key) + '</td><td style="text-align:right">' + c.count + '</td><td style="text-align:right">' + mkFmtM(c.valueUsdM) + "</td></tr>").join("");
-  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Market Pulse</title><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto;background:#0a2223;color:#eee6d6;margin:auto;padding:1rem;max-width:720px}h1{font-size:1.25rem;letter-spacing:.14em;color:#cda86a;text-transform:uppercase;margin:.6rem 0 .1rem}h2{font-size:.8rem;letter-spacing:.22em;color:#cda86a;text-transform:uppercase;margin:1.4rem 0 .4rem;border-bottom:1px solid #1d4344;padding-bottom:.3rem}table{width:100%;border-collapse:collapse;font-size:.86rem}td{padding:.32rem .3rem;border-bottom:1px solid #12393a;vertical-align:top}.pv{font-size:.72rem;color:#8fa6a0}.warn{background:#4a1f16;color:#f0c9ac;padding:.5rem .7rem;border-radius:.5rem;font-size:.8rem;margin:.6rem 0}</style></head><body>' +
-    "<h1>Market Pulse</h1><div class=pv>" + esc2(m.country || "UAE") + " supply side · " + esc2(m.source || "") + "</div>" +
+
+  const t = d.transactions || null, rn = d.rents || null, mo = d.monthly || null, ho = d.handover || null;
+  const num2 = (v) => (v == null ? "—" : Number(v).toLocaleString("en-US"));
+  let body = "";
+
+  // ── THE PULSE — DLD registered sales ──
+  if (t) {
+    const offTot = (t.offPlanSplit && (t.offPlanSplit["Off-Plan"] || 0) + (t.offPlanSplit["Ready"] || 0)) || 0;
+    const offPct = offTot ? Math.round(100 * (t.offPlanSplit["Off-Plan"] || 0) / offTot) : null;
+    body += '<div class=hero><div class=hv>AED ' + esc2(t.salesValueAedBn) + '<small> billion</small></div><div class=hl>registered sales · ' + esc2(String(t.periodFrom || "")) + " → " + esc2(String(t.periodTo || "")) + ' · Dubai Land Department (DLD)</div></div>' +
+      '<div class=grid>' +
+      '<div class=st><div class=v>' + num2(t.salesCount) + '</div><div class=l>sales registered</div></div>' +
+      '<div class=st><div class=v>' + num2(t.medianResidentialAedSqft) + '<small>/sq ft</small></div><div class=l>median residential (AED)</div></div>' +
+      '<div class=st><div class=v>' + (t.medianTicketAed ? (t.medianTicketAed / 1e6).toFixed(2) + "m" : "—") + '</div><div class=l>median ticket (AED)</div></div>' +
+      '<div class=st><div class=v>' + (offPct == null ? "—" : offPct + "<small>%</small>") + '</div><div class=l>of sales are off-plan</div></div>' +
+      "</div>";
+    if (offPct != null) body += '<div class=card><h2>Off-plan vs ready</h2><div class=bar><i style="width:' + offPct + '%;background:#C5A56A"></i><i style="width:' + (100 - offPct) + '%;background:#3E8A7E"></i></div><div class=lg><span><b>' + num2(t.offPlanSplit["Off-Plan"]) + "</b> off-plan</span><span><b>" + num2(t.offPlanSplit["Ready"]) + "</b> ready</span></div></div>";
+    if (t.weekly && t.weekly.length) {
+      const mx = Math.max(...t.weekly.map(w => w.sales)) || 1;
+      body += '<div class=card><h2>Sales by week</h2><div class=spark>' + t.weekly.map((w, i) => '<div class=wk title="' + esc2(w.week) + ": " + num2(w.sales) + ' sales"><i style="height:' + Math.max(4, Math.round(64 * w.sales / mx)) + "px" + (i === t.weekly.length - 1 ? ";opacity:.45;border:1px dashed #3B584F;background:none" : (w.sales === mx ? ";background:#C5A56A" : "")) + '"></i><span>' + esc2(String(w.week).slice(-3)) + "</span></div>").join("") + '</div><div class=note>Newest bar is a part-week — registration lags the deal.</div></div>';
+    }
+    if (t.topAreas && t.topAreas.length) {
+      const amx = t.topAreas[0].sales || 1;
+      body += '<div class=card><h2>Where the market is trading</h2>' + t.topAreas.slice(0, 8).map(a => '<div class=arow><span class=nm>' + esc2(a.area) + '</span><span class=tr><i style="width:' + Math.round(100 * a.sales / amx) + '%"></i></span><span class=ct>' + num2(a.sales) + "</span></div>").join("") + "</div>";
+    }
+  }
+  if (mo && mo.series && mo.series.length) {
+    const vmx = Math.max(...mo.series.map(s => s.valueAedBn)) || 1;
+    body += '<div class=card><h2>The year so far — AED ' + esc2(mo.ytdValueAedBn) + "bn · " + num2(mo.ytdSales) + ' sales</h2><div class=spark>' + mo.series.map((s, i) => '<div class=wk title="' + esc2(s.month) + ": AED " + s.valueAedBn + 'bn"><i style="height:' + Math.max(4, Math.round(64 * s.valueAedBn / vmx)) + "px" + (i === mo.series.length - 1 ? ";opacity:.45;border:1px dashed #3B584F;background:none" : "") + '"></i><span>' + esc2(String(s.month).slice(5)) + "</span></div>").join("") + "</div></div>";
+  }
+
+  // ── RENTS & YIELDS — Ejari ──
+  if (rn) {
+    body += '<div class=card><h2>Rents &amp; gross yields · ' + num2(rn.contractsCount) + " contracts, " + esc2(String(rn.registrationTo || "")) + "</h2>" +
+      '<div class=grid style="margin-bottom:.5rem"><div class=st><div class=v>' + (rn.medianAnnualRentAed ? Math.round(rn.medianAnnualRentAed / 1000) + "k" : "—") + '</div><div class=l>median annual rent (AED)</div></div><div class=st><div class=v>' + esc2(rn.medianRentAedSqftYr || "—") + '<small>/sq ft/yr</small></div><div class=l>median residential (AED)</div></div></div>' +
+      ((rn.grossYieldPctByArea || []).slice(0, 6).map(y => { const ymx = rn.grossYieldPctByArea[0].yieldPct || 1; return '<div class=arow><span class=nm>' + esc2(y.area) + '</span><span class=tr><i style="width:' + Math.round(100 * y.yieldPct / ymx) + '%"></i></span><span class=ct>' + y.yieldPct + "%</span></div>"; }).join("")) +
+      '<div class=note>' + esc2(rn.yieldNote || "") + "</div></div>";
+  }
+
+  // ── HANDOVER RADAR ──
+  if (ho && ho.meedByQuarter) {
+    const qs = Object.entries(ho.meedByQuarter).slice(0, 5);
+    body += '<div class=card><h2>Handover radar</h2>' + qs.map(([q, e]) => '<div class=arow><span class=nm style="color:#C5A56A">' + esc2(q) + '</span><span style="flex:1;font-size:.82rem">' + e.packages + " package(s) · " + mkFmtM(e.valueUsdM) + "</span></div>").join("") + '<div class=note>' + esc2((ho.note || "").slice(0, 160)) + "</div></div>";
+  }
+
+  // ── TRACKED DEVELOPMENTS — demand (DLD) vs delivery (MEED) ──
+  if (m.developments && m.developments.length) {
+    body += '<div class=card><h2>Tracked developments — demand vs delivery</h2>' + m.developments.map(dv => {
+      const dp = dv.dldPulse;
+      return '<div class=dev><div class=devh><b>' + esc2(dv.development) + "</b><span class=pv>" + esc2(dv.developer) + " · " + esc2(dv.location || "") + '</span></div><div class=devg><div><span class=k>DEMAND — DLD</span>' +
+        (dp ? ("<br>" + num2(dp.salesCount) + " sales · AED " + num2(dp.salesValueAedM) + "m<br>" + num2(dp.medianResidentialAedSqft) + "/sq ft · " + dp.offPlanPct + "% off-plan") : "<br><span class=pv>" + esc2(dv.mapNote || "outside DLD coverage") + "</span>") +
+        '</div><div><span class=k>DELIVERY — MEED</span><br>' + dv.activeProjects + " active · " + mkFmtM(dv.pipelineValueUsdM) + (dv.nextCompletion ? "<br>next handover " + esc2(String(dv.nextCompletion).slice(0, 10)) : "") + "</div></div></div>";
+    }).join("") + '<div class=note>' + esc2(m.valueDisclaimer || "Project values are MEED estimates in US$; progress is editorial, not measured.") + "</div></div>";
+  }
+
+  // ── SUPPLY CORPUS — MEED daily collector ──
+  if (m.byStage) {
+    body += '<div class=card><h2>' + esc2(m.country || "UAE") + " supply pipeline by stage</h2><table>" + stageRows + "</table></div>";
+    if (m.recentBigUpdates && m.recentBigUpdates.length) body += '<div class=card><h2>Recently updated · ≥ $50m</h2><table>' + projRows(m.recentBigUpdates) + "</table></div>";
+    if (m.largestUnderConstruction && m.largestUnderConstruction.length) body += '<div class=card><h2>Largest under construction</h2><table>' + projRows((m.largestUnderConstruction || []).slice(0, 8)) + "</table></div>";
+  }
+
+  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Najma</title><style>' +
+    "body{font-family:system-ui,-apple-system,Segoe UI,Roboto;background:#0C1413;color:#E8E4D8;margin:auto;padding:14px 12px 40px;max-width:460px}" +
+    ".mast{font-size:1.7rem;font-weight:700;letter-spacing:-.01em}.mast em{font-style:normal;color:#C5A56A}" +
+    ".sub{color:#8FA39B;font-size:.78rem;margin:.2rem 0 .9rem}" +
+    ".hero{background:#182823;border:1px solid #24352F;border-radius:10px;padding:14px;margin-bottom:10px}" +
+    ".hv{font-size:2rem;font-weight:600;color:#C5A56A}.hv small{font-size:1rem;color:#8FA39B}.hl{color:#8FA39B;font-size:.75rem;margin-top:2px}" +
+    ".grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}" +
+    ".st{background:#131F1D;border:1px solid #24352F;border-radius:8px;padding:10px}.st .v{font-size:1.35rem;font-weight:600}.st .v small{font-size:.8rem;color:#8FA39B}.st .l{color:#8FA39B;font-size:.72rem;margin-top:2px}" +
+    ".card{background:#131F1D;border:1px solid #24352F;border-radius:10px;padding:13px;margin-bottom:10px}" +
+    "h2{font-size:.68rem;letter-spacing:.14em;color:#C5A56A;text-transform:uppercase;margin:0 0 .6rem;font-weight:600}" +
+    ".bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:#182823}.bar i{display:block;height:100%}" +
+    ".lg{display:flex;justify-content:space-between;color:#8FA39B;font-size:.75rem;margin-top:5px}.lg b{color:#E8E4D8}" +
+    ".spark{display:flex;align-items:flex-end;gap:4px}.wk{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}.wk i{display:block;width:100%;background:#3E8A7E;border-radius:2px 2px 0 0}.wk span{font-size:.58rem;color:#8FA39B}" +
+    ".arow{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #182823}.arow:last-of-type{border-bottom:none}.nm{flex:0 0 46%;font-size:.8rem}.tr{flex:1;height:6px;border-radius:3px;background:#182823;overflow:hidden}.tr i{display:block;height:100%;background:#3E8A7E}.ct{font-size:.72rem;color:#8FA39B;min-width:40px;text-align:right;font-variant-numeric:tabular-nums}" +
+    ".dev{border:1px solid #24352F;border-radius:8px;background:#182823;padding:10px;margin-bottom:8px}.devh{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.devg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;font-size:.78rem}.k{font-size:.6rem;letter-spacing:.1em;color:#8FA39B}" +
+    ".note{color:#8FA39B;font-size:.72rem;margin-top:.5rem}.pv{font-size:.72rem;color:#8FA39B}" +
+    "table{width:100%;border-collapse:collapse;font-size:.8rem}td{padding:.3rem .2rem;border-bottom:1px solid #182823;vertical-align:top}" +
+    ".warn{background:#33270F;color:#D9A441;border:1px solid #4A3B1E;padding:.5rem .7rem;border-radius:.5rem;font-size:.78rem;margin:.6rem 0}" +
+    "</style></head><body>" +
+    '<div class=mast>Najma <em>نجمة</em></div><div class=sub>The market pulse — Dubai property from the official register.</div>' +
     (stale ? "<div class=warn>⚠️ Data is " + Math.round(ageDays) + " days old — collector may be down. Do not quote until refreshed.</div>" : "") +
-    "<h2>" + esc2(m.country || "UAE") + " pipeline by stage</h2><table>" + stageRows + "</table>" +
-    "<h2>Recently updated · ≥ $50m · last 7 days</h2><table>" + projRows(m.recentBigUpdates) + "</table>" +
-    "<h2>Largest under construction</h2><table>" + projRows(m.largestUnderConstruction) + "</table>" +
-    "<h2>GCC by country</h2><table>" + ctyRows + "</table>" +
-    '<div class=pv style="margin-top:1rem">Corpus v' + esc2(m.corpusVersion) + " · corpus synced " + esc2(String(m.corpusSyncedAt || "").slice(0, 16)) + "Z · aggregated " + esc2(String(d.generatedAt || "").slice(0, 16)) + "Z · " + esc2(d.collector || "") + "<br>Figures are project-supply data (MEED corpus), not sales transactions. Attribution required on publication.</div></body></html>";
+    body +
+    '<div class=pv style="margin-top:1rem;line-height:1.6">' +
+    (t ? "Source: Dubai Land Department (DLD) Open Data. Contains information from the Government of Dubai.<br>" : "") +
+    "Project data licensed from MEED Projects (GlobalData), served via Digital Abbot Cloud" + (m.corpusVersion ? " — corpus v" + esc2(m.corpusVersion) : "") + ".<br>" +
+    "Every source passes a fail-closed sanity gate; a failing source is quarantined, never averaged in. Refreshed " + esc2(String(d.generatedAt || "").slice(0, 16)) + "Z." +
+    "</div></body></html>";
 }
 async function marketBriefTick(env) {
   if ((env.MARKET_BRIEF || "") !== "on") return;                                   // opt-in per instance
@@ -2147,9 +2233,15 @@ async function marketBriefTick(env) {
     d._movement = moved.slice(0, 8);                                               // pass the triggers to the drafter
   }
   const sys = isSunday
-    ? "You draft a weekly WhatsApp market brief for a Dubai real-estate professional who makes short advisory videos. Plain English, construction-literate, no hype, at most one emoji. Use ONLY the figures provided — never invent, extrapolate or round beyond one decimal. Structure: THREE candidate story angles ranked by how unusual the movement is, each with its exact figure and a one-line source tag; then one line per angle on what it means for a buyer; then a final WHAT NOT TO CLAIM line reminding that this is project-supply data (MEED corpus), not sales transactions — no price, rent or yield claims from it. Under 280 words. Plain text."
+    ? "You draft a weekly WhatsApp market brief for a Dubai real-estate professional who makes short advisory videos. Plain English, construction-literate, no hype, at most one emoji. Use ONLY the figures provided — never invent, extrapolate or round beyond one decimal. The data may contain several SECTIONS: dldSales (registered sales transactions — price and volume claims allowed, tag 'DLD Open Data' with the period), monthly (year-to-date), rents (registered Ejari contracts — rent and gross-yield claims allowed, tag 'DLD Ejari'), handover (declared completion programmes), developments (tracked projects, demand vs delivery), supply (MEED project corpus — supply/pipeline claims ONLY, never price). Structure: THREE candidate story angles ranked by how unusual the movement is, each with its exact figure and a one-line source tag; then one line per angle on what it means for a buyer; then a final WHAT NOT TO CLAIM line naming the claims the provided sections cannot support (a section that is null supports no claim at all; supply data never supports a price claim). Under 280 words. Plain text."
     : "You draft a SHORT same-day market alert for a Dubai real-estate professional. Something moved in the construction-supply data TODAY — the movement triggers are provided. ONE angle only: the single most story-worthy movement, its exact figure, one line on what it means for a buyer, one line on why today. Use ONLY the figures provided. End with: (Supply data, MEED corpus — not sales transactions.) Under 110 words. Plain text, at most one emoji.";
-  const user = JSON.stringify({ generatedAt: d.generatedAt, movementTriggers: d._movement || null, source: m.source, corpusVersion: m.corpusVersion, country: m.country, byStage: m.byStage, recentBigUpdates: m.recentBigUpdates, largestUnderConstruction: (m.largestUnderConstruction || []).slice(0, 5), gccTotals: m.gcc && m.gcc.totals, byCountry: m.gcc && m.gcc.byCountry });
+  const user = JSON.stringify({ generatedAt: d.generatedAt, movementTriggers: d._movement || null,
+    dldSales: d.transactions ? { period: [d.transactions.periodFrom, d.transactions.periodTo], salesCount: d.transactions.salesCount, salesValueAedBn: d.transactions.salesValueAedBn, medianTicketAed: d.transactions.medianTicketAed, medianResidentialAedSqft: d.transactions.medianResidentialAedSqft, offPlanSplit: d.transactions.offPlanSplit, topAreas: (d.transactions.topAreas || []).slice(0, 6), weekly: d.transactions.weekly } : null,
+    monthly: d.monthly ? { ytdSales: d.monthly.ytdSales, ytdValueAedBn: d.monthly.ytdValueAedBn, series: d.monthly.series } : null,
+    rents: d.rents ? { registrationTo: d.rents.registrationTo, contractsCount: d.rents.contractsCount, medianAnnualRentAed: d.rents.medianAnnualRentAed, medianRentAedSqftYr: d.rents.medianRentAedSqftYr, grossYieldPctByArea: d.rents.grossYieldPctByArea, versionSplit: d.rents.versionSplit } : null,
+    handover: d.handover ? { meedByQuarter: d.handover.meedByQuarter } : null,
+    developments: (m.developments || []).map(x => ({ development: x.development, developer: x.developer, activeProjects: x.activeProjects, pipelineValueUsdM: x.pipelineValueUsdM, nextCompletion: x.nextCompletion, dldPulse: x.dldPulse })),
+    supply: { source: m.source, corpusVersion: m.corpusVersion, country: m.country, byStage: m.byStage, recentBigUpdates: m.recentBigUpdates, largestUnderConstruction: (m.largestUnderConstruction || []).slice(0, 5), gccTotals: m.gcc && m.gcc.totals, byCountry: m.gcc && m.gcc.byCountry } });
   let brief = null;
   try { brief = await claudeText(env, sys, user, null, 900); } catch (e) {}
   if (!brief) return;
