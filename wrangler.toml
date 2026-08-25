@@ -58,6 +58,7 @@ ai = { binding = "AI" }
 ADD_TO = ""
 BOARD_BG = "off"
 MAILBOXES = ""
+MARKET_BRIEF = "on"
 WA_ALLOWED = "971565484397"
 
 [env.azimuth2.triggers]
