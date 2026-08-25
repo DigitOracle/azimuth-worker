@@ -1868,7 +1868,7 @@ export default {
                                         : ("🙈 Ignoring “" + _gr.name + "”. Azimuth won't read it. If you change your mind, tell me “watch " + _gr.name + "”."));
           }
           else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + env.READ_KEY); }
-          else if (/^mkt:(pod|li):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); }
+          else if (/^mkt:(pod|li|ig):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); }
           else if (bid.indexOf("pno:") === 0) { await env.MEETINGS.delete("pimg_" + bid.slice(4)); await waSend(env, from, "OK — nothing filed."); }
           else if (bid.indexOf("pimg:") === 0) {
             const _p = JSON.parse((await env.MEETINGS.get("pimg_" + bid.slice(5))) || "null");
@@ -1984,9 +1984,9 @@ export default {
             await waSend(env, from, "📈 Najma — your market pulse:" + NL10 + url.origin + "/market?key=" + env.READ_KEY + NL10 + NL10 + "Built from the official registers. Your weekly brief lands here every Sunday morning, and I'll flag same-day movements when something shifts.");
             return new Response("ok");
           }
-          const _dm = text.match(/^draft\s+(?:a\s+)?(podcast|video|script|linkedin|post)(?:\s+(?:script|post))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d))?\s*$/i);
+          const _dm = text.match(/^draft\s+(?:an?\s+)?(podcast|video|script|linkedin|post|instagram|insta|reel|ig)(?:\s+(?:script|post|reel))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d))?\s*$/i);
           if (_dm) {
-            const _kind = /podcast|video|script/i.test(_dm[1]) ? "pod" : "li";
+            const _kind = /podcast|video|script/i.test(_dm[1]) ? "pod" : /instagram|insta|reel|ig/i.test(_dm[1]) ? "ig" : "li";
             await draftFromAngle(env, from, _kind, _dm[2] ? parseInt(_dm[2], 10) : 1);
             return new Response("ok");
           }
@@ -2006,7 +2006,7 @@ export default {
               "🖥 “board” — your live board link" + NL10 +
               "📈 “market” — your Najma market pulse" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
-              "🎙 “draft podcast 1” · ✍️ “draft linkedin 2” — content from an angle");
+              "🎙 “draft podcast 1” · ✍️ “draft linkedin 2” · 📸 “draft instagram 3” — content from an angle");
             return new Response("ok");
           }
         }
@@ -2301,11 +2301,14 @@ async function draftFromAngle(env, to, kind, n) {
   let ctx; try { ctx = JSON.parse(raw); } catch (e) { return; }
   const sys = kind === "pod"
     ? "You write a 60-90 second to-camera video script for Najjuko ('Naj'), a Dubai property broker. Spoken, warm, plain English, construction-literate, no hype, no emojis, no stage directions, no greetings like 'hey guys'. Open with the chosen angle's hook in one sentence. Use ONLY figures from the provided brief and data; every figure carries its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'). One practical takeaway for a buyer to close. 140-210 words, plain text."
+    : kind === "ig"
+    ? "You write an Instagram reel package for Najjuko, a Dubai property broker, from ONE angle of the provided brief. Two parts, exactly this structure, plain text: SCRIPT: a 30-45 second spoken-to-camera script (70-105 words) — hook in the first five words, one figure with its source and period said out loud, one buyer takeaway, no emojis, no stage directions. CAPTION: 2-4 short lines restating the figure WITH its source and period, one question to invite comments, then at most 5 hashtags on the final line. Use ONLY figures from the provided brief and data — never invent or sharpen a number."
     : "You write a LinkedIn post for Najjuko, a Dubai property broker. First line is the angle's hook — specific, no clickbait. Short paragraphs. Use ONLY figures from the provided brief and data; every figure carries its source and period. One practical buyer takeaway. End with one question inviting comments. At most 3 hashtags. Under 140 words, plain text.";
   const user2 = "DRAFT FROM ANGLE " + n + " of this brief.\n\nTHE BRIEF:\n" + ctx.brief + "\n\nTHE FIGURES (the only numbers you may use):\n" + ctx.data;
   let out = null;
   try { out = await claudeText(env, sys, user2, null, 900); } catch (e) {}
   if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
-  await waSend(env, to, (kind === "pod" ? "🎙 Podcast script — Angle " + n : "✍️ LinkedIn draft — Angle " + n) + "\n\n" + out + "\n\n— a draft to make your own, not to post as-is.");
+  const label = kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram reel + caption" : "✍️ LinkedIn draft";
+  await waSend(env, to, label + " — Angle " + n + "\n\n" + out + "\n\n— a draft to make your own, not to post as-is.");
 }
 
