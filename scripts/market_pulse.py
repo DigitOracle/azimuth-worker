@@ -204,7 +204,10 @@ def main():
         os.environ["AZIMUTH_URL"].rstrip("/") + "/ingest_market",
         data=blob.encode(),
         headers={"X-Azimuth-Ingest": os.environ["INGEST_TOKEN"],
-                 "Content-Type": "application/json"},
+                 "Content-Type": "application/json",
+                 # Cloudflare's edge 403s the default Python-urllib UA before the
+                 # Worker ever runs — proven 25 Aug (curl 400s, urllib 403s, same token)
+                 "User-Agent": "najma-market-pulse/1.0"},
         method="POST")
     with urllib.request.urlopen(req, timeout=60) as r:
         print("ingest:", r.status, r.read().decode()[:200])
