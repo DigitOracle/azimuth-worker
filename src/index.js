@@ -1760,6 +1760,12 @@ export default {
       }
       if (url.searchParams.get("scan") === env.READ_KEY) { const mins = parseInt(url.searchParams.get("mins") || "45", 10) || 45; let n = 0; try { const tok = await msToken(env); const _r = await scanEmails(env, tok, mins, 40); n = _r.sent; } catch (e) { return new Response("scan error: " + (e && e.message ? e.message : String(e)), { status: 500 }); } return new Response("scan complete — alerts sent this run: " + n); }
       if (url.pathname === "/scan_sent" && url.searchParams.get("key") === env.READ_KEY) { const mins = parseInt(url.searchParams.get("mins") || "1440", 10) || 1440; try { const tok = await msToken(env); const _r = await scanSent(env, tok, { sinceMin: mins, cap: 60 }); return new Response(JSON.stringify(_r), { headers: { "Content-Type": "application/json" } }); } catch (e) { return new Response("scan_sent error: " + (e && e.message ? e.message : String(e)), { status: 500 }); } }
+      if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _ml = await env.MEETINGS.get("mkt_latest");
+        const _mp = await env.MEETINGS.get("mkt_prev");
+        return new Response(renderMarket(_ml, _mp), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 }); const list = await env.MEETINGS.list(); const events = []; for (const k of list.keys) { if (!k.name.startsWith("evt_")) continue; const v = await env.MEETINGS.get(k.name); if (v) { try { events.push(JSON.parse(v)); } catch (e) {} } } return new Response(JSON.stringify(events), { headers: { "Content-Type": "application/json" } });
     }
     if (request.method === "POST") {
@@ -1772,12 +1778,6 @@ export default {
         try { const _old = await env.MEETINGS.get("mkt_latest"); if (_old) await env.MEETINGS.put("mkt_prev", _old); } catch (e) {}
         await env.MEETINGS.put("mkt_latest", JSON.stringify(_mb));
         return new Response(JSON.stringify({ ok: true, bytes: JSON.stringify(_mb).length }), { headers: { "Content-Type": "application/json" } });
-      }
-      if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
-        const _ml = await env.MEETINGS.get("mkt_latest");
-        const _mp = await env.MEETINGS.get("mkt_prev");
-        return new Response(renderMarket(_ml, _mp), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/ingest") {                        // v30 — passive group-chat ingest (READ-ONLY, writes cmt_ only)
         const _ih = request.headers.get("X-Azimuth-Ingest");
