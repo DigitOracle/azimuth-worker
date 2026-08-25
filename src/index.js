@@ -1763,6 +1763,22 @@ export default {
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 }); const list = await env.MEETINGS.list(); const events = []; for (const k of list.keys) { if (!k.name.startsWith("evt_")) continue; const v = await env.MEETINGS.get(k.name); if (v) { try { events.push(JSON.parse(v)); } catch (e) {} } } return new Response(JSON.stringify(events), { headers: { "Content-Type": "application/json" } });
     }
     if (request.method === "POST") {
+      if (url.pathname === "/ingest_market") {                 // v36 — Market Pulse aggregates (collector -> KV, ~10 KB)
+        if (request.method !== "POST") return new Response("method", { status: 405 });
+        const _mh = request.headers.get("X-Azimuth-Ingest");
+        if (!env.INGEST_TOKEN || !_mh || !ctEq(_mh, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
+        let _mb; try { _mb = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
+        if (!_mb || !_mb.generatedAt || !_mb.meed) return new Response("bad payload", { status: 400 });
+        try { const _old = await env.MEETINGS.get("mkt_latest"); if (_old) await env.MEETINGS.put("mkt_prev", _old); } catch (e) {}
+        await env.MEETINGS.put("mkt_latest", JSON.stringify(_mb));
+        return new Response(JSON.stringify({ ok: true, bytes: JSON.stringify(_mb).length }), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _ml = await env.MEETINGS.get("mkt_latest");
+        const _mp = await env.MEETINGS.get("mkt_prev");
+        return new Response(renderMarket(_ml, _mp), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/ingest") {                        // v30 — passive group-chat ingest (READ-ONLY, writes cmt_ only)
         const _ih = request.headers.get("X-Azimuth-Ingest");
         if (!env.INGEST_TOKEN || !_ih || !ctEq(_ih, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
@@ -2041,6 +2057,58 @@ export default {
       } catch (e) {}
       try { await meetingNudges(env); } catch (e) {}          // v32 — T-30/T-15 meeting nudges
       try { const _n = gstNow(); if (_n.getUTCHours() === 6 && _n.getUTCMinutes() < 30) { const rk = "reindex_" + gstDateStr(_n); if (!(await env.MEETINGS.get(rk))) { await env.MEETINGS.put(rk, "1", { expirationTtl: 2 * 86400 }); await peopleReindex(env); } } } catch (e) {}   // v35 — daily party reindex ~06:00 GST
+      try { await marketBriefTick(env); } catch (e) {}        // v36 — weekly Market Pulse brief (Sunday ~09:00 GST, MARKET_BRIEF="on" only)
     })());
   },
 };
+
+// ── Market Pulse (v36) ── dashboard renderer + weekly brief ─────────────────────────────
+function mkFmtM(v) { if (v == null) return "—"; if (v >= 1000) return "$" + (v / 1000).toFixed(1) + "bn"; return "$" + Math.round(v) + "m"; }
+function renderMarket(latestRaw, prevRaw) {
+  let d = null, p = null;
+  try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
+  try { p = JSON.parse(prevRaw || "null"); } catch (e) {}
+  if (!d) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0a2223;color:#eee6d6;padding:2rem"><h2>Market Pulse</h2><p>No data yet — the collector has not delivered. Run the market-pulse Action once, then refresh.</p>';
+  const m = d.meed || {};
+  const prevStage = {}; if (p && p.meed && p.meed.byStage) for (const s of p.meed.byStage) prevStage[s.stage] = s;
+  const ageDays = (Date.now() - Date.parse(d.generatedAt || 0)) / 86400000;
+  const stale = !(ageDays < 3);
+  const esc2 = (s) => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const stageRows = (m.byStage || []).map(s => {
+    const pv = prevStage[s.stage]; let delta = "";
+    if (pv && pv.count !== s.count) { const df = s.count - pv.count; delta = ' <span style="color:' + (df > 0 ? "#7fd6a4" : "#e0a06a") + '">' + (df > 0 ? "▲" : "▼") + Math.abs(df) + "</span>"; }
+    return "<tr><td>" + esc2(s.stage) + delta + '</td><td style="text-align:right">' + s.count + '</td><td style="text-align:right">' + mkFmtM(s.valueUsdM) + "</td></tr>";
+  }).join("");
+  const projRows = (list) => (list || []).map(r => "<tr><td>" + esc2(r.title) + "</td><td>" + esc2(r.stage) + '</td><td style="text-align:right">' + mkFmtM(r.valueUsdM) + '</td><td style="text-align:right;white-space:nowrap">' + esc2(r.updated || "") + "</td></tr>").join("");
+  const ctyRows = ((m.gcc && m.gcc.byCountry) || []).map(c => "<tr><td>" + esc2(c.key) + '</td><td style="text-align:right">' + c.count + '</td><td style="text-align:right">' + mkFmtM(c.valueUsdM) + "</td></tr>").join("");
+  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Market Pulse</title><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto;background:#0a2223;color:#eee6d6;margin:auto;padding:1rem;max-width:720px}h1{font-size:1.25rem;letter-spacing:.14em;color:#cda86a;text-transform:uppercase;margin:.6rem 0 .1rem}h2{font-size:.8rem;letter-spacing:.22em;color:#cda86a;text-transform:uppercase;margin:1.4rem 0 .4rem;border-bottom:1px solid #1d4344;padding-bottom:.3rem}table{width:100%;border-collapse:collapse;font-size:.86rem}td{padding:.32rem .3rem;border-bottom:1px solid #12393a;vertical-align:top}.pv{font-size:.72rem;color:#8fa6a0}.warn{background:#4a1f16;color:#f0c9ac;padding:.5rem .7rem;border-radius:.5rem;font-size:.8rem;margin:.6rem 0}</style></head><body>' +
+    "<h1>Market Pulse</h1><div class=pv>" + esc2(m.country || "UAE") + " supply side · " + esc2(m.source || "") + "</div>" +
+    (stale ? "<div class=warn>⚠️ Data is " + Math.round(ageDays) + " days old — collector may be down. Do not quote until refreshed.</div>" : "") +
+    "<h2>" + esc2(m.country || "UAE") + " pipeline by stage</h2><table>" + stageRows + "</table>" +
+    "<h2>Recently updated · ≥ $50m · last 7 days</h2><table>" + projRows(m.recentBigUpdates) + "</table>" +
+    "<h2>Largest under construction</h2><table>" + projRows(m.largestUnderConstruction) + "</table>" +
+    "<h2>GCC by country</h2><table>" + ctyRows + "</table>" +
+    '<div class=pv style="margin-top:1rem">Corpus v' + esc2(m.corpusVersion) + " · corpus synced " + esc2(String(m.corpusSyncedAt || "").slice(0, 16)) + "Z · aggregated " + esc2(String(d.generatedAt || "").slice(0, 16)) + "Z · " + esc2(d.collector || "") + "<br>Figures are project-supply data (MEED corpus), not sales transactions. Attribution required on publication.</div></body></html>";
+}
+async function marketBriefTick(env) {
+  if ((env.MARKET_BRIEF || "") !== "on") return;                                   // opt-in per instance
+  const n = gstNow();
+  if (n.getUTCDay() !== 0 || n.getUTCHours() !== 9 || n.getUTCMinutes() >= 30) return;   // Sunday ~09:00 GST
+  const bk = "mktbrief_" + gstDateStr(n);
+  if (await env.MEETINGS.get(bk)) return;
+  await env.MEETINGS.put(bk, "1", { expirationTtl: 3 * 86400 });
+  const raw = await env.MEETINGS.get("mkt_latest");
+  if (!raw) return;
+  let d; try { d = JSON.parse(raw); } catch (e) { return; }
+  const ageDays = (Date.now() - Date.parse(d.generatedAt || 0)) / 86400000;
+  if (!(ageDays < 4)) { try { await waSend(env, env.WA_ALLOWED, "Market brief skipped this week — the data feed is " + Math.round(ageDays) + " days old and I will not brief from stale numbers. The collector needs attention."); } catch (e) {} return; }
+  const m = d.meed || {};
+  const sys = "You draft a weekly WhatsApp market brief for a Dubai real-estate professional who makes short advisory videos. Plain English, construction-literate, no hype, at most one emoji. Use ONLY the figures provided — never invent, extrapolate or round beyond one decimal. Structure: THREE candidate story angles ranked by how unusual the movement is, each with its exact figure and a one-line source tag; then one line per angle on what it means for a buyer; then a final WHAT NOT TO CLAIM line reminding that this is project-supply data (MEED corpus), not sales transactions — no price, rent or yield claims from it. Under 280 words. Plain text.";
+  const user = JSON.stringify({ generatedAt: d.generatedAt, source: m.source, corpusVersion: m.corpusVersion, country: m.country, byStage: m.byStage, recentBigUpdates: m.recentBigUpdates, largestUnderConstruction: (m.largestUnderConstruction || []).slice(0, 5), gccTotals: m.gcc && m.gcc.totals, byCountry: m.gcc && m.gcc.byCountry });
+  let brief = null;
+  try { brief = await claudeText(env, sys, user, null, 900); } catch (e) {}
+  if (!brief) return;
+  const head = "🏗️ Weekly Market Pulse — supply side (corpus v" + (m.corpusVersion || "?") + ", " + String(d.generatedAt || "").slice(0, 10) + ")\n\n";
+  try { await waSend(env, env.WA_ALLOWED, head + brief); } catch (e) {}
+}
+
