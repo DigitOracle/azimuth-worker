@@ -57,6 +57,38 @@ def api(path, params=None):
     sys.exit(f"FATAL: retries exhausted on {path}")
 
 
+class SourceRejected(Exception):
+    """A source failed its sanity gate. It is quarantined, never averaged in."""
+
+
+def sanity_gate(source, rows, *, row_shape, min_rows, max_rows, sample=None):
+    """Fail CLOSED. Return only rows matching row_shape; raise SourceRejected if the source
+    as a whole looks poisoned, collapsed, or exploded.
+
+    row_shape(r) -> bool   : True only for a row of the expected shape (allow-list).
+    min_rows / max_rows    : volume canary bounds on the CLEAN count.
+    sample(clean) -> None  : optional range canary; raise SourceRejected on out-of-band values.
+
+    The DLD price-index feed (HACK_TEST / 777.77 / test-pentest / {"$ne":null}) is the worked
+    example this exists for: those rows fail row_shape and are dropped; if too few survive,
+    the whole source is rejected rather than shipping a garbage figure.
+    """
+    if not isinstance(rows, list):
+        raise SourceRejected(f"{source}: payload is not a list ({type(rows).__name__})")
+    total = len(rows)
+    clean = [r for r in rows if row_shape(r)]
+    dropped = total - len(clean)
+    if dropped:
+        print(f"  gate[{source}]: dropped {dropped}/{total} rows failing shape allow-list")
+    if len(clean) < min_rows:
+        raise SourceRejected(f"{source}: only {len(clean)} clean rows (< {min_rows}) — quarantined")
+    if len(clean) > max_rows:
+        raise SourceRejected(f"{source}: {len(clean)} clean rows (> {max_rows}) — quarantined")
+    if sample:
+        sample(clean)  # raises SourceRejected on out-of-band headline values
+    return clean
+
+
 def collect_meed():
     status = api("/meed/status")["data"]
     stats = api("/meed/stats")["data"]
@@ -80,6 +112,20 @@ def collect_meed():
         if not pg.get("hasMore") or pages > 200:  # 200-page hard stop = 40k rows
             break
         after = pg.get("nextCursor", "")
+
+    # ---- source sanity gate: shape allow-list + volume canary (fails closed) ----
+    STAGES = {"complete", "construction", "cancelled", "design", "on-hold", "awarded",
+              "bid-evaluation", "study", "bid", "prequalification", "unknown"}
+    def meed_shape(r):
+        return (isinstance(r.get("projectId"), (str, int))
+                and (r.get("stage") or "unknown") in STAGES
+                and (r.get("netValueUsdM") is None or (isinstance(r.get("netValueUsdM"), (int, float)) and 0 <= r["netValueUsdM"] < 200000)))
+    def meed_range(clean):
+        biggest = max((r.get("netValueUsdM") or 0) for r in clean)
+        if biggest > 100000:   # no single GCC project is > $100bn; a value this big = a poisoned row that passed shape
+            raise SourceRejected(f"MEED: implausible max netValueUsdM {biggest}")
+    rows = sanity_gate("MEED/register", rows, row_shape=meed_shape,
+                       min_rows=8000, max_rows=40000, sample=meed_range)
 
     # per-country stage split (global stats can't provide the country x stage cross)
     by_stage = {}
@@ -121,13 +167,30 @@ def collect_meed():
     }
 
 
+# Every source is registered here. A source that fails its gate is quarantined —
+# excluded from the shipped payload, recorded with its reason — never averaged in.
+SOURCES = {
+    "meed": collect_meed,
+    # "dld": collect_dld,      # <- lands when DLD access is granted; MUST ship with its own sanity_gate
+}
+
+
 def main():
     out = {
         "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "collector": "market_pulse.py v1 (MEED-only)",
-        "meed": collect_meed(),
-        # "dld": collect_dld(),   # <- lands when DLD access is granted
+        "collector": "market_pulse.py v1",
     }
+    quarantine = {}
+    for name, fn in SOURCES.items():
+        try:
+            out[name] = fn()
+        except SourceRejected as e:
+            quarantine[name] = str(e)
+            print(f"QUARANTINED {name}: {e}")
+    if quarantine:
+        out["quarantine"] = quarantine
+    if "meed" not in out:
+        sys.exit("FATAL: the primary source (MEED) was quarantined — refusing to ship an empty pulse")
     blob = json.dumps(out, separators=(",", ":"))
     print(f"aggregate: {len(blob)} bytes | {out['meed']['countryRows']} {COUNTRY} rows walked")
 
