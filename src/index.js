@@ -2482,6 +2482,42 @@ async function dailyFeedTick(env, force) {
   // recent-angle memory so mornings don't repeat themselves
   let hist = []; try { hist = JSON.parse((await env.MEETINGS.get("mkt_feed_hist")) || "[]"); } catch (e) {}
   const m = d.meed || {};
+
+  // v37.3 — TREND DELTAS, computed here so every delta is exact and quotable.
+  // The final week/month in each series is partial (registration lags) — compare the
+  // last two COMPLETE periods only.
+  const trends = [];
+  try {
+    const wk = (d.transactions && d.transactions.weekly) || [];
+    if (wk.length >= 3) {
+      const a = wk[wk.length - 3], b = wk[wk.length - 2];
+      if (a.sales) trends.push({ metric: "weekly sales count", from: a.week, to: b.week, change: b.sales - a.sales, changePct: Math.round(1000 * (b.sales - a.sales) / a.sales) / 10, values: [a.sales, b.sales], source: "DLD Open Data, registered sales by week" });
+      if (a.valueAedBn) trends.push({ metric: "weekly sales value (AED bn)", from: a.week, to: b.week, change: Math.round(100 * (b.valueAedBn - a.valueAedBn)) / 100, changePct: Math.round(1000 * (b.valueAedBn - a.valueAedBn) / a.valueAedBn) / 10, values: [a.valueAedBn, b.valueAedBn], source: "DLD Open Data, registered sales by week" });
+    }
+    const mo2 = (d.monthly && d.monthly.series) || [];
+    if (mo2.length >= 3) {
+      const a = mo2[mo2.length - 3], b = mo2[mo2.length - 2];
+      if (a.sales) trends.push({ metric: "monthly sales count", from: a.month, to: b.month, change: b.sales - a.sales, changePct: Math.round(1000 * (b.sales - a.sales) / a.sales) / 10, values: [a.sales, b.sales], source: "DLD Open Data, registered sales by month" });
+      if (a.valueAedBn) trends.push({ metric: "monthly sales value (AED bn)", from: a.month, to: b.month, change: Math.round(100 * (b.valueAedBn - a.valueAedBn)) / 100, changePct: Math.round(1000 * (b.valueAedBn - a.valueAedBn) / a.valueAedBn) / 10, values: [a.valueAedBn, b.valueAedBn], source: "DLD Open Data, registered sales by month" });
+      const peak = mo2.slice(0, -1).reduce((x, y) => (y.valueAedBn > x.valueAedBn ? y : x), mo2[0]);
+      trends.push({ metric: "year shape", note: "strongest complete month so far: " + peak.month + " at AED " + peak.valueAedBn + "bn", source: "DLD Open Data, monthly" });
+    }
+    if (d.transactions && d.transactions.topAreas && d.transactions.topAreas[0] && d.transactions.salesCount) {
+      const ta = d.transactions.topAreas[0];
+      trends.push({ metric: "area concentration", note: ta.area + " alone took " + Math.round(100 * ta.sales / d.transactions.salesCount) + "% of all sales this period (" + ta.sales + " of " + d.transactions.salesCount + ")", source: "DLD Open Data, " + (d.transactions.periodFrom || "") + " to " + (d.transactions.periodTo || "") });
+    }
+  } catch (e) {}
+
+  // v37.3 — DAILY RANDOMIZER: two required lenses rotate every morning so the mix
+  // never settles into a pattern. The no-repeat history handles exact hooks; this
+  // handles the shape of the day.
+  const LENSES = ["register price/volume trend (use the computed trends)", "rental yields and the rent register",
+    "one area spotlight (top-areas or yields by area)", "handover watch (what's completing, when)",
+    "news-led with corpus cross-reference", "off-plan vs ready split", "the year-to-date arc month by month",
+    "one tracked development, demand vs delivery"];
+  const pick = () => LENSES[Math.floor(Math.random() * LENSES.length)];
+  let lensA = pick(), lensB = pick();
+  while (lensB === lensA) lensB = pick();
   const data = JSON.stringify({
     dldSales: d.transactions ? { period: [d.transactions.periodFrom, d.transactions.periodTo], salesCount: d.transactions.salesCount, salesValueAedBn: d.transactions.salesValueAedBn, medianTicketAed: d.transactions.medianTicketAed, medianResidentialAedSqft: d.transactions.medianResidentialAedSqft, offPlanSplit: d.transactions.offPlanSplit, topAreas: (d.transactions.topAreas || []).slice(0, 8), weekly: d.transactions.weekly } : null,
     monthly: d.monthly || null,
@@ -2489,9 +2525,10 @@ async function dailyFeedTick(env, force) {
     handover: d.handover ? { meedByQuarter: d.handover.meedByQuarter } : null,
     developments: (m.developments || []).map(x => ({ development: x.development, developer: x.developer, activeProjects: x.activeProjects, pipelineValueUsdM: x.pipelineValueUsdM, nextCompletion: x.nextCompletion, dldPulse: x.dldPulse })),
     supply: m.byStage ? { byStage: m.byStage, recentBigUpdates: m.recentBigUpdates, largestUnderConstruction: (m.largestUnderConstruction || []).slice(0, 5) } : null,
+    trends,
     news: await (async () => { try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); return nn.slice(0, 8).map(x => ({ title: x.title, outlet: x.outlet, meedCrossReference: x.xref ? { project: x.xref.meedName, facts: x.xref.facts } : null })); } catch (e) { return null; } })(),
   });
-  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections (sales, rents, handovers, supply, news). NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
+  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections. AT LEAST TWO of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all). TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
   const g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 1400);
   const angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 5) : [];
   if (angles.length < 3) { if (force) await waSend(env, env.WA_ALLOWED, "Couldn't build this morning's angles — try “feed” again in a minute."); return; }
