@@ -1809,11 +1809,19 @@ export default {
         try { await marketBriefTick(env, true); } catch (e) { return new Response("brief error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response("brief fired — check WhatsApp");
       }
-      if (url.pathname === "/news_test") {                     // v37.1 — force a news sweep and return the matched stories
+      if (url.pathname === "/news_test") {                     // v37.1 — force a news sweep and return the matched stories + feed diagnostics
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         try { await newsTick(env, true); } catch (e) { return new Response("news error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         const nn = (await env.MEETINGS.get("mkt_news")) || "[]";
-        return new Response(nn, { headers: { "Content-Type": "application/json" } });
+        const st = (await env.MEETINGS.get("mkt_news_stats")) || "{}";
+        return new Response('{"stats":' + st + ',"stories":' + nn + "}", { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/announce") {                      // v37.2 — send the user a one-off service message (admin-keyed; used for feature updates)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const tx = url.searchParams.get("text") || "";
+        if (!tx || tx.length > 3500) return new Response("text required (<=3500 chars)", { status: 400 });
+        try { await waSend(env, env.WA_ALLOWED, tx); } catch (e) { return new Response("send failed", { status: 502 }); }
+        return new Response("announced");
       }
       if (url.pathname === "/feed_test") {                     // v37 — force the daily feed now (live demo / recovery)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -2520,7 +2528,7 @@ const NEWS_FEEDS = [
   { url: "https://news.google.com/rss/search?q=dubai%20real%20estate%20OR%20property%20developer&hl=en-AE&gl=AE&ceid=AE:en", outlet: null },   // outlet comes per-item
   { url: "https://www.thenationalnews.com/arc/outboundfeeds/rss/?outputType=xml", outlet: "The National" },
 ];
-const NEWS_KEYWORDS = /propert|real estate|developer|tower|residen|handover|launch|off-?plan|master ?plan|community|mortgage|rent|villa|apartment|dubai land|freehold|escrow/i;
+const NEWS_KEYWORDS = /\b(propert(y|ies)|real estate|developers?|towers?|residen(ce|ces|tial)|handovers?|launch(es|ed)?|off-?plan|master ?plan|mortgages?|rents?|rental|villas?|apartments?|dubai land|freehold|escrow|penthouses?|sq ?ft|square feet)\b/i;
 
 function _newsTok(s) {
   return String(s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
@@ -2555,12 +2563,15 @@ async function newsTick(env, force) {
   for (const r of idx) cands.push({ name: r.t, kind: "index", facts: { stage: r.s, valueUsdM: r.v, completionDate: r.c } });
 
   let seen = {}; try { seen = JSON.parse((await env.MEETINGS.get("mkt_news_seen")) || "{}"); } catch (e) {}
-  const items = [];
+  const items = [], feedStats = [];
   for (const f of NEWS_FEEDS) {
     try {
-      const r = await fetch(f.url, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }, redirect: "follow" });
+      const r = await fetch(f.url, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Accept": "application/rss+xml, application/xml, text/xml, */*" }, redirect: "follow" });
+      feedStats.push({ url: f.url.slice(0, 60), status: r.status });
       if (!r.ok) continue;
       const xml = await r.text();
+      feedStats[feedStats.length - 1].bytes = xml.length;
+      feedStats[feedStats.length - 1].rawItems = xml.split("<item>").length - 1;
       for (const it of xml.split("<item>").slice(1, 40)) {
         const ti = (it.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s) || [])[1] || "";
         const src = (it.match(/<source[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/source>/s) || [])[1] || f.outlet || "";
@@ -2577,8 +2588,9 @@ async function newsTick(env, force) {
         items.push({ title, outlet: src.trim(), link: lnk.trim(), at: pd, xref });
         seen[key] = Date.now();
       }
-    } catch (e) {}
+    } catch (e) { feedStats.push({ url: f.url.slice(0, 60), error: String((e && e.message) || e).slice(0, 80) }); }
   }
+  try { await env.MEETINGS.put("mkt_news_stats", JSON.stringify({ at: gstNowIso(), feeds: feedStats, kept: items.length }), { expirationTtl: 2 * 86400 }); } catch (e) {}
   if (!items.length && !force) return;
   // keep a rolling window: cross-referenced first, then newest
   let stored = []; try { stored = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); } catch (e) {}
