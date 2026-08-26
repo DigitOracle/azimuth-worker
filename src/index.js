@@ -1805,6 +1805,12 @@ export default {
         try { await marketBriefTick(env, true); } catch (e) { return new Response("brief error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response("brief fired — check WhatsApp");
       }
+      if (url.pathname === "/news_test") {                     // v37.1 — force a news sweep and return the matched stories
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        try { await newsTick(env, true); } catch (e) { return new Response("news error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
+        const nn = (await env.MEETINGS.get("mkt_news")) || "[]";
+        return new Response(nn, { headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/feed_test") {                     // v37 — force the daily feed now (live demo / recovery)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         try { await dailyFeedTick(env, true); } catch (e) { return new Response("feed error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
