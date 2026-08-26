@@ -656,6 +656,10 @@ async function waSend(env, to, body) {
 async function waSendButtons(env, to, body, buttons) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: body }, action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) } } }, "buttons");
 }
+// v37.2 — interactive LIST (up to 10 rows; row title <=24 chars, description <=72)
+async function waSendList(env, to, body, buttonLabel, rows) {
+  return waPost(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "list", body: { text: body }, action: { button: buttonLabel, sections: [{ rows: rows.map(r => ({ id: r.id, title: String(r.title).slice(0, 24), description: String(r.description || "").slice(0, 72) })) }] } } }, "list");
+}
 // WhatsApp cancel flow: returns a reply string, or null if the message isn't a cancel. Reuses the Telegram cancel plumbing.
 async function waHandleCancel(env, from, text) {
   const pk = "wacancel_" + from;
@@ -1901,8 +1905,8 @@ export default {
           return new Response("ok");
         }
         if (msg.id) { const _mk = "wamsg_" + msg.id; if (await env.MEETINGS.get(_mk)) return new Response("ok"); await env.MEETINGS.put(_mk, "1", { expirationTtl: 3 * 86400 }); }
-        if (msg.type === "interactive" && msg.interactive && msg.interactive.button_reply) {
-          const bid = (msg.interactive.button_reply.id) || "";
+        if (msg.type === "interactive" && msg.interactive && (msg.interactive.button_reply || msg.interactive.list_reply)) {
+          const bid = (msg.interactive.button_reply && msg.interactive.button_reply.id) || (msg.interactive.list_reply && msg.interactive.list_reply.id) || "";
           if (bid.indexOf("done:") === 0) { await env.MEETINGS.delete("act_" + bid.slice(5)); await waSend(env, from, "✅ Done — cleared from your plate."); }
           if (bid.indexOf("ga:") === 0 || bid.indexOf("gi:") === 0) {   // v31 — group opt-in decision
             const _gj = bid.slice(3), _on = bid.indexOf("ga:") === 0;
@@ -1914,7 +1918,7 @@ export default {
           }
           else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + env.READ_KEY); }
           else if (/^mkt:(pod|li|ig):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); }
-          else if (/^feed:[123]$/.test(bid)) {                 // v37 — daily-feed pick: full content package for one angle
+          else if (/^feed:[1-5]$/.test(bid)) {                 // v37 — daily-feed pick: full content package for one angle
             const _fn = parseInt(bid.slice(5), 10);
             let _fc = null; try { _fc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
             const _fa = _fc && _fc.angles && _fc.angles[_fn - 1];
@@ -2473,23 +2477,21 @@ async function dailyFeedTick(env, force) {
     supply: m.byStage ? { byStage: m.byStage, recentBigUpdates: m.recentBigUpdates, largestUnderConstruction: (m.largestUnderConstruction || []).slice(0, 5) } : null,
     news: await (async () => { try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); return nn.slice(0, 8).map(x => ({ title: x.title, outlet: x.outlet, meedCrossReference: x.xref ? { project: x.xref.meedName, facts: x.xref.facts } : null })); } catch (e) { return null; } })(),
   });
-  const sys = "You pick THREE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The three angles must cover DIFFERENT figures and, where possible, different sections (sales vs rents vs handovers vs supply vs news). NEWS RULES: a news item may anchor at most ONE angle; name the outlet in the source (e.g. 'reported by Khaleej Times'); if it carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
-  const g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 900);
-  const angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 3) : [];
+  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections (sales, rents, handovers, supply, news). NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
+  const g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 1400);
+  const angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 5) : [];
   if (angles.length < 3) { if (force) await waSend(env, env.WA_ALLOWED, "Couldn't build this morning's angles — try “feed” again in a minute."); return; }
   // store as the drafting context (draftFromAngle reads this) + remember the hooks
   const briefTxt = angles.map((a, i) => "ANGLE " + (i + 1) + ": " + a.hook + "\nFigure: " + a.figure + " (" + a.source + ")\nBuyer: " + a.buyer).join("\n\n");
   await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: briefTxt, data, angles }), { expirationTtl: 3 * 86400 });
   hist = angles.map(a => a.hook).concat(hist).slice(0, 24);
   await env.MEETINGS.put("mkt_feed_hist", JSON.stringify(hist), { expirationTtl: 30 * 86400 });
-  const bodyTxt = "☀️ *Najma daily — three you could post today*\n\n" +
+  const bodyTxt = "☀️ *Najma daily — " + (angles.length === 5 ? "five" : String(angles.length)) + " you could post today*\n\n" +
     angles.map((a, i) => (i + 1) + "️⃣ " + a.hook + "\n     " + a.figure + " · " + a.source).join("\n\n") +
     "\n\nPick one — you'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
   await waSend(env, env.WA_ALLOWED, bodyTxt);
-  await waSendButtons(env, env.WA_ALLOWED, "Today's pick:", [
-    { id: "feed:1", title: "1️⃣ First angle" },
-    { id: "feed:2", title: "2️⃣ Second angle" },
-    { id: "feed:3", title: "3️⃣ Third angle" }]);
+  await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle",
+    angles.map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.figure || "").slice(0, 20), description: a.hook })));
 }
 
 // The complete, self-contained image prompt — one copyable block, BOTH ratios inside.
