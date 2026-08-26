@@ -1824,6 +1824,11 @@ export default {
         const _mh = request.headers.get("X-Azimuth-Ingest");
         if (!env.INGEST_TOKEN || !_mh || !ctEq(_mh, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
         let _mb; try { _mb = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
+        if (_mb && _mb.projectIndex && Array.isArray(_mb.projectIndex)) {          // v37.1 — compact active-project name index for news cross-referencing
+          if (_mb.projectIndex.length < 100 || _mb.projectIndex.length > 50000) return new Response("index size implausible", { status: 400 });
+          await env.MEETINGS.put("mkt_index", JSON.stringify(_mb.projectIndex));
+          return new Response(JSON.stringify({ ok: true, indexed: _mb.projectIndex.length }), { headers: { "Content-Type": "application/json" } });
+        }
         if (!_mb || !_mb.generatedAt || !(_mb.meed || _mb.transactions)) return new Response("bad payload", { status: 400 });
         // MERGE, don't replace: the daily MEED collector and the weekly Najma pulse feed
         // different sections of one dashboard. `meed` deep-merges (corpus stats + development
@@ -2039,6 +2044,16 @@ export default {
             try { await marketBriefTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the brief just now — try again shortly."); }
             return new Response("ok");
           }
+          if (/^news\s*\??$/i.test(text)) {
+            try { await newsTick(env, true); } catch (e) {}
+            let nn = []; try { nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); } catch (e) {}
+            if (!nn.length) { await waSend(env, from, "📰 Nothing property-worthy in the last couple of days' headlines."); return new Response("ok"); }
+            await waSend(env, from, "📰 Latest, cross-checked against the project register:" + NL10 + NL10 + nn.slice(0, 6).map(x =>
+              "• " + x.title + (x.outlet ? " — " + x.outlet : "") +
+              (x.xref ? NL10 + "   🔗 matches “" + x.xref.meedName + "” in the MEED corpus" + (x.xref.facts && x.xref.facts.completionDate ? " · completion " + String(x.xref.facts.completionDate).slice(0, 10) : "") + (x.xref.facts && x.xref.facts.stage ? " · " + x.xref.facts.stage : "") : "")
+            ).join(NL10 + NL10) + NL10 + NL10 + "Say “feed” to turn today's data + news into three post-ready angles.");
+            return new Response("ok");
+          }
           if (/^(?:feed|daily|today(?:'s)?\s+(?:feed|angles|posts?))\s*\??$/i.test(text)) {
             await waSend(env, from, "☀️ Building this morning's three — a moment…");
             try { await dailyFeedTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the feed just now — try again shortly."); }
@@ -2055,6 +2070,7 @@ export default {
               "🖥 “board” — your live board link" + NL10 +
               "📈 “market” — your Najma market pulse" + NL10 +
               "☀️ “feed” — today's three post-ready angles, any time" + NL10 +
+              "📰 “news” — latest headlines, cross-checked against the project register" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
               "🎙 “draft podcast 1” · ✍️ “draft linkedin 2” · 📸 “draft instagram 3” — content from an angle");
             return new Response("ok");
@@ -2167,6 +2183,7 @@ export default {
       } catch (e) {}
       try { await meetingNudges(env); } catch (e) {}          // v32 — T-30/T-15 meeting nudges
       try { const _n = gstNow(); if (_n.getUTCHours() === 6 && _n.getUTCMinutes() < 30) { const rk = "reindex_" + gstDateStr(_n); if (!(await env.MEETINGS.get(rk))) { await env.MEETINGS.put(rk, "1", { expirationTtl: 2 * 86400 }); await peopleReindex(env); } } } catch (e) {}   // v35 — daily party reindex ~06:00 GST
+      try { await newsTick(env); } catch (e) {}               // v37.1 — hourly news sweep + MEED cross-reference
       try { await dailyFeedTick(env); } catch (e) {}          // v37 — Najma daily feed: three post-ready angles ~07:00 GST
       try { await marketBriefTick(env); } catch (e) {}        // v36 — weekly Market Pulse brief (Sunday ~09:00 GST, MARKET_BRIEF="on" only)
     })());
@@ -2448,8 +2465,9 @@ async function dailyFeedTick(env, force) {
     handover: d.handover ? { meedByQuarter: d.handover.meedByQuarter } : null,
     developments: (m.developments || []).map(x => ({ development: x.development, developer: x.developer, activeProjects: x.activeProjects, pipelineValueUsdM: x.pipelineValueUsdM, nextCompletion: x.nextCompletion, dldPulse: x.dldPulse })),
     supply: m.byStage ? { byStage: m.byStage, recentBigUpdates: m.recentBigUpdates, largestUnderConstruction: (m.largestUnderConstruction || []).slice(0, 5) } : null,
+    news: await (async () => { try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); return nn.slice(0, 8).map(x => ({ title: x.title, outlet: x.outlet, meedCrossReference: x.xref ? { project: x.xref.meedName, facts: x.xref.facts } : null })); } catch (e) { return null; } })(),
   });
-  const sys = "You pick THREE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The three angles must cover DIFFERENT figures and, where possible, different sections (sales vs rents vs handovers vs supply). DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
+  const sys = "You pick THREE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The three angles must cover DIFFERENT figures and, where possible, different sections (sales vs rents vs handovers vs supply vs news). NEWS RULES: a news item may anchor at most ONE angle; name the outlet in the source (e.g. 'reported by Khaleej Times'); if it carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
   const g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 900);
   const angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 3) : [];
   if (angles.length < 3) { if (force) await waSend(env, env.WA_ALLOWED, "Couldn't build this morning's angles — try “feed” again in a minute."); return; }
@@ -2481,5 +2499,85 @@ function visualPromptBlock(angle) {
     "- Footer strip, small muted text: Source: Dubai Land Department (DLD) Open Data. Contains information from the Government of Dubai.\n\n" +
     "Rules: no logos other than the NAJMA text wordmark, no watermarks, no people, no photographs, no invented text or numbers, keep all figures exactly as written." +
     "```\n\nAttach the 9:16 to the Instagram post, the 16:9 to LinkedIn.";
+}
+
+// ── v37.1 — NEWS LAYER + MEED CROSS-REFERENCE ───────────────────────────────────
+// Reads public RSS headlines (Google News aggregate + The National), keeps the recent
+// property-relevant ones, and cross-references each against the MEED corpus we hold:
+// the tracked developments, the collector's big-update/under-construction lists, and —
+// when the collector has shipped one — the full active-project name index (mkt_index).
+// A matched story carries the MEED facts (stage, value, completion) into the daily feed,
+// so one headline becomes a multi-angle story with register-grade facts attached.
+const NEWS_FEEDS = [
+  { url: "https://news.google.com/rss/search?q=dubai%20real%20estate%20OR%20property%20developer&hl=en-AE&gl=AE&ceid=AE:en", outlet: null },   // outlet comes per-item
+  { url: "https://www.thenationalnews.com/arc/outboundfeeds/rss/?outputType=xml", outlet: "The National" },
+];
+const NEWS_KEYWORDS = /propert|real estate|developer|tower|residen|handover|launch|off-?plan|master ?plan|community|mortgage|rent|villa|apartment|dubai land|freehold|escrow/i;
+
+function _newsTok(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+    .filter(w => w.length > 3 && !/^(the|and|with|from|dubai|uae|abu|dhabi|real|estate|property|properties|residential|project|projects|community|tower|towers|building|development|developments)$/.test(w));
+}
+
+// Match a headline against a MEED name: 2+ significant shared tokens, or a whole-name hit.
+function _newsMatch(headTokens, headLower, name) {
+  const nl = String(name || "").toLowerCase();
+  if (nl.length > 4 && headLower.indexOf(nl) !== -1) return true;
+  const nt = _newsTok(name);
+  if (!nt.length) return false;
+  const hits = nt.filter(t => headTokens.indexOf(t) !== -1).length;
+  return hits >= Math.min(2, nt.length);
+}
+
+async function newsTick(env, force) {
+  if ((env.MARKET_BRIEF || "") !== "on") return;
+  const n = gstNow();
+  if (!force && n.getUTCMinutes() >= 30) return;                                   // once per cron hour
+  const nk = "mktnews_run_" + gstDateStr(n) + "_" + n.getUTCHours();
+  if (!force) { if (await env.MEETINGS.get(nk)) return; await env.MEETINGS.put(nk, "1", { expirationTtl: 86400 }); }
+
+  // cross-reference candidates: tracked developments + collector lists + full index if shipped
+  let d = null, idx = [];
+  try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+  try { idx = JSON.parse((await env.MEETINGS.get("mkt_index")) || "[]"); } catch (e) {}
+  const m = (d && d.meed) || {};
+  const cands = [];
+  for (const dv of (m.developments || [])) cands.push({ name: dv.development, kind: "tracked", facts: { developer: dv.developer, activeProjects: dv.activeProjects, pipelineValueUsdM: dv.pipelineValueUsdM, nextCompletion: dv.nextCompletion, dldPulse: dv.dldPulse } });
+  for (const r of (m.recentBigUpdates || []).concat(m.largestUnderConstruction || [])) cands.push({ name: r.title, kind: "corpus", facts: { stage: r.stage, valueUsdM: r.valueUsdM, updated: r.updated } });
+  for (const r of idx) cands.push({ name: r.t, kind: "index", facts: { stage: r.s, valueUsdM: r.v, completionDate: r.c } });
+
+  let seen = {}; try { seen = JSON.parse((await env.MEETINGS.get("mkt_news_seen")) || "{}"); } catch (e) {}
+  const items = [];
+  for (const f of NEWS_FEEDS) {
+    try {
+      const r = await fetch(f.url, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }, redirect: "follow" });
+      if (!r.ok) continue;
+      const xml = await r.text();
+      for (const it of xml.split("<item>").slice(1, 40)) {
+        const ti = (it.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s) || [])[1] || "";
+        const src = (it.match(/<source[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/source>/s) || [])[1] || f.outlet || "";
+        const lnk = (it.match(/<link>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/link>/s) || [])[1] || "";
+        const pd = Date.parse((it.match(/<pubDate>(.*?)<\/pubDate>/s) || [])[1] || "") || 0;
+        const title = ti.replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').trim();
+        if (!title || Date.now() - pd > 48 * 3600 * 1000) continue;
+        if (f.outlet && !NEWS_KEYWORDS.test(title)) continue;                      // The National is general news — filter
+        const key = title.toLowerCase().slice(0, 80);
+        if (seen[key]) continue;
+        const ht = _newsTok(title), hl = title.toLowerCase();
+        let xref = null;
+        for (const c of cands) { if (_newsMatch(ht, hl, c.name)) { xref = { meedName: c.name, via: c.kind, facts: c.facts }; break; } }
+        items.push({ title, outlet: src.trim(), link: lnk.trim(), at: pd, xref });
+        seen[key] = Date.now();
+      }
+    } catch (e) {}
+  }
+  if (!items.length && !force) return;
+  // keep a rolling window: cross-referenced first, then newest
+  let stored = []; try { stored = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); } catch (e) {}
+  stored = items.concat(stored).slice(0, 40);
+  stored.sort((a, b) => ((b.xref ? 1 : 0) - (a.xref ? 1 : 0)) || (b.at - a.at));
+  await env.MEETINGS.put("mkt_news", JSON.stringify(stored.slice(0, 24)), { expirationTtl: 4 * 86400 });
+  for (const k of Object.keys(seen)) { if (Date.now() - seen[k] > 5 * 86400000) delete seen[k]; }
+  await env.MEETINGS.put("mkt_news_seen", JSON.stringify(seen), { expirationTtl: 7 * 86400 });
 }
 

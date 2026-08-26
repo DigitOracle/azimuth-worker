@@ -28,6 +28,7 @@ from datetime import datetime, timezone, timedelta
 
 BASE = "https://www.digitalabbot.io/api/cloud/v1"
 COUNTRY = os.environ.get("MP_COUNTRY", "UAE")
+PROJECT_INDEX = []   # v37.1 — filled by collect_meed, shipped as a second ingest
 RECENT_DAYS = 7
 TOP_N = 10
 BIG_VALUE_USDM = 50  # "recently updated AND worth talking about" floor
@@ -148,6 +149,14 @@ def collect_meed():
                 "stage": r.get("stageLabel") or r.get("stage"),
                 "valueUsdM": r.get("netValueUsdM"), "updated": r.get("lastUpdated")}
 
+    # v37.1 — compact name index of every LIVE project (news cross-referencing in the
+    # Worker: headline -> project -> stage/value facts). Complete/cancelled excluded.
+    global PROJECT_INDEX
+    PROJECT_INDEX = [
+        {"t": (r.get("title") or "")[:90], "s": r.get("stage"), "v": r.get("netValueUsdM")}
+        for r in rows if r.get("stage") not in ("complete", "cancelled") and r.get("title")
+    ]
+
     return {
         "source": "Digital Abbot Cloud — stored MEED Projects corpus (GlobalData)",
         "corpusVersion": corpus.get("version"),
@@ -200,17 +209,24 @@ def main():
         print("DRY RUN -> market_pulse_out.json")
         return
 
-    req = urllib.request.Request(
-        os.environ["AZIMUTH_URL"].rstrip("/") + "/ingest_market",
-        data=blob.encode(),
-        headers={"X-Azimuth-Ingest": os.environ["INGEST_TOKEN"],
-                 "Content-Type": "application/json",
-                 # Cloudflare's edge 403s the default Python-urllib UA before the
-                 # Worker ever runs — proven 25 Aug (curl 400s, urllib 403s, same token)
-                 "User-Agent": "najma-market-pulse/1.0"},
-        method="POST")
-    with urllib.request.urlopen(req, timeout=60) as r:
-        print("ingest:", r.status, r.read().decode()[:200])
+    def post_ingest(payload):
+        req = urllib.request.Request(
+            os.environ["AZIMUTH_URL"].rstrip("/") + "/ingest_market",
+            data=json.dumps(payload, separators=(",", ":")).encode(),
+            headers={"X-Azimuth-Ingest": os.environ["INGEST_TOKEN"],
+                     "Content-Type": "application/json",
+                     # Cloudflare's edge 403s the default Python-urllib UA before the
+                     # Worker ever runs — proven 25 Aug (curl 400s, urllib 403s, same token)
+                     "User-Agent": "najma-market-pulse/1.0"},
+            method="POST")
+        with urllib.request.urlopen(req, timeout=120) as r:
+            print("ingest:", r.status, r.read().decode()[:200])
+
+    post_ingest(out)
+    # v37.1 — ship the live-project name index (news cross-referencing in the Worker)
+    if PROJECT_INDEX:
+        post_ingest({"generatedAt": out["generatedAt"], "projectIndex": PROJECT_INDEX})
+        print(f"index: {len(PROJECT_INDEX)} live projects shipped")
 
 
 if __name__ == "__main__":
