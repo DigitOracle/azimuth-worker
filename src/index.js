@@ -1775,6 +1775,44 @@ export default {
       }
       if (url.searchParams.get("scan") === env.READ_KEY) { const mins = parseInt(url.searchParams.get("mins") || "45", 10) || 45; let n = 0; try { const tok = await msToken(env); const _r = await scanEmails(env, tok, mins, 40); n = _r.sent; } catch (e) { return new Response("scan error: " + (e && e.message ? e.message : String(e)), { status: 500 }); } return new Response("scan complete — alerts sent this run: " + n); }
       if (url.pathname === "/scan_sent" && url.searchParams.get("key") === env.READ_KEY) { const mins = parseInt(url.searchParams.get("mins") || "1440", 10) || 1440; try { const tok = await msToken(env); const _r = await scanSent(env, tok, { sinceMin: mins, cap: 60 }); return new Response(JSON.stringify(_r), { headers: { "Content-Type": "application/json" } }); } catch (e) { return new Response("scan_sent error: " + (e && e.message ? e.message : String(e)), { status: 500 }); } }
+      if (url.pathname === "/ig_connect") {                    // v38 — start Instagram OAuth (official Instagram API with Instagram Login; free, tester role, no review)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!env.IG_APP_ID) return new Response("Instagram app not configured yet", { status: 503 });
+        const st = rid();
+        await env.MEETINGS.put("ig_state_" + st, "1", { expirationTtl: 600 });
+        const auth = "https://www.instagram.com/oauth/authorize?response_type=code" +
+          "&client_id=" + encodeURIComponent(env.IG_APP_ID) +
+          "&redirect_uri=" + encodeURIComponent(url.origin + "/ig_callback") +
+          "&state=" + st + "&scope=" + encodeURIComponent("instagram_business_basic,instagram_business_content_publish");
+        return Response.redirect(auth, 302);
+      }
+      if (url.pathname === "/ig_callback") {                   // v38 — Instagram OAuth return: code -> short token -> 60-day token
+        const st = url.searchParams.get("state") || "";
+        if (!(await env.MEETINGS.get("ig_state_" + st))) return new Response("state mismatch — start again from the connect link", { status: 400 });
+        await env.MEETINGS.delete("ig_state_" + st);
+        const code = url.searchParams.get("code");
+        if (!code) return new Response("Instagram declined: " + (url.searchParams.get("error_description") || url.searchParams.get("error") || "no code"), { status: 400 });
+        const tr = await fetch("https://api.instagram.com/oauth/access_token", {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ client_id: env.IG_APP_ID, client_secret: env.IG_APP_SECRET, grant_type: "authorization_code", redirect_uri: url.origin + "/ig_callback", code }),
+        });
+        const tj = await tr.json();
+        const shortTok = tj.access_token, igUser = tj.user_id;
+        if (!shortTok) return new Response("token exchange failed: " + JSON.stringify(tj).slice(0, 200), { status: 502 });
+        const lr = await fetch("https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=" + encodeURIComponent(env.IG_APP_SECRET) + "&access_token=" + encodeURIComponent(shortTok));
+        const lj = await lr.json();
+        const tok = lj.access_token || shortTok;
+        await env.MEETINGS.put("ig_auth", JSON.stringify({ token: tok, userId: String(igUser), expiresAt: Date.now() + (lj.expires_in ? (lj.expires_in - 86400) * 1000 : 59 * 86400000) }));
+        try { await waSend(env, env.WA_ALLOWED, "📸 Instagram connected — send me any finished image with the caption “post to instagram” and I'll publish it with your latest caption draft."); } catch (e) {}
+        return new Response('<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem;text-align:center"><h2 style="color:#C5A56A">Connected ✓</h2><p>Instagram publishing is live. You can close this and go back to WhatsApp.</p>', { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
+      if (url.pathname.indexOf("/ig_media/") === 0) {          // v38 — serve a stored image publicly (unguessable id; Instagram fetches from here)
+        const mid = url.pathname.slice(10).replace(/[^a-z0-9]/gi, "");
+        const bytes = await env.MEETINGS.get("igm_" + mid, "arrayBuffer");
+        if (!bytes) return new Response("gone", { status: 404 });
+        const ct = (await env.MEETINGS.get("igm_ct_" + mid)) || "image/jpeg";
+        return new Response(bytes, { headers: { "Content-Type": ct, "Cache-Control": "public, max-age=3600" } });
+      }
       if (url.pathname === "/li_connect") {                    // v36.6 — start LinkedIn OAuth (free native posting; token ~60 days)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         if (!env.LI_CLIENT_ID) return new Response("LinkedIn app not configured yet", { status: 503 });
@@ -1970,6 +2008,18 @@ export default {
         }
         if (msg.type === "image" && msg.image && msg.image.id) {
           const _cap = String((msg.image.caption || "")).trim();
+          if (/\bpost\b.*\b(insta(gram)?|ig)\b/i.test(_cap)) {             // v38 — publish this image to her Instagram with the stored caption draft
+            try {
+              const _pimg = await waFetchMedia(env, msg.image.id);
+              if (_pimg.bytes.byteLength > 8 * 1024 * 1024) { await waSend(env, from, "That image is over 8 MB — Instagram wants smaller. Try again."); return new Response("ok"); }
+              const _mid = rid() + rid();
+              await env.MEETINGS.put("igm_" + _mid, _pimg.bytes, { expirationTtl: 86400 });
+              await env.MEETINGS.put("igm_ct_" + _mid, _pimg.mime || "image/jpeg", { expirationTtl: 86400 });
+              await waSend(env, from, "📤 Got it — publishing to Instagram…");
+              await publishInstagram(env, from, url.origin + "/ig_media/" + _mid);
+            } catch (e) { await waSend(env, from, "⚠ Couldn't read that image — send it again."); }
+            return new Response("ok");
+          }
           if (isBgCaption(_cap)) {
             try {
               const _img = await waFetchMedia(env, msg.image.id);          // {bytes, mime}
@@ -2402,14 +2452,48 @@ async function draftFromAngle(env, to, kind, n) {
   if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
   const label = kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram reel + caption" : "✍️ LinkedIn draft";
   await waSend(env, to, label + " — Angle " + n + "\n\n" + out + (kind === "li" ? "" : "\n\n— a draft to make your own, not to post as-is."));
-  if (kind === "li") {                                                             // v36.5 — one-tap publish (LinkedIn is pure text; Instagram needs her recorded video first)
+  if (kind === "li") {                                                             // v36.5 — one-tap publish (LinkedIn is pure text)
     await env.MEETINGS.put("mkt_lastdraft_li", out, { expirationTtl: 2 * 86400 });
     await waSendButtons(env, to, "Post it as-is, or tell me what to change and I'll redraft.", [
       { id: "mkt:post:li", title: "🚀 Post to LinkedIn" },
       { id: "mkt:discard", title: "✖️ Not this one" }]);
   }
-  if (kind === "ig") {
-    await waSend(env, to, "🎬 Record the script (30-45s, phone vertical) — the caption above is ready to paste. One-tap reel posting switches on once video upload is connected.");
+  if (kind === "ig") {                                                             // v38 — stash the caption; her next "post to instagram" image publishes with it
+    const capM = out.match(/CAPTION:\s*([\s\S]+)$/i);
+    await env.MEETINGS.put("mkt_lastdraft_ig", (capM ? capM[1] : out).trim().slice(0, 2100), { expirationTtl: 2 * 86400 });
+    await waSend(env, to, "🎬 For a reel: record the script (30-45s, phone vertical). For an image post: generate the visual with the prompt below, then send it back to me captioned “post to instagram” — I'll publish it with this caption.");
+  }
+}
+
+// v38 — publish an image to her Instagram via the official API: container -> poll -> publish.
+async function publishInstagram(env, to, imageUrl) {
+  let auth = null; try { auth = JSON.parse((await env.MEETINGS.get("ig_auth")) || "null"); } catch (e) {}
+  if (!env.IG_APP_ID) { await waSend(env, to, "🔌 Instagram posting isn't switched on yet — the app link-up on DigitAlchemy's side is in progress."); return; }
+  if (!auth || !auth.token || (auth.expiresAt && Date.now() > auth.expiresAt)) {
+    await waSend(env, to, "🔗 Instagram needs a (re)connect — one tap and a sign-in:\n" + LI_ORIGIN(env) + "/ig_connect?key=" + env.READ_KEY + "\n\nYour image is saved; send it again after connecting.");
+    return;
+  }
+  const caption = (await env.MEETINGS.get("mkt_lastdraft_ig")) || "";
+  try {
+    const cr = await (await fetch("https://graph.instagram.com/v21.0/" + auth.userId + "/media", {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ image_url: imageUrl, caption, access_token: auth.token }),
+    })).json();
+    if (!cr.id) { await waSend(env, to, "⚠ Instagram didn't accept the image — " + JSON.stringify(cr).slice(0, 160)); return; }
+    let status = "IN_PROGRESS";
+    for (let i = 0; i < 6 && status === "IN_PROGRESS"; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const sj = await (await fetch("https://graph.instagram.com/v21.0/" + cr.id + "?fields=status_code&access_token=" + encodeURIComponent(auth.token))).json();
+      status = sj.status_code || "FINISHED";
+    }
+    const pj = await (await fetch("https://graph.instagram.com/v21.0/" + auth.userId + "/media_publish", {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ creation_id: cr.id, access_token: auth.token }),
+    })).json();
+    if (pj.id) await waSend(env, to, "📸 Posted to Instagram." + (caption ? "" : " (No caption draft was on file — it went up caption-less.)"));
+    else await waSend(env, to, "⚠ Publish step failed — " + JSON.stringify(pj).slice(0, 160) + ". The image is still saved; try again in a minute.");
+  } catch (e) {
+    await waSend(env, to, "⚠ Couldn't reach Instagram — try again in a minute.");
   }
 }
 
