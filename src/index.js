@@ -1805,6 +1805,11 @@ export default {
         try { await marketBriefTick(env, true); } catch (e) { return new Response("brief error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response("brief fired — check WhatsApp");
       }
+      if (url.pathname === "/feed_test") {                     // v37 — force the daily feed now (live demo / recovery)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        try { await dailyFeedTick(env, true); } catch (e) { return new Response("feed error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
+        return new Response("feed fired — check WhatsApp");
+      }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _ml = await env.MEETINGS.get("mkt_latest");
@@ -1898,6 +1903,14 @@ export default {
           }
           else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + env.READ_KEY); }
           else if (/^mkt:(pod|li|ig):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); }
+          else if (/^feed:[123]$/.test(bid)) {                 // v37 — daily-feed pick: full content package for one angle
+            const _fn = parseInt(bid.slice(5), 10);
+            let _fc = null; try { _fc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+            const _fa = _fc && _fc.angles && _fc.angles[_fn - 1];
+            await draftFromAngle(env, from, "ig", _fn);
+            await draftFromAngle(env, from, "li", _fn);
+            if (_fa) await waSend(env, from, visualPromptBlock(_fa));
+          }
           else if (bid === "mkt:post:li") { await publishDraft(env, from); }
           else if (bid === "mkt:discard") { await env.MEETINGS.delete("mkt_lastdraft_li"); await waSend(env, from, "✖️ Dropped. Ask for another angle any time — “draft linkedin 2”."); }
           else if (bid.indexOf("pno:") === 0) { await env.MEETINGS.delete("pimg_" + bid.slice(4)); await waSend(env, from, "OK — nothing filed."); }
@@ -2026,6 +2039,11 @@ export default {
             try { await marketBriefTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the brief just now — try again shortly."); }
             return new Response("ok");
           }
+          if (/^(?:feed|daily|today(?:'s)?\s+(?:feed|angles|posts?))\s*\??$/i.test(text)) {
+            await waSend(env, from, "☀️ Building this morning's three — a moment…");
+            try { await dailyFeedTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the feed just now — try again shortly."); }
+            return new Response("ok");
+          }
           if (/^(?:help|menu|commands|what\s+can\s+you\s+do|what\s+do\s+you\s+do|how\s+do(?:es)?\s+(?:i|you|this)\s+(?:use\s+)?(?:you|this|work))\s*\??$/i.test(text)) {
             await waSend(env, from, "🧭 Here's what I can do:" + NL10 +
               "📋 Tasks — just tell me (“call Sara tomorrow 3pm”)" + NL10 +
@@ -2036,6 +2054,7 @@ export default {
               "👀 “list groups” · “watch <name>” — what I listen to" + NL10 +
               "🖥 “board” — your live board link" + NL10 +
               "📈 “market” — your Najma market pulse" + NL10 +
+              "☀️ “feed” — today's three post-ready angles, any time" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
               "🎙 “draft podcast 1” · ✍️ “draft linkedin 2” · 📸 “draft instagram 3” — content from an angle");
             return new Response("ok");
@@ -2148,6 +2167,7 @@ export default {
       } catch (e) {}
       try { await meetingNudges(env); } catch (e) {}          // v32 — T-30/T-15 meeting nudges
       try { const _n = gstNow(); if (_n.getUTCHours() === 6 && _n.getUTCMinutes() < 30) { const rk = "reindex_" + gstDateStr(_n); if (!(await env.MEETINGS.get(rk))) { await env.MEETINGS.put(rk, "1", { expirationTtl: 2 * 86400 }); await peopleReindex(env); } } } catch (e) {}   // v35 — daily party reindex ~06:00 GST
+      try { await dailyFeedTick(env); } catch (e) {}          // v37 — Najma daily feed: three post-ready angles ~07:00 GST
       try { await marketBriefTick(env); } catch (e) {}        // v36 — weekly Market Pulse brief (Sunday ~09:00 GST, MARKET_BRIEF="on" only)
     })());
   },
@@ -2395,5 +2415,71 @@ async function publishDraft(env, to) {
   } catch (e) {
     await waSend(env, to, "⚠ Couldn't reach LinkedIn — the draft is still saved; try again in a minute.");
   }
+}
+
+// ── v37 — NAJMA DAILY FEED ──────────────────────────────────────────────────────
+// Every morning ~07:00 GST: three post-ready angles from the freshest gated data.
+// Tap one -> Instagram package + LinkedIn package (with one-tap post) + a complete,
+// self-contained image-generation prompt in BOTH ratios (9:16 story + 16:9 landscape).
+// Total intended time from wake-up to posted: under five minutes.
+const FEED_SCHEMA = { type: "object", additionalProperties: false, properties: { angles: { type: "array", items: { type: "object", additionalProperties: false, properties: { hook: { type: "string" }, figure: { type: "string" }, source: { type: "string" }, buyer: { type: "string" } }, required: ["hook", "figure", "source", "buyer"] } } }, required: ["angles"] };
+
+async function dailyFeedTick(env, force) {
+  if ((env.MARKET_BRIEF || "") !== "on") return;
+  const n = gstNow();
+  if (!force && (n.getUTCHours() !== 7 || n.getUTCMinutes() >= 30)) return;       // ~07:00 GST daily
+  const fk = "mktfeed_" + gstDateStr(n);
+  if (!force) { if (await env.MEETINGS.get(fk)) return; await env.MEETINGS.put(fk, "1", { expirationTtl: 2 * 86400 }); }
+  const raw = await env.MEETINGS.get("mkt_latest");
+  if (!raw) return;
+  let d; try { d = JSON.parse(raw); } catch (e) { return; }
+  const ageDays = (Date.now() - Date.parse(d.generatedAt || 0)) / 86400000;
+  if (ageDays >= 8) {                                                              // stale gate + the refresh reminder
+    await waSend(env, env.WA_ALLOWED, "☀️ Morning — no feed today: the market data is " + Math.round(ageDays) + " days old and I won't hand you a stale figure to say out loud. The refresh needs running on DigitAlchemy's side — I've flagged it. Your board and tasks are unaffected.");
+    return;
+  }
+  // recent-angle memory so mornings don't repeat themselves
+  let hist = []; try { hist = JSON.parse((await env.MEETINGS.get("mkt_feed_hist")) || "[]"); } catch (e) {}
+  const m = d.meed || {};
+  const data = JSON.stringify({
+    dldSales: d.transactions ? { period: [d.transactions.periodFrom, d.transactions.periodTo], salesCount: d.transactions.salesCount, salesValueAedBn: d.transactions.salesValueAedBn, medianTicketAed: d.transactions.medianTicketAed, medianResidentialAedSqft: d.transactions.medianResidentialAedSqft, offPlanSplit: d.transactions.offPlanSplit, topAreas: (d.transactions.topAreas || []).slice(0, 8), weekly: d.transactions.weekly } : null,
+    monthly: d.monthly || null,
+    rents: d.rents ? { registrationTo: d.rents.registrationTo, contractsCount: d.rents.contractsCount, medianAnnualRentAed: d.rents.medianAnnualRentAed, medianRentAedSqftYr: d.rents.medianRentAedSqftYr, grossYieldPctByArea: d.rents.grossYieldPctByArea, versionSplit: d.rents.versionSplit } : null,
+    handover: d.handover ? { meedByQuarter: d.handover.meedByQuarter } : null,
+    developments: (m.developments || []).map(x => ({ development: x.development, developer: x.developer, activeProjects: x.activeProjects, pipelineValueUsdM: x.pipelineValueUsdM, nextCompletion: x.nextCompletion, dldPulse: x.dldPulse })),
+    supply: m.byStage ? { byStage: m.byStage, recentBigUpdates: m.recentBigUpdates, largestUnderConstruction: (m.largestUnderConstruction || []).slice(0, 5) } : null,
+  });
+  const sys = "You pick THREE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The three angles must cover DIFFERENT figures and, where possible, different sections (sales vs rents vs handovers vs supply). DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
+  const g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 900);
+  const angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 3) : [];
+  if (angles.length < 3) { if (force) await waSend(env, env.WA_ALLOWED, "Couldn't build this morning's angles — try “feed” again in a minute."); return; }
+  // store as the drafting context (draftFromAngle reads this) + remember the hooks
+  const briefTxt = angles.map((a, i) => "ANGLE " + (i + 1) + ": " + a.hook + "\nFigure: " + a.figure + " (" + a.source + ")\nBuyer: " + a.buyer).join("\n\n");
+  await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: briefTxt, data, angles }), { expirationTtl: 3 * 86400 });
+  hist = angles.map(a => a.hook).concat(hist).slice(0, 24);
+  await env.MEETINGS.put("mkt_feed_hist", JSON.stringify(hist), { expirationTtl: 30 * 86400 });
+  const bodyTxt = "☀️ *Najma daily — three you could post today*\n\n" +
+    angles.map((a, i) => (i + 1) + "️⃣ " + a.hook + "\n     " + a.figure + " · " + a.source).join("\n\n") +
+    "\n\nPick one — you'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
+  await waSend(env, env.WA_ALLOWED, bodyTxt);
+  await waSendButtons(env, env.WA_ALLOWED, "Today's pick:", [
+    { id: "feed:1", title: "1️⃣ First angle" },
+    { id: "feed:2", title: "2️⃣ Second angle" },
+    { id: "feed:3", title: "3️⃣ Third angle" }]);
+}
+
+// The complete, self-contained image prompt — one copyable block, BOTH ratios inside.
+function visualPromptBlock(angle) {
+  return "🎨 Image prompt — copy the whole block into your image tool:\n\n```" +
+    "Create TWO images of the same design, one 1080x1920 (9:16, for Instagram) and one 1920x1080 (16:9, for LinkedIn).\n\n" +
+    "Style: premium dark editorial market-report card. Background deep teal-black #0C1413 with a very subtle abstract geometric skyline silhouette in #182823 along the bottom. Accent gold #C5A56A, secondary teal #3E8A7E, text warm off-white #E8E4D8. Clean modern sans-serif typography, generous spacing, the number is the hero of the composition.\n\n" +
+    "Content, exactly this text and nothing else:\n" +
+    "- Small gold wordmark top-right: NAJMA نجمة\n" +
+    "- Headline: " + angle.hook + "\n" +
+    "- Dominant central stat, largest element: " + angle.figure + "\n" +
+    "- Sub-line under the stat: " + angle.source + "\n" +
+    "- Footer strip, small muted text: Source: Dubai Land Department (DLD) Open Data. Contains information from the Government of Dubai.\n\n" +
+    "Rules: no logos other than the NAJMA text wordmark, no watermarks, no people, no photographs, no invented text or numbers, keep all figures exactly as written." +
+    "```\n\nAttach the 9:16 to the Instagram post, the 16:9 to LinkedIn.";
 }
 
