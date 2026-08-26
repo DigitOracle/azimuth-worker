@@ -1847,6 +1847,12 @@ export default {
           await env.MEETINGS.put("mkt_index", JSON.stringify(_mb.projectIndex));
           return new Response(JSON.stringify({ ok: true, indexed: _mb.projectIndex.length }), { headers: { "Content-Type": "application/json" } });
         }
+        if (_mb && _mb.newsItems && Array.isArray(_mb.newsItems)) {                // v37.2 — Google News batch from the collector (GN blocks Cloudflare IPs)
+          if (_mb.newsItems.length > 100) return new Response("too many items", { status: 400 });
+          await env.MEETINGS.put("mkt_news_pending", JSON.stringify(_mb.newsItems.slice(0, 50)), { expirationTtl: 86400 });
+          try { await newsTick(env, true); } catch (e) {}
+          return new Response(JSON.stringify({ ok: true, pending: Math.min(_mb.newsItems.length, 50) }), { headers: { "Content-Type": "application/json" } });
+        }
         if (!_mb || !_mb.generatedAt || !(_mb.meed || _mb.transactions)) return new Response("bad payload", { status: 400 });
         // MERGE, don't replace: the daily MEED collector and the weekly Najma pulse feed
         // different sections of one dashboard. `meed` deep-merges (corpus stats + development
@@ -2525,7 +2531,10 @@ function visualPromptBlock(angle) {
 // A matched story carries the MEED facts (stage, value, completion) into the daily feed,
 // so one headline becomes a multi-angle story with register-grade facts attached.
 const NEWS_FEEDS = [
-  { url: "https://news.google.com/rss/search?q=dubai%20real%20estate%20OR%20property%20developer&hl=en-AE&gl=AE&ceid=AE:en", outlet: null },   // outlet comes per-item
+  // Google News 503s from Cloudflare's IPs (proven 26 Aug) — GN arrives via the daily
+  // collector instead (newsItems ingest). Bing tolerates datacenter IPs.
+  { url: "https://www.bing.com/news/search?q=dubai+real+estate&format=rss", outlet: null },
+  { url: "https://www.bing.com/news/search?q=dubai+property+developer+launch&format=rss", outlet: null },
   { url: "https://www.thenationalnews.com/arc/outboundfeeds/rss/?outputType=xml", outlet: "The National" },
 ];
 const NEWS_KEYWORDS = /\b(propert(y|ies)|real estate|developers?|towers?|residen(ce|ces|tial)|handovers?|launch(es|ed)?|off-?plan|master ?plan|mortgages?|rents?|rental|villas?|apartments?|dubai land|freehold|escrow|penthouses?|sq ?ft|square feet)\b/i;
@@ -2574,7 +2583,7 @@ async function newsTick(env, force) {
       feedStats[feedStats.length - 1].rawItems = xml.split("<item>").length - 1;
       for (const it of xml.split("<item>").slice(1, 40)) {
         const ti = (it.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s) || [])[1] || "";
-        const src = (it.match(/<source[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/source>/s) || [])[1] || f.outlet || "";
+        const src = (it.match(/<source[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/source>/s) || [])[1] || (it.match(/<News:Source[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/News:Source>/s) || [])[1] || f.outlet || "";
         const lnk = (it.match(/<link>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/link>/s) || [])[1] || "";
         const pd = Date.parse((it.match(/<pubDate>(.*?)<\/pubDate>/s) || [])[1] || "") || 0;
         const title = ti.replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').trim();
@@ -2590,6 +2599,22 @@ async function newsTick(env, force) {
       }
     } catch (e) { feedStats.push({ url: f.url.slice(0, 60), error: String((e && e.message) || e).slice(0, 80) }); }
   }
+  // collector-shipped Google News batch (arrives already query-scoped — no keyword filter)
+  try {
+    const pend = JSON.parse((await env.MEETINGS.get("mkt_news_pending")) || "[]");
+    if (pend.length) await env.MEETINGS.delete("mkt_news_pending");
+    for (const p of pend) {
+      const title = String(p.title || "").trim();
+      if (!title) continue;
+      const key = title.toLowerCase().slice(0, 80);
+      if (seen[key]) continue;
+      const ht = _newsTok(title), hl = title.toLowerCase();
+      let xref = null;
+      for (const c of cands) { if (_newsMatch(ht, hl, c.name)) { xref = { meedName: c.name, via: c.kind, facts: c.facts }; break; } }
+      items.push({ title, outlet: String(p.outlet || "").trim(), link: String(p.link || ""), at: Date.parse(p.at || "") || Date.now(), xref });
+      seen[key] = Date.now();
+    }
+  } catch (e) {}
   try { await env.MEETINGS.put("mkt_news_stats", JSON.stringify({ at: gstNowIso(), feeds: feedStats, kept: items.length }), { expirationTtl: 2 * 86400 }); } catch (e) {}
   if (!items.length && !force) return;
   // keep a rolling window: cross-referenced first, then newest
