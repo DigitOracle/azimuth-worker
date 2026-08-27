@@ -2780,15 +2780,17 @@ async function clientMatch(env, to, briefText) {
   });
   const top = cand.slice(0, 5);
 
-  // attach matching MEED pipeline/handovers by area name
+  // attach matching MEED pipeline/handovers + DLD incoming-supply by area name
   const devs = (d.meed && d.meed.developments) || [];
+  const sba = (d.projects && d.projects.supplyByArea) || {};
   for (const c of top) {
     const hit = devs.find(dv => (dv.dldPulse && String(dv.location || "").toLowerCase().indexOf(c.area.toLowerCase()) !== -1) || (c.area.toLowerCase().indexOf((dv.development || "").toLowerCase()) !== -1));
     if (hit) c.pipeline = { development: hit.development, developer: hit.developer, nextCompletion: hit.nextCompletion, activeProjects: hit.activeProjects };
+    for (const k of Object.keys(sba)) { if (k.toLowerCase() === c.area.toLowerCase()) { c.incomingSupply = { units: sba[k].units, projects: sba[k].projects, nextDelivery: sba[k].nextEnd }; break; } }
   }
 
   const period = d.transactions ? (d.transactions.periodFrom + " to " + d.transactions.periodTo) : "recent";
-  const sys = "You are advising a Dubai property broker preparing for a client meeting. Turn the matched register data into a crisp, sourced briefing she can speak from. Use ONLY the numbers provided — never invent or round beyond the nearest thousand. Structure, plain text, under 240 words: open with one line restating the client's ask; then for each of up to 4 candidate areas a short block — area name, the settled median for the requested type (say 'settled, not asking'), price per sq ft, off-plan share, and — when purpose is investment — lead with NET yield and show the working ('gross X%, minus ~SC AED/sq ft service charge = net Y%'), because net is what the buyer actually earns; any pipeline/handover fact. If two areas have similar gross but different net, CALL THAT OUT — it's the insight no one else gives. Then a NEGOTIATION line: these are DLD-registered settled prices, portals show higher asking prices — that gap is her leverage. Then WHAT NOT TO CLAIM: service charges tagged 'estimate' are RERA-published community typicals not the specific building's Mollak figure (confirm per building); no yield claim where absent; transaction history, not a forecast. Tag price figures 'DLD Open Data, " + period + "'.";
+  const sys = "You are advising a Dubai property broker preparing for a client meeting. Turn the matched register data into a crisp, sourced briefing she can speak from. Use ONLY the numbers provided — never invent or round beyond the nearest thousand. Structure, plain text, under 240 words: open with one line restating the client's ask; then for each of up to 4 candidate areas a short block — area name, the settled median for the requested type (say 'settled, not asking'), price per sq ft, off-plan share, and — when purpose is investment — lead with NET yield and show the working ('gross X%, minus ~SC AED/sq ft service charge = net Y%'), because net is what the buyer actually earns; any pipeline/handover fact. If two areas have similar gross but different net, CALL THAT OUT — it's the insight no one else gives. If an area has incomingSupply, add one line — units registered to deliver there and by when — as rental-competition context (more supply can soften rents). Then a NEGOTIATION line: these are DLD-registered settled prices, portals show higher asking prices — that gap is her leverage. Then WHAT NOT TO CLAIM: service charges tagged 'estimate' are RERA-published community typicals not the specific building's Mollak figure (confirm per building); no yield claim where absent; transaction history, not a forecast. Tag price figures 'DLD Open Data, " + period + "'.";
   const user = JSON.stringify({ clientAsk: { budgetAed: budget, roomType: rt, purpose, readyPref: ready, areaHint: intent.areaHint || null }, candidates: top });
   let out = null;
   try { out = await claudeText(env, sys, user, null, 1100); } catch (e) {}
@@ -2847,6 +2849,19 @@ async function launchMode(env, to, briefText) {
     if (intent.priceAed && priceCheck.settledMedianAed) priceCheck.launchVsSettledPct = Math.round(100 * (intent.priceAed - priceCheck.settledMedianAed) / priceCheck.settledMedianAed);
   }
 
+  // 1b. DLD register match — escrow + %-complete for THIS project, if it's in the register
+  let regHit = null;
+  const pl = (d && d.projects && d.projects.projectLookup) || [];
+  const dl2 = (intent.developer || "").toLowerCase(), al2 = (intent.area || "").toLowerCase();
+  for (const p of pl) {
+    const pd = (p.developer || "").toLowerCase(), pa = (p.area || "").toLowerCase();
+    if ((dl2 && (pd.indexOf(dl2) !== -1 || dl2.indexOf(pd) !== -1)) && (!al2 || pa.indexOf(al2) !== -1 || al2.indexOf(pa) !== -1)) { regHit = p; break; }
+  }
+  // 1c. competing supply in the area (units already registered to deliver nearby)
+  let areaSupply = null;
+  const sba = (d && d.projects && d.projects.supplyByArea) || {};
+  for (const k of Object.keys(sba)) { if (areaHit && k.toLowerCase() === areaHit.area.toLowerCase()) { areaSupply = { area: k, ...sba[k] }; break; } }
+
   // 2. developer track record
   const dev = _devMatch(devIndex, intent.developer);
   const track = dev ? { name: dev.d, projectsInCorpus: dev.n, completed: dev.complete, underConstruction: dev.construction, cancelled: dev.cancelled, onHold: dev.onhold, activeNow: dev.active, pipelineUsdM: dev.valueUsdM } : null;
@@ -2859,8 +2874,8 @@ async function launchMode(env, to, briefText) {
     serviceChargeIsEstimate: areaHit ? areaHit.serviceChargeIsEstimate : null };
 
   const period = d && d.transactions ? (d.transactions.periodFrom + " to " + d.transactions.periodTo) : "recent";
-  const sys = "You are briefing a Dubai property broker DISCREETLY while she sits in a developer's new-launch pitch. Give her the register's reality check on what she's being told, so she asks sharp questions and advises her clients honestly. Use ONLY the numbers provided; never invent. Structure, plain text, under 230 words: PRICE — is the launch price a premium or discount to what SETTLES in that area (give the % and the settled figure, 'DLD Open Data, " + period + "', settled not asking); if no area data say so plainly. RETURN — compare any ROI claim to the area's real NET yield (gross minus service charge — the number the buyer actually keeps); developers quote gross or projected ROI and hide the service charge, so if their claim exceeds the registered NET yield, name the gap and name the service charge as the reason (flag it 'estimate' where the service charge is a community typical, not the building's Mollak figure). TRACK RECORD — from the MEED corpus, the developer's completed vs under-construction vs cancelled counts and what that suggests about delivery (a high cancelled count is a flag; no record found = say so, not a verdict). ASK IN THE ROOM — three specific questions (escrow account status, realistic handover given their track record, service charge estimate, post-handover payment terms — pick the sharpest three). Close with WHAT NOT TO CLAIM: this is transaction history and corpus data, not a guarantee about this specific building.";
-  const user = JSON.stringify({ launch: intent, priceCheck, developerTrackRecord: track, roiReality });
+  const sys = "You are briefing a Dubai property broker DISCREETLY while she sits in a developer's new-launch pitch. Give her the register's reality check on what she's being told, so she asks sharp questions and advises her clients honestly. Use ONLY the numbers provided; never invent. Structure, plain text, under 230 words: PRICE — is the launch price a premium or discount to what SETTLES in that area (give the % and the settled figure, 'DLD Open Data, " + period + "', settled not asking); if no area data say so plainly. RETURN — compare any ROI claim to the area's real NET yield (gross minus service charge — the number the buyer actually keeps); developers quote gross or projected ROI and hide the service charge, so if their claim exceeds the registered NET yield, name the gap and name the service charge as the reason (flag it 'estimate' where the service charge is a community typical, not the building's Mollak figure). TRACK RECORD — from the MEED corpus, the developer's completed vs under-construction vs cancelled counts and what that suggests about delivery (a high cancelled count is a flag; no record found = say so, not a verdict). ESCROW &amp; REGISTRATION — if dldRegisterMatch is present, state it plainly: whether the project is on the DLD register, whether an escrow account is registered (escrowRegistered), its recorded %-complete and registered completion date — this is verification the developer can't spin; if no register match, say it's not in the open sample (not a verdict, just say to confirm the Oqood/escrow number in the room). SUPPLY — if competingSupplyInArea is present, note how many units are already registered to deliver in that area and by when (absorption/rental-competition risk the buyer should hear). ASK IN THE ROOM — three specific questions (escrow account number to verify on Dubai REST, realistic handover given their track record, service-charge estimate, post-handover payment terms — pick the sharpest three, informed by the gaps above). Close with WHAT NOT TO CLAIM: this is transaction history and corpus data, not a guarantee about this specific building.";
+  const user = JSON.stringify({ launch: intent, priceCheck, developerTrackRecord: track, roiReality, dldRegisterMatch: regHit, competingSupplyInArea: areaSupply });
   let out = null;
   try { out = await claudeText(env, sys, user, null, 1200); } catch (e) {}
   if (!out) { await waSend(env, to, "Couldn't build the check just now — try again in a minute."); return; }
