@@ -1858,6 +1858,14 @@ export default {
         const st = (await env.MEETINGS.get("mkt_news_stats")) || "{}";
         return new Response('{"stats":' + st + ',"stories":' + nn + "}", { headers: { "Content-Type": "application/json" } });
       }
+      if (url.pathname === "/sendimg") {                       // v45 — send a stored image to the user (admin-keyed, Kendall-approved sends)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const nm = (url.searchParams.get("name") || "").replace(/[^a-z0-9_]/gi, "");
+        if (!(await env.MEETINGS.get("img_" + nm))) return new Response("no such image: " + nm, { status: 404 });
+        try { await waSendImage(env, env.WA_ALLOWED, url.origin + "/img/" + nm, url.searchParams.get("caption") || undefined); }
+        catch (e) { return new Response("send failed", { status: 502 }); }
+        return new Response("sent " + nm);
+      }
       if (url.pathname === "/announce") {                      // v37.2 — send the user a one-off service message (admin-keyed; used for feature updates)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const tx = url.searchParams.get("text") || "";
