@@ -1974,12 +1974,20 @@ export default {
             const _fn = parseInt(bid.slice(5), 10);
             let _fc = null; try { _fc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
             const _fa = _fc && _fc.angles && _fc.angles[_fn - 1];
+            if (_fa) {                                          // v39 — taste memory: remember what she chooses; mornings learn her
+              try {
+                let _pk = JSON.parse((await env.MEETINGS.get("mkt_picks")) || "[]");
+                _pk.unshift({ at: gstDateStr(gstNow()), hook: _fa.hook, figure: _fa.figure, source: _fa.source });
+                await env.MEETINGS.put("mkt_picks", JSON.stringify(_pk.slice(0, 21)), { expirationTtl: 60 * 86400 });
+              } catch (e) {}
+              await dnaSignal(env, "picked_angle", _fa.hook);
+            }
             await draftFromAngle(env, from, "ig", _fn);
             await draftFromAngle(env, from, "li", _fn);
             if (_fa) await waSend(env, from, visualPromptBlock(_fa));
           }
           else if (bid === "mkt:post:li") { await publishDraft(env, from); }
-          else if (bid === "mkt:discard") { await env.MEETINGS.delete("mkt_lastdraft_li"); await waSend(env, from, "✖️ Dropped. Ask for another angle any time — “draft linkedin 2”."); }
+          else if (bid === "mkt:discard") { await env.MEETINGS.delete("mkt_lastdraft_li"); await dnaSignal(env, "discarded_linkedin_draft", ""); await waSend(env, from, "✖️ Dropped. Ask for another angle any time — “draft linkedin 2”."); }
           else if (bid.indexOf("pno:") === 0) { await env.MEETINGS.delete("pimg_" + bid.slice(4)); await waSend(env, from, "OK — nothing filed."); }
           else if (bid.indexOf("pimg:") === 0) {
             const _p = JSON.parse((await env.MEETINGS.get("pimg_" + bid.slice(5))) || "null");
@@ -2118,6 +2126,11 @@ export default {
             try { await marketBriefTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the brief just now — try again shortly."); }
             return new Response("ok");
           }
+          if (/^dna\s*\??$/i.test(text)) {                     // v39 — transparency: show her what it has learned about her
+            const _d = await dnaGet(env);
+            await waSend(env, from, _d ? ("🧬 What I've learned about your content identity so far:" + NL10 + NL10 + _d + NL10 + NL10 + "This updates itself nightly from what you pick, draft and skip. It only ever learns from your own choices.") : "🧬 Still learning you — pick a few angles from your morning feeds and check back in a couple of days.");
+            return new Response("ok");
+          }
           if (/^news\s*\??$/i.test(text)) {
             try { await newsTick(env, true); } catch (e) {}
             let nn = []; try { nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); } catch (e) {}
@@ -2146,7 +2159,8 @@ export default {
               "☀️ “feed” — today's three post-ready angles, any time" + NL10 +
               "📰 “news” — latest headlines, cross-checked against the project register" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
-              "🎙 “draft podcast 1” · ✍️ “draft linkedin 2” · 📸 “draft instagram 3” — content from an angle");
+              "✍️ “draft linkedin 2” · 📸 “draft instagram 3” — content from an angle" + NL10 +
+              "🧬 “dna” — what I've learned about your style");
             return new Response("ok");
           }
         }
@@ -2257,6 +2271,7 @@ export default {
       } catch (e) {}
       try { await meetingNudges(env); } catch (e) {}          // v32 — T-30/T-15 meeting nudges
       try { const _n = gstNow(); if (_n.getUTCHours() === 6 && _n.getUTCMinutes() < 30) { const rk = "reindex_" + gstDateStr(_n); if (!(await env.MEETINGS.get(rk))) { await env.MEETINGS.put(rk, "1", { expirationTtl: 2 * 86400 }); await peopleReindex(env); } } } catch (e) {}   // v35 — daily party reindex ~06:00 GST
+      try { await dnaReflect(env); } catch (e) {}             // v39 — nightly DNA reflection (~20:00 GST, only when new signals exist)
       try { await newsTick(env); } catch (e) {}               // v37.1 — hourly news sweep + MEED cross-reference
       try { await dailyFeedTick(env); } catch (e) {}          // v37 — Najma daily feed: three post-ready angles ~07:00 GST
       try { await marketBriefTick(env); } catch (e) {}        // v36 — weekly Market Pulse brief (Sunday ~09:00 GST, MARKET_BRIEF="on" only)
@@ -2446,7 +2461,10 @@ async function draftFromAngle(env, to, kind, n) {
     : kind === "ig"
     ? "You write an Instagram reel package for Najjuko, a Dubai property broker, from ONE angle of the provided brief. Two parts, exactly this structure, plain text: SCRIPT: a 30-45 second spoken-to-camera script (70-105 words) — hook in the first five words, one figure with its source and period said out loud, one buyer takeaway, no emojis, no stage directions. CAPTION: 2-4 short lines restating the figure WITH its source and period, one question to invite comments, then at most 5 hashtags on the final line. Use ONLY figures from the provided brief and data — never invent or sharpen a number."
     : "You write a LinkedIn post for Najjuko, a Dubai property broker. First line is the angle's hook — specific, no clickbait. Short paragraphs. Use ONLY figures from the provided brief and data; every figure carries its source and period. One practical buyer takeaway. End with one question inviting comments. At most 3 hashtags. Under 140 words, plain text.";
-  const user2 = "DRAFT FROM ANGLE " + n + " of this brief.\n\nTHE BRIEF:\n" + ctx.brief + "\n\nTHE FIGURES (the only numbers you may use):\n" + ctx.data;
+  await dnaSignal(env, "drafted_" + kind, "angle " + n);
+  const dna = await dnaGet(env);
+  const user2 = "DRAFT FROM ANGLE " + n + " of this brief.\n\nTHE BRIEF:\n" + ctx.brief + "\n\nTHE FIGURES (the only numbers you may use):\n" + ctx.data +
+    (dna ? "\n\nHER DNA PROFILE (learned from her own choices — write in HER style, favour HER framings):\n" + dna : "");
   let out = null;
   try { out = await claudeText(env, sys, user2, null, 900); } catch (e) {}
   if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
@@ -2565,6 +2583,8 @@ async function dailyFeedTick(env, force) {
   }
   // recent-angle memory so mornings don't repeat themselves
   let hist = []; try { hist = JSON.parse((await env.MEETINGS.get("mkt_feed_hist")) || "[]"); } catch (e) {}
+  // v39 — taste memory: the angles she actually CHOSE recently bias today's five
+  let picks = []; try { picks = JSON.parse((await env.MEETINGS.get("mkt_picks")) || "[]"); } catch (e) {}
   const m = d.meed || {};
 
   // v37.3 — TREND DELTAS, computed here so every delta is exact and quotable.
@@ -2612,7 +2632,7 @@ async function dailyFeedTick(env, force) {
     trends,
     news: await (async () => { try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); return nn.slice(0, 8).map(x => ({ title: x.title, outlet: x.outlet, meedCrossReference: x.xref ? { project: x.xref.meedName, facts: x.xref.facts } : null })); } catch (e) { return null; } })(),
   });
-  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections. AT LEAST TWO of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all). TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
+  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections. AT LEAST TWO of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all). TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". HER TASTE: these are angles she personally chose to post on recent mornings — bias the five toward similar subjects and styles WITHOUT repeating any hook: " + JSON.stringify(picks.slice(0, 8).map(p => p.hook)) + ". HER DNA PROFILE (learned from her choices — honour it): " + ((await dnaGet(env)) || "(still learning)") + ". NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
   const g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 1400);
   const angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 5) : [];
   if (angles.length < 3) { if (force) await waSend(env, env.WA_ALLOWED, "Couldn't build this morning's angles — try “feed” again in a minute."); return; }
@@ -2627,6 +2647,41 @@ async function dailyFeedTick(env, force) {
   await waSend(env, env.WA_ALLOWED, bodyTxt);
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle",
     angles.map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.figure || "").slice(0, 20), description: a.hook })));
+}
+
+// ── v39 — DNA: a self-learning profile of HER content identity ──────────────────
+// Every interaction is a signal (angle picked, draft discarded, format requested,
+// group watched). A nightly reflection distills the rolling signal log + the previous
+// profile into a compact DNA document, which then shapes the morning five and every
+// draft's voice. Transparent by design: she can read it any time with "dna".
+async function dnaSignal(env, type, detail) {
+  try {
+    let s = JSON.parse((await env.MEETINGS.get("mkt_signals")) || "[]");
+    s.unshift({ at: gstNowIso().slice(0, 16), type, detail: String(detail || "").slice(0, 160) });
+    await env.MEETINGS.put("mkt_signals", JSON.stringify(s.slice(0, 80)), { expirationTtl: 90 * 86400 });
+  } catch (e) {}
+}
+
+async function dnaGet(env) {
+  try { const d = JSON.parse((await env.MEETINGS.get("mkt_dna")) || "null"); return (d && d.text) || ""; } catch (e) { return ""; }
+}
+
+async function dnaReflect(env, force) {
+  const n = gstNow();
+  if (!force && (n.getUTCHours() !== 20 || n.getUTCMinutes() >= 30)) return;       // nightly ~20:00 GST
+  let s = []; try { s = JSON.parse((await env.MEETINGS.get("mkt_signals")) || "[]"); } catch (e) {}
+  let cur = null; try { cur = JSON.parse((await env.MEETINGS.get("mkt_dna")) || "null"); } catch (e) {}
+  const seenCount = (cur && cur.signalsSeen) || 0;
+  if (!force && s.length - seenCount < 3) return;                                  // reflect only when there's something new
+  let picks = []; try { picks = JSON.parse((await env.MEETINGS.get("mkt_picks")) || "[]"); } catch (e) {}
+  const sys = "You maintain the compact working profile ('DNA') of one Dubai property broker's content identity, learned ONLY from her observed choices. Update the existing profile with the new signals — evolve it, don't rewrite from scratch; keep what still holds, sharpen what the new evidence supports, drop what it contradicts. Structure, plain text, UNDER 170 words total: SUBJECTS SHE FAVOURS (data themes/areas she picks) · STYLE (tone and framing her chosen hooks share) · FORMATS (what she drafts most: Instagram vs LinkedIn, image vs reel) · AVOIDS (what she skips or discards). Never invent traits with no signal behind them — write 'not yet known' where evidence is thin.";
+  const user = "EXISTING PROFILE:\n" + ((cur && cur.text) || "(none yet)") +
+    "\n\nANGLES SHE CHOSE (newest first):\n" + JSON.stringify(picks.slice(0, 15)) +
+    "\n\nINTERACTION SIGNALS (newest first):\n" + JSON.stringify(s.slice(0, 40));
+  let out = null;
+  try { out = await claudeText(env, sys, user, null, 700); } catch (e) {}
+  if (!out) return;
+  await env.MEETINGS.put("mkt_dna", JSON.stringify({ text: out.trim().slice(0, 1400), updatedAt: gstNowIso(), signalsSeen: s.length }));
 }
 
 // The complete, self-contained image prompt — one copyable block, BOTH ratios inside.
