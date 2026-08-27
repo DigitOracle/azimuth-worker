@@ -1986,6 +1986,19 @@ export default {
             await draftFromAngle(env, from, "li", _fn);
             if (_fa) await waSend(env, from, visualPromptBlock(_fa));
           }
+          else if (bid === "match:done") { await waSend(env, from, "👍 Ready for your meeting. Every figure is DLD-registered — you're the most credible person at that table."); }
+          else if (bid === "match:post") {                     // v40 — turn a client-match briefing into a public post angle
+            let lm = null; try { lm = JSON.parse((await env.MEETINGS.get("mkt_lastmatch")) || "null"); } catch (e) {}
+            if (!lm) { await waSend(env, from, "That match expired — run the client brief again."); }
+            else {
+              await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: "MARKET INSIGHT FROM A REAL CLIENT BRIEF (anonymised — never name the client):\n" + lm.brief, data: JSON.stringify(lm.ask), angles: [] }), { expirationTtl: 3 * 86400 });
+              await waSend(env, from, "Turning it into content — pick a format:");
+              await waSendButtons(env, from, "Draft from this insight:", [
+                { id: "mkt:ig:1", title: "📸 Instagram" },
+                { id: "mkt:li:1", title: "✍️ LinkedIn" },
+                { id: "match:done", title: "✖️ Skip" }]);
+            }
+          }
           else if (bid === "mkt:post:li") { await publishDraft(env, from); }
           else if (bid === "mkt:discard") { await env.MEETINGS.delete("mkt_lastdraft_li"); await dnaSignal(env, "discarded_linkedin_draft", ""); await waSend(env, from, "✖️ Dropped. Ask for another angle any time — “draft linkedin 2”."); }
           else if (bid.indexOf("pno:") === 0) { await env.MEETINGS.delete("pimg_" + bid.slice(4)); await waSend(env, from, "OK — nothing filed."); }
@@ -2126,6 +2139,15 @@ export default {
             try { await marketBriefTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the brief just now — try again shortly."); }
             return new Response("ok");
           }
+          {                                                     // v40 — client match: "client has 1.5M wants a 1-bed for rental" / "match ..."
+            const _mm = text.match(/^(?:match|client|buyer|find(?:\s+me)?)\b[:\s]*(.+)$/i) ||
+                        (/\bclient\b|\bbudget\b|\bwants?\b|\blooking for\b/i.test(text) && /\b\d/.test(text) && /\b(bed|b\/?r|studio|villa|apartment|invest|rent|yield|budget|aed|k\b|m\b|million)\b/i.test(text) ? [null, text] : null);
+            if (_mm && _mm[1] && _mm[1].trim().length > 6) {
+              await waSend(env, from, "🎯 Working the register for that brief…");
+              try { await clientMatch(env, from, _mm[1].trim()); } catch (e) { await waSend(env, from, "Couldn't build that match — try again shortly."); }
+              return new Response("ok");
+            }
+          }
           if (/^dna\s*\??$/i.test(text)) {                     // v39 — transparency: show her what it has learned about her
             const _d = await dnaGet(env);
             await waSend(env, from, _d ? ("🧬 What I've learned about your content identity so far:" + NL10 + NL10 + _d + NL10 + NL10 + "This updates itself nightly from what you pick, draft and skip. It only ever learns from your own choices.") : "🧬 Still learning you — pick a few angles from your morning feeds and check back in a couple of days.");
@@ -2156,7 +2178,8 @@ export default {
               "👀 “list groups” · “watch <name>” — what I listen to" + NL10 +
               "🖥 “board” — your live board link" + NL10 +
               "📈 “market” — your Najma market pulse" + NL10 +
-              "☀️ “feed” — today's three post-ready angles, any time" + NL10 +
+              "🎯 “client has 1.5M, wants a 1-bed to rent” — instant register-grounded advice for a meeting" + NL10 +
+              "☀️ “feed” — today's five post-ready angles, any time" + NL10 +
               "📰 “news” — latest headlines, cross-checked against the project register" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
               "✍️ “draft linkedin 2” · 📸 “draft instagram 3” — content from an angle" + NL10 +
@@ -2682,6 +2705,75 @@ async function dnaReflect(env, force) {
   try { out = await claudeText(env, sys, user, null, 700); } catch (e) {}
   if (!out) return;
   await env.MEETINGS.put("mkt_dna", JSON.stringify({ text: out.trim().slice(0, 1400), updatedAt: gstNowIso(), signalsSeen: s.length }));
+}
+
+// ── v40 — CLIENT MATCH: budget + preferences -> register-grounded actionable intelligence ──
+// The feature that sells property, not just followers. She texts a client brief; the Worker
+// filters the per-area settled-price reality to where that budget REALISTICALLY buys, ranks it
+// (by yield for investors, by fit for end-users), attaches matching MEED pipeline/handovers, and
+// hands her sourced talking points for the meeting — settled prices, never asking prices.
+const MATCH_SCHEMA = { type: "object", additionalProperties: false, properties: { budgetAed: { type: ["number", "null"] }, roomType: { type: "string" }, purpose: { type: "string" }, readyPref: { type: "string" }, areaHint: { type: "string" } }, required: ["budgetAed", "roomType", "purpose", "readyPref", "areaHint"] };
+
+async function clientMatch(env, to, briefText) {
+  let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+  const ai = d && d.areaIntel && d.areaIntel.areas;
+  if (!ai || !ai.length) { await waSend(env, to, "The area data isn't loaded yet — try again after the next refresh."); return; }
+
+  const isys = "Extract a Dubai property buyer brief. roomType is one of: Studio, 1 B/R, 2 B/R, 3 B/R, 4 B/R, 5 B/R, villa, any. purpose: invest (yield/rental) | live (end-user) | any. readyPref: ready | off-plan | any. areaHint: an area name if the client named one, else empty. budgetAed: the number in AED (convert 'k'/'m'/'million'); null if none given. JSON only.";
+  const intent = await claudeJSON(env, isys, briefText, MATCH_SCHEMA, null, 300);
+  if (!intent) { await waSend(env, to, "Couldn't read that brief — try e.g. “client has 1.5M, wants a 1-bed for rental income”."); return; }
+  const budget = intent.budgetAed, rt = (intent.roomType || "any"), purpose = (intent.purpose || "any"), ready = (intent.readyPref || "any");
+
+  // score each area by how well the budget buys the requested room type
+  const cand = [];
+  for (const a of ai) {
+    if (intent.areaHint && a.area.toLowerCase().indexOf(intent.areaHint.toLowerCase()) === -1) continue;
+    const rr = (rt !== "any" && rt !== "villa") ? (a.byRoom && a.byRoom[rt]) : null;
+    const med = rr ? rr.medianAed : a.medianTicketAed;
+    if (!med) continue;
+    if (rt !== "any" && rt !== "villa" && !rr) continue;                 // asked for a room type this area has no depth in
+    let fit = 1;
+    if (budget) {
+      const lo = rr && rr.p25Aed ? rr.p25Aed * 0.9 : med * 0.75;
+      const hi = rr && rr.p75Aed ? rr.p75Aed * 1.1 : med * 1.25;
+      if (budget < lo * 0.85 || budget > hi * 1.3) continue;            // budget can't realistically buy here
+      fit = 1 - Math.min(1, Math.abs(med - budget) / budget);
+    }
+    if (ready === "ready" && a.offPlanPct >= 80) continue;              // wants ready, area is overwhelmingly off-plan
+    if (ready === "off-plan" && a.offPlanPct <= 20) continue;
+    cand.push({ area: a.area, sales: a.sales, medianForType: med, medianAedSqft: a.medianAedSqft,
+                offPlanPct: a.offPlanPct, grossYieldPct: a.grossYieldPct, roomType: rt, fit,
+                p25: rr && rr.p25Aed, p75: rr && rr.p75Aed });
+  }
+  if (!cand.length) { await waSend(env, to, "Nothing in the register cleanly matches that brief — the budget may be below where that type transacts. Try a wider budget or “any” room type."); return; }
+
+  // rank: investors by yield (known first), end-users by budget-fit then depth
+  cand.sort((x, y) => {
+    if (purpose === "invest") { const yx = x.grossYieldPct || -1, yy = y.grossYieldPct || -1; if (yx !== yy) return yy - yx; }
+    if (x.fit !== y.fit) return y.fit - x.fit;
+    return y.sales - x.sales;
+  });
+  const top = cand.slice(0, 5);
+
+  // attach matching MEED pipeline/handovers by area name
+  const devs = (d.meed && d.meed.developments) || [];
+  for (const c of top) {
+    const hit = devs.find(dv => (dv.dldPulse && String(dv.location || "").toLowerCase().indexOf(c.area.toLowerCase()) !== -1) || (c.area.toLowerCase().indexOf((dv.development || "").toLowerCase()) !== -1));
+    if (hit) c.pipeline = { development: hit.development, developer: hit.developer, nextCompletion: hit.nextCompletion, activeProjects: hit.activeProjects };
+  }
+
+  const period = d.transactions ? (d.transactions.periodFrom + " to " + d.transactions.periodTo) : "recent";
+  const sys = "You are advising a Dubai property broker preparing for a client meeting. Turn the matched register data into a crisp, sourced briefing she can speak from. Use ONLY the numbers provided — never invent or round beyond the nearest thousand. Structure, plain text, under 220 words: open with one line restating the client's ask; then for each of up to 4 candidate areas a short block — area name, the settled median for the requested type (say 'settled, not asking'), price per sq ft, off-plan share, gross yield if present, and any pipeline/handover fact; then a NEGOTIATION line reminding these are DLD-registered settled prices and portals show higher asking prices — that gap is her leverage; then a WHAT NOT TO CLAIM line (no yield claim where yield is absent; this is transaction history, not a forecast). Tag figures 'DLD Open Data, " + period + "'.";
+  const user = JSON.stringify({ clientAsk: { budgetAed: budget, roomType: rt, purpose, readyPref: ready, areaHint: intent.areaHint || null }, candidates: top });
+  let out = null;
+  try { out = await claudeText(env, sys, user, null, 1100); } catch (e) {}
+  if (!out) { await waSend(env, to, "Couldn't build the briefing just now — try again in a minute."); return; }
+  await env.MEETINGS.put("mkt_lastmatch", JSON.stringify({ at: gstNowIso(), ask: intent, brief: out }), { expirationTtl: 3 * 86400 });
+  await dnaSignal(env, "client_match", (rt !== "any" ? rt + " " : "") + purpose + (budget ? " ~" + Math.round(budget / 1000) + "k" : ""));
+  await waSend(env, to, "🎯 Client match — register-grounded\n\n" + out);
+  await waSendButtons(env, to, "Turn this into content, or refine the brief in a reply.", [
+    { id: "match:post", title: "📸 Make it a post" },
+    { id: "match:done", title: "✓ Just for the meeting" }]);
 }
 
 // The complete, self-contained image prompt — one copyable block, BOTH ratios inside.
