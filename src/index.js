@@ -2968,6 +2968,48 @@ function chMap(title, sub, areas) {         // areas: [{area, sales}]
   return _chWrap(title, sub, body);
 }
 
+// Heat map on a self-contained vector Dubai basemap (coastline + Palm Jumeirah + Sheikh Zayed
+// Road for orientation) — no tiles, no API key, no external calls. Heat = registered sales
+// density per community; warmer + bigger = more sales. Fixed projection so basemap and heat align.
+const DXB_BBOX = { lo0: 55.02, lo1: 55.42, la0: 24.86, la1: 25.32 };
+function chHeatMap(title, sub, areas) {
+  const W = 1080, H = 1080, PT = 250, PB = 90;
+  const px = lon => 80 + (W - 160) * (lon - DXB_BBOX.lo0) / (DXB_BBOX.lo1 - DXB_BBOX.lo0);
+  const py = lat => PT + (H - PT - PB) * (1 - (lat - DXB_BBOX.la0) / (DXB_BBOX.la1 - DXB_BBOX.la0));
+  const pts = areas.map(a => ({ a, c: DXB_COORDS[a.area.toLowerCase()] })).filter(p => p.c);
+  if (pts.length < 4) return null;
+  const mx = Math.max(...pts.map(p => p.a.sales), 1);
+
+  // basemap: sea fill + coastline + Palm + arterial road (thin, subtle — heat is the star)
+  const shore = [[55.02, 24.98], [55.10, 25.05], [55.135, 25.095], [55.15, 25.10], [55.19, 25.135], [55.24, 25.20], [55.285, 25.26], [55.35, 25.30]];
+  const shorePath = shore.map((c, i) => (i ? "L" : "M") + px(c[0]).toFixed(0) + " " + py(c[1]).toFixed(0)).join(" ");
+  const seaFill = "M" + px(55.02).toFixed(0) + " " + py(24.98).toFixed(0) + " " + shore.slice(1).map(c => "L" + px(c[0]).toFixed(0) + " " + py(c[1]).toFixed(0)).join(" ") + " L" + px(55.35).toFixed(0) + " " + PT + " L" + px(55.02).toFixed(0) + " " + PT + " Z";
+  const road = [[55.14, 25.06], [55.20, 25.13], [55.27, 25.19], [55.33, 25.26]].map((c, i) => (i ? "L" : "M") + px(c[0]).toFixed(0) + " " + py(c[1]).toFixed(0)).join(" ");
+  // Palm Jumeirah at 55.138,25.112 — a small iconic mark
+  const palmX = px(55.138), palmY = py(25.112), pr = 34;
+  let palm = `<circle cx="${palmX.toFixed(0)}" cy="${palmY.toFixed(0)}" r="8" fill="none" stroke="${CH.teal}" stroke-width="2" opacity="0.5"/>`;
+  for (let k = 0; k < 9; k++) { const a = -Math.PI * 0.9 + k * (Math.PI * 0.8 / 8); palm += `<line x1="${palmX.toFixed(0)}" y1="${palmY.toFixed(0)}" x2="${(palmX + pr * Math.cos(a)).toFixed(0)}" y2="${(palmY + pr * Math.sin(a)).toFixed(0)}" stroke="${CH.teal}" stroke-width="1.5" opacity="0.45"/>`; }
+  palm += `<path d="M${(palmX - pr - 8).toFixed(0)} ${(palmY - pr).toFixed(0)} A${pr + 10} ${pr + 10} 0 0 1 ${(palmX + pr + 8).toFixed(0)} ${(palmY - pr + 4).toFixed(0)}" fill="none" stroke="${CH.teal}" stroke-width="2" opacity="0.45"/>`;
+
+  // heat blobs (radial gradient, additive look via opacity), then labels for the top areas
+  let defs = "", heat = "", dots = "", labels = "";
+  pts.sort((a, b) => b.a.sales - a.a.sales).forEach((p, i) => {
+    const t = p.a.sales / mx, r = 34 + 120 * Math.sqrt(t);
+    const col = t > 0.55 ? CH.gold : CH.teal;
+    defs += `<radialGradient id="h${i}"><stop offset="0" stop-color="${col}" stop-opacity="${(0.55 * t + 0.18).toFixed(2)}"/><stop offset="100%" stop-color="${col}" stop-opacity="0"/></radialGradient>`;
+    heat += `<circle cx="${px(p.c[0]).toFixed(0)}" cy="${py(p.c[1]).toFixed(0)}" r="${r.toFixed(0)}" fill="url(#h${i})"/>`;
+    if (i < 8) { dots += `<circle cx="${px(p.c[0]).toFixed(0)}" cy="${py(p.c[1]).toFixed(0)}" r="5" fill="${col}"/>`; labels += `<text x="${px(p.c[0]).toFixed(0)}" y="${(py(p.c[1]) - 12).toFixed(0)}" fill="${CH.text}" font-size="21" text-anchor="middle" font-weight="600">${_sx(p.a.area.length > 15 ? p.a.area.slice(0, 14) + "…" : p.a.area)}</text>`; }
+  });
+  const body = `<defs>${defs}</defs>` +
+    `<rect x="70" y="${PT - 18}" width="${W - 140}" height="${H - PT - PB + 8}" rx="24" fill="#0F211E"/>` +
+    `<path d="${seaFill}" fill="${CH.teal}" fill-opacity="0.10"/>` +
+    `<path d="${shorePath}" fill="none" stroke="${CH.teal}" stroke-width="2.5" opacity="0.6"/>` +
+    `<path d="${road}" fill="none" stroke="${CH.mut}" stroke-width="2" stroke-dasharray="2 5" opacity="0.5"/>` +
+    palm + heat + dots + labels +
+    `<text x="96" y="${H - 108}" fill="${CH.mut}" font-size="20">◍ warmer &amp; larger = more registered sales · ✦ Palm Jumeirah · – – Sheikh Zayed Road</text>`;
+  return _chWrap(title, sub, body);
+}
+
 function _chWrap(title, sub, body) {
   const W = 1080, H = 1080;
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" width="100%" style="max-width:520px;display:block">` +
@@ -2992,7 +3034,7 @@ function renderCharts(latestRaw) {
   const nety = (d.areaIntel && d.areaIntel.areas || []).filter(a => a.netYieldPct != null).sort((a, b) => b.netYieldPct - a.netYieldPct).slice(0, 7);
   if (nety.length) cards.push(chBars("Net rental yield by area", "Gross minus service charge — what the buyer keeps", nety.map(a => ({ label: a.area.length > 22 ? a.area.slice(0, 21) + "…" : a.area, value: a.netYieldPct, disp: a.netYieldPct + "%" }))));
   else if (rn && rn.grossYieldPctByArea && rn.grossYieldPctByArea.length) cards.push(chBars("Gross rental yield by area", "Registered rent ÷ registered price · Ejari + DLD", rn.grossYieldPctByArea.slice(0, 7).map(y => ({ label: y.area.length > 22 ? y.area.slice(0, 21) + "…" : y.area, value: y.yieldPct, disp: y.yieldPct + "%" }))));
-  const map = t.topAreas ? chMap("Dubai — where it's trading", "Bubble size = registered sales volume", t.topAreas.slice(0, 20)) : null;
+  const map = t.topAreas ? (chHeatMap("Dubai — where it's trading", "Sales heat on the map · Ejari + DLD register", t.topAreas.slice(0, 20)) || chMap("Dubai — where it's trading", "Bubble size = registered sales volume", t.topAreas.slice(0, 20))) : null;
   if (map) cards.push(map);
   return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Najma charts</title><style>body{background:#0C1413;color:#E8E4D8;font-family:system-ui,-apple-system,Segoe UI,Roboto;margin:0;padding:14px 12px 40px;max-width:560px;margin:auto}.h{font-size:1.5rem;font-weight:700;margin:.3rem 0}.h em{font-style:normal;color:#C5A56A}.s{color:#8FA39B;font-size:.8rem;margin-bottom:1rem}.c{margin:0 0 16px}.t{color:#8FA39B;font-size:.7rem;text-align:center;margin-top:4px}</style></head><body>' +
     '<div class=h>Najma <em>نجمة</em> — charts</div><div class=s>Long-press any chart to save it, then post. Every figure is register-grounded.</div>' +
