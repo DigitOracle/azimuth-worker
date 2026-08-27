@@ -1866,6 +1866,10 @@ export default {
         try { await dailyFeedTick(env, true); } catch (e) { return new Response("feed error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response("feed fired — check WhatsApp");
       }
+      if (url.pathname === "/charts") {                        // v41 — post-ready SVG charts from the register
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        return new Response(renderCharts(await env.MEETINGS.get("mkt_latest")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _ml = await env.MEETINGS.get("mkt_latest");
@@ -2176,6 +2180,10 @@ export default {
             ).join(NL10 + NL10) + NL10 + NL10 + "Say “feed” to turn today's data + news into three post-ready angles.");
             return new Response("ok");
           }
+          if (/^(?:charts?|graphs?|visuals?|map)\s*\??$/i.test(text)) {
+            await waSend(env, from, "📊 Your charts — bar, line, off-plan split, yields, and a Dubai map, all from the register:\n" + url.origin + "/charts?key=" + env.READ_KEY + "\n\nLong-press any one to save it, then post — the source line is already on it.");
+            return new Response("ok");
+          }
           if (/^(?:feed|daily|today(?:'s)?\s+(?:feed|angles|posts?))\s*\??$/i.test(text)) {
             await waSend(env, from, "☀️ Building this morning's three — a moment…");
             try { await dailyFeedTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the feed just now — try again shortly."); }
@@ -2191,6 +2199,7 @@ export default {
               "👀 “list groups” · “watch <name>” — what I listen to" + NL10 +
               "🖥 “board” — your live board link" + NL10 +
               "📈 “market” — your Najma market pulse" + NL10 +
+              "📊 “charts” — post-ready bar/line/pie + a Dubai map" + NL10 +
               "🎯 “client has 1.5M, wants a 1-bed to rent” — instant register-grounded advice for a meeting" + NL10 +
               "🏗 “launch: <developer> in <area>, 1-bed from 1.2M, claims 8% ROI” — due diligence while you're in the pitch" + NL10 +
               "☀️ “feed” — today's five post-ready angles, any time" + NL10 +
@@ -2855,6 +2864,104 @@ async function launchMode(env, to, briefText) {
   await waSendButtons(env, to, "Keep it for the room, or turn the honest read into content.", [
     { id: "match:post", title: "📸 Make it a post" },
     { id: "match:done", title: "✓ Just for me" }]);
+}
+
+// ── v41 — CHARTS: post-ready visuals rendered from the register (native SVG, no libraries,
+// no image generator — real numbers only). Each card is sized for a screenshot to become an
+// Instagram/LinkedIn asset, with the NAJMA wordmark and DLD attribution already on it.
+const CH = { ink: "#0C1413", card: "#131F1D", card2: "#182823", line: "#24352F", text: "#E8E4D8", mut: "#8FA39B", gold: "#C5A56A", teal: "#3E8A7E", amber: "#D9A441" };
+const _sx = (s) => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+function chLine(title, sub, pts) {          // pts: [{label, value}]
+  const W = 1080, H = 1080, PL = 90, PR = 70, PT = 250, PB = 150;
+  const vals = pts.map(p => p.value), mx = Math.max(...vals, 1), mn = Math.min(...vals, 0);
+  const x = i => PL + (W - PL - PR) * (pts.length === 1 ? 0.5 : i / (pts.length - 1));
+  const y = v => PT + (H - PT - PB) * (1 - (v - mn) / (mx - mn || 1));
+  const line = pts.map((p, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(p.value).toFixed(1)).join(" ");
+  const area = "M" + x(0).toFixed(1) + " " + (H - PB) + " " + pts.map((p, i) => "L" + x(i).toFixed(1) + " " + y(p.value).toFixed(1)).join(" ") + " L" + x(pts.length - 1).toFixed(1) + " " + (H - PB) + " Z";
+  const dots = pts.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="7" fill="${CH.gold}"/>`).join("");
+  const labs = pts.map((p, i) => `<text x="${x(i).toFixed(1)}" y="${H - PB + 45}" fill="${CH.mut}" font-size="26" text-anchor="middle">${_sx(p.label)}</text>`).join("");
+  const vlab = pts.map((p, i) => `<text x="${x(i).toFixed(1)}" y="${(y(p.value) - 22).toFixed(1)}" fill="${CH.text}" font-size="24" text-anchor="middle" font-weight="600">${_sx(p.disp || p.value)}</text>`).join("");
+  return _chWrap(title, sub, `<defs><linearGradient id="lg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${CH.teal}" stop-opacity=".35"/><stop offset="1" stop-color="${CH.teal}" stop-opacity="0"/></linearGradient></defs><path d="${area}" fill="url(#lg)"/><path d="${line}" fill="none" stroke="${CH.teal}" stroke-width="5"/>${dots}${vlab}${labs}`);
+}
+
+function chBars(title, sub, rows) {         // rows: [{label, value, disp}]
+  const W = 1080, H = 1080, PL = 90, PT = 250, PB = 90, rowH = (H - PT - PB) / rows.length;
+  const mx = Math.max(...rows.map(r => r.value), 1);
+  const bw = W - PL - 90;
+  let body = "";
+  rows.forEach((r, i) => {
+    const yy = PT + i * rowH, w = Math.max(4, bw * r.value / mx);
+    body += `<text x="${PL}" y="${yy + 26}" fill="${CH.text}" font-size="30">${_sx(r.label)}</text>` +
+      `<rect x="${PL}" y="${yy + 42}" width="${w.toFixed(1)}" height="26" rx="6" fill="${i === 0 ? CH.gold : CH.teal}"/>` +
+      `<text x="${(PL + w + 14).toFixed(1)}" y="${yy + 63}" fill="${CH.mut}" font-size="26" font-weight="600">${_sx(r.disp != null ? r.disp : r.value)}</text>`;
+  });
+  return _chWrap(title, sub, body);
+}
+
+function chDonut(title, sub, parts) {       // parts: [{label, value, color}]
+  const W = 1080, H = 1080, cx = W / 2, cy = 560, R = 210, r = 120;
+  const tot = parts.reduce((s, p) => s + p.value, 0) || 1;
+  let ang = -Math.PI / 2, segs = "";
+  const pt = (a, rad) => [cx + rad * Math.cos(a), cy + rad * Math.sin(a)];
+  parts.forEach(p => {
+    const a2 = ang + 2 * Math.PI * p.value / tot, big = (a2 - ang) > Math.PI ? 1 : 0;
+    const [x1, y1] = pt(ang, R), [x2, y2] = pt(a2, R), [x3, y3] = pt(a2, r), [x4, y4] = pt(ang, r);
+    segs += `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${R} ${R} 0 ${big} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L${x3.toFixed(1)} ${y3.toFixed(1)} A${r} ${r} 0 ${big} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z" fill="${p.color}"/>`;
+    ang = a2;
+  });
+  const leg = parts.map((p, i) => `<rect x="330" y="${840 + i * 56}" width="30" height="30" rx="5" fill="${p.color}"/><text x="378" y="${864 + i * 56}" fill="${CH.text}" font-size="32">${_sx(p.label)} — ${Math.round(100 * p.value / tot)}%</text>`).join("");
+  return _chWrap(title, sub, segs + leg);
+}
+
+// Curated public community coordinates (well-known Dubai geography, not proprietary data),
+// normalised into the card. Bubble size = sales volume. An honest, screenshot-ready map.
+const DXB_COORDS = { "business bay": [55.264, 25.186], "jumeirah village circle": [55.207, 25.058], "downtown dubai": [55.276, 25.194], "dubai marina": [55.138, 25.080], "palm jumeirah": [55.138, 25.112], "jumeirah lakes towers": [55.141, 25.069], "dubai hills estate": [55.246, 25.104], "arjan": [55.243, 25.055], "al furjan": [55.145, 25.026], "dubai south": [55.161, 24.896], "madinat al mataar": [55.16, 24.90], "city of arabia": [55.30, 25.13], "jumeirah village triangle": [55.19, 25.05], "damac hills": [55.25, 25.03], "dubai creek harbour": [55.34, 25.20], "meydan": [55.30, 25.16], "town square": [55.28, 25.02], "the valley": [55.45, 25.02], "sobha hartland": [55.30, 25.18], "majan": [55.26, 25.07], "dubai land residence complex": [55.28, 25.06], "al barsha": [55.20, 25.11], "deira": [55.32, 25.27], "palm deira": [55.32, 25.30], "dubai islands": [55.33, 25.30], "jabal ali first": [55.13, 25.00], "wadi al safa 5": [55.30, 25.07] };
+function chMap(title, sub, areas) {         // areas: [{area, sales}]
+  const W = 1080, H = 1080, PT = 250, PB = 80;
+  const pts = areas.map(a => ({ a, c: DXB_COORDS[a.area.toLowerCase()] })).filter(p => p.c);
+  if (pts.length < 4) return null;
+  const lons = pts.map(p => p.c[0]), lats = pts.map(p => p.c[1]);
+  const lo0 = Math.min(...lons), lo1 = Math.max(...lons), la0 = Math.min(...lats), la1 = Math.max(...lats);
+  const px = lon => 110 + (W - 220) * (lon - lo0) / (lo1 - lo0 || 1);
+  const py = lat => PT + (H - PT - PB) * (1 - (lat - la0) / (la1 - la0 || 1));
+  const mx = Math.max(...pts.map(p => p.a.sales), 1);
+  let body = `<rect x="70" y="${PT - 20}" width="${W - 140}" height="${H - PT - PB + 10}" rx="24" fill="${CH.card2}"/>`;
+  pts.sort((a, b) => b.a.sales - a.a.sales).forEach((p, i) => {
+    const r = 16 + 60 * Math.sqrt(p.a.sales / mx);
+    body += `<circle cx="${px(p.c[0]).toFixed(1)}" cy="${py(p.c[1]).toFixed(1)}" r="${r.toFixed(1)}" fill="${i === 0 ? CH.gold : CH.teal}" fill-opacity="0.5" stroke="${i === 0 ? CH.gold : CH.teal}" stroke-width="2"/>`;
+    if (i < 6) body += `<text x="${px(p.c[0]).toFixed(1)}" y="${(py(p.c[1]) + 8).toFixed(1)}" fill="${CH.text}" font-size="22" text-anchor="middle" font-weight="600">${_sx(p.a.area.length > 16 ? p.a.area.slice(0, 15) + "…" : p.a.area)}</text>`;
+  });
+  return _chWrap(title, sub, body);
+}
+
+function _chWrap(title, sub, body) {
+  const W = 1080, H = 1080;
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" width="100%" style="max-width:520px;display:block">` +
+    `<rect width="${W}" height="${H}" fill="${CH.ink}"/><rect x="24" y="24" width="${W - 48}" height="${H - 48}" rx="28" fill="${CH.card}" stroke="${CH.line}" stroke-width="2"/>` +
+    `<text x="70" y="120" fill="${CH.gold}" font-size="30" font-weight="700" letter-spacing="1">NAJMA نجمة</text>` +
+    `<text x="70" y="188" fill="${CH.text}" font-size="46" font-weight="700">${_sx(title)}</text>` +
+    `<text x="70" y="228" fill="${CH.mut}" font-size="26">${_sx(sub)}</text>` +
+    body +
+    `<text x="70" y="${H - 44}" fill="${CH.mut}" font-size="22">Source: Dubai Land Department (DLD) Open Data · settled, not asking</text>` +
+    `</svg>`;
+}
+
+function renderCharts(latestRaw) {
+  let d = null; try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
+  if (!d || !d.transactions) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem"><h2>Charts</h2><p>No data yet — the collector has not delivered.</p>';
+  const t = d.transactions, mo = d.monthly, rn = d.rents;
+  const cards = [];
+  if (mo && mo.series && mo.series.length) cards.push(chLine("Sales value by month", "AED billion · " + (mo.ytdValueAedBn || "") + "bn year to date", mo.series.map(s => ({ label: s.month.slice(5), value: s.valueAedBn, disp: s.valueAedBn }))));
+  if (t.topAreas && t.topAreas.length) cards.push(chBars("Where the market trades", "Registered sales by area · " + (t.periodFrom || "") + " to " + (t.periodTo || ""), t.topAreas.slice(0, 8).map(a => ({ label: a.area.length > 22 ? a.area.slice(0, 21) + "…" : a.area, value: a.sales, disp: a.sales.toLocaleString("en-US") }))));
+  if (t.offPlanSplit) cards.push(chDonut("Off-plan vs ready", "Share of registered sales", [{ label: "Off-plan", value: t.offPlanSplit["Off-Plan"] || 0, color: CH.gold }, { label: "Ready", value: t.offPlanSplit["Ready"] || 0, color: CH.teal }]));
+  if (rn && rn.grossYieldPctByArea && rn.grossYieldPctByArea.length) cards.push(chBars("Gross rental yield by area", "Registered rent ÷ registered price · Ejari + DLD", rn.grossYieldPctByArea.slice(0, 7).map(y => ({ label: y.area.length > 22 ? y.area.slice(0, 21) + "…" : y.area, value: y.yieldPct, disp: y.yieldPct + "%" }))));
+  const map = t.topAreas ? chMap("Dubai — where it's trading", "Bubble size = registered sales volume", t.topAreas.slice(0, 20)) : null;
+  if (map) cards.push(map);
+  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Najma charts</title><style>body{background:#0C1413;color:#E8E4D8;font-family:system-ui,-apple-system,Segoe UI,Roboto;margin:0;padding:14px 12px 40px;max-width:560px;margin:auto}.h{font-size:1.5rem;font-weight:700;margin:.3rem 0}.h em{font-style:normal;color:#C5A56A}.s{color:#8FA39B;font-size:.8rem;margin-bottom:1rem}.c{margin:0 0 16px}.t{color:#8FA39B;font-size:.7rem;text-align:center;margin-top:4px}</style></head><body>' +
+    '<div class=h>Najma <em>نجمة</em> — charts</div><div class=s>Long-press any chart to save it, then post. Every figure is register-grounded.</div>' +
+    cards.map(c => '<div class=c>' + c + '<div class=t>screenshot or long-press to save · then post</div></div>').join("") +
+    '</body></html>';
 }
 
 // The complete, self-contained image prompt — one copyable block, BOTH ratios inside.
