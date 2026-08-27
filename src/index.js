@@ -2765,14 +2765,16 @@ async function clientMatch(env, to, briefText) {
     if (ready === "ready" && a.offPlanPct >= 80) continue;              // wants ready, area is overwhelmingly off-plan
     if (ready === "off-plan" && a.offPlanPct <= 20) continue;
     cand.push({ area: a.area, sales: a.sales, medianForType: med, medianAedSqft: a.medianAedSqft,
-                offPlanPct: a.offPlanPct, grossYieldPct: a.grossYieldPct, roomType: rt, fit,
+                offPlanPct: a.offPlanPct, grossYieldPct: a.grossYieldPct,
+                netYieldPct: a.netYieldPct, serviceChargeAedSqftYr: a.serviceChargeAedSqftYr,
+                serviceChargeIsEstimate: a.serviceChargeIsEstimate, roomType: rt, fit,
                 p25: rr && rr.p25Aed, p75: rr && rr.p75Aed });
   }
   if (!cand.length) { await waSend(env, to, "Nothing in the register cleanly matches that brief — the budget may be below where that type transacts. Try a wider budget or “any” room type."); return; }
 
   // rank: investors by yield (known first), end-users by budget-fit then depth
   cand.sort((x, y) => {
-    if (purpose === "invest") { const yx = x.grossYieldPct || -1, yy = y.grossYieldPct || -1; if (yx !== yy) return yy - yx; }
+    if (purpose === "invest") { const yx = (x.netYieldPct != null ? x.netYieldPct : x.grossYieldPct) || -1, yy = (y.netYieldPct != null ? y.netYieldPct : y.grossYieldPct) || -1; if (yx !== yy) return yy - yx; }
     if (x.fit !== y.fit) return y.fit - x.fit;
     return y.sales - x.sales;
   });
@@ -2786,7 +2788,7 @@ async function clientMatch(env, to, briefText) {
   }
 
   const period = d.transactions ? (d.transactions.periodFrom + " to " + d.transactions.periodTo) : "recent";
-  const sys = "You are advising a Dubai property broker preparing for a client meeting. Turn the matched register data into a crisp, sourced briefing she can speak from. Use ONLY the numbers provided — never invent or round beyond the nearest thousand. Structure, plain text, under 220 words: open with one line restating the client's ask; then for each of up to 4 candidate areas a short block — area name, the settled median for the requested type (say 'settled, not asking'), price per sq ft, off-plan share, gross yield if present, and any pipeline/handover fact; then a NEGOTIATION line reminding these are DLD-registered settled prices and portals show higher asking prices — that gap is her leverage; then a WHAT NOT TO CLAIM line (no yield claim where yield is absent; this is transaction history, not a forecast). Tag figures 'DLD Open Data, " + period + "'.";
+  const sys = "You are advising a Dubai property broker preparing for a client meeting. Turn the matched register data into a crisp, sourced briefing she can speak from. Use ONLY the numbers provided — never invent or round beyond the nearest thousand. Structure, plain text, under 240 words: open with one line restating the client's ask; then for each of up to 4 candidate areas a short block — area name, the settled median for the requested type (say 'settled, not asking'), price per sq ft, off-plan share, and — when purpose is investment — lead with NET yield and show the working ('gross X%, minus ~SC AED/sq ft service charge = net Y%'), because net is what the buyer actually earns; any pipeline/handover fact. If two areas have similar gross but different net, CALL THAT OUT — it's the insight no one else gives. Then a NEGOTIATION line: these are DLD-registered settled prices, portals show higher asking prices — that gap is her leverage. Then WHAT NOT TO CLAIM: service charges tagged 'estimate' are RERA-published community typicals not the specific building's Mollak figure (confirm per building); no yield claim where absent; transaction history, not a forecast. Tag price figures 'DLD Open Data, " + period + "'.";
   const user = JSON.stringify({ clientAsk: { budgetAed: budget, roomType: rt, purpose, readyPref: ready, areaHint: intent.areaHint || null }, candidates: top });
   let out = null;
   try { out = await claudeText(env, sys, user, null, 1100); } catch (e) {}
@@ -2849,11 +2851,15 @@ async function launchMode(env, to, briefText) {
   const dev = _devMatch(devIndex, intent.developer);
   const track = dev ? { name: dev.d, projectsInCorpus: dev.n, completed: dev.complete, underConstruction: dev.construction, cancelled: dev.cancelled, onHold: dev.onhold, activeNow: dev.active, pipelineUsdM: dev.valueUsdM } : null;
 
-  // 3. ROI reality
-  const roiReality = (areaHit && areaHit.grossYieldPct) ? { areaGrossYieldPct: areaHit.grossYieldPct, developerClaimPct: intent.roiClaimPct } : { areaGrossYieldPct: null, developerClaimPct: intent.roiClaimPct };
+  // 3. ROI reality — compare their claim to the area's NET yield (what a buyer actually earns)
+  const roiReality = { developerClaimPct: intent.roiClaimPct,
+    areaGrossYieldPct: areaHit ? areaHit.grossYieldPct : null,
+    areaNetYieldPct: areaHit ? areaHit.netYieldPct : null,
+    serviceChargeAedSqftYr: areaHit ? areaHit.serviceChargeAedSqftYr : null,
+    serviceChargeIsEstimate: areaHit ? areaHit.serviceChargeIsEstimate : null };
 
   const period = d && d.transactions ? (d.transactions.periodFrom + " to " + d.transactions.periodTo) : "recent";
-  const sys = "You are briefing a Dubai property broker DISCREETLY while she sits in a developer's new-launch pitch. Give her the register's reality check on what she's being told, so she asks sharp questions and advises her clients honestly. Use ONLY the numbers provided; never invent. Structure, plain text, under 230 words: PRICE — is the launch price a premium or discount to what SETTLES in that area (give the % and the settled figure, 'DLD Open Data, " + period + "', settled not asking); if no area data say so plainly. RETURN — compare any ROI claim to the area's actual gross yield; if the claim exceeds the registered yield, say the gap is the developer's projection, not the register. TRACK RECORD — from the MEED corpus, the developer's completed vs under-construction vs cancelled counts and what that suggests about delivery (a high cancelled count is a flag; no record found = say so, not a verdict). ASK IN THE ROOM — three specific questions (escrow account status, realistic handover given their track record, service charge estimate, post-handover payment terms — pick the sharpest three). Close with WHAT NOT TO CLAIM: this is transaction history and corpus data, not a guarantee about this specific building.";
+  const sys = "You are briefing a Dubai property broker DISCREETLY while she sits in a developer's new-launch pitch. Give her the register's reality check on what she's being told, so she asks sharp questions and advises her clients honestly. Use ONLY the numbers provided; never invent. Structure, plain text, under 230 words: PRICE — is the launch price a premium or discount to what SETTLES in that area (give the % and the settled figure, 'DLD Open Data, " + period + "', settled not asking); if no area data say so plainly. RETURN — compare any ROI claim to the area's real NET yield (gross minus service charge — the number the buyer actually keeps); developers quote gross or projected ROI and hide the service charge, so if their claim exceeds the registered NET yield, name the gap and name the service charge as the reason (flag it 'estimate' where the service charge is a community typical, not the building's Mollak figure). TRACK RECORD — from the MEED corpus, the developer's completed vs under-construction vs cancelled counts and what that suggests about delivery (a high cancelled count is a flag; no record found = say so, not a verdict). ASK IN THE ROOM — three specific questions (escrow account status, realistic handover given their track record, service charge estimate, post-handover payment terms — pick the sharpest three). Close with WHAT NOT TO CLAIM: this is transaction history and corpus data, not a guarantee about this specific building.";
   const user = JSON.stringify({ launch: intent, priceCheck, developerTrackRecord: track, roiReality });
   let out = null;
   try { out = await claudeText(env, sys, user, null, 1200); } catch (e) {}
@@ -2955,7 +2961,10 @@ function renderCharts(latestRaw) {
   if (mo && mo.series && mo.series.length) cards.push(chLine("Sales value by month", "AED billion · " + (mo.ytdValueAedBn || "") + "bn year to date", mo.series.map(s => ({ label: s.month.slice(5), value: s.valueAedBn, disp: s.valueAedBn }))));
   if (t.topAreas && t.topAreas.length) cards.push(chBars("Where the market trades", "Registered sales by area · " + (t.periodFrom || "") + " to " + (t.periodTo || ""), t.topAreas.slice(0, 8).map(a => ({ label: a.area.length > 22 ? a.area.slice(0, 21) + "…" : a.area, value: a.sales, disp: a.sales.toLocaleString("en-US") }))));
   if (t.offPlanSplit) cards.push(chDonut("Off-plan vs ready", "Share of registered sales", [{ label: "Off-plan", value: t.offPlanSplit["Off-Plan"] || 0, color: CH.gold }, { label: "Ready", value: t.offPlanSplit["Ready"] || 0, color: CH.teal }]));
-  if (rn && rn.grossYieldPctByArea && rn.grossYieldPctByArea.length) cards.push(chBars("Gross rental yield by area", "Registered rent ÷ registered price · Ejari + DLD", rn.grossYieldPctByArea.slice(0, 7).map(y => ({ label: y.area.length > 22 ? y.area.slice(0, 21) + "…" : y.area, value: y.yieldPct, disp: y.yieldPct + "%" }))));
+  // net-yield chart from areaIntel (gross minus service charge) — the number that actually matters
+  const nety = (d.areaIntel && d.areaIntel.areas || []).filter(a => a.netYieldPct != null).sort((a, b) => b.netYieldPct - a.netYieldPct).slice(0, 7);
+  if (nety.length) cards.push(chBars("Net rental yield by area", "Gross minus service charge — what the buyer keeps", nety.map(a => ({ label: a.area.length > 22 ? a.area.slice(0, 21) + "…" : a.area, value: a.netYieldPct, disp: a.netYieldPct + "%" }))));
+  else if (rn && rn.grossYieldPctByArea && rn.grossYieldPctByArea.length) cards.push(chBars("Gross rental yield by area", "Registered rent ÷ registered price · Ejari + DLD", rn.grossYieldPctByArea.slice(0, 7).map(y => ({ label: y.area.length > 22 ? y.area.slice(0, 21) + "…" : y.area, value: y.yieldPct, disp: y.yieldPct + "%" }))));
   const map = t.topAreas ? chMap("Dubai — where it's trading", "Bubble size = registered sales volume", t.topAreas.slice(0, 20)) : null;
   if (map) cards.push(map);
   return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Najma charts</title><style>body{background:#0C1413;color:#E8E4D8;font-family:system-ui,-apple-system,Segoe UI,Roboto;margin:0;padding:14px 12px 40px;max-width:560px;margin:auto}.h{font-size:1.5rem;font-weight:700;margin:.3rem 0}.h em{font-style:normal;color:#C5A56A}.s{color:#8FA39B;font-size:.8rem;margin-bottom:1rem}.c{margin:0 0 16px}.t{color:#8FA39B;font-size:.7rem;text-align:center;margin-top:4px}</style></head><body>' +
