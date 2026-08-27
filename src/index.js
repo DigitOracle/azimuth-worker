@@ -656,6 +656,10 @@ async function waSend(env, to, body) {
 async function waSendButtons(env, to, body, buttons) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: body }, action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) } } }, "buttons");
 }
+// v45 — send an image by public link (the heat map etc.); caption optional
+async function waSendImage(env, to, link, caption) {
+  return waPost(env, { messaging_product: "whatsapp", to, type: "image", image: { link, caption: caption || undefined } }, "image");
+}
 // v37.2 — interactive LIST (up to 10 rows; row title <=24 chars, description <=72)
 async function waSendList(env, to, body, buttonLabel, rows) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "list", body: { text: body }, action: { button: buttonLabel, sections: [{ rows: rows.map(r => ({ id: r.id, title: String(r.title).slice(0, 24), description: String(r.description || "").slice(0, 72) })) }] } } }, "list");
@@ -1874,6 +1878,13 @@ export default {
         try { await dailyFeedTick(env, true); } catch (e) { return new Response("feed error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response("feed fired — check WhatsApp");
       }
+      if (url.pathname.indexOf("/img/") === 0) {               // v45 — serve a stored rendered image (public; WhatsApp fetches by link)
+        const nm = url.pathname.slice(5).replace(/[^a-z0-9_]/gi, "");
+        const buf = await env.MEETINGS.get("img_" + nm, "arrayBuffer");
+        if (!buf) return new Response("not found", { status: 404 });
+        const ct = (await env.MEETINGS.get("img_ct_" + nm)) || "image/png";
+        return new Response(buf, { headers: { "Content-Type": ct, "Cache-Control": "public, max-age=3600" } });
+      }
       if (url.pathname === "/charts") {                        // v41 — post-ready SVG charts from the register
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         return new Response(renderCharts(await env.MEETINGS.get("mkt_latest")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
@@ -1896,6 +1907,15 @@ export default {
           if (_mb.projectIndex.length < 100 || _mb.projectIndex.length > 50000) return new Response("index size implausible", { status: 400 });
           await env.MEETINGS.put("mkt_index", JSON.stringify(_mb.projectIndex));
           return new Response(JSON.stringify({ ok: true, indexed: _mb.projectIndex.length }), { headers: { "Content-Type": "application/json" } });
+        }
+        if (_mb && _mb.image && _mb.imageName) {                                  // v45 — rendered heat-map (or other) PNG from the collector
+          const nm = String(_mb.imageName).replace(/[^a-z0-9_]/gi, "").slice(0, 40);
+          const bin = Uint8Array.from(atob(_mb.image), c => c.charCodeAt(0));
+          if (bin.length > 5 * 1024 * 1024) return new Response("image too large", { status: 400 });
+          await env.MEETINGS.put("img_" + nm, bin.buffer);
+          await env.MEETINGS.put("img_ct_" + nm, _mb.contentType || "image/png");
+          await env.MEETINGS.put("img_at_" + nm, gstNowIso());
+          return new Response(JSON.stringify({ ok: true, image: nm, bytes: bin.length }), { headers: { "Content-Type": "application/json" } });
         }
         if (_mb && _mb.developerIndex && Array.isArray(_mb.developerIndex)) {      // v40 — per-developer track record for launch-briefing due diligence
           if (_mb.developerIndex.length < 20 || _mb.developerIndex.length > 5000) return new Response("developer index size implausible", { status: 400 });
@@ -2188,7 +2208,17 @@ export default {
             ).join(NL10 + NL10) + NL10 + NL10 + "Say “feed” to turn today's data + news into three post-ready angles.");
             return new Response("ok");
           }
-          if (/^(?:charts?|graphs?|visuals?|map)\s*\??$/i.test(text)) {
+          if (/^(?:maps?|heat\s*maps?|heatmap)\s*\??$/i.test(text)) {
+            const has = await env.MEETINGS.get("img_heatmap_story");
+            if (has) {
+              await waSendImage(env, from, url.origin + "/img/heatmap_story", "🗺 Dubai — where it's trading. Registered sales heat, straight from the register. Long-press to save and post.");
+              await waSendImage(env, from, url.origin + "/img/heatmap_square", "Square version for your grid.");
+            } else {
+              await waSend(env, from, "🗺 The map's rendering on the next refresh — for now your charts (incl. a map) are here:\n" + url.origin + "/charts?key=" + env.READ_KEY);
+            }
+            return new Response("ok");
+          }
+          if (/^(?:charts?|graphs?|visuals?)\s*\??$/i.test(text)) {
             await waSend(env, from, "📊 Your charts — bar, line, off-plan split, yields, and a Dubai map, all from the register:\n" + url.origin + "/charts?key=" + env.READ_KEY + "\n\nLong-press any one to save it, then post — the source line is already on it.");
             return new Response("ok");
           }
