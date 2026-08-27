@@ -19,6 +19,7 @@ Run locally:  DAC_KEY=... MP_DRY_RUN=1 python scripts/market_pulse.py
 """
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
