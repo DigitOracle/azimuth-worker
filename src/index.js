@@ -1885,6 +1885,11 @@ export default {
           await env.MEETINGS.put("mkt_index", JSON.stringify(_mb.projectIndex));
           return new Response(JSON.stringify({ ok: true, indexed: _mb.projectIndex.length }), { headers: { "Content-Type": "application/json" } });
         }
+        if (_mb && _mb.developerIndex && Array.isArray(_mb.developerIndex)) {      // v40 — per-developer track record for launch-briefing due diligence
+          if (_mb.developerIndex.length < 20 || _mb.developerIndex.length > 5000) return new Response("developer index size implausible", { status: 400 });
+          await env.MEETINGS.put("mkt_devindex", JSON.stringify(_mb.developerIndex));
+          return new Response(JSON.stringify({ ok: true, developers: _mb.developerIndex.length }), { headers: { "Content-Type": "application/json" } });
+        }
         if (_mb && _mb.newsItems && Array.isArray(_mb.newsItems)) {                // v37.2 — Google News batch from the collector (GN blocks Cloudflare IPs)
           if (_mb.newsItems.length > 100) return new Response("too many items", { status: 400 });
           await env.MEETINGS.put("mkt_news_pending", JSON.stringify(_mb.newsItems.slice(0, 50)), { expirationTtl: 86400 });
@@ -2139,6 +2144,14 @@ export default {
             try { await marketBriefTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the brief just now — try again shortly."); }
             return new Response("ok");
           }
+          {                                                     // v40 — launch mode: due diligence in the developer's briefing room
+            const _lm = text.match(/^(?:launch|at a launch|new launch|briefing|due diligence)\b[:\s]*(.+)$/i);
+            if (_lm && _lm[1] && _lm[1].trim().length > 8) {
+              await waSend(env, from, "🏗 Checking that launch against the register…");
+              try { await launchMode(env, from, _lm[1].trim()); } catch (e) { await waSend(env, from, "Couldn't build that check — try again shortly."); }
+              return new Response("ok");
+            }
+          }
           {                                                     // v40 — client match: "client has 1.5M wants a 1-bed for rental" / "match ..."
             const _mm = text.match(/^(?:match|client|buyer|find(?:\s+me)?)\b[:\s]*(.+)$/i) ||
                         (/\bclient\b|\bbudget\b|\bwants?\b|\blooking for\b/i.test(text) && /\b\d/.test(text) && /\b(bed|b\/?r|studio|villa|apartment|invest|rent|yield|budget|aed|k\b|m\b|million)\b/i.test(text) ? [null, text] : null);
@@ -2179,6 +2192,7 @@ export default {
               "🖥 “board” — your live board link" + NL10 +
               "📈 “market” — your Najma market pulse" + NL10 +
               "🎯 “client has 1.5M, wants a 1-bed to rent” — instant register-grounded advice for a meeting" + NL10 +
+              "🏗 “launch: <developer> in <area>, 1-bed from 1.2M, claims 8% ROI” — due diligence while you're in the pitch" + NL10 +
               "☀️ “feed” — today's five post-ready angles, any time" + NL10 +
               "📰 “news” — latest headlines, cross-checked against the project register" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
@@ -2774,6 +2788,73 @@ async function clientMatch(env, to, briefText) {
   await waSendButtons(env, to, "Turn this into content, or refine the brief in a reply.", [
     { id: "match:post", title: "📸 Make it a post" },
     { id: "match:done", title: "✓ Just for the meeting" }]);
+}
+
+// ── v40 — LAUNCH MODE: real-time due diligence in the developer's briefing room ──
+// She's at a new-launch pitch. She types what they're claiming; the Worker checks the price
+// against what actually SETTLES in that area, sanity-checks the ROI claim against real yields,
+// pulls the developer's delivery track record from the MEED corpus, flags competing supply,
+// and hands her the questions to ask in the room. Quiet edge no other broker there has.
+const LAUNCH_SCHEMA = { type: "object", additionalProperties: false, properties: { developer: { type: "string" }, area: { type: "string" }, roomType: { type: "string" }, priceAed: { type: ["number", "null"] }, pricePsfAed: { type: ["number", "null"] }, handoverYear: { type: ["number", "null"] }, roiClaimPct: { type: ["number", "null"] } }, required: ["developer", "area", "roomType", "priceAed", "pricePsfAed", "handoverYear", "roiClaimPct"] };
+
+function _devMatch(devIndex, name) {
+  if (!name) return null;
+  const nl = name.toLowerCase();
+  let best = null, bestScore = 0;
+  const nt = nl.split(/[^a-z0-9]+/).filter(w => w.length > 2);
+  for (const dv of devIndex) {
+    const dl = String(dv.d || "").toLowerCase();
+    let score = 0;
+    if (dl.indexOf(nl) !== -1 || nl.indexOf(dl) !== -1) score = 5;
+    else { const dt = dl.split(/[^a-z0-9]+/); score = nt.filter(w => dt.indexOf(w) !== -1).length; }
+    if (score > bestScore) { bestScore = score; best = dv; }
+  }
+  return bestScore >= 1 ? best : null;
+}
+
+async function launchMode(env, to, briefText) {
+  let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+  let devIndex = []; try { devIndex = JSON.parse((await env.MEETINGS.get("mkt_devindex")) || "[]"); } catch (e) {}
+  const ai = (d && d.areaIntel && d.areaIntel.areas) || [];
+
+  const isys = "Extract the facts of a Dubai property NEW-LAUNCH pitch a broker is hearing. developer: the developer/brand name. area: the location/community. roomType: Studio|1 B/R|2 B/R|3 B/R|4 B/R|villa|any. priceAed: headline unit price in AED (convert k/m/million), null if none. pricePsfAed: price per sq ft in AED if stated, else null. handoverYear: 4-digit year if stated, else null. roiClaimPct: any ROI / rental-return percentage the developer claims, else null. JSON only.";
+  const intent = await claudeJSON(env, isys, briefText, LAUNCH_SCHEMA, null, 300);
+  if (!intent) { await waSend(env, to, "Couldn't read the launch details — try e.g. “launch: Binghatti in JVC, 1-bed from 1.2M, handover 2027, claims 8% ROI”."); return; }
+
+  // 1. price reality — area settled comparables
+  const areaHit = ai.find(a => intent.area && a.area.toLowerCase().indexOf(intent.area.toLowerCase()) !== -1)
+                || ai.find(a => intent.area && intent.area.toLowerCase().indexOf(a.area.toLowerCase()) !== -1);
+  let priceCheck = null;
+  if (areaHit) {
+    const rr = intent.roomType && intent.roomType !== "any" && intent.roomType !== "villa" ? (areaHit.byRoom && areaHit.byRoom[intent.roomType]) : null;
+    priceCheck = {
+      area: areaHit.area, sales: areaHit.sales, settledMedianAed: rr ? rr.medianAed : areaHit.medianTicketAed,
+      settledMedianAedSqft: areaHit.medianAedSqft, offPlanPct: areaHit.offPlanPct, grossYieldPct: areaHit.grossYieldPct,
+      roomType: intent.roomType,
+    };
+    if (intent.pricePsfAed && areaHit.medianAedSqft) priceCheck.launchVsSettledPsfPct = Math.round(100 * (intent.pricePsfAed - areaHit.medianAedSqft) / areaHit.medianAedSqft);
+    if (intent.priceAed && priceCheck.settledMedianAed) priceCheck.launchVsSettledPct = Math.round(100 * (intent.priceAed - priceCheck.settledMedianAed) / priceCheck.settledMedianAed);
+  }
+
+  // 2. developer track record
+  const dev = _devMatch(devIndex, intent.developer);
+  const track = dev ? { name: dev.d, projectsInCorpus: dev.n, completed: dev.complete, underConstruction: dev.construction, cancelled: dev.cancelled, onHold: dev.onhold, activeNow: dev.active, pipelineUsdM: dev.valueUsdM } : null;
+
+  // 3. ROI reality
+  const roiReality = (areaHit && areaHit.grossYieldPct) ? { areaGrossYieldPct: areaHit.grossYieldPct, developerClaimPct: intent.roiClaimPct } : { areaGrossYieldPct: null, developerClaimPct: intent.roiClaimPct };
+
+  const period = d && d.transactions ? (d.transactions.periodFrom + " to " + d.transactions.periodTo) : "recent";
+  const sys = "You are briefing a Dubai property broker DISCREETLY while she sits in a developer's new-launch pitch. Give her the register's reality check on what she's being told, so she asks sharp questions and advises her clients honestly. Use ONLY the numbers provided; never invent. Structure, plain text, under 230 words: PRICE — is the launch price a premium or discount to what SETTLES in that area (give the % and the settled figure, 'DLD Open Data, " + period + "', settled not asking); if no area data say so plainly. RETURN — compare any ROI claim to the area's actual gross yield; if the claim exceeds the registered yield, say the gap is the developer's projection, not the register. TRACK RECORD — from the MEED corpus, the developer's completed vs under-construction vs cancelled counts and what that suggests about delivery (a high cancelled count is a flag; no record found = say so, not a verdict). ASK IN THE ROOM — three specific questions (escrow account status, realistic handover given their track record, service charge estimate, post-handover payment terms — pick the sharpest three). Close with WHAT NOT TO CLAIM: this is transaction history and corpus data, not a guarantee about this specific building.";
+  const user = JSON.stringify({ launch: intent, priceCheck, developerTrackRecord: track, roiReality });
+  let out = null;
+  try { out = await claudeText(env, sys, user, null, 1200); } catch (e) {}
+  if (!out) { await waSend(env, to, "Couldn't build the check just now — try again in a minute."); return; }
+  await dnaSignal(env, "launch_check", (intent.developer || "") + " / " + (intent.area || ""));
+  await env.MEETINGS.put("mkt_lastmatch", JSON.stringify({ at: gstNowIso(), ask: intent, brief: out }), { expirationTtl: 3 * 86400 });
+  await waSend(env, to, "🏗 Launch check — what the register says\n\n" + out);
+  await waSendButtons(env, to, "Keep it for the room, or turn the honest read into content.", [
+    { id: "match:post", title: "📸 Make it a post" },
+    { id: "match:done", title: "✓ Just for me" }]);
 }
 
 // The complete, self-contained image prompt — one copyable block, BOTH ratios inside.

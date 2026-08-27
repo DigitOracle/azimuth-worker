@@ -29,6 +29,7 @@ from datetime import datetime, timezone, timedelta
 BASE = "https://www.digitalabbot.io/api/cloud/v1"
 COUNTRY = os.environ.get("MP_COUNTRY", "UAE")
 PROJECT_INDEX = []   # v37.1 — filled by collect_meed, shipped as a second ingest
+DEVELOPER_INDEX = []  # v40 — per-developer track record, shipped alongside the project index
 RECENT_DAYS = 7
 TOP_N = 10
 BIG_VALUE_USDM = 50  # "recently updated AND worth talking about" floor
@@ -157,6 +158,39 @@ def collect_meed():
         for r in rows if r.get("stage") not in ("complete", "cancelled") and r.get("title")
     ]
 
+    # v40 — DEVELOPER TRACK RECORD: title arrives as "Developer - Project" (observed data
+    # model). Aggregate per developer so the Worker can, at a launch briefing, answer "does
+    # this developer actually deliver?" — completed vs cancelled vs active, and live pipeline.
+    global DEVELOPER_INDEX
+    dev_agg = {}
+    for r in rows:
+        title = (r.get("title") or "")
+        # split on the first " - " / " – " / " — "; the prefix is the client/developer
+        dev = re.split(r"\s[-–—]\s", title, 1)[0].strip()
+        if not dev or len(dev) < 3:
+            continue
+        e = dev_agg.setdefault(dev, {"stages": {}, "valueUsdM": 0})
+        st = r.get("stage") or "unknown"
+        e["stages"][st] = e["stages"].get(st, 0) + 1
+        e["valueUsdM"] += r.get("netValueUsdM") or 0
+    DEVELOPER_INDEX = []
+    for dev, e in dev_agg.items():
+        total = sum(e["stages"].values())
+        if total < 2:                       # a developer with one row tells us nothing
+            continue
+        DEVELOPER_INDEX.append({
+            "d": dev[:60],
+            "n": total,
+            "complete": e["stages"].get("complete", 0),
+            "construction": e["stages"].get("construction", 0),
+            "cancelled": e["stages"].get("cancelled", 0),
+            "onhold": e["stages"].get("on-hold", 0),
+            "active": sum(v for k, v in e["stages"].items() if k not in ("complete", "cancelled")),
+            "valueUsdM": round(e["valueUsdM"]),
+        })
+    DEVELOPER_INDEX.sort(key=lambda x: -x["n"])
+    DEVELOPER_INDEX = DEVELOPER_INDEX[:500]
+
     return {
         "source": "Digital Abbot Cloud — stored MEED Projects corpus (GlobalData)",
         "corpusVersion": corpus.get("version"),
@@ -227,6 +261,9 @@ def main():
     if PROJECT_INDEX:
         post_ingest({"generatedAt": out["generatedAt"], "projectIndex": PROJECT_INDEX})
         print(f"index: {len(PROJECT_INDEX)} live projects shipped")
+    if DEVELOPER_INDEX:
+        post_ingest({"generatedAt": out["generatedAt"], "developerIndex": DEVELOPER_INDEX})
+        print(f"developers: {len(DEVELOPER_INDEX)} track records shipped")
     # v37.2 — ship a Google News batch (Google 503s Cloudflare IPs; this machine can reach it)
     try:
         items = collect_google_news()
