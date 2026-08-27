@@ -1861,6 +1861,14 @@ export default {
         try { await waSend(env, env.WA_ALLOWED, tx); } catch (e) { return new Response("send failed", { status: 502 }); }
         return new Response("announced");
       }
+      if (url.pathname === "/launch_test") {                   // v43 — run a launch check, RETURN the briefing (does not message the user)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const q = url.searchParams.get("q") || "";
+        if (!q) return new Response("pass ?q=<launch brief>", { status: 400 });
+        let out = "";
+        try { out = await launchMode(env, null, q, true); } catch (e) { return new Response("launch error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
+        return new Response(out || "(no output)", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      }
       if (url.pathname === "/feed_test") {                     // v37 — force the daily feed now (live demo / recovery)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         try { await dailyFeedTick(env, true); } catch (e) { return new Response("feed error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
@@ -2825,14 +2833,17 @@ function _devMatch(devIndex, name) {
   return bestScore >= 1 ? best : null;
 }
 
-async function launchMode(env, to, briefText) {
+async function launchMode(env, to, briefText, returnOnly) {
+  if (returnOnly) launchMode._out = "";
+  const _send = async (msg) => { if (returnOnly) { launchMode._out += msg + "\n\n"; } else { await waSend(env, to, msg); } };
+  const _sendButtons = async (body, btns) => { if (!returnOnly) await waSendButtons(env, to, body, btns); };
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   let devIndex = []; try { devIndex = JSON.parse((await env.MEETINGS.get("mkt_devindex")) || "[]"); } catch (e) {}
   const ai = (d && d.areaIntel && d.areaIntel.areas) || [];
 
   const isys = "Extract the facts of a Dubai property NEW-LAUNCH pitch a broker is hearing. developer: the developer/brand name. area: the location/community. roomType: Studio|1 B/R|2 B/R|3 B/R|4 B/R|villa|any. priceAed: headline unit price in AED (convert k/m/million), null if none. pricePsfAed: price per sq ft in AED if stated, else null. handoverYear: 4-digit year if stated, else null. roiClaimPct: any ROI / rental-return percentage the developer claims, else null. JSON only.";
   const intent = await claudeJSON(env, isys, briefText, LAUNCH_SCHEMA, null, 300);
-  if (!intent) { await waSend(env, to, "Couldn't read the launch details — try e.g. “launch: Binghatti in JVC, 1-bed from 1.2M, handover 2027, claims 8% ROI”."); return; }
+  if (!intent) { await _send("Couldn't read the launch details — try e.g. “launch: Binghatti in JVC, 1-bed from 1.2M, handover 2027, claims 8% ROI”."); return returnOnly ? launchMode._out : undefined; }
 
   // 1. price reality — area settled comparables
   const areaHit = ai.find(a => intent.area && a.area.toLowerCase().indexOf(intent.area.toLowerCase()) !== -1)
@@ -2878,13 +2889,14 @@ async function launchMode(env, to, briefText) {
   const user = JSON.stringify({ launch: intent, priceCheck, developerTrackRecord: track, roiReality, dldRegisterMatch: regHit, competingSupplyInArea: areaSupply });
   let out = null;
   try { out = await claudeText(env, sys, user, null, 1200); } catch (e) {}
-  if (!out) { await waSend(env, to, "Couldn't build the check just now — try again in a minute."); return; }
+  if (!out) { await _send("Couldn't build the check just now — try again in a minute."); return; }
   await dnaSignal(env, "launch_check", (intent.developer || "") + " / " + (intent.area || ""));
   await env.MEETINGS.put("mkt_lastmatch", JSON.stringify({ at: gstNowIso(), ask: intent, brief: out }), { expirationTtl: 3 * 86400 });
-  await waSend(env, to, "🏗 Launch check — what the register says\n\n" + out);
-  await waSendButtons(env, to, "Keep it for the room, or turn the honest read into content.", [
+  await _send("🏗 Launch check — what the register says\n\n" + out);
+  await _sendButtons("Keep it for the room, or turn the honest read into content.", [
     { id: "match:post", title: "📸 Make it a post" },
     { id: "match:done", title: "✓ Just for me" }]);
+  if (returnOnly) return launchMode._out;
 }
 
 // ── v41 — CHARTS: post-ready visuals rendered from the register (native SVG, no libraries,
