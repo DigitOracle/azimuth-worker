@@ -2014,7 +2014,7 @@ export default {
                                         : ("🙈 Ignoring “" + _gr.name + "”. Azimuth won't read it. If you change your mind, tell me “watch " + _gr.name + "”."));
           }
           else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + env.READ_KEY); }
-          else if (/^mkt:(pod|li|ig|car):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); if (_mp2[1] === "car") { let _fa2 = null; try { const _c2 = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); _fa2 = _c2 && _c2.angles && _c2.angles[parseInt(_mp2[2], 10) - 1]; } catch (e) {} if (_fa2) await waSend(env, from, visualPromptBlock(_fa2)); } }
+          else if (/^mkt:(pod|li|ig|car|art):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); if (_mp2[1] === "car" || _mp2[1] === "art") { let _fa2 = null; try { const _c2 = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); _fa2 = _c2 && _c2.angles && _c2.angles[parseInt(_mp2[2], 10) - 1]; } catch (e) {} if (_fa2) await waSend(env, from, visualPromptBlock(_fa2)); } }
           else if (/^feed:[1-5]$/.test(bid)) {                 // v37 — daily-feed pick: full content package for one angle
             const _fn = parseInt(bid.slice(5), 10);
             let _fc = null; try { _fc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
@@ -2028,10 +2028,11 @@ export default {
               await dnaSignal(env, "picked_angle", _fa.hook);
             }
             await waSend(env, from, "Good pick. What do you want from it?");
-            await waSendButtons(env, from, "Choose a format:", [
-              { id: "mkt:li:" + _fn, title: "✍️ LinkedIn post" },
-              { id: "mkt:car:" + _fn, title: "🎠 Carousel" },
-              { id: "mkt:ig:" + _fn, title: "📸 Instagram" }]);
+            await waSendList(env, from, "Choose a format:", "Format", [
+              { id: "mkt:li:" + _fn, title: "✍️ LinkedIn post", description: "Short feed post to copy in" },
+              { id: "mkt:car:" + _fn, title: "🎠 LinkedIn carousel", description: "6 swipeable slides + image prompt" },
+              { id: "mkt:art:" + _fn, title: "📝 LinkedIn article", description: "Long-form thought-leadership" },
+              { id: "mkt:ig:" + _fn, title: "📸 Instagram", description: "Reel script + caption + visual" }]);
           }
           else if (bid === "match:done") { await waSend(env, from, "👍 Ready for your meeting. Every figure is DLD-registered — you're the most credible person at that table."); }
           else if (bid === "match:post") {                     // v40 — turn a client-match briefing into a public post angle
@@ -2040,10 +2041,11 @@ export default {
             else {
               await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: "MARKET INSIGHT FROM A REAL CLIENT BRIEF (anonymised — never name the client):\n" + lm.brief, data: JSON.stringify(lm.ask), angles: [] }), { expirationTtl: 3 * 86400 });
               await waSend(env, from, "Turning it into content — pick a format:");
-              await waSendButtons(env, from, "Draft from this insight:", [
-                { id: "mkt:li:1", title: "✍️ LinkedIn post" },
-                { id: "mkt:car:1", title: "🎠 Carousel" },
-                { id: "mkt:ig:1", title: "📸 Instagram" }]);
+              await waSendList(env, from, "Draft from this insight:", "Format", [
+                { id: "mkt:li:1", title: "✍️ LinkedIn post", description: "Short feed post" },
+                { id: "mkt:car:1", title: "🎠 LinkedIn carousel", description: "6 slides + image prompt" },
+                { id: "mkt:art:1", title: "📝 LinkedIn article", description: "Long-form" },
+                { id: "mkt:ig:1", title: "📸 Instagram", description: "Reel + caption + visual" }]);
             }
           }
           else if (bid === "mkt:post:li") { await publishDraft(env, from); }
@@ -2175,9 +2177,9 @@ export default {
             await waSend(env, from, "📈 Najma — your market pulse:" + NL10 + url.origin + "/market?key=" + env.READ_KEY + NL10 + NL10 + "Built from the official registers. Your weekly brief lands here every Sunday morning, and I'll flag same-day movements when something shifts.");
             return new Response("ok");
           }
-          const _dm = text.match(/^draft\s+(?:an?\s+)?(podcast|video|script|linkedin|post|carousel|slides?|instagram|insta|reel|ig)(?:\s+(?:script|post|reel|carousel))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d))?\s*$/i);
+          const _dm = text.match(/^draft\s+(?:an?\s+)?(podcast|video|script|article|linkedin|post|carousel|slides?|instagram|insta|reel|ig)(?:\s+(?:script|post|reel|carousel|article))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d))?\s*$/i);
           if (_dm) {
-            const _kind = /podcast|video|script/i.test(_dm[1]) ? "pod" : /carousel|slide/i.test(_dm[1]) ? "car" : /instagram|insta|reel|ig/i.test(_dm[1]) ? "ig" : "li";
+            const _kind = /podcast|video|script/i.test(_dm[1]) ? "pod" : /article/i.test(_dm[1]) ? "art" : /carousel|slide/i.test(_dm[1]) ? "car" : /instagram|insta|reel|ig/i.test(_dm[1]) ? "ig" : "li";
             await draftFromAngle(env, from, _kind, _dm[2] ? parseInt(_dm[2], 10) : 1);
             return new Response("ok");
           }
@@ -2253,7 +2255,7 @@ export default {
               "☀️ “feed” — today's five post-ready angles, any time" + NL10 +
               "📰 “news” — latest headlines, cross-checked against the project register" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
-              "✍️ “draft linkedin 2” · 🎠 “draft carousel 2” · 📸 “draft instagram 3” — content from an angle" + NL10 +
+              "✍️ “draft linkedin 2” · 🎠 “draft carousel 2” · 📝 “draft article 2” · 📸 “draft instagram 3”" + NL10 +
               "🧬 “dna” — what I've learned about your style");
             return new Response("ok");
           }
@@ -2554,6 +2556,8 @@ async function draftFromAngle(env, to, kind, n) {
     ? "You write a 60-90 second to-camera video script for Najjuko ('Naj'), a Dubai property broker. Spoken, warm, plain English, construction-literate, no hype, no emojis, no stage directions, no greetings like 'hey guys'. Open with the chosen angle's hook in one sentence. Use ONLY figures from the provided brief and data; every figure carries its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'). One practical takeaway for a buyer to close. 140-210 words, plain text."
     : kind === "ig"
     ? "You write an Instagram reel package for Najjuko, a Dubai property broker, from ONE angle of the provided brief. Two parts, exactly this structure, plain text: SCRIPT: a 30-45 second spoken-to-camera script (70-105 words) — hook in the first five words, one figure with its source and period said out loud, one buyer takeaway, no emojis, no stage directions. CAPTION: 2-4 short lines restating the figure WITH its source and period, one question to invite comments, then at most 5 hashtags on the final line. Use ONLY figures from the provided brief and data — never invent or sharpen a number."
+    : kind === "art"
+    ? "You write a LinkedIn ARTICLE (long-form thought-leadership) for Najjuko, a Dubai property broker, from ONE angle of the provided brief. Structure, plain text: a strong HEADLINE on the first line; then 600-900 words in short paragraphs with 2-3 bold subheadings; open with a scene or a sharp observation, build the argument around the provided figures (every figure carries its source and period exactly as given), give the reader something genuinely useful they can act on, and close with a forward-looking line and one question. Warm, credible, construction-literate, no hype, first person as Naj. Use ONLY figures from the provided brief and data — never invent or sharpen a number. At most 3 hashtags at the very end."
     : kind === "car"
     ? "You write a LinkedIn CAROUSEL (a swipeable document) for Najjuko, a Dubai property broker, from ONE angle of the provided brief. 6 slides. Output EXACTLY this structure, plain text, each slide 1-2 short lines only (carousels are visual — few words per slide): 'SLIDE 1 — COVER: <a bold hook that makes them stop scrolling>'. 'SLIDE 2 — THE NUMBER: <the single headline figure, big and clear> / <its source and period>'. 'SLIDE 3 — CONTEXT: <one line on what settled vs asking, or the trend>'. 'SLIDE 4 — WHAT IT MEANS: <one line for a buyer>'. 'SLIDE 5 — THE CATCH: <the what-not-to-claim / the honest caveat>'. 'SLIDE 6 — CTA: <invite to DM her for the full picture>'. Then after the slides, a line 'CAPTION:' with a 2-3 line post caption + at most 3 hashtags. Use ONLY figures from the provided brief and data — never invent or sharpen a number."
     : "You write a LinkedIn post for Najjuko, a Dubai property broker. First line is the angle's hook — specific, no clickbait. Short paragraphs. Use ONLY figures from the provided brief and data; every figure carries its source and period. One practical buyer takeaway. End with one question inviting comments. At most 3 hashtags. Under 140 words, plain text.";
@@ -2564,17 +2568,11 @@ async function draftFromAngle(env, to, kind, n) {
   let out = null;
   try { out = await claudeText(env, sys, user2, null, 900); } catch (e) {}
   if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
-  const label = kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram reel + caption" : kind === "car" ? "🎠 LinkedIn carousel" : "✍️ LinkedIn draft";
-  await waSend(env, to, label + " — Angle " + n + "\n\n" + out + (kind === "li" ? "" : "\n\n— a draft to make your own, not to post as-is."));
-  if (kind === "car") {
-    await waSend(env, to, "🎠 To post: build these 6 slides in a free carousel maker (Canva, or PowerPoint → save as PDF), then upload the PDF to LinkedIn as a *document* — it becomes a swipeable carousel. Use the image prompt below for the look. Paste the CAPTION as the post text.");
-  }
-  if (kind === "li") {                                                             // v36.5 — one-tap publish (LinkedIn is pure text)
-    await env.MEETINGS.put("mkt_lastdraft_li", out, { expirationTtl: 2 * 86400 });
-    await waSendButtons(env, to, "Post it as-is, or tell me what to change and I'll redraft.", [
-      { id: "mkt:post:li", title: "🚀 Post to LinkedIn" },
-      { id: "mkt:discard", title: "✖️ Not this one" }]);
-  }
+  const label = kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram package" : kind === "car" ? "🎠 LinkedIn carousel" : kind === "art" ? "📝 LinkedIn article" : "✍️ LinkedIn post";
+  await waSend(env, to, label + " — Angle " + n + "\n\n" + out + "\n\n— a draft to make your own.");
+  if (kind === "li") await waSend(env, to, "✍️ Copy this straight into LinkedIn. Want a different angle? Say “draft linkedin 3”.");
+  if (kind === "art") await waSend(env, to, "📝 Paste this into LinkedIn → “Write article”. Add a cover image with the prompt below.");
+  if (kind === "car") await waSend(env, to, "🎠 Build these 6 slides in Canva (or PowerPoint → save as PDF), then upload the PDF to LinkedIn as a *document* — it becomes a swipeable carousel. Use the image prompt below for the look; paste the CAPTION as the post text.");
   if (kind === "ig") {                                                             // v38 — stash the caption; her next "post to instagram" image publishes with it
     const capM = out.match(/CAPTION:\s*([\s\S]+)$/i);
     await env.MEETINGS.put("mkt_lastdraft_ig", (capM ? capM[1] : out).trim().slice(0, 2100), { expirationTtl: 2 * 86400 });
@@ -3088,18 +3086,20 @@ function renderCharts(latestRaw) {
 }
 
 // The complete, self-contained image prompt — one copyable block, BOTH ratios inside.
+// People-forward and editorial: a real human moment in aspirational Dubai, the figure woven in
+// as a tasteful overlay — an image people stop scrolling for, not a sterile stat card.
 function visualPromptBlock(angle) {
   return "🎨 Image prompt — copy the whole block into your image tool:\n\n```" +
-    "Create TWO images of the same design, one 1080x1920 (9:16, for Instagram) and one 1920x1080 (16:9, for LinkedIn).\n\n" +
-    "Style: premium dark editorial market-report card. Background deep teal-black #0C1413 with a very subtle abstract geometric skyline silhouette in #182823 along the bottom. Accent gold #C5A56A, secondary teal #3E8A7E, text warm off-white #E8E4D8. Clean modern sans-serif typography, generous spacing, the number is the hero of the composition.\n\n" +
-    "Content, exactly this text and nothing else:\n" +
-    "- Small gold wordmark top-right: NAJMA نجمة\n" +
+    "Create TWO photorealistic images of the same scene, one 1080x1920 (9:16, vertical for Instagram) and one 1920x1080 (16:9, for LinkedIn).\n\n" +
+    "SCENE: a warm, aspirational, editorial photograph set in Dubai real estate — choose whichever fits the story: a confident, well-dressed woman in her 30s (a broker) showing a couple a bright modern apartment with a Dubai skyline view; OR a young professional couple smiling as they receive keys on a sunlit balcony; OR a stylish agent and client shaking hands in a designer living room. Natural window light, golden-hour warmth, shallow depth of field, real human emotion — hopeful, trusting, successful. Cinematic and premium, like a high-end property brand campaign. Diverse, contemporary Dubai residents.\n\n" +
+    "OVERLAY (tasteful, in the lower third, not covering faces): a semi-transparent deep teal-to-transparent gradient band. On it, clean modern sans-serif text:\n" +
     "- Headline: " + angle.hook + "\n" +
-    "- Dominant central stat, largest element: " + angle.figure + "\n" +
-    "- Sub-line under the stat: " + angle.source + "\n" +
-    "- Footer strip, small muted text: Source: Dubai Land Department (DLD) Open Data. Contains information from the Government of Dubai.\n\n" +
-    "Rules: no logos other than the NAJMA text wordmark, no watermarks, no people, no photographs, no invented text or numbers, keep all figures exactly as written." +
-    "```\n\nAttach the 9:16 to the Instagram post, the 16:9 to LinkedIn.";
+    "- The figure, large and gold (#C5A56A): " + angle.figure + "\n" +
+    "- Small line under it: " + angle.source + "\n" +
+    "- Tiny gold wordmark in a corner: NAJMA نجمة\n" +
+    "- Very small footer: Source: Dubai Land Department (DLD) Open Data.\n\n" +
+    "Rules: photorealistic people and setting (not illustration, not a flat card), keep faces clear and unobstructed, text only in the lower-third band, no other logos or watermarks, keep every figure exactly as written, do not invent numbers." +
+    "```\n\nThe people make it stop the scroll; the figure makes it credible. 9:16 → Instagram, 16:9 → LinkedIn.";
 }
 
 // ── v37.1 — NEWS LAYER + MEED CROSS-REFERENCE ───────────────────────────────────
