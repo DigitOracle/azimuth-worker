@@ -2014,7 +2014,7 @@ export default {
                                         : ("🙈 Ignoring “" + _gr.name + "”. Azimuth won't read it. If you change your mind, tell me “watch " + _gr.name + "”."));
           }
           else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + env.READ_KEY); }
-          else if (/^mkt:(pod|li|ig):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); }
+          else if (/^mkt:(pod|li|ig|car):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); if (_mp2[1] === "car") { let _fa2 = null; try { const _c2 = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); _fa2 = _c2 && _c2.angles && _c2.angles[parseInt(_mp2[2], 10) - 1]; } catch (e) {} if (_fa2) await waSend(env, from, visualPromptBlock(_fa2)); } }
           else if (/^feed:[1-5]$/.test(bid)) {                 // v37 — daily-feed pick: full content package for one angle
             const _fn = parseInt(bid.slice(5), 10);
             let _fc = null; try { _fc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
@@ -2027,9 +2027,11 @@ export default {
               } catch (e) {}
               await dnaSignal(env, "picked_angle", _fa.hook);
             }
-            await draftFromAngle(env, from, "ig", _fn);
-            await draftFromAngle(env, from, "li", _fn);
-            if (_fa) await waSend(env, from, visualPromptBlock(_fa));
+            await waSend(env, from, "Good pick. What do you want from it?");
+            await waSendButtons(env, from, "Choose a format:", [
+              { id: "mkt:li:" + _fn, title: "✍️ LinkedIn post" },
+              { id: "mkt:car:" + _fn, title: "🎠 Carousel" },
+              { id: "mkt:ig:" + _fn, title: "📸 Instagram" }]);
           }
           else if (bid === "match:done") { await waSend(env, from, "👍 Ready for your meeting. Every figure is DLD-registered — you're the most credible person at that table."); }
           else if (bid === "match:post") {                     // v40 — turn a client-match briefing into a public post angle
@@ -2039,9 +2041,9 @@ export default {
               await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: "MARKET INSIGHT FROM A REAL CLIENT BRIEF (anonymised — never name the client):\n" + lm.brief, data: JSON.stringify(lm.ask), angles: [] }), { expirationTtl: 3 * 86400 });
               await waSend(env, from, "Turning it into content — pick a format:");
               await waSendButtons(env, from, "Draft from this insight:", [
-                { id: "mkt:ig:1", title: "📸 Instagram" },
-                { id: "mkt:li:1", title: "✍️ LinkedIn" },
-                { id: "match:done", title: "✖️ Skip" }]);
+                { id: "mkt:li:1", title: "✍️ LinkedIn post" },
+                { id: "mkt:car:1", title: "🎠 Carousel" },
+                { id: "mkt:ig:1", title: "📸 Instagram" }]);
             }
           }
           else if (bid === "mkt:post:li") { await publishDraft(env, from); }
@@ -2173,9 +2175,9 @@ export default {
             await waSend(env, from, "📈 Najma — your market pulse:" + NL10 + url.origin + "/market?key=" + env.READ_KEY + NL10 + NL10 + "Built from the official registers. Your weekly brief lands here every Sunday morning, and I'll flag same-day movements when something shifts.");
             return new Response("ok");
           }
-          const _dm = text.match(/^draft\s+(?:an?\s+)?(podcast|video|script|linkedin|post|instagram|insta|reel|ig)(?:\s+(?:script|post|reel))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d))?\s*$/i);
+          const _dm = text.match(/^draft\s+(?:an?\s+)?(podcast|video|script|linkedin|post|carousel|slides?|instagram|insta|reel|ig)(?:\s+(?:script|post|reel|carousel))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d))?\s*$/i);
           if (_dm) {
-            const _kind = /podcast|video|script/i.test(_dm[1]) ? "pod" : /instagram|insta|reel|ig/i.test(_dm[1]) ? "ig" : "li";
+            const _kind = /podcast|video|script/i.test(_dm[1]) ? "pod" : /carousel|slide/i.test(_dm[1]) ? "car" : /instagram|insta|reel|ig/i.test(_dm[1]) ? "ig" : "li";
             await draftFromAngle(env, from, _kind, _dm[2] ? parseInt(_dm[2], 10) : 1);
             return new Response("ok");
           }
@@ -2251,7 +2253,7 @@ export default {
               "☀️ “feed” — today's five post-ready angles, any time" + NL10 +
               "📰 “news” — latest headlines, cross-checked against the project register" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
-              "✍️ “draft linkedin 2” · 📸 “draft instagram 3” — content from an angle" + NL10 +
+              "✍️ “draft linkedin 2” · 🎠 “draft carousel 2” · 📸 “draft instagram 3” — content from an angle" + NL10 +
               "🧬 “dna” — what I've learned about your style");
             return new Response("ok");
           }
@@ -2552,6 +2554,8 @@ async function draftFromAngle(env, to, kind, n) {
     ? "You write a 60-90 second to-camera video script for Najjuko ('Naj'), a Dubai property broker. Spoken, warm, plain English, construction-literate, no hype, no emojis, no stage directions, no greetings like 'hey guys'. Open with the chosen angle's hook in one sentence. Use ONLY figures from the provided brief and data; every figure carries its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'). One practical takeaway for a buyer to close. 140-210 words, plain text."
     : kind === "ig"
     ? "You write an Instagram reel package for Najjuko, a Dubai property broker, from ONE angle of the provided brief. Two parts, exactly this structure, plain text: SCRIPT: a 30-45 second spoken-to-camera script (70-105 words) — hook in the first five words, one figure with its source and period said out loud, one buyer takeaway, no emojis, no stage directions. CAPTION: 2-4 short lines restating the figure WITH its source and period, one question to invite comments, then at most 5 hashtags on the final line. Use ONLY figures from the provided brief and data — never invent or sharpen a number."
+    : kind === "car"
+    ? "You write a LinkedIn CAROUSEL (a swipeable document) for Najjuko, a Dubai property broker, from ONE angle of the provided brief. 6 slides. Output EXACTLY this structure, plain text, each slide 1-2 short lines only (carousels are visual — few words per slide): 'SLIDE 1 — COVER: <a bold hook that makes them stop scrolling>'. 'SLIDE 2 — THE NUMBER: <the single headline figure, big and clear> / <its source and period>'. 'SLIDE 3 — CONTEXT: <one line on what settled vs asking, or the trend>'. 'SLIDE 4 — WHAT IT MEANS: <one line for a buyer>'. 'SLIDE 5 — THE CATCH: <the what-not-to-claim / the honest caveat>'. 'SLIDE 6 — CTA: <invite to DM her for the full picture>'. Then after the slides, a line 'CAPTION:' with a 2-3 line post caption + at most 3 hashtags. Use ONLY figures from the provided brief and data — never invent or sharpen a number."
     : "You write a LinkedIn post for Najjuko, a Dubai property broker. First line is the angle's hook — specific, no clickbait. Short paragraphs. Use ONLY figures from the provided brief and data; every figure carries its source and period. One practical buyer takeaway. End with one question inviting comments. At most 3 hashtags. Under 140 words, plain text.";
   await dnaSignal(env, "drafted_" + kind, "angle " + n);
   const dna = await dnaGet(env);
@@ -2560,8 +2564,11 @@ async function draftFromAngle(env, to, kind, n) {
   let out = null;
   try { out = await claudeText(env, sys, user2, null, 900); } catch (e) {}
   if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
-  const label = kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram reel + caption" : "✍️ LinkedIn draft";
+  const label = kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram reel + caption" : kind === "car" ? "🎠 LinkedIn carousel" : "✍️ LinkedIn draft";
   await waSend(env, to, label + " — Angle " + n + "\n\n" + out + (kind === "li" ? "" : "\n\n— a draft to make your own, not to post as-is."));
+  if (kind === "car") {
+    await waSend(env, to, "🎠 To post: build these 6 slides in a free carousel maker (Canva, or PowerPoint → save as PDF), then upload the PDF to LinkedIn as a *document* — it becomes a swipeable carousel. Use the image prompt below for the look. Paste the CAPTION as the post text.");
+  }
   if (kind === "li") {                                                             // v36.5 — one-tap publish (LinkedIn is pure text)
     await env.MEETINGS.put("mkt_lastdraft_li", out, { expirationTtl: 2 * 86400 });
     await waSendButtons(env, to, "Post it as-is, or tell me what to change and I'll redraft.", [
