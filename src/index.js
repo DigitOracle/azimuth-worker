@@ -3086,20 +3086,22 @@ function renderCharts(latestRaw) {
 }
 
 // The complete, self-contained image prompt — one copyable block, BOTH ratios inside.
-// People-forward and editorial: a real human moment in aspirational Dubai, the figure woven in
-// as a tasteful overlay — an image people stop scrolling for, not a sterile stat card.
+// Direction B: a Forbes/Fortune-style aspirational editorial COVER — a real Dubai broker/buyer
+// as the hero, the figure as a gold cover-line, magazine grid, current gpt-image-2 text
+// discipline (quote strings, "render verbatim") and anti-AI-slop negatives so it looks like
+// real editorial photography, not AI. (Research: Businessweek/Forbes/Economist cover language.)
 function visualPromptBlock(angle) {
-  return "🎨 Image prompt — copy the whole block into your image tool:\n\n```" +
-    "Create TWO photorealistic images of the same scene, one 1080x1920 (9:16, vertical for Instagram) and one 1920x1080 (16:9, for LinkedIn).\n\n" +
-    "SCENE: a warm, aspirational, editorial photograph set in Dubai real estate — choose whichever fits the story: a confident, well-dressed woman in her 30s (a broker) showing a couple a bright modern apartment with a Dubai skyline view; OR a young professional couple smiling as they receive keys on a sunlit balcony; OR a stylish agent and client shaking hands in a designer living room. Natural window light, golden-hour warmth, shallow depth of field, real human emotion — hopeful, trusting, successful. Cinematic and premium, like a high-end property brand campaign. Diverse, contemporary Dubai residents.\n\n" +
-    "OVERLAY (tasteful, in the lower third, not covering faces): a semi-transparent deep teal-to-transparent gradient band. On it, clean modern sans-serif text:\n" +
-    "- Headline: " + angle.hook + "\n" +
-    "- The figure, large and gold (#C5A56A): " + angle.figure + "\n" +
-    "- Small line under it: " + angle.source + "\n" +
-    "- Tiny gold wordmark in a corner: NAJMA نجمة\n" +
-    "- Very small footer: Source: Dubai Land Department (DLD) Open Data.\n\n" +
-    "Rules: photorealistic people and setting (not illustration, not a flat card), keep faces clear and unobstructed, text only in the lower-third band, no other logos or watermarks, keep every figure exactly as written, do not invent numbers." +
-    "```\n\nThe people make it stop the scroll; the figure makes it credible. 9:16 → Instagram, 16:9 → LinkedIn.";
+  const H = String(angle.hook || "").replace(/"/g, "'");
+  const F = String(angle.figure || "").replace(/"/g, "'");
+  const S = String(angle.source || "").replace(/"/g, "'");
+  return "🎨 Cover-image prompt — paste the whole block into ChatGPT (make an image), then ask for the second size:\n\n```" +
+    "A premium business-magazine COVER in the style of a Forbes / Fortune editorial portrait — aspirational, warm, credible, high-end. Make it 1080x1920 (vertical 9:16) first; I will then ask you to remake it 1920x1080 (16:9).\n\n" +
+    "HERO: a real, confident Dubai real-estate professional — pick one and keep it authentic to Dubai: an elegant Emirati woman in her 30s in a modern tailored abaya · OR a sharply dressed South-Asian man in his 30s in a well-cut suit · OR a Levantine woman in a cream blazer. Three-quarter framing, warm direct eye contact, a natural genuine half-smile, standing on a sunlit Dubai balcony with the skyline softly out of focus behind. Candid documentary-style photograph taken on a real camera, 85mm portrait lens, shallow depth of field, golden-hour side light with soft rim light. Natural UNRETOUCHED skin with visible pore detail, subtle tonal variation, a few flyaway hairs, restrained highlights, real fabric texture, fine film grain. Place the subject on the RIGHT THIRD; leave clean deep-teal negative space on the LEFT for text.\n\n" +
+    "LAYOUT (magazine grid): masthead \"NAJMA\" across the very top in cream uppercase with wide letter-spacing. Down the LEFT negative space, a stacked cover-line: the figure \"" + F + "\" set LARGE in warm gold, bold condensed sans-serif; beneath it the headline \"" + H + "\" in smaller cream sans-serif; under a thin gold rule a small cream kicker \"" + S + "\".\n\n" +
+    "COLOUR: only deep teal #0F5A54, warm gold #C9A24B, cream #F4EFE6.\n" +
+    "TEXT: render \"NAJMA\", \"" + F + "\", \"" + H + "\", \"" + S + "\" verbatim, exactly once each, perfectly legible — no extra characters, no duplicated or garbled text, no invented words or numbers.\n" +
+    "NEGATIVE: no plastic or waxy skin, no airbrushing, no over-smoothing, no CGI gloss, no warped or extra fingers, no mangled hands, no distorted eyes, no fake or misspelled logos, no watermark, no gibberish text, no generic stock-photo feel, no oversaturated HDR." +
+    "```\n\n👉 Before posting, just check the number reads exactly “" + F + "”. The face stops the scroll; the figure makes it credible. Ask ChatGPT “now the same as 1920x1080” for the LinkedIn version.";
 }
 
 // ── v37.1 — NEWS LAYER + MEED CROSS-REFERENCE ───────────────────────────────────
