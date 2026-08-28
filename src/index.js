@@ -82,15 +82,30 @@ function claudeBody(model, maxTok, sys, user, schema) {
   if (schema) b.output_config = { format: { type: "json_schema", schema } };
   return JSON.stringify(b);
 }
+// Anthropic intermittently 403s ("Request not allowed") / 429s / 5xx on some Cloudflare egress
+// IPs; a retry from a fresh attempt usually clears it. Retry transient statuses a few times.
+async function claudeFetch(env, model, maxTok, sys, user, schema) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let r;
+    try {
+      r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: claudeBody(model, maxTok, sys, user, schema),
+      });
+    } catch (e) { await new Promise(s => setTimeout(s, 400 * (attempt + 1))); continue; }
+    if (r.ok) return r;
+    if (r.status === 403 || r.status === 429 || r.status >= 500) { await new Promise(s => setTimeout(s, 500 * (attempt + 1))); continue; }
+    return r;   // 4xx that won't fix on retry (400/401) — give up
+  }
+  return null;
+}
+
 async function claudeJSON(env, sys, user, schema, model, maxTok) {
   if (!env.ANTHROPIC_API_KEY) return null;
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: claudeBody(model || CLAUDE_FAST, maxTok || 300, sys, user, schema)
-    });
-    if (!r.ok) return null;
+    const r = await claudeFetch(env, model || CLAUDE_FAST, maxTok || 300, sys, user, schema);
+    if (!r || !r.ok) return null;
     const j = await r.json();
     if (j.stop_reason === "refusal") return null;
     const txt = (j.content || []).filter(b => b && b.type === "text").map(b => b.text).join("");
@@ -145,7 +160,7 @@ async function indexDoc(env, id, kind, text, src) {
   try { const t = String(text || "").trim(); if (!t) return; const pfx = kind === "meeting" ? "Meeting: " : kind === "attachment" ? "Document: " : "Task: "; const vec = await embed(env, pfx + t); if (!vec) return; await env.MEETINGS.put("doc_" + id, JSON.stringify({ kind, text: t.slice(0, 1200), vec, src: src || null, created: Date.now() }), { expirationTtl: 180 * 86400 }); } catch (e) {}
 }
 async function claudeText(env, sys, user, model, maxTok) {
-  if (env.ANTHROPIC_API_KEY) { try { const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: claudeBody(model || CLAUDE_SMART, maxTok || 600, sys, user, null) }); if (r.ok) { const j = await r.json(); const txt = (j.content || []).filter(b => b && b.type === "text").map(b => b.text).join("").trim(); if (txt) return txt; } } catch (e) {} }
+  if (env.ANTHROPIC_API_KEY) { try { const r = await claudeFetch(env, model || CLAUDE_SMART, maxTok || 600, sys, user, null); if (r && r.ok) { const j = await r.json(); const txt = (j.content || []).filter(b => b && b.type === "text").map(b => b.text).join("").trim(); if (txt) return txt; } } catch (e) {} }
   try { const res = await env.AI.run(MODEL, { messages: [{ role: "system", content: sys }, { role: "user", content: user }], max_tokens: 320, temperature: 0.2 }); return asText(res); } catch (e) { return ""; }
 }
 function isQuestion(t) { const s = (t || "").trim(); if (!s) return false; if (/[?]\s*$/.test(s)) return true; return /^(what|when|where|who|which|whose|how|why|is|are|was|were|do|does|did|has|have|any|show me|tell me|catch me up|status of|outstanding|remind me (what|when|who|where))\b/i.test(s); }
