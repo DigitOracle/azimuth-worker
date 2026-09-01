@@ -588,16 +588,17 @@ function renderBoard(meetings, actions, key, env, mkt) {
 
   const upd = gn.getUTCHours ? `${pad(gn.getUTCHours())}:${pad(gn.getUTCMinutes())}` : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="theme-color" content="#0A4F4A"><meta name="apple-mobile-web-app-title" content="Azimuth"><title>Azimuth</title>
+${NAJ_FONTS}
 <style>
 :root{--paper:#FAF8F3;--ink:#16211F;--muted:#5F6B66;--teal:#0A4F4A;--gold:#B98B3E;--line:#E9E4D7;--card:#FFF;--online:#3E7C8C;--radius:16px}
-*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;position:relative;min-height:100vh}body::before{content:"";position:fixed;inset:0;z-index:-2;background:url(/bg.jpg) center 14%/cover no-repeat}body::after{content:"";position:fixed;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(250,248,243,.40) 0%,rgba(250,248,243,.47) 34%,rgba(250,248,243,.50) 72%,rgba(250,248,243,.54) 100%)}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;position:relative;min-height:100vh}body::before{content:"";position:fixed;inset:0;z-index:-2;background:url(/bg.jpg) center 14%/cover no-repeat}body::after{content:"";position:fixed;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(12,20,19,.44) 0%,rgba(12,20,19,.26) 96px,rgba(250,248,243,.60) 230px,rgba(250,248,243,.86) 430px,rgba(250,248,243,.93) 100%)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .wrap{max-width:460px;margin:0 auto;padding:22px 18px 40px;position:relative}.num{font-variant-numeric:tabular-nums}
-.brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;color:#F6F3EA;text-shadow:0 1px 10px rgba(12,20,19,.55)}
 .mark{display:flex;align-items:center;gap:9px;font-weight:700;font-size:16px;letter-spacing:.03em}
-.mark .glyph{width:20px;height:20px;position:relative}.mark .glyph span{position:absolute;inset:0;border:1.5px solid var(--teal);border-radius:50%;opacity:.9}
+.mark .glyph{width:20px;height:20px;position:relative}.mark .glyph span{position:absolute;inset:0;border:1.5px solid #F6F3EA;border-radius:50%;opacity:.9}
 .mark .glyph span:nth-child(2){inset:5px;opacity:.55}.mark .glyph::after{content:"";position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px;border-radius:50%;background:var(--gold)}
-.today{font-size:12.5px;color:var(--muted)}
+.today{font-size:12.5px;color:rgba(246,243,234,.82)}
 .pulse{position:relative;overflow:hidden;background:rgba(10,79,74,.60);color:#F2EFE6;-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);border-radius:20px;padding:20px 20px 22px;margin-bottom:26px;box-shadow:0 8px 26px rgba(10,79,74,.20)}
 .pulse::after{content:"";position:absolute;right:-70px;top:-70px;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,transparent 0 34px,rgba(197,165,106,.16) 34px 35px,transparent 35px 62px),radial-gradient(circle,transparent 0 62px,rgba(242,239,230,.10) 62px 63px,transparent 63px 92px),radial-gradient(circle,transparent 0 92px,rgba(242,239,230,.07) 92px 93px,transparent 93px)}
 .pulse .eb{font-size:11px;text-transform:uppercase;letter-spacing:.16em;color:rgba(242,239,230,.7);position:relative}
@@ -625,15 +626,17 @@ ${(() => {                                                      // v36.2 — Naj
     const t2 = mkt.transactions, r2 = mkt.rents || null;
     const off2 = t2.offPlanSplit ? Math.round(100 * (t2.offPlanSplit["Off-Plan"] || 0) / (((t2.offPlanSplit["Off-Plan"] || 0) + (t2.offPlanSplit["Ready"] || 0)) || 1)) : null;
     const y2 = r2 && r2.grossYieldPctByArea && r2.grossYieldPctByArea[0];
-    return '<section><a href="/market?key=' + encodeURIComponent(key) + '" style="display:block;text-decoration:none;color:inherit;background:#FFF;border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:var(--radius);padding:.8rem .95rem">' +
-      '<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-weight:700;letter-spacing:.02em">Najma <span style="color:var(--gold)">نجمة</span> · market pulse</span><span style="color:var(--gold);font-weight:600;font-size:.8rem">open →</span></div>' +
-      '<div style="color:var(--muted);font-size:.8rem;margin-top:.25rem">AED ' + t2.salesValueAedBn + 'bn registered · ' + (off2 == null ? "" : off2 + "% off-plan") + (y2 ? " · top yield " + y2.area + " " + y2.yieldPct + "%" : "") + '</div>' +
-      '<div style="color:var(--muted);font-size:.68rem;margin-top:.15rem">DLD Open Data · ' + String(t2.periodFrom || "") + " → " + String(t2.periodTo || "") + '</div></a></section>';
+    return '<section><a href="/market?key=' + encodeURIComponent(key) + '" style="display:block;text-decoration:none;color:#E8E4D8;background:#0C1413;border:1px solid #24352F;border-left:3px solid #C5A56A;border-radius:var(--radius);padding:.9rem 1rem;box-shadow:0 8px 22px rgba(12,20,19,.28)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center"><span style="display:inline-flex;align-items:center;gap:8px;font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.06rem;letter-spacing:.01em"><svg viewBox="0 0 256 256" width="15" height="15" fill="#C5A56A" aria-hidden="true"><path d="' + NAJ_ICONS.star + '"/></svg>Najma <span style="color:#C5A56A">نجمة</span></span><span style="color:#C5A56A;font-weight:600;font-size:.8rem">open →</span></div>' +
+      '<div style="color:#B8C4BD;font-size:.8rem;margin-top:.35rem">AED ' + t2.salesValueAedBn + 'bn registered · ' + (off2 == null ? "" : off2 + "% off-plan") + (y2 ? " · top yield " + y2.area + " " + y2.yieldPct + "%" : "") + '</div>' +
+      '<div style="color:#8FA39B;font-size:.68rem;margin-top:.15rem;font-family:\'IBM Plex Mono\',monospace">DLD Open Data · ' + String(t2.periodFrom || "") + " → " + String(t2.periodTo || "") + '</div></a></section>';
   })()}
 <section><div class="plate-h"><div class="l"><span class="n num">${acts.length}</span><span class="cap">on your plate</span></div><div class="hint">${(env && env.TELEGRAM_TOKEN) ? "clear in Telegram ✓" : "tap a circle to clear ✓"}</div></div>${tasksHtml}
 <div class="legend"><span><i style="background:#0A4F4A"></i>Abu Dhabi</span><span><i style="background:#B98B3E"></i>Dubai</span><span><i style="background:#7A4A93"></i>Sharjah</span><span><i style="background:#3E7C8C"></i>Online</span></div>
 <div class="foot">Live · ${(env && MB(env).length) ? "meetings from Outlook · actions from your inbox" : "captured from WhatsApp"} · ${upd} GST</div>
-</section></div><script>window.__l=Date.now();document.addEventListener("visibilitychange",function(){if(!document.hidden&&Date.now()-window.__l>15000){location.reload()}});window.addEventListener("pageshow",function(e){if(e.persisted){location.reload()}});document.addEventListener("click",function(e){var r=e.target.closest?e.target.closest(".task .ring"):null;if(!r)return;var c=r.closest(".task");var id=c&&c.getAttribute("data-id");if(!id)return;var k=new URLSearchParams(location.search).get("key");if(r.classList.contains("done"))return;r.classList.add("done");fetch("/done?key="+encodeURIComponent(k)+"&id="+encodeURIComponent(id)).then(function(x){if(x.ok){c.style.transition="opacity .3s";c.style.opacity="0.25";setTimeout(function(){c.remove();var n=document.querySelector(".plate-h .n");if(n){n.textContent=Math.max(0,(parseInt(n.textContent,10)||1)-1)}},300)}else{r.classList.remove("done")}}).catch(function(){r.classList.remove("done")})});document.addEventListener("click",function(e){var a=e.target.closest?e.target.closest("a.card"):null;if(a){var h=a.getAttribute("href");if(h){e.preventDefault();try{window.open(h,"_blank")||(location.href=h)}catch(x){location.href=h}}}},true);</script></body></html>`;
+</section></div><script>window.__l=Date.now();document.addEventListener("visibilitychange",function(){if(!document.hidden&&Date.now()-window.__l>15000){location.reload()}});window.addEventListener("pageshow",function(e){if(e.persisted){location.reload()}});document.addEventListener("click",function(e){var r=e.target.closest?e.target.closest(".task .ring"):null;if(!r)return;var c=r.closest(".task");var id=c&&c.getAttribute("data-id");if(!id)return;var k=new URLSearchParams(location.search).get("key");if(r.classList.contains("done"))return;r.classList.add("done");fetch("/done?key="+encodeURIComponent(k)+"&id="+encodeURIComponent(id)).then(function(x){if(x.ok){c.style.transition="opacity .3s";c.style.opacity="0.25";setTimeout(function(){c.remove();var n=document.querySelector(".plate-h .n");if(n){n.textContent=Math.max(0,(parseInt(n.textContent,10)||1)-1)}},300)}else{r.classList.remove("done")}}).catch(function(){r.classList.remove("done")})});document.addEventListener("click",function(e){var a=e.target.closest?e.target.closest("a.card"):null;if(a){var h=a.getAttribute("href");if(h){e.preventDefault();try{window.open(h,"_blank")||(location.href=h)}catch(x){location.href=h}}}},true);</script>
+<div id="spl" style="position:fixed;inset:0;z-index:60;background:#0C1413;display:none;align-items:center;justify-content:center"><video id="splv" playsinline muted preload="auto" style="width:100%;height:100%;object-fit:cover"></video><div id="splm" style="position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;font-weight:600;color:#0C1413;background:#C5A56A;border-radius:99px;padding:8px 14px;cursor:pointer">🔇 tap for sound</div><div id="splw" style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-family:Fraunces,Georgia,serif;font-size:32px;color:#E8E4D8;opacity:0;transition:opacity .9s">Najma <span style="color:#C5A56A">نجمة</span></div></div>
+<script>(function(){try{fetch("/img/splash",{method:"HEAD"}).then(function(r){if(!r.ok)return;var s=document.getElementById("spl"),v=document.getElementById("splv"),w=document.getElementById("splw"),m=document.getElementById("splm");v.src="/img/splash";s.style.display="flex";var done=function(){if(!s.parentNode)return;s.style.transition="opacity .6s";s.style.opacity="0";setTimeout(function(){s.remove()},650)};v.onended=done;s.onclick=done;v.onerror=done;m.onclick=function(e){e.stopPropagation();v.muted=!v.muted;m.textContent=v.muted?"🔇 tap for sound":"🔊 sound on"};setTimeout(function(){w.style.opacity="1"},9000);setTimeout(done,20000);var p=v.play();if(p&&p.catch)p.catch(done)})}catch(e){}})();</script></body></html>`;
 }
 
 // --- WhatsApp Cloud API (two-way capture) -------------------------------
@@ -1546,9 +1549,15 @@ export default {
       await env.MEETINGS.put("cfg_bg_ct", _ct0);
       return new Response(JSON.stringify({ ok: true, via: "upload", bytes: _b0.byteLength, contentType: _ct0 }), { headers: { "Content-Type": "application/json" } });
     }
+    if (request.method === "HEAD" && url.pathname.indexOf("/img/") === 0) {  // v49 — board splash probes /img/splash without downloading it
+      const _hn = url.pathname.slice(5).replace(/[^a-z0-9_]/gi, "");
+      const _hv = await env.MEETINGS.get("img_" + _hn, "arrayBuffer");
+      return new Response(null, { status: _hv ? 200 : 404 });
+    }
     if (request.method === "GET") {
       if (url.pathname === "/bg.jpg") {
         { const _u = await env.MEETINGS.get("cfg_bg", { type: "arrayBuffer" }); if (_u && _u.byteLength > 0) { const _ct = (await env.MEETINGS.get("cfg_bg_ct")) || "image/jpeg"; return new Response(_u, { headers: { "Content-Type": _ct, "Cache-Control": "public, max-age=300" } }); } }
+        { const _nb = await env.MEETINGS.get("img_bg_board", { type: "arrayBuffer" }); if (_nb && _nb.byteLength > 0) { const _nct = (await env.MEETINGS.get("img_ct_bg_board")) || "image/jpeg"; return new Response(_nb, { headers: { "Content-Type": _nct, "Cache-Control": "public, max-age=3600" } }); } } // v49 — Najma default backdrop (personal cfg_bg above still wins)
         if (env.BOARD_BG === "off") return new Response("", { status: 404 }); const _b = Uint8Array.from(atob(FOUNDER_BG), c => c.charCodeAt(0)); return new Response(_b, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=604800, immutable" } }); }
       if (url.pathname === "/wa") {
         if (url.searchParams.get("hub.verify_token") === env.WA_VERIFY_TOKEN) return new Response(url.searchParams.get("hub.challenge") || "", { status: 200 });
@@ -1896,10 +1905,26 @@ export default {
         try { out = await launchMode(env, null, q, true); } catch (e) { return new Response("launch error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response(out || "(no output)", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
       }
-      if (url.pathname === "/feed_test") {                     // v37 — force the daily feed now (live demo / recovery)
+      if (url.pathname === "/feed_test") {                     // v37 — force the daily feed now; v56 — ?dry=1 generates WITHOUT sending (safe diagnostic)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (url.searchParams.get("dry")) {
+          let out = null;
+          try { out = await dailyFeedTick(env, true, true); } catch (e) { return new Response("feed error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
+          return new Response(out || "(no output — check MARKET_BRIEF/mkt_latest)", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+        }
         try { await dailyFeedTick(env, true); } catch (e) { return new Response("feed error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response("feed fired — check WhatsApp");
+      }
+      if (url.pathname.indexOf("/r/") === 0) {                 // v58 — client briefing (PUBLIC by unguessable id; no keys on the page)
+        const rid = url.pathname.slice(3).replace(/[^a-f0-9]/g, "").slice(0, 24);
+        const snapRaw = rid ? await env.MEETINGS.get("rpt_" + rid) : null;
+        if (!snapRaw) return new Response("This briefing link has expired. Ask your agent for a fresh one.", { status: 404 });
+        let sn; try { sn = JSON.parse(snapRaw); } catch (e) { return new Response("snapshot error", { status: 500 }); }
+        let _tok = null, _poly = null;
+        try { const _t2 = await esriToken(env); _tok = _t2 && _t2.token; } catch (e) {}
+        try { const _ar2 = JSON.parse((await env.MEETINGS.get("mp_areas_json")) || (new TextDecoder().decode(await env.MEETINGS.get("img_mp_areas", "arrayBuffer")) || "null"));
+              if (_ar2 && _ar2.features) { const _f = _ar2.features.find(f => f.properties && f.properties.n === (sn.area && sn.area.area)); if (_f) _poly = _f.geometry; } } catch (e) {}
+        return new Response(renderReport(sn, _tok, _poly), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname.indexOf("/img/") === 0) {               // v45 — serve a stored rendered image (public; WhatsApp fetches by link)
         const nm = url.pathname.slice(5).replace(/[^a-z0-9_]/gi, "");
@@ -1910,13 +1935,107 @@ export default {
       }
       if (url.pathname === "/charts") {                        // v41 — post-ready SVG charts from the register
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
-        return new Response(renderCharts(await env.MEETINGS.get("mkt_latest")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        const _cRaw = await env.MEETINGS.get("mkt_latest");
+        let _amenRaw = null;
+        try { const _cd = JSON.parse(_cRaw || "null"); const _t0 = _cd && _cd.areaIntel && _cd.areaIntel.areas && _cd.areaIntel.areas[0]; if (_t0) _amenRaw = await env.MEETINGS.get("amen_" + _t0.area.toLowerCase().replace(/[^a-z0-9]/g, "")); } catch (e) {}
+        return new Response(renderCharts(_cRaw, url.searchParams.get("key") || "", _amenRaw), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _ml = await env.MEETINGS.get("mkt_latest");
         const _mp = await env.MEETINGS.get("mkt_prev");
-        return new Response(renderMarket(_ml, _mp), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return new Response(renderMarket(_ml, _mp, url.searchParams.get("key") || "", url.origin, await env.MEETINGS.get("mkt_watch")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/manifest.webmanifest") {          // v49 — PWA: "Najma" installs from /market (key rides in start_url)
+        const _mk = url.searchParams.get("key") || "";
+        return new Response(JSON.stringify({ name: "Najma", short_name: "Najma", start_url: "/market?key=" + _mk, display: "standalone", background_color: "#0C1413", theme_color: "#0C1413", icons: [{ src: "/naj_icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }] }), { headers: { "Content-Type": "application/manifest+json" } });
+      }
+      if (url.pathname.indexOf("/skyline/") === 0) {          // v63 — 3D massing viewer (MUST sit above the keyed catch-all dump below)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _sk = url.pathname.slice(9).replace(/[^a-z0-9]/gi, "").toLowerCase();
+        let _an2 = _sk;
+        try { const _dd = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); const _hit = ((_dd && _dd.areaIntel && _dd.areaIntel.areas) || []).find(x => x.area.toLowerCase().replace(/[^a-z0-9]/g, "") === _sk); if (_hit) _an2 = _hit.area; } catch (e) {}
+        return new Response(renderSkyline(_sk, _an2, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/studio") {                        // v61 — editorial card studio (MUST sit above the keyed catch-all dump below)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        return new Response(renderStudio(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/map") {                           // v50 — interactive community map (MUST sit above the keyed catch-all dump below)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        return new Response(renderMap(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", env.WA_BOT_NUMBER || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET), await env.MEETINGS.get("mkt_prev")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname.indexOf("/area/") === 0) {              // v50 — per-community deep dive (MUST sit above the keyed catch-all dump below)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _an = ""; try { _an = decodeURIComponent(url.pathname.slice(6)); } catch (e) { _an = url.pathname.slice(6); }
+        return new Response(renderArea(await env.MEETINGS.get("mkt_latest"), _an, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/amenities") {                     // v58 — nearest POIs per community via geocoder category search; ONE paid call set per area, cached forever
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const nmq = (url.searchParams.get("area") || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const coord = Object.entries(DXB_COORDS).find(([k]) => k.replace(/[^a-z0-9]/g, "") === nmq);
+        if (!coord) return new Response(JSON.stringify({ ok: false, note: "no coordinates for that community" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        const ak = "amen_" + nmq;
+        const hit = await env.MEETINGS.get(ak);
+        if (hit) return new Response(hit, { headers: { "Content-Type": "application/json" } });
+        const t = await esriToken(env);
+        if (!t) return new Response(JSON.stringify({ ok: false, note: "Esri token unavailable" }), { status: 503, headers: { "Content-Type": "application/json" } });
+        const [lon, lat] = coord[1];
+        const CATS = [["Metro Station", "Nearest metro"], ["School", "Nearest school"], ["Shopping Center", "Nearest mall"], ["Hospital", "Nearest hospital"]];
+        const out = [];
+        let privErr = null;
+        for (const [cat, label] of CATS) {
+          try {
+            const q = new URLSearchParams({ f: "json", token: t.token, langCode: "en", category: cat, location: lon + "," + lat, maxLocations: "1", outFields: "PlaceName,Distance", searchExtent: (lon - 0.12) + "," + (lat - 0.12) + "," + (lon + 0.12) + "," + (lat + 0.12) });
+            const r = await fetch("https://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?" + q.toString(), { headers: { "Referer": "https://azimuth-2.digitalchemy.workers.dev/" } });
+            const j = await r.json();
+            if (j && j.error) { privErr = j.error.message || "geocode error"; break; }
+            const c = j && j.candidates && j.candidates[0];
+            if (c) {
+              const km = c.attributes && c.attributes.Distance != null ? null : null;
+              const dx = (c.location.x - lon) * 87, dy = (c.location.y - lat) * 111;   // rough km at Dubai latitude
+              out.push({ label, value: (c.address || c.attributes && c.attributes.PlaceName || "found") + " · ~" + Math.round(Math.sqrt(dx * dx + dy * dy) * 10) / 10 + " km" });
+            }
+          } catch (e) {}
+        }
+        if (privErr) return new Response(JSON.stringify({ ok: false, note: /token|invalid/i.test(privErr) ? "amenities need the geocoding privilege on the Esri credential" : privErr.slice(0, 120) }), { status: 503, headers: { "Content-Type": "application/json" } });
+        const body = JSON.stringify({ ok: true, amen: out });
+        await env.MEETINGS.put(ak, body);                       // cacheable by licence (geocode, not Places)
+        return new Response(body, { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/iso") {                           // v57 — cached drive-time rings (needs servicearea privilege on the Esri credential)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const ANCHORS = { difc: [55.282, 25.211], downtown: [55.276, 25.194], marina: [55.138, 25.080], dxb: [55.365, 25.253], mediacity: [55.156, 25.095] };
+        const an = url.searchParams.get("anchor") || "";
+        if (!ANCHORS[an]) return new Response(JSON.stringify({ ok: false, note: "unknown anchor" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        const ck = "iso_" + an;                                 // permanent cache: one paid call per anchor, ever
+        const cached = await env.MEETINGS.get(ck);
+        if (cached) return new Response(cached, { headers: { "Content-Type": "application/json" } });
+        const t = await esriToken(env);
+        if (!t) return new Response(JSON.stringify({ ok: false, note: "Esri token unavailable" }), { status: 503, headers: { "Content-Type": "application/json" } });
+        try {
+          const q = new URLSearchParams({ f: "json", token: t.token, facilities: ANCHORS[an][0] + "," + ANCHORS[an][1], defaultBreaks: "10 20 30", outSR: "4326", trimOuterPolygons: "true" });
+          const r = await fetch("https://route-api.arcgis.com/arcgis/rest/services/World/ServiceAreas/NAServer/ServiceArea_World/solveServiceArea?" + q.toString(), { headers: { "Referer": "https://azimuth-2.digitalchemy.workers.dev/" } });
+          const j = await r.json();
+          if (!j || !j.saPolygons || !j.saPolygons.features) {
+            const msg = j && j.error ? (j.error.message || "") : "no polygons";
+            const priv = /token|privilege|not licensed|access/i.test(msg);
+            return new Response(JSON.stringify({ ok: false, note: priv ? "drive-time needs the service-area privilege on the Esri credential" : msg.slice(0, 120) }), { status: 503, headers: { "Content-Type": "application/json" } });
+          }
+          const geo = { type: "FeatureCollection", features: j.saPolygons.features.map(f => ({ type: "Feature", properties: { toBreak: f.attributes && f.attributes.ToBreak }, geometry: { type: "Polygon", coordinates: f.geometry.rings } })) };
+          const body = JSON.stringify({ ok: true, anchor: an, geo });
+          await env.MEETINGS.put(ck, body);
+          return new Response(body, { headers: { "Content-Type": "application/json" } });
+        } catch (e) { return new Response(JSON.stringify({ ok: false, note: "isochrone error" }), { status: 503, headers: { "Content-Type": "application/json" } }); }
+      }
+      if (url.pathname === "/esri_token") {                    // v54 — short-lived Esri basemap token for the map client (secret stays server-side)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const t = await esriToken(env);
+        if (!t) return new Response(JSON.stringify({ ok: false, detail: JSON.parse((await env.MEETINGS.get("esri_err")) || "null") }), { status: 503, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ ok: true, token: t.token, expires: t.exp }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/naj_icon.svg") {                  // v49 — gold star app icon
+        return new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect width="256" height="256" rx="52" fill="#0C1413"/><g transform="translate(39,39) scale(0.695)"><path d="' + NAJ_ICONS.star + '" fill="#C5A56A"/></g></svg>', { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=604800" } });
       }
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 }); const list = await env.MEETINGS.list(); const events = []; for (const k of list.keys) { if (!k.name.startsWith("evt_")) continue; const v = await env.MEETINGS.get(k.name); if (v) { try { events.push(JSON.parse(v)); } catch (e) {} } } return new Response(JSON.stringify(events), { headers: { "Content-Type": "application/json" } });
     }
@@ -2192,6 +2311,63 @@ export default {
             await waSend(env, from, "📈 Najma — your market pulse:" + NL10 + url.origin + "/market?key=" + env.READ_KEY + NL10 + NL10 + "Built from the official registers. Your weekly brief lands here every Sunday morning, and I'll flag same-day movements when something shifts.");
             return new Response("ok");
           }
+          {                                                      // v58 — "report <area> [for <client>]": client briefing link in seconds
+            const _rm = text.match(/^report\s+(.{2,50}?)(?:\s+for\s+(.{2,40}))?\s*$/i);
+            if (_rm) {
+              const _q = _rm[1].trim(), _cl = (_rm[2] || "").trim();
+              const _nz2 = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+              let _d3 = null; try { _d3 = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+              const _ai = (_d3 && _d3.areaIntel && _d3.areaIntel.areas) || [];
+              const _nq = _nz2(_q);
+              const _a = _ai.find(x => _nz2(x.area) === _nq) || _ai.find(x => _nz2(x.area).indexOf(_nq) >= 0 || (_nq.length > 5 && _nq.indexOf(_nz2(x.area)) >= 0));
+              if (!_a) { await waSend(env, from, "📄 Couldn't match “" + _q + "” to a community with register depth. Use the area name as it shows on your pulse."); return new Response("ok"); }
+              const _sup = ((_d3.projects && _d3.projects.supplyByArea) || {})[_a.area] || null;
+              const _projs = ((_d3.projects && _d3.projects.projectLookup) || []).filter(p2 => (p2.area || "").toLowerCase() === _a.area.toLowerCase()).sort((x, y) => (y.units || 0) - (x.units || 0)).slice(0, 6);
+              let _amen = null; try { const _am = JSON.parse((await env.MEETINGS.get("amen_" + _a.area.toLowerCase().replace(/[^a-z0-9]/g, ""))) || "null"); if (_am && _am.ok) _amen = _am.amen; } catch (e) {}
+              const _id = [...crypto.getRandomValues(new Uint8Array(9))].map(b => b.toString(16).padStart(2, "0")).join("");
+              const _snap = { v: 1, at: gstNowIso(), client: _cl, area: _a, sup: _sup, projs: _projs, amen: _amen, period: _d3.transactions ? [_d3.transactions.periodFrom, _d3.transactions.periodTo] : null };
+              await env.MEETINGS.put("rpt_" + _id, JSON.stringify(_snap), { expirationTtl: 60 * 86400 });
+              await waSend(env, from, "📄 " + _a.area + " briefing" + (_cl ? " for " + _cl : "") + " — ready to forward:\n" + url.origin + "/r/" + _id + "\n\nFrozen to today's register figures · link lives 60 days · shows the client nothing but the briefing.");
+              return new Response("ok");
+            }
+          }
+          {                                                      // v52 — track/untrack: Naj curates her development radar; the register still ranks it
+            const _tm = text.match(/^(un)?track\s+(.{2,60})$/i);
+            if (_tm) {
+              const _off = !!_tm[1], _q = _tm[2].trim().replace(/[?.!]+$/, "");
+              const _nz = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+              let _w = {}; try { _w = JSON.parse((await env.MEETINGS.get("mkt_watch")) || "{}"); } catch (e) {}
+              _w.add = _w.add || []; _w.del = _w.del || [];
+              let _d2 = null, _ix = [];
+              try { _d2 = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+              try { _ix = JSON.parse((await env.MEETINGS.get("mkt_index")) || "[]"); } catch (e) {}
+              const _m2 = (_d2 && _d2.meed) || {};
+              const _pool = [];
+              for (const dv of (_m2.developments || [])) _pool.push(dv.development);
+              for (const r of (_m2.recentBigUpdates || []).concat(_m2.largestUnderConstruction || [])) _pool.push(r.title);
+              for (const p2 of ((_d2 && _d2.projects && _d2.projects.projectLookup) || [])) _pool.push(p2.project);
+              for (const r of _ix) _pool.push(r.t);
+              const _nq = _nz(_q); let _hit = null;
+              for (const nm of _pool) { if (!nm) continue; const nn = _nz(nm); if (nn === _nq) { _hit = nm; break; } }
+              if (!_hit) for (const nm of _pool) { if (!nm) continue; const nn = _nz(nm); if (nn.indexOf(_nq) >= 0 || (_nq.length > 5 && _nq.indexOf(nn) >= 0)) { _hit = nm; break; } }
+              if (_off) {
+                const _tg = _hit || _q;
+                _w.del = Array.from(new Set(_w.del.concat([_nz(_tg)]))).slice(-40);
+                _w.add = _w.add.filter(a => _nz(a.name) !== _nz(_tg));
+                await env.MEETINGS.put("mkt_watch", JSON.stringify(_w));
+                await waSend(env, from, "📡 Off the radar: " + _tg + ". Say “track " + _tg + "” anytime to bring it back.");
+              } else if (_hit) {
+                _w.del = _w.del.filter(x => x !== _nz(_hit));
+                if (!_w.add.some(a => _nz(a.name) === _nz(_hit))) _w.add.push({ name: _hit, at: gstNowIso() });
+                _w.add = _w.add.slice(-20);
+                await env.MEETINGS.put("mkt_watch", JSON.stringify(_w));
+                await waSend(env, from, "📡 On the radar: " + _hit + ". The register ranks it with the rest — demand and delivery decide its spot from the next refresh. “untrack " + _hit + "” removes it.");
+              } else {
+                await waSend(env, from, "📡 Couldn't find “" + _q + "” in the register or the project corpus. Try the name as the developer registered it — or send me a news story about it and I'll cross-reference.");
+              }
+              return new Response("ok");
+            }
+          }
           const _dm = text.match(/^draft\s+(?:an?\s+)?(podcast|video|script|article|linkedin|post|carousel|slides?|instagram|insta|reel|ig)(?:\s+(?:script|post|reel|carousel|article))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d))?\s*$/i);
           if (_dm) {
             const _kind = /podcast|video|script/i.test(_dm[1]) ? "pod" : /article/i.test(_dm[1]) ? "art" : /carousel|slide/i.test(_dm[1]) ? "car" : /instagram|insta|reel|ig/i.test(_dm[1]) ? "ig" : "li";
@@ -2260,6 +2436,7 @@ export default {
               "🗓 Meetings — text or voice note, I file them with reminders" + NL10 +
               "📷 Photos — flyers, invites, whiteboards; I read them and file what's in them" + NL10 +
               "❓ Questions — ask about anything I've filed for you" + NL10 +
+              "📡 “track <project>” / “untrack <project>” — curate your development radar" + NL10 +
               "🤝 “who owes me” · “what do I owe” · “status with <name>”" + NL10 +
               "👀 “list groups” · “watch <name>” — what I listen to" + NL10 +
               "🖥 “board” — your live board link" + NL10 +
@@ -2392,11 +2569,33 @@ export default {
 
 // ── Market Pulse (v36) ── dashboard renderer + weekly brief ─────────────────────────────
 function mkFmtM(v) { if (v == null) return "—"; if (v >= 1000) return "$" + (v / 1000).toFixed(1) + "bn"; return "$" + Math.round(v) + "m"; }
-function renderMarket(latestRaw, prevRaw) {
-  let d = null, p = null;
+// v49 — Najma UI uplift: Phosphor icons (MIT, phosphoricons.com), inlined as single paths, gold via currentColor
+const NAJ_ICONS = { star:"M237.28,97.87A14.18,14.18,0,0,0,224.76,88l-60.25-4.87-23.22-56.2a14.37,14.37,0,0,0-26.58,0L91.49,83.11,31.24,88a14.18,14.18,0,0,0-12.52,9.89A14.43,14.43,0,0,0,23,113.32L69,152.93l-14,59.25a14.4,14.4,0,0,0,5.59,15,14.1,14.1,0,0,0,15.91.6L128,196.12l51.58,31.71a14.1,14.1,0,0,0,15.91-.6,14.4,14.4,0,0,0,5.59-15l-14-59.25L233,113.32A14.43,14.43,0,0,0,237.28,97.87Zm-12.14,6.37-48.69,42a6,6,0,0,0-1.92,5.92l14.88,62.79a2.35,2.35,0,0,1-.95,2.57,2.24,2.24,0,0,1-2.6.1L131.14,184a6,6,0,0,0-6.28,0L70.14,217.61a2.24,2.24,0,0,1-2.6-.1,2.35,2.35,0,0,1-1-2.57l14.88-62.79a6,6,0,0,0-1.92-5.92l-48.69-42a2.37,2.37,0,0,1-.73-2.65,2.28,2.28,0,0,1,2.07-1.65l63.92-5.16a6,6,0,0,0,5.06-3.69l24.63-59.6a2.35,2.35,0,0,1,4.38,0l24.63,59.6a6,6,0,0,0,5.06,3.69l63.92,5.16a2.28,2.28,0,0,1,2.07,1.65A2.37,2.37,0,0,1,225.14,104.24Z", sun:"M122,40V16a6,6,0,0,1,12,0V40a6,6,0,0,1-12,0Zm68,88a62,62,0,1,1-62-62A62.07,62.07,0,0,1,190,128Zm-12,0a50,50,0,1,0-50,50A50.06,50.06,0,0,0,178,128ZM59.76,68.24a6,6,0,1,0,8.48-8.48l-16-16a6,6,0,0,0-8.48,8.48Zm0,119.52-16,16a6,6,0,1,0,8.48,8.48l16-16a6,6,0,1,0-8.48-8.48ZM192,70a6,6,0,0,0,4.24-1.76l16-16a6,6,0,0,0-8.48-8.48l-16,16A6,6,0,0,0,192,70Zm4.24,117.76a6,6,0,0,0-8.48,8.48l16,16a6,6,0,0,0,8.48-8.48ZM46,128a6,6,0,0,0-6-6H16a6,6,0,0,0,0,12H40A6,6,0,0,0,46,128Zm82,82a6,6,0,0,0-6,6v24a6,6,0,0,0,12,0V216A6,6,0,0,0,128,210Zm112-88H216a6,6,0,0,0,0,12h24a6,6,0,0,0,0-12Z", buildings:"M240,210H222V96a14,14,0,0,0-14-14H142V32a14,14,0,0,0-21.77-11.64l-80,53.33A14,14,0,0,0,34,85.34V210H16a6,6,0,0,0,0,12H240a6,6,0,0,0,0-12ZM208,94a2,2,0,0,1,2,2V210H142V94ZM46,85.34a2,2,0,0,1,.89-1.66l80-53.34A2,2,0,0,1,130,32V210H46ZM110,112v16a6,6,0,0,1-12,0V112a6,6,0,0,1,12,0Zm-32,0v16a6,6,0,0,1-12,0V112a6,6,0,0,1,12,0Zm0,56v16a6,6,0,0,1-12,0V168a6,6,0,0,1,12,0Zm32,0v16a6,6,0,0,1-12,0V168a6,6,0,0,1,12,0Z", chart:"M230,208a6,6,0,0,1-6,6H32a6,6,0,0,1-6-6V48a6,6,0,0,1,12,0v98.78l54.05-47.3a6,6,0,0,1,7.55-.28l60.11,45.08,60.34-52.8a6,6,0,0,1,7.9,9l-64,56a6,6,0,0,1-7.55.28L96.29,111.72,38,162.72V202H224A6,6,0,0,1,230,208Z", pin:"M128,66a38,38,0,1,0,38,38A38,38,0,0,0,128,66Zm0,64a26,26,0,1,1,26-26A26,26,0,0,1,128,130Zm0-112a86.1,86.1,0,0,0-86,86c0,30.91,14.34,63.74,41.47,94.94a252.32,252.32,0,0,0,41.09,38,6,6,0,0,0,6.88,0,252.32,252.32,0,0,0,41.09-38c27.13-31.2,41.47-64,41.47-94.94A86.1,86.1,0,0,0,128,18Zm0,206.51C113,212.93,54,163.62,54,104a74,74,0,0,1,148,0C202,163.62,143,212.93,128,224.51Z", trend:"M238,56v64a6,6,0,0,1-12,0V70.48l-85.76,85.76a6,6,0,0,1-8.48,0L96,120.49,28.24,188.24a6,6,0,0,1-8.48-8.48l72-72a6,6,0,0,1,8.48,0L136,143.51,217.52,62H168a6,6,0,0,1,0-12h64A6,6,0,0,1,238,56Z", coins:"M224.56,103.81C213.43,97.75,198.47,93.39,182,91.34V84c0-12.12-9.58-23.1-27-30.93C139.16,45.93,118.2,42,96,42S52.84,45.93,37,53.07C19.58,60.9,10,71.88,10,84v40c0,12.12,9.58,23.1,27,30.93,10.49,4.72,23.21,8,37,9.73V172c0,12.12,9.58,23.1,27,30.93C116.84,210.07,137.8,214,160,214s43.16-3.93,59-11.07c17.39-7.83,27-18.81,27-30.93V132C246,121.35,238.39,111.34,224.56,103.81Zm-5.74,10.54C228.61,119.68,234,126,234,132c0,14.19-30.39,30-74,30a166.9,166.9,0,0,1-21.21-1.34A110.79,110.79,0,0,0,155,154.93c17.39-7.83,27-18.81,27-30.93V103.43C196.4,105.36,209.3,109.16,218.82,114.35ZM108.16,153.58c-3.92.27-8,.42-12.16.42-5.3,0-10.4-.24-15.28-.67a2.22,2.22,0,0,0-.37,0c-3.58-.33-7-.77-10.35-1.3V124.12A178,178,0,0,0,96,126a178,178,0,0,0,26-1.88V152c-4.34.69-8.91,1.22-13.69,1.56ZM170,105.89V124c0,9.54-13.75,19.8-36,25.51V121.85a115,115,0,0,0,21-6.92A66.2,66.2,0,0,0,170,105.89ZM96,54c43.61,0,74,15.81,74,30s-30.39,30-74,30S22,98.19,22,84,52.39,54,96,54ZM22,124V105.89a66.2,66.2,0,0,0,15,9,115,115,0,0,0,21,6.92v27.66C35.75,143.8,22,133.54,22,124Zm64,48v-6.28c3.3.18,6.63.28,10,.28q5.91,0,11.66-.37A123.17,123.17,0,0,0,122,169.84v27.67C99.75,191.8,86,181.54,86,172Zm48,28V172.1a177.84,177.84,0,0,0,26,1.9,178,178,0,0,0,26-1.88V200a170,170,0,0,1-52,0Zm64-2.49V169.85a115,115,0,0,0,21-6.92,66.2,66.2,0,0,0,15-9V172C234,181.54,220.25,191.8,198,197.51Z", key:"M215.15,40.85A78,78,0,0,0,86.2,121.31l-56.1,56.1a13.94,13.94,0,0,0-4.1,9.9V216a14,14,0,0,0,14,14H72a6,6,0,0,0,6-6V206H96a6,6,0,0,0,6-6V182h18a6,6,0,0,0,4.24-1.76l10.45-10.44A77.59,77.59,0,0,0,160,174h.1A78,78,0,0,0,215.15,40.85ZM226,98.16c-1.12,35.16-30.67,63.8-65.88,63.84a65.93,65.93,0,0,1-24.51-4.67,6,6,0,0,0-6.64,1.26L117.51,170H96a6,6,0,0,0-6,6v18H72a6,6,0,0,0-6,6v18H40a2,2,0,0,1-2-2V187.31a2,2,0,0,1,.58-1.41l58.83-58.83a6,6,0,0,0,1.26-6.64A65.61,65.61,0,0,1,94,95.92C94,60.71,122.68,31.16,157.83,30A66,66,0,0,1,226,98.16ZM190,76a10,10,0,1,1-10-10A10,10,0,0,1,190,76Z", crane:"M240,82H107.71L85.37,37.32A6,6,0,0,0,80,34H48a6,6,0,0,0-6,6V82H24a6,6,0,0,0,0,12H42V210H24a6,6,0,0,0,0,12H128a6,6,0,0,0,0-12H110V94H210v90a2,2,0,0,1-2,2H192a2,2,0,0,1-2-2v-8a6,6,0,0,0-12,0v8a14,14,0,0,0,14,14h16a14,14,0,0,0,14-14V94h18a6,6,0,0,0,0-12ZM54,46H76.29l18,36H54Zm0,164V158H98v52Zm44-64H54V94H98Z", house:"M240,210H222V131.17l5.76,5.76a6,6,0,0,0,8.48-8.49L137.9,30.09a14,14,0,0,0-19.8,0L19.76,128.44a6,6,0,0,0,8.48,8.49L34,131.17V210H16a6,6,0,0,0,0,12H240a6,6,0,0,0,0-12ZM46,119.17l80.58-80.59a2,2,0,0,1,2.84,0L210,119.17V210H158V152a6,6,0,0,0-6-6H104a6,6,0,0,0-6,6v58H46ZM146,210H110V158h36Z", bed:"M216,74H30V48a6,6,0,0,0-12,0V208a6,6,0,0,0,12,0V174H242v34a6,6,0,0,0,12,0V112A38,38,0,0,0,216,74ZM30,86h76v76H30Zm88,76V86h98a26,26,0,0,1,26,26v50Z", file:"M212.24,83.76l-56-56A6,6,0,0,0,152,26H56A14,14,0,0,0,42,40V216a14,14,0,0,0,14,14H200a14,14,0,0,0,14-14V88A6,6,0,0,0,212.24,83.76ZM158,46.48,193.52,82H158ZM200,218H56a2,2,0,0,1-2-2V40a2,2,0,0,1,2-2h90V88a6,6,0,0,0,6,6h50V216A2,2,0,0,1,200,218Zm-34-82a6,6,0,0,1-6,6H96a6,6,0,0,1,0-12h64A6,6,0,0,1,166,136Zm0,32a6,6,0,0,1-6,6H96a6,6,0,0,1,0-12h64A6,6,0,0,1,166,168Z" };
+const najIcon = (n) => NAJ_ICONS[n] ? '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="' + NAJ_ICONS[n] + '"/></svg>' : "";
+// v62 — the register labels layouts "1 B/R" / "Studio" / "PENTHOUSE"; sort numerically, Studio first
+const najRoomKey = (k) => { const m = String(k).match(/(\d+)/); return /studio/i.test(k) ? 0 : m ? parseInt(m[1], 10) : 98; };
+const najRooms = (byRoom) => Object.entries(byRoom || {}).sort((a, b) => najRoomKey(a[0]) - najRoomKey(b[0]));
+const najH2 = (icon, title) => '<h2><span class=ih>' + najIcon(icon) + '</span>' + title + '</h2>';
+// v55 — satellite banners: real Esri World Imagery of each community, pre-stitched and stored in
+// KV as sat_<slug> (make_area_banners.py). Real location beats stock photography, and it is
+// licensed, accurate and defensible. Falls back silently to nothing if a banner is absent.
+const najSlug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const najSat = (name) => '/img/sat_' + najSlug(name);
+const NAJ_FONTS = '<link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">';
+// v51 — shared bottom tab bar: one app, four rooms. Inject NAJ_NAV_CSS in <style> and najNav() before </body>.
+const NAJ_NAV_CSS = '.nnav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-around;align-items:center;background:rgba(12,20,19,.93);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-top:1px solid #24352F;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.nnav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8FA39B;font-size:.58rem;font-family:"IBM Plex Mono",monospace;letter-spacing:.05em;-webkit-tap-highlight-color:transparent}.nnav a svg{width:19px;height:19px}.nnav a.on{color:#C5A56A}';
+const najNav = (key, active) => {
+  const k = encodeURIComponent(key || "");
+  const items = [["pulse", "/market", "trend", "PULSE"], ["map", "/map", "pin", "MAP"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"]];
+  return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + '?key=' + k + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>').join('') + '</nav>';
+};
+
+function renderMarket(latestRaw, prevRaw, key, origin, watchRaw) {
+  let d = null, p = null, watch = {};
   try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
   try { p = JSON.parse(prevRaw || "null"); } catch (e) {}
-  if (!d) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0a2223;color:#eee6d6;padding:2rem"><h2>Market Pulse</h2><p>No data yet — the collector has not delivered. Run the market-pulse Action once, then refresh.</p>';
+  try { watch = JSON.parse(watchRaw || "{}") || {}; } catch (e) {}
+  if (!d) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem"><h2 style="color:#C5A56A">Najma</h2><p>No data yet — the collector has not delivered. Run the market-pulse collector once, then refresh.</p>';
   const m = d.meed || {};
   const prevStage = {}; if (p && p.meed && p.meed.byStage) for (const s of p.meed.byStage) prevStage[s.stage] = s;
   const ageDays = (Date.now() - Date.parse(d.generatedAt || 0)) / 86400000;
@@ -2405,108 +2604,183 @@ function renderMarket(latestRaw, prevRaw) {
   const stageRows = (m.byStage || []).map(s => {
     const pv = prevStage[s.stage]; let delta = "";
     if (pv && pv.count !== s.count) { const df = s.count - pv.count; delta = ' <span style="color:' + (df > 0 ? "#56B584" : "#D9A441") + '">' + (df > 0 ? "▲" : "▼") + Math.abs(df) + "</span>"; }
-    return "<tr><td>" + esc2(s.stage) + delta + '</td><td style="text-align:right">' + s.count + '</td><td style="text-align:right">' + mkFmtM(s.valueUsdM) + "</td></tr>";
+    return '<div class=srow><span>' + esc2(s.stage) + delta + '</span><span class=sv>' + s.count + ' · ' + mkFmtM(s.valueUsdM) + '</span></div>';
   }).join("");
-  const projRows = (list) => (list || []).map(r => "<tr><td>" + esc2(r.title) + "</td><td>" + esc2(r.stage) + '</td><td style="text-align:right">' + mkFmtM(r.valueUsdM) + '</td><td style="text-align:right;white-space:nowrap">' + esc2(r.updated || "") + "</td></tr>").join("");
+  const projRows = (list) => (list || []).map(r => '<div class=prow data-track="' + esc2(r.title) + '"><div class=pt>' + esc2(r.title) + ' <span class=trk>📡</span></div><div class=pm><span>' + esc2(r.stage) + '</span><span>' + mkFmtM(r.valueUsdM) + (r.updated ? ' · ' + esc2(r.updated) : '') + '</span></div></div>').join("");
 
   const t = d.transactions || null, rn = d.rents || null, mo = d.monthly || null, ho = d.handover || null;
   const num2 = (v) => (v == null ? "—" : Number(v).toLocaleString("en-US"));
+  const eKey = encodeURIComponent(key || "");
+  const areaLink = (nm) => '/area/' + encodeURIComponent(nm) + '?key=' + eKey;
   let body = "";
 
   // ── THE PULSE — DLD registered sales ──
   if (t) {
     const offTot = (t.offPlanSplit && (t.offPlanSplit["Off-Plan"] || 0) + (t.offPlanSplit["Ready"] || 0)) || 0;
     const offPct = offTot ? Math.round(100 * (t.offPlanSplit["Off-Plan"] || 0) / offTot) : null;
-    body += '<div class=hero><div class=hv>AED ' + esc2(t.salesValueAedBn) + '<small> billion</small></div><div class=hl>registered sales · ' + esc2(String(t.periodFrom || "")) + " → " + esc2(String(t.periodTo || "")) + ' · Dubai Land Department (DLD)</div></div>' +
+    body += '<a class=hero href="/map?key=' + eKey + '"><div class=hv>AED ' + esc2(t.salesValueAedBn) + '<small> billion</small></div><div class=hl>registered sales · ' + esc2(String(t.periodFrom || "")) + " → " + esc2(String(t.periodTo || "")) + ' · Dubai Land Department (DLD)</div><div class=hgo>see it on the live map ›</div></a>' +
       '<div class=grid>' +
-      '<div class=st><div class=v>' + num2(t.salesCount) + '</div><div class=l>sales registered</div></div>' +
-      '<div class=st><div class=v>' + num2(t.medianResidentialAedSqft) + '<small>/sq ft</small></div><div class=l>median residential (AED)</div></div>' +
-      '<div class=st><div class=v>' + (t.medianTicketAed ? (t.medianTicketAed / 1e6).toFixed(2) + "m" : "—") + '</div><div class=l>median ticket (AED)</div></div>' +
-      '<div class=st><div class=v>' + (offPct == null ? "—" : offPct + "<small>%</small>") + '</div><div class=l>of sales are off-plan</div></div>' +
+      '<a class=st href="/map?key=' + eKey + '"><div class=v>' + num2(t.salesCount) + '</div><div class=l>sales registered ›</div></a>' +
+      '<a class=st href="/charts?key=' + eKey + '"><div class=v>' + num2(t.medianResidentialAedSqft) + '<small>/sq ft</small></div><div class=l>median residential (AED) ›</div></a>' +
+      '<a class=st href="/charts?key=' + eKey + '"><div class=v>' + (t.medianTicketAed ? (t.medianTicketAed / 1e6).toFixed(2) + "m" : "—") + '</div><div class=l>median ticket (AED) ›</div></a>' +
+      '<a class=st href="/charts?key=' + eKey + '"><div class=v>' + (offPct == null ? "—" : offPct + "<small>%</small>") + '</div><div class=l>of sales are off-plan ›</div></a>' +
       "</div>";
-    if (offPct != null) body += '<div class=card><h2>Off-plan vs ready</h2><div class=bar><i style="width:' + offPct + '%;background:#C5A56A"></i><i style="width:' + (100 - offPct) + '%;background:#3E8A7E"></i></div><div class=lg><span><b>' + num2(t.offPlanSplit["Off-Plan"]) + "</b> off-plan</span><span><b>" + num2(t.offPlanSplit["Ready"]) + "</b> ready</span></div></div>";
+    if (offPct != null) body += '<a class="card clk" href="/charts?key=' + eKey + '">' + najH2("house", "Off-plan vs ready") + '<div class=bar><i style="width:' + offPct + '%;background:#C5A56A"></i><i style="width:' + (100 - offPct) + '%;background:#3E8A7E"></i></div><div class=lg><span><b>' + num2(t.offPlanSplit["Off-Plan"]) + "</b> off-plan</span><span><b>" + num2(t.offPlanSplit["Ready"]) + "</b> ready</span></div></a>";
     if (t.weekly && t.weekly.length) {
       const mx = Math.max(...t.weekly.map(w => w.sales)) || 1;
-      body += '<div class=card><h2>Sales by week</h2><div class=spark>' + t.weekly.map((w, i) => '<div class=wk title="' + esc2(w.week) + ": " + num2(w.sales) + ' sales"><i style="height:' + Math.max(4, Math.round(64 * w.sales / mx)) + "px" + (i === t.weekly.length - 1 ? ";opacity:.45;border:1px dashed #3B584F;background:none" : (w.sales === mx ? ";background:#C5A56A" : "")) + '"></i><span>' + esc2(String(w.week).slice(-3)) + "</span></div>").join("") + '</div><div class=note>Newest bar is a part-week — registration lags the deal.</div></div>';
+      body += '<a class="card clk" href="/charts?key=' + eKey + '">' + najH2("chart", "Sales by week") + '<div class=spark>' + t.weekly.map((w, i) => '<div class=wk title="' + esc2(w.week) + ": " + num2(w.sales) + ' sales"><i style="height:' + Math.max(4, Math.round(64 * w.sales / mx)) + "px" + (i === t.weekly.length - 1 ? ";opacity:.45;border:1px dashed #3B584F;background:none" : (w.sales === mx ? ";background:#C5A56A" : "")) + '"></i><span>' + esc2(String(w.week).slice(-3)) + "</span></div>").join("") + '</div><div class=note>Newest bar is a part-week — registration lags the deal.</div></a>';
     }
     if (t.topAreas && t.topAreas.length) {
       const amx = t.topAreas[0].sales || 1;
-      body += '<div class=card><h2>Where the market is trading</h2>' + t.topAreas.slice(0, 8).map(a => '<div class=arow><span class=nm>' + esc2(a.area) + '</span><span class=tr><i style="width:' + Math.round(100 * a.sales / amx) + '%"></i></span><span class=ct>' + num2(a.sales) + "</span></div>").join("") + "</div>";
+      body += '<div class=card>' + najH2("pin", "Where the market is trading") + t.topAreas.slice(0, 8).map(a => '<a class=arow href="' + areaLink(a.area) + '"><span class=nm>' + esc2(a.area) + '</span><span class=tr><i style="width:' + Math.round(100 * a.sales / amx) + '%"></i></span><span class=ct>' + num2(a.sales) + '</span><span class=chv>›</span></a>').join("") + '<div class=note>Tap an area for its full deep dive.</div></div>';
     }
   }
   if (mo && mo.series && mo.series.length) {
     const vmx = Math.max(...mo.series.map(s => s.valueAedBn)) || 1;
-    body += '<div class=card><h2>The year so far — AED ' + esc2(mo.ytdValueAedBn) + "bn · " + num2(mo.ytdSales) + ' sales</h2><div class=spark>' + mo.series.map((s, i) => '<div class=wk title="' + esc2(s.month) + ": AED " + s.valueAedBn + 'bn"><i style="height:' + Math.max(4, Math.round(64 * s.valueAedBn / vmx)) + "px" + (i === mo.series.length - 1 ? ";opacity:.45;border:1px dashed #3B584F;background:none" : "") + '"></i><span>' + esc2(String(s.month).slice(5)) + "</span></div>").join("") + "</div></div>";
+    body += '<a class="card clk" href="/charts?key=' + eKey + '">' + najH2("trend", 'The year so far — AED ' + esc2(mo.ytdValueAedBn) + "bn · " + num2(mo.ytdSales) + ' sales') + '<div class=spark>' + mo.series.map((s, i) => '<div class=wk title="' + esc2(s.month) + ": AED " + s.valueAedBn + 'bn"><i style="height:' + Math.max(4, Math.round(64 * s.valueAedBn / vmx)) + "px" + (i === mo.series.length - 1 ? ";opacity:.45;border:1px dashed #3B584F;background:none" : "") + '"></i><span>' + esc2(String(s.month).slice(5)) + "</span></div>").join("") + "</div></a>";
   }
 
   // ── RENTS & YIELDS — Ejari ──
   if (rn) {
-    body += '<div class=card><h2>Rents &amp; gross yields · ' + num2(rn.contractsCount) + " contracts, " + esc2(String(rn.registrationTo || "")) + "</h2>" +
+    body += '<div class=card>' + najH2("coins", 'Rents &amp; gross yields · ' + num2(rn.contractsCount) + " contracts, " + esc2(String(rn.registrationTo || ""))) +
       '<div class=grid style="margin-bottom:.5rem"><div class=st><div class=v>' + (rn.medianAnnualRentAed ? Math.round(rn.medianAnnualRentAed / 1000) + "k" : "—") + '</div><div class=l>median annual rent (AED)</div></div><div class=st><div class=v>' + esc2(rn.medianRentAedSqftYr || "—") + '<small>/sq ft/yr</small></div><div class=l>median residential (AED)</div></div></div>' +
-      ((rn.grossYieldPctByArea || []).slice(0, 6).map(y => { const ymx = rn.grossYieldPctByArea[0].yieldPct || 1; return '<div class=arow><span class=nm>' + esc2(y.area) + '</span><span class=tr><i style="width:' + Math.round(100 * y.yieldPct / ymx) + '%"></i></span><span class=ct>' + y.yieldPct + "%</span></div>"; }).join("")) +
+      ((rn.grossYieldPctByArea || []).slice(0, 6).map(y => { const ymx = rn.grossYieldPctByArea[0].yieldPct || 1; return '<a class=arow href="' + areaLink(y.area) + '"><span class=nm>' + esc2(y.area) + '</span><span class=tr><i style="width:' + Math.round(100 * y.yieldPct / ymx) + '%"></i></span><span class=ct>' + y.yieldPct + '%</span><span class=chv>›</span></a>'; }).join("")) +
       '<div class=note>' + esc2(rn.yieldNote || "") + "</div></div>";
   }
 
   // ── HANDOVER RADAR ──
   if (ho && ho.meedByQuarter) {
     const qs = Object.entries(ho.meedByQuarter).slice(0, 5);
-    body += '<div class=card><h2>Handover radar</h2>' + qs.map(([q, e]) => '<div class=arow><span class=nm style="color:#C5A56A">' + esc2(q) + '</span><span style="flex:1;font-size:.82rem">' + e.packages + " package(s) · " + mkFmtM(e.valueUsdM) + "</span></div>").join("") + '<div class=note>' + esc2((ho.note || "").slice(0, 160)) + "</div></div>";
+    body += '<a class="card clk" href="/map?m=su&key=' + eKey + '">' + najH2("key", "Handover radar") + qs.map(([q, e]) => '<div class=arow><span class=nm style="color:#C5A56A">' + esc2(q) + '</span><span style="flex:1;font-size:.82rem">' + e.packages + " package(s) · " + mkFmtM(e.valueUsdM) + "</span></div>").join("") + '<div class=note>' + esc2((ho.note || "").slice(0, 160)) + "</div></a>";
   }
 
   // ── TRACKED DEVELOPMENTS — demand (DLD) vs delivery (MEED) ──
-  if (m.developments && m.developments.length) {
-    body += '<div class=card><h2>Tracked developments — demand vs delivery</h2>' + m.developments.map(dv => {
+  const _nz = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  const wdel = (watch.del || []), wadd = (watch.add || []);
+  const devPool = (m.developments || []).filter(dv => !wdel.includes(_nz(dv.development)));
+  if (devPool.length || wadd.length) {
+    // v52 — the list ranks ITSELF from the register: demand momentum (vs previous pulse) +
+    // delivery proximity decide the order, every card says why it sits where it sits, and
+    // Naj curates the pool from chat ("track X" / "untrack X").
+    const prevDev = {};
+    if (p && p.meed && p.meed.developments) for (const v of p.meed.developments) prevDev[v.development] = v;
+    const aiAreas = (d.areaIntel && d.areaIntel.areas) || [];
+    const devSlug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const devHref = (nm, loc) => { const l = _nz(loc || ""); const hitA = aiAreas.find(a2 => l.indexOf(_nz(a2.area)) >= 0); return hitA ? areaLink(hitA.area) : ('/map?key=' + eKey); };
+    // Photo if Kendall has supplied one (dev_<slug>); otherwise real satellite imagery of the
+    // matched community (sat_<slug>) — accurate and licensed, never a generic stock shot.
+    const devImg = (nm, loc) => {
+      const l = _nz(loc || ""); const hitA = aiAreas.find(a2 => l.indexOf(_nz(a2.area)) >= 0);
+      const alt = hitA ? najSat(hitA.area) : "";
+      return '<img class=devimg src="/img/dev_' + devSlug(nm) + '" alt="" loading=lazy' +
+        (alt ? ' data-sat="' + alt + '" onerror="if(this.dataset.sat&&this.src.indexOf(\'sat_\')<0){this.src=this.dataset.sat}else{this.remove()}"' : ' onerror="this.remove()"') + '>';
+    };
+    const scored = devPool.map(dv => {
+      const dp = dv.dldPulse; let s = 0; const why = [];
+      if (dp) {
+        s += Math.min(40, (dp.salesCount || 0) / 20);
+        const pv = prevDev[dv.development], pc = pv && pv.dldPulse ? pv.dldPulse.salesCount : null;
+        if (pc != null && dp.salesCount != null && dp.salesCount !== pc) {
+          const delta = dp.salesCount - pc;
+          if (delta > 0) { s += Math.min(30, delta / 5); why.push("▲" + num2(delta) + " sales vs last pulse"); }
+          else why.push("▼" + num2(-delta) + " sales vs last pulse");
+        }
+      }
+      if (dv.nextCompletion) {
+        const days = Math.round((Date.parse(dv.nextCompletion) - Date.now()) / 86400000);
+        if (days >= 0 && days <= 240) { s += (240 - days) / 8; why.push("handover " + days + "d out"); }
+      }
+      if (!dp) s -= 10;
+      if (!why.length) why.push(dp ? "steady demand on the register" : "delivery watch only");
+      return { dv, s, why };
+    }).sort((x, y) => y.s - x.s);
+    const extras = wadd.filter(w => !devPool.some(dv => _nz(dv.development) === _nz(w.name)) && !wdel.includes(_nz(w.name))).map(w => {
+      const pl = ((d.projects && d.projects.projectLookup) || []).find(p2 => { const a = _nz(p2.project), b = _nz(w.name); return a === b || a.indexOf(b) >= 0 || (b.length > 5 && b.indexOf(a) >= 0); });
+      const ai2 = pl ? (((d.areaIntel && d.areaIntel.areas) || []).find(a2 => a2.area === pl.area) || null) : null;
+      return '<a class=dev href="' + (pl && pl.area ? areaLink(pl.area) : ('/map?key=' + eKey)) + '">' + devImg(w.name, pl ? pl.area : "") + '<div class=devh><b>' + esc2(w.name) + '</b><span class=pv>' + (pl ? esc2((pl.developer || "") + (pl.area ? " · " + pl.area : "")) : "on your watchlist") + '</span></div><div class=why>tracked by you · register-only card</div><div class=devg><div><span class=k>DEMAND — DLD' + (ai2 ? " (" + esc2(pl.area) + " area)" : "") + '</span>' +
+        (ai2 ? ("<br>" + num2(ai2.sales) + " area sales · " + num2(ai2.medianAedSqft) + "/sq ft" + (ai2.netYieldPct != null ? "<br>net yield " + ai2.netYieldPct + "%" : "")) : "<br><span class=pv>searching the register</span>") +
+        '</div><div><span class=k>DELIVERY — DLD REGISTER</span><br>' + (pl ? ((pl.percentComplete != null ? pl.percentComplete + "% built" : esc2(pl.status || "registered")) + (pl.units ? " · " + num2(pl.units) + " units" : "") + (pl.escrowRegistered ? "<br>escrow ✓" : "") + (pl.endDate ? "<br>completion " + esc2(String(pl.endDate).slice(0, 10)) : "")) : '<span class=pv>full delivery detail joins on the next collector run</span>') + '</div></div></a>';
+    }).join("");
+    body += '<div class=card>' + najH2("star", "Development radar — ranked by the register") + scored.map(({ dv, why }) => {
       const dp = dv.dldPulse;
-      return '<div class=dev><div class=devh><b>' + esc2(dv.development) + "</b><span class=pv>" + esc2(dv.developer) + " · " + esc2(dv.location || "") + '</span></div><div class=devg><div><span class=k>DEMAND — DLD</span>' +
+      return '<a class=dev href="' + devHref(dv.development, dv.location) + '">' + devImg(dv.development, dv.location) + '<div class=devh><b>' + esc2(dv.development) + "</b><span class=pv>" + esc2(dv.developer) + " · " + esc2(dv.location || "") + '</span></div><div class=why>' + esc2(why.join(" · ")) + '</div><div class=devg><div><span class=k>DEMAND — DLD</span>' +
         (dp ? ("<br>" + num2(dp.salesCount) + " sales · AED " + num2(dp.salesValueAedM) + "m<br>" + num2(dp.medianResidentialAedSqft) + "/sq ft · " + dp.offPlanPct + "% off-plan") : "<br><span class=pv>" + esc2(dv.mapNote || "outside DLD coverage") + "</span>") +
-        '</div><div><span class=k>DELIVERY — MEED</span><br>' + dv.activeProjects + " active · " + mkFmtM(dv.pipelineValueUsdM) + (dv.nextCompletion ? "<br>next handover " + esc2(String(dv.nextCompletion).slice(0, 10)) : "") + "</div></div></div>";
-    }).join("") + '<div class=note>' + esc2(m.valueDisclaimer || "Project values are MEED estimates in US$; progress is editorial, not measured.") + "</div></div>";
+        '</div><div><span class=k>DELIVERY — MEED</span><br>' + dv.activeProjects + " active · " + mkFmtM(dv.pipelineValueUsdM) + (dv.nextCompletion ? "<br>next handover " + esc2(String(dv.nextCompletion).slice(0, 10)) : "") + "</div></div></a>";
+    }).join("") + extras + '<div class=note>This list re-orders itself every refresh — demand momentum and delivery proximity from the register decide, not an editor. Curate it from chat: “track &lt;project&gt;” / “untrack &lt;project&gt;”. ' + esc2(m.valueDisclaimer || "Project values are MEED estimates in US$; progress is editorial, not measured.") + "</div></div>";
   }
 
   // ── SUPPLY CORPUS — MEED daily collector ──
   if (m.byStage) {
-    body += '<div class=card><h2>' + esc2(m.country || "UAE") + " supply pipeline by stage</h2><table>" + stageRows + "</table></div>";
-    if (m.recentBigUpdates && m.recentBigUpdates.length) body += '<div class=card><h2>Recently updated · ≥ $50m</h2><table>' + projRows(m.recentBigUpdates) + "</table></div>";
-    if (m.largestUnderConstruction && m.largestUnderConstruction.length) body += '<div class=card><h2>Largest under construction</h2><table>' + projRows((m.largestUnderConstruction || []).slice(0, 8)) + "</table></div>";
+    body += '<a class="card clk" href="/map?m=su&key=' + eKey + '">' + najH2("buildings", esc2(m.country || "UAE") + " supply pipeline by stage") + stageRows + "</a>";
+    if (m.recentBigUpdates && m.recentBigUpdates.length) body += '<div class=card>' + najH2("file", 'Recently updated · ≥ $50m') + projRows(m.recentBigUpdates) + '<div class=note>Tap a project to copy its “track” command for Azimuth.</div></div>';
+    if (m.largestUnderConstruction && m.largestUnderConstruction.length) body += '<div class=card>' + najH2("crane", 'Largest under construction') + projRows((m.largestUnderConstruction || []).slice(0, 8)) + '<div class=note>Tap a project to copy its “track” command for Azimuth.</div></div>';
   }
 
-  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Najma</title><style>' +
-    "body{font-family:system-ui,-apple-system,Segoe UI,Roboto;background:#0C1413;color:#E8E4D8;margin:auto;padding:14px 12px 40px;max-width:460px}" +
-    ".mast{font-size:1.7rem;font-weight:700;letter-spacing:-.01em}.mast em{font-style:normal;color:#C5A56A}" +
-    ".sub{color:#8FA39B;font-size:.78rem;margin:.2rem 0 .9rem}" +
-    ".hero{background:#182823;border:1px solid #24352F;border-radius:10px;padding:14px;margin-bottom:10px}" +
-    ".hv{font-size:2rem;font-weight:600;color:#C5A56A}.hv small{font-size:1rem;color:#8FA39B}.hl{color:#8FA39B;font-size:.75rem;margin-top:2px}" +
+  const chips = '<div class=chips>' +
+    (t ? '<span class=chip>' + esc2(String(t.periodFrom || "")) + ' → ' + esc2(String(t.periodTo || "")) + '</span>' : '') +
+    '<span class=chip>DLD · refreshed ' + esc2(String(d.generatedAt || "").slice(0, 10)) + '</span>' +
+    (m.corpusVersion ? '<span class=chip>MEED corpus v' + esc2(m.corpusVersion) + ' · fixed snapshot</span>' : '') +
+    '<span class="chip g">register-grounded ✓</span></div>';
+  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Najma</title>' +
+    '<meta name=theme-color content="#0C1413"><meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-status-bar-style content=black-translucent><meta name=apple-mobile-web-app-title content=Najma>' +
+    '<link rel=manifest href="/manifest.webmanifest?key=' + encodeURIComponent(key || "") + '"><link rel=icon href=/naj_icon.svg>' +
+    '<meta property=og:title content="Najma — the Dubai market pulse"><meta property=og:description content="Register-grounded Dubai property figures — settled, not asking."><meta property=og:image content="' + (origin || "") + '/img/heatmap_square">' +
+    NAJ_FONTS + '<style>' +
+    ":root{--ink:#0C1413;--card:#131F1D;--card2:#182823;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#3E8A7E;--amber:#D9A441}" +
+    'body{font-family:"IBM Plex Sans",system-ui,sans-serif;background:var(--ink);color:var(--text);margin:auto;padding:0 12px 88px;max-width:460px}' +
+    '.phead{margin:0 -12px 12px;padding:44px 16px 14px;background:linear-gradient(180deg,rgba(12,20,19,.18) 0%,rgba(12,20,19,.42) 40%,rgba(12,20,19,.86) 78%,#0C1413 98%),url(/img/bg_market) center 38%/cover no-repeat}' +
+    '.mast{font-family:Fraunces,Georgia,serif;font-size:2.05rem;font-weight:600;letter-spacing:-.01em}.mast em{font-style:normal;color:var(--gold)}' +
+    ".sub{color:var(--mut);font-size:.8rem;margin:.25rem 0 .75rem}" +
+    '.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.03em;border:1px solid var(--line);background:rgba(19,31,29,.78);border-radius:99px;padding:4px 9px;color:var(--text)}.chip.g{color:var(--gold);border-color:rgba(197,165,106,.55)}' +
+    "a.hero{display:block;text-decoration:none;color:inherit;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:10px;-webkit-tap-highlight-color:transparent}a.hero:active{opacity:.82}" +
+    ".hgo{color:var(--gold);font-size:.74rem;font-weight:600;margin-top:7px}" +
+    '.hv{font-family:Fraunces,Georgia,serif;font-size:2.1rem;font-weight:600;color:var(--gold);font-variant-numeric:tabular-nums}.hv small{font-size:1rem;color:var(--mut);font-family:"IBM Plex Sans",sans-serif}.hl{color:var(--mut);font-size:.75rem;margin-top:2px}' +
     ".grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}" +
-    ".st{background:#131F1D;border:1px solid #24352F;border-radius:8px;padding:10px}.st .v{font-size:1.35rem;font-weight:600}.st .v small{font-size:.8rem;color:#8FA39B}.st .l{color:#8FA39B;font-size:.72rem;margin-top:2px}" +
-    ".card{background:#131F1D;border:1px solid #24352F;border-radius:10px;padding:13px;margin-bottom:10px}" +
-    "h2{font-size:.68rem;letter-spacing:.14em;color:#C5A56A;text-transform:uppercase;margin:0 0 .6rem;font-weight:600}" +
-    ".bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:#182823}.bar i{display:block;height:100%}" +
-    ".lg{display:flex;justify-content:space-between;color:#8FA39B;font-size:.75rem;margin-top:5px}.lg b{color:#E8E4D8}" +
-    ".spark{display:flex;align-items:flex-end;gap:4px}.wk{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}.wk i{display:block;width:100%;background:#3E8A7E;border-radius:2px 2px 0 0}.wk span{font-size:.58rem;color:#8FA39B}" +
-    ".arow{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #182823}.arow:last-of-type{border-bottom:none}.nm{flex:0 0 46%;font-size:.8rem}.tr{flex:1;height:6px;border-radius:3px;background:#182823;overflow:hidden}.tr i{display:block;height:100%;background:#3E8A7E}.ct{font-size:.72rem;color:#8FA39B;min-width:40px;text-align:right;font-variant-numeric:tabular-nums}" +
-    ".dev{border:1px solid #24352F;border-radius:8px;background:#182823;padding:10px;margin-bottom:8px}.devh{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.devg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;font-size:.78rem}.k{font-size:.6rem;letter-spacing:.1em;color:#8FA39B}" +
-    ".note{color:#8FA39B;font-size:.72rem;margin-top:.5rem}.pv{font-size:.72rem;color:#8FA39B}" +
-    "table{width:100%;border-collapse:collapse;font-size:.8rem}td{padding:.3rem .2rem;border-bottom:1px solid #182823;vertical-align:top}" +
-    ".warn{background:#33270F;color:#D9A441;border:1px solid #4A3B1E;padding:.5rem .7rem;border-radius:.5rem;font-size:.78rem;margin:.6rem 0}" +
+    '.st{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px}.st .v{font-family:Fraunces,Georgia,serif;font-size:1.4rem;font-weight:600;font-variant-numeric:tabular-nums}.st .v small{font-size:.8rem;color:var(--mut);font-family:"IBM Plex Sans",sans-serif}.st .l{color:var(--mut);font-size:.72rem;margin-top:2px}' +
+    'a.st{display:block;text-decoration:none;color:inherit;-webkit-tap-highlight-color:transparent}a.st:active{opacity:.82}' +
+    ".card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px;margin-bottom:10px}" +
+    'a.card{display:block;text-decoration:none;color:inherit;-webkit-tap-highlight-color:transparent}a.card:active{opacity:.82}.clk h2::after{content:"›";margin-left:auto;color:var(--gold);font-size:.9rem}' +
+    "h2{display:flex;align-items:center;gap:7px;font-size:.68rem;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;margin:0 0 .6rem;font-weight:600}" +
+    ".ih{display:inline-flex;flex:none}.ih svg{width:15px;height:15px;color:var(--gold)}" +
+    ".bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--card2)}.bar i{display:block;height:100%}" +
+    ".lg{display:flex;justify-content:space-between;color:var(--mut);font-size:.75rem;margin-top:5px}.lg b{color:var(--text)}" +
+    ".spark{display:flex;align-items:flex-end;gap:4px}.wk{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}.wk i{display:block;width:100%;background:var(--teal);border-radius:2px 2px 0 0}.wk span{font-size:.58rem;color:var(--mut)}" +
+    ".arow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #182823;text-decoration:none;color:inherit;-webkit-tap-highlight-color:transparent}.arow:last-of-type{border-bottom:none}a.arow:active{background:#182823}.nm{flex:0 0 44%;font-size:.8rem}.tr{flex:1;height:6px;border-radius:3px;background:var(--card2);overflow:hidden}.tr i{display:block;height:100%;background:var(--teal)}.ct{font-size:.72rem;color:var(--mut);min-width:40px;text-align:right;font-variant-numeric:tabular-nums}.chv{color:var(--gold);font-size:.95rem;line-height:1}" +
+    NAJ_NAV_CSS +
+    'a.dev{display:block;text-decoration:none;color:inherit;-webkit-tap-highlight-color:transparent;overflow:hidden}a.dev:active{opacity:.85}' +
+    '.devimg{display:block;width:calc(100% + 20px);height:112px;object-fit:cover;border-radius:8px 8px 0 0;margin:-10px -10px 9px}' +
+    '.prow[data-track]{cursor:pointer;-webkit-tap-highlight-color:transparent}.prow[data-track]:active{background:#182823}.trk{color:var(--gold);font-size:.68rem}' +
+    ".dev{border:1px solid var(--line);border-radius:8px;background:var(--card2);padding:10px;margin-bottom:8px}.devh{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.devh b{font-family:Fraunces,Georgia,serif;font-weight:600}.devg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;font-size:.78rem}.k{font-size:.6rem;letter-spacing:.1em;color:var(--mut)}.why{color:var(--gold);font-size:.64rem;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.03em;margin-top:4px}" +
+    ".note{color:var(--mut);font-size:.72rem;margin-top:.5rem}.pv{font-size:.72rem;color:var(--mut)}" +
+    '.srow{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #182823;font-size:.8rem}.srow:last-child{border-bottom:none}.srow .sv{color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}' +
+    '.prow{padding:6px 0;border-bottom:1px solid #182823;font-size:.82rem}.prow:last-child{border-bottom:none}.prow .pm{display:flex;justify-content:space-between;gap:8px;color:var(--mut);font-size:.72rem;margin-top:2px}' +
+    ".warn{background:#33270F;color:var(--amber);border:1px solid #4A3B1E;padding:.5rem .7rem;border-radius:.5rem;font-size:.78rem;margin:.6rem 0}" +
     "</style></head><body>" +
-    '<div class=mast>Najma <em>نجمة</em></div><div class=sub>The market pulse — Dubai property from the official register.</div>' +
+    '<div class=phead><div class=mast>Najma <em>نجمة</em></div><div class=sub>The market pulse — Dubai property from the official register.</div>' + chips + '</div>' +
     (stale ? "<div class=warn>⚠️ Data is " + Math.round(ageDays) + " days old — collector may be down. Do not quote until refreshed.</div>" : "") +
     body +
     '<div class=pv style="margin-top:1rem;line-height:1.6">' +
     (t ? "Source: Dubai Land Department (DLD) Open Data. Contains information from the Government of Dubai.<br>" : "") +
     "Project data licensed from MEED Projects (GlobalData), served via Digital Abbot Cloud" + (m.corpusVersion ? " — corpus v" + esc2(m.corpusVersion) : "") + ".<br>" +
     "Every source passes a fail-closed sanity gate; a failing source is quarantined, never averaged in. Refreshed " + esc2(String(d.generatedAt || "").slice(0, 16)) + "Z." +
-    "</div></body></html>";
+    "</div>" + najNav(key, "pulse") +
+    '<div id=mtoast style="position:fixed;left:50%;bottom:74px;transform:translateX(-50%) translateY(90px);background:#C5A56A;color:#0C1413;font-size:.78rem;font-weight:600;padding:9px 16px;border-radius:99px;transition:transform .25s;z-index:99;max-width:88vw"></div>' +
+    '<script>document.addEventListener("click",function(e){var r=e.target.closest?e.target.closest("[data-track]"):null;if(!r)return;var cmd="track "+r.getAttribute("data-track");function t(m){var el=document.getElementById("mtoast");el.textContent=m;el.style.transform="translateX(-50%) translateY(0)";setTimeout(function(){el.style.transform="translateX(-50%) translateY(90px)"},2200)}(navigator.clipboard?navigator.clipboard.writeText(cmd):Promise.reject()).then(function(){t("Copied \\u201c"+cmd+"\\u201d \\u2014 paste it to Azimuth")},function(){t(cmd)})});</script>' +
+    "</body></html>";
 }
 async function marketBriefTick(env, force) {
   if ((env.MARKET_BRIEF || "") !== "on") return;                                   // opt-in per instance
   const n = gstNow();
-  if (!force && (n.getUTCHours() !== 9 || n.getUTCMinutes() >= 30)) return;        // daily check ~09:00 GST
+  if (!force && n.getUTCHours() !== 9) return;                                     // 09:00 + 09:30 GST cron ticks both eligible
   const isSunday = force ? true : n.getUTCDay() === 0;                             // Sunday = full roundup; force = full roundup now
-  if (!force) {
-    const bk = "mktbrief_" + gstDateStr(n);
-    if (await env.MEETINGS.get(bk)) return;
-    await env.MEETINGS.put(bk, "1", { expirationTtl: 3 * 86400 });
+  const bk = "mktbrief_" + gstDateStr(n);
+  let briefAttempts = 0;
+  if (!force) {                                                                    // v56 — marker records SUCCESS, not attempt (same silent-morning fix as the feed)
+    const bv = await env.MEETINGS.get(bk);
+    if (bv === "done") return;
+    briefAttempts = parseInt(bv, 10) || 0;
+    if (briefAttempts >= 2) return;
+    await env.MEETINGS.put(bk, String(briefAttempts + 1), { expirationTtl: 3 * 86400 });
   }
   const raw = await env.MEETINGS.get("mkt_latest");
   if (!raw) return;
@@ -2514,6 +2788,9 @@ async function marketBriefTick(env, force) {
   const ageDays = (Date.now() - Date.parse(d.generatedAt || 0)) / 86400000;
   if (!(ageDays < 4)) { if (isSunday) { try { await waSend(env, env.WA_ALLOWED, "Market brief skipped this week — the data feed is " + Math.round(ageDays) + " days old and I will not brief from stale numbers. The collector needs attention."); } catch (e) {} } return; }
   const m = d.meed || {};
+  const _nzb = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  let wl = {}; try { wl = JSON.parse((await env.MEETINGS.get("mkt_watch")) || "{}") || {}; } catch (e) {}
+  const devsForBrief = (m.developments || []).filter(x => !(wl.del || []).includes(_nzb(x.development)));
   // ── event gate: weekdays speak ONLY when something moved ──
   if (!isSunday) {
     let moved = [];
@@ -2541,14 +2818,27 @@ async function marketBriefTick(env, force) {
     monthly: d.monthly ? { ytdSales: d.monthly.ytdSales, ytdValueAedBn: d.monthly.ytdValueAedBn, series: d.monthly.series } : null,
     rents: d.rents ? { registrationTo: d.rents.registrationTo, contractsCount: d.rents.contractsCount, medianAnnualRentAed: d.rents.medianAnnualRentAed, medianRentAedSqftYr: d.rents.medianRentAedSqftYr, grossYieldPctByArea: d.rents.grossYieldPctByArea, versionSplit: d.rents.versionSplit } : null,
     handover: d.handover ? { meedByQuarter: d.handover.meedByQuarter } : null,
-    developments: (m.developments || []).map(x => ({ development: x.development, developer: x.developer, activeProjects: x.activeProjects, pipelineValueUsdM: x.pipelineValueUsdM, nextCompletion: x.nextCompletion, dldPulse: x.dldPulse })),
+    developments: devsForBrief.map(x => ({ development: x.development, developer: x.developer, activeProjects: x.activeProjects, pipelineValueUsdM: x.pipelineValueUsdM, nextCompletion: x.nextCompletion, dldPulse: x.dldPulse })),
     supply: { source: m.source, corpusVersion: m.corpusVersion, country: m.country, byStage: m.byStage, recentBigUpdates: m.recentBigUpdates, largestUnderConstruction: (m.largestUnderConstruction || []).slice(0, 5), gccTotals: m.gcc && m.gcc.totals, byCountry: m.gcc && m.gcc.byCountry } });
-  let brief = null;
-  try { brief = await claudeText(env, sys, user, null, 900); } catch (e) {}
-  if (!brief) return;
+  let brief = null, briefErr = null;
+  try { brief = await claudeText(env, sys, user, null, 900); } catch (e) { briefErr = e && e.message ? e.message : String(e); }
+  if (!brief) {
+    try { await env.MEETINGS.put("mkt_brief_err", JSON.stringify({ at: gstNowIso(), attempts: briefAttempts + 1, err: briefErr || "empty brief" }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+    if (!force && briefAttempts + 1 >= 2 && isSunday) { try { await waSend(env, env.WA_ALLOWED, "🕐 Morning — this week's brief didn't come together on my side (twice, so I'm telling you rather than staying quiet). Say “market brief” anytime and I'll run it fresh."); } catch (e) {} }
+    return;
+  }
   const hasDld = !!d.transactions;
   const head = (isSunday ? (hasDld ? "🕐 Najma weekly — the pulse is in" : "🏗️ Weekly Market Pulse — supply side") : "🏗️ Market movement — supply side") + " (" + String(d.generatedAt || "").slice(0, 10) + ")\n\n";
-  try { await waSend(env, env.WA_ALLOWED, head + brief); } catch (e) {}
+  let radarLine = "";                                                              // v52 — one register-picked candidate she can adopt with a reply
+  if (isSunday) {
+    try {
+      const cand = (m.recentBigUpdates || []).find(r => r.title && !devsForBrief.some(x => _nzb(x.development) === _nzb(r.title)) && !(wl.add || []).some(a => _nzb(a.name) === _nzb(r.title)) && !(wl.del || []).includes(_nzb(r.title)));
+      if (cand) radarLine = "\n\n📡 Radar candidate: " + cand.title + " — " + (cand.stage || "on the register") + (cand.valueUsdM ? ", $" + cand.valueUsdM + "m" : "") + ". Reply “track " + cand.title + "” to watch it.";
+    } catch (e) {}
+  }
+  let briefSent = false;
+  try { await waSend(env, env.WA_ALLOWED, head + brief + radarLine); briefSent = true; } catch (e) {}
+  if (briefSent && !force) { try { await env.MEETINGS.put(bk, "done", { expirationTtl: 3 * 86400 }); } catch (e) {} }
   if (isSunday) {                                                                  // v36.3 — tap-to-draft: store the brief + its figures, offer content buttons
     try {
       await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief, data: user }), { expirationTtl: 8 * 86400 });
@@ -2679,12 +2969,19 @@ async function publishDraft(env, to) {
 // Total intended time from wake-up to posted: under five minutes.
 const FEED_SCHEMA = { type: "object", additionalProperties: false, properties: { angles: { type: "array", items: { type: "object", additionalProperties: false, properties: { hook: { type: "string" }, figure: { type: "string" }, source: { type: "string" }, buyer: { type: "string" } }, required: ["hook", "figure", "source", "buyer"] } } }, required: ["angles"] };
 
-async function dailyFeedTick(env, force) {
+async function dailyFeedTick(env, force, dry) {
   if ((env.MARKET_BRIEF || "") !== "on") return;
   const n = gstNow();
-  if (!force && (n.getUTCHours() !== 7 || n.getUTCMinutes() >= 30)) return;       // ~07:00 GST daily
+  if (!force && n.getUTCHours() !== 7) return;                                    // 07:00 + 07:30 GST cron ticks both eligible
   const fk = "mktfeed_" + gstDateStr(n);
-  if (!force) { if (await env.MEETINGS.get(fk)) return; await env.MEETINGS.put(fk, "1", { expirationTtl: 2 * 86400 }); }
+  let attempts = 0;
+  if (!force) {                                                                    // v56 — marker records SUCCESS, not attempt: a failed
+    const fv = await env.MEETINGS.get(fk);                                         // generation no longer silently eats the whole morning
+    if (fv === "done") return;
+    attempts = parseInt(fv, 10) || 0;
+    if (attempts >= 2) return;
+    await env.MEETINGS.put(fk, String(attempts + 1), { expirationTtl: 2 * 86400 });
+  }
   const raw = await env.MEETINGS.get("mkt_latest");
   if (!raw) return;
   let d; try { d = JSON.parse(raw); } catch (e) { return; }
@@ -2745,9 +3042,17 @@ async function dailyFeedTick(env, force) {
     news: await (async () => { try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); return nn.slice(0, 8).map(x => ({ title: x.title, outlet: x.outlet, meedCrossReference: x.xref ? { project: x.xref.meedName, facts: x.xref.facts } : null })); } catch (e) { return null; } })(),
   });
   const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections. AT LEAST TWO of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all). TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". HER TASTE: these are angles she personally chose to post on recent mornings — bias the five toward similar subjects and styles WITHOUT repeating any hook: " + JSON.stringify(picks.slice(0, 8).map(p => p.hook)) + ". HER DNA PROFILE (learned from her choices — honour it): " + ((await dnaGet(env)) || "(still learning)") + ". NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
-  const g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 1400);
+  let g = null, genErr = null;
+  try { g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 1400); } catch (e) { genErr = e && e.message ? e.message : String(e); }
   const angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 5) : [];
-  if (angles.length < 3) { if (force) await waSend(env, env.WA_ALLOWED, "Couldn't build this morning's angles — try “feed” again in a minute."); return; }
+  if (angles.length < 3) {
+    try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), attempts: attempts + 1, err: genErr || ("angles=" + angles.length) }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+    if (dry) return "GENERATION FAILED: " + (genErr || ("only " + angles.length + " angles"));
+    if (force) await waSend(env, env.WA_ALLOWED, "Couldn't build this morning's angles — try “feed” again in a minute.");
+    else if (attempts + 1 >= 2) await waSend(env, env.WA_ALLOWED, "☀️ Morning — today's angles didn't come together on my side (twice, so I'm telling you rather than staying quiet). Say “feed” anytime and I'll build them fresh.");
+    return;
+  }
+  if (dry) return angles.map((a, i) => (i + 1) + ". " + a.hook + "\n   " + a.figure + " · " + a.source).join("\n");
   // store as the drafting context (draftFromAngle reads this) + remember the hooks
   const briefTxt = angles.map((a, i) => "ANGLE " + (i + 1) + ": " + a.hook + "\nFigure: " + a.figure + " (" + a.source + ")\nBuyer: " + a.buyer).join("\n\n");
   await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: briefTxt, data, angles }), { expirationTtl: 3 * 86400 });
@@ -2759,6 +3064,7 @@ async function dailyFeedTick(env, force) {
   await waSend(env, env.WA_ALLOWED, bodyTxt);
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle",
     angles.map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.figure || "").slice(0, 20), description: a.hook })));
+  if (!force) { try { await env.MEETINGS.put(fk, "done", { expirationTtl: 2 * 86400 }); } catch (e) {} }
 }
 
 // ── v39 — DNA: a self-learning profile of HER content identity ──────────────────
@@ -3072,19 +3378,64 @@ function _chWrap(title, sub, body) {
   const W = 1080, H = 1080;
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" width="100%" style="max-width:520px;display:block">` +
     `<rect width="${W}" height="${H}" fill="${CH.ink}"/><rect x="24" y="24" width="${W - 48}" height="${H - 48}" rx="28" fill="${CH.card}" stroke="${CH.line}" stroke-width="2"/>` +
-    `<text x="70" y="120" fill="${CH.gold}" font-size="30" font-weight="700" letter-spacing="1">NAJMA نجمة</text>` +
-    `<text x="70" y="188" fill="${CH.text}" font-size="46" font-weight="700">${_sx(title)}</text>` +
-    `<text x="70" y="228" fill="${CH.mut}" font-size="26">${_sx(sub)}</text>` +
+    `<text x="70" y="120" fill="${CH.gold}" font-size="30" font-weight="700" letter-spacing="1" font-family="Fraunces,Georgia,serif">NAJMA نجمة</text>` +
+    `<text x="70" y="188" fill="${CH.text}" font-size="46" font-weight="600" font-family="Fraunces,Georgia,serif">${_sx(title)}</text>` +
+    `<text x="70" y="228" fill="${CH.mut}" font-size="26" font-family="'IBM Plex Sans',sans-serif">${_sx(sub)}</text>` +
     body +
-    `<text x="70" y="${H - 44}" fill="${CH.mut}" font-size="22">Source: Dubai Land Department (DLD) Open Data · settled, not asking</text>` +
+    `<text x="70" y="${H - 44}" fill="${CH.mut}" font-size="22" font-family="'IBM Plex Sans',sans-serif">Source: Dubai Land Department (DLD) Open Data · settled, not asking</text>` +
     `</svg>`;
 }
 
-function renderCharts(latestRaw) {
+
+// v59 — AREA POSTCARD: 1080×1080 post card — real satellite of the community, Fraunces
+// masthead, five dot-leader facts (price, ticket, net yield, who lives there, what's near,
+// what's coming). Screenshot-and-post, like every /charts card.
+function chPostcard(a, sup, amen) {
+  const slug = String(a.area || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const num2 = (v) => (v == null ? "—" : Number(v).toLocaleString("en-US"));
+  const facts = [];
+  if (a.medianAedSqft) facts.push(["Median settled", num2(a.medianAedSqft) + " AED/sqft"]);
+  if (a.medianTicketAed) facts.push(["Median ticket", (a.medianTicketAed / 1e6).toFixed(2) + "m AED"]);
+  if (a.netYieldPct != null) facts.push(["Net yield", a.netYieldPct + "%"]);
+  if (a.pop) facts.push(["Who lives here", num2(a.pop) + " residents"]);
+  if (amen && amen.length) facts.push(["Nearby", String(amen[0].value).split("·")[0].trim()]);
+  if (sup && sup.units) facts.push(["Coming", num2(sup.units) + " units in pipeline"]);
+  const rows = facts.slice(0, 5).map(([k, v], i) => {
+    const y = 700 + i * 62;
+    return `<text x="88" y="${y}" fill="#8FA39B" font-size="26" font-family="'IBM Plex Mono',monospace">${_sx(k.toUpperCase())}</text>` +
+      `<text x="992" y="${y}" fill="#E8E4D8" font-size="30" font-weight="600" text-anchor="end" font-family="'IBM Plex Sans',sans-serif">${_sx(v)}</text>` +
+      `<line x1="88" y1="${y + 16}" x2="992" y2="${y + 16}" stroke="#24352F" stroke-width="1"/>`;
+  }).join("");
+  return `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="100%" style="max-width:520px;display:block">` +
+    `<defs><clipPath id="pcclip"><rect x="24" y="24" width="1032" height="1032" rx="28"/></clipPath>` +
+    `<linearGradient id="pcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0.3" stop-color="#0C1413" stop-opacity="0"/><stop offset="0.62" stop-color="#0C1413" stop-opacity="0.82"/><stop offset="1" stop-color="#0C1413" stop-opacity="0.97"/></linearGradient></defs>` +
+    `<rect width="1080" height="1080" fill="#0C1413"/>` +
+    `<g clip-path="url(#pcclip)"><image href="/img/sat_${slug}" x="24" y="24" width="1032" height="1032" preserveAspectRatio="xMidYMid slice"/>` +
+    `<rect x="24" y="24" width="1032" height="1032" fill="url(#pcg)"/></g>` +
+    `<rect x="24" y="24" width="1032" height="1032" rx="28" fill="none" stroke="#24352F" stroke-width="2"/>` +
+    `<rect x="40" y="40" width="1000" height="1000" rx="20" fill="none" stroke="rgba(232,228,216,.28)" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>` +
+    `<text x="88" y="118" fill="#C5A56A" font-size="26" font-weight="700" letter-spacing="3" font-family="'IBM Plex Mono',monospace">NAJMA نجمة · AREA POSTCARD</text>` +
+    `<rect x="908" y="76" width="96" height="96" rx="8" fill="rgba(12,20,19,.55)" stroke="#C5A56A" stroke-width="2"/>` +
+    `<g transform="translate(924,92) scale(0.25)"><path d="${NAJ_ICONS.star}" fill="#C5A56A"/></g>` +
+    `<text x="88" y="600" fill="#E8E4D8" font-size="76" font-weight="600" font-family="Fraunces,Georgia,serif">${_sx(a.area)}</text>` +
+    `<text x="88" y="644" fill="#8FA39B" font-size="26" font-family="'IBM Plex Sans',sans-serif">settled, not asking — the register's own numbers</text>` +
+    rows +
+    `<text x="88" y="1020" fill="#8FA39B" font-size="22" font-family="'IBM Plex Sans',sans-serif">Source: Dubai Land Department (DLD) Open Data · imagery: Esri World Imagery</text>` +
+    `</svg>`;
+}
+
+function renderCharts(latestRaw, key, amenRaw) {
   let d = null; try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
   if (!d || !d.transactions) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem"><h2>Charts</h2><p>No data yet — the collector has not delivered.</p>';
   const t = d.transactions, mo = d.monthly, rn = d.rents;
   const cards = [];
+  // v59 — postcard leads the sheet: the most personal, most postable card
+  const topA = (d.areaIntel && d.areaIntel.areas && d.areaIntel.areas[0]) || null;
+  if (topA) {
+    let amen = null; try { const am = JSON.parse(amenRaw || "null"); if (am && am.ok) amen = am.amen; } catch (e) {}
+    const supA = ((d.projects && d.projects.supplyByArea) || {})[topA.area] || null;
+    cards.push(chPostcard(topA, supA, amen));
+  }
   if (mo && mo.series && mo.series.length) cards.push(chLine("Sales value by month", "AED billion · " + (mo.ytdValueAedBn || "") + "bn year to date", mo.series.map(s => ({ label: s.month.slice(5), value: s.valueAedBn, disp: s.valueAedBn }))));
   if (t.topAreas && t.topAreas.length) cards.push(chBars("Where the market trades", "Registered sales by area · " + (t.periodFrom || "") + " to " + (t.periodTo || ""), t.topAreas.slice(0, 8).map(a => ({ label: a.area.length > 22 ? a.area.slice(0, 21) + "…" : a.area, value: a.sales, disp: a.sales.toLocaleString("en-US") }))));
   if (t.offPlanSplit) cards.push(chDonut("Off-plan vs ready", "Share of registered sales", [{ label: "Off-plan", value: t.offPlanSplit["Off-Plan"] || 0, color: CH.gold }, { label: "Ready", value: t.offPlanSplit["Ready"] || 0, color: CH.teal }]));
@@ -3094,10 +3445,581 @@ function renderCharts(latestRaw) {
   else if (rn && rn.grossYieldPctByArea && rn.grossYieldPctByArea.length) cards.push(chBars("Gross rental yield by area", "Registered rent ÷ registered price · Ejari + DLD", rn.grossYieldPctByArea.slice(0, 7).map(y => ({ label: y.area.length > 22 ? y.area.slice(0, 21) + "…" : y.area, value: y.yieldPct, disp: y.yieldPct + "%" }))));
   const map = t.topAreas ? (chHeatMap("Dubai — where it's trading", "Sales heat on the map · Ejari + DLD register", t.topAreas.slice(0, 20)) || chMap("Dubai — where it's trading", "Bubble size = registered sales volume", t.topAreas.slice(0, 20))) : null;
   if (map) cards.push(map);
-  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Najma charts</title><style>body{background:#0C1413;color:#E8E4D8;font-family:system-ui,-apple-system,Segoe UI,Roboto;margin:0;padding:14px 12px 40px;max-width:560px;margin:auto}.h{font-size:1.5rem;font-weight:700;margin:.3rem 0}.h em{font-style:normal;color:#C5A56A}.s{color:#8FA39B;font-size:.8rem;margin-bottom:1rem}.c{margin:0 0 16px}.t{color:#8FA39B;font-size:.7rem;text-align:center;margin-top:4px}</style></head><body>' +
-    '<div class=h>Najma <em>نجمة</em> — charts</div><div class=s>Long-press any chart to save it, then post. Every figure is register-grounded.</div>' +
+  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Najma charts</title><link rel=icon href=/naj_icon.svg>' + NAJ_FONTS + '<style>body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans",system-ui,sans-serif;margin:0;padding:14px 12px 88px;max-width:560px;margin:auto}.h{font-family:Fraunces,Georgia,serif;font-size:1.6rem;font-weight:600;margin:.3rem 0}.h em{font-style:normal;color:#C5A56A}.s{color:#8FA39B;font-size:.8rem;margin-bottom:1rem}.c{margin:0 0 16px}.t{color:#8FA39B;font-size:.7rem;text-align:center;margin-top:4px}' + NAJ_NAV_CSS + '</style></head><body>' +
+    '<div class=h>Najma <em>نجمة</em> — charts</div><div class=s>Long-press any chart to save it, then post. Every figure is register-grounded. <a href="/studio?key=' + encodeURIComponent(key || "") + '" style="color:#C5A56A;font-weight:600;text-decoration:none">🎨 open the studio →</a></div>' +
     cards.map(c => '<div class=c>' + c + '<div class=t>screenshot or long-press to save · then post</div></div>').join("") +
+    najNav(key, "charts") + '</body></html>';
+}
+
+// v54 — ESRI BASEMAPS: OAuth 2.0 app-authentication token minted SERVER-SIDE from
+// ESRI_CLIENT_ID/ESRI_CLIENT_SECRET (never in page source), cached in KV until shortly before
+// expiry. The map asks /esri_token for a short-lived token; if anything fails it silently keeps
+// the offline canvas basemap, so the map can never go blank.
+async function esriToken(env) {
+  if (!env.ESRI_CLIENT_ID || !env.ESRI_CLIENT_SECRET) return null;
+  try {
+    const cached = await env.MEETINGS.get("esri_tok");
+    if (cached) { const c = JSON.parse(cached); if (c.exp > Date.now() + 300000) return c; }
+  } catch (e) {}
+  try {
+    const body = new URLSearchParams({ client_id: env.ESRI_CLIENT_ID, client_secret: env.ESRI_CLIENT_SECRET, grant_type: "client_credentials", expiration: "20160" });
+    const r = await fetch("https://www.arcgis.com/sharing/rest/oauth2/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+    const j = await r.json();
+    if (!j || !j.access_token) { try { await env.MEETINGS.put("esri_err", JSON.stringify({ at: gstNowIso(), status: r.status, err: j && j.error ? j.error : j }), { expirationTtl: 86400 }); } catch (e) {} return null; }
+    const out = { token: j.access_token, exp: Date.now() + (Math.min(j.expires_in || 1209600, 1209600) * 1000) };
+    await env.MEETINGS.put("esri_tok", JSON.stringify(out), { expirationTtl: Math.max(3600, Math.floor((out.exp - Date.now()) / 1000) - 600) });
+    return out;
+  } catch (e) { return null; }
+}
+
+// v50 — INTERACTIVE MAP (/map): canvas pan-zoom over the offline basemap JSON (/img/mp_basemap),
+// gold dot per community, tap -> bottom sheet (stats + actions), metric toggle. No map service,
+// no external libraries — everything is register data + curated public coordinates.
+function renderMap(latestRaw, key, waBot, esriOn, prevRaw) {
+  let d = null, pv = null; try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
+  try { pv = JSON.parse(prevRaw || "null"); } catch (e) {}
+  const prevA = {}; if (pv && pv.areaIntel && pv.areaIntel.areas) for (const x of pv.areaIntel.areas) prevA[x.area] = x.sales || 0;
+  const esc2 = (s) => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  if (!d || !d.areaIntel || !(d.areaIntel.areas || []).length) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem"><h2 style="color:#C5A56A">Najma map</h2><p>No area intelligence yet — run the collector once, then refresh.</p>';
+  const sup = (d.projects && d.projects.supplyByArea) || {};
+
+  const mkA = (a) => ({
+    n: a.area, s: a.sales || 0, psf: a.medianAedSqft || null,
+    tik: a.medianTicketAed || null, off: a.offPlanPct == null ? null : a.offPlanPct,
+    ny: a.netYieldPct == null ? null : a.netYieldPct, gy: a.grossYieldPct == null ? null : a.grossYieldPct,
+    su: (sup[a.area] && sup[a.area].units) || 0,
+    dl: prevA[a.area] != null ? (a.sales || 0) - prevA[a.area] : null,
+    rm: najRooms(a.byRoom).slice(0, 3).map(([k, r]) => [k, r.medianAed])
+  });
+  const list = (d.areaIntel.areas || []).filter(a => DXB_COORDS[a.area.toLowerCase()]).map(a => Object.assign(mkA(a), { c: DXB_COORDS[a.area.toLowerCase()] }));
+  const list2 = (d.areaIntel.areas || []).map(mkA);   // full register list — polygon taps reach beyond the 27 dots
+  const period = d.transactions ? (String(d.transactions.periodFrom || "") + " → " + String(d.transactions.periodTo || "")) : "";
+  return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><title>Najma map</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
+:root{--ink:#0C1413;--card:#131F1D;--card2:#182823;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#3E8A7E;--topscrim:rgba(12,20,19,.92);--chipbg:rgba(19,31,29,.85)}
+html[data-theme=light]{--ink:#F2EEE3;--card:#FBF8F0;--card2:#EDE7D7;--line:#DCD5C2;--text:#1A2422;--mut:#6E7B74;--gold:#A88544;--teal:#2F6E64;--topscrim:rgba(242,238,227,.94);--chipbg:rgba(251,248,240,.9)}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;overflow:hidden;overscroll-behavior:none}
+#cv{position:fixed;inset:0;touch-action:none;cursor:grab}
+.top{position:fixed;top:0;left:0;right:0;padding:12px 14px 26px;background:linear-gradient(180deg,var(--topscrim),rgba(12,20,19,0));pointer-events:none}
+html[data-theme=light] .top{background:linear-gradient(180deg,var(--topscrim),rgba(242,238,227,0))}
+.mast{font-family:Fraunces,Georgia,serif;font-size:1.45rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
+.per{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace;margin-top:2px}
+.tog{position:fixed;top:64px;left:14px;display:flex;gap:6px;pointer-events:auto}
+.tg{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.03em;border:1px solid var(--line);background:var(--chipbg);border-radius:99px;padding:6px 11px;color:var(--mut);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tg.on{color:var(--gold);border-color:rgba(197,165,106,.6)}
+#sh{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);border-radius:16px 16px 0 0;padding:10px 16px calc(16px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .28s ease;box-shadow:0 -12px 34px rgba(0,0,0,.45);max-height:62vh;overflow-y:auto}
+#sh.open{transform:translateY(0)}
+.grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 10px}
+.shn{font-family:Fraunces,Georgia,serif;font-size:1.35rem;font-weight:600}
+.shgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin:10px 0}
+.shs{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:8px}.shs .v{font-family:Fraunces,Georgia,serif;font-size:1.05rem;font-weight:600;font-variant-numeric:tabular-nums}.shs .v small{font-size:.7rem;color:var(--mut)}.shs .l{color:var(--mut);font-size:.62rem;margin-top:1px}
+.shr{color:var(--mut);font-size:.72rem;margin:2px 0 10px}
+.shrm{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--mut);margin:0 0 10px;line-height:1.7}.shrm b{color:var(--text);font-weight:600}.up{color:#56B584}.dn{color:#D9A441}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.act{display:block;text-align:center;text-decoration:none;font-size:.8rem;font-weight:600;border:1px solid var(--line);border-radius:9px;padding:10px 6px;color:var(--text);background:var(--card2);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.act.pri{background:var(--gold);color:#0C1413;border-color:var(--gold)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(80px);background:var(--gold);color:#0C1413;font-size:.78rem;font-weight:600;padding:9px 16px;border-radius:99px;transition:transform .25s;z-index:99}
+#toast.on{transform:translateX(-50%) translateY(0)}
+.foot{position:fixed;right:10px;bottom:calc(64px + env(safe-area-inset-bottom));color:rgba(143,163,155,.7);font-size:.58rem;font-family:"IBM Plex Mono",monospace;pointer-events:none}
+${NAJ_NAV_CSS}
+#sh{z-index:50}
+</style></head><body>
+<canvas id=cv></canvas>
+<div class=top><div class=mast>Najma <em>نجمة</em> — the map</div><div class=per>${esc2(period)} · tap a community</div></div>
+<div class=tog><span class="tg on" data-m=s>sales</span><span class=tg data-m=ny>net yield</span><span class=tg data-m=su>supply</span><span class=tg data-m=gap>🎯 gap</span><span class=tg id=thm>☀️ light</span></div><div id=leg style="position:fixed;left:14px;bottom:calc(64px + env(safe-area-inset-bottom));z-index:35;background:var(--chipbg);border:1px solid var(--line);border-radius:9px;padding:7px 11px;font-family:'IBM Plex Mono',monospace;font-size:.6rem;color:var(--mut)"><div id=legt style="margin-bottom:4px;color:var(--text)">registered sales</div><div style="display:flex;align-items:center;gap:6px"><span>less</span><span style="display:inline-block;width:86px;height:7px;border-radius:4px;background:linear-gradient(90deg,#3E8A7E,#C5A56A)"></span><span>more</span></div></div>
+<div id=sh><div class=grab></div><div class=shn id=shn></div><div class=shr id=shr></div><div class=shgrid id=shg></div><div class=shrm id=shrm></div><div class=acts id=sha></div></div>
+<div id=toast></div>
+<div class=foot>DLD Open Data · © OpenStreetMap contributors</div>
+<script>
+var AREAS=${JSON.stringify(list)},AREAS2=${JSON.stringify(list2)},KEY=${JSON.stringify(key || "")},WA=${JSON.stringify(waBot || "")},ESRI=${esriOn ? "true" : "false"};
+var cv=document.getElementById("cv"),ctx=cv.getContext("2d"),dpr=Math.min(2,window.devicePixelRatio||1);
+var PAL={dark:{bg:"#0C1413",water:"#0A1A22",rMid:"#152E2A",rMaj:"#2A4742",heatHot:"197,165,106",heatCool:"62,138,126",dotHot:"#C5A56A",dotCool:"#3E8A7E",dotEdge:"#0C1413",label:"#E8E4D8",halo:"rgba(12,20,19,.85)"},light:{bg:"#F2EEE3",water:"#BFD5DB",rMid:"#E0DACA",rMaj:"#CDC5B0",heatHot:"168,133,68",heatCool:"47,110,100",dotHot:"#A88544",dotCool:"#2F6E64",dotEdge:"#F2EEE3",label:"#1A2422",halo:"rgba(242,238,227,.88)"}};
+var THM=localStorage.getItem("naj_thm")||((window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches)?"light":"dark");
+document.documentElement.setAttribute("data-theme",THM);
+function pal(){return PAL[THM]||PAL.dark}
+var MLMAP=null,BASE_TRANSPARENT=false;
+// Keep the Esri basemap locked to our canvas transform: our world units are wx/wy at scale
+// view.s, so the visible lon/lat window follows directly from the current view.
+function syncML(){if(!MLMAP||!W)return;
+var lon0=B[0]+((0-view.x)/view.s)/(3000*K),lon1=B[0]+((W-view.x)/view.s)/(3000*K);
+var lat0=B[3]-((H-view.y)/view.s)/3000,lat1=B[3]-((0-view.y)/view.s)/3000;
+try{MLMAP.jumpTo(MLMAP.cameraForBounds([[lon0,lat0],[lon1,lat1]],{padding:0}))}catch(e){}}
+var BM=null,B=[54.98,24.83,55.55,25.36],view={s:1,x:0,y:0},metric="s",W=0,H=0,K=Math.cos(25.1*Math.PI/180);
+function wx(lon){return (lon-B[0])*K*3000}function wy(lat){return (B[3]-lat)*3000}
+function resize(){W=window.innerWidth;H=window.innerHeight;cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+"px";cv.style.height=H+"px";draw()}
+function fit(){var xs=AREAS.map(function(a){return wx(a.c[0])}),ys=AREAS.map(function(a){return wy(a.c[1])});var x0=Math.min.apply(0,xs),x1=Math.max.apply(0,xs),y0=Math.min.apply(0,ys),y1=Math.max.apply(0,ys);var p=70;var s=Math.min((W-2*p)/(x1-x0||1),(H-2*p)/(y1-y0||1));view.s=s;view.x=(W-s*(x0+x1))/2;view.y=(H-s*(y0+y1))/2}
+function mval(a){return metric==="ny"?(a.ny||0):metric==="su"?(a.su||0):metric==="gap"?((a.s||0)/((a.su||0)+40)):(a.s||0)}
+var MLBL={s:"registered sales",ny:"net yield %",su:"units in pipeline",gap:"demand vs supply gap"};
+function draw(){if(!W)return;var P=pal();ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);if(!BASE_TRANSPARENT){ctx.fillStyle=P.bg;ctx.fillRect(0,0,W,H)}ctx.setTransform(dpr*view.s,0,0,dpr*view.s,dpr*view.x,dpr*view.y);
+syncML();
+if(BM&&!BASE_TRANSPARENT){ctx.fillStyle=P.water;BM.water.forEach(function(r){ctx.beginPath();for(var i=0;i<r.length;i++){var p=r[i];if(i)ctx.lineTo(wx(p[0]),wy(p[1]));else ctx.moveTo(wx(p[0]),wy(p[1]))}ctx.closePath();ctx.fill()});
+ctx.strokeStyle=P.rMid;ctx.lineWidth=1.1/view.s;BM.roadsMid.forEach(function(l){ctx.beginPath();for(var i=0;i<l.length;i++){var p=l[i];if(i)ctx.lineTo(wx(p[0]),wy(p[1]));else ctx.moveTo(wx(p[0]),wy(p[1]))}ctx.stroke()});
+ctx.strokeStyle=P.rMaj;ctx.lineWidth=2.2/view.s;BM.roadsMajor.forEach(function(l){ctx.beginPath();for(var i=0;i<l.length;i++){var p=l[i];if(i)ctx.lineTo(wx(p[0]),wy(p[1]));else ctx.moveTo(wx(p[0]),wy(p[1]))}ctx.stroke()})}
+var mx=0;AREAS.forEach(function(a){if(mval(a)>mx)mx=mval(a)});mx=mx||1;
+AREAS.forEach(function(a){var v=mval(a);if(v<=0)return;var r=(26+95*Math.sqrt(v/mx))/view.s;var g=ctx.createRadialGradient(wx(a.c[0]),wy(a.c[1]),0,wx(a.c[0]),wy(a.c[1]),r);var hot=v/mx>0.55;var c=hot?P.heatHot:P.heatCool;g.addColorStop(0,"rgba("+c+",0.34)");g.addColorStop(1,"rgba("+c+",0)");ctx.fillStyle=g;ctx.beginPath();ctx.arc(wx(a.c[0]),wy(a.c[1]),r,0,7);ctx.fill()});
+ctx.setTransform(dpr,0,0,dpr,0,0);
+var top=AREAS.slice().sort(function(a,b){return mval(b)-mval(a)});
+AREAS.forEach(function(a){var x=view.s*wx(a.c[0])+view.x,y=view.s*wy(a.c[1])+view.y;if(x<-30||y<-30||x>W+30||y>H+30)return;var v=mval(a),hot=v/mx>0.55;ctx.fillStyle=hot?P.dotHot:P.dotCool;ctx.strokeStyle=P.dotEdge;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(x,y,4.5,0,7);ctx.fill();ctx.stroke()});
+ctx.font="600 11px 'IBM Plex Sans',sans-serif";ctx.textAlign="center";var nlab=view.s>((W-140)/((wx(B[2])-wx(B[0]))||1))*2.2?14:8;
+top.slice(0,nlab).forEach(function(a){var x=view.s*wx(a.c[0])+view.x,y=view.s*wy(a.c[1])+view.y-9;if(x<10||y<70||x>W-10||y>H-20)return;ctx.lineWidth=3;ctx.strokeStyle=P.halo;ctx.strokeText(a.n,x,y);ctx.fillStyle=P.label;ctx.fillText(a.n,x,y)});}
+var ptrs={},lastD=0;
+cv.addEventListener("pointerdown",function(e){cv.setPointerCapture(e.pointerId);ptrs[e.pointerId]={x:e.clientX,y:e.clientY,mx:0}});
+cv.addEventListener("pointermove",function(e){var p=ptrs[e.pointerId];if(!p)return;var ks=Object.keys(ptrs);var dx=e.clientX-p.x,dy=e.clientY-p.y;p.mx+=Math.abs(dx)+Math.abs(dy);
+if(ks.length===1){view.x+=dx;view.y+=dy}else if(ks.length===2){var o=ptrs[ks[0]===String(e.pointerId)?ks[1]:ks[0]];var d=Math.hypot(e.clientX-o.x,e.clientY-o.y);if(lastD){var f=d/lastD;var cx=(e.clientX+o.x)/2,cy=(e.clientY+o.y)/2;zoomAt(cx,cy,f)}lastD=d}
+p.x=e.clientX;p.y=e.clientY;requestAnimationFrame(draw)});
+function up(e){var p=ptrs[e.pointerId];delete ptrs[e.pointerId];lastD=0;if(p&&p.mx<8)tap(e.clientX,e.clientY)}
+cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",function(e){delete ptrs[e.pointerId];lastD=0});
+cv.addEventListener("wheel",function(e){e.preventDefault();zoomAt(e.clientX,e.clientY,e.deltaY<0?1.18:0.85)},{passive:false});
+function zoomAt(cx,cy,f){var ns=Math.max(0.5,Math.min(30,view.s*f));f=ns/view.s;view.x=cx-(cx-view.x)*f;view.y=cy-(cy-view.y)*f;view.s=ns;requestAnimationFrame(draw)}
+function tap(cx,cy){var best=null,bd=26;AREAS.forEach(function(a){var x=view.s*wx(a.c[0])+view.x,y=view.s*wy(a.c[1])+view.y;var d=Math.hypot(cx-x,cy-y);if(d<bd){bd=d;best=a}});if(best)sheet(best);else document.getElementById("sh").classList.remove("open")}
+function fmt(v){return v==null?"—":Number(v).toLocaleString("en-US")}
+function sheet(a){document.getElementById("shn").textContent=a.n;
+document.getElementById("shr").textContent="Settled figures from the register · "+fmt(a.s)+" sales this period";
+document.getElementById("shg").innerHTML=
+'<div class=shs><div class=v>'+fmt(a.psf)+'<small>/sqft</small></div><div class=l>median (AED)</div></div>'+
+'<div class=shs><div class=v>'+(a.tik?(a.tik/1e6).toFixed(2)+"m":"—")+'</div><div class=l>median ticket</div></div>'+
+'<div class=shs><div class=v>'+(a.off==null?"—":a.off+"<small>%</small>")+'</div><div class=l>off-plan</div></div>'+
+'<div class=shs><div class=v>'+(a.ny==null?"—":a.ny+"<small>%</small>")+'</div><div class=l>net yield</div></div>'+
+'<div class=shs><div class=v>'+(a.gy==null?"—":a.gy+"<small>%</small>")+'</div><div class=l>gross yield</div></div>'+
+'<div class=shs><div class=v>'+fmt(a.su)+'</div><div class=l>units in pipeline</div></div>';
+var acts=document.getElementById("sha");acts.innerHTML="";
+var full=document.createElement("a");full.className="act pri";full.textContent="📊 Full area page";full.href="/area/"+encodeURIComponent(a.n)+"?key="+encodeURIComponent(KEY);acts.appendChild(full);
+[["✍️ Draft a post","area post "+a.n],["🎯 Client match","client match in "+a.n],["🏗 Launch check","launch check "+a.n]].forEach(function(x){var b=document.createElement(WA?"a":"button");b.className="act";b.textContent=x[0];
+if(WA){b.href="https://wa.me/"+WA+"?text="+encodeURIComponent(x[1])}else{b.onclick=function(){(navigator.clipboard?navigator.clipboard.writeText(x[1]):Promise.reject()).then(function(){toast("Copied — paste it to Azimuth")},function(){toast(x[1])})}}
+acts.appendChild(b)});
+var rmEl=document.getElementById("shrm");var bits=[];
+if(a.dl!=null&&a.dl!==0)bits.push(a.dl>0?'<span class=up>▲'+fmt(a.dl)+' sales vs last pulse</span>':'<span class=dn>▼'+fmt(-a.dl)+' vs last pulse</span>');
+(a.rm||[]).forEach(function(r){bits.push('<b>'+r[0]+'</b> '+(r[1]?(r[1]/1e6).toFixed(2)+'m':'—'))});
+rmEl.innerHTML=bits.join(' · ');rmEl.style.display=bits.length?'':'none';
+document.getElementById("sh").classList.add("open")}
+function toast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("on");setTimeout(function(){t.classList.remove("on")},1800)}
+document.querySelectorAll(".tg[data-m]").forEach(function(el){el.onclick=function(){metric=el.getAttribute("data-m");document.querySelectorAll(".tg[data-m]").forEach(function(o){o.classList.remove("on")});el.classList.add("on");var lt=document.getElementById("legt");if(lt)lt.textContent=MLBL[metric]||metric;draw()}});
+var thm=document.getElementById("thm");function thmLbl(){thm.textContent=THM==="dark"?"☀️ light":"🌙 dark"}thmLbl();
+thm.onclick=function(){THM=THM==="dark"?"light":"dark";try{localStorage.setItem("naj_thm",THM)}catch(e){}document.documentElement.setAttribute("data-theme",THM);thmLbl();
+if(MLMAP){fetch("/esri_token?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(j){if(j&&j.ok)MLMAP.setStyle("https://basemapstyles-api.arcgis.com/arcgis/rest/services/styles/v2/styles/arcgis/"+(THM==="light"?"light-gray":"dark-gray")+"?token="+encodeURIComponent(j.token))}).catch(function(){})}
+draw()};
+window.addEventListener("resize",resize);
+try{var _mq=new URLSearchParams(location.search).get("m");if(_mq&&{s:1,ny:1,su:1}[_mq]){metric=_mq;document.querySelectorAll(".tg[data-m]").forEach(function(o){o.classList.toggle("on",o.getAttribute("data-m")===metric)})}}catch(e){}
+resize();fit();draw();
+fetch("/img/mp_basemap").then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){BM=j;B=j.bounds||B;draw()}).catch(function(){});
+// v57 — MapLibre-PRIMARY map when Esri credentials exist: real vector basemap, four VIEWS
+// (dark / light / satellite / data), Arabic labels, UAE worldview, LABEL SANDWICH (our
+// layers insert before the style's first symbol layer), community CHOROPLETH from
+// /img/mp_areas, and cached drive-time rings via /iso. The offline canvas stays untouched
+// as the automatic fallback — any failure and the map still works.
+(function(){if(!ESRI)return;
+var VIEWS={dark:"arcgis/dark-gray",light:"arcgis/light-gray",sat:"arcgis/imagery",streets:"arcgis/navigation",data:"arcgis/human-geography-dark"};
+var VIEW=localStorage.getItem("naj_view")||((THM==="light")?"light":"dark");if(!VIEWS[VIEW])VIEW="dark";
+var LANG=localStorage.getItem("naj_lang")||"en";
+var TOKEN=null,map=null,AR2=null,ISO_ON=null;
+function styleUrl(){return "https://basemapstyles-api.arcgis.com/arcgis/rest/services/styles/v2/styles/"+VIEWS[VIEW]+"?token="+encodeURIComponent(TOKEN)+"&worldview=unitedArabEmirates"+(LANG==="ar"?"&language=ar":"")}
+function metricVal(a){return metric==="ny"?(a.ny||0):metric==="su"?(a.su||0):(a.s||0)}
+function ramp(v,mx){var t=mx?Math.min(1,v/mx):0;var c1=[62,138,126],c2=[197,165,106];var c=[0,1,2].map(function(i){return Math.round(c1[i]+(c2[i]-c1[i])*t)});return "rgb("+c.join(",")+")"}
+function firstSymbol(){var ls=map.getStyle().layers;for(var i=0;i<ls.length;i++){if(ls[i].type==="symbol")return ls[i].id}return undefined}
+function paintData(){if(!map||!map.getLayer("naj-fill"))return;var mx=0;AREAS2.forEach(function(a){var v=metricVal(a);if(v>mx)mx=v});
+var m=["match",["get","n"]];AREAS2.forEach(function(a){m.push(a.n,ramp(metricVal(a),mx))});m.push("rgba(0,0,0,0)");
+map.setPaintProperty("naj-fill","fill-color",m);
+var mc=["match",["get","n"]];AREAS.forEach(function(a){var v=metricVal(a),hot=mx&&v/mx>0.55;mc.push(a.n,hot?"#C5A56A":"#3E8A7E")});mc.push("#3E8A7E");
+map.setPaintProperty("naj-dot","circle-color",mc);
+var mr=["match",["get","n"]];AREAS.forEach(function(a){mr.push(a.n,4+9*Math.sqrt(mx?metricVal(a)/mx:0))});mr.push(4);
+map.setPaintProperty("naj-dot","circle-radius",mr);
+if(map.getLayer("naj-lab")){var top12=AREAS.slice().sort(function(a,b){return metricVal(b)-metricVal(a)}).slice(0,12).map(function(a){return a.n});
+map.setFilter("naj-lab",["in",["get","n"],["literal",top12]])}}
+function addData(){var before=firstSymbol();
+if(AR2)map.addSource("naj-areas",{type:"geojson",data:AR2});
+map.addSource("naj-pts",{type:"geojson",data:{type:"FeatureCollection",features:AREAS.map(function(a){return {type:"Feature",properties:{n:a.n},geometry:{type:"Point",coordinates:a.c}}})}});
+if(AR2){map.addLayer({id:"naj-fill",type:"fill",source:"naj-areas",paint:{"fill-color":"rgba(0,0,0,0)","fill-opacity":VIEW==="sat"?0.42:0.34}},before);
+map.addLayer({id:"naj-line",type:"line",source:"naj-areas",paint:{"line-color":VIEW==="light"?"rgba(26,36,34,.45)":"rgba(232,228,216,.38)","line-width":1}},before);}
+map.addLayer({id:"naj-dot",type:"circle",source:"naj-pts",paint:{"circle-color":"#3E8A7E","circle-radius":5,"circle-stroke-color":VIEW==="light"?"#F2EEE3":"#0C1413","circle-stroke-width":1.5}},before);
+map.addLayer({id:"naj-lab",type:"symbol",source:"naj-pts",layout:{"text-field":["get","n"],"text-size":11,"text-offset":[0,1.1],"text-anchor":"top","text-allow-overlap":false},paint:{"text-color":VIEW==="light"?"#1A2422":"#E8E4D8","text-halo-color":VIEW==="light"?"rgba(242,238,227,.9)":"rgba(12,20,19,.9)","text-halo-width":1.4}});
+paintData();drawIso()}
+function findArea(n){var k=String(n||"").toLowerCase();for(var i=0;i<AREAS2.length;i++){if(AREAS2[i].n.toLowerCase()===k)return AREAS2[i]}return null}
+var POP=null;
+function wire(){POP=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:10});
+map.on("mousemove",function(e){var fs=map.queryRenderedFeatures(e.point,{layers:(map.getLayer("naj-fill")?["naj-dot","naj-fill"]:["naj-dot"])});
+if(!fs.length){POP.remove();map.getCanvas().style.cursor="";return}
+map.getCanvas().style.cursor="pointer";var a=findArea(fs[0].properties.n);if(!a)return;
+var v=metric==="ny"?(a.ny==null?"—":a.ny+"%"):metric==="su"?fmt(a.su)+" units":metric==="gap"?"gap "+(Math.round(mval(a)*100)/100):fmt(a.s)+" sales";
+POP.setLngLat(e.lngLat).setHTML('<div style="font-family:\\'IBM Plex Sans\\',sans-serif;font-size:12px;color:#0C1413"><b>'+a.n+'</b><br>'+v+'</div>').addTo(map)});
+map.on("click",function(e){var fs=map.queryRenderedFeatures(e.point,{layers:(map.getLayer("naj-fill")?["naj-dot","naj-fill"]:["naj-dot"])});
+if(!fs.length){document.getElementById("sh").classList.remove("open");return}
+var a=findArea(fs[0].properties.n);if(a)sheet(a)});
+map.on("mouseenter","naj-dot",function(){map.getCanvas().style.cursor="pointer"});
+map.on("mouseleave","naj-dot",function(){map.getCanvas().style.cursor=""})}
+function boot(){var host=document.createElement("div");host.id="mlmap";host.style.cssText="position:fixed;inset:0;z-index:0";document.body.insertBefore(host,cv);
+cv.style.display="none";
+map=new maplibregl.Map({container:"mlmap",style:styleUrl(),center:[55.23,25.10],zoom:9.6,attributionControl:{compact:true}});
+map.on("style.load",function(){addData()});wire()}
+function reStyle(){if(!map)return;fetchTok(function(){map.setStyle(styleUrl())})}
+function fetchTok(cb){fetch("/esri_token?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){TOKEN=j.token;cb()}}).catch(function(){})}
+// view chips
+var vrow=document.createElement("div");vrow.className="tog";vrow.style.top="104px";
+[["dark","🌑 dark"],["light","☀️ light"],["sat","🛰 satellite"],["streets","🛣️ streets"],["data","📊 data"]].forEach(function(v){
+var el=document.createElement("span");el.className="tg"+(VIEW===v[0]?" on":"");el.textContent=v[1];el.setAttribute("data-v",v[0]);
+el.onclick=function(){VIEW=v[0];try{localStorage.setItem("naj_view",VIEW)}catch(e){}
+THM=(VIEW==="light")?"light":"dark";document.documentElement.setAttribute("data-theme",THM);
+vrow.querySelectorAll(".tg").forEach(function(o){o.classList.remove("on")});el.classList.add("on");reStyle()};
+vrow.appendChild(el)});
+var ar=document.createElement("span");ar.className="tg";ar.textContent=LANG==="ar"?"EN":"ع";
+ar.onclick=function(){LANG=LANG==="ar"?"en":"ar";try{localStorage.setItem("naj_lang",LANG)}catch(e){}ar.textContent=LANG==="ar"?"EN":"ع";reStyle()};
+vrow.appendChild(ar);
+// drive-time chips
+var irow=document.createElement("div");irow.className="tog";irow.style.top="146px";
+var ichip=document.createElement("span");ichip.className="tg";ichip.textContent="⏱ drive-time";irow.appendChild(ichip);
+var anchors=[["difc","DIFC"],["downtown","Downtown"],["marina","Marina"],["dxb","DXB apt"],["mediacity","Media City"]];var sub=[];
+ichip.onclick=function(){var open=sub.length&&sub[0].style.display!=="none";sub.forEach(function(s){s.style.display=open?"none":""});if(!sub.length){anchors.forEach(function(an){var s=document.createElement("span");s.className="tg";s.textContent=an[1];s.onclick=function(){if(ISO_ON===an[0]){ISO_ON=null;s.classList.remove("on");drawIso();return}ISO_ON=an[0];sub.forEach(function(o){o.classList.remove("on")});s.classList.add("on");loadIso(an[0])};irow.appendChild(s);sub.push(s)})}};
+function loadIso(a){fetch("/iso?key="+encodeURIComponent(KEY)+"&anchor="+a).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){ISO_GEO=j.geo;drawIso()}else{toast(j&&j.note?j.note:"drive-time not enabled yet")}}).catch(function(){toast("drive-time unavailable")})}
+var ISO_GEO=null;
+function drawIso(){if(!map)return;["iso-fill","iso-line"].forEach(function(id){if(map.getLayer(id))map.removeLayer(id)});if(map.getSource("naj-iso"))map.removeSource("naj-iso");
+if(!ISO_ON||!ISO_GEO)return;var before=firstSymbol();
+map.addSource("naj-iso",{type:"geojson",data:ISO_GEO});
+map.addLayer({id:"iso-fill",type:"fill",source:"naj-iso",paint:{"fill-color":"#D9A441","fill-opacity":0.10}},before);
+map.addLayer({id:"iso-line",type:"line",source:"naj-iso",paint:{"line-color":"#D9A441","line-width":1.6,"line-dasharray":[2,2]}},before)}
+// metric + theme chips re-wire for ML mode
+document.querySelectorAll(".tg[data-m]").forEach(function(el){var old=el.onclick;el.onclick=function(){old.call(el);paintData()}});
+var thmEl=document.getElementById("thm");if(thmEl)thmEl.style.display="none";  // theme folded into views
+// assets then boot
+var css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css";document.head.appendChild(css);
+var s=document.createElement("script");s.src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";
+s.onload=function(){fetchTok(function(){
+fetch("/img/mp_areas").then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){AR2=j}).catch(function(){AR2=null}).then(function(){
+if(!window.maplibregl)return;document.querySelector(".tog").insertAdjacentElement("afterend",vrow);vrow.insertAdjacentElement("afterend",irow);boot()})})};
+s.onerror=function(){};document.head.appendChild(s);})();
+</script>${najNav(key, "map")}</body></html>`;
+}
+
+
+// v58 — CLIENT BRIEFING (/r/<id>): a polished, client-safe page Naj builds from chat in
+// seconds ("report business bay for Ahmed") and forwards after a viewing. Snapshot frozen
+// in KV (60d TTL, unguessable id), no keys, no internal controls, satellite hero, every
+// figure sourced. Our native answer to "StoryMaps for clients".
+function renderReport(sn, esriTok, poly) {
+  const esc2 = (x) => String(x == null ? "" : x).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const a = sn.area || {}; const num2 = (v) => (v == null ? "—" : Number(v).toLocaleString("en-US"));
+  const slug = String(a.area || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const rooms = najRooms(a.byRoom);
+  const rmax = Math.max(...rooms.map(r => r[1].medianAed || 0), 1);
+  const period = sn.period ? (String(sn.period[0] || "") + " → " + String(sn.period[1] || "")) : "";
+  const amen = sn.amen || null;
+  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=robots content=noindex><title>' + esc2(a.area) + ' — Najma briefing</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS + '<style>' +
+    ':root{--ink:#0C1413;--card:#131F1D;--card2:#182823;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#3E8A7E}' +
+    'body{font-family:"IBM Plex Sans",system-ui,sans-serif;background:var(--ink);color:var(--text);margin:auto;padding:0 14px 48px;max-width:560px}' +
+    '.hero{margin:0 -14px;padding:150px 18px 18px;background-image:linear-gradient(180deg,rgba(12,20,19,.10) 0%,rgba(12,20,19,.55) 55%,rgba(12,20,19,.93) 86%,#0C1413 100%),url(/img/sat_' + slug + ');background-size:cover;background-position:center}' +
+    '.brand{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.16em;color:var(--gold);text-transform:uppercase}' +
+    'h1{font-family:Fraunces,Georgia,serif;font-size:2rem;font-weight:600;margin:.25rem 0 .15rem;text-shadow:0 2px 16px rgba(12,20,19,.8)}' +
+    '.for{color:#B8C4BD;font-size:.85rem;text-shadow:0 1px 8px rgba(12,20,19,.8)}' +
+    '.per{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--mut);margin-top:4px}' +
+    '.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:14px 0 10px}' +
+    '.st{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:12px}.st .v{font-family:Fraunces,Georgia,serif;font-size:1.45rem;font-weight:600;font-variant-numeric:tabular-nums}.st .v small{font-size:.8rem;color:var(--mut)}.st .l{color:var(--mut);font-size:.72rem;margin-top:2px}' +
+    '.card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px;margin-bottom:10px}' +
+    'h2{font-size:.68rem;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;margin:0 0 .6rem;font-weight:600}' +
+    '.srow{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #182823;font-size:.83rem}.srow:last-child{border-bottom:none}.srow .sv{color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}' +
+    '.arow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #182823}.arow:last-of-type{border-bottom:none}.nm{flex:0 0 42%;font-size:.82rem}.tr{flex:1;height:6px;border-radius:3px;background:var(--card2);overflow:hidden}.tr i{display:block;height:100%;background:var(--teal)}.ct{font-size:.74rem;color:var(--mut);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}' +
+    '.note{color:var(--mut);font-size:.72rem;margin-top:.5rem}.foot{color:var(--mut);font-size:.7rem;line-height:1.6;margin-top:16px;border-top:1px solid var(--line);padding-top:12px}' +
+    '</style></head><body>' +
+    '<div class=hero><div class=brand>Najma · market briefing</div><h1>' + esc2(a.area) + '</h1>' +
+    (sn.client ? '<div class=for>Prepared for ' + esc2(sn.client) + '</div>' : '') +
+    '<div class=per>' + esc2(period) + ' · prepared ' + esc2(String(sn.at || "").slice(0, 10)) + ' · settled figures, not asking prices</div></div>' +
+    '<div class=grid>' +
+    '<div class=st><div class=v>' + num2(a.sales) + '</div><div class=l>sales registered this period</div></div>' +
+    '<div class=st><div class=v>' + num2(a.medianAedSqft) + '<small>/sqft</small></div><div class=l>median settled (AED)</div></div>' +
+    '<div class=st><div class=v>' + (a.medianTicketAed ? (a.medianTicketAed / 1e6).toFixed(2) + 'm' : '—') + '</div><div class=l>median ticket (AED)</div></div>' +
+    '<div class=st><div class=v>' + (a.netYieldPct == null ? '—' : a.netYieldPct + '<small>%</small>') + '</div><div class=l>net rental yield</div></div></div>' +
+    '<div class=card><h2>The yield, honestly</h2>' +
+    '<div class=srow><span>Gross yield (registered rents ÷ registered prices)</span><span class=sv>' + (a.grossYieldPct == null ? '—' : a.grossYieldPct + '%') + '</span></div>' +
+    '<div class=srow><span>Typical service charge</span><span class=sv>' + (a.serviceChargeAedSqftYr == null ? '—' : a.serviceChargeAedSqftYr + ' AED/sqft/yr') + '</span></div>' +
+    '<div class=srow><span><b>Net to the owner</b></span><span class=sv style="color:var(--gold);font-weight:600">' + (a.netYieldPct == null ? '—' : a.netYieldPct + '%') + '</span></div>' +
+    '<div class=note>Most portals quote gross. Net is what actually lands after the building is paid for.</div></div>' +
+    (rooms.length ? '<div class=card><h2>What each layout actually sells for</h2>' + rooms.map(([rb, r]) =>
+      '<div class=arow><span class=nm>' + esc2(rb) + ' <span style="color:#8FA39B;font-size:.68rem">' + num2(r.sales) + ' sales</span></span><span class=tr><i style="width:' + Math.round(100 * (r.medianAed || 0) / rmax) + '%"></i></span><span class=ct>' + (r.medianAed ? (r.medianAed / 1e6).toFixed(2) + 'm' : '—') + (r.p25Aed && r.p75Aed ? '<br><span style="color:#8FA39B;font-size:.62rem">' + (r.p25Aed / 1e6).toFixed(2) + '–' + (r.p75Aed / 1e6).toFixed(2) + '</span>' : '') + '</span></div>').join('') +
+      '<div class=note>Median settled prices from the register; the range is the middle half of transactions (p25–p75).</div></div>' : '') +
+    (amen && amen.length ? '<div class=card><h2>Around the community</h2>' + amen.map(x =>
+      '<div class=srow><span>' + esc2(x.label) + '</span><span class=sv>' + esc2(x.value) + '</span></div>').join('') +
+      '<div class=note>Nearest points of interest, geocoded once from the community centre.</div></div>' : '') +
+    ((a.pop || a.households) ? '<div class=card><h2>Who lives here</h2>' +
+      (a.pop ? '<div class=srow><span>Population</span><span class=sv>' + num2(a.pop) + '</span></div>' : '') +
+      (a.households ? '<div class=srow><span>Households</span><span class=sv>' + num2(a.households) + '</span></div>' : '') +
+      (a.densityKm2 ? '<div class=srow><span>Density</span><span class=sv>' + num2(a.densityKm2) + '/km²</span></div>' : '') +
+      '<div class=note>Dubai Statistics Center, by community.</div></div>' : '') +
+    (sn.sup ? '<div class=card><h2>What is being built here</h2>' +
+      '<div class=srow><span>Units in the registered pipeline</span><span class=sv>' + num2(sn.sup.units) + '</span></div>' +
+      '<div class=srow><span>Active registered projects</span><span class=sv>' + num2(sn.sup.projects) + '</span></div>' +
+      (sn.sup.nextEnd ? '<div class=srow><span>Next completion on file</span><span class=sv>' + esc2(String(sn.sup.nextEnd).slice(0, 10)) + '</span></div>' : '') + '</div>' : '') +
+    ((sn.projs || []).length ? '<div class=card><h2>Projects on the register</h2>' + sn.projs.map(pj =>
+      '<div class=srow><span>' + esc2(pj.project) + (pj.escrowRegistered ? ' <span style="color:#56B584;font-size:.7rem">escrow ✓</span>' : '') + '</span><span class=sv>' + (pj.percentComplete != null ? pj.percentComplete + '% built' : esc2(pj.status || '')) + '</span></div>').join('') + '</div>' : '') +
+    (esriTok ? '<div class=card style="padding:8px"><div id=bmap style="height:330px;border-radius:8px"></div><div class=note style="padding:0 6px 4px">Pan and zoom — the gold line is the community boundary. Imagery: Esri.</div></div>' +
+      '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></' + 'script>' +
+      '<script>(function(){try{var P=' + JSON.stringify(poly || null) + ',A=' + JSON.stringify((sn.amen || []).slice(0, 6)) + ';' +
+      'var m=new maplibregl.Map({container:"bmap",style:"https://basemapstyles-api.arcgis.com/arcgis/rest/services/styles/v2/styles/arcgis/imagery?token=' + encodeURIComponent(esriTok) + '&worldview=unitedArabEmirates",center:[55.27,25.19],zoom:12,attributionControl:{compact:true}});' +
+      'm.on("load",function(){if(P){m.addSource("cm",{type:"geojson",data:{type:"Feature",geometry:P}});' +
+      'm.addLayer({id:"cmf",type:"fill",paint:{"fill-color":"#C5A56A","fill-opacity":0.08},source:"cm"});' +
+      'm.addLayer({id:"cml",type:"line",paint:{"line-color":"#C5A56A","line-width":2.5},source:"cm"});' +
+      'var cs=(P.type==="Polygon"?P.coordinates[0]:P.coordinates[0][0]);var xs=cs.map(function(c){return c[0]}),ys=cs.map(function(c){return c[1]});' +
+      'm.fitBounds([[Math.min.apply(0,xs),Math.min.apply(0,ys)],[Math.max.apply(0,xs),Math.max.apply(0,ys)]],{padding:34,animate:false});}});' +
+      '}catch(e){}})();</' + 'script>' : '') +
+    '<div class=foot>Every figure on this page comes from official registers: Dubai Land Department (DLD) Open Data (sales and Ejari rentals; contains information from the Government of Dubai) and the DLD registered-projects file. Satellite imagery: Esri World Imagery. Communities under 20 settled sales are not reported; layouts shown only at 8+ sales. Figures are period medians, not valuations of any specific unit. Prepared with Najma.</div>' +
     '</body></html>';
+}
+
+
+// v61 — THE STUDIO (/studio): six editorial post-card templates. MapLibre renders the Esri
+// style (newspaper / midcentury / blueprint / antique / colored-pencil / nova) into a
+// 1080×1080 buffer (preserveDrawingBuffer), Najma chrome is painted on a canvas overlay,
+// "save card" composites both into a PNG she downloads or long-presses. Content only —
+// the working map is untouched.
+function renderStudio(latestRaw, key, esriOn) {
+  let d = null; try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
+  if (!esriOn) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem"><h2 style="color:#C5A56A">Studio</h2><p>The studio needs the Esri basemap credential.</p>';
+  if (!d || !d.transactions) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem"><h2 style="color:#C5A56A">Studio</h2><p>No market data yet.</p>';
+  const t = d.transactions, mo = d.monthly || {};
+  const sup = (d.projects && d.projects.supplyByArea) || {};
+  const wk = (t.weekly || []); const lastFull = wk.length >= 2 ? wk[wk.length - 2] : null;
+  const areas = (d.areaIntel && d.areaIntel.areas || []).filter(a => DXB_COORDS[a.area.toLowerCase()]).map(a => ({
+    n: a.area, c: DXB_COORDS[a.area.toLowerCase()], psf: a.medianAedSqft, tik: a.medianTicketAed,
+    off: a.offPlanPct, ny: a.netYieldPct, su: (sup[a.area] && sup[a.area].units) || 0,
+    rm: najRooms(a.byRoom).slice(0, 2).map(([k, r]) => [k, r.medianAed])
+  }));
+  const DATA = { weekBn: lastFull ? lastFull.valueAedBn : null, week: lastFull ? lastFull.week : "",
+    periodFrom: t.periodFrom, periodTo: t.periodTo, salesBn: t.salesValueAedBn, salesCount: t.salesCount,
+    ytdBn: mo.ytdValueAedBn, ytdSales: mo.ytdSales, areas };
+  return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Najma studio</title><link rel=icon href=/naj_icon.svg>${NAJ_FONTS}<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>
+:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
+body{margin:0;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:14px 12px 90px;display:flex;flex-direction:column;align-items:center;gap:12px}
+h1{font:600 1.4rem Fraunces,Georgia,serif;margin:.2rem 0 0;align-self:flex-start}h1 em{font-style:normal;color:var(--gold)}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start}
+.tg{font-family:"IBM Plex Mono",monospace;font-size:.66rem;border:1px solid var(--line);background:rgba(19,31,29,.85);border-radius:99px;padding:6px 11px;color:var(--mut);cursor:pointer}
+.tg.on{color:var(--gold);border-color:rgba(197,165,106,.6)}
+select{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-family:"IBM Plex Sans",sans-serif;font-size:.8rem}
+#stage{position:relative;width:min(92vw,540px);aspect-ratio:1/1;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+#smap{position:absolute;inset:0}#chrome{position:absolute;inset:0;pointer-events:none;width:100%;height:100%}
+.act{font-size:.85rem;font-weight:600;background:var(--gold);color:#0C1413;border:none;border-radius:9px;padding:11px 22px;cursor:pointer}
+#out{max-width:min(92vw,540px);display:none;border-radius:12px;border:1px solid var(--line)}
+.hint{color:var(--mut);font-size:.72rem;max-width:min(92vw,540px)}
+${NAJ_NAV_CSS}</style></head><body>
+<h1>Najma <em>نجمة</em> — studio</h1>
+<div class=row id=tpls></div>
+<div class=row><select id=asel></select></div>
+<div id=stage><div id=smap></div><canvas id=chrome width=1080 height=1080></canvas></div>
+<div class=row><button class=act id=save>Save card</button><span class=hint id=st>pick a template — the map is live, drag it until the frame feels right, then save</span></div>
+<img id=out alt="your card — long-press to save">
+${najNav(key, "charts")}
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+var D=${JSON.stringify(DATA)},KEY=${JSON.stringify(key || "")};
+var TPL={
+ front:{name:"📰 Front Page",style:"arcgis/newspaper",scope:"city",ink:"#1A1A1A",paper:"#F2EEE3",acc:"#8A1F1F"},
+ mid:{name:"🏝 Postcard",style:"arcgis/midcentury",scope:"area",ink:"#2B2320",paper:"#F0E7D8",acc:"#C24F2E"},
+ blue:{name:"📐 Blueprint",style:"open/blueprint",scope:"area",ink:"#EAF2FA",paper:"#123A5F",acc:"#EAF2FA"},
+ ant:{name:"🧭 Explorer",style:"arcgis/modern-antique",scope:"city",ink:"#3A2E20",paper:"#EFE6D2",acc:"#7A5B2E"},
+ soft:{name:"🎨 Soft Map",style:"arcgis/colored-pencil",scope:"area",ink:"#33403B",paper:"#F6F3EA",acc:"#3E8A7E"},
+ nova:{name:"🌃 Night Signal",style:"arcgis/nova",scope:"area",ink:"#E8F4FF",paper:"#0A1626",acc:"#37C0F5"}};
+var cur="front",AREA=D.areas[0]||null,TOKEN=null,map=null,POLY={};
+var tr=document.getElementById("tpls");
+Object.keys(TPL).forEach(function(k){var el=document.createElement("span");el.className="tg"+(k===cur?" on":"");el.textContent=TPL[k].name;el.onclick=function(){cur=k;tr.querySelectorAll(".tg").forEach(function(o){o.classList.remove("on")});el.classList.add("on");sync()};tr.appendChild(el)});
+var sel=document.getElementById("asel");
+D.areas.forEach(function(a,i){var o=document.createElement("option");o.value=i;o.textContent=a.n;sel.appendChild(o)});
+sel.onchange=function(){AREA=D.areas[+sel.value];sync()};
+function fmt(v){return v==null?"—":Number(v).toLocaleString("en-US")}
+function styleUrl(){return "https://basemapstyles-api.arcgis.com/arcgis/rest/services/styles/v2/styles/"+TPL[cur].style+"?token="+encodeURIComponent(TOKEN)+"&worldview=unitedArabEmirates"}
+function fitScope(){if(!map)return;if(TPL[cur].scope==="city"){map.jumpTo({center:[55.22,25.11],zoom:9.4});return}
+var ALIAS={"DUBAI SOUTH":"Madinat Al Mataar","DUBAI HILLS":"DUBAI HILLS ESTATE"};
+var pg=AREA&&(POLY[AREA.n]||POLY[ALIAS[AREA.n]]);if(pg){var cs=(pg.type==="Polygon"?pg.coordinates[0]:pg.coordinates[0][0]);var xs=cs.map(function(c){return c[0]}),ys=cs.map(function(c){return c[1]});map.fitBounds([[Math.min.apply(0,xs),Math.min.apply(0,ys)],[Math.max.apply(0,xs),Math.max.apply(0,ys)]],{padding:150,animate:false})}
+else if(AREA)map.jumpTo({center:AREA.c,zoom:12.4})}
+function addPoly(){if(!map)return;["st-f","st-l"].forEach(function(id){if(map.getLayer(id))map.removeLayer(id)});if(map.getSource("st"))map.removeSource("st");
+var pg=TPL[cur].scope==="area"&&AREA&&(POLY[AREA.n]||POLY[{"DUBAI SOUTH":"Madinat Al Mataar"}[AREA.n]]);if(!pg)return;
+map.addSource("st",{type:"geojson",data:{type:"Feature",geometry:pg}});
+map.addLayer({id:"st-f",type:"fill",source:"st",paint:{"fill-color":TPL[cur].acc,"fill-opacity":0.10}});
+map.addLayer({id:"st-l",type:"line",source:"st",paint:{"line-color":TPL[cur].acc,"line-width":3}})}
+function chrome(){var c=document.getElementById("chrome"),x=c.getContext("2d");x.clearRect(0,0,1080,1080);
+var T=TPL[cur],a=AREA||{};
+function band(y,h,col,al){x.globalAlpha=al;x.fillStyle=col;x.fillRect(0,y,1080,h);x.globalAlpha=1}
+function txt(str,px,py,size,font,col,align,ls){x.fillStyle=col;x.textAlign=align||"left";x.font=size+"px "+font;if(ls){x.save();str=String(str).split("").join(String.fromCharCode(8202));}x.fillText(str,px,py);if(ls)x.restore()}
+var srcLine="Source: Dubai Land Department (DLD) Open Data · basemap © Esri";
+if(cur==="front"){band(0,240,T.paper,.96);band(880,200,T.paper,.96);
+txt("THE NAJMA REGISTER",540,74,34,"700 'IBM Plex Mono',monospace",T.ink,"center");
+x.strokeStyle=T.ink;x.lineWidth=3;x.beginPath();x.moveTo(60,92);x.lineTo(1020,92);x.stroke();
+txt((D.periodTo||"")+"  ·  DUBAI, U.A.E.",540,122,20,"'IBM Plex Mono',monospace",T.ink,"center");
+txt("DUBAI REGISTERS AED "+(D.weekBn!=null?D.weekBn:D.salesBn)+"BN WEEK",540,190,52,"600 Fraunces,Georgia,serif",T.ink,"center");
+txt(fmt(D.salesCount)+" sales settled "+D.periodFrom+" – "+D.periodTo,540,226,22,"'IBM Plex Sans',sans-serif",T.ink,"center");
+txt("Where the money moved — registered sales by community",540,930,26,"600 'IBM Plex Sans',sans-serif",T.ink,"center");
+txt(srcLine,540,1046,18,"'IBM Plex Mono',monospace",T.ink,"center");}
+if(cur==="mid"){band(700,380,T.paper,.94);
+txt("COMMUNITY OF THE WEEK",90,780,24,"700 'IBM Plex Mono',monospace",T.acc);
+txt(a.n||"",90,856,64,"600 Fraunces,Georgia,serif",T.ink);
+txt((a.psf?fmt(a.psf)+" AED/sqft settled":"")+(a.ny!=null?"   ·   net yield "+a.ny+"%":""),90,905,26,"'IBM Plex Sans',sans-serif",T.ink);
+txt((a.rm||[]).map(function(r){return r[0]+" "+(r[1]/1e6).toFixed(2)+"m"}).join("   ·   "),90,945,24,"'IBM Plex Mono',monospace",T.ink);
+txt(srcLine,90,1030,18,"'IBM Plex Mono',monospace",T.ink);
+x.strokeStyle=T.acc;x.lineWidth=6;x.strokeRect(34,34,1012,1012);}
+if(cur==="blue"){x.strokeStyle=T.ink;x.lineWidth=2;x.strokeRect(40,40,1000,1000);x.strokeRect(52,52,976,976);
+band(60,150,T.paper,.88);
+txt("NAJMA — SUPPLY DRAWING NO. "+((D.periodTo||"").replace(/-/g,"")),80,110,24,"'IBM Plex Mono',monospace",T.ink);
+txt((fmt(a.su)||"0")+" UNITS DRAWN UP: "+(a.n||""),80,160,40,"600 'IBM Plex Mono',monospace",T.ink);
+band(940,90,T.paper,.88);
+txt("registered pipeline · escrow-gated · DLD projects file · basemap © Esri",80,995,20,"'IBM Plex Mono',monospace",T.ink);
+x.strokeStyle=T.ink;x.strokeRect(830,880,200,60);txt("NAJMA نجمة",930,918,22,"700 'IBM Plex Mono',monospace",T.ink,"center");}
+if(cur==="ant"){band(0,190,T.paper,.93);
+txt("✦  CHARTING THE YEAR  ✦",540,82,30,"700 'IBM Plex Mono',monospace",T.acc,"center");
+txt("AED "+(D.ytdBn||"—")+" billion · "+fmt(D.ytdSales)+" voyages settled",540,140,34,"600 Fraunces,Georgia,serif",T.ink,"center");
+txt("registered upon the ledgers of the Dubai Land Department, anno "+String(D.periodTo||"").slice(0,4),540,172,20,"italic 'IBM Plex Sans',sans-serif",T.ink,"center");
+band(1010,70,T.paper,.93);txt(srcLine,540,1052,18,"'IBM Plex Mono',monospace",T.ink,"center");}
+if(cur==="soft"){band(760,320,T.paper,.92);
+txt("A gentler look at "+(a.n||""),90,830,42,"600 Fraunces,Georgia,serif",T.ink);
+txt((a.rm&&a.rm.length?("A "+a.rm[0][0]+" here settles around "+(a.rm[0][1]/1e6).toFixed(2)+"m — the register's number, not the listing's."):("Median settled: "+fmt(a.psf)+" AED/sqft")),90,880,26,"'IBM Plex Sans',sans-serif",T.ink);
+txt("for families doing the maths",90,922,22,"italic 'IBM Plex Sans',sans-serif",T.acc);
+txt(srcLine,90,1030,18,"'IBM Plex Mono',monospace",T.ink);}
+if(cur==="nova"){band(0,10,T.acc,1);band(1070,10,T.acc,1);
+band(740,340,T.paper,.82);
+txt("OFF-PLAN SIGNAL",90,810,26,"700 'IBM Plex Mono',monospace",T.acc);
+txt(a.n||"",90,880,58,"600 Fraunces,Georgia,serif",T.ink);
+txt((a.off!=null?a.off+"% of sales are off-plan":"")+(a.psf?"  ·  "+fmt(a.psf)+" AED/sqft":""),90,925,26,"'IBM Plex Sans',sans-serif",T.ink);
+txt(srcLine,90,1030,18,"'IBM Plex Mono',monospace",T.ink);}
+txt("NAJMA نجمة",1000,120,26,"700 'IBM Plex Mono',monospace",(cur==="front"||cur==="mid"||cur==="ant"||cur==="soft")?TPL[cur].ink:"#C5A56A","right");}
+var CURSTYLE="";
+function sync(){document.fonts.ready.then(function(){chrome()});sel.style.display=TPL[cur].scope==="area"?"":"none";
+if(!map)return;
+var u=styleUrl();
+if(u!==CURSTYLE){CURSTYLE=u;map.setStyle(u);map.once("style.load",function(){fitScope();addPoly()})}
+else{fitScope();addPoly()}}
+function boot(){CURSTYLE=styleUrl();map=new maplibregl.Map({container:"smap",style:CURSTYLE,center:[55.22,25.11],zoom:9.4,attributionControl:false,preserveDrawingBuffer:true,pixelRatio:2});
+map.on("style.load",function(){fitScope();addPoly()});sync()}
+document.getElementById("save").onclick=function(){var o=document.createElement("canvas");o.width=1080;o.height=1080;var g=o.getContext("2d");
+g.drawImage(map.getCanvas(),0,0,1080,1080);g.drawImage(document.getElementById("chrome"),0,0);
+var img=document.getElementById("out");img.src=o.toDataURL("image/png");img.style.display="block";
+document.getElementById("st").textContent="rendered below — long-press (or right-click) the image to save, then post";img.scrollIntoView({behavior:"smooth"})};
+fetch("/esri_token?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(j){if(!j||!j.ok)throw 0;TOKEN=j.token;
+return fetch("/img/mp_areas").then(function(r){return r.ok?r.json():null})}).then(function(ar){
+if(ar&&ar.features)ar.features.forEach(function(f){POLY[f.properties.n]=f.geometry});boot()}).catch(function(){document.getElementById("st").textContent="studio unavailable — Esri token failed"});
+</script></body></html>`;
+}
+
+
+// v63 — SKYLINE VIEWER (/skyline/<slug>): CityEngine massing exported as GLB (sky_<slug> in
+// KV), rendered in three.js with orbit controls and status filters. Materials carry the CGA
+// palette: ink-grey existing / teal construction / gold pipeline — meshes are classified by
+// material color, which is what the filter chips toggle. Register-grounded massing, in 3D,
+// inside Najma.
+function renderSkyline(slugName, areaName, key) {
+  return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${areaName} — 3D</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
+:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;overflow:hidden}
+#cv3{position:fixed;inset:0}
+.top{position:fixed;top:0;left:0;right:0;padding:12px 14px 26px;background:linear-gradient(180deg,rgba(12,20,19,.92),rgba(12,20,19,0));pointer-events:none}
+.mast{font-family:Fraunces,Georgia,serif;font-size:1.3rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
+.sub{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace;margin-top:2px}
+.tog{position:fixed;top:76px;left:14px;display:flex;gap:6px;flex-wrap:wrap}
+.tg{font-family:"IBM Plex Mono",monospace;font-size:.66rem;border:1px solid var(--line);background:rgba(19,31,29,.85);border-radius:99px;padding:6px 11px;color:var(--mut);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tg.on{color:var(--gold);border-color:rgba(197,165,106,.6)}
+#msg{position:fixed;inset:0;display:grid;place-items:center;color:var(--mut);font-size:.85rem;text-align:center;padding:0 30px}
+.foot{position:fixed;right:10px;bottom:calc(64px + env(safe-area-inset-bottom));color:rgba(143,163,155,.7);font-size:.58rem;font-family:"IBM Plex Mono",monospace;pointer-events:none}
+${NAJ_NAV_CSS}</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.169.0/examples/jsm/"}}</script>
+</head><body>
+<div id=cv3></div>
+<div class=top><div class=mast>${areaName} <em>· 3D</em></div><div class=sub>massing from the register — heights real where known, illustrative where not</div></div>
+<div class=tog id=filters></div>
+<div id=msg>loading massing…</div>
+<div class=foot>model: CityEngine from OSM footprints + DLD register · © OpenStreetMap contributors</div>
+${najNav(key, "map")}
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+const el=document.getElementById("cv3"),msg=document.getElementById("msg");
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x0C1413);scene.fog=new THREE.Fog(0x0C1413,2500,9000);
+const cam=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,1,20000);
+const ren=new THREE.WebGLRenderer({antialias:true});ren.setPixelRatio(Math.min(2,devicePixelRatio));ren.setSize(innerWidth,innerHeight);ren.toneMapping=THREE.ACESFilmicToneMapping;ren.toneMappingExposure=1.35;el.appendChild(ren.domElement);
+scene.add(new THREE.HemisphereLight(0xE8E4D8,0x182823,1.5));
+const sun=new THREE.DirectionalLight(0xF2E7CF,2.4);sun.position.set(1,1.2,0.6);scene.add(sun);
+const fill=new THREE.DirectionalLight(0x3E8A7E,0.7);fill.position.set(-1,0.4,-0.8);scene.add(fill);
+const ctl=new OrbitControls(cam,ren.domElement);ctl.enableDamping=true;ctl.autoRotate=true;ctl.autoRotateSpeed=0.5;ctl.maxPolarAngle=Math.PI*0.49;
+addEventListener("pointerdown",()=>ctl.autoRotate=false,{once:true});
+const GROUPS={existing:{label:"existing",col:0x39434F,on:true,meshes:[]},construction:{label:"under construction",col:0x3E8A7E,on:true,meshes:[]},pipeline:{label:"pipeline",col:0xC5A56A,on:true,meshes:[]}};
+function classify(hex){const d=(a,b)=>{const c1=new THREE.Color(a),c2=new THREE.Color(b);return (c1.r-c2.r)**2+(c1.g-c2.g)**2+(c1.b-c2.b)**2};
+let best="existing",bd=1e9;for(const k in GROUPS){const dd=d(hex,GROUPS[k].col);if(dd<bd){bd=dd;best=k}}return best}
+new GLTFLoader().load("/img/sky_${slugName}",g=>{
+  msg.remove();
+  const root=g.scene;
+  const box=new THREE.Box3().setFromObject(root);const c=box.getCenter(new THREE.Vector3());const sz=box.getSize(new THREE.Vector3());
+  root.position.sub(c);root.position.y+=sz.y/2- (c.y-box.min.y);
+  const DISPLAY={existing:0x7A8694,construction:0x3E8A7E,pipeline:0xC5A56A};
+  root.traverse(o=>{if(o.isMesh){const grp=classify(o.material.color.getHex());
+    o.material=new THREE.MeshStandardMaterial({color:DISPLAY[grp],flatShading:true,roughness:0.82,metalness:0.05,transparent:grp==="pipeline",opacity:grp==="pipeline"?0.55:1});
+    GROUPS[grp].meshes.push(o);}});
+  scene.add(root);
+  const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1}));
+  ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;scene.add(ground);
+  const R=Math.max(sz.x,sz.z);cam.position.set(R*0.9,R*0.42,R*0.9);ctl.target.set(0,sz.y*0.18,0);
+  const fr=document.getElementById("filters");
+  for(const k in GROUPS){const gme=GROUPS[k];if(!gme.meshes.length)continue;
+    const b=document.createElement("span");b.className="tg on";b.textContent=gme.label+" ("+gme.meshes.length+")";
+    b.onclick=()=>{gme.on=!gme.on;b.classList.toggle("on",gme.on);gme.meshes.forEach(m=>m.visible=gme.on)};fr.appendChild(b)}
+},undefined,()=>{msg.textContent="No 3D massing for this community yet — it gets built the first time CityEngine runs for it."});
+addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});
+(function loop(){requestAnimationFrame(loop);ctl.update();ren.render(scene,cam)})();
+</script></body></html>`;
+}
+
+// v50 — AREA DEEP DIVE (/area/<name>): everything the register holds for one community.
+function renderArea(latestRaw, name, key) {
+  let d = null; try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
+  const esc2 = (s) => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const ai = (d && d.areaIntel && d.areaIntel.areas) || [];
+  const a = ai.find(x => x.area.toLowerCase() === String(name || "").toLowerCase());
+  if (!a) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem"><h2 style="color:#C5A56A">Najma</h2><p>No register depth for "' + esc2(name) + '" this period (areas under 20 settled sales are omitted — that is the honesty gate, not an error).</p>';
+  const sup = ((d.projects && d.projects.supplyByArea) || {})[a.area] || null;
+  const projs = ((d.projects && d.projects.projectLookup) || []).filter(p => (p.area || "").toLowerCase() === a.area.toLowerCase()).sort((x, y) => (y.units || 0) - (x.units || 0)).slice(0, 10);
+  const period = d.transactions ? (String(d.transactions.periodFrom || "") + " → " + String(d.transactions.periodTo || "")) : "";
+  const num2 = (v) => (v == null ? "—" : Number(v).toLocaleString("en-US"));
+  const rooms = najRooms(a.byRoom);
+  const rmax = Math.max(...rooms.map(r => r[1].medianAed || 0), 1);
+  let body = '<div class=grid>' +
+    '<div class=st><div class=v>' + num2(a.sales) + '</div><div class=l>settled sales</div></div>' +
+    '<div class=st><div class=v>' + num2(a.medianAedSqft) + '<small>/sqft</small></div><div class=l>median (AED)</div></div>' +
+    '<div class=st><div class=v>' + (a.medianTicketAed ? (a.medianTicketAed / 1e6).toFixed(2) + 'm' : '—') + '</div><div class=l>median ticket (AED)</div></div>' +
+    '<div class=st><div class=v>' + (a.offPlanPct == null ? '—' : a.offPlanPct + '<small>%</small>') + '</div><div class=l>off-plan share</div></div></div>';
+  body += '<div class=card>' + najH2("coins", "The yield walk — what the buyer keeps") +
+    '<div class=srow><span>Gross yield</span><span class=sv>' + (a.grossYieldPct == null ? '—' : a.grossYieldPct + '%') + '</span></div>' +
+    '<div class=srow><span>Service charge' + (a.serviceChargeIsEstimate ? ' <span style="color:#D9A441;font-size:.68rem">~community estimate</span>' : '') + '</span><span class=sv>' + (a.serviceChargeAedSqftYr == null ? '—' : a.serviceChargeAedSqftYr + ' AED/sqft/yr') + '</span></div>' +
+    '<div class=srow><span><b>Net yield</b></span><span class=sv style="color:#C5A56A;font-weight:600">' + (a.netYieldPct == null ? '—' : a.netYieldPct + '%') + '</span></div>' +
+    '<div class=note>Net = gross minus service charge. Building-specific Mollak figures override community ranges when available.</div></div>';
+  if (a.pop || a.households) body += '<div class=card>' + najH2("house", "Who lives here") +
+    (a.pop ? '<div class=srow><span>Population</span><span class=sv>' + num2(a.pop) + '</span></div>' : '') +
+    (a.households ? '<div class=srow><span>Households</span><span class=sv>' + num2(a.households) + '</span></div>' : '') +
+    (a.densityKm2 ? '<div class=srow><span>Density</span><span class=sv>' + num2(a.densityKm2) + '/km²</span></div>' : '') +
+    '<div class=note>Dubai Statistics Center, by community.</div></div>';
+  if (rooms.length) body += '<div class=card>' + najH2("bed", "What each layout settles at") + rooms.map(([rb, r]) =>
+    '<div class=arow><span class=nm>' + esc2(rb) + ' <span style="color:#8FA39B;font-size:.68rem">' + num2(r.sales) + ' sales</span></span><span class=tr><i style="width:' + Math.round(100 * (r.medianAed || 0) / rmax) + '%"></i></span><span class=ct>' + (r.medianAed ? (r.medianAed / 1e6).toFixed(2) + 'm' : '—') + (r.p25Aed && r.p75Aed ? '<br><span style="color:#8FA39B;font-size:.62rem">' + (r.p25Aed / 1e6).toFixed(2) + '–' + (r.p75Aed / 1e6).toFixed(2) + '</span>' : '') + '</span></div>').join('') +
+    '<div class=note>Median settled price per layout; the small range is the p25–p75 spread — the middle half of what actually transacted.</div></div>';
+  if (sup) body += '<div class=card>' + najH2("crane", "Incoming supply in " + esc2(a.area)) +
+    '<div class=srow><span>Units in registered pipeline</span><span class=sv>' + num2(sup.units) + '</span></div>' +
+    '<div class=srow><span>Projects</span><span class=sv>' + num2(sup.projects) + '</span></div>' +
+    (sup.nextEnd ? '<div class=srow><span>Next completion on file</span><span class=sv>' + esc2(String(sup.nextEnd).slice(0, 10)) + '</span></div>' : '') + '</div>';
+  if (projs.length) body += '<div class=card>' + najH2("file", "Projects on the register here") + projs.map(p =>
+    '<div class=prow><div class=pt>' + esc2(p.project) + (p.escrowRegistered ? ' <span style="color:#56B584;font-size:.7rem">escrow ✓</span>' : '') + '</div><div class=pm><span>' + esc2(p.developer || '') + '</span><span>' + (p.percentComplete != null ? p.percentComplete + '% built' : (p.status ? esc2(p.status) : '')) + (p.units ? ' · ' + num2(p.units) + ' units' : '') + '</span></div></div>').join('') + '</div>';
+  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>' + esc2(a.area) + ' — Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS + '<style>' +
+    ':root{--ink:#0C1413;--card:#131F1D;--card2:#182823;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#3E8A7E}' +
+    'body{font-family:"IBM Plex Sans",system-ui,sans-serif;background:var(--ink);color:var(--text);margin:auto;padding:0 12px 88px;max-width:460px}' +
+    '.ahead{position:relative;margin:0 -12px 12px;padding:16px 16px 14px;min-height:186px;display:flex;flex-direction:column;justify-content:flex-end;background-size:cover;background-position:center}' +
+    '.satc{position:absolute;top:8px;right:12px;font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.04em;color:rgba(232,228,216,.72);background:rgba(12,20,19,.55);border-radius:99px;padding:3px 8px}' +
+    'a.bk{color:var(--gold);text-decoration:none;font-size:.78rem;font-family:"IBM Plex Mono",monospace;margin-bottom:auto}' + NAJ_NAV_CSS +
+    '.mast{font-family:Fraunces,Georgia,serif;font-size:1.7rem;font-weight:600;margin-top:4px;text-shadow:0 2px 14px rgba(12,20,19,.75)}' +
+    '.sub{color:#B8C4BD;font-size:.75rem;margin:.2rem 0 0;font-family:"IBM Plex Mono",monospace;text-shadow:0 1px 8px rgba(12,20,19,.8)}' +
+    '.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}' +
+    '.st{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px}.st .v{font-family:Fraunces,Georgia,serif;font-size:1.35rem;font-weight:600;font-variant-numeric:tabular-nums}.st .v small{font-size:.8rem;color:var(--mut);font-family:"IBM Plex Sans",sans-serif}.st .l{color:var(--mut);font-size:.72rem;margin-top:2px}' +
+    '.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px;margin-bottom:10px}' +
+    'h2{display:flex;align-items:center;gap:7px;font-size:.68rem;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;margin:0 0 .6rem;font-weight:600}.ih{display:inline-flex;flex:none}.ih svg{width:15px;height:15px;color:var(--gold)}' +
+    '.srow{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #182823;font-size:.8rem}.srow:last-child{border-bottom:none}.srow .sv{color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}' +
+    '.arow{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #182823}.arow:last-of-type{border-bottom:none}.nm{flex:0 0 46%;font-size:.8rem}.tr{flex:1;height:6px;border-radius:3px;background:var(--card2);overflow:hidden}.tr i{display:block;height:100%;background:var(--teal)}.ct{font-size:.72rem;color:var(--mut);min-width:44px;text-align:right;font-variant-numeric:tabular-nums}' +
+    '.prow{padding:6px 0;border-bottom:1px solid #182823;font-size:.82rem}.prow:last-child{border-bottom:none}.prow .pm{display:flex;justify-content:space-between;gap:8px;color:var(--mut);font-size:.72rem;margin-top:2px}' +
+    '.note{color:var(--mut);font-size:.72rem;margin-top:.5rem}.pv{font-size:.72rem;color:var(--mut)}' +
+    '</style></head><body>' +
+    '<div class=ahead style="background-image:linear-gradient(180deg,rgba(12,20,19,.15) 0%,rgba(12,20,19,.62) 55%,rgba(12,20,19,.94) 88%,#0C1413 100%),url(' + najSat(a.area) + ')">' +
+    '<a class=bk href="/map?key=' + encodeURIComponent(key || '') + '">← back to the map</a>' +
+    '<div class=mast>' + esc2(a.area) + '</div><div class=sub>' + esc2(period) + ' · settled, not asking</div>' +
+    '<div class=satc>Esri World Imagery</div>' +
+    '<a href="/skyline/' + najSlug(a.area) + '?key=' + encodeURIComponent(key || '') + '" style="position:absolute;top:8px;left:12px;font-family:\'IBM Plex Mono\',monospace;font-size:.6rem;letter-spacing:.04em;color:#C5A56A;background:rgba(12,20,19,.6);border:1px solid rgba(197,165,106,.4);border-radius:99px;padding:4px 10px;text-decoration:none">⬢ view in 3D</a></div>' +
+    body +
+    '<div class=pv style="margin-top:1rem;line-height:1.6">Source: Dubai Land Department (DLD) Open Data. Contains information from the Government of Dubai. Areas under 20 settled sales are omitted; layouts shown only at 8+ sales. Every source passes a fail-closed sanity gate.</div>' +
+    najNav(key, "map") + '</body></html>';
 }
 
 // The complete, self-contained image prompt — one copyable block, BOTH ratios inside.
@@ -3113,7 +4035,7 @@ function visualPromptBlock(angle) {
     "A premium business-magazine COVER in the style of a Forbes / Fortune editorial portrait — aspirational, warm, credible, high-end. Make it 1080x1920 (vertical 9:16) first; I will then ask you to remake it 1920x1080 (16:9).\n\n" +
     "HERO: a real, confident Dubai real-estate professional — pick one and keep it authentic to Dubai: an elegant Emirati woman in her 30s in a modern tailored abaya · OR a sharply dressed South-Asian man in his 30s in a well-cut suit · OR a Levantine woman in a cream blazer. Three-quarter framing, warm direct eye contact, a natural genuine half-smile, standing on a sunlit Dubai balcony with the skyline softly out of focus behind. Candid documentary-style photograph taken on a real camera, 85mm portrait lens, shallow depth of field, golden-hour side light with soft rim light. Natural UNRETOUCHED skin with visible pore detail, subtle tonal variation, a few flyaway hairs, restrained highlights, real fabric texture, fine film grain. Place the subject on the RIGHT THIRD; leave clean deep-teal negative space on the LEFT for text.\n\n" +
     "LAYOUT (magazine grid): masthead \"NAJMA\" across the very top in cream uppercase with wide letter-spacing. Down the LEFT negative space, a stacked cover-line: the figure \"" + F + "\" set LARGE in warm gold, bold condensed sans-serif; beneath it the headline \"" + H + "\" in smaller cream sans-serif; under a thin gold rule a small cream kicker \"" + S + "\".\n\n" +
-    "COLOUR: only deep teal #0F5A54, warm gold #C9A24B, cream #F4EFE6.\n" +
+    "COLOUR: only deep teal #3E8A7E, warm gold #C5A56A, cream #E8E4D8.\n" +
     "TEXT: render \"NAJMA\", \"" + F + "\", \"" + H + "\", \"" + S + "\" verbatim, exactly once each, perfectly legible — no extra characters, no duplicated or garbled text, no invented words or numbers.\n" +
     "NEGATIVE: no plastic or waxy skin, no airbrushing, no over-smoothing, no CGI gloss, no warped or extra fingers, no mangled hands, no distorted eyes, no fake or misspelled logos, no watermark, no gibberish text, no generic stock-photo feel, no oversaturated HDR." +
     "```\n\n👉 Before posting, just check the number reads exactly “" + F + "”. The face stops the scroll; the figure makes it credible. Ask ChatGPT “now the same as 1920x1080” for the LinkedIn version.";
