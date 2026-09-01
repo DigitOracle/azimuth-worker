@@ -1950,12 +1950,17 @@ export default {
         const _mk = url.searchParams.get("key") || "";
         return new Response(JSON.stringify({ name: "Najma", short_name: "Najma", start_url: "/market?key=" + _mk, display: "standalone", background_color: "#0C1413", theme_color: "#0C1413", icons: [{ src: "/naj_icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }] }), { headers: { "Content-Type": "application/manifest+json" } });
       }
-      if (url.pathname.indexOf("/skyline/") === 0) {          // v63 — 3D massing viewer (MUST sit above the keyed catch-all dump below)
+      if (url.pathname === "/skyline" || url.pathname.indexOf("/skyline/") === 0) { // v64 — 3D viewer + district rail (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
-        const _sk = url.pathname.slice(9).replace(/[^a-z0-9]/gi, "").toLowerCase();
-        let _an2 = _sk;
-        try { const _dd = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); const _hit = ((_dd && _dd.areaIntel && _dd.areaIntel.areas) || []).find(x => x.area.toLowerCase().replace(/[^a-z0-9]/g, "") === _sk); if (_hit) _an2 = _hit.area; } catch (e) {}
-        return new Response(renderSkyline(_sk, _an2, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        // rail: every sky_<slug> GLB in KV, named from the register where it can be
+        let _rail = [];
+        let _names = {};
+        try { const _dd = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); for (const x of ((_dd && _dd.areaIntel && _dd.areaIntel.areas) || [])) _names[x.area.toLowerCase().replace(/[^a-z0-9]/g, "")] = x.area; } catch (e) {}
+        try { const _kl = await env.MEETINGS.list({ prefix: "img_sky_" }); _rail = _kl.keys.map(k => k.name.slice(8)).sort().map(sl => ({ s: sl, n: _names[sl] || sl })); } catch (e) {}
+        let _sk = url.pathname === "/skyline" ? (url.searchParams.get("d") || (_rail[0] && _rail[0].s) || "") : url.pathname.slice(9);
+        _sk = _sk.replace(/[^a-z0-9]/gi, "").toLowerCase();
+        const _an2 = _names[_sk] || _sk;
+        return new Response(renderSkyline(_sk, _an2, url.searchParams.get("key") || "", _rail), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/studio") {                        // v61 — editorial card studio (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -3897,7 +3902,9 @@ if(ar&&ar.features)ar.features.forEach(function(f){POLY[f.properties.n]=f.geomet
 // palette: ink-grey existing / teal construction / gold pipeline — meshes are classified by
 // material color, which is what the filter chips toggle. Register-grounded massing, in 3D,
 // inside Najma.
-function renderSkyline(slugName, areaName, key) {
+function renderSkyline(slugName, areaName, key, rail) {
+  const _dr = (rail || []).map(r =>
+    '<a class="dg' + (r.s === slugName ? ' on' : '') + '" href="/skyline/' + r.s + '?key=' + encodeURIComponent(key || '') + '">' + String(r.n).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])) + '</a>').join('');
   return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${areaName} — 3D</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
 :root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
 html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;overflow:hidden}
@@ -3905,9 +3912,22 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .top{position:fixed;top:0;left:0;right:0;padding:12px 14px 26px;background:linear-gradient(180deg,rgba(12,20,19,.92),rgba(12,20,19,0));pointer-events:none}
 .mast{font-family:Fraunces,Georgia,serif;font-size:1.3rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
 .sub{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace;margin-top:2px}
-.tog{position:fixed;top:76px;left:14px;display:flex;gap:6px;flex-wrap:wrap}
+.tog{position:fixed;top:112px;left:14px;display:flex;gap:6px;flex-wrap:wrap}
 .tg{font-family:"IBM Plex Mono",monospace;font-size:.66rem;border:1px solid var(--line);background:rgba(19,31,29,.85);border-radius:99px;padding:6px 11px;color:var(--mut);cursor:pointer;-webkit-tap-highlight-color:transparent}
 .tg.on{color:var(--gold);border-color:rgba(197,165,106,.6)}
+.rail{position:fixed;top:44px;left:0;right:0;display:flex;gap:6px;overflow-x:auto;padding:6px 14px;pointer-events:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.rail::-webkit-scrollbar{display:none}
+.dg{flex:0 0 auto;font-family:"IBM Plex Mono",monospace;font-size:.62rem;border:1px solid var(--line);background:rgba(19,31,29,.85);border-radius:99px;padding:5px 10px;color:var(--mut);text-decoration:none;-webkit-tap-highlight-color:transparent}
+.dg.on{color:var(--gold);border-color:rgba(197,165,106,.6)}
+#card{position:fixed;left:12px;right:12px;bottom:calc(74px + env(safe-area-inset-bottom));max-width:430px;margin:auto;background:rgba(19,31,29,.96);border:1px solid rgba(197,165,106,.5);border-radius:14px;padding:14px 16px;display:none;z-index:40}
+#card.on{display:block}
+#card .ct{font-family:Fraunces,Georgia,serif;font-size:1.05rem;font-weight:600;color:var(--gold)}
+#card .cs{color:var(--mut);font-size:.68rem;font-family:"IBM Plex Mono",monospace;margin:2px 0 8px}
+#card .cf{display:flex;justify-content:space-between;gap:10px;font-size:.72rem;padding:3px 0;border-top:1px solid rgba(36,53,47,.8)}
+#card .cf span:first-child{color:var(--mut)}
+#card .cf span:last-child{text-align:right}
+#card .cx{position:absolute;top:8px;right:12px;color:var(--mut);cursor:pointer;font-size:1rem}
+#card .cp{color:rgba(143,163,155,.75);font-size:.58rem;font-family:"IBM Plex Mono",monospace;margin-top:8px}
 #msg{position:fixed;inset:0;display:grid;place-items:center;color:var(--mut);font-size:.85rem;text-align:center;padding:0 30px}
 .foot{position:fixed;right:10px;bottom:calc(64px + env(safe-area-inset-bottom));color:rgba(143,163,155,.7);font-size:.58rem;font-family:"IBM Plex Mono",monospace;pointer-events:none}
 ${NAJ_NAV_CSS}</style>
@@ -3915,6 +3935,8 @@ ${NAJ_NAV_CSS}</style>
 </head><body>
 <div id=cv3></div>
 <div class=top><div class=mast>${areaName} <em>· 3D</em></div><div class=sub>massing from the register — heights real where known, illustrative where not</div></div>
+<div class=rail>${_dr}</div>
+<div id=card><span class=cx id=cx>✕</span><div class=ct id=ct></div><div class=cs id=cs></div><div id=cfacts></div><div class=cp id=cp></div></div>
 <div class=tog id=filters></div>
 <div id=msg>loading massing…</div>
 <div class=foot>model: CityEngine from OSM footprints + DLD register · © OpenStreetMap contributors</div>
@@ -3943,7 +3965,7 @@ new GLTFLoader().load("/img/sky_${slugName}",g=>{
   const DISPLAY={existing:0x7A8694,construction:0x3E8A7E,pipeline:0xC5A56A};
   root.traverse(o=>{if(o.isMesh){const grp=classify(o.material.color.getHex());
     o.material=new THREE.MeshStandardMaterial({color:DISPLAY[grp],flatShading:true,roughness:0.82,metalness:0.05,transparent:grp==="pipeline",opacity:grp==="pipeline"?0.55:1});
-    GROUPS[grp].meshes.push(o);}});
+    o.userData.grp=grp;GROUPS[grp].meshes.push(o);}});
   scene.add(root);
   const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1}));
   ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;scene.add(ground);
@@ -3953,6 +3975,29 @@ new GLTFLoader().load("/img/sky_${slugName}",g=>{
     const b=document.createElement("span");b.className="tg on";b.textContent=gme.label+" ("+gme.meshes.length+")";
     b.onclick=()=>{gme.on=!gme.on;b.classList.toggle("on",gme.on);gme.meshes.forEach(m=>m.visible=gme.on)};fr.appendChild(b)}
 },undefined,()=>{msg.textContent="No 3D massing for this community yet — it gets built the first time CityEngine runs for it."});
+let META=null;
+fetch("/img/meta_${slugName}").then(r=>r.ok?r.json():null).then(m=>{META=m}).catch(()=>{});
+const ray=new THREE.Raycaster(),ptr=new THREE.Vector2();let pd=null;
+addEventListener("pointerdown",e=>{pd=[e.clientX,e.clientY]});
+addEventListener("pointerup",e=>{
+  if(!pd||Math.hypot(e.clientX-pd[0],e.clientY-pd[1])>6){pd=null;return}
+  pd=null;if(!META)return;
+  ptr.x=(e.clientX/innerWidth)*2-1;ptr.y=-(e.clientY/innerHeight)*2+1;
+  ray.setFromCamera(ptr,cam);
+  const featured=[...GROUPS.construction.meshes,...GROUPS.pipeline.meshes].filter(m=>m.visible);
+  const hit=ray.intersectObjects(featured,false)[0];
+  const card=document.getElementById("card");
+  if(!hit){card.classList.remove("on");return}
+  const grp=hit.object.userData.grp;
+  let b=null;for(const k in (META.buildings||{})){if(META.buildings[k].status_key===grp){b=META.buildings[k];break}}
+  if(!b)return;
+  document.getElementById("ct").textContent=b.title;
+  document.getElementById("cs").textContent=b.developer+" · "+b.status;
+  document.getElementById("cfacts").innerHTML=(b.facts||[]).map(f=>"<div class=cf><span>"+f[0]+"</span><span>"+f[1]+"</span></div>").join("");
+  document.getElementById("cp").textContent=(b.sources||[]).join(" · ")+(b.placement?" · "+b.placement:"");
+  card.classList.add("on");
+});
+document.getElementById("cx").onclick=()=>document.getElementById("card").classList.remove("on");
 addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});
 (function loop(){requestAnimationFrame(loop);ctl.update();ren.render(scene,cam)})();
 </script></body></html>`;
