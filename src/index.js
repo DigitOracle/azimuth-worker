@@ -634,10 +634,13 @@ ${(() => {                                                      // v36.2 — Naj
 ${(() => {                                                      // v68 — developer availability strip (sheets from her group)
     const sheets = (avail && avail.sheets) || [];
     if (!sheets.length) return "";
-    const rows = sheets.slice(0, 6).map(x =>
-      '<div style="display:flex;justify-content:space-between;gap:10px;padding:.32rem 0;border-top:1px solid #24352F;font-size:.76rem">' +
-      '<span style="color:#E8E4D8">📄 ' + String(x.sheet || "").slice(0, 34) + '</span>' +
-      '<span style="color:' + (x.mapped ? "#8FC7B9" : "#C5A56A") + ';text-align:right">' + String(x.note || "").slice(0, 46) + '</span></div>').join("");
+    const rows = sheets.slice(0, 6).map(x => {
+      const inner = '<span style="color:#E8E4D8">📄 ' + String(x.sheet || "").slice(0, 34) + '</span>' +
+        '<span style="color:' + (x.mapped ? "#8FC7B9" : "#C5A56A") + ';text-align:right">' + String(x.note || "").slice(0, 46) + (x.d ? ' ›' : '') + '</span>';
+      const st = 'display:flex;justify-content:space-between;gap:10px;padding:.32rem 0;border-top:1px solid #24352F;font-size:.76rem';
+      return x.d ? '<a href="/avail?d=' + encodeURIComponent(x.d) + '&key=' + encodeURIComponent(key) + '" style="' + st + ';text-decoration:none">' + inner + '</a>'
+                 : '<div style="' + st + '">' + inner + '</div>';
+    }).join("");
     return '<section><div style="color:#E8E4D8;background:#0C1413;border:1px solid #24352F;border-left:3px solid #3E8A7E;border-radius:var(--radius);padding:.9rem 1rem;box-shadow:0 8px 22px rgba(12,20,19,.28)">' +
       '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1rem">Developer availability</span>' +
       '<span style="color:#8FA39B;font-size:.68rem;font-family:\'IBM Plex Mono\',monospace">' + sheets.length + ' sheet' + (sheets.length === 1 ? "" : "s") + ' · via your group</span></div>' +
@@ -1963,6 +1966,13 @@ export default {
       if (url.pathname === "/manifest.webmanifest") {          // v49 — PWA: "Najma" installs from /market (key rides in start_url)
         const _mk = url.searchParams.get("key") || "";
         return new Response(JSON.stringify({ name: "Najma", short_name: "Najma", start_url: "/market?key=" + _mk, display: "standalone", background_color: "#0C1413", theme_color: "#0C1413", icons: [{ src: "/naj_icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }] }), { headers: { "Content-Type": "application/manifest+json" } });
+      }
+      if (url.pathname === "/avail") {                        // v69 - availability drill (donut of registered mix; claimed units join after extraction)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _dk = String(url.searchParams.get("d") || "").replace(/[^a-z0-9]/g, "");
+        let _dd3 = null; try { _dd3 = JSON.parse((await env.MEETINGS.get("img_drill_" + _dk)) || "null"); } catch (e) {}
+        if (!_dd3) return new Response("no drill data", { status: 404 });
+        return new Response(renderAvailDrill(_dd3, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/skyline" || url.pathname.indexOf("/skyline/") === 0) { // v64 — 3D viewer + district rail (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -3930,6 +3940,58 @@ if(ar&&ar.features)ar.features.forEach(function(f){POLY[f.properties.n]=f.geomet
 // palette: ink-grey existing / teal construction / gold pipeline — meshes are classified by
 // material color, which is what the filter chips toggle. Register-grounded massing, in 3D,
 // inside Najma.
+// v69 - AVAILABILITY DRILL: one project, registered sales mix as a donut + per-room medians.
+// Developer-claimed unit availability joins this page after PDF extraction - separate, dated.
+function renderAvailDrill(d, key) {
+  const COLS = ["#3E8A7E", "#C5A56A", "#8FC7B9", "#A88544", "#566B64", "#E8E4D8"];
+  const rooms = (d.rooms || []).slice(0, 6);
+  const total = rooms.reduce((a, x) => a + (x.n || 0), 0) || 1;
+  const R = 74, C = 2 * Math.PI * R;
+  let off = 0;
+  const segs = rooms.map((x, i) => {
+    const frac = (x.n || 0) / total, seg = frac * C;
+    const el = '<circle r="' + R + '" cx="110" cy="110" fill="none" stroke="' + COLS[i % COLS.length] + '" stroke-width="30" stroke-dasharray="' + seg.toFixed(1) + ' ' + (C - seg).toFixed(1) + '" stroke-dashoffset="' + (-off).toFixed(1) + '" transform="rotate(-90 110 110)"/>';
+    off += seg; return el;
+  }).join("");
+  const fm = (n) => n == null ? "-" : (n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : Math.round(n).toLocaleString("en-US"));
+  const chips = rooms.map((x, i) =>
+    '<div style="display:flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.55rem .8rem">' +
+    '<span style="width:10px;height:10px;border-radius:3px;background:' + COLS[i % COLS.length] + ';flex:0 0 auto"></span>' +
+    '<span style="min-width:56px;font-weight:600">' + String(x.r) + '</span>' +
+    '<span style="color:var(--mut);font-size:.72rem">' + x.n + ' sold</span>' +
+    '<span style="margin-left:auto;text-align:right"><b style="color:var(--gold)">AED ' + fm(x.med) + '</b><br><span style="color:var(--mut);font-size:.66rem">' + (x.psm ? fm(x.psm) + "/m²" : "") + '</span></span></div>').join("");
+  const latest = (d.latest || []).map(x =>
+    '<div style="display:flex;justify-content:space-between;gap:8px;padding:.3rem 0;border-top:1px solid var(--line);font-size:.74rem">' +
+    '<span style="color:var(--mut)">' + x.d + '</span><span>' + (x.r || "") + ' · ' + (x.m2 || "?") + ' m²</span><b>AED ' + fm(x.aed) + '</b></div>').join("");
+  const dist = String(d.district || "");
+  const distSlug = dist.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const acts =
+    (dist ? '<a class=act href="/area/' + encodeURIComponent(dist.toLowerCase()) + '?key=' + encodeURIComponent(key) + '">📊 area deep-dive</a>' : "") +
+    (dist ? '<a class=act href="/skyline/' + distSlug + '?key=' + encodeURIComponent(key) + '">⬢ 3D district</a>' : "") +
+    '<a class=act href="/board?key=' + encodeURIComponent(key) + '">← board</a>';
+  return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${d.title} — availability</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
+:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
+body{margin:auto;max-width:460px;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:14px 14px 88px}
+.mast{font-family:Fraunces,Georgia,serif;font-size:1.35rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
+.sub{color:var(--mut);font-size:.72rem;font-family:"IBM Plex Mono",monospace;margin:2px 0 14px}
+.act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:7px 13px;color:var(--text);text-decoration:none;font-size:.76rem;margin:4px 6px 0 0;background:var(--card)}
+${NAJ_NAV_CSS}</style></head><body>
+<div class=mast>${d.title} <em>· the mix</em></div>
+<div class=sub>registered sales by layout — DLD Open Data${dist ? " · " + dist : ""}</div>
+<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+  <svg viewBox="0 0 220 220" width="46%" style="max-width:190px">${segs}
+    <text x="110" y="104" text-anchor="middle" fill="#E8E4D8" font-size="30" font-weight="600" font-family="Fraunces,Georgia,serif">${total}</text>
+    <text x="110" y="126" text-anchor="middle" fill="#8FA39B" font-size="11" font-family="IBM Plex Mono,monospace">registered sales</text></svg>
+  <div style="flex:1;display:flex;flex-direction:column;gap:7px">${chips}</div>
+</div>
+<div style="background:rgba(197,165,106,.08);border:1px solid rgba(197,165,106,.35);border-radius:10px;padding:.6rem .8rem;font-size:.72rem;color:var(--gold)">📄 Developer sheet on file (${(d.sheet && d.sheet.received) || ""}) — unit-level availability appears here once read. Claimed figures will sit beside these, never mixed.</div>
+<div style="margin-top:14px"><div style="font-family:Fraunces,Georgia,serif;font-weight:600;margin-bottom:2px">Latest registered</div>${latest}</div>
+<div style="margin-top:14px">${acts}</div>
+<div style="color:var(--mut);font-size:.62rem;margin-top:16px;font-family:'IBM Plex Mono',monospace">settled, not asking — the register's own numbers</div>
+${najNav(key, "market")}
+</body></html>`;
+}
+
 function renderSkyline(slugName, areaName, key, rail) {
   const _dr = (rail || []).map(r =>
     '<a class="dg' + (r.s === slugName ? ' on' : '') + '" href="/skyline/' + r.s + '?key=' + encodeURIComponent(key || '') + '">' + String(r.n).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])) + '</a>').join('');
