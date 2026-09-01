@@ -532,7 +532,7 @@ h1{font-size:${n >= 4 ? 36 : 42}px;line-height:1.08;font-weight:800;margin:12px 
 </div></body></html>`;
 }
 function srcLink(a, key) { if (!a || !a.src || (a.src.type !== "email" && a.src.type !== "meeting-invite")) return ""; return '·<a class="src" target="_blank" rel="noopener" style="color:#B98B3E;text-decoration:none" href="/src?key=' + encodeURIComponent(key || "") + "&id=" + encodeURIComponent(a.id) + '">📧 source</a>'; }
-function renderBoard(meetings, actions, key, env, mkt) {
+function renderBoard(meetings, actions, key, env, mkt, avail) {
   const gn = gstNow();
   const today = gstDateStr(gn);
   const tomo = gstDateStr(new Date(gn.getTime() + 86400000));
@@ -630,6 +630,19 @@ ${(() => {                                                      // v36.2 — Naj
       '<div style="display:flex;justify-content:space-between;align-items:center"><span style="display:inline-flex;align-items:center;gap:8px;font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.06rem;letter-spacing:.01em"><svg viewBox="0 0 256 256" width="15" height="15" fill="#C5A56A" aria-hidden="true"><path d="' + NAJ_ICONS.star + '"/></svg>Najma <span style="color:#C5A56A">نجمة</span></span><span style="color:#C5A56A;font-weight:600;font-size:.8rem">open →</span></div>' +
       '<div style="color:#B8C4BD;font-size:.8rem;margin-top:.35rem">AED ' + t2.salesValueAedBn + 'bn registered · ' + (off2 == null ? "" : off2 + "% off-plan") + (y2 ? " · top yield " + y2.area + " " + y2.yieldPct + "%" : "") + '</div>' +
       '<div style="color:#8FA39B;font-size:.68rem;margin-top:.15rem;font-family:\'IBM Plex Mono\',monospace">DLD Open Data · ' + String(t2.periodFrom || "") + " → " + String(t2.periodTo || "") + '</div></a></section>';
+  })()}
+${(() => {                                                      // v68 — developer availability strip (sheets from her group)
+    const sheets = (avail && avail.sheets) || [];
+    if (!sheets.length) return "";
+    const rows = sheets.slice(0, 6).map(x =>
+      '<div style="display:flex;justify-content:space-between;gap:10px;padding:.32rem 0;border-top:1px solid #24352F;font-size:.76rem">' +
+      '<span style="color:#E8E4D8">📄 ' + String(x.sheet || "").slice(0, 34) + '</span>' +
+      '<span style="color:' + (x.mapped ? "#8FC7B9" : "#C5A56A") + ';text-align:right">' + String(x.note || "").slice(0, 46) + '</span></div>').join("");
+    return '<section><div style="color:#E8E4D8;background:#0C1413;border:1px solid #24352F;border-left:3px solid #3E8A7E;border-radius:var(--radius);padding:.9rem 1rem;box-shadow:0 8px 22px rgba(12,20,19,.28)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1rem">Developer availability</span>' +
+      '<span style="color:#8FA39B;font-size:.68rem;font-family:\'IBM Plex Mono\',monospace">' + sheets.length + ' sheet' + (sheets.length === 1 ? "" : "s") + ' · via your group</span></div>' +
+      '<div style="margin-top:.4rem">' + rows + '</div>' +
+      '<div style="color:#8FA39B;font-size:.64rem;margin-top:.45rem;font-family:\'IBM Plex Mono\',monospace">developer-stated · dated per sheet · shown beside register figures, never mixed</div></div></section>';
   })()}
 <section><div class="plate-h"><div class="l"><span class="n num">${acts.length}</span><span class="cap">on your plate</span></div><div class="hint">${(env && env.TELEGRAM_TOKEN) ? "clear in Telegram ✓" : "tap a circle to clear ✓"}</div></div>${tasksHtml}
 <div class="legend"><span><i style="background:#0A4F4A"></i>Abu Dhabi</span><span><i style="background:#B98B3E"></i>Dubai</span><span><i style="background:#7A4A93"></i>Sharjah</span><span><i style="background:#3E7C8C"></i>Online</span></div>
@@ -1753,7 +1766,8 @@ export default {
         try { meetings = dedup(meetings); } catch (e) {}
         try { actions = await openActions(env); } catch (e) {}
         let mkt = null; try { mkt = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
-        return new Response(renderBoard(meetings, actions, url.searchParams.get("key"), env, mkt), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        let _avail = null; try { _avail = JSON.parse((await env.MEETINGS.get("img_avail_index")) || "null"); } catch (e) {}
+        return new Response(renderBoard(meetings, actions, url.searchParams.get("key"), env, mkt, _avail), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/card.png") {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
