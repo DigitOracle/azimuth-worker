@@ -1972,7 +1972,8 @@ export default {
         const _dk = String(url.searchParams.get("d") || "").replace(/[^a-z0-9]/g, "");
         let _dd3 = null; try { _dd3 = JSON.parse((await env.MEETINGS.get("img_drill_" + _dk)) || "null"); } catch (e) {}
         if (!_dd3) return new Response("no drill data", { status: 404 });
-        return new Response(renderAvailDrill(_dd3, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        const _full = url.searchParams.get("full") === "1" && _dd3.claimed && _dd3.claimed.detail;
+        return new Response(_full ? renderAvailUnits(_dd3, _dk, url.searchParams.get("key") || "") : renderAvailDrill(_dd3, _dk, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/skyline" || url.pathname.indexOf("/skyline/") === 0) { // v64 — 3D viewer + district rail (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -3940,9 +3941,39 @@ if(ar&&ar.features)ar.features.forEach(function(f){POLY[f.properties.n]=f.geomet
 // palette: ink-grey existing / teal construction / gold pipeline — meshes are classified by
 // material color, which is what the filter chips toggle. Register-grounded massing, in 3D,
 // inside Najma.
+// v71 - UNIT LIST: every developer-stated unit, grouped by project. The bottom of the drill.
+function renderAvailUnits(d, dk, key) {
+  const fm = (n) => n == null ? "-" : (n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : Math.round(n).toLocaleString("en-US"));
+  const det = (d.claimed && d.claimed.detail) || [];
+  const blocks = det.map(pr => {
+    const rows = (pr.units || []).map(u =>
+      '<div style="display:grid;grid-template-columns:64px 62px 1fr 84px;gap:8px;padding:.4rem 0;border-top:1px solid var(--line);font-size:.74rem;align-items:baseline">' +
+      '<b>' + String(u[0]) + '</b>' +
+      '<span style="color:var(--mut)">' + String(u[1]).replace(" Duplex", "·dx") + '</span>' +
+      '<span>' + (u[4] ? '<span style="color:#8FC7B9">' + u[4] + '</span>' : '<span style="color:var(--mut)">—</span>') +
+      '<span style="color:var(--mut);font-size:.66rem"> · ' + Math.round(u[2]).toLocaleString("en-US") + ' sqft</span></span>' +
+      '<b style="color:var(--gold);text-align:right">' + fm(u[3]) + '</b></div>').join("");
+    return '<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.7rem .9rem;margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span style="font-family:Fraunces,Georgia,serif;font-weight:600">' + pr.p + '</span>' +
+      '<span style="color:var(--mut);font-size:.64rem;font-family:\'IBM Plex Mono\',monospace">' + (pr.units || []).length + ' units · ' + (pr.completion || "") + (pr.plan ? " · " + pr.plan : "") + '</span></div>' + rows + '</div>';
+  }).join("");
+  return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${d.title} — units</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
+:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
+body{margin:auto;max-width:520px;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:14px 14px 88px}
+.mast{font-family:Fraunces,Georgia,serif;font-size:1.3rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
+.sub{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace;margin:2px 0 14px}
+${NAJ_NAV_CSS}</style></head><body>
+<div class=mast>${d.title} <em>· every unit</em></div>
+<div class=sub>developer-stated availability — sheet ${(d.claimed && d.claimed.as_of) || ""} · unit · layout · view · sqft · AED</div>
+${blocks}
+<div style="color:var(--mut);font-size:.62rem;font-family:'IBM Plex Mono',monospace">claimed by ${(d.claimed && d.claimed.source) || "the developer"} — not register data · <a href="/avail?d=${dk}&key=${encodeURIComponent(key)}" style="color:var(--gold)">← the mix</a></div>
+${najNav(key, "market")}
+</body></html>`;
+}
+
 // v69 - AVAILABILITY DRILL: one project, registered sales mix as a donut + per-room medians.
 // Developer-claimed unit availability joins this page after PDF extraction - separate, dated.
-function renderAvailDrill(d, key) {
+function renderAvailDrill(d, dk, key) {
   const COLS = ["#3E8A7E", "#C5A56A", "#8FC7B9", "#A88544", "#566B64", "#E8E4D8"];
   const rooms = (d.rooms || []).slice(0, 6);
   const total = rooms.reduce((a, x) => a + (x.n || 0), 0) || 1;
@@ -3993,8 +4024,9 @@ ${(() => {
     '<span style="font-weight:600">' + String(x.r) + '</span>' +
     '<span style="color:var(--mut)">' + x.n + ' available</span>' +
     '<b style="color:var(--gold)">' + (x.from ? "from AED " + (x.from >= 1e6 ? (x.from / 1e6).toFixed(2) + "M" : Math.round(x.from).toLocaleString("en-US")) : "") + '</b></div>').join("");
+  const unitsLink = (d.claimed && d.claimed.detail) ? '<a href="/avail?d=' + dk + '&full=1&key=' + encodeURIComponent(key) + '" style="color:var(--gold);text-decoration:none;font-size:.72rem;border:1px solid rgba(197,165,106,.5);border-radius:99px;padding:3px 10px">all units ›</a>' : "";
   return '<div style="background:rgba(197,165,106,.08);border:1px solid rgba(197,165,106,.45);border-radius:12px;padding:.7rem .9rem">' +
-    '<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:Fraunces,Georgia,serif;font-weight:600;color:var(--gold)">Available now — developer-stated</span>' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span style="font-family:Fraunces,Georgia,serif;font-weight:600;color:var(--gold)">Available now — developer-stated</span>' + unitsLink +
     '<span style="color:var(--mut);font-size:.66rem;font-family:\'IBM Plex Mono\',monospace">' + tot2 + ' units · sheet ' + ((d.claimed && d.claimed.as_of) || "") + '</span></div>' +
     rows2 +
     '<div style="color:var(--mut);font-size:.6rem;margin-top:.4rem;font-family:\'IBM Plex Mono\',monospace">claimed by ' + ((d.claimed && d.claimed.source) || "the developer") + ' — not register data; registered mix above is the settled record</div></div>';
