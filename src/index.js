@@ -3927,6 +3927,9 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .mast{font-family:Fraunces,Georgia,serif;font-size:1.3rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
 .sub{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace;margin-top:2px}
 .tog{position:fixed;top:118px;left:14px;display:flex;gap:6px;flex-wrap:wrap}
+.feat{position:fixed;top:154px;left:14px;display:flex;gap:6px;flex-wrap:wrap}
+.fg{font-family:"IBM Plex Mono",monospace;font-size:.66rem;border:1px solid rgba(197,165,106,.45);background:rgba(19,31,29,.9);border-radius:99px;padding:6px 11px;color:var(--gold);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.fg.on{background:rgba(197,165,106,.18);border-color:var(--gold)}
 .tg{font-family:"IBM Plex Mono",monospace;font-size:.66rem;border:1px solid var(--line);background:rgba(19,31,29,.85);border-radius:99px;padding:6px 11px;color:var(--mut);cursor:pointer;-webkit-tap-highlight-color:transparent}
 .tg.on{color:var(--gold);border-color:rgba(197,165,106,.6)}
 .rail{position:fixed;top:68px;left:0;right:0;display:flex;gap:6px;overflow-x:auto;padding:6px 14px;pointer-events:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
@@ -3952,6 +3955,7 @@ ${NAJ_NAV_CSS}</style>
 <div class=rail>${_dr}</div>
 <div id=card><span class=cx id=cx>✕</span><div class=ct id=ct></div><div class=cs id=cs></div><div id=cfacts></div><div class=cp id=cp></div></div>
 <div class=tog id=filters></div>
+<div class=feat id=feat></div>
 <div id=msg>loading massing…</div>
 <div class=foot>model: CityEngine from OSM footprints + DLD register · © OpenStreetMap contributors</div>
 ${najNav(key, "map")}
@@ -3989,9 +3993,46 @@ new GLTFLoader().load("/img/sky_${slugName}",g=>{
   for(const k in GROUPS){const gme=GROUPS[k];if(!gme.meshes.length)continue;
     const b=document.createElement("span");b.className="tg on";b.textContent=gme.label+" ("+gme.meshes.length+")";
     b.onclick=()=>{gme.on=!gme.on;b.classList.toggle("on",gme.on);gme.meshes.forEach(m=>m.visible=gme.on)};fr.appendChild(b)}
+  buildFeat();
 },undefined,()=>{msg.textContent="No 3D massing for this community yet — it gets built the first time CityEngine runs for it."});
 let META=null;
-fetch("/img/meta_${slugName}").then(r=>r.ok?r.json():null).then(m=>{META=m}).catch(()=>{});
+fetch("/img/meta_${slugName}").then(r=>r.ok?r.json():null).then(m=>{META=m;buildFeat()}).catch(()=>{});
+let FOCUS=null,HOME=null;const ORIG=new Map();
+function allMeshes(){return [...GROUPS.existing.meshes,...GROUPS.construction.meshes,...GROUPS.pipeline.meshes]}
+function buildFeat(){
+  if(!META||!META.buildings)return;
+  const fe=document.getElementById("feat");if(!fe||fe.childElementCount)return;
+  if(!GROUPS.construction.meshes.length&&!GROUPS.pipeline.meshes.length)return;
+  for(const k in META.buildings){const b=META.buildings[k];
+    const c=document.createElement("span");c.className="fg";c.textContent="⬢ "+(b.title||k).split("(")[0].trim();
+    c.onclick=()=>focusBuilding(k,c);fe.appendChild(c)}}
+function focusBuilding(k,chip){
+  const b=META.buildings[k];if(!b)return;
+  const target=GROUPS[b.status_key]&&GROUPS[b.status_key].meshes||[];
+  if(!target.length)return;
+  if(FOCUS===k){unfocus();return}
+  document.querySelectorAll(".fg").forEach(x=>x.classList.remove("on"));if(chip)chip.classList.add("on");
+  if(!HOME)HOME={pos:cam.position.clone(),tgt:ctl.target.clone(),rot:ctl.autoRotate,spd:ctl.autoRotateSpeed};
+  FOCUS=k;
+  allMeshes().forEach(m=>{if(target.indexOf(m)<0){if(!ORIG.has(m))ORIG.set(m,[m.material.transparent,m.material.opacity]);m.material.transparent=true;m.material.opacity=0.10}});
+  target.forEach(m=>{if(ORIG.has(m)){m.material.transparent=ORIG.get(m)[0];m.material.opacity=ORIG.get(m)[1];ORIG.delete(m)}});
+  const bb=new THREE.Box3();target.forEach(m=>bb.expandByObject(m));
+  const c2=bb.getCenter(new THREE.Vector3()),s2=bb.getSize(new THREE.Vector3());
+  const r2=Math.max(s2.x,s2.z,s2.y*0.9,30);
+  ctl.target.copy(c2);cam.position.set(c2.x+r2*2.6,c2.y+r2*1.5,c2.z+r2*2.6);
+  ctl.autoRotate=true;ctl.autoRotateSpeed=1.4;
+  showCard(b);}
+function unfocus(){
+  FOCUS=null;document.querySelectorAll(".fg").forEach(x=>x.classList.remove("on"));
+  ORIG.forEach((v,m)=>{m.material.transparent=v[0];m.material.opacity=v[1]});ORIG.clear();
+  if(HOME){cam.position.copy(HOME.pos);ctl.target.copy(HOME.tgt);ctl.autoRotate=HOME.rot;ctl.autoRotateSpeed=HOME.spd;HOME=null}
+  document.getElementById("card").classList.remove("on");}
+function showCard(b){
+  document.getElementById("ct").textContent=b.title;
+  document.getElementById("cs").textContent=b.developer+" · "+b.status;
+  document.getElementById("cfacts").innerHTML=(b.facts||[]).map(f=>"<div class=cf><span>"+f[0]+"</span><span>"+f[1]+"</span></div>").join("");
+  document.getElementById("cp").textContent=(b.sources||[]).join(" · ")+(b.placement?" · "+b.placement:"");
+  document.getElementById("card").classList.add("on");}
 const ray=new THREE.Raycaster(),ptr=new THREE.Vector2();let pd=null;
 addEventListener("pointerdown",e=>{pd=[e.clientX,e.clientY]});
 addEventListener("pointerup",e=>{
@@ -4005,15 +4046,11 @@ addEventListener("pointerup",e=>{
   const card=document.getElementById("card");
   if(!hit){card.classList.remove("on");return}
   const grp=hit.object.userData.grp;
-  let b=null;for(const k in (META.buildings||{})){if(META.buildings[k].status_key===grp){b=META.buildings[k];break}}
-  if(!b)return;
-  document.getElementById("ct").textContent=b.title;
-  document.getElementById("cs").textContent=b.developer+" · "+b.status;
-  document.getElementById("cfacts").innerHTML=(b.facts||[]).map(f=>"<div class=cf><span>"+f[0]+"</span><span>"+f[1]+"</span></div>").join("");
-  document.getElementById("cp").textContent=(b.sources||[]).join(" · ")+(b.placement?" · "+b.placement:"");
-  card.classList.add("on");
+  let bk=null;for(const k in (META.buildings||{})){if(META.buildings[k].status_key===grp){bk=k;break}}
+  if(!bk)return;
+  focusBuilding(bk,[...document.querySelectorAll(".fg")].find(x=>x.textContent.indexOf((META.buildings[bk].title||bk).split("(")[0].trim())>=0));
 });
-document.getElementById("cx").onclick=()=>document.getElementById("card").classList.remove("on");
+document.getElementById("cx").onclick=()=>{if(FOCUS)unfocus();else document.getElementById("card").classList.remove("on")};
 addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});
 (function loop(){requestAnimationFrame(loop);ctl.update();ren.render(scene,cam)})();
 </script></body></html>`;
