@@ -3912,10 +3912,10 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .top{position:fixed;top:0;left:0;right:0;padding:12px 14px 26px;background:linear-gradient(180deg,rgba(12,20,19,.92),rgba(12,20,19,0));pointer-events:none}
 .mast{font-family:Fraunces,Georgia,serif;font-size:1.3rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
 .sub{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace;margin-top:2px}
-.tog{position:fixed;top:112px;left:14px;display:flex;gap:6px;flex-wrap:wrap}
+.tog{position:fixed;top:118px;left:14px;display:flex;gap:6px;flex-wrap:wrap}
 .tg{font-family:"IBM Plex Mono",monospace;font-size:.66rem;border:1px solid var(--line);background:rgba(19,31,29,.85);border-radius:99px;padding:6px 11px;color:var(--mut);cursor:pointer;-webkit-tap-highlight-color:transparent}
 .tg.on{color:var(--gold);border-color:rgba(197,165,106,.6)}
-.rail{position:fixed;top:44px;left:0;right:0;display:flex;gap:6px;overflow-x:auto;padding:6px 14px;pointer-events:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.rail{position:fixed;top:68px;left:0;right:0;display:flex;gap:6px;overflow-x:auto;padding:6px 14px;pointer-events:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .rail::-webkit-scrollbar{display:none}
 .dg{flex:0 0 auto;font-family:"IBM Plex Mono",monospace;font-size:.62rem;border:1px solid var(--line);background:rgba(19,31,29,.85);border-radius:99px;padding:5px 10px;color:var(--mut);text-decoration:none;-webkit-tap-highlight-color:transparent}
 .dg.on{color:var(--gold);border-color:rgba(197,165,106,.6)}
@@ -3970,6 +3970,7 @@ new GLTFLoader().load("/img/sky_${slugName}",g=>{
   const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1}));
   ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;scene.add(ground);
   const R=Math.max(sz.x,sz.z);cam.position.set(R*0.9,R*0.42,R*0.9);ctl.target.set(0,sz.y*0.18,0);
+  scene.fog.near=R*1.3;scene.fog.far=R*3.6;cam.far=Math.max(20000,R*8);cam.updateProjectionMatrix();
   const fr=document.getElementById("filters");
   for(const k in GROUPS){const gme=GROUPS[k];if(!gme.meshes.length)continue;
     const b=document.createElement("span");b.className="tg on";b.textContent=gme.label+" ("+gme.meshes.length+")";
@@ -3985,6 +3986,7 @@ addEventListener("pointerup",e=>{
   ptr.x=(e.clientX/innerWidth)*2-1;ptr.y=-(e.clientY/innerHeight)*2+1;
   ray.setFromCamera(ptr,cam);
   const featured=[...GROUPS.construction.meshes,...GROUPS.pipeline.meshes].filter(m=>m.visible);
+  featured.forEach(m=>m.updateWorldMatrix(true,false));
   const hit=ray.intersectObjects(featured,false)[0];
   const card=document.getElementById("card");
   if(!hit){card.classList.remove("on");return}
