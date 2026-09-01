@@ -3985,6 +3985,7 @@ new GLTFLoader().load("/img/sky_${slugName}",g=>{
     o.material=new THREE.MeshStandardMaterial({color:DISPLAY[grp],flatShading:true,roughness:0.82,metalness:0.05,transparent:grp==="pipeline",opacity:grp==="pipeline"?0.55:1});
     o.userData.grp=grp;GROUPS[grp].meshes.push(o);}});
   scene.add(root);
+  ROOTREF=root;drawCtx();
   const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1}));
   ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;scene.add(ground);
   const R=Math.max(sz.x,sz.z);cam.position.set(R*0.9,R*0.42,R*0.9);ctl.target.set(0,sz.y*0.18,0);
@@ -3997,6 +3998,23 @@ new GLTFLoader().load("/img/sky_${slugName}",g=>{
 },undefined,()=>{msg.textContent="No 3D massing for this community yet — it gets built the first time CityEngine runs for it."});
 let META=null;
 fetch("/img/meta_${slugName}").then(r=>r.ok?r.json():null).then(m=>{META=m;buildFeat()}).catch(()=>{});
+let CTX=null,ctxG=null,ROOTREF=null;
+fetch("/img/ctx_${slugName}").then(r=>r.ok?r.json():null).then(cx=>{CTX=cx;drawCtx()}).catch(()=>{});
+function drawCtx(){
+  if(!CTX||!ROOTREF||ctxG)return;
+  ctxG=new THREE.Group();ctxG.position.copy(ROOTREF.position);
+  const L=[["sea",0x10333E,0.35,0.96],["water",0x123A46,0.45,0.96],["green",0x17301F,0.3,1],["roads",0x272C30,0.55,1]];
+  L.forEach(t=>{const k=t[0],col=t[1],y=t[2],op=t[3];const polys=CTX[k]||[];if(!polys.length)return;
+    const shapes=[];
+    polys.forEach(rings=>{try{
+      const sh=new THREE.Shape(rings[0].map(pp=>new THREE.Vector2(pp[0],-pp[1])));
+      for(let i=1;i<rings.length;i++)sh.holes.push(new THREE.Path(rings[i].map(pp=>new THREE.Vector2(pp[0],-pp[1]))));
+      shapes.push(sh)}catch(e){}});
+    if(!shapes.length)return;
+    const g2=new THREE.ShapeGeometry(shapes,1);g2.rotateX(-Math.PI/2);g2.translate(0,y,0);
+    const mm=new THREE.Mesh(g2,new THREE.MeshStandardMaterial({color:col,roughness:0.95,metalness:0,transparent:op<1,opacity:op}));
+    ctxG.add(mm)});
+  scene.add(ctxG);}
 let FOCUS=null,HOME=null;const ORIG=new Map();
 function allMeshes(){return [...GROUPS.existing.meshes,...GROUPS.construction.meshes,...GROUPS.pipeline.meshes]}
 function buildFeat(){
