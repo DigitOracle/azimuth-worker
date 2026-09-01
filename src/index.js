@@ -3984,7 +3984,21 @@ ${NAJ_NAV_CSS}</style></head><body>
     <text x="110" y="126" text-anchor="middle" fill="#8FA39B" font-size="11" font-family="IBM Plex Mono,monospace">registered sales</text></svg>
   <div style="flex:1;display:flex;flex-direction:column;gap:7px">${chips}</div>
 </div>
-<div style="background:rgba(197,165,106,.08);border:1px solid rgba(197,165,106,.35);border-radius:10px;padding:.6rem .8rem;font-size:.72rem;color:var(--gold)">📄 Developer sheet on file (${(d.sheet && d.sheet.received) || ""}) — unit-level availability appears here once read. Claimed figures will sit beside these, never mixed.</div>
+${(() => {
+  const cl = (d.claimed && d.claimed.rooms) || [];
+  if (!cl.length) return '<div style="background:rgba(197,165,106,.08);border:1px solid rgba(197,165,106,.35);border-radius:10px;padding:.6rem .8rem;font-size:.72rem;color:var(--gold)">📄 Developer sheet on file (' + ((d.sheet && d.sheet.received) || "") + ') — unit-level availability appears here once read. Claimed figures will sit beside these, never mixed.</div>';
+  const tot2 = cl.reduce((a, x) => a + (x.n || 0), 0);
+  const rows2 = cl.map(x =>
+    '<div style="display:flex;justify-content:space-between;gap:8px;padding:.34rem 0;border-top:1px solid rgba(197,165,106,.25);font-size:.76rem">' +
+    '<span style="font-weight:600">' + String(x.r) + '</span>' +
+    '<span style="color:var(--mut)">' + x.n + ' available</span>' +
+    '<b style="color:var(--gold)">' + (x.from ? "from AED " + (x.from >= 1e6 ? (x.from / 1e6).toFixed(2) + "M" : Math.round(x.from).toLocaleString("en-US")) : "") + '</b></div>').join("");
+  return '<div style="background:rgba(197,165,106,.08);border:1px solid rgba(197,165,106,.45);border-radius:12px;padding:.7rem .9rem">' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:Fraunces,Georgia,serif;font-weight:600;color:var(--gold)">Available now — developer-stated</span>' +
+    '<span style="color:var(--mut);font-size:.66rem;font-family:\'IBM Plex Mono\',monospace">' + tot2 + ' units · sheet ' + ((d.claimed && d.claimed.as_of) || "") + '</span></div>' +
+    rows2 +
+    '<div style="color:var(--mut);font-size:.6rem;margin-top:.4rem;font-family:\'IBM Plex Mono\',monospace">claimed by ' + ((d.claimed && d.claimed.source) || "the developer") + ' — not register data; registered mix above is the settled record</div></div>';
+})()}
 <div style="margin-top:14px"><div style="font-family:Fraunces,Georgia,serif;font-weight:600;margin-bottom:2px">Latest registered</div>${latest}</div>
 <div style="margin-top:14px">${acts}</div>
 <div style="color:var(--mut);font-size:.62rem;margin-top:16px;font-family:'IBM Plex Mono',monospace">settled, not asking — the register's own numbers</div>
