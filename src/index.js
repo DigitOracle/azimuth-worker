@@ -1968,7 +1968,9 @@ export default {
       }
       if (url.pathname === "/map") {                           // v50 — interactive community map (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
-        return new Response(renderMap(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", env.WA_BOT_NUMBER || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET), await env.MEETINGS.get("mkt_prev")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        let _sky64 = [];
+        try { const _kl2 = await env.MEETINGS.list({ prefix: "img_sky_" }); _sky64 = _kl2.keys.map(k => k.name.slice(8)); } catch (e) {}
+        return new Response(renderMap(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", env.WA_BOT_NUMBER || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET), await env.MEETINGS.get("mkt_prev"), _sky64), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname.indexOf("/area/") === 0) {              // v50 — per-community deep dive (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -3480,7 +3482,7 @@ async function esriToken(env) {
 // v50 — INTERACTIVE MAP (/map): canvas pan-zoom over the offline basemap JSON (/img/mp_basemap),
 // gold dot per community, tap -> bottom sheet (stats + actions), metric toggle. No map service,
 // no external libraries — everything is register data + curated public coordinates.
-function renderMap(latestRaw, key, waBot, esriOn, prevRaw) {
+function renderMap(latestRaw, key, waBot, esriOn, prevRaw, skySlugs) {
   let d = null, pv = null; try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
   try { pv = JSON.parse(prevRaw || "null"); } catch (e) {}
   const prevA = {}; if (pv && pv.areaIntel && pv.areaIntel.areas) for (const x of pv.areaIntel.areas) prevA[x.area] = x.sales || 0;
@@ -3529,13 +3531,14 @@ ${NAJ_NAV_CSS}
 #sh{z-index:50}
 </style></head><body>
 <canvas id=cv></canvas>
-<div class=top><div class=mast>Najma <em>نجمة</em> — the map</div><div class=per>${esc2(period)} · tap a community</div></div>
+<div class=top><div class=mast>Najma <em>نجمة</em> — the map</div><div class=per>${esc2(period)} · tap a community — the rest dims · ⬢ = 3D</div></div>
 <div class=tog><span class="tg on" data-m=s>sales</span><span class=tg data-m=ny>net yield</span><span class=tg data-m=su>supply</span><span class=tg data-m=gap>🎯 gap</span><span class=tg id=thm>☀️ light</span></div><div id=leg style="position:fixed;left:14px;bottom:calc(64px + env(safe-area-inset-bottom));z-index:35;background:var(--chipbg);border:1px solid var(--line);border-radius:9px;padding:7px 11px;font-family:'IBM Plex Mono',monospace;font-size:.6rem;color:var(--mut)"><div id=legt style="margin-bottom:4px;color:var(--text)">registered sales</div><div style="display:flex;align-items:center;gap:6px"><span>less</span><span style="display:inline-block;width:86px;height:7px;border-radius:4px;background:linear-gradient(90deg,#3E8A7E,#C5A56A)"></span><span>more</span></div></div>
 <div id=sh><div class=grab></div><div class=shn id=shn></div><div class=shr id=shr></div><div class=shgrid id=shg></div><div class=shrm id=shrm></div><div class=acts id=sha></div></div>
 <div id=toast></div>
 <div class=foot>DLD Open Data · © OpenStreetMap contributors</div>
 <script>
 var AREAS=${JSON.stringify(list)},AREAS2=${JSON.stringify(list2)},KEY=${JSON.stringify(key || "")},WA=${JSON.stringify(waBot || "")},ESRI=${esriOn ? "true" : "false"};
+var SKY=${JSON.stringify(skySlugs||[])},SEL=null;function njslug(x){return String(x||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
 var cv=document.getElementById("cv"),ctx=cv.getContext("2d"),dpr=Math.min(2,window.devicePixelRatio||1);
 var PAL={dark:{bg:"#0C1413",water:"#0A1A22",rMid:"#152E2A",rMaj:"#2A4742",heatHot:"197,165,106",heatCool:"62,138,126",dotHot:"#C5A56A",dotCool:"#3E8A7E",dotEdge:"#0C1413",label:"#E8E4D8",halo:"rgba(12,20,19,.85)"},light:{bg:"#F2EEE3",water:"#BFD5DB",rMid:"#E0DACA",rMaj:"#CDC5B0",heatHot:"168,133,68",heatCool:"47,110,100",dotHot:"#A88544",dotCool:"#2F6E64",dotEdge:"#F2EEE3",label:"#1A2422",halo:"rgba(242,238,227,.88)"}};
 var THM=localStorage.getItem("naj_thm")||((window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches)?"light":"dark");
@@ -3588,6 +3591,7 @@ document.getElementById("shg").innerHTML=
 '<div class=shs><div class=v>'+fmt(a.su)+'</div><div class=l>units in pipeline</div></div>';
 var acts=document.getElementById("sha");acts.innerHTML="";
 var full=document.createElement("a");full.className="act pri";full.textContent="📊 Full area page";full.href="/area/"+encodeURIComponent(a.n)+"?key="+encodeURIComponent(KEY);acts.appendChild(full);
+if(SKY.indexOf(njslug(a.n))>=0){var td=document.createElement("a");td.className="act";td.textContent="⬢ 3D skyline";td.href="/skyline/"+njslug(a.n)+"?key="+encodeURIComponent(KEY);acts.appendChild(td)}
 [["✍️ Draft a post","area post "+a.n],["🎯 Client match","client match in "+a.n],["🏗 Launch check","launch check "+a.n]].forEach(function(x){var b=document.createElement(WA?"a":"button");b.className="act";b.textContent=x[0];
 if(WA){b.href="https://wa.me/"+WA+"?text="+encodeURIComponent(x[1])}else{b.onclick=function(){(navigator.clipboard?navigator.clipboard.writeText(x[1]):Promise.reject()).then(function(){toast("Copied — paste it to Azimuth")},function(){toast(x[1])})}}
 acts.appendChild(b)});
@@ -3636,7 +3640,17 @@ if(AR2){map.addLayer({id:"naj-fill",type:"fill",source:"naj-areas",paint:{"fill-
 map.addLayer({id:"naj-line",type:"line",source:"naj-areas",paint:{"line-color":VIEW==="light"?"rgba(26,36,34,.45)":"rgba(232,228,216,.38)","line-width":1}},before);}
 map.addLayer({id:"naj-dot",type:"circle",source:"naj-pts",paint:{"circle-color":"#3E8A7E","circle-radius":5,"circle-stroke-color":VIEW==="light"?"#F2EEE3":"#0C1413","circle-stroke-width":1.5}},before);
 map.addLayer({id:"naj-lab",type:"symbol",source:"naj-pts",layout:{"text-field":["get","n"],"text-size":11,"text-offset":[0,1.1],"text-anchor":"top","text-allow-overlap":false},paint:{"text-color":VIEW==="light"?"#1A2422":"#E8E4D8","text-halo-color":VIEW==="light"?"rgba(242,238,227,.9)":"rgba(12,20,19,.9)","text-halo-width":1.4}});
-paintData();drawIso()}
+paintData();drawIso();if(SEL)isolate(SEL)}
+function isolate(n){SEL=n;if(!map||!map.getLayer("naj-fill"))return;
+map.setPaintProperty("naj-fill","fill-opacity",["case",["==",["get","n"],n],(VIEW==="sat"?0.55:0.5),0.07]);
+map.setPaintProperty("naj-line","line-color",["case",["==",["get","n"],n],"#C5A56A",(VIEW==="light"?"rgba(26,36,34,.45)":"rgba(232,228,216,.38)")]);
+map.setPaintProperty("naj-line","line-width",["case",["==",["get","n"],n],2.5,1]);
+if(map.getLayer("naj-dot"))map.setPaintProperty("naj-dot","circle-opacity",["case",["==",["get","n"],n],1,0.25]);}
+function unisolate(){SEL=null;if(!map||!map.getLayer("naj-fill"))return;
+map.setPaintProperty("naj-fill","fill-opacity",VIEW==="sat"?0.42:0.34);
+map.setPaintProperty("naj-line","line-color",VIEW==="light"?"rgba(26,36,34,.45)":"rgba(232,228,216,.38)");
+map.setPaintProperty("naj-line","line-width",1);
+if(map.getLayer("naj-dot"))map.setPaintProperty("naj-dot","circle-opacity",1);}
 function findArea(n){var k=String(n||"").toLowerCase();for(var i=0;i<AREAS2.length;i++){if(AREAS2[i].n.toLowerCase()===k)return AREAS2[i]}return null}
 var POP=null;
 function wire(){POP=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:10});
@@ -3646,8 +3660,8 @@ map.getCanvas().style.cursor="pointer";var a=findArea(fs[0].properties.n);if(!a)
 var v=metric==="ny"?(a.ny==null?"—":a.ny+"%"):metric==="su"?fmt(a.su)+" units":metric==="gap"?"gap "+(Math.round(mval(a)*100)/100):fmt(a.s)+" sales";
 POP.setLngLat(e.lngLat).setHTML('<div style="font-family:\\'IBM Plex Sans\\',sans-serif;font-size:12px;color:#0C1413"><b>'+a.n+'</b><br>'+v+'</div>').addTo(map)});
 map.on("click",function(e){var fs=map.queryRenderedFeatures(e.point,{layers:(map.getLayer("naj-fill")?["naj-dot","naj-fill"]:["naj-dot"])});
-if(!fs.length){document.getElementById("sh").classList.remove("open");return}
-var a=findArea(fs[0].properties.n);if(a)sheet(a)});
+if(!fs.length){document.getElementById("sh").classList.remove("open");unisolate();return}
+var a=findArea(fs[0].properties.n);if(a){sheet(a);isolate(a.n)}});
 map.on("mouseenter","naj-dot",function(){map.getCanvas().style.cursor="pointer"});
 map.on("mouseleave","naj-dot",function(){map.getCanvas().style.cursor=""})}
 function boot(){var host=document.createElement("div");host.id="mlmap";host.style.cssText="position:fixed;inset:0;z-index:0";document.body.insertBefore(host,cv);
