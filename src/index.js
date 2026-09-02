@@ -1998,7 +1998,9 @@ export default {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         let _bd = null; try { _bd = JSON.parse((await env.MEETINGS.get("img_board_devs")) || "null"); } catch (e) {}
         if (!_bd) return new Response("no board data yet - run build_board.py", { status: 404 });
-        return new Response(renderHome(_bd, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        const _p = (n) => String(url.searchParams.get(n) || "").replace(/[^a-z0-9_]/g, "");
+        let _cmp = null; if (_p("mode") === "compare") { try { _cmp = JSON.parse((await env.MEETINGS.get("img_dev_compare")) || "null"); } catch (e) {} }   // v73.4 compare mode
+        return new Response(renderHome(_bd, url.searchParams.get("key") || "", _cmp, { mode: _p("mode"), bed: _p("bed"), band: _p("band"), metric: _p("metric"), sort: _p("sort") }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/dev") {                          // v73 - one developer: its property cards (ours -> registered -> trading), then down to unit cards
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -4071,31 +4073,79 @@ function devLogo(dv, size) {
   // logo plates are 2:1 (wordmarks fill the width, square marks fill the height); the monogram fallback stays square
   return (dv.logo ? '<img class=logo src="' + dv.logo + '" alt="" width=' + (size * 2) + ' height=' + size + ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'">' : '') + fb;
 }
-function renderHome(bd, key) {
-  const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(1) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(0) + " M" : Math.round(n).toLocaleString("en-US"));
-  const tiles = (bd.developers || []).map(dv => {
-    const k = dv.kpi || {};
-    const line = k.tx_2026 ? fm(k.tx_2026) + ' sales 2026 · AED ' + fm(k.value_aed) : (k.registered_2026 ? k.registered_2026 + ' registered 2026' : (k.meed_projects ? k.meed_projects + ' MEED projects' : 'on the list'));
-    return '<a class=tile href="/dev?d=' + encodeURIComponent(dv.key) + '&key=' + encodeURIComponent(key) + '">' + devLogo(dv, 56) +
-      '<div class=nm>' + dv.name + '</div><div class=tier>' + tierSvg(dv.icon) + '<span>' + dv.segment_label + '</span></div>' +
-      '<div class=kpi>' + line + (dv.ours && dv.ours.length ? ' · <b style="color:#8FC7B9">' + dv.ours.length + ' modelled</b>' : '') + '</div></a>';
-  }).join("");
+// v73.4 - COMPARE MODE on the cover (Kendall, 2 Sep): one filter, all eleven answers at once. The tiles keep their places and
+// "flip" to a back face showing the chosen metric for the chosen bedroom / price band, with a bar scaled to the largest value
+// and a rank. Tapping a flipped tile still opens that developer. s = { mode, bed, band, metric, sort } from the query string.
+const CMP_METRICS = { price: "median price", sqm: "AED / m²", sales: "sales 2026", range: "price range", offplan: "off-plan share", rent: "median rent" };
+function renderHome(bd, key, cmp, s) {
+  s = s || {}; const K = encodeURIComponent(key); const compare = s.mode === "compare" && cmp && cmp.developers;
+  const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(1) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 2) + " M" : Math.round(n).toLocaleString("en-US"));
+  const q = (o) => { const p = Object.assign({ mode: "compare", bed: s.bed || "all", band: s.band || "all", metric: s.metric || "range", sort: s.sort || "" }, o); return '/home?' + Object.keys(p).filter(k => p[k]).map(k => k + '=' + encodeURIComponent(p[k])).join('&') + '&key=' + K; };
+  let tiles = "", bar = "";
+  if (!compare) {
+    tiles = (bd.developers || []).map(dv => {
+      const k = dv.kpi || {};
+      const line = k.tx_2026 ? fm(k.tx_2026) + ' sales 2026 · AED ' + fm(k.value_aed) : (k.registered_2026 ? k.registered_2026 + ' registered 2026' : (k.meed_projects ? k.meed_projects + ' MEED projects' : 'on the list'));
+      return '<a class=tile href="/dev?d=' + encodeURIComponent(dv.key) + '&key=' + K + '">' + devLogo(dv, 56) +
+        '<div class=nm>' + dv.name + '</div><div class=tier>' + tierSvg(dv.icon) + '<span>' + dv.segment_label + '</span></div>' +
+        '<div class=kpi>' + line + (dv.ours && dv.ours.length ? ' · <b style="color:#8FC7B9">' + dv.ours.length + ' modelled</b>' : '') + '</div></a>';
+    }).join("");
+    bar = '<div class=chips><a class="chip on" href="' + q({ bed: "2", metric: "range" }) + '">compare mode →</a></div>';
+  } else {
+    const bed = s.bed || "all", band = s.band || "all", metric = CMP_METRICS[s.metric] ? s.metric : "range"; const cut = bed + "|" + band;
+    const val = (dv) => {                                              // -> { v: number|null, big: string, sub: string }
+      const c = cmp.developers[dv.key] || {}; const x = (c.cells || {})[cut]; const r = (c.rents || {})[bed];
+      if (metric === "rent") return r ? { v: r.median, big: "AED " + fm(r.median), sub: r.n + " Ejari contracts / yr" } : { v: null, big: "—", sub: "no rent data" };
+      if (!x) return { v: null, big: "—", sub: "no sales in this cut" };
+      if (metric === "price") return { v: x.median, big: "AED " + fm(x.median), sub: fm(x.p10) + " – " + fm(x.p90) + " · " + x.n + " sales" };
+      if (metric === "sqm") return { v: x.sqm, big: x.sqm ? "AED " + fm(x.sqm) : "—", sub: "per m² · " + x.n + " sales" };
+      if (metric === "sales") return { v: x.n, big: fm(x.n), sub: "registered sales 2026" };
+      if (metric === "offplan") return { v: x.offplan, big: Math.round(x.offplan * 100) + "%", sub: "off-plan · " + x.n + " sales" };
+      return { v: x.p90 && x.p10 ? x.p90 - x.p10 : null, big: "AED " + fm(x.p10) + " – " + fm(x.p90), sub: "P10 – P90 · median " + fm(x.median) };
+    };
+    const rows = (bd.developers || []).map(dv => ({ dv, r: val(dv) }));
+    const max = Math.max(0, ...rows.map(x => x.r.v || 0));
+    const order = rows.slice().sort((a, b) => (b.r.v || -1) - (a.r.v || -1)); const rank = new Map(order.map((x, i) => [x.dv.key, x.r.v == null ? null : i + 1]));
+    tiles = (s.sort ? order : rows).map(({ dv, r }) => {
+      const rk = rank.get(dv.key); const w = r.v && max ? Math.max(4, Math.round(r.v / max * 100)) : 0;
+      return '<a class="tile back" href="/dev?d=' + encodeURIComponent(dv.key) + '&key=' + K + '">' +
+        '<div class=bh>' + devLogo(dv, 30) + '<span class=bn>' + dv.name + '</span>' + (rk ? '<span class=rk>#' + rk + '</span>' : '') + '</div>' +
+        '<div class="bv' + (metric === "range" ? ' rg' : '') + '"' + (r.v == null ? ' style="color:var(--mut)"' : '') + '>' + r.big + '</div><div class=bs>' + r.sub + '</div>' +
+        '<div class=bar><i style="width:' + w + '%"></i></div></a>';
+    }).join("");
+    const chips = (name, map, cur) => '<div class=chips>' + Object.keys(map).map(k => '<a class="chip' + (k === cur ? ' on' : '') + '" href="' + q({ [name]: k }) + '">' + map[k] + '</a>').join("") + '</div>';
+    // tier 1 = budget triage: bedrooms + price band up front; the metric row stays small (default = the price range, so a
+    // client priced out of a developer is visible at a glance); tier 2 (geography, lifestyle, amenities) comes after the shortlist
+    bar = '<div class=sec>Bedrooms</div>' + chips("bed", cmp.beds || {}, bed) + '<div class=sec>Client budget</div>' + chips("band", cmp.bands || {}, band) +
+      '<div class=sec>Show</div>' + chips("metric", CMP_METRICS, metric).replace('<div class=chips>', '<div class="chips small">') +
+      '<div class="chips small"><a class="chip' + (s.sort ? ' on' : '') + '" href="' + q({ sort: s.sort ? "" : "1" }) + '">rank order</a><a class=chip href="/home?key=' + K + '">exit compare</a></div>' +
+      '<div class=sub style="margin:8px 0 4px">' + (cmp.beds || {})[bed] + ' · ' + CMP_METRICS[metric] + ' · ' + (cmp.bands || {})[band] + ' · bar = share of the largest value · a developer with many projects shows a wide range</div>';
+  }
   return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Najma - developers</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
 :root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
 body{margin:auto;max-width:720px;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:14px 14px 88px}
 .mast{font-family:Fraunces,Georgia,serif;font-size:1.3rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
 .sub{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace;margin:2px 0 14px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.tile{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 12px 12px;text-decoration:none;color:var(--text);min-height:150px;position:relative}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tile{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 12px 12px;text-decoration:none;color:var(--text);min-height:150px;position:relative;min-width:0}
 .tile:active{border-color:var(--gold)}
 .logo,.mono{border-radius:12px;background:#fff;object-fit:contain;padding:6px;display:block}.mono{background:#1C2B28;color:var(--gold);text-align:center;font-family:Fraunces,Georgia,serif;font-weight:600;padding:0}
 .nm{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.02rem;margin-top:10px;line-height:1.15}
 .tier{display:flex;align-items:center;gap:5px;color:var(--gold);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
 .kpi{color:var(--mut);font-size:.66rem;font-family:"IBM Plex Mono",monospace;margin-top:6px;line-height:1.35}
 .act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--text);text-decoration:none;font-size:.72rem;margin:0 6px 8px 0;background:var(--card)}
+.sec{color:var(--mut);font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;margin:10px 2px 5px}.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px}
+.chip{border:1px solid var(--line);border-radius:99px;padding:5px 10px;color:var(--text);text-decoration:none;font-size:.7rem;background:var(--card)}.chip.on{border-color:var(--gold);color:var(--gold)}
+.tile.back{min-height:128px;background:#182A26;border-color:#2E4A44;animation:flip .45s ease both;transform-origin:center}.tile.back .logo,.tile.back .mono{border-radius:8px;padding:3px}
+@keyframes flip{from{transform:rotateY(90deg);opacity:.2}to{transform:none;opacity:1}}
+.bh{display:flex;align-items:center;gap:8px;min-width:0}.bn{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:.88rem;line-height:1.1;flex:1;min-width:0;overflow-wrap:anywhere}.rk{color:var(--mut);font-size:.62rem;font-family:"IBM Plex Mono",monospace}
+.bv{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.2rem;color:var(--gold);margin-top:12px;line-height:1.05;overflow-wrap:anywhere}.bv.rg{font-size:1rem}.bs{color:var(--mut);font-size:.62rem;font-family:"IBM Plex Mono",monospace;margin-top:5px;overflow-wrap:anywhere}
+.chips.small .chip{padding:3px 8px;font-size:.64rem}
+.bar{height:4px;background:#24352F;border-radius:2px;margin-top:10px;overflow:hidden}.bar i{display:block;height:100%;background:var(--gold);border-radius:2px}
 ${NAJ_NAV_CSS}</style></head><body>
-<div class=mast>Najma <em>نجمة</em> · developers</div>
-<div class=sub>your ${(bd.developers || []).length} developers in five tiers · tap one for its properties, then a property for its unit cards · updated ${bd.updated || ""}</div>
+<div class=mast>Najma <em>نجمة</em> · developers${compare ? ' · <span style="color:var(--mut);font-weight:400;font-size:.9rem">compare</span>' : ''}</div>
+<div class=sub>${compare ? 'one filter, all ' + (bd.developers || []).length + ' developers at once · tap a tile for its properties' : 'your ' + (bd.developers || []).length + ' developers in five tiers · tap one for its properties, then a property for its unit cards · updated ' + (bd.updated || "")}</div>
+${bar}
 <div class=grid>${tiles}</div>
 <div style="margin-top:14px"><a class=act href="/board?key=${encodeURIComponent(key)}">meetings board</a><a class=act href="/market?key=${encodeURIComponent(key)}">market pulse</a></div>
 <div class=sub style="margin-top:10px">${bd.note || ""}</div>
