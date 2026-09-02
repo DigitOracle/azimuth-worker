@@ -4057,8 +4057,9 @@ const TIER_GLYPH = { crown: "M4 18h16l-1.5-9-4.5 4-2-7-2 7-4.5-4z", gem: "M6 3h1
 function tierSvg(icon) { return '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#C5A56A" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="' + (TIER_GLYPH[icon] || TIER_GLYPH.spark) + '"/></svg>'; }
 function devLogo(dv, size) {
   const mono = dv.name.replace(/[^A-Za-z&]/g, "").slice(0, 2).toUpperCase();
-  const fb = '<div class=mono style="width:' + size + 'px;height:' + size + 'px;line-height:' + size + 'px;font-size:' + Math.round(size * .38) + 'px">' + mono + '</div>';
-  return dv.logo ? '<img class=logo src="' + dv.logo + '" alt="" width=' + size + ' height=' + size + ' onerror="this.outerHTML=\'' + fb.replace(/'/g, "\\'") + '\'">' : fb;
+  const fb = '<div class=mono style="width:' + size + 'px;height:' + size + 'px;line-height:' + size + 'px;font-size:' + Math.round(size * .38) + 'px' + (dv.logo ? ';display:none' : '') + '">' + mono + '</div>';
+  // img first, monogram hidden behind it; a failed logo hides itself and reveals the monogram (no HTML inside the attribute)
+  return (dv.logo ? '<img class=logo src="' + dv.logo + '" alt="" width=' + size + ' height=' + size + ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'">' : '') + fb;
 }
 function renderHome(bd, key) {
   const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(1) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(0) + " M" : Math.round(n).toLocaleString("en-US"));
@@ -4101,10 +4102,11 @@ function renderDev(dv, bd, galleries, key) {
   const cards = (dv.properties || []).map(p => {
     if (p.kind === "ours") {
       const g = galleries[p.building]; const n = g && g.cards ? g.cards.length : 0;
-      return '<a class=prop href="/cards?b=' + encodeURIComponent(p.cards) + '&key=' + encodeURIComponent(key) + '"><div class=ph><span class=pn>' + p.name + '</span><span class=badge>modelled</span></div>' +
+      const cu = '/cards?b=' + encodeURIComponent(p.cards) + '&key=' + encodeURIComponent(key);
+      return '<div class="prop ours"><a class=cover href="' + cu + '" aria-label="unit cards"></a><div class=ph><span class=pn>' + p.name + '</span><span class=badge>modelled</span></div>' +
         '<div class=pm>' + (p.area || "") + ' · ' + (p.status || "") + '</div>' +
         '<div class=pm style="color:#8FC7B9">' + (n ? n + ' unit-type cards · availability from the latest developer sheet' : 'cards being generated') + '</div>' +
-        '<div class=row><span class=go>unit cards →</span>' + (p.drill ? '<a class=mini href="/avail?d=' + p.drill + '&key=' + encodeURIComponent(key) + '">the mix</a>' : '') + (p.meta ? '<a class=mini href="/skyline/' + p.meta + '?key=' + encodeURIComponent(key) + '">3D</a>' : '') + '</div></a>';
+        '<div class=row><a class=go href="' + cu + '">unit cards →</a>' + (p.drill ? '<a class=mini href="/avail?d=' + p.drill + '&key=' + encodeURIComponent(key) + '">the mix</a>' : '') + (p.meta ? '<a class=mini href="/skyline/' + p.meta + '?key=' + encodeURIComponent(key) + '">3D</a>' : '') + '</div></div>';
     }
     if (p.kind === "registered") {
       return '<div class=prop><div class=ph><span class=pn>' + p.name + '</span><span class=badge style="border-color:var(--line);color:var(--mut)">DLD ' + (p.status || "registered") + '</span></div>' +
@@ -4123,7 +4125,7 @@ body{margin:auto;max-width:720px;background:var(--ink);color:var(--text);font-fa
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin:12px 0 16px}.k{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 10px 8px}.k .v{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;color:var(--gold)}.k .l{color:var(--mut);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
 .sec{color:var(--mut);font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;margin:14px 2px 8px}
 .prop{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;text-decoration:none;color:var(--text)}
-a.prop{border-color:#2E4A44}a.prop:active{border-color:var(--gold)}
+.prop.ours{border-color:#2E4A44;position:relative}.prop.ours:active{border-color:var(--gold)}.cover{position:absolute;inset:0;border-radius:14px}.row a{position:relative;z-index:1}.go{text-decoration:none}
 .ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.pn{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1rem}.badge{border:1px solid #3E7C6C;color:#8FC7B9;border-radius:99px;padding:2px 8px;font-size:.62rem;white-space:nowrap}
 .pm{color:var(--text);font-size:.72rem;margin-top:4px;font-family:"IBM Plex Mono",monospace}.row{display:flex;gap:8px;align-items:center;margin-top:8px}.go{color:var(--gold);font-weight:600;font-size:.78rem}.mini{margin-left:auto;border:1px solid var(--line);border-radius:99px;padding:3px 9px;color:var(--text);text-decoration:none;font-size:.66rem}.mini+.mini{margin-left:6px}
 .act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--text);text-decoration:none;font-size:.72rem;margin:0 6px 8px 0;background:var(--card)}
