@@ -7,7 +7,7 @@
   "main": "src/index.js",
   "scripts": {
     "check": "node --check src/index.js",
-    "test": "node test/test_v35_relationship.mjs && node test/test_v351_sent.mjs && node test/test_v34_twilio.mjs",
+    "test": "node test/test_v35_relationship.mjs && node test/test_v351_sent.mjs && node test/test_v34_twilio.mjs && node test/test_v721_claude403.mjs",
     "dry": "wrangler deploy --dry-run",
     "dry:azimuth2": "wrangler deploy --dry-run --env azimuth2",
     "deploy": "wrangler deploy",

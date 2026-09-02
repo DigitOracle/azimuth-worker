@@ -84,7 +84,22 @@ function claudeBody(model, maxTok, sys, user, schema) {
 }
 // Anthropic intermittently 403s ("Request not allowed") / 429s / 5xx on some Cloudflare egress
 // IPs; a retry from a fresh attempt usually clears it. Retry transient statuses a few times.
+// v72.1 — Anthropic 403 "Request not allowed" is intermittent on some Cloudflare egress IPs.
+// claudeFetch already retries; these helpers only COUNT what happened so /health can show it.
+async function bumpClaude403(env, model, attempt) {
+  try {
+    if (!env || !env.MEETINGS) return;
+    const k = "diag_claude403_" + new Date().toISOString().slice(0, 10);
+    const n = parseInt((await env.MEETINGS.get(k)) || "0", 10) + 1;
+    await env.MEETINGS.put(k, String(n), { expirationTtl: 3 * 86400 });
+    await env.MEETINGS.put("diag_claude403_last", JSON.stringify({ at: new Date().toISOString(), model, attempt, count_today: n }), { expirationTtl: 30 * 86400 });
+  } catch (e) {}
+}
+async function noteClaudeFail(env, model, lastStatus) {
+  try { if (env && env.MEETINGS) await env.MEETINGS.put("diag_claude_fail_last", JSON.stringify({ at: new Date().toISOString(), model, last_status: lastStatus }), { expirationTtl: 30 * 86400 }); } catch (e) {}
+}
 async function claudeFetch(env, model, maxTok, sys, user, schema) {
+  let lastStatus = null;
   for (let attempt = 0; attempt < 4; attempt++) {
     let r;
     try {
@@ -93,11 +108,14 @@ async function claudeFetch(env, model, maxTok, sys, user, schema) {
         headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
         body: claudeBody(model, maxTok, sys, user, schema),
       });
-    } catch (e) { await new Promise(s => setTimeout(s, 400 * (attempt + 1))); continue; }
+    } catch (e) { lastStatus = "threw"; await new Promise(s => setTimeout(s, 400 * (attempt + 1))); continue; }
+    lastStatus = r.status;
     if (r.ok) return r;
+    if (r.status === 403) await bumpClaude403(env, model, attempt);
     if (r.status === 403 || r.status === 429 || r.status >= 500) { await new Promise(s => setTimeout(s, 500 * (attempt + 1))); continue; }
     return r;   // 4xx that won't fix on retry (400/401) — give up
   }
+  await noteClaudeFail(env, model, lastStatus);
   return null;
 }
 
@@ -1606,7 +1624,8 @@ export default {
         const errs = await (async () => { try { return JSON.parse((await env.MEETINGS.get("diag_errs")) || "[]"); } catch (e) { return []; } })();
         // dependencies — reachability only, never contents
         const dep = {};
-        dep.claude = env.ANTHROPIC_API_KEY ? await (async () => { try { const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: claudeBody(CLAUDE_FAST, 4, "Reply with the single character: 1", "1", null) }); return r.ok ? "ok" : ("HTTP " + r.status); } catch (e) { return "unreachable"; } })() : "no key";
+        dep.claude = env.ANTHROPIC_API_KEY ? await (async () => { try { const r = await claudeFetch(env, CLAUDE_FAST, 4, "Reply with the single character: 1", "1", null); return r ? (r.ok ? "ok" : ("HTTP " + r.status)) : "FAILED after 4 attempts (403/429/5xx) — see claude_403"; } catch (e) { return "unreachable"; } })() : "no key";
+        const c403 = await (async () => { try { const today = new Date().toISOString().slice(0, 10); const n = parseInt((await env.MEETINGS.get("diag_claude403_" + today)) || "0", 10); const last = JSON.parse((await env.MEETINGS.get("diag_claude403_last")) || "null"); const fail = JSON.parse((await env.MEETINGS.get("diag_claude_fail_last")) || "null"); return { retried_403s_today: n, last_403: last, last_total_failure: fail, note: "403s are retried up to 4x; only last_total_failure means a user-facing miss" }; } catch (e) { return null; } })();
         dep.whatsapp = (env.WHATSAPP_TOKEN && env.WA_PHONE_ID) ? await (async () => { try { const r = await fetch(`${WA_GRAPH}/${env.WA_PHONE_ID}?fields=display_phone_number`, { headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN } }); const j = await r.json().catch(() => ({})); return r.ok ? ("ok · " + (j.display_phone_number || "?")) : ("HTTP " + r.status); } catch (e) { return "unreachable"; } })() : "not configured";
         dep.outlook = MB(env).length ? await (async () => { try { const tk = await msToken(env); return tk ? "ok · " + MB(env).length + " mailbox(es)" : "no token"; } catch (e) { return "unreachable"; } })() : "not configured (WhatsApp-only instance)";
         const body = {
@@ -1617,6 +1636,7 @@ export default {
           router: lastMsg && lastMsg.router ? { via: lastMsg.router.via, forwarded: lastMsg.router.forwarded, status: lastMsg.router.fwdStatus || lastMsg.router.fwdErr } : "not a router / no route matched",
           data: { open_tasks: await count("act_"), commitments: await count("cmt_"), captured_meetings: await count("evt_"), indexed_docs: await count("doc_"), pending_photo_reads: await count("pimg_") },
           dependencies: dep,
+          claude_403: c403,
           recent_swallowed_errors: errs.slice(0, 8)
         };
         // A human-readable line first: the one sentence that says whether the loop is alive.
@@ -1639,7 +1659,8 @@ export default {
         for (const _t of _tiers) {
           if (!env.ANTHROPIC_API_KEY) { _o[_t[0]] = "no ANTHROPIC_API_KEY set"; continue; }
           try {
-            const _r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: claudeBody(_t[1], 32, "Answer in one word.", "ping", null) });
+            const _r = await claudeFetch(env, _t[1], 32, "Answer in one word.", "ping", null);
+            if (!_r) { _o[_t[0]] = "FAILED after 4 attempts (403/429/5xx)"; continue; }
             const _b = await _r.text();
             _o[_t[0]] = "HTTP " + _r.status + " :: " + _b.slice(0, 400);
           } catch (e) { _o[_t[0]] = "THREW :: " + (e && e.message ? e.message : String(e)); }
