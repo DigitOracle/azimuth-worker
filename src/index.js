@@ -2009,6 +2009,15 @@ export default {
         for (const _b of (_dv.ours || [])) { try { const _j = JSON.parse((await env.MEETINGS.get("img_cards_" + _b + "_index")) || "null"); if (_j) _galleries[_b] = _j; } catch (e) {} }
         return new Response(renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      if (url.pathname === "/compare") {                      // v73.3 - two developers side by side, click-only (dev_compare pushed by build_compare.py)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _bd = null, _cmp = null;
+        try { _bd = JSON.parse((await env.MEETINGS.get("img_board_devs")) || "null"); } catch (e) {}
+        try { _cmp = JSON.parse((await env.MEETINGS.get("img_dev_compare")) || "null"); } catch (e) {}
+        if (!_bd || !_cmp) return new Response("no comparison data yet - run build_compare.py", { status: 404 });
+        const _p = (n) => String(url.searchParams.get(n) || "").replace(/[^a-z0-9_]/g, "");
+        return new Response(renderCompare(_cmp, _bd, { a: _p("a"), b: _p("b"), bed: _p("bed") || "all", band: _p("band") || "all", diff: _p("diff") === "1" }, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/cards") {                        // v72 - unit-type card gallery for a building (cards_<b>_index pushed by push_cards.py)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _cb = String(url.searchParams.get("b") || "symphony").replace(/[^a-z0-9]/g, "");
@@ -4109,6 +4118,19 @@ function renderDev(dv, bd, galleries, key) {
         '<div class=pm style="color:#8FC7B9">' + (n ? n + ' unit-type cards · availability from the latest developer sheet' : 'cards being generated') + '</div>' +
         '<div class=row><a class=go href="' + cu + '">unit cards →</a>' + (p.drill ? '<a class=mini href="/avail?d=' + p.drill + '&key=' + encodeURIComponent(key) + '">the mix</a>' : '') + (p.meta ? '<a class=mini href="/skyline/' + p.meta + '?key=' + encodeURIComponent(key) + '">3D</a>' : '') + '</div></div>';
     }
+    if (p.kind === "portfolio") {                                   // v73.3 - from the developer's own site, enriched with DLD + the availability sheet
+      const specs = [p.area, p.structure || (p.storeys ? p.storeys + ' storeys' : null), p.units ? Math.round(p.units) + ' units' : null, (p.plans && p.plans.length) ? p.plans.join(' / ') + ' plan' : null].filter(Boolean).join(' · ');
+      const mix = (p.mix || []).filter(m => !/retail|office/.test(m)).join(', ');
+      const dld = p.dld ? 'DLD ' + (p.dld.status || 'registered') + (p.dld.pct != null ? ' · ' + Math.round(p.dld.pct) + '% built' : '') : '';
+      const trade = p.tx ? p.tx + ' registered sales 2026' + (p.median_aed_per_sqm ? ' · median AED ' + fm(p.median_aed_per_sqm) + '/m²' : '') : '';
+      const sh = p.sheet ? '<div class=pm style="color:#8FC7B9">on the developer sheet ' + (p.sheet.sheet || '') + ': ' + p.sheet.units + ' unit' + (p.sheet.units === 1 ? '' : 's') + ' for sale · ' + (p.sheet.types || []).join(', ') + (p.sheet.plan ? ' · ' + p.sheet.plan : '') + '</div>' : '';
+      const img = p.image ? '<img class=hero src="' + p.image + '" alt="" loading=lazy referrerpolicy=no-referrer>' : '';
+      return '<div class="prop' + (p.sheet ? ' ours' : '') + '">' + img + '<div class=ph><span class=pn>' + p.name + '</span><span class=badge' + (p.handover ? '' : ' style="border-color:var(--line);color:var(--mut)"') + '>' + (p.handover ? 'handover ' + p.handover : 'developer site') + '</span></div>' +
+        '<div class=pm>' + specs + '</div>' + (mix ? '<div class=pm style="color:var(--mut)">' + mix + '</div>' : '') +
+        ((dld || trade) ? '<div class=pm style="color:var(--mut)">' + [dld, trade].filter(Boolean).join(' · ') + '</div>' : '') + sh +
+        '<div class=row>' + (p.sheet ? '<a class=go href="/avail?d=' + encodeURIComponent(dv.key) + '&key=' + encodeURIComponent(key) + '">the mix →</a>' : '<span class=pm style="margin:0;color:var(--mut)">no floor plans on file - the developer gates them behind a form; ask the group for the brochure</span>') +
+        '<a class=mini href="' + p.url + '" target=_blank rel=noopener>developer page</a></div></div>';
+    }
     if (p.kind === "registered") {
       return '<div class=prop><div class=ph><span class=pn>' + p.name + '</span><span class=badge style="border-color:var(--line);color:var(--mut)">DLD ' + (p.status || "registered") + '</span></div>' +
         '<div class=pm>' + (p.area || "") + (p.units ? ' · ' + Math.round(p.units) + ' units' : '') + (p.pct != null ? ' · ' + p.pct + '% built' : '') + (p.value_aed ? ' · AED ' + fm(p.value_aed) : '') + '</div>' +
@@ -4126,6 +4148,7 @@ body{margin:auto;max-width:720px;background:var(--ink);color:var(--text);font-fa
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin:12px 0 16px}.k{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 10px 8px}.k .v{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;color:var(--gold)}.k .l{color:var(--mut);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
 .sec{color:var(--mut);font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;margin:14px 2px 8px}
 .prop{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;text-decoration:none;color:var(--text)}
+.hero{width:100%;height:110px;object-fit:cover;border-radius:10px;margin-bottom:8px;display:block;background:#1C2B28}
 .prop.ours{border-color:#2E4A44;position:relative}.prop.ours:active{border-color:var(--gold)}.cover{position:absolute;inset:0;border-radius:14px}.row a{position:relative;z-index:1}.go{text-decoration:none}
 .ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.pn{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1rem}.badge{border:1px solid #3E7C6C;color:#8FC7B9;border-radius:99px;padding:2px 8px;font-size:.62rem;white-space:nowrap}
 .pm{color:var(--text);font-size:.72rem;margin-top:4px;font-family:"IBM Plex Mono",monospace}.row{display:flex;gap:8px;align-items:center;margin-top:8px}.go{color:var(--gold);font-weight:600;font-size:.78rem}.mini{margin-left:auto;border:1px solid var(--line);border-radius:99px;padding:3px 9px;color:var(--text);text-decoration:none;font-size:.66rem}.mini+.mini{margin-left:6px}
@@ -4135,10 +4158,91 @@ ${NAJ_NAV_CSS}</style></head><body>
 <div class=kpis>${kp}</div>
 ${(dv.properties || []).some(p => p.kind === "ours") ? '<div class=sec>Modelled - unit cards ready</div>' : ''}
 ${cards || '<div class=prop><div class=pm>No properties on file yet - the first floor-plan deck or availability sheet posted to the group starts the file.</div></div>'}
-<div style="margin-top:14px"><a class=act href="/home?key=${encodeURIComponent(key)}">← developers</a><a class=act href="/board?key=${encodeURIComponent(key)}">board</a></div>
+<div style="margin-top:14px"><a class=act href="/compare?a=${dv.key}&key=${encodeURIComponent(key)}">compare with another developer</a><a class=act href="/home?key=${encodeURIComponent(key)}">← developers</a><a class=act href="/board?key=${encodeURIComponent(key)}">board</a></div>
 <div class=sub style="color:var(--mut);font-size:.66rem;font-family:'IBM Plex Mono',monospace;margin-top:10px">${(dv.entities || []).length ? 'DLD entities: ' + dv.entities.join(' · ') : ''}</div>
 ${najNav(key, "homes")}
 </body></html>`;
+}
+// v73.3 - COMPARE: two developers, attributes as rows, click-only. Pattern follows the comparison-table guidance we researched:
+// dynamic selection capped at TWO on mobile, a persistent tray showing what is picked, sticky column header with the two marks,
+// short values (no sentences), a "differences only" toggle, and filter chips (bedroom, price band) that re-cut every row.
+function renderCompare(cmp, bd, s, key) {
+  const K = encodeURIComponent(key); const devs = bd.developers || []; const C = cmp.developers || {};
+  const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(2) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(2) + " M" : Math.round(n).toLocaleString("en-US"));
+  const q = (o) => { const p = Object.assign({ a: s.a, b: s.b, bed: s.bed, band: s.band, diff: s.diff ? "1" : "" }, o); return '/compare?' + Object.keys(p).filter(k => p[k]).map(k => k + '=' + encodeURIComponent(p[k])).join('&') + '&key=' + K; };
+  const byKey = (k) => devs.find(d => d.key === k);
+  const A = byKey(s.a), B = byKey(s.b);
+  const head = '<div class=mast>Compare developers</div><div class=sub>tap two developers - every row re-cuts by bedroom and price band</div>';
+  // ---- stage 1: pick (grid of the eleven; the tray pins the first pick)
+  if (!A || !B) {
+    const first = A || B;
+    const tiles = devs.filter(d => !first || d.key !== first.key).map(d =>
+      '<a class=tile href="' + q(first ? { a: first.key, b: d.key } : { a: d.key, b: "" }) + '">' + devLogo(d, 44) + '<div class=tn>' + d.name + '</div><div class=tt>' + tierSvg(d.icon) + '<span>' + d.segment_label + '</span></div></a>').join("");
+    const tray = first
+      ? '<div class=tray>' + devLogo(first, 36) + '<div><div class=trn>' + first.name + '</div><div class=trs>now tap the second developer</div></div><a class=mini href="/compare?key=' + K + '">clear</a></div>'
+      : '<div class=tray><div class=trs>pick the first developer - two slots</div></div>';
+    return page(head + '<div class=grid>' + tiles + '</div>' + tray);
+  }
+  // ---- stage 2: the table
+  const ca = C[A.key] || {}, cb = C[B.key] || {}; const cut = s.bed + "|" + s.band;
+  const xa = (ca.cells || {})[cut], xb = (cb.cells || {})[cut];
+  const ra = (ca.rents || {})[s.bed], rb = (cb.rents || {})[s.bed];
+  const pct = (v) => v == null ? null : Math.round(v * 100) + "%";
+  const rng = (x) => x && x.p10 ? "AED " + fm(x.p10) + " - " + fm(x.p90) : null;
+  const yld = (r, x) => (r && x && x.median) ? (r.median / x.median * 100).toFixed(1) + "%" : null;
+  // rows: [label, valueA, valueB, numericA, numericB]  (numeric drives the marker; null = no marker)
+  const rows = [
+    ["Registered sales 2026", xa ? fm(xa.n) : null, xb ? fm(xb.n) : null, xa && xa.n, xb && xb.n],
+    ["Median price", xa && xa.median ? "AED " + fm(xa.median) : null, xb && xb.median ? "AED " + fm(xb.median) : null, xa && xa.median, xb && xb.median],
+    ["Typical range (P10-P90)", rng(xa), rng(xb), null, null],
+    ["Median AED / m²", xa && xa.sqm ? fm(xa.sqm) : null, xb && xb.sqm ? fm(xb.sqm) : null, xa && xa.sqm, xb && xb.sqm],
+    ["Off-plan share", xa ? pct(xa.offplan) : null, xb ? pct(xb.offplan) : null, xa && xa.offplan, xb && xb.offplan],
+    ["Where the sales are", xa && xa.areas ? xa.areas.join(" · ") : null, xb && xb.areas ? xb.areas.join(" · ") : null, null, null],
+    ["Median rent " + (cmp.beds[s.bed] || ""), ra ? "AED " + fm(ra.median) + " / yr" : null, rb ? "AED " + fm(rb.median) + " / yr" : null, ra && ra.median, rb && rb.median],
+    ["Gross yield proxy", yld(ra, xa), yld(rb, xb), null, null],
+    ["Projects trading 2026", String(ca.projects_trading || 0), String(cb.projects_trading || 0), ca.projects_trading, cb.projects_trading],
+    ["Registered 2026 (DLD)", String(ca.registered_2026 || 0), String(cb.registered_2026 || 0), ca.registered_2026, cb.registered_2026],
+    ["Handovers ahead", (ca.handovers || []).slice(0, 3).join(" · ") || null, (cb.handovers || []).slice(0, 3).join(" · ") || null, null, null],
+    ["Portfolio on developer site", ca.portfolio != null ? String(ca.portfolio) : null, cb.portfolio != null ? String(cb.portfolio) : null, null, null],
+    ["MEED active projects", String(ca.meed_active || 0), String(cb.meed_active || 0), ca.meed_active, cb.meed_active],
+    ["Units on the developer sheet", ca.sheet_units ? String(ca.sheet_units) : null, cb.sheet_units ? String(cb.sheet_units) : null, null, null],
+    ["Modelled - unit cards", ca.ours_cards ? "yes" : "not yet", cb.ours_cards ? "yes" : "not yet", null, null],
+  ];
+  const tr = rows.filter(r => !s.diff || (r[1] || "") !== (r[2] || "")).map(r => {
+    const ma = r[3] != null && r[4] != null && r[3] > r[4], mb = r[3] != null && r[4] != null && r[4] > r[3];
+    return '<tr><th>' + r[0] + '</th><td' + (ma ? ' class=hi' : '') + '>' + (r[1] || '<span class=none>no data in this cut</span>') + '</td><td' + (mb ? ' class=hi' : '') + '>' + (r[2] || '<span class=none>no data in this cut</span>') + '</td></tr>';
+  }).join("");
+  const chips = (name, map, cur) => '<div class=chips>' + Object.keys(map).map(k => '<a class="chip' + (k === cur ? ' on' : '') + '" href="' + q({ [name]: k }) + '">' + map[k] + '</a>').join("") + '</div>';
+  const body = head +
+    '<table class=cmp><thead><tr><th><a class=mini href="' + q({ a: B.key, b: A.key }) + '">swap</a></th>' +
+    '<th><a class=col href="' + q({ a: "", b: B.key }) + '">' + devLogo(A, 40) + '<span>' + A.name + '</span><em>change</em></a></th>' +
+    '<th><a class=col href="' + q({ a: A.key, b: "" }) + '">' + devLogo(B, 40) + '<span>' + B.name + '</span><em>change</em></a></th></tr></thead><tbody>' + tr + '</tbody></table>' +
+    '<div class=sec>Bedrooms</div>' + chips("bed", cmp.beds, s.bed) + '<div class=sec>Price band</div>' + chips("band", cmp.bands, s.band) +
+    '<div class=chips><a class="chip' + (s.diff ? ' on' : '') + '" href="' + q({ diff: s.diff ? "" : "1" }) + '">differences only</a><a class=chip href="' + q({ bed: "all", band: "all", diff: "" }) + '">reset</a></div>' +
+    '<div class=legend><span class=dot></span> the higher of the two - not a verdict: a higher AED/m² is a pricier product, a higher off-plan share is a younger pipeline</div>' +
+    '<div class=legend>' + (cmp.note || "") + ' Updated ' + (cmp.updated || "") + '.</div>' +
+    '<div style="margin-top:12px"><a class=act href="/dev?d=' + A.key + '&key=' + K + '">' + A.name + ' properties</a><a class=act href="/dev?d=' + B.key + '&key=' + K + '">' + B.name + ' properties</a><a class=act href="/home?key=' + K + '">← developers</a></div>';
+  return page(body);
+
+  function page(inner) {
+    return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Compare developers</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
+:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
+body{margin:auto;max-width:720px;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:14px 14px 150px}
+.mast{font-family:Fraunces,Georgia,serif;font-size:1.35rem;font-weight:600}.sub{color:var(--mut);font-size:.72rem;margin:4px 0 12px;font-family:"IBM Plex Mono",monospace}
+.logo,.mono{border-radius:10px;background:#fff;object-fit:contain;padding:4px;display:block}.mono{background:#1C2B28;color:var(--gold);text-align:center;font-family:Fraunces,Georgia,serif;font-weight:600;padding:0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tile{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;text-decoration:none;color:var(--text)}.tile:active{border-color:var(--gold)}
+.tn{font-family:Fraunces,Georgia,serif;font-weight:600;margin-top:8px}.tt{display:flex;gap:5px;align-items:center;color:var(--gold);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
+.tray{position:fixed;left:0;right:0;bottom:62px;z-index:39;display:flex;gap:10px;align-items:center;max-width:720px;margin:auto;background:rgba(19,31,29,.97);border-top:1px solid var(--line);padding:10px 14px}.trn{font-family:Fraunces,Georgia,serif;font-weight:600}.trs{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace}
+.mini{margin-left:auto;border:1px solid var(--line);border-radius:99px;padding:3px 9px;color:var(--text);text-decoration:none;font-size:.66rem;white-space:nowrap}
+table.cmp{width:100%;border-collapse:collapse;font-size:.74rem}table.cmp thead th{position:sticky;top:0;background:var(--ink);z-index:2;padding:6px 4px 8px;border-bottom:1px solid var(--gold);text-align:left;vertical-align:bottom}
+.col{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-decoration:none;color:var(--text)}.col span{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:.9rem;line-height:1.1}.col em{font-style:normal;color:var(--mut);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em}
+table.cmp tbody th{text-align:left;font-weight:500;color:var(--mut);padding:9px 6px 9px 0;border-bottom:1px solid var(--line);width:34%;vertical-align:top;font-size:.68rem}table.cmp tbody td{padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:top;font-family:"IBM Plex Mono",monospace;width:33%}
+td.hi{color:var(--gold)}td.hi::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold);margin-right:6px;vertical-align:middle}.none{color:var(--mut);font-size:.64rem;font-family:"IBM Plex Sans",system-ui,sans-serif}
+.sec{color:var(--mut);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;margin:14px 2px 6px}.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--text);text-decoration:none;font-size:.72rem;background:var(--card)}.chip.on{border-color:var(--gold);color:var(--gold)}
+.legend{display:flex;gap:6px;align-items:flex-start;color:var(--mut);font-size:.64rem;margin-top:10px;font-family:"IBM Plex Mono",monospace}.dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--gold);margin-top:5px}
+.act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--text);text-decoration:none;font-size:.72rem;margin:0 6px 8px 0;background:var(--card)}
+${NAJ_NAV_CSS}</style></head><body>${inner}${najNav(key, "homes")}</body></html>`;
+  }
 }
 function renderCards(ci, b, key, t) {
   const cards = ci.cards || [];
