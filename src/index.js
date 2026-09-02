@@ -4084,11 +4084,10 @@ function renderHome(bd, key, cmp, s) {
   let tiles = "", bar = "";
   if (!compare) {
     tiles = (bd.developers || []).map(dv => {
-      const k = dv.kpi || {};
-      const line = k.tx_2026 ? fm(k.tx_2026) + ' sales 2026 · AED ' + fm(k.value_aed) : (k.registered_2026 ? k.registered_2026 + ' registered 2026' : (k.meed_projects ? k.meed_projects + ' MEED projects' : 'on the list'));
+      // default view = clean: logo, name, tier (and a quiet "modelled" mark). Numbers live ONLY in compare mode (Kendall, 2 Sep).
       return '<a class=tile href="/dev?d=' + encodeURIComponent(dv.key) + '&key=' + K + '">' + devLogo(dv, 56) +
         '<div class=nm>' + dv.name + '</div><div class=tier>' + tierSvg(dv.icon) + '<span>' + dv.segment_label + '</span></div>' +
-        '<div class=kpi>' + line + (dv.ours && dv.ours.length ? ' · <b style="color:#8FC7B9">' + dv.ours.length + ' modelled</b>' : '') + '</div></a>';
+        (dv.ours && dv.ours.length ? '<div class=kpi><b style="color:#8FC7B9">' + dv.ours.length + ' modelled</b></div>' : '') + '</a>';
     }).join("");
     bar = '<div class=chips><a class="chip on" href="' + q({ bed: "2", metric: "range" }) + '">compare mode →</a></div>';
   } else {
