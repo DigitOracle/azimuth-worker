@@ -1935,6 +1935,12 @@ export default {
         try { await waSend(env, env.WA_ALLOWED, tx); } catch (e) { return new Response("send failed", { status: 502 }); }
         return new Response("announced");
       }
+      if (url.pathname === "/trust_test") {                    // v72.2 — developer trust check, RETURN it (does not message the user)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const q = url.searchParams.get("q") || "";
+        if (!q) return new Response("pass ?q=<developer name>", { status: 400 });
+        return new Response(devTrustText(await devTrust(env, q)), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      }
       if (url.pathname === "/launch_test") {                   // v43 — run a launch check, RETURN the briefing (does not message the user)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const q = url.searchParams.get("q") || "";
@@ -1988,6 +1994,21 @@ export default {
         const _mk = url.searchParams.get("key") || "";
         return new Response(JSON.stringify({ name: "Najma", short_name: "Najma", start_url: "/market?key=" + _mk, display: "standalone", background_color: "#0C1413", theme_color: "#0C1413", icons: [{ src: "/naj_icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }] }), { headers: { "Content-Type": "application/manifest+json" } });
       }
+      if (url.pathname === "/home") {                         // v73 - developer grid (2 x 5): the new top of the board (board_devs pushed by build_board.py)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _bd = null; try { _bd = JSON.parse((await env.MEETINGS.get("img_board_devs")) || "null"); } catch (e) {}
+        if (!_bd) return new Response("no board data yet - run build_board.py", { status: 404 });
+        return new Response(renderHome(_bd, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/dev") {                          // v73 - one developer: its property cards (ours -> registered -> trading), then down to unit cards
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _bd = null; try { _bd = JSON.parse((await env.MEETINGS.get("img_board_devs")) || "null"); } catch (e) {}
+        const _dv = _bd && (_bd.developers || []).find(x => x.key === String(url.searchParams.get("d") || "").replace(/[^a-z0-9_]/g, ""));
+        if (!_dv) return new Response("no such developer on the board", { status: 404 });
+        let _galleries = {};
+        for (const _b of (_dv.ours || [])) { try { const _j = JSON.parse((await env.MEETINGS.get("img_cards_" + _b + "_index")) || "null"); if (_j) _galleries[_b] = _j; } catch (e) {} }
+        return new Response(renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/cards") {                        // v72 - unit-type card gallery for a building (cards_<b>_index pushed by push_cards.py)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _cb = String(url.searchParams.get("b") || "symphony").replace(/[^a-z0-9]/g, "");
@@ -2003,7 +2024,8 @@ export default {
         let _cards = [];                                          // v72 - card galleries that belong to this developer's drill
         for (const _b of (CARD_BUILDINGS[_dk] || [])) { try { const _j = JSON.parse((await env.MEETINGS.get("img_cards_" + _b + "_index")) || "null"); if (_j) _cards.push(_j); } catch (e) {} }
         const _full = url.searchParams.get("full") === "1" && _dd3.claimed && _dd3.claimed.detail;
-        return new Response(_full ? renderAvailUnits(_dd3, _dk, url.searchParams.get("key") || "") : renderAvailDrill(_dd3, _dk, url.searchParams.get("key") || "", _cards), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        let _dt = null; try { _dt = await devTrust(env, String(_dd3.title || _dk).replace(/\s*\(.*?\)\s*$/, "")); } catch (e) {}   // v72.2
+        return new Response(_full ? renderAvailUnits(_dd3, _dk, url.searchParams.get("key") || "") : renderAvailDrill(_dd3, _dk, url.searchParams.get("key") || "", _cards, _dt), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/skyline" || url.pathname.indexOf("/skyline/") === 0) { // v64 — 3D viewer + district rail (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -2124,6 +2146,7 @@ export default {
         if (_mb && _mb.developerIndex && Array.isArray(_mb.developerIndex)) {      // v40 — per-developer track record for launch-briefing due diligence
           if (_mb.developerIndex.length < 20 || _mb.developerIndex.length > 5000) return new Response("developer index size implausible", { status: 400 });
           await env.MEETINGS.put("mkt_devindex", JSON.stringify(_mb.developerIndex));
+          try { await env.MEETINGS.put("mkt_devindex_at", String(_mb.generatedAt || new Date().toISOString())); } catch (e) {}   // v72.2 — snapshot date for the trust check
           return new Response(JSON.stringify({ ok: true, developers: _mb.developerIndex.length }), { headers: { "Content-Type": "application/json" } });
         }
         if (_mb && _mb.newsItems && Array.isArray(_mb.newsItems)) {                // v37.2 — Google News batch from the collector (GN blocks Cloudflare IPs)
@@ -2441,6 +2464,14 @@ export default {
             try { await marketBriefTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the brief just now — try again shortly."); }
             return new Response("ok");
           }
+          {                                                     // v72.2 — developer trust check: "trust Binghatti" / "check developer Imtiaz"
+            const _tm = text.match(/^(?:trust check|trust|check developer|developer check|verify developer)\b[:\s]*(.+)$/i);
+            if (_tm && _tm[1] && _tm[1].trim().length > 1) {
+              try { await waSend(env, from, devTrustText(await devTrust(env, _tm[1].trim()))); } catch (e) { await waSend(env, from, "Couldn't run that check — try again shortly."); }
+              try { await dnaSignal(env, "trust_check", _tm[1].trim()); } catch (e) {}
+              return new Response("ok");
+            }
+          }
           {                                                     // v40 — launch mode: due diligence in the developer's briefing room
             const _lm = text.match(/^(?:launch|at a launch|new launch|briefing|due diligence)\b[:\s]*(.+)$/i);
             if (_lm && _lm[1] && _lm[1].trim().length > 8) {
@@ -2506,6 +2537,7 @@ export default {
               "📊 “charts” — post-ready bar/line/pie + a Dubai map" + NL10 +
               "🎯 “client has 1.5M, wants a 1-bed to rent” — instant register-grounded advice for a meeting" + NL10 +
               "🏗 “launch: <developer> in <area>, 1-bed from 1.2M, claims 8% ROI” — due diligence while you're in the pitch" + NL10 +
+              "🛡 “trust <developer>” — MEED delivery record + the official DLD pages to verify licence, escrow and disputes" + NL10 +
               "☀️ “feed” — today's five post-ready angles, any time" + NL10 +
               "📰 “news” — latest headlines, cross-checked against the project register" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
@@ -3259,6 +3291,50 @@ function _devMatch(devIndex, name) {
   return bestScore >= 1 ? best : null;
 }
 
+// v72.2 — DEVELOPER TRUST CHECK. Owner decision 2 Sep 2026 (option A): sourced MEED Projects
+// counts + the OFFICIAL DLD verification pages, nothing else. Third-party dispute tables (PARCEL etc.)
+// are unverifiable, ~15 months stale and a defamation risk — NEVER wired in. Counts are records, not
+// a rating; only the DLD register proves licence, escrow and %-complete. All URLs verified live 2 Sep 2026.
+const DLD_VERIFY = [
+  ["Licensed developers (DLD)", "https://dubailand.gov.ae/en/eservices/approved-real-estate-developers/"],
+  ["Project status + escrow (DLD)", "https://dubailand.gov.ae/en/eservices/real-estate-project-status-landing/"],
+  ["Licences & permits check (DLD)", "https://dubailand.gov.ae/en/eservices/validate-real-estate-licenses-and-permits/"],
+  ["Contractual disputes inquiry (RVS)", "https://dubailand.gov.ae/en/eservices/rvs-contractual-disputes-overview/"],
+  ["Approved escrow trustees (DLD)", "https://dubailand.gov.ae/en/eservices/certified-escrow-agents/"],
+  ["Dubai REST app — iOS", "https://apps.apple.com/us/app/dubai-rest/id1437805105"],
+  ["Dubai REST app — Android", "https://play.google.com/store/apps/details?id=ae.gov.dubailand.selfregistration"],
+];
+async function devTrust(env, name) {
+  let devIndex = []; try { devIndex = JSON.parse((await env.MEETINGS.get("mkt_devindex")) || "[]"); } catch (e) {}
+  let asAt = null; try { asAt = await env.MEETINGS.get("mkt_devindex_at"); } catch (e) {}
+  const dev = _devMatch(devIndex, name);
+  const track = dev ? { name: dev.d, projectsInCorpus: dev.n, completed: dev.complete, underConstruction: dev.construction, cancelled: dev.cancelled, onHold: dev.onhold, activeNow: dev.active, pipelineUsdM: dev.valueUsdM } : null;
+  return { asked: String(name || "").trim(), track, asAt: asAt || null, links: DLD_VERIFY };
+}
+function devTrustText(t) {
+  const n = (x) => (x == null ? 0 : x);
+  const src = "MEED Projects record" + (t.asAt ? " (snapshot " + String(t.asAt).slice(0, 10) + ")" : " (snapshot, undated)");
+  const head = "🛡 Developer trust check — " + (t.track ? t.track.name : t.asked);
+  const rec = t.track
+    ? src + ": " + n(t.track.projectsInCorpus) + " projects · " + n(t.track.completed) + " completed · " + n(t.track.underConstruction) + " under construction · " + n(t.track.cancelled) + " cancelled · " + n(t.track.onHold) + " on hold" + (t.track.pipelineUsdM ? " · pipeline US$" + Math.round(t.track.pipelineUsdM).toLocaleString("en-US") + "m" : "")
+    : src + ": no developer matched “" + t.asked + "” — that alone says nothing either way.";
+  const links = t.links.map(l => "• " + l[0] + ": " + l[1]).join("\n");
+  return head + "\n" + rec + "\n\nVerify on the official pages before you rely on it:\n" + links + "\n\nCounts are project records, not a rating. Only the DLD register proves licence, escrow and %-complete.";
+}
+function devTrustHtml(t) {
+  const e = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const n = (x) => (x == null ? 0 : x);
+  const rec = t.track
+    ? '<div style="font-size:.74rem">' + e(t.track.name) + ' — ' + n(t.track.projectsInCorpus) + ' projects · <b>' + n(t.track.completed) + ' completed</b> · ' + n(t.track.underConstruction) + ' under construction · <b style="color:#E0A090">' + n(t.track.cancelled) + ' cancelled</b> · ' + n(t.track.onHold) + ' on hold</div>'
+    : '<div style="font-size:.74rem;color:var(--mut)">no developer matched “' + e(t.asked) + '” in the MEED record — says nothing either way</div>';
+  const links = t.links.map(l => '<a href="' + e(l[1]) + '" target=_blank rel=noopener style="display:block;color:var(--gold);text-decoration:none;font-size:.72rem;padding:.28rem 0;border-top:1px solid rgba(197,165,106,.25)">↗ ' + e(l[0]) + '</a>').join("");
+  return '<div style="margin-top:14px;background:rgba(62,138,126,.08);border:1px solid rgba(62,138,126,.45);border-radius:12px;padding:.7rem .9rem">' +
+    '<div style="font-family:Fraunces,Georgia,serif;font-weight:600;color:var(--gold)">Verify the developer</div>' +
+    '<div style="color:var(--mut);font-size:.62rem;font-family:\'IBM Plex Mono\',monospace;margin:2px 0 6px">MEED Projects record' + (t.asAt ? ' · snapshot ' + e(String(t.asAt).slice(0, 10)) : ' · snapshot, undated') + '</div>' + rec +
+    '<div style="margin-top:.5rem">' + links + '</div>' +
+    '<div style="color:var(--mut);font-size:.6rem;margin-top:.4rem;font-family:\'IBM Plex Mono\',monospace">records, not a rating — only the DLD register proves licence, escrow and %-complete</div></div>';
+}
+
 async function launchMode(env, to, briefText, returnOnly) {
   if (returnOnly) launchMode._out = "";
   const _send = async (msg) => { if (returnOnly) { launchMode._out += msg + "\n\n"; } else { await waSend(env, to, msg); } };
@@ -3319,6 +3395,7 @@ async function launchMode(env, to, briefText, returnOnly) {
   await dnaSignal(env, "launch_check", (intent.developer || "") + " / " + (intent.area || ""));
   await env.MEETINGS.put("mkt_lastmatch", JSON.stringify({ at: gstNowIso(), ask: intent, brief: out }), { expirationTtl: 3 * 86400 });
   await _send("🏗 Launch check — what the register says\n\n" + out);
+  try { await _send(devTrustText(await devTrust(env, intent.developer))); } catch (e) {}   // v72.2 — official verification doors, always
   await _sendButtons("Keep it for the room, or turn the honest read into content.", [
     { id: "match:post", title: "📸 Make it a post" },
     { id: "match:done", title: "✓ Just for me" }]);
@@ -3974,6 +4051,92 @@ if(ar&&ar.features)ar.features.forEach(function(f){POLY[f.properties.n]=f.geomet
 // v72 - UNIT CARDS: buildings with card galleries per drill key, label helper, and the gallery page
 const CARD_BUILDINGS = { imtiaz: ["symphony"] };
 function cardLabel(t) { return String(t || "").replace(/_/g, " ").replace(/MasterSuite 1BR/, "Master Suite 1BR").replace(/4BR Duplex (lower|upper)/, "4BR Duplex - $1"); }
+// v73 - HOME: the developer grid. Ten cards, two by five, one per developer on Najjuko's list; tap -> /dev. Logos come from
+// KV logo_<key> (/img/logo_<key>) with a monogram fallback so a missing logo never breaks the grid.
+const TIER_GLYPH = { crown: "M4 18h16l-1.5-9-4.5 4-2-7-2 7-4.5-4z", gem: "M6 3h12l4 6-10 12L2 9z", leaf: "M20 4C10 4 4 10 4 20c10 0 16-6 16-16zM4 20 14 10", spark: "M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2z", key: "M14 3a5 5 0 1 0 4.6 7L21 12.4l-2 2-2-2-2 2-2-2-1.4 1.4A5 5 0 0 0 14 3z" };
+function tierSvg(icon) { return '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#C5A56A" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="' + (TIER_GLYPH[icon] || TIER_GLYPH.spark) + '"/></svg>'; }
+function devLogo(dv, size) {
+  const mono = dv.name.replace(/[^A-Za-z&]/g, "").slice(0, 2).toUpperCase();
+  const fb = '<div class=mono style="width:' + size + 'px;height:' + size + 'px;line-height:' + size + 'px;font-size:' + Math.round(size * .38) + 'px">' + mono + '</div>';
+  return dv.logo ? '<img class=logo src="' + dv.logo + '" alt="" width=' + size + ' height=' + size + ' onerror="this.outerHTML=\'' + fb.replace(/'/g, "\\'") + '\'">' : fb;
+}
+function renderHome(bd, key) {
+  const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(1) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(0) + " M" : Math.round(n).toLocaleString("en-US"));
+  const tiles = (bd.developers || []).map(dv => {
+    const k = dv.kpi || {};
+    const line = k.tx_2026 ? fm(k.tx_2026) + ' sales 2026 · AED ' + fm(k.value_aed) : (k.registered_2026 ? k.registered_2026 + ' registered 2026' : (k.meed_projects ? k.meed_projects + ' MEED projects' : 'on the list'));
+    return '<a class=tile href="/dev?d=' + encodeURIComponent(dv.key) + '&key=' + encodeURIComponent(key) + '">' + devLogo(dv, 56) +
+      '<div class=nm>' + dv.name + '</div><div class=tier>' + tierSvg(dv.icon) + '<span>' + dv.segment_label + '</span></div>' +
+      '<div class=kpi>' + line + (dv.ours && dv.ours.length ? ' · <b style="color:#8FC7B9">' + dv.ours.length + ' modelled</b>' : '') + '</div></a>';
+  }).join("");
+  return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Najma - developers</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
+:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
+body{margin:auto;max-width:720px;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:14px 14px 88px}
+.mast{font-family:Fraunces,Georgia,serif;font-size:1.3rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
+.sub{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace;margin:2px 0 14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 12px 12px;text-decoration:none;color:var(--text);min-height:150px;position:relative}
+.tile:active{border-color:var(--gold)}
+.logo,.mono{border-radius:12px;background:#fff;object-fit:contain;padding:6px;display:block}.mono{background:#1C2B28;color:var(--gold);text-align:center;font-family:Fraunces,Georgia,serif;font-weight:600;padding:0}
+.nm{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.02rem;margin-top:10px;line-height:1.15}
+.tier{display:flex;align-items:center;gap:5px;color:var(--gold);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+.kpi{color:var(--mut);font-size:.66rem;font-family:"IBM Plex Mono",monospace;margin-top:6px;line-height:1.35}
+.act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--text);text-decoration:none;font-size:.72rem;margin:0 6px 8px 0;background:var(--card)}
+${NAJ_NAV_CSS}</style></head><body>
+<div class=mast>Najma <em>نجمة</em> · developers</div>
+<div class=sub>your ${(bd.developers || []).length} developers in five tiers · tap one for its properties, then a property for its unit cards · updated ${bd.updated || ""}</div>
+<div class=grid>${tiles}</div>
+<div style="margin-top:14px"><a class=act href="/board?key=${encodeURIComponent(key)}">meetings board</a><a class=act href="/market?key=${encodeURIComponent(key)}">market pulse</a></div>
+<div class=sub style="margin-top:10px">${bd.note || ""}</div>
+${najNav(key, "market")}
+</body></html>`;
+}
+// v73 - DEVELOPER PAGE: property cards. "ours" first (modelled, unit cards ready), then DLD-registered 2026 projects, then projects trading in 2026.
+function renderDev(dv, bd, galleries, key) {
+  const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(2) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(1) + " M" : Math.round(n).toLocaleString("en-US"));
+  const k = dv.kpi || {};
+  const kp = [k.tx_2026 ? ["Sales 2026", fm(k.tx_2026)] : null, k.value_aed ? ["Value", "AED " + fm(k.value_aed)] : null, k.median_aed_per_sqm ? ["Median", "AED " + fm(k.median_aed_per_sqm) + "/m²"] : null,
+              k.registered_2026 ? ["Registered 2026", String(k.registered_2026)] : null, k.meed_projects ? ["MEED projects", String(k.meed_projects)] : null].filter(Boolean)
+    .map(x => '<div class=k><div class=v>' + x[1] + '</div><div class=l>' + x[0] + '</div></div>').join("");
+  const cards = (dv.properties || []).map(p => {
+    if (p.kind === "ours") {
+      const g = galleries[p.building]; const n = g && g.cards ? g.cards.length : 0;
+      return '<a class=prop href="/cards?b=' + encodeURIComponent(p.cards) + '&key=' + encodeURIComponent(key) + '"><div class=ph><span class=pn>' + p.name + '</span><span class=badge>modelled</span></div>' +
+        '<div class=pm>' + (p.area || "") + ' · ' + (p.status || "") + '</div>' +
+        '<div class=pm style="color:#8FC7B9">' + (n ? n + ' unit-type cards · availability from the latest developer sheet' : 'cards being generated') + '</div>' +
+        '<div class=row><span class=go>unit cards →</span>' + (p.drill ? '<a class=mini href="/avail?d=' + p.drill + '&key=' + encodeURIComponent(key) + '">the mix</a>' : '') + (p.meta ? '<a class=mini href="/skyline/' + p.meta + '?key=' + encodeURIComponent(key) + '">3D</a>' : '') + '</div></a>';
+    }
+    if (p.kind === "registered") {
+      return '<div class=prop><div class=ph><span class=pn>' + p.name + '</span><span class=badge style="border-color:var(--line);color:var(--mut)">DLD ' + (p.status || "registered") + '</span></div>' +
+        '<div class=pm>' + (p.area || "") + (p.units ? ' · ' + Math.round(p.units) + ' units' : '') + (p.pct != null ? ' · ' + p.pct + '% built' : '') + (p.value_aed ? ' · AED ' + fm(p.value_aed) : '') + '</div>' +
+        '<div class=pm style="color:var(--mut)">registered ' + (p.start || "2026") + ' · no cards yet - send the floor-plan deck and the availability sheet to the group</div></div>';
+    }
+    return '<div class=prop><div class=ph><span class=pn>' + p.name + '</span><span class=badge style="border-color:var(--line);color:var(--mut)">trading</span></div>' +
+      '<div class=pm>' + (p.area || "") + ' · ' + p.tx + ' registered sales 2026' + (p.median_aed_per_sqm ? ' · median AED ' + fm(p.median_aed_per_sqm) + '/m²' : '') + (p.offplan_share != null ? ' · ' + Math.round(p.offplan_share * 100) + '% off-plan' : '') + '</div>' +
+      '<div class=pm style="color:var(--mut)">last registration ' + (p.last || "") + ' · DLD Open Data</div></div>';
+  }).join("");
+  return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${dv.name} - properties</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
+:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
+body{margin:auto;max-width:720px;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:14px 14px 88px}
+.hd{display:flex;gap:14px;align-items:center;margin-bottom:6px}.logo,.mono{border-radius:14px;background:#fff;object-fit:contain;padding:8px;display:block}.mono{background:#1C2B28;color:var(--gold);text-align:center;font-family:Fraunces,Georgia,serif;font-weight:600;padding:0}
+.mast{font-family:Fraunces,Georgia,serif;font-size:1.35rem;font-weight:600;line-height:1.1}.tier{display:flex;align-items:center;gap:5px;color:var(--gold);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin:12px 0 16px}.k{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 10px 8px}.k .v{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;color:var(--gold)}.k .l{color:var(--mut);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.sec{color:var(--mut);font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;margin:14px 2px 8px}
+.prop{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;text-decoration:none;color:var(--text)}
+a.prop{border-color:#2E4A44}a.prop:active{border-color:var(--gold)}
+.ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.pn{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1rem}.badge{border:1px solid #3E7C6C;color:#8FC7B9;border-radius:99px;padding:2px 8px;font-size:.62rem;white-space:nowrap}
+.pm{color:var(--text);font-size:.72rem;margin-top:4px;font-family:"IBM Plex Mono",monospace}.row{display:flex;gap:8px;align-items:center;margin-top:8px}.go{color:var(--gold);font-weight:600;font-size:.78rem}.mini{margin-left:auto;border:1px solid var(--line);border-radius:99px;padding:3px 9px;color:var(--text);text-decoration:none;font-size:.66rem}.mini+.mini{margin-left:6px}
+.act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--text);text-decoration:none;font-size:.72rem;margin:0 6px 8px 0;background:var(--card)}
+${NAJ_NAV_CSS}</style></head><body>
+<div class=hd>${devLogo(dv, 64)}<div><div class=mast>${dv.name}</div><div class=tier>${tierSvg(dv.icon)}<span>${dv.segment_label}</span></div></div></div>
+<div class=kpis>${kp}</div>
+${(dv.properties || []).some(p => p.kind === "ours") ? '<div class=sec>Modelled - unit cards ready</div>' : ''}
+${cards || '<div class=prop><div class=pm>No properties on file yet - the first floor-plan deck or availability sheet posted to the group starts the file.</div></div>'}
+<div style="margin-top:14px"><a class=act href="/home?key=${encodeURIComponent(key)}">← developers</a><a class=act href="/board?key=${encodeURIComponent(key)}">board</a></div>
+<div class=sub style="color:var(--mut);font-size:.66rem;font-family:'IBM Plex Mono',monospace;margin-top:10px">${(dv.entities || []).length ? 'DLD entities: ' + dv.entities.join(' · ') : ''}</div>
+${najNav(key, "market")}
+</body></html>`;
+}
 function renderCards(ci, b, key, t) {
   const cards = ci.cards || [];
   const sel = t ? cards.find(c => c.type === t) : null;
@@ -4031,7 +4194,7 @@ ${najNav(key, "market")}
 
 // v69 - AVAILABILITY DRILL: one project, registered sales mix as a donut + per-room medians.
 // Developer-claimed unit availability joins this page after PDF extraction - separate, dated.
-function renderAvailDrill(d, dk, key, cards) {
+function renderAvailDrill(d, dk, key, cards, trust) {
   const COLS = ["#3E8A7E", "#C5A56A", "#8FC7B9", "#A88544", "#566B64", "#E8E4D8"];
   const rooms = (d.rooms || []).slice(0, 6);
   const total = rooms.reduce((a, x) => a + (x.n || 0), 0) || 1;
@@ -4101,6 +4264,7 @@ ${(() => {                                                      // v72 - unit-ty
       '<div style="color:var(--mut);font-size:.6rem;margin-top:.4rem;font-family:\'IBM Plex Mono\',monospace">developer plate + availability as of the latest sheet - rebuilt daily</div></div>';
   }).join("");
 })()}
+${trust ? devTrustHtml(trust) : ""}
 <div style="margin-top:14px"><div style="font-family:Fraunces,Georgia,serif;font-weight:600;margin-bottom:2px">Latest registered</div>${latest}</div>
 <div style="margin-top:14px">${acts}</div>
 <div style="color:var(--mut);font-size:.62rem;margin-top:16px;font-family:'IBM Plex Mono',monospace">settled, not asking — the register's own numbers</div>
