@@ -4127,7 +4127,7 @@ body{margin:auto;max-width:720px;background:var(--ink);color:var(--text);font-fa
 .mast{font-family:Fraunces,Georgia,serif;font-size:1.3rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
 .sub{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace;margin:2px 0 14px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.tile{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 12px 12px;text-decoration:none;color:var(--text);min-height:150px;position:relative;min-width:0}
+.tile{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 12px 12px;text-decoration:none;color:var(--text);min-height:132px;position:relative;min-width:0}
 .tile:active{border-color:var(--gold)}
 .logo,.mono{border-radius:12px;background:#fff;object-fit:contain;padding:6px;display:block}.mono{background:#1C2B28;color:var(--gold);text-align:center;font-family:Fraunces,Georgia,serif;font-weight:600;padding:0}
 .nm{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.02rem;margin-top:10px;line-height:1.15}
