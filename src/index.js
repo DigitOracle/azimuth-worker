@@ -4460,6 +4460,11 @@ function renderSkyline(slugName, areaName, key, rail) {
 :root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
 html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;overflow:hidden}
 #cv3{position:fixed;inset:0}
+#lbls{position:fixed;inset:0;pointer-events:none;overflow:hidden}#lbls svg{position:absolute;inset:0;width:100%;height:100%}
+.lb{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;text-decoration:none;color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.74rem;font-weight:500;letter-spacing:.01em;white-space:nowrap;opacity:0;transition:opacity .45s ease;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 12px rgba(12,20,19,.9)}
+.lb.on{opacity:1}.lb i{display:block;font-style:normal;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:1px}.lb.dev{font-weight:600}
+#legend{position:fixed;left:14px;bottom:78px;display:flex;flex-direction:column;gap:5px;pointer-events:none;opacity:0;transition:opacity .4s}#legend.on{opacity:1}
+.lg{display:flex;align-items:center;gap:7px;font-family:"IBM Plex Mono",monospace;font-size:.64rem;color:var(--text);background:rgba(19,31,29,.85);border:1px solid var(--line);border-radius:99px;padding:4px 10px 4px 6px}.lg b{width:9px;height:9px;border-radius:50%;display:inline-block}
 .top{position:fixed;top:0;left:0;right:0;padding:12px 14px 26px;background:linear-gradient(180deg,rgba(12,20,19,.92),rgba(12,20,19,0));pointer-events:none}
 .mast{font-family:Fraunces,Georgia,serif;font-size:1.3rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}
 .sub{color:var(--mut);font-size:.7rem;font-family:"IBM Plex Mono",monospace;margin-top:2px}
@@ -4523,6 +4528,8 @@ new GLTFLoader().load("/img/sky_${slugName}",g=>{
     o.userData.grp=grp;GROUPS[grp].meshes.push(o);}});
   scene.add(root);
   ROOTREF=root;drawCtx();
+  MESHES=[];root.traverse(o=>{if(o.isMesh)MESHES.push(o)});   // v74: export order = mesh index (per-building GLB), used by the anchors
+  paintDevs();
   const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1}));
   ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;scene.add(ground);
   const R=Math.max(sz.x,sz.z);cam.position.set(R*0.9,R*0.42,R*0.9);ctl.target.set(0,sz.y*0.18,0);
@@ -4588,6 +4595,54 @@ function showCard(b){
   document.getElementById("cfacts").innerHTML=(b.facts||[]).map(f=>"<div class=cf><span>"+f[0]+"</span><span>"+f[1]+"</span></div>").join("");
   document.getElementById("cp").textContent=(b.sources||[]).join(" · ")+(b.placement?" · "+b.placement:"");
   document.getElementById("card").classList.add("on");}
+// ---- v74 LABELS + DEVELOPER COLOUR (Kendall, 3 Sep): names float above buildings passing the FRONT of the rotation, on thin
+// leader lines at staggered heights, ten at most, held a few seconds, never painted on the model. Buildings of the eleven
+// developers take their developer's colour; the legend lists only developers currently labelled. Anchors = data/names/anchors_<slug>.json
+// (name, x/z in the GLB's own metres, roof height, developer key, mesh index) built by build_anchors.py.
+const DEVCOL={omniyat:0xE8E4D8,hh:0xD96C5F,meraas:0xD9A441,select:0x3E8A7E,ellington:0x8FC7B9,arada:0x56B584,zaya_palma:0x9B8CE6,fakhruddin:0xF28C6A,beyond:0x4C9BE8,imtiaz:0xC41E3A,iman:0xB08BD9};
+const DEVNAME={omniyat:"OMNIYAT",hh:"H&H",meraas:"Meraas",select:"Select Group",ellington:"Ellington",arada:"Arada",zaya_palma:"ZAYA / Palma",fakhruddin:"Fakhruddin",beyond:"BEYOND",imtiaz:"Imtiaz",iman:"Iman"};
+const KEY=${JSON.stringify(key || "")};let ANCH=null,MESHES=null,LIVE=new Map();const TIERS=[62,118,168,92,142,196,76,128,182,106];
+const lblWrap=document.createElement("div");lblWrap.id="lbls";lblWrap.innerHTML='<svg xmlns="http://www.w3.org/2000/svg"></svg>';document.body.appendChild(lblWrap);
+const svgL=lblWrap.querySelector("svg");const legend=document.createElement("div");legend.id="legend";document.body.appendChild(legend);
+fetch("/img/anchors_${slugName}").then(r=>r.ok?r.json():null).then(a=>{if(!a||!a.anchors)return;ANCH=a;paintDevs()}).catch(()=>{});
+function paintDevs(){
+  if(!ANCH||!MESHES||!ANCH.per_building_glb)return;
+  for(const a of ANCH.anchors){if(!a.dev||a.mesh==null)continue;const m=MESHES[a.mesh];if(!m)continue;
+    m.material=m.material.clone();m.material.color.setHex(DEVCOL[a.dev]||0xC5A56A);m.material.emissive=new THREE.Color(DEVCOL[a.dev]||0xC5A56A);m.material.emissiveIntensity=0.12;m.userData.dev=a.dev}}
+const _v=new THREE.Vector3(),_c=new THREE.Vector3(),_t=new THREE.Vector3();
+function updateLabels(){
+  if(!ANCH||!ROOTREF)return;
+  const W=innerWidth,H=innerHeight;cam.getWorldDirection(_c);_t.copy(ctl.target);
+  const cand=[];
+  for(const a of ANCH.anchors){
+    if(a.x==null)continue;
+    _v.set(a.x,a.h,a.z).add(ROOTREF.position);                   // GLB metres -> world (root is re-centred by the viewer)
+    const toB=_v.clone().sub(cam.position);const depth=toB.dot(_c);if(depth<=0)continue;
+    const front=_v.clone().sub(_t).dot(cam.position.clone().sub(_t))>0;   // on the camera's side of the orbit centre = passing in front
+    if(!front)continue;
+    const p=_v.clone().project(cam);const sx=(p.x+1)/2*W,sy=(1-p.y)/2*H;
+    if(sx<40||sx>W-40||sy<110||sy>H-120)continue;
+    cand.push({a,sx,sy,depth,score:(a.dev?1e6:0)+a.h*10-depth*0.02});}
+  cand.sort((x,y)=>y.score-x.score);
+  const pick=[],MINDX=Math.max(40,Math.min(64,W/8)),TS=Math.max(.55,Math.min(1,H/820));   // spacing and leader tiers scale with the screen
+  for(const c of cand){if(pick.length>=10)break;if(pick.some(q=>Math.abs(q.sx-c.sx)<MINDX&&Math.abs(q.sy-c.sy)<140))continue;pick.push(c)}
+  const now=performance.now();const keep=new Set();
+  pick.forEach((c,i)=>{const k=String(c.a.i);keep.add(k);let L=LIVE.get(k);
+    if(!L){const el=document.createElement("a");el.className="lb"+(c.a.dev?" dev":"");el.href=c.a.dev?"/dev?d="+c.a.dev+"&key="+encodeURIComponent(KEY):"javascript:void 0";
+      el.innerHTML=c.a.name.replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))+(c.a.dev?"<i>"+DEVNAME[c.a.dev]+(c.a.h>20?" · "+Math.round(c.a.h)+" m":"")+"</i>":(c.a.h>40?"<i>"+Math.round(c.a.h)+" m</i>":""));
+      const ln=document.createElementNS("http://www.w3.org/2000/svg","polyline");ln.setAttribute("fill","none");ln.setAttribute("stroke-width","1");
+      const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");dot.setAttribute("r","2.4");
+      svgL.appendChild(ln);svgL.appendChild(dot);lblWrap.appendChild(el);
+      L={el,ln,dot,tier:TIERS[LIVE.size%TIERS.length],born:now};LIVE.set(k,L);requestAnimationFrame(()=>el.classList.add("on"))}
+    L.seen=now;const col=c.a.dev?"#"+DEVCOL[c.a.dev].toString(16).padStart(6,"0"):"rgba(197,165,106,.75)";
+    const ty=Math.max(112,c.sy-L.tier*TS),e2=L.el;e2.style.left=c.sx+"px";e2.style.top=(ty-4)+"px";e2.style.color=c.a.dev?col:"";   // never under the masthead
+    L.ln.setAttribute("points",c.sx+","+c.sy+" "+c.sx+","+(ty+2));L.ln.setAttribute("stroke",col);L.dot.setAttribute("cx",c.sx);L.dot.setAttribute("cy",c.sy);L.dot.setAttribute("fill",col);});
+  LIVE.forEach((L,k)=>{if(!keep.has(k)){if(!L.dying){L.dying=now;L.el.classList.remove("on");L.ln.setAttribute("stroke","transparent");L.dot.setAttribute("fill","transparent")}
+    else if(now-L.dying>500){L.el.remove();L.ln.remove();L.dot.remove();LIVE.delete(k)}}});
+  const devs=[...new Set(pick.map(c=>c.a.dev).filter(Boolean))];
+  legend.innerHTML=devs.map(d=>'<span class=lg><b style="background:#'+DEVCOL[d].toString(16).padStart(6,"0")+'"></b>'+DEVNAME[d]+'</span>').join("");
+  legend.classList.toggle("on",devs.length>0);}
+{const _r=ren.render.bind(ren);ren.render=function(s,c){_r(s,c);try{updateLabels()}catch(e){}}}
 const ray=new THREE.Raycaster(),ptr=new THREE.Vector2();let pd=null;
 addEventListener("pointerdown",e=>{pd=[e.clientX,e.clientY]});
 addEventListener("pointerup",e=>{
