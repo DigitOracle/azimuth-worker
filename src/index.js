@@ -4508,6 +4508,7 @@ ${NAJ_NAV_CSS}</style></head><body>
 <div class=top><div class=mast>${esc(v.name || "The view")}</div><div class=sub>${esc(v.side ? v.side + " facade" : "")} · standing at ${Math.round(v.h)} m · live photoreal imagery</div></div>
 ${v.sees ? '<div class=sees><b>this side looks at</b>' + esc(v.sees) + '</div>' : ''}
 <a class=back href="javascript:history.back()">← back</a>
+<div class=msg id=st>bringing the view into focus…</div>
 ${noKey ? '<div class=msg>The real view needs the mapping key.<br>Add <code>GOOGLE_MAPS_KEY</code> to the Worker, or open this page with <code>&amp;gkey=…</code>.</div>' : ''}
 <script src="https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/Cesium/Cesium.js"></script>
 <script>
@@ -4517,15 +4518,24 @@ if(GK){(async()=>{
   const viewer=new Cesium.Viewer("cv",{baseLayerPicker:false,geocoder:false,homeButton:false,sceneModePicker:false,navigationHelpButton:false,timeline:false,animation:false,
     infoBox:false,selectionIndicator:false,globe:false,skyAtmosphere:new Cesium.SkyAtmosphere()});
   viewer.scene.skyBox.show=true;viewer.scene.fog.enabled=true;viewer.scene.screenSpaceCameraController.enableCollisionDetection=false;
+  viewer.scene.globe&&(viewer.scene.globe.show=false);
+  const setCam=(head,pitch)=>viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(LON,LAT,H),orientation:{heading:Cesium.Math.toRadians(head),pitch:Cesium.Math.toRadians(pitch),roll:0}});
+  setCam(HEAD,-12);
+  let ready=false;
   try{
     const t=await Cesium.Cesium3DTileset.fromUrl("https://tile.googleapis.com/v1/3dtiles/root.json?key="+encodeURIComponent(GK),{showCreditsOnScreen:true});
+    t.maximumScreenSpaceError=8;                                    // sharper: the default 16 leaves the near city flat
+    t.preloadWhenHidden=true;t.preferLeaves=true;
     viewer.scene.primitives.add(t);
+    const st=document.getElementById("st");
+    t.allTilesLoaded.addEventListener(()=>{ready=true;if(st)st.remove()});
+    t.initialTilesLoaded.addEventListener(()=>{if(st)st.textContent="sharpening…"});
+    setTimeout(()=>{ready=true;const s2=document.getElementById("st");if(s2)s2.remove()},12000);   // never wait forever
   }catch(e){document.body.insertAdjacentHTML("beforeend","<div class=msg>Photoreal imagery could not load. Check that the Map Tiles API is enabled for this key and that the key allows this site.</div>")}
-  viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(LON,LAT,H),orientation:{heading:Cesium.Math.toRadians(HEAD),pitch:Cesium.Math.toRadians(-6),roll:0}});
-  let t0=Date.now(),drag=false;                                     // a slow pan across the outlook, stopped by the first touch
+  let t0=null,drag=false;                                           // the pan starts only once the view is sharp, and stops on touch
   viewer.scene.canvas.addEventListener("pointerdown",()=>{drag=true},{once:true});
-  viewer.clock.onTick.addEventListener(()=>{if(drag)return;const el=(Date.now()-t0)/1000;
-    viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(LON,LAT,H),orientation:{heading:Cesium.Math.toRadians(HEAD+Math.sin(el/9)*26),pitch:Cesium.Math.toRadians(-6),roll:0}})});
+  viewer.clock.onTick.addEventListener(()=>{if(drag||!ready)return;if(t0===null)t0=Date.now();
+    setCam(HEAD+Math.sin((Date.now()-t0)/9000)*22,-12)});
 })()}
 </script>
 ${najNav(key, "map")}
