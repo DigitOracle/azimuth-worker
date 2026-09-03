@@ -4463,6 +4463,13 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 #lbls{position:fixed;inset:0;pointer-events:none;overflow:hidden}#lbls svg{position:absolute;inset:0;width:100%;height:100%}
 .lb{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;text-decoration:none;color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.74rem;font-weight:500;letter-spacing:.01em;white-space:nowrap;opacity:0;transition:opacity .45s ease;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 12px rgba(12,20,19,.9)}
 .lb.on{opacity:1}.lb i{display:block;font-style:normal;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:1px}.lb.dev{font-weight:600}
+#devwrap{position:fixed;right:14px;top:118px;z-index:41;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+#projsel{appearance:none;-webkit-appearance:none;font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--text);background:rgba(19,31,29,.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23E8E4D8' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid var(--line);border-radius:99px;padding:6px 28px 6px 12px;max-width:52vw}
+#ppanel{position:fixed;right:14px;top:206px;bottom:92px;width:min(44vw,400px);overflow:auto;background:rgba(19,31,29,.95);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:none;z-index:41}
+#ppanel.on{display:block}.pt{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;padding-right:22px}.ps{color:var(--gold);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;margin:3px 0 10px}
+.pr{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:6px 0;font-size:.72rem}.pr span:first-child{color:var(--mut)}.pr span:last-child{text-align:right;font-family:"IBM Plex Mono",monospace}
+.px{position:absolute;right:12px;top:10px;color:var(--mut);cursor:pointer}.pa{margin-top:10px}.pn{color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:8px}
+@media(max-width:640px){#ppanel{left:10px;right:10px;top:auto;bottom:74px;width:auto;max-height:46vh}}#devsel{appearance:none;-webkit-appearance:none;font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--gold);background:rgba(19,31,29,.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23C5A56A' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid rgba(197,165,106,.5);border-radius:99px;padding:7px 28px 7px 12px;max-width:52vw}
 #legend{position:fixed;left:14px;bottom:78px;display:flex;flex-direction:column;gap:5px;pointer-events:none;opacity:0;transition:opacity .4s}#legend.on{opacity:1}
 .lg{display:flex;align-items:center;gap:7px;font-family:"IBM Plex Mono",monospace;font-size:.64rem;color:var(--text);background:rgba(19,31,29,.85);border:1px solid var(--line);border-radius:99px;padding:4px 10px 4px 6px}.lg b{width:9px;height:9px;border-radius:50%;display:inline-block}
 .top{position:fixed;top:0;left:0;right:0;padding:12px 14px 26px;background:linear-gradient(180deg,rgba(12,20,19,.92),rgba(12,20,19,0));pointer-events:none}
@@ -4653,7 +4660,87 @@ fetch("/img/anchors_${slugName}").then(r=>r.ok?r.json():null).then(a=>{if(!a||!a
 function paintDevs(){
   if(!ANCH||!MESHES||!ANCH.per_building_glb)return;
   for(const a of ANCH.anchors){if(!a.dev||a.mesh==null)continue;const m=MESHES[a.mesh];if(!m)continue;
-    m.material=m.material.clone();m.material.color.setHex(DEVCOL[a.dev]||0xC5A56A);m.material.emissive=new THREE.Color(DEVCOL[a.dev]||0xC5A56A);m.material.emissiveIntensity=0.12;m.userData.dev=a.dev}}
+    m.material=m.material.clone();m.material.color.setHex(DEVCOL[a.dev]||0xC5A56A);m.material.emissive=new THREE.Color(DEVCOL[a.dev]||0xC5A56A);m.material.emissiveIntensity=0.12;m.userData.dev=a.dev}
+  buildDevSel();}
+// v74.4 - DEVELOPER FILTER (Kendall, 3 Sep): pick a developer and every other building fades to a ghost; only that developer's
+// towers stay solid, labelled, and the camera frames them. "all developers" restores the district.
+let SELDEV="";const DEVORIG=new Map();
+function buildDevSel(){
+  if(document.getElementById("devsel"))return;
+  const present=[...new Set((ANCH.anchors||[]).filter(a=>a.dev&&a.mesh!=null&&MESHES[a.mesh]).map(a=>a.dev))];
+  if(!present.length)return;
+  const wrap=document.createElement("div");wrap.id="devwrap";
+  const sel=document.createElement("select");sel.id="devsel";
+  sel.innerHTML='<option value="">all developers</option>'+present.sort((x,y)=>DEVNAME[x].localeCompare(DEVNAME[y])).map(d=>'<option value="'+d+'">'+DEVNAME[d]+' ('+(ANCH.anchors.filter(a=>a.dev===d).length)+')</option>').join("");
+  sel.onchange=()=>applyDev(sel.value);wrap.appendChild(sel);
+  const ps=document.createElement("select");ps.id="projsel";ps.style.display="none";ps.onchange=()=>applyProj(ps.value);wrap.appendChild(ps);
+  document.body.appendChild(wrap);
+  const pp=document.createElement("div");pp.id="ppanel";document.body.appendChild(pp);}
+// v74.5 - PROJECT DRILL: second dropdown lists the chosen developer's projects in this district; picking one keeps the tower in 3D,
+// slides it to the left and opens the fact panel on the right (developer-site facts + availability sheet + DLD 2026 + nearest metro/mall).
+let SELPROJ="",PROJFACTS=null;
+fetch("/img/projfacts").then(r=>r.ok?r.json():null).then(j=>{PROJFACTS=j&&j.projects||null}).catch(()=>{});
+const nz=(s)=>String(s||"").toLowerCase().replace(/\\b(the|by|at|residences?|residency|tower|towers|apartments?|dubai|building)\\b/g," ").replace(/[^a-z0-9]/g,"");
+function projFor(dev,name){
+  if(!PROJFACTS)return null;const k=nz(name);
+  for(const id in PROJFACTS){const p=PROJFACTS[id];if(p.dev!==dev)continue;
+    if(nz(p.name)===k||(p.aliases||[]).some(a=>nz(a)===k))return p}
+  for(const id in PROJFACTS){const p=PROJFACTS[id];if(p.dev!==dev)continue;const pk=nz(p.name);if(pk.length>5&&(k.indexOf(pk)>=0||pk.indexOf(k)>=0))return p}
+  return null}
+function fillProjSel(d){
+  const ps=document.getElementById("projsel");if(!ps)return;
+  if(!d){ps.style.display="none";ps.innerHTML="";return}
+  const names=[...new Set(ANCH.anchors.filter(a=>a.dev===d&&a.mesh!=null).map(a=>a.dev_project||a.name))].sort();
+  ps.innerHTML='<option value="">all '+DEVNAME[d]+' projects</option>'+names.map(n=>'<option value="'+n.replace(/"/g,"&quot;")+'">'+n+'</option>').join("");
+  ps.style.display=names.length?"block":"none";}
+const fmA=(n)=>n==null?"-":(n>=1e6?(n/1e6).toFixed(2)+" M":Math.round(n).toLocaleString("en-US"));
+function applyProj(name){
+  SELPROJ=name;const pp=document.getElementById("ppanel");
+  const mine=new Set(ANCH.anchors.filter(a=>a.dev===SELDEV&&(a.dev_project||a.name)===name&&a.mesh!=null).map(a=>a.mesh));
+  for(const m of MESHES){const o=DEVORIG.get(m)||[m.material.transparent,m.material.opacity];
+    const keep=name?mine.has(MESHES.indexOf(m)):(m.userData.dev===SELDEV);
+    m.material.transparent=keep?o[0]:true;m.material.opacity=keep?o[1]:0.07;m.material.depthWrite=keep}
+  LIVE.forEach((L)=>{L.el.remove();L.ln.remove();L.dot.remove()});LIVE.clear();
+  if(!name){pp.classList.remove("on");applyDev(SELDEV);return}
+  // frame the building, then slide the view so it sits in the left third and the panel takes the right
+  const bb=new THREE.Box3();mine.forEach(i=>bb.expandByObject(MESHES[i]));
+  const c2=bb.getCenter(new THREE.Vector3()),s2=bb.getSize(new THREE.Vector3());const r2=Math.max(s2.x,s2.z,s2.y*0.7,60);
+  const eye=new THREE.Vector3(c2.x+r2*2.4,c2.y+r2*0.9,c2.z+r2*2.4);const dir=c2.clone().sub(eye).normalize();
+  const right=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize().multiplyScalar(innerWidth>640?r2*1.1:0);
+  ctl.target.copy(c2.clone().add(right));cam.position.copy(eye.clone().add(right));ctl.autoRotate=false;
+  const a0=ANCH.anchors.find(a=>a.dev===SELDEV&&(a.dev_project||a.name)===name);const f=projFor(SELDEV,name)||projFor(SELDEV,a0&&a0.name);
+  const esc=(s)=>String(s==null?"":s).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
+  const rows=[];if(f){
+    const d=f.dld||{};
+    if(f.area)rows.push(["Where",f.area]);if(f.handover)rows.push(["Handover",f.handover]);
+    if(f.structure||f.storeys)rows.push(["Structure",f.structure||(f.storeys+" storeys")]);if(f.units)rows.push(["Units",f.units]);
+    if(f.mix&&f.mix.length)rows.push(["Mix",f.mix.filter(m=>!/retail|office/.test(m)).join(", ")]);if(f.plans&&f.plans.length)rows.push(["Payment plan",f.plans.join(" / ")]);
+    if(d.sales_2026)rows.push(["Registered sales 2026",d.sales_2026]);if(d.median_aed)rows.push(["Median price","AED "+fmA(d.median_aed)]);
+    if(d.p10_aed)rows.push(["Typical range","AED "+fmA(d.p10_aed)+" – "+fmA(d.p90_aed)]);if(d.median_aed_per_sqm)rows.push(["Median AED / m²",fmA(d.median_aed_per_sqm)]);
+    if(d.offplan_share!=null)rows.push(["Off-plan share",Math.round(d.offplan_share*100)+"%"]);if(d.rooms)rows.push(["Sold by type",Object.entries(d.rooms).map(x=>x[0]+" "+x[1]).join(" · ")]);
+    if(d.nearest_metro)rows.push(["Nearest metro",d.nearest_metro]);if(d.nearest_mall)rows.push(["Nearest mall",d.nearest_mall]);if(d.nearest_landmark)rows.push(["Landmark",d.nearest_landmark]);
+    if(f.sheet)rows.push(["On the developer sheet",f.sheet.units+" unit"+(f.sheet.units===1?"":"s")+" · "+(f.sheet.types||[]).join(", ")]);
+    if(d.last_registration)rows.push(["Last registration",d.last_registration]);}
+  if(a0&&a0.h>12)rows.push(["Height (model)",Math.round(a0.h)+" m"]);
+  const acts='<div class=pa>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
+    '<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>'+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
+  pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+'</div><div class=ps>'+DEVNAME[SELDEV]+(f&&f.status?' · '+esc(f.status):'')+'</div>'+
+    (rows.length?rows.map(r=>'<div class=pr><span>'+esc(r[0])+'</span><span>'+esc(r[1])+'</span></div>').join(""):'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+acts+
+    '<div class=pn>developer site · availability sheet · DLD Open Data 2026 (nearest metro/mall = most common on this project\\'s sales)</div>';
+  pp.classList.add("on");document.getElementById("ppx").onclick=()=>{document.getElementById("projsel").value="";applyProj("")};}
+function applyDev(d){
+  SELDEV=d;SELPROJ="";const _pp=document.getElementById("ppanel");if(_pp)_pp.classList.remove("on");fillProjSel(d);
+  for(const m of MESHES){
+    if(!DEVORIG.has(m))DEVORIG.set(m,[m.material.transparent,m.material.opacity]);
+    const o=DEVORIG.get(m);
+    if(d&&m.userData.dev!==d){m.material.transparent=true;m.material.opacity=0.07;m.material.depthWrite=false}
+    else{m.material.transparent=o[0];m.material.opacity=o[1];m.material.depthWrite=true}}
+  LIVE.forEach((L)=>{L.el.remove();L.ln.remove();L.dot.remove()});LIVE.clear();
+  if(!d){if(HOME){cam.position.copy(HOME.pos);ctl.target.copy(HOME.tgt);ctl.autoRotate=HOME.rot;ctl.autoRotateSpeed=HOME.spd;HOME=null}return}
+  if(!HOME)HOME={pos:cam.position.clone(),tgt:ctl.target.clone(),rot:ctl.autoRotate,spd:ctl.autoRotateSpeed};
+  const bb=new THREE.Box3();let n=0;for(const m of MESHES){if(m.userData.dev===d){bb.expandByObject(m);n++}}
+  if(!n)return;const c2=bb.getCenter(new THREE.Vector3()),s2=bb.getSize(new THREE.Vector3());const r2=Math.max(s2.x,s2.z,s2.y*1.2,160);
+  ctl.target.set(c2.x,c2.y*0.4,c2.z);cam.position.set(c2.x+r2*2.2,c2.y+r2*1.1,c2.z+r2*2.2);ctl.autoRotate=true;ctl.autoRotateSpeed=0.9;}
 const _v=new THREE.Vector3(),_c=new THREE.Vector3(),_t=new THREE.Vector3();
 function updateLabels(){
   if(!ANCH||!ROOTREF)return;
@@ -4663,13 +4750,15 @@ function updateLabels(){
   const cand=[];
   for(const a of ANCH.anchors){
     if(a.x==null)continue;
+    if(SELDEV&&a.dev!==SELDEV)continue;                            // developer filter: only that developer's buildings get labels
+    if(SELPROJ&&(a.dev_project||a.name)!==SELPROJ)continue;        // project drill: only that project
     if(!a.dev&&(a.h<10||a.name.length<4||/^(shower|toilets?|wc|mosque|masjid|substation|parking|car park|guardhouse|gate|entrance|kiosk|atm)$/i.test(a.name)))continue;   // street furniture is not a landmark
     _v.set(a.x,a.h,a.z).add(ROOTREF.position);                   // GLB metres -> world (root is re-centred by the viewer)
     const toB=_v.clone().sub(cam.position);const depth=toB.dot(_c);if(depth<=0)continue;
-    const front=_v.clone().sub(_t).dot(cam.position.clone().sub(_t))>0;   // on the camera's side of the orbit centre = passing in front
+    const front=SELDEV?true:_v.clone().sub(_t).dot(cam.position.clone().sub(_t))>0;   // on the camera's side of the orbit centre = passing in front (filtered: all of them)
     if(!front)continue;
     const p=_v.clone().project(cam);const sx=(p.x+1)/2*W,sy=(1-p.y)/2*H;
-    if(sx<40||sx>W-40||sy<TOP||sy>H-120)continue;
+    if(sx<40||sx>W-40||sy<(SELDEV?70:TOP)||sy>H-120)continue;                 // filtered view: roofs may sit higher on screen
     cand.push({a,sx,sy,depth,score:(a.dev?1e6:0)+a.h*10-depth*0.02});}
   cand.sort((x,y)=>y.score-x.score);
   const pick=[],MINDX=Math.max(40,Math.min(64,W/8)),TS=Math.max(.55,Math.min(1,H/820));   // spacing and leader tiers scale with the screen
