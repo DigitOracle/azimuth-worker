@@ -3164,10 +3164,13 @@ async function dailyFeedTick(env, force, dry) {
   // appreciation claim, sales-only rates, hashtag + tag, permit still open). They sit after the five market angles.
   let camp = null; try { camp = JSON.parse((await env.MEETINGS.get("img_valley_pack")) || "null"); } catch (e) {}
   if (camp && camp.contest && gstDateStr(n) <= camp.contest.closes) {
-    const csys = "You write TWO post angles a day for a Dubai broker competing in a developer's video contest. Use ONLY the pack's figures — never invent, sharpen or round beyond the nearest thousand, and never state a figure the pack does not contain. " +
-      "OBEY EVERY LINE of pack.guardrails; they are judged criteria, not style notes. Vary the two angles: one from the community/lifestyle side, one from the register/investment side. " +
-      "Each angle: hook = one arresting sentence she can say to camera; figure = the exact number with its unit; source = where it comes from (land department register, developer launch material, contest brief); buyer = who it speaks to; " +
-      "shot = one line on what to film or cut from the assets on hand. Return JSON only.";
+    const csys = "You write TWO post angles a day for a Dubai broker competing in a developer's video contest. She wins on things NOBODY ELSE CAN SAY. " +
+      "Every angle MUST be built on one item from pack.edges — facts that exist only because she reads the official registers — and must be one a competitor working from the brochure could not write. " +
+      "If a developer's marketing page could plausibly say it, discard it and take a different edge. Never write a stat read-out: choose a form from pack.creative_modes and write the angle inside it. " +
+      "OBEY EVERY LINE of pack.guardrails and pack.creative_rules; accuracy and brand compliance are two of the four judged criteria. Use ONLY the pack's figures, exactly as given, one number per angle. " +
+      "Make the two angles different in kind: one human (a person, a room, a walk, a question), one from the register (money, supply, yield, velocity). " +
+      "Each angle: hook = the first sentence she says to camera, specific and arresting, with no adjectives such as stunning, vibrant, nestled or oasis; figure = the one exact number with its unit; " +
+      "source = the register or document it comes from; buyer = who it speaks to; shot = one line she can film this week on a phone, or the exact cut to take from the two supplied films. Return JSON only.";
     const cdata = JSON.stringify({ pack: camp, daysLeft: Math.max(0, Math.round((Date.parse(camp.contest.closes) - Date.parse(gstDateStr(n))) / 86400000)), avoidHooks: hist.slice(0, 12) });
     let cg = null; try { cg = await claudeJSON(env, csys, cdata, CAMPAIGN_SCHEMA, null, 900); } catch (e) {}
     const cangles = cg && Array.isArray(cg.angles) ? cg.angles.slice(0, 2).map(a => Object.assign({}, a, { campaign: camp.contest.name })) : [];
