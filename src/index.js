@@ -4900,6 +4900,13 @@ function applyProj(name){
     if(d.nearest_metro)rows.push(["Nearest metro",d.nearest_metro]);if(d.nearest_mall)rows.push(["Nearest mall",d.nearest_mall]);if(d.nearest_landmark)rows.push(["Landmark",d.nearest_landmark]);
     if(f.sheet)rows.push(["On the developer sheet",f.sheet.units+" unit"+(f.sheet.units===1?"":"s")+" · "+(f.sheet.types||[]).join(", ")]);}
   if(a0&&a0.h>12)rows.push(["Height (model)",Math.round(a0.h)+" m"]);
+  // measured from our own massing: gross floor area, storeys, and homes (registered count where we hold one, else indicative)
+  const bf=a0&&BF?BF[String(a0.i)]:null;
+  if(bf){
+    if(bf.gfa_sqft)rows.splice(2,0,["Floor area (model)",fmA(bf.gfa_sqft)+" sq ft"]);
+    if(bf.storeys>1&&!(f&&f.storeys))rows.splice(3,0,["Storeys (model)",String(bf.storeys)]);
+    if(bf.units_registered)rows.splice(4,0,["Homes (registered)",String(bf.units_registered)]);
+    else if(bf.units_indicative)rows.splice(4,0,["Homes (indicative)","~"+bf.units_indicative]);}
   rows.splice(12);                                                     // the panel must never scroll: twelve tiles is the ceiling
   const acts='<div class=pa>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
     (SELDEV?'<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>':'')+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
@@ -4914,7 +4921,7 @@ function applyProj(name){
   const tile=(r)=>'<div class=tl><svg viewBox="0 0 24 24" fill="none" stroke="#C5A56A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+(ICO[r[0]]||"M12 12h.01")+'"/></svg><b>'+esc(r[1])+'</b><i>'+esc(r[0])+'</i></div>';
   pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+'</div><div class=ps>'+(SELDEV?DEVNAME[SELDEV]:'on the map · developer not on the list')+(f&&f.status?' · '+esc(f.status):'')+'</div>'+
     (rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+acts+
-    '<div class=pn>developer site · availability sheet · DLD Open Data 2026 · views rendered from this model, blockers within this district only</div>';
+    '<div class=pn>developer site · availability sheet · DLD Open Data 2026 · floor area and storeys measured from our massing; homes indicative unless marked registered; blockers within this district only</div>';
   pp.classList.add("on");document.getElementById("ppx").onclick=()=>{document.getElementById("projsel").value="";applyProj("")};
   if(a0)buildViews(a0,mine);}
 // v77 - VIEWS (Kendall, 3 Sep): what each side of the building actually looks at. Four thumbnails rendered live from the tower's own
@@ -4922,6 +4929,8 @@ function applyProj(name){
 // stand at that facade. Facade midpoints and bearings come from the anchors (build_anchors.py), landmarks from /img/landmarks.
 let LMK=null,VRT=null,VCAM=null;
 fetch("/img/landmarks").then(r=>r.ok?r.json():null).then(j=>{LMK=j&&j.items||null}).catch(()=>{});
+// v80 - BUILDING FACTS from our own model's reports (build_buildingfacts.py): floor area, storeys and homes per building
+let BF=null;fetch("/img/bldgfacts_${slugName}").then(r=>r.ok?r.json():null).then(j=>{BF=j&&j.buildings_by_id||null}).catch(()=>{});
 const VSIDE=["N","E","S","W"];
 function viewEye(a,i){
   const p=a.fm&&a.fm[i];if(!p)return null;
