@@ -4547,7 +4547,7 @@ fetch("/img/ctx_${slugName}").then(r=>r.ok?r.json():null).then(cx=>{CTX=cx;drawC
 function drawCtx(){
   if(!CTX||!ROOTREF||ctxG)return;
   ctxG=new THREE.Group();ctxG.position.copy(ROOTREF.position);
-  const L=[["sea",0x10333E,0.35,0.96],["water",0x123A46,0.45,0.96],["green",0x17301F,0.3,1],["roads",0x272C30,0.55,1]];
+  const L=[["green",0x17301F,0.3,1],["roads",0x272C30,0.55,1]];   // v74.1: sea/water planes off (Kendall, 3 Sep) - they read badly against the ground disc
   L.forEach(t=>{const k=t[0],col=t[1],y=t[2],op=t[3];const polys=CTX[k]||[];if(!polys.length)return;
     const shapes=[];
     polys.forEach(rings=>{try{
