@@ -4613,15 +4613,18 @@ const _v=new THREE.Vector3(),_c=new THREE.Vector3(),_t=new THREE.Vector3();
 function updateLabels(){
   if(!ANCH||!ROOTREF)return;
   const W=innerWidth,H=innerHeight;cam.getWorldDirection(_c);_t.copy(ctl.target);
+  const fEl=document.getElementById("feat"),tEl=document.getElementById("filters");
+  const TOP=Math.max(112,((fEl&&fEl.childElementCount?fEl:tEl)||tEl).getBoundingClientRect().bottom+14);   // labels stay clear of the masthead + chips
   const cand=[];
   for(const a of ANCH.anchors){
     if(a.x==null)continue;
+    if(!a.dev&&(a.h<10||a.name.length<4||/^(shower|toilets?|wc|mosque|masjid|substation|parking|car park|guardhouse|gate|entrance|kiosk|atm)$/i.test(a.name)))continue;   // street furniture is not a landmark
     _v.set(a.x,a.h,a.z).add(ROOTREF.position);                   // GLB metres -> world (root is re-centred by the viewer)
     const toB=_v.clone().sub(cam.position);const depth=toB.dot(_c);if(depth<=0)continue;
     const front=_v.clone().sub(_t).dot(cam.position.clone().sub(_t))>0;   // on the camera's side of the orbit centre = passing in front
     if(!front)continue;
     const p=_v.clone().project(cam);const sx=(p.x+1)/2*W,sy=(1-p.y)/2*H;
-    if(sx<40||sx>W-40||sy<110||sy>H-120)continue;
+    if(sx<40||sx>W-40||sy<TOP||sy>H-120)continue;
     cand.push({a,sx,sy,depth,score:(a.dev?1e6:0)+a.h*10-depth*0.02});}
   cand.sort((x,y)=>y.score-x.score);
   const pick=[],MINDX=Math.max(40,Math.min(64,W/8)),TS=Math.max(.55,Math.min(1,H/820));   // spacing and leader tiers scale with the screen
@@ -4635,7 +4638,7 @@ function updateLabels(){
       svgL.appendChild(ln);svgL.appendChild(dot);lblWrap.appendChild(el);
       L={el,ln,dot,tier:TIERS[LIVE.size%TIERS.length],born:now};LIVE.set(k,L);requestAnimationFrame(()=>el.classList.add("on"))}
     L.seen=now;const col=c.a.dev?"#"+DEVCOL[c.a.dev].toString(16).padStart(6,"0"):"rgba(197,165,106,.75)";
-    const ty=Math.max(112,c.sy-L.tier*TS),e2=L.el;e2.style.left=c.sx+"px";e2.style.top=(ty-4)+"px";e2.style.color=c.a.dev?col:"";   // never under the masthead
+    const ty=Math.max(TOP,c.sy-L.tier*TS),e2=L.el;e2.style.left=c.sx+"px";e2.style.top=(ty-4)+"px";e2.style.color=c.a.dev?col:"";   // never under the masthead
     L.ln.setAttribute("points",c.sx+","+c.sy+" "+c.sx+","+(ty+2));L.ln.setAttribute("stroke",col);L.dot.setAttribute("cx",c.sx);L.dot.setAttribute("cy",c.sy);L.dot.setAttribute("fill",col);});
   LIVE.forEach((L,k)=>{if(!keep.has(k)){if(!L.dying){L.dying=now;L.el.classList.remove("on");L.ln.setAttribute("stroke","transparent");L.dot.setAttribute("fill","transparent")}
     else if(now-L.dying>500){L.el.remove();L.ln.remove();L.dot.remove();LIVE.delete(k)}}});
