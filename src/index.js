@@ -2047,6 +2047,15 @@ export default {
         let _dt = null; try { _dt = await devTrust(env, String(_dd3.title || _dk).replace(/\s*\(.*?\)\s*$/, "")); } catch (e) {}   // v72.2
         return new Response(_full ? renderAvailUnits(_dd3, _dk, url.searchParams.get("key") || "") : renderAvailDrill(_dd3, _dk, url.searchParams.get("key") || "", _cards, _dt), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      if (url.pathname.indexOf("/report/") === 0) {           // v81 - district stock report, read straight off the model's own measurements
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _rs = url.pathname.slice(8).replace(/[^a-z0-9]/gi, "").toLowerCase();
+        let _rn = {}; try { const _rd = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); for (const x of ((_rd && _rd.areaIntel && _rd.areaIntel.areas) || [])) _rn[x.area.toLowerCase().replace(/[^a-z0-9]/g, "")] = x.area; } catch (e) {}
+        return new Response(renderStock(_rs, _rn[_rs] || _rs, url.searchParams.get("key") || "",
+          await env.MEETINGS.get("img_bldgfacts_" + _rs), await env.MEETINGS.get("img_anchors_" + _rs),
+          await env.MEETINGS.get("img_projfacts"), await env.MEETINGS.get("mkt_latest")),
+          { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/skyline" || url.pathname.indexOf("/skyline/") === 0) { // v64 — 3D viewer + district rail (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         // rail: every sky_<slug> GLB in KV, named from the register where it can be
@@ -4597,13 +4606,14 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 #card .cf span:last-child{text-align:right}
 #card .cx{position:absolute;top:8px;right:12px;color:var(--mut);cursor:pointer;font-size:1rem}
 #card .cp{color:rgba(143,163,155,.75);font-size:.58rem;font-family:"IBM Plex Mono",monospace;margin-top:8px}
+.rpt{margin-left:9px;font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.05em;color:#C5A56A;background:rgba(197,165,106,.1);border:1px solid rgba(197,165,106,.42);border-radius:99px;padding:3px 9px;text-decoration:none;vertical-align:middle;white-space:nowrap}
 #msg{position:fixed;inset:0;display:grid;place-items:center;color:var(--mut);font-size:.85rem;text-align:center;padding:0 30px}
 .foot{position:fixed;right:10px;bottom:calc(64px + env(safe-area-inset-bottom));color:rgba(143,163,155,.7);font-size:.58rem;font-family:"IBM Plex Mono",monospace;pointer-events:none}
 ${NAJ_NAV_CSS}</style>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.169.0/examples/jsm/"}}</script>
 </head><body>
 <div id=cv3></div>
-<div class=top><div class=mast>${areaName} <em>· 3D</em></div><div class=sub>massing from the register — heights real where known, illustrative where not</div></div>
+<div class=top><div class=mast>${areaName} <em>· 3D</em><a class=rpt href="/report/${slugName}?key=${encodeURIComponent(key || '')}">stock report →</a></div><div class=sub>massing from the register — heights real where known, illustrative where not</div></div>
 <div class=rail>${_dr}</div>
 <div id=card><span class=cx id=cx>✕</span><div class=ct id=ct></div><div class=cs id=cs></div><div id=cfacts></div><div class=cp id=cp></div></div>
 <div class=tog id=filters></div>
@@ -5051,6 +5061,96 @@ addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProje
 }
 
 // v50 — AREA DEEP DIVE (/area/<name>): everything the register holds for one community.
+// v81 - DISTRICT STOCK REPORT (/report/<slug>). The massing carries a measured report per building - footprint, storeys,
+// gross floor area - written by the model itself (build_buildingfacts.py joins it to the names, developers and the register).
+// This page is that report read as a broker would read it: how much stock stands here, how tall, whose it is, what it sells for.
+// Floor area is measured from our own model, never lifted from a brochure. Home counts are indicative unless the register gives a real one.
+function renderStock(slug, areaName, key, bfRaw, ancRaw, pfRaw, mktRaw) {
+  const esc2 = (x) => String(x == null ? "" : x).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const num2 = (v) => (v == null ? "\u2014" : Number(v).toLocaleString("en-US"));
+  let BF = null, AN = null, MK = null;
+  try { BF = JSON.parse(bfRaw || "null"); } catch (e) {}
+  try { AN = JSON.parse(ancRaw || "null"); } catch (e) {}
+  try { MK = JSON.parse(mktRaw || "null"); } catch (e) {}
+  const K = encodeURIComponent(key || "");
+  if (!BF || !BF.buildings_by_id) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem"><h2 style="color:#C5A56A">Najma</h2><p>No measured report for "' + esc2(areaName) + '" yet. The report is written when the district is massed \u2014 mass it first and this page fills itself.</p><a style="color:#C5A56A" href="/skyline?key=' + K + '">\u2190 back to the twin</a>';
+  const B = Object.keys(BF.buildings_by_id).map(k => BF.buildings_by_id[k]);
+  const byDev = {};
+  B.forEach(b => {
+    if (!b.dev) return;
+    const d = byDev[b.dev] || (byDev[b.dev] = { dev: b.dev, n: 0, gfa: 0, homes: 0, tall: 0, projects: {} });
+    d.n++; d.gfa += b.gfa_m2 || 0; d.homes += b.units_registered || b.units_indicative || 0;
+    d.tall = Math.max(d.tall, b.height_m || 0); if (b.project) d.projects[b.project] = 1;
+  });
+  const devs = Object.keys(byDev).map(k => byDev[k]).sort((a, b) => b.gfa - a.gfa);
+  const devMax = Math.max.apply(null, devs.map(d => d.gfa).concat([1]));
+  const BANDS = [["Supertall \u2014 300 m and over", 300, 1e9], ["Tall \u2014 150 to 300 m", 150, 300], ["High-rise \u2014 75 to 150 m", 75, 150], ["Mid-rise \u2014 25 to 75 m", 25, 75], ["Low-rise \u2014 under 25 m", 0, 25]];
+  const bands = BANDS.map(bd => {
+    const set = B.filter(b => (b.height_m || 0) >= bd[1] && (b.height_m || 0) < bd[2]);
+    return { label: bd[0], n: set.length, gfa: set.reduce((t, b) => t + (b.gfa_m2 || 0), 0) };
+  }).filter(x => x.n);
+  const bMax = Math.max.apply(null, bands.map(x => x.n).concat([1]));
+  const named = B.filter(b => b.name);
+  const tallest = named.slice().sort((a, b) => (b.height_m || 0) - (a.height_m || 0)).slice(0, 14);
+  const biggest = named.slice().sort((a, b) => (b.gfa_m2 || 0) - (a.gfa_m2 || 0)).slice(0, 10);
+  const sqft = (m2) => Math.round((m2 || 0) * 10.7639);
+  const mm = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : Math.round(n / 1000) + "k");
+  let A = null;
+  try { A = ((MK && MK.areaIntel && MK.areaIntel.areas) || []).find(x => String(x.area).toLowerCase().replace(/[^a-z0-9]/g, "") === slug) || null; } catch (e) {}
+  let body = '<div class=grid>' +
+    '<div class=st><div class=v>' + num2(B.length) + '</div><div class=l>buildings modelled</div></div>' +
+    '<div class=st><div class=v>' + mm(sqft(BF.gfa_m2_total)) + '<small> sqft</small></div><div class=l>floor area, measured</div></div>' +
+    '<div class=st><div class=v>' + mm(BF.units_indicative_total) + '</div><div class=l>homes, indicative</div></div>' +
+    '<div class=st><div class=v>' + (tallest[0] ? Math.round(tallest[0].height_m) + '<small> m</small>' : '\u2014') + '</div><div class=l>tallest on file</div></div></div>';
+  body += '<div class=card>' + najH2("buildings", "The shape of the skyline") +
+    bands.map(x => '<div class=arow><div class=nm>' + esc2(x.label) + '</div><div class=tr><i style="width:' + Math.round(x.n / bMax * 100) + '%"></i></div><div class=ct>' + num2(x.n) + '</div></div>').join('') +
+    '<div class=note>Every building in the district, sorted by the height the model holds for it. Heights come from the survey and the open registers, not from marketing copy.</div></div>';
+  if (devs.length) body += '<div class=card>' + najH2("crane", "Who holds the floor area") +
+    devs.map(d => {
+      const np = Object.keys(d.projects).length;
+      return '<div class=arow><div class=nm><a href="/dev?d=' + encodeURIComponent(d.dev) + '&key=' + K + '">' + esc2(d.dev) + '</a><span class=sm>' + d.n + ' building' + (d.n > 1 ? 's' : '') + (np ? ' \u00b7 ' + np + ' scheme' + (np > 1 ? 's' : '') : '') + '</span></div><div class=tr><i style="width:' + Math.round(d.gfa / devMax * 100) + '%"></i></div><div class=ct>' + mm(sqft(d.gfa)) + '</div></div>';
+    }).join('') +
+    '<div class=note>Floor area is attributed only where we hold a confirmed binding between the building and the scheme. The rest of the district sits with owners outside the eleven.</div></div>';
+  const trow = (b) => '<div class=prow><div style="display:flex;justify-content:space-between;gap:8px"><b>' + esc2(b.name) + '</b><span class=sv>' + (b.height_m ? Math.round(b.height_m) + ' m' : '\u2014') + '</span></div>' +
+    '<div class=pm><span>' + (b.dev ? esc2(b.dev) + (b.project ? ' \u00b7 ' + esc2(b.project) : '') : 'owner not on the list') + '</span><span>' + (b.storeys > 1 ? b.storeys + ' storeys \u00b7 ' : '') + num2(sqft(b.gfa_m2)) + ' sqft' + (b.units_registered ? ' \u00b7 ' + b.units_registered + ' homes' : (b.units_indicative ? ' \u00b7 ~' + b.units_indicative + ' homes' : '')) + '</span></div></div>';
+  body += '<div class=card>' + najH2("star", "Tallest on file") + tallest.map(trow).join('') +
+    '<div class=note>Tap any of these in the twin to walk its facades and see what each side actually looks at.</div></div>';
+  body += '<div class=card>' + najH2("house", "Most floor area in one building") + biggest.map(trow).join('') + '</div>';
+  if (A) body += '<div class=card>' + najH2("coins", "What it sells for") +
+    '<div class=srow><span>Settled sales this period</span><span class=sv>' + num2(A.sales) + '</span></div>' +
+    '<div class=srow><span>Median</span><span class=sv>' + num2(A.medianAedSqft) + ' AED/sqft</span></div>' +
+    '<div class=srow><span>Median ticket</span><span class=sv>' + (A.medianTicketAed ? 'AED ' + (A.medianTicketAed / 1e6).toFixed(2) + 'm' : '\u2014') + '</span></div>' +
+    '<div class=srow><span>Off-plan share</span><span class=sv>' + (A.offPlanPct == null ? '\u2014' : A.offPlanPct + '%') + '</span></div>' +
+    (A.grossYieldPct != null ? '<div class=srow><span>Gross yield</span><span class=sv>' + A.grossYieldPct + '%</span></div>' : '') +
+    '<div class=note>Settled registrations, not asking prices. <a href="/area/' + encodeURIComponent(A.area) + '?key=' + K + '">Full briefing for this community \u2192</a></div></div>';
+  const nreg = B.filter(b => b.units_registered).length;
+  body += '<div class=card>' + najH2("file", "How this was measured") +
+    '<div class=srow><span>Buildings carrying a name</span><span class=sv>' + num2(named.length) + ' of ' + num2(B.length) + '</span></div>' +
+    '<div class=srow><span>Bound to a developer</span><span class=sv>' + num2(B.filter(b => b.dev).length) + '</span></div>' +
+    '<div class=srow><span>Home counts from the register</span><span class=sv>' + num2(nreg) + '</span></div>' +
+    '<div class=note>Gross floor area is the sum of the storey plates the model builds on each footprint. Where the developer or the register publishes a real home count it replaces the indicative one and is labelled so. Indicative homes assume ' + Math.round((BF.efficiency || 0.78) * 100) + '% efficiency and a ' + Math.round(BF.unit_m2 || 105) + ' m\u00b2 apartment: a planning figure for scale, not a schedule of units.</div></div>';
+  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=robots content=noindex><title>' + esc2(areaName) + ' \u2014 stock report</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS + '<style>' +
+    ':root{--ink:#0C1413;--card:#111C1A;--card2:#0E1817;--line:#24352F;--gold:#C5A56A;--teal:#3E8A7E;--cream:#E8E4D8;--mut:#8FA39B}' +
+    '*{box-sizing:border-box}body{margin:0;background:var(--ink);color:var(--cream);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:0 12px 92px}' +
+    '.hd{padding:18px 0 10px}.bk{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.05em;color:var(--gold);text-decoration:none}' +
+    '.mast{font-family:Fraunces,serif;font-size:1.9rem;line-height:1.05;margin:.5rem 0 .2rem}.sub{color:var(--mut);font-size:.72rem;font-family:"IBM Plex Mono",monospace;letter-spacing:.04em}' +
+    '.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}.st{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px}' +
+    '.st .v{font-family:Fraunces,serif;font-size:1.5rem;color:var(--gold);line-height:1}.st .v small{font-size:.72rem;color:var(--mut)}.st .l{color:var(--mut);font-size:.66rem;margin-top:4px}' +
+    '.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px;margin-bottom:10px}' +
+    'h2{display:flex;align-items:center;gap:7px;font-size:.68rem;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;margin:0 0 .6rem;font-weight:600}.ih{display:inline-flex;flex:none}.ih svg{width:15px;height:15px;color:var(--gold)}' +
+    '.srow{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #182823;font-size:.8rem}.srow:last-child{border-bottom:none}.srow .sv{color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}' +
+    '.arow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #182823}.arow:last-of-type{border-bottom:none}.nm{flex:0 0 46%;font-size:.78rem}.nm a{color:var(--cream);text-decoration:none;border-bottom:1px solid rgba(197,165,106,.35)}.sm{display:block;color:var(--mut);font-size:.64rem;margin-top:2px}' +
+    '.tr{flex:1;height:6px;border-radius:3px;background:var(--card2);overflow:hidden}.tr i{display:block;height:100%;background:var(--teal)}.ct{font-size:.72rem;color:var(--mut);min-width:56px;text-align:right;font-variant-numeric:tabular-nums}' +
+    '.prow{padding:7px 0;border-bottom:1px solid #182823;font-size:.82rem}.prow:last-child{border-bottom:none}.prow .pm{display:flex;justify-content:space-between;gap:8px;color:var(--mut);font-size:.7rem;margin-top:3px}.prow .sv{color:var(--gold);font-variant-numeric:tabular-nums}' +
+    '.note{color:var(--mut);font-size:.72rem;margin-top:.6rem;line-height:1.55}.note a{color:var(--gold)}' +
+    '.pv{color:var(--mut);font-size:.7rem;line-height:1.6;margin-top:1rem}' +
+    NAJ_NAV_CSS + '</style></head><body>' +
+    '<div class=hd><a class=bk href="/skyline/' + esc2(slug) + '?key=' + K + '">\u2190 back to the twin</a>' +
+    '<div class=mast>' + esc2(areaName) + '</div><div class=sub>stock report \u00b7 measured from the model</div></div>' + body +
+    '<div class=pv>Floor area, storeys and height are measured from our own massing of this district. Names and ownership come from the open registers and the developers\u2019 own published schemes. Sales figures are Dubai Land Department (DLD) Open Data \u2014 settled registrations, not asking prices. Contains information from the Government of Dubai.</div>' +
+    najNav(key, "twin") + '</body></html>';
+}
+
 function renderArea(latestRaw, name, key) {
   let d = null; try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
   const esc2 = (s) => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
