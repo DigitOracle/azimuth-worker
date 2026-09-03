@@ -4665,15 +4665,19 @@ function paintDevs(){
   // anchor -> mesh by POSITION (mesh order in a merged export is not the footprint order): nearest mesh centre within 12 m
   const _cc=new THREE.Vector3();   // geometry-local bounds are already in the GLB's own metres (no root offset, no stale world matrices)
   const cents=MESHES.map(m=>{if(!m.geometry.boundingBox)m.geometry.computeBoundingBox();m.geometry.boundingBox.getCenter(_cc);return [_cc.x,_cc.z]});
-  for(const a of ANCH.anchors){if(a.x==null)continue;let bi=-1,bd=144;
-    for(let i=0;i<cents.length;i++){const dx=cents[i][0]-a.x,dz=cents[i][1]-a.z,d=dx*dx+dz*dz;if(d<bd){bd=d;bi=i}}
-    a.mesh=bi>=0?bi:null}
-  window.__sky={get anch(){return ANCH},get meshes(){return MESHES},get cam(){return cam},get ctl(){return ctl},get root(){return ROOTREF},get state(){return [SELDEV,SELPROJ]},sel:buildDevSel,dev:applyDev,proj:applyProj};
+  // a banded tower is several meshes (walls, floor bands, crown): give EVERY mesh to its nearest footprint, then an anchor owns all
+  // the meshes of its footprint (a.meshes); a.mesh keeps the first for compatibility
+  const fps=ANCH.fps||ANCH.anchors.map(a=>[a.i,a.x,a.z,a.h]);const byFp={};
+  for(let i=0;i<cents.length;i++){let bi=-1,bd=1e9;for(const f of fps){if(f[1]==null)continue;const dx=f[1]-cents[i][0],dz=f[2]-cents[i][1],d=dx*dx+dz*dz;if(d<bd){bd=d;bi=f[0]}}
+    if(bi>=0&&bd<=900)(byFp[bi]=byFp[bi]||[]).push(i)}
+  for(const a of ANCH.anchors){const ms=byFp[a.i]||[];a.meshes=ms;a.mesh=ms.length?ms[0]:null}
+  window.__sky={get anch(){return ANCH},get meshes(){return MESHES},get cam(){return cam},get ctl(){return ctl},get root(){return ROOTREF},get state(){return [SELDEV,SELPROJ]},sel:buildDevSel,dev:applyDev,proj:applyProj,open:openAnchor};
   // every mesh gets its own material copies (merged exports share materials and use arrays per primitive) so fading one never fades another
   for(const m of MESHES){m.material=Array.isArray(m.material)?m.material.map(x=>x.clone()):m.material.clone()}
   const mats=(m)=>Array.isArray(m.material)?m.material:[m.material];
-  for(const a of ANCH.anchors){if(!a.dev||a.mesh==null)continue;const m=MESHES[a.mesh];if(!m)continue;
-    for(const mt of mats(m)){mt.color.setHex(DEVCOL[a.dev]||0xC5A56A);mt.emissive=new THREE.Color(DEVCOL[a.dev]||0xC5A56A);mt.emissiveIntensity=0.12}m.userData.dev=a.dev}
+  for(const a of ANCH.anchors){if(!a.dev||!a.meshes||!a.meshes.length)continue;
+    for(const mi of a.meshes){const m=MESHES[mi];if(!m)continue;
+      for(const mt of mats(m)){mt.color.setHex(DEVCOL[a.dev]||0xC5A56A);mt.emissive=new THREE.Color(DEVCOL[a.dev]||0xC5A56A);mt.emissiveIntensity=0.12}m.userData.dev=a.dev}}
   buildDevSel();}
 const MATS=(m)=>Array.isArray(m.material)?m.material:[m.material];
 function ghost(m,on){m.visible=!on;      // Kendall: the others must go, not fade - hide them outright; roads and ground stay for context
@@ -4683,7 +4687,7 @@ function ghost(m,on){m.visible=!on;      // Kendall: the others must go, not fad
 let SELDEV="";const DEVORIG=new Map();
 function buildDevSel(){
   if(document.getElementById("devsel"))return;
-  const present=[...new Set((ANCH.anchors||[]).filter(a=>a.dev&&a.mesh!=null&&MESHES[a.mesh]).map(a=>a.dev))];
+  const present=[...new Set((ANCH.anchors||[]).filter(a=>a.dev&&a.meshes&&a.meshes.length).map(a=>a.dev))];
   if(!present.length)return;
   const wrap=document.createElement("div");wrap.id="devwrap";
   const sel=document.createElement("select");sel.id="devsel";
@@ -4706,23 +4710,32 @@ function projFor(dev,name){
 function fillProjSel(d){
   const ps=document.getElementById("projsel");if(!ps)return;
   if(!d){ps.style.display="none";ps.innerHTML="";return}
-  const names=[...new Set(ANCH.anchors.filter(a=>a.dev===d&&a.mesh!=null).map(a=>a.dev_project||a.name))].sort();
+  const names=[...new Set(ANCH.anchors.filter(a=>a.dev===d&&a.meshes&&a.meshes.length).map(a=>a.dev_project||a.name))].sort();
   ps.innerHTML='<option value="">all '+DEVNAME[d]+' projects</option>'+names.map(n=>'<option value="'+n.replace(/"/g,"&quot;")+'">'+n+'</option>').join("");
   ps.style.display=names.length?"block":"none";}
 const fmA=(n)=>n==null?"-":(n>=1e6?(n/1e6).toFixed(2)+" M":Math.round(n).toLocaleString("en-US"));
+// tap on a tower or its label: sync the dropdowns to that building's developer (if any) and open it
+function openAnchor(a){
+  const ds=document.getElementById("devsel"),ps=document.getElementById("projsel");
+  const d=a.dev||"";
+  if(d!==SELDEV){if(ds)ds.value=d;applyDev(d)}
+  const nm=a.dev_project||a.name;
+  if(ps&&d){if(![...ps.options].some(o=>o.value===nm)){const o=document.createElement("option");o.value=nm;o.textContent=nm;ps.appendChild(o)}ps.value=nm}
+  applyProj(nm);}
 function applyProj(name){
   SELPROJ=name;const pp=document.getElementById("ppanel");
-  const mine=new Set(ANCH.anchors.filter(a=>a.dev===SELDEV&&(a.dev_project||a.name)===name&&a.mesh!=null).map(a=>a.mesh));
-  MESHES.forEach((m,i)=>ghost(m,!(name?mine.has(i):(m.userData.dev===SELDEV))));
+  const mine=new Set();ANCH.anchors.filter(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name)===name).forEach(a=>(a.meshes||[]).forEach(i=>mine.add(i)));
+  MESHES.forEach((m,i)=>ghost(m,!(name?mine.has(i):(SELDEV?m.userData.dev===SELDEV:true))));
   LIVE.forEach((L)=>{L.el.remove();L.ln.remove();L.dot.remove()});LIVE.clear();
   if(!name){pp.classList.remove("on");applyDev(SELDEV);return}
+  if(!mine.size){pp.classList.remove("on");return}
   // frame the building, then slide the view so it sits in the left third and the panel takes the right
   const bb=new THREE.Box3();mine.forEach(i=>bb.expandByObject(MESHES[i]));
   const c2=bb.getCenter(new THREE.Vector3()),s2=bb.getSize(new THREE.Vector3());const r2=Math.max(s2.x,s2.z,s2.y*0.7,60);
   const eye=new THREE.Vector3(c2.x+r2*2.4,c2.y+r2*0.9,c2.z+r2*2.4);const dir=c2.clone().sub(eye).normalize();
   const right=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize().multiplyScalar(innerWidth>640?r2*1.1:0);
   ctl.target.copy(c2.clone().add(right));cam.position.copy(eye.clone().add(right));ctl.autoRotate=false;
-  const a0=ANCH.anchors.find(a=>a.dev===SELDEV&&(a.dev_project||a.name)===name);const f=projFor(SELDEV,name)||projFor(SELDEV,a0&&a0.name);
+  const a0=ANCH.anchors.find(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name)===name);const f=SELDEV?(projFor(SELDEV,name)||projFor(SELDEV,a0&&a0.name)):null;
   const esc=(s)=>String(s==null?"":s).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
   const rows=[];if(f){
     const d=f.dld||{};
@@ -4737,7 +4750,7 @@ function applyProj(name){
     if(d.last_registration)rows.push(["Last registration",d.last_registration]);}
   if(a0&&a0.h>12)rows.push(["Height (model)",Math.round(a0.h)+" m"]);
   const acts='<div class=pa>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
-    '<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>'+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
+    (SELDEV?'<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>':'')+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
   // icon tiles instead of a list (Kendall): small squares, gold line icons drawn inline, value first, label under
   const ICO={"Where":"M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10zm0-8a2 2 0 1 0 0-4 2 2 0 0 0 0 4z","Handover":"M4 6h16v14H4zM8 3v4M16 3v4M4 10h16","Structure":"M4 20h16M6 20V9l6-4 6 4v11M9 20v-5h6v5",
     "Units":"M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z","Mix":"M3 18V9h18v9M3 13h18M7 9V6h4v3","Payment plan":"M3 8h18v10H3zM7 8V5h10v3M12 13h.01",
@@ -4747,7 +4760,7 @@ function applyProj(name){
     "Nearest mall":"M6 8h12l1 12H5zM9 8a3 3 0 0 1 6 0","Landmark":"M5 21V4M5 4h12l-2 4 2 4H5","On the developer sheet":"M6 3h12v18H6zM9 8h6M9 12h6M9 16h4",
     "Last registration":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2","Height (model)":"M12 20V6M8 10l4-4 4 4"};
   const tile=(r)=>'<div class=tl><svg viewBox="0 0 24 24" fill="none" stroke="#C5A56A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+(ICO[r[0]]||"M12 12h.01")+'"/></svg><b>'+esc(r[1])+'</b><i>'+esc(r[0])+'</i></div>';
-  pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+'</div><div class=ps>'+DEVNAME[SELDEV]+(f&&f.status?' · '+esc(f.status):'')+'</div>'+
+  pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+'</div><div class=ps>'+(SELDEV?DEVNAME[SELDEV]:'on the map · developer not on the list')+(f&&f.status?' · '+esc(f.status):'')+'</div>'+
     (rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+acts+
     '<div class=pn>developer site · availability sheet · DLD Open Data 2026 (nearest metro/mall = most common on this project\\'s sales)</div>';
   pp.classList.add("on");document.getElementById("ppx").onclick=()=>{document.getElementById("projsel").value="";applyProj("")};}
@@ -4786,7 +4799,7 @@ function updateLabels(){
     if(pick.some(q=>Math.abs(q.sx-c.sx)<Math.max(MINDX,(lw(q.a)+lw(c.a))/2+10)&&Math.abs(q.sy-c.sy)<140))continue;pick.push(c)}
   const now=performance.now();const keep=new Set();
   pick.forEach((c,i)=>{const k=String(c.a.i);keep.add(k);let L=LIVE.get(k);
-    if(!L){const el=document.createElement("a");el.className="lb"+(c.a.dev?" dev":"");el.href=c.a.dev?"/dev?d="+c.a.dev+"&key="+encodeURIComponent(KEY):"javascript:void 0";
+    if(!L){const el=document.createElement("a");el.className="lb"+(c.a.dev?" dev":"");el.href="javascript:void 0";const _a=c.a;el.onclick=(ev)=>{ev.preventDefault();openAnchor(_a)};   // tap a name -> open it
       el.innerHTML=c.a.name.replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))+(c.a.dev?"<i>"+DEVNAME[c.a.dev]+(c.a.h>20?" · "+Math.round(c.a.h)+" m":"")+"</i>":(c.a.h>40?"<i>"+Math.round(c.a.h)+" m</i>":""));
       const ln=document.createElementNS("http://www.w3.org/2000/svg","polyline");ln.setAttribute("fill","none");ln.setAttribute("stroke-width","1");
       const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");dot.setAttribute("r","2.4");
@@ -4804,9 +4817,14 @@ const ray=new THREE.Raycaster(),ptr=new THREE.Vector2();let pd=null;
 addEventListener("pointerdown",e=>{pd=[e.clientX,e.clientY]});
 addEventListener("pointerup",e=>{
   if(!pd||Math.hypot(e.clientX-pd[0],e.clientY-pd[1])>6){pd=null;return}
-  pd=null;if(!META)return;
+  pd=null;
   ptr.x=(e.clientX/innerWidth)*2-1;ptr.y=-(e.clientY/innerHeight)*2+1;
   ray.setFromCamera(ptr,cam);
+  if(ANCH&&MESHES&&!(e.target&&e.target.closest&&e.target.closest("#ppanel,#devwrap,.lb,.nnav,.rail,.tog,.feat"))){   // v74.8 tap a tower -> open it
+    const vis=MESHES.filter(m=>m.visible);vis.forEach(m=>m.updateWorldMatrix(true,false));
+    const h=ray.intersectObjects(vis,false)[0];
+    if(h){const idx=MESHES.indexOf(h.object);const a=ANCH.anchors.find(x=>x.meshes&&x.meshes.indexOf(idx)>=0);if(a){openAnchor(a);return}}}
+  if(!META)return;
   const featured=[...GROUPS.construction.meshes,...GROUPS.pipeline.meshes].filter(m=>m.visible);
   featured.forEach(m=>m.updateWorldMatrix(true,false));
   const hit=ray.intersectObjects(featured,false)[0];
