@@ -4551,10 +4551,12 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .pa .act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:5px 10px;color:var(--gold);text-decoration:none;font-size:.68rem;font-family:"IBM Plex Mono",monospace;background:rgba(24,42,38,.9)}
 .vw{margin-bottom:8px}.vh{color:var(--mut);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
 .vr{display:block;color:var(--gold);font-size:.55rem;font-family:"IBM Plex Mono",monospace;text-decoration:none;margin-top:2px}
-.vg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.vc{cursor:pointer;min-width:0}
-.vp{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block;background:#16211E}
-.vc b{display:block;font-family:"IBM Plex Mono",monospace;font-size:.6rem;color:var(--gold);margin-top:3px}
-.vc i{display:block;font-style:normal;color:var(--mut);font-size:.54rem;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.vg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.vc{display:block;text-decoration:none;color:var(--text);background:rgba(24,42,38,.9);border:1px solid #2E4A44;border-radius:10px;padding:8px 9px;min-width:0}
+.vc.blk{border-color:var(--line);opacity:.72}
+.vc b{display:block;font-family:Fraunces,Georgia,serif;font-size:.9rem;color:var(--gold);line-height:1}
+.vc i{display:block;font-style:normal;color:var(--text);font-size:.58rem;line-height:1.3;margin-top:4px;min-height:2.6em}
+.vc em{display:block;font-style:normal;color:var(--gold);font-size:.54rem;font-family:"IBM Plex Mono",monospace;margin-top:4px}
 .tg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.tl{background:rgba(24,42,38,.9);border:1px solid var(--line);border-radius:10px;padding:7px 8px 6px;min-width:0}
 .tl svg{width:14px;height:14px;display:block;margin-bottom:3px}.tl b{display:block;font-family:Fraunces,Georgia,serif;font-weight:600;font-size:.74rem;line-height:1.12;overflow-wrap:anywhere}.tl i{display:block;font-style:normal;color:var(--mut);font-size:.52rem;font-family:"IBM Plex Mono",monospace;margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
 @media(max-width:900px){.tg{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -4931,32 +4933,20 @@ function losFor(a,i,own){
   out.sort((x,y)=>(x.blocked-y.blocked)||(x.km-y.km));return out.slice(0,4);}
 function buildViews(a,own){
   const pp=document.getElementById("ppanel");if(!pp||!a.fm||!MESHES||!ROOTREF)return;
-  const wrap=document.createElement("div");wrap.className="vw";wrap.innerHTML='<div class=vh>What each side looks at · diagram from our model, tap “real view” for the real thing</div><div class=vg></div>';
+  // v78.1 (Kendall): no model thumbnails - a grey massing picture is no use to a buyer. Four sides, what each looks at from our
+  // line-of-sight check, and each card opens the REAL view: live photoreal imagery from that facade at that height.
+  const wrap=document.createElement("div");wrap.className="vw";wrap.innerHTML='<div class=vh>The view from each side · tap to stand there</div><div class=vg></div>';
   pp.insertBefore(wrap,pp.querySelector(".tg")||pp.querySelector(".pa"));
   const grid=wrap.querySelector(".vg");
-  const savedVis=MESHES.map(m=>m.visible);MESHES.forEach(m=>m.visible=true);   // the drill hides the district; the view must see it
-  if(!VRT){VRT=new THREE.WebGLRenderTarget(256,256);VCAM=new THREE.PerspectiveCamera(72,1,1,12000)}
-  const buf=new Uint8Array(256*256*4);
   VSIDE.forEach((side,i)=>{
-    const e=viewEye(a,i);const cell=document.createElement("div");cell.className="vc";
-    if(!e){cell.innerHTML='<div class=vp></div><b>'+side+'</b>';grid.appendChild(cell);return}
-    VCAM.position.copy(e.pos);VCAM.lookAt(e.pos.clone().add(e.dir.clone().multiplyScalar(400)).setY(e.pos.y-40));
-    const prevT=ren.getRenderTarget();ren.setRenderTarget(VRT);ren.render(scene,VCAM);ren.readRenderTargetPixels(VRT,0,0,256,256,buf);ren.setRenderTarget(prevT);
-    const cv=document.createElement("canvas");cv.width=cv.height=256;const ctx2=cv.getContext("2d");const im=ctx2.createImageData(256,256);
-    for(let y=0;y<256;y++){const s=(255-y)*256*4,d2=y*256*4;for(let x=0;x<256*4;x++)im.data[d2+x]=buf[s+x]}
-    ctx2.putImageData(im,0,0);
-    const los=losFor(a,i,own);
-    const clear=los.filter(l=>!l.blocked).map(l=>l.name);
-    const seesTxt=clear.length?clear.slice(0,2).join(" · "):(los.length?"blocked: "+esc2v(los[0].blocker):"open");
-    // the thumbnail is our MODEL (orientation + what is blocked); "real view" opens live photoreal imagery from this exact facade
-    const ll=a.fm_ll&&a.fm_ll[i];const head=Math.round((Math.atan2(e.dir.x,-e.dir.z)*180/Math.PI+360)%360);
-    const realUrl=ll?"/view?lon="+ll[0]+"&lat="+ll[1]+"&h="+Math.round((GROUND?0:0)+Math.max(6,a.h*0.66))+"&head="+head+
-      "&name="+encodeURIComponent(a.name)+"&side="+side+"&sees="+encodeURIComponent(clear.slice(0,3).join(" · "))+"&key="+encodeURIComponent(KEY):null;
-    cell.innerHTML='<img class=vp src="'+cv.toDataURL("image/jpeg",0.72)+'" alt="'+side+' view"><b>'+side+'</b>'+
-      '<i>'+seesTxt+'</i>'+(realUrl?'<a class=vr href="'+realUrl+'">real view →</a>':'');
-    cell.querySelector("img").onclick=()=>{ctl.autoRotate=false;cam.position.copy(e.pos);ctl.target.copy(e.pos.clone().add(e.dir.clone().multiplyScalar(300)).setY(e.pos.y-30))};
-    grid.appendChild(cell);});
-  MESHES.forEach((m,k)=>m.visible=savedVis[k]);}
+    const e=viewEye(a,i);const ll=a.fm_ll&&a.fm_ll[i];if(!e||!ll)return;
+    const los=losFor(a,i,own);const clear=los.filter(l=>!l.blocked).map(l=>l.name);const blocked=!clear.length&&los.length;
+    const head=Math.round((Math.atan2(e.dir.x,-e.dir.z)*180/Math.PI+360)%360);
+    const url="/view?lon="+ll[0]+"&lat="+ll[1]+"&h="+Math.round(Math.max(6,a.h*0.66))+"&head="+head+
+      "&name="+encodeURIComponent(a.name)+"&side="+side+"&sees="+encodeURIComponent(clear.slice(0,3).join(" · "))+"&key="+encodeURIComponent(KEY);
+    const cell=document.createElement("a");cell.className="vc"+(blocked?" blk":"");cell.href=url;
+    cell.innerHTML='<b>'+side+'</b><i>'+(clear.length?esc2v(clear.slice(0,2).join(" · ")):(blocked?"blocked by "+esc2v(los[0].blocker):"open outlook"))+'</i><em>real view →</em>';
+    grid.appendChild(cell);});}
 function esc2v(s){return String(s==null?"":s).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))}
 function applyDev(d){
   SELDEV=d;SELPROJ="";const _pp=document.getElementById("ppanel");if(_pp)_pp.classList.remove("on");fillProjSel(d);
