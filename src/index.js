@@ -4629,6 +4629,23 @@ function drawGroundImagery(){
   GPLANE.position.set((G.x0+G.x1)/2+ROOTREF.position.x,GROUND.position.y+0.05,(G.z0+G.z1)/2+ROOTREF.position.z);
   GPLANE.receiveShadow=true;GPLANE.renderOrder=-1;scene.add(GPLANE);
   const cr=document.createElement("div");cr.id="gcredit";cr.textContent=GIMG.attribution||"Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community";document.body.appendChild(cr);}
+// v77 STREETS (3 Sep): CityEngine street layer (ESRI.lib Street_Modern_Standard on the OSM centrelines, packed GLB in KV as streets_<slug>)
+// in the same absolute metres as the massing. It sits 0.15 m above the imagery plane (GROUND+0.05), keeps its own asphalt/kerb/pavement
+// textures, receives the building shadows and hides the drawn ctx roads. No streets GLB in KV = nothing changes.
+let STREETS=null,_stTries=0;
+loader.load("/img/streets_${slugName}",g=>{STREETS=g.scene;placeStreets()},undefined,()=>{});
+function placeStreets(){
+  if(!STREETS||STREETS.parent)return;
+  if(!ROOTREF||!GROUND){if(_stTries++<2400)requestAnimationFrame(placeStreets);return}   // the massing may still be loading
+  const ani=Math.min(8,ren.capabilities.getMaxAnisotropy());
+  STREETS.traverse(o=>{if(!o.isMesh)return;o.receiveShadow=true;o.castShadow=false;
+    const fix=m=>{if(m.map){m.map.colorSpace=THREE.SRGBColorSpace;m.map.anisotropy=ani;m.map.needsUpdate=true}
+      m.roughness=0.95;m.metalness=0;m.envMapIntensity=0.5;m.polygonOffset=true;m.polygonOffsetFactor=-2;m.polygonOffsetUnits=-4;m.needsUpdate=true;return m};   // offset keeps the asphalt in front of the imagery plane at distance
+    o.material=Array.isArray(o.material)?o.material.map(fix):fix(o.material)});
+  STREETS.position.set(ROOTREF.position.x,GROUND.position.y+0.2,ROOTREF.position.z);   // GLB y=0 = street level = massing base; imagery plane is GROUND+0.05
+  scene.add(STREETS);hideCtxRoads()}
+function hideCtxRoads(){if(!STREETS||!STREETS.parent)return;if(!ctxG){if(_stTries++<2400)requestAnimationFrame(hideCtxRoads);return}
+  ctxG.children.forEach(ch=>{if(ch.userData.k==="roads")ch.visible=false})}
 fetch("/img/ctx_${slugName}").then(r=>r.ok?r.json():null).then(cx=>{CTX=cx;drawCtx()}).catch(()=>{});
 function drawCtx(){
   if(!CTX||!ROOTREF||ctxG)return;
