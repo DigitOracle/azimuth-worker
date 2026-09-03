@@ -4705,7 +4705,9 @@ loader.load("/img/sky_${slugName}",g=>{
   if(GROUPS.pipeline.meshes.length)setupBloom();   // no pipeline = no composer, plain render path
   const fr=document.getElementById("filters");
   for(const k in GROUPS){const gme=GROUPS[k];if(!gme.meshes.length)continue;
-    const b=document.createElement("span");b.className="tg on";b.textContent=gme.label+" ("+gme.meshes.length+")";
+    // count BUILDINGS, not primitives: a textured building is walls + roof + bands (Kendall, 3 Sep)
+    const nB=new Set(gme.meshes.map(m=>{const mm=(m.name||"").match(/^b(\d+)/);return mm?mm[1]:m.id})).size;
+    const b=document.createElement("span");b.className="tg on";b.textContent=gme.label+" ("+nB+")";
     b.onclick=()=>{gme.on=!gme.on;b.classList.toggle("on",gme.on);gme.meshes.forEach(m=>m.visible=gme.on)};fr.appendChild(b)}
   buildFeat();
 },undefined,()=>{msg.textContent="No 3D massing for this community yet — it gets built the first time CityEngine runs for it."});
