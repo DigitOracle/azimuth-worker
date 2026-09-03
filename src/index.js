@@ -1637,6 +1637,9 @@ export default {
           data: { open_tasks: await count("act_"), commitments: await count("cmt_"), captured_meetings: await count("evt_"), indexed_docs: await count("doc_"), pending_photo_reads: await count("pimg_") },
           dependencies: dep,
           claude_403: c403,
+          // v82 - the group listener on the PC is a live socket: if it is not running, developer sheets posted to the group
+          // are lost, and the morning scan reads as a quiet day. listener_health.py writes this every morning (and on demand).
+          listener: await (async () => { try { const h = JSON.parse((await env.MEETINGS.get("img_listener_health")) || "null"); return h ? { verdict: h.verdict, checked: h.checked, checked_ago: ago(h.checked), alive: h.alive, coverage_lost_hours: h.coverage_lost_hours, pdfs_captured_in_window: h.pdfs_captured_in_window, meaning: h.meaning } : "no health report yet - run scripts/listener_health.py"; } catch (e) { return "unreadable"; } })(),
           recent_swallowed_errors: errs.slice(0, 8)
         };
         // A human-readable line first: the one sentence that says whether the loop is alive.
