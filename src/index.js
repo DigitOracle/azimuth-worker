@@ -3073,6 +3073,8 @@ async function publishDraft(env, to) {
 // self-contained image-generation prompt in BOTH ratios (9:16 story + 16:9 landscape).
 // Total intended time from wake-up to posted: under five minutes.
 const FEED_SCHEMA = { type: "object", additionalProperties: false, properties: { angles: { type: "array", items: { type: "object", additionalProperties: false, properties: { hook: { type: "string" }, figure: { type: "string" }, source: { type: "string" }, buyer: { type: "string" } }, required: ["hook", "figure", "source", "buyer"] } } }, required: ["angles"] };
+// v76 — campaign angles add one line on what to film / which supplied asset to cut from
+const CAMPAIGN_SCHEMA = { type: "object", additionalProperties: false, properties: { angles: { type: "array", items: { type: "object", additionalProperties: false, properties: { hook: { type: "string" }, figure: { type: "string" }, source: { type: "string" }, buyer: { type: "string" }, shot: { type: "string" } }, required: ["hook", "figure", "source", "buyer", "shot"] } } }, required: ["angles"] };
 
 async function dailyFeedTick(env, force, dry) {
   if ((env.MARKET_BRIEF || "") !== "on") return;
@@ -3157,14 +3159,31 @@ async function dailyFeedTick(env, force, dry) {
     else if (attempts + 1 >= 2) await waSend(env, env.WA_ALLOWED, "☀️ Morning — today's angles didn't come together on my side (twice, so I'm telling you rather than staying quiet). Say “feed” anytime and I'll build them fresh.");
     return;
   }
-  if (dry) return angles.map((a, i) => (i + 1) + ". " + a.hook + "\n   " + a.figure + " · " + a.source).join("\n");
+  // v76 — CAMPAIGN TRACK: while a campaign pack is live (Emaar District Ambassador, The Valley, closes 15 Sep 2026) the morning
+  // carries TWO extra angles for it, written ONLY from the pack's evidence and bound by the pack's guardrails (no capital-
+  // appreciation claim, sales-only rates, hashtag + tag, permit still open). They sit after the five market angles.
+  let camp = null; try { camp = JSON.parse((await env.MEETINGS.get("img_valley_pack")) || "null"); } catch (e) {}
+  if (camp && camp.contest && gstDateStr(n) <= camp.contest.closes) {
+    const csys = "You write TWO post angles a day for a Dubai broker competing in a developer's video contest. Use ONLY the pack's figures — never invent, sharpen or round beyond the nearest thousand, and never state a figure the pack does not contain. " +
+      "OBEY EVERY LINE of pack.guardrails; they are judged criteria, not style notes. Vary the two angles: one from the community/lifestyle side, one from the register/investment side. " +
+      "Each angle: hook = one arresting sentence she can say to camera; figure = the exact number with its unit; source = where it comes from (land department register, developer launch material, contest brief); buyer = who it speaks to; " +
+      "shot = one line on what to film or cut from the assets on hand. Return JSON only.";
+    const cdata = JSON.stringify({ pack: camp, daysLeft: Math.max(0, Math.round((Date.parse(camp.contest.closes) - Date.parse(gstDateStr(n))) / 86400000)), avoidHooks: hist.slice(0, 12) });
+    let cg = null; try { cg = await claudeJSON(env, csys, cdata, CAMPAIGN_SCHEMA, null, 900); } catch (e) {}
+    const cangles = cg && Array.isArray(cg.angles) ? cg.angles.slice(0, 2).map(a => Object.assign({}, a, { campaign: camp.contest.name })) : [];
+    if (cangles.length) angles.push(...cangles);
+  }
+  if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + a.hook + "\n   " + a.figure + " · " + a.source + (a.shot ? "\n   shot: " + a.shot : "")).join("\n");
   // store as the drafting context (draftFromAngle reads this) + remember the hooks
   const briefTxt = angles.map((a, i) => "ANGLE " + (i + 1) + ": " + a.hook + "\nFigure: " + a.figure + " (" + a.source + ")\nBuyer: " + a.buyer).join("\n\n");
   await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: briefTxt, data, angles }), { expirationTtl: 3 * 86400 });
   hist = angles.map(a => a.hook).concat(hist).slice(0, 24);
   await env.MEETINGS.put("mkt_feed_hist", JSON.stringify(hist), { expirationTtl: 30 * 86400 });
-  const bodyTxt = "☀️ *Najma daily — " + (angles.length === 5 ? "five" : String(angles.length)) + " you could post today*\n\n" +
-    angles.map((a, i) => (i + 1) + "️⃣ " + a.hook + "\n     " + a.figure + " · " + a.source).join("\n\n") +
+  const nCamp = angles.filter(a => a.campaign).length;
+  const dLeft = camp && camp.contest ? Math.max(0, Math.round((Date.parse(camp.contest.closes) - Date.now()) / 86400000)) : 0;
+  const bodyTxt = "☀️ *Najma daily — " + (angles.length === 5 ? "five" : String(angles.length)) + " you could post today*" +
+    (nCamp ? "\n_the last " + (nCamp === 1 ? "one is" : String(nCamp) + " are") + " for the Valley contest · " + dLeft + " day" + (dLeft === 1 ? "" : "s") + " left_" : "") + "\n\n" +
+    angles.map((a, i) => (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + a.hook + "\n     " + a.figure + " · " + a.source + (a.shot ? "\n     🎬 " + a.shot : "")).join("\n\n") +
     "\n\nPick one — you'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
   await waSend(env, env.WA_ALLOWED, bodyTxt);
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle",
