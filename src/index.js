@@ -4468,7 +4468,10 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 #ppanel{position:fixed;right:14px;top:206px;bottom:92px;width:min(44vw,400px);overflow:auto;background:rgba(19,31,29,.95);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:none;z-index:41}
 #ppanel.on{display:block}.pt{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;padding-right:22px}.ps{color:var(--gold);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;margin:3px 0 10px}
 .pr{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:6px 0;font-size:.72rem}.pr span:first-child{color:var(--mut)}.pr span:last-child{text-align:right;font-family:"IBM Plex Mono",monospace}
-.px{position:absolute;right:12px;top:10px;color:var(--mut);cursor:pointer}.pa{margin-top:10px}.pn{color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:8px}
+.px{position:absolute;right:12px;top:10px;color:var(--mut);cursor:pointer}.pa{margin-top:10px}
+.tg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tl{background:rgba(24,42,38,.9);border:1px solid var(--line);border-radius:12px;padding:10px 10px 8px;min-width:0}
+.tl svg{width:20px;height:20px;display:block;margin-bottom:6px}.tl b{display:block;font-family:Fraunces,Georgia,serif;font-weight:600;font-size:.92rem;line-height:1.15;overflow-wrap:anywhere}.tl i{display:block;font-style:normal;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:3px;text-transform:uppercase;letter-spacing:.06em}
+@media(max-width:640px){.tg{grid-template-columns:repeat(3,minmax(0,1fr))}}.pn{color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:8px}
 @media(max-width:640px){#ppanel{left:10px;right:10px;top:auto;bottom:74px;width:auto;max-height:46vh}}#devsel{appearance:none;-webkit-appearance:none;font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--gold);background:rgba(19,31,29,.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23C5A56A' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid rgba(197,165,106,.5);border-radius:99px;padding:7px 28px 7px 12px;max-width:52vw}
 #legend{position:fixed;left:14px;bottom:78px;display:flex;flex-direction:column;gap:5px;pointer-events:none;opacity:0;transition:opacity .4s}#legend.on{opacity:1}
 .lg{display:flex;align-items:center;gap:7px;font-family:"IBM Plex Mono",monospace;font-size:.64rem;color:var(--text);background:rgba(19,31,29,.85);border:1px solid var(--line);border-radius:99px;padding:4px 10px 4px 6px}.lg b{width:9px;height:9px;border-radius:50%;display:inline-block}
@@ -4659,9 +4662,22 @@ const svgL=lblWrap.querySelector("svg");const legend=document.createElement("div
 fetch("/img/anchors_${slugName}").then(r=>r.ok?r.json():null).then(a=>{if(!a||!a.anchors)return;ANCH=a;paintDevs()}).catch(()=>{});
 function paintDevs(){
   if(!ANCH||!MESHES||!ANCH.per_building_glb)return;
+  // anchor -> mesh by POSITION (mesh order in a merged export is not the footprint order): nearest mesh centre within 12 m
+  const _cc=new THREE.Vector3();   // geometry-local bounds are already in the GLB's own metres (no root offset, no stale world matrices)
+  const cents=MESHES.map(m=>{if(!m.geometry.boundingBox)m.geometry.computeBoundingBox();m.geometry.boundingBox.getCenter(_cc);return [_cc.x,_cc.z]});
+  for(const a of ANCH.anchors){if(a.x==null)continue;let bi=-1,bd=144;
+    for(let i=0;i<cents.length;i++){const dx=cents[i][0]-a.x,dz=cents[i][1]-a.z,d=dx*dx+dz*dz;if(d<bd){bd=d;bi=i}}
+    a.mesh=bi>=0?bi:null}
+  window.__sky={get anch(){return ANCH},get meshes(){return MESHES},get cam(){return cam},get ctl(){return ctl},get root(){return ROOTREF},sel:buildDevSel,dev:applyDev,proj:applyProj};
+  // every mesh gets its own material copies (merged exports share materials and use arrays per primitive) so fading one never fades another
+  for(const m of MESHES){m.material=Array.isArray(m.material)?m.material.map(x=>x.clone()):m.material.clone()}
+  const mats=(m)=>Array.isArray(m.material)?m.material:[m.material];
   for(const a of ANCH.anchors){if(!a.dev||a.mesh==null)continue;const m=MESHES[a.mesh];if(!m)continue;
-    m.material=m.material.clone();m.material.color.setHex(DEVCOL[a.dev]||0xC5A56A);m.material.emissive=new THREE.Color(DEVCOL[a.dev]||0xC5A56A);m.material.emissiveIntensity=0.12;m.userData.dev=a.dev}
+    for(const mt of mats(m)){mt.color.setHex(DEVCOL[a.dev]||0xC5A56A);mt.emissive=new THREE.Color(DEVCOL[a.dev]||0xC5A56A);mt.emissiveIntensity=0.12}m.userData.dev=a.dev}
   buildDevSel();}
+const MATS=(m)=>Array.isArray(m.material)?m.material:[m.material];
+function ghost(m,on){for(const mt of MATS(m)){if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity]);const o=DEVORIG.get(mt);
+  if(on){mt.transparent=true;mt.opacity=0.07;mt.depthWrite=false}else{mt.transparent=o[0];mt.opacity=o[1];mt.depthWrite=true}}}
 // v74.4 - DEVELOPER FILTER (Kendall, 3 Sep): pick a developer and every other building fades to a ghost; only that developer's
 // towers stay solid, labelled, and the camera frames them. "all developers" restores the district.
 let SELDEV="";const DEVORIG=new Map();
@@ -4674,8 +4690,8 @@ function buildDevSel(){
   sel.innerHTML='<option value="">all developers</option>'+present.sort((x,y)=>DEVNAME[x].localeCompare(DEVNAME[y])).map(d=>'<option value="'+d+'">'+DEVNAME[d]+' ('+(ANCH.anchors.filter(a=>a.dev===d).length)+')</option>').join("");
   sel.onchange=()=>applyDev(sel.value);wrap.appendChild(sel);
   const ps=document.createElement("select");ps.id="projsel";ps.style.display="none";ps.onchange=()=>applyProj(ps.value);wrap.appendChild(ps);
-  document.body.appendChild(wrap);
-  const pp=document.createElement("div");pp.id="ppanel";document.body.appendChild(pp);}
+  document.body.appendChild(wrap);}
+{const pp=document.createElement("div");pp.id="ppanel";document.body.appendChild(pp);}   // fact panel exists from the start
 // v74.5 - PROJECT DRILL: second dropdown lists the chosen developer's projects in this district; picking one keeps the tower in 3D,
 // slides it to the left and opens the fact panel on the right (developer-site facts + availability sheet + DLD 2026 + nearest metro/mall).
 let SELPROJ="",PROJFACTS=null;
@@ -4697,9 +4713,7 @@ const fmA=(n)=>n==null?"-":(n>=1e6?(n/1e6).toFixed(2)+" M":Math.round(n).toLocal
 function applyProj(name){
   SELPROJ=name;const pp=document.getElementById("ppanel");
   const mine=new Set(ANCH.anchors.filter(a=>a.dev===SELDEV&&(a.dev_project||a.name)===name&&a.mesh!=null).map(a=>a.mesh));
-  for(const m of MESHES){const o=DEVORIG.get(m)||[m.material.transparent,m.material.opacity];
-    const keep=name?mine.has(MESHES.indexOf(m)):(m.userData.dev===SELDEV);
-    m.material.transparent=keep?o[0]:true;m.material.opacity=keep?o[1]:0.07;m.material.depthWrite=keep}
+  MESHES.forEach((m,i)=>ghost(m,!(name?mine.has(i):(m.userData.dev===SELDEV))));
   LIVE.forEach((L)=>{L.el.remove();L.ln.remove();L.dot.remove()});LIVE.clear();
   if(!name){pp.classList.remove("on");applyDev(SELDEV);return}
   // frame the building, then slide the view so it sits in the left third and the panel takes the right
@@ -4724,17 +4738,22 @@ function applyProj(name){
   if(a0&&a0.h>12)rows.push(["Height (model)",Math.round(a0.h)+" m"]);
   const acts='<div class=pa>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
     '<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>'+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
+  // icon tiles instead of a list (Kendall): small squares, gold line icons drawn inline, value first, label under
+  const ICO={"Where":"M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10zm0-8a2 2 0 1 0 0-4 2 2 0 0 0 0 4z","Handover":"M4 6h16v14H4zM8 3v4M16 3v4M4 10h16","Structure":"M4 20h16M6 20V9l6-4 6 4v11M9 20v-5h6v5",
+    "Units":"M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z","Mix":"M3 18V9h18v9M3 13h18M7 9V6h4v3","Payment plan":"M3 8h18v10H3zM7 8V5h10v3M12 13h.01",
+    "Registered sales 2026":"M4 18l5-6 4 3 7-8M4 20h16","Median price":"M4 6h9l7 6-7 6H4zM8 12h.01","Typical range":"M4 12h16M7 8v8M17 8v8",
+    "Median AED / m²":"M3 17l14-14 4 4L7 21H3zM13 7l2 2M10 10l2 2M7 13l2 2","Off-plan share":"M4 21h16M6 21V8h4v13M10 8l10-4v17M14 12h2M14 16h2",
+    "Sold by type":"M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 21v-6h6v6M9 9h.01M15 9h.01","Nearest metro":"M6 3h12v12H6zM6 15l-2 4M18 15l2 4M9 11h6M9 7h6",
+    "Nearest mall":"M6 8h12l1 12H5zM9 8a3 3 0 0 1 6 0","Landmark":"M5 21V4M5 4h12l-2 4 2 4H5","On the developer sheet":"M6 3h12v18H6zM9 8h6M9 12h6M9 16h4",
+    "Last registration":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2","Height (model)":"M12 20V6M8 10l4-4 4 4"};
+  const tile=(r)=>'<div class=tl><svg viewBox="0 0 24 24" fill="none" stroke="#C5A56A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+(ICO[r[0]]||"M12 12h.01")+'"/></svg><b>'+esc(r[1])+'</b><i>'+esc(r[0])+'</i></div>';
   pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+'</div><div class=ps>'+DEVNAME[SELDEV]+(f&&f.status?' · '+esc(f.status):'')+'</div>'+
-    (rows.length?rows.map(r=>'<div class=pr><span>'+esc(r[0])+'</span><span>'+esc(r[1])+'</span></div>').join(""):'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+acts+
+    (rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+acts+
     '<div class=pn>developer site · availability sheet · DLD Open Data 2026 (nearest metro/mall = most common on this project\\'s sales)</div>';
   pp.classList.add("on");document.getElementById("ppx").onclick=()=>{document.getElementById("projsel").value="";applyProj("")};}
 function applyDev(d){
   SELDEV=d;SELPROJ="";const _pp=document.getElementById("ppanel");if(_pp)_pp.classList.remove("on");fillProjSel(d);
-  for(const m of MESHES){
-    if(!DEVORIG.has(m))DEVORIG.set(m,[m.material.transparent,m.material.opacity]);
-    const o=DEVORIG.get(m);
-    if(d&&m.userData.dev!==d){m.material.transparent=true;m.material.opacity=0.07;m.material.depthWrite=false}
-    else{m.material.transparent=o[0];m.material.opacity=o[1];m.material.depthWrite=true}}
+  for(const m of MESHES)ghost(m,!!d&&m.userData.dev!==d);
   LIVE.forEach((L)=>{L.el.remove();L.ln.remove();L.dot.remove()});LIVE.clear();
   if(!d){if(HOME){cam.position.copy(HOME.pos);ctl.target.copy(HOME.tgt);ctl.autoRotate=HOME.rot;ctl.autoRotateSpeed=HOME.spd;HOME=null}return}
   if(!HOME)HOME={pos:cam.position.clone(),tgt:ctl.target.clone(),rot:ctl.autoRotate,spd:ctl.autoRotateSpeed};
