@@ -4505,35 +4505,80 @@ ${najNav(key, "map")}
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 const el=document.getElementById("cv3"),msg=document.getElementById("msg");
+const MOBILE=innerWidth<600;   // v75 look pass: mobile gets a lighter pixel ratio and no MSAA in the composer
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x0C1413);scene.fog=new THREE.Fog(0x0C1413,2500,9000);
 const cam=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,1,20000);
-const ren=new THREE.WebGLRenderer({antialias:true});ren.setPixelRatio(Math.min(2,devicePixelRatio));ren.setSize(innerWidth,innerHeight);ren.toneMapping=THREE.ACESFilmicToneMapping;ren.toneMappingExposure=1.35;el.appendChild(ren.domElement);
-scene.add(new THREE.HemisphereLight(0xE8E4D8,0x182823,1.5));
-const sun=new THREE.DirectionalLight(0xF2E7CF,2.4);sun.position.set(1,1.2,0.6);scene.add(sun);
-const fill=new THREE.DirectionalLight(0x3E8A7E,0.7);fill.position.set(-1,0.4,-0.8);scene.add(fill);
+const ren=new THREE.WebGLRenderer({antialias:true});ren.setPixelRatio(Math.min(MOBILE?1.5:2,devicePixelRatio));ren.setSize(innerWidth,innerHeight);ren.toneMapping=THREE.ACESFilmicToneMapping;ren.toneMappingExposure=0.95;el.appendChild(ren.domElement);
+ren.shadowMap.enabled=true;ren.shadowMap.type=THREE.PCFSoftShadowMap;
+// v75 LOOK PASS (3 Sep): image-based light so the massing has real shading, a dark sky dome, soft sun shadows, gentle glow on pipeline.
+{const pm=new THREE.PMREMGenerator(ren);scene.environment=pm.fromScene(new RoomEnvironment(),0.04).texture;pm.dispose();scene.environmentIntensity=0.45;}
+const SKYCOL={horizon:new THREE.Color(0x1B332E),zenith:new THREE.Color(0x121D1B),warm:new THREE.Color(0xC5A56A)};   // pre-tone-map values chosen so ACES lands on ink #0C1413 / teal-black #152926   // deep teal-black at the horizon -> ink at zenith, a breath of gold on the skyline
+const sky=new THREE.Mesh(new THREE.SphereGeometry(1,48,24),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,
+  uniforms:{horizon:{value:SKYCOL.horizon},zenith:{value:SKYCOL.zenith},warm:{value:SKYCOL.warm}},
+  vertexShader:"varying vec3 vW;void main(){vW=normalize((modelMatrix*vec4(position,1.0)).xyz);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}",
+  fragmentShader:"uniform vec3 horizon,zenith,warm;varying vec3 vW;void main(){float h=clamp(vW.y,0.0,1.0);vec3 c=mix(horizon,zenith,pow(h,0.45));c+=warm*0.035*exp(-h*14.0);gl_FragColor=vec4(c,1.0);\\n#include <tonemapping_fragment>\\n#include <colorspace_fragment>\\n}"}));
+sky.scale.setScalar(9000);sky.renderOrder=-1;sky.frustumCulled=false;scene.add(sky);
+scene.add(new THREE.HemisphereLight(0xE8E4D8,0x182823,0.35));
+const sun=new THREE.DirectionalLight(0xF2E7CF,2.2);sun.position.set(1,1.2,0.6);scene.add(sun);scene.add(sun.target);
+sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.bias=-0.0004;sun.shadow.normalBias=0.6;
+const fill=new THREE.DirectionalLight(0x3E8A7E,0.35);fill.position.set(-1,0.4,-0.8);scene.add(fill);
+// selective bloom: pipeline meshes carry layer 1; everything else is painted black for the bloom pass, then the pure glow is added on top
+const BLOOM=1,bloomLayer=new THREE.Layers();bloomLayer.set(BLOOM);const DARK=new THREE.MeshBasicMaterial({color:0x000000});
+let bloomC=null,finalC=null,bloomPass=null;const _mats=new Map();
+function setupBloom(){
+  const pr=ren.getPixelRatio(),W=innerWidth,H=innerHeight;
+  const rt=new THREE.WebGLRenderTarget(W*pr,H*pr,{type:THREE.HalfFloatType,samples:MOBILE?0:4});
+  bloomC=new EffectComposer(ren);bloomC.renderToScreen=false;bloomC.addPass(new RenderPass(scene,cam));
+  bloomPass=new UnrealBloomPass(new THREE.Vector2(W,H),0.35,0.45,0.6);bloomC.addPass(bloomPass);
+  finalC=new EffectComposer(ren,rt);finalC.addPass(new RenderPass(scene,cam));
+  const mix=new ShaderPass(new THREE.ShaderMaterial({uniforms:{baseTexture:{value:null},bloomTexture:{value:bloomPass.renderTargetsHorizontal[0].texture}},
+    vertexShader:"varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}",
+    fragmentShader:"uniform sampler2D baseTexture;uniform sampler2D bloomTexture;varying vec2 vUv;void main(){gl_FragColor=texture2D(baseTexture,vUv)+vec4(texture2D(bloomTexture,vUv).rgb,0.0);}"}),"baseTexture");
+  mix.needsSwap=true;finalC.addPass(mix);finalC.addPass(new OutputPass());}
+function renderFrame(){
+  if(!finalC){ren.render(scene,cam);return}
+  const bg=scene.background;scene.background=null;sky.visible=false;
+  scene.traverse(o=>{if(o.isMesh&&!o.layers.test(bloomLayer)){_mats.set(o,o.material);o.material=DARK}});
+  bloomC.render();
+  _mats.forEach((m,o)=>{o.material=m});_mats.clear();sky.visible=true;scene.background=bg;
+  finalC.render();}
 const ctl=new OrbitControls(cam,ren.domElement);ctl.enableDamping=true;ctl.autoRotate=true;ctl.autoRotateSpeed=0.5;ctl.maxPolarAngle=Math.PI*0.49;
 addEventListener("pointerdown",()=>ctl.autoRotate=false,{once:true});
 const GROUPS={existing:{label:"existing",col:0x39434F,on:true,meshes:[]},construction:{label:"under construction",col:0x3E8A7E,on:true,meshes:[]},pipeline:{label:"pipeline",col:0xC5A56A,on:true,meshes:[]}};
 function classify(hex){const d=(a,b)=>{const c1=new THREE.Color(a),c2=new THREE.Color(b);return (c1.r-c2.r)**2+(c1.g-c2.g)**2+(c1.b-c2.b)**2};
 let best="existing",bd=1e9;for(const k in GROUPS){const dd=d(hex,GROUPS[k].col);if(dd<bd){bd=dd;best=k}}return best}
-new GLTFLoader().load("/img/sky_${slugName}",g=>{
+const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);   // compressed GLBs load too
+loader.load("/img/sky_${slugName}",g=>{
   msg.remove();
   const root=g.scene;
   const box=new THREE.Box3().setFromObject(root);const c=box.getCenter(new THREE.Vector3());const sz=box.getSize(new THREE.Vector3());
   root.position.sub(c);root.position.y+=sz.y/2- (c.y-box.min.y);
-  const DISPLAY={existing:0x7A8694,construction:0x3E8A7E,pipeline:0xC5A56A};
+  const DISPLAY={existing:0x8A857C,construction:0x3E8A7E,pipeline:0xC5A56A};   // existing = warm grey under the image light
   root.traverse(o=>{if(o.isMesh){const grp=classify(o.material.color.getHex());
-    o.material=new THREE.MeshStandardMaterial({color:DISPLAY[grp],flatShading:true,roughness:0.82,metalness:0.05,transparent:grp==="pipeline",opacity:grp==="pipeline"?0.55:1});
+    o.material=new THREE.MeshStandardMaterial({color:DISPLAY[grp],flatShading:true,roughness:0.82,metalness:0.05,transparent:grp==="pipeline",opacity:grp==="pipeline"?0.55:1,
+      emissive:grp==="pipeline"?0xC5A56A:0x000000,emissiveIntensity:grp==="pipeline"?0.28:1});
+    o.castShadow=grp!=="pipeline";o.receiveShadow=true;if(grp==="pipeline")o.layers.enable(BLOOM);   // ghosts glow, they do not throw shadows
     o.userData.grp=grp;GROUPS[grp].meshes.push(o);}});
   scene.add(root);
   ROOTREF=root;drawCtx();
   MESHES=[];root.traverse(o=>{if(o.isMesh)MESHES.push(o)});   // v74: export order = mesh index (per-building GLB), used by the anchors
   paintDevs();
   const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1}));
-  ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;scene.add(ground);
+  ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;ground.receiveShadow=true;scene.add(ground);
   const R=Math.max(sz.x,sz.z);cam.position.set(R*0.9,R*0.42,R*0.9);ctl.target.set(0,sz.y*0.18,0);
   scene.fog.near=R*1.3;scene.fog.far=R*3.6;cam.far=Math.max(20000,R*8);cam.updateProjectionMatrix();
+  sky.scale.setScalar(Math.min(cam.far*0.8,R*6));
+  {const rad=sz.length()*0.52,d=new THREE.Vector3(1,1.2,0.6).normalize();sun.position.copy(d.multiplyScalar(rad*2.2));sun.target.position.set(0,0,0);   // shadow frustum hugs the model's bounding sphere
+    const sc=sun.shadow.camera;sc.left=-rad;sc.right=rad;sc.top=rad;sc.bottom=-rad;sc.near=rad*1.1;sc.far=rad*3.4;sc.updateProjectionMatrix();}
+  if(GROUPS.pipeline.meshes.length)setupBloom();   // no pipeline = no composer, plain render path
   const fr=document.getElementById("filters");
   for(const k in GROUPS){const gme=GROUPS[k];if(!gme.meshes.length)continue;
     const b=document.createElement("span");b.className="tg on";b.textContent=gme.label+" ("+gme.meshes.length+")";
@@ -4556,7 +4601,7 @@ function drawCtx(){
       shapes.push(sh)}catch(e){}});
     if(!shapes.length)return;
     const g2=new THREE.ShapeGeometry(shapes,1);g2.rotateX(-Math.PI/2);g2.translate(0,y,0);
-    const mm=new THREE.Mesh(g2,new THREE.MeshStandardMaterial({color:col,roughness:0.95,metalness:0,transparent:op<1,opacity:op}));
+    const mm=new THREE.Mesh(g2,new THREE.MeshStandardMaterial({color:col,roughness:0.95,metalness:0,transparent:op<1,opacity:op}));mm.receiveShadow=true;
     ctxG.add(mm)});
   scene.add(ctxG);}
 let FOCUS=null,HOME=null;const ORIG=new Map();
@@ -4628,7 +4673,9 @@ function updateLabels(){
     cand.push({a,sx,sy,depth,score:(a.dev?1e6:0)+a.h*10-depth*0.02});}
   cand.sort((x,y)=>y.score-x.score);
   const pick=[],MINDX=Math.max(40,Math.min(64,W/8)),TS=Math.max(.55,Math.min(1,H/820));   // spacing and leader tiers scale with the screen
-  for(const c of cand){if(pick.length>=10)break;if(pick.some(q=>Math.abs(q.sx-c.sx)<MINDX&&Math.abs(q.sy-c.sy)<140))continue;pick.push(c)}
+  const lw=(a)=>Math.min(W*0.6,a.name.length*7.2+16);                                  // estimated label width in px
+  for(const c of cand){if(pick.length>=10)break;
+    if(pick.some(q=>Math.abs(q.sx-c.sx)<Math.max(MINDX,(lw(q.a)+lw(c.a))/2+10)&&Math.abs(q.sy-c.sy)<140))continue;pick.push(c)}
   const now=performance.now();const keep=new Set();
   pick.forEach((c,i)=>{const k=String(c.a.i);keep.add(k);let L=LIVE.get(k);
     if(!L){const el=document.createElement("a");el.className="lb"+(c.a.dev?" dev":"");el.href=c.a.dev?"/dev?d="+c.a.dev+"&key="+encodeURIComponent(KEY):"javascript:void 0";
@@ -4645,7 +4692,6 @@ function updateLabels(){
   const devs=[...new Set(pick.map(c=>c.a.dev).filter(Boolean))];
   legend.innerHTML=devs.map(d=>'<span class=lg><b style="background:#'+DEVCOL[d].toString(16).padStart(6,"0")+'"></b>'+DEVNAME[d]+'</span>').join("");
   legend.classList.toggle("on",devs.length>0);}
-{const _r=ren.render.bind(ren);ren.render=function(s,c){_r(s,c);try{updateLabels()}catch(e){}}}
 const ray=new THREE.Raycaster(),ptr=new THREE.Vector2();let pd=null;
 addEventListener("pointerdown",e=>{pd=[e.clientX,e.clientY]});
 addEventListener("pointerup",e=>{
@@ -4664,8 +4710,8 @@ addEventListener("pointerup",e=>{
   focusBuilding(bk,[...document.querySelectorAll(".fg")].find(x=>x.textContent.indexOf((META.buildings[bk].title||bk).split("(")[0].trim())>=0));
 });
 document.getElementById("cx").onclick=()=>{if(FOCUS)unfocus();else document.getElementById("card").classList.remove("on")};
-addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});
-(function loop(){requestAnimationFrame(loop);ctl.update();ren.render(scene,cam)})();
+addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight);if(finalC){finalC.setSize(innerWidth,innerHeight);bloomC.setSize(innerWidth,innerHeight)}});
+(function loop(){requestAnimationFrame(loop);ctl.update();renderFrame();try{updateLabels()}catch(e){}})();
 </script></body></html>`;
 }
 
