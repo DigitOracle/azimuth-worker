@@ -3275,6 +3275,21 @@ async function clientMatch(env, to, briefText) {
   await env.MEETINGS.put("mkt_lastmatch", JSON.stringify({ at: gstNowIso(), ask: intent, brief: out }), { expirationTtl: 3 * 86400 });
   await dnaSignal(env, "client_match", (rt !== "any" ? rt + " " : "") + purpose + (budget ? " ~" + Math.round(budget / 1000) + "k" : ""));
   await waSend(env, to, "🎯 Client match — register-grounded\n\n" + out);
+  // v73.6 — one tap from the brief into the board: compare mode pre-set to this client's bedrooms + budget (who builds this, at what
+  // range), plus the 3D skyline of the matched areas where we hold one. Deeper links (a developer's page, a unit card) attach
+  // once the match ranks projects rather than areas.
+  try {
+    const bedKey = /studio/i.test(rt) ? "studio" : (/^([1-4])\s*B/i.test(rt) ? rt.match(/^([1-4])/)[1] : (/^5/.test(rt) ? "4" : "all"));
+    const bandKey = !budget ? "all" : budget < 1e6 ? "lt1" : budget < 2e6 ? "1to2" : budget < 4e6 ? "2to4" : "gt4";
+    const base = LI_ORIGIN(env) + "/home?mode=compare&bed=" + bedKey + "&band=" + bandKey + "&metric=range&key=" + encodeURIComponent(env.READ_KEY || "");
+    let skyLinks = "";
+    try {
+      const _kl = await env.MEETINGS.list({ prefix: "img_sky_" });                 // same enumeration the /skyline rail uses
+      const slugs = new Set(_kl.keys.map(k => k.name.slice(8)));
+      skyLinks = top.map(c => { const s = String(c.area || "").toLowerCase().replace(/[^a-z0-9]/g, ""); return slugs.has(s) ? "⬢ " + c.area + " in 3D: " + LI_ORIGIN(env) + "/skyline/" + s + "?key=" + encodeURIComponent(env.READ_KEY || "") : null; }).filter(Boolean).slice(0, 3).join("\n");
+    } catch (e) {}
+    await waSend(env, to, "🗂 On the board\n" + "Who builds " + (bedKey === "all" ? "this" : bedKey === "studio" ? "studios" : bedKey + "-beds") + (budget ? " under AED " + (budget / 1e6).toFixed(1) + " M" : "") + ", side by side: " + base + (skyLinks ? "\n" + skyLinks : ""));
+  } catch (e) {}
   await waSendButtons(env, to, "Turn this into content, or refine the brief in a reply.", [
     { id: "match:post", title: "📸 Make it a post" },
     { id: "match:done", title: "✓ Just for the meeting" }]);
