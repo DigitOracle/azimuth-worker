@@ -4917,7 +4917,9 @@ function applyProj(name){
     "Median AED / m²":"M3 17l14-14 4 4L7 21H3zM13 7l2 2M10 10l2 2M7 13l2 2","Off-plan share":"M4 21h16M6 21V8h4v13M10 8l10-4v17M14 12h2M14 16h2",
     "Sold by type":"M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 21v-6h6v6M9 9h.01M15 9h.01","Nearest metro":"M6 3h12v12H6zM6 15l-2 4M18 15l2 4M9 11h6M9 7h6",
     "Nearest mall":"M6 8h12l1 12H5zM9 8a3 3 0 0 1 6 0","Landmark":"M5 21V4M5 4h12l-2 4 2 4H5","On the developer sheet":"M6 3h12v18H6zM9 8h6M9 12h6M9 16h4",
-    "Last registration":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2","Height (model)":"M12 20V6M8 10l4-4 4 4"};
+    "Last registration":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2","Height (model)":"M12 20V6M8 10l4-4 4 4",
+    "Floor area (model)":"M4 4h16v16H4zM4 10h16M10 4v16","Storeys (model)":"M4 20h16M6 20V4h12v16M6 9h12M6 14h12",
+    "Homes (registered)":"M4 21V10l8-6 8 6v11M9 21v-6h6v6M15 6l3-2","Homes (indicative)":"M4 21V10l8-6 8 6v11M9 21v-6h6v6"};
   const tile=(r)=>'<div class=tl><svg viewBox="0 0 24 24" fill="none" stroke="#C5A56A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+(ICO[r[0]]||"M12 12h.01")+'"/></svg><b>'+esc(r[1])+'</b><i>'+esc(r[0])+'</i></div>';
   pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+'</div><div class=ps>'+(SELDEV?DEVNAME[SELDEV]:'on the map · developer not on the list')+(f&&f.status?' · '+esc(f.status):'')+'</div>'+
     (rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+acts+
