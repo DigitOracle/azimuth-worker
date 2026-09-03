@@ -4460,6 +4460,7 @@ function renderSkyline(slugName, areaName, key, rail) {
 :root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
 html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;overflow:hidden}
 #cv3{position:fixed;inset:0}
+#gcredit{position:fixed;right:14px;bottom:100px;color:var(--mut);font-size:.56rem;font-family:"IBM Plex Mono",monospace;opacity:.8;pointer-events:none;z-index:39}
 #lbls{position:fixed;inset:0;pointer-events:none;overflow:hidden}#lbls svg{position:absolute;inset:0;width:100%;height:100%}
 .lb{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;text-decoration:none;color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.74rem;font-weight:500;letter-spacing:.01em;white-space:nowrap;opacity:0;transition:opacity .45s ease;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 12px rgba(12,20,19,.9)}
 .lb.on{opacity:1}.lb i{display:block;font-style:normal;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:1px}.lb.dev{font-weight:600}
@@ -4510,7 +4511,7 @@ ${NAJ_NAV_CSS}</style>
 <div class=tog id=filters></div>
 <div class=feat id=feat></div>
 <div id=msg>loading massing…</div>
-<div class=foot>model: CityEngine from OSM footprints + DLD register · © OpenStreetMap contributors</div>
+<div class=foot>model: CityEngine from OSM footprints + DLD register · facades: Esri CityEngine texture library · © OpenStreetMap contributors</div>
 ${najNav(key, "map")}
 <script type="module">
 import * as THREE from "three";
@@ -4572,10 +4573,24 @@ loader.load("/img/sky_${slugName}",g=>{
   const root=g.scene;
   const box=new THREE.Box3().setFromObject(root);const c=box.getCenter(new THREE.Vector3());const sz=box.getSize(new THREE.Vector3());
   root.position.sub(c);root.position.y+=sz.y/2- (c.y-box.min.y);
-  const DISPLAY={existing:0x8A857C,construction:0x3E8A7E,pipeline:0xC5A56A};   // existing = warm grey under the image light
-  root.traverse(o=>{if(o.isMesh){const grp=classify(o.material.color.getHex());
-    o.material=new THREE.MeshStandardMaterial({color:DISPLAY[grp],flatShading:true,roughness:0.82,metalness:0.05,transparent:grp==="pipeline",opacity:grp==="pipeline"?0.55:1,
-      emissive:grp==="pipeline"?0xC5A56A:0x000000,emissiveIntensity:grp==="pipeline"?0.28:1});
+  const DISPLAY={existing:0x8A857C,construction:0x3E8A7E,pipeline:0xC5A56A};   // existing = warm grey under the image light (untextured v2 files)
+  // v76 TEXTURES (3 Sep): v3 exports carry real facade photos (baseColorTexture, WebP) and the status in the mesh name
+  // "b<i>_<class>_s<status>". A textured material is KEPT and only tinted (existing none / construction teal / pipeline gold + glass);
+  // an untextured one is replaced by the flat status colour as before (status from the name when present, nearest colour otherwise).
+  const STATUS_RE=/_s(existing|construction|pipeline)(?:_|$)/;
+  const TINT={existing:0xFFFFFF,construction:0xA9DCCF,pipeline:0xE6CC94};
+  const ANISO=Math.min(8,ren.capabilities.getMaxAnisotropy());
+  function statusOf(o){for(let n=o;n;n=n.parent){const m=STATUS_RE.exec(n.name||"");if(m)return m[1]}
+    const m0=Array.isArray(o.material)?o.material[0]:o.material;return classify(m0&&m0.color?m0.color.getHex():0x39434F)}
+  root.traverse(o=>{if(o.isMesh){const grp=statusOf(o);
+    const fix=(m)=>{if(!(m&&m.map))return new THREE.MeshStandardMaterial({color:DISPLAY[grp],flatShading:true,roughness:0.82,metalness:0.05,transparent:grp==="pipeline",opacity:grp==="pipeline"?0.55:1,
+        emissive:grp==="pipeline"?0xC5A56A:0x000000,emissiveIntensity:grp==="pipeline"?0.28:1});
+      m.map.colorSpace=THREE.SRGBColorSpace;m.map.anisotropy=ANISO;m.map.needsUpdate=true;   // photos are sRGB; anisotropy keeps window rows crisp at grazing angles
+      m.flatShading=true;m.roughness=0.88;m.metalness=0;m.side=THREE.FrontSide;m.envMapIntensity=0.7;m.color.setHex(TINT[grp]);
+      if(grp==="pipeline"){m.transparent=true;m.opacity=0.6;m.emissive=new THREE.Color(0xC5A56A);m.emissiveIntensity=0.22}
+      else if(grp==="construction"){m.emissive=new THREE.Color(0x3E8A7E);m.emissiveIntensity=0.07}
+      m.userData.textured=true;m.needsUpdate=true;return m};
+    o.material=Array.isArray(o.material)?o.material.map(fix):fix(o.material);
     o.castShadow=grp!=="pipeline";o.receiveShadow=true;if(grp==="pipeline")o.layers.enable(BLOOM);   // ghosts glow, they do not throw shadows
     o.userData.grp=grp;GROUPS[grp].meshes.push(o);}});
   scene.add(root);
@@ -4584,6 +4599,7 @@ loader.load("/img/sky_${slugName}",g=>{
   paintDevs();
   const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1}));
   ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;ground.receiveShadow=true;scene.add(ground);
+  GROUND=ground;drawGroundImagery();
   const R=Math.max(sz.x,sz.z);cam.position.set(R*0.9,R*0.42,R*0.9);ctl.target.set(0,sz.y*0.18,0);
   scene.fog.near=R*1.3;scene.fog.far=R*3.6;cam.far=Math.max(20000,R*8);cam.updateProjectionMatrix();
   sky.scale.setScalar(Math.min(cam.far*0.8,R*6));
@@ -4599,6 +4615,20 @@ loader.load("/img/sky_${slugName}",g=>{
 let META=null;
 fetch("/img/meta_${slugName}").then(r=>r.ok?r.json():null).then(m=>{META=m;buildFeat()}).catch(()=>{});
 let CTX=null,ctxG=null,ROOTREF=null;
+// v75 - AERIAL GROUND (Kendall, 3 Sep): Esri World Imagery draped under the massing (ground_<slug> json + ground_<slug>_jpg in KV,
+// exported by scripts/ground_imagery.py in the GLB's own metres). Photographed roads/parks replace the drawn ctx roads/green.
+let GROUND=null,GIMG=null,GPLANE=null,HAVE_GROUND=false;
+fetch("/img/ground_${slugName}").then(r=>r.ok?r.json():null).then(g=>{if(!g||!g.scene)return;GIMG=g;HAVE_GROUND=true;drawGroundImagery();
+  if(ctxG)ctxG.children.forEach(ch=>{if(ch.userData.k==="roads"||ch.userData.k==="green")ch.visible=false})}).catch(()=>{});
+function drawGroundImagery(){
+  if(!GIMG||!GROUND||!ROOTREF||GPLANE)return;
+  const G=GIMG.scene;const tex=new THREE.TextureLoader().load("/img/ground_${slugName}_jpg");
+  tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=Math.min(8,ren.capabilities.getMaxAnisotropy());
+  const geo=new THREE.PlaneGeometry(G.x1-G.x0,G.z1-G.z0);geo.rotateX(-Math.PI/2);          // image top row = north = smaller z; no flip needed
+  GPLANE=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({map:tex,roughness:1,metalness:0,color:0x9AA09A}));
+  GPLANE.position.set((G.x0+G.x1)/2+ROOTREF.position.x,GROUND.position.y+0.05,(G.z0+G.z1)/2+ROOTREF.position.z);
+  GPLANE.receiveShadow=true;GPLANE.renderOrder=-1;scene.add(GPLANE);
+  const cr=document.createElement("div");cr.id="gcredit";cr.textContent=GIMG.attribution||"Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community";document.body.appendChild(cr);}
 fetch("/img/ctx_${slugName}").then(r=>r.ok?r.json():null).then(cx=>{CTX=cx;drawCtx()}).catch(()=>{});
 function drawCtx(){
   if(!CTX||!ROOTREF||ctxG)return;
@@ -4613,6 +4643,7 @@ function drawCtx(){
     if(!shapes.length)return;
     const g2=new THREE.ShapeGeometry(shapes,1);g2.rotateX(-Math.PI/2);g2.translate(0,y,0);
     const mm=new THREE.Mesh(g2,new THREE.MeshStandardMaterial({color:col,roughness:0.95,metalness:0,transparent:op<1,opacity:op}));mm.receiveShadow=true;
+    mm.userData.k=k;if(HAVE_GROUND&&(k==="roads"||k==="green"))mm.visible=false;          // the photo already shows them
     ctxG.add(mm)});
   scene.add(ctxG);}
 let FOCUS=null,HOME=null;const ORIG=new Map();
@@ -4664,8 +4695,8 @@ fetch("/img/anchors_${slugName}").then(r=>r.ok?r.json():null).then(a=>{if(!a||!a
 function paintDevs(){
   if(!ANCH||!MESHES||!ANCH.per_building_glb)return;
   // anchor -> mesh by POSITION (mesh order in a merged export is not the footprint order): nearest mesh centre within 12 m
-  const _cc=new THREE.Vector3();   // geometry-local bounds are already in the GLB's own metres (no root offset, no stale world matrices)
-  const cents=MESHES.map(m=>{if(!m.geometry.boundingBox)m.geometry.computeBoundingBox();m.geometry.boundingBox.getCenter(_cc);return [_cc.x,_cc.z]});
+  const _cc=new THREE.Vector3(),_bb=new THREE.Box3();ROOTREF.updateWorldMatrix(true,true);   // v76: packed (quantized) GLBs carry a dequantise transform on the node, so measure in ROOT space, not geometry space
+  const cents=MESHES.map(m=>{if(!m.geometry.boundingBox)m.geometry.computeBoundingBox();_bb.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld);_bb.getCenter(_cc).sub(ROOTREF.position);return [_cc.x,_cc.z]});
   // a banded tower is several meshes (walls, floor bands, crown): give EVERY mesh to its nearest footprint, then an anchor owns all
   // the meshes of its footprint (a.meshes); a.mesh keeps the first for compatibility
   const fps=ANCH.fps||ANCH.anchors.map(a=>[a.i,a.x,a.z,a.h]);const byFp={};
@@ -4678,7 +4709,9 @@ function paintDevs(){
   const mats=(m)=>Array.isArray(m.material)?m.material:[m.material];
   for(const a of ANCH.anchors){if(!a.dev||!a.meshes||!a.meshes.length)continue;
     for(const mi of a.meshes){const m=MESHES[mi];if(!m)continue;
-      for(const mt of mats(m)){mt.color.setHex(DEVCOL[a.dev]||0xC5A56A);mt.emissive=new THREE.Color(DEVCOL[a.dev]||0xC5A56A);mt.emissiveIntensity=0.12}m.userData.dev=a.dev}}
+      for(const mt of mats(m)){const dc=new THREE.Color(DEVCOL[a.dev]||0xC5A56A);
+        if(mt.map){mt.color.lerp(dc,0.35);mt.emissive=dc;mt.emissiveIntensity=0.16}   // v76: textured tower keeps its facade photo, tinted 35 % towards the developer colour + a glow
+        else{mt.color.copy(dc);mt.emissive=dc.clone();mt.emissiveIntensity=0.12}}m.userData.dev=a.dev}}
   buildDevSel();}
 const MATS=(m)=>Array.isArray(m.material)?m.material:[m.material];
 function ghost(m,on){m.visible=!on;      // Kendall: the others must go, not fade - hide them outright; roads and ground stay for context
