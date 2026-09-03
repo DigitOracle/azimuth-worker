@@ -2020,6 +2020,15 @@ export default {
         const _p = (n) => String(url.searchParams.get(n) || "").replace(/[^a-z0-9_]/g, "");
         return new Response(renderCompare(_cmp, _bd, { a: _p("a"), b: _p("b"), bed: _p("bed") || "all", band: _p("band") || "all", diff: _p("diff") === "1" }, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      if (url.pathname === "/view") {                         // v78 - THE REAL VIEW: photorealistic tiles rendered live from one facade
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _num = (n, d) => { const v = parseFloat(url.searchParams.get(n)); return isFinite(v) ? v : d; };
+        const _s = (n) => String(url.searchParams.get(n) || "").replace(/[^\w .,'&()-]/g, "").slice(0, 80);
+        const gk = url.searchParams.get("gkey") || env.GOOGLE_MAPS_KEY || "";
+        return new Response(renderRealView({ lon: _num("lon", 55.2744), lat: _num("lat", 25.1972), h: _num("h", 120), head: _num("head", 0),
+          name: _s("name"), side: _s("side"), sees: _s("sees"), gkey: gk }, url.searchParams.get("key") || ""),
+          { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/cards") {                        // v72 - unit-type card gallery for a building (cards_<b>_index pushed by push_cards.py)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _cb = String(url.searchParams.get("b") || "symphony").replace(/[^a-z0-9]/g, "");
@@ -4475,6 +4484,53 @@ ${najNav(key, "homes")}
 </body></html>`;
 }
 
+// v78 — THE REAL VIEW. The skyline model answers "which side and is it blocked"; this answers "what does it actually look like".
+// Google Photorealistic 3D Tiles are rendered LIVE in CesiumJS from the facade's own point and height — under Google's terms the
+// tiles may not be cached or re-served, so this is a live view, never a stored picture. Attribution stays on screen.
+function renderRealView(v, key) {
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const noKey = !v.gkey;
+  return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(v.name || "The view")} — real view</title>
+<link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}
+<link rel=stylesheet href="https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/Cesium/Widgets/widgets.css">
+<style>
+:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;overflow:hidden}
+#cv{position:fixed;inset:0}.cesium-widget-credits{font-size:10px!important;color:#cfcfcf!important}
+.top{position:fixed;top:0;left:0;right:0;padding:12px 14px 30px;background:linear-gradient(180deg,rgba(12,20,19,.9),rgba(12,20,19,0));pointer-events:none;z-index:5}
+.mast{font-family:Fraunces,Georgia,serif;font-size:1.2rem;font-weight:600}.sub{color:var(--mut);font-size:.68rem;font-family:"IBM Plex Mono",monospace;margin-top:3px}
+.sees{position:fixed;left:14px;bottom:86px;max-width:60vw;background:rgba(19,31,29,.9);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:.72rem;z-index:5}
+.sees b{color:var(--gold);font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:2px}
+.back{position:fixed;right:14px;top:14px;z-index:6;border:1px solid var(--line);background:rgba(19,31,29,.9);border-radius:99px;padding:7px 13px;color:var(--text);text-decoration:none;font-size:.72rem}
+.msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:30px;text-align:center;color:var(--mut);font-size:.8rem;line-height:1.6;z-index:4}
+${NAJ_NAV_CSS}</style></head><body>
+<div id=cv></div>
+<div class=top><div class=mast>${esc(v.name || "The view")}</div><div class=sub>${esc(v.side ? v.side + " facade" : "")} · standing at ${Math.round(v.h)} m · live photoreal imagery</div></div>
+${v.sees ? '<div class=sees><b>this side looks at</b>' + esc(v.sees) + '</div>' : ''}
+<a class=back href="javascript:history.back()">← back</a>
+${noKey ? '<div class=msg>The real view needs the mapping key.<br>Add <code>GOOGLE_MAPS_KEY</code> to the Worker, or open this page with <code>&amp;gkey=…</code>.</div>' : ''}
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/Cesium/Cesium.js"></script>
+<script>
+window.CESIUM_BASE_URL="https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/Cesium/";
+const GK=${JSON.stringify(v.gkey)},LON=${v.lon},LAT=${v.lat},H=${v.h},HEAD=${v.head};
+if(GK){(async()=>{
+  const viewer=new Cesium.Viewer("cv",{baseLayerPicker:false,geocoder:false,homeButton:false,sceneModePicker:false,navigationHelpButton:false,timeline:false,animation:false,
+    infoBox:false,selectionIndicator:false,globe:false,skyAtmosphere:new Cesium.SkyAtmosphere()});
+  viewer.scene.skyBox.show=true;viewer.scene.fog.enabled=true;viewer.scene.screenSpaceCameraController.enableCollisionDetection=false;
+  try{
+    const t=await Cesium.Cesium3DTileset.fromUrl("https://tile.googleapis.com/v1/3dtiles/root.json?key="+encodeURIComponent(GK),{showCreditsOnScreen:true});
+    viewer.scene.primitives.add(t);
+  }catch(e){document.body.insertAdjacentHTML("beforeend","<div class=msg>Photoreal imagery could not load. Check that the Map Tiles API is enabled for this key and that the key allows this site.</div>")}
+  viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(LON,LAT,H),orientation:{heading:Cesium.Math.toRadians(HEAD),pitch:Cesium.Math.toRadians(-6),roll:0}});
+  let t0=Date.now(),drag=false;                                     // a slow pan across the outlook, stopped by the first touch
+  viewer.scene.canvas.addEventListener("pointerdown",()=>{drag=true},{once:true});
+  viewer.clock.onTick.addEventListener(()=>{if(drag)return;const el=(Date.now()-t0)/1000;
+    viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(LON,LAT,H),orientation:{heading:Cesium.Math.toRadians(HEAD+Math.sin(el/9)*26),pitch:Cesium.Math.toRadians(-6),roll:0}})});
+})()}
+</script>
+${najNav(key, "map")}
+</body></html>`;
+}
 function renderSkyline(slugName, areaName, key, rail) {
   const _dr = (rail || []).map(r =>
     '<a class="dg' + (r.s === slugName ? ' on' : '') + '" href="/skyline/' + r.s + '?key=' + encodeURIComponent(key || '') + '">' + String(r.n).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])) + '</a>').join('');
@@ -4494,6 +4550,7 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .px{position:absolute;right:12px;top:10px;color:var(--mut);cursor:pointer}.pa{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
 .pa .act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:5px 10px;color:var(--gold);text-decoration:none;font-size:.68rem;font-family:"IBM Plex Mono",monospace;background:rgba(24,42,38,.9)}
 .vw{margin-bottom:8px}.vh{color:var(--mut);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
+.vr{display:block;color:var(--gold);font-size:.55rem;font-family:"IBM Plex Mono",monospace;text-decoration:none;margin-top:2px}
 .vg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.vc{cursor:pointer;min-width:0}
 .vp{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block;background:#16211E}
 .vc b{display:block;font-family:"IBM Plex Mono",monospace;font-size:.6rem;color:var(--gold);margin-top:3px}
@@ -4874,7 +4931,7 @@ function losFor(a,i,own){
   out.sort((x,y)=>(x.blocked-y.blocked)||(x.km-y.km));return out.slice(0,4);}
 function buildViews(a,own){
   const pp=document.getElementById("ppanel");if(!pp||!a.fm||!MESHES||!ROOTREF)return;
-  const wrap=document.createElement("div");wrap.className="vw";wrap.innerHTML='<div class=vh>What each side looks at</div><div class=vg></div>';
+  const wrap=document.createElement("div");wrap.className="vw";wrap.innerHTML='<div class=vh>What each side looks at · diagram from our model, tap “real view” for the real thing</div><div class=vg></div>';
   pp.insertBefore(wrap,pp.querySelector(".tg")||pp.querySelector(".pa"));
   const grid=wrap.querySelector(".vg");
   const savedVis=MESHES.map(m=>m.visible);MESHES.forEach(m=>m.visible=true);   // the drill hides the district; the view must see it
@@ -4890,9 +4947,14 @@ function buildViews(a,own){
     ctx2.putImageData(im,0,0);
     const los=losFor(a,i,own);
     const clear=los.filter(l=>!l.blocked).map(l=>l.name);
+    const seesTxt=clear.length?clear.slice(0,2).join(" · "):(los.length?"blocked: "+esc2v(los[0].blocker):"open");
+    // the thumbnail is our MODEL (orientation + what is blocked); "real view" opens live photoreal imagery from this exact facade
+    const ll=a.fm_ll&&a.fm_ll[i];const head=Math.round((Math.atan2(e.dir.x,-e.dir.z)*180/Math.PI+360)%360);
+    const realUrl=ll?"/view?lon="+ll[0]+"&lat="+ll[1]+"&h="+Math.round((GROUND?0:0)+Math.max(6,a.h*0.66))+"&head="+head+
+      "&name="+encodeURIComponent(a.name)+"&side="+side+"&sees="+encodeURIComponent(clear.slice(0,3).join(" · "))+"&key="+encodeURIComponent(KEY):null;
     cell.innerHTML='<img class=vp src="'+cv.toDataURL("image/jpeg",0.72)+'" alt="'+side+' view"><b>'+side+'</b>'+
-      '<i>'+(clear.length?clear.slice(0,2).join(" · "):(los.length?"blocked: "+esc2v(los[0].blocker):"open"))+'</i>';
-    cell.onclick=()=>{ctl.autoRotate=false;cam.position.copy(e.pos);ctl.target.copy(e.pos.clone().add(e.dir.clone().multiplyScalar(300)).setY(e.pos.y-30))};
+      '<i>'+seesTxt+'</i>'+(realUrl?'<a class=vr href="'+realUrl+'">real view →</a>':'');
+    cell.querySelector("img").onclick=()=>{ctl.autoRotate=false;cam.position.copy(e.pos);ctl.target.copy(e.pos.clone().add(e.dir.clone().multiplyScalar(300)).setY(e.pos.y-30))};
     grid.appendChild(cell);});
   MESHES.forEach((m,k)=>m.visible=savedVis[k]);}
 function esc2v(s){return String(s==null?"":s).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))}
