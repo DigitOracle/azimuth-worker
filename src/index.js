@@ -4740,6 +4740,32 @@ function drawGroundImagery(){
   GPLANE.position.set((G.x0+G.x1)/2+ROOTREF.position.x,GROUND.position.y+0.05,(G.z0+G.z1)/2+ROOTREF.position.z);
   GPLANE.receiveShadow=true;GPLANE.renderOrder=-1;scene.add(GPLANE);
   const cr=document.createElement("div");cr.id="gcredit";cr.textContent=GIMG.attribution||"Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community";document.body.appendChild(cr);}
+// ===== v82 TERRAIN (3 Sep) - self-contained block, begin =====
+// 30 m elevation lattice (scripts/terrain_grid.py -> KV terrain_<slug>, same bbox as ground_<slug>) displacing the imagery plane, so the
+// coast, the creek banks, the Marina basin and Palm Jumeirah's fill sit at their real level instead of on one flat disc. It swaps
+// GPLANE's geometry for a subdivided one (same texture, same 0..1 UVs, receiveShadow stays on) and drops the flat ground disc beneath the sheet as a horizon skirt.
+// Heights are absolute metres; terrain.datum_m is the median height under the massing footprint, i.e. the plane the CE massing
+// already stands on, so built-up ground lands on the base plane and only the water / open ground falls away. Uphill excursions are
+// soft-clamped (smooth min(r,0), 0.15 m knee) and the sheet sits 5 cm BELOW the building bases, so terrain never pokes through a
+// tower; buildings are not moved. No terrain_<slug> in KV, or a grid flagged flat = nothing changes.
+let TERR=null,TDONE=false,_tTries=0;
+fetch("/img/terrain_${slugName}").then(r=>r.ok?r.json():null).then(t=>{if(t&&t.z&&t.nx&&t.nz&&t.scene&&!t.flat){TERR=t;drawTerrain()}}).catch(()=>{});
+function drawTerrain(){
+  if(!TERR||TDONE)return;
+  if(!GPLANE||!GROUND){if(_tTries++<2400)requestAnimationFrame(drawTerrain);return}   // the photo plane may still be loading
+  const T=TERR,S=T.scene,K=0.15,BASE=GROUND.position.y-0.1;                             // BASE = the y the massing's bases sit on (disc is base+0.1)
+  const d=(typeof T.datum_m==="number")?T.datum_m:T.min_m;
+  const geo=new THREE.PlaneGeometry(S.x1-S.x0,S.z1-S.z0,T.nx-1,T.nz-1);geo.rotateX(-Math.PI/2);   // row 0 = north = smaller z, like the JPEG
+  const P=geo.attributes.position;
+  if(P.count!==T.z.length){console.warn("terrain: grid/vertex mismatch",P.count,T.z.length);TDONE=true;return}
+  for(let i=0;i<P.count;i++){const r=T.z[i]-d,t=r/K;
+    P.setY(i,BASE-0.05+(t>30?0:(t<-30?r:-K*Math.log(1+Math.exp(-t)))))}                 // soft min(r,0): never above BASE-0.05
+  geo.computeVertexNormals();
+  GPLANE.geometry.dispose();GPLANE.geometry=geo;GPLANE.position.y=0;                    // vertex y is already world y; x/z centring unchanged
+  // keep the disc as the horizon skirt, dropped just under the lowest point of the sheet: hiding it exposed the imagery's square edge
+  GPLANE.receiveShadow=true;GROUND.position.y=BASE-0.05+Math.min(0,T.min_m-d)-0.3;TDONE=true;
+  const cr=document.getElementById("gcredit");if(cr&&T.attribution&&cr.textContent.indexOf(T.attribution)<0)cr.textContent+="  |  "+T.attribution;}
+// ===== v82 TERRAIN - self-contained block, end =====
 // v77 STREETS (3 Sep): CityEngine street layer (ESRI.lib Street_Modern_Standard on the OSM centrelines, packed GLB in KV as streets_<slug>)
 // in the same absolute metres as the massing. It sits 0.15 m above the imagery plane (GROUND+0.05), keeps its own asphalt/kerb/pavement
 // textures, receives the building shadows and hides the drawn ctx roads. No streets GLB in KV = nothing changes.
