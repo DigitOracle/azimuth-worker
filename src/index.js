@@ -4668,7 +4668,7 @@ function paintDevs(){
   for(const a of ANCH.anchors){if(a.x==null)continue;let bi=-1,bd=144;
     for(let i=0;i<cents.length;i++){const dx=cents[i][0]-a.x,dz=cents[i][1]-a.z,d=dx*dx+dz*dz;if(d<bd){bd=d;bi=i}}
     a.mesh=bi>=0?bi:null}
-  window.__sky={get anch(){return ANCH},get meshes(){return MESHES},get cam(){return cam},get ctl(){return ctl},get root(){return ROOTREF},sel:buildDevSel,dev:applyDev,proj:applyProj};
+  window.__sky={get anch(){return ANCH},get meshes(){return MESHES},get cam(){return cam},get ctl(){return ctl},get root(){return ROOTREF},get state(){return [SELDEV,SELPROJ]},sel:buildDevSel,dev:applyDev,proj:applyProj};
   // every mesh gets its own material copies (merged exports share materials and use arrays per primitive) so fading one never fades another
   for(const m of MESHES){m.material=Array.isArray(m.material)?m.material.map(x=>x.clone()):m.material.clone()}
   const mats=(m)=>Array.isArray(m.material)?m.material:[m.material];
@@ -4676,8 +4676,8 @@ function paintDevs(){
     for(const mt of mats(m)){mt.color.setHex(DEVCOL[a.dev]||0xC5A56A);mt.emissive=new THREE.Color(DEVCOL[a.dev]||0xC5A56A);mt.emissiveIntensity=0.12}m.userData.dev=a.dev}
   buildDevSel();}
 const MATS=(m)=>Array.isArray(m.material)?m.material:[m.material];
-function ghost(m,on){for(const mt of MATS(m)){if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity]);const o=DEVORIG.get(mt);
-  if(on){mt.transparent=true;mt.opacity=0.07;mt.depthWrite=false}else{mt.transparent=o[0];mt.opacity=o[1];mt.depthWrite=true}}}
+function ghost(m,on){m.visible=!on;      // Kendall: the others must go, not fade - hide them outright; roads and ground stay for context
+  for(const mt of MATS(m)){if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity]);const o=DEVORIG.get(mt);mt.transparent=o[0];mt.opacity=o[1];mt.depthWrite=true;mt.needsUpdate=true}}
 // v74.4 - DEVELOPER FILTER (Kendall, 3 Sep): pick a developer and every other building fades to a ghost; only that developer's
 // towers stay solid, labelled, and the camera frames them. "all developers" restores the district.
 let SELDEV="";const DEVORIG=new Map();
