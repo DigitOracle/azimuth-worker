@@ -5108,7 +5108,7 @@ function renderStock(slug, areaName, key, bfRaw, ancRaw, pfRaw, mktRaw) {
   // the anchors carry a developer key; the register carries the name the developer actually trades under
   const DNAME = {};
   try { const _p = (PF && PF.projects) || {}; for (const k in _p) if (_p[k].dev && _p[k].developer) DNAME[_p[k].dev] = _p[k].developer; } catch (e) {}
-  const devName = (k) => DNAME[k] || String(k || "").replace(/_/g, " / ").replace(/\w/g, c => c.toUpperCase());
+  const devName = (k) => DNAME[k] || String(k || "").replace(/_/g, " / ").replace(/\b\w/g, c => c.toUpperCase());
   const K = encodeURIComponent(key || "");
   if (!BF || !BF.buildings_by_id) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem"><h2 style="color:#C5A56A">Najma</h2><p>No report for "' + esc2(areaName) + '" yet. The report is written when the district is massed \u2014 mass it first and this page fills itself.</p><a style="color:#C5A56A" href="/skyline?key=' + K + '">\u2190 back to the twin</a>';
   const B = Object.keys(BF.buildings_by_id).map(k => BF.buildings_by_id[k]);
