@@ -4488,13 +4488,19 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .lb.on{opacity:1}.lb i{display:block;font-style:normal;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:1px}.lb.dev{font-weight:600}
 #devwrap{position:fixed;left:14px;top:192px;z-index:41;display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;align-items:center;max-width:46vw}   // v74.9: filters live on the LEFT as a banner; the panel on the right fits without scrolling
 #projsel{appearance:none;-webkit-appearance:none;font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--text);background:rgba(19,31,29,.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23E8E4D8' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid var(--line);border-radius:99px;padding:6px 28px 6px 12px;max-width:52vw}
-#ppanel{position:fixed;right:14px;top:104px;bottom:84px;width:min(50vw,560px);overflow:auto;background:rgba(19,31,29,.95);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:none;z-index:41}
+#ppanel{position:fixed;right:14px;top:82px;bottom:78px;width:min(52vw,600px);overflow:auto;background:rgba(19,31,29,.95);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:none;z-index:41}
 #ppanel.on{display:block}.pt{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;padding-right:22px}.ps{color:var(--gold);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;margin:3px 0 10px}
 .pr{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:6px 0;font-size:.72rem}.pr span:first-child{color:var(--mut)}.pr span:last-child{text-align:right;font-family:"IBM Plex Mono",monospace}
 .px{position:absolute;right:12px;top:10px;color:var(--mut);cursor:pointer}.pa{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
 .pa .act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:5px 10px;color:var(--gold);text-decoration:none;font-size:.68rem;font-family:"IBM Plex Mono",monospace;background:rgba(24,42,38,.9)}
-.tg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.tl{background:rgba(24,42,38,.9);border:1px solid var(--line);border-radius:10px;padding:8px 9px 7px;min-width:0}
-.tl svg{width:16px;height:16px;display:block;margin-bottom:4px}.tl b{display:block;font-family:Fraunces,Georgia,serif;font-weight:600;font-size:.82rem;line-height:1.12;overflow-wrap:anywhere}.tl i{display:block;font-style:normal;color:var(--mut);font-size:.55rem;font-family:"IBM Plex Mono",monospace;margin-top:2px;text-transform:uppercase;letter-spacing:.05em}
+.vw{margin-bottom:8px}.vh{color:var(--mut);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
+.vg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.vc{cursor:pointer;min-width:0}
+.vp{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block;background:#16211E}
+.vc b{display:block;font-family:"IBM Plex Mono",monospace;font-size:.6rem;color:var(--gold);margin-top:3px}
+.vc i{display:block;font-style:normal;color:var(--mut);font-size:.54rem;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.tl{background:rgba(24,42,38,.9);border:1px solid var(--line);border-radius:10px;padding:7px 8px 6px;min-width:0}
+.tl svg{width:14px;height:14px;display:block;margin-bottom:3px}.tl b{display:block;font-family:Fraunces,Georgia,serif;font-weight:600;font-size:.74rem;line-height:1.12;overflow-wrap:anywhere}.tl i{display:block;font-style:normal;color:var(--mut);font-size:.52rem;font-family:"IBM Plex Mono",monospace;margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+@media(max-width:900px){.tg{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:640px){.tg{grid-template-columns:repeat(3,minmax(0,1fr))}#devwrap{top:auto;bottom:74px;left:10px;right:10px;max-width:none}#ppanel.on~#devwrap{display:none}}.pn{color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:8px}
 @media(max-width:640px){#ppanel{left:10px;right:10px;top:auto;bottom:74px;width:auto;max-height:46vh}}#devsel{appearance:none;-webkit-appearance:none;font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--gold);background:rgba(19,31,29,.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23C5A56A' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid rgba(197,165,106,.5);border-radius:99px;padding:7px 28px 7px 12px;max-width:52vw}
 #legend{position:fixed;left:14px;bottom:78px;display:flex;flex-direction:column;gap:5px;pointer-events:none;opacity:0;transition:opacity .4s}#legend.on{opacity:1}
@@ -4819,9 +4825,9 @@ function applyProj(name){
     if(d.p10_aed)rows.push(["Typical range","AED "+fmA(d.p10_aed)+" – "+fmA(d.p90_aed)]);if(d.median_aed_per_sqm)rows.push(["Median AED / m²",fmA(d.median_aed_per_sqm)]);
     if(d.offplan_share!=null)rows.push(["Off-plan share",Math.round(d.offplan_share*100)+"%"]);if(d.rooms)rows.push(["Sold by type",Object.entries(d.rooms).map(x=>x[0]+" "+x[1]).join(" · ")]);
     if(d.nearest_metro)rows.push(["Nearest metro",d.nearest_metro]);if(d.nearest_mall)rows.push(["Nearest mall",d.nearest_mall]);if(d.nearest_landmark)rows.push(["Landmark",d.nearest_landmark]);
-    if(f.sheet)rows.push(["On the developer sheet",f.sheet.units+" unit"+(f.sheet.units===1?"":"s")+" · "+(f.sheet.types||[]).join(", ")]);
-    if(d.last_registration)rows.push(["Last registration",d.last_registration]);}
+    if(f.sheet)rows.push(["On the developer sheet",f.sheet.units+" unit"+(f.sheet.units===1?"":"s")+" · "+(f.sheet.types||[]).join(", ")]);}
   if(a0&&a0.h>12)rows.push(["Height (model)",Math.round(a0.h)+" m"]);
+  rows.splice(12);                                                     // the panel must never scroll: twelve tiles is the ceiling
   const acts='<div class=pa>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
     (SELDEV?'<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>':'')+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
   // icon tiles instead of a list (Kendall): small squares, gold line icons drawn inline, value first, label under
@@ -4835,8 +4841,61 @@ function applyProj(name){
   const tile=(r)=>'<div class=tl><svg viewBox="0 0 24 24" fill="none" stroke="#C5A56A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+(ICO[r[0]]||"M12 12h.01")+'"/></svg><b>'+esc(r[1])+'</b><i>'+esc(r[0])+'</i></div>';
   pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+'</div><div class=ps>'+(SELDEV?DEVNAME[SELDEV]:'on the map · developer not on the list')+(f&&f.status?' · '+esc(f.status):'')+'</div>'+
     (rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+acts+
-    '<div class=pn>developer site · availability sheet · DLD Open Data 2026 (nearest metro/mall = most common on this project\\'s sales)</div>';
-  pp.classList.add("on");document.getElementById("ppx").onclick=()=>{document.getElementById("projsel").value="";applyProj("")};}
+    '<div class=pn>developer site · availability sheet · DLD Open Data 2026 · views rendered from this model, blockers within this district only</div>';
+  pp.classList.add("on");document.getElementById("ppx").onclick=()=>{document.getElementById("projsel").value="";applyProj("")};
+  if(a0)buildViews(a0,mine);}
+// v77 - VIEWS (Kendall, 3 Sep): what each side of the building actually looks at. Four thumbnails rendered live from the tower's own
+// facades at two thirds of its height, plus a line-of-sight check to the named landmarks with the blocker named. Tap a thumbnail to
+// stand at that facade. Facade midpoints and bearings come from the anchors (build_anchors.py), landmarks from /img/landmarks.
+let LMK=null,VRT=null,VCAM=null;
+fetch("/img/landmarks").then(r=>r.ok?r.json():null).then(j=>{LMK=j&&j.items||null}).catch(()=>{});
+const VSIDE=["N","E","S","W"];
+function viewEye(a,i){
+  const p=a.fm&&a.fm[i];if(!p)return null;
+  const eyeY=(GROUND?GROUND.position.y:0)+Math.max(6,a.h*0.66);
+  const pos=new THREE.Vector3(p[0]+ROOTREF.position.x,eyeY,p[1]+ROOTREF.position.z);
+  const c=new THREE.Vector3(a.x+ROOTREF.position.x,eyeY,a.z+ROOTREF.position.z);
+  const dir=pos.clone().sub(c).setY(0).normalize();
+  return {pos,dir};}
+function losFor(a,i,own){
+  if(!LMK)return[];
+  const e=viewEye(a,i);if(!e)return[];
+  const ray=new THREE.Raycaster();const out=[];
+  const vis=MESHES.filter((m,k)=>!own.has(k));
+  for(const L of LMK){
+    const t=new THREE.Vector3(L.x+ROOTREF.position.x,(GROUND?GROUND.position.y:0)+Math.max(2,L.h*0.5),L.z+ROOTREF.position.z);
+    const d=t.clone().sub(e.pos);const dist=d.length();d.normalize();
+    if(d.dot(e.dir)<0.24)continue;                                        // not in this facade's field of view
+    ray.set(e.pos,d);ray.far=Math.min(dist,4000);
+    const hit=ray.intersectObjects(vis,false)[0];
+    let blocker=null;
+    if(hit){const idx=MESHES.indexOf(hit.object);const ba=ANCH.anchors.find(x=>x.meshes&&x.meshes.indexOf(idx)>=0);blocker=(ba&&ba.name)||"a neighbouring building"}
+    out.push({name:L.name,km:Math.round(dist/100)/10,blocked:!!hit,blocker});}
+  out.sort((x,y)=>(x.blocked-y.blocked)||(x.km-y.km));return out.slice(0,4);}
+function buildViews(a,own){
+  const pp=document.getElementById("ppanel");if(!pp||!a.fm||!MESHES||!ROOTREF)return;
+  const wrap=document.createElement("div");wrap.className="vw";wrap.innerHTML='<div class=vh>What each side looks at</div><div class=vg></div>';
+  pp.insertBefore(wrap,pp.querySelector(".tg")||pp.querySelector(".pa"));
+  const grid=wrap.querySelector(".vg");
+  const savedVis=MESHES.map(m=>m.visible);MESHES.forEach(m=>m.visible=true);   // the drill hides the district; the view must see it
+  if(!VRT){VRT=new THREE.WebGLRenderTarget(256,256);VCAM=new THREE.PerspectiveCamera(72,1,1,12000)}
+  const buf=new Uint8Array(256*256*4);
+  VSIDE.forEach((side,i)=>{
+    const e=viewEye(a,i);const cell=document.createElement("div");cell.className="vc";
+    if(!e){cell.innerHTML='<div class=vp></div><b>'+side+'</b>';grid.appendChild(cell);return}
+    VCAM.position.copy(e.pos);VCAM.lookAt(e.pos.clone().add(e.dir.clone().multiplyScalar(400)).setY(e.pos.y-40));
+    const prevT=ren.getRenderTarget();ren.setRenderTarget(VRT);ren.render(scene,VCAM);ren.readRenderTargetPixels(VRT,0,0,256,256,buf);ren.setRenderTarget(prevT);
+    const cv=document.createElement("canvas");cv.width=cv.height=256;const ctx2=cv.getContext("2d");const im=ctx2.createImageData(256,256);
+    for(let y=0;y<256;y++){const s=(255-y)*256*4,d2=y*256*4;for(let x=0;x<256*4;x++)im.data[d2+x]=buf[s+x]}
+    ctx2.putImageData(im,0,0);
+    const los=losFor(a,i,own);
+    const clear=los.filter(l=>!l.blocked).map(l=>l.name);
+    cell.innerHTML='<img class=vp src="'+cv.toDataURL("image/jpeg",0.72)+'" alt="'+side+' view"><b>'+side+'</b>'+
+      '<i>'+(clear.length?clear.slice(0,2).join(" · "):(los.length?"blocked: "+esc2v(los[0].blocker):"open"))+'</i>';
+    cell.onclick=()=>{ctl.autoRotate=false;cam.position.copy(e.pos);ctl.target.copy(e.pos.clone().add(e.dir.clone().multiplyScalar(300)).setY(e.pos.y-30))};
+    grid.appendChild(cell);});
+  MESHES.forEach((m,k)=>m.visible=savedVis[k]);}
+function esc2v(s){return String(s==null?"":s).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))}
 function applyDev(d){
   SELDEV=d;SELPROJ="";const _pp=document.getElementById("ppanel");if(_pp)_pp.classList.remove("on");fillProjSel(d);
   for(const m of MESHES)ghost(m,!!d&&m.userData.dev!==d);
