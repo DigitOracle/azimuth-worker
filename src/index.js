@@ -2278,6 +2278,16 @@ export default {
           else if (/^feed:\d{1,2}(?:\+\d{1,2})*$/.test(bid)) {  // v37 — daily-feed pick; v83 — any angle the feed sent, one or several
             await handleFeedPick(env, from, bid.slice(5).split("+").map(x => parseInt(x, 10)).filter(x => x > 0));
           }
+          else if (/^vasset:(floorplan|still|plate)$/.test(bid)) {   // v83 — hand her the campaign's own images, in the chat
+            const _kindA = bid.split(":")[1];
+            let _va2 = null; try { _va2 = JSON.parse((await env.MEETINGS.get("img_valley_assets")) || "null"); } catch (e) {}
+            const _list = ((_va2 && _va2.assets) || []).filter(a => a.kind === _kindA);
+            if (!_list.length) { await waSend(env, from, "No " + _kindA + "s on file yet."); }
+            else {
+              await waSend(env, from, "Sending " + _list.length + " " + _kindA + (_list.length === 1 ? "" : "s") + " — long-press any one to save it.");
+              for (const a of _list.slice(0, 10)) await waSendImage(env, from, url.origin + "/img/" + a.key, a.caption + (a.kind === "plate" ? " · generated plate, not a photograph of the project" : ""));
+            }
+          }
           else if (bid === "feed:again") {                     // v83 — show the morning's angles again so she can take a second one
             let _fc3 = null; try { _fc3 = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
             const _ang3 = (_fc3 && _fc3.angles) || [];
@@ -3068,6 +3078,19 @@ async function draftFromAngle(env, to, kind, n) {
   if (kind === "li") await waSend(env, to, "✍️ Copy this straight into LinkedIn. Want a different angle? Say “draft linkedin 3”.");
   if (kind === "art") await waSend(env, to, "📝 Paste this into LinkedIn → “Write article”. Add a cover image with the prompt below.");
   if (kind === "car") await waSend(env, to, "🎠 Build these 6 slides in Canva (or PowerPoint → save as PDF), then upload the PDF to LinkedIn as a *document* — it becomes a swipeable carousel. Use the image prompt below for the look; paste the CAPTION as the post text.");
+  // v83 — she is not going hunting for a visual: every draft is followed by the plate prompt for her own composite, and by the
+  // campaign's own images where there are any. Nothing here needs her to type a thing.
+  await waSend(env, to, bgPromptBlock(_ang || { hook: "", figure: "", source: "" }));
+  if (_camp) {
+    let _va = null; try { _va = JSON.parse((await env.MEETINGS.get("img_valley_assets")) || "null"); } catch (e) {}
+    if (_va && Array.isArray(_va.assets) && _va.assets.length) {
+      await waSendButtons(env, to, "📎 Or use the campaign's own pictures — " +
+        _va.assets.filter(a => a.kind === "floorplan").length + " floor plans, " +
+        _va.assets.filter(a => a.kind === "still").length + " film stills, " +
+        _va.assets.filter(a => a.kind === "plate").length + " plates.",
+        [{ id: "vasset:floorplan", title: "📐 Floor plans" }, { id: "vasset:still", title: "🎬 Film stills" }, { id: "vasset:plate", title: "🖼 Plates" }]);
+    }
+  }
   if (kind === "ig") {                                                             // v38 — stash the caption; her next "post to instagram" image publishes with it
     const capM = out.match(/CAPTION:\s*([\s\S]+)$/i);
     await env.MEETINGS.put("mkt_lastdraft_ig", (capM ? capM[1] : out).trim().slice(0, 2100), { expirationTtl: 2 * 86400 });
@@ -3249,16 +3272,20 @@ async function dailyFeedTick(env, force, dry) {
   // appreciation claim, sales-only rates, hashtag + tag, permit still open). They sit after the five market angles.
   let camp = null; try { camp = JSON.parse((await env.MEETINGS.get("img_valley_pack")) || "null"); } catch (e) {}
   if (camp && camp.contest && gstDateStr(n) <= camp.contest.closes) {
-    const csys = "You write TWO post angles a day for a Dubai broker competing in a developer's video contest. She wins on things NOBODY ELSE CAN SAY. " +
-      "Every angle MUST be built on one item from pack.edges — facts that exist only because she reads the official registers — and must be one a competitor working from the brochure could not write. " +
-      "If a developer's marketing page could plausibly say it, discard it and take a different edge. Never write a stat read-out: choose a form from pack.creative_modes and write the angle inside it. " +
-      "OBEY EVERY LINE of pack.guardrails and pack.creative_rules; accuracy and brand compliance are two of the four judged criteria. Use ONLY the pack's figures, exactly as given, one number per angle. " +
-      "Make the two angles different in kind: one human (a person, a room, a walk, a question), one from the register (money, supply, yield, velocity). " +
-      "Each angle: hook = the first sentence she says to camera, specific and arresting, with no adjectives such as stunning, vibrant, nestled or oasis; figure = the one exact number with its unit; " +
-      "source = the register or document it comes from; buyer = who it speaks to; shot = one line she can film this week on a phone, or the exact cut to take from the two supplied films. Return JSON only.";
-    const cdata = JSON.stringify({ pack: camp, daysLeft: Math.max(0, Math.round((Date.parse(camp.contest.closes) - Date.parse(gstDateStr(n))) / 86400000)), avoidHooks: hist.slice(0, 12) });
+    const csys = "You write FIVE post angles a day for a Dubai broker competing in a developer's video contest. She wins on things NOBODY ELSE CAN SAY. " +
+      "She is judged on four things: engagement, creativity, accuracy of messaging, and compliance with the developer's brand guidelines. Every angle must serve all four. " +
+      "Every angle MUST be built on one item from pack.edges - facts that exist only because she reads the official registers - and must be one a competitor working from the brochure could not write. " +
+      "If a developer's marketing page could plausibly say it, discard it and take a different edge. Never write a stat read-out: choose a DIFFERENT form from pack.creative_modes for each of the five and write the angle inside it. " +
+      "OBEY EVERY LINE of pack.guardrails and pack.creative_rules. Use ONLY the pack's figures, exactly as given, one number per angle, and never the same number twice across the five. " +
+      "THE HOOK IS THE WHOLE JOB. It is the first sentence she says to camera and the only thing a scrolling viewer hears. Rules for it: " +
+      "the first SIX WORDS must be able to stop a thumb on their own; open on a person, a question, a contradiction, a sum of money or a plain statement of fact - never on an adjective, never on the place name, never on 'welcome to', 'discover', 'nestled', 'imagine', 'let me tell you' or 'did you know'; " +
+      "say one concrete thing rather than two vague ones; use the words a person uses out loud, no marketing register; and make it a sentence she could say to a friend in a car without embarrassment. " +
+      "Make the five differ in KIND, not just in wording - across the set include at least one built on a person or a room, one on money, one that overturns something buyers assume, and one that answers a question a buyer actually asks. Two angles that could be cut together into the same video are a failure. " +
+      "Each angle: hook = that first sentence; figure = the one exact number with its unit; source = the register or document it comes from; buyer = who it speaks to; " +
+      "shot = one line she can film this week on a phone, or the exact cut to take from the two supplied films, or the floor plan / still on hand to hold up. Return JSON only.";
+    const cdata = JSON.stringify({ pack: camp, daysLeft: Math.max(0, Math.round((Date.parse(camp.contest.closes) - Date.parse(gstDateStr(n))) / 86400000)), avoidHooks: hist.slice(0, 30), avoidRule: "None of the five may repeat a hook, a figure, a creative mode or an opening word already used in avoidHooks." });
     let cg = null; try { cg = await claudeJSON(env, csys, cdata, CAMPAIGN_SCHEMA, null, 900); } catch (e) {}
-    const cangles = cg && Array.isArray(cg.angles) ? cg.angles.slice(0, 2).map(a => Object.assign({}, a, { campaign: camp.contest.name })) : [];
+    const cangles = cg && Array.isArray(cg.angles) ? cg.angles.slice(0, 5).map(a => Object.assign({}, a, { campaign: camp.contest.name })) : [];
     if (cangles.length) angles.push(...cangles);
   }
   if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + a.hook + "\n   " + a.figure + " · " + a.source + (a.shot ? "\n   shot: " + a.shot : "")).join("\n");
@@ -3276,7 +3303,7 @@ async function dailyFeedTick(env, force, dry) {
     "\nYou'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
   await waSend(env, env.WA_ALLOWED, bodyTxt);
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle",
-    angles.map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.figure || "").slice(0, 20), description: a.hook })));
+    angles.slice(0, 10).map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + (a.figure || "").slice(0, 18), description: a.hook })));
   if (!force) { try { await env.MEETINGS.put(fk, "done", { expirationTtl: 2 * 86400 }); } catch (e) {} }
 }
 
@@ -5326,6 +5353,30 @@ function renderArea(latestRaw, name, key) {
 // as the hero, the figure as a gold cover-line, magazine grid, current gpt-image-2 text
 // discipline (quote strings, "render verbatim") and anti-AI-slop negatives so it looks like
 // real editorial photography, not AI. (Research: Businessweek/Forbes/Economist cover language.)
+// v83 — BACKGROUND PLATE prompt: she composites her own digital twin and outfit on top, so the plate must contain NO people
+// and must leave her somewhere to stand. Light direction, eye level and lens are stated so the overlay sits believably.
+// Everything she needs is inside the one code block — she copies it whole, pastes it into ChatGPT, and gets the plate back.
+function bgPromptBlock(angle, place) {
+  const H = String(angle.hook || "").replace(/"/g, "'");
+  const F = String(angle.figure || "").replace(/"/g, "'");
+  const S = String(angle.source || "").replace(/"/g, "'");
+  const camp = !!angle.campaign;
+  const where = place || (camp ? "The Valley by Emaar, Dubai — a low-rise family community on the Al Ain road: sand-coloured townhouses with dark window frames, wide green lawns, young trees, a community sports court, a shaded pergola walk, open desert sky at the horizon"
+                              : "Dubai — the skyline or the street that matches the subject of the line below, real and specific, never a generic city");
+  return "🎨 *Background plate — paste this whole block into ChatGPT (make an image)*\n" +
+    "_You then drop your own avatar and outfit on top. The plate has nobody in it and a clear space on the left for you._\n\n```" +
+    "Create a photorealistic BACKGROUND PLATE for a social post. This is a plate, not a finished picture: a real person will be composited into it afterwards, so follow the empty-space and lighting rules exactly.\n\n" +
+    "SIZE: make it 1080x1920 (vertical 9:16) first. I will then ask you for the same plate at 1920x1080 (16:9).\n\n" +
+    "PLACE: " + where + ".\n\n" +
+    "THE PICTURE: shot on a full-frame camera with a 35mm lens at f/4, camera at standing eye level (about 1.6 m from the ground), horizon level and roughly a third up the frame. Late afternoon, about an hour before sunset: warm low sun coming from the RIGHT of frame at a shallow angle, long soft shadows falling to the LEFT, gentle haze in the distance, no harsh midday contrast. Natural colour, no filter, no HDR crunch, no vignette.\n\n" +
+    "COMPOSITION — this matters most: leave the LEFT THIRD of the frame open and uncluttered as a standing area — clean ground, no furniture, no signage, no plants and no strong lines crossing it, so a person can be placed there later. Put the visual interest in the right two thirds. Keep the ground plane visible and continuous across the bottom of the frame so a composited figure has somewhere to stand and cast a shadow.\n\n" +
+    "ABSOLUTELY NO PEOPLE anywhere in the frame — no figures, no silhouettes, no crowds, no people in windows or in the far distance. No animals. No text, no captions, no watermarks, no logos, no brand names, no signage with words, no numbers.\n\n" +
+    "NEGATIVE: no CGI or video-game look, no plastic sheen, no over-saturated sky, no lens flare, no tilt-shift, no fisheye, no illustration or painting style, no collage, no floating objects, no duplicated or warped architecture, no impossible geometry.\n\n" +
+    "CONTEXT (do not render any of this as text — it is only so you choose the right place and mood): the post says \"" + H + "\", the figure quoted is " + F + ", sourced from " + S + "." +
+    "```\n\n" +
+    "👉 Ask ChatGPT “*now the same plate at 1920x1080*” for the LinkedIn version. Then place your avatar in the left third, feet on the ground line, with the light on your right cheek so it matches the sun in the plate.";
+}
+
 function visualPromptBlock(angle) {
   const H = String(angle.hook || "").replace(/"/g, "'");
   const F = String(angle.figure || "").replace(/"/g, "'");
