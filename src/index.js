@@ -4706,6 +4706,11 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 #card .cf span:last-child{text-align:right}
 #card .cx{position:absolute;top:8px;right:12px;color:var(--mut);cursor:pointer;font-size:1rem}
 #card .cp{color:rgba(143,163,155,.75);font-size:.58rem;font-family:"IBM Plex Mono",monospace;margin-top:8px}
+.gchip{display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid;border-radius:99px;font-family:"IBM Plex Mono",monospace;font-size:.52rem;letter-spacing:.04em;vertical-align:middle;white-space:nowrap}
+.tenants{margin-top:6px;font-size:.6rem;color:#8FA39B;display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden}
+.tenants b{flex:none;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;color:#C5A56A;font-weight:600}
+.tenants i{font-style:normal;background:rgba(143,163,155,.1);border:1px solid rgba(143,163,155,.2);border-radius:4px;padding:1px 6px;margin-right:4px;flex:none}
+.tenants em{font-style:normal;color:rgba(143,163,155,.6);flex:none}
 .rpt{margin-left:9px;font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.05em;color:#C5A56A;background:rgba(197,165,106,.1);border:1px solid rgba(197,165,106,.42);border-radius:99px;padding:3px 9px;text-decoration:none;vertical-align:middle;white-space:nowrap}
 #msg{position:fixed;inset:0;display:grid;place-items:center;color:var(--mut);font-size:.85rem;text-align:center;padding:0 30px}
 .foot{position:fixed;right:10px;bottom:calc(64px + env(safe-area-inset-bottom));color:rgba(143,163,155,.7);font-size:.58rem;font-family:"IBM Plex Mono",monospace;pointer-events:none}
@@ -5045,6 +5050,12 @@ function applyProj(name){
     else if(bf.envelope_sqft)rows.splice(3,0,["Envelope (model)",fmA(bf.envelope_sqft)+" sq ft"]);
     if(bf.units_registered)rows.splice(4,0,["Homes (registered)",String(bf.units_registered)]);
     else if(bf.units_indicative)rows.splice(4,0,["Homes (indicative)","~"+bf.units_indicative]);}
+  // identity: the address or site-plan label a building carries INSTEAD of a name, and the scheme it belongs to
+  const idn=a0&&IDN?IDN[String(a0.i)]:null;
+  if(idn){
+    if(idn.address&&idn.display_role!=="ADDRESS")rows.splice(1,0,["Address",idn.address]);
+    if(idn.structural_identifier&&idn.structural_identifier!==idn.name)rows.splice(1,0,["On the site plan",idn.structural_identifier]);
+    if(idn.plot_id)rows.splice(2,0,["Plot",idn.plot_id]);}
   rows.splice(12);                                                     // the panel must never scroll: twelve tiles is the ceiling
   const acts='<div class=pa>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
     (SELDEV?'<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>':'')+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
@@ -5059,9 +5070,21 @@ function applyProj(name){
     "Envelope (model)":"M4 4h16v16H4zM4 10h16M10 4v16","Footprint":"M4 20h16M7 20V12h10v8M7 12l5-4 5 4","Storeys (model)":"M4 20h16M6 20V4h12v16M6 9h12M6 14h12",
     "Homes (registered)":"M4 21V10l8-6 8 6v11M9 21v-6h6v6M15 6l3-2","Homes (indicative)":"M4 21V10l8-6 8 6v11M9 21v-6h6v6"};
   const tile=(r)=>'<div class=tl><svg viewBox="0 0 24 24" fill="none" stroke="#C5A56A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+(ICO[r[0]]||"M12 12h.01")+'"/></svg><b>'+esc(r[1])+'</b><i>'+esc(r[0])+'</i></div>';
-  pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+'</div><div class=ps>'+(SELDEV?DEVNAME[SELDEV]:'on the map · developer not on the list')+(f&&f.status?' · '+esc(f.status):'')+'</div>'+
-    (rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+acts+
-    '<div class=pn>developer site · availability sheet · DLD Open Data 2026 · storeys from our massing; envelope is footprint × storeys, an upper bound; homes indicative unless marked registered; blockers within this district only</div>';
+  // how well this building is known, said on the card rather than implied. VERIFIED = an authoritative register named it;
+  // MATCHED = a survey record on the building itself; SITE PLAN = a street address or plan label; NEARBY = a point of
+  // interest close to the footprint, which is a lead, not a fact.
+  const GRADE={VERIFIED:["✓ verified","#8FC7B9"],MATCHED:["✓ survey","#8FC7B9"],STRUCTURALLY_IDENTIFIED:["◧ site plan","#C5A56A"],INFERRED:["◌ nearby","#D9A441"]};
+  const gk=idn&&idn.identity_grade&&GRADE[idn.identity_grade];
+  const chip=gk?'<span class=gchip style="color:'+gk[1]+';border-color:'+gk[1]+'44">'+gk[0]+(idn.name_source?' · '+esc(idn.name_source):'')+'</span>':'';
+  const ten=(idn&&idn.tenants||[]).filter(Boolean);
+  const amen=(idn&&idn.amenities||[]).filter(Boolean);
+  // four each, one line apiece: the card must never scroll (Kendall). A long tenant name is trimmed rather than wrapped.
+  const chipify=(a,n)=>a.slice(0,n).map(t=>'<i>'+esc(t.length>26?t.slice(0,25)+'…':t)+'</i>').join('')+(a.length>n?'<em>+'+(a.length-n)+'</em>':'');
+  const tstrip=ten.length?'<div class=tenants><b>Inside</b>'+chipify(ten,4)+'</div>':'';
+  const astrip=amen.length?'<div class=tenants><b>On site</b>'+chipify(amen,4)+'</div>':'';
+  pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+chip+'</div><div class=ps>'+(SELDEV?DEVNAME[SELDEV]:'on the map · developer not on the list')+(f&&f.status?' · '+esc(f.status):'')+'</div>'+
+    (rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+tstrip+astrip+acts+
+    '<div class=pn>developer site · availability sheet · DLD Open Data 2026 · identity resolved across every source we hold, graded on the chip; tenants are recorded against the building, never as its name; envelope is footprint × storeys, an upper bound; blockers within this district only</div>';
   pp.classList.add("on");document.getElementById("ppx").onclick=()=>{document.getElementById("projsel").value="";applyProj("")};
   if(a0)buildViews(a0,mine);}
 // v77 - VIEWS (Kendall, 3 Sep): what each side of the building actually looks at. Four thumbnails rendered live from the tower's own
@@ -5071,6 +5094,10 @@ let LMK=null,VRT=null,VCAM=null;
 fetch("/img/landmarks").then(r=>r.ok?r.json():null).then(j=>{LMK=j&&j.items||null}).catch(()=>{});
 // v80 - BUILDING FACTS from our own model's reports (build_buildingfacts.py): floor area, storeys and homes per building
 let BF=null;fetch("/img/bldgfacts_${slugName}").then(r=>r.ok?r.json():null).then(j=>{BF=j&&j.buildings_by_id||null}).catch(()=>{});
+// v84 - IDENTITY (resolve_identity.py -> apply_identity.py -> KV identity_<slug>): what we actually KNOW about this building
+// and how well we know it. The grade is shown plainly, because a name from an authoritative register and a name lifted from
+// a nearby shopfront are not the same claim and the card should never pretend they are.
+let IDN=null;fetch("/img/identity_${slugName}").then(r=>r.ok?r.json():null).then(j=>{IDN=j&&j.by_index||null}).catch(()=>{});
 const VSIDE=["N","E","S","W"];
 function viewEye(a,i){
   const p=a.fm&&a.fm[i];if(!p)return null;
