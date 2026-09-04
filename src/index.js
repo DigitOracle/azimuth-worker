@@ -2519,6 +2519,12 @@ export default {
             await draftFromAngle(env, from, _kind, _dm[2] ? parseInt(_dm[2], 10) : 1);
             return new Response("ok");
           }
+          // v83.1 - a second post in the same day: she asks for a fresh set and gets ten NEW angles, not the morning's list again.
+          if (/^(more|again|fresh|fresh set|new angles?|another set|next set|round two|second round|run it again|new run)$/i.test(text)) {
+            await waSend(env, from, "On it - a fresh set, nothing repeated from this morning. Give me a minute.");
+            try { await dailyFeedTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build a fresh set just now - try again shortly."); }
+            return new Response("ok");
+          }
           if (/^market\s+brief$/i.test(text)) {
             await waSend(env, from, "🕐 Running your market brief now — give me a moment…");
             try { await marketBriefTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the brief just now — try again shortly."); }
