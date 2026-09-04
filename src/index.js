@@ -2265,25 +2265,25 @@ export default {
                                         : ("🙈 Ignoring “" + _gr.name + "”. Azimuth won't read it. If you change your mind, tell me “watch " + _gr.name + "”."));
           }
           else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + env.READ_KEY); }
-          else if (/^mkt:(pod|li|ig|car|art):\d$/.test(bid)) { const _mp2 = bid.split(":"); await draftFromAngle(env, from, _mp2[1], parseInt(_mp2[2], 10)); if (_mp2[1] === "car" || _mp2[1] === "art") { let _fa2 = null; try { const _c2 = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); _fa2 = _c2 && _c2.angles && _c2.angles[parseInt(_mp2[2], 10) - 1]; } catch (e) {} if (_fa2) await waSend(env, from, visualPromptBlock(_fa2)); } }
-          else if (/^feed:[1-5]$/.test(bid)) {                 // v37 — daily-feed pick: full content package for one angle
-            const _fn = parseInt(bid.slice(5), 10);
-            let _fc = null; try { _fc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
-            const _fa = _fc && _fc.angles && _fc.angles[_fn - 1];
-            if (_fa) {                                          // v39 — taste memory: remember what she chooses; mornings learn her
-              try {
-                let _pk = JSON.parse((await env.MEETINGS.get("mkt_picks")) || "[]");
-                _pk.unshift({ at: gstDateStr(gstNow()), hook: _fa.hook, figure: _fa.figure, source: _fa.source });
-                await env.MEETINGS.put("mkt_picks", JSON.stringify(_pk.slice(0, 21)), { expirationTtl: 60 * 86400 });
-              } catch (e) {}
-              await dnaSignal(env, "picked_angle", _fa.hook);
+          else if (/^mkt:(pod|li|ig|car|art):\d{1,2}(?:\+\d{1,2})*$/.test(bid)) {   // v83 — one id can carry several angles ("6+7")
+            const _mp2 = bid.split(":");
+            for (const _one of _mp2[2].split("+").map(x => parseInt(x, 10)).filter(x => x > 0)) {
+              await draftFromAngle(env, from, _mp2[1], _one);
+              if (_mp2[1] === "car" || _mp2[1] === "art") {
+                let _fa2 = null; try { const _c2 = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); _fa2 = _c2 && _c2.angles && _c2.angles[_one - 1]; } catch (e) {}
+                if (_fa2) await waSend(env, from, visualPromptBlock(_fa2));
+              }
             }
-            await waSend(env, from, "Good pick. What do you want from it?");
-            await waSendList(env, from, "Choose a format:", "Format", [
-              { id: "mkt:li:" + _fn, title: "✍️ LinkedIn post", description: "Short feed post to copy in" },
-              { id: "mkt:car:" + _fn, title: "🎠 LinkedIn carousel", description: "6 swipeable slides + image prompt" },
-              { id: "mkt:art:" + _fn, title: "📝 LinkedIn article", description: "Long-form thought-leadership" },
-              { id: "mkt:ig:" + _fn, title: "📸 Instagram", description: "Reel script + caption + visual" }]);
+          }
+          else if (/^feed:\d{1,2}(?:\+\d{1,2})*$/.test(bid)) {  // v37 — daily-feed pick; v83 — any angle the feed sent, one or several
+            await handleFeedPick(env, from, bid.slice(5).split("+").map(x => parseInt(x, 10)).filter(x => x > 0));
+          }
+          else if (bid === "feed:again") {                     // v83 — show the morning's angles again so she can take a second one
+            let _fc3 = null; try { _fc3 = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+            const _ang3 = (_fc3 && _fc3.angles) || [];
+            if (!_ang3.length) { await waSend(env, from, "No angles on file this morning yet — say “feed” and I'll run today's."); }
+            else await waSendList(env, from, "Today's angles:", "Choose an angle",
+              _ang3.map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + (a.figure || "").slice(0, 18), description: a.hook })));
           }
           else if (bid === "match:done") { await waSend(env, from, "👍 Ready for your meeting. Every figure is DLD-registered — you're the most credible person at that table."); }
           else if (bid === "match:post") {                     // v40 — turn a client-match briefing into a public post angle
@@ -2485,7 +2485,25 @@ export default {
               return new Response("ok");
             }
           }
-          const _dm = text.match(/^draft\s+(?:an?\s+)?(podcast|video|script|article|linkedin|post|carousel|slides?|instagram|insta|reel|ig)(?:\s+(?:script|post|reel|carousel|article))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d))?\s*$/i);
+          // v83 — she can also just TYPE the numbers: "7", "6 and 7", "1,3,5", "angles 2 4". The list only lets her tap one,
+          // so typing is the way she takes several, and it is what she reaches for anyway.
+          const _pm = text.match(/^(?:angles?\s*)?(\d{1,2}(?:\s*(?:,|and|&|\+|\s)\s*\d{1,2})*)\s*$/i);
+          const _midFollowUp = !!(await env.MEETINGS.get("pending_wa_" + from));   // she may be answering "when is it?" - a number is hers, not ours
+          if (_pm && !_midFollowUp) {
+            let _pc = null; try { _pc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+            const _pa = (_pc && _pc.angles) || [];
+            const _want = (_pm[1].match(/\d{1,2}/g) || []).map(x => parseInt(x, 10));
+            const _ok = _want.filter(x => x >= 1 && x <= _pa.length);
+            if (_pa.length && _ok.length && _ok.length === _want.length) {
+              await handleFeedPick(env, from, _ok);
+              return new Response("ok");
+            }
+            if (_pa.length && _want.length && !_ok.length) {
+              await waSend(env, from, "There " + (_pa.length === 1 ? "is 1 angle" : "are " + _pa.length + " angles") + " this morning — pick between 1 and " + _pa.length + ".");
+              return new Response("ok");
+            }
+          }
+          const _dm = text.match(/^draft\s+(?:an?\s+)?(podcast|video|script|article|linkedin|post|carousel|slides?|instagram|insta|reel|ig)(?:\s+(?:script|post|reel|carousel|article))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d{1,2}))?\s*$/i);
           if (_dm) {
             const _kind = /podcast|video|script/i.test(_dm[1]) ? "pod" : /article/i.test(_dm[1]) ? "art" : /carousel|slide/i.test(_dm[1]) ? "car" : /instagram|insta|reel|ig/i.test(_dm[1]) ? "ig" : "li";
             await draftFromAngle(env, from, _kind, _dm[2] ? parseInt(_dm[2], 10) : 1);
@@ -2980,6 +2998,30 @@ async function marketBriefTick(env, force) {
 // v36.3 — draft content from one angle of the stored weekly brief. The draft inherits the
 // brief's discipline: only the stored figures, every claim source-tagged. It is a DRAFT for
 // Naj to approve and record — never something that posts itself anywhere.
+// v83 — one pick routine for both routes: a tapped list row (feed:6, feed:6+7) and a typed "6 and 7".
+// Records every chosen angle for the taste memory, says whether a campaign angle is among them, and offers the formats once.
+async function handleFeedPick(env, to, nums) {
+  let ctx = null; try { ctx = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+  const angles = (ctx && ctx.angles) || [];
+  const picked = nums.map(i => angles[i - 1]).filter(Boolean);
+  if (!picked.length) { await waSend(env, to, "No angles on file this morning yet — say “feed” and I'll run today's."); return; }
+  try {
+    let pk = JSON.parse((await env.MEETINGS.get("mkt_picks")) || "[]");
+    for (const a of picked) pk.unshift({ at: gstDateStr(gstNow()), hook: a.hook, figure: a.figure, source: a.source, campaign: a.campaign || null });
+    await env.MEETINGS.put("mkt_picks", JSON.stringify(pk.slice(0, 21)), { expirationTtl: 60 * 86400 });
+  } catch (e) {}
+  for (const a of picked) await dnaSignal(env, "picked_angle", a.hook);
+  const sel = nums.join("+"); const camp = picked.some(a => a.campaign);
+  await waSend(env, to, (nums.length > 1 ? "Good picks — angles " + nums.join(" and ") + ". " : "Good pick. ") +
+    (camp ? "The Valley one carries the contest rules, so I'll hold to them. " : "") + "What do you want" + (nums.length > 1 ? " for both?" : " from it?"));
+  await waSendList(env, to, "Choose a format:", "Format", [
+    { id: "mkt:li:" + sel, title: "✍️ LinkedIn post", description: "Short feed post to copy in" },
+    { id: "mkt:car:" + sel, title: "🎠 LinkedIn carousel", description: "6 swipeable slides + image prompt" },
+    { id: "mkt:art:" + sel, title: "📝 LinkedIn article", description: "Long-form thought-leadership" },
+    { id: "mkt:ig:" + sel, title: "📸 Instagram", description: "Reel script + caption + visual" },
+    { id: "feed:again", title: "🔁 Another angle", description: "Show this morning's list again" }]);
+}
+
 async function draftFromAngle(env, to, kind, n) {
   const raw = await env.MEETINGS.get("mkt_briefctx");
   if (!raw) { await waSend(env, to, "No weekly brief on file yet — say “market brief” and I'll run one now."); return; }
@@ -2994,14 +3036,35 @@ async function draftFromAngle(env, to, kind, n) {
     ? "You write a LinkedIn CAROUSEL (a swipeable document) for Najjuko, a Dubai property broker, from ONE angle of the provided brief. 6 slides. Output EXACTLY this structure, plain text, each slide 1-2 short lines only (carousels are visual — few words per slide): 'SLIDE 1 — COVER: <a bold hook that makes them stop scrolling>'. 'SLIDE 2 — THE NUMBER: <the single headline figure, big and clear> / <its source and period>'. 'SLIDE 3 — CONTEXT: <one line on what settled vs asking, or the trend>'. 'SLIDE 4 — WHAT IT MEANS: <one line for a buyer>'. 'SLIDE 5 — THE CATCH: <the what-not-to-claim / the honest caveat>'. 'SLIDE 6 — CTA: <invite to DM her for the full picture>'. Then after the slides, a line 'CAPTION:' with a 2-3 line post caption + at most 3 hashtags. Use ONLY figures from the provided brief and data — never invent or sharpen a number."
     : "You write a LinkedIn post for Najjuko, a Dubai property broker. First line is the angle's hook — specific, no clickbait. Short paragraphs. Use ONLY figures from the provided brief and data; every figure carries its source and period. One practical buyer takeaway. End with one question inviting comments. At most 3 hashtags. Under 140 words, plain text.";
   await dnaSignal(env, "drafted_" + kind, "angle " + n);
+  // v83 — a Valley angle is a CONTEST entry before it is a post: the pack's guardrails and creative rules ride on the draft,
+  // and the entry mechanics (hashtag, tag, permit) are stated to her rather than assumed. Without this the two campaign
+  // angles drafted like any other market post and quietly dropped the rules the contest is judged on.
+  const _ang = (ctx.angles || [])[n - 1] || null;
+  let _camp = null;
+  if (_ang && _ang.campaign) { try { _camp = JSON.parse((await env.MEETINGS.get("img_valley_pack")) || "null"); } catch (e) {} }
+  const campRules = _camp ? ("\n\nTHIS IS A CONTEST ENTRY for " + ((_camp.contest && _camp.contest.name) || "the campaign") +
+    ". Obey every one of these, they are judged:\n" +
+    (Array.isArray(_camp.guardrails) ? _camp.guardrails.map(g => "- " + g).join("\n") : JSON.stringify(_camp.guardrails || {})) +
+    (_camp.creative_rules ? "\nCreative rules:\n" + (Array.isArray(_camp.creative_rules) ? _camp.creative_rules.map(g => "- " + g).join("\n") : JSON.stringify(_camp.creative_rules)) : "") +
+    "\nUse ONLY the figures in the brief. Never claim capital appreciation or any return the register does not show.") : "";
   const dna = await dnaGet(env);
   const user2 = "DRAFT FROM ANGLE " + n + " of this brief.\n\nTHE BRIEF:\n" + ctx.brief + "\n\nTHE FIGURES (the only numbers you may use):\n" + ctx.data +
     (dna ? "\n\nHER DNA PROFILE (learned from her own choices — write in HER style, favour HER framings):\n" + dna : "");
   let out = null;
-  try { out = await claudeText(env, sys, user2, null, 900); } catch (e) {}
+  try { out = await claudeText(env, sys + campRules, user2, null, 900); } catch (e) {}
   if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
   const label = kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram package" : kind === "car" ? "🎠 LinkedIn carousel" : kind === "art" ? "📝 LinkedIn article" : "✍️ LinkedIn post";
-  await waSend(env, to, label + " — Angle " + n + "\n\n" + out + "\n\n— a draft to make your own.");
+  await waSend(env, to, label + " — Angle " + n + (_camp ? " · 🏡 " + ((_camp.contest && _camp.contest.name) || "campaign") : "") + "\n\n" + out + "\n\n— a draft to make your own.");
+  if (_camp && _camp.contest) {                                                    // the entry mechanics, every time, so none of it is left to memory
+    const c = _camp.contest;
+    const dl = c.closes ? Math.max(0, Math.round((Date.parse(c.closes) - Date.now()) / 86400000)) : null;
+    await waSend(env, to, "🏡 *Contest entry checklist*" +
+      (c.mechanics ? "\n• " + c.mechanics : "") +
+      (c.ask ? "\n• The ask: " + c.ask : "") +
+      (c.closes ? "\n• Closes " + c.closes + (dl !== null ? " · " + dl + " day" + (dl === 1 ? "" : "s") + " left" : "") : "") +
+      "\n• Every figure here is from the register — keep them exactly as written." +
+      "\n• No capital-appreciation claim: it is not in the data.");
+  }
   if (kind === "li") await waSend(env, to, "✍️ Copy this straight into LinkedIn. Want a different angle? Say “draft linkedin 3”.");
   if (kind === "art") await waSend(env, to, "📝 Paste this into LinkedIn → “Write article”. Add a cover image with the prompt below.");
   if (kind === "car") await waSend(env, to, "🎠 Build these 6 slides in Canva (or PowerPoint → save as PDF), then upload the PDF to LinkedIn as a *document* — it becomes a swipeable carousel. Use the image prompt below for the look; paste the CAPTION as the post text.");
@@ -3209,7 +3272,8 @@ async function dailyFeedTick(env, force, dry) {
   const bodyTxt = "☀️ *Najma daily — " + (angles.length === 5 ? "five" : String(angles.length)) + " you could post today*" +
     (nCamp ? "\n_the last " + (nCamp === 1 ? "one is" : String(nCamp) + " are") + " for the Valley contest · " + dLeft + " day" + (dLeft === 1 ? "" : "s") + " left_" : "") + "\n\n" +
     angles.map((a, i) => (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + a.hook + "\n     " + a.figure + " · " + a.source + (a.shot ? "\n     🎬 " + a.shot : "")).join("\n\n") +
-    "\n\nPick one — you'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
+    "\n\nPick one from the list — or just type the numbers for several, like “" + (angles.length > 1 ? (angles.length - 1) + " and " + angles.length : "1") + "”." +
+    "\nYou'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
   await waSend(env, env.WA_ALLOWED, bodyTxt);
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle",
     angles.map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.figure || "").slice(0, 20), description: a.hook })));
