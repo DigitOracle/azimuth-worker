@@ -5056,7 +5056,11 @@ function applyProj(name){
     if(idn.address&&idn.display_role!=="ADDRESS")rows.splice(1,0,["Address",idn.address]);
     if(idn.structural_identifier&&idn.structural_identifier!==idn.name)rows.splice(1,0,["On the site plan",idn.structural_identifier]);
     if(idn.plot_id)rows.splice(2,0,["Plot",idn.plot_id]);}
-  rows.splice(12);                                                     // the panel must never scroll: twelve tiles is the ceiling
+  // the panel must never scroll: twelve tiles is the ceiling, and every strip below costs two of them so the card's
+  // total height never grows when a building turns out to have tenants.
+  const ten=(idn&&idn.tenants||[]).filter(Boolean);
+  const amen=(idn&&idn.amenities||[]).filter(Boolean);
+  rows.splice(12 - (ten.length?2:0) - (amen.length?2:0));
   const acts='<div class=pa>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
     (SELDEV?'<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>':'')+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
   // icon tiles instead of a list (Kendall): small squares, gold line icons drawn inline, value first, label under
@@ -5076,8 +5080,6 @@ function applyProj(name){
   const GRADE={VERIFIED:["✓ verified","#8FC7B9"],MATCHED:["✓ survey","#8FC7B9"],STRUCTURALLY_IDENTIFIED:["◧ site plan","#C5A56A"],INFERRED:["◌ nearby","#D9A441"]};
   const gk=idn&&idn.identity_grade&&GRADE[idn.identity_grade];
   const chip=gk?'<span class=gchip style="color:'+gk[1]+';border-color:'+gk[1]+'44">'+gk[0]+(idn.name_source?' · '+esc(idn.name_source):'')+'</span>':'';
-  const ten=(idn&&idn.tenants||[]).filter(Boolean);
-  const amen=(idn&&idn.amenities||[]).filter(Boolean);
   // four each, one line apiece: the card must never scroll (Kendall). A long tenant name is trimmed rather than wrapped.
   const chipify=(a,n)=>a.slice(0,n).map(t=>'<i>'+esc(t.length>26?t.slice(0,25)+'…':t)+'</i>').join('')+(a.length>n?'<em>+'+(a.length-n)+'</em>':'');
   const tstrip=ten.length?'<div class=tenants><b>Inside</b>'+chipify(ten,4)+'</div>':'';
