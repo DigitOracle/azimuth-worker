@@ -1997,6 +1997,12 @@ export default {
         const _mk = url.searchParams.get("key") || "";
         return new Response(JSON.stringify({ name: "Najma", short_name: "Najma", start_url: "/market?key=" + _mk, display: "standalone", background_color: "#0C1413", theme_color: "#0C1413", icons: [{ src: "/naj_icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }] }), { headers: { "Content-Type": "application/manifest+json" } });
       }
+      if (url.pathname === "/plans") {                        // v85 - the floor-plan library: every plan we hold, by developer and project
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _pi = null; try { _pi = JSON.parse((await env.MEETINGS.get("img_plans_index")) || "null"); } catch (e) {}
+        return new Response(renderPlans(_pi, url.searchParams.get("key") || "", url.searchParams.get("d") || "", url.searchParams.get("p") || "", url.searchParams.get("i") || ""),
+          { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/home") {                         // v73 - developer grid (2 x 5): the new top of the board (board_devs pushed by build_board.py)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         let _bd = null; try { _bd = JSON.parse((await env.MEETINGS.get("img_board_devs")) || "null"); } catch (e) {}
@@ -4233,6 +4239,58 @@ function devLogo(dv, size) {
 // "flip" to a back face showing the chosen metric for the chosen bedroom / price band, with a bar scaled to the largest value
 // and a rank. Tapping a flipped tile still opens that developer. s = { mode, bed, band, metric, sort } from the query string.
 const CMP_METRICS = { price: "median price", sqm: "AED / m²", sales: "sales 2026", range: "price range", offplan: "off-plan share", rent: "median rent" };
+// v85 - FLOOR-PLAN LIBRARY. One door to every floor plan we hold (KV plans_index, build_plans_index.py): developers -> projects ->
+// plans. Tap a plan to see it full-width with its source line; the source is always shown because these are developer documents
+// shown to the broker who sells them, not ours to re-publish.
+function renderPlans(idx, key, dsel, psel, isel) {
+  const esc2 = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const K = encodeURIComponent(key || "");
+  const devs = (idx && idx.developers) || [];
+  const dev = devs.find(d => d.key === dsel) || null;
+  const proj = dev ? (dev.projects.find(p => p.name === psel) || dev.projects[0]) : null;
+  const plan = proj ? proj.plans[parseInt(isel || "-1", 10)] : null;
+  let body = "";
+  if (!devs.length) body = '<div class=card>No floor plans on file yet. They arrive through the developer group (PDF capture) or by hand.</div>';
+  else if (!dev) {
+    body = '<div class=grid>' + devs.map(d => {
+      const n = d.projects.reduce((t, p) => t + p.plans.length, 0);
+      return '<a class=tile href="/plans?d=' + encodeURIComponent(d.key) + '&key=' + K + '"><img class=logo src="/img/logo_' + esc2(d.key) + '" onerror="this.style.display=\'none\'" alt=""><div class=nm>' + esc2(d.name) + '</div>' +
+        '<div class=kpi>' + d.projects.length + ' project' + (d.projects.length === 1 ? '' : 's') + ' · ' + n + ' plan' + (n === 1 ? '' : 's') + '</div>' +
+        '<div class=kpi>' + esc2(d.projects.map(p => p.name).join(' · ')) + '</div></a>';
+    }).join('') + '</div>';
+  } else {
+    const tabs = dev.projects.length > 1 ? '<div class=chips>' + dev.projects.map(p => '<a class="chip' + (p === proj ? ' on' : '') + '" href="/plans?d=' + encodeURIComponent(dev.key) + '&p=' + encodeURIComponent(p.name) + '&key=' + K + '">' + esc2(p.name) + '</a>').join('') + '</div>' : '';
+    if (plan) {
+      body = tabs + '<div class=sec>' + esc2(proj.name) + ' · ' + esc2(plan.label) + '</div>' +
+        '<a href="' + esc2(plan.url) + '" target=_blank rel=noopener><img src="' + esc2(plan.url) + '" alt="' + esc2(plan.label) + '" style="width:100%;border-radius:10px;border:1px solid var(--line);background:#fff"></a>' +
+        '<div class=kpi style="margin-top:8px">' + esc2(plan.source) + '</div>' +
+        '<div style="margin-top:12px"><a class=act href="/plans?d=' + encodeURIComponent(dev.key) + '&p=' + encodeURIComponent(proj.name) + '&key=' + K + '">← all ' + esc2(proj.name) + ' plans</a>' +
+        '<a class=act href="' + esc2(plan.url) + '" target=_blank rel=noopener>open full size</a></div>';
+    } else {
+      body = tabs + (proj.area ? '<div class=sub>' + esc2(proj.area) + (proj.note ? ' · ' + esc2(proj.note) : '') + '</div>' : '') +
+        '<div class=pgrid>' + proj.plans.map((pl, i) => '<a class=ptile href="/plans?d=' + encodeURIComponent(dev.key) + '&p=' + encodeURIComponent(proj.name) + '&i=' + i + '&key=' + K + '">' +
+          '<img src="' + esc2(pl.url) + '" loading=lazy alt=""><div class=pl>' + esc2(pl.label) + '</div><div class=pk>' + (pl.kind === 'unit_card' ? 'unit card' : pl.kind === 'page' ? 'brochure page' : 'floor plan') + '</div></a>').join('') + '</div>';
+    }
+  }
+  return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=robots content=noindex><title>' + (dev ? esc2(dev.name) + ' — floor plans' : 'Floor plans') + '</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS + '<style>' +
+    ':root{--ink:#0C1413;--card:#111C1A;--line:#24352F;--gold:#C5A56A;--text:#E8E4D8;--mut:#8FA39B}*{box-sizing:border-box}body{margin:0;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:14px 12px 92px}' +
+    '.mast{font-family:Fraunces,Georgia,serif;font-size:1.5rem;font-weight:600;line-height:1.1}.mast em{font-style:normal;color:var(--gold)}.sub{color:var(--mut);font-size:.72rem;font-family:"IBM Plex Mono",monospace;margin:4px 0 12px}' +
+    '.bk{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.05em;color:var(--gold);text-decoration:none;display:inline-block;margin-bottom:8px}' +
+    '.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tile{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;text-decoration:none;color:var(--text)}.tile:active{border-color:var(--gold)}' +
+    '.logo{width:56px;height:56px;border-radius:10px;background:#fff;object-fit:contain;padding:5px;display:block}.nm{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1rem;margin-top:8px}.kpi{color:var(--mut);font-size:.64rem;font-family:"IBM Plex Mono",monospace;margin-top:5px;line-height:1.35}' +
+    '.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;color:var(--mut);font-size:.8rem}' +
+    '.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}.chip{border:1px solid var(--line);border-radius:99px;padding:5px 10px;color:var(--text);text-decoration:none;font-size:.7rem;background:var(--card)}.chip.on{border-color:var(--gold);color:var(--gold)}' +
+    '.sec{color:var(--gold);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;margin:8px 2px 8px;font-family:"IBM Plex Mono",monospace}' +
+    '.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.ptile{display:block;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;text-decoration:none;color:var(--text)}.ptile img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:#fff}' +
+    '.pl{font-size:.7rem;padding:8px 9px 2px;color:var(--text);background:var(--card);line-height:1.3}.pk{font-size:.58rem;font-family:"IBM Plex Mono",monospace;color:var(--mut);padding:0 9px 8px;background:var(--card)}' +
+    '.act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--text);text-decoration:none;font-size:.72rem;margin:0 6px 8px 0;background:var(--card)}' +
+    NAJ_NAV_CSS + '</style></head><body>' +
+    (dev ? '<a class=bk href="/plans?key=' + K + '">← all developers</a>' : '') +
+    '<div class=mast>' + (dev ? esc2(dev.name) + ' <em>· floor plans</em>' : 'Floor plans') + '</div>' +
+    '<div class=sub>' + (dev ? (proj ? esc2(proj.name) : '') : (idx ? idx.count + ' plans on file · ' + devs.length + ' developer' + (devs.length === 1 ? '' : 's') + ' · tap one' : 'nothing on file yet')) + '</div>' +
+    body + najNav(key, "homes") + '</body></html>';
+}
+
 function renderHome(bd, key, cmp, s) {
   s = s || {}; const K = encodeURIComponent(key); const compare = s.mode === "compare" && cmp && cmp.developers;
   const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(1) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 2) + " M" : Math.round(n).toLocaleString("en-US"));
@@ -4312,7 +4370,7 @@ ${NAJ_NAV_CSS}</style></head><body>
 <div class=sub>${compare ? 'one filter, all ' + (bd.developers || []).length + ' developers at once · tap a tile for its properties' : 'your ' + (bd.developers || []).length + ' developers in five tiers · tap one for its properties, then a property for its unit cards · updated ' + (bd.updated || "")}</div>
 ${bar}
 <div class=grid>${tiles}</div>
-<div style="margin-top:14px"><a class=act href="/board?key=${encodeURIComponent(key)}">meetings board</a><a class=act href="/market?key=${encodeURIComponent(key)}">market pulse</a></div>
+<div style="margin-top:14px"><a class=act href="/plans?key=${encodeURIComponent(key)}" style="border-color:var(--gold);color:var(--gold)">📐 floor plans</a><a class=act href="/board?key=${encodeURIComponent(key)}">meetings board</a><a class=act href="/market?key=${encodeURIComponent(key)}">market pulse</a></div>
 <div class=sub style="margin-top:10px">${bd.note || ""}</div>
 ${najNav(key, "homes")}
 </body></html>`;
