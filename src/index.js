@@ -1,3 +1,4 @@
+import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
 //   data counts, dependency reachability, and a ring of swallowed errors. Outbound sends are now
@@ -2098,14 +2099,14 @@ export default {
         let _bc = null; try { _bc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
         const _n = parseInt(url.searchParams.get("n") || "1", 10) || 1; const _a = _bc && _bc.angles && _bc.angles[_n - 1];
         if (!_a) return new Response("no angle " + _n, { status: 404 });
-        const _h = await angleCardHtml(env, _a, _n, url.origin);
+        const _h = await angleCardHtml(env, _a, _n, url.origin, url.searchParams.get("size") === "story" ? "story" : "square", url.searchParams.has("t") ? parseInt(url.searchParams.get("t"), 10) : undefined);   // v105 - ?size=story ?t=0..4
         return new Response(_h.html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/angle_pending") {                 // v89.1 — which angles of the current brief still lack a card
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         let _bc = null; try { _bc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
         const out = { ctxAt: _bc ? _bc.at : null, pending: [], wanted: [] };
-        if (_bc && _bc.angles) for (let i = 0; i < _bc.angles.length; i++) { const k = cardKey(_bc.at, i + 1); if (!(await env.MEETINGS.get("img_" + k, "arrayBuffer"))) out.pending.push({ n: i + 1, key: k }); if (await env.MEETINGS.get("angle_wanted_" + k)) out.wanted.push(i + 1); }
+        if (_bc && _bc.angles) for (let i = 0; i < _bc.angles.length; i++) for (const sz of ["square", "story"]) { const k = cardKey(_bc.at, i + 1, sz); if (!(await env.MEETINGS.get("img_" + k, "arrayBuffer"))) out.pending.push({ n: i + 1, key: k, size: sz }); if ((await env.MEETINGS.get("angle_wanted_" + k)) && !out.wanted.includes(i + 1)) out.wanted.push(i + 1); }   // v105 - both sizes
         return new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/send_card") {                     // v89.1 — deliver a just-rendered card to whoever asked for it
@@ -2113,7 +2114,7 @@ export default {
         const _k = (url.searchParams.get("k") || "").replace(/[^a-z0-9_]/gi, ""); let _w = null; try { _w = JSON.parse((await env.MEETINGS.get("angle_wanted_" + _k)) || "null"); } catch (e) {}
         if (!_w) return new Response("nobody waiting for " + _k);
         if (!(await env.MEETINGS.get("img_" + _k, "arrayBuffer"))) return new Response("card not in store yet", { status: 404 });
-        await waSendImage(env, _w.to, url.origin + "/img/" + _k, "🖼 Here is your card for angle " + _w.n + " - 1080×1080, ready to post.");
+        await waSendImage(env, _w.to, url.origin + "/img/" + _k, _k.endsWith("_s") ? "🖼 Your card for angle " + _w.n + " at 1080×1920 - Stories, Reels and TikTok." : "🖼 Here is your card for angle " + _w.n + " - 1080×1080 for the grid.");
         await env.MEETINGS.delete("angle_wanted_" + _k);
         return new Response("sent to " + _w.to);
       }
@@ -2122,7 +2123,7 @@ export default {
         let _bc = null; try { _bc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
         const _n = parseInt(url.searchParams.get("n") || "1", 10) || 1; const _a = _bc && _bc.angles && _bc.angles[_n - 1];
         if (!_a) return new Response("no angle " + _n + " in today's brief", { status: 404 });
-        const _c = await renderAngleCard(env, _a, _n, url.origin, _bc.at, null);
+        const _c = await renderAngleCard(env, _a, _n, url.origin, _bc.at, null, url.searchParams.get("size") === "story" ? "story" : "square");
         if (!_c) return new Response("not rendered yet: " + RENDER_LAST_ERR, { status: 502 });
         if (url.searchParams.get("png")) { const _b = await env.MEETINGS.get("img_" + _c.key, "arrayBuffer"); return new Response(_b, { headers: { "Content-Type": "image/png" } }); }
         return new Response(JSON.stringify(_c), { headers: { "Content-Type": "application/json" } });
@@ -3369,10 +3370,13 @@ async function draftFromAngle(env, to, kind, n) {
   if (kind === "car") await waSend(env, to, "🎠 Build these 6 slides in Canva (or PowerPoint → save as PDF), then upload the PDF to LinkedIn as a *document* — it becomes a swipeable carousel. Use the image prompt below for the look; paste the CAPTION as the post text.");
   // v83 — she is not going hunting for a visual: every draft is followed by the plate prompt for her own composite, and by the
   // campaign's own images where there are any. Nothing here needs her to type a thing.
-  if (_ang && (kind === "li" || kind === "ig" || kind === "car")) {                                // v89 - the finished square image, ready to post
-    try { const _card = await renderAngleCard(env, _ang, n, env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev", ctx.at, to);
-      if (_card) await waSendImage(env, to, _card.url, "Your card for angle " + n + (_card.area ? " · " + _card.area : "") + " - 1080×1080, post as-is or overlay your twin using the prompt below.");
-      else await waSend(env, to, "🖼 Your finished card for angle " + n + " is rendering - it lands here in a few minutes."); } catch (e) {}
+  if (_ang && (kind === "li" || kind === "ig" || kind === "car")) {                                // v89 - the finished image; v105 - both sizes, five looks
+    try { const _o = env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev";
+      const _sq = await renderAngleCard(env, _ang, n, _o, ctx.at, to, "square");
+      const _st = await renderAngleCard(env, _ang, n, _o, ctx.at, to, "story");
+      if (_sq) await waSendImage(env, to, _sq.url, "Your card for angle " + n + (_sq.area ? " · " + _sq.area : "") + " - 1080×1080 for the grid.");
+      if (_st) await waSendImage(env, to, _st.url, "Same card at 1080×1920 - Stories, Reels and TikTok.");
+      if (!_sq && !_st) await waSend(env, to, "🖼 Your cards for angle " + n + " (square and 9:16) are rendering - they land here in a few minutes."); } catch (e) {}
   }
   await waSend(env, to, bgPromptBlock(_ang || { hook: "", figure: "", source: "" }));
   if (kind === "li" || kind === "ig" || kind === "car") {                                          // v88.2 - the quick hit is done; offer the deeper dive once
@@ -4180,26 +4184,112 @@ function angleArea(angle, d) {
   return best;
 }
 function wrapSvg(text, max) { const w = String(text || "").split(/\s+/); const lines = []; let cur = ""; for (const x of w) { if ((cur + " " + x).trim().length > max && cur) { lines.push(cur); cur = x; } else cur = (cur + " " + x).trim(); } if (cur) lines.push(cur); if (lines.length > 5) { const k = lines.slice(0, 5); k[4] = k[4].replace(/\s+\S*$/, "") + "…"; return k; } return lines; }
-function angleCardSvg(angle, areaName, imgUrl, n) {
-  let hookTxt = String(angle.hook || "").trim(); if (hookTxt.length > 150) { const cut = hookTxt.slice(0, 150); hookTxt = cut.slice(0, Math.max(cut.lastIndexOf(" "), 100)).replace(/[,;:—-]+$/, "") + "…"; }
-  const hookL = wrapSvg(hookTxt, hookTxt.length > 110 ? 38 : 34); const fz = hookL.length >= 4 ? 42 : hookL.length === 3 ? 50 : 56; const y0 = 250;
-  const fig = String(angle.figure || "").trim().replace(/\d{4,}/g, m => Number(m).toLocaleString("en-US")); const figFz = fig.length > 26 ? 40 : fig.length > 16 ? 54 : 72;
-  const src = String(angle.source || "").replace(/\s+/g, " ").trim(); const srcL = wrapSvg(src, 60).slice(0, 2);
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">` +
-    `<defs><clipPath id="acclip"><rect x="0" y="0" width="1080" height="1080" rx="0"/></clipPath><linearGradient id="acg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E8DCC8" stop-opacity=".30"/><stop offset=".30" stop-color="#E8DCC8" stop-opacity=".55"/><stop offset=".60" stop-color="#E8DCC8" stop-opacity=".97"/><stop offset="1" stop-color="#E8DCC8" stop-opacity="1"/></linearGradient></defs>` +
-    `<rect width="1080" height="1080" fill="#E8DCC8"/>` +
-    (imgUrl ? `<g clip-path="url(#acclip)"><image href="${imgUrl}" x="0" y="0" width="1080" height="640" preserveAspectRatio="xMidYMid slice"/></g>` : "") +
-    `<rect width="1080" height="1080" fill="url(#acg)"/>` +
-    `<rect x="56" y="62" width="${(areaName ? 14 + String(areaName).length : 10) * 15 + 56}" height="46" rx="23" fill="#E8DCC8" fill-opacity=".92"/>` +
-    `<text x="84" y="93" fill="#006039" font-size="22" font-weight="700" letter-spacing="4" font-family="'IBM Plex Mono',monospace">THE DIGEST${areaName ? " · " + _sx(String(areaName).toUpperCase()) : ""}</text>` +
-    (n ? `<text x="1008" y="96" fill="#E8DCC8" font-size="24" text-anchor="end" font-family="'IBM Plex Mono',monospace">${n}</text>` : "") +
-    hookL.map((l, i) => `<text x="72" y="${y0 + 180 + i * (fz + 12)}" fill="#0B3D2E" font-size="${fz}" font-weight="600" font-family="Fraunces,Georgia,serif">${_sx(l)}</text>`).join("") +
-    `<line x1="72" y1="${790}" x2="360" y2="${790}" stroke="#C5A56A" stroke-width="3"/>` +
-    `<text x="72" y="${790 + figFz + 14}" fill="#8C7238" font-size="${figFz}" font-weight="700" font-family="Fraunces,Georgia,serif">${_sx(fig)}</text>` +
-    srcL.map((l, i) => `<text x="72" y="${930 + i * 28}" fill="#5E6F69" font-size="22" font-family="'IBM Plex Sans',sans-serif">${_sx(i === 0 ? "Source: " + l : l)}</text>`).join("") +
-    `<text x="72" y="1022" fill="#006039" font-size="22" font-family="'IBM Plex Sans',sans-serif">Najjuko · settled, not asking · the register's own numbers</text>` +
-    `<text x="1008" y="1022" fill="#8C7238" font-size="20" text-anchor="end" font-family="'IBM Plex Mono',monospace">the digest</text>` +
-    `</svg>`;
+// v105 - CARD ENGINE. Five looks, two sizes. The look is seeded by the hook so an angle's square and story match,
+// and tomorrow's cards do not look like today's. Every look carries the same four facts: masthead, hook, figure, source.
+const CARD_C = { beige: "#E8DCC8", beige2: "#D9CBB2", gold: "#C5A56A", goldD: "#8C7238", green: "#006039", greenD: "#0B3D2E", ink: "#0C1413", mute: "#5E6F69", muteL: "#B8C4BD" };
+const F_SERIF = "Fraunces,Georgia,serif", F_SANS = "'IBM Plex Sans',sans-serif", F_MONO = "'IBM Plex Mono',monospace";
+const CARD_TPL = ["bignumber", "split", "stat", "quote", "ticker"];
+function hashStr(t) { let h = 2166136261; const x = String(t || ""); for (let i = 0; i < x.length; i++) { h ^= x.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; }
+function tplOf(angle, t) { if (Number.isInteger(t)) return ((t % 5) + 5) % 5; if (angle && Number.isInteger(angle.tpl)) return ((angle.tpl % 5) + 5) % 5; return hashStr((angle && angle.hook) || "") % 5; }
+function wrapWords(text, max) { const w = String(text || "").split(/\s+/).filter(Boolean); const lines = []; let cur = ""; for (const x of w) { if ((cur + " " + x).trim().length > max && cur) { lines.push(cur); cur = x; } else cur = (cur + " " + x).trim(); } if (cur) lines.push(cur); return lines; }
+// shrink the font until the text sits inside boxW x maxLines (k = average glyph width as a fraction of the font size)
+function fitLines(text, boxW, fz, maxLines, k, minFz) { k = k || 0.54; minFz = minFz || 34; let f = fz; for (;;) { const lines = wrapWords(text, Math.max(8, Math.floor(boxW / (f * k)))); if (lines.length <= maxLines || f <= minFz) { const L = lines.slice(0, maxLines); if (lines.length > maxLines) L[maxLines - 1] = L[maxLines - 1].replace(/\s+\S*$/, "") + "…"; return { lines: L, fz: f }; } f -= 4; } }
+// like fitLines, but also shrinks until the block is no taller than availH (lh = line height factor)
+function fitBox(text, boxW, fz, availH, k, minFz, lh) { lh = lh || 1.12; minFz = minFz || 30; let f = fz; for (;;) { const maxL = Math.max(1, Math.floor(availH / Math.round(f * lh))); const r = fitLines(text, boxW, f, maxL, k, f); if ((r.lines.length * Math.round(r.fz * lh) <= availH && !/…$/.test(r.lines[r.lines.length - 1])) || f <= minFz) return r; f -= 4; } }
+function fitOne(text, boxW, fz, k, minFz) { const L = String(text || "").length || 1; return Math.max(minFz || 40, Math.min(fz, Math.floor(boxW / (L * (k || 0.6))))); }
+function svgLines(lines, x, y, fz, fill, font, weight, lh, extra) { return lines.map((l, i) => `<text x="${x}" y="${y + i * Math.round(fz * (lh || 1.12))}" fill="${fill}" font-size="${fz}" font-weight="${weight || 600}" font-family="${font}"${extra || ""}>${_sx(l)}</text>`).join(""); }
+function figureParts(fig) {
+  const t = String(fig || "").trim().replace(/\d{4,}/g, (m, at, all) => (m.length === 4 && /^(19|20)\d\d$/.test(m) && /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|in|since|by|until|through|from|to|q[1-4]|fy|year)\w*\s*$/i.test(all.slice(0, at))) ? m : Number(m).toLocaleString("en-US"));   // "August 2026" stays a year; "1980 AED" is a number
+  const pct = t.match(/^(-?\d+(?:\.\d+)?)\s*%(.*)$/); if (pct) return { kind: "pct", val: Math.max(0, Math.min(100, parseFloat(pct[1]))), num: pct[1] + "%", unit: (pct[2] || "").trim(), text: t };
+  const two = t.match(/^(.+?)\s+(?:vs\.?|versus|→|->|to)\s+(.+)$/i); if (two) { const av = parseFloat(two[1].replace(/[^\d.]/g, "")), bv = parseFloat(two[2].replace(/[^\d.]/g, "")); if (isFinite(av) && isFinite(bv) && av + bv > 0) return { kind: "two", a: two[1].trim(), b: two[2].trim(), av, bv, text: t }; }
+  const m = t.match(/^([A-Za-z]{2,4}\s+)?([\d,.]+\s*[kKmMbB]?)\s*(.*)$/); if (m && m[2] && /\d/.test(m[2])) return { kind: "num", num: ((m[1] || "") + m[2]).trim(), unit: (m[3] || "").trim(), text: t };
+  return { kind: "text", num: t, unit: "", text: t };
+}
+function cardDate() { const d = new Date(Date.now() + 4 * 3600 * 1000); return d.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()] + " " + d.getUTCFullYear(); }
+function angleCardSvg(angle, areaName, imgUrl, n, opts) {
+  opts = opts || {}; const W = 1080, story = opts.size === "story", H = story ? 1920 : 1080; const t = tplOf(angle, opts.t); const C = CARD_C;
+  const hook = String(angle.hook || "").replace(/\s+/g, " ").trim().slice(0, 220);
+  const src = String(angle.source || "").replace(/\s+/g, " ").trim();
+  const fp = figureParts(angle.figure); const area = areaName ? String(areaName) : "";
+  // what the big type shows: the number when there is one, else the phrase (a long phrase is wrapped small, never blown up)
+  const fig = (fp.kind === "text" || fp.kind === "two") ? fp.text : fp.num; const figRest = (fp.kind === "text" || fp.kind === "two") ? "" : String(fp.unit || "").slice(0, 90);
+  const bigFig = (x, base, maxFz, fill, extra) => {                                  // returns svg + the y where the block ends
+    if (fig.length <= 18) { const fz = fitOne(fig, 936, maxFz, 0.6, 72); let out = `<text x="${x - 6}" y="${base}" fill="${fill}" font-size="${fz}" font-weight="700" font-family="${F_SERIF}"${extra || ""}>${_sx(fig)}</text>`; let end = base;
+      if (figRest) { const r = fitLines(figRest, 936, 34, 2, 0.6, 26); out += svgLines(r.lines, x, base + 16 + r.fz, r.fz, fill, F_MONO, 400, 1.25, ' letter-spacing="2"'); end = base + 16 + r.fz + (r.lines.length - 1) * Math.round(r.fz * 1.25); }
+      return { svg: out, end }; }
+    const r = fitLines(fig + (figRest ? " " + figRest : ""), 936, Math.min(maxFz, 88), 3, 0.56, 44); const y = base - (r.lines.length - 1) * Math.round(r.fz * 1.1);
+    return { svg: svgLines(r.lines, x, y, r.fz, fill, F_SERIF, 700, 1.1, extra), end: base }; };
+  const mast = "THE DIGEST" + (area ? " · " + area.toUpperCase() : "");
+  const img = (x, y, w, h, id) => imgUrl ? `<clipPath id="${id}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${opts.rx || 0}"/></clipPath><g clip-path="url(#${id})"><image href="${imgUrl}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/></g>` : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${C.greenD}"/>`;
+  const chip = (x, y, ground, ink) => { const w = Math.min(W - 2 * x, mast.length * 17.6 + 56); /* 22px mono + 4px tracking */ return `<rect x="${x}" y="${y}" width="${w}" height="48" rx="24" fill="${ground}" fill-opacity=".94"/><text x="${x + 28}" y="${y + 32}" fill="${ink}" font-size="22" font-weight="700" letter-spacing="4" font-family="${F_MONO}">${_sx(mast.length > 40 ? mast.slice(0, 39) + "…" : mast)}</text>`; };
+  const srcLines = (y, fill) => { const L = wrapWords(src, 62).slice(0, 2); return svgLines(L.map((l, i) => (i === 0 ? "Source: " : "") + l), 72, y, 22, fill, F_SANS, 400, 1.3); };
+  const foot = (y, fill, fillR) => `<text x="72" y="${y}" fill="${fill}" font-size="22" font-family="${F_SANS}">Najjuko · settled, not asking · the register's own numbers</text><text x="${W - 72}" y="${y}" fill="${fillR}" font-size="20" text-anchor="end" font-family="${F_MONO}">the digest</text>`;
+  const num = n ? `<text x="${W - 72}" y="96" fill="${C.beige}" fill-opacity=".85" font-size="24" text-anchor="end" font-family="${F_MONO}">${n}</text>` : "";
+  const defs = `<defs><filter id="sh" x="-5%" y="-10%" width="110%" height="130%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity=".6"/></filter><linearGradient id="gd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.ink}" stop-opacity="0"/><stop offset=".45" stop-color="${C.ink}" stop-opacity=".25"/><stop offset=".75" stop-color="${C.ink}" stop-opacity=".86"/><stop offset="1" stop-color="${C.ink}" stop-opacity=".97"/></linearGradient></defs>`;
+  let body = "";
+  if (t === 0) {                                                                   // BIG NUMBER - the figure is the picture
+    const base = Math.round(H * (story ? (figRest ? 0.56 : 0.60) : (figRest ? 0.50 : 0.55))); const bf = bigFig(72, base, story ? 340 : 300, C.gold, ' filter="url(#sh)"');
+    const hk = fitBox(hook, 936, story ? 70 : 62, (H - 150) - (bf.end + 40) - 20, 0.54, 34);
+    body = img(0, 0, W, H, "c0") + `<rect width="${W}" height="${H}" fill="url(#gd)"/>` + chip(56, 62, C.beige, C.green) + num + bf.svg +
+      svgLines(hk.lines, 72, bf.end + 40 + hk.fz, hk.fz, C.beige, F_SANS, 600, 1.12, ' filter="url(#sh)"') +
+      srcLines(H - 118, C.muteL) + foot(H - 52, C.beige, C.gold);
+  } else if (t === 1) {                                                            // EDITORIAL SPLIT - photo above, the words on beige
+    const ph = Math.round(H * (story ? 0.48 : 0.46)); const fy = H - (story ? 230 : 190);
+    const figH = fig.length <= 18 ? fitOne(fig, 936, story ? 128 : 104, 0.6, 72) + (figRest ? 60 : 0) : 3 * 60;
+    const hk = fitBox(hook, 936, story ? 84 : 72, (fy - figH - 60) - (ph + 60), 0.56, 34, 1.1);
+    const bf = bigFig(72, fy - (figRest ? 60 : 0), story ? 128 : 104, C.goldD);
+    body = `<rect width="${W}" height="${H}" fill="${C.beige}"/>` + img(0, 0, W, ph, "c1") + `<rect x="0" y="${ph - 8}" width="${W}" height="10" fill="${C.gold}"/>` + chip(56, 62, C.beige, C.green) + num +
+      svgLines(hk.lines, 72, ph + 60 + hk.fz, hk.fz, C.greenD, F_SERIF, 600, 1.1) +
+      `<rect x="72" y="${fy - figH - 30}" width="260" height="4" fill="${C.gold}"/>` + bf.svg +
+      srcLines(H - 96, C.mute) + foot(H - 44, C.green, C.goldD);
+  } else if (t === 2) {                                                            // STAT INFOGRAPHIC - the figure becomes a graphic
+    const y0 = 150; const stripH = story ? 620 : 300; const stripY = H - stripH - 120; let g = "", hookY, hk;
+    if (fp.kind === "pct") {
+      const r = story ? 230 : 190, cx = 72 + r + 18, cy = y0 + r + 40, circ = 2 * Math.PI * r;
+      g = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${C.beige2}" stroke-width="36"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${C.gold}" stroke-width="36" stroke-linecap="round" stroke-dasharray="${(circ * fp.val / 100).toFixed(1)} ${circ.toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"/>` +
+        `<text x="${cx}" y="${cy + 34}" fill="${C.goldD}" font-size="${fitOne(fp.num, 2 * r - 90, 104, 0.6, 48)}" font-weight="700" text-anchor="middle" font-family="${F_SERIF}">${_sx(fp.num)}</text>` +
+        (fp.unit ? `<text x="${cx}" y="${cy + 84}" fill="${C.green}" font-size="24" letter-spacing="4" text-anchor="middle" font-family="${F_MONO}">${_sx(fp.unit.toUpperCase().slice(0, 22))}</text>` : "");
+      const bx = cx + r + 48, bw = W - 72 - bx; hk = fitBox(hook, bw, story ? 56 : 48, (stripY - 40) - (y0 + 60), 0.54, 30, 1.15); hookY = y0 + 60 + hk.fz;
+      g += svgLines(hk.lines, bx, hookY, hk.fz, C.greenD, F_SANS, 600, 1.15);
+    } else if (fp.kind === "two") {
+      const mx = Math.max(fp.av, fp.bv) || 1, bw = 936 - 260; const row = (lab, v, y, col) => `<text x="72" y="${y + 44}" fill="${C.greenD}" font-size="30" font-weight="600" font-family="${F_SANS}">${_sx(lab.slice(0, 18))}</text><rect x="300" y="${y}" width="${Math.max(24, Math.round(bw * v / mx))}" height="60" rx="8" fill="${col}"/>`;
+      g = row(fp.a, fp.av, y0 + 40, C.gold) + row(fp.b, fp.bv, y0 + 130, C.green);
+      hk = fitBox(hook, 936, story ? 64 : 56, (stripY - 40) - (y0 + 250), 0.54, 30, 1.15); hookY = y0 + 250 + hk.fz; g += svgLines(hk.lines, 72, hookY, hk.fz, C.greenD, F_SANS, 600, 1.15);
+    } else {
+      const nfz = fitOne(fp.num, 936, story ? 240 : 210, 0.6, 96);
+      g = `<text x="66" y="${y0 + nfz}" fill="${C.goldD}" font-size="${nfz}" font-weight="700" font-family="${F_SERIF}">${_sx(fp.num)}</text>` +
+        (fp.unit ? svgLines(fitLines(fp.unit.toUpperCase(), 936, 30, 2, 0.75, 22).lines, 72, y0 + nfz + 48, 30, C.green, F_MONO, 400, 1.3, ' letter-spacing="4"') : "");
+      const hy0 = y0 + nfz + (fp.unit ? 150 : 70); hk = fitBox(hook, 936, story ? 64 : 56, (stripY - 40) - hy0, 0.54, 30, 1.15); hookY = hy0 + hk.fz; g += svgLines(hk.lines, 72, hookY, hk.fz, C.greenD, F_SANS, 600, 1.15);
+    }
+    body = `<rect width="${W}" height="${H}" fill="${C.beige}"/>` + chip(56, 62, C.green, C.beige) + `<text x="${W - 72}" y="96" fill="${C.goldD}" font-size="24" text-anchor="end" font-family="${F_MONO}">${n || ""}</text>` + g +
+      `<clipPath id="c2"><rect x="56" y="${stripY}" width="${W - 112}" height="${stripH}" rx="26"/></clipPath>` + (imgUrl ? `<g clip-path="url(#c2)"><image href="${imgUrl}" x="56" y="${stripY}" width="${W - 112}" height="${stripH}" preserveAspectRatio="xMidYMid slice"/></g>` : `<rect x="56" y="${stripY}" width="${W - 112}" height="${stripH}" rx="26" fill="${C.greenD}"/>`) +
+      `<rect x="56" y="${stripY}" width="${W - 112}" height="${stripH}" rx="26" fill="none" stroke="${C.gold}" stroke-width="3"/>` +
+      srcLines(H - 78, C.mute) + foot(H - 40, C.green, C.goldD);
+  } else if (t === 3) {                                                            // PULL QUOTE - the line is the hero, on Rolex green
+    const th = story ? 440 : 300; const ty = 140; const hy = ty + th + (story ? 150 : 120);
+    const fq = fitLines(fig + (figRest ? " · " + figRest : ""), 936, 64, 3, 0.65, 30); const ffz = fq.fz; const figBlock = 60 + ffz + (fq.lines.length - 1) * Math.round(ffz * 1.2);
+    const hk = fitBox(hook, 936, story ? 84 : 70, (H - 150 - figBlock - 60) - hy, 0.56, 34, 1.1);
+    const endY = hy + (hk.lines.length - 1) * Math.round(hk.fz * 1.1);
+    body = `<rect width="${W}" height="${H}" fill="${C.greenD}"/>` +
+      `<text x="44" y="${ty + th - 20}" fill="${C.gold}" fill-opacity=".92" font-size="360" font-weight="700" font-family="${F_SERIF}">“</text>` +
+      `<rect x="56" y="62" width="${Math.min(W - 112, mast.length * 14.5 + 56)}" height="48" rx="24" fill="none" stroke="${C.gold}" stroke-width="2"/><text x="84" y="94" fill="${C.gold}" font-size="22" font-weight="700" letter-spacing="4" font-family="${F_MONO}">${_sx(mast.length > 40 ? mast.slice(0, 39) + "…" : mast)}</text>` + num +
+      svgLines(hk.lines, 72, hy, hk.fz, C.beige, F_SERIF, 600, 1.1) +
+      `<rect x="72" y="${endY + 44}" width="240" height="4" fill="${C.gold}"/>` + svgLines(fq.lines, 72, endY + 60 + ffz, ffz, C.gold, F_MONO, 700, 1.2) +
+      `<clipPath id="c3"><rect x="${W - 72 - th}" y="${ty}" width="${th}" height="${th}" rx="28"/></clipPath>` + (imgUrl ? `<g clip-path="url(#c3)"><image href="${imgUrl}" x="${W - 72 - th}" y="${ty}" width="${th}" height="${th}" preserveAspectRatio="xMidYMid slice"/></g>` : "") +
+      `<rect x="${W - 72 - th}" y="${ty}" width="${th}" height="${th}" rx="28" fill="none" stroke="${C.gold}" stroke-width="3"/>` +
+      srcLines(H - 100, C.muteL) + foot(H - 52, C.beige, C.gold);
+  } else {                                                                         // TICKER - dark plate, mono data strip
+    const fy = story ? 700 : (figRest ? 400 : 440); const bf = bigFig(72, fy, story ? 240 : 200, C.gold, ' filter="url(#sh)"'); const hk = fitBox(hook, 936, story ? 66 : 58, (H - 300) - (bf.end + 60), 0.54, 34);
+    const hy = bf.end + 60 + hk.fz; const endY = hy + (hk.lines.length - 1) * Math.round(hk.fz * 1.12);
+    body = img(0, 0, W, H, "c4") + `<rect width="${W}" height="${H}" fill="${C.ink}" fill-opacity=".66"/><rect width="${W}" height="${H}" fill="${C.greenD}" fill-opacity=".28"/>` +
+      `<text x="72" y="118" fill="${C.gold}" font-size="26" font-weight="700" letter-spacing="6" font-family="${F_MONO}">${_sx(mast)}</text>` + num +
+      bf.svg +
+      svgLines(hk.lines, 72, hy, hk.fz, C.beige, F_SANS, 600, 1.12) +
+      `<rect x="72" y="${endY + 36}" width="936" height="3" fill="${C.gold}"/>` +
+      `<text x="72" y="${endY + 92}" fill="${C.beige}" font-size="26" letter-spacing="2" font-family="${F_MONO}">${_sx([fig.slice(0, 28), area || "Dubai", cardDate()].join("  ·  "))}</text>` +
+      srcLines(endY + 140, C.muteL) + foot(H - 52, C.beige, C.gold);
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" data-tpl="${CARD_TPL[t]}">` + defs + body + `</svg>`;
 }
 // v90 - BRIDGE RECORDS. One append-only list per day; the export route serves it. Never overwrites a record.
 const GUARD_BY_FAMILY = { rents_yields: "Yields are gross, from registered contracts; no net or guaranteed-return claim; 'last eight weeks', never 'this week'.", prices: "Settled registrations, not asking prices; no forecast, no 'prices will rise'.", volume: "Counts are registrations, which lag the deal; no causation - 'coincided with', never 'because of'.",
@@ -4320,40 +4410,55 @@ const UNIT_MIX_CSS = '.um{margin-top:10px;border:1px solid var(--line);border-ra
   '.umx{width:100%;border-collapse:collapse;margin-top:8px;font-size:.66rem}.umx th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.1em;color:#8FA39B;font-weight:500;padding:2px 4px}.umx td{padding:3px 4px;border-top:1px solid var(--line);color:#E8E4D8}.umx td:not(:first-child),.umx th:not(:first-child){text-align:right}.umn{margin-top:6px;font-size:.64rem;color:#8FA39B;line-height:1.35}';
 const UPDATE_SIGNOFF = "\n\n— Black Coffee, curated by Papi";   // v89.3 - every update to her signs off this way (Kendall, 5 Sep 2026)
 let RENDER_LAST_ERR = "";
-const cardKey = (ctxAt, n) => "angle_" + String(ctxAt || 0) + "_" + n;
-async function angleCardHtml(env, angle, n, origin) {
+const cardKey = (ctxAt, n, size) => "angle_" + String(ctxAt || 0) + "_" + n + (size === "story" ? "_s" : "");   // v105 - "_s" = 1080x1920
+async function angleCardHtml(env, angle, n, origin, size, t) {
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const area = angleArea(angle, d); let img = null;
   if (area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
   if (!img) img = origin + "/img/bg_market";
-  const svg = angleCardSvg(angle, area, img, n);
-  return { area, html: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413;width:1080px;height:1080px;overflow:hidden}svg{display:block}</style></head><body>${svg}</body></html>` };
+  const story = size === "story", W = 1080, H = story ? 1920 : 1080;
+  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t });
+  return { area, W, H, html: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413;width:${W}px;height:${H}px;overflow:hidden}svg{display:block}</style></head><body>${svg}</body></html>` };
 }
-async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy) {
-  RENDER_LAST_ERR = "";
-  const k = cardKey(ctxAt, n);
-  try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: origin + "/img/" + k, area: angleArea(angle, null) }; } catch (e) {}
-  if (!env.CF_RENDER_TOKEN) {
-    RENDER_LAST_ERR = "no CF_RENDER_TOKEN - rendered on the DigitAlchemy machine within ~5 min";
-    if (wantedBy) { try { await env.MEETINGS.put("angle_wanted_" + k, JSON.stringify({ to: wantedBy, n, at: Date.now() }), { expirationTtl: 6 * 3600 }); } catch (e) {} }
+// v105 - render HTML to PNG inside the Worker through the Browser Rendering binding. One browser per call; fonts awaited.
+async function renderHtmlPng(env, html, W, H) {
+  if (!env.BROWSER) return null;
+  const browser = await puppeteer.launch(env.BROWSER);
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
+    await page.setContent(html, { waitUntil: "networkidle0", timeout: 25000 });
+    try { await page.evaluate(() => document.fonts.ready.then(() => true)); } catch (e) {}
+    const png = await page.screenshot({ type: "png", clip: { x: 0, y: 0, width: W, height: H } });
+    return png && png.byteLength ? png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) : null;
+  } finally { try { await browser.close(); } catch (e) {} }
+}
+async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size) {
+  RENDER_LAST_ERR = ""; size = size === "story" ? "story" : "square";
+  const k = cardKey(ctxAt, n, size);
+  try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: origin + "/img/" + k, area: angleArea(angle, null), size }; } catch (e) {}
+  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size);
+  let png = null;
+  try {
+    if (env.CF_RENDER_TOKEN) {                                                                     // REST API (needs an API token)
+      const acc = env.CF_ACCOUNT_ID || "76bc08573538d7426fce444cf7ef7645";
+      const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/browser-rendering/screenshot`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + env.CF_RENDER_TOKEN },
+        body: JSON.stringify({ html, viewport: { width: W, height: H, deviceScaleFactor: 1 }, gotoOptions: { waitUntil: "networkidle0", timeout: 20000 }, screenshotOptions: { type: "png", clip: { x: 0, y: 0, width: W, height: H } } }) });
+      if (!r.ok) { RENDER_LAST_ERR = "render " + r.status; } else png = await r.arrayBuffer();
+    } else if (env.BROWSER) {                                                                       // v105 - binding, no token needed
+      png = await renderHtmlPng(env, html, W, H);
+      if (!png) RENDER_LAST_ERR = "browser binding returned nothing";
+    } else {
+      RENDER_LAST_ERR = "no renderer on this Worker - rendered on the DigitAlchemy machine within ~5 min";
+    }
+  } catch (e) { RENDER_LAST_ERR = "render exception: " + String((e && e.message) || e).slice(0, 120); }
+  if (!png || png.byteLength < 5000) {
+    if (!RENDER_LAST_ERR) RENDER_LAST_ERR = "png too small";
+    if (wantedBy) { try { await env.MEETINGS.put("angle_wanted_" + k, JSON.stringify({ to: wantedBy, n, at: Date.now(), size }), { expirationTtl: 6 * 3600 }); } catch (e) {} }   // the PC fallback delivers it
     return null;
   }
-  let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
-  const area = angleArea(angle, d); let img = null;
-  if (area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
-  if (!img) img = origin + "/img/bg_market";
-  const svg = angleCardSvg(angle, area, img, n);
-  const html = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413}svg{display:block}</style></head><body>${svg}</body></html>`;
-  const acc = env.CF_ACCOUNT_ID || "76bc08573538d7426fce444cf7ef7645";
-  try {
-    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/browser-rendering/screenshot`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + env.CF_RENDER_TOKEN },
-      body: JSON.stringify({ html, viewport: { width: 1080, height: 1080, deviceScaleFactor: 1 }, gotoOptions: { waitUntil: "networkidle0", timeout: 20000 }, screenshotOptions: { type: "png", clip: { x: 0, y: 0, width: 1080, height: 1080 } } }) });
-    if (!r.ok) { RENDER_LAST_ERR = "render " + r.status; return null; }
-    const png = await r.arrayBuffer(); if (png.byteLength < 5000) { RENDER_LAST_ERR = "png too small"; return null; }
-    const key = k;
-    await env.MEETINGS.put("img_" + key, png, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + key, "image/png", { expirationTtl: 14 * 86400 });
-    return { key, url: origin + "/img/" + key, area };
-  } catch (e) { return null; }
+  await env.MEETINGS.put("img_" + k, png, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + k, "image/png", { expirationTtl: 14 * 86400 });
+  return { key: k, url: origin + "/img/" + k, area, size };
 }
 
 // v59 — AREA POSTCARD: 1080×1080 post card — real satellite of the community, Fraunces
@@ -4509,7 +4614,7 @@ const MAP_CHROME_CSS = ''
   + '.vwrap{margin:10px 0 6px}.vwrap video{width:100%;max-height:58vh;border-radius:12px;background:#000;display:block}'
   + '.vtt{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.05em;color:var(--gold);text-transform:uppercase;margin:6px 0 2px}'
   + '.hint{position:fixed;left:0;right:0;bottom:78px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--mut);z-index:4;pointer-events:none}';
-const MAP_CHROME_CSS_X = 'body.wide .top{right:37%}body.wide #panel{left:auto;right:14px;top:96px;bottom:88px;width:34%;max-width:none;max-height:none;margin:0;padding:14px 16px}body.wide #scope{left:14px;top:auto;bottom:70px;transform:none;flex-direction:row;align-items:flex-end;gap:10px;zoom:.78}body.wide .hint{left:14px;right:auto;bottom:88px;text-align:left;max-width:300px}body.wide #hp{max-width:460px}body.wide.film #panel{transform:translateX(28px)}body.wide.film #panel.on{transform:translateX(0)}'
+const MAP_CHROME_CSS_X = '#scope{display:none!important}.scw{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;align-content:center;padding:6px;border:1px solid var(--line);border-radius:14px;background:rgba(19,31,29,.92);width:156px;box-sizing:border-box}.scw i{grid-column:1/-1;font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);text-align:center}.scw button{border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:8px;padding:4px 0;font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.03em;text-transform:uppercase;cursor:pointer}.scw button.on{color:var(--gold);border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}.a{width:84px}.a small{display:block;font-size:.48rem;letter-spacing:.02em;text-transform:none;color:var(--mut);line-height:1.15;min-height:1.15em}.nx{display:block;margin-top:8px;color:var(--gold);cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.7rem}.hlive{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:7px 10px;margin-bottom:8px;cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}.hlive.on{color:var(--gold);border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}.hlive b{color:var(--text)}body.wide .top{right:37%}body.wide #panel{left:auto;right:14px;top:96px;bottom:88px;width:34%;max-width:none;max-height:none;margin:0;padding:14px 16px}body.wide #scope{left:14px;top:auto;bottom:70px;transform:none;flex-direction:row;align-items:flex-end;gap:10px;zoom:.78}body.wide .hint{left:14px;right:auto;bottom:88px;text-align:left;max-width:300px}body.wide #hp{max-width:460px}body.wide.film #panel{transform:translateX(28px)}body.wide.film #panel.on{transform:translateX(0)}'
   + 'body.film #panel{transition:transform .55s cubic-bezier(.2,.8,.2,1),opacity .45s ease;transform:translateY(24px);opacity:0}body.film #panel.on{transform:translateY(0);opacity:1}body.film .rail .c,body.film .a{animation:filmin .5s cubic-bezier(.2,.8,.2,1) both}body.film .rail .c:nth-child(2){animation-delay:.05s}body.film .rail .c:nth-child(3){animation-delay:.1s}body.film .rail .c:nth-child(4){animation-delay:.15s}body.film .rail .c:nth-child(5){animation-delay:.2s}body.film .rail .c:nth-child(6){animation-delay:.25s}body.film .a:nth-child(2){animation-delay:.06s}body.film .a:nth-child(3){animation-delay:.12s}body.film .a:nth-child(4){animation-delay:.18s}body.film .a:nth-child(5){animation-delay:.24s}body.film .a:nth-child(6){animation-delay:.3s}body.film .a:nth-child(7){animation-delay:.36s}body.film .n1{animation:filmin .45s ease both}body.film .n1:nth-child(2){animation-delay:.07s}body.film .n1:nth-child(3){animation-delay:.14s}body.film .n1:nth-child(4){animation-delay:.21s}body.film .n1:nth-child(5){animation-delay:.28s}body.film .n1:nth-child(6){animation-delay:.35s}@keyframes filmin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}body.film .a.on,body.film .rail .c.on{transition:background .4s,border-color .4s,color .4s}.tapfx{position:fixed;z-index:99;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:rgba(197,165,106,.55);box-shadow:0 0 0 2px rgba(197,165,106,.9);pointer-events:none;animation:tapfx .7s ease-out forwards}@keyframes tapfx{0%{transform:scale(.6);opacity:.95}100%{transform:scale(3.2);opacity:0}}body.film .maplibregl-ctrl-bottom-right,body.film .hint{display:none!important}' + 'body.clean .top,body.clean #scope,body.clean #hp,body.clean #panel,body.clean .hint,body.clean .maplibregl-ctrl-bottom-right,body.clean nav,body.clean .nav,body.clean #nav{display:none!important}@media(max-width:640px){.hp:not(.on){width:auto}.hp:not(.on) .hh b{display:none}.hp{top:8px;right:8px}}';
 const MAP_CHROME_HTML = ''
   + '<div class=top><h1>Najma <i>نجمة</i> — __TITLE__</h1><div class=sub id=st>pick a district</div>'
@@ -4518,16 +4623,16 @@ const MAP_CHROME_HTML = ''
   + '<div id=scope><div class=sm><button class="on" data-mode=area>in this community</button><button data-mode=dist>by distance</button></div>'
   + '<div id=vr><b id=rngv>2.0 km</b><input type=range id=rng min=0.5 max=10 step=0.5 value=2><small id=rngof>from the district centre</small></div></div>'
   + '<div id=panel></div><div class=hint id=hint></div>'
-  + '<div id=hp class=hp><div class=hh id=hh><span>homes</span><b id=hres>set a budget</b><i>\u25BE</i></div><div class=hbody>'
+  + '<div id=hp class=hp><div class=hh id=hh><span>homes</span><b id=hres>set a budget</b><i>\u25BE</i></div><div class=hbody><div class=hlive id=hlivet><span>developer stock only</span><b id=hlivec></b></div>'
   + '  <div class=hrow><label>budget <b id=hbv>from AED 1.5M to 6.4M</b></label><div class=dual><i class=band id=bandp></i><input type=range id=hlo min=0 max=60 value=10 autocomplete=off><input type=range id=hhi min=0 max=60 value=30 autocomplete=off></div></div>'
   + '  <div class=hrow><label>bedrooms <b id=hbdv>from 1 to 3</b></label><div class=dual><i class=band id=bandb></i><input type=range id=hblo min=0 max=6 value=1 autocomplete=off><input type=range id=hbhi min=0 max=6 value=3 autocomplete=off></div></div>'
   + '  <div class=hrow><label>home type</label><div class=seg><button class="on" data-t=any type=button>any</button><button data-t=apt type=button>apartment</button><button data-t=villa type=button>villa &amp; townhouse</button></div></div>'
-  + '  <div class=hrow><label>extras</label><div class=seg><button data-x=beach type=button>near the beach</button><button data-x=live type=button>live availability</button></div></div>'
+  + '  <div class=hrow><label>extras</label><div class=seg><button data-x=beach type=button>near the beach</button></div></div>'
   + '  <div class=hfoot><a id=hlist>list them \u2192</a><a id=hclear>clear</a></div></div></div>';
 const MAP_CHROME_JS = ''
   + 'var AMEN={school:["schools","\u{1F393}","#8FC7B9"],hospital:["hospitals","\u{1F3E5}","#E08A8A"],clinic:["clinics","⚕","#E8B49A"],metro:["metro","\u{1F687}","#9FB8E8"],mall:["malls","\u{1F6CD}","#D98F5A"],park:["parks","\u{1F333}","#8FD3A0"],beach:["beach","\u{1F30A}","#7FC7D9"]};'
   + 'var ICON=' + JSON.stringify(MAP_ICONS) + ';'
-  + 'var D=null,SUBS=null,PLOTS=null,AM=null,SEL=null,ON={},VIDS=[],PR=[],RKM=2,MODE="area";'
+  + 'var D=null,SUBS=null,PLOTS=null,AM=null,SEL=null,ON={},VIDS=[],PR=[],RKM=3,MODE="dist";(function(){var r=document.getElementById("rng");if(r)r.value=3;var v=document.getElementById("rngv");if(v)v.textContent="3.0 km";document.querySelectorAll("#scope .sm button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-mode")==="dist")});var sc=document.getElementById("scope");if(sc)sc.classList.add("dist")})();'
   + 'document.getElementById("rng").oninput=function(){RKM=parseFloat(this.value);document.getElementById("rngv").textContent=RKM.toFixed(1)+" km";drawAm();if(SEL)openPanel(SEL)};'
   + 'document.querySelectorAll("#scope .sm button").forEach(function(b){b.onclick=function(){MODE=b.getAttribute("data-mode");document.querySelectorAll("#scope .sm button").forEach(function(x){x.classList.toggle("on",x===b)});document.getElementById("scope").classList.toggle("dist",MODE==="dist");drawAm();if(SEL)openPanel(SEL)}});'
   + 'function rngLabel(){var el=document.getElementById("rngof");if(el)el.textContent=SEL?"from the selected place":"from the district centre";var sc=document.getElementById("scope");if(sc){sc.classList.toggle("on",!!currentDistrict()||!!SEL);placeScope()}}'
@@ -4562,7 +4667,7 @@ const MAP_CHROME_JS = ''
   + 'function drawHomes(){var src=map&&map.getSource("homes");if(!HB.on){if(src)src.setData({type:"FeatureCollection",features:[]});return}var m=homeMatches();var mPins=window.__twinDistrict?m.filter(function(x){return x.it.d===window.__twinDistrict}):m;'
   + '  if(src)src.setData({type:"FeatureCollection",features:mPins.map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x.it.lon,x.it.lat]},properties:{p:x.it.p,lab:x.it.n+" \u00b7 "+fmtAed(x.v)}}})});'
   + '  var byD={};m.forEach(function(x){byD[x.it.d]=(byD[x.it.d]||0)+1});var top=Object.keys(byD).sort(function(a,b){return byD[b]-byD[a]}).slice(0,2).map(function(d){return dName(d)+" "+byD[d]}).join(" \u00b7 ");'
-  + '  document.getElementById("hres").textContent=m.length+" developments"+(window.__twinDistrict?" · "+mPins.length+" here":"")+(top?" \u00b7 "+top:"");'
+  + '  var dsl=window.__twinDistrict||CURD;var here=dsl?m.filter(function(x){return x.it.d===dsl}).length:null;document.getElementById("hres").textContent=(HB.live?"developer stock \u00b7 ":"")+(dsl?here+" here \u00b7 "+m.length+" across Dubai":m.length+" developments"+(top?" \u00b7 "+top:""));var lc=document.getElementById("hlivec");if(lc)lc.textContent=PR.filter(function(i){return i.left}).length+" live";'
   + '  var hl=document.getElementById("hlist");if(hl)hl.onclick=function(){listHomes(m)};'
   + '  document.getElementById("hbv").textContent="from "+fmtAed(stepAed(Math.min(HB.lo,HB.hi)))+" to "+fmtAed(stepAed(Math.max(HB.lo,HB.hi))).replace("AED ","");document.getElementById("hbdv").textContent="from "+bedsLabel(Math.min(HB.blo,HB.bhi))+" to "+bedsLabel(Math.max(HB.blo,HB.bhi));'
   + '  var bp=document.getElementById("bandp"),bb=document.getElementById("bandb");if(bp){var a=Math.min(HB.lo,HB.hi)/60*100,b=Math.max(HB.lo,HB.hi)/60*100;bp.style.left=a+"%";bp.style.width=(b-a)+"%"}if(bb){var c=Math.min(HB.blo,HB.bhi)/6*100,d=Math.max(HB.blo,HB.bhi)/6*100;bb.style.left=c+"%";bb.style.width=(d-c)+"%"}}'
@@ -4578,10 +4683,10 @@ const MAP_CHROME_JS = ''
   + '(function(){var hp=document.getElementById("hp"),hh=document.getElementById("hh");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});'
   + '  hh.onclick=function(){var open=!hp.classList.contains("on");hp.classList.toggle("on",open);if(open&&!HB.on){HB.on=true;drawHomes()}};'
   + '  (function(){var bp=document.getElementById("bandp"),bb=document.getElementById("bandb");if(bp){bp.style.left="16.7%";bp.style.width="33.3%"}if(bb){bb.style.left="16.7%";bb.style.width="33.3%"}})();'
-  + '  document.getElementById("hclear").onclick=function(){HB.on=false;HB.lo=10;HB.hi=30;HB.blo=1;HB.bhi=3;HB.type="any";HB.beach=false;HB.live=false;[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});hp.querySelectorAll(".seg button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-t")==="any")});drawHomes();document.getElementById("hres").textContent="set a budget";hp.classList.remove("on")};'
+  + '  document.getElementById("hclear").onclick=function(){HB.on=false;HB.lo=10;HB.hi=30;HB.blo=1;HB.bhi=3;HB.type="any";HB.beach=false;HB.live=false;var _lt=document.getElementById("hlivet");if(_lt)_lt.classList.remove("on");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});hp.querySelectorAll(".seg button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-t")==="any")});drawHomes();document.getElementById("hres").textContent="set a budget";hp.classList.remove("on")};'
   + '  [["hlo","lo"],["hhi","hi"],["hblo","blo"],["hbhi","bhi"]].forEach(function(x){var el=document.getElementById(x[0]);el.oninput=function(){HB[x[1]]=+el.value;HB.on=true;drawHomes()}});'
   + '  hp.querySelectorAll(".seg button[data-t]").forEach(function(b){b.onclick=function(){HB.type=b.getAttribute("data-t");hp.querySelectorAll(".seg button[data-t]").forEach(function(x){x.classList.toggle("on",x===b)});drawHomes()}});'
-  + '  hp.querySelectorAll(".seg button[data-x]").forEach(function(b){b.onclick=function(){var k=b.getAttribute("data-x");HB[k]=!HB[k];b.classList.toggle("on",HB[k]);drawHomes()}});})();'
+  + '  hp.querySelectorAll(".seg button[data-x]").forEach(function(b){b.onclick=function(){var k=b.getAttribute("data-x");HB[k]=!HB[k];b.classList.toggle("on",HB[k]);drawHomes()}});var lt=document.getElementById("hlivet");if(lt)lt.onclick=function(){HB.live=!HB.live;lt.classList.toggle("on",HB.live);HB.on=true;drawHomes()};})();'
   + 'var DN={};function dName(slug){if(!DN[slug]&&D){(D.districts||[]).forEach(function(d){DN[d.slug]=d.name})}return DN[slug]||slug}'
   + 'function qnorm(t){return String(t||"").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g," ").trim()}'
   + 'function searchAll(q){q=qnorm(q);if(q.length<2)return [];var toks=q.split(" ").filter(Boolean);var hit=function(t){t=qnorm(t);return toks.every(function(w){return t.indexOf(w)>=0})};var out=[];'
@@ -4631,16 +4736,23 @@ const MAP_CHROME_JS = ''
   + '  (D.districts||[]).forEach(function(d){h+=\'<div class=c data-d="\'+d.slug+\'"><i>\'+esc(d.corridor||"")+\'</i><b>\'+esc(d.name)+\'</b><s>\'+(d.subs?\'<em>\'+d.subs+\'</em> sub-communities\':\'<em>\'+(d.named||0)+\'</em> named buildings\')+\'</s></div>\'});'
   + '  el.innerHTML=h;el.querySelectorAll(".c").forEach(function(c){c.onclick=function(){pickDistrict(c.getAttribute("data-d"),c)}});}'
   + 'var CURD="";'
-  + 'function buildSubs(d){var el=document.getElementById("rail");var list=((SUBS&&SUBS.features)||[]).filter(function(f){return f.properties.district===d.slug}).sort(function(a,b){return (b.properties.plots||0)+(b.properties.units||0)-(a.properties.plots||0)-(a.properties.units||0)});'
+  + 'function buildSubs(d){var el=document.getElementById("rail");var list=((SUBS&&SUBS.features)||[]).filter(function(f){return f.properties.district===d.slug}).sort(function(a,b){var A=a.properties,B=b.properties;return ((B.units||0)-(A.units||0))||((B.plots||0)-(A.plots||0))||((B.buildings||0)-(A.buildings||0))});'
   + '  var h=\'<div class="c back" data-back=1><i>\'+esc(d.corridor||"")+\'</i><b>\u2190 \'+esc(d.name)+\'</b><s><em>\'+list.length+\'</em> sub-communities</s></div>\';'
-  + '  list.forEach(function(f,ix){var p=f.properties;var meta=p.plots?\'<em>\'+p.plots+\'</em> plots\':(p.units?\'<em>\'+p.units+\'</em> units\':\'<em>\'+(p.buildings||0)+\'</em> buildings\');'
-  + '    h+=\'<div class=c data-sub="\'+ix+\'"><i>sub-community</i><b>\'+esc(tc(p.name))+\'</b><s>\'+meta+\'</s></div>\'});'
+  + '  list.forEach(function(f,ix){var p=f.properties;var dv=devFor(p.name,p.district);var meta=p.units?\'<em>\'+p.units.toLocaleString("en")+\'</em> units\':((p.plots||0)>1?\'<em>\'+p.plots+\'</em> plots\':((p.buildings||0)>1?\'<em>\'+p.buildings+\'</em> buildings\':\'single plot\'));'
+  + '    h+=\'<div class=c data-sub="\'+ix+\'"><i>\'+(dv?esc(dv):"sub-community")+\'</i><b>\'+esc(tc(p.name))+\'</b><s>\'+meta+\'</s></div>\'});'
   + '  el.innerHTML=h;el.scrollLeft=0;'
   + '  el.querySelector(".back").onclick=function(){buildRail();var all=el.querySelector(".c[data-d=\'\']");pickDistrict("",all)};'
   + '  el.querySelectorAll(".c[data-sub]").forEach(function(c){c.onclick=function(){var f=list[+c.getAttribute("data-sub")];el.querySelectorAll(".c").forEach(function(x){x.classList.toggle("on",x===c)});openPlace({properties:f.properties,geometry:f.geometry},"sub")}});}'
-  + 'function buildAm(){var el=document.getElementById("am"),h="";'
-  + '  Object.keys(AMEN).forEach(function(k){h+=\'<div class=a data-k="\'+k+\'" style="--ac:\'+AMEN[k][2]+\'">\'+ICON[k]+\'<span>\'+AMEN[k][0]+\'</span><b id="amc-\'+k+\'"></b></div>\'});'
-  + '  el.innerHTML=h;el.querySelectorAll(".a").forEach(function(a){a.onclick=function(){var k=a.getAttribute("data-k");ON[k]=!ON[k];a.classList.toggle("on",!!ON[k]);drawAm();if(ON[k])listKind(k);else if(LISTK===k){closePanel()}}});}'
+  + 'function buildAm(){var el=document.getElementById("am"),h=\'<div class=scw id=scw><i>count within</i><button data-r=area>community</button><button data-r=1>1 km</button><button data-r=2>2 km</button><button data-r=3>3 km</button><button data-r=5>5 km</button><button data-r=10>10 km</button></div>\';'
+  + '  Object.keys(AMEN).forEach(function(k){h+=\'<div class=a data-k="\'+k+\'" style="--ac:\'+AMEN[k][2]+\'">\'+ICON[k]+\'<span>\'+AMEN[k][0]+\'</span><b id="amc-\'+k+\'"></b><small id="ams-\'+k+\'"></small></div>\'});'
+  + '  el.innerHTML=h;el.querySelectorAll(".a").forEach(function(a){a.onclick=function(){var k=a.getAttribute("data-k");ON[k]=!ON[k];a.classList.toggle("on",!!ON[k]);drawAm();if(ON[k])listKind(k);else if(LISTK===k){closePanel()}}});  el.querySelectorAll(\'.scw button\').forEach(function(b){b.onclick=function(){setScope(b.getAttribute(\'data-r\'))}});syncChips();}'
+  + 'function setScope(r){var sc=document.getElementById(\'scope\');if(!sc)return;if(r===\'area\'){var b=sc.querySelector(\'button[data-mode=area]\');if(b&&MODE!==\'area\')b.click()}else{var b2=sc.querySelector(\'button[data-mode=dist]\');if(b2&&MODE!==\'dist\')b2.click();var rg=document.getElementById(\'rng\');if(rg){rg.value=r;rg.dispatchEvent(new Event(\'input\'))}}syncChips()}'
+  + 'function syncChips(){document.querySelectorAll(\'.scw button\').forEach(function(b){var r=b.getAttribute(\'data-r\');b.classList.toggle(\'on\',MODE===\'area\'?r===\'area\':(r!==\'area\'&&Math.abs(parseFloat(r)-RKM)<0.01))})}'
+  + 'function inArea(i,d){if(!d)return true;var b=d.bbox;return i.lon>=b[0]&&i.lon<=b[2]&&i.lat>=b[1]&&i.lat<=b[3]}'
+  + 'function inDist(i,c,km){return !c||m2(c,[i.lon,i.lat])<=km*1000}'
+  + 'function emptyNext(k){var ref=refPoint(),d=curD();var items=(AM&&AM.items?AM.items:[]).filter(function(i){return i.k===k});var head=MODE===\'area\'?\'none inside \'+(d?d.name:\'the boundary\'):\'none within \'+RKM.toFixed(1)+\' km\';if(!ref)return \'<div class=ps style="text-transform:none">\'+head+\'</div>\';var steps=[1,2,3,5,10],found=null;for(var x=0;x<steps.length;x++){if(MODE===\'dist\'&&steps[x]<=RKM)continue;var n=items.filter(function(i){return inDist(i,ref,steps[x])}).length;if(n){found=[steps[x],n];break}}return \'<div class=ps style="text-transform:none">\'+head+\'</div>\'+(found?\'<a class=nx data-r="\'+found[0]+\'">\'+found[1]+\' within \'+found[0]+\' km \u2192</a>\':\'<div class=ps style="text-transform:none">none within 10 km either</div>\')}'
+  + 'function bindNext(el){el.querySelectorAll(\'.nx\').forEach(function(a){a.onclick=function(){setScope(a.getAttribute(\'data-r\'))}})}'
+  + 'function devFor(name,d){var T=ntok(name).join(\' \');if(!T)return \'\';var hit=PR.filter(function(i){return i.dev&&(!d||i.d===d)&&ntok(i.n).join(\' \')===T})[0];return hit?hit.dev:\'\'}'
   + 'var LISTK=null;'
   + 'function closePanel(){var el=document.getElementById("panel");el.classList.remove("on");LISTK=null;if(!SEL){setSel(null)}setNear([]);hint();if(window.__onClear)try{window.__onClear()}catch(e){}}'
   + 'function refPoint(){var d=curD();return SEL?SEL.c:(d?d.centre:null)}'
@@ -4648,9 +4760,9 @@ const MAP_CHROME_JS = ''
   + '  var rows=(AM&&AM.items?AM.items:[]).filter(function(i){return i.k===k&&within(i)}).map(function(i){return [ref?m2(ref,[i.lon,i.lat]):0,i]});'
   + '  rows.sort(function(a,b){return a[0]-b[0]});rows=rows.slice(0,40);setNear(rows);'
   + '  var scope=MODE==="area"?(d?"in "+d.name:"across Dubai"):("within "+RKM.toFixed(1)+" km of "+(SEL?"the selected place":(d?"the centre of "+d.name:"here")));'
-  + '  var body=rows.length?\'<div class=near>\'+rows.map(function(x,ix){return \'<div class="n1 nk" data-ix="\'+ix+\'"><em style="color:\'+AMEN[k][2]+\'">\'+ICON[k]+\'</em><span>\'+esc(x[1].n)+(x[1].x?\' <small style="color:var(--mut)">\'+esc(x[1].x)+\'</small>\':"")+\'</span><s>\'+(x[1].ap?"\u2248 ":"")+(ref?fmt(x[0]):"")+\'</s></div>\'}).join("")+\'</div>\':\'<div class=ps style="text-transform:none">none \'+scope+\'</div>\';'
+  + '  var body=rows.length?\'<div class=near>\'+rows.map(function(x,ix){return \'<div class="n1 nk" data-ix="\'+ix+\'"><em style="color:\'+AMEN[k][2]+\'">\'+ICON[k]+\'</em><span>\'+esc(x[1].n)+(x[1].x?\' <small style="color:var(--mut)">\'+esc(x[1].x)+\'</small>\':"")+\'</span><s>\'+(x[1].ap?"\u2248 ":"")+(ref?fmt(x[0]):"")+\'</s></div>\'}).join("")+\'</div>\':emptyNext(k);'
   + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+AMEN[k][0]+\'</div><div class=ps>\'+rows.length+" "+scope+\'</div>\'+body;'
-  + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;'
+  + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;bindNext(el);'
   + '  el.querySelectorAll(".nk").forEach(function(r){r.onclick=function(){var x=rows[+r.getAttribute("data-ix")][1];openAmenity(x,function(){listKind(k)})}});'
   + '  document.getElementById("hint").textContent="";}'
   + 'document.getElementById("rng").addEventListener("input",function(){if(LISTK)listKind(LISTK)});'
@@ -4699,7 +4811,7 @@ const MAP_CHROME_JS = ''
   + '  window.__bb=bb;rngLabel();var f=[];if(keys.length&&AM&&AM.items){AM.items.forEach(function(i){if(keys.indexOf(i.k)<0)return;if(!within(i))return;'
   + '    f.push({type:"Feature",geometry:{type:"Point",coordinates:[i.lon,i.lat]},properties:{n:i.n,k:i.k,col:AMEN[i.k][2],ap:i.ap?1:0}})})}'
   + '  if(map&&map.getSource("amen"))map.getSource("amen").setData({type:"FeatureCollection",features:f});'
-  + '  Object.keys(AMEN).forEach(function(k){var n=0;(AM&&AM.items?AM.items:[]).forEach(function(i){if(i.k!==k)return;if(!within(i))return;n++});var c=document.getElementById("amc-"+k);if(c)c.textContent=n?String(n):""});'
+  + '  var ref=refPoint();Object.keys(AMEN).forEach(function(k){var nA=0,nD=0;(AM&&AM.items?AM.items:[]).forEach(function(i){if(i.k!==k)return;if(inArea(i,dd))nA++;if(inDist(i,ref,RKM))nD++});var c=document.getElementById("amc-"+k),sm=document.getElementById("ams-"+k);if(c)c.textContent=String(MODE==="area"?nA:nD);if(sm)sm.textContent=(dd||SEL)?(MODE==="area"?nD+" within "+RKM+" km":(dd?nA+" in community":"")):""});syncChips();'
   + '  if(SEL)openPanel(SEL);}'
   + 'function openPlace(feat,kind){var p=feat.properties;var c=feat.geometry.coordinates;SEL={kind:kind,p:p,c:c};'
   + '  if(kind==="sub")map.easeTo({center:c,zoom:Math.max(map.getZoom(),14.6),duration:700});else map.easeTo({center:c,zoom:Math.max(map.getZoom(),16.2),duration:700});'
@@ -4731,17 +4843,17 @@ const MAP_CHROME_JS = ''
   + '  el.innerHTML=\'<span class=px id=px>\u2715</span>\'+(back?\'<span class=back id=back>\u2190 back</span>\':"")+\'<div class=pt>\'+esc(i.n)+\'</div><div class=ps>\'+esc(AMEN[i.k][0])+(i.x?" \u00b7 "+esc(i.x):"")+(i.ap?" \u00b7 position approximate":"")+(src?" \u00b7 "+src:"")+\'</div><div class=cc><div class=ct>\'+(lines.join("")||"<div><i>contact</i>not in the register</div>")+\'</div>\'+qr+\'</div>\';'
   + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;var bk=document.getElementById("back");if(bk)bk.onclick=back;document.getElementById("hint").textContent="";}'
   + 'function openPanel(sel){LISTK=null;var p=sel.p,c=sel.c;var el=document.getElementById("panel");setSel(c);'
-  + '  var title=sel.kind==="sub"?tc(p.name):(tc(p.name)||("Plot "+p.plot));'
-  + '  var line=sel.kind==="sub"?((p.plots||0)+" plots in the register · "+(p.buildings||0)+" buildings here"):("plot "+p.plot+(p.units?" · "+p.units+" units":"")+(p.area_sqm?" · "+Math.round(p.area_sqm).toLocaleString("en")+" m²":""));'
-  + '  var keys=Object.keys(ON).filter(function(k){return ON[k]});var body="";'
-  + '  if(!keys.length){setNear([]);body=\'<div class=ps style="text-transform:none;letter-spacing:0">Switch on schools, hospitals, clinics, metro, malls, parks or beach above to see what is near this place.</div>\'}'
-  + '  else{var near=[];(AM&&AM.items?AM.items:[]).forEach(function(i){if(keys.indexOf(i.k)<0)return;if(!within(i))return;var d=m2(c,[i.lon,i.lat]);near.push([d,i])});'
-  + '    near.sort(function(a,b){return a[0]-b[0]});near=near.slice(0,24);setNear(near);'
-  + '    var anyAp=near.some(function(x){return x[1].ap});'
-  + '    body=near.length?(\'<div class=near>\'+near.map(function(x){return \'<div class="n1 nb" data-ix="\'+near.indexOf(x)+\'"><em style="color:\'+AMEN[x[1].k][2]+\'">\'+ICON[x[1].k]+\'</em><span>\'+esc(x[1].n)+(x[1].x?\' <small style="color:var(--mut)">\'+esc(x[1].x)+\'</small>\':"")+\'</span><s>\'+(x[1].ap?"≈ ":"")+fmt(x[0])+\'</s></div>\'}).join("")+\'</div>\'+(anyAp?\'<div class=ps style="text-transform:none;letter-spacing:0;margin-top:8px">≈ position approximate (about 1 km) — the health licence register truncates it</div>\':"")):\'<div class=ps style="text-transform:none">\'+(MODE==="area"?"nothing of that kind inside this community":"nothing of that kind within "+RKM.toFixed(1)+" km")+\'</div>\';}'
+  + '  var title=sel.kind==="sub"?tc(p.name):(tc(p.name)||("Plot "+p.plot));var dv=devFor(p.name,p.district);'
+  + '  var line=sel.kind==="sub"?((dv?dv+" \u00b7 ":"")+(p.units?p.units.toLocaleString("en")+" units":(p.plots?p.plots+" plots in the register":""))+(p.buildings?" \u00b7 "+p.buildings+" buildings here":"")):("plot "+p.plot+(p.units?" \u00b7 "+p.units+" units":"")+(p.area_sqm?" \u00b7 "+Math.round(p.area_sqm).toLocaleString("en")+" m\u00b2":""));'
+  + '  var keys=Object.keys(ON).filter(function(k){return ON[k]});var body="";var near=[];var rowOf=function(x,ix){return \'<div class="n1 nb" data-ix="\'+ix+\'"><em style="color:\'+AMEN[x[1].k][2]+\'">\'+ICON[x[1].k]+\'</em><span>\'+esc(x[1].n)+(x[1].x?\' <small style="color:var(--mut)">\'+esc(x[1].x)+\'</small>\':"")+\'</span><s>\'+(x[1].ap?"\u2248 ":"")+fmt(x[0])+\'</s></div>\'};'
+  + '  if(!keys.length){["school","hospital","clinic","metro","mall","park","beach"].forEach(function(k){var best=null;(AM&&AM.items?AM.items:[]).forEach(function(i){if(i.k!==k)return;var dd=m2(c,[i.lon,i.lat]);if(!best||dd<best[0])best=[dd,i]});if(best)near.push(best)});setNear(near);'
+  + '    body=\'<div class=ps style="text-transform:none;letter-spacing:0;margin:4px 0 6px">nearest of each kind \u00b7 tap a card above to list all within \'+RKM+\' km</div><div class=near>\'+near.map(rowOf).join("")+\'</div>\'}'
+  + '  else{(AM&&AM.items?AM.items:[]).forEach(function(i){if(keys.indexOf(i.k)<0)return;if(!within(i))return;var d=m2(c,[i.lon,i.lat]);near.push([d,i])});'
+  + '    near.sort(function(a,b){return a[0]-b[0]});near=near.slice(0,24);setNear(near);var anyAp=near.some(function(x){return x[1].ap});'
+  + '    body=near.length?(\'<div class=near>\'+near.map(rowOf).join("")+\'</div>\'+(anyAp?\'<div class=ps style="text-transform:none;letter-spacing:0;margin-top:8px">\u2248 position approximate (about 1 km) \u2014 the health licence register truncates it</div>\':"")):(keys.length===1?emptyNext(keys[0]):\'<div class=ps style="text-transform:none">\'+(MODE==="area"?"nothing of those kinds inside this community":"nothing of those kinds within "+RKM.toFixed(1)+" km")+\'</div>\');}'
   + '  var vv=videoFor(title,p.district);'
-  + '  el.innerHTML=\'<span class=px id=px>✕</span><div class=pt>\'+esc(title)+\'</div><div class=ps>\'+esc(line)+\'</div>\'+(vv?videoHtml(vv):"")+body;'
-  + '  el.classList.add("on");document.getElementById("px").onclick=function(){el.classList.remove("on");SEL=null;setSel(null);setNear([]);drawAm();hint();if(window.__onClear)try{window.__onClear()}catch(e){}};'
+  + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+esc(title)+\'</div><div class=ps>\'+esc(line)+\'</div>\'+(vv?videoHtml(vv):"")+body;'
+  + '  el.classList.add("on");document.getElementById("px").onclick=function(){el.classList.remove("on");SEL=null;setSel(null);setNear([]);drawAm();hint();if(window.__onClear)try{window.__onClear()}catch(e){}};bindNext(el);'
   + '  var _sel=sel;el.querySelectorAll(".nb").forEach(function(r){r.style.cursor="pointer";r.onclick=function(){var x=near[+r.getAttribute("data-ix")][1];openAmenity(x,function(){openPanel(_sel)})}});'
   + '  document.getElementById("hint").textContent="";}'
   + 'function bootShim(){map=window.__twinMap;window.__najmap2=map;STYLE_READY=true;loadData()}'
@@ -6126,7 +6238,7 @@ loader.load("/img/sky_${slugName}",g=>{
   const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:8}));   // v97: the disc is a horizon skirt; push it behind anything drawn on top of it
   ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;ground.receiveShadow=true;scene.add(ground);
   GROUND=ground;drawGroundImagery();
-  const R=Math.max(sz.x,sz.z);cam.position.set(R*0.9,R*0.42,R*0.9);ctl.target.set(0,sz.y*0.18,0);
+  const R=Math.max(sz.x,sz.z);{root.updateMatrixWorld(true);let tall=null,th=-1;const _b=new THREE.Box3();for(const m of MESHES){_b.setFromObject(m);const hh=_b.max.y-_b.min.y;if(hh>th){th=hh;tall=_b.getCenter(new THREE.Vector3())}}const tgt=tall?new THREE.Vector3(tall.x,Math.min(th*0.35,120),tall.z):new THREE.Vector3(0,sz.y*0.18,0);const dist=Math.max(R*0.38,th*2.2,260),ang=28*Math.PI/180;cam.position.set(tgt.x+dist*Math.cos(ang)*0.7071,tgt.y+dist*Math.sin(ang),tgt.z+dist*Math.cos(ang)*0.7071);ctl.target.copy(tgt);ctl.autoRotateSpeed=0.7}   // v104: arrive close and low on the tallest cluster, turning (DA-AUD-003 #8)
   scene.fog.near=R*1.3;scene.fog.far=R*3.6;cam.far=Math.max(20000,R*8);cam.updateProjectionMatrix();
   sky.scale.setScalar(Math.min(cam.far*0.8,R*6));
   {const rad=sz.length()*0.52,d=new THREE.Vector3(1,1.2,0.6).normalize();sun.position.copy(d.multiplyScalar(rad*2.2));sun.target.position.set(0,0,0);   // shadow frustum hugs the model's bounding sphere
@@ -6902,6 +7014,17 @@ function bgPromptBlock(angle, place) {
   const withText = !!(F || H);
   const where = place || (camp ? "The Valley by Emaar, Dubai — a low-rise family community on the Al Ain road: sand-coloured townhouses with dark window frames, wide green lawns, young trees, a community sports court, a shaded pergola walk, open desert sky at the horizon"
                               : "Dubai — the skyline or the street that matches the subject of the headline below, real and specific, never a generic city");
+  // v105 - seeded by the hook: light, lens, vantage and text layout rotate, so two mornings never hand her the same plate
+  const seed = hashStr(H + "|" + F);
+  const look = {
+    light: ["Late afternoon, about an hour before sunset: warm low sun coming from the RIGHT of frame at a shallow angle, long soft shadows falling to the LEFT, gentle haze in the distance, no harsh midday contrast.",
+            "Blue hour, twenty minutes after sunset: deep cobalt sky fading to amber at the horizon, building lights just switched on, soft even light with a faint warm key from the RIGHT so shadows fall gently to the LEFT.",
+            "Bright clear morning, about eight o'clock: crisp cool light from the RIGHT at a low angle, long clean shadows to the LEFT, pale sky, high clarity, no haze.",
+            "Soft overcast afternoon: diffuse light with no hard shadows, a muted warm palette, and a hint of directional light from the RIGHT so a composited figure can still be lit to match."][seed % 4],
+    lens: ["Shot on a full-frame camera with a 35mm lens at f/4,", "Shot on a full-frame camera with a 24mm lens at f/5.6 for a wide, calm view,", "Shot on a full-frame camera with a 50mm lens at f/2.8, the far distance softly out of focus,"][(seed >> 2) % 3],
+    vantage: ["camera at standing eye level (about 1.6 m from the ground) on the street or promenade.", "camera on a balcony one floor up (about 5 m from the ground), looking slightly down across the scene.", "camera at standing eye level on a waterfront promenade, water on one side, the buildings beyond.", "camera on a rooftop terrace (about 30 m up), the terrace floor visible in the foreground as the standing ground."][(seed >> 4) % 4],
+    layout: (seed >> 6) % 3,
+  };
   const strings = ['"THE DIGEST"'].concat(F ? ['"' + F + '"'] : [], H ? ['"' + H + '"'] : [], S ? ['"' + S + '"'] : []).join(", ");
   return "🎨 *" + (withText ? "Cover plate" : "Background plate") + " — paste this whole block into ChatGPT (make an image)*\n" +
     (withText ? "_The figure and the headline are ON the picture, in the right two thirds. The left third is left clear for your own avatar and outfit._\n\n```"
@@ -6909,14 +7032,14 @@ function bgPromptBlock(angle, place) {
     "Create a photorealistic BACKGROUND PLATE" + (withText ? " WITH EDITORIAL TEXT" : "") + " for a social post. This is a plate, not a finished picture: a real person will be composited into the LEFT THIRD afterwards, so follow the empty-space, lighting" + (withText ? " and text-placement" : "") + " rules exactly.\n\n" +
     "SIZE: make it 1080x1920 (vertical 9:16) first. I will then ask you for the same plate at 1920x1080 (16:9).\n\n" +
     "PLACE: " + where + ".\n\n" +
-    "THE PICTURE: shot on a full-frame camera with a 35mm lens at f/4, camera at standing eye level (about 1.6 m from the ground), horizon level and roughly a third up the frame. Late afternoon, about an hour before sunset: warm low sun coming from the RIGHT of frame at a shallow angle, long soft shadows falling to the LEFT, gentle haze in the distance, no harsh midday contrast. Natural colour, no filter, no HDR crunch, no vignette.\n\n" +
+    "THE PICTURE: " + look.lens + " " + look.vantage + " Horizon level and roughly a third up the frame. " + look.light + " Natural colour, no filter, no HDR crunch, no vignette.\n\n" +
     "COMPOSITION — this matters most: leave the LEFT THIRD of the frame open and uncluttered as a standing area — clean ground, no furniture, no signage, no plants, no text and no strong lines crossing it, so a person can be placed there later. Put the visual interest" + (withText ? " and all of the text" : "") + " in the right two thirds. Keep the ground plane visible and continuous across the bottom of the frame so a composited figure has somewhere to stand and cast a shadow.\n\n" +
     "ABSOLUTELY NO PEOPLE anywhere in the frame — no figures, no silhouettes, no crowds, no people in windows or in the far distance. No animals. No logos, no brand names, no watermarks, no signage with words" + (withText ? ", and no text of any kind other than the strings listed under TEXT below.\n\n" : ", no text, no captions, no numbers.\n\n") +
     (withText ?
-      "TEXT — this is the point of the picture, do not leave it out. All of it sits in the RIGHT two thirds and never crosses into the left third. Across the top right, the masthead \"THE DIGEST\" small, beige #E8DCC8, uppercase, wide letter-spacing. Below it a stacked cover-line, upper-right to mid-right: " +
-      (F ? "the figure \"" + F + "\" set LARGE in warm gold #C5A56A, bold condensed sans-serif; " : "") +
-      (H ? "the headline \"" + H + "\" in smaller beige #E8DCC8 sans-serif, over a soft dark translucent band so it stays legible on the photograph; " : "") +
-      (S ? "under a thin gold rule the kicker \"" + S + "\" small in beige. " : "") +
+      "TEXT — this is the point of the picture, do not leave it out. All of it sits in the RIGHT two thirds and never crosses into the left third. Across the top right, the masthead \"THE DIGEST\" small, beige #E8DCC8, uppercase, wide letter-spacing. " +
+      (look.layout === 0 ? "Below it a stacked cover-line, upper-right to mid-right: " + (F ? "the figure \"" + F + "\" set LARGE in warm gold #C5A56A, bold condensed sans-serif; " : "") + (H ? "the headline \"" + H + "\" in smaller beige #E8DCC8 sans-serif, over a soft dark translucent band so it stays legible on the photograph; " : "") + (S ? "under a thin gold rule the kicker \"" + S + "\" small in beige. " : "")
+       : look.layout === 1 ? "Poster treatment: " + (F ? "the figure \"" + F + "\" set LARGE in warm gold #C5A56A as a single poster number filling the upper right, bold condensed sans-serif, with a soft shadow; " : "") + (H ? "the headline \"" + H + "\" runs along the lower right in a beige #E8DCC8 band, two lines at most; " : "") + (S ? "the kicker \"" + S + "\" tiny in beige under the band. " : "")
+       : "Magazine box: " + (F ? "the figure \"" + F + "\" set LARGE in warm gold #C5A56A inside a thin gold-outlined rectangle at the upper right; " : "") + (H ? "the headline \"" + H + "\" stacked beneath the box in beige #E8DCC8 serif, on a soft dark translucent band; " : "") + (S ? "a thin gold rule and the kicker \"" + S + "\" small in beige. " : "")) +
       "Render " + strings + " verbatim, exactly once each, perfectly legible — no extra characters, no duplicated or garbled text, no invented words or numbers. Keep the ground line under the text clear.\n\n"
       : "") +
     "NEGATIVE: no CGI or video-game look, no plastic sheen, no over-saturated sky, no lens flare, no tilt-shift, no fisheye, no illustration or painting style, no collage, no floating objects, no duplicated or warped architecture, no impossible geometry" + (withText ? ", no gibberish text" : "") + "." +

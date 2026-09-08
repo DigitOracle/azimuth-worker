@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 const src = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 const a = src.indexOf("function bgPromptBlock(angle, place) {");
 const b = src.indexOf("\nfunction visualPromptBlock(angle) {");
-const bgPromptBlock = new Function(src.slice(a, b) + "\nreturn bgPromptBlock;")();
+const h0 = src.indexOf("function hashStr("); const h1 = src.indexOf("\n", h0);   // v105: the prompt seeds its look with hashStr
+const bgPromptBlock = new Function(src.slice(h0, h1) + "\n" + src.slice(a, b) + "\nreturn bgPromptBlock;")();
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m); } };

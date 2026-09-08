@@ -54,6 +54,9 @@ kv_namespaces = [
 
 ai = { binding = "AI" }
 
+browser = { binding = "BROWSER" }   # v105 - Browser Rendering binding: cards render in the Worker, no API token needed
+compatibility_flags = ["nodejs_compat"]   # v105 - @cloudflare/puppeteer needs the node built-ins
+
 [env.azimuth2.vars]
 ADD_TO = ""
 BOARD_BG = "off"
