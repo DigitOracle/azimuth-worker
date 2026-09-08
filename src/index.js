@@ -3489,7 +3489,7 @@ const FEED_SCHEMA = { type: "object", additionalProperties: false, properties: {
 const FEED_FAMILIES = ["prices", "rents_yields", "volume", "handover_supply", "developer", "district", "offplan_ready", "news", "transit", "buyer_maths", "education"];
 const FAM_RX = [["transit", /metro|rail|tram|station|commute|etihad|route 2020/i], ["handover_supply", /handover|complet|deliver|pipeline|supply|under construction|launch/i],
   ["rents_yields", /rent|yield|ejari|tenan|lease/i], ["offplan_ready", /off-?plan|ready|secondary|resale/i], ["volume", /transactions?|sales count|deals|registered sales|number of sales|volume/i],
-  ["developer", /emaar|damac|sobha|nakheel|meraas|ellington|binghatti|select group|omniyat|imtiaz|beyond|fakhruddin|arada|iman|developer/i],
+  ["developer", /emaar|damac|sobha|nakheel|meraas|ellington|binghatti|select group|omniyat|imtiaz|beyond|fakhruddin|arada|iman|zaya|palma|developer/i],
   ["district", /marina|jlt|jumeirah|downtown|business bay|creek|palm|hills|jvc|jvt|meydan|arjan|al wasl|satwa|dubai south|expo|silicon|motor city|sports city|villa|townhouse/i],
   ["buyer_maths", /budget|mortgage|service charge|per sq|square foot|sqft|afford|monthly|instalment|payment plan|fee/i], ["news", /reported|announce|headline|according to/i],
   ["prices", /price|median|aed \d|ticket|value/i], ["education", /./]];
@@ -4746,7 +4746,7 @@ const MAP_CHROME_JS = ''
   + 'function buildAm(){var el=document.getElementById("am"),h=\'<div class=scw id=scw><i>count within</i><button data-r=area>community</button><button data-r=1>1 km</button><button data-r=2>2 km</button><button data-r=3>3 km</button><button data-r=5>5 km</button><button data-r=10>10 km</button></div>\';'
   + '  Object.keys(AMEN).forEach(function(k){h+=\'<div class=a data-k="\'+k+\'" style="--ac:\'+AMEN[k][2]+\'">\'+ICON[k]+\'<span>\'+AMEN[k][0]+\'</span><b id="amc-\'+k+\'"></b><small id="ams-\'+k+\'"></small></div>\'});'
   + '  el.innerHTML=h;el.querySelectorAll(".a").forEach(function(a){a.onclick=function(){var k=a.getAttribute("data-k");ON[k]=!ON[k];a.classList.toggle("on",!!ON[k]);drawAm();if(ON[k])listKind(k);else if(LISTK===k){closePanel()}}});  el.querySelectorAll(\'.scw button\').forEach(function(b){b.onclick=function(){setScope(b.getAttribute(\'data-r\'))}});syncChips();}'
-  + 'function setScope(r){var sc=document.getElementById(\'scope\');if(!sc)return;if(r===\'area\'){var b=sc.querySelector(\'button[data-mode=area]\');if(b&&MODE!==\'area\')b.click()}else{var b2=sc.querySelector(\'button[data-mode=dist]\');if(b2&&MODE!==\'dist\')b2.click();var rg=document.getElementById(\'rng\');if(rg){rg.value=r;rg.dispatchEvent(new Event(\'input\'))}}syncChips()}'
+  + 'function setScope(r){var sc=document.getElementById(\'scope\');if(!sc)return;var lk=LISTK;if(r===\'area\'){var b=sc.querySelector(\'button[data-mode=area]\');if(b&&MODE!==\'area\')b.click()}else{var b2=sc.querySelector(\'button[data-mode=dist]\');if(b2&&MODE!==\'dist\')b2.click();var rg=document.getElementById(\'rng\');if(rg){rg.value=r;rg.dispatchEvent(new Event(\'input\'))}}syncChips();if(lk)listKind(lk)}'
   + 'function syncChips(){document.querySelectorAll(\'.scw button\').forEach(function(b){var r=b.getAttribute(\'data-r\');b.classList.toggle(\'on\',MODE===\'area\'?r===\'area\':(r!==\'area\'&&Math.abs(parseFloat(r)-RKM)<0.01))})}'
   + 'function inArea(i,d){if(!d)return true;var b=d.bbox;return i.lon>=b[0]&&i.lon<=b[2]&&i.lat>=b[1]&&i.lat<=b[3]}'
   + 'function inDist(i,c,km){return !c||m2(c,[i.lon,i.lat])<=km*1000}'
@@ -6238,7 +6238,7 @@ loader.load("/img/sky_${slugName}",g=>{
   const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:8}));   // v97: the disc is a horizon skirt; push it behind anything drawn on top of it
   ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;ground.receiveShadow=true;scene.add(ground);
   GROUND=ground;drawGroundImagery();
-  const R=Math.max(sz.x,sz.z);{root.updateMatrixWorld(true);let tall=null,th=-1;const _b=new THREE.Box3();for(const m of MESHES){_b.setFromObject(m);const hh=_b.max.y-_b.min.y;if(hh>th){th=hh;tall=_b.getCenter(new THREE.Vector3())}}const tgt=tall?new THREE.Vector3(tall.x,Math.min(th*0.35,120),tall.z):new THREE.Vector3(0,sz.y*0.18,0);const dist=Math.max(R*0.38,th*2.2,260),ang=28*Math.PI/180;cam.position.set(tgt.x+dist*Math.cos(ang)*0.7071,tgt.y+dist*Math.sin(ang),tgt.z+dist*Math.cos(ang)*0.7071);ctl.target.copy(tgt);ctl.autoRotateSpeed=0.7}   // v104: arrive close and low on the tallest cluster, turning (DA-AUD-003 #8)
+  const R=Math.max(sz.x,sz.z);{root.updateMatrixWorld(true);let tall=null,th=-1;const _b=new THREE.Box3();for(const m of MESHES){_b.setFromObject(m);const hh=_b.max.y-_b.min.y;if(hh>th){th=hh;tall=_b.getCenter(new THREE.Vector3())}}const tgt=tall?new THREE.Vector3(tall.x,Math.min(th*0.35,120),tall.z):new THREE.Vector3(0,sz.y*0.18,0);const dist=Math.max(R*0.42,th*2.4,280),ang=26*Math.PI/180;const dv=new THREE.Vector3(tgt.x,0,tgt.z);if(dv.length()<20)dv.set(0.7071,0,0.7071);dv.normalize();cam.position.set(tgt.x+dv.x*dist*Math.cos(ang),tgt.y+dist*Math.sin(ang),tgt.z+dv.z*dist*Math.cos(ang));ctl.target.copy(tgt);ctl.autoRotateSpeed=0.7}   // v104: arrive close and low on the tallest cluster, turning (DA-AUD-003 #8)
   scene.fog.near=R*1.3;scene.fog.far=R*3.6;cam.far=Math.max(20000,R*8);cam.updateProjectionMatrix();
   sky.scale.setScalar(Math.min(cam.far*0.8,R*6));
   {const rad=sz.length()*0.52,d=new THREE.Vector3(1,1.2,0.6).normalize();sun.position.copy(d.multiplyScalar(rad*2.2));sun.target.position.set(0,0,0);   // shadow frustum hugs the model's bounding sphere
@@ -6451,8 +6451,8 @@ function showCard(b){
 // leader lines at staggered heights, ten at most, held a few seconds, never painted on the model. Buildings of the eleven
 // developers take their developer's colour; the legend lists only developers currently labelled. Anchors = data/names/anchors_<slug>.json
 // (name, x/z in the GLB's own metres, roof height, developer key, mesh index) built by build_anchors.py.
-const DEVCOL={omniyat:0xE8E4D8,hh:0xD96C5F,meraas:0xD9A441,select:0x3E8A7E,ellington:0x8FC7B9,arada:0x56B584,zaya_palma:0x9B8CE6,fakhruddin:0xF28C6A,beyond:0x4C9BE8,imtiaz:0xC41E3A,iman:0xB08BD9,emaar:0xC5A56A};
-const DEVNAME={omniyat:"OMNIYAT",hh:"H&H",meraas:"Meraas",select:"Select Group",ellington:"Ellington",arada:"Arada",zaya_palma:"ZAYA / Palma",fakhruddin:"Fakhruddin",beyond:"BEYOND",imtiaz:"Imtiaz",iman:"Iman",emaar:"Emaar"};
+const DEVCOL={omniyat:0xE8E4D8,hh:0xD96C5F,meraas:0xD9A441,select:0x3E8A7E,ellington:0x8FC7B9,arada:0x56B584,zaya:0x9B8CE6,palma:0x6FB7A8,fakhruddin:0xF28C6A,beyond:0x4C9BE8,imtiaz:0xC41E3A,iman:0xB08BD9,emaar:0xC5A56A,sobha:0xE07A5F};
+const DEVNAME={omniyat:"OMNIYAT",hh:"H&H",meraas:"Meraas",select:"Select Group",ellington:"Ellington",arada:"Arada",zaya:"ZAYA",palma:"Palma",fakhruddin:"Fakhruddin",beyond:"BEYOND",imtiaz:"Imtiaz",iman:"Iman",emaar:"Emaar",sobha:"Sobha"};
 const KEY=${JSON.stringify(key || "")};let ANCH=null,MESHES=null,LIVE=new Map();const TIERS=[62,118,168,92,142,196,76,128,182,106];
 const lblWrap=document.createElement("div");lblWrap.id="lbls";lblWrap.innerHTML='<svg xmlns="http://www.w3.org/2000/svg"></svg>';document.body.appendChild(lblWrap);
 const svgL=lblWrap.querySelector("svg");const legend=document.createElement("div");legend.id="legend";document.body.appendChild(legend);
