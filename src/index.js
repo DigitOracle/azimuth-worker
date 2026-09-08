@@ -669,8 +669,9 @@ ${(() => {                                                      // v68 — devel
 <div class="legend"><span><i style="background:#0A4F4A"></i>Abu Dhabi</span><span><i style="background:#B98B3E"></i>Dubai</span><span><i style="background:#7A4A93"></i>Sharjah</span><span><i style="background:#3E7C8C"></i>Online</span></div>
 <div class="foot">Live · ${(env && MB(env).length) ? "meetings from Outlook · actions from your inbox" : "captured from WhatsApp"} · ${upd} GST</div>
 </section></div><script>window.__l=Date.now();document.addEventListener("visibilitychange",function(){if(!document.hidden&&Date.now()-window.__l>15000){location.reload()}});window.addEventListener("pageshow",function(e){if(e.persisted){location.reload()}});document.addEventListener("click",function(e){var r=e.target.closest?e.target.closest(".task .ring"):null;if(!r)return;var c=r.closest(".task");var id=c&&c.getAttribute("data-id");if(!id)return;var k=new URLSearchParams(location.search).get("key");if(r.classList.contains("done"))return;r.classList.add("done");fetch("/done?key="+encodeURIComponent(k)+"&id="+encodeURIComponent(id)).then(function(x){if(x.ok){c.style.transition="opacity .3s";c.style.opacity="0.25";setTimeout(function(){c.remove();var n=document.querySelector(".plate-h .n");if(n){n.textContent=Math.max(0,(parseInt(n.textContent,10)||1)-1)}},300)}else{r.classList.remove("done")}}).catch(function(){r.classList.remove("done")})});document.addEventListener("click",function(e){var a=e.target.closest?e.target.closest("a.card"):null;if(a){var h=a.getAttribute("href");if(h){e.preventDefault();try{window.open(h,"_blank")||(location.href=h)}catch(x){location.href=h}}}},true);</script>
-<div id="spl" style="position:fixed;inset:0;z-index:60;background:#0C1413;display:none;align-items:center;justify-content:center"><video id="splv" playsinline muted preload="auto" style="width:100%;height:100%;object-fit:cover"></video><div id="splm" style="position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;font-weight:600;color:#0C1413;background:#C5A56A;border-radius:99px;padding:8px 14px;cursor:pointer">🔇 tap for sound</div><div id="splw" style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-family:Fraunces,Georgia,serif;font-size:32px;color:#E8E4D8;opacity:0;transition:opacity .9s">Najma <span style="color:#C5A56A">نجمة</span></div></div>
-<script>(function(){try{fetch("/img/splash",{method:"HEAD"}).then(function(r){if(!r.ok)return;var s=document.getElementById("spl"),v=document.getElementById("splv"),w=document.getElementById("splw"),m=document.getElementById("splm");v.src="/img/splash";s.style.display="flex";var done=function(){if(!s.parentNode)return;s.style.transition="opacity .6s";s.style.opacity="0";setTimeout(function(){s.remove()},650)};v.onended=done;s.onclick=done;v.onerror=done;m.onclick=function(e){e.stopPropagation();v.muted=!v.muted;m.textContent=v.muted?"🔇 tap for sound":"🔊 sound on"};setTimeout(function(){w.style.opacity="1"},9000);setTimeout(done,20000);var p=v.play();if(p&&p.catch)p.catch(done)})}catch(e){}})();</script></body></html>`;
+<div id="spl" style="position:fixed;inset:0;z-index:60;background:#0C1413;display:none;align-items:center;justify-content:center"><div id="splq" style="display:none;position:absolute;inset:0;background:#E8DCC8;color:#006039;padding:12vh 8vw;box-sizing:border-box;flex-direction:column;justify-content:center;align-items:center;text-align:center;font-family:Fraunces,Georgia,serif"><div style="font-size:11px;letter-spacing:.32em;color:#8A6D2F;font-family:'IBM Plex Mono',monospace;margin-bottom:26px">A VERSE FOR THE DAY</div><div id="splqt" style="font-size:clamp(22px,4.6vw,40px);line-height:1.32;max-width:26em;text-wrap:balance;font-weight:500"></div><div id="splqr" style="margin-top:26px;font-size:14px;letter-spacing:.2em;color:#C5A56A;font-family:'IBM Plex Mono',monospace;text-transform:uppercase"></div><div style="position:absolute;bottom:calc(30px + env(safe-area-inset-bottom));left:0;right:0;font-size:12px;letter-spacing:.24em;color:#8A6D2F;font-family:'IBM Plex Mono',monospace">TAP TO CONTINUE</div></div><video id="splv" playsinline muted preload="auto" style="width:100%;height:100%;object-fit:cover"></video><div id="splm" style="position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;font-weight:600;color:#0C1413;background:#C5A56A;border-radius:99px;padding:8px 14px;cursor:pointer">🔇 tap for sound</div><div id="splw" style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-family:Fraunces,Georgia,serif;font-size:32px;color:#E8E4D8;opacity:0;transition:opacity .9s">Najma <span style="color:#C5A56A">نجمة</span></div></div>
+<script>(function(){try{if(!/[?&]video=1/.test(location.search)){fetch("/verse").then(function(r){return r.ok?r.json():null}).then(function(j){if(!j)return;var s=document.getElementById("spl"),q=document.getElementById("splq"),v=document.getElementById("splv"),m=document.getElementById("splm"),w=document.getElementById("splw");v.remove();m.remove();w.remove();document.getElementById("splqt").textContent="\u201C"+j.text+"\u201D";document.getElementById("splqr").textContent=j.ref;q.style.display="flex";s.style.background="#E8DCC8";s.style.display="flex";var done=function(){if(!s.parentNode)return;s.style.transition="opacity .7s";s.style.opacity="0";setTimeout(function(){s.remove()},720)};s.onclick=done;setTimeout(done,8000)}).catch(function(){});return}
+fetch("/img/splash",{method:"HEAD"}).then(function(r){if(!r.ok)return;var s=document.getElementById("spl"),v=document.getElementById("splv"),w=document.getElementById("splw"),m=document.getElementById("splm");document.getElementById("splq").remove();v.src="/img/splash";s.style.display="flex";var done=function(){if(!s.parentNode)return;s.style.transition="opacity .6s";s.style.opacity="0";setTimeout(function(){s.remove()},650)};v.onended=done;s.onclick=done;v.onerror=done;m.onclick=function(e){e.stopPropagation();v.muted=!v.muted;m.textContent=v.muted?"🔇 tap for sound":"🔊 sound on"};setTimeout(function(){w.style.opacity="1"},9000);setTimeout(done,20000);var p=v.play();if(p&&p.catch)p.catch(done)})}catch(e){}})();</script></body></html>`;
 }
 
 // --- WhatsApp Cloud API (two-way capture) -------------------------------
@@ -1588,7 +1589,70 @@ export default {
       const _hv = await env.MEETINGS.get("img_" + _hn, "arrayBuffer");
       return new Response(null, { status: _hv ? 200 : 404 });
     }
+    if (url.pathname === "/video_upload" && request.method === "PUT") {   // v101 - store a tour in KV (wrangler cannot put large binaries on Windows)
+      if (request.headers.get("X-Azimuth-Ingest") !== env.INGEST_TOKEN) return new Response("unauthorized", { status: 401 });
+      const _uk = (url.searchParams.get("key") || "").replace(/[^a-z0-9_]/gi, ""); if (!_uk) return new Response("key required", { status: 400 });
+      const _ub = await request.arrayBuffer(); if (_ub.byteLength > 24 * 1024 * 1024) return new Response("too large for KV", { status: 413 });
+      await env.MEETINGS.put((url.searchParams.get("poster") === "1" ? "vidposter_" : "vid_") + _uk, _ub);
+      return new Response(JSON.stringify({ ok: true, key: _uk, bytes: _ub.byteLength }), { headers: { "Content-Type": "application/json" } });
+    }
+    if (url.pathname.indexOf("/video/") === 0) {                        // v101 - property video tours from KV, range-capable for phones
+      const _vk = url.pathname.slice(7).replace(/[^a-z0-9_]/gi, "");
+      if (url.searchParams.get("poster") === "1") {
+        const _pb = await env.MEETINGS.get("vidposter_" + _vk, "arrayBuffer");
+        return _pb ? new Response(_pb, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } }) : new Response("no poster", { status: 404 });
+      }
+      const _vb = await env.MEETINGS.get("vid_" + _vk, "arrayBuffer");
+      if (!_vb) return new Response("no video", { status: 404 });
+      const _total = _vb.byteLength; const _rg = /bytes=(\d*)-(\d*)/.exec(request.headers.get("Range") || "");
+      const _vh = { "Content-Type": "video/mp4", "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=86400" };
+      if (_rg) {
+        let _s = _rg[1] ? parseInt(_rg[1], 10) : 0; let _e = _rg[2] ? parseInt(_rg[2], 10) : _total - 1;
+        if (!_rg[1] && _rg[2]) { _s = Math.max(0, _total - parseInt(_rg[2], 10)); _e = _total - 1; }
+        _e = Math.min(_e, _total - 1);
+        if (_s > _e || _s >= _total) return new Response(null, { status: 416, headers: { "Content-Range": "bytes */" + _total } });
+        return new Response(_vb.slice(_s, _e + 1), { status: 206, headers: Object.assign({}, _vh, { "Content-Range": "bytes " + _s + "-" + _e + "/" + _total, "Content-Length": String(_e - _s + 1) }) });
+      }
+      return new Response(_vb, { headers: Object.assign({}, _vh, { "Content-Length": String(_total) }) });
+    }
+    // v92.1 - Drive media routes (POST/PUT) must sit outside the GET-only block
+    if (url.pathname === "/gdrive/upload_start" && request.method === "POST") {   // v92 — open a resumable upload into Najma_Media/<folder>
+      if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      const tok = await gdToken(env); if (!tok) return new Response("not connected", { status: 400 });
+      let b = {}; try { b = await request.json(); } catch (e) {}
+      const name = String(b.name || "").replace(/[\\/:*?"<>|]/g, "_").slice(0, 200); const size = parseInt(b.size, 10) || 0; const mime = String(b.mime || "application/octet-stream");
+      if (!name || !size) return new Response("name and size required", { status: 400 });
+      const parent = await gdPath(env, tok, b.root === "feed" ? "Najma_Feed" : "Najma_Media", b.folder || "");
+      if ((await gdList(tok, parent)).some(f => f.name === name) && !b.overwrite) return new Response(JSON.stringify({ exists: true, name }), { headers: { "Content-Type": "application/json" } });
+      const r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": mime, "X-Upload-Content-Length": String(size) }, body: JSON.stringify({ name, parents: [parent] }) });
+      const uri = r.headers.get("Location"); if (!r.ok || !uri) return new Response("google refused: " + r.status + " " + (await r.text()).slice(0, 200), { status: 502 });
+      const id = Math.random().toString(36).slice(2, 12); await env.MEETINGS.put("gdup_" + id, JSON.stringify({ uri, size, name, mime }), { expirationTtl: 86400 });
+      return new Response(JSON.stringify({ id, name, size }), { headers: { "Content-Type": "application/json" } });
+    }
+    if (url.pathname === "/gdrive/upload_chunk" && request.method === "PUT") {   // v92 — forward one chunk with its Content-Range
+      if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      let up = null; try { up = JSON.parse((await env.MEETINGS.get("gdup_" + (url.searchParams.get("id") || "").replace(/[^a-z0-9]/g, "")) || "null")); } catch (e) {}
+      if (!up) return new Response("unknown upload id", { status: 404 });
+      const start = parseInt(url.searchParams.get("start"), 10), end = parseInt(url.searchParams.get("end"), 10);   // inclusive end
+      const bytes = await request.arrayBuffer(); if (bytes.byteLength !== end - start + 1) return new Response("chunk length mismatch", { status: 400 });
+      const r = await fetch(up.uri, { method: "PUT", headers: { "Content-Length": String(bytes.byteLength), "Content-Range": "bytes " + start + "-" + end + "/" + up.size }, body: bytes });
+      if (r.status === 308) return new Response(JSON.stringify({ done: false, range: r.headers.get("Range") }), { headers: { "Content-Type": "application/json" } });
+      if (r.ok) { const j = await r.json(); return new Response(JSON.stringify({ done: true, file: j }), { headers: { "Content-Type": "application/json" } }); }
+      return new Response("google " + r.status + " " + (await r.text()).slice(0, 200), { status: 502 });
+    }
+    if (url.pathname === "/gdrive/put_text" && request.method === "POST") {      // v92 — a small text file (INDEX.md etc.)
+      if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      const tok = await gdToken(env); if (!tok) return new Response("not connected", { status: 400 });
+      let b = {}; try { b = await request.json(); } catch (e) {}
+      const parent = await gdPath(env, tok, b.root === "feed" ? "Najma_Feed" : "Najma_Media", b.folder || "");
+      const j = await gdUpload(env, tok, parent, String(b.name || "INDEX.md"), String(b.mime || "text/markdown"), new TextEncoder().encode(String(b.text || "")));
+      return new Response(JSON.stringify({ ok: !!j, file: j }), { headers: { "Content-Type": "application/json" } });
+    }
     if (request.method === "GET") {
+      if (url.pathname === "/verse") {                                                                    // v95
+        const v = NAJ_VERSES[Math.floor(Math.random() * NAJ_VERSES.length)];
+        return new Response(JSON.stringify({ text: v[0], ref: v[1], n: NAJ_VERSES.length }), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/bg.jpg") {
         { const _u = await env.MEETINGS.get("cfg_bg", { type: "arrayBuffer" }); if (_u && _u.byteLength > 0) { const _ct = (await env.MEETINGS.get("cfg_bg_ct")) || "image/jpeg"; return new Response(_u, { headers: { "Content-Type": _ct, "Cache-Control": "public, max-age=300" } }); } }
         { const _nb = await env.MEETINGS.get("img_bg_board", { type: "arrayBuffer" }); if (_nb && _nb.byteLength > 0) { const _nct = (await env.MEETINGS.get("img_ct_bg_board")) || "image/jpeg"; return new Response(_nb, { headers: { "Content-Type": _nct, "Cache-Control": "public, max-age=3600" } }); } } // v49 — Najma default backdrop (personal cfg_bg above still wins)
@@ -1952,6 +2016,136 @@ export default {
         try { out = await launchMode(env, null, q, true); } catch (e) { return new Response("launch error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response(out || "(no output)", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
       }
+      if (url.pathname === "/privacy") {                       // v91.1 — the consent screen needs a public privacy page; this is it, plain and true
+        const _pp = "<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Najma by Azimuth - Privacy</title><style>body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;color:#16201E;background:#EEF1EC;line-height:1.55}h1{font-size:1.6rem}h2{font-size:1.1rem;margin-top:28px}a{color:#0A4F4A}</style></head><body>" +
+          "<h1>Najma by Azimuth - Privacy</h1><p>Najma is a private assistant operated by DigitAlchemy Tech Limited (Abu Dhabi, UAE) for a single named client. This page describes what the Google integration does.</p>" +
+          "<h2>What the Google connection is used for</h2><p>With the account holder's explicit consent, Najma creates files in the account holder's own Google Drive: the drafts, briefs and images it produces for them. It requests only the <code>drive.file</code> permission, which allows it to see, create, edit and delete <em>only files it created itself</em>. It cannot read, list or change any other file in the Drive.</p>" +
+          "<h2>What is stored</h2><p>A refresh token for that permission is stored encrypted at rest by the service operator and used solely to write those files. No Google account password is ever seen or stored. No data from the Drive is read back except the folders Najma created.</p>" +
+          "<h2>Sharing</h2><p>Nothing obtained through the Google connection is sold, shared with third parties or used for advertising. Files belong to the account holder and remain in their Drive under their control.</p>" +
+          "<h2>Revoking</h2><p>The account holder can revoke access at any time at <a href=https://myaccount.google.com/permissions>myaccount.google.com/permissions</a>, or by writing to the operator. On revocation the stored token stops working and is deleted.</p>" +
+          "<h2>Contact</h2><p>DigitAlchemy Tech Limited - <a href=mailto:contact@digitalabbot.io>contact@digitalabbot.io</a> - +971 56 227 6093. Last updated 5 September 2026.</p></body></html>";
+        return new Response(_pp, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+      }
+      if (url.pathname === "/gdrive/start") {                  // v91 — send her the one-time consent link (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!env.GOOGLE_OAUTH_CLIENT_ID) return new Response("GOOGLE_OAUTH_CLIENT_ID / _SECRET not set on the Worker yet", { status: 500 });
+        const st = Math.random().toString(36).slice(2, 12); await env.MEETINGS.put("gdrive_state", st, { expirationTtl: 3600 });
+        const link = "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({ client_id: env.GOOGLE_OAUTH_CLIENT_ID, redirect_uri: GD_REDIRECT(url.origin), response_type: "code", scope: GD_SCOPE, access_type: "offline", prompt: "consent", include_granted_scopes: "false", state: st, login_hint: url.searchParams.get("hint") || "herrealestatecode@gmail.com" }).toString();
+        if (url.searchParams.get("send")) { await waSend(env, env.WA_ALLOWED, "🔗 *One tap to connect your Google Drive*\n\nOpen this link, sign in as herrealestatecode@gmail.com and allow. It only lets Azimuth create and edit files it makes itself - two folders, Najma_Feed and Najma_Media, in your My Drive. Nothing else in your Drive is visible to it.\n\n" + link + UPDATE_SIGNOFF); return new Response("consent link sent to her"); }
+        return new Response(link, { headers: { "Content-Type": "text/plain" } });
+      }
+      if (url.pathname === "/gdrive/callback") {               // v91 — Google returns here with the code
+        const st = url.searchParams.get("state"), code = url.searchParams.get("code");
+        if (!code || !st || st !== (await env.MEETINGS.get("gdrive_state"))) return new Response("This link has expired. Ask Azimuth for a new one.", { status: 400 });
+        const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: env.GOOGLE_OAUTH_CLIENT_ID, client_secret: env.GOOGLE_OAUTH_CLIENT_SECRET, redirect_uri: GD_REDIRECT(url.origin), grant_type: "authorization_code" }) });
+        const j = await r.json();
+        if (!j.refresh_token) return new Response("Google did not return a lasting permission (" + (j.error || r.status) + "). Please try the link once more and tick Allow.", { status: 400 });
+        await env.MEETINGS.put("gdrive_token", JSON.stringify({ refresh_token: j.refresh_token, access_token: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000, granted: new Date().toISOString() })); await env.MEETINGS.delete("gdrive_state");
+        let made = ""; try { const tok = await gdToken(env); const a = await gdFolder(env, tok, "Najma_Feed", null); const b = await gdFolder(env, tok, "Najma_Media", null); made = a && b ? "Najma_Feed and Najma_Media are now in your My Drive." : "Connected; folders will be created on the first drop."; } catch (e) { made = "Connected."; }
+        try { await waSend(env, env.WA_ALLOWED, "✅ Google Drive connected. " + made + " From now on everything Azimuth writes for you also lands there as files, in your name." + UPDATE_SIGNOFF); } catch (e) {}
+        return new Response("<!doctype html><meta charset=utf-8><body style=\"font-family:system-ui;background:#E8DCC8;color:#0B3D2E;padding:2rem\"><h2>Connected.</h2><p>" + made + "</p><p>You can close this window.</p>", { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
+      if (url.pathname === "/gdrive/status") {                 // v91 — keyed
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let t = null; try { t = JSON.parse((await env.MEETINGS.get("gdrive_token")) || "null"); } catch (e) {}
+        const tok = t ? await gdToken(env) : null; const err = await env.MEETINGS.get("gdrive_last_err");
+        return new Response(JSON.stringify({ configured: !!env.GOOGLE_OAUTH_CLIENT_ID, connected: !!(t && t.refresh_token), granted: t && t.granted, token_ok: !!tok, feed_folder: await env.MEETINGS.get("gdrive_folder_root_Najma_Feed"), media_folder: await env.MEETINGS.get("gdrive_folder_root_Najma_Media"), last_error: err || null }, null, 1), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/gdrive/list") {                   // v92 — what is in a folder (keyed, read-only)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const tok = await gdToken(env); if (!tok) return new Response("not connected", { status: 400 });
+        const parent = await gdPath(env, tok, url.searchParams.get("root") === "feed" ? "Najma_Feed" : "Najma_Media", url.searchParams.get("folder") || "");
+        return new Response(JSON.stringify(await gdList(tok, parent), null, 1), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/gdrive/readme") {                 // v91.2 — put a README in each folder and list what is there (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const tok = await gdToken(env); if (!tok) return new Response("not connected", { status: 400 });
+        const feed = await gdFolder(env, tok, "Najma_Feed", null), media = await gdFolder(env, tok, "Najma_Media", null); const enc = new TextEncoder(); const out = {};
+        const list = async (id) => { const r = await fetch("https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent("'" + id + "' in parents and trashed=false") + "&fields=files(name,mimeType,createdTime)&pageSize=50", { headers: { Authorization: "Bearer " + tok } }); const j = await r.json(); return (j.files || []).map(f => f.name); };
+        const R1 = ["# Najma_Feed", "", "Written by Azimuth for Najjuko. One folder per day (YYYY-MM-DD) with feed/, ondemand/, radar/, media/ and your own final/.",
+          "Each piece is a .md (to read) plus a .json with the same name (for your assistant). Azimuth never edits or deletes anything here; re-runs get _v2, _v3.",
+          "Put the version you actually posted into that day's final/ with the same name and \"status\": \"final\" - Azimuth reads final/ nightly to learn your voice and to keep those numbers out of future feeds.",
+          "", "Rules for anything you post: keep the source line, obey the what-not-to-claim line, never add or sharpen a number.", "", "DigitAlchemy - contact@digitalabbot.io", ""].join("\n");
+        const R2 = ["# Najma_Media", "", "Long-lived assets from Azimuth: video cuts (YYYY-MM-DD_track_piece_length.mp4), brand plates, podcast masters.",
+          "Day-specific images (the finished cards) live inside Najma_Feed/<date>/media/.", "", "DigitAlchemy - contact@digitalabbot.io", ""].join("\n");
+        if (!(await list(feed)).includes("README.md")) await gdUpload(env, tok, feed, "README.md", "text/markdown", enc.encode(R1));
+        if (!(await list(media)).includes("README.md")) await gdUpload(env, tok, media, "README.md", "text/markdown", enc.encode(R2));
+        out.Najma_Feed = await list(feed); out.Najma_Media = await list(media);
+        return new Response(JSON.stringify(out, null, 1), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/gdrive/backfill") {               // v91 — write today's (and yesterday's) records that never reached Drive
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let n = 0, tried = 0; for (let i = 0; i < 2; i++) { const day = gstDateStr(new Date(gstNow().getTime() - i * 86400000)); const k = "bridge_" + day; let L = []; try { L = JSON.parse((await env.MEETINGS.get(k)) || "[]"); } catch (e) {} let changed = false;
+          for (const r of L) { if (r.drive) continue; tried++; r.drive = await bridgeWrite(env, r); if (r.drive) { n++; changed = true; } } if (changed) await env.MEETINGS.put(k, JSON.stringify(L), { expirationTtl: 30 * 86400 }); }
+        return new Response("written " + n + " of " + tried + " pending records");
+      }
+      if (url.pathname === "/bridge/export") {                 // v90 — the day's records in the sidecar schema (keyed, read-only)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const since = Date.parse(url.searchParams.get("since") || "") || 0; const days = Math.min(14, Math.max(1, parseInt(url.searchParams.get("days") || "2", 10) || 2));
+        const out = []; const n0 = gstNow();
+        for (let i = 0; i < days; i++) { const day = gstDateStr(new Date(n0.getTime() - i * 86400000)); let L = []; try { L = JSON.parse((await env.MEETINGS.get("bridge_" + day)) || "[]"); } catch (e) {} for (const r of L) if (!since || Date.parse(r.at) >= since) out.push(r); }
+        out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+        return new Response(JSON.stringify({ generated: new Date().toISOString(), schema: "azimuth-bridge/1", count: out.length, records: out }, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/note") {                          // v89.2 — send a plain note to her (operator-approved text only; keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _t = (url.searchParams.get("text") || "").slice(0, 2000); if (!_t) return new Response("no text", { status: 400 });
+        try { await waSend(env, env.WA_ALLOWED, _t + UPDATE_SIGNOFF); } catch (e) { return new Response("send failed", { status: 502 }); }
+        return new Response("sent");
+      }
+      if (url.pathname === "/angle_svg") {                     // v89.1 — the card as HTML for the machine-side renderer
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _bc = null; try { _bc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+        const _n = parseInt(url.searchParams.get("n") || "1", 10) || 1; const _a = _bc && _bc.angles && _bc.angles[_n - 1];
+        if (!_a) return new Response("no angle " + _n, { status: 404 });
+        const _h = await angleCardHtml(env, _a, _n, url.origin);
+        return new Response(_h.html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/angle_pending") {                 // v89.1 — which angles of the current brief still lack a card
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _bc = null; try { _bc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+        const out = { ctxAt: _bc ? _bc.at : null, pending: [], wanted: [] };
+        if (_bc && _bc.angles) for (let i = 0; i < _bc.angles.length; i++) { const k = cardKey(_bc.at, i + 1); if (!(await env.MEETINGS.get("img_" + k, "arrayBuffer"))) out.pending.push({ n: i + 1, key: k }); if (await env.MEETINGS.get("angle_wanted_" + k)) out.wanted.push(i + 1); }
+        return new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/send_card") {                     // v89.1 — deliver a just-rendered card to whoever asked for it
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _k = (url.searchParams.get("k") || "").replace(/[^a-z0-9_]/gi, ""); let _w = null; try { _w = JSON.parse((await env.MEETINGS.get("angle_wanted_" + _k)) || "null"); } catch (e) {}
+        if (!_w) return new Response("nobody waiting for " + _k);
+        if (!(await env.MEETINGS.get("img_" + _k, "arrayBuffer"))) return new Response("card not in store yet", { status: 404 });
+        await waSendImage(env, _w.to, url.origin + "/img/" + _k, "🖼 Here is your card for angle " + _w.n + " - 1080×1080, ready to post.");
+        await env.MEETINGS.delete("angle_wanted_" + _k);
+        return new Response("sent to " + _w.to);
+      }
+      if (url.pathname === "/card_test") {                     // v89 — render today's angle n as the finished card (diagnostic; ?png=1 returns the image)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _bc = null; try { _bc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+        const _n = parseInt(url.searchParams.get("n") || "1", 10) || 1; const _a = _bc && _bc.angles && _bc.angles[_n - 1];
+        if (!_a) return new Response("no angle " + _n + " in today's brief", { status: 404 });
+        const _c = await renderAngleCard(env, _a, _n, url.origin, _bc.at, null);
+        if (!_c) return new Response("not rendered yet: " + RENDER_LAST_ERR, { status: 502 });
+        if (url.searchParams.get("png")) { const _b = await env.MEETINGS.get("img_" + _c.key, "arrayBuffer"); return new Response(_b, { headers: { "Content-Type": "image/png" } }); }
+        return new Response(JSON.stringify(_c), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/trends") {                        // v88 — the trend radar page (tap-to-open, never inside the feed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _tr = null; try { _tr = JSON.parse((await env.MEETINGS.get("trend_radar")) || "null"); } catch (e) {}
+        return new Response(renderTrends(_tr, url.searchParams.get("key") || "", env.WA_BOT_NUMBER || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/radar_test") {                    // v88 — build the radar now (diagnostic); ?json=1 returns it
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (url.searchParams.get("probe")) {                   // per-feed reachability from the Worker: status + item count
+          const GNp = ["https://news.google.com/rss/search?q=Dubai+property+OR+%22real+estate%22+when:3d&hl=en-AE&gl=AE&ceid=AE:en"];
+          const out = [];
+          for (const [o, u] of GNp.map(u => ["Google News", u]).concat(RADAR_FEEDS)) { try { const r = await fetchT(u, 8000); const t = r.ok ? await r.text() : ""; out.push(o + " " + r.status + " items=" + rxAll(/<item>/g, t).length + " bytes=" + t.length); } catch (e) { out.push(o + " ERR " + (e && e.name)); } }
+          let nn = []; try { nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); } catch (e) {}
+          let rn = null, rerr = ""; try { rn = await radarNews(env); } catch (e) { rerr = String(e && e.message || e); }
+          return new Response("mkt_news items=" + nn.length + " sample=" + JSON.stringify(nn[0] || null).slice(0, 200) + "\nradarNews -> " + (rn ? rn.length + " items; first: " + JSON.stringify(rn[0] || null).slice(0, 160) : "ERROR " + rerr) + "\n" + out.join("\n"), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+        }
+        let _r = null; try { _r = await trendRadarTick(env, true); } catch (e) { return new Response("radar error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
+        if (url.searchParams.get("json")) return new Response(JSON.stringify(_r, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+        return new Response("radar built: " + ((_r && _r.items) || []).length + " items · sources " + JSON.stringify(_r && _r.sources) + (_r && _r.note ? "\n" + _r.note : ""), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      }
       if (url.pathname === "/feed_test") {                     // v37 — force the daily feed now; v56 — ?dry=1 generates WITHOUT sending (safe diagnostic)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         if (url.searchParams.get("dry")) {
@@ -1959,6 +2153,7 @@ export default {
           try { out = await dailyFeedTick(env, true, true); } catch (e) { return new Response("feed error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
           return new Response(out || "(no output — check MARKET_BRIEF/mkt_latest)", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
         }
+        const _note = url.searchParams.get("note"); if (_note) { try { await waSend(env, env.WA_ALLOWED, _note.slice(0, 1500) + UPDATE_SIGNOFF); } catch (e) {} }   // v88.4 - a note ahead of the feed
         try { await dailyFeedTick(env, true); } catch (e) { return new Response("feed error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response("feed fired — check WhatsApp");
       }
@@ -1978,6 +2173,9 @@ export default {
         const buf = await env.MEETINGS.get("img_" + nm, "arrayBuffer");
         if (!buf) return new Response("not found", { status: 404 });
         const ct = (await env.MEETINGS.get("img_ct_" + nm)) || "image/png";
+        const _u8 = new Uint8Array(buf, 0, Math.min(2, buf.byteLength));
+        if (_u8.length === 2 && _u8[0] === 0x1f && _u8[1] === 0x8b)       // v86: stored pre-gzipped (large district GLBs) - pass through as-is
+          return new Response(buf, { encodeBody: "manual", headers: { "Content-Type": ct, "Content-Encoding": "gzip", "Cache-Control": "public, max-age=3600" } });
         return new Response(buf, { headers: { "Content-Type": ct, "Cache-Control": "public, max-age=3600" } });
       }
       if (url.pathname === "/charts") {                        // v41 — post-ready SVG charts from the register
@@ -1985,7 +2183,8 @@ export default {
         const _cRaw = await env.MEETINGS.get("mkt_latest");
         let _amenRaw = null;
         try { const _cd = JSON.parse(_cRaw || "null"); const _t0 = _cd && _cd.areaIntel && _cd.areaIntel.areas && _cd.areaIntel.areas[0]; if (_t0) _amenRaw = await env.MEETINGS.get("amen_" + _t0.area.toLowerCase().replace(/[^a-z0-9]/g, "")); } catch (e) {}
-        return new Response(renderCharts(_cRaw, url.searchParams.get("key") || "", _amenRaw), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        let _satS = []; try { const _sl = await env.MEETINGS.list({ prefix: "img_sat_" }); _satS = _sl.keys.map(k => k.name.slice(8)); } catch (e) {}   // v89
+        return new Response(renderCharts(_cRaw, url.searchParams.get("key") || "", _amenRaw, await env.MEETINGS.get("mkt_briefctx"), _satS), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -1996,6 +2195,14 @@ export default {
       if (url.pathname === "/manifest.webmanifest") {          // v49 — PWA: "Najma" installs from /market (key rides in start_url)
         const _mk = url.searchParams.get("key") || "";
         return new Response(JSON.stringify({ name: "Najma", short_name: "Najma", start_url: "/market?key=" + _mk, display: "standalone", background_color: "#0C1413", theme_color: "#0C1413", icons: [{ src: "/naj_icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }] }), { headers: { "Content-Type": "application/manifest+json" } });
+      }
+      if (url.pathname === "/clock") {                        // v86 - world clock: Dubai anchor, scrub the day, see who is awake
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        return new Response(renderClock(url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/find") {                         // v95.1 - search by developer, development or building (search_index from the knowledge graph)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        return new Response(renderFind(url.searchParams.get("key") || "", url.searchParams.get("q") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/plans") {                        // v85 - the floor-plan library: every plan we hold, by developer and project
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -2018,7 +2225,9 @@ export default {
         if (!_dv) return new Response("no such developer on the board", { status: 404 });
         let _galleries = {};
         for (const _b of (_dv.ours || [])) { try { const _j = JSON.parse((await env.MEETINGS.get("img_cards_" + _b + "_index")) || "null"); if (_j) _galleries[_b] = _j; } catch (e) {} }
-        return new Response(renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        let _umx = null; try { _umx = JSON.parse((await env.MEETINGS.get("img_unitmix_projects")) || "null"); } catch (e) {}   // v93.2
+        let _vids = []; try { _vids = (JSON.parse((await env.MEETINGS.get("img_videos")) || "{}").items) || []; } catch (e) {}   // v101
+        return new Response(renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/compare") {                      // v73.3 - two developers side by side, click-only (dev_compare pushed by build_compare.py)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -2071,10 +2280,20 @@ export default {
         let _rail = [];
         let _names = {};
         try { const _dd = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); for (const x of ((_dd && _dd.areaIntel && _dd.areaIntel.areas) || [])) _names[x.area.toLowerCase().replace(/[^a-z0-9]/g, "")] = x.area; } catch (e) {}
-        try { const _kl = await env.MEETINGS.list({ prefix: "img_sky_" }); _rail = _kl.keys.map(k => k.name.slice(8)).sort().map(sl => ({ s: sl, n: _names[sl] || sl })); } catch (e) {}
+        // v86: rail carries corridor + maturity; model tiles get their own names; a parent district leaves the rail once all its tiles are live
+        let _aud = {}; try { const _ta = JSON.parse((await env.MEETINGS.get("img_twin_audit")) || "null"); for (const d of ((_ta && _ta.districts) || [])) _aud[d.slug] = d; } catch (e) {}
+        try {
+          const _kl = await env.MEETINGS.list({ prefix: "img_sky_" });
+          const _have = new Set(_kl.keys.map(k => k.name.slice(8)));
+          _rail = [..._have].filter(sl => !Object.values(TWIN_TILE_PARENT).includes(sl) || Object.keys(TWIN_TILE_PARENT).some(t => TWIN_TILE_PARENT[t] === sl && !_have.has(t)))
+            .map(sl => { const a = _aud[sl] || null; const bound = a ? (a.bound || 0) : 0; const named = a ? (a.named || 0) : 0;
+              return { s: sl, n: _names[sl] || TWIN_TILE_NAME[sl] || sl, c: TWIN_CORRIDOR[sl] || "Other", p: TWIN_TILE_PARENT[sl] || sl,
+                       m: bound >= 5 ? 2 : (named >= 100 || bound > 0) ? 1 : 0, b: a ? a.buildings : 0, bd: bound, nm: named }; })
+            .sort((x, y) => TWIN_CORRIDORS.indexOf(x.c) - TWIN_CORRIDORS.indexOf(y.c) || y.m - x.m || x.n.localeCompare(y.n));
+        } catch (e) {}
         let _sk = url.pathname === "/skyline" ? (url.searchParams.get("d") || (_rail[0] && _rail[0].s) || "") : url.pathname.slice(9);
         _sk = _sk.replace(/[^a-z0-9]/gi, "").toLowerCase();
-        const _an2 = _names[_sk] || _sk;
+        const _an2 = _names[_sk] || TWIN_TILE_NAME[_sk] || _sk;
         return new Response(renderSkyline(_sk, _an2, url.searchParams.get("key") || "", _rail), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/studio") {                        // v61 — editorial card studio (MUST sit above the keyed catch-all dump below)
@@ -2085,7 +2304,9 @@ export default {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         let _sky64 = [];
         try { const _kl2 = await env.MEETINGS.list({ prefix: "img_sky_" }); _sky64 = _kl2.keys.map(k => k.name.slice(8)); } catch (e) {}
-        return new Response(renderMap(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", env.WA_BOT_NUMBER || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET), await env.MEETINGS.get("mkt_prev"), _sky64), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return new Response(url.searchParams.get("legacy") === "1"
+          ? renderMap(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", env.WA_BOT_NUMBER || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET), await env.MEETINGS.get("mkt_prev"), _sky64, await env.MEETINGS.get("img_plots"))
+          : renderMapBasic(url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname.indexOf("/area/") === 0) {              // v50 — per-community deep dive (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -2097,6 +2318,27 @@ export default {
         const nmq = (url.searchParams.get("area") || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         const coord = Object.entries(DXB_COORDS).find(([k]) => k.replace(/[^a-z0-9]/g, "") === nmq);
         if (!coord) return new Response(JSON.stringify({ ok: false, note: "no coordinates for that community" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        // v101 - the register layer first: the same points the map draws, so the two never disagree
+        try {
+          const _reg = JSON.parse((await env.MEETINGS.get("img_amenities")) || "null");
+          if (_reg && Array.isArray(_reg.items) && _reg.items.length) {
+            const [lon0, lat0] = coord[1];
+            const km = (i) => { const t = Math.PI / 180, dx = (i.lon - lon0) * t * Math.cos((i.lat + lat0) * 0.5 * t), dy = (i.lat - lat0) * t; return Math.sqrt(dx * dx + dy * dy) * 6371; };
+            const nearest = (k, pref) => { let best = null; for (const i of _reg.items) { if (i.k !== k) continue; if (pref && !pref(i)) continue; const d = km(i); if (!best || d < best.d) best = { d, i }; } return best; };
+            const rows = [];
+            const add = (label, b) => { if (b) rows.push({ label, value: b.i.n + (b.i.x ? " (" + b.i.x + ")" : "") + " \u00b7 " + (b.d < 0.95 ? Math.round(b.d * 1000) + " m" : b.d.toFixed(1) + " km"), km: Math.round(b.d * 100) / 100, name: b.i.n, detail: b.i.x || "", kind: label.replace("Nearest ", ""), approx: !!b.i.ap, src: b.i.src }); else rows.push({ label, value: "none in the register", km: null, kind: label.replace("Nearest ", "") }); };
+            add("Nearest metro", nearest("metro"));
+            add("Nearest school", nearest("school"));
+            add("Nearest government school", nearest("school", (i) => i.src === "ese"));
+            add("Nearest mall", nearest("mall"));
+            add("Nearest hospital", nearest("hospital"));
+            add("Nearest clinic", nearest("clinic"));
+            const _in = (k) => _reg.items.filter((i) => i.k === k && km(i) <= 1.5).length;
+            const body = JSON.stringify({ ok: true, source: "registers (KHDA + ESE schools, DHA health, RTA metro, DM malls) - straight-line from the community centre; drive time is not implied",
+                                          generated: _reg.generated, within_1_5_km: { school: _in("school"), clinic: _in("clinic"), hospital: _in("hospital"), metro: _in("metro"), mall: _in("mall"), park: _in("park") }, amen: rows });
+            return new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=600" } });
+          }
+        } catch (e) {}
         const ak = "amen_" + nmq;
         const hit = await env.MEETINGS.get(ak);
         if (hit) return new Response(hit, { headers: { "Content-Type": "application/json" } });
@@ -2271,7 +2513,18 @@ export default {
                                         : ("🙈 Ignoring “" + _gr.name + "”. Azimuth won't read it. If you change your mind, tell me “watch " + _gr.name + "”."));
           }
           else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + env.READ_KEY); }
-          else if (/^mkt:(pod|li|ig|car|art):\d{1,2}(?:\+\d{1,2})*$/.test(bid)) {   // v83 — one id can carry several angles ("6+7")
+          else if (/^deep:(no|\d{1,2})$/.test(bid)) {                                   // v88.2 - the deeper dive menu
+            const _dn = bid.slice(5);
+            if (_dn === "no") { await waSend(env, from, "👍 Quick hit it is. The options are always there - say “draft video 2” or “questions 2” any time."); }
+            else await waSendList(env, from, "Deeper dive on angle " + _dn + " - pick what you want to make:", "Options", [
+              { id: "mkt:car:" + _dn, title: "🎠 Carousel outline", description: "6 slides, what goes on each, caption" },
+              { id: "mkt:vid:" + _dn, title: "🎬 Magnific video prompt", description: "Paste-ready Seedance prompt, 20-25 s, your twin as reference" },
+              { id: "mkt:pod:" + _dn, title: "🎙 Podcast script", description: "60-90 s to camera at your pace" },
+              { id: "mkt:q:" + _dn, title: "🎤 Questions for the room", description: "8 questions for a banker or relationship manager + follow-ups" },
+              { id: "mkt:art:" + _dn, title: "📝 LinkedIn article", description: "Long-form, 600-900 words" }]);
+            try { await dnaSignal(env, "deeper_dive", _dn); } catch (e) {}
+          }
+          else if (/^mkt:(pod|li|ig|car|art|vid|q):\d{1,2}(?:\+\d{1,2})*$/.test(bid)) {   // v83 — one id can carry several angles ("6+7"); v88.2 + vid, q
             const _mp2 = bid.split(":");
             for (const _one of _mp2[2].split("+").map(x => parseInt(x, 10)).filter(x => x > 0)) {
               await draftFromAngle(env, from, _mp2[1], _one);
@@ -2519,9 +2772,9 @@ export default {
               return new Response("ok");
             }
           }
-          const _dm = text.match(/^draft\s+(?:an?\s+)?(podcast|video|script|article|linkedin|post|carousel|slides?|instagram|insta|reel|ig)(?:\s+(?:script|post|reel|carousel|article))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d{1,2}))?\s*$/i);
+          const _dm = text.match(/^(?:draft\s+)?(?:an?\s+)?(podcast|video|magnific|seedance|script|article|linkedin|post|carousel|slides?|instagram|insta|reel|ig|questions?|interview)(?:\s+(?:script|post|reel|carousel|article|prompt|questions?))?(?:\s+(?:for\s+)?(?:angle\s+)?(\d{1,2}))?\s*$/i);
           if (_dm) {
-            const _kind = /podcast|video|script/i.test(_dm[1]) ? "pod" : /article/i.test(_dm[1]) ? "art" : /carousel|slide/i.test(_dm[1]) ? "car" : /instagram|insta|reel|ig/i.test(_dm[1]) ? "ig" : "li";
+            const _kind = /video|magnific|seedance/i.test(_dm[1]) ? "vid" : /question|interview/i.test(_dm[1]) ? "q" : /podcast|script/i.test(_dm[1]) ? "pod" : /article/i.test(_dm[1]) ? "art" : /carousel|slide/i.test(_dm[1]) ? "car" : /instagram|insta|reel|ig/i.test(_dm[1]) ? "ig" : "li";
             await draftFromAngle(env, from, _kind, _dm[2] ? parseInt(_dm[2], 10) : 1);
             return new Response("ok");
           }
@@ -2590,6 +2843,19 @@ export default {
             await waSend(env, from, "📊 Your charts — bar, line, off-plan split, yields, and a Dubai map, all from the register:\n" + url.origin + "/charts?key=" + env.READ_KEY + "\n\nLong-press any one to save it, then post — the source line is already on it.");
             return new Response("ok");
           }
+          if (/^(?:radar|trends?|trend radar|what(?:'s| is) trending)\s*\??$/i.test(text)) {          // v88
+            let _tr = null; try { _tr = JSON.parse((await env.MEETINGS.get("trend_radar")) || "null"); } catch (e) {}
+            if (!_tr || !_tr.items || !_tr.items.length || Date.now() - Date.parse(_tr.generated) > 20 * 3600 * 1000) { await waSend(env, from, "🔥 Building today's radar - a minute…"); try { _tr = await trendRadarTick(env, true); } catch (e) {} }
+            const _top = ((_tr && _tr.items) || []).slice(0, 3).map(x => x.id + ". " + x.title + " _(" + x.platform + ")_").join("\n");
+            await waSend(env, from, "🔥 *Trend radar*\n" + (_top || "nothing moving today") + "\n\nAll of it: " + url.origin + "/trends?key=" + env.READ_KEY + "\nSay *trend 2* and I'll draft from item 2.");
+            return new Response("ok");
+          }
+          { const _tm = text.match(/^trend\s*(\d{1,2})$/i); if (_tm) { await waSend(env, from, "On it - drafting from trend " + _tm[1] + "…"); try { await trendDraft(env, from, parseInt(_tm[1], 10), url.origin); } catch (e) { await waSend(env, from, "Couldn't draft from that trend just now."); } return new Response("ok"); } }
+          if (/^feed\s*qa$/i.test(text)) {                                                              // v88 - the redundancy audit of this morning's five
+            let _q = null; try { _q = JSON.parse((await env.MEETINGS.get("mkt_feed_qa")) || "null"); } catch (e) {}
+            await waSend(env, from, _q ? "🔎 *Feed QA* (" + _q.at.slice(0, 16) + ")\n" + _q.note + "\nfamilies: " + (_q.after || []).join(" · ") + (_q.repaired && _q.repaired.length ? "\nreplaced angles: " + _q.repaired.join(", ") : "") + ((_q.remaining || []).length ? "\nstill overlapping: " + _q.remaining.map(r => r.angle + " - " + r.why.join("; ")).join(" | ") : "") : "No audit stored yet - it runs with each morning's feed.");
+            return new Response("ok");
+          }
           if (/^(?:feed|daily|today(?:'s)?\s+(?:feed|angles|posts?))\s*\??$/i.test(text)) {
             await waSend(env, from, "☀️ Building this morning's three — a moment…");
             try { await dailyFeedTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the feed just now — try again shortly."); }
@@ -2610,10 +2876,12 @@ export default {
               "🎯 “client has 1.5M, wants a 1-bed to rent” — instant register-grounded advice for a meeting" + NL10 +
               "🏗 “launch: <developer> in <area>, 1-bed from 1.2M, claims 8% ROI” — due diligence while you're in the pitch" + NL10 +
               "🛡 “trust <developer>” — MEED delivery record + the official DLD pages to verify licence, escrow and disputes" + NL10 +
-              "☀️ “feed” — today's five post-ready angles, any time" + NL10 +
+              "☀️ “feed” — today's five post-ready angles, any time · “feed qa” — how different they are" + NL10 +
+              "🔥 “radar” — what people are talking about today (TikTok · Reddit · news) · “trend 3” drafts from item 3" + NL10 +
               "📰 “news” — latest headlines, cross-checked against the project register" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
               "✍️ “draft linkedin 2” · 🎠 “draft carousel 2” · 📝 “draft article 2” · 📸 “draft instagram 3”" + NL10 +
+              "🔎 Deeper dive: 🎬 “video 2” — a paste-ready Magnific (Seedance) prompt · 🎤 “questions 2” — what to ask a banker or RM on camera" + NL10 +
               "🧬 “dna” — what I've learned about your style");
             return new Response("ok");
           }
@@ -2727,6 +2995,7 @@ export default {
       try { const _n = gstNow(); if (_n.getUTCHours() === 6 && _n.getUTCMinutes() < 30) { const rk = "reindex_" + gstDateStr(_n); if (!(await env.MEETINGS.get(rk))) { await env.MEETINGS.put(rk, "1", { expirationTtl: 2 * 86400 }); await peopleReindex(env); } } } catch (e) {}   // v35 — daily party reindex ~06:00 GST
       try { await dnaReflect(env); } catch (e) {}             // v39 — nightly DNA reflection (~20:00 GST, only when new signals exist)
       try { await newsTick(env); } catch (e) {}               // v37.1 — hourly news sweep + MEED cross-reference
+      try { await trendRadarTick(env); } catch (e) {}         // v88 — trend radar first (~07:00 GST), so the feed can touch it
       try { await dailyFeedTick(env); } catch (e) {}          // v37 — Najma daily feed: three post-ready angles ~07:00 GST
       try { await marketBriefTick(env); } catch (e) {}        // v36 — weekly Market Pulse brief (Sunday ~09:00 GST, MARKET_BRIEF="on" only)
     })());
@@ -2736,7 +3005,9 @@ export default {
 // ── Market Pulse (v36) ── dashboard renderer + weekly brief ─────────────────────────────
 function mkFmtM(v) { if (v == null) return "—"; if (v >= 1000) return "$" + (v / 1000).toFixed(1) + "bn"; return "$" + Math.round(v) + "m"; }
 // v49 — Najma UI uplift: Phosphor icons (MIT, phosphoricons.com), inlined as single paths, gold via currentColor
-const NAJ_ICONS = { cube: "M128 24l96 52v104l-96 52-96-52V76zM32 76l96 52 96-52M128 128v104",
+// v95 - the opening verse: a repository Najma sees one of at random on every open (King James text, public domain)
+const NAJ_VERSES = [["For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil, to give you an expected end.", "Jeremiah 29:11"], ["Trust in the LORD with all thine heart; and lean not unto thine own understanding. In all thy ways acknowledge him, and he shall direct thy paths.", "Proverbs 3:5-6"], ["I can do all things through Christ which strengtheneth me.", "Philippians 4:13"], ["Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God.", "Philippians 4:6"], ["And the peace of God, which passeth all understanding, shall keep your hearts and minds through Christ Jesus.", "Philippians 4:7"], ["The LORD is my shepherd; I shall not want.", "Psalm 23:1"], ["Thy word is a lamp unto my feet, and a light unto my path.", "Psalm 119:105"], ["This is the day which the LORD hath made; we will rejoice and be glad in it.", "Psalm 118:24"], ["Be still, and know that I am God.", "Psalm 46:10"], ["The LORD is my light and my salvation; whom shall I fear? the LORD is the strength of my life; of whom shall I be afraid?", "Psalm 27:1"], ["Delight thyself also in the LORD; and he shall give thee the desires of thine heart.", "Psalm 37:4"], ["Commit thy way unto the LORD; trust also in him; and he shall bring it to pass.", "Psalm 37:5"], ["Wait on the LORD: be of good courage, and he shall strengthen thine heart: wait, I say, on the LORD.", "Psalm 27:14"], ["Weeping may endure for a night, but joy cometh in the morning.", "Psalm 30:5"], ["Create in me a clean heart, O God; and renew a right spirit within me.", "Psalm 51:10"], ["The LORD is nigh unto all them that call upon him, to all that call upon him in truth.", "Psalm 145:18"], ["Except the LORD build the house, they labour in vain that build it.", "Psalm 127:1"], ["Let the words of my mouth, and the meditation of my heart, be acceptable in thy sight, O LORD, my strength, and my redeemer.", "Psalm 19:14"], ["Cast thy burden upon the LORD, and he shall sustain thee.", "Psalm 55:22"], ["I will lift up mine eyes unto the hills, from whence cometh my help. My help cometh from the LORD, which made heaven and earth.", "Psalm 121:1-2"], ["Have not I commanded thee? Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest.", "Joshua 1:9"], ["But they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary; and they shall walk, and not faint.", "Isaiah 40:31"], ["Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee; yea, I will help thee.", "Isaiah 41:10"], ["Thou wilt keep him in perfect peace, whose mind is stayed on thee: because he trusteth in thee.", "Isaiah 26:3"], ["And we know that all things work together for good to them that love God, to them who are the called according to his purpose.", "Romans 8:28"], ["If God be for us, who can be against us?", "Romans 8:31"], ["Rejoicing in hope; patient in tribulation; continuing instant in prayer.", "Romans 12:12"], ["Now the God of hope fill you with all joy and peace in believing, that ye may abound in hope, through the power of the Holy Ghost.", "Romans 15:13"], ["Now faith is the substance of things hoped for, the evidence of things not seen.", "Hebrews 11:1"], ["Let us hold fast the profession of our faith without wavering; for he is faithful that promised.", "Hebrews 10:23"], ["Casting all your care upon him; for he careth for you.", "1 Peter 5:7"], ["Draw nigh to God, and he will draw nigh to you.", "James 4:8"], ["If any of you lack wisdom, let him ask of God, that giveth to all men liberally, and upbraideth not; and it shall be given him.", "James 1:5"], ["Every good gift and every perfect gift is from above, and cometh down from the Father of lights.", "James 1:17"], ["For God hath not given us the spirit of fear; but of power, and of love, and of a sound mind.", "2 Timothy 1:7"], ["I have fought a good fight, I have finished my course, I have kept the faith.", "2 Timothy 4:7"], ["And let us not be weary in well doing: for in due season we shall reap, if we faint not.", "Galatians 6:9"], ["But the fruit of the Spirit is love, joy, peace, longsuffering, gentleness, goodness, faith, meekness, temperance.", "Galatians 5:22-23"], ["And whatsoever ye do, do it heartily, as to the Lord, and not unto men.", "Colossians 3:23"], ["Let your light so shine before men, that they may see your good works, and glorify your Father which is in heaven.", "Matthew 5:16"], ["But seek ye first the kingdom of God, and his righteousness; and all these things shall be added unto you.", "Matthew 6:33"], ["Take therefore no thought for the morrow: for the morrow shall take thought for the things of itself.", "Matthew 6:34"], ["Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you.", "Matthew 7:7"], ["Come unto me, all ye that labour and are heavy laden, and I will give you rest.", "Matthew 11:28"], ["With men this is impossible; but with God all things are possible.", "Matthew 19:26"], ["Peace I leave with you, my peace I give unto you: not as the world giveth, give I unto you. Let not your heart be troubled, neither let it be afraid.", "John 14:27"], ["I am the light of the world: he that followeth me shall not walk in darkness, but shall have the light of life.", "John 8:12"], ["These things I have spoken unto you, that in me ye might have peace. In the world ye shall have tribulation: but be of good cheer; I have overcome the world.", "John 16:33"], ["A new commandment I give unto you, That ye love one another; as I have loved you, that ye also love one another.", "John 13:34"], ["For where two or three are gathered together in my name, there am I in the midst of them.", "Matthew 18:20"], ["The LORD bless thee, and keep thee: the LORD make his face shine upon thee, and be gracious unto thee: the LORD lift up his countenance upon thee, and give thee peace.", "Numbers 6:24-26"], ["The LORD is good, a strong hold in the day of trouble; and he knoweth them that trust in him.", "Nahum 1:7"], ["He hath shewed thee, O man, what is good; and what doth the LORD require of thee, but to do justly, and to love mercy, and to walk humbly with thy God?", "Micah 6:8"], ["It is of the LORD's mercies that we are not consumed, because his compassions fail not. They are new every morning: great is thy faithfulness.", "Lamentations 3:22-23"], ["The blessing of the LORD, it maketh rich, and he addeth no sorrow with it.", "Proverbs 10:22"], ["A soft answer turneth away wrath: but grievous words stir up anger.", "Proverbs 15:1"], ["Commit thy works unto the LORD, and thy thoughts shall be established.", "Proverbs 16:3"], ["A man's heart deviseth his way: but the LORD directeth his steps.", "Proverbs 16:9"], ["Through wisdom is an house builded; and by understanding it is established: and by knowledge shall the chambers be filled with all precious and pleasant riches.", "Proverbs 24:3-4"], ["She is clothed with strength and honour; and she shall rejoice in time to come.", "Proverbs 31:25"], ["She openeth her mouth with wisdom; and in her tongue is the law of kindness.", "Proverbs 31:26"], ["The name of the LORD is a strong tower: the righteous runneth into it, and is safe.", "Proverbs 18:10"], ["Where there is no vision, the people perish: but he that keepeth the law, happy is he.", "Proverbs 29:18"], ["To every thing there is a season, and a time to every purpose under the heaven.", "Ecclesiastes 3:1"], ["He hath made every thing beautiful in his time.", "Ecclesiastes 3:11"], ["Two are better than one; because they have a good reward for their labour.", "Ecclesiastes 4:9"], ["Whatsoever thy hand findeth to do, do it with thy might.", "Ecclesiastes 9:10"], ["The steps of a good man are ordered by the LORD: and he delighteth in his way.", "Psalm 37:23"], ["O give thanks unto the LORD; for he is good: for his mercy endureth for ever.", "Psalm 107:1"], ["Blessed is the man that trusteth in the LORD, and whose hope the LORD is.", "Jeremiah 17:7"], ["Call unto me, and I will answer thee, and shew thee great and mighty things, which thou knowest not.", "Jeremiah 33:3"], ["The LORD thy God in the midst of thee is mighty; he will save, he will rejoice over thee with joy; he will rest in his love, he will joy over thee with singing.", "Zephaniah 3:17"], ["For we walk by faith, not by sight.", "2 Corinthians 5:7"], ["My grace is sufficient for thee: for my strength is made perfect in weakness.", "2 Corinthians 12:9"], ["Therefore if any man be in Christ, he is a new creature: old things are passed away; behold, all things are become new.", "2 Corinthians 5:17"], ["Let all your things be done with charity.", "1 Corinthians 16:14"], ["Charity suffereth long, and is kind; charity envieth not; charity vaunteth not itself, is not puffed up.", "1 Corinthians 13:4"], ["And now abideth faith, hope, charity, these three; but the greatest of these is charity.", "1 Corinthians 13:13"], ["Rejoice evermore. Pray without ceasing. In every thing give thanks: for this is the will of God in Christ Jesus concerning you.", "1 Thessalonians 5:16-18"], ["Being confident of this very thing, that he which hath begun a good work in you will perform it until the day of Jesus Christ.", "Philippians 1:6"], ["Finally, brethren, whatsoever things are true, whatsoever things are honest, whatsoever things are just, whatsoever things are pure, whatsoever things are lovely, whatsoever things are of good report; if there be any virtue, and if there be any praise, think on these things.", "Philippians 4:8"], ["And be ye kind one to another, tenderhearted, forgiving one another, even as God for Christ's sake hath forgiven you.", "Ephesians 4:32"], ["For by grace are ye saved through faith; and that not of yourselves: it is the gift of God.", "Ephesians 2:8"], ["Now unto him that is able to do exceeding abundantly above all that we ask or think, according to the power that worketh in us.", "Ephesians 3:20"], ["Behold, I stand at the door, and knock: if any man hear my voice, and open the door, I will come in to him, and will sup with him, and he with me.", "Revelation 3:20"], ["The grass withereth, the flower fadeth: but the word of our God shall stand for ever.", "Isaiah 40:8"], ["Arise, shine; for thy light is come, and the glory of the LORD is risen upon thee.", "Isaiah 60:1"], ["Seek ye the LORD while he may be found, call ye upon him while he is near.", "Isaiah 55:6"], ["As for God, his way is perfect: the word of the LORD is tried: he is a buckler to all those that trust in him.", "Psalm 18:30"], ["Teach us to number our days, that we may apply our hearts unto wisdom.", "Psalm 90:12"], ["Let the beauty of the LORD our God be upon us: and establish thou the work of our hands upon us; yea, the work of our hands establish thou it.", "Psalm 90:17"], ["He that dwelleth in the secret place of the most High shall abide under the shadow of the Almighty.", "Psalm 91:1"], ["Bless the LORD, O my soul, and all that is within me, bless his holy name.", "Psalm 103:1"], ["Enter into his gates with thanksgiving, and into his courts with praise: be thankful unto him, and bless his name.", "Psalm 100:4"], ["The heavens declare the glory of God; and the firmament sheweth his handywork.", "Psalm 19:1"], ["God is our refuge and strength, a very present help in trouble.", "Psalm 46:1"], ["In God I have put my trust: I will not be afraid what man can do unto me.", "Psalm 56:11"], ["Search me, O God, and know my heart: try me, and know my thoughts.", "Psalm 139:23"], ["I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well.", "Psalm 139:14"]];
+const NAJ_ICONS = { clock: "M128 24a104 104 0 1 1 0 208 104 104 0 0 1 0-208zm0 26a78 78 0 1 0 0 156 78 78 0 0 0 0-156z M120 68h16v62l44 26-8 14-52-31z",  search: "M104 24a80 80 0 1 1 0 160 80 80 0 0 1 0-160zm0 26a54 54 0 1 0 0 108 54 54 0 0 0 0-108z M154 168l18-18 62 62-18 18z",  plan: "M32 32h192v192H32z M48 48v160h160V48z M120 48h16v64h-16z M48 120h56v16H48z M120 136h16v24h-16z M136 176h72v16h-72z M176 48h16v40h-16z",  cube: "M128 24l96 52v104l-96 52-96-52V76zM32 76l96 52 96-52M128 128v104",
   grid: "M40 40h76v76H40zM140 40h76v76h-76zM40 140h76v76H40zM140 140h76v76h-76z", star:"M237.28,97.87A14.18,14.18,0,0,0,224.76,88l-60.25-4.87-23.22-56.2a14.37,14.37,0,0,0-26.58,0L91.49,83.11,31.24,88a14.18,14.18,0,0,0-12.52,9.89A14.43,14.43,0,0,0,23,113.32L69,152.93l-14,59.25a14.4,14.4,0,0,0,5.59,15,14.1,14.1,0,0,0,15.91.6L128,196.12l51.58,31.71a14.1,14.1,0,0,0,15.91-.6,14.4,14.4,0,0,0,5.59-15l-14-59.25L233,113.32A14.43,14.43,0,0,0,237.28,97.87Zm-12.14,6.37-48.69,42a6,6,0,0,0-1.92,5.92l14.88,62.79a2.35,2.35,0,0,1-.95,2.57,2.24,2.24,0,0,1-2.6.1L131.14,184a6,6,0,0,0-6.28,0L70.14,217.61a2.24,2.24,0,0,1-2.6-.1,2.35,2.35,0,0,1-1-2.57l14.88-62.79a6,6,0,0,0-1.92-5.92l-48.69-42a2.37,2.37,0,0,1-.73-2.65,2.28,2.28,0,0,1,2.07-1.65l63.92-5.16a6,6,0,0,0,5.06-3.69l24.63-59.6a2.35,2.35,0,0,1,4.38,0l24.63,59.6a6,6,0,0,0,5.06,3.69l63.92,5.16a2.28,2.28,0,0,1,2.07,1.65A2.37,2.37,0,0,1,225.14,104.24Z", sun:"M122,40V16a6,6,0,0,1,12,0V40a6,6,0,0,1-12,0Zm68,88a62,62,0,1,1-62-62A62.07,62.07,0,0,1,190,128Zm-12,0a50,50,0,1,0-50,50A50.06,50.06,0,0,0,178,128ZM59.76,68.24a6,6,0,1,0,8.48-8.48l-16-16a6,6,0,0,0-8.48,8.48Zm0,119.52-16,16a6,6,0,1,0,8.48,8.48l16-16a6,6,0,1,0-8.48-8.48ZM192,70a6,6,0,0,0,4.24-1.76l16-16a6,6,0,0,0-8.48-8.48l-16,16A6,6,0,0,0,192,70Zm4.24,117.76a6,6,0,0,0-8.48,8.48l16,16a6,6,0,0,0,8.48-8.48ZM46,128a6,6,0,0,0-6-6H16a6,6,0,0,0,0,12H40A6,6,0,0,0,46,128Zm82,82a6,6,0,0,0-6,6v24a6,6,0,0,0,12,0V216A6,6,0,0,0,128,210Zm112-88H216a6,6,0,0,0,0,12h24a6,6,0,0,0,0-12Z", buildings:"M240,210H222V96a14,14,0,0,0-14-14H142V32a14,14,0,0,0-21.77-11.64l-80,53.33A14,14,0,0,0,34,85.34V210H16a6,6,0,0,0,0,12H240a6,6,0,0,0,0-12ZM208,94a2,2,0,0,1,2,2V210H142V94ZM46,85.34a2,2,0,0,1,.89-1.66l80-53.34A2,2,0,0,1,130,32V210H46ZM110,112v16a6,6,0,0,1-12,0V112a6,6,0,0,1,12,0Zm-32,0v16a6,6,0,0,1-12,0V112a6,6,0,0,1,12,0Zm0,56v16a6,6,0,0,1-12,0V168a6,6,0,0,1,12,0Zm32,0v16a6,6,0,0,1-12,0V168a6,6,0,0,1,12,0Z", chart:"M230,208a6,6,0,0,1-6,6H32a6,6,0,0,1-6-6V48a6,6,0,0,1,12,0v98.78l54.05-47.3a6,6,0,0,1,7.55-.28l60.11,45.08,60.34-52.8a6,6,0,0,1,7.9,9l-64,56a6,6,0,0,1-7.55.28L96.29,111.72,38,162.72V202H224A6,6,0,0,1,230,208Z", pin:"M128,66a38,38,0,1,0,38,38A38,38,0,0,0,128,66Zm0,64a26,26,0,1,1,26-26A26,26,0,0,1,128,130Zm0-112a86.1,86.1,0,0,0-86,86c0,30.91,14.34,63.74,41.47,94.94a252.32,252.32,0,0,0,41.09,38,6,6,0,0,0,6.88,0,252.32,252.32,0,0,0,41.09-38c27.13-31.2,41.47-64,41.47-94.94A86.1,86.1,0,0,0,128,18Zm0,206.51C113,212.93,54,163.62,54,104a74,74,0,0,1,148,0C202,163.62,143,212.93,128,224.51Z", trend:"M238,56v64a6,6,0,0,1-12,0V70.48l-85.76,85.76a6,6,0,0,1-8.48,0L96,120.49,28.24,188.24a6,6,0,0,1-8.48-8.48l72-72a6,6,0,0,1,8.48,0L136,143.51,217.52,62H168a6,6,0,0,1,0-12h64A6,6,0,0,1,238,56Z", coins:"M224.56,103.81C213.43,97.75,198.47,93.39,182,91.34V84c0-12.12-9.58-23.1-27-30.93C139.16,45.93,118.2,42,96,42S52.84,45.93,37,53.07C19.58,60.9,10,71.88,10,84v40c0,12.12,9.58,23.1,27,30.93,10.49,4.72,23.21,8,37,9.73V172c0,12.12,9.58,23.1,27,30.93C116.84,210.07,137.8,214,160,214s43.16-3.93,59-11.07c17.39-7.83,27-18.81,27-30.93V132C246,121.35,238.39,111.34,224.56,103.81Zm-5.74,10.54C228.61,119.68,234,126,234,132c0,14.19-30.39,30-74,30a166.9,166.9,0,0,1-21.21-1.34A110.79,110.79,0,0,0,155,154.93c17.39-7.83,27-18.81,27-30.93V103.43C196.4,105.36,209.3,109.16,218.82,114.35ZM108.16,153.58c-3.92.27-8,.42-12.16.42-5.3,0-10.4-.24-15.28-.67a2.22,2.22,0,0,0-.37,0c-3.58-.33-7-.77-10.35-1.3V124.12A178,178,0,0,0,96,126a178,178,0,0,0,26-1.88V152c-4.34.69-8.91,1.22-13.69,1.56ZM170,105.89V124c0,9.54-13.75,19.8-36,25.51V121.85a115,115,0,0,0,21-6.92A66.2,66.2,0,0,0,170,105.89ZM96,54c43.61,0,74,15.81,74,30s-30.39,30-74,30S22,98.19,22,84,52.39,54,96,54ZM22,124V105.89a66.2,66.2,0,0,0,15,9,115,115,0,0,0,21,6.92v27.66C35.75,143.8,22,133.54,22,124Zm64,48v-6.28c3.3.18,6.63.28,10,.28q5.91,0,11.66-.37A123.17,123.17,0,0,0,122,169.84v27.67C99.75,191.8,86,181.54,86,172Zm48,28V172.1a177.84,177.84,0,0,0,26,1.9,178,178,0,0,0,26-1.88V200a170,170,0,0,1-52,0Zm64-2.49V169.85a115,115,0,0,0,21-6.92,66.2,66.2,0,0,0,15-9V172C234,181.54,220.25,191.8,198,197.51Z", key:"M215.15,40.85A78,78,0,0,0,86.2,121.31l-56.1,56.1a13.94,13.94,0,0,0-4.1,9.9V216a14,14,0,0,0,14,14H72a6,6,0,0,0,6-6V206H96a6,6,0,0,0,6-6V182h18a6,6,0,0,0,4.24-1.76l10.45-10.44A77.59,77.59,0,0,0,160,174h.1A78,78,0,0,0,215.15,40.85ZM226,98.16c-1.12,35.16-30.67,63.8-65.88,63.84a65.93,65.93,0,0,1-24.51-4.67,6,6,0,0,0-6.64,1.26L117.51,170H96a6,6,0,0,0-6,6v18H72a6,6,0,0,0-6,6v18H40a2,2,0,0,1-2-2V187.31a2,2,0,0,1,.58-1.41l58.83-58.83a6,6,0,0,0,1.26-6.64A65.61,65.61,0,0,1,94,95.92C94,60.71,122.68,31.16,157.83,30A66,66,0,0,1,226,98.16ZM190,76a10,10,0,1,1-10-10A10,10,0,0,1,190,76Z", crane:"M240,82H107.71L85.37,37.32A6,6,0,0,0,80,34H48a6,6,0,0,0-6,6V82H24a6,6,0,0,0,0,12H42V210H24a6,6,0,0,0,0,12H128a6,6,0,0,0,0-12H110V94H210v90a2,2,0,0,1-2,2H192a2,2,0,0,1-2-2v-8a6,6,0,0,0-12,0v8a14,14,0,0,0,14,14h16a14,14,0,0,0,14-14V94h18a6,6,0,0,0,0-12ZM54,46H76.29l18,36H54Zm0,164V158H98v52Zm44-64H54V94H98Z", house:"M240,210H222V131.17l5.76,5.76a6,6,0,0,0,8.48-8.49L137.9,30.09a14,14,0,0,0-19.8,0L19.76,128.44a6,6,0,0,0,8.48,8.49L34,131.17V210H16a6,6,0,0,0,0,12H240a6,6,0,0,0,0-12ZM46,119.17l80.58-80.59a2,2,0,0,1,2.84,0L210,119.17V210H158V152a6,6,0,0,0-6-6H104a6,6,0,0,0-6,6v58H46ZM146,210H110V158h36Z", bed:"M216,74H30V48a6,6,0,0,0-12,0V208a6,6,0,0,0,12,0V174H242v34a6,6,0,0,0,12,0V112A38,38,0,0,0,216,74ZM30,86h76v76H30Zm88,76V86h98a26,26,0,0,1,26,26v50Z", file:"M212.24,83.76l-56-56A6,6,0,0,0,152,26H56A14,14,0,0,0,42,40V216a14,14,0,0,0,14,14H200a14,14,0,0,0,14-14V88A6,6,0,0,0,212.24,83.76ZM158,46.48,193.52,82H158ZM200,218H56a2,2,0,0,1-2-2V40a2,2,0,0,1,2-2h90V88a6,6,0,0,0,6,6h50V216A2,2,0,0,1,200,218Zm-34-82a6,6,0,0,1-6,6H96a6,6,0,0,1,0-12h64A6,6,0,0,1,166,136Zm0,32a6,6,0,0,1-6,6H96a6,6,0,0,1,0-12h64A6,6,0,0,1,166,168Z" };
 const najIcon = (n) => NAJ_ICONS[n] ? '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="' + NAJ_ICONS[n] + '"/></svg>' : "";
 // v62 — the register labels layouts "1 B/R" / "Studio" / "PENTHOUSE"; sort numerically, Studio first
@@ -2753,7 +3024,7 @@ const NAJ_FONTS = '<link rel=preconnect href=https://fonts.googleapis.com><link 
 const NAJ_NAV_CSS = '.nnav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-around;align-items:center;background:rgba(12,20,19,.93);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-top:1px solid #24352F;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.nnav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8FA39B;font-size:.58rem;font-family:"IBM Plex Mono",monospace;letter-spacing:.05em;-webkit-tap-highlight-color:transparent}.nnav a svg{width:19px;height:19px}.nnav a.on{color:#C5A56A}';
 const najNav = (key, active) => {
   const k = encodeURIComponent(key || "");
-  const items = [["homes", "/home", "grid", "HOMES"], ["pulse", "/market", "trend", "PULSE"], ["twin", "/skyline", "cube", "TWIN"], ["map", "/map", "pin", "MAP"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"]];   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
+  const items = [["find", "/find", "search", "FIND"], ["homes", "/home", "grid", "HOMES"], ["pulse", "/market", "trend", "PULSE"], ["twin", "/skyline", "cube", "TWIN"], ["map", "/map", "pin", "MAP"], ["plans", "/plans", "plan", "PLANS"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"], ["clock", "/clock", "clock", "TIME"]];   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
   return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + '?key=' + k + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>').join('') + '</nav>';
 };
 
@@ -3048,7 +3319,11 @@ async function draftFromAngle(env, to, kind, n) {
   const raw = await env.MEETINGS.get("mkt_briefctx");
   if (!raw) { await waSend(env, to, "No weekly brief on file yet — say “market brief” and I'll run one now."); return; }
   let ctx; try { ctx = JSON.parse(raw); } catch (e) { return; }
-  const sys = kind === "pod"
+  const sys = kind === "vid"
+    ? "You write ONE paste-ready video-generation prompt for Najjuko, a Dubai property broker, from ONE angle of the provided brief. Target: Magnific's video generator running Seedance 2.5 (multi-shot, reference images, native audio, lip-sync, up to 30 s). Output EXACTLY this structure, plain text: 'ASPECT: 9:16 vertical, 20-25 seconds, 1080p'. 'REFERENCES: 1) her digital-twin portrait (she attaches it) - keep the face, hair and outfit consistent in every shot; 2) the drop-in card (she attaches it) - shown on screen in shot 3'. 'SHOT 1 (0-5 s): <setting, camera move, what she does with her hands, expression> - SHE SAYS: \"<the hook, spoken, no numbers>\"'. 'SHOT 2 (5-13 s): <camera move, action> - SHE SAYS: \"<one sentence that sets up the number>\"'. 'SHOT 3 (13-20 s): <the card appears / overlay> - SHE SAYS: \"<the ONE figure with its source and period, exactly as in the brief>\"'. 'SHOT 4 (20-25 s): <close, look to lens, slight smile> - SHE SAYS: \"<one line for the buyer, then the ask to DM>\"'. Then 'STYLE: warm late-afternoon light, real Dubai street or terrace, natural skin, no captions burned in, no logos, no developer branding, face never leaves camera, hands always doing something'. Then 'NEGATIVE: text on screen except the card, extra people, brochure renders, drone shots'. Then 'AUDIO: her voice only; music off (she adds it)'. Use ONLY figures from the provided brief and data - never invent or sharpen a number. No emojis."
+    : kind === "q"
+    ? "You prepare Najjuko, a Dubai property broker, to walk into a real room with a microphone - a bank relationship manager, a mortgage adviser, a valuer or a developer sales lead - and argue the buyer's side of ONE angle from the provided brief. Output, plain text: 'WHO TO SIT WITH: <the two roles most worth asking, one line each on why>'. 'THE OPENER: <one sentence that puts the register figure on the table and invites disagreement>'. 'EIGHT QUESTIONS:' numbered, each one sentence, ordered from easy to uncomfortable, each answerable in under a minute, none leading. 'THREE FOLLOW-UPS IF THEY DODGE:' numbered. 'WHAT THE REGISTER SAYS (so she can push back):' 2-3 lines, ONLY figures from the brief and data with source and period. 'THE CLIP TO KEEP:' the one exchange most likely to become a 30-second reel, and why. Rules: no yes/no questions, no jargon without a plain-word gloss, never name a private individual, never invent a number. No emojis."
+    : kind === "pod"
     ? "You write a 60-90 second to-camera video script for Najjuko ('Naj'), a Dubai property broker. Spoken, warm, plain English, construction-literate, no hype, no emojis, no stage directions, no greetings like 'hey guys'. Open with the chosen angle's hook in one sentence. Use ONLY figures from the provided brief and data; every figure carries its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'). One practical takeaway for a buyer to close. 140-210 words, plain text."
     : kind === "ig"
     ? "You write an Instagram reel package for Najjuko, a Dubai property broker, from ONE angle of the provided brief. Two parts, exactly this structure, plain text: SCRIPT: a 30-45 second spoken-to-camera script (70-105 words) — hook in the first five words, one figure with its source and period said out loud, one buyer takeaway, no emojis, no stage directions. CAPTION: 2-4 short lines restating the figure WITH its source and period, one question to invite comments, then at most 5 hashtags on the final line. Use ONLY figures from the provided brief and data — never invent or sharpen a number."
@@ -3075,7 +3350,9 @@ async function draftFromAngle(env, to, kind, n) {
   let out = null;
   try { out = await claudeText(env, sys + campRules, user2, null, 900); } catch (e) {}
   if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
-  const label = kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram package" : kind === "car" ? "🎠 LinkedIn carousel" : kind === "art" ? "📝 LinkedIn article" : "✍️ LinkedIn post";
+  try { const _t = { li: "linkedin", car: "carousel", art: "article", ig: "instagram", pod: "podcast", vid: "seedance_prompt", q: "questions" }[kind] || kind;
+    await bridgeRecord(env, { id: "angle-" + String(n).padStart(2, "0"), type: _t, set: "ondemand", topic_family: (_ang && (_ang.family || famOf(_ang))) || "", campaign: _ang && _ang.campaign ? "the_valley" : "", hook: _ang ? _ang.hook : "", figure: _ang ? _ang.figure : "", body: out, source_line: _ang ? "Source: " + _ang.source : "", what_not_to_claim: guardLine(_ang || {}), campaign_rules: _ang && _ang.campaign ? "#ThisIsTheValley - @EmaarInsider - 60-90 s - Emaar visuals only" : "", image_prompt: _ang ? bgPromptBlock(_ang).replace(/^[\s\S]*?```/, "").replace(/```[\s\S]*$/, "").trim() : "", timing: kind === "pod" ? "60-90 s / 140-210 words at 142 wpm" : kind === "ig" ? "30-45 s / 70-105 words" : kind === "vid" ? "20-25 s" : "" }); } catch (e) {}
+  const label = kind === "vid" ? "🎬 Magnific video prompt (Seedance)" : kind === "q" ? "🎤 Questions for the room" : kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram package" : kind === "car" ? "🎠 LinkedIn carousel" : kind === "art" ? "📝 LinkedIn article" : "✍️ LinkedIn post";
   await waSend(env, to, label + " — Angle " + n + (_camp ? " · 🏡 " + ((_camp.contest && _camp.contest.name) || "campaign") : "") + "\n\n" + out + "\n\n— a draft to make your own.");
   if (_camp && _camp.contest) {                                                    // the entry mechanics, every time, so none of it is left to memory
     const c = _camp.contest;
@@ -3092,7 +3369,15 @@ async function draftFromAngle(env, to, kind, n) {
   if (kind === "car") await waSend(env, to, "🎠 Build these 6 slides in Canva (or PowerPoint → save as PDF), then upload the PDF to LinkedIn as a *document* — it becomes a swipeable carousel. Use the image prompt below for the look; paste the CAPTION as the post text.");
   // v83 — she is not going hunting for a visual: every draft is followed by the plate prompt for her own composite, and by the
   // campaign's own images where there are any. Nothing here needs her to type a thing.
+  if (_ang && (kind === "li" || kind === "ig" || kind === "car")) {                                // v89 - the finished square image, ready to post
+    try { const _card = await renderAngleCard(env, _ang, n, env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev", ctx.at, to);
+      if (_card) await waSendImage(env, to, _card.url, "Your card for angle " + n + (_card.area ? " · " + _card.area : "") + " - 1080×1080, post as-is or overlay your twin using the prompt below.");
+      else await waSend(env, to, "🖼 Your finished card for angle " + n + " is rendering - it lands here in a few minutes."); } catch (e) {}
+  }
   await waSend(env, to, bgPromptBlock(_ang || { hook: "", figure: "", source: "" }));
+  if (kind === "li" || kind === "ig" || kind === "car") {                                          // v88.2 - the quick hit is done; offer the deeper dive once
+    try { await waSendButtons(env, to, "That's the quick hit for angle " + n + ". Want a deeper dive on it - a carousel outline, a video prompt for Magnific, a podcast script, or the questions to take into a banker's office?", [{ id: "deep:" + n, title: "🔎 Show me the options" }, { id: "deep:no", title: "Not today" }]); } catch (e) {}
+  }
   if (_camp) {
     let _va = null; try { _va = JSON.parse((await env.MEETINGS.get("img_valley_assets")) || "null"); } catch (e) {}
     if (_va && Array.isArray(_va.assets) && _va.assets.length) {
@@ -3192,7 +3477,69 @@ async function publishDraft(env, to) {
 // Tap one -> Instagram package + LinkedIn package (with one-tap post) + a complete,
 // self-contained image-generation prompt in BOTH ratios (9:16 story + 16:9 landscape).
 // Total intended time from wake-up to posted: under five minutes.
-const FEED_SCHEMA = { type: "object", additionalProperties: false, properties: { angles: { type: "array", items: { type: "object", additionalProperties: false, properties: { hook: { type: "string" }, figure: { type: "string" }, source: { type: "string" }, buyer: { type: "string" } }, required: ["hook", "figure", "source", "buyer"] } } }, required: ["angles"] };
+const FEED_SCHEMA = { type: "object", additionalProperties: false, properties: { angles: { type: "array", items: { type: "object", additionalProperties: false, properties: { hook: { type: "string" }, figure: { type: "string" }, source: { type: "string" }, buyer: { type: "string" }, family: { type: "string" }, trend: { type: "string" } }, required: ["hook", "figure", "source", "buyer", "family"] } } }, required: ["angles"] };
+
+// v88 - FEED QA. The five must differ in KIND. Eleven topic families; one angle per family per morning; a family that ran on
+// two of the last six mornings is "tired"; a figure seen in the last 14 days is a repeat. Deterministic first, one model repair
+// pass if needed, and the verdict is stored (mkt_feed_qa) and shown on the feed in one line.
+const FEED_FAMILIES = ["prices", "rents_yields", "volume", "handover_supply", "developer", "district", "offplan_ready", "news", "transit", "buyer_maths", "education"];
+const FAM_RX = [["transit", /metro|rail|tram|station|commute|etihad|route 2020/i], ["handover_supply", /handover|complet|deliver|pipeline|supply|under construction|launch/i],
+  ["rents_yields", /rent|yield|ejari|tenan|lease/i], ["offplan_ready", /off-?plan|ready|secondary|resale/i], ["volume", /transactions?|sales count|deals|registered sales|number of sales|volume/i],
+  ["developer", /emaar|damac|sobha|nakheel|meraas|ellington|binghatti|select group|omniyat|imtiaz|beyond|fakhruddin|arada|iman|developer/i],
+  ["district", /marina|jlt|jumeirah|downtown|business bay|creek|palm|hills|jvc|jvt|meydan|arjan|al wasl|satwa|dubai south|expo|silicon|motor city|sports city|villa|townhouse/i],
+  ["buyer_maths", /budget|mortgage|service charge|per sq|square foot|sqft|afford|monthly|instalment|payment plan|fee/i], ["news", /reported|announce|headline|according to/i],
+  ["prices", /price|median|aed \d|ticket|value/i], ["education", /./]];
+const famOf = (a) => { if (a && a.family && FEED_FAMILIES.includes(a.family)) return a.family; const t = ((a && a.hook) || "") + " " + ((a && a.figure) || "") + " " + ((a && a.buyer) || ""); for (const [f, rx] of FAM_RX) if (rx.test(t)) return f; return "education"; };
+const figKey = (a) => String((a && a.figure) || "").toLowerCase().replace(/[^0-9a-z%.]/g, "").slice(0, 40);
+const numKeys = (a) => { const t = ((a && a.hook) || "") + " " + ((a && a.figure) || ""); const out = new Set(); for (const m of t.matchAll(/\d[\d,]*(?:\.\d+)?/g)) { const v = m[0].replace(/,/g, ""); if (v.replace(".", "").length >= 3 && !/^20\d\d$/.test(v)) out.add(v); } return [...out]; };
+const ENTITY_RX = /(dubai marina|business bay|downtown|burj khalifa|palm jumeirah|palm deira|jlt|jumeirah lake|jvc|jumeirah village circle|jvt|jumeirah village triangle|motor city|arjan|al wasl|satwa|dubai south|madinat al mataar|expo|silicon oasis|dubai hills|damac hills|meydan|sobha heartland|mbr city|creek harbour|al khairan|jaddaf|al jadaf|maritime city|investment park|sports city|studio city|production city|al furjan|discovery gardens|dubai islands|emaar|damac|sobha|nakheel|meraas|ellington|binghatti|select group|omniyat|imtiaz|beyond|fakhruddin|arada|iman|h&h|azizi|danube)/i;
+const subjKey = (a) => { const m = ENTITY_RX.exec(((a && a.hook) || "") + " " + ((a && a.figure) || "")); return (a.family || famOf(a)) + ":" + (m ? m[1].toLowerCase() : "-"); };
+async function feedFamHist(env) { try { return JSON.parse((await env.MEETINGS.get("mkt_feed_famhist")) || "[]"); } catch (e) { return []; } }
+function tiredFamilies(famh) { const days = [...new Set(famh.map(x => x.d))].sort().reverse().slice(0, 6); const c = {}; for (const x of famh) if (days.includes(x.d)) c[x.f] = (c[x.f] || 0) + 1; return Object.keys(c).filter(f => c[f] >= 2); }
+function seedFamHist(famh, hist, today) {
+  // v88.4 - the memory starts from what was already sent: every hook in mkt_feed_hist becomes a dated entry (numbers + family)
+  if (famh.length) return famh;
+  const y = new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10);
+  return (hist || []).slice(0, 24).map(h => { const a = { hook: h, figure: "" }; return { d: y, f: famOf(a), k: "", n: numKeys(a), s: subjKey(a) }; });
+}
+function feedAudit(angles, famh) {
+  const seenFig = new Set(famh.filter(x => x.k).map(x => x.k)); const seenNum = new Map(); const seenSubj = new Map(); const seenFam = {}; const bad = [];
+  const today = Date.now();
+  for (const x of famh) { for (const n of (x.n || [])) if (!seenNum.has(n)) seenNum.set(n, x.d); if (x.s && (today - Date.parse(x.d)) < 5 * 86400 * 1000 && !seenSubj.has(x.s)) seenSubj.set(x.s, x.d); }
+  angles.forEach((a, i) => { const f = famOf(a), k = figKey(a), nums = numKeys(a), sk = subjKey(a); a.family = f; const why = [];
+    if (seenFam[f] != null) why.push("same family as angle " + (seenFam[f] + 1) + " (" + f + ")"); else seenFam[f] = i;
+    if (k && seenFig.has(k)) why.push("figure already used in the last 14 days");
+    const hitN = nums.find(n => seenNum.has(n)); if (hitN) why.push("number " + hitN + " already used on " + seenNum.get(hitN));
+    if (seenSubj.has(sk)) why.push("same subject (" + sk + ") on " + seenSubj.get(sk));
+    if (nums.some(n => angles.some((b, j) => j < i && numKeys(b).includes(n)))) why.push("shares a number with an earlier angle");
+    if (angles.some((b, j) => j < i && subjKey(b) === sk)) why.push("same subject as an earlier angle");
+    if (why.length) bad.push({ i, why }); });
+  return { bad, families: angles.map(a => a.family) };
+}
+async function feedQA(env, angles, sys, data, famh) {
+  let audit = feedAudit(angles, famh); const report = { at: gstNowIso(), before: audit.families.slice(), repaired: [], dropped: [], after: null, note: "" };
+  for (let pass = 0; pass < 2 && audit.bad.length; pass++) {
+    const used = angles.filter((a, i) => !audit.bad.some(b => b.i === i)).map(a => a.family);
+    const free = FEED_FAMILIES.filter(f => !used.includes(f) && !tiredFamilies(famh).includes(f));
+    const fix = sys + " REPAIR PASS: angles " + audit.bad.map(b => (b.i + 1) + " (" + b.why.join("; ") + ")").join(", ") + " failed the redundancy audit. Return the SAME set with ONLY those angles replaced, each replacement from a different family in this list: " +
+      JSON.stringify(free) + ". Keep the others verbatim. Do not reuse any figure already present in the set or in avoidFigures.";
+    try {
+      const g2 = await claudeJSON(env, fix, JSON.stringify({ current: angles, avoidFigures: famh.map(x => x.k).filter(Boolean).slice(0, 60), data: JSON.parse(data) }), FEED_SCHEMA, null, 1400);
+      const a2 = g2 && Array.isArray(g2.angles) ? g2.angles.slice(0, 5) : null;
+      if (a2 && a2.length >= angles.length - 1) { const au2 = feedAudit(a2, famh); if (au2.bad.length < audit.bad.length) { report.repaired = [...new Set(report.repaired.concat(audit.bad.map(b => b.i + 1)))]; angles.splice(0, angles.length, ...a2); audit = au2; } }
+    } catch (e) {}
+  }
+  if (audit.bad.length && angles.length - audit.bad.length >= 3) {                 // v88.4 - never send a repeat: drop it, send fewer
+    const dropIdx = new Set(audit.bad.map(b => b.i)); report.dropped = audit.bad.map(b => ({ angle: b.i + 1, why: b.why[0] }));
+    const kept = angles.filter((a, i) => !dropIdx.has(i)); angles.splice(0, angles.length, ...kept); audit = feedAudit(angles, famh);
+  }
+  report.after = audit.families.slice(); report.remaining = audit.bad.map(b => ({ angle: b.i + 1, why: b.why }));
+  const distinct = new Set(audit.families).size;
+  report.note = distinct === angles.length && !audit.bad.length ? "checked: " + angles.length + " different topics and subjects, no number repeated from the last two weeks" + (report.repaired.length ? " (" + report.repaired.length + " replaced)" : "") + (report.dropped.length ? " (" + report.dropped.length + " dropped rather than repeated)" : "")
+    : "checked: " + distinct + " of " + angles.length + " topics distinct" + (audit.bad.length ? " - " + audit.bad.length + " still overlap (" + audit.bad.map(b => b.why[0]).join("; ") + ")" : "");
+  try { await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(report), { expirationTtl: 14 * 86400 }); } catch (e) {}
+  return report;
+}
 // v76 — campaign angles add one line on what to film / which supplied asset to cut from
 const CAMPAIGN_SCHEMA = { type: "object", additionalProperties: false, properties: { angles: { type: "array", items: { type: "object", additionalProperties: false, properties: { hook: { type: "string" }, figure: { type: "string" }, source: { type: "string" }, buyer: { type: "string" }, shot: { type: "string" } }, required: ["hook", "figure", "source", "buyer", "shot"] } } }, required: ["angles"] };
 
@@ -3221,6 +3568,10 @@ async function dailyFeedTick(env, force, dry) {
   let hist = []; try { hist = JSON.parse((await env.MEETINGS.get("mkt_feed_hist")) || "[]"); } catch (e) {}
   // v39 — taste memory: the angles she actually CHOSE recently bias today's five
   let picks = []; try { picks = JSON.parse((await env.MEETINGS.get("mkt_picks")) || "[]"); } catch (e) {}
+  const famh = seedFamHist(await feedFamHist(env), hist, gstDateStr(n)); const tired = tiredFamilies(famh);   // v88 - QA memory (v88.4 seeded from sent hooks)
+  const LANES = { 1: ["prices", "volume", "rents_yields", "offplan_ready", "buyer_maths"], 3: ["district", "handover_supply", "transit", "developer", "news"], 5: ["education", "buyer_maths", "developer", "news", "offplan_ready"] };
+  const lane = LANES[n.getUTCDay()] || null;
+  let radar = null; try { radar = JSON.parse((await env.MEETINGS.get("trend_radar")) || "null"); if (radar && Date.now() - Date.parse(radar.generated) > 20 * 3600 * 1000) radar = null; } catch (e) {}
   const m = d.meed || {};
 
   // v37.3 — TREND DELTAS, computed here so every delta is exact and quotable.
@@ -3268,7 +3619,7 @@ async function dailyFeedTick(env, force, dry) {
     trends,
     news: await (async () => { try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); return nn.slice(0, 8).map(x => ({ title: x.title, outlet: x.outlet, meedCrossReference: x.xref ? { project: x.xref.meedName, facts: x.xref.facts } : null })); } catch (e) { return null; } })(),
   });
-  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections. AT LEAST TWO of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all). TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". HER TASTE: these are angles she personally chose to post on recent mornings — bias the five toward similar subjects and styles WITHOUT repeating any hook: " + JSON.stringify(picks.slice(0, 8).map(p => p.hook)) + ". HER DNA PROFILE (learned from her choices — honour it): " + ((await dnaGet(env)) || "(still learning)") + ". NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
+  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections. AT LEAST TWO of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all). TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". TOPIC FAMILIES: each of the five must come from a DIFFERENT family and name it in `family`, one of " + JSON.stringify(FEED_FAMILIES) + ". " + (lane ? "TODAY'S LANE (" + ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n.getUTCDay()] + "): at least THREE of the five from " + JSON.stringify(lane) + ". " : "") + "NO REPEATS: these numbers and these subjects were used in recent mornings and must not appear again in any form (a percentage of the same fact is the same fact): numbers " + JSON.stringify([...new Set(famh.flatMap(x => x.n || []))].slice(0, 80)) + "; subjects " + JSON.stringify([...new Set(famh.filter(x => (Date.now() - Date.parse(x.d)) < 5 * 86400 * 1000).map(x => x.s).filter(Boolean))].slice(0, 40)) + ". Prefer a figure the register has NOT yet been quoted on: a different area, a different bedroom count, a different month, a different developer. Families that ran on recent mornings and must be avoided today unless the figure is genuinely new: " + JSON.stringify(tired) + ". HER STYLE (from angles she chose recently): copy the SHAPE of these hooks - length, tone, how they open - but NEVER their subject: " + JSON.stringify(picks.slice(0, 8).map(p => p.hook)) + ". TRENDING (what people are talking about today, context only - a trend never supplies a number): " + JSON.stringify((radar && radar.items || []).slice(0, 6).map(t => ({ platform: t.platform, title: t.title, family: t.family }))) + ". If an angle's subject matches a trending item, set `trend` to one short line naming the platform and what is moving; otherwise omit `trend`. HER DNA PROFILE (learned from her choices — honour it): " + ((await dnaGet(env)) || "(still learning)") + ". NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
   let g = null, genErr = null;
   try { g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 1400); } catch (e) { genErr = e && e.message ? e.message : String(e); }
   const angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 5) : [];
@@ -3279,6 +3630,7 @@ async function dailyFeedTick(env, force, dry) {
     else if (attempts + 1 >= 2) await waSend(env, env.WA_ALLOWED, "☀️ Morning — today's angles didn't come together on my side (twice, so I'm telling you rather than staying quiet). Say “feed” anytime and I'll build them fresh.");
     return;
   }
+  const qa = await feedQA(env, angles, sys, data, famh);                                        // v88 - redundancy audit + one repair pass
   // v76 — CAMPAIGN TRACK: while a campaign pack is live (Emaar District Ambassador, The Valley, closes 15 Sep 2026) the morning
   // carries TWO extra angles for it, written ONLY from the pack's evidence and bound by the pack's guardrails (no capital-
   // appreciation claim, sales-only rates, hashtag + tag, permit still open). They sit after the five market angles.
@@ -3300,23 +3652,139 @@ async function dailyFeedTick(env, force, dry) {
     const cangles = cg && Array.isArray(cg.angles) ? cg.angles.slice(0, 5).map(a => Object.assign({}, a, { campaign: camp.contest.name })) : [];
     if (cangles.length) angles.push(...cangles);
   }
-  if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + a.hook + "\n   " + a.figure + " · " + a.source + (a.shot ? "\n   shot: " + a.shot : "")).join("\n");
+  if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + "[" + (a.family || "-") + "] " + a.hook + "\n   " + a.figure + " · " + a.source + (a.trend ? "\n   trend: " + a.trend : "") + (a.shot ? "\n   shot: " + a.shot : "")).join("\n") + "\n\nQA: " + qa.note + (qa.repaired.length ? " | repaired " + qa.repaired.join(",") : "") + " | before " + qa.before.join(",") + " | after " + qa.after.join(",");
   // store as the drafting context (draftFromAngle reads this) + remember the hooks
   const briefTxt = angles.map((a, i) => "ANGLE " + (i + 1) + ": " + a.hook + "\nFigure: " + a.figure + " (" + a.source + ")\nBuyer: " + a.buyer).join("\n\n");
   await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: briefTxt, data, angles }), { expirationTtl: 3 * 86400 });
   hist = angles.map(a => a.hook).concat(hist).slice(0, 24);
   await env.MEETINGS.put("mkt_feed_hist", JSON.stringify(hist), { expirationTtl: 30 * 86400 });
+  for (let i = 0; i < angles.length; i++) { const a = angles[i]; await bridgeRecord(env, { id: "angle-" + String(i + 1).padStart(2, "0"), set: force ? "ondemand" : "feed", type: "angle", topic_family: a.family || famOf(a), campaign: a.campaign ? "the_valley" : "", hook: a.hook, figure: a.figure, body: a.hook + "\n" + a.figure + " - " + a.source + "\n" + (a.buyer || ""), source_line: "Source: " + a.source, what_not_to_claim: guardLine(a), campaign_rules: a.campaign ? "#ThisIsTheValley - @EmaarInsider - 60-90 s - Emaar visuals only" : "", image_prompt: "", timing: "", trend: a.trend || "", shot: a.shot || "", qa: qa.note }); }
+  try { const today = gstDateStr(n); const keep = famh.filter(x => (Date.parse(today) - Date.parse(x.d)) < 14 * 86400 * 1000);
+    await env.MEETINGS.put("mkt_feed_famhist", JSON.stringify(angles.filter(a => !a.campaign).map(a => ({ d: today, f: a.family || famOf(a), k: figKey(a), n: numKeys(a), s: subjKey(a) })).concat(keep).slice(0, 240)), { expirationTtl: 30 * 86400 }); } catch (e) {}
   const nCamp = angles.filter(a => a.campaign).length;
   const dLeft = camp && camp.contest ? Math.max(0, Math.round((Date.parse(camp.contest.closes) - Date.now()) / 86400000)) : 0;
   const bodyTxt = "☀️ *Najma daily — " + (angles.length === 5 ? "five" : String(angles.length)) + " you could post today*" +
     (nCamp ? "\n_the last " + (nCamp === 1 ? "one is" : String(nCamp) + " are") + " for the Valley contest · " + dLeft + " day" + (dLeft === 1 ? "" : "s") + " left_" : "") + "\n\n" +
-    angles.map((a, i) => (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + a.hook + "\n     " + a.figure + " · " + a.source + (a.shot ? "\n     🎬 " + a.shot : "")).join("\n\n") +
+    angles.map((a, i) => (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + a.hook + "\n     " + a.figure + " · " + a.source + (a.trend ? "\n     📈 " + a.trend : "") + (a.shot ? "\n     🎬 " + a.shot : "")).join("\n\n") +
+    "\n\n_✔ " + qa.note + "_" +
     "\n\nPick one from the list — or just type the numbers for several, like “" + (angles.length > 1 ? (angles.length - 1) + " and " + angles.length : "1") + "”." +
     "\nYou'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
   await waSend(env, env.WA_ALLOWED, bodyTxt);
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle",
     angles.slice(0, 10).map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + (a.figure || "").slice(0, 18), description: a.hook })));
+  if (radar && radar.items && radar.items.length && !force) {                                   // v88 - the radar is its own tap, never inside the feed
+    try { await waSend(env, env.WA_ALLOWED, "🔥 *Trend radar* - " + radar.items.length + " things people are talking about today (" + Object.keys(radar.sources || {}).filter(k => radar.sources[k]).join(" · ") + "). Open it when you want it:\n" + (env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev") + "/trends?key=" + env.READ_KEY + "\n\nSay *trend 3* and I'll draft from item 3."); } catch (e) {}
+  }
   if (!force) { try { await env.MEETINGS.put(fk, "done", { expirationTtl: 2 * 86400 }); } catch (e) {} }
+}
+
+// ── v88 — TREND RADAR ─────────────────────────────────────────────────────────────
+// What people are talking about, gathered once a day and kept OUT of the feed: news feeds (Khaleej Times, Gulf News, The
+// National, Arabian Business, Al Jazeera, Zawya), Wikipedia page-view spikes on a Dubai basket, and - when APIFY_TOKEN is set -
+// TikTok Creative Center rankings for the UAE and Reddit hot threads via Apify. A trend supplies a topic, a sound or a hashtag;
+// it never supplies a number - the register does. Each item carries its platform and a one-line suggested angle.
+const RADAR_FEEDS = [["Bing News", "https://www.bing.com/news/search?q=Dubai+real+estate&format=rss"], ["Bing News", "https://www.bing.com/news/search?q=Dubai+rent+OR+off-plan+OR+developer&format=rss"],
+  ["Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"], ["Khaleej Times", "https://www.khaleejtimes.com/rss"], ["Khaleej Times", "https://www.khaleejtimes.com/rss/business"], ["Gulf News", "https://gulfnews.com/rss"], ["Gulf News", "https://gulfnews.com/rss/business"],
+  ["The National", "https://www.thenationalnews.com/rss"], ["The National", "https://www.thenationalnews.com/rss/business"], ["Zawya", "https://www.zawya.com/en/rss"]];   // v88.3 - paths that answered from the Worker
+const RADAR_WIKI = ["Dubai", "Real_estate_in_Dubai", "Dubai_Marina", "Downtown_Dubai", "Palm_Jumeirah", "Jumeirah_Lake_Towers", "Business_Bay", "Dubai_Creek_Harbour", "Dubai_Hills_Estate", "Dubai_South", "Emaar_Properties", "Damac_Properties", "Nakheel", "Sobha_Realty", "Meraas",
+  "Dubai_Metro", "Etihad_Rail", "Golden_visa_(UAE)", "Dubai_Land_Department", "Real_Estate_Regulatory_Agency", "Expo_City_Dubai", "Al_Maktoum_International_Airport", "Burj_Khalifa", "Dubai_Islands"];
+const RADAR_SCHEMA = { type: "object", additionalProperties: false, properties: { items: { type: "array", items: { type: "object", additionalProperties: false, properties: { id: { type: "integer" }, platform: { type: "string" }, title: { type: "string" }, moving: { type: "string" }, angle: { type: "string" }, family: { type: "string" }, register_check: { type: "string" }, url: { type: "string" } }, required: ["id", "platform", "title", "moving", "angle", "family", "register_check", "url"] } } }, required: ["items"] };
+async function fetchT(url, ms, init) { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); try { return await fetch(url, Object.assign({ signal: c.signal, headers: { "User-Agent": "Mozilla/5.0 najma-trend-radar/1.0 (contact@digitalabbot.io)" } }, init || {})); } finally { clearTimeout(t); } }
+const rxAll = (re, txt) => { const out = []; let m; while ((m = re.exec(txt))) out.push(m); return out; };
+const untag = (x) => String(x || "").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').trim();
+async function radarNews(env) {
+  const out = []; const RE_KEEP = /dubai|uae|emirat|abu dhabi|property|real estate|rent|villa|apartment|off-?plan|developer|emaar|damac|nakheel|sobha|meraas|metro|golden visa|mortgage/i;
+  // layer 1: the hourly sweep the Worker already runs (title, outlet, url, MEED cross-reference)
+  try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); for (const x of nn.slice(0, 20)) if (x && x.title) out.push({ platform: "news", outlet: x.outlet || "", title: String(x.title).slice(0, 140), url: x.url || x.link || "", when: (x.at || x.publishedAt || "").slice(0, 10), xref: x.xref ? x.xref.meedName : "" }); } catch (e) {}
+  // layer 2: Google News, UAE edition - one feed, every outlet
+  const GN = ["https://news.google.com/rss/search?q=Dubai+property+OR+%22real+estate%22+when:3d&hl=en-AE&gl=AE&ceid=AE:en", "https://news.google.com/rss/search?q=Dubai+rent+OR+off-plan+OR+developer+when:3d&hl=en-AE&gl=AE&ceid=AE:en"];
+  const feeds = GN.map(u => ["Google News", u]).concat(RADAR_FEEDS);
+  const rs = await Promise.allSettled(feeds.map(([o, u]) => fetchT(u, 12000).then(r => r.ok ? r.text() : "").then(t => ({ o, t })).catch(() => ({ o, t: "" }))));
+  for (const r of rs) { if (r.status !== "fulfilled" || !r.value.t) continue; const { o, t } = r.value;
+    for (const it of rxAll(/<item>([\s\S]*?)<\/item>/g, t).slice(0, 25)) { const b = it[1]; const title = untag((b.match(/<title>([\s\S]*?)<\/title>/) || [])[1]); const link = untag((b.match(/<link>([\s\S]*?)<\/link>/) || [])[1]) || untag((b.match(/<guid[^>]*>([\s\S]*?)<\/guid>/) || [])[1]);
+      const pub = (b.match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1]; if (!title || !RE_KEEP.test(title)) continue; if (pub && Date.now() - Date.parse(pub) > 3 * 86400 * 1000) continue;
+      const src = (o === "Google News" || o === "Bing News") ? (untag((b.match(/<source[^>]*>([\s\S]*?)<\/source>/) || [])[1]) || untag((b.match(/<News:Source>([\s\S]*?)<\/News:Source>/) || [])[1]) || o) : o;
+      if (out.some(x => x.title.slice(0, 60).toLowerCase() === title.slice(0, 60).toLowerCase())) continue;
+      out.push({ platform: "news", outlet: src, title: title.slice(0, 140), url: link, when: pub ? new Date(Date.parse(pub)).toISOString().slice(0, 10) : "" }); } }
+  return out.slice(0, 45);
+}
+async function radarWiki() {
+  const end = new Date(Date.now() - 86400000), start = new Date(Date.now() - 15 * 86400000); const f = (d) => d.toISOString().slice(0, 10).replace(/-/g, "");
+  const rs = await Promise.allSettled(RADAR_WIKI.map(t => fetchT("https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/" + t + "/daily/" + f(start) + "/" + f(end), 8000).then(r => r.ok ? r.json() : null).then(j => ({ t, j })).catch(() => ({ t, j: null }))));
+  const out = [];
+  for (const r of rs) { if (r.status !== "fulfilled" || !r.value.j || !r.value.j.items) continue; const v = r.value.j.items.map(x => x.views); if (v.length < 8) continue;
+    const last = v.slice(-3).reduce((a, b) => a + b, 0) / 3, base = v.slice(0, -3).reduce((a, b) => a + b, 0) / Math.max(1, v.length - 3); const ratio = base ? last / base : 1;
+    out.push({ platform: "wikipedia", title: r.value.t.replace(/_/g, " "), ratio: Math.round(ratio * 100) / 100, last: Math.round(last), url: "https://en.wikipedia.org/wiki/" + r.value.t }); }
+  return out.sort((a, b) => b.ratio - a.ratio).filter(x => x.ratio >= 1.25).slice(0, 8);
+}
+async function apifyRun(env, actor, input, ms) {
+  if (!env.APIFY_TOKEN) return null;
+  const r = await fetchT("https://api.apify.com/v2/acts/" + actor + "/run-sync-get-dataset-items?token=" + encodeURIComponent(env.APIFY_TOKEN) + "&timeout=" + Math.round(ms / 1000) + "&memory=1024", ms + 5000, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  return r.ok ? r.json() : null;
+}
+async function radarTikTok(env) { try { const j = await apifyRun(env, "data_xplorer~tiktok-trends", { trendType: "hashtag", countryCode: "AE", hashtagPeriod: "7", maxItems: 30 }, 90000); if (!Array.isArray(j)) return null;
+  return j.slice(0, 30).map(x => ({ platform: "tiktok", title: "#" + (x.hashtag_name || x.hashtagName || x.name || x.hashtag || "?"), posts: x.publish_cnt || x.publishCnt || x.posts || null, views: x.video_views || x.videoViews || x.views || null, rank: x.rank || null, industry: x.industry_name || x.industryName || "", url: "https://www.tiktok.com/tag/" + encodeURIComponent(String(x.hashtag_name || x.hashtagName || x.name || x.hashtag || "")) })); } catch (e) { return null; } }
+async function radarReddit(env) { try { const j = await apifyRun(env, "trudax~reddit-scraper-lite", { startUrls: [{ url: "https://www.reddit.com/r/dubai/hot/" }, { url: "https://www.reddit.com/r/DubaiRealEstate/hot/" }, { url: "https://www.reddit.com/r/UAE/hot/" }], skipComments: true, skipUserPosts: true, skipCommunity: true, maxItems: 60, maxPostCount: 25 }, 90000); if (!Array.isArray(j)) return null;
+  const RE = /rent|landlord|tenant|buy|bought|mortgage|off-?plan|developer|handover|villa|apartment|studio|ejari|rera|dld|agent|broker|cheque|deposit|jvc|marina|jlt|downtown|creek|dubai hills|dubai south|damac|emaar|sobha|nakheel|golden visa|metro/i;
+  return j.filter(x => x && (x.title || x.body) && RE.test((x.title || "") + " " + (x.body || "").slice(0, 200))).slice(0, 20).map(x => ({ platform: "reddit", title: String(x.title || "").slice(0, 140), sub: x.communityName || x.parsedCommunityName || "", score: x.upVotes || x.score || 0, comments: x.numberOfComments || x.numComments || 0, url: x.url || x.link || "" })); } catch (e) { return null; } }
+async function trendRadarTick(env, force) {
+  const n = gstNow();
+  if (!force && !(n.getUTCHours() === 7 && n.getUTCMinutes() < 30)) return null;
+  const rk = "trend_radar_" + gstDateStr(n);
+  if (!force && (await env.MEETINGS.get(rk))) return null;
+  await env.MEETINGS.put(rk, "1", { expirationTtl: 2 * 86400 });
+  const [news, wiki, tiktok, reddit] = await Promise.all([radarNews(env).catch(() => []), radarWiki().catch(() => []), radarTikTok(env), radarReddit(env)]);
+  let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+  const reg = d ? { sales: d.transactions ? { period: [d.transactions.periodFrom, d.transactions.periodTo], salesCount: d.transactions.salesCount, medianTicketAed: d.transactions.medianTicketAed, medianResidentialAedSqft: d.transactions.medianResidentialAedSqft, topAreas: (d.transactions.topAreas || []).slice(0, 5) } : null,
+    rents: d.rents ? { medianAnnualRentAed: d.rents.medianAnnualRentAed, grossYieldPctByArea: (d.rents.grossYieldPctByArea || []).slice(0, 6) } : null } : null;
+  const rawItems = [].concat(tiktok || [], reddit || [], news, wiki);
+  const sys = "You curate a daily TREND RADAR for a Dubai property broker's content. From the raw items (TikTok UAE trending hashtags, Reddit hot threads from Dubai communities, Gulf news headlines, Wikipedia page-view spikes) pick the 10 most useful for real-estate content this week. " +
+    "For each: platform (tiktok|reddit|news|wikipedia), title (the item, verbatim or lightly trimmed), moving (one short phrase on WHY it is moving or what it signals), angle (one line she could post - a topic or question, NOT a statistic), family (one of " + JSON.stringify(FEED_FAMILIES) + "), " +
+    "register_check (one line: what the official register data provided says about the same subject, or 'no register angle' - never invent a figure; quote only figures present in register), url (the item's url or ''). Prefer items that contradict or sharpen what people assume. Never name a private individual. Return JSON only.";
+  let g = null; try { g = await claudeJSON(env, sys, JSON.stringify({ raw: rawItems.slice(0, 90), register: reg, today: gstDateStr(n) }), RADAR_SCHEMA, null, 1600); } catch (e) {}
+  const items = g && Array.isArray(g.items) ? g.items.slice(0, 10).map((x, i) => Object.assign({}, x, { id: i + 1 })) : [];
+  const radar = { generated: new Date().toISOString(), day: gstDateStr(n), items, sources: { news: news.length, wikipedia: wiki.length, tiktok: tiktok ? tiktok.length : null, reddit: reddit ? reddit.length : null }, raw: { tiktok: (tiktok || []).slice(0, 15), reddit: (reddit || []).slice(0, 12), wiki, news: news.slice(0, 15) },
+    note: (!tiktok || !reddit) ? "TikTok and Reddit need the APIFY_TOKEN secret on the Worker; until then the radar runs on news feeds and Wikipedia." : "" };
+  await env.MEETINGS.put("trend_radar", JSON.stringify(radar), { expirationTtl: 7 * 86400 });
+  try { await bridgeRecord(env, { id: "radar", type: "radar", set: "radar", topic_family: "", campaign: "", hook: items.map(x => x.id + ". " + x.title).join(" | ").slice(0, 400), figure: "", body: JSON.stringify(items), source_line: "Sources: " + JSON.stringify(radar.sources), what_not_to_claim: "Trends are topics, sounds and hashtags; they never supply a figure.", campaign_rules: "", image_prompt: "", timing: "" }); } catch (e) {}
+  return radar;
+}
+function renderTrends(radar, key, bot) {
+  const esc2 = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const PL = { tiktok: ["TikTok", "#C5A56A"], reddit: ["Reddit", "#E0A070"], news: ["News", "#8FA39B"], wikipedia: ["Wikipedia", "#7FBFB3"] };
+  const items = (radar && radar.items) || [];
+  const rows = items.map(it => { const pl = PL[it.platform] || [it.platform, "#8FA39B"]; const wa = bot ? "https://wa.me/" + bot.replace(/[^0-9]/g, "") + "?text=" + encodeURIComponent("trend " + it.id) : "";
+    return '<div class=it><div class=hd><span class=pl style="color:' + pl[1] + ';border-color:' + pl[1] + '">' + esc2(pl[0]) + '</span><span class=fam>' + esc2(String(it.family || "").replace(/_/g, " ")) + '</span></div>' +
+      '<div class=tt>' + (it.url ? '<a href="' + esc2(it.url) + '" target=_blank rel=noopener>' + esc2(it.title) + '</a>' : esc2(it.title)) + '</div>' +
+      '<div class=mv>' + esc2(it.moving) + '</div><div class=an>💡 ' + esc2(it.angle) + '</div><div class=rc>📒 ' + esc2(it.register_check) + '</div>' +
+      (wa ? '<a class=go href="' + wa + '">draft from this → say “trend ' + it.id + '”</a>' : '') + '</div>'; }).join("");
+  const src = radar && radar.sources ? Object.keys(radar.sources).map(k => k + (radar.sources[k] == null ? " (off)" : " " + radar.sources[k])).join(" · ") : "";
+  return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Najma — trend radar</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
+:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}html,body{margin:0;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:18px 14px 110px}.mast{font-family:Fraunces,Georgia,serif;font-size:1.5rem;font-weight:600}.mast em{font-style:normal;color:var(--gold)}.sub{color:var(--mut);font-family:"IBM Plex Mono",monospace;font-size:.7rem;margin:4px 0 16px}
+.it{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}.hd{display:flex;gap:8px;align-items:center;margin-bottom:6px}.pl{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;border:1px solid;border-radius:99px;padding:2px 8px}
+.fam{font-family:"IBM Plex Mono",monospace;font-size:.6rem;color:var(--mut);letter-spacing:.06em;text-transform:uppercase}.tt{font-family:Fraunces,Georgia,serif;font-size:1.02rem;font-weight:600;line-height:1.25}.tt a{color:var(--text);text-decoration:none}.mv{color:var(--mut);font-size:.8rem;margin-top:4px}
+.an{margin-top:8px;font-size:.86rem}.rc{margin-top:4px;font-size:.78rem;color:var(--mut)}.go{display:inline-block;margin-top:10px;font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--gold);border:1px solid rgba(197,165,106,.45);border-radius:99px;padding:5px 11px;text-decoration:none}
+.note{color:var(--mut);font-size:.74rem;border:1px dashed var(--line);border-radius:10px;padding:8px 12px;margin-top:14px}${NAJ_NAV_CSS}</style></head><body><div class=wrap>
+<div class=mast>Trend radar <em>· ${esc2(radar && radar.day || "")}</em></div><div class=sub>what people are talking about · ${esc2(src)} · a trend gives you the topic, the register gives you the number</div>
+${rows || '<div class=note>No radar yet today. Say <b>radar</b> in WhatsApp and I will build it now.</div>'}
+${radar && radar.note ? '<div class=note>' + esc2(radar.note) + '</div>' : ''}
+</div>${najNav(key, "pulse")}</body></html>`;
+}
+async function trendDraft(env, to, n, origin) {
+  let radar = null; try { radar = JSON.parse((await env.MEETINGS.get("trend_radar")) || "null"); } catch (e) {}
+  const it = radar && radar.items && radar.items.find(x => x.id === n);
+  if (!it) { await waSend(env, to, "No trend " + n + " on today's radar. Open it here: " + origin + "/trends?key=" + env.READ_KEY); return; }
+  let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+  const reg = d ? { sales: d.transactions ? { period: [d.transactions.periodFrom, d.transactions.periodTo], salesCount: d.transactions.salesCount, medianTicketAed: d.transactions.medianTicketAed, medianResidentialAedSqft: d.transactions.medianResidentialAedSqft } : null, rents: d.rents ? { medianAnnualRentAed: d.rents.medianAnnualRentAed } : null } : null;
+  const sys = "Write for a Dubai property broker from ONE trending item plus the official register figures supplied. Return JSON with: linkedin (<=140 words, <=3 hashtags, ends with a one-line source note), reel (30-45 second to-camera script at 142 words a minute, so 70-105 words, first six words must stop a thumb), caption (Instagram, <=5 hashtags). " +
+    "The trend supplies the topic; every number must come from the register object verbatim with its period; if the register has no figure for the subject, say what the register CAN say and make the post a question, never an invented statistic. Never name a private individual. Coincided with, never caused.";
+  const SCH = { type: "object", additionalProperties: false, properties: { linkedin: { type: "string" }, reel: { type: "string" }, caption: { type: "string" } }, required: ["linkedin", "reel", "caption"] };
+  let g = null; try { g = await claudeJSON(env, sys, JSON.stringify({ trend: it, register: reg }), SCH, null, 900); } catch (e) {}
+  if (!g) { await waSend(env, to, "Couldn't draft from that trend just now - try again in a minute."); return; }
+  try { await bridgeRecord(env, { id: "trend-" + String(n).padStart(2, "0"), type: "trend", set: "ondemand", topic_family: it.family || "", campaign: "", hook: it.angle || it.title, figure: "", body: "LINKEDIN:\n" + g.linkedin + "\n\nREEL:\n" + g.reel + "\n\nCAPTION:\n" + g.caption, source_line: "Trend: " + it.platform + " - " + it.title + (it.url ? " - " + it.url : "") + " | Register: " + (it.register_check || ""), what_not_to_claim: "A trend supplies the topic, never a number; every figure is from the register with its period.", campaign_rules: "", image_prompt: "", timing: "reel 30-45 s" }); } catch (e) {}
+  await waSend(env, to, "📈 *From the radar: " + it.title + "*\n_" + it.platform + " · " + it.moving + "_\n\n✍️ *LinkedIn*\n" + g.linkedin + "\n\n🎬 *Reel (30-45 s)*\n" + g.reel + "\n\n📸 *Caption*\n" + g.caption + "\n\n_A draft to make your own. Register: " + (it.register_check || "") + "_");
+  try { await dnaSignal(env, "trend_pick", it.platform + ": " + it.title); } catch (e) {}
 }
 
 // ── v39 — DNA: a self-learning profile of HER content identity ──────────────────
@@ -3690,7 +4158,7 @@ function _chWrap(title, sub, body) {
   const W = 1080, H = 1080;
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" width="100%" style="max-width:520px;display:block">` +
     `<rect width="${W}" height="${H}" fill="${CH.ink}"/><rect x="24" y="24" width="${W - 48}" height="${H - 48}" rx="28" fill="${CH.card}" stroke="${CH.line}" stroke-width="2"/>` +
-    `<text x="70" y="120" fill="${CH.gold}" font-size="30" font-weight="700" letter-spacing="1" font-family="Fraunces,Georgia,serif">NAJMA نجمة</text>` +
+    `<text x="70" y="120" fill="${CH.gold}" font-size="30" font-weight="700" letter-spacing="1" font-family="Fraunces,Georgia,serif">THE DIGEST</text>` +
     `<text x="70" y="188" fill="${CH.text}" font-size="46" font-weight="600" font-family="Fraunces,Georgia,serif">${_sx(title)}</text>` +
     `<text x="70" y="228" fill="${CH.mut}" font-size="26" font-family="'IBM Plex Sans',sans-serif">${_sx(sub)}</text>` +
     body +
@@ -3698,6 +4166,195 @@ function _chWrap(title, sub, body) {
     `</svg>`;
 }
 
+
+// v89 — ANGLE CARD: the postcard tied to the work. One angle -> one finished square image: the district's satellite (or the
+// skyline banner), the hook, the figure, the source. Sent with the draft; shown five-up on /charts.
+const AREA_SLUG = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function angleArea(angle, d) {
+  const txt = ((angle && angle.hook) || "") + " " + ((angle && angle.figure) || "") + " " + ((angle && angle.buyer) || "");
+  const names = new Set(); try { for (const a of ((d && d.areaIntel && d.areaIntel.areas) || [])) names.add(a.area); for (const a of ((d && d.transactions && d.transactions.topAreas) || [])) names.add(a.area); for (const a of ((d && d.rents && d.rents.grossYieldPctByArea) || [])) if (a.area) names.add(a.area); } catch (e) {}
+  const ALIAS = { "jlt": "Al Thanyah Fifth", "jumeirah lake towers": "Al Thanyah Fifth", "jvc": "Jumeirah Village Circle", "jvt": "Jumeirah Village Triangle", "downtown": "Burj Khalifa", "dubai south": "Madinat Al Mataar", "creek harbour": "Al Khairan First", "meydan": "Meydan One", "dubai hills": "Hadaeq Sheikh Mohammed Bin Rashid" };
+  const low = txt.toLowerCase(); let best = null;
+  for (const nme of names) if (nme && low.includes(String(nme).toLowerCase())) { if (!best || nme.length > best.length) best = nme; }
+  if (!best) for (const k in ALIAS) if (low.includes(k)) { best = ALIAS[k]; break; }
+  return best;
+}
+function wrapSvg(text, max) { const w = String(text || "").split(/\s+/); const lines = []; let cur = ""; for (const x of w) { if ((cur + " " + x).trim().length > max && cur) { lines.push(cur); cur = x; } else cur = (cur + " " + x).trim(); } if (cur) lines.push(cur); if (lines.length > 5) { const k = lines.slice(0, 5); k[4] = k[4].replace(/\s+\S*$/, "") + "…"; return k; } return lines; }
+function angleCardSvg(angle, areaName, imgUrl, n) {
+  let hookTxt = String(angle.hook || "").trim(); if (hookTxt.length > 150) { const cut = hookTxt.slice(0, 150); hookTxt = cut.slice(0, Math.max(cut.lastIndexOf(" "), 100)).replace(/[,;:—-]+$/, "") + "…"; }
+  const hookL = wrapSvg(hookTxt, hookTxt.length > 110 ? 38 : 34); const fz = hookL.length >= 4 ? 42 : hookL.length === 3 ? 50 : 56; const y0 = 250;
+  const fig = String(angle.figure || "").trim().replace(/\d{4,}/g, m => Number(m).toLocaleString("en-US")); const figFz = fig.length > 26 ? 40 : fig.length > 16 ? 54 : 72;
+  const src = String(angle.source || "").replace(/\s+/g, " ").trim(); const srcL = wrapSvg(src, 60).slice(0, 2);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">` +
+    `<defs><clipPath id="acclip"><rect x="0" y="0" width="1080" height="1080" rx="0"/></clipPath><linearGradient id="acg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E8DCC8" stop-opacity=".30"/><stop offset=".30" stop-color="#E8DCC8" stop-opacity=".55"/><stop offset=".60" stop-color="#E8DCC8" stop-opacity=".97"/><stop offset="1" stop-color="#E8DCC8" stop-opacity="1"/></linearGradient></defs>` +
+    `<rect width="1080" height="1080" fill="#E8DCC8"/>` +
+    (imgUrl ? `<g clip-path="url(#acclip)"><image href="${imgUrl}" x="0" y="0" width="1080" height="640" preserveAspectRatio="xMidYMid slice"/></g>` : "") +
+    `<rect width="1080" height="1080" fill="url(#acg)"/>` +
+    `<rect x="56" y="62" width="${(areaName ? 14 + String(areaName).length : 10) * 15 + 56}" height="46" rx="23" fill="#E8DCC8" fill-opacity=".92"/>` +
+    `<text x="84" y="93" fill="#006039" font-size="22" font-weight="700" letter-spacing="4" font-family="'IBM Plex Mono',monospace">THE DIGEST${areaName ? " · " + _sx(String(areaName).toUpperCase()) : ""}</text>` +
+    (n ? `<text x="1008" y="96" fill="#E8DCC8" font-size="24" text-anchor="end" font-family="'IBM Plex Mono',monospace">${n}</text>` : "") +
+    hookL.map((l, i) => `<text x="72" y="${y0 + 180 + i * (fz + 12)}" fill="#0B3D2E" font-size="${fz}" font-weight="600" font-family="Fraunces,Georgia,serif">${_sx(l)}</text>`).join("") +
+    `<line x1="72" y1="${790}" x2="360" y2="${790}" stroke="#C5A56A" stroke-width="3"/>` +
+    `<text x="72" y="${790 + figFz + 14}" fill="#8C7238" font-size="${figFz}" font-weight="700" font-family="Fraunces,Georgia,serif">${_sx(fig)}</text>` +
+    srcL.map((l, i) => `<text x="72" y="${930 + i * 28}" fill="#5E6F69" font-size="22" font-family="'IBM Plex Sans',sans-serif">${_sx(i === 0 ? "Source: " + l : l)}</text>`).join("") +
+    `<text x="72" y="1022" fill="#006039" font-size="22" font-family="'IBM Plex Sans',sans-serif">Najjuko · settled, not asking · the register's own numbers</text>` +
+    `<text x="1008" y="1022" fill="#8C7238" font-size="20" text-anchor="end" font-family="'IBM Plex Mono',monospace">the digest</text>` +
+    `</svg>`;
+}
+// v90 - BRIDGE RECORDS. One append-only list per day; the export route serves it. Never overwrites a record.
+const GUARD_BY_FAMILY = { rents_yields: "Yields are gross, from registered contracts; no net or guaranteed-return claim; 'last eight weeks', never 'this week'.", prices: "Settled registrations, not asking prices; no forecast, no 'prices will rise'.", volume: "Counts are registrations, which lag the deal; no causation - 'coincided with', never 'because of'.",
+  handover_supply: "Completion dates are the developer's schedule as recorded, not a promise; no 'delivered on time' claim without the register.", developer: "Delivery record only from the project register; never a private individual; no defamatory inference.", district: "One area's figure is that area's, for that period; do not generalise to 'Dubai'.",
+  offplan_ready: "Share of registrations, not of value, unless stated; no 'demand is exploding' language.", news: "A headline is context, never a figure; name the outlet; quote only register figures.", transit: "Walking times and distances are approximate; station status from the operator, not a promise.", buyer_maths: "Illustrative arithmetic on register medians; not advice; fees and rates change - date them.", education: "Explain the rule, cite the authority, no legal advice." };
+const guardLine = (a) => (GUARD_BY_FAMILY[(a && a.family) || ""] || "Only the figure quoted, for the period quoted, with its source; no invented or sharpened number.") + (a && a.campaign ? " No capital-appreciation claim - it is not in the data. #ThisIsTheValley - tag @EmaarInsider - 60-90 s - Emaar visuals only." : "");
+async function bridgeRecord(env, rec) {
+  try {
+    const day = gstDateStr(gstNow()); const k = "bridge_" + day;
+    let L = []; try { L = JSON.parse((await env.MEETINGS.get(k)) || "[]"); } catch (e) {}
+    const full = Object.assign({ at: new Date().toISOString(), date: day, status: "draft" }, rec);
+    try { full.drive = await bridgeWrite(env, full); } catch (e) { full.drive = false; }
+    L.push(full);
+    await env.MEETINGS.put(k, JSON.stringify(L.slice(-400)), { expirationTtl: 30 * 86400 });
+  } catch (e) {}
+}
+// ── v91 — GOOGLE DRIVE BRIDGE (her My Drive, her ownership) ──────────────────────
+const GD_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const GD_REDIRECT = (origin) => origin + "/gdrive/callback";
+async function gdToken(env) {
+  let t = null; try { t = JSON.parse((await env.MEETINGS.get("gdrive_token")) || "null"); } catch (e) {}
+  if (!t || !t.refresh_token || !env.GOOGLE_OAUTH_CLIENT_ID) return null;
+  if (t.access_token && t.exp && Date.now() < t.exp - 60000) return t.access_token;
+  const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: env.GOOGLE_OAUTH_CLIENT_ID, client_secret: env.GOOGLE_OAUTH_CLIENT_SECRET, refresh_token: t.refresh_token, grant_type: "refresh_token" }) });
+  if (!r.ok) { try { await env.MEETINGS.put("gdrive_last_err", "refresh " + r.status + " " + (await r.text()).slice(0, 200)); } catch (e) {} return null; }
+  const j = await r.json(); t.access_token = j.access_token; t.exp = Date.now() + (j.expires_in || 3600) * 1000;
+  await env.MEETINGS.put("gdrive_token", JSON.stringify(t)); return t.access_token;
+}
+async function gdFolder(env, tok, name, parentId) {
+  // one folder per (name, parent); ids cached so we never create twins
+  const ck = "gdrive_folder_" + (parentId || "root") + "_" + name; const c = await env.MEETINGS.get(ck); if (c) return c;
+  const q = encodeURIComponent("name='" + name.replace(/'/g, "\\'") + "' and mimeType='application/vnd.google-apps.folder' and trashed=false" + (parentId ? " and '" + parentId + "' in parents" : ""));
+  let id = null; try { const r = await fetch("https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=files(id)&spaces=drive", { headers: { Authorization: "Bearer " + tok } }); const j = await r.json(); id = j.files && j.files[0] && j.files[0].id; } catch (e) {}
+  if (!id) { const r = await fetch("https://www.googleapis.com/drive/v3/files?fields=id", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(Object.assign({ name, mimeType: "application/vnd.google-apps.folder" }, parentId ? { parents: [parentId] } : {})) }); const j = await r.json(); id = j.id; }
+  if (id) await env.MEETINGS.put(ck, id); return id;
+}
+async function gdUpload(env, tok, parentId, name, mime, bytes) {
+  const boundary = "najma" + Math.random().toString(36).slice(2); const meta = JSON.stringify({ name, parents: [parentId] });
+  const head = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`; const tail = `\r\n--${boundary}--`;
+  const body = new Blob([head, bytes, tail]);
+  const r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "multipart/related; boundary=" + boundary }, body });
+  if (!r.ok) { try { await env.MEETINGS.put("gdrive_last_err", "upload " + r.status + " " + (await r.text()).slice(0, 200)); } catch (e) {} return null; }
+  return r.json();
+}
+function bridgeBasename(rec) {
+  const hm = (rec.at || new Date().toISOString()).slice(11, 16).replace(":", "-"); const setp = rec.set === "ondemand" && /set-2/.test(rec.id || "") ? "set-2_" : "";
+  return hm + "_" + setp + String(rec.id || "item") + "_" + String(rec.type || "piece");
+}
+function bridgeMarkdown(rec) {
+  return "# " + (rec.hook || rec.id || "") + "\n\n" + (rec.figure ? "**Figure:** " + rec.figure + "  \n" : "") + "**" + (rec.source_line || "") + "**  \n" +
+    "**What not to claim:** " + (rec.what_not_to_claim || "") + "\n\n" + (rec.campaign_rules ? "**Campaign rules:** " + rec.campaign_rules + "\n\n" : "") + "---\n\n" + (rec.body || "") + "\n\n" +
+    (rec.image_prompt ? "---\n\n## Image prompt\n\n```\n" + rec.image_prompt + "\n```\n\n" : "") + (rec.timing ? "**Timing:** " + rec.timing + "\n\n" : "") +
+    "_type " + (rec.type || "") + " · family " + (rec.topic_family || "-") + " · " + (rec.date || "") + " · status " + (rec.status || "draft") + (rec.qa ? " · " + rec.qa : "") + "_\n";
+}
+async function bridgeWrite(env, rec) {
+  const tok = await gdToken(env); if (!tok) return false;
+  try {
+    const root = await gdFolder(env, tok, "Najma_Feed", null); if (!root) return false;
+    const day = await gdFolder(env, tok, rec.date || gstDateStr(gstNow()), root); const sub = await gdFolder(env, tok, rec.set === "radar" ? "radar" : rec.set === "weekly" ? "weekly" : rec.set === "feed" ? "feed" : "ondemand", day);
+    const base = bridgeBasename(rec); const enc = new TextEncoder();
+    const a = await gdUpload(env, tok, sub, base + ".md", "text/markdown", enc.encode(bridgeMarkdown(rec)));
+    const b = await gdUpload(env, tok, sub, base + ".json", "application/json", enc.encode(JSON.stringify(rec, null, 1)));
+    return !!(a && b);
+  } catch (e) { return false; }
+}
+async function gdPath(env, tok, rootName, path) {            // nested folders under Najma_Feed / Najma_Media, created as needed
+  let id = await gdFolder(env, tok, rootName, null);
+  for (const seg of String(path || "").split("/").map(x => x.trim()).filter(Boolean)) id = await gdFolder(env, tok, seg.replace(/[^A-Za-z0-9._ -]/g, "_"), id);
+  return id;
+}
+async function gdList(tok, id) {
+  const r = await fetch("https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent("'" + id + "' in parents and trashed=false") + "&fields=files(id,name,size,mimeType,createdTime,webViewLink)&pageSize=200&orderBy=name", { headers: { Authorization: "Bearer " + tok } });
+  const j = await r.json(); return j.files || [];
+}
+// v93 - unit-mix card HTML, used by the twin panel (client, via a string template) and the HOMES developer page (server)
+function unitMixHtml(u, compact) {
+  const esc = (t) => String(t == null ? "" : t).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  if (!u) return '<div class=um><div class=umh><b>UNIT MIX</b><i class="ums p">not on file</i></div><div class=umn>No record yet for this building. Fills from the Dubai Land Department unit register or the developer\'s sheet.</div></div>';
+  const st = u.status || "placeholder"; const stl = st === "verified" ? "register" : st === "partial" ? "partial" : "placeholder";
+  const ac = u.asset_classes || null; const rows = (u.rows || []).filter(r => r && r.type);
+  let h = '<div class=um><div class=umh><b>UNIT MIX</b>' + (u.total_units ? '<span class=umt>' + esc(Number(u.total_units).toLocaleString("en")) + ' units</span>' : '') + '<i class="ums ' + stl[0] + '">' + stl + '</i></div>';
+  if (ac) h += '<div class=umc>' + [["residential", "Residential"], ["office", "Office suites"], ["retail", "Retail units"]].filter(x => ac[x[0]]).map(x => '<div><b>' + esc(ac[x[0]]) + '</b><i>' + x[1] + '</i></div>').join("") + '</div>';
+  if (rows.length) {
+    const money = (v) => v == null ? "\u2014" : (v >= 1e6 ? (v / 1e6).toFixed(2) + "m" : Math.round(v / 1000) + "k");
+    const hasP = rows.some(r => r.median_aed || r.est_aed), hasR = rows.some(r => r.median_rent), hasY = rows.some(r => r.gross_yield_pct != null), hasL = rows.some(r => r.levels), hasS = rows.some(r => r.sold != null && r.launched);
+    const left = (r) => r.remaining == null ? "\u2014" : (r.remaining <= 0 ? '<span style="color:#8FC7B9">sold out</span>' : esc(r.remaining) + (r.sheet ? ' <span style="opacity:.65">(' + esc(r.sheet) + ' on sheet)</span>' : ''));
+    const hasA = rows.some(r => r.ask_med);
+    const ask = (r) => r.ask_med ? money(r.ask_med) + (r.ask_n > 1 && r.ask_min && r.ask_max && r.ask_max > r.ask_min ? ' <span style="opacity:.65">' + money(r.ask_min) + "\u2013" + money(r.ask_max) + "</span>" : "") : "\u2014";
+    const cols = compact ? [["Type", r => esc(r.type)], ["Units", r => r.units != null ? esc(r.units) : "\u2014"]].concat(hasS ? [["Sold", r => r.sold != null ? esc(r.sold) : "\u2014"], ["Left", left]] : [], hasA ? [["Ask", ask]] : [], hasP ? [["Sold @", r => r.median_aed ? money(r.median_aed) : (r.est_aed ? '<span style="opacity:.7" title="estimate">~' + money(r.est_aed) + '</span>' : "\u2014")]] : [], hasR && !hasS ? [["Rent", r => money(r.median_rent)]] : [], hasY && !hasS && !hasA ? [["Yield", r => r.gross_yield_pct != null ? r.gross_yield_pct + "%" : "\u2014"]] : [])
+      : [["Type", r => esc(r.type)], ["Units", r => r.units != null ? esc(r.units) : "\u2014"], ["Size", r => r.median_sqm ? Math.round(r.median_sqm) + " m\u00b2" : (r.ask_sqft_med ? Math.round(r.ask_sqft_med) + " ft\u00b2" : (r.configuration ? esc(r.configuration) : "\u2014"))]].concat(hasL ? [["Levels", r => esc(r.levels || "\u2014")]] : [], hasS ? [["Sold", r => r.sold != null ? esc(r.sold) : "\u2014"], ["Left", left]] : [], hasA ? [["Ask", ask]] : [], hasP ? [["Sold @", r => r.median_aed ? money(r.median_aed) : (r.est_aed ? '<span style="opacity:.7" title="estimate">~' + money(r.est_aed) + '</span>' : "\u2014")]] : [], hasR ? [["Rent", r => money(r.median_rent)]] : [], hasY ? [["Yield", r => r.gross_yield_pct != null ? r.gross_yield_pct + "%" : "\u2014"]] : []);
+    h += '<table class=umx><tr>' + cols.map(c => '<th>' + c[0] + '</th>').join("") + '</tr>' + rows.slice(0, compact ? 5 : 9).map(r => '<tr>' + cols.map(c => '<td>' + c[1](r) + '</td>').join("") + '</tr>').join("") + '</table>';
+    if (rows.some(r => !r.median_aed && r.est_aed)) h += '<div class=umn>~ = estimate, not a sold price: ' + esc((rows.find(r => !r.median_aed && r.est_aed) || {}).est_basis || "register price per m\u00b2 x size") + (u.register_aed_sqm ? ' (this building: AED ' + Number(u.register_aed_sqm).toLocaleString("en") + '/m\u00b2 in the register)' : '') + '</div>';
+    if (hasA) h += '<div class=umn>Ask = the developer\u2019s own availability sheet' + (u.remaining && u.remaining.sheet_date ? " of " + esc(u.remaining.sheet_date) : "") + ', median of the units listed (range in grey) \u00b7 Sold @ = median price actually paid, Land Department register, same type</div>';
+    if (!compact && u.register_avg_aed && !rows.some(r => r.median_aed)) h += '<div class=umn>Average price paid in this building, all types: AED ' + money(u.register_avg_aed) + ' (register, sales-weighted)</div>';
+    const rm = u.remaining || null;
+    if (rm && rm.launched) h += '<div class=umn style="color:var(--text,#E8E4D8)">' + ["launched " + esc(rm.launched), "sold " + esc(rm.sold) + " (register)", rm.sheet != null ? "on the developer sheet " + esc(rm.sheet) + (rm.sheet_date ? " (" + esc(rm.sheet_date) + ")" : "") : null,
+      rm.remaining != null ? (rm.remaining <= 0 ? "sold out on the register" : "left " + esc(rm.remaining)) : null, rm.unaccounted != null && rm.unaccounted > 0 ? esc(rm.unaccounted) + " unaccounted: sold but not yet registered, or held back" : null, rm.rented ? esc(rm.rented) + " Ejari contracts" : null].filter(Boolean).join(" \u00b7 ") + '</div>';
+    const d_ = u.dld || {};
+    if (!compact && (d_.community || d_.master || d_.plot_area_sqm)) h += '<div class=umn>' + [d_.community && d_.plot_no ? "plot " + esc(d_.community) + "-" + esc(d_.plot_no) : null, d_.master ? "master project " + esc(d_.master) : null,
+      d_.plot_area_sqm ? Math.round(d_.plot_area_sqm).toLocaleString("en") + " m\u00b2 plot" : null, d_.buildings_on_plot > 1 ? d_.buildings_on_plot + " buildings on the plot" : null, d_.property_id ? "DLD property " + esc(d_.property_id) : null].filter(Boolean).join(" \u00b7 ") + '</div>';
+    const m_ = u.dm || null;
+    if (!compact && m_ && (m_.floors_above || m_.lifts || m_.indoor_parking)) h += '<div class=umn>' + ["Dubai Municipality permit: " + (m_.floors_label ? esc(String(m_.floors_label).replace(/\s+/g, " ").trim()) : (m_.floors_above ? "G+" + m_.floors_above : "")),
+      m_.basements ? m_.basements + " basement" + (m_.basements > 1 ? "s" : "") : null, m_.lifts ? m_.lifts + " lifts" : null, m_.indoor_parking ? Number(m_.indoor_parking).toLocaleString("en") + " indoor parking" : null,
+      m_.completed ? "completed " + String(m_.completed).slice(0, 4) : (m_.dm_status ? esc(m_.dm_status) : null), m_.height_m ? Math.round(m_.height_m) + " m" : null].filter(Boolean).join(" \u00b7 ") + '</div>';
+    const basis = [...new Set(rows.map(r => r.basis).filter(Boolean))]; if (!compact && basis.length) h += '<div class=umn style="opacity:.7">' + esc(basis.join(" \u00b7 ")) + (hasR ? " \u00b7 rent: Ejari contracts from 2024, median annual \u00b7 yield = median rent \u00f7 median sale price, same type, gross" : "") + '</div>';
+  }
+  else if (u.mix_types && u.mix_types.length) h += '<div class=umn>Types offered: ' + esc(u.mix_types.join(", ")) + '. Counts per type not on file yet.</div>';
+  if (u.sheet && u.sheet.by_type) h += '<div class=umn><b>On the developer sheet (' + esc(u.sheet.date || "") + '):</b> ' + esc(Object.entries(u.sheet.by_type).map(x => x[1] + " \u00d7 " + x[0]).join(" \u00b7 ")) + (u.sheet.completion ? ' \u00b7 completion ' + esc(u.sheet.completion) : '') + '</div>';
+  if (!ac && !rows.length) h += '<div class=umn>' + (u.registered_homes ? esc(u.registered_homes) + ' homes seen in the register' : (u.indicative_homes ? '~' + esc(u.indicative_homes) + ' homes indicated by the model' : 'No unit data held yet')) + '.</div>';
+  if (!compact && u.needs && u.needs.length) h += '<div class=umn style="opacity:.75">Fills from: ' + esc(u.needs[0].replace(/ for .*$/, "")) + '.</div>';
+  if (u.floors || u.car_parks) h += '<div class=umn>' + [u.floors ? u.floors + ' floors' : null, u.car_parks ? u.car_parks + ' car parks' : null].filter(Boolean).join(' \u00b7 ') + '</div>';
+  return h + '</div>';
+}
+const UNIT_MIX_CSS = '.um{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:rgba(24,42,38,.55)}.umh{display:flex;align-items:baseline;gap:8px}.umh b{font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.14em;color:#C5A56A}.umt{font-family:Fraunces,Georgia,serif;font-size:1rem;color:#E8E4D8}' +
+  '.ums{margin-left:auto;font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:.52rem;letter-spacing:.06em;text-transform:uppercase;border:1px solid;border-radius:99px;padding:1px 7px}.ums.r{color:#C5A56A;border-color:rgba(197,165,106,.6)}.ums.p{color:#8FA39B;border-color:#2E4A44}' +
+  '.umc{display:flex;gap:6px;margin-top:8px}.umc div{flex:1;background:rgba(19,31,29,.9);border:1px solid var(--line);border-radius:8px;padding:6px 8px;text-align:center}.umc b{display:block;font-family:Fraunces,Georgia,serif;font-size:1.05rem;color:#C5A56A}.umc i{font-style:normal;font-size:.55rem;color:#8FA39B;font-family:"IBM Plex Mono",monospace}' +
+  '.umx{width:100%;border-collapse:collapse;margin-top:8px;font-size:.66rem}.umx th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.1em;color:#8FA39B;font-weight:500;padding:2px 4px}.umx td{padding:3px 4px;border-top:1px solid var(--line);color:#E8E4D8}.umx td:not(:first-child),.umx th:not(:first-child){text-align:right}.umn{margin-top:6px;font-size:.64rem;color:#8FA39B;line-height:1.35}';
+const UPDATE_SIGNOFF = "\n\n— Black Coffee, curated by Papi";   // v89.3 - every update to her signs off this way (Kendall, 5 Sep 2026)
+let RENDER_LAST_ERR = "";
+const cardKey = (ctxAt, n) => "angle_" + String(ctxAt || 0) + "_" + n;
+async function angleCardHtml(env, angle, n, origin) {
+  let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+  const area = angleArea(angle, d); let img = null;
+  if (area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
+  if (!img) img = origin + "/img/bg_market";
+  const svg = angleCardSvg(angle, area, img, n);
+  return { area, html: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413;width:1080px;height:1080px;overflow:hidden}svg{display:block}</style></head><body>${svg}</body></html>` };
+}
+async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy) {
+  RENDER_LAST_ERR = "";
+  const k = cardKey(ctxAt, n);
+  try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: origin + "/img/" + k, area: angleArea(angle, null) }; } catch (e) {}
+  if (!env.CF_RENDER_TOKEN) {
+    RENDER_LAST_ERR = "no CF_RENDER_TOKEN - rendered on the DigitAlchemy machine within ~5 min";
+    if (wantedBy) { try { await env.MEETINGS.put("angle_wanted_" + k, JSON.stringify({ to: wantedBy, n, at: Date.now() }), { expirationTtl: 6 * 3600 }); } catch (e) {} }
+    return null;
+  }
+  let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+  const area = angleArea(angle, d); let img = null;
+  if (area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
+  if (!img) img = origin + "/img/bg_market";
+  const svg = angleCardSvg(angle, area, img, n);
+  const html = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413}svg{display:block}</style></head><body>${svg}</body></html>`;
+  const acc = env.CF_ACCOUNT_ID || "76bc08573538d7426fce444cf7ef7645";
+  try {
+    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/browser-rendering/screenshot`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + env.CF_RENDER_TOKEN },
+      body: JSON.stringify({ html, viewport: { width: 1080, height: 1080, deviceScaleFactor: 1 }, gotoOptions: { waitUntil: "networkidle0", timeout: 20000 }, screenshotOptions: { type: "png", clip: { x: 0, y: 0, width: 1080, height: 1080 } } }) });
+    if (!r.ok) { RENDER_LAST_ERR = "render " + r.status; return null; }
+    const png = await r.arrayBuffer(); if (png.byteLength < 5000) { RENDER_LAST_ERR = "png too small"; return null; }
+    const key = k;
+    await env.MEETINGS.put("img_" + key, png, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + key, "image/png", { expirationTtl: 14 * 86400 });
+    return { key, url: origin + "/img/" + key, area };
+  } catch (e) { return null; }
+}
 
 // v59 — AREA POSTCARD: 1080×1080 post card — real satellite of the community, Fraunces
 // masthead, five dot-leader facts (price, ticket, net yield, who lives there, what's near,
@@ -3726,7 +4383,7 @@ function chPostcard(a, sup, amen) {
     `<rect x="24" y="24" width="1032" height="1032" fill="url(#pcg)"/></g>` +
     `<rect x="24" y="24" width="1032" height="1032" rx="28" fill="none" stroke="#24352F" stroke-width="2"/>` +
     `<rect x="40" y="40" width="1000" height="1000" rx="20" fill="none" stroke="rgba(232,228,216,.28)" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>` +
-    `<text x="88" y="118" fill="#C5A56A" font-size="26" font-weight="700" letter-spacing="3" font-family="'IBM Plex Mono',monospace">NAJMA نجمة · AREA POSTCARD</text>` +
+    `<text x="88" y="118" fill="#C5A56A" font-size="26" font-weight="700" letter-spacing="3" font-family="'IBM Plex Mono',monospace">THE DIGEST · AREA POSTCARD</text>` +
     `<rect x="908" y="76" width="96" height="96" rx="8" fill="rgba(12,20,19,.55)" stroke="#C5A56A" stroke-width="2"/>` +
     `<g transform="translate(924,92) scale(0.25)"><path d="${NAJ_ICONS.star}" fill="#C5A56A"/></g>` +
     `<text x="88" y="600" fill="#E8E4D8" font-size="76" font-weight="600" font-family="Fraunces,Georgia,serif">${_sx(a.area)}</text>` +
@@ -3736,18 +4393,23 @@ function chPostcard(a, sup, amen) {
     `</svg>`;
 }
 
-function renderCharts(latestRaw, key, amenRaw) {
+function renderCharts(latestRaw, key, amenRaw, briefCtxRaw, satSlugs) { satSlugs = satSlugs || [];
   let d = null; try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
   if (!d || !d.transactions) return '<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#0C1413;color:#E8E4D8;padding:2rem"><h2>Charts</h2><p>No data yet — the collector has not delivered.</p>';
   const t = d.transactions, mo = d.monthly, rn = d.rents;
   const cards = [];
   // v59 — postcard leads the sheet: the most personal, most postable card
+  // v89 - today's angles lead the sheet as cards (the postcard tied to the work); the generic area postcard only when there is no feed yet
+  let _todayAngles = []; try { const _bc = JSON.parse(briefCtxRaw || "null"); if (_bc && Array.isArray(_bc.angles) && Date.now() - (_bc.at || 0) < 36 * 3600 * 1000) _todayAngles = _bc.angles.filter(a => !a.campaign).slice(0, 5); } catch (e) {}
+  if (_todayAngles.length) {
+    _todayAngles.forEach((a, i) => { const ar = angleArea(a, d); const sl = ar ? AREA_SLUG(ar) : ""; cards.push(angleCardSvg(a, ar, sl && satSlugs.includes(sl) ? "/img/sat_" + sl : "/img/bg_market", i + 1)); });
+  } else {
   const topA = (d.areaIntel && d.areaIntel.areas && d.areaIntel.areas[0]) || null;
   if (topA) {
     let amen = null; try { const am = JSON.parse(amenRaw || "null"); if (am && am.ok) amen = am.amen; } catch (e) {}
     const supA = ((d.projects && d.projects.supplyByArea) || {})[topA.area] || null;
     cards.push(chPostcard(topA, supA, amen));
-  }
+  } }
   if (mo && mo.series && mo.series.length) cards.push(chLine("Sales value by month", "AED billion · " + (mo.ytdValueAedBn || "") + "bn year to date", mo.series.map(s => ({ label: s.month.slice(5), value: s.valueAedBn, disp: s.valueAedBn }))));
   if (t.topAreas && t.topAreas.length) cards.push(chBars("Where the market trades", "Registered sales by area · " + (t.periodFrom || "") + " to " + (t.periodTo || ""), t.topAreas.slice(0, 8).map(a => ({ label: a.area.length > 22 ? a.area.slice(0, 21) + "…" : a.area, value: a.sales, disp: a.sales.toLocaleString("en-US") }))));
   if (t.offPlanSplit) cards.push(chDonut("Off-plan vs ready", "Share of registered sales", [{ label: "Off-plan", value: t.offPlanSplit["Off-Plan"] || 0, color: CH.gold }, { label: "Ready", value: t.offPlanSplit["Ready"] || 0, color: CH.teal }]));
@@ -3787,7 +4449,326 @@ async function esriToken(env) {
 // v50 — INTERACTIVE MAP (/map): canvas pan-zoom over the offline basemap JSON (/img/mp_basemap),
 // gold dot per community, tap -> bottom sheet (stats + actions), metric toggle. No map service,
 // no external libraries — everything is register data + curated public coordinates.
-function renderMap(latestRaw, key, waBot, esriOn, prevRaw, skySlugs) {
+const MAP_ICONS = {"school": "<svg viewBox='0 0 24 24'><path d='M2 9l10-4 10 4-10 4z'/><path d='M6 11v4c0 1.6 2.7 3 6 3s6-1.4 6-3v-4'/><path d='M22 9v6'/></svg>", "hospital": "<svg viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='1.5'/><path d='M12 7v6M9 10h6'/><path d='M9.5 21v-4h5v4'/></svg>", "clinic": "<svg viewBox='0 0 24 24'><path d='M6 3v6a6 6 0 0 0 12 0V3'/><path d='M12 15v2a4 4 0 0 0 8 0v-2'/><circle cx='20' cy='13' r='2'/></svg>", "metro": "<svg viewBox='0 0 24 24'><rect x='5' y='3' width='14' height='14' rx='3'/><path d='M5 11h14M9 21l1.5-3M15 21l-1.5-3'/><circle cx='9' cy='14' r='1'/><circle cx='15' cy='14' r='1'/></svg>", "mall": "<svg viewBox='0 0 24 24'><path d='M5 8h14l-1 12H6z'/><path d='M9 8V6a3 3 0 0 1 6 0v2'/></svg>", "park": "<svg viewBox='0 0 24 24'><path d='M12 3l5 7h-3l4 5H6l4-5H7z'/><path d='M12 15v6'/></svg>", "beach": "<svg viewBox='0 0 24 24'><circle cx='17' cy='7' r='2.5'/><path d='M2 15c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M2 19c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0'/></svg>"};
+
+// ---- v102: the map's chrome, shared with the twin. CSS + markup + behaviour; the twin supplies a scene-backed `map` shim.
+const MAP_CHROME_CSS = ''
+  + ':root{--bg:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#8FC7B9}'
+  + '*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;overflow:hidden}'
+  + '#m{position:absolute;inset:0}'
+  + '.top{position:fixed;top:0;left:0;right:0;z-index:5;padding:10px 12px 26px;background:linear-gradient(180deg,rgba(12,20,19,.94),rgba(12,20,19,0));pointer-events:none}'
+  + '.top>*{pointer-events:auto}'
+  + 'h1{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.3rem;margin:0 0 2px}h1 i{font-style:normal;color:var(--gold)}'
+  + '.sub{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.07em;color:var(--mut);text-transform:uppercase;margin-bottom:8px}'
+  + '.srow{display:flex;gap:8px;align-items:flex-start;max-width:640px}.srow .sbox{flex:1;margin:0 0 8px}'
+  + '.hp{position:fixed;top:10px;right:10px;z-index:8;width:min(330px,72vw);background:rgba(19,31,29,.97);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.35)}'
+  + '.hh{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}.hh b{color:var(--text);font-weight:500;letter-spacing:.03em;text-transform:none;font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hh i{font-style:normal;color:var(--mut);transition:transform .2s}.hp.on .hh i{transform:rotate(180deg)}'
+  + '.hbody{display:none;padding:2px 12px 10px;border-top:1px solid var(--line)}.hp.on .hbody{display:block}'
+  + '.hrow{display:grid;grid-template-columns:1fr;gap:4px;padding:7px 0}.hrow label{font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);display:flex;justify-content:space-between;gap:8px}.hrow label b{color:var(--gold);font-weight:500;font-size:.68rem;letter-spacing:0;text-transform:none}'
+  + '.hfoot{display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.06em;text-transform:uppercase}.hfoot a{color:var(--gold);cursor:pointer}.hfoot a#hclear{color:var(--mut)}'
+  + '.dual{position:relative;height:28px}.dual .band{position:absolute;top:12px;height:4px;background:var(--gold);border-radius:2px;pointer-events:none;opacity:.9}.dual input{position:absolute;left:0;right:0;top:0;width:100%;margin:0;background:transparent;pointer-events:none;-webkit-appearance:none;appearance:none;height:28px}.dual input::-webkit-slider-runnable-track{height:4px;background:var(--line);border-radius:2px}.dual input::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:20px;height:20px;border-radius:50%;background:var(--gold);border:2px solid #0C1413;margin-top:-8px;cursor:pointer}.dual input::-moz-range-thumb{pointer-events:auto;width:18px;height:18px;border-radius:50%;background:var(--gold);border:2px solid #0C1413;cursor:pointer}.dual input::-moz-range-track{height:4px;background:var(--line)}'
+  + '.seg{display:flex;gap:6px;flex-wrap:wrap}.seg button{border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:99px;padding:5px 11px;font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}.seg button.on{color:var(--gold);border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}'
+  + '.sbox{position:relative;margin:0 0 8px;max-width:560px}.sbox input{width:100%;box-sizing:border-box;background:rgba(19,31,29,.94);border:1px solid var(--line);border-radius:12px;color:var(--text);font:inherit;font-size:.9rem;padding:9px 12px;outline:none}.sbox input:focus{border-color:rgba(197,165,106,.7)}'
+  + '#qr{position:absolute;left:0;right:0;top:100%;z-index:9;background:rgba(19,31,29,.98);border:1px solid var(--line);border-radius:12px;margin-top:4px;max-height:46vh;overflow:auto;display:none}#qr.on{display:block}'
+  + '.qi{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:baseline;padding:8px 12px;border-top:1px solid var(--line);cursor:pointer;font-size:.86rem}.qi:first-child{border-top:0}.qi:hover,.qi.sel{background:rgba(197,165,106,.1)}'
+  + '.qi i{font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:.52rem;letter-spacing:.07em;text-transform:uppercase;color:var(--gold);min-width:72px}.qi small{color:var(--mut);font-family:"IBM Plex Mono",monospace;font-size:.6rem}'
+  + '.rail{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none}.rail::-webkit-scrollbar{display:none}'
+  + '.c{flex:0 0 auto;min-width:118px;display:flex;flex-direction:column;gap:3px;border:1px solid var(--line);background:rgba(19,31,29,.92);border-radius:14px;padding:9px 12px 8px;color:var(--mut);cursor:pointer;white-space:nowrap;transition:border-color .15s,background .15s}'
+  + '.c i{font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}'
+  + '.c b{font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:600;font-size:.8rem;color:var(--text);letter-spacing:0}'
+  + '.c s{text-decoration:none;font-family:"IBM Plex Mono",monospace;font-size:.58rem;color:var(--mut)}.c s em{font-style:normal;color:var(--text)}'
+  + '.c.on{border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}.c.on b,.c.on s em{color:var(--gold)}.c.on i{color:rgba(197,165,106,.8)}'
+  + '.c.back{border-style:dashed;border-color:rgba(197,165,106,.5);display:flex;flex-direction:column;max-width:210px;white-space:normal}.c.back b{color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}'
+  + '.am{display:flex;gap:8px;overflow-x:auto;margin-top:8px;padding-bottom:4px;scrollbar-width:none}.am::-webkit-scrollbar{display:none}'
+  + '.a{flex:0 0 auto;width:76px;display:flex;flex-direction:column;align-items:center;gap:5px;border:1px solid var(--line);background:rgba(19,31,29,.92);border-radius:14px;padding:10px 6px 8px;color:var(--mut);cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.05em;text-transform:uppercase;text-align:center;transition:border-color .15s,background .15s,color .15s}'
+  + '.a svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}'
+  + '.a b{font-weight:500;font-size:.66rem;color:var(--text);letter-spacing:0;min-height:.9em}'
+  + '.a.on{color:var(--text);border-color:var(--ac);background:color-mix(in srgb,var(--ac) 16%,rgba(19,31,29,.92))}.a.on svg{stroke:var(--ac)}.a.on b{color:var(--ac)}'
+  + '.n1 em svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}'
+  + '#scope{position:fixed;left:10px;top:50%;transform:translateY(-42%);z-index:5;display:none;flex-direction:column;align-items:center;gap:8px;font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}'
+  + '#scope.on{display:flex}'
+  + '.sm{display:flex;flex-direction:column;gap:4px}.sm button{border:1px solid var(--line);background:rgba(19,31,29,.94);color:var(--mut);border-radius:10px;padding:7px 8px;font:inherit;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;width:64px;line-height:1.25}'
+  + '.sm button.on{color:var(--gold);border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}'
+  + '#vr{display:none;flex-direction:column;align-items:center;gap:6px;background:rgba(19,31,29,.94);border:1px solid var(--line);border-radius:12px;padding:10px 6px}#scope.dist #vr{display:flex}'
+  + '#vr b{color:var(--gold);font-weight:500;font-size:.62rem}'
+  + '#vr input{-webkit-appearance:slider-vertical;appearance:slider-vertical;writing-mode:vertical-lr;direction:rtl;width:22px;height:150px;accent-color:var(--gold)}'
+  + '#vr small{color:var(--mut);font-size:.5rem}'
+  + '#panel{position:fixed;left:10px;right:10px;bottom:74px;z-index:6;background:rgba(19,31,29,.97);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:none;max-height:52vh;overflow:auto;max-width:520px;margin:auto}'
+  + '#panel.on{display:block}'
+  + '.pt{font-family:Fraunces,Georgia,serif;font-size:1.2rem;font-weight:600;margin-bottom:2px}'
+  + '.ps{font-family:"IBM Plex Mono",monospace;font-size:.63rem;letter-spacing:.05em;color:var(--mut);text-transform:uppercase;margin-bottom:10px}'
+  + '.near{display:grid;gap:5px}'
+  + '.n1{display:grid;grid-template-columns:16px 1fr auto;gap:8px;align-items:baseline;font-size:.86rem;padding:5px 0;border-top:1px solid var(--line)}'
+  + '.n1:first-child{border-top:0}.n1 em{font-style:normal;font-size:.9rem}.n1.nk{cursor:pointer}.n1.nk:hover{color:var(--gold)}'
+  + '.n1 s{text-decoration:none;font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--mut)}'
+  + '.px{float:right;cursor:pointer;color:var(--mut);font-size:1rem;margin-left:8px}'
+  + '.cc{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;margin-top:8px}.cc .qr{width:118px;height:118px;background:#fff;border-radius:10px;padding:6px;box-sizing:border-box}.cc .qr svg{width:100%;height:100%;display:block}'
+  + '.ct{display:grid;gap:6px;font-size:.84rem}.ct a{color:var(--text);text-decoration:none;border-bottom:1px solid var(--line)}.ct a:hover{color:var(--gold)}.ct i{font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.06em;color:var(--mut);text-transform:uppercase;display:block}'
+  + '.qrl{font-family:"IBM Plex Mono",monospace;font-size:.52rem;letter-spacing:.05em;color:var(--mut);text-transform:uppercase;text-align:center;margin-top:4px}'
+  + '.back{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.06em;color:var(--gold);text-transform:uppercase;cursor:pointer;margin-bottom:6px}'
+  + '.vwrap{margin:10px 0 6px}.vwrap video{width:100%;max-height:58vh;border-radius:12px;background:#000;display:block}'
+  + '.vtt{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.05em;color:var(--gold);text-transform:uppercase;margin:6px 0 2px}'
+  + '.hint{position:fixed;left:0;right:0;bottom:78px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--mut);z-index:4;pointer-events:none}';
+const MAP_CHROME_CSS_X = 'body.wide .top{right:37%}body.wide #panel{left:auto;right:14px;top:96px;bottom:88px;width:34%;max-width:none;max-height:none;margin:0;padding:14px 16px}body.wide #scope{left:14px;top:auto;bottom:70px;transform:none;flex-direction:row;align-items:flex-end;gap:10px;zoom:.78}body.wide .hint{left:14px;right:auto;bottom:88px;text-align:left;max-width:300px}body.wide #hp{max-width:460px}body.wide.film #panel{transform:translateX(28px)}body.wide.film #panel.on{transform:translateX(0)}'
+  + 'body.film #panel{transition:transform .55s cubic-bezier(.2,.8,.2,1),opacity .45s ease;transform:translateY(24px);opacity:0}body.film #panel.on{transform:translateY(0);opacity:1}body.film .rail .c,body.film .a{animation:filmin .5s cubic-bezier(.2,.8,.2,1) both}body.film .rail .c:nth-child(2){animation-delay:.05s}body.film .rail .c:nth-child(3){animation-delay:.1s}body.film .rail .c:nth-child(4){animation-delay:.15s}body.film .rail .c:nth-child(5){animation-delay:.2s}body.film .rail .c:nth-child(6){animation-delay:.25s}body.film .a:nth-child(2){animation-delay:.06s}body.film .a:nth-child(3){animation-delay:.12s}body.film .a:nth-child(4){animation-delay:.18s}body.film .a:nth-child(5){animation-delay:.24s}body.film .a:nth-child(6){animation-delay:.3s}body.film .a:nth-child(7){animation-delay:.36s}body.film .n1{animation:filmin .45s ease both}body.film .n1:nth-child(2){animation-delay:.07s}body.film .n1:nth-child(3){animation-delay:.14s}body.film .n1:nth-child(4){animation-delay:.21s}body.film .n1:nth-child(5){animation-delay:.28s}body.film .n1:nth-child(6){animation-delay:.35s}@keyframes filmin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}body.film .a.on,body.film .rail .c.on{transition:background .4s,border-color .4s,color .4s}.tapfx{position:fixed;z-index:99;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:rgba(197,165,106,.55);box-shadow:0 0 0 2px rgba(197,165,106,.9);pointer-events:none;animation:tapfx .7s ease-out forwards}@keyframes tapfx{0%{transform:scale(.6);opacity:.95}100%{transform:scale(3.2);opacity:0}}body.film .maplibregl-ctrl-bottom-right,body.film .hint{display:none!important}' + 'body.clean .top,body.clean #scope,body.clean #hp,body.clean #panel,body.clean .hint,body.clean .maplibregl-ctrl-bottom-right,body.clean nav,body.clean .nav,body.clean #nav{display:none!important}@media(max-width:640px){.hp:not(.on){width:auto}.hp:not(.on) .hh b{display:none}.hp{top:8px;right:8px}}';
+const MAP_CHROME_HTML = ''
+  + '<div class=top><h1>Najma <i>نجمة</i> — __TITLE__</h1><div class=sub id=st>pick a district</div>'
+  + '<div class=srow><div class=sbox><input id=q type=search placeholder="search a district, sub-community, plot, school, hospital, mall, metro, developer\u2026" autocomplete=off spellcheck=false><div id=qr></div></div></div>'
+  + '<div class=rail id=rail></div><div class=am id=am></div></div>'
+  + '<div id=scope><div class=sm><button class="on" data-mode=area>in this community</button><button data-mode=dist>by distance</button></div>'
+  + '<div id=vr><b id=rngv>2.0 km</b><input type=range id=rng min=0.5 max=10 step=0.5 value=2><small id=rngof>from the district centre</small></div></div>'
+  + '<div id=panel></div><div class=hint id=hint></div>'
+  + '<div id=hp class=hp><div class=hh id=hh><span>homes</span><b id=hres>set a budget</b><i>\u25BE</i></div><div class=hbody>'
+  + '  <div class=hrow><label>budget <b id=hbv>from AED 1.5M to 6.4M</b></label><div class=dual><i class=band id=bandp></i><input type=range id=hlo min=0 max=60 value=10 autocomplete=off><input type=range id=hhi min=0 max=60 value=30 autocomplete=off></div></div>'
+  + '  <div class=hrow><label>bedrooms <b id=hbdv>from 1 to 3</b></label><div class=dual><i class=band id=bandb></i><input type=range id=hblo min=0 max=6 value=1 autocomplete=off><input type=range id=hbhi min=0 max=6 value=3 autocomplete=off></div></div>'
+  + '  <div class=hrow><label>home type</label><div class=seg><button class="on" data-t=any type=button>any</button><button data-t=apt type=button>apartment</button><button data-t=villa type=button>villa &amp; townhouse</button></div></div>'
+  + '  <div class=hrow><label>extras</label><div class=seg><button data-x=beach type=button>near the beach</button><button data-x=live type=button>live availability</button></div></div>'
+  + '  <div class=hfoot><a id=hlist>list them \u2192</a><a id=hclear>clear</a></div></div></div>';
+const MAP_CHROME_JS = ''
+  + 'var AMEN={school:["schools","\u{1F393}","#8FC7B9"],hospital:["hospitals","\u{1F3E5}","#E08A8A"],clinic:["clinics","⚕","#E8B49A"],metro:["metro","\u{1F687}","#9FB8E8"],mall:["malls","\u{1F6CD}","#D98F5A"],park:["parks","\u{1F333}","#8FD3A0"],beach:["beach","\u{1F30A}","#7FC7D9"]};'
+  + 'var ICON=' + JSON.stringify(MAP_ICONS) + ';'
+  + 'var D=null,SUBS=null,PLOTS=null,AM=null,SEL=null,ON={},VIDS=[],PR=[],RKM=2,MODE="area";'
+  + 'document.getElementById("rng").oninput=function(){RKM=parseFloat(this.value);document.getElementById("rngv").textContent=RKM.toFixed(1)+" km";drawAm();if(SEL)openPanel(SEL)};'
+  + 'document.querySelectorAll("#scope .sm button").forEach(function(b){b.onclick=function(){MODE=b.getAttribute("data-mode");document.querySelectorAll("#scope .sm button").forEach(function(x){x.classList.toggle("on",x===b)});document.getElementById("scope").classList.toggle("dist",MODE==="dist");drawAm();if(SEL)openPanel(SEL)}});'
+  + 'function rngLabel(){var el=document.getElementById("rngof");if(el)el.textContent=SEL?"from the selected place":"from the district centre";var sc=document.getElementById("scope");if(sc){sc.classList.toggle("on",!!currentDistrict()||!!SEL);placeScope()}}'
+  + 'function placeScope(){var sc=document.getElementById("scope"),tp=document.querySelector(".top");if(!sc||!tp)return;if(innerWidth<=640){var b=tp.getBoundingClientRect().bottom;sc.style.top=(b+8)+"px";sc.style.transform="none"}else{sc.style.top="";sc.style.transform=""}}'
+  + 'window.addEventListener("resize",placeScope);'
+  + 'function curD(){var slug=currentDistrict();return slug&&D?(D.districts||[]).filter(function(x){return x.slug===slug})[0]:null}'
+  + 'function within(i){var d=curD();'
+  + '  if(MODE==="area"){if(!d)return true;var b=d.bbox;return i.lon>=b[0]&&i.lon<=b[2]&&i.lat>=b[1]&&i.lat<=b[3]}'
+  + '  var c=SEL?SEL.c:(d?d.centre:null);return !c||m2(c,[i.lon,i.lat])<=RKM*1000}'
+  + 'function styleFor(tok){return tok?"https://basemapstyles-api.arcgis.com/arcgis/rest/services/styles/v2/styles/arcgis/dark-gray?token="+encodeURIComponent(tok)+"&worldview=unitedArabEmirates":"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"}'
+  + 'var map=null,STYLE_READY=false;'
+  + 'function mkMap(tok){map=new maplibregl.Map({container:"m",style:styleFor(tok),center:[55.23,25.10],zoom:9.4,attributionControl:{compact:true}});'
+  + '  window.__najmap2=map;map.on("style.load",function(){STYLE_READY=true;if(D)addLayers()});map.addControl(new maplibregl.NavigationControl({showCompass:false}),"bottom-right");map.on("zoomend",hint);map.on("error",function(e){console.warn("map",e&&e.error&&e.error.message)});loadData();}'
+  + 'function j(u){return fetch(u).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}'
+  + 'function m2(a,b){var R=6371000,t=Math.PI/180;var dx=(b[0]-a[0])*t*Math.cos((a[1]+b[1])*0.5*t),dy=(b[1]-a[1])*t;return Math.round(Math.sqrt(dx*dx+dy*dy)*R)}'
+  + 'function fmt(d){return d<950?(d+" m"):((d/1000).toFixed(1)+" km")}'
+  + 'function esc(t){return String(t==null?"":t).replace(/[&<>]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]})}'
+  + 'function tc(t){t=String(t||"");if(t.length>3&&t===t.toUpperCase()&&/[A-Z]/.test(t)){return t.toLowerCase().replace(/(^|[\\s\\-\\/(])([a-z])/g,function(m,a,b){return a+b.toUpperCase()}).replace(/\\b(By|Of|And|The|At)\\b/g,function(m){return m.toLowerCase()})}return t}'
+  + 'function loadData(){var V="?v="+Math.floor(Date.now()/600000);Promise.all([j("/img/districts_geo"+V),j("/img/subs"+V),j("/img/plots"+V),j("/img/amenities"+V),j("/img/videos"+V),j("/img/map_prices"+V)]).then(function(r){'
+  + '  D=r[0];SUBS=r[1];PLOTS=r[2];AM=r[3];VIDS=(r[4]&&r[4].items)||[];PR=(r[5]&&r[5].items)||[];buildRail();buildAm();drawAm();if(STYLE_READY)addLayers();deepLink();});}'
+  + 'var HB={lo:10,hi:30,blo:1,bhi:3,type:"any",beach:false,live:false,on:false};'
+  + 'function stepAed(v){v=+v;return v<=20?250000+v*125000:(v<=40?2750000+(v-20)*362500:10000000+(v-40)*500000)}'      // 0.25M..2.75M..10M..20M
+  + 'function fmtAed(a){return a>=1e6?("AED "+(a/1e6).toFixed(a>=1e7?0:1)+"M"):("AED "+Math.round(a/1e3)+"k")}'
+  + 'function bedsLabel(b){return b>=6?"5+":(b===0?"studio":String(b))}'
+  + 'function isVilla(it){return !!(it.fl&&it.fl<=3&&(!it.b["0"]&&!it.b["1"]))||/villa|townhouse|town house|mansion/i.test(it.n||"")}'
+  + 'function nearBeach(it){if(!AM||!AM.items)return false;for(var k=0;k<AM.items.length;k++){var a=AM.items[k];if(a.k!=="beach")continue;if(m2([it.lon,it.lat],[a.lon,a.lat])<=1000)return true}return false}'
+  + 'function homeMatches(){var lo=stepAed(HB.lo),hi=stepAed(HB.hi);if(hi<lo){var t=lo;lo=hi;hi=t}var blo=Math.min(HB.blo,HB.bhi),bhi=Math.max(HB.blo,HB.bhi);var out=[];'
+  + '  PR.forEach(function(it){var best=null;var src={};Object.keys(it.b||{}).forEach(function(k){src[k]=["reg",it.b[k]]});Object.keys(it.ask||{}).forEach(function(k){if(!src[k])src[k]=["ask",it.ask[k]]});'
+  + '    Object.keys(src).forEach(function(k){var b=+k;if(b===9)return;var bb=b>=6?6:b;if(bb<blo||bb>bhi)return;var v=src[k][1];if(v<lo||v>hi)return;if(!best||v<best.v)best={b:b,v:v,ask:src[k][0]==="ask"}});if(!best)return;'
+  + '    if(HB.type==="villa"&&!isVilla(it))return;if(HB.type==="apt"&&isVilla(it))return;if(HB.live&&!it.left)return;if(HB.beach&&!nearBeach(it))return;out.push({it:it,b:best.b,v:best.v})});'
+  + '  out.sort(function(a,b){return a.v-b.v});return out}'
+  + 'function drawHomes(){var src=map&&map.getSource("homes");if(!HB.on){if(src)src.setData({type:"FeatureCollection",features:[]});return}var m=homeMatches();var mPins=window.__twinDistrict?m.filter(function(x){return x.it.d===window.__twinDistrict}):m;'
+  + '  if(src)src.setData({type:"FeatureCollection",features:mPins.map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x.it.lon,x.it.lat]},properties:{p:x.it.p,lab:x.it.n+" \u00b7 "+fmtAed(x.v)}}})});'
+  + '  var byD={};m.forEach(function(x){byD[x.it.d]=(byD[x.it.d]||0)+1});var top=Object.keys(byD).sort(function(a,b){return byD[b]-byD[a]}).slice(0,2).map(function(d){return dName(d)+" "+byD[d]}).join(" \u00b7 ");'
+  + '  document.getElementById("hres").textContent=m.length+" developments"+(window.__twinDistrict?" · "+mPins.length+" here":"")+(top?" \u00b7 "+top:"");'
+  + '  var hl=document.getElementById("hlist");if(hl)hl.onclick=function(){listHomes(m)};'
+  + '  document.getElementById("hbv").textContent="from "+fmtAed(stepAed(Math.min(HB.lo,HB.hi)))+" to "+fmtAed(stepAed(Math.max(HB.lo,HB.hi))).replace("AED ","");document.getElementById("hbdv").textContent="from "+bedsLabel(Math.min(HB.blo,HB.bhi))+" to "+bedsLabel(Math.max(HB.blo,HB.bhi));'
+  + '  var bp=document.getElementById("bandp"),bb=document.getElementById("bandb");if(bp){var a=Math.min(HB.lo,HB.hi)/60*100,b=Math.max(HB.lo,HB.hi)/60*100;bp.style.left=a+"%";bp.style.width=(b-a)+"%"}if(bb){var c=Math.min(HB.blo,HB.bhi)/6*100,d=Math.max(HB.blo,HB.bhi)/6*100;bb.style.left=c+"%";bb.style.width=(d-c)+"%"}}'
+  + 'function listHomes(m){var el=document.getElementById("panel");LISTK=null;var rows=m.slice(0,60);'
+  + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>homes</div><div class=ps>\'+m.length+" developments match \u00b7 "+document.getElementById("hbv").textContent+" \u00b7 "+document.getElementById("hbdv").textContent+" bed"+\'</div><div class=near>\'+rows.map(function(x,ix){return \'<div class="n1 nk" data-ix="\'+ix+\'"><em style="color:var(--gold)">\u25CF</em><span>\'+esc(x.it.n)+\' <small style="color:var(--mut)">\'+esc(dName(x.it.d))+(x.it.dev?" \u00b7 "+esc(x.it.dev):"")+(x.it.left?" \u00b7 "+x.it.left+" left":"")+\'</small></span><s>\'+bedsLabel(x.b)+"-bed "+fmtAed(x.v)+(x.ask?" asking":((x.it.e||[]).indexOf(x.b)>=0?" \u2248":""))+\'</s></div>\'}).join("")+"</div>";'
+  + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;el.querySelectorAll(".nk").forEach(function(r){r.onclick=function(){openHome(rows[+r.getAttribute("data-ix")].it)}})}'
+  + 'function openHome(it){var el=document.getElementById("panel");goDistrict(it.d);setTimeout(function(){setSel([it.lon,it.lat]);map.easeTo({center:[it.lon,it.lat],zoom:Math.max(map.getZoom(),15),duration:700});'
+  + '  var keys={};Object.keys(it.b||{}).forEach(function(k){keys[k]=1});Object.keys(it.ask||{}).forEach(function(k){keys[k]=1});'
+  + '  var lines=Object.keys(keys).sort(function(a,b){return +a-+b}).map(function(k){var b=+k;var reg=it.b&&it.b[k];var ask=it.ask&&it.ask[k];return "<div><i>"+(b===9?"penthouse":bedsLabel(b)+"-bed")+"</i>"+(reg?fmtAed(reg)+((it.e||[]).indexOf(b)>=0?" <small style=color:var(--mut)>estimate</small>":" <small style=color:var(--mut)>register median</small>"):"")+(ask?(reg?" \u00b7 ":"")+"from "+fmtAed(ask)+" <small style=color:var(--mut)>asking \u00b7 sheet "+(it.sheet||"")+"</small>":"")+(it.r&&it.r[k]?" <small style=color:var(--mut)>\u00b7 rent "+fmtAed(it.r[k])+"/yr</small>":"")+"</div>"}).join("");'
+  + '  var vv=videoFor(it.n,it.d);'
+  + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+esc(it.n)+\'</div><div class=ps>\'+esc(dName(it.d))+(it.dev?" \u00b7 "+esc(it.dev):"")+(it.u?" \u00b7 "+it.u+" units":"")+(it.la?" \u00b7 "+it.la+" launched":"")+(it.la&&it.so!=null?" \u00b7 "+it.so+" sold in the register":"")+(it.left?" \u00b7 "+it.left+" left on the developer sheet":"")+\'</div><div class=ct style="margin-top:8px">\'+lines+\'<div><i>more</i><a href="/find?key=\'+encodeURIComponent(KEY)+\'&q=\'+encodeURIComponent(it.n)+\'">open in Find \u2192</a></div></div>\'+(vv?videoHtml(vv):"");'
+  + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;document.getElementById("hint").textContent=""},700)}'
+  + '(function(){var hp=document.getElementById("hp"),hh=document.getElementById("hh");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});'
+  + '  hh.onclick=function(){var open=!hp.classList.contains("on");hp.classList.toggle("on",open);if(open&&!HB.on){HB.on=true;drawHomes()}};'
+  + '  (function(){var bp=document.getElementById("bandp"),bb=document.getElementById("bandb");if(bp){bp.style.left="16.7%";bp.style.width="33.3%"}if(bb){bb.style.left="16.7%";bb.style.width="33.3%"}})();'
+  + '  document.getElementById("hclear").onclick=function(){HB.on=false;HB.lo=10;HB.hi=30;HB.blo=1;HB.bhi=3;HB.type="any";HB.beach=false;HB.live=false;[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});hp.querySelectorAll(".seg button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-t")==="any")});drawHomes();document.getElementById("hres").textContent="set a budget";hp.classList.remove("on")};'
+  + '  [["hlo","lo"],["hhi","hi"],["hblo","blo"],["hbhi","bhi"]].forEach(function(x){var el=document.getElementById(x[0]);el.oninput=function(){HB[x[1]]=+el.value;HB.on=true;drawHomes()}});'
+  + '  hp.querySelectorAll(".seg button[data-t]").forEach(function(b){b.onclick=function(){HB.type=b.getAttribute("data-t");hp.querySelectorAll(".seg button[data-t]").forEach(function(x){x.classList.toggle("on",x===b)});drawHomes()}});'
+  + '  hp.querySelectorAll(".seg button[data-x]").forEach(function(b){b.onclick=function(){var k=b.getAttribute("data-x");HB[k]=!HB[k];b.classList.toggle("on",HB[k]);drawHomes()}});})();'
+  + 'var DN={};function dName(slug){if(!DN[slug]&&D){(D.districts||[]).forEach(function(d){DN[d.slug]=d.name})}return DN[slug]||slug}'
+  + 'function qnorm(t){return String(t||"").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g," ").trim()}'
+  + 'function searchAll(q){q=qnorm(q);if(q.length<2)return [];var toks=q.split(" ").filter(Boolean);var hit=function(t){t=qnorm(t);return toks.every(function(w){return t.indexOf(w)>=0})};var out=[];'
+  + '  (D&&D.districts||[]).forEach(function(d){if(hit(d.name)||hit(d.slug))out.push({t:"district",n:d.name,s:d.corridor,rank:0,go:function(){goDistrict(d.slug)}})});'
+  + '  ((SUBS&&SUBS.features)||[]).forEach(function(f){var p=f.properties;if(hit(p.name))out.push({t:"sub-community",n:tc(p.name),s:dName(p.district)+(p.plots?" \u00b7 "+p.plots+" plots":""),rank:1,go:function(){goDistrict(p.district);setTimeout(function(){openPlace({properties:p,geometry:f.geometry},"sub")},650)}})});'
+  + '  ((PLOTS&&PLOTS.features)||[]).forEach(function(f){var p=f.properties;if(hit(p.name)||(p.plot&&/^[0-9]/.test(q)&&String(p.plot).toLowerCase().replace(/[^a-z0-9]/g,"").indexOf(q.replace(/ /g,""))===0)||("plot "+p.plot).indexOf(q)===0)out.push({t:"plot "+p.plot,n:tc(p.name)||("Plot "+p.plot),s:dName(p.district),rank:2,go:function(){goDistrict(p.district);setTimeout(function(){openPlace({properties:p,geometry:f.geometry},"plot")},650)}})});'
+  + '  var devs={};PR.forEach(function(it){if(it.dev)devs[it.dev]=(devs[it.dev]||0)+1});Object.keys(devs).forEach(function(dv){if(hit(dv))out.push({t:"developer",n:dv,s:devs[dv]+" priced developments",rank:0,go:function(){var m=PR.filter(function(it){return it.dev===dv}).map(function(it){var ks=Object.keys(it.b);var k=ks[0];return {it:it,b:+k,v:it.b[k]}}).sort(function(a,b){return a.v-b.v});listHomes(m);if(map.getSource("homes"))map.getSource("homes").setData({type:"FeatureCollection",features:m.map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x.it.lon,x.it.lat]},properties:{p:x.it.p,lab:x.it.n}}})})}})});'
+  + '  PR.forEach(function(it){if(hit(it.n)&&!((SUBS&&SUBS.features)||[]).some(function(f){return qnorm(f.properties.name)===qnorm(it.n)}))out.push({t:"development",n:it.n,s:dName(it.d)+(it.dev?" \u00b7 "+it.dev:"")+" \u00b7 from "+fmtAed(Math.min.apply(null,Object.keys(it.b).map(function(k){return it.b[k]}))),rank:1,go:function(){openHome(it)}})});'
+  + '  VIDS.forEach(function(v){if(hit(v.name)||hit(v.title))out.push({t:"video tour",n:v.name,s:v.master||"",rank:0,go:function(){if(v.district)goDistrict(v.district);setTimeout(function(){openVideo(v)},650)}})});'
+  + '  (AM&&AM.items||[]).forEach(function(i){if(hit(i.n))out.push({t:AMEN[i.k]?AMEN[i.k][0]:i.k,n:i.n,s:(i.x||"")+(i.d?" \u00b7 "+dName(i.d):""),rank:3,go:function(){if(i.d)goDistrict(i.d);setTimeout(function(){if(!ON[i.k]){ON[i.k]=true;var a=document.querySelector(".a[data-k=\'"+i.k+"\']");if(a)a.classList.add("on");drawAm()}openAmenity(i,null)},650)}})});'
+  + '  out.sort(function(a,b){return a.rank-b.rank||(qnorm(a.n).indexOf(q)===0?-1:0)-(qnorm(b.n).indexOf(q)===0?-1:0)||a.n.length-b.n.length});return out.slice(0,14)}'
+  + 'function goDistrict(slug){if(currentDistrict()===slug)return;var c=document.querySelector(".rail .c[data-d=\'"+slug+"\']");if(!c){buildRail();c=document.querySelector(".rail .c[data-d=\'"+slug+"\']")}if(c)pickDistrict(slug,c)}'
+  + 'var QI=[],QSEL=-1;function renderQ(list){var box=document.getElementById("qr");QI=list;QSEL=-1;if(!list.length){box.classList.remove("on");box.innerHTML="";return}'
+  + '  box.innerHTML=list.map(function(r,ix){return \'<div class=qi data-ix="\'+ix+\'"><i>\'+esc(r.t)+\'</i><span>\'+esc(r.n)+\'</span><small>\'+esc(r.s||"")+\'</small></div>\'}).join("");box.classList.add("on");'
+  + '  box.querySelectorAll(".qi").forEach(function(el){el.onclick=function(){pickQ(+el.getAttribute("data-ix"))}})}'
+  + 'function pickQ(ix){var r=QI[ix];if(!r)return;document.getElementById("qr").classList.remove("on");document.getElementById("q").value=r.n;document.getElementById("q").blur();r.go()}'
+  + '(function(){var q=document.getElementById("q");var tmr=null;q.oninput=function(){clearTimeout(tmr);tmr=setTimeout(function(){renderQ(searchAll(q.value))},120)};'
+  + '  q.onkeydown=function(e){if(e.key==="Escape"){renderQ([]);q.blur()}else if(e.key==="ArrowDown"||e.key==="ArrowUp"){if(!QI.length)return;e.preventDefault();QSEL=(QSEL+(e.key==="ArrowDown"?1:-1)+QI.length)%QI.length;document.querySelectorAll(".qi").forEach(function(x,i){x.classList.toggle("sel",i===QSEL)})}else if(e.key==="Enter"){if(QI.length)pickQ(QSEL<0?0:QSEL)}};'
+  + '  document.addEventListener("click",function(e){if(!e.target.closest(".sbox"))renderQ([])})})();'
+  + 'if(new URLSearchParams(location.search).get("clean")==="1")document.body.classList.add("clean");'
+  + 'if(new URLSearchParams(location.search).get("film")==="1")document.body.classList.add("film");'
+  + 'if(new URLSearchParams(location.search).get("wide")==="1")document.body.classList.add("wide");'
+  + 'function tapfx(el){if(!el)return;var r=el.getBoundingClientRect();var d=document.createElement("div");d.className="tapfx";d.style.left=(r.left+r.width/2)+"px";d.style.top=(r.top+r.height/2)+"px";document.body.appendChild(d);setTimeout(function(){d.remove()},800)}'
+  + 'window.__film={'
+  + '  tap:function(sel){var el=typeof sel==="string"?document.querySelector(sel):sel;if(!el)return false;tapfx(el);setTimeout(function(){el.click()},180);return true},'
+  + '  tapText:function(root,txt){var el=[].slice.call(document.querySelectorAll(root)).filter(function(e){return (e.innerText||"").toLowerCase().indexOf(String(txt).toLowerCase())>=0})[0];return this.tap(el)},'
+  + '  type:function(txt,ms){var q=document.getElementById("q");q.focus();var i=0;ms=ms||70;return new Promise(function(res){var t=setInterval(function(){i++;q.value=txt.slice(0,i);q.dispatchEvent(new Event("input"));if(i>=txt.length){clearInterval(t);res(true)}},ms)})},'
+  + '  fly:function(lon,lat,zoom,ms){map.easeTo({center:[lon,lat],zoom:zoom,duration:ms||2000,essential:true});return new Promise(function(res){setTimeout(res,(ms||2000)+150)})},'
+  + '  settle:function(max){return new Promise(function(res){var done=false;var t=setTimeout(function(){if(!done){done=true;res(false)}},max||6000);function chk(){if(map.loaded()&&map.areTilesLoaded()){if(!done){done=true;clearTimeout(t);res(true)}}else setTimeout(chk,120)}chk()})},'
+  + '  radius:function(km){var r=document.getElementById("rng");r.value=km;r.dispatchEvent(new Event("input"))},'
+  + '  mode:function(m){var b=document.querySelector("#scope button[data-mode="+m+"]");return this.tap(b)},'
+  + '  map:function(){return map}'
+  + '};'
+  + 'function deepLink(){var u=new URLSearchParams(location.search);var d=u.get("d")||window.__twinDistrict||"",f=u.get("focus")||"";if(!d&&!f)return;'
+  + '  if(d){var c=document.querySelector(".rail .c[data-d=\'"+d+"\']");if(c)pickDistrict(d,c)}'
+  + '  if(!f)return;var T=ntok(f);var same=function(n){var U=ntok(n);return U.length&&T.length&&(U.every(function(w){return T.indexOf(w)>=0})||T.every(function(w){return U.indexOf(w)>=0}))};'
+  + '  var v=VIDS.filter(function(x){return (!d||x.district===d)&&same(x.name)})[0];'
+  + '  var sf=((SUBS&&SUBS.features)||[]).filter(function(x){return (!d||x.properties.district===d)&&same(x.properties.name)})[0];'
+  + '  var pf=((PLOTS&&PLOTS.features)||[]).filter(function(x){return (!d||x.properties.district===d)&&same(x.properties.name)})[0];'
+  + '  var go=function(){if(sf)openPlace({properties:sf.properties,geometry:sf.geometry},"sub");else if(pf)openPlace({properties:pf.properties,geometry:pf.geometry},"plot");else if(v)openVideo(v);'
+  + '    if(v&&(sf||pf)){}};'
+  + '  if(STYLE_READY&&map.getSource("subs"))setTimeout(go,900);else map.once("style.load",function(){setTimeout(go,1200)});}'
+  + 'function buildRail(){if(!D)return;var el=document.getElementById("rail"),h="";var seen={};'
+  + '  (D.districts||[]).forEach(function(d){if(!seen[d.corridor]){seen[d.corridor]=1}});'
+  + '  var tot=(D.districts||[]).reduce(function(a,d){return a+(d.subs||0)},0);'
+  + '  h+=\'<div class="c on" data-d=""><i>everywhere</i><b>All Dubai</b><s><em>\'+(D.districts||[]).length+\'</em> districts</s></div>\';'
+  + '  (D.districts||[]).forEach(function(d){h+=\'<div class=c data-d="\'+d.slug+\'"><i>\'+esc(d.corridor||"")+\'</i><b>\'+esc(d.name)+\'</b><s>\'+(d.subs?\'<em>\'+d.subs+\'</em> sub-communities\':\'<em>\'+(d.named||0)+\'</em> named buildings\')+\'</s></div>\'});'
+  + '  el.innerHTML=h;el.querySelectorAll(".c").forEach(function(c){c.onclick=function(){pickDistrict(c.getAttribute("data-d"),c)}});}'
+  + 'var CURD="";'
+  + 'function buildSubs(d){var el=document.getElementById("rail");var list=((SUBS&&SUBS.features)||[]).filter(function(f){return f.properties.district===d.slug}).sort(function(a,b){return (b.properties.plots||0)+(b.properties.units||0)-(a.properties.plots||0)-(a.properties.units||0)});'
+  + '  var h=\'<div class="c back" data-back=1><i>\'+esc(d.corridor||"")+\'</i><b>\u2190 \'+esc(d.name)+\'</b><s><em>\'+list.length+\'</em> sub-communities</s></div>\';'
+  + '  list.forEach(function(f,ix){var p=f.properties;var meta=p.plots?\'<em>\'+p.plots+\'</em> plots\':(p.units?\'<em>\'+p.units+\'</em> units\':\'<em>\'+(p.buildings||0)+\'</em> buildings\');'
+  + '    h+=\'<div class=c data-sub="\'+ix+\'"><i>sub-community</i><b>\'+esc(tc(p.name))+\'</b><s>\'+meta+\'</s></div>\'});'
+  + '  el.innerHTML=h;el.scrollLeft=0;'
+  + '  el.querySelector(".back").onclick=function(){buildRail();var all=el.querySelector(".c[data-d=\'\']");pickDistrict("",all)};'
+  + '  el.querySelectorAll(".c[data-sub]").forEach(function(c){c.onclick=function(){var f=list[+c.getAttribute("data-sub")];el.querySelectorAll(".c").forEach(function(x){x.classList.toggle("on",x===c)});openPlace({properties:f.properties,geometry:f.geometry},"sub")}});}'
+  + 'function buildAm(){var el=document.getElementById("am"),h="";'
+  + '  Object.keys(AMEN).forEach(function(k){h+=\'<div class=a data-k="\'+k+\'" style="--ac:\'+AMEN[k][2]+\'">\'+ICON[k]+\'<span>\'+AMEN[k][0]+\'</span><b id="amc-\'+k+\'"></b></div>\'});'
+  + '  el.innerHTML=h;el.querySelectorAll(".a").forEach(function(a){a.onclick=function(){var k=a.getAttribute("data-k");ON[k]=!ON[k];a.classList.toggle("on",!!ON[k]);drawAm();if(ON[k])listKind(k);else if(LISTK===k){closePanel()}}});}'
+  + 'var LISTK=null;'
+  + 'function closePanel(){var el=document.getElementById("panel");el.classList.remove("on");LISTK=null;if(!SEL){setSel(null)}setNear([]);hint();if(window.__onClear)try{window.__onClear()}catch(e){}}'
+  + 'function refPoint(){var d=curD();return SEL?SEL.c:(d?d.centre:null)}'
+  + 'function listKind(k){LISTK=k;var el=document.getElementById("panel");var ref=refPoint();var d=curD();'
+  + '  var rows=(AM&&AM.items?AM.items:[]).filter(function(i){return i.k===k&&within(i)}).map(function(i){return [ref?m2(ref,[i.lon,i.lat]):0,i]});'
+  + '  rows.sort(function(a,b){return a[0]-b[0]});rows=rows.slice(0,40);setNear(rows);'
+  + '  var scope=MODE==="area"?(d?"in "+d.name:"across Dubai"):("within "+RKM.toFixed(1)+" km of "+(SEL?"the selected place":(d?"the centre of "+d.name:"here")));'
+  + '  var body=rows.length?\'<div class=near>\'+rows.map(function(x,ix){return \'<div class="n1 nk" data-ix="\'+ix+\'"><em style="color:\'+AMEN[k][2]+\'">\'+ICON[k]+\'</em><span>\'+esc(x[1].n)+(x[1].x?\' <small style="color:var(--mut)">\'+esc(x[1].x)+\'</small>\':"")+\'</span><s>\'+(x[1].ap?"\u2248 ":"")+(ref?fmt(x[0]):"")+\'</s></div>\'}).join("")+\'</div>\':\'<div class=ps style="text-transform:none">none \'+scope+\'</div>\';'
+  + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+AMEN[k][0]+\'</div><div class=ps>\'+rows.length+" "+scope+\'</div>\'+body;'
+  + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;'
+  + '  el.querySelectorAll(".nk").forEach(function(r){r.onclick=function(){var x=rows[+r.getAttribute("data-ix")][1];openAmenity(x,function(){listKind(k)})}});'
+  + '  document.getElementById("hint").textContent="";}'
+  + 'document.getElementById("rng").addEventListener("input",function(){if(LISTK)listKind(LISTK)});'
+  + 'document.querySelectorAll("#scope .sm button").forEach(function(b){b.addEventListener("click",function(){if(LISTK)listKind(LISTK)})});'
+  + 'function addLayers(){if(map.getSource("subs"))return;'
+  + '  map.addSource("sel",{type:"geojson",data:{type:"FeatureCollection",features:[]}});'
+  + '  map.addLayer({id:"sel-halo",type:"circle",source:"sel",paint:{"circle-radius":["interpolate",["exponential",1.6],["zoom"],12,14,15,34,18,90],"circle-color":"#C5A56A","circle-opacity":0.16,"circle-stroke-color":"#C5A56A","circle-stroke-width":2,"circle-stroke-opacity":0.9,"circle-blur":0.15}});'
+  + '  map.addSource("subs",{type:"geojson",data:SUBS||{type:"FeatureCollection",features:[]}});'
+  + '  map.addLayer({id:"sub-bub",type:"circle",source:"subs",paint:{"circle-radius":["interpolate",["exponential",2],["zoom"],11,2,14,["/",["get","radius_m"],28],17,["/",["get","radius_m"],3.2]],"circle-color":"#C5A56A","circle-opacity":0.22,"circle-stroke-color":"#C5A56A","circle-stroke-width":1.2,"circle-stroke-opacity":0.7}});'
+  + '  map.addLayer({id:"sub-lab",type:"symbol",source:"subs",minzoom:12.4,layout:{"text-font":["Ubuntu Regular"],"text-field":["get","name"],"text-size":["interpolate",["linear"],["zoom"],12.4,10,17,14],"text-anchor":"center","text-allow-overlap":false},paint:{"text-color":"#F0E4C8","text-halo-color":"rgba(12,20,19,.95)","text-halo-width":1.5}});'
+  + '  map.addSource("plots",{type:"geojson",data:PLOTS||{type:"FeatureCollection",features:[]}});'
+  + '  map.addLayer({id:"plot-dot",type:"circle",source:"plots",minzoom:13.5,paint:{"circle-radius":["interpolate",["linear"],["zoom"],13.5,2.2,18,5],"circle-color":"#E8E4D8","circle-stroke-color":"#C5A56A","circle-stroke-width":1.2}});'
+  + '  map.addLayer({id:"plot-lab",type:"symbol",source:"plots",minzoom:15.4,layout:{"text-font":["Ubuntu Regular"],"text-field":["get","plot"],"text-size":11,"text-offset":[0,1.1],"text-anchor":"top","text-allow-overlap":false},paint:{"text-color":"#BFE0D6","text-halo-color":"rgba(12,20,19,.95)","text-halo-width":1.3}});'
+  + '  map.addSource("amen",{type:"geojson",data:{type:"FeatureCollection",features:[]}});'
+  + '  map.addLayer({id:"am-dot",type:"circle",source:"amen",paint:{"circle-radius":["interpolate",["linear"],["zoom"],11,3,17,7],"circle-color":["get","col"],"circle-opacity":["case",["==",["get","ap"],1],0.18,0.92],"circle-stroke-color":["case",["==",["get","ap"],1],["get","col"],"rgba(12,20,19,.85)"],"circle-stroke-width":1}});'
+  + '  map.on("click","am-dot",function(e){var p=e.features[0].properties;var c=e.features[0].geometry.coordinates;var hit=null,bd=1e9;(AM&&AM.items?AM.items:[]).forEach(function(i){if(i.k!==p.k||i.n!==p.n)return;var d=m2(c,[i.lon,i.lat]);if(d<bd){bd=d;hit=i}});if(hit)openAmenity(hit,null)});'
+  + '  map.addLayer({id:"am-lab",type:"symbol",source:"amen",minzoom:14.6,layout:{"text-font":["Ubuntu Regular"],"text-field":["get","n"],"text-size":10,"text-offset":[0,1.2],"text-anchor":"top","text-allow-overlap":false},paint:{"text-color":"rgba(232,228,216,.85)","text-halo-color":"rgba(12,20,19,.95)","text-halo-width":1.2}});'
+  + '  map.addSource("near",{type:"geojson",data:{type:"FeatureCollection",features:[]}});'
+  + '  map.addLayer({id:"near-ring",type:"circle",source:"near",paint:{"circle-radius":["interpolate",["linear"],["zoom"],11,7,17,13],"circle-color":"rgba(0,0,0,0)","circle-stroke-color":["get","col"],"circle-stroke-width":2,"circle-stroke-opacity":0.95}});'
+  + '  map.addSource("vids",{type:"geojson",data:{type:"FeatureCollection",features:VIDS.filter(function(v){return v.lon&&v.lat}).map(function(v){return {type:"Feature",geometry:{type:"Point",coordinates:[v.lon,v.lat]},properties:{key:v.key,title:v.title,name:v.name}}})}});'
+  + '  map.addLayer({id:"vid-dot",type:"circle",source:"vids",paint:{"circle-radius":["interpolate",["linear"],["zoom"],9,5,16,11],"circle-color":"#F0E4C8","circle-stroke-color":"#C5A56A","circle-stroke-width":2}});'
+  + '  map.addLayer({id:"vid-lab",type:"symbol",source:"vids",minzoom:10.5,layout:{"text-font":["Ubuntu Regular"],"text-field":["concat","\u25B6 ",["get","name"]],"text-size":11,"text-offset":[0,1.3],"text-anchor":"top","text-allow-overlap":true},paint:{"text-color":"#F0E4C8","text-halo-color":"rgba(12,20,19,.95)","text-halo-width":1.4}});'
+  + '  map.addSource("homes",{type:"geojson",data:{type:"FeatureCollection",features:[]}});'
+  + '  map.addLayer({id:"home-dot",type:"circle",source:"homes",paint:{"circle-radius":["interpolate",["linear"],["zoom"],9,4,13,7,16,11],"circle-color":"#C5A56A","circle-opacity":0.95,"circle-stroke-color":"#0C1413","circle-stroke-width":1.5}});'
+  + '  map.addLayer({id:"home-lab",type:"symbol",source:"homes",minzoom:12,layout:{"text-font":["Ubuntu Regular"],"text-field":["get","lab"],"text-size":10.5,"text-offset":[0,1.2],"text-anchor":"top","text-allow-overlap":false},paint:{"text-color":"#F0E4C8","text-halo-color":"rgba(12,20,19,.95)","text-halo-width":1.3}});'
+  + '  map.on("click","home-dot",function(e){var p=e.features[0].properties;var it=PR.filter(function(x){return x.p===p.p})[0];if(it)openHome(it)});'
+  + '  map.on("click","vid-dot",function(e){var p=e.features[0].properties;var v=VIDS.filter(function(x){return x.key===p.key})[0];if(v)openVideo(v)});'
+  + '  map.on("click","sub-bub",function(e){openPlace(e.features[0],"sub")});'
+  + '  map.on("click","plot-dot",function(e){openPlace(e.features[0],"plot")});'
+  + '  ["sub-bub","plot-dot","am-dot","vid-dot","home-dot"].forEach(function(id){map.on("mouseenter",id,function(){map.getCanvas().style.cursor="pointer"});map.on("mouseleave",id,function(){map.getCanvas().style.cursor=""})});'
+  + '  filterTo(currentDistrict()||null);drawAm();hint();}'
+  + 'function hint(){var z=map.getZoom();var t="";if(!SEL){t=z<12?"pick a district above":(z<13.5?"tap a sub-community":"tap a sub-community or a plot")}document.getElementById("hint").textContent=t}'
+  + 'function pickDistrict(slug,el){if(window.__twinDistrict){if(slug&&slug!==window.__twinDistrict){location.href="/skyline/"+encodeURIComponent(slug)+"?key="+encodeURIComponent(KEY);return}if(!slug){location.href="/map?key="+encodeURIComponent(KEY);return}}'
+  + '  document.querySelectorAll(".rail .c").forEach(function(c){c.classList.toggle("on",c===el)});'
+  + '  SEL=null;LISTK=null;document.getElementById("panel").classList.remove("on");setSel(null);setNear([]);'
+  + '  CURD="";if(!slug){map.flyTo({center:[55.23,25.10],zoom:9.4});document.getElementById("st").textContent="pick a district";filterTo(null);drawAm();return}'
+  + '  var d=(D.districts||[]).filter(function(x){return x.slug===slug})[0];if(!d)return;'
+  + '  map.fitBounds([[d.bbox[0],d.bbox[1]],[d.bbox[2],d.bbox[3]]],{padding:{top:150,bottom:120,left:40,right:40},duration:900});'
+  + '  document.getElementById("st").textContent=d.name+" · "+d.subs+" sub-communities · "+d.plots+" plots · "+d.named+" named buildings";'
+  + '  CURD=slug;filterTo(slug);drawAm();buildSubs(d);}'
+  + 'function filterTo(slug){var f=slug?["==",["get","district"],slug]:null;'
+  + '  ["sub-bub","sub-lab","plot-dot","plot-lab"].forEach(function(id){if(map.getLayer(id))map.setFilter(id,f)});}'
+  + 'function currentDistrict(){return CURD||""}'
+  + 'function drawAm(){var slug=currentDistrict();var keys=Object.keys(ON).filter(function(k){return ON[k]});'
+  + '  var dd=slug&&D?(D.districts||[]).filter(function(x){return x.slug===slug})[0]:null;var bb=dd?[dd.bbox[0]-0.03,dd.bbox[1]-0.03,dd.bbox[2]+0.03,dd.bbox[3]+0.03]:null;'
+  + '  window.__bb=bb;rngLabel();var f=[];if(keys.length&&AM&&AM.items){AM.items.forEach(function(i){if(keys.indexOf(i.k)<0)return;if(!within(i))return;'
+  + '    f.push({type:"Feature",geometry:{type:"Point",coordinates:[i.lon,i.lat]},properties:{n:i.n,k:i.k,col:AMEN[i.k][2],ap:i.ap?1:0}})})}'
+  + '  if(map&&map.getSource("amen"))map.getSource("amen").setData({type:"FeatureCollection",features:f});'
+  + '  Object.keys(AMEN).forEach(function(k){var n=0;(AM&&AM.items?AM.items:[]).forEach(function(i){if(i.k!==k)return;if(!within(i))return;n++});var c=document.getElementById("amc-"+k);if(c)c.textContent=n?String(n):""});'
+  + '  if(SEL)openPanel(SEL);}'
+  + 'function openPlace(feat,kind){var p=feat.properties;var c=feat.geometry.coordinates;SEL={kind:kind,p:p,c:c};'
+  + '  if(kind==="sub")map.easeTo({center:c,zoom:Math.max(map.getZoom(),14.6),duration:700});else map.easeTo({center:c,zoom:Math.max(map.getZoom(),16.2),duration:700});'
+  + '  drawAm();openPanel(SEL);if(window.__onPlace)try{window.__onPlace(SEL)}catch(e){}}'
+  + 'function setSel(c){if(map&&map.getSource("sel"))map.getSource("sel").setData({type:"FeatureCollection",features:c?[{type:"Feature",geometry:{type:"Point",coordinates:c},properties:{}}]:[]})}'
+  + 'function setNear(list){if(map&&map.getSource("near"))map.getSource("near").setData({type:"FeatureCollection",features:(list||[]).map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x[1].lon,x[1].lat]},properties:{col:AMEN[x[1].k][2]}}})})}'
+  + 'function ntok(t){return String(t||"").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff ]+/g," ").split(" ").filter(function(w){return w.length>2&&["the","by","at","residences","residence","tower","towers","dubai"].indexOf(w)<0})}'
+  + 'function videoFor(name,district){var T=ntok(name);if(!T.length)return null;return VIDS.filter(function(v){if(district&&v.district&&v.district!==district)return false;var U=ntok(v.name);return U.length&&U.every(function(w){return T.indexOf(w)>=0})})[0]||null}'
+  + 'function videoHtml(v){return \'<div class=vwrap><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="\'+v.poster+\'"><source src="\'+v.src+\'" type="video/mp4"></video><div class=ps style="text-transform:none;letter-spacing:0;margin-top:6px">\'+esc(v.title)+(v.approx?" \u00b7 pin is approximate: plot "+esc(v.plot||"")+", building not yet on the map":"")+\'</div></div>\'}'
+  + 'function openVideo(v){var el=document.getElementById("panel");SEL=null;setNear([]);setSel([v.lon,v.lat]);map.easeTo({center:[v.lon,v.lat],zoom:Math.max(map.getZoom(),14.5),duration:700});'
+  + '  el.innerHTML=\'<span class=px id=px>✕</span><div class=pt>\'+esc(v.name)+\'</div><div class=ps>\'+esc(v.master||"")+(v.plot?" \u00b7 plot "+esc(v.plot):"")+\'</div>\'+videoHtml(v);'
+  + '  el.classList.add("on");document.getElementById("px").onclick=function(){el.classList.remove("on");setSel(null);hint()};document.getElementById("hint").textContent="";}'
+  + 'function qrSvg(text){try{var q=qrcode(0,"M");q.addData(text);q.make();return q.createSvgTag({cellSize:3,margin:0,scalable:true})}catch(e){return ""}}'
+  + 'function webUrl(w){w=String(w||"").trim();if(!w)return "";return /^https?:/i.test(w)?w:"https://"+w}'
+  + 'function openAmenity(i,back){var el=document.getElementById("panel");setSel([i.lon,i.lat]);map.easeTo({center:[i.lon,i.lat],zoom:Math.max(map.getZoom(),15),duration:600});'
+  + '  var lines=[];if(i.ad)lines.push("<div><i>address</i>"+esc(i.ad)+"</div>");'
+  + 'function fmtTel(t){var d=String(t||"").replace(/[^0-9]/g,"");if(d.indexOf("971")===0&&d.length>=11){var r=d.slice(3);return "+971 "+(r.length===9?r.slice(0,2)+" "+r.slice(2,5)+" "+r.slice(5):r.slice(0,1)+" "+r.slice(1,4)+" "+r.slice(4))}if(d.indexOf("0")===0&&d.length>=9){return "+971 "+(d.length===10?d.slice(1,3)+" "+d.slice(3,6)+" "+d.slice(6):d.slice(1,2)+" "+d.slice(2,5)+" "+d.slice(5))}return t}'
+  + '  if(i.tel)lines.push(\'<div><i>phone</i><a href="tel:+\'+(function(d){return d.indexOf("0")===0?"971"+d.slice(1):d})(String(i.tel).replace(/[^0-9]/g,""))+\'">\'+esc(fmtTel(i.tel))+"</a></div>");'
+  + '  var subj=encodeURIComponent("Enquiry about "+i.n),body=encodeURIComponent("Hello, I would like more information about "+i.n+" for my family. Thank you.");'
+  + '  if(i.em)lines.push(\'<div><i>email</i><a href="mailto:\'+esc(i.em)+"?subject="+subj+"&body="+body+\'">\'+esc(i.em)+"</a></div>");'
+  + '  if(i.web)lines.push(\'<div><i>website</i><a href="\'+esc(webUrl(i.web))+\'" target=_blank rel=noopener>\'+esc(String(i.web).replace(/^https?:\\/\\//,"").replace(/\\/$/,""))+"</a></div>");'
+  + '  if(i.hrs)lines.push("<div><i>opening hours</i>"+esc(i.hrs)+"</div>");'
+  + '  var dirs="https://www.google.com/maps/dir/?api=1&destination="+i.lat+","+i.lon+"&travelmode=driving";'
+  + '  lines.push(\'<div><i>directions</i><a href="\'+dirs+\'" target=_blank rel=noopener>open in maps</a></div>\');'
+  + '  var wa="https://wa.me/?text="+encodeURIComponent(i.n+(i.x?" ("+i.x+")":"")+(i.tel?" \u00b7 "+i.tel:"")+(i.web?" \u00b7 "+webUrl(i.web):"")+(i.em?" \u00b7 "+i.em:""));'
+  + '  lines.push(\'<div><i>share</i><a href="\'+wa+\'" target=_blank rel=noopener>send these details by WhatsApp</a></div>\');'
+  + '  var qrText=i.em?("mailto:"+i.em+"?subject="+subj+"&body="+body):((i.web&&!i.dir)?webUrl(i.web):dirs);var qr=\'<div><div class=qr>\'+qrSvg(qrText)+\'</div><div class=qrl>\'+(i.em?"scan to email":((i.web&&!i.dir)?"scan for website":"scan for directions"))+"</div></div>";'
+  + '  var src={khda:"KHDA school register",ese:"Emirates Schools Establishment",dha:"DHA licence register","dha+overture":"DHA licence register","dha+google":"DHA licence register","khda+google":"KHDA school register",rta:"RTA","dm+google":"DM building register","trakhees-gap":"Trakhees zone, outside the DM register",overture:"open map data"}[i.src]||"";'
+  + '  el.innerHTML=\'<span class=px id=px>\u2715</span>\'+(back?\'<span class=back id=back>\u2190 back</span>\':"")+\'<div class=pt>\'+esc(i.n)+\'</div><div class=ps>\'+esc(AMEN[i.k][0])+(i.x?" \u00b7 "+esc(i.x):"")+(i.ap?" \u00b7 position approximate":"")+(src?" \u00b7 "+src:"")+\'</div><div class=cc><div class=ct>\'+(lines.join("")||"<div><i>contact</i>not in the register</div>")+\'</div>\'+qr+\'</div>\';'
+  + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;var bk=document.getElementById("back");if(bk)bk.onclick=back;document.getElementById("hint").textContent="";}'
+  + 'function openPanel(sel){LISTK=null;var p=sel.p,c=sel.c;var el=document.getElementById("panel");setSel(c);'
+  + '  var title=sel.kind==="sub"?tc(p.name):(tc(p.name)||("Plot "+p.plot));'
+  + '  var line=sel.kind==="sub"?((p.plots||0)+" plots in the register · "+(p.buildings||0)+" buildings here"):("plot "+p.plot+(p.units?" · "+p.units+" units":"")+(p.area_sqm?" · "+Math.round(p.area_sqm).toLocaleString("en")+" m²":""));'
+  + '  var keys=Object.keys(ON).filter(function(k){return ON[k]});var body="";'
+  + '  if(!keys.length){setNear([]);body=\'<div class=ps style="text-transform:none;letter-spacing:0">Switch on schools, hospitals, clinics, metro, malls, parks or beach above to see what is near this place.</div>\'}'
+  + '  else{var near=[];(AM&&AM.items?AM.items:[]).forEach(function(i){if(keys.indexOf(i.k)<0)return;if(!within(i))return;var d=m2(c,[i.lon,i.lat]);near.push([d,i])});'
+  + '    near.sort(function(a,b){return a[0]-b[0]});near=near.slice(0,24);setNear(near);'
+  + '    var anyAp=near.some(function(x){return x[1].ap});'
+  + '    body=near.length?(\'<div class=near>\'+near.map(function(x){return \'<div class="n1 nb" data-ix="\'+near.indexOf(x)+\'"><em style="color:\'+AMEN[x[1].k][2]+\'">\'+ICON[x[1].k]+\'</em><span>\'+esc(x[1].n)+(x[1].x?\' <small style="color:var(--mut)">\'+esc(x[1].x)+\'</small>\':"")+\'</span><s>\'+(x[1].ap?"≈ ":"")+fmt(x[0])+\'</s></div>\'}).join("")+\'</div>\'+(anyAp?\'<div class=ps style="text-transform:none;letter-spacing:0;margin-top:8px">≈ position approximate (about 1 km) — the health licence register truncates it</div>\':"")):\'<div class=ps style="text-transform:none">\'+(MODE==="area"?"nothing of that kind inside this community":"nothing of that kind within "+RKM.toFixed(1)+" km")+\'</div>\';}'
+  + '  var vv=videoFor(title,p.district);'
+  + '  el.innerHTML=\'<span class=px id=px>✕</span><div class=pt>\'+esc(title)+\'</div><div class=ps>\'+esc(line)+\'</div>\'+(vv?videoHtml(vv):"")+body;'
+  + '  el.classList.add("on");document.getElementById("px").onclick=function(){el.classList.remove("on");SEL=null;setSel(null);setNear([]);drawAm();hint();if(window.__onClear)try{window.__onClear()}catch(e){}};'
+  + '  var _sel=sel;el.querySelectorAll(".nb").forEach(function(r){r.style.cursor="pointer";r.onclick=function(){var x=near[+r.getAttribute("data-ix")][1];openAmenity(x,function(){openPanel(_sel)})}});'
+  + '  document.getElementById("hint").textContent="";}'
+  + 'function bootShim(){map=window.__twinMap;window.__najmap2=map;STYLE_READY=true;loadData()}'
+  + 'if(window.__twinMap){bootShim()}else if(window.__twinPending){window.addEventListener("twinmap",bootShim)}else{fetch("/esri_token?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).catch(function(){return null}).then(function(j){mkMap(j&&j.ok?j.token:null)})}';
+
+
+function renderMapBasic(key) {
+  const K = JSON.stringify(key || "");
+  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Najma — the map</title>'
+  + '<link rel=preconnect href="https://fonts.googleapis.com"><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">'
+  + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">'
+  + '<style>'
+  + MAP_CHROME_CSS + MAP_CHROME_CSS_X
+  + NAJ_NAV_CSS
+  + '</style></head><body><div id=m></div>'
+  + MAP_CHROME_HTML.replace('__TITLE__', 'the map')
+  + najNav(key, "map")
+  + '<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"><\/script>'
+  + '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"><\/script>'
+  + '<script>(function(){'
+  + 'var KEY=' + K + ';'
+  + MAP_CHROME_JS
+  + '})();<\/script></body></html>';
+}
+
+function renderMap(latestRaw, key, waBot, esriOn, prevRaw, skySlugs, plotsRaw) {
+  let _plots = null; try { _plots = JSON.parse(plotsRaw || "null"); } catch (e) {}
   let d = null, pv = null; try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
   try { pv = JSON.parse(prevRaw || "null"); } catch (e) {}
   const prevA = {}; if (pv && pv.areaIntel && pv.areaIntel.areas) for (const x of pv.areaIntel.areas) prevA[x.area] = x.sales || 0;
@@ -3843,6 +4824,7 @@ ${NAJ_NAV_CSS}
 <div class=foot>DLD Open Data · © OpenStreetMap contributors</div>
 <script>
 var AREAS=${JSON.stringify(list)},AREAS2=${JSON.stringify(list2)},KEY=${JSON.stringify(key || "")},WA=${JSON.stringify(waBot || "")},ESRI=${esriOn ? "true" : "false"};
+var PLOTS=${JSON.stringify(_plots || null)};var PLOTSON=localStorage.getItem("naj_plots")!=="0";   // on by default: they only draw from zoom 14.5, where they are the point
 var SKY=${JSON.stringify(skySlugs||[])},SEL=null;function njslug(x){return String(x||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
 var cv=document.getElementById("cv"),ctx=cv.getContext("2d"),dpr=Math.min(2,window.devicePixelRatio||1);
 var PAL={dark:{bg:"#0C1413",water:"#0A1A22",rMid:"#152E2A",rMaj:"#2A4742",heatHot:"197,165,106",heatCool:"62,138,126",dotHot:"#C5A56A",dotCool:"#3E8A7E",dotEdge:"#0C1413",label:"#E8E4D8",halo:"rgba(12,20,19,.85)"},light:{bg:"#F2EEE3",water:"#BFD5DB",rMid:"#E0DACA",rMaj:"#CDC5B0",heatHot:"168,133,68",heatCool:"47,110,100",dotHot:"#A88544",dotCool:"#2F6E64",dotEdge:"#F2EEE3",label:"#1A2422",halo:"rgba(242,238,227,.88)"}};
@@ -3940,6 +4922,32 @@ if(map.getLayer("naj-lab")){var top12=AREAS.slice().sort(function(a,b){return me
 map.setFilter("naj-lab",["in",["get","n"],["literal",top12]])}}
 function addData(){var before=firstSymbol();
 if(AR2)map.addSource("naj-areas",{type:"geojson",data:AR2});
+// v99 - plot numbers: the DLD parcel id (community-plot) at each bound building. No parcel outlines exist publicly, so this is
+// the number without the boundary; it only appears once you are close enough for it to mean something.
+if(window.PLOTS&&PLOTS.features&&PLOTS.features.length){
+  map.addSource("naj-plots",{type:"geojson",data:PLOTS});
+  map.addLayer({id:"plot-dot",type:"circle",source:"naj-plots",minzoom:14.5,
+    paint:{"circle-radius":["interpolate",["linear"],["zoom"],14.5,2,18,4.5],"circle-color":"#C5A56A","circle-opacity":0.9,
+           "circle-stroke-width":1,"circle-stroke-color":VIEW==="light"?"rgba(255,255,255,.9)":"rgba(12,20,19,.9)"}});
+  map.addLayer({id:"plot-lab",type:"symbol",source:"naj-plots",minzoom:15.2,
+    layout:{"text-field":["get","plot"],"text-size":["interpolate",["linear"],["zoom"],15.2,10,18,13],"text-offset":[0,1.0],
+            "text-anchor":"top","text-allow-overlap":false},
+    paint:{"text-color":VIEW==="light"?"#6B5420":"#E5CE9A","text-halo-color":VIEW==="light"?"rgba(255,255,255,.95)":"rgba(12,20,19,.95)","text-halo-width":1.4}});
+  map.addLayer({id:"plot-name",type:"symbol",source:"naj-plots",minzoom:16.4,
+    layout:{"text-field":["get","name"],"text-size":11,"text-offset":[0,2.2],"text-anchor":"top","text-allow-overlap":false},
+    paint:{"text-color":VIEW==="light"?"rgba(26,36,34,.75)":"rgba(232,228,216,.75)","text-halo-color":VIEW==="light"?"rgba(255,255,255,.9)":"rgba(12,20,19,.9)","text-halo-width":1.2}});
+  ["plot-dot","plot-lab","plot-name"].forEach(function(id){if(!PLOTSON)map.setLayoutProperty(id,"visibility","none")});
+  map.on("click","plot-dot",function(e){var p=e.features[0].properties;
+    new maplibregl.Popup({closeButton:true,offset:10}).setLngLat(e.lngLat)
+      .setHTML('<div style="font-family:IBM Plex Mono,monospace;font-size:11px;line-height:1.5">'
+        +'<b style="font-family:Fraunces,Georgia,serif;font-size:14px">'+(p.name||"plot "+p.plot)+'</b><br>'
+        +'plot '+p.plot+(p.parcel?' \u00b7 parcel '+p.parcel:'')
+        +(p.units?'<br>'+p.units+' registered units':'')
+        +(p.area_sqm?'<br>'+Math.round(p.area_sqm).toLocaleString("en")+' m\u00b2 plot':'')
+        +(p.master?'<br>'+p.master:'')+'</div>').addTo(map)});
+  map.on("mouseenter","plot-dot",function(){map.getCanvas().style.cursor="pointer"});
+  map.on("mouseleave","plot-dot",function(){map.getCanvas().style.cursor=""});
+}
 map.addSource("naj-pts",{type:"geojson",data:{type:"FeatureCollection",features:AREAS.map(function(a){return {type:"Feature",properties:{n:a.n},geometry:{type:"Point",coordinates:a.c}}})}});
 if(AR2){map.addLayer({id:"naj-fill",type:"fill",source:"naj-areas",paint:{"fill-color":"rgba(0,0,0,0)","fill-opacity":VIEW==="sat"?0.42:0.34}},before);
 map.addLayer({id:"naj-line",type:"line",source:"naj-areas",paint:{"line-color":VIEW==="light"?"rgba(26,36,34,.45)":"rgba(232,228,216,.38)","line-width":1}},before);}
@@ -3971,7 +4979,7 @@ map.on("mouseenter","naj-dot",function(){map.getCanvas().style.cursor="pointer"}
 map.on("mouseleave","naj-dot",function(){map.getCanvas().style.cursor=""})}
 function boot(){var host=document.createElement("div");host.id="mlmap";host.style.cssText="position:fixed;inset:0;z-index:0";document.body.insertBefore(host,cv);
 cv.style.display="none";
-map=new maplibregl.Map({container:"mlmap",style:styleUrl(),center:[55.23,25.10],zoom:9.6,attributionControl:{compact:true}});
+map=window.__najmap=new maplibregl.Map({container:"mlmap",style:styleUrl(),center:[55.23,25.10],zoom:9.6,attributionControl:{compact:true}});
 map.on("style.load",function(){addData()});wire()}
 function reStyle(){if(!map)return;fetchTok(function(){map.setStyle(styleUrl())})}
 function fetchTok(cb){fetch("/esri_token?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){TOKEN=j.token;cb()}}).catch(function(){})}
@@ -4242,6 +5250,162 @@ const CMP_METRICS = { price: "median price", sqm: "AED / m²", sales: "sales 202
 // v85 - FLOOR-PLAN LIBRARY. One door to every floor plan we hold (KV plans_index, build_plans_index.py): developers -> projects ->
 // plans. Tap a plan to see it full-width with its source line; the source is always shown because these are developer documents
 // shown to the broker who sells them, not ours to re-publish.
+// v86 - the world clock room. Dubai is home; every other city is shown against it.
+// Intl carries the daylight-saving rules, so nothing here needs a table of offsets to go stale.
+function renderClock(key) {
+  const K = JSON.stringify(key || "");
+  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=robots content=noindex><title>Time — Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">'
+   + NAJ_FONTS
+   + '<style>:root{--bg:#0C1413;--card:#131F1D;--card2:#1A2725;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#8FC7B9;--night:#18231F;--edge:#4C6A5E;--work:#C5A56A;--eve:#8A7A56}'
+   + '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:calc(14px + env(safe-area-inset-top)) 14px 96px}'
+   + 'h1{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.6rem;margin:6px 0 2px;color:var(--gold)}'
+   + '.sub{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.06em;color:var(--mut);text-transform:uppercase;margin-bottom:14px}'
+   + '.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}'
+   + '.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}'
+   + '.big{font-family:"IBM Plex Mono",monospace;font-size:clamp(2.6rem,13vw,3.5rem);font-weight:500;letter-spacing:-.03em;line-height:1;color:var(--gold);margin:6px 0 2px;font-variant-numeric:tabular-nums}'
+   + '.hc{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.1rem}'
+   + '.hm{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--mut);letter-spacing:.02em}'
+   + '.htop{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap}'
+   + '.hdate{text-align:right;font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--mut)}.hdate b{display:block;font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:500;font-size:.9rem;color:var(--text);letter-spacing:0}'
+   + '.scrub{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}'
+   + '.shead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}'
+   + '.slab{font-size:.8rem;color:var(--mut)}'
+   + 'input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:26px;background:transparent;display:block;cursor:pointer;margin:0}'
+   + 'input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--night) 0 25%,var(--edge) 25% 37.5%,var(--work) 37.5% 71%,var(--eve) 71% 87.5%,var(--night) 87.5% 100%)}'
+   + 'input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--night) 0 25%,var(--edge) 25% 37.5%,var(--work) 37.5% 71%,var(--eve) 71% 87.5%,var(--night) 87.5% 100%)}'
+   + 'input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--teal);border:3px solid var(--card);margin-top:-6px}'
+   + 'input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--teal);border:3px solid var(--card)}'
+   + '.ticks{display:flex;justify-content:space-between;font-family:"IBM Plex Mono",monospace;font-size:.58rem;color:var(--mut)}'
+   + 'button,select,input[type=date]{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.04em;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:99px;padding:7px 12px;cursor:pointer}'
+   + 'button.on{border-color:var(--gold);color:var(--gold)}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--teal);outline-offset:2px}'
+   + '.acts{display:flex;gap:6px;flex-wrap:wrap}'
+   + '.grp{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.14em;color:var(--mut);text-transform:uppercase;margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center;gap:8px}'
+   + '.row{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:8px;display:grid;grid-template-columns:1fr auto;gap:9px 12px;align-items:center}'
+   + '.rn{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;line-height:1.2}'
+   + '.rm{font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--mut);margin-top:3px;letter-spacing:.02em}'
+   + '.rr{display:flex;align-items:center;gap:10px;justify-self:end}'
+   + '.rt{font-family:"IBM Plex Mono",monospace;font-size:1.4rem;font-weight:500;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}'
+   + '.rd{font-family:"IBM Plex Mono",monospace;font-size:.58rem;color:var(--mut);text-align:right;margin-top:4px;white-space:nowrap}'
+   + '.pill{font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.04em;border:1px solid var(--line);border-radius:99px;padding:4px 9px;color:var(--mut);white-space:nowrap}'
+   + '.pill.ok{border-color:var(--teal);color:var(--teal)}.pill.warn{border-color:var(--gold);color:var(--gold)}'
+   + '.x{border:0;background:transparent;color:var(--mut);font-size:1rem;padding:4px 6px;border-radius:8px}'
+   + '.band{grid-column:1/-1;position:relative;height:13px;border-radius:4px;overflow:hidden;background:var(--night)}'
+   + '.band i{position:absolute;top:0;bottom:0}.band i.mk{top:-2px;bottom:-2px;width:2px;background:var(--teal)}'
+   + '.add{display:flex;gap:6px;margin-top:6px}.add select{flex:1;border-radius:14px;text-align:left}'
+   + '.leg{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;font-family:"IBM Plex Mono",monospace;font-size:.58rem;color:var(--mut)}'
+   + '.leg span{display:flex;align-items:center;gap:5px}.leg i{width:11px;height:11px;border-radius:3px}'
+   + '.note{font-family:"IBM Plex Mono",monospace;font-size:.6rem;color:var(--mut);margin-top:18px;line-height:1.7}'
+   + '.toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(10px);background:var(--gold);color:#0C1413;font-family:"IBM Plex Mono",monospace;font-size:.66rem;padding:8px 15px;border-radius:99px;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:50}.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}'
+   + '@media(max-width:430px){.row{grid-template-columns:1fr}.rr{justify-self:start;width:100%;justify-content:space-between}.hdate{text-align:left}}'
+   + '@media(prefers-reduced-motion:reduce){*{transition:none!important}}'
+   + NAJ_NAV_CSS + '</style></head><body>'
+   + '<h1>World clock</h1><div class=sub>dubai is home · everyone else is measured against it</div>'
+   + '<div class=panel><div class=htop><div><div class=eyebrow>Home</div><div class=big id=bt>--:--</div><div class=hc id=bc>Dubai</div><div class=hm id=bm>United Arab Emirates</div></div>'
+   + '<div class=hdate><b id=bd>—</b><span id=bz>—</span></div></div>'
+   + '<div class=scrub><div class=shead><span class=slab id=sl>Showing the time right now</span><div class=acts><input type=date id=dp aria-label="Date in Dubai"><button id=nb type=button>back to now</button></div></div>'
+   + '<input type=range id=sc min=0 max=1439 step=5 value=0 aria-label="Time of day in Dubai">'
+   + '<div class=ticks><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div></div></div>'
+   + '<div class=grp><span>Everywhere else</span><div class=acts><button id=fm type=button>12h</button><button id=cp type=button>copy list</button></div></div>'
+   + '<div id=rows></div>'
+   + '<div class=add><select id=pk aria-label="Add a city"></select><button id=ab type=button>add</button></div>'
+   + '<div class=leg><span><i style="background:var(--night)"></i>asleep</span><span><i style="background:var(--edge)"></i>early or late</span><span><i style="background:var(--work)"></i>working</span><span><i style="background:var(--eve)"></i>evening</span><span><i style="background:var(--teal);width:3px;border-radius:1px"></i>the time shown</span></div>'
+   + '<div class=note>Daylight saving is handled for you — London, New York and Sydney shift on their own dates, and this follows them. Your city list is remembered on this phone.</div>'
+   + '<div class=toast id=ts role=status aria-live=polite></div>'
+   + najNav(key, "clock")
+   + '<script>(function(){var KEY=' + K + ';'
+   + 'var C=[["Dubai","United Arab Emirates","Asia/Dubai"],["Abu Dhabi","United Arab Emirates","Asia/Dubai"],["Kampala","Uganda","Africa/Kampala"],["Nairobi","Kenya","Africa/Nairobi"],["Dar es Salaam","Tanzania","Africa/Dar_es_Salaam"],["Kigali","Rwanda","Africa/Kigali"],["Addis Ababa","Ethiopia","Africa/Addis_Ababa"],["Lagos","Nigeria","Africa/Lagos"],["Abuja","Nigeria","Africa/Lagos"],["Accra","Ghana","Africa/Accra"],["Cairo","Egypt","Africa/Cairo"],["Johannesburg","South Africa","Africa/Johannesburg"],["Cape Town","South Africa","Africa/Johannesburg"],["Lusaka","Zambia","Africa/Lusaka"],["Harare","Zimbabwe","Africa/Harare"],["Casablanca","Morocco","Africa/Casablanca"],["Tunis","Tunisia","Africa/Tunis"],["Algiers","Algeria","Africa/Algiers"],["Port Louis","Mauritius","Indian/Mauritius"],["Victoria","Seychelles","Indian/Mahe"],'
+   + '["London","United Kingdom","Europe/London"],["Manchester","United Kingdom","Europe/London"],["Dublin","Ireland","Europe/Dublin"],["Lisbon","Portugal","Europe/Lisbon"],["Madrid","Spain","Europe/Madrid"],["Paris","France","Europe/Paris"],["Brussels","Belgium","Europe/Brussels"],["Amsterdam","Netherlands","Europe/Amsterdam"],["Frankfurt","Germany","Europe/Berlin"],["Berlin","Germany","Europe/Berlin"],["Zurich","Switzerland","Europe/Zurich"],["Milan","Italy","Europe/Rome"],["Rome","Italy","Europe/Rome"],["Vienna","Austria","Europe/Vienna"],["Warsaw","Poland","Europe/Warsaw"],["Stockholm","Sweden","Europe/Stockholm"],["Oslo","Norway","Europe/Oslo"],["Copenhagen","Denmark","Europe/Copenhagen"],["Helsinki","Finland","Europe/Helsinki"],["Athens","Greece","Europe/Athens"],["Istanbul","Turkey","Europe/Istanbul"],["Moscow","Russia","Europe/Moscow"],["Kyiv","Ukraine","Europe/Kyiv"],'
+   + '["Riyadh","Saudi Arabia","Asia/Riyadh"],["Jeddah","Saudi Arabia","Asia/Riyadh"],["Doha","Qatar","Asia/Qatar"],["Kuwait City","Kuwait","Asia/Kuwait"],["Manama","Bahrain","Asia/Bahrain"],["Muscat","Oman","Asia/Muscat"],["Amman","Jordan","Asia/Amman"],["Beirut","Lebanon","Asia/Beirut"],["Tel Aviv","Israel","Asia/Jerusalem"],["Baghdad","Iraq","Asia/Baghdad"],["Tehran","Iran","Asia/Tehran"],["Baku","Azerbaijan","Asia/Baku"],["Tbilisi","Georgia","Asia/Tbilisi"],["Almaty","Kazakhstan","Asia/Almaty"],["Tashkent","Uzbekistan","Asia/Tashkent"],["Karachi","Pakistan","Asia/Karachi"],["Lahore","Pakistan","Asia/Karachi"],["Mumbai","India","Asia/Kolkata"],["New Delhi","India","Asia/Kolkata"],["Bengaluru","India","Asia/Kolkata"],["Kochi","India","Asia/Kolkata"],["Colombo","Sri Lanka","Asia/Colombo"],["Kathmandu","Nepal","Asia/Kathmandu"],["Dhaka","Bangladesh","Asia/Dhaka"],["Male","Maldives","Indian/Maldives"],'
+   + '["Bangkok","Thailand","Asia/Bangkok"],["Ho Chi Minh City","Vietnam","Asia/Ho_Chi_Minh"],["Jakarta","Indonesia","Asia/Jakarta"],["Bali","Indonesia","Asia/Makassar"],["Kuala Lumpur","Malaysia","Asia/Kuala_Lumpur"],["Singapore","Singapore","Asia/Singapore"],["Manila","Philippines","Asia/Manila"],["Hong Kong","Hong Kong","Asia/Hong_Kong"],["Shanghai","China","Asia/Shanghai"],["Beijing","China","Asia/Shanghai"],["Shenzhen","China","Asia/Shanghai"],["Taipei","Taiwan","Asia/Taipei"],["Seoul","South Korea","Asia/Seoul"],["Tokyo","Japan","Asia/Tokyo"],["Perth","Australia","Australia/Perth"],["Brisbane","Australia","Australia/Brisbane"],["Sydney","Australia","Australia/Sydney"],["Melbourne","Australia","Australia/Melbourne"],["Auckland","New Zealand","Pacific/Auckland"],'
+   + '["Honolulu","United States","Pacific/Honolulu"],["Anchorage","United States","America/Anchorage"],["Los Angeles","United States","America/Los_Angeles"],["San Francisco","United States","America/Los_Angeles"],["Seattle","United States","America/Los_Angeles"],["Denver","United States","America/Denver"],["Chicago","United States","America/Chicago"],["Houston","United States","America/Chicago"],["Atlanta","United States","America/New_York"],["Miami","United States","America/New_York"],["Washington DC","United States","America/New_York"],["Boston","United States","America/New_York"],["New York","United States","America/New_York"],["Toronto","Canada","America/Toronto"],["Vancouver","Canada","America/Vancouver"],["Mexico City","Mexico","America/Mexico_City"],["Bogota","Colombia","America/Bogota"],["Lima","Peru","America/Lima"],["Santiago","Chile","America/Santiago"],["Buenos Aires","Argentina","America/Argentina/Buenos_Aires"],["Sao Paulo","Brazil","America/Sao_Paulo"]];'
+   + 'var HOME="Dubai",SK="najma.clock.v1",sig="";'
+   + 'var st={list:["Kampala","London","New York","Singapore"],live:true,min:0,day:"",h12:false};'
+   + 'var $=function(i){return document.getElementById(i)};'
+   + 'var cb=function(n){for(var i=0;i<C.length;i++){if(C[i][0]===n)return C[i]}return null};'
+   + 'var HZ=cb(HOME)[2];'
+   + 'var pt=function(d,z){var f=new Intl.DateTimeFormat("en-GB",{timeZone:z,hour12:false,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});var o={},a=f.formatToParts(d);for(var i=0;i<a.length;i++)o[a[i].type]=a[i].value;if(o.hour==="24")o.hour="00";return o};'
+   + 'var om=function(d,z){var p=pt(d,z);return Math.round((Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second)-Math.floor(d.getTime()/1000)*1000)/60000)};'
+   + 'var ol=function(d,z){var m=om(d,z),s=m<0?"-":"+";m=Math.abs(m);var h=Math.floor(m/60),n=m%60;return "UTC"+s+h+(n?":"+(n<10?"0":"")+n:"")};'
+   + 'var inst=function(y,mo,da,hh,mi,z){var t=Date.UTC(y,mo-1,da,hh,mi,0),g=t;for(var i=0;i<4;i++){var n=t-om(new Date(g),z)*60000;if(n===g)break;g=n}return new Date(g)};'
+   + 'var ft=function(p){var h=+p.hour;if(!st.h12)return p.hour+":"+p.minute;var a=h<12?"am":"pm",x=h%12;if(!x)x=12;return x+":"+p.minute+" "+a};'
+   + 'var di=function(p){return Date.UTC(+p.year,+p.month-1,+p.day)/86400000};'
+   + 'var bc=function(h){return h<6||h>=22?"var(--night)":(h<9||h>=21?"var(--edge)":(h<18?"var(--work)":"var(--eve)"))};'
+   + 'var stt=function(h){return h<6||h>=23?["","asleep"]:(h<9?["warn","early"]:(h<18?["ok","working"]:(h<21?["ok","evening"]:["warn","late"])))};'
+   + 'var dfmt=function(d,z){return new Intl.DateTimeFormat("en-GB",{timeZone:z,weekday:"short",day:"numeric",month:"short"}).format(d)};'
+   + 'var now=function(){if(st.live)return new Date();var a=st.day.split("-");return inst(+a[0],+a[1],+a[2],Math.floor(st.min/60),st.min%60,HZ)};'
+   + 'var sync=function(){var p=pt(new Date(),HZ);st.min=+p.hour*60+ +p.minute;st.day=p.year+"-"+p.month+"-"+p.day};'
+   + 'var save=function(){try{localStorage.setItem(SK,JSON.stringify({list:st.list,h12:st.h12}))}catch(e){}fill()};'
+   + 'var load=function(){try{var r=localStorage.getItem(SK);if(r){var o=JSON.parse(r);if(o&&o.list&&o.list.length)st.list=o.list.filter(cb);st.h12=!!(o&&o.h12)}}catch(e){}};'
+   + 'var toast=function(m){var t=$("ts");t.textContent=m;t.classList.add("on");clearTimeout(t._h);t._h=setTimeout(function(){t.classList.remove("on")},1900)};'
+   + 'var copy=function(x,m){var ok=function(){toast(m)};var bad=function(){var a=document.createElement("textarea");a.value=x;a.style.position="fixed";a.style.left="-9999px";document.body.appendChild(a);a.select();try{document.execCommand("copy");toast(m)}catch(e){toast("could not copy")}document.body.removeChild(a)};'
+   + 'try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(x).then(ok,bad)}else bad()}catch(e){bad()}};'
+   + 'var fill=function(){var s=$("pk");s.innerHTML="";var u={};u[HOME]=1;st.list.forEach(function(n){u[n]=1});C.forEach(function(c){if(u[c[0]])return;var o=document.createElement("option");o.value=c[0];o.textContent=c[0]+" — "+c[1];s.appendChild(o)})};'
+   + 'var draw=function(){var d=now(),hp=pt(d,HZ),hi=di(hp),ho=om(d,HZ);sig=st.day+" "+st.min;'
+   + '$("bt").textContent=ft(hp);$("bd").textContent=new Intl.DateTimeFormat("en-GB",{timeZone:HZ,weekday:"long",day:"numeric",month:"long"}).format(d);$("bz").textContent=ol(d,HZ);'
+   + '$("sl").textContent=st.live?"Showing the time right now":"Showing "+ft(hp)+" in Dubai";$("sc").value=st.min;$("dp").value=st.day;$("nb").style.display=st.live?"none":"";'
+   + 'var rs=$("rows");rs.innerHTML="";'
+   + 'if(!st.list.length){rs.innerHTML="<div class=note style=text-align:center>No cities yet. Add one below and it will be shown against Dubai.</div>";return}'
+   + 'var es=st.list.map(cb).filter(Boolean).map(function(c){return{c:c,o:om(d,c[2])}}).sort(function(a,b){return a.o-b.o});'
+   + 'es.forEach(function(e){var c=e.c,p=pt(d,c[2]),h=+p.hour,df=(e.o-ho)/60,dd=di(p)-hi,s2=stt(h);'
+   + 'var w=document.createElement("div");w.className="row";'
+   + 'var L=document.createElement("div");var n=document.createElement("div");n.className="rn";n.textContent=c[0];'
+   + 'var m=document.createElement("div");m.className="rm";'
+   + 'm.textContent=c[1]+" · "+ol(d,c[2])+" · "+(df===0?"same time as Dubai":(df>0?"+":"")+(Math.round(df*10)/10)+"h from Dubai");'
+   + 'L.appendChild(n);L.appendChild(m);'
+   + 'var R=document.createElement("div");R.className="rr";var tb=document.createElement("div");'
+   + 'var t=document.createElement("div");t.className="rt";t.textContent=ft(p);'
+   + 'var dl=document.createElement("div");dl.className="rd";dl.textContent=(dd===0?"same day":dd>0?"next day":"day before")+" · "+dfmt(d,c[2]);'
+   + 'tb.appendChild(t);tb.appendChild(dl);'
+   + 'var pl=document.createElement("span");pl.className="pill "+s2[0];pl.textContent=s2[1];'
+   + 'var x=document.createElement("button");x.type="button";x.className="x";x.textContent="×";x.setAttribute("aria-label","Remove "+c[0]);'
+   + 'x.onclick=function(){st.list=st.list.filter(function(v){return v!==c[0]});save();draw()};'
+   + 'R.appendChild(tb);R.appendChild(pl);R.appendChild(x);'
+   + 'var b=document.createElement("div");b.className="band";'
+   + 'for(var i=0;i<24;i++){var g=document.createElement("i");g.style.left=(i/24*100)+"%";g.style.width=(100/24)+"%";g.style.background=bc(i);b.appendChild(g)}'
+   + 'var k=document.createElement("i");k.className="mk";k.style.left=((h*60+ +p.minute)/1440*100)+"%";b.appendChild(k);'
+   + 'w.appendChild(L);w.appendChild(R);w.appendChild(b);rs.appendChild(w)})};'
+   + '$("sc").addEventListener("input",function(){st.live=false;st.min=+this.value;draw()});'
+   + '$("dp").addEventListener("change",function(){if(!this.value)return;st.live=false;st.day=this.value;draw()});'
+   + '$("nb").addEventListener("click",function(){st.live=true;sync();draw()});'
+   + '$("ab").addEventListener("click",function(){var v=$("pk").value;if(!v)return;st.list.push(v);save();draw();toast(v+" added")});'
+   + '$("fm").addEventListener("click",function(){st.h12=!st.h12;this.textContent=st.h12?"24h":"12h";this.classList.toggle("on",st.h12);save();draw()});'
+   + '$("cp").addEventListener("click",function(){var d=now(),L=["Dubai  "+ft(pt(d,HZ))+"  ("+dfmt(d,HZ)+")"];'
+   + 'st.list.map(cb).filter(Boolean).sort(function(a,b){return om(d,a[2])-om(d,b[2])}).forEach(function(c){L.push(c[0]+"  "+ft(pt(d,c[2]))+"  ("+dfmt(d,c[2])+")")});'
+   + 'copy(L.join("\\n"),"times copied")});'
+   + 'var tick=function(){if(!st.live)return;sync();var g=st.day+" "+st.min;if(g===sig)return;draw()};'
+   + 'load();if(st.h12){$("fm").textContent="24h";$("fm").classList.add("on")}sync();fill();draw();'
+   + 'setInterval(tick,5000);document.addEventListener("visibilitychange",function(){if(!document.hidden)tick()});})();</script></body></html>';
+}
+
+function renderFind(key, q0) {
+  const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Find \u2014 Najma</title>' +
+    '<link rel=preconnect href="https://fonts.googleapis.com"><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">' +
+    '<style>:root{--bg:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#8FC7B9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:calc(14px + env(safe-area-inset-top)) 14px 96px}' +
+    'h1{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.6rem;margin:6px 0 2px;color:var(--gold)}.sub{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.06em;color:var(--mut);text-transform:uppercase;margin-bottom:14px}' +
+    '.box{position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0 10px}.q{width:100%;font:500 1.05rem "IBM Plex Sans",system-ui,sans-serif;color:var(--text);background:var(--card);border:1px solid var(--gold);border-radius:14px;padding:14px 16px;outline:none}.q::placeholder{color:var(--mut)}' +
+    '.chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.chip{font-family:"IBM Plex Mono",monospace;font-size:.64rem;letter-spacing:.04em;border:1px solid var(--line);border-radius:99px;padding:5px 10px;color:var(--mut);cursor:pointer;background:transparent}.chip.on{border-color:var(--gold);color:var(--gold)}' +
+    '.grp{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.14em;color:var(--mut);text-transform:uppercase;margin:16px 0 8px}.it{display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:8px}.it b{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;display:block}.it b i{font-style:normal;color:var(--gold)}' +
+    '.it small{display:block;font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--mut);margin-top:3px;letter-spacing:.02em}.it .go{float:right;font-family:"IBM Plex Mono",monospace;font-size:.64rem;color:var(--teal);margin-left:8px}.it.off{opacity:.72}.it .tw{color:var(--teal);text-decoration:none}.n{color:var(--mut);font-family:"IBM Plex Mono",monospace;font-size:.7rem;padding:24px 4px;text-align:center}' + NAJ_NAV_CSS + '</style></head><body>' +
+    '<h1>Find</h1><div class=sub>developer \u00b7 development \u00b7 building \u00b7 across every district we hold</div>' +
+    '<div class=box><input class=q id=q type=search autocomplete=off autocorrect=off autocapitalize=off spellcheck=false placeholder="Developer, development or building\u2026" value="' + esc(q0) + '">' +
+    '<div class=chips><span class="chip on" data-t="">all</span><span class=chip data-t=developer>developers</span><span class=chip data-t=development>developments</span><span class=chip data-t=building>buildings</span></div></div>' +
+    '<div id=out><div class=n>loading the index\u2026</div></div>' + najNav(key, "find") +
+    '<script>(function(){var KEY=' + JSON.stringify(key) + ';var IDX=null,T="";var q=document.getElementById("q"),out=document.getElementById("out");' +
+    'var esc=function(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"})[c]})};var nk=function(t){return String(t||"").toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\\s+/g," ").trim()};' +
+    'var hl=function(n,toks){var h=esc(n);toks.forEach(function(t){if(t.length<2)return;h=h.replace(new RegExp("("+t.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&")+")","ig"),"<i>$1</i>")});return h};' +
+    'var twin=function(r){if(r.d&&r.i!=null)return"/skyline/"+encodeURIComponent(r.d)+"?key="+encodeURIComponent(KEY)+"&b="+encodeURIComponent(r.i);if(r.d)return"/skyline/"+encodeURIComponent(r.d)+"?key="+encodeURIComponent(KEY)+"&q="+encodeURIComponent(r.n);return null};' +
+    'var link=function(r){if(r.t==="developer"&&r.dev)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY);if(r.dev&&r.p)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY)+"&p="+encodeURIComponent(r.p);if(r.dev)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY);return twin(r)};' +
+    'var where=function(r){var w=[];if(r.a)w.push(r.a);if(r.m&&r.m!==r.n)w.push(r.m);if(r.units)w.push(Number(r.units).toLocaleString("en")+" units");if(r.nb)w.push(r.nb+" buildings");if(r.st==="verified")w.push("register");if(r.off)w.push("in the register, not yet on the twin");if(r.dev&&r.t!=="developer")w.push(r.dev);return w.join(" \\u00b7 ")};' +
+    'var render=function(){if(!IDX)return;var s=nk(q.value),toks=s?s.split(" "):[];var rows=IDX.items.filter(function(r){if(T&&r.t!==T)return false;if(!toks.length)return r.t==="developer";var hay=nk(r.n)+" "+nk(r.m)+" "+nk(r.a)+" "+nk(r.dev);return toks.every(function(t){return hay.indexOf(t)>=0})});' +
+    'rows.sort(function(a,b){var sa=nk(a.n).indexOf(s)===0?0:1,sb=nk(b.n).indexOf(s)===0?0:1;if(sa!==sb)return sa-sb;var ta={developer:0,development:1,building:2};if(ta[a.t]!==ta[b.t])return ta[a.t]-ta[b.t];return (Number(b.units)||0)-(Number(a.units)||0)});' +
+    'if(!window.__itwire){window.__itwire=1;document.head.insertAdjacentHTML("beforeend","<style>.it[data-u]{cursor:pointer}.go a{color:inherit;text-decoration:none}.go a.gm{margin-left:10px;color:#8FC7B9}</style>");document.addEventListener("click",function(e){var it=e.target.closest(".it[data-u]");if(!it||e.target.closest("a"))return;location.href=it.getAttribute("data-u")})}'
+  + 'var groups=[["developer","Developers"],["development","Developments"],["building","Buildings"]],h="",n=0;groups.forEach(function(g){var rs=rows.filter(function(r){return r.t===g[0]}).slice(0,toks.length?40:60);if(!rs.length)return;h+=\'<div class=grp>\'+g[1]+" \\u00b7 "+rows.filter(function(r){return r.t===g[0]}).length+"</div>";rs.forEach(function(r){n++;var u=link(r);var tw=twin(r);var isHome=u&&u.indexOf("/dev?")===0;var mp=r.d?"/map?key="+encodeURIComponent(KEY)+"&d="+encodeURIComponent(r.d)+"&focus="+encodeURIComponent(r.n):"";h+=\'<div class="it\'+(r.off?" off":"")+\'"\'+(u?\' data-u="\'+u+\'"\':"")+\'><span class=go>\'+(u?\'<a href="\'+u+\'">\'+(isHome?"HOMES \\u2192":(r.i!=null?"twin \\u2192":"district \\u2192"))+"</a>":"")+(mp?\'<a class=gm href="\'+mp+\'">map \\u2192</a>\':"")+"</span><b>"+hl(r.n,toks)+"</b><small>"+esc(where(r))+(isHome&&tw?\' \\u00b7 <a class=tw href="\'+tw+\'">on the twin \\u2192</a>\':"")+"</small></div>"})});' +
+    'out.innerHTML=h||\'<div class=n>nothing by that name yet \\u2014 the register, the twin and the developer pages were all checked</div>\';if(toks.length){try{history.replaceState(null,"",location.pathname+"?key="+encodeURIComponent(KEY)+"&q="+encodeURIComponent(q.value))}catch(e){}}};' +
+    'document.querySelectorAll(".chip").forEach(function(c){c.onclick=function(){document.querySelectorAll(".chip").forEach(function(x){x.classList.toggle("on",x===c)});T=c.getAttribute("data-t")||"";render()}});q.addEventListener("input",render);' +
+    'fetch("/img/search_index?t="+Math.floor(Date.now()/600000)).then(function(r){return r.ok?r.json():null}).then(function(j){IDX=j||{items:[]};render();if(!q.value)q.focus()}).catch(function(){out.innerHTML=\'<div class=n>the index did not load \\u2014 pull to refresh</div>\'});})();</script></body></html>';
+}
+
 function renderPlans(idx, key, dsel, psel, isel) {
   const esc2 = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const K = encodeURIComponent(key || "");
@@ -4288,7 +5452,7 @@ function renderPlans(idx, key, dsel, psel, isel) {
     (dev ? '<a class=bk href="/plans?key=' + K + '">← all developers</a>' : '') +
     '<div class=mast>' + (dev ? esc2(dev.name) + ' <em>· floor plans</em>' : 'Floor plans') + '</div>' +
     '<div class=sub>' + (dev ? (proj ? esc2(proj.name) : '') : (idx ? idx.count + ' plans on file · ' + devs.length + ' developer' + (devs.length === 1 ? '' : 's') + ' · tap one' : 'nothing on file yet')) + '</div>' +
-    body + najNav(key, "homes") + '</body></html>';
+    body + najNav(key, "plans") + '</body></html>';
 }
 
 function renderHome(bd, key, cmp, s) {
@@ -4376,13 +5540,30 @@ ${najNav(key, "homes")}
 </body></html>`;
 }
 // v73 - DEVELOPER PAGE: property cards. "ours" first (modelled, unit cards ready), then DLD-registered 2026 projects, then projects trading in 2026.
-function renderDev(dv, bd, galleries, key) {
+const umNkey = (t) => String(t || "").toLowerCase().replace(/\b(by|the|tower|towers|residences?|residence|building|bldg|apartments?)\b/g, "").replace(/[^a-z0-9]/g, "");
+function videoMatch(vids, name, district) {                                 // v101 - a tour belongs to a scheme by name (and district when known)
+  const tok = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff ]+/g, " ").split(" ").filter(w => w.length > 2 && !["the", "by", "at", "residences", "residence", "tower", "towers", "dubai"].includes(w));
+  const T = tok(name); if (!T.length) return null;
+  return (vids || []).find(v => (!district || !v.district || v.district === district) && (() => { const U = tok(v.name); return U.length && U.every(w => T.includes(w)); })()) || null;
+}
+function videoBlock(v) {
+  return '<div class=vtour><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="' + v.poster + '"><source src="' + v.src + '" type="video/mp4"></video>' +
+         '<div class=vcap>' + esc2(v.title) + (v.approx ? ' \u00b7 pin on the map is approximate: plot ' + esc2(v.plot || '') + ', building not yet a footprint' : '') + '</div></div>';
+}
+function renderDev(dv, bd, galleries, key, umx, vids) {
+  const umLookup = (name) => { const P = (umx && umx.projects) || {}; const k = umNkey(name); if (P[k]) return P[k]; for (const kk in P) if (k && kk && (kk.indexOf(k) === 0 || k.indexOf(kk) === 0) && Math.min(k.length, kk.length) >= 6) return P[kk]; return null; };
   const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(2) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(1) + " M" : Math.round(n).toLocaleString("en-US"));
   const k = dv.kpi || {};
   const kp = [k.tx_2026 ? ["Sales 2026", fm(k.tx_2026)] : null, k.value_aed ? ["Value", "AED " + fm(k.value_aed)] : null, k.median_aed_per_sqm ? ["Median", "AED " + fm(k.median_aed_per_sqm) + "/m²"] : null,
               k.registered_2026 ? ["Registered 2026", String(k.registered_2026)] : null, k.meed_projects ? ["MEED projects", String(k.meed_projects)] : null].filter(Boolean)
     .map(x => '<div class=k><div class=v>' + x[1] + '</div><div class=l>' + x[0] + '</div></div>').join("");
-  const cards = (dv.properties || []).map(p => {
+  const cardsArr = (dv.properties || []).map(p => { const _h = cardFor(p); if (!_h) return _h; const _u = umLookup(p.name);
+    const _tw = (_u && _u.district != null && _u.i != null) ? '/skyline/' + encodeURIComponent(_u.district) + '?key=' + encodeURIComponent(key) + '&b=' + encodeURIComponent(_u.i) : null;
+    const _mp = (_u && _u.district != null) ? '/map?key=' + encodeURIComponent(key) + '&d=' + encodeURIComponent(_u.district) + '&focus=' + encodeURIComponent(p.name || '') : null;
+    const _vd = videoMatch(vids, p.name, _u && _u.district);
+    const _bar = '<div class=modeb2><button class="mb2 on" data-m=snap type=button>Snapshot</button><button class=mb2 data-m=deep type=button>Deeper dive</button>' + (_tw ? '<a class=mb2 href="' + _tw + '">on the twin \u2192</a>' : '') + (_mp ? '<a class=mb2 href="' + _mp + '">on the map \u2192</a>' : '') + '</div>';
+    return _h.replace(/<\/div>\s*$/, _bar + (_vd ? videoBlock(_vd) : '') + unitMixHtml(_u, true).replace('class=um', 'class="um umhover"') + '</div>'); });
+  function cardFor(p) {
     if (p.kind === "ours") {
       const g = galleries[p.building]; const n = g && g.cards ? g.cards.length : 0;
       const cu = '/cards?b=' + encodeURIComponent(p.cards) + '&key=' + encodeURIComponent(key);
@@ -4412,7 +5593,8 @@ function renderDev(dv, bd, galleries, key) {
     return '<div class=prop><div class=ph><span class=pn>' + p.name + '</span><span class=badge style="border-color:var(--line);color:var(--mut)">trading</span></div>' +
       '<div class=pm>' + (p.area || "") + ' · ' + p.tx + ' registered sales 2026' + (p.median_aed_per_sqm ? ' · median AED ' + fm(p.median_aed_per_sqm) + '/m²' : '') + (p.offplan_share != null ? ' · ' + Math.round(p.offplan_share * 100) + '% off-plan' : '') + '</div>' +
       '<div class=pm style="color:var(--mut)">last registration ' + (p.last || "") + ' · DLD Open Data</div></div>';
-  }).join("");
+  }
+  const cards = cardsArr.join("");
   return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${dv.name} - properties</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
 :root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
 body{margin:auto;max-width:720px;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:14px 14px 88px}
@@ -4420,13 +5602,15 @@ body{margin:auto;max-width:720px;background:var(--ink);color:var(--text);font-fa
 .mast{font-family:Fraunces,Georgia,serif;font-size:1.35rem;font-weight:600;line-height:1.1}.tier{display:flex;align-items:center;gap:5px;color:var(--gold);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin:12px 0 16px}.k{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 10px 8px}.k .v{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;color:var(--gold)}.k .l{color:var(--mut);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
 .sec{color:var(--mut);font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;margin:14px 2px 8px}
-.prop{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;text-decoration:none;color:var(--text)}
+.prop{display:block;position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;text-decoration:none;color:var(--text)}
+${UNIT_MIX_CSS}.umhover{display:none;position:absolute;left:8px;right:8px;top:calc(100% - 6px);z-index:6;background:#131F1D;box-shadow:0 10px 28px rgba(0,0,0,.55)}.prop:hover .umhover,.prop.on .umhover{display:block}@media(hover:none){.prop:hover .umhover{display:none}.prop.on .umhover{display:block}}.vtour{margin:10px 0 4px}.vtour video{width:100%;max-height:60vh;border-radius:12px;background:#000;display:block}.vtt{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.05em;color:var(--gold);text-transform:uppercase;margin:0 0 6px}.vcap{font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--mut);margin-top:6px}.modeb2{display:none}.prop{position:relative}.prop .modeb2,.prop .umhover{position:relative;z-index:9}@media(hover:none),(max-width:640px){.modeb2{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.mb2{font-family:"IBM Plex Mono",monospace;font-size:.64rem;letter-spacing:.03em;border:1px solid var(--gold,#C5A56A);border-radius:99px;padding:5px 11px;background:transparent;color:var(--gold,#C5A56A);cursor:pointer;text-decoration:none}.mb2.on{background:var(--gold,#C5A56A);color:#132320}.prop.on .umhover{position:relative;box-shadow:none;margin-top:8px;z-index:9}}
 .hero{width:100%;height:110px;object-fit:cover;border-radius:10px;margin-bottom:8px;display:block;background:#1C2B28}
 .prop.ours{border-color:#2E4A44;position:relative}.prop.ours:active{border-color:var(--gold)}.cover{position:absolute;inset:0;border-radius:14px}.row a{position:relative;z-index:1}.go{text-decoration:none}
 .ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.pn{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1rem}.badge{border:1px solid #3E7C6C;color:#8FC7B9;border-radius:99px;padding:2px 8px;font-size:.62rem;white-space:nowrap}
 .pm{color:var(--text);font-size:.72rem;margin-top:4px;font-family:"IBM Plex Mono",monospace}.row{display:flex;gap:8px;align-items:center;margin-top:8px}.go{color:var(--gold);font-weight:600;font-size:.78rem}.mini{margin-left:auto;border:1px solid var(--line);border-radius:99px;padding:3px 9px;color:var(--text);text-decoration:none;font-size:.66rem}.mini+.mini{margin-left:6px}
 .act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--text);text-decoration:none;font-size:.72rem;margin:0 6px 8px 0;background:var(--card)}
 ${NAJ_NAV_CSS}</style></head><body>
+<script>window.addEventListener("DOMContentLoaded",function(){try{var p=new URLSearchParams(location.search).get("p");if(!p)return;var nk=function(t){return String(t||"").toLowerCase().replace(/[^a-z0-9]/g,"")};var cards=[].slice.call(document.querySelectorAll(".prop"));var hit=cards.find(function(c){var n=nk((c.querySelector(".pn")||{}).textContent);return n===p})||cards.find(function(c){var n=nk((c.querySelector(".pn")||{}).textContent);return n&&p&&(n.indexOf(p)>=0||p.indexOf(n)>=0)});if(!hit)return;hit.classList.add("on");hit.style.outline="1px solid #C5A56A";var d=hit.querySelector(".mb2[data-m=deep]");if(d){hit.querySelectorAll(".mb2[data-m]").forEach(function(x){x.classList.toggle("on",x===d)})}setTimeout(function(){hit.scrollIntoView({block:"start",behavior:"smooth"})},150)}catch(e){}});document.addEventListener("click",function(e){var mb=e.target.closest(".mb2[data-m]");if(mb){e.preventDefault();e.stopPropagation();var pr2=mb.closest(".prop");if(!pr2)return;var deep=mb.getAttribute("data-m")==="deep";pr2.classList.toggle("on",deep);pr2.querySelectorAll(".mb2[data-m]").forEach(function(x){x.classList.toggle("on",x===mb)});return}var ph=e.target.closest(".ph");if(!ph)return;var pr=ph.closest(".prop");if(!pr)return;document.querySelectorAll(".prop.on").forEach(function(x){if(x!==pr)x.classList.remove("on")});pr.classList.toggle("on")});</script>
 <div class=hd>${devLogo(dv, 64)}<div><div class=mast>${dv.name}</div><div class=tier>${tierSvg(dv.icon)}<span>${dv.segment_label}</span></div></div></div>
 <div class=kpis>${kp}</div>
 ${(dv.properties || []).some(p => p.kind === "ours") ? '<div class=sec>Modelled - unit cards ready</div>' : ''}
@@ -4709,9 +5893,28 @@ if(GK){(async()=>{
 ${najNav(key, "twin")}
 </body></html>`;
 }
+// v86 - twin context. Model tiles (a district split for the 5 MB budget) name themselves and point at the community polygon of their parent;
+// corridors group the rail into five doors instead of one long alphabetical row.
+const TWIN_TILE_NAME = { jltnorth: "JLT \u00b7 North (the towers)", jltsouth: "JLT \u00b7 South (Islands & Park)" };
+const TWIN_TILE_PARENT = { jltnorth: "althanyahfifth", jltsouth: "althanyahfifth" };
+const TWIN_CORRIDORS = ["Coast", "Downtown & Creek", "New Dubai", "Meydan & MBR", "South & Outer", "Other"];
+const TWIN_CORRIDOR = {
+  dubaimarina: "Coast", palmjumeirah: "Coast", alwasl: "Coast", alsatwa: "Coast", dubaimaritimecity: "Coast", jumeirah: "Coast",
+  burjkhalifa: "Downtown & Creek", businessbay: "Downtown & Creek", samaaljadaf: "Downtown & Creek", alkhairanfirst: "Downtown & Creek", palmdeira: "Downtown & Creek", alkifaf: "Downtown & Creek",
+  jltnorth: "New Dubai", jltsouth: "New Dubai", althanyahfifth: "New Dubai", jumeirahvillagecircle: "New Dubai", jumeirahvillagetriangle: "New Dubai", motorcity: "New Dubai", arjan: "New Dubai", dubaisportscity: "New Dubai", dubaiproductioncity: "New Dubai", dubaistudiocity: "New Dubai", dubaisciencepark: "New Dubai",
+  meydanone: "Meydan & MBR", sobhaheartland: "Meydan & MBR", nadalsheba: "Meydan & MBR", alyufrah1: "Meydan & MBR", alyufrah2: "Meydan & MBR",
+  dubaihills: "South & Outer", damachills: "South & Outer", alhebiahfifth: "South & Outer", alhebiahfourth: "South & Outer", alyelayiss1: "South & Outer", alyelayiss2: "South & Outer", wadialsafa5: "South & Outer", wadialsafa4: "South & Outer", madinatalmataar: "South & Outer", dubaiindustrialcity: "South & Outer", siliconoasis: "South & Outer", majan: "South & Outer", dubaiinvestmentpark: "South & Outer", dubaisouth: "South & Outer"
+};
 function renderSkyline(slugName, areaName, key, rail) {
+  const _esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const _cur = (rail || []).find(r => r.s === slugName) || null;
+  const _openC = _cur ? _cur.c : ((rail || [])[0] ? rail[0].c : "Coast");
+  const _cors = TWIN_CORRIDORS.filter(c => (rail || []).some(r => r.c === c));
+  const _dr1 = _cors.map(c => '<span class="dg cor' + (c === _openC ? ' on' : '') + '" data-c="' + _esc(c) + '">' + _esc(c) + ' <i>' + (rail || []).filter(r => r.c === c).length + '</i></span>').join('');
+  const _mt = ["massing only", "surveyed \u00b7 names on the model", "register-bound \u00b7 developers and units"];
   const _dr = (rail || []).map(r =>
-    '<a class="dg' + (r.s === slugName ? ' on' : '') + '" href="/skyline/' + r.s + '?key=' + encodeURIComponent(key || '') + '">' + String(r.n).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])) + '</a>').join('');
+    '<a class="dg' + (r.s === slugName ? ' on' : '') + '" data-c="' + _esc(r.c) + '"' + (r.c === _openC ? '' : ' hidden') + ' href="/skyline/' + r.s + '?key=' + encodeURIComponent(key || '') + '" title="' + _esc(r.n) + ' \u00b7 ' + (r.b || 0).toLocaleString("en") + ' buildings \u00b7 ' + _mt[r.m || 0] + '"><b class="mb m' + (r.m || 0) + '"></b>' + _esc(r.n) + '</a>').join('');
+  const _railJson = JSON.stringify((rail || []).map(r => ({ s: r.s, n: r.n, p: r.p, m: r.m })));
   return `<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${areaName} — 3D</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}<style>
 :root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
 html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;overflow:hidden}
@@ -4720,6 +5923,7 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 #lbls{position:fixed;inset:0;pointer-events:none;overflow:hidden}#lbls svg{position:absolute;inset:0;width:100%;height:100%}
 .lb{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;text-decoration:none;color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.74rem;font-weight:500;letter-spacing:.01em;white-space:nowrap;opacity:0;transition:opacity .45s ease;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 12px rgba(12,20,19,.9)}
 .lb.on{opacity:1}.lb i{display:block;font-style:normal;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:1px}.lb.dev{font-weight:600}
+.lb.st{font-size:.66rem;transition:opacity .25s}.lb.st i{color:var(--gold)}
 #devwrap{position:fixed;left:14px;top:192px;z-index:41;display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;align-items:center;max-width:46vw}   // v74.9: filters live on the LEFT as a banner; the panel on the right fits without scrolling
 #projsel{appearance:none;-webkit-appearance:none;font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--text);background:rgba(19,31,29,.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23E8E4D8' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid var(--line);border-radius:99px;padding:6px 28px 6px 12px;max-width:52vw}
 #ppanel{position:fixed;right:14px;top:82px;bottom:78px;width:min(52vw,600px);overflow:auto;background:rgba(19,31,29,.95);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:none;z-index:41}
@@ -4739,7 +5943,13 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .tl svg{width:14px;height:14px;display:block;margin-bottom:3px}.tl b{display:block;font-family:Fraunces,Georgia,serif;font-weight:600;font-size:.74rem;line-height:1.12;overflow-wrap:anywhere}.tl i{display:block;font-style:normal;color:var(--mut);font-size:.52rem;font-family:"IBM Plex Mono",monospace;margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
 @media(max-width:900px){.tg{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:640px){.tg{grid-template-columns:repeat(3,minmax(0,1fr))}#devwrap{top:auto;bottom:74px;left:10px;right:10px;max-width:none}#ppanel.on~#devwrap{display:none}}.pn{color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;margin-top:8px}
-@media(max-width:640px){#ppanel{left:10px;right:10px;top:auto;bottom:74px;width:auto;max-height:46vh}}#devsel{appearance:none;-webkit-appearance:none;font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--gold);background:rgba(19,31,29,.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23C5A56A' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid rgba(197,165,106,.5);border-radius:99px;padding:7px 28px 7px 12px;max-width:52vw}
+@media(max-width:640px){#ppanel{left:10px;right:10px;top:auto;bottom:74px;width:auto;max-height:46vh}}
+.modeb{display:none}
+@media(hover:none),(max-width:640px){.modeb{display:flex;position:sticky;top:0;justify-content:flex-end;align-items:center;gap:6px;z-index:3;margin:-4px 26px 4px 0;pointer-events:none}
+.modeb>*{pointer-events:auto}#mob{width:26px;height:26px;border-radius:50%;border:1px solid var(--gold);background:rgba(19,31,29,.96);color:var(--gold);display:grid;place-items:center;font-style:normal;font-size:.9rem;cursor:pointer;flex:none}
+.modeb .mb{display:none;font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.03em;border:1px solid var(--gold);border-radius:99px;padding:5px 11px;background:rgba(19,31,29,.96);color:var(--gold);cursor:pointer}
+.modeb.open .mb{display:inline-block}.modeb .mb.on{background:var(--gold);color:#132320}
+#ppanel:not(.deep) .deep,#ppanel:not(.deep) .vw{display:none}#ppanel.deep .snap{display:none}}#devsel{appearance:none;-webkit-appearance:none;font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--gold);background:rgba(19,31,29,.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23C5A56A' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid rgba(197,165,106,.5);border-radius:99px;padding:7px 28px 7px 12px;max-width:52vw}
 #legend{position:fixed;left:14px;bottom:78px;display:flex;flex-direction:column;gap:5px;pointer-events:none;opacity:0;transition:opacity .4s}#legend.on{opacity:1}
 .lg{display:flex;align-items:center;gap:7px;font-family:"IBM Plex Mono",monospace;font-size:.64rem;color:var(--text);background:rgba(19,31,29,.85);border:1px solid var(--line);border-radius:99px;padding:4px 10px 4px 6px}.lg b{width:9px;height:9px;border-radius:50%;display:inline-block}
 .top{position:fixed;top:0;left:0;right:0;padding:12px 14px 26px;background:linear-gradient(180deg,rgba(12,20,19,.92),rgba(12,20,19,0));pointer-events:none}
@@ -4753,6 +5963,14 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .tg.on{color:var(--gold);border-color:rgba(197,165,106,.6)}
 .rail{position:fixed;top:68px;left:0;right:0;display:flex;gap:6px;overflow-x:auto;padding:6px 14px;pointer-events:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .rail::-webkit-scrollbar{display:none}
+.rail.r2{top:100px}.dg.cor{color:var(--text);border-color:#2E4A44;cursor:pointer}.dg.cor.on{color:var(--gold);border-color:rgba(197,165,106,.6);background:rgba(197,165,106,.1)}.dg.cor i{font-style:normal;color:var(--mut);margin-left:3px}
+.dg .mb{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px;background:#3A4F49}.dg .mb.m1{background:#8FA39B}.dg .mb.m2{background:var(--gold);box-shadow:0 0 6px rgba(197,165,106,.7)}
+.tog{top:150px}.feat{top:186px}#devwrap{top:224px}
+#mini{position:fixed;right:14px;top:138px;width:176px;height:136px;background:rgba(19,31,29,.92);border:1px solid var(--line);border-radius:12px;z-index:42;overflow:hidden;cursor:pointer}
+#mini canvas{width:100%;height:100%;display:block}#mini .mn{position:absolute;left:8px;bottom:5px;font-family:"IBM Plex Mono",monospace;font-size:.52rem;color:var(--mut);pointer-events:none;letter-spacing:.04em}
+#mini .mt{position:absolute;right:8px;top:5px;font-family:"IBM Plex Mono",monospace;font-size:.5rem;color:rgba(143,163,155,.7);pointer-events:none;letter-spacing:.08em;text-transform:uppercase}
+body:has(#ppanel.on) #mini{display:none}
+@media(max-width:640px){#mini{width:118px;height:92px;top:auto;bottom:calc(120px + env(safe-area-inset-bottom));right:10px}#mini .mt{display:none}}
 .dg{flex:0 0 auto;font-family:"IBM Plex Mono",monospace;font-size:.62rem;border:1px solid var(--line);background:rgba(19,31,29,.85);border-radius:99px;padding:5px 10px;color:var(--mut);text-decoration:none;-webkit-tap-highlight-color:transparent}
 .dg.on{color:var(--gold);border-color:rgba(197,165,106,.6)}
 #card{position:fixed;left:12px;right:12px;bottom:calc(74px + env(safe-area-inset-bottom));max-width:430px;margin:auto;background:rgba(19,31,29,.96);border:1px solid rgba(197,165,106,.5);border-radius:14px;padding:14px 16px;display:none;z-index:40}
@@ -4769,21 +5987,56 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .tenants b{flex:none;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;color:#C5A56A;font-weight:600}
 .tenants i{font-style:normal;background:rgba(143,163,155,.1);border:1px solid rgba(143,163,155,.2);border-radius:4px;padding:1px 6px;margin-right:4px;flex:none}
 .tenants em{font-style:normal;color:rgba(143,163,155,.6);flex:none}
+${UNIT_MIX_CSS}
 .rpt{margin-left:9px;font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.05em;color:#C5A56A;background:rgba(197,165,106,.1);border:1px solid rgba(197,165,106,.42);border-radius:99px;padding:3px 9px;text-decoration:none;vertical-align:middle;white-space:nowrap}
 #msg{position:fixed;inset:0;display:grid;place-items:center;color:var(--mut);font-size:.85rem;text-align:center;padding:0 30px}
 .foot{position:fixed;right:10px;bottom:calc(64px + env(safe-area-inset-bottom));color:rgba(143,163,155,.7);font-size:.58rem;font-family:"IBM Plex Mono",monospace;pointer-events:none}
-${NAJ_NAV_CSS}</style>
+${MAP_CHROME_CSS}${MAP_CHROME_CSS_X}#rail1,#rail2,#mini,.tog,.feat,#devwrap{display:none!important}.top #rail{position:static!important;top:auto;left:auto;right:auto;padding:0 0 6px}.top{pointer-events:none}.top>*{pointer-events:auto}#twmk{position:fixed;inset:0;pointer-events:none;z-index:3}.tm{position:absolute;transform:translate(-50%,-50%);border-radius:50%;pointer-events:auto;cursor:pointer;box-sizing:border-box}.tm.am{width:12px;height:12px;border:1.5px solid rgba(12,20,19,.85)}.tm.am.ap{background:transparent!important;border-width:2px}.tm.near{width:22px;height:22px;background:transparent;border:2px solid}.tm.sel{width:54px;height:54px;background:rgba(197,165,106,.16);border:2px solid #C5A56A;pointer-events:none}.tm.home{width:14px;height:14px;background:#C5A56A;border:1.5px solid #0C1413}.tm.vid{width:20px;height:20px;background:#F0E4C8;border:2px solid #C5A56A;color:#0C1413;font-size:9px;line-height:16px;text-align:center}.tm b{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:3px;font:10.5px 'IBM Plex Sans',system-ui,sans-serif;color:#F0E4C8;white-space:nowrap;text-shadow:0 0 3px #0C1413,0 0 3px #0C1413;font-weight:500}${NAJ_NAV_CSS}</style>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.169.0/examples/jsm/"}}</script>
 </head><body>
 <div id=cv3></div>
-<div class=top><div class=mast>${areaName} <em>· 3D</em><a class=rpt href="/report/${slugName}?key=${encodeURIComponent(key || '')}">stock report →</a></div><div class=sub>massing from the register — heights real where known, illustrative where not</div></div>
-<div class=rail>${_dr}</div>
+${MAP_CHROME_HTML.replace('__TITLE__', 'the twin')}
+<div class=rail id=rail1 hidden>${_dr1}</div>
+<div class="rail r2" id=rail2 hidden>${_dr}</div>
+<div id=twmk></div>
+<div id=mini title="where you are in Dubai \u00b7 tap a dot to jump"><canvas id=minic width=352 height=272></canvas><span class=mt>Dubai</span><span class=mn id=minn>${_esc(areaName)}</span></div>
+<script>
+(function(){
+  var RAIL=${_railJson},CUR="${slugName}",KEY=${JSON.stringify(key || '')};
+  // corridor pills open one row of districts at a time
+  var cors=document.querySelectorAll('#rail1 .cor');
+  for(var i=0;i<cors.length;i++)cors[i].addEventListener('click',function(){var c=this.getAttribute('data-c');for(var j=0;j<cors.length;j++)cors[j].classList.toggle('on',cors[j]===this);var ds=document.querySelectorAll('#rail2 .dg');for(var k=0;k<ds.length;k++)ds[k].hidden=ds[k].getAttribute('data-c')!==c;});
+  // locator minimap: every community outline, the modelled ones as dots, the current one gold, the camera's heading as a cone
+  var cv=document.getElementById('minic'),cx=cv.getContext('2d'),AR=null,DOTS=[],cur=(RAIL.filter(function(r){return r.s===CUR})[0]||{}).p||CUR;
+  var slug=function(n){return String(n).toLowerCase().replace(/[^a-z0-9]/g,'')};
+  var W=cv.width,H=cv.height,PAD=14,bx=[55.02,24.82,55.47,25.39],ky=1/Math.cos(25.1*Math.PI/180);
+  var sc=Math.min((W-2*PAD)/((bx[2]-bx[0])),(H-2*PAD)/((bx[3]-bx[1])*ky));
+  var ox=(W-(bx[2]-bx[0])*sc)/2,oy=(H-(bx[3]-bx[1])*ky*sc)/2;
+  var px=function(c){return [ox+(c[0]-bx[0])*sc,H-oy-(c[1]-bx[1])*ky*sc]};
+  var rings=function(g){return g.type==='Polygon'?[g.coordinates[0]]:g.coordinates.map(function(p){return p[0]})};
+  function draw(){
+    cx.clearRect(0,0,W,H);if(!AR)return;var mod={};RAIL.forEach(function(r){mod[r.p]=Math.max(mod[r.p]||0,r.m||0)});DOTS=[];
+    AR.features.forEach(function(f){var sl=slug(f.properties.n),on=sl===cur,has=mod[sl]!=null;
+      rings(f.geometry).forEach(function(rg){cx.beginPath();rg.forEach(function(c,i){var q=px(c);i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1])});cx.closePath();
+        cx.fillStyle=on?'rgba(197,165,106,.55)':has?'rgba(143,163,155,.16)':'rgba(36,53,47,.35)';cx.fill();cx.strokeStyle=on?'#C5A56A':'rgba(143,163,155,.35)';cx.lineWidth=on?1.6:.7;cx.stroke()});
+      if(has||on){var pts=rings(f.geometry)[0],sx=0,sy=0;pts.forEach(function(c){sx+=c[0];sy+=c[1]});var q=px([sx/pts.length,sy/pts.length]);DOTS.push({x:q[0],y:q[1],sl:sl,on:on});}});
+    DOTS.forEach(function(d){if(d.on)return;cx.beginPath();cx.arc(d.x,d.y,mod[d.sl]===2?3.6:2.8,0,7);cx.fillStyle=mod[d.sl]===2?'#C5A56A':'#8FA39B';cx.fill()});
+    var me=DOTS.filter(function(d){return d.on})[0];if(me){var v=window.__najView&&window.__najView();if(v){var a=Math.atan2(v.x,-v.z);cx.beginPath();cx.moveTo(me.x,me.y);cx.arc(me.x,me.y,26,a-Math.PI/2-0.42,a-Math.PI/2+0.42);cx.closePath();cx.fillStyle='rgba(197,165,106,.28)';cx.fill()}
+      cx.beginPath();cx.arc(me.x,me.y,4.2,0,7);cx.fillStyle='#E8E4D8';cx.fill();cx.lineWidth=1.5;cx.strokeStyle='#C5A56A';cx.stroke()}}
+  fetch('/img/mp_areas').then(function(r){return r.ok?r.json():null}).then(function(j){AR=j;draw();setInterval(draw,300)}).catch(function(){});
+  cv.parentNode.addEventListener('click',function(e){var r=cv.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height,best=null,bd=1e9;
+    DOTS.forEach(function(d){var dd=(d.x-x)*(d.x-x)+(d.y-y)*(d.y-y);if(dd<bd){bd=dd;best=d}});if(!best||bd>18*18||best.on)return;
+    var t=RAIL.filter(function(q){return q.p===best.sl}).sort(function(a,b){return (b.m||0)-(a.m||0)})[0];if(t)location.href='/skyline/'+t.s+'?key='+encodeURIComponent(KEY);});
+})();
+</script>
 <div id=card><span class=cx id=cx>✕</span><div class=ct id=ct></div><div class=cs id=cs></div><div id=cfacts></div><div class=cp id=cp></div></div>
 <div class=tog id=filters></div>
 <div class=feat id=feat></div>
 <div id=msg>loading massing…</div>
 <div class=foot>model: CityEngine from OSM footprints + DLD register · facades: Esri CityEngine texture library · © OpenStreetMap contributors</div>
 ${najNav(key, "twin")}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>window.__twinPending=true;window.__twinDistrict=${JSON.stringify(slugName)};(function(){var KEY=${JSON.stringify(key || "")};${MAP_CHROME_JS}})();</script>
 <script type="module">
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -4792,13 +6045,14 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 const el=document.getElementById("cv3"),msg=document.getElementById("msg");
 const MOBILE=innerWidth<600;   // v75 look pass: mobile gets a lighter pixel ratio and no MSAA in the composer
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x0C1413);scene.fog=new THREE.Fog(0x0C1413,2500,9000);
-const cam=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,1,20000);
+const cam=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,6,20000);   // v97: near 1->6 m; the camera never comes closer than ~60 m, and a 1 m near plane left the depth buffer ~25 cm of resolution at 2 km, so the ground disc and the imagery sheet (5 cm apart) fought for the same pixels at the horizon and blinked
 const ren=new THREE.WebGLRenderer({antialias:true});ren.setPixelRatio(Math.min(MOBILE?1.5:2,devicePixelRatio));ren.setSize(innerWidth,innerHeight);ren.toneMapping=THREE.ACESFilmicToneMapping;ren.toneMappingExposure=0.95;el.appendChild(ren.domElement);
 ren.shadowMap.enabled=true;ren.shadowMap.type=THREE.PCFSoftShadowMap;
 // v75 LOOK PASS (3 Sep): image-based light so the massing has real shading, a dark sky dome, soft sun shadows, gentle glow on pipeline.
@@ -4827,13 +6081,14 @@ function setupBloom(){
     fragmentShader:"uniform sampler2D baseTexture;uniform sampler2D bloomTexture;varying vec2 vUv;void main(){gl_FragColor=texture2D(baseTexture,vUv)+vec4(texture2D(bloomTexture,vUv).rgb,0.0);}"}),"baseTexture");
   mix.needsSwap=true;finalC.addPass(mix);finalC.addPass(new OutputPass());}
 function renderFrame(){
+  if(WATERMAT)WATERMAT.uniforms.uTime.value=performance.now()*0.001;
   if(!finalC){ren.render(scene,cam);return}
   const bg=scene.background;scene.background=null;sky.visible=false;
   scene.traverse(o=>{if(o.isMesh&&!o.layers.test(bloomLayer)){_mats.set(o,o.material);o.material=DARK}});
   bloomC.render();
   _mats.forEach((m,o)=>{o.material=m});_mats.clear();sky.visible=true;scene.background=bg;
   finalC.render();}
-const ctl=new OrbitControls(cam,ren.domElement);ctl.enableDamping=true;ctl.autoRotate=true;ctl.autoRotateSpeed=0.5;ctl.maxPolarAngle=Math.PI*0.49;
+const ctl=new OrbitControls(cam,ren.domElement);ctl.enableDamping=true;ctl.autoRotate=true;ctl.autoRotateSpeed=0.5;ctl.maxPolarAngle=Math.PI*0.49;window.__najView=()=>({x:ctl.target.x-cam.position.x,z:ctl.target.z-cam.position.z});
 addEventListener("pointerdown",()=>ctl.autoRotate=false,{once:true});
 const GROUPS={existing:{label:"existing",col:0x39434F,on:true,meshes:[]},construction:{label:"under construction",col:0x3E8A7E,on:true,meshes:[]},pipeline:{label:"pipeline",col:0xC5A56A,on:true,meshes:[]}};
 function classify(hex){const d=(a,b)=>{const c1=new THREE.Color(a),c2=new THREE.Color(b);return (c1.r-c2.r)**2+(c1.g-c2.g)**2+(c1.b-c2.b)**2};
@@ -4868,7 +6123,7 @@ loader.load("/img/sky_${slugName}",g=>{
   ROOTREF=root;drawCtx();
   MESHES=[];root.traverse(o=>{if(o.isMesh)MESHES.push(o)});   // v74: export order = mesh index (per-building GLB), used by the anchors
   paintDevs();
-  const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1}));
+  const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:8}));   // v97: the disc is a horizon skirt; push it behind anything drawn on top of it
   ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;ground.receiveShadow=true;scene.add(ground);
   GROUND=ground;drawGroundImagery();
   const R=Math.max(sz.x,sz.z);cam.position.set(R*0.9,R*0.42,R*0.9);ctl.target.set(0,sz.y*0.18,0);
@@ -4899,10 +6154,91 @@ function drawGroundImagery(){
   const G=GIMG.scene;const tex=new THREE.TextureLoader().load("/img/ground_${slugName}_jpg");
   tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=Math.min(8,ren.capabilities.getMaxAnisotropy());
   const geo=new THREE.PlaneGeometry(G.x1-G.x0,G.z1-G.z0);geo.rotateX(-Math.PI/2);          // image top row = north = smaller z; no flip needed
-  GPLANE=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({map:tex,roughness:1,metalness:0,color:0x9AA09A}));
-  GPLANE.position.set((G.x0+G.x1)/2+ROOTREF.position.x,GROUND.position.y+0.05,(G.z0+G.z1)/2+ROOTREF.position.z);
+  GPLANE=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({map:tex,roughness:1,metalness:0,color:0x9AA09A,polygonOffset:true,polygonOffsetFactor:2,polygonOffsetUnits:4}));   // v97: imagery sits behind streets and building bases, ahead of the disc
+  GPLANE.position.set((G.x0+G.x1)/2+ROOTREF.position.x,GROUND.position.y+0.05,(G.z0+G.z1)/2+ROOTREF.position.z);   // v97: separation is done with polygonOffset, not by moving the disc (streets and terrain key off GROUND.y)
   GPLANE.receiveShadow=true;GPLANE.renderOrder=-1;scene.add(GPLANE);
   const cr=document.createElement("div");cr.id="gcredit";cr.textContent=GIMG.attribution||"Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community";document.body.appendChild(cr);}
+// ===== v98 WATER (6 Sep) - self-contained block, begin =====
+// The real coastline for this district (KV water_<slug>, built by scripts/water_layer.py from Overture, clipped and simplified).
+// Drawn as one merged mesh with a Fresnel + depth-fade + ripple shader, sitting just above the terrain sheet. No textures.
+let WATER=null;
+fetch("/img/water_${slugName}?t=${Math.floor(Date.now()/600000)}").then(r=>r.ok?r.json():null).then(w=>{if(w&&w.polys&&w.polys.length){WATER=w;drawWater()}}).catch(()=>{});
+let _wTries=0;
+function drawWater(){
+  if(!WATER||!GROUND||!ROOTREF){if(_wTries++<2400)requestAnimationFrame(drawWater);return}
+  if(scene.getObjectByName("water"))return;
+  const S=WATER.scene,geos=[];
+  // one shape per polygon, triangulated flat, then displaced in the shader. The edge attribute = metres to the nearest shoreline point,
+  // computed here because a distance field on the GPU would need another pass.
+  for(const ring of WATER.polys){
+    if(ring.length<4)continue;
+    const pts=ring.map(p=>new THREE.Vector2(p[0],p[1]));
+    const shape2=new THREE.Shape(pts);
+    let g;try{g=new THREE.ShapeGeometry(shape2,1)}catch(e){continue}
+    const pos=g.attributes.position,edge=new Float32Array(pos.count);
+    for(let k=0;k<pos.count;k++){
+      const x=pos.getX(k),y=pos.getY(k);let best=1e9;
+      for(let m=0;m<pts.length;m++){const dx=pts[m].x-x,dy=pts[m].y-y;const d=dx*dx+dy*dy;if(d<best)best=d}
+      edge[k]=Math.sqrt(best);
+    }
+    g.setAttribute("edge",new THREE.BufferAttribute(edge,1));
+    geos.push(g);
+  }
+  if(!geos.length)return;
+  const geo=geos.length>1?mergeGeometries(geos,false):geos[0];
+  geo.rotateX(-Math.PI/2);                                     // shapes are built in x/y; the twin's ground plane is x/z
+  const mat=new THREE.ShaderMaterial({
+    transparent:true,depthWrite:false,side:THREE.DoubleSide,
+    uniforms:{uTime:{value:0},uShallow:{value:new THREE.Color(0x1E6F72)},uDeep:{value:new THREE.Color(0x08262E)},
+              uSky:{value:new THREE.Color(0x9FC6C4)},uSun:{value:new THREE.Vector3(1,1.2,0.6).normalize()},
+              uFogColor:{value:new THREE.Color(0x0C1413)},uFogNear:{value:2500},uFogFar:{value:9000},uMove:{value:1}},
+    vertexShader:[
+      "attribute float edge;varying float vEdge;varying vec3 vWorld;varying vec3 vNormal;uniform float uTime;uniform float uMove;",
+      "float wave(vec2 p,vec2 d,float f,float sp,float t){return sin(dot(p,d)*f+t*sp);}",
+      "void main(){",
+      "  vEdge=edge;vec3 pos=position;",
+      "  vec4 wp=modelMatrix*vec4(pos,1.0);vec2 P=wp.xz;",
+      "  float t=uTime*uMove;",
+      // three crossed ripples, centimetres of travel - a harbour surface, not a swell
+      "  float h=wave(P,normalize(vec2(1.0,0.35)),0.055,0.9,t)*0.16",
+      "        +wave(P,normalize(vec2(-0.4,1.0)),0.083,1.3,t)*0.10",
+      "        +wave(P,normalize(vec2(0.7,-0.8)),0.140,1.9,t)*0.05;",
+      "  float shore=smoothstep(0.0,14.0,edge);",                       // the surface goes still where it meets land
+      "  wp.y+=h*shore;",
+      "  float e=0.9;",
+      "  float hx=wave(P+vec2(e,0.0),normalize(vec2(1.0,0.35)),0.055,0.9,t)*0.16+wave(P+vec2(e,0.0),normalize(vec2(-0.4,1.0)),0.083,1.3,t)*0.10;",
+      "  float hz=wave(P+vec2(0.0,e),normalize(vec2(1.0,0.35)),0.055,0.9,t)*0.16+wave(P+vec2(0.0,e),normalize(vec2(-0.4,1.0)),0.083,1.3,t)*0.10;",
+      "  vNormal=normalize(vec3(-(hx-h)/e,1.0,-(hz-h)/e));",
+      "  vWorld=wp.xyz;",
+      "  gl_Position=projectionMatrix*viewMatrix*wp;",
+      "}"].join(String.fromCharCode(10)),
+    fragmentShader:[
+      "varying float vEdge;varying vec3 vWorld;varying vec3 vNormal;",
+      "uniform vec3 uShallow,uDeep,uSky,uSun,uFogColor;uniform float uFogNear,uFogFar;",
+      "void main(){",
+      "  vec3 V=normalize(cameraPosition-vWorld);vec3 N=normalize(vNormal);",
+      // Schlick: looking down you see into the water, at a grazing angle you see the sky in it
+      "  float f=0.02+0.98*pow(1.0-clamp(dot(N,V),0.0,1.0),5.0);",
+      "  float depth=smoothstep(0.0,150.0,vEdge);",                     // shallow at the shoreline, deep offshore
+      "  vec3 body=mix(uShallow,uDeep,depth);",
+      "  vec3 col=mix(body,uSky,clamp(f,0.0,0.9));",
+      "  vec3 H=normalize(uSun+V);float spec=pow(max(dot(N,H),0.0),220.0);",
+      "  col+=vec3(1.0,0.98,0.92)*spec*0.85;",
+      "  float wet=1.0-smoothstep(0.0,7.0,vEdge);",                     // the bright wet band at the edge
+      "  col=mix(col,uShallow*1.55,wet*0.45);",
+      "  float d=length(cameraPosition-vWorld);",
+      "  col=mix(col,uFogColor,clamp((d-uFogNear)/(uFogFar-uFogNear),0.0,1.0));",
+      "  gl_FragColor=vec4(col,mix(0.80,0.97,clamp(f,0.0,1.0)));",
+      "}"].join(String.fromCharCode(10))});
+  const mesh=new THREE.Mesh(geo,mat);mesh.name="water";
+  mesh.position.set(ROOTREF.position.x,GROUND.position.y+0.10,ROOTREF.position.z);   // above the imagery sheet, below the streets
+  mesh.renderOrder=-1;mesh.frustumCulled=false;scene.add(mesh);
+  if(scene.fog){mat.uniforms.uFogColor.value=new THREE.Color(scene.fog.color);mat.uniforms.uFogNear.value=scene.fog.near;mat.uniforms.uFogFar.value=scene.fog.far}
+  try{if(matchMedia("(prefers-reduced-motion: reduce)").matches||MOBILE&&devicePixelRatio<2)mat.uniforms.uMove.value=0}catch(e){}
+  WATERMAT=mat;
+}
+let WATERMAT=null;
+// ===== v98 WATER - self-contained block, end =====
 // ===== v82 TERRAIN (3 Sep) - self-contained block, begin =====
 // 30 m elevation lattice (scripts/terrain_grid.py -> KV terrain_<slug>, same bbox as ground_<slug>) displacing the imagery plane, so the
 // coast, the creek banks, the Marina basin and Palm Jumeirah's fill sit at their real level instead of on one flat disc. It swaps
@@ -5003,12 +6339,12 @@ function showCard(b){
 // leader lines at staggered heights, ten at most, held a few seconds, never painted on the model. Buildings of the eleven
 // developers take their developer's colour; the legend lists only developers currently labelled. Anchors = data/names/anchors_<slug>.json
 // (name, x/z in the GLB's own metres, roof height, developer key, mesh index) built by build_anchors.py.
-const DEVCOL={omniyat:0xE8E4D8,hh:0xD96C5F,meraas:0xD9A441,select:0x3E8A7E,ellington:0x8FC7B9,arada:0x56B584,zaya_palma:0x9B8CE6,fakhruddin:0xF28C6A,beyond:0x4C9BE8,imtiaz:0xC41E3A,iman:0xB08BD9};
-const DEVNAME={omniyat:"OMNIYAT",hh:"H&H",meraas:"Meraas",select:"Select Group",ellington:"Ellington",arada:"Arada",zaya_palma:"ZAYA / Palma",fakhruddin:"Fakhruddin",beyond:"BEYOND",imtiaz:"Imtiaz",iman:"Iman"};
+const DEVCOL={omniyat:0xE8E4D8,hh:0xD96C5F,meraas:0xD9A441,select:0x3E8A7E,ellington:0x8FC7B9,arada:0x56B584,zaya_palma:0x9B8CE6,fakhruddin:0xF28C6A,beyond:0x4C9BE8,imtiaz:0xC41E3A,iman:0xB08BD9,emaar:0xC5A56A};
+const DEVNAME={omniyat:"OMNIYAT",hh:"H&H",meraas:"Meraas",select:"Select Group",ellington:"Ellington",arada:"Arada",zaya_palma:"ZAYA / Palma",fakhruddin:"Fakhruddin",beyond:"BEYOND",imtiaz:"Imtiaz",iman:"Iman",emaar:"Emaar"};
 const KEY=${JSON.stringify(key || "")};let ANCH=null,MESHES=null,LIVE=new Map();const TIERS=[62,118,168,92,142,196,76,128,182,106];
 const lblWrap=document.createElement("div");lblWrap.id="lbls";lblWrap.innerHTML='<svg xmlns="http://www.w3.org/2000/svg"></svg>';document.body.appendChild(lblWrap);
 const svgL=lblWrap.querySelector("svg");const legend=document.createElement("div");legend.id="legend";document.body.appendChild(legend);
-fetch("/img/anchors_${slugName}").then(r=>r.ok?r.json():null).then(a=>{if(!a||!a.anchors)return;ANCH=a;paintDevs()}).catch(()=>{});
+fetch("/img/anchors_${slugName}?t=${Math.floor(Date.now()/600000)}").then(r=>r.ok?r.json():null).then(a=>{if(!a||!a.anchors)return;ANCH=a;paintDevs()}).catch(()=>{});
 function paintDevs(){
   if(!ANCH||!MESHES||!ANCH.per_building_glb)return;
   // anchor -> mesh by POSITION (mesh order in a merged export is not the footprint order): nearest mesh centre within 12 m
@@ -5020,6 +6356,9 @@ function paintDevs(){
   for(let i=0;i<cents.length;i++){let bi=-1,bd=1e9;for(const f of fps){if(f[1]==null)continue;const dx=f[1]-cents[i][0],dz=f[2]-cents[i][1],d=dx*dx+dz*dz;if(d<bd){bd=d;bi=f[0]}}
     if(bi>=0&&bd<=900)(byFp[bi]=byFp[bi]||[]).push(i)}
   for(const a of ANCH.anchors){const ms=byFp[a.i]||[];a.meshes=ms;a.mesh=ms.length?ms[0]:null}
+  try{const _q=new URLSearchParams(location.search);const _b=_q.get("b"),_n=(_q.get("q")||"").trim().toLowerCase();   // v94 deep link: ?b=<anchor i> or ?q=<name>
+    const _a=_b?ANCH.anchors.find(a=>String(a.i)===_b):_n?(ANCH.anchors.find(a=>(a.name||"").toLowerCase()===_n)||ANCH.anchors.find(a=>(a.name||"").toLowerCase().indexOf(_n)>=0)):null;
+    if(_a&&_a.meshes&&_a.meshes.length)setTimeout(()=>openAnchor(_a),500)}catch(e){}
   window.__sky={get anch(){return ANCH},get meshes(){return MESHES},get cam(){return cam},get ctl(){return ctl},get root(){return ROOTREF},get state(){return [SELDEV,SELPROJ]},sel:buildDevSel,dev:applyDev,proj:applyProj,open:openAnchor};
   // every mesh gets its own material copies (merged exports share materials and use arrays per primitive) so fading one never fades another
   for(const m of MESHES){m.material=Array.isArray(m.material)?m.material.map(x=>x.clone()):m.material.clone()}
@@ -5070,12 +6409,12 @@ function openAnchor(a){
   const ds=document.getElementById("devsel"),ps=document.getElementById("projsel");
   const d=a.dev||"";
   if(d!==SELDEV){if(ds)ds.value=d;applyDev(d)}
-  const nm=a.dev_project||a.name;
+  const nm=a.dev_project||a.name||a.cluster;      // v100: an unnamed villa opens its sub-community
   if(ps&&d){if(![...ps.options].some(o=>o.value===nm)){const o=document.createElement("option");o.value=nm;o.textContent=nm;ps.appendChild(o)}ps.value=nm}
   applyProj(nm);}
 function applyProj(name){
   SELPROJ=name;const pp=document.getElementById("ppanel");
-  const mine=new Set();ANCH.anchors.filter(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name)===name).forEach(a=>(a.meshes||[]).forEach(i=>mine.add(i)));
+  const mine=new Set();ANCH.anchors.filter(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name||a.cluster)===name).forEach(a=>(a.meshes||[]).forEach(i=>mine.add(i)));
   MESHES.forEach((m,i)=>ghost(m,!(name?mine.has(i):(SELDEV?m.userData.dev===SELDEV:true))));
   LIVE.forEach((L)=>{L.el.remove();L.ln.remove();L.dot.remove()});LIVE.clear();
   if(!name){pp.classList.remove("on");applyDev(SELDEV);return}
@@ -5086,7 +6425,7 @@ function applyProj(name){
   const eye=new THREE.Vector3(c2.x+r2*2.4,c2.y+r2*0.9,c2.z+r2*2.4);const dir=c2.clone().sub(eye).normalize();
   const right=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize().multiplyScalar(innerWidth>640?r2*1.1:0);
   ctl.target.copy(c2.clone().add(right));cam.position.copy(eye.clone().add(right));ctl.autoRotate=false;
-  const a0=ANCH.anchors.find(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name)===name);const f=SELDEV?(projFor(SELDEV,name)||projFor(SELDEV,a0&&a0.name)):null;
+  const a0=ANCH.anchors.find(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name||a.cluster)===name);const f=SELDEV?(projFor(SELDEV,name)||projFor(SELDEV,a0&&a0.name)):null;
   const esc=(s)=>String(s==null?"":s).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
   const rows=[];if(f){
     const d=f.dld||{};
@@ -5119,7 +6458,10 @@ function applyProj(name){
   const ten=(idn&&idn.tenants||[]).filter(Boolean);
   const amen=(idn&&idn.amenities||[]).filter(Boolean);
   rows.splice(12 - (ten.length?2:0) - (amen.length?2:0));
-  const acts='<div class=pa>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
+  const _vtok=(t)=>String(t||"").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff ]+/g," ").split(" ").filter(w=>w.length>2&&["the","by","at","residences","residence","tower","towers","dubai"].indexOf(w)<0);
+  const _vT=_vtok(name);const _vid=VIDS.find(v=>(!v.district||v.district==="${slugName}")&&(()=>{const U=_vtok(v.name);return U.length&&_vT.length&&U.every(w=>_vT.indexOf(w)>=0)})())||null;
+  const _vidHtml=_vid?'<div class=vtour><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="'+_vid.poster+'"><source src="'+_vid.src+'" type="video/mp4"></video></div>':'';
+  const acts='<div class=pa>'+'<a class=act href="/map?key='+encodeURIComponent(KEY)+'&d=${slugName}&focus='+encodeURIComponent(name)+'">on the map →</a>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
     (SELDEV?'<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>':'')+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
   // icon tiles instead of a list (Kendall): small squares, gold line icons drawn inline, value first, label under
   const ICO={"Where":"M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10zm0-8a2 2 0 1 0 0-4 2 2 0 0 0 0 4z","Handover":"M4 6h16v14H4zM8 3v4M16 3v4M4 10h16","Structure":"M4 20h16M6 20V9l6-4 6 4v11M9 20v-5h6v5",
@@ -5140,12 +6482,21 @@ function applyProj(name){
   const chip=gk?'<span class=gchip style="color:'+gk[1]+';border-color:'+gk[1]+'44">'+gk[0]+(idn.name_source?' · '+esc(idn.name_source):'')+'</span>':'';
   // four each, one line apiece: the card must never scroll (Kendall). A long tenant name is trimmed rather than wrapped.
   const chipify=(a,n)=>a.slice(0,n).map(t=>'<i>'+esc(t.length>26?t.slice(0,25)+'…':t)+'</i>').join('')+(a.length>n?'<em>+'+(a.length-n)+'</em>':'');
+  const umxHtml=(a0&&UMX)?unitMixHtml(UMX[String(a0.i)]||null,false):"";   // v93 - the second card: unit mix
   const tstrip=ten.length?'<div class=tenants><b>Inside</b>'+chipify(ten,4)+'</div>':'';
   const astrip=amen.length?'<div class=tenants><b>On site</b>'+chipify(amen,4)+'</div>':'';
-  pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+chip+'</div><div class=ps>'+(SELDEV?DEVNAME[SELDEV]:'on the map · developer not on the list')+(f&&f.status?' · '+esc(f.status):'')+'</div>'+
-    (rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+tstrip+astrip+acts+
+  const _isSub=!!(a0&&!a0.name&&a0.cluster&&a0.cluster===name);
+  const _subChip=_isSub?'<span class=gchip style="color:#8FA39B;border-color:#8FA39B44">sub-community</span>':'';
+  const _inSub=(!_isSub&&a0&&a0.cluster&&a0.cluster!==name)?'<span style="color:var(--mut)"> · in '+esc(a0.cluster)+'</span>':'';
+  pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+chip+_subChip+'</div><div class=ps>'+(_isSub?('the register files these plots under this name · '+mine.size+' buildings here'):(SELDEV?DEVNAME[SELDEV]:'on the map · developer not on the list'))+(f&&f.status?' · '+esc(f.status):'')+_inSub+'</div>'+
+    '<div class=modeb><i id=mob title="snapshot or deeper dive">\u25CE</i><button class="mb on" data-m=snap>Snapshot</button><button class=mb data-m=deep>Deeper dive</button></div>'+
+    '<div class=snap>'+(rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+'</div>'+
+    '<div class=deep>'+_vidHtml+tstrip+astrip+umxHtml+acts+'</div>'+
     '<div class=pn>developer site · availability sheet · DLD Open Data 2026 · identity resolved across every source we hold, graded on the chip; tenants are recorded against the building, never as its name; envelope is footprint × storeys, an upper bound; blockers within this district only</div>';
   pp.classList.add("on");document.getElementById("ppx").onclick=()=>{document.getElementById("projsel").value="";applyProj("")};
+  pp.classList.remove("deep");pp.scrollTop=0;                                                     // v94: a phone opens on the snapshot
+  const _mb=pp.querySelector(".modeb");_mb.querySelector("#mob").onclick=()=>_mb.classList.toggle("open");
+  _mb.querySelectorAll(".mb").forEach(b=>b.onclick=()=>{pp.classList.toggle("deep",b.dataset.m==="deep");_mb.querySelectorAll(".mb").forEach(x=>x.classList.toggle("on",x===b));_mb.classList.remove("open");pp.scrollTop=0});
   if(a0)buildViews(a0,mine);}
 // v77 - VIEWS (Kendall, 3 Sep): what each side of the building actually looks at. Four thumbnails rendered live from the tower's own
 // facades at two thirds of its height, plus a line-of-sight check to the named landmarks with the blocker named. Tap a thumbnail to
@@ -5158,6 +6509,49 @@ let BF=null;fetch("/img/bldgfacts_${slugName}").then(r=>r.ok?r.json():null).then
 // and how well we know it. The grade is shown plainly, because a name from an authoritative register and a name lifted from
 // a nearby shopfront are not the same claim and the card should never pretend they are.
 let IDN=null;fetch("/img/identity_${slugName}").then(r=>r.ok?r.json():null).then(j=>{IDN=j&&j.by_index||null}).catch(()=>{});
+let VIDS=[];fetch("/img/videos?t=${Math.floor(Date.now()/600000)}").then(r=>r.ok?r.json():null).then(j=>{VIDS=(j&&j.items)||[]}).catch(()=>{});
+let UMX=null;fetch("/img/unitmix_${slugName}?t=${Math.floor(Date.now()/600000)}").then(r=>r.ok?r.json():null).then(j=>{UMX=j&&j.buildings_by_id||null}).catch(()=>{});   // v93 - unit mix per building
+var __name=window.__name||function(f){return f};const unitMixHtml=${unitMixHtml.toString()};
+// v87 - RAIL (scripts/rail_context.py -> KV rail_<slug>). OpenStreetMap track + stations for the tile window, drawn as what they
+// are: the Metro as a 13 m viaduct on piers, Etihad Rail as ballast with a gold rail strip, stations as platform boxes with a
+// label. Heights are standard figures, not measured (the footer says so). Three toggles: metro / etihad rail / monorail-tram.
+let RAIL=null,railG=null;
+const RAILNET={metro_red:[0xB0262B,"Red Line"],metro_green:[0x2E7D4F,"Green Line"],metro_2020:[0x1F8A8A,"Route 2020"],metro_blue:[0x2E5C9E,"Blue Line (works)"],monorail:[0x8A7A5A,"Palm Monorail"],tram:[0x7A5A8A,"Tram"],etihad:[0x3A3F44,"Etihad Rail"],etihad_construction:[0x55606A,"Etihad Rail (works)"],trolley:[0x8A5A3A,"Dubai Trolley"],apm:[0x6A6A7A,"Airport people-mover"],rail:[0x4A5158,"Rail"]};
+const RAILFAM={metro_red:"metro",metro_green:"metro",metro_2020:"metro",metro_blue:"metro",etihad:"etihad",etihad_construction:"etihad",monorail:"other",tram:"other",trolley:"other",apm:"other",rail:"other"};
+const RAILON={metro:true,etihad:true,other:true};const STL=[];
+fetch("/img/rail_${slugName}").then(r=>r.ok?r.json():null).then(j=>{if(j&&j.lines&&j.lines.length){RAIL=j;drawRail()}}).catch(()=>{});
+let _rlTries=0;
+function drawRail(){
+  if(!RAIL||railG)return;if(!ROOTREF){if(_rlTries++<2400)requestAnimationFrame(drawRail);return}
+  railG=new THREE.Group();railG.position.copy(ROOTREF.position);
+  const mats={};const mat=(net,op)=>{const k=net+op;if(!mats[k])mats[k]=new THREE.MeshStandardMaterial({color:(RAILNET[net]||RAILNET.rail)[0],roughness:.7,metalness:.1,transparent:op<1,opacity:op});return mats[k]};
+  const gold=new THREE.MeshStandardMaterial({color:0xC5A56A,roughness:.5,metalness:.3}),pier=new THREE.MeshStandardMaterial({color:0xB9B4A6,roughness:.9});
+  const fam={metro:[],etihad:[],other:[]};
+  for(const L of RAIL.lines){const f=RAILFAM[L.net]||"other";const op=/construction|blue/.test(L.net)?.55:1;const grp=new THREE.Group();
+    for(let i=1;i<L.pts.length;i++){const ax=L.pts[i-1][0],az=L.pts[i-1][1],bx=L.pts[i][0],bz=L.pts[i][1];const dx=bx-ax,dz=bz-az;const len=Math.hypot(dx,dz);if(len<0.5)continue;const yaw=-Math.atan2(dz,dx);
+      const grade=L.prof==="grade";const deck=new THREE.Mesh(new THREE.BoxGeometry(len+0.6,grade?0.6:1.4,L.w),mat(L.net,op));deck.position.set((ax+bx)/2,L.h+(grade?0.3:0.7),(az+bz)/2);deck.rotation.y=yaw;deck.castShadow=!grade;grp.add(deck);
+      if(L.net.indexOf("etihad")===0){const strip=new THREE.Mesh(new THREE.BoxGeometry(len+0.6,0.2,L.w*0.25),gold);strip.position.set((ax+bx)/2,L.h+(grade?0.7:1.5),(az+bz)/2);strip.rotation.y=yaw;grp.add(strip)}
+      if(!grade){for(let sd=15;sd<len;sd+=30){const t=sd/len;const pm=new THREE.Mesh(new THREE.BoxGeometry(1.8,L.h,1.8),pier);pm.position.set(ax+dx*t,L.h/2,az+dz*t);pm.rotation.y=yaw;grp.add(pm)}}}
+    railG.add(grp);fam[f].push(grp)}
+  for(const S of RAIL.stations){const f=RAILFAM[S.net]||"other";const rot=-S.brg*Math.PI/180;
+    const st=new THREE.Mesh(new THREE.BoxGeometry(110,5,16),mat(S.net,1));st.position.set(S.x,S.h+3.2,S.z);st.rotation.y=rot;st.castShadow=true;railG.add(st);fam[f].push(st);
+    const roof=new THREE.Mesh(new THREE.BoxGeometry(112,0.4,18),gold);roof.position.set(S.x,S.h+5.9,S.z);roof.rotation.y=rot;railG.add(roof);fam[f].push(roof);
+    const el=document.createElement("a");el.className="lb st on";el.href="javascript:void 0";
+    el.innerHTML=S.name.replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]))+"<i>"+(RAILNET[S.net]||RAILNET.rail)[1]+" station</i>";
+    document.getElementById("lbls").appendChild(el);STL.push({el,S,f})}
+  scene.add(railG);
+  const fr=document.getElementById("filters");const lab={metro:"\u{1F687} metro",etihad:"\u{1F686} etihad rail",other:"\u{1F69D} monorail · tram · trolley"};
+  for(const f of ["metro","etihad","other"]){if(!fam[f].length)continue;const segs=RAIL.lines.filter(L=>(RAILFAM[L.net]||"other")===f);
+    const b=document.createElement("span");b.className="tg on";b.textContent=lab[f]+" ("+segs.length+")";
+    b.title=[...new Set(segs.map(L=>(RAILNET[L.net]||RAILNET.rail)[1]))].join(" \u00b7 ")+" \u2014 OpenStreetMap; deck heights illustrative";
+    b.onclick=()=>{RAILON[f]=!RAILON[f];b.classList.toggle("on",RAILON[f]);fam[f].forEach(o=>o.visible=RAILON[f]);STL.forEach(x=>{if(x.f===f)x.el.style.display=RAILON[f]?"":"none"})};fr.appendChild(b)}
+  const ft=document.querySelector(".foot");if(ft)ft.textContent+=" \u00b7 rail: OpenStreetMap, deck heights illustrative";
+  const _sv=new THREE.Vector3(),_sc=new THREE.Vector3();
+  (function loop(){requestAnimationFrame(loop);cam.getWorldDirection(_sc);
+    for(const x of STL){if(!RAILON[x.f])continue;_sv.set(x.S.x,x.S.h+9,x.S.z).add(ROOTREF.position);const d=_sv.clone().sub(cam.position).dot(_sc);const pr=_sv.project(cam);
+      const sx=(pr.x+1)/2*innerWidth,sy=(1-pr.y)/2*innerHeight;const ok=d>0&&sx>30&&sx<innerWidth-30&&sy>100&&sy<innerHeight-110;x.el.style.opacity=ok?"1":"0";if(ok){x.el.style.left=sx+"px";x.el.style.top=sy+"px"}}})();
+}
+
 const VSIDE=["N","E","S","W"];
 function viewEye(a,i){
   const p=a.fm&&a.fm[i];if(!p)return null;
@@ -5186,7 +6580,7 @@ function buildViews(a,own){
   // v78.1 (Kendall): no model thumbnails - a grey massing picture is no use to a buyer. Four sides, what each looks at from our
   // line-of-sight check, and each card opens the REAL view: live photoreal imagery from that facade at that height.
   const wrap=document.createElement("div");wrap.className="vw";wrap.innerHTML='<div class=vh>The view from each side · tap to stand there</div><div class=vg></div>';
-  pp.insertBefore(wrap,pp.querySelector(".tg")||pp.querySelector(".pa"));
+  const host=pp.querySelector(".deep")||pp;host.insertBefore(wrap,host.querySelector(".pa")||null);   // v97.1: the tiles now live inside .snap, so the views go into the deeper-dive block, ahead of the actions
   const grid=wrap.querySelector(".vg");
   VSIDE.forEach((side,i)=>{
     const e=viewEye(a,i);const ll=a.fm_ll&&a.fm_ll[i];if(!e||!ll)return;
@@ -5272,6 +6666,50 @@ addEventListener("pointerup",e=>{
 document.getElementById("cx").onclick=()=>{if(FOCUS)unfocus();else document.getElementById("card").classList.remove("on")};
 addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight);if(finalC){finalC.setSize(innerWidth,innerHeight);bloomC.setSize(innerWidth,innerHeight)}});
 (function loop(){requestAnimationFrame(loop);ctl.update();renderFrame();try{updateLabels()}catch(e){}})();
+// ---- v102: map shim so the shared chrome drives this scene ---------------------------------------------------------------------
+const _TL={},_TH={};let _AFF=null,_HOMECAM=null;const _MK=document.getElementById("twmk");const _DOTS=new Map();
+function _fit(){if(_AFF||!ANCH)return _AFF;const P=ANCH.anchors.filter(a=>a.lon&&a.lat&&a.x!=null&&a.z!=null);if(P.length<3)return null;
+  const ml=P.reduce((s,a)=>s+a.lon,0)/P.length,mt=P.reduce((s,a)=>s+a.lat,0)/P.length,mx=P.reduce((s,a)=>s+a.x,0)/P.length,mz=P.reduce((s,a)=>s+a.z,0)/P.length;
+  let sll=0,stt=0,slt=0,slx=0,stx=0,slz=0,stz=0;P.forEach(a=>{const l=a.lon-ml,t=a.lat-mt;sll+=l*l;stt+=t*t;slt+=l*t;slx+=l*(a.x-mx);stx+=t*(a.x-mx);slz+=l*(a.z-mz);stz+=t*(a.z-mz)});
+  const det=sll*stt-slt*slt;if(Math.abs(det)<1e-12)return null;
+  _AFF={ml,mt,mx,mz,ax:(slx*stt-stx*slt)/det,bx:(stx*sll-slx*slt)/det,az:(slz*stt-stz*slt)/det,bz:(stz*sll-slz*slt)/det};return _AFF}
+function _scene(lon,lat){const A=_fit();if(!A||!ROOTREF)return null;const l=lon-A.ml,t=lat-A.mt;return new THREE.Vector3(A.mx+A.ax*l+A.bx*t+ROOTREF.position.x,ROOTREF.position.y+3,A.mz+A.az*l+A.bz*t+ROOTREF.position.z)}
+function _zoomDist(z){return 40000/Math.pow(2,(z||14.5)-7)}
+function _fly(center,zoom){if(!center)return;const P=_scene(center[0],center[1]);if(!P)return;if(!_HOMECAM)_HOMECAM={pos:cam.position.clone(),tgt:ctl.target.clone(),rot:ctl.autoRotate};
+  const r=_zoomDist(zoom);const dir=cam.position.clone().sub(ctl.target);dir.y=0;if(dir.lengthSq()<1)dir.set(1,0,1);dir.normalize();
+  ctl.target.copy(P);cam.position.copy(P.clone().add(dir.multiplyScalar(r*1.5)).add(new THREE.Vector3(0,r*0.85,0)));ctl.autoRotate=false}
+const _STYLE={"am-dot":"am","near-ring":"near","sel-halo":"sel","home-dot":"home","vid-dot":"vid"};
+function _drawDots(){const W=innerWidth,H=innerHeight;const seen=new Set();
+  Object.keys(_STYLE).forEach(id=>{const lay=_TL[id];if(!lay)return;const src=_TL[lay.src];const F=(src&&src.data&&src.data.features)||[];
+    F.forEach((f,i)=>{const key=id+":"+i;seen.add(key);let d=_DOTS.get(key);if(!d){d=document.createElement("div");d.className="tm "+_STYLE[id];_MK.appendChild(d);d.onclick=(ev)=>{ev.stopPropagation();const h=_TH[id];if(h)h({features:[f],lngLat:{lng:f.geometry.coordinates[0],lat:f.geometry.coordinates[1]}})};_DOTS.set(key,d)}
+      const pr=f.properties||{};if(id==="am-dot"){d.style.background=pr.col||"#8FC7B9";d.style.borderColor=pr.ap?(pr.col||"#8FC7B9"):"rgba(12,20,19,.85)";d.classList.toggle("ap",!!pr.ap)}
+      if(id==="near-ring")d.style.borderColor=pr.col||"#C5A56A";
+      if(id==="vid-dot"&&!d.innerHTML)d.innerHTML="\u25B6<b>"+(pr.name||"")+"</b>";if(id==="home-dot"&&!d.innerHTML&&pr.lab)d.innerHTML="<b>"+pr.lab+"</b>";
+      const P=_scene(f.geometry.coordinates[0],f.geometry.coordinates[1]);if(!P){d.style.display="none";return}
+      const q=P.project(cam);if(q.z>1||q.x<-1.1||q.x>1.1||q.y<-1.1||q.y>1.1){d.style.display="none";return}
+      d.style.display="";d.style.left=((q.x+1)/2*W)+"px";d.style.top=((1-q.y)/2*H)+"px"})});
+  _DOTS.forEach((d,k)=>{if(!seen.has(k)){d.remove();_DOTS.delete(k)}})}
+(function tick(){requestAnimationFrame(tick);try{_drawDots()}catch(e){}})();
+window.__twinMap={
+  addSource:(n,o)=>{_TL[n]=_TL[n]||{};_TL[n].data=o.data||{type:"FeatureCollection",features:[]}},
+  addLayer:(o)=>{_TL[o.id]=_TL[o.id]||{};_TL[o.id].src=o.source;_TL[o.id].layer=true},
+  getSource:(n)=>_TL[n]?{setData:(d)=>{_TL[n].data=d},get _data(){return _TL[n].data}}:null,
+  getLayer:(id)=>(_TL[id]&&_TL[id].layer)?{id}:null, setFilter:()=>{}, setLayoutProperty:()=>{}, getLayoutProperty:()=>"visible",
+  on:(ev,l,fn)=>{if(typeof l==="string"&&fn&&ev==="click")_TH[l]=fn}, once:()=>{}, off:()=>{},
+  isStyleLoaded:()=>true, loaded:()=>true, getZoom:()=>7+Math.log2(40000/Math.max(20,cam.position.distanceTo(ctl.target))),
+  easeTo:(o)=>_fly(o.center,o.zoom), flyTo:(o)=>_fly(o.center,o.zoom), jumpTo:(o)=>_fly(o.center,o.zoom),
+  fitBounds:()=>{if(_HOMECAM){cam.position.copy(_HOMECAM.pos);ctl.target.copy(_HOMECAM.tgt);ctl.autoRotate=_HOMECAM.rot;_HOMECAM=null}},
+  getCanvas:()=>ren.domElement, queryRenderedFeatures:()=>[], querySourceFeatures:(n)=>((_TL[n]&&_TL[n].data&&_TL[n].data.features)||[]), triggerRepaint:()=>{}, addControl:()=>{}, project:(ll)=>{const P=_scene(ll[0],ll[1]);if(!P)return{x:0,y:0};const q=P.project(cam);return{x:(q.x+1)/2*innerWidth,y:(1-q.y)/2*innerHeight}}
+};
+// v103 film director hook (8 Sep): the shot list needs to know when the massing is in and to open one tower's panel by name
+window.__twinFilm={loaded:()=>!!(MESHES&&ANCH&&ROOTREF),names:()=>ANCH?ANCH.anchors.filter(a=>a.meshes&&a.meshes.length).map(a=>[a.dev_project||a.name||a.cluster,a.dev||'',Math.round(a.h||0)]):[],open:(nm)=>{if(!ANCH||!MESHES)return false;const q=String(nm).toLowerCase();const a=ANCH.anchors.find(x=>x.meshes&&x.meshes.length&&[x.dev_project,x.name,x.cluster].some(v=>v&&String(v).toLowerCase()===q));if(!a)return false;openAnchor(a);return true},close:()=>{try{applyProj('');applyDev('')}catch(e){}},orbit:(on,spd)=>{ctl.autoRotate=!!on;if(spd)ctl.autoRotateSpeed=spd},view:()=>({p:cam.position.toArray(),t:ctl.target.toArray()}),setView:(p,t)=>{cam.position.fromArray(p);ctl.target.fromArray(t)},glide:(dp,ms)=>new Promise(res=>{const p0=cam.position.clone(),t0=performance.now();const d=new THREE.Vector3().fromArray(dp);(function st(){const k=Math.min(1,(performance.now()-t0)/ms),e=k<.5?2*k*k:-1+(4-2*k)*k;cam.position.copy(p0).addScaledVector(d,e);if(k<1)requestAnimationFrame(st);else res(true)})()})};
+window.__onPlace=(sel)=>{if(!ANCH||!MESHES)return;const nm=sel&&sel.p&&(sel.p.name||"");if(!nm)return;const mine=new Set();
+  ANCH.anchors.filter(a=>[a.cluster,a.name,a.dev_project].some(v=>v&&String(v).toLowerCase()===String(nm).toLowerCase())).forEach(a=>(a.meshes||[]).forEach(i=>mine.add(i)));
+  if(!mine.size)return;MESHES.forEach((m,i)=>ghost(m,!mine.has(i)));
+  const bb=new THREE.Box3();mine.forEach(i=>bb.expandByObject(MESHES[i]));const c2=bb.getCenter(new THREE.Vector3()),s2=bb.getSize(new THREE.Vector3());const r2=Math.max(s2.x,s2.z,s2.y*0.8,60);
+  if(!_HOMECAM)_HOMECAM={pos:cam.position.clone(),tgt:ctl.target.clone(),rot:ctl.autoRotate};ctl.target.copy(c2);cam.position.set(c2.x+r2*1.8,c2.y+r2*1.1,c2.z+r2*1.8);ctl.autoRotate=false};
+window.__onClear=()=>{if(MESHES)MESHES.forEach(m=>ghost(m,false))};
+window.dispatchEvent(new Event("twinmap"));
 </script></body></html>`;
 }
 
@@ -5449,25 +6887,43 @@ function renderArea(latestRaw, name, key) {
 // v83 — BACKGROUND PLATE prompt: she composites her own digital twin and outfit on top, so the plate must contain NO people
 // and must leave her somewhere to stand. Light direction, eye level and lens are stated so the overlay sits believably.
 // Everything she needs is inside the one code block — she copies it whole, pastes it into ChatGPT, and gets the plate back.
+// v104 (8 Sep) — the plate CARRIES THE DATA. Naj: "it gives me an image without the data or information". The figure, the
+// headline and the source are now rendered as editorial text in the RIGHT two thirds (masthead THE DIGEST), verbatim and
+// once each, while the LEFT third stays clear for her avatar. An angle with no figure keeps the old text-free plate.
 function bgPromptBlock(angle, place) {
-  const H = String(angle.hook || "").replace(/"/g, "'");
-  const F = String(angle.figure || "").replace(/"/g, "'");
-  const S = String(angle.source || "").replace(/"/g, "'");
+  let H = String(angle.hook || "").replace(/"/g, "'").replace(/\s+/g, " ").trim();
+  if (H.length > 120) {                                                                          // image models garble long lines: cut at the last strong break, else the last space
+    const cut = H.slice(0, 120); let at = -1; for (const m of cut.matchAll(/[—–;:.]/g)) if (m.index >= 40) at = m.index;
+    H = cut.slice(0, at > 0 ? at : Math.max(cut.lastIndexOf(" "), 80)).replace(/[\s,;:—–'’-]+$/, "");
+  }
+  const F = String(angle.figure || "").replace(/"/g, "'").trim();
+  const S = String(angle.source || "").replace(/"/g, "'").replace(/\s+/g, " ").trim();
   const camp = !!angle.campaign;
+  const withText = !!(F || H);
   const where = place || (camp ? "The Valley by Emaar, Dubai — a low-rise family community on the Al Ain road: sand-coloured townhouses with dark window frames, wide green lawns, young trees, a community sports court, a shaded pergola walk, open desert sky at the horizon"
-                              : "Dubai — the skyline or the street that matches the subject of the line below, real and specific, never a generic city");
-  return "🎨 *Background plate — paste this whole block into ChatGPT (make an image)*\n" +
-    "_You then drop your own avatar and outfit on top. The plate has nobody in it and a clear space on the left for you._\n\n```" +
-    "Create a photorealistic BACKGROUND PLATE for a social post. This is a plate, not a finished picture: a real person will be composited into it afterwards, so follow the empty-space and lighting rules exactly.\n\n" +
+                              : "Dubai — the skyline or the street that matches the subject of the headline below, real and specific, never a generic city");
+  const strings = ['"THE DIGEST"'].concat(F ? ['"' + F + '"'] : [], H ? ['"' + H + '"'] : [], S ? ['"' + S + '"'] : []).join(", ");
+  return "🎨 *" + (withText ? "Cover plate" : "Background plate") + " — paste this whole block into ChatGPT (make an image)*\n" +
+    (withText ? "_The figure and the headline are ON the picture, in the right two thirds. The left third is left clear for your own avatar and outfit._\n\n```"
+              : "_You then drop your own avatar and outfit on top. The plate has nobody in it and a clear space on the left for you._\n\n```") +
+    "Create a photorealistic BACKGROUND PLATE" + (withText ? " WITH EDITORIAL TEXT" : "") + " for a social post. This is a plate, not a finished picture: a real person will be composited into the LEFT THIRD afterwards, so follow the empty-space, lighting" + (withText ? " and text-placement" : "") + " rules exactly.\n\n" +
     "SIZE: make it 1080x1920 (vertical 9:16) first. I will then ask you for the same plate at 1920x1080 (16:9).\n\n" +
     "PLACE: " + where + ".\n\n" +
     "THE PICTURE: shot on a full-frame camera with a 35mm lens at f/4, camera at standing eye level (about 1.6 m from the ground), horizon level and roughly a third up the frame. Late afternoon, about an hour before sunset: warm low sun coming from the RIGHT of frame at a shallow angle, long soft shadows falling to the LEFT, gentle haze in the distance, no harsh midday contrast. Natural colour, no filter, no HDR crunch, no vignette.\n\n" +
-    "COMPOSITION — this matters most: leave the LEFT THIRD of the frame open and uncluttered as a standing area — clean ground, no furniture, no signage, no plants and no strong lines crossing it, so a person can be placed there later. Put the visual interest in the right two thirds. Keep the ground plane visible and continuous across the bottom of the frame so a composited figure has somewhere to stand and cast a shadow.\n\n" +
-    "ABSOLUTELY NO PEOPLE anywhere in the frame — no figures, no silhouettes, no crowds, no people in windows or in the far distance. No animals. No text, no captions, no watermarks, no logos, no brand names, no signage with words, no numbers.\n\n" +
-    "NEGATIVE: no CGI or video-game look, no plastic sheen, no over-saturated sky, no lens flare, no tilt-shift, no fisheye, no illustration or painting style, no collage, no floating objects, no duplicated or warped architecture, no impossible geometry.\n\n" +
-    "CONTEXT (do not render any of this as text — it is only so you choose the right place and mood): the post says \"" + H + "\", the figure quoted is " + F + ", sourced from " + S + "." +
+    "COMPOSITION — this matters most: leave the LEFT THIRD of the frame open and uncluttered as a standing area — clean ground, no furniture, no signage, no plants, no text and no strong lines crossing it, so a person can be placed there later. Put the visual interest" + (withText ? " and all of the text" : "") + " in the right two thirds. Keep the ground plane visible and continuous across the bottom of the frame so a composited figure has somewhere to stand and cast a shadow.\n\n" +
+    "ABSOLUTELY NO PEOPLE anywhere in the frame — no figures, no silhouettes, no crowds, no people in windows or in the far distance. No animals. No logos, no brand names, no watermarks, no signage with words" + (withText ? ", and no text of any kind other than the strings listed under TEXT below.\n\n" : ", no text, no captions, no numbers.\n\n") +
+    (withText ?
+      "TEXT — this is the point of the picture, do not leave it out. All of it sits in the RIGHT two thirds and never crosses into the left third. Across the top right, the masthead \"THE DIGEST\" small, beige #E8DCC8, uppercase, wide letter-spacing. Below it a stacked cover-line, upper-right to mid-right: " +
+      (F ? "the figure \"" + F + "\" set LARGE in warm gold #C5A56A, bold condensed sans-serif; " : "") +
+      (H ? "the headline \"" + H + "\" in smaller beige #E8DCC8 sans-serif, over a soft dark translucent band so it stays legible on the photograph; " : "") +
+      (S ? "under a thin gold rule the kicker \"" + S + "\" small in beige. " : "") +
+      "Render " + strings + " verbatim, exactly once each, perfectly legible — no extra characters, no duplicated or garbled text, no invented words or numbers. Keep the ground line under the text clear.\n\n"
+      : "") +
+    "NEGATIVE: no CGI or video-game look, no plastic sheen, no over-saturated sky, no lens flare, no tilt-shift, no fisheye, no illustration or painting style, no collage, no floating objects, no duplicated or warped architecture, no impossible geometry" + (withText ? ", no gibberish text" : "") + "." +
+    (withText ? "" : "\n\nCONTEXT (do not render any of this as text — it is only so you choose the right place and mood): the post says \"" + H + "\", the figure quoted is " + F + ", sourced from " + S + ".") +
     "```\n\n" +
-    "👉 Ask ChatGPT “*now the same plate at 1920x1080*” for the LinkedIn version. Then place your avatar in the left third, feet on the ground line, with the light on your right cheek so it matches the sun in the plate.";
+    "👉 Ask ChatGPT “*now the same plate at 1920x1080*” for the LinkedIn version. Then place your avatar in the left third, feet on the ground line, with the light on your right cheek so it matches the sun in the plate." +
+    (F ? " Before posting, check the figure reads exactly “" + F + "”." : "");
 }
 
 function visualPromptBlock(angle) {
@@ -5477,9 +6933,9 @@ function visualPromptBlock(angle) {
   return "🎨 Cover-image prompt — paste the whole block into ChatGPT (make an image), then ask for the second size:\n\n```" +
     "A premium business-magazine COVER in the style of a Forbes / Fortune editorial portrait — aspirational, warm, credible, high-end. Make it 1080x1920 (vertical 9:16) first; I will then ask you to remake it 1920x1080 (16:9).\n\n" +
     "HERO: a real, confident Dubai real-estate professional — pick one and keep it authentic to Dubai: an elegant Emirati woman in her 30s in a modern tailored abaya · OR a sharply dressed South-Asian man in his 30s in a well-cut suit · OR a Levantine woman in a cream blazer. Three-quarter framing, warm direct eye contact, a natural genuine half-smile, standing on a sunlit Dubai balcony with the skyline softly out of focus behind. Candid documentary-style photograph taken on a real camera, 85mm portrait lens, shallow depth of field, golden-hour side light with soft rim light. Natural UNRETOUCHED skin with visible pore detail, subtle tonal variation, a few flyaway hairs, restrained highlights, real fabric texture, fine film grain. Place the subject on the RIGHT THIRD; leave clean deep-teal negative space on the LEFT for text.\n\n" +
-    "LAYOUT (magazine grid): masthead \"NAJMA\" across the very top in cream uppercase with wide letter-spacing. Down the LEFT negative space, a stacked cover-line: the figure \"" + F + "\" set LARGE in warm gold, bold condensed sans-serif; beneath it the headline \"" + H + "\" in smaller cream sans-serif; under a thin gold rule a small cream kicker \"" + S + "\".\n\n" +
-    "COLOUR: only deep teal #3E8A7E, warm gold #C5A56A, cream #E8E4D8.\n" +
-    "TEXT: render \"NAJMA\", \"" + F + "\", \"" + H + "\", \"" + S + "\" verbatim, exactly once each, perfectly legible — no extra characters, no duplicated or garbled text, no invented words or numbers.\n" +
+    "LAYOUT (magazine grid): masthead \"THE DIGEST\" across the very top in beige uppercase with wide letter-spacing. Down the LEFT negative space, a stacked cover-line: the figure \"" + F + "\" set LARGE in warm gold, bold condensed sans-serif; beneath it the headline \"" + H + "\" in smaller beige sans-serif; under a thin gold rule a small beige kicker \"" + S + "\".\n\n" +
+    "COLOUR: only three colours, in this order of dominance - beige #E8DCC8 as the ground and most of the frame, warm gold #C5A56A for the figure, the rules and the light, and Rolex green (deep racing green #006039) only as the accent: the masthead, the kicker and one garment or object. Green must not dominate. No teal, no white.\n" +
+    "TEXT: render \"THE DIGEST\", \"" + F + "\", \"" + H + "\", \"" + S + "\" verbatim, exactly once each, perfectly legible — no extra characters, no duplicated or garbled text, no invented words or numbers.\n" +
     "NEGATIVE: no plastic or waxy skin, no airbrushing, no over-smoothing, no CGI gloss, no warped or extra fingers, no mangled hands, no distorted eyes, no fake or misspelled logos, no watermark, no gibberish text, no generic stock-photo feel, no oversaturated HDR." +
     "```\n\n👉 Before posting, just check the number reads exactly “" + F + "”. The face stops the scroll; the figure makes it credible. Ask ChatGPT “now the same as 1920x1080” for the LinkedIn version.";
 }
