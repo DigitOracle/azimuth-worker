@@ -1601,7 +1601,7 @@ export default {
       const _ct0 = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
       if (!/^image\//.test(_ct0)) return new Response("POST needs Content-Type: image/* (got: " + (_ct0 || "none") + ")", { status: 415 });
       const _b0 = await request.arrayBuffer();
-      if (_b0.byteLength > 4 * 1024 * 1024) return new Response("image too large: " + _b0.byteLength + " bytes (max 4MB)", { status: 413 });
+      if (_b0.byteLength > 12 * 1024 * 1024) return new Response("image too large: " + _b0.byteLength + " bytes (max 12MB)", { status: 413 });
       if (_b0.byteLength < 500) return new Response("image suspiciously small: " + _b0.byteLength + " bytes", { status: 422 });
       await env.MEETINGS.put("cfg_bg", _b0);
       await env.MEETINGS.put("cfg_bg_ct", _ct0);
@@ -6569,12 +6569,12 @@ function openAnchor(a){
   const ds=document.getElementById("devsel"),ps=document.getElementById("projsel");
   const d=a.dev||"";
   if(d!==SELDEV){if(ds)ds.value=d;applyDev(d)}
-  const nm=a.dev_project||a.name||a.cluster;      // v100: an unnamed villa opens its sub-community
+  const nm=a.dev_project||a.name||a.place_label||a.cluster;      // v100: an unnamed villa opens its sub-community
   if(ps&&d){if(![...ps.options].some(o=>o.value===nm)){const o=document.createElement("option");o.value=nm;o.textContent=nm;ps.appendChild(o)}ps.value=nm}
   applyProj(nm);}
 function applyProj(name){
   SELPROJ=name;const pp=document.getElementById("ppanel");
-  const mine=new Set();ANCH.anchors.filter(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name||a.cluster)===name).forEach(a=>(a.meshes||[]).forEach(i=>mine.add(i)));
+  const mine=new Set();ANCH.anchors.filter(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name||a.place_label||a.cluster)===name).forEach(a=>(a.meshes||[]).forEach(i=>mine.add(i)));
   MESHES.forEach((m,i)=>ghost(m,!(name?mine.has(i):(SELDEV?m.userData.dev===SELDEV:true))));
   LIVE.forEach((L)=>{L.el.remove();L.ln.remove();L.dot.remove()});LIVE.clear();
   if(!name){pp.classList.remove("on");applyDev(SELDEV);return}
@@ -6585,7 +6585,7 @@ function applyProj(name){
   const eye=new THREE.Vector3(c2.x+r2*2.4,c2.y+r2*0.9,c2.z+r2*2.4);const dir=c2.clone().sub(eye).normalize();
   const right=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0)).normalize().multiplyScalar(innerWidth>640?r2*1.1:0);
   ctl.target.copy(c2.clone().add(right));cam.position.copy(eye.clone().add(right));ctl.autoRotate=false;
-  const a0=ANCH.anchors.find(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name||a.cluster)===name);const f=SELDEV?(projFor(SELDEV,name)||projFor(SELDEV,a0&&a0.name)):null;
+  const a0=ANCH.anchors.find(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name||a.place_label||a.cluster)===name);const f=SELDEV?(projFor(SELDEV,name)||projFor(SELDEV,a0&&a0.name)):null;
   const esc=(s)=>String(s==null?"":s).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
   const rows=[];if(f){
     const d=f.dld||{};
@@ -6862,7 +6862,7 @@ window.__twinMap={
   getCanvas:()=>ren.domElement, queryRenderedFeatures:()=>[], querySourceFeatures:(n)=>((_TL[n]&&_TL[n].data&&_TL[n].data.features)||[]), triggerRepaint:()=>{}, addControl:()=>{}, project:(ll)=>{const P=_scene(ll[0],ll[1]);if(!P)return{x:0,y:0};const q=P.project(cam);return{x:(q.x+1)/2*innerWidth,y:(1-q.y)/2*innerHeight}}
 };
 // v103 film director hook (8 Sep): the shot list needs to know when the massing is in and to open one tower's panel by name
-window.__twinFilm={loaded:()=>!!(MESHES&&ANCH&&ROOTREF),names:()=>ANCH?ANCH.anchors.filter(a=>a.meshes&&a.meshes.length).map(a=>[a.dev_project||a.name||a.cluster,a.dev||'',Math.round(a.h||0)]):[],open:(nm)=>{if(!ANCH||!MESHES)return false;const q=String(nm).toLowerCase();const a=ANCH.anchors.find(x=>x.meshes&&x.meshes.length&&[x.dev_project,x.name,x.cluster].some(v=>v&&String(v).toLowerCase()===q));if(!a)return false;openAnchor(a);return true},close:()=>{try{applyProj('');applyDev('')}catch(e){}},orbit:(on,spd)=>{ctl.autoRotate=!!on;if(spd)ctl.autoRotateSpeed=spd},view:()=>({p:cam.position.toArray(),t:ctl.target.toArray()}),setView:(p,t)=>{cam.position.fromArray(p);ctl.target.fromArray(t)},glide:(dp,ms)=>new Promise(res=>{const p0=cam.position.clone(),t0=performance.now();const d=new THREE.Vector3().fromArray(dp);(function st(){const k=Math.min(1,(performance.now()-t0)/ms),e=k<.5?2*k*k:-1+(4-2*k)*k;cam.position.copy(p0).addScaledVector(d,e);if(k<1)requestAnimationFrame(st);else res(true)})()})};
+window.__twinFilm={loaded:()=>!!(MESHES&&ANCH&&ROOTREF),names:()=>ANCH?ANCH.anchors.filter(a=>a.meshes&&a.meshes.length).map(a=>[a.dev_project||a.name||a.place_label||a.cluster,a.dev||'',Math.round(a.h||0)]):[],open:(nm)=>{if(!ANCH||!MESHES)return false;const q=String(nm).toLowerCase();const a=ANCH.anchors.find(x=>x.meshes&&x.meshes.length&&[x.dev_project,x.name,x.cluster].some(v=>v&&String(v).toLowerCase()===q));if(!a)return false;openAnchor(a);return true},close:()=>{try{applyProj('');applyDev('')}catch(e){}},orbit:(on,spd)=>{ctl.autoRotate=!!on;if(spd)ctl.autoRotateSpeed=spd},view:()=>({p:cam.position.toArray(),t:ctl.target.toArray()}),setView:(p,t)=>{cam.position.fromArray(p);ctl.target.fromArray(t)},glide:(dp,ms)=>new Promise(res=>{const p0=cam.position.clone(),t0=performance.now();const d=new THREE.Vector3().fromArray(dp);(function st(){const k=Math.min(1,(performance.now()-t0)/ms),e=k<.5?2*k*k:-1+(4-2*k)*k;cam.position.copy(p0).addScaledVector(d,e);if(k<1)requestAnimationFrame(st);else res(true)})()})};
 window.__onPlace=(sel)=>{if(!ANCH||!MESHES)return;const nm=sel&&sel.p&&(sel.p.name||"");if(!nm)return;const mine=new Set();
   ANCH.anchors.filter(a=>[a.cluster,a.name,a.dev_project].some(v=>v&&String(v).toLowerCase()===String(nm).toLowerCase())).forEach(a=>(a.meshes||[]).forEach(i=>mine.add(i)));
   if(!mine.size)return;MESHES.forEach((m,i)=>ghost(m,!mine.has(i)));
