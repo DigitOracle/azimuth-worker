@@ -2315,6 +2315,7 @@ export default {
                        m: bound >= 5 ? 2 : (named >= 100 || bound > 0) ? 1 : 0, b: a ? a.buildings : 0, bd: bound, nm: named }; })
             .sort((x, y) => TWIN_CORRIDORS.indexOf(x.c) - TWIN_CORRIDORS.indexOf(y.c) || y.m - x.m || x.n.localeCompare(y.n));
         } catch (e) {}
+        if (url.pathname === "/skyline" && url.searchParams.get("all") === "1") return new Response(renderCity(url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v106 - all Dubai
         let _sk = url.pathname === "/skyline" ? (url.searchParams.get("d") || (_rail[0] && _rail[0].s) || "") : url.pathname.slice(9);
         _sk = _sk.replace(/[^a-z0-9]/gi, "").toLowerCase();
         const _an2 = _names[_sk] || TWIN_TILE_NAME[_sk] || _sk;
@@ -3059,8 +3060,8 @@ const NAJ_FONTS = '<link rel=preconnect href=https://fonts.googleapis.com><link 
 const NAJ_NAV_CSS = '.nnav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-around;align-items:center;background:rgba(12,20,19,.93);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-top:1px solid #24352F;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.nnav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8FA39B;font-size:.58rem;font-family:"IBM Plex Mono",monospace;letter-spacing:.05em;-webkit-tap-highlight-color:transparent}.nnav a svg{width:19px;height:19px}.nnav a.on{color:#C5A56A}';
 const najNav = (key, active) => {
   const k = encodeURIComponent(key || "");
-  const items = [["find", "/find", "search", "FIND"], ["homes", "/home", "grid", "HOMES"], ["pulse", "/market", "trend", "PULSE"], ["twin", "/skyline", "cube", "TWIN"], ["map", "/map", "pin", "MAP"], ["plans", "/plans", "plan", "PLANS"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"], ["clock", "/clock", "clock", "TIME"]];   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
-  return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + '?key=' + k + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>').join('') + '</nav>';
+  const items = [["find", "/find", "search", "FIND"], ["homes", "/home", "grid", "HOMES"], ["pulse", "/market", "trend", "PULSE"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["map", "/map", "pin", "MAP"], ["plans", "/plans", "plan", "PLANS"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"], ["clock", "/clock", "clock", "TIME"]];   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
+  return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>').join('') + '</nav>';
 };
 
 function renderMarket(latestRaw, prevRaw, key, origin, watchRaw) {
@@ -4209,6 +4210,7 @@ function _chWrap(title, sub, body) {
 // skyline banner), the hook, the figure, the source. Sent with the draft; shown five-up on /charts.
 const AREA_SLUG = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function angleArea(angle, d) {
+  if (angle && typeof angle.area === "string" && angle.area.trim()) return angle.area.trim();   // v106 - an angle may name its own masthead (an event, or Dubai-wide), overriding the district match
   const txt = ((angle && angle.hook) || "") + " " + ((angle && angle.figure) || "") + " " + ((angle && angle.buyer) || "");
   const names = new Set(); try { for (const a of ((d && d.areaIntel && d.areaIntel.areas) || [])) names.add(a.area); for (const a of ((d && d.transactions && d.transactions.topAreas) || [])) names.add(a.area); for (const a of ((d && d.rents && d.rents.grossYieldPctByArea) || [])) if (a.area) names.add(a.area); } catch (e) {}
   const ALIAS = { "jlt": "Al Thanyah Fifth", "jumeirah lake towers": "Al Thanyah Fifth", "jvc": "Jumeirah Village Circle", "jvt": "Jumeirah Village Triangle", "downtown": "Burj Khalifa", "dubai south": "Madinat Al Mataar", "creek harbour": "Al Khairan First", "meydan": "Meydan One", "dubai hills": "Hadaeq Sheikh Mohammed Bin Rashid" };
@@ -4838,7 +4840,7 @@ const MAP_CHROME_JS = ''
   + '  ["sub-bub","plot-dot","am-dot","vid-dot","home-dot"].forEach(function(id){map.on("mouseenter",id,function(){map.getCanvas().style.cursor="pointer"});map.on("mouseleave",id,function(){map.getCanvas().style.cursor=""})});'
   + '  filterTo(currentDistrict()||null);drawAm();hint();}'
   + 'function hint(){var z=map.getZoom();var t="";if(!SEL){t=z<12?"pick a district above":(z<13.5?"tap a sub-community":"tap a sub-community or a plot")}document.getElementById("hint").textContent=t}'
-  + 'function pickDistrict(slug,el){if(window.__twinDistrict){if(slug&&slug!==window.__twinDistrict){location.href="/skyline/"+encodeURIComponent(slug)+"?key="+encodeURIComponent(KEY);return}if(!slug){CURD="";buildRail();var _all=document.querySelector("#rail .c");if(_all)_all.classList.add("on");return}}'
+  + 'function pickDistrict(slug,el){if(window.__twinDistrict){if(slug&&slug!==window.__twinDistrict){location.href="/skyline/"+encodeURIComponent(slug)+"?key="+encodeURIComponent(KEY);return}if(!slug){location.href="/skyline?all=1&key="+encodeURIComponent(KEY);return}}'
   + '  document.querySelectorAll(".rail .c").forEach(function(c){c.classList.toggle("on",c===el)});'
   + '  SEL=null;LISTK=null;document.getElementById("panel").classList.remove("on");setSel(null);setNear([]);'
   + '  CURD="";if(!slug){map.flyTo({center:[55.23,25.10],zoom:9.4});document.getElementById("st").textContent="pick a district";filterTo(null);drawAm();return}'
@@ -6065,6 +6067,57 @@ const TWIN_CORRIDOR = {
   meydanone: "Meydan & MBR", sobhaheartland: "Meydan & MBR", nadalsheba: "Meydan & MBR", alyufrah1: "Meydan & MBR", alyufrah2: "Meydan & MBR",
   dubaihills: "South & Outer", damachills: "South & Outer", alhebiahfifth: "South & Outer", alhebiahfourth: "South & Outer", alyelayiss1: "South & Outer", alyelayiss2: "South & Outer", wadialsafa5: "South & Outer", wadialsafa4: "South & Outer", madinatalmataar: "South & Outer", dubaiindustrialcity: "South & Outer", siliconoasis: "South & Outer", majan: "South & Outer", dubaiinvestmentpark: "South & Outer", dubaisouth: "South & Outer"
 };
+// v106 — the twin at city level: all Dubai as one instanced massing (KV city_overview, built by build_city_overview.py). Tap a district to open its twin.
+function renderCity(key) {
+  const K = encodeURIComponent(key || "");
+  const css = 'html,body{margin:0;height:100%;background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans",system-ui,sans-serif;overflow:hidden}'
+    + '#c{position:fixed;inset:0}#hd{position:fixed;left:14px;top:12px;z-index:5;pointer-events:none}#hd h1{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:22px;margin:0;color:#E8E4D8}#hd h1 b{color:#C5A56A;font-weight:600}'
+    + '#hd p{margin:4px 0 0;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#8FA39E}'
+    + '#lbl{position:fixed;inset:0;pointer-events:none;z-index:4}.lb{position:absolute;transform:translate(-50%,-100%);font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#D9D2C2;background:rgba(12,20,19,.62);border:1px solid rgba(197,165,106,.35);border-radius:999px;padding:3px 8px;white-space:nowrap;transition:opacity .2s}.lb.on{color:#0C1413;background:#C5A56A;border-color:#C5A56A}'
+    + '#tip{position:fixed;right:14px;top:14px;z-index:6;max-width:280px;background:rgba(12,20,19,.9);border:1px solid #24352F;border-radius:10px;padding:10px 12px;display:none}#tip b{display:block;font-family:Fraunces,Georgia,serif;font-size:17px;color:#E8E4D8}#tip s{display:block;text-decoration:none;font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8FA39E;margin-top:3px}'
+    + '#tip a{display:inline-block;margin-top:8px;font-size:12px;color:#C5A56A;text-decoration:none;border:1px solid #C5A56A;border-radius:999px;padding:4px 10px}'
+    + '#leg{position:fixed;left:14px;bottom:76px;z-index:5;font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8FA39E;pointer-events:none}#leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin:0 5px 0 12px;vertical-align:-1px}'
+    + '#ld{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:7;color:#8FA39E;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;background:#0C1413}';
+  const js = [
+    'import * as THREE from "three";import { OrbitControls } from "three/addons/controls/OrbitControls.js";',
+    'const KEY=' + JSON.stringify(key || "") + ';const canvas=document.getElementById("c");const ren=new THREE.WebGLRenderer({canvas,antialias:true,logarithmicDepthBuffer:true});ren.setPixelRatio(Math.min(devicePixelRatio,2));ren.setSize(innerWidth,innerHeight);',
+    'const scene=new THREE.Scene();scene.background=new THREE.Color(0x0C1413);scene.fog=new THREE.Fog(0x0C1413,30000,90000);',
+    'const cam=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,20,200000);const ctl=new OrbitControls(cam,canvas);ctl.enableDamping=true;ctl.dampingFactor=.08;ctl.maxPolarAngle=Math.PI*.47;ctl.minDistance=1500;ctl.maxDistance=90000;ctl.autoRotate=true;ctl.autoRotateSpeed=.25;',
+    'scene.add(new THREE.HemisphereLight(0xdfe8e6,0x1a2422,1.05));const sun=new THREE.DirectionalLight(0xffe9c4,1.1);sun.position.set(-20000,30000,-12000);scene.add(sun);',
+    'const ground=new THREE.Mesh(new THREE.PlaneGeometry(220000,220000),new THREE.MeshStandardMaterial({color:0x121b19,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-1;scene.add(ground);',
+    'function b64(s,T){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return new T(u.buffer)}',
+    'const hues=(i)=>((i*137.508)%360)/360;const tmp=new THREE.Object3D();const col=new THREE.Color();let D=null,mesh=null,labels=[];',
+    'const r=await fetch("/img/city_overview");D=await r.json();const U=D.unit_m;const n=D.n;const xz=b64(D.arrays.xz_i16,Int16Array),wd=b64(D.arrays.wd_u8,Uint8Array),hh=b64(D.arrays.h_u16,Uint16Array),fl=b64(D.arrays.flags_u8,Uint8Array),di=b64(D.arrays.dist_u8,Uint8Array);',
+    'mesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({roughness:.85,metalness:.05}),n);',
+    'for(let i=0;i<n;i++){const x=xz[2*i]*U,z=xz[2*i+1]*U,w=wd[2*i],d=wd[2*i+1],h=hh[i];tmp.position.set(x,h/2,z);tmp.scale.set(w,h,d);tmp.updateMatrix();mesh.setMatrixAt(i,tmp.matrix);',
+    '  const f=fl[i];const tower=f&8,villa=f&2,town=f&4;col.setHSL(hues(di[i]),tower?.42:.22,tower?.66:(villa||town?.28:.40));mesh.setColorAt(i,col)}',
+    'mesh.instanceMatrix.needsUpdate=true;mesh.instanceColor.needsUpdate=true;scene.add(mesh);',
+    'const cs=b64(D.coast.xzxz_i16,Int16Array),cc=b64(D.coast.cls_u8,Uint8Array);const pos=new Float32Array(D.coast.n*6);const ccol=new Float32Array(D.coast.n*6);const sea=new THREE.Color(0x3E8A7E),inland=new THREE.Color(0x8FC7B9);',
+    'for(let i=0;i<D.coast.n;i++){pos[6*i]=cs[4*i]*U;pos[6*i+1]=2;pos[6*i+2]=cs[4*i+1]*U;pos[6*i+3]=cs[4*i+2]*U;pos[6*i+4]=2;pos[6*i+5]=cs[4*i+3]*U;const c=D.coast_classes[cc[i]]==="sea"?sea:inland;for(let k=0;k<2;k++){ccol[6*i+3*k]=c.r;ccol[6*i+3*k+1]=c.g;ccol[6*i+3*k+2]=c.b}}',
+    'const lg=new THREE.BufferGeometry();lg.setAttribute("position",new THREE.BufferAttribute(pos,3));lg.setAttribute("color",new THREE.BufferAttribute(ccol,3));scene.add(new THREE.LineSegments(lg,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:.75})));',
+    'const box=new THREE.Box3().setFromObject(mesh);const ctr=box.getCenter(new THREE.Vector3());const size=box.getSize(new THREE.Vector3());ctl.target.copy(ctr).setY(0);cam.position.set(ctr.x+size.x*.55,Math.max(size.x,size.z)*.62,ctr.z+size.z*.75);cam.lookAt(ctl.target);',
+    'const lay=document.getElementById("lbl");D.districts.forEach((d,ix)=>{const e=document.createElement("div");e.className="lb";e.textContent=d.name;e.dataset.ix=ix;lay.appendChild(e);labels.push({e,d,v:new THREE.Vector3(d.x,(d.tallest_m||60)+120,d.z)})});',
+    'document.getElementById("hd").querySelector("p").textContent=D.n.toLocaleString("en")+" buildings \\u00b7 "+D.districts.length+" districts \\u00b7 tap a district";document.getElementById("ld").remove();',
+    'const ray=new THREE.Raycaster();const m2=new THREE.Vector2();let hot=-1;const tip=document.getElementById("tip");',
+    'function pick(ev){const rct=canvas.getBoundingClientRect();m2.x=((ev.clientX-rct.left)/rct.width)*2-1;m2.y=-((ev.clientY-rct.top)/rct.height)*2+1;ray.setFromCamera(m2,cam);const hit=ray.intersectObject(mesh,false)[0];return hit?di[hit.instanceId]:-1}',
+    'canvas.addEventListener("pointermove",ev=>{const ix=pick(ev);if(ix===hot)return;hot=ix;labels.forEach((l,i)=>l.e.classList.toggle("on",i===ix));if(ix>=0){const d=D.districts[ix];tip.style.display="block";tip.innerHTML="<b>"+d.name+"</b><s>"+d.buildings.toLocaleString("en")+" buildings \\u00b7 "+d.named.toLocaleString("en")+" named"+(d.tallest?" \\u00b7 tallest "+d.tallest+" "+d.tallest_m+" m":"")+"</s><a href=\\"/skyline/"+d.slug+"?key="+encodeURIComponent(KEY)+"\\">open the twin \\u2192</a>";ctl.autoRotate=false}else{tip.style.display="none"}});',
+    'let downAt=0;canvas.addEventListener("pointerdown",()=>{downAt=Date.now()});canvas.addEventListener("pointerup",ev=>{if(Date.now()-downAt>260)return;const ix=pick(ev);if(ix>=0)flyTo(ix,true)});',
+    'let anim=null;function flyTo(ix,go){const d=D.districts[ix];const from={p:cam.position.clone(),t:ctl.target.clone()};const to={p:new THREE.Vector3(d.x+2600,2200,d.z+3200),t:new THREE.Vector3(d.x,0,d.z)};const t0=performance.now();ctl.autoRotate=false;anim={from,to,t0,ms:1600,go:go?d.slug:null}}',
+    'window.__cityFilm={fly:(slug,ms)=>{const ix=D.districts.findIndex(d=>d.slug===slug);if(ix<0)return false;flyTo(ix,false);anim.ms=ms||2400;return true},orbit:(on)=>{ctl.autoRotate=!!on},open:(slug)=>{location.href="/skyline/"+slug+"?key="+encodeURIComponent(KEY)},districts:()=>D.districts.map(d=>d.slug)};',
+    'function tick(){requestAnimationFrame(tick);if(anim){const k=Math.min(1,(performance.now()-anim.t0)/anim.ms),e=k<.5?2*k*k:-1+(4-2*k)*k;cam.position.lerpVectors(anim.from.p,anim.to.p,e);ctl.target.lerpVectors(anim.from.t,anim.to.t,e);if(k>=1){const go=anim.go;anim=null;if(go)location.href="/skyline/"+go+"?key="+encodeURIComponent(KEY)}}ctl.update();',
+    '  const w=innerWidth,h=innerHeight;for(const l of labels){const v=l.v.clone().project(cam);const vis=v.z<1&&Math.abs(v.x)<1.05&&Math.abs(v.y)<1.05;l.e.style.opacity=vis?"1":"0";if(vis){l.e.style.left=((v.x+1)/2*w)+"px";l.e.style.top=((1-v.y)/2*h)+"px"}}ren.render(scene,cam)}tick();',
+    'addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});'
+  ].join("\n");
+  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Najma \u2014 the twin \u00b7 all Dubai</title>' + NAJ_FONTS
+    + '<style>' + css + NAJ_NAV_CSS + '</style>'
+    + '<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.169.0/examples/jsm/"}}</script></head><body>'
+    + '<div id=ld>loading the city</div><canvas id=c></canvas><div id=lbl></div>'
+    + '<div id=hd><h1>Najma <b>\u0646\u062c\u0645\u0629</b> \u2014 the twin \u00b7 all Dubai</h1><p>loading</p></div><div id=tip></div>'
+    + '<div id=leg>massing by district <i style="background:#C5A56A"></i>towers lighter <i style="background:#3E8A7E"></i>sea <i style="background:#8FC7B9"></i>creek, canal, lakes</div>'
+    + '<script type="module">' + js + '</script>' + najNav(key, "twin") + '</body></html>';
+}
+
+
 function renderSkyline(slugName, areaName, key, rail) {
   const _esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const _cur = (rail || []).find(r => r.s === slugName) || null;
