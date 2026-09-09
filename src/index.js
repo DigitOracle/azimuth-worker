@@ -1673,8 +1673,9 @@ export default {
     }
     if (request.method === "GET") {
       if (url.pathname === "/verse") {                                                                    // v95
-        const v = NAJ_VERSES[Math.floor(Math.random() * NAJ_VERSES.length)];
-        return new Response(JSON.stringify({ text: v[0], ref: v[1], n: NAJ_VERSES.length }), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+        // v105.3 (Kendall, 9 Sep 2026): one verse per Dubai day - the same verse for 24 hours, a new one each morning (UTC+4), scattered rather than sequential
+        const _day = Math.floor((Date.now() + 4 * 3600 * 1000) / 86400000); const _idx = (Math.imul(_day, 2654435761) >>> 0) % NAJ_VERSES.length; const v = NAJ_VERSES[_idx];
+        return new Response(JSON.stringify({ text: v[0], ref: v[1], n: NAJ_VERSES.length, day: _day, holds: "24h Dubai day" }), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/bg.jpg") {
         { const _u = await env.MEETINGS.get("cfg_bg", { type: "arrayBuffer" }); if (_u && _u.byteLength > 0) { const _ct = (await env.MEETINGS.get("cfg_bg_ct")) || "image/jpeg"; return new Response(_u, { headers: { "Content-Type": _ct, "Cache-Control": "public, max-age=300" } }); } }
