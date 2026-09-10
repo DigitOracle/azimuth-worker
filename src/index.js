@@ -2122,19 +2122,116 @@ export default {
         out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
         return new Response(JSON.stringify({ generated: new Date().toISOString(), schema: "azimuth-bridge/1", count: out.length, records: out }, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      if (url.pathname === "/genimg" && request.method === "POST") {   // v110 (Kendall, 10 Sep 2026) - generic prompt -> image. The podcast word plates were being made by hand in a browser and downloaded; this makes them here. Reuses the v109 store, so they serve from /img/<name> like everything else.
+        // Its OWN key, not READ_KEY. READ_KEY is write-only on Cloudflare and its value is no longer held anywhere; rotating it would have broken every existing keyed link (board, health, group registry). A separate secret leaves all of that untouched.
+        const _gk = env.GENIMG_KEY || env.READ_KEY;
+        if (!_gk || url.searchParams.get("key") !== _gk) return new Response("unauthorized", { status: 401 });
+        const _jr = (o, st) => new Response(JSON.stringify(o, null, 1), { status: st || 200, headers: { "Content-Type": "application/json" } });
+        if (!env.OPENAI_API_KEY) return _jr({ ok: false, err: "no image key on this env" }, 500);
+        let _gb = null; try { _gb = await request.json(); } catch (e) {}
+        const _gp = _gb && String(_gb.prompt || "").trim();
+        if (!_gp) return _jr({ ok: false, err: "no prompt in body" }, 400);
+        // gpt-image-1 offers 1024x1024, 1024x1536 (2:3) and 1536x1024 only - there is NO 9:16.
+        // Portrait comes back 2:3 and the caller crops or pads it to 9:16.
+        const _gs = ["1024x1024", "1024x1536", "1536x1024"].indexOf(String(_gb.size || "")) >= 0 ? String(_gb.size) : "1024x1536";
+        const _gq = ["low", "medium", "high"].indexOf(String(_gb.quality || "")) >= 0 ? String(_gb.quality) : "high";
+        const _gn = "gen_" + (String(_gb.name || "").replace(/[^a-z0-9_]/gi, "").slice(0, 34) || String(Date.now()));
+        try {
+          const _gr = await fetch("https://api.openai.com/v1/images/generations", { method: "POST",
+            headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "gpt-image-1", prompt: _gp, size: _gs, quality: _gq, n: 1 }) });
+          if (!_gr.ok) return _jr({ ok: false, err: "image api " + _gr.status + " " + (await _gr.text()).slice(0, 300) }, 502);
+          const _gj = await _gr.json(); const _g64 = _gj && _gj.data && _gj.data[0] && _gj.data[0].b64_json;
+          if (!_g64) return _jr({ ok: false, err: "image api returned no image" }, 502);
+          const _gbin = Uint8Array.from(atob(_g64), c => c.charCodeAt(0));
+          if (_gbin.byteLength < 20000) return _jr({ ok: false, err: "image too small (" + _gbin.byteLength + " bytes)" }, 502);
+          await env.MEETINGS.put("img_" + _gn, _gbin.buffer, { expirationTtl: 14 * 86400 });
+          await env.MEETINGS.put("img_ct_" + _gn, "image/png", { expirationTtl: 14 * 86400 });
+          return _jr({ ok: true, name: _gn, size: _gs, quality: _gq, bytes: _gbin.byteLength, url: url.origin + "/img/" + _gn });
+        } catch (e) { return _jr({ ok: false, err: "exception: " + String((e && e.message) || e).slice(0, 200) }, 500); }
+      }
+      if (url.pathname === "/plate_gen_me") {                 // v114 - TEST: generate her into the plate from her photo (image edit). Returns a URL, never sends.
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!env.OPENAI_API_KEY) return new Response("no image key", { status: 400 });
+        const _id = "ips_" + String(url.searchParams.get("post") || "") + "_" + String(url.searchParams.get("opt") || "a").toLowerCase();
+        const _pn = "plate_" + _id.replace(/[^a-z0-9_]/gi, "").slice(0, 34);
+        const _plate = await env.MEETINGS.get("img_" + _pn, "arrayBuffer"); const _me = await env.MEETINGS.get("img_style_me", "arrayBuffer");
+        if (!_plate || !_me) return new Response("need a stored plate and her photo", { status: 404 });
+        const _meCt = (await env.MEETINGS.get("img_ct_style_me")) || "image/jpeg";
+        const fd = new FormData();
+        fd.append("model", "gpt-image-1");
+        fd.append("image[]", new Blob([_plate], { type: "image/png" }), "plate.png");
+        fd.append("image[]", new Blob([_me], { type: _meCt }), "person.jpg");
+        fd.append("size", "1024x1536");
+        fd.append("quality", "medium");
+        fd.append("prompt", "Edit the FIRST image (the scene) by adding the woman from the SECOND image into it. Place her standing in the RIGHT half of the scene, full length, feet on the ground line near the bottom, facing the camera, exactly as she appears in the second image: the same face, the same skin tone, the same hair, the same rust-orange suit with shorts and black heels, the same pose with hands clasped. Match the light of the scene on her, with a soft natural shadow at her feet. Keep the LEFT 45% of the scene exactly as it is, empty and calm. Do not add any text, lettering, logos or other people. Photorealistic, natural colour, no plastic skin, no smoothing of her features.");
+        let out = null, err = "";
+        try {
+          const r = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY }, body: fd });
+          if (!r.ok) err = "edit " + r.status + " " + (await r.text()).slice(0, 200);
+          else { const j = await r.json(); const b64 = j && j.data && j.data[0] && j.data[0].b64_json; if (b64) out = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); else err = "no image"; }
+        } catch (e) { err = "exception " + String((e && e.message) || e).slice(0, 120); }
+        if (!out) return new Response(JSON.stringify({ err }), { status: 502, headers: { "Content-Type": "application/json" } });
+        await env.MEETINGS.put("img_" + _pn + "_gen", out.buffer, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + _pn + "_gen", "image/png", { expirationTtl: 14 * 86400 });
+        return new Response(JSON.stringify({ url: url.origin + "/img/" + _pn + "_gen" }), { headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/plate_run") {                    // v109 - make one post's plate and cards; ?send=1 delivers to her, ?send=0 returns the URLs
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
-        let _pk = null; try { _pk = JSON.parse((await env.MEETINGS.get("img_ips_bg_prompts")) || "null"); } catch (e) {}
-        const _po = _pk && (_pk.posts || []).find(p => String(p.n) === String(url.searchParams.get("post")));
-        const _op = _po && (_po.options || []).find(o => o.id === String(url.searchParams.get("opt") || "").toUpperCase());
-        if (!_op) return new Response("no such post/option", { status: 404 });
+        let _po = null, _op = null;
+        if (url.searchParams.get("feed")) {                                            // v109.2 - a morning-feed angle: ?feed=1&angle=N (from today's brief), place follows the angle's area
+          let _bc = null; try { _bc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+          const _an = parseInt(url.searchParams.get("angle") || "0", 10); const _ag = _bc && Array.isArray(_bc.angles) ? _bc.angles[_an - 1] : null;
+          if (!_ag) return new Response("no such feed angle", { status: 404 });
+          let _md = null; try { _md = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+          const _ar = angleArea(_ag, _md) || "Dubai";
+          _po = { n: "f" + String(_bc.at || 0).slice(-6) + "_" + _an, hook: _ag.hook, figure: _ag.figure, source: _ag.source, masthead: _ar,
+                  caption: String(_ag.hook || "") + "\n\n" + String(_ag.figure || "") + " \u2014 " + String(_ag.source || "") + (_ag.buyer ? "\n\n" + _ag.buyer : "") };
+          _op = { id: "A", name: _ar, place: url.searchParams.get("place") || (_ar === "Dubai" ? "Dubai \u2014 the skyline or the street that matches this headline, real and specific, never a generic city: " + String(_ag.hook || "").slice(0, 140)
+                                                                                : _ar + ", Dubai \u2014 a real street or waterfront view of this community, specific to it, never a generic city"), prompt_only: "", tail: "" };
+        } else {
+          let _pk = null; try { _pk = JSON.parse((await env.MEETINGS.get("img_ips_bg_prompts")) || "null"); } catch (e) {}
+          _po = _pk && (_pk.posts || []).find(p => String(p.n) === String(url.searchParams.get("post")));
+          _op = _po && (_po.options || []).find(o => o.id === String(url.searchParams.get("opt") || "").toUpperCase());
+          if (!_op) return new Response("no such post/option", { status: 404 });
+        }
         const _send = url.searchParams.get("send") === "1"; const _to = url.searchParams.get("to") || env.WA_ALLOWED;
         if (url.searchParams.get("fresh") === "1") _op.fresh = true;
+        if (url.searchParams.get("me") === "0") _op.withMe = false;
         const _res = await plateRun(env, _po, _op, _to, url.origin, _send);
         if (_send && !_res.square && !_res.story) {                                // the picture failed: she still gets the prompt, as before
-          try { await waSend(env, _to, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, _to, _op.prompt_only || _op.prompt_message); if (_op.tail) await waSend(env, _to, _op.tail); } catch (e) {}
+          try { await waSend(env, _to, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, _to, _op.prompt_only || _op.prompt_message || bgPromptBlock({ hook: _po.hook, figure: _po.figure, source: _po.source }, _op.place)); if (_op.tail) await waSend(env, _to, _op.tail); } catch (e) {}
         }
         return new Response(JSON.stringify(_res, null, 1), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/style_refs") {                   // v111 - her style pile, for reading and sampling from outside (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _pile = []; try { _pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {}
+        let _hasMe = false; try { _hasMe = !!(await env.MEETINGS.get("img_style_me", "arrayBuffer")); } catch (e) {}
+        if (url.searchParams.get("clear") === "1") { for (const r of _pile) { try { await env.MEETINGS.delete("img_" + r.key); await env.MEETINGS.delete("img_ct_" + r.key); } catch (e) {} } await env.MEETINGS.delete("style_refs"); return new Response("cleared " + _pile.length); }
+        return new Response(JSON.stringify({ count: _pile.length, me: _hasMe, refs: _pile.map(r => Object.assign({ url: url.origin + "/img/" + r.key }, r)) }, null, 1), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/style_start") {                  // v112 - begin the walk-through (keyed); resets the pile
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _old = []; try { _old = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {}
+        for (const r of _old) { try { await env.MEETINGS.delete("img_" + r.key); await env.MEETINGS.delete("img_ct_" + r.key); } catch (e) {} }
+        await env.MEETINGS.delete("style_refs"); await env.MEETINGS.delete("style_notes");
+        await styleSet(env, { step: "own", own: 0, admired: 0, started: new Date().toISOString() });
+        await waSend(env, env.WA_ALLOWED, STYLE_MSG.own);
+        return new Response("started");
+      }
+      if (url.pathname === "/style_card") {                   // v112 - send the "This is you" card with Lock / Change (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _ct = String(url.searchParams.get("text") || "").slice(0, 1000); if (!_ct) return new Response("no text", { status: 400 });
+        const _sf = (await styleGet(env)) || { step: "reading" }; _sf.step = "card"; await styleSet(env, _sf);
+        await env.MEETINGS.put("style_card", JSON.stringify({ text: _ct, at: new Date().toISOString(), locked_at: null }));
+        await waSendButtons(env, env.WA_ALLOWED, _ct, [{ id: "st:lock", title: "Lock it" }, { id: "st:change", title: "Change something" }]);
+        return new Response("card sent");
+      }
+      if (url.pathname === "/style_status") {                 // v112 - where the walk-through is (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _pile = [], _notes = [], _card = null; try { _pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {} try { _notes = JSON.parse((await env.MEETINGS.get("style_notes")) || "[]"); } catch (e) {} try { _card = JSON.parse((await env.MEETINGS.get("style_card")) || "null"); } catch (e) {}
+        let _hasMe = false; try { _hasMe = !!(await env.MEETINGS.get("img_style_me", "arrayBuffer")); } catch (e) {}
+        return new Response(JSON.stringify({ flow: await styleGet(env), me: _hasMe, refs: _pile.map(r => Object.assign({ url: url.origin + "/img/" + r.key }, r)), notes: _notes, card: _card }, null, 1), { headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/bg_ask") {                       // v107 - ask her which backdrop she wants, one interactive message per post (keyed, operator-fired)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -2579,6 +2676,24 @@ export default {
             }
             return new Response("ok");
           }
+          if (bid.indexOf("st:") === 0) {                                              // v112 - walk-through buttons
+            const _sf = (await styleGet(env)) || { step: "own" };
+            if (bid === "st:next" && _sf.step === "admired") { _sf.step = "me"; await styleSet(env, _sf); await waSend(env, from, STYLE_MSG.me); }
+            else if (bid === "st:lock" && _sf.step === "card") {
+              _sf.step = "locked"; _sf.locked_at = new Date().toISOString(); await styleSet(env, _sf);
+              try { const _c = JSON.parse((await env.MEETINGS.get("style_card")) || "null"); if (_c) { _c.locked_at = _sf.locked_at; await env.MEETINGS.put("style_card", JSON.stringify(_c)); } } catch (e) {}
+              await waSend(env, from, STYLE_MSG.locked);
+            }
+            else if (bid === "st:me_done" && _sf.step === "me") {
+              if (!(_sf.me > 0)) { await waSend(env, from, "Send at least one photo of you first."); return new Response("ok"); }
+              _sf.step = "colours"; await styleSet(env, _sf);
+              await waSendButtons(env, from, STYLE_MSG.colours, [{ id: "st:col_keep", title: "Keep mine" }, { id: "st:col_send", title: "I'll send some" }]);
+            }
+            else if (bid === "st:col_keep" && _sf.step === "colours") { _sf.step = "reading"; _sf.colours = "keep"; await styleSet(env, _sf); await waSend(env, from, "Keeping them."); await waSend(env, from, STYLE_MSG.reading); }
+            else if (bid === "st:col_send" && _sf.step === "colours") { _sf.step = "colours_wait"; await styleSet(env, _sf); await waSend(env, from, "Send them as words, or a picture of the colours."); }
+            else if (bid === "st:change" && _sf.step === "card") { _sf.step = "change"; await styleSet(env, _sf); await waSend(env, from, STYLE_MSG.change); }
+            return new Response("ok");
+          }
           if (bid.indexOf("bg:") === 0) {                                              // v107 - backdrop choice: ack, record, then hand her the plate prompt (Kendall approved the auto-send, 9 Sep 2026)
             const _bp = bid.split(":"), _pn = _bp[1], _oid = String(_bp[2] || "").toUpperCase();
             let _pack = null; try { _pack = JSON.parse((await env.MEETINGS.get("img_ips_bg_prompts")) || "null"); } catch (e) {}
@@ -2588,8 +2703,14 @@ export default {
             try { const _bs = JSON.parse((await env.MEETINGS.get("bg_picks")) || "{}"); _bs[_pn] = { opt: _oid, name: _opt.name, at: new Date().toISOString() }; await env.MEETINGS.put("bg_picks", JSON.stringify(_bs), { expirationTtl: 30 * 86400 }); } catch (e) {}
             if (env.OPENAI_API_KEY && ctx) {                                                    // v109 - make the picture here; hand the long work to a fresh invocation so the webhook returns now
               await waSend(env, from, "Good pick - " + _opt.name + " for post " + _pn + ". Making your picture now, give me a minute.");
-              const _ru = url.origin + "/plate_run?key=" + encodeURIComponent(env.READ_KEY) + "&post=" + encodeURIComponent(_pn) + "&opt=" + encodeURIComponent(_oid) + "&send=1&to=" + encodeURIComponent(from);
-              ctx.waitUntil(fetch(_ru, { headers: { "User-Agent": "azimuth-plate/1.0" } }).catch(() => {}));
+              const _pp = _post, _oo = _opt, _tt = from;                                          // v109.3 - a Worker cannot fetch its own address; do the work here, after the response, under waitUntil
+              ctx.waitUntil((async () => {
+                let _r = null; try { _r = await plateRun(env, _pp, _oo, _tt, url.origin, true); } catch (e) { _r = { err: String((e && e.message) || e) }; }
+                if (!_r || (!_r.square && !_r.story)) {                                      // the picture failed: she still gets the prompt, and Kendall's log gets the reason
+                  try { await env.MEETINGS.put("plate_last_fail", JSON.stringify({ at: new Date().toISOString(), post: _pn, opt: _oid, err: _r && _r.err }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+                  try { await waSend(env, _tt, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, _tt, _oo.prompt_only || _oo.prompt_message || bgPromptBlock({ hook: _pp.hook, figure: _pp.figure, source: _pp.source }, _oo.place)); if (_oo.tail) await waSend(env, _tt, _oo.tail); } catch (e) {}
+                }
+              })());
               return new Response("ok");
             }
             await waSend(env, from, "Good pick - " + _opt.name + " for post " + _pn + ". Paste the next message, whole, into ChatGPT (make an image).");
@@ -2703,6 +2824,74 @@ export default {
             } catch (e) { await waSend(env, from, "⚠ Couldn't read that image — send it again."); }
             return new Response("ok");
           }
+          {                                                                            // v112 - the walk-through takes any photo for its current step
+            const _sf = await styleGet(env);
+            if (_sf && _sf.step === "colours_wait") {                                       // v112.2 - a picture of her colours
+              try { const _cm = await waFetchMedia(env, msg.image.id); await styleKeep(env, _cm.bytes, _cm.mime, "colours", _cap); } catch (e) {}
+              _sf.step = "reading"; _sf.colours = "sent"; await styleSet(env, _sf);
+              await waSend(env, from, "Got them, saved with your style."); await waSend(env, from, STYLE_MSG.reading);
+              return new Response("ok");
+            }
+            if (_sf && (_sf.step === "reading" || _sf.step === "card" || _sf.step === "locked" || _sf.step === "colours" || _sf.step === "change")) {   // v112.5 - after the photo step, photos still join her gallery
+              try {
+                const _lm = await waFetchMedia(env, msg.image.id);
+                if (_lm.bytes.byteLength > 4 * 1024 * 1024) { await waSend(env, from, "That one's a bit large - try a smaller copy."); return new Response("ok"); }
+                await styleKeep(env, _lm.bytes, _lm.mime, "me", _cap); _sf.me = (_sf.me || 0) + 1;
+                const _mn = "style_me_" + String(_sf.me).padStart(2, "0");
+                await env.MEETINGS.put("img_" + _mn, _lm.bytes); await env.MEETINGS.put("img_ct_" + _mn, _lm.mime || "image/jpeg");
+                await env.MEETINGS.put("img_style_me", _lm.bytes); await env.MEETINGS.put("img_ct_style_me", _lm.mime || "image/jpeg");
+                await styleSet(env, _sf);
+                await waSend(env, from, (_sf.me === 1 ? "1 photo of you saved" : _sf.me + " photos of you saved") + " to your style file. It will be in your pictures within the hour.");
+              } catch (e) { await waSend(env, from, "Couldn't read that one - send it again."); }
+              return new Response("ok");
+            }
+            if (_sf && (_sf.step === "own" || _sf.step === "admired" || _sf.step === "me")) {
+              try {
+                const _fm = await waFetchMedia(env, msg.image.id);
+                if (_fm.bytes.byteLength > 4 * 1024 * 1024) { await waSend(env, from, "That one's a bit large - try a smaller copy."); return new Response("ok"); }
+                if (_sf.step === "own") {
+                  await styleKeep(env, _fm.bytes, _fm.mime, "own", _cap); _sf.own = (_sf.own || 0) + 1;
+                  if (_sf.own >= 3) { _sf.step = "admired"; await styleSet(env, _sf); await waSend(env, from, _sf.own + " of 3, saved to your style file. Thank you."); await waSend(env, from, STYLE_MSG.admired); }
+                  else { await styleSet(env, _sf); await waSend(env, from, _sf.own + " of 3, saved to your style file."); }
+                } else if (_sf.step === "admired") {
+                  await styleKeep(env, _fm.bytes, _fm.mime, "admired", _cap); _sf.admired = (_sf.admired || 0) + 1;
+                  if (_sf.admired >= 3) { _sf.step = "me"; await styleSet(env, _sf); await waSend(env, from, "Got it, that's 3, all in your style file."); await waSend(env, from, STYLE_MSG.me); }
+                  else { await styleSet(env, _sf); await waSendButtons(env, from, "Got it, " + _sf.admired + ", saved to your style file. Send another, or tap next.", [{ id: "st:next", title: "Next" }]); }
+                } else {                                                                     // v112.4 - a gallery of her, not one photo
+                  await styleKeep(env, _fm.bytes, _fm.mime, "me", _cap); _sf.me = (_sf.me || 0) + 1;
+                  const _mn = "style_me_" + String(_sf.me).padStart(2, "0");
+                  await env.MEETINGS.put("img_" + _mn, _fm.bytes); await env.MEETINGS.put("img_ct_" + _mn, _fm.mime || "image/jpeg");
+                  await env.MEETINGS.put("img_style_me", _fm.bytes); await env.MEETINGS.put("img_ct_style_me", _fm.mime || "image/jpeg");
+                  await styleSet(env, _sf);
+                  await waSendButtons(env, from, (_sf.me === 1 ? "1 photo of you saved." : _sf.me + " photos of you saved.") + " Send more, or tap Done.", [{ id: "st:me_done", title: "Done" }]);
+                }
+              } catch (e) { await waSend(env, from, "Couldn't read that one - send it again."); }
+              return new Response("ok");
+            }
+          }
+          if (/^(?:for\s+)?(?:my\s+)?(?:style|look)\b|^(?:i\s+)?like\s+this\b/i.test(_cap)) {   // v111 - her style pile: what she likes, in her own words "style"
+            try {
+              const _sr = await waFetchMedia(env, msg.image.id);
+              if (_sr.bytes.byteLength > 4 * 1024 * 1024) { await waSend(env, from, "That one's a bit large to read - try a smaller copy."); return new Response("ok"); }
+              let _pile = []; try { _pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {}
+              const _nm = "style_ref_" + String(_pile.length + 1).padStart(2, "0");
+              await env.MEETINGS.put("img_" + _nm, _sr.bytes); await env.MEETINGS.put("img_ct_" + _nm, _sr.mime || "image/jpeg");
+              _pile.push({ key: _nm, caption: _cap.slice(0, 120), at: new Date().toISOString() });
+              await env.MEETINGS.put("style_refs", JSON.stringify(_pile));
+              await waSend(env, from, "Got it - that's in your style pile, " + _pile.length + " so far. Send more the same way, captioned \"style\".");
+            } catch (e) { await waSend(env, from, "Couldn't read that one - send it again."); }
+            return new Response("ok");
+          }
+          if (/^(?:use\s+)?(?:this\s+)?(?:my\s+)?photo(?:\s+of\s+me)?$/i.test(_cap)) {           // v111 - the photo of herself she wants used in pictures
+            try {
+              const _me = await waFetchMedia(env, msg.image.id);
+              if (_me.bytes.byteLength > 4 * 1024 * 1024) { await waSend(env, from, "That one's a bit large - try a smaller copy."); return new Response("ok"); }
+              const _n = await styleKeep(env, _me.bytes, _me.mime, "me", _cap);
+              await env.MEETINGS.put("img_style_me", _me.bytes); await env.MEETINGS.put("img_ct_style_me", _me.mime || "image/jpeg");
+              await waSend(env, from, "Got it - added to your photos, saved to your style file. It will be in your pictures within the hour.");
+            } catch (e) { await waSend(env, from, "Couldn't read that one - send it again."); }
+            return new Response("ok");
+          }
           if (isBgCaption(_cap)) {
             try {
               const _img = await waFetchMedia(env, msg.image.id);          // {bytes, mime}
@@ -2739,6 +2928,49 @@ export default {
         if (msg.type === "text") text = (msg.text && msg.text.body || "").trim();
         else if (msg.type === "audio") { try { text = await waTranscribe(env, msg.audio.id); } catch (e) { await waSend(env, from, "⚠ Couldn't read that voice note — try text."); return new Response("ok"); } }
         if (!text) { await waSend(env, from, "Send a meeting or task (text or voice) and I'll file it. \u{1F9ED}"); return new Response("ok"); }
+        {                                                                            // v112 - her one-line change to the style card
+          const _sf = await styleGet(env);
+          if (_sf && (_sf.step === "own" || _sf.step === "admired") && msg.type === "text" && /https?:\/\/\S+/i.test(text)) {   // v112.1 - a link counts too
+            const _u = (text.match(/https?:\/\/\S+/i) || [""])[0].slice(0, 300);
+            let _pile = []; try { _pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {}
+            _pile.push({ key: "", kind: _sf.step === "own" ? "own_link" : "admired_link", url: _u, caption: text.replace(_u, "").trim().slice(0, 120), at: new Date().toISOString() });
+            await env.MEETINGS.put("style_refs", JSON.stringify(_pile));
+            const _isIg = /instagram\.com|tiktok\.com/i.test(_u);
+            if (_sf.step === "own") {
+              _sf.own = (_sf.own || 0) + 1;
+              if (_sf.own >= 3) { _sf.step = "admired"; await styleSet(env, _sf); await waSend(env, from, "Got the link, " + _sf.own + " of 3, saved to your style file. Thank you."); await waSend(env, from, STYLE_MSG.admired); }
+              else { await styleSet(env, _sf); await waSend(env, from, "Got the link, " + _sf.own + " of 3, saved to your style file."); }
+            } else {
+              _sf.admired = (_sf.admired || 0) + 1;
+              if (_sf.admired >= 3) { _sf.step = "me"; await styleSet(env, _sf); await waSend(env, from, "Got the link, that's 3, all in your style file."); await waSend(env, from, STYLE_MSG.me); }
+              else { await styleSet(env, _sf); await waSendButtons(env, from, "Got the " + (_isIg ? "link" : "website") + ", " + _sf.admired + ", saved to your style file. Send another, or tap next.", [{ id: "st:next", title: "Next" }]); }
+            }
+            return new Response("ok");
+          }
+          if (_sf && _sf.step && _sf.step !== "own" && _sf.step !== "admired" && msg.type === "text" && /https?:\/\/\S+/i.test(text)) {   // v112.3 - a link later in the flow still lands in her style file
+            const _u = (text.match(/https?:\/\/\S+/i) || [""])[0].slice(0, 300);
+            let _pile = []; try { _pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {}
+            _pile.push({ key: "", kind: "own_link", url: _u, caption: text.replace(_u, "").trim().slice(0, 120), at: new Date().toISOString() });
+            await env.MEETINGS.put("style_refs", JSON.stringify(_pile));
+            const _n = _pile.filter(r => r.kind === "own_link").length;
+            await waSend(env, from, "Got the link, saved to your style file" + (_n > 1 ? " (" + _n + " links so far)" : "") + ".");
+            return new Response("ok");
+          }
+          if (_sf && _sf.step === "colours_wait" && msg.type === "text") {                 // v112.2 - her colours, in words
+            let _notes = []; try { _notes = JSON.parse((await env.MEETINGS.get("style_notes")) || "[]"); } catch (e) {}
+            _notes.push({ at: new Date().toISOString(), kind: "colours", text: text.slice(0, 500) }); await env.MEETINGS.put("style_notes", JSON.stringify(_notes), { expirationTtl: 30 * 86400 });
+            _sf.step = "reading"; _sf.colours = "sent"; await styleSet(env, _sf);
+            await waSend(env, from, "Got them, saved with your style."); await waSend(env, from, STYLE_MSG.reading);
+            return new Response("ok");
+          }
+          if (_sf && _sf.step === "change" && msg.type === "text") {
+            let _notes = []; try { _notes = JSON.parse((await env.MEETINGS.get("style_notes")) || "[]"); } catch (e) {}
+            _notes.push({ at: new Date().toISOString(), text: text.slice(0, 500) }); await env.MEETINGS.put("style_notes", JSON.stringify(_notes), { expirationTtl: 30 * 86400 });
+            _sf.step = "reading"; await styleSet(env, _sf);
+            await waSend(env, from, "Got it. Give me a minute.");
+            return new Response("ok");
+          }
+        }
         {                                                      // v35 — relationship-memory intents (routed BEFORE recall)
           let pm = text.match(/^(?:merge)\s+(.{1,60})\s+into\s+(.{1,60})$/i);
           if (pm) { await env.MEETINGS.put("palias_" + pslug(pm[1].trim()), pslug(pm[2].trim())); await peopleReindex(env); await waSend(env, from, "🔗 Merged “" + pm[1].trim() + "” into “" + pm[2].trim() + "”."); return new Response("ok"); }
@@ -4301,7 +4533,8 @@ function figureParts(fig) {
 function cardDate() { const d = new Date(Date.now() + 4 * 3600 * 1000); return d.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()] + " " + d.getUTCFullYear(); }
 function angleCardSvg(angle, areaName, imgUrl, n, opts) {
   opts = opts || {}; const W = 1080, story = opts.size === "story", H = story ? 1920 : 1080; const t = tplOf(angle, opts.t); const C = CARD_C;
-  const hook = String(angle.hook || "").replace(/\s+/g, " ").trim().slice(0, 220);
+  const hookMax = t === 5 ? 340 : 220; let hook = String(angle.hook || "").replace(/\s+/g, " ").trim();   // v109.4 - never cut a hook mid-word: cut at the last space and say so
+  if (hook.length > hookMax) { const cut = hook.slice(0, hookMax); const sp = cut.lastIndexOf(" "); hook = (sp > hookMax * 0.6 ? cut.slice(0, sp) : cut).replace(/[\s,;:—–-]+$/, "") + "…"; }
   const src = String(angle.source || "").replace(/\s+/g, " ").trim();
   const fp = figureParts(angle.figure); const area = areaName ? String(areaName) : "";
   // what the big type shows: the number when there is one, else the phrase (a long phrase is wrapped small, never blown up)
@@ -4373,7 +4606,7 @@ function angleCardSvg(angle, areaName, imgUrl, n, opts) {
       srcLines(H - 100, C.muteL) + foot(H - 52, C.beige, C.gold);
   } else if (t === 5) {                                                            // v109 - EDITORIAL: her layout. Type in a left column on a cream wash that fades into the photograph on the right.
     const colW = Math.round(W * 0.45), x0 = 64;
-    const hk = fitLines(hook, colW + 24, story ? 54 : 46, story ? 7 : 5, 0.54, 30);
+    const hk = fitLines(hook, colW + 24, story ? 54 : 46, story ? 11 : 8, 0.54, 30);   // v109.2 - feed hooks run long; more lines before the ellipsis
     const bigTxt = fp.kind === "num" ? fp.num : fp.text, unitTxt = fp.kind === "num" ? String(fp.unit || "").toUpperCase().slice(0, 36) : "";   // v109.1 - her card: the number big, the unit as a spaced label under it
     const ffz = fitOne(bigTxt, colW + 60, story ? 200 : 150, 0.58, 72);
     const my = story ? 150 : 120, ky = my + 38, fy = ky + 44 + ffz, uy = unitTxt ? fy + 40 : fy, hy = uy + 44 + hk.fz;
@@ -4388,6 +4621,12 @@ function angleCardSvg(angle, areaName, imgUrl, n, opts) {
       svgLines(hk.lines, x0, hy, hk.fz, C.green, F_SANS, 600, 1.12) +
       `<rect x="${x0}" y="${endY + 34}" width="${Math.round(colW / 3)}" height="3" fill="${C.gold}"/>` +
       svgLines(srcL, x0, endY + 34 + 44, 20, C.green, F_MONO, 700, 1.35, ' letter-spacing="1.5"') +
+      (opts.me ? (() => {                                                          // v113 - her cut-out on the right, feet on the ground line
+        const mh = Math.round(H * (story ? 0.62 : 0.66)), mw = Math.round(mh * 0.62), gy = H - (story ? 84 : 100);
+        const mx = Math.round(W * 0.55 + (W * 0.45 - mw) / 2);
+        return `<ellipse cx="${mx + mw / 2}" cy="${gy - 6}" rx="${Math.round(mw * 0.42)}" ry="16" fill="${C.ink}" fill-opacity=".28"/>` +
+          `<image href="${opts.me}" x="${mx}" y="${gy - mh}" width="${mw}" height="${mh}" preserveAspectRatio="xMidYMax meet"/>`;
+      })() : "") +
       foot(H - 52, C.green, C.goldD);
   } else {                                                                         // TICKER - dark plate, mono data strip
     const fy = story ? 700 : (figRest ? 400 : 440); const bf = bigFig(72, fy, story ? 240 : 200, C.gold, ' filter="url(#sh)"'); const hk = fitBox(hook, 936, story ? 66 : 58, (H - 300) - (bf.end + 60), 0.54, 34);
@@ -4522,13 +4761,13 @@ const UNIT_MIX_CSS = '.um{margin-top:10px;border:1px solid var(--line);border-ra
 const UPDATE_SIGNOFF = "\n\n— Black Coffee, curated by Papi";   // v89.3 - every update to her signs off this way (Kendall, 5 Sep 2026)
 let RENDER_LAST_ERR = "";
 const cardKey = (ctxAt, n, size) => "angle_" + String(ctxAt || 0) + "_" + n + (size === "story" ? "_s" : "");   // v105 - "_s" = 1080x1920
-async function angleCardHtml(env, angle, n, origin, size, t, imgOverride) {
+async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl) {
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const area = angleArea(angle, d); let img = imgOverride || null;   // v109 - a made plate wins over the satellite
   if (!img && area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
   if (!img) img = origin + "/img/bg_market";
   const story = size === "story", W = 1080, H = story ? 1920 : 1080;
-  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t });
+  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "" });
   return { area, W, H, html: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413;width:${W}px;height:${H}px;overflow:hidden}svg{display:block}</style></head><body>${svg}</body></html>` };
 }
 // v105 - render HTML to PNG inside the Worker through the Browser Rendering binding. One browser per call; fonts awaited.
@@ -4548,7 +4787,7 @@ async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size, opt
   RENDER_LAST_ERR = ""; size = size === "story" ? "story" : "square";
   const k = opts && opts.key ? opts.key + (size === "story" ? "_s" : "") : cardKey(ctxAt, n, size);   // v109 - a plate card keys by its plate, not the morning brief
   try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: origin + "/img/" + k, area: angleArea(angle, null), size }; } catch (e) {}
-  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img);
+  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me);
   let png = null;
   try {
     if (env.CF_RENDER_TOKEN) {                                                                     // REST API (needs an API token)
@@ -7192,7 +7431,7 @@ function renderArea(latestRaw, name, key) {
 // v109 - PLATE, MADE IN-HOUSE. The image model makes the photograph (no text, right side clear); the card
 // engine sets her words over it in the editorial look; the renderer already on this Worker makes the PNGs.
 let PLATE_LAST_ERR = "";
-const PLATE_CARD_V = "2";   // bump when the editorial look changes, so cached cards re-render
+const PLATE_CARD_V = "6";   // bump when the editorial look changes, so cached cards re-render
 async function platePhoto(env, angle, place, id) {
   PLATE_LAST_ERR = "";
   if (!env.OPENAI_API_KEY) { PLATE_LAST_ERR = "no image key"; return null; }
@@ -7230,7 +7469,17 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
   if (!have || (opt && opt.fresh)) photo = await platePhoto(env, angle, opt.place || "Dubai", id);
   if (!photo) { out.err = PLATE_LAST_ERR; return out; }
   out.photo = origin + "/img/" + photo;
-  const o = { img: out.photo, t: 5, key: photo + "_card" + PLATE_CARD_V };
+  let meUrl = "", meVar = "";                                                     // v113 - with her by default, when a cut-out exists
+  if (!(opt && opt.withMe === false)) {
+    const lightIx = hashStr(String(angle.hook || "") + "|" + String(angle.figure || "")) % 4;   // v115 - the same seed platePhoto used, so her grade matches the plate's light
+    meVar = ["warm", "blue", "day", "soft"][lightIx];
+    try {
+      if (await env.MEETINGS.get("img_style_me_cut_" + meVar, "arrayBuffer")) meUrl = origin + "/img/style_me_cut_" + meVar;
+      else if (await env.MEETINGS.get("img_style_me_cut", "arrayBuffer")) { meUrl = origin + "/img/style_me_cut"; meVar = "base"; }
+    } catch (e) {}
+  }
+  out.withMe = !!meUrl; out.meVariant = meUrl ? meVar : "";
+  const o = { img: out.photo, t: 5, me: meUrl, key: photo + "_card" + PLATE_CARD_V + (meUrl ? "_me" + meVar : "") };
   const sq = await renderAngleCard(env, angle, post.n, origin, 0, null, "square", o);
   const st = await renderAngleCard(env, angle, post.n, origin, 0, null, "story", o);
   out.square = sq && sq.url; out.story = st && st.url; if (!sq && !st) out.err = RENDER_LAST_ERR || "render failed";
@@ -7239,6 +7488,27 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
     if (st) await waSendImage(env, to, st.url, "Same picture at 1080\u00d71920 for Stories.");
   }
   return out;
+}
+
+// v112 - STYLE WALK-THROUGH. Short prompts, one step at a time. She just sends pictures; the step decides what they are.
+const STYLE_MSG = {
+  own: "Let's set your style, so everything I make looks like you.\n\nFirst: links to 3 of your own posts you're proud of. Open the post, copy its link, paste it here. One at a time.",
+  admired: "Now links to 2 or 3 posts from accounts you admire. Same again, one at a time.",
+  me: "Now photos of you that you'd be happy to see in your pictures. Different outfits, different poses, as many as you like, one at a time. Tap Done when you're finished.",
+  colours: "Your colours. Keep the cream, deep green and gold from your posts, or tell me yours?",
+  reading: "Reading them now. Give me a few minutes.",
+  locked: "Locked. From now on everything I make for you follows this.",
+  change: "Tell me what to change, in a line.",
+};
+async function styleGet(env) { try { return JSON.parse((await env.MEETINGS.get("style_flow")) || "null"); } catch (e) { return null; } }
+async function styleSet(env, f) { await env.MEETINGS.put("style_flow", JSON.stringify(f), { expirationTtl: 30 * 86400 }); }
+async function styleKeep(env, bytes, mime, kind, cap) {
+  let pile = []; try { pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {}
+  const nm = "style_ref_" + String(pile.length + 1).padStart(2, "0");
+  await env.MEETINGS.put("img_" + nm, bytes); await env.MEETINGS.put("img_ct_" + nm, mime || "image/jpeg");
+  pile.push({ key: nm, kind, caption: String(cap || "").slice(0, 120), at: new Date().toISOString() });
+  await env.MEETINGS.put("style_refs", JSON.stringify(pile));
+  return pile.length;
 }
 
 function bgPromptBlock(angle, place) {
