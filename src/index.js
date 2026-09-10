@@ -2855,8 +2855,8 @@ export default {
               try {
                 const _lm = await waFetchMedia(env, msg.image.id);
                 if (_lm.bytes.byteLength > 4 * 1024 * 1024) { await waSend(env, from, "That one's a bit large - try a smaller copy."); return new Response("ok"); }
-                await styleKeep(env, _lm.bytes, _lm.mime, "me", _cap); _sf.me = (_sf.me || 0) + 1;
-                const _mn = "style_me_" + String(_sf.me).padStart(2, "0");
+                const _pi2 = await styleKeep(env, _lm.bytes, _lm.mime, "me", _cap); _sf.me = Math.max((_sf.me || 0) + 1, _pi2);
+                const _mn = "style_me_" + String(_pi2).padStart(2, "0");   // v118.1 - same, for photos after the walk-through
                 await env.MEETINGS.put("img_" + _mn, _lm.bytes); await env.MEETINGS.put("img_ct_" + _mn, _lm.mime || "image/jpeg");
                 await env.MEETINGS.put("img_style_me", _lm.bytes); await env.MEETINGS.put("img_ct_style_me", _lm.mime || "image/jpeg");
                 await styleSet(env, _sf);
@@ -2877,8 +2877,8 @@ export default {
                   if (_sf.admired >= 3) { _sf.step = "me"; await styleSet(env, _sf); await waSend(env, from, "Got it, that's 3, all in your style file."); await waSend(env, from, STYLE_MSG.me); }
                   else { await styleSet(env, _sf); await waSendButtons(env, from, "Got it, " + _sf.admired + ", saved to your style file. Send another, or tap next.", [{ id: "st:next", title: "Next" }]); }
                 } else {                                                                     // v112.4 - a gallery of her, not one photo
-                  await styleKeep(env, _fm.bytes, _fm.mime, "me", _cap); _sf.me = (_sf.me || 0) + 1;
-                  const _mn = "style_me_" + String(_sf.me).padStart(2, "0");
+                  const _pi = await styleKeep(env, _fm.bytes, _fm.mime, "me", _cap); _sf.me = Math.max((_sf.me || 0) + 1, _pi);
+                  const _mn = "style_me_" + String(_pi).padStart(2, "0");   // v118.1 - from the pile index; the flow counter goes stale under concurrent sends
                   await env.MEETINGS.put("img_" + _mn, _fm.bytes); await env.MEETINGS.put("img_ct_" + _mn, _fm.mime || "image/jpeg");
                   await env.MEETINGS.put("img_style_me", _fm.bytes); await env.MEETINGS.put("img_ct_style_me", _fm.mime || "image/jpeg");
                   await styleSet(env, _sf);
@@ -5084,8 +5084,8 @@ const MAP_CHROME_JS = ''
   + '  out.sort(function(a,b){return a.v-b.v});return out}'
   + 'function drawHomes(){var src=map&&map.getSource("homes");if(!HB.on){if(src)src.setData({type:"FeatureCollection",features:[]});return}var m=homeMatches();var mPins=window.__twinDistrict?m.filter(function(x){return x.it.d===window.__twinDistrict}):m;'
   + '  if(src)src.setData({type:"FeatureCollection",features:mPins.map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x.it.lon,x.it.lat]},properties:{p:x.it.p,lab:x.it.n+" \u00b7 "+fmtAed(x.v)}}})});'
-  + '  var byD={};m.forEach(function(x){byD[x.it.d]=(byD[x.it.d]||0)+1});var top=Object.keys(byD).sort(function(a,b){return byD[b]-byD[a]}).slice(0,2).map(function(d){return dName(d)+" "+byD[d]}).join(" \u00b7 ");'
-  + '  var dsl=window.__twinDistrict||CURD;var here=dsl?m.filter(function(x){return x.it.d===dsl}).length:null;document.getElementById("hres").textContent=(HB.live?"developer stock \u00b7 ":"")+(dsl?here+" here \u00b7 "+m.length+" across Dubai":m.length+" developments"+(top?" \u00b7 "+top:""));var lc=document.getElementById("hlivec");if(lc)lc.textContent=PR.filter(function(i){return i.left}).length+" live";'
+  + '  var byD={};m.forEach(function(x){byD[x.it.d]=(byD[x.it.d]||0)+1});var _tk=Object.keys(byD).sort(function(a,b){return byD[b]-byD[a]});var top=_tk.length?"most in "+dName(_tk[0]):"";'
+  + '  var dsl=window.__twinDistrict||CURD;var here=dsl?m.filter(function(x){return x.it.d===dsl}).length:null;document.getElementById("hres").textContent=(HB.live?"developer stock \u00b7 ":"")+(dsl?here+" here \u00b7 "+m.length+" across Dubai":m.length+" across Dubai"+(top?" \u00b7 "+top:""));var lc=document.getElementById("hlivec");if(lc)lc.textContent=PR.filter(function(i){return i.left}).length+" live";'
   + '  var hl=document.getElementById("hlist");if(hl)hl.onclick=function(){listHomes(m)};'
   + '  document.getElementById("hbv").textContent="from "+fmtAed(stepAed(Math.min(HB.lo,HB.hi)))+" to "+fmtAed(stepAed(Math.max(HB.lo,HB.hi))).replace("AED ","");document.getElementById("hbdv").textContent="from "+bedsLabel(Math.min(HB.blo,HB.bhi))+" to "+bedsLabel(Math.max(HB.blo,HB.bhi));'
   + '  var bp=document.getElementById("bandp"),bb=document.getElementById("bandb");if(bp){var a=Math.min(HB.lo,HB.hi)/60*100,b=Math.max(HB.lo,HB.hi)/60*100;bp.style.left=a+"%";bp.style.width=(b-a)+"%"}if(bb){var c=Math.min(HB.blo,HB.bhi)/6*100,d=Math.max(HB.blo,HB.bhi)/6*100;bb.style.left=c+"%";bb.style.width=(d-c)+"%"}}'
