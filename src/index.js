@@ -2984,9 +2984,9 @@ export default {
           if (_sf && _sf.step && _sf.step !== "own" && _sf.step !== "admired" && msg.type === "text" && /https?:\/\/\S+/i.test(text)) {   // v112.3 - a link later in the flow still lands in her style file
             const _u = (text.match(/https?:\/\/\S+/i) || [""])[0].slice(0, 300);
             let _pile = []; try { _pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {}
-            _pile.push({ key: "", kind: "own_link", url: _u, caption: text.replace(_u, "").trim().slice(0, 120), at: new Date().toISOString() });
+            _pile.push({ key: "", kind: "link", url: _u, caption: text.replace(_u, "").trim().slice(0, 120), at: new Date().toISOString() });   // v118.2 - neutral: whose post it is comes from the post itself, not from when she sent it
             await env.MEETINGS.put("style_refs", JSON.stringify(_pile));
-            const _n = _pile.filter(r => r.kind === "own_link").length;
+            const _n = _pile.filter(r => String(r.kind || "").indexOf("link") >= 0).length;
             await waSend(env, from, "Got the link, saved to your style file" + (_n > 1 ? " (" + _n + " links so far)" : "") + ".");
             return new Response("ok");
           }
