@@ -3674,9 +3674,16 @@ async function draftFromAngle(env, to, kind, n) {
     "\nUse ONLY the figures in the brief. Never claim capital appreciation or any return the register does not show.") : "";
   const dna = await dnaGet(env);
   const user2 = "DRAFT FROM ANGLE " + n + " of this brief.\n\nTHE BRIEF:\n" + ctx.brief + "\n\nTHE FIGURES (the only numbers you may use):\n" + ctx.data +
-    (dna ? "\n\nHER DNA PROFILE (learned from her own choices — write in HER style, favour HER framings):\n" + dna : "");
+    "\n\n" + (await styleVoice(env)) +
+    (dna ? "\n\nWHAT SHE FAVOURS (subjects and formats only, never style):\n" + (await dnaSubjects(env)) : "");
   let out = null;
   try { out = await claudeText(env, sys + campRules, user2, null, 900); } catch (e) {}
+  if (out && VOICE_BAN.test(out)) {                                                // v117 - the draft slipped into the old jargon: one repair pass in her voice
+    try {
+      const _fix = await claudeText(env, "You rewrite a social post for a Dubai property broker into HER VOICE. Keep every figure, source, structure and section label exactly as they are; change only the wording that breaks her voice. Return the rewritten post only, no preamble. " + (await styleVoice(env)), out, null, 900);
+      if (_fix && !VOICE_BAN.test(_fix)) out = _fix.trim();
+    } catch (e) {}
+  }
   if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
   try { const _t = { li: "linkedin", car: "carousel", art: "article", ig: "instagram", pod: "podcast", vid: "seedance_prompt", q: "questions" }[kind] || kind;
     await bridgeRecord(env, { id: "angle-" + String(n).padStart(2, "0"), type: _t, set: "ondemand", topic_family: (_ang && (_ang.family || famOf(_ang))) || "", campaign: _ang && _ang.campaign ? "the_valley" : "", hook: _ang ? _ang.hook : "", figure: _ang ? _ang.figure : "", body: out, source_line: _ang ? "Source: " + _ang.source : "", what_not_to_claim: guardLine(_ang || {}), campaign_rules: _ang && _ang.campaign ? "#ThisIsTheValley - @EmaarInsider - 60-90 s - Emaar visuals only" : "", image_prompt: _ang ? bgPromptBlock(_ang).replace(/^[\s\S]*?```/, "").replace(/```[\s\S]*$/, "").trim() : "", timing: kind === "pod" ? "60-90 s / 140-210 words at 142 wpm" : kind === "ig" ? "30-45 s / 70-105 words" : kind === "vid" ? "20-25 s" : "" }); } catch (e) {}
@@ -4133,6 +4140,17 @@ async function dnaSignal(env, type, detail) {
 }
 
 // v116 - HER VOICE. From the style card she locked (10 Sep 2026). Overrides every other note about style.
+// v117 - her colours, from storage. Change style_palette and every picture follows, no deploy.
+async function stylePalette(env) {
+  try {
+    const p = JSON.parse((await env.MEETINGS.get("style_palette")) || "null");
+    if (p && typeof p === "object") {
+      const ok = {}; for (const k of ["beige", "beige2", "gold", "goldD", "green", "greenD", "ink", "mute", "muteL"]) if (typeof p[k] === "string" && /^#[0-9a-f]{6}$/i.test(p[k])) ok[k] = p[k];
+      return ok;
+    }
+  } catch (e) {}
+  return {};
+}
 async function styleVoice(env) {
   let card = null; try { card = JSON.parse((await env.MEETINGS.get("style_card")) || "null"); } catch (e) {}
   const locked = card && card.locked_at ? String(card.locked_at).slice(0, 10) : "";
@@ -4565,7 +4583,7 @@ function figureParts(fig) {
 }
 function cardDate() { const d = new Date(Date.now() + 4 * 3600 * 1000); return d.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()] + " " + d.getUTCFullYear(); }
 function angleCardSvg(angle, areaName, imgUrl, n, opts) {
-  opts = opts || {}; const W = 1080, story = opts.size === "story", H = story ? 1920 : 1080; const t = tplOf(angle, opts.t); const C = CARD_C;
+  opts = opts || {}; const W = 1080, story = opts.size === "story", H = story ? 1920 : 1080; const t = tplOf(angle, opts.t); const C = Object.assign({}, CARD_C, opts.palette || {});   // v117 - her palette from storage wins over the built-in
   const hookMax = t === 5 ? 340 : 220; let hook = String(angle.hook || "").replace(/\s+/g, " ").trim();   // v109.4 - never cut a hook mid-word: cut at the last space and say so
   if (hook.length > hookMax) { const cut = hook.slice(0, hookMax); const sp = cut.lastIndexOf(" "); hook = (sp > hookMax * 0.6 ? cut.slice(0, sp) : cut).replace(/[\s,;:—–-]+$/, "") + "…"; }
   const src = String(angle.source || "").replace(/\s+/g, " ").trim();
@@ -4800,7 +4818,7 @@ async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl)
   if (!img && area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
   if (!img) img = origin + "/img/bg_market";
   const story = size === "story", W = 1080, H = story ? 1920 : 1080;
-  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "" });
+  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "", palette: await stylePalette(env) });
   return { area, W, H, html: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413;width:${W}px;height:${H}px;overflow:hidden}svg{display:block}</style></head><body>${svg}</body></html>` };
 }
 // v105 - render HTML to PNG inside the Worker through the Browser Rendering binding. One browser per call; fonts awaited.
@@ -7544,7 +7562,8 @@ async function styleKeep(env, bytes, mime, kind, cap) {
   return pile.length;
 }
 
-function bgPromptBlock(angle, place) {
+function bgPromptBlock(angle, place, pal) {
+  const PC = Object.assign({ beige: "#F0DECC", gold: "#A88448", green: "#003C1E", ink: "#00120C" }, pal || {});
   let H = String(angle.hook || "").replace(/"/g, "'").replace(/\s+/g, " ").trim();
   if (H.length > 120) {                                                                          // image models garble long lines: cut at the last strong break, else the last space
     const cut = H.slice(0, 120); let at = -1; for (const m of cut.matchAll(/[\u2014\u2013;:.]/g)) if (m.index >= 40) at = m.index;
@@ -7569,10 +7588,10 @@ function bgPromptBlock(angle, place) {
   const withText = !!(F || H);
   const strings = ['"THE DIGEST"'].concat(F ? ['"' + F + '"'] : [], H ? ['"' + H + '"'] : [], S ? ['"' + S + '"'] : []).join(", ");
   const COL = look.layout === 0
-    ? "Beneath the masthead, the figure \"" + F + "\" set VERY LARGE in bronze gold #A88448, heavy condensed sans-serif, filling the upper column and allowed to run two lines if it needs to. Directly under it the headline \"" + H + "\" in deep green #003C1E, medium-weight sans, three or four short lines."
+    ? "Beneath the masthead, the figure \"" + F + "\" set VERY LARGE in bronze gold " + PC.gold + ", heavy condensed sans-serif, filling the upper column and allowed to run two lines if it needs to. Directly under it the headline \"" + H + "\" in deep green " + PC.green + ", medium-weight sans, three or four short lines."
     : look.layout === 1
-    ? "Beneath the masthead, the figure \"" + F + "\" set VERY LARGE in deep green #003C1E as a high-contrast serif, the kind used on a magazine cover. Under it a short label in wide letter-spaced capitals taken from the headline. Then the headline \"" + H + "\" in a clean sans in near-black green #00120C, three or four short lines."
-    : "Beneath the masthead, a thin bronze gold #A88448 hairline rule, then a short kicker in wide letter-spaced deep green capitals, then the figure \"" + F + "\" set VERY LARGE in bronze gold #A88448, then the headline \"" + H + "\" in deep green #003C1E, three or four short lines.";
+    ? "Beneath the masthead, the figure \"" + F + "\" set VERY LARGE in deep green " + PC.green + " as a high-contrast serif, the kind used on a magazine cover. Under it a short label in wide letter-spaced capitals taken from the headline. Then the headline \"" + H + "\" in a clean sans in near-black green " + PC.ink + ", three or four short lines."
+    : "Beneath the masthead, a thin bronze gold " + PC.gold + " hairline rule, then a short kicker in wide letter-spaced deep green capitals, then the figure \"" + F + "\" set VERY LARGE in bronze gold " + PC.gold + ", then the headline \"" + H + "\" in deep green " + PC.green + ", three or four short lines.";
   return "\ud83c\udfa8 *" + (withText ? "Cover plate" : "Background plate") + " \u2014 paste this whole block into ChatGPT (make an image)*\n" +
     (withText ? "_The type sits in the LEFT column. The right side is the picture, and the space you drop yourself into._\n\n```"
               : "_No text on this one. The right side is the picture and the space you drop yourself into._\n\n```") +
@@ -7581,14 +7600,14 @@ function bgPromptBlock(angle, place) {
     "PLACE: " + where + ".\n\n" +
     "THE PICTURE: " + look.lens + " " + look.vantage + " Horizon level and roughly a third up the frame. " + look.light + " Natural colour, no filter, no HDR crunch, no vignette.\n\n" +
     "COMPOSITION \u2014 this matters most. Two zones, split about 45 / 55.\n" +
-    "LEFT COLUMN, about 45% of the width: a soft cream wash in #F0DECC laid over the photograph, carrying all of the text. It must dissolve into the picture across a wide, soft gradient \u2014 never a hard edge, never a rectangle, never a panel with a border or a drop shadow.\n" +
+    "LEFT COLUMN, about 45% of the width: a soft cream wash in " + PC.beige + " laid over the photograph, carrying all of the text. It must dissolve into the picture across a wide, soft gradient \u2014 never a hard edge, never a rectangle, never a panel with a border or a drop shadow.\n" +
     "RIGHT SIDE, about 55%: the photograph itself, clean and uncluttered, with the real subject of the place sitting there. Keep the lower right open and free of clutter \u2014 that is where a standing figure is composited later, feet on the ground line.\n\n" +
     "ABSOLUTELY NO PEOPLE anywhere in the frame \u2014 no figures, no silhouettes, no crowds, no people in windows or in the far distance. No animals. No logos, no brand names, no watermarks, no signage of any kind.\n\n" +
     (withText ?
-      "TEXT \u2014 all of it inside the LEFT COLUMN, none of it crossing into the right side. Across the top of the column, the masthead \"THE DIGEST\" in deep green #003C1E, heavy sans-serif capitals with wide letter-spacing, running the full width of the column. " + COL + " Beneath the headline a two-pixel hairline rule in bronze gold #A88448, about a third of the column wide. Under the rule the source line \"" + S + "\" in deep green #003C1E, small bold capitals, two lines at most.\n" +
+      "TEXT \u2014 all of it inside the LEFT COLUMN, none of it crossing into the right side. Across the top of the column, the masthead \"THE DIGEST\" in deep green " + PC.green + ", heavy sans-serif capitals with wide letter-spacing, running the full width of the column. " + COL + " Beneath the headline a two-pixel hairline rule in bronze gold " + PC.gold + ", about a third of the column wide. Under the rule the source line \"" + S + "\" in deep green " + PC.green + ", small bold capitals, two lines at most.\n" +
     "Render " + strings + " verbatim, exactly once each, perfectly legible \u2014 no extra characters, no duplicated or garbled text, no invented words or numbers.\n\n"
       : "NO TEXT ANYWHERE IN THE FRAME \u2014 no text, no captions, no numbers, no masthead, no lettering of any kind. The LEFT COLUMN still carries the soft cream wash, left empty and ready for type to be set over it later.\n\n") +
-    "TYPE RULES: every label, kicker and source line is set in wide letter-spaced capitals. The column is flush left, never centred. Body text is a clean sans in near-black green #00120C with generous leading. Nothing italic, no boxes or cards around the type, no drop shadows behind the type, no gradients anywhere except the single cream wash.\n\n" +
+    "TYPE RULES: every label, kicker and source line is set in wide letter-spaced capitals. The column is flush left, never centred. Body text is a clean sans in near-black green " + PC.ink + " with generous leading. Nothing italic, no boxes or cards around the type, no drop shadows behind the type, no gradients anywhere except the single cream wash.\n\n" +
     (withText ? "" : "CONTEXT (do not render any of this as text \u2014 it is only so you choose the right place and mood): the post says \"" + H + "\", the figure quoted is " + F + ", source " + S + ".\n\n") +
     "NEGATIVE: no CGI or video-game look, no plastic sheen, no over-saturated sky, no lens flare, no tilt-shift, no fisheye, no illustration or painting style, no collage, no floating objects, no people." +
     "```\n\n" +

@@ -2,7 +2,7 @@
 // Pulls bgPromptBlock straight out of src/index.js and checks both branches.
 import { readFileSync } from "node:fs";
 const src = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-const a = src.indexOf("function bgPromptBlock(angle, place) {");
+const a = src.indexOf("function bgPromptBlock(angle, place, pal) {");   // v117: takes her palette
 const b = src.indexOf("\nfunction visualPromptBlock(angle) {");
 const h0 = src.indexOf("function hashStr("); const h1 = src.indexOf("\n", h0);   // v105: the prompt seeds its look with hashStr
 const bgPromptBlock = new Function(src.slice(h0, h1) + "\n" + src.slice(a, b) + "\nreturn bgPromptBlock;")();
