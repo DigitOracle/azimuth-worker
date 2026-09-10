@@ -1585,6 +1585,62 @@ async function handleCallback(env, cbq) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url); const CHAT = env.TELEGRAM_CHAT_ID;
+    // v110.1 - HOISTED (10 Sep 2026). Sitting lower down, this never matched: the request
+    // fell through to the Telegram webhook secret check at the foot of the handler and came
+    // back "unauthorized" for every path. Same trap the header comment already records.
+    if (url.pathname === "/genimg" && request.method === "POST") {   // v110 (Kendall, 10 Sep 2026) - generic prompt -> image. The podcast word plates were being made by hand in a browser and downloaded; this makes them here. Reuses the v109 store, so they serve from /img/<name> like everything else.
+      // Its OWN key, not READ_KEY. READ_KEY is write-only on Cloudflare and its value is no longer held anywhere; rotating it would have broken every existing keyed link (board, health, group registry). A separate secret leaves all of that untouched.
+      const _gk = env.GENIMG_KEY || env.READ_KEY;
+      if (!_gk || url.searchParams.get("key") !== _gk) return new Response("unauthorized", { status: 401 });
+      const _jr = (o, st) => new Response(JSON.stringify(o, null, 1), { status: st || 200, headers: { "Content-Type": "application/json" } });
+      if (!env.OPENAI_API_KEY) return _jr({ ok: false, err: "no image key on this env" }, 500);
+      let _gb = null; try { _gb = await request.json(); } catch (e) {}
+      const _gp = _gb && String(_gb.prompt || "").trim();
+      if (!_gp) return _jr({ ok: false, err: "no prompt in body" }, 400);
+      // gpt-image-1 offers 1024x1024, 1024x1536 (2:3) and 1536x1024 only - there is NO 9:16.
+      // Portrait comes back 2:3 and the caller crops or pads it to 9:16.
+      const _gs = ["1024x1024", "1024x1536", "1536x1024"].indexOf(String(_gb.size || "")) >= 0 ? String(_gb.size) : "1024x1536";
+      const _gq = ["low", "medium", "high"].indexOf(String(_gb.quality || "")) >= 0 ? String(_gb.quality) : "high";
+      const _gn = "gen_" + (String(_gb.name || "").replace(/[^a-z0-9_]/gi, "").slice(0, 34) || String(Date.now()));
+      try {
+        const _gr = await fetch("https://api.openai.com/v1/images/generations", { method: "POST",
+          headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "gpt-image-1", prompt: _gp, size: _gs, quality: _gq, n: 1 }) });
+        if (!_gr.ok) return _jr({ ok: false, err: "image api " + _gr.status + " " + (await _gr.text()).slice(0, 300) }, 502);
+        const _gj = await _gr.json(); const _g64 = _gj && _gj.data && _gj.data[0] && _gj.data[0].b64_json;
+        if (!_g64) return _jr({ ok: false, err: "image api returned no image" }, 502);
+        const _gbin = Uint8Array.from(atob(_g64), c => c.charCodeAt(0));
+        if (_gbin.byteLength < 20000) return _jr({ ok: false, err: "image too small (" + _gbin.byteLength + " bytes)" }, 502);
+        await env.MEETINGS.put("img_" + _gn, _gbin.buffer, { expirationTtl: 14 * 86400 });
+        await env.MEETINGS.put("img_ct_" + _gn, "image/png", { expirationTtl: 14 * 86400 });
+        return _jr({ ok: true, name: _gn, size: _gs, quality: _gq, bytes: _gbin.byteLength, url: url.origin + "/img/" + _gn });
+      } catch (e) { return _jr({ ok: false, err: "exception: " + String((e && e.message) || e).slice(0, 200) }, 500); }
+    }
+    if (url.pathname === "/plate_gen_me") {                 // v114 - TEST: generate her into the plate from her photo (image edit). Returns a URL, never sends.
+      if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      if (!env.OPENAI_API_KEY) return new Response("no image key", { status: 400 });
+      const _id = "ips_" + String(url.searchParams.get("post") || "") + "_" + String(url.searchParams.get("opt") || "a").toLowerCase();
+      const _pn = "plate_" + _id.replace(/[^a-z0-9_]/gi, "").slice(0, 34);
+      const _plate = await env.MEETINGS.get("img_" + _pn, "arrayBuffer"); const _me = await env.MEETINGS.get("img_style_me", "arrayBuffer");
+      if (!_plate || !_me) return new Response("need a stored plate and her photo", { status: 404 });
+      const _meCt = (await env.MEETINGS.get("img_ct_style_me")) || "image/jpeg";
+      const fd = new FormData();
+      fd.append("model", "gpt-image-1");
+      fd.append("image[]", new Blob([_plate], { type: "image/png" }), "plate.png");
+      fd.append("image[]", new Blob([_me], { type: _meCt }), "person.jpg");
+      fd.append("size", "1024x1536");
+      fd.append("quality", "medium");
+      fd.append("prompt", "Edit the FIRST image (the scene) by adding the woman from the SECOND image into it. Place her standing in the RIGHT half of the scene, full length, feet on the ground line near the bottom, facing the camera, exactly as she appears in the second image: the same face, the same skin tone, the same hair, the same rust-orange suit with shorts and black heels, the same pose with hands clasped. Match the light of the scene on her, with a soft natural shadow at her feet. Keep the LEFT 45% of the scene exactly as it is, empty and calm. Do not add any text, lettering, logos or other people. Photorealistic, natural colour, no plastic skin, no smoothing of her features.");
+      let out = null, err = "";
+      try {
+        const r = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY }, body: fd });
+        if (!r.ok) err = "edit " + r.status + " " + (await r.text()).slice(0, 200);
+        else { const j = await r.json(); const b64 = j && j.data && j.data[0] && j.data[0].b64_json; if (b64) out = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); else err = "no image"; }
+      } catch (e) { err = "exception " + String((e && e.message) || e).slice(0, 120); }
+      if (!out) return new Response(JSON.stringify({ err }), { status: 502, headers: { "Content-Type": "application/json" } });
+      await env.MEETINGS.put("img_" + _pn + "_gen", out.buffer, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + _pn + "_gen", "image/png", { expirationTtl: 14 * 86400 });
+      return new Response(JSON.stringify({ url: url.origin + "/img/" + _pn + "_gen" }), { headers: { "Content-Type": "application/json" } });
+    }
     if (url.pathname === "/poll_send" && request.method === "POST") {   // v105 - a yes/no poll for Naj: one button question per row, answers kept in KV poll_<id>
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       let pj = null; try { pj = await request.json(); } catch (e) { return new Response("json body required", { status: 400 }); }
@@ -2121,59 +2177,6 @@ export default {
         for (let i = 0; i < days; i++) { const day = gstDateStr(new Date(n0.getTime() - i * 86400000)); let L = []; try { L = JSON.parse((await env.MEETINGS.get("bridge_" + day)) || "[]"); } catch (e) {} for (const r of L) if (!since || Date.parse(r.at) >= since) out.push(r); }
         out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
         return new Response(JSON.stringify({ generated: new Date().toISOString(), schema: "azimuth-bridge/1", count: out.length, records: out }, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
-      }
-      if (url.pathname === "/genimg" && request.method === "POST") {   // v110 (Kendall, 10 Sep 2026) - generic prompt -> image. The podcast word plates were being made by hand in a browser and downloaded; this makes them here. Reuses the v109 store, so they serve from /img/<name> like everything else.
-        // Its OWN key, not READ_KEY. READ_KEY is write-only on Cloudflare and its value is no longer held anywhere; rotating it would have broken every existing keyed link (board, health, group registry). A separate secret leaves all of that untouched.
-        const _gk = env.GENIMG_KEY || env.READ_KEY;
-        if (!_gk || url.searchParams.get("key") !== _gk) return new Response("unauthorized", { status: 401 });
-        const _jr = (o, st) => new Response(JSON.stringify(o, null, 1), { status: st || 200, headers: { "Content-Type": "application/json" } });
-        if (!env.OPENAI_API_KEY) return _jr({ ok: false, err: "no image key on this env" }, 500);
-        let _gb = null; try { _gb = await request.json(); } catch (e) {}
-        const _gp = _gb && String(_gb.prompt || "").trim();
-        if (!_gp) return _jr({ ok: false, err: "no prompt in body" }, 400);
-        // gpt-image-1 offers 1024x1024, 1024x1536 (2:3) and 1536x1024 only - there is NO 9:16.
-        // Portrait comes back 2:3 and the caller crops or pads it to 9:16.
-        const _gs = ["1024x1024", "1024x1536", "1536x1024"].indexOf(String(_gb.size || "")) >= 0 ? String(_gb.size) : "1024x1536";
-        const _gq = ["low", "medium", "high"].indexOf(String(_gb.quality || "")) >= 0 ? String(_gb.quality) : "high";
-        const _gn = "gen_" + (String(_gb.name || "").replace(/[^a-z0-9_]/gi, "").slice(0, 34) || String(Date.now()));
-        try {
-          const _gr = await fetch("https://api.openai.com/v1/images/generations", { method: "POST",
-            headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-            body: JSON.stringify({ model: "gpt-image-1", prompt: _gp, size: _gs, quality: _gq, n: 1 }) });
-          if (!_gr.ok) return _jr({ ok: false, err: "image api " + _gr.status + " " + (await _gr.text()).slice(0, 300) }, 502);
-          const _gj = await _gr.json(); const _g64 = _gj && _gj.data && _gj.data[0] && _gj.data[0].b64_json;
-          if (!_g64) return _jr({ ok: false, err: "image api returned no image" }, 502);
-          const _gbin = Uint8Array.from(atob(_g64), c => c.charCodeAt(0));
-          if (_gbin.byteLength < 20000) return _jr({ ok: false, err: "image too small (" + _gbin.byteLength + " bytes)" }, 502);
-          await env.MEETINGS.put("img_" + _gn, _gbin.buffer, { expirationTtl: 14 * 86400 });
-          await env.MEETINGS.put("img_ct_" + _gn, "image/png", { expirationTtl: 14 * 86400 });
-          return _jr({ ok: true, name: _gn, size: _gs, quality: _gq, bytes: _gbin.byteLength, url: url.origin + "/img/" + _gn });
-        } catch (e) { return _jr({ ok: false, err: "exception: " + String((e && e.message) || e).slice(0, 200) }, 500); }
-      }
-      if (url.pathname === "/plate_gen_me") {                 // v114 - TEST: generate her into the plate from her photo (image edit). Returns a URL, never sends.
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
-        if (!env.OPENAI_API_KEY) return new Response("no image key", { status: 400 });
-        const _id = "ips_" + String(url.searchParams.get("post") || "") + "_" + String(url.searchParams.get("opt") || "a").toLowerCase();
-        const _pn = "plate_" + _id.replace(/[^a-z0-9_]/gi, "").slice(0, 34);
-        const _plate = await env.MEETINGS.get("img_" + _pn, "arrayBuffer"); const _me = await env.MEETINGS.get("img_style_me", "arrayBuffer");
-        if (!_plate || !_me) return new Response("need a stored plate and her photo", { status: 404 });
-        const _meCt = (await env.MEETINGS.get("img_ct_style_me")) || "image/jpeg";
-        const fd = new FormData();
-        fd.append("model", "gpt-image-1");
-        fd.append("image[]", new Blob([_plate], { type: "image/png" }), "plate.png");
-        fd.append("image[]", new Blob([_me], { type: _meCt }), "person.jpg");
-        fd.append("size", "1024x1536");
-        fd.append("quality", "medium");
-        fd.append("prompt", "Edit the FIRST image (the scene) by adding the woman from the SECOND image into it. Place her standing in the RIGHT half of the scene, full length, feet on the ground line near the bottom, facing the camera, exactly as she appears in the second image: the same face, the same skin tone, the same hair, the same rust-orange suit with shorts and black heels, the same pose with hands clasped. Match the light of the scene on her, with a soft natural shadow at her feet. Keep the LEFT 45% of the scene exactly as it is, empty and calm. Do not add any text, lettering, logos or other people. Photorealistic, natural colour, no plastic skin, no smoothing of her features.");
-        let out = null, err = "";
-        try {
-          const r = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY }, body: fd });
-          if (!r.ok) err = "edit " + r.status + " " + (await r.text()).slice(0, 200);
-          else { const j = await r.json(); const b64 = j && j.data && j.data[0] && j.data[0].b64_json; if (b64) out = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); else err = "no image"; }
-        } catch (e) { err = "exception " + String((e && e.message) || e).slice(0, 120); }
-        if (!out) return new Response(JSON.stringify({ err }), { status: 502, headers: { "Content-Type": "application/json" } });
-        await env.MEETINGS.put("img_" + _pn + "_gen", out.buffer, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + _pn + "_gen", "image/png", { expirationTtl: 14 * 86400 });
-        return new Response(JSON.stringify({ url: url.origin + "/img/" + _pn + "_gen" }), { headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/plate_run") {                    // v109 - make one post's plate and cards; ?send=1 delivers to her, ?send=0 returns the URLs
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -3947,7 +3950,7 @@ async function dailyFeedTick(env, force, dry) {
     trends,
     news: await (async () => { try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); return nn.slice(0, 8).map(x => ({ title: x.title, outlet: x.outlet, meedCrossReference: x.xref ? { project: x.xref.meedName, facts: x.xref.facts } : null })); } catch (e) { return null; } })(),
   });
-  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one arresting spoken sentence built around ONE specific figure; figure = that exact figure verbatim; source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections. AT LEAST TWO of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all). TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". TOPIC FAMILIES: each of the five must come from a DIFFERENT family and name it in `family`, one of " + JSON.stringify(FEED_FAMILIES) + ". " + (lane ? "TODAY'S LANE (" + ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n.getUTCDay()] + "): at least THREE of the five from " + JSON.stringify(lane) + ". " : "") + "NO REPEATS: these numbers and these subjects were used in recent mornings and must not appear again in any form (a percentage of the same fact is the same fact): numbers " + JSON.stringify([...new Set(famh.flatMap(x => x.n || []))].slice(0, 80)) + "; subjects " + JSON.stringify([...new Set(famh.filter(x => (Date.now() - Date.parse(x.d)) < 5 * 86400 * 1000).map(x => x.s).filter(Boolean))].slice(0, 40)) + ". Prefer a figure the register has NOT yet been quoted on: a different area, a different bedroom count, a different month, a different developer. Families that ran on recent mornings and must be avoided today unless the figure is genuinely new: " + JSON.stringify(tired) + ". HER STYLE (from angles she chose recently): copy the SHAPE of these hooks - length, tone, how they open - but NEVER their subject: " + JSON.stringify(picks.slice(0, 8).map(p => p.hook)) + ". TRENDING (what people are talking about today, context only - a trend never supplies a number): " + JSON.stringify((radar && radar.items || []).slice(0, 6).map(t => ({ platform: t.platform, title: t.title, family: t.family }))) + ". If an angle's subject matches a trending item, set `trend` to one short line naming the platform and what is moving; otherwise omit `trend`. HER DNA PROFILE (learned from her choices — honour it): " + ((await dnaGet(env)) || "(still learning)") + ". NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
+  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one or two short sentences in HER VOICE (below), built around ONE specific figure written as numerals the way her captions do (3,098 homes; AED 7.78B; 13.9%), never spelled out in words; figure = that exact figure WITH its unit (e.g. 'AED 7.78B', '13.9%', '3,098 homes'); source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections. AT LEAST TWO of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all). TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". TOPIC FAMILIES: each of the five must come from a DIFFERENT family and name it in `family`, one of " + JSON.stringify(FEED_FAMILIES) + ". " + (lane ? "TODAY'S LANE (" + ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n.getUTCDay()] + "): at least THREE of the five from " + JSON.stringify(lane) + ". " : "") + "NO REPEATS: these numbers and these subjects were used in recent mornings and must not appear again in any form (a percentage of the same fact is the same fact): numbers " + JSON.stringify([...new Set(famh.flatMap(x => x.n || []))].slice(0, 80)) + "; subjects " + JSON.stringify([...new Set(famh.filter(x => (Date.now() - Date.parse(x.d)) < 5 * 86400 * 1000).map(x => x.s).filter(Boolean))].slice(0, 40)) + ". Prefer a figure the register has NOT yet been quoted on: a different area, a different bedroom count, a different month, a different developer. Families that ran on recent mornings and must be avoided today unless the figure is genuinely new: " + JSON.stringify(tired) + ". The SHAPE of every hook comes from HER VOICE above, never from past hooks. Subjects she has already used, do not repeat: " + JSON.stringify(picks.slice(0, 8).map(p => String(p.hook || "").slice(0, 60))) + ". TRENDING (what people are talking about today, context only - a trend never supplies a number): " + JSON.stringify((radar && radar.items || []).slice(0, 6).map(t => ({ platform: t.platform, title: t.title, family: t.family }))) + ". If an angle's subject matches a trending item, set `trend` to one short line naming the platform and what is moving; otherwise omit `trend`. " + (await styleVoice(env)) + " WHAT SHE FAVOURS (learned from her choices; subjects and formats only, never style): " + ((await dnaSubjects(env)) || "(still learning)") + ". NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
   let g = null, genErr = null;
   try { g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 1400); } catch (e) { genErr = e && e.message ? e.message : String(e); }
   const angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 5) : [];
@@ -3980,6 +3983,7 @@ async function dailyFeedTick(env, force, dry) {
     const cangles = cg && Array.isArray(cg.angles) ? cg.angles.slice(0, 5).map(a => Object.assign({}, a, { campaign: camp.contest.name })) : [];
     if (cangles.length) angles.push(...cangles);
   }
+  try { const _vg = await voiceGuard(env, angles); if (_vg.repaired.length) qa.note += " | voice repaired " + _vg.repaired.join(","); } catch (e) {}   // v116.1
   if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + "[" + (a.family || "-") + "] " + a.hook + "\n   " + a.figure + " · " + a.source + (a.trend ? "\n   trend: " + a.trend : "") + (a.shot ? "\n   shot: " + a.shot : "")).join("\n") + "\n\nQA: " + qa.note + (qa.repaired.length ? " | repaired " + qa.repaired.join(",") : "") + " | before " + qa.before.join(",") + " | after " + qa.after.join(",");
   // store as the drafting context (draftFromAngle reads this) + remember the hooks
   const briefTxt = angles.map((a, i) => "ANGLE " + (i + 1) + ": " + a.hook + "\nFigure: " + a.figure + " (" + a.source + ")\nBuyer: " + a.buyer).join("\n\n");
@@ -4128,6 +4132,35 @@ async function dnaSignal(env, type, detail) {
   } catch (e) {}
 }
 
+// v116 - HER VOICE. From the style card she locked (10 Sep 2026). Overrides every other note about style.
+async function styleVoice(env) {
+  let card = null; try { card = JSON.parse((await env.MEETINGS.get("style_card")) || "null"); } catch (e) {}
+  const locked = card && card.locked_at ? String(card.locked_at).slice(0, 10) : "";
+  return "HER VOICE" + (locked ? " (locked by her on " + locked + "; this overrides every other note about style)" : "") + ": " +
+    "Short lines, one thought each. Feeling first, then the fact. The number said plainly, then its source. Calm and settled, never selling. " +
+    "A hook is one or two sentences she could say out loud, at most 18 words each, no dash-chains. " +
+    "NEVER use: proving, fortress, towers over, commands, anchors, velocity, conviction, institutional, gates, locks in, momentum, punched, fires. " +
+    "Her own sentences, for the shape: \"If I can't feel it, I can't sell it.\" / \"The market doesn't define great realtors. It reveals them.\" / \"Knowledge earns attention. Integrity earns trust.\" " +
+    "Her ground: wellness real estate, emotional intelligence, how a place makes people feel. She talks to one buyer, not to a market." +
+    (card && card.text ? " HER CARD, in her words: " + String(card.text).replace(/\s+/g, " ").slice(0, 900) : "");
+}
+const VOICE_BAN = /\b(proving|proves?|fortress|towers? over|commands?|commanded|anchors?|anchored|velocity|conviction|institutional|gates?|locked|locks? in|momentum|punched|fires?|absorption|corridor concentration)\b/i;
+async function voiceGuard(env, angles) {                                            // v116.1 - rewrite any hook or buyer line that slipped into the old jargon
+  const bad = (angles || []).map((a, i) => (VOICE_BAN.test(a.hook || "") || VOICE_BAN.test(a.buyer || "")) ? i : -1).filter(i => i >= 0);
+  if (!bad.length) return { angles, repaired: [] };
+  const voice = await styleVoice(env);
+  const sys = "You rewrite social-post hooks for a Dubai property broker into HER VOICE. Keep every figure, source and fact exactly; change only the wording. Return JSON only: {\"items\":[{\"i\":<index>,\"hook\":\"...\",\"buyer\":\"...\"}]}. " + voice;
+  const user = JSON.stringify({ items: bad.map(i => ({ i, hook: angles[i].hook, figure: angles[i].figure, source: angles[i].source, buyer: angles[i].buyer })) });
+  let out = null; try { const t = await claudeText(env, sys, user, null, 900); out = JSON.parse(String(t).replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/, "$1")); } catch (e) { out = null; }
+  const done = [];
+  if (out && Array.isArray(out.items)) for (const it of out.items) { const i = it.i | 0; if (angles[i] && it.hook && !VOICE_BAN.test(it.hook) && !VOICE_BAN.test(it.buyer || "")) { angles[i].hook = String(it.hook).slice(0, 220); if (it.buyer) angles[i].buyer = String(it.buyer).slice(0, 220); done.push(i + 1); } }
+  for (const i of bad) if (!done.includes(i + 1)) { angles[i].hook = String(angles[i].hook || "").replace(VOICE_BAN, "").replace(/\s{2,}/g, " ").trim(); angles[i].buyer = String(angles[i].buyer || "").replace(VOICE_BAN, "").replace(/\s{2,}/g, " ").trim(); done.push(i + 1); }
+  return { angles, repaired: done };
+}
+async function dnaSubjects(env) {                                                  // v116 - the learned profile minus its STYLE paragraph
+  const t = await dnaGet(env); if (!t) return "";
+  return t.split(/\n\s*\n/).filter(p => !/^\s*STYLE\b/i.test(p)).join("\n\n");
+}
 async function dnaGet(env) {
   try { const d = JSON.parse((await env.MEETINGS.get("mkt_dna")) || "null"); return (d && d.text) || ""; } catch (e) { return ""; }
 }
@@ -4140,7 +4173,7 @@ async function dnaReflect(env, force) {
   const seenCount = (cur && cur.signalsSeen) || 0;
   if (!force && s.length - seenCount < 3) return;                                  // reflect only when there's something new
   let picks = []; try { picks = JSON.parse((await env.MEETINGS.get("mkt_picks")) || "[]"); } catch (e) {}
-  const sys = "You maintain the compact working profile ('DNA') of one Dubai property broker's content identity, learned ONLY from her observed choices. Update the existing profile with the new signals — evolve it, don't rewrite from scratch; keep what still holds, sharpen what the new evidence supports, drop what it contradicts. Structure, plain text, UNDER 170 words total: SUBJECTS SHE FAVOURS (data themes/areas she picks) · STYLE (tone and framing her chosen hooks share) · FORMATS (what she drafts most: Instagram vs LinkedIn, image vs reel) · AVOIDS (what she skips or discards). Never invent traits with no signal behind them — write 'not yet known' where evidence is thin.";
+  const sys = "You maintain the compact working profile ('DNA') of one Dubai property broker's content identity, learned ONLY from her observed choices. VOICE AND STYLE ARE NOT YOURS TO LEARN: her writing voice is fixed by the style card she locked; never add, keep or describe a STYLE section - record SUBJECTS, FORMATS and AVOIDS only. Update the existing profile with the new signals — evolve it, don't rewrite from scratch; keep what still holds, sharpen what the new evidence supports, drop what it contradicts. Structure, plain text, UNDER 170 words total: SUBJECTS SHE FAVOURS (data themes/areas she picks) · STYLE (tone and framing her chosen hooks share) · FORMATS (what she drafts most: Instagram vs LinkedIn, image vs reel) · AVOIDS (what she skips or discards). Never invent traits with no signal behind them — write 'not yet known' where evidence is thin.";
   const user = "EXISTING PROFILE:\n" + ((cur && cur.text) || "(none yet)") +
     "\n\nANGLES SHE CHOSE (newest first):\n" + JSON.stringify(picks.slice(0, 15)) +
     "\n\nINTERACTION SIGNALS (newest first):\n" + JSON.stringify(s.slice(0, 40));
