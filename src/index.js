@@ -705,7 +705,18 @@ async function waPost(env, payload, kind) {
   } catch (e) { await noteErr(env, "whatsapp-send:" + kind, String(e && e.message || e)); throw e; }
 }
 async function waSend(env, to, body) {
-  return waPost(env, { messaging_product: "whatsapp", to, type: "text", text: { body } }, "text");
+  body = String(body == null ? "" : body);
+  if (body.length <= 4000) return waPost(env, { messaging_product: "whatsapp", to, type: "text", text: { body } }, "text");
+  // v108.2 - WhatsApp rejects a body over 4096; split at paragraph breaks rather than fail silently
+  let last = null;
+  while (body.length) {
+    let cut = body.length <= 4000 ? body.length : body.lastIndexOf("\n\n", 4000);
+    if (cut < 800) cut = body.lastIndexOf("\n", 4000);
+    if (cut < 800) cut = 4000;
+    last = await waPost(env, { messaging_product: "whatsapp", to, type: "text", text: { body: body.slice(0, cut).trimEnd() } }, "text");
+    body = body.slice(cut).replace(/^\s+/, "");
+  }
+  return last;
 }
 async function waSendButtons(env, to, body, buttons) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: body }, action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) } } }, "buttons");
@@ -1572,7 +1583,7 @@ async function handleCallback(env, cbq) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url); const CHAT = env.TELEGRAM_CHAT_ID;
     if (url.pathname === "/poll_send" && request.method === "POST") {   // v105 - a yes/no poll for Naj: one button question per row, answers kept in KV poll_<id>
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -2111,6 +2122,34 @@ export default {
         out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
         return new Response(JSON.stringify({ generated: new Date().toISOString(), schema: "azimuth-bridge/1", count: out.length, records: out }, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      if (url.pathname === "/plate_run") {                    // v109 - make one post's plate and cards; ?send=1 delivers to her, ?send=0 returns the URLs
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _pk = null; try { _pk = JSON.parse((await env.MEETINGS.get("img_ips_bg_prompts")) || "null"); } catch (e) {}
+        const _po = _pk && (_pk.posts || []).find(p => String(p.n) === String(url.searchParams.get("post")));
+        const _op = _po && (_po.options || []).find(o => o.id === String(url.searchParams.get("opt") || "").toUpperCase());
+        if (!_op) return new Response("no such post/option", { status: 404 });
+        const _send = url.searchParams.get("send") === "1"; const _to = url.searchParams.get("to") || env.WA_ALLOWED;
+        if (url.searchParams.get("fresh") === "1") _op.fresh = true;
+        const _res = await plateRun(env, _po, _op, _to, url.origin, _send);
+        if (_send && !_res.square && !_res.story) {                                // the picture failed: she still gets the prompt, as before
+          try { await waSend(env, _to, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, _to, _op.prompt_only || _op.prompt_message); if (_op.tail) await waSend(env, _to, _op.tail); } catch (e) {}
+        }
+        return new Response(JSON.stringify(_res, null, 1), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/bg_ask") {                       // v107 - ask her which backdrop she wants, one interactive message per post (keyed, operator-fired)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _bgp = null; try { _bgp = JSON.parse((await env.MEETINGS.get("img_ips_bg_prompts")) || "null"); } catch (e) {}
+        if (!_bgp || !Array.isArray(_bgp.posts) || !_bgp.posts.length) return new Response("no prompt pack in KV", { status: 404 });
+        const _only = url.searchParams.get("post"); let _sent = 0;
+        for (const p of _bgp.posts) {
+          if (_only && String(p.n) !== String(_only)) continue;
+          const _btns = (p.options || []).slice(0, 3).map(o => ({ id: "bg:" + p.n + ":" + o.id, title: String(o.button || o.name).slice(0, 20) }));
+          if (_btns.length !== 3) continue;
+          await waSendButtons(env, env.WA_ALLOWED, String(p.ask || ("Post " + p.n + " - " + p.figure + ". Which backdrop?")).slice(0, 1024), _btns);
+          _sent++;
+        }
+        return new Response("asked " + _sent);
+      }
       if (url.pathname === "/note") {                          // v89.2 — send a plain note to her (operator-approved text only; keyed)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _t = (url.searchParams.get("text") || "").slice(0, 2000); if (!_t) return new Response("no text", { status: 400 });
@@ -2538,6 +2577,24 @@ export default {
               const _done = Object.keys(_pr.answers).length, _tot = (_pr.questions || []).length;
               // v105.1 (Kendall, 8 Sep): no automatic replies on polls - answers are only recorded; nothing goes back to her without his approval
             }
+            return new Response("ok");
+          }
+          if (bid.indexOf("bg:") === 0) {                                              // v107 - backdrop choice: ack, record, then hand her the plate prompt (Kendall approved the auto-send, 9 Sep 2026)
+            const _bp = bid.split(":"), _pn = _bp[1], _oid = String(_bp[2] || "").toUpperCase();
+            let _pack = null; try { _pack = JSON.parse((await env.MEETINGS.get("img_ips_bg_prompts")) || "null"); } catch (e) {}
+            const _post = _pack && (_pack.posts || []).find(p => String(p.n) === String(_pn));
+            const _opt = _post && (_post.options || []).find(o => o.id === _oid);
+            if (!_opt) { await waSend(env, from, "That backdrop is not on file any more - say \u201cbackdrops\u201d and I will send the choices again."); return new Response("ok"); }
+            try { const _bs = JSON.parse((await env.MEETINGS.get("bg_picks")) || "{}"); _bs[_pn] = { opt: _oid, name: _opt.name, at: new Date().toISOString() }; await env.MEETINGS.put("bg_picks", JSON.stringify(_bs), { expirationTtl: 30 * 86400 }); } catch (e) {}
+            if (env.OPENAI_API_KEY && ctx) {                                                    // v109 - make the picture here; hand the long work to a fresh invocation so the webhook returns now
+              await waSend(env, from, "Good pick - " + _opt.name + " for post " + _pn + ". Making your picture now, give me a minute.");
+              const _ru = url.origin + "/plate_run?key=" + encodeURIComponent(env.READ_KEY) + "&post=" + encodeURIComponent(_pn) + "&opt=" + encodeURIComponent(_oid) + "&send=1&to=" + encodeURIComponent(from);
+              ctx.waitUntil(fetch(_ru, { headers: { "User-Agent": "azimuth-plate/1.0" } }).catch(() => {}));
+              return new Response("ok");
+            }
+            await waSend(env, from, "Good pick - " + _opt.name + " for post " + _pn + ". Paste the next message, whole, into ChatGPT (make an image).");
+            if (_opt.prompt_only) { await waSend(env, from, _opt.prompt_only); if (_opt.tail) await waSend(env, from, _opt.tail); }   // v108.2 - block and guidance travel separately so neither trips the 4096 cap
+            else await waSend(env, from, _opt.prompt_message);
             return new Response("ok");
           }
           if (bid.indexOf("ga:") === 0 || bid.indexOf("gi:") === 0) {   // v31 — group opt-in decision
@@ -4222,11 +4279,11 @@ function angleArea(angle, d) {
 function wrapSvg(text, max) { const w = String(text || "").split(/\s+/); const lines = []; let cur = ""; for (const x of w) { if ((cur + " " + x).trim().length > max && cur) { lines.push(cur); cur = x; } else cur = (cur + " " + x).trim(); } if (cur) lines.push(cur); if (lines.length > 5) { const k = lines.slice(0, 5); k[4] = k[4].replace(/\s+\S*$/, "") + "…"; return k; } return lines; }
 // v105 - CARD ENGINE. Five looks, two sizes. The look is seeded by the hook so an angle's square and story match,
 // and tomorrow's cards do not look like today's. Every look carries the same four facts: masthead, hook, figure, source.
-const CARD_C = { beige: "#E8DCC8", beige2: "#D9CBB2", gold: "#C5A56A", goldD: "#8C7238", green: "#006039", greenD: "#0B3D2E", ink: "#0C1413", mute: "#5E6F69", muteL: "#B8C4BD" };
+const CARD_C = { beige: "#F0DECC", beige2: "#E3D0B8", gold: "#A88448", goldD: "#7A5E30", green: "#003C1E", greenD: "#0C3C30", ink: "#00120C", mute: "#5E6F69", muteL: "#B8C4BD" };   // v107 - her own palette, sampled from three finished cards (9 Sep 2026); see naj-market-pulse/data/research/NAJMA_PALETTE.md
 const F_SERIF = "Fraunces,Georgia,serif", F_SANS = "'IBM Plex Sans',sans-serif", F_MONO = "'IBM Plex Mono',monospace";
-const CARD_TPL = ["bignumber", "split", "stat", "quote", "ticker"];
+const CARD_TPL = ["bignumber", "split", "stat", "quote", "ticker", "editorial"];   // v109 - editorial is explicit-only (t === 5); the hash still picks from the first five
 function hashStr(t) { let h = 2166136261; const x = String(t || ""); for (let i = 0; i < x.length; i++) { h ^= x.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; }
-function tplOf(angle, t) { if (Number.isInteger(t)) return ((t % 5) + 5) % 5; if (angle && Number.isInteger(angle.tpl)) return ((angle.tpl % 5) + 5) % 5; return hashStr((angle && angle.hook) || "") % 5; }
+function tplOf(angle, t) { if (t === 5) return 5; if (Number.isInteger(t)) return ((t % 5) + 5) % 5; if (angle && Number.isInteger(angle.tpl)) return ((angle.tpl % 5) + 5) % 5; return hashStr((angle && angle.hook) || "") % 5; }
 function wrapWords(text, max) { const w = String(text || "").split(/\s+/).filter(Boolean); const lines = []; let cur = ""; for (const x of w) { if ((cur + " " + x).trim().length > max && cur) { lines.push(cur); cur = x; } else cur = (cur + " " + x).trim(); } if (cur) lines.push(cur); return lines; }
 // shrink the font until the text sits inside boxW x maxLines (k = average glyph width as a fraction of the font size)
 function fitLines(text, boxW, fz, maxLines, k, minFz) { k = k || 0.54; minFz = minFz || 34; let f = fz; for (;;) { const lines = wrapWords(text, Math.max(8, Math.floor(boxW / (f * k)))); if (lines.length <= maxLines || f <= minFz) { const L = lines.slice(0, maxLines); if (lines.length > maxLines) L[maxLines - 1] = L[maxLines - 1].replace(/\s+\S*$/, "") + "…"; return { lines: L, fz: f }; } f -= 4; } }
@@ -4314,6 +4371,24 @@ function angleCardSvg(angle, areaName, imgUrl, n, opts) {
       `<clipPath id="c3"><rect x="${W - 72 - th}" y="${ty}" width="${th}" height="${th}" rx="28"/></clipPath>` + (imgUrl ? `<g clip-path="url(#c3)"><image href="${imgUrl}" x="${W - 72 - th}" y="${ty}" width="${th}" height="${th}" preserveAspectRatio="xMidYMid slice"/></g>` : "") +
       `<rect x="${W - 72 - th}" y="${ty}" width="${th}" height="${th}" rx="28" fill="none" stroke="${C.gold}" stroke-width="3"/>` +
       srcLines(H - 100, C.muteL) + foot(H - 52, C.beige, C.gold);
+  } else if (t === 5) {                                                            // v109 - EDITORIAL: her layout. Type in a left column on a cream wash that fades into the photograph on the right.
+    const colW = Math.round(W * 0.45), x0 = 64;
+    const hk = fitLines(hook, colW + 24, story ? 54 : 46, story ? 7 : 5, 0.54, 30);
+    const bigTxt = fp.kind === "num" ? fp.num : fp.text, unitTxt = fp.kind === "num" ? String(fp.unit || "").toUpperCase().slice(0, 36) : "";   // v109.1 - her card: the number big, the unit as a spaced label under it
+    const ffz = fitOne(bigTxt, colW + 60, story ? 200 : 150, 0.58, 72);
+    const my = story ? 150 : 120, ky = my + 38, fy = ky + 44 + ffz, uy = unitTxt ? fy + 40 : fy, hy = uy + 44 + hk.fz;
+    const endY = hy + (hk.lines.length - 1) * Math.round(hk.fz * 1.12);
+    const srcL = wrapWords(src, 34).slice(0, 3);
+    body = img(0, 0, W, H, "c5") +
+      `<defs><linearGradient id="wash" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${C.beige}"/><stop offset="0.42" stop-color="${C.beige}"/><stop offset="0.72" stop-color="${C.beige}" stop-opacity="0"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#wash)"/>` +
+      `<text x="${x0}" y="${my}" fill="${C.green}" font-size="${story ? 30 : 26}" font-weight="700" letter-spacing="9" font-family="${F_SANS}">THE DIGEST</text>` +
+      (area ? `<text x="${x0}" y="${ky}" fill="${C.goldD}" font-size="20" letter-spacing="4" font-family="${F_MONO}">${_sx(String(area).toUpperCase().slice(0, 34))}</text>` : "") +
+      `<text x="${x0 - 4}" y="${fy}" fill="${C.gold}" font-size="${ffz}" font-weight="700" font-family="${F_SERIF}">${_sx(bigTxt)}</text>` +
+      (unitTxt ? `<text x="${x0}" y="${uy}" fill="${C.green}" font-size="24" letter-spacing="5" font-family="${F_MONO}">${_sx(unitTxt)}</text>` : "") +
+      svgLines(hk.lines, x0, hy, hk.fz, C.green, F_SANS, 600, 1.12) +
+      `<rect x="${x0}" y="${endY + 34}" width="${Math.round(colW / 3)}" height="3" fill="${C.gold}"/>` +
+      svgLines(srcL, x0, endY + 34 + 44, 20, C.green, F_MONO, 700, 1.35, ' letter-spacing="1.5"') +
+      foot(H - 52, C.green, C.goldD);
   } else {                                                                         // TICKER - dark plate, mono data strip
     const fy = story ? 700 : (figRest ? 400 : 440); const bf = bigFig(72, fy, story ? 240 : 200, C.gold, ' filter="url(#sh)"'); const hk = fitBox(hook, 936, story ? 66 : 58, (H - 300) - (bf.end + 60), 0.54, 34);
     const hy = bf.end + 60 + hk.fz; const endY = hy + (hk.lines.length - 1) * Math.round(hk.fz * 1.12);
@@ -4447,10 +4522,10 @@ const UNIT_MIX_CSS = '.um{margin-top:10px;border:1px solid var(--line);border-ra
 const UPDATE_SIGNOFF = "\n\n— Black Coffee, curated by Papi";   // v89.3 - every update to her signs off this way (Kendall, 5 Sep 2026)
 let RENDER_LAST_ERR = "";
 const cardKey = (ctxAt, n, size) => "angle_" + String(ctxAt || 0) + "_" + n + (size === "story" ? "_s" : "");   // v105 - "_s" = 1080x1920
-async function angleCardHtml(env, angle, n, origin, size, t) {
+async function angleCardHtml(env, angle, n, origin, size, t, imgOverride) {
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
-  const area = angleArea(angle, d); let img = null;
-  if (area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
+  const area = angleArea(angle, d); let img = imgOverride || null;   // v109 - a made plate wins over the satellite
+  if (!img && area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
   if (!img) img = origin + "/img/bg_market";
   const story = size === "story", W = 1080, H = story ? 1920 : 1080;
   const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t });
@@ -4469,11 +4544,11 @@ async function renderHtmlPng(env, html, W, H) {
     return png && png.byteLength ? png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) : null;
   } finally { try { await browser.close(); } catch (e) {} }
 }
-async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size) {
+async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size, opts) {
   RENDER_LAST_ERR = ""; size = size === "story" ? "story" : "square";
-  const k = cardKey(ctxAt, n, size);
+  const k = opts && opts.key ? opts.key + (size === "story" ? "_s" : "") : cardKey(ctxAt, n, size);   // v109 - a plate card keys by its plate, not the morning brief
   try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: origin + "/img/" + k, area: angleArea(angle, null), size }; } catch (e) {}
-  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size);
+  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img);
   let png = null;
   try {
     if (env.CF_RENDER_TOKEN) {                                                                     // REST API (needs an API token)
@@ -7114,51 +7189,108 @@ function renderArea(latestRaw, name, key) {
 // v104 (8 Sep) — the plate CARRIES THE DATA. Naj: "it gives me an image without the data or information". The figure, the
 // headline and the source are now rendered as editorial text in the RIGHT two thirds (masthead THE DIGEST), verbatim and
 // once each, while the LEFT third stays clear for her avatar. An angle with no figure keeps the old text-free plate.
+// v109 - PLATE, MADE IN-HOUSE. The image model makes the photograph (no text, right side clear); the card
+// engine sets her words over it in the editorial look; the renderer already on this Worker makes the PNGs.
+let PLATE_LAST_ERR = "";
+const PLATE_CARD_V = "2";   // bump when the editorial look changes, so cached cards re-render
+async function platePhoto(env, angle, place, id) {
+  PLATE_LAST_ERR = "";
+  if (!env.OPENAI_API_KEY) { PLATE_LAST_ERR = "no image key"; return null; }
+  const seed = hashStr(String(angle.hook || "") + "|" + String(angle.figure || ""));
+  const light = ["Late afternoon, about an hour before sunset: warm low sun from the right of frame at a shallow angle, long soft shadows to the left, gentle haze in the distance.",
+                 "Blue hour, twenty minutes after sunset: deep cobalt sky fading to amber at the horizon, building lights just switched on, soft even light with a faint warm key from the right.",
+                 "Bright clear morning about eight o'clock: crisp cool light from the right at a low angle, long clean shadows to the left, pale sky, high clarity.",
+                 "Soft overcast afternoon: diffuse light, no hard shadows, a muted warm palette, a hint of directional light from the right."][seed % 4];
+  const lens = ["Full-frame camera, 35mm lens at f/4,", "Full-frame camera, 24mm lens at f/5.6 for a wide calm view,", "Full-frame camera, 50mm lens at f/4 for a close human view,"][(seed >>> 2) % 3];
+  const vantage = ["camera at standing eye level, about 1.6 m above the ground.", "camera one floor up, about 5 m above the ground, looking slightly down across the view.", "camera at standing eye level on a promenade, the water across the middle distance."][(seed >>> 4) % 3];
+  const prompt = "A photorealistic photograph to be used as an editorial cover background. NO TEXT of any kind anywhere in the image: no lettering, no numbers, no signs, no labels, no watermarks, no logos, no brand names. " +
+    "PLACE: " + place + ". " + lens + " " + vantage + " Horizon level and about a third of the way up the frame. " + light + " Natural colour, no filter, no HDR look, no vignette. " +
+    "COMPOSITION: the real subject of the place sits in the RIGHT half of the frame. The LEFT 45% of the frame is calm, low in detail and slightly lighter, so that type can be laid over it afterwards. The lower right is open, clear ground with nothing standing on it. " +
+    "ABSOLUTELY NO PEOPLE anywhere, no silhouettes, no crowds, no one in windows or in the distance. No animals. Not CGI, no plastic sheen, no lens flare, no tilt-shift, no fisheye, no illustration or painting style.";
+  try {
+    const r = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "gpt-image-1", prompt, size: "1024x1536", quality: "medium", n: 1 }) });
+    if (!r.ok) { PLATE_LAST_ERR = "image api " + r.status + " " + (await r.text()).slice(0, 160); return null; }
+    const j = await r.json(); const b64 = j && j.data && j.data[0] && j.data[0].b64_json;
+    if (!b64) { PLATE_LAST_ERR = "image api returned no image"; return null; }
+    const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    if (bin.byteLength < 20000) { PLATE_LAST_ERR = "image too small"; return null; }
+    const name = "plate_" + String(id).replace(/[^a-z0-9_]/gi, "").slice(0, 34);
+    await env.MEETINGS.put("img_" + name, bin.buffer, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + name, "image/png", { expirationTtl: 14 * 86400 });
+    return name;
+  } catch (e) { PLATE_LAST_ERR = "image api exception: " + String((e && e.message) || e).slice(0, 120); return null; }
+}
+// photo -> editorial card in both sizes -> (optionally) her chat. Returns what was made; never throws.
+async function plateRun(env, post, opt, to, origin, sendIt) {
+  const id = "ips_" + post.n + "_" + String(opt.id || "a").toLowerCase();
+  const angle = { hook: post.hook || post.ask || "", figure: post.figure || "", source: post.source || "", area: post.masthead || "" };
+  const out = { id, photo: null, square: null, story: null, err: "" };
+  let photo = "plate_" + id.replace(/[^a-z0-9_]/gi, "").slice(0, 34);
+  let have = false; try { have = !!(await env.MEETINGS.get("img_" + photo, "arrayBuffer")); } catch (e) {}   // v109.1 - a photograph already made is reused; ?fresh=1 forces a new one
+  if (!have || (opt && opt.fresh)) photo = await platePhoto(env, angle, opt.place || "Dubai", id);
+  if (!photo) { out.err = PLATE_LAST_ERR; return out; }
+  out.photo = origin + "/img/" + photo;
+  const o = { img: out.photo, t: 5, key: photo + "_card" + PLATE_CARD_V };
+  const sq = await renderAngleCard(env, angle, post.n, origin, 0, null, "square", o);
+  const st = await renderAngleCard(env, angle, post.n, origin, 0, null, "story", o);
+  out.square = sq && sq.url; out.story = st && st.url; if (!sq && !st) out.err = RENDER_LAST_ERR || "render failed";
+  if (sendIt && to) {
+    if (sq) await waSendImage(env, to, sq.url, String(post.caption || (angle.figure + " - " + angle.source)).slice(0, 1000));
+    if (st) await waSendImage(env, to, st.url, "Same picture at 1080\u00d71920 for Stories.");
+  }
+  return out;
+}
+
 function bgPromptBlock(angle, place) {
   let H = String(angle.hook || "").replace(/"/g, "'").replace(/\s+/g, " ").trim();
   if (H.length > 120) {                                                                          // image models garble long lines: cut at the last strong break, else the last space
-    const cut = H.slice(0, 120); let at = -1; for (const m of cut.matchAll(/[—–;:.]/g)) if (m.index >= 40) at = m.index;
-    H = cut.slice(0, at > 0 ? at : Math.max(cut.lastIndexOf(" "), 80)).replace(/[\s,;:—–'’-]+$/, "");
+    const cut = H.slice(0, 120); let at = -1; for (const m of cut.matchAll(/[\u2014\u2013;:.]/g)) if (m.index >= 40) at = m.index;
+    H = cut.slice(0, at > 0 ? at : Math.max(cut.lastIndexOf(" "), 80)).replace(/[\s,;:\u2014\u2013'\u2019-]+$/, "");
   }
   const F = String(angle.figure || "").replace(/"/g, "'").trim();
   const S = String(angle.source || "").replace(/"/g, "'").replace(/\s+/g, " ").trim();
   const camp = !!angle.campaign;
-  const withText = !!(F || H);
-  const where = place || (camp ? "The Valley by Emaar, Dubai — a low-rise family community on the Al Ain road: sand-coloured townhouses with dark window frames, wide green lawns, young trees, a community sports court, a shaded pergola walk, open desert sky at the horizon"
-                              : "Dubai — the skyline or the street that matches the subject of the headline below, real and specific, never a generic city");
-  // v105 - seeded by the hook: light, lens, vantage and text layout rotate, so two mornings never hand her the same plate
+  const where = place || (camp ? "The Valley by Emaar, Dubai \u2014 a low-rise family community on the Al Ain road: sand-coloured townhouses with dark window frames, wide green lawns, young trees, and open sky"
+                              : "Dubai \u2014 the skyline or the street that matches the subject of the headline below, real and specific, never a generic city");
+  // v105 - seeded by the hook: light, lens, vantage and the left-column treatment rotate, so two mornings never hand her the same plate
   const seed = hashStr(H + "|" + F);
   const look = {
-    light: ["Late afternoon, about an hour before sunset: warm low sun coming from the RIGHT of frame at a shallow angle, long soft shadows falling to the LEFT, gentle haze in the distance, no harsh midday contrast.",
-            "Blue hour, twenty minutes after sunset: deep cobalt sky fading to amber at the horizon, building lights just switched on, soft even light with a faint warm key from the RIGHT so shadows fall gently to the LEFT.",
+    light: ["Late afternoon, about an hour before sunset: warm low sun coming from the RIGHT of frame at a shallow angle, long soft shadows falling to the LEFT, gentle haze in the distance.",
+            "Blue hour, twenty minutes after sunset: deep cobalt sky fading to amber at the horizon, building lights just switched on, soft even light with a faint warm key from the RIGHT.",
             "Bright clear morning, about eight o'clock: crisp cool light from the RIGHT at a low angle, long clean shadows to the LEFT, pale sky, high clarity, no haze.",
             "Soft overcast afternoon: diffuse light with no hard shadows, a muted warm palette, and a hint of directional light from the RIGHT so a composited figure can still be lit to match."][seed % 4],
-    lens: ["Shot on a full-frame camera with a 35mm lens at f/4,", "Shot on a full-frame camera with a 24mm lens at f/5.6 for a wide, calm view,", "Shot on a full-frame camera with a 50mm lens at f/2.8, the far distance softly out of focus,"][(seed >> 2) % 3],
-    vantage: ["camera at standing eye level (about 1.6 m from the ground) on the street or promenade.", "camera on a balcony one floor up (about 5 m from the ground), looking slightly down across the scene.", "camera at standing eye level on a waterfront promenade, water on one side, the buildings beyond.", "camera on a rooftop terrace (about 30 m up), the terrace floor visible in the foreground as the standing ground."][(seed >> 4) % 4],
-    layout: (seed >> 6) % 3,
+    lens: ["Shot on a full-frame camera with a 35mm lens at f/4,", "Shot on a full-frame camera with a 24mm lens at f/5.6 for a wide, calm view,", "Shot on a full-frame camera with a 50mm lens at f/4 for a close, human view,"][(seed >>> 2) % 3],
+    vantage: ["camera at standing eye level (about 1.6 m from the ground) on the street or promenade.", "camera on a balcony one floor up (about 5 m from the ground), looking slightly down across the view.", "camera at standing eye level on a waterfront promenade, the water running across the middle distance."][(seed >>> 4) % 3],
+    layout: (seed >>> 6) % 3,
   };
+  const withText = !!(F || H);
   const strings = ['"THE DIGEST"'].concat(F ? ['"' + F + '"'] : [], H ? ['"' + H + '"'] : [], S ? ['"' + S + '"'] : []).join(", ");
-  return "🎨 *" + (withText ? "Cover plate" : "Background plate") + " — paste this whole block into ChatGPT (make an image)*\n" +
-    (withText ? "_The figure and the headline are ON the picture, in the right two thirds. The left third is left clear for your own avatar and outfit._\n\n```"
-              : "_You then drop your own avatar and outfit on top. The plate has nobody in it and a clear space on the left for you._\n\n```") +
-    "Create a photorealistic BACKGROUND PLATE" + (withText ? " WITH EDITORIAL TEXT" : "") + " for a social post. This is a plate, not a finished picture: a real person will be composited into the LEFT THIRD afterwards, so follow the empty-space, lighting" + (withText ? " and text-placement" : "") + " rules exactly.\n\n" +
+  const COL = look.layout === 0
+    ? "Beneath the masthead, the figure \"" + F + "\" set VERY LARGE in bronze gold #A88448, heavy condensed sans-serif, filling the upper column and allowed to run two lines if it needs to. Directly under it the headline \"" + H + "\" in deep green #003C1E, medium-weight sans, three or four short lines."
+    : look.layout === 1
+    ? "Beneath the masthead, the figure \"" + F + "\" set VERY LARGE in deep green #003C1E as a high-contrast serif, the kind used on a magazine cover. Under it a short label in wide letter-spaced capitals taken from the headline. Then the headline \"" + H + "\" in a clean sans in near-black green #00120C, three or four short lines."
+    : "Beneath the masthead, a thin bronze gold #A88448 hairline rule, then a short kicker in wide letter-spaced deep green capitals, then the figure \"" + F + "\" set VERY LARGE in bronze gold #A88448, then the headline \"" + H + "\" in deep green #003C1E, three or four short lines.";
+  return "\ud83c\udfa8 *" + (withText ? "Cover plate" : "Background plate") + " \u2014 paste this whole block into ChatGPT (make an image)*\n" +
+    (withText ? "_The type sits in the LEFT column. The right side is the picture, and the space you drop yourself into._\n\n```"
+              : "_No text on this one. The right side is the picture and the space you drop yourself into._\n\n```") +
+    "Create a photorealistic EDITORIAL COVER PLATE for a social post, in the style of a printed business-magazine page: restrained, warm, credible. A real person may be composited into the RIGHT side afterwards, so follow the zone, lighting and text rules exactly.\n\n" +
     "SIZE: make it 1080x1920 (vertical 9:16) first. I will then ask you for the same plate at 1920x1080 (16:9).\n\n" +
     "PLACE: " + where + ".\n\n" +
     "THE PICTURE: " + look.lens + " " + look.vantage + " Horizon level and roughly a third up the frame. " + look.light + " Natural colour, no filter, no HDR crunch, no vignette.\n\n" +
-    "COMPOSITION — this matters most: leave the LEFT THIRD of the frame open and uncluttered as a standing area — clean ground, no furniture, no signage, no plants, no text and no strong lines crossing it, so a person can be placed there later. Put the visual interest" + (withText ? " and all of the text" : "") + " in the right two thirds. Keep the ground plane visible and continuous across the bottom of the frame so a composited figure has somewhere to stand and cast a shadow.\n\n" +
-    "ABSOLUTELY NO PEOPLE anywhere in the frame — no figures, no silhouettes, no crowds, no people in windows or in the far distance. No animals. No logos, no brand names, no watermarks, no signage with words" + (withText ? ", and no text of any kind other than the strings listed under TEXT below.\n\n" : ", no text, no captions, no numbers.\n\n") +
+    "COMPOSITION \u2014 this matters most. Two zones, split about 45 / 55.\n" +
+    "LEFT COLUMN, about 45% of the width: a soft cream wash in #F0DECC laid over the photograph, carrying all of the text. It must dissolve into the picture across a wide, soft gradient \u2014 never a hard edge, never a rectangle, never a panel with a border or a drop shadow.\n" +
+    "RIGHT SIDE, about 55%: the photograph itself, clean and uncluttered, with the real subject of the place sitting there. Keep the lower right open and free of clutter \u2014 that is where a standing figure is composited later, feet on the ground line.\n\n" +
+    "ABSOLUTELY NO PEOPLE anywhere in the frame \u2014 no figures, no silhouettes, no crowds, no people in windows or in the far distance. No animals. No logos, no brand names, no watermarks, no signage of any kind.\n\n" +
     (withText ?
-      "TEXT — this is the point of the picture, do not leave it out. All of it sits in the RIGHT two thirds and never crosses into the left third. Across the top right, the masthead \"THE DIGEST\" small, beige #E8DCC8, uppercase, wide letter-spacing. " +
-      (look.layout === 0 ? "Below it a stacked cover-line, upper-right to mid-right: " + (F ? "the figure \"" + F + "\" set LARGE in warm gold #C5A56A, bold condensed sans-serif; " : "") + (H ? "the headline \"" + H + "\" in smaller beige #E8DCC8 sans-serif, over a soft dark translucent band so it stays legible on the photograph; " : "") + (S ? "under a thin gold rule the kicker \"" + S + "\" small in beige. " : "")
-       : look.layout === 1 ? "Poster treatment: " + (F ? "the figure \"" + F + "\" set LARGE in warm gold #C5A56A as a single poster number filling the upper right, bold condensed sans-serif, with a soft shadow; " : "") + (H ? "the headline \"" + H + "\" runs along the lower right in a beige #E8DCC8 band, two lines at most; " : "") + (S ? "the kicker \"" + S + "\" tiny in beige under the band. " : "")
-       : "Magazine box: " + (F ? "the figure \"" + F + "\" set LARGE in warm gold #C5A56A inside a thin gold-outlined rectangle at the upper right; " : "") + (H ? "the headline \"" + H + "\" stacked beneath the box in beige #E8DCC8 serif, on a soft dark translucent band; " : "") + (S ? "a thin gold rule and the kicker \"" + S + "\" small in beige. " : "")) +
-      "Render " + strings + " verbatim, exactly once each, perfectly legible — no extra characters, no duplicated or garbled text, no invented words or numbers. Keep the ground line under the text clear.\n\n"
-      : "") +
-    "NEGATIVE: no CGI or video-game look, no plastic sheen, no over-saturated sky, no lens flare, no tilt-shift, no fisheye, no illustration or painting style, no collage, no floating objects, no duplicated or warped architecture, no impossible geometry" + (withText ? ", no gibberish text" : "") + "." +
-    (withText ? "" : "\n\nCONTEXT (do not render any of this as text — it is only so you choose the right place and mood): the post says \"" + H + "\", the figure quoted is " + F + ", sourced from " + S + ".") +
+      "TEXT \u2014 all of it inside the LEFT COLUMN, none of it crossing into the right side. Across the top of the column, the masthead \"THE DIGEST\" in deep green #003C1E, heavy sans-serif capitals with wide letter-spacing, running the full width of the column. " + COL + " Beneath the headline a two-pixel hairline rule in bronze gold #A88448, about a third of the column wide. Under the rule the source line \"" + S + "\" in deep green #003C1E, small bold capitals, two lines at most.\n" +
+    "Render " + strings + " verbatim, exactly once each, perfectly legible \u2014 no extra characters, no duplicated or garbled text, no invented words or numbers.\n\n"
+      : "NO TEXT ANYWHERE IN THE FRAME \u2014 no text, no captions, no numbers, no masthead, no lettering of any kind. The LEFT COLUMN still carries the soft cream wash, left empty and ready for type to be set over it later.\n\n") +
+    "TYPE RULES: every label, kicker and source line is set in wide letter-spaced capitals. The column is flush left, never centred. Body text is a clean sans in near-black green #00120C with generous leading. Nothing italic, no boxes or cards around the type, no drop shadows behind the type, no gradients anywhere except the single cream wash.\n\n" +
+    (withText ? "" : "CONTEXT (do not render any of this as text \u2014 it is only so you choose the right place and mood): the post says \"" + H + "\", the figure quoted is " + F + ", source " + S + ".\n\n") +
+    "NEGATIVE: no CGI or video-game look, no plastic sheen, no over-saturated sky, no lens flare, no tilt-shift, no fisheye, no illustration or painting style, no collage, no floating objects, no people." +
     "```\n\n" +
-    "👉 Ask ChatGPT “*now the same plate at 1920x1080*” for the LinkedIn version. Then place your avatar in the left third, feet on the ground line, with the light on your right cheek so it matches the sun in the plate." +
-    (F ? " Before posting, check the figure reads exactly “" + F + "”." : "");
+    "\ud83d\udc49 Ask ChatGPT \u201c*now the same plate at 1920x1080*\u201d for the LinkedIn version. Then place yourself in the RIGHT side, feet on the ground line, lit from the right so you match the plate." +
+    (F ? " Before posting, check the figure reads exactly \u201c" + F + "\u201d." : "");
 }
 
 function visualPromptBlock(angle) {
