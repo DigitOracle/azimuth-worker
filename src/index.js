@@ -2246,6 +2246,12 @@ export default {
         await waSendButtons(env, env.WA_ALLOWED, _ct, [{ id: "st:lock", title: "Lock it" }, { id: "st:change", title: "Change something" }]);
         return new Response("card sent");
       }
+      if (url.pathname === "/walk_status") {                  // v119 - is the UnReal streamer on, and where (keyed); heartbeat lands via POST below
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _ws = null; try { _ws = JSON.parse((await env.MEETINGS.get("walk_status")) || "null"); } catch (e) {}
+        const _age = _ws && _ws.ts ? Math.round((Date.now() - _ws.ts) / 1000) : null;
+        return new Response(JSON.stringify({ live: !!(_ws && _ws.live && _age !== null && _age < 90), url: _ws ? _ws.url : null, age_s: _age, streamer: _ws ? _ws.streamer || "NajmaDubai" : null }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/style_status") {                 // v112 - where the walk-through is (keyed)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         let _pile = [], _notes = [], _card = null; try { _pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {} try { _notes = JSON.parse((await env.MEETINGS.get("style_notes")) || "[]"); } catch (e) {} try { _card = JSON.parse((await env.MEETINGS.get("style_card")) || "null"); } catch (e) {}
@@ -2584,6 +2590,15 @@ export default {
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 }); const list = await env.MEETINGS.list(); const events = []; for (const k of list.keys) { if (!k.name.startsWith("evt_")) continue; const v = await env.MEETINGS.get(k.name); if (v) { try { events.push(JSON.parse(v)); } catch (e) {} } } return new Response(JSON.stringify(events), { headers: { "Content-Type": "application/json" } });
     }
     if (request.method === "POST") {
+      if (url.pathname === "/walk_status") {                   // v119 - UnReal streamer heartbeat from the laptop (every 30 s while the game runs)
+        const _wh = request.headers.get("X-Azimuth-Ingest");
+        if (!env.INGEST_TOKEN || !_wh || !ctEq(_wh, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
+        let _wb; try { _wb = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
+        const _wu = String(_wb.url || "").slice(0, 200);
+        if (!/^https?:\/\/[a-z0-9.\-:]+\/?$/i.test(_wu)) return new Response("url required (scheme://host[:port]/)", { status: 400 });
+        await env.MEETINGS.put("walk_status", JSON.stringify({ url: _wu.replace(/\/$/, ""), live: !!_wb.live, streamer: String(_wb.streamer || "NajmaDubai").slice(0, 40), ts: Date.now() }), { expirationTtl: 3600 });
+        return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/ingest_market") {                 // v36 — Market Pulse aggregates (collector -> KV, ~10 KB)
         if (request.method !== "POST") return new Response("method", { status: 405 });
         const _mh = request.headers.get("X-Azimuth-Ingest");
@@ -5070,7 +5085,7 @@ const MAP_CHROME_JS = ''
   + 'function esc(t){return String(t==null?"":t).replace(/[&<>]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]})}'
   + 'function tc(t){t=String(t||"");if(t.length>3&&t===t.toUpperCase()&&/[A-Z]/.test(t)){return t.toLowerCase().replace(/(^|[\\s\\-\\/(])([a-z])/g,function(m,a,b){return a+b.toUpperCase()}).replace(/\\b(By|Of|And|The|At)\\b/g,function(m){return m.toLowerCase()})}return t}'
   + 'function loadData(){var V="?v="+Math.floor(Date.now()/600000);Promise.all([j("/img/districts_geo"+V),j("/img/subs"+V),j("/img/plots"+V),j("/img/amenities"+V),j("/img/videos"+V),j("/img/map_prices"+V)]).then(function(r){'
-  + '  D=r[0];SUBS=r[1];PLOTS=r[2];AM=r[3];VIDS=(r[4]&&r[4].items)||[];PR=(r[5]&&r[5].items)||[];buildRail();buildAm();drawAm();if(STYLE_READY)addLayers();deepLink();});}'
+  + '  D=r[0];SUBS=r[1];PLOTS=r[2];AM=r[3];VIDS=((r[4]&&r[4].items)||[]).filter(function(v){return !v.kind});PR=(r[5]&&r[5].items)||[];buildRail();buildAm();drawAm();if(STYLE_READY)addLayers();deepLink();});}'
   + 'var HB={lo:10,hi:30,blo:1,bhi:3,type:"any",beach:false,live:false,on:false};'
   + 'function stepAed(v){v=+v;return v<=20?250000+v*125000:(v<=40?2750000+(v-20)*362500:10000000+(v-40)*500000)}'      // 0.25M..2.75M..10M..20M
   + 'function fmtAed(a){return a>=1e6?("AED "+(a/1e6).toFixed(a>=1e7?0:1)+"M"):("AED "+Math.round(a/1e3)+"k")}'
@@ -7064,9 +7079,9 @@ function applyProj(name){
   const amen=(idn&&idn.amenities||[]).filter(Boolean);
   rows.splice(12 - (ten.length?2:0) - (amen.length?2:0));
   const _vtok=(t)=>String(t||"").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff ]+/g," ").split(" ").filter(w=>w.length>2&&["the","by","at","residences","residence","tower","towers","dubai"].indexOf(w)<0);
-  const _vT=_vtok(name);const _vid=VIDS.find(v=>(!v.district||v.district==="${slugName}")&&(()=>{const U=_vtok(v.name);return U.length&&_vT.length&&U.every(w=>_vT.indexOf(w)>=0)})())||null;
+  const _vT=_vtok(name);const _vid=VIDS.find(v=>!v.kind&&(!v.district||v.district==="${slugName}")&&(()=>{const U=_vtok(v.name);return U.length&&_vT.length&&U.every(w=>_vT.indexOf(w)>=0)})())||null;
   const _vidHtml=_vid?'<div class=vtour><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="'+_vid.poster+'"><source src="'+_vid.src+'" type="video/mp4"></video></div>':'';
-  const acts='<div class=pa>'+'<a class=act href="/map?key='+encodeURIComponent(KEY)+'&d=${slugName}&focus='+encodeURIComponent(name)+'">on the map →</a>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
+  const acts='<div class=pa>'+'<a class="act unreal" id=unrealbtn data-i="'+(a0?a0.i:"")+'" style="display:none;border-color:var(--gold);color:var(--gold)">UnReal</a>'+'<a class=act href="/map?key='+encodeURIComponent(KEY)+'&d=${slugName}&focus='+encodeURIComponent(name)+'">on the map →</a>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
     (SELDEV?'<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>':'')+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
   // icon tiles instead of a list (Kendall): small squares, gold line icons drawn inline, value first, label under
   const ICO={"Where":"M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10zm0-8a2 2 0 1 0 0-4 2 2 0 0 0 0 4z","Handover":"M4 6h16v14H4zM8 3v4M16 3v4M4 10h16","Structure":"M4 20h16M6 20V9l6-4 6 4v11M9 20v-5h6v5",
@@ -7102,7 +7117,19 @@ function applyProj(name){
   pp.classList.remove("deep");pp.scrollTop=0;                                                     // v94: a phone opens on the snapshot
   const _mb=pp.querySelector(".modeb");_mb.querySelector("#mob").onclick=()=>_mb.classList.toggle("open");
   _mb.querySelectorAll(".mb").forEach(b=>b.onclick=()=>{pp.classList.toggle("deep",b.dataset.m==="deep");_mb.querySelectorAll(".mb").forEach(x=>x.classList.toggle("on",x===b));_mb.classList.remove("open");pp.scrollTop=0});
-  if(a0)buildViews(a0,mine);}
+  if(a0)buildViews(a0,mine);walkRefresh();}
+// v119 - UnReal (Kendall, 10 Sep): one button on the building panel. Live = the laptop streamer is on (heartbeat < 90 s) and the
+// button opens the stream; otherwise the pre-rendered clip for this footprint plays inline; neither = the button stays hidden.
+let WALK=null;
+function walkPoll(){fetch("/walk_status?key="+encodeURIComponent(KEY)).then(r=>r.ok?r.json():null).then(j=>{WALK=j;walkRefresh()}).catch(()=>{})}
+walkPoll();setInterval(walkPoll,45000);
+function walkRefresh(){const b=document.getElementById("unrealbtn");if(!b)return;const i=b.dataset.i;
+  const clip=VIDS.find(v=>v.kind==="unreal"&&v.district==="${slugName}"&&String(v.i)===String(i))||null;
+  if(WALK&&WALK.live&&WALK.url){b.textContent="UnReal \u00b7 live";b.href=WALK.url+"/?StreamerId="+encodeURIComponent(WALK.streamer||"NajmaDubai")+"&AutoConnect=true&AutoPlayVideo=true&StartVideoMuted=true&HoveringMouse=true&MatchViewportRes=true";b.target="_blank";b.rel="noopener";b.onclick=null;b.style.display="";return}
+  if(clip){b.textContent="UnReal \u00b7 clip";b.removeAttribute("href");b.removeAttribute("target");b.style.display="";
+    b.onclick=()=>{const d=b.closest(".deep");if(!d||d.querySelector(".vtour.unreal"))return;const w=document.createElement("div");w.className="vtour unreal";
+      w.innerHTML='<div class=vtt>UnReal \u00b7 '+esc(clip.title||"")+'</div><video controls autoplay playsinline poster="'+clip.poster+'"><source src="'+clip.src+'" type="video/mp4"></video>';d.insertBefore(w,d.firstChild);b.style.display="none"};return}
+  b.style.display="none"}
 // v77 - VIEWS (Kendall, 3 Sep): what each side of the building actually looks at. Four thumbnails rendered live from the tower's own
 // facades at two thirds of its height, plus a line-of-sight check to the named landmarks with the blocker named. Tap a thumbnail to
 // stand at that facade. Facade midpoints and bearings come from the anchors (build_anchors.py), landmarks from /img/landmarks.
