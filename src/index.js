@@ -722,6 +722,10 @@ async function waSendButtons(env, to, body, buttons) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: body }, action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) } } }, "buttons");
 }
 // v45 — send an image by public link (the heat map etc.); caption optional
+// v118 - a video message: WhatsApp fetches the link itself, and /video/<key> already answers range requests
+async function waSendVideo(env, to, link, caption) {
+  return waPost(env, { messaging_product: "whatsapp", to, type: "video", video: { link, caption: caption || undefined } }, "video");
+}
 async function waSendImage(env, to, link, caption) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "image", image: { link, caption: caption || undefined } }, "image");
 }
@@ -2177,6 +2181,18 @@ export default {
         for (let i = 0; i < days; i++) { const day = gstDateStr(new Date(n0.getTime() - i * 86400000)); let L = []; try { L = JSON.parse((await env.MEETINGS.get("bridge_" + day)) || "[]"); } catch (e) {} for (const r of L) if (!since || Date.parse(r.at) >= since) out.push(r); }
         out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
         return new Response(JSON.stringify({ generated: new Date().toISOString(), schema: "azimuth-bridge/1", count: out.length, records: out }, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/send_video") {                   // v118 - send a stored video to her as a video message (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _vn = (url.searchParams.get("v") || "").replace(/[^a-z0-9_]/gi, ""); if (!_vn) return new Response("v required", { status: 400 });
+        let _have = 0; try { const _b = await env.MEETINGS.get("vid_" + _vn, "arrayBuffer"); _have = _b ? _b.byteLength : 0; } catch (e) {}
+        if (!_have) return new Response("no such video: " + _vn, { status: 404 });
+        if (_have > 16 * 1024 * 1024) return new Response("video is " + Math.round(_have / 1e6) + " MB - WhatsApp caps video at 16 MB", { status: 413 });
+        const _lnk = url.origin + "/video/" + _vn;
+        const _cap = String(url.searchParams.get("caption") || "").slice(0, 1000);
+        const _to = url.searchParams.get("to") || env.WA_ALLOWED;
+        try { await waSendVideo(env, _to, _lnk, _cap); } catch (e) { return new Response("send failed", { status: 502 }); }
+        return new Response(JSON.stringify({ ok: true, key: _vn, bytes: _have, link: _lnk }), { headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/plate_run") {                    // v109 - make one post's plate and cards; ?send=1 delivers to her, ?send=0 returns the URLs
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
