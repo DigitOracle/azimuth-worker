@@ -2728,6 +2728,39 @@ export default {
             else if (bid === "st:change" && _sf.step === "card") { _sf.step = "change"; await styleSet(env, _sf); await waSend(env, from, STYLE_MSG.change); }
             return new Response("ok");
           }
+          if (/^mkt:pic:\d{1,2}$/.test(bid)) {                                        // v120 - a morning angle becomes a picture
+            const _n = bid.slice(8);
+            let _cx = null; try { _cx = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+            const _a = _cx && (_cx.angles || [])[Number(_n) - 1];
+            if (!_a) { await waSend(env, from, "That angle isn't on file any more - say \u201cfeed\u201d and I'll show today's again."); return new Response("ok"); }
+            let _d = null; try { _d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+            const _area = angleArea(_a, _d);
+            const _opts = feedBackdrops(_a, _area);
+            try { await env.MEETINGS.put("fbg_" + _n, JSON.stringify({ n: _n, area: _area || "", angle: _a, options: _opts }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+            await waSendButtons(env, from, (_area ? _area + ". " : "") + "Which backdrop?", _opts.map(o => ({ id: "fbg:" + _n + ":" + o.id, title: o.button.slice(0, 20) })));
+            return new Response("ok");
+          }
+          if (bid.indexOf("fbg:") === 0) {                                             // v120 - backdrop chosen: make the plate, her cut-out, the card
+            const _p = bid.split(":"), _n = _p[1], _oid = String(_p[2] || "").toUpperCase();
+            let _st = null; try { _st = JSON.parse((await env.MEETINGS.get("fbg_" + _n)) || "null"); } catch (e) {}
+            const _opt = _st && (_st.options || []).find(o => o.id === _oid);
+            if (!_opt) { await waSend(env, from, "Those backdrops have expired - pick the angle again and I'll offer them fresh."); return new Response("ok"); }
+            const _ang = _st.angle || {};
+            const _post = { n: _n, idp: "feed_", hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "",
+                            masthead: _st.area || "Dubai",
+                            caption: [_ang.hook || "", (_ang.figure || "") + " — " + (_ang.source || ""), _ang.buyer || ""].filter(Boolean).join("\n\n").slice(0, 1000) };
+            if (!env.OPENAI_API_KEY) { await waSend(env, from, "I can't make pictures just now - the image key is missing."); return new Response("ok"); }
+            await waSend(env, from, "Good pick - " + _opt.name + ". Making your picture now, give me a minute.");
+            const _tt = from;
+            if (ctx) ctx.waitUntil((async () => {                                       // a Worker cannot fetch its own address; do it here after the response
+              let _r = null; try { _r = await plateRun(env, _post, _opt, _tt, url.origin, true); } catch (e) { _r = { err: String((e && e.message) || e) }; }
+              if (!_r || (!_r.square && !_r.story)) {
+                try { await env.MEETINGS.put("plate_last_fail", JSON.stringify({ at: new Date().toISOString(), feed: _n, opt: _oid, err: _r && _r.err }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+                try { await waSend(env, _tt, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, _tt, bgPromptBlock(_ang, _opt.place)); } catch (e) {}
+              }
+            })());
+            return new Response("ok");
+          }
           if (bid.indexOf("bg:") === 0) {                                              // v107 - backdrop choice: ack, record, then hand her the plate prompt (Kendall approved the auto-send, 9 Sep 2026)
             const _bp = bid.split(":"), _pn = _bp[1], _oid = String(_bp[2] || "").toUpperCase();
             let _pack = null; try { _pack = JSON.parse((await env.MEETINGS.get("img_ips_bg_prompts")) || "null"); } catch (e) {}
@@ -3671,6 +3704,7 @@ async function handleFeedPick(env, to, nums) {
     { id: "mkt:car:" + sel, title: "🎠 LinkedIn carousel", description: "6 swipeable slides + image prompt" },
     { id: "mkt:art:" + sel, title: "📝 LinkedIn article", description: "Long-form thought-leadership" },
     { id: "mkt:ig:" + sel, title: "📸 Instagram", description: "Reel script + caption + visual" },
+    { id: "mkt:pic:" + nums[0], title: "📷 Picture with you", description: "Backdrop, then your card with you in it" },
     { id: "feed:again", title: "🔁 Another angle", description: "Show this morning's list again" }]);
 }
 
@@ -5065,7 +5099,7 @@ const MAP_CHROME_JS = ''
   + 'var DEVN={omniyat:"OMNIYAT",hh:"H&H",meraas:"Meraas",select:"Select Group",ellington:"Ellington",arada:"Arada",zaya:"ZAYA",palma:"Palma",fakhruddin:"Fakhruddin",beyond:"BEYOND",imtiaz:"Imtiaz",iman:"Iman",emaar:"Emaar",sobha:"Sobha",prestigeone:"Prestige One"};function devName(k){return DEVN[k]||k}function bedWord(b){return b===0?"studio":bedsLabel(b)+"-bed"}'
   + 'var AMEN={school:["schools","\u{1F393}","#8FC7B9"],hospital:["hospitals","\u{1F3E5}","#E08A8A"],clinic:["clinics","⚕","#E8B49A"],metro:["metro","\u{1F687}","#9FB8E8"],mall:["malls","\u{1F6CD}","#D98F5A"],park:["parks","\u{1F333}","#8FD3A0"],beach:["beach","\u{1F30A}","#7FC7D9"]};'
   + 'var ICON=' + JSON.stringify(MAP_ICONS) + ';'
-  + 'var D=null,SUBS=null,PLOTS=null,AM=null,SEL=null,ON={},VIDS=[],PR=[],RKM=3,MODE="dist",COAST=null;fetch("/img/coast?t="+Math.floor(Date.now()/600000)).then(function(r){return r.ok?r.json():null}).then(function(j){COAST=j&&j.segments?j.segments:null;window.__COASTB=j&&j.bodies?j.bodies:[];if(SEL)openPanel(SEL);if(typeof drawAm==="function"&&AM)drawAm()}).catch(function(){});(function(){var r=document.getElementById("rng");if(r)r.value=3;var v=document.getElementById("rngv");if(v)v.textContent="3.0 km";document.querySelectorAll("#scope .sm button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-mode")==="dist")});var sc=document.getElementById("scope");if(sc)sc.classList.add("dist")})();'
+  + 'var D=null,SUBS=null,PLOTS=null,AM=null,SEL=null,ON={},VIDS=[],UFLY=[],PR=[],RKM=3,MODE="dist",COAST=null;fetch("/img/coast?t="+Math.floor(Date.now()/600000)).then(function(r){return r.ok?r.json():null}).then(function(j){COAST=j&&j.segments?j.segments:null;window.__COASTB=j&&j.bodies?j.bodies:[];if(SEL)openPanel(SEL);if(typeof drawAm==="function"&&AM)drawAm()}).catch(function(){});(function(){var r=document.getElementById("rng");if(r)r.value=3;var v=document.getElementById("rngv");if(v)v.textContent="3.0 km";document.querySelectorAll("#scope .sm button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-mode")==="dist")});var sc=document.getElementById("scope");if(sc)sc.classList.add("dist")})();'
   + 'document.getElementById("rng").oninput=function(){RKM=parseFloat(this.value);document.getElementById("rngv").textContent=RKM.toFixed(1)+" km";drawAm();if(SEL)openPanel(SEL)};'
   + 'document.querySelectorAll("#scope .sm button").forEach(function(b){b.onclick=function(){MODE=b.getAttribute("data-mode");document.querySelectorAll("#scope .sm button").forEach(function(x){x.classList.toggle("on",x===b)});document.getElementById("scope").classList.toggle("dist",MODE==="dist");drawAm();if(SEL)openPanel(SEL)}});'
   + 'function rngLabel(){var el=document.getElementById("rngof");if(el)el.textContent=SEL?"from the selected place":"from the district centre";var sc=document.getElementById("scope");if(sc){sc.classList.toggle("on",!!currentDistrict()||!!SEL);placeScope()}}'
@@ -5085,7 +5119,7 @@ const MAP_CHROME_JS = ''
   + 'function esc(t){return String(t==null?"":t).replace(/[&<>]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]})}'
   + 'function tc(t){t=String(t||"");if(t.length>3&&t===t.toUpperCase()&&/[A-Z]/.test(t)){return t.toLowerCase().replace(/(^|[\\s\\-\\/(])([a-z])/g,function(m,a,b){return a+b.toUpperCase()}).replace(/\\b(By|Of|And|The|At)\\b/g,function(m){return m.toLowerCase()})}return t}'
   + 'function loadData(){var V="?v="+Math.floor(Date.now()/600000);Promise.all([j("/img/districts_geo"+V),j("/img/subs"+V),j("/img/plots"+V),j("/img/amenities"+V),j("/img/videos"+V),j("/img/map_prices"+V)]).then(function(r){'
-  + '  D=r[0];SUBS=r[1];PLOTS=r[2];AM=r[3];VIDS=((r[4]&&r[4].items)||[]).filter(function(v){return !v.kind});PR=(r[5]&&r[5].items)||[];buildRail();buildAm();drawAm();if(STYLE_READY)addLayers();deepLink();});}'
+  + '  D=r[0];SUBS=r[1];PLOTS=r[2];AM=r[3];VIDS=((r[4]&&r[4].items)||[]).filter(function(v){return !v.kind});UFLY=((r[4]&&r[4].items)||[]).filter(function(v){return v.kind==="unreal"&&v.scope==="district"});PR=(r[5]&&r[5].items)||[];buildRail();buildAm();drawAm();if(STYLE_READY)addLayers();deepLink();});}'
   + 'var HB={lo:10,hi:30,blo:1,bhi:3,type:"any",beach:false,live:false,on:false};'
   + 'function stepAed(v){v=+v;return v<=20?250000+v*125000:(v<=40?2750000+(v-20)*362500:10000000+(v-40)*500000)}'      // 0.25M..2.75M..10M..20M
   + 'function fmtAed(a){return a>=1e6?("AED "+(a/1e6).toFixed(a>=1e7?0:1)+"M"):("AED "+Math.round(a/1e3)+"k")}'
@@ -5162,18 +5196,23 @@ const MAP_CHROME_JS = ''
   + '  var go=function(){if(sf)openPlace({properties:sf.properties,geometry:sf.geometry},"sub");else if(pf)openPlace({properties:pf.properties,geometry:pf.geometry},"plot");else if(v)openVideo(v);'
   + '    if(v&&(sf||pf)){}};'
   + '  if(STYLE_READY&&map.getSource("subs"))setTimeout(go,900);else map.once("style.load",function(){setTimeout(go,1200)});}'
+  + 'function flyFor(slug){for(var i=0;i<UFLY.length;i++){if(UFLY[i].district===slug)return UFLY[i]}return null}'
+  + 'function flyChip(slug){return flyFor(slug)?\' \u00b7 <u class=uv data-fly="\'+slug+\'" style="color:var(--gold);text-decoration:none;border:1px solid var(--gold);border-radius:9px;padding:0 6px;font-style:normal;cursor:pointer">\u25B6 UnReal</u>\':""}'
+  + 'function openFly(v){var el=document.getElementById("panel");el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+esc(v.name)+\'</div><div class=ps>UnReal fly-through\'+(v.title?" \u00b7 "+esc(v.title):"")+\'</div>\'+videoHtml(v);'
+  + '  el.classList.add("on");document.getElementById("px").onclick=function(){el.classList.remove("on");hint()};document.getElementById("hint").textContent="";}'
+  + 'function wireFly(el){el.querySelectorAll("u[data-fly]").forEach(function(u){u.onclick=function(e){e.stopPropagation();var v=flyFor(u.getAttribute("data-fly"));if(v)openFly(v)}})}'
   + 'function buildRail(){if(!D)return;var el=document.getElementById("rail"),h="";var seen={};'
   + '  (D.districts||[]).forEach(function(d){if(!seen[d.corridor]){seen[d.corridor]=1}});'
   + '  var tot=(D.districts||[]).reduce(function(a,d){return a+(d.subs||0)},0);'
   + '  h+=\'<div class="c on" data-d=""><i>everywhere</i><b>All Dubai</b><s><em>\'+(D.districts||[]).length+\'</em> districts</s></div>\';'
-  + '  (D.districts||[]).forEach(function(d){h+=\'<div class=c data-d="\'+d.slug+\'"><i>\'+esc(d.corridor||"")+\'</i><b>\'+esc(d.name)+\'</b><s>\'+(d.subs?\'<em>\'+d.subs+\'</em> sub-communities\':\'<em>\'+(d.named||0)+\'</em> named buildings\')+\'</s></div>\'});'
-  + '  el.innerHTML=h;el.querySelectorAll(".c").forEach(function(c){c.onclick=function(){pickDistrict(c.getAttribute("data-d"),c)}});}'
+  + '  (D.districts||[]).forEach(function(d){h+=\'<div class=c data-d="\'+d.slug+\'"><i>\'+esc(d.corridor||"")+\'</i><b>\'+esc(d.name)+\'</b><s>\'+(d.subs?\'<em>\'+d.subs+\'</em> sub-communities\':\'<em>\'+(d.named||0)+\'</em> named buildings\')+flyChip(d.slug)+\'</s></div>\'});'
+  + '  el.innerHTML=h;el.querySelectorAll(".c").forEach(function(c){c.onclick=function(){pickDistrict(c.getAttribute("data-d"),c)}});wireFly(el);}'
   + 'var CURD="";'
   + 'function buildSubs(d){var el=document.getElementById("rail");var list=((SUBS&&SUBS.features)||[]).filter(function(f){return f.properties.district===d.slug}).sort(function(a,b){var A=a.properties,B=b.properties;return ((B.units||0)-(A.units||0))||((B.plots||0)-(A.plots||0))||((B.buildings||0)-(A.buildings||0))});'
-  + '  var h=\'<div class="c back" data-back=1><i>\'+esc(d.corridor||"")+\'</i><b>\u2190 \'+esc(d.name)+\'</b><s><em>\'+list.length+\'</em> sub-communities</s></div>\';'
+  + '  var h=\'<div class="c back" data-back=1><i>\'+esc(d.corridor||"")+\'</i><b>\u2190 \'+esc(d.name)+\'</b><s><em>\'+list.length+\'</em> sub-communities\'+flyChip(d.slug)+\'</s></div>\';'
   + '  list.forEach(function(f,ix){var p=f.properties;var dv=devFor(p.name,p.district);var meta=p.units?\'<em>\'+p.units.toLocaleString("en")+\'</em> units\':((p.plots||0)>1?\'<em>\'+p.plots+\'</em> plots\':((p.buildings||0)>1?\'<em>\'+p.buildings+\'</em> buildings\':\'single plot\'));'
-  + '    h+=\'<div class=c data-sub="\'+ix+\'"><i>\'+(dv?esc(dv):"sub-community")+\'</i><b>\'+esc(tc(p.name))+\'</b><s>\'+meta+\'</s></div>\'});'
-  + '  el.innerHTML=h;el.scrollLeft=0;'
+  + '    h+=\'<div class=c data-sub="\'+ix+\'"><i>\'+(dv?esc(dv):"sub-community")+\'</i><b>\'+esc(tc(p.name))+\'</b><s>\'+meta+flyChip(d.slug)+\'</s></div>\'});'
+  + '  el.innerHTML=h;el.scrollLeft=0;wireFly(el);'
   + '  el.querySelector(".back").onclick=function(){buildRail();var all=el.querySelector(".c[data-d=\'\']");pickDistrict("",all)};'
   + '  el.querySelectorAll(".c[data-sub]").forEach(function(c){c.onclick=function(){var f=list[+c.getAttribute("data-sub")];el.querySelectorAll(".c").forEach(function(x){x.classList.toggle("on",x===c)});openPlace({properties:f.properties,geometry:f.geometry},"sub")}});}'
   + 'function buildAm(){var el=document.getElementById("am"),h=\'<div class=scw id=scw><i>count within</i><button data-r=area>community</button><button data-r=1>1 km</button><button data-r=2>2 km</button><button data-r=3>3 km</button><button data-r=5>5 km</button><button data-r=10>10 km</button></div>\';'
@@ -7081,7 +7120,7 @@ function applyProj(name){
   const _vtok=(t)=>String(t||"").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff ]+/g," ").split(" ").filter(w=>w.length>2&&["the","by","at","residences","residence","tower","towers","dubai"].indexOf(w)<0);
   const _vT=_vtok(name);const _vid=VIDS.find(v=>!v.kind&&(!v.district||v.district==="${slugName}")&&(()=>{const U=_vtok(v.name);return U.length&&_vT.length&&U.every(w=>_vT.indexOf(w)>=0)})())||null;
   const _vidHtml=_vid?'<div class=vtour><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="'+_vid.poster+'"><source src="'+_vid.src+'" type="video/mp4"></video></div>':'';
-  const acts='<div class=pa>'+'<a class="act unreal" id=unrealbtn data-i="'+(a0?a0.i:"")+'" style="display:none;border-color:var(--gold);color:var(--gold)">UnReal</a>'+'<a class=act href="/map?key='+encodeURIComponent(KEY)+'&d=${slugName}&focus='+encodeURIComponent(name)+'">on the map →</a>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
+  const acts='<div class=pa>'+'<a class=act href="/map?key='+encodeURIComponent(KEY)+'&d=${slugName}&focus='+encodeURIComponent(name)+'">on the map →</a>'+(f&&f.cards?'<a class=act href="/cards?b='+encodeURIComponent(f.cards)+'&key='+encodeURIComponent(KEY)+'">unit cards →</a>':'')+
     (SELDEV?'<a class=act href="/dev?d='+SELDEV+'&key='+encodeURIComponent(KEY)+'">'+DEVNAME[SELDEV]+' page</a>':'')+(f&&f.url?'<a class=act href="'+esc(f.url)+'" target=_blank rel=noopener>developer site</a>':'')+'</div>';
   // icon tiles instead of a list (Kendall): small squares, gold line icons drawn inline, value first, label under
   const ICO={"Where":"M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10zm0-8a2 2 0 1 0 0-4 2 2 0 0 0 0 4z","Handover":"M4 6h16v14H4zM8 3v4M16 3v4M4 10h16","Structure":"M4 20h16M6 20V9l6-4 6 4v11M9 20v-5h6v5",
@@ -7110,6 +7149,7 @@ function applyProj(name){
   const _inSub=(!_isSub&&a0&&a0.cluster&&a0.cluster!==name)?'<span style="color:var(--mut)"> · in '+esc(a0.cluster)+'</span>':'';
   pp.innerHTML='<span class=px id=ppx>✕</span><div class=pt>'+esc(name)+chip+_subChip+'</div><div class=ps>'+(_isSub?('the register files these plots under this name · '+mine.size+' buildings here'):(SELDEV?DEVNAME[SELDEV]:'on the map · developer not on the list'))+(f&&f.status?' · '+esc(f.status):'')+_inSub+'</div>'+
     '<div class=modeb><i id=mob title="snapshot or deeper dive">\u25CE</i><button class="mb on" data-m=snap>Snapshot</button><button class=mb data-m=deep>Deeper dive</button></div>'+
+    '<div class=pa id=unrealrow style="display:none;margin:6px 0 2px"><a class="act unreal" id=unrealbtn data-i="'+(a0?a0.i:"")+'" style="border-color:var(--gold);color:var(--gold);font-weight:600">UnReal</a></div>'+
     '<div class=snap>'+(rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+'</div>'+
     '<div class=deep>'+_vidHtml+tstrip+astrip+umxHtml+acts+'</div>'+
     '<div class=pn>developer site · availability sheet · DLD Open Data 2026 · identity resolved across every source we hold, graded on the chip; tenants are recorded against the building, never as its name; envelope is footprint × storeys, an upper bound; blockers within this district only</div>';
@@ -7123,13 +7163,13 @@ function applyProj(name){
 let WALK=null;
 function walkPoll(){fetch("/walk_status?key="+encodeURIComponent(KEY)).then(r=>r.ok?r.json():null).then(j=>{WALK=j;walkRefresh()}).catch(()=>{})}
 walkPoll();setInterval(walkPoll,45000);
-function walkRefresh(){const b=document.getElementById("unrealbtn");if(!b)return;const i=b.dataset.i;
+function walkRefresh(){const b=document.getElementById("unrealbtn"),row=document.getElementById("unrealrow");if(!b||!row)return;const i=b.dataset.i;
   const clip=VIDS.find(v=>v.kind==="unreal"&&v.district==="${slugName}"&&String(v.i)===String(i))||null;
-  if(WALK&&WALK.live&&WALK.url){b.textContent="UnReal \u00b7 live";b.href=WALK.url+"/?StreamerId="+encodeURIComponent(WALK.streamer||"NajmaDubai")+"&AutoConnect=true&AutoPlayVideo=true&StartVideoMuted=true&HoveringMouse=true&MatchViewportRes=true";b.target="_blank";b.rel="noopener";b.onclick=null;b.style.display="";return}
-  if(clip){b.textContent="UnReal \u00b7 clip";b.removeAttribute("href");b.removeAttribute("target");b.style.display="";
-    b.onclick=()=>{const d=b.closest(".deep");if(!d||d.querySelector(".vtour.unreal"))return;const w=document.createElement("div");w.className="vtour unreal";
-      w.innerHTML='<div class=vtt>UnReal \u00b7 '+esc(clip.title||"")+'</div><video controls autoplay playsinline poster="'+clip.poster+'"><source src="'+clip.src+'" type="video/mp4"></video>';d.insertBefore(w,d.firstChild);b.style.display="none"};return}
-  b.style.display="none"}
+  if(WALK&&WALK.live&&WALK.url){b.textContent="UnReal \u00b7 live";b.href=WALK.url+"/?StreamerId="+encodeURIComponent(WALK.streamer||"NajmaDubai")+"&AutoConnect=true&AutoPlayVideo=true&StartVideoMuted=true&HoveringMouse=true&MatchViewportRes=true";b.target="_blank";b.rel="noopener";b.onclick=null;b.style.display="";row.style.display="";return}
+  if(clip){b.textContent="UnReal \u00b7 clip";b.removeAttribute("href");b.removeAttribute("target");b.style.display="";row.style.display="";
+    b.onclick=()=>{if(row.querySelector(".vtour.unreal"))return;const w=document.createElement("div");w.className="vtour unreal";w.style.width="100%";
+      w.innerHTML='<div class=vtt>UnReal \u00b7 '+esc(clip.title||"")+'</div><video controls autoplay playsinline poster="'+clip.poster+'"><source src="'+clip.src+'" type="video/mp4"></video>';row.appendChild(w);b.style.display="none"};return}
+  row.style.display="none"}
 // v77 - VIEWS (Kendall, 3 Sep): what each side of the building actually looks at. Four thumbnails rendered live from the tower's own
 // facades at two thirds of its height, plus a line-of-sight check to the named landmarks with the blocker named. Tap a thumbnail to
 // stand at that facade. Facade midpoints and bearings come from the anchors (build_anchors.py), landmarks from /img/landmarks.
@@ -7555,7 +7595,7 @@ async function platePhoto(env, angle, place, id) {
 }
 // photo -> editorial card in both sizes -> (optionally) her chat. Returns what was made; never throws.
 async function plateRun(env, post, opt, to, origin, sendIt) {
-  const id = "ips_" + post.n + "_" + String(opt.id || "a").toLowerCase();
+  const id = (post.idp || "ips_") + post.n + "_" + String(opt.id || "a").toLowerCase();   // v120 - a feed angle and an IPS post can share a number
   const angle = { hook: post.hook || post.ask || "", figure: post.figure || "", source: post.source || "", area: post.masthead || "" };
   const out = { id, photo: null, square: null, story: null, err: "" };
   let photo = "plate_" + id.replace(/[^a-z0-9_]/gi, "").slice(0, 34);
@@ -7605,6 +7645,20 @@ async function styleKeep(env, bytes, mime, kind, cap) {
   return pile.length;
 }
 
+// v120 - backdrops for an ordinary morning angle. The IPS pack was written by hand for one event;
+// this builds the same three shapes from whatever the angle is about, so every angle can become a picture.
+// Deliberately three: a wide view of the place, a street-level human one, and a lived-in interior.
+function feedBackdrops(angle, area) {
+  const where = area ? ("Dubai, " + area) : "Dubai";
+  return [
+    { id: "A", name: "Skyline, blue hour", button: "Skyline, blue hour",
+      place: "The " + where + " skyline seen across open water or a wide boulevard at blue hour - towers in silhouette with their lights just on, calm water or empty road in the foreground" },
+    { id: "B", name: "Street level", button: "Street level",
+      place: "A residential street in " + where + " at eye level - low-rise and mid-rise buildings, mature planting along the pavement, parked cars, a shaded walkway, ordinary and lived-in rather than promotional" },
+    { id: "C", name: "Balcony, interiors", button: "Balcony, interiors",
+      place: "The view out from a furnished apartment balcony in " + where + " - pale stone floor, a planter and a low chair in the near corner, the community and skyline beyond the rail" },
+  ];
+}
 function bgPromptBlock(angle, place, pal) {
   const PC = Object.assign({ beige: "#F0DECC", gold: "#A88448", green: "#003C1E", ink: "#00120C" }, pal || {});
   let H = String(angle.hook || "").replace(/"/g, "'").replace(/\s+/g, " ").trim();
