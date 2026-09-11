@@ -2182,6 +2182,31 @@ export default {
         out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
         return new Response(JSON.stringify({ generated: new Date().toISOString(), schema: "azimuth-bridge/1", count: out.length, records: out }, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      if (url.pathname === "/broc_pending") {                 // v124 - brochures she sent, waiting to be read on the machine that holds the register (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _q = []; try { _q = JSON.parse((await env.MEETINGS.get("broc_pending")) || "[]"); } catch (e) {}
+        const _out = [];
+        for (const id of _q) { try { const m = JSON.parse((await env.MEETINGS.get("broc_" + id)) || "null"); if (m) _out.push(m); } catch (e) {} }
+        return new Response(JSON.stringify({ n: _out.length, items: _out }), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/broc_part") {                    // v124 - one 8 MB part of a stored brochure (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _id = (url.searchParams.get("id") || "").replace(/[^a-z0-9]/gi, ""), _i = parseInt(url.searchParams.get("i") || "0", 10) | 0;
+        const _b = await env.MEETINGS.get("brocp_" + _id + "_" + _i, "arrayBuffer");
+        if (!_b) return new Response("no such part", { status: 404 });
+        return new Response(_b, { headers: { "Content-Type": "application/pdf" } });
+      }
+      if (url.pathname === "/broc_done") {                    // v124 - the local side has it: drop the parts, tell her what was in it (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _id = (url.searchParams.get("id") || "").replace(/[^a-z0-9]/gi, "");
+        let _m = null; try { _m = JSON.parse((await env.MEETINGS.get("broc_" + _id)) || "null"); } catch (e) {}
+        for (let i = 0; i < ((_m && _m.parts) || 12); i++) { try { await env.MEETINGS.delete("brocp_" + _id + "_" + i); } catch (e) {} }
+        try { await env.MEETINGS.delete("broc_" + _id); } catch (e) {}
+        try { let _q = JSON.parse((await env.MEETINGS.get("broc_pending")) || "[]"); await env.MEETINGS.put("broc_pending", JSON.stringify(_q.filter(x => x !== _id)), { expirationTtl: 7 * 86400 }); } catch (e) {}
+        const _say = String(url.searchParams.get("say") || "").slice(0, 600);
+        if (_say) { try { await waSend(env, env.WA_ALLOWED, _say); } catch (e) {} }
+        return new Response("ok");
+      }
       if (url.pathname === "/pic_resume") {                   // v123 - finish any picture job an isolate did not live to send (keyed; the 5-minute task calls it)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _min = Math.max(30, parseInt(url.searchParams.get("min_age") || "90", 10) | 0) * 1000;
@@ -2211,7 +2236,9 @@ export default {
           const _ar = angleArea(_ag, _md) || "Dubai";
           _po = { n: "f" + String(_bc.at || 0).slice(-6) + "_" + _an, hook: _ag.hook, figure: _ag.figure, source: _ag.source, masthead: _ar,
                   caption: String(_ag.hook || "") + "\n\n" + String(_ag.figure || "") + " \u2014 " + String(_ag.source || "") + (_ag.buyer ? "\n\n" + _ag.buyer : "") };
-          _op = { id: "A", name: _ar, place: url.searchParams.get("place") || (_ar === "Dubai" ? "Dubai \u2014 the skyline or the street that matches this headline, real and specific, never a generic city: " + String(_ag.hook || "").slice(0, 140)
+          const _use = (url.searchParams.get("use") || "").replace(/[^a-z0-9_]/gi, "");   // v124 - build on a stored render instead of generating one
+          if (_use) { _po.masthead = _ar; _op = { id: _use, name: "stored render", useKey: _use, credit: url.searchParams.get("credit") || "" }; }
+          else _op = { id: "A", name: _ar, place: url.searchParams.get("place") || (_ar === "Dubai" ? "Dubai \u2014 the skyline or the street that matches this headline, real and specific, never a generic city: " + String(_ag.hook || "").slice(0, 140)
                                                                                 : _ar + ", Dubai \u2014 a real street or waterfront view of this community, specific to it, never a generic city"), prompt_only: "", tail: "" };
         } else {
           let _pk = null; try { _pk = JSON.parse((await env.MEETINGS.get("img_ips_bg_prompts")) || "null"); } catch (e) {}
@@ -2743,8 +2770,52 @@ export default {
             const _area = angleArea(_a, _d);
             const _opts = feedBackdrops(_a, _area);
             try { await env.MEETINGS.put("fbg_" + _n, JSON.stringify({ n: _n, area: _area || "", angle: _a, options: _opts }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+            const _mh = await mediaFor(env, _a);                                     // v124 - do we hold the developer's own renders?
+            if (_mh) {
+              await waSendButtons(env, from, _mh.n + (_mh.n === 1 ? " render" : " renders") + " on file from " + _mh.developer + " for " + _mh.project + ". Use one of theirs, or make a new picture?",
+                [{ id: "mth:" + _n, title: "Use theirs" }, { id: "fbg:menu:" + _n, title: "Make a new one" }]);
+              return new Response("ok");
+            }
+            if (_mh === null && _a.developer) await waSend(env, from, "Nothing from " + _a.developer + " on file yet, so I will make one. Send me their brochure any time and I will keep it.");
             await waSendList(env, from, (_area ? _area + ". " : "") + "Which backdrop?", "Backdrops",
               _opts.map(o => ({ id: "fbg:" + _n + ":" + o.id, title: o.name, description: o.note })));
+            return new Response("ok");
+          }
+          if (/^fbg:menu:\d{1,2}$/.test(bid)) {                                      // v124 - "make a new one" from the offer
+            const _n = bid.slice(9);
+            let _st = null; try { _st = JSON.parse((await env.MEETINGS.get("fbg_" + _n)) || "null"); } catch (e) {}
+            if (!_st) { await waSend(env, from, "Pick the angle again and I will offer the backdrops fresh."); return new Response("ok"); }
+            await waSendList(env, from, (_st.area ? _st.area + ". " : "") + "Which backdrop?", "Backdrops",
+              (_st.options || []).map(o => ({ id: "fbg:" + _n + ":" + o.id, title: o.name, description: o.note })));
+            return new Response("ok");
+          }
+          if (/^mth:\d{1,2}$/.test(bid)) {                                           // v124 - show the developer's own renders
+            const _n = bid.slice(4);
+            let _st = null; try { _st = JSON.parse((await env.MEETINGS.get("fbg_" + _n)) || "null"); } catch (e) {}
+            const _mh = _st && await mediaFor(env, _st.angle || {});
+            if (!_mh) { await waSend(env, from, "Those have expired - pick the angle again."); return new Response("ok"); }
+            let _i = 0;
+            for (const r of _mh.renders.slice(0, 4)) { _i++; try { await waSendImage(env, from, url.origin + "/img/" + r.id, _i + ". " + _mh.project + " - " + r.credit); } catch (e) {} }
+            await waSendList(env, from, "Which one do you want behind you?", "Renders",
+              _mh.renders.slice(0, 4).map((r, k) => ({ id: "mtu:" + _n + ":" + r.id, title: "Use render " + (k + 1), description: _mh.project + " - " + r.credit })));
+            return new Response("ok");
+          }
+          if (bid.indexOf("mtu:") === 0) {                                           // v124 - build the card on the developer's render
+            const _p = bid.split(":"), _n = _p[1], _mid = String(_p[2] || "").replace(/[^a-z0-9_]/gi, "");
+            let _st = null; try { _st = JSON.parse((await env.MEETINGS.get("fbg_" + _n)) || "null"); } catch (e) {}
+            if (!_st || !_mid) { await waSend(env, from, "Pick the angle again and I will offer them fresh."); return new Response("ok"); }
+            const _mh = await mediaFor(env, _st.angle || {});
+            const _r = _mh && _mh.renders.find(x => x.id === _mid);
+            if (!_r) { await waSend(env, from, "That render is not on file any more."); return new Response("ok"); }
+            const _ang = _st.angle || {};
+            const _post = { n: _n, idp: "feed_", hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "",
+                            masthead: _mh.project || _st.area || "Dubai",
+                            caption: [_ang.hook || "", (_ang.figure || "") + " \u2014 " + (_ang.source || ""), _r.credit].filter(Boolean).join("\n\n").slice(0, 1000) };
+            const _opt = { id: _mid, name: _r.credit, useKey: _mid, credit: _r.credit };
+            const _jk = "picjob_" + _n + "_" + _mid.toLowerCase();
+            try { await env.MEETINGS.put(_jk, JSON.stringify({ n: _n, opt: _mid, to: from, at: Date.now(), tries: 0, post: _post, option: _opt, angle: _ang }), { expirationTtl: 2 * 86400 }); } catch (e) {}
+            await waSend(env, from, "Good pick. Building your card on " + _mh.developer + "'s own render now.");
+            if (ctx) ctx.waitUntil(picJobRun(env, _jk, url.origin));
             return new Response("ok");
           }
           if (bid.indexOf("fbg:") === 0) {                                             // v120 - backdrop chosen: make the plate, her cut-out, the card
@@ -2877,6 +2948,26 @@ export default {
               await waSend(env, from, n ? ("✅ Added " + n + " to your plate. 🧭") : "Those were already on your plate.");
             }
           }
+          return new Response("ok");
+        }
+        if (msg.type === "document" && msg.document && msg.document.id) {          // v124 - she can send a brochure
+          const _dn = String(msg.document.filename || "brochure.pdf");
+          if (!/pdf$/i.test(_dn) && !/pdf/i.test(String(msg.document.mime_type || ""))) {
+            await waSend(env, from, "I can read PDFs. Send it as a PDF and I will keep it.");
+            return new Response("ok");
+          }
+          try {
+            const _m = await waFetchMedia(env, msg.document.id);
+            const _b = new Uint8Array(_m.bytes);
+            const _id = rid() + rid();
+            const PART = 8 * 1024 * 1024;                                          // a KV value holds 25 MB; a broker pack runs to 70
+            const _parts = Math.ceil(_b.byteLength / PART);
+            for (let i = 0; i < _parts; i++) await env.MEETINGS.put("brocp_" + _id + "_" + i, _b.slice(i * PART, (i + 1) * PART).buffer, { expirationTtl: 7 * 86400 });
+            await env.MEETINGS.put("broc_" + _id, JSON.stringify({ id: _id, name: _dn, bytes: _b.byteLength, parts: _parts, caption: String(msg.document.caption || "").slice(0, 300), at: new Date().toISOString() }), { expirationTtl: 7 * 86400 });
+            let _q = []; try { _q = JSON.parse((await env.MEETINGS.get("broc_pending")) || "[]"); } catch (e) {}
+            _q.unshift(_id); await env.MEETINGS.put("broc_pending", JSON.stringify(_q.slice(0, 40)), { expirationTtl: 7 * 86400 });
+            await waSend(env, from, "Got " + _dn + " (" + Math.max(1, Math.round(_b.byteLength / 1e6)) + " MB). I will read it and keep any renders in it, so I can put your card in front of them. Give me a few minutes.");
+          } catch (e) { await waSend(env, from, "Could not read that file - send it again."); }
           return new Response("ok");
         }
         if (msg.type === "image" && msg.image && msg.image.id) {
@@ -4671,7 +4762,11 @@ function angleCardSvg(angle, areaName, imgUrl, n, opts) {
   const img = (x, y, w, h, id) => imgUrl ? `<clipPath id="${id}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${opts.rx || 0}"/></clipPath><g clip-path="url(#${id})"><image href="${imgUrl}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/></g>` : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${C.greenD}"/>`;
   const chip = (x, y, ground, ink) => { const w = Math.min(W - 2 * x, mast.length * 17.6 + 56); /* 22px mono + 4px tracking */ return `<rect x="${x}" y="${y}" width="${w}" height="48" rx="24" fill="${ground}" fill-opacity=".94"/><text x="${x + 28}" y="${y + 32}" fill="${ink}" font-size="22" font-weight="700" letter-spacing="4" font-family="${F_MONO}">${_sx(mast.length > 40 ? mast.slice(0, 39) + "…" : mast)}</text>`; };
   const srcLines = (y, fill) => { const L = wrapWords(src, 62).slice(0, 2); return svgLines(L.map((l, i) => (i === 0 ? "Source: " : "") + l), 72, y, 22, fill, F_SANS, 400, 1.3); };
-  const foot = (y, fill, fillR) => `<text x="72" y="${y}" fill="${fill}" font-size="22" font-family="${F_SANS}">Najjuko · settled, not asking · the register's own numbers</text><text x="${W - 72}" y="${y}" fill="${fillR}" font-size="20" text-anchor="end" font-family="${F_MONO}">the digest</text>`;
+  // v124 - when the picture behind her is a developer's own render, the credit rides on the card. It is
+  // their image; it should say so wherever the card ends up, not only in the message that delivered it.
+  const foot = (y, fill, fillR) => `<text x="72" y="${y}" fill="${fill}" font-size="22" font-family="${F_SANS}">Najjuko · settled, not asking · the register's own numbers</text>` +
+    (opts.credit ? `<text x="72" y="${y - 28}" fill="${fill}" fill-opacity=".85" font-size="17" font-family="${F_MONO}">${_sx(String(opts.credit).slice(0, 34))}</text>` : "") +
+    `<text x="${W - 72}" y="${y}" fill="${fillR}" font-size="20" text-anchor="end" font-family="${F_MONO}">the digest</text>`;
   const num = n ? `<text x="${W - 72}" y="96" fill="${C.beige}" fill-opacity=".85" font-size="24" text-anchor="end" font-family="${F_MONO}">${n}</text>` : "";
   const defs = `<defs><filter id="sh" x="-5%" y="-10%" width="110%" height="130%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity=".6"/></filter><linearGradient id="gd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.ink}" stop-opacity="0"/><stop offset=".45" stop-color="${C.ink}" stop-opacity=".25"/><stop offset=".75" stop-color="${C.ink}" stop-opacity=".86"/><stop offset="1" stop-color="${C.ink}" stop-opacity=".97"/></linearGradient></defs>`;
   let body = "";
@@ -4883,13 +4978,13 @@ const UNIT_MIX_CSS = '.um{margin-top:10px;border:1px solid var(--line);border-ra
 const UPDATE_SIGNOFF = "\n\n— Curated for Black Coffee, by Papi";   // v89.3 - every update to her signs off this way (Kendall, 5 Sep 2026); v120.1 - his wording, 11 Sep: for her, by him
 let RENDER_LAST_ERR = "";
 const cardKey = (ctxAt, n, size) => "angle_" + String(ctxAt || 0) + "_" + n + (size === "story" ? "_s" : "");   // v105 - "_s" = 1080x1920
-async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl) {
+async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl, credit) {
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const area = angleArea(angle, d); let img = imgOverride || null;   // v109 - a made plate wins over the satellite
   if (!img && area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
   if (!img) img = origin + "/img/bg_market";
   const story = size === "story", W = 1080, H = story ? 1920 : 1080;
-  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "", palette: await stylePalette(env) });
+  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "", palette: await stylePalette(env), credit: credit || "" });   // v124 - the credit rides through; this builder never saw opts
   return { area, W, H, html: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413;width:${W}px;height:${H}px;overflow:hidden}svg{display:block}</style></head><body>${svg}</body></html>` };
 }
 // v105 - render HTML to PNG inside the Worker through the Browser Rendering binding. One browser per call; fonts awaited.
@@ -4909,7 +5004,7 @@ async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size, opt
   RENDER_LAST_ERR = ""; size = size === "story" ? "story" : "square";
   const k = opts && opts.key ? opts.key + (size === "story" ? "_s" : "") : cardKey(ctxAt, n, size);   // v109 - a plate card keys by its plate, not the morning brief
   try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: origin + "/img/" + k, area: angleArea(angle, null), size }; } catch (e) {}
-  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me);
+  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me, opts && opts.credit);
   let png = null;
   try {
     if (env.CF_RENDER_TOKEN) {                                                                     // REST API (needs an API token)
@@ -7571,7 +7666,7 @@ function renderArea(latestRaw, name, key) {
 // v109 - PLATE, MADE IN-HOUSE. The image model makes the photograph (no text, right side clear); the card
 // engine sets her words over it in the editorial look; the renderer already on this Worker makes the PNGs.
 let PLATE_LAST_ERR = "";
-const PLATE_CARD_V = "6";   // bump when the editorial look changes, so cached cards re-render
+const PLATE_CARD_V = "7";   // bump when the editorial look changes, so cached cards re-render
 async function platePhoto(env, angle, place, id) {
   PLATE_LAST_ERR = "";
   if (!env.OPENAI_API_KEY) { PLATE_LAST_ERR = "no image key"; return null; }
@@ -7598,6 +7693,28 @@ async function platePhoto(env, angle, place, id) {
     await env.MEETINGS.put("img_" + name, bin.buffer, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + name, "image/png", { expirationTtl: 14 * 86400 });
     return name;
   } catch (e) { PLATE_LAST_ERR = "image api exception: " + String((e && e.message) || e).slice(0, 120); return null; }
+}
+// v124 - what we hold for the developer this angle is about. null when the angle names no developer we
+// know; an object when there is something to offer. media_index is pushed from the truth store, which is
+// where the register actually lives - the Worker only ever sees the shortlist.
+async function mediaFor(env, angle) {
+  let idx = null; try { idx = JSON.parse((await env.MEETINGS.get("img_media_index")) || "null"); } catch (e) {}
+  if (!idx || !idx.developers) return null;
+  const hay = (String(angle.hook || "") + " " + String(angle.figure || "") + " " + String(angle.source || "")).toLowerCase();
+  for (const slug in idx.developers) {
+    const d = idx.developers[slug];
+    if (!d || !d.name) continue;
+    if (hay.indexOf(String(d.name).toLowerCase()) < 0) continue;
+    let best = null;
+    for (const proj in (d.projects || {})) {                                     // the project named in the hook wins; otherwise the one with most on file
+      const p = d.projects[proj];
+      if (!p || !(p.renders || []).length) continue;
+      const named = hay.indexOf(proj.toLowerCase()) >= 0;
+      if (!best || (named && !best.named) || (named === best.named && p.renders.length > best.renders.length)) best = { project: proj, named, renders: p.renders, on_file: p.on_file };
+    }
+    if (best) return { developer: d.name, project: best.project, renders: best.renders, n: best.on_file || best.renders.length };
+  }
+  return null;
 }
 // v123 - run one recorded picture job to completion. Idempotent: plateRun reuses an existing plate and an
 // existing render, so a second run after an interrupted first costs only the sends. Clears the job on success.
@@ -7633,6 +7750,22 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
   const id = (post.idp || "ips_") + post.n + "_" + String(opt.id || "a").toLowerCase();   // v120 - a feed angle and an IPS post can share a number
   const angle = { hook: post.hook || post.ask || "", figure: post.figure || "", source: post.source || "", area: post.masthead || "" };
   const out = { id, photo: null, square: null, story: null, err: "" };
+  if (opt && opt.useKey) {                                                        // v124 - the developer's own render, already on the Worker: nothing to generate
+    out.photo = origin + "/img/" + opt.useKey;
+    const _o = { img: out.photo, t: 5, me: "", key: opt.useKey + "_card" + PLATE_CARD_V, credit: opt.credit || "" };
+    const lix = hashStr(String(angle.hook || "") + "|" + String(angle.figure || "")) % 4;
+    const mv = ["warm", "blue", "day", "soft"][lix];
+    try { if (await env.MEETINGS.get("img_style_me_cut_" + mv, "arrayBuffer")) { _o.me = origin + "/img/style_me_cut_" + mv; _o.key += "_me" + mv; } } catch (e) {}
+    out.withMe = !!_o.me; out.meVariant = _o.me ? mv : "";
+    const sq2 = await renderAngleCard(env, angle, post.n, origin, 0, null, "square", _o);
+    const st2 = await renderAngleCard(env, angle, post.n, origin, 0, null, "story", _o);
+    out.square = sq2 && sq2.url; out.story = st2 && st2.url; if (!sq2 && !st2) out.err = RENDER_LAST_ERR || "render failed";
+    if (sendIt && to) {
+      if (sq2) await waSendImage(env, to, sq2.url, String(post.caption || "").slice(0, 1000));
+      if (st2) await waSendImage(env, to, st2.url, "Same picture at 1080\u00d71920 for Stories.");
+    }
+    return out;
+  }
   let photo = "plate_" + id.replace(/[^a-z0-9_]/gi, "").slice(0, 34);
   let have = false; try { have = !!(await env.MEETINGS.get("img_" + photo, "arrayBuffer")); } catch (e) {}   // v109.1 - a photograph already made is reused; ?fresh=1 forces a new one
   if (!have || (opt && opt.fresh)) photo = await platePhoto(env, angle, opt.place || "Dubai", id);
