@@ -4228,9 +4228,12 @@ async function styleVoice(env) {
     "Her ground: wellness real estate, emotional intelligence, how a place makes people feel. She talks to one buyer, not to a market." +
     (card && card.text ? " HER CARD, in her words: " + String(card.text).replace(/\s+/g, " ").slice(0, 900) : "");
 }
-const VOICE_BAN = /\b(proving|proves?|fortress|towers? over|commands?|commanded|anchors?|anchored|velocity|conviction|institutional|gates?|locked|locks? in|momentum|punched|fires?|absorption|corridor concentration)\b/i;
+const VOICE_BAN = /\b(proving|proves?|fortress|towers? over|command(s|ed|ing)?|anchors?|anchored|velocity|conviction|institutional|gates?|locked|locks? in|momentum|punched|fires?|absorption|corridor concentration|rhythm|settles? in|yield math|the math)\b|\u2014|\u2013/i;   // v122 - the dash is banned too: her card never uses one
 async function voiceGuard(env, angles) {                                            // v116.1 - rewrite any hook or buyer line that slipped into the old jargon
-  const bad = (angles || []).map((a, i) => (VOICE_BAN.test(a.hook || "") || VOICE_BAN.test(a.buyer || "")) ? i : -1).filter(i => i >= 0);
+  // v122 - every angle goes through the rewrite. A ban list catches words; it cannot catch "calm, steady rhythm as
+  // autumn settles in", which is the machine's voice with the banned words filed off. The 07:01 run rewrote all
+  // five and they came out as hers; the 08:26 run rewrote none and they did not. So the pass is no longer optional.
+  const bad = (angles || []).map((a, i) => i);
   if (!bad.length) return { angles, repaired: [] };
   const voice = await styleVoice(env);
   const sys = "You rewrite social-post hooks for a Dubai property broker into HER VOICE. Keep every figure, source and fact exactly; change only the wording. Return JSON only: {\"items\":[{\"i\":<index>,\"hook\":\"...\",\"buyer\":\"...\"}]}. " + voice;
@@ -4238,7 +4241,8 @@ async function voiceGuard(env, angles) {                                        
   let out = null; try { const t = await claudeText(env, sys, user, null, 900); out = JSON.parse(String(t).replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/, "$1")); } catch (e) { out = null; }
   const done = [];
   if (out && Array.isArray(out.items)) for (const it of out.items) { const i = it.i | 0; if (angles[i] && it.hook && !VOICE_BAN.test(it.hook) && !VOICE_BAN.test(it.buyer || "")) { angles[i].hook = String(it.hook).slice(0, 220); if (it.buyer) angles[i].buyer = String(it.buyer).slice(0, 220); done.push(i + 1); } }
-  for (const i of bad) if (!done.includes(i + 1)) { angles[i].hook = String(angles[i].hook || "").replace(VOICE_BAN, "").replace(/\s{2,}/g, " ").trim(); angles[i].buyer = String(angles[i].buyer || "").replace(VOICE_BAN, "").replace(/\s{2,}/g, " ").trim(); done.push(i + 1); }
+  const strip = (t) => String(t || "").replace(/\s*[\u2014\u2013]\s*/g, ". ").replace(VOICE_BAN, "").replace(/\s{2,}/g, " ").replace(/\.\s*\./g, ".").trim();
+  for (const i of bad) if (!done.includes(i + 1)) { angles[i].hook = strip(angles[i].hook); angles[i].buyer = strip(angles[i].buyer); done.push(i + 1); }
   return { angles, repaired: done };
 }
 async function dnaSubjects(env) {                                                  // v116 - the learned profile minus its STYLE paragraph
