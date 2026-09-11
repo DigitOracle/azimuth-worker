@@ -2182,6 +2182,12 @@ export default {
         out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
         return new Response(JSON.stringify({ generated: new Date().toISOString(), schema: "azimuth-bridge/1", count: out.length, records: out }, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      if (url.pathname === "/pic_resume") {                   // v123 - finish any picture job an isolate did not live to send (keyed; the 5-minute task calls it)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _min = Math.max(30, parseInt(url.searchParams.get("min_age") || "90", 10) | 0) * 1000;
+        const _res = await picResume(env, url.origin, _min);
+        return new Response(JSON.stringify({ checked: _res.length, jobs: _res }), { headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/send_video") {                   // v118 - send a stored video to her as a video message (keyed)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _vn = (url.searchParams.get("v") || "").replace(/[^a-z0-9_]/gi, ""); if (!_vn) return new Response("v required", { status: 400 });
@@ -2751,15 +2757,10 @@ export default {
                             masthead: _st.area || "Dubai",
                             caption: [_ang.hook || "", (_ang.figure || "") + " — " + (_ang.source || ""), _ang.buyer || ""].filter(Boolean).join("\n\n").slice(0, 1000) };
             if (!env.OPENAI_API_KEY) { await waSend(env, from, "I can't make pictures just now - the image key is missing."); return new Response("ok"); }
+            const _tt = from, _jk = "picjob_" + _n + "_" + _oid.toLowerCase();
+            try { await env.MEETINGS.put(_jk, JSON.stringify({ n: _n, opt: _oid, to: _tt, at: Date.now(), tries: 0, post: _post, option: _opt, angle: _ang }), { expirationTtl: 2 * 86400 }); } catch (e) {}   // v123 - on record before any work
             await waSend(env, from, "Good pick - " + _opt.name + ". Making your picture now, give me a minute.");
-            const _tt = from;
-            if (ctx) ctx.waitUntil((async () => {                                       // a Worker cannot fetch its own address; do it here after the response
-              let _r = null; try { _r = await plateRun(env, _post, _opt, _tt, url.origin, true); } catch (e) { _r = { err: String((e && e.message) || e) }; }
-              if (!_r || (!_r.square && !_r.story)) {
-                try { await env.MEETINGS.put("plate_last_fail", JSON.stringify({ at: new Date().toISOString(), feed: _n, opt: _oid, err: _r && _r.err }), { expirationTtl: 7 * 86400 }); } catch (e) {}
-                try { await waSend(env, _tt, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, _tt, bgPromptBlock(_ang, _opt.place)); } catch (e) {}
-              }
-            })());
+            if (ctx) ctx.waitUntil(picJobRun(env, _jk, url.origin));
             return new Response("ok");
           }
           if (bid.indexOf("bg:") === 0) {                                              // v107 - backdrop choice: ack, record, then hand her the plate prompt (Kendall approved the auto-send, 9 Sep 2026)
@@ -7597,6 +7598,35 @@ async function platePhoto(env, angle, place, id) {
     await env.MEETINGS.put("img_" + name, bin.buffer, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + name, "image/png", { expirationTtl: 14 * 86400 });
     return name;
   } catch (e) { PLATE_LAST_ERR = "image api exception: " + String((e && e.message) || e).slice(0, 120); return null; }
+}
+// v123 - run one recorded picture job to completion. Idempotent: plateRun reuses an existing plate and an
+// existing render, so a second run after an interrupted first costs only the sends. Clears the job on success.
+async function picJobRun(env, jk, origin) {
+  let j = null; try { j = JSON.parse((await env.MEETINGS.get(jk)) || "null"); } catch (e) {}
+  if (!j) return { done: false, why: "no job" };
+  try { j.tries = (j.tries | 0) + 1; j.last = Date.now(); await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
+  let r = null; try { r = await plateRun(env, j.post, j.option, j.to, origin, true); } catch (e) { r = { err: String((e && e.message) || e) }; }
+  if (r && (r.square || r.story)) { try { await env.MEETINGS.delete(jk); } catch (e) {} return { done: true, square: r.square, story: r.story }; }
+  try { await env.MEETINGS.put("plate_last_fail", JSON.stringify({ at: new Date().toISOString(), job: jk, err: r && r.err }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  if ((j.tries | 0) >= 3) {                                                            // three real failures: stop retrying, give her the prompt, keep the record
+    try { await waSend(env, j.to, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, j.to, bgPromptBlock(j.angle || {}, (j.option || {}).place)); } catch (e) {}
+    try { j.gaveUp = Date.now(); await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
+  }
+  return { done: false, why: r && r.err };
+}
+// v123 - finish any picture job that an isolate did not live long enough to send. Called by the local 5-minute task.
+async function picResume(env, origin, minAgeMs) {
+  const out = []; let lst = null;
+  try { lst = await env.MEETINGS.list({ prefix: "picjob_" }); } catch (e) { return out; }
+  for (const k of ((lst && lst.keys) || [])) {
+    let j = null; try { j = JSON.parse((await env.MEETINGS.get(k.name)) || "null"); } catch (e) {}
+    if (!j || j.gaveUp) continue;
+    const age = Date.now() - (j.last || j.at || 0);
+    if (age < minAgeMs) { out.push({ job: k.name, skipped: "in flight " + Math.round(age / 1000) + "s" }); continue; }
+    const r = await picJobRun(env, k.name, origin);
+    out.push({ job: k.name, ...r });
+  }
+  return out;
 }
 // photo -> editorial card in both sizes -> (optionally) her chat. Returns what was made; never throws.
 async function plateRun(env, post, opt, to, origin, sendIt) {
