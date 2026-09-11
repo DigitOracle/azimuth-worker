@@ -2737,7 +2737,8 @@ export default {
             const _area = angleArea(_a, _d);
             const _opts = feedBackdrops(_a, _area);
             try { await env.MEETINGS.put("fbg_" + _n, JSON.stringify({ n: _n, area: _area || "", angle: _a, options: _opts }), { expirationTtl: 7 * 86400 }); } catch (e) {}
-            await waSendButtons(env, from, (_area ? _area + ". " : "") + "Which backdrop?", _opts.map(o => ({ id: "fbg:" + _n + ":" + o.id, title: o.button.slice(0, 20) })));
+            await waSendList(env, from, (_area ? _area + ". " : "") + "Which backdrop?", "Backdrops",
+              _opts.map(o => ({ id: "fbg:" + _n + ":" + o.id, title: o.name, description: o.note })));
             return new Response("ok");
           }
           if (bid.indexOf("fbg:") === 0) {                                             // v120 - backdrop chosen: make the plate, her cut-out, the card
@@ -4874,7 +4875,7 @@ const UNIT_MIX_CSS = '.um{margin-top:10px;border:1px solid var(--line);border-ra
   '.ums{margin-left:auto;font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:.52rem;letter-spacing:.06em;text-transform:uppercase;border:1px solid;border-radius:99px;padding:1px 7px}.ums.r{color:#C5A56A;border-color:rgba(197,165,106,.6)}.ums.p{color:#8FA39B;border-color:#2E4A44}' +
   '.umc{display:flex;gap:6px;margin-top:8px}.umc div{flex:1;background:rgba(19,31,29,.9);border:1px solid var(--line);border-radius:8px;padding:6px 8px;text-align:center}.umc b{display:block;font-family:Fraunces,Georgia,serif;font-size:1.05rem;color:#C5A56A}.umc i{font-style:normal;font-size:.55rem;color:#8FA39B;font-family:"IBM Plex Mono",monospace}' +
   '.umx{width:100%;border-collapse:collapse;margin-top:8px;font-size:.66rem}.umx th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.1em;color:#8FA39B;font-weight:500;padding:2px 4px}.umx td{padding:3px 4px;border-top:1px solid var(--line);color:#E8E4D8}.umx td:not(:first-child),.umx th:not(:first-child){text-align:right}.umn{margin-top:6px;font-size:.64rem;color:#8FA39B;line-height:1.35}';
-const UPDATE_SIGNOFF = "\n\n— Black Coffee, curated by Papi";   // v89.3 - every update to her signs off this way (Kendall, 5 Sep 2026)
+const UPDATE_SIGNOFF = "\n\n— Curated for Black Coffee, by Papi";   // v89.3 - every update to her signs off this way (Kendall, 5 Sep 2026); v120.1 - his wording, 11 Sep: for her, by him
 let RENDER_LAST_ERR = "";
 const cardKey = (ctxAt, n, size) => "angle_" + String(ctxAt || 0) + "_" + n + (size === "story" ? "_s" : "");   // v105 - "_s" = 1080x1920
 async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl) {
@@ -7650,13 +7651,24 @@ async function styleKeep(env, bytes, mime, kind, cap) {
 // Deliberately three: a wide view of the place, a street-level human one, and a lived-in interior.
 function feedBackdrops(angle, area) {
   const where = area ? ("Dubai, " + area) : "Dubai";
+  const A = area || "Dubai";
   return [
-    { id: "A", name: "Skyline, blue hour", button: "Skyline, blue hour",
+    { id: "A", name: "Skyline, blue hour", note: "Towers across water, lights just on",
       place: "The " + where + " skyline seen across open water or a wide boulevard at blue hour - towers in silhouette with their lights just on, calm water or empty road in the foreground" },
-    { id: "B", name: "Street level", button: "Street level",
+    { id: "B", name: "Street level", note: "A real residential street, lived-in",
       place: "A residential street in " + where + " at eye level - low-rise and mid-rise buildings, mature planting along the pavement, parked cars, a shaded walkway, ordinary and lived-in rather than promotional" },
-    { id: "C", name: "Balcony, interiors", button: "Balcony, interiors",
+    { id: "C", name: "Balcony view", note: "Looking out from a furnished balcony",
       place: "The view out from a furnished apartment balcony in " + where + " - pale stone floor, a planter and a low chair in the near corner, the community and skyline beyond the rail" },
+    { id: "D", name: "Lobby", note: "Inside the entrance, warm and quiet",
+      place: "The residential lobby of a new building in " + where + " - stone floor, warm timber and brass, deep seating, tall glass out to a planted forecourt, quiet and empty" },
+    { id: "E", name: "Pool deck", note: "Podium deck, loungers, late sun",
+      place: "The podium pool deck of a residential tower in " + where + " - still water, loungers and umbrellas, planting along the edge, the surrounding community beyond, late afternoon" },
+    { id: "F", name: "Handover site", note: "Under construction, cranes up",
+      place: "A residential development under construction in " + A + ", Dubai - topped-out concrete frame with cranes still up, hoarding and site road in the foreground, the finished community behind" },
+    { id: "G", name: "Villa street", note: "Low-rise, gardens, wide pavement",
+      place: "A villa street in " + A + ", Dubai - two-storey homes set back behind low walls and mature gardens, a wide pavement and street trees, cars on the drives, early morning" },
+    { id: "H", name: "Waterfront walk", note: "Promenade, water, towers behind",
+      place: "A waterfront promenade in " + A + ", Dubai - boardwalk and railing along the water, planting and benches, moored boats or open water across the middle distance, the towers of the community behind" },
   ];
 }
 function bgPromptBlock(angle, place, pal) {
