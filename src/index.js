@@ -800,6 +800,22 @@ Read dates from the date map above; never calculate a weekday yourself. Prefer "
   return g;
 }
 
+// v125 - the inbound record. Her side only, bounded, and never in the way: every write is wrapped by
+// its caller, so a failure here can never cost her a reply.
+async function inboxNote(env, msg) {
+  const it = { at: new Date().toISOString(), type: String(msg.type || "?") };
+  if (msg.type === "text" && msg.text) it.text = String(msg.text.body || "").slice(0, 400);
+  else if (msg.type === "interactive" && msg.interactive) {
+    const r = msg.interactive.button_reply || msg.interactive.list_reply || {};
+    it.tapped = String(r.id || ""); it.text = String(r.title || "");     // the id for us, the words for whoever reads this back
+  } else if (msg.type === "document" && msg.document) { it.file = String(msg.document.filename || ""); it.bytes = Number(msg.document.file_size || 0) || undefined; }
+  else if (msg.type === "image" && msg.image) { it.text = String(msg.image.caption || "").slice(0, 200); it.file = "(photo)"; }
+  else if (msg.type === "audio" || msg.type === "voice") it.file = "(voice note)";
+  else if (msg[msg.type] && msg[msg.type].caption) it.text = String(msg[msg.type].caption).slice(0, 200);
+  let q = []; try { q = JSON.parse((await env.MEETINGS.get("wa_inbox")) || "[]"); } catch (e) {}
+  q.unshift(it);
+  await env.MEETINGS.put("wa_inbox", JSON.stringify(q.slice(0, 60)), { expirationTtl: 30 * 86400 });
+}
 async function waFetchMedia(env, mediaId) {
   const meta = await (await fetch(`${WA_GRAPH}/${mediaId}`, { headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN } })).json();
   if (!meta.url) throw new Error("no media url");
@@ -2182,6 +2198,12 @@ export default {
         out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
         return new Response(JSON.stringify({ generated: new Date().toISOString(), schema: "azimuth-bridge/1", count: out.length, records: out }, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      if (url.pathname === "/inbox") {                        // v125 - what she has actually sent, newest first (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _n = Math.min(60, Math.max(1, parseInt(url.searchParams.get("n") || "15", 10) | 0));
+        let _q = []; try { _q = JSON.parse((await env.MEETINGS.get("wa_inbox")) || "[]"); } catch (e) {}
+        return new Response(JSON.stringify({ n: _q.length, items: _q.slice(0, _n) }, null, 1), { headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/broc_pending") {                 // v124 - brochures she sent, waiting to be read on the machine that holds the register (keyed)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         let _q = []; try { _q = JSON.parse((await env.MEETINGS.get("broc_pending")) || "[]"); } catch (e) {}
@@ -2705,6 +2727,7 @@ export default {
         const msg = val && val.messages && val.messages[0];
         if (!msg) return new Response("ok");                          // delivery/read status callbacks — ignore
         const from = msg.from;
+        try { await inboxNote(env, msg); } catch (e) {}                 // v125 - record that it arrived, before anything acts on it
         if (!_viaForward && from) {                                    // sender-keyed router (one number, many instances)
           const _rk = "WA_ROUTE_" + String(from).replace(/[^0-9]/g, "");
           const _dest = env[_rk];
