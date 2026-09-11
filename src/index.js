@@ -4171,7 +4171,12 @@ async function dailyFeedTick(env, force, dry) {
     const cangles = cg && Array.isArray(cg.angles) ? cg.angles.slice(0, 5).map(a => Object.assign({}, a, { campaign: camp.contest.name })) : [];
     if (cangles.length) angles.push(...cangles);
   }
-  try { const _vg = await voiceGuard(env, angles); if (_vg.repaired.length) qa.note += " | voice repaired " + _vg.repaired.join(","); } catch (e) {}   // v116.1
+  try {                                                                             // v116.1 rewrite; v126 - and record that it happened
+    const _vg = await voiceGuard(env, angles);
+    qa.voice_repaired = _vg.repaired || []; qa.voice_at = gstNowIso();
+    if (_vg.repaired.length) qa.note += " | voice repaired " + _vg.repaired.join(",");
+    try { await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
+  } catch (e) {}
   if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + "[" + (a.family || "-") + "] " + a.hook + "\n   " + a.figure + " · " + a.source + (a.trend ? "\n   trend: " + a.trend : "") + (a.shot ? "\n   shot: " + a.shot : "")).join("\n") + "\n\nQA: " + qa.note + (qa.repaired.length ? " | repaired " + qa.repaired.join(",") : "") + " | before " + qa.before.join(",") + " | after " + qa.after.join(",");
   // store as the drafting context (draftFromAngle reads this) + remember the hooks
   const briefTxt = angles.map((a, i) => "ANGLE " + (i + 1) + ": " + a.hook + "\nFigure: " + a.figure + " (" + a.source + ")\nBuyer: " + a.buyer).join("\n\n");
@@ -4356,7 +4361,15 @@ async function voiceGuard(env, angles) {                                        
   let out = null; try { const t = await claudeText(env, sys, user, null, 900); out = JSON.parse(String(t).replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/, "$1")); } catch (e) { out = null; }
   const done = [];
   if (out && Array.isArray(out.items)) for (const it of out.items) { const i = it.i | 0; if (angles[i] && it.hook && !VOICE_BAN.test(it.hook) && !VOICE_BAN.test(it.buyer || "")) { angles[i].hook = String(it.hook).slice(0, 220); if (it.buyer) angles[i].buyer = String(it.buyer).slice(0, 220); done.push(i + 1); } }
-  const strip = (t) => String(t || "").replace(/\s*[\u2014\u2013]\s*/g, ". ").replace(VOICE_BAN, "").replace(/\s{2,}/g, " ").replace(/\.\s*\./g, ".").trim();
+  const strip = (t) => {                                                            // v126.1 - drop the sentence, not the word
+    const whole = String(t || "");
+    const flat = whole.replace(/\s*[\u2014\u2013]\s*/g, ". ").replace(/\s{2,}/g, " ").trim();
+    const keep = flat.split(/(?<=[.!?])\s+/).filter(x => x.trim() && !VOICE_BAN.test(x));
+    if (!keep.length) return whole;                                                 // nothing survived: jargon beats an empty hook
+    let out = keep.join(" ").replace(/\s+([.,;:!?])/g, "$1").replace(/\.\s*\./g, ".").trim();
+    if (!/[.!?]$/.test(out)) out += ".";
+    return out.charAt(0).toUpperCase() + out.slice(1);
+  };
   for (const i of bad) if (!done.includes(i + 1)) { angles[i].hook = strip(angles[i].hook); angles[i].buyer = strip(angles[i].buyer); done.push(i + 1); }
   return { angles, repaired: done };
 }
