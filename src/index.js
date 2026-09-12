@@ -3389,6 +3389,7 @@ export default {
           }
           if (/^(?:feed|daily|today(?:'s)?\s+(?:feed|angles|posts?))\s*\??$/i.test(text)) {
             await waSend(env, from, "☀️ Building this morning's three — a moment…");
+            await waSend(env, from, "Building today's set now. About a minute.");   // v128
             try { await dailyFeedTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the feed just now — try again shortly."); }
             return new Response("ok");
           }
@@ -7830,7 +7831,7 @@ async function picJobRun(env, jk, origin) {
   if (!j) return { done: false, why: "no job" };
   try { j.tries = (j.tries | 0) + 1; j.last = Date.now(); await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
   let r = null; try { r = await plateRun(env, j.post, j.option, j.to, origin, true); } catch (e) { r = { err: String((e && e.message) || e) }; }
-  if (r && (r.square || r.story)) { try { await env.MEETINGS.delete(jk); } catch (e) {} return { done: true, square: r.square, story: r.story }; }
+  if (r && (r.sentSq || r.sentSt)) { try { await env.MEETINGS.delete(jk); } catch (e) {} return { done: true, square: r.square, story: r.story }; }   // v128 - accepted by Meta, not merely rendered
   try { await env.MEETINGS.put("plate_last_fail", JSON.stringify({ at: new Date().toISOString(), job: jk, err: r && r.err }), { expirationTtl: 7 * 86400 }); } catch (e) {}
   if ((j.tries | 0) >= 3) {                                                            // three real failures: stop retrying, give her the prompt, keep the record
     try { await waSend(env, j.to, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, j.to, bgPromptBlock(j.angle || {}, (j.option || {}).place)); } catch (e) {}
@@ -7868,8 +7869,9 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
     const st2 = await renderAngleCard(env, angle, post.n, origin, 0, null, "story", _o);
     out.square = sq2 && sq2.url; out.story = st2 && st2.url; if (!sq2 && !st2) out.err = RENDER_LAST_ERR || "render failed";
     if (sendIt && to) {
-      if (sq2) await waSendImage(env, to, sq2.url, String(post.caption || "").slice(0, 1000));
-      if (st2) await waSendImage(env, to, st2.url, "Same picture at 1080\u00d71920 for Stories.");
+      if (sq2) { const _r = await waSendImage(env, to, sq2.url, String(post.caption || "").slice(0, 1000)); out.sentSq = !!(_r && _r.ok); }
+      if (st2) { const _r = await waSendImage(env, to, st2.url, "Same picture at 1080\u00d71920 for Stories."); out.sentSt = !!(_r && _r.ok); }
+      if (!out.sentSq && !out.sentSt) out.err = "send rejected";                  // v128 - the card exists; she does not have it
     }
     return out;
   }
@@ -7893,8 +7895,9 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
   const st = await renderAngleCard(env, angle, post.n, origin, 0, null, "story", o);
   out.square = sq && sq.url; out.story = st && st.url; if (!sq && !st) out.err = RENDER_LAST_ERR || "render failed";
   if (sendIt && to) {
-    if (sq) await waSendImage(env, to, sq.url, String(post.caption || (angle.figure + " - " + angle.source)).slice(0, 1000));
-    if (st) await waSendImage(env, to, st.url, "Same picture at 1080\u00d71920 for Stories.");
+    if (sq) { const _r = await waSendImage(env, to, sq.url, String(post.caption || (angle.figure + " - " + angle.source)).slice(0, 1000)); out.sentSq = !!(_r && _r.ok); }
+    if (st) { const _r = await waSendImage(env, to, st.url, "Same picture at 1080\u00d71920 for Stories."); out.sentSt = !!(_r && _r.ok); }
+    if (!out.sentSq && !out.sentSt) out.err = "send rejected";                    // v128
   }
   return out;
 }
