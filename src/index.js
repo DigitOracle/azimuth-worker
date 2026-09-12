@@ -2823,7 +2823,6 @@ export default {
                 [{ id: "mth:" + _n, title: "Use theirs" }, { id: "fbg:menu:" + _n, title: "Make a new one" }]);
               return new Response("ok");
             }
-            if (_mh === null && _a.developer) await waSend(env, from, "Nothing from " + _a.developer + " on file yet, so I will make one. Send me their brochure any time and I will keep it.");
             await waSendList(env, from, (_area ? _area + ". " : "") + "Which backdrop?", "Backdrops",
               _opts.map(o => ({ id: "fbg:" + _n + ":" + o.id, title: o.name, description: o.note })));
             return new Response("ok");
@@ -7813,7 +7812,13 @@ async function platePhoto(env, angle, place, id) {
 // v124 - what we hold for the developer this angle is about. null when the angle names no developer we
 // know; an object when there is something to offer. media_index is pushed from the truth store, which is
 // where the register actually lives - the Worker only ever sees the shortlist.
+// v131 (Kendall, 12 Sep 2026) - stored developer renders are no longer offered as card backdrops.
+// Every backdrop is generated from a prompt on his OpenAI key. The register stays as a record of what
+// each developer has published; it is simply not a source for a card carrying her byline, which no
+// term sheet with any developer supports. Set OFFER_STORED_RENDERS true to bring the offer back.
+const OFFER_STORED_RENDERS = false;
 async function mediaFor(env, angle) {
+  if (!OFFER_STORED_RENDERS) return null;
   let idx = null; try { idx = JSON.parse((await env.MEETINGS.get("img_media_index")) || "null"); } catch (e) {}
   if (!idx || !idx.developers) return null;
   const hay = (String(angle.hook || "") + " " + String(angle.figure || "") + " " + String(angle.source || "")).toLowerCase();
