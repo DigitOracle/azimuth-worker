@@ -730,6 +730,14 @@ async function waSendButtons(env, to, body, buttons) {
 async function waSendVideo(env, to, link, caption) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "video", video: { link, caption: caption || undefined } }, "video");
 }
+// v129 - a forwarded webhook has no public hostname: url.origin reads "https://internal" and every
+// image link built from it is rejected by Meta as an invalid URI. Never trust the request origin for
+// a link that leaves this Worker.
+function pubOrigin(env, origin) {
+  const o = String(origin || "");
+  if (/^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?$/i.test(o)) return o;   // a real public host, dots and all
+  return (env && env.PUBLIC_ORIGIN) || "https://azimuth-2.digitalchemy.workers.dev";
+}
 async function waSendImage(env, to, link, caption) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "image", image: { link, caption: caption || undefined } }, "image");
 }
@@ -2273,7 +2281,7 @@ export default {
           let _md = null; try { _md = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
           const _ar = angleArea(_ag, _md) || "Dubai";
           _po = { n: "f" + String(_bc.at || 0).slice(-6) + "_" + _an, hook: _ag.hook, figure: _ag.figure, source: _ag.source, masthead: _ar,
-                  caption: String(_ag.hook || "") + "\n\n" + String(_ag.figure || "") + " \u2014 " + String(_ag.source || "") + (_ag.buyer ? "\n\n" + _ag.buyer : "") };
+                  caption: String(_ag.hook || "") + "\n\n" + String(_ag.figure || "") + " \u2014 " + String(_ag.source || "") };   // v130 - never the buyer field: that is targeting notes, not caption copy
           const _use = (url.searchParams.get("use") || "").replace(/[^a-z0-9_]/gi, "");   // v124 - build on a stored render instead of generating one
           if (_use) { _po.masthead = _ar; _op = { id: _use, name: "stored render", useKey: _use, credit: url.searchParams.get("credit") || "" }; }
           else _op = { id: "A", name: _ar, place: url.searchParams.get("place") || (_ar === "Dubai" ? "Dubai \u2014 the skyline or the street that matches this headline, real and specific, never a generic city: " + String(_ag.hook || "").slice(0, 140)
@@ -2369,7 +2377,7 @@ export default {
         const _k = (url.searchParams.get("k") || "").replace(/[^a-z0-9_]/gi, ""); let _w = null; try { _w = JSON.parse((await env.MEETINGS.get("angle_wanted_" + _k)) || "null"); } catch (e) {}
         if (!_w) return new Response("nobody waiting for " + _k);
         if (!(await env.MEETINGS.get("img_" + _k, "arrayBuffer"))) return new Response("card not in store yet", { status: 404 });
-        await waSendImage(env, _w.to, url.origin + "/img/" + _k, _k.endsWith("_s") ? "🖼 Your card for angle " + _w.n + " at 1080×1920 - Stories, Reels and TikTok." : "🖼 Here is your card for angle " + _w.n + " - 1080×1080 for the grid.");
+        await waSendImage(env, _w.to, pubOrigin(env, url.origin) + "/img/" + _k, _k.endsWith("_s") ? "🖼 Your card for angle " + _w.n + " at 1080×1920 - Stories, Reels and TikTok." : "🖼 Here is your card for angle " + _w.n + " - 1080×1080 for the grid.");
         await env.MEETINGS.delete("angle_wanted_" + _k);
         return new Response("sent to " + _w.to);
       }
@@ -2834,7 +2842,7 @@ export default {
             const _mh = _st && await mediaFor(env, _st.angle || {});
             if (!_mh) { await waSend(env, from, "Those have expired - pick the angle again."); return new Response("ok"); }
             let _i = 0;
-            for (const r of _mh.renders.slice(0, 4)) { _i++; try { await waSendImage(env, from, url.origin + "/img/" + r.id, _i + ". " + _mh.project + " - " + r.credit); } catch (e) {} }
+            for (const r of _mh.renders.slice(0, 4)) { _i++; try { await waSendImage(env, from, pubOrigin(env, url.origin) + "/img/" + r.id, _i + ". " + _mh.project + " - " + r.credit); } catch (e) {} }
             await waSendList(env, from, "Which one do you want behind you?", "Renders",
               _mh.renders.slice(0, 4).map((r, k) => ({ id: "mtu:" + _n + ":" + r.id, title: "Use render " + (k + 1), description: _mh.project + " - " + r.credit })));
             return new Response("ok");
@@ -2865,7 +2873,7 @@ export default {
             const _ang = _st.angle || {};
             const _post = { n: _n, idp: "feed_", hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "",
                             masthead: _st.area || "Dubai",
-                            caption: [_ang.hook || "", (_ang.figure || "") + " — " + (_ang.source || ""), _ang.buyer || ""].filter(Boolean).join("\n\n").slice(0, 1000) };
+                            caption: [_ang.hook || "", (_ang.figure || "") + " — " + (_ang.source || "")].filter(Boolean).join("\n\n").slice(0, 1000) };   // v130 - buyer is targeting notes, not caption copy
             if (!env.OPENAI_API_KEY) { await waSend(env, from, "I can't make pictures just now - the image key is missing."); return new Response("ok"); }
             const _tt = from, _jk = "picjob_" + _n + "_" + _oid.toLowerCase();
             try { await env.MEETINGS.put(_jk, JSON.stringify({ n: _n, opt: _oid, to: _tt, at: Date.now(), tries: 0, post: _post, option: _opt, angle: _ang }), { expirationTtl: 2 * 86400 }); } catch (e) {}   // v123 - on record before any work
@@ -2937,7 +2945,7 @@ export default {
             if (!_list.length) { await waSend(env, from, "No " + _kindA + "s on file yet."); }
             else {
               await waSend(env, from, "Sending " + _list.length + " " + _kindA + (_list.length === 1 ? "" : "s") + " — long-press any one to save it.");
-              for (const a of _list.slice(0, 10)) await waSendImage(env, from, url.origin + "/img/" + a.key, a.caption + (a.kind === "plate" ? " · generated plate, not a photograph of the project" : ""));
+              for (const a of _list.slice(0, 10)) await waSendImage(env, from, pubOrigin(env, url.origin) + "/img/" + a.key, a.caption + (a.kind === "plate" ? " · generated plate, not a photograph of the project" : ""));
             }
           }
           else if (bid === "feed:again") {                     // v83 — show the morning's angles again so she can take a second one
@@ -5105,7 +5113,7 @@ async function renderHtmlPng(env, html, W, H) {
 async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size, opts) {
   RENDER_LAST_ERR = ""; size = size === "story" ? "story" : "square";
   const k = opts && opts.key ? opts.key + (size === "story" ? "_s" : "") : cardKey(ctxAt, n, size);   // v109 - a plate card keys by its plate, not the morning brief
-  try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: origin + "/img/" + k, area: angleArea(angle, null), size }; } catch (e) {}
+  try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: pubOrigin(env, origin) + "/img/" + k, area: angleArea(angle, null), size }; } catch (e) {}
   const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me, opts && opts.credit);
   let png = null;
   try {
@@ -5127,7 +5135,7 @@ async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size, opt
     return null;
   }
   await env.MEETINGS.put("img_" + k, png, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + k, "image/png", { expirationTtl: 14 * 86400 });
-  return { key: k, url: origin + "/img/" + k, area, size };
+  return { key: k, url: pubOrigin(env, origin) + "/img/" + k, area, size };
 }
 
 // v59 — AREA POSTCARD: 1080×1080 post card — real satellite of the community, Fraunces
@@ -7827,6 +7835,7 @@ async function mediaFor(env, angle) {
 // v123 - run one recorded picture job to completion. Idempotent: plateRun reuses an existing plate and an
 // existing render, so a second run after an interrupted first costs only the sends. Clears the job on success.
 async function picJobRun(env, jk, origin) {
+  origin = pubOrigin(env, origin);                                  // v129
   let j = null; try { j = JSON.parse((await env.MEETINGS.get(jk)) || "null"); } catch (e) {}
   if (!j) return { done: false, why: "no job" };
   try { j.tries = (j.tries | 0) + 1; j.last = Date.now(); await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
@@ -7841,6 +7850,7 @@ async function picJobRun(env, jk, origin) {
 }
 // v123 - finish any picture job that an isolate did not live long enough to send. Called by the local 5-minute task.
 async function picResume(env, origin, minAgeMs) {
+  origin = pubOrigin(env, origin);                                  // v129
   const out = []; let lst = null;
   try { lst = await env.MEETINGS.list({ prefix: "picjob_" }); } catch (e) { return out; }
   for (const k of ((lst && lst.keys) || [])) {
@@ -7855,6 +7865,7 @@ async function picResume(env, origin, minAgeMs) {
 }
 // photo -> editorial card in both sizes -> (optionally) her chat. Returns what was made; never throws.
 async function plateRun(env, post, opt, to, origin, sendIt) {
+  origin = pubOrigin(env, origin);                                  // v129 - a forwarded webhook's origin is not sendable
   const id = (post.idp || "ips_") + post.n + "_" + String(opt.id || "a").toLowerCase();   // v120 - a feed angle and an IPS post can share a number
   const angle = { hook: post.hook || post.ask || "", figure: post.figure || "", source: post.source || "", area: post.masthead || "" };
   const out = { id, photo: null, square: null, story: null, err: "" };
