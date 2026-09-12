@@ -1944,10 +1944,25 @@ export default {
         const res = await ringNudge(env, to, say);
         return new Response(JSON.stringify({ called: to, result: res }, null, 2), { headers: { "Content-Type": "application/json" } });
       }
-      if (url.pathname === "/ring_test") {                     // v135 - fire ONE WhatsApp ring now
+      if (url.pathname === "/ring_test") {                     // v135.1 - fire ONE WhatsApp ring, with overrides
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
-        const res = await ringWhatsApp(env, url.searchParams.get("text") || "Azimuth test ring");
-        return new Response(JSON.stringify({ configured: !!env.RING_WA_TO, template: env.RING_TEMPLATE || "azimuth_ring", lang: env.RING_TEMPLATE_LANG || "en_US", result: res }, null, 2), { headers: { "Content-Type": "application/json" } });
+        const q = url.searchParams;
+        const name = q.get("template") || env.RING_TEMPLATE || "azimuth_ring";
+        const lang = q.get("lang") || env.RING_TEMPLATE_LANG || "en_US";
+        const to   = env.RING_WA_TO;   // never a query override: READ_KEY is not a strong enough gate to let a URL pick who Digital Abbot messages
+        // ?params=a|b|c sets the body variables in order; ?params= (empty) sends none.
+        const raw  = q.get("params");
+        const params = raw !== null ? (raw === "" ? [] : raw.split("|")) : [q.get("text") || "Azimuth test ring"];
+        let result;
+        if (!to) result = { ok: false, skipped: "no RING_WA_TO" };
+        else {
+          try {
+            const r = await waSendTemplate(env, to, name, lang, params);
+            let body = ""; try { body = await r.clone().text(); } catch (e) {}
+            result = { ok: r.ok, status: r.status, meta: body.slice(0, 500) };
+          } catch (e) { result = { ok: false, error: String(e && e.message || e) }; }
+        }
+        return new Response(JSON.stringify({ to, template: name, lang, param_count: params.length, result }, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/nudge_run") {                     // v32 — force a real nudge pass now (for a live test)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
