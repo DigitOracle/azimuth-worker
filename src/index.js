@@ -690,6 +690,39 @@ async function noteErr(env, where, detail) {
 async function noteSent(env, kind) {
   try { await env.MEETINGS.put("diag_lastsend", JSON.stringify({ at: new Date().toISOString(), kind: kind }), { expirationTtl: 7 * 86400 }); } catch (e) {}
 }
+// v132 - the outbox. Accepted is not delivered and delivered is not read; each send is recorded
+// against the message id Meta returns, and the receipts below move it along. Without this, "she has
+// it" is an inference from a queue acknowledgement, which is how a whole morning went wrong twice.
+async function noteOutbound(env, kind, msgId, note) {
+  if (!msgId) return;
+  try {
+    const q = JSON.parse((await env.MEETINGS.get("wa_outbox")) || "[]");
+    q.unshift({ id: String(msgId), kind: String(kind || ""), note: String(note || "").slice(0, 90),
+                state: "accepted", sent_at: new Date().toISOString(), delivered_at: null, read_at: null, error: null });
+    await env.MEETINGS.put("wa_outbox", JSON.stringify(q.slice(0, 60)), { expirationTtl: 14 * 86400 });
+  } catch (e) {}
+}
+// A receipt from Meta: sent -> delivered -> read, or failed with a reason. Never moves backwards,
+// because the three arrive out of order often enough to matter.
+const _RANK = { accepted: 0, sent: 1, delivered: 2, read: 3, failed: 4 };
+async function noteReceipt(env, st) {
+  try {
+    const id = String((st && st.id) || ""); if (!id) return;
+    const state = String((st && st.status) || "").toLowerCase();
+    const when = st && st.timestamp ? new Date(Number(st.timestamp) * 1000).toISOString() : new Date().toISOString();
+    const q = JSON.parse((await env.MEETINGS.get("wa_outbox")) || "[]");
+    const row = q.find(r => r.id === id);
+    if (!row) return;                       // v133 - a receipt for a message this instance did not send
+    if ((_RANK[state] || 0) >= (_RANK[row.state] || 0)) row.state = state || row.state;
+    if (state === "delivered" && !row.delivered_at) row.delivered_at = when;
+    if (state === "read" && !row.read_at) row.read_at = when;
+    if (state === "failed") {
+      const e = (st.errors && st.errors[0]) || {};
+      row.error = String(e.title || e.message || e.code || "failed").slice(0, 140);
+    }
+    await env.MEETINGS.put("wa_outbox", JSON.stringify(q.slice(0, 60)), { expirationTtl: 14 * 86400 });
+  } catch (e) {}
+}
 // Send and CHECK. Previously the fetch result was discarded, so a Meta rejection was silent —
 // which is exactly how a whole day of "she got two ticks and nothing back" stays mysterious.
 async function waPost(env, payload, kind) {
@@ -704,7 +737,17 @@ async function waPost(env, payload, kind) {
       const _lnk = (payload && (payload.image && payload.image.link || payload.video && payload.video.link || payload.document && payload.document.link)) || "";
       await noteErr(env, "whatsapp-send:" + kind, "HTTP " + r.status + " " + t.slice(0, 120) + (_lnk ? " | link=" + String(_lnk).slice(0, 120) : ""));
     }
-    else await noteSent(env, kind);
+    else {
+      await noteSent(env, kind);
+      // v132 - the message id only exists in the response body, so take a clone: the caller may read r.
+      try {
+        const j = await r.clone().json();
+        const id = j && j.messages && j.messages[0] && j.messages[0].id;
+        const cap = (payload && ((payload.text && payload.text.body) || (payload.image && payload.image.caption) ||
+                     (payload.interactive && payload.interactive.body && payload.interactive.body.text) || "")) || "";
+        await noteOutbound(env, kind, id, cap);
+      } catch (e) {}
+    }
     return r;
   } catch (e) { await noteErr(env, "whatsapp-send:" + kind, String(e && e.message || e)); throw e; }
 }
@@ -2210,6 +2253,13 @@ export default {
         out.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
         return new Response(JSON.stringify({ generated: new Date().toISOString(), schema: "azimuth-bridge/1", count: out.length, records: out }, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      if (url.pathname === "/outbox") {                       // v132 - what was sent, and whether it was delivered and read (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _n = Math.min(60, Math.max(1, parseInt(url.searchParams.get("n") || "15", 10) | 0));
+        let _q = []; try { _q = JSON.parse((await env.MEETINGS.get("wa_outbox")) || "[]"); } catch (e) {}
+        const _sum = _q.reduce((a, r) => { a[r.state] = (a[r.state] || 0) + 1; return a; }, {});
+        return new Response(JSON.stringify({ n: _q.length, byState: _sum, items: _q.slice(0, _n) }, null, 1), { headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/inbox") {                        // v125 - what she has actually sent, newest first (keyed)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _n = Math.min(60, Math.max(1, parseInt(url.searchParams.get("n") || "15", 10) | 0));
@@ -2749,11 +2799,18 @@ export default {
         } catch (e) {}
         const val = body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
         const msg = val && val.messages && val.messages[0];
-        if (!msg) return new Response("ok");                          // delivery/read status callbacks — ignore
+        const _sts = (val && val.statuses) || [];
+        // v132 - a delivery/read receipt is the answer to "did she get it". v133 - record it here AND
+        // let the router below forward it: Meta posts every callback to the primary instance, so the
+        // instance that actually sent the message only learns the outcome if the payload is passed on.
+        for (const _s of _sts) { try { await noteReceipt(env, _s); } catch (e) {} }
         const from = msg.from;
         try { await inboxNote(env, msg); } catch (e) {}                 // v125 - record that it arrived, before anything acts on it
-        if (!_viaForward && from) {                                    // sender-keyed router (one number, many instances)
-          const _rk = "WA_ROUTE_" + String(from).replace(/[^0-9]/g, "");
+        // v133 - a status-only payload has no `from`; its subject is statuses[0].recipient_id, and that
+        // is the same number the router keys on for her messages.
+        const _routeNum = from || (_sts[0] && _sts[0].recipient_id) || "";
+        if (!_viaForward && _routeNum) {                               // sender-keyed router (one number, many instances)
+          const _rk = "WA_ROUTE_" + String(_routeNum).replace(/[^0-9]/g, "");
           const _dest = env[_rk];
           const _tr = { routeKey: _rk, destSet: !!_dest, destPrefix: _dest ? String(_dest).slice(0, 48) : null, tokenSet: !!env.WA_FORWARD_TOKEN, forwarded: false, fwdStatus: null, fwdErr: null };
           if (_dest && env.WA_FORWARD_TOKEN) {
@@ -2771,6 +2828,7 @@ export default {
           }
           try { const _p = JSON.parse((await env.MEETINGS.get("diag_walog")) || "[]"); if (_p[0]) { _p[0].router = _tr; await env.MEETINGS.put("diag_walog", JSON.stringify(_p), { expirationTtl: 86400 }); } } catch (e) {}
         }
+        if (!msg) return new Response("ok");                           // v133 - a receipt: recorded above, nothing more to do
         if (env.WA_ALLOWED && from !== env.WA_ALLOWED) {                       // only you can drive it
           try { await env.MEETINGS.put("diag_lastdrop", JSON.stringify({ from: String(from), phone_number_id: (val && val.metadata && val.metadata.phone_number_id) || null, display_phone_number: (val && val.metadata && val.metadata.display_phone_number) || null, type: msg.type || null, at: new Date().toISOString(), had_route_key: !!env["WA_ROUTE_" + String(from).replace(/[^0-9]/g, "")], via_forward: !!_viaForward }), { expirationTtl: 86400 }); } catch (e) {}
           return new Response("ok");
@@ -7792,8 +7850,21 @@ async function platePhoto(env, angle, place, id) {
                  "Soft overcast afternoon: diffuse light, no hard shadows, a muted warm palette, a hint of directional light from the right."][seed % 4];
   const lens = ["Full-frame camera, 35mm lens at f/4,", "Full-frame camera, 24mm lens at f/5.6 for a wide calm view,", "Full-frame camera, 50mm lens at f/4 for a close human view,"][(seed >>> 2) % 3];
   const vantage = ["camera at standing eye level, about 1.6 m above the ground.", "camera one floor up, about 5 m above the ground, looking slightly down across the view.", "camera at standing eye level on a promenade, the water across the middle distance."][(seed >>> 4) % 3];
+  // v134 - the model put the Burj Khalifa behind a City of Arabia card. Downtown, Business Bay, the
+  // Marina and the Palm genuinely do carry those views, so the ban is lifted only when the place is
+  // actually one of them; everywhere else the famous skyline is a lie about the area on the masthead.
+  const _pl = String(place || "").toLowerCase();
+  const _ownsSkyline = /downtown|business bay|burj|sheikh zayed road|difc|za'?abeel|dubai canal/.test(_pl);
+  const _ownsMarina = /marina|jbr|jumeirah beach residence|bluewaters|dubai harbour|palm/.test(_pl);
+  const truth = "TRUTHFUL TO THE PLACE: the view must be what this specific area genuinely looks like. " +
+    (_ownsSkyline ? "" : "The Burj Khalifa, the Downtown cluster and the Museum of the Future must NOT appear, at any distance or scale, and no invented supertall tower may stand in for them. ") +
+    (_ownsMarina ? "" : "The Marina towers, Ain Dubai, the Palm and the Burj Al Arab must NOT appear. ") +
+    (/villa|townhouse|valley|yufrah|arabian ranches|mudon|damac hills|tilal|serena|reem|mira/.test(_pl)
+      ? "This is a low-rise community: two- and three-storey homes, garden walls, street trees and open sky. NO high-rise towers anywhere, not even on the horizon. "
+      : "Build height must match the area rather than defaulting to towers. ") +
+    "If the area has no notable skyline, show its own ordinary fabric honestly - mid-rise blocks, low-rise streets, sand-edged plots, planting and roads. ";
   const prompt = "A photorealistic photograph to be used as an editorial cover background. NO TEXT of any kind anywhere in the image: no lettering, no numbers, no signs, no labels, no watermarks, no logos, no brand names. " +
-    "PLACE: " + place + ". " + lens + " " + vantage + " Horizon level and about a third of the way up the frame. " + light + " Natural colour, no filter, no HDR look, no vignette. " +
+    "PLACE: " + place + ". " + truth + lens + " " + vantage + " Horizon level and about a third of the way up the frame. " + light + " Natural colour, no filter, no HDR look, no vignette. " +
     "COMPOSITION: the real subject of the place sits in the RIGHT half of the frame. The LEFT 45% of the frame is calm, low in detail and slightly lighter, so that type can be laid over it afterwards. The lower right is open, clear ground with nothing standing on it. " +
     "ABSOLUTELY NO PEOPLE anywhere, no silhouettes, no crowds, no one in windows or in the distance. No animals. Not CGI, no plastic sheen, no lens flare, no tilt-shift, no fisheye, no illustration or painting style.";
   try {
