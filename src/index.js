@@ -699,7 +699,11 @@ async function waPost(env, payload, kind) {
       headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!r.ok) { const t = await r.text(); await noteErr(env, "whatsapp-send:" + kind, "HTTP " + r.status + " " + t.slice(0, 160)); }
+    if (!r.ok) {
+      const t = await r.text();
+      const _lnk = (payload && (payload.image && payload.image.link || payload.video && payload.video.link || payload.document && payload.document.link)) || "";
+      await noteErr(env, "whatsapp-send:" + kind, "HTTP " + r.status + " " + t.slice(0, 120) + (_lnk ? " | link=" + String(_lnk).slice(0, 120) : ""));
+    }
     else await noteSent(env, kind);
     return r;
   } catch (e) { await noteErr(env, "whatsapp-send:" + kind, String(e && e.message || e)); throw e; }
@@ -2235,6 +2239,18 @@ export default {
         const _res = await picResume(env, url.origin, _min);
         return new Response(JSON.stringify({ checked: _res.length, jobs: _res }), { headers: { "Content-Type": "application/json" } });
       }
+      if (url.pathname === "/send_image") {                   // v127 - push a stored image to her as an image message (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _in = (url.searchParams.get("img") || "").replace(/[^a-z0-9_]/gi, ""); if (!_in) return new Response("img required", { status: 400 });
+        let _have = 0; try { const _b = await env.MEETINGS.get("img_" + _in, "arrayBuffer"); _have = _b ? _b.byteLength : 0; } catch (e) {}
+        if (!_have) return new Response("no such image: " + _in, { status: 404 });
+        const _lnk = url.origin + "/img/" + _in;
+        const _cap = String(url.searchParams.get("caption") || "").slice(0, 1000);
+        const _to = url.searchParams.get("to") || env.WA_ALLOWED;
+        let _r = null; try { _r = await waSendImage(env, _to, _lnk, _cap); } catch (e) { return new Response("send failed: " + String(e && e.message || e), { status: 502 }); }
+        let _body = ""; try { _body = await _r.text(); } catch (e) {}
+        return new Response(JSON.stringify({ ok: !!(_r && _r.ok), status: _r && _r.status, key: _in, bytes: _have, link: _lnk, api: _body.slice(0, 300) }), { headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/send_video") {                   // v118 - send a stored video to her as a video message (keyed)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _vn = (url.searchParams.get("v") || "").replace(/[^a-z0-9_]/gi, ""); if (!_vn) return new Response("v required", { status: 400 });
@@ -3288,8 +3304,15 @@ export default {
           }
           // v83.1 - a second post in the same day: she asks for a fresh set and gets ten NEW angles, not the morning's list again.
           if (/^(more|again|fresh|fresh set|new angles?|another set|next set|round two|second round|run it again|new run)$/i.test(text)) {
+            if (await env.MEETINGS.get("mkt_feed_inflight")) {                 // v127 - she sent it twice 23 s apart; one build at a time
+              await waSend(env, from, "Still building the last set - give it a moment.");
+              return new Response("ok");
+            }
+            try { await env.MEETINGS.put("mkt_feed_inflight", "1", { expirationTtl: 150 }); } catch (e) {}
+            await waSend(env, from, "Building you a fresh set now. About a minute.");
             await waSend(env, from, "On it - a fresh set, nothing repeated from this morning. Give me a minute.");
             try { await dailyFeedTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build a fresh set just now - try again shortly."); }
+            try { await env.MEETINGS.delete("mkt_feed_inflight"); } catch (e) {}
             return new Response("ok");
           }
           if (/^market\s+brief$/i.test(text)) {
@@ -4151,10 +4174,39 @@ async function dailyFeedTick(env, force, dry) {
     trends,
     news: await (async () => { try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); return nn.slice(0, 8).map(x => ({ title: x.title, outlet: x.outlet, meedCrossReference: x.xref ? { project: x.xref.meedName, facts: x.xref.facts } : null })); } catch (e) { return null; } })(),
   });
-  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one or two short sentences in HER VOICE (below), built around ONE specific figure written as numerals the way her captions do (3,098 homes; AED 7.78B; 13.9%), never spelled out in words; figure = that exact figure WITH its unit (e.g. 'AED 7.78B', '13.9%', '3,098 homes'); source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections. AT LEAST TWO of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all). TWO FURTHER SOURCES, and AT LEAST ONE of the five must come from them: `cityLife` is Dubai as a place to LIVE, from government registers - metro distance by district, bus coverage and stop counts by community, the airport's busiest and quietest hours, bus speeds; these are structural facts, so quote them exactly and name the body (e.g. 'RTA bus network coverage, 31 Dec 2024'); a community with residents and no bus stop, or a district with no metro within 5 km, is a strong hook because no other broker posts it. `developerInventory` is what each DEVELOPER ITSELF claims is still available, captured from their own sheets on the date they said it - `moves` shows the change between two sheets, and the rule is: a count that FELL was taken up, a count that ROSE was RELEASED by the developer, never call a rise a sale; family for these is `inventory`. TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". TOPIC FAMILIES: each of the five must come from a DIFFERENT family and name it in `family`, one of " + JSON.stringify(FEED_FAMILIES) + ". " + (lane ? "TODAY'S LANE (" + ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n.getUTCDay()] + "): at least THREE of the five from " + JSON.stringify(lane) + ". " : "") + "NO REPEATS: these numbers and these subjects were used in recent mornings and must not appear again in any form (a percentage of the same fact is the same fact): numbers " + JSON.stringify([...new Set(famh.flatMap(x => x.n || []))].slice(0, 80)) + "; subjects " + JSON.stringify([...new Set(famh.filter(x => (Date.now() - Date.parse(x.d)) < 5 * 86400 * 1000).map(x => x.s).filter(Boolean))].slice(0, 40)) + ". Prefer a figure the register has NOT yet been quoted on: a different area, a different bedroom count, a different month, a different developer. Families that ran on recent mornings and must be avoided today unless the figure is genuinely new: " + JSON.stringify(tired) + ". The SHAPE of every hook comes from HER VOICE above, never from past hooks. Subjects she has already used, do not repeat: " + JSON.stringify(picks.slice(0, 8).map(p => String(p.hook || "").slice(0, 60))) + ". TRENDING (what people are talking about today, context only - a trend never supplies a number): " + JSON.stringify((radar && radar.items || []).slice(0, 6).map(t => ({ platform: t.platform, title: t.title, family: t.family }))) + ". If an angle's subject matches a trending item, set `trend` to one short line naming the platform and what is moving; otherwise omit `trend`. " + (await styleVoice(env)) + " WHAT SHE FAVOURS (learned from her choices; subjects and formats only, never style): " + ((await dnaSubjects(env)) || "(still learning)") + ". NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
+  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one or two short sentences in HER VOICE (below), built around ONE specific figure written as numerals the way her captions do (3,098 homes; AED 7.78B; 13.9%), never spelled out in words; figure = that exact figure WITH its unit (e.g. 'AED 7.78B', '13.9%', '3,098 homes'); source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer. The five angles must cover DIFFERENT figures and span different sections. AT LEAST TWO of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all). TWO FURTHER SOURCES, and AT LEAST ONE of the five must come from them: `cityLife` is Dubai as a place to LIVE, from government registers - metro distance by district, bus coverage and stop counts by community, the airport's busiest and quietest hours, bus speeds; these are structural facts, so quote them exactly and name the body (e.g. 'RTA bus network coverage, 31 Dec 2024'); a community with residents and no bus stop, or a district with no metro within 5 km, is a strong hook because no other broker posts it. `developerInventory` is what each DEVELOPER ITSELF claims is still available, captured from their own sheets on the date they said it - `moves` shows the change between two sheets, and the rule is: a count that FELL was taken up, a count that ROSE was RELEASED by the developer, never call a rise a sale; family for these is `inventory`. GEOGRAPHY RULE for both: name the community, district or developer EXACTLY as it appears in that block, and use ONLY that block's figures - the community names in cityLife are a different geography from the register's areas, so never attach a sales, rent, price or transaction figure to a cityLife place; an angle that breaks this is discarded. TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". TOPIC FAMILIES: each of the five must come from a DIFFERENT family and name it in `family`, one of " + JSON.stringify(FEED_FAMILIES) + ". " + (lane ? "TODAY'S LANE (" + ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n.getUTCDay()] + "): at least THREE of the five from " + JSON.stringify(lane) + ". " : "") + "NO REPEATS: these numbers and these subjects were used in recent mornings and must not appear again in any form (a percentage of the same fact is the same fact): numbers " + JSON.stringify([...new Set(famh.flatMap(x => x.n || []))].slice(0, 80)) + "; subjects " + JSON.stringify([...new Set(famh.filter(x => (Date.now() - Date.parse(x.d)) < 5 * 86400 * 1000).map(x => x.s).filter(Boolean))].slice(0, 40)) + ". Prefer a figure the register has NOT yet been quoted on: a different area, a different bedroom count, a different month, a different developer. Families that ran on recent mornings and must be avoided today unless the figure is genuinely new: " + JSON.stringify(tired) + ". The SHAPE of every hook comes from HER VOICE above, never from past hooks. Subjects she has already used, do not repeat: " + JSON.stringify(picks.slice(0, 8).map(p => String(p.hook || "").slice(0, 60))) + ". TRENDING (what people are talking about today, context only - a trend never supplies a number): " + JSON.stringify((radar && radar.items || []).slice(0, 6).map(t => ({ platform: t.platform, title: t.title, family: t.family }))) + ". If an angle's subject matches a trending item, set `trend` to one short line naming the platform and what is moving; otherwise omit `trend`. " + (await styleVoice(env)) + " WHAT SHE FAVOURS (learned from her choices; subjects and formats only, never style): " + ((await dnaSubjects(env)) || "(still learning)") + ". NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
   let g = null, genErr = null;
   try { g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 1400); } catch (e) { genErr = e && e.message ? e.message : String(e); }
-  const angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 5) : [];
+  let angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 5) : [];
+  // v127 - a city_life or inventory angle must name something that is actually in its block. The
+  // bus-coverage communities are NOT the register's areas, so a hook that welds "no bus stop" to a
+  // sales count has invented a place. Drop it rather than let it reach her.
+  {
+    const names = new Set();
+    const add = (v) => { if (v) names.add(String(v).toLowerCase()); };
+    const c = d.cityLife || {};
+    for (const k of ["closest", "furthest"]) for (const x of ((c.metro || {})[k] || [])) add(x.district);
+    for (const k of ["worstServed", "bestServed", "theValley"]) for (const x of ((c.busCoverage || {})[k] || [])) add(x.community);
+    for (const k of ["mostServed", "leastServed"]) for (const x of ((c.busStops || {})[k] || [])) add(x.district);
+    for (const k of ["slowest", "fastest"]) for (const x of ((c.buses || {})[k] || [])) add(x.line);
+    if (c.airport) add("dxb"), add("dubai international"), add("airport");
+    if (c.buses) add("km/h"), add("bus");
+    if (c.professions) add("profession"), add("occupation");
+    const inv = d.developerInventory || {};
+    for (const x of (inv.current || [])) add(x.developer);
+    for (const x of (inv.moves || [])) add(x.developer);
+    const otherFig = /\b(sales?|sold|transactions?|deals?|rent(al)?s?|yield|aed [\d.,]+|dirhams?|per sq ?ft|median)\b/i;
+    const before = angles.length;
+    angles = angles.filter(a => {
+      const fam = String(a.family || "");
+      if (fam !== "city_life" && fam !== "inventory") return true;
+      const t = (String(a.hook || "") + " " + String(a.figure || "") + " " + String(a.source || "")).toLowerCase();
+      const named = [...names].some(n => n.length >= 3 && t.indexOf(n) >= 0);
+      const mixed = fam === "city_life" && otherFig.test(String(a.hook || "") + " " + String(a.figure || ""));
+      return named && !mixed;
+    });
+    if (angles.length < before) { try { await env.MEETINGS.put("mkt_feed_geo_dropped", JSON.stringify({ at: gstNowIso(), dropped: before - angles.length }), { expirationTtl: 7 * 86400 }); } catch (e) {} }
+  }
   if (angles.length < 3) {
     try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), attempts: attempts + 1, err: genErr || ("angles=" + angles.length) }), { expirationTtl: 7 * 86400 }); } catch (e) {}
     if (dry) return "GENERATION FAILED: " + (genErr || ("only " + angles.length + " angles"));
