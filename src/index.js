@@ -3611,7 +3611,13 @@ export default {
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
-      try { if (env.GH_PAT) await fetch(GH_DISPATCH, { method: "POST", headers: { "Authorization": "Bearer " + env.GH_PAT, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "meeting-capture-cron", "Content-Type": "application/json" }, body: JSON.stringify({ ref: "main", inputs: { force_mode: "auto" } }) }); } catch (e) {}
+      // v136 - dispatch ONCE per half hour, never on every 5-minute tick. reminder.py is stateless and its
+      // send windows are 30 minutes wide (07:00-07:29, 12:00-12:29, 20:00-20:29 GST, and 45-75 min before a
+      // meeting), so a dispatch every 5 minutes re-sent each of those up to seven times and burned GitHub
+      // Free's whole monthly Actions allowance by the 11th. The workflow's own cron is removed in the same
+      // change, so this is now the only trigger. scheduledTime is the exact cron slot, so :00 and :30 each
+      // match exactly once even when the handler starts a few seconds late.
+      try { if (env.GH_PAT && new Date(event.scheduledTime).getUTCMinutes() % 30 === 0) await fetch(GH_DISPATCH, { method: "POST", headers: { "Authorization": "Bearer " + env.GH_PAT, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "meeting-capture-cron", "Content-Type": "application/json" }, body: JSON.stringify({ ref: "main", inputs: { force_mode: "auto" } }) }); } catch (e) {}
       try { const tok = await msToken(env); await scanEmails(env, tok); } catch (e) {}
       try { const tok = await msToken(env); await scanSent(env, tok, { sinceMin: 90, cap: 40 }); } catch (e) {}   // v35.1 — sent-items promises
       try { const n = gstNow(); if (n.getUTCHours() === 7 && n.getUTCMinutes() < 30) { const dk = "digest_" + n.getUTCFullYear() + pad(n.getUTCMonth() + 1) + pad(n.getUTCDate()); if (!(await env.MEETINGS.get(dk))) { await env.MEETINGS.put(dk, "1", { expirationTtl: 2 * 86400 }); await morningDigest(env); } } } catch (e) {}
