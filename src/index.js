@@ -2849,7 +2849,7 @@ export default {
         // let the router below forward it: Meta posts every callback to the primary instance, so the
         // instance that actually sent the message only learns the outcome if the payload is passed on.
         for (const _s of _sts) { try { await noteReceipt(env, _s); } catch (e) {} }
-        const from = msg.from;
+        const from = msg ? msg.from : undefined;   // v136.1 - a receipt has no message; msg.from threw here, before the receipt router below could run, on every status callback
         try { await inboxNote(env, msg); } catch (e) {}                 // v125 - record that it arrived, before anything acts on it
         // v133 - a status-only payload has no `from`; its subject is statuses[0].recipient_id, and that
         // is the same number the router keys on for her messages.
