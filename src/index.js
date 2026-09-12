@@ -765,6 +765,27 @@ async function waSend(env, to, body) {
   }
   return last;
 }
+// v135 - a TEMPLATE send. Needed for the ring handset, which never replies and therefore has no
+// open 24-hour window. `params` fill {{1}}, {{2}}... in the template body, in order.
+async function waSendTemplate(env, to, name, lang, params) {
+  const comps = (params && params.length)
+    ? [{ type: "body", parameters: params.map(p => ({ type: "text", text: String(p == null ? "" : p).slice(0, 900) })) }]
+    : undefined;
+  return waPost(env, {
+    messaging_product: "whatsapp", to, type: "template",
+    template: { name, language: { code: lang || "en_US" }, components: comps }
+  }, "template:" + name);
+}
+// v135 - fire the ring handset. Silent no-op unless RING_WA_TO is set, so deploying this changes
+// nothing until it is configured. Never throws into the nudge path.
+async function ringWhatsApp(env, text) {
+  try {
+    if (!env.RING_WA_TO) return { ok: false, skipped: "unconfigured" };
+    const r = await waSendTemplate(env, env.RING_WA_TO,
+      env.RING_TEMPLATE || "azimuth_ring", env.RING_TEMPLATE_LANG || "en_US", [String(text || "meeting")]);
+    return { ok: !!(r && r.ok), status: r && r.status, to: env.RING_WA_TO };
+  } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+}
 async function waSendButtons(env, to, body, buttons) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: body }, action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) } } }, "buttons");
 }
@@ -1303,6 +1324,10 @@ async function meetingNudges(env) {
         // The ring — only at T-15 by default (one call, not two), gated on a configured provider.
         if (lead === 15 && callConfigured(env) && (env.CALL_TO || env.WA_ALLOWED)) {
           try { await ringNudge(env, env.CALL_TO || env.WA_ALLOWED, (m.summary || "meeting") + " in 15 minutes" + (m.location && !online ? " at " + m.location : "")); } catch (e) {}
+        }
+        // v135 - the WhatsApp ring: a template to the dialler handset, which calls the owner back.
+        if (lead === 15 && env.RING_WA_TO) {
+          try { await ringWhatsApp(env, (m.summary || "meeting") + " in 15 minutes"); } catch (e) {}
         }
         fired++;
       }
@@ -1918,6 +1943,11 @@ export default {
         const say = url.searchParams.get("text") || "This is a test call from Azimuth. Your meeting reminders will ring you like this.";
         const res = await ringNudge(env, to, say);
         return new Response(JSON.stringify({ called: to, result: res }, null, 2), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/ring_test") {                     // v135 - fire ONE WhatsApp ring now
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const res = await ringWhatsApp(env, url.searchParams.get("text") || "Azimuth test ring");
+        return new Response(JSON.stringify({ configured: !!env.RING_WA_TO, template: env.RING_TEMPLATE || "azimuth_ring", lang: env.RING_TEMPLATE_LANG || "en_US", result: res }, null, 2), { headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/nudge_run") {                     // v32 — force a real nudge pass now (for a live test)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });

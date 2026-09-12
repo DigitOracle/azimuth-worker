@@ -10,6 +10,11 @@
 name = "meeting-capture"
 main = "src/index.js"
 compatibility_date = "2026-06-29"
+# 12 Sep 2026 - these two were MISSING from this file but ARE live on meeting-capture (/card.png
+# renders, and index.js imports @cloudflare/puppeteer which needs node:buffer). Deploying without
+# them fails on "No such module node:buffer" and would strip card rendering.
+compatibility_flags = ["nodejs_compat"]
+browser = { binding = "BROWSER" }
 account_id = "76bc08573538d7426fce444cf7ef7645"
 workers_dev = true
 
@@ -30,6 +35,12 @@ MS_TENANT_ID = "0d6748c6-97d7-44f0-b920-7a9db8925d4f"
 WA_ALLOWED = "971562276093"
 WA_PHONE_ID = "1178276628713333"
 WA_ROUTE_971565484397 = "AZIMUTH_2"
+# v135 - the ring. Azimuth sends azimuth_ring to the dedicated Android holding +971 58 544 6093;
+# MacroDroid there answers the notification by placing a real call to the owner. LANG IS "en":
+# azimuth_ring was created as English, NOT English (US) like the other templates.
+RING_WA_TO = "971585446093"
+RING_TEMPLATE = "azimuth_ring"
+RING_TEMPLATE_LANG = "en"
 
 [triggers]
 crons = ["*/5 3-18 * * *"]
