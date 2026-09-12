@@ -6488,8 +6488,23 @@ function renderDev(dv, bd, galleries, key, umx, vids) {
         '<div class=pm>' + (p.area || "") + (p.units ? ' · ' + Math.round(p.units) + ' units' : '') + (p.pct != null ? ' · ' + p.pct + '% built' : '') + (p.value_aed ? ' · AED ' + fm(p.value_aed) : '') + '</div>' +
         '<div class=pm style="color:var(--mut)">registered ' + (p.start || "2026") + ' · no cards yet - send the floor-plan deck and the availability sheet to the group</div></div>';
     }
+    if (p.kind === "sheet") {                                       // 13 Sep 2026 - we hold availability for a project the developer's own site does not list
+      const tl = p.level === "type";                                // type-level: a broker-pack summary, NOT unit-by-unit availability
+      const rows = (p.types || []).map(t =>
+        '<div class=pm style="display:flex;gap:.6rem;justify-content:space-between"><span>' + t.t + '</span>' +
+        '<span style="color:var(--mut)">' + (t.n != null ? t.n + ' units' : '') +
+        (t.from_sqft ? ' · from ' + fm(t.from_sqft) + ' sq ft' : '') +
+        (t.from_aed ? ' · from AED ' + fm(t.from_aed) : '') + '</span></div>').join("");
+      const spec = [p.area, p.units ? fm(p.units) + ' units' : null, p.handover ? 'handover ' + p.handover : null].filter(Boolean).join(' · ');
+      return '<div class="prop ours"><div class=ph><span class=pn>' + p.name + '</span>' +
+        '<span class=badge>' + (tl ? 'developer type summary' : 'on the developer sheet') + '</span></div>' +
+        '<div class=pm>' + spec + '</div>' + rows +
+        (tl ? '<div class=pm style="color:#E0B080">starting prices by type — not unit-by-unit availability; no unit here can be quoted as free</div>' : '') +
+        (p.note ? '<div class=pm style="color:var(--mut);font-size:.6rem">' + p.note + '</div>' : '') +
+        '<div class=row><a class=go href="/avail?d=' + encodeURIComponent(dv.key) + '&key=' + encodeURIComponent(key) + '">the mix →</a></div></div>';
+    }
     return '<div class=prop><div class=ph><span class=pn>' + p.name + '</span><span class=badge style="border-color:var(--line);color:var(--mut)">trading</span></div>' +
-      '<div class=pm>' + (p.area || "") + ' · ' + p.tx + ' registered sales 2026' + (p.median_aed_per_sqm ? ' · median AED ' + fm(p.median_aed_per_sqm) + '/m²' : '') + (p.offplan_share != null ? ' · ' + Math.round(p.offplan_share * 100) + '% off-plan' : '') + '</div>' +
+      '<div class=pm>' + (p.area || "") + (p.tx ? ' · ' + p.tx + ' registered sales 2026' : '') + (p.median_aed_per_sqm ? ' · median AED ' + fm(p.median_aed_per_sqm) + '/m²' : '') + (p.offplan_share != null ? ' · ' + Math.round(p.offplan_share * 100) + '% off-plan' : '') + '</div>' +
       '<div class=pm style="color:var(--mut)">last registration ' + (p.last || "") + ' · DLD Open Data</div></div>';
   }
   const cards = cardsArr.join("");
