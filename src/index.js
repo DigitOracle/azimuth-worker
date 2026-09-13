@@ -1797,12 +1797,15 @@ export default {
       const _n = String(_q.get("n") || "1").replace(/[^0-9]/g, "") || "1";
       const _oid = String(_q.get("bg") || "B").toUpperCase().replace(/[^A-H]/g, "").slice(0, 1) || "B";
       const _mk = String(_q.get("me") || "").replace(/[^a-z0-9_]/gi, "");
+      // v144.1 - read the angle from fbg_<n>, where the real flow keeps it: mkt_briefctx loses its angles when the Sunday
+      // 09:00 brief rewrites that key, so after 09:00 on a Sunday it no longer holds the morning's feed.
+      let _fb = null; try { _fb = JSON.parse((await env.MEETINGS.get("fbg_" + _n)) || "null"); } catch (e) {}
       let _cx = null; try { _cx = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
-      const _ang = _cx && (_cx.angles || [])[Number(_n) - 1];
+      const _ang = (_fb && _fb.angle) || (_cx && (_cx.angles || [])[Number(_n) - 1]);
       if (!_ang || !_mk) return new Response("need an angle on file (n) and her photo key (me)", { status: 400 });
       let _d = null; try { _d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
-      const _area = angleArea(_ang, _d);
-      const _opt = feedBackdrops(_ang, _area).find(o => o.id === _oid);
+      const _area = (_fb && typeof _fb.area === "string") ? _fb.area : angleArea(_ang, _d);
+      const _opt = ((_fb && _fb.options) || feedBackdrops(_ang, _area)).find(o => o.id === _oid);
       const _prompt = scenePrompt(_opt, _q.get("extra") ? [_q.get("extra")] : []);
       const _json = (o, s) => new Response(JSON.stringify(o, null, 2), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
       if (_q.get("dry") === "1") return _json({ dry: true, backdrop: _opt && _opt.name, photo: _mk, prompt: _prompt });
