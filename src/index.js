@@ -1833,7 +1833,7 @@ export default {
       let _opt = ((_fb && _fb.options) || feedBackdrops(_ang, _area)).find(o => o.id === _oid);
       if (!_opt) return new Response("no such backdrop", { status: 404 });
       if (_q.get("place")) _opt = Object.assign({}, _opt, { place: String(_q.get("place")).slice(0, 400) });
-      const _face = ["first", "second", "none"].indexOf(String(_q.get("face") || "")) >= 0 ? String(_q.get("face")) : "second";   // where her own photo goes, for her face
+      const _face = ["first", "second", "none"].indexOf(String(_q.get("face") || "")) >= 0 ? String(_q.get("face")) : "first";   // where her own photo goes, for her face (first = what her chat uses)
       const _prompt = sceneCardPrompt(_opt, _tm, _q.get("extra") ? [_q.get("extra")] : [], _face === "none" ? "" : _face);
       if (_q.get("dry") === "1") return _json({ dry: true, backdrop: _opt.name, time: _tm, photo: _mk, face: _face, prompt: _prompt });
       const _id = "c" + _n + _oid.toLowerCase() + _tm + _face.charAt(0) + "_" + _mk.slice(-2) + "_" + rid().slice(0, 4);
@@ -3177,10 +3177,42 @@ export default {
             try { await env.MEETINGS.delete("mepick_" + _tok); } catch (e) {}
             const _mk = _pk.cands[_ix];
             try { const _u = JSON.parse((await env.MEETINGS.get("style_me_used")) || "{}"); _u[_mk] = new Date().toISOString(); await env.MEETINGS.put("style_me_used", JSON.stringify(_u)); } catch (e) {}
+            if (_pk.kind === "scene") { await sceneShow(env, from, Object.assign({}, _pk, { meKey: _mk, extra: [] })); return new Response("ok"); }   // v147 - show what the picture will be before it is made
             const _jk = "picjob_" + _pk.n + "_" + String(_pk.oid || "a").toLowerCase();
             try { await env.MEETINGS.put(_jk, JSON.stringify({ n: _pk.n, opt: _pk.oid, to: _pk.to || from, at: Date.now(), tries: 0, post: _pk.post, option: Object.assign({}, _pk.option, { meKey: _mk }), angle: _pk.angle }), { expirationTtl: 2 * 86400 }); } catch (e) {}
             await waSend(env, from, _pk.ack || "Making your picture now, give me a minute.");
             if (ctx) ctx.waitUntil(picJobRun(env, _jk, url.origin));
+            return new Response("ok");
+          }
+          if (bid.indexOf("stm:") === 0) {                                             // v147 - time of day chosen: which photo of her, then what the picture will be
+            const _p = bid.split(":"), _n = String(_p[1] || "").replace(/[^0-9]/g, ""), _oid = String(_p[2] || "").toUpperCase(), _tm = SCENE_TIMES.find(t => t.id === String(_p[3] || ""));
+            let _st = null; try { _st = JSON.parse((await env.MEETINGS.get("fbg_" + _n)) || "null"); } catch (e) {}
+            const _opt = _st && (_st.options || []).find(o => o.id === _oid);
+            if (!_opt || !_tm) { await waSend(env, from, "Those backdrops have expired - pick the angle again and I'll offer them fresh."); return new Response("ok"); }
+            const _ang = _st.angle || {};
+            const _post = { n: _n, idp: "feed_", hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "", masthead: _st.area || "Dubai",
+                            caption: [_ang.hook || "", (_ang.figure || "") + " — " + (_ang.source || "")].filter(Boolean).join("\n\n").slice(0, 1000) };
+            const _job = { kind: "scene", n: _n, oid: _oid, tid: _tm.id, to: from, post: _post, option: _opt, angle: _ang,
+                           ask: "Good pick - " + _opt.name + " " + _tm.when + ". Which photo of you for this one?" };
+            if (await meOffer(env, from, url.origin, _job)) return new Response("ok");
+            const _pool = await mePool(env);                                            // fewer than two photos to choose from: use what there is
+            await sceneShow(env, from, Object.assign({}, _job, { meKey: _pool[0] || "style_me", extra: [] }));
+            return new Response("ok");
+          }
+          if (bid.indexOf("sx:") === 0) {                                              // v147 - Change it: her next line is added to the picture
+            const _tok = bid.slice(3).replace(/[^a-z0-9]/gi, "");
+            if (!(await env.MEETINGS.get("scpend_" + _tok))) { await waSend(env, from, "Those choices have expired - pick the backdrop again and I'll offer them fresh."); return new Response("ok"); }
+            await env.MEETINGS.put("scedit_" + from, _tok, { expirationTtl: 1800 });
+            await waSend(env, from, "Tell me what to change, in a line.");
+            return new Response("ok");
+          }
+          if (bid.indexOf("sk:") === 0) {                                              // v147 - Make it: on record as a picture job; the minute tick makes and sends it
+            const _tok = bid.slice(3).replace(/[^a-z0-9]/gi, ""), _jk = "picjob_s" + _tok;
+            let _r = null; try { _r = JSON.parse((await env.MEETINGS.get("scpend_" + _tok)) || "null"); } catch (e) {}
+            if (!_r) { if (!(await env.MEETINGS.get(_jk))) await waSend(env, from, "Those choices have expired - pick the backdrop again and I'll offer them fresh."); return new Response("ok"); }
+            try { await env.MEETINGS.put(_jk, JSON.stringify({ scene: true, n: _r.n, opt: _r.oid, tid: _r.tid, to: _r.to || from, at: Date.now(), tries: 0, post: _r.post, option: _r.option, angle: _r.angle, meKey: _r.meKey, extra: _r.extra || [] }), { expirationTtl: 2 * 86400 }); } catch (e) {}
+            try { await env.MEETINGS.delete("scpend_" + _tok); await env.MEETINGS.delete("scedit_" + from); } catch (e) {}
+            await waSend(env, from, "Making your picture now, give me a minute.");
             return new Response("ok");
           }
           if (bid.indexOf("fbg:") === 0) {                                             // v120 - backdrop chosen: make the plate, her cut-out, the card
@@ -3193,6 +3225,10 @@ export default {
                             masthead: _st.area || "Dubai",
                             caption: [_ang.hook || "", (_ang.figure || "") + " — " + (_ang.source || "")].filter(Boolean).join("\n\n").slice(0, 1000) };   // v130 - buyer is targeting notes, not caption copy
             if (!env.OPENAI_API_KEY) { await waSend(env, from, "I can't make pictures just now - the image key is missing."); return new Response("ok"); }
+            if (env.SCENE_PICTURES === "on") {                                          // v147 - scene pictures: the time of day next, then her photo
+              await waSendList(env, from, "What time of day?", "Time of day", SCENE_TIMES.map(t => ({ id: "stm:" + _n + ":" + _oid + ":" + t.id, title: t.name, description: t.note })));
+              return new Response("ok");
+            }
             if (await meOffer(env, from, url.origin, { kind: "fbg", n: _n, oid: _oid, to: from, post: _post, option: _opt, angle: _ang,
                 ask: "Good pick - " + _opt.name + ". Which photo of you for this one?", ack: "Making your picture now, give me a minute." })) return new Response("ok");   // v141
             const _tt = from, _jk = "picjob_" + _n + "_" + _oid.toLowerCase();
@@ -3458,6 +3494,14 @@ export default {
         if (msg.type === "text") text = (msg.text && msg.text.body || "").trim();
         else if (msg.type === "audio") { try { text = await waTranscribe(env, msg.audio.id); } catch (e) { await waSend(env, from, "⚠ Couldn't read that voice note — try text."); return new Response("ok"); } }
         if (!text) { await waSend(env, from, "Send a meeting or task (text or voice) and I'll file it. \u{1F9ED}"); return new Response("ok"); }
+        {                                                                            // v147 - her one line for Change it on a scene picture
+          const _se = await env.MEETINGS.get("scedit_" + from);
+          if (_se) {
+            try { await env.MEETINGS.delete("scedit_" + from); } catch (e) {}
+            let _r = null; try { _r = JSON.parse((await env.MEETINGS.get("scpend_" + _se)) || "null"); } catch (e) {}
+            if (_r) { _r.extra = (_r.extra || []).concat([text.slice(0, 300)]).slice(-5); await sceneShow(env, from, _r); return new Response("ok"); }
+          }
+        }
         {                                                                            // v112 - her one-line change to the style card
           const _sf = await styleGet(env);
           if (_sf && (_sf.step === "own" || _sf.step === "admired") && msg.type === "text" && /https?:\/\/\S+/i.test(text)) {   // v112.1 - a link counts too
@@ -8244,11 +8288,11 @@ async function sceneGenerate(env, meKey, prompt, renderKey, id) {
 // on the left, her photo placed on the right, no words - and the words are set on top afterwards by the card engine, so the
 // register's figure is always drawn by us and never redrawn by the image service.
 const SCENE_TIMES = [
-  { id: "em", name: "Early morning", note: "Soft low sun, long gentle shadows", light: "Early morning: soft, clear light from a low sun, long gentle shadows, a pale fresh sky" },
-  { id: "md", name: "Midday", note: "Bright sun, clear sky", light: "Midday: bright sun high in a clear blue sky, crisp short shadows, clean vivid colour" },
-  { id: "la", name: "Late afternoon", note: "Warm golden light", light: "Late afternoon: warm golden sun low in the sky, long soft shadows, a gentle warm haze" },
-  { id: "ss", name: "Sunset", note: "Golden glow, sun low behind", light: "Sunset: the sun just above the horizon behind the scene, a warm golden glow and soft haze, the light catching her hair and shoulders" },
-  { id: "nt", name: "Night", note: "Lights on, deep blue sky", light: "Night: a deep blue sky, warm street lamps and lit windows, soft pools of light on the ground and on her" },
+  { id: "em", name: "Early morning", note: "Soft low sun, long gentle shadows", when: "in the early morning", say: "Early morning, soft low sun", light: "Early morning: soft, clear light from a low sun, long gentle shadows, a pale fresh sky" },
+  { id: "md", name: "Midday", note: "Bright sun, clear sky", when: "at midday", say: "Midday, bright sun and a clear sky", light: "Midday: bright sun high in a clear blue sky, crisp short shadows, clean vivid colour" },
+  { id: "la", name: "Late afternoon", note: "Warm golden light", when: "in the late afternoon", say: "Late afternoon, warm golden light", light: "Late afternoon: warm golden sun low in the sky, long soft shadows, a gentle warm haze" },
+  { id: "ss", name: "Sunset", note: "Golden glow, sun low behind", when: "at sunset", say: "Sunset, a warm golden glow", light: "Sunset: the sun just above the horizon behind the scene, a warm golden glow and soft haze, the light catching her hair and shoulders" },
+  { id: "nt", name: "Night", note: "Lights on, deep blue sky", when: "at night", say: "Night, the lights on under a deep blue sky", light: "Night: a deep blue sky, warm street lamps and lit windows, soft pools of light on the ground and on her" },
 ];
 // faceRef: "second" = the layout goes first and her own photo second, for her face; "first" = her photo first, the layout second.
 // No landmark ban here: Kendall, 13 Sep 2026, iconic views are allowed on her pictures (her own edit put the Burj Khalifa behind her).
@@ -8319,6 +8363,73 @@ async function sceneLayoutRef(env, origin, meKey, bgKey, id) {
   const key = "sref_" + String(id || rid()).replace(/[^a-z0-9_]/gi, "").slice(0, 30);
   await env.MEETINGS.put("img_" + key, png, { expirationTtl: 7 * 86400 }); await env.MEETINGS.put("img_ct_" + key, "image/png", { expirationTtl: 7 * 86400 });
   return { key, url: o + "/img/" + key };
+}
+// v147 - what she reads before a scene picture is made (wording approved by Kendall, 13 Sep 2026): plain words, nothing about
+// reference pictures or the cream column, and never the name of the image service.
+function sceneDescription(option, tid, extra) {
+  const id = String((option && option.id) || "").toUpperCase();
+  const tm = SCENE_TIMES.find(x => x.id === tid) || null;
+  const pose = String(SCENE_POSE[id] || "standing naturally in the scene, looking towards the camera").split(",")[0];
+  let where = String((option && option.place) || "a residential setting in Dubai").trim().replace(/\s+-\s+/g, ", ").replace(/\bDubai,\s*Dubai\b/g, "Dubai")
+    .replace(/,?\s*(at\s+)?(early morning|late afternoon|blue hour)\b/gi, "").replace(/\s+at eye level\b/gi, "").replace(/,?\s*ordinary and lived-in rather than promotional/gi, "").replace(/\s+,/g, ",").trim();
+  where = where.charAt(0).toLowerCase() + where.slice(1);
+  let s = "You, " + pose + ". Behind you: " + where + ". " + (tm ? tm.say : "Natural daylight") + ". Your face, hair and outfit exactly as in your photo.";
+  const ch = (extra || []).map(x => String(x || "").trim()).filter(Boolean);
+  if (ch.length) s += "\n\n" + ch.map(c => "Your change: " + c).join("\n");
+  return s;
+}
+// The picture she will get, with Make it / Change it. One pending record per picture (scpend_<tok>), kept while she changes it.
+async function sceneShow(env, to, rec) {
+  const tok = rec.tok || rid();
+  const r = Object.assign({}, rec, { tok, at: Date.now() }); delete r.cands; delete r.ask;
+  await env.MEETINGS.put("scpend_" + tok, JSON.stringify(r), { expirationTtl: 6 * 3600 });
+  await waSendButtons(env, to, ("Here's the picture I'll make:\n\n" + sceneDescription(r.option, r.tid, r.extra)).slice(0, 1024),
+    [{ id: "sk:" + tok, title: "✅ Make it" }, { id: "sx:" + tok, title: "✏️ Change it" }]);
+  return tok;
+}
+// v147 - make one scene picture: her chosen photo first, the card's layout second (tested 13 Sep: that order keeps her face and the
+// framing), the words set by the card engine, both sizes to her chat. The minute tick runs it. A lock stops two ticks making the same
+// picture twice, and the picture is kept on the job, so a retry after an interruption costs only the cards and the sends.
+async function sceneJobRun(env, jk, j, origin) {
+  origin = pubOrigin(env, origin);
+  if (j.gaveUp) return { done: false, why: "gave up" };
+  if (j.running_until && j.running_until > Date.now()) return { done: false, why: "making" };
+  const lock = rid();
+  j.tries = (j.tries | 0) + 1; j.last = Date.now(); j.running_until = Date.now() + 180000; j.lock = lock;
+  try { await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
+  await new Promise(res => setTimeout(res, 1500));
+  try { const again = JSON.parse((await env.MEETINGS.get(jk)) || "null"); if (!again || again.lock !== lock) return { done: false, why: "another tick has it" }; } catch (e) {}
+  let err = "";
+  try {
+    if (!j.sceneKey) {
+      const id = "s" + String(j.n || "") + String(j.opt || "").toLowerCase() + String(j.tid || "") + "_" + jk.slice(-6);
+      const ref = await sceneLayoutRef(env, origin, j.meKey, "", id);
+      if (ref.err) throw new Error(ref.err);
+      const g = await sceneGenerate(env, j.meKey, sceneCardPrompt(j.option, j.tid, j.extra || [], "first"), ref.key, id);
+      if (g.err) throw new Error(g.err);
+      j.sceneKey = g.key;
+      try { await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
+    }
+    const post = j.post || {};
+    const angle = { hook: post.hook || "", figure: post.figure || "", source: post.source || "", area: post.masthead || "" };
+    const card = { img: origin + "/img/" + j.sceneKey, t: 5, me: "", key: j.sceneKey + "_card" + PLATE_CARD_V, credit: "", align: { square: "xMaxYMid meet" }, wash: [0.40, 0.58] };
+    const sq = await renderAngleCard(env, angle, post.n, origin, 0, null, "square", card);
+    const st = await renderAngleCard(env, angle, post.n, origin, 0, null, "story", card);
+    if (!sq && !st) throw new Error(RENDER_LAST_ERR || "render failed");
+    let sentSq = false, sentSt = false;
+    if (sq) { const r = await waSendImage(env, j.to, sq.url, String(post.caption || "").slice(0, 1000)); sentSq = !!(r && r.ok); }
+    if (st) { const r = await waSendImage(env, j.to, st.url, "Same picture at 1080×1920 for Stories."); sentSt = !!(r && r.ok); }
+    if (sentSq || sentSt) { try { await env.MEETINGS.delete(jk); } catch (e) {} return { done: true, square: sq && sq.url, story: st && st.url }; }
+    err = "send rejected";
+  } catch (e) { err = String((e && e.message) || e).slice(0, 200); }
+  j.running_until = 0;
+  try { await env.MEETINGS.put("plate_last_fail", JSON.stringify({ at: new Date().toISOString(), job: jk, err }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  if ((j.tries | 0) >= 3) {                                                            // three real failures: stop, give her the prompt, keep the record
+    try { await waSend(env, j.to, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, j.to, bgPromptBlock(j.angle || {}, (j.option || {}).place)); } catch (e) {}
+    j.gaveUp = Date.now();
+  }
+  try { await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
+  return { done: false, why: err };
 }
 async function platePhoto(env, angle, place, id) {
   PLATE_LAST_ERR = "";
@@ -8394,6 +8505,7 @@ async function picJobRun(env, jk, origin) {
   origin = pubOrigin(env, origin);                                  // v129
   let j = null; try { j = JSON.parse((await env.MEETINGS.get(jk)) || "null"); } catch (e) {}
   if (!j) return { done: false, why: "no job" };
+  if (j.scene) return sceneJobRun(env, jk, j, origin);                            // v147 - a scene picture
   try { j.tries = (j.tries | 0) + 1; j.last = Date.now(); await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
   let r = null; try { r = await plateRun(env, j.post, j.option, j.to, origin, true); } catch (e) { r = { err: String((e && e.message) || e) }; }
   if (r && (r.sentSq || r.sentSt)) { try { await env.MEETINGS.delete(jk); } catch (e) {} return { done: true, square: r.square, story: r.story }; }   // v128 - accepted by Meta, not merely rendered
@@ -8412,8 +8524,9 @@ async function picResume(env, origin, minAgeMs) {
   for (const k of ((lst && lst.keys) || [])) {
     let j = null; try { j = JSON.parse((await env.MEETINGS.get(k.name)) || "null"); } catch (e) {}
     if (!j || j.gaveUp) continue;
+    if (j.scene && j.running_until && j.running_until > Date.now()) { out.push({ job: k.name, skipped: "making" }); continue; }   // v147 - a scene job carries its own lock and waits for no age
     const age = Date.now() - (j.last || j.at || 0);
-    if (age < minAgeMs) { out.push({ job: k.name, skipped: "in flight " + Math.round(age / 1000) + "s" }); continue; }
+    if (!j.scene && age < minAgeMs) { out.push({ job: k.name, skipped: "in flight " + Math.round(age / 1000) + "s" }); continue; }
     const r = await picJobRun(env, k.name, origin);
     out.push({ job: k.name, ...r });
   }
