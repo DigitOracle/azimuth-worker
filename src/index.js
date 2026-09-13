@@ -3098,6 +3098,19 @@ export default {
             if (ctx) ctx.waitUntil(picJobRun(env, _jk, url.origin));
             return new Response("ok");
           }
+          if (bid.indexOf("mq:") === 0) {                                              // v143 - is this a photo of her? only a yes files it
+            const _p = bid.split(":"), _tok = String(_p[1] || "").replace(/[^a-z0-9]/gi, ""), _yes = _p[2] === "y";
+            let _meta = null; try { _meta = JSON.parse((await env.MEETINGS.get("mephoto_meta_" + _tok)) || "null"); } catch (e) {}
+            let _pb = null; try { _pb = _meta ? await env.MEETINGS.get("mephoto_" + _tok, "arrayBuffer") : null; } catch (e) {}
+            if (!_meta || !_pb) { await waSend(env, from, "That one has expired - send the photo again."); return new Response("ok"); }
+            try { await env.MEETINGS.delete("mephoto_" + _tok); await env.MEETINGS.delete("mephoto_meta_" + _tok); } catch (e) {}
+            if (!_yes) { await waSend(env, from, "Got it, I won't save that one as a photo of you."); return new Response("ok"); }
+            try {
+              const _cnt = await styleSaveMe(env, await styleGet(env), _pb, _meta.mime, _meta.cap);
+              await waSend(env, from, (_cnt === 1 ? "1 photo of you saved" : _cnt + " photos of you saved") + " to your style file. It will be in your pictures within the hour.");
+            } catch (e) { await waSend(env, from, "Couldn't save that one - send it again."); }
+            return new Response("ok");
+          }
           if (bid.indexOf("mp:") === 0) {                                              // v141 - she chose which photo of her goes in
             const _p = bid.split(":"), _tok = String(_p[1] || "").replace(/[^a-z0-9]/gi, ""), _ix = parseInt(_p[2], 10) || 0;
             let _pk = null; try { _pk = JSON.parse((await env.MEETINGS.get("mepick_" + _tok)) || "null"); } catch (e) {}
@@ -3291,12 +3304,15 @@ export default {
               try {
                 const _lm = await waFetchMedia(env, msg.image.id);
                 if (_lm.bytes.byteLength > 4 * 1024 * 1024) { await waSend(env, from, "That one's a bit large - try a smaller copy."); return new Response("ok"); }
-                const _pi2 = await styleKeep(env, _lm.bytes, _lm.mime, "me", _cap); _sf.me = Math.max((_sf.me || 0) + 1, _pi2);
-                const _mn = "style_me_" + String(_pi2).padStart(2, "0");   // v118.1 - same, for photos after the walk-through
-                await env.MEETINGS.put("img_" + _mn, _lm.bytes); await env.MEETINGS.put("img_ct_" + _mn, _lm.mime || "image/jpeg");
-                await env.MEETINGS.put("img_style_me", _lm.bytes); await env.MEETINGS.put("img_ct_style_me", _lm.mime || "image/jpeg");
-                await styleSet(env, _sf);
-                await waSend(env, from, (_sf.me === 1 ? "1 photo of you saved" : _sf.me + " photos of you saved") + " to your style file. It will be in your pictures within the hour.");
+                // v143 - ask before filing. A flyer or a screenshot is not a photo of her (two flyers were filed as her on 12 Sep).
+                // The question is sent as a reply to her picture, so with several at once each question sits under its own photo.
+                const _qt = rid();
+                await env.MEETINGS.put("mephoto_" + _qt, _lm.bytes, { expirationTtl: 86400 });
+                await env.MEETINGS.put("mephoto_meta_" + _qt, JSON.stringify({ mime: _lm.mime || "image/jpeg", cap: _cap, at: Date.now() }), { expirationTtl: 86400 });
+                await waPost(env, { messaging_product: "whatsapp", to: from, context: { message_id: msg.id }, type: "interactive",
+                  interactive: { type: "button", body: { text: "Is this a photo of you?" }, action: { buttons: [
+                    { type: "reply", reply: { id: "mq:" + _qt + ":y", title: "Yes, it's me" } },
+                    { type: "reply", reply: { id: "mq:" + _qt + ":n", title: "No" } }] } } }, "buttons");
               } catch (e) { await waSend(env, from, "Couldn't read that one - send it again."); }
               return new Response("ok");
             }
@@ -8252,6 +8268,18 @@ const STYLE_MSG = {
 };
 async function styleGet(env) { try { return JSON.parse((await env.MEETINGS.get("style_flow")) || "null"); } catch (e) { return null; } }
 async function styleSet(env, f) { await env.MEETINGS.put("style_flow", JSON.stringify(f), { expirationTtl: 30 * 86400 }); }
+// v143 - file a photo of her: the pile entry, its numbered copy and the latest-photo copy. Returns how many photos OF HER
+// the pile holds. The old reply used the whole pile's length, so it counted her own posts and admired posts as photos of her.
+async function styleSaveMe(env, sf, bytes, mime, cap) {
+  const pi = await styleKeep(env, bytes, mime, "me", cap);
+  const mn = "style_me_" + String(pi).padStart(2, "0");
+  await env.MEETINGS.put("img_" + mn, bytes); await env.MEETINGS.put("img_ct_" + mn, mime || "image/jpeg");
+  await env.MEETINGS.put("img_style_me", bytes); await env.MEETINGS.put("img_ct_style_me", mime || "image/jpeg");
+  let pile = []; try { pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {}
+  const count = pile.filter(p => p && p.kind === "me").length;
+  if (sf && sf.step) { sf.me = count; await styleSet(env, sf); }
+  return count;
+}
 async function styleKeep(env, bytes, mime, kind, cap) {
   let pile = []; try { pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {}
   const nm = "style_ref_" + String(pile.length + 1).padStart(2, "0");
