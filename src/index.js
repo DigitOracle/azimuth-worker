@@ -3079,9 +3079,24 @@ export default {
                             masthead: _mh.project || _st.area || "Dubai",
                             caption: [_ang.hook || "", (_ang.figure || "") + " \u2014 " + (_ang.source || ""), _r.credit].filter(Boolean).join("\n\n").slice(0, 1000) };
             const _opt = { id: _mid, name: _r.credit, useKey: _mid, credit: _r.credit };
+            if (await meOffer(env, from, url.origin, { kind: "mtu", n: _n, oid: _mid, to: from, post: _post, option: _opt, angle: _ang,
+                ask: "Good pick. Which photo of you for this one?", ack: "Building your card on " + _mh.developer + "'s own render now." })) return new Response("ok");   // v141
             const _jk = "picjob_" + _n + "_" + _mid.toLowerCase();
             try { await env.MEETINGS.put(_jk, JSON.stringify({ n: _n, opt: _mid, to: from, at: Date.now(), tries: 0, post: _post, option: _opt, angle: _ang }), { expirationTtl: 2 * 86400 }); } catch (e) {}
             await waSend(env, from, "Good pick. Building your card on " + _mh.developer + "'s own render now.");
+            if (ctx) ctx.waitUntil(picJobRun(env, _jk, url.origin));
+            return new Response("ok");
+          }
+          if (bid.indexOf("mp:") === 0) {                                              // v141 - she chose which photo of her goes in
+            const _p = bid.split(":"), _tok = String(_p[1] || "").replace(/[^a-z0-9]/gi, ""), _ix = parseInt(_p[2], 10) || 0;
+            let _pk = null; try { _pk = JSON.parse((await env.MEETINGS.get("mepick_" + _tok)) || "null"); } catch (e) {}
+            if (!_pk || !_pk.cands || !_pk.cands[_ix]) { await waSend(env, from, "Those photo choices have expired - pick the backdrop again and I'll offer them fresh."); return new Response("ok"); }
+            try { await env.MEETINGS.delete("mepick_" + _tok); } catch (e) {}
+            const _mk = _pk.cands[_ix];
+            try { const _u = JSON.parse((await env.MEETINGS.get("style_me_used")) || "{}"); _u[_mk] = new Date().toISOString(); await env.MEETINGS.put("style_me_used", JSON.stringify(_u)); } catch (e) {}
+            const _jk = "picjob_" + _pk.n + "_" + String(_pk.oid || "a").toLowerCase();
+            try { await env.MEETINGS.put(_jk, JSON.stringify({ n: _pk.n, opt: _pk.oid, to: _pk.to || from, at: Date.now(), tries: 0, post: _pk.post, option: Object.assign({}, _pk.option, { meKey: _mk }), angle: _pk.angle }), { expirationTtl: 2 * 86400 }); } catch (e) {}
+            await waSend(env, from, _pk.ack || "Making your picture now, give me a minute.");
             if (ctx) ctx.waitUntil(picJobRun(env, _jk, url.origin));
             return new Response("ok");
           }
@@ -3095,6 +3110,8 @@ export default {
                             masthead: _st.area || "Dubai",
                             caption: [_ang.hook || "", (_ang.figure || "") + " — " + (_ang.source || "")].filter(Boolean).join("\n\n").slice(0, 1000) };   // v130 - buyer is targeting notes, not caption copy
             if (!env.OPENAI_API_KEY) { await waSend(env, from, "I can't make pictures just now - the image key is missing."); return new Response("ok"); }
+            if (await meOffer(env, from, url.origin, { kind: "fbg", n: _n, oid: _oid, to: from, post: _post, option: _opt, angle: _ang,
+                ask: "Good pick - " + _opt.name + ". Which photo of you for this one?", ack: "Making your picture now, give me a minute." })) return new Response("ok");   // v141
             const _tt = from, _jk = "picjob_" + _n + "_" + _oid.toLowerCase();
             try { await env.MEETINGS.put(_jk, JSON.stringify({ n: _n, opt: _oid, to: _tt, at: Date.now(), tries: 0, post: _post, option: _opt, angle: _ang }), { expirationTtl: 2 * 86400 }); } catch (e) {}   // v123 - on record before any work
             await waSend(env, from, "Good pick - " + _opt.name + ". Making your picture now, give me a minute.");
@@ -8127,6 +8144,44 @@ async function picResume(env, origin, minAgeMs) {
   return out;
 }
 // photo -> editorial card in both sizes -> (optionally) her chat. Returns what was made; never throws.
+// v141 - PHOTO CHOICE. Najjuko, 13 Sep 2026: "ask me from these 3 which do you want to use today and rotate
+// images of me so I keep picking from 3". The laptop cut-out job publishes img_style_me_pool: only photos that can
+// be placed (colour, full-length standing). With fewer than two there is nothing to choose and nothing changes.
+async function mePool(env) {
+  try {
+    const p = JSON.parse((await env.MEETINGS.get("img_style_me_pool")) || "null");
+    return (p && Array.isArray(p.usable)) ? p.usable.map(k => String(k).replace(/[^a-z0-9_]/gi, "")).filter(Boolean) : [];
+  } catch (e) { return []; }
+}
+// Up to three, taken in turn round the pool (a cursor, so every photo gets its turn and none is favoured),
+// shown in the pool's own order so "Photo 1" is always the earlier photo. With three or fewer, all are offered.
+async function meOffer(env, from, origin, job) {
+  const pool = await mePool(env);
+  if (pool.length < 2) return false;
+  let cur = 0; try { cur = parseInt((await env.MEETINGS.get("style_me_cursor")) || "0", 10) || 0; } catch (e) {}
+  const take = Math.min(3, pool.length), pick = [];
+  for (let i = 0; i < take; i++) pick.push(pool[(cur + i) % pool.length]);
+  const cands = pool.filter(k => pick.includes(k));
+  try { await env.MEETINGS.put("style_me_cursor", String((cur + take) % pool.length)); } catch (e) {}
+  const tok = rid();
+  await env.MEETINGS.put("mepick_" + tok, JSON.stringify(Object.assign({}, job, { cands, at: Date.now() })), { expirationTtl: 6 * 3600 });
+  const o = pubOrigin(env, origin);
+  for (let i = 0; i < cands.length; i++) { try { await waSendImage(env, from, o + "/img/" + cands[i], "Photo " + (i + 1)); } catch (e) {} }
+  await waSendButtons(env, from, job.ask, cands.map((k, i) => ({ id: "mp:" + tok + ":" + i, title: "Photo " + (i + 1) })));
+  return true;
+}
+// The cut-out to place: the photo she chose (opt.meKey) in this light, then its base, then the default look.
+// tag goes into the card's cache key, so the default look keeps its old keys and a chosen photo gets its own.
+async function meCutFor(env, origin, opt, grade) {
+  const mk = opt && opt.meKey ? String(opt.meKey).replace(/[^a-z0-9_]/gi, "") : "";
+  const tries = [];
+  if (mk) { tries.push([mk + "_cut_" + grade, grade, "_" + mk]); tries.push([mk + "_cut", "base", "_" + mk]); }
+  tries.push(["style_me_cut_" + grade, grade, ""]); tries.push(["style_me_cut", "base", ""]);
+  for (const t of tries) {
+    try { if (await env.MEETINGS.get("img_" + t[0], "arrayBuffer")) return { url: origin + "/img/" + t[0], variant: t[1], tag: t[2] + "_me" + t[1] }; } catch (e) {}
+  }
+  return { url: "", variant: "", tag: "" };
+}
 async function plateRun(env, post, opt, to, origin, sendIt) {
   origin = pubOrigin(env, origin);                                  // v129 - a forwarded webhook's origin is not sendable
   const id = (post.idp || "ips_") + post.n + "_" + String(opt.id || "a").toLowerCase();   // v120 - a feed angle and an IPS post can share a number
@@ -8137,7 +8192,7 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
     const _o = { img: out.photo, t: 5, me: "", key: opt.useKey + "_card" + PLATE_CARD_V, credit: opt.credit || "" };
     const lix = hashStr(String(angle.hook || "") + "|" + String(angle.figure || "")) % 4;
     const mv = ["warm", "blue", "day", "soft"][lix];
-    try { if (await env.MEETINGS.get("img_style_me_cut_" + mv, "arrayBuffer")) { _o.me = origin + "/img/style_me_cut_" + mv; _o.key += "_me" + mv; } } catch (e) {}
+    { const _mc = await meCutFor(env, origin, opt, mv); if (_mc.url) { _o.me = _mc.url; _o.key += _mc.tag; } }   // v141 - her chosen photo, else the default look
     out.withMe = !!_o.me; out.meVariant = _o.me ? mv : "";
     const sq2 = await renderAngleCard(env, angle, post.n, origin, 0, null, "square", _o);
     const st2 = await renderAngleCard(env, angle, post.n, origin, 0, null, "story", _o);
@@ -8154,17 +8209,15 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
   if (!have || (opt && opt.fresh)) photo = await platePhoto(env, angle, opt.place || "Dubai", id);
   if (!photo) { out.err = PLATE_LAST_ERR; return out; }
   out.photo = origin + "/img/" + photo;
-  let meUrl = "", meVar = "";                                                     // v113 - with her by default, when a cut-out exists
+  let meUrl = "", meVar = "", meTag = "";                                         // v113 - with her by default, when a cut-out exists
   if (!(opt && opt.withMe === false)) {
     const lightIx = hashStr(String(angle.hook || "") + "|" + String(angle.figure || "")) % 4;   // v115 - the same seed platePhoto used, so her grade matches the plate's light
     meVar = ["warm", "blue", "day", "soft"][lightIx];
-    try {
-      if (await env.MEETINGS.get("img_style_me_cut_" + meVar, "arrayBuffer")) meUrl = origin + "/img/style_me_cut_" + meVar;
-      else if (await env.MEETINGS.get("img_style_me_cut", "arrayBuffer")) { meUrl = origin + "/img/style_me_cut"; meVar = "base"; }
-    } catch (e) {}
+    const _mc = await meCutFor(env, origin, opt, meVar);                          // v141 - her chosen photo, else the default look
+    meUrl = _mc.url; if (_mc.url) { meVar = _mc.variant; meTag = _mc.tag; }
   }
   out.withMe = !!meUrl; out.meVariant = meUrl ? meVar : "";
-  const o = { img: out.photo, t: 5, me: meUrl, key: photo + "_card" + PLATE_CARD_V + (meUrl ? "_me" + meVar : "") };
+  const o = { img: out.photo, t: 5, me: meUrl, key: photo + "_card" + PLATE_CARD_V + (meUrl ? meTag : "") };
   const sq = await renderAngleCard(env, angle, post.n, origin, 0, null, "square", o);
   const st = await renderAngleCard(env, angle, post.n, origin, 0, null, "story", o);
   out.square = sq && sq.url; out.story = st && st.url; if (!sq && !st) out.err = RENDER_LAST_ERR || "render failed";
