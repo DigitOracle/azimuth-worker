@@ -45,8 +45,12 @@ PROPOSALS = "on"
 # MacroDroid there answers the notification by placing a real call to the owner. LANG IS "en":
 # azimuth_ring was created as English, NOT English (US) like the other templates.
 RING_WA_TO = "971585446093"
-RING_TEMPLATE = "azimuth_ring"
-RING_TEMPLATE_LANG = "en"
+# v138 - ring on the APPROVED daily_meeting_reminder (en_US, three variables) while azimuth_ring sits in review.
+# The macro only needs RING in the text, so no meeting title is copied onto the dialler handset.
+# Once azimuth_ring is approved: RING_TEMPLATE = "azimuth_ring", RING_TEMPLATE_LANG = "en", RING_PARAMS = "meeting".
+RING_TEMPLATE = "daily_meeting_reminder"
+RING_TEMPLATE_LANG = "en_US"
+RING_PARAMS = "RING|1|meeting starting in 15 minutes"
 
 [triggers]
 crons = ["*/5 3-18 * * *"]

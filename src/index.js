@@ -818,11 +818,17 @@ async function waSendTemplate(env, to, name, lang, params) {
 }
 // v135 - fire the ring handset. Silent no-op unless RING_WA_TO is set, so deploying this changes
 // nothing until it is configured. Never throws into the nudge path.
+// v138 - the ring template's body variables, from RING_PARAMS ("|"-separated; {text} is the nudge text). Whitespace is
+// collapsed because Meta rejects template variables with newlines, tabs or 4+ spaces, and an empty variable becomes "-".
+function ringParams(env, text) {
+  const t = String(text || "meeting").replace(/\s+/g, " ").trim() || "meeting";
+  return String(env.RING_PARAMS || "{text}").split("|").map(p => p.split("{text}").join(t).replace(/\s+/g, " ").trim() || "-");
+}
 async function ringWhatsApp(env, text) {
   try {
     if (!env.RING_WA_TO) return { ok: false, skipped: "unconfigured" };
     const r = await waSendTemplate(env, env.RING_WA_TO,
-      env.RING_TEMPLATE || "azimuth_ring", env.RING_TEMPLATE_LANG || "en_US", [String(text || "meeting")]);
+      env.RING_TEMPLATE || "azimuth_ring", env.RING_TEMPLATE_LANG || "en_US", ringParams(env, text));
     return { ok: !!(r && r.ok), status: r && r.status, to: env.RING_WA_TO };
   } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
 }
@@ -1992,7 +1998,8 @@ export default {
         const to   = env.RING_WA_TO;   // never a query override: READ_KEY is not a strong enough gate to let a URL pick who Digital Abbot messages
         // ?params=a|b|c sets the body variables in order; ?params= (empty) sends none.
         const raw  = q.get("params");
-        const params = raw !== null ? (raw === "" ? [] : raw.split("|")) : [q.get("text") || "Azimuth test ring"];
+        const params = raw !== null ? (raw === "" ? [] : raw.split("|")) : ringParams(env, q.get("text") || "Azimuth test ring");   // v138 - default = exactly what T-15 sends
+        if (q.get("dry") === "1") return new Response(JSON.stringify({ dry: true, to, template: name, lang, params }, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
         let result;
         if (!to) result = { ok: false, skipped: "no RING_WA_TO" };
         else {
