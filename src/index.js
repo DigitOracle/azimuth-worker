@@ -1375,13 +1375,13 @@ async function ringNudge(env, phone, text) {
 async function meetingNudges(env) {
   const now = Date.now();
   const meetings = await upcomingMeetings(env);
-  let fired = 0;
+  let fired = 0; const half = env.MINUTE_TICK === "on" ? 1.5 : 3.5;   // v146 - checked every minute, the window can be narrow, so the ring comes close to 15 minutes out
   for (const m of meetings) {
     const t = Date.parse(m.start_iso); if (isNaN(t)) continue;
     const minsOut = (t - now) / 60000;
     for (const lead of [30, 15]) {
       // window = lead ± 3.5 min, so a 5-min cron always catches it once
-      if (minsOut <= lead + 3.5 && minsOut > lead - 3.5) {
+      if (minsOut <= lead + half && minsOut > lead - half) {
         const idBase = (m.id || (m.summary + m.start_iso)).replace(/[^A-Za-z0-9]/g, "").slice(0, 60);
         const mk = "nudge" + lead + "_" + idBase;
         if (await env.MEETINGS.get(mk)) continue;               // already nudged at this lead
@@ -3831,6 +3831,18 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
+    // v146 - THE MINUTE TICK (azimuth-2: cron "* * * * *" + MINUTE_TICK="on"). Her instance ticked only at :00 and :30, so the T-15 window
+    // was never checked for a meeting on the hour or half hour: 13 Sep 2026, "Meeting with Dr Doli" 08:30 got its 08:00 reminder and no
+    // ring. Meetings are now checked here every minute, and picture jobs are finished here, not left for the laptop's 5-minute task.
+    if (event && event.cron === "* * * * *") {
+      if (env.MINUTE_TICK !== "on") return;
+      ctx.waitUntil((async () => {
+        try { await env.MEETINGS.put("minute_tick_at", new Date().toISOString(), { expirationTtl: 86400 }); } catch (e) {}
+        try { await meetingNudges(env); } catch (e) {}
+        try { await picResume(env, "", 90000); } catch (e) {}
+      })());
+      return;
+    }
     ctx.waitUntil((async () => {
       // v136 - dispatch ONCE per half hour, never on every 5-minute tick. reminder.py is stateless and its
       // send windows are 30 minutes wide (07:00-07:29, 12:00-12:29, 20:00-20:29 GST, and 45-75 min before a
@@ -3860,7 +3872,7 @@ export default {
           }
         }
       } catch (e) {}
-      try { await meetingNudges(env); } catch (e) {}          // v32 — T-30/T-15 meeting nudges
+      try { if (env.MINUTE_TICK !== "on") await meetingNudges(env); } catch (e) {}          // v32 — T-30/T-15 meeting nudges; v146 - on the minute tick instead where one runs, so two ticks never race the same nudge
       try { const _n = gstNow(); if (_n.getUTCHours() === 6 && _n.getUTCMinutes() < 30) { const rk = "reindex_" + gstDateStr(_n); if (!(await env.MEETINGS.get(rk))) { await env.MEETINGS.put(rk, "1", { expirationTtl: 2 * 86400 }); await peopleReindex(env); } } } catch (e) {}   // v35 — daily party reindex ~06:00 GST
       try { await dnaReflect(env); } catch (e) {}             // v39 — nightly DNA reflection (~20:00 GST, only when new signals exist)
       try { await newsTick(env); } catch (e) {}               // v37.1 — hourly news sweep + MEED cross-reference
