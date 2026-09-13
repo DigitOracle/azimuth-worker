@@ -1791,6 +1791,30 @@ export default {
         return _jr({ ok: true, name: _gn, size: _gs, quality: _gq, bytes: _gbin.byteLength, url: url.origin + "/img/" + _gn });
       } catch (e) { return _jr({ ok: false, err: "exception: " + String((e && e.message) || e).slice(0, 200) }, 500); }
     }
+    if (url.pathname === "/scene_test") {                   // v144 - TEST: make a scene picture of her and its cards; returns URLs, NEVER sends
+      if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      const _q = url.searchParams;
+      const _n = String(_q.get("n") || "1").replace(/[^0-9]/g, "") || "1";
+      const _oid = String(_q.get("bg") || "B").toUpperCase().replace(/[^A-H]/g, "").slice(0, 1) || "B";
+      const _mk = String(_q.get("me") || "").replace(/[^a-z0-9_]/gi, "");
+      let _cx = null; try { _cx = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+      const _ang = _cx && (_cx.angles || [])[Number(_n) - 1];
+      if (!_ang || !_mk) return new Response("need an angle on file (n) and her photo key (me)", { status: 400 });
+      let _d = null; try { _d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+      const _area = angleArea(_ang, _d);
+      const _opt = feedBackdrops(_ang, _area).find(o => o.id === _oid);
+      const _prompt = scenePrompt(_opt, _q.get("extra") ? [_q.get("extra")] : []);
+      const _json = (o, s) => new Response(JSON.stringify(o, null, 2), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      if (_q.get("dry") === "1") return _json({ dry: true, backdrop: _opt && _opt.name, photo: _mk, prompt: _prompt });
+      const _g = await sceneGenerate(env, _mk, _prompt, null, "t" + _n + _oid.toLowerCase() + "_" + _mk.slice(-2) + "_" + rid().slice(0, 4));
+      if (_g.err) return _json({ prompt: _prompt, err: _g.err }, 502);
+      const _o = pubOrigin(env, url.origin);
+      const _card = { img: _o + "/img/" + _g.key, t: 5, me: "", key: _g.key + "_card" + PLATE_CARD_V, credit: "" };
+      const _angle = { hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "", area: _area || "" };
+      const _sq = await renderAngleCard(env, _angle, _n, _o, 0, null, "square", _card);
+      const _st = await renderAngleCard(env, _angle, _n, _o, 0, null, "story", _card);
+      return _json({ backdrop: _opt && _opt.name, photo: _mk, prompt: _prompt, note: _g.note || "", scene: _o + "/img/" + _g.key, square: _sq && _sq.url, story: _st && _st.url });
+    }
     if (url.pathname === "/plate_gen_me") {                 // v114 - TEST: generate her into the plate from her photo (image edit). Returns a URL, never sends.
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       if (!env.OPENAI_API_KEY) return new Response("no image key", { status: 400 });
@@ -8071,6 +8095,99 @@ function renderArea(latestRaw, name, key) {
 // engine sets her words over it in the editorial look; the renderer already on this Worker makes the PNGs.
 let PLATE_LAST_ERR = "";
 const PLATE_CARD_V = "7";   // bump when the editorial look changes, so cached cards re-render
+// v144 - SCENE PICTURES (Kendall, 13 Sep 2026). Her pictures looked pasted in: a cut-out laid on a generated backdrop never
+// matches pose, light or ground. Instead the image service draws her INTO the chosen scene from the photo she chose, in a
+// pose that belongs to the place (a street: walking; a lobby: sitting), and she sees and approves this exact prompt first.
+const SCENE_POSE = {
+  A: "standing at the railing, one hand resting on it, turned three-quarters towards the camera, looking out towards the towers",
+  B: "walking along the pavement towards the camera, mid-stride, relaxed",
+  C: "sitting in the low chair on the balcony, legs crossed, turned slightly towards the camera",
+  D: "sitting on the deep seating in the lobby, relaxed, turned slightly towards the camera",
+  E: "sitting on the edge of a lounger by the pool, relaxed, looking towards the camera",
+  F: "standing on the site road in front of the hoarding, looking towards the camera",
+  G: "walking along the wide pavement past the gardens, mid-stride, relaxed",
+  H: "walking along the boardwalk beside the railing, mid-stride, relaxed",
+};
+const SCENE_LIGHT = {
+  A: "Blue-hour light, the tower lights just on, soft cool light on her with a warm glow from the city",
+  E: "Late-afternoon sun, warm and low, the light on her matching the deck",
+  G: "Early-morning light, soft and clear, the light on her matching the street",
+};
+// v134's truth-to-place rule in words she can read: no landmark the area cannot actually see, no towers in a low-rise community.
+function scenePlaceGuard(place) {
+  const p = String(place || "").toLowerCase();
+  const skyline = /downtown|business bay|burj|sheikh zayed road|difc|za'?abeel|dubai canal/.test(p);
+  const marina = /marina|jbr|jumeirah beach residence|bluewaters|dubai harbour|palm/.test(p);
+  const lowrise = /villa|townhouse|valley|yufrah|arabian ranches|mudon|damac hills|tilal|serena|reem|mira/.test(p);
+  let s = "Show only what this area really looks like";
+  if (!skyline && !marina) s += ", with no famous Dubai landmarks such as the Burj Khalifa, the Marina towers or the Palm";
+  else if (!skyline) s += ", with no Burj Khalifa or Downtown towers";
+  else if (!marina) s += ", with no Marina towers, Ain Dubai or the Palm";
+  s += ".";
+  if (lowrise) s += " This is a low-rise community, so no high-rise towers anywhere.";
+  return s;
+}
+// The prompt she is shown. extra = her own changes, one line each, added at the end in her words.
+function scenePrompt(option, extra) {
+  const id = String((option && option.id) || "").toUpperCase();
+  const render = !!(option && option.useKey);
+  const _pr = String((option && option.place) || "a residential setting in Dubai").trim().replace(/\s+-\s+/g, ", ");
+  const place = _pr.charAt(0).toLowerCase() + _pr.slice(1);
+  const pose = render ? "standing naturally at a believable spot in the scene from the second reference image" : (SCENE_POSE[id] || "standing naturally in the scene, looking towards the camera");
+  const light = render ? "Match the light and colour of that scene exactly" : (SCENE_LIGHT[id] || "Natural daylight, the light on her matching the scene");
+  const out = ["A realistic photograph of the woman in the reference photo " + pose + "."];
+  out.push(render ? "The setting is the scene in the second reference image, kept as it is." : "The setting: " + place + ".");
+  out.push("Keep her face, hair, skin tone, build and outfit exactly as in the reference photo.");
+  out.push("She belongs in the scene: natural scale, feet on the ground with a soft shadow beneath her.");
+  out.push(light + ".");
+  out.push("Eye-level camera, gentle background blur, her figure slightly right of centre.");
+  if (!render) out.push(scenePlaceGuard(place));
+  out.push("No text, signs, logos or watermarks.");
+  const _ch = (extra || []).map(x => String(x || "").trim()).filter(Boolean);   // her changes win over the lines above
+  if (_ch.length) {
+    out.push("Where a change below conflicts with anything above, follow the change.");
+    for (const t of _ch) { const c = t.charAt(0).toUpperCase() + t.slice(1); out.push("Change: " + (/[.!?]$/.test(c) ? c : c + ".")); }
+  }
+  return out.join(" ");
+}
+// Her chosen photo (plus the developer's render on that path) and the approved prompt go to the image service.
+// input_fidelity=high keeps her face closer to the photo; retried without it if the service rejects the parameter.
+async function sceneGenerate(env, meKey, prompt, renderKey, id) {
+  if (!env.OPENAI_API_KEY) return { err: "no image key" };
+  const mk = String(meKey || "").replace(/[^a-z0-9_]/gi, "");
+  const me = mk ? await env.MEETINGS.get("img_" + mk, "arrayBuffer") : null;
+  if (!me) return { err: "her photo " + mk + " is not on file" };
+  const meCt = (await env.MEETINGS.get("img_ct_" + mk)) || "image/jpeg";
+  let rb = null, rbCt = "image/jpeg";
+  if (renderKey) { const rk = String(renderKey).replace(/[^a-z0-9_]/gi, ""); rb = await env.MEETINGS.get("img_" + rk, "arrayBuffer"); rbCt = (await env.MEETINGS.get("img_ct_" + rk)) || "image/jpeg"; }
+  const call = async (fidelity) => {
+    const fd = new FormData();
+    fd.append("model", "gpt-image-1");
+    fd.append("image[]", new Blob([me], { type: meCt }), "person.jpg");
+    if (rb) fd.append("image[]", new Blob([rb], { type: rbCt }), "scene.jpg");
+    fd.append("size", "1024x1536");
+    fd.append("quality", env.SCENE_QUALITY || "high");
+    if (fidelity) fd.append("input_fidelity", "high");
+    fd.append("prompt", String(prompt || "").slice(0, 3500));
+    return fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY }, body: fd });
+  };
+  try {
+    let r = await call(true), note = "";
+    if (!r.ok) {
+      const t = await r.text();
+      if (r.status === 400 && /input_fidelity/i.test(t)) { note = "without input_fidelity"; r = await call(false); }
+      else return { err: "image " + r.status + " " + t.slice(0, 200) };
+      if (!r.ok) return { err: "image " + r.status + " " + (await r.text()).slice(0, 200) };
+    }
+    const j = await r.json(); const b64 = j && j.data && j.data[0] && j.data[0].b64_json;
+    if (!b64) return { err: "no image returned" };
+    const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const key = "scene_" + String(id || rid()).replace(/[^a-z0-9_]/gi, "").slice(0, 30);
+    await env.MEETINGS.put("img_" + key, bin.buffer, { expirationTtl: 30 * 86400 });
+    await env.MEETINGS.put("img_ct_" + key, "image/png", { expirationTtl: 30 * 86400 });
+    return { key, note };
+  } catch (e) { return { err: "exception " + String((e && e.message) || e).slice(0, 120) }; }
+}
 async function platePhoto(env, angle, place, id) {
   PLATE_LAST_ERR = "";
   if (!env.OPENAI_API_KEY) { PLATE_LAST_ERR = "no image key"; return null; }
