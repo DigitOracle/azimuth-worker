@@ -99,6 +99,8 @@ RING_PARAMS = "CALLNAJ|1|meeting starting in 15 minutes"
 MINUTE_TICK = "on"
 # v147 - scene pictures in her chat (Kendall approved with Najjuko, 13 Sep 2026): backdrop -> time of day -> photo -> Make it / Change it.
 SCENE_PICTURES = "on"
+# v148 - scene pictures drawn with GPT Image 2.5 (Kendall, 13 Sep 2026: "use gpt 2.5"). Remove to go back to gpt-image-1.
+SCENE_MODEL = "gpt-image-2.5-sunburst"
 
 [env.azimuth2.triggers]
 crons = ["0,30 2-18 * * *", "* * * * *"]   # v140 - starts 06:00 GST (was 07:00) so the 06:00 feed has a tick; v146 - the minute tick

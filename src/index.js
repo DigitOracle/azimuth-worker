@@ -8255,7 +8255,7 @@ async function sceneGenerate(env, meKey, prompt, renderKey, id) {
   if (renderKey) { const rk = String(renderKey).replace(/[^a-z0-9_]/gi, ""); rb = await env.MEETINGS.get("img_" + rk, "arrayBuffer"); rbCt = (await env.MEETINGS.get("img_ct_" + rk)) || "image/jpeg"; }
   const call = async (fidelity) => {
     const fd = new FormData();
-    fd.append("model", "gpt-image-1");
+    fd.append("model", env.SCENE_MODEL || "gpt-image-1");   // v148 - GPT Image 2.5 on azimuth-2 (Kendall, 13 Sep 2026); unset = the old model
     fd.append("image[]", new Blob([me], { type: meCt }), "person.jpg");
     if (rb) fd.append("image[]", new Blob([rb], { type: rbCt }), "scene.jpg");
     fd.append("size", "1024x1536");
