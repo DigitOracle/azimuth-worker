@@ -51,6 +51,10 @@ RING_WA_TO = "971585446093"
 RING_TEMPLATE = "daily_meeting_reminder"
 RING_TEMPLATE_LANG = "en_US"
 RING_PARAMS = "RING|1|meeting starting in 15 minutes"
+# v139 - dial report-back: which first template variables count as rings, and handset call numbers mapped to names.
+# The /dial_ack token is the DIAL_ACK_TOKEN secret, never a var.
+DIAL_MARKERS = "RING,CALLNAJ"
+DIAL_NAMES = "971562276093:kendall,971565484397:najjuko"
 
 [triggers]
 crons = ["*/5 3-18 * * *"]

@@ -824,11 +824,40 @@ function ringParams(env, text) {
   const t = String(text || "meeting").replace(/\s+/g, " ").trim() || "meeting";
   return String(env.RING_PARAMS || "{text}").split("|").map(p => p.split("{text}").join(t).replace(/\s+/g, " ").trim() || "-");
 }
+// v139 - dial report-back. A MacroDroid macro on the dialler handset pings /dial_ack whenever that handset starts an
+// outgoing call, so a ring is confirmed by the phone that placed it, not inferred from WhatsApp accepting a message.
+// "ring" is deliberately absent from these paths: the ack URL is delivered to the handset in a WhatsApp message, and
+// the owner's macro fires on any notification containing RING.
+async function dialNote(env, key, rec) {
+  try {
+    const q = JSON.parse((await env.MEETINGS.get(key)) || "[]");
+    q.unshift(Object.assign({ at: new Date().toISOString() }, rec));
+    await env.MEETINGS.put(key, JSON.stringify(q.slice(0, 60)), { expirationTtl: 30 * 86400 });
+  } catch (e) {}
+}
+// Names from DIAL_NAMES ("number:name,..."), matched on the last 9 digits so +971, 00971 and 05... forms all agree.
+function dialWho(env, raw) {
+  const digits = String(raw || "").replace(/[^0-9]/g, "");
+  if (digits) {
+    for (const pair of String(env.DIAL_NAMES || "").split(",")) {
+      const bits = pair.split(":"); const num = String(bits[0] || "").replace(/[^0-9]/g, ""); const name = String(bits[1] || "").trim();
+      if (num && name && digits.slice(-9) === num.slice(-9)) return name;
+    }
+    return "other-" + digits.slice(-4);
+  }
+  return String(raw || "?").replace(/[^a-z0-9_-]/gi, "").slice(0, 24) || "?";
+}
+// A send only counts as a ring when its first template variable is one of DIAL_MARKERS.
+function dialMarker(env, params) {
+  const m = String((params && params[0]) || "");
+  return String(env.DIAL_MARKERS || "RING").split(",").map(s => s.trim()).filter(Boolean).includes(m) ? m : "";
+}
 async function ringWhatsApp(env, text) {
   try {
     if (!env.RING_WA_TO) return { ok: false, skipped: "unconfigured" };
     const r = await waSendTemplate(env, env.RING_WA_TO,
       env.RING_TEMPLATE || "azimuth_ring", env.RING_TEMPLATE_LANG || "en_US", ringParams(env, text));
+    if (r && r.ok) { const _mk = dialMarker(env, ringParams(env, text)); if (_mk) await dialNote(env, "dial_sends", { marker: _mk, via: "meeting" }); }
     return { ok: !!(r && r.ok), status: r && r.status, to: env.RING_WA_TO };
   } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
 }
@@ -1990,6 +2019,33 @@ export default {
         const res = await ringNudge(env, to, say);
         return new Response(JSON.stringify({ called: to, result: res }, null, 2), { headers: { "Content-Type": "application/json" } });
       }
+      if (url.pathname === "/dial_ack") {                     // v139 - the dialler handset reports it started an outgoing call
+        if (!env.DIAL_ACK_TOKEN || !ctEq(url.searchParams.get("t") || "", env.DIAL_ACK_TOKEN)) return new Response("unauthorized", { status: 401 });
+        await dialNote(env, "dial_acks", { who: dialWho(env, url.searchParams.get("who")) });
+        return new Response("ok", { headers: { "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/dials") {                        // v139 - every ring sent to the handset, and whether a call followed
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let sends = [], acks = [];
+        try { sends = JSON.parse((await env.MEETINGS.get("dial_sends")) || "[]"); } catch (e) {}
+        try { acks = JSON.parse((await env.MEETINGS.get("dial_acks")) || "[]"); } catch (e) {}
+        const rows = sends.map(s => {
+          const t = Date.parse(s.at);
+          const a = acks.filter(x => { const u = Date.parse(x.at); return u >= t && u - t <= 15 * 60000; }).sort((p, o) => Date.parse(p.at) - Date.parse(o.at))[0];
+          return Object.assign({}, s, { confirmed: !!a, called: a ? a.who : null, after_sec: a ? Math.round((Date.parse(a.at) - t) / 1000) : null });
+        });
+        if (url.searchParams.get("format") === "json") return new Response(JSON.stringify({ sends: rows, acks }, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+        const tr = rows.map(x => "<tr><td>" + esc(humanGst(x.at)) + "</td><td>" + esc(x.marker) + "</td><td>" + esc(x.via) + "</td><td>" + (x.confirmed ? "✅ " + esc(x.called) + " · " + x.after_sec + " s" : "⚠ no call reported") + "</td></tr>").join("");
+        const ar = acks.map(x => "<tr><td>" + esc(humanGst(x.at)) + "</td><td>" + esc(x.who) + "</td></tr>").join("");
+        const page = '<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Azimuth dials</title>' +
+          '<body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#FAF8F3;color:#222;padding:20px;max-width:720px;margin:0 auto">' +
+          '<h2 style="color:#0A4F4A">Rings and calls</h2><p style="color:#555;font-size:14px">Each ring Azimuth sent to the dialler phone, and whether that phone reported starting a call within 15 minutes.</p>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:14px"><tr style="text-align:left;color:#0A4F4A"><th>Sent (GST)</th><th>Marker</th><th>Why</th><th>Call</th></tr>' +
+          (tr || '<tr><td colspan=4 style="color:#999">No rings yet.</td></tr>') + '</table>' +
+          '<h3 style="color:#C5A56A;margin-top:28px">Calls the phone reported</h3><table style="width:100%;border-collapse:collapse;font-size:14px"><tr style="text-align:left;color:#0A4F4A"><th>When (GST)</th><th>To</th></tr>' +
+          (ar || '<tr><td colspan=2 style="color:#999">None yet.</td></tr>') + '</table></body>';
+        return new Response(page, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/ring_test") {                     // v135.1 - fire ONE WhatsApp ring, with overrides
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const q = url.searchParams;
@@ -2007,6 +2063,7 @@ export default {
             const r = await waSendTemplate(env, to, name, lang, params);
             let body = ""; try { body = await r.clone().text(); } catch (e) {}
             result = { ok: r.ok, status: r.status, meta: body.slice(0, 500) };
+            if (r.ok) { const _mk = dialMarker(env, params); if (_mk) await dialNote(env, "dial_sends", { marker: _mk, via: "test" }); }
           } catch (e) { result = { ok: false, error: String(e && e.message || e) }; }
         }
         return new Response(JSON.stringify({ to, template: name, lang, param_count: params.length, result }, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
