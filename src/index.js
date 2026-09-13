@@ -2078,17 +2078,6 @@ export default {
         const res = await ringNudge(env, to, say);
         return new Response(JSON.stringify({ called: to, result: res }, null, 2), { headers: { "Content-Type": "application/json" } });
       }
-      if (url.pathname === "/owner_note") {                   // v142 - pipeline alerts to the OWNER only, never to Najjuko (data-spine session, 13 Sep 2026)
-        if (request.method !== "POST") return new Response("POST only", { status: 405 });
-        if (!env.OWNER_TEMPLATE) return new Response("owner instance only", { status: 403 });   // only meeting-capture sets OWNER_TEMPLATE, so azimuth-2 can never send this
-        const _oh = request.headers.get("X-Azimuth-Ingest");
-        if (!env.INGEST_TOKEN || !_oh || !ctEq(_oh, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
-        let _ob = {}; try { _ob = await request.json(); } catch (e) {}
-        const _ot = String((_ob && _ob.text) || "").slice(0, 1500);
-        if (!_ot) return new Response("no text", { status: 400 });
-        const _ok = await ownerNotify(env, _ot);                   // free-form inside the 24-hour window, the azimuth_daily template outside it
-        return new Response(_ok ? "sent" : "failed", { status: _ok ? 200 : 502 });
-      }
       if (url.pathname === "/dial_ack") {                     // v139 - the dialler handset reports it started an outgoing call
         if (!env.DIAL_ACK_TOKEN || !ctEq(url.searchParams.get("t") || "", env.DIAL_ACK_TOKEN)) return new Response("unauthorized", { status: 401 });
         await dialNote(env, "dial_acks", { who: dialWho(env, url.searchParams.get("who")) });
@@ -2946,6 +2935,16 @@ export default {
         if (!/^https?:\/\/[a-z0-9.\-:]+\/?$/i.test(_wu)) return new Response("url required (scheme://host[:port]/)", { status: 400 });
         await env.MEETINGS.put("walk_status", JSON.stringify({ url: _wu.replace(/\/$/, ""), live: !!_wb.live, streamer: String(_wb.streamer || "NajmaDubai").slice(0, 40), ts: Date.now() }), { expirationTtl: 3600 });
         return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/owner_note") {                    // v142 - pipeline alerts to the OWNER only, never to Najjuko (data-spine session, 13 Sep 2026); v147.2 - moved here from the GET branch, where no POST could ever reach it (found by the data-spine session)
+        if (!env.OWNER_TEMPLATE) return new Response("owner instance only", { status: 403 });   // only meeting-capture sets OWNER_TEMPLATE, so azimuth-2 can never send this
+        const _oh = request.headers.get("X-Azimuth-Ingest");
+        if (!env.INGEST_TOKEN || !_oh || !ctEq(_oh, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
+        let _ob = {}; try { _ob = await request.json(); } catch (e) {}
+        const _ot = String((_ob && _ob.text) || "").slice(0, 1500);
+        if (!_ot) return new Response("no text", { status: 400 });
+        const _ok = await ownerNotify(env, _ot);                   // free-form inside the 24-hour window, the azimuth_daily template outside it
+        return new Response(_ok ? "sent" : "failed", { status: _ok ? 200 : 502 });
       }
       if (url.pathname === "/ingest_market") {                 // v36 — Market Pulse aggregates (collector -> KV, ~10 KB)
         if (request.method !== "POST") return new Response("method", { status: 405 });
