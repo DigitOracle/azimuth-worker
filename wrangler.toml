@@ -35,6 +35,12 @@ MS_TENANT_ID = "0d6748c6-97d7-44f0-b920-7a9db8925d4f"
 WA_ALLOWED = "971562276093"
 WA_PHONE_ID = "1178276628713333"
 WA_ROUTE_971565484397 = "AZIMUTH_2"
+# v137 - Telegram retired 13 Sep 2026. OWNER_TEMPLATE delivers owner notices outside the 24-hour window;
+# PROPOSALS turns the approve/deny cards on for this instance only (they are off wherever it is unset).
+TELEGRAM = "off"
+OWNER_TEMPLATE = "azimuth_daily"
+OWNER_TEMPLATE_LANG = "en_US"
+PROPOSALS = "on"
 # v135 - the ring. Azimuth sends azimuth_ring to the dedicated Android holding +971 58 544 6093;
 # MacroDroid there answers the notification by placing a real call to the owner. LANG IS "en":
 # azimuth_ring was created as English, NOT English (US) like the other templates.
