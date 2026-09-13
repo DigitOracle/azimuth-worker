@@ -1818,6 +1818,35 @@ export default {
       const _st = await renderAngleCard(env, _angle, _n, _o, 0, null, "story", _card);
       return _json({ backdrop: _opt && _opt.name, photo: _mk, prompt: _prompt, note: _g.note || "", scene: _o + "/img/" + _g.key, square: _sq && _sq.url, story: _st && _st.url });
     }
+    if (url.pathname === "/scene_card_test") {              // v145 - TEST: a scene card made from the card's own layout, the way she made hers; returns URLs, NEVER sends
+      if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      const _q = url.searchParams;
+      const _json = (o, s) => new Response(JSON.stringify(o, null, 2), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      const _n = String(_q.get("n") || "1").replace(/[^0-9]/g, "") || "1";
+      const _oid = String(_q.get("bg") || "B").toUpperCase().replace(/[^A-H]/g, "").slice(0, 1) || "B";
+      const _mk = String(_q.get("me") || "").replace(/[^a-z0-9_]/gi, "");
+      const _tm = String(_q.get("time") || "").replace(/[^a-z]/g, "").slice(0, 2);
+      let _fb = null; try { _fb = JSON.parse((await env.MEETINGS.get("fbg_" + _n)) || "null"); } catch (e) {}
+      const _ang = _fb && _fb.angle;
+      if (!_ang || !_mk) return new Response("need an angle on file (n) and her photo key (me)", { status: 400 });
+      const _area = typeof _fb.area === "string" ? _fb.area : "";
+      let _opt = ((_fb && _fb.options) || feedBackdrops(_ang, _area)).find(o => o.id === _oid);
+      if (!_opt) return new Response("no such backdrop", { status: 404 });
+      if (_q.get("place")) _opt = Object.assign({}, _opt, { place: String(_q.get("place")).slice(0, 400) });
+      const _prompt = sceneCardPrompt(_opt, _tm, _q.get("extra") ? [_q.get("extra")] : []);
+      if (_q.get("dry") === "1") return _json({ dry: true, backdrop: _opt.name, time: _tm, photo: _mk, prompt: _prompt });
+      const _id = "c" + _n + _oid.toLowerCase() + _tm + "_" + _mk.slice(-2) + "_" + rid().slice(0, 4);
+      const _ref = await sceneLayoutRef(env, url.origin, _mk, _q.get("plate") || "", _id);
+      if (_ref.err) return _json({ prompt: _prompt, err: _ref.err }, 502);
+      const _g = await sceneGenerate(env, _ref.key, _prompt, null, _id);
+      if (_g.err) return _json({ prompt: _prompt, ref: _ref.url, err: _g.err }, 502);
+      const _o = pubOrigin(env, url.origin);
+      const _card = { img: _o + "/img/" + _g.key, t: 5, me: "", key: _g.key + "_card" + PLATE_CARD_V, credit: "", align: { square: "xMidYMax" } };
+      const _angle = { hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "", area: _area || "Dubai" };
+      const _sq = await renderAngleCard(env, _angle, _n, _o, 0, null, "square", _card);
+      const _st = await renderAngleCard(env, _angle, _n, _o, 0, null, "story", _card);
+      return _json({ backdrop: _opt.name, time: _tm, photo: _mk, prompt: _prompt, note: _g.note || "", ref: _ref.url, scene: _o + "/img/" + _g.key, square: _sq && _sq.url, story: _st && _st.url, renderErr: RENDER_LAST_ERR || "" });
+    }
     if (url.pathname === "/plate_gen_me") {                 // v114 - TEST: generate her into the plate from her photo (image edit). Returns a URL, never sends.
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       if (!env.OPENAI_API_KEY) return new Response("no image key", { status: 400 });
@@ -5150,7 +5179,7 @@ function figureParts(fig) {
   const t = String(fig || "").trim().replace(/\d{4,}/g, (m, at, all) => (m.length === 4 && /^(19|20)\d\d$/.test(m) && /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|in|since|by|until|through|from|to|q[1-4]|fy|year)\w*\s*$/i.test(all.slice(0, at))) ? m : Number(m).toLocaleString("en-US"));   // "August 2026" stays a year; "1980 AED" is a number
   const pct = t.match(/^(-?\d+(?:\.\d+)?)\s*%(.*)$/); if (pct) return { kind: "pct", val: Math.max(0, Math.min(100, parseFloat(pct[1]))), num: pct[1] + "%", unit: (pct[2] || "").trim(), text: t };
   const two = t.match(/^(.+?)\s+(?:vs\.?|versus|→|->|to)\s+(.+)$/i); if (two) { const av = parseFloat(two[1].replace(/[^\d.]/g, "")), bv = parseFloat(two[2].replace(/[^\d.]/g, "")); if (isFinite(av) && isFinite(bv) && av + bv > 0) return { kind: "two", a: two[1].trim(), b: two[2].trim(), av, bv, text: t }; }
-  const m = t.match(/^([A-Za-z]{2,4}\s+)?([\d,.]+\s*[kKmMbB]?)\s*(.*)$/); if (m && m[2] && /\d/.test(m[2])) return { kind: "num", num: ((m[1] || "") + m[2]).trim(), unit: (m[3] || "").trim(), text: t };
+  const m = t.match(/^([A-Za-z]{2,4}\s+)?([\d,.]+(?:\s*[kKmMbB](?![A-Za-z]))?)\s*(.*)$/); if (m && m[2] && /\d/.test(m[2])) return { kind: "num", num: ((m[1] || "") + m[2]).trim(), unit: (m[3] || "").trim(), text: t };   // v145 - k/m/b multiply only when no letter follows: "5 km+" printed as "5 k" over "M+" on her 13 Sep card
   return { kind: "text", num: t, unit: "", text: t };
 }
 function cardDate() { const d = new Date(Date.now() + 4 * 3600 * 1000); return d.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()] + " " + d.getUTCFullYear(); }
@@ -5169,7 +5198,7 @@ function angleCardSvg(angle, areaName, imgUrl, n, opts) {
     const r = fitLines(fig + (figRest ? " " + figRest : ""), 936, Math.min(maxFz, 88), 3, 0.56, 44); const y = base - (r.lines.length - 1) * Math.round(r.fz * 1.1);
     return { svg: svgLines(r.lines, x, y, r.fz, fill, F_SERIF, 700, 1.1, extra), end: base }; };
   const mast = "THE DIGEST" + (area ? " · " + area.toUpperCase() : "");
-  const img = (x, y, w, h, id) => imgUrl ? `<clipPath id="${id}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${opts.rx || 0}"/></clipPath><g clip-path="url(#${id})"><image href="${imgUrl}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/></g>` : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${C.greenD}"/>`;
+  const img = (x, y, w, h, id) => imgUrl ? `<clipPath id="${id}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${opts.rx || 0}"/></clipPath><g clip-path="url(#${id})"><image href="${imgUrl}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="${/^x(Min|Mid|Max)Y(Min|Mid|Max)$/.test(opts.imgAlign || "") ? opts.imgAlign : "xMidYMid"} slice"/></g>` : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${C.greenD}"/>`;   // v145 - imgAlign: a scene card's square keeps her feet (xMidYMax)
   const chip = (x, y, ground, ink) => { const w = Math.min(W - 2 * x, mast.length * 17.6 + 56); /* 22px mono + 4px tracking */ return `<rect x="${x}" y="${y}" width="${w}" height="48" rx="24" fill="${ground}" fill-opacity=".94"/><text x="${x + 28}" y="${y + 32}" fill="${ink}" font-size="22" font-weight="700" letter-spacing="4" font-family="${F_MONO}">${_sx(mast.length > 40 ? mast.slice(0, 39) + "…" : mast)}</text>`; };
   const srcLines = (y, fill) => { const L = wrapWords(src, 62).slice(0, 2); return svgLines(L.map((l, i) => (i === 0 ? "Source: " : "") + l), 72, y, 22, fill, F_SANS, 400, 1.3); };
   // v124 - when the picture behind her is a developer's own render, the credit rides on the card. It is
@@ -5388,13 +5417,13 @@ const UNIT_MIX_CSS = '.um{margin-top:10px;border:1px solid var(--line);border-ra
 const UPDATE_SIGNOFF = "\n\n— Curated for Black Coffee, by Papi";   // v89.3 - every update to her signs off this way (Kendall, 5 Sep 2026); v120.1 - his wording, 11 Sep: for her, by him
 let RENDER_LAST_ERR = "";
 const cardKey = (ctxAt, n, size) => "angle_" + String(ctxAt || 0) + "_" + n + (size === "story" ? "_s" : "");   // v105 - "_s" = 1080x1920
-async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl, credit) {
+async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl, credit, imgAlign) {
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const area = angleArea(angle, d); let img = imgOverride || null;   // v109 - a made plate wins over the satellite
   if (!img && area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
   if (!img) img = origin + "/img/bg_market";
   const story = size === "story", W = 1080, H = story ? 1920 : 1080;
-  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "", palette: await stylePalette(env), credit: credit || "" });   // v124 - the credit rides through; this builder never saw opts
+  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "", palette: await stylePalette(env), credit: credit || "", imgAlign: imgAlign || "" });   // v124 - the credit rides through; this builder never saw opts
   return { area, W, H, html: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413;width:${W}px;height:${H}px;overflow:hidden}svg{display:block}</style></head><body>${svg}</body></html>` };
 }
 // v105 - render HTML to PNG inside the Worker through the Browser Rendering binding. One browser per call; fonts awaited.
@@ -5414,7 +5443,7 @@ async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size, opt
   RENDER_LAST_ERR = ""; size = size === "story" ? "story" : "square";
   const k = opts && opts.key ? opts.key + (size === "story" ? "_s" : "") : cardKey(ctxAt, n, size);   // v109 - a plate card keys by its plate, not the morning brief
   try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: pubOrigin(env, origin) + "/img/" + k, area: angleArea(angle, null), size }; } catch (e) {}
-  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me, opts && opts.credit);
+  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me, opts && opts.credit, opts && opts.align && opts.align[size]);
   let png = null;
   try {
     if (env.CF_RENDER_TOKEN) {                                                                     // REST API (needs an API token)
@@ -8191,6 +8220,79 @@ async function sceneGenerate(env, meKey, prompt, renderKey, id) {
     return { key, note };
   } catch (e) { return { err: "exception " + String((e && e.message) || e).slice(0, 120) }; }
 }
+// v145 - SCENE CARDS, made the way Najjuko made the one she loved (13 Sep 2026). She took the story card Azimuth had sent her into an
+// image editor and asked for a new background. The editor kept the cream column and kept her where the card had placed her, at that
+// size, then repainted the scene and redrew her walking in its light. So a scene card starts from the card's own layout - cream column
+// on the left, her photo placed on the right, no words - and the words are set on top afterwards by the card engine, so the
+// register's figure is always drawn by us and never redrawn by the image service.
+const SCENE_TIMES = [
+  { id: "em", name: "Early morning", note: "Soft low sun, long gentle shadows", light: "Early morning: soft, clear light from a low sun, long gentle shadows, a pale fresh sky" },
+  { id: "md", name: "Midday", note: "Bright sun, clear sky", light: "Midday: bright sun high in a clear blue sky, crisp short shadows, clean vivid colour" },
+  { id: "la", name: "Late afternoon", note: "Warm golden light", light: "Late afternoon: warm golden sun low in the sky, long soft shadows, a gentle warm haze" },
+  { id: "ss", name: "Sunset", note: "Golden glow, sun low behind", light: "Sunset: the sun just above the horizon behind the scene, a warm golden glow and soft haze, the light catching her hair and shoulders" },
+  { id: "nt", name: "Night", note: "Lights on, deep blue sky", light: "Night: a deep blue sky, warm street lamps and lit windows, soft pools of light on the ground and on her" },
+];
+function sceneCardPrompt(option, timeId, extra) {
+  const id = String((option && option.id) || "").toUpperCase();
+  const tm = SCENE_TIMES.find(x => x.id === timeId) || null;
+  let _pr = String((option && option.place) || "a residential setting in Dubai").trim().replace(/\s+-\s+/g, ", ").replace(/\bDubai,\s*Dubai\b/g, "Dubai");
+  if (tm) _pr = _pr.replace(/,?\s*(at\s+)?(early morning|late afternoon|blue hour)\b/gi, "");   // the backdrop's own time of day gives way to hers
+  const place = _pr.charAt(0).toLowerCase() + _pr.slice(1);
+  const pose = SCENE_POSE[id] || "standing naturally in the scene, looking towards the camera";
+  const out = ["Edit this picture into a realistic photograph."];
+  out.push("Keep the soft cream column on the left where it is, fading into the photograph, plain and empty, with no words or marks on it.");
+  out.push("Keep the woman in the same place in the frame and at the same size, with her face, hair, skin tone, build and outfit exactly as they are.");
+  out.push("Replace everything behind her with " + place + ".");
+  out.push("Redraw her " + pose + ", so she belongs in the scene: feet on the ground, a natural shadow beneath her.");
+  out.push((tm ? tm.light : "Natural daylight") + ", with the same light on her skin, hair and clothes as on the scene.");
+  out.push("Eye-level camera, gentle background blur behind her.");
+  out.push(scenePlaceGuard(place));
+  out.push("No text, signs, logos or watermarks anywhere in the picture.");
+  const _ch = (extra || []).map(x => String(x || "").trim()).filter(Boolean);   // her changes win over the lines above
+  if (_ch.length) {
+    out.push("Where a change below conflicts with anything above, follow the change.");
+    for (const t of _ch) { const c = t.charAt(0).toUpperCase() + t.slice(1); out.push("Change: " + (/[.!?]$/.test(c) ? c : c + ".")); }
+  }
+  return out.join(" ");
+}
+async function renderPng(env, html, W, H) {
+  RENDER_LAST_ERR = "";
+  try {
+    if (env.CF_RENDER_TOKEN) {
+      const acc = env.CF_ACCOUNT_ID || "76bc08573538d7426fce444cf7ef7645";
+      const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acc}/browser-rendering/screenshot`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + env.CF_RENDER_TOKEN },
+        body: JSON.stringify({ html, viewport: { width: W, height: H, deviceScaleFactor: 1 }, gotoOptions: { waitUntil: "networkidle0", timeout: 20000 }, screenshotOptions: { type: "png", clip: { x: 0, y: 0, width: W, height: H } } }) });
+      if (!r.ok) { RENDER_LAST_ERR = "render " + r.status; return null; }
+      return await r.arrayBuffer();
+    }
+    if (env.BROWSER) { const p = await renderHtmlPng(env, html, W, H); if (!p) RENDER_LAST_ERR = "browser binding returned nothing"; return p; }
+    RENDER_LAST_ERR = "no renderer on this Worker"; return null;
+  } catch (e) { RENDER_LAST_ERR = "render exception: " + String((e && e.message) || e).slice(0, 120); return null; }
+}
+// The card's layout with no words, at the image service's own portrait size (1024x1536), so what it keeps lines up with the card:
+// the story crops 80 px off each side and shows her centre at 0.77 of the width, as the cut-out cards do; the square keeps the
+// bottom two thirds (imgAlign xMidYMax), so her head sits near its top and her feet stay in. bgKey = a stored photo to start from.
+async function sceneLayoutRef(env, origin, meKey, bgKey, id) {
+  const o = pubOrigin(env, origin);
+  const mk = String(meKey || "").replace(/[^a-z0-9_]/gi, "");
+  let cut = "";
+  for (const k of [mk + "_cut", mk + "_cut_day", mk + "_cut_soft"]) { try { if (mk && await env.MEETINGS.get("img_" + k, "arrayBuffer")) { cut = o + "/img/" + k; break; } } catch (e) {} }
+  if (!cut) return { err: "no cut-out of " + (mk || "her photo") + " on file yet" };
+  const bk = String(bgKey || "").replace(/[^a-z0-9_]/gi, "");
+  const W = 1024, H = 1536, gy = 1467, mh = 853, mw = Math.round(mh * 0.62), cx = 742, C = CARD_C;
+  const bg = bk ? `<image href="${o}/img/${bk}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/>`
+               : `<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C9D3D9"/><stop offset="0.74" stop-color="#E6DFD3"/><stop offset="0.74" stop-color="#BDB09C"/><stop offset="1" stop-color="#A89A86"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#sky)"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` + bg +
+    `<defs><linearGradient id="wash" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${C.beige}"/><stop offset="0.42" stop-color="${C.beige}"/><stop offset="0.72" stop-color="${C.beige}" stop-opacity="0"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#wash)"/>` +
+    `<ellipse cx="${cx}" cy="${gy - 6}" rx="${Math.round(mw * 0.42)}" ry="16" fill="${C.ink}" fill-opacity=".28"/>` +
+    `<image href="${cut}" x="${cx - Math.round(mw / 2)}" y="${gy - mh}" width="${mw}" height="${mh}" preserveAspectRatio="xMidYMax meet"/></svg>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;width:${W}px;height:${H}px;overflow:hidden;background:${C.beige}}svg{display:block}</style></head><body>${svg}</body></html>`;
+  const png = await renderPng(env, html, W, H);
+  if (!png || png.byteLength < 5000) return { err: "layout render failed: " + (RENDER_LAST_ERR || "empty image") };
+  const key = "sref_" + String(id || rid()).replace(/[^a-z0-9_]/gi, "").slice(0, 30);
+  await env.MEETINGS.put("img_" + key, png, { expirationTtl: 7 * 86400 }); await env.MEETINGS.put("img_ct_" + key, "image/png", { expirationTtl: 7 * 86400 });
+  return { key, url: o + "/img/" + key };
+}
 async function platePhoto(env, angle, place, id) {
   PLATE_LAST_ERR = "";
   if (!env.OPENAI_API_KEY) { PLATE_LAST_ERR = "no image key"; return null; }
@@ -8331,7 +8433,7 @@ async function meCutFor(env, origin, opt, grade) {
 }
 async function plateRun(env, post, opt, to, origin, sendIt) {
   origin = pubOrigin(env, origin);                                  // v129 - a forwarded webhook's origin is not sendable
-  const id = (post.idp || "ips_") + post.n + "_" + String(opt.id || "a").toLowerCase();   // v120 - a feed angle and an IPS post can share a number
+  const id = (post.idp || "ips_") + post.n + "_" + String(opt.id || "a").toLowerCase() + (post.idp === "feed_" ? "_" + hashStr(String(post.hook || "") + "|" + String(post.figure || "")).toString(36).slice(-5) : "");   // v120 - a feed angle and an IPS post can share a number; v145 - feed numbers repeat every morning, so the photo keys by what the angle says (13 Sep: yesterday's angle 4 street came back for today's angle 4)
   const angle = { hook: post.hook || post.ask || "", figure: post.figure || "", source: post.source || "", area: post.masthead || "" };
   const out = { id, photo: null, square: null, story: null, err: "" };
   if (opt && opt.useKey) {                                                        // v124 - the developer's own render, already on the Worker: nothing to generate
