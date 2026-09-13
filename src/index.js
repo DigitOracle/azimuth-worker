@@ -1833,19 +1833,22 @@ export default {
       let _opt = ((_fb && _fb.options) || feedBackdrops(_ang, _area)).find(o => o.id === _oid);
       if (!_opt) return new Response("no such backdrop", { status: 404 });
       if (_q.get("place")) _opt = Object.assign({}, _opt, { place: String(_q.get("place")).slice(0, 400) });
-      const _prompt = sceneCardPrompt(_opt, _tm, _q.get("extra") ? [_q.get("extra")] : []);
-      if (_q.get("dry") === "1") return _json({ dry: true, backdrop: _opt.name, time: _tm, photo: _mk, prompt: _prompt });
-      const _id = "c" + _n + _oid.toLowerCase() + _tm + "_" + _mk.slice(-2) + "_" + rid().slice(0, 4);
+      const _face = ["first", "second", "none"].indexOf(String(_q.get("face") || "")) >= 0 ? String(_q.get("face")) : "second";   // where her own photo goes, for her face
+      const _prompt = sceneCardPrompt(_opt, _tm, _q.get("extra") ? [_q.get("extra")] : [], _face === "none" ? "" : _face);
+      if (_q.get("dry") === "1") return _json({ dry: true, backdrop: _opt.name, time: _tm, photo: _mk, face: _face, prompt: _prompt });
+      const _id = "c" + _n + _oid.toLowerCase() + _tm + _face.charAt(0) + "_" + _mk.slice(-2) + "_" + rid().slice(0, 4);
       const _ref = await sceneLayoutRef(env, url.origin, _mk, _q.get("plate") || "", _id);
       if (_ref.err) return _json({ prompt: _prompt, err: _ref.err }, 502);
-      const _g = await sceneGenerate(env, _ref.key, _prompt, null, _id);
+      const _g = _face === "first" ? await sceneGenerate(env, _mk, _prompt, _ref.key, _id)
+               : _face === "second" ? await sceneGenerate(env, _ref.key, _prompt, _mk, _id)
+               : await sceneGenerate(env, _ref.key, _prompt, null, _id);
       if (_g.err) return _json({ prompt: _prompt, ref: _ref.url, err: _g.err }, 502);
       const _o = pubOrigin(env, url.origin);
-      const _card = { img: _o + "/img/" + _g.key, t: 5, me: "", key: _g.key + "_card" + PLATE_CARD_V, credit: "", align: { square: "xMidYMax" } };
+      const _card = { img: _o + "/img/" + _g.key, t: 5, me: "", key: _g.key + "_card" + PLATE_CARD_V, credit: "", align: { square: "xMaxYMid meet" }, wash: [0.40, 0.58] };
       const _angle = { hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "", area: _area || "Dubai" };
       const _sq = await renderAngleCard(env, _angle, _n, _o, 0, null, "square", _card);
       const _st = await renderAngleCard(env, _angle, _n, _o, 0, null, "story", _card);
-      return _json({ backdrop: _opt.name, time: _tm, photo: _mk, prompt: _prompt, note: _g.note || "", ref: _ref.url, scene: _o + "/img/" + _g.key, square: _sq && _sq.url, story: _st && _st.url, renderErr: RENDER_LAST_ERR || "" });
+      return _json({ backdrop: _opt.name, time: _tm, photo: _mk, face: _face, prompt: _prompt, note: _g.note || "", ref: _ref.url, scene: _o + "/img/" + _g.key, square: _sq && _sq.url, story: _st && _st.url, renderErr: RENDER_LAST_ERR || "" });
     }
     if (url.pathname === "/plate_gen_me") {                 // v114 - TEST: generate her into the plate from her photo (image edit). Returns a URL, never sends.
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -5198,7 +5201,9 @@ function angleCardSvg(angle, areaName, imgUrl, n, opts) {
     const r = fitLines(fig + (figRest ? " " + figRest : ""), 936, Math.min(maxFz, 88), 3, 0.56, 44); const y = base - (r.lines.length - 1) * Math.round(r.fz * 1.1);
     return { svg: svgLines(r.lines, x, y, r.fz, fill, F_SERIF, 700, 1.1, extra), end: base }; };
   const mast = "THE DIGEST" + (area ? " · " + area.toUpperCase() : "");
-  const img = (x, y, w, h, id) => imgUrl ? `<clipPath id="${id}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${opts.rx || 0}"/></clipPath><g clip-path="url(#${id})"><image href="${imgUrl}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="${/^x(Min|Mid|Max)Y(Min|Mid|Max)$/.test(opts.imgAlign || "") ? opts.imgAlign : "xMidYMid"} slice"/></g>` : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${C.greenD}"/>`;   // v145 - imgAlign: a scene card's square keeps her feet (xMidYMax)
+  const _al = /^x(Min|Mid|Max)Y(Min|Mid|Max)( meet| slice)?$/.test(opts.imgAlign || "") ? String(opts.imgAlign) : "xMidYMid";   // v145 - imgAlign: "xMaxYMid meet" shows a scene picture whole, on cream
+  const _par = / meet$/.test(_al) ? _al : _al.replace(/ slice$/, "") + " slice";
+  const img = (x, y, w, h, id) => imgUrl ? `<clipPath id="${id}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${opts.rx || 0}"/></clipPath><g clip-path="url(#${id})">${/ meet$/.test(_par) ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${C.beige}"/>` : ""}<image href="${imgUrl}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="${_par}"/></g>` : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${C.greenD}"/>`;
   const chip = (x, y, ground, ink) => { const w = Math.min(W - 2 * x, mast.length * 17.6 + 56); /* 22px mono + 4px tracking */ return `<rect x="${x}" y="${y}" width="${w}" height="48" rx="24" fill="${ground}" fill-opacity=".94"/><text x="${x + 28}" y="${y + 32}" fill="${ink}" font-size="22" font-weight="700" letter-spacing="4" font-family="${F_MONO}">${_sx(mast.length > 40 ? mast.slice(0, 39) + "…" : mast)}</text>`; };
   const srcLines = (y, fill) => { const L = wrapWords(src, 62).slice(0, 2); return svgLines(L.map((l, i) => (i === 0 ? "Source: " : "") + l), 72, y, 22, fill, F_SANS, 400, 1.3); };
   // v124 - when the picture behind her is a developer's own render, the credit rides on the card. It is
@@ -5268,8 +5273,9 @@ function angleCardSvg(angle, areaName, imgUrl, n, opts) {
     const my = story ? 150 : 120, ky = my + 38, fy = ky + 44 + ffz, uy = unitTxt ? fy + 40 : fy, hy = uy + 44 + hk.fz;
     const endY = hy + (hk.lines.length - 1) * Math.round(hk.fz * 1.12);
     const srcL = wrapWords(src, 34).slice(0, 3);
+    const _w0 = Math.min(0.9, Math.max(0, Number(opts.wash && opts.wash[0]) || 0.42)), _w1 = Math.min(1, Math.max(_w0, Number(opts.wash && opts.wash[1]) || 0.72));   // v145 - a scene card's cream fades sooner, as on the card she made
     body = img(0, 0, W, H, "c5") +
-      `<defs><linearGradient id="wash" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${C.beige}"/><stop offset="0.42" stop-color="${C.beige}"/><stop offset="0.72" stop-color="${C.beige}" stop-opacity="0"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#wash)"/>` +
+      `<defs><linearGradient id="wash" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${C.beige}"/><stop offset="${_w0}" stop-color="${C.beige}"/><stop offset="${_w1}" stop-color="${C.beige}" stop-opacity="0"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#wash)"/>` +
       `<text x="${x0}" y="${my}" fill="${C.green}" font-size="${story ? 30 : 26}" font-weight="700" letter-spacing="9" font-family="${F_SANS}">THE DIGEST</text>` +
       (area ? `<text x="${x0}" y="${ky}" fill="${C.goldD}" font-size="20" letter-spacing="4" font-family="${F_MONO}">${_sx(String(area).toUpperCase().slice(0, 34))}</text>` : "") +
       `<text x="${x0 - 4}" y="${fy}" fill="${C.gold}" font-size="${ffz}" font-weight="700" font-family="${F_SERIF}">${_sx(bigTxt)}</text>` +
@@ -5417,13 +5423,13 @@ const UNIT_MIX_CSS = '.um{margin-top:10px;border:1px solid var(--line);border-ra
 const UPDATE_SIGNOFF = "\n\n— Curated for Black Coffee, by Papi";   // v89.3 - every update to her signs off this way (Kendall, 5 Sep 2026); v120.1 - his wording, 11 Sep: for her, by him
 let RENDER_LAST_ERR = "";
 const cardKey = (ctxAt, n, size) => "angle_" + String(ctxAt || 0) + "_" + n + (size === "story" ? "_s" : "");   // v105 - "_s" = 1080x1920
-async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl, credit, imgAlign) {
+async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl, credit, imgAlign, wash) {
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const area = angleArea(angle, d); let img = imgOverride || null;   // v109 - a made plate wins over the satellite
   if (!img && area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
   if (!img) img = origin + "/img/bg_market";
   const story = size === "story", W = 1080, H = story ? 1920 : 1080;
-  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "", palette: await stylePalette(env), credit: credit || "", imgAlign: imgAlign || "" });   // v124 - the credit rides through; this builder never saw opts
+  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "", palette: await stylePalette(env), credit: credit || "", imgAlign: imgAlign || "", wash: Array.isArray(wash) ? wash : null });   // v124 - the credit rides through; this builder never saw opts
   return { area, W, H, html: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413;width:${W}px;height:${H}px;overflow:hidden}svg{display:block}</style></head><body>${svg}</body></html>` };
 }
 // v105 - render HTML to PNG inside the Worker through the Browser Rendering binding. One browser per call; fonts awaited.
@@ -5443,7 +5449,7 @@ async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size, opt
   RENDER_LAST_ERR = ""; size = size === "story" ? "story" : "square";
   const k = opts && opts.key ? opts.key + (size === "story" ? "_s" : "") : cardKey(ctxAt, n, size);   // v109 - a plate card keys by its plate, not the morning brief
   try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: pubOrigin(env, origin) + "/img/" + k, area: angleArea(angle, null), size }; } catch (e) {}
-  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me, opts && opts.credit, opts && opts.align && opts.align[size]);
+  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me, opts && opts.credit, opts && opts.align && opts.align[size], opts && opts.wash);
   let png = null;
   try {
     if (env.CF_RENDER_TOKEN) {                                                                     // REST API (needs an API token)
@@ -8232,21 +8238,30 @@ const SCENE_TIMES = [
   { id: "ss", name: "Sunset", note: "Golden glow, sun low behind", light: "Sunset: the sun just above the horizon behind the scene, a warm golden glow and soft haze, the light catching her hair and shoulders" },
   { id: "nt", name: "Night", note: "Lights on, deep blue sky", light: "Night: a deep blue sky, warm street lamps and lit windows, soft pools of light on the ground and on her" },
 ];
-function sceneCardPrompt(option, timeId, extra) {
+// faceRef: "second" = the layout goes first and her own photo second, for her face; "first" = her photo first, the layout second.
+// No landmark ban here: Kendall, 13 Sep 2026, iconic views are allowed on her pictures (her own edit put the Burj Khalifa behind her).
+function sceneCardPrompt(option, timeId, extra, faceRef) {
   const id = String((option && option.id) || "").toUpperCase();
   const tm = SCENE_TIMES.find(x => x.id === timeId) || null;
   let _pr = String((option && option.place) || "a residential setting in Dubai").trim().replace(/\s+-\s+/g, ", ").replace(/\bDubai,\s*Dubai\b/g, "Dubai");
   if (tm) _pr = _pr.replace(/,?\s*(at\s+)?(early morning|late afternoon|blue hour)\b/gi, "");   // the backdrop's own time of day gives way to hers
   const place = _pr.charAt(0).toLowerCase() + _pr.slice(1);
   const pose = SCENE_POSE[id] || "standing naturally in the scene, looking towards the camera";
-  const out = ["Edit this picture into a realistic photograph."];
-  out.push("Keep the soft cream column on the left where it is, fading into the photograph, plain and empty, with no words or marks on it.");
-  out.push("Keep the woman in the same place in the frame and at the same size, with her face, hair, skin tone, build and outfit exactly as they are.");
+  const layout = "the soft cream column on the left, plain and empty with no words or marks on it, fading into the photograph, and the woman at the size and in the place she stands there, in the right-hand part of the frame and clear of the cream column. Do not enlarge her, crop her or move her towards the centre: her whole figure shows, from the top of her head to her feet.";
+  const out = [];
+  if (faceRef === "first") {
+    out.push("Make a realistic photograph of the woman in the first picture, with her face, hair, skin tone, build and outfit exactly as in that photo.");
+    out.push("Copy the layout of the second picture exactly: " + layout);
+  } else {
+    out.push("Edit " + (faceRef === "second" ? "the first picture" : "this picture") + " into a realistic photograph.");
+    out.push("Keep its layout exactly: " + layout);
+    out.push(faceRef === "second" ? "She is the woman in the second picture: give her exactly that face, with the same eyes, nose, lips, jawline, skin tone and hair, and the outfit she wears in the first picture."
+                                  : "Keep her face, hair, skin tone, build and outfit exactly as they are.");
+  }
   out.push("Replace everything behind her with " + place + ".");
-  out.push("Redraw her " + pose + ", so she belongs in the scene: feet on the ground, a natural shadow beneath her.");
+  out.push("Show her " + pose + ", so she belongs in the scene: feet on the ground, a natural shadow beneath her.");
   out.push((tm ? tm.light : "Natural daylight") + ", with the same light on her skin, hair and clothes as on the scene.");
   out.push("Eye-level camera, gentle background blur behind her.");
-  out.push(scenePlaceGuard(place));
   out.push("No text, signs, logos or watermarks anywhere in the picture.");
   const _ch = (extra || []).map(x => String(x || "").trim()).filter(Boolean);   // her changes win over the lines above
   if (_ch.length) {
@@ -8279,11 +8294,11 @@ async function sceneLayoutRef(env, origin, meKey, bgKey, id) {
   for (const k of [mk + "_cut", mk + "_cut_day", mk + "_cut_soft"]) { try { if (mk && await env.MEETINGS.get("img_" + k, "arrayBuffer")) { cut = o + "/img/" + k; break; } } catch (e) {} }
   if (!cut) return { err: "no cut-out of " + (mk || "her photo") + " on file yet" };
   const bk = String(bgKey || "").replace(/[^a-z0-9_]/gi, "");
-  const W = 1024, H = 1536, gy = 1467, mh = 853, mw = Math.round(mh * 0.62), cx = 742, C = CARD_C;
+  const W = 1024, H = 1536, gy = 1450, mh = 760, mw = Math.round(mh * 0.62), cx = 770, C = CARD_C;   // smaller and further right than the cut-out cards: the image service draws her larger and nearer the centre
   const bg = bk ? `<image href="${o}/img/${bk}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/>`
                : `<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C9D3D9"/><stop offset="0.74" stop-color="#E6DFD3"/><stop offset="0.74" stop-color="#BDB09C"/><stop offset="1" stop-color="#A89A86"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#sky)"/>`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` + bg +
-    `<defs><linearGradient id="wash" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${C.beige}"/><stop offset="0.42" stop-color="${C.beige}"/><stop offset="0.72" stop-color="${C.beige}" stop-opacity="0"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#wash)"/>` +
+    `<defs><linearGradient id="wash" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${C.beige}"/><stop offset="0.40" stop-color="${C.beige}"/><stop offset="0.58" stop-color="${C.beige}" stop-opacity="0"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#wash)"/>` +
     `<ellipse cx="${cx}" cy="${gy - 6}" rx="${Math.round(mw * 0.42)}" ry="16" fill="${C.ink}" fill-opacity=".28"/>` +
     `<image href="${cut}" x="${cx - Math.round(mw / 2)}" y="${gy - mh}" width="${mw}" height="${mh}" preserveAspectRatio="xMidYMax meet"/></svg>`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;width:${W}px;height:${H}px;overflow:hidden;background:${C.beige}}svg{display:block}</style></head><body>${svg}</body></html>`;
