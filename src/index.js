@@ -4322,10 +4322,13 @@ async function feedQA(env, angles, sys, data, famh) {
 // v76 — campaign angles add one line on what to film / which supplied asset to cut from
 const CAMPAIGN_SCHEMA = { type: "object", additionalProperties: false, properties: { angles: { type: "array", items: { type: "object", additionalProperties: false, properties: { hook: { type: "string" }, figure: { type: "string" }, source: { type: "string" }, buyer: { type: "string" }, shot: { type: "string" } }, required: ["hook", "figure", "source", "buyer", "shot"] } } }, required: ["angles"] };
 
+// v140 - the hour (GST) the daily feed and its trend radar run in. Najjuko asked for 06:00 on 13 Sep 2026; the instance
+// cron must include that hour. Default 7 keeps every other instance exactly as it was.
+function feedHourGst(env) { const h = parseInt(env.FEED_HOUR_GST || "7", 10); return h >= 0 && h <= 23 ? h : 7; }
 async function dailyFeedTick(env, force, dry) {
   if ((env.MARKET_BRIEF || "") !== "on") return;
   const n = gstNow();
-  if (!force && n.getUTCHours() !== 7) return;                                    // 07:00 + 07:30 GST cron ticks both eligible
+  if (!force && n.getUTCHours() !== feedHourGst(env)) return;                      // v140 - FEED_HOUR_GST (default 7); that hour's :00 and :30 ticks are both eligible
   const fk = "mktfeed_" + gstDateStr(n);
   let attempts = 0;
   if (!force) {                                                                    // v56 — marker records SUCCESS, not attempt: a failed
@@ -4554,7 +4557,7 @@ async function radarReddit(env) { try { const j = await apifyRun(env, "trudax~re
   return j.filter(x => x && (x.title || x.body) && RE.test((x.title || "") + " " + (x.body || "").slice(0, 200))).slice(0, 20).map(x => ({ platform: "reddit", title: String(x.title || "").slice(0, 140), sub: x.communityName || x.parsedCommunityName || "", score: x.upVotes || x.score || 0, comments: x.numberOfComments || x.numComments || 0, url: x.url || x.link || "" })); } catch (e) { return null; } }
 async function trendRadarTick(env, force) {
   const n = gstNow();
-  if (!force && !(n.getUTCHours() === 7 && n.getUTCMinutes() < 30)) return null;
+  if (!force && !(n.getUTCHours() === feedHourGst(env) && n.getUTCMinutes() < 30)) return null;   // v140 - the radar runs in the feed's hour, ahead of it
   const rk = "trend_radar_" + gstDateStr(n);
   if (!force && (await env.MEETINGS.get(rk))) return null;
   await env.MEETINGS.put(rk, "1", { expirationTtl: 2 * 86400 });
