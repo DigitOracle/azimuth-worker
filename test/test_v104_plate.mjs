@@ -2,10 +2,11 @@
 // Pulls bgPromptBlock straight out of src/index.js and checks both branches.
 import { readFileSync } from "node:fs";
 const src = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-const a = src.indexOf("function bgPromptBlock(angle, place, pal) {");   // v117: takes her palette
-const b = src.indexOf("\nfunction visualPromptBlock(angle) {");
+const a = src.indexOf("function bgPromptBlock(");   // v117: takes her palette; v151: and her time of day
+const b = src.indexOf("\nfunction visualPromptBlock(");
 const h0 = src.indexOf("function hashStr("); const h1 = src.indexOf("\n", h0);   // v105: the prompt seeds its look with hashStr
-const bgPromptBlock = new Function(src.slice(h0, h1) + "\n" + src.slice(a, b) + "\nreturn bgPromptBlock;")();
+const p0 = src.indexOf("const PLATE_LIGHT = {"); const p1 = p0 >= 0 ? src.indexOf("\n};", p0) + 3 : -1;   // v151: the light for her chosen time of day
+const bgPromptBlock = new Function(src.slice(h0, h1) + "\n" + (p0 >= 0 ? src.slice(p0, p1) : "") + "\n" + src.slice(a, b) + "\nreturn bgPromptBlock;")();
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m); } };

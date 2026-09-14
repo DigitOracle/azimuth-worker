@@ -3284,13 +3284,13 @@ export default {
           }
           else if (/^mkt:(pod|li|ig|car|art|vid|q):\d{1,2}(?:\+\d{1,2})*$/.test(bid)) {   // v83 — one id can carry several angles ("6+7"); v88.2 + vid, q
             const _mp2 = bid.split(":");
-            for (const _one of _mp2[2].split("+").map(x => parseInt(x, 10)).filter(x => x > 0)) {
-              await draftFromAngle(env, from, _mp2[1], _one);
-              if (_mp2[1] === "car" || _mp2[1] === "art") {
-                let _fa2 = null; try { const _c2 = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); _fa2 = _c2 && _c2.angles && _c2.angles[_one - 1]; } catch (e) {}
-                if (_fa2) await waSend(env, from, visualPromptBlock(_fa2));
-              }
-            }
+            if (env.SCENE_PICTURES === "on" && TIME_FORMATS.includes(_mp2[1])) {        // v151 - a format with a picture asks the time of day first
+              await waSendList(env, from, "What time of day?", "Time of day", SCENE_TIMES.map(t => ({ id: "mtd:" + _mp2[1] + ":" + _mp2[2] + ":" + t.id, title: t.name, description: t.note })));
+            } else await runDrafts(env, from, _mp2[1], _mp2[2], "");
+          }
+          else if (/^mtd:(li|ig|car|art|vid):\d{1,2}(?:\+\d{1,2})*:(em|md|la|ss|nt)$/.test(bid)) {   // v151 - her time of day, then the drafts lit for it
+            const _mt = bid.split(":");
+            await runDrafts(env, from, _mt[1], _mt[2], _mt[3]);
           }
           else if (/^feed:\d{1,2}(?:\+\d{1,2})*$/.test(bid)) {  // v37 — daily-feed pick; v83 — any angle the feed sent, one or several
             await handleFeedPick(env, from, bid.slice(5).split("+").map(x => parseInt(x, 10)).filter(x => x > 0));
@@ -4243,7 +4243,17 @@ async function handleFeedPick(env, to, nums) {
     { id: "feed:again", title: "🔁 Another angle", description: "Show this morning's list again" }]);
 }
 
-async function draftFromAngle(env, to, kind, n) {
+// v151 - the drafts for one format and one or several angles ("6+7"); timeId (em|md|la|ss|nt, or "") sets the light in their picture prompts.
+async function runDrafts(env, to, kind, sel, timeId) {
+  for (const n of String(sel).split("+").map(x => parseInt(x, 10)).filter(x => x > 0)) {
+    await draftFromAngle(env, to, kind, n, timeId);
+    if (kind === "car" || kind === "art") {
+      let a = null; try { const c = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); a = c && c.angles && c.angles[n - 1]; } catch (e) {}
+      if (a) await waSend(env, to, visualPromptBlock(a, timeId));
+    }
+  }
+}
+async function draftFromAngle(env, to, kind, n, timeId) {
   const raw = await env.MEETINGS.get("mkt_briefctx");
   if (!raw) { await waSend(env, to, "No weekly brief on file yet — say “market brief” and I'll run one now."); return; }
   let ctx; try { ctx = JSON.parse(raw); } catch (e) { return; }
@@ -4277,7 +4287,8 @@ async function draftFromAngle(env, to, kind, n) {
     "\n\n" + (await styleVoice(env)) +
     (dna ? "\n\nWHAT SHE FAVOURS (subjects and formats only, never style):\n" + (await dnaSubjects(env)) : "");
   let out = null;
-  try { out = await claudeText(env, sys + campRules, user2, null, 900); } catch (e) {}
+  const sysLit = kind === "vid" && VIDEO_LIGHT[timeId] ? sys.replace("warm late-afternoon light", VIDEO_LIGHT[timeId]) : sys;   // v151 - her time of day in the video prompt's STYLE line
+  try { out = await claudeText(env, sysLit + campRules, user2, null, 900); } catch (e) {}
   if (out && VOICE_BAN.test(out)) {                                                // v117 - the draft slipped into the old jargon: one repair pass in her voice
     try {
       const _fix = await claudeText(env, "You rewrite a social post for a Dubai property broker into HER VOICE. Keep every figure, source, structure and section label exactly as they are; change only the wording that breaks her voice. Return the rewritten post only, no preamble. " + (await styleVoice(env)), out, null, 900);
@@ -4286,7 +4297,7 @@ async function draftFromAngle(env, to, kind, n) {
   }
   if (!out) { await waSend(env, to, "Couldn't draft that just now — try again in a minute."); return; }
   try { const _t = { li: "linkedin", car: "carousel", art: "article", ig: "instagram", pod: "podcast", vid: "seedance_prompt", q: "questions" }[kind] || kind;
-    await bridgeRecord(env, { id: "angle-" + String(n).padStart(2, "0"), type: _t, set: "ondemand", topic_family: (_ang && (_ang.family || famOf(_ang))) || "", campaign: _ang && _ang.campaign ? "the_valley" : "", hook: _ang ? _ang.hook : "", figure: _ang ? _ang.figure : "", body: out, source_line: _ang ? "Source: " + _ang.source : "", what_not_to_claim: guardLine(_ang || {}), campaign_rules: _ang && _ang.campaign ? "#ThisIsTheValley - @EmaarInsider - 60-90 s - Emaar visuals only" : "", image_prompt: _ang ? bgPromptBlock(_ang).replace(/^[\s\S]*?```/, "").replace(/```[\s\S]*$/, "").trim() : "", timing: kind === "pod" ? "60-90 s / 140-210 words at 142 wpm" : kind === "ig" ? "30-45 s / 70-105 words" : kind === "vid" ? "20-25 s" : "" }); } catch (e) {}
+    await bridgeRecord(env, { id: "angle-" + String(n).padStart(2, "0"), type: _t, set: "ondemand", topic_family: (_ang && (_ang.family || famOf(_ang))) || "", campaign: _ang && _ang.campaign ? "the_valley" : "", hook: _ang ? _ang.hook : "", figure: _ang ? _ang.figure : "", body: out, source_line: _ang ? "Source: " + _ang.source : "", what_not_to_claim: guardLine(_ang || {}), campaign_rules: _ang && _ang.campaign ? "#ThisIsTheValley - @EmaarInsider - 60-90 s - Emaar visuals only" : "", image_prompt: _ang ? bgPromptBlock(_ang, undefined, undefined, timeId).replace(/^[\s\S]*?```/, "").replace(/```[\s\S]*$/, "").trim() : "", timing: kind === "pod" ? "60-90 s / 140-210 words at 142 wpm" : kind === "ig" ? "30-45 s / 70-105 words" : kind === "vid" ? "20-25 s" : "" }); } catch (e) {}
   const label = kind === "vid" ? "🎬 Magnific video prompt (Seedance)" : kind === "q" ? "🎤 Questions for the room" : kind === "pod" ? "🎙 Podcast script" : kind === "ig" ? "📸 Instagram package" : kind === "car" ? "🎠 LinkedIn carousel" : kind === "art" ? "📝 LinkedIn article" : "✍️ LinkedIn post";
   await waSend(env, to, label + " — Angle " + n + (_camp ? " · 🏡 " + ((_camp.contest && _camp.contest.name) || "campaign") : "") + "\n\n" + out + "\n\n— a draft to make your own.");
   if (_camp && _camp.contest) {                                                    // the entry mechanics, every time, so none of it is left to memory
@@ -4313,7 +4324,7 @@ async function draftFromAngle(env, to, kind, n) {
       if (_sq || _st) await cardLedger(env, { kind: "angle", key: (_sq || _st).key, n, hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "", area: (_sq && _sq.area) || "" });   // v149
       if (!_sq && !_st) await waSend(env, to, "🖼 Your cards for angle " + n + " (square and 9:16) are rendering - they land here in a few minutes."); } catch (e) {}
   }
-  await waSend(env, to, bgPromptBlock(_ang || { hook: "", figure: "", source: "" }));
+  await waSend(env, to, bgPromptBlock(_ang || { hook: "", figure: "", source: "" }, undefined, undefined, timeId));
   if (kind === "li" || kind === "ig" || kind === "car") {                                          // v88.2 - the quick hit is done; offer the deeper dive once
     try { await waSendButtons(env, to, "That's the quick hit for angle " + n + ". Want a deeper dive on it - a carousel outline, a video prompt for Magnific, a podcast script, or the questions to take into a banker's office?", [{ id: "deep:" + n, title: "🔎 Show me the options" }, { id: "deep:no", title: "Not today" }]); } catch (e) {}
   }
@@ -8297,6 +8308,26 @@ const SCENE_TIMES = [
   { id: "ss", name: "Sunset", note: "Golden glow, sun low behind", when: "at sunset", say: "Sunset, a warm golden glow", light: "Sunset: the sun just above the horizon behind the scene, a warm golden glow and soft haze, the light catching her hair and shoulders" },
   { id: "nt", name: "Night", note: "Lights on, deep blue sky", when: "at night", say: "Night, the lights on under a deep blue sky", light: "Night: a deep blue sky, warm street lamps and lit windows, soft pools of light on the ground and on her" },
 ];
+// v151 - THE TIME OF DAY FOR EVERY FORMAT WITH A PICTURE (Kendall, 14 Sep 2026: "the time of day is only asking in picture with you, not
+// the other options"). LinkedIn post, carousel, article, Instagram and the video prompt now ask the same five-choice question first, and
+// her answer sets the light in every picture prompt that format sends. The podcast script and the questions for the room carry no
+// picture, so they do not ask. Behind SCENE_PICTURES, like the question it copies.
+const TIME_FORMATS = ["li", "ig", "car", "art", "vid"];
+const PLATE_LIGHT = {   // the cover plate she pastes: no person in it, the light kept from the right so a figure can be lit to match
+  em: "Early morning, just after sunrise: soft clear light from a low sun on the RIGHT of frame, long gentle shadows falling to the LEFT, a pale fresh sky.",
+  md: "Midday: bright sun high in a clear blue sky, crisp short shadows, clean vivid colour, a hint of directional light from the RIGHT.",
+  la: "Late afternoon, about an hour before sunset: warm golden sun low on the RIGHT of frame, long soft shadows falling to the LEFT, a gentle warm haze.",
+  ss: "Sunset: the sun just above the horizon on the RIGHT of frame, a warm golden glow and soft haze across the whole scene, long shadows falling to the LEFT.",
+  nt: "Night: a deep blue sky, warm street lamps and lit windows, soft pools of light on the ground, a faint warm key from the RIGHT.",
+};
+const COVER_LIGHT = {   // the magazine-cover portrait
+  em: { place: "on a Dubai balcony in the soft early morning", light: "soft early-morning side light" },
+  md: { place: "on a bright Dubai balcony at midday", light: "bright midday light softened by open shade" },
+  la: { place: "on a sunlit Dubai balcony in the late afternoon", light: "warm late-afternoon side light with soft rim light" },
+  ss: { place: "on a Dubai balcony at sunset", light: "golden sunset backlight with a soft rim light on the hair" },
+  nt: { place: "on a Dubai balcony at night, the city lights glowing", light: "warm evening light from lamps and lit windows, the city glowing behind" },
+};
+const VIDEO_LIGHT = { em: "soft early-morning light", md: "bright midday light", la: "warm late-afternoon light", ss: "golden sunset light", nt: "warm night-time light from street lamps and lit windows" };
 // faceRef: "second" = the layout goes first and her own photo second, for her face; "first" = her photo first, the layout second.
 // No landmark ban here: Kendall, 13 Sep 2026, iconic views are allowed on her pictures (her own edit put the Burj Khalifa behind her).
 function sceneCardPrompt(option, timeId, extra, faceRef) {
@@ -8997,7 +9028,7 @@ function feedBackdrops(angle, area) {
       place: "A waterfront promenade in " + A + ", Dubai - boardwalk and railing along the water, planting and benches, moored boats or open water across the middle distance, the towers of the community behind" },
   ];
 }
-function bgPromptBlock(angle, place, pal) {
+function bgPromptBlock(angle, place, pal, timeId) {   // v151 - timeId (em|md|la|ss|nt): her time of day sets the light
   const PC = Object.assign({ beige: "#F0DECC", gold: "#A88448", green: "#003C1E", ink: "#00120C" }, pal || {});
   let H = String(angle.hook || "").replace(/"/g, "'").replace(/\s+/g, " ").trim();
   if (H.length > 120) {                                                                          // image models garble long lines: cut at the last strong break, else the last space
@@ -9012,7 +9043,7 @@ function bgPromptBlock(angle, place, pal) {
   // v105 - seeded by the hook: light, lens, vantage and the left-column treatment rotate, so two mornings never hand her the same plate
   const seed = hashStr(H + "|" + F);
   const look = {
-    light: ["Late afternoon, about an hour before sunset: warm low sun coming from the RIGHT of frame at a shallow angle, long soft shadows falling to the LEFT, gentle haze in the distance.",
+    light: PLATE_LIGHT[timeId] || ["Late afternoon, about an hour before sunset: warm low sun coming from the RIGHT of frame at a shallow angle, long soft shadows falling to the LEFT, gentle haze in the distance.",
             "Blue hour, twenty minutes after sunset: deep cobalt sky fading to amber at the horizon, building lights just switched on, soft even light with a faint warm key from the RIGHT.",
             "Bright clear morning, about eight o'clock: crisp cool light from the RIGHT at a low angle, long clean shadows to the LEFT, pale sky, high clarity, no haze.",
             "Soft overcast afternoon: diffuse light with no hard shadows, a muted warm palette, and a hint of directional light from the RIGHT so a composited figure can still be lit to match."][seed % 4],
@@ -9050,13 +9081,14 @@ function bgPromptBlock(angle, place, pal) {
     (F ? " Before posting, check the figure reads exactly \u201c" + F + "\u201d." : "");
 }
 
-function visualPromptBlock(angle) {
+function visualPromptBlock(angle, timeId) {
   const H = String(angle.hook || "").replace(/"/g, "'");
   const F = String(angle.figure || "").replace(/"/g, "'");
   const S = String(angle.source || "").replace(/"/g, "'");
+  const CL = COVER_LIGHT[timeId] || { place: "on a sunlit Dubai balcony", light: "golden-hour side light with soft rim light" };   // v151
   return "🎨 Cover-image prompt — paste the whole block into ChatGPT (make an image), then ask for the second size:\n\n```" +
     "A premium business-magazine COVER in the style of a Forbes / Fortune editorial portrait — aspirational, warm, credible, high-end. Make it 1080x1920 (vertical 9:16) first; I will then ask you to remake it 1920x1080 (16:9).\n\n" +
-    "HERO: a real, confident Dubai real-estate professional — pick one and keep it authentic to Dubai: an elegant Emirati woman in her 30s in a modern tailored abaya · OR a sharply dressed South-Asian man in his 30s in a well-cut suit · OR a Levantine woman in a cream blazer. Three-quarter framing, warm direct eye contact, a natural genuine half-smile, standing on a sunlit Dubai balcony with the skyline softly out of focus behind. Candid documentary-style photograph taken on a real camera, 85mm portrait lens, shallow depth of field, golden-hour side light with soft rim light. Natural UNRETOUCHED skin with visible pore detail, subtle tonal variation, a few flyaway hairs, restrained highlights, real fabric texture, fine film grain. Place the subject on the RIGHT THIRD; leave clean deep-teal negative space on the LEFT for text.\n\n" +
+    "HERO: a real, confident Dubai real-estate professional — pick one and keep it authentic to Dubai: an elegant Emirati woman in her 30s in a modern tailored abaya · OR a sharply dressed South-Asian man in his 30s in a well-cut suit · OR a Levantine woman in a cream blazer. Three-quarter framing, warm direct eye contact, a natural genuine half-smile, standing " + CL.place + " with the skyline softly out of focus behind. Candid documentary-style photograph taken on a real camera, 85mm portrait lens, shallow depth of field, " + CL.light + ". Natural UNRETOUCHED skin with visible pore detail, subtle tonal variation, a few flyaway hairs, restrained highlights, real fabric texture, fine film grain. Place the subject on the RIGHT THIRD; leave clean deep-teal negative space on the LEFT for text.\n\n" +
     "LAYOUT (magazine grid): masthead \"THE DIGEST\" across the very top in beige uppercase with wide letter-spacing. Down the LEFT negative space, a stacked cover-line: the figure \"" + F + "\" set LARGE in warm gold, bold condensed sans-serif; beneath it the headline \"" + H + "\" in smaller beige sans-serif; under a thin gold rule a small beige kicker \"" + S + "\".\n\n" +
     "COLOUR: only three colours, in this order of dominance - beige #E8DCC8 as the ground and most of the frame, warm gold #C5A56A for the figure, the rules and the light, and Rolex green (deep racing green #006039) only as the accent: the masthead, the kicker and one garment or object. Green must not dominate. No teal, no white.\n" +
     "TEXT: render \"THE DIGEST\", \"" + F + "\", \"" + H + "\", \"" + S + "\" verbatim, exactly once each, perfectly legible — no extra characters, no duplicated or garbled text, no invented words or numbers.\n" +
