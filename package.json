@@ -7,7 +7,7 @@
   "main": "src/index.js",
   "scripts": {
     "check": "node --check src/index.js",
-    "test": "node test/test_v35_relationship.mjs && node test/test_v351_sent.mjs && node test/test_v34_twilio.mjs && node test/test_v721_claude403.mjs && node test/test_v722_trust.mjs && node test/test_v104_plate.mjs && node test/test_v105_cards.mjs && node test/test_v147_scene_flow.mjs && node test/test_v147_2_owner_note.mjs",
+    "test": "node test/test_v35_relationship.mjs && node test/test_v351_sent.mjs && node test/test_v34_twilio.mjs && node test/test_v721_claude403.mjs && node test/test_v722_trust.mjs && node test/test_v104_plate.mjs && node test/test_v105_cards.mjs && node test/test_v147_scene_flow.mjs && node test/test_v147_2_owner_note.mjs && node test/test_v149_ig.mjs",
     "dry": "wrangler deploy --dry-run",
     "dry:azimuth2": "wrangler deploy --dry-run --env azimuth2",
     "deploy": "wrangler deploy",

@@ -1986,6 +1986,7 @@ export default {
         if (url.searchParams.get("hub.verify_token") === env.WA_VERIFY_TOKEN) return new Response(url.searchParams.get("hub.challenge") || "", { status: 200 });
         return new Response("forbidden", { status: 403 });
       }
+      if (url.pathname.indexOf("/ig/") === 0 || url.pathname.indexOf("/ig_") === 0) return igRoute(env, url, request);   // v149 - Instagram insights (404 unless IG_APP_ID)
       if (url.pathname === "/setbg") {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         if (url.searchParams.get("clear")) { await env.MEETINGS.delete("cfg_bg"); await env.MEETINGS.delete("cfg_bg_ct"); return new Response("backdrop cleared"); }
@@ -2927,6 +2928,7 @@ export default {
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 }); const list = await env.MEETINGS.list(); const events = []; for (const k of list.keys) { if (!k.name.startsWith("evt_")) continue; const v = await env.MEETINGS.get(k.name); if (v) { try { events.push(JSON.parse(v)); } catch (e) {} } } return new Response(JSON.stringify(events), { headers: { "Content-Type": "application/json" } });
     }
     if (request.method === "POST") {
+      if (url.pathname === "/ig/deauth" || url.pathname === "/ig/delete") return igRoute(env, url, request);   // v149 - Meta's deauthorise / data-deletion callbacks
       if (url.pathname === "/walk_status") {                   // v119 - UnReal streamer heartbeat from the laptop (every 30 s while the game runs)
         const _wh = request.headers.get("X-Azimuth-Ingest");
         if (!env.INGEST_TOKEN || !_wh || !ctEq(_wh, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
@@ -3883,6 +3885,7 @@ export default {
         try { await env.MEETINGS.put("minute_tick_at", new Date().toISOString(), { expirationTtl: 86400 }); } catch (e) {}
         try { await meetingNudges(env); } catch (e) {}
         try { await picResume(env, "", 90000); } catch (e) {}
+        try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
       })());
       return;
     }
@@ -4307,6 +4310,7 @@ async function draftFromAngle(env, to, kind, n) {
       const _st = await renderAngleCard(env, _ang, n, _o, ctx.at, to, "story");
       if (_sq) await waSendImage(env, to, _sq.url, "Your card for angle " + n + (_sq.area ? " · " + _sq.area : "") + " - 1080×1080 for the grid.");
       if (_st) await waSendImage(env, to, _st.url, "Same card at 1080×1920 - Stories, Reels and TikTok.");
+      if (_sq || _st) await cardLedger(env, { kind: "angle", key: (_sq || _st).key, n, hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "", area: (_sq && _sq.area) || "" });   // v149
       if (!_sq && !_st) await waSend(env, to, "🖼 Your cards for angle " + n + " (square and 9:16) are rendering - they land here in a few minutes."); } catch (e) {}
   }
   await waSend(env, to, bgPromptBlock(_ang || { hook: "", figure: "", source: "" }));
@@ -8418,7 +8422,12 @@ async function sceneJobRun(env, jk, j, origin) {
     let sentSq = false, sentSt = false;
     if (sq) { const r = await waSendImage(env, j.to, sq.url, String(post.caption || "").slice(0, 1000)); sentSq = !!(r && r.ok); }
     if (st) { const r = await waSendImage(env, j.to, st.url, "Same picture at 1080×1920 for Stories."); sentSt = !!(r && r.ok); }
-    if (sentSq || sentSt) { try { await env.MEETINGS.delete(jk); } catch (e) {} return { done: true, square: sq && sq.url, story: st && st.url }; }
+    if (sentSq || sentSt) {
+      try { await env.MEETINGS.delete(jk); } catch (e) {}
+      await cardLedger(env, { kind: "scene", key: j.sceneKey, n: post.n, hook: post.hook || "", figure: post.figure || "", source: post.source || "", area: post.masthead || "",
+        backdrop: (j.option || {}).name || "", time: (SCENE_TIMES.find(x => x.id === j.tid) || {}).name || "", photo: j.meKey || "", caption: String(post.caption || "").slice(0, 400) });   // v149
+      return { done: true, square: sq && sq.url, story: st && st.url };
+    }
     err = "send rejected";
   } catch (e) { err = String((e && e.message) || e).slice(0, 200); }
   j.running_until = 0;
@@ -8429,6 +8438,317 @@ async function sceneJobRun(env, jk, j, origin) {
   }
   try { await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
   return { done: false, why: err };
+}
+// v149 - CARD LEDGER + INSTAGRAM INSIGHTS (Kendall, 14 Sep 2026: "Instagram insights on her posts, to learn which cards perform").
+// Every card sent to her goes into cards_sent: what it said, and which look, backdrop, time of day and photo made it. Her Instagram
+// connects once through Instagram's own login, on a separate Meta app ("Azimuth Insights", her account as an Instagram tester, so
+// no Meta review and the live WhatsApp app untouched). The minute tick reads her posts and Stories every three hours (a Story's
+// numbers are gone 24 hours after it goes up), keeps the 60-day token fresh, and the report matches each post to the card it came
+// from. Off unless IG_APP_ID is set (azimuth-2 only). The app secret lives only in the IG_APP_SECRET secret; no route prints the token.
+async function cardLedger(env, e) {
+  if (env.CARD_LEDGER !== "on") return;
+  try {
+    let L = []; try { L = JSON.parse((await env.MEETINGS.get("cards_sent")) || "[]"); } catch (x) {}
+    L.push(Object.assign({ at: new Date().toISOString() }, e));
+    await env.MEETINGS.put("cards_sent", JSON.stringify(L.slice(-400)));
+  } catch (x) {}
+}
+const IG_GRAPH = "https://graph.instagram.com";
+const IG_SCOPES = "instagram_business_basic,instagram_business_manage_insights";
+const IG_METRICS = {   // Meta's media insights reference, read 14 Sep 2026: impressions is gone for media after 2 Jul 2024, views replaces it
+  FEED: ["reach", "views", "likes", "comments", "saved", "shares", "total_interactions", "follows", "profile_visits"],
+  REELS: ["reach", "views", "likes", "comments", "saved", "shares", "total_interactions", "ig_reels_avg_watch_time"],
+  STORY: ["reach", "views", "replies", "shares", "total_interactions", "follows", "profile_visits"],
+};
+const igRedirect = (env) => pubOrigin(env, "") + "/ig/callback";
+async function igAuth(env) { try { return JSON.parse((await env.MEETINGS.get("ig_auth")) || "null"); } catch (e) { return null; } }
+async function igNote(env, text) {
+  try { const L = JSON.parse((await env.MEETINGS.get("ig_log")) || "[]"); L.push({ at: new Date().toISOString(), text: String(text).slice(0, 240) }); await env.MEETINGS.put("ig_log", JSON.stringify(L.slice(-50))); } catch (e) {}
+}
+async function igGet(env, path, token, params) {
+  const u = new URL(IG_GRAPH + path);
+  for (const k in (params || {})) u.searchParams.set(k, String(params[k]));
+  u.searchParams.set("access_token", token);
+  let r = null, j = null;
+  try { r = await fetch(u.toString()); } catch (e) { return { err: "network: " + String((e && e.message) || e).slice(0, 80), code: 0 }; }
+  try { j = await r.json(); } catch (e) {}
+  if (!r.ok || !j || j.error) return { err: String((j && j.error && (j.error.message || j.error.type)) || ("HTTP " + r.status)).slice(0, 160), code: j && j.error ? j.error.code : r.status };
+  return j;
+}
+const igVal = (d) => d && d.values && d.values[0] && typeof d.values[0].value === "number" ? d.values[0].value : (d && d.total_value && typeof d.total_value.value === "number" ? d.total_value.value : null);
+// One unsupported metric fails the whole request, so after a metric or parameter error each metric is asked for on its own.
+async function igMetrics(env, path, token, metrics, base) {
+  const got = {}, errs = []; let calls = 1;
+  const take = (j) => { for (const d of (j.data || [])) { const v = igVal(d); if (v !== null) got[d.name] = v; } };
+  const j = await igGet(env, path, token, Object.assign({}, base || {}, { metric: metrics.join(",") }));
+  if (!j.err) { take(j); return { got, errs, calls }; }
+  if (metrics.length === 1 || !(j.code === 100 || /metric|param/i.test(j.err))) { errs.push(j.err); return { got, errs, calls }; }
+  for (const k of metrics) {
+    const one = await igGet(env, path, token, Object.assign({}, base || {}, { metric: k })); calls++;
+    if (one.err) errs.push(k + ": " + one.err); else take(one);
+  }
+  return { got, errs, calls };
+}
+async function igPull(env, opts) {
+  opts = opts || {};
+  const now = Date.now();
+  const out = { at: new Date(now).toISOString(), calls: 0, posts: 0, stories: 0, read: 0, errs: [] };
+  const done = async () => { try { await env.MEETINGS.put("ig_status", JSON.stringify(out), { expirationTtl: 30 * 86400 }); } catch (e) {} return out; };
+  const a = await igAuth(env);
+  if (!a || !a.token) { out.err = "not connected"; return done(); }
+  if (now > (a.expires_at || 0)) { out.err = "token expired - she needs to connect again"; return done(); }
+  if (now - (a.token_at || 0) > 20 * 86400000) {                                   // a 60-day token, refreshed once it is 20 days old
+    const r = await igGet(env, "/refresh_access_token", a.token, { grant_type: "ig_refresh_token" }); out.calls++;
+    if (r.err) out.errs.push("refresh: " + r.err);
+    else if (r.access_token) { a.token = r.access_token; a.token_at = now; a.expires_at = now + (Number(r.expires_in) || 5184000) * 1000; out.refreshed = true; }
+  }
+  const me = await igGet(env, "/me", a.token, { fields: "user_id,username,account_type,followers_count,media_count" }); out.calls++;
+  if (me.err) { out.err = "profile: " + me.err; try { await env.MEETINGS.put("ig_auth", JSON.stringify(a)); } catch (e) {} return done(); }
+  Object.assign(a, { username: me.username || a.username, account_type: me.account_type || a.account_type, followers: me.followers_count, media_count: me.media_count });
+  await env.MEETINGS.put("ig_auth", JSON.stringify(a));
+  try {                                                                            // followers, one reading per Dubai day
+    const day = gstDateStr(gstNow()); const H = JSON.parse((await env.MEETINGS.get("ig_followers")) || "[]");
+    if (typeof me.followers_count === "number") { if (H.length && H[H.length - 1].day === day) H[H.length - 1].n = me.followers_count; else H.push({ day, n: me.followers_count }); await env.MEETINGS.put("ig_followers", JSON.stringify(H.slice(-400))); }
+  } catch (e) {}
+  let M = {}; try { M = JSON.parse((await env.MEETINGS.get("ig_media")) || "{}"); } catch (e) {}
+  const fields = "id,caption,media_type,media_product_type,timestamp,permalink,media_url,thumbnail_url";
+  const seen = []; let after = "", pages = 0;
+  do {
+    const p = await igGet(env, "/me/media", a.token, Object.assign({ fields, limit: 50 }, after ? { after } : {})); out.calls++; pages++;
+    if (p.err) { out.errs.push("posts: " + p.err); break; }
+    for (const x of (p.data || [])) seen.push(x);
+    after = (p.paging && p.paging.next && p.paging.cursors && p.paging.cursors.after) || "";
+  } while (after && pages < (opts.pages || 6));
+  const st = await igGet(env, "/me/stories", a.token, { fields }); out.calls++;
+  if (st.err) out.errs.push("stories: " + st.err); else for (const x of (st.data || [])) seen.push(Object.assign({}, x, { media_product_type: "STORY" }));
+  for (const x of seen) {
+    const e = M[x.id] || { id: x.id };
+    Object.assign(e, { type: x.media_type || e.type, product: x.media_product_type || e.product || "FEED", at: x.timestamp || e.at, permalink: x.permalink || e.permalink,
+      caption: String(x.caption || "").slice(0, 400), thumb: x.thumbnail_url || x.media_url || e.thumb || "" });
+    M[x.id] = e;
+    if (e.product === "STORY") out.stories++; else out.posts++;
+  }
+  // what to read this time: live Stories every run, posts under 14 days old every few hours, posts never read, older posts weekly
+  const due = Object.values(M).filter(e => {
+    const age = now - Date.parse(e.at || 0), since = now - (e.read_at || 0);
+    if (e.product === "STORY") return age < 26 * 3600000 && since > 40 * 60000;
+    if (!e.read_at) return true;
+    return age < 14 * 86400000 ? since > 2.5 * 3600000 : since > 7 * 86400000;
+  }).sort((x, y) => (x.product === "STORY" ? 0 : 1) - (y.product === "STORY" ? 0 : 1) || Date.parse(y.at || 0) - Date.parse(x.at || 0));
+  for (const e of due.slice(0, opts.cap || 60)) {
+    const r = await igMetrics(env, "/" + e.id + "/insights", a.token, IG_METRICS[e.product === "STORY" ? "STORY" : e.product === "REELS" ? "REELS" : "FEED"]);
+    out.calls += r.calls; out.read++;
+    if (Object.keys(r.got).length) e.m = Object.assign(e.m || {}, r.got);
+    e.read_at = now; e.errs = r.errs.slice(0, 3);
+  }
+  const M2 = {}; for (const e of Object.values(M).sort((x, y) => Date.parse(y.at || 0) - Date.parse(x.at || 0)).slice(0, 500)) M2[e.id] = e;
+  await env.MEETINGS.put("ig_media", JSON.stringify(M2));
+  try {                                                                            // the account's day and who follows her, once a Dubai day
+    const day = gstDateStr(gstNow()); let A = null; try { A = JSON.parse((await env.MEETINGS.get("ig_account")) || "null"); } catch (e) {}
+    if (!A || A.day !== day || opts.force) {
+      A = { day, at: new Date().toISOString(), totals: {}, audience: {}, errs: [] };
+      const t = await igMetrics(env, "/me/insights", a.token, ["reach", "views", "accounts_engaged", "total_interactions", "follows_and_unfollows"], { period: "day", metric_type: "total_value" });
+      out.calls += t.calls; A.totals = t.got; for (const x of t.errs) A.errs.push("day totals: " + x);
+      for (const b of ["age", "gender", "city", "country"]) {                     // needs 100+ followers; she had 378 on 14 Sep 2026
+        const g = await igGet(env, "/me/insights", a.token, { metric: "follower_demographics", period: "lifetime", metric_type: "total_value", timeframe: "this_month", breakdown: b }); out.calls++;
+        if (g.err) { A.errs.push(b + ": " + g.err); continue; }
+        const d = (g.data || [])[0], bd = d && d.total_value && d.total_value.breakdowns && d.total_value.breakdowns[0];
+        A.audience[b] = ((bd && bd.results) || []).map(x => ({ k: (x.dimension_values || []).join(" "), n: x.value })).sort((p, q) => q.n - p.n).slice(0, 12);
+      }
+      await env.MEETINGS.put("ig_account", JSON.stringify(A));
+    }
+  } catch (e) { out.errs.push("account: " + String((e && e.message) || e).slice(0, 80)); }
+  await igSeedLedger(env);
+  return done();
+}
+// Cards sent before the ledger existed: the outbox kept the first 90 characters of each picture's caption, enough to match on.
+async function igSeedLedger(env) {
+  if (env.CARD_LEDGER !== "on") return;
+  try {
+    if (await env.MEETINGS.get("cards_sent_seeded")) return;
+    const q = JSON.parse((await env.MEETINGS.get("wa_outbox")) || "[]");
+    let L = []; try { L = JSON.parse((await env.MEETINGS.get("cards_sent")) || "[]"); } catch (e) {}
+    const first = L.length ? Date.parse(L[0].at || 0) : Infinity;
+    const old = q.filter(r => r && r.kind === "image" && String(r.note || "").length >= 25 && !/^(Same (picture|card) at|Photo \d|Your card for angle)/.test(r.note) && Date.parse(r.sent_at || 0) < first - 60000)
+      .map(r => ({ at: r.sent_at, kind: "sent", caption: r.note, seeded: true }));
+    L = old.concat(L).sort((x, y) => Date.parse(x.at || 0) - Date.parse(y.at || 0)).slice(-400);
+    await env.MEETINGS.put("cards_sent", JSON.stringify(L)); await env.MEETINGS.put("cards_sent_seeded", "1");
+  } catch (e) {}
+}
+const IG_STOP = new Set("the and for with that this you your are was were has have had not but from into over under what when where who why how its than then them they their there here out our all any can will just more most very about after before also only same been being which while would could should".split(" "));
+const igWords = (t) => String(t || "").toLowerCase().replace(/[‘’']/g, "").replace(/(\d),(?=\d{3}\b)/g, "$1").replace(/[^a-z0-9%.\s]/g, " ").split(/\s+/)
+  .map(w => w.replace(/^\.+|\.+$/g, "")).filter(w => w && !IG_STOP.has(w) && (w.length > 2 || /\d/.test(w)));
+// Which card a post came from: the words of the card in her caption, sent before she posted (10 days; a Story, 2 days). A Story has no
+// caption to read, so it is only called "likely" when a card reached her in the 30 hours before it went up.
+function igMatch(post, ledger) {
+  const pt = Date.parse(post.at || 0); if (!pt) return null;
+  const pw = new Set(igWords(post.caption));
+  let best = null;
+  for (const c of (ledger || [])) {
+    const ct = Date.parse(c.at || 0); if (!ct || ct > pt + 3600000) continue;
+    const gap = pt - ct; if (gap > (post.product === "STORY" ? 2 : 10) * 86400000) continue;
+    const cw = [...new Set(igWords([c.hook, c.figure, c.caption].filter(Boolean).join(" ")))];
+    let score = 0;
+    if (pw.size && cw.length) { let hit = 0; for (const w of cw) if (pw.has(w)) hit++; score = hit / Math.min(cw.length, 20); }
+    const figHit = igWords(c.figure).some(w => /\d/.test(w) && pw.has(w));
+    const how = (score >= 0.35 || (figHit && score >= 0.2)) ? "caption" : (!pw.size && gap < 30 * 3600000 ? "timing" : "");
+    if (!how) continue;
+    const rank = (how === "caption" ? 100 : 0) + score * 10 - gap / 86400000;
+    if (!best || rank > best.rank) best = { rank, how, score: Math.round(score * 100) / 100, card: c };
+  }
+  return best;
+}
+async function igReportData(env) {
+  const J = async (k, d) => { try { return JSON.parse((await env.MEETINGS.get(k)) || "null") || d; } catch (e) { return d; } };
+  const M = await J("ig_media", {}), L = await J("cards_sent", []), A = await J("ig_account", null), F = await J("ig_followers", []), S = await J("ig_status", null);
+  const a = await igAuth(env);
+  const KIND = { scene: "scene picture", plate: "backdrop with cut-out", angle: "data card", render: "developer render", sent: "card sent before 14 Sep" };
+  const rows = Object.values(M).map(e => {
+    const m = e.m || {};
+    const inter = typeof m.total_interactions === "number" ? m.total_interactions : ["likes", "comments", "saved", "shares", "replies"].reduce((s, k) => s + (m[k] || 0), 0);
+    const hit = igMatch(e, L);
+    return { id: e.id, at: e.at, product: e.product, type: e.type, permalink: e.permalink, thumb: e.thumb, caption: e.caption, m, interactions: inter,
+      rate: m.reach ? Math.round(1000 * inter / m.reach) / 10 : null,
+      card: hit ? { how: hit.how, score: hit.score, kind: KIND[hit.card.kind] || "card", backdrop: hit.card.backdrop || "", time: hit.card.time || "", photo: hit.card.photo || "",
+        said: hit.card.hook || String(hit.card.caption || "").slice(0, 120), sent: hit.card.at } : null,
+      errs: e.errs || [] };
+  }).sort((x, y) => Date.parse(y.at || 0) - Date.parse(x.at || 0));
+  const G = {};
+  for (const r of rows) {
+    if (typeof r.m.reach !== "number") continue;
+    const label = r.card ? ["Card", r.card.kind, r.card.backdrop, r.card.time].filter(Boolean).join(" · ")
+      : (r.product === "STORY" ? "Story, not from a card" : r.product === "REELS" ? "Reel, not from a card" : "Post, not from a card");
+    const g = G[label] || (G[label] = { group: label, n: 0, reach: 0, views: 0, inter: 0, saved: 0, shares: 0 });
+    g.n++; g.reach += r.m.reach || 0; g.views += r.m.views || 0; g.inter += r.interactions || 0; g.saved += r.m.saved || 0; g.shares += r.m.shares || 0;
+  }
+  const groups = Object.values(G).map(g => ({ group: g.group, posts: g.n, avg_reach: Math.round(g.reach / g.n), avg_views: Math.round(g.views / g.n),
+    avg_interactions: Math.round(10 * g.inter / g.n) / 10, rate: g.reach ? Math.round(1000 * g.inter / g.reach) / 10 : null, saves: g.saved, shares: g.shares }))
+    .sort((x, y) => (y.rate || 0) - (x.rate || 0));
+  return { account: a ? { username: a.username, account_type: a.account_type, followers: a.followers, posts: a.media_count, connected_at: a.connected_at, permissions: a.perms,
+    token_expires: a.expires_at ? new Date(a.expires_at).toISOString() : null } : null, last_read: S, followers: F.slice(-30), audience: A, groups, rows };
+}
+function igReportHtml(d) {
+  const n = (v) => typeof v === "number" ? v.toLocaleString("en-US") : "—";
+  const pct = (v) => typeof v === "number" ? v + "%" : "—";
+  const gst = (t) => t ? new Date(Date.parse(t) + 4 * 3600000).toISOString().slice(0, 16).replace("T", " ") : "";
+  const acc = d.account;
+  const head = acc ? "@" + esc(acc.username) + " · " + n(acc.followers) + " followers · " + n(acc.posts) + " posts · " + (acc.account_type === "MEDIA_CREATOR" ? "creator account" : acc.account_type === "BUSINESS" ? "business account" : esc(acc.account_type || "")) : "Not connected yet";
+  const last = d.last_read ? "Last read " + esc(gst(d.last_read.at)) + " GST · " + n(d.last_read.read) + " posts and Stories · " + n(d.last_read.calls) + " requests" + (d.last_read.err ? " · " + esc(d.last_read.err) : "") : "Not read yet";
+  const groups = d.groups.map(g => "<tr><td>" + esc(g.group) + "</td><td>" + n(g.posts) + "</td><td>" + n(g.avg_reach) + "</td><td>" + n(g.avg_views) + "</td><td>" + n(g.avg_interactions) + "</td><td><b>" + pct(g.rate) + "</b></td><td>" + n(g.saves) + "</td><td>" + n(g.shares) + "</td></tr>").join("");
+  const au = d.audience && d.audience.audience ? d.audience.audience : {};
+  const aud = ["city", "age", "gender", "country"].filter(k => (au[k] || []).length).map(k => "<p><b>" + k + "</b> " + au[k].slice(0, 6).map(x => esc(x.k) + " " + n(x.n)).join(" · ") + "</p>").join("");
+  const rows = d.rows.slice(0, 150).map(r => "<tr><td>" + (r.thumb ? '<img src="' + esc(r.thumb) + '" loading="lazy" referrerpolicy="no-referrer" alt="">' : "") + "</td><td>" + esc(gst(r.at)) + '<br><span class=m>' + esc(String(r.product || "").toLowerCase()) + "</span>" + (r.permalink ? ' <a href="' + esc(r.permalink) + '" target="_blank" rel="noopener">open</a>' : "") +
+    "</td><td>" + n(r.m.reach) + "</td><td>" + n(r.m.views) + "</td><td>" + n(r.m.likes) + "</td><td>" + n(r.m.comments) + "</td><td>" + n(r.m.saved) + "</td><td>" + n(r.m.shares) + "</td><td><b>" + pct(r.rate) + "</b></td><td class=c>" +
+    (r.card ? esc(["Card", r.card.kind, r.card.backdrop, r.card.time].filter(Boolean).join(" · ")) + '<br><span class=m>' + (r.card.how === "caption" ? "matched by caption" : "likely, by timing") + ": " + esc(String(r.card.said || "").slice(0, 80)) + "</span>" : '<span class=m>' + esc(String(r.caption || "").slice(0, 80)) + "</span>") +
+    (r.errs.length ? '<br><span class=e>' + esc(r.errs[0]) + "</span>" : "") + "</td></tr>").join("");
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Which cards perform</title><style>' +
+    "body{margin:0;background:#F6EEE4;color:#0C2A20;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}main{max-width:1180px;margin:0 auto;padding:24px 18px 60px}h1{font:600 26px/1.2 Georgia,serif;margin:0 0 4px}h2{font:600 17px/1.3 Georgia,serif;margin:28px 0 8px}.s{color:#5E6F69;margin:0}" +
+    ".w{overflow-x:auto;background:#fff;border:1px solid #E3D0B8;border-radius:10px}table{border-collapse:collapse;width:100%}th,td{padding:7px 9px;border-bottom:1px solid #EFE3D3;text-align:right;vertical-align:top;white-space:nowrap}th{font-size:12px;color:#5E6F69;font-weight:600;background:#FBF6F0}" +
+    "td:first-child,th:first-child,td.c{text-align:left}td.c{white-space:normal;min-width:260px}img{width:54px;height:54px;object-fit:cover;border-radius:6px;background:#EFE3D3}.m{color:#5E6F69;font-size:12px}.e{color:#9A3B2E;font-size:12px}a{color:#7A5E30}p{margin:4px 0}" +
+    "</style></head><body><main><h1>Which cards perform</h1><p class=s>" + head + "</p><p class=s>" + last + "</p>" +
+    "<h2>By kind of card</h2><p class=s>Rate = likes, comments, saves, shares and replies as a share of the people reached. Instagram's numbers can lag by up to 48 hours.</p>" +
+    "<div class=w><table><tr><th>Group</th><th>Posts</th><th>Avg reach</th><th>Avg views</th><th>Avg interactions</th><th>Rate</th><th>Saves</th><th>Shares</th></tr>" + (groups || "<tr><td colspan=8 class=c>No numbers yet.</td></tr>") + "</table></div>" +
+    (aud ? "<h2>Who follows her</h2>" + aud : "") +
+    "<h2>Every post and Story</h2><div class=w><table><tr><th></th><th>Posted (GST)</th><th>Reach</th><th>Views</th><th>Likes</th><th>Comments</th><th>Saves</th><th>Shares</th><th>Rate</th><th>Card it came from</th></tr>" + (rows || "<tr><td colspan=10 class=c>Nothing read yet.</td></tr>") + "</table></div></main></body></html>";
+}
+// Meta's deauthorise and data-deletion callbacks carry a signed_request: HMAC-SHA256 of the payload with the app secret.
+async function igSigned(env, sr) {
+  const parts = String(sr || "").split("."); if (parts.length !== 2 || !env.IG_APP_SECRET) return null;
+  const b64u = (s) => s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
+  try {
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.IG_APP_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(parts[1])));
+    const want = Uint8Array.from(atob(b64u(parts[0])), c => c.charCodeAt(0));
+    if (want.length !== mac.length) return null;
+    let diff = 0; for (let i = 0; i < mac.length; i++) diff |= mac[i] ^ want[i];
+    if (diff) return null;
+    const data = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64u(parts[1])), c => c.charCodeAt(0))));
+    return data && String(data.algorithm || "").toUpperCase() === "HMAC-SHA256" ? data : null;
+  } catch (e) { return null; }
+}
+async function igRoute(env, url, request) {
+  if (!env.IG_APP_ID) return new Response("not found", { status: 404 });
+  const p = url.pathname;
+  const page = (title, body, st) => new Response('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(title) + "</title><style>" +
+    "body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F0DECC;color:#003C1E;font:17px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}main{max-width:420px;padding:32px 24px;text-align:center}h1{font:600 26px/1.25 Georgia,serif;margin:0 0 12px}p{margin:0;color:#3D5A4E}" +
+    "</style></head><body><main><h1>" + esc(title) + "</h1><p>" + esc(body) + "</p></main></body></html>", { status: st || 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  const json = (o, st) => new Response(JSON.stringify(o, null, 1), { status: st || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  const EXPIRED = ["This link has expired", "Ask for a fresh link and try again."];
+  if (request.method === "POST") {
+    if (p !== "/ig/deauth" && p !== "/ig/delete") return new Response("not found", { status: 404 });
+    let sr = ""; try { const f = await request.formData(); sr = String(f.get("signed_request") || ""); } catch (e) {}
+    const data = await igSigned(env, sr);
+    if (!data) return new Response("bad signed request", { status: 400 });
+    for (const k of ["ig_auth", "ig_media", "ig_account", "ig_followers", "ig_status"].concat(p === "/ig/delete" ? ["ig_log"] : [])) { try { await env.MEETINGS.delete(k); } catch (e) {} }
+    if (p === "/ig/deauth") { await igNote(env, "disconnected from Instagram's side"); return new Response("ok"); }
+    const code = rid() + rid();
+    await env.MEETINGS.put("ig_deleted_" + code, JSON.stringify({ at: new Date().toISOString() }), { expirationTtl: 365 * 86400 });
+    return json({ url: pubOrigin(env, "") + "/ig/deletion?code=" + code, confirmation_code: code });
+  }
+  if (request.method !== "GET") return new Response("not found", { status: 404 });
+  if (p === "/ig/connect") {                                                         // the link she taps: one use, seven days, then Instagram's own login
+    const t = String(url.searchParams.get("t") || "").replace(/[^a-z0-9]/gi, "").slice(0, 40);
+    if (!t || !(await env.MEETINGS.get("ig_state_" + t))) return page(EXPIRED[0], EXPIRED[1], 410);
+    const u = new URL("https://www.instagram.com/oauth/authorize");
+    u.searchParams.set("client_id", env.IG_APP_ID); u.searchParams.set("redirect_uri", igRedirect(env));
+    u.searchParams.set("response_type", "code"); u.searchParams.set("scope", IG_SCOPES); u.searchParams.set("state", t);
+    return Response.redirect(u.toString(), 302);
+  }
+  if (p === "/ig/callback") {
+    if (url.searchParams.get("error")) return page("Nothing was connected", "You can close this page.");
+    const t = String(url.searchParams.get("state") || "").replace(/[^a-z0-9]/gi, "").slice(0, 40);
+    const code = String(url.searchParams.get("code") || "").replace(/#_$/, "");
+    if (!t || !code || !(await env.MEETINGS.get("ig_state_" + t))) return page(EXPIRED[0], EXPIRED[1], 410);
+    if (!env.IG_APP_SECRET) { await igNote(env, "callback reached before IG_APP_SECRET was set"); return page("Not quite ready", "Please try the link again a little later.", 503); }
+    let sj = null;
+    try {
+      const r = await fetch("https://api.instagram.com/oauth/access_token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: env.IG_APP_ID, client_secret: env.IG_APP_SECRET, grant_type: "authorization_code", redirect_uri: igRedirect(env), code }).toString() });
+      sj = await r.json();
+    } catch (e) {}
+    const s0 = sj && (Array.isArray(sj.data) ? sj.data[0] : sj);
+    if (!s0 || !s0.access_token) {
+      await igNote(env, "code exchange failed: " + String((sj && (sj.error_message || (sj.error && (sj.error.message || sj.error)))) || "no token").slice(0, 160));
+      return page("That didn't work", "Instagram didn't finish connecting. Please try the link again.", 502);
+    }
+    const ll = await igGet(env, "/access_token", s0.access_token, { grant_type: "ig_exchange_token", client_secret: env.IG_APP_SECRET });
+    if (ll.err || !ll.access_token) { await igNote(env, "long-lived token failed: " + (ll.err || "no token")); return page("That didn't work", "Instagram didn't finish connecting. Please try the link again.", 502); }
+    const me = await igGet(env, "/me", ll.access_token, { fields: "user_id,username,account_type,followers_count,media_count" });
+    const a = { token: ll.access_token, token_at: Date.now(), expires_at: Date.now() + (Number(ll.expires_in) || 5184000) * 1000,
+      user_id: String((me && me.user_id) || s0.user_id || ""), username: (me && me.username) || "", account_type: (me && me.account_type) || "",
+      followers: me && me.followers_count, media_count: me && me.media_count, perms: String(s0.permissions || ""), connected_at: new Date().toISOString() };
+    await env.MEETINGS.put("ig_auth", JSON.stringify(a));
+    try { await env.MEETINGS.delete("ig_state_" + t); } catch (e) {}
+    await igNote(env, "connected @" + a.username + " (" + (a.account_type || "type unknown") + ", " + a.followers + " followers; permissions: " + (a.perms || "not listed") + ")");
+    return page("You're connected", "Azimuth can now read how your posts and Stories are doing. It can't post, message or change anything. You can close this page.");
+  }
+  if (p === "/ig/deletion") {
+    const c = String(url.searchParams.get("code") || "").replace(/[^a-z0-9]/gi, "").slice(0, 40);
+    let rec = null; try { rec = c ? JSON.parse((await env.MEETINGS.get("ig_deleted_" + c)) || "null") : null; } catch (e) {}
+    return rec ? page("Deleted", "Everything Azimuth held from your Instagram was deleted on " + String(rec.at).slice(0, 10) + ".") : page("Not found", "There is no deletion request with that code.", 404);
+  }
+  if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+  if (p === "/ig_link") {
+    const t = rid() + rid() + rid();
+    await env.MEETINGS.put("ig_state_" + t, JSON.stringify({ at: new Date().toISOString() }), { expirationTtl: 7 * 86400 });
+    return json({ link: pubOrigin(env, url.origin) + "/ig/connect?t=" + t, expires_in_days: 7 });
+  }
+  if (p === "/ig_status") {
+    const a = await igAuth(env);
+    let st = null, log = [];
+    try { st = JSON.parse((await env.MEETINGS.get("ig_status")) || "null"); } catch (e) {}
+    try { log = JSON.parse((await env.MEETINGS.get("ig_log")) || "[]"); } catch (e) {}
+    return json({ app_id: env.IG_APP_ID, secret_set: !!env.IG_APP_SECRET, redirect_uri: igRedirect(env), connected: !!(a && a.token),
+      username: a ? a.username : null, account_type: a ? a.account_type : null, followers: a ? a.followers : null, permissions: a ? a.perms : null,
+      token_expires: a && a.expires_at ? new Date(a.expires_at).toISOString() : null, last_read: st, log: log.slice(-12) });
+  }
+  if (p === "/ig_pull") return json(await igPull(env, { force: url.searchParams.get("force") === "1", cap: Math.min(150, parseInt(url.searchParams.get("cap") || "60", 10) || 60) }));
+  if (p === "/ig_report") {
+    const d = await igReportData(env);
+    if (url.searchParams.get("format") === "json") return json(d);
+    return new Response(igReportHtml(d), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  }
+  return new Response("not found", { status: 404 });
 }
 async function platePhoto(env, angle, place, id) {
   PLATE_LAST_ERR = "";
@@ -8589,6 +8909,7 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
       if (sq2) { const _r = await waSendImage(env, to, sq2.url, String(post.caption || "").slice(0, 1000)); out.sentSq = !!(_r && _r.ok); }
       if (st2) { const _r = await waSendImage(env, to, st2.url, "Same picture at 1080\u00d71920 for Stories."); out.sentSt = !!(_r && _r.ok); }
       if (!out.sentSq && !out.sentSt) out.err = "send rejected";                  // v128 - the card exists; she does not have it
+      else await cardLedger(env, { kind: "render", key: opt.useKey, n: post.n, hook: angle.hook, figure: angle.figure, source: angle.source, area: angle.area, backdrop: opt.name || "", photo: opt.meKey || (out.withMe ? "default" : ""), caption: String(post.caption || "").slice(0, 400) });   // v149
     }
     return out;
   }
@@ -8613,6 +8934,7 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
     if (sq) { const _r = await waSendImage(env, to, sq.url, String(post.caption || (angle.figure + " - " + angle.source)).slice(0, 1000)); out.sentSq = !!(_r && _r.ok); }
     if (st) { const _r = await waSendImage(env, to, st.url, "Same picture at 1080\u00d71920 for Stories."); out.sentSt = !!(_r && _r.ok); }
     if (!out.sentSq && !out.sentSt) out.err = "send rejected";                    // v128
+    else await cardLedger(env, { kind: "plate", key: photo, n: post.n, hook: angle.hook, figure: angle.figure, source: angle.source, area: angle.area, backdrop: opt.name || "", photo: opt.meKey || (meUrl ? "default" : ""), caption: String(post.caption || (angle.figure + " - " + angle.source)).slice(0, 400) });   // v149
   }
   return out;
 }

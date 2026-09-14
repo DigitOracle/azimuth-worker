@@ -101,10 +101,15 @@ MINUTE_TICK = "on"
 SCENE_PICTURES = "on"
 # v148 - scene pictures drawn with GPT Image 2.5 (Kendall, 13 Sep 2026: "use gpt 2.5"). Remove to go back to gpt-image-1.
 SCENE_MODEL = "gpt-image-2.5-sunburst"
+# v149 - every card sent to her is written to cards_sent, so her Instagram numbers can be matched to the card that made the post.
+CARD_LEDGER = "on"
+# v149 - Instagram insights on her account (Kendall, 14 Sep 2026): the Instagram app ID of the "Azimuth Insights" Meta app (public; the secret is IG_APP_SECRET).
+IG_APP_ID = "3591427797679606"
 
 [env.azimuth2.triggers]
 crons = ["0,30 2-18 * * *", "* * * * *"]   # v140 - starts 06:00 GST (was 07:00) so the 06:00 feed has a tick; v146 - the minute tick
 
 # secrets on azimuth-2 (set already; note WA_PHONE_ID is a SECRET here, not a var):
+#   IG_APP_SECRET (v149, the "Azimuth Insights" Instagram app secret - put by Kendall, never seen by the assistant)
 #   ANTHROPIC_API_KEY INGEST_TOKEN READ_KEY WA_FORWARD_TOKEN WA_PHONE_ID
 #   WA_VERIFY_TOKEN WEBHOOK_SECRET WHATSAPP_TOKEN
