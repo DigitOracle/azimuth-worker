@@ -105,6 +105,9 @@ SCENE_MODEL = "gpt-image-2.5-sunburst"
 CARD_LEDGER = "on"
 # v149 - Instagram insights on her account (Kendall, 14 Sep 2026): the Instagram app ID of the "Azimuth Insights" Meta app (public; the secret is IG_APP_SECRET).
 IG_APP_ID = "3591427797679606"
+# v150 - Google Meet (Kendall, 14 Sep 2026). "consent" opens only /gcal/start, /gcal/callback and /gcal/status so she can connect
+# Google Calendar (calendar.events, its own token; Drive untouched). "on" also turns on "meet <when> with <emails>" -> card -> Book it. Remove to switch off.
+GMEET = "consent"
 
 [env.azimuth2.triggers]
 crons = ["0,30 2-18 * * *", "* * * * *"]   # v140 - starts 06:00 GST (was 07:00) so the 06:00 feed has a tick; v146 - the minute tick

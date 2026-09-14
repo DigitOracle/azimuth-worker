@@ -1987,6 +1987,7 @@ export default {
         return new Response("forbidden", { status: 403 });
       }
       if (url.pathname.indexOf("/ig/") === 0 || url.pathname.indexOf("/ig_") === 0) return igRoute(env, url, request);   // v149 - Instagram insights (404 unless IG_APP_ID)
+      if (url.pathname.indexOf("/gcal/") === 0) return gcalRoute(env, url);   // v150 - Google Calendar consent and status for Meet bookings (404 unless GMEET)
       if (url.pathname === "/setbg") {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         if (url.searchParams.get("clear")) { await env.MEETINGS.delete("cfg_bg"); await env.MEETINGS.delete("cfg_bg_ct"); return new Response("backdrop cleared"); }
@@ -2395,6 +2396,7 @@ export default {
         const _pp = "<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Najma by Azimuth - Privacy</title><style>body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;color:#16201E;background:#EEF1EC;line-height:1.55}h1{font-size:1.6rem}h2{font-size:1.1rem;margin-top:28px}a{color:#0A4F4A}</style></head><body>" +
           "<h1>Najma by Azimuth - Privacy</h1><p>Najma is a private assistant operated by DigitAlchemy Tech Limited (Abu Dhabi, UAE) for a single named client. This page describes what the Google integration does.</p>" +
           "<h2>What the Google connection is used for</h2><p>With the account holder's explicit consent, Najma creates files in the account holder's own Google Drive: the drafts, briefs and images it produces for them. It requests only the <code>drive.file</code> permission, which allows it to see, create, edit and delete <em>only files it created itself</em>. It cannot read, list or change any other file in the Drive.</p>" +
+          "<h2>Google Calendar and Google Meet</h2><p>If the account holder separately connects Google Calendar, Najma requests the <code>calendar.events</code> permission and uses it only to create the meetings the account holder has approved one by one in their own chat: an event on their calendar, a Google Meet link, and invitations to the addresses they typed. It does not share, sell or analyse calendar data.</p>" +
           "<h2>What is stored</h2><p>A refresh token for that permission is stored encrypted at rest by the service operator and used solely to write those files. No Google account password is ever seen or stored. No data from the Drive is read back except the folders Najma created.</p>" +
           "<h2>Sharing</h2><p>Nothing obtained through the Google connection is sold, shared with third parties or used for advertising. Files belong to the account holder and remain in their Drive under their control.</p>" +
           "<h2>Revoking</h2><p>The account holder can revoke access at any time at <a href=https://myaccount.google.com/permissions>myaccount.google.com/permissions</a>, or by writing to the operator. On revocation the stored token stops working and is deleted.</p>" +
@@ -3064,6 +3066,7 @@ export default {
             await waSend(env, from, _r === "cleared" ? "🗑 Cleared" : _r === "blocked" ? "📅 Blocked out" : _r === "denied" ? "✋ Kept" : _r === "already" ? "Already handled" : _r === "expired" ? "Expired" : _r === "graph-failed" ? "⚠ Calendar write failed" : "OK");
             return new Response("ok");
           }
+          if (bid.indexOf("gm:") === 0 && await gmeetButton(env, from, bid)) return new Response("ok");   // v150 - Book it / Don't book on a Google Meet card
           if (bid.indexOf("ig:") === 0) { await env.MEETINGS.delete("cand_" + bid.slice(3)); await waSend(env, from, "🙈 Ignored"); return new Response("ok"); }
           if (bid.indexOf("m:") === 0) {
             const _cid = bid.slice(2); let _cand = null; try { _cand = JSON.parse((await env.MEETINGS.get("cand_" + _cid)) || "null"); } catch (e) {}
@@ -3546,6 +3549,7 @@ export default {
             return new Response("ok");
           }
         }
+        if (await gmeetText(env, from, text)) return new Response("ok");            // v150 - "meet Friday 3pm with name@x.com" -> a card to approve (only when GMEET = "on")
         {                                                      // v35 — relationship-memory intents (routed BEFORE recall)
           let pm = text.match(/^(?:merge)\s+(.{1,60})\s+into\s+(.{1,60})$/i);
           if (pm) { await env.MEETINGS.put("palias_" + pslug(pm[1].trim()), pslug(pm[2].trim())); await peopleReindex(env); await waSend(env, from, "🔗 Merged “" + pm[1].trim() + "” into “" + pm[2].trim() + "”."); return new Response("ok"); }
@@ -9199,3 +9203,132 @@ async function newsTick(env, force) {
   await env.MEETINGS.put("mkt_news_seen", JSON.stringify(seen), { expirationTtl: 7 * 86400 });
 }
 
+
+// ── v150 GOOGLE MEET ─────────────────────────────────────────────────────────
+// "meet Friday 3pm with sara@x.com 45m" -> a proposal card -> Book it -> an event on her Google Calendar with a Meet link,
+// invites sent by Google from her account, and an evt_ record so the T-30 nudge and T-15 ring carry the join link.
+// Off unless GMEET = "on"; GMEET = "consent" opens only the /gcal/ connect routes, so she can link Calendar before the command is live. Its own consent and its own token (gcal_token, calendar.events only): the Drive connection
+// (gdrive_token, drive.file) is never read or changed here. Guests come only from addresses typed in her message.
+const GC_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+const GC_REDIRECT = (env) => pubOrigin(env, "") + "/gcal/callback";
+const GMEET_SCHEMA = { type: "object", additionalProperties: false, properties: { ok: { type: "boolean" }, title: { type: ["string", "null"] }, start_iso: { type: ["string", "null"] }, duration_min: { type: ["integer", "null"] } }, required: ["ok", "title", "start_iso", "duration_min"] };
+const GMEET_EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+function gmeetOn(env) { return env.GMEET === "on"; }
+async function gcToken(env) {
+  let t = null; try { t = JSON.parse((await env.MEETINGS.get("gcal_token")) || "null"); } catch (e) {}
+  if (!t || !t.refresh_token || !env.GOOGLE_OAUTH_CLIENT_ID) return null;
+  if (t.access_token && t.exp && t.exp - Date.now() > 120000) return t.access_token;
+  const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: env.GOOGLE_OAUTH_CLIENT_ID, client_secret: env.GOOGLE_OAUTH_CLIENT_SECRET, refresh_token: t.refresh_token, grant_type: "refresh_token" }) });
+  if (!r.ok) { try { await env.MEETINGS.put("gcal_last_err", "refresh " + r.status + " " + (await r.text()).slice(0, 200)); } catch (e) {} return null; }
+  const j = await r.json(); t.access_token = j.access_token; t.exp = Date.now() + (j.expires_in || 3600) * 1000;
+  await env.MEETINGS.put("gcal_token", JSON.stringify(t)); return t.access_token;
+}
+// The typed addresses, lower-cased, de-duplicated. Nothing the model says can add a guest.
+function gmeetEmails(text) {
+  const out = [];
+  for (const m of String(text || "").matchAll(GMEET_EMAIL)) { const e = m[0].toLowerCase().replace(/\.+$/, ""); if (!out.includes(e)) out.push(e); }
+  return out.slice(0, 20);
+}
+// A stated length wins over the model: "45m", "90 min", "1h", "1.5 hours". Default 30, bounded 10-240.
+function gmeetDuration(text, fromModel) {
+  const s = String(text || "").replace(GMEET_EMAIL, " ");
+  let m = s.match(/\b(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b/i); if (m) return Math.min(240, Math.max(10, Math.round(parseFloat(m[1]) * 60)));
+  m = s.match(/\b(\d{1,3})\s*(?:m|min|mins|minute|minutes)\b/i); if (m) return Math.min(240, Math.max(10, parseInt(m[1], 10)));
+  const d = parseInt(fromModel, 10); return d >= 10 && d <= 240 ? d : 30;
+}
+function gmeetCard(p) {
+  return "🎥 *Google Meet - book this?*\n" + p.title + "\n🗓 " + humanGst(p.start_iso) + " GST · " + p.duration_min + " min"
+    + (p.guests.length ? "\n✉️ Invites from your Google account to: " + p.guests.join(", ") : "\n✉️ No guests - just the link for you to share");
+}
+// Returns true when the message was a Meet request (handled, whatever the outcome).
+async function gmeetText(env, from, text) {
+  if (!gmeetOn(env)) return false;
+  const m = String(text || "").match(/^(?:google\s+meet|g-?meet|meet|set\s+up\s+a\s+(?:google\s+)?meet|book\s+a\s+(?:google\s+)?meet)\b[:,\s]+(.{3,})$/i);
+  if (!m) return false;
+  if (!(await gcToken(env))) { await waSend(env, from, "🎥 Google Calendar isn't connected yet, so I can't make a Meet link. Kendall will send you a one-time link to connect it."); return true; }
+  const body = m[1].trim(), guests = gmeetEmails(body);
+  const sys = `You read a request to set up ONE online meeting in the UAE (GST, UTC+4). NOW is ${gstNowIso()} (${gstWeekday()}). ${dateHints()} Output ONLY JSON {"ok":true,"title":"...","start_iso":"YYYY-MM-DDTHH:MM:00+04:00","duration_min":30}. Resolve dates ONLY from the date map; 9am->09:00, 3pm->15:00, noon->12:00. title = a short meeting name from the message (who or what it is about), never an email address; "Meeting" if nothing better. duration_min = stated length in minutes, else null. If no date or time can be read, ok=false and start_iso=null.`;
+  let g = null; try { g = await claudeJSON(env, sys, body, GMEET_SCHEMA); } catch (e) {}
+  const t = g && g.ok && g.start_iso ? Date.parse(g.start_iso) : NaN;
+  if (isNaN(t)) { await waSend(env, from, "🎥 When should it be? Say it like: *meet Friday 3pm with sara@example.com 45m*"); return true; }
+  if (t < Date.now() - 5 * 60000) { await waSend(env, from, "🎥 " + humanGst(g.start_iso) + " GST has already passed - send the time again."); return true; }
+  const id = rid() + rid();
+  const title = String(g.title || "").replace(GMEET_EMAIL, "").replace(/\s+/g, " ").trim().slice(0, 120) || "Meeting";
+  const p = { id, title, start_iso: g.start_iso, duration_min: gmeetDuration(body, g.duration_min), guests, asked: body.slice(0, 300), status: "proposed", at: new Date().toISOString() };
+  await env.MEETINGS.put("gmp_" + id, JSON.stringify(p), { expirationTtl: 86400 });
+  await waSendButtons(env, from, gmeetCard(p), [{ id: "gm:ok:" + id, title: "✅ Book it" }, { id: "gm:no:" + id, title: "✖️ Don't book" }]);
+  return true;
+}
+async function gmeetCreate(env, p) {
+  const tok = await gcToken(env); if (!tok) return { ok: false, why: "not-connected" };
+  const start = new Date(Date.parse(p.start_iso)), end = new Date(start.getTime() + p.duration_min * 60000);
+  const ev = { summary: p.title, start: { dateTime: start.toISOString(), timeZone: "Asia/Dubai" }, end: { dateTime: end.toISOString(), timeZone: "Asia/Dubai" },
+    attendees: p.guests.map(email => ({ email })), conferenceData: { createRequest: { requestId: "az-" + p.id, conferenceSolutionKey: { type: "hangoutsMeet" } } } };
+  const base = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+  const r = await fetch(base + "?conferenceDataVersion=1&sendUpdates=" + (p.guests.length ? "all" : "none"), { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(ev) });
+  if (!r.ok) { const e = (await r.text()).slice(0, 200); try { await env.MEETINGS.put("gcal_last_err", "insert " + r.status + " " + e); } catch (er) {} return { ok: false, why: "insert-" + r.status }; }
+  let j = await r.json();
+  const link = (x) => x.hangoutLink || ((((x.conferenceData || {}).entryPoints) || []).find(e => e.entryPointType === "video") || {}).uri || "";
+  if (!link(j) && j.id) {                                                         // Meet creation can still be pending on the first answer: look once more
+    try { const r2 = await fetch(base + "/" + encodeURIComponent(j.id), { headers: { Authorization: "Bearer " + tok } }); if (r2.ok) j = await r2.json(); } catch (e) {}
+  }
+  return { ok: true, id: j.id, join: link(j) };
+}
+// Returns true when the button belonged to a Meet proposal.
+async function gmeetButton(env, from, bid) {
+  const mm = String(bid || "").match(/^gm:(ok|no):([a-z0-9]{4,40})$/); if (!mm) return false;
+  const key = "gmp_" + mm[2];
+  let p = null; try { p = JSON.parse((await env.MEETINGS.get(key)) || "null"); } catch (e) {}
+  if (!p) { await waSend(env, from, "That Meet request has expired - send it again."); return true; }
+  if (p.status !== "proposed") { await waSend(env, from, "Already handled."); return true; }
+  if (mm[1] === "no") { p.status = "declined"; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 86400 }); await waSend(env, from, "✋ Not booked."); return true; }
+  if (!gmeetOn(env)) { await waSend(env, from, "Google Meet is switched off right now - nothing was booked."); return true; }
+  p.status = "booking"; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 86400 });   // a second tap while Google answers gets "Already handled"
+  let res = null; try { res = await gmeetCreate(env, p); } catch (e) { res = { ok: false, why: String(e && e.message || e).slice(0, 80) }; }
+  if (!res.ok) {
+    p.status = "proposed"; p.last_err = res.why; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 86400 });
+    try { await noteErr(env, "gmeet", res.why); } catch (e) {}
+    await waSend(env, from, res.why === "not-connected" ? "⚠️ Google Calendar isn't connected, so nothing was booked." : "⚠️ Google didn't accept that booking, nothing was created. Tap Book it again in a minute.");
+    return true;
+  }
+  p.status = "booked"; p.gcal_id = res.id; p.join = res.join; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 });
+  const event = { summary: p.title, start_iso: p.start_iso, location: "Google Meet", join: res.join || "", gcal_id: res.id, source: "gmeet", src: { type: "captured", channel: "whatsapp" } };
+  await env.MEETINGS.put("evt_" + Date.now() + "_" + rid(), JSON.stringify(event), { expirationTtl: 60 * 60 * 24 * 21 });
+  await waSend(env, from, "📅 Booked - " + p.title + "\n🗓 " + humanGst(p.start_iso) + " GST · " + p.duration_min + " min"
+    + (res.join ? "\n🎥 Join: " + res.join : "\n🎥 The Meet link is on the event in your Google Calendar")
+    + (p.guests.length ? "\n✉️ Invites sent to " + p.guests.join(", ") : "") + "\nReminders set.");
+  return true;
+}
+// /gcal/start?key= (returns the consent link; &send=1 also sends it to her) · /gcal/callback · /gcal/status?key=
+async function gcalRoute(env, url) {
+  if (!gmeetOn(env) && env.GMEET !== "consent") return new Response("not found", { status: 404 });
+  const p = url.pathname;
+  if (p === "/gcal/start") {
+    if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+    if (!env.GOOGLE_OAUTH_CLIENT_ID) return new Response("GOOGLE_OAUTH_CLIENT_ID / _SECRET not set on the Worker yet", { status: 500 });
+    const st = rid() + rid(); await env.MEETINGS.put("gcal_state", st, { expirationTtl: 3600 });
+    const link = "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({ client_id: env.GOOGLE_OAUTH_CLIENT_ID, redirect_uri: GC_REDIRECT(env), response_type: "code", scope: GC_SCOPE, access_type: "offline", prompt: "consent", include_granted_scopes: "false", state: st, login_hint: url.searchParams.get("hint") || "herrealestatecode@gmail.com" }).toString();
+    if (url.searchParams.get("send")) await waSend(env, env.WA_ALLOWED, "🔗 *One tap to connect Google Calendar*\n\nOpen this link within the hour, sign in as herrealestatecode@gmail.com and allow. It lets Azimuth add and edit events on your calendar so it can book Google Meet calls you approve. It does not touch your Drive files.\n\n" + link);
+    return new Response(link, { headers: { "Content-Type": "text/plain" } });
+  }
+  if (p === "/gcal/callback") {
+    const st = url.searchParams.get("state"), code = url.searchParams.get("code");
+    if (!code || !st || st !== (await env.MEETINGS.get("gcal_state"))) return new Response("This link has expired. Ask for a new one.", { status: 400 });
+    const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: env.GOOGLE_OAUTH_CLIENT_ID, client_secret: env.GOOGLE_OAUTH_CLIENT_SECRET, redirect_uri: GC_REDIRECT(env), grant_type: "authorization_code" }) });
+    const j = await r.json();
+    if (!j.refresh_token) return new Response("Google did not return a lasting permission (" + (j.error || r.status) + "). Please try the link once more and tick Allow.", { status: 400 });
+    if (String(j.scope || "").indexOf(GC_SCOPE) < 0) return new Response("Calendar access was not ticked on Google's screen. Please open the link again and allow it.", { status: 400 });
+    await env.MEETINGS.put("gcal_token", JSON.stringify({ refresh_token: j.refresh_token, access_token: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000, granted: new Date().toISOString() }));
+    await env.MEETINGS.delete("gcal_state");
+    try { await waSend(env, env.WA_ALLOWED, "✅ Google Calendar connected. Say *meet Friday 3pm with name@example.com* and I'll show you the booking to approve before anything is sent." + UPDATE_SIGNOFF); } catch (e) {}
+    return new Response("<!doctype html><meta charset=utf-8><body style=\"font-family:system-ui;background:#E8DCC8;color:#0B3D2E;padding:2rem\"><h2>Connected.</h2><p>Google Calendar is linked. You can close this window.</p>", { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  }
+  if (p === "/gcal/status") {
+    if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+    let t = null; try { t = JSON.parse((await env.MEETINGS.get("gcal_token")) || "null"); } catch (e) {}
+    const tok = t ? await gcToken(env) : null;
+    return new Response(JSON.stringify({ configured: !!env.GOOGLE_OAUTH_CLIENT_ID, connected: !!(t && t.refresh_token), granted: t && t.granted, token_ok: !!tok, last_error: (await env.MEETINGS.get("gcal_last_err")) || null }, null, 1), { headers: { "Content-Type": "application/json" } });
+  }
+  return new Response("not found", { status: 404 });
+}
