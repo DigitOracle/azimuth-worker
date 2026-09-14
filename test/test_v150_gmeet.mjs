@@ -1,4 +1,4 @@
-// v150 - Google Meet from her chat, offline (14 Sep 2026): "meet ..." -> a card -> Book it -> a Calendar event with a Meet link,
+// v150 / v150.1 - Google Meet from her chat and the walkthrough that connects it, offline (14 Sep 2026): "meet ..." -> a card -> Book it -> a Calendar event with a Meet link,
 // invites only to typed addresses, an evt_ record for the nudges; the switch, the consent routes and the Drive token untouched.
 // No network: WhatsApp, Claude and Google are stubbed, and every request is captured and checked.
 import worker from "../src/index.js";
@@ -11,11 +11,12 @@ const KV = {
   async delete(k) { store.delete(k); },
   async list(o) { const p = (o && o.prefix) || ""; return { keys: [...store.keys()].filter(k => k.startsWith(p)).map(name => ({ name })) }; },
 };
-const sent = [], inserts = [], tokenCalls = [];
+const sent = [], inserts = [], tokenCalls = [], ownerNotes = [];
 let claudeOut = null, insertStatus = 200, pendingLink = false;
 globalThis.fetch = async (url, init) => {
   const u = String(url);
   if (u.includes("graph.facebook.com")) { sent.push(JSON.parse(init.body)); return new Response(JSON.stringify({ messages: [{ id: "wamid.out" + sent.length }] }), { status: 200 }); }
+  if (u.includes("/owner_note")) { ownerNotes.push(Object.assign({ token: init.headers["X-Azimuth-Ingest"] }, JSON.parse(init.body))); return new Response("sent", { status: 200 }); }
   if (u.includes("api.anthropic.com")) return new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(claudeOut) }] }), { status: 200 });
   if (u.includes("oauth2.googleapis.com/token")) {
     const b = new URLSearchParams(String(init.body)); tokenCalls.push(Object.fromEntries(b));
@@ -36,6 +37,7 @@ const base = { MEETINGS: KV, READ_KEY: "RK", WA_FORWARD_TOKEN: "FWD", WA_ALLOWED
   ANTHROPIC_API_KEY: "k", GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "cs", PUBLIC_ORIGIN: "https://azimuth-2.digitalchemy.workers.dev" };
 const on = Object.assign({}, base, { GMEET: "on" });
 const ctx = { waitUntil() {} };
+const tpend = []; const tctx = { waitUntil(p) { tpend.push(p); } };
 let mid = 0;
 const post = (message, e) => worker.fetch(new Request("https://x/wa", { method: "POST", headers: { "X-Azimuth-Forward": "FWD", "Content-Type": "application/json" },
   body: JSON.stringify({ entry: [{ changes: [{ field: "messages", value: { metadata: { phone_number_id: "p" }, messages: [Object.assign({ from: HER, id: "wamid.in" + (++mid) }, message)] } }] }] }) }), e, ctx);
@@ -57,27 +59,73 @@ await say("meet Friday 3pm with sara@example.com", base);
 ok(!sent.slice(i).some(m => m.type === "interactive" && /Google Meet/.test(m.interactive.body.text)), "GMEET unset: no Meet card");
 ok(![...store.keys()].some(k => k.startsWith("gmp_")), "GMEET unset: no proposal stored");
 
-// 2. consent mode: routes open, command still off
-const consent = Object.assign({}, base, { GMEET: "consent" });
+// 2. consent mode: the walkthrough in her chat; the meet command still off
+const consent = Object.assign({}, base, { GMEET: "consent", MINUTE_TICK: "on" });
+const last = () => sent[sent.length - 1];
+const btnIds = (m) => m && m.type === "interactive" ? m.interactive.action.buttons.map(b => b.reply.id).join(",") : "";
+const guide = () => JSON.parse(store.get("gcal_guide") || "null") || {};
 r = await get("/gcal/start?key=bad", consent); ok(r.status === 401, "consent: /gcal/start needs the key");
 r = await get("/gcal/start?key=RK", consent); const link = await r.text();
 ok(r.status === 200 && link.includes("scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.events") && !link.includes("drive"), "consent link asks for calendar.events only");
 ok(link.includes("redirect_uri=https%3A%2F%2Fazimuth-2.digitalchemy.workers.dev%2Fgcal%2Fcallback"), "redirect is azimuth-2 /gcal/callback");
-const st = new URL(link).searchParams.get("state");
+store.delete("wa_owner_last_in");   // section 1's message opened her window; close it
 i = sent.length; r = await get("/gcal/start?key=RK&send=1", consent);
-ok(sent.slice(i).length === 1 && sent[sent.length - 1].to === HER && /Google Calendar/.test(sent[sent.length - 1].text.body), "&send=1 sends her one consent message");
-const st2 = new URL(await r.text()).searchParams.get("state");
-r = await get("/gcal/callback?state=" + st + "&code=c", consent); ok(r.status === 400 && !store.has("gcal_token"), "callback with a replaced state is refused");
-r = await get("/gcal/callback?state=" + st2 + "&code=noscope", consent); ok(r.status === 400 && !store.has("gcal_token"), "callback without the calendar scope stores nothing");
-await get("/gcal/start?key=RK", consent);
-const st3 = store.get("gcal_state");
-r = await get("/gcal/callback?state=" + st3 + "&code=good", consent);
-ok(r.status === 200 && JSON.parse(store.get("gcal_token")).refresh_token === "RT2", "good callback stores gcal_token");
+ok(r.status === 409 && sent.length === i, "send=1 with her 24-hour window closed: 409, nothing sent");
+store.set("wa_owner_last_in", new Date().toISOString());
+i = sent.length; r = await get("/gcal/start?key=RK&send=1", consent); let rj = JSON.parse(await r.text());
+ok(r.status === 200 && rj.sent === true && rj.step === "intro" && sent.length === i + 1, "send=1 with the window open: one intro message");
+ok(last().to === HER && /Google Meet from this chat/.test(last().interactive.body.text) && btnIds(last()) === "gc:go,gc:later", "intro: what it is, Let's do it / Later");
+await tap("gc:later", consent); ok(/connect calendar/.test(last().text.body) && guide().step === "later", "Later: tells her how to pick it up");
+await say("connect calendar", consent); ok(btnIds(last()) === "gc:go,gc:later", "\"connect calendar\" restarts the intro");
+i = sent.length; await tap("gc:go", consent);
+const out2 = sent.slice(i);
+ok(out2.length === 2 && /Step 1 of 3/.test(out2[0].text.body) && /Advanced/.test(out2[0].text.body) && /view and edit events/.test(out2[0].text.body), "Let's do it: the three Google screens explained");
+const link1 = (out2[0].text.body.match(/https:\/\/accounts\.google\.com\S+/) || [""])[0];
+ok(link1.includes("calendar.events") && btnIds(out2[1]) === "gc:stuck,gc:new" && guide().step === "link", "the link is in the message, then I'm stuck / New link");
+await tap("gc:stuck", consent); ok(/Wrong account/.test(last().interactive.body.text) && btnIds(last()) === "gc:new,gc:help", "I'm stuck: the fixes, New link / Tell Kendall");
+await tap("gc:help", consent); ok(/Send him a quick message/.test(last().text.body), "Tell Kendall with no route to him: says so honestly");
+const withOwner = Object.assign({}, consent, { OWNER_NOTE_URL: "https://meeting-capture.example/owner_note", INGEST_TOKEN: "ING" });
+await tap("gc:help", withOwner);
+ok(ownerNotes.length === 1 && ownerNotes[0].token === "ING" && /stuck connecting Google Calendar/.test(ownerNotes[0].text) && /let Kendall know/.test(last().text.body), "Tell Kendall with OWNER_NOTE_URL: the note goes to him, she is told");
+// the follow-up: nothing before twenty minutes, one after, never two
+const tick = async () => { await worker.scheduled({ cron: "* * * * *", scheduledTime: Date.now() }, consent, tctx); while (tpend.length) await tpend.shift(); };
+i = sent.length; await tick(); ok(sent.length === i, "tick at once: no follow-up");
+const gg = guide(); gg.link_at = new Date(Date.now() - 21 * 60000).toISOString(); store.set("gcal_guide", JSON.stringify(gg));
+i = sent.length; await tick(); ok(sent.length === i + 1 && /Did the Google step work/.test(last().interactive.body.text) && btnIds(last()) === "gc:stuck,gc:new", "tick after twenty minutes: one follow-up");
+i = sent.length; await tick(); ok(sent.length === i, "next tick: no second follow-up");
+// Google's screen cancelled, a replaced link, calendar box not ticked, then success
+let st = store.get("gcal_state");
+i = sent.length; r = await get("/gcal/callback?state=" + st + "&error=access_denied", consent);
+ok(r.status === 200 && /closed or cancelled/.test(last().interactive.body.text) && !store.has("gcal_state"), "cancelled on Google: told in the chat, link retired");
+await tap("gc:new", consent); const stOld = store.get("gcal_state"); await tap("gc:new", consent);
+r = await get("/gcal/callback?state=" + stOld + "&code=c", consent); ok(r.status === 400 && !store.has("gcal_token"), "an older link after New link: refused");
+st = store.get("gcal_state"); i = sent.length;
+r = await get("/gcal/callback?state=" + st + "&code=noscope", consent);
+ok(r.status === 400 && !store.has("gcal_token") && /calendar box is ticked/.test(last().interactive.body.text) && /scope not granted/.test(store.get("gcal_last_err")), "calendar box not ticked: nothing stored, told how to fix it");
+await tap("gc:new", consent); st = store.get("gcal_state");
+r = await get("/gcal/callback?state=" + st + "&code=good", consent);
+ok(r.status === 200 && JSON.parse(store.get("gcal_token")).refresh_token === "RT2" && !store.has("gcal_last_err"), "good callback stores gcal_token");
+ok(/Kendall is switching Meet bookings on/.test(last().text.body) && guide().step === "connected", "consent mode: connected, told bookings come next");
 ok(store.get("gdrive_token") === drive, "Drive token untouched by the Calendar consent");
-i = sent.length; await say("meet Friday 3pm with sara@example.com", consent);
-ok(!store.has("gmp_") && ![...store.keys()].some(k => k.startsWith("gmp_")), "consent mode: the command is still off");
-r = await get("/gcal/status?key=RK", on); const stj = JSON.parse(await r.text());
-ok(stj.connected === true && stj.token_ok === true, "/gcal/status reports connected");
+await say("meet Friday 3pm with sara@example.com", consent);
+ok(![...store.keys()].some(k => k.startsWith("gmp_")), "consent mode: the command is still off");
+r = await get("/gcal/status?key=RK", consent); const stj = JSON.parse(await r.text());
+ok(stj.connected === true && stj.token_ok === true && stj.mode === "consent" && stj.guide.step === "connected" && stj.window_open === true, "/gcal/status: connected, mode, walkthrough step, window");
+
+// 2b. switched on: Kendall starts it again, she runs the test call
+i = sent.length; r = await get("/gcal/start?key=RK&send=1", on); rj = JSON.parse(await r.text());
+ok(rj.step === "try" && /Google Meet is ready/.test(last().interactive.body.text) && btnIds(last()) === "gc:try,gc:skip", "on: send=1 offers the test call");
+i = sent.length; await tap("gc:try", on);
+const tcard = last().interactive; const tp = JSON.parse(store.get([...store.keys()].find(k => k.startsWith("gmp_"))));
+const tstart = Date.parse(tp.start_iso);
+ok(/Test call - Najma/.test(tcard.body.text) && /15 min/.test(tcard.body.text) && /No guests/.test(tcard.body.text) && tp.trial === true, "Try it: a 15-minute test card, no guests");
+ok(tstart >= Date.now() + 9 * 60000 && tstart <= Date.now() + 16 * 60000 && new Date(tstart).getUTCMinutes() % 5 === 0 && /\+04:00$/.test(tp.start_iso), "test call about ten minutes out, on a five-minute mark, Gulf time");
+await tap(tcard.action.buttons[0].reply.id, on);
+ok(inserts.length === 1 && inserts[0].url.includes("sendUpdates=none") && inserts[0].body.attendees.length === 0, "test booking: nobody invited");
+ok(/From now on just say \*meet\*/.test(last().text.body) && last().text.body.includes("https://meet.google.com/abc-defg-hij") && guide().step === "done", "booked: join link and how to use it; walkthrough done");
+await say("connect calendar", on); ok(/already connected/.test(last().text.body), "\"connect calendar\" after done: already connected");
+inserts.length = 0;
+for (const k of [...store.keys()]) if (k.startsWith("evt_")) store.delete(k);   // the walkthrough's test call is not part of the counts below
 
 // 3. on: a card, guests only from typed addresses, length from the text
 i = sent.length; claudeOut = { ok: true, title: "Sara from Emaar ghost@evil.com", start_iso: future, duration_min: 30 };
@@ -124,7 +172,7 @@ await say("meet with sara@example.com", on); ok(/When should it be/.test(sent[se
 claudeOut = { ok: true, title: "Old", start_iso: "2020-01-01T10:00:00+04:00", duration_min: null };
 await say("meet 1 Jan 2020 10am", on); ok(/already passed/.test(sent[sent.length - 1].text.body), "past time: refused");
 store.delete("gcal_token"); const n = inserts.length;
-await say("meet tomorrow 3pm team", on); ok(/isn't connected/.test(sent[sent.length - 1].text.body) && inserts.length === n, "no calendar token: says so, books nothing");
+await say("meet tomorrow 3pm team", on); ok(/isn't connected/.test(sent[sent.length - 1].interactive.body.text) && btnIds(sent[sent.length - 1]) === "gc:go,gc:later" && inserts.length === n, "no calendar token: offers to connect, books nothing");
 ok(store.get("gdrive_token") === drive, "Drive token still untouched at the end");
 
 console.log(`\n${pass} passed, ${fail} failed`);
