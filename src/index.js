@@ -8040,7 +8040,7 @@ window.__onClear=()=>{if(MESHES)MESHES.forEach(m=>ghost(m,false))};
 // ordinal blue ramp for filling up, two poles and a neutral middle for the other two; buildings with no record recede.
 // Data: /img/building_activity, pushed weekly by the pipeline; there is no nationality in it.
 const COLBANDS={fill:["#184f95","#2a78d6","#6da7ec","#b7d3f6"],residents:["#d95926","#c3c2b7","#3987e5"],activity:["#d95926","#c3c2b7","#3987e5"]};
-const COLNAME={fill:"Filling up",residents:"Residents vs businesses",activity:"Activity vs Dubai"};
+const COLNAME={fill:"Filling up",residents:"Residents vs businesses",activity:"Move-ins vs Dubai"};
 const esc3=(t)=>String(t==null?"":t).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let BACT=null,BACTLOAD=null,CMODE="";
 function loadBact(){if(!BACTLOAD)BACTLOAD=fetch("/img/building_activity?t="+Math.floor(Date.now()/3600000)).then(r=>r.ok?r.json():null).then(j=>{BACT=j&&j.buildings?j:null;return BACT}).catch(()=>null);return BACTLOAD}
@@ -8049,7 +8049,7 @@ function colourCtl(){
   if(document.getElementById("colsel"))return;
   let wrap=document.getElementById("devwrap");if(!wrap){wrap=document.createElement("div");wrap.id="devwrap";document.body.appendChild(wrap)}
   const sel=document.createElement("select");sel.id="colsel";
-  sel.innerHTML='<option value="">colours: standard</option><option value="fill">colour by: filling up</option><option value="residents">colour by: residents vs businesses</option><option value="activity">colour by: activity vs Dubai</option>';
+  sel.innerHTML='<option value="">colours: standard</option><option value="fill">colour by: filling up</option><option value="residents">colour by: residents vs businesses</option><option value="activity">colour by: move-ins vs Dubai</option>';
   sel.onchange=()=>applyColour(sel.value);wrap.appendChild(sel);
   const lg=document.createElement("div");lg.id="clegend";document.body.appendChild(lg);}
 function applyColour(mode){
@@ -8840,21 +8840,26 @@ const PRIVATE_DATA = ["community_resident_mix"];
 function cleanResidentMix(j) {
   const pct = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
   const idOf = (v) => String(v == null ? "" : v).replace(/[^0-9A-Za-z_-]/g, "").slice(0, 12);
+  const txt = (v, n) => String(v == null ? "" : v).slice(0, n || 80);
   const communities = (Array.isArray(j && j.communities) ? j.communities : []).map(c => ({
-    comm: idOf(c.comm), name: String(c.name || "").slice(0, 80),
-    mix: (Array.isArray(c.mix) ? c.mix : []).filter(x => Array.isArray(x) && x.length >= 2).map(x => [String(x[0]).slice(0, 60), pct(x[1])]).slice(0, 30),
+    comm: idOf(c.comm), name: txt(c.name), label: txt(c.label || c.name), official: txt(c.official || c.name),
+    known: (Array.isArray(c.known) ? c.known : []).map(x => txt(x)).slice(0, 12),
+    mix: (Array.isArray(c.mix) ? c.mix : []).filter(x => Array.isArray(x) && x.length >= 2).map(x => [txt(x[0], 60), pct(x[1])]).slice(0, 30),
     other: pct(c.other), noNationalityPct: pct(c.noNationalityPct),
-    bands: Object.fromEntries(Object.entries(c.bands || {}).filter(([, v]) => [5, 10, 20, 40].includes(Number(v))).map(([k, v]) => [String(k).slice(0, 60), Number(v)])),
+    bands: Object.fromEntries(Object.entries(c.bands || {}).filter(([, v]) => [5, 10, 20, 40].includes(Number(v))).map(([k, v]) => [txt(k, 60), Number(v)])),
     lon: Math.round(Number(c.lon) * 1e5) / 1e5, lat: Math.round(Number(c.lat) * 1e5) / 1e5, onMap: !!c.onMap,
-  })).filter(c => c.comm);
-  const outlines = {};
+  })).filter(c => c.comm);   // no accounts: Kendall approved rounded shares only, no counts
+  const outlines = {}, names = {};
   for (const k in ((j && j.outlines) || {})) {
     const ring = j.outlines[k];
     if (Array.isArray(ring) && ring.length >= 3) outlines[idOf(k)] = ring.slice(0, 5000).filter(p => Array.isArray(p) && p.length >= 2).map(p => [Math.round(Number(p[0]) * 1e5) / 1e5, Math.round(Number(p[1]) * 1e5) / 1e5]);
   }
-  return { generated: String((j && j.generated) || "").slice(0, 40), source: String((j && j.source) || "").slice(0, 300), audience: String((j && j.audience) || "").slice(0, 400),
-    notes: (Array.isArray(j && j.notes) ? j.notes : []).map(x => String(x).slice(0, 400)).slice(0, 10),
-    nationalities: (Array.isArray(j && j.nationalities) ? j.nationalities : []).map(x => String(x).slice(0, 60)).slice(0, 40), communities, outlines };
+  for (const k in ((j && j.names) || {})) { const n = j.names[k] || {}; names[idOf(k)] = { label: txt(n.label), official: txt(n.official) }; }
+  const r = (j && j.rules) || {};
+  return { generated: txt(j && j.generated, 40), source: txt(j && j.source, 300), audience: txt(j && j.audience, 400),
+    rules: { minResidentialAccounts: Number(r.minResidentialAccounts) || 500, minSharePct: Number(r.minSharePct) || 5, filterBands: [5, 10, 20, 40] },   // thresholds, not counts of anything
+    notes: (Array.isArray(j && j.notes) ? j.notes : []).map(x => txt(x, 400)).slice(0, 10),
+    nationalities: (Array.isArray(j && j.nationalities) ? j.nationalities : []).map(x => txt(x, 60)).slice(0, 40), communities, names, outlines };
 }
 async function ingestPrivate(env, request) {
   const h = request.headers.get("X-Azimuth-Ingest");
@@ -8883,68 +8888,136 @@ async function residentsRoute(env, url) {
   }
   return new Response(renderResidents(), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
 }
+// The layout Kendall used on the laptop (scripts/dewa_views_template.html, residents tab), served from here with the data read from the
+// private route and no counts: chips, minimum share, search with a ranked list, map shading, gold outline on the selected community,
+// detail panel with bars. Phones get a bottom sheet over a full-screen map. Teal ramp from the template, validated on its ground.
 function renderResidents() {
-  return `<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - residents (private)</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}
+  return `<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - residents (private)</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0e1413">${NAJ_FONTS}
 <link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
-:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
-html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif}
-#m{position:fixed;inset:0}
-#pn{position:fixed;left:12px;top:12px;width:min(360px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;box-sizing:border-box;background:rgba(19,31,29,.95);border:1px solid var(--line);border-radius:14px;padding:12px 14px;z-index:2}
-#pn h1{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.15rem;margin:0}
-.pv{color:var(--gold);font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;margin:3px 0 8px}
-.hd{color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;text-transform:uppercase;letter-spacing:.08em;margin:10px 0 5px}
-.ch{display:flex;flex-wrap:wrap;gap:5px}.mn{display:flex;gap:5px}
-.ch button,.mn button{font-family:"IBM Plex Mono",monospace;font-size:.64rem;border:1px solid var(--line);background:rgba(24,42,38,.9);color:var(--text);border-radius:99px;padding:5px 9px;cursor:pointer}
-.ch button.on,.mn button.on{border-color:var(--gold);color:var(--gold);background:rgba(197,165,106,.14)}
-.lr{display:flex;align-items:center;gap:8px;font-family:"IBM Plex Mono",monospace;font-size:.64rem;margin:3px 0}.lr b{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}.lr i{margin-left:auto;font-style:normal;color:var(--mut)}
-.nt{color:var(--mut);font-size:.62rem;line-height:1.4;margin-top:8px}
-.maplibregl-popup-content{background:#131F1D;color:#E8E4D8;border:1px solid #24352F;border-radius:10px;font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.72rem;padding:9px 11px}
-.maplibregl-popup-tip{border-top-color:#131F1D!important;border-bottom-color:#131F1D!important}
-.pp b{font-family:Fraunces,Georgia,serif;font-size:.88rem;display:block;margin-bottom:4px}.pp .r{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #24352F;padding:3px 0;font-family:"IBM Plex Mono",monospace;font-size:.64rem}.pp .r.on{color:#C5A56A}
-@media(max-width:640px){#pn{top:auto;bottom:12px;max-height:48vh}}
-</style></head><body><div id=m></div>
-<div id=pn><h1>Residents by nationality</h1><div class=pv>Private &middot; for Kendall and Naj only</div>
-<div class=hd>Nationalities</div><div class=ch id=ch></div>
-<div class=hd>Show a community when one of them is at least</div><div class=mn id=mn></div>
-<div class=hd>Largest share among the selected</div><div id=lg></div>
-<div class=nt id=nt>Loading the communities...</div></div>
+:root{--ground:#0e1413;--panel:#151d1c;--raise:#1b2524;--ink:#e8eeec;--muted:#9aa9a5;--line:#26312f;--teal:#2f8a7f;--gold:#c5a56a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--ground);color:var(--ink);font:14px/1.45 "IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif}
+#map{position:fixed;top:0;bottom:0;left:340px;right:360px}
+#side{position:fixed;top:0;bottom:0;left:0;width:340px;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:14px;z-index:3}
+#detail{position:fixed;top:0;bottom:0;right:0;width:360px;overflow:auto;background:var(--panel);border-left:1px solid var(--line);padding:14px}
+h1{margin:0;font-family:Fraunces,Georgia,serif;font-size:18px;font-weight:600}
+.flag{display:inline-block;margin-top:6px;padding:3px 9px;border-radius:4px;background:var(--gold);color:#1d1608;font-size:11.5px;font-weight:700}
+.sub{color:var(--muted);font-size:11.5px;margin-top:6px}
+.card{margin-top:14px}
+.label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--raise);color:var(--ink);border-radius:999px;padding:4px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--teal);border-color:var(--teal);color:#fff}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;border:0;background:var(--raise);color:var(--ink);padding:7px 0;font:inherit;font-size:12.5px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--gold);color:#1d1608;font-weight:700}
+input[type=search]{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--raise);color:var(--ink);font:inherit}
+button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.list{max-height:300px;overflow:auto;margin:0 -4px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:7px 6px;border-bottom:1px solid var(--line);cursor:pointer}
+.row:hover,.row.sel{background:var(--raise)}
+.row .n{font-weight:600;font-size:13px}.row .o,.row .m{color:var(--muted);font-size:11.5px}
+.tag{font-size:11.5px;padding:1px 7px;border-radius:4px;color:#0b1211;white-space:nowrap;align-self:center;font-weight:600}
+.legend{display:grid;gap:5px;font-size:12.5px}
+.sw{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:7px;vertical-align:middle}
+.note{font-size:12px;color:var(--muted);margin:8px 0 0}
+h2{margin:0;font-family:Fraunces,Georgia,serif;font-size:18px}
+.aka{color:var(--muted);font-size:12.5px;margin-top:2px}
+.bars{display:grid;gap:8px;margin-top:4px}
+.bar{display:grid;grid-template-columns:120px minmax(0,1fr) 40px;gap:8px;align-items:center;font-size:12.5px}
+.bar i{display:block;height:9px;border-radius:2px;background:#58b5a8}.bar b{text-align:right;font-variant-numeric:tabular-nums}
+.maplibregl-popup-content{background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:7px 10px;font:12.5px/1.35 "IBM Plex Sans","Segoe UI",system-ui,sans-serif}
+.maplibregl-popup-tip{display:none}
+#grab{display:none}
+.dwrap{display:none}
+@media(max-width:1100px){#detail{display:none}#map{right:0}#side .dwrap{display:block}}
+@media(max-width:760px){
+#map{left:0;right:0;bottom:0}
+#side{top:auto;left:0;right:0;width:auto;height:44vh;border-right:0;border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.45);padding:0 14px 18px;transition:height .25s ease}
+#side.max{height:86vh}
+#grab{display:block;position:sticky;top:0;z-index:2;background:var(--panel);margin:0 -14px 4px;padding:8px 14px 6px;border:0;width:calc(100% + 28px);text-align:center;color:var(--muted);font:inherit;font-size:11.5px;cursor:pointer}
+#grab::before{content:"";display:block;width:40px;height:4px;border-radius:2px;background:#3a4a48;margin:0 auto 5px}
+.list{max-height:none}
+}
+</style></head><body>
+<div id=map role=region aria-label="Map of Dubai communities shaded by the selected nationalities"></div>
+<aside id=side>
+<button id=grab aria-expanded=false>Tap to expand</button>
+<h1>Residents by community</h1><div class=flag>Private: Kendall and Naj only. Never for clients.</div><div class=sub id=source>Loading the communities...</div>
+<div class="card dwrap" id=detail2 style="display:none"></div>
+<div class=card><p class=label>Nationality</p><div class=chips id=nats></div></div>
+<div class=card><p class=label>Minimum share</p><div class=seg id=mins></div></div>
+<div class=card><p class=label>Community</p><input type=search id=q placeholder="Search: Dubai Marina, JVC, Al Barsha..."><p class=label id=listhead style="margin-top:12px"></p><div class=list id=list></div></div>
+<div class=card><p class=label>Shading</p><div class=legend id=legend></div><p class=note id=rules></p></div>
+</aside>
+<aside id=detail></aside>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>(function(){
 var RK=new URLSearchParams(location.search).get("rk")||"";
-var RAMP={5:"#184f95",10:"#2a78d6",20:"#6da7ec",40:"#b7d3f6"},LBL={5:"5 to 9%",10:"10 to 19%",20:"20 to 39%",40:"40% or more"};
-var D=null,SEL=[],MIN=5,FEAT=[];
+var $=function(id){return document.getElementById(id)};
+var COL={5:"#1f5f58",10:"#2f8a7f",20:"#58b5a8",40:"#a9e2da"},BAND_TXT={5:"5-10%",10:"10-20%",20:"20-40%",40:"40%+"};
+var MIX=null,byComm=new Map(),state={nats:new Set(),min:5,q:"",sel:null},map=null,MINACC=500;
 function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]})}
-var map=new maplibregl.Map({container:"m",style:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",center:[55.27,25.12],zoom:9.6,attributionControl:{compact:true}});
-map.addControl(new maplibregl.NavigationControl({showCompass:false}),"bottom-right");
-function band(c){var best=0;for(var i=0;i<SEL.length;i++){var b=Number((c.bands||{})[SEL[i]]||0);if(b>=MIN&&b>best)best=b}return best}
-function geo(){return {type:"FeatureCollection",features:FEAT.map(function(f){f.properties.band=band(f.c);return {type:"Feature",id:f.id,properties:f.properties,geometry:f.geometry}})}}
-function refresh(){
-  if(!D)return;var src=map.getSource("res");if(src)src.setData(geo());else geo();
-  var n={5:0,10:0,20:0,40:0};FEAT.forEach(function(f){var b=f.properties.band;if(b)n[b]++});
-  document.getElementById("lg").innerHTML=[40,20,10,5].filter(function(b){return b>=MIN}).map(function(b){return '<div class=lr><b style="background:'+RAMP[b]+'"></b>'+LBL[b]+'<i>'+n[b]+' communities</i></div>'}).join("");
-  document.getElementById("nt").innerHTML=(SEL.length?"":"Pick one or more nationalities. ")+esc((D.notes||[]).join(" "))+"<br>"+esc(D.source||"")+(D.generated?" &middot; built "+esc(String(D.generated).slice(0,10)):"");
-  document.querySelectorAll("#ch button").forEach(function(b){b.classList.toggle("on",SEL.indexOf(b.getAttribute("data-n"))>=0)});
-  document.querySelectorAll("#mn button").forEach(function(b){b.classList.toggle("on",Number(b.getAttribute("data-m"))===MIN)});}
-function ui(){
-  document.getElementById("ch").innerHTML=(D.nationalities||[]).map(function(n){return '<button data-n="'+esc(n)+'">'+esc(n)+'</button>'}).join("");
-  document.querySelectorAll("#ch button").forEach(function(b){b.onclick=function(){var n=b.getAttribute("data-n"),i=SEL.indexOf(n);if(i>=0)SEL.splice(i,1);else SEL.push(n);refresh()}});
-  document.getElementById("mn").innerHTML=[5,10,20,40].map(function(m){return '<button data-m="'+m+'">'+m+'%</button>'}).join("");
-  document.querySelectorAll("#mn button").forEach(function(b){b.onclick=function(){MIN=Number(b.getAttribute("data-m"));refresh()}});
-  FEAT=[];(D.communities||[]).forEach(function(c){var ring=(D.outlines||{})[String(c.comm)];if(!ring||ring.length<3)return;var r=ring.slice(),a=r[0],z=r[r.length-1];if(a[0]!==z[0]||a[1]!==z[1])r.push(a);FEAT.push({id:FEAT.length+1,c:c,properties:{comm:String(c.comm),name:c.name||"",band:0},geometry:{type:"Polygon",coordinates:[r]}})});
-  refresh();}
-function layers(){
-  if(map.getSource("res"))return;
-  map.addSource("res",{type:"geojson",data:geo()});
-  map.addLayer({id:"res-fill",type:"fill",source:"res",paint:{"fill-color":["match",["get","band"],5,RAMP[5],10,RAMP[10],20,RAMP[20],40,RAMP[40],"rgba(12,20,19,0.01)"],"fill-opacity":0.7}});
-  map.addLayer({id:"res-line",type:"line",source:"res",paint:{"line-color":"#3A4F49","line-width":0.7}});
-  map.on("click","res-fill",function(e){var f=e.features&&e.features[0];if(!f)return;var c=null;for(var i=0;i<FEAT.length;i++){if(FEAT[i].properties.comm===f.properties.comm){c=FEAT[i].c;break}}if(!c)return;
-    var rows=(c.mix||[]).map(function(x){return '<div class="r'+(SEL.indexOf(x[0])>=0?" on":"")+'"><span>'+esc(x[0])+'</span><span>'+Number(x[1])+'%</span></div>'}).join("")+'<div class=r><span>other</span><span>'+Number(c.other||0)+'%</span></div>'+(c.noNationalityPct?'<div class=r><span>no nationality recorded</span><span>'+Number(c.noNationalityPct)+'%</span></div>':'');
-    new maplibregl.Popup({maxWidth:"280px"}).setLngLat(e.lngLat).setHTML('<div class=pp><b>'+esc(c.name)+'</b>'+rows+'</div>').addTo(map)});
-  map.on("mouseenter","res-fill",function(){map.getCanvas().style.cursor="pointer"});map.on("mouseleave","res-fill",function(){map.getCanvas().style.cursor=""});}
+function labelOf(c){return c.label||c.name||("Community "+c.comm)}
+function nameOf(comm){var c=byComm.get(comm);if(c)return{label:labelOf(c),official:c.official||""};var n=(MIX.names||{})[comm];return n?{label:n.label||("Community "+comm),official:n.official||""}:{label:"Community "+comm,official:""}}
+function bandFor(c){var best=0;state.nats.forEach(function(n){var b=Number((c.bands||{})[n]||0);if(b>=state.min&&b>best)best=b});return best}
+function matchesQ(comm){if(!state.q)return true;var n=nameOf(comm),c=byComm.get(comm)||{};return (n.label+" "+n.official+" "+(c.known||[]).join(" ")).toLowerCase().indexOf(state.q)>=0}
+function features(){return{type:"FeatureCollection",features:Object.keys(MIX.outlines||{}).map(function(comm){var ring=MIX.outlines[comm].slice();if(ring.length&&(ring[0][0]!==ring[ring.length-1][0]||ring[0][1]!==ring[ring.length-1][1]))ring.push(ring[0]);var c=byComm.get(comm),n=nameOf(comm);
+  return{type:"Feature",geometry:{type:"Polygon",coordinates:[ring]},properties:{comm:comm,label:n.label,official:n.official,band:c?bandFor(c):0,shown:!!c,dim:!matchesQ(comm),sel:state.sel===comm}}})}}
+function bboxOf(comm){var ring=(MIX.outlines||{})[comm];if(!ring)return null;var a=[180,90,-180,-90];ring.forEach(function(p){a=[Math.min(a[0],p[0]),Math.min(a[1],p[1]),Math.max(a[2],p[0]),Math.max(a[3],p[1])]});return[[a[0],a[1]],[a[2],a[3]]]}
+function setSheet(max){var s=$("side"),g=$("grab");s.classList.toggle("max",!!max);g.setAttribute("aria-expanded",max?"true":"false");g.textContent=max?"Tap to see more of the map":"Tap to expand"}
+function select(comm,fly){var phone=innerWidth<=760;state.sel=comm;if(phone&&fly)setSheet(false);render();if(phone)$("side").scrollTop=0;
+  if(fly&&map){var b=bboxOf(comm);if(b)map.fitBounds(b,{padding:phone?{top:40,left:30,right:30,bottom:Math.round(innerHeight*0.44)+20}:60,maxZoom:13.5,duration:600})}}
+function detailHtml(){var c=state.sel&&byComm.get(state.sel);
+  if(!c){var n=state.sel?nameOf(state.sel):null;return '<p class=label>Community</p>'+(n?'<h2>'+esc(n.label)+'</h2><div class=aka>'+(n.official&&n.official!==n.label?esc(n.official):'')+'</div><p class=note>Fewer than '+MINACC+' residential accounts with a nationality, so no mix is shown.</p>':'<p class=note>Tap a community on the map or in the list.</p>')}
+  var bars=(c.mix||[]).map(function(x){return '<div class=bar><span>'+esc(x[0])+'</span><i style="width:'+Math.max(2,Number(x[1]))+'%"></i><b>'+Number(x[1])+'%</b></div>'}).join("")+(c.other?'<div class=bar><span>Other</span><i style="width:'+Math.max(2,Number(c.other))+'%;background:#3a4a48"></i><b>'+Number(c.other)+'%</b></div>':"");
+  var label=labelOf(c),official=c.official||"";
+  return '<p class=label>Community</p><h2>'+esc(label)+'</h2><div class=aka>'+(c.known&&c.known.length>2?'Also '+esc(c.known.slice(2).join(", "))+' &middot; ':'')+(official&&official!==label?'Official name: '+esc(official):'Official and common name')+'</div>'+
+    (c.noNationalityPct?'<p class=note>'+Number(c.noNationalityPct)+'% of accounts record no nationality.</p>':'')+
+    '<p class=label style="margin-top:14px">Largest groups</p><div class=bars>'+bars+'</div><p class=note style="margin-top:14px">Account holders, not every resident. For market understanding and planning content; not for recommending homes.</p>'}
+function render(){
+  document.querySelectorAll("#nats .chip").forEach(function(b){b.setAttribute("aria-pressed",state.nats.has(b.getAttribute("data-nat"))?"true":"false")});
+  document.querySelectorAll("#mins button").forEach(function(b){b.setAttribute("aria-pressed",Number(b.getAttribute("data-min"))===state.min?"true":"false")});
+  var hits=(MIX.communities||[]).map(function(c){return[c,bandFor(c)]}).filter(function(h){return h[1]&&matchesQ(String(h[0].comm))});
+  hits.sort(function(a,b){return b[1]-a[1]||labelOf(a[0]).localeCompare(labelOf(b[0]))});
+  var sel=Array.from(state.nats);
+  $("listhead").textContent=sel.length?hits.length+" communities where "+sel.join(" or ")+" reach "+state.min+"%+":"Pick at least one nationality";
+  $("list").innerHTML=hits.map(function(h){var c=h[0],b=h[1],label=labelOf(c),official=c.official||"",top=(c.mix||[]).filter(function(x){return state.nats.has(x[0])}).map(function(x){return esc(x[0])+" "+Number(x[1])+"%"}).join(", ");
+    return '<div class="row'+(state.sel===String(c.comm)?" sel":"")+'" data-comm="'+esc(c.comm)+'"><div><div class=n>'+esc(label)+'</div>'+(official&&official!==label?'<div class=o>'+esc(official)+'</div>':'')+'<div class=m>'+top+'</div></div><span class=tag style="background:'+COL[b]+'">'+BAND_TXT[b]+'</span></div>'}).join("")||'<p class=note>No community matches.</p>';
+  $("list").querySelectorAll(".row").forEach(function(r){r.onclick=function(){select(r.getAttribute("data-comm"),true)}});
+  if(map&&map.getSource("comm"))map.getSource("comm").setData(features());
+  var dh=detailHtml();$("detail").innerHTML=dh;$("detail2").innerHTML=dh;$("detail2").style.display=state.sel?"":"none";}
+$("grab").onclick=function(){setSheet(!$("side").classList.contains("max"))};
+function startMap(){
+  map=new maplibregl.Map({container:"map",style:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",center:[55.24,25.12],zoom:10.2,attributionControl:{compact:true}});
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}),"top-right");
+  map.on("load",function(){
+    var layers=map.getStyle().layers,firstSymbol=(layers.find(function(l){return l.type==="symbol"})||{}).id;
+    var font=((layers.find(function(l){return l.type==="symbol"&&l.layout&&l.layout["text-font"]})||{}).layout||{})["text-font"]||["Open Sans Regular"];
+    map.addSource("comm",{type:"geojson",data:features()});
+    map.addLayer({id:"comm-fill",type:"fill",source:"comm",paint:{"fill-color":["match",["get","band"],40,COL[40],20,COL[20],10,COL[10],5,COL[5],"#000000"],"fill-opacity":["case",["==",["get","band"],0],0.01,["get","dim"],0.2,0.62]}},firstSymbol);
+    map.addLayer({id:"comm-line",type:"line",source:"comm",paint:{"line-color":["case",["get","sel"],"#c5a56a",["get","shown"],"rgba(197,165,106,0.45)","rgba(255,255,255,0.13)"],"line-width":["case",["get","sel"],2.6,0.7]}},firstSymbol);
+    map.addLayer({id:"comm-label",type:"symbol",source:"comm",filter:["any",[">",["get","band"],0],["get","sel"]],layout:{"text-field":["get","label"],"text-font":font,"text-size":11.5,"text-max-width":9,"text-allow-overlap":false},paint:{"text-color":"#f5efe2","text-halo-color":"#0b0f0f","text-halo-width":1.4}});
+    var pop=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:12});
+    map.on("mousemove","comm-fill",function(e){var p=e.features[0].properties;map.getCanvas().style.cursor="pointer";pop.setLngLat(e.lngLat).setHTML("<b>"+esc(p.label)+"</b>"+(p.official&&p.official!==p.label?"<br><span style='color:#9aa9a5'>"+esc(p.official)+"</span>":"")).addTo(map)});
+    map.on("mouseleave","comm-fill",function(){map.getCanvas().style.cursor="";pop.remove()});
+    map.on("click","comm-fill",function(e){select(e.features[0].properties.comm,false)});
+  });}
 fetch("/residents/data?rk="+encodeURIComponent(RK),{cache:"no-store",referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(j){
-  if(!j||!j.communities){document.getElementById("nt").textContent="The residents data is not on file yet.";return}
-  D=j;ui();if(map.isStyleLoaded())layers();else map.on("load",layers)}).catch(function(){document.getElementById("nt").textContent="The residents data did not load."});
+  if(!j||!j.communities){$("source").textContent="The residents data is not on file yet.";return}
+  MIX=j;byComm=new Map(j.communities.map(function(c){return[String(c.comm),c]}));
+  if((j.nationalities||[]).length)state.nats.add(j.nationalities[0]);
+  $("source").textContent=(j.source||"")+". Names from the Land Department's sales records; official Municipality names underneath.";
+  var r0=j.rules||{};MINACC=Number(r0.minResidentialAccounts)||500;$("rules").textContent="Communities with at least "+MINACC+" residential accounts. Groups under "+(r0.minSharePct||5)+"% are pooled; shares rounded. "+((j.notes||[])[0]||"");
+  $("legend").innerHTML=[40,20,10,5].map(function(k){return '<div><span class=sw style="background:'+COL[k]+'"></span>'+BAND_TXT[k]+'</div>'}).join("")+'<div><span class=sw style="border:1px solid #c5a56a88"></span>shown, below your minimum</div><div><span class=sw style="border:1px solid #ffffff22"></span>fewer than '+MINACC+' accounts: not shown</div>';
+  (j.nationalities||[]).forEach(function(n){var b=document.createElement("button");b.className="chip";b.textContent=n;b.setAttribute("data-nat",n);b.onclick=function(){if(state.nats.has(n))state.nats.delete(n);else state.nats.add(n);render()};$("nats").appendChild(b)});
+  [5,10,20,40].forEach(function(v){var b=document.createElement("button");b.textContent=v+"%+";b.setAttribute("data-min",v);b.onclick=function(){state.min=v;render()};$("mins").appendChild(b)});
+  $("q").addEventListener("input",function(e){state.q=e.target.value.trim().toLowerCase();render()});
+  render();
+  if(window.maplibregl)startMap();else $("map").innerHTML='<p class=note style="padding:16px">The map could not load. The list and details still work.</p>';
+}).catch(function(){$("source").textContent="The residents data did not load."});
 })();</script></body></html>`;
 }
 async function platePhoto(env, angle, place, id) {
