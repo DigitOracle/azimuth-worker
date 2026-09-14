@@ -175,5 +175,20 @@ store.delete("gcal_token"); const n = inserts.length;
 await say("meet tomorrow 3pm team", on); ok(/isn't connected/.test(sent[sent.length - 1].interactive.body.text) && btnIds(sent[sent.length - 1]) === "gc:go,gc:later" && inserts.length === n, "no calendar token: offers to connect, books nothing");
 ok(store.get("gdrive_token") === drive, "Drive token still untouched at the end");
 
+// 6. v150.2 - the operator's kick (gcal_kick written with Cloudflare access) starts her walkthrough on the minute tick
+store.delete("gcal_guide");
+const kickEnv = Object.assign({}, consent);
+const kickTick = async () => { await worker.scheduled({ cron: "* * * * *", scheduledTime: Date.now() }, kickEnv, tctx); while (tpend.length) await tpend.shift(); };
+store.delete("wa_owner_last_in"); store.set("gcal_kick", "k1");
+i = sent.length; await kickTick();
+ok(sent.length === i && !store.has("gcal_kick") && JSON.parse(store.get("gcal_kick_result")).sent === false, "kick with her window closed: nothing sent, kick used, result says why");
+store.set("wa_owner_last_in", new Date().toISOString()); store.set("gcal_kick", "k2");
+i = sent.length; await kickTick();
+ok(sent.length === i + 1 && /Google Meet from this chat/.test(last().interactive.body.text) && btnIds(last()) === "gc:go,gc:later", "kick with the window open: her intro, once");
+ok(JSON.parse(store.get("gcal_kick_result")).step === "intro" && guide().step === "intro" && !store.has("gcal_kick"), "kick result recorded; walkthrough at intro");
+store.set("gcal_kick", "k2");
+i = sent.length; await kickTick(); ok(sent.length === i, "the same kick value again: nothing more sent");
+i = sent.length; await kickTick(); ok(sent.length === i, "no kick: the tick sends nothing");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

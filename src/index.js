@@ -9316,8 +9316,21 @@ async function gcGuideButton(env, from, bid) {
   return true;
 }
 // Minute tick: one follow-up if twenty minutes pass after a link without a connection. Never more than one per link.
+// v150.2 - gcal_kick: the operator starts her walkthrough by writing this key with Cloudflare access (wrangler kv), no READ_KEY
+// needed. Each value runs once (gcal_kick_seen); the outcome lands in gcal_kick_result. Nothing is sent while her window is closed.
 async function gcGuideTick(env) {
   if (!gcalOpen(env) || !env.WA_ALLOWED) return;
+  const kick = await env.MEETINGS.get("gcal_kick");
+  if (kick) {
+    await env.MEETINGS.delete("gcal_kick");
+    if ((await env.MEETINGS.get("gcal_kick_seen")) === kick) return;
+    await env.MEETINGS.put("gcal_kick_seen", kick, { expirationTtl: 7 * 86400 });
+    let res;
+    if (!(await ownerWindowOpen(env))) res = { sent: false, why: "her 24-hour WhatsApp window is closed" };
+    else { try { res = { sent: true, step: await gcGuideStart(env, env.WA_ALLOWED) }; } catch (e) { res = { sent: false, why: String(e && e.message || e).slice(0, 120) }; } }
+    await env.MEETINGS.put("gcal_kick_result", JSON.stringify(Object.assign({ at: new Date().toISOString(), kick }, res)), { expirationTtl: 7 * 86400 });
+    return;
+  }
   const g = await gcGuideGet(env); if (!g || g.step !== "link" || g.nudged || !g.link_at) return;
   const age = Date.now() - Date.parse(g.link_at); if (age < 20 * 60000 || age > 6 * 3600000) return;
   g.nudged = true; await gcGuideSet(env, g);
