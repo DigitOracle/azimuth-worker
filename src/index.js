@@ -1988,6 +1988,7 @@ export default {
       }
       if (url.pathname.indexOf("/ig/") === 0 || url.pathname.indexOf("/ig_") === 0) return igRoute(env, url, request);   // v149 - Instagram insights (404 unless IG_APP_ID)
       if (url.pathname.indexOf("/gcal/") === 0) return gcalRoute(env, url);   // v150 - Google Calendar consent and status for Meet bookings (404 unless GMEET)
+      if (url.pathname === "/residents" || url.pathname === "/residents/data") return residentsRoute(env, url);   // v152 - PRIVATE Residents map, Kendall and Naj only (404 unless RESIDENTS_KEY and the right rk)
       if (url.pathname === "/setbg") {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         if (url.searchParams.get("clear")) { await env.MEETINGS.delete("cfg_bg"); await env.MEETINGS.delete("cfg_bg_ct"); return new Response("backdrop cleared"); }
@@ -2931,6 +2932,7 @@ export default {
     }
     if (request.method === "POST") {
       if (url.pathname === "/ig/deauth" || url.pathname === "/ig/delete") return igRoute(env, url, request);   // v149 - Meta's deauthorise / data-deletion callbacks
+      if (url.pathname === "/ingest_private") return ingestPrivate(env, request);   // v152 - private datasets: never under img_, never served by /img
       if (url.pathname === "/walk_status") {                   // v119 - UnReal streamer heartbeat from the laptop (every 30 s while the game runs)
         const _wh = request.headers.get("X-Azimuth-Ingest");
         if (!env.INGEST_TOKEN || !_wh || !ctEq(_wh, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
@@ -7225,6 +7227,13 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .lb.st{font-size:.66rem;transition:opacity .25s}.lb.st i{color:var(--gold)}
 #devwrap{position:fixed;left:14px;top:192px;z-index:41;display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;align-items:center;max-width:46vw}   // v74.9: filters live on the LEFT as a banner; the panel on the right fits without scrolling
 #projsel{appearance:none;-webkit-appearance:none;font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--text);background:rgba(19,31,29,.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23E8E4D8' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid var(--line);border-radius:99px;padding:6px 28px 6px 12px;max-width:52vw}
+#colsel{appearance:none;-webkit-appearance:none;font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--gold);background:rgba(19,31,29,.92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23C5A56A' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid rgba(197,165,106,.5);border-radius:99px;padding:6px 28px 6px 12px;max-width:52vw}
+#clegend{position:fixed;left:14px;bottom:78px;z-index:40;display:none;flex-direction:column;gap:4px;background:rgba(19,31,29,.93);border:1px solid var(--line);border-radius:12px;padding:8px 11px;font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--text);max-width:min(80vw,310px)}
+#clegend.on{display:flex}#clegend .clt{font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:600;font-size:.74rem;margin-bottom:2px}
+#clegend .clr{display:flex;align-items:center;gap:7px}#clegend .clr b{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}#clegend .clr b.cln{background:#2c2c2a;box-shadow:inset 0 0 0 1px #4a4a46}#clegend .clr i{margin-left:auto;padding-left:12px;font-style:normal;color:var(--mut)}
+#clegend .cls{color:var(--mut);font-size:.56rem;margin-top:4px;line-height:1.35}
+body.cmode #legend{display:none}
+@media(max-width:640px){#clegend{bottom:132px;left:10px}}
 #ppanel{position:fixed;right:14px;top:82px;bottom:78px;width:min(52vw,600px);overflow:auto;background:rgba(19,31,29,.95);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:none;z-index:41}
 #ppanel.on{display:block}.pt{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;padding-right:22px}.ps{color:var(--gold);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;margin:3px 0 10px}
 .pr{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:6px 0;font-size:.72rem}.pr span:first-child{color:var(--mut)}.pr span:last-child{text-align:right;font-family:"IBM Plex Mono",monospace}
@@ -7670,8 +7679,9 @@ function paintDevs(){
         else{mt.color.copy(dc);mt.emissive=dc.clone();mt.emissiveIntensity=0.12}}m.userData.dev=a.dev}}
   buildDevSel();}
 const MATS=(m)=>Array.isArray(m.material)?m.material:[m.material];
+const CORIG=new Map(),CDIM=new Set();   // v152 - colour by: each material's look before it was coloured, and the buildings with no record that recede
 function ghost(m,on){m.visible=!on;      // Kendall: the others must go, not fade - hide them outright; roads and ground stay for context
-  for(const mt of MATS(m)){if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity]);const o=DEVORIG.get(mt);mt.transparent=o[0];mt.opacity=o[1];mt.depthWrite=true;mt.needsUpdate=true}}
+  for(const mt of MATS(m)){if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity]);const o=DEVORIG.get(mt);mt.transparent=o[0];mt.opacity=o[1];if(CDIM.has(mt)){mt.transparent=true;mt.opacity=0.45}mt.depthWrite=true;mt.needsUpdate=true}}
 // v74.4 - DEVELOPER FILTER (Kendall, 3 Sep): pick a developer and every other building fades to a ghost; only that developer's
 // towers stay solid, labelled, and the camera frames them. "all developers" restores the district.
 let SELDEV="";const DEVORIG=new Map();
@@ -7679,12 +7689,12 @@ function buildDevSel(){
   if(document.getElementById("devsel"))return;
   const present=[...new Set((ANCH.anchors||[]).filter(a=>a.dev&&a.meshes&&a.meshes.length).map(a=>a.dev))];
   if(!present.length)return;
-  const wrap=document.createElement("div");wrap.id="devwrap";
+  const wrap=document.getElementById("devwrap")||document.createElement("div");wrap.id="devwrap";const first=wrap.firstChild;   // v152 - the colour menu may have made the banner already
   const sel=document.createElement("select");sel.id="devsel";
   sel.innerHTML='<option value="">all developers</option>'+present.sort((x,y)=>DEVNAME[x].localeCompare(DEVNAME[y])).map(d=>'<option value="'+d+'">'+DEVNAME[d]+' ('+(ANCH.anchors.filter(a=>a.dev===d).length)+')</option>').join("");
-  sel.onchange=()=>applyDev(sel.value);wrap.appendChild(sel);
-  const ps=document.createElement("select");ps.id="projsel";ps.style.display="none";ps.onchange=()=>applyProj(ps.value);wrap.appendChild(ps);
-  document.body.appendChild(wrap);}
+  sel.onchange=()=>applyDev(sel.value);wrap.insertBefore(sel,first);
+  const ps=document.createElement("select");ps.id="projsel";ps.style.display="none";ps.onchange=()=>applyProj(ps.value);wrap.insertBefore(ps,first);
+  if(!wrap.parentNode)document.body.appendChild(wrap);}
 {const pp=document.createElement("div");pp.id="ppanel";document.body.appendChild(pp);}   // fact panel exists from the start
 // v74.5 - PROJECT DRILL: second dropdown lists the chosen developer's projects in this district; picking one keeps the tower in 3D,
 // slides it to the left and opens the fact panel on the right (developer-site facts + availability sheet + DLD 2026 + nearest metro/mall).
@@ -8024,6 +8034,41 @@ window.__onPlace=(sel)=>{if(!ANCH||!MESHES)return;const nm=sel&&sel.p&&(sel.p.na
   const bb=new THREE.Box3();mine.forEach(i=>bb.expandByObject(MESHES[i]));const c2=bb.getCenter(new THREE.Vector3()),s2=bb.getSize(new THREE.Vector3());const r2=Math.max(s2.x,s2.z,s2.y*0.8,60);
   if(!_HOMECAM)_HOMECAM={pos:cam.position.clone(),tgt:ctl.target.clone(),rot:ctl.autoRotate};ctl.target.copy(c2);cam.position.set(c2.x+r2*1.8,c2.y+r2*1.1,c2.z+r2*1.8);ctl.autoRotate=false};
 window.__onClear=()=>{if(MESHES)MESHES.forEach(m=>ghost(m,false))};
+// ===== v152 COLOUR BY (Kendall, 14 Sep 2026) - DEWA open data per building, self-contained block, begin =====
+// Three looks on the buildings the twin knows by duid: towers filling up (move-ins a month in their first six months, towers handed over
+// since Jan 2024), residents against businesses (share of accounts), and activity against Dubai. Colours validated on this surface: an
+// ordinal blue ramp for filling up, two poles and a neutral middle for the other two; buildings with no record recede.
+// Data: /img/building_activity, pushed weekly by the pipeline; there is no nationality in it.
+const COLBANDS={fill:["#184f95","#2a78d6","#6da7ec","#b7d3f6"],residents:["#d95926","#c3c2b7","#3987e5"],activity:["#d95926","#c3c2b7","#3987e5"]};
+const COLNAME={fill:"Filling up",residents:"Residents vs businesses",activity:"Activity vs Dubai"};
+const esc3=(t)=>String(t==null?"":t).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let BACT=null,BACTLOAD=null,CMODE="";
+function loadBact(){if(!BACTLOAD)BACTLOAD=fetch("/img/building_activity?t="+Math.floor(Date.now()/3600000)).then(r=>r.ok?r.json():null).then(j=>{BACT=j&&j.buildings?j:null;return BACT}).catch(()=>null);return BACTLOAD}
+function bandOf(mode,duid){if(!BACT||!duid)return -1;const b=BACT.buildings[duid];if(!b)return -1;const bands=((BACT.modes||{})[mode]||{}).bands||[];const v=mode==="fill"?b.fill:mode==="residents"?b.residents:b.activity;return v==null?-1:bands.indexOf(v)}
+function colourCtl(){
+  if(document.getElementById("colsel"))return;
+  let wrap=document.getElementById("devwrap");if(!wrap){wrap=document.createElement("div");wrap.id="devwrap";document.body.appendChild(wrap)}
+  const sel=document.createElement("select");sel.id="colsel";
+  sel.innerHTML='<option value="">colours: standard</option><option value="fill">colour by: filling up</option><option value="residents">colour by: residents vs businesses</option><option value="activity">colour by: activity vs Dubai</option>';
+  sel.onchange=()=>applyColour(sel.value);wrap.appendChild(sel);
+  const lg=document.createElement("div");lg.id="clegend";document.body.appendChild(lg);}
+function applyColour(mode){
+  CMODE=mode||"";document.body.classList.toggle("cmode",!!CMODE);
+  const lg=document.getElementById("clegend");
+  CORIG.forEach((v,mt)=>{mt.color.copy(v.c);mt.emissive.copy(v.e);mt.emissiveIntensity=v.ei;mt.transparent=v.t;mt.opacity=v.o;mt.needsUpdate=true});CORIG.clear();CDIM.clear();
+  if(!CMODE||!BACT||!MESHES||!ANCH){if(lg){lg.innerHTML="";lg.classList.remove("on")}return}
+  const cols=COLBANDS[CMODE].map(h=>new THREE.Color(h)),counts=cols.map(()=>0),painted=new Set();let none=0;
+  const keep=(mt)=>{if(!CORIG.has(mt))CORIG.set(mt,{c:mt.color.clone(),e:mt.emissive.clone(),ei:mt.emissiveIntensity,t:mt.transparent,o:mt.opacity});if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity])};
+  const dim=(mt)=>{keep(mt);mt.color.setHex(0x2c2c2a);mt.emissive.setHex(0x000000);mt.emissiveIntensity=0;mt.transparent=true;mt.opacity=0.45;CDIM.add(mt);mt.needsUpdate=true};
+  for(const a of ANCH.anchors){if(!a.meshes||!a.meshes.length)continue;const bi=bandOf(CMODE,a.duid);if(bi>=0)counts[bi]++;else none++;
+    for(const mi of a.meshes){const m=MESHES[mi];if(!m)continue;painted.add(mi);
+      for(const mt of MATS(m)){if(bi<0){dim(mt);continue}keep(mt);const cc=cols[bi];mt.color.copy(cc);mt.emissive.copy(cc);mt.emissiveIntensity=mt.map?0.35:0.18;mt.needsUpdate=true}}}
+  for(let i=0;i<MESHES.length;i++){if(!painted.has(i))MATS(MESHES[i]).forEach(dim)}
+  const md=(BACT.modes||{})[CMODE]||{},bands=md.bands||[];
+  if(lg){lg.innerHTML='<div class=clt>'+esc3(COLNAME[CMODE])+'</div>'+bands.map((b,i)=>'<div class=clr><b style="background:'+COLBANDS[CMODE][i]+'"></b>'+esc3(b)+'<i>'+counts[i]+'</i></div>').join("")+'<div class=clr><b class=cln></b>no record<i>'+none+'</i></div><div class=cls>'+esc3(md.label||"")+'<br>'+esc3(BACT.attribution||"Source: DEWA open data via Dubai Data")+'</div>';lg.title=(BACT.notes||[]).join(" ");lg.classList.add("on")}}
+(function waitColour(){if(ANCH&&MESHES&&ANCH.per_building_glb&&ANCH.anchors){loadBact().then(j=>{if(j&&ANCH.anchors.some(a=>a.duid&&j.buildings[a.duid]&&a.meshes&&a.meshes.length))colourCtl()});return}setTimeout(waitColour,800)})();
+window.__twinColour={apply:applyColour,get mode(){return CMODE},get data(){return BACT}};
+// ===== v152 COLOUR BY - end =====
 window.dispatchEvent(new Event("twinmap"));
 </script></body></html>`;
 }
@@ -8786,6 +8831,121 @@ async function igRoute(env, url, request) {
     return new Response(igReportHtml(d), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   return new Response("not found", { status: 404 });
+}
+// v152 - PRIVATE DATA + THE RESIDENTS MAP (Kendall, 14 Sep 2026). The DEWA community resident mix - rounded shares of account holders'
+// nationalities per community - is for Kendall and Naj only: never reachable with the key in client links, never under img_ (which /img
+// serves publicly), never on HOMES, FIND, cards, feed posts or anything Azimuth says. Kendall approved keeping it on Cloudflare as rounded
+// community shares with no counts and nothing below community level, so whatever a push carries, counts are dropped here.
+const PRIVATE_DATA = ["community_resident_mix"];
+function cleanResidentMix(j) {
+  const pct = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+  const idOf = (v) => String(v == null ? "" : v).replace(/[^0-9A-Za-z_-]/g, "").slice(0, 12);
+  const communities = (Array.isArray(j && j.communities) ? j.communities : []).map(c => ({
+    comm: idOf(c.comm), name: String(c.name || "").slice(0, 80),
+    mix: (Array.isArray(c.mix) ? c.mix : []).filter(x => Array.isArray(x) && x.length >= 2).map(x => [String(x[0]).slice(0, 60), pct(x[1])]).slice(0, 30),
+    other: pct(c.other), noNationalityPct: pct(c.noNationalityPct),
+    bands: Object.fromEntries(Object.entries(c.bands || {}).filter(([, v]) => [5, 10, 20, 40].includes(Number(v))).map(([k, v]) => [String(k).slice(0, 60), Number(v)])),
+    lon: Math.round(Number(c.lon) * 1e5) / 1e5, lat: Math.round(Number(c.lat) * 1e5) / 1e5, onMap: !!c.onMap,
+  })).filter(c => c.comm);
+  const outlines = {};
+  for (const k in ((j && j.outlines) || {})) {
+    const ring = j.outlines[k];
+    if (Array.isArray(ring) && ring.length >= 3) outlines[idOf(k)] = ring.slice(0, 5000).filter(p => Array.isArray(p) && p.length >= 2).map(p => [Math.round(Number(p[0]) * 1e5) / 1e5, Math.round(Number(p[1]) * 1e5) / 1e5]);
+  }
+  return { generated: String((j && j.generated) || "").slice(0, 40), source: String((j && j.source) || "").slice(0, 300), audience: String((j && j.audience) || "").slice(0, 400),
+    notes: (Array.isArray(j && j.notes) ? j.notes : []).map(x => String(x).slice(0, 400)).slice(0, 10),
+    nationalities: (Array.isArray(j && j.nationalities) ? j.nationalities : []).map(x => String(x).slice(0, 60)).slice(0, 40), communities, outlines };
+}
+async function ingestPrivate(env, request) {
+  const h = request.headers.get("X-Azimuth-Ingest");
+  if (!env.INGEST_TOKEN || !h || !ctEq(h, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
+  let b = null; try { b = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
+  const name = String((b && b.name) || "");
+  if (!PRIVATE_DATA.includes(name)) return new Response("unknown private dataset", { status: 400 });
+  if (!b.json || typeof b.json !== "object") return new Response("json object required", { status: 400 });
+  const clean = cleanResidentMix(b.json);
+  if (!clean.communities.length) return new Response("no communities in it", { status: 400 });
+  const s = JSON.stringify(clean);
+  if (s.length > 5 * 1024 * 1024) return new Response("too large", { status: 413 });
+  await env.MEETINGS.put("priv_" + name, s);
+  await env.MEETINGS.put("priv_at_" + name, new Date().toISOString());
+  return new Response(JSON.stringify({ ok: true, name, communities: clean.communities.length, outlines: Object.keys(clean.outlines).length, bytes: s.length }), { headers: { "Content-Type": "application/json" } });
+}
+async function residentsRoute(env, url) {
+  const rk = url.searchParams.get("rk") || "";
+  const key = String(env.RESIDENTS_KEY || "");
+  if (key.length < 24 || !ctEq(rk, key) || (env.READ_KEY && ctEq(rk, env.READ_KEY))) return new Response("not found", { status: 404 });
+  const hdr = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer" };
+  if (url.pathname === "/residents/data") {
+    const raw = await env.MEETINGS.get("priv_community_resident_mix");
+    if (!raw) return new Response("not on file", { status: 404, headers: hdr });
+    return new Response(raw, { headers: Object.assign({ "Content-Type": "application/json" }, hdr) });
+  }
+  return new Response(renderResidents(), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
+}
+function renderResidents() {
+  return `<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - residents (private)</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">${NAJ_FONTS}
+<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+:root{--ink:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif}
+#m{position:fixed;inset:0}
+#pn{position:fixed;left:12px;top:12px;width:min(360px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;box-sizing:border-box;background:rgba(19,31,29,.95);border:1px solid var(--line);border-radius:14px;padding:12px 14px;z-index:2}
+#pn h1{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.15rem;margin:0}
+.pv{color:var(--gold);font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;margin:3px 0 8px}
+.hd{color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace;text-transform:uppercase;letter-spacing:.08em;margin:10px 0 5px}
+.ch{display:flex;flex-wrap:wrap;gap:5px}.mn{display:flex;gap:5px}
+.ch button,.mn button{font-family:"IBM Plex Mono",monospace;font-size:.64rem;border:1px solid var(--line);background:rgba(24,42,38,.9);color:var(--text);border-radius:99px;padding:5px 9px;cursor:pointer}
+.ch button.on,.mn button.on{border-color:var(--gold);color:var(--gold);background:rgba(197,165,106,.14)}
+.lr{display:flex;align-items:center;gap:8px;font-family:"IBM Plex Mono",monospace;font-size:.64rem;margin:3px 0}.lr b{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}.lr i{margin-left:auto;font-style:normal;color:var(--mut)}
+.nt{color:var(--mut);font-size:.62rem;line-height:1.4;margin-top:8px}
+.maplibregl-popup-content{background:#131F1D;color:#E8E4D8;border:1px solid #24352F;border-radius:10px;font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.72rem;padding:9px 11px}
+.maplibregl-popup-tip{border-top-color:#131F1D!important;border-bottom-color:#131F1D!important}
+.pp b{font-family:Fraunces,Georgia,serif;font-size:.88rem;display:block;margin-bottom:4px}.pp .r{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #24352F;padding:3px 0;font-family:"IBM Plex Mono",monospace;font-size:.64rem}.pp .r.on{color:#C5A56A}
+@media(max-width:640px){#pn{top:auto;bottom:12px;max-height:48vh}}
+</style></head><body><div id=m></div>
+<div id=pn><h1>Residents by nationality</h1><div class=pv>Private &middot; for Kendall and Naj only</div>
+<div class=hd>Nationalities</div><div class=ch id=ch></div>
+<div class=hd>Show a community when one of them is at least</div><div class=mn id=mn></div>
+<div class=hd>Largest share among the selected</div><div id=lg></div>
+<div class=nt id=nt>Loading the communities...</div></div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>(function(){
+var RK=new URLSearchParams(location.search).get("rk")||"";
+var RAMP={5:"#184f95",10:"#2a78d6",20:"#6da7ec",40:"#b7d3f6"},LBL={5:"5 to 9%",10:"10 to 19%",20:"20 to 39%",40:"40% or more"};
+var D=null,SEL=[],MIN=5,FEAT=[];
+function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]})}
+var map=new maplibregl.Map({container:"m",style:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",center:[55.27,25.12],zoom:9.6,attributionControl:{compact:true}});
+map.addControl(new maplibregl.NavigationControl({showCompass:false}),"bottom-right");
+function band(c){var best=0;for(var i=0;i<SEL.length;i++){var b=Number((c.bands||{})[SEL[i]]||0);if(b>=MIN&&b>best)best=b}return best}
+function geo(){return {type:"FeatureCollection",features:FEAT.map(function(f){f.properties.band=band(f.c);return {type:"Feature",id:f.id,properties:f.properties,geometry:f.geometry}})}}
+function refresh(){
+  if(!D)return;var src=map.getSource("res");if(src)src.setData(geo());else geo();
+  var n={5:0,10:0,20:0,40:0};FEAT.forEach(function(f){var b=f.properties.band;if(b)n[b]++});
+  document.getElementById("lg").innerHTML=[40,20,10,5].filter(function(b){return b>=MIN}).map(function(b){return '<div class=lr><b style="background:'+RAMP[b]+'"></b>'+LBL[b]+'<i>'+n[b]+' communities</i></div>'}).join("");
+  document.getElementById("nt").innerHTML=(SEL.length?"":"Pick one or more nationalities. ")+esc((D.notes||[]).join(" "))+"<br>"+esc(D.source||"")+(D.generated?" &middot; built "+esc(String(D.generated).slice(0,10)):"");
+  document.querySelectorAll("#ch button").forEach(function(b){b.classList.toggle("on",SEL.indexOf(b.getAttribute("data-n"))>=0)});
+  document.querySelectorAll("#mn button").forEach(function(b){b.classList.toggle("on",Number(b.getAttribute("data-m"))===MIN)});}
+function ui(){
+  document.getElementById("ch").innerHTML=(D.nationalities||[]).map(function(n){return '<button data-n="'+esc(n)+'">'+esc(n)+'</button>'}).join("");
+  document.querySelectorAll("#ch button").forEach(function(b){b.onclick=function(){var n=b.getAttribute("data-n"),i=SEL.indexOf(n);if(i>=0)SEL.splice(i,1);else SEL.push(n);refresh()}});
+  document.getElementById("mn").innerHTML=[5,10,20,40].map(function(m){return '<button data-m="'+m+'">'+m+'%</button>'}).join("");
+  document.querySelectorAll("#mn button").forEach(function(b){b.onclick=function(){MIN=Number(b.getAttribute("data-m"));refresh()}});
+  FEAT=[];(D.communities||[]).forEach(function(c){var ring=(D.outlines||{})[String(c.comm)];if(!ring||ring.length<3)return;var r=ring.slice(),a=r[0],z=r[r.length-1];if(a[0]!==z[0]||a[1]!==z[1])r.push(a);FEAT.push({id:FEAT.length+1,c:c,properties:{comm:String(c.comm),name:c.name||"",band:0},geometry:{type:"Polygon",coordinates:[r]}})});
+  refresh();}
+function layers(){
+  if(map.getSource("res"))return;
+  map.addSource("res",{type:"geojson",data:geo()});
+  map.addLayer({id:"res-fill",type:"fill",source:"res",paint:{"fill-color":["match",["get","band"],5,RAMP[5],10,RAMP[10],20,RAMP[20],40,RAMP[40],"rgba(12,20,19,0.01)"],"fill-opacity":0.7}});
+  map.addLayer({id:"res-line",type:"line",source:"res",paint:{"line-color":"#3A4F49","line-width":0.7}});
+  map.on("click","res-fill",function(e){var f=e.features&&e.features[0];if(!f)return;var c=null;for(var i=0;i<FEAT.length;i++){if(FEAT[i].properties.comm===f.properties.comm){c=FEAT[i].c;break}}if(!c)return;
+    var rows=(c.mix||[]).map(function(x){return '<div class="r'+(SEL.indexOf(x[0])>=0?" on":"")+'"><span>'+esc(x[0])+'</span><span>'+Number(x[1])+'%</span></div>'}).join("")+'<div class=r><span>other</span><span>'+Number(c.other||0)+'%</span></div>'+(c.noNationalityPct?'<div class=r><span>no nationality recorded</span><span>'+Number(c.noNationalityPct)+'%</span></div>':'');
+    new maplibregl.Popup({maxWidth:"280px"}).setLngLat(e.lngLat).setHTML('<div class=pp><b>'+esc(c.name)+'</b>'+rows+'</div>').addTo(map)});
+  map.on("mouseenter","res-fill",function(){map.getCanvas().style.cursor="pointer"});map.on("mouseleave","res-fill",function(){map.getCanvas().style.cursor=""});}
+fetch("/residents/data?rk="+encodeURIComponent(RK),{cache:"no-store",referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(j){
+  if(!j||!j.communities){document.getElementById("nt").textContent="The residents data is not on file yet.";return}
+  D=j;ui();if(map.isStyleLoaded())layers();else map.on("load",layers)}).catch(function(){document.getElementById("nt").textContent="The residents data did not load."});
+})();</script></body></html>`;
 }
 async function platePhoto(env, angle, place, id) {
   PLATE_LAST_ERR = "";
