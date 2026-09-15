@@ -59,6 +59,9 @@ DIAL_NAMES = "971562276093:kendall,971565484397:najjuko"
 # A WhatsApp voice note at T-15, sent only inside his 24-hour window; azimuth-2 (Naj) stays text-only.
 VOICE_REMINDERS = "on"
 VOICE_SPEAKER = "asteria"
+# v153 - question notes: Kendall's "?" texts and "question ..." voice notes are handed to azimuth-2 over the service binding, so every note
+# sits in the one store /questions/export reads (kept here if azimuth-2 cannot take one).
+QN_STORE = "AZIMUTH_2"
 
 [triggers]
 crons = ["*/5 3-18 * * *"]

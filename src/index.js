@@ -999,7 +999,7 @@ Read dates from the date map above; never calculate a weekday yourself. Prefer "
 // its caller, so a failure here can never cost her a reply.
 async function inboxNote(env, msg) {
   const it = { at: new Date().toISOString(), type: String(msg.type || "?") };
-  if (msg.type === "text" && msg.text) it.text = String(msg.text.body || "").slice(0, 400);
+  if (msg.type === "text" && msg.text) { const _b = String(msg.text.body || "").slice(0, 4000); it.text = (/^\s*\?/.test(_b) ? qnScrub(_b) : _b).slice(0, 400); }   // v153 - a question note is logged with its phone numbers, emails and IDs already out
   else if (msg.type === "interactive" && msg.interactive) {
     const r = msg.interactive.button_reply || msg.interactive.list_reply || {};
     it.tapped = String(r.id || ""); it.text = String(r.title || "");     // the id for us, the words for whoever reads this back
@@ -1805,8 +1805,9 @@ async function handleCallback(env, cbq) {
   await answerCb(env, cbq.id);
 }
 
-export default {
-  async fetch(request, env, ctx) {
+// v153 - the request handler proper. The exported fetch below sends /questions/* to the question notes and gives every private app page
+// its question button; everything else is exactly what this function returns.
+async function appFetch(request, env, ctx) {
     const url = new URL(request.url); const CHAT = env.TELEGRAM_CHAT_ID;
     // v110.1 - HOISTED (10 Sep 2026). Sitting lower down, this never matched: the request
     // fell through to the Telegram webhook secret check at the foot of the handler and came
@@ -3560,6 +3561,10 @@ export default {
         let text = "";
         if (msg.type === "text") text = (msg.text && msg.text.body || "").trim();
         else if (msg.type === "audio") { try { text = await waTranscribe(env, msg.audio.id); } catch (e) { await waSend(env, from, "⚠ Couldn't read that voice note — try text."); return new Response("ok"); } }
+        {                                                                            // v153 - "?..." or a voice note starting "question" is a question note, acknowledged with a ✅ reaction only
+          const _qn = qnWhatsAppText(msg.type, text);
+          if (_qn) { await qnFromWhatsApp(env, from, msg, _qn); return new Response("ok"); }
+        }
         if (!text) { await waSend(env, from, "Send a meeting or task (text or voice) and I'll file it. \u{1F9ED}"); return new Response("ok"); }
         {                                                                            // v147 - her one line for Change it on a scene picture
           const _se = await env.MEETINGS.get("scedit_" + from);
@@ -3940,6 +3945,13 @@ export default {
       return new Response("ok");
     }
     return new Response("meeting-capture is running");
+}
+
+export default {
+  async fetch(request, env, ctx) {   // v153 - question notes: their routes first, then the question button on private app pages
+    const url = new URL(request.url);
+    if (url.pathname.indexOf("/questions/") === 0) return questionsRoute(request, env, url);
+    return qnDecorate(request, env, url, await appFetch(request, env, ctx));
   },
 
   async scheduled(event, env, ctx) {
@@ -5791,6 +5803,7 @@ const MAP_CHROME_HTML = ''
 // v152.5 - HOMES matching (needs PR, AM and m2 in scope) and the panel wiring (needs drawHomes and window.__stackOpen)
 const HOMES_CORE_JS = ''
   + 'var HB={lo:10,hi:30,blo:1,bhi:3,type:"any",beach:false,live:false,on:false};'
+  + '(window.__qnParts=window.__qnParts||[]).push(function(){if(!HB.on)return {};var lo=Math.min(HB.lo,HB.hi),hi=Math.max(HB.lo,HB.hi),blo=Math.min(HB.blo,HB.bhi),bhi=Math.max(HB.blo,HB.bhi),f={budget:fmtAed(stepAed(lo))+" to "+fmtAed(stepAed(hi)),bedrooms:bedsLabel(blo)+(bhi!==blo?" to "+bedsLabel(bhi):""),home_type:({any:"any",apt:"apartment",villa:"villa and townhouse"})[HB.type]||HB.type};if(HB.beach)f.near_public_beach=true;if(HB.hbeach)f.near_hotel_beach=true;if(HB.live)f.developer_stock_only=true;return {filters:f}});'   // v153 - the HOMES filters in force, for a question note
   + 'function stepAed(v){v=+v;return v<=20?250000+v*125000:(v<=40?2750000+(v-20)*362500:10000000+(v-40)*500000)}'      // 0.25M..2.75M..10M..20M
   + 'function fmtAed(a){return a>=1e6?("AED "+(a/1e6).toFixed(a>=1e7?0:1)+"M"):("AED "+Math.round(a/1e3)+"k")}'
   + 'function bedsLabel(b){return b>=6?"5+":(b===0?"studio":String(b))}'
@@ -5848,7 +5861,7 @@ const MAP_CHROME_JS = ''
   + 'function listHomes(m){var el=document.getElementById("panel");LISTK=null;var rows=m.slice(0,60);'
   + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>homes</div><div class=ps>\'+m.length+" developments match \u00b7 "+document.getElementById("hbv").textContent+" \u00b7 "+document.getElementById("hbdv").textContent+" bed"+\'</div><div class=near>\'+rows.map(function(x,ix){return \'<div class="n1 nk" data-ix="\'+ix+\'"><em style="color:var(--gold)">\u25CF</em><span>\'+esc(x.it.n)+\' <small style="color:var(--mut)">\'+esc(dName(x.it.d))+(x.it.dev?" \u00b7 "+esc(devName(x.it.dev)):"")+(x.it.left?" \u00b7 "+x.it.left+" left":"")+\'</small></span><s>\'+bedWord(x.b)+" "+fmtAed(x.v)+(x.ask?" asking":((x.it.e||[]).indexOf(x.b)>=0?" \u2248":""))+\'</s></div>\'}).join("")+"</div>";'
   + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;el.querySelectorAll(".nk").forEach(function(r){r.onclick=function(){openHome(rows[+r.getAttribute("data-ix")].it)}})}'
-  + 'function openHome(it){var el=document.getElementById("panel");goDistrict(it.d);setTimeout(function(){setSel([it.lon,it.lat]);map.easeTo({center:[it.lon,it.lat],zoom:Math.max(map.getZoom(),15),duration:700});'
+  + 'function openHome(it){QNH=it;var el=document.getElementById("panel");goDistrict(it.d);setTimeout(function(){setSel([it.lon,it.lat]);map.easeTo({center:[it.lon,it.lat],zoom:Math.max(map.getZoom(),15),duration:700});'
   + '  var keys={};Object.keys(it.b||{}).forEach(function(k){keys[k]=1});Object.keys(it.ask||{}).forEach(function(k){keys[k]=1});'
   + '  var lines=Object.keys(keys).sort(function(a,b){return +a-+b}).map(function(k){var b=+k;var reg=it.b&&it.b[k];var ask=it.ask&&it.ask[k];return "<div><i>"+(b===9?"penthouse":bedWord(b))+"</i>"+(reg?fmtAed(reg)+((it.e||[]).indexOf(b)>=0?" <small style=color:var(--mut)>estimate</small>":" <small style=color:var(--mut)>register median</small>"):"")+(ask?(reg?" \u00b7 ":"")+"from "+fmtAed(ask)+" <small style=color:var(--mut)>asking \u00b7 sheet "+(it.sheet||"")+"</small>":"")+(it.r&&it.r[k]?" <small style=color:var(--mut)>\u00b7 rent "+fmtAed(it.r[k])+"/yr</small>":"")+"</div>"}).join("");'
   + '  var vv=videoFor(it.n,it.d);'
@@ -6045,6 +6058,11 @@ const MAP_CHROME_JS = ''
   + '  el.classList.add("on");document.getElementById("px").onclick=function(){el.classList.remove("on");SEL=null;setSel(null);setNear([]);drawAm();hint();if(window.__onClear)try{window.__onClear()}catch(e){}};bindNext(el);el.querySelectorAll(\'.ptabs button\').forEach(function(b){b.onclick=function(){PTAB=b.getAttribute(\'data-t\');openPanel(sel)}});'
   + '  var _sel=sel;el.querySelectorAll(".nb").forEach(function(r){r.style.cursor="pointer";r.onclick=function(){var x=near[+r.getAttribute("data-ix")][1];openAmenity(x,function(){openPanel(_sel)})}});'
   + '  document.getElementById("hint").textContent="";}'
+  // v153 - what this map (or the twin's map chrome) has open, for a question note: the district, the place or home in the panel, the search box
+  + 'var QNH=null;(window.__qnParts=window.__qnParts||[]).push(function(){var c={},d=currentDistrict(),pt=document.querySelector("#panel.on .pt"),t=pt?pt.textContent.trim():"";if(d)c.district=d;'
+  + '  if(t&&SEL&&SEL.p){var p=SEL.p,nm=SEL.kind==="sub"?tc(p.name):(tc(p.name)||("Plot "+p.plot));if(nm&&t===nm){if(SEL.kind==="sub")c.community=nm;else{c.project=nm;if(p.plot!=null)c.project_id=String(p.plot)}if(p.district)c.district=p.district}}'
+  + '  if(t&&!c.project&&!c.community&&QNH&&t===QNH.n){c.project=QNH.n;if(QNH.d)c.district=QNH.d;if(QNH.dev)c.filters={developer:devName(QNH.dev)}}'
+  + '  var qe=document.getElementById("q");if(qe&&qe.value.trim())c.search=qe.value.trim();return c});'
   + 'function bootShim(){map=window.__twinMap;window.__najmap2=map;STYLE_READY=true;loadData()}'
   + 'if(window.__twinMap){bootShim()}else if(window.__twinPending){window.addEventListener("twinmap",bootShim)}else{fetch("/esri_token?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).catch(function(){return null}).then(function(j){mkMap(j&&j.ok?j.token:null)})}';
 
@@ -6990,6 +7008,7 @@ function renderFind(key, q0) {
     'var link=function(r){if(r.t==="developer"&&r.dev)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY);if(r.dev&&r.p)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY)+"&p="+encodeURIComponent(r.p);if(r.dev)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY);return twin(r)};' +
     'var where=function(r){var w=[];if(r.a)w.push(r.a);if(r.m&&r.m!==r.n)w.push(r.m);if(r.units)w.push(Number(r.units).toLocaleString("en")+" units");if(r.nb)w.push(r.nb+" buildings");if(r.st==="verified")w.push("register");if(r.off)w.push("in the register, not yet on the twin");if(r.dev&&r.t!=="developer")w.push(r.dev);return w.join(" \\u00b7 ")};' +
     'var render=function(){if(!IDX)return;var s=nk(q.value),toks=s?s.split(" "):[];var rows=IDX.items.filter(function(r){if(T&&r.t!==T)return false;if(!toks.length)return r.t==="developer";var hay=nk(r.n)+" "+nk(r.m)+" "+nk(r.a)+" "+nk(r.dev);return toks.every(function(t){return hay.indexOf(t)>=0})});' +
+    'if(window.__qnFind)try{window.__qnFind(q.value,rows.length,T)}catch(e){}' +   // v153 - on Kendall's and Naj's devices an empty search becomes a question note (nothing on client links)
     'rows.sort(function(a,b){var sa=nk(a.n).indexOf(s)===0?0:1,sb=nk(b.n).indexOf(s)===0?0:1;if(sa!==sb)return sa-sb;var ta={developer:0,development:1,building:2};if(ta[a.t]!==ta[b.t])return ta[a.t]-ta[b.t];return (Number(b.units)||0)-(Number(a.units)||0)});' +
     'if(!window.__itwire){window.__itwire=1;document.head.insertAdjacentHTML("beforeend","<style>.it[data-u]{cursor:pointer}.go a{color:inherit;text-decoration:none}.go a.gm{margin-left:10px;color:#8FC7B9}</style>");document.addEventListener("click",function(e){var it=e.target.closest(".it[data-u]");if(!it||e.target.closest("a"))return;location.href=it.getAttribute("data-u")})}'
   + 'var groups=[["developer","Developers"],["development","Developments"],["building","Buildings"]],h="",n=0;groups.forEach(function(g){var rs=rows.filter(function(r){return r.t===g[0]}).slice(0,toks.length?40:60);if(!rs.length)return;h+=\'<div class=grp>\'+g[1]+" \\u00b7 "+rows.filter(function(r){return r.t===g[0]}).length+"</div>";rs.forEach(function(r){n++;var u=link(r);var tw=twin(r);var isHome=u&&u.indexOf("/dev?")===0;var mp=r.d?"/map?key="+encodeURIComponent(KEY)+"&d="+encodeURIComponent(r.d)+"&focus="+encodeURIComponent(r.n):"";h+=\'<div class="it\'+(r.off?" off":"")+\'"\'+(u?\' data-u="\'+u+\'"\':"")+\'><span class=go>\'+(u?\'<a href="\'+u+\'">\'+(isHome?"HOMES \\u2192":(r.i!=null?"twin \\u2192":"district \\u2192"))+"</a>":"")+(mp?\'<a class=gm href="\'+mp+\'">map \\u2192</a>\':"")+"</span><b>"+hl(r.n,toks)+"</b><small>"+esc(where(r))+(isHome&&tw?\' \\u00b7 <a class=tw href="\'+tw+\'">on the twin \\u2192</a>\':"")+"</small></div>"})});' +
@@ -7044,7 +7063,8 @@ function renderPlans(idx, key, dsel, psel, isel) {
     (dev ? '<a class=bk href="/plans?key=' + K + '">← all developers</a>' : '') +
     '<div class=mast>' + (dev ? esc2(dev.name) + ' <em>· floor plans</em>' : 'Floor plans') + '</div>' +
     '<div class=sub>' + (dev ? (proj ? esc2(proj.name) : '') : (idx ? idx.count + ' plans on file · ' + devs.length + ' developer' + (devs.length === 1 ? '' : 's') + ' · tap one' : 'nothing on file yet')) + '</div>' +
-    body + najNav(key, "plans") + '</body></html>';
+    body + (dev ? '<script>window.__qnCtx=' + JSON.stringify({ project: proj ? proj.name : null, unit: plan ? plan.label : null, community: proj && proj.area ? proj.area : null, filters: { developer: dev.name } }).replace(/</g, "\\u003c") + '<\/script>' : '') +   // v153 - what is open, for a question note
+    najNav(key, "plans") + '</body></html>';
 }
 
 function renderHome(bd, key, cmp, s) {
@@ -8207,6 +8227,12 @@ let BF=null;fetch("/img/bldgfacts_${slugName}").then(r=>r.ok?r.json():null).then
 // and how well we know it. The grade is shown plainly, because a name from an authoritative register and a name lifted from
 // a nearby shopfront are not the same claim and the card should never pretend they are.
 let IDN=null;fetch("/img/identity_${slugName}").then(r=>r.ok?r.json():null).then(j=>{IDN=j&&j.by_index||null}).catch(()=>{});
+// v153 - the building open on this twin, for a question note: its name, plot number when the identity file has one, sub-community, developer
+(window.__qnParts=window.__qnParts||[]).push(()=>{const c={district:"${slugName}"};
+  if(SELPROJ){c.project=SELPROJ;const a0=ANCH&&ANCH.anchors?ANCH.anchors.find(a=>(a.dev||"")===(SELDEV||"")&&(a.dev_project||a.name||a.place_label||a.cluster)===SELPROJ):null;const idn=a0&&IDN?IDN[String(a0.i)]:null;
+    if(idn&&idn.plot_id)c.project_id=String(idn.plot_id);if(a0&&a0.cluster&&a0.cluster!==SELPROJ)c.community=a0.cluster}
+  else if(FOCUS&&META&&META.buildings&&META.buildings[FOCUS])c.project=String(META.buildings[FOCUS].title||FOCUS).split("(")[0].trim();
+  if(SELDEV)c.filters={developer:DEVNAME[SELDEV]||SELDEV};return c});
 let SUBB=null;fetch("/img/subbind_${slugName}?t=${Math.floor(Date.now()/600000)}").then(r=>r.ok?r.json():null).then(j=>{SUBB=j;if(j&&j.cards){j.lc={};for(const k in j.cards)j.lc[String(k).toLowerCase().trim()]=j.cards[k]}}).catch(()=>{});   // v121 - truth-store card -> footprints
 let VIDS=[];fetch("/img/videos?t=${Math.floor(Date.now()/600000)}").then(r=>r.ok?r.json():null).then(j=>{VIDS=(j&&j.items)||[]}).catch(()=>{});
 let UMX=null;fetch("/img/unitmix_${slugName}?t=${Math.floor(Date.now()/600000)}").then(r=>r.ok?r.json():null).then(j=>{UMX=j&&j.buildings_by_id||null}).catch(()=>{});   // v93 - unit mix per building
@@ -9252,7 +9278,7 @@ async function igRoute(env, url, request) {
 // nationalities per community - is for Kendall and Naj only: never reachable with the key in client links, never under img_ (which /img
 // serves publicly), never on HOMES, FIND, cards, feed posts or anything Azimuth says. Kendall approved keeping it on Cloudflare as rounded
 // community shares with no counts and nothing below community level, so whatever a push carries, counts are dropped here.
-const PRIVATE_DATA = ["community_resident_mix"];
+const PRIVATE_DATA = ["community_resident_mix", "question_bank"];   // v153 - question_bank: the Najma data session's question bank, stored only
 function cleanResidentMix(j) {
   const pct = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
   const idOf = (v) => String(v == null ? "" : v).replace(/[^0-9A-Za-z_-]/g, "").slice(0, 12);
@@ -9289,6 +9315,7 @@ async function ingestPrivate(env, request) {
   const name = String((b && b.name) || "");
   if (!PRIVATE_DATA.includes(name)) return new Response("unknown private dataset", { status: 400 });
   if (!b.json || typeof b.json !== "object") return new Response("json object required", { status: 400 });
+  if (name === "question_bank") return ingestQuestionBank(env, b.json);
   const clean = cleanResidentMix(b.json);
   if (!clean.communities.length) return new Response("no communities in it", { status: 400 });
   const s = JSON.stringify(clean);
@@ -9452,8 +9479,399 @@ fetch("/residents/data?rk="+encodeURIComponent(RK),{cache:"no-store",referrerPol
   render();
   if(window.maplibregl)startMap();else $("map").innerHTML='<p class=note style="padding:16px">The map could not load. The list and details still work.</p>';
 }).catch(function(){$("source").textContent="The residents data did not load."});
+(window.__qnParts=window.__qnParts||[]).push(function(){if(!state.sel)return {};return {community:nameOf(state.sel).label,comm:String(state.sel)}});   // v153 - the community open here, for a question note (never the nationality filters)
 })();</script></body></html>`;
 }
+
+// v153 - QUESTION NOTES (Kendall approved in the Najma data session, 15 Sep 2026: "a way for her to provide feedback for any questions that
+// we're missing, almost like we're building up a question bank"). While Naj is with a client she notes what the app could not answer without
+// disturbing the meeting: a small button on her private pages (typed, or hold-to-talk that records only while held, transcribed here and the
+// audio dropped), a WhatsApp text starting "?" or a voice note starting "question" (acknowledged with a reaction, never a reply), and FIND
+// searches that come back empty. Each note is KV qn_<utc>_<rand>, with phone numbers, emails and Emirates IDs taken out and never a key; the
+// Najma data session reads them weekly through GET /questions/export (ingest token) for its question bank. Client links never get the button:
+// it is added only for a device holding the azq cookie, which a page opened with the residents key issues, signed with that key (rotating the
+// residents key retires every device). Recording a client without consent is an offence in the UAE: hence hold-to-talk and no stored audio.
+const QN_PEOPLE = { "971562276093": "kendall", "971565484397": "naj" };
+const QN_ASKED = ["buyer", "tenant", "investor", "developer"];
+const QN_CTX = ["tab", "path", "community", "comm", "project", "project_id", "unit", "search", "filters", "district"];
+const QN_PAGE = /^\/(find|home|market|map|plans|charts|board|clock|dev|compare|cards|avail|view|studio|residents)$|^\/(skyline|area|report)(\/|$)/;   // the app's rooms; never /r/ (client briefings)
+const QN_NOISE = /^(?:thank you\.?|thanks for watching[.!]?|you\.?|bye\.?|\.+|\[[^\]]*\]|\([^)]*\))$/i;   // what speech-to-text makes of silence
+function qnOwner(env) {
+  if (env.QN_BY === "kendall" || env.QN_BY === "naj") return env.QN_BY;
+  return QN_PEOPLE[String(env.WA_ALLOWED || "").split(",")[0].replace(/[^0-9]/g, "")] || "naj";
+}
+const qnDay = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");   // the Dubai day
+// Personal details out of free text: emails, Emirates IDs (784-YYYY-NNNNNNN-N), phone numbers in UAE and international forms, then any other
+// run of ten or more digits. Prices written with commas survive ("AED 1,250,000"), as do years, unit and plot numbers.
+function qnScrub(s) {
+  return String(s == null ? "" : s)
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g, "[email]")
+    .replace(/(?<!\d)784[\s.-]?\d{4}[\s.-]?\d{7}[\s.-]?\d(?!\d)/g, "[emirates id]")
+    .replace(/(?:\+|(?<!\d)00)\d{1,3}[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}(?!\d)/g, "[phone]")
+    .replace(/(?<!\d)0?5\d[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/g, "[phone]")
+    .replace(/(?<!\d)0[2-9][\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/g, "[phone]")
+    .replace(/(?<!\d)\d(?:[\s.-]?\d){9,}(?!\d)/g, "[number]");
+}
+function qnClean(env, v, n) {
+  let s = String(v == null ? "" : v).slice(0, 4000).replace(/[ -]+/g, " ");
+  for (const k of [env.READ_KEY, env.RESIDENTS_KEY, env.INGEST_TOKEN, env.WA_FORWARD_TOKEN, env.GENIMG_KEY]) if (k && String(k).length >= 8) s = s.split(String(k)).join("[key]");
+  s = s.replace(/\b(key|rk|gkey|token)=[^\s&#]+/gi, "$1=[key]");
+  return qnScrub(s).replace(/\s+/g, " ").trim().slice(0, n || 200);
+}
+function qnPath(p) {   // the path only; a segment that looks like an id or token (a client briefing, a share link) is masked
+  const s = String(p || "").split(/[?#]/)[0].slice(0, 300);
+  return ("/" + s.replace(/^\/+/, "")).split("/").map(seg => (seg.length >= 16 && /^[A-Za-z0-9_-]+$/.test(seg) && /\d/.test(seg) && /[A-Za-z]/.test(seg)) ? ":id" : seg)
+    .join("/").replace(/[^A-Za-z0-9\/%._:~-]/g, "").slice(0, 120) || "/";
+}
+function qnFilters(env, v) {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out = {};
+  for (const k of Object.keys(v).slice(0, 24)) {
+    const kk = String(k).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 24);
+    if (!kk || ["key", "rk", "me", "gkey", "token"].includes(kk) || Object.keys(out).length >= 12) continue;
+    const x = v[k];
+    if (typeof x === "boolean" || (typeof x === "number" && isFinite(x))) out[kk] = x;
+    else if (typeof x === "string") { const s = qnClean(env, x, 80); if (s) out[kk] = s; }
+  }
+  return Object.keys(out).length ? out : null;
+}
+// The one record shape (agreed with the Najma data session): every context field is always present, null when the page had nothing.
+function qnRecord(env, o) {
+  o = o || {};
+  const text = qnClean(env, o.text, 1000);
+  if (!text) return null;
+  const idc = (v, n) => (String(v == null ? "" : v).replace(/[^0-9A-Za-z_.:\/-]/g, "").slice(0, n) || null);
+  const cx = o.context && typeof o.context === "object" && !Array.isArray(o.context) ? o.context : {};
+  const context = {};
+  for (const k of QN_CTX) {
+    const v = cx[k], plain = typeof v === "string" || typeof v === "number";
+    if (k === "filters") context.filters = qnFilters(env, v);
+    else if (k === "path") context.path = typeof v === "string" && v ? qnPath(v) : null;
+    else if (k === "comm") context.comm = plain ? idc(v, 12) : null;
+    else if (k === "project_id") context.project_id = plain ? idc(v, 40) : null;
+    else context[k] = plain ? (qnClean(env, v, k === "search" ? 200 : 120) || null) : null;
+  }
+  const at = new Date().toISOString();
+  const asked = String(o.askedBy == null ? "" : o.askedBy).toLowerCase();
+  return { id: "qn_" + at.replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z") + "_" + (rid() + "000000").slice(0, 6), at,
+    by: o.by === "kendall" || o.by === "naj" ? o.by : qnOwner(env), via: ["app", "whatsapp", "auto_search"].includes(o.via) ? o.via : "app",
+    kind: ["typed", "voice", "empty_search"].includes(o.kind) ? o.kind : "typed", text, askedBy: QN_ASKED.includes(asked) ? asked : null, context };
+}
+async function qnBudget(env, by) {   // a ceiling per person per day, so a lost cookie cannot fill the store
+  const k = "qnc_" + qnDay() + "_" + by;
+  const n = parseInt((await env.MEETINGS.get(k)) || "0", 10) || 0;
+  if (n >= 300) return false;
+  await env.MEETINGS.put(k, String(n + 1), { expirationTtl: 2 * 86400 });
+  return true;
+}
+async function qnHash(s) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(d)].slice(0, 8).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function qnB64(bytes) { let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
+// the device cookie: "<who>.<HMAC-SHA256(residents key, 'azq1|<who>')>" - proves the device once opened a residents-key page, reveals nothing of the key
+async function qnSig(env, by) {
+  const key = String(env.RESIDENTS_KEY || "");
+  if (key.length < 24 || (by !== "kendall" && by !== "naj")) return "";
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const s = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode("azq1|" + by));
+  return [...new Uint8Array(s)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function qnWho(env, request) {
+  const m = /(?:^|;\s*)azq=(kendall|naj)\.([0-9a-f]{64})(?:;|$)/.exec(request.headers.get("Cookie") || "");
+  if (!m) return "";
+  const want = await qnSig(env, m[1]);
+  return want && ctEq(m[2], want) ? m[1] : "";
+}
+// Every app page opened on Kendall's or Naj's device gets the button; a page opened with the residents key (re)issues the cookie, and ?me=kendall
+// on that link says whose device it is (otherwise the instance's owner: Naj on azimuth-2). Film recordings (?film=1) never show it.
+async function qnDecorate(request, env, url, res) {
+  if (!(res instanceof Response) || request.method !== "GET" || res.status !== 200 || !QN_PAGE.test(url.pathname) || url.searchParams.get("film") === "1") return res;
+  if (!/^text\/html/i.test(res.headers.get("Content-Type") || "")) return res;
+  let by = await qnWho(env, request), cookie = "";
+  if (residentsKeyOf(env, url)) {
+    const me = url.searchParams.get("me");
+    const want = me === "kendall" || me === "naj" ? me : (by || qnOwner(env));
+    const sig = await qnSig(env, want);
+    if (sig) { cookie = "azq=" + want + "." + sig + "; Path=/; Max-Age=" + 180 * 86400 + "; Secure; HttpOnly; SameSite=Lax"; by = want; }
+  }
+  if (!by) return res;
+  const html = await res.text();
+  const bt = /<body\b[^>]*>/ig; bt.lastIndex = Math.max(0, html.indexOf("</head>"));   // straight after <body>: the page's own markup and scripts stay where they were
+  const m = bt.exec(html), at = m ? m.index + m[0].length : html.length;
+  const h = new Headers(res.headers);
+  h.delete("Content-Length"); h.set("Cache-Control", "no-store");
+  if (cookie) h.append("Set-Cookie", cookie);
+  return new Response(html.slice(0, at) + QN_STRIP + html.slice(at), { status: 200, headers: h });
+}
+async function questionsRoute(request, env, url) {
+  const p = url.pathname;
+  const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  if (p === "/questions/export") {   // the weekly pipeline's only read: {"notes":[...]} oldest first, since inclusive (dedupe on id)
+    const h = request.headers.get("X-Azimuth-Ingest");
+    if (request.method !== "GET" || !env.INGEST_TOKEN || !h || !ctEq(h, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
+    const s0 = url.searchParams.get("since");
+    const since = s0 ? Date.parse(s0) : 0;
+    if (s0 && !isFinite(since)) return new Response("since must be an ISO time", { status: 400 });
+    const floor = since ? "qn_" + new Date(Math.floor(since / 1000) * 1000).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z") : "";
+    const names = []; let cursor;
+    do { const l = await env.MEETINGS.list({ prefix: "qn_", cursor }); for (const k of l.keys) if (!floor || k.name >= floor) names.push(k.name); cursor = l.list_complete === false && l.cursor ? l.cursor : null; } while (cursor);
+    names.sort();
+    const notes = []; let more = false;
+    for (const n of names) {
+      if (notes.length >= 2000) { more = true; break; }
+      let r = null; try { r = JSON.parse((await env.MEETINGS.get(n)) || "null"); } catch (e) {}
+      if (r && r.id && (!since || Date.parse(r.at) >= since)) notes.push(r);
+    }
+    notes.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 : 1));
+    return J(more ? { notes, more: true } : { notes });
+  }
+  if (p === "/questions/forwarded") {   // meeting-capture hands over Kendall's WhatsApp notes, so every note sits in one store
+    const f = request.headers.get("X-Azimuth-Forward");
+    if (request.method !== "POST" || !env.WA_FORWARD_TOKEN || !f || !ctEq(f, env.WA_FORWARD_TOKEN)) return new Response("unauthorized", { status: 401 });
+    let b = null; try { b = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
+    const rec = qnRecord(env, { by: b && b.by, via: "whatsapp", kind: b && b.kind, text: b && b.text, askedBy: b && b.askedBy, context: b && b.context });
+    if (!rec) return new Response("empty", { status: 400 });
+    await env.MEETINGS.put(rec.id, JSON.stringify(rec));
+    return J({ ok: true, id: rec.id });
+  }
+  const by = await qnWho(env, request);
+  if (!by || request.method !== "POST" || request.headers.get("X-Azimuth-Q") !== "1") return new Response("not found", { status: 404 });
+  if (p === "/questions/note") {
+    let b = null; try { b = await request.json(); } catch (e) { return J({ ok: false, error: "bad json" }, 400); }
+    const auto = !!(b && b.kind === "empty_search");
+    let dk = "";
+    if (auto) {   // one note per search per person per Dubai day
+      const qn = String((b && b.text) || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 200);
+      if (qn.length < 3) return J({ ok: false, error: "too short" }, 400);
+      dk = "qnd_" + qnDay() + "_" + by + "_" + (await qnHash(qn));
+      if (await env.MEETINGS.get(dk)) return J({ ok: true, dup: true });
+    }
+    const rec = qnRecord(env, { by, via: auto ? "auto_search" : "app", kind: auto ? "empty_search" : "typed", text: b && b.text, askedBy: auto ? null : b && b.askedBy, context: b && b.context });
+    if (!rec) return J({ ok: false, error: "empty" }, 400);
+    if (!(await qnBudget(env, by))) return J({ ok: false, error: "too many today" }, 429);
+    await env.MEETINGS.put(rec.id, JSON.stringify(rec));
+    if (dk) await env.MEETINGS.put(dk, "1", { expirationTtl: 2 * 86400 });
+    return J({ ok: true, id: rec.id });
+  }
+  if (p === "/questions/voice") {   // transcribed in this request; the audio is never written anywhere
+    let fd = null; try { fd = await request.formData(); } catch (e) { return J({ ok: false, error: "form data required" }, 400); }
+    const audio = fd.get("audio");
+    if (!audio || typeof audio === "string" || typeof audio.arrayBuffer !== "function") return J({ ok: false, error: "no audio" }, 400);
+    if (audio.size > 4 * 1024 * 1024) return J({ ok: false, error: "too long" }, 413);
+    let meta = {}; try { meta = JSON.parse(String(fd.get("meta") || "{}")) || {}; } catch (e) {}
+    const bytes = new Uint8Array(await audio.arrayBuffer());
+    if (bytes.length < 600) return J({ ok: false, heard: "" });
+    let text = "";
+    try { const out = await env.AI.run(STT, { audio: qnB64(bytes) }); text = String((out && out.text) || "").trim(); }
+    catch (e) { await noteErr(env, "question-voice", String((e && e.message) || e)); return J({ ok: false, error: "transcription failed" }, 502); }
+    if (!text || QN_NOISE.test(text)) return J({ ok: false, heard: "" });
+    const rec = qnRecord(env, { by, via: "app", kind: "voice", text, askedBy: meta.askedBy, context: meta.context });
+    if (!rec) return J({ ok: false, heard: "" });
+    if (!(await qnBudget(env, by))) return J({ ok: false, error: "too many today" }, 429);
+    await env.MEETINGS.put(rec.id, JSON.stringify(rec));
+    return J({ ok: true, id: rec.id });
+  }
+  return new Response("not found", { status: 404 });
+}
+// WhatsApp: a text starting "?" or a voice note whose words start "question" is a note (the prefix dropped); "" when the message is not one
+function qnWhatsAppText(type, text) {
+  const t = String(text || "").trim();
+  const m = type === "text" ? /^\?+\s*([\s\S]*\S)/.exec(t) : type === "audio" ? /^(?:a\s+)?questions?\b[\s,.:;!?–—-]*([\s\S]*\S)/i.exec(t) : null;
+  return m ? m[1].trim() : "";
+}
+async function qnFromWhatsApp(env, from, msg, text) {
+  const rec = qnRecord(env, { by: QN_PEOPLE[String(from || "").replace(/[^0-9]/g, "")] || qnOwner(env), via: "whatsapp", kind: msg.type === "audio" ? "voice" : "typed", text });
+  if (!rec) return;
+  let stored = false;
+  const svc = env.QN_STORE ? env[env.QN_STORE] : null;   // meeting-capture: QN_STORE = "AZIMUTH_2", the store the export reads
+  if (svc && typeof svc.fetch === "function" && env.WA_FORWARD_TOKEN) {
+    try {
+      const r = await svc.fetch(new Request("https://internal/questions/forwarded", { method: "POST", headers: { "Content-Type": "application/json", "X-Azimuth-Forward": env.WA_FORWARD_TOKEN }, body: JSON.stringify(rec) }));
+      stored = r.ok;
+      if (!r.ok) await noteErr(env, "question-forward", "HTTP " + r.status);
+    } catch (e) { await noteErr(env, "question-forward", String((e && e.message) || e)); }
+  }
+  if (!stored) { try { await env.MEETINGS.put(rec.id, JSON.stringify(rec)); stored = true; } catch (e) { await noteErr(env, "question-note", String((e && e.message) || e)); } }
+  if (stored) { if (msg.id) await waPost(env, { messaging_product: "whatsapp", recipient_type: "individual", to: from, type: "reaction", reaction: { message_id: msg.id, emoji: "✅" } }, "question-ack"); }
+  else await waSend(env, from, "⚠ That question did not save. Send it again in a minute.");
+}
+// /ingest_private name "question_bank": the Najma data session's canonical bank. Stored only (a private QUESTIONS view is phase 2); the same
+// scrub runs over every string on the way in, and the reply says how many it changed.
+async function ingestQuestionBank(env, json) {
+  let scrubbed = 0;
+  const walk = (v, d) => {
+    if (d > 12) return null;
+    if (typeof v === "string") { const s = qnScrub(v); if (s !== v) scrubbed++; return s; }
+    if (Array.isArray(v)) return v.slice(0, 50000).map(x => walk(x, d + 1));
+    if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v)) o[k] = walk(v[k], d + 1); return o; }
+    return typeof v === "number" || typeof v === "boolean" ? v : null;
+  };
+  const s = JSON.stringify(walk(json, 0));
+  if (s.length > 5 * 1024 * 1024) return new Response("too large", { status: 413 });
+  await env.MEETINGS.put("priv_question_bank", s);
+  await env.MEETINGS.put("priv_at_question_bank", new Date().toISOString());
+  return new Response(JSON.stringify({ ok: true, name: "question_bank", bytes: s.length, scrubbed }), { headers: { "Content-Type": "application/json" } });
+}
+// The button and its strip, added straight after <body>. Everything is scoped to #azq-*, keeps its events to itself (the twins pick a building on any
+// tap that reaches the window), and never reloads or scrolls the page. Pages can describe what is open through window.__qnCtx or by pushing a
+// function onto window.__qnParts; FIND reports each search's result count through window.__qnFind.
+const QN_STRIP = String.raw`<style id=azq-css>
+#azq-b{position:fixed;right:env(safe-area-inset-right);bottom:calc(16px + env(safe-area-inset-bottom));z-index:100;box-sizing:border-box;width:26px;height:40px;margin:0;padding:0 0 0 2px;border-radius:12px 0 0 12px;border:1px solid rgba(197,165,106,.5);border-right:0;background:rgba(12,20,19,.86);color:#C5A56A;font:600 15px/1 "IBM Plex Sans",system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.85;box-shadow:-2px 2px 10px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#azq-b::before{content:"";position:absolute;top:-6px;bottom:-6px;left:-16px;right:0}
+#azq-b:hover,#azq-b:focus-visible{opacity:1}
+#azq-b.ok{color:#8FC7B9;border-color:rgba(143,199,185,.75);opacity:1}
+#azq-b.q{border-style:dashed;opacity:1}
+#azq-b[hidden],#azq-k[hidden],#azq-s[hidden],#azq-m[hidden],body.film #azq-b{display:none!important}
+#azq-k{position:fixed;inset:0;z-index:118;background:transparent}
+#azq-s{position:fixed;left:0;right:0;bottom:0;z-index:120;box-sizing:border-box;max-width:720px;margin:0 auto;background:#101a19;color:#E8E4D8;border:1px solid #2a3b37;border-bottom:0;border-radius:14px 14px 0 0;padding:10px 12px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -10px 30px rgba(0,0,0,.5);font:14px/1.4 "IBM Plex Sans",system-ui,-apple-system,sans-serif;text-align:left}
+#azq-s *{box-sizing:border-box}
+#azq-s .azq-top{display:flex;align-items:center;gap:6px;margin:0 0 8px}
+#azq-s .azq-lab{font:500 10px/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.04em;text-transform:uppercase;color:#8FA39B;white-space:nowrap}
+#azq-s .azq-chips{display:flex;gap:4px;flex-wrap:wrap;flex:1;min-width:0}
+#azq-s .azq-chips button{font:500 11.5px/1 "IBM Plex Sans",system-ui,sans-serif;color:#B7C4BE;background:transparent;border:1px solid #2f433e;border-radius:99px;padding:7px 8px;margin:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#azq-s .azq-chips button[aria-pressed="true"]{color:#0C1413;background:#C5A56A;border-color:#C5A56A}
+#azq-s .azq-x{flex:none;margin:0 0 0 auto;background:transparent;border:0;color:#8FA39B;font-size:16px;line-height:1;padding:6px 0 6px 6px;cursor:pointer}
+#azq-s .azq-row{display:flex;align-items:flex-end;gap:8px}
+#azq-t{flex:1;min-width:0;height:42px;min-height:42px;max-height:120px;margin:0;resize:none;font:16px/1.35 "IBM Plex Sans",system-ui,sans-serif;color:#E8E4D8;background:#0C1413;border:1px solid #2f433e;border-radius:12px;padding:10px 12px;outline:none;-webkit-appearance:none;appearance:none}
+#azq-t:focus{border-color:#C5A56A}
+#azq-t::placeholder{color:#6f817a}
+#azq-s .azq-i{flex:none;width:42px;height:42px;margin:0;border-radius:50%;border:1px solid #2f433e;background:#0C1413;color:#C5A56A;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;-webkit-tap-highlight-color:transparent}
+#azq-s .azq-i svg{width:20px;height:20px;pointer-events:none}
+#azq-s .azq-i:disabled{opacity:.38;cursor:default}
+#azq-m{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#azq-s #azq-m.rec{background:#D96C5F;border-color:#D96C5F;color:#0C1413;box-shadow:0 0 0 6px rgba(217,108,95,.22)}
+#azq-s #azq-go{background:#C5A56A;border-color:#C5A56A;color:#0C1413}
+#azq-h{margin:6px 0 0;min-height:15px;font:11.5px/1.3 "IBM Plex Mono",ui-monospace,monospace;color:#8FA39B}
+#azq-h.w{color:#E0B26A}
+</style>
+<button id=azq-b type=button aria-label="Note a question the app could not answer" title="Note a question">?</button>
+<div id=azq-k hidden></div>
+<div id=azq-s role=dialog aria-label="Note a question" hidden>
+<div class=azq-top><span class=azq-lab>Asked by</span><div class=azq-chips><button type=button data-a=buyer aria-pressed=false>Buyer</button><button type=button data-a=tenant aria-pressed=false>Tenant</button><button type=button data-a=investor aria-pressed=false>Investor</button><button type=button data-a=developer aria-pressed=false>Developer</button></div><button type=button class=azq-x aria-label=Close>&#x2715;</button></div>
+<div class=azq-row><textarea id=azq-t rows=1 maxlength=1000 enterkeyhint=send placeholder="What couldn't the app answer?"></textarea><button type=button class=azq-i id=azq-m aria-label="Hold to talk"><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.8 stroke-linecap=round stroke-linejoin=round><rect x=9 y=3 width=6 height=11 rx=3></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button><button type=button class=azq-i id=azq-go aria-label=Send disabled><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2.1 stroke-linecap=round stroke-linejoin=round><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button></div>
+<div id=azq-h aria-live=polite></div>
+</div>
+<script id=azq-js>(function(){
+if(window.__azq)return;window.__azq=1;
+var $=function(i){return document.getElementById(i)},B=$("azq-b"),K=$("azq-k"),S=$("azq-s"),T=$("azq-t"),M=$("azq-m"),G=$("azq-go"),H=$("azq-h");
+if(!B||!S||!T)return;
+var ASK=null,BUSY=false,TK=0,QK="azq_q",FL=false,FT=0,REC=null,STREAM=null,CH=[],T0=0,HELD=false,STARTING=false,RT=0;
+var CAN=!!(window.MediaRecorder&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.isSecureContext!==false);
+if(!CAN)M.hidden=true;
+function hint(t,w){H.textContent=t||"";H.className=w?"w":""}
+function shown(e){var cs=getComputedStyle(e);return cs.display!=="none"&&cs.visibility!=="hidden"&&+cs.opacity>0.05}
+function painted(e){var cs=getComputedStyle(e);return !/^(transparent|rgba\(0, 0, 0, 0\))$/.test(cs.backgroundColor)||cs.backgroundImage!=="none"||parseFloat(cs.borderTopWidth)>0}
+function rectsOf(e){if(painted(e))return [e.getBoundingClientRect()];var out=[];try{var rg=document.createRange();rg.selectNodeContents(e);var rs=rg.getClientRects();for(var i=0;i<rs.length&&i<60;i++)out.push(rs[i])}catch(x){}
+  var ds=e.querySelectorAll("*");for(var j=0;j<ds.length&&j<80;j++){if(painted(ds[j])&&shown(ds[j]))out.push(ds[j].getBoundingClientRect())}return out}
+// a slim tab on the right edge just above the tab bar, lifted clear of what the page keeps down there (map zoom buttons, the twin's credits,
+// a small panel); over a large panel it covers only the panel's margin
+function place(){if(B.hidden)return;var nv=document.querySelector(".nnav"),base=nv?Math.round(nv.getBoundingClientRect().height)+12:18,A=innerWidth*innerHeight*0.4,x0=innerWidth-30,x1=innerWidth,R=[];
+  [].slice.call(document.body.children).filter(function(e){return e!==B&&e!==S&&e!==K&&e!==nv&&!/^(SCRIPT|STYLE|LINK)$/.test(e.tagName)&&getComputedStyle(e).position==="fixed"&&shown(e)}).concat([].slice.call(document.querySelectorAll(".maplibregl-ctrl-group")))
+    .forEach(function(e){rectsOf(e).forEach(function(r){if(r.width>0&&r.height>0&&r.width*r.height<A&&r.right>x0&&r.left<x1)R.push(r)})});
+  var bt=base;for(var k=0;k<12;k++){var top=innerHeight-bt-40,bot=innerHeight-bt,hit=null;R.forEach(function(r){if(r.bottom>top-4&&r.top<bot+4&&(!hit||r.top<hit.top))hit=r});if(!hit)break;bt=Math.round(innerHeight-hit.top+8)}
+  if(bt>base+260)bt=base;B.style.bottom=bt+"px"}
+place();addEventListener("resize",place);addEventListener("load",place);document.addEventListener("DOMContentLoaded",place);setInterval(place,2000);
+document.addEventListener("click",function(){setTimeout(place,300)},true);
+function kb(){var v=window.visualViewport;if(!v||S.hidden){S.style.bottom="";return}var off=Math.round(innerHeight-v.height-v.offsetTop);S.style.bottom=off>40?off+"px":""}
+if(window.visualViewport){visualViewport.addEventListener("resize",kb);visualViewport.addEventListener("scroll",kb)}
+function sync(){G.disabled=BUSY||!T.value.trim();M.disabled=BUSY}
+function grow(){if(!T.value){T.style.height="42px";return}T.style.height="auto";T.style.height=Math.max(42,Math.min(120,T.scrollHeight+2))+"px"}
+function chips(){S.querySelectorAll(".azq-chips button").forEach(function(b){b.setAttribute("aria-pressed",b.getAttribute("data-a")===ASK?"true":"false")})}
+function openS(){K.hidden=false;S.hidden=false;B.hidden=true;sync();grow();hint(CAN?"type, or hold the mic and talk (45 s at most)":"type the question");kb();try{if(matchMedia("(hover:hover) and (pointer:fine)").matches)T.focus()}catch(e){}}
+function closeS(){if(REC||STARTING)stopRec(true);S.hidden=true;K.hidden=true;B.hidden=false;try{T.blur()}catch(e){}}
+function done(q){T.value="";ASK=null;chips();closeS();B.classList.remove("ok","q");B.classList.add(q?"q":"ok");B.textContent="✓";B.title=q?"kept on this device; it sends when you are back online":"noted";clearTimeout(TK);TK=setTimeout(function(){B.classList.remove("ok","q");B.textContent="?";B.title="Note a question"},q?4000:2000)}
+[S,K].forEach(function(el){["pointerdown","pointerup","click","touchstart","touchend","mousedown","mouseup","wheel","keydown","keyup","keypress","input"].forEach(function(ev){el.addEventListener(ev,function(e){e.stopPropagation()})})});
+["pointerdown","mousedown","touchstart","click"].forEach(function(ev){B.addEventListener(ev,function(e){e.stopPropagation()})});
+B.addEventListener("click",openS);K.addEventListener("click",closeS);S.querySelector(".azq-x").addEventListener("click",closeS);
+S.querySelectorAll(".azq-chips button").forEach(function(b){b.addEventListener("click",function(){var a=b.getAttribute("data-a");ASK=ASK===a?null:a;chips()})});
+T.addEventListener("input",function(){sync();grow()});
+T.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();typed()}});
+S.addEventListener("keydown",function(e){if(e.key==="Escape")closeS()});
+G.addEventListener("click",typed);
+function ctx(){
+  var P=location.pathname,U=new URLSearchParams(location.search),g=function(k){var v=U.get(k);return v==null||v===""?null:v};
+  var c={tab:null,path:P,community:null,comm:null,project:null,project_id:null,unit:null,search:null,filters:null,district:null},F={},own=function(o,k){return Object.prototype.hasOwnProperty.call(o,k)};
+  var put=function(o){if(!o||typeof o!=="object")return;for(var k in o){if(!own(o,k))continue;var v=o[k];if(v==null||v==="")continue;if(k==="filters"){if(typeof v==="object")for(var f in v){if(own(v,f)&&v[f]!=null&&v[f]!=="")F[f]=v[f]}}else if(k!=="tab"&&k!=="path"&&own(c,k)&&typeof v!=="object")c[k]=v}};
+  var sg=P.split("/"),s1=sg[1]||"",rest=sg.slice(2).join("/");
+  var on=document.querySelector(".nnav a.on span");c.tab=on?on.textContent.trim().toLowerCase():(s1||"home");
+  if(s1==="find"){var q=$("q");c.search=(q&&q.value.trim())||g("q")}
+  else if(s1==="home"){["mode","bed","band","metric","sort","tier","life"].forEach(function(k){if(g(k))F[k]=g(k)})}
+  else if(s1==="dev"||s1==="avail"){if(g("d"))F.developer=g("d");c.project=g("p")}
+  else if(s1==="cards"){c.project_id=g("b");c.unit=g("t")}
+  else if(s1==="plans"){if(g("d"))F.developer=g("d");c.project=g("p")}
+  else if(s1==="compare"){["a","b","bed","band"].forEach(function(k){if(g(k))F[k]=g(k)})}
+  else if(s1==="area"&&rest){try{c.community=decodeURIComponent(rest)}catch(e){c.community=rest}}
+  else if(s1==="skyline"){c.district=rest||g("d")}
+  else if(s1==="map"){c.district=g("d")}
+  else if(s1==="report"&&rest){c.district=rest}
+  put(window.__qnCtx);
+  (window.__qnParts||[]).forEach(function(fn){try{put(fn())}catch(e){}});
+  if(s1==="map"&&!c.project&&!c.community)c.project=g("focus");
+  try{var R=window.__res,st=R&&R.state;if(st&&st.sel!=null&&st.sel!==""&&document.querySelector("#panel.on #rpx")){var cm=String(st.sel),dt=R.data,lab=null;((dt&&dt.communities)||[]).forEach(function(x){if(String(x.comm)===cm)lab=x.label||x.name});if(!lab&&dt&&dt.names&&dt.names[cm])lab=dt.names[cm].label;put({community:lab||("Community "+cm),comm:cm})}}catch(e){}
+  if(Object.keys(F).length)c.filters=F;
+  return c}
+function post(kind,body){
+  var init={method:"POST",credentials:"same-origin",headers:{"X-Azimuth-Q":"1"}};
+  if(kind==="voice")init.body=body;else{init.headers["Content-Type"]="application/json";init.body=JSON.stringify(body)}
+  return fetch(kind==="voice"?"/questions/voice":"/questions/note",init).then(function(r){
+    if(r.status>=500)return "later";
+    return r.json().catch(function(){return {}}).then(function(j){return r.ok&&j.ok?"ok":(r.ok&&j.heard===""?"heard":"no")})
+  },function(){return "net"})}
+function qget(){try{var a=JSON.parse(localStorage.getItem(QK)||"[]");return Array.isArray(a)?a:[]}catch(e){return []}}
+function qset(a){try{if(a.length)localStorage.setItem(QK,JSON.stringify(a));else localStorage.removeItem(QK);return true}catch(e){return false}}
+function keep(it){it.at=Date.now();var a=qget();a.push(it);while(a.length>40)a.shift();return qset(a)}
+function typed(){var t=T.value.trim();if(!t||BUSY)return;var body={text:t,askedBy:ASK,kind:"typed",context:ctx()};
+  if(navigator.onLine===false){if(keep({t:"note",b:body}))done(true);else hint("this device could not keep it; try again when you are online",1);return}
+  BUSY=true;sync();hint("sending…");
+  post("note",body).then(function(r){BUSY=false;sync();
+    if(r==="ok"){done(false);flush()}
+    else if((r==="net"||r==="later")&&keep({t:"note",b:body}))done(true);
+    else hint("that did not go through; try again in a moment",1)})}
+function form(blob,type,meta){var fd=new FormData();fd.append("audio",blob,"note"+(/mp4|aac|m4a/.test(type)?".m4a":/ogg/.test(type)?".ogg":".webm"));fd.append("meta",JSON.stringify(meta));return fd}
+function keepVoice(blob,type,meta){
+  if(qget().filter(function(x){return x.t==="voice"}).length>=3){hint("three voice notes are already waiting to send; type this one",1);return}
+  var fr=new FileReader();fr.onload=function(){if(keep({t:"voice",d:String(fr.result),ty:type,m:meta}))done(true);else hint("this device could not keep it; type it instead",1)};
+  fr.onerror=function(){hint("this device could not keep it; type it instead",1)};fr.readAsDataURL(blob)}
+function voice(blob,type){var meta={askedBy:ASK,context:ctx()};
+  if(navigator.onLine===false){keepVoice(blob,type,meta);return}
+  BUSY=true;sync();hint("writing it down…");
+  post("voice",form(blob,type,meta)).then(function(r){BUSY=false;sync();
+    if(r==="ok"){done(false);flush()}
+    else if(r==="heard")hint("didn't catch that; hold the mic and try again",1);
+    else if(r==="net"||r==="later")keepVoice(blob,type,meta);
+    else hint("that did not go through; type it instead",1)})}
+function flush(){if(FL||navigator.onLine===false)return;var a=qget(),n=a.length;
+  a=a.filter(function(x){return x&&Date.now()-(x.at||0)<7*864e5});if(a.length!==n)qset(a);if(!a.length)return;
+  FL=true;var it=a[0],p;
+  if(it.t==="voice"){try{var bin=atob(String(it.d).split(",")[1]||""),u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);p=post("voice",form(new Blob([u],{type:it.ty}),it.ty,it.m))}catch(e){p=Promise.resolve("no")}}
+  else p=post("note",it.b);
+  p.then(function(r){FL=false;if(r==="net"||r==="later")return;var b=qget();if(b.length&&b[0].at===it.at)b.shift();qset(b);if(b.length)setTimeout(flush,600)})}
+addEventListener("online",flush);setTimeout(flush,2500);
+window.__qnFind=function(q,n,t){clearTimeout(FT);var s=String(q||"").replace(/\s+/g," ").trim();if(n||t||s.length<3)return;
+  FT=setTimeout(function(){var d=new Date(Date.now()+144e5).toISOString().slice(0,10),seen={};try{seen=JSON.parse(localStorage.getItem("azq_e")||"{}")||{}}catch(e){}
+    if(seen.d!==d||!seen.q)seen={d:d,q:{}};var k=s.toLowerCase();if(seen.q[k])return;seen.q[k]=1;try{localStorage.setItem("azq_e",JSON.stringify(seen))}catch(e){}
+    var body={text:s,kind:"empty_search",context:ctx()};post("note",body).then(function(r){if(r==="net"||r==="later")keep({t:"note",b:body})})},3000)};
+function mime(){var c=["audio/webm;codecs=opus","audio/mp4","audio/ogg;codecs=opus","audio/webm"];for(var i=0;i<c.length;i++){try{if(MediaRecorder.isTypeSupported(c[i]))return c[i]}catch(e){}}return ""}
+function tracksOff(){if(STREAM){try{STREAM.getTracks().forEach(function(t){t.stop()})}catch(e){}STREAM=null}}
+function startRec(e){if(e){e.preventDefault();try{M.setPointerCapture(e.pointerId)}catch(x){}}
+  if(BUSY||REC||STARTING)return;HELD=true;STARTING=true;hint("starting the mic…");
+  navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(function(st){STARTING=false;STREAM=st;
+    if(!HELD||S.hidden){tracksOff();hint(S.hidden?"":"hold the mic down while you talk");return}
+    var mt=mime(),r;CH=[];
+    try{r=mt?new MediaRecorder(st,{mimeType:mt}):new MediaRecorder(st)}catch(x){tracksOff();hint("this browser cannot record here; type it instead",1);return}
+    REC=r;r.ondataavailable=function(ev){if(ev.data&&ev.data.size)CH.push(ev.data)};
+    r.onstop=function(){var drop=r.__drop,ms=Date.now()-T0,type=r.mimeType||mt||"audio/webm";REC=null;tracksOff();clearInterval(RT);M.classList.remove("rec");
+      if(drop){hint("");return}if(ms<900){hint("hold the mic down while you talk");return}voice(new Blob(CH,{type:type}),type)};
+    T0=Date.now();try{r.start(500)}catch(x){REC=null;tracksOff();hint("this browser cannot record here; type it instead",1);return}M.classList.add("rec");
+    var up=function(){var s=Math.floor((Date.now()-T0)/1000);hint("listening · 0:"+(s<10?"0":"")+s+" · let go to send");if(s>=45)stopRec(false)};up();RT=setInterval(up,250)
+  },function(){STARTING=false;HELD=false;hint("the microphone is off for this site; allow it, or type",1)})}
+function stopRec(drop){HELD=false;if(REC&&REC.state!=="inactive"){if(drop)REC.__drop=1;try{REC.stop()}catch(x){}}}
+M.addEventListener("pointerdown",startRec);
+["pointerup","pointercancel","lostpointercapture"].forEach(function(ev){M.addEventListener(ev,function(){stopRec(false)})});
+M.addEventListener("contextmenu",function(e){e.preventDefault()});
+document.addEventListener("visibilitychange",function(){if(document.hidden&&(REC||STARTING))stopRec(true)});
+})();</script>`;
 async function platePhoto(env, angle, place, id) {
   PLATE_LAST_ERR = "";
   if (!env.OPENAI_API_KEY) { PLATE_LAST_ERR = "no image key"; return null; }
