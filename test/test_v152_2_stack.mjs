@@ -52,7 +52,7 @@ ok(r.status === 200 && /<div id=hp class=hp>[\s\S]*?<\/div><\/div><\/div><div id
 ok(mp.includes("<b id=rres>pick a nationality</b>") && !/class="hp rp on"/.test(mp), "MAP private: RESIDENTS starts collapsed with its hint, like HOMES");
 ok(r.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin" && /noindex/.test(r.headers.get("X-Robots-Tag") || "") && mp.includes("<meta name=referrer content=strict-origin-when-cross-origin>") && !mp.includes("content=no-referrer>"), "MAP private: other sites get the origin only, never the key in the query (the basemap needs a referrer), noindex");
 const nav = navHrefs(mp);
-ok(nav.length === 9 && nav.filter(h => h.includes("rk=")).map(h => h.split("?")[0]).sort().join() === "/map,/skyline" && nav.filter(h => h.includes("rk=")).every(h => h.includes("&rk=" + encodeURIComponent(RES))), "MAP private: the key rides on the MAP and TWIN tabs only, never to FIND, HOMES, PULSE, PLANS, CHARTS, BOARD or TIME");
+ok(nav.length === 10 && nav.filter(h => h.includes("rk=")).map(h => h.split("?")[0]).sort().join() === "/map,/residents,/skyline" && nav.filter(h => h.includes("rk=")).every(h => h.includes("rk=" + encodeURIComponent(RES))) && nav.indexOf("/residents?rk=" + encodeURIComponent(RES)) === nav.findIndex(h => h.startsWith("/map")) + 1, "MAP private: the key rides on the MAP, RESIDENTS (right after MAP) and TWIN tabs only, never to FIND, HOMES, PULSE, PLANS, CHARTS, BOARD or TIME");
 ok(!/"accounts"|1800|5200/.test(mp), "MAP private: the page carries no residents data and no counts; it reads them from the private route");
 const mscript = (mp.match(/<script>\(function\(\)\{([\s\S]*)\}\)\(\);<\/script><\/body><\/html>$/) || [])[1] || "";
 ok(mscript.length > 30000 && parses("(function(){" + mscript + "})();", ".js"), "MAP private: the page script parses");
@@ -133,7 +133,7 @@ for (const [label, p] of [["district twin", "/skyline/jltnorth"], ["all-Dubai tw
   r = await call(p + (p.includes("?") ? "&" : "?") + "key=" + READ + "&rk=" + RES);
   const pr = await r.text();
   const nv = navHrefs(pr);
-  ok(r.status === 200 && r.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin" && pr.includes("window.__RKQ=") && nv.filter(h => h.includes("rk=")).map(h => h.split("?")[0]).sort().join() === "/map,/skyline", label + ", private link: origin-only referrer, and the key rides on the MAP and TWIN tabs only");
+  ok(r.status === 200 && r.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin" && pr.includes("window.__RKQ=") && nv.filter(h => h.includes("rk=")).map(h => h.split("?")[0]).sort().join() === "/map,/residents,/skyline", label + ", private link: origin-only referrer, and the key rides on the MAP, RESIDENTS and TWIN tabs only");
 }
 r = await call("/skyline/jltnorth?key=" + READ + "&rk=" + RES);
 const tw = await r.text();

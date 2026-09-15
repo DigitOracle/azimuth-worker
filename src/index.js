@@ -3944,7 +3944,7 @@ function mkFmtM(v) { if (v == null) return "—"; if (v >= 1000) return "$" + (v
 // v49 — Najma UI uplift: Phosphor icons (MIT, phosphoricons.com), inlined as single paths, gold via currentColor
 // v95 - the opening verse: a repository Najma sees one of at random on every open (King James text, public domain)
 const NAJ_VERSES = [["For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil, to give you an expected end.", "Jeremiah 29:11"], ["Trust in the LORD with all thine heart; and lean not unto thine own understanding. In all thy ways acknowledge him, and he shall direct thy paths.", "Proverbs 3:5-6"], ["I can do all things through Christ which strengtheneth me.", "Philippians 4:13"], ["Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God.", "Philippians 4:6"], ["And the peace of God, which passeth all understanding, shall keep your hearts and minds through Christ Jesus.", "Philippians 4:7"], ["The LORD is my shepherd; I shall not want.", "Psalm 23:1"], ["Thy word is a lamp unto my feet, and a light unto my path.", "Psalm 119:105"], ["This is the day which the LORD hath made; we will rejoice and be glad in it.", "Psalm 118:24"], ["Be still, and know that I am God.", "Psalm 46:10"], ["The LORD is my light and my salvation; whom shall I fear? the LORD is the strength of my life; of whom shall I be afraid?", "Psalm 27:1"], ["Delight thyself also in the LORD; and he shall give thee the desires of thine heart.", "Psalm 37:4"], ["Commit thy way unto the LORD; trust also in him; and he shall bring it to pass.", "Psalm 37:5"], ["Wait on the LORD: be of good courage, and he shall strengthen thine heart: wait, I say, on the LORD.", "Psalm 27:14"], ["Weeping may endure for a night, but joy cometh in the morning.", "Psalm 30:5"], ["Create in me a clean heart, O God; and renew a right spirit within me.", "Psalm 51:10"], ["The LORD is nigh unto all them that call upon him, to all that call upon him in truth.", "Psalm 145:18"], ["Except the LORD build the house, they labour in vain that build it.", "Psalm 127:1"], ["Let the words of my mouth, and the meditation of my heart, be acceptable in thy sight, O LORD, my strength, and my redeemer.", "Psalm 19:14"], ["Cast thy burden upon the LORD, and he shall sustain thee.", "Psalm 55:22"], ["I will lift up mine eyes unto the hills, from whence cometh my help. My help cometh from the LORD, which made heaven and earth.", "Psalm 121:1-2"], ["Have not I commanded thee? Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest.", "Joshua 1:9"], ["But they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary; and they shall walk, and not faint.", "Isaiah 40:31"], ["Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee; yea, I will help thee.", "Isaiah 41:10"], ["Thou wilt keep him in perfect peace, whose mind is stayed on thee: because he trusteth in thee.", "Isaiah 26:3"], ["And we know that all things work together for good to them that love God, to them who are the called according to his purpose.", "Romans 8:28"], ["If God be for us, who can be against us?", "Romans 8:31"], ["Rejoicing in hope; patient in tribulation; continuing instant in prayer.", "Romans 12:12"], ["Now the God of hope fill you with all joy and peace in believing, that ye may abound in hope, through the power of the Holy Ghost.", "Romans 15:13"], ["Now faith is the substance of things hoped for, the evidence of things not seen.", "Hebrews 11:1"], ["Let us hold fast the profession of our faith without wavering; for he is faithful that promised.", "Hebrews 10:23"], ["Casting all your care upon him; for he careth for you.", "1 Peter 5:7"], ["Draw nigh to God, and he will draw nigh to you.", "James 4:8"], ["If any of you lack wisdom, let him ask of God, that giveth to all men liberally, and upbraideth not; and it shall be given him.", "James 1:5"], ["Every good gift and every perfect gift is from above, and cometh down from the Father of lights.", "James 1:17"], ["For God hath not given us the spirit of fear; but of power, and of love, and of a sound mind.", "2 Timothy 1:7"], ["I have fought a good fight, I have finished my course, I have kept the faith.", "2 Timothy 4:7"], ["And let us not be weary in well doing: for in due season we shall reap, if we faint not.", "Galatians 6:9"], ["But the fruit of the Spirit is love, joy, peace, longsuffering, gentleness, goodness, faith, meekness, temperance.", "Galatians 5:22-23"], ["And whatsoever ye do, do it heartily, as to the Lord, and not unto men.", "Colossians 3:23"], ["Let your light so shine before men, that they may see your good works, and glorify your Father which is in heaven.", "Matthew 5:16"], ["But seek ye first the kingdom of God, and his righteousness; and all these things shall be added unto you.", "Matthew 6:33"], ["Take therefore no thought for the morrow: for the morrow shall take thought for the things of itself.", "Matthew 6:34"], ["Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you.", "Matthew 7:7"], ["Come unto me, all ye that labour and are heavy laden, and I will give you rest.", "Matthew 11:28"], ["With men this is impossible; but with God all things are possible.", "Matthew 19:26"], ["Peace I leave with you, my peace I give unto you: not as the world giveth, give I unto you. Let not your heart be troubled, neither let it be afraid.", "John 14:27"], ["I am the light of the world: he that followeth me shall not walk in darkness, but shall have the light of life.", "John 8:12"], ["These things I have spoken unto you, that in me ye might have peace. In the world ye shall have tribulation: but be of good cheer; I have overcome the world.", "John 16:33"], ["A new commandment I give unto you, That ye love one another; as I have loved you, that ye also love one another.", "John 13:34"], ["For where two or three are gathered together in my name, there am I in the midst of them.", "Matthew 18:20"], ["The LORD bless thee, and keep thee: the LORD make his face shine upon thee, and be gracious unto thee: the LORD lift up his countenance upon thee, and give thee peace.", "Numbers 6:24-26"], ["The LORD is good, a strong hold in the day of trouble; and he knoweth them that trust in him.", "Nahum 1:7"], ["He hath shewed thee, O man, what is good; and what doth the LORD require of thee, but to do justly, and to love mercy, and to walk humbly with thy God?", "Micah 6:8"], ["It is of the LORD's mercies that we are not consumed, because his compassions fail not. They are new every morning: great is thy faithfulness.", "Lamentations 3:22-23"], ["The blessing of the LORD, it maketh rich, and he addeth no sorrow with it.", "Proverbs 10:22"], ["A soft answer turneth away wrath: but grievous words stir up anger.", "Proverbs 15:1"], ["Commit thy works unto the LORD, and thy thoughts shall be established.", "Proverbs 16:3"], ["A man's heart deviseth his way: but the LORD directeth his steps.", "Proverbs 16:9"], ["Through wisdom is an house builded; and by understanding it is established: and by knowledge shall the chambers be filled with all precious and pleasant riches.", "Proverbs 24:3-4"], ["She is clothed with strength and honour; and she shall rejoice in time to come.", "Proverbs 31:25"], ["She openeth her mouth with wisdom; and in her tongue is the law of kindness.", "Proverbs 31:26"], ["The name of the LORD is a strong tower: the righteous runneth into it, and is safe.", "Proverbs 18:10"], ["Where there is no vision, the people perish: but he that keepeth the law, happy is he.", "Proverbs 29:18"], ["To every thing there is a season, and a time to every purpose under the heaven.", "Ecclesiastes 3:1"], ["He hath made every thing beautiful in his time.", "Ecclesiastes 3:11"], ["Two are better than one; because they have a good reward for their labour.", "Ecclesiastes 4:9"], ["Whatsoever thy hand findeth to do, do it with thy might.", "Ecclesiastes 9:10"], ["The steps of a good man are ordered by the LORD: and he delighteth in his way.", "Psalm 37:23"], ["O give thanks unto the LORD; for he is good: for his mercy endureth for ever.", "Psalm 107:1"], ["Blessed is the man that trusteth in the LORD, and whose hope the LORD is.", "Jeremiah 17:7"], ["Call unto me, and I will answer thee, and shew thee great and mighty things, which thou knowest not.", "Jeremiah 33:3"], ["The LORD thy God in the midst of thee is mighty; he will save, he will rejoice over thee with joy; he will rest in his love, he will joy over thee with singing.", "Zephaniah 3:17"], ["For we walk by faith, not by sight.", "2 Corinthians 5:7"], ["My grace is sufficient for thee: for my strength is made perfect in weakness.", "2 Corinthians 12:9"], ["Therefore if any man be in Christ, he is a new creature: old things are passed away; behold, all things are become new.", "2 Corinthians 5:17"], ["Let all your things be done with charity.", "1 Corinthians 16:14"], ["Charity suffereth long, and is kind; charity envieth not; charity vaunteth not itself, is not puffed up.", "1 Corinthians 13:4"], ["And now abideth faith, hope, charity, these three; but the greatest of these is charity.", "1 Corinthians 13:13"], ["Rejoice evermore. Pray without ceasing. In every thing give thanks: for this is the will of God in Christ Jesus concerning you.", "1 Thessalonians 5:16-18"], ["Being confident of this very thing, that he which hath begun a good work in you will perform it until the day of Jesus Christ.", "Philippians 1:6"], ["Finally, brethren, whatsoever things are true, whatsoever things are honest, whatsoever things are just, whatsoever things are pure, whatsoever things are lovely, whatsoever things are of good report; if there be any virtue, and if there be any praise, think on these things.", "Philippians 4:8"], ["And be ye kind one to another, tenderhearted, forgiving one another, even as God for Christ's sake hath forgiven you.", "Ephesians 4:32"], ["For by grace are ye saved through faith; and that not of yourselves: it is the gift of God.", "Ephesians 2:8"], ["Now unto him that is able to do exceeding abundantly above all that we ask or think, according to the power that worketh in us.", "Ephesians 3:20"], ["Behold, I stand at the door, and knock: if any man hear my voice, and open the door, I will come in to him, and will sup with him, and he with me.", "Revelation 3:20"], ["The grass withereth, the flower fadeth: but the word of our God shall stand for ever.", "Isaiah 40:8"], ["Arise, shine; for thy light is come, and the glory of the LORD is risen upon thee.", "Isaiah 60:1"], ["Seek ye the LORD while he may be found, call ye upon him while he is near.", "Isaiah 55:6"], ["As for God, his way is perfect: the word of the LORD is tried: he is a buckler to all those that trust in him.", "Psalm 18:30"], ["Teach us to number our days, that we may apply our hearts unto wisdom.", "Psalm 90:12"], ["Let the beauty of the LORD our God be upon us: and establish thou the work of our hands upon us; yea, the work of our hands establish thou it.", "Psalm 90:17"], ["He that dwelleth in the secret place of the most High shall abide under the shadow of the Almighty.", "Psalm 91:1"], ["Bless the LORD, O my soul, and all that is within me, bless his holy name.", "Psalm 103:1"], ["Enter into his gates with thanksgiving, and into his courts with praise: be thankful unto him, and bless his name.", "Psalm 100:4"], ["The heavens declare the glory of God; and the firmament sheweth his handywork.", "Psalm 19:1"], ["God is our refuge and strength, a very present help in trouble.", "Psalm 46:1"], ["In God I have put my trust: I will not be afraid what man can do unto me.", "Psalm 56:11"], ["Search me, O God, and know my heart: try me, and know my thoughts.", "Psalm 139:23"], ["I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well.", "Psalm 139:14"]];
-const NAJ_ICONS = { clock: "M128 24a104 104 0 1 1 0 208 104 104 0 0 1 0-208zm0 26a78 78 0 1 0 0 156 78 78 0 0 0 0-156z M120 68h16v62l44 26-8 14-52-31z",  search: "M104 24a80 80 0 1 1 0 160 80 80 0 0 1 0-160zm0 26a54 54 0 1 0 0 108 54 54 0 0 0 0-108z M154 168l18-18 62 62-18 18z",  plan: "M32 32h192v192H32z M48 48v160h160V48z M120 48h16v64h-16z M48 120h56v16H48z M120 136h16v24h-16z M136 176h72v16h-72z M176 48h16v40h-16z",  cube: "M128 24l96 52v104l-96 52-96-52V76zM32 76l96 52 96-52M128 128v104",
+const NAJ_ICONS = { people: "M96 40a36 36 0 1 1 0 72 36 36 0 0 1 0-72z M180 60a28 28 0 1 1 0 56 28 28 0 0 1 0-56z M24 212c0-46 32-78 72-78s72 32 72 78v12H24z M180 132c34 0 60 28 60 66v14h-58c0-30-10-56-30-74 8-4 18-6 28-6z", clock: "M128 24a104 104 0 1 1 0 208 104 104 0 0 1 0-208zm0 26a78 78 0 1 0 0 156 78 78 0 0 0 0-156z M120 68h16v62l44 26-8 14-52-31z",  search: "M104 24a80 80 0 1 1 0 160 80 80 0 0 1 0-160zm0 26a54 54 0 1 0 0 108 54 54 0 0 0 0-108z M154 168l18-18 62 62-18 18z",  plan: "M32 32h192v192H32z M48 48v160h160V48z M120 48h16v64h-16z M48 120h56v16H48z M120 136h16v24h-16z M136 176h72v16h-72z M176 48h16v40h-16z",  cube: "M128 24l96 52v104l-96 52-96-52V76zM32 76l96 52 96-52M128 128v104",
   grid: "M40 40h76v76H40zM140 40h76v76h-76zM40 140h76v76H40zM140 140h76v76h-76z", star:"M237.28,97.87A14.18,14.18,0,0,0,224.76,88l-60.25-4.87-23.22-56.2a14.37,14.37,0,0,0-26.58,0L91.49,83.11,31.24,88a14.18,14.18,0,0,0-12.52,9.89A14.43,14.43,0,0,0,23,113.32L69,152.93l-14,59.25a14.4,14.4,0,0,0,5.59,15,14.1,14.1,0,0,0,15.91.6L128,196.12l51.58,31.71a14.1,14.1,0,0,0,15.91-.6,14.4,14.4,0,0,0,5.59-15l-14-59.25L233,113.32A14.43,14.43,0,0,0,237.28,97.87Zm-12.14,6.37-48.69,42a6,6,0,0,0-1.92,5.92l14.88,62.79a2.35,2.35,0,0,1-.95,2.57,2.24,2.24,0,0,1-2.6.1L131.14,184a6,6,0,0,0-6.28,0L70.14,217.61a2.24,2.24,0,0,1-2.6-.1,2.35,2.35,0,0,1-1-2.57l14.88-62.79a6,6,0,0,0-1.92-5.92l-48.69-42a2.37,2.37,0,0,1-.73-2.65,2.28,2.28,0,0,1,2.07-1.65l63.92-5.16a6,6,0,0,0,5.06-3.69l24.63-59.6a2.35,2.35,0,0,1,4.38,0l24.63,59.6a6,6,0,0,0,5.06,3.69l63.92,5.16a2.28,2.28,0,0,1,2.07,1.65A2.37,2.37,0,0,1,225.14,104.24Z", sun:"M122,40V16a6,6,0,0,1,12,0V40a6,6,0,0,1-12,0Zm68,88a62,62,0,1,1-62-62A62.07,62.07,0,0,1,190,128Zm-12,0a50,50,0,1,0-50,50A50.06,50.06,0,0,0,178,128ZM59.76,68.24a6,6,0,1,0,8.48-8.48l-16-16a6,6,0,0,0-8.48,8.48Zm0,119.52-16,16a6,6,0,1,0,8.48,8.48l16-16a6,6,0,1,0-8.48-8.48ZM192,70a6,6,0,0,0,4.24-1.76l16-16a6,6,0,0,0-8.48-8.48l-16,16A6,6,0,0,0,192,70Zm4.24,117.76a6,6,0,0,0-8.48,8.48l16,16a6,6,0,0,0,8.48-8.48ZM46,128a6,6,0,0,0-6-6H16a6,6,0,0,0,0,12H40A6,6,0,0,0,46,128Zm82,82a6,6,0,0,0-6,6v24a6,6,0,0,0,12,0V216A6,6,0,0,0,128,210Zm112-88H216a6,6,0,0,0,0,12h24a6,6,0,0,0,0-12Z", buildings:"M240,210H222V96a14,14,0,0,0-14-14H142V32a14,14,0,0,0-21.77-11.64l-80,53.33A14,14,0,0,0,34,85.34V210H16a6,6,0,0,0,0,12H240a6,6,0,0,0,0-12ZM208,94a2,2,0,0,1,2,2V210H142V94ZM46,85.34a2,2,0,0,1,.89-1.66l80-53.34A2,2,0,0,1,130,32V210H46ZM110,112v16a6,6,0,0,1-12,0V112a6,6,0,0,1,12,0Zm-32,0v16a6,6,0,0,1-12,0V112a6,6,0,0,1,12,0Zm0,56v16a6,6,0,0,1-12,0V168a6,6,0,0,1,12,0Zm32,0v16a6,6,0,0,1-12,0V168a6,6,0,0,1,12,0Z", chart:"M230,208a6,6,0,0,1-6,6H32a6,6,0,0,1-6-6V48a6,6,0,0,1,12,0v98.78l54.05-47.3a6,6,0,0,1,7.55-.28l60.11,45.08,60.34-52.8a6,6,0,0,1,7.9,9l-64,56a6,6,0,0,1-7.55.28L96.29,111.72,38,162.72V202H224A6,6,0,0,1,230,208Z", pin:"M128,66a38,38,0,1,0,38,38A38,38,0,0,0,128,66Zm0,64a26,26,0,1,1,26-26A26,26,0,0,1,128,130Zm0-112a86.1,86.1,0,0,0-86,86c0,30.91,14.34,63.74,41.47,94.94a252.32,252.32,0,0,0,41.09,38,6,6,0,0,0,6.88,0,252.32,252.32,0,0,0,41.09-38c27.13-31.2,41.47-64,41.47-94.94A86.1,86.1,0,0,0,128,18Zm0,206.51C113,212.93,54,163.62,54,104a74,74,0,0,1,148,0C202,163.62,143,212.93,128,224.51Z", trend:"M238,56v64a6,6,0,0,1-12,0V70.48l-85.76,85.76a6,6,0,0,1-8.48,0L96,120.49,28.24,188.24a6,6,0,0,1-8.48-8.48l72-72a6,6,0,0,1,8.48,0L136,143.51,217.52,62H168a6,6,0,0,1,0-12h64A6,6,0,0,1,238,56Z", coins:"M224.56,103.81C213.43,97.75,198.47,93.39,182,91.34V84c0-12.12-9.58-23.1-27-30.93C139.16,45.93,118.2,42,96,42S52.84,45.93,37,53.07C19.58,60.9,10,71.88,10,84v40c0,12.12,9.58,23.1,27,30.93,10.49,4.72,23.21,8,37,9.73V172c0,12.12,9.58,23.1,27,30.93C116.84,210.07,137.8,214,160,214s43.16-3.93,59-11.07c17.39-7.83,27-18.81,27-30.93V132C246,121.35,238.39,111.34,224.56,103.81Zm-5.74,10.54C228.61,119.68,234,126,234,132c0,14.19-30.39,30-74,30a166.9,166.9,0,0,1-21.21-1.34A110.79,110.79,0,0,0,155,154.93c17.39-7.83,27-18.81,27-30.93V103.43C196.4,105.36,209.3,109.16,218.82,114.35ZM108.16,153.58c-3.92.27-8,.42-12.16.42-5.3,0-10.4-.24-15.28-.67a2.22,2.22,0,0,0-.37,0c-3.58-.33-7-.77-10.35-1.3V124.12A178,178,0,0,0,96,126a178,178,0,0,0,26-1.88V152c-4.34.69-8.91,1.22-13.69,1.56ZM170,105.89V124c0,9.54-13.75,19.8-36,25.51V121.85a115,115,0,0,0,21-6.92A66.2,66.2,0,0,0,170,105.89ZM96,54c43.61,0,74,15.81,74,30s-30.39,30-74,30S22,98.19,22,84,52.39,54,96,54ZM22,124V105.89a66.2,66.2,0,0,0,15,9,115,115,0,0,0,21,6.92v27.66C35.75,143.8,22,133.54,22,124Zm64,48v-6.28c3.3.18,6.63.28,10,.28q5.91,0,11.66-.37A123.17,123.17,0,0,0,122,169.84v27.67C99.75,191.8,86,181.54,86,172Zm48,28V172.1a177.84,177.84,0,0,0,26,1.9,178,178,0,0,0,26-1.88V200a170,170,0,0,1-52,0Zm64-2.49V169.85a115,115,0,0,0,21-6.92,66.2,66.2,0,0,0,15-9V172C234,181.54,220.25,191.8,198,197.51Z", key:"M215.15,40.85A78,78,0,0,0,86.2,121.31l-56.1,56.1a13.94,13.94,0,0,0-4.1,9.9V216a14,14,0,0,0,14,14H72a6,6,0,0,0,6-6V206H96a6,6,0,0,0,6-6V182h18a6,6,0,0,0,4.24-1.76l10.45-10.44A77.59,77.59,0,0,0,160,174h.1A78,78,0,0,0,215.15,40.85ZM226,98.16c-1.12,35.16-30.67,63.8-65.88,63.84a65.93,65.93,0,0,1-24.51-4.67,6,6,0,0,0-6.64,1.26L117.51,170H96a6,6,0,0,0-6,6v18H72a6,6,0,0,0-6,6v18H40a2,2,0,0,1-2-2V187.31a2,2,0,0,1,.58-1.41l58.83-58.83a6,6,0,0,0,1.26-6.64A65.61,65.61,0,0,1,94,95.92C94,60.71,122.68,31.16,157.83,30A66,66,0,0,1,226,98.16ZM190,76a10,10,0,1,1-10-10A10,10,0,0,1,190,76Z", crane:"M240,82H107.71L85.37,37.32A6,6,0,0,0,80,34H48a6,6,0,0,0-6,6V82H24a6,6,0,0,0,0,12H42V210H24a6,6,0,0,0,0,12H128a6,6,0,0,0,0-12H110V94H210v90a2,2,0,0,1-2,2H192a2,2,0,0,1-2-2v-8a6,6,0,0,0-12,0v8a14,14,0,0,0,14,14h16a14,14,0,0,0,14-14V94h18a6,6,0,0,0,0-12ZM54,46H76.29l18,36H54Zm0,164V158H98v52Zm44-64H54V94H98Z", house:"M240,210H222V131.17l5.76,5.76a6,6,0,0,0,8.48-8.49L137.9,30.09a14,14,0,0,0-19.8,0L19.76,128.44a6,6,0,0,0,8.48,8.49L34,131.17V210H16a6,6,0,0,0,0,12H240a6,6,0,0,0,0-12ZM46,119.17l80.58-80.59a2,2,0,0,1,2.84,0L210,119.17V210H158V152a6,6,0,0,0-6-6H104a6,6,0,0,0-6,6v58H46ZM146,210H110V158h36Z", bed:"M216,74H30V48a6,6,0,0,0-12,0V208a6,6,0,0,0,12,0V174H242v34a6,6,0,0,0,12,0V112A38,38,0,0,0,216,74ZM30,86h76v76H30Zm88,76V86h98a26,26,0,0,1,26,26v50Z", file:"M212.24,83.76l-56-56A6,6,0,0,0,152,26H56A14,14,0,0,0,42,40V216a14,14,0,0,0,14,14H200a14,14,0,0,0,14-14V88A6,6,0,0,0,212.24,83.76ZM158,46.48,193.52,82H158ZM200,218H56a2,2,0,0,1-2-2V40a2,2,0,0,1,2-2h90V88a6,6,0,0,0,6,6h50V216A2,2,0,0,1,200,218Zm-34-82a6,6,0,0,1-6,6H96a6,6,0,0,1,0-12h64A6,6,0,0,1,166,136Zm0,32a6,6,0,0,1-6,6H96a6,6,0,0,1,0-12h64A6,6,0,0,1,166,168Z" };
 const najIcon = (n) => NAJ_ICONS[n] ? '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="' + NAJ_ICONS[n] + '"/></svg>' : "";
 // v62 — the register labels layouts "1 B/R" / "Studio" / "PENTHOUSE"; sort numerically, Studio first
@@ -3962,7 +3962,8 @@ const NAJ_NAV_CSS = '.nnav{position:fixed;left:0;right:0;bottom:0;z-index:40;dis
 const najNav = (key, active, rk) => {   // v152.2 - rk: a private page carries the residents key on its MAP and TWIN tabs only, never to the other rooms
   const k = encodeURIComponent(key || "");
   const items = [["find", "/find", "search", "FIND"], ["homes", "/home", "grid", "HOMES"], ["pulse", "/market", "trend", "PULSE"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["map", "/map", "pin", "MAP"], ["plans", "/plans", "plan", "PLANS"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"], ["clock", "/clock", "clock", "TIME"]];   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
-  return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + (rk && (i[0] === "map" || i[0] === "twin") ? '&rk=' + encodeURIComponent(rk) : '') + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>').join('') + '</nav>';
+  return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + (rk && (i[0] === "map" || i[0] === "twin") ? '&rk=' + encodeURIComponent(rk) : '') + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>'
+    + (rk && i[0] === "map" ? '<a' + (active === "residents" ? ' class=on' : '') + ' href="/residents?rk=' + encodeURIComponent(rk) + '">' + najIcon("people") + '<span>RESIDENTS</span></a>' : '')).join('') + '</nav>';   // v152.3 - a private page has one tap to the full residents view (Kendall, 15 Sep)
 };
 
 function renderMarket(latestRaw, prevRaw, key, origin, watchRaw) {
@@ -5759,7 +5760,7 @@ const MAP_CHROME_JS = ''
   + '    Object.keys(src).forEach(function(k){var b=+k;if(b===9)return;var bb=b>=6?6:b;if(bb<blo||bb>bhi)return;var v=src[k][1];if(v<lo||v>hi)return;if(!best||v<best.v)best={b:b,v:v,ask:src[k][0]==="ask"}});if(!best)return;'
   + '    if(HB.type==="villa"&&!isVilla(it))return;if(HB.type==="apt"&&isVilla(it))return;if(HB.live&&!it.left)return;if(HB.beach&&!nearBeach(it,"public"))return;if(HB.hbeach&&!nearBeach(it,"hotel"))return;out.push({it:it,b:best.b,v:best.v})});'
   + '  out.sort(function(a,b){return a.v-b.v});return out}'
-  + 'function drawHomes(){var src=map&&map.getSource("homes");if(!HB.on){if(src)src.setData({type:"FeatureCollection",features:[]});return}var m=homeMatches();var mPins=window.__twinDistrict?m.filter(function(x){return x.it.d===window.__twinDistrict}):m;'
+  + 'function drawHomes(){var src=map&&map.getSource("homes");if(!HB.on){if(src)src.setData({type:"FeatureCollection",features:[]});if(window.__onHomes)try{window.__onHomes(null)}catch(e){}return}var m=homeMatches();if(window.__onHomes)try{window.__onHomes(m)}catch(e){}var mPins=window.__twinDistrict?m.filter(function(x){return x.it.d===window.__twinDistrict}):m;'   // v152.3 - the twin lights up the buildings whose homes match
   + '  if(src)src.setData({type:"FeatureCollection",features:mPins.map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x.it.lon,x.it.lat]},properties:{p:x.it.p,lab:x.it.n+" \u00b7 "+fmtAed(x.v)}}})});'
   + '  var byD={};m.forEach(function(x){byD[x.it.d]=(byD[x.it.d]||0)+1});var _tk=Object.keys(byD).sort(function(a,b){return byD[b]-byD[a]});var top=_tk.length?"most in "+dName(_tk[0]):"";'
   + '  var dsl=window.__twinDistrict||CURD;var here=dsl?m.filter(function(x){return x.it.d===dsl}).length:null;document.getElementById("hres").textContent=(HB.live?"developer stock \u00b7 ":"")+(dsl?here+" here \u00b7 "+m.length+" across Dubai":m.length+" across Dubai"+(top?" \u00b7 "+top:""));var lc=document.getElementById("hlivec");if(lc)lc.textContent=PR.filter(function(i){return i.left}).length+" live";'
@@ -5982,7 +5983,7 @@ const MAP_CHROME_JS = ''
 // The data is read from /residents/data with the key; nothing of it is in the page. The script runs inside the map chrome's scope (map, esc).
 const RES_COL = { 5: "#1f5f58", 10: "#2f8a7f", 20: "#58b5a8", 40: "#a9e2da" };   // the template's teal ramp, validated on this ground
 const RES_PANEL_CSS = ''
-  + '.rp .hbody{max-height:calc(100vh - 170px);overflow:auto}'
+  + '.rp .hbody{max-height:min(64vh,calc(100vh - 230px));overflow:auto}'
   + '.rpriv{display:inline-block;margin:9px 0 2px;padding:3px 8px;border-radius:6px;background:var(--gold);color:#1d1608;font-family:"IBM Plex Mono",monospace;font-size:.54rem;letter-spacing:.06em;text-transform:uppercase}'
   + '.rnat{gap:5px}.rnat button{text-transform:none;letter-spacing:0;font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.7rem;padding:4px 9px}.rnote{font-size:.7rem;color:var(--mut)}'
   + '#rq{width:100%;box-sizing:border-box;background:rgba(12,20,19,.6);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;font-size:.8rem;padding:7px 10px;outline:none}#rq:focus{border-color:rgba(197,165,106,.7)}'
@@ -5995,6 +5996,7 @@ const RES_PANEL_CSS = ''
   + '.rbars{display:grid;gap:6px;margin-top:8px}.rbar{display:grid;grid-template-columns:minmax(0,130px) minmax(0,1fr) 38px;gap:8px;align-items:center;font-size:.78rem}.rbar i{display:block;height:8px;border-radius:2px;background:#58b5a8}.rbar b{text-align:right;font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:.7rem}'
   + '.rcav{margin-top:10px;color:var(--mut);font-size:.72rem;line-height:1.4}'
   + '#panel:has(#rpx){z-index:9}'   // a community's detail sits over the open stack (wide screens put the panel under it), close it to get back to the list
+  + '#rtip{position:fixed;z-index:30;display:none;pointer-events:none;max-width:260px;background:rgba(19,31,29,.96);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:.74rem;line-height:1.35;color:var(--text)}#rtip span{color:var(--mut)}'   // the twin's hover name
   + '@media(max-width:640px){.srow{margin-right:112px}}';   // on a phone the second pill of the stack sits level with the search box
 const RES_PANEL_HTML = '<div id=rp class="hp rp"><div class=hh id=rh><span>residents</span><b id=rres>pick a nationality</b><i>▾</i></div><div class=hbody>'
   + '<div class=rpriv>private · Kendall and Naj only</div>'
@@ -6015,7 +6017,10 @@ function rmatch(comm){if(!RS.q)return true;var n=rname(comm),c=RBY[comm]||{};ret
 function rfeatures(){var O=(RX&&RX.outlines)||{};return {type:"FeatureCollection",features:Object.keys(O).map(function(comm){var ring=O[comm].slice();if(ring.length&&(ring[0][0]!==ring[ring.length-1][0]||ring[0][1]!==ring[ring.length-1][1]))ring.push(ring[0]);var c=RBY[comm],n=rname(comm);
   return {type:"Feature",geometry:{type:"Polygon",coordinates:[ring]},properties:{comm:comm,label:n.label,official:n.official,band:(c&&RS.nats.length)?rband(c):0,shown:!!c,dim:!rmatch(comm),sel:RS.sel===comm}}})}}
 function rbbox(comm){var ring=((RX&&RX.outlines)||{})[comm];if(!ring)return null;var a=[180,90,-180,-90];ring.forEach(function(p){a=[Math.min(a[0],p[0]),Math.min(a[1],p[1]),Math.max(a[2],p[0]),Math.max(a[3],p[1])]});return [[a[0],a[1]],[a[2],a[3]]]}
-function rlayers(){if(RLAY||!RX||!map||!STYLE_READY||!map.getStyle)return;
+function rTwin(){return !!(window.__twinDistrict&&window.__resTwin)}   // v152.3 - on the twin the shading is drawn on the ground by the scene
+function rlayers(){if(RLAY||!RX)return;
+  if(rTwin()){RLAY=true;window.__resTwin.init({pick:function(comm){rselect(String(comm),false)}});rdraw();return}
+  if(window.__twinDistrict||!map||!STYLE_READY||!map.getStyle)return;
   var L=[];try{L=map.getStyle().layers||[]}catch(e){}var before,font=["Ubuntu Regular"];
   for(var i=0;i<L.length;i++){if(L[i].type==="symbol"){if(!before)before=L[i].id;if(L[i].layout&&L[i].layout["text-font"]){font=L[i].layout["text-font"];break}}}
   map.addSource("res",{type:"geojson",data:rfeatures()});
@@ -6027,7 +6032,7 @@ function rlayers(){if(RLAY||!RX||!map||!STYLE_READY||!map.getStyle)return;
   map.on("mouseleave","res-fill",function(){if(RPOP)RPOP.remove()});
   map.on("click","res-fill",function(e){if(!RS.nats.length)return;var ids=["sub-bub","plot-dot","am-dot","vid-dot","home-dot"].filter(function(id){return map.getLayer(id)});if(ids.length&&map.queryRenderedFeatures(e.point,{layers:ids}).length)return;rselect(String(e.features[0].properties.comm),false)});
   RLAY=true;rdraw()}
-function rdraw(){if(!RLAY)return;map.getSource("res").setData(rfeatures());var v=RS.nats.length?"visible":"none";["res-fill","res-line","res-label"].forEach(function(id){map.setLayoutProperty(id,"visibility",v)});if(!RS.nats.length&&RPOP)RPOP.remove()}
+function rdraw(){if(!RLAY)return;if(rTwin()){window.__resTwin.draw(rfeatures(),RS.nats.length>0);return}map.getSource("res").setData(rfeatures());var v=RS.nats.length?"visible":"none";["res-fill","res-line","res-label"].forEach(function(id){map.setLayoutProperty(id,"visibility",v)});if(!RS.nats.length&&RPOP)RPOP.remove()}
 function rrender(){
   var hits=[];if(RX&&RS.nats.length)(RX.communities||[]).forEach(function(c){var b=rband(c);if(b&&rmatch(String(c.comm)))hits.push([c,b])});
   hits.sort(function(a,b){return b[1]-a[1]||rlab(a[0]).localeCompare(rlab(b[0]))});
@@ -6048,6 +6053,7 @@ function rdetail(){var el=document.getElementById("panel");if(!el)return;var com
   el.innerHTML='<span class=px id=rpx>✕</span><div class=pt>'+esc(n.label)+'</div><div class=ps>residents'+(n.official&&n.official!==n.label?' · official name: '+esc(n.official):'')+'</div>'+body;
   el.classList.add("on");document.getElementById("rpx").onclick=function(){RS.sel=null;el.classList.remove("on");rrender()};var h=document.getElementById("hint");if(h)h.textContent=""}
 function rselect(comm,fly){RS.sel=comm;if(innerWidth<=640)rp.classList.remove("on");rrender();rdetail();
+  if(fly&&RLAY&&rTwin()){window.__resTwin.fly(comm,rbbox(comm));return}
   if(fly&&RLAY){var b=rbbox(comm);if(b){var ph=innerWidth<=640,wide=document.body.classList.contains("wide");map.fitBounds(b,{padding:ph?{top:70,left:30,right:30,bottom:Math.round(innerHeight*0.55)}:(wide?{top:90,bottom:90,left:60,right:Math.round(innerWidth*0.38)}:{top:120,left:40,right:40,bottom:Math.round(innerHeight*0.5)}),maxZoom:14,duration:700})}}}
 function rload(){if(RLOAD)return RLOAD;RLOAD=fetch("/residents/data?rk="+encodeURIComponent(RK),{cache:"no-store",referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(j){
   if(!j||!j.communities){rnat.innerHTML='<span class=rnote>The residents data is not on file yet.</span>';return}
@@ -6070,6 +6076,57 @@ window.__res={get state(){return RS},get data(){return RX},load:rload,select:rse
 const RES_HEAD = '<meta name=referrer content=strict-origin-when-cross-origin><meta name=robots content="noindex,nofollow">';
 const resHeaders = (rk) => rk ? { "Referrer-Policy": "strict-origin-when-cross-origin", "X-Robots-Tag": "noindex, nofollow" } : {};
 const resRkq = (rk) => rk ? '<script>window.__RKQ=' + JSON.stringify("&rk=" + encodeURIComponent(rk)) + ';<\/script>' : '';
+// v152.3 - RESIDENTS on the district twin's ground (private pages only: appended to the twin's module script when the residents key is valid).
+// The panel in the map chrome owns the controls and the data; this draws the communities around the model as shaded outlines on the ground,
+// names them on hover, and hands a tapped community back to the panel. Positions come from the twin's own lon/lat fit (_scene).
+const RES_TWIN_JS = `
+// ===== v152.3 RESIDENTS on the twin ground (private page) =====
+const RES3={grp:null,meshes:[],byComm:new Map(),cb:null,tip:null,box:null,pend:null,tries:0};
+const RES3COL={5:0x1f5f58,10:0x2f8a7f,20:0x58b5a8,40:0xa9e2da};
+function res3Box(){if(RES3.box)return RES3.box;if(!ANCH||!ANCH.anchors)return null;let a=[180,90,-180,-90],n=0;for(const x of ANCH.anchors){if(x.lon&&x.lat){n++;a=[Math.min(a[0],x.lon),Math.min(a[1],x.lat),Math.max(a[2],x.lon),Math.max(a[3],x.lat)]}}if(!n)return null;RES3.box=[a[0]-0.02,a[1]-0.02,a[2]+0.02,a[3]+0.02];return RES3.box}
+function res3Build(fc){
+  const box=res3Box();if(!box||!ROOTREF||!_fit())return false;
+  RES3.grp=new THREE.Group();RES3.meshes=[];RES3.byComm.clear();
+  const y=(GROUND?GROUND.position.y:ROOTREF.position.y)+1.2;
+  for(const f of fc.features){let ring=f.geometry.coordinates[0]||[];
+    if(ring.length>1&&ring[0][0]===ring[ring.length-1][0]&&ring[0][1]===ring[ring.length-1][1])ring=ring.slice(0,-1);
+    let lo=[180,90],hi=[-180,-90];for(const p of ring){lo=[Math.min(lo[0],p[0]),Math.min(lo[1],p[1])];hi=[Math.max(hi[0],p[0]),Math.max(hi[1],p[1])]}
+    if(hi[0]<box[0]||lo[0]>box[2]||hi[1]<box[1]||lo[1]>box[3])continue;   // only the communities around this model
+    const pts=ring.map(p=>_scene(p[0],p[1])).filter(Boolean);if(pts.length<3)continue;
+    const geo=new THREE.ShapeGeometry(new THREE.Shape(pts.map(P=>new THREE.Vector2(P.x,-P.z))));geo.rotateX(-Math.PI/2);   // drawn in XY, laid on the ground
+    const fill=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide,toneMapped:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));
+    fill.position.y=y;fill.renderOrder=3;fill.userData.comm=String(f.properties.comm);
+    const line=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts.map(P=>new THREE.Vector3(P.x,y+0.6,P.z))),new THREE.LineBasicMaterial({color:0xC5A56A,transparent:true,opacity:0.35,depthWrite:false,toneMapped:false}));
+    line.renderOrder=4;RES3.grp.add(fill);RES3.grp.add(line);RES3.meshes.push(fill);RES3.byComm.set(String(f.properties.comm),{fill,line,f})}
+  scene.add(RES3.grp);return true}
+function res3Style(fc,visible){
+  RES3.grp.visible=!!visible;
+  for(const f of fc.features){const e=RES3.byComm.get(String(f.properties.comm));if(!e)continue;const p=f.properties;e.f=f;
+    e.fill.material.color.setHex(RES3COL[p.band]||0x000000);e.fill.material.opacity=p.band?(p.dim?0.1:0.38):(p.sel?0.08:0);
+    e.line.material.color.setHex(p.sel||p.shown?0xC5A56A:0xE8E4D8);e.line.material.opacity=p.sel?1:(p.shown?0.35:0.1)}}
+function res3Retry(){if(RES3.grp||!RES3.pend||RES3.tries>80)return;RES3.tries++;setTimeout(()=>{if(RES3.pend&&!RES3.grp&&res3Build(RES3.pend.fc))res3Style(RES3.pend.fc,RES3.pend.v);else res3Retry()},700)}
+window.__resTwin={
+  init(cb){RES3.cb=cb},
+  draw(fc,visible){RES3.pend={fc,v:visible};if(!RES3.grp&&!res3Build(fc)){res3Retry();return false}res3Style(fc,visible);if(!visible&&RES3.tip)RES3.tip.style.display="none";return true},
+  fly(comm,bb){const e=RES3.byComm.get(String(comm)),k=res3Box();if(!e||!bb||!k)return false;const c=[(bb[0][0]+bb[1][0])/2,(bb[0][1]+bb[1][1])/2];if(c[0]<k[0]+0.016||c[0]>k[2]-0.016||c[1]<k[1]+0.016||c[1]>k[3]-0.016)return false;   /* only where the model stands: next door there is nothing but ground */const r=Math.max(Math.hypot((bb[1][0]-bb[0][0])*101000,(bb[1][1]-bb[0][1])*111000),600);window.__twinMap.easeTo({center:c,zoom:7+Math.log2(40000/r)});return true},
+  get communities(){return [...RES3.byComm.keys()]}
+};
+const res3Ray=new THREE.Raycaster(),res3Ptr=new THREE.Vector2();let res3T=0,res3Down=null;
+function res3Hit(e){if(!RES3.grp||!RES3.grp.visible)return null;res3Ptr.x=(e.clientX/innerWidth)*2-1;res3Ptr.y=-(e.clientY/innerHeight)*2+1;res3Ray.setFromCamera(res3Ptr,cam);
+  const h=res3Ray.intersectObjects(RES3.meshes,false).find(x=>{const e2=RES3.byComm.get(x.object.userData.comm);return e2&&e2.f.properties.shown});return h?h.object.userData.comm:null}
+const res3Off=(e)=>!!(e.target&&e.target.closest&&e.target.closest(".hstack,#panel,#ppanel,.top,.nnav,#card,.lb,#clegend"));
+addEventListener("pointermove",e=>{if(!RES3.grp||!RES3.grp.visible||e.pointerType==="touch")return;const now=performance.now();if(now-res3T<60)return;res3T=now;
+  if(!RES3.tip){RES3.tip=document.createElement("div");RES3.tip.id="rtip";document.body.appendChild(RES3.tip)}
+  const comm=res3Off(e)?null:res3Hit(e);if(!comm){RES3.tip.style.display="none";return}
+  const p=RES3.byComm.get(comm).f.properties;RES3.tip.innerHTML="<b>"+esc3(p.label)+"</b>"+(p.official&&p.official!==p.label?"<br><span>"+esc3(p.official)+"</span>":"");
+  RES3.tip.style.display="block";RES3.tip.style.left=Math.min(e.clientX+14,innerWidth-270)+"px";RES3.tip.style.top=(e.clientY+12)+"px"});
+addEventListener("pointerdown",e=>{res3Down=[e.clientX,e.clientY]});
+addEventListener("pointerup",e=>{const d=res3Down;res3Down=null;if(!d||Math.hypot(e.clientX-d[0],e.clientY-d[1])>6||res3Off(e)||!RES3.cb)return;
+  const comm=res3Hit(e);if(!comm)return;
+  if(MESHES){const vis=MESHES.filter(m=>m.visible);if(res3Ray.intersectObjects(vis,false).length)return}   // a tower under the tap keeps its own panel
+  RES3.cb.pick(comm)});
+// ===== v152.3 RESIDENTS on the twin ground - end =====
+`;
 function renderMapBasic(key, rk) {
   const K = JSON.stringify(key || "");
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">' + (rk ? RES_HEAD : '') + '<title>Najma — the map</title>'
@@ -7334,7 +7391,7 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 #clegend .cls{color:var(--mut);font-size:.56rem;margin-top:4px;line-height:1.35}
 body.cmode #legend{display:none}
 @media(max-width:640px){#clegend{bottom:132px;left:10px}}
-.cseg{flex-direction:column;align-items:stretch;padding:8px 0 4px}.cseg button{text-align:left}.cnote{font-family:"IBM Plex Mono",monospace;font-size:.54rem;letter-spacing:.03em;color:var(--mut);padding:4px 0 2px}
+.cseg{flex-direction:column;align-items:stretch;padding:8px 0 4px}.cseg button{text-align:left}.cseg button[disabled]{opacity:.4;cursor:default}.cnote{font-family:"IBM Plex Mono",monospace;font-size:.54rem;letter-spacing:.03em;color:var(--mut);padding:4px 0 2px}
 @media(max-width:640px){body:has(#colp) .srow{margin-right:112px}}
 #ppanel{position:fixed;right:14px;top:82px;bottom:78px;width:min(52vw,600px);overflow:auto;background:rgba(19,31,29,.95);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:none;z-index:41}
 #ppanel.on{display:block}.pt{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;padding-right:22px}.ps{color:var(--gold);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;margin:3px 0 10px}
@@ -7401,11 +7458,11 @@ ${UNIT_MIX_CSS}
 .rpt{margin-left:9px;font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.05em;color:#C5A56A;background:rgba(197,165,106,.1);border:1px solid rgba(197,165,106,.42);border-radius:99px;padding:3px 9px;text-decoration:none;vertical-align:middle;white-space:nowrap}
 #msg{position:fixed;inset:0;display:grid;place-items:center;color:var(--mut);font-size:.85rem;text-align:center;padding:0 30px}
 .foot{position:fixed;right:10px;bottom:calc(64px + env(safe-area-inset-bottom));color:rgba(143,163,155,.7);font-size:.58rem;font-family:"IBM Plex Mono",monospace;pointer-events:none}
-${MAP_CHROME_CSS}${MAP_CHROME_CSS_X}#rail1,#rail2,#mini,.tog,.feat,#devwrap{display:none!important}.top #rail{position:static!important;top:auto;left:auto;right:auto;padding:0 0 6px}.top{pointer-events:none}.top>*{pointer-events:auto}#twmk{position:fixed;inset:0;pointer-events:none;z-index:3}.tm{position:absolute;transform:translate(-50%,-50%);border-radius:50%;pointer-events:auto;cursor:pointer;box-sizing:border-box}.tm.am{width:12px;height:12px;border:1.5px solid rgba(12,20,19,.85)}.tm.am.ap{background:transparent!important;border-width:2px}.tm.near{width:22px;height:22px;background:transparent;border:2px solid}.tm.sel{width:54px;height:54px;background:rgba(197,165,106,.16);border:2px solid #C5A56A;pointer-events:none}.tm.home{width:14px;height:14px;background:#C5A56A;border:1.5px solid #0C1413}.tm.vid{width:20px;height:20px;background:#F0E4C8;border:2px solid #C5A56A;color:#0C1413;font-size:9px;line-height:16px;text-align:center}.tm b{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:3px;font:10.5px 'IBM Plex Sans',system-ui,sans-serif;color:#F0E4C8;white-space:nowrap;text-shadow:0 0 3px #0C1413,0 0 3px #0C1413;font-weight:500}${NAJ_NAV_CSS}</style>
+${MAP_CHROME_CSS}${MAP_CHROME_CSS_X}#rail1,#rail2,#mini,.tog,.feat,#devwrap{display:none!important}.top #rail{position:static!important;top:auto;left:auto;right:auto;padding:0 0 6px}.top{pointer-events:none}.top>*{pointer-events:auto}#twmk{position:fixed;inset:0;pointer-events:none;z-index:3}.tm{position:absolute;transform:translate(-50%,-50%);border-radius:50%;pointer-events:auto;cursor:pointer;box-sizing:border-box}.tm.am{width:12px;height:12px;border:1.5px solid rgba(12,20,19,.85)}.tm.am.ap{background:transparent!important;border-width:2px}.tm.near{width:22px;height:22px;background:transparent;border:2px solid}.tm.sel{width:54px;height:54px;background:rgba(197,165,106,.16);border:2px solid #C5A56A;pointer-events:none}.tm.home{width:14px;height:14px;background:#C5A56A;border:1.5px solid #0C1413}.tm.vid{width:20px;height:20px;background:#F0E4C8;border:2px solid #C5A56A;color:#0C1413;font-size:9px;line-height:16px;text-align:center}.tm b{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:3px;font:10.5px 'IBM Plex Sans',system-ui,sans-serif;color:#F0E4C8;white-space:nowrap;text-shadow:0 0 3px #0C1413,0 0 3px #0C1413;font-weight:500}${NAJ_NAV_CSS}${rk ? RES_PANEL_CSS : ""}</style>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.169.0/examples/jsm/"}}</script>
 </head><body>
 <div id=cv3></div>
-${MAP_CHROME_HTML.replace('__TITLE__', 'the twin')}
+${MAP_CHROME_HTML.replace('<!--hstack-->', rk ? RES_PANEL_HTML : '').replace('__TITLE__', 'the twin')}
 <div class=rail id=rail1 hidden>${_dr1}</div>
 <div class="rail r2" id=rail2 hidden>${_dr}</div>
 <div id=twmk></div>
@@ -7446,7 +7503,7 @@ ${MAP_CHROME_HTML.replace('__TITLE__', 'the twin')}
 <div class=foot>model: CityEngine from OSM footprints + DLD register · facades: Esri CityEngine texture library · © OpenStreetMap contributors</div>
 ${najNav(key, "twin", rk)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-<script>window.__twinPending=true;window.__twinDistrict=${JSON.stringify(slugName)};(function(){var KEY=${JSON.stringify(key || "")};${MAP_CHROME_JS}})();</script>
+<script>window.__twinPending=true;window.__twinDistrict=${JSON.stringify(slugName)};(function(){var KEY=${JSON.stringify(key || "")};${MAP_CHROME_JS}${rk ? 'var RK=' + JSON.stringify(rk) + ';' + RES_PANEL_JS : ''}})();</script>
 <script type="module">
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -8147,38 +8204,72 @@ const esc3=(t)=>String(t==null?"":t).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&
 let BACT=null,BACTLOAD=null,CMODE="";
 function loadBact(){if(!BACTLOAD)BACTLOAD=fetch("/img/building_activity?t="+Math.floor(Date.now()/3600000)).then(r=>r.ok?r.json():null).then(j=>{BACT=j&&j.buildings?j:null;return BACT}).catch(()=>null);return BACTLOAD}
 function bandOf(mode,duid){if(!BACT||!duid)return -1;const b=BACT.buildings[duid];if(!b)return -1;const bands=((BACT.modes||{})[mode]||{}).bands||[];const v=mode==="fill"?b.fill:mode==="residents"?b.residents:b.activity;return v==null?-1:bands.indexOf(v)}
-function colourCtl(){
+const CNOTE={merged:"This district’s 3D model is one merged piece, so its buildings can’t be coloured one by one yet. It works in Dubai Marina, JLT, JVC, Business Bay and Downtown.",none:"No DEWA building record matches this district’s model yet."};
+function colourCtl(state){
+  state=state||"ok";
   if(document.getElementById("colsel")||document.getElementById("colp"))return;   // not "cp": the building card already has a #cp
   const stack=document.getElementById("hstack");
   if(stack){   // v152.2 - a collapsible panel in the top-right stack under HOMES (the twin's chrome hides #devwrap, so a menu there was never seen)
+    const can=state==="ok";   // v152.3 - always there; where the model cannot be coloured building by building it says why (Kendall on Damac Hills, 15 Sep)
     const p=document.createElement("div");p.id="colp";p.className="hp colp";
-    p.innerHTML='<div class=hh id=colh><span>colour by</span><b id=colres>standard</b><i>▾</i></div><div class=hbody><div class="seg cseg" id=cseg>'+[["","standard"],["fill","filling up"],["residents","residents vs businesses"],["activity","move-ins vs Dubai"]].map(o=>'<button type=button data-c="'+o[0]+'"'+(o[0]?'':' class=on')+'>'+o[1]+'</button>').join("")+'</div><div class=cnote>DEWA open data, building by building · the key sits bottom left</div></div>';
+    p.innerHTML='<div class=hh id=colh><span>colour by</span><b id=colres>'+(can?'standard':'not in this district')+'</b><i>▾</i></div><div class=hbody><div class="seg cseg" id=cseg>'+[["","standard"],["fill","filling up"],["residents","residents vs businesses"],["activity","move-ins vs Dubai"]].map(o=>'<button type=button data-c="'+o[0]+'"'+(o[0]?'':' class=on')+(can||!o[0]?'':' disabled')+'>'+o[1]+'</button>').join("")+'</div><div class=cnote>'+(can?'DEWA open data, building by building · the key sits bottom left':esc3(CNOTE[state]||CNOTE.none))+'</div></div>';
     stack.appendChild(p);
     p.querySelector("#colh").onclick=()=>{const open=!p.classList.contains("on");if(open&&window.__stackOpen)window.__stackOpen(p);p.classList.toggle("on",open)};
-    p.querySelectorAll("#cseg button").forEach(b=>{b.onclick=()=>{const v=b.getAttribute("data-c");p.querySelectorAll("#cseg button").forEach(x=>x.classList.toggle("on",x===b));document.getElementById("colres").textContent=v?COLNAME[v]:"standard";applyColour(v)}});
+    p.querySelectorAll("#cseg button").forEach(b=>{b.onclick=()=>{if(b.disabled)return;const v=b.getAttribute("data-c");p.querySelectorAll("#cseg button").forEach(x=>x.classList.toggle("on",x===b));document.getElementById("colres").textContent=v?COLNAME[v]:"standard";applyColour(v)}});
   }else{
+    if(state!=="ok")return;
     let wrap=document.getElementById("devwrap");if(!wrap){wrap=document.createElement("div");wrap.id="devwrap";document.body.appendChild(wrap)}
     const sel=document.createElement("select");sel.id="colsel";
     sel.innerHTML='<option value="">colours: standard</option><option value="fill">colour by: filling up</option><option value="residents">colour by: residents vs businesses</option><option value="activity">colour by: move-ins vs Dubai</option>';
     sel.onchange=()=>applyColour(sel.value);wrap.appendChild(sel);}
-  const lg=document.createElement("div");lg.id="clegend";document.body.appendChild(lg);}
-function applyColour(mode){
-  CMODE=mode||"";document.body.classList.toggle("cmode",!!CMODE);
-  const lg=document.getElementById("clegend");
+  if(!document.getElementById("clegend")){const lg=document.createElement("div");lg.id="clegend";document.body.appendChild(lg)}}
+// v152.3 - HOMES on the buildings (Kendall, 15 Sep): the HOMES filters light up the towers whose homes match (the register's anchor index
+// on each priced development) and the rest recede. With a colour look on, the matches keep their colours and the others recede.
+const TWSLUG="${slugName}";
+let HOMESET=null,HOMEN=0,HOMEM=null;
+function homesFrom(m){
+  if(!m||!ANCH||!MESHES||!ANCH.per_building_glb){HOMESET=null;HOMEN=0;paintAll();return}
+  const want=new Set(m.filter(x=>x.it&&x.it.d===TWSLUG&&x.it.i!=null&&x.it.i>=0).map(x=>String(x.it.i)));
+  HOMESET=new Set();HOMEN=0;
+  for(const a of ANCH.anchors){if(want.has(String(a.i))&&a.meshes&&a.meshes.length){HOMEN++;a.meshes.forEach(i=>HOMESET.add(i))}}
+  paintAll()}
+function applyColour(mode){CMODE=mode||"";paintAll()}
+function paintAll(){
+  let lg=document.getElementById("clegend");
   CORIG.forEach((v,mt)=>{mt.color.copy(v.c);mt.emissive.copy(v.e);mt.emissiveIntensity=v.ei;mt.transparent=v.t;mt.opacity=v.o;mt.needsUpdate=true});CORIG.clear();CDIM.clear();
-  if(!CMODE||!BACT||!MESHES||!ANCH){if(lg){lg.innerHTML="";lg.classList.remove("on")}return}
-  const cols=COLBANDS[CMODE].map(h=>new THREE.Color(h)),counts=cols.map(()=>0),painted=new Set();let none=0;
+  const colourOn=!!(CMODE&&BACT&&MESHES&&ANCH),homesOn=!!(HOMESET&&MESHES&&ANCH);
+  document.body.classList.toggle("cmode",colourOn||homesOn);
+  if(!colourOn&&!homesOn){if(lg){lg.innerHTML="";lg.classList.remove("on")}return}
   const keep=(mt)=>{if(!CORIG.has(mt))CORIG.set(mt,{c:mt.color.clone(),e:mt.emissive.clone(),ei:mt.emissiveIntensity,t:mt.transparent,o:mt.opacity});if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity])};
   const dim=(mt)=>{keep(mt);mt.color.setHex(0x2c2c2a);mt.emissive.setHex(0x000000);mt.emissiveIntensity=0;mt.transparent=true;mt.opacity=0.45;CDIM.add(mt);mt.needsUpdate=true};
-  for(const a of ANCH.anchors){if(!a.meshes||!a.meshes.length)continue;const bi=bandOf(CMODE,a.duid);if(bi>=0)counts[bi]++;else none++;
-    for(const mi of a.meshes){const m=MESHES[mi];if(!m)continue;painted.add(mi);
-      for(const mt of MATS(m)){if(bi<0){dim(mt);continue}keep(mt);const cc=cols[bi];mt.color.copy(cc);mt.emissive.copy(cc);mt.emissiveIntensity=mt.map?0.35:0.18;mt.needsUpdate=true}}}
-  for(let i=0;i<MESHES.length;i++){if(!painted.has(i))MATS(MESHES[i]).forEach(dim)}
-  const md=(BACT.modes||{})[CMODE]||{},bands=md.bands||[];
-  if(lg){lg.innerHTML='<div class=clt>'+esc3(COLNAME[CMODE])+'</div>'+bands.map((b,i)=>'<div class=clr><b style="background:'+COLBANDS[CMODE][i]+'"></b>'+esc3(b)+'<i>'+counts[i]+'</i></div>').join("")+'<div class=clr><b class=cln></b>no record<i>'+none+'</i></div><div class=cls>'+esc3(md.label||"")+'<br>'+esc3(BACT.attribution||"Source: DEWA open data via Dubai Data")+'</div>';lg.title=(BACT.notes||[]).join(" ");lg.classList.add("on")}}
-(function waitColour(){if(ANCH&&MESHES&&ANCH.per_building_glb&&ANCH.anchors){loadBact().then(j=>{if(j&&ANCH.anchors.some(a=>a.duid&&j.buildings[a.duid]&&a.meshes&&a.meshes.length))colourCtl()});return}setTimeout(waitColour,800)})();
-window.__twinColour={apply:applyColour,get mode(){return CMODE},get data(){return BACT}};
+  const matched=(i)=>homesOn&&HOMESET.has(i);
+  let html="";
+  if(colourOn){
+    const cols=COLBANDS[CMODE].map(h=>new THREE.Color(h)),counts=cols.map(()=>0),painted=new Set();let none=0;
+    for(const a of ANCH.anchors){if(!a.meshes||!a.meshes.length)continue;const bi=bandOf(CMODE,a.duid);if(bi>=0)counts[bi]++;else none++;
+      for(const mi of a.meshes){const m=MESHES[mi];if(!m)continue;painted.add(mi);
+        for(const mt of MATS(m)){if(bi<0){if(!matched(mi))dim(mt);continue}keep(mt);const cc=cols[bi];mt.color.copy(cc);mt.emissive.copy(cc);mt.emissiveIntensity=mt.map?0.35:0.18;mt.needsUpdate=true}}}
+    for(let i=0;i<MESHES.length;i++){if(!painted.has(i)&&!matched(i))MATS(MESHES[i]).forEach(dim)}
+    const md=(BACT.modes||{})[CMODE]||{},bands=md.bands||[];
+    html='<div class=clt>'+esc3(COLNAME[CMODE])+'</div>'+bands.map((b,i)=>'<div class=clr><b style="background:'+COLBANDS[CMODE][i]+'"></b>'+esc3(b)+'<i>'+counts[i]+'</i></div>').join("")+'<div class=clr><b class=cln></b>no record<i>'+none+'</i></div><div class=cls>'+esc3(md.label||"")+'<br>'+esc3(BACT.attribution||"Source: DEWA open data via Dubai Data")+'</div>';}
+  if(homesOn){const gold=new THREE.Color(0xC5A56A);
+    for(let i=0;i<MESHES.length;i++){const hit=HOMESET.has(i);
+      for(const mt of MATS(MESHES[i])){if(!hit){if(!CDIM.has(mt))dim(mt);continue}if(colourOn)continue;keep(mt);if(mt.map)mt.color.lerp(gold,0.45);else mt.color.copy(gold);mt.emissive.copy(gold);mt.emissiveIntensity=mt.map?0.28:0.2;mt.needsUpdate=true}}
+    const row='<div class=clr><b style="background:#C5A56A"></b>buildings with homes in your budget<i>'+HOMEN+'</i></div>';
+    html=colourOn?html.replace('<div class=cls>',row+'<div class=cls>'):'<div class=clt>Homes in your budget</div>'+row+'<div class=cls>From the HOMES filters: budget, bedrooms, type and extras. The other buildings recede.</div>';}
+  if(!lg){lg=document.createElement("div");lg.id="clegend";document.body.appendChild(lg)}
+  lg.innerHTML=html;lg.title=colourOn?(BACT.notes||[]).join(" "):"";lg.classList.add("on")}
+(function waitColour(n){n=n||0;
+  if(ANCH&&MESHES&&ANCH.anchors){
+    if(!ANCH.per_building_glb){colourCtl("merged");return}
+    loadBact().then(j=>{colourCtl(j&&ANCH.anchors.some(a=>a.duid&&j.buildings[a.duid]&&a.meshes&&a.meshes.length)?"ok":"none");if(HOMEM)homesFrom(HOMEM)});return}
+  if(MESHES&&n>15){colourCtl("none");return}   // the model is in but no anchors came
+  if(n>75)return;                                // no model at all
+  setTimeout(()=>waitColour(n+1),800)})();
+window.__twinColour={apply:applyColour,get mode(){return CMODE},get data(){return BACT},get homes(){return HOMEN}};
 // ===== v152 COLOUR BY - end =====
+let _homeT=null;window.__onHomes=(m)=>{HOMEM=m;clearTimeout(_homeT);_homeT=setTimeout(()=>homesFrom(HOMEM),160)};   // the sliders fire on every step: paint once they settle
+${rk ? RES_TWIN_JS : ""}
 window.dispatchEvent(new Event("twinmap"));
 </script></body></html>`;
 }
@@ -8994,19 +9085,22 @@ function residentsKeyOf(env, url) {
   return rk;
 }
 async function residentsRoute(env, url) {
-  if (!residentsKeyOf(env, url)) return new Response("not found", { status: 404 });
+  const rk = residentsKeyOf(env, url);
+  if (!rk) return new Response("not found", { status: 404 });
   const hdr = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer" };
   if (url.pathname === "/residents/data") {
     const raw = await env.MEETINGS.get("priv_community_resident_mix");
     if (!raw) return new Response("not on file", { status: 404, headers: hdr });
     return new Response(raw, { headers: Object.assign({ "Content-Type": "application/json" }, hdr) });
   }
-  return new Response(renderResidents(), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
+  return new Response(renderResidents(env.READ_KEY || "", rk), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
 }
 // The layout Kendall used on the laptop (scripts/dewa_views_template.html, residents tab), served from here with the data read from the
 // private route and no counts: chips, minimum share, search with a ranked list, map shading, gold outline on the selected community,
 // detail panel with bars. Phones get a bottom sheet over a full-screen map. Teal ramp from the template, validated on its ground.
-function renderResidents() {
+function renderResidents(readKey, rk) {
+  // v152.3 - the way back: MAP and TWIN with the private panel (only the residents-key holders ever see this page)
+  const back = readKey && rk ? '<div class=backl><a href="/map?key=' + encodeURIComponent(readKey) + '&rk=' + encodeURIComponent(rk) + '">&larr; the map</a> &middot; <a href="/skyline?all=1&key=' + encodeURIComponent(readKey) + '&rk=' + encodeURIComponent(rk) + '">the twin</a></div>' : '';
   return `<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - residents (private)</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0e1413">${NAJ_FONTS}
 <link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
@@ -9018,6 +9112,7 @@ html,body{margin:0;height:100%;background:var(--ground);color:var(--ink);font:14
 #detail{position:fixed;top:0;bottom:0;right:0;width:360px;overflow:auto;background:var(--panel);border-left:1px solid var(--line);padding:14px}
 h1{margin:0;font-family:Fraunces,Georgia,serif;font-size:18px;font-weight:600}
 .flag{display:inline-block;margin-top:6px;padding:3px 9px;border-radius:4px;background:var(--gold);color:#1d1608;font-size:11.5px;font-weight:700}
+.backl{margin-top:8px;font-size:12.5px;color:var(--muted)}.backl a{color:var(--gold);text-decoration:none;font-weight:600}
 .sub{color:var(--muted);font-size:11.5px;margin-top:6px}
 .card{margin-top:14px}
 .label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 8px}
@@ -9060,7 +9155,7 @@ h2{margin:0;font-family:Fraunces,Georgia,serif;font-size:18px}
 <div id=map role=region aria-label="Map of Dubai communities shaded by the selected nationalities"></div>
 <aside id=side>
 <button id=grab aria-expanded=false>Tap to expand</button>
-<h1>Residents by community</h1><div class=flag>Private: Kendall and Naj only. Never for clients.</div><div class=sub id=source>Loading the communities...</div>
+<h1>Residents by community</h1><div class=flag>Private: Kendall and Naj only. Never for clients.</div>${back}<div class=sub id=source>Loading the communities...</div>
 <div class="card dwrap" id=detail2 style="display:none"></div>
 <div class=card><p class=label>Nationality</p><div class=chips id=nats></div></div>
 <div class=card><p class=label>Minimum share</p><div class=seg id=mins></div></div>
