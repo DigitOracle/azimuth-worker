@@ -852,6 +852,50 @@ function dialMarker(env, params) {
   const m = String((params && params[0]) || "");
   return String(env.DIAL_MARKERS || "RING").split(",").map(s => s.trim()).filter(Boolean).includes(m) ? m : "";
 }
+// v152.9 - VOICE REMINDER (Kendall, 15 Sep 2026). The rings are off (the dialler handset's open microphone relayed room noise); instead,
+// at T-15 the owner gets a short spoken WhatsApp voice note of the reminder. Workers AI text-to-speech (aura-2-en) renders OGG/Opus, which
+// WhatsApp plays as a native voice note; it is uploaded to WhatsApp media and sent with voice:true. A voice note is a free-form message,
+// so it only goes inside the owner's 24-hour window; the text reminder still goes either way. Off unless VOICE_REMINDERS = "on".
+const VOICE_MODEL = "@cf/deepgram/aura-2-en";
+function voiceText(env, m) {
+  const clean = (t) => String(t || "").replace(/https?:\/\/\S+/g, "").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, "").replace(/\s+/g, " ").trim();
+  const online = m && m.join && /^https?:\/\//i.test(m.join);
+  const what = clean(m && m.summary) || "your meeting";
+  const where = m && m.location && !online ? clean(m.location) : "";
+  return String(env.VOICE_TEMPLATE || "Reminder. {what} starts in fifteen minutes{where}.")
+    .replace("{what}", what).replace("{where}", where ? ", at " + where : (online ? ", online" : "")).slice(0, 400);
+}
+async function ttsOgg(env, text) {
+  const res = await env.AI.run(VOICE_MODEL, { text: String(text || "").slice(0, 1000), speaker: env.VOICE_SPEAKER || "asteria", encoding: "opus", container: "ogg" });
+  if (res instanceof ReadableStream) return new Uint8Array(await new Response(res).arrayBuffer());
+  if (res instanceof ArrayBuffer) return new Uint8Array(res);
+  if (res && res.audio) { const b = atob(res.audio); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+  if (res && res.body) return new Uint8Array(await new Response(res.body).arrayBuffer());
+  throw new Error("text-to-speech returned no audio");
+}
+async function waUploadAudio(env, bytes) {
+  const fd = new FormData();
+  fd.append("messaging_product", "whatsapp"); fd.append("type", "audio/ogg");
+  fd.append("file", new Blob([bytes], { type: "audio/ogg" }), "reminder.ogg");
+  const r = await fetch(`${WA_GRAPH}/${env.WA_PHONE_ID}/media`, { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN }, body: fd });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.id) throw new Error("media upload HTTP " + r.status + " " + JSON.stringify(j).slice(0, 160));
+  return j.id;
+}
+async function voiceReminder(env, text, opts) {
+  opts = opts || {};
+  if (env.VOICE_REMINDERS !== "on" && !opts.force) return { ok: false, skipped: "off" };
+  if (!env.WHATSAPP_TOKEN || !env.WA_ALLOWED || !env.AI) return { ok: false, skipped: "unconfigured" };
+  if (!(await ownerWindowOpen(env))) return { ok: false, skipped: "outside the 24-hour window" };   // WhatsApp refuses free-form audio outside it
+  try {
+    const audio = await ttsOgg(env, text);
+    const id = await waUploadAudio(env, audio);
+    const r = await waPost(env, { messaging_product: "whatsapp", recipient_type: "individual", to: env.WA_ALLOWED, type: "audio", audio: { id, voice: true } }, "voice");
+    const out = { ok: !!(r && r.ok), status: r && r.status, bytes: audio.length, text };
+    await env.MEETINGS.put("voice_last", JSON.stringify(Object.assign({ at: new Date().toISOString() }, out)), { expirationTtl: 30 * 86400 });
+    return out;
+  } catch (e) { await noteErr(env, "voice-reminder", String(e && e.message || e)); return { ok: false, error: String(e && e.message || e) }; }
+}
 async function ringWhatsApp(env, text) {
   try {
     if (!env.RING_WA_TO) return { ok: false, skipped: "unconfigured" };
@@ -1403,6 +1447,10 @@ async function meetingNudges(env) {
         // v135 - the WhatsApp ring: a template to the dialler handset, which calls the owner back.
         if (lead === 15 && env.RING_WA_TO) {
           try { await ringWhatsApp(env, (m.summary || "meeting") + " in 15 minutes"); } catch (e) {}
+        }
+        // v152.9 - the spoken reminder that replaces the ring
+        if (lead === 15 && env.VOICE_REMINDERS === "on") {
+          try { await voiceReminder(env, voiceText(env, m)); } catch (e) {}
         }
         fired++;
       }
@@ -2061,6 +2109,15 @@ export default {
           } catch (e) { _o[_t[0]] = "THREW :: " + (e && e.message ? e.message : String(e)); }
         }
         return new Response(JSON.stringify(_o, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/voice_sample") {                  // v152.9 - hear the spoken reminder: returns the voice note's audio, sends nothing
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!env.AI) return new Response("no AI binding", { status: 500 });
+        const _ms = (await upcomingMeetings(env)).sort((a, b) => Date.parse(a.start_iso) - Date.parse(b.start_iso));
+        const _t = (url.searchParams.get("text") || "").slice(0, 400) || voiceText(env, _ms[0] || { summary: "Site visit with the developer", location: "Dubai Hills Estate" });
+        const _env = url.searchParams.get("voice") ? Object.assign({}, env, { VOICE_SPEAKER: String(url.searchParams.get("voice")).replace(/[^a-z]/g, "").slice(0, 20) }) : env;
+        try { const _a = await ttsOgg(_env, _t); return new Response(_a, { headers: { "Content-Type": "audio/ogg", "Cache-Control": "no-store", "X-Voice-Text": encodeURIComponent(_t) } }); }
+        catch (e) { return new Response("text-to-speech failed: " + String(e && e.message || e), { status: 502 }); }
       }
       if (url.pathname === "/nudge_test") {                    // v32 — preview the next meeting's nudge, fire nothing
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
