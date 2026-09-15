@@ -44,7 +44,7 @@ PROPOSALS = "on"
 # v135 - the ring. Azimuth sends azimuth_ring to the dedicated Android holding +971 58 544 6093;
 # MacroDroid there answers the notification by placing a real call to the owner. LANG IS "en":
 # azimuth_ring was created as English, NOT English (US) like the other templates.
-RING_WA_TO = "971585446093"
+# RING_WA_TO = "971585446093"   # rings off (Kendall, 15 Sep 2026): the dialler handset's open microphone relayed room noise
 # v138 - ring on the APPROVED daily_meeting_reminder (en_US, three variables) while azimuth_ring sits in review.
 # The macro only needs RING in the text, so no meeting title is copied onto the dialler handset.
 # Once azimuth_ring is approved: RING_TEMPLATE = "azimuth_ring", RING_TEMPLATE_LANG = "en", RING_PARAMS = "meeting".
@@ -91,7 +91,7 @@ WA_ALLOWED = "971565484397"
 # v140 - Najjuko asked for her feed at 06:00 (13 Sep 2026); the trend radar follows the same hour.
 FEED_HOUR_GST = "6"
 # v140 - her meeting ring: the shared dialler handset, her own CALLNAJ marker, no meeting title on the handset.
-RING_WA_TO = "971585446093"
+# RING_WA_TO = "971585446093"   # rings off (Kendall, 15 Sep 2026): the dialler handset's open microphone relayed room noise
 RING_TEMPLATE = "daily_meeting_reminder"
 RING_TEMPLATE_LANG = "en_US"
 RING_PARAMS = "CALLNAJ|1|meeting starting in 15 minutes"
