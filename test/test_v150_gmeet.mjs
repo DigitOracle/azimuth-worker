@@ -189,6 +189,16 @@ ok(JSON.parse(store.get("gcal_kick_result")).step === "intro" && guide().step ==
 store.set("gcal_kick", "k2");
 i = sent.length; await kickTick(); ok(sent.length === i, "the same kick value again: nothing more sent");
 i = sent.length; await kickTick(); ok(sent.length === i, "no kick: the tick sends nothing");
+// v150.3 - an approved message as the kick
+store.set("gcal_kick", JSON.stringify({ id: "n1", text: "Good morning, Black Coffee.\n\nIt's easier on your computer.", buttons: "link", signoff: true }));
+i = sent.length; await kickTick();
+ok(sent.length === i + 1 && last().interactive.body.text === "Good morning, Black Coffee.\n\nIt's easier on your computer.\n\n— Curated for Black Coffee, by Papi", "message kick: the approved text as written, house sign-off appended");
+ok(btnIds(last()) === "gc:new,gc:stuck" && JSON.parse(store.get("gcal_kick_result")).message === true && guide().nudge_at, "message kick: New link / I'm stuck; result and nudge time recorded");
+store.set("gcal_kick", JSON.stringify({ id: "n1", text: "again", buttons: "link" }));
+i = sent.length; await kickTick(); ok(sent.length === i, "message kick with a used id: nothing sent");
+store.set("gcal_kick", JSON.stringify({ id: "n2", text: "x".repeat(1100), buttons: "link" }));
+i = sent.length; await kickTick(); ok(sent.length === i && /over 1024/.test(JSON.parse(store.get("gcal_kick_result")).why), "message kick over 1024 characters: refused, nothing sent");
+await tap("gc:new", kickEnv); ok(/Step 1 of 3/.test(sent[sent.length - 2].text.body), "New link under the nudge sends the steps with a fresh link");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

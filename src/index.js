@@ -9551,17 +9551,34 @@ async function gcGuideButton(env, from, bid) {
 // Minute tick: one follow-up if twenty minutes pass after a link without a connection. Never more than one per link.
 // v150.2 - gcal_kick: the operator starts her walkthrough by writing this key with Cloudflare access (wrangler kv), no READ_KEY
 // needed. Each value runs once (gcal_kick_seen); the outcome lands in gcal_kick_result. Nothing is sent while her window is closed.
+// v150.3 - a kick can also be JSON {"id","text","buttons":"link","signoff":true}: an operator-approved message about this step,
+// sent as written (the house sign-off appended when asked), with New link / I'm stuck under it. Over 1024 characters is refused.
+const GC_BTN_NUDGE = [{ id: "gc:new", title: "New link" }, { id: "gc:stuck", title: "I'm stuck" }];
 async function gcGuideTick(env) {
   if (!gcalOpen(env) || !env.WA_ALLOWED) return;
   const kick = await env.MEETINGS.get("gcal_kick");
   if (kick) {
     await env.MEETINGS.delete("gcal_kick");
-    if ((await env.MEETINGS.get("gcal_kick_seen")) === kick) return;
-    await env.MEETINGS.put("gcal_kick_seen", kick, { expirationTtl: 7 * 86400 });
+    let spec = null; try { const j = JSON.parse(kick); if (j && typeof j === "object") spec = j; } catch (e) {}
+    const kid = spec ? String(spec.id || "") : kick;
+    if (!kid || (await env.MEETINGS.get("gcal_kick_seen")) === kid) return;
+    await env.MEETINGS.put("gcal_kick_seen", kid, { expirationTtl: 7 * 86400 });
     let res;
     if (!(await ownerWindowOpen(env))) res = { sent: false, why: "her 24-hour WhatsApp window is closed" };
+    else if (spec && spec.text) {
+      const body = String(spec.text).trim() + (spec.signoff ? UPDATE_SIGNOFF : "");
+      const btns = spec.buttons === "link" ? GC_BTN_NUDGE : null;
+      if (btns && body.length > 1024) res = { sent: false, why: "text over 1024 characters (" + body.length + ")" };
+      else {
+        try {
+          const r = btns ? await waSendButtons(env, env.WA_ALLOWED, body, btns) : await waSend(env, env.WA_ALLOWED, body);
+          res = { sent: !!(r && r.ok), status: r && r.status, message: true };
+          if (res.sent) { const g = (await gcGuideGet(env)) || {}; g.nudge_at = new Date().toISOString(); await gcGuideSet(env, g); }
+        } catch (e) { res = { sent: false, why: String(e && e.message || e).slice(0, 120) }; }
+      }
+    }
     else { try { res = { sent: true, step: await gcGuideStart(env, env.WA_ALLOWED) }; } catch (e) { res = { sent: false, why: String(e && e.message || e).slice(0, 120) }; } }
-    await env.MEETINGS.put("gcal_kick_result", JSON.stringify(Object.assign({ at: new Date().toISOString(), kick }, res)), { expirationTtl: 7 * 86400 });
+    await env.MEETINGS.put("gcal_kick_result", JSON.stringify(Object.assign({ at: new Date().toISOString(), kick: kid }, res)), { expirationTtl: 7 * 86400 });
     return;
   }
   const g = await gcGuideGet(env); if (!g || g.step !== "link" || g.nudged || !g.link_at) return;
