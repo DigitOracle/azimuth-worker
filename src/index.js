@@ -5996,6 +5996,7 @@ const MAP_CHROME_JS = ''
 // page is opened with the residents key. Same controls as /residents (nationality, minimum share, search, ranked list); choosing shades this
 // map's communities, with labels and a gold outline on the selected one; its detail opens in the map's bottom panel. Rounded shares, no counts.
 // The data is read from /residents/data with the key; nothing of it is in the page. The script runs inside the map chrome's scope (map, esc).
+const REGION_COL = { "Europe": "#2f9fd0", "Arab world": "#199e70", "South Asia": "#d95926", "Russia & Central Asia": "#d55181", "East & Southeast Asia": "#9085e9", "Iran & Türkiye": "#c98500", "Americas": "#b04fb8", "Sub-Saharan Africa": "#a0662a", "Oceania": "#8fa0b3", "Rest of the world": "#6f7a78" };   // v152.7 - one colour per region, only one of them green (Kendall: the shades of green were confusing); fixed per region, never by rank; every bar is also labelled
 const RES_COL = { 5: "#3987e5", 10: "#008300", 20: "#c98500", 40: "#d55181" };   // v152.5 - four distinct hues (Kendall: "totally different colors"), the most separable set on this ground; the band is always written beside it
 const RES_PANEL_CSS = ''
   + '.rp .hbody{max-height:min(64vh,calc(100vh - 230px));overflow:auto}'
@@ -6008,9 +6009,9 @@ const RES_PANEL_CSS = ''
   + '.rrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 4px;border-top:1px solid var(--line);cursor:pointer}.rrow:hover,.rrow.on{background:rgba(197,165,106,.1)}'
   + '.rrow b{display:block;font-weight:600;font-size:.78rem;color:var(--text)}.rrow small{display:block;color:var(--mut);font-size:.64rem;line-height:1.3}'
   + '.rtag{padding:1px 6px;border-radius:4px;color:#0b1211;font-family:"IBM Plex Mono",monospace;font-size:.58rem;font-weight:600;white-space:nowrap}'
-  + '.rbars{display:grid;gap:6px;margin-top:8px}.rbar{display:grid;grid-template-columns:minmax(0,130px) minmax(0,1fr) 38px;gap:8px;align-items:center;font-size:.78rem}.rbar i{display:block;height:8px;border-radius:2px;background:#58b5a8}.rbar b{text-align:right;font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:.7rem}'
+  + '.rbars{display:grid;gap:6px;margin-top:8px}.rbar{display:grid;grid-template-columns:minmax(0,130px) minmax(0,1fr) 38px;gap:8px;align-items:center;font-size:.78rem}.rbar i{display:block;height:8px;border-radius:2px;background:#c5a56a}.rbar b{text-align:right;font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:.7rem}'
   + '.rcav{margin-top:10px;color:var(--mut);font-size:.72rem;line-height:1.4}'
-  + '.rreghd{margin-top:8px;font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.rreg{cursor:pointer}.rreg:hover span{color:var(--gold)}.rcar{font-style:normal;display:inline-block;width:12px;color:var(--mut);transition:transform .15s}.rreg.open .rcar{transform:rotate(90deg);color:var(--gold)}.rsub{display:grid;gap:5px;margin:0 0 6px 12px;padding-left:8px;border-left:1px solid var(--line)}.rsub[hidden]{display:none}.rsub .rbar{font-size:.72rem}.rsub .rbar i{background:#8fa39b;opacity:.75}'   // v152.6 - regions that open into countries
+  + '.rreghd{margin-top:8px;font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}.rreg{cursor:pointer}.rreg:hover span{color:var(--gold)}.rcar{font-style:normal;display:inline-block;width:12px;color:var(--mut);transition:transform .15s}.rreg.open .rcar{transform:rotate(90deg);color:var(--gold)}.rsub{display:grid;gap:5px;margin:0 0 6px 12px;padding-left:8px;border-left:1px solid var(--line)}.rsub[hidden]{display:none}.rsub .rbar{font-size:.72rem}.rsub .rbar i{opacity:.6}'   // v152.6 - regions that open into countries
   + '#panel:has(#rpx){z-index:9}'   // a community's detail sits over the open stack (wide screens put the panel under it), close it to get back to the list
   + '#rtip{position:fixed;z-index:30;display:none;pointer-events:none;max-width:260px;background:rgba(19,31,29,.96);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:.74rem;line-height:1.35;color:var(--text)}#rtip span{color:var(--mut)}'   // the twin's hover name
   + '@media(max-width:640px){.srow{margin-right:112px}}';   // on a phone the second pill of the stack sits level with the search box
@@ -6023,7 +6024,7 @@ const RES_PANEL_HTML = '<div id=rp class="hp rp"><div class=hh id=rh><span>resid
   + '<div class=hfoot><a id=rfull>full screen →</a><a id=rclear>clear</a></div></div></div>';
 const RES_PANEL_JS = `
 (function(){
-var COLR=${JSON.stringify(RES_COL)},BTX={5:"5-10%",10:"10-20%",20:"20-40%",40:"40%+"};
+var RCOL=${JSON.stringify(REGION_COL)},COLR=${JSON.stringify(RES_COL)},BTX={5:"5-10%",10:"10-20%",20:"20-40%",40:"40%+"};
 var RX=null,RBY={},RS={nats:[],min:5,q:"",sel:null},RLOAD=null,MINACC=500,MINPCT=5,RCMIN=1,RLAY=false,RPOP=null;
 var rp=document.getElementById("rp"),rres=document.getElementById("rres"),rnat=document.getElementById("rnat"),rlist=document.getElementById("rlist"),rlh=document.getElementById("rlh");
 function rlab(c){return c.label||c.name||("Community "+c.comm)}
@@ -6070,8 +6071,8 @@ function rdetail(){var el=document.getElementById("panel");if(!el)return;var com
   rregionWire(el);
   el.classList.add("on");document.getElementById("rpx").onclick=function(){RS.sel=null;el.classList.remove("on");rrender()};var h=document.getElementById("hint");if(h)h.textContent=""}
 // v152.6 - by region first; a tap opens the region's countries (each 1%+), the rest of the region pooled and never named
-function rregions(c){return '<div class=rreghd>by region · tap one for its countries</div><div class=rbars>'+c.regions.map(function(g,gi){return '<div class="rbar rreg" data-g="'+gi+'"><span><em class=rcar>▸</em>'+esc(g.name)+'</span><i style="width:'+Math.max(2,Number(g.pct))+'%"></i><b>'+Number(g.pct)+'%</b></div>'
-  +'<div class=rsub data-g="'+gi+'" hidden>'+(g.countries||[]).map(function(x){return '<div class=rbar><span>'+esc(x[0])+'</span><i style="width:'+Math.max(2,Number(x[1]))+'%"></i><b>'+Number(x[1])+'%</b></div>'}).join("")
+function rregions(c){return '<div class=rreghd>by region · tap one for its countries</div><div class=rbars>'+c.regions.map(function(g,gi){return '<div class="rbar rreg" data-g="'+gi+'"><span><em class=rcar>▸</em>'+esc(g.name)+'</span><i style="width:'+Math.max(2,Number(g.pct))+'%;background:'+(RCOL[g.name]||'#6f7a78')+'"></i><b>'+Number(g.pct)+'%</b></div>'
+  +'<div class=rsub data-g="'+gi+'" hidden>'+(g.countries||[]).map(function(x){return '<div class=rbar><span>'+esc(x[0])+'</span><i style="width:'+Math.max(2,Number(x[1]))+'%;background:'+(RCOL[g.name]||'#6f7a78')+'"></i><b>'+Number(x[1])+'%</b></div>'}).join("")
   +(g.others?'<div class=rbar><span>others in '+esc(g.name)+', each under '+RCMIN+'%</span><i style="width:'+Math.max(2,Number(g.others))+'%;background:#3a4a48"></i><b>'+Number(g.others)+'%</b></div>':'')+'</div>'}).join("")+'</div>'}
 function rregionWire(el){el.querySelectorAll(".rreg").forEach(function(r){r.onclick=function(){var s=el.querySelector('.rsub[data-g="'+r.getAttribute("data-g")+'"]');if(!s)return;var open=!!s.hidden;s.hidden=!open;r.classList.toggle("open",open)}})}
 function rselect(comm,fly){RS.sel=comm;if(innerWidth<=640)rp.classList.remove("on");rrender();rdetail();
@@ -9281,7 +9282,7 @@ h1{margin:0;font-family:Fraunces,Georgia,serif;font-size:18px;font-weight:600}
 .label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 8px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{border:1px solid var(--line);background:var(--raise);color:var(--ink);border-radius:999px;padding:4px 10px;font:inherit;font-size:12.5px;cursor:pointer}
-.chip[aria-pressed="true"]{background:var(--teal);border-color:var(--teal);color:#fff}
+.chip[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#1d1608;font-weight:600}
 .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg button{flex:1;border:0;background:var(--raise);color:var(--ink);padding:7px 0;font:inherit;font-size:12.5px;cursor:pointer}
 .seg button+button{border-left:1px solid var(--line)}
@@ -9300,7 +9301,7 @@ h2{margin:0;font-family:Fraunces,Georgia,serif;font-size:18px}
 .aka{color:var(--muted);font-size:12.5px;margin-top:2px}
 .bars{display:grid;gap:8px;margin-top:4px}
 .bar{display:grid;grid-template-columns:120px minmax(0,1fr) 40px;gap:8px;align-items:center;font-size:12.5px}
-.bar i{display:block;height:9px;border-radius:2px;background:#58b5a8}.reg{cursor:pointer}.reg:hover span{color:var(--gold)}.car{font-style:normal;display:inline-block;width:12px;color:var(--muted);transition:transform .15s}.reg.open .car{transform:rotate(90deg);color:var(--gold)}.sub{display:grid;gap:6px;margin:0 0 6px 12px;padding-left:8px;border-left:1px solid var(--line)}.sub[hidden]{display:none}.sub .bar{font-size:11.5px}.sub .bar i{background:#8fa39b;opacity:.75}.bar b{text-align:right;font-variant-numeric:tabular-nums}
+.bar i{display:block;height:9px;border-radius:2px;background:#c5a56a}.reg{cursor:pointer}.reg:hover span{color:var(--gold)}.car{font-style:normal;display:inline-block;width:12px;color:var(--muted);transition:transform .15s}.reg.open .car{transform:rotate(90deg);color:var(--gold)}.sub{display:grid;gap:6px;margin:0 0 6px 12px;padding-left:8px;border-left:1px solid var(--line)}.sub[hidden]{display:none}.sub .bar{font-size:11.5px}.sub .bar i{opacity:.6}.bar b{text-align:right;font-variant-numeric:tabular-nums}
 .maplibregl-popup-content{background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:7px 10px;font:12.5px/1.35 "IBM Plex Sans","Segoe UI",system-ui,sans-serif}
 .maplibregl-popup-tip{display:none}
 #grab{display:none}
@@ -9330,7 +9331,7 @@ h2{margin:0;font-family:Fraunces,Georgia,serif;font-size:18px}
 <script>(function(){
 var RK=new URLSearchParams(location.search).get("rk")||"";
 var $=function(id){return document.getElementById(id)};
-var COL={5:"#3987e5",10:"#008300",20:"#c98500",40:"#d55181"},BAND_TXT={5:"5-10%",10:"10-20%",20:"20-40%",40:"40%+"};
+var RCOL=${JSON.stringify(REGION_COL)},COL={5:"#3987e5",10:"#008300",20:"#c98500",40:"#d55181"},BAND_TXT={5:"5-10%",10:"10-20%",20:"20-40%",40:"40%+"};
 var MIX=null,byComm=new Map(),state={nats:new Set(),min:5,q:"",sel:null},map=null,MINACC=500,MINPCT=5,RCMIN=1;
 function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]})}
 function labelOf(c){return c.label||c.name||("Community "+c.comm)}
@@ -9350,7 +9351,7 @@ function detailHtml(){var c=state.sel&&byComm.get(state.sel);
   return '<p class=label>Community</p><h2>'+esc(label)+'</h2><div class=aka>'+(c.known&&c.known.length>2?'Also '+esc(c.known.slice(2).join(", "))+' &middot; ':'')+(official&&official!==label?'Official name: '+esc(official):'Official and common name')+'</div>'+
     (c.noNationalityPct?'<p class=note>'+Number(c.noNationalityPct)+'% of accounts record no nationality.</p>':'')+
     (c.regions&&c.regions.length   // v152.6 - by region, each opening into its countries (1%+), the rest of the region pooled and never named
-      ?'<p class=label style="margin-top:14px">By region <span style="text-transform:none;letter-spacing:0">&middot; tap one for its countries</span></p><div class=bars>'+c.regions.map(function(g,gi){return '<div class="bar reg" data-g="'+gi+'"><span><em class=car>&#9656;</em>'+esc(g.name)+'</span><i style="width:'+Math.max(2,Number(g.pct))+'%"></i><b>'+Number(g.pct)+'%</b></div><div class=sub data-g="'+gi+'" hidden>'+(g.countries||[]).map(function(x){return '<div class=bar><span>'+esc(x[0])+'</span><i style="width:'+Math.max(2,Number(x[1]))+'%"></i><b>'+Number(x[1])+'%</b></div>'}).join("")+(g.others?'<div class=bar><span>others in '+esc(g.name)+', each under '+RCMIN+'%</span><i style="width:'+Math.max(2,Number(g.others))+'%;background:#3a4a48"></i><b>'+Number(g.others)+'%</b></div>':'')+'</div>'}).join("")+'</div>'
+      ?'<p class=label style="margin-top:14px">By region <span style="text-transform:none;letter-spacing:0">&middot; tap one for its countries</span></p><div class=bars>'+c.regions.map(function(g,gi){return '<div class="bar reg" data-g="'+gi+'"><span><em class=car>&#9656;</em>'+esc(g.name)+'</span><i style="width:'+Math.max(2,Number(g.pct))+'%;background:'+(RCOL[g.name]||'#6f7a78')+'"></i><b>'+Number(g.pct)+'%</b></div><div class=sub data-g="'+gi+'" hidden>'+(g.countries||[]).map(function(x){return '<div class=bar><span>'+esc(x[0])+'</span><i style="width:'+Math.max(2,Number(x[1]))+'%;background:'+(RCOL[g.name]||'#6f7a78')+'"></i><b>'+Number(x[1])+'%</b></div>'}).join("")+(g.others?'<div class=bar><span>others in '+esc(g.name)+', each under '+RCMIN+'%</span><i style="width:'+Math.max(2,Number(g.others))+'%;background:#3a4a48"></i><b>'+Number(g.others)+'%</b></div>':'')+'</div>'}).join("")+'</div>'
       :'<p class=label style="margin-top:14px">Largest groups</p><div class=bars>'+bars+'</div>')+
     '<p class=note style="margin-top:14px">Account holders, not every resident. For market understanding and planning content; not for recommending homes.</p>'}
 function wireRegions(el){if(!el||!el.querySelectorAll)return;el.querySelectorAll(".reg").forEach(function(r){r.onclick=function(){var s=el.querySelector('.sub[data-g="'+r.getAttribute("data-g")+'"]');if(!s)return;var open=!!s.hidden;s.hidden=!open;r.classList.toggle("open",open)}})}
