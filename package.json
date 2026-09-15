@@ -3,11 +3,11 @@
   "version": "35.1.0",
   "private": true,
   "type": "module",
-  "description": "Azimuth ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â personal-assistant / commitment-ledger Cloudflare Worker. Migrated from paste-deploy to wrangler (v36 foundation).",
+  "description": "Azimuth ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â personal-assistant / commitment-ledger Cloudflare Worker. Migrated from paste-deploy to wrangler (v36 foundation).",
   "main": "src/index.js",
   "scripts": {
     "check": "node --check src/index.js",
-    "test": "node test/test_v35_relationship.mjs && node test/test_v351_sent.mjs && node test/test_v34_twilio.mjs && node test/test_v721_claude403.mjs && node test/test_v722_trust.mjs && node test/test_v104_plate.mjs && node test/test_v105_cards.mjs && node test/test_v147_scene_flow.mjs && node test/test_v147_2_owner_note.mjs && node test/test_v149_ig.mjs && node test/test_v150_gmeet.mjs && node test/test_v151_time_formats.mjs && node test/test_v152_dewa.mjs && node test/test_v152_2_stack.mjs && node test/test_v152_3_twin.mjs && node test/test_v152_5_city.mjs",
+    "test": "node test/test_v35_relationship.mjs && node test/test_v351_sent.mjs && node test/test_v34_twilio.mjs && node test/test_v721_claude403.mjs && node test/test_v722_trust.mjs && node test/test_v104_plate.mjs && node test/test_v105_cards.mjs && node test/test_v147_scene_flow.mjs && node test/test_v147_2_owner_note.mjs && node test/test_v149_ig.mjs && node test/test_v150_gmeet.mjs && node test/test_v151_time_formats.mjs && node test/test_v152_dewa.mjs && node test/test_v152_2_stack.mjs && node test/test_v152_3_twin.mjs && node test/test_v152_5_city.mjs && node test/test_v152_6_regions.mjs",
     "dry": "wrangler deploy --dry-run",
     "dry:azimuth2": "wrangler deploy --dry-run --env azimuth2",
     "deploy": "wrangler deploy",
