@@ -6064,9 +6064,11 @@ document.getElementById("rclear").onclick=function(){RS.nats=[];RS.min=5;RS.q=""
 document.getElementById("rfull").onclick=function(){location.href="/residents?rk="+encodeURIComponent(RK)};
 window.__res={get state(){return RS},get data(){return RX},load:rload,select:rselect,render:rrender};
 })();`;
-// v152.2 - a private page (valid residents key) tells the browser to send no referrer and keeps the key on the MAP and TWIN links only
-const RES_HEAD = '<meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow">';
-const resHeaders = (rk) => rk ? { "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow" } : {};
+// v152.2 - a private page (valid residents key) sends only its origin to other sites, never the path or the query that holds the key, and
+// keeps the key on the MAP and TWIN links only. Not no-referrer: the Esri basemap refuses a style request that carries no referrer (401,
+// a black map - seen live on 15 Sep). strict-origin-when-cross-origin is what the client pages already send by default.
+const RES_HEAD = '<meta name=referrer content=strict-origin-when-cross-origin><meta name=robots content="noindex,nofollow">';
+const resHeaders = (rk) => rk ? { "Referrer-Policy": "strict-origin-when-cross-origin", "X-Robots-Tag": "noindex, nofollow" } : {};
 const resRkq = (rk) => rk ? '<script>window.__RKQ=' + JSON.stringify("&rk=" + encodeURIComponent(rk)) + ';<\/script>' : '';
 function renderMapBasic(key, rk) {
   const K = JSON.stringify(key || "");
