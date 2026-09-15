@@ -106,7 +106,7 @@ const fc = (props) => ({ type: "FeatureCollection", features: [["126", { band: 2
 ok(twinWin.__resTwin.draw(fc({}), true) === true && G.RES3.byComm.size === 1 && G.RES3.byComm.has("500") && added.length === 1, "ground: only the communities around this model are built (JLT here, not Abu Hail across the city)");
 const e500 = G.RES3.byComm.get("500");
 ok(e500.fill.geometry.shape.pts.length === 4 && e500.fill.geometry.rx === -Math.PI / 2 && Math.abs(e500.fill.position.y - 0.2) < 1e-9 && e500.fill.material.depthWrite === false && e500.fill.material.toneMapped === false, "ground: the outline is laid flat just above the ground, closed ring deduplicated, colours not tone-mapped");
-ok(e500.fill.material.color.hex === 0x58b5a8 && e500.fill.material.opacity === 0.38 && e500.line.material.opacity === 0.35, "ground: 20-40% takes the template's third teal step");
+ok(e500.fill.material.color.hex === 0xc98500 && e500.fill.material.opacity === 0.38 && e500.line.material.opacity === 0.35, "ground: 20-40% takes the amber band colour");
 twinWin.__resTwin.draw(fc({ sel: true, dim: true }), true);
 ok(e500.line.material.color.hex === 0xC5A56A && e500.line.material.opacity === 1 && e500.fill.material.opacity === 0.1, "ground: the chosen community gets a solid gold outline; a search miss recedes");
 RAYHITS = [{ object: e500.fill }];

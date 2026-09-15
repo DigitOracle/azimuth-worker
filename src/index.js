@@ -5650,6 +5650,17 @@ async function esriToken(env) {
 const MAP_ICONS = {"school": "<svg viewBox='0 0 24 24'><path d='M2 9l10-4 10 4-10 4z'/><path d='M6 11v4c0 1.6 2.7 3 6 3s6-1.4 6-3v-4'/><path d='M22 9v6'/></svg>", "hospital": "<svg viewBox='0 0 24 24'><rect x='4' y='3' width='16' height='18' rx='1.5'/><path d='M12 7v6M9 10h6'/><path d='M9.5 21v-4h5v4'/></svg>", "clinic": "<svg viewBox='0 0 24 24'><path d='M6 3v6a6 6 0 0 0 12 0V3'/><path d='M12 15v2a4 4 0 0 0 8 0v-2'/><circle cx='20' cy='13' r='2'/></svg>", "metro": "<svg viewBox='0 0 24 24'><rect x='5' y='3' width='14' height='14' rx='3'/><path d='M5 11h14M9 21l1.5-3M15 21l-1.5-3'/><circle cx='9' cy='14' r='1'/><circle cx='15' cy='14' r='1'/></svg>", "mall": "<svg viewBox='0 0 24 24'><path d='M5 8h14l-1 12H6z'/><path d='M9 8V6a3 3 0 0 1 6 0v2'/></svg>", "park": "<svg viewBox='0 0 24 24'><path d='M12 3l5 7h-3l4 5H6l4-5H7z'/><path d='M12 15v6'/></svg>", "beach": "<svg viewBox='0 0 24 24'><circle cx='17' cy='7' r='2.5'/><path d='M2 15c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M2 19c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0'/></svg>"};
 
 // ---- v102: the map's chrome, shared with the twin. CSS + markup + behaviour; the twin supplies a scene-backed `map` shim.
+// v152.5 - the top-right stack (HOMES, RESIDENTS, COLOUR BY): used by the MAP chrome and the all-Dubai twin
+const STACK_CSS = ''
+  + '.hstack{position:fixed;top:10px;right:10px;z-index:8;width:min(330px,72vw);display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:none}.hstack>*{pointer-events:auto}'   // v152.2 - HOMES, then RESIDENTS (private), then COLOUR BY (twin): one column, an open panel pushes the next down
+  + '.hp{position:relative;width:100%;background:rgba(19,31,29,.97);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.35)}'
+  + '.hh{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}.hh b{color:var(--text);font-weight:500;letter-spacing:.03em;text-transform:none;font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hh i{font-style:normal;color:var(--mut);transition:transform .2s}.hp.on .hh i{transform:rotate(180deg)}'
+  + '.hbody{display:none;padding:2px 12px 10px;border-top:1px solid var(--line)}.hp.on .hbody{display:block}'
+  + '.hrow{display:grid;grid-template-columns:1fr;gap:4px;padding:7px 0}.hrow label{font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);display:flex;justify-content:space-between;gap:8px}.hrow label b{color:var(--gold);font-weight:500;font-size:.68rem;letter-spacing:0;text-transform:none}'
+  + '.hfoot{display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.06em;text-transform:uppercase}.hfoot a{color:var(--gold);cursor:pointer}.hfoot a#hclear{color:var(--mut)}'
+  + '.dual{position:relative;height:28px}.dual .band{position:absolute;top:12px;height:4px;background:var(--gold);border-radius:2px;pointer-events:none;opacity:.9}.dual input{position:absolute;left:0;right:0;top:0;width:100%;margin:0;background:transparent;pointer-events:none;-webkit-appearance:none;appearance:none;height:28px}.dual input::-webkit-slider-runnable-track{height:4px;background:var(--line);border-radius:2px}.dual input::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:20px;height:20px;border-radius:50%;background:var(--gold);border:2px solid #0C1413;margin-top:-8px;cursor:pointer}.dual input::-moz-range-thumb{pointer-events:auto;width:18px;height:18px;border-radius:50%;background:var(--gold);border:2px solid #0C1413;cursor:pointer}.dual input::-moz-range-track{height:4px;background:var(--line)}'
+  + '.seg{display:flex;gap:6px;flex-wrap:wrap}.seg button{border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:99px;padding:5px 11px;font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}.seg button.on{color:var(--gold);border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}'
+  ;
 const MAP_CHROME_CSS = ''
   + ':root{--bg:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#8FC7B9}'
   + '*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;overflow:hidden}'
@@ -5659,14 +5670,7 @@ const MAP_CHROME_CSS = ''
   + 'h1{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.3rem;margin:0 0 2px}h1 i{font-style:normal;color:var(--gold)}'
   + '.sub{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.07em;color:var(--mut);text-transform:uppercase;margin-bottom:8px}'
   + '.srow{display:flex;gap:8px;align-items:flex-start;max-width:640px}.srow .sbox{flex:1;margin:0 0 8px}'
-  + '.hstack{position:fixed;top:10px;right:10px;z-index:8;width:min(330px,72vw);display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:none}.hstack>*{pointer-events:auto}'   // v152.2 - HOMES, then RESIDENTS (private), then COLOUR BY (twin): one column, an open panel pushes the next down
-  + '.hp{position:relative;width:100%;background:rgba(19,31,29,.97);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.35)}'
-  + '.hh{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}.hh b{color:var(--text);font-weight:500;letter-spacing:.03em;text-transform:none;font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hh i{font-style:normal;color:var(--mut);transition:transform .2s}.hp.on .hh i{transform:rotate(180deg)}'
-  + '.hbody{display:none;padding:2px 12px 10px;border-top:1px solid var(--line)}.hp.on .hbody{display:block}'
-  + '.hrow{display:grid;grid-template-columns:1fr;gap:4px;padding:7px 0}.hrow label{font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);display:flex;justify-content:space-between;gap:8px}.hrow label b{color:var(--gold);font-weight:500;font-size:.68rem;letter-spacing:0;text-transform:none}'
-  + '.hfoot{display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.06em;text-transform:uppercase}.hfoot a{color:var(--gold);cursor:pointer}.hfoot a#hclear{color:var(--mut)}'
-  + '.dual{position:relative;height:28px}.dual .band{position:absolute;top:12px;height:4px;background:var(--gold);border-radius:2px;pointer-events:none;opacity:.9}.dual input{position:absolute;left:0;right:0;top:0;width:100%;margin:0;background:transparent;pointer-events:none;-webkit-appearance:none;appearance:none;height:28px}.dual input::-webkit-slider-runnable-track{height:4px;background:var(--line);border-radius:2px}.dual input::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:20px;height:20px;border-radius:50%;background:var(--gold);border:2px solid #0C1413;margin-top:-8px;cursor:pointer}.dual input::-moz-range-thumb{pointer-events:auto;width:18px;height:18px;border-radius:50%;background:var(--gold);border:2px solid #0C1413;cursor:pointer}.dual input::-moz-range-track{height:4px;background:var(--line)}'
-  + '.seg{display:flex;gap:6px;flex-wrap:wrap}.seg button{border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:99px;padding:5px 11px;font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}.seg button.on{color:var(--gold);border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}'
+  + STACK_CSS   // v152.5 - the stack's own rules, shared with the all-Dubai twin
   + '.sbox{position:relative;margin:0 0 8px;max-width:560px}.sbox input{width:100%;box-sizing:border-box;background:rgba(19,31,29,.94);border:1px solid var(--line);border-radius:12px;color:var(--text);font:inherit;font-size:.9rem;padding:9px 12px;outline:none}.sbox input:focus{border-color:rgba(197,165,106,.7)}'
   + '#qr{position:absolute;left:0;right:0;top:100%;z-index:9;background:rgba(19,31,29,.98);border:1px solid var(--line);border-radius:12px;margin-top:4px;max-height:46vh;overflow:auto;display:none}#qr.on{display:block}'
   + '.qi{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:baseline;padding:8px 12px;border-top:1px solid var(--line);cursor:pointer;font-size:.86rem}.qi:first-child{border-top:0}.qi:hover,.qi.sel{background:rgba(197,165,106,.1)}'
@@ -5710,6 +5714,14 @@ const MAP_CHROME_CSS = ''
   + '.hint{position:fixed;left:0;right:0;bottom:78px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--mut);z-index:4;pointer-events:none}';
 const MAP_CHROME_CSS_X = '.ptabs{display:flex;gap:6px;margin:8px 0 6px}.ptabs button{flex:1;border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:10px;padding:7px 8px;font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.ptabs button.on{color:var(--gold);border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}.umx{margin-top:10px}.umx table{width:100%;border-collapse:collapse;font-size:.78rem}.umx th{font-family:"IBM Plex Mono",monospace;font-weight:400;font-size:.52rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);text-align:right;padding:4px 0}.umx td{padding:5px 0;border-top:1px solid var(--line);text-align:right;white-space:nowrap}.umx td:first-child,.umx th:first-child{text-align:left}.umx .k{display:flex;gap:8px;margin-bottom:6px}.umx .k b{flex:1;border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center;font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.1rem}.umx .k b small{display:block;font-family:"IBM Plex Mono",monospace;font-weight:400;font-size:.52rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-top:2px}#scope{display:none!important}.scw{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;align-content:center;padding:6px;border:1px solid var(--line);border-radius:14px;background:rgba(19,31,29,.92);width:156px;box-sizing:border-box}.scw i{grid-column:1/-1;font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);text-align:center}.scw button{border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:8px;padding:4px 0;font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.03em;text-transform:uppercase;cursor:pointer}.scw button.on{color:var(--gold);border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}.a{width:84px}.a small{display:block;font-size:.48rem;letter-spacing:.02em;text-transform:none;color:var(--mut);line-height:1.15;min-height:1.15em}.nx{display:block;margin-top:8px;color:var(--gold);cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.7rem}.hlive{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:7px 10px;margin-bottom:8px;cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}.hlive.on{color:var(--gold);border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}.hlive b{color:var(--text)}body.wide .top{right:37%}body.wide #panel{left:auto;right:14px;top:96px;bottom:88px;width:34%;max-width:none;max-height:none;margin:0;padding:14px 16px}body.wide #scope{left:14px;top:auto;bottom:70px;transform:none;flex-direction:row;align-items:flex-end;gap:10px;zoom:.78}body.wide .hint{left:14px;right:auto;bottom:88px;text-align:left;max-width:300px}body.wide #hp{max-width:460px}body.wide.film #panel{transform:translateX(28px)}body.wide.film #panel.on{transform:translateX(0)}'
   + 'body.film #panel{transition:transform .55s cubic-bezier(.2,.8,.2,1),opacity .45s ease;transform:translateY(24px);opacity:0}body.film #panel.on{transform:translateY(0);opacity:1}body.film .rail .c,body.film .a{animation:filmin .5s cubic-bezier(.2,.8,.2,1) both}body.film .rail .c:nth-child(2){animation-delay:.05s}body.film .rail .c:nth-child(3){animation-delay:.1s}body.film .rail .c:nth-child(4){animation-delay:.15s}body.film .rail .c:nth-child(5){animation-delay:.2s}body.film .rail .c:nth-child(6){animation-delay:.25s}body.film .a:nth-child(2){animation-delay:.06s}body.film .a:nth-child(3){animation-delay:.12s}body.film .a:nth-child(4){animation-delay:.18s}body.film .a:nth-child(5){animation-delay:.24s}body.film .a:nth-child(6){animation-delay:.3s}body.film .a:nth-child(7){animation-delay:.36s}body.film .n1{animation:filmin .45s ease both}body.film .n1:nth-child(2){animation-delay:.07s}body.film .n1:nth-child(3){animation-delay:.14s}body.film .n1:nth-child(4){animation-delay:.21s}body.film .n1:nth-child(5){animation-delay:.28s}body.film .n1:nth-child(6){animation-delay:.35s}@keyframes filmin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}body.film .a.on,body.film .rail .c.on{transition:background .4s,border-color .4s,color .4s}.tapfx{position:fixed;z-index:99;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:rgba(197,165,106,.55);box-shadow:0 0 0 2px rgba(197,165,106,.9);pointer-events:none;animation:tapfx .7s ease-out forwards}@keyframes tapfx{0%{transform:scale(.6);opacity:.95}100%{transform:scale(3.2);opacity:0}}body.film .maplibregl-ctrl-bottom-right,body.film .hint{display:none!important}' + 'body.clean .top,body.clean #scope,body.clean #hp,body.clean .hstack,body.clean #panel,body.clean .hint,body.clean .maplibregl-ctrl-bottom-right,body.clean nav,body.clean .nav,body.clean #nav{display:none!important}@media(max-width:640px){.hp:not(.on){width:auto}.hp:not(.on) .hh b{display:none}.hstack{top:8px;right:8px}}';
+// v152.5 - the HOMES panel markup, shared by the MAP chrome and the all-Dubai twin
+const HOMES_PANEL_HTML = ''
+  + '<div id=hp class=hp><div class=hh id=hh><span>homes</span><b id=hres>set a budget</b><i>\u25BE</i></div><div class=hbody><div class=hlive id=hlivet><span>developer stock only</span><b id=hlivec></b></div>'
+  + '  <div class=hrow><label>budget <b id=hbv>from AED 1.5M to 6.4M</b></label><div class=dual><i class=band id=bandp></i><input type=range id=hlo min=0 max=60 value=10 autocomplete=off><input type=range id=hhi min=0 max=60 value=30 autocomplete=off></div></div>'
+  + '  <div class=hrow><label>bedrooms <b id=hbdv>from 1 to 3</b></label><div class=dual><i class=band id=bandb></i><input type=range id=hblo min=0 max=6 value=1 autocomplete=off><input type=range id=hbhi min=0 max=6 value=3 autocomplete=off></div></div>'
+  + '  <div class=hrow><label>home type</label><div class=seg><button class="on" data-t=any type=button>any</button><button data-t=apt type=button>apartment</button><button data-t=villa type=button>villa &amp; townhouse</button></div></div>'
+  + '  <div class=hrow><label>extras</label><div class=seg><button data-x=beach type=button>near a public beach</button><button data-x=hbeach type=button>near a hotel beach</button></div></div>'
+  + '  <div class=hfoot><a id=hlist>list them \u2192</a><a id=hclear>clear</a></div></div></div>';
 const MAP_CHROME_HTML = ''
   + '<div class=top><h1>Najma <i>نجمة</i> — __TITLE__</h1><div class=sub id=st>pick a district</div>'
   + '<div class=srow><div class=sbox><input id=q type=search placeholder="search a district, sub-community, plot, school, hospital, mall, metro, developer\u2026" autocomplete=off spellcheck=false><div id=qr></div></div></div>'
@@ -5717,12 +5729,30 @@ const MAP_CHROME_HTML = ''
   + '<div id=scope><div class=sm><button class="on" data-mode=area>in this community</button><button data-mode=dist>by distance</button></div>'
   + '<div id=vr><b id=rngv>2.0 km</b><input type=range id=rng min=0.5 max=10 step=0.5 value=2><small id=rngof>from the district centre</small></div></div>'
   + '<div id=panel></div><div class=hint id=hint></div>'
-  + '<div class=hstack id=hstack><div id=hp class=hp><div class=hh id=hh><span>homes</span><b id=hres>set a budget</b><i>\u25BE</i></div><div class=hbody><div class=hlive id=hlivet><span>developer stock only</span><b id=hlivec></b></div>'
-  + '  <div class=hrow><label>budget <b id=hbv>from AED 1.5M to 6.4M</b></label><div class=dual><i class=band id=bandp></i><input type=range id=hlo min=0 max=60 value=10 autocomplete=off><input type=range id=hhi min=0 max=60 value=30 autocomplete=off></div></div>'
-  + '  <div class=hrow><label>bedrooms <b id=hbdv>from 1 to 3</b></label><div class=dual><i class=band id=bandb></i><input type=range id=hblo min=0 max=6 value=1 autocomplete=off><input type=range id=hbhi min=0 max=6 value=3 autocomplete=off></div></div>'
-  + '  <div class=hrow><label>home type</label><div class=seg><button class="on" data-t=any type=button>any</button><button data-t=apt type=button>apartment</button><button data-t=villa type=button>villa &amp; townhouse</button></div></div>'
-  + '  <div class=hrow><label>extras</label><div class=seg><button data-x=beach type=button>near a public beach</button><button data-x=hbeach type=button>near a hotel beach</button></div></div>'
-  + '  <div class=hfoot><a id=hlist>list them \u2192</a><a id=hclear>clear</a></div></div></div><!--hstack--></div>';
+  + '<div class=hstack id=hstack>' + HOMES_PANEL_HTML + '<!--hstack--></div>';
+// v152.5 - HOMES matching (needs PR, AM and m2 in scope) and the panel wiring (needs drawHomes and window.__stackOpen)
+const HOMES_CORE_JS = ''
+  + 'var HB={lo:10,hi:30,blo:1,bhi:3,type:"any",beach:false,live:false,on:false};'
+  + 'function stepAed(v){v=+v;return v<=20?250000+v*125000:(v<=40?2750000+(v-20)*362500:10000000+(v-40)*500000)}'      // 0.25M..2.75M..10M..20M
+  + 'function fmtAed(a){return a>=1e6?("AED "+(a/1e6).toFixed(a>=1e7?0:1)+"M"):("AED "+Math.round(a/1e3)+"k")}'
+  + 'function bedsLabel(b){return b>=6?"5+":(b===0?"studio":String(b))}'
+  + 'function isVilla(it){return !!(it.fl&&it.fl<=3&&(!it.b["0"]&&!it.b["1"]))||/villa|townhouse|town house|mansion/i.test(it.n||"")}'
+  + 'function nearBeach(it,acc){if(!AM||!AM.items)return false;acc=acc||"public";for(var k=0;k<AM.items.length;k++){var a=AM.items[k];if(a.k!=="beach")continue;if(acc==="public"&&a.acc&&a.acc!=="public")continue;if(acc==="hotel"&&a.acc!=="hotel")continue;if(m2([it.lon,it.lat],[a.lon,a.lat])<=1000)return true}return false}'
+  + 'function homeMatches(){var lo=stepAed(HB.lo),hi=stepAed(HB.hi);if(hi<lo){var t=lo;lo=hi;hi=t}var blo=Math.min(HB.blo,HB.bhi),bhi=Math.max(HB.blo,HB.bhi);var out=[];'
+  + '  PR.forEach(function(it){var best=null;var src={};Object.keys(it.b||{}).forEach(function(k){src[k]=["reg",it.b[k]]});Object.keys(it.ask||{}).forEach(function(k){if(!src[k])src[k]=["ask",it.ask[k]]});'
+  + '    Object.keys(src).forEach(function(k){var b=+k;if(b===9)return;var bb=b>=6?6:b;if(bb<blo||bb>bhi)return;var v=src[k][1];if(v<lo||v>hi)return;if(!best||v<best.v)best={b:b,v:v,ask:src[k][0]==="ask"}});if(!best)return;'
+  + '    if(HB.type==="villa"&&!isVilla(it))return;if(HB.type==="apt"&&isVilla(it))return;if(HB.live&&!it.left)return;if(HB.beach&&!nearBeach(it,"public"))return;if(HB.hbeach&&!nearBeach(it,"hotel"))return;out.push({it:it,b:best.b,v:best.v})});'
+  + '  out.sort(function(a,b){return a.v-b.v});return out}'
+  ;
+const HOMES_WIRE_JS = ''
+  + '(function(){var hp=document.getElementById("hp"),hh=document.getElementById("hh");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});'
+  + '  hh.onclick=function(){var open=!hp.classList.contains("on");if(open)window.__stackOpen(hp);hp.classList.toggle("on",open);if(open&&!HB.on){HB.on=true;drawHomes()}};'
+  + '  (function(){var bp=document.getElementById("bandp"),bb=document.getElementById("bandb");if(bp){bp.style.left="16.7%";bp.style.width="33.3%"}if(bb){bb.style.left="16.7%";bb.style.width="33.3%"}})();'
+  + '  document.getElementById("hclear").onclick=function(){HB.on=false;HB.lo=10;HB.hi=30;HB.blo=1;HB.bhi=3;HB.type="any";HB.beach=false;HB.hbeach=false;HB.live=false;var _lt=document.getElementById("hlivet");if(_lt)_lt.classList.remove("on");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});hp.querySelectorAll(".seg button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-t")==="any")});drawHomes();document.getElementById("hres").textContent="set a budget";hp.classList.remove("on")};'
+  + '  [["hlo","lo"],["hhi","hi"],["hblo","blo"],["hbhi","bhi"]].forEach(function(x){var el=document.getElementById(x[0]);el.oninput=function(){HB[x[1]]=+el.value;HB.on=true;drawHomes()}});'
+  + '  hp.querySelectorAll(".seg button[data-t]").forEach(function(b){b.onclick=function(){HB.type=b.getAttribute("data-t");hp.querySelectorAll(".seg button[data-t]").forEach(function(x){x.classList.toggle("on",x===b)});drawHomes()}});'
+  + '  hp.querySelectorAll(".seg button[data-x]").forEach(function(b){b.onclick=function(){var k=b.getAttribute("data-x");HB[k]=!HB[k];b.classList.toggle("on",HB[k]);drawHomes()}});var lt=document.getElementById("hlivet");if(lt)lt.onclick=function(){HB.live=!HB.live;lt.classList.toggle("on",HB.live);HB.on=true;drawHomes()};})();'
+  ;
 const MAP_CHROME_JS = ''
   + 'window.__stackOpen=function(p){if(innerWidth<=640)document.querySelectorAll(".hstack .hp.on").forEach(function(x){if(x!==p)x.classList.remove("on")})};'   // v152.2 - on a phone one panel of the stack is open at a time
   + 'var DEVN={omniyat:"OMNIYAT",hh:"H&H",meraas:"Meraas",select:"Select Group",ellington:"Ellington",arada:"Arada",zaya:"ZAYA",palma:"Palma",fakhruddin:"Fakhruddin",beyond:"BEYOND",imtiaz:"Imtiaz",iman:"Iman",emaar:"Emaar",sobha:"Sobha",prestigeone:"Prestige One"};function devName(k){return DEVN[k]||k}function bedWord(b){return b===0?"studio":bedsLabel(b)+"-bed"}'
@@ -5749,17 +5779,7 @@ const MAP_CHROME_JS = ''
   + 'function tc(t){t=String(t||"");if(t.length>3&&t===t.toUpperCase()&&/[A-Z]/.test(t)){return t.toLowerCase().replace(/(^|[\\s\\-\\/(])([a-z])/g,function(m,a,b){return a+b.toUpperCase()}).replace(/\\b(By|Of|And|The|At)\\b/g,function(m){return m.toLowerCase()})}return t}'
   + 'function loadData(){var V="?v="+Math.floor(Date.now()/600000);Promise.all([j("/img/districts_geo"+V),j("/img/subs"+V),j("/img/plots"+V),j("/img/amenities"+V),j("/img/videos"+V),j("/img/map_prices"+V)]).then(function(r){'
   + '  D=r[0];SUBS=r[1];PLOTS=r[2];AM=r[3];VIDS=((r[4]&&r[4].items)||[]).filter(function(v){return !v.kind});UFLY=((r[4]&&r[4].items)||[]).filter(function(v){return v.kind==="unreal"&&v.scope==="district"});PR=(r[5]&&r[5].items)||[];buildRail();buildAm();drawAm();if(STYLE_READY)addLayers();deepLink();});}'
-  + 'var HB={lo:10,hi:30,blo:1,bhi:3,type:"any",beach:false,live:false,on:false};'
-  + 'function stepAed(v){v=+v;return v<=20?250000+v*125000:(v<=40?2750000+(v-20)*362500:10000000+(v-40)*500000)}'      // 0.25M..2.75M..10M..20M
-  + 'function fmtAed(a){return a>=1e6?("AED "+(a/1e6).toFixed(a>=1e7?0:1)+"M"):("AED "+Math.round(a/1e3)+"k")}'
-  + 'function bedsLabel(b){return b>=6?"5+":(b===0?"studio":String(b))}'
-  + 'function isVilla(it){return !!(it.fl&&it.fl<=3&&(!it.b["0"]&&!it.b["1"]))||/villa|townhouse|town house|mansion/i.test(it.n||"")}'
-  + 'function nearBeach(it,acc){if(!AM||!AM.items)return false;acc=acc||"public";for(var k=0;k<AM.items.length;k++){var a=AM.items[k];if(a.k!=="beach")continue;if(acc==="public"&&a.acc&&a.acc!=="public")continue;if(acc==="hotel"&&a.acc!=="hotel")continue;if(m2([it.lon,it.lat],[a.lon,a.lat])<=1000)return true}return false}'
-  + 'function homeMatches(){var lo=stepAed(HB.lo),hi=stepAed(HB.hi);if(hi<lo){var t=lo;lo=hi;hi=t}var blo=Math.min(HB.blo,HB.bhi),bhi=Math.max(HB.blo,HB.bhi);var out=[];'
-  + '  PR.forEach(function(it){var best=null;var src={};Object.keys(it.b||{}).forEach(function(k){src[k]=["reg",it.b[k]]});Object.keys(it.ask||{}).forEach(function(k){if(!src[k])src[k]=["ask",it.ask[k]]});'
-  + '    Object.keys(src).forEach(function(k){var b=+k;if(b===9)return;var bb=b>=6?6:b;if(bb<blo||bb>bhi)return;var v=src[k][1];if(v<lo||v>hi)return;if(!best||v<best.v)best={b:b,v:v,ask:src[k][0]==="ask"}});if(!best)return;'
-  + '    if(HB.type==="villa"&&!isVilla(it))return;if(HB.type==="apt"&&isVilla(it))return;if(HB.live&&!it.left)return;if(HB.beach&&!nearBeach(it,"public"))return;if(HB.hbeach&&!nearBeach(it,"hotel"))return;out.push({it:it,b:best.b,v:best.v})});'
-  + '  out.sort(function(a,b){return a.v-b.v});return out}'
+  + HOMES_CORE_JS   // v152.5 - budget, bedrooms, type and extras matching, shared with the all-Dubai twin
   + 'function drawHomes(){var src=map&&map.getSource("homes");if(!HB.on){if(src)src.setData({type:"FeatureCollection",features:[]});if(window.__onHomes)try{window.__onHomes(null)}catch(e){}return}var m=homeMatches();if(window.__onHomes)try{window.__onHomes(m)}catch(e){}var mPins=window.__twinDistrict?m.filter(function(x){return x.it.d===window.__twinDistrict}):m;'   // v152.3 - the twin lights up the buildings whose homes match
   + '  if(src)src.setData({type:"FeatureCollection",features:mPins.map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x.it.lon,x.it.lat]},properties:{p:x.it.p,lab:x.it.n+" \u00b7 "+fmtAed(x.v)}}})});'
   + '  var byD={};m.forEach(function(x){byD[x.it.d]=(byD[x.it.d]||0)+1});var _tk=Object.keys(byD).sort(function(a,b){return byD[b]-byD[a]});var top=_tk.length?"most in "+dName(_tk[0]):"";'
@@ -5776,13 +5796,7 @@ const MAP_CHROME_JS = ''
   + '  var vv=videoFor(it.n,it.d);'
   + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+esc(it.n)+\'</div><div class=ps>\'+esc(dName(it.d))+(it.dev?" \u00b7 "+esc(devName(it.dev)):"")+(it.u?" \u00b7 "+it.u+" units":"")+(it.la?" \u00b7 "+it.la+" launched":"")+(it.la&&it.so!=null?" \u00b7 "+it.so+" sold in the register":"")+(it.left?" \u00b7 "+it.left+" left on the developer sheet":"")+\'</div><div class=ct style="margin-top:8px">\'+lines+\'<div><i>more</i><a href="/find?key=\'+encodeURIComponent(KEY)+\'&q=\'+encodeURIComponent(it.n)+\'">open in Find \u2192</a></div></div>\'+(vv?videoHtml(vv):"");'
   + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;document.getElementById("hint").textContent=""},700)}'
-  + '(function(){var hp=document.getElementById("hp"),hh=document.getElementById("hh");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});'
-  + '  hh.onclick=function(){var open=!hp.classList.contains("on");if(open)window.__stackOpen(hp);hp.classList.toggle("on",open);if(open&&!HB.on){HB.on=true;drawHomes()}};'
-  + '  (function(){var bp=document.getElementById("bandp"),bb=document.getElementById("bandb");if(bp){bp.style.left="16.7%";bp.style.width="33.3%"}if(bb){bb.style.left="16.7%";bb.style.width="33.3%"}})();'
-  + '  document.getElementById("hclear").onclick=function(){HB.on=false;HB.lo=10;HB.hi=30;HB.blo=1;HB.bhi=3;HB.type="any";HB.beach=false;HB.hbeach=false;HB.live=false;var _lt=document.getElementById("hlivet");if(_lt)_lt.classList.remove("on");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});hp.querySelectorAll(".seg button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-t")==="any")});drawHomes();document.getElementById("hres").textContent="set a budget";hp.classList.remove("on")};'
-  + '  [["hlo","lo"],["hhi","hi"],["hblo","blo"],["hbhi","bhi"]].forEach(function(x){var el=document.getElementById(x[0]);el.oninput=function(){HB[x[1]]=+el.value;HB.on=true;drawHomes()}});'
-  + '  hp.querySelectorAll(".seg button[data-t]").forEach(function(b){b.onclick=function(){HB.type=b.getAttribute("data-t");hp.querySelectorAll(".seg button[data-t]").forEach(function(x){x.classList.toggle("on",x===b)});drawHomes()}});'
-  + '  hp.querySelectorAll(".seg button[data-x]").forEach(function(b){b.onclick=function(){var k=b.getAttribute("data-x");HB[k]=!HB[k];b.classList.toggle("on",HB[k]);drawHomes()}});var lt=document.getElementById("hlivet");if(lt)lt.onclick=function(){HB.live=!HB.live;lt.classList.toggle("on",HB.live);HB.on=true;drawHomes()};})();'
+  + HOMES_WIRE_JS   // v152.5 - the HOMES panel's controls, shared with the all-Dubai twin (each page brings its own drawHomes)
   + 'var DN={};function dName(slug){if(!DN[slug]&&D){(D.districts||[]).forEach(function(d){DN[d.slug]=d.name})}return DN[slug]||slug}'
   + 'function qnorm(t){return String(t||"").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g," ").trim()}'
   + 'function searchAll(q){q=qnorm(q);if(q.length<2)return [];var toks=q.split(" ").filter(Boolean);var hit=function(t){t=qnorm(t);return toks.every(function(w){return t.indexOf(w)>=0})};var out=[];'
@@ -5981,7 +5995,7 @@ const MAP_CHROME_JS = ''
 // page is opened with the residents key. Same controls as /residents (nationality, minimum share, search, ranked list); choosing shades this
 // map's communities, with labels and a gold outline on the selected one; its detail opens in the map's bottom panel. Rounded shares, no counts.
 // The data is read from /residents/data with the key; nothing of it is in the page. The script runs inside the map chrome's scope (map, esc).
-const RES_COL = { 5: "#1f5f58", 10: "#2f8a7f", 20: "#58b5a8", 40: "#a9e2da" };   // the template's teal ramp, validated on this ground
+const RES_COL = { 5: "#3987e5", 10: "#008300", 20: "#c98500", 40: "#d55181" };   // v152.5 - four distinct hues (Kendall: "totally different colors"), the most separable set on this ground; the band is always written beside it
 const RES_PANEL_CSS = ''
   + '.rp .hbody{max-height:min(64vh,calc(100vh - 230px));overflow:auto}'
   + '.rpriv{display:inline-block;margin:9px 0 2px;padding:3px 8px;border-radius:6px;background:var(--gold);color:#1d1608;font-family:"IBM Plex Mono",monospace;font-size:.54rem;letter-spacing:.06em;text-transform:uppercase}'
@@ -6008,7 +6022,7 @@ const RES_PANEL_HTML = '<div id=rp class="hp rp"><div class=hh id=rh><span>resid
 const RES_PANEL_JS = `
 (function(){
 var COLR=${JSON.stringify(RES_COL)},BTX={5:"5-10%",10:"10-20%",20:"20-40%",40:"40%+"};
-var RX=null,RBY={},RS={nats:[],min:5,q:"",sel:null},RLOAD=null,MINACC=500,RLAY=false,RPOP=null;
+var RX=null,RBY={},RS={nats:[],min:5,q:"",sel:null},RLOAD=null,MINACC=500,MINPCT=5,RLAY=false,RPOP=null;
 var rp=document.getElementById("rp"),rres=document.getElementById("rres"),rnat=document.getElementById("rnat"),rlist=document.getElementById("rlist"),rlh=document.getElementById("rlh");
 function rlab(c){return c.label||c.name||("Community "+c.comm)}
 function rname(comm){var c=RBY[comm];if(c)return {label:rlab(c),official:c.official||""};var n=((RX&&RX.names)||{})[comm];return n?{label:n.label||("Community "+comm),official:n.official||""}:{label:"Community "+comm,official:""}}
@@ -6017,10 +6031,10 @@ function rmatch(comm){if(!RS.q)return true;var n=rname(comm),c=RBY[comm]||{};ret
 function rfeatures(){var O=(RX&&RX.outlines)||{};return {type:"FeatureCollection",features:Object.keys(O).map(function(comm){var ring=O[comm].slice();if(ring.length&&(ring[0][0]!==ring[ring.length-1][0]||ring[0][1]!==ring[ring.length-1][1]))ring.push(ring[0]);var c=RBY[comm],n=rname(comm);
   return {type:"Feature",geometry:{type:"Polygon",coordinates:[ring]},properties:{comm:comm,label:n.label,official:n.official,band:(c&&RS.nats.length)?rband(c):0,shown:!!c,dim:!rmatch(comm),sel:RS.sel===comm}}})}}
 function rbbox(comm){var ring=((RX&&RX.outlines)||{})[comm];if(!ring)return null;var a=[180,90,-180,-90];ring.forEach(function(p){a=[Math.min(a[0],p[0]),Math.min(a[1],p[1]),Math.max(a[2],p[0]),Math.max(a[3],p[1])]});return [[a[0],a[1]],[a[2],a[3]]]}
-function rTwin(){return !!(window.__twinDistrict&&window.__resTwin)}   // v152.3 - on the twin the shading is drawn on the ground by the scene
+function rTwin(){return !!window.__resTwin}   // v152.3 - on a twin (district or, v152.5, all Dubai) the shading is drawn on the ground by the scene
 function rlayers(){if(RLAY||!RX)return;
   if(rTwin()){RLAY=true;window.__resTwin.init({pick:function(comm){rselect(String(comm),false)}});rdraw();return}
-  if(window.__twinDistrict||!map||!STYLE_READY||!map.getStyle)return;
+  if(window.__twinDistrict||window.__cityTwin||!map||!STYLE_READY||!map.getStyle)return;
   var L=[];try{L=map.getStyle().layers||[]}catch(e){}var before,font=["Ubuntu Regular"];
   for(var i=0;i<L.length;i++){if(L[i].type==="symbol"){if(!before)before=L[i].id;if(L[i].layout&&L[i].layout["text-font"]){font=L[i].layout["text-font"];break}}}
   map.addSource("res",{type:"geojson",data:rfeatures()});
@@ -6049,7 +6063,7 @@ function rdetail(){var el=document.getElementById("panel");if(!el)return;var com
   if(!comm){if(el.querySelector("#rpx"))el.classList.remove("on");return}
   var c=RBY[comm],n=rname(comm),body;
   if(!c)body='<div class=rcav>Fewer than '+MINACC+' residential accounts with a nationality, so no mix is shown.</div>';
-  else body=(c.noNationalityPct?'<div class=rcav style="margin-top:2px">'+Number(c.noNationalityPct)+'% of accounts record no nationality.</div>':'')+'<div class=rbars>'+(c.mix||[]).map(function(x){return '<div class=rbar><span>'+esc(x[0])+'</span><i style="width:'+Math.max(2,Number(x[1]))+'%"></i><b>'+Number(x[1])+'%</b></div>'}).join("")+(c.other?'<div class=rbar><span>Other</span><i style="width:'+Math.max(2,Number(c.other))+'%;background:#3a4a48"></i><b>'+Number(c.other)+'%</b></div>':'')+'</div><div class=rcav>Account holders, not every resident. For market understanding and planning content; not for recommending homes.</div>';
+  else body=(c.noNationalityPct?'<div class=rcav style="margin-top:2px">'+Number(c.noNationalityPct)+'% of accounts record no nationality.</div>':'')+'<div class=rbars>'+(c.mix||[]).map(function(x){return '<div class=rbar><span>'+esc(x[0])+'</span><i style="width:'+Math.max(2,Number(x[1]))+'%"></i><b>'+Number(x[1])+'%</b></div>'}).join("")+(c.other?'<div class=rbar><span>Others, each under '+MINPCT+'%</span><i style="width:'+Math.max(2,Number(c.other))+'%;background:#3a4a48"></i><b>'+Number(c.other)+'%</b></div>':'')+'</div><div class=rcav>Account holders, not every resident. For market understanding and planning content; not for recommending homes.</div>';
   el.innerHTML='<span class=px id=rpx>✕</span><div class=pt>'+esc(n.label)+'</div><div class=ps>residents'+(n.official&&n.official!==n.label?' · official name: '+esc(n.official):'')+'</div>'+body;
   el.classList.add("on");document.getElementById("rpx").onclick=function(){RS.sel=null;el.classList.remove("on");rrender()};var h=document.getElementById("hint");if(h)h.textContent=""}
 function rselect(comm,fly){RS.sel=comm;if(innerWidth<=640)rp.classList.remove("on");rrender();rdetail();
@@ -6057,7 +6071,7 @@ function rselect(comm,fly){RS.sel=comm;if(innerWidth<=640)rp.classList.remove("o
   if(fly&&RLAY){var b=rbbox(comm);if(b){var ph=innerWidth<=640,wide=document.body.classList.contains("wide");map.fitBounds(b,{padding:ph?{top:70,left:30,right:30,bottom:Math.round(innerHeight*0.55)}:(wide?{top:90,bottom:90,left:60,right:Math.round(innerWidth*0.38)}:{top:120,left:40,right:40,bottom:Math.round(innerHeight*0.5)}),maxZoom:14,duration:700})}}}
 function rload(){if(RLOAD)return RLOAD;RLOAD=fetch("/residents/data?rk="+encodeURIComponent(RK),{cache:"no-store",referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(j){
   if(!j||!j.communities){rnat.innerHTML='<span class=rnote>The residents data is not on file yet.</span>';return}
-  RX=j;RBY={};j.communities.forEach(function(c){RBY[String(c.comm)]=c});MINACC=Number((j.rules||{}).minResidentialAccounts)||500;
+  RX=j;RBY={};j.communities.forEach(function(c){RBY[String(c.comm)]=c});MINACC=Number((j.rules||{}).minResidentialAccounts)||500;MINPCT=Number((j.rules||{}).minSharePct)||5;
   rnat.innerHTML=(j.nationalities||[]).map(function(n){return '<button type=button data-n="'+esc(n).replace(/"/g,"&quot;")+'">'+esc(n)+'</button>'}).join("");
   rnat.querySelectorAll("button").forEach(function(b){b.onclick=function(){var n=b.getAttribute("data-n"),i=RS.nats.indexOf(n);if(i>=0)RS.nats.splice(i,1);else RS.nats.push(n);rrender()}});
   document.getElementById("rleg").innerHTML=[40,20,10,5].map(function(k){return '<span><i style="background:'+COLR[k]+'"></i>'+BTX[k]+'</span>'}).join("")+'<span>fewer than '+MINACC+' accounts: not shown</span>';
@@ -6082,7 +6096,7 @@ const resRkq = (rk) => rk ? '<script>window.__RKQ=' + JSON.stringify("&rk=" + en
 const RES_TWIN_JS = `
 // ===== v152.3 RESIDENTS on the twin ground (private page) =====
 const RES3={grp:null,meshes:[],byComm:new Map(),cb:null,tip:null,box:null,pend:null,tries:0};
-const RES3COL={5:0x1f5f58,10:0x2f8a7f,20:0x58b5a8,40:0xa9e2da};
+const RES3COL={5:0x3987e5,10:0x008300,20:0xc98500,40:0xd55181};
 function res3Box(){if(RES3.box)return RES3.box;if(!ANCH||!ANCH.anchors)return null;let a=[180,90,-180,-90],n=0;for(const x of ANCH.anchors){if(x.lon&&x.lat){n++;a=[Math.min(a[0],x.lon),Math.min(a[1],x.lat),Math.max(a[2],x.lon),Math.max(a[3],x.lat)]}}if(!n)return null;RES3.box=[a[0]-0.02,a[1]-0.02,a[2]+0.02,a[3]+0.02];return RES3.box}
 function res3Build(fc){
   const box=res3Box();if(!box||!ROOTREF||!_fit())return false;
@@ -6126,6 +6140,138 @@ addEventListener("pointerup",e=>{const d=res3Down;res3Down=null;if(!d||Math.hypo
   if(MESHES){const vis=MESHES.filter(m=>m.visible);if(res3Ray.intersectObjects(vis,false).length)return}   // a tower under the tap keeps its own panel
   RES3.cb.pick(comm)});
 // ===== v152.3 RESIDENTS on the twin ground - end =====
+`;
+// v152.5 - the stack on the all-Dubai twin (Kendall, 15 Sep 2026): HOMES lights up the buildings whose homes match, COLOUR BY offers
+// district, height and developer (the DEWA looks need buildings modelled one by one, which only the district twins have), and with the
+// residents key RESIDENTS shades every community on the ground. The HOMES panel, its matching and its wiring are the MAP chrome's own.
+const CITY_STACK_CSS = ''
+  + ':root{--bg:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#8FC7B9}'
+  + '.hlive{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:7px 10px;margin-bottom:8px;cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}.hlive.on{color:var(--gold);border-color:rgba(197,165,106,.75);background:rgba(197,165,106,.13)}.hlive b{color:var(--text)}'
+  + '#panel{position:fixed;left:14px;bottom:96px;z-index:9;width:min(430px,calc(100vw - 28px));max-height:52vh;overflow:auto;box-sizing:border-box;background:rgba(19,31,29,.97);border:1px solid var(--line);border-radius:16px;padding:12px 14px;display:none;color:var(--text)}#panel.on{display:block}'
+  + '.pt{font-family:Fraunces,Georgia,serif;font-size:1.2rem;font-weight:600;margin-bottom:2px}.ps{font-family:"IBM Plex Mono",monospace;font-size:.63rem;letter-spacing:.05em;color:var(--mut);text-transform:uppercase;margin-bottom:10px}.px{float:right;cursor:pointer;color:var(--mut);font-size:1rem;margin-left:8px}'
+  + '.near{display:grid;gap:5px}.n1{display:grid;grid-template-columns:16px 1fr auto;gap:8px;align-items:baseline;font-size:.86rem;padding:5px 0;border-top:1px solid var(--line)}.n1:first-child{border-top:0}.n1 em{font-style:normal}.n1.nk{cursor:pointer}.n1.nk:hover{color:var(--gold)}.n1 s{text-decoration:none;font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--mut)}'
+  + '.cseg{flex-direction:column;align-items:stretch;padding:8px 0 4px}.cseg button{text-align:left}.cnote{font-family:"IBM Plex Mono",monospace;font-size:.54rem;letter-spacing:.03em;color:var(--mut);padding:4px 0 2px;line-height:1.45}'
+  + '#tip{right:auto;left:14px;top:auto;bottom:118px}'   // the stack owns the top right now
+  + '#leg{max-width:calc(100vw - 28px);line-height:1.9}'
+  + '@media(max-width:640px){.hp:not(.on){width:auto}.hp:not(.on) .hh b{display:none}.hstack{top:8px;right:8px}#sb{width:calc(100vw - 150px)}#tip{bottom:150px}#panel{left:10px;right:10px;width:auto;bottom:74px}}';
+const CITY_COLOUR_HTML = '<div id=colp class="hp colp"><div class=hh id=colh><span>colour by</span><b id=colres>district</b><i>▾</i></div><div class=hbody><div class="seg cseg" id=cseg><button type=button class=on data-c="">district</button><button type=button data-c=height>height</button><button type=button data-c=dev>developer</button></div><div class=cnote>Filling up, residents vs businesses and move-ins vs Dubai are on the district twins that model buildings one by one: Dubai Marina, JLT, JVC, Business Bay, Downtown.</div></div></div>';
+const CITY_CHROME_JS = `
+window.__stackOpen=function(p){if(innerWidth<=640)document.querySelectorAll(".hstack .hp.on").forEach(function(x){if(x!==p)x.classList.remove("on")})};
+var map=null,STYLE_READY=false;   // the residents panel draws through the scene here, never a map
+function esc(t){return String(t==null?"":t).replace(/[&<>]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]})}
+function m2(a,b){var R=6371000,t=Math.PI/180;var dx=(b[0]-a[0])*t*Math.cos((a[1]+b[1])*0.5*t),dy=(b[1]-a[1])*t;return Math.round(Math.sqrt(dx*dx+dy*dy)*R)}
+var PR=[],AM=null,DN={};function dName(s){return DN[s]||s}
+var DEVN={omniyat:"OMNIYAT",hh:"H&H",meraas:"Meraas",select:"Select Group",ellington:"Ellington",arada:"Arada",zaya:"ZAYA",palma:"Palma",fakhruddin:"Fakhruddin",beyond:"BEYOND",imtiaz:"Imtiaz",iman:"Iman",emaar:"Emaar",sobha:"Sobha",prestigeone:"Prestige One"};function devName(k){return DEVN[k]||k}
+${HOMES_CORE_JS}
+function bedWord(b){return b===0?"studio":bedsLabel(b)+"-bed"}
+function drawHomes(){var m=HB.on?homeMatches():null;window.__homesLast=m;if(window.__onHomes)try{window.__onHomes(m)}catch(e){}if(!m)return;
+  var byD={};m.forEach(function(x){byD[x.it.d]=(byD[x.it.d]||0)+1});var tk=Object.keys(byD).sort(function(a,b){return byD[b]-byD[a]});
+  document.getElementById("hres").textContent=(HB.live?"developer stock · ":"")+m.length+" across Dubai"+(tk.length?" · most in "+dName(tk[0]):"");
+  var lc=document.getElementById("hlivec");if(lc)lc.textContent=PR.filter(function(i){return i.left}).length+" live";
+  var hl=document.getElementById("hlist");if(hl)hl.onclick=function(){listHomes(m)};
+  document.getElementById("hbv").textContent="from "+fmtAed(stepAed(Math.min(HB.lo,HB.hi)))+" to "+fmtAed(stepAed(Math.max(HB.lo,HB.hi))).replace("AED ","");document.getElementById("hbdv").textContent="from "+bedsLabel(Math.min(HB.blo,HB.bhi))+" to "+bedsLabel(Math.max(HB.blo,HB.bhi));
+  var bp=document.getElementById("bandp"),bb=document.getElementById("bandb");if(bp){var a=Math.min(HB.lo,HB.hi)/60*100,b=Math.max(HB.lo,HB.hi)/60*100;bp.style.left=a+"%";bp.style.width=(b-a)+"%"}if(bb){var c=Math.min(HB.blo,HB.bhi)/6*100,d=Math.max(HB.blo,HB.bhi)/6*100;bb.style.left=c+"%";bb.style.width=(d-c)+"%"}}
+function closePanel(){document.getElementById("panel").classList.remove("on")}
+function listHomes(m){var el=document.getElementById("panel"),rows=m.slice(0,60);
+  el.innerHTML='<span class=px id=px>✕</span><div class=pt>homes</div><div class=ps>'+m.length+' developments match · '+esc(document.getElementById("hbv").textContent)+' · '+esc(document.getElementById("hbdv").textContent)+' bed</div><div class=near>'+rows.map(function(x,ix){return '<div class="n1 nk" data-ix="'+ix+'"><em style="color:var(--gold)">●</em><span>'+esc(x.it.n)+' <small style="color:var(--mut)">'+esc(dName(x.it.d))+(x.it.dev?' · '+esc(devName(x.it.dev)):'')+(x.it.left?' · '+x.it.left+' left':'')+'</small></span><s>'+bedWord(x.b)+' '+fmtAed(x.v)+(x.ask?' asking':'')+'</s></div>'}).join("")+'</div>';
+  el.classList.add("on");document.getElementById("px").onclick=closePanel;
+  el.querySelectorAll(".nk").forEach(function(r){r.onclick=function(){var it=rows[+r.getAttribute("data-ix")].it;if(window.__cityFly)window.__cityFly(it.lon,it.lat)}})}
+${HOMES_WIRE_JS}
+(function(){var V="?v="+Math.floor(Date.now()/600000);function j(u){return fetch(u).then(function(r){return r.ok?r.json():null}).catch(function(){return null})}
+  Promise.all([j("/img/map_prices"+V),j("/img/amenities"+V),j("/img/districts_geo"+V)]).then(function(r){PR=(r[0]&&r[0].items)||[];AM=r[1];((r[2]&&r[2].districts)||[]).forEach(function(d){DN[d.slug]=d.name});var lc=document.getElementById("hlivec");if(lc)lc.textContent=PR.filter(function(i){return i.left}).length+" live";if(HB.on)drawHomes()})})();
+(function(){var p=document.getElementById("colp");if(!p)return;
+  document.getElementById("colh").onclick=function(){var open=!p.classList.contains("on");if(open)window.__stackOpen(p);p.classList.toggle("on",open)};
+  p.querySelectorAll("#cseg button").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-c");p.querySelectorAll("#cseg button").forEach(function(x){x.classList.toggle("on",x===b)});document.getElementById("colres").textContent=v==="height"?"height":(v==="dev"?"developer":"district");window.__cityColourLast=v;if(window.__cityColour)window.__cityColour(v)}})})();
+`;
+const CITY_STACK_MODULE_JS = `
+// ===== v152.5 CITY STACK: HOMES and COLOUR BY on the all-Dubai twin =====
+const dvA=D.arrays.dev_u8?b64(D.arrays.dev_u8,Uint8Array):new Uint8Array(n);
+const ORIGCOL=mesh.instanceColor.array.slice(0);
+const SLUGIX={};D.districts.forEach((d,i)=>{SLUGIX[d.slug]=i});
+const ORIGIN=D.origin||{lon:55.27,lat:25.12,e:325579.1,n:2779353.4};
+// WGS84 -> UTM zone 40N, the city model's own grid (x = easting - e0, z = -(northing - n0))
+function utm40(lon,lat){const a=6378137,f=1/298.257223563,k0=0.9996,e2=f*(2-f),ep2=e2/(1-e2),e4=e2*e2,e6=e4*e2;const p=lat*Math.PI/180,l=lon*Math.PI/180,l0=57*Math.PI/180;
+  const sp=Math.sin(p),cp=Math.cos(p),tp=Math.tan(p);const N=a/Math.sqrt(1-e2*sp*sp),T=tp*tp,C=ep2*cp*cp,A=cp*(l-l0);
+  const M=a*((1-e2/4-3*e4/64-5*e6/256)*p-(3*e2/8+3*e4/32+45*e6/1024)*Math.sin(2*p)+(15*e4/256+45*e6/1024)*Math.sin(4*p)-(35*e6/3072)*Math.sin(6*p));
+  const x=k0*N*(A+(1-T+C)*A*A*A/6+(5-18*T+T*T+72*C-58*ep2)*Math.pow(A,5)/120)+500000;
+  const y=k0*(M+N*tp*(A*A/2+(5-T+9*C+4*C*C)*Math.pow(A,4)/24+(61-58*T+T*T+600*C-330*ep2)*Math.pow(A,6)/720));return [x,y]}
+function llx(lon,lat){const q=utm40(lon,lat);return [q[0]-ORIGIN.e,-(q[1]-ORIGIN.n)]}
+const CELL=150,GRID=new Map();for(let i=0;i<n;i++){const k=Math.floor(xz[2*i]*U/CELL)+","+Math.floor(xz[2*i+1]*U/CELL);let g=GRID.get(k);if(!g){g=[];GRID.set(k,g)}g.push(i)}
+function nearestInst(x,z,dIx,maxD){const cx=Math.floor(x/CELL),cz=Math.floor(z/CELL);let best=-1,bd=maxD*maxD;
+  for(let gx=cx-1;gx<=cx+1;gx++)for(let gz=cz-1;gz<=cz+1;gz++){const g=GRID.get(gx+","+gz);if(!g)continue;for(const i of g){if(dIx>=0&&di[i]!==dIx)continue;const dx=xz[2*i]*U-x,dz=xz[2*i+1]*U-z,dd=dx*dx+dz*dz;if(dd<bd){bd=dd;best=i}}}return best}
+const CDEV={omniyat:0xE8E4D8,hh:0xD96C5F,meraas:0xD9A441,select:0x3E8A7E,ellington:0x8FC7B9,arada:0x56B584,zaya:0x9B8CE6,palma:0x6FB7A8,fakhruddin:0xF28C6A,beyond:0x4C9BE8,imtiaz:0xC41E3A,iman:0xB08BD9,emaar:0xC5A56A,sobha:0xE07A5F,prestigeone:0x7FA7C9};   // the district twins' developer colours
+const CDEVN={omniyat:"OMNIYAT",hh:"H&H",meraas:"Meraas",select:"Select Group",ellington:"Ellington",arada:"Arada",zaya:"ZAYA",palma:"Palma",fakhruddin:"Fakhruddin",beyond:"BEYOND",imtiaz:"Imtiaz",iman:"Iman",emaar:"Emaar",sobha:"Sobha",prestigeone:"Prestige One"};
+const HBANDS=[[0,25,"under 25 m"],[25,75,"25 to 75 m"],[75,150,"75 to 150 m"],[150,1e9,"150 m and over"]],HCOL=["#184f95","#2a78d6","#6da7ec","#b7d3f6"];   // the validated ordinal blue ramp, lightest = tallest
+const legEl=document.getElementById("leg"),LEG0=legEl?legEl.innerHTML:"";
+let CMODE3="",HOMESET3=null,HOMEN3=0;
+function paintCity(){
+  const arr=mesh.instanceColor.array,c=new THREE.Color(),dim=new THREE.Color(0x1f2826),gold=new THREE.Color(0xC5A56A),hc=HCOL.map(h=>new THREE.Color(h));
+  const counts=[0,0,0,0],devCount={};
+  for(let i=0;i<n;i++){let r=ORIGCOL[3*i],g=ORIGCOL[3*i+1],b=ORIGCOL[3*i+2];
+    if(CMODE3==="height"){const hm=hh[i];let k=HBANDS.length-1;for(let q=0;q<HBANDS.length;q++){if(hm<HBANDS[q][1]){k=q;break}}counts[k]++;r=hc[k].r;g=hc[k].g;b=hc[k].b}
+    else if(CMODE3==="dev"){const dk=(D.devs||[])[dvA[i]]||"";if(dk&&CDEV[dk]!=null){devCount[dk]=(devCount[dk]||0)+1;c.setHex(CDEV[dk]);r=c.r;g=c.g;b=c.b}else{r=dim.r;g=dim.g;b=dim.b}}
+    if(HOMESET3){if(!HOMESET3.has(i)){r=dim.r;g=dim.g;b=dim.b}else if(!CMODE3){r=gold.r;g=gold.g;b=gold.b}}
+    arr[3*i]=r;arr[3*i+1]=g;arr[3*i+2]=b}
+  mesh.instanceColor.needsUpdate=true;
+  if(!legEl)return;
+  let txt=CMODE3==="height"?"height "+HBANDS.map((x,k)=>'<i style="background:'+HCOL[k]+'"></i>'+x[2]+" ("+counts[k].toLocaleString("en")+")").join(" ")
+    :CMODE3==="dev"?"developer "+Object.keys(devCount).sort((a,b)=>devCount[b]-devCount[a]).slice(0,9).map(k=>'<i style="background:#'+CDEV[k].toString(16).padStart(6,"0")+'"></i>'+CDEVN[k]+" ("+devCount[k].toLocaleString("en")+")").join(" ")+' <i style="background:#1f2826"></i>other buildings'
+    :LEG0;
+  if(HOMESET3)txt+=' <i style="background:#C5A56A"></i>'+HOMEN3.toLocaleString("en")+" buildings with homes in your budget";
+  legEl.innerHTML=txt}
+let homeT3=null;
+window.__onHomes=(m)=>{window.__homesLast=m;clearTimeout(homeT3);homeT3=setTimeout(()=>{
+  if(!m){HOMESET3=null;HOMEN3=0}
+  else{HOMESET3=new Set();for(const x of m){const it=(x&&x.it)||{};if(!it.lon||!it.lat)continue;const p=llx(it.lon,it.lat),dIx=SLUGIX[it.d]!=null?SLUGIX[it.d]:-1;let i=nearestInst(p[0],p[1],dIx,90);if(i<0)i=nearestInst(p[0],p[1],-1,60);if(i>=0)HOMESET3.add(i)}HOMEN3=HOMESET3.size}
+  paintCity()},160)};   // the sliders fire on every step: paint once they settle
+window.__cityColour=(mode)=>{CMODE3=mode||"";paintCity()};
+function flyPoint(x,z,r){const from={p:cam.position.clone(),t:ctl.target.clone()};const to={p:new THREE.Vector3(x+r*0.7,Math.max(r*0.8,900),z+r),t:new THREE.Vector3(x,0,z)};ctl.autoRotate=false;anim={from,to,t0:performance.now(),ms:1400,go:null}}
+window.__cityFly=(lon,lat,r)=>{const p=llx(lon,lat);flyPoint(p[0],p[1],r||1600)};
+window.__cityStack={utm40,llx,nearestInst,get homes(){return HOMEN3},get mode(){return CMODE3}};
+if(window.__homesLast!==undefined)window.__onHomes(window.__homesLast);
+if(window.__cityColourLast)window.__cityColour(window.__cityColourLast);
+// ===== v152.5 CITY STACK - end =====
+`;
+const RES_CITY_JS = `
+// ===== v152.5 RESIDENTS on the all-Dubai ground (private page) =====
+const RES3={grp:null,meshes:[],byComm:new Map(),cb:null,tip:null};
+const RES3COL={5:0x3987e5,10:0x008300,20:0xc98500,40:0xd55181};
+const escC=(t)=>String(t==null?"":t).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function res3Build(fc){
+  RES3.grp=new THREE.Group();RES3.meshes=[];RES3.byComm.clear();const y=1.5;
+  for(const f of fc.features){let ring=f.geometry.coordinates[0]||[];
+    if(ring.length>1&&ring[0][0]===ring[ring.length-1][0]&&ring[0][1]===ring[ring.length-1][1])ring=ring.slice(0,-1);
+    if(ring.length<3)continue;
+    const pts=ring.map(p=>llx(p[0],p[1]));
+    const geo=new THREE.ShapeGeometry(new THREE.Shape(pts.map(P=>new THREE.Vector2(P[0],-P[1]))));geo.rotateX(-Math.PI/2);   // drawn in XY, laid on the ground
+    const fill=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide,toneMapped:false}));
+    fill.position.y=y;fill.renderOrder=3;fill.userData.comm=String(f.properties.comm);
+    const line=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts.map(P=>new THREE.Vector3(P[0],y+3,P[1]))),new THREE.LineBasicMaterial({color:0xC5A56A,transparent:true,opacity:0.35,depthWrite:false,toneMapped:false}));
+    line.renderOrder=4;RES3.grp.add(fill);RES3.grp.add(line);RES3.meshes.push(fill);RES3.byComm.set(String(f.properties.comm),{fill,line,f})}
+  scene.add(RES3.grp);return true}
+function res3Style(fc,visible){
+  RES3.grp.visible=!!visible;
+  for(const f of fc.features){const e=RES3.byComm.get(String(f.properties.comm));if(!e)continue;const p=f.properties;e.f=f;
+    e.fill.material.color.setHex(RES3COL[p.band]||0x000000);e.fill.material.opacity=p.band?(p.dim?0.1:0.42):(p.sel?0.08:0);
+    e.line.material.color.setHex(p.sel||p.shown?0xC5A56A:0xE8E4D8);e.line.material.opacity=p.sel?1:(p.shown?0.35:0.1)}}
+window.__resTwin={
+  init(cb){RES3.cb=cb},
+  draw(fc,visible){if(!RES3.grp)res3Build(fc);res3Style(fc,visible);if(!visible&&RES3.tip)RES3.tip.style.display="none";return true},
+  fly(comm,bb){if(!bb||!RES3.byComm.has(String(comm)))return false;const c=llx((bb[0][0]+bb[1][0])/2,(bb[0][1]+bb[1][1])/2);const r=Math.max(Math.hypot((bb[1][0]-bb[0][0])*101000,(bb[1][1]-bb[0][1])*111000)*1.1,1800);flyPoint(c[0],c[1],r);return true},
+  get communities(){return [...RES3.byComm.keys()]}
+};
+const res3Ray=new THREE.Raycaster(),res3Ptr=new THREE.Vector2();let res3T=0,res3Down=0;
+function res3Hit(ev){if(!RES3.grp||!RES3.grp.visible)return null;const rct=canvas.getBoundingClientRect();res3Ptr.x=((ev.clientX-rct.left)/rct.width)*2-1;res3Ptr.y=-((ev.clientY-rct.top)/rct.height)*2+1;res3Ray.setFromCamera(res3Ptr,cam);
+  if(res3Ray.intersectObject(mesh,false).length)return null;   // a building under the pointer keeps the city's own behaviour
+  const h=res3Ray.intersectObjects(RES3.meshes,false).find(x=>{const e=RES3.byComm.get(x.object.userData.comm);return e&&e.f.properties.shown});return h?h.object.userData.comm:null}
+canvas.addEventListener("pointermove",ev=>{if(!RES3.grp||!RES3.grp.visible||ev.pointerType==="touch")return;const now=performance.now();if(now-res3T<60)return;res3T=now;
+  if(!RES3.tip){RES3.tip=document.createElement("div");RES3.tip.id="rtip";document.body.appendChild(RES3.tip)}
+  const comm=res3Hit(ev);if(!comm){RES3.tip.style.display="none";return}const p=RES3.byComm.get(comm).f.properties;
+  RES3.tip.innerHTML="<b>"+escC(p.label)+"</b>"+(p.official&&p.official!==p.label?"<br><span>"+escC(p.official)+"</span>":"");
+  RES3.tip.style.display="block";RES3.tip.style.left=Math.min(ev.clientX+14,innerWidth-270)+"px";RES3.tip.style.top=(ev.clientY+12)+"px"});
+canvas.addEventListener("pointerdown",()=>{res3Down=Date.now()});
+canvas.addEventListener("pointerup",ev=>{if(Date.now()-res3Down>260||!RES3.cb)return;const comm=res3Hit(ev);if(comm)RES3.cb.pick(comm)});
+// ===== v152.5 RESIDENTS on the all-Dubai ground - end =====
 `;
 function renderMapBasic(key, rk) {
   const K = JSON.stringify(key || "");
@@ -7350,15 +7496,19 @@ function renderCity(key, rk) {
     'window.__cityFilm={fly:(slug,ms)=>{const ix=D.districts.findIndex(d=>d.slug===slug);if(ix<0)return false;flyTo(ix,false);anim.ms=ms||2400;return true},orbit:(on)=>{ctl.autoRotate=!!on},open:(slug)=>{location.href="/skyline/"+slug+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")},districts:()=>D.districts.map(d=>d.slug)};',
     'function tick(){requestAnimationFrame(tick);if(anim){const k=Math.min(1,(performance.now()-anim.t0)/anim.ms),e=k<.5?2*k*k:-1+(4-2*k)*k;cam.position.lerpVectors(anim.from.p,anim.to.p,e);ctl.target.lerpVectors(anim.from.t,anim.to.t,e);if(k>=1){const go=anim.go;anim=null;if(go)location.href="/skyline/"+go+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")}}ctl.update();',
     '  const w=innerWidth,h=innerHeight;const taken=[];const order=labels.map((l,i)=>i).sort((a,b)=>labels[b].d.buildings-labels[a].d.buildings);for(const i of order){const l=labels[i];const v=l.v.clone().project(cam);let vis=v.z<1&&Math.abs(v.x)<1.05&&Math.abs(v.y)<1.05;const px=(v.x+1)/2*w,py=(1-v.y)/2*h;if(vis){const bw=l.e.offsetWidth||90,bh=22;const r={x0:px-bw/2,x1:px+bw/2,y0:py-bh,y1:py};if(!l.e.classList.contains("on")&&taken.some(t=>r.x0<t.x1&&r.x1>t.x0&&r.y0<t.y1&&r.y1>t.y0))vis=false;else taken.push(r)}l.e.style.opacity=vis?"1":"0";if(vis){l.e.style.left=px+"px";l.e.style.top=py+"px"}}ren.render(scene,cam)}tick();',
-    'addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});'
+    'addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});',
+    CITY_STACK_MODULE_JS,   // v152.5 - HOMES and COLOUR BY on the city
+    rk ? RES_CITY_JS : ""   // v152.5 - RESIDENTS on the ground, private pages only
   ].join("\n");
-  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">' + (rk ? RES_HEAD : '') + '<title>Najma \u2014 the twin \u00b7 all Dubai</title>' + NAJ_FONTS + resRkq(rk)
-    + '<style>' + css + NAJ_NAV_CSS + '</style>'
+  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">' + (rk ? RES_HEAD : '') + '<title>Najma \u2014 the twin \u00b7 all Dubai</title>' + NAJ_FONTS + resRkq(rk) + '<script>window.__cityTwin=true;<\/script>'
+    + '<style>' + css + NAJ_NAV_CSS + STACK_CSS + CITY_STACK_CSS + (rk ? RES_PANEL_CSS : '') + '</style>'
     + '<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.169.0/examples/jsm/"}}</script></head><body>'
     + '<div id=ld>loading the city</div><canvas id=c></canvas><div id=lbl></div>'
     + '<div id=hd><h1>Najma <b>\u0646\u062c\u0645\u0629</b> \u2014 the twin \u00b7 all Dubai</h1><p>loading</p></div>'
     + '<div id=sb><input id=q type=search placeholder="search a district or corridor\u2026" autocomplete=off spellcheck=false><div id=sr></div><select id=sel><option value="">jump to a district\u2026</option></select></div><div id=tip></div>'
     + '<div id=leg>massing by district <i style="background:#C5A56A"></i>towers lighter <i style="background:#3E8A7E"></i>sea <i style="background:#8FC7B9"></i>creek, canal, lakes</div>'
+    + '<div class=hstack id=hstack>' + HOMES_PANEL_HTML + (rk ? RES_PANEL_HTML : '') + CITY_COLOUR_HTML + '</div><div id=panel></div>'   // v152.5 - the same stack as MAP and the district twins
+    + '<script>(function(){var KEY=' + JSON.stringify(key || "") + ';' + CITY_CHROME_JS + (rk ? 'var RK=' + JSON.stringify(rk) + ';' + RES_PANEL_JS : '') + '})();<\/script>'
     + '<script type="module">' + js + '</script>' + najNav(key, "twin", rk) + '</body></html>';
 }
 
@@ -9167,8 +9317,8 @@ h2{margin:0;font-family:Fraunces,Georgia,serif;font-size:18px}
 <script>(function(){
 var RK=new URLSearchParams(location.search).get("rk")||"";
 var $=function(id){return document.getElementById(id)};
-var COL={5:"#1f5f58",10:"#2f8a7f",20:"#58b5a8",40:"#a9e2da"},BAND_TXT={5:"5-10%",10:"10-20%",20:"20-40%",40:"40%+"};
-var MIX=null,byComm=new Map(),state={nats:new Set(),min:5,q:"",sel:null},map=null,MINACC=500;
+var COL={5:"#3987e5",10:"#008300",20:"#c98500",40:"#d55181"},BAND_TXT={5:"5-10%",10:"10-20%",20:"20-40%",40:"40%+"};
+var MIX=null,byComm=new Map(),state={nats:new Set(),min:5,q:"",sel:null},map=null,MINACC=500,MINPCT=5;
 function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]})}
 function labelOf(c){return c.label||c.name||("Community "+c.comm)}
 function nameOf(comm){var c=byComm.get(comm);if(c)return{label:labelOf(c),official:c.official||""};var n=(MIX.names||{})[comm];return n?{label:n.label||("Community "+comm),official:n.official||""}:{label:"Community "+comm,official:""}}
@@ -9182,7 +9332,7 @@ function select(comm,fly){var phone=innerWidth<=760;state.sel=comm;if(phone&&fly
   if(fly&&map){var b=bboxOf(comm);if(b)map.fitBounds(b,{padding:phone?{top:40,left:30,right:30,bottom:Math.round(innerHeight*0.44)+20}:60,maxZoom:13.5,duration:600})}}
 function detailHtml(){var c=state.sel&&byComm.get(state.sel);
   if(!c){var n=state.sel?nameOf(state.sel):null;return '<p class=label>Community</p>'+(n?'<h2>'+esc(n.label)+'</h2><div class=aka>'+(n.official&&n.official!==n.label?esc(n.official):'')+'</div><p class=note>Fewer than '+MINACC+' residential accounts with a nationality, so no mix is shown.</p>':'<p class=note>Tap a community on the map or in the list.</p>')}
-  var bars=(c.mix||[]).map(function(x){return '<div class=bar><span>'+esc(x[0])+'</span><i style="width:'+Math.max(2,Number(x[1]))+'%"></i><b>'+Number(x[1])+'%</b></div>'}).join("")+(c.other?'<div class=bar><span>Other</span><i style="width:'+Math.max(2,Number(c.other))+'%;background:#3a4a48"></i><b>'+Number(c.other)+'%</b></div>':"");
+  var bars=(c.mix||[]).map(function(x){return '<div class=bar><span>'+esc(x[0])+'</span><i style="width:'+Math.max(2,Number(x[1]))+'%"></i><b>'+Number(x[1])+'%</b></div>'}).join("")+(c.other?'<div class=bar><span>Others, each under '+MINPCT+'%</span><i style="width:'+Math.max(2,Number(c.other))+'%;background:#3a4a48"></i><b>'+Number(c.other)+'%</b></div>':"");
   var label=labelOf(c),official=c.official||"";
   return '<p class=label>Community</p><h2>'+esc(label)+'</h2><div class=aka>'+(c.known&&c.known.length>2?'Also '+esc(c.known.slice(2).join(", "))+' &middot; ':'')+(official&&official!==label?'Official name: '+esc(official):'Official and common name')+'</div>'+
     (c.noNationalityPct?'<p class=note>'+Number(c.noNationalityPct)+'% of accounts record no nationality.</p>':'')+
@@ -9220,7 +9370,7 @@ fetch("/residents/data?rk="+encodeURIComponent(RK),{cache:"no-store",referrerPol
   MIX=j;byComm=new Map(j.communities.map(function(c){return[String(c.comm),c]}));
   if((j.nationalities||[]).length)state.nats.add(j.nationalities[0]);
   $("source").textContent=(j.source||"")+". Names from the Land Department's sales records; official Municipality names underneath.";
-  var r0=j.rules||{};MINACC=Number(r0.minResidentialAccounts)||500;$("rules").textContent="Communities with at least "+MINACC+" residential accounts. Groups under "+(r0.minSharePct||5)+"% are pooled; shares rounded. "+((j.notes||[])[0]||"");
+  var r0=j.rules||{};MINACC=Number(r0.minResidentialAccounts)||500;MINPCT=Number(r0.minSharePct)||5;$("rules").textContent="Communities with at least "+MINACC+" residential accounts. Groups under "+(r0.minSharePct||5)+"% are pooled; shares rounded. "+((j.notes||[])[0]||"");
   $("legend").innerHTML=[40,20,10,5].map(function(k){return '<div><span class=sw style="background:'+COL[k]+'"></span>'+BAND_TXT[k]+'</div>'}).join("")+'<div><span class=sw style="border:1px solid #c5a56a88"></span>shown, below your minimum</div><div><span class=sw style="border:1px solid #ffffff22"></span>fewer than '+MINACC+' accounts: not shown</div>';
   (j.nationalities||[]).forEach(function(n){var b=document.createElement("button");b.className="chip";b.textContent=n;b.setAttribute("data-nat",n);b.onclick=function(){if(state.nats.has(n))state.nats.delete(n);else state.nats.add(n);render()};$("nats").appendChild(b)});
   [5,10,20,40].forEach(function(v){var b=document.createElement("button");b.textContent=v+"%+";b.setAttribute("data-min",v);b.onclick=function(){state.min=v;render()};$("mins").appendChild(b)});

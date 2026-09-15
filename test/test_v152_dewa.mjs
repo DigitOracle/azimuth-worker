@@ -57,7 +57,7 @@ const page = await r.text();
 ok(r.status === 200 && page.includes("Residents by community") && page.includes("Private: Kendall and Naj only"), "residents: its own key opens the private page");
 ok(r.headers.get("Referrer-Policy") === "no-referrer" && /no-store/.test(r.headers.get("Cache-Control") || "") && /noindex/.test(r.headers.get("X-Robots-Tag") || "") && page.includes('name=referrer content=no-referrer'), "residents: no-store, noindex, and no referrer (the key never leaks to the map tiles)");
 ok(/href="\/map\?key=[^"]+&rk=[^"]+">&larr; the map<\/a>/.test(page) && /href="\/skyline\?all=1&key=[^"]+&rk=[^"]+">the twin<\/a>/.test(page) && (page.match(new RegExp(RES, "g")) || []).length === 2 && !/najnav|\/homes|\/find/i.test(page), "residents: the keys appear only in its two ways back, to the private MAP and TWIN; no client page is linked");
-ok(page.includes("@media(max-width:760px)") && page.includes("id=grab") && page.includes("#side.max{height:86vh}") && ["#1f5f58", "#2f8a7f", "#58b5a8", "#a9e2da"].every(c => page.includes(c)), "residents: the template's teal ramp, and a bottom sheet on phones");
+ok(page.includes("@media(max-width:760px)") && page.includes("id=grab") && page.includes("#side.max{height:86vh}") && ["#3987e5", "#008300", "#c98500", "#d55181"].every(c => page.includes(c)), "residents: four distinct band colours, and a bottom sheet on phones");
 ok(!/\.accounts\b|toLocaleString/.test(page), "residents: the page has no way to show an account count");
 const script = (page.match(/<script>\(function\(\)\{([\s\S]*?)\}\)\(\);<\/script>/) || [])[1] || "";
 ok(script.length > 1000 && parses("(function(){" + script + "})();", ".js"), "residents: the page script parses");
