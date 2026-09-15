@@ -6016,8 +6016,7 @@ const RES_PANEL_CSS = ''
   + '#rtip{position:fixed;z-index:30;display:none;pointer-events:none;max-width:260px;background:rgba(19,31,29,.96);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:.74rem;line-height:1.35;color:var(--text)}#rtip span{color:var(--mut)}'   // the twin's hover name
   + '@media(max-width:640px){.srow{margin-right:112px}}';   // on a phone the second pill of the stack sits level with the search box
 const RES_PANEL_HTML = '<div id=rp class="hp rp"><div class=hh id=rh><span>residents</span><b id=rres>pick a nationality</b><i>▾</i></div><div class=hbody>'
-  + '<div class=rpriv>private · Kendall and Naj only</div>'
-  + '<div class=hrow><label>nationality</label><div class="seg rnat" id=rnat><span class=rnote>loading the communities…</span></div></div>'
+ + '<div class=hrow><label>nationality</label><div class="seg rnat" id=rnat><span class=rnote>loading the communities…</span></div></div>'
   + '<div class=hrow><label>minimum share</label><div class=seg id=rmin><button type=button class=on data-m=5>5%+</button><button type=button data-m=10>10%+</button><button type=button data-m=20>20%+</button><button type=button data-m=40>40%+</button></div></div>'
   + '<div class=hrow><label>community</label><input id=rq type=search placeholder="search: Dubai Marina, JVC, Al Barsha…" autocomplete=off spellcheck=false></div>'
   + '<div class=rleg id=rleg></div><div class=rlh id=rlh>pick at least one nationality</div><div class=rlist id=rlist></div>'
@@ -9319,7 +9318,7 @@ h2{margin:0;font-family:Fraunces,Georgia,serif;font-size:18px}
 <div id=map role=region aria-label="Map of Dubai communities shaded by the selected nationalities"></div>
 <aside id=side>
 <button id=grab aria-expanded=false>Tap to expand</button>
-<h1>Residents by community</h1><div class=flag>Private: Kendall and Naj only. Never for clients.</div>${back}<div class=sub id=source>Loading the communities...</div>
+<h1>Residents by community</h1>${back}<div class=sub id=source>Loading the communities...</div>
 <div class="card dwrap" id=detail2 style="display:none"></div>
 <div class=card><p class=label>Nationality</p><div class=chips id=nats></div></div>
 <div class=card><p class=label>Minimum share</p><div class=seg id=mins></div></div>
