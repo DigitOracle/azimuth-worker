@@ -55,6 +55,10 @@ RING_PARAMS = "RING|1|meeting starting in 15 minutes"
 # The /dial_ack token is the DIAL_ACK_TOKEN secret, never a var.
 DIAL_MARKERS = "RING,CALLNAJ"
 DIAL_NAMES = "971562276093:kendall,971565484397:najjuko"
+# v152.10 - the spoken reminder replaces the ring on Kendall's instance only (Kendall, 15 Sep 2026: voice Asteria, "Only you").
+# A WhatsApp voice note at T-15, sent only inside his 24-hour window; azimuth-2 (Naj) stays text-only.
+VOICE_REMINDERS = "on"
+VOICE_SPEAKER = "asteria"
 
 [triggers]
 crons = ["*/5 3-18 * * *"]
