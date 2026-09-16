@@ -10543,7 +10543,7 @@ const GC_MSG = {
   connectedWait: "✅ *Google Calendar is connected.*\n\nKendall is switching Meet bookings on shortly, and I'll message you the moment you can use it.",
   live: "🎥 *Google Meet is ready.*\n\nWant to try it? I'll set up a 15-minute test call for just you, starting in about 10 minutes. Nobody else is invited, and you can delete it afterwards.",
   skip: "OK. Whenever you want a call, say *meet* followed by when and who, like " + GMEET_EXAMPLE + ".",
-  trialDone: "\n\nThat's it. From now on just say *meet* followed by when and who, like " + GMEET_EXAMPLE + ". I'll show you the booking first, every time.",
+  trialDone: "\n\nThat's it. From now on just say *meet* followed by when and who, like " + GMEET_EXAMPLE + ". I'll show you the booking first, every time. To change one later: *move Jackson to 3pm* or *cancel Jackson*.",
   already: "Google Calendar is already connected. Say *meet* followed by when and who, like " + GMEET_EXAMPLE + "."
 };
 function gmeetOn(env) { return env.GMEET === "on"; }
@@ -10668,22 +10668,135 @@ function gmeetEmails(text) {
   return out.slice(0, 20);
 }
 // A stated length wins over the model: "45m", "90 min", "1h", "1.5 hours". Default 30, bounded 10-240.
-function gmeetDuration(text, fromModel) {
+// v154.7 - the length she stated, in minutes, or 0 when the text has none.
+function gmeetStated(text) {
   const s = String(text || "").replace(GMEET_EMAIL, " ");
   let m = s.match(/\b(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b/i); if (m) return Math.min(240, Math.max(10, Math.round(parseFloat(m[1]) * 60)));
   m = s.match(/\b(\d{1,3})\s*(?:m|min|mins|minute|minutes)\b/i); if (m) return Math.min(240, Math.max(10, parseInt(m[1], 10)));
   const r = gmeetRange(s); if (r) return Math.max(10, r);                                   // v154.4 - "1:00 - 2pm" is an hour
+  return 0;
+}
+function gmeetDuration(text, fromModel) {
+  const st = gmeetStated(text); if (st) return st;
   const d = parseInt(fromModel, 10); return d >= 10 && d <= 240 ? d : 30;
 }
 function gmeetCard(p) {
   return "🎥 *Google Meet - book this?*\n" + p.title + "\n🗓 " + humanGst(p.start_iso) + " GST · " + p.duration_min + " min"
     + (p.guests.length ? "\n✉️ Invites from your Google account to: " + p.guests.join(", ") : "\n✉️ No guests - just the link for you to share");
 }
+// ── v154.7 MOVE / CANCEL a booked Meet ───────────────────────────────────────
+// "move Jackson to 3pm" / "move Jackson to tomorrow 10am 30m" -> a card (old time -> new time) -> Move it -> the Google event is
+// patched in place (same link, Google tells the guests) and the evt_ record follows. "cancel Jackson" -> a card -> Cancel it ->
+// the Google event is deleted and the evt_ record with it. Only events Azimuth booked itself (gmp_ records with a gcal_id) are
+// ever touched; a name that matches none of them is not claimed, so the message goes on to the other handlers.
+const GMEET_MOVE_SCHEMA = { type: "object", additionalProperties: false, properties: { ok: { type: "boolean" }, start_iso: { type: ["string", "null"] }, duration_min: { type: ["integer", "null"] } }, required: ["ok", "start_iso", "duration_min"] };
+const GC_EVENTS = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+// Her upcoming bookings, soonest first (still running ones count, so "cancel Jackson" works five minutes in).
+async function gmeetBooked(env) {
+  const out = []; let cursor = null;
+  do {
+    const l = await env.MEETINGS.list({ prefix: "gmp_", cursor });
+    for (const k of l.keys) {
+      let p = null; try { p = JSON.parse((await env.MEETINGS.get(k.name)) || "null"); } catch (e) {}
+      if (p && p.status === "booked" && p.gcal_id && Date.parse(p.start_iso) + (p.duration_min || 30) * 60000 > Date.now()) out.push(p);
+    }
+    cursor = l.list_complete === false && l.cursor ? l.cursor : null;
+  } while (cursor);
+  return out.sort((a, b) => Date.parse(a.start_iso) - Date.parse(b.start_iso));
+}
+// "the Jackson call", "meeting with Jackson", "Jackson" -> the soonest booking whose title carries every word.
+function gmeetFind(list, name) {
+  const n = String(name || "").toLowerCase().replace(/^(?:the|my|our|a|that)\s+/, "").replace(/^(?:google\s+)?(?:meet(?:ing)?|call)\s+(?:with\s+)?/, "").replace(/\s+(?:meet(?:ing)?|call)$/, "").replace(/[^\p{L}\p{N}\s@.'-]/gu, " ").replace(/\s+/g, " ").trim();
+  if (!n) return null;
+  const words = n.split(" ").filter(w => w.length > 1);
+  return list.find(p => { const t = String(p.title || "").toLowerCase(); return t.includes(n) || (words.length > 0 && words.every(w => t.includes(w))); }) || null;
+}
+// The evt_ record Azimuth filed for this booking: updated (fn returns the new record) or removed (fn returns null).
+async function gmeetLedger(env, gcalId, fn) {
+  let cursor = null;
+  do {
+    const l = await env.MEETINGS.list({ prefix: "evt_", cursor });
+    for (const k of l.keys) {
+      let e = null; try { e = JSON.parse((await env.MEETINGS.get(k.name)) || "null"); } catch (x) {}
+      if (!e || e.gcal_id !== gcalId) continue;
+      const n = fn(e);
+      if (n) await env.MEETINGS.put(k.name, JSON.stringify(n), { expirationTtl: 60 * 60 * 24 * 21 }); else await env.MEETINGS.delete(k.name);
+      return true;
+    }
+    cursor = l.list_complete === false && l.cursor ? l.cursor : null;
+  } while (cursor);
+  return false;
+}
+function gmeetWhen(p) { return humanGst(p.start_iso) + " GST · " + p.duration_min + " min"; }
+// Returns true when the message was a move or a cancel of one of her bookings (handled, whatever the outcome).
+async function gmeetChange(env, from, text) {
+  const s = String(text || "").trim().replace(/^[*_~`\s]+|[*_~`\s]+$/g, "");
+  const mv = s.match(/^(?:move|reschedule|shift|change|push)\s+(.+?)\s+(?:to|->|\u2192)\s+(.{2,})$/i);
+  const cx = mv ? null : s.match(/^(?:cancel|delete|drop|scrap)\s+(.{2,})$/i);
+  if (!mv && !cx) return false;
+  const p = gmeetFind(await gmeetBooked(env), mv ? mv[1] : cx[1]);
+  if (!p) return false;                                                                   // not one of her Meet bookings: leave it to the other handlers
+  const key = "gmp_" + p.id;
+  if (cx) {
+    p.cancel = { at: new Date().toISOString() }; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 });
+    await waSendButtons(env, from, "🗑 *Cancel this Meet?*\n" + p.title + "\n🗓 " + gmeetWhen(p) + (p.guests.length ? "\n✉️ Google will tell " + p.guests.join(", ") : ""), [{ id: "gm:cx:" + p.id, title: "✅ Cancel it" }, { id: "gm:kx:" + p.id, title: "✖️ Keep it" }]);
+    return true;
+  }
+  const when = mv[2].trim();
+  const sys = `You move ONE existing online meeting in the UAE (GST, UTC+4). It is currently at ${p.start_iso} (${humanGst(p.start_iso)}) for ${p.duration_min} minutes. NOW is ${gstNowIso()} (${gstWeekday()}). ${dateHints()} Output ONLY JSON {"ok":true,"start_iso":"YYYY-MM-DDTHH:MM:00+04:00","duration_min":null}. A time alone keeps the meeting's current date; a day alone keeps its current time. Resolve dates ONLY from the date map; 9am->09:00, 3pm->15:00, noon->12:00. duration_min = a stated new length in minutes, else null. If no new time can be read, ok=false and start_iso=null.`;
+  let g = null; try { g = await claudeJSON(env, sys, when, GMEET_MOVE_SCHEMA); } catch (e) {}
+  const t = g && g.ok && g.start_iso ? Date.parse(g.start_iso) : NaN;
+  if (isNaN(t)) { await waSend(env, from, "🎥 When should " + p.title + " move to? Say it like: *move " + p.title + " to tomorrow 3pm*"); return true; }
+  if (t < Date.now() - 5 * 60000) { await waSend(env, from, "🎥 " + humanGst(g.start_iso) + " GST has already passed - send the new time again."); return true; }
+  const dur = gmeetStated(when) || (g.duration_min >= 10 && g.duration_min <= 240 ? g.duration_min : 0) || p.duration_min;
+  p.move = { start_iso: g.start_iso, duration_min: dur, at: new Date().toISOString() }; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 });
+  await waSendButtons(env, from, "🎥 *Move this Meet?*\n" + p.title + "\n🗓 " + humanGst(p.start_iso) + " → *" + humanGst(g.start_iso) + "* GST · " + dur + " min" + (p.guests.length ? "\n✉️ Google will tell " + p.guests.join(", ") : "\n🔗 Same Meet link"), [{ id: "gm:mv:" + p.id, title: "✅ Move it" }, { id: "gm:keep:" + p.id, title: "✖️ Keep it" }]);
+  return true;
+}
+// Patch or delete the Google event. 404/410 on a delete means it is already gone: treated as done.
+async function gmeetUpdate(env, p, patch) {
+  const tok = await gcToken(env); if (!tok) return { ok: false, why: "not-connected" };
+  const url = GC_EVENTS + "/" + encodeURIComponent(p.gcal_id) + "?sendUpdates=" + (p.guests.length ? "all" : "none");
+  const r = await fetch(url, patch ? { method: "PATCH", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(patch) } : { method: "DELETE", headers: { Authorization: "Bearer " + tok } });
+  if (r.ok || (!patch && (r.status === 404 || r.status === 410))) return { ok: true };
+  const e = (await r.text()).slice(0, 200); try { await env.MEETINGS.put("gcal_last_err", (patch ? "patch " : "delete ") + r.status + " " + e); } catch (er) {}
+  return { ok: false, why: (patch ? "patch-" : "delete-") + r.status };
+}
+// Move it / Keep it / Cancel it / Keep it on the cards above. Returns true when the button was one of them.
+async function gmeetChangeButton(env, from, act, p, key) {
+  if (act === "keep") { delete p.move; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 }); await waSend(env, from, "✋ Kept as it was - " + p.title + "\n🗓 " + gmeetWhen(p)); return true; }
+  if (act === "kx") { delete p.cancel; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 }); await waSend(env, from, "✋ Kept - " + p.title + "\n🗓 " + gmeetWhen(p)); return true; }
+  if (act === "mv") {
+    const m = p.move; if (!m) { await waSend(env, from, "Already handled."); return true; }
+    delete p.move; p.moving = true; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 });   // a second tap while Google answers gets "Already handled"
+    const start = new Date(Date.parse(m.start_iso)), end = new Date(start.getTime() + m.duration_min * 60000);
+    let res; try { res = await gmeetUpdate(env, p, { start: { dateTime: start.toISOString(), timeZone: "Asia/Dubai" }, end: { dateTime: end.toISOString(), timeZone: "Asia/Dubai" } }); } catch (e) { res = { ok: false, why: String(e && e.message || e).slice(0, 80) }; }
+    delete p.moving;
+    if (!res.ok) { p.move = m; p.last_err = res.why; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 }); try { await noteErr(env, "gmeet-move", res.why); } catch (e) {} await waSend(env, from, "⚠️ Google didn't accept the move - " + p.title + " is still at " + humanGst(p.start_iso) + " GST. Tap Move it again in a minute."); return true; }
+    const was = p.start_iso; p.start_iso = m.start_iso; p.duration_min = m.duration_min; p.moved_at = new Date().toISOString(); await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 });
+    await gmeetLedger(env, p.gcal_id, e => Object.assign(e, { start_iso: m.start_iso }));
+    await waSend(env, from, "📅 Moved - " + p.title + "\n🗓 " + gmeetWhen(p) + " (was " + humanGst(was) + ")" + (p.join ? "\n🎥 Join: " + p.join : "") + (p.guests.length ? "\n✉️ Google has told " + p.guests.join(", ") : "") + "\nReminders follow the new time.");
+    return true;
+  }
+  if (act === "cx") {
+    if (!p.cancel) { await waSend(env, from, "Already handled."); return true; }
+    delete p.cancel; p.moving = true; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 });
+    let res; try { res = await gmeetUpdate(env, p, null); } catch (e) { res = { ok: false, why: String(e && e.message || e).slice(0, 80) }; }
+    delete p.moving;
+    if (!res.ok) { p.cancel = { at: new Date().toISOString() }; p.last_err = res.why; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 }); try { await noteErr(env, "gmeet-cancel", res.why); } catch (e) {} await waSend(env, from, "⚠️ Google didn't accept that - " + p.title + " is still on your calendar. Tap Cancel it again in a minute."); return true; }
+    p.status = "cancelled"; p.cancelled_at = new Date().toISOString(); await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 7 * 86400 });
+    await gmeetLedger(env, p.gcal_id, () => null);
+    await waSend(env, from, "🗑 Cancelled - " + p.title + "\n🗓 " + gmeetWhen(p) + "\nIt's off your Google Calendar" + (p.guests.length ? " and Google has told " + p.guests.join(", ") : "") + ". No reminders.");
+    return true;
+  }
+  return false;
+}
 // Returns true when the message was a Meet request or a request to connect (handled, whatever the outcome).
 async function gmeetText(env, from, text) {
   if (!gcalOpen(env)) return false;
   if (/^(?:connect|link|set\s*up)\s+(?:my\s+)?(?:google\s+)?(?:calendar|meet)\s*[.!]?$/i.test(String(text || "").trim())) { await gcGuideStart(env, from); return true; }
   if (!gmeetOn(env)) return false;
+  if (await gmeetChange(env, from, text)) return true;                                    // v154.7 - "move Jackson to 3pm" / "cancel Jackson"
   const asked = gmeetAsk(text);                                                           // v154.4 - wider trigger, see gmeetAsk
   if (asked === null) return false;
   if (!(await gcToken(env))) { await waSendButtons(env, from, "🎥 Your Google Calendar isn't connected yet, so I can't make a Meet link. Want to connect it now? It takes about a minute.", [{ id: "gc:go", title: "Connect now" }, { id: "gc:later", title: "Later" }]); return true; }
@@ -10717,10 +10830,14 @@ async function gmeetCreate(env, p) {
 }
 // Returns true when the button belonged to a Meet proposal.
 async function gmeetButton(env, from, bid) {
-  const mm = String(bid || "").match(/^gm:(ok|no):([a-z0-9]{4,40})$/); if (!mm) return false;
+  const mm = String(bid || "").match(/^gm:(ok|no|mv|keep|cx|kx):([a-z0-9]{4,40})$/); if (!mm) return false;
   const key = "gmp_" + mm[2];
   let p = null; try { p = JSON.parse((await env.MEETINGS.get(key)) || "null"); } catch (e) {}
   if (!p) { await waSend(env, from, "That Meet request has expired - send it again."); return true; }
+  if (mm[1] !== "ok" && mm[1] !== "no") {                                                // v154.7 - Move it / Keep it / Cancel it / Keep it
+    if (p.status !== "booked" || p.moving) { await waSend(env, from, "Already handled."); return true; }
+    return gmeetChangeButton(env, from, mm[1], p, key);
+  }
   if (p.status !== "proposed") { await waSend(env, from, "Already handled."); return true; }
   if (mm[1] === "no") {
     p.status = "declined"; await env.MEETINGS.put(key, JSON.stringify(p), { expirationTtl: 86400 });

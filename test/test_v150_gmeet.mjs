@@ -11,8 +11,8 @@ const KV = {
   async delete(k) { store.delete(k); },
   async list(o) { const p = (o && o.prefix) || ""; return { keys: [...store.keys()].filter(k => k.startsWith(p)).map(name => ({ name })) }; },
 };
-const sent = [], inserts = [], tokenCalls = [], ownerNotes = [];
-let claudeOut = null, insertStatus = 200, pendingLink = false;
+const sent = [], inserts = [], tokenCalls = [], ownerNotes = [], patches = [], deletes = [];
+let claudeOut = null, insertStatus = 200, pendingLink = false, patchStatus = 200, deleteStatus = 204;
 globalThis.fetch = async (url, init) => {
   const u = String(url);
   if (u.includes("graph.facebook.com")) { sent.push(JSON.parse(init.body)); return new Response(JSON.stringify({ messages: [{ id: "wamid.out" + sent.length }] }), { status: 200 }); }
@@ -24,6 +24,8 @@ globalThis.fetch = async (url, init) => {
     return new Response(JSON.stringify({ access_token: "AT", expires_in: 3600 }), { status: 200 });
   }
   if (u.includes("googleapis.com/calendar/v3/calendars/primary/events")) {
+    if (init && init.method === "PATCH") { patches.push({ url: u, auth: init.headers.Authorization, body: JSON.parse(init.body) }); return new Response(JSON.stringify({ id: "ev1", hangoutLink: "https://meet.google.com/abc-defg-hij" }), { status: patchStatus }); }
+    if (init && init.method === "DELETE") { deletes.push({ url: u, auth: init.headers.Authorization }); return new Response(deleteStatus === 204 ? null : "{\"error\":\"nope\"}", { status: deleteStatus }); }
     if (init && init.method === "POST") {
       inserts.push({ url: u, auth: init.headers.Authorization, body: JSON.parse(init.body) });
       if (insertStatus !== 200) return new Response('{"error":"nope"}', { status: insertStatus });
@@ -228,6 +230,55 @@ for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
 claudeOut = { ok: true, title: "Jackson", start_iso: future, duration_min: null };
 await say("*meet Jackson today 1pm 1h*", on); gp = [...store.keys()].filter(k => k.startsWith("gmp_")).map(k => JSON.parse(store.get(k)));
 ok(gp.length === 1 && gp[0].asked === "Jackson today 1pm 1h" && gp[0].duration_min === 60, "\"*meet ... 1h*\" with bold stars: a proposal, 60 minutes");
+for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
+// v154.7 - move and cancel a booked Meet from the chat
+const gmpAll = () => [...store.keys()].filter(k => k.startsWith("gmp_")).map(k => JSON.parse(store.get(k)));
+const evtsOf = (id) => [...store.keys()].filter(k => k.startsWith("evt_")).map(k => JSON.parse(store.get(k))).filter(e => e.gcal_id === id);
+for (const k of [...store.keys()]) if (k.startsWith("gmp_") || (k.startsWith("evt_") && /"gcal_id":"ev1"/.test(store.get(k)))) store.delete(k);   // earlier bookings share the stub id
+claudeOut = { ok: true, title: "Jackson", start_iso: future, duration_min: null };
+await say("meet Jackson tomorrow 3pm 1h jackson@example.com", on); let jp = gmpAll()[0];
+await tap("gm:ok:" + jp.id, on); jp = gmpAll()[0];
+ok(jp.status === "booked" && jp.gcal_id === "ev1" && evtsOf("ev1").length === 1, "setup: Jackson booked with a guest, evt_ filed");
+const later = future.replace("T15:00", "T16:00");
+claudeOut = { ok: true, start_iso: later, duration_min: null };
+i = sent.length; await say("move Jackson to 4pm", on); jp = gmpAll()[0];
+ok(sent.length === i + 1 && /Move this Meet\?/.test(last().interactive.body.text) && /→/.test(last().interactive.body.text) && /60 min/.test(last().interactive.body.text) && btnIds(last()) === "gm:mv:" + jp.id + ",gm:keep:" + jp.id, "move: a card, old -> new time, the old length kept, Move it / Keep it");
+ok(jp.move && jp.move.start_iso === later && jp.move.duration_min === 60 && jp.status === "booked" && patches.length === 0, "move: pending on the record, nothing sent to Google yet");
+await tap("gm:keep:" + jp.id, on); jp = gmpAll()[0];
+ok(!jp.move && jp.start_iso === future && /Kept as it was/.test(last().text.body) && patches.length === 0, "Keep it: nothing changes");
+await say("move the Jackson call to 4pm 30m", on); jp = gmpAll()[0];
+ok(jp.move && jp.move.duration_min === 30 && /30 min/.test(last().interactive.body.text), "move with a stated length: 30 min; \"the Jackson call\" finds it");
+i = sent.length; await tap("gm:mv:" + jp.id, on); jp = gmpAll()[0];
+const pt = patches[patches.length - 1];
+ok(patches.length === 1 && pt.url.includes("/events/ev1?sendUpdates=all") && pt.auth === "Bearer AT" && pt.body.start.dateTime === new Date(Date.parse(later)).toISOString() && pt.body.end.dateTime === new Date(Date.parse(later) + 30 * 60000).toISOString(), "Move it: PATCH on the event, guests told, new start and end");
+ok(jp.start_iso === later && jp.duration_min === 30 && !jp.move && jp.moved_at && jp.status === "booked", "Move it: the record follows");
+ok(evtsOf("ev1").length === 1 && evtsOf("ev1")[0].start_iso === later, "Move it: the evt_ record moves with it");
+ok(sent.length === i + 1 && /Moved - Jackson/.test(last().text.body) && last().text.body.includes("https://meet.google.com/abc-defg-hij") && /Google has told jackson@example.com/.test(last().text.body), "Move it: confirmation with the same link and the guest told");
+await tap("gm:mv:" + jp.id, on); ok(/Already handled/.test(last().text.body) && patches.length === 1, "a second Move it tap: already handled");
+claudeOut = { ok: false, start_iso: null, duration_min: null };
+await say("move Jackson to whenever", on); ok(/When should Jackson move to/.test(last().text.body) && !gmpAll()[0].move, "move with no readable time: asks, nothing pending");
+claudeOut = { ok: true, start_iso: "2020-01-01T10:00:00+04:00", duration_min: null };
+await say("move Jackson to 1 Jan 2020 10am", on); ok(/already passed/.test(last().text.body) && !gmpAll()[0].move, "move into the past: refused");
+i = sent.length; await say("move Sara to 4pm", on);
+ok(!sent.slice(i).some(m => m.type === "interactive" && /Move this Meet/.test(m.interactive.body.text)), "move of a name with no booking: not claimed by the Meet flow");
+patchStatus = 500; claudeOut = { ok: true, start_iso: later.replace("T16:00", "T17:00"), duration_min: null };
+await say("move Jackson to 5pm", on); jp = gmpAll()[0]; await tap("gm:mv:" + jp.id, on); jp = gmpAll()[0];
+ok(patches.length === 2 && /didn't accept the move/.test(last().text.body) && jp.start_iso === later && jp.move && jp.move.start_iso === later.replace("T16:00", "T17:00") && /^patch 500/.test(store.get("gcal_last_err")), "Google refuses the move: nothing changes, the move stays pending, error recorded");
+patchStatus = 200; await tap("gm:mv:" + jp.id, on); jp = gmpAll()[0]; ok(jp.start_iso === later.replace("T16:00", "T17:00") && patches.length === 3, "Move it again after the failure: done");
+// cancel
+i = sent.length; await say("cancel Jackson", on); jp = gmpAll()[0];
+ok(sent.length === i + 1 && /Cancel this Meet\?/.test(last().interactive.body.text) && /Google will tell jackson@example.com/.test(last().interactive.body.text) && btnIds(last()) === "gm:cx:" + jp.id + ",gm:kx:" + jp.id && jp.cancel && deletes.length === 0, "cancel: a card, Cancel it / Keep it, nothing sent to Google yet");
+await tap("gm:kx:" + jp.id, on); jp = gmpAll()[0]; ok(!jp.cancel && jp.status === "booked" && /Kept - Jackson/.test(last().text.body), "Keep it: still booked");
+i = sent.length; await say("cancel Zed", on); ok(!sent.slice(i).some(m => m.type === "interactive" && /Cancel this Meet/.test(m.interactive.body.text)), "cancel of a name with no booking: not claimed");
+await say("cancel meeting with Jackson", on); jp = gmpAll()[0]; ok(!!jp.cancel, "\"cancel meeting with Jackson\" finds it");
+deleteStatus = 500; await tap("gm:cx:" + jp.id, on); jp = gmpAll()[0];
+ok(deletes.length === 1 && /didn't accept that/.test(last().text.body) && jp.status === "booked" && jp.cancel && evtsOf("ev1").length === 1, "Google refuses the delete: still booked, still pending, evt_ kept");
+deleteStatus = 204; i = sent.length; await tap("gm:cx:" + jp.id, on); jp = gmpAll()[0];
+ok(deletes.length === 2 && deletes[1].url.includes("/events/ev1?sendUpdates=all") && deletes[1].auth === "Bearer AT", "Cancel it: DELETE on the event, guests told");
+ok(jp.status === "cancelled" && !jp.cancel && jp.cancelled_at && evtsOf("ev1").length === 0, "Cancel it: record cancelled, evt_ removed");
+ok(sent.length === i + 1 && /Cancelled - Jackson/.test(last().text.body) && /off your Google Calendar and Google has told jackson@example.com/.test(last().text.body), "Cancel it: confirmation");
+i = sent.length; await say("cancel Jackson", on); ok(!sent.slice(i).some(m => m.type === "interactive" && /Cancel this Meet/.test(m.interactive.body.text)), "a cancelled booking is not found again");
+await tap("gm:cx:" + jp.id, on); ok(/Already handled/.test(last().text.body) && deletes.length === 2, "a stale Cancel it tap: already handled");
 for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
 // the nudge preview: an online "location" gets no map link
 store.set("evt_" + Date.now() + "_x1", JSON.stringify({ summary: "Google meeting with Jackson", start_iso: future.replace("T15:00", "T08:00"), location: "Google Meet", source: "whatsapp" }));
