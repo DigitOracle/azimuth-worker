@@ -200,5 +200,36 @@ store.set("gcal_kick", JSON.stringify({ id: "n2", text: "x".repeat(1100), button
 i = sent.length; await kickTick(); ok(sent.length === i && /over 1024/.test(JSON.parse(store.get("gcal_kick_result")).why), "message kick over 1024 characters: refused, nothing sent");
 await tap("gc:new", kickEnv); ok(/Step 1 of 3/.test(sent[sent.length - 2].text.body), "New link under the nudge sends the steps with a fresh link");
 
+
+// v154.4 - Naj's wording (16 Sep 2026): "Google meeting with Jackson Wednesday 1:00 - 2pm" is a Meet request, an hour long
+store.set("gcal_token", JSON.stringify({ refresh_token: "RT", access_token: "AT", exp: Date.now() + 3600000 }));   // the case above removed it
+for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
+claudeOut = { ok: true, title: "Google meeting with Jackson", start_iso: future, duration_min: null };
+i = sent.length; await say("Google meeting with Jackson Wednesday 1:00 - 2pm", on);
+let gp = [...store.keys()].filter(k => k.startsWith("gmp_")).map(k => JSON.parse(store.get(k)));
+ok(gp.length === 1 && gp[0].asked === "with Jackson Wednesday 1:00 - 2pm" && gp[0].duration_min === 60, "\"Google meeting with ... 1:00 - 2pm\": a proposal, 60 minutes");
+ok(sent.length === i + 1 && last().type === "interactive" && /Google Meet - book this\?/.test(last().interactive.body.text) && /60 min/.test(last().interactive.body.text), "... and the card says 60 min");
+for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
+i = sent.length; await say("Call with Jackson tomorrow 3pm on Google Meet", on);
+gp = [...store.keys()].filter(k => k.startsWith("gmp_")).map(k => JSON.parse(store.get(k)));
+ok(gp.length === 1 && gp[0].asked === "Call with Jackson tomorrow 3pm on Google Meet" && gp[0].duration_min === 30, "\"... on Google Meet\" anywhere in the line: a proposal, default 30 minutes");
+for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
+i = sent.length; await say("Meeting with Jackson tomorrow 3pm at the office", on);
+ok(![...store.keys()].some(k => k.startsWith("gmp_")) && !sent.slice(i).some(m => m.type === "interactive" && /Google Meet - book/.test(m.interactive.body.text)), "a plain \"meeting with ...\" is not a Meet request (in person stays with the capture)");
+for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
+claudeOut = { ok: true, title: "Sara", start_iso: future, duration_min: null };
+await say("meet Sara 11 - 1pm", on); gp = [...store.keys()].filter(k => k.startsWith("gmp_")).map(k => JSON.parse(store.get(k)));
+ok(gp.length === 1 && gp[0].duration_min === 120, "\"11 - 1pm\": two hours (the start stays am)");
+for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
+await say("meet Sara 16-17 Sept 3pm 45m", on); gp = [...store.keys()].filter(k => k.startsWith("gmp_")).map(k => JSON.parse(store.get(k)));
+ok(gp.length === 1 && gp[0].duration_min === 45, "\"16-17 Sept\" is not read as hours; a stated 45m wins");
+// the nudge preview: an online "location" gets no map link
+store.set("evt_" + Date.now() + "_x1", JSON.stringify({ summary: "Google meeting with Jackson", start_iso: future.replace("T15:00", "T08:00"), location: "Google Meet", source: "whatsapp" }));
+store.set("evt_" + Date.now() + "_x2", JSON.stringify({ summary: "Coffee", start_iso: future, location: "Emaar Square, Downtown Dubai", source: "whatsapp" }));
+r = await get("/nudge_test?key=RK", on); const nj = await r.json();
+const gmRow = nj.next.find(x => x.summary === "Google meeting with Jackson"), cfRow = nj.next.find(x => x.summary === "Coffee");
+ok(gmRow && gmRow.nav === "" && gmRow.location === "Google Meet", "nudge: \"Google Meet\" as the location gets no map link");
+ok(cfRow && /google\.com\/maps/.test(cfRow.nav), "nudge: a real address still gets its map link");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

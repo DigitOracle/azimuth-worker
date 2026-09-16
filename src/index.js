@@ -1360,6 +1360,7 @@ async function capturedMeetings(env) {
 function mapsLink(loc) {
   const s = String(loc || "").trim();
   if (!s || /^https?:\/\//i.test(s)) return "";                 // blank or already a URL (join link)
+  if (GMEET_ONLINE_LOC.test(s) || emirateOf(s)[2] === "Online") return "";   // v154.4 - "Google Meet", "Zoom", "online": no map to search for (Naj's nudge, 16 Sep 2026)
   return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s);
 }
 // All upcoming meetings across Outlook + captured, de-duplicated by summary+start slot.
@@ -10491,6 +10492,32 @@ const GC_REDIRECT = (env) => pubOrigin(env, "") + "/gcal/callback";
 const GMEET_SCHEMA = { type: "object", additionalProperties: false, properties: { ok: { type: "boolean" }, title: { type: ["string", "null"] }, start_iso: { type: ["string", "null"] }, duration_min: { type: ["integer", "null"] } }, required: ["ok", "title", "start_iso", "duration_min"] };
 const GMEET_EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const GMEET_EXAMPLE = "*meet Thursday 11am with sara@example.com 30m*";
+const GMEET_ONLINE_LOC = /^(?:google\s+meet(?:ing)?|g-?meet|meet|zoom|(?:microsoft\s+|ms\s+)?teams|webex|skype|online|virtual|video\s+call|phone\s+call|call)\s*(?:call|meeting|link)?\s*$/i;
+// v154.4 - the words that make a message a Meet request (Naj, 16 Sep 2026: "Google meeting with Jackson Wednesday 1:00 - 2pm" went to the plain capture):
+// a leading "meet" / "google meet(ing)" / "gmeet" / "set up|book a (google) meet(ing)", or "on|via|over Google Meet" / "google meet(ing)" anywhere in the line.
+// A plain "meeting with X" is NOT a Meet request: it may be in person, and the ordinary capture files it.
+function gmeetAsk(text) {
+  const s = String(text || "").trim();
+  let m = s.match(/^(?:google\s+meet(?:ing)?|g-?meet|meet|set\s+up\s+a\s+(?:google\s+)?meet(?:ing)?|book\s+a\s+(?:google\s+)?meet(?:ing)?)\b[:,\s]+(.{3,})$/i);
+  if (m) return m[1].trim();
+  if (s.length >= 8 && /\b(?:on|via|over|through|using)\s+(?:google\s+|g-?)?meet\b|\bgoogle\s+meet(?:ing)?\b|\bg-?meet\b|\bmeet\s+link\b/i.test(s)) return s;
+  return null;
+}
+// v154.4 - "1:00 - 2pm", "1-2pm", "13:00-14:30", "1pm to 2:30pm" -> minutes; 0 when there is no such range. A colon or am/pm must
+// appear somewhere in it, so "16-17 Sept" is a date, not an hour.
+function gmeetRange(text) {
+  const m = String(text || "").match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|\u2013|\u2014|to|till|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
+  if (!m || !(m[2] || m[3] || m[5] || m[6])) return 0;
+  let h1 = +m[1], h2 = +m[4]; const m1 = +(m[2] || 0), m2 = +(m[5] || 0), ap1 = (m[3] || "").toLowerCase(), ap2 = (m[6] || "").toLowerCase();
+  if (h1 > 23 || h2 > 23 || m1 > 59 || m2 > 59) return 0;
+  const to24 = (h, ap) => ap === "pm" && h < 12 ? h + 12 : (ap === "am" && h === 12 ? 0 : h);
+  h2 = to24(h2, ap2);
+  if (ap1) h1 = to24(h1, ap1);
+  else if (ap2 && to24(h1, ap2) * 60 + m1 <= h2 * 60 + m2) h1 = to24(h1, ap2);   // "1:00 - 2pm": the start shares the pm; "11 - 1pm" keeps 11
+  let d = (h2 * 60 + m2) - (h1 * 60 + m1);
+  if (d <= 0) d += 12 * 60;
+  return d > 0 && d <= 240 ? d : 0;
+}
 const GC_MSG = {
   intro: "🎥 *New: Google Meet from this chat*\n\nSoon you can say " + GMEET_EXAMPLE + " and I'll set up the call, put it on your Google Calendar and send the invite. Nothing is booked until you tap *Book it*.\n\nFirst your Google Calendar has to let me in. It takes about a minute, and I'll walk you through it.",
   later: "No problem. Whenever you're ready, say *connect calendar* and we'll pick it up from here.",
@@ -10637,6 +10664,7 @@ function gmeetDuration(text, fromModel) {
   const s = String(text || "").replace(GMEET_EMAIL, " ");
   let m = s.match(/\b(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b/i); if (m) return Math.min(240, Math.max(10, Math.round(parseFloat(m[1]) * 60)));
   m = s.match(/\b(\d{1,3})\s*(?:m|min|mins|minute|minutes)\b/i); if (m) return Math.min(240, Math.max(10, parseInt(m[1], 10)));
+  const r = gmeetRange(s); if (r) return Math.max(10, r);                                   // v154.4 - "1:00 - 2pm" is an hour
   const d = parseInt(fromModel, 10); return d >= 10 && d <= 240 ? d : 30;
 }
 function gmeetCard(p) {
@@ -10648,11 +10676,11 @@ async function gmeetText(env, from, text) {
   if (!gcalOpen(env)) return false;
   if (/^(?:connect|link|set\s*up)\s+(?:my\s+)?(?:google\s+)?(?:calendar|meet)\s*[.!]?$/i.test(String(text || "").trim())) { await gcGuideStart(env, from); return true; }
   if (!gmeetOn(env)) return false;
-  const m = String(text || "").match(/^(?:google\s+meet|g-?meet|meet|set\s+up\s+a\s+(?:google\s+)?meet|book\s+a\s+(?:google\s+)?meet)\b[:,\s]+(.{3,})$/i);
-  if (!m) return false;
+  const asked = gmeetAsk(text);                                                           // v154.4 - wider trigger, see gmeetAsk
+  if (asked === null) return false;
   if (!(await gcToken(env))) { await waSendButtons(env, from, "🎥 Your Google Calendar isn't connected yet, so I can't make a Meet link. Want to connect it now? It takes about a minute.", [{ id: "gc:go", title: "Connect now" }, { id: "gc:later", title: "Later" }]); return true; }
-  const body = m[1].trim(), guests = gmeetEmails(body);
-  const sys = `You read a request to set up ONE online meeting in the UAE (GST, UTC+4). NOW is ${gstNowIso()} (${gstWeekday()}). ${dateHints()} Output ONLY JSON {"ok":true,"title":"...","start_iso":"YYYY-MM-DDTHH:MM:00+04:00","duration_min":30}. Resolve dates ONLY from the date map; 9am->09:00, 3pm->15:00, noon->12:00. title = a short meeting name from the message (who or what it is about), never an email address; "Meeting" if nothing better. duration_min = stated length in minutes, else null. If no date or time can be read, ok=false and start_iso=null.`;
+  const body = asked, guests = gmeetEmails(body);
+  const sys = `You read a request to set up ONE online meeting in the UAE (GST, UTC+4). NOW is ${gstNowIso()} (${gstWeekday()}). ${dateHints()} Output ONLY JSON {"ok":true,"title":"...","start_iso":"YYYY-MM-DDTHH:MM:00+04:00","duration_min":30}. Resolve dates ONLY from the date map; 9am->09:00, 3pm->15:00, noon->12:00. title = a short meeting name from the message (who or what it is about), never an email address; "Meeting" if nothing better. duration_min = stated length in minutes, or end minus start when both are given (1:00 - 2pm = 60), else null. If no date or time can be read, ok=false and start_iso=null.`;
   let g = null; try { g = await claudeJSON(env, sys, body, GMEET_SCHEMA); } catch (e) {}
   const t = g && g.ok && g.start_iso ? Date.parse(g.start_iso) : NaN;
   if (isNaN(t)) { await waSend(env, from, "🎥 When should it be? Say it like: " + GMEET_EXAMPLE); return true; }
