@@ -115,6 +115,9 @@ IG_APP_ID = "3591427797679606"
 # v150 - Google Meet (Kendall, 14 Sep 2026). "consent" opens only /gcal/start, /gcal/callback and /gcal/status so she can connect
 # Google Calendar (calendar.events, its own token; Drive untouched). "on" also turns on "meet <when> with <emails>" -> card -> Book it. Remove to switch off.
 GMEET = "consent"
+# v154 - Dubai versus a world city, 45-60 s to camera (Kendall with Naj, 16 Sep 2026): Mon/Wed/Fri at 07:00 GST after the feed, and
+# on demand with "versus". WORLD_DAYS (default "1,3,5") and WORLD_HOUR_GST (default 7) adjust the cadence. Remove to switch off.
+# WORLD_TALK = "on"   # OFF until Kendall approves the sample wording (16 Sep 2026); set to "on" in that commit and deploy from it
 
 [env.azimuth2.triggers]
 crons = ["0,30 2-18 * * *", "* * * * *"]   # v140 - starts 06:00 GST (was 07:00) so the 06:00 feed has a tick; v146 - the minute tick

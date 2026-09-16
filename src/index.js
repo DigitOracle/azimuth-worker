@@ -1,3 +1,4 @@
+import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity } from "./world.js";   // v154 - Dubai versus a world city, to camera
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -2730,6 +2731,12 @@ async function appFetch(request, env, ctx) {
         if (url.searchParams.get("json")) return new Response(JSON.stringify(_r, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8" } });
         return new Response("radar built: " + ((_r && _r.items) || []).length + " items · sources " + JSON.stringify(_r && _r.sources) + (_r && _r.note ? "\n" + _r.note : ""), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
       }
+      if (url.pathname === "/world_test") {                    // v154 - Dubai versus a world city now; ?dry=1 writes WITHOUT sending; ?city=london&angle=tax picks; ?to= overrides the number
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _wo = null;
+        try { _wo = await worldTick(env, true, !!url.searchParams.get("dry"), { city: url.searchParams.get("city") || "", angle: url.searchParams.get("angle") || "", to: url.searchParams.get("to") || "" }); } catch (e) { return new Response("world error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
+        return new Response(_wo || "(no output - see world_err)", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      }
       if (url.pathname === "/feed_test") {                     // v37 — force the daily feed now; v56 — ?dry=1 generates WITHOUT sending (safe diagnostic)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         if (url.searchParams.get("dry")) {
@@ -3130,6 +3137,7 @@ async function appFetch(request, env, ctx) {
             return new Response("ok");
           }
           if (bid.indexOf("gm:") === 0 && await gmeetButton(env, from, bid)) return new Response("ok");   // v150 - Book it / Don't book on a Google Meet card
+          if (bid.indexOf("wld:") === 0 && (env.WORLD_TALK || "") === "on" && await worldButton(env, from, bid)) return new Response("ok");   // v154 - Another city / Another angle / a city from the list
           if (bid.indexOf("gc:") === 0 && await gcGuideButton(env, from, bid)) return new Response("ok");   // v150.1 - her Google Calendar walkthrough
           if (bid.indexOf("ig:") === 0) { await env.MEETINGS.delete("cand_" + bid.slice(3)); await waSend(env, from, "🙈 Ignored"); return new Response("ok"); }
           if (bid.indexOf("m:") === 0) {
@@ -3763,6 +3771,15 @@ async function appFetch(request, env, ctx) {
             try { await env.MEETINGS.delete("mkt_feed_inflight"); } catch (e) {}
             return new Response("ok");
           }
+          { const _wp = (env.WORLD_TALK || "") === "on" ? worldParse(text) : null;   // v154 - "versus" / "versus london" / "versus paris tax": Dubai against a world city, 45-60 s to camera
+            if (_wp) {
+              if (await env.MEETINGS.get("world_inflight")) { await waSend(env, from, "Still writing the last one. A moment."); return new Response("ok"); }
+              try { await env.MEETINGS.put("world_inflight", "1", { expirationTtl: 120 }); } catch (e) {}
+              await waSend(env, from, _wp.city ? "On it: Dubai versus " + worldCity(_wp.city).name + ". About half a minute." : "On it: today's city. About half a minute.");
+              try { await worldTick(env, true, false, { city: _wp.city, angle: _wp.angle, to: from }); } catch (e) { await waSend(env, from, "Couldn't write that one just now. Try again shortly."); }
+              try { await env.MEETINGS.delete("world_inflight"); } catch (e) {}
+              return new Response("ok");
+            } }
           if (/^market\s+brief$/i.test(text)) {
             await waSend(env, from, "🕐 Running your market brief now — give me a moment…");
             try { await marketBriefTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the brief just now — try again shortly."); }
@@ -3860,6 +3877,7 @@ async function appFetch(request, env, ctx) {
               "🔥 “radar” — what people are talking about today (TikTok · Reddit · news) · “trend 3” drafts from item 3" + NL10 +
               "📰 “news” — latest headlines, cross-checked against the project register" + NL10 +
               "🕐 “market brief” — your weekly brief, on demand" + NL10 +
+              "🌍 “versus” — Dubai against one of ten world cities, 45-60 s to camera · “versus london” · “versus paris tax”" + NL10 +
               "✍️ “draft linkedin 2” · 🎠 “draft carousel 2” · 📝 “draft article 2” · 📸 “draft instagram 3”" + NL10 +
               "🔎 Deeper dive: 🎬 “video 2” — a paste-ready Magnific (Seedance) prompt · 🎤 “questions 2” — what to ask a banker or RM on camera" + NL10 +
               "🧬 “dna” — what I've learned about your style");
@@ -4004,6 +4022,7 @@ export default {
       try { await newsTick(env); } catch (e) {}               // v37.1 — hourly news sweep + MEED cross-reference
       try { await trendRadarTick(env); } catch (e) {}         // v88 — trend radar first (~07:00 GST), so the feed can touch it
       try { await dailyFeedTick(env); } catch (e) {}          // v37 — Najma daily feed: three post-ready angles ~07:00 GST
+      try { await worldTick(env); } catch (e) {}              // v154 - Dubai versus a world city, Mon/Wed/Fri ~07:00 GST after the feed (WORLD_TALK="on")
       try { await marketBriefTick(env); } catch (e) {}        // v36 — weekly Market Pulse brief (Sunday ~09:00 GST, MARKET_BRIEF="on" only)
     })());
   },
@@ -4501,6 +4520,76 @@ async function publishDraft(env, to) {
   } catch (e) {
     await waSend(env, to, "⚠ Couldn't reach LinkedIn — the draft is still saved; try again in a minute.");
   }
+}
+
+// ── v154 — WORLD: Dubai versus one of ten world cities, 45-60 s to camera ─────────────────────────────────
+// Kendall with Naj, 16 Sep 2026: "expensive compared to what?" A buyer hears five million and flinches; she puts Dubai next to a city the
+// world rates the same way, one angle at a time (price per square foot, what the money buys, tax, how the city lives, why its people buy
+// here). Sent Mon/Wed/Fri at WORLD_HOUR_GST (07:00, on the same tick as the feed and after it) while WORLD_TALK="on"; on demand with
+// "versus", "versus london", "versus paris tax". The facts, the rotation and the checks live in src/world.js. A script whose numbers are
+// not all in the fact base, or that runs the wrong length, or that slips into the old jargon, gets one repair pass and is otherwise
+// NOT sent: world_err says why. Refreshing the numbers is an edit to world.js twice a year (Savills: February and August).
+function worldDays(env) { return String(env.WORLD_DAYS || "1,3,5").split(",").map(x => parseInt(x, 10)).filter(x => x >= 0 && x <= 6); }
+async function worldHist(env) { try { const h = JSON.parse((await env.MEETINGS.get("world_hist")) || "[]"); return Array.isArray(h) ? h : []; } catch (e) { return []; } }
+async function worldBuild(env, cityKey, angleKey) {
+  const facts = worldFacts(cityKey, angleKey);
+  if (!facts) return { ok: false, why: "unknown city " + cityKey };
+  const sys = worldSystem(await styleVoice(env), facts.angle);
+  const user = "FACTS (the only numbers you may use):\n" + JSON.stringify(facts, null, 1);
+  let script = String((await claudeText(env, sys, user, null, 700)) || "").trim();
+  let chk = worldCheck(script, facts, VOICE_BAN);
+  if (script && !chk.ok) {                                                       // one repair pass, then it is sent or it is not
+    const fixed = String((await claudeText(env, sys + " REPAIR PASS: the draft failed these checks: " + chk.why + ". Return the corrected script only.", user + "\n\nDRAFT:\n" + script, null, 700)) || "").trim();
+    if (fixed) { script = fixed; chk = worldCheck(script, facts, VOICE_BAN); }
+  }
+  if (!script) chk = { ok: false, why: "no script came back", words: 0 };
+  return { ok: chk.ok, why: chk.why, words: chk.words, script, facts };
+}
+async function worldSend(env, to, cityKey, angleKey, o) {
+  o = o || {};
+  const b = await worldBuild(env, cityKey, angleKey);
+  if (!b.ok) {
+    try { await env.MEETINGS.put("world_err", JSON.stringify({ at: gstNowIso(), city: cityKey, angle: angleKey, why: b.why, draft: (b.script || "").slice(0, 900) }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+    if (o.dry) return "FAILED (" + b.why + ")\n\n" + (b.script || "");
+    if (o.tell) await waSend(env, to, "Couldn't get that piece right just now (" + b.why + "). Say *versus* again in a minute.");
+    return null;
+  }
+  const msg = worldMessage(b.facts, b.script);
+  if (o.dry) return msg + "\n\n[" + b.words + " words]";
+  await waSend(env, to, msg);
+  await waSendButtons(env, to, "Want a different one?", [{ id: "wld:city", title: "🔁 Another city" }, { id: "wld:a:" + cityKey, title: "🔀 Another angle" }]);
+  const h = await worldHist(env);
+  h.unshift({ d: gstDateStr(gstNow()), city: cityKey, angle: b.facts.angle, at: gstNowIso() });
+  try { await env.MEETINGS.put("world_hist", JSON.stringify(h.slice(0, 60)), { expirationTtl: 400 * 86400 }); } catch (e) {}
+  try { await bridgeRecord(env, { id: "world-" + cityKey + "-" + b.facts.angle, set: o.force ? "ondemand" : "feed", type: "world_script", topic_family: "buyer_maths", campaign: "", hook: "Dubai versus " + b.facts.other.city, figure: "", body: b.script, source_line: "Source: " + b.facts.sources.prices.name + ", " + b.facts.sources.prices.period + "; " + b.facts.sources.what_1m_buys.name + ", " + b.facts.sources.what_1m_buys.period, what_not_to_claim: b.facts.basis, campaign_rules: "", image_prompt: "", timing: "45-60 s / 105-140 words", trend: "", shot: "", qa: "every number checked against the fact base; " + b.words + " words" }); } catch (e) {}
+  return msg;
+}
+async function worldTick(env, force, dry, o) {
+  o = o || {};
+  if ((env.WORLD_TALK || "") !== "on" && !force) return;
+  const n = gstNow();
+  if (!force) {
+    if (!worldDays(env).includes(n.getUTCDay())) return;
+    if (n.getUTCHours() !== (parseInt(env.WORLD_HOUR_GST || "7", 10) || 7)) return;
+    const mk = "world_" + gstDateStr(n);
+    const mv = await env.MEETINGS.get(mk);
+    if (mv === "done") return;
+    const attempts = parseInt(mv, 10) || 0;
+    if (attempts >= 2) return;
+    await env.MEETINGS.put(mk, String(attempts + 1), { expirationTtl: 2 * 86400 });
+  }
+  const pick = worldPick(await worldHist(env), { city: o.city, angle: o.angle, notCity: o.notCity, notAngle: o.notAngle, day: n.getUTCDay() });
+  const out = await worldSend(env, o.to || env.WA_ALLOWED, pick.city, pick.angle, { dry, force, tell: !!force && !dry });
+  if (!force && out) { try { await env.MEETINGS.put("world_" + gstDateStr(n), "done", { expirationTtl: 2 * 86400 }); } catch (e) {} }
+  return out;
+}
+async function worldButton(env, from, bid) {
+  if (bid === "wld:city") { await waSendList(env, from, "Pick the city:", "Cities", worldListRows(await worldHist(env))); return true; }
+  let m = bid.match(/^wld:c:([a-z]+)$/);
+  if (m) { await waSend(env, from, "On it: Dubai versus " + ((worldCity(m[1]) || {}).name || m[1]) + ". About half a minute."); await worldTick(env, true, false, { city: m[1], to: from }); return true; }
+  m = bid.match(/^wld:a:([a-z]+)$/);
+  if (m) { const last = (await worldHist(env)).find(x => x.city === m[1]); await waSend(env, from, "Same city, a different angle. About half a minute."); await worldTick(env, true, false, { city: m[1], notAngle: last ? last.angle : "", to: from }); return true; }
+  return false;
 }
 
 // ── v37 — NAJMA DAILY FEED ──────────────────────────────────────────────────────
