@@ -1813,6 +1813,7 @@ async function handleCallback(env, cbq) {
 // its question button; everything else is exactly what this function returns.
 async function appFetch(request, env, ctx) {
     const url = new URL(request.url); const CHAT = env.TELEGRAM_CHAT_ID;
+    if (keyTier(env, url) === "client" && !clientPathOk(url.pathname)) return new Response("unauthorized", { status: 401 });   // v155 (DA-AUD-005) - a client key opens the app pages and nothing else
     // v110.1 - HOISTED (10 Sep 2026). Sitting lower down, this never matched: the request
     // fell through to the Telegram webhook secret check at the foot of the handler and came
     // back "unauthorized" for every path. Same trap the header comment already records.
@@ -2661,7 +2662,7 @@ async function appFetch(request, env, ctx) {
         return new Response("card sent");
       }
       if (url.pathname === "/walk_status") {                  // v119 - is the UnReal streamer on, and where (keyed); heartbeat lands via POST below
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _ws = null; try { _ws = JSON.parse((await env.MEETINGS.get("walk_status")) || "null"); } catch (e) {}
         const _age = _ws && _ws.ts ? Math.round((Date.now() - _ws.ts) / 1000) : null;
         return new Response(JSON.stringify({ live: !!(_ws && _ws.live && _age !== null && _age < 90), url: _ws ? _ws.url : null, age_s: _age, streamer: _ws ? _ws.streamer || "NajmaDubai" : null }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
@@ -2748,7 +2749,7 @@ async function appFetch(request, env, ctx) {
       if (url.pathname === "/versus") {                        // v155 - Dubai against one of ten cities, beside a client; keyed, not linked
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         let _fb = {}; try { _fb = (JSON.parse((await env.MEETINGS.get("world_review")) || "{}") || {}).fb || {}; } catch (e) {}
-        return new Response(worldPageHtml(_fb), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex", "Referrer-Policy": "strict-origin" } });
+        return new Response(worldPageHtml(_fb, url.searchParams.get("key") === env.READ_KEY), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex", "Referrer-Policy": "strict-origin" } })   // v156 - owner flag: the send buttons are drawn only for the owner key (DA-AUD-005). /versus is NOT on the client list, so this is true today; it stays correct if it ever is.;
       }
       if (url.pathname === "/world_review") {                  // v154.2 - send her the ten sample scripts with their buttons (Kendall approved the wording 16 Sep 2026); ?dry=1 lists them
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -2801,30 +2802,30 @@ async function appFetch(request, env, ctx) {
         return new Response(buf, { headers: { "Content-Type": ct, "Cache-Control": "public, max-age=3600" } });
       }
       if (url.pathname === "/charts") {                        // v41 — post-ready SVG charts from the register
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _cRaw = await env.MEETINGS.get("mkt_latest");
         let _amenRaw = null;
         try { const _cd = JSON.parse(_cRaw || "null"); const _t0 = _cd && _cd.areaIntel && _cd.areaIntel.areas && _cd.areaIntel.areas[0]; if (_t0) _amenRaw = await env.MEETINGS.get("amen_" + _t0.area.toLowerCase().replace(/[^a-z0-9]/g, "")); } catch (e) {}
         let _satS = []; try { const _sl = await env.MEETINGS.list({ prefix: "img_sat_" }); _satS = _sl.keys.map(k => k.name.slice(8)); } catch (e) {}   // v89
-        return new Response(renderCharts(_cRaw, url.searchParams.get("key") || "", _amenRaw, await env.MEETINGS.get("mkt_briefctx"), _satS), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, renderCharts(_cRaw, url.searchParams.get("key") || "", _amenRaw, await env.MEETINGS.get("mkt_briefctx"), _satS), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _ml = await env.MEETINGS.get("mkt_latest");
         const _mp = await env.MEETINGS.get("mkt_prev");
-        return new Response(renderMarket(_ml, _mp, url.searchParams.get("key") || "", url.origin, await env.MEETINGS.get("mkt_watch")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, renderMarket(_ml, _mp, url.searchParams.get("key") || "", url.origin, await env.MEETINGS.get("mkt_watch")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/manifest.webmanifest") {          // v49 — PWA: "Najma" installs from /market (key rides in start_url)
         const _mk = url.searchParams.get("key") || "";
         return new Response(JSON.stringify({ name: "Najma", short_name: "Najma", start_url: "/market?key=" + _mk, display: "standalone", background_color: "#0C1413", theme_color: "#0C1413", icons: [{ src: "/naj_icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }] }), { headers: { "Content-Type": "application/manifest+json" } });
       }
       if (url.pathname === "/clock") {                        // v86 - world clock: Dubai anchor, scrub the day, see who is awake
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
-        return new Response(renderClock(url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
+        return clientResp(env, url, renderClock(url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/find") {                         // v95.1 - search by developer, development or building (search_index from the knowledge graph)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
-        return new Response(renderFind(url.searchParams.get("key") || "", url.searchParams.get("q") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
+        return clientResp(env, url, renderFind(url.searchParams.get("key") || "", url.searchParams.get("q") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/world") {                        // v154.5 - Dubai against ten world cities as cards, prime per sq ft (Kendall, 16 Sep 2026: "prime for the cards"). Same figures as the
         // spoken pieces, through worldFacts in src/world.js. Deliberately NOT in the tab bar yet: which key it sits behind waits on the client-key split (DA-AUD-005).
@@ -2834,77 +2835,77 @@ async function appFetch(request, env, ctx) {
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname === "/plans") {                        // v85 - the floor-plan library: every plan we hold, by developer and project
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _pi = null; try { _pi = JSON.parse((await env.MEETINGS.get("img_plans_index")) || "null"); } catch (e) {}
-        return new Response(renderPlans(_pi, url.searchParams.get("key") || "", url.searchParams.get("d") || "", url.searchParams.get("p") || "", url.searchParams.get("i") || ""),
+        return clientResp(env, url, renderPlans(_pi, url.searchParams.get("key") || "", url.searchParams.get("d") || "", url.searchParams.get("p") || "", url.searchParams.get("i") || ""),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/home") {                         // v73 - developer grid (2 x 5): the new top of the board (board_devs pushed by build_board.py)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _bd = null; try { _bd = JSON.parse((await env.MEETINGS.get("img_board_devs")) || "null"); } catch (e) {}
-        if (!_bd) return new Response("no board data yet - run build_board.py", { status: 404 });
+        if (!_bd) return clientResp(env, url, "no board data yet - run build_board.py", { status: 404 });
         const _p = (n) => String(url.searchParams.get(n) || "").replace(/[^a-z0-9_]/g, "");
         let _cmp = null; if (_p("mode") === "compare") { try { _cmp = JSON.parse((await env.MEETINGS.get("img_dev_compare")) || "null"); } catch (e) {} }   // v73.4 compare mode
-        return new Response(renderHome(_bd, url.searchParams.get("key") || "", _cmp, { mode: _p("mode"), bed: _p("bed"), band: _p("band"), metric: _p("metric"), sort: _p("sort"), tier: _p("tier"), life: _p("life") }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, renderHome(_bd, url.searchParams.get("key") || "", _cmp, { mode: _p("mode"), bed: _p("bed"), band: _p("band"), metric: _p("metric"), sort: _p("sort"), tier: _p("tier"), life: _p("life") }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/dev") {                          // v73 - one developer: its property cards (ours -> registered -> trading), then down to unit cards
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _bd = null; try { _bd = JSON.parse((await env.MEETINGS.get("img_board_devs")) || "null"); } catch (e) {}
         const _dv = _bd && (_bd.developers || []).find(x => x.key === String(url.searchParams.get("d") || "").replace(/[^a-z0-9_]/g, ""));
-        if (!_dv) return new Response("no such developer on the board", { status: 404 });
+        if (!_dv) return clientResp(env, url, "no such developer on the board", { status: 404 });
         let _galleries = {};
         for (const _b of (_dv.ours || [])) { try { const _j = JSON.parse((await env.MEETINGS.get("img_cards_" + _b + "_index")) || "null"); if (_j) _galleries[_b] = _j; } catch (e) {} }
         let _umx = null; try { _umx = JSON.parse((await env.MEETINGS.get("img_unitmix_projects")) || "null"); } catch (e) {}   // v93.2
         let _vids = []; try { _vids = (JSON.parse((await env.MEETINGS.get("img_videos")) || "{}").items) || []; } catch (e) {}   // v101
-        return new Response(renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/compare") {                      // v73.3 - two developers side by side, click-only (dev_compare pushed by build_compare.py)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _bd = null, _cmp = null;
         try { _bd = JSON.parse((await env.MEETINGS.get("img_board_devs")) || "null"); } catch (e) {}
         try { _cmp = JSON.parse((await env.MEETINGS.get("img_dev_compare")) || "null"); } catch (e) {}
-        if (!_bd || !_cmp) return new Response("no comparison data yet - run build_compare.py", { status: 404 });
+        if (!_bd || !_cmp) return clientResp(env, url, "no comparison data yet - run build_compare.py", { status: 404 });
         const _p = (n) => String(url.searchParams.get(n) || "").replace(/[^a-z0-9_]/g, "");
-        return new Response(renderCompare(_cmp, _bd, { a: _p("a"), b: _p("b"), bed: _p("bed") || "all", band: _p("band") || "all", diff: _p("diff") === "1" }, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, renderCompare(_cmp, _bd, { a: _p("a"), b: _p("b"), bed: _p("bed") || "all", band: _p("band") || "all", diff: _p("diff") === "1" }, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/view") {                         // v78 - THE REAL VIEW: photorealistic tiles rendered live from one facade
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _num = (n, d) => { const v = parseFloat(url.searchParams.get(n)); return isFinite(v) ? v : d; };
         const _s = (n) => String(url.searchParams.get(n) || "").replace(/[^\w .,'&()-]/g, "").slice(0, 80);
         const gk = url.searchParams.get("gkey") || env.GOOGLE_MAPS_KEY || "";
-        return new Response(renderRealView({ lon: _num("lon", 55.2744), lat: _num("lat", 25.1972), h: _num("h", 120), head: _num("head", 0),
+        return clientResp(env, url, renderRealView({ lon: _num("lon", 55.2744), lat: _num("lat", 25.1972), h: _num("h", 120), head: _num("head", 0),
           name: _s("name"), side: _s("side"), sees: _s("sees"), gkey: gk }, url.searchParams.get("key") || ""),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/cards") {                        // v72 - unit-type card gallery for a building (cards_<b>_index pushed by push_cards.py)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _cb = String(url.searchParams.get("b") || "symphony").replace(/[^a-z0-9]/g, "");
         let _ci = null; try { _ci = JSON.parse((await env.MEETINGS.get("img_cards_" + _cb + "_index")) || "null"); } catch (e) {}
-        if (!_ci) return new Response("no cards for " + _cb, { status: 404 });
-        return new Response(renderCards(_ci, _cb, url.searchParams.get("key") || "", url.searchParams.get("t") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        if (!_ci) return clientResp(env, url, "no cards for " + _cb, { status: 404 });
+        return clientResp(env, url, renderCards(_ci, _cb, url.searchParams.get("key") || "", url.searchParams.get("t") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/avail") {                        // v69 - availability drill (donut of registered mix; claimed units join after extraction)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _dk = String(url.searchParams.get("d") || "").replace(/[^a-z0-9]/g, "");
         let _dd3 = null; try { _dd3 = JSON.parse((await env.MEETINGS.get("img_drill_" + _dk)) || "null"); } catch (e) {}
-        if (!_dd3) return new Response("no drill data", { status: 404 });
+        if (!_dd3) return clientResp(env, url, "no drill data", { status: 404 });
         let _cards = [];                                          // v72 - card galleries that belong to this developer's drill
         for (const _b of (CARD_BUILDINGS[_dk] || [])) { try { const _j = JSON.parse((await env.MEETINGS.get("img_cards_" + _b + "_index")) || "null"); if (_j) _cards.push(_j); } catch (e) {} }
         const _full = url.searchParams.get("full") === "1" && _dd3.claimed && _dd3.claimed.detail;
         let _dt = null; try { _dt = await devTrust(env, String(_dd3.title || _dk).replace(/\s*\(.*?\)\s*$/, "")); } catch (e) {}   // v72.2
-        return new Response(_full ? renderAvailUnits(_dd3, _dk, url.searchParams.get("key") || "") : renderAvailDrill(_dd3, _dk, url.searchParams.get("key") || "", _cards, _dt), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, _full ? renderAvailUnits(_dd3, _dk, url.searchParams.get("key") || "") : renderAvailDrill(_dd3, _dk, url.searchParams.get("key") || "", _cards, _dt), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname.indexOf("/report/") === 0) {           // v81 - district stock report, read straight off the model's own measurements
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _rs = url.pathname.slice(8).replace(/[^a-z0-9]/gi, "").toLowerCase();
         let _rn = {}; try { const _rd = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); for (const x of ((_rd && _rd.areaIntel && _rd.areaIntel.areas) || [])) _rn[x.area.toLowerCase().replace(/[^a-z0-9]/g, "")] = x.area; } catch (e) {}
-        return new Response(renderStock(_rs, _rn[_rs] || _rs, url.searchParams.get("key") || "",
+        return clientResp(env, url, renderStock(_rs, _rn[_rs] || _rs, url.searchParams.get("key") || "",
           await env.MEETINGS.get("img_bldgfacts_" + _rs), await env.MEETINGS.get("img_anchors_" + _rs),
           await env.MEETINGS.get("img_projfacts"), await env.MEETINGS.get("mkt_latest")),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/skyline" || url.pathname.indexOf("/skyline/") === 0) { // v64 — 3D viewer + district rail (MUST sit above the keyed catch-all dump below)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         // rail: every sky_<slug> GLB in KV, named from the register where it can be
         let _rail = [];
         let _names = {};
@@ -2921,29 +2922,29 @@ async function appFetch(request, env, ctx) {
             .sort((x, y) => TWIN_CORRIDORS.indexOf(x.c) - TWIN_CORRIDORS.indexOf(y.c) || y.m - x.m || x.n.localeCompare(y.n));
         } catch (e) {}
         const _rkT = residentsKeyOf(env, url);   // v152.2 - a private twin page keeps the residents key on its MAP and TWIN links
-        if (url.pathname === "/skyline" && url.searchParams.get("all") === "1") return new Response(renderCity(url.searchParams.get("key") || "", _rkT), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, resHeaders(_rkT)) });   // v106 - all Dubai
+        if (url.pathname === "/skyline" && url.searchParams.get("all") === "1") return clientResp(env, url, renderCity(url.searchParams.get("key") || "", _rkT), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, resHeaders(_rkT)) });   // v106 - all Dubai
         let _sk = url.pathname === "/skyline" ? (url.searchParams.get("d") || (_rail[0] && _rail[0].s) || "") : url.pathname.slice(9);
         _sk = _sk.replace(/[^a-z0-9]/gi, "").toLowerCase();
         const _an2 = _names[_sk] || TWIN_TILE_NAME[_sk] || _sk;
-        return new Response(renderSkyline(_sk, _an2, url.searchParams.get("key") || "", _rail, _rkT), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, resHeaders(_rkT)) });
+        return clientResp(env, url, renderSkyline(_sk, _an2, url.searchParams.get("key") || "", _rail, _rkT), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, resHeaders(_rkT)) });
       }
       if (url.pathname === "/studio") {                        // v61 — editorial card studio (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         return new Response(renderStudio(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/map") {                           // v50 — interactive community map (MUST sit above the keyed catch-all dump below)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _sky64 = [];
         try { const _kl2 = await env.MEETINGS.list({ prefix: "img_sky_" }); _sky64 = _kl2.keys.map(k => k.name.slice(8)); } catch (e) {}
         const _rk = url.searchParams.get("legacy") === "1" ? "" : residentsKeyOf(env, url);   // v152.2 - the private residents panel under HOMES
-        return new Response(url.searchParams.get("legacy") === "1"
+        return clientResp(env, url, url.searchParams.get("legacy") === "1"
           ? renderMap(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", env.WA_BOT_NUMBER || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET), await env.MEETINGS.get("mkt_prev"), _sky64, await env.MEETINGS.get("img_plots"))
           : renderMapBasic(url.searchParams.get("key") || "", _rk), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, resHeaders(_rk)) });
       }
       if (url.pathname.indexOf("/area/") === 0) {              // v50 — per-community deep dive (MUST sit above the keyed catch-all dump below)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _an = ""; try { _an = decodeURIComponent(url.pathname.slice(6)); } catch (e) { _an = url.pathname.slice(6); }
-        return new Response(renderArea(await env.MEETINGS.get("mkt_latest"), _an, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, renderArea(await env.MEETINGS.get("mkt_latest"), _an, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/amenities") {                     // v58 — nearest POIs per community via geocoder category search; ONE paid call set per area, cached forever
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -3001,7 +3002,7 @@ async function appFetch(request, env, ctx) {
         return new Response(body, { headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/iso") {                           // v57 — cached drive-time rings (needs servicearea privilege on the Esri credential)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const ANCHORS = { difc: [55.282, 25.211], downtown: [55.276, 25.194], marina: [55.138, 25.080], dxb: [55.365, 25.253], mediacity: [55.156, 25.095] };
         const an = url.searchParams.get("anchor") || "";
         if (!ANCHORS[an]) return new Response(JSON.stringify({ ok: false, note: "unknown anchor" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -3026,7 +3027,7 @@ async function appFetch(request, env, ctx) {
         } catch (e) { return new Response(JSON.stringify({ ok: false, note: "isochrone error" }), { status: 503, headers: { "Content-Type": "application/json" } }); }
       }
       if (url.pathname === "/esri_token") {                    // v54 — short-lived Esri basemap token for the map client (secret stays server-side)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const t = await esriToken(env);
         if (!t) return new Response(JSON.stringify({ ok: false, detail: JSON.parse((await env.MEETINGS.get("esri_err")) || "null") }), { status: 503, headers: { "Content-Type": "application/json" } });
         return new Response(JSON.stringify({ ok: true, token: t.token, expires: t.exp }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
@@ -3384,7 +3385,7 @@ async function appFetch(request, env, ctx) {
             await waSend(env, from, _on ? ("👀 Watching “" + _gr.name + "”. Commitments and meetings from it will land on your ledger. Reply “stop watching " + _gr.name + "” anytime.")
                                         : ("🙈 Ignoring “" + _gr.name + "”. Azimuth won't read it. If you change your mind, tell me “watch " + _gr.name + "”."));
           }
-          else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + env.READ_KEY); }
+          else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + clientLinkKey(env)); }
           else if (/^deep:(no|\d{1,2})$/.test(bid)) {                                   // v88.2 - the deeper dive menu
             const _dn = bid.slice(5);
             if (_dn === "no") { await waSend(env, from, "👍 Quick hit it is. The options are always there - say “draft video 2” or “questions 2” any time."); }
@@ -3713,7 +3714,7 @@ async function appFetch(request, env, ctx) {
             return new Response("ok");
           }
           if (/^(?:show\s+|open\s+)?(?:my\s+|the\s+)?(?:najma|market(?:\s+pulse)?|pulse)\s*\??$/i.test(text)) {
-            await waSend(env, from, "📈 Najma — your market pulse:" + NL10 + url.origin + "/market?key=" + env.READ_KEY + NL10 + NL10 + "Built from the official registers. Your weekly brief lands here every Sunday morning, and I'll flag same-day movements when something shifts.");
+            await waSend(env, from, "📈 Najma — your market pulse:" + NL10 + url.origin + "/market?key=" + clientLinkKey(env) + NL10 + NL10 + "Built from the official registers. Your weekly brief lands here every Sunday morning, and I'll flag same-day movements when something shifts.");
             return new Response("ok");
           }
           {                                                      // v58 — "report <area> [for <client>]": client briefing link in seconds
@@ -3871,12 +3872,12 @@ async function appFetch(request, env, ctx) {
               await waSendImage(env, from, url.origin + "/img/heatmap_story", "🗺 Dubai — where it's trading. Registered sales heat, straight from the register. Long-press to save and post.");
               await waSendImage(env, from, url.origin + "/img/heatmap_square", "Square version for your grid.");
             } else {
-              await waSend(env, from, "🗺 The map's rendering on the next refresh — for now your charts (incl. a map) are here:\n" + url.origin + "/charts?key=" + env.READ_KEY);
+              await waSend(env, from, "🗺 The map's rendering on the next refresh — for now your charts (incl. a map) are here:\n" + url.origin + "/charts?key=" + clientLinkKey(env));
             }
             return new Response("ok");
           }
           if (/^(?:charts?|graphs?|visuals?)\s*\??$/i.test(text)) {
-            await waSend(env, from, "📊 Your charts — bar, line, off-plan split, yields, and a Dubai map, all from the register:\n" + url.origin + "/charts?key=" + env.READ_KEY + "\n\nLong-press any one to save it, then post — the source line is already on it.");
+            await waSend(env, from, "📊 Your charts — bar, line, off-plan split, yields, and a Dubai map, all from the register:\n" + url.origin + "/charts?key=" + clientLinkKey(env) + "\n\nLong-press any one to save it, then post — the source line is already on it.");
             return new Response("ok");
           }
           if (/^(?:radar|trends?|trend radar|what(?:'s| is) trending)\s*\??$/i.test(text)) {          // v88
@@ -5217,12 +5218,12 @@ async function clientMatch(env, to, briefText) {
   try {
     const bedKey = /studio/i.test(rt) ? "studio" : (/^([1-4])\s*B/i.test(rt) ? rt.match(/^([1-4])/)[1] : (/^5/.test(rt) ? "4" : "all"));
     const bandKey = !budget ? "all" : budget < 1e6 ? "lt1" : budget < 2e6 ? "1to2" : budget < 4e6 ? "2to4" : "gt4";
-    const base = LI_ORIGIN(env) + "/home?mode=compare&bed=" + bedKey + "&band=" + bandKey + "&metric=range&key=" + encodeURIComponent(env.READ_KEY || "");
+    const base = LI_ORIGIN(env) + "/home?mode=compare&bed=" + bedKey + "&band=" + bandKey + "&metric=range&key=" + encodeURIComponent(clientLinkKey(env));
     let skyLinks = "";
     try {
       const _kl = await env.MEETINGS.list({ prefix: "img_sky_" });                 // same enumeration the /skyline rail uses
       const slugs = new Set(_kl.keys.map(k => k.name.slice(8)));
-      skyLinks = top.map(c => { const s = String(c.area || "").toLowerCase().replace(/[^a-z0-9]/g, ""); return slugs.has(s) ? "⬢ " + c.area + " in 3D: " + LI_ORIGIN(env) + "/skyline/" + s + "?key=" + encodeURIComponent(env.READ_KEY || "") : null; }).filter(Boolean).slice(0, 3).join("\n");
+      skyLinks = top.map(c => { const s = String(c.area || "").toLowerCase().replace(/[^a-z0-9]/g, ""); return slugs.has(s) ? "⬢ " + c.area + " in 3D: " + LI_ORIGIN(env) + "/skyline/" + s + "?key=" + encodeURIComponent(clientLinkKey(env)) : null; }).filter(Boolean).slice(0, 3).join("\n");
     } catch (e) {}
     await waSend(env, to, "🗂 On the board\n" + "Who builds " + (bedKey === "all" ? "this" : bedKey === "studio" ? "studios" : bedKey + "-beds") + (budget ? " under AED " + (budget / 1e6).toFixed(1) + " M" : "") + ", side by side: " + base + (skyLinks ? "\n" + skyLinks : ""));
   } catch (e) {}
@@ -9541,8 +9542,32 @@ async function ingestPrivate(env, request) {
 function residentsKeyOf(env, url) {
   const rk = url.searchParams.get("rk") || "";
   const key = String(env.RESIDENTS_KEY || "");
-  if (!rk || key.length < 24 || !ctEq(rk, key) || (env.READ_KEY && ctEq(rk, env.READ_KEY))) return "";
+  if (!rk || key.length < 24 || !ctEq(rk, key) || (env.READ_KEY && ctEq(rk, env.READ_KEY)) || clientKeysOf(env).some((c) => ctEq(rk, c))) return "";   // v155 - nor any client key
   return rk;
+}
+// v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
+// only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
+// links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
+const CLIENT_PATHS = ["/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const CLIENT_PREFIXES = ["/skyline/", "/area/", "/report/"];
+const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
+const KEYLESS_PREFIXES = ["/img/", "/video/", "/r/"];
+function clientKeysOf(env) {
+  const read = String(env.READ_KEY || ""), res = String(env.RESIDENTS_KEY || "");
+  return String(env.CLIENT_KEY || "").split(",").map((k) => k.trim()).filter((k) => k.length >= 12 && !(read && ctEq(k, read)) && !(res && ctEq(k, res)));
+}
+function keyTier(env, url) {   // "admin" for READ_KEY, "client" for a client key, "" for anything else
+  const k = url.searchParams.get("key") || "";
+  if (!k) return "";
+  if (env.READ_KEY && ctEq(k, String(env.READ_KEY))) return "admin";
+  return clientKeysOf(env).some((c) => ctEq(k, c)) ? "client" : "";
+}
+const clientOk = (env, url) => keyTier(env, url) !== "";   // the check on the app pages: READ_KEY or a client key
+const clientPathOk = (p) => CLIENT_PATHS.includes(p) || KEYLESS_PATHS.includes(p) || CLIENT_PREFIXES.concat(KEYLESS_PREFIXES).some((x) => p.indexOf(x) === 0);
+const clientLinkKey = (env) => { const c = clientKeysOf(env); return c.length ? c[0] : String(env.READ_KEY || ""); };   // app links Azimuth hands the owner to forward
+const OWNER_LINK_RE = /<a\b[^>]*\bhref="\/(?:board|studio|trends)\b[^"]*"[^>]*>[\s\S]*?<\/a>/g;
+function clientResp(env, url, body, init) {   // a page opened with a client key loses its owner-only links (BOARD, the studio); those routes refuse the key anyway
+  return new Response(typeof body === "string" && keyTier(env, url) === "client" ? body.replace(OWNER_LINK_RE, "") : body, init);
 }
 async function residentsRoute(env, url) {
   const rk = residentsKeyOf(env, url);
@@ -9553,7 +9578,7 @@ async function residentsRoute(env, url) {
     if (!raw) return new Response("not on file", { status: 404, headers: hdr });
     return new Response(raw, { headers: Object.assign({ "Content-Type": "application/json" }, hdr) });
   }
-  return new Response(renderResidents(env.READ_KEY || "", rk), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
+  return new Response(renderResidents(clientLinkKey(env), rk), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
 }
 // The layout Kendall used on the laptop (scripts/dewa_views_template.html, residents tab), served from here with the data read from the
 // private route and no counts: chips, minimum share, search with a ranked list, map shading, gold outline on the selected community,
@@ -9727,7 +9752,7 @@ function qnScrub(s) {
 }
 function qnClean(env, v, n) {
   let s = String(v == null ? "" : v).slice(0, 4000).replace(/[ -]+/g, " ");
-  for (const k of [env.READ_KEY, env.RESIDENTS_KEY, env.INGEST_TOKEN, env.WA_FORWARD_TOKEN, env.GENIMG_KEY]) if (k && String(k).length >= 8) s = s.split(String(k)).join("[key]");
+  for (const k of [env.READ_KEY, env.RESIDENTS_KEY, env.INGEST_TOKEN, env.WA_FORWARD_TOKEN, env.GENIMG_KEY, ...String(env.CLIENT_KEY || "").split(",")]) if (k && String(k).trim().length >= 8) s = s.split(String(k).trim()).join("[key]");   // v156 - client keys too (DA-AUD-005); CLIENT_KEY is comma-separated
   s = s.replace(/\b(key|rk|gkey|token)=[^\s&#]+/gi, "$1=[key]");
   return qnScrub(s).replace(/\s+/g, " ").trim().slice(0, n || 200);
 }

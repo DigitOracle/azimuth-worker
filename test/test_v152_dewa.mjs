@@ -7,7 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-const READ = "client_read_key_in_links_123";
+const READ = "owner_read_key_never_in_links_123";
+const CLIENT = "client_key_for_links_0123456";   // v155 (DA-AUD-005) - what a client link carries; READ_KEY is the owner's
 const RES = "residents_private_key_0123456789abcdef";
 const store = new Map();
 const KV = {
@@ -17,7 +18,7 @@ const KV = {
   async list(o) { const p = (o && o.prefix) || ""; return { keys: [...store.keys()].filter(k => k.startsWith(p)).map(name => ({ name })) }; },
 };
 globalThis.fetch = async () => new Response("{}", { status: 200 });
-const env = { MEETINGS: KV, READ_KEY: READ, INGEST_TOKEN: "ING", RESIDENTS_KEY: RES, WA_ALLOWED: "971565484397", MAILBOXES: "", ADD_TO: "", PUBLIC_ORIGIN: "https://azimuth-2.digitalchemy.workers.dev" };
+const env = { MEETINGS: KV, READ_KEY: READ, CLIENT_KEY: CLIENT, INGEST_TOKEN: "ING", RESIDENTS_KEY: RES, WA_ALLOWED: "971565484397", MAILBOXES: "", ADD_TO: "", PUBLIC_ORIGIN: "https://azimuth-2.digitalchemy.workers.dev" };
 const ctx = { waitUntil() {} };
 const call = (p, init, e) => worker.fetch(new Request("https://azimuth-2.digitalchemy.workers.dev" + p, init), e || env, ctx);
 let pass = 0, fail = 0;
@@ -48,7 +49,7 @@ r = await call("/img/community_resident_mix");
 ok(r.status === 404, "the public /img route cannot serve it");
 
 // 2. the private page: only its own key opens it
-for (const [label, q, e] of [["no key", "/residents", null], ["wrong key", "/residents?rk=nope", null], ["the client link key", "/residents?rk=" + READ, null], ["key= from a client link", "/residents?key=" + READ, null], ["RESIDENTS_KEY not set", "/residents?rk=" + RES, Object.assign({}, env, { RESIDENTS_KEY: "" })], ["a short RESIDENTS_KEY", "/residents?rk=short", Object.assign({}, env, { RESIDENTS_KEY: "short" })], ["data without the key", "/residents/data?key=" + READ, null]]) {
+for (const [label, q, e] of [["no key", "/residents", null], ["wrong key", "/residents?rk=nope", null], ["the client link key", "/residents?rk=" + CLIENT, null], ["key= from a client link", "/residents?key=" + CLIENT, null], ["READ_KEY as rk", "/residents?rk=" + READ, null], ["data with the client key as rk", "/residents/data?rk=" + CLIENT, null], ["RESIDENTS_KEY not set", "/residents?rk=" + RES, Object.assign({}, env, { RESIDENTS_KEY: "" })], ["a short RESIDENTS_KEY", "/residents?rk=short", Object.assign({}, env, { RESIDENTS_KEY: "short" })], ["data without the key", "/residents/data?key=" + READ, null]]) {
   r = await call(q, {}, e || env);
   ok(r.status === 404, "residents: " + label + " gets 404");
 }
@@ -127,7 +128,7 @@ ok(P.ids.list.innerHTML.includes("&lt;img") && !/<img|<script/.test(P.ids.list.i
 await call("/ingest_private", { method: "POST", headers: { "X-Azimuth-Ingest": "ING" }, body: JSON.stringify({ name: "community_resident_mix", json: mix }) });
 
 // 3. the TWIN page carries the colour menu, and its module script still parses
-r = await call("/skyline/jabalalifirst?key=" + READ);
+r = await call("/skyline/jabalalifirst?key=" + CLIENT);
 const sky = await r.text();
 ok(r.status === 200 && sky.includes('sel.id="colsel"') && sky.includes("/img/building_activity") && sky.includes("colour by: filling up") && sky.includes("colour by: move-ins vs Dubai"), "twin: the page carries the Colour by menu and reads /img/building_activity");
 const mod = (sky.match(/<script type="module">([\s\S]*?)<\/script><\/body><\/html>/) || [])[1] || "";

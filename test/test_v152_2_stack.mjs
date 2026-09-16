@@ -7,7 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-const READ = "client_read_key_in_links_123";
+const READ = "owner_read_key_never_in_links_123";
+const CLIENT = "client_key_for_links_0123456";   // v155 (DA-AUD-005) - what a client link carries; READ_KEY is the owner's
 const RES = "residents_private_key_0123456789abcdef";
 const store = new Map();
 const KV = {
@@ -17,7 +18,7 @@ const KV = {
   async list(o) { const p = (o && o.prefix) || ""; return { keys: [...store.keys()].filter(k => k.startsWith(p)).map(name => ({ name })) }; },
 };
 globalThis.fetch = async () => new Response("{}", { status: 200 });
-const env = { MEETINGS: KV, READ_KEY: READ, INGEST_TOKEN: "ING", RESIDENTS_KEY: RES, WA_ALLOWED: "971565484397", MAILBOXES: "", ADD_TO: "", PUBLIC_ORIGIN: "https://azimuth-2.digitalchemy.workers.dev" };
+const env = { MEETINGS: KV, READ_KEY: READ, CLIENT_KEY: CLIENT, INGEST_TOKEN: "ING", RESIDENTS_KEY: RES, WA_ALLOWED: "971565484397", MAILBOXES: "", ADD_TO: "", PUBLIC_ORIGIN: "https://azimuth-2.digitalchemy.workers.dev" };
 const ctx = { waitUntil() {} };
 const call = (p, init, e) => worker.fetch(new Request("https://azimuth-2.digitalchemy.workers.dev" + p, init), e || env, ctx);
 let pass = 0, fail = 0;
@@ -36,7 +37,7 @@ ok(r.status === 200, "setup: the residents data is pushed");
 store.set("img_sky_jltnorth", "glb");
 
 // 1. MAP for a client link: the stack holds HOMES alone, and nothing private is in the page
-const clientCases = [["the client key", "/map?key=" + READ], ["a wrong residents key", "/map?key=" + READ + "&rk=wrong_wrong_wrong_wrong_wrong"], ["the client key passed as rk", "/map?key=" + READ + "&rk=" + READ]];
+const clientCases = [["the client key", "/map?key=" + CLIENT], ["a wrong residents key", "/map?key=" + CLIENT + "&rk=wrong_wrong_wrong_wrong_wrong"], ["the client key passed as rk", "/map?key=" + CLIENT + "&rk=" + CLIENT], ["READ_KEY passed as rk", "/map?key=" + CLIENT + "&rk=" + READ]];
 for (const [label, q] of clientCases) {
   r = await call(q);
   const html = await r.text();
@@ -56,7 +57,7 @@ ok(nav.length === 10 && nav.filter(h => h.includes("rk=")).map(h => h.split("?")
 ok(!/"accounts"|1800|5200/.test(mp), "MAP private: the page carries no residents data and no counts; it reads them from the private route");
 const mscript = (mp.match(/<script>\(function\(\)\{([\s\S]*)\}\)\(\);<\/script><\/body><\/html>$/) || [])[1] || "";
 ok(mscript.length > 30000 && parses("(function(){" + mscript + "})();", ".js"), "MAP private: the page script parses");
-r = await call("/map?key=" + READ);
+r = await call("/map?key=" + CLIENT);
 ok(parses("(function(){" + (((await r.text()).match(/<script>\(function\(\)\{([\s\S]*)\}\)\(\);<\/script><\/body><\/html>$/) || [])[1] || "") + "})();", ".js"), "MAP client: the page script still parses");
 
 // 3. the residents panel script running: a stand-in DOM and map, the worker answering its data call
@@ -127,7 +128,7 @@ ids.rfull.onclick();
 
 // 4. the twins: private pages keep the key on MAP/TWIN links only; client pages carry none of it
 for (const [label, p] of [["district twin", "/skyline/jltnorth"], ["all-Dubai twin", "/skyline?all=1"]]) {
-  r = await call(p + (p.includes("?") ? "&" : "?") + "key=" + READ);
+  r = await call(p + (p.includes("?") ? "&" : "?") + "key=" + CLIENT);
   const cl = await r.text();
   ok(r.status === 200 && !cl.includes("rk=") && !cl.includes("__RKQ=") && !cl.includes(RES) && !r.headers.get("X-Robots-Tag"), label + ", client link: no residents key, no private headers");
   r = await call(p + (p.includes("?") ? "&" : "?") + "key=" + READ + "&rk=" + RES);
@@ -138,7 +139,7 @@ for (const [label, p] of [["district twin", "/skyline/jltnorth"], ["all-Dubai tw
 r = await call("/skyline/jltnorth?key=" + READ + "&rk=" + RES);
 const tw = await r.text();
 ok(/href="\/skyline\/jltnorth\?key=[^"]*&rk=/.test(tw) && tw.includes("(window.__RKQ||'')") && tw.includes('+(window.__RKQ||"")'), "district twin, private link: its district links and the map chrome's twin links keep the key");
-r = await call("/skyline/jltnorth?key=" + READ);
+r = await call("/skyline/jltnorth?key=" + CLIENT);
 const tc = await r.text();
 ok(tc.includes("<div class=hstack id=hstack>") && tc.includes('p.id="colp";p.className="hp colp"') && tc.includes('<div class=cp id=cp></div>') && !tc.includes("id=rp"), "district twin, client link: the stack is there for COLOUR BY; no residents panel");
 const mod = (tc.match(/<script type="module">([\s\S]*?)<\/script><\/body><\/html>/) || [])[1] || "";
