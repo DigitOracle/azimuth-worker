@@ -9381,15 +9381,32 @@ async function igRoute(env, url, request) {
     const code = String(url.searchParams.get("code") || "").replace(/#_$/, "");
     if (!t || !code || !(await env.MEETINGS.get("ig_state_" + t))) return page(EXPIRED[0], EXPIRED[1], 410);
     if (!env.IG_APP_SECRET) { await igNote(env, "callback reached before IG_APP_SECRET was set"); return page("Not quite ready", "Please try the link again a little later.", 503); }
-    let sj = null;
+    let sj = null, st = 0;   // v153.1 (16 Sep 2026) - three identical failures: log what Meta actually says (status, type, code, subcode, trace) and what we sent it, minus the secret
     try {
       const r = await fetch("https://api.instagram.com/oauth/access_token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ client_id: env.IG_APP_ID, client_secret: env.IG_APP_SECRET, grant_type: "authorization_code", redirect_uri: igRedirect(env), code }).toString() });
+      st = r.status;
       sj = await r.json();
     } catch (e) {}
     const s0 = sj && (Array.isArray(sj.data) ? sj.data[0] : sj);
     if (!s0 || !s0.access_token) {
-      await igNote(env, "code exchange failed: " + String((sj && (sj.error_message || (sj.error && (sj.error.message || sj.error)))) || "no token").slice(0, 160));
+      const _e = (sj && (sj.error || sj)) || {};
+      // control call: the same request with a code that cannot be valid. If Meta answers it differently from the real one, its complaint
+      // is about the code; if identically, its complaint is about this app id / secret pair. Neither call can leak the secret.
+      let _ctl = "";
+      try {
+        const r2 = await fetch("https://api.instagram.com/oauth/access_token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ client_id: env.IG_APP_ID, client_secret: env.IG_APP_SECRET, grant_type: "authorization_code", redirect_uri: igRedirect(env), code: "control-not-a-real-code" }).toString() });
+        const _j2 = await r2.json(); const _e2 = (_j2 && (_j2.error || _j2)) || {};
+        _ctl = r2.status + " | " + String(_e2.error_type || _e2.type || "") + " " + (_e2.code ?? "") + " | " + String(_e2.error_message || _e2.message || "").slice(0, 90);
+      } catch (e) { _ctl = "control call threw"; }
+      try {
+        await env.MEETINGS.put("ig_lastexchange", JSON.stringify({ at: new Date().toISOString(), http: st,
+          err: { type: _e.error_type || _e.type || null, code: _e.code ?? null, subcode: _e.error_subcode ?? null, msg: String(_e.error_message || _e.message || ""), trace: _e.fbtrace_id || null },
+          sent: { redirect: igRedirect(env), app: String(env.IG_APP_ID || ""), scope: IG_SCOPES, code_len: code.length, code_head: code.slice(0, 10), code_tail: code.slice(-6) },
+          control: _ctl }), { expirationTtl: 7 * 86400 });
+      } catch (e) {}
+      await igNote(env, "code exchange failed: HTTP " + st + " " + String(_e.error_message || _e.message || "no token").slice(0, 80) + " | control: " + _ctl.slice(0, 60));
       return page("That didn't work", "Instagram didn't finish connecting. Please try the link again.", 502);
     }
     const ll = await igGet(env, "/access_token", s0.access_token, { grant_type: "ig_exchange_token", client_secret: env.IG_APP_SECRET });
