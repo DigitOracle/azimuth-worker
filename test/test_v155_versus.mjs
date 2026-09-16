@@ -58,5 +58,9 @@ ok((await postC("/versus/picture", { key: CLIENT, city: "monaco" })).status === 
 globalThis.fetch = realFetch;
 import { WORLD_SAMPLES as SMP } from "../src/world.js";
 ok(SMP.length === 10 && SMP.filter(x => (x.rev || 1) === 2).length === 8 && SMP.filter(x => (x.rev || 1) === 1).map(x => x.city).join() === "monaco,mumbai" && SMP.every(x => x.text.split(/\s+/).length >= 105 && x.text.split(/\s+/).length <= 140), "v157: eight scripts are at revision 2 as stories; Monaco and Mumbai stay at revision 1 because she approved them; all still 105 to 140 words");
+const revPage = (fb) => worldPageHtml(fb, true).split("const DATA = ")[1].split(";\n")[0];
+ok(/"FB":\{\}/.test(revPage({ "1": { verdict: "no" } })), "a verdict with no revision is revision 1: on London, now revision 2, it is not shown");
+ok(/"FB":\{"1":"yes"\}/.test(revPage({ "1": { verdict: "yes", rev: 2 } })), "a verdict recorded on revision 2 IS shown on the revision 2 script (the case that would have shipped broken)");
+ok(/"FB":\{"2":"yes"\}/.test(revPage({ "2": { verdict: "yes" } })) && /"FB":\{\}/.test(revPage({ "2": { verdict: "yes", rev: 2 } })), "Monaco is still revision 1, so her revision 1 verdict shows and a revision 2 verdict would not");
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
