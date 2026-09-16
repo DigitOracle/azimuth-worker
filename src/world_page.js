@@ -352,7 +352,7 @@ export function worldPageHtml(fb, owner, nav) {   // nav: { css, html } = the ap
     SAMPLES: WORLD_SAMPLES.map(s => ({ n: s.n, city: s.city, title: s.title, text: s.text, ready: s.ready, sources: s.sources })),
     STORY: WORLD_STORY, CULT: WORLD_CULTURE, CULT_SRC: WORLD_CULTURE_SOURCES, NUM: WORLD_NUMERIC, REF: WORLD_SIZE_REFS, REG: WORLD_REGISTER,
     FX: WORLD_FX.rates, SYM: WORLD_FX.symbols, PRESETS: WORLD_FX.presets, FX_DATE: WORLD_FX.date,
-    FB: Object.fromEntries(Object.entries(fb || {}).map(([k, v]) => [k, v && v.verdict])), LIVE: true, OWNER: owner !== false };
+    FB: Object.fromEntries(Object.entries(fb || {}).filter(([k]) => { const smp = WORLD_SAMPLES.find(x => String(x.n) === String(k)); return smp && (smp.rev || 1) === 1; }).map(([k, v]) => [k, v && v.verdict])), LIVE: true, OWNER: owner !== false };   // v157 - a verdict given on revision 1 is not shown against a rewritten script
   const json = JSON.stringify(data).replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\!--");
   const navCss = nav && nav.css ? "<style>" + nav.css + " body{padding-bottom:88px}</style>" : "";
   return "<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><meta name=robots content=noindex>" + navCss +
