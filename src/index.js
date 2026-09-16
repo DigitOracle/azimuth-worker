@@ -4682,7 +4682,7 @@ async function worldFbButton(env, from, bid) {
   const n = parseInt(m[1], 10), v = m[2];
   const r = await worldReviewGet(env);
   const s = WORLD_SAMPLES.find(x => x.n === n);
-  r.fb = r.fb || {}; r.fb[n] = Object.assign({ notes: [] }, r.fb[n] || {}, { verdict: v, at: gstNowIso() });
+  r.fb = r.fb || {}; r.fb[n] = Object.assign({ notes: [] }, r.fb[n] || {}, { verdict: v, rev: (s && s.rev) || 1, at: gstNowIso() });   // v157.4 - WHICH revision she judged. Without it a rewritten script can never show a verdict again, so her tap looks ignored.
   await worldReviewPut(env, r);
   if (v === "fix") {
     await env.MEETINGS.put("world_fb_pending", String(n), { expirationTtl: 1800 });
