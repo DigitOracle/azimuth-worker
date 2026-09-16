@@ -2854,7 +2854,7 @@ async function appFetch(request, env, ctx) {
       }
       if (url.pathname === "/find") {                         // v95.1 - search by developer, development or building (search_index from the knowledge graph)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
-        return clientResp(env, url, renderFind(url.searchParams.get("key") || "", url.searchParams.get("q") || "", keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v159 - owner only sees the client-sheet action; the sheet routes refuse a client key anyway, so a client link must not offer a button that cannot work
+        return clientResp(env, url, renderFind(url.searchParams.get("key") || "", url.searchParams.get("q") || "", keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v158 - owner only sees the client-sheet action; the sheet routes refuse a client key anyway, so a client link must not offer a button that cannot work
       }
       if (url.pathname === "/world") {                        // v154.5 - Dubai against ten world cities as cards, prime per sq ft (Kendall, 16 Sep 2026: "prime for the cards"). Same figures as the
         // spoken pieces, through worldFacts in src/world.js. Deliberately NOT in the tab bar yet: which key it sits behind waits on the client-key split (DA-AUD-005).
@@ -7272,9 +7272,9 @@ function renderClock(key) {
 }
 
 function renderFind(key, q0, owner) {
-  // v159 - the sheet action is EMITTED only for the owner, never merely hidden at run time. A client's page should not carry the markup, the
+  // v158 - the sheet action is EMITTED only for the owner, never merely hidden at run time. A client's page should not carry the markup, the
   // route names, or a flag that can be flipped in a console. The sheet routes refuse a client key anyway; this is the layer above that one.
-  const GSF = owner ? '+(r.t==="building"?\'<a class=gs data-s="\'+esc(slugOf(r))+\'" data-d="\'+(r.sheet?"0":"1")+\'">sheet \\u2192</a>\':"")' : "";
+  const GSF = owner ? '+(r.t==="building"&&r.sheet?\'<a class=gs data-s="\'+esc(String(r.sheet))+\'">sheet \\u2192</a>\':"")' : "";
   const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Find \u2014 Najma</title>' +
     '<link rel=preconnect href="https://fonts.googleapis.com"><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">' +
@@ -7294,26 +7294,26 @@ function renderFind(key, q0, owner) {
     'var twin=function(r){if(r.d&&r.i!=null)return"/skyline/"+encodeURIComponent(r.d)+"?key="+encodeURIComponent(KEY)+"&b="+encodeURIComponent(r.i);if(r.d)return"/skyline/"+encodeURIComponent(r.d)+"?key="+encodeURIComponent(KEY)+"&q="+encodeURIComponent(r.n);return null};' +
     'var link=function(r){if(r.t==="developer"&&r.dev)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY);if(r.dev&&r.p)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY)+"&p="+encodeURIComponent(r.p);if(r.dev)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY);return twin(r)};' +
     'var where=function(r){var w=[];if(r.a)w.push(r.a);if(r.m&&r.m!==r.n)w.push(r.m);if(r.units)w.push(Number(r.units).toLocaleString("en")+" units");if(r.nb)w.push(r.nb+" buildings");if(r.st==="verified")w.push("register");if(r.off)w.push("in the register, not yet on the twin");if(r.dev&&r.t!=="developer")w.push(r.dev);return w.join(" \\u00b7 ")};' +
-    'var slugOf=function(r){if(r.sheet)return String(r.sheet);return String(r.n||"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,50)};' +   // v158.1 - the pipeline's exact rule, cap 50 (I had 60, which would miss any long name). Deriving is a BETA CRUTCH: the real slug comes from the Land Department project name, so where the register is terser than the marketing ("Peninsula Four" vs the row's "Peninsula Four, The Plaza") a derived slug misses a sheet that exists. r.sheet, once the pipeline carries it, is the only safe path.
     'var render=function(){if(!IDX)return;var s=nk(q.value),toks=s?s.split(" "):[];var rows=IDX.items.filter(function(r){if(T&&r.t!==T)return false;if(!toks.length)return r.t==="developer";var hay=nk(r.n)+" "+nk(r.m)+" "+nk(r.a)+" "+nk(r.dev);return toks.every(function(t){return hay.indexOf(t)>=0})});' +
     'if(window.__qnFind)try{window.__qnFind(q.value,rows.length,T)}catch(e){}' +   // v153 - on Kendall's and Naj's devices an empty search becomes a question note (nothing on client links)
     'rows.sort(function(a,b){var sa=nk(a.n).indexOf(s)===0?0:1,sb=nk(b.n).indexOf(s)===0?0:1;if(sa!==sb)return sa-sb;var ta={developer:0,development:1,building:2};if(ta[a.t]!==ta[b.t])return ta[a.t]-ta[b.t];return (Number(b.units)||0)-(Number(a.units)||0)});' +
     'if(!window.__itwire){window.__itwire=1;document.head.insertAdjacentHTML("beforeend","<style>.it[data-u]{cursor:pointer}.go a{color:inherit;text-decoration:none}.go a.gm{margin-left:10px;color:#8FC7B9}</style>");document.addEventListener("click",function(e){var it=e.target.closest(".it[data-u]");if(!it||e.target.closest("a"))return;location.href=it.getAttribute("data-u")})}'
-    // v159 - THE CLIENT SHEET, on the row (Kendall, 16 Sep 2026, having seen that the twin's top right is taken: put it on the search result).
+    // v158 - THE CLIENT SHEET, on the row (Kendall, 16 Sep 2026, having seen that the twin's top right is taken: put it on the search result).
     // Owner only. Tap once for what we hold on that tower: pages and size with Preview and Send, or the pipeline's own reason why there is no
     // sheet - "no pictures held", "only 3 recorded sales (bar is 20)". Six of about 2,100 buildings have one today, so the reason IS the common
     // screen and must never be a dead button. The panel swallows its own clicks so a stray tap does not fire the row's jump to the twin.
   + (owner ? 'if(!window.__shwire){window.__shwire=1;document.head.insertAdjacentHTML("beforeend","<style>.gs{margin-left:10px;color:#C5A56A}.sp{margin-top:9px;padding-top:9px;border-top:1px solid #24352F}.spr{font-size:.74rem;color:#8FA39B;margin-bottom:8px}.spb{display:inline-block;border:1px solid #24352F;border-radius:99px;padding:6px 12px;margin-right:7px;color:#E8E4D8;font-size:.74rem;cursor:pointer;text-decoration:none}.spb.on{border-color:#C5A56A;color:#C5A56A}</style>");'
-  + 'document.addEventListener("click",function(e){var a=e.target.closest(".gs");if(!a)return;e.preventDefault();var it=a.closest(".it"),slug=a.getAttribute("data-s"),derived=a.getAttribute("data-d")==="1";var ex=it.querySelector(".sp");if(ex){ex.parentNode.removeChild(ex);return}'
+  + 'document.addEventListener("click",function(e){var a=e.target.closest(".gs");if(!a)return;e.preventDefault();var it=a.closest(".it"),slug=a.getAttribute("data-s");var ex=it.querySelector(".sp");if(ex){ex.parentNode.removeChild(ex);return}'
   + 'var d=document.createElement("div");d.className="sp";d.textContent="looking...";d.addEventListener("click",function(ev){ev.stopPropagation()});it.appendChild(d);'
-  + 'fetch("/sheet/"+encodeURIComponent(slug)+"/meta?key="+encodeURIComponent(KEY)).then(function(r){var st=r.status;return r.json().catch(function(){return null}).then(function(m){return{st:st,m:m}})}).then(function(o){var m=o.m;'
+  + 'fetch("/sheet/"+encodeURIComponent(slug)+"/meta?key="+encodeURIComponent(KEY)).then(function(r){return r.json().catch(function(){return null})}).then(function(m){'
   + 'if(!m){d.textContent="could not read that one";return}'
-  // A stored hold is the pipeline's own judgement and is quoted as it stands. A 404 on a slug we DERIVED is a different animal: it may mean
-  // no sheet, or it may mean the register calls the tower something shorter than the row does. Saying "no sheet built yet" there would be a
-  // confident answer to a question we did not actually ask, so the wording names the doubt until the pipeline supplies the slug.
-  + 'if(m.hold){d.innerHTML="<div class=spr>"+esc(o.st===404&&derived?"no sheet found under this name \\u2014 it may be filed under the register\\u2019s name for this tower":m.hold)+"</div>";return}'
+  // v158.2 - the row now carries the Land Department slug, so a miss IS a miss and says so plainly. The hedge that stood here existed only
+  // because we were deriving the name from the display name and could be looking in the wrong place; it went out with the derivation.
+  + 'if(m.hold){d.innerHTML="<div class=spr>"+esc(m.hold)+"</div>";return}'
   + 'var kb=Math.round((m.bytes||0)/1024);'
-  + 'd.innerHTML="<div class=spr>"+(m.pages?m.pages+" pages &middot; ":"")+kb+" KB"+(m.has_pictures===false?" &middot; no pictures yet":"")+"</div>"'
+  // v158.2 - say WHICH pictures: "layouts and interiors" is a sheet to hand a buyer, "exteriors only" is a building with nothing to look
+  // inside. has_pictures is kept as the fallback for sheets pushed before the pipeline carried the phrase.
+  + 'd.innerHTML="<div class=spr>"+(m.pages?m.pages+" pages &middot; ":"")+kb+" KB"+(m.pictures?" &middot; "+esc(m.pictures):(m.has_pictures===false?" &middot; no pictures yet":""))+"</div>"'
   + '+"<a class=spb target=_blank rel=noopener href=\\"/sheet/"+encodeURIComponent(slug)+".pdf?key="+encodeURIComponent(KEY)+"\\">Preview</a>"'
   + '+"<a class=\\"spb on\\">Send to WhatsApp</a>";'
   + 'var b=d.querySelector(".spb.on");b.addEventListener("click",function(){if(b.busy)return;b.busy=1;b.textContent="sending...";'
