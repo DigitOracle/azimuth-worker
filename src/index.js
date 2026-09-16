@@ -2734,7 +2734,9 @@ async function appFetch(request, env, ctx) {
       if (url.pathname === "/world_review") {                  // v154.2 - send her the ten sample scripts with their buttons (Kendall approved the wording 16 Sep 2026); ?dry=1 lists them
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const _dry = !!url.searchParams.get("dry");
-        let _out; try { _out = await worldReviewSend(env, _dry, url.searchParams.get("to") || ""); } catch (e) { return new Response("review error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
+        const _only = (url.searchParams.get("only") || "").split(",").map(x => parseInt(x, 10)).filter(x => x >= 0 && x <= 10);   // v154.3 - a subset (0 = the intro), and a pause between sends
+        const _gap = Math.min(30, Math.max(0, parseFloat(url.searchParams.get("gap") || "0") || 0));
+        let _out; try { _out = await worldReviewSend(env, _dry, url.searchParams.get("to") || "", { only: _only, gap: _gap }); } catch (e) { return new Response("review error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response(_out, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
       }
       if (url.pathname === "/world_fb") {                      // v154.2 - her verdicts and notes on the samples
@@ -4600,21 +4602,23 @@ async function worldTick(env, force, dry, o) {
 // task; "3: too long" files at any time. Kendall reads it all back at /world_fb and curates the next round from it.
 async function worldReviewGet(env) { try { return JSON.parse((await env.MEETINGS.get("world_review")) || "null") || { fb: {} }; } catch (e) { return { fb: {} }; } }
 async function worldReviewPut(env, r) { await env.MEETINGS.put("world_review", JSON.stringify(r), { expirationTtl: 180 * 86400 }); }
-async function worldReviewSend(env, dry, to) {
-  to = to || env.WA_ALLOWED;
-  const msgs = [{ kind: "text", body: WORLD_REVIEW_INTRO }].concat(WORLD_SAMPLES.map(s => ({ kind: "buttons", n: s.n, body: worldReviewBody(s), buttons: WORLD_REVIEW_BUTTONS(s.n) })));
+async function worldReviewSend(env, dry, to, o) {
+  to = to || env.WA_ALLOWED; o = o || {};
+  let msgs = [{ kind: "text", n: 0, body: WORLD_REVIEW_INTRO }].concat(WORLD_SAMPLES.map(s => ({ kind: "buttons", n: s.n, body: worldReviewBody(s), buttons: WORLD_REVIEW_BUTTONS(s.n) })));
+  if (o.only && o.only.length) msgs = msgs.filter(m => o.only.includes(m.n));   // v154.3 - re-send a subset; 0 is the intro
   const long = msgs.filter(m => m.body.length > 1024).map(m => m.n);
   if (long.length) throw new Error("script body over 1024 characters: " + long.join(","));
   if (dry) return msgs.map(m => (m.n ? "[" + m.n + "] " : "[intro] ") + m.body + (m.buttons ? "\n  buttons: " + m.buttons.map(b => b.title).join(" | ") : "")).join("\n\n---\n\n");
   const r = await worldReviewGet(env);
-  r.started = gstNowIso(); r.to = to; r.scripts = WORLD_SAMPLES.map(s => ({ n: s.n, city: s.city, title: s.title })); r.fb = r.fb || {}; r.sent = [];
+  r.started = r.started || gstNowIso(); r.to = to; r.scripts = WORLD_SAMPLES.map(s => ({ n: s.n, city: s.city, title: s.title })); r.fb = r.fb || {}; r.sent = r.sent || [];
   for (const m of msgs) {
+    if (o.gap && r.sent.length) await new Promise(x => setTimeout(x, o.gap * 1000));   // v154.3 - a pause between sends: eleven in six seconds left ten undelivered on 16 Sep
     let res = null;
     try { res = m.kind === "text" ? await waSend(env, to, m.body) : await waSendButtons(env, to, m.body, m.buttons); } catch (e) { res = { err: String(e && e.message || e) }; }
-    r.sent.push({ n: m.n || 0, ok: !!(res && res.ok !== false && !res.err), at: gstNowIso() });
+    r.sent.push({ n: m.n || 0, ok: !!(res && res.ok !== false && !res.err), at: gstNowIso(), id: res && res.id ? String(res.id).slice(0, 80) : undefined });
   }
   await worldReviewPut(env, r);
-  return "sent " + r.sent.filter(x => x.ok).length + "/" + msgs.length + " (intro + " + WORLD_SAMPLES.length + " scripts) to " + to;
+  return "sent " + msgs.length + " (" + msgs.map(m => m.n).join(",") + ") to " + to + "; ledger " + r.sent.filter(x => x.ok).length + "/" + r.sent.length + " ok";
 }
 async function worldFbButton(env, from, bid) {
   const m = bid.match(/^wld:fb:(\d{1,2}):(yes|fix|no)$/);
