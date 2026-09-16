@@ -1,4 +1,4 @@
-import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity } from "./world.js";   // v154 - Dubai versus a world city, to camera
+import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";   // v154 - Dubai versus a world city, to camera
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -2731,6 +2731,16 @@ async function appFetch(request, env, ctx) {
         if (url.searchParams.get("json")) return new Response(JSON.stringify(_r, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8" } });
         return new Response("radar built: " + ((_r && _r.items) || []).length + " items · sources " + JSON.stringify(_r && _r.sources) + (_r && _r.note ? "\n" + _r.note : ""), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
       }
+      if (url.pathname === "/world_review") {                  // v154.2 - send her the ten sample scripts with their buttons (Kendall approved the wording 16 Sep 2026); ?dry=1 lists them
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _dry = !!url.searchParams.get("dry");
+        let _out; try { _out = await worldReviewSend(env, _dry, url.searchParams.get("to") || ""); } catch (e) { return new Response("review error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
+        return new Response(_out, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      }
+      if (url.pathname === "/world_fb") {                      // v154.2 - her verdicts and notes on the samples
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        return new Response((await env.MEETINGS.get("world_review")) || "{}", { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/world_test") {                    // v154 - Dubai versus a world city now; ?dry=1 writes WITHOUT sending; ?city=london&angle=tax picks; ?to= overrides the number
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         let _wo = null;
@@ -3137,6 +3147,7 @@ async function appFetch(request, env, ctx) {
             return new Response("ok");
           }
           if (bid.indexOf("gm:") === 0 && await gmeetButton(env, from, bid)) return new Response("ok");   // v150 - Book it / Don't book on a Google Meet card
+          if (bid.indexOf("wld:fb:") === 0 && await worldFbButton(env, from, bid)) return new Response("ok");   // v154.2 - her verdict on a sample script (works with the lane off)
           if (bid.indexOf("wld:") === 0 && (env.WORLD_TALK || "") === "on" && await worldButton(env, from, bid)) return new Response("ok");   // v154 - Another city / Another angle / a city from the list
           if (bid.indexOf("gc:") === 0 && await gcGuideButton(env, from, bid)) return new Response("ok");   // v150.1 - her Google Calendar walkthrough
           if (bid.indexOf("ig:") === 0) { await env.MEETINGS.delete("cand_" + bid.slice(3)); await waSend(env, from, "🙈 Ignored"); return new Response("ok"); }
@@ -3771,6 +3782,7 @@ async function appFetch(request, env, ctx) {
             try { await env.MEETINGS.delete("mkt_feed_inflight"); } catch (e) {}
             return new Response("ok");
           }
+          { const _fb = await worldFbNote(env, from, text); if (_fb) { await waSend(env, from, _fb); return new Response("ok"); } }   // v154.2 - a note on a sample script (after ✏️, or "3: too long"), filed, never a task
           { const _wp = (env.WORLD_TALK || "") === "on" ? worldParse(text) : null;   // v154 - "versus" / "versus london" / "versus paris tax": Dubai against a world city, 45-60 s to camera
             if (_wp) {
               if (await env.MEETINGS.get("world_inflight")) { await waSend(env, from, "Still writing the last one. A moment."); return new Response("ok"); }
@@ -4582,6 +4594,62 @@ async function worldTick(env, force, dry, o) {
   const out = await worldSend(env, o.to || env.WA_ALLOWED, pick.city, pick.angle, { dry, force, tell: !!force && !dry });
   if (!force && out) { try { await env.MEETINGS.put("world_" + gstDateStr(n), "done", { expirationTtl: 2 * 86400 }); } catch (e) {} }
   return out;
+}
+// v154.2 - THE REVIEW ROUND. The ten samples go to her once, each under three buttons. A tap files her verdict; ✏️ opens a
+// thirty-minute window in which her next text or voice note is filed against that script and acknowledged, never parsed as a
+// task; "3: too long" files at any time. Kendall reads it all back at /world_fb and curates the next round from it.
+async function worldReviewGet(env) { try { return JSON.parse((await env.MEETINGS.get("world_review")) || "null") || { fb: {} }; } catch (e) { return { fb: {} }; } }
+async function worldReviewPut(env, r) { await env.MEETINGS.put("world_review", JSON.stringify(r), { expirationTtl: 180 * 86400 }); }
+async function worldReviewSend(env, dry, to) {
+  to = to || env.WA_ALLOWED;
+  const msgs = [{ kind: "text", body: WORLD_REVIEW_INTRO }].concat(WORLD_SAMPLES.map(s => ({ kind: "buttons", n: s.n, body: worldReviewBody(s), buttons: WORLD_REVIEW_BUTTONS(s.n) })));
+  const long = msgs.filter(m => m.body.length > 1024).map(m => m.n);
+  if (long.length) throw new Error("script body over 1024 characters: " + long.join(","));
+  if (dry) return msgs.map(m => (m.n ? "[" + m.n + "] " : "[intro] ") + m.body + (m.buttons ? "\n  buttons: " + m.buttons.map(b => b.title).join(" | ") : "")).join("\n\n---\n\n");
+  const r = await worldReviewGet(env);
+  r.started = gstNowIso(); r.to = to; r.scripts = WORLD_SAMPLES.map(s => ({ n: s.n, city: s.city, title: s.title })); r.fb = r.fb || {}; r.sent = [];
+  for (const m of msgs) {
+    let res = null;
+    try { res = m.kind === "text" ? await waSend(env, to, m.body) : await waSendButtons(env, to, m.body, m.buttons); } catch (e) { res = { err: String(e && e.message || e) }; }
+    r.sent.push({ n: m.n || 0, ok: !!(res && res.ok !== false && !res.err), at: gstNowIso() });
+  }
+  await worldReviewPut(env, r);
+  return "sent " + r.sent.filter(x => x.ok).length + "/" + msgs.length + " (intro + " + WORLD_SAMPLES.length + " scripts) to " + to;
+}
+async function worldFbButton(env, from, bid) {
+  const m = bid.match(/^wld:fb:(\d{1,2}):(yes|fix|no)$/);
+  if (!m) return false;
+  const n = parseInt(m[1], 10), v = m[2];
+  const r = await worldReviewGet(env);
+  const s = WORLD_SAMPLES.find(x => x.n === n);
+  r.fb = r.fb || {}; r.fb[n] = Object.assign({ notes: [] }, r.fb[n] || {}, { verdict: v, at: gstNowIso() });
+  await worldReviewPut(env, r);
+  if (v === "fix") {
+    await env.MEETINGS.put("world_fb_pending", String(n), { expirationTtl: 1800 });
+    await waSend(env, from, "✏️ Script " + n + (s ? " (" + s.cityName + ")" : "") + ". Tell me what to change. A text or a voice note, in your words.");
+  } else {
+    try { await env.MEETINGS.delete("world_fb_pending"); } catch (e) {}
+    await waSend(env, from, v === "yes" ? "✅ Script " + n + (s ? " (" + s.cityName + ")" : "") + ": you would say it as it is. Noted." : "✅ Script " + n + (s ? " (" + s.cityName + ")" : "") + ": not you. Noted, nothing more from me on that one.");
+  }
+  return true;
+}
+// Returns the acknowledgement to send when the text is a note on a sample script, else null (the message goes on its way).
+async function worldFbNote(env, from, text) {
+  const t = String(text || "").trim();
+  if (!t) return null;
+  let n = null, note = null;
+  const pend = await env.MEETINGS.get("world_fb_pending");
+  const parsed = worldFbParse(t);
+  if (parsed && (pend || await env.MEETINGS.get("world_review"))) { n = parsed.n; note = parsed.note; }
+  else if (pend) { n = parseInt(pend, 10); note = t; }
+  if (!n || !note) return null;
+  const r = await worldReviewGet(env);
+  r.fb = r.fb || {}; r.fb[n] = r.fb[n] || { notes: [] }; r.fb[n].notes = r.fb[n].notes || [];
+  r.fb[n].notes.push({ at: gstNowIso(), text: note.slice(0, 2000) });
+  await worldReviewPut(env, r);
+  try { await env.MEETINGS.delete("world_fb_pending"); } catch (e) {}
+  const s = WORLD_SAMPLES.find(x => x.n === n);
+  return "✅ Filed for script " + n + (s ? " (" + s.cityName + ")" : "") + ". Papi reads every one of these.";
 }
 async function worldButton(env, from, bid) {
   if (bid === "wld:city") { await waSendList(env, from, "Pick the city:", "Cities", worldListRows(await worldHist(env))); return true; }

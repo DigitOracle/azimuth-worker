@@ -159,5 +159,37 @@ const body = await r.text();
 ok(r.status === 200 && body.startsWith("🌍 *Dubai versus Geneva*") && /\[\d+ words\]$/.test(body.trim()) && !sent.some(m => m.text && m.text.body.includes("Geneva")), "/world_test?dry=1 writes the piece without sending");
 ok((await worker.fetch(new Request("https://x/world_test?dry=1&city=geneva"), env, ctx)).status === 401, "the route is keyed");
 
+
+// 8. v154.2 - the review round: the ten samples with buttons, her verdicts and notes filed, the lane still off
+import { WORLD_SAMPLES, worldReviewBody, worldFbParse, WORLD_REVIEW_INTRO } from "../src/world.js";
+const envOff = Object.assign({}, env, { WORLD_TALK: "" });
+ok(WORLD_SAMPLES.length === 10 && WORLD_SAMPLES.every((s, i) => s.n === i + 1 && s.text.split(/\s+/).length >= 105 && s.text.split(/\s+/).length <= 140 && worldReviewBody(s).length <= 1024 && s.sources && s.ready), "ten samples, 105-140 words each, every body within WhatsApp's 1,024 characters, sources and the have-ready line on each");
+ok(WORLD_SAMPLES.every(s => !/claude|anthropic|gpt|openai|gemini|mistral|\u2014|\u2013/i.test(s.text)) && /Black Coffee/.test(WORLD_REVIEW_INTRO) && /by Papi/.test(WORLD_REVIEW_INTRO), "no model names or dashes in the scripts; the intro speaks to Black Coffee and signs off from Papi");
+ok(worldFbParse("3: too long").n === 3 && worldFbParse("script 7 - shorter please").note === "shorter please" && worldFbParse("10 love it").n === 10 && worldFbParse("11: x") === null && worldFbParse("call Sara tomorrow 3pm") === null && worldFbParse("3") === null, "a numbered note parses; ordinary messages and bare numbers do not");
+let rr = await worker.fetch(new Request("https://x/world_review?key=RK&dry=1"), envOff, ctx);
+let rb = await rr.text();
+ok(rr.status === 200 && rb.startsWith("[intro] Good morning, Black Coffee") && (rb.match(/\n\n---\n\n/g) || []).length === 10 && rb.includes("[10] 10/10 · Dubai versus Mumbai") && !sent.some(m => m.text && /Black Coffee/.test(m.text.body)), "/world_review?dry=1 lists the intro and the ten without sending");
+sent.length = 0;
+rr = await worker.fetch(new Request("https://x/world_review?key=RK"), envOff, ctx);
+rb = await rr.text();
+const btns = sent.filter(m => m.type === "interactive" && m.interactive.type === "button");
+ok(rr.status === 200 && rb.startsWith("sent 11/11") && sent[0].type === "text" && sent[0].text.body === WORLD_REVIEW_INTRO && btns.length === 10 && btns.every((b, i) => b.interactive.body.text.startsWith((i + 1) + "/10 · Dubai versus ") && b.interactive.action.buttons.map(x => x.reply.id).join(",") === ["wld:fb:" + (i + 1) + ":yes", "wld:fb:" + (i + 1) + ":fix", "wld:fb:" + (i + 1) + ":no"].join(",")), "/world_review sends the intro, then ten button messages with 👍 ✏️ 👎, with the lane switched off");
+ok(JSON.parse(store.get("world_review")).sent.length === 11 && JSON.parse(store.get("world_review")).scripts.length === 10, "the review record remembers what went out");
+sent.length = 0;
+await tap("wld:fb:2:fix", envOff); await drain();
+ok(store.get("world_fb_pending") === "2" && texts().some(t => t.startsWith("✏️ Script 2 (Monaco)")), "✏️ on script 2 opens the window and asks what to change");
+sent.length = 0; model.length = 0;
+await say("the parking space line is too much, keep the studio prices", envOff); await drain();
+let rec = JSON.parse(store.get("world_review"));
+ok(rec.fb["2"].verdict === "fix" && rec.fb["2"].notes.length === 1 && /parking space line/.test(rec.fb["2"].notes[0].text) && texts().some(t => t.startsWith("✅ Filed for script 2 (Monaco)")) && !store.has("world_fb_pending") && model.length === 0, "her next message is filed against script 2 and acknowledged, never sent to the model as a task");
+sent.length = 0;
+await tap("wld:fb:5:yes", envOff); await drain();
+await tap("wld:fb:9:no", envOff); await drain();
+await say("7: I would say Numbeo differently", envOff); await drain();
+rec = JSON.parse(store.get("world_review"));
+ok(rec.fb["5"].verdict === "yes" && rec.fb["9"].verdict === "no" && rec.fb["7"].notes[0].text === "I would say Numbeo differently" && texts().some(t => t.startsWith("✅ Script 5 (Sydney): you would say it")) && texts().some(t => t.startsWith("✅ Filed for script 7 (Geneva)")), "👍 and 👎 are filed; a numbered note files without the window");
+rr = await worker.fetch(new Request("https://x/world_fb?key=RK"), envOff, ctx);
+ok(rr.status === 200 && JSON.parse(await rr.text()).fb["2"].notes.length === 1 && (await worker.fetch(new Request("https://x/world_fb"), envOff, ctx)).status === 401, "/world_fb returns the record, keyed");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
