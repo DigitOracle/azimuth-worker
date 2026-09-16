@@ -1,4 +1,5 @@
-import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";   // v154 - Dubai versus a world city, to camera
+import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
+import { worldPageHtml, worldCardText, worldScriptText } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -1927,6 +1928,17 @@ async function appFetch(request, env, ctx) {
       await env.MEETINGS.put("img_" + _pn + "_gen", out.buffer, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + _pn + "_gen", "image/png", { expirationTtl: 14 * 86400 });
       return new Response(JSON.stringify({ url: url.origin + "/img/" + _pn + "_gen" }), { headers: { "Content-Type": "application/json" } });
     }
+    if (url.pathname === "/versus/send" && request.method === "POST") {   // v155 - the script or the client card for a city, to her own WhatsApp, plain text. POST on purpose: a GET that sends would fire on link previews.
+      let _b = {}; try { _b = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
+      if (!_b || _b.key !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      const _c = worldCity(_b.city || ""); if (!_c || _c.base) return new Response("unknown city", { status: 404 });
+      const _what = _b.what === "card" ? "card" : "script";
+      const _bud = Math.max(1, parseFloat(_b.budget) || 5000000), _cur = String(_b.cur || "AED").toUpperCase().slice(0, 3);
+      const _txt = _what === "card" ? worldCardText(_c.key, _bud, _cur) : worldScriptText(_c.key);
+      if (!_txt) return new Response("nothing to send for " + _c.name, { status: 404 });
+      try { await waSend(env, env.WA_ALLOWED, _txt); } catch (e) { return new Response("send failed", { status: 502 }); }
+      return new Response((_what === "card" ? "Client card" : "Script") + " for Dubai versus " + _c.name + " sent to your WhatsApp.", { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+    }
     if (url.pathname === "/poll_send" && request.method === "POST") {   // v105 - a yes/no poll for Naj: one button question per row, answers kept in KV poll_<id>
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       let pj = null; try { pj = await request.json(); } catch (e) { return new Response("json body required", { status: 400 }); }
@@ -2732,6 +2744,11 @@ async function appFetch(request, env, ctx) {
         let _r = null; try { _r = await trendRadarTick(env, true); } catch (e) { return new Response("radar error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         if (url.searchParams.get("json")) return new Response(JSON.stringify(_r, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8" } });
         return new Response("radar built: " + ((_r && _r.items) || []).length + " items · sources " + JSON.stringify(_r && _r.sources) + (_r && _r.note ? "\n" + _r.note : ""), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      }
+      if (url.pathname === "/versus") {                        // v155 - Dubai against one of ten cities, beside a client; keyed, not linked
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let _fb = {}; try { _fb = (JSON.parse((await env.MEETINGS.get("world_review")) || "{}") || {}).fb || {}; } catch (e) {}
+        return new Response(worldPageHtml(_fb), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex", "Referrer-Policy": "strict-origin" } });
       }
       if (url.pathname === "/world_review") {                  // v154.2 - send her the ten sample scripts with their buttons (Kendall approved the wording 16 Sep 2026); ?dry=1 lists them
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
