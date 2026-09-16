@@ -15,10 +15,10 @@ const nfmt = (n) => Number(n).toLocaleString("en-US");
 
 // One row per city: Dubai first, then dearest to cheapest. worldFacts returns null for Dubai itself, so its row is taken from any call.
 export function worldCardRows() {
-  const first = worldFacts(WORLD_CITIES.find(c => !c.base).key, "psf");
+  const first = worldFacts(WORLD_CITIES.find(c => !c.base).key, "sqft");
   const dubai = Object.assign({}, first.dubai, { key: "dubai", flag: WORLD_CITIES[0].flag, base: true, multiple: "the baseline" });
   const rest = WORLD_CITIES.filter(c => !c.base).map(c => {
-    const f = worldFacts(c.key, "psf");
+    const f = worldFacts(c.key, "sqft");
     return Object.assign({}, f.other, { key: c.key, flag: c.flag, multiple: f.multiple.text, multiple_value: f.multiple.value });
   }).sort((a, b) => b.prime_usd_per_sqft - a.prime_usd_per_sqft);
   return { dubai, rest, basis: first.basis, sources: first.sources, dip: first.dip };
