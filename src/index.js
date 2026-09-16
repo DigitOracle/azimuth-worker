@@ -9400,11 +9400,20 @@ async function igRoute(env, url, request) {
         const _j2 = await r2.json(); const _e2 = (_j2 && (_j2.error || _j2)) || {};
         _ctl = r2.status + " | " + String(_e2.error_type || _e2.type || "") + " " + (_e2.code ?? "") + " | " + String(_e2.error_message || _e2.message || "").slice(0, 90);
       } catch (e) { _ctl = "control call threw"; }
+      // second control: the SAME bogus code with a deliberately wrong secret. If Meta answers this differently from the first control, it
+      // does distinguish secrets - and the first control, which used the stored secret, shows whether ours is the good one.
+      let _ctl2 = "";
+      try {
+        const r3 = await fetch("https://api.instagram.com/oauth/access_token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ client_id: env.IG_APP_ID, client_secret: "control-not-the-real-secret", grant_type: "authorization_code", redirect_uri: igRedirect(env), code: "control-not-a-real-code" }).toString() });
+        const _j3 = await r3.json(); const _e3 = (_j3 && (_j3.error || _j3)) || {};
+        _ctl2 = r3.status + " | " + String(_e3.error_type || _e3.type || "") + " " + (_e3.code ?? "") + " | " + String(_e3.error_message || _e3.message || "").slice(0, 90);
+      } catch (e) { _ctl2 = "control call threw"; }
       try {
         await env.MEETINGS.put("ig_lastexchange", JSON.stringify({ at: new Date().toISOString(), http: st,
           err: { type: _e.error_type || _e.type || null, code: _e.code ?? null, subcode: _e.error_subcode ?? null, msg: String(_e.error_message || _e.message || ""), trace: _e.fbtrace_id || null },
           sent: { redirect: igRedirect(env), app: String(env.IG_APP_ID || ""), scope: IG_SCOPES, code_len: code.length, code_head: code.slice(0, 10), code_tail: code.slice(-6) },
-          control: _ctl }), { expirationTtl: 7 * 86400 });
+          control_stored_secret: _ctl, control_wrong_secret: _ctl2 }), { expirationTtl: 7 * 86400 });
       } catch (e) {}
       await igNote(env, "code exchange failed: HTTP " + st + " " + String(_e.error_message || _e.message || "no token").slice(0, 80) + " | control: " + _ctl.slice(0, 60));
       return page("That didn't work", "Instagram didn't finish connecting. Please try the link again.", 502);
