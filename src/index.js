@@ -1,4 +1,5 @@
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";   // v154 - Dubai versus a world city, to camera
+import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -2807,6 +2808,13 @@ async function appFetch(request, env, ctx) {
       if (url.pathname === "/find") {                         // v95.1 - search by developer, development or building (search_index from the knowledge graph)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         return new Response(renderFind(url.searchParams.get("key") || "", url.searchParams.get("q") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      }
+      if (url.pathname === "/world") {                        // v154.5 - Dubai against ten world cities as cards, prime per sq ft (Kendall, 16 Sep 2026: "prime for the cards"). Same figures as the
+        // spoken pieces, through worldFacts in src/world.js. Deliberately NOT in the tab bar yet: which key it sits behind waits on the client-key split (DA-AUD-005).
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _wk = url.searchParams.get("key") || "";
+        return new Response(worldCardsHtml(_wk, { fonts: NAJ_FONTS, navCss: NAJ_NAV_CSS, nav: najNav(_wk, "") }),
+          { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname === "/plans") {                        // v85 - the floor-plan library: every plan we hold, by developer and project
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
