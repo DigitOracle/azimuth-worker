@@ -29,8 +29,8 @@ p = worldPick([{ d: "2026-09-14", city: "london", angle: "sqft" }], { city: "lon
 ok(p.city === "london" && p.angle !== "sqft", "the same city again gets an angle it has not had");
 p = worldPick([], { city: "london", angle: "sqft", notAngle: "sqft" });
 ok(p.angle !== "sqft", "notAngle (Another angle) is honoured even when the angle is asked for");
-p = worldPick([], { city: "mumbai", angle: "tax" });
-ok(p.angle !== "tax" && !WORLD_ANGLES.find(a => a.key === "tax").needs.every(f => WORLD_CITIES.find(c => c.key === "mumbai")[f]), "an angle whose facts a city lacks is never picked for it");
+p = worldPick([], { city: "monaco", angle: "living" });
+ok(p.angle !== "living" && !WORLD_ANGLES.find(a => a.key === "living").needs.every(f => WORLD_CITIES.find(c => c.key === "monaco")[f]), "an angle whose facts a city lacks is never picked for it");
 const seen = new Set(); let h2 = [];
 for (let i = 0; i < 10; i++) { const q = worldPick(h2, day([1, 3, 5][i % 3])); seen.add(q.city); h2.unshift({ d: "d" + i, city: q.city, angle: q.angle }); }
 ok(seen.size === 10, "ten pieces in a row cover all ten cities");
@@ -45,8 +45,8 @@ const good = (f) => {
 };
 const gL = good(L);
 ok(worldNumbersOk(gL, L).ok && worldCheck(gL, L, /\bmomentum\b/i).ok, "a script built only from the facts passes (" + worldCheck(gL, L).words + " words)");
-const bad = worldNumbersOk(gL + " Rents rose 12% last year and 1,950 is the old figure.", L);
-ok(!bad.ok && bad.bad.join(",") === "12,1,950", "an invented percentage and a near-miss figure are caught");
+const bad = worldNumbersOk(gL + " Rents rose 47% last year and 1,950 is the old figure.", L);
+ok(!bad.ok && bad.bad.join(",") === "47,1,950", "an invented percentage and a near-miss figure are caught");
 ok(worldNumbersOk("Savills, June 2026. Knight Frank, 23 April 2026.", L).ok, "years and dates in the sources count as facts");
 ok(!worldCheck("Too short to say anything at all.", L).ok && /too short/.test(worldCheck("Too short.", L).why), "a 45-second piece cannot be six words");
 ok(!worldCheck(gL, L, /\bactually\b/i).ok && /banned/.test(worldCheck(gL, L, /\bactually\b/i).why), "the voice ban list applies");
@@ -62,6 +62,10 @@ const msgL = worldMessage(L, gL);
 ok(msgL.startsWith("🌍 *Dubai versus London* 🇬🇧 · price per square foot · about ") && msgL.includes(gL) && msgL.includes("If they ask about the dip") && msgL.includes("Savills World Cities Prime Residential Index, values at June 2026") && !msgL.includes("Papi"), "the wrapper: title, the piece, the dip line to have ready, the sources, no sign-off");
 const HK = worldFacts("hongkong", "living");
 ok(worldMessage(HK, gL).includes("net saleable") && !worldMessage(worldFacts("paris", "tax"), gL).includes("If they ask about the dip"), "Hong Kong carries the area-basis note; a tax piece carries no dip line");
+const MO = worldFacts("monaco", "sqft");
+ok(MO.other.price_source && /IMSEE/.test(MO.other.price_source) && worldMessage(MO, gL).includes("Savills Monaco Spotlight") && !worldMessage(MO, gL).includes("World Cities Prime Residential Index, values"), "Monaco is not in the Savills index: its price is credited to the Monaco spotlight and IMSEE");
+ok(WORLD_CITIES.slice(1).filter(c => c.tax).length === 10 && WORLD_CITIES.slice(1).filter(c => c.living).length === 8 && WORLD_CITIES.every(c => !c.tax || (c.tax.income && c.tax.buying && c.tax.capital_gains)), "every city has tax facts in three parts; eight have liveability facts");
+ok(worldPick([], { city: "monaco", angle: "living" }).angle !== "living" && worldPick([], { city: "mumbai", angle: "tax" }).angle === "tax", "Monaco has no liveability rankings so never gets that angle; Mumbai has tax facts");
 const rows = worldListRows([{ city: "london" }]);
 ok(rows.length === 10 && rows.every(r => r.id.startsWith("wld:c:") && r.title.length <= 24 && r.description.length <= 72) && rows.find(r => r.id === "wld:c:london").description.includes("recent") && rows.find(r => r.id === "wld:c:mumbai").description.includes("just under Dubai"), "the city list fits WhatsApp's limits and marks recent cities");
 
@@ -82,7 +86,7 @@ globalThis.fetch = async (url, init) => {
     if (!/spoken piece for Najjuko/.test(sysT)) return new Response(JSON.stringify({ content: [{ type: "text", text: "{}" }] }), { status: 200 });
     const fm = userT.match(/\{[\s\S]*\}/); const f = JSON.parse(fm[0].split("\n\nDRAFT:")[0]);
     const repair = /REPAIR PASS/.test(sysT);
-    const text = (draftMode === "bad" && !repair) ? good(f) + " Rents rose 12% too." : good(f);
+    const text = (draftMode === "bad" && !repair) ? good(f) + " Rents rose 47% too." : good(f);
     return new Response(JSON.stringify({ content: [{ type: "text", text }] }), { status: 200 });
   }
   return new Response("{}", { status: 200 });
@@ -124,7 +128,7 @@ ok(pieces().length === 1 && pieces()[0].includes("Dubai versus Mumbai") && piece
 
 sent.length = 0; model.length = 0; draftMode = "bad";
 await say("versus"); await drain();
-ok(model.length === 2 && /REPAIR PASS/.test(model[1].sys) && /12%/.test(model[1].user) && pieces().length === 1 && !/12%/.test(pieces()[0]), "a draft with an invented number gets one repair pass and the repaired piece is the one sent");
+ok(model.length === 2 && /REPAIR PASS/.test(model[1].sys) && /47%/.test(model[1].user) && pieces().length === 1 && !/47%/.test(pieces()[0]), "a draft with an invented number gets one repair pass and the repaired piece is the one sent");
 draftMode = "good";
 
 sent.length = 0;
