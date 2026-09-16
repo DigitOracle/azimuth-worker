@@ -10505,7 +10505,7 @@ const GMEET_ONLINE_LOC = /^(?:google\s+meet(?:ing)?|g-?meet|meet|zoom|(?:microso
 // a leading "meet" / "google meet(ing)" / "gmeet" / "set up|book a (google) meet(ing)", or "on|via|over Google Meet" / "google meet(ing)" anywhere in the line.
 // A plain "meeting with X" is NOT a Meet request: it may be in person, and the ordinary capture files it.
 function gmeetAsk(text) {
-  const s = String(text || "").trim();
+  const s = String(text || "").trim().replace(/^[*_~`\s]+|[*_~`\s]+$/g, "");   // v154.6 - "*meet Jackson today 1pm 1h*": WhatsApp bold copied from a message still counts (Naj, 16 Sep 2026)
   let m = s.match(/^(?:google\s+meet(?:ing)?|g-?meet|meet|set\s+up\s+a\s+(?:google\s+)?meet(?:ing)?|book\s+a\s+(?:google\s+)?meet(?:ing)?)\b[:,\s]+(.{3,})$/i);
   if (m) return m[1].trim();
   if (s.length >= 8 && /\b(?:on|via|over|through|using)\s+(?:google\s+|g-?)?meet\b|\bgoogle\s+meet(?:ing)?\b|\bg-?meet\b|\bmeet\s+link\b/i.test(s)) return s;

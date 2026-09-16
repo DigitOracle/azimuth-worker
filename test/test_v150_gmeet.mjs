@@ -223,6 +223,12 @@ ok(gp.length === 1 && gp[0].duration_min === 120, "\"11 - 1pm\": two hours (the 
 for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
 await say("meet Sara 16-17 Sept 3pm 45m", on); gp = [...store.keys()].filter(k => k.startsWith("gmp_")).map(k => JSON.parse(store.get(k)));
 ok(gp.length === 1 && gp[0].duration_min === 45, "\"16-17 Sept\" is not read as hours; a stated 45m wins");
+// v154.6 - the line copied with WhatsApp's bold stars still books (Naj, 16 Sep 2026 12:59 GST: "*meet Jackson today 1pm 1h*" went to the capture)
+for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
+claudeOut = { ok: true, title: "Jackson", start_iso: future, duration_min: null };
+await say("*meet Jackson today 1pm 1h*", on); gp = [...store.keys()].filter(k => k.startsWith("gmp_")).map(k => JSON.parse(store.get(k)));
+ok(gp.length === 1 && gp[0].asked === "Jackson today 1pm 1h" && gp[0].duration_min === 60, "\"*meet ... 1h*\" with bold stars: a proposal, 60 minutes");
+for (const k of [...store.keys()]) if (k.startsWith("gmp_")) store.delete(k);
 // the nudge preview: an online "location" gets no map link
 store.set("evt_" + Date.now() + "_x1", JSON.stringify({ summary: "Google meeting with Jackson", start_iso: future.replace("T15:00", "T08:00"), location: "Google Meet", source: "whatsapp" }));
 store.set("evt_" + Date.now() + "_x2", JSON.stringify({ summary: "Coffee", start_iso: future, location: "Emaar Square, Downtown Dubai", source: "whatsapp" }));
