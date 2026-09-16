@@ -1,6 +1,7 @@
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPicturePrompt } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
+import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -1814,6 +1815,10 @@ async function handleCallback(env, cbq) {
 async function appFetch(request, env, ctx) {
     const url = new URL(request.url); const CHAT = env.TELEGRAM_CHAT_ID;
     if (keyTier(env, url) === "client" && !clientPathOk(url.pathname)) return new Response("unauthorized", { status: 401 });   // v155 (DA-AUD-005) - a client key opens the app pages and nothing else
+    // v157 - the fact-sheet routes, placed AFTER the client gate on purpose: a client key is refused above
+    // before any storage is touched. Returns null for anything that is not its own, so the handler carries on.
+    const _sh = await sheetRoutes(request, env, url, { ctEq, waPost, ownerWindowOpen, noteErr, WA_GRAPH });
+    if (_sh) return _sh;
     // v110.1 - HOISTED (10 Sep 2026). Sitting lower down, this never matched: the request
     // fell through to the Telegram webhook secret check at the foot of the handler and came
     // back "unauthorized" for every path. Same trap the header comment already records.

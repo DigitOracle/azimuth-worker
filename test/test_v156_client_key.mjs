@@ -57,7 +57,11 @@ store.set("img_drill_imtiaz", JSON.stringify({ title: "Imtiaz (all projects)", d
 store.set("priv_community_resident_mix", JSON.stringify({ communities: [{ comm: "126", name: "ABU HAIL", mix: [["India", 21]] }], names: {}, outlines: {} }));
 
 // 1. every route in the source, every method: a client key gets no more than no key at all, except on the app pages
-const src = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+// v157 - read EVERY src/*.js, not just index.js. The moment routes moved into a module (sheets.js)
+// they left this net silently, which defeats the whole point of discovering routes instead of listing them.
+const _srcDir = new URL("../src/", import.meta.url);
+const src = fs.readdirSync(_srcDir).filter((f) => f.endsWith(".js")).sort()
+  .map((f) => fs.readFileSync(new URL(f, _srcDir), "utf8")).join("\n");
 const exact = new Set(["/", "/no_such_route"]), prefixes = new Set();
 for (const m of src.matchAll(/(?:url\.pathname|\bp)\s*===\s*"(\/[A-Za-z0-9_\-./]*)"/g)) exact.add(m[1]);
 for (const m of src.matchAll(/(?:url\.pathname|\bp)\.(?:indexOf|startsWith)\("(\/[A-Za-z0-9_\-./]*)"\)/g)) prefixes.add(m[1]);
