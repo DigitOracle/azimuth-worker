@@ -148,6 +148,7 @@ section h2 .note{font:400 .75rem var(--body);color:var(--mut)}
 
 <script>
 const DATA = __DATA__;
+const OWNER = DATA.OWNER !== false;   // false when the page was opened with a client key: no buttons that write into her chat
 const ICON = {
   area:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>',
   home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
@@ -304,7 +305,7 @@ function render() {
   // say
   const s = DATA.SAMPLES.find(x => x.city === city);
   const V = DATA.FB || {};
-  $("say").innerHTML = s ? '<div class="card"><p class="eyebrow">' + s.n + '/10 · ' + s.title + ' &nbsp;<span class="pill ' + (V[s.n] ? V[s.n] : "wait") + '">' + (V[s.n] === "yes" ? "Naj: say it" : V[s.n] === "no" ? "Naj: not me" : "awaiting Naj") + '</span></p><p class="script">' + s.text + '</p><p class="ready"><b>Have ready, not said:</b> ' + s.ready + '</p><p class="ready">' + s.sources + '</p></div><div class="actions"><button type="button" class="primary" onclick="sendTo(\\'script\\')">Send me this script</button><button type="button" onclick="openDrawer(\\'Another angle\\',\\'<p>Say <b>versus ' + c.name.toLowerCase() + '</b> in WhatsApp for a fresh piece on this pair once the lane is switched on.</p>\\')">Another angle</button></div>'
+  $("say").innerHTML = s ? '<div class="card"><p class="eyebrow">' + s.n + '/10 · ' + s.title + ' &nbsp;<span class="pill ' + (V[s.n] ? V[s.n] : "wait") + '">' + (V[s.n] === "yes" ? "Naj: say it" : V[s.n] === "no" ? "Naj: not me" : "awaiting Naj") + '</span></p><p class="script">' + s.text + '</p><p class="ready"><b>Have ready, not said:</b> ' + s.ready + '</p><p class="ready">' + s.sources + '</p></div>(OWNER ? <div class="actions"><button type="button" class="primary" onclick="sendTo(\\'script\\')">Send me this script</button><button type="button" onclick="openDrawer(\\'Another angle\\',\\'<p>Say <b>versus ' + c.name.toLowerCase() + '</b> in WhatsApp for a fresh piece on this pair once the lane is switched on.</p>\\')">Another angle</button></div>' : "")
     : '<div class="card"><p>No script written for ' + c.name + ' yet.</p></div>';
   // share
   $("share").innerHTML = '<div class="share"><div class="t">Dubai versus ' + c.name + ' · for your ' + M(budget, true) + '</div>' +
@@ -315,7 +316,7 @@ function render() {
     '<div class="l"><span>Tax on the gain</span><span>' + NUM.gains.dubai + '% vs ' + NUM.gains[c.key] + '%</span></div>' +
     '<div class="l"><span>Sunshine a year</span><span>' + fmt(lD.sun) + ' vs ' + fmt(lC.sun) + ' h</span></div>' +
     '<div class="l" style="border:0;padding-top:8px;font-size:.78rem;opacity:.8"><span>Savills June 2026 · Knight Frank 2026 · prime basis</span><span>Najma</span></div></div>' +
-    '<div class="actions"><button type="button" class="primary" onclick="sendTo(\\'card\\')">Send me this card</button></div>';
+    '(OWNER ? '<div class="actions"><button type="button" class="primary" onclick="sendTo(\\'card\\')">Send me this card</button></div>' : "");
   $("foot").textContent = "Prime means the top few per cent of each market. Figures: Savills World Cities Prime Residential Index H1 2026 (June values), Knight Frank Wealth Report 2026 (Q4 2025), PwC tax summaries 2026, Global Property Guide 2026, EIU 2026, Mercer 2024, Numbeo mid-2026, Henley 2025, DLD Open Data 2026. Savills has Dubai prime down 4.5% in the first half of 2026 and expects around 10% off in the second half. Currencies at ECB reference rates of 15 September 2026; the dirham is pegged at 3.6725 to the US dollar.";
   chips();
 }
@@ -344,12 +345,12 @@ render();
 
 // The page with its data. fb = the review record's verdicts ({ "2": "yes" }), may be empty. The key never enters the HTML:
 // the page reads it from its own address when it needs to call /versus/send.
-export function worldPageHtml(fb) {
+export function worldPageHtml(fb, owner) {   // owner=false: opened with a client key, so the page shows no send buttons
   const data = { USD_AED, SOURCES: WORLD_SOURCES, CITIES: WORLD_CITIES, REFS: WORLD_SIZE_REFS,
     SAMPLES: WORLD_SAMPLES.map(s => ({ n: s.n, city: s.city, title: s.title, text: s.text, ready: s.ready, sources: s.sources })),
     STORY: WORLD_STORY, CULT: WORLD_CULTURE, CULT_SRC: WORLD_CULTURE_SOURCES, NUM: WORLD_NUMERIC, REF: WORLD_SIZE_REFS, REG: WORLD_REGISTER,
     FX: WORLD_FX.rates, SYM: WORLD_FX.symbols, PRESETS: WORLD_FX.presets, FX_DATE: WORLD_FX.date,
-    FB: Object.fromEntries(Object.entries(fb || {}).map(([k, v]) => [k, v && v.verdict])), LIVE: true };
+    FB: Object.fromEntries(Object.entries(fb || {}).map(([k, v]) => [k, v && v.verdict])), LIVE: true, OWNER: owner !== false };
   const json = JSON.stringify(data).replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\!--");
   return "<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><meta name=robots content=noindex>" +
     PAGE.replace("const DATA = __DATA__;", "const DATA = " + json + ";").replace("<title>", "</head><body><title>") + "</body></html>";
