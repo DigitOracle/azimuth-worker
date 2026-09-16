@@ -27,7 +27,7 @@
 //
 // Keys in MEETINGS:
 //   sheet_<slug>    the PDF bytes
-//   sheetm_<slug>   { slug, name, pages, bytes, built_at, has_pictures, hold, sha, wa_media_id,
+//   sheetm_<slug>   { slug, name, pages, bytes, built_at, has_pictures, pictures, hold, sha, wa_media_id,
 //                     wa_media_at } — small, so the app renders button state without pulling half
 //                     a megabyte. `hold` names WHY a building has no sheet ("no pictures yet",
 //                     "only 2 registered sales"); a boolean would leave her asking which.
@@ -157,6 +157,11 @@ export async function sheetRoutes(request, env, url, deps) {
       pages: Number(url.searchParams.get("pages") || 0) || null,
       bytes: body.byteLength,
       has_pictures: url.searchParams.get("pics") !== "0",
+      // has_pictures is a yes/no and some buildings sit between. Churchill Towers publishes three
+      // exterior views and no interiors or layouts at all; reported as a plain "true" she could
+      // hand a client a sheet expecting to see rooms. `pictures` says WHICH - "layouts and
+      // interiors", "interiors", "exteriors only" - so the panel can warn her before she opens it.
+      pictures: (url.searchParams.get("pics_kind") || "").slice(0, 40) || null,
       built_at: new Date().toISOString(),
       sha
     };
