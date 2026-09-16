@@ -397,3 +397,17 @@ export function worldPicturePrompt(cityKey) {
     "Palette: warm beige #E8DCC8 and gold #C5A56A dominant, deep green #006039 as the only accent. Flat, painterly, premium, no people, no logos, no watermarks. " +
     "Text, set in an elegant serif, exactly and only this: at the top centre \"DUBAI  vs  " + c.name.toUpperCase() + "\"; at the bottom left \"AED " + f.dubai.prime_aed_per_sqft.toLocaleString("en-US") + " / sq ft\"; at the bottom right \"AED " + f.other.prime_aed_per_sqft.toLocaleString("en-US") + " / sq ft\"; and in small type at the very bottom \"prime · Savills June 2026\". No other words or numbers anywhere.";
 }
+
+// v159 - the caption offered with a Versus picture. Her voice, the two prices, the basis and the source, and nothing the fact base
+// does not hold. She sees it before anything is posted and can rewrite it in her own words from the chat.
+export function worldPostCaption(cityKey) {
+  const f = worldFacts(cityKey, "sqft"); if (!f) return "";
+  const c = worldCity(cityKey);
+  const n = (x) => x.toLocaleString("en-US");
+  return "Dubai or " + c.name + "? Expensive compared to what.\n\n" +
+    "At the top end of both markets: " + c.name + " AED " + n(f.other.prime_aed_per_sqft) + " a square foot, Dubai AED " + n(f.dubai.prime_aed_per_sqft) + ". " +
+    (f.multiple.value >= 1 ? "Same square foot, " + f.multiple.text + "." : "Close, and the case here is what the money buys.") + "\n\n" +
+    "Prime means the top few per cent of each market, not the average home. " +
+    (c.price_source ? "Monaco is not in the world cities index: its figure is Savills' Monaco spotlight and IMSEE, Monaco's statistics office, 2025." : "Figures from Savills, June 2026.") + "\n\n" +
+    "#dubai #dubairealestate #primeproperty #" + c.name.toLowerCase().replace(/[^a-z]/g, "");
+}

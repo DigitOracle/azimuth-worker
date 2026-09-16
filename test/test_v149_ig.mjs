@@ -110,7 +110,7 @@ const loc = new URL(r.headers.get("Location") || "https://none/");
 ok(r.status === 302 && loc.host === "www.instagram.com" && loc.pathname === "/oauth/authorize", "connect: sends her to Instagram's login");
 ok(loc.searchParams.get("client_id") === "3591427797679606" && loc.searchParams.get("redirect_uri") === ORIGIN + "/ig/callback" && loc.searchParams.get("response_type") === "code" && loc.searchParams.get("state") === t,
   "connect: the Instagram app ID, the registered return address and the link's own state");
-ok(loc.searchParams.get("scope") === "instagram_business_basic,instagram_business_manage_insights", "connect: asks only to read her profile and her numbers");
+ok(/scope=instagram_business_basic%2Cinstagram_business_manage_insights%2Cinstagram_business_content_publish/.test(loc) && !/pages_|user_media|comments|manage_messages/.test(loc), "connect: asks to read her profile and her numbers AND to publish, and nothing beyond those three (v159, Kendall 16 Sep 2026: she approves each post from WhatsApp)");
 
 // 3. the return from Instagram
 r = await get("/ig/callback?error=access_denied&error_reason=user_denied&state=" + t);

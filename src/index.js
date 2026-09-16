@@ -1,5 +1,5 @@
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
-import { worldPageHtml, worldCardText, worldScriptText, worldPicturePrompt } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
+import { worldPageHtml, worldCardText, worldScriptText, worldPicturePrompt, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
@@ -1953,7 +1953,7 @@ async function appFetch(request, env, ctx) {
         await env.MEETINGS.put("img_ct_" + _pn, "image/png", { expirationTtl: 30 * 86400 });
       } catch (e) { return new Response("image failed: " + String((e && e.message) || e).slice(0, 120), { status: 502 }); }
       const _plink = pubOrigin(env, url.origin) + "/img/" + _pn;
-      try { await waSendImage(env, env.WA_ALLOWED, _plink, "Dubai versus " + _pc.name + " · the picture for the script. Post it with the script text or say the script over it."); } catch (e) { return new Response("made but not sent", { status: 502 }); }
+      try { await igPropose(env, env.WA_ALLOWED, _plink, worldPostCaption(_pc.key), "Dubai versus " + _pc.name + " · the picture for the script."); } catch (e) { return new Response("made but not sent", { status: 502 }); }   // v159 - it arrives as a post waiting for her tap, never as a post
       return new Response(JSON.stringify({ ok: true, url: _plink, city: _pc.name }), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
     }
     if (url.pathname === "/versus/send" && request.method === "POST") {   // v155 - the script or the client card for a city, to her own WhatsApp, plain text. POST on purpose: a GET that sends would fire on link previews.
@@ -2854,7 +2854,7 @@ async function appFetch(request, env, ctx) {
       }
       if (url.pathname === "/find") {                         // v95.1 - search by developer, development or building (search_index from the knowledge graph)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
-        return clientResp(env, url, renderFind(url.searchParams.get("key") || "", url.searchParams.get("q") || "", keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v158 - owner only sees the client-sheet action; the sheet routes refuse a client key anyway, so a client link must not offer a button that cannot work
+        return clientResp(env, url, renderFind(url.searchParams.get("key") || "", url.searchParams.get("q") || "", keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v159 - owner only sees the client-sheet action; the sheet routes refuse a client key anyway, so a client link must not offer a button that cannot work
       }
       if (url.pathname === "/world") {                        // v154.5 - Dubai against ten world cities as cards, prime per sq ft (Kendall, 16 Sep 2026: "prime for the cards"). Same figures as the
         // spoken pieces, through worldFacts in src/world.js. Deliberately NOT in the tab bar yet: which key it sits behind waits on the client-key split (DA-AUD-005).
@@ -3205,6 +3205,7 @@ async function appFetch(request, env, ctx) {
             return new Response("ok");
           }
           if (bid.indexOf("gm:") === 0 && await gmeetButton(env, from, bid)) return new Response("ok");   // v150 - Book it / Don't book on a Google Meet card
+          if (bid.indexOf("igp:") === 0 && await igPostButton(env, from, bid)) return new Response("ok");   // v159 - Post it / Change caption / Not now on an Instagram post
           if (bid.indexOf("wld:fb:") === 0 && await worldFbButton(env, from, bid)) return new Response("ok");   // v154.2 - her verdict on a sample script (works with the lane off)
           if (bid.indexOf("wld:") === 0 && (env.WORLD_TALK || "") === "on" && await worldButton(env, from, bid)) return new Response("ok");   // v154 - Another city / Another angle / a city from the list
           if (bid.indexOf("gc:") === 0 && await gcGuideButton(env, from, bid)) return new Response("ok");   // v150.1 - her Google Calendar walkthrough
@@ -3527,8 +3528,7 @@ async function appFetch(request, env, ctx) {
               const _mid = rid() + rid();
               await env.MEETINGS.put("igm_" + _mid, _pimg.bytes, { expirationTtl: 86400 });
               await env.MEETINGS.put("igm_ct_" + _mid, _pimg.mime || "image/jpeg", { expirationTtl: 86400 });
-              await waSend(env, from, "📤 Got it — publishing to Instagram…");
-              await publishInstagram(env, from, url.origin + "/ig_media/" + _mid);
+              await igPropose(env, from, pubOrigin(env, url.origin) + "/ig_media/" + _mid, (await env.MEETINGS.get("mkt_lastdraft_ig")) || "", "Here is the post, before anything goes up.");   // v159 - she sees the caption and taps, rather than it publishing on the word alone
             } catch (e) { await waSend(env, from, "⚠ Couldn't read that image — send it again."); }
             return new Response("ok");
           }
@@ -3840,6 +3840,7 @@ async function appFetch(request, env, ctx) {
             try { await env.MEETINGS.delete("mkt_feed_inflight"); } catch (e) {}
             return new Response("ok");
           }
+          if (await igCaptionNote(env, from, text)) return new Response("ok");   // v159 - the caption she just wrote for a waiting post
           { const _fb = await worldFbNote(env, from, text); if (_fb) { await waSend(env, from, _fb); return new Response("ok"); } }   // v154.2 - a note on a sample script (after ✏️, or "3: too long"), filed, never a task
           { const _wp = (env.WORLD_TALK || "") === "on" ? worldParse(text) : null;   // v154 - "versus" / "versus london" / "versus paris tax": Dubai against a world city, 45-60 s to camera
             if (_wp) {
@@ -4516,35 +4517,101 @@ async function draftFromAngle(env, to, kind, n, timeId) {
 }
 
 // v38 — publish an image to her Instagram via the official API: container -> poll -> publish.
-async function publishInstagram(env, to, imageUrl) {
+// v159 - the two Instagram flows wrote different field names for the same login: v38 stored userId/expiresAt, the v149 insights
+// connect stores user_id/expires_at, and the live record is the second. Read both, or the publisher posts to an undefined account.
+function igUserId(a) { return a && (a.user_id || a.userId || ""); }
+function igExpiry(a) { return (a && (a.expires_at || a.expiresAt)) || 0; }
+// A token granted before v158 has no publishing permission, and Meta refuses the call. Say that here rather than after the failure.
+function igCanPost(a) { return !!(a && a.token && String(a.perms || "").indexOf("content_publish") >= 0); }
+async function publishInstagram(env, to, imageUrl, captionIn, pend) {
   let auth = null; try { auth = JSON.parse((await env.MEETINGS.get("ig_auth")) || "null"); } catch (e) {}
-  if (!env.IG_APP_ID) { await waSend(env, to, "🔌 Instagram posting isn't switched on yet — the app link-up on DigitAlchemy's side is in progress."); return; }
-  if (!auth || !auth.token || (auth.expiresAt && Date.now() > auth.expiresAt)) {
-    await waSend(env, to, "🔗 Instagram needs a (re)connect — one tap and a sign-in:\n" + LI_ORIGIN(env) + "/ig_connect?key=" + env.READ_KEY + "\n\nYour image is saved; send it again after connecting.");
-    return;
+  if (!env.IG_APP_ID) { await waSend(env, to, "🔌 Instagram posting isn't switched on yet — the app link-up on DigitAlchemy's side is in progress."); return false; }
+  if (!auth || !auth.token || (igExpiry(auth) && Date.now() > igExpiry(auth))) {
+    await waSend(env, to, "🔗 Instagram needs a reconnect, one tap and a sign-in. Ask Papi for the link and your post is still here waiting.");
+    return false;
   }
-  const caption = (await env.MEETINGS.get("mkt_lastdraft_ig")) || "";
+  if (!igCanPost(auth)) {
+    await waSend(env, to, "🔗 Your Instagram is connected for the numbers, not for posting yet. One reconnect adds it, and nothing changes for your insights. Ask Papi for the link and this post stays saved.");
+    return false;
+  }
+  const caption = captionIn != null ? String(captionIn) : ((await env.MEETINGS.get("mkt_lastdraft_ig")) || "");
   try {
-    const cr = await (await fetch("https://graph.instagram.com/v21.0/" + auth.userId + "/media", {
+    // v159 - publishing is public and irreversible, so a container is made ONCE and remembered. A second tap after a half-failed
+    // publish reuses it: Instagram refuses a repeat of the same creation id, which is what we want, rather than a second post.
+    let cr = pend && pend.rec && pend.rec.container ? { id: pend.rec.container } : await (await fetch("https://graph.instagram.com/v21.0/" + igUserId(auth) + "/media", {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ image_url: imageUrl, caption, access_token: auth.token }),
     })).json();
-    if (!cr.id) { await waSend(env, to, "⚠ Instagram didn't accept the image — " + JSON.stringify(cr).slice(0, 160)); return; }
+    if (cr && cr.id && pend && pend.key && pend.rec && !pend.rec.container) {
+      pend.rec.container = String(cr.id);
+      try { await env.MEETINGS.put(pend.key, JSON.stringify(pend.rec), { expirationTtl: IG_POST_TTL }); } catch (e) {}
+    }
+    if (!cr.id) { await waSend(env, to, "⚠ Instagram didn't accept the image — " + JSON.stringify(cr).slice(0, 160)); return false; }
     let status = "IN_PROGRESS";
     for (let i = 0; i < 6 && status === "IN_PROGRESS"; i++) {
       await new Promise(r => setTimeout(r, 2000));
       const sj = await (await fetch("https://graph.instagram.com/v21.0/" + cr.id + "?fields=status_code&access_token=" + encodeURIComponent(auth.token))).json();
       status = sj.status_code || "FINISHED";
     }
-    const pj = await (await fetch("https://graph.instagram.com/v21.0/" + auth.userId + "/media_publish", {
+    const pj = await (await fetch("https://graph.instagram.com/v21.0/" + igUserId(auth) + "/media_publish", {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ creation_id: cr.id, access_token: auth.token }),
     })).json();
-    if (pj.id) await waSend(env, to, "📸 Posted to Instagram." + (caption ? "" : " (No caption draft was on file — it went up caption-less.)"));
-    else await waSend(env, to, "⚠ Publish step failed — " + JSON.stringify(pj).slice(0, 160) + ". The image is still saved; try again in a minute.");
+    if (pj.id) { await waSend(env, to, "📸 Posted to Instagram." + (caption ? "" : " It went up without a caption, nothing was on file.")); try { await igNote(env, "posted " + pj.id); } catch (e) {} return true; }
+    await waSend(env, to, "⚠ Publish step failed — " + JSON.stringify(pj).slice(0, 160) + ". The post is still saved; tap Post it again in a minute.");
+    return false;
   } catch (e) {
-    await waSend(env, to, "⚠ Couldn't reach Instagram — try again in a minute.");
+    await waSend(env, to, "⚠ Instagram went quiet mid-post, so I cannot tell you whether it went up. Look at your feed first. If it is not there, tap Post it again and it will not double up.");
+    return false;
   }
+}
+
+// v159 (Kendall, 16 Sep 2026: "she approves each post from WhatsApp") - NOTHING reaches her feed without her tap. The candidate
+// image and the exact caption go to her chat; the post waits in KV; only igPostButton publishes it. She can rewrite the caption
+// first, and "Not now" throws the post away rather than parking it somewhere it could fire later.
+const IG_POST_TTL = 3 * 86400;
+async function igPropose(env, to, imageUrl, caption, note, idIn) {
+  const id = idIn || rid();   // v159 - a rewritten caption re-proposes the SAME post, so one image never leaves two pending records behind
+  await env.MEETINGS.put("igpost_" + id, JSON.stringify({ url: imageUrl, caption: String(caption || "").slice(0, 2100), at: gstNowIso(), note: note || "" }), { expirationTtl: IG_POST_TTL });
+  try { await waSendImage(env, to, imageUrl, (note ? note + "\n\n" : "") + "Caption as it would go up:\n" + (caption || "(none on file)")); } catch (e) {}
+  await waSendButtons(env, to, "Post this to Instagram?", [{ id: "igp:" + id + ":yes", title: "📸 Post it" }, { id: "igp:" + id + ":cap", title: "✏️ Change caption" }, { id: "igp:" + id + ":no", title: "✋ Not now" }]);
+  return id;
+}
+async function igPostButton(env, from, bid) {
+  const m = bid.match(/^igp:([a-z0-9]+):(yes|cap|no)$/i);
+  if (!m) return false;
+  const key = "igpost_" + m[1];
+  let rec = null; try { rec = JSON.parse((await env.MEETINGS.get(key)) || "null"); } catch (e) {}
+  if (!rec) { await waSend(env, from, "That post has expired. Send me the picture again when you want it up."); return true; }
+  if (m[2] === "no") { await env.MEETINGS.delete(key); await waSend(env, from, "✋ Left it. Nothing was posted."); return true; }
+  if (m[2] === "cap") {
+    await env.MEETINGS.put("igcap_pending", m[1], { expirationTtl: 1800 });
+    await waSend(env, from, "✏️ Send me the caption you want, in your words. I'll show you the post again before anything goes up.");
+    return true;
+  }
+  if (rec.state === "publishing" && Date.now() - (rec.started || 0) < 120000) { await waSend(env, from, "Still posting that one. Give it a moment."); return true; }
+  rec.state = "publishing"; rec.started = Date.now();
+  await env.MEETINGS.put(key, JSON.stringify(rec), { expirationTtl: IG_POST_TTL });
+  await waSend(env, from, "📤 Posting…");
+  const ok = await publishInstagram(env, from, rec.url, rec.caption, { key, rec });   // v159 - the url and caption she approved, byte for byte, never rebuilt here
+  if (ok) await env.MEETINGS.delete(key);
+  else { rec.state = "held"; try { await env.MEETINGS.put(key, JSON.stringify(rec), { expirationTtl: IG_POST_TTL }); } catch (e) {} }
+  return true;
+}
+// Her next message after "Change caption" is the caption, and she sees the post again before it can go anywhere.
+async function igCaptionNote(env, from, text) {
+  const id = await env.MEETINGS.get("igcap_pending");
+  if (!id) return false;
+  const key = "igpost_" + id;
+  let rec = null; try { rec = JSON.parse((await env.MEETINGS.get(key)) || "null"); } catch (e) {}
+  await env.MEETINGS.delete("igcap_pending");
+  if (!rec) { await waSend(env, from, "That post expired while we were writing. Send the picture again."); return true; }
+  rec.caption = String(text || "").slice(0, 2100);
+  delete rec.container; delete rec.state; delete rec.started;   // v159 - a container holds the OLD caption; drop it so what she approves next is what posts
+  await env.MEETINGS.put(key, JSON.stringify(rec), { expirationTtl: IG_POST_TTL });
+  await waSend(env, from, "✏️ New caption saved.");
+  await igPropose(env, from, rec.url, rec.caption, rec.note, id);
+  return true;
 }
 
 // v36.6 — publish the stored LinkedIn draft DIRECTLY via LinkedIn's own free API.
@@ -7205,7 +7272,7 @@ function renderClock(key) {
 }
 
 function renderFind(key, q0, owner) {
-  // v158 - the sheet action is EMITTED only for the owner, never merely hidden at run time. A client's page should not carry the markup, the
+  // v159 - the sheet action is EMITTED only for the owner, never merely hidden at run time. A client's page should not carry the markup, the
   // route names, or a flag that can be flipped in a console. The sheet routes refuse a client key anyway; this is the layer above that one.
   const GSF = owner ? '+(r.t==="building"?\'<a class=gs data-s="\'+esc(slugOf(r))+\'" data-d="\'+(r.sheet?"0":"1")+\'">sheet \\u2192</a>\':"")' : "";
   const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -7232,7 +7299,7 @@ function renderFind(key, q0, owner) {
     'if(window.__qnFind)try{window.__qnFind(q.value,rows.length,T)}catch(e){}' +   // v153 - on Kendall's and Naj's devices an empty search becomes a question note (nothing on client links)
     'rows.sort(function(a,b){var sa=nk(a.n).indexOf(s)===0?0:1,sb=nk(b.n).indexOf(s)===0?0:1;if(sa!==sb)return sa-sb;var ta={developer:0,development:1,building:2};if(ta[a.t]!==ta[b.t])return ta[a.t]-ta[b.t];return (Number(b.units)||0)-(Number(a.units)||0)});' +
     'if(!window.__itwire){window.__itwire=1;document.head.insertAdjacentHTML("beforeend","<style>.it[data-u]{cursor:pointer}.go a{color:inherit;text-decoration:none}.go a.gm{margin-left:10px;color:#8FC7B9}</style>");document.addEventListener("click",function(e){var it=e.target.closest(".it[data-u]");if(!it||e.target.closest("a"))return;location.href=it.getAttribute("data-u")})}'
-    // v158 - THE CLIENT SHEET, on the row (Kendall, 16 Sep 2026, having seen that the twin's top right is taken: put it on the search result).
+    // v159 - THE CLIENT SHEET, on the row (Kendall, 16 Sep 2026, having seen that the twin's top right is taken: put it on the search result).
     // Owner only. Tap once for what we hold on that tower: pages and size with Preview and Send, or the pipeline's own reason why there is no
     // sheet - "no pictures held", "only 3 recorded sales (bar is 20)". Six of about 2,100 buildings have one today, so the reason IS the common
     // screen and must never be a dead button. The panel swallows its own clicks so a stray tap does not fire the row's jump to the twin.
@@ -9219,7 +9286,7 @@ async function cardLedger(env, e) {
   } catch (x) {}
 }
 const IG_GRAPH = "https://graph.instagram.com";
-const IG_SCOPES = "instagram_business_basic,instagram_business_manage_insights";
+const IG_SCOPES = "instagram_business_basic,instagram_business_manage_insights,instagram_business_content_publish";   // v159 (Kendall, 16 Sep 2026) - publishing rides on the same connect, so one link keeps the numbers AND lets her post; a token granted before this carries only the first two and igCanPost says so
 const IG_METRICS = {   // Meta's media insights reference, read 14 Sep 2026: impressions is gone for media after 2 Jul 2024, views replaces it
   FEED: ["reach", "views", "likes", "comments", "saved", "shares", "total_interactions", "follows", "profile_visits"],
   REELS: ["reach", "views", "likes", "comments", "saved", "shares", "total_interactions", "ig_reels_avg_watch_time"],

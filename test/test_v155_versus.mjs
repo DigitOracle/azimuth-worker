@@ -53,7 +53,7 @@ globalThis.fetch = async (url, init) => { const u = String(url); if (u.includes(
 const postC = (path, b) => worker.fetch(new Request("https://azimuth-2.digitalchemy.workers.dev" + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }), envC, ctx);
 sent.length = 0;
 r = await postC("/versus/picture", { key: READ, city: "monaco" }); const pj = JSON.parse(await r.text());
-ok(r.status === 200 && pj.ok && /\/img\/versus_monaco_\d{6}$/.test(pj.url) && imgCalls === 1 && sent.length === 1 && sent[0].type === "image" && sent[0].image.link === pj.url && /Dubai versus Monaco/.test(sent[0].image.caption) && store.has("img_" + pj.url.split("/img/")[1]), "picture: one image call with the pair's prompt, stored under img_, sent to her WhatsApp as an image with a caption");
+ok(r.status === 200 && pj.ok && /\/img\/versus_monaco_\d{6}$/.test(pj.url) && imgCalls === 1 && store.has("img_" + pj.url.split("/img/")[1]) && sent.some(m => m.type === "image" && m.image.link === pj.url && /Dubai versus Monaco/.test(m.image.caption) && /Caption as it would go up/.test(m.image.caption)) && sent.some(m => m.type === "interactive" && m.interactive.action.buttons.map(b => b.reply.id.split(":")[2]).join() === "yes,cap,no"), "picture: one image call with the pair's prompt, stored under img_, and it reaches her as a post awaiting her tap rather than as a bare image (v159)");
 ok((await postC("/versus/picture", { key: CLIENT, city: "monaco" })).status === 401 && (await postC("/versus/picture", { key: READ, city: "dubai" })).status === 404 && imgCalls === 1, "picture: the client key cannot make one; Dubai is not a pair");
 globalThis.fetch = realFetch;
 import { WORLD_SAMPLES as SMP } from "../src/world.js";
