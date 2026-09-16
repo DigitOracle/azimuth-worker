@@ -305,7 +305,7 @@ function render() {
   // say
   const s = DATA.SAMPLES.find(x => x.city === city);
   const V = DATA.FB || {};
-  $("say").innerHTML = s ? '<div class="card"><p class="eyebrow">' + s.n + '/10 · ' + s.title + ' &nbsp;<span class="pill ' + (V[s.n] ? V[s.n] : "wait") + '">' + (V[s.n] === "yes" ? "Naj: say it" : V[s.n] === "no" ? "Naj: not me" : "awaiting Naj") + '</span></p><p class="script">' + s.text + '</p><p class="ready"><b>Have ready, not said:</b> ' + s.ready + '</p><p class="ready">' + s.sources + '</p></div>(OWNER ? <div class="actions"><button type="button" class="primary" onclick="sendTo(\\'script\\')">Send me this script</button><button type="button" onclick="openDrawer(\\'Another angle\\',\\'<p>Say <b>versus ' + c.name.toLowerCase() + '</b> in WhatsApp for a fresh piece on this pair once the lane is switched on.</p>\\')">Another angle</button></div>' : "")
+  $("say").innerHTML = s ? '<div class="card"><p class="eyebrow">' + s.n + '/10 · ' + s.title + ' &nbsp;<span class="pill ' + (V[s.n] ? V[s.n] : "wait") + '">' + (V[s.n] === "yes" ? "Naj: say it" : V[s.n] === "no" ? "Naj: not me" : "awaiting Naj") + '</span></p><p class="script">' + s.text + '</p><p class="ready"><b>Have ready, not said:</b> ' + s.ready + '</p><p class="ready">' + s.sources + '</p></div>(OWNER ? <div class="actions"><button type="button" class="primary" onclick="sendTo(\\'script\\')">Send me this script</button><button type="button" onclick="sendTo(\\'picture\\')">Make me a picture</button><button type="button" onclick="openDrawer(\\'Another angle\\',\\'<p>Say <b>versus ' + c.name.toLowerCase() + '</b> in WhatsApp for a fresh piece on this pair once the lane is switched on.</p>\\')">Another angle</button></div>' : "")
     : '<div class="card"><p>No script written for ' + c.name + ' yet.</p></div>';
   // share
   $("share").innerHTML = '<div class="share"><div class="t">Dubai versus ' + c.name + ' · for your ' + M(budget, true) + '</div>' +
@@ -322,11 +322,13 @@ function render() {
 }
 async function sendTo(what) {
   const key = new URLSearchParams(location.search).get("key") || "";
-  if (!confirm((what === "card" ? "Send the Dubai versus " + OTHERS.find(o => o.key === city).name + " card" : "Send this script") + " to your WhatsApp?")) return;
-  openDrawer(what === "card" ? "Client card" : "Script", "<p>Sending to your WhatsApp…</p>");
+  const cn = OTHERS.find(o => o.key === city).name;
+  if (!confirm((what === "card" ? "Send the Dubai versus " + cn + " card" : what === "picture" ? "Make a picture for Dubai versus " + cn + " and send it" : "Send this script") + " to your WhatsApp?")) return;
+  openDrawer(what === "card" ? "Client card" : what === "picture" ? "Picture" : "Script", "<p>" + (what === "picture" ? "Drawing it, about half a minute…" : "Sending to your WhatsApp…") + "</p>");
   try {
-    const r = await fetch("/versus/send", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, city, what, cur, budget: Math.round(budget) }) });
+    const r = await fetch(what === "picture" ? "/versus/picture" : "/versus/send", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, city, what, cur, budget: Math.round(budget) }) });
     const t = await r.text();
+    if (what === "picture") { let j = null; try { j = JSON.parse(t); } catch (e) {} $("dBody").innerHTML = r.ok && j && j.url ? "<p>Picture sent to your WhatsApp.</p><img src=\"" + j.url + "\" alt=\"Dubai versus " + j.city + "\" style=\"width:100%;border-radius:10px\">" : "<p>Could not make the picture: " + t + "</p>"; return; }
     $("dBody").innerHTML = r.ok ? "<p>" + t + "</p><p class=src>Forward it from your chat; it carries no links and no keys.</p>" : "<p>Could not send: " + t + "</p>";
   } catch (e) { $("dBody").innerHTML = "<p>Could not send just now. Try again in a moment.</p>"; }
 }
@@ -345,15 +347,16 @@ render();
 
 // The page with its data. fb = the review record's verdicts ({ "2": "yes" }), may be empty. The key never enters the HTML:
 // the page reads it from its own address when it needs to call /versus/send.
-export function worldPageHtml(fb, owner) {   // owner=false: opened with a client key, so the page shows no send buttons
+export function worldPageHtml(fb, owner, nav) {   // nav: { css, html } = the app's tab bar, when the page is one of its rooms   // owner=false: opened with a client key, so the page shows no send buttons
   const data = { USD_AED, SOURCES: WORLD_SOURCES, CITIES: WORLD_CITIES, REFS: WORLD_SIZE_REFS,
     SAMPLES: WORLD_SAMPLES.map(s => ({ n: s.n, city: s.city, title: s.title, text: s.text, ready: s.ready, sources: s.sources })),
     STORY: WORLD_STORY, CULT: WORLD_CULTURE, CULT_SRC: WORLD_CULTURE_SOURCES, NUM: WORLD_NUMERIC, REF: WORLD_SIZE_REFS, REG: WORLD_REGISTER,
     FX: WORLD_FX.rates, SYM: WORLD_FX.symbols, PRESETS: WORLD_FX.presets, FX_DATE: WORLD_FX.date,
     FB: Object.fromEntries(Object.entries(fb || {}).map(([k, v]) => [k, v && v.verdict])), LIVE: true, OWNER: owner !== false };
   const json = JSON.stringify(data).replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\!--");
-  return "<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><meta name=robots content=noindex>" +
-    PAGE.replace("const DATA = __DATA__;", "const DATA = " + json + ";").replace("<title>", "</head><body><title>") + "</body></html>";
+  const navCss = nav && nav.css ? "<style>" + nav.css + " body{padding-bottom:88px}</style>" : "";
+  return "<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><meta name=robots content=noindex>" + navCss +
+    PAGE.replace("const DATA = __DATA__;", "const DATA = " + json + ";").replace("<title>", "</head><body><title>") + (nav && nav.html ? nav.html : "") + "</body></html>";
 }
 
 // The two things the page sends to her own WhatsApp. Plain text, no links, no keys, so she can forward it as it is.
@@ -381,4 +384,16 @@ export function worldCardText(cityKey, budgetAED, cur) {
 export function worldScriptText(cityKey) {
   const s = WORLD_SAMPLES.find(x => x.city === cityKey); if (!s) return null;
   return "🎬 Dubai versus " + s.cityName + ": " + s.title + " · 45 to 60 seconds to camera\n\n" + s.text + "\n\n_Have ready, not said: " + s.ready + "_";
+}
+
+// v155.3 - the picture for a pair, from the same facts the script uses. One frame, the Digest identity (beige and gold, Rolex green as the
+// accent), Dubai on the left and the city on the right by their unmistakable skylines, the two prime prices as the only text. The image
+// model draws; every number in the frame is one the fact base holds, so the picture cannot say what the script does not.
+export function worldPicturePrompt(cityKey) {
+  const f = worldFacts(cityKey, "sqft"); if (!f) return null;
+  const c = worldCity(cityKey);
+  const land = { monaco: "the Monte Carlo harbour and casino", hongkong: "the Victoria Harbour skyline", geneva: "the Jet d'Eau on Lake Geneva", newyork: "the Manhattan skyline with the Empire State Building", paris: "the Eiffel Tower over Haussmann rooftops", london: "Big Ben and the Thames", sydney: "the Sydney Opera House and Harbour Bridge", singapore: "Marina Bay Sands", miami: "South Beach art deco towers and palms", mumbai: "Marine Drive and the Gateway of India" }[cityKey] || (c.name + "'s skyline");
+  return "Editorial split-frame illustration for a property broker's Instagram post, square. Left half: Dubai at golden hour, the Burj Khalifa and the Palm Jumeirah, warm beige and gold light. Right half: " + c.name + ", " + land + ", cooler light. A thin vertical gold line divides the two halves. " +
+    "Palette: warm beige #E8DCC8 and gold #C5A56A dominant, deep green #006039 as the only accent. Flat, painterly, premium, no people, no logos, no watermarks. " +
+    "Text, set in an elegant serif, exactly and only this: at the top centre \"DUBAI  vs  " + c.name.toUpperCase() + "\"; at the bottom left \"AED " + f.dubai.prime_aed_per_sqft.toLocaleString("en-US") + " / sq ft\"; at the bottom right \"AED " + f.other.prime_aed_per_sqft.toLocaleString("en-US") + " / sq ft\"; and in small type at the very bottom \"prime · Savills June 2026\". No other words or numbers anywhere.";
 }

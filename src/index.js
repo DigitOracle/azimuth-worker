@@ -1,5 +1,5 @@
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
-import { worldPageHtml, worldCardText, worldScriptText } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
+import { worldPageHtml, worldCardText, worldScriptText, worldPicturePrompt } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -1929,6 +1929,28 @@ async function appFetch(request, env, ctx) {
       await env.MEETINGS.put("img_" + _pn + "_gen", out.buffer, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + _pn + "_gen", "image/png", { expirationTtl: 14 * 86400 });
       return new Response(JSON.stringify({ url: url.origin + "/img/" + _pn + "_gen" }), { headers: { "Content-Type": "application/json" } });
     }
+    if (url.pathname === "/versus/picture" && request.method === "POST") {   // v155.3 (Kendall, 16 Sep 2026) - a picture of the pair from the script, through the image API the podcast plates use, to her own WhatsApp. Owner key only: it spends money and writes into her chat.
+      let _pb = {}; try { _pb = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
+      if (!env.READ_KEY || !_pb || _pb.key !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      const _pc = worldCity(_pb.city || ""); if (!_pc || _pc.base) return new Response("unknown city", { status: 404 });
+      if (!env.OPENAI_API_KEY) return new Response("no image key on this env", { status: 500 });
+      const _pp = worldPicturePrompt(_pc.key);
+      const _pn = "versus_" + _pc.key + "_" + String(Date.now()).slice(-6);
+      try {
+        const _pr = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "gpt-image-1", prompt: _pp, size: "1024x1024", quality: "high", n: 1 }) });
+        if (!_pr.ok) return new Response("image api " + _pr.status, { status: 502 });
+        const _pj = await _pr.json(); const _p64 = _pj && _pj.data && _pj.data[0] && _pj.data[0].b64_json;
+        if (!_p64) return new Response("image api returned no image", { status: 502 });
+        const _pbin = Uint8Array.from(atob(_p64), c => c.charCodeAt(0));
+        if (_pbin.byteLength < 20000) return new Response("image too small", { status: 502 });
+        await env.MEETINGS.put("img_" + _pn, _pbin.buffer, { expirationTtl: 30 * 86400 });
+        await env.MEETINGS.put("img_ct_" + _pn, "image/png", { expirationTtl: 30 * 86400 });
+      } catch (e) { return new Response("image failed: " + String((e && e.message) || e).slice(0, 120), { status: 502 }); }
+      const _plink = pubOrigin(env, url.origin) + "/img/" + _pn;
+      try { await waSendImage(env, env.WA_ALLOWED, _plink, "Dubai versus " + _pc.name + " · the picture for the script. Post it with the script text or say the script over it."); } catch (e) { return new Response("made but not sent", { status: 502 }); }
+      return new Response(JSON.stringify({ ok: true, url: _plink, city: _pc.name }), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+    }
     if (url.pathname === "/versus/send" && request.method === "POST") {   // v155 - the script or the client card for a city, to her own WhatsApp, plain text. POST on purpose: a GET that sends would fire on link previews.
       let _b = {}; try { _b = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
       if (!_b || _b.key !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -2746,10 +2768,12 @@ async function appFetch(request, env, ctx) {
         if (url.searchParams.get("json")) return new Response(JSON.stringify(_r, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8" } });
         return new Response("radar built: " + ((_r && _r.items) || []).length + " items · sources " + JSON.stringify(_r && _r.sources) + (_r && _r.note ? "\n" + _r.note : ""), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
       }
-      if (url.pathname === "/versus") {                        // v155 - Dubai against one of ten cities, beside a client; keyed, not linked
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      if (url.pathname === "/versus") {                        // v155 - Dubai against one of ten cities, beside a client. v155.2 (Kendall, 16 Sep): in the tab bar, so a client key opens it; the sends stay owner-only
+        const _vk = url.searchParams.get("key") || "";
+        const _vOwner = !!env.READ_KEY && _vk === env.READ_KEY;
+        if (!_vOwner && !clientKeysOf(env).some((c) => ctEq(_vk, c))) return new Response("unauthorized", { status: 401 });
         let _fb = {}; try { _fb = (JSON.parse((await env.MEETINGS.get("world_review")) || "{}") || {}).fb || {}; } catch (e) {}
-        return new Response(worldPageHtml(_fb, url.searchParams.get("key") === env.READ_KEY), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex", "Referrer-Policy": "strict-origin" } })   // v156 - owner flag: the send buttons are drawn only for the owner key (DA-AUD-005). /versus is NOT on the client list, so this is true today; it stays correct if it ever is.;
+        return new Response(worldPageHtml(_fb, _vOwner, { css: NAJ_NAV_CSS, html: najNav(_vk, "versus") }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex", "Referrer-Policy": "strict-origin" } })   // v156 - owner flag: the send buttons are drawn only for the owner key (DA-AUD-005). /versus is NOT on the client list, so this is true today; it stays correct if it ever is.;
       }
       if (url.pathname === "/world_review") {                  // v154.2 - send her the ten sample scripts with their buttons (Kendall approved the wording 16 Sep 2026); ?dry=1 lists them
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -4091,7 +4115,7 @@ const NAJ_FONTS = '<link rel=preconnect href=https://fonts.googleapis.com><link 
 const NAJ_NAV_CSS = '.nnav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-around;align-items:center;background:rgba(12,20,19,.93);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-top:1px solid #24352F;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.nnav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8FA39B;font-size:.58rem;font-family:"IBM Plex Mono",monospace;letter-spacing:.05em;-webkit-tap-highlight-color:transparent}.nnav a svg{width:19px;height:19px}.nnav a.on{color:#C5A56A}';
 const najNav = (key, active, rk) => {   // v152.2 - rk: a private page carries the residents key on its MAP and TWIN tabs only, never to the other rooms
   const k = encodeURIComponent(key || "");
-  const items = [["find", "/find", "search", "FIND"], ["homes", "/home", "grid", "HOMES"], ["pulse", "/market", "trend", "PULSE"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["map", "/map", "pin", "MAP"], ["plans", "/plans", "plan", "PLANS"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"], ["clock", "/clock", "clock", "TIME"]];   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
+  const items = [["find", "/find", "search", "FIND"], ["homes", "/home", "grid", "HOMES"], ["pulse", "/market", "trend", "PULSE"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["map", "/map", "pin", "MAP"], ["plans", "/plans", "plan", "PLANS"], ["versus", "/versus", "buildings", "VERSUS"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"], ["clock", "/clock", "clock", "TIME"]];   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
   return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + (rk && (i[0] === "map" || i[0] === "twin") ? '&rk=' + encodeURIComponent(rk) : '') + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>'
     + (rk && i[0] === "map" ? '<a' + (active === "residents" ? ' class=on' : '') + ' href="/residents?rk=' + encodeURIComponent(rk) + '">' + najIcon("people") + '<span>RESIDENTS</span></a>' : '')).join('') + '</nav>';   // v152.3 - a private page has one tap to the full residents view (Kendall, 15 Sep)
 };
@@ -9548,7 +9572,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const CLIENT_PATHS = ["/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
 const CLIENT_PREFIXES = ["/skyline/", "/area/", "/report/"];
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
 const KEYLESS_PREFIXES = ["/img/", "/video/", "/r/"];

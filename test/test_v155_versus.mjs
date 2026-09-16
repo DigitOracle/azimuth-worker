@@ -23,7 +23,7 @@ store.set("world_review", JSON.stringify({ fb: { "1": { verdict: "no" }, "2": { 
 let r = await call("/versus"); ok(r.status === 401, "/versus without the key: 401");
 r = await call("/versus?key=" + READ); let html = await r.text();
 ok(r.status === 200 && html.startsWith("<!doctype html>") && html.includes("<title>Dubai Versus</title>") && r.headers.get("Cache-Control") === "no-store" && r.headers.get("X-Robots-Tag") === "noindex", "the page renders, no-store, noindex");
-ok(!html.includes(READ) && html.includes('"FB":{"1":"no","2":"yes"}') && html.includes('"LIVE":true') && html.includes("Monaco") && html.includes("Mumbai") && html.includes('"CULT":') && html.includes('"STORY":') && html.includes('fetch("/versus/send", { method: "POST"'), "no key inside the page; verdicts, both fact sets and the live send are in it");
+ok(!html.split("const DATA = ")[1].split("</script>")[0].includes(READ) && html.includes('"FB":{"1":"no","2":"yes"}') && html.includes('"LIVE":true') && html.includes("Monaco") && html.includes("Mumbai") && html.includes('"CULT":') && html.includes('"STORY":') && html.includes('"/versus/send", { method: "POST"'), "no key inside the page data; verdicts, both fact sets and the live send are in it");
 ok(html.includes("const DATA = {") && !html.includes("__DATA__") && (html.match(/<script>/g) || []).length === 1 && !/<\/script/i.test(JSON.stringify(html.split("const DATA = ")[1].split(";\n")[0]).slice(1, -1).replace(/<\\\\\/script/g, "")), "data is injected once and cannot close the script tag");
 r = await post({ key: READ, city: "london", what: "script" }); let t = await r.text();
 ok(r.status === 200 && /Script for Dubai versus London sent/.test(t) && sent.length === 1 && sent[0].to === HER && sent[0].type === "text" && sent[0].text.body.startsWith("🎬 Dubai versus London: the price of the door") && sent[0].text.body.includes("Have ready, not said"), "send script: her WhatsApp gets the London piece with its have-ready line");
@@ -34,5 +34,27 @@ ok((await post({ city: "london", what: "script" })).status === 401 && (await pos
 ok(worldScriptText("nowhere") === null && worldCardText("nowhere", 1, "AED") === null && worldCardText("paris", 3672500, "USD").includes("for your US$1m") && worldCardText("paris", 3672500, "USD").includes("Paid at the door: US$40,000 (4%) vs US$63,000 (6.3%)"), "helpers: unknown city is null; the card does the currency arithmetic");
 const own = worldPageHtml({}), cli = worldPageHtml({}, false);
 ok(own.includes('"OWNER":true') && own.includes("Send me this script") && cli.includes('"OWNER":false') && cli.includes("(OWNER ?") && cli.includes("sendTo(") === own.includes("sendTo("), "owner flag: a client-key render carries OWNER false so the page draws no send buttons (the code is present, the guard hides it)");
+
+// v155.2 - the tab and the client key; v155.3 - the picture
+import { worldPicturePrompt } from "../src/world_page.js";
+const CLIENT = "client_only_key_abcdefgh0123";
+const envC = Object.assign({}, env, { CLIENT_KEY: CLIENT, OPENAI_API_KEY: "oai" });
+const callC = (p) => worker.fetch(new Request("https://azimuth-2.digitalchemy.workers.dev" + p), envC, ctx);
+r = await callC("/versus?key=" + CLIENT); html = await r.text();
+ok(r.status === 200 && html.includes('"OWNER":false') && html.includes('<nav class=nnav>') && html.includes('class=on href="/versus?key=' + CLIENT + '"') && html.includes("<span>VERSUS</span>") && !html.includes(READ), "a client key opens the page: no send buttons, the tab bar with VERSUS active, links carrying the client key, never the owner key");
+r = await callC("/versus?key=" + READ); html = await r.text();
+ok(r.status === 200 && html.includes('"OWNER":true') && html.includes("Make me a picture") && html.includes('href="/versus?key=' + READ + '"'), "the owner key opens it with the sends and the picture button, tab links carrying the owner key");
+ok((await callC("/versus?key=wrong")).status === 401 && html.indexOf("<span>PLANS</span>") < html.indexOf("<span>VERSUS</span>") && html.indexOf("<span>VERSUS</span>") < html.indexOf("<span>CHARTS</span>"), "wrong key refused; VERSUS sits between PLANS and CHARTS in the bar");
+const pp = worldPicturePrompt("london");
+ok(/DUBAI  vs  LONDON/.test(pp) && pp.includes("AED 4,260 / sq ft") && pp.includes("AED 7,200 / sq ft") && pp.includes("#006039") && /Big Ben/.test(pp) && worldPicturePrompt("nowhere") === null, "the picture prompt carries only the fact base's two prices and the city's landmark");
+const png = Buffer.alloc(30000, 9).toString("base64"); let imgCalls = 0;
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => { const u = String(url); if (u.includes("api.openai.com/v1/images/generations")) { imgCalls++; const b = JSON.parse(init.body); if (!/DUBAI  vs  MONACO/.test(b.prompt) || b.model !== "gpt-image-1") return new Response("bad", { status: 400 }); return new Response(JSON.stringify({ data: [{ b64_json: png }] })); } return realFetch(url, init); };
+const postC = (path, b) => worker.fetch(new Request("https://azimuth-2.digitalchemy.workers.dev" + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }), envC, ctx);
+sent.length = 0;
+r = await postC("/versus/picture", { key: READ, city: "monaco" }); const pj = JSON.parse(await r.text());
+ok(r.status === 200 && pj.ok && /\/img\/versus_monaco_\d{6}$/.test(pj.url) && imgCalls === 1 && sent.length === 1 && sent[0].type === "image" && sent[0].image.link === pj.url && /Dubai versus Monaco/.test(sent[0].image.caption) && store.has("img_" + pj.url.split("/img/")[1]), "picture: one image call with the pair's prompt, stored under img_, sent to her WhatsApp as an image with a caption");
+ok((await postC("/versus/picture", { key: CLIENT, city: "monaco" })).status === 401 && (await postC("/versus/picture", { key: READ, city: "dubai" })).status === 404 && imgCalls === 1, "picture: the client key cannot make one; Dubai is not a pair");
+globalThis.fetch = realFetch;
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

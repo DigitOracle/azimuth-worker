@@ -43,7 +43,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m); } };
 
 // The app pages a client may open - stated here on purpose, apart from CLIENT_PATHS in the worker, so widening the client surface takes two edits.
-const APP_PAGES = ["/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const APP_PAGES = ["/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
 const APP_PREFIXES = ["/skyline/", "/area/", "/report/"];
 const isAppPage = (p) => APP_PAGES.includes(p.split("?")[0]) || APP_PREFIXES.some((x) => p.indexOf(x) === 0);
 // Services a client key must never make the worker call: WhatsApp, Microsoft mail, Google, Instagram/LinkedIn, the language models, Mistral.
