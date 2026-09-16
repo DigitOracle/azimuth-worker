@@ -60,7 +60,7 @@ for (const s of clientScripts) { try { new Function(s); cParsed++; } catch (e) {
 ok(cParsed === clientScripts.length, "every emitted script parses on a client link too (" + cParsed + "/" + clientScripts.length + ")");
 
 // ── the slug rule, against the six the pipeline actually pushed ──────────────────────────────────
-const slugOf = (name) => String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
+const slugOf = (name) => String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 50);
 const REAL = [
   ["Bellevue Towers", "bellevue_towers"],
   ["The EDGE", "the_edge"],
@@ -72,16 +72,20 @@ const REAL = [
 for (const [name, want] of REAL) ok(slugOf(name) === want, 'slug: "' + name + '" -> ' + want);
 ok(slugOf("Al Maktoum  -  Tower #2!") === "al_maktoum_tower_2", "slug: punctuation and doubled spaces collapse to single underscores");
 ok(slugOf("   ") === "", "slug: a nameless row yields nothing rather than an underscore that would hit a wrong key");
-ok(slugOf("x".repeat(80)).length === 60, "slug: capped at the length the module's own regex accepts");
+ok(slugOf("x".repeat(80)).length === 50, "slug: capped at 50, the pipeline's own cap - 60 would miss every long name");
+ok(slugOf("SERENIA DISTRICT - EAST") === "serenia_district_east", "slug: a spaced hyphen collapses to ONE underscore, as the pipeline does");
 
 // the page's own copy of the rule must be the one tested above
-ok(ownerHtml.includes('replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")'), "the page derives the slug by the rule these checks cover");
+ok(ownerHtml.includes('.slice(0,50)') && ownerHtml.includes('replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")'), "the page derives the slug by the rule these checks cover");
 ok(ownerHtml.includes("if(r.sheet)return String(r.sheet)"), "a slug supplied by the pipeline wins over the derived one, so a rename cannot break the link");
 
 // ── the panel must not fire the row's jump to the twin ───────────────────────────────────────────
 ok(ownerHtml.includes('d.addEventListener("click",function(ev){ev.stopPropagation()})'), "a tap inside the panel does not also jump to the twin");
-ok(ownerHtml.includes('if(m.hold){d.innerHTML="<div class=spr>"+esc(m.hold)'), "a held building shows the pipeline's reason, not a dead button");
-ok(ownerHtml.includes("esc(m.hold)"), "the reason is escaped before it reaches the page");
+ok(ownerHtml.includes('if(m.hold){d.innerHTML="<div class=spr>"+esc('), "a held building shows a reason, not a dead button");
+ok(ownerHtml.includes(":m.hold)"), "a hold the pipeline stored is quoted as it stands");
+ok(ownerHtml.includes("esc(o.st===404&&derived?"), "a 404 on a slug we DERIVED is worded as doubt, not as a confident \"no sheet\" - the register may name the tower more tersely than the row does");
+ok(ownerHtml.includes('data-d="'), "the row records whether its slug came from the pipeline or was derived here");
+ok(ownerHtml.includes('derived=a.getAttribute("data-d")==="1"'), "the panel reads that flag before it words a miss");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
