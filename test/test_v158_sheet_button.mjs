@@ -24,6 +24,8 @@ const KV = {
   async delete(k) { store.delete(k); },
   async list(o) { const p = (o && o.prefix) || ""; return { keys: [...store.keys()].filter((k) => k.startsWith(p)).map((name) => ({ name })), list_complete: true }; },
 };
+// v169 - an icon appears only where a sheet EXISTS. A slug says where one would live; these records say one does.
+for (const slug of ["bellevue_towers", "the_edge", "churchill_tower"]) store.set("sheetm_" + slug, JSON.stringify({ slug, pages: 3, bytes: 448000 }));
 globalThis.fetch = async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
 const env = { MEETINGS: KV, READ_KEY: READ, CLIENT_KEY: CLIENT, RESIDENTS_KEY: "r", INGEST_TOKEN: "ING", WA_ALLOWED: "971565484397",
   WHATSAPP_TOKEN: "t", WA_PHONE_ID: "p", PUBLIC_ORIGIN: "https://azimuth-2.digitalchemy.workers.dev" };
@@ -54,7 +56,9 @@ for (const [label, html] of [["owner", ownerHtml], ["client", clientHtml]]) {
 }
 
 // ── the slug comes from the row, and nothing is guessed ──────────────────────────────────────────
-ok(ownerHtml.includes('r.t==="building"?(r.sheet?'), "the action appears only on a building row that carries a slug");
+ok(ownerHtml.includes('r.t==="building"?((r.sheet&&(!SHEETS||SHEETS[r.sheet]))?'), "the action appears only on a building row whose slug points at a sheet that EXISTS");
+ok(ownerHtml.includes("var SHEETS={") && ownerHtml.includes('"bellevue_towers":1'), "the page is told which sheets exist, rather than assuming a slug means a document");
+ok(clientHtml.includes("var SHEETS=null"), "a client link is told nothing about which sheets exist - it has no action to gate anyway");
 
 // ── v160: icons, not text links (Kendall: "these should be nice small icons, not buttons") ────────────────
 ok(ownerHtml.includes("var IC=") && ownerHtml.includes('viewBox=\\"0 0 256 256\\"'), "the row icons come from the app's own set, so a row and the tab bar do not draw the same place twice");

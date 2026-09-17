@@ -518,6 +518,23 @@ async function scanEmails(env, token, sinceMin, cap, opts) {
   }
   return { sent, added };
 }
+// v169 - WHICH SHEETS ACTUALLY EXIST. A join row carries the slug where a sheet WOULD live, which is not the same as one being built:
+// 169 cards carry a slug and 13 of them point at a document. Showing the icon on the strength of the slug gave her 156 controls that open
+// "no sheet built yet" - exactly the dead button this feature was designed to avoid, and worse in front of a client than no icon at all.
+// One list call per render; a few hundred slugs is a small answer, and if it ever runs to thousands this becomes a keyed route instead.
+async function liveSheetSlugs(env) {
+  try {
+    const out = []; let cursor;
+    for (let page = 0; page < 3; page++) {
+      const r = await env.MEETINGS.list({ prefix: "sheetm_", cursor });
+      for (const k of (r.keys || [])) out.push(String(k.name).slice(7));
+      if (r.list_complete || !r.cursor) break;
+      cursor = r.cursor;
+    }
+    return out;
+  } catch (e) { return null; }   // a failed list returns null, and null means "do not know" - the caller keeps today's behaviour rather than hiding every icon
+}
+
 async function openActions(env) { const list = await env.MEETINGS.list({ prefix: "act_" }); const items = []; for (const k of list.keys) { const v = await env.MEETINGS.get(k.name); if (v) { try { items.push(JSON.parse(v)); } catch (e) {} } } items.sort((a, b) => { const ad = a.due_iso ? Date.parse(a.due_iso) : Infinity, bd = b.due_iso ? Date.parse(b.due_iso) : Infinity; if (ad !== bd) return ad - bd; const ac = a.created || 0, bc = b.created || 0; if (ac !== bc) return ac - bc; return String(a.id || "").localeCompare(String(b.id || "")); }); return items; }
 async function findDupTask(env, text) { try { const k = String(text || "").trim().toLowerCase(); if (!k) return null; const items = await openActions(env); for (const it of items) { if ((it.text || "").trim().toLowerCase() === k) return it; } } catch (e) {} return null; }
 async function listActions(env) { const items = await openActions(env); if (!items.length) { await say(env, "✅ <b>Your plate's clear</b> — no open action items.", true); return; } await say(env, `📋 <b>Your plate — ${items.length} open</b> (tap ✅ to clear):`, true); for (const it of items.slice(0, 15)) { await tg(env, "sendMessage", { chat_id: env.TELEGRAM_CHAT_ID, parse_mode: "HTML", disable_web_page_preview: true, text: `• <b>${esc(it.text)}</b>\n<i>${esc(it.from || "")}</i>`, reply_markup: { inline_keyboard: [[{ text: "✅ Done", callback_data: "d:" + it.id }]] } }); } }
@@ -2867,7 +2884,7 @@ async function appFetch(request, env, ctx) {
       }
       if (url.pathname === "/find") {                         // v95.1 - search by developer, development or building (search_index from the knowledge graph)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
-        return clientResp(env, url, renderFind(url.searchParams.get("key") || "", url.searchParams.get("q") || "", keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v158 - owner only sees the client-sheet action; the sheet routes refuse a client key anyway, so a client link must not offer a button that cannot work
+        return clientResp(env, url, renderFind(url.searchParams.get("key") || "", url.searchParams.get("q") || "", keyTier(env, url) === "admin", keyTier(env, url) === "admin" ? await liveSheetSlugs(env) : null), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v158 - owner only sees the client-sheet action; the sheet routes refuse a client key anyway, so a client link must not offer a button that cannot work
       }
       if (url.pathname === "/world") {                        // v154.5 - Dubai against ten world cities as cards, prime per sq ft (Kendall, 16 Sep 2026: "prime for the cards"). Same figures as the
         // spoken pieces, through worldFacts in src/world.js. Deliberately NOT in the tab bar yet: which key it sits behind waits on the client-key split (DA-AUD-005).
@@ -2901,8 +2918,9 @@ async function appFetch(request, env, ctx) {
         // v168 - the precomputed card->building join. One entry per card: the unit-mix key, the fact sheet, the district and the twin id, so the
         // sheet, the twin link and the map link all read the SAME row and cannot disagree. Built in the pipeline where the matching rule lives.
         let _cj = null; try { _cj = JSON.parse((await env.MEETINGS.get("img_card_joins")) || "null"); } catch (e) {}   // v168
+        const _ls = keyTier(env, url) === "admin" ? await liveSheetSlugs(env) : null;   // v169 - only the owner can open a sheet, so only the owner pays for the list
         let _vids = []; try { _vids = (JSON.parse((await env.MEETINGS.get("img_videos")) || "{}").items) || []; } catch (e) {}   // v101
-        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids, keyTier(env, url) === "admin", _cj), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids, keyTier(env, url) === "admin", _cj, _ls), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/compare") {                      // v73.3 - two developers side by side, click-only (dev_compare pushed by build_compare.py)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
@@ -7366,12 +7384,12 @@ function sheetPanelJs(keyJson) {
     + '}).catch(function(){d.textContent="could not read that one"});});}';
 }
 
-function renderFind(key, q0, owner) {
+function renderFind(key, q0, owner, liveSheets) {
   // v158 - the sheet action is EMITTED only for the owner, never merely hidden at run time. A client's page should not carry the markup, the
   // route names, or a flag that can be flipped in a console. The sheet routes refuse a client key anyway; this is the layer above that one.
   // v160 - a building with no sheet still holds the slot open with an empty spacer, so the twin and map icons sit at the same place on every
   // row. Without it the group is right-aligned and the other two shift under her thumb between one building and the next.
-  const GSF = owner ? '+(r.t==="building"?(r.sheet?\'<a class=gs title="Client sheet" aria-label="Client sheet" data-s="\'+esc(String(r.sheet))+\'">\'+IC.file+"</a>":"<i class=gsp></i>"):"")' : "";
+  const GSF = owner ? '+(r.t==="building"?((r.sheet&&(!SHEETS||SHEETS[r.sheet]))?\'<a class=gs title="Client sheet" aria-label="Client sheet" data-s="\'+esc(String(r.sheet))+\'">\'+IC.file+"</a>":"<i class=gsp></i>"):"")' : "";
   const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Find \u2014 Najma</title>' +
     '<link rel=preconnect href="https://fonts.googleapis.com"><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">' +
@@ -7387,7 +7405,7 @@ function renderFind(key, q0, owner) {
     '<div id=out><div class=n>loading the index\u2026</div></div>' + najNav(key, "find") +
     // v160 - the row's actions are the app's OWN icons, not a second set drawn for this screen: MAP in the tab bar and map on a row must be
     // the same glyph or they read as different places. cube/pin/file/grid/buildings all already exist in NAJ_ICONS.
-    '<script>(function(){var KEY=' + JSON.stringify(key) + ';var OWNER=' + (owner ? "true" : "false") + ';var IC=' + JSON.stringify({ cube: najIcon("cube"), pin: najIcon("pin"), file: najIcon("file"), grid: najIcon("grid"), buildings: najIcon("buildings") }) + ';var IDX=null,T="";var q=document.getElementById("q"),out=document.getElementById("out");' +
+    '<script>(function(){var KEY=' + JSON.stringify(key) + ';var OWNER=' + (owner ? "true" : "false") + ';var SHEETS=' + (owner && liveSheets ? JSON.stringify(liveSheets.reduce((o, s) => { o[s] = 1; return o; }, {})) : "null") + ';var IC=' + JSON.stringify({ cube: najIcon("cube"), pin: najIcon("pin"), file: najIcon("file"), grid: najIcon("grid"), buildings: najIcon("buildings") }) + ';var IDX=null,T="";var q=document.getElementById("q"),out=document.getElementById("out");' +
     'var esc=function(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"})[c]})};var nk=function(t){return String(t||"").toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\\s+/g," ").trim()};' +
     'var hl=function(n,toks){var h=esc(n);toks.forEach(function(t){if(t.length<2)return;h=h.replace(new RegExp("("+t.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&")+")","ig"),"<i>$1</i>")});return h};' +
     'var twin=function(r){if(r.d&&r.i!=null)return"/skyline/"+encodeURIComponent(r.d)+"?key="+encodeURIComponent(KEY)+"&b="+encodeURIComponent(r.i);if(r.d)return"/skyline/"+encodeURIComponent(r.d)+"?key="+encodeURIComponent(KEY)+"&q="+encodeURIComponent(r.n);return null};' +
@@ -7555,7 +7573,7 @@ function videoBlock(v) {
   return '<div class=vtour><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="' + v.poster + '"><source src="' + v.src + '" type="video/mp4"></video>' +
          '<div class=vcap>' + esc2(v.title) + (v.approx ? ' \u00b7 pin on the map is approximate: plot ' + esc2(v.plot || '') + ', building not yet a footprint' : '') + '</div></div>';
 }
-function renderDev(dv, bd, galleries, key, umx, vids, owner, cardJoins) {   // v161 - owner: the client-sheet action on a developer card, never on a client link   // v168 - cardJoins: the precomputed join
+function renderDev(dv, bd, galleries, key, umx, vids, owner, cardJoins, liveSheets) {   // v161 - owner: the client-sheet action on a developer card, never on a client link   // v168 - cardJoins: the precomputed join
   // v165 - THE SLUG MUST AGREE WITH THE NAME ON THE CARD. umLookup exists to put a card near a building for the twin and map links, where a
   // near miss shows a neighbour and costs nothing. This hands a buyer a document with her name on it, so a near miss is a different kind of
   // thing entirely. Measured against the live file: 174 cards carry an icon today and 15 of them point at another building - "Golf Grand" is
@@ -7622,7 +7640,11 @@ function renderDev(dv, bd, galleries, key, umx, vids, owner, cardJoins) {   // v
     // an icon that could only ever disappoint. Hence the typeof guard as well as the corrected name: a count must never pass for a slug again.
     // Several rows legitimately share one slug (Bluewaters Residences 3-9 are seven rows and one sheet, because the slug is the Land Department
     // project while the sheet covers the development). That is expected, not a collision.
-    const _slug = owner && _u ? (_u.client_sheet || null) : null;
+    // v169 - a slug says where a sheet WOULD live; liveSheets says whether one does. 169 cards carried a slug and 13 pointed at a real
+    // document, so the icon was a dead control on 156 of them. null means the list could not be read - then keep the old behaviour rather
+    // than hiding every icon because of one failed KV call.
+    const _sl = _u && _u.client_sheet ? _u.client_sheet : null;
+    const _slug = owner && _sl && (!liveSheets || liveSheets.indexOf(_sl) >= 0) ? _sl : null;
     const _shb = _slug ? '<a class="mb2 gs" title="Client sheet" aria-label="Client sheet" data-s="' + _slug + '">' + najIcon("file") + '</a>' : '';
     const _bar = '<div class=modeb2>' + _shb + '<button class=mb2 data-m=mix type=button aria-expanded=false>Unit mix</button>' + (_tw ? '<a class=mb2 href="' + _tw + '">on the twin \u2192</a>' : '') + (_mp ? '<a class=mb2 href="' + _mp + '">on the map \u2192</a>' : '') + '</div>';
     return _h.replace(/<\/div>\s*$/, _bar + (_vd ? videoBlock(_vd) : '') + unitMixHtml(_u, true).replace('class=um', 'class="um umhover"') + '</div>'); });
