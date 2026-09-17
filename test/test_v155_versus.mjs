@@ -36,7 +36,7 @@ const own = worldPageHtml({}), cli = worldPageHtml({}, false);
 ok(own.includes('"OWNER":true') && own.includes("Send me this script") && cli.includes('"OWNER":false') && cli.includes("(OWNER ?") && cli.includes("sendTo(") === own.includes("sendTo("), "owner flag: a client-key render carries OWNER false so the page draws no send buttons (the code is present, the guard hides it)");
 
 // v155.2 - the tab and the client key; v155.3 - the picture
-import { worldPicturePrompt } from "../src/world_page.js";
+import { worldPlatePrompt, worldScenePrompt, worldPicSay, worldCardFields, worldBackdrops, worldPicSize } from "../src/world_pic.js";
 const CLIENT = "client_only_key_abcdefgh0123";
 const envC = Object.assign({}, env, { CLIENT_KEY: CLIENT, OPENAI_API_KEY: "oai" });
 const callC = (p) => worker.fetch(new Request("https://azimuth-2.digitalchemy.workers.dev" + p), envC, ctx);
@@ -45,16 +45,38 @@ ok(r.status === 200 && html.includes('"OWNER":false') && html.includes('<nav cla
 r = await callC("/versus?key=" + READ); html = await r.text();
 ok(r.status === 200 && html.includes('"OWNER":true') && html.includes("Make me a picture") && html.includes('href="/versus?key=' + READ + '"'), "the owner key opens it with the sends and the picture button, tab links carrying the owner key");
 ok((await callC("/versus?key=wrong")).status === 401 && html.indexOf("<span>PLANS</span>") < html.indexOf("<span>VS</span>") && html.indexOf("<span>VS</span>") < html.indexOf("<span>CHARTS</span>"), "wrong key refused; VS sits between PLANS and CHARTS in the bar");
-const pp = worldPicturePrompt("london");
-ok(/DUBAI  vs  LONDON/.test(pp) && pp.includes("AED 4,260 / sq ft") && pp.includes("AED 7,200 / sq ft") && pp.includes("#006039") && /Big Ben/.test(pp) && worldPicturePrompt("nowhere") === null, "the picture prompt carries only the fact base's two prices and the city's landmark");
+// v164 - THE ONE THAT MATTERS: not one digit may reach the image service. A prompt that carries a price is a prompt that can
+// come back with the wrong price drawn into a picture she is about to publish.
+const anyDigits = (x) => /\d/.test(String(x).replace(/1024x1536|1024x1024/g, ""));
+const plate = worldPlatePrompt("london", "ss"), scene = worldScenePrompt("london", worldBackdrops()[1], "ss");
+ok(!anyDigits(plate) && !anyDigits(scene) && /no numbers/i.test(plate) && /no numbers/i.test(scene)
+   && !/4,260|7,200|AED/.test(plate + scene), "v164: neither picture prompt carries a digit, a price or the word AED - the image service is never asked to draw a number");
+ok(/Big Ben/.test(plate) && /split-frame/i.test(plate) && /sunset/i.test(plate) && /empty of people/.test(scene) && /Downtown Dubai/.test(scene)
+   && worldPlatePrompt("nowhere", "ss") === null && worldScenePrompt("dubai", null, "ss") === null, "v164: the plate is the pair at her chosen hour, the scene is an empty Dubai backdrop; an unknown city and Dubai itself make neither");
+// the figures travel separately, as words WE draw, and Monaco is not credited to an index it is not in
+const cf = worldCardFields("monaco"), cfl = worldCardFields("london");
+ok(cf.figure === "AED 4,260 vs AED 22,790" && /Savills Monaco spotlight and IMSEE/.test(cf.source) && !/World Cities/.test(cf.source)
+   && /Savills World Cities Prime Residential Index/.test(cfl.source) && cf.masthead === "Dubai vs Monaco" && worldCardFields("dubai") === null,
+   "v164: the two prices reach the card as our own text, and Monaco's source is its spotlight, never the world cities index it is absent from");
+// what she is shown before it is made is readable English, carries her change, and promises who draws the numbers
+const say = worldPicSay("monaco", "me", worldBackdrops()[0], "ss", ["make it wider"]);
+ok(/You, standing in/.test(say) && /Sunset/.test(say) && /DUBAI vs MONACO/.test(say) && /I draw the prices myself/.test(say) && /Your change: make it wider/.test(say)
+   && /Dubai on the left, Monaco on the right/.test(worldPicSay("monaco", "plate", null, "ss", []))
+   && worldPicSize("me") === "1024x1536" && worldPicSize("plate") === "1024x1024", "v164: she is shown the picture in her own language, with her change on it, and told we draw the prices");
 const png = Buffer.alloc(30000, 9).toString("base64"); let imgCalls = 0;
 const realFetch = globalThis.fetch;
-globalThis.fetch = async (url, init) => { const u = String(url); if (u.includes("api.openai.com/v1/images/generations")) { imgCalls++; const b = JSON.parse(init.body); if (!/DUBAI  vs  MONACO/.test(b.prompt) || b.model !== "gpt-image-1") return new Response("bad", { status: 400 }); return new Response(JSON.stringify({ data: [{ b64_json: png }] })); } return realFetch(url, init); };
+let badPrompt = "";
+globalThis.fetch = async (url, init) => { const u = String(url); if (u.includes("api.openai.com/v1/images/")) { imgCalls++; const b = init.body && init.body.get ? { model: init.body.get("model"), prompt: init.body.get("prompt") } : JSON.parse(init.body); if (/\d/.test(String(b.prompt))) badPrompt = String(b.prompt); return new Response(JSON.stringify({ data: [{ b64_json: png }] })); } return realFetch(url, init); };
 const postC = (path, b) => worker.fetch(new Request("https://azimuth-2.digitalchemy.workers.dev" + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }), envC, ctx);
 sent.length = 0;
 r = await postC("/versus/picture", { key: READ, city: "monaco" }); const pj = JSON.parse(await r.text());
-ok(r.status === 200 && pj.ok && /\/img\/versus_monaco_\d{6}$/.test(pj.url) && imgCalls === 1 && store.has("img_" + pj.url.split("/img/")[1]) && sent.some(m => m.type === "image" && m.image.link === pj.url && /Dubai versus Monaco/.test(m.image.caption) && /Caption as it would go up/.test(m.image.caption)) && sent.some(m => m.type === "interactive" && m.interactive.action.buttons.map(b => b.reply.id.split(":")[2]).join() === "yes,cap,no"), "picture: one image call with the pair's prompt, stored under img_, and it reaches her as a post awaiting her tap rather than as a bare image (v159)");
-ok((await postC("/versus/picture", { key: CLIENT, city: "monaco" })).status === 401 && (await postC("/versus/picture", { key: READ, city: "dubai" })).status === 404 && imgCalls === 1, "picture: the client key cannot make one; Dubai is not a pair");
+ok(r.status === 200 && pj.ok && pj.asked === true && pj.city === "Monaco" && imgCalls === 0
+   && sent.length === 1 && sent[0].type === "interactive" && /How do you want this one\?/.test(sent[0].interactive.body.text)
+   && sent[0].interactive.action.buttons.map(b => b.reply.id).join() === "vsp:monaco:me,vsp:monaco:plate",
+   "v164: the tap spends NOTHING - it asks her which shape she wants, the way the morning asks before it makes");
+sent.length = 0;
+ok((await postC("/versus/picture", { key: CLIENT, city: "monaco" })).status === 401 && (await postC("/versus/picture", { key: READ, city: "dubai" })).status === 404 && imgCalls === 0 && sent.length === 0,
+   "picture: the client key cannot start one; Dubai is not a pair; neither spends an image");
 globalThis.fetch = realFetch;
 import { WORLD_SAMPLES as SMP } from "../src/world.js";
 ok(SMP.length === 10 && SMP.filter(x => (x.rev || 1) === 2).length === 8 && SMP.filter(x => (x.rev || 1) === 1).map(x => x.city).join() === "monaco,mumbai" && SMP.every(x => x.text.split(/\s+/).length >= 105 && x.text.split(/\s+/).length <= 140), "v157: eight scripts are at revision 2 as stories; Monaco and Mumbai stay at revision 1 because she approved them; all still 105 to 140 words");

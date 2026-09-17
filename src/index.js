@@ -1,6 +1,7 @@
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
-import { worldPageHtml, worldCardText, worldScriptText, worldPicturePrompt, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
+import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
+import { worldBackdrops, worldBackdrop, worldPlatePrompt, worldScenePrompt, worldPicSay, worldCardFields, worldPicSize } from "./world_pic.js";   // v164 - the Versus picture, made the way the morning pictures are made
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -1956,22 +1957,10 @@ async function appFetch(request, env, ctx) {
       if (!env.READ_KEY || !_pb || _pb.key !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       const _pc = worldCity(_pb.city || ""); if (!_pc || _pc.base) return new Response("unknown city", { status: 404 });
       if (!env.OPENAI_API_KEY) return new Response("no image key on this env", { status: 500 });
-      const _pp = worldPicturePrompt(_pc.key);
-      const _pn = "versus_" + _pc.key + "_" + String(Date.now()).slice(-6);
-      try {
-        const _pr = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "gpt-image-1", prompt: _pp, size: "1024x1024", quality: "high", n: 1 }) });
-        if (!_pr.ok) return new Response("image api " + _pr.status, { status: 502 });
-        const _pj = await _pr.json(); const _p64 = _pj && _pj.data && _pj.data[0] && _pj.data[0].b64_json;
-        if (!_p64) return new Response("image api returned no image", { status: 502 });
-        const _pbin = Uint8Array.from(atob(_p64), c => c.charCodeAt(0));
-        if (_pbin.byteLength < 20000) return new Response("image too small", { status: 502 });
-        await env.MEETINGS.put("img_" + _pn, _pbin.buffer, { expirationTtl: 30 * 86400 });
-        await env.MEETINGS.put("img_ct_" + _pn, "image/png", { expirationTtl: 30 * 86400 });
-      } catch (e) { return new Response("image failed: " + String((e && e.message) || e).slice(0, 120), { status: 502 }); }
-      const _plink = pubOrigin(env, url.origin) + "/img/" + _pn;
-      try { await igPropose(env, env.WA_ALLOWED, _plink, worldPostCaption(_pc.key), "Dubai versus " + _pc.name + " · the picture for the script."); } catch (e) { return new Response("made but not sent", { status: 502 }); }   // v159 - it arrives as a post waiting for her tap, never as a post
-      return new Response(JSON.stringify({ ok: true, url: _plink, city: _pc.name }), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+      // v164 - the tap no longer spends. It opens the morning's ritual in her chat: which shape, which backdrop, what time
+      // of day, then "here's the picture I'll make" with Make it / Change it. Nothing is charged until she taps Make it.
+      await versusAsk(env, env.WA_ALLOWED, _pc.key);
+      return new Response(JSON.stringify({ ok: true, asked: true, city: _pc.name }), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
     }
     if (url.pathname === "/versus/send" && request.method === "POST") {   // v155 - the script or the client card for a city, to her own WhatsApp, plain text. POST on purpose: a GET that sends would fire on link previews.
       let _b = {}; try { _b = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
@@ -3380,9 +3369,45 @@ async function appFetch(request, env, ctx) {
             const _tok = bid.slice(3).replace(/[^a-z0-9]/gi, ""), _jk = "picjob_s" + _tok;
             let _r = null; try { _r = JSON.parse((await env.MEETINGS.get("scpend_" + _tok)) || "null"); } catch (e) {}
             if (!_r) { if (!(await env.MEETINGS.get(_jk))) await waSend(env, from, "Those choices have expired - pick the backdrop again and I'll offer them fresh."); return new Response("ok"); }
-            try { await env.MEETINGS.put(_jk, JSON.stringify({ scene: true, n: _r.n, opt: _r.oid, tid: _r.tid, to: _r.to || from, at: Date.now(), tries: 0, post: _r.post, option: _r.option, angle: _r.angle, meKey: _r.meKey, extra: _r.extra || [] }), { expirationTtl: 2 * 86400 }); } catch (e) {}
+            try { await env.MEETINGS.put(_jk, JSON.stringify({ scene: true, n: _r.n, opt: _r.oid, tid: _r.tid, to: _r.to || from, at: Date.now(), tries: 0, post: _r.post, option: _r.option, angle: _r.angle, meKey: _r.meKey, extra: _r.extra || [], versus: _r.versus || "", mode: _r.mode || "" }), { expirationTtl: 2 * 86400 }); } catch (e) {}
             try { await env.MEETINGS.delete("scpend_" + _tok); await env.MEETINGS.delete("scedit_" + from); } catch (e) {}
             await waSend(env, from, "Making your picture now, give me a minute.");
+            return new Response("ok");
+          }
+          if (bid.indexOf("vsp:") === 0) {                                             // v164 - Versus: which shape, her in it or just the two cities
+            const _p = bid.split(":"), _ck = String(_p[1] || "").replace(/[^a-z]/gi, ""), _md = _p[2] === "me" ? "me" : "plate";
+            const _vc = worldCity(_ck);
+            if (!_vc || _vc.base) { await waSend(env, from, "I have lost which city that was - open Versus and tap Make me a picture again."); return new Response("ok"); }
+            if (_md === "me") {
+              await waSendList(env, from, "Dubai versus " + _vc.name + ". Where are you standing?", "Backdrops",
+                worldBackdrops().map(o => ({ id: "vsb:" + _vc.key + ":" + o.id, title: o.name, description: o.note })));
+            } else {
+              await waSendList(env, from, "Dubai versus " + _vc.name + ". What time of day?", "Time of day",
+                SCENE_TIMES.map(t => ({ id: "vst:" + _vc.key + ":P:" + t.id, title: t.name, description: t.note })));
+            }
+            return new Response("ok");
+          }
+          if (bid.indexOf("vsb:") === 0) {                                             // v164 - Versus: backdrop chosen, the time of day next
+            const _p = bid.split(":"), _ck = String(_p[1] || "").replace(/[^a-z]/gi, ""), _oid = String(_p[2] || "").toUpperCase();
+            const _vc = worldCity(_ck), _vo = worldBackdrop(_oid);
+            if (!_vc || _vc.base || !_vo) { await waSend(env, from, "Those backdrops have expired - open Versus and tap Make me a picture again."); return new Response("ok"); }
+            await waSendList(env, from, _vo.name + ". What time of day?", "Time of day",
+              SCENE_TIMES.map(t => ({ id: "vst:" + _vc.key + ":" + _vo.id + ":" + t.id, title: t.name, description: t.note })));
+            return new Response("ok");
+          }
+          if (bid.indexOf("vst:") === 0) {                                             // v164 - Versus: time of day chosen, then her photo, then what the picture will be
+            const _p = bid.split(":"), _ck = String(_p[1] || "").replace(/[^a-z]/gi, ""), _oid = String(_p[2] || "").toUpperCase(), _tm = SCENE_TIMES.find(t => t.id === String(_p[3] || ""));
+            const _vc = worldCity(_ck);
+            if (!_vc || _vc.base || !_tm) { await waSend(env, from, "Those choices have expired - open Versus and tap Make me a picture again."); return new Response("ok"); }
+            const _vm = _oid === "P" ? "plate" : "me";
+            const _vo = _vm === "me" ? worldBackdrop(_oid) : null;
+            if (_vm === "me" && !_vo) { await waSend(env, from, "Those backdrops have expired - open Versus and tap Make me a picture again."); return new Response("ok"); }
+            const _vjob = { kind: "scene", versus: _vc.key, mode: _vm, n: "0", oid: _oid, tid: _tm.id, to: from,
+                            post: Object.assign({}, worldCardFields(_vc.key)), option: _vo || { id: "P", name: "Both cities", place: "" }, angle: {},
+                            ask: "Good pick - " + (_vo ? _vo.name + " " : "") + _tm.when + ". Which photo of you for this one?" };
+            if (_vm === "me" && await meOffer(env, from, url.origin, _vjob)) return new Response("ok");
+            const _vpool = _vm === "me" ? await mePool(env) : [];
+            await sceneShow(env, from, Object.assign({}, _vjob, { meKey: _vpool[0] || (_vm === "me" ? "style_me" : ""), extra: [] }));
             return new Response("ok");
           }
           if (bid.indexOf("fbg:") === 0) {                                             // v120 - backdrop chosen: make the plate, her cut-out, the card
@@ -9284,15 +9309,98 @@ async function sceneShow(env, to, rec) {
   const tok = rec.tok || rid();
   const r = Object.assign({}, rec, { tok, at: Date.now() }); delete r.cands; delete r.ask;
   await env.MEETINGS.put("scpend_" + tok, JSON.stringify(r), { expirationTtl: 6 * 3600 });
-  await waSendButtons(env, to, ("Here's the picture I'll make:\n\n" + sceneDescription(r.option, r.tid, r.extra)).slice(0, 1024),
+  const say = r.versus ? worldPicSay(r.versus, r.mode, r.option, r.tid, r.extra) : sceneDescription(r.option, r.tid, r.extra);   // v164
+  await waSendButtons(env, to, ("Here's the picture I'll make:\n\n" + say).slice(0, 1024),
     [{ id: "sk:" + tok, title: "✅ Make it" }, { id: "sx:" + tok, title: "✏️ Change it" }]);
   return tok;
 }
 // v147 - make one scene picture: her chosen photo first, the card's layout second (tested 13 Sep: that order keeps her face and the
 // framing), the words set by the card engine, both sizes to her chat. The minute tick runs it. A lock stops two ticks making the same
 // picture twice, and the picture is kept on the job, so a retry after an interruption costs only the cards and the sends.
+// v164 - THE VERSUS PICTURE. Before v164 one tap on the Versus page spent an image immediately, on a fixed prompt, on the
+// old model, and it asked the image service to draw the two prices as words inside the picture. All three are gone. The tap
+// now opens the same ritual the morning pictures use - which shape, which backdrop, what time of day, which photo, and
+// "here's the picture I'll make" with Make it / Change it - and nothing is charged until she taps Make it.
+async function versusAsk(env, to, cityKey) {
+  const c = worldCity(cityKey); if (!c || c.base) return false;
+  await waSendButtons(env, to, "Dubai versus " + c.name + ". How do you want this one?",
+    [{ id: "vsp:" + c.key + ":me", title: "\u{1F464} Put me in it" }, { id: "vsp:" + c.key + ":plate", title: "\u{1F3D9} Just the cities" }]);
+  return true;
+}
+// One wordless picture from the image service, on the SAME model the morning pictures use (SCENE_MODEL). Not one digit is
+// asked of it: every figure on the finished card is set afterwards, in real type, by the card engine, from src/world.js.
+async function versusPlate(env, prompt, size, key) {
+  if (!env.OPENAI_API_KEY) return { err: "no image key" };
+  try {
+    const r = await fetch("https://api.openai.com/v1/images/generations", { method: "POST",
+      headers: { "Authorization": "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: env.SCENE_MODEL || "gpt-image-1", prompt: String(prompt || "").slice(0, 3500), size, quality: env.SCENE_QUALITY || "high", n: 1 }) });
+    if (!r.ok) return { err: "image " + r.status + " " + (await r.text()).slice(0, 160) };
+    const j = await r.json(); const b64 = j && j.data && j.data[0] && j.data[0].b64_json;
+    if (!b64) return { err: "no image returned" };
+    const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    if (bin.byteLength < 20000) return { err: "image too small" };
+    await env.MEETINGS.put("img_" + key, bin.buffer, { expirationTtl: 30 * 86400 });
+    await env.MEETINGS.put("img_ct_" + key, "image/png", { expirationTtl: 30 * 86400 });
+    return { key };
+  } catch (e) { return { err: "exception " + String((e && e.message) || e).slice(0, 120) }; }
+}
+// Idempotent in three steps, each written to the job the moment it succeeds: the wordless plate, her placed into it, the
+// card. A tick that dies half way costs only what it had not yet done, and the same picture is never bought twice.
+async function versusJobRun(env, jk, j, origin) {
+  origin = pubOrigin(env, origin);
+  if (j.gaveUp) return { done: false, why: "gave up" };
+  if (j.running_until && j.running_until > Date.now()) return { done: false, why: "making" };
+  const c = worldCity(j.versus);
+  if (!c || c.base) { try { await env.MEETINGS.delete(jk); } catch (e) {} return { done: false, why: "unknown city" }; }
+  const lock = rid();
+  j.tries = (j.tries | 0) + 1; j.last = Date.now(); j.running_until = Date.now() + 180000; j.lock = lock;
+  try { await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
+  await new Promise(res => setTimeout(res, 1500));
+  try { const again = JSON.parse((await env.MEETINGS.get(jk)) || "null"); if (!again || again.lock !== lock) return { done: false, why: "another tick has it" }; } catch (e) {}
+  const me = j.mode === "me";
+  let err = "";
+  try {
+    const id = "v" + c.key + String(j.oid || "").toLowerCase() + String(j.tid || "") + "_" + jk.slice(-6);
+    if (!j.plateKey) {
+      const pr = me ? worldScenePrompt(c.key, j.option, j.tid, j.extra || []) : worldPlatePrompt(c.key, j.tid, j.extra || []);
+      if (!pr) throw new Error("no prompt for " + c.key);
+      const g = await versusPlate(env, pr, worldPicSize(j.mode), "vplate_" + id);
+      if (g.err) throw new Error(g.err);
+      j.plateKey = g.key;
+      try { await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
+    }
+    if (me && !j.sceneKey) {                                                          // her, placed into that scene in the morning's own words
+      const g = await sceneGenerate(env, j.meKey, scenePrompt({ id: "", useKey: true, place: (j.option || {}).place }, j.extra || []), j.plateKey, id);
+      if (g.err) throw new Error(g.err);
+      j.sceneKey = g.key;
+      try { await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
+    }
+    const post = j.post || {};
+    const angle = { hook: post.hook || "", figure: post.figure || "", source: post.source || "", area: post.masthead || "" };
+    const picKey = j.sceneKey || j.plateKey;
+    const card = { img: origin + "/img/" + picKey, t: 5, me: "", key: picKey + "_card" + PLATE_CARD_V, credit: "",
+                   align: { square: me ? "xMaxYMid meet" : "xMidYMid slice" }, wash: [0.40, 0.58] };
+    const sq = await renderAngleCard(env, angle, 0, origin, 0, null, "square", card);
+    if (!sq) throw new Error(RENDER_LAST_ERR || "render failed");
+    await igPropose(env, j.to, sq.url, worldPostCaption(c.key), "Dubai versus " + c.name + " \u00b7 the picture for the script.");
+    try { await env.MEETINGS.delete(jk); } catch (e) {}
+    await cardLedger(env, { kind: "versus", key: picKey, n: 0, hook: post.hook || "", figure: post.figure || "", source: post.source || "", area: post.masthead || "",
+      backdrop: me ? ((j.option || {}).name || "") : "Both cities", time: (SCENE_TIMES.find(x => x.id === j.tid) || {}).name || "", photo: me ? (j.meKey || "") : "", caption: "" });
+    return { done: true, square: sq.url };
+  } catch (e) { err = String((e && e.message) || e).slice(0, 200); }
+  j.running_until = 0;
+  try { await env.MEETINGS.put("plate_last_fail", JSON.stringify({ at: new Date().toISOString(), job: jk, err }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  if ((j.tries | 0) >= 3) {                                                            // three real failures: stop, say so plainly, keep the record
+    try { await waSend(env, j.to, "The Dubai versus " + c.name + " picture didn't come out this time. Open Versus and tap Make me a picture to start it again."); } catch (e) {}
+    j.gaveUp = Date.now();
+  }
+  try { await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
+  return { done: false, why: err };
+}
 async function sceneJobRun(env, jk, j, origin) {
   origin = pubOrigin(env, origin);
+  if (j.versus) return versusJobRun(env, jk, j, origin);                              // v164 - a Versus picture
   if (j.gaveUp) return { done: false, why: "gave up" };
   if (j.running_until && j.running_until > Date.now()) return { done: false, why: "making" };
   const lock = rid();

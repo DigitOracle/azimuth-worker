@@ -323,12 +323,12 @@ function render() {
 async function sendTo(what) {
   const key = new URLSearchParams(location.search).get("key") || "";
   const cn = OTHERS.find(o => o.key === city).name;
-  if (!confirm((what === "card" ? "Send the Dubai versus " + cn + " card" : what === "picture" ? "Make a picture for Dubai versus " + cn + " and send it" : "Send this script") + " to your WhatsApp?")) return;
-  openDrawer(what === "card" ? "Client card" : what === "picture" ? "Picture" : "Script", "<p>" + (what === "picture" ? "Drawing it, about half a minute…" : "Sending to your WhatsApp…") + "</p>");
+  if (!confirm((what === "card" ? "Send the Dubai versus " + cn + " card" : what === "picture" ? "Start a picture for Dubai versus " + cn : "Send this script") + " in your WhatsApp?")) return;
+  openDrawer(what === "card" ? "Client card" : what === "picture" ? "Picture" : "Script", "<p>" + (what === "picture" ? "Asking you how you want it…" : "Sending to your WhatsApp…") + "</p>");
   try {
     const r = await fetch(what === "picture" ? "/versus/picture" : "/versus/send", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, city, what, cur, budget: Math.round(budget) }) });
     const t = await r.text();
-    if (what === "picture") { let j = null; try { j = JSON.parse(t); } catch (e) {} $("dBody").innerHTML = r.ok && j && j.url ? "<p>Picture sent to your WhatsApp.</p><img src=\\"" + j.url + "\\" alt=\\"Dubai versus " + j.city + "\\" style=\\"width:100%;border-radius:10px\\">" : "<p>Could not make the picture: " + t + "</p>"; return; }
+    if (what === "picture") { let j = null; try { j = JSON.parse(t); } catch (e) {} $("dBody").innerHTML = r.ok && j && j.asked ? "<p>Check your WhatsApp - I have asked you how you want this one.</p><p class=src>You choose the shape, the backdrop and the hour, and see the picture described before it is made. Nothing is made, and nothing is charged, until you tap Make it.</p>" : "<p>Could not start the picture: " + t + "</p>"; return; }
     $("dBody").innerHTML = r.ok ? "<p>" + t + "</p><p class=src>Forward it from your chat; it carries no links and no keys.</p>" : "<p>Could not send: " + t + "</p>";
   } catch (e) { $("dBody").innerHTML = "<p>Could not send just now. Try again in a moment.</p>"; }
 }
@@ -389,14 +389,9 @@ export function worldScriptText(cityKey) {
 // v155.3 - the picture for a pair, from the same facts the script uses. One frame, the Digest identity (beige and gold, Rolex green as the
 // accent), Dubai on the left and the city on the right by their unmistakable skylines, the two prime prices as the only text. The image
 // model draws; every number in the frame is one the fact base holds, so the picture cannot say what the script does not.
-export function worldPicturePrompt(cityKey) {
-  const f = worldFacts(cityKey, "sqft"); if (!f) return null;
-  const c = worldCity(cityKey);
-  const land = { monaco: "the Monte Carlo harbour and casino", hongkong: "the Victoria Harbour skyline", geneva: "the Jet d'Eau on Lake Geneva", newyork: "the Manhattan skyline with the Empire State Building", paris: "the Eiffel Tower over Haussmann rooftops", london: "Big Ben and the Thames", sydney: "the Sydney Opera House and Harbour Bridge", singapore: "Marina Bay Sands", miami: "South Beach art deco towers and palms", mumbai: "Marine Drive and the Gateway of India" }[cityKey] || (c.name + "'s skyline");
-  return "Editorial split-frame illustration for a property broker's Instagram post, square. Left half: Dubai at golden hour, the Burj Khalifa and the Palm Jumeirah, warm beige and gold light. Right half: " + c.name + ", " + land + ", cooler light. A thin vertical gold line divides the two halves. " +
-    "Palette: warm beige #E8DCC8 and gold #C5A56A dominant, deep green #006039 as the only accent. Flat, painterly, premium, no people, no logos, no watermarks. " +
-    "Text, set in an elegant serif, exactly and only this: at the top centre \"DUBAI  vs  " + c.name.toUpperCase() + "\"; at the bottom left \"AED " + f.dubai.prime_aed_per_sqft.toLocaleString("en-US") + " / sq ft\"; at the bottom right \"AED " + f.other.prime_aed_per_sqft.toLocaleString("en-US") + " / sq ft\"; and in small type at the very bottom \"prime · Savills June 2026\". No other words or numbers anywhere.";
-}
+// v164 - worldPicturePrompt is GONE. It asked the image service to draw the two prices as words inside the picture, which is
+// exactly what the morning cards refuse to do, because image models garble digits and a wrong price would have gone up under her
+// name. The Versus picture is now made wordless in src/world_pic.js and the figures are set on top by the card engine.
 
 // v159 - the caption offered with a Versus picture. Her voice, the two prices, the basis and the source, and nothing the fact base
 // does not hold. She sees it before anything is posted and can rewrite it in her own words from the chat.
