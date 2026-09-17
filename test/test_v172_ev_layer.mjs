@@ -50,7 +50,7 @@ if (m) {
   ok(/community listing/.test(srcNote({ src: "osm" })), "an OpenStreetMap point is marked the same way");
   ok(srcNote({}) === "" && srcNote(null) === "", "a point with no source says nothing rather than guessing");
 }
-ok(/esc\(x\[1\]\.n\)\+srcNote\(x\[1\]\)/.test(src), "and the row builder actually calls it - a helper nothing calls is decoration");
+ok(/srcNote\(x\[1\]\)/.test(src), "and the row builder actually calls it - a helper nothing calls is decoration");
 
 // v171: the list follows the district she is looking at, rather than contradicting the line above it.
 ok(html.includes("listHomes(_hd?m.filter"), "the homes list is the district's matches when a district is open");
@@ -58,6 +58,21 @@ ok(html.includes('+(inD?" in "+dName(inD):"")'), "and the panel says which distr
 
 const clientHtml = await (await call("/map", CLIENT)).text();
 ok(clientHtml.includes('ev:["EV charging"'), "a client link sees the chargers too - they are an amenity of a building, not owner data");
+
+// v172.1 - WHERE the caveat sits, which only shows when the row is rendered. It used to sit between the name and the detail, and the detail
+// begins with the operator, so a real row read "Dukes Dubai - community listing, unverified Tesla - 2 bays - 13 kW". That is a sentence about
+// Tesla, not about the listing, and she reads these aloud to a client. Nothing may follow the caveat.
+ok(/esc\(x\[1\]\.x\)[\s\S]{0,120}srcNote\(x\[1\]\)/.test(src), "the caveat is rendered AFTER the detail field, so no operator name can follow it");
+ok(!/srcNote\(x\[1\]\)[\s\S]{0,60}esc\(x\[1\]\.x\)/.test(src), "and never before it");
+if (m) {
+  const srcNote = eval("(" + m[0] + ")");
+  const strip = (t) => t.replace(/<[^>]*>/g, "");
+  const row = (i) => strip("<span>" + i.n + (i.x ? " <small>" + i.x + "</small>" : "") + srcNote(i) + "</span>");
+  const tesla = row({ n: "Dukes Dubai", x: "Tesla \u00b7 2 bays \u00b7 13 kW", src: "ocm" });
+  ok(!/unverified\s+\S/.test(tesla), "a rendered community row never leaves a word sitting after \"unverified\": " + tesla);
+  ok(/community listing, unverified$/.test(tesla.trim()), "the caveat ends the row, where it qualifies the whole listing");
+  ok(row({ n: "Anantara hotel", x: "DEWA \u00b7 2 bays", src: "dewa" }).indexOf("unverified") === -1, "and a DEWA row carries no caveat at all");
+}
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
