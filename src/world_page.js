@@ -305,7 +305,7 @@ function render() {
   // say
   const s = DATA.SAMPLES.find(x => x.city === city);
   const V = DATA.FB || {};
-  $("say").innerHTML = s ? '<div class="card"><p class="eyebrow">' + s.n + '/10 · ' + s.title + ' &nbsp;<span class="pill ' + (V[s.n] ? V[s.n] : "wait") + '">' + (V[s.n] === "yes" ? "Naj: say it" : V[s.n] === "no" ? "Naj: not me" : "awaiting Naj") + '</span></p><p class="script">' + s.text + '</p><p class="ready"><b>Have ready, not said:</b> ' + s.ready + '</p><p class="ready">' + s.sources + '</p></div>(OWNER ? <div class="actions"><button type="button" class="primary" onclick="sendTo(\\'script\\')">Send me this script</button><button type="button" onclick="sendTo(\\'picture\\')">Make me a picture</button><button type="button" onclick="openDrawer(\\'Another angle\\',\\'<p>Say <b>versus ' + c.name.toLowerCase() + '</b> in WhatsApp for a fresh piece on this pair once the lane is switched on.</p>\\')">Another angle</button></div>' : "")
+  $("say").innerHTML = s ? '<div class="card"><p class="eyebrow">' + s.n + '/10 · ' + s.title + ' &nbsp;<span class="pill ' + (V[s.n] ? V[s.n] : "wait") + '">' + (V[s.n] === "yes" ? "Naj: say it" : V[s.n] === "no" ? "Naj: not me" : "awaiting Naj") + '</span></p><p class="script">' + s.text + '</p><p class="ready"><b>Have ready, not said:</b> ' + s.ready + '</p><p class="ready">' + s.sources + '</p></div>' + (OWNER ? '<div class="actions"><button type="button" class="primary" onclick="sendTo(\\'script\\')">Send me this script</button><button type="button" onclick="sendTo(\\'picture\\')">Make me a picture</button><button type="button" onclick="openDrawer(\\'Another angle\\',\\'<p>Say <b>versus ' + c.name.toLowerCase() + '</b> in WhatsApp for a fresh piece on this pair once the lane is switched on.</p>\\')">Another angle</button></div>' : "")
     : '<div class="card"><p>No script written for ' + c.name + ' yet.</p></div>';
   // share
   $("share").innerHTML = '<div class="share"><div class="t">Dubai versus ' + c.name + ' · for your ' + M(budget, true) + '</div>' +
@@ -316,7 +316,7 @@ function render() {
     '<div class="l"><span>Tax on the gain</span><span>' + NUM.gains.dubai + '% vs ' + NUM.gains[c.key] + '%</span></div>' +
     '<div class="l"><span>Sunshine a year</span><span>' + fmt(lD.sun) + ' vs ' + fmt(lC.sun) + ' h</span></div>' +
     '<div class="l" style="border:0;padding-top:8px;font-size:.78rem;opacity:.8"><span>Savills June 2026 · Knight Frank 2026 · prime basis</span><span>Najma</span></div></div>' +
-    '(OWNER ? '<div class="actions"><button type="button" class="primary" onclick="sendTo(\\'card\\')">Send me this card</button></div>' : "");
+    (OWNER ? '<div class="actions"><button type="button" class="primary" onclick="sendTo(\\'card\\')">Send me this card</button></div>' : "");
   $("foot").textContent = "Prime means the top few per cent of each market. Figures: Savills World Cities Prime Residential Index H1 2026 (June values), Knight Frank Wealth Report 2026 (Q4 2025), PwC tax summaries 2026, Global Property Guide 2026, EIU 2026, Mercer 2024, Numbeo mid-2026, Henley 2025, DLD Open Data 2026. Savills has Dubai prime down 4.5% in the first half of 2026 and expects around 10% off in the second half. Currencies at ECB reference rates of 15 September 2026; the dirham is pegged at 3.6725 to the US dollar.";
   chips();
 }
@@ -328,7 +328,7 @@ async function sendTo(what) {
   try {
     const r = await fetch(what === "picture" ? "/versus/picture" : "/versus/send", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, city, what, cur, budget: Math.round(budget) }) });
     const t = await r.text();
-    if (what === "picture") { let j = null; try { j = JSON.parse(t); } catch (e) {} $("dBody").innerHTML = r.ok && j && j.url ? "<p>Picture sent to your WhatsApp.</p><img src=\"" + j.url + "\" alt=\"Dubai versus " + j.city + "\" style=\"width:100%;border-radius:10px\">" : "<p>Could not make the picture: " + t + "</p>"; return; }
+    if (what === "picture") { let j = null; try { j = JSON.parse(t); } catch (e) {} $("dBody").innerHTML = r.ok && j && j.url ? "<p>Picture sent to your WhatsApp.</p><img src=\\"" + j.url + "\\" alt=\\"Dubai versus " + j.city + "\\" style=\\"width:100%;border-radius:10px\\">" : "<p>Could not make the picture: " + t + "</p>"; return; }
     $("dBody").innerHTML = r.ok ? "<p>" + t + "</p><p class=src>Forward it from your chat; it carries no links and no keys.</p>" : "<p>Could not send: " + t + "</p>";
   } catch (e) { $("dBody").innerHTML = "<p>Could not send just now. Try again in a moment.</p>"; }
 }
