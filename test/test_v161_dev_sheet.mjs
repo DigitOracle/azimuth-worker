@@ -42,6 +42,8 @@ store.set("img_board_devs", JSON.stringify({ developers: [{ key: "arada", name: 
     { kind: "portfolio", name: "Golf Grand", area: "Dubai Hills", url: "https://example.com/gg" },
     { kind: "portfolio", name: "Marina Cove At Dubai Marina", area: "Dubai Marina", url: "https://example.com/mc" },
     { kind: "portfolio", name: "Tr\u00e9ppan Tower", area: "Dubai Islands", url: "https://example.com/tt" },
+    { kind: "portfolio", name: "Eden House The PARK", area: "Al Wasl", url: "https://example.com/ehp" },
+    { kind: "portfolio", name: "Eden House Za'abeel", area: "Zaabeel", url: "https://example.com/ehz" },
   ] }] }));
 // THE REAL SHAPE, which is the point of this fixture: `sheet` on these records is a NUMBER - the count of units on the developer's
 // availability list - and the slug lives in `client_sheet`. Reading `sheet` shipped an icon whose slug was "26". It fetched nothing and told
@@ -63,6 +65,9 @@ store.set("img_unitmix_projects", JSON.stringify({ projects: {
   marinacove: { district: "dubaimarina", i: 3, name: "Marina Cove", client_sheet: "marina_cove" },
   // v166 - the accent must FOLD, not vanish. Without NFKD "Treppan" normalised to "trppan" and matched nothing.
   treppan: { district: "dubaiislands", i: 4, name: "Treppan Tower", client_sheet: "treppan_tower" },
+  // v167 - "edenhouse" is a FAMILY record: one building standing in for a community full of them.
+  edenhouse: { district: "zaabeel", i: 7, name: "Eden House Za'abeel" },
+  edenhousezaabeel: { district: "zaabeel", i: 7, name: "Eden House Za'abeel" },
 } }));
 
 const devOwner = await (await call("/dev?d=arada&key=" + encodeURIComponent(READ))).text();
@@ -113,6 +118,11 @@ ok(!devOwner.includes('data-s="golf_ville"'), "Golf Grand gets no sheet: a slug 
 ok(devOwner.includes('data-s="marina_cove"'), "the LONGEST matching key wins: Marina Cove At Dubai Marina reaches Marina Cove");
 ok(!devOwner.includes('data-s="marina_tower"'), "and no longer stops at Marina Tower, a different building that won by being walked first");
 ok(devOwner.includes('data-s="treppan_tower"'), "an accented name folds to its base letters rather than losing them - Treppan matched nothing when the accent was dropped");
+
+// v167 (Kendall: "remove those four twin links") - a card must not borrow another building's twin and map links.
+ok(!/Eden House The PARK[\s\S]{0,900}?\/skyline\//.test(devOwner), "Eden House The PARK has no twin link - it was opening Eden House Za'abeel, a different building in a different community");
+ok(!/Eden House The PARK[\s\S]{0,900}?\/map\?/.test(devOwner), "and no map link either, for the same reason");
+ok(/Eden House Za'abeel[\s\S]{0,900}?\/skyline\//.test(devOwner), "Eden House Za'abeel keeps its own twin link - the refusal is four named cards, not the name Eden House");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);

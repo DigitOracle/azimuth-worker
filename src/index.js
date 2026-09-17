@@ -7575,7 +7575,15 @@ function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner
   // "marinacove" sat in the same file, and five Madinat Jumeirah Living towers landed on "Madina Tower" on the strength of MADINA. Worse than
   // six wrong links: a short landing makes the record name a subset of the card name, which reads like a phase or a sub-name, so the
   // agreement guard waved it through. Longest-wins fixes the joins and closes that hole in the guard at the same time.
+  // v167 (Kendall, 17 Sep 2026: "remove those four twin links") - four cards land on a FAMILY record, one building standing in for a
+  // community full of them, so their twin and map links open a different building. None of the four has a sheet, so this removes those two
+  // links and nothing else. It is deliberately a LIST, not a rule: the rule that separates these from legitimate phases (Bluewaters 3-9,
+  // Peninsula Four, The Plaza) lives in the data pipeline, and reimplementing it here is the mistake that produced four false findings in
+  // one day. It goes when the precomputed join lands. It blocks only the PREFIX fallback - if any of these four ever gets its own record,
+  // the exact match above wins and the card works without anyone remembering this list.
+  const UM_NO_FAMILY = { edenhousepark: 1, edenhousedubaihills: 1, edenhousealsatwa: 1, marinaviewsatrashidyachtsmarina: 1 };
   const umLookup = (name) => { const P = (umx && umx.projects) || {}; const k = umNkey(name); if (P[k]) return P[k];
+    if (UM_NO_FAMILY[k]) return null;
     let best = null, bestLen = 0;
     for (const kk in P) if (k && kk && (kk.indexOf(k) === 0 || k.indexOf(kk) === 0) && Math.min(k.length, kk.length) >= 6 && kk.length > bestLen) { best = P[kk]; bestLen = kk.length; }
     return best; };
