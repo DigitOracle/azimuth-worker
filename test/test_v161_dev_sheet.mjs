@@ -124,5 +124,27 @@ ok(!/Eden House The PARK[\s\S]{0,900}?\/skyline\//.test(devOwner), "Eden House T
 ok(!/Eden House The PARK[\s\S]{0,900}?\/map\?/.test(devOwner), "and no map link either, for the same reason");
 ok(/Eden House Za'abeel[\s\S]{0,900}?\/skyline\//.test(devOwner), "Eden House Za'abeel keeps its own twin link - the refusal is four named cards, not the name Eden House");
 
+// ── v168: the precomputed join is the ONLY source when it is present ────────────────────
+// Absence in the image is a DECISION - the pipeline looked at that card and refused to guess - so a card missing from it gets no links even
+// where umLookup would happily find one. Falling back per card would resurrect every join the pipeline removed. The fallback is at the image
+// level instead: no image at all means the page behaves as it does today rather than losing every link.
+store.set("img_card_joins", JSON.stringify({ generated: "2026-09-17", joins: {
+  bellevue: { k: "bellevue", sheet: "bellevue_towers", d: "downtown", i: 12 },
+  edge: { k: "edge", sheet: "the_edge", d: "businessbay", i: 9 },
+  malformed: { k: "malformed", sheet: "../../etc/passwd", d: "businessbay", i: 4 },
+} }));
+const withImage = await (await call("/dev?d=arada&key=" + encodeURIComponent(READ))).text();
+
+ok(withImage.includes('data-s="bellevue_towers"'), "a card present in the image gets its sheet from the image");
+ok(withImage.includes("/skyline/downtown") && withImage.includes("&b=12"), "and its twin link carries the district and twin id from the SAME row, so the sheet and the link cannot disagree");
+ok(!withImage.includes('data-s="golf_ville"') && !withImage.includes('data-s="treppan_tower"'), "cards ABSENT from the image get nothing - absence is the pipeline refusing to guess, not a gap to fill");
+ok(!/Golf Grand[\s\S]{0,900}?\/skyline\//.test(withImage), "an absent card loses its twin link too, even though the old lookup would have found one");
+ok(!withImage.includes("etc/passwd"), "a malformed slug in the image is still refused on shape - trusting the pipeline is not trusting its bytes");
+ok(withImage.includes('data-s="the_edge"'), "and the rest of the image is unaffected by that one bad row");
+
+store.delete("img_card_joins");
+const noImage = await (await call("/dev?d=arada&key=" + encodeURIComponent(READ))).text();
+ok(noImage.includes('data-s="bellevue_towers"') && noImage.includes('data-s="treppan_tower"'), "with NO image the page falls back to the old lookup and keeps working - a failed read must not empty her cards");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);

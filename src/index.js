@@ -2898,8 +2898,11 @@ async function appFetch(request, env, ctx) {
         let _galleries = {};
         for (const _b of (_dv.ours || [])) { try { const _j = JSON.parse((await env.MEETINGS.get("img_cards_" + _b + "_index")) || "null"); if (_j) _galleries[_b] = _j; } catch (e) {} }
         let _umx = null; try { _umx = JSON.parse((await env.MEETINGS.get("img_unitmix_projects")) || "null"); } catch (e) {}   // v93.2
+        // v168 - the precomputed card->building join. One entry per card: the unit-mix key, the fact sheet, the district and the twin id, so the
+        // sheet, the twin link and the map link all read the SAME row and cannot disagree. Built in the pipeline where the matching rule lives.
+        let _cj = null; try { _cj = JSON.parse((await env.MEETINGS.get("img_card_joins")) || "null"); } catch (e) {}   // v168
         let _vids = []; try { _vids = (JSON.parse((await env.MEETINGS.get("img_videos")) || "{}").items) || []; } catch (e) {}   // v101
-        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids, keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids, keyTier(env, url) === "admin", _cj), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/compare") {                      // v73.3 - two developers side by side, click-only (dev_compare pushed by build_compare.py)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
@@ -7552,7 +7555,7 @@ function videoBlock(v) {
   return '<div class=vtour><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="' + v.poster + '"><source src="' + v.src + '" type="video/mp4"></video>' +
          '<div class=vcap>' + esc2(v.title) + (v.approx ? ' \u00b7 pin on the map is approximate: plot ' + esc2(v.plot || '') + ', building not yet a footprint' : '') + '</div></div>';
 }
-function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner: the client-sheet action on a developer card, never on a client link
+function renderDev(dv, bd, galleries, key, umx, vids, owner, cardJoins) {   // v161 - owner: the client-sheet action on a developer card, never on a client link   // v168 - cardJoins: the precomputed join
   // v165 - THE SLUG MUST AGREE WITH THE NAME ON THE CARD. umLookup exists to put a card near a building for the twin and map links, where a
   // near miss shows a neighbour and costs nothing. This hands a buyer a document with her name on it, so a near miss is a different kind of
   // thing entirely. Measured against the live file: 174 cards carry an icon today and 15 of them point at another building - "Golf Grand" is
@@ -7592,7 +7595,21 @@ function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner
   const kp = [k.tx_2026 ? ["Sales 2026", fm(k.tx_2026)] : null, k.value_aed ? ["Value", "AED " + fm(k.value_aed)] : null, k.median_aed_per_sqm ? ["Median", "AED " + fm(k.median_aed_per_sqm) + "/m²"] : null,
               k.registered_2026 ? ["Registered 2026", String(k.registered_2026)] : null, k.meed_projects ? ["MEED projects", String(k.meed_projects)] : null].filter(Boolean)
     .map(x => '<div class=k><div class=v>' + x[1] + '</div><div class=l>' + x[0] + '</div></div>').join("");
-  const cardsArr = (dv.properties || []).map(p => { const _h = cardFor(p); if (!_h) return _h; const _u = umLookup(p.name);
+  // v168 - THE JOIN, ONE SOURCE. When the precomputed image is present it is the ONLY source: a card absent from it gets no links, because
+  // absence there is a decision - the pipeline looked at that card and refused to guess. Falling back per-card would resurrect all 33 joins it
+  // deliberately removed, which is the opposite of the point; I checked the image rather than assuming, and the removed cards are absent from
+  // it rather than present-and-empty. The fallback is therefore at the IMAGE level: if it is missing or empty - a failed read, a pipeline that
+  // has not run - the page degrades to umLookup and today's behaviour, not to a page with no links on it.
+  const _J = (cardJoins && cardJoins.joins && Object.keys(cardJoins.joins).length) ? cardJoins.joins : null;
+  const _cardJoin = (name) => {
+    if (!_J) { const u = umLookup(name); return u ? { district: u.district, i: u.i, client_sheet: _sheetSlug(name, u), vetted: false } : null; }
+    const e = _J[umNkey(name)];
+    if (!e) return null;
+    // The sheet is already vetted by the pipeline's own test, which is stricter than the guard below; only the shape is checked here.
+    const s = typeof e.sheet === "string" && /^[a-z0-9_]{1,60}$/.test(e.sheet) ? e.sheet : null;
+    return { district: e.d, i: e.i, client_sheet: s, vetted: true };
+  };
+  const cardsArr = (dv.properties || []).map(p => { const _h = cardFor(p); if (!_h) return _h; const _u = _cardJoin(p.name);
     const _tw = (_u && _u.district != null && _u.i != null) ? '/skyline/' + encodeURIComponent(_u.district) + '?key=' + encodeURIComponent(key) + '&b=' + encodeURIComponent(_u.i) : null;
     const _mp = (_u && _u.district != null) ? '/map?key=' + encodeURIComponent(key) + '&d=' + encodeURIComponent(_u.district) + '&focus=' + encodeURIComponent(p.name || '') : null;
     const _vd = videoMatch(vids, p.name, _u && _u.district);
@@ -7605,7 +7622,7 @@ function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner
     // an icon that could only ever disappoint. Hence the typeof guard as well as the corrected name: a count must never pass for a slug again.
     // Several rows legitimately share one slug (Bluewaters Residences 3-9 are seven rows and one sheet, because the slug is the Land Department
     // project while the sheet covers the development). That is expected, not a collision.
-    const _slug = owner ? _sheetSlug(p.name, _u) : null;
+    const _slug = owner && _u ? (_u.client_sheet || null) : null;
     const _shb = _slug ? '<a class="mb2 gs" title="Client sheet" aria-label="Client sheet" data-s="' + _slug + '">' + najIcon("file") + '</a>' : '';
     const _bar = '<div class=modeb2>' + _shb + '<button class=mb2 data-m=mix type=button aria-expanded=false>Unit mix</button>' + (_tw ? '<a class=mb2 href="' + _tw + '">on the twin \u2192</a>' : '') + (_mp ? '<a class=mb2 href="' + _mp + '">on the map \u2192</a>' : '') + '</div>';
     return _h.replace(/<\/div>\s*$/, _bar + (_vd ? videoBlock(_vd) : '') + unitMixHtml(_u, true).replace('class=um', 'class="um umhover"') + '</div>'); });
