@@ -76,8 +76,8 @@ ok(!ownerHtml.includes("data-d=") && !ownerHtml.includes("derived"), "the derive
 ok(!ownerHtml.includes("may be filed under the register"), "the hedge is gone - it existed only because we were guessing the name");
 
 // ── what the panel says ──────────────────────────────────────────────────────────────────────────
-ok(ownerHtml.includes('if(m.hold){d.innerHTML="<div class=spr>"+esc(m.hold)'), "a held building shows the pipeline's reason verbatim, escaped, and no dead button");
-ok(ownerHtml.includes('m.pictures?" &middot; "+esc(m.pictures)'), 'the panel says WHICH pictures - "exteriors only" is a different proposition from "layouts and interiors"');
+ok(ownerHtml.includes('if(m.hold){d.innerHTML="<div class=spr>"+__se(m.hold)'), "a held building shows the pipeline's reason verbatim, escaped, and no dead button");
+ok(ownerHtml.includes('m.pictures?" &middot; "+__se(m.pictures)'), 'the panel says WHICH pictures - "exteriors only" is a different proposition from "layouts and interiors"');
 ok(ownerHtml.includes("m.has_pictures===false"), "has_pictures still answers for sheets pushed before the phrase existed");
 ok(ownerHtml.includes('d.addEventListener("click",function(ev){ev.stopPropagation()})'), "a tap inside the panel does not also jump to the twin");
 ok(ownerHtml.includes("/sheet_send") && ownerHtml.includes('method:"POST"'), "the send is a POST, so no link preview or prefetch can fire it");

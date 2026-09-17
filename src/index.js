@@ -2910,7 +2910,7 @@ async function appFetch(request, env, ctx) {
         for (const _b of (_dv.ours || [])) { try { const _j = JSON.parse((await env.MEETINGS.get("img_cards_" + _b + "_index")) || "null"); if (_j) _galleries[_b] = _j; } catch (e) {} }
         let _umx = null; try { _umx = JSON.parse((await env.MEETINGS.get("img_unitmix_projects")) || "null"); } catch (e) {}   // v93.2
         let _vids = []; try { _vids = (JSON.parse((await env.MEETINGS.get("img_videos")) || "{}").items) || []; } catch (e) {}   // v101
-        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids, keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/compare") {                      // v73.3 - two developers side by side, click-only (dev_compare pushed by build_compare.py)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
@@ -7306,6 +7306,29 @@ function renderClock(key) {
    + 'setInterval(tick,5000);document.addEventListener("visibilitychange",function(){if(!document.hidden)tick()});})();</script></body></html>';
 }
 
+// v161 - ONE implementation of the client-sheet panel, shared by the Find row and the developer card. Two copies would drift, and every
+// sentence in here is read out beside a client. It is self-contained - its own key, its own escaper - so it depends on nothing the host page
+// happens to define, and it finds its container as .it (a Find row) or .prop (a developer card).
+function sheetPanelJs(keyJson) {
+  return 'if(!window.__shwire){window.__shwire=1;var SKEY=' + keyJson + ';var __se=function(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"})[c]})};'
+    + 'document.head.insertAdjacentHTML("beforeend","<style>.gs{cursor:pointer}.gs svg{width:16px;height:16px;display:block}.mb2.gs{display:inline-flex;align-items:center;justify-content:center;min-width:44px;color:#C5A56A}.sp{margin-top:9px;padding-top:9px;border-top:1px solid #24352F}.spr{font-size:.74rem;color:#8FA39B;margin-bottom:8px}.spb{display:inline-block;border:1px solid #24352F;border-radius:99px;padding:6px 12px;margin-right:7px;color:#E8E4D8;font-size:.74rem;cursor:pointer;text-decoration:none}.spb.on{border-color:#C5A56A;color:#C5A56A}</style>");'
+    + 'document.addEventListener("click",function(e){var a=e.target.closest(".gs");if(!a)return;e.preventDefault();var it=a.closest(".it,.prop"),slug=a.getAttribute("data-s");if(!it)return;var ex=it.querySelector(".sp");if(ex){ex.parentNode.removeChild(ex);return}'
+    + 'var d=document.createElement("div");d.className="sp";d.textContent="looking...";d.addEventListener("click",function(ev){ev.stopPropagation()});var __bar=a.closest(".modeb2");if(__bar&&__bar.parentNode){__bar.parentNode.insertBefore(d,__bar.nextSibling)}else{it.appendChild(d)}'
+    + 'fetch("/sheet/"+encodeURIComponent(slug)+"/meta?key="+encodeURIComponent(SKEY)).then(function(r){return r.json().catch(function(){return null})}).then(function(m){'
+    + 'if(!m){d.textContent="could not read that one";return}'
+    // A hold is the pipeline's own judgement about a real building, so it is quoted exactly as written and escaped, never paraphrased.
+    + 'if(m.hold){d.innerHTML="<div class=spr>"+__se(m.hold)+"</div>";return}'
+    + 'var kb=Math.round((m.bytes||0)/1024);'
+    // Say WHICH pictures: "layouts and interiors" is a sheet to hand a buyer, "exteriors only" is a building with nothing to look inside.
+    // has_pictures stays as the fallback for sheets pushed before the phrase existed.
+    + 'd.innerHTML="<div class=spr>"+(m.pages?m.pages+" pages &middot; ":"")+kb+" KB"+(m.pictures?" &middot; "+__se(m.pictures):(m.has_pictures===false?" &middot; no pictures yet":""))+"</div>"'
+    + '+"<a class=spb target=_blank rel=noopener href=\\"/sheet/"+encodeURIComponent(slug)+".pdf?key="+encodeURIComponent(SKEY)+"\\">Preview</a>"'
+    + '+"<a class=\\"spb on\\">Send to WhatsApp</a>";'
+    + 'var b=d.querySelector(".spb.on");b.addEventListener("click",function(){if(b.busy)return;b.busy=1;b.textContent="sending...";'
+    + 'fetch("/sheet_send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:SKEY,slug:slug})}).then(function(r){return r.json().catch(function(){return null})}).then(function(j){b.textContent=j&&j.ok?"Sent":((j&&(j.reason||j.error))||"did not send");b.busy=0}).catch(function(){b.textContent="did not send";b.busy=0})});'
+    + '}).catch(function(){d.textContent="could not read that one"});});}';
+}
+
 function renderFind(key, q0, owner) {
   // v158 - the sheet action is EMITTED only for the owner, never merely hidden at run time. A client's page should not carry the markup, the
   // route names, or a flag that can be flipped in a console. The sheet routes refuse a client key anyway; this is the layer above that one.
@@ -7341,23 +7364,7 @@ function renderFind(key, q0, owner) {
     // Owner only. Tap once for what we hold on that tower: pages and size with Preview and Send, or the pipeline's own reason why there is no
     // sheet - "no pictures held", "only 3 recorded sales (bar is 20)". Six of about 2,100 buildings have one today, so the reason IS the common
     // screen and must never be a dead button. The panel swallows its own clicks so a stray tap does not fire the row's jump to the twin.
-  + (owner ? 'if(!window.__shwire){window.__shwire=1;document.head.insertAdjacentHTML("beforeend","<style>.gs{margin-left:10px;color:#C5A56A}.sp{margin-top:9px;padding-top:9px;border-top:1px solid #24352F}.spr{font-size:.74rem;color:#8FA39B;margin-bottom:8px}.spb{display:inline-block;border:1px solid #24352F;border-radius:99px;padding:6px 12px;margin-right:7px;color:#E8E4D8;font-size:.74rem;cursor:pointer;text-decoration:none}.spb.on{border-color:#C5A56A;color:#C5A56A}</style>");'
-  + 'document.addEventListener("click",function(e){var a=e.target.closest(".gs");if(!a)return;e.preventDefault();var it=a.closest(".it"),slug=a.getAttribute("data-s");var ex=it.querySelector(".sp");if(ex){ex.parentNode.removeChild(ex);return}'
-  + 'var d=document.createElement("div");d.className="sp";d.textContent="looking...";d.addEventListener("click",function(ev){ev.stopPropagation()});it.appendChild(d);'
-  + 'fetch("/sheet/"+encodeURIComponent(slug)+"/meta?key="+encodeURIComponent(KEY)).then(function(r){return r.json().catch(function(){return null})}).then(function(m){'
-  + 'if(!m){d.textContent="could not read that one";return}'
-  // v158.2 - the row now carries the Land Department slug, so a miss IS a miss and says so plainly. The hedge that stood here existed only
-  // because we were deriving the name from the display name and could be looking in the wrong place; it went out with the derivation.
-  + 'if(m.hold){d.innerHTML="<div class=spr>"+esc(m.hold)+"</div>";return}'
-  + 'var kb=Math.round((m.bytes||0)/1024);'
-  // v158.2 - say WHICH pictures: "layouts and interiors" is a sheet to hand a buyer, "exteriors only" is a building with nothing to look
-  // inside. has_pictures is kept as the fallback for sheets pushed before the pipeline carried the phrase.
-  + 'd.innerHTML="<div class=spr>"+(m.pages?m.pages+" pages &middot; ":"")+kb+" KB"+(m.pictures?" &middot; "+esc(m.pictures):(m.has_pictures===false?" &middot; no pictures yet":""))+"</div>"'
-  + '+"<a class=spb target=_blank rel=noopener href=\\"/sheet/"+encodeURIComponent(slug)+".pdf?key="+encodeURIComponent(KEY)+"\\">Preview</a>"'
-  + '+"<a class=\\"spb on\\">Send to WhatsApp</a>";'
-  + 'var b=d.querySelector(".spb.on");b.addEventListener("click",function(){if(b.busy)return;b.busy=1;b.textContent="sending...";'
-  + 'fetch("/sheet_send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:KEY,slug:slug})}).then(function(r){return r.json().catch(function(){return null})}).then(function(j){b.textContent=j&&j.ok?"Sent":((j&&(j.reason||j.error))||"did not send");b.busy=0}).catch(function(){b.textContent="did not send";b.busy=0})});'
-  + '}).catch(function(){d.textContent="could not read that one"});});}' : '')
+  + (owner ? sheetPanelJs(JSON.stringify(key)) : '')
   + 'var groups=[["developer","Developers"],["development","Developments"],["building","Buildings"]],h="",n=0;groups.forEach(function(g){var rs=rows.filter(function(r){return r.t===g[0]}).slice(0,toks.length?40:60);if(!rs.length)return;h+=\'<div class=grp>\'+g[1]+" \\u00b7 "+rows.filter(function(r){return r.t===g[0]}).length+"</div>";rs.forEach(function(r){n++;var u=link(r);var tw=twin(r);var isHome=u&&u.indexOf("/dev?")===0;var mp=r.d?"/map?key="+encodeURIComponent(KEY)+"&d="+encodeURIComponent(r.d)+"&focus="+encodeURIComponent(r.n):"";h+=\'<div class="it\'+(r.off?" off":"")+\'"\'+(u?\' data-u="\'+u+\'"\':"")+\'><span class=go>\'+(u?\'<a title="\'+(isHome?"Developer":(r.i!=null?"On the twin":"District"))+\'" href="\'+u+\'">\'+(isHome?IC.grid:(r.i!=null?IC.cube:IC.buildings))+"</a>":"")+(mp?\'<a class=gm title="On the map" href="\'+mp+\'">\'+IC.pin+"</a>":"")' + GSF + '+"</span><b>"+hl(r.n,toks)+"</b><small>"+esc(where(r))+(isHome&&tw?\' \\u00b7 <a class=tw href="\'+tw+\'">on the twin \\u2192</a>\':"")+"</small></div>"})});' +
     'out.innerHTML=h||\'<div class=n>nothing by that name yet \\u2014 the register, the twin and the developer pages were all checked</div>\';if(toks.length){try{history.replaceState(null,"",location.pathname+"?key="+encodeURIComponent(KEY)+"&q="+encodeURIComponent(q.value))}catch(e){}}};' +
     'document.querySelectorAll(".chip").forEach(function(c){c.onclick=function(){document.querySelectorAll(".chip").forEach(function(x){x.classList.toggle("on",x===c)});T=c.getAttribute("data-t")||"";render()}});q.addEventListener("input",render);' +
@@ -7509,7 +7516,7 @@ function videoBlock(v) {
   return '<div class=vtour><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="' + v.poster + '"><source src="' + v.src + '" type="video/mp4"></video>' +
          '<div class=vcap>' + esc2(v.title) + (v.approx ? ' \u00b7 pin on the map is approximate: plot ' + esc2(v.plot || '') + ', building not yet a footprint' : '') + '</div></div>';
 }
-function renderDev(dv, bd, galleries, key, umx, vids) {
+function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner: the client-sheet action on a developer card, never on a client link
   const umLookup = (name) => { const P = (umx && umx.projects) || {}; const k = umNkey(name); if (P[k]) return P[k]; for (const kk in P) if (k && kk && (kk.indexOf(k) === 0 || k.indexOf(kk) === 0) && Math.min(k.length, kk.length) >= 6) return P[kk]; return null; };
   const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(2) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(1) + " M" : Math.round(n).toLocaleString("en-US"));
   const k = dv.kpi || {};
@@ -7520,7 +7527,13 @@ function renderDev(dv, bd, galleries, key, umx, vids) {
     const _tw = (_u && _u.district != null && _u.i != null) ? '/skyline/' + encodeURIComponent(_u.district) + '?key=' + encodeURIComponent(key) + '&b=' + encodeURIComponent(_u.i) : null;
     const _mp = (_u && _u.district != null) ? '/map?key=' + encodeURIComponent(key) + '&d=' + encodeURIComponent(_u.district) + '&focus=' + encodeURIComponent(p.name || '') : null;
     const _vd = videoMatch(vids, p.name, _u && _u.district);
-    const _bar = '<div class=modeb2><button class="mb2 on" data-m=snap type=button>Snapshot</button><button class=mb2 data-m=deep type=button>Deeper dive</button>' + (_tw ? '<a class=mb2 href="' + _tw + '">on the twin \u2192</a>' : '') + (_mp ? '<a class=mb2 href="' + _mp + '">on the map \u2192</a>' : '') + '</div>';
+    // v161 - the client sheet, joined through umLookup: the same resolution the twin and map links on this card already use, rather than a
+    // second lookup with its own failure modes. The slug is allowlisted to the pattern sheets.js itself accepts, so a malformed one is simply
+    // not offered - and no slug means no icon, which is a miss rather than a wrong answer. NOTE p.sheet on these cards is the DEVELOPER's
+    // availability sheet, a different thing entirely; this one comes off the building, not the property record.
+    const _slug = (owner && _u && _u.sheet && /^[a-z0-9_]{1,60}$/.test(String(_u.sheet))) ? String(_u.sheet) : null;
+    const _shb = _slug ? '<a class="mb2 gs" title="Client sheet" aria-label="Client sheet" data-s="' + _slug + '">' + najIcon("file") + '</a>' : '';
+    const _bar = '<div class=modeb2>' + _shb + '<button class="mb2 on" data-m=snap type=button>Snapshot</button><button class=mb2 data-m=deep type=button>Deeper dive</button>' + (_tw ? '<a class=mb2 href="' + _tw + '">on the twin \u2192</a>' : '') + (_mp ? '<a class=mb2 href="' + _mp + '">on the map \u2192</a>' : '') + '</div>';
     return _h.replace(/<\/div>\s*$/, _bar + (_vd ? videoBlock(_vd) : '') + unitMixHtml(_u, true).replace('class=um', 'class="um umhover"') + '</div>'); });
   function cardFor(p) {
     if (p.kind === "ours") {
@@ -7584,7 +7597,7 @@ ${UNIT_MIX_CSS}.umhover{display:none;position:absolute;left:8px;right:8px;top:ca
 .pm{color:var(--text);font-size:.72rem;margin-top:4px;font-family:"IBM Plex Mono",monospace}.row{display:flex;gap:8px;align-items:center;margin-top:8px}.go{color:var(--gold);font-weight:600;font-size:.78rem}.mini{margin-left:auto;border:1px solid var(--line);border-radius:99px;padding:3px 9px;color:var(--text);text-decoration:none;font-size:.66rem}.mini+.mini{margin-left:6px}
 .act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--text);text-decoration:none;font-size:.72rem;margin:0 6px 8px 0;background:var(--card)}
 ${NAJ_NAV_CSS}</style></head><body>
-<script>window.addEventListener("DOMContentLoaded",function(){try{var p=new URLSearchParams(location.search).get("p");if(!p)return;var nk=function(t){return String(t||"").toLowerCase().replace(/[^a-z0-9]/g,"")};var cards=[].slice.call(document.querySelectorAll(".prop"));var hit=cards.find(function(c){var n=nk((c.querySelector(".pn")||{}).textContent);return n===p})||cards.find(function(c){var n=nk((c.querySelector(".pn")||{}).textContent);return n&&p&&(n.indexOf(p)>=0||p.indexOf(n)>=0)});if(!hit)return;hit.classList.add("on");hit.style.outline="1px solid #C5A56A";var d=hit.querySelector(".mb2[data-m=deep]");if(d){hit.querySelectorAll(".mb2[data-m]").forEach(function(x){x.classList.toggle("on",x===d)})}setTimeout(function(){hit.scrollIntoView({block:"start",behavior:"smooth"})},150)}catch(e){}});document.addEventListener("click",function(e){var mb=e.target.closest(".mb2[data-m]");if(mb){e.preventDefault();e.stopPropagation();var pr2=mb.closest(".prop");if(!pr2)return;var deep=mb.getAttribute("data-m")==="deep";pr2.classList.toggle("on",deep);pr2.querySelectorAll(".mb2[data-m]").forEach(function(x){x.classList.toggle("on",x===mb)});return}var ph=e.target.closest(".ph");if(!ph)return;var pr=ph.closest(".prop");if(!pr)return;document.querySelectorAll(".prop.on").forEach(function(x){if(x!==pr)x.classList.remove("on")});pr.classList.toggle("on")});</script>
+<script>window.addEventListener("DOMContentLoaded",function(){try{var p=new URLSearchParams(location.search).get("p");if(!p)return;var nk=function(t){return String(t||"").toLowerCase().replace(/[^a-z0-9]/g,"")};var cards=[].slice.call(document.querySelectorAll(".prop"));var hit=cards.find(function(c){var n=nk((c.querySelector(".pn")||{}).textContent);return n===p})||cards.find(function(c){var n=nk((c.querySelector(".pn")||{}).textContent);return n&&p&&(n.indexOf(p)>=0||p.indexOf(n)>=0)});if(!hit)return;hit.classList.add("on");hit.style.outline="1px solid #C5A56A";var d=hit.querySelector(".mb2[data-m=deep]");if(d){hit.querySelectorAll(".mb2[data-m]").forEach(function(x){x.classList.toggle("on",x===d)})}setTimeout(function(){hit.scrollIntoView({block:"start",behavior:"smooth"})},150)}catch(e){}});document.addEventListener("click",function(e){var mb=e.target.closest(".mb2[data-m]");if(mb){e.preventDefault();e.stopPropagation();var pr2=mb.closest(".prop");if(!pr2)return;var deep=mb.getAttribute("data-m")==="deep";pr2.classList.toggle("on",deep);pr2.querySelectorAll(".mb2[data-m]").forEach(function(x){x.classList.toggle("on",x===mb)});return}var ph=e.target.closest(".ph");if(!ph)return;var pr=ph.closest(".prop");if(!pr)return;document.querySelectorAll(".prop.on").forEach(function(x){if(x!==pr)x.classList.remove("on")});pr.classList.toggle("on")});</script>${owner ? "<script>" + sheetPanelJs(JSON.stringify(key)) + "<\/script>" : ""}
 <div class=hd>${devLogo(dv, 64)}<div><div class=mast>${dv.name}</div><div class=tier>${tierSvg(dv.icon)}<span>${dv.segment_label}</span></div></div></div>
 <div class=kpis>${kp}</div>
 ${(dv.properties || []).some(p => p.kind === "ours") ? '<div class=sec>Modelled - unit cards ready</div>' : ''}
