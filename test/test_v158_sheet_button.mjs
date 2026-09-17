@@ -40,8 +40,8 @@ const clientHtml = await (await call("/find?key=" + encodeURIComponent(CLIENT)))
 // ── owner versus client ─────────────────────────────────────────────────────────────────────────
 ok(ownerHtml.includes("var OWNER=true"), "the owner's page is marked as the owner's");
 ok(clientHtml.includes("var OWNER=false"), "a client link is NOT marked as the owner's");
-ok(ownerHtml.includes("class=gs data-s="), "the owner's page carries the sheet action");
-ok(!clientHtml.includes("class=gs data-s="), "a client link carries NO sheet action - the routes would refuse it anyway, so the button must not be there");
+ok(ownerHtml.includes("class=gs title="), "the owner's page carries the sheet action");
+ok(!clientHtml.includes("class=gs title="), "a client link carries NO sheet action - the routes would refuse it anyway, so the button must not be there");
 ok(!clientHtml.includes("/sheet_send") && !clientHtml.includes("/sheet/"), "a client link mentions no sheet route at all");
 ok(!ownerHtml.includes(CLIENT) && !clientHtml.includes(READ), "neither page leaks the other key");
 
@@ -54,7 +54,21 @@ for (const [label, html] of [["owner", ownerHtml], ["client", clientHtml]]) {
 }
 
 // ── the slug comes from the row, and nothing is guessed ──────────────────────────────────────────
-ok(ownerHtml.includes('r.t==="building"&&r.sheet'), "the action appears only on a building row that carries a slug");
+ok(ownerHtml.includes('r.t==="building"?(r.sheet?'), "the action appears only on a building row that carries a slug");
+
+// ── v160: icons, not text links (Kendall: "these should be nice small icons, not buttons") ────────────────
+ok(ownerHtml.includes("var IC=") && ownerHtml.includes('viewBox=\\"0 0 256 256\\"'), "the row icons come from the app's own set, so a row and the tab bar do not draw the same place twice");
+// The page carries these as the ESCAPE text \u2192 inside its own script, not as the arrow character, so a check written against the
+// character alone can never fail. Check both spellings, and prove the check can see an arrow at all before trusting that it found none.
+// Scoped to the ACTION labels, not to the word "twin" anywhere: the description line still ends with a prose link "on the twin \u2192", which
+// is deliberate \u2014 it is a sentence, not one of the three actions. A broader check fails on that and teaches you to loosen it, which is how
+// a test stops meaning anything.
+const OLD_ACTION_LABELS = ['?"twin \\u2192"', '?"district \\u2192"', '>map \\u2192</a>', '>sheet \\u2192</a>'];
+ok(OLD_ACTION_LABELS.every((s) => !ownerHtml.includes(s)), "no action is a text-and-arrow label any more - arrows read as a sequence, and these are three independent actions");
+ok(ownerHtml.includes("on the twin \\u2192"), "the prose link in the description line is untouched - it is a sentence, and the check above is scoped so it stays that way");
+ok(ownerHtml.includes("<i class=gsp></i>"), "a building with no sheet holds the slot open, so twin and map do not shift under her thumb between rows");
+ok(ownerHtml.includes("width:40px;height:40px"), "the tap area is 40px around a 17px glyph - she is using this one-handed with a client watching");
+ok(ownerHtml.includes('title="Client sheet"') && ownerHtml.includes('aria-label="Client sheet"'), "the icon still says what it is, to a finger and to a screen reader");
 ok(ownerHtml.includes("esc(String(r.sheet))"), "the row's slug is used as given, and escaped");
 ok(!ownerHtml.includes('replace(/[^a-z0-9]+/g,"_")'), "no name-derivation survives anywhere on the page");
 ok(!ownerHtml.includes("slugOf"), "the derivation helper is gone, not merely unused");
