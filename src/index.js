@@ -2138,7 +2138,7 @@ async function appFetch(request, env, ctx) {
           data: { open_tasks: await count("act_"), commitments: await count("cmt_"), captured_meetings: await count("evt_"), indexed_docs: await count("doc_"), pending_photo_reads: await count("pimg_") },
           dependencies: dep,
           claude_403: c403,
-          // v82 - the group listener on the PC is a live socket: if it is not running, developer sheets posted to the group
+          // v82 - the group listener on the PC is a live socket: if it is not running, availability lists posted to the group
           // are lost, and the morning scan reads as a quiet day. listener_health.py writes this every morning (and on demand).
           listener: await (async () => { try { const h = JSON.parse((await env.MEETINGS.get("img_listener_health")) || "null"); return h ? { verdict: h.verdict, checked: h.checked, checked_ago: ago(h.checked), alive: h.alive, coverage_lost_hours: h.coverage_lost_hours, pdfs_captured_in_window: h.pdfs_captured_in_window, meaning: h.meaning } : "no health report yet - run scripts/listener_health.py"; } catch (e) { return "unreadable"; } })(),
           recent_swallowed_errors: errs.slice(0, 8)
@@ -5868,7 +5868,7 @@ function unitMixHtml(u, compact) {
     if (hasA) h += '<div class=umn>Ask = the developer\u2019s own availability sheet' + (u.remaining && u.remaining.sheet_date ? " of " + esc(u.remaining.sheet_date) : "") + ', median of the units listed (range in grey) \u00b7 Sold @ = median price actually paid, Land Department register, same type</div>';
     if (!compact && u.register_avg_aed && !rows.some(r => r.median_aed)) h += '<div class=umn>Average price paid in this building, all types: AED ' + money(u.register_avg_aed) + ' (register, sales-weighted)</div>';
     const rm = u.remaining || null;
-    if (rm && rm.launched) h += '<div class=umn style="color:var(--text,#E8E4D8)">' + ["launched " + esc(rm.launched), "sold " + esc(rm.sold) + " (register)", rm.sheet != null ? "on the developer sheet " + esc(rm.sheet) + (rm.sheet_date ? " (" + esc(rm.sheet_date) + ")" : "") : null,
+    if (rm && rm.launched) h += '<div class=umn style="color:var(--text,#E8E4D8)">' + ["launched " + esc(rm.launched), "sold " + esc(rm.sold) + " (register)", rm.sheet != null ? "on the availability list " + esc(rm.sheet) + (rm.sheet_date ? " (" + esc(rm.sheet_date) + ")" : "") : null,
       rm.remaining != null ? (rm.remaining <= 0 ? "sold out on the register" : "left " + esc(rm.remaining)) : null, rm.unaccounted != null && rm.unaccounted > 0 ? esc(rm.unaccounted) + " unaccounted: sold but not yet registered, or held back" : null, rm.rented ? esc(rm.rented) + " Ejari contracts" : null].filter(Boolean).join(" \u00b7 ") + '</div>';
     const d_ = u.dld || {};
     if (!compact && (d_.community || d_.master || d_.plot_area_sqm)) h += '<div class=umn>' + [d_.community && d_.plot_no ? "plot " + esc(d_.community) + "-" + esc(d_.plot_no) : null, d_.master ? "master project " + esc(d_.master) : null,
@@ -5880,7 +5880,7 @@ function unitMixHtml(u, compact) {
     const basis = [...new Set(rows.map(r => r.basis).filter(Boolean))]; if (!compact && basis.length) h += '<div class=umn style="opacity:.7">' + esc(basis.join(" \u00b7 ")) + (hasR ? " \u00b7 rent: Ejari contracts from 2024, median annual \u00b7 yield = median rent \u00f7 median sale price, same type, gross" : "") + '</div>';
   }
   else if (u.mix_types && u.mix_types.length) h += '<div class=umn>Types offered: ' + esc(u.mix_types.join(", ")) + '. Counts per type not on file yet.</div>';
-  if (u.sheet && u.sheet.by_type) h += '<div class=umn><b>On the developer sheet (' + esc(u.sheet.date || "") + '):</b> ' + esc(Object.entries(u.sheet.by_type).map(x => x[1] + " \u00d7 " + x[0]).join(" \u00b7 ")) + (u.sheet.completion ? ' \u00b7 completion ' + esc(u.sheet.completion) : '') + '</div>';
+  if (u.sheet && u.sheet.by_type) h += '<div class=umn><b>On the availability list (' + esc(u.sheet.date || "") + '):</b> ' + esc(Object.entries(u.sheet.by_type).map(x => x[1] + " \u00d7 " + x[0]).join(" \u00b7 ")) + (u.sheet.completion ? ' \u00b7 completion ' + esc(u.sheet.completion) : '') + '</div>';
   if (!ac && !rows.length) h += '<div class=umn>' + (u.registered_homes ? esc(u.registered_homes) + ' homes seen in the register' : (u.indicative_homes ? '~' + esc(u.indicative_homes) + ' homes indicated by the model' : 'No unit data held yet')) + '.</div>';
   if (!compact && u.needs && u.needs.length) h += '<div class=umn style="opacity:.75">Fills from: ' + esc(u.needs[0].replace(/ for .*$/, "")) + '.</div>';
   if (u.floors || u.car_parks) h += '<div class=umn>' + [u.floors ? u.floors + ' floors' : null, u.car_parks ? u.car_parks + ' car parks' : null].filter(Boolean).join(' \u00b7 ') + '</div>';
@@ -6184,7 +6184,7 @@ const MAP_CHROME_JS = ''
   + '  var keys={};Object.keys(it.b||{}).forEach(function(k){keys[k]=1});Object.keys(it.ask||{}).forEach(function(k){keys[k]=1});'
   + '  var lines=Object.keys(keys).sort(function(a,b){return +a-+b}).map(function(k){var b=+k;var reg=it.b&&it.b[k];var ask=it.ask&&it.ask[k];return "<div><i>"+(b===9?"penthouse":bedWord(b))+"</i>"+(reg?fmtAed(reg)+((it.e||[]).indexOf(b)>=0?" <small style=color:var(--mut)>estimate</small>":" <small style=color:var(--mut)>register median</small>"):"")+(ask?(reg?" \u00b7 ":"")+"from "+fmtAed(ask)+" <small style=color:var(--mut)>asking \u00b7 sheet "+(it.sheet||"")+"</small>":"")+(it.r&&it.r[k]?" <small style=color:var(--mut)>\u00b7 rent "+fmtAed(it.r[k])+"/yr</small>":"")+"</div>"}).join("");'
   + '  var vv=videoFor(it.n,it.d);'
-  + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+esc(it.n)+\'</div><div class=ps>\'+esc(dName(it.d))+(it.dev?" \u00b7 "+esc(devName(it.dev)):"")+(it.u?" \u00b7 "+it.u+" units":"")+(it.la?" \u00b7 "+it.la+" launched":"")+(it.la&&it.so!=null?" \u00b7 "+it.so+" sold in the register":"")+(it.left?" \u00b7 "+it.left+" left on the developer sheet":"")+\'</div><div class=ct style="margin-top:8px">\'+lines+\'<div><i>more</i><a href="/find?key=\'+encodeURIComponent(KEY)+\'&q=\'+encodeURIComponent(it.n)+\'">open in Find \u2192</a></div></div>\'+(vv?videoHtml(vv):"");'
+  + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+esc(it.n)+\'</div><div class=ps>\'+esc(dName(it.d))+(it.dev?" \u00b7 "+esc(devName(it.dev)):"")+(it.u?" \u00b7 "+it.u+" units":"")+(it.la?" \u00b7 "+it.la+" launched":"")+(it.la&&it.so!=null?" \u00b7 "+it.so+" sold in the register":"")+(it.left?" \u00b7 "+it.left+" left on the availability list":"")+\'</div><div class=ct style="margin-top:8px">\'+lines+\'<div><i>more</i><a href="/find?key=\'+encodeURIComponent(KEY)+\'&q=\'+encodeURIComponent(it.n)+\'">open in Find \u2192</a></div></div>\'+(vv?videoHtml(vv):"");'
   + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;document.getElementById("hint").textContent=""},700)}'
   + HOMES_WIRE_JS   // v152.5 - the HOMES panel's controls, shared with the all-Dubai twin (each page brings its own drawHomes)
   + 'var DN={};function dName(slug){if(!DN[slug]&&D){(D.districts||[]).forEach(function(d){DN[d.slug]=d.name})}return DN[slug]||slug}'
@@ -6262,7 +6262,7 @@ const MAP_CHROME_JS = ''
   + 'function waterNear(c){if(!COAST||!c)return null;var k=Math.cos(c[1]*Math.PI/180),px=c[0]*k,py=c[1],best={},who={};for(var i=0;i<COAST.length;i++){var s=COAST[i];var ax=s[0]*k,ay=s[1],bx=s[2]*k,by=s[3];var dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy;var t=L?Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/L)):0;var cx=ax+t*dx,cy=ay+t*dy;var d=Math.sqrt((px-cx)*(px-cx)+(py-cy)*(py-cy))*111320;if(best[s[4]]==null||d<best[s[4]]){best[s[4]]=d;who[s[4]]=s[5]}}best.__who=who;return best}'
   + 'function waterLine(c){var w=waterNear(c);if(!w)return \'\';var order=[\'marina\',\'canal\',\'creek\',\'lake\',\'sea\'];var best=null;order.forEach(function(k){if(w[k]!=null&&w[k]<=1500&&(!best||w[k]<best[1]-25))best=[k,w[k]]});if(!best)return \'\';var B=(window.__COASTB||[])[w.__who[best[0]]];var nm=B&&B.named?B.name:(best[0]===\'sea\'?\'the sea\':best[0]);return nm+\' \'+(best[1]<1000?Math.round(best[1])+\' m\':(best[1]/1000).toFixed(1)+\' km\')}'
   + 'function bindNext(el){el.querySelectorAll(\'.nx\').forEach(function(a){a.onclick=function(){setScope(a.getAttribute(\'data-r\'))}})}'
-  + 'function homeBlock(it){var keys={};Object.keys(it.b||{}).forEach(function(k){keys[k]=1});Object.keys(it.ask||{}).forEach(function(k){keys[k]=1});var lines=Object.keys(keys).sort(function(a,b){return +a-+b}).map(function(k){var b=+k;var reg=it.b&&it.b[k];var ask=it.ask&&it.ask[k];return \'<div><i>\'+(b===9?\'penthouse\':bedsLabel(b)+\'-bed\')+\'</i>\'+(reg?fmtAed(reg)+((it.e||[]).indexOf(b)>=0?\' <small style=color:var(--mut)>estimate</small>\':\' <small style=color:var(--mut)>register median</small>\'):\'\')+(ask?(reg?\' \u00b7 \':\'\')+\'from \'+fmtAed(ask)+\' <small style=color:var(--mut)>asking \u00b7 sheet \'+(it.sheet||\'\')+\'</small>\':\'\')+(it.r&&it.r[k]?\' <small style=color:var(--mut)>\u00b7 rent \'+fmtAed(it.r[k])+\'/yr</small>\':\'\')+\'</div>\'}).join(\'\');var facts=[];if(it.dev)facts.push(esc(devName(it.dev)));if(it.u)facts.push(it.u+\' units\');if(it.la)facts.push(it.la+\' launched\');if(it.la&&it.so!=null)facts.push(it.so+\' sold in the register\');if(it.left)facts.push(it.left+\' left on the developer sheet\');return \'<div class=ps style="margin-top:6px">\'+facts.join(\' \u00b7 \')+\'</div><div class=ct style="margin-top:6px">\'+lines+\'<div><i>more</i><a href="/find?key=\'+encodeURIComponent(KEY)+\'&q=\'+encodeURIComponent(it.n)+\'">open in Find \u2192</a></div></div>\'}'
+  + 'function homeBlock(it){var keys={};Object.keys(it.b||{}).forEach(function(k){keys[k]=1});Object.keys(it.ask||{}).forEach(function(k){keys[k]=1});var lines=Object.keys(keys).sort(function(a,b){return +a-+b}).map(function(k){var b=+k;var reg=it.b&&it.b[k];var ask=it.ask&&it.ask[k];return \'<div><i>\'+(b===9?\'penthouse\':bedsLabel(b)+\'-bed\')+\'</i>\'+(reg?fmtAed(reg)+((it.e||[]).indexOf(b)>=0?\' <small style=color:var(--mut)>estimate</small>\':\' <small style=color:var(--mut)>register median</small>\'):\'\')+(ask?(reg?\' \u00b7 \':\'\')+\'from \'+fmtAed(ask)+\' <small style=color:var(--mut)>asking \u00b7 sheet \'+(it.sheet||\'\')+\'</small>\':\'\')+(it.r&&it.r[k]?\' <small style=color:var(--mut)>\u00b7 rent \'+fmtAed(it.r[k])+\'/yr</small>\':\'\')+\'</div>\'}).join(\'\');var facts=[];if(it.dev)facts.push(esc(devName(it.dev)));if(it.u)facts.push(it.u+\' units\');if(it.la)facts.push(it.la+\' launched\');if(it.la&&it.so!=null)facts.push(it.so+\' sold in the register\');if(it.left)facts.push(it.left+\' left on the availability list\');return \'<div class=ps style="margin-top:6px">\'+facts.join(\' \u00b7 \')+\'</div><div class=ct style="margin-top:6px">\'+lines+\'<div><i>more</i><a href="/find?key=\'+encodeURIComponent(KEY)+\'&q=\'+encodeURIComponent(it.n)+\'">open in Find \u2192</a></div></div>\'}'
   + 'function homeFor(name,d){var T=ntok(name).join(\' \');if(!T)return null;return PR.filter(function(i){return (!d||!i.d||i.d===d)&&ntok(i.n).join(\' \')===T}).sort(function(a,b){return (b.left||0)-(a.left||0)})[0]||null}'
   + 'var UMXC={},PTAB=null;function loadUmx(slug,cb){if(!slug)return cb({});if(UMXC[slug])return cb(UMXC[slug]);fetch(\'/img/unitmix_\'+slug+\'?t=\'+Math.floor(Date.now()/600000)).then(function(r){return r.ok?r.json():null}).then(function(j){UMXC[slug]=(j&&j.buildings_by_id)||{};cb(UMXC[slug])}).catch(function(){UMXC[slug]={};cb({})})}'
   + 'function umxFor(slug,name,hm){var U=UMXC[slug];if(!U)return null;if(hm&&hm.i!=null&&hm.i>=0&&U[hm.i]&&U[hm.i].rows&&U[hm.i].rows.length)return U[hm.i];var T=ntok(name);if(!T.length)return null;var best=null;Object.keys(U).forEach(function(k){var r=U[k];if(!r||!r.rows||!r.rows.length)return;var N=ntok(r.name||\'\');if(!N.length)return;var eq=N.length===T.length&&N.every(function(w){return T.indexOf(w)>=0});var sup=N.every(function(w){return T.indexOf(w)>=0})&&N.length>=2;var sub=T.every(function(w){return N.indexOf(w)>=0})&&T.length>=2;var sc=eq?3:(sup?2:(sub?1:0));if(sc&&(!best||sc>best[0]||(sc===best[0]&&(r.total_units||0)>(best[1].total_units||0))))best=[sc,r]});return best?best[1]:null}'
@@ -7323,9 +7323,18 @@ function sheetPanelJs(keyJson) {
     // has_pictures stays as the fallback for sheets pushed before the phrase existed.
     + 'd.innerHTML="<div class=spr>"+(m.pages?m.pages+" pages &middot; ":"")+kb+" KB"+(m.pictures?" &middot; "+__se(m.pictures):(m.has_pictures===false?" &middot; no pictures yet":""))+"</div>"'
     + '+"<a class=spb target=_blank rel=noopener href=\\"/sheet/"+encodeURIComponent(slug)+".pdf?key="+encodeURIComponent(SKEY)+"\\">Preview</a>"'
-    + '+"<a class=\\"spb on\\">Send to WhatsApp</a>";'
-    + 'var b=d.querySelector(".spb.on");b.addEventListener("click",function(){if(b.busy)return;b.busy=1;b.textContent="sending...";'
-    + 'fetch("/sheet_send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:SKEY,slug:slug})}).then(function(r){return r.json().catch(function(){return null})}).then(function(j){b.textContent=j&&j.ok?"Sent":((j&&(j.reason||j.error))||"did not send");b.busy=0}).catch(function(){b.textContent="did not send";b.busy=0})});'
+    // v162 (Kendall, 17 Sep 2026: "it should be opening whatsapp so she cn send to a clinet") - the button hands her the FILE through the
+    // phone's own share sheet, where she picks the client herself. It used to post the sheet into her own thread for her to forward, which
+    // is a step she should not have to take mid-conversation. Two things this deliberately is NOT: it does not message anyone on her behalf,
+    // and it does not hand over a LINK - a link to a sheet carries the owner key, so sharing the bytes is the only safe way to put one in a
+    // buyer's hands. If the share sheet is unavailable (a desktop browser), the file is saved instead and she attaches it herself.
+    + '+"<a class=\\"spb on\\">Send to a client</a>";'
+    + 'var b=d.querySelector(".spb.on");var LBL="Send to a client";b.addEventListener("click",function(){if(b.busy)return;b.busy=1;b.textContent="preparing...";'
+    + 'fetch("/sheet/"+encodeURIComponent(slug)+".pdf?key="+encodeURIComponent(SKEY)).then(function(r){if(!r.ok)throw new Error("http "+r.status);return r.blob()}).then(function(bl){'
+    + 'var fn=((m.name||slug)+".pdf").replace(/[^\\w .\\-]+/g,"-");var f=null;try{f=new File([bl],fn,{type:"application/pdf"})}catch(e){}'
+    + 'if(f&&navigator.canShare&&navigator.canShare({files:[f]}))return navigator.share({files:[f],title:(m.name||slug)}).then(function(){b.textContent="Shared"});'
+    + 'var u=URL.createObjectURL(bl);var dl=document.createElement("a");dl.href=u;dl.download=fn;document.body.appendChild(dl);dl.click();document.body.removeChild(dl);setTimeout(function(){URL.revokeObjectURL(u)},30000);b.textContent="Saved - attach it in WhatsApp";'
+    + '}).catch(function(e){b.textContent=(e&&e.name==="AbortError")?LBL:"could not open it"}).then(function(){b.busy=0})});'
     + '}).catch(function(){d.textContent="could not read that one"});});}';
 }
 
@@ -7541,7 +7550,7 @@ function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner
       const cu = '/cards?b=' + encodeURIComponent(p.cards) + '&key=' + encodeURIComponent(key);
       return '<div class="prop ours"><a class=cover href="' + cu + '" aria-label="unit cards"></a><div class=ph><span class=pn>' + p.name + '</span><span class=badge>modelled</span></div>' +
         '<div class=pm>' + (p.area || "") + ' · ' + (p.status || "") + '</div>' +
-        '<div class=pm style="color:#8FC7B9">' + (n ? n + ' unit-type cards · availability from the latest developer sheet' : 'cards being generated') + '</div>' +
+        '<div class=pm style="color:#8FC7B9">' + (n ? n + ' unit-type cards · availability from the latest list' : 'cards being generated') + '</div>' +
         '<div class=row><a class=go href="' + cu + '">unit cards →</a>' + (p.drill ? '<a class=mini href="/avail?d=' + p.drill + '&key=' + encodeURIComponent(key) + '">the mix</a>' : '') + (p.meta ? '<a class=mini href="/skyline/' + p.meta + '?key=' + encodeURIComponent(key) + '">3D</a>' : '') + '</div></div>';
     }
     if (p.kind === "portfolio") {                                   // v73.3 - from the developer's own site, enriched with DLD + the availability sheet
@@ -7549,7 +7558,7 @@ function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner
       const mix = (p.mix || []).filter(m => !/retail|office/.test(m)).join(', ');
       const dld = p.dld ? 'DLD ' + (p.dld.status || 'registered') + (p.dld.pct != null ? ' · ' + Math.round(p.dld.pct) + '% built' : '') : '';
       const trade = p.tx ? p.tx + ' registered sales 2026' + (p.median_aed_per_sqm ? ' · median AED ' + fm(p.median_aed_per_sqm) + '/m²' : '') : '';
-      const sh = p.sheet ? '<div class=pm style="color:#8FC7B9">on the developer sheet ' + (p.sheet.sheet || '') + ': ' + p.sheet.units + ' unit' + (p.sheet.units === 1 ? '' : 's') + ' for sale · ' + (p.sheet.types || []).join(', ') + (p.sheet.plan ? ' · ' + p.sheet.plan : '') + '</div>' : '';
+      const sh = p.sheet ? '<div class=pm style="color:#8FC7B9">on the availability list ' + (p.sheet.sheet || '') + ': ' + p.sheet.units + ' unit' + (p.sheet.units === 1 ? '' : 's') + ' for sale · ' + (p.sheet.types || []).join(', ') + (p.sheet.plan ? ' · ' + p.sheet.plan : '') + '</div>' : '';
       const img = p.image ? '<img class=hero src="' + p.image + '" alt="" loading=lazy referrerpolicy=no-referrer>' : '';
       return '<div class="prop' + (p.sheet ? ' ours' : '') + '">' + img + '<div class=ph><span class=pn>' + p.name + '</span><span class=badge' + (p.handover ? '' : ' style="border-color:var(--line);color:var(--mut)"') + '>' + (p.handover ? 'handover ' + p.handover : 'developer site') + '</span></div>' +
         '<div class=pm>' + specs + '</div>' + (mix ? '<div class=pm style="color:var(--mut)">' + mix + '</div>' : '') +
@@ -7571,7 +7580,7 @@ function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner
         (t.from_aed ? ' · from AED ' + fm(t.from_aed) : '') + '</span></div>').join("");
       const spec = [p.area, p.units ? fm(p.units) + ' units' : null, p.handover ? 'handover ' + p.handover : null].filter(Boolean).join(' · ');
       return '<div class="prop ours"><div class=ph><span class=pn>' + p.name + '</span>' +
-        '<span class=badge>' + (tl ? 'developer type summary' : 'on the developer sheet') + '</span></div>' +
+        '<span class=badge>' + (tl ? 'developer type summary' : 'on the availability list') + '</span></div>' +
         '<div class=pm>' + spec + '</div>' + rows +
         (tl ? '<div class=pm style="color:#E0B080">starting prices by type — not unit-by-unit availability; no unit here can be quoted as free</div>' : '') +
         (p.note ? '<div class=pm style="color:var(--mut);font-size:.6rem">' + p.note + '</div>' : '') +
@@ -7649,7 +7658,7 @@ function renderCompare(cmp, bd, s, key) {
     ["Handovers ahead", (ca.handovers || []).slice(0, 3).join(" · ") || null, (cb.handovers || []).slice(0, 3).join(" · ") || null, null, null],
     ["Portfolio on developer site", ca.portfolio != null ? String(ca.portfolio) : null, cb.portfolio != null ? String(cb.portfolio) : null, null, null],
     ["MEED active projects", String(ca.meed_active || 0), String(cb.meed_active || 0), ca.meed_active, cb.meed_active],
-    ["Units on the developer sheet", ca.sheet_units ? String(ca.sheet_units) : null, cb.sheet_units ? String(cb.sheet_units) : null, null, null],
+    ["Units on the availability list", ca.sheet_units ? String(ca.sheet_units) : null, cb.sheet_units ? String(cb.sheet_units) : null, null, null],
     ["Modelled - unit cards", ca.ours_cards ? "yes" : "not yet", cb.ours_cards ? "yes" : "not yet", null, null],
   ];
   const tr = rows.filter(r => !s.diff || (r[1] || "") !== (r[2] || "")).map(r => {
@@ -8501,7 +8510,7 @@ function applyProj(name){
     if(d.p10_aed)rows.push(["Typical range","AED "+fmA(d.p10_aed)+" – "+fmA(d.p90_aed)]);if(d.median_aed_per_sqm)rows.push(["Median AED / m²",fmA(d.median_aed_per_sqm)]);
     if(d.offplan_share!=null)rows.push(["Off-plan share",Math.round(d.offplan_share*100)+"%"]);if(d.rooms)rows.push(["Sold by type",Object.entries(d.rooms).map(x=>x[0]+" "+x[1]).join(" · ")]);
     if(d.nearest_metro)rows.push(["Nearest metro",d.nearest_metro]);if(d.nearest_mall)rows.push(["Nearest mall",d.nearest_mall]);if(d.nearest_landmark)rows.push(["Landmark",d.nearest_landmark]);
-    if(f.sheet)rows.push(["On the developer sheet",f.sheet.units+" unit"+(f.sheet.units===1?"":"s")+" · "+(f.sheet.types||[]).join(", ")]);}
+    if(f.sheet)rows.push(["On the availability list",f.sheet.units+" unit"+(f.sheet.units===1?"":"s")+" · "+(f.sheet.types||[]).join(", ")]);}
   if(a0&&a0.h>12)rows.push(["Height (model)",Math.round(a0.h)+" m"]);
   // from the model's own report: storeys, and the envelope (footprint x storeys - an upper bound, withheld where the
   // footprint we hold is a podium or the whole plot). Homes are the register's where we have them, indicative otherwise.
@@ -8534,7 +8543,7 @@ function applyProj(name){
     "Registered sales 2026":"M4 18l5-6 4 3 7-8M4 20h16","Median price":"M4 6h9l7 6-7 6H4zM8 12h.01","Typical range":"M4 12h16M7 8v8M17 8v8",
     "Median AED / m²":"M3 17l14-14 4 4L7 21H3zM13 7l2 2M10 10l2 2M7 13l2 2","Off-plan share":"M4 21h16M6 21V8h4v13M10 8l10-4v17M14 12h2M14 16h2",
     "Sold by type":"M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 21v-6h6v6M9 9h.01M15 9h.01","Nearest metro":"M6 3h12v12H6zM6 15l-2 4M18 15l2 4M9 11h6M9 7h6",
-    "Nearest mall":"M6 8h12l1 12H5zM9 8a3 3 0 0 1 6 0","Landmark":"M5 21V4M5 4h12l-2 4 2 4H5","On the developer sheet":"M6 3h12v18H6zM9 8h6M9 12h6M9 16h4",
+    "Nearest mall":"M6 8h12l1 12H5zM9 8a3 3 0 0 1 6 0","Landmark":"M5 21V4M5 4h12l-2 4 2 4H5","On the availability list":"M6 3h12v18H6zM9 8h6M9 12h6M9 16h4",
     "Last registration":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2","Height (model)":"M12 20V6M8 10l4-4 4 4",
     "Envelope (model)":"M4 4h16v16H4zM4 10h16M10 4v16","Footprint":"M4 20h16M7 20V12h10v8M7 12l5-4 5 4","Storeys (model)":"M4 20h16M6 20V4h12v16M6 9h12M6 14h12",
     "Homes (registered)":"M4 21V10l8-6 8 6v11M9 21v-6h6v6M15 6l3-2","Homes (indicative)":"M4 21V10l8-6 8 6v11M9 21v-6h6v6"};

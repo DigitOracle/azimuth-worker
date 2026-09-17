@@ -80,7 +80,15 @@ ok(ownerHtml.includes('if(m.hold){d.innerHTML="<div class=spr>"+__se(m.hold)'), 
 ok(ownerHtml.includes('m.pictures?" &middot; "+__se(m.pictures)'), 'the panel says WHICH pictures - "exteriors only" is a different proposition from "layouts and interiors"');
 ok(ownerHtml.includes("m.has_pictures===false"), "has_pictures still answers for sheets pushed before the phrase existed");
 ok(ownerHtml.includes('d.addEventListener("click",function(ev){ev.stopPropagation()})'), "a tap inside the panel does not also jump to the twin");
-ok(ownerHtml.includes("/sheet_send") && ownerHtml.includes('method:"POST"'), "the send is a POST, so no link preview or prefetch can fire it");
+// v162 - the button hands her the FILE through the phone's share sheet and she picks the client. The old worry (a prefetch firing a send)
+// is gone because the page no longer sends anything at all; the new worry is a LINK reaching a buyer, because a link to a sheet carries the
+// owner key. These pin the file path and rule out the link path.
+ok(ownerHtml.includes("navigator.share({files:") && ownerHtml.includes("navigator.canShare({files:"), "the sheet is shared as a file, and only after checking the device will take one");
+ok(ownerHtml.includes('new File([bl],fn,{type:"application/pdf"})'), "it shares the bytes, not an address");
+ok(!ownerHtml.includes("wa.me") && !ownerHtml.includes("api.whatsapp.com"), "no WhatsApp deep link is built - a link would carry the owner key into a buyer's hands");
+ok(!ownerHtml.includes("/sheet_send"), "the page no longer posts the sheet into her own thread; she sends it herself, to whom she chooses");
+ok(ownerHtml.includes('dl.download=fn') && ownerHtml.includes('"Saved - attach it in WhatsApp"'), "where there is no share sheet (a desktop browser) the file is saved and she is told what to do with it");
+ok(ownerHtml.includes('(e&&e.name==="AbortError")?LBL'), "cancelling the share puts the button back, rather than reporting a failure she did not cause");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
