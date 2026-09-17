@@ -7540,7 +7540,9 @@ ${najNav(key, "homes")}
 </body></html>`;
 }
 // v73 - DEVELOPER PAGE: property cards. "ours" first (modelled, unit cards ready), then DLD-registered 2026 projects, then projects trading in 2026.
-const umNkey = (t) => String(t || "").toLowerCase().replace(/\b(by|the|tower|towers|residences?|residence|building|bldg|apartments?)\b/g, "").replace(/[^a-z0-9]/g, "");
+// v166 - NFKD first: without it an accented letter is DROPPED rather than folded, so "Tréppan" normalised to "trppan" and shared no
+// word with itself. Three cards were unreachable for that reason alone. The data side hit the identical bug in its own normaliser.
+const umNkey = (t) => String(t || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(by|the|tower|towers|residences?|residence|building|bldg|apartments?)\b/g, "").replace(/[^a-z0-9]/g, "");
 function videoMatch(vids, name, district) {                                 // v101 - a tour belongs to a scheme by name (and district when known)
   const tok = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff ]+/g, " ").split(" ").filter(w => w.length > 2 && !["the", "by", "at", "residences", "residence", "tower", "towers", "dubai"].includes(w));
   const T = tok(name); if (!T.length) return null;
@@ -7569,7 +7571,14 @@ function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner
     if (!/^[a-z0-9_]{1,60}$/.test(slug)) return null;
     return _agrees(name, slug) ? slug : null;
   };
-  const umLookup = (name) => { const P = (umx && umx.projects) || {}; const k = umNkey(name); if (P[k]) return P[k]; for (const kk in P) if (k && kk && (kk.indexOf(k) === 0 || k.indexOf(kk) === 0) && Math.min(k.length, kk.length) >= 6) return P[kk]; return null; };
+  // v166 - LONGEST match wins. It returned the FIRST prefix hit, so "Marina Cove At Dubai Marina" landed on "marina" (Marina Tower) while
+  // "marinacove" sat in the same file, and five Madinat Jumeirah Living towers landed on "Madina Tower" on the strength of MADINA. Worse than
+  // six wrong links: a short landing makes the record name a subset of the card name, which reads like a phase or a sub-name, so the
+  // agreement guard waved it through. Longest-wins fixes the joins and closes that hole in the guard at the same time.
+  const umLookup = (name) => { const P = (umx && umx.projects) || {}; const k = umNkey(name); if (P[k]) return P[k];
+    let best = null, bestLen = 0;
+    for (const kk in P) if (k && kk && (kk.indexOf(k) === 0 || k.indexOf(kk) === 0) && Math.min(k.length, kk.length) >= 6 && kk.length > bestLen) { best = P[kk]; bestLen = kk.length; }
+    return best; };
   const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(2) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(1) + " M" : Math.round(n).toLocaleString("en-US"));
   const k = dv.kpi || {};
   const kp = [k.tx_2026 ? ["Sales 2026", fm(k.tx_2026)] : null, k.value_aed ? ["Value", "AED " + fm(k.value_aed)] : null, k.median_aed_per_sqm ? ["Median", "AED " + fm(k.median_aed_per_sqm) + "/m²"] : null,

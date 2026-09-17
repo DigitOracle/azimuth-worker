@@ -40,6 +40,8 @@ store.set("img_board_devs", JSON.stringify({ developers: [{ key: "arada", name: 
     { kind: "portfolio", name: "The EDGE", area: "Business Bay", url: "https://example.com/e" },
     { kind: "portfolio", name: "Bulgari Lighthouse Dubai", area: "Jumeirah", url: "https://example.com/bl" },
     { kind: "portfolio", name: "Golf Grand", area: "Dubai Hills", url: "https://example.com/gg" },
+    { kind: "portfolio", name: "Marina Cove At Dubai Marina", area: "Dubai Marina", url: "https://example.com/mc" },
+    { kind: "portfolio", name: "Tr\u00e9ppan Tower", area: "Dubai Islands", url: "https://example.com/tt" },
   ] }] }));
 // THE REAL SHAPE, which is the point of this fixture: `sheet` on these records is a NUMBER - the count of units on the developer's
 // availability list - and the slug lives in `client_sheet`. Reading `sheet` shipped an icon whose slug was "26". It fetched nothing and told
@@ -55,6 +57,12 @@ store.set("img_unitmix_projects", JSON.stringify({ projects: {
   b: { district: "jumeirah", i: 1, client_sheet: "the_edge" },
   // a real wrong join from the live data: different building, plausible-looking slug
   golfgrand: { district: "dubaihills", i: 6, client_sheet: "golf_ville" },
+  // v166 - longest match wins. Both of these are prefixes of "marinacoveatdubaimarina"; the short one is
+  // a DIFFERENT building and used to win purely by being walked first.
+  marina: { district: "dubaimarina", i: 2, name: "Marina Tower", client_sheet: "marina_tower" },
+  marinacove: { district: "dubaimarina", i: 3, name: "Marina Cove", client_sheet: "marina_cove" },
+  // v166 - the accent must FOLD, not vanish. Without NFKD "Treppan" normalised to "trppan" and matched nothing.
+  treppan: { district: "dubaiislands", i: 4, name: "Treppan Tower", client_sheet: "treppan_tower" },
 } }));
 
 const devOwner = await (await call("/dev?d=arada&key=" + encodeURIComponent(READ))).text();
@@ -100,6 +108,11 @@ ok(devOwner.includes('data-s="the_edge"'), "The EDGE keeps its sheet - both side
 // further down the card than that - it was green against the broken join, which is the exact failure this suite keeps finding.
 ok((devOwner.match(/data-s="the_edge"/g) || []).length === 1, "exactly ONE card offers the_edge - under the old join every building starting with b got it too, through a single-letter project key");
 ok(!devOwner.includes('data-s="golf_ville"'), "Golf Grand gets no sheet: a slug that does not agree with the name is refused, however plausible it looks");
+
+// v166 - two faults in the lookup itself, both found by the data session reading the join I exported.
+ok(devOwner.includes('data-s="marina_cove"'), "the LONGEST matching key wins: Marina Cove At Dubai Marina reaches Marina Cove");
+ok(!devOwner.includes('data-s="marina_tower"'), "and no longer stops at Marina Tower, a different building that won by being walked first");
+ok(devOwner.includes('data-s="treppan_tower"'), "an accented name folds to its base letters rather than losing them - Treppan matched nothing when the accent was dropped");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
