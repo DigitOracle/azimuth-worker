@@ -716,7 +716,7 @@ ${(() => {                                                      // v68 — devel
 </section></div><script>window.__l=Date.now();document.addEventListener("visibilitychange",function(){if(!document.hidden&&Date.now()-window.__l>15000){location.reload()}});window.addEventListener("pageshow",function(e){if(e.persisted){location.reload()}});document.addEventListener("click",function(e){var r=e.target.closest?e.target.closest(".task .ring"):null;if(!r)return;var c=r.closest(".task");var id=c&&c.getAttribute("data-id");if(!id)return;var k=new URLSearchParams(location.search).get("key");if(r.classList.contains("done"))return;r.classList.add("done");fetch("/done?key="+encodeURIComponent(k)+"&id="+encodeURIComponent(id)).then(function(x){if(x.ok){c.style.transition="opacity .3s";c.style.opacity="0.25";setTimeout(function(){c.remove();var n=document.querySelector(".plate-h .n");if(n){n.textContent=Math.max(0,(parseInt(n.textContent,10)||1)-1)}},300)}else{r.classList.remove("done")}}).catch(function(){r.classList.remove("done")})});document.addEventListener("click",function(e){var a=e.target.closest?e.target.closest("a.card"):null;if(a){var h=a.getAttribute("href");if(h){e.preventDefault();try{window.open(h,"_blank")||(location.href=h)}catch(x){location.href=h}}}},true);</script>
 <div id="spl" style="position:fixed;inset:0;z-index:60;background:#0C1413;display:none;align-items:center;justify-content:center"><div id="splq" style="display:none;position:absolute;inset:0;background:#E8DCC8;color:#006039;padding:12vh 8vw;box-sizing:border-box;flex-direction:column;justify-content:center;align-items:center;text-align:center;font-family:Fraunces,Georgia,serif"><div style="font-size:11px;letter-spacing:.32em;color:#8A6D2F;font-family:'IBM Plex Mono',monospace;margin-bottom:26px">A VERSE FOR THE DAY</div><div id="splqt" style="font-size:clamp(22px,4.6vw,40px);line-height:1.32;max-width:26em;text-wrap:balance;font-weight:500"></div><div id="splqr" style="margin-top:26px;font-size:14px;letter-spacing:.2em;color:#C5A56A;font-family:'IBM Plex Mono',monospace;text-transform:uppercase"></div><div style="position:absolute;bottom:calc(30px + env(safe-area-inset-bottom));left:0;right:0;font-size:12px;letter-spacing:.24em;color:#8A6D2F;font-family:'IBM Plex Mono',monospace">TAP TO CONTINUE</div></div><video id="splv" playsinline muted preload="auto" style="width:100%;height:100%;object-fit:cover"></video><div id="splm" style="position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;font-weight:600;color:#0C1413;background:#C5A56A;border-radius:99px;padding:8px 14px;cursor:pointer">🔇 tap for sound</div><div id="splw" style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-family:Fraunces,Georgia,serif;font-size:32px;color:#E8E4D8;opacity:0;transition:opacity .9s">Najma <span style="color:#C5A56A">نجمة</span></div></div>
 <script>(function(){try{if(!/[?&]video=1/.test(location.search)){fetch("/verse").then(function(r){return r.ok?r.json():null}).then(function(j){if(!j)return;var s=document.getElementById("spl"),q=document.getElementById("splq"),v=document.getElementById("splv"),m=document.getElementById("splm"),w=document.getElementById("splw");v.remove();m.remove();w.remove();document.getElementById("splqt").textContent="\u201C"+j.text+"\u201D";document.getElementById("splqr").textContent=j.ref;q.style.display="flex";s.style.background="#E8DCC8";s.style.display="flex";var done=function(){if(!s.parentNode)return;s.style.transition="opacity .7s";s.style.opacity="0";setTimeout(function(){s.remove()},720)};s.onclick=done;setTimeout(done,8000)}).catch(function(){});return}
-fetch("/img/splash",{method:"HEAD"}).then(function(r){if(!r.ok)return;var s=document.getElementById("spl"),v=document.getElementById("splv"),w=document.getElementById("splw"),m=document.getElementById("splm");document.getElementById("splq").remove();v.src="/img/splash";s.style.display="flex";var done=function(){if(!s.parentNode)return;s.style.transition="opacity .6s";s.style.opacity="0";setTimeout(function(){s.remove()},650)};v.onended=done;s.onclick=done;v.onerror=done;m.onclick=function(e){e.stopPropagation();v.muted=!v.muted;m.textContent=v.muted?"🔇 tap for sound":"🔊 sound on"};setTimeout(function(){w.style.opacity="1"},9000);setTimeout(done,20000);var p=v.play();if(p&&p.catch)p.catch(done)})}catch(e){}})();</script></body></html>`;
+var fm=/[#&]film=([a-z0-9_]+)/i.exec(location.hash);(fm?Promise.resolve({ok:true}):fetch("/img/splash",{method:"HEAD"})).then(function(r){if(!r.ok)return;var s=document.getElementById("spl"),v=document.getElementById("splv"),w=document.getElementById("splw"),m=document.getElementById("splm");document.getElementById("splq").remove();if(fm){v.src="/video/"+fm[1];v.poster="/video/"+fm[1]+"?poster=1"}else{v.src="/img/splash"}s.style.display="flex";var done=function(){if(!s.parentNode)return;s.style.transition="opacity .6s";s.style.opacity="0";setTimeout(function(){s.remove()},650)};v.onended=done;s.onclick=done;v.onerror=done;m.onclick=function(e){e.stopPropagation();v.muted=!v.muted;m.textContent=v.muted?"🔇 tap for sound":"🔊 sound on"};setTimeout(function(){w.style.opacity="1"},9000);setTimeout(done,fm?60000:20000);var p=v.play();if(p&&p.catch)p.catch(done)})}catch(e){}})();</script></body></html>`;
 }
 
 // --- WhatsApp Cloud API (two-way capture) -------------------------------
@@ -925,6 +925,23 @@ function pubOrigin(env, origin) {
   if (/^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?$/i.test(o)) return o;   // a real public host, dots and all
   return (env && env.PUBLIC_ORIGIN) || "https://azimuth-2.digitalchemy.workers.dev";
 }
+// v161 - the DAMAC Hills 30 s film (scope "district30") and its nine cluster endings (scope "cluster", with members: the sub-communities), from the img_videos register
+async function filmItems(env) {
+  let items = []; try { items = (JSON.parse((await env.MEETINGS.get("img_videos")) || "{}").items) || []; } catch (e) {}
+  return items.filter((v) => v && v.kind === "unreal" && (v.scope === "district30" || v.scope === "cluster") && v.key);
+}
+function filmMatch(items, q, district) {   // the cluster whose name or member sits in q, or q in it (longest name wins); else the district's 30 s film; else null
+  const t = String(q || "").toLowerCase().trim(); let best = null, len = 0;
+  if (t.length >= 3) for (const v of items) {
+    if (v.scope !== "cluster" || (district && v.district !== district)) continue;
+    for (const n of [v.name].concat(Array.isArray(v.members) ? v.members : [])) {
+      const s = String(n || "").toLowerCase().trim();
+      if (s.length >= 3 && s.length > len && (t.indexOf(s) !== -1 || s.indexOf(t) !== -1)) { best = v; len = s.length; }
+    }
+  }
+  return best || items.find((v) => v.scope === "district30" && (!district || v.district === district)) || null;
+}
+const filmOut = (v) => ({ key: v.key, src: v.src || "/video/" + v.key, poster: v.poster || "/video/" + v.key + "?poster=1", name: v.name || "", cluster: v.cluster == null ? null : v.cluster });
 async function waSendImage(env, to, link, caption) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "image", image: { link, caption: caption || undefined } }, "image");
 }
@@ -2688,6 +2705,13 @@ async function appFetch(request, env, ctx) {
         await waSendButtons(env, env.WA_ALLOWED, _ct, [{ id: "st:lock", title: "Lock it" }, { id: "st:change", title: "Change something" }]);
         return new Response("card sent");
       }
+      if (url.pathname === "/film") {                         // v161 - the cluster ending that fits a free-text ask, else the district's 30 s film (keyed)
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _fd = (url.searchParams.get("district") || "").replace(/[^a-z0-9_]/gi, "");
+        const _fv = filmMatch(await filmItems(env), url.searchParams.get("q") || "", _fd);
+        if (!_fv) return new Response("no film", { status: 404 });
+        return new Response(JSON.stringify(filmOut(_fv)), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/walk_status") {                  // v119 - is the UnReal streamer on, and where (keyed); heartbeat lands via POST below
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _ws = null; try { _ws = JSON.parse((await env.MEETINGS.get("walk_status")) || "null"); } catch (e) {}
@@ -3952,6 +3976,17 @@ async function appFetch(request, env, ctx) {
               "✍️ “draft linkedin 2” · 🎠 “draft carousel 2” · 📝 “draft article 2” · 📸 “draft instagram 3”" + NL10 +
               "🔎 Deeper dive: 🎬 “video 2” — a paste-ready Magnific (Seedance) prompt · 🎤 “questions 2” — what to ask a banker or RM on camera" + NL10 +
               "🧬 “dna” — what I've learned about your style");
+            return new Response("ok");
+          }
+        }
+        {                                                                            // v161 - "show me Golf Place" -> the cluster ending as a video; the board's player when the film is over WhatsApp's 16 MB
+          const _fm = text.match(/^(?:show|play|film|video)\s+(?:me\s+)?(.+)$/i);
+          const _fv = _fm ? filmMatch((await filmItems(env)).filter((v) => v.scope === "cluster"), _fm[1], "") : null;
+          if (_fv) {
+            const _cap = (_fv.name || "") + " \u00b7 Damac Hills";
+            let _fb = null; try { _fb = await env.MEETINGS.get("vid_" + _fv.key, "arrayBuffer"); } catch (e) {}
+            if (_fb && _fb.byteLength <= 16 * 1024 * 1024) await waSendVideo(env, from, pubOrigin(env, url.origin) + "/video/" + _fv.key, _cap);
+            else await waSend(env, from, "\u{1F3AC} " + _cap + NL10 + pubOrigin(env, url.origin) + "/board?key=" + env.READ_KEY + "&video=1#film=" + _fv.key);
             return new Response("ok");
           }
         }
@@ -6133,7 +6168,7 @@ const MAP_CHROME_JS = ''
   + 'function esc(t){return String(t==null?"":t).replace(/[&<>]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]})}'
   + 'function tc(t){t=String(t||"");if(t.length>3&&t===t.toUpperCase()&&/[A-Z]/.test(t)){return t.toLowerCase().replace(/(^|[\\s\\-\\/(])([a-z])/g,function(m,a,b){return a+b.toUpperCase()}).replace(/\\b(By|Of|And|The|At)\\b/g,function(m){return m.toLowerCase()})}return t}'
   + 'function loadData(){var V="?v="+Math.floor(Date.now()/600000);Promise.all([j("/img/districts_geo"+V),j("/img/subs"+V),j("/img/plots"+V),j("/img/amenities"+V),j("/img/videos"+V),j("/img/map_prices"+V)]).then(function(r){'
-  + '  D=r[0];SUBS=r[1];PLOTS=r[2];AM=r[3];VIDS=((r[4]&&r[4].items)||[]).filter(function(v){return !v.kind});UFLY=((r[4]&&r[4].items)||[]).filter(function(v){return v.kind==="unreal"&&v.scope==="district"});PR=(r[5]&&r[5].items)||[];buildRail();buildAm();drawAm();if(STYLE_READY)addLayers();deepLink();});}'
+  + '  D=r[0];SUBS=r[1];PLOTS=r[2];AM=r[3];VIDS=((r[4]&&r[4].items)||[]).filter(function(v){return !v.kind});UFLY=((r[4]&&r[4].items)||[]).filter(function(v){return v.kind==="unreal"&&(v.scope==="district"||v.scope==="district30")});PR=(r[5]&&r[5].items)||[];buildRail();buildAm();drawAm();if(STYLE_READY)addLayers();deepLink();});}'
   + HOMES_CORE_JS   // v152.5 - budget, bedrooms, type and extras matching, shared with the all-Dubai twin
   + 'function drawHomes(){var src=map&&map.getSource("homes");if(!HB.on){if(src)src.setData({type:"FeatureCollection",features:[]});if(window.__onHomes)try{window.__onHomes(null)}catch(e){}return}var m=homeMatches();if(window.__onHomes)try{window.__onHomes(m)}catch(e){}var mPins=window.__twinDistrict?m.filter(function(x){return x.it.d===window.__twinDistrict}):m;'   // v152.3 - the twin lights up the buildings whose homes match
   + '  if(src)src.setData({type:"FeatureCollection",features:mPins.map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x.it.lon,x.it.lat]},properties:{p:x.it.p,lab:x.it.n+" \u00b7 "+fmtAed(x.v)}}})});'
@@ -6194,7 +6229,7 @@ const MAP_CHROME_JS = ''
   + '  var go=function(){if(sf)openPlace({properties:sf.properties,geometry:sf.geometry},"sub");else if(pf)openPlace({properties:pf.properties,geometry:pf.geometry},"plot");else if(v)openVideo(v);'
   + '    if(v&&(sf||pf)){}};'
   + '  if(STYLE_READY&&map.getSource("subs"))setTimeout(go,900);else map.once("style.load",function(){setTimeout(go,1200)});}'
-  + 'function flyFor(slug){for(var i=0;i<UFLY.length;i++){if(UFLY[i].district===slug)return UFLY[i]}return null}'
+  + 'function flyFor(slug){var f=null;for(var i=0;i<UFLY.length;i++){if(UFLY[i].district===slug){if(UFLY[i].scope==="district30")return UFLY[i];if(!f)f=UFLY[i]}}return f}'   // v161 - the 30 s film first, the 15 s fly-through when there is none
   + 'var WALK=null;function walkPoll(){var k=new URLSearchParams(location.search).get("key")||"";fetch("/walk_status?key="+encodeURIComponent(k)).then(function(r){return r.ok?r.json():null}).then(function(j){WALK=j;flyRefresh()}).catch(function(){})}walkPoll();setInterval(walkPoll,45000);'
   + 'function flyOn(slug){return !!(flyFor(slug)||(WALK&&WALK.live&&WALK.url))}'
   + 'function flyChip(slug){var on=flyOn(slug);return \' <u class=uv data-fly="\'+slug+\'" title="\'+(on?"UnReal":"UnReal \u00b7 coming soon")+\'" style="display:inline-block;vertical-align:-3px;margin-left:6px;text-decoration:none;cursor:\'+(on?"pointer":"default")+\';opacity:\'+(on?"1":".3")+\'"><svg width="16" height="12" viewBox="0 0 24 18" fill="none" stroke="#C5A56A" stroke-width="2" stroke-linejoin="round"><rect x="1.5" y="2.5" width="14" height="13" rx="2"/><path d="M15.5 7l7-3.5v11l-7-3.5z"/></svg></u>\'}'
