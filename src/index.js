@@ -7540,7 +7540,12 @@ function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner
     // second lookup with its own failure modes. The slug is allowlisted to the pattern sheets.js itself accepts, so a malformed one is simply
     // not offered - and no slug means no icon, which is a miss rather than a wrong answer. NOTE p.sheet on these cards is the DEVELOPER's
     // availability sheet, a different thing entirely; this one comes off the building, not the property record.
-    const _slug = (owner && _u && _u.sheet && /^[a-z0-9_]{1,60}$/.test(String(_u.sheet))) ? String(_u.sheet) : null;
+    // v162.1 - the field is client_sheet, NOT sheet. On these same records `sheet` is a NUMBER: the count of units on the developer's
+    // availability list. Reading it gave such a card an icon carrying "26" as its slug, which fetched nothing and told her there was no sheet -
+    // an icon that could only ever disappoint. Hence the typeof guard as well as the corrected name: a count must never pass for a slug again.
+    // Several rows legitimately share one slug (Bluewaters Residences 3-9 are seven rows and one sheet, because the slug is the Land Department
+    // project while the sheet covers the development). That is expected, not a collision.
+    const _slug = (owner && _u && typeof _u.client_sheet === "string" && /^[a-z0-9_]{1,60}$/.test(_u.client_sheet)) ? _u.client_sheet : null;
     const _shb = _slug ? '<a class="mb2 gs" title="Client sheet" aria-label="Client sheet" data-s="' + _slug + '">' + najIcon("file") + '</a>' : '';
     const _bar = '<div class=modeb2>' + _shb + '<button class=mb2 data-m=mix type=button aria-expanded=false>Unit mix</button>' + (_tw ? '<a class=mb2 href="' + _tw + '">on the twin \u2192</a>' : '') + (_mp ? '<a class=mb2 href="' + _mp + '">on the map \u2192</a>' : '') + '</div>';
     return _h.replace(/<\/div>\s*$/, _bar + (_vd ? videoBlock(_vd) : '') + unitMixHtml(_u, true).replace('class=um', 'class="um umhover"') + '</div>'); });

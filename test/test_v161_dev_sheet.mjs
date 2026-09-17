@@ -38,10 +38,14 @@ store.set("img_board_devs", JSON.stringify({ developers: [{ key: "arada", name: 
     { kind: "portfolio", name: "Unjoined Tower", area: "Business Bay", url: "https://example.com/u" },
     { kind: "portfolio", name: "Malformed Tower", area: "Business Bay", url: "https://example.com/m" },
   ] }] }));
+// THE REAL SHAPE, which is the point of this fixture: `sheet` on these records is a NUMBER - the count of units on the developer's
+// availability list - and the slug lives in `client_sheet`. Reading `sheet` shipped an icon whose slug was "26". It fetched nothing and told
+// her there was no sheet. The fixture I first wrote here invented `sheet: "bellevue_towers"`, so it could never have caught that; this one is
+// copied from what the pipeline actually writes.
 store.set("img_unitmix_projects", JSON.stringify({ projects: {
-  bellevue: { district: "downtown", i: 12, sheet: "bellevue_towers" },
-  unjoined: { district: "businessbay", i: 3 },
-  malformed: { district: "businessbay", i: 4, sheet: "../../etc/passwd?key=x" },
+  bellevue: { district: "downtown", i: 12, sheet: 18, client_sheet: "bellevue_towers" },
+  unjoined: { district: "businessbay", i: 3, sheet: 26 },
+  malformed: { district: "businessbay", i: 4, client_sheet: "../../etc/passwd?key=x" },
 } }));
 
 const devOwner = await (await call("/dev?d=arada&key=" + encodeURIComponent(READ))).text();
@@ -49,6 +53,7 @@ const devClient = await (await call("/dev?d=arada&key=" + encodeURIComponent(CLI
 
 ok(devOwner.includes('data-s="bellevue_towers"'), "a developer card carries the sheet action, joined through the lookup its twin and map links already use");
 ok(!devOwner.includes('data-s="unjoined'), "a card whose building has no slug gets no action - a miss, never a wrong answer");
+ok(!devOwner.includes('data-s="26"') && !devOwner.includes('data-s="18"'), "a UNIT COUNT is never mistaken for a slug - this is the bug that shipped, and the check that would have caught it");
 ok(!devOwner.includes("etc/passwd") && !devOwner.includes('data-s="../'), "a slug that is not the shape sheets.js accepts is not offered at all, so nothing unchecked reaches an href");
 ok(devOwner.includes("Client sheet") && devOwner.includes('aria-label="Client sheet"'), "the developer card's icon says what it is, to a finger and to a screen reader");
 ok(devOwner.includes("on the developer sheet") === false || !devOwner.includes('data-s="26'), "the DEVELOPER's availability sheet and the client sheet stay distinct - the slug is read off the building, not the property record");
