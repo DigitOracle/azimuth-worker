@@ -7551,6 +7551,24 @@ function videoBlock(v) {
          '<div class=vcap>' + esc2(v.title) + (v.approx ? ' \u00b7 pin on the map is approximate: plot ' + esc2(v.plot || '') + ', building not yet a footprint' : '') + '</div></div>';
 }
 function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner: the client-sheet action on a developer card, never on a client link
+  // v165 - THE SLUG MUST AGREE WITH THE NAME ON THE CARD. umLookup exists to put a card near a building for the twin and map links, where a
+  // near miss shows a neighbour and costs nothing. This hands a buyer a document with her name on it, so a near miss is a different kind of
+  // thing entirely. Measured against the live file: 174 cards carry an icon today and 15 of them point at another building - "Golf Grand" is
+  // offered golf_ville, "One at Palm Jumeirah" is offered ava_at_palm_jumeirah.
+  //
+  // The guard, not a stricter lookup. Requiring an exact key instead would have refused all 15 AND thrown away 37 correct ones found through
+  // the prefix path; agreement keeps 159 and refuses exactly the 15. Both sides are normalised the SAME way, which the first version of this
+  // did not do - it stripped "the" from the name but not the slug and discarded "The EDGE -> the_edge", which is right.
+  const _agrees = (name, slug) => {
+    const n = umNkey(name), s = umNkey(String(slug).replace(/_/g, " "));
+    if (n.length < 3 || s.length < 3) return false;
+    return n === s || n.startsWith(s) || s.startsWith(n);
+  };
+  const _sheetSlug = (name, rec) => {
+    const slug = rec && typeof rec.client_sheet === "string" ? rec.client_sheet : "";
+    if (!/^[a-z0-9_]{1,60}$/.test(slug)) return null;
+    return _agrees(name, slug) ? slug : null;
+  };
   const umLookup = (name) => { const P = (umx && umx.projects) || {}; const k = umNkey(name); if (P[k]) return P[k]; for (const kk in P) if (k && kk && (kk.indexOf(k) === 0 || k.indexOf(kk) === 0) && Math.min(k.length, kk.length) >= 6) return P[kk]; return null; };
   const fm = (n) => n == null ? "-" : (n >= 1e9 ? (n / 1e9).toFixed(2) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(1) + " M" : Math.round(n).toLocaleString("en-US"));
   const k = dv.kpi || {};
@@ -7570,7 +7588,7 @@ function renderDev(dv, bd, galleries, key, umx, vids, owner) {   // v161 - owner
     // an icon that could only ever disappoint. Hence the typeof guard as well as the corrected name: a count must never pass for a slug again.
     // Several rows legitimately share one slug (Bluewaters Residences 3-9 are seven rows and one sheet, because the slug is the Land Department
     // project while the sheet covers the development). That is expected, not a collision.
-    const _slug = (owner && _u && typeof _u.client_sheet === "string" && /^[a-z0-9_]{1,60}$/.test(_u.client_sheet)) ? _u.client_sheet : null;
+    const _slug = owner ? _sheetSlug(p.name, _u) : null;
     const _shb = _slug ? '<a class="mb2 gs" title="Client sheet" aria-label="Client sheet" data-s="' + _slug + '">' + najIcon("file") + '</a>' : '';
     const _bar = '<div class=modeb2>' + _shb + '<button class=mb2 data-m=mix type=button aria-expanded=false>Unit mix</button>' + (_tw ? '<a class=mb2 href="' + _tw + '">on the twin \u2192</a>' : '') + (_mp ? '<a class=mb2 href="' + _mp + '">on the map \u2192</a>' : '') + '</div>';
     return _h.replace(/<\/div>\s*$/, _bar + (_vd ? videoBlock(_vd) : '') + unitMixHtml(_u, true).replace('class=um', 'class="um umhover"') + '</div>'); });

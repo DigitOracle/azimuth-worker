@@ -37,6 +37,9 @@ store.set("img_board_devs", JSON.stringify({ developers: [{ key: "arada", name: 
     { kind: "portfolio", name: "Bellevue Towers", area: "Downtown Dubai", url: "https://example.com/b", handover: "31-Oct-2029" },
     { kind: "portfolio", name: "Unjoined Tower", area: "Business Bay", url: "https://example.com/u" },
     { kind: "portfolio", name: "Malformed Tower", area: "Business Bay", url: "https://example.com/m" },
+    { kind: "portfolio", name: "The EDGE", area: "Business Bay", url: "https://example.com/e" },
+    { kind: "portfolio", name: "Bulgari Lighthouse Dubai", area: "Jumeirah", url: "https://example.com/bl" },
+    { kind: "portfolio", name: "Golf Grand", area: "Dubai Hills", url: "https://example.com/gg" },
   ] }] }));
 // THE REAL SHAPE, which is the point of this fixture: `sheet` on these records is a NUMBER - the count of units on the developer's
 // availability list - and the slug lives in `client_sheet`. Reading `sheet` shipped an icon whose slug was "26". It fetched nothing and told
@@ -46,6 +49,12 @@ store.set("img_unitmix_projects", JSON.stringify({ projects: {
   bellevue: { district: "downtown", i: 12, sheet: 18, client_sheet: "bellevue_towers" },
   unjoined: { district: "businessbay", i: 3, sheet: 26 },
   malformed: { district: "businessbay", i: 4, client_sheet: "../../etc/passwd?key=x" },
+  // article handling must be like-for-like: umNkey strips "the" from BOTH sides, so this pair agrees
+  edge: { district: "businessbay", i: 9, client_sheet: "the_edge" },
+  // a single-letter key - this is what actually exists in the live file, and what handed every "b" building The EDGE
+  b: { district: "jumeirah", i: 1, client_sheet: "the_edge" },
+  // a real wrong join from the live data: different building, plausible-looking slug
+  golfgrand: { district: "dubaihills", i: 6, client_sheet: "golf_ville" },
 } }));
 
 const devOwner = await (await call("/dev?d=arada&key=" + encodeURIComponent(READ))).text();
@@ -83,6 +92,14 @@ ok(devOwner.includes("data-m=mix") && devOwner.includes(">Unit mix<"), "one butt
 ok(!devOwner.includes(">Snapshot<") && !devOwner.includes(">Deeper dive<"), "neither of the two state-named buttons survives");
 ok(devOwner.includes('aria-expanded=false') && devOwner.includes('setAttribute("aria-expanded"'), "the toggle reports whether it is open, so it is not a mystery to a screen reader either");
 ok(devOwner.includes('var open=!pr2.classList.contains("on")'), "it toggles from the card's actual state rather than from which button was pressed");
+
+// v165 - the join is exact-key only, and the slug must agree with the name. Fixtures here are taken from the LIVE file, not invented:
+// a single-letter project key really exists, and "Golf Grand -> golf_ville" is a real mismatch it was really serving.
+ok(devOwner.includes('data-s="the_edge"'), "The EDGE keeps its sheet - both sides drop the article, so they agree");
+// Counted, not proximity-matched: my first version looked for data-s within 400 characters of "Bulgari" and passed because the icon sits
+// further down the card than that - it was green against the broken join, which is the exact failure this suite keeps finding.
+ok((devOwner.match(/data-s="the_edge"/g) || []).length === 1, "exactly ONE card offers the_edge - under the old join every building starting with b got it too, through a single-letter project key");
+ok(!devOwner.includes('data-s="golf_ville"'), "Golf Grand gets no sheet: a slug that does not agree with the name is refused, however plausible it looks");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
