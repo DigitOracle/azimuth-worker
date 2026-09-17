@@ -71,5 +71,13 @@ const PANEL = 'if(m.hold){d.innerHTML="<div class=spr>"+__se(m.hold)';
 ok(findOwner.includes(PANEL) && devOwner.includes(PANEL), "both pages run the SAME panel, so the words a client reads cannot depend on which screen she came from");
 ok(devOwner.includes(".it,.prop"), "the shared panel finds its container on either page rather than assuming one");
 
+// v161.1 - Kendall asked whether Snapshot/Deeper dive duplicated the PDF. They do not: they open the UNIT MIX inline, which exists for
+// buildings that have no sheet at all. But they were two buttons naming two states of one thing, so they are now one that says what it
+// opens. These checks pin the replacement rather than the old pair.
+ok(devOwner.includes("data-m=mix") && devOwner.includes(">Unit mix<"), "one button, named for what it opens");
+ok(!devOwner.includes(">Snapshot<") && !devOwner.includes(">Deeper dive<"), "neither of the two state-named buttons survives");
+ok(devOwner.includes('aria-expanded=false') && devOwner.includes('setAttribute("aria-expanded"'), "the toggle reports whether it is open, so it is not a mystery to a screen reader either");
+ok(devOwner.includes('var open=!pr2.classList.contains("on")'), "it toggles from the card's actual state rather than from which button was pressed");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
