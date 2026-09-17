@@ -74,5 +74,11 @@ if (m) {
   ok(row({ n: "Anantara hotel", x: "DEWA \u00b7 2 bays", src: "dewa" }).indexOf("unverified") === -1, "and a DEWA row carries no caveat at all");
 }
 
+// v173 - a building must offer the same routes however she reached it (video session, tested A/B on the live app).
+// Opened from the searchbox it had "on the twin"; opened from the homes LIST it had nothing, so the path she took
+// decided what she could do next. And the filter panel stayed open on top of the card it had just opened.
+ok(/on the twin[\s\S]{0,40}<\/a>[\s\S]{0,80}\+\(vv\?/.test(src) || /it\.d&&!window\.__twinDistrict/.test(src), "a building opened from the homes list offers the twin too");
+ok(/_hp\)_hp\.classList\.remove\("on"\);openHome/.test(src), "and opening a result closes the filter panel, so the card is not behind the thing that found it");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
