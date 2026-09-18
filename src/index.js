@@ -9143,10 +9143,11 @@ function _drawSubs(){
   const W=innerWidth,H=innerHeight;const cd=(location.pathname.split("/skyline/")[1]||"").split(/[/?#]/)[0].toLowerCase();
   const sl=_TL["sel"];const sf=sl&&sl.data&&sl.data.features&&sl.data.features[0];const selP=sf&&sf.geometry?sf.geometry.coordinates:null;
   const cand=[];
+  let _nd=0,_np=0;
   F.forEach((f,i)=>{const p=f.properties||{};const c=f.geometry&&f.geometry.coordinates;if(!p.name||!c)return;
     if(cd&&p.district&&p.district!==cd)return;                                                       // this district only
     if(!cd&&(Math.abs(c[0]-A.ml)*101+Math.abs(c[1]-A.mt)*111)>25)return;                          // no district known: stay near the model
-    const P=_scene(c[0],c[1]);if(!P)return;const q=P.project(cam);if(q.z>1||q.x<-1||q.x>1||q.y<-1||q.y>1)return;
+    _nd++;const P=_scene(c[0],c[1]);if(!P)return;const q=P.project(cam);if(q.z>1||q.x<-1||q.x>1||q.y<-1||q.y>1)return;_np++;
     const sx=(q.x+1)/2*W,sy=(1-q.y)/2*H-14;
     const sel=!!(selP&&Math.abs(selP[0]-c[0])<1e-7&&Math.abs(selP[1]-c[1])<1e-7);
     if(!sel&&(sy<36||sy>H-70||sx<30||sx>W-30))return;                                                // on screen; the chrome is handled as obstacles below
@@ -9161,6 +9162,7 @@ function _drawSubs(){
     if(!c.sel){if(pick.length>=12)break;
       if(pick.some(p=>hit(r,p.r))||blocks.some(b=>hit(r,{l:b.left,r:b.right,t:b.top,b:b.bottom})))continue}
     c.r=r;pick.push(c)}
+  window.__twinSubs={district:cd,features:F.length,inDistrict:_nd,onScreen:_np,candidates:cand.length,shown:pick.length,names:pick.map(c=>c.nm)};   // how many names reach each stage - lets a test (or a person) read the labels without opening the module
   const keep=new Set();
   pick.forEach(c=>{keep.add(c.k);let e=_SUBL.get(c.k);if(!e){e=document.createElement("div");e.className="tsl";e.textContent=c.nm;_MK.appendChild(e);_SUBL.set(c.k,e)}
     e.classList.toggle("on",c.sel);e.style.left=c.sx+"px";e.style.top=c.sy+"px";e.style.display=""});
