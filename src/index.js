@@ -4993,6 +4993,7 @@ async function dailyFeedTick(env, force, dry) {
   let d; try { d = JSON.parse(raw); } catch (e) { return; }
   const ageDays = (Date.now() - Date.parse(d.generatedAt || 0)) / 86400000;
   if (ageDays >= 8) {                                                              // stale gate + the refresh reminder
+    if (dry) return "(dry run - nothing sent) no feed today: the market data is " + Math.round(ageDays) + " days old, so the morning run would stop here and tell her so.";   // v177
     await waSend(env, env.WA_ALLOWED, "☀️ Morning — no feed today: the market data is " + Math.round(ageDays) + " days old and I won't hand you a stale figure to say out loud. The refresh needs running on DigitAlchemy's side — I've flagged it. Your board and tasks are unaffected.");
     return;
   }
@@ -5099,7 +5100,7 @@ async function dailyFeedTick(env, force, dry) {
   if (angles.length < 3) {
     try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), attempts: attempts + 1, err: genErr || ("angles=" + angles.length) }), { expirationTtl: 7 * 86400 }); } catch (e) {}
     if (dry) return "GENERATION FAILED: " + (genErr || ("only " + angles.length + " angles"));
-    if (force) await waSend(env, env.WA_ALLOWED, "Couldn't build this morning's angles — try “feed” again in a minute.");
+    if (force && !dry) await waSend(env, env.WA_ALLOWED, "Couldn't build this morning's angles — try “feed” again in a minute.");
     else if (attempts + 1 >= 2) await waSend(env, env.WA_ALLOWED, "☀️ Morning — today's angles didn't come together on my side (twice, so I'm telling you rather than staying quiet). Say “feed” anytime and I'll build them fresh.");
     return;
   }
@@ -5129,6 +5130,7 @@ async function dailyFeedTick(env, force, dry) {
     const _vg = await voiceGuard(env, angles);
     qa.voice_repaired = _vg.repaired || []; qa.voice_at = gstNowIso();
     if (_vg.repaired.length) qa.note += " | voice repaired " + _vg.repaired.join(",");
+    if (_vg.refused && _vg.refused.length) qa.note += " | voice rewrite REFUSED on " + _vg.refused.join(",") + " - it changed a figure, hers kept";
     try { await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
   } catch (e) {}
   if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + "[" + (a.family || "-") + "] " + a.hook + "\n   " + a.figure + " · " + a.source + (a.trend ? "\n   trend: " + a.trend : "") + (a.shot ? "\n   shot: " + a.shot : "")).join("\n") + "\n\nQA: " + qa.note + (qa.repaired.length ? " | repaired " + qa.repaired.join(",") : "") + " | before " + qa.before.join(",") + " | after " + qa.after.join(",");
@@ -5302,6 +5304,10 @@ async function styleVoice(env) {
     "Her ground: wellness real estate, emotional intelligence, how a place makes people feel. She talks to one buyer, not to a market." +
     (card && card.text ? " HER CARD, in her words: " + String(card.text).replace(/\s+/g, " ").slice(0, 900) : "");
 }
+// v177 - every numeral in a hook must survive its rewrite. Tested against the ORIGINAL hook rather than the
+// figure field, because the rewrite is only allowed to change wording - anything it does to a number is damage.
+const voiceNums = (t) => (String(t || "").match(/\d+(?:[.,]\d+)*/g) || []).map(s => s.replace(/[.,]+$/, ""));
+const voiceKeepsNumbers = (before, after) => { const A = voiceNums(after); return voiceNums(before).every(n => A.indexOf(n) >= 0); };
 const VOICE_BAN = /\b(proving|proves?|fortress|towers? over|command(s|ed|ing)?|anchors?|anchored|velocity|conviction|institutional|gates?|locked|locks? in|momentum|punched|fires?|absorption|corridor concentration|rhythm|settles? in|yield math|the math)\b|\u2014|\u2013/i;   // v122 - the dash is banned too: her card never uses one
 async function voiceGuard(env, angles) {                                            // v116.1 - rewrite any hook or buyer line that slipped into the old jargon
   // v122 - every angle goes through the rewrite. A ban list catches words; it cannot catch "calm, steady rhythm as
@@ -5313,8 +5319,8 @@ async function voiceGuard(env, angles) {                                        
   const sys = "You rewrite social-post hooks for a Dubai property broker into HER VOICE. Keep every figure, source and fact exactly; change only the wording. Return JSON only: {\"items\":[{\"i\":<index>,\"hook\":\"...\",\"buyer\":\"...\"}]}. " + voice;
   const user = JSON.stringify({ items: bad.map(i => ({ i, hook: angles[i].hook, figure: angles[i].figure, source: angles[i].source, buyer: angles[i].buyer })) });
   let out = null; try { const t = await claudeText(env, sys, user, null, 900); out = JSON.parse(String(t).replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/, "$1")); } catch (e) { out = null; }
-  const done = [];
-  if (out && Array.isArray(out.items)) for (const it of out.items) { const i = it.i | 0; if (angles[i] && it.hook && !VOICE_BAN.test(it.hook) && !VOICE_BAN.test(it.buyer || "")) { angles[i].hook = String(it.hook).slice(0, 220); if (it.buyer) angles[i].buyer = String(it.buyer).slice(0, 220); done.push(i + 1); } }
+  const done = [], refused = [];
+  if (out && Array.isArray(out.items)) for (const it of out.items) { const i = it.i | 0; if (angles[i] && it.hook && !VOICE_BAN.test(it.hook) && !VOICE_BAN.test(it.buyer || "")) { if (!voiceKeepsNumbers(angles[i].hook, it.hook)) { refused.push(i + 1); continue; }   /* v177 - it changed a figure: keep hers */ angles[i].hook = String(it.hook).slice(0, 220); if (it.buyer) angles[i].buyer = String(it.buyer).slice(0, 220); done.push(i + 1); } }
   const strip = (t) => {                                                            // v126.1 - drop the sentence, not the word
     const whole = String(t || "");
     const flat = whole.replace(/\s*[\u2014\u2013]\s*/g, ". ").replace(/\s{2,}/g, " ").trim();
@@ -5325,7 +5331,7 @@ async function voiceGuard(env, angles) {                                        
     return out.charAt(0).toUpperCase() + out.slice(1);
   };
   for (const i of bad) if (!done.includes(i + 1)) { angles[i].hook = strip(angles[i].hook); angles[i].buyer = strip(angles[i].buyer); done.push(i + 1); }
-  return { angles, repaired: done };
+  return { angles, repaired: done, refused };
 }
 async function dnaSubjects(env) {                                                  // v116 - the learned profile minus its STYLE paragraph
   const t = await dnaGet(env); if (!t) return "";
@@ -7434,16 +7440,16 @@ function renderFind(key, q0, owner, liveSheets) {
     '<style>:root{--bg:#0C1413;--card:#131F1D;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#8FC7B9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;padding:calc(14px + env(safe-area-inset-top)) 14px 96px}' +
     'h1{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.6rem;margin:6px 0 2px;color:var(--gold)}.sub{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.06em;color:var(--mut);text-transform:uppercase;margin-bottom:14px}' +
     '.box{position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0 10px}.q{width:100%;font:500 1.05rem "IBM Plex Sans",system-ui,sans-serif;color:var(--text);background:var(--card);border:1px solid var(--gold);border-radius:14px;padding:14px 16px;outline:none}.q::placeholder{color:var(--mut)}' +
-    '.chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.chip{font-family:"IBM Plex Mono",monospace;font-size:.64rem;letter-spacing:.04em;border:1px solid var(--line);border-radius:99px;padding:5px 10px;color:var(--mut);cursor:pointer;background:transparent}.chip.on{border-color:var(--gold);color:var(--gold)}' +
+    '.chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.chip.sh{margin-left:auto}.chip.sh.on{border-color:var(--gold);color:var(--gold)}.chip{font-family:"IBM Plex Mono",monospace;font-size:.64rem;letter-spacing:.04em;border:1px solid var(--line);border-radius:99px;padding:5px 10px;color:var(--mut);cursor:pointer;background:transparent}.chip.on{border-color:var(--gold);color:var(--gold)}' +
     '.grp{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.14em;color:var(--mut);text-transform:uppercase;margin:16px 0 8px}.it{display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:8px}.it b{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.05rem;display:block}.it b i{font-style:normal;color:var(--gold)}' +
     '.it small{display:block;font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--mut);margin-top:3px;letter-spacing:.02em}.it .go{float:right;font-family:"IBM Plex Mono",monospace;font-size:.64rem;color:var(--teal);margin-left:8px}.it.off{opacity:.72}.it .tw{color:var(--teal);text-decoration:none}.n{color:var(--mut);font-family:"IBM Plex Mono",monospace;font-size:.7rem;padding:24px 4px;text-align:center}' + NAJ_NAV_CSS + '</style></head><body>' +
     '<h1>Find</h1><div class=sub>developer \u00b7 development \u00b7 building \u00b7 across every district we hold</div>' +
     '<div class=box><input class=q id=q type=search autocomplete=off autocorrect=off autocapitalize=off spellcheck=false placeholder="Developer, development or building\u2026" value="' + esc(q0) + '">' +
-    '<div class=chips><span class="chip on" data-t="">all</span><span class=chip data-t=developer>developers</span><span class=chip data-t=development>developments</span><span class=chip data-t=building>buildings</span></div></div>' +
+    '<div class=chips><span class="chip on" data-t="">all</span><span class=chip data-t=developer>developers</span><span class=chip data-t=development>developments</span><span class=chip data-t=building>buildings</span>' + (owner ? '<span class="chip sh" id=shchip data-s=1>with a PDF</span>' : '') + '</div></div>' +
     '<div id=out><div class=n>loading the index\u2026</div></div>' + najNav(key, "find") +
     // v160 - the row's actions are the app's OWN icons, not a second set drawn for this screen: MAP in the tab bar and map on a row must be
     // the same glyph or they read as different places. cube/pin/file/grid/buildings all already exist in NAJ_ICONS.
-    '<script>(function(){var KEY=' + JSON.stringify(key) + ';var OWNER=' + (owner ? "true" : "false") + ';var SHEETS=' + (owner && liveSheets ? JSON.stringify(liveSheets.reduce((o, s) => { o[s] = 1; return o; }, {})) : "null") + ';var IC=' + JSON.stringify({ cube: najIcon("cube"), pin: najIcon("pin"), file: najIcon("file"), grid: najIcon("grid"), buildings: najIcon("buildings") }) + ';var IDX=null,T="";var q=document.getElementById("q"),out=document.getElementById("out");' +
+    '<script>(function(){var KEY=' + JSON.stringify(key) + ';var OWNER=' + (owner ? "true" : "false") + ';var SHEETS=' + (owner && liveSheets ? JSON.stringify(liveSheets.reduce((o, s) => { o[s] = 1; return o; }, {})) : "null") + ';var IC=' + JSON.stringify({ cube: najIcon("cube"), pin: najIcon("pin"), file: najIcon("file"), grid: najIcon("grid"), buildings: najIcon("buildings") }) + ';var IDX=null,T="",SH=0;var q=document.getElementById("q"),out=document.getElementById("out");' +
     'var esc=function(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"})[c]})};var nk=function(t){return String(t||"").toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\\s+/g," ").trim()};' +
     'var hl=function(n,toks){var h=esc(n);toks.forEach(function(t){if(t.length<2)return;h=h.replace(new RegExp("("+t.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&")+")","ig"),"<i>$1</i>")});return h};' +
     'var twin=function(r){if(r.d&&r.i!=null)return"/skyline/"+encodeURIComponent(r.d)+"?key="+encodeURIComponent(KEY)+"&b="+encodeURIComponent(r.i);if(r.d)return"/skyline/"+encodeURIComponent(r.d)+"?key="+encodeURIComponent(KEY)+"&q="+encodeURIComponent(r.n);return null};' +
@@ -7458,9 +7464,9 @@ function renderFind(key, q0, owner, liveSheets) {
     // sheet - "no pictures held", "only 3 recorded sales (bar is 20)". Six of about 2,100 buildings have one today, so the reason IS the common
     // screen and must never be a dead button. The panel swallows its own clicks so a stray tap does not fire the row's jump to the twin.
   + (owner ? sheetPanelJs(JSON.stringify(key)) : '')
-  + 'var groups=[["developer","Developers"],["development","Developments"],["building","Buildings"]],h="",n=0;groups.forEach(function(g){var rs=rows.filter(function(r){return r.t===g[0]}).slice(0,toks.length?40:60);if(!rs.length)return;h+=\'<div class=grp>\'+g[1]+" \\u00b7 "+rows.filter(function(r){return r.t===g[0]}).length+"</div>";rs.forEach(function(r){n++;var u=link(r);var tw=twin(r);var isHome=u&&u.indexOf("/dev?")===0;var mp=r.d?"/map?key="+encodeURIComponent(KEY)+"&d="+encodeURIComponent(r.d)+"&focus="+encodeURIComponent(r.n):"";h+=\'<div class="it\'+(r.off?" off":"")+\'"\'+(u?\' data-u="\'+u+\'"\':"")+\'><span class=go>\'+(u?\'<a title="\'+(isHome?"Developer":(r.i!=null?"On the twin":"District"))+\'" href="\'+u+\'">\'+(isHome?IC.grid:(r.i!=null?IC.cube:IC.buildings))+"</a>":"")+(mp?\'<a class=gm title="On the map" href="\'+mp+\'">\'+IC.pin+"</a>":"")' + GSF + '+"</span><b>"+hl(r.n,toks)+"</b><small>"+esc(where(r))+(isHome&&tw?\' \\u00b7 <a class=tw href="\'+tw+\'">on the twin \\u2192</a>\':"")+"</small></div>"})});' +
+  + 'var _nsh=0;for(var _i=0;_i<rows.length;_i++){var _rr=rows[_i];if(_rr.sheet&&SHEETS&&SHEETS[_rr.sheet])_nsh++}'+ 'if(SH)rows=rows.filter(function(r){return r.sheet&&SHEETS&&SHEETS[r.sheet]});'+ 'var _sc2=document.getElementById("shchip");if(_sc2)_sc2.textContent="with a PDF \u00b7 "+_nsh;'+ 'var groups=[["developer","Developers"],["development","Developments"],["building","Buildings"]],h="",n=0;groups.forEach(function(g){var rs=rows.filter(function(r){return r.t===g[0]}).slice(0,toks.length?40:60);if(!rs.length)return;h+=\'<div class=grp>\'+g[1]+" \\u00b7 "+rows.filter(function(r){return r.t===g[0]}).length+"</div>";rs.forEach(function(r){n++;var u=link(r);var tw=twin(r);var isHome=u&&u.indexOf("/dev?")===0;var mp=r.d?"/map?key="+encodeURIComponent(KEY)+"&d="+encodeURIComponent(r.d)+"&focus="+encodeURIComponent(r.n):"";h+=\'<div class="it\'+(r.off?" off":"")+\'"\'+(u?\' data-u="\'+u+\'"\':"")+\'><span class=go>\'+(u?\'<a title="\'+(isHome?"Developer":(r.i!=null?"On the twin":"District"))+\'" href="\'+u+\'">\'+(isHome?IC.grid:(r.i!=null?IC.cube:IC.buildings))+"</a>":"")+(mp?\'<a class=gm title="On the map" href="\'+mp+\'">\'+IC.pin+"</a>":"")' + GSF + '+"</span><b>"+hl(r.n,toks)+"</b><small>"+esc(where(r))+(isHome&&tw?\' \\u00b7 <a class=tw href="\'+tw+\'">on the twin \\u2192</a>\':"")+"</small></div>"})});' +
     'out.innerHTML=h||\'<div class=n>nothing by that name yet \\u2014 the register, the twin and the developer pages were all checked</div>\';if(toks.length){try{history.replaceState(null,"",location.pathname+"?key="+encodeURIComponent(KEY)+"&q="+encodeURIComponent(q.value))}catch(e){}}};' +
-    'document.querySelectorAll(".chip").forEach(function(c){c.onclick=function(){document.querySelectorAll(".chip").forEach(function(x){x.classList.toggle("on",x===c)});T=c.getAttribute("data-t")||"";render()}});q.addEventListener("input",render);' +
+    'document.querySelectorAll(".chip[data-t]").forEach(function(c){c.onclick=function(){document.querySelectorAll(".chip[data-t]").forEach(function(x){x.classList.toggle("on",x===c)});T=c.getAttribute("data-t")||"";render()}});var _sc=document.getElementById("shchip");if(_sc&&!SHEETS){_sc.remove()}else if(_sc){_sc.onclick=function(){SH=SH?0:1;_sc.classList.toggle("on",!!SH);render()}}q.addEventListener("input",render);' +
     'fetch("/img/search_index?t="+Math.floor(Date.now()/600000)).then(function(r){return r.ok?r.json():null}).then(function(j){IDX=j||{items:[]};render();if(!q.value)q.focus()}).catch(function(){out.innerHTML=\'<div class=n>the index did not load \\u2014 pull to refresh</div>\'});})();</script></body></html>';
 }
 
