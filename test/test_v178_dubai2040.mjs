@@ -100,5 +100,16 @@ ok(!voice || (/never spell a number in words/.test(vs) && /I feel/.test(vs)), "t
 
 ok(res.status === 200 && /growth_plan/.test(out), "the dry run returns the five, labelled by family: " + out.slice(0, 70).replace(/\n/g, " "));
 
+// v178.1 - the first LIVE dry run came back feeling-first on 3 of 5, because the shared style guide says "Feeling first,
+// then the fact" and the voice rewrite touches all five after the picker. The swap is a string replace on that guide, so
+// check its EFFECT in the captured requests - if the guide's wording ever changes, the replace would silently do nothing.
+ok(!/Feeling first, then the fact/.test(sys) && /The change first, then the figure that proves it/.test(sys), "the picker no longer reads 'Feeling first' - it reads the story shape");
+ok(!voice || (!/Feeling first, then the fact/.test(vs) && /The change first/.test(vs)), "and neither does the voice rewrite, which rewrites all five after the picker");
+ok(!/The number said plainly/.test(sys) && /Every number as numerals/.test(sys), "'said plainly' - which produced 'twelve weeks' - is replaced by numerals");
+ok(/AT LEAST ONE angle for EACH of the three - move, invest AND authority/.test(sys), "one angle at least for EACH reader - the dry run gave no authority angle");
+ok(/the authority angle itself sets a 2040 target against where Dubai stands today/.test(sys), "and the authority angle is defined: a 2040 target against today's data");
+ok(/including counts and spans of time \(12 weeks, 9 days, 3 towers\)/.test(sys), "numerals include small counts and spans of time");
+ok(/AT LEAST ONE of the five must come from cityLife/.test(sys) && /never headline a move of fewer than 20 units/.test(sys), "cityLife is required; a few released units is never headlined as a story of Dubai");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
