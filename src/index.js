@@ -7712,6 +7712,9 @@ function videoMatch(vids, name, district) {                                 // v
   return (vids || []).find(v => (!district || !v.district || v.district === district) && (() => { const U = tok(v.name); return U.length && U.every(w => T.includes(w)); })()) || null;
 }
 function videoBlock(v) {
+  // v181.1 - esc2 lived only inside other page functions, so this top-level function threw 'esc2 is not defined' on every page that
+  // drew a video tour: /dev?d=emaar and /dev?d=sobha returned Error 1101. It carries its own escaper now.
+  const esc2 = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   return '<div class=vtour><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="' + v.poster + '"><source src="' + v.src + '" type="video/mp4"></video>' +
          '<div class=vcap>' + esc2(v.title) + (v.approx ? ' \u00b7 pin on the map is approximate: plot ' + esc2(v.plot || '') + ', building not yet a footprint' : '') + '</div></div>';
 }
