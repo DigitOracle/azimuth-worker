@@ -4904,11 +4904,16 @@ function seedFamHist(famh, hist, today) {
 function feedAudit(angles, famh) {
   const seenFig = new Set(famh.filter(x => x.k).map(x => x.k)); const seenNum = new Map(); const seenSubj = new Map(); const seenFam = {}; const bad = [];
   const today = Date.now();
+  const PLAN_WINDOW = 3 * 86400 * 1000;   // v179 - the plan's 16 facts restate on a 3-day cooldown, not a 14-day lock
+  const recentFig = new Set(famh.filter(x => x.k && (today - Date.parse(x.d)) < PLAN_WINDOW).map(x => x.k)), recentNum = new Map();
+  for (const x of famh) if ((today - Date.parse(x.d)) < PLAN_WINDOW) for (const n of (x.n || [])) if (!recentNum.has(n)) recentNum.set(n, x.d);
+  const isPlan = (a) => { const f = String((a && a.figure) || "").toLowerCase().trim(); return f.length >= 3 && DUBAI_2040.facts.some(p => { const pf = String(p.figure).toLowerCase(); return pf.includes(f) || f.includes(pf); }); };
   for (const x of famh) { for (const n of (x.n || [])) if (!seenNum.has(n)) seenNum.set(n, x.d); if (x.s && (today - Date.parse(x.d)) < 5 * 86400 * 1000 && !seenSubj.has(x.s)) seenSubj.set(x.s, x.d); }
   angles.forEach((a, i) => { const f = famOf(a), k = figKey(a), nums = numKeys(a), sk = subjKey(a); a.family = f; const why = [];
     if (seenFam[f] != null) why.push("same family as angle " + (seenFam[f] + 1) + " (" + f + ")"); else seenFam[f] = i;
-    if (k && seenFig.has(k)) why.push("figure already used in the last 14 days");
-    const hitN = nums.find(n => seenNum.has(n)); if (hitN) why.push("number " + hitN + " already used on " + seenNum.get(hitN));
+    const plan = isPlan(a), figSeen = plan ? recentFig : seenFig, numSeen = plan ? recentNum : seenNum;   // v179
+    if (k && figSeen.has(k)) why.push(plan ? "plan figure already used in the last 3 days" : "figure already used in the last 14 days");
+    const hitN = nums.find(n => numSeen.has(n)); if (hitN) why.push("number " + hitN + " already used on " + numSeen.get(hitN));
     if (seenSubj.has(sk)) why.push("same subject (" + sk + ") on " + seenSubj.get(sk));
     if (nums.some(n => angles.some((b, j) => j < i && numKeys(b).includes(n)))) why.push("shares a number with an earlier angle");
     if (angles.some((b, j) => j < i && subjKey(b) === sk)) why.push("same subject as an earlier angle");
@@ -4917,7 +4922,7 @@ function feedAudit(angles, famh) {
 }
 async function feedQA(env, angles, sys, data, famh) {
   let audit = feedAudit(angles, famh); const report = { at: gstNowIso(), before: audit.families.slice(), repaired: [], dropped: [], after: null, note: "" };
-  for (let pass = 0; pass < 2 && audit.bad.length; pass++) {
+  for (let pass = 0; pass < 3 && audit.bad.length; pass++) {   // v179 - three attempts at fresh replacements, not two
     const used = angles.filter((a, i) => !audit.bad.some(b => b.i === i)).map(a => a.family);
     const free = FEED_FAMILIES.filter(f => !used.includes(f) && !tiredFamilies(famh).includes(f));
     const fix = sys + " REPAIR PASS: angles " + audit.bad.map(b => (b.i + 1) + " (" + b.why.join("; ") + ")").join(", ") + " failed the redundancy audit. Return the SAME set with ONLY those angles replaced, each replacement from a different family in this list: " +
@@ -4928,7 +4933,7 @@ async function feedQA(env, angles, sys, data, famh) {
       if (a2 && a2.length >= angles.length - 1) { const au2 = feedAudit(a2, famh); if (au2.bad.length < audit.bad.length) { report.repaired = [...new Set(report.repaired.concat(audit.bad.map(b => b.i + 1)))]; angles.splice(0, angles.length, ...a2); audit = au2; } }
     } catch (e) {}
   }
-  if (audit.bad.length && angles.length - audit.bad.length >= 3) {                 // v88.4 - never send a repeat: drop it, send fewer
+  if (audit.bad.length) {   // v88.4 - never send a repeat: drop it, send fewer. v179 - with NO floor: the old '>= 3 must remain' let a mostly-repeated set out whole
     const dropIdx = new Set(audit.bad.map(b => b.i)); report.dropped = audit.bad.map(b => ({ angle: b.i + 1, why: b.why[0] }));
     const kept = angles.filter((a, i) => !dropIdx.has(i)); angles.splice(0, angles.length, ...kept); audit = feedAudit(angles, famh);
   }
@@ -5140,6 +5145,10 @@ async function dailyFeedTick(env, force, dry) {
     return;
   }
   const qa = await feedQA(env, angles, sys, data, famh);                                        // v88 - redundancy audit + one repair pass
+  if (!angles.length) {   // v179 - every angle repeated a figure she already had, even after three repair passes: send nothing rather than a repeat
+    try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), why: "every angle repeated a figure already sent, after 3 repair passes" }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+    return dry ? "(dry run - nothing sent) every angle repeated a figure she already had, even after 3 repair passes, so nothing would be sent" : undefined;
+  }
   // v76 — CAMPAIGN TRACK: while a campaign pack is live (Emaar District Ambassador, The Valley, closes 15 Sep 2026) the morning
   // carries TWO extra angles for it, written ONLY from the pack's evidence and bound by the pack's guardrails (no capital-
   // appreciation claim, sales-only rates, hashtag + tag, permit still open). They sit after the five market angles.
