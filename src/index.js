@@ -715,17 +715,41 @@ ${(() => {                                                      // v36.2 — Naj
 ${(() => {                                                      // v68 — developer availability strip (sheets from her group)
     const sheets = (avail && avail.sheets) || [];
     if (!sheets.length) return "";
-    const rows = sheets.slice(0, 6).map(x => {
-      const inner = '<span style="color:#E8E4D8">📄 ' + String(x.sheet || "").slice(0, 34) + '</span>' +
-        '<span style="color:' + (x.mapped ? "#8FC7B9" : "#C5A56A") + ';text-align:right">' + String(x.note || "").slice(0, 46) + (x.d ? ' ›' : '') + '</span>';
-      const st = 'display:flex;justify-content:space-between;gap:10px;padding:.32rem 0;border-top:1px solid #24352F;font-size:.76rem';
-      return x.d ? '<a href="/avail?d=' + encodeURIComponent(x.d) + '&key=' + encodeURIComponent(key) + '" style="' + st + ';text-decoration:none">' + inner + '</a>'
-                 : '<div style="' + st + '">' + inner + '</div>';
+    // v181 - AVAILABILITY BAR CHART. One bar per developer, homes only, split by bedrooms; commercial and type-level stock beside it.
+    const BANDS = [["S", "studio", "#C4E3DA", "studios"], ["1", "1 bed", "#8FC7B9", "1-beds"], ["2", "2 bed", "#5FA89A", "2-beds"], ["3", "3 bed", "#3E8A7E", "3-beds"], ["4", "4 bed +", "#2A6B61", "4+ beds"], ["o", "type not stated", "#56615C", "type not stated"]];
+    const band = r => { const t = String(r || ""); if (/retail|office|shop|commercial|warehouse/i.test(t)) return "c"; if (/studio/i.test(t)) return "S"; const m = t.match(/(\d+)\s*B\s*\/?\s*R/i); if (!m) return "o"; const n = +m[1]; return n >= 4 ? "4" : (n >= 1 ? String(n) : "o"); };
+    const devs = sheets.map(x => {
+      const b = { S: 0, 1: 0, 2: 0, 3: 0, 4: 0, o: 0, c: 0 };
+      for (const r of (x.rooms || [])) b[band(r.r)] += +r.n || 0;
+      const homes = b.S + b[1] + b[2] + b[3] + b[4] + b.o;
+      const tl = String(x.note || "").match(/\+(\d+) in (\d+) type-level/);
+      const name = String(x.sheet || "").replace(/\s+\d{4}-\d{2}-\d{2}$/, "");
+      const dt = String(x.asOf || (String(x.sheet || "").match(/\d{4}-\d{2}-\d{2}$/) || [""])[0]);
+      return { x, b, homes, typeLevel: tl ? +tl[1] : 0, name, dt, has: !!x.rooms };
+    }).sort((a, c) => c.homes - a.homes);
+    const maxH = Math.max(1, ...devs.map(d => d.homes));
+    const dmy = d => { const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? (+m[3]) + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m[2] - 1] : ""; };
+    const legend = '<div class=avlg>' + BANDS.filter(bd => devs.some(d => d.b[bd[0]])).map(bd => '<span><i style="background:' + bd[2] + '"></i>' + bd[1] + '</span>').join("") + '</div>';
+    const rows = devs.map(d => {
+      const segs = '<span class=avt style="width:calc((100% - 44px) * ' + (d.homes / maxH).toFixed(4) + ')">' + BANDS.filter(bd => d.b[bd[0]]).map(bd => '<i style="width:' + (100 * d.b[bd[0]] / d.homes).toFixed(2) + '%;background:' + bd[2] + '" data-tip="' + d.name + ' · ' + d.b[bd[0]] + ' ' + bd[3] + '"></i>').join("") + '</span>';
+      const extra = [d.b.c ? '+' + d.b.c + ' shops &amp; offices' : '', d.typeLevel ? '+' + d.typeLevel + ' listed by type only' : ''].filter(Boolean).join(' · ');
+      const inner = '<span class=avn>' + d.name + '<small>' + dmy(d.dt) + '</small></span><span class=avb>' + (d.has ? segs : '<em>mix not read</em>') + '<b>' + d.homes + '</b></span>' + (extra ? '<span class=avx>' + extra + '</span>' : '');
+      return d.x.d ? '<a class=avr href="/avail?d=' + encodeURIComponent(d.x.d) + '&key=' + encodeURIComponent(key) + '">' + inner + '</a>' : '<div class=avr>' + inner + '</div>';
     }).join("");
-    return '<section><div style="color:#E8E4D8;background:#0C1413;border:1px solid #24352F;border-left:3px solid #3E8A7E;border-radius:var(--radius);padding:.9rem 1rem;box-shadow:0 8px 22px rgba(12,20,19,.28)">' +
+    const totH = devs.reduce((a, d) => a + d.homes, 0), totC = devs.reduce((a, d) => a + d.b.c, 0);
+    const css = '<style>.avlg{display:flex;flex-wrap:wrap;gap:4px 12px;margin:.55rem 0 .35rem;font-size:.64rem;color:#B8C4BD;font-family:"IBM Plex Mono",monospace}.avlg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}'
+      + '.avr{display:grid;grid-template-columns:92px 1fr;gap:2px 10px;align-items:center;padding:.38rem 0;border-top:1px solid #24352F;text-decoration:none;color:#E8E4D8}'
+      + '.avn{font-size:.76rem;line-height:1.15}.avn small{display:block;color:#8FA39B;font-size:.6rem;font-family:"IBM Plex Mono",monospace}'
+      + '.avb{display:flex;align-items:center;height:14px;min-width:0}.avt{display:flex;height:14px;flex:none;min-width:3px}.avt i{height:14px;border-right:2px solid #0C1413;position:relative;flex:none;box-sizing:border-box}.avt i:last-child{border-right:0;border-radius:0 4px 4px 0}'
+      + '.avb b{margin-left:7px;font-family:Fraunces,Georgia,serif;font-weight:600;font-size:.86rem;color:#E8E4D8}.avb em{font-size:.64rem;color:#8FA39B;font-style:normal}'
+      + '.avx{grid-column:2;font-size:.62rem;color:#8FA39B;font-family:"IBM Plex Mono",monospace}'
+      + '.avt i:hover::after{content:attr(data-tip);position:absolute;bottom:20px;left:0;white-space:nowrap;background:#E8E4D8;color:#0C1413;font-size:.66rem;padding:3px 7px;border-radius:6px;z-index:5;pointer-events:none}</style>';
+    return '<section>' + css + '<div style="color:#E8E4D8;background:#0C1413;border:1px solid #24352F;border-left:3px solid #3E8A7E;border-radius:var(--radius);padding:.9rem 1rem;box-shadow:0 8px 22px rgba(12,20,19,.28)">' +
       '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1rem">Developer availability</span>' +
-      '<span style="color:#8FA39B;font-size:.68rem;font-family:\'IBM Plex Mono\',monospace">' + sheets.length + ' sheet' + (sheets.length === 1 ? "" : "s") + ' · via your group</span></div>' +
-      '<div style="margin-top:.4rem">' + rows + '</div>' +
+      '<span style="color:#8FA39B;font-size:.68rem;font-family:\'IBM Plex Mono\',monospace">' + totH + ' homes · ' + sheets.length + ' developer' + (sheets.length === 1 ? "" : "s") + '</span></div>' +
+      '<div style="color:#B8C4BD;font-size:.72rem;margin-top:.2rem">Homes for sale on each developer\'s latest sheet, by bedrooms. Tap a developer for its units.</div>' +
+      legend + '<div>' + rows + '</div>' +
+      (totC ? '<div style="color:#8FA39B;font-size:.64rem;margin-top:.45rem;font-family:\'IBM Plex Mono\',monospace">not in the bars: ' + totC + ' shops and offices' + (devs.some(d => d.typeLevel) ? ', and ' + devs.reduce((a, d) => a + d.typeLevel, 0) + ' units listed by type only (no unit-by-unit list yet)' : '') + '</div>' : '') +
       '<div style="color:#8FA39B;font-size:.64rem;margin-top:.45rem;font-family:\'IBM Plex Mono\',monospace">developer-stated · dated per sheet · shown beside register figures, never mixed</div></div></section>';
   })()}
 <section><div class="plate-h"><div class="l"><span class="n num">${acts.length}</span><span class="cap">on your plate</span></div><div class="hint">${(env && env.TELEGRAM_TOKEN) ? "clear in Telegram ✓" : "tap a circle to clear ✓"}</div></div>${tasksHtml}
@@ -2359,6 +2383,7 @@ async function appFetch(request, env, ctx) {
         try { actions = await openActions(env); } catch (e) {}
         let mkt = null; try { mkt = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
         let _avail = null; try { _avail = JSON.parse((await env.MEETINGS.get("img_avail_index")) || "null"); } catch (e) {}
+        try { if (_avail && _avail.sheets) await Promise.all(_avail.sheets.map(async x => { if (!x.d) return; try { const _j = JSON.parse((await env.MEETINGS.get("img_drill_" + String(x.d).replace(/[^a-z0-9]/g, ""))) || "null"); const _c = _j && _j.claimed; if (_c) { x.rooms = _c.rooms || null; x.asOf = _c.as_of || null; } } catch (e) {} })); } catch (e) {}   // v181 - the bar chart needs each mix
         return new Response(renderBoard(meetings, actions, url.searchParams.get("key"), env, mkt, _avail), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/card.png") {
