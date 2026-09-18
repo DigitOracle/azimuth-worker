@@ -354,7 +354,7 @@ export function worldPageHtml(fb, owner, nav) {   // nav: { css, html } = the ap
     FX: WORLD_FX.rates, SYM: WORLD_FX.symbols, PRESETS: WORLD_FX.presets, FX_DATE: WORLD_FX.date,
     FB: Object.fromEntries(Object.entries(fb || {}).filter(([k, v]) => { const smp = WORLD_SAMPLES.find(x => String(x.n) === String(k)); return smp && (v && v.rev ? v.rev : 1) === (smp.rev || 1); }).map(([k, v]) => [k, v && v.verdict])), LIVE: true, OWNER: owner !== false };   // v157.4 - show a verdict only where it judged the text now on screen: compare the verdict's revision with the sample's, never pin to 1, or a fresh verdict on a rewritten script could never appear
   const json = JSON.stringify(data).replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\!--");
-  const navCss = nav && nav.css ? "<style>" + nav.css + " body{padding-bottom:88px}</style>" : "";
+  const navCss = nav && nav.css ? "<style>" + nav.css + " body{padding-bottom:88px} body .drawer{z-index:50} body .scrim{z-index:45}</style>"   /* v179.1 - the explanation drawer sat UNDER the tab bar (20 vs 40), so only its title showed; "body" outranks the page rule that loads after this */ : "";
   return "<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><meta name=robots content=noindex>" + navCss +
     PAGE.replace("const DATA = __DATA__;", "const DATA = " + json + ";").replace("<title>", "</head><body><title>") + (nav && nav.html ? nav.html : "") + "</body></html>";
 }
