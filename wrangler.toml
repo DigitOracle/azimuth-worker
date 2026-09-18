@@ -62,6 +62,10 @@ VOICE_SPEAKER = "asteria"
 # v153 - question notes: Kendall's "?" texts and "question ..." voice notes are handed to azimuth-2 over the service binding, so every note
 # sits in the one store /questions/export reads (kept here if azimuth-2 cannot take one).
 QN_STORE = "AZIMUTH_2"
+# v155 - approved sends (Kendall, 18 Sep 2026): POST /send_request {to,text} -> owner sees the exact text with Send / Discard;
+# Send delivers through the recipient's instance. Only names listed here can be requested. Remove to switch the feature off.
+# Merged into dewa-screens 18 Sep so this tree matches what is live on meeting-capture (29124600); azimuth-2 only receives /approved_send.
+APPROVED_SEND = "najjuko:971565484397"
 
 [triggers]
 crons = ["*/5 3-18 * * *"]

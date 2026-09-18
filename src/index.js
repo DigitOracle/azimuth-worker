@@ -216,6 +216,85 @@ async function ownerTg(env, p) {
   const buttons = [].concat(...kb).filter(b => b && b.callback_data).map(b => ({ id: String(b.callback_data).replace(/^d:/, "done:"), title: b.text }));
   return ownerNotify(env, p && p.text, buttons);
 }
+// v155 - approved sends (Kendall, 18 Sep 2026). Anyone - a script, another session - may REQUEST a message to an
+// allow-listed person; nothing goes out until the owner reads the exact text and taps Send. No key is involved:
+// POST /send_request {to, text} stores the request, the owner gets the text with Send / Discard, and Send delivers it
+// through the recipient's own instance (service binding + WA_FORWARD_TOKEN, both already inside Cloudflare).
+// APPROVED_SEND = "najjuko:971565484397" (owner instance only). Unset = the whole feature is off.
+const SENDREQ_MAX_PENDING = 3, SENDREQ_MAX_DAY = 10, SENDREQ_TTL = 48 * 3600, SENDREQ_MAX_LEN = 1500;
+function sendTargets(env) {
+  const m = {};
+  String(env.APPROVED_SEND || "").split(",").forEach(p => {
+    const [n, d] = p.split(":").map(x => String(x || "").trim());
+    if (n && /^\d{8,15}$/.test(d || "") && d !== env.WA_ALLOWED) m[n.toLowerCase()] = d;
+  });
+  return m;
+}
+function sendReqName(to) { return to ? to.charAt(0).toUpperCase() + to.slice(1) : "them"; }
+function sendReqId() {
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", b = new Uint8Array(6); crypto.getRandomValues(b);
+  return Array.from(b, x => A[x % A.length]).join("");
+}
+async function sendReqLog(env, rec) {
+  try { const l = JSON.parse((await env.MEETINGS.get("sendreq_log")) || "[]"); l.unshift(rec); await env.MEETINGS.put("sendreq_log", JSON.stringify(l.slice(0, 30))); } catch (e) {}
+}
+async function sendRequest(env, request) {
+  if (!env.OWNER_TEMPLATE || !env.APPROVED_SEND) return new Response("approved sends are not enabled here", { status: 403 });
+  let b = {}; try { b = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
+  const to = String((b && b.to) || "").trim().toLowerCase();
+  const dig = sendTargets(env)[to];
+  if (!dig) return new Response("unknown recipient", { status: 400 });
+  const text = String((b && b.text) || "").replace(/\r\n/g, "\n").trim();
+  if (!text || text.length > SENDREQ_MAX_LEN) return new Response("text required (1-" + SENDREQ_MAX_LEN + " chars)", { status: 400 });
+  const dk = "sendreq_day_" + new Date().toISOString().slice(0, 10);
+  const n = Number((await env.MEETINGS.get(dk)) || 0);
+  if (n >= SENDREQ_MAX_DAY) return new Response("daily request limit reached", { status: 429 });
+  const pend = await env.MEETINGS.list({ prefix: "sendreq_p_" });
+  if (((pend && pend.keys) || []).length >= SENDREQ_MAX_PENDING) return new Response("too many requests already waiting for approval", { status: 429 });
+  const id = sendReqId();
+  const rec = { id, to, dig, text, at: new Date().toISOString() };
+  await env.MEETINGS.put("sendreq_p_" + id, JSON.stringify(rec), { expirationTtl: SENDREQ_TTL });
+  await env.MEETINGS.put(dk, String(n + 1), { expirationTtl: 2 * 86400 });
+  let notified = false;
+  if (await ownerWindowOpen(env)) notified = await sendReqShow(env, env.WA_ALLOWED, id);
+  else notified = await ownerNotify(env, "Approval needed: a message to " + sendReqName(to) + " is waiting (ref " + id + ").\nReply  show " + id + "  to read it and approve or discard it. Nothing goes out until you do.");
+  await sendReqLog(env, { id, to, at: rec.at, state: "requested", notified: !!notified });
+  return new Response(JSON.stringify({ ok: true, id, state: "awaiting approval", owner_notified: !!notified, expires_in_hours: SENDREQ_TTL / 3600 }), { headers: { "Content-Type": "application/json" } });
+}
+// The owner sees the EXACT text first, then the buttons, so a long message is never approved half-read.
+async function sendReqShow(env, to, id) {
+  let rec = null; try { rec = JSON.parse((await env.MEETINGS.get("sendreq_p_" + id)) || "null"); } catch (e) {}
+  if (!rec) { await waSend(env, to, "Request " + id + " has expired or was already handled."); return false; }
+  const nm = sendReqName(rec.to);
+  const a = await waSend(env, to, "📨 Request " + id + " - message for " + nm + " (+" + rec.dig + "). Requested through /send_request, not typed by you. Exact text:\n\n" + rec.text);
+  const c = await waSendButtons(env, to, "Send the message above to " + nm + " exactly as written?", [{ id: "sr:ok:" + id, title: ("Send to " + nm).slice(0, 20) }, { id: "sr:no:" + id, title: "Discard" }]);
+  return !!(a && a.ok && c && c.ok);
+}
+async function sendReqDeliver(env, rec) {
+  const route = env["WA_ROUTE_" + rec.dig];
+  const svc = (typeof route === "string" && !/^https?:\/\//i.test(route)) ? env[route] : null;
+  if (svc && typeof svc.fetch === "function") {
+    if (!env.WA_FORWARD_TOKEN) return { ok: false, why: "no forward token on this instance" };
+    const r = await svc.fetch(new Request("https://internal/approved_send", { method: "POST",
+      headers: { "Content-Type": "application/json", "X-Azimuth-Forward": env.WA_FORWARD_TOKEN }, body: JSON.stringify({ to: rec.dig, text: rec.text }) }));
+    return { ok: r.status === 200, why: r.status === 200 ? "" : ("her instance answered " + r.status + " " + (await r.text()).slice(0, 120)), via: "instance" };
+  }
+  const r = await waSend(env, rec.dig, rec.text);
+  return { ok: !!(r && r.ok), why: r && r.ok ? "" : "WhatsApp answered " + (r ? r.status : "nothing"), via: "direct" };
+}
+async function sendReqResolve(env, from, id, approve) {
+  if (!env.OWNER_TEMPLATE || !env.APPROVED_SEND) return;
+  const k = "sendreq_p_" + id;
+  let rec = null; try { rec = JSON.parse((await env.MEETINGS.get(k)) || "null"); } catch (e) {}
+  if (!rec) { await waSend(env, from, "Request " + id + " has expired or was already handled. Nothing was sent."); return; }
+  await env.MEETINGS.delete(k);                                     // first, so a double tap can never send twice
+  const nm = sendReqName(rec.to);
+  if (!approve) { await sendReqLog(env, { id, to: rec.to, at: new Date().toISOString(), state: "discarded" }); await waSend(env, from, "🗑 Discarded. Nothing was sent to " + nm + "."); return; }
+  let res; try { res = await sendReqDeliver(env, rec); } catch (e) { res = { ok: false, why: String(e && e.message || e).slice(0, 120) }; }
+  await sendReqLog(env, { id, to: rec.to, at: new Date().toISOString(), state: res.ok ? "sent" : "failed", via: res.via || null, why: res.why || null });
+  await waSend(env, from, res.ok ? "✅ Sent to " + nm + "."
+    : "⚠ Not sent to " + nm + ": " + res.why + ".\nIf she hasn't messaged Azimuth in the last 24 hours WhatsApp refuses free text - send it from your own WhatsApp instead.");
+}
 async function embed(env, text) {
   try { const t = String(text || "").slice(0, 2000); if (!t.trim()) return null; const r = await env.AI.run(EMBED_MODEL, { text: [t] }); const v = r && r.data && r.data[0]; return Array.isArray(v) ? v : null; } catch (e) { return null; }
 }
@@ -3128,6 +3207,18 @@ async function appFetch(request, env, ctx) {
     if (request.method === "POST") {
       if (url.pathname === "/ig/deauth" || url.pathname === "/ig/delete") return igRoute(env, url, request);   // v149 - Meta's deauthorise / data-deletion callbacks
       if (url.pathname === "/ingest_private") return ingestPrivate(env, request);   // v152 - private datasets: never under img_, never served by /img
+      if (url.pathname === "/send_request") return sendRequest(env, request);   // v155 - request only; the owner approves on WhatsApp
+      if (url.pathname === "/approved_send") {                 // v155 - the recipient's instance delivers an owner-approved message
+        if (env.OWNER_TEMPLATE) return new Response("recipient instance only", { status: 403 });
+        const _ah = request.headers.get("X-Azimuth-Forward");
+        if (!env.WA_FORWARD_TOKEN || !_ah || !ctEq(_ah, env.WA_FORWARD_TOKEN)) return new Response("unauthorized", { status: 401 });
+        let _ab = {}; try { _ab = await request.json(); } catch (e) {}
+        if (!_ab || String(_ab.to || "") !== String(env.WA_ALLOWED || "")) return new Response("wrong recipient", { status: 403 });
+        const _at = String(_ab.text || "").trim();
+        if (!_at || _at.length > SENDREQ_MAX_LEN) return new Response("text required", { status: 400 });
+        let _ar = null; try { _ar = await waSend(env, env.WA_ALLOWED, _at); } catch (e) {}
+        return new Response(_ar && _ar.ok ? "sent" : ("whatsapp " + (_ar ? _ar.status : "error")), { status: _ar && _ar.ok ? 200 : 502 });
+      }
       if (url.pathname === "/walk_status") {                   // v119 - UnReal streamer heartbeat from the laptop (every 30 s while the game runs)
         const _wh = request.headers.get("X-Azimuth-Ingest");
         if (!env.INGEST_TOKEN || !_wh || !ctEq(_wh, env.INGEST_TOKEN)) return new Response("unauthorized", { status: 401 });
@@ -3254,6 +3345,12 @@ async function appFetch(request, env, ctx) {
         }
         if (msg.id) { const _mk = "wamsg_" + msg.id; if (await env.MEETINGS.get(_mk)) return new Response("ok"); await env.MEETINGS.put(_mk, "1", { expirationTtl: 3 * 86400 }); }
         try { await env.MEETINGS.put("wa_owner_last_in", new Date().toISOString(), { expirationTtl: 3 * 86400 }); } catch (e) {}   // v137 - opens ownerNotify's 24-hour window
+        if (env.OWNER_TEMPLATE && env.APPROVED_SEND) {                 // v155 - approved sends: "show <ref>" and the Send / Discard buttons
+          const _sm = msg.type === "text" && msg.text && String(msg.text.body || "").trim().match(/^show\s+([A-Z0-9]{6})$/i);
+          if (_sm) { await sendReqShow(env, from, _sm[1].toUpperCase()); return new Response("ok"); }
+          const _sb = msg.type === "interactive" && msg.interactive && msg.interactive.button_reply && String(msg.interactive.button_reply.id || "");
+          if (_sb && /^sr:(ok|no):[A-Z0-9]{6}$/.test(_sb)) { await sendReqResolve(env, from, _sb.slice(6), _sb.indexOf("sr:ok:") === 0); return new Response("ok"); }
+        }
         if (msg.type === "interactive" && msg.interactive && (msg.interactive.button_reply || msg.interactive.list_reply)) {
           const bid = (msg.interactive.button_reply && msg.interactive.button_reply.id) || (msg.interactive.list_reply && msg.interactive.list_reply.id) || "";
           if (bid.indexOf("done:") === 0) { await env.MEETINGS.delete("act_" + bid.slice(5)); await waSend(env, from, "✅ Done — cleared from your plate."); }
