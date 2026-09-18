@@ -6618,7 +6618,7 @@ const MAP_CHROME_JS = ''
   + '  if(kind==="sub")map.easeTo({center:c,zoom:Math.max(map.getZoom(),14.6),duration:700});else map.easeTo({center:c,zoom:Math.max(map.getZoom(),16.2),duration:700});'
   + '  drawAm();openPanel(SEL);if(window.__onPlace)try{window.__onPlace(SEL)}catch(e){}}'
   + 'function setSel(c){if(map&&map.getSource("sel"))map.getSource("sel").setData({type:"FeatureCollection",features:c?[{type:"Feature",geometry:{type:"Point",coordinates:c},properties:{}}]:[]})}'
-  + 'function setNear(list){if(map&&map.getSource("near"))map.getSource("near").setData({type:"FeatureCollection",features:(list||[]).map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x[1].lon,x[1].lat]},properties:{col:AMEN[x[1].k][2]}}})})}'
+  + 'function setNear(list){if(map&&map.getSource("near"))map.getSource("near").setData({type:"FeatureCollection",features:(list||[]).map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x[1].lon,x[1].lat]},properties:{col:AMEN[x[1].k][2],n:x[1].n||""}}})})}'   /* v183 - the ring carries its name for the twin */
   + 'function ntok(t){return String(t||"").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff ]+/g," ").split(" ").filter(function(w){return w.length>2&&["the","by","at","residences","residence","tower","towers","dubai"].indexOf(w)<0})}'
   + 'function videoFor(name,district){var T=ntok(name);if(!T.length)return null;return VIDS.filter(function(v){if(district&&v.district&&v.district!==district)return false;var U=ntok(v.name);return U.length&&U.every(function(w){return T.indexOf(w)>=0})})[0]||null}'
   + 'function videoHtml(v){return \'<div class=vwrap><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="\'+v.poster+\'"><source src="\'+v.src+\'" type="video/mp4"></video><div class=ps style="text-transform:none;letter-spacing:0;margin-top:6px">\'+esc(v.title)+(v.approx?" \u00b7 pin is approximate: plot "+esc(v.plot||"")+", building not yet on the map":"")+\'</div></div>\'}'
@@ -9125,13 +9125,48 @@ function _drawDots(){const W=innerWidth,H=innerHeight;const seen=new Set();
   Object.keys(_STYLE).forEach(id=>{const lay=_TL[id];if(!lay)return;const src=_TL[lay.src];const F=(src&&src.data&&src.data.features)||[];
     F.forEach((f,i)=>{const key=id+":"+i;seen.add(key);let d=_DOTS.get(key);if(!d){d=document.createElement("div");d.className="tm "+_STYLE[id];_MK.appendChild(d);d.onclick=(ev)=>{ev.stopPropagation();const h=_TH[id];if(h)h({features:[f],lngLat:{lng:f.geometry.coordinates[0],lat:f.geometry.coordinates[1]}})};_DOTS.set(key,d)}
       const pr=f.properties||{};if(id==="am-dot"){d.style.background=pr.col||"#8FC7B9";d.style.borderColor=pr.ap?(pr.col||"#8FC7B9"):"rgba(12,20,19,.85)";d.classList.toggle("ap",!!pr.ap)}
-      if(id==="near-ring")d.style.borderColor=pr.col||"#C5A56A";
+      if(id==="near-ring"){d.style.borderColor=pr.col||"#C5A56A";const nb=pr.n?"<b>"+String(pr.n).replace(/[&<>]/g,"")+"</b>":"";if(d._n!==nb){d.innerHTML=nb;d._n=nb}}   // v183 - AROUND IT rings name their place
       if(id==="vid-dot"&&!d.innerHTML)d.innerHTML="\u25B6<b>"+(pr.name||"")+"</b>";if(id==="home-dot"&&!d.innerHTML&&pr.lab)d.innerHTML="<b>"+pr.lab+"</b>";
       const P=_scene(f.geometry.coordinates[0],f.geometry.coordinates[1]);if(!P){d.style.display="none";return}
       const q=P.project(cam);if(q.z>1||q.x<-1.1||q.x>1.1||q.y<-1.1||q.y>1.1){d.style.display="none";return}
       d.style.display="";d.style.left=((q.x+1)/2*W)+"px";d.style.top=((1-q.y)/2*H)+"px"})});
   _DOTS.forEach((d,k)=>{if(!seen.has(k)){d.remove();_DOTS.delete(k)}})}
-(function tick(){requestAnimationFrame(tick);try{_drawDots()}catch(e){}})();
+// v183 - SUB-COMMUNITY NAMES IN THE DISTRICT TWIN (Kendall, 18 Sep 2026: a viewer "can't tell what's what" until a card is opened).
+// The map's sub-lab layer names every sub-community; the twin's bridge drew only dots and rings, so the names never reached 3D.
+// Same treatment as the all-Dubai district labels: largest first, collision-culled against each other AND against the building
+// labels, at most 12 - and the selected one is always labelled, in gold, whatever it collides with.
+const _SUBL=new Map();let _SUBCSS=false;
+function _drawSubs(){
+  const lay=_TL["sub-lab"];const src=lay&&_TL[lay.src];const F=(src&&src.data&&src.data.features)||[];
+  if(!_SUBCSS){const st=document.createElement("style");st.textContent=".tsl{position:absolute;transform:translate(-50%,-100%);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#D9D2C2;background:rgba(12,20,19,.68);border:1px solid rgba(197,165,106,.4);border-radius:999px;padding:3px 9px;white-space:nowrap;pointer-events:none}.tsl.on{color:#0C1413;background:#C5A56A;border-color:#C5A56A;font-weight:600}";document.head.appendChild(st);_SUBCSS=true}
+  const A=_fit();if(!A){_SUBL.forEach(e=>{e.style.display="none"});return}
+  const W=innerWidth,H=innerHeight;const cd=(typeof currentDistrict==="function")?currentDistrict():"";
+  const sl=_TL["sel"];const sf=sl&&sl.data&&sl.data.features&&sl.data.features[0];const selP=sf&&sf.geometry?sf.geometry.coordinates:null;
+  const cand=[];
+  F.forEach((f,i)=>{const p=f.properties||{};const c=f.geometry&&f.geometry.coordinates;if(!p.name||!c)return;
+    if(cd&&p.district&&p.district!==cd)return;                                                       // this district only
+    if(!cd&&(Math.abs(c[0]-A.ml)*101+Math.abs(c[1]-A.mt)*111)>8)return;                           // no district known: stay near the model
+    const P=_scene(c[0],c[1]);if(!P)return;const q=P.project(cam);if(q.z>1||q.x<-1||q.x>1||q.y<-1||q.y>1)return;
+    const sx=(q.x+1)/2*W,sy=(1-q.y)/2*H-14;
+    const sel=!!(selP&&Math.abs(selP[0]-c[0])<1e-7&&Math.abs(selP[1]-c[1])<1e-7);
+    if(!sel&&(sy<120||sy>H-110||sx<30||sx>W-30))return;                                              // clear of the masthead and the rail
+    const nm=(typeof tc==="function"?tc(p.name):p.name);
+    cand.push({k:i,nm,sx,sy,sel,score:(sel?1e12:0)+(p.radius_m||0)*1000+(p.units||0)})});
+  cand.sort((a,b)=>b.score-a.score);
+  const blocks=Array.prototype.map.call(document.querySelectorAll("a.lb"),e=>e.getBoundingClientRect()).filter(r=>r.width>0);
+  const hit=(r,o)=>!(r.r<o.l||r.l>o.r||r.b<o.t||r.t>o.b);
+  const pick=[];
+  for(const c of cand){
+    const w=c.nm.length*6.6+24;const r={l:c.sx-w/2-4,r:c.sx+w/2+4,t:c.sy-24,b:c.sy+3};
+    if(!c.sel){if(pick.length>=12)break;
+      if(pick.some(p=>hit(r,p.r))||blocks.some(b=>hit(r,{l:b.left,r:b.right,t:b.top,b:b.bottom})))continue}
+    c.r=r;pick.push(c)}
+  const keep=new Set();
+  pick.forEach(c=>{keep.add(c.k);let e=_SUBL.get(c.k);if(!e){e=document.createElement("div");e.className="tsl";e.textContent=c.nm;_MK.appendChild(e);_SUBL.set(c.k,e)}
+    e.classList.toggle("on",c.sel);e.style.left=c.sx+"px";e.style.top=c.sy+"px";e.style.display=""});
+  _SUBL.forEach((e,k)=>{if(!keep.has(k))e.style.display="none"});
+}
+(function tick(){requestAnimationFrame(tick);try{_drawDots()}catch(e){}try{_drawSubs()}catch(e){}})();   // v183 - and the sub-community names
 window.__twinMap={
   addSource:(n,o)=>{_TL[n]=_TL[n]||{};_TL[n].data=o.data||{type:"FeatureCollection",features:[]}},
   addLayer:(o)=>{_TL[o.id]=_TL[o.id]||{};_TL[o.id].src=o.source;_TL[o.id].layer=true},
