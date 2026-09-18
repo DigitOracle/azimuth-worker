@@ -9140,20 +9140,20 @@ function _drawSubs(){
   const lay=_TL["sub-lab"];const src=lay&&_TL[lay.src];const F=(src&&src.data&&src.data.features)||[];
   if(!_SUBCSS){const st=document.createElement("style");st.textContent=".tsl{position:absolute;transform:translate(-50%,-100%);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#D9D2C2;background:rgba(12,20,19,.68);border:1px solid rgba(197,165,106,.4);border-radius:999px;padding:3px 9px;white-space:nowrap;pointer-events:none}.tsl.on{color:#0C1413;background:#C5A56A;border-color:#C5A56A;font-weight:600}";document.head.appendChild(st);_SUBCSS=true}
   const A=_fit();if(!A){_SUBL.forEach(e=>{e.style.display="none"});return}
-  const W=innerWidth,H=innerHeight;const cd=(typeof currentDistrict==="function")?currentDistrict():"";
+  const W=innerWidth,H=innerHeight;const cd=(location.pathname.split("/skyline/")[1]||"").split(/[/?#]/)[0].toLowerCase();
   const sl=_TL["sel"];const sf=sl&&sl.data&&sl.data.features&&sl.data.features[0];const selP=sf&&sf.geometry?sf.geometry.coordinates:null;
   const cand=[];
   F.forEach((f,i)=>{const p=f.properties||{};const c=f.geometry&&f.geometry.coordinates;if(!p.name||!c)return;
     if(cd&&p.district&&p.district!==cd)return;                                                       // this district only
-    if(!cd&&(Math.abs(c[0]-A.ml)*101+Math.abs(c[1]-A.mt)*111)>8)return;                           // no district known: stay near the model
+    if(!cd&&(Math.abs(c[0]-A.ml)*101+Math.abs(c[1]-A.mt)*111)>25)return;                          // no district known: stay near the model
     const P=_scene(c[0],c[1]);if(!P)return;const q=P.project(cam);if(q.z>1||q.x<-1||q.x>1||q.y<-1||q.y>1)return;
     const sx=(q.x+1)/2*W,sy=(1-q.y)/2*H-14;
     const sel=!!(selP&&Math.abs(selP[0]-c[0])<1e-7&&Math.abs(selP[1]-c[1])<1e-7);
-    if(!sel&&(sy<120||sy>H-110||sx<30||sx>W-30))return;                                              // clear of the masthead and the rail
+    if(!sel&&(sy<36||sy>H-70||sx<30||sx>W-30))return;                                                // on screen; the chrome is handled as obstacles below
     const nm=(typeof tc==="function"?tc(p.name):p.name);
     cand.push({k:i,nm,sx,sy,sel,score:(sel?1e12:0)+(p.radius_m||0)*1000+(p.units||0)})});
   cand.sort((a,b)=>b.score-a.score);
-  const blocks=Array.prototype.map.call(document.querySelectorAll("a.lb"),e=>e.getBoundingClientRect()).filter(r=>r.width>0);
+  const blocks=Array.prototype.map.call(document.querySelectorAll("a.lb,.top,#hp,#panel,#ppanel,.nnav,#sb,#sr"),e=>e.getBoundingClientRect()).filter(r=>r.width>0&&r.height>0);   // building labels AND the chrome: search, rail, cards, open panel, tab bar
   const hit=(r,o)=>!(r.r<o.l||r.l>o.r||r.b<o.t||r.t>o.b);
   const pick=[];
   for(const c of cand){
