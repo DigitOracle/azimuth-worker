@@ -25,7 +25,14 @@ const KV = {
   async list(o) { const p = (o && o.prefix) || ""; return { keys: [...store.keys()].filter((k) => k.startsWith(p)).map((name) => ({ name })), list_complete: true }; },
 };
 // v169 - an icon appears only where a sheet EXISTS. A slug says where one would live; these records say one does.
-for (const slug of ["bellevue_towers", "the_edge", "churchill_tower"]) store.set("sheetm_" + slug, JSON.stringify({ slug, pages: 3, bytes: 448000 }));
+for (const slug of ["bellevue_towers", "the_edge", "churchill_tower"]) {
+  store.set("sheetm_" + slug, JSON.stringify({ slug, pages: 3, bytes: 448000 }));
+  store.set("sheet_" + slug, "%PDF-1.4 pretend document");   // v174 - the DOCUMENT is what makes a sheet exist
+}
+// v174 - and a meta with NO document is a hold placeholder: sheets.js writes one to record WHY a building has no
+// sheet. Symphony had exactly this on a building row and showed an icon that 404d on tap, which is the fault
+// v169 was written to prevent. Stage one here so the gate can never drift back.
+store.set("sheetm_symphony", JSON.stringify({ slug: "symphony", name: "symphony", hold: "pictures are of a different building" }));
 globalThis.fetch = async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
 const env = { MEETINGS: KV, READ_KEY: READ, CLIENT_KEY: CLIENT, RESIDENTS_KEY: "r", INGEST_TOKEN: "ING", WA_ALLOWED: "971565484397",
   WHATSAPP_TOKEN: "t", WA_PHONE_ID: "p", PUBLIC_ORIGIN: "https://azimuth-2.digitalchemy.workers.dev" };
@@ -56,7 +63,9 @@ for (const [label, html] of [["owner", ownerHtml], ["client", clientHtml]]) {
 }
 
 // ── the slug comes from the row, and nothing is guessed ──────────────────────────────────────────
-ok(ownerHtml.includes('r.t==="building"?((r.sheet&&(!SHEETS||SHEETS[r.sheet]))?'), "the action appears only on a building row whose slug points at a sheet that EXISTS");
+ok(ownerHtml.includes('(r.t==="building"||r.t==="development")?((r.sheet&&(!SHEETS||SHEETS[r.sheet]))?'), "the action appears where the row's slug points at a sheet that EXISTS - a development row names a real building too");
+ok(ownerHtml.includes('":(r.t==="building"?"<i class=gsp></i>":"")'), "only a building row holds the slot open, so the 4,470 development rows do not shift");
+ok(!/"symphony":1/.test(ownerHtml), "a slug with a META but no DOCUMENT is not offered - that icon 404s on tap, which is the whole point of the existence check");
 ok(ownerHtml.includes("var SHEETS={") && ownerHtml.includes('"bellevue_towers":1'), "the page is told which sheets exist, rather than assuming a slug means a document");
 ok(clientHtml.includes("var SHEETS=null"), "a client link is told nothing about which sheets exist - it has no action to gate anyway");
 

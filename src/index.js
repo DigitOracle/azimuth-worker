@@ -526,8 +526,8 @@ async function liveSheetSlugs(env) {
   try {
     const out = []; let cursor;
     for (let page = 0; page < 3; page++) {
-      const r = await env.MEETINGS.list({ prefix: "sheetm_", cursor });
-      for (const k of (r.keys || [])) out.push(String(k.name).slice(7));
+      const r = await env.MEETINGS.list({ prefix: "sheet_", cursor });   // v174 - the DOCUMENT, not the meta: a sheetm_ is also written INSTEAD of a sheet, to record why a building has none
+      for (const k of (r.keys || [])) out.push(String(k.name).slice(6));
       if (r.list_complete || !r.cursor) break;
       cursor = r.cursor;
     }
@@ -7395,7 +7395,7 @@ function renderFind(key, q0, owner, liveSheets) {
   // route names, or a flag that can be flipped in a console. The sheet routes refuse a client key anyway; this is the layer above that one.
   // v160 - a building with no sheet still holds the slot open with an empty spacer, so the twin and map icons sit at the same place on every
   // row. Without it the group is right-aligned and the other two shift under her thumb between one building and the next.
-  const GSF = owner ? '+(r.t==="building"?((r.sheet&&(!SHEETS||SHEETS[r.sheet]))?\'<a class=gs title="Client sheet" aria-label="Client sheet" data-s="\'+esc(String(r.sheet))+\'">\'+IC.file+"</a>":"<i class=gsp></i>"):"")' : "";
+  const GSF = owner ? '+((r.t==="building"||r.t==="development")?((r.sheet&&(!SHEETS||SHEETS[r.sheet]))?\'<a class=gs title="Client sheet" aria-label="Client sheet" data-s="\'+esc(String(r.sheet))+\'">\'+IC.file+"</a>":(r.t==="building"?"<i class=gsp></i>":"")):"")' : "";
   const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Find \u2014 Najma</title>' +
     '<link rel=preconnect href="https://fonts.googleapis.com"><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">' +

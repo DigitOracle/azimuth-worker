@@ -1,7 +1,13 @@
 // v172 — EV CHARGING ON THE MAP (Kendall, 17 Sep 2026: "we have pulled EV charging stations ... it's not pulled into
 // our overall map, maybe we should add a filter for it").
 //
-// The layer itself is data: the pipeline appends 297 points with k:"ev" to the amenities image and the map's chip loop
+// The layer itself is data: the pipeline appends 285 points with k:"ev" to the amenities image and the map's chip loop
+// (297 at first release on 17 Sep; twelve were in OTHER EMIRATES - Fairmont Ajman, Al Zorah, Sheraton Sharjah,
+// Tesla at Sharjah and Ajman City Centres - because the pipeline kept the layer to a bounding BOX and the
+// Dubai/Sharjah border runs diagonally through Al Nahda, so any box holding Deira also holds the Ajman corniche.
+// Kendall found it by tapping a card. Nothing in the worker can catch that: the chip loop renders whatever the
+// image holds, so the guard belongs in the pipeline and it is now two - the emirate is the LAST component of the
+// address, and no Dubai government register point anywhere in this image sits above 25.30.)
 // builds from that table, so the app needed a label, a colour and an icon and nothing else.
 //
 // The check worth having is the PROVENANCE one. 186 of the points come from DEWA's Green Charger register, an

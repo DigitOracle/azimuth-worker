@@ -22,6 +22,7 @@ const KV = {
   async list(o) { const p = (o && o.prefix) || ""; return { keys: [...store.keys()].filter((k) => k.startsWith(p)).map((name) => ({ name })), list_complete: true }; },
 };
 // v169 - the icon is gated on a sheet existing, not on a slug being present. 156 of 169 cards carried a slug that pointed at nothing.
+for (const slug of ["bellevue_towers", "the_edge", "marina_cove", "treppan_tower", "golf_ville", "oxford_cove"]) store.set("sheet_" + slug, "%PDF-1.4 pretend document");   // v174 - the document is what exists
 for (const slug of ["bellevue_towers", "the_edge", "marina_cove", "treppan_tower", "golf_ville", "oxford_cove"]) store.set("sheetm_" + slug, JSON.stringify({ slug, pages: 2, bytes: 430000 }));
 globalThis.fetch = async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
 const env = { MEETINGS: KV, READ_KEY: READ, CLIENT_KEY: CLIENT, RESIDENTS_KEY: "r", INGEST_TOKEN: "ING", WA_ALLOWED: "971565484397",

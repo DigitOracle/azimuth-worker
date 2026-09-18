@@ -63,7 +63,7 @@ function codeBlocks(html) {
   return out;
 }
 
-const PAGES = ["/find", "/dev?d=arada", "/versus", "/world", "/plans", "/clock", "/charts", "/market", "/home", "/skyline?all=1", "/map", "/avail"];
+const PAGES = ["/find", "/dev?d=arada", "/versus", "/world", "/plans", "/clock", "/charts", "/market", "/home", "/skyline?all=1", "/skyline/businessbay", "/map", "/avail"];
 
 let pagesChecked = 0, scriptsChecked = 0;
 for (const path of PAGES) {
