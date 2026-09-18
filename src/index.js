@@ -3365,6 +3365,7 @@ async function appFetch(request, env, ctx) {
           if (bid.indexOf("wld:fb:") === 0 && await worldFbButton(env, from, bid)) return new Response("ok");   // v154.2 - her verdict on a sample script (works with the lane off)
           if (bid.indexOf("wld:") === 0 && (env.WORLD_TALK || "") === "on" && await worldButton(env, from, bid)) return new Response("ok");   // v154 - Another city / Another angle / a city from the list
           if (bid.indexOf("gc:") === 0 && await gcGuideButton(env, from, bid)) return new Response("ok");   // v150.1 - her Google Calendar walkthrough
+          if (bid.indexOf("em:") === 0 && await emGuideButton(env, from, bid)) return new Response("ok");   // v182 - her email sign-in walkthrough
           if (bid.indexOf("ig:") === 0) { await env.MEETINGS.delete("cand_" + bid.slice(3)); await waSend(env, from, "🙈 Ignored"); return new Response("ok"); }
           if (bid.indexOf("m:") === 0) {
             const _cid = bid.slice(2); let _cand = null; try { _cand = JSON.parse((await env.MEETINGS.get("cand_" + _cid)) || "null"); } catch (e) {}
@@ -3886,6 +3887,7 @@ async function appFetch(request, env, ctx) {
             return new Response("ok");
           }
         }
+        if (await emGuideText(env, from, text)) return new Response("ok");            // v182 - "email setup" starts her email sign-in walkthrough
         if (await gmeetText(env, from, text)) return new Response("ok");            // v150 - "meet Friday 3pm with name@x.com" -> a card to approve (GMEET = "on"); v150.1 - "connect calendar" starts the walkthrough (GMEET = "consent" or "on")
         {                                                      // v35 — relationship-memory intents (routed BEFORE recall)
           let pm = text.match(/^(?:merge)\s+(.{1,60})\s+into\s+(.{1,60})$/i);
@@ -11177,6 +11179,73 @@ function gmeetRange(text) {
   let d = (h2 * 60 + m2) - (h1 * 60 + m1);
   if (d <= 0) d += 12 * 60;
   return d > 0 && d <= 240 ? d : 0;
+}
+// v182 - her DigitAlchemy email, walked through in this chat (Kendall, 18 Sep 2026: "Azimuth can walk her through the process of
+// setting up her email"). Follows his new-joiner guide step for step. She starts it herself with "email setup"; nothing is sent
+// unprompted. The password never passes through here: Kendall sends it to her himself. Her first attempt failed with AADSTS50020
+// ("does not exist in tenant ...") because Outlook on her Mac was already signed in to another organisation's Microsoft account, so
+// step 1 is a private browser window and "stuck" leads with that exact error.
+const EM_ADDR = "najjuko.najma@digitalabbot.io";
+const EM_STEPS = [
+  "*Step 1 of 5 - open a private window*\n\nOn your laptop open a private window (Safari: *File > New Private Window*. Chrome: *New Incognito Window*) and go to *outlook.office.com*\n\nThis matters for you: your laptop is already signed in to another company's Microsoft account, and that login gets in the way. A private window keeps the two apart.",
+  "*Step 2 of 5 - your email*\n\nType your address in full:\n" + EM_ADDR + "\n\nThen *Next*. If Microsoft asks you to choose between a work and a personal account, choose *Work or school account*.",
+  "*Step 3 of 5 - the temporary password*\n\nUse the temporary password Kendall sent you. It is case-sensitive: type it by hand rather than pasting, because a copied space at the end is the usual reason it's rejected.\n\nMicrosoft will then say the password has expired or must be changed. That's expected, not an error.",
+  "*Step 4 of 5 - your own password*\n\nEnter the temporary one as the current password, then your new one twice.\n\nAt least 8 characters, with upper case, lower case, a number and a symbol. Don't reuse a password from anywhere else.",
+  "*Step 5 of 5 - verification*\n\nWhen you see *More information required*, follow the steps to add the *Microsoft Authenticator* app or your phone number. This is what lets you reset your own password later.\n\nYour mailbox opens when this is done."
+];
+const EM_MSG = {
+  intro: "\u{1F4E7} *Your DigitAlchemy email*\n\nI'll walk you through signing in for the first time: five short steps, about five minutes, one at a time. Keep your phone with you.\n\nYour address: " + EM_ADDR + "\nYour temporary password comes from Kendall.",
+  later: "No problem. Say *email setup* whenever you're ready and we'll start from the beginning.",
+  done: "\u2705 *You're in.*\n\nTo get your mail everywhere:\n\u2022 *Browser* - outlook.office.com, nothing to install.\n\u2022 *Phone* - install *Microsoft Outlook* from the App Store or Google Play and add " + EM_ADDR + ".\n\u2022 *Outlook on your laptop* - choose *Add account*. If it shows the \"does not exist in tenant\" error again, that's your other work account getting in the way: use the browser or your phone instead, and say *email setup* if you want help.",
+  stuck: "Here's what usually fixes it:\n\n\u2022 *\"User account ... does not exist in tenant\"* (AADSTS50020) - you're still signed in to your other work account. Close the window, open a *new private window*, and go to outlook.office.com again.\n\u2022 *Wrong account shown* - sign out fully, or use a private window.\n\u2022 *Password rejected* - type it by hand; no space at the end.\n\u2022 *\"Your password has expired\"* - expected the first time; follow it to set your own.\n\u2022 *Account locked* - too many tries. Wait a few minutes, or tap *Tell Kendall*.",
+  helped: "I've let Kendall know. He'll sort it and get back to you.",
+  helpSelf: "I couldn't reach Kendall from here. Send him a quick message saying the email sign-in isn't working, and he'll sort it."
+};
+const EM_BTN_STEP = [{ id: "em:done", title: "Done" }, { id: "em:stuck", title: "I'm stuck" }];
+async function emGuideGet(env) { try { return JSON.parse((await env.MEETINGS.get("email_guide")) || "null"); } catch (e) { return null; } }
+async function emGuideSet(env, g) { g.at = new Date().toISOString(); await env.MEETINGS.put("email_guide", JSON.stringify(g), { expirationTtl: 30 * 86400 }); }
+async function emSendStep(env, to, g) {
+  const i = Math.max(0, Math.min(EM_STEPS.length - 1, g.step | 0));
+  await waSendButtons(env, to, EM_STEPS[i], EM_BTN_STEP);
+}
+async function emGuideStart(env, to) {
+  const g = { step: 0, stuck: 0, started_at: new Date().toISOString() };
+  await emGuideSet(env, g);
+  await waSendButtons(env, to, EM_MSG.intro, [{ id: "em:go", title: "Let's start" }, { id: "em:later", title: "Later" }]);
+  return "intro";
+}
+async function emGuideText(env, from, text) {
+  if (!/^(?:e-?mail\s+set\s*-?\s*up|set\s*-?\s*up\s+(?:my\s+)?(?:work\s+)?e-?mail|my\s+e-?mail|e-?mail\s+help|help\s+with\s+(?:my\s+)?e-?mail)\s*[.!?]?$/i.test(String(text || "").trim())) return false;
+  await emGuideStart(env, from); return true;
+}
+async function emGuideButton(env, from, bid) {
+  if (!/^em:(go|later|done|stuck|back|help)$/.test(bid)) return false;
+  const g = (await emGuideGet(env)) || { step: 0, stuck: 0 }; const b = bid.slice(3);
+  if (b === "later") { g.state = "later"; await emGuideSet(env, g); await waSend(env, from, EM_MSG.later); return true; }
+  if (b === "go") { g.step = 0; g.state = "steps"; await emGuideSet(env, g); await emSendStep(env, from, g); return true; }
+  if (b === "back") { await emSendStep(env, from, g); return true; }
+  if (b === "done") {
+    if (g.state === "finished") { await waSend(env, from, EM_MSG.done); return true; }
+    g.step = (g.step | 0) + 1;
+    if (g.step >= EM_STEPS.length) {
+      g.state = "finished"; g.finished_at = new Date().toISOString(); await emGuideSet(env, g);
+      await waSend(env, from, EM_MSG.done);
+      try { await gcTellOwner(env, "Najjuko finished the email sign-in walkthrough (" + EM_ADDR + ")."); } catch (e) {}
+      return true;
+    }
+    g.state = "steps"; await emGuideSet(env, g); await emSendStep(env, from, g); return true;
+  }
+  if (b === "stuck") {
+    g.stuck = (g.stuck | 0) + 1; await emGuideSet(env, g);
+    await waSendButtons(env, from, EM_MSG.stuck, [{ id: "em:back", title: "Back to my step" }, { id: "em:help", title: "Tell Kendall" }]);
+    return true;
+  }
+  if (b === "help") {
+    const told = await gcTellOwner(env, "Najjuko is stuck signing in to her DigitAlchemy email (" + EM_ADDR + ") at step " + ((g.step | 0) + 1) + " of " + EM_STEPS.length + ", after " + (g.stuck | 0) + " \"I'm stuck\". Her first attempt showed AADSTS50020: Outlook on her Mac is signed in to another organisation's tenant.");
+    g.help_at = new Date().toISOString(); await emGuideSet(env, g);
+    await waSend(env, from, told ? EM_MSG.helped : EM_MSG.helpSelf); return true;
+  }
+  return true;
 }
 const GC_MSG = {
   intro: "🎥 *New: Google Meet from this chat*\n\nSoon you can say " + GMEET_EXAMPLE + " and I'll set up the call, put it on your Google Calendar and send the invite. Nothing is booked until you tap *Book it*.\n\nFirst your Google Calendar has to let me in. It takes about a minute, and I'll walk you through it.",
