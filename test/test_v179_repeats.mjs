@@ -45,7 +45,7 @@ const run = async (angles, famhist, top) => {
 
 // ---- this morning, replayed: her 06:00 figures in the history, four of the new five repeating them ------------------------
 const RENT = A("68,323 rental contracts through mid-September.", "68,323 contracts", "DLD Open Data, rents to 2026-09-17", "rents_yields", "move");
-const WEEK = A("Week 37 moved 2,916 homes.", "2,916 sales", "DLD Open Data, 2026-W37", "volume", "move");
+const WEEK = A("2,916 homes moved last week.", "2,916 sales", "DLD Open Data, 2026-W37", "volume", "move");
 const MAD = A("Madinat Al Mataar took 2,964 sales.", "2,964 sales", "DLD Open Data, 2026-07-22 to 2026-09-17", "district", "invest");
 const OFF = A("Off-plan took 15,760 homes.", "15,760 off-plan units", "DLD Open Data, 2026-07-22 to 2026-09-17", "offplan_ready", "invest");
 const PLAN = A("50+ master plans and AED 55 billion approved.", "50+ master plans, AED 55 billion", "Dubai Media Office, 4 Mar 2025", "growth_plan", "authority");
@@ -66,7 +66,7 @@ ok(m.qa && /dropped rather than repeated/.test(m.qa.note) && /topped up 4/.test(
 // ---- the plan's facts: v179 gave them a 3-day cooldown; v184 (Kendall, 19 Sep) exempts them from the history locks entirely --
 const BEACH = A("Public beaches up by as much as 400% by 2040.", "400%", "Dubai Media Office, 13 Mar 2021", "city_life", "move");
 const FRESH = [A("Rents at 71,000 contracts.", "71,000 contracts", "DLD Open Data", "rents_yields", "move"),
-               A("Week 38 at 3,101 homes.", "3,101 sales", "DLD Open Data", "volume", "move"),
+               A("3,101 homes moved this week.", "3,101 sales", "DLD Open Data", "volume", "move"),
                A("A district at 1,777 sales.", "1,777 sales", "DLD Open Data", "district", "invest"),
                A("50+ master plans.", "50+ master plans, AED 55 billion", "Dubai Media Office, 4 Mar 2025", "growth_plan", "authority")];
 const five = await run([BEACH, ...FRESH], [hist("400%", "city_life", 5)]);

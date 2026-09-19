@@ -71,5 +71,15 @@ const INVENT = A("12 new hospitals are coming.", "12 new hospitals", "Dubai Medi
 const hon = await run([POP, PRICE, SATWA, EDU, RENT], hist19, [INVENT, ...TOP_RE]);
 ok(!/12 new hospitals/.test(hon.out) && hon.n === 5, "a top-up angle citing the plan for a figure the plan does not contain is refused, and the floor still reaches five");
 
+// ---- the content guards: the first dry run of the floor on real data carried both of these ------------------------------------
+const WORDS = A("Fifty-five million residents move within walking distance of a Metro station by 2040.", "55 districts, 11 within 2 km walk, 14 stations planned", "cityLife metro data; Dubai Media Office, 4 Mar 2025", "transit", "move");
+const NINE = A("Arada released 9 units across 3 projects.", "9 units released", "developerInventory moves, 2026-09-07 to 2026-09-11", "offplan_ready", "invest");
+const INVENTED_NUM = A("Approvals are 73% faster.", "50+ master plans, AED 55 billion", "Dubai Media Office, 4 Mar 2025", "growth_plan", "authority");
+const cg = await run([WORDS, NINE, INVENTED_NUM, EDU, POP], [], TOP_RE);
+ok(!/Fifty-five million/.test(cg.out), "a hook with a big number spelled out in words is dropped - '55 districts' became 'Fifty-five million residents'");
+ok(!/9 units released/.test(cg.out), "an inventory move under 20 units is never a headline, top-up or not");
+ok(!/73% faster/.test(cg.out), "a hook number that appears nowhere in the figure or the data is dropped");
+ok(cg.n >= 4 && cg.qa && /DROPPED 3 for content/.test(cg.qa.note), "and the floor replaces them, saying why: " + (cg.qa ? (cg.qa.note.match(/DROPPED 3 for content[^|]*/) || [""])[0].slice(0, 160) : ""));
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);

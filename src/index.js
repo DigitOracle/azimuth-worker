@@ -5090,13 +5090,30 @@ async function feedQA(env, angles, sys, data, famh) {
 // 1. trim to the split (at most three of either kind); 2. ask for exactly the missing number in the missing mix - each new
 // angle must pass the repeat audit, the citation test and the voice pass; 3. only then bring back the least-bad dropped angle
 // (the oldest repeat first), and say so.
+// v184 - the first dry run of the floor on real data (19 Sep) carried a hook that turned "55 districts" into "Fifty-five million
+// residents" - spelled out, so no number check saw it - and a top-up headlining "Arada released 9 units", which the prompt forbids
+// but nothing enforced. A floor that fills the morning with false posts is worse than no floor, so both are now mechanical:
+// every number in a hook must appear in the data, big numbers are never spelled out, and no inventory move under 20 units.
+const FEED_WORDNUM = /\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(-\w+)?\b|\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(hundred|thousand|million|billion)\b/i;
+function feedHookTrue(a, dataStr) {
+  const h = String((a && a.hook) || "");
+  if (FEED_WORDNUM.test(h)) return "a number spelled out in words";
+  const fig = String((a && a.figure) || "").replace(/,/g, "");
+  const bad = (h.match(/\d[\d,]*(?:\.\d+)?/g) || []).map(n => n.replace(/,/g, "").replace(/\.$/, "")).filter(n => n.length >= 2).find(n => !fig.includes(n) && !dataStr.includes(n));
+  if (bad) return "number " + bad + " is not in the data";
+  const u = String((a && a.figure) || "").match(/(\d[\d,]*)\s*(?:units?|homes?)\b/i);
+  if (u && /released|taken up|inventory|developer/i.test(String(a.hook) + " " + String(a.source)) && Number(u[1].replace(/,/g, "")) < 20) return "an inventory move under 20 units";
+  return "";
+}
 async function feedFill(env, angles, sys, data, famh, qa) {
   const own = () => angles.filter(a => !a.campaign);
+  const dataStr = String(data || "").replace(/,/g, "");
+  const bogus = []; for (let i = 0; i < angles.length; i++) { const a = angles[i]; if (a.campaign) continue; const w = feedHookTrue(a, dataStr); if (w) { bogus.push(w); angles.splice(i, 1); i--; } }
   const insertAt = () => { const i = angles.findIndex(a => a.campaign); return i < 0 ? angles.length : i; };
-  const notes = [];
+  const notes = []; if (bogus.length) notes.push("DROPPED " + bogus.length + " for content (" + bogus.join("; ") + ")");
   for (const kind of [true, false]) { let n = 0; for (let i = 0; i < angles.length; i++) { const a = angles[i]; if (a.campaign || planAngle(a) !== kind) continue; if (++n > 3) { angles.splice(i, 1); i--; notes.push("trimmed a " + (kind ? "plan" : "real-estate") + " angle over three"); } } }
   const fits = (a) => { const o = own(); const isP = planAngle(a); return isP ? o.filter(planAngle).length < 3 : o.filter(x => !planAngle(x)).length < 3; };
-  const honest = (a) => !(PLAN_SRC_RX.test(String(a.source || "")) && !planFigBacked(a));
+  const honest = (a) => !(PLAN_SRC_RX.test(String(a.source || "")) && !planFigBacked(a)) && !feedHookTrue(a, dataStr);
   for (let pass = 0; pass < 2 && own().length < 5; pass++) {
     const cur = own(); const P = cur.filter(planAngle).length, R = cur.length - P, need = 5 - cur.length;
     let wantP = Math.max(0, 2 - P), wantR = Math.max(0, 2 - R), rest = need - wantP - wantR;
