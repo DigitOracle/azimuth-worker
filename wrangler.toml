@@ -108,6 +108,8 @@ RING_TEMPLATE_LANG = "en_US"
 RING_PARAMS = "CALLNAJ|1|meeting starting in 15 minutes"
 # v146 - meetings checked every minute (the half-hour tick never saw the T-15 ring window); picture jobs finished on the same tick.
 MINUTE_TICK = "on"
+# v185 - the five morning scene cards (Naj drawn into each place), queued after the 06:00 list and made by the minute tick (Kendall, 19 Sep 2026). Remove to switch off.
+FEED_SCENES = "on"
 # v147 - scene pictures in her chat (Kendall approved with Najjuko, 13 Sep 2026): backdrop -> time of day -> photo -> Make it / Change it.
 SCENE_PICTURES = "on"
 # v148 - scene pictures drawn with GPT Image 2.5 (Kendall, 13 Sep 2026: "use gpt 2.5"). Remove to go back to gpt-image-1.

@@ -5431,12 +5431,44 @@ async function dailyFeedTick(env, force, dry) {
   await waSend(env, env.WA_ALLOWED, bodyTxt);
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle",
     angles.slice(0, 10).map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + (a.figure || "").slice(0, 18), description: a.hook })));
+  try { await feedScenes(env, angles); } catch (e) {}   // v185 - the five scene cards, made and sent by the minute tick
   if (radar && radar.items && radar.items.length && !force) {                                   // v88 - the radar is its own tap, never inside the feed
     try { await waSend(env, env.WA_ALLOWED, "🔥 *Trend radar* - " + radar.items.length + " things people are talking about today (" + Object.keys(radar.sources || {}).filter(k => radar.sources[k]).join(" · ") + "). Open it when you want it:\n" + (env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev") + "/trends?key=" + env.READ_KEY + "\n\nSay *trend 3* and I'll draft from item 3."); } catch (e) {}
   }
   if (!force) { try { await env.MEETINGS.put(fk, "done", { expirationTtl: 2 * 86400 }); } catch (e) {} }
 }
 
+// v185 - THE MORNING SCENE CARDS, EVERY DAY (Kendall, 19 Sep 2026: "make sure this is what happens every day, with the feed").
+// On 19 Sep the five cards were made by hand: Naj drawn into each place from her sparkly-jacket photo, today's text on the card,
+// each sent as a post and a story. This queues exactly that after the morning list goes out - one scene job per angle, built
+// the way her own Make it tap builds one (post block, backdrop, time of day, her photo) - and the one-minute tick in the cloud
+// makes and sends them, so nothing depends on the laptop being awake. Each angle's backdrop choices are saved in fbg_<n>, so if
+// she picks an angle afterwards to redo it, the usual flow works. Off unless FEED_SCENES = "on"; her photo is the KV key
+// feed_scene_photo, else the sparkly-jacket photo (style_ref_21). Never on a dry run, never for the campaign angles.
+const FEED_SCENE_TIMES = ["la", "md", "ss", "em", "la"];
+async function feedScenes(env, angles) {
+  if (env.FEED_SCENES !== "on" || !env.WA_ALLOWED) return 0;
+  let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+  const me = String((await env.MEETINGS.get("feed_scene_photo")) || "style_ref_21").replace(/[^a-z0-9_]/gi, "");
+  let queued = 0;
+  const list = angles.filter(a => !a.campaign).slice(0, 5);
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i], n = String(angles.indexOf(a) + 1);
+    const area = angleArea(a, d) || "";
+    const opts = feedBackdrops(a, area) || [];
+    const opt = opts[0]; if (!opt) continue;
+    try { await env.MEETINGS.put("fbg_" + n, JSON.stringify({ n, area, angle: a, options: opts }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+    const post = { n, idp: "feed_", hook: a.hook || "", figure: a.figure || "", source: a.source || "", masthead: area || "Dubai",
+      caption: [a.hook || "", (a.figure || "") + " \u2014 " + (a.source || "")].filter(Boolean).join("\n\n").slice(0, 1000) };
+    const jk = "picjob_s" + "feed" + gstDateStr(new Date()).replace(/-/g, "") + n;
+    if (await env.MEETINGS.get(jk)) continue;                                                     // one job per angle per morning, even if the tick fires twice
+    try { await env.MEETINGS.put(jk, JSON.stringify({ scene: true, n, opt: opt.id, tid: FEED_SCENE_TIMES[i] || "la", to: env.WA_ALLOWED, at: Date.now(), tries: 0,
+      post, option: opt, angle: a, meKey: me, extra: [], auto: "feed" }), { expirationTtl: 2 * 86400 }); queued++; } catch (e) {}
+  }
+  if (queued) { try { await waSend(env, env.WA_ALLOWED, "\u{1F4F8} Your " + (queued === 5 ? "five" : String(queued)) + " pictures are being made now. They'll arrive here over the next few minutes, each as a post and a story."); } catch (e) {} }
+  try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued, photo: me }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  return queued;
+}
 // ── v88 — TREND RADAR ─────────────────────────────────────────────────────────────
 // What people are talking about, gathered once a day and kept OUT of the feed: news feeds (Khaleej Times, Gulf News, The
 // National, Arabian Business, Al Jazeera, Zawya), Wikipedia page-view spikes on a Dubai basket, and - when APIFY_TOKEN is set -
