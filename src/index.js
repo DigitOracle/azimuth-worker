@@ -5123,15 +5123,20 @@ async function feedFill(env, angles, sys, data, famh, qa) {
       wantP + " Dubai 2040 angle(s) whose figure is taken from dubai2040 and cites that line's own source, and " + wantR + " real-estate angle(s) from the live market data. " +
       "Each from a family not already used (used: " + JSON.stringify(cur.map(a => a.family || famOf(a))) + "). Real-estate angles must not reuse any figure in avoidFigures. Nothing may repeat an angle in current.";
     let g = null; try { g = await claudeJSON(env, ask, JSON.stringify({ current: cur, avoidFigures: famh.map(x => x.k).filter(Boolean).slice(0, 60), data: JSON.parse(data) }), FEED_SCHEMA, null, 1400); } catch (e) {}
-    let added = 0;
+    let added = 0; const rej = [];
     for (const a of (g && Array.isArray(g.angles) ? g.angles : [])) {
       if (own().length >= 5) break;
-      if (!a || !a.hook || !a.figure || !fits(a) || !honest(a)) continue;
-      const o = own(); if (feedAudit(o.concat([a]), famh).bad.some(b => b.i === o.length)) continue;
+      if (!a || !a.hook || !a.figure) { rej.push("empty"); continue; }
+      if (!fits(a)) { rej.push((planAngle(a) ? "plan" : "real-estate") + " over three"); continue; }
+      const cw = feedHookTrue(a, dataStr); if (cw) { rej.push(cw); continue; }
+      if (!honest(a)) { rej.push("cites the plan for a figure it does not contain"); continue; }
+      const o = own(); const au = feedAudit(o.concat([a]), famh).bad.find(b => b.i === o.length); if (au) { rej.push(au.why[0]); continue; }
       try { await voiceGuard(env, [a]); } catch (e) {}
       angles.splice(insertAt(), 0, a); added++;
     }
     if (added) notes.push("topped up " + added);
+    if (rej.length) notes.push("top-up refused " + rej.length + " (" + rej.map(r => String(r).slice(0, 60)).join("; ") + ")");
+    if (!g) notes.push("top-up got no answer");
   }
   if (own().length < 5 && qa && Array.isArray(qa._droppedAngles)) {
     const dated = (w) => (String(w || "").match(/\d{4}-\d{2}-\d{2}/) || ["9999"])[0];
