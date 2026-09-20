@@ -71,7 +71,7 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     open: r.open || null, openFrom: r.open_from || null, openRadius: r.open_radius || 0, plot: r.plot || null,
     fits: r.fits !== false, heightFlag: r.height_flag || null, modelH: (anchors && a.h) || null,
     plans: plansFor(plansIndex, r.name, (u.dld || {}).project, u.developer),
-    rent: r.rent || null, project: r.project || null,
+    rent: r.rent || null, project: r.project || null, land: r.land || null, districtLand: stack.district_land || null,
     schools: amen ? (amen.schools || []).slice(0, 8) : null,
     schoolsAll: amen ? (amen.schools || []).length : 0,
     healthN: amen ? amen.health_n || 0 : 0,
@@ -679,6 +679,18 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
           esc(p.url) + '" alt="' + esc(p.label) + '"><b>' + esc(p.label) + "</b></a>").join("") + "</div>" +
         '<div class=src>' + (D.plans.note ? esc(D.plans.note) + ". " : "") +
         "Developer material from the app's plan library, shown to the broker who sells it; each plan names its source on the PLANS page.</div>" : "") +
+      (D.land ? "<h3>The plot</h3>" +
+        '<div class=row><span>Tenure</span><span>' + (D.land.freehold === null ? "not stated" : D.land.freehold ? "freehold" : "leasehold") + "</span></div>" +
+        (D.land.zoned ? '<div class=row><span>Zoned</span><span>' + esc(D.land.zoned) + (D.land.use && D.land.use !== D.land.zoned ? " · used as " + esc(D.land.use) : "") + "</span></div>" : "") +
+        (D.land.area_sqm ? '<div class=row><span>Plot area</span><span>' + fmt(D.land.area_sqm) + " m²</span></div>" : "") +
+        (D.land.land ? '<div class=row><span>Land number</span><span>' + esc(D.land.land) + (D.land.parcel ? " · parcel " + D.land.parcel : "") + "</span></div>" : "") +
+        (D.plot && D.plot.n > 1 ? '<div class=row><span>Buildings on this plot</span><span>' + D.plot.n + " · " +
+          (D.plot.tallest ? "this is the tallest" : "this is not the tallest, " + D.plot.tallest_floors + " floors beside it") + "</span></div>" +
+          D.plot.others.map((o) => '<div class=row><span>' + esc(o.type || "building") + "</span><span>" + (o.floors ? o.floors + " floors" : "") +
+            (o.units ? " · " + fmt(o.units) + " units" : "") + "</span></div>").join("") : "") +
+        '<div class=src>Dubai Land Department land registry' + (D.districtLand ? ", where " + fmt(D.districtLand.freehold) + " of " +
+          fmt(D.districtLand.plots) + " plots in " + esc(D.district) + " are freehold, so tenure is worth checking rather than assuming" : "") +
+        ". A plot is not one tower: podium blocks, services blocks and second towers share it, and the parking and plot area above are counted for the whole plot.</div>" : "") +
       (D.around.length ? "<h3>Around it</h3>" + D.around.map((a) => '<div class=row><span>' + esc(a[0]) + "</span><span>" + esc(a[1]) + "</span></div>").join("") : "") +
       '<div class=src>' + esc(D.asOf) + ". Floors divide the model's surveyed height evenly; a double-height lobby is not drawn as one." +
       (D.levelShift ? " The register numbers levels " + D.levelShift + " higher than the permit here, so its ranges are shifted to match." : "") + "</div>");
