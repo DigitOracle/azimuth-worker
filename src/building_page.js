@@ -57,6 +57,8 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
   if (r.area_sqm) facts.push(["Registered floor area", fmt(r.area_sqm) + " m²"]);
   if (dm.plot_area_sqm) facts.push(["Plot", fmt(dm.plot_area_sqm) + " m²" + (dm.buildings_on_plot > 1 ? " · " + dm.buildings_on_plot + " buildings on it" : "")]);
   if (a.lat && a.lon) facts.push(["Location", a.lat.toFixed(4) + " N " + a.lon.toFixed(4) + " E" + (a.cluster ? " · " + a.cluster : "")]);
+  if (r.makani && r.makani.makani) facts.push(["Makani", String(r.makani.makani).replace(/(\d{4})(\d{5})/, "$1 $2") +
+    (r.makani.dist_m ? " · entrance " + Math.round(r.makani.dist_m) + " m from the footprint" : "")]);
   const around = [];
   if (sales.metro) around.push(["Metro", sales.metro]);
   if (sales.mall) around.push(["Mall", sales.mall]);
@@ -72,6 +74,7 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     fits: r.fits !== false, heightFlag: r.height_flag || null, modelH: (anchors && a.h) || null,
     plans: plansFor(plansIndex, r.name, (u.dld || {}).project, u.developer),
     rent: r.rent || null, project: r.project || null, land: r.land || null, districtLand: stack.district_land || null,
+    sold: r.sales || null, makani: r.makani || null, permit: r.permit || null,
     schools: amen ? (amen.schools || []).slice(0, 8) : null,
     schoolsAll: amen ? (amen.schools || []).length : 0,
     healthN: amen ? amen.health_n || 0 : 0,
@@ -641,7 +644,10 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         (D.project.escrow ? '<div class=row><span>Escrow account</span><span dir=auto>' + esc(D.project.escrow) + "</span></div>" : "") +
         (D.project.units ? '<div class=row><span>Units in the project</span><span>' + fmt(D.project.units) +
           (D.project.registered ? " · " + fmt(D.project.registered) + " registered" : "") + "</span></div>" : "") +
-        '<div class=src>Dubai Land Department project register, joined by project id, not by name. Percent complete and the escrow agent are the register’s own, not the developer’s marketing.</div>' : "") +
+        (D.permit ? '<div class=row><span>' + esc(D.permit.type || "Permit") + "<br><small>the plot's permit" +
+          (D.permit.new_on_plot > 1 ? ", " + D.permit.new_on_plot + " new-building permits on this plot" : "") + "</small></span><span>" +
+          esc(D.permit.date || "") + (D.permit.status ? "<br><small>" + esc(D.permit.status) + "</small>" : "") + "</span></div>" : "") +
+        '<div class=src>Dubai Land Department project register, joined by project id, not by name. The permit is Dubai Municipality\u2019s and keys on the PLOT, not the building, so on a shared plot it may belong to a neighbour. Percent complete and the escrow agent are the register’s own, not the developer’s marketing.</div>' : "") +
       (D.facts.length ? "<h3>The building</h3>" + D.facts.map((f) => '<div class=row><span><small>' + esc(f[0]) + "</small><br>" + esc(f[1]) + "</span><span></span></div>").join("") : "") +
       "<h3>The stack</h3>" + stackLines().map((l) => '<div class=row><span>' + esc(l[0]) + "</span><span>" + esc(l[1]) + "</span></div>").join("") +
       (s.total ? "<h3>Sold, from the register</h3><div class=row><span>Units sold</span><span>" + fmt(s.total) + "</span></div>" +
@@ -657,6 +663,15 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         '<div class=src>DEWA customer register for the whole community' + (D.people.accounts ? ", " + fmt(D.people.accounts) + " accounts" : "") +
         ", of the residents whose nationality it holds. There is no building-level figure: a region is shown at any size, a country inside it from " +
         D.people.cfloor + "%, and smaller groups stay pooled so nobody can be identified by subtraction. It is context about an area, not a reason to choose one.</div>" : "") +
+      (D.sold ? "<h3>What has sold here</h3>" +
+        '<div class=row><span>Registered sales</span><span>' + fmt(D.sold.n) + (D.sold.first ? " since " + esc(D.sold.first.slice(0, 4)) : "") + "</span></div>" +
+        (D.sold.psf ? '<div class=row><span>Median</span><span>AED ' + fmt(D.sold.psf) + " per sq ft</span></div>" : "") +
+        '<div class=row><span>Off-plan</span><span>' + D.sold.offplan_pct + "% of them</span></div>" +
+        (D.sold.recent || []).map((x) => '<div class=row><span>' + esc(x.date) + " · " + esc(x.rooms || "") +
+          (x.sqft ? "<br><small>" + fmt(x.sqft) + " sq ft · " + (x.offplan ? "off-plan" : "ready") + "</small>" : "") +
+          "</span><span>" + (x.price ? aed(x.price) : "") + "</span></div>").join("") +
+        '<div class=src>Dubai Land Department transactions registered against the name ' + esc(D.sold.name) +
+        ". The transaction register carries no building id, only a name, so these are that name's sales rather than provably this footprint's. Settled prices, not asking.</div>" : "") +
       (D.rent ? "<h3>What it lets for</h3>" +
         '<div class=src style="margin:0 0 6px">Ejari registers a letting against the SCHEME, not the tower: these are ' +
         fmt(D.rent.n) + " contracts registered against " + esc(D.rent.scheme) + " since 2024, the scheme this building belongs to." +
