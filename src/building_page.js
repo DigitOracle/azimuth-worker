@@ -57,6 +57,8 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
   if (r.area_sqm) facts.push(["Registered floor area", fmt(r.area_sqm) + " m²"]);
   if (dm.plot_area_sqm) facts.push(["Plot", fmt(dm.plot_area_sqm) + " m²" + (dm.buildings_on_plot > 1 ? " · " + dm.buildings_on_plot + " buildings on it" : "")]);
   if (a.lat && a.lon) facts.push(["Location", a.lat.toFixed(4) + " N " + a.lon.toFixed(4) + " E" + (a.cluster ? " · " + a.cluster : "")]);
+  if (r.name_id && r.name_id.name && !r.name_id.backs_register) facts.push([r.name_id.broader ? "The scheme" : "Named by the land registry",
+    r.name_id.name + (r.name_id.plot_code ? " · plot " + r.name_id.plot_code : "")]);
   if (r.makani && r.makani.makani) facts.push(["Makani", String(r.makani.makani).replace(/(\d{4})(\d{5})/, "$1 $2") +
     (r.makani.dist_m ? " · entrance " + Math.round(r.makani.dist_m) + " m from the footprint" : "")]);
   const around = [];
@@ -75,6 +77,7 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     plans: plansFor(plansIndex, r.name, (u.dld || {}).project, u.developer),
     rent: r.rent || null, project: r.project || null, land: r.land || null, districtLand: stack.district_land || null,
     sold: r.sales || null, makani: r.makani || null, permit: r.permit || null,
+    nameId: r.name_id || null, verdict: r.conflict_verdict || null,
     schools: amen ? (amen.schools || []).slice(0, 8) : null,
     schoolsAll: amen ? (amen.schools || []).length : 0,
     healthN: amen ? amen.health_n || 0 : 0,
@@ -173,8 +176,11 @@ export function buildingPageHtml(D, key, rk) {
     (!D.fits ? '<div id=warn>The floors are not drawn on the model here. This footprint stands ' + (D.modelH ? Math.round(D.modelH) + " m" : "far lower") +
       ' in the twin, and the register building is ' + (D.heightFlag && D.heightFlag.bound_m ? D.heightFlag.bound_m + " m" : "much taller") +
       ': either the footprint is the podium of the scheme, or the model carries a podium height for it. The floor layout below is the register’s and stands on its own.</div>' : "") +
-    (D.conflict ? '<div id=warn>The map calls this building ' + esc(D.conflict) + '. The floors here are the register record for ' +
-      esc(D.name) + " — one of the two is bound to the wrong footprint, so read them with care.</div>" : "");
+    (D.conflict ? '<div id=warn>The map calls this building ' + esc(D.conflict) + ', and the floors here are the register record for ' +
+      esc(D.name) + ". " + (D.verdict === "map" && D.nameId
+        ? "The Land Department's own name for this building, reached through parcel ids rather than by matching text, is " +
+          esc(D.nameId.name) + " — which agrees with the map. So the register record shown here is very probably bound to the wrong footprint: treat these floors as unverified."
+        : "One of the two is bound to the wrong footprint, so read them with care.") + "</div>" : "");
   const json = JSON.stringify(D).replace(/<\//g, "<\\/");
   const tail = '<script type="module">import * as THREE from "three";import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";' +
     'import { OrbitControls } from "three/addons/controls/OrbitControls.js";import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";' +
