@@ -22,6 +22,7 @@ const aed = (n) => (n == null ? "—" : n >= 1e6 ? "AED " + (n / 1e6).toFixed(2)
 
 // ---- what the registers can say about one building ---------------------------------------------------------------------------
 export function buildingData(slug, id, stack, umx, bf, anchors, people, districtName, plansIndex) {
+  const amen = stack.district_amenities || null;
   const r = stack && stack.buildings_by_id && stack.buildings_by_id[String(id)];
   const u = umx && umx.buildings_by_id && umx.buildings_by_id[String(id)];
   if (!r || !u) return null;
@@ -70,7 +71,14 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     open: r.open || null, openFrom: r.open_from || null, openRadius: r.open_radius || 0, plot: r.plot || null,
     fits: r.fits !== false, heightFlag: r.height_flag || null, modelH: (anchors && a.h) || null,
     plans: plansFor(plansIndex, r.name, (u.dld || {}).project, u.developer),
-    developer: u.developer || null, project: (dld.project && String(dld.project).toLowerCase() !== String(r.name || "").toLowerCase()) ? dld.project : null,
+    rent: r.rent || null, project: r.project || null,
+    schools: amen ? (amen.schools || []).slice(0, 8) : null,
+    schoolsAll: amen ? (amen.schools || []).length : 0,
+    healthN: amen ? amen.health_n || 0 : 0,
+    amenKm: amen ? amen.radius_km || 5 : 0,
+    developer: u.developer || null,
+    // the register's own name for this building, when it differs - NOT the project register row, which is `project`
+    registeredAs: (dld.project && String(dld.project).toLowerCase() !== String(r.name || "").toLowerCase()) ? dld.project : null,
     people: communityMix(people, stack.district || slug),
     fps: ((anchors && anchors.anchors) || []).filter((x) => x.x != null).map((x) => [x.i, x.x, x.z]),
   };
@@ -137,7 +145,7 @@ export function buildingPageHtml(D, key, rk) {
   const body =
     '<div id=stage></div><div id=msg>loading the model…</div>' +
     // whichever building is open, its name and its developer sit across the top (Kendall, 20 Sep)
-    '<div id=title><b>' + esc(D.name) + "</b><span>" + esc([D.developer || (D.project ? "registered as " + D.project : ""), D.district]
+    '<div id=title><b>' + esc(D.name) + "</b><span>" + esc([D.developer || (D.registeredAs ? "registered as " + D.registeredAs : ""), D.district]
       .filter(Boolean).join(" · ")) + "</span></div>" +
     '<a class=bk href="' + back + '">← the twin</a>' +
     '<div id=about class=glass>About the building</div>' +
@@ -624,6 +632,16 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     const s = D.sales || {};
     open_('<div class=t>' + esc(D.district) + "</div><h2>" + esc(D.name) + "</h2>" +
       (D.grade ? '<span class="pill n">' + esc(String(D.grade).toLowerCase().replace(/_/g, " ")) + "</span>" : "") +
+      (D.project ? "<h3>Construction · the register</h3>" +
+        '<div class=row><span>' + esc(D.project.name || "this project") + (D.project.master ? "<br><small>" + esc(D.project.master) + "</small>" : "") +
+          "</span><span>" + esc(String(D.project.status || "").toLowerCase() || "—") + "</span></div>" +
+        (D.project.pct != null ? '<div class=row><span>Percent complete</span><span>' + D.project.pct + "%</span></div>" +
+          '<div class=bar style="margin:2px 0 6px"><i style="width:' + Math.max(0, Math.min(100, D.project.pct)) + '%"></i></div>' : "") +
+        (D.project.end ? '<div class=row><span>' + (D.project.pct === 100 ? "Completed" : "Due") + "</span><span>" + esc(D.project.end) + "</span></div>" : "") +
+        (D.project.escrow ? '<div class=row><span>Escrow account</span><span dir=auto>' + esc(D.project.escrow) + "</span></div>" : "") +
+        (D.project.units ? '<div class=row><span>Units in the project</span><span>' + fmt(D.project.units) +
+          (D.project.registered ? " · " + fmt(D.project.registered) + " registered" : "") + "</span></div>" : "") +
+        '<div class=src>Dubai Land Department project register, joined by project id, not by name. Percent complete and the escrow agent are the register’s own, not the developer’s marketing.</div>' : "") +
       (D.facts.length ? "<h3>The building</h3>" + D.facts.map((f) => '<div class=row><span><small>' + esc(f[0]) + "</small><br>" + esc(f[1]) + "</span><span></span></div>").join("") : "") +
       "<h3>The stack</h3>" + stackLines().map((l) => '<div class=row><span>' + esc(l[0]) + "</span><span>" + esc(l[1]) + "</span></div>").join("") +
       (s.total ? "<h3>Sold, from the register</h3><div class=row><span>Units sold</span><span>" + fmt(s.total) + "</span></div>" +
@@ -639,6 +657,23 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         '<div class=src>DEWA customer register for the whole community' + (D.people.accounts ? ", " + fmt(D.people.accounts) + " accounts" : "") +
         ", of the residents whose nationality it holds. There is no building-level figure: a region is shown at any size, a country inside it from " +
         D.people.cfloor + "%, and smaller groups stay pooled so nobody can be identified by subtraction. It is context about an area, not a reason to choose one.</div>" : "") +
+      (D.rent ? "<h3>What it lets for</h3>" +
+        '<div class=src style="margin:0 0 6px">Ejari registers a letting against the SCHEME, not the tower: these are ' +
+        fmt(D.rent.n) + " contracts registered against " + esc(D.rent.scheme) + " since 2024, the scheme this building belongs to." +
+        (esc(D.rent.scheme).toLowerCase() !== esc(D.name).toLowerCase() ? " They are not this building's alone." : "") + "</div>" +
+        Object.keys(D.rent.by_type).map((t) => { const v = D.rent.by_type[t];
+          const price = (D.register.find((x) => String(x.type).toLowerCase().replace(/[^a-z0-9]/g, "") === String(t).toLowerCase().replace(/[^a-z0-9]/g, "")) || {}).median;
+          const y = (price && v.aed) ? Math.round(1000 * v.aed / price) / 10 : null;
+          return '<div class=row><span>' + esc(t) + "<br><small>" + fmt(v.n) + " contracts" +
+            (v.new != null ? " · " + fmt(v.new) + " new, " + fmt(v.renew) + " renewed" : "") + "</small></span><span>" +
+            aed(v.aed) + " a year" + (y ? "<br><small>" + y + "% on the register price</small>" : "") + "</span></div>"; }).join("") +
+        '<div class=src>A contract is a letting newly registered or renewed, not a measure of how much of the building is occupied. ' +
+        "Where a yield is shown it is the scheme's rent against this building's register price, worked out here, not quoted.</div>" : "") +
+      (D.schools && D.schools.length ? "<h3>Schools · " + esc(D.district) + "</h3>" +
+        D.schools.map((x) => '<div class=row><span>' + esc(x.name) + "<br><small>" + esc([x.curriculum, x.rating].filter(Boolean).join(" · ")) +
+          "</small></span><span>" + (x.km != null ? x.km + " km" : "") + "</span></div>").join("") +
+        '<div class=src>' + D.schoolsAll + " KHDA schools and " + fmt(D.healthN) + " DHA health facilities within " + D.amenKm +
+        " km of the district centre, nearest first. Measured from the centre of " + esc(D.district) + ", not from this building's door.</div>" : "") +
       (D.plans ? "<h3>The plans · " + esc(D.plans.project) + "</h3>" +
         '<div class=plans>' + D.plans.plans.map((p) => '<a href="' + esc(p.url) + '" target=_blank rel=noopener><img loading=lazy src="' +
           esc(p.url) + '" alt="' + esc(p.label) + '"><b>' + esc(p.label) + "</b></a>").join("") + "</div>" +
