@@ -5501,6 +5501,9 @@ const FEED_SCENE_TIMES = ["la", "md", "ss", "em", "la"];
 const feedDayIndex = () => Math.floor(Date.parse(gstDateStr(new Date())) / 86400000);
 async function feedScenes(env, angles) {
   if (env.FEED_SCENES !== "on" || !env.WA_ALLOWED) return 0;
+  // v187.1 (Naj, 21 Sep 2026: "I don't get to choose anymore") - a switch that needs no deploy: set feed_scenes_off and the
+  // morning goes back to her choosing each picture (tap the angle, then the backdrop, the light and the photo).
+  if (await env.MEETINGS.get("feed_scenes_off")) { try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued: 0, why: "feed_scenes_off" }), { expirationTtl: 7 * 86400 }); } catch (e) {} return 0; }
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const me = String((await env.MEETINGS.get("feed_scene_photo")) || "style_ref_21").replace(/[^a-z0-9_]/gi, "");
   const _used = [], _times = [];
