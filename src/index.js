@@ -3092,6 +3092,14 @@ async function appFetch(request, env, ctx) {
         const _pl = await _get("plate_" + _bs + "_" + _bi);   // the indicative floor plates, one key per building
         const _bd = (_st && _um && _bi) ? buildingData(_bs, _bi, _st, _um, _bf, _ac, _pp, _bn, _px, _uu, _pl) : null;
         if (!_bd) return new Response("no register record for this building yet", { status: 404 });
+        // the dossier PDF: hers to pull and forward, so it is offered only to the owner key and only when one has been built
+        try {
+          const _kk = url.searchParams.get("key") || "";
+          if (env.READ_KEY && ctEq(_kk, env.READ_KEY)) {
+            const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
+            if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
+          }
+        } catch (e) {}
         return clientResp(env, url, buildingPageHtml(_bd, url.searchParams.get("key") || "", residentsKeyOf(env, url)),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
@@ -4348,10 +4356,10 @@ const najSat = (name) => '/img/sat_' + najSlug(name);
 const NAJ_FONTS = '<link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">';
 // v51 — shared bottom tab bar: one app, four rooms. Inject NAJ_NAV_CSS in <style> and najNav() before </body>.
 const NAJ_NAV_CSS = '.nnav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-around;align-items:center;background:rgba(12,20,19,.93);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-top:1px solid #24352F;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.nnav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8FA39B;font-size:.58rem;font-family:"IBM Plex Mono",monospace;letter-spacing:.05em;-webkit-tap-highlight-color:transparent}.nnav a svg{width:19px;height:19px}.nnav a.on{color:#C5A56A}';
-const najNav = (key, active, rk) => {   // v152.2 - rk: a private page carries the residents key on its MAP and TWIN tabs only, never to the other rooms
+const najNav = (key, active, rk) => {   // v208 (Kendall, 21 Sep 2026) - rk rides EVERY tab: pinned to MAP and TWIN it vanished the moment Naj tapped another room, and this app has two users
   const k = encodeURIComponent(key || "");
   const items = [["find", "/find", "search", "FIND"], ["homes", "/home", "grid", "HOMES"], ["pulse", "/market", "trend", "PULSE"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["map", "/map", "pin", "MAP"], ["plans", "/plans", "plan", "PLANS"], ["versus", "/versus", "buildings", "VS"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"], ["clock", "/clock", "clock", "TIME"]];   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
-  return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + (rk && (i[0] === "map" || i[0] === "twin") ? '&rk=' + encodeURIComponent(rk) : '') + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>'
+  return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + (rk ? '&rk=' + encodeURIComponent(rk) : '') + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>'
     + (rk && i[0] === "map" ? '<a' + (active === "residents" ? ' class=on' : '') + ' href="/residents?rk=' + encodeURIComponent(rk) + '">' + najIcon("people") + '<span>RESIDENTS</span></a>' : '')).join('') + '</nav>';   // v152.3 - a private page has one tap to the full residents view (Kendall, 15 Sep)
 };
 

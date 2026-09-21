@@ -176,6 +176,12 @@ export function buildingPageHtml(D, key, rk) {
         (g.k ? " · " + g.k + " homes" : " · " + esc({ homes: "homes", office: "offices", retail: "retail", hotel: "hotel", services: "services and parking" }[g.u] || g.u)) +
         "</option>").join("") + "</select>" +
       (D.plans ? '<button id=plansbtn>The plans · ' + D.plans.plans.length + "</button>" : "") +
+      (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
+        '">The dossier · PDF' + (D.dossier.pages ? " · " + D.dossier.pages + "pp" : "") + "</a>" : "") +
+      (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
+        '">The dossier · PDF' + (D.dossier.pages ? " · " + D.dossier.pages + "pp" : "") + "</a>" : "") +
+      (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
+        '">The dossier · PDF' + (D.dossier.pages ? " · " + D.dossier.pages + "pp" : "") + "</a>" : "") +
       (D.register.length ? '<div class=grp>Sold so far <u id=soldtag></u></div><div id=sold></div>' +
         '<div class=src>Dubai Land Department units register. Counts by type, not by unit number: which homes are sold is not published.</div>' : "") +
     "</div>" +
@@ -234,6 +240,15 @@ table.reg td:first-child,table.reg th:first-child{text-align:left}
 #tab{display:none}
 .fsel2{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid var(--line);border-radius:8px;color:var(--text);font:500 .66rem 'IBM Plex Mono',monospace;padding:7px 10px;cursor:pointer}.fsel2:hover{border-color:var(--gold)}.fsel2 option{background:#0C1413}
 #plansbtn{display:block;width:100%;border:1px solid var(--line);border-radius:99px;padding:6px 0;margin-top:8px;background:transparent;color:var(--gold);font:600 .56rem 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}#plansbtn:hover{background:rgba(197,165,106,.12)}
+#dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
+background:rgba(197,165,106,.1);color:var(--gold);text-decoration:none;font:600 .56rem 'IBM Plex Mono',monospace;
+letter-spacing:.12em;text-transform:uppercase}#dossbtn:hover{background:rgba(197,165,106,.22)}
+#dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
+background:rgba(197,165,106,.1);color:var(--gold);text-decoration:none;font:600 .56rem 'IBM Plex Mono',monospace;
+letter-spacing:.12em;text-transform:uppercase}#dossbtn:hover{background:rgba(197,165,106,.22)}
+#dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
+background:rgba(197,165,106,.1);color:var(--gold);text-decoration:none;font:600 .56rem 'IBM Plex Mono',monospace;
+letter-spacing:.12em;text-transform:uppercase}#dossbtn:hover{background:rgba(197,165,106,.22)}
 #lbx{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:rgba(6,10,10,.92);cursor:zoom-out;padding:24px}#lbx img{max-width:min(92vw,1100px);max-height:80vh;object-fit:contain;background:#F6F3EC;border-radius:10px}#lbx b{font:600 .62rem 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}#lbx .x{position:absolute;right:20px;top:14px;font-size:1.6rem;color:var(--mut)}
 .lnk{color:var(--text);text-decoration:none;border-bottom:1px solid rgba(197,165,106,.45)}
 .lnk:hover{color:var(--gold)}
