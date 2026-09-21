@@ -5057,6 +5057,7 @@ function seedFamHist(famh, hist, today) {
 // history lock (they are the fixed spine and are meant to be restated); the set is firmly 2-3 plan angles and 2-3 real-estate
 // angles; and the send never goes out with fewer than five - it tops up, and only as a last resort brings back the least-bad
 // dropped angle, saying so in the QA line.
+const PLAN_DAYS = 4;   // v187 - how long one of the plan's sixteen facts rests before it may be said again
 const PLAN_SRC_RX = /dubai media office|uae government|2040|master plan/i;
 let _PLAN_FIGS = null;
 function planFigBacked(a) {   // the v178.2 citation test, shared: is this figure one the plan actually contains?
@@ -5075,12 +5076,18 @@ function planAngle(a) {       // a Dubai 2040 angle: a plan figure, or a plan ci
 function feedAudit(angles, famh) {
   const seenFig = new Set(famh.filter(x => x.k).map(x => x.k)); const seenNum = new Map(); const seenSubj = new Map(); const seenFam = {}; const bad = [];
   const today = Date.now();
+  const PLAN_WINDOW = PLAN_DAYS * 86400 * 1000;
+  const recentFig = new Set(famh.filter(x => x.k && (today - Date.parse(x.d)) < PLAN_WINDOW).map(x => x.k)), recentNum = new Map();
+  for (const x of famh) if ((today - Date.parse(x.d)) < PLAN_WINDOW) for (const n of (x.n || [])) if (!recentNum.has(n)) recentNum.set(n, x.d);
   for (const x of famh) { for (const n of (x.n || [])) if (!seenNum.has(n)) seenNum.set(n, x.d); if (x.s && (today - Date.parse(x.d)) < 5 * 86400 * 1000 && !seenSubj.has(x.s)) seenSubj.set(x.s, x.d); }
   angles.forEach((a, i) => { const f = famOf(a), k = figKey(a), nums = numKeys(a), sk = subjKey(a); a.family = f; const why = [];
     if (seenFam[f] != null) why.push("same family as angle " + (seenFam[f] + 1) + " (" + f + ")"); else seenFam[f] = i;
-    const plan = planAngle(a);   // v184 - the plan's fixed facts are exempt from every history lock; only the in-set checks below apply
-    if (!plan && k && seenFig.has(k)) why.push("figure already used in the last 14 days");
-    const hitN = plan ? null : nums.find(n => seenNum.has(n)); if (hitN) why.push("number " + hitN + " already used on " + seenNum.get(hitN));
+    // v187 (Naj, 21 Sep 2026: "it gave me the same data as yesterday") - a plan fact may be restated, but not day after day:
+    // it rests PLAN_DAYS. Only the subject lock stays exempt, because every plan post files under the same subject and that is
+    // what emptied the morning on 19 Sep.
+    const plan = planAngle(a), figSeen = plan ? recentFig : seenFig, numSeen = plan ? recentNum : seenNum;
+    if (k && figSeen.has(k)) why.push(plan ? "plan figure already used in the last " + PLAN_DAYS + " days" : "figure already used in the last 14 days");
+    const hitN = nums.find(n => numSeen.has(n)); if (hitN) why.push("number " + hitN + " already used on " + numSeen.get(hitN));
     if (!plan && seenSubj.has(sk)) why.push("same subject (" + sk + ") on " + seenSubj.get(sk));
     if (nums.some(n => angles.some((b, j) => j < i && numKeys(b).includes(n)))) why.push("shares a number with an earlier angle");
     if (angles.some((b, j) => j < i && subjKey(b) === sk)) why.push("same subject as an earlier angle");
@@ -5166,7 +5173,9 @@ async function feedFill(env, angles, sys, data, famh, qa) {
   }
   if (own().length < 5 && qa && Array.isArray(qa._droppedAngles)) {
     const dated = (w) => (String(w || "").match(/\d{4}-\d{2}-\d{2}/) || ["9999"])[0];
-    const pool = qa._droppedAngles.filter(d => d && d.a && !d.a.campaign && honest(d.a)).sort((x, y) => dated(x.why).localeCompare(dated(y.why)));
+    // v187 - never readmit something she had in the last two days: four fresh angles beat five with yesterday's in it
+    const _fresh = new Set(famh.filter(x => x.k && (Date.now() - Date.parse(x.d)) < 2 * 86400 * 1000).map(x => x.k));
+    const pool = qa._droppedAngles.filter(d => d && d.a && !d.a.campaign && honest(d.a) && !_fresh.has(figKey(d.a))).sort((x, y) => dated(x.why).localeCompare(dated(y.why)));
     const back = [];
     for (const strict of [true, false]) for (const d of pool) {   // the split first; then the floor wins over the split
       if (own().length >= 5) break;
@@ -5444,8 +5453,10 @@ async function dailyFeedTick(env, force, dry) {
   hist = angles.map(a => a.hook).concat(hist).slice(0, 24);
   await env.MEETINGS.put("mkt_feed_hist", JSON.stringify(hist), { expirationTtl: 30 * 86400 });
   for (let i = 0; i < angles.length; i++) { const a = angles[i]; await bridgeRecord(env, { id: "angle-" + String(i + 1).padStart(2, "0"), set: force ? "ondemand" : "feed", type: "angle", topic_family: a.family || famOf(a), campaign: a.campaign ? "the_valley" : "", hook: a.hook, figure: a.figure, body: a.hook + "\n" + a.figure + " - " + a.source + "\n" + (a.buyer || ""), source_line: "Source: " + a.source, what_not_to_claim: guardLine(a), campaign_rules: a.campaign ? "#ThisIsTheValley - @EmaarInsider - 60-90 s - Emaar visuals only" : "", image_prompt: "", timing: "", trend: a.trend || "", shot: a.shot || "", qa: qa.note }); }
+  const _famWrite = async () => {   // v187 - called after the send, never before it
   try { const today = gstDateStr(n); const keep = famh.filter(x => (Date.parse(today) - Date.parse(x.d)) < 14 * 86400 * 1000);
     await env.MEETINGS.put("mkt_feed_famhist", JSON.stringify(angles.filter(a => !a.campaign).map(a => ({ d: today, f: a.family || famOf(a), k: figKey(a), n: numKeys(a), s: subjKey(a) })).concat(keep).slice(0, 240)), { expirationTtl: 30 * 86400 }); } catch (e) {}
+  };
   const nCamp = angles.filter(a => a.campaign).length;
   const dLeft = camp && camp.contest ? Math.max(0, Math.round((Date.parse(camp.contest.closes) - Date.now()) / 86400000)) : 0;
   const bodyTxt = "☀️ *Najma daily — " + (angles.length === 5 ? "five" : String(angles.length)) + " you could post today*" +
@@ -5454,13 +5465,21 @@ async function dailyFeedTick(env, force, dry) {
     "\n\n_✔ " + qa.note + "_" +
     "\n\nPick one from the list — or just type the numbers for several, like “" + (angles.length > 1 ? (angles.length - 1) + " and " + angles.length : "1") + "”." +
     "\nYou'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
+  try { const _iss = await feedSelfCheck(env, angles, famh); if (_iss.length) qa.note += " | CHECK FAILED: " + _iss.join("; "); else qa.note += " | check passed"; } catch (e) {}   // v187
+  try { await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
   const _rows = angles.slice(0, 10).map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + (a.figure || "").slice(0, 18), description: a.hook }));
   if (!(await ownerWindowOpen(env))) {   // v186 - her window is shut: hold it, nudge her, tell Kendall. Sending now would fail silently.
-    const _h = await feedHold(env, bodyTxt, _rows, angles);
+    const _h = await feedHold(env, bodyTxt, _rows, angles);   // v187 - held: famhist is written at the flush, not now
     if (!force) { try { await env.MEETINGS.put(fk, "held", { expirationTtl: 2 * 86400 }); } catch (e) {} }
     return;
   }
-  await waSend(env, env.WA_ALLOWED, bodyTxt);
+  const _sent = await waSend(env, env.WA_ALLOWED, bodyTxt);
+  if (!(_sent && _sent.ok)) {   // v187 - WhatsApp refused it: she has nothing, so nothing is recorded as sent
+    try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), why: "the morning was refused by WhatsApp: " + ((_sent && _sent.status) || "no answer") }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+    try { await gcTellOwner(env, "Naj's morning was REFUSED by WhatsApp (" + ((_sent && _sent.status) || "?") + "). She has not received it, and nothing was recorded against her history."); } catch (e) {}
+    return;
+  }
+  await _famWrite();
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", _rows);
   try { await feedScenes(env, angles); } catch (e) {}   // v185 - the five scene cards, made and sent by the minute tick
   if (radar && radar.items && radar.items.length && !force) {                                   // v88 - the radar is its own tap, never inside the feed
@@ -5477,28 +5496,61 @@ async function dailyFeedTick(env, force, dry) {
 // she picks an angle afterwards to redo it, the usual flow works. Off unless FEED_SCENES = "on"; her photo is the KV key
 // feed_scene_photo, else the sparkly-jacket photo (style_ref_21). Never on a dry run, never for the campaign angles.
 const FEED_SCENE_TIMES = ["la", "md", "ss", "em", "la"];
+// v187 - the backdrop and the light turn with the day, so two mornings never look alike. Every card on 20 and 21 Sep used
+// the first backdrop ("Skyline, blue hour") and the same five times, which is what she saw as "the same images".
+const feedDayIndex = () => Math.floor(Date.parse(gstDateStr(new Date())) / 86400000);
 async function feedScenes(env, angles) {
   if (env.FEED_SCENES !== "on" || !env.WA_ALLOWED) return 0;
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const me = String((await env.MEETINGS.get("feed_scene_photo")) || "style_ref_21").replace(/[^a-z0-9_]/gi, "");
+  const _used = [], _times = [];
   let queued = 0;
+  let _last = null; try { _last = JSON.parse((await env.MEETINGS.get("feed_scenes_last")) || "null"); } catch (e) {}
+  const _shift = 0;   // set below if today's backdrops would repeat yesterday's
   const list = angles.filter(a => !a.campaign).slice(0, 5);
   for (let i = 0; i < list.length; i++) {
     const a = list[i], n = String(angles.indexOf(a) + 1);
     const area = angleArea(a, d) || "";
     const opts = feedBackdrops(a, area) || [];
-    const opt = opts[0]; if (!opt) continue;
+    const opt = opts[(feedDayIndex() + _shift + i) % opts.length]; if (!opt) continue;   // v187 - a different backdrop each morning
     try { await env.MEETINGS.put("fbg_" + n, JSON.stringify({ n, area, angle: a, options: opts }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+    _used.push(opt.id); _times.push(FEED_SCENE_TIMES[(feedDayIndex() + i) % FEED_SCENE_TIMES.length] || "la");
     const post = { n, idp: "feed_", hook: a.hook || "", figure: a.figure || "", source: a.source || "", masthead: area || "Dubai",
       caption: [a.hook || "", (a.figure || "") + " \u2014 " + (a.source || "")].filter(Boolean).join("\n\n").slice(0, 1000) };
     const jk = "picjob_s" + "feed" + gstDateStr(new Date()).replace(/-/g, "") + n;
     if (await env.MEETINGS.get(jk)) continue;                                                     // one job per angle per morning, even if the tick fires twice
-    try { await env.MEETINGS.put(jk, JSON.stringify({ scene: true, n, opt: opt.id, tid: FEED_SCENE_TIMES[i] || "la", to: env.WA_ALLOWED, at: Date.now(), tries: 0,
+    try { await env.MEETINGS.put(jk, JSON.stringify({ scene: true, n, opt: opt.id, tid: FEED_SCENE_TIMES[(feedDayIndex() + i) % FEED_SCENE_TIMES.length] || "la", to: env.WA_ALLOWED, at: Date.now(), tries: 0,
       post, option: opt, angle: a, meKey: me, extra: [], auto: "feed" }), { expirationTtl: 2 * 86400 }); queued++; } catch (e) {}
   }
   if (queued) { try { await waSend(env, env.WA_ALLOWED, "\u{1F4F8} Your " + (queued === 5 ? "five" : String(queued)) + " pictures are being made now. They'll arrive here over the next few minutes, each as a post and a story."); } catch (e) {} }
-  try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued, photo: me }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued, photo: me, backdrops: _used, times: _times }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  if (_last && Array.isArray(_last.backdrops) && _used.length && _last.backdrops.join() === _used.join()) {   // v187 - say so rather than let her spot it
+    try { await gcTellOwner(env, "Naj's cards today use the same backdrops as yesterday (" + _used.join(", ") + "). The rotation has run out of choices for these angles."); } catch (e) {}
+  }
   return queued;
+}
+// v187 - THE MORNING'S OWN AUDIT (Kendall, 21 Sep 2026: "some form of quality check to make sure this doesn't keep happening").
+// Naj read the 21 Sep morning as "the same data as yesterday, and the same images". Both were true: the plan's facts had been
+// exempted from every repeat check, and every card since the feature went in had used the first backdrop. The checks below run
+// on the finished set, BEFORE she gets it: anything they find is written into the QA line and sent to Kendall, never to her.
+async function feedSelfCheck(env, angles, famh) {
+  const own = angles.filter(a => !a.campaign);
+  const issues = [];
+  const audit = feedAudit(own.map(a => Object.assign({}, a)), famh);
+  for (const b of audit.bad) issues.push("angle " + (b.i + 1) + ": " + b.why[0]);
+  const yest = gstDateStr(new Date(Date.now() - 86400000));
+  const saidYesterday = new Set(famh.filter(x => x.d === yest && x.k).map(x => x.k));
+  for (let i = 0; i < own.length; i++) if (saidYesterday.has(figKey(own[i]))) issues.push("angle " + (i + 1) + ": the same figure as yesterday");
+  const figs = own.map(a => figKey(a)); if (new Set(figs).size < figs.length) issues.push("two angles share a figure");
+  const P = own.filter(planAngle).length, R = own.length - P;
+  if (own.length < 5) issues.push("only " + own.length + " angles");
+  if (P < 2 || P > 3 || R < 2 || R > 3) issues.push("the split is " + P + " plan and " + R + " real estate, not 2-3 of each");
+  const readers = new Set(own.map(a => a.reader).filter(Boolean));
+  if (readers.size < 3) issues.push("only " + [...readers].join(" and ") + " - one of the three readers is missing");
+  const rec = { at: gstNowIso(), issues, figures: figs, plan: P, real: R, readers: [...readers] };
+  try { await env.MEETINGS.put("mkt_feed_audit", JSON.stringify(rec), { expirationTtl: 14 * 86400 }); } catch (e) {}
+  if (issues.length) { try { await gcTellOwner(env, "Naj's morning failed its own check before it went: " + issues.join("; ") + ". It has been sent anyway - tell me to hold these instead if you would rather she got nothing."); } catch (e) {} }
+  return issues;
 }
 // v186 - THE 24-HOUR WINDOW (Naj, 21 Sep 2026: "I didn't receive anything this morning"). WhatsApp only delivers free-form
 // messages within 24 hours of HER last message. She last wrote on 19 Sep, so on 21 Sep all ten of the morning's messages - five
@@ -5517,7 +5569,8 @@ async function feedNudge(env, head, body) {
   } catch (e) { return { ok: false, why: String((e && e.message) || e).slice(0, 120) }; }
 }
 async function feedHold(env, bodyTxt, rows, angles) {
-  const rec = { at: Date.now(), at_gst: gstNowIso(), bodyTxt, rows, angles };
+  const famRows = angles.filter(a => !a.campaign).map(a => ({ d: gstDateStr(new Date()), f: a.family || famOf(a), k: figKey(a), n: numKeys(a), s: subjKey(a) }));
+  const rec = { at: Date.now(), at_gst: gstNowIso(), bodyTxt, rows, angles, famRows };
   try { await env.MEETINGS.put("mkt_feed_pending", JSON.stringify(rec), { expirationTtl: 3 * 86400 }); } catch (e) {}
   const n = await feedNudge(env, "Your five for today are ready", "Reply with anything here and I'll send them straight over, with your pictures.");
   try { await gcTellOwner(env, "Naj's morning is HELD: her 24-hour WhatsApp window is shut (she last wrote " + String((await env.MEETINGS.get("wa_owner_last_in")) || "?").slice(0, 16) + "). " +
@@ -5535,6 +5588,11 @@ async function feedFlush(env) {
     return { flushed: false, why: "stale" };
   }
   const r1 = await waSend(env, env.WA_ALLOWED, p.bodyTxt);
+  if (r1 && r1.ok && Array.isArray(p.famRows) && p.famRows.length) {   // v187 - now she has it, it counts as said
+    try { const famh = JSON.parse((await env.MEETINGS.get("mkt_feed_famhist")) || "[]"); const today = gstDateStr(new Date());
+      const keep = famh.filter(x => (Date.parse(today) - Date.parse(x.d)) < 14 * 86400 * 1000);
+      await env.MEETINGS.put("mkt_feed_famhist", JSON.stringify(p.famRows.map(r => Object.assign({}, r, { d: today })).concat(keep).slice(0, 240)), { expirationTtl: 30 * 86400 }); } catch (e) {}
+  }
   if (Array.isArray(p.rows) && p.rows.length) { try { await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", p.rows); } catch (e) {} }
   try { if (Array.isArray(p.angles) && p.angles.length) await feedScenes(env, p.angles); } catch (e) {}
   try { await gcTellOwner(env, "Naj wrote back, so the morning I was holding has gone to her" + (r1 && r1.ok ? "" : " (the text was refused: " + ((r1 && r1.status) || "?") + ")") + "."); } catch (e) {}
