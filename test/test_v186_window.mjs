@@ -59,7 +59,7 @@ await worker.fetch(new Request("https://x/wa", { method: "POST", headers: { "Con
 await new Promise((r) => setTimeout(r, 60));   // the flush runs as background work (ctx.waitUntil), which this fake runtime does not await
 ok(texts().some((t) => /Najma daily/.test(t)), "her reply sends the held morning immediately");
 ok(texts().some((t) => /Choose an angle/.test(t)), "with the pick-an-angle list");
-ok(jobs(shut).length === 5, "and queues the five cards: " + jobs(shut).length);
+ok(texts().some((t) => /Want the pictures/.test(t)), "v188 - and offers her the five pictures, rather than making them unasked");
 ok(!shut.has("mkt_feed_pending"), "the held morning is cleared, so it cannot go twice");
 ok(owner.some((t) => /wrote back/.test(t)), "Kendall is told it went");
 
@@ -75,7 +75,7 @@ ok(owner.some((t) => /too old/.test(t)), "and Kendall is told why");
 // ---- her window is OPEN: nothing changes ---------------------------------------------------------------------------------------
 const open = mkStore(new Date().toISOString());
 await feed(open);
-ok(texts().some((t) => /Najma daily/.test(t)) && jobs(open).length === 5, "with her window open the morning goes as usual, five cards and all");
+ok(texts().some((t) => /Najma daily/.test(t)) && texts().some((t) => /Want the pictures/.test(t)), "with her window open the morning goes as usual, and ends with the offer of the pictures");
 ok(!sent.some((m) => m.type === "template"), "and no template is spent when it isn't needed");
 
 // ---- the watchdog reads RECEIPTS, not the send ----------------------------------------------------------------------------------

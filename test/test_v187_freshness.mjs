@@ -39,6 +39,11 @@ globalThis.fetch = async (u, o) => {
   return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
 };
 const READ = "owner_admin_key_never_in_client_links_0001";
+const tapAll = async (r) => {   // v188 - the morning offers the pictures; this is her tap on "Make all five"
+  const body = { entry: [{ changes: [{ value: { metadata: { phone_number_id: "1" }, messages: [{ from: "971565484397", id: "t" + Date.now(), timestamp: String(Math.floor(Date.now() / 1000)), type: "interactive", interactive: { type: "button_reply", button_reply: { id: "fs:all", title: "Make all five" } } }] } }] }] };
+  await worker.fetch(new Request("https://x/wa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), r.env, { waitUntil() {} });
+  return { jobs: [...r.store.keys()].filter((k) => k.startsWith("picjob_s")).map((k) => JSON.parse(r.store.get(k))), store: r.store };
+};
 const run = async (famhist, opts) => {
   opts = opts || {}; serve = opts.serve || FIVE; topup = opts.topup || []; sendOk = opts.sendOk !== false; sent = []; owner = [];
   const store = new Map([["mkt_latest", JSON.stringify({ generatedAt: new Date().toISOString() })], ["mkt_feed_famhist", JSON.stringify(famhist)], ["wa_owner_last_in", new Date().toISOString()]]);
@@ -46,14 +51,14 @@ const run = async (famhist, opts) => {
   const KV = { async get(k, t) { if (!store.has(k)) return null; const v = store.get(k); return t === "json" ? JSON.parse(v) : v; },
     async put(k, v) { store.set(k, v); }, async delete(k) { store.delete(k); },
     async list(o) { return { keys: [...store.keys()].filter((k) => !o || !o.prefix || k.startsWith(o.prefix)).map((name) => ({ name })), list_complete: true }; } };
-  const env = { MEETINGS: KV, READ_KEY: READ, MARKET_BRIEF: "on", ANTHROPIC_API_KEY: "test-only-not-a-key", PUBLIC_ORIGIN: "https://x",
+  const env = { MEETINGS: KV, AI: { run: async () => ({ response: "{}" }) }, READ_KEY: READ, MARKET_BRIEF: "on", ANTHROPIC_API_KEY: "test-only-not-a-key", PUBLIC_ORIGIN: "https://x",
     WA_ALLOWED: "971565484397", WHATSAPP_TOKEN: "t", WA_PHONE_ID: "1", FEED_SCENES: "on", OWNER_NOTE_URL: "https://mc/owner_note", INGEST_TOKEN: "i" };
   const r = await worker.fetch(new Request("https://x/feed_test?key=" + READ + (opts.dry ? "&dry=1" : "")), env, { waitUntil() {} });
   const out = await r.text();
   let qa = null; try { qa = JSON.parse(store.get("mkt_feed_qa") || "null"); } catch (e) {}
   let audit = null; try { audit = JSON.parse(store.get("mkt_feed_audit") || "null"); } catch (e) {}
   const jobs = [...store.keys()].filter((k) => k.startsWith("picjob_s")).map((k) => JSON.parse(store.get(k)));
-  return { out, qa, audit, store, jobs, famh: JSON.parse(store.get("mkt_feed_famhist") || "[]") };
+  return { out, qa, audit, store, jobs, env, famh: JSON.parse(store.get("mkt_feed_famhist") || "[]") };
 };
 
 // ---- the plan's facts rest, instead of coming back every morning ---------------------------------------------------------------
@@ -72,10 +77,11 @@ const okrun = await run([]);
 ok(okrun.famh.length === 5, "when it goes, all five are recorded: " + okrun.famh.length + " rows");
 
 // ---- the pictures change with the day -------------------------------------------------------------------------------------------
-ok(okrun.jobs.length === 5, "five cards queued");
-const backs = okrun.jobs.map((j) => j.opt);
+const tapped = await tapAll(okrun);
+ok(tapped.jobs.length === 5, "five cards queued once she taps Make all five: " + tapped.jobs.length);
+const backs = tapped.jobs.map((j) => j.opt);
 ok(new Set(backs).size > 1, "they do not all use the same backdrop any more: " + backs.join(","));
-const scenes = JSON.parse(okrun.store.get("feed_scenes_last"));
+const scenes = JSON.parse(tapped.store.get("feed_scenes_last"));
 ok(Array.isArray(scenes.backdrops) && scenes.backdrops.length === 5, "and what was used is recorded, so tomorrow can differ: " + JSON.stringify(scenes.backdrops));
 
 // ---- the morning checks itself before she gets it -----------------------------------------------------------------------------
