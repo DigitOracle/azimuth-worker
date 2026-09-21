@@ -244,6 +244,13 @@ table.reg td:first-child,table.reg th:first-child{text-align:left}
 .bar{height:3px;border-radius:2px;background:rgba(197,165,106,.18);overflow:hidden;margin-top:2px}.bar i{display:block;height:100%;background:var(--gold)}
 .src{font-size:.52rem;color:rgba(143,163,155,.85);line-height:1.5;margin-top:7px}
 #tab{display:none}
+.drow{display:flex;flex-wrap:wrap;gap:6px 4px;justify-content:flex-start;margin:4px 0 2px}
+.dcell{flex:1 1 52px;min-width:48px;max-width:72px;text-align:center;cursor:pointer;text-decoration:none;color:inherit}
+.dcell svg{display:block;width:100%;height:auto}
+.dcell .dnum{font:600 15px 'IBM Plex Mono',monospace;fill:var(--text)}
+.dcell b{display:block;font:600 .5rem 'IBM Plex Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--text);margin-top:2px}
+.dcell small{display:block;font:400 .46rem 'IBM Plex Mono',monospace;color:var(--mut)}
+.dcell:hover .dnum{fill:var(--gold)}
 .fsel2{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid var(--line);border-radius:8px;color:var(--text);font:500 .66rem 'IBM Plex Mono',monospace;padding:7px 10px;cursor:pointer}.fsel2:hover{border-color:var(--gold)}.fsel2 option{background:#0C1413}
 #plansbtn{display:block;width:100%;border:1px solid var(--line);border-radius:99px;padding:6px 0;margin-top:8px;background:transparent;color:var(--gold);font:600 .56rem 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}#plansbtn:hover{background:rgba(197,165,106,.12)}
 #dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
@@ -553,17 +560,32 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     const tag = $("soldtag");
     const col = (c) => COL[c] || COL.other;
     if (!only) {
-      const left = D.register.reduce((t, r) => t + Math.max(0, (r.launched || 0) - (r.sold || 0)), 0);
-      const units = D.register.reduce((t, r) => t + (r.launched || 0), 0);
-      if (tag) tag.textContent = fmt(left) + " left";
-      ring(host, D.register.filter((r) => r.launched).map((r) => ({
-        name: r.type, pct: r.launched, col: col(r.c), label: fmt(r.launched),
-        sub: fmt(Math.max(0, r.launched - (r.sold || 0))) + " left of " + fmt(r.launched),
-        on: () => { state.on = new Set([r.c]); state.use = new Set();
+      // the bedroom types only: "NA" is the register's unclassified bucket, not a home anyone asks for, and giving it a ring
+      // put it on a row of its own at three times the size. It keeps its place in the table and in the drill-down.
+      const rows = D.register.filter((r) => r.launched && r.c !== "other");
+      const left = rows.reduce((t, r) => t + Math.max(0, (r.launched || 0) - (r.sold || 0)), 0);
+      const units = rows.reduce((t, r) => t + (r.launched || 0), 0);
+      if (tag) tag.textContent = fmt(left) + " left of " + fmt(units);
+      // one ring per type, left against launched. A full ring is sold out; a gap is something to sell.
+      const R = 19, C = 2 * Math.PI * R;
+      host.innerHTML = '<div class=drow>' + rows.map((r, i) => {
+        const all = r.launched || 0, rest = Math.max(0, all - (r.sold || 0));
+        const frac = all ? rest / all : 0;
+        return '<a class=dcell data-dt="' + i + '"><svg viewBox="0 0 48 48">' +
+          '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="rgba(232,228,216,.14)" stroke-width=5.5></circle>' +
+          (frac > 0 ? '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="' + col(r.c) + '" stroke-width=5.5 stroke-linecap=round ' +
+            'stroke-dasharray="' + (frac * C).toFixed(1) + " " + C.toFixed(1) + '" transform="rotate(-90 24 24)"></circle>'
+            : '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="' + col(r.c) + '" stroke-width=5.5 stroke-opacity=".35"></circle>') +
+          '<text x=24 y=28 text-anchor=middle class=dnum>' + fmt(rest) + "</text></svg>" +
+          "<b>" + esc(r.type) + "</b><small>of " + fmt(all) + "</small></a>";
+      }).join("") + "</div>";
+      host.querySelectorAll("[data-dt]").forEach((el) => {
+        const r = rows[+el.dataset.dt];
+        el.onclick = () => { state.on = new Set([r.c]); state.use = new Set();
           document.querySelectorAll("[data-t]").forEach((b) => b.classList.toggle("off", b.dataset.t !== r.c));
           document.querySelectorAll("[data-u]").forEach((b) => b.classList.add("off"));
-          hideLabel(); paint(); drawSold(r); },
-      })), [fmt(units), "homes registered"], null);
+          hideLabel(); paint(); drawSold(r); };
+      });
       return;
     }
     const sold = only.sold || 0, all = only.launched || 0, rest = Math.max(0, all - sold);

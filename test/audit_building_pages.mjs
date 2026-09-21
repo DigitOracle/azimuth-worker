@@ -33,7 +33,7 @@ const SECTIONS = [
   ["plans", "The plans", (D) => !!D.plans, "The plans"],
   ["plot", "The plot", (D) => !!D.land, "The plot"],
   ["facts", "The building facts", (D) => (D.facts || []).length >= 3, "The building</h3>"],
-  ["around", "Around it", (D) => (D.around || []).length > 0 || (D.schools || []).length > 0, null],
+  ["around", "Around it", (D) => (D.around || []).length > 0 || (D.schools || []).length > 0 || (D.transit || []).length > 0, null],
   ["people", "Who lives here", (D) => !!D.people, "Who lives here"],
   ["views", "What it sees over", (D) => !!D.openFrom, "What it sees over"],
   ["sourced", "Every claim sourced", (D) => !!D.asOf, null],
@@ -126,7 +126,9 @@ async function district(slug) {
   const full = rows.filter((r) => r.score === SECTIONS.length).length;
   return { slug, generated: new Date().toISOString().slice(0, 16).replace("T", " "), buildings: rows.length,
     sections: SECTIONS.length, full, median: rows.map((r) => r.score).sort((a, b) => a - b)[Math.floor(rows.length / 2)],
-    cover, drift, worst: rows.slice().sort((a, b) => a.score - b.score).slice(0, 5).map((r) => [r.id, r.name, r.score]) };
+    cover, drift, worst: rows.slice().sort((a, b) => a.score - b.score).slice(0, 5).map((r) => [r.id, r.name, r.score]),
+    // per building, so a specific one can be checked before it is filmed or sent: which of the sixteen it carries
+    buildings_by_id: Object.fromEntries(rows.map((r) => [r.id, { name: r.name, score: r.score, has: r.has }])) };
 }
 
 let bad = 0;
