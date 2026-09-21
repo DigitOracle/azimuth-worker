@@ -3098,6 +3098,9 @@ async function appFetch(request, env, ctx) {
         try {
           const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
           if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
+          // what a shared link may carry. NEVER the key that opened this page: the owner browses with READ_KEY and a
+          // WhatsApp share built from it would hand the owner key to the recipient.
+          if (_bd.dossier) _bd.shareKey = clientKeysOf(env)[0] || "";
         } catch (e) {}
         return clientResp(env, url, buildingPageHtml(_bd, url.searchParams.get("key") || "", residentsKeyOf(env, url)),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
