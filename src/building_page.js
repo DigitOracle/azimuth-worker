@@ -88,7 +88,8 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     developer: u.developer || null,
     // the register's own name for this building, when it differs - NOT the project register row, which is `project`
     registeredAs: (dld.project && String(dld.project).toLowerCase() !== String(r.name || "").toLowerCase()) ? dld.project : null,
-    people: communityMix(people, stack.district || slug),
+    people: communityMix(people, stack.district || slug, r.community),
+    community: r.community || null, transit: r.transit || null,
     fps: ((anchors && anchors.anchors) || []).filter((x) => x.x != null).map((x) => [x.i, x.x, x.z]),
   };
 }
@@ -96,10 +97,15 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
 // The community's resident mix (DEWA register, per community only). Kendall's decision of 17 Sep 2026 allows it on a
 // client-facing surface; the size floors in the data are disclosure control and are not touched here. It is context about an
 // area, never a reason to choose one - the card says so.
-function communityMix(people, slug) {
+function communityMix(people, slug, comm) {
   const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const want = norm(slug);
-  const c = ((people && people.communities) || []).find((x) => [x.name, x.label, x.official].concat(x.known || []).some((n) => norm(n) === want));
+  const all = (people && people.communities) || [];
+  // v210: the building's own community first, by the number the polygons gave it. The name match is the fallback for a
+  // building no polygon contains, and it is what was silently wrong for the ones that straddle a district boundary.
+  let c = (comm && comm.num != null) ? all.find((x) => String(x.comm) === String(comm.num)) : null;
+  const byNum = !!c;
+  if (!c) c = all.find((x) => [x.name, x.label, x.official].concat(x.known || []).some((n) => norm(n) === want));
   if (!c) return null;
   // Regions first, with the countries inside them. Naming countries alone leaves a meaningless "everyone else" - Business Bay
   // read India 17, Russia 7, Iran 6, UK 6 and then 63% unexplained, because a country is only named at 5% or more. The regions
@@ -110,7 +116,7 @@ function communityMix(people, slug) {
   }));
   if (!regions.length && !(c.mix || []).length) return null;
   const named = regions.reduce((t, r) => t + r.pct, 0);
-  return { label: c.label || c.official || c.name, accounts: c.accounts || null, unknown: c.noNationalityPct || 0,
+  return { label: c.label || c.official || c.name, byNum, accounts: c.accounts || null, unknown: c.noNationalityPct || 0,
     regions, rest: Math.max(0, 100 - named - (c.noNationalityPct || 0)),
     mix: (c.mix || []).slice(0, 4), floor: (people.rules && people.rules.minSharePct) || 5,
     cfloor: (people.rules && people.rules.regionCountryMinPct) || 1 };
@@ -813,6 +819,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         (D.people.unknown ? '<div class=src style="margin-top:2px">A further ' + D.people.unknown +
           "% of accounts carry no nationality at all and are not in the ring.</div>" : "") +
         '<div class=src>DEWA customer register for the whole community' + (D.people.accounts ? ", " + fmt(D.people.accounts) + " accounts" : "") +
+        (D.people.byNum && D.community ? ". This building stands in " + esc(String(D.community.name || "").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase())) + ", which is not always the district it is listed under" : "") +
         ", of the residents whose nationality it holds. There is no building-level figure: a region is shown at any size, a country inside it from " +
         D.people.cfloor + "%, and smaller groups stay pooled so nobody can be identified by subtraction. It is context about an area, not a reason to choose one.</div>" : "") +
       (D.sold ? "<h3>What has sold here</h3>" +
@@ -859,7 +866,12 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         '<div class=src>Dubai Land Department land registry' + (D.districtLand ? ", where " + fmt(D.districtLand.freehold) + " of " +
           fmt(D.districtLand.plots) + " plots in " + esc(D.district) + " are freehold, so tenure is worth checking rather than assuming" : "") +
         ". A plot is not one tower: podium blocks, services blocks and second towers share it, and the parking and plot area above are counted for the whole plot.</div>" : "") +
-      (D.around.length ? "<h3>Around it</h3>" + D.around.map((a) => '<div class=row><span>' + esc(a[0]) + "</span><span>" + esc(a[1]) + "</span></div>").join("") : "") +
+      ((D.transit && D.transit.length) || D.around.length ? "<h3>Around it</h3>" +
+        (D.transit || []).map((t) => '<div class=row><span>' + esc(t.kind) +
+          (t.outside ? "<br><small>outside this district</small>" : (t.zone ? "<br><small>zone " + esc(t.zone) + "</small>" : "")) +
+          "</span><span>" + esc(t.name || "") + " · " + (t.m < 1000 ? t.m + " m" : (t.m / 1000).toFixed(1) + " km") + "</span></div>").join("") +
+        D.around.map((a) => '<div class=row><span>' + esc(a[0]) + "<br><small>the register's own</small></span><span>" + esc(a[1]) + "</span></div>").join("") +
+        (D.transit && D.transit.length ? '<div class=src>Distances are straight-line from this building, not walking minutes \u2014 every routed estimate we have checked has overstated them. Stops and stations are the RTA\'s own layers.</div>' : "") : "") +
       '<div class=src>' + esc(D.asOf) + ". Floors divide the model's surveyed height evenly; a double-height lobby is not drawn as one." +
       (D.levelShift ? " The register numbers levels " + D.levelShift + " higher than the permit here, so its ranges are shifted to match." : "") + "</div>");
   };
