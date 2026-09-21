@@ -72,7 +72,7 @@ const FRESH = [A("Rents at 71,000 contracts.", "71,000 contracts", "DLD Open Dat
 const five = await run([BEACH, ...FRESH], [hist("400%", "city_life", 5)]);
 ok(/400%/.test(five.out), "a plan fact last used FIVE days ago may be restated - the plan's thesis does not wear out in a fortnight");
 const one = await run([BEACH, ...FRESH], [hist("400%", "city_life", 1)]);
-ok(/400%/.test(one.out), "v184 - and the day after too: the plan's fixed facts are exempt from the repeat bans (on 19 Sep the lock blocked every plan angle)");
+ok(!/400%/.test(one.out), "v187 (Naj: \"the same data as yesterday\") - but NOT the day after: a plan fact rests four days. Only the subject lock stays exempt, which is what emptied 19 Sep");
 
 const LIVE = A("12,345 homes in one quarter.", "12,345 homes", "DLD Open Data", "district", "invest");
 const live = await run([LIVE, FRESH[0], FRESH[1], FRESH[3], BEACH], [hist("12,345 homes", "district", 5)], [TOP4[1]]);
@@ -81,7 +81,7 @@ ok(!/12,345 homes/.test(live.out), "a LIVE figure used five days ago is still bl
 // ---- nothing fresh at all: v179 sent nothing, and on 19 Sep that emptied her morning. v184 keeps the floor: when the top-up
 // brings nothing either, the least-bad repeats come back (oldest first, each figure once) and the QA line says so ------------
 const all = await run([RENT, WEEK, MAD, OFF, A("Rents again: 68,323.", "68,323 contracts", "DLD Open Data", "rents_yields", "move")], at0600);
-ok(!/nothing sent/.test(all.out) && (all.out.match(/^\d\. /gm) || []).length >= 4 && all.qa && /readmitted/.test(all.qa.note), "when the top-up brings nothing, the distinct repeats are READMITTED rather than sending nothing - and it says so: " + (all.qa ? all.qa.note.slice(-120) : ""));
+ok(!/68,323 contracts/.test(all.out) && all.qa && /five-floor: 0 sent/.test(all.qa.note), "v187 - when every angle repeats what she had TODAY and the top-up brings nothing, none is readmitted: four fresh beat five with yesterday's in them. Kendall is told, she is not: " + (all.qa ? all.qa.note.slice(-60) : ""));
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
