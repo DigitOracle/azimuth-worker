@@ -6474,6 +6474,9 @@ const STACK_CSS = ''
   + '.hp{position:relative;width:100%;background:rgba(19,31,29,.97);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.35)}'
   + '.hh{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}.hh b{color:var(--text);font-weight:500;letter-spacing:.03em;text-transform:none;font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hh i{font-style:normal;color:var(--mut);transition:transform .2s}.hp.on .hh i{transform:rotate(180deg)}'
   + '.hbody{display:none;padding:2px 12px 10px;border-top:1px solid var(--line)}.hp.on .hbody{display:block}'
+  + '.hx{display:none}.hp.on .hx{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;margin:-6px -6px -6px 6px;'
+  + '  border-radius:8px;color:var(--mut);font-style:normal;font-size:.9rem;cursor:pointer;flex:none}'
+  + '.hp.on .hx:hover{color:var(--gold);background:rgba(197,165,106,.14)}'
   + '.hrow{display:grid;grid-template-columns:1fr;gap:4px;padding:7px 0}.hrow label{font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);display:flex;justify-content:space-between;gap:8px}.hrow label b{color:var(--gold);font-weight:500;font-size:.68rem;letter-spacing:0;text-transform:none}'
   + '.hfoot{display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.06em;text-transform:uppercase}.hfoot a{color:var(--gold);cursor:pointer}.hfoot a#hclear{color:var(--mut)}'
   + '.dual{position:relative;height:28px}.dual .band{position:absolute;top:12px;height:4px;background:var(--gold);border-radius:2px;pointer-events:none;opacity:.9}.dual input{position:absolute;left:0;right:0;top:0;width:100%;margin:0;background:transparent;pointer-events:none;-webkit-appearance:none;appearance:none;height:28px}.dual input::-webkit-slider-runnable-track{height:4px;background:var(--line);border-radius:2px}.dual input::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:20px;height:20px;border-radius:50%;background:var(--gold);border:2px solid #0C1413;margin-top:-8px;cursor:pointer}.dual input::-moz-range-thumb{pointer-events:auto;width:18px;height:18px;border-radius:50%;background:var(--gold);border:2px solid #0C1413;cursor:pointer}.dual input::-moz-range-track{height:4px;background:var(--line)}'
@@ -6567,6 +6570,13 @@ const HOMES_CORE_JS = ''
 const HOMES_WIRE_JS = ''
   + '(function(){var hp=document.getElementById("hp"),hh=document.getElementById("hh");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});'
   + '  hh.onclick=function(){var open=!hp.classList.contains("on");if(open)window.__stackOpen(hp);hp.classList.toggle("on",open);if(open&&!HB.on){HB.on=true;drawHomes()}};'
+  // v219 - an X on every panel in the stack, and on a phone the stack yields to the detail panel
+  + '  document.querySelectorAll(".hstack .hp").forEach(function(p){var h=p.querySelector(".hh");if(!h||h.querySelector(".hx"))return;'
+  + '    var x=document.createElement("u");x.className="hx";x.textContent="✕";x.title="close";'
+  + '    x.onclick=function(ev){ev.stopPropagation();p.classList.remove("on")};h.appendChild(x)});'
+  + '  var dp=document.getElementById("panel");'
+  + '  if(dp&&window.MutationObserver)new MutationObserver(function(){if(innerWidth<=640&&dp.classList.contains("on"))'
+  + '    document.querySelectorAll(".hstack .hp.on").forEach(function(q){q.classList.remove("on")})}).observe(dp,{attributes:true,attributeFilter:["class"]});'
   + '  (function(){var bp=document.getElementById("bandp"),bb=document.getElementById("bandb");if(bp){bp.style.left="16.7%";bp.style.width="33.3%"}if(bb){bb.style.left="16.7%";bb.style.width="33.3%"}})();'
   + '  document.getElementById("hclear").onclick=function(){HB.on=false;HB.lo=10;HB.hi=30;HB.blo=1;HB.bhi=3;HB.type="any";HB.beach=false;HB.hbeach=false;HB.live=false;var _lt=document.getElementById("hlivet");if(_lt)_lt.classList.remove("on");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});hp.querySelectorAll(".seg button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-t")==="any")});drawHomes();document.getElementById("hres").textContent="set a budget";hp.classList.remove("on")};'
   + '  [["hlo","lo"],["hhi","hi"],["hblo","blo"],["hbhi","bhi"]].forEach(function(x){var el=document.getElementById(x[0]);el.oninput=function(){HB[x[1]]=+el.value;HB.on=true;drawHomes()}});'
@@ -9319,6 +9329,17 @@ function stkApply(){if(!STK||!MESHES||!stkMap())return;stkClear();STKSEL=null;
 function stkAnchor(i){return ANCH&&ANCH.anchors.find(a=>String(a.i)===String(i))}
 // tapping a building opens ITS OWN PAGE (Kendall, 20 Sep: "instead of opening a panel, it should open a new pop up or page
 // within the ecosystem") - the Symphony viewer for that building, built from the registers.
+// A tap that misses every band: the building has no register record, so nothing was drawn over it. Hit the model instead and
+// say so - silence reads as a broken page, and on a villa district almost every tap lands here.
+let STKSAY=null;
+function stkSayNoRecord(ray){
+  if(!MESHES||!MESHES.length)return;
+  const hit=ray.intersectObjects(MESHES.filter(m=>m&&m.visible),false)[0];if(!hit)return;
+  let el=document.getElementById("stksay");
+  if(!el){el=document.createElement("div");el.id="stksay";document.body.appendChild(el)}
+  el.textContent="No register record for this building - the Land Department reaches "+(STK&&STK.buildings_by_id?Object.keys(STK.buildings_by_id).length:0)+" buildings in this district, and this is not one of them.";
+  el.className="on";clearTimeout(STKSAY);STKSAY=setTimeout(()=>{el.className=""},2600);
+}
 function stkOpen(i){location.href="/building/"+encodeURIComponent(window.__twinDistrict)+"/"+encodeURIComponent(i)+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")}
 function stkCount(){const c=document.getElementById("stkc");if(!c||!STK)return;let fl=0;const hit=[];
   const ids=STKM?[...STKM.keys()]:Object.keys(STK.buildings_by_id);
@@ -9352,7 +9373,7 @@ function stkUI(){
     "#ppanel .flr{display:none}#ppanel.floors .flr{display:block}#ppanel.floors .snap,#ppanel.floors .deep,#ppanel.floors .vw{display:none!important}"+
     ".flh{font:600 .66rem 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#C5A56A;margin:2px 0 0}.flh span{color:rgba(232,228,216,.55);font-weight:500;margin-left:6px}"+
     ".fwarn{font-size:.72rem;line-height:1.45;margin:6px 0 2px;padding:7px 9px;border:1px solid rgba(217,148,112,.55);border-radius:8px;color:#E8C4A8}"+
-    ".fopen{display:block;text-align:center;margin:8px 0 6px;padding:7px 0;border:1px solid rgba(197,165,106,.5);border-radius:99px;color:#C5A56A;text-decoration:none;font:600 .58rem monospace;letter-spacing:.12em;text-transform:uppercase}.fopen:hover{background:rgba(197,165,106,.12)}"+".fsel{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid rgba(197,165,106,.35);border-radius:8px;color:#E8E4D8;font:600 .8rem Fraunces,Georgia,serif;padding:6px 10px;cursor:pointer}.fsel option{background:#0C1413;font-size:.72rem}"+".fplate svg{display:block;width:100%;height:auto;margin:2px 0 4px}"+".fstk{margin:6px 0 8px;cursor:crosshair}.fstk svg{display:block;width:100%;height:auto}.fstk text{font:500 9px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.62)}"+
+    "#stksay{position:fixed;left:50%;bottom:86px;transform:translateX(-50%) translateY(8px);z-index:30;max-width:min(520px,86vw);padding:9px 14px;border-radius:10px;background:rgba(12,20,19,.94);border:1px solid rgba(197,165,106,.45);color:#E8E4D8;font:500 .62rem/1.5 monospace;text-align:center;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s}"+"#stksay.on{opacity:1;transform:translateX(-50%) translateY(0)}"+".fopen{display:block;text-align:center;margin:8px 0 6px;padding:7px 0;border:1px solid rgba(197,165,106,.5);border-radius:99px;color:#C5A56A;text-decoration:none;font:600 .58rem monospace;letter-spacing:.12em;text-transform:uppercase}.fopen:hover{background:rgba(197,165,106,.12)}"+".fsel{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid rgba(197,165,106,.35);border-radius:8px;color:#E8E4D8;font:600 .8rem Fraunces,Georgia,serif;padding:6px 10px;cursor:pointer}.fsel option{background:#0C1413;font-size:.72rem}"+".fplate svg{display:block;width:100%;height:auto;margin:2px 0 4px}"+".fstk{margin:6px 0 8px;cursor:crosshair}.fstk svg{display:block;width:100%;height:auto}.fstk text{font:500 9px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.62)}"+
     ".fstk .tl{font:600 9.5px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.9)}.fstk .zl{fill:rgba(232,228,216,.45);font-size:8.5px}"+
     ".fdet{font-size:.78rem;line-height:1.45;margin:6px 0;padding:8px 10px;border:1px solid rgba(197,165,106,.35);border-radius:8px}.fdet b{color:#F4D58D}"+
     ".ftyp{width:100%;border-collapse:collapse;font-size:.7rem;margin-top:4px}.ftyp td,.ftyp th{padding:3px 2px;text-align:right;font-weight:400}.ftyp th{opacity:.6;font-size:.62rem}.ftyp td:first-child,.ftyp th:first-child{text-align:left}"+
@@ -9485,7 +9506,8 @@ addEventListener("pointerup",e=>{if(!STK||!STKB.size||!pd||Math.hypot(e.clientX-
   if(e.target&&e.target.closest&&e.target.closest("#ppanel,#stkp,#devwrap,.lb,.nnav,.rail,.tog,.feat"))return;
   ptr.x=(e.clientX/innerWidth)*2-1;ptr.y=-(e.clientY/innerHeight)*2+1;ray.setFromCamera(ptr,cam);
   const all=[];STKB.forEach(b=>b.bands.forEach(x=>all.push(x)));
-  const h=ray.intersectObjects(all,false).find(x=>{const u=x.object.userData.stk;return x.point.y>=u.lo-0.05&&x.point.y<=u.hi+0.05});if(!h)return;
+  const h=ray.intersectObjects(all,false).find(x=>{const u=x.object.userData.stk;return x.point.y>=u.lo-0.05&&x.point.y<=u.hi+0.05});
+  if(!h){stkSayNoRecord(ray);return}
   const u=h.object.userData.stk;e.stopImmediatePropagation();pd=null;
   if(STKSEL&&STKSEL.has(u.i)){stkPick(u.i,Math.max(u.j0,Math.min(u.j1,Math.floor((h.point.y-u.y0)/u.fh))));return}
   stkOpen(u.i)});
