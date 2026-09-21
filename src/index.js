@@ -3092,21 +3092,12 @@ async function appFetch(request, env, ctx) {
         const _pl = await _get("plate_" + _bs + "_" + _bi);   // the indicative floor plates, one key per building
         const _bd = (_st && _um && _bi) ? buildingData(_bs, _bi, _st, _um, _bf, _ac, _pp, _bn, _px, _uu, _pl) : null;
         if (!_bd) return new Response("no register record for this building yet", { status: 404 });
-        // the dossier PDF: hers to pull and forward, so it is offered only to the owner key and only when one has been built
+        // the dossier PDF, offered whenever one has been built. It was owner-only when v207 shipped, because the route was;
+        // Kendall opened b_* dossiers to a client key (v212), so the button follows - a client could reach the file and not
+        // see the way to it. The named client fact sheets stay owner-only, route and all.
         try {
-          const _kk = url.searchParams.get("key") || "";
-          if (env.READ_KEY && ctEq(_kk, env.READ_KEY)) {
-            const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
-            if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
-          }
-        } catch (e) {}
-        // the dossier PDF: hers to pull and forward, so it is offered only to the owner key and only when one has been built
-        try {
-          const _kk = url.searchParams.get("key") || "";
-          if (env.READ_KEY && ctEq(_kk, env.READ_KEY)) {
-            const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
-            if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
-          }
+          const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
+          if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
         } catch (e) {}
         return clientResp(env, url, buildingPageHtml(_bd, url.searchParams.get("key") || "", residentsKeyOf(env, url)),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
