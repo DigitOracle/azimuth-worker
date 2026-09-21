@@ -6,7 +6,7 @@
 // floor is the register's range, never a unit position - the panel says so. Unit positions stay with level A (Revit / a
 // developer stacking plan: the Symphony pilot).
 ren.localClippingEnabled=true;
-let STK=null,STKON=false,STKSEL=null,STKFLOOR=-1,STKHOT=null;const STKB=new Map(),STKG=new Map();
+let STK=null,STKON=false,STKSEL=null,STKFLOOR=-1,STKHOT=null,STKPL=null,STKPLID=null;const STKB=new Map(),STKG=new Map();
 const STKCOL={studio:0xB9A6C9,"1":0xC5A56A,"2":0x7FA8C9,"3":0x8FC7B9,"4":0xD9A441,office:0x8FA39B,retail:0xD98C6A,hotel:0xC58FB0,services:0x37423F,homes:0xD9CFB8,villa:0xC9C0AC,civic:0x7FA3B8,other:0x8A8F96};
 const STKCHIP=[["studio","Studio"],["1","1 BHK"],["2","2 BHK"],["3","3 BHK"],["4","4 BHK +"]],STKUSE=[["office","Office"],["retail","Retail"],["hotel","Hotel"]];
 const STKUSEN={homes:"homes",villa:"villa",office:"offices",retail:"retail",hotel:"hotel",civic:"civic",services:"services and parking"};
@@ -107,7 +107,7 @@ function stkUI(){
     "#ppanel .flr{display:none}#ppanel.floors .flr{display:block}#ppanel.floors .snap,#ppanel.floors .deep,#ppanel.floors .vw{display:none!important}"+
     ".flh{font:600 .66rem 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#C5A56A;margin:2px 0 0}.flh span{color:rgba(232,228,216,.55);font-weight:500;margin-left:6px}"+
     ".fwarn{font-size:.72rem;line-height:1.45;margin:6px 0 2px;padding:7px 9px;border:1px solid rgba(217,148,112,.55);border-radius:8px;color:#E8C4A8}"+
-    ".fstk{margin:6px 0 8px;cursor:crosshair}.fstk svg{display:block;width:100%;height:auto}.fstk text{font:500 9px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.62)}"+
+    ".fopen{display:block;text-align:center;margin:8px 0 6px;padding:7px 0;border:1px solid rgba(197,165,106,.5);border-radius:99px;color:#C5A56A;text-decoration:none;font:600 .58rem monospace;letter-spacing:.12em;text-transform:uppercase}.fopen:hover{background:rgba(197,165,106,.12)}"+".fsel{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid rgba(197,165,106,.35);border-radius:8px;color:#E8E4D8;font:600 .8rem Fraunces,Georgia,serif;padding:6px 10px;cursor:pointer}.fsel option{background:#0C1413;font-size:.72rem}"+".fplate svg{display:block;width:100%;height:auto;margin:2px 0 4px}"+".fstk{margin:6px 0 8px;cursor:crosshair}.fstk svg{display:block;width:100%;height:auto}.fstk text{font:500 9px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.62)}"+
     ".fstk .tl{font:600 9.5px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.9)}.fstk .zl{fill:rgba(232,228,216,.45);font-size:8.5px}"+
     ".fdet{font-size:.78rem;line-height:1.45;margin:6px 0;padding:8px 10px;border:1px solid rgba(197,165,106,.35);border-radius:8px}.fdet b{color:#F4D58D}"+
     ".ftyp{width:100%;border-collapse:collapse;font-size:.7rem;margin-top:4px}.ftyp td,.ftyp th{padding:3px 2px;text-align:right;font-weight:400}.ftyp th{opacity:.6;font-size:.62rem}.ftyp td:first-child,.ftyp th:first-child{text-align:left}"+
@@ -166,6 +166,36 @@ function stkMark(pp,r){const g=pp.querySelector("#fmark"),sv=pp.querySelector("#
   if(STKFLOOR<0){g.innerHTML="";return}const y=G.t+(G.N-1-STKFLOOR)/G.N*G.h+G.h/G.N/2,f=r.floors[STKFLOOR];
   g.innerHTML='<line x1="'+(G.L-2)+'" x2="'+(G.W-G.R)+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="#F4D58D" stroke-width="2"/><rect x="0" y="'+(y-7).toFixed(1)+'" width="'+(G.L-4)+'" height="14" rx="3" fill="#F4D58D"/><text x="'+((G.L-4)/2)+'" y="'+(y+3).toFixed(1)+'" text-anchor="middle" style="fill:#0C1413;font-weight:700">'+stkEsc(f.l)+'</text>'}
 // the building panel gains a third view, Floor layout (Kendall, 19 Sep: "i prefer this to be the overall floor layout"), and opens on it when the building has a stack
+function stkPlateFetch(i,then){if(STKPLID===String(i)){then();return}STKPLID=String(i);STKPL=null;
+  fetch("/img/plate_"+window.__twinDistrict+"_"+i+"?t="+Math.floor(Date.now()/600000)).then(r=>r.ok?r.json():null)
+    .then(j=>{STKPL=(j&&(j.building||((j.buildings||{})[String(i)])))||null;then()}).catch(()=>then())}
+// the same drawing the building page uses, in the panel's width
+function stkPlateSVG(f){
+  if(!STKPL||!STKPL.floors)return"";
+  const ix=STKPL.floors[String(f.l)];if(ix===undefined)return"";
+  const p=STKPL.plates[ix];if(!p)return"";
+  if(p.skip)return'<div class=fbas>'+(p.skip==="small"?"Not drawn: the register puts more homes on this floor than this footprint can hold - several buildings are probably bound to one record.":"Not drawn: too many units on one floor to draw.")+"</div>";
+  const lab=(STKPL.labels||{})[String(f.l)],o=STKPL.outline,xs=[],ys=[];
+  for(let i=0;i<o.length;i+=2){xs.push(o[i]);ys.push(o[i+1])}
+  const x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs),y0=Math.min.apply(null,ys),y1=Math.max.apply(null,ys);
+  const pad=Math.max(3,(x1-x0)*0.03),W=1000,k=W/(x1-x0+2*pad),H=(y1-y0+2*pad)*k;
+  const T=(a)=>{let t="";for(let i=0;i<a.length;i+=2)t+=((a[i]-x0+pad)*k).toFixed(1)+","+((y1-a[i+1]+pad)*k).toFixed(1)+" ";return t};
+  const SH={studio:"S","1":"1","2":"2","3":"3","4":"4",office:"O",retail:"R",other:""};
+  let h='<svg class=fplate viewBox="0 0 '+W+" "+H.toFixed(0)+'">';
+  if(p.tower)h+='<polygon points="'+T(o)+'" fill="#2B3532" fill-opacity=".3" stroke="#C5A56A" stroke-opacity=".45" stroke-width="1.4" stroke-dasharray="7 6"/><polygon points="'+T(p.tower)+'" fill="#2B3532" stroke="#C5A56A" stroke-opacity=".6" stroke-width="1.8"/>';
+  else h+='<polygon points="'+T(o)+'" fill="'+(p.cells.length?"#2B3532":(stkHex(STKCOL[p.use]||STKCOL.other)))+'" fill-opacity="'+(p.cells.length?1:0.35)+'" stroke="#C5A56A" stroke-opacity=".6" stroke-width="1.8"/>';
+  for(const c of p.cells){const t=lab&&lab[c[2]]!==undefined?lab[c[2]]:(SH[c[0]]||"");
+    h+='<polygon points="'+T(c[1])+'" fill="'+stkHex(STKCOL[c[0]]||STKCOL.other)+'" stroke="#0E1613" stroke-width="1.5" stroke-linejoin="round"/>';
+    let cx=0,cy=0,mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;const a=c[1];
+    for(let i=0;i<a.length;i+=2){cx+=a[i];cy+=a[i+1];mnx=Math.min(mnx,a[i]);mxx=Math.max(mxx,a[i]);mny=Math.min(mny,a[i+1]);mxy=Math.max(mxy,a[i+1])}
+    cx/=a.length/2;cy/=a.length/2;
+    if(Math.max(mxx-mnx,mxy-mny)*k>16&&Math.min(mxx-mnx,mxy-mny)*k>9)
+      h+='<text x="'+((cx-x0+pad)*k).toFixed(1)+'" y="'+((y1-cy+pad)*k+4).toFixed(1)+'" font-size="'+(lab?Math.min(12,Math.max(7.5,k*1.5)):Math.min(15,Math.max(9,k*2.2))).toFixed(1)+'" font-weight="600" text-anchor="middle" fill="#0E1613" fill-opacity=".8">'+stkEsc(t)+"</text>"}
+  for(const b of p.blocks||[])h+='<polygon points="'+T(b[1])+'" fill="'+(b[0]==="lift"?"#5B6662":"#9A95D6")+'" stroke="#0E1613" stroke-width="1.3"/>';
+  if(!p.cells.length)h+='<text x="'+W/2+'" y="'+(H/2+5).toFixed(1)+'" font-size="17" letter-spacing="3" text-anchor="middle" fill="#E8E4D8" fill-opacity=".8">'+stkEsc(String(p.use).toUpperCase())+"</text>";
+  h+='<g transform="translate('+(W-40)+',38) rotate('+(-STKPL.north).toFixed(1)+')"><circle r="17" fill="#0E1613" fill-opacity=".6" stroke="#C5A56A" stroke-opacity=".6"/><path d="M0,-12 L5,7 L0,3 L-5,7 Z" fill="#C5A56A"/><text y="-21" font-size="11" fill="#C5A56A" text-anchor="middle">N</text></g></svg>';
+  const says={units:"The unit numbers, types and sizes are the Land Department units register's, one row per unit; they are laid round the facade in unit-number order.",municipality:"How many homes this floor carries is the Municipality's count for the floor, shared between the types the Land Department register puts on it.",register:"How many homes of each type this floor carries is the Land Department register's units for the type, spread evenly over the floors the register gives it."}[p.basis]||"";
+  return h+'<div class=fbas><b>Indicative layout.</b> The outline is this building’s surveyed footprint; the sizes of the homes against each other are the register’s. '+says+(p.basis!=="units"?" No unit numbers are shown: the units register does not cover this building well enough.":"")+(p.dm_use?" The Municipality records this floor as "+stkEsc(p.dm_use)+"; the Land Department register lists these homes on it, so they are drawn.":"")+(p.tower?" The footprint (dashed) is far larger than the floor the register describes, so it is read as a podium.":"")+" Where each home sits, and where the lifts and stairs are, is not published for this building.</div>"}
 function stkPanel(){const pp=document.getElementById("ppanel");if(!pp||!STKSEL||!pp.classList.contains("on"))return;
   const i=[...STKSEL].sort((a,b)=>STK.buildings_by_id[b].floors.length-STK.buildings_by_id[a].floors.length)[0],r=STK.buildings_by_id[i];
   const mb=pp.querySelector(".modeb");if(!mb||mb.querySelector('[data-m="floors"]'))return;
@@ -173,7 +203,7 @@ function stkPanel(){const pp=document.getElementById("ppanel");if(!pp||!STKSEL||
   mb.querySelectorAll(".mb").forEach(b=>b.addEventListener("click",()=>{pp.classList.toggle("floors",b.dataset.m==="floors");if(b.dataset.m==="floors"){pp.classList.remove("deep");mb.querySelectorAll(".mb").forEach(x=>x.classList.toggle("on",x===b))}}));
   const N=r.floors.length;
   const seen=new Map();r.types.forEach((T,ti)=>{if(T.c==="other"||!T.units)return;seen.set(ti,T)});
-  const rows=stkChart(r,[...seen.values()]);
+  const sel=r.floors.map((f,j)=>'<option value="'+j+'">'+stkEsc(f.l==='G'?'Ground floor':(f.n!=null?'Floor '+f.n:f.l))+(f.k?' · '+f.k+' homes':'')+'</option>').join('');
   const trs=[...seen.values()].slice(0,7).map(T=>'<tr><td><i style="background:'+stkHex(STKCOL[T.c]||STKCOL.other)+'"></i>'+stkEsc(T.t)+'</td><td>'+(T.lo!=null?(T.lo===T.hi?T.lo:T.lo+"-"+T.hi):"")+'</td><td>'+(T.units||"")+'</td><td>'+(T.aed?(T.est?"~":"")+stkFmtA(T.aed):"")+'</td><td>'+(T.yield?T.yield+"%":"")+'</td></tr>').join("");
   const unfit=r.fits===false?'<div class=fwarn>The floors are not drawn on the tower here: this footprint stands far lower in the model than the register building, so it is the podium of the scheme, or it carries a podium height. The layout below is the register and stands on its own.</div>':"";
   const basis=r.basis==="dm_floors"?"Floors from the Dubai Municipality floor register (building "+stkEsc(r.dm)+(r.label?", permit "+stkEsc(String(r.label).replace(/ +/g,""))+")":")")+(r.basements?"; "+r.basements+" basement"+(r.basements>1?"s":"")+" not drawn":"")
@@ -183,15 +213,19 @@ function stkPanel(){const pp=document.getElementById("ppanel");if(!pp||!STKSEL||
   const clash=r.conflict?'<div class=fwarn>The map calls this building '+stkEsc(r.conflict)+'. These floors are the register record for '+stkEsc(r.name)+' - one of the two is bound to the wrong footprint, so read them with care.</div>':"";
 
   const d=document.createElement("div");d.className="flr";
-  d.innerHTML=clash+unfit+'<div class=flh>Floor layout <span>'+N+' levels'+(r.basements?' + '+r.basements+' below ground':'')+'</span></div><div class=fstk id=fstk>'+rows+'</div><div class=fdet id=fdet>Tap a floor, here or on the tower.</div>'+
+  d.innerHTML=clash+unfit+'<div class=flh>Floor layout <span>'+N+' levels'+(r.basements?' + '+r.basements+' below ground':'')+'</span></div>'+
+    '<a class=fopen target=_blank rel=noopener href="/building/'+encodeURIComponent(window.__twinDistrict)+'/'+encodeURIComponent(i)+'?key='+encodeURIComponent(KEY)+(window.__RKQ||"")+'">open the building page ↗</a>'+
+    '<select id=fsel class=fsel>'+sel+'</select><div id=fplate></div><div class=fdet id=fdet>Pick a floor, or tap one on the tower.</div>'+
     (trs?'<table class=ftyp><tr><th>type</th><th>floors</th><th>units</th><th>median</th><th>yield</th></tr>'+trs+'</table>':'')+
     '<div class=fbas>'+basis+'. A type on a floor means the Land Department register puts that type in this floor range, not a unit position.'+(r.level_shift?" The register numbers levels "+r.level_shift+" higher than the permit here; its ranges are shifted to match.":"")+' The tower is the CityEngine model at its surveyed height, divided evenly.</div>';
   const pn=pp.querySelector(".pn");pp.insertBefore(d,pn||null);
-  d.querySelector("#fstk").onclick=(e)=>{const sv=d.querySelector("#fstk svg");if(!sv)return;const bx=sv.getBoundingClientRect(),g=sv.__g;
-    const y=(e.clientY-bx.top)*g.vh/bx.height;if(y<g.t||y>g.t+g.h)return;stkPick(i,Math.max(0,Math.min(N-1,N-1-Math.floor((y-g.t)/g.h*N))))};
+  const fs=d.querySelector("#fsel");if(fs)fs.onchange=()=>stkPick(i,+fs.value);
+  stkPlateFetch(i,()=>{if(STKFLOOR>=0)stkPick(i,STKFLOOR)});
   fb.click()}
 function stkPick(i,j){if(!STK||i==null)return;const r=STK.buildings_by_id[i];if(!r)return;STKFLOOR=(STKFLOOR===j)?-1:j;stkApply();
-  const pp=document.getElementById("ppanel");if(!pp)return;stkMark(pp,r);
+  const pp=document.getElementById("ppanel");if(!pp)return;
+  const fs=pp.querySelector("#fsel");if(fs&&STKFLOOR>=0)fs.value=String(STKFLOOR);
+  const ph=pp.querySelector("#fplate");if(ph)ph.innerHTML=STKFLOOR>=0?stkPlateSVG(r.floors[STKFLOOR]):"";
   const det=pp.querySelector("#fdet");if(!det)return;if(STKFLOOR<0){det.textContent="Tap a floor, here or on the tower.";return}
   const f=r.floors[j];const ty=(f.t||[]).map(t=>r.types[t]).filter(T=>T&&T.c!=="other");
   det.innerHTML='<b>'+(f.n!=null?"Floor "+f.n:({G:"Ground",M:"Mezzanine",R:"Roof",PH:"Penthouse"}[f.l]||f.l))+'</b> · '+(f.k?f.k+" "+(f.u==="office"?"offices":f.u==="retail"?"shops":"homes"):STKUSEN[f.u]||f.u)+(f.a?" · "+Math.round(f.a*10.764).toLocaleString("en")+" sq ft":"")+
