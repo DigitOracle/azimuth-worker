@@ -700,11 +700,14 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
   function plateSays(b, p) {
     const basis = { units: "The unit numbers, types and sizes are the Land Department units register's, one row per unit; they are laid round the facade in unit-number order.",
       municipality: "How many homes this floor carries is the Municipality's count for the floor, shared between the types the Land Department register puts on it.",
-      register: "How many homes of each type this floor carries is the Land Department register's units for the type, spread evenly over the floors the register gives it." }[p.basis] || "";
+      register: "How many homes of each type this floor carries is the Land Department register's units for the type, spread evenly over the floors the register gives it.",
+      revit: "The unit numbers, types and sizes are the developer's Revit model of this building, floor by floor, and each flat is drawn where the model puts it." }[p.basis] || "";
+    const real = p.basis === "revit";
     let extra = "";
-    if (p.basis !== "units") extra += " No unit numbers are shown: the units register does not cover this building well enough.";
+    if (!real && p.basis !== "units") extra += " No unit numbers are shown: the units register does not cover this building well enough.";
     if (p.dm_use) extra += " The Municipality records this floor as " + esc(p.dm_use) + "; the Land Department register lists these homes on it, so they are drawn.";
     if (p.tower) extra += " The footprint (dashed) is far larger than the floor the register describes, so it is read as a podium: the floor is drawn inside it at the size the register implies.";
+    if (real) return "<b>The built layout.</b> " + basis + " " + esc(D.plateNote || "The outline is this building's surveyed footprint.") + extra + " What is not claimed is which way a flat faces: the model's own labels are to project north, which is not true north here.";
     return "<b>Indicative layout.</b> The outline is this building's surveyed footprint; the sizes of the homes against each other are the register's. " +
       basis + extra + " Where each home sits, and where the lifts and stairs are, is not published for this building — that comes from a Revit model or the developer's stacking plan, as on The Symphony.";
   }
