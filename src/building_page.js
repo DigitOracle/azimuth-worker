@@ -88,7 +88,8 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     developer: u.developer || null,
     // the register's own name for this building, when it differs - NOT the project register row, which is `project`
     registeredAs: (dld.project && String(dld.project).toLowerCase() !== String(r.name || "").toLowerCase()) ? dld.project : null,
-    people: communityMix(people, stack.district || slug),
+    people: communityMix(people, stack.district || slug, r.community),
+    community: r.community || null, transit: r.transit || null,
     fps: ((anchors && anchors.anchors) || []).filter((x) => x.x != null).map((x) => [x.i, x.x, x.z]),
   };
 }
@@ -96,10 +97,15 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
 // The community's resident mix (DEWA register, per community only). Kendall's decision of 17 Sep 2026 allows it on a
 // client-facing surface; the size floors in the data are disclosure control and are not touched here. It is context about an
 // area, never a reason to choose one - the card says so.
-function communityMix(people, slug) {
+function communityMix(people, slug, comm) {
   const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const want = norm(slug);
-  const c = ((people && people.communities) || []).find((x) => [x.name, x.label, x.official].concat(x.known || []).some((n) => norm(n) === want));
+  const all = (people && people.communities) || [];
+  // v210: the building's own community first, by the number the polygons gave it. The name match is the fallback for a
+  // building no polygon contains, and it is what was silently wrong for the ones that straddle a district boundary.
+  let c = (comm && comm.num != null) ? all.find((x) => String(x.comm) === String(comm.num)) : null;
+  const byNum = !!c;
+  if (!c) c = all.find((x) => [x.name, x.label, x.official].concat(x.known || []).some((n) => norm(n) === want));
   if (!c) return null;
   // Regions first, with the countries inside them. Naming countries alone leaves a meaningless "everyone else" - Business Bay
   // read India 17, Russia 7, Iran 6, UK 6 and then 63% unexplained, because a country is only named at 5% or more. The regions
@@ -110,7 +116,7 @@ function communityMix(people, slug) {
   }));
   if (!regions.length && !(c.mix || []).length) return null;
   const named = regions.reduce((t, r) => t + r.pct, 0);
-  return { label: c.label || c.official || c.name, accounts: c.accounts || null, unknown: c.noNationalityPct || 0,
+  return { label: c.label || c.official || c.name, byNum, accounts: c.accounts || null, unknown: c.noNationalityPct || 0,
     regions, rest: Math.max(0, 100 - named - (c.noNationalityPct || 0)),
     mix: (c.mix || []).slice(0, 4), floor: (people.rules && people.rules.minSharePct) || 5,
     cfloor: (people.rules && people.rules.regionCountryMinPct) || 1 };
@@ -238,6 +244,13 @@ table.reg td:first-child,table.reg th:first-child{text-align:left}
 .bar{height:3px;border-radius:2px;background:rgba(197,165,106,.18);overflow:hidden;margin-top:2px}.bar i{display:block;height:100%;background:var(--gold)}
 .src{font-size:.52rem;color:rgba(143,163,155,.85);line-height:1.5;margin-top:7px}
 #tab{display:none}
+.drow{display:flex;flex-wrap:wrap;gap:6px 4px;justify-content:flex-start;margin:4px 0 2px}
+.dcell{flex:1 1 52px;min-width:48px;max-width:72px;text-align:center;cursor:pointer;text-decoration:none;color:inherit}
+.dcell svg{display:block;width:100%;height:auto}
+.dcell .dnum{font:600 15px 'IBM Plex Mono',monospace;fill:var(--text)}
+.dcell b{display:block;font:600 .5rem 'IBM Plex Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--text);margin-top:2px}
+.dcell small{display:block;font:400 .46rem 'IBM Plex Mono',monospace;color:var(--mut)}
+.dcell:hover .dnum{fill:var(--gold)}
 .fsel2{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid var(--line);border-radius:8px;color:var(--text);font:500 .66rem 'IBM Plex Mono',monospace;padding:7px 10px;cursor:pointer}.fsel2:hover{border-color:var(--gold)}.fsel2 option{background:#0C1413}
 #plansbtn{display:block;width:100%;border:1px solid var(--line);border-radius:99px;padding:6px 0;margin-top:8px;background:transparent;color:var(--gold);font:600 .56rem 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}#plansbtn:hover{background:rgba(197,165,106,.12)}
 #dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
@@ -547,17 +560,32 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     const tag = $("soldtag");
     const col = (c) => COL[c] || COL.other;
     if (!only) {
-      const left = D.register.reduce((t, r) => t + Math.max(0, (r.launched || 0) - (r.sold || 0)), 0);
-      const units = D.register.reduce((t, r) => t + (r.launched || 0), 0);
-      if (tag) tag.textContent = fmt(left) + " left";
-      ring(host, D.register.filter((r) => r.launched).map((r) => ({
-        name: r.type, pct: r.launched, col: col(r.c), label: fmt(r.launched),
-        sub: fmt(Math.max(0, r.launched - (r.sold || 0))) + " left of " + fmt(r.launched),
-        on: () => { state.on = new Set([r.c]); state.use = new Set();
+      // the bedroom types only: "NA" is the register's unclassified bucket, not a home anyone asks for, and giving it a ring
+      // put it on a row of its own at three times the size. It keeps its place in the table and in the drill-down.
+      const rows = D.register.filter((r) => r.launched && r.c !== "other");
+      const left = rows.reduce((t, r) => t + Math.max(0, (r.launched || 0) - (r.sold || 0)), 0);
+      const units = rows.reduce((t, r) => t + (r.launched || 0), 0);
+      if (tag) tag.textContent = fmt(left) + " left of " + fmt(units);
+      // one ring per type, left against launched. A full ring is sold out; a gap is something to sell.
+      const R = 19, C = 2 * Math.PI * R;
+      host.innerHTML = '<div class=drow>' + rows.map((r, i) => {
+        const all = r.launched || 0, rest = Math.max(0, all - (r.sold || 0));
+        const frac = all ? rest / all : 0;
+        return '<a class=dcell data-dt="' + i + '"><svg viewBox="0 0 48 48">' +
+          '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="rgba(232,228,216,.14)" stroke-width=5.5></circle>' +
+          (frac > 0 ? '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="' + col(r.c) + '" stroke-width=5.5 stroke-linecap=round ' +
+            'stroke-dasharray="' + (frac * C).toFixed(1) + " " + C.toFixed(1) + '" transform="rotate(-90 24 24)"></circle>'
+            : '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="' + col(r.c) + '" stroke-width=5.5 stroke-opacity=".35"></circle>') +
+          '<text x=24 y=28 text-anchor=middle class=dnum>' + fmt(rest) + "</text></svg>" +
+          "<b>" + esc(r.type) + "</b><small>of " + fmt(all) + "</small></a>";
+      }).join("") + "</div>";
+      host.querySelectorAll("[data-dt]").forEach((el) => {
+        const r = rows[+el.dataset.dt];
+        el.onclick = () => { state.on = new Set([r.c]); state.use = new Set();
           document.querySelectorAll("[data-t]").forEach((b) => b.classList.toggle("off", b.dataset.t !== r.c));
           document.querySelectorAll("[data-u]").forEach((b) => b.classList.add("off"));
-          hideLabel(); paint(); drawSold(r); },
-      })), [fmt(units), "homes registered"], null);
+          hideLabel(); paint(); drawSold(r); };
+      });
       return;
     }
     const sold = only.sold || 0, all = only.launched || 0, rest = Math.max(0, all - sold);
@@ -813,6 +841,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         (D.people.unknown ? '<div class=src style="margin-top:2px">A further ' + D.people.unknown +
           "% of accounts carry no nationality at all and are not in the ring.</div>" : "") +
         '<div class=src>DEWA customer register for the whole community' + (D.people.accounts ? ", " + fmt(D.people.accounts) + " accounts" : "") +
+        (D.people.byNum && D.community ? ". This building stands in " + esc(String(D.community.name || "").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase())) + ", which is not always the district it is listed under" : "") +
         ", of the residents whose nationality it holds. There is no building-level figure: a region is shown at any size, a country inside it from " +
         D.people.cfloor + "%, and smaller groups stay pooled so nobody can be identified by subtraction. It is context about an area, not a reason to choose one.</div>" : "") +
       (D.sold ? "<h3>What has sold here</h3>" +
@@ -859,7 +888,12 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         '<div class=src>Dubai Land Department land registry' + (D.districtLand ? ", where " + fmt(D.districtLand.freehold) + " of " +
           fmt(D.districtLand.plots) + " plots in " + esc(D.district) + " are freehold, so tenure is worth checking rather than assuming" : "") +
         ". A plot is not one tower: podium blocks, services blocks and second towers share it, and the parking and plot area above are counted for the whole plot.</div>" : "") +
-      (D.around.length ? "<h3>Around it</h3>" + D.around.map((a) => '<div class=row><span>' + esc(a[0]) + "</span><span>" + esc(a[1]) + "</span></div>").join("") : "") +
+      ((D.transit && D.transit.length) || D.around.length ? "<h3>Around it</h3>" +
+        (D.transit || []).map((t) => '<div class=row><span>' + esc(t.kind) +
+          (t.outside ? "<br><small>outside this district</small>" : (t.zone ? "<br><small>zone " + esc(t.zone) + "</small>" : "")) +
+          "</span><span>" + esc(t.name || "") + " · " + (t.m < 1000 ? t.m + " m" : (t.m / 1000).toFixed(1) + " km") + "</span></div>").join("") +
+        D.around.map((a) => '<div class=row><span>' + esc(a[0]) + "<br><small>the register's own</small></span><span>" + esc(a[1]) + "</span></div>").join("") +
+        (D.transit && D.transit.length ? '<div class=src>Distances are straight-line from this building, not walking minutes \u2014 every routed estimate we have checked has overstated them. Stops and stations are the RTA\'s own layers.</div>' : "") : "") +
       '<div class=src>' + esc(D.asOf) + ". Floors divide the model's surveyed height evenly; a double-height lobby is not drawn as one." +
       (D.levelShift ? " The register numbers levels " + D.levelShift + " higher than the permit here, so its ranges are shifted to match." : "") + "</div>");
   };

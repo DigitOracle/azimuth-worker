@@ -187,9 +187,12 @@ export async function sheetRoutes(request, env, url, deps) {
     }
 
     if (rest.endsWith(".pdf")) {
-      if (!ownerOk(env, url, deps)) return new Response("unauthorized", { status: 401 });
       const slug = rest.slice(0, -4).toLowerCase();
       if (!SLUG_RX.test(slug)) return new Response("bad slug", { status: 400 });
+      // v212 - a building dossier (b_<district>_<id>) opens on a client key too, so the click can be filmed without the
+      // owner key on screen. Every other slug on the rail stays owner-only.
+      const dossier = /^b_[a-z0-9]+_[a-z0-9]+$/.test(slug) && deps && typeof deps.clientKeyOk === "function" && deps.clientKeyOk(env, url);
+      if (!dossier && !ownerOk(env, url, deps)) return new Response("unauthorized", { status: 401 });
       const buf = await env.MEETINGS.get("sheet_" + slug, "arrayBuffer");
       if (!buf) return new Response("not found", { status: 404 });
       const m = await sheetMeta(env, slug);

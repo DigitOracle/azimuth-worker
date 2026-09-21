@@ -1953,10 +1953,10 @@ async function handleCallback(env, cbq) {
 // its question button; everything else is exactly what this function returns.
 async function appFetch(request, env, ctx) {
     const url = new URL(request.url); const CHAT = env.TELEGRAM_CHAT_ID;
-    if (keyTier(env, url) === "client" && !clientPathOk(url.pathname)) return new Response("unauthorized", { status: 401 });   // v155 (DA-AUD-005) - a client key opens the app pages and nothing else
+    if (keyTier(env, url) === "client" && !clientPathOk(url.pathname) && !CLIENT_DOSSIER_RX.test(url.pathname)) return new Response("unauthorized", { status: 401 });   // v155 (DA-AUD-005) - a client key opens the app pages and nothing else; v212 - and one building dossier file
     // v157 - the fact-sheet routes, placed AFTER the client gate on purpose: a client key is refused above
     // before any storage is touched. Returns null for anything that is not its own, so the handler carries on.
-    const _sh = await sheetRoutes(request, env, url, { ctEq, waPost, ownerWindowOpen, noteErr, WA_GRAPH });
+    const _sh = await sheetRoutes(request, env, url, { ctEq, waPost, ownerWindowOpen, noteErr, WA_GRAPH, clientKeyOk: (e, u) => keyTier(e, u) !== "" });   // v212 - the building dossier opens on a client key
     if (_sh) return _sh;
     // v110.1 - HOISTED (10 Sep 2026). Sitting lower down, this never matched: the request
     // fell through to the Telegram webhook secret check at the foot of the handler and came
@@ -9592,7 +9592,7 @@ function stkPanel(){const pp=document.getElementById("ppanel");if(!pp||!STKSEL||
   const seen=new Map();r.types.forEach((T,ti)=>{if(T.c==="other"||!T.units)return;seen.set(ti,T)});
   const sel=r.floors.map((f,j)=>'<option value="'+j+'">'+stkEsc(f.l==='G'?'Ground floor':(f.n!=null?'Floor '+f.n:f.l))+(f.k?' · '+f.k+' homes':'')+'</option>').join('');
   const trs=[...seen.values()].slice(0,7).map(T=>'<tr><td><i style="background:'+stkHex(STKCOL[T.c]||STKCOL.other)+'"></i>'+stkEsc(T.t)+'</td><td>'+(T.lo!=null?(T.lo===T.hi?T.lo:T.lo+"-"+T.hi):"")+'</td><td>'+(T.units||"")+'</td><td>'+(T.aed?(T.est?"~":"")+stkFmtA(T.aed):"")+'</td><td>'+(T.yield?T.yield+"%":"")+'</td></tr>').join("");
-  const unfit=r.fits===false?'<div class=fwarn>The floors are not drawn on the tower here: this footprint stands far lower in the model than the register building, so it is the podium of the scheme, or it carries a podium height. The layout below is the register and stands on its own.</div>':"";
+  const unfit="";   // v209 - the podium paragraph is gone: the plate's caption says it where it belongs, beside the drawing
   const basis=r.basis==="dm_floors"?"Floors from the Dubai Municipality floor register (building "+stkEsc(r.dm)+(r.label?", permit "+stkEsc(String(r.label).replace(/ +/g,""))+")":")")+(r.basements?"; "+r.basements+" basement"+(r.basements>1?"s":"")+" not drawn":"")
     :"No Municipality floor register on this building yet: floors from the Land Department register's "+N+" levels";
   // the register record and the map disagree on which building this is: one of the two bindings is wrong, and the floors below
@@ -10745,6 +10745,7 @@ function residentsKeyOf(env, url) {
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
 const CLIENT_PATHS = ["/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
 const KEYLESS_PREFIXES = ["/img/", "/video/", "/r/"];
