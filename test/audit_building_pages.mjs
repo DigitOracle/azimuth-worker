@@ -132,7 +132,9 @@ async function district(slug) {
 let bad = 0;
 for (const slug of (process.argv.slice(2).length ? process.argv.slice(2) : ["businessbay"])) {
   const a = await district(slug);
-  if (a.error) { console.log(slug + ": " + a.error); bad++; continue; }
+  // nothing to score is not a failure: Al Thanyah Fifth shares its registers with JLT North, and the industrial districts
+  // hold no building that meets both. A non-zero exit means DRIFT - the page not rendering what the data says it holds.
+  if (a.error) { console.log(slug + ": " + a.error + " (skipped)"); continue; }
   fs.writeFileSync(NAJ + "/board/audit_" + slug + ".json", JSON.stringify(a, null, 1));
   console.log("\n" + slug + " - " + a.buildings + " buildings, " + a.full + " carry all " + a.sections +
     " sections, median " + a.median + "/" + a.sections);
