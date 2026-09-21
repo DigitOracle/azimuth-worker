@@ -85,14 +85,22 @@ function stkAnchor(i){return ANCH&&ANCH.anchors.find(a=>String(a.i)===String(i))
 // within the ecosystem") - the Symphony viewer for that building, built from the registers.
 // A tap that misses every band: the building has no register record, so nothing was drawn over it. Hit the model instead and
 // say so - silence reads as a broken page, and on a villa district almost every tap lands here.
-let STKSAY=null;
-function stkSayNoRecord(ray){
+let STKSAY=null,STKREV=null;
+// mesh index -> footprint id, from the same nearest-footprint mapping the bands are built from
+function stkRev(){if(STKREV)return STKREV;if(!window.BYFP)return null;STKREV=new Map();
+  for(const k in window.BYFP){const a=window.BYFP[k];if(a)a.forEach(x=>STKREV.set(x,k))}return STKREV}
+function stkTapModel(ray){
   if(!MESHES||!MESHES.length)return;
-  const hit=ray.intersectObjects(MESHES.filter(m=>m&&m.visible),false)[0];if(!hit)return;
+  const vis=MESHES.filter(m=>m&&m.visible);
+  const hit=ray.intersectObjects(vis,false)[0];if(!hit)return;
+  const rev=stkRev(),ix=MESHES.indexOf(hit.object),id=rev?rev.get(ix):null;
+  if(id!=null&&STK&&STK.buildings_by_id&&STK.buildings_by_id[id]){stkOpen(id);return}
+  stkSay("No register record for this building - the Land Department reaches "+(STK&&STK.buildings_by_id?Object.keys(STK.buildings_by_id).length:0)+" buildings in this district, and this is not one of them.");
+}
+function stkSay(msg){
   let el=document.getElementById("stksay");
   if(!el){el=document.createElement("div");el.id="stksay";document.body.appendChild(el)}
-  el.textContent="No register record for this building - the Land Department reaches "+(STK&&STK.buildings_by_id?Object.keys(STK.buildings_by_id).length:0)+" buildings in this district, and this is not one of them.";
-  el.className="on";clearTimeout(STKSAY);STKSAY=setTimeout(()=>{el.className=""},2600);
+  el.textContent=msg;el.className="on";clearTimeout(STKSAY);STKSAY=setTimeout(()=>{el.className=""},2600);
 }
 function stkOpen(i){location.href="/building/"+encodeURIComponent(window.__twinDistrict)+"/"+encodeURIComponent(i)+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")}
 function stkCount(){const c=document.getElementById("stkc");if(!c||!STK)return;let fl=0;const hit=[];
@@ -256,12 +264,12 @@ const _stkAP=applyProj;applyProj=function(name){STKFLOOR=-1;_stkAP(name);const p
 const _stkAD=applyDev;applyDev=function(d){_stkAD(d);if(STK)stkApply()};
 // a tap on a band: inside the open building it picks the floor; anywhere else it opens that building. Raycasts ignore clipping,
 // so a hit only counts where it lands inside its own band.
-addEventListener("pointerup",e=>{if(!STK||!STKB.size||!pd||Math.hypot(e.clientX-pd[0],e.clientY-pd[1])>6)return;
+addEventListener("pointerup",e=>{if(!STK||!pd||Math.hypot(e.clientX-pd[0],e.clientY-pd[1])>6)return;
   if(e.target&&e.target.closest&&e.target.closest("#ppanel,#stkp,#devwrap,.lb,.nnav,.rail,.tog,.feat"))return;
   ptr.x=(e.clientX/innerWidth)*2-1;ptr.y=-(e.clientY/innerHeight)*2+1;ray.setFromCamera(ptr,cam);
   const all=[];STKB.forEach(b=>b.bands.forEach(x=>all.push(x)));
   const h=ray.intersectObjects(all,false).find(x=>{const u=x.object.userData.stk;return x.point.y>=u.lo-0.05&&x.point.y<=u.hi+0.05});
-  if(!h){stkSayNoRecord(ray);return}
+  if(!h){stkTapModel(ray);return}
   const u=h.object.userData.stk;e.stopImmediatePropagation();pd=null;
   if(STKSEL&&STKSEL.has(u.i)){stkPick(u.i,Math.max(u.j0,Math.min(u.j1,Math.floor((h.point.y-u.y0)/u.fh))));return}
   stkOpen(u.i)});
