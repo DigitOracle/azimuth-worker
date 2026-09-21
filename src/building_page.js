@@ -171,14 +171,16 @@ export function buildingPageHtml(D, key, rk) {
       (D.open ? '<div class=grp>Open view <u>sees over the roofs</u></div><div id=dirs>' +
         ["N", "NE", "E", "SE", "S", "SW", "W", "NW"].map((x, k) => '<button class="tb dir off" data-d="' + k + '">' + x + "</button>").join("") + "</div>" : "") +
       '<button id=hide>Hide All</button>' +
+      '<div class=grp>Floors <u>' + D.floors.length + ' levels</u></div><select id=fpick class=fsel2><option value="">choose a floor…</option>' +
+      D.floors.map((g, k) => '<option value="' + k + '">' + esc(g.n != null ? "Floor " + g.n : (g.l === "G" ? "Ground floor" : g.l)) +
+        (g.k ? " · " + g.k + " homes" : " · " + esc({ homes: "homes", office: "offices", retail: "retail", hotel: "hotel", services: "services and parking" }[g.u] || g.u)) +
+        "</option>").join("") + "</select>" +
+      (D.plans ? '<button id=plansbtn>The plans · ' + D.plans.plans.length + "</button>" : "") +
       (D.register.length ? '<div class=grp>Sold so far <u id=soldtag></u></div><div id=sold></div>' +
         '<div class=src>Dubai Land Department units register. Counts by type, not by unit number: which homes are sold is not published.</div>' : "") +
     "</div>" +
     "<div id=card></div>" +
     '<div id=foot></div>' +
-    (!D.fits ? '<div id=warn>The floors are not drawn on the model here. This footprint stands ' + (D.modelH ? Math.round(D.modelH) + " m" : "far lower") +
-      ' in the twin, and the register building is ' + (D.heightFlag && D.heightFlag.bound_m ? D.heightFlag.bound_m + " m" : "much taller") +
-      ': either the footprint is the podium of the scheme, or the model carries a podium height for it. The floor layout below is the register’s and stands on its own.</div>' : "") +
     (D.conflict ? '<div id=warn>The map calls this building ' + esc(D.conflict) + ', and the floors here are the register record for ' +
       esc(D.name) + ". " + (D.verdict === "map" && D.nameId
         ? "The Land Department's own name for this building, reached through parcel ids rather than by matching text, is " +
@@ -230,6 +232,11 @@ table.reg td:first-child,table.reg th:first-child{text-align:left}
 .bar{height:3px;border-radius:2px;background:rgba(197,165,106,.18);overflow:hidden;margin-top:2px}.bar i{display:block;height:100%;background:var(--gold)}
 .src{font-size:.52rem;color:rgba(143,163,155,.85);line-height:1.5;margin-top:7px}
 #tab{display:none}
+.fsel2{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid var(--line);border-radius:8px;color:var(--text);font:500 .66rem 'IBM Plex Mono',monospace;padding:7px 10px;cursor:pointer}.fsel2:hover{border-color:var(--gold)}.fsel2 option{background:#0C1413}
+#plansbtn{display:block;width:100%;border:1px solid var(--line);border-radius:99px;padding:6px 0;margin-top:8px;background:transparent;color:var(--gold);font:600 .56rem 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}#plansbtn:hover{background:rgba(197,165,106,.12)}
+#lbx{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:rgba(6,10,10,.92);cursor:zoom-out;padding:24px}#lbx img{max-width:min(92vw,1100px);max-height:80vh;object-fit:contain;background:#F6F3EC;border-radius:10px}#lbx b{font:600 .62rem 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}#lbx .x{position:absolute;right:20px;top:14px;font-size:1.6rem;color:var(--mut)}
+.lnk{color:var(--text);text-decoration:none;border-bottom:1px solid rgba(197,165,106,.45)}
+.lnk:hover{color:var(--gold)}
 .lvl{font:600 .62rem 'IBM Plex Mono',monospace;letter-spacing:.24em;color:var(--gold);text-align:center;margin:4px 0 2px}
 .lgs{display:flex;flex-wrap:wrap;gap:4px 10px;margin:6px 0 2px}
 .lg{display:inline-flex;align-items:center;gap:5px;font-size:.55rem;letter-spacing:.04em;color:rgba(232,228,216,.8)}
@@ -469,6 +476,10 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
   const kvals = () => { $("vkhi").textContent = state.khi >= kmax ? "any" : "at most " + state.khi; };
   khi.oninput = () => { state.khi = +khi.value; kvals(); paint(); };
   kvals();
+  const fp = $("fpick");
+  if (fp) fp.onchange = () => { if (fp.value === "") return; state.sel = -1; pick(+fp.value); };
+  const pb = $("plansbtn");
+  if (pb) pb.onclick = () => plansCard();
   document.querySelectorAll("[data-d]").forEach((b) => { b.onclick = () => { const k = +b.dataset.d; state.dirs.has(k) ? state.dirs.delete(k) : state.dirs.add(k); b.classList.toggle("off", !state.dirs.has(k)); paint(); }; });
   function hideLabel() { $("hide").textContent = state.on.size || state.use.size ? "Hide All" : "Show All"; }
   $("hide").onclick = () => {
@@ -587,7 +598,9 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         '<div class=src>A type on a floor means the Land Department register places that type within this floor range. It is not a unit position: which flat is where comes from a Revit model or the developer stacking plan, and this building has neither on file.</div>'
         : '<div class=src>No unit type is registered against this floor.</div>') +
       '<div class=acts><a class=w target=_blank href="https://wa.me/?text=' + msgTxt + '">Send by WhatsApp</a>' +
-      '<a class=c href="/find?key=' + encodeURIComponent(KEY) + "&q=" + encodeURIComponent(D.name) + '">Look it up in Find</a></div>');
+      (D.plans ? '<a class=c id=flplans>The plans</a>' : '<a class=c href="/find?key=' + encodeURIComponent(KEY) + "&q=" + encodeURIComponent(D.name) + '">Look it up in Find</a>') + "</div>");
+    const fl2 = $("flplans");
+    if (fl2) fl2.onclick = () => plansCard();
     const sel = $("fsel");
     if (sel) sel.onchange = () => { const k = +sel.value; state.sel = -1; pick(k); };
   }
@@ -715,6 +728,25 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
       '<div class=src>' + plateSays(b, p) + "</div>";
   }
 
+  // the project's plans, over the page rather than in a tab a phone cannot follow
+  function plansCard() {
+    if (!D.plans) return;
+    open_('<div class=t>' + esc(D.plans.project) + "</div><h2>The plans</h2>" +
+      '<div class=plans>' + D.plans.plans.map((p, i) => '<a data-p="' + i + '"><img loading=lazy src="' + esc(p.url) + '" alt="' +
+        esc(p.label) + '"><b>' + esc(p.label) + "</b></a>").join("") + "</div>" +
+      '<div class=src>' + (D.plans.note ? esc(D.plans.note) + ". " : "") +
+      "Developer material from the app's plan library; each plan names its source on the PLANS page.</div>");
+    const c = $("card");
+    c.querySelectorAll("[data-p]").forEach((a) => { a.onclick = () => lightbox(D.plans.plans[+a.dataset.p]); });
+  }
+  function lightbox(p) {
+    let lb = $("lbx");
+    if (!lb) { lb = document.createElement("div"); lb.id = "lbx"; document.body.appendChild(lb); }
+    lb.innerHTML = '<span class=x>&times;</span><img src="' + esc(p.url) + '" alt="' + esc(p.label) + '"><b>' + esc(p.label) + "</b>";
+    lb.style.display = "flex";
+    lb.onclick = () => { lb.style.display = "none"; };
+  }
+
   function pick(j) { state.sel = state.sel === j ? -1 : j; paint(); if (state.sel >= 0) floorCard(state.sel); else close_(); }
 
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let down = null;
@@ -784,8 +816,9 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         '<div class=src>A contract is a letting newly registered or renewed, not a measure of how much of the building is occupied. ' +
         "Where a yield is shown it is the scheme's rent against this building's register price, worked out here, not quoted.</div>" : "") +
       (D.schools && D.schools.length ? "<h3>Schools · " + esc(D.district) + "</h3>" +
-        D.schools.map((x) => '<div class=row><span>' + esc(x.name) + "<br><small>" + esc([x.curriculum, x.rating].filter(Boolean).join(" · ")) +
-          "</small></span><span>" + (x.km != null ? x.km + " km" : "") + "</span></div>").join("") +
+        D.schools.map((x) => '<div class=row><span><a class=lnk target=_blank rel=noopener href="/map?key=' + encodeURIComponent(KEY) +
+          "&d=" + encodeURIComponent(D.slug) + "&focus=" + encodeURIComponent(x.name) + '">' + esc(x.name) + "</a><br><small>" +
+          esc([x.curriculum, x.rating].filter(Boolean).join(" · ")) + "</small></span><span>" + (x.km != null ? x.km + " km" : "") + "</span></div>").join("") +
         '<div class=src>' + D.schoolsAll + " KHDA schools and " + fmt(D.healthN) + " DHA health facilities within " + D.amenKm +
         " km of the district centre, nearest first. Measured from the centre of " + esc(D.district) + ", not from this building's door.</div>" : "") +
       (D.plans ? "<h3>The plans · " + esc(D.plans.project) + "</h3>" +
