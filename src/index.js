@@ -8390,7 +8390,7 @@ ${najNav(key, "twin")}
 }
 // v86 - twin context. Model tiles (a district split for the 5 MB budget) name themselves and point at the community polygon of their parent;
 // corridors group the rail into five doors instead of one long alphabetical row.
-const TWIN_TILE_NAME = { jltnorth: "JLT \u00b7 North (the towers)", jltsouth: "JLT \u00b7 South (Islands & Park)" };
+const TWIN_TILE_NAME = { liwan1: "Liwan", bukadra: "Bu Kadra · Meydan Horizon", jltnorth: "JLT \u00b7 North (the towers)", jltsouth: "JLT \u00b7 South (Islands & Park)" };
 const TWIN_TILE_PARENT = { jltnorth: "althanyahfifth", jltsouth: "althanyahfifth" };
 const TWIN_CORRIDORS = ["Coast", "Downtown & Creek", "New Dubai", "Meydan & MBR", "South & Outer", "Other"];
 const TWIN_CORRIDOR = {
