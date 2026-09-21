@@ -5174,8 +5174,10 @@ async function feedFill(env, angles, sys, data, famh, qa) {
   if (own().length < 5 && qa && Array.isArray(qa._droppedAngles)) {
     const dated = (w) => (String(w || "").match(/\d{4}-\d{2}-\d{2}/) || ["9999"])[0];
     // v187 - never readmit something she had in the last two days: four fresh angles beat five with yesterday's in it
-    const _fresh = new Set(famh.filter(x => x.k && (Date.now() - Date.parse(x.d)) < 2 * 86400 * 1000).map(x => x.k));
-    const pool = qa._droppedAngles.filter(d => d && d.a && !d.a.campaign && honest(d.a) && !_fresh.has(figKey(d.a))).sort((x, y) => dated(x.why).localeCompare(dated(y.why)));
+    const _recent = famh.filter(x => (Date.now() - Date.parse(x.d)) < 2 * 86400 * 1000);
+    const _fresh = new Set(_recent.filter(x => x.k).map(x => x.k));
+    const _freshNums = new Set([].concat(..._recent.map(x => x.n || [])));   // v187.2 - and the NUMBERS, not just the whole figure: on 21 Sep '2,927 sales' came back because its figure key differed by a few words
+    const pool = qa._droppedAngles.filter(d => d && d.a && !d.a.campaign && honest(d.a) && !_fresh.has(figKey(d.a)) && !numKeys(d.a).some(n => _freshNums.has(n))).sort((x, y) => dated(x.why).localeCompare(dated(y.why)));
     const back = [];
     for (const strict of [true, false]) for (const d of pool) {   // the split first; then the floor wins over the split
       if (own().length >= 5) break;

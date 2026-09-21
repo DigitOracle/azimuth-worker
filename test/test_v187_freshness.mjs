@@ -85,5 +85,12 @@ const thin = await run([], { serve: [POP, WALK, EDU], topup: [] });
 ok(thin.audit && thin.audit.issues.some((i) => /only \d angles|split is/.test(i)), "a short or lopsided morning is caught: " + JSON.stringify(thin.audit && thin.audit.issues));
 ok(owner.some((t) => /failed its own check/.test(t)), "and Kendall hears about it, not Naj");
 
+// ---- v187.2: a readmitted angle must not repeat a NUMBER she had today either -----------------------------------------------
+// On 21 Sep the floor brought "2,927 sales" back an hour after she had already had it: the two figure keys differed by a few
+// words, so the figure check missed it. The numbers inside are now checked too.
+const NUMDUP = A("Madinat Al Mataar took 2,927 sales in nine weeks.", "2,927 sales", "DLD Open Data, 2026-09-20", "district", "invest");
+const numrun = await run([{ d: day(0), f: "volume", k: "2927sales12%oftotal", n: ["2927"], s: "volume:-" }], { serve: [POP, WALK, EDU, NUMDUP, RENTS], topup: [], dry: true });
+ok(!/2,927/.test(numrun.out), "a dropped angle whose NUMBER she had today is not readmitted, even when its figure reads differently");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
