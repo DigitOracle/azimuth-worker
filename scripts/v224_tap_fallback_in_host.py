@@ -18,7 +18,10 @@ This adds the fallback where the tap really lands: no anchor, so ask the floor s
 (window.BYFP, reversed) and whether the register holds that building - so it opens the building page, or says the register
 does not reach it, which is what v218 was for.
 
-  python scripts/v223_tap_fallback_in_host.py && python scripts/v186_apply.py
+  python scripts/v224_tap_fallback_in_host.py && python scripts/v186_apply.py
+
+(Renumbered from v223: the building-wiring session had already taken that number for the THE BUILDING tab work,
+and theirs carries a test file named for it. Two v223s in one history helps nobody.)
 """
 import io, os
 
@@ -70,7 +73,7 @@ t = io.open(Q, encoding="utf-8").read()
 OLD2 = """    if(h){const idx=MESHES.indexOf(h.object);const a=ANCH.anchors.find(x=>x.meshes&&x.meshes.indexOf(idx)>=0);if(a){openAnchor(a);return}}}"""
 NEW2 = ("""    if(h){const idx=MESHES.indexOf(h.object);const a=ANCH.anchors.find(x=>x.meshes&&x.meshes.indexOf(idx)>=0);if(a){openAnchor(a);return}"""
         + NL +
-        """      // v223: no anchor carries this mesh, which is the common case. Ask the floor stack: it knows the footprint behind
+        """      // v224: no anchor carries this mesh, which is the common case. Ask the floor stack: it knows the footprint behind
       // the mesh and whether the register holds it, so the tap opens the building page or says why it cannot.
       if(window.__stkTapMesh&&window.__stkTapMesh(idx))return}}""")
 t = sub(t, OLD2, NEW2, "host fallback")

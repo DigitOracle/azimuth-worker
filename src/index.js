@@ -9543,7 +9543,7 @@ addEventListener("pointerup",e=>{
     const vis=MESHES.filter(m=>m.visible);vis.forEach(m=>m.updateWorldMatrix(true,false));
     const h=ray.intersectObjects(vis,false)[0];
     if(h){const idx=MESHES.indexOf(h.object);const a=ANCH.anchors.find(x=>x.meshes&&x.meshes.indexOf(idx)>=0);if(a){openAnchor(a);return}
-      // v223: no anchor carries this mesh, which is the common case. Ask the floor stack: it knows the footprint behind
+      // v224: no anchor carries this mesh, which is the common case. Ask the floor stack: it knows the footprint behind
       // the mesh and whether the register holds it, so the tap opens the building page or says why it cannot.
       if(window.__stkTapMesh&&window.__stkTapMesh(idx))return}}
   if(!META)return;
