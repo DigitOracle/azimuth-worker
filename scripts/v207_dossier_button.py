@@ -42,6 +42,11 @@ print("index.js:", len(s), "chars")
 # --- the button --------------------------------------------------------------------------------------------------------------
 Q = os.path.join(HERE, "src", "building_page.js")
 t = io.open(Q, encoding="utf-8").read()
+# This inserts AFTER an anchor that survives the insert, so a second run appends a second button and a third a third -
+# which is exactly what shipped: three "The dossier" buttons on the live page, found by Kendall, not by a test.
+if "id=dossbtn" in t:
+    print("already applied - nothing to do")
+    raise SystemExit(0)
 t = sub(t, """      (D.plans ? '<button id=plansbtn>The plans · ' + D.plans.plans.length + "</button>" : "") +""",
         """      (D.plans ? '<button id=plansbtn>The plans · ' + D.plans.plans.length + "</button>" : "") +
       (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +

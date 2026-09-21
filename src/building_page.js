@@ -184,10 +184,6 @@ export function buildingPageHtml(D, key, rk) {
       (D.plans ? '<button id=plansbtn>The plans · ' + D.plans.plans.length + "</button>" : "") +
       (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
         '">The dossier · PDF' + (D.dossier.pages ? " · " + D.dossier.pages + "pp" : "") + "</a>" : "") +
-      (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
-        '">The dossier · PDF' + (D.dossier.pages ? " · " + D.dossier.pages + "pp" : "") + "</a>" : "") +
-      (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
-        '">The dossier · PDF' + (D.dossier.pages ? " · " + D.dossier.pages + "pp" : "") + "</a>" : "") +
       (D.register.length ? '<div class=grp>Sold so far <u id=soldtag></u></div><div id=sold></div>' +
         '<div class=src>Dubai Land Department units register. Counts by type, not by unit number: which homes are sold is not published.</div>' : "") +
     "</div>" +
@@ -253,12 +249,11 @@ table.reg td:first-child,table.reg th:first-child{text-align:left}
 .dcell:hover .dnum{fill:var(--gold)}
 .fsel2{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid var(--line);border-radius:8px;color:var(--text);font:500 .66rem 'IBM Plex Mono',monospace;padding:7px 10px;cursor:pointer}.fsel2:hover{border-color:var(--gold)}.fsel2 option{background:#0C1413}
 #plansbtn{display:block;width:100%;border:1px solid var(--line);border-radius:99px;padding:6px 0;margin-top:8px;background:transparent;color:var(--gold);font:600 .56rem 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}#plansbtn:hover{background:rgba(197,165,106,.12)}
-#dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
-background:rgba(197,165,106,.1);color:var(--gold);text-decoration:none;font:600 .56rem 'IBM Plex Mono',monospace;
-letter-spacing:.12em;text-transform:uppercase}#dossbtn:hover{background:rgba(197,165,106,.22)}
-#dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
-background:rgba(197,165,106,.1);color:var(--gold);text-decoration:none;font:600 .56rem 'IBM Plex Mono',monospace;
-letter-spacing:.12em;text-transform:uppercase}#dossbtn:hover{background:rgba(197,165,106,.22)}
+.dossier{display:flex;align-items:baseline;gap:8px;margin:10px 0 2px;padding:9px 12px;border:1px solid var(--gold);
+border-radius:10px;background:rgba(197,165,106,.12);text-decoration:none;color:var(--gold)}
+.dossier:hover{background:rgba(197,165,106,.22)}
+.dossier b{font:600 .62rem 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase}
+.dossier span{font:400 .56rem 'IBM Plex Mono',monospace;color:var(--mut)}
 #dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
 background:rgba(197,165,106,.1);color:var(--gold);text-decoration:none;font:600 .56rem 'IBM Plex Mono',monospace;
 letter-spacing:.12em;text-transform:uppercase}#dossbtn:hover{background:rgba(197,165,106,.22)}
@@ -812,6 +807,10 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     const s = D.sales || {};
     open_('<div class=t>' + esc(D.district) + "</div><h2>" + esc(D.name) + "</h2>" +
       (D.grade ? '<span class="pill n">' + esc(String(D.grade).toLowerCase().replace(/_/g, " ")) + "</span>" : "") +
+      // the whole building as one document, to keep or to send: at the top of the card about this building
+      (D.dossier ? '<a class=dossier target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
+        '"><b>The dossier</b><span>everything on this page as a PDF' + (D.dossier.pages ? " \u00b7 " + D.dossier.pages + " pages" : "") +
+        "</span></a>" : "") +
       (D.project ? "<h3>Construction · the register</h3>" +
         '<div class=row><span>' + esc(D.project.name || "this project") + (D.project.master ? "<br><small>" + esc(D.project.master) + "</small>" : "") +
           "</span><span>" + esc(String(D.project.status || "").toLowerCase() || "—") + "</span></div>" +
