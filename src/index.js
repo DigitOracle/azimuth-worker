@@ -9243,7 +9243,7 @@ function updateLabels(){
 // floor is the register's range, never a unit position - the panel says so. Unit positions stay with level A (Revit / a
 // developer stacking plan: the Symphony pilot).
 ren.localClippingEnabled=true;
-let STK=null,STKON=false,STKSEL=null,STKFLOOR=-1,STKHOT=null,STKPL=null,STKPLID=null;const STKB=new Map(),STKG=new Map();
+let STK=null,STKON=false,STKSEL=null,STKFLOOR=-1,STKHOT=null,STKPL=null,STKPLID=null,STKLAST=null,STKTMR=null;const STKB=new Map(),STKG=new Map();
 const STKCOL={studio:0xB9A6C9,"1":0xC5A56A,"2":0x7FA8C9,"3":0x8FC7B9,"4":0xD9A441,office:0x8FA39B,retail:0xD98C6A,hotel:0xC58FB0,services:0x37423F,homes:0xD9CFB8,villa:0xC9C0AC,civic:0x7FA3B8,other:0x8A8F96};
 const STKCHIP=[["studio","Studio"],["1","1 BHK"],["2","2 BHK"],["3","3 BHK"],["4","4 BHK +"]],STKUSE=[["office","Office"],["retail","Retail"],["hotel","Hotel"]];
 const STKUSEN={homes:"homes",villa:"villa",office:"offices",retail:"retail",hotel:"hotel",civic:"civic",services:"services and parking"};
@@ -9304,7 +9304,15 @@ function stkLookBuilding(r){return(f,j)=>{if(j===STKFLOOR)return[0xF4D58D,1,0.85
 // the whole scene from the current state: a building open -> its floors, one band each; the filter on -> every stacked tower
 function stkApply(){if(!STK||!MESHES||!stkMap())return;stkClear();STKSEL=null;
   const shown=(i)=>(STKM.get(i)||[]).some(x=>MESHES[x]&&MESHES[x].visible),mine=new Set();STKM.forEach(v=>v.forEach(x=>mine.add(x)));
-  if(SELPROJ){const own=[...STKM.keys()].filter(shown);if(own.length){STKSEL=new Set(own);own.forEach(i=>{const r=STK.buildings_by_id[i];stkDraw(i,stkRuns(r,stkLookBuilding(r)),false)})}
+  if(SELPROJ){const own=[...STKM.keys()].filter(shown);
+    if(own.length){STKSEL=new Set(own);
+      const paint=()=>{own.forEach(i=>{const r=STK.buildings_by_id[i];stkDraw(i,stkRuns(r,stkLookBuilding(r)),false)});stkCount()};
+      const key=own.join(",");
+      if(STKTMR){clearTimeout(STKTMR);STKTMR=null}
+      // a new building: let its facade be seen before the type colours land on it. Re-applying to the same one paints now.
+      if(key!==STKLAST&&STKFLOOR<0){STKLAST=key;STKTMR=setTimeout(()=>{STKTMR=null;paint()},900)}
+      else{STKLAST=key;paint()}}
+    else{STKLAST=null}
     stkCount();return}
   if(STKON){STKM.forEach((v,i)=>{if(shown(i))stkDraw(i,stkRuns(STK.buildings_by_id[i],stkLookDistrict(STK.buildings_by_id[i])),false)});MESHES.forEach((m,x)=>{if(!mine.has(x))stkGhost(x)})}
   stkCount()}
