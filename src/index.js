@@ -9340,13 +9340,22 @@ let STKSAY=null,STKREV=null;
 function stkRev(){if(STKREV)return STKREV;if(!window.BYFP)return null;STKREV=new Map();
   for(const k in window.BYFP){const a=window.BYFP[k];if(a)a.forEach(x=>STKREV.set(x,k))}return STKREV}
 function stkTapModel(ray){
-  if(!MESHES||!MESHES.length)return;
+  if(!MESHES||!MESHES.length)return false;
   const vis=MESHES.filter(m=>m&&m.visible);
-  const hit=ray.intersectObjects(vis,false)[0];if(!hit)return;
-  const rev=stkRev(),ix=MESHES.indexOf(hit.object),id=rev?rev.get(ix):null;
-  if(id!=null&&STK&&STK.buildings_by_id&&STK.buildings_by_id[id]){stkOpen(id);return}
-  stkSay("No register record for this building - the Land Department reaches "+(STK&&STK.buildings_by_id?Object.keys(STK.buildings_by_id).length:0)+" buildings in this district, and this is not one of them.");
+  const hit=ray.intersectObjects(vis,false)[0];if(!hit)return false;
+  return stkTapMesh(MESHES.indexOf(hit.object));
 }
+// the host twin owns the tap (it registers pointerup first and consumes pd), so it calls this when its own anchor
+// lookup finds nothing. Returns true when it has answered the tap.
+function stkTapMesh(ix){
+  if(ix==null||ix<0)return false;
+  const rev=stkRev(),id=rev?rev.get(ix):null;
+  if(id!=null&&STK&&STK.buildings_by_id&&STK.buildings_by_id[id]){stkOpen(id);return true}
+  if(!STK||!STK.buildings_by_id)return false;
+  stkSay("No register record for this building - the Land Department reaches "+Object.keys(STK.buildings_by_id).length+" buildings in this district, and this is not one of them.");
+  return true;
+}
+window.__stkTapMesh=function(ix){try{return stkTapMesh(ix)}catch(e){return false}};
 function stkSay(msg){
   let el=document.getElementById("stksay");
   if(!el){el=document.createElement("div");el.id="stksay";document.body.appendChild(el)}
@@ -9533,7 +9542,10 @@ addEventListener("pointerup",e=>{
   if(ANCH&&MESHES&&!(e.target&&e.target.closest&&e.target.closest("#ppanel,#devwrap,.lb,.nnav,.rail,.tog,.feat"))){   // v74.8 tap a tower -> open it
     const vis=MESHES.filter(m=>m.visible);vis.forEach(m=>m.updateWorldMatrix(true,false));
     const h=ray.intersectObjects(vis,false)[0];
-    if(h){const idx=MESHES.indexOf(h.object);const a=ANCH.anchors.find(x=>x.meshes&&x.meshes.indexOf(idx)>=0);if(a){openAnchor(a);return}}}
+    if(h){const idx=MESHES.indexOf(h.object);const a=ANCH.anchors.find(x=>x.meshes&&x.meshes.indexOf(idx)>=0);if(a){openAnchor(a);return}
+      // v223: no anchor carries this mesh, which is the common case. Ask the floor stack: it knows the footprint behind
+      // the mesh and whether the register holds it, so the tap opens the building page or says why it cannot.
+      if(window.__stkTapMesh&&window.__stkTapMesh(idx))return}}
   if(!META)return;
   const featured=[...GROUPS.construction.meshes,...GROUPS.pipeline.meshes].filter(m=>m.visible);
   featured.forEach(m=>m.updateWorldMatrix(true,false));
