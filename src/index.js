@@ -3092,6 +3092,14 @@ async function appFetch(request, env, ctx) {
         const _pl = await _get("plate_" + _bs + "_" + _bi);   // the indicative floor plates, one key per building
         const _bd = (_st && _um && _bi) ? buildingData(_bs, _bi, _st, _um, _bf, _ac, _pp, _bn, _px, _uu, _pl) : null;
         if (!_bd) return new Response("no register record for this building yet", { status: 404 });
+        // the dossier PDF: hers to pull and forward, so it is offered only to the owner key and only when one has been built
+        try {
+          const _kk = url.searchParams.get("key") || "";
+          if (env.READ_KEY && ctEq(_kk, env.READ_KEY)) {
+            const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
+            if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
+          }
+        } catch (e) {}
         return clientResp(env, url, buildingPageHtml(_bd, url.searchParams.get("key") || "", residentsKeyOf(env, url)),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
@@ -3391,6 +3399,7 @@ async function appFetch(request, env, ctx) {
           if (bid.indexOf("wld:") === 0 && (env.WORLD_TALK || "") === "on" && await worldButton(env, from, bid)) return new Response("ok");   // v154 - Another city / Another angle / a city from the list
           if (bid.indexOf("gc:") === 0 && await gcGuideButton(env, from, bid)) return new Response("ok");   // v150.1 - her Google Calendar walkthrough
           if (bid.indexOf("em:") === 0 && await emGuideButton(env, from, bid)) return new Response("ok");   // v182 - her email sign-in walkthrough
+          if (bid.indexOf("fs:") === 0 && await feedSceneOfferButton(env, from, bid)) return new Response("ok");   // v188 - Make all five / I'll choose
           if (bid.indexOf("ig:") === 0) { await env.MEETINGS.delete("cand_" + bid.slice(3)); await waSend(env, from, "🙈 Ignored"); return new Response("ok"); }
           if (bid.indexOf("m:") === 0) {
             const _cid = bid.slice(2); let _cand = null; try { _cand = JSON.parse((await env.MEETINGS.get("cand_" + _cid)) || "null"); } catch (e) {}
@@ -4350,10 +4359,10 @@ const najSat = (name) => '/img/sat_' + najSlug(name);
 const NAJ_FONTS = '<link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">';
 // v51 — shared bottom tab bar: one app, four rooms. Inject NAJ_NAV_CSS in <style> and najNav() before </body>.
 const NAJ_NAV_CSS = '.nnav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-around;align-items:center;background:rgba(12,20,19,.93);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-top:1px solid #24352F;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.nnav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8FA39B;font-size:.58rem;font-family:"IBM Plex Mono",monospace;letter-spacing:.05em;-webkit-tap-highlight-color:transparent}.nnav a svg{width:19px;height:19px}.nnav a.on{color:#C5A56A}';
-const najNav = (key, active, rk) => {   // v152.2 - rk: a private page carries the residents key on its MAP and TWIN tabs only, never to the other rooms
+const najNav = (key, active, rk) => {   // v208 (Kendall, 21 Sep 2026) - rk rides EVERY tab: pinned to MAP and TWIN it vanished the moment Naj tapped another room, and this app has two users
   const k = encodeURIComponent(key || "");
   const items = [["find", "/find", "search", "FIND"], ["homes", "/home", "grid", "HOMES"], ["pulse", "/market", "trend", "PULSE"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["map", "/map", "pin", "MAP"], ["plans", "/plans", "plan", "PLANS"], ["versus", "/versus", "buildings", "VS"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"], ["clock", "/clock", "clock", "TIME"]];   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
-  return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + (rk && (i[0] === "map" || i[0] === "twin") ? '&rk=' + encodeURIComponent(rk) : '') + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>'
+  return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + (rk ? '&rk=' + encodeURIComponent(rk) : '') + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>'
     + (rk && i[0] === "map" ? '<a' + (active === "residents" ? ' class=on' : '') + ' href="/residents?rk=' + encodeURIComponent(rk) + '">' + najIcon("people") + '<span>RESIDENTS</span></a>' : '')).join('') + '</nav>';   // v152.3 - a private page has one tap to the full residents view (Kendall, 15 Sep)
 };
 
@@ -5483,7 +5492,7 @@ async function dailyFeedTick(env, force, dry) {
   }
   await _famWrite();
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", _rows);
-  try { await feedScenes(env, angles); } catch (e) {}   // v185 - the five scene cards, made and sent by the minute tick
+  try { await feedSceneOffer(env, angles); } catch (e) {}   // v188 - the offer; she taps to have them made
   if (radar && radar.items && radar.items.length && !force) {                                   // v88 - the radar is its own tap, never inside the feed
     try { await waSend(env, env.WA_ALLOWED, "🔥 *Trend radar* - " + radar.items.length + " things people are talking about today (" + Object.keys(radar.sources || {}).filter(k => radar.sources[k]).join(" · ") + "). Open it when you want it:\n" + (env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev") + "/trends?key=" + env.READ_KEY + "\n\nSay *trend 3* and I'll draft from item 3."); } catch (e) {}
   }
@@ -5527,7 +5536,7 @@ async function feedScenes(env, angles) {
     try { await env.MEETINGS.put(jk, JSON.stringify({ scene: true, n, opt: opt.id, tid: FEED_SCENE_TIMES[(feedDayIndex() + i) % FEED_SCENE_TIMES.length] || "la", to: env.WA_ALLOWED, at: Date.now(), tries: 0,
       post, option: opt, angle: a, meKey: me, extra: [], auto: "feed" }), { expirationTtl: 2 * 86400 }); queued++; } catch (e) {}
   }
-  if (queued) { try { await waSend(env, env.WA_ALLOWED, "\u{1F4F8} Your " + (queued === 5 ? "five" : String(queued)) + " pictures are being made now. They'll arrive here over the next few minutes, each as a post and a story."); } catch (e) {} }
+  if (queued) { try { await waSend(env, env.WA_ALLOWED, "On it. Your " + (queued === 5 ? "five" : String(queued)) + " pictures are being made now - they'll arrive over the next few minutes, each as a post and a story."); } catch (e) {} }
   try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued, photo: me, backdrops: _used, times: _times }), { expirationTtl: 7 * 86400 }); } catch (e) {}
   if (_last && Array.isArray(_last.backdrops) && _used.length && _last.backdrops.join() === _used.join()) {   // v187 - say so rather than let her spot it
     try { await gcTellOwner(env, "Naj's cards today use the same backdrops as yesterday (" + _used.join(", ") + "). The rotation has run out of choices for these angles."); } catch (e) {}
@@ -5556,6 +5565,31 @@ async function feedSelfCheck(env, angles, famh) {
   try { await env.MEETINGS.put("mkt_feed_audit", JSON.stringify(rec), { expirationTtl: 14 * 86400 }); } catch (e) {}
   if (issues.length) { try { await gcTellOwner(env, "Naj's morning failed its own check before it went: " + issues.join("; ") + ". It has been sent anyway - tell me to hold these instead if you would rather she got nothing."); } catch (e) {} }
   return issues;
+}
+// v188 - SHE CHOOSES AGAIN (Naj, 21 Sep 2026: "I don't get to choose anymore, it closes created"; Kendall's answer: Azimuth
+// offers, she taps). v185 made all five cards without asking, which took away the backdrop, the light and the photo she used to
+// pick. Now the morning ends with one question. "Make all five" makes them exactly as before; "I'll choose" leaves it to her,
+// and tapping an angle still opens the old backdrop -> light -> photo walk. Nothing is made until she says so.
+async function feedSceneOffer(env, angles) {
+  if (env.FEED_SCENES !== "on" || !env.WA_ALLOWED) return false;
+  if (await env.MEETINGS.get("feed_scenes_off")) return false;
+  const own = angles.filter(a => !a.campaign).slice(0, 5);
+  if (!own.length) return false;
+  try { await env.MEETINGS.put("feed_scene_offer", JSON.stringify({ at: Date.now(), angles: own }), { expirationTtl: 2 * 86400 }); } catch (e) {}
+  const r = await waSendButtons(env, env.WA_ALLOWED,
+    "\u{1F4F8} Want the pictures? I can make all " + (own.length === 5 ? "five" : String(own.length)) + " now - you in each place, a post and a story each - or you pick them one at a time.",
+    [{ id: "fs:all", title: "Make all " + (own.length === 5 ? "five" : String(own.length)) }, { id: "fs:pick", title: "I'll choose" }]);
+  return !!(r && r.ok);
+}
+async function feedSceneOfferButton(env, from, bid) {
+  if (bid !== "fs:all" && bid !== "fs:pick") return false;
+  if (bid === "fs:pick") { await waSend(env, from, "Yours to choose. Tap an angle above and I'll show you the backdrops, the light and which photo of you."); return true; }
+  let o = null; try { o = JSON.parse((await env.MEETINGS.get("feed_scene_offer")) || "null"); } catch (e) {}
+  if (!o || !Array.isArray(o.angles) || !o.angles.length) { await waSend(env, from, "Those angles have gone - say \u201cfeed\u201d and I'll bring today's again."); return true; }
+  const n = await feedScenes(env, o.angles);
+  await env.MEETINGS.delete("feed_scene_offer");
+  if (!n) await waSend(env, from, "I couldn't start them just now - tap an angle and I'll make that one with you.");
+  return true;
 }
 // v186 - THE 24-HOUR WINDOW (Naj, 21 Sep 2026: "I didn't receive anything this morning"). WhatsApp only delivers free-form
 // messages within 24 hours of HER last message. She last wrote on 19 Sep, so on 21 Sep all ten of the morning's messages - five
@@ -5599,7 +5633,7 @@ async function feedFlush(env) {
       await env.MEETINGS.put("mkt_feed_famhist", JSON.stringify(p.famRows.map(r => Object.assign({}, r, { d: today })).concat(keep).slice(0, 240)), { expirationTtl: 30 * 86400 }); } catch (e) {}
   }
   if (Array.isArray(p.rows) && p.rows.length) { try { await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", p.rows); } catch (e) {} }
-  try { if (Array.isArray(p.angles) && p.angles.length) await feedScenes(env, p.angles); } catch (e) {}
+  try { if (Array.isArray(p.angles) && p.angles.length) await feedSceneOffer(env, p.angles); } catch (e) {}   // v188 - a held morning offers too
   try { await gcTellOwner(env, "Naj wrote back, so the morning I was holding has gone to her" + (r1 && r1.ok ? "" : " (the text was refused: " + ((r1 && r1.status) || "?") + ")") + "."); } catch (e) {}
   return { flushed: !!(r1 && r1.ok) };
 }
@@ -9520,7 +9554,7 @@ function stkMark(pp,r){const g=pp.querySelector("#fmark"),sv=pp.querySelector("#
 // the building panel gains a third view, Floor layout (Kendall, 19 Sep: "i prefer this to be the overall floor layout"), and opens on it when the building has a stack
 function stkPlateFetch(i,then){if(STKPLID===String(i)){then();return}STKPLID=String(i);STKPL=null;
   fetch("/img/plate_"+window.__twinDistrict+"_"+i+"?t="+Math.floor(Date.now()/600000)).then(r=>r.ok?r.json():null)
-    .then(j=>{STKPL=(j&&(j.building||((j.buildings||{})[String(i)])))||null;then()}).catch(()=>then())}
+    .then(j=>{STKPL=(j&&(j.building||((j.buildings||{})[String(i)])))||null;if(STKPL&&j&&j.note&&!STKPL.note)STKPL.note=j.note;then()}).catch(()=>then())}
 // the same drawing the building page uses, in the panel's width
 function stkPlateSVG(f){
   if(!STKPL||!STKPL.floors)return"";
@@ -9546,7 +9580,8 @@ function stkPlateSVG(f){
   for(const b of p.blocks||[])h+='<polygon points="'+T(b[1])+'" fill="'+(b[0]==="lift"?"#5B6662":"#9A95D6")+'" stroke="#0E1613" stroke-width="1.3"/>';
   if(!p.cells.length)h+='<text x="'+W/2+'" y="'+(H/2+5).toFixed(1)+'" font-size="17" letter-spacing="3" text-anchor="middle" fill="#E8E4D8" fill-opacity=".8">'+stkEsc(String(p.use).toUpperCase())+"</text>";
   h+='<g transform="translate('+(W-40)+',38) rotate('+(-STKPL.north).toFixed(1)+')"><circle r="17" fill="#0E1613" fill-opacity=".6" stroke="#C5A56A" stroke-opacity=".6"/><path d="M0,-12 L5,7 L0,3 L-5,7 Z" fill="#C5A56A"/><text y="-21" font-size="11" fill="#C5A56A" text-anchor="middle">N</text></g></svg>';
-  const says={units:"The unit numbers, types and sizes are the Land Department units register's, one row per unit; they are laid round the facade in unit-number order.",municipality:"How many homes this floor carries is the Municipality's count for the floor, shared between the types the Land Department register puts on it.",register:"How many homes of each type this floor carries is the Land Department register's units for the type, spread evenly over the floors the register gives it."}[p.basis]||"";
+  const says={units:"The unit numbers, types and sizes are the Land Department units register's, one row per unit; they are laid round the facade in unit-number order.",municipality:"How many homes this floor carries is the Municipality's count for the floor, shared between the types the Land Department register puts on it.",register:"How many homes of each type this floor carries is the Land Department register's units for the type, spread evenly over the floors the register gives it.",revit:"The unit numbers, types and sizes are the developer's Revit model of this building, floor by floor, and each flat is drawn where the model puts it."}[p.basis]||"";
+  if(p.basis==="revit")return h+'<div class=fbas><b>The built layout.</b> '+says+" "+stkEsc(STKPL.note||"The outline is this building's surveyed footprint.")+" What is not claimed is which way a flat faces: the model's own labels are to project north, which is not true north here."+"</div>";
   return h+'<div class=fbas><b>Indicative layout.</b> The outline is this building’s surveyed footprint; the sizes of the homes against each other are the register’s. '+says+(p.basis!=="units"?" No unit numbers are shown: the units register does not cover this building well enough.":"")+(p.dm_use?" The Municipality records this floor as "+stkEsc(p.dm_use)+"; the Land Department register lists these homes on it, so they are drawn.":"")+(p.tower?" The footprint (dashed) is far larger than the floor the register describes, so it is read as a podium.":"")+" Where each home sits, and where the lifts and stairs are, is not published for this building.</div>"}
 function stkPanel(){const pp=document.getElementById("ppanel");if(!pp||!STKSEL||!pp.classList.contains("on"))return;
   const i=[...STKSEL].sort((a,b)=>STK.buildings_by_id[b].floors.length-STK.buildings_by_id[a].floors.length)[0],r=STK.buildings_by_id[i];

@@ -44,7 +44,8 @@ const ok = (c, m) => { if (c) { pass++; console.log("  ok - " + m); } else { fai
 
 // The app pages a client may open - stated here on purpose, apart from CLIENT_PATHS in the worker, so widening the client surface takes two edits.
 const APP_PAGES = ["/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
-const APP_PREFIXES = ["/skyline/", "/area/", "/report/", "/building/"];   // v186 (twin-floor-stack): the building page is client-openable, like the twin and the area report
+// v187 put the building page on the client surface but never widened it here, so the sweep counted /building/ an escalation.
+const APP_PREFIXES = ["/skyline/", "/area/", "/report/", "/building/"];
 const isAppPage = (p) => APP_PAGES.includes(p.split("?")[0]) || APP_PREFIXES.some((x) => p.indexOf(x) === 0);
 // Services a client key must never make the worker call: WhatsApp, Microsoft mail, Google, Instagram/LinkedIn, the language models, Mistral.
 const PRIVATE_SERVICES = /graph\.facebook\.com|graph\.microsoft\.com|login\.microsoftonline|googleapis\.com|instagram\.com|linkedin\.com|api\.anthropic\.com|api\.openai\.com|api\.mistral\.ai|api\.telegram\.org/;
@@ -65,7 +66,7 @@ const src = fs.readdirSync(_srcDir).filter((f) => f.endsWith(".js")).sort()
 const exact = new Set(["/", "/no_such_route"]), prefixes = new Set();
 for (const m of src.matchAll(/(?:url\.pathname|\bp)\s*===\s*"(\/[A-Za-z0-9_\-./]*)"/g)) exact.add(m[1]);
 for (const m of src.matchAll(/(?:url\.pathname|\bp)\.(?:indexOf|startsWith)\("(\/[A-Za-z0-9_\-./]*)"\)/g)) prefixes.add(m[1]);
-const SAMPLE = { "/building/": "/building/businessbay/1", "/skyline/": "/skyline/jltnorth", "/area/": "/area/Business%20Bay", "/report/": "/report/businessbay", "/r/": "/r/0123456789abcdef01234567", "/avail": "/avail?d=imtiaz" };
+const SAMPLE = { "/skyline/": "/skyline/jltnorth", "/area/": "/area/Business%20Bay", "/report/": "/report/businessbay", "/r/": "/r/0123456789abcdef01234567", "/avail": "/avail?d=imtiaz", "/building/": "/building/businessbay/0" };
 const routes = [...new Set([...exact].map((p) => SAMPLE[p] || p).concat([...prefixes].map((p) => SAMPLE[p] || p + "sample")))].sort();
 ok(routes.length > 120 && routes.includes("/board") && routes.includes("/announce") && routes.includes("/gdrive/put_text") && routes.includes("/ig_status") && routes.includes("/gcal/status"),
   "routes found in the source: " + routes.length + " (including /board, /announce, /gdrive/put_text, /ig_status, /gcal/status)");
