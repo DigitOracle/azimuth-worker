@@ -51,10 +51,12 @@ function stkDraw(i,runs,gap){const ms=(STKM.get(i)||[]).map(x=>MESHES[x]).filter
     const cp=[new THREE.Plane(new THREE.Vector3(0,1,0),-lo),new THREE.Plane(new THREE.Vector3(0,-1,0),hi)];
     // a v3 tower is several meshes (walls, slab bands, crown) sharing faces; each gets its own small depth offset so they do not
     // fight for the same pixels once they are one colour
+    // OVER the facade, never instead of it: a chosen floor reads strongly, every other band is a wash you can see through
+    const strong=(q[4]||0)>=0.6,op=Math.min(q[3]===undefined?1:q[3],strong?0.82:0.46);
     ms.forEach((m,k)=>{const mt=new THREE.MeshStandardMaterial({color:q[2],emissive:q[2],emissiveIntensity:q[4]||0.14,roughness:0.62,metalness:0.02,flatShading:true,side:THREE.FrontSide,
-        transparent:q[3]<1,opacity:q[3],depthWrite:q[3]>=1,clippingPlanes:cp,polygonOffset:k>0,polygonOffsetFactor:-k,polygonOffsetUnits:-4*k});
+        transparent:true,opacity:op,depthWrite:false,clippingPlanes:cp,polygonOffset:true,polygonOffsetFactor:-1-k,polygonOffsetUnits:-4*(k+1)});
       const b=new THREE.Mesh(m.geometry,mt);b.matrixAutoUpdate=false;b.matrix.copy(m.matrixWorld);b.userData.stk={i:i,j0:q[0],j1:q[1],lo:lo,hi:hi,y0:y0,fh:h};g.add(b);bands.push(b);mats.push(mt)})}
-  ms.forEach(stkHide);scene.add(g);STKB.set(i,{g:g,mats:mats,bands:bands,ms:ms})}
+  scene.add(g);STKB.set(i,{g:g,mats:mats,bands:bands,ms:ms})}   // v215: the facade is NOT hidden any more
 function stkGhost(i){const m=MESHES[+i];if(!m||!m.visible)return;const g=new THREE.Mesh(m.geometry,STKGHOST);g.matrixAutoUpdate=false;m.updateWorldMatrix(true,false);g.matrix.copy(m.matrixWorld);stkHide(m);scene.add(g);STKG.set(i,g)}
 // consecutive floors with the same look become one band: the district view stays a few draw calls per tower
 function stkRuns(r,look){const out=[];r.floors.forEach((f,j)=>{const L=look(f,j);const p=out[out.length-1];if(p&&p[1]===j-1&&p[2]===L[0]&&p[3]===L[1]&&p[4]===L[2])p[1]=j;else out.push([j,j,L[0],L[1],L[2]])});return out}
@@ -72,9 +74,8 @@ function stkApply(){if(!STK||!MESHES||!stkMap())return;stkClear();STKSEL=null;
       const paint=()=>{own.forEach(i=>{const r=STK.buildings_by_id[i];stkDraw(i,stkRuns(r,stkLookBuilding(r)),false)});stkCount()};
       const key=own.join(",");
       if(STKTMR){clearTimeout(STKTMR);STKTMR=null}
-      // a new building: let its facade be seen before the type colours land on it. Re-applying to the same one paints now.
-      if(key!==STKLAST&&STKFLOOR<0){STKLAST=key;STKTMR=setTimeout(()=>{STKTMR=null;paint()},900)}
-      else{STKLAST=key;paint()}}
+      // v215 retired the v213 delay: the facade is no longer replaced, so there is nothing to wait for and a wait is lag.
+      STKLAST=key;paint()}
     else{STKLAST=null}
     stkCount();return}
   if(STKON){STKM.forEach((v,i)=>{if(shown(i))stkDraw(i,stkRuns(STK.buildings_by_id[i],stkLookDistrict(STK.buildings_by_id[i])),false)});MESHES.forEach((m,x)=>{if(!mine.has(x))stkGhost(x)})}
