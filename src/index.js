@@ -3345,6 +3345,7 @@ async function appFetch(request, env, ctx) {
         }
         if (msg.id) { const _mk = "wamsg_" + msg.id; if (await env.MEETINGS.get(_mk)) return new Response("ok"); await env.MEETINGS.put(_mk, "1", { expirationTtl: 3 * 86400 }); }
         try { await env.MEETINGS.put("wa_owner_last_in", new Date().toISOString(), { expirationTtl: 3 * 86400 }); } catch (e) {}   // v137 - opens ownerNotify's 24-hour window
+        try { if (await env.MEETINGS.get("mkt_feed_pending")) { const _fl = feedFlush(env); if (ctx && ctx.waitUntil) ctx.waitUntil(_fl); else await _fl; } } catch (e) {}   // v186 - she wrote back: the held morning goes now
         if (env.OWNER_TEMPLATE && env.APPROVED_SEND) {                 // v155 - approved sends: "show <ref>" and the Send / Discard buttons
           const _sm = msg.type === "text" && msg.text && String(msg.text.body || "").trim().match(/^show\s+([A-Z0-9]{6})$/i);
           if (_sm) { await sendReqShow(env, from, _sm[1].toUpperCase()); return new Response("ok"); }
@@ -4258,6 +4259,7 @@ export default {
         try { await env.MEETINGS.put("minute_tick_at", new Date().toISOString(), { expirationTtl: 86400 }); } catch (e) {}
         try { await meetingNudges(env); } catch (e) {}
         try { await picResume(env, "", 90000); } catch (e) {}
+        try { await deliveryWatch(env); } catch (e) {}   // v186 - accepted then failed is not sent
         try { await gcGuideTick(env); } catch (e) {}   // v150.1 - one follow-up if her Calendar link sits unused for twenty minutes
         try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
       })());
@@ -5428,9 +5430,14 @@ async function dailyFeedTick(env, force, dry) {
     "\n\n_✔ " + qa.note + "_" +
     "\n\nPick one from the list — or just type the numbers for several, like “" + (angles.length > 1 ? (angles.length - 1) + " and " + angles.length : "1") + "”." +
     "\nYou'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
+  const _rows = angles.slice(0, 10).map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + (a.figure || "").slice(0, 18), description: a.hook }));
+  if (!(await ownerWindowOpen(env))) {   // v186 - her window is shut: hold it, nudge her, tell Kendall. Sending now would fail silently.
+    const _h = await feedHold(env, bodyTxt, _rows, angles);
+    if (!force) { try { await env.MEETINGS.put(fk, "held", { expirationTtl: 2 * 86400 }); } catch (e) {} }
+    return;
+  }
   await waSend(env, env.WA_ALLOWED, bodyTxt);
-  await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle",
-    angles.slice(0, 10).map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + (a.figure || "").slice(0, 18), description: a.hook })));
+  await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", _rows);
   try { await feedScenes(env, angles); } catch (e) {}   // v185 - the five scene cards, made and sent by the minute tick
   if (radar && radar.items && radar.items.length && !force) {                                   // v88 - the radar is its own tap, never inside the feed
     try { await waSend(env, env.WA_ALLOWED, "🔥 *Trend radar* - " + radar.items.length + " things people are talking about today (" + Object.keys(radar.sources || {}).filter(k => radar.sources[k]).join(" · ") + "). Open it when you want it:\n" + (env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev") + "/trends?key=" + env.READ_KEY + "\n\nSay *trend 3* and I'll draft from item 3."); } catch (e) {}
@@ -5468,6 +5475,59 @@ async function feedScenes(env, angles) {
   if (queued) { try { await waSend(env, env.WA_ALLOWED, "\u{1F4F8} Your " + (queued === 5 ? "five" : String(queued)) + " pictures are being made now. They'll arrive here over the next few minutes, each as a post and a story."); } catch (e) {} }
   try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued, photo: me }), { expirationTtl: 7 * 86400 }); } catch (e) {}
   return queued;
+}
+// v186 - THE 24-HOUR WINDOW (Naj, 21 Sep 2026: "I didn't receive anything this morning"). WhatsApp only delivers free-form
+// messages within 24 hours of HER last message. She last wrote on 19 Sep, so on 21 Sep all ten of the morning's messages - five
+// angles and five cards - were accepted by Meta and then failed with "Re-engagement message". Nothing in the app noticed: the QA
+// line said "5 sent" and the 06:20 watch read it as a healthy morning. Now: the feed checks the window BEFORE it sends; when it
+// is shut it HOLDS the morning, nudges her with the approved template (the only message Meta delivers outside the window),
+// tells Kendall, and flushes the moment she writes back. And every morning's receipts are checked, so a failed delivery is
+// never read as a send.
+const FEED_HOLD_MAX_MS = 20 * 3600 * 1000;   // a held morning older than this is stale: it is dropped rather than sent late
+async function feedNudge(env, head, body) {
+  if (!env.FEED_TEMPLATE || !env.WA_ALLOWED) return { ok: false, why: "no template configured" };
+  try {
+    const r = await waSendTemplate(env, env.WA_ALLOWED, env.FEED_TEMPLATE, env.FEED_TEMPLATE_LANG || "en_US",
+      [String(head).replace(/\s+/g, " ").slice(0, 200), String(body).replace(/\s+/g, " ").slice(0, 900)]);
+    return { ok: !!(r && r.ok), status: r && r.status };
+  } catch (e) { return { ok: false, why: String((e && e.message) || e).slice(0, 120) }; }
+}
+async function feedHold(env, bodyTxt, rows, angles) {
+  const rec = { at: Date.now(), at_gst: gstNowIso(), bodyTxt, rows, angles };
+  try { await env.MEETINGS.put("mkt_feed_pending", JSON.stringify(rec), { expirationTtl: 3 * 86400 }); } catch (e) {}
+  const n = await feedNudge(env, "Your five for today are ready", "Reply with anything here and I'll send them straight over, with your pictures.");
+  try { await gcTellOwner(env, "Naj's morning is HELD: her 24-hour WhatsApp window is shut (she last wrote " + String((await env.MEETINGS.get("wa_owner_last_in")) || "?").slice(0, 16) + "). " +
+    (n.ok ? "I've sent her the template nudge; it goes the moment she replies." : "The template nudge did NOT go (" + (n.why || n.status) + ") - she needs a message from you to reopen the window.")); } catch (e) {}
+  try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), why: "held: her 24-hour window is shut", nudge: n }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  return n;
+}
+// Her next message reopens the window: send the held morning at once, then queue its cards.
+async function feedFlush(env) {
+  let p = null; try { p = JSON.parse((await env.MEETINGS.get("mkt_feed_pending")) || "null"); } catch (e) {}
+  if (!p || !p.bodyTxt) return { flushed: false };
+  await env.MEETINGS.delete("mkt_feed_pending");
+  if (Date.now() - (p.at || 0) > FEED_HOLD_MAX_MS) {
+    try { await gcTellOwner(env, "Naj replied, but the morning I was holding for her was too old to send (" + String(p.at_gst || "").slice(0, 16) + "). She gets the next one as usual."); } catch (e) {}
+    return { flushed: false, why: "stale" };
+  }
+  const r1 = await waSend(env, env.WA_ALLOWED, p.bodyTxt);
+  if (Array.isArray(p.rows) && p.rows.length) { try { await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", p.rows); } catch (e) {} }
+  try { if (Array.isArray(p.angles) && p.angles.length) await feedScenes(env, p.angles); } catch (e) {}
+  try { await gcTellOwner(env, "Naj wrote back, so the morning I was holding has gone to her" + (r1 && r1.ok ? "" : " (the text was refused: " + ((r1 && r1.status) || "?") + ")") + "."); } catch (e) {}
+  return { flushed: !!(r1 && r1.ok) };
+}
+// Every send is recorded in wa_outbox with its receipt. A morning that Meta accepted and then failed must never read as sent.
+async function deliveryWatch(env) {
+  let q = []; try { q = JSON.parse((await env.MEETINGS.get("wa_outbox")) || "[]"); } catch (e) {}
+  const since = Date.now() - 30 * 60000;
+  const bad = q.filter(r => r && r.state === "failed" && Date.parse(r.sent_at || 0) > since);
+  if (bad.length < 2) return { failed: bad.length };
+  const key = "mkt_delivery_alert_" + gstDateStr(new Date());
+  if (await env.MEETINGS.get(key)) return { failed: bad.length, alerted: "already" };
+  await env.MEETINGS.put(key, String(bad.length), { expirationTtl: 3 * 86400 });
+  const why = String((bad[0] && bad[0].error) || "").slice(0, 80);
+  try { await gcTellOwner(env, bad.length + " of Naj's messages were accepted by WhatsApp and then FAILED in the last half hour (" + (why || "no reason given") + "). She has not received them."); } catch (e) {}
+  return { failed: bad.length, alerted: true };
 }
 // ── v88 — TREND RADAR ─────────────────────────────────────────────────────────────
 // What people are talking about, gathered once a day and kept OUT of the feed: news feeds (Khaleej Times, Gulf News, The

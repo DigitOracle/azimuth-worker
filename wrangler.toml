@@ -110,6 +110,13 @@ RING_PARAMS = "CALLNAJ|1|meeting starting in 15 minutes"
 MINUTE_TICK = "on"
 # v185 - the five morning scene cards (Naj drawn into each place), queued after the 06:00 list and made by the minute tick (Kendall, 19 Sep 2026). Remove to switch off.
 FEED_SCENES = "on"
+# v186 - the approved template that reaches her when her 24-hour WhatsApp window is shut (21 Sep 2026: a whole morning was
+# accepted by Meta and then failed). Two body variables: the headline and the line under it. Remove to switch the nudge off.
+# v186 - where "tell Kendall" goes from her instance. It was never set, so every owner alert from azimuth-2 (the calendar
+# guide included) has been going nowhere. meeting-capture delivers it to his own WhatsApp.
+OWNER_NOTE_URL = "https://meeting-capture.digitalchemy.workers.dev/owner_note"
+FEED_TEMPLATE = "azimuth_daily"
+FEED_TEMPLATE_LANG = "en_US"
 # v147 - scene pictures in her chat (Kendall approved with Najjuko, 13 Sep 2026): backdrop -> time of day -> photo -> Make it / Change it.
 SCENE_PICTURES = "on"
 # v148 - scene pictures drawn with GPT Image 2.5 (Kendall, 13 Sep 2026: "use gpt 2.5"). Remove to go back to gpt-image-1.
