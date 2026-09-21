@@ -249,11 +249,17 @@ table.reg td:first-child,table.reg th:first-child{text-align:left}
 .dcell:hover .dnum{fill:var(--gold)}
 .fsel2{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid var(--line);border-radius:8px;color:var(--text);font:500 .66rem 'IBM Plex Mono',monospace;padding:7px 10px;cursor:pointer}.fsel2:hover{border-color:var(--gold)}.fsel2 option{background:#0C1413}
 #plansbtn{display:block;width:100%;border:1px solid var(--line);border-radius:99px;padding:6px 0;margin-top:8px;background:transparent;color:var(--gold);font:600 .56rem 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}#plansbtn:hover{background:rgba(197,165,106,.12)}
-.dossier{display:flex;align-items:baseline;gap:8px;margin:10px 0 2px;padding:9px 12px;border:1px solid var(--gold);
-border-radius:10px;background:rgba(197,165,106,.12);text-decoration:none;color:var(--gold)}
-.dossier:hover{background:rgba(197,165,106,.22)}
-.dossier b{font:600 .62rem 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase}
-.dossier span{font:400 .56rem 'IBM Plex Mono',monospace;color:var(--mut)}
+.dossier{margin:10px 0 2px;padding:9px 12px;border:1px solid var(--gold);border-radius:10px;background:rgba(197,165,106,.1)}
+.dossier .dh{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.dossier b{font:600 .62rem 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+.dossier .dh span{font:400 .56rem 'IBM Plex Mono',monospace;color:var(--mut)}
+.dacts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.da{flex:1 1 auto;min-width:78px;text-align:center;padding:7px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer;
+text-decoration:none;color:var(--text);font:600 .54rem 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase}
+.da:hover{border-color:var(--gold);color:var(--gold);background:rgba(197,165,106,.12)}
+.dnote{font:400 .5rem 'IBM Plex Mono',monospace;color:var(--mut)}
+.qrw{background:#F6F3EC;padding:10px;border-radius:10px}.qrw svg{display:block;width:min(62vw,300px);height:auto}
+.qrn{font:400 .54rem 'IBM Plex Mono',monospace;color:var(--mut)}
 #dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
 background:rgba(197,165,106,.1);color:var(--gold);text-decoration:none;font:600 .56rem 'IBM Plex Mono',monospace;
 letter-spacing:.12em;text-transform:uppercase}#dossbtn:hover{background:rgba(197,165,106,.22)}
@@ -637,6 +643,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         : '<div class=src>No unit type is registered against this floor.</div>') +
       '<div class=acts><a class=w target=_blank href="https://wa.me/?text=' + msgTxt + '">Send by WhatsApp</a>' +
       (D.plans ? '<a class=c id=flplans>The plans</a>' : '<a class=c href="/find?key=' + encodeURIComponent(KEY) + "&q=" + encodeURIComponent(D.name) + '">Look it up in Find</a>') + "</div>");
+    wireDossier();
     const fl2 = $("flplans");
     if (fl2) fl2.onclick = () => plansCard();
     const sel = $("fsel");
@@ -803,14 +810,56 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     pick(Math.max(u.j0, Math.min(u.j1, Math.floor((h.point.y - y0) / fh))));
   });
 
+  // The dossier and the four ways to hand it over. Share links carry the CLIENT key the worker passed down, never the key
+  // that opened this page - the owner browses with his own and must not post it into WhatsApp.
+  function dossierUrl(share) {
+    const k = share ? (D.shareKey || "") : K;
+    return location.origin + "/sheet/" + encodeURIComponent(D.dossier.slug) + ".pdf" + (k ? "?key=" + encodeURIComponent(k) : "");
+  }
+  function dossierBlock() {
+    const pp = D.dossier.pages ? " \u00b7 " + D.dossier.pages + " pages" : "";
+    const can = !!D.shareKey;
+    return '<div class=dossier><div class=dh><b>The dossier</b><span>everything on this page as a PDF' + pp + "</span></div>" +
+      '<div class=dacts>' +
+      '<a class=da target=_blank rel=noopener href="' + esc(dossierUrl(false)) + '" download>Download</a>' +
+      (can ? '<a class=da id=dwa>WhatsApp</a><a class=da id=dmail>Email</a><a class=da id=dqr>QR code</a>' :
+        '<span class=dnote>sharing needs a client key on this worker</span>') + "</div></div>";
+  }
+  function wireDossier() {
+    if (!D.dossier || !D.shareKey) return;
+    const u = dossierUrl(true), line = D.name + (D.district ? ", " + D.district : "") + " - the building in full";
+    const wa = $("dwa");
+    if (wa) { wa.href = "https://wa.me/?text=" + encodeURIComponent(line + "\n" + u); wa.target = "_blank"; wa.rel = "noopener"; }
+    const em = $("dmail");
+    if (em) em.href = "mailto:?subject=" + encodeURIComponent(line) + "&body=" + encodeURIComponent(line + "\n\n" + u);
+    const qr = $("dqr");
+    if (qr) qr.onclick = () => showQR(u, line);
+  }
+  // rendered here, in the browser: the link is never handed to a third party to be turned into a picture
+  function showQR(url, label) {
+    const draw = () => {
+      const q = window.qrcode(0, "M"); q.addData(url); q.make();
+      let lb = $("lbx");
+      if (!lb) { lb = document.createElement("div"); lb.id = "lbx"; document.body.appendChild(lb); }
+      lb.innerHTML = '<div class=qrw>' + q.createSvgTag({ cellSize: 6, margin: 4, scalable: true }) + "</div><b>" + esc(label) +
+        '</b><span class=qrn>scan to open the dossier</span>';
+      lb.style.display = "flex";
+      lb.onclick = () => { lb.style.display = "none"; };
+    };
+    if (window.qrcode) return draw();
+    const sc = document.createElement("script");
+    sc.src = "https://unpkg.com/qrcode-generator@1.4.4/qrcode.js";
+    sc.onload = draw;
+    sc.onerror = () => { const l = $("dqr"); if (l) l.textContent = "QR needs a connection"; };
+    document.head.appendChild(sc);
+  }
+
   $("about").onclick = () => {
     const s = D.sales || {};
     open_('<div class=t>' + esc(D.district) + "</div><h2>" + esc(D.name) + "</h2>" +
       (D.grade ? '<span class="pill n">' + esc(String(D.grade).toLowerCase().replace(/_/g, " ")) + "</span>" : "") +
       // the whole building as one document, to keep or to send: at the top of the card about this building
-      (D.dossier ? '<a class=dossier target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
-        '"><b>The dossier</b><span>everything on this page as a PDF' + (D.dossier.pages ? " \u00b7 " + D.dossier.pages + " pages" : "") +
-        "</span></a>" : "") +
+      (D.dossier ? dossierBlock() : "") +
       (D.project ? "<h3>Construction · the register</h3>" +
         '<div class=row><span>' + esc(D.project.name || "this project") + (D.project.master ? "<br><small>" + esc(D.project.master) + "</small>" : "") +
           "</span><span>" + esc(String(D.project.status || "").toLowerCase() || "—") + "</span></div>" +

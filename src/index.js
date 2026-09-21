@@ -3092,21 +3092,15 @@ async function appFetch(request, env, ctx) {
         const _pl = await _get("plate_" + _bs + "_" + _bi);   // the indicative floor plates, one key per building
         const _bd = (_st && _um && _bi) ? buildingData(_bs, _bi, _st, _um, _bf, _ac, _pp, _bn, _px, _uu, _pl) : null;
         if (!_bd) return new Response("no register record for this building yet", { status: 404 });
-        // the dossier PDF: hers to pull and forward, so it is offered only to the owner key and only when one has been built
+        // the dossier PDF, offered whenever one has been built. It was owner-only when v207 shipped, because the route was;
+        // Kendall opened b_* dossiers to a client key (v212), so the button follows - a client could reach the file and not
+        // see the way to it. The named client fact sheets stay owner-only, route and all.
         try {
-          const _kk = url.searchParams.get("key") || "";
-          if (env.READ_KEY && ctEq(_kk, env.READ_KEY)) {
-            const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
-            if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
-          }
-        } catch (e) {}
-        // the dossier PDF: hers to pull and forward, so it is offered only to the owner key and only when one has been built
-        try {
-          const _kk = url.searchParams.get("key") || "";
-          if (env.READ_KEY && ctEq(_kk, env.READ_KEY)) {
-            const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
-            if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
-          }
+          const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
+          if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
+          // what a shared link may carry. NEVER the key that opened this page: the owner browses with READ_KEY and a
+          // WhatsApp share built from it would hand the owner key to the recipient.
+          if (_bd.dossier) _bd.shareKey = clientKeysOf(env)[0] || "";
         } catch (e) {}
         return clientResp(env, url, buildingPageHtml(_bd, url.searchParams.get("key") || "", residentsKeyOf(env, url)),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
@@ -6632,6 +6626,9 @@ const STACK_CSS = ''
   + '.hp{position:relative;width:100%;background:rgba(19,31,29,.97);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.35)}'
   + '.hh{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}.hh b{color:var(--text);font-weight:500;letter-spacing:.03em;text-transform:none;font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hh i{font-style:normal;color:var(--mut);transition:transform .2s}.hp.on .hh i{transform:rotate(180deg)}'
   + '.hbody{display:none;padding:2px 12px 10px;border-top:1px solid var(--line)}.hp.on .hbody{display:block}'
+  + '.hx{display:none}.hp.on .hx{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;margin:-6px -6px -6px 6px;'
+  + '  border-radius:8px;color:var(--mut);font-style:normal;font-size:.9rem;cursor:pointer;flex:none}'
+  + '.hp.on .hx:hover{color:var(--gold);background:rgba(197,165,106,.14)}'
   + '.hrow{display:grid;grid-template-columns:1fr;gap:4px;padding:7px 0}.hrow label{font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);display:flex;justify-content:space-between;gap:8px}.hrow label b{color:var(--gold);font-weight:500;font-size:.68rem;letter-spacing:0;text-transform:none}'
   + '.hfoot{display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.06em;text-transform:uppercase}.hfoot a{color:var(--gold);cursor:pointer}.hfoot a#hclear{color:var(--mut)}'
   + '.dual{position:relative;height:28px}.dual .band{position:absolute;top:12px;height:4px;background:var(--gold);border-radius:2px;pointer-events:none;opacity:.9}.dual input{position:absolute;left:0;right:0;top:0;width:100%;margin:0;background:transparent;pointer-events:none;-webkit-appearance:none;appearance:none;height:28px}.dual input::-webkit-slider-runnable-track{height:4px;background:var(--line);border-radius:2px}.dual input::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:20px;height:20px;border-radius:50%;background:var(--gold);border:2px solid #0C1413;margin-top:-8px;cursor:pointer}.dual input::-moz-range-thumb{pointer-events:auto;width:18px;height:18px;border-radius:50%;background:var(--gold);border:2px solid #0C1413;cursor:pointer}.dual input::-moz-range-track{height:4px;background:var(--line)}'
@@ -6725,6 +6722,13 @@ const HOMES_CORE_JS = ''
 const HOMES_WIRE_JS = ''
   + '(function(){var hp=document.getElementById("hp"),hh=document.getElementById("hh");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});'
   + '  hh.onclick=function(){var open=!hp.classList.contains("on");if(open)window.__stackOpen(hp);hp.classList.toggle("on",open);if(open&&!HB.on){HB.on=true;drawHomes()}};'
+  // v219 - an X on every panel in the stack, and on a phone the stack yields to the detail panel
+  + '  document.querySelectorAll(".hstack .hp").forEach(function(p){var h=p.querySelector(".hh");if(!h||h.querySelector(".hx"))return;'
+  + '    var x=document.createElement("u");x.className="hx";x.textContent="✕";x.title="close";'
+  + '    x.onclick=function(ev){ev.stopPropagation();p.classList.remove("on")};h.appendChild(x)});'
+  + '  var dp=document.getElementById("panel");'
+  + '  if(dp&&window.MutationObserver)new MutationObserver(function(){if(innerWidth<=640&&dp.classList.contains("on"))'
+  + '    document.querySelectorAll(".hstack .hp.on").forEach(function(q){q.classList.remove("on")})}).observe(dp,{attributes:true,attributeFilter:["class"]});'
   + '  (function(){var bp=document.getElementById("bandp"),bb=document.getElementById("bandb");if(bp){bp.style.left="16.7%";bp.style.width="33.3%"}if(bb){bb.style.left="16.7%";bb.style.width="33.3%"}})();'
   + '  document.getElementById("hclear").onclick=function(){HB.on=false;HB.lo=10;HB.hi=30;HB.blo=1;HB.bhi=3;HB.type="any";HB.beach=false;HB.hbeach=false;HB.live=false;var _lt=document.getElementById("hlivet");if(_lt)_lt.classList.remove("on");[["hlo",10],["hhi",30],["hblo",1],["hbhi",3]].forEach(function(x){document.getElementById(x[0]).value=x[1]});hp.querySelectorAll(".seg button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-t")==="any")});drawHomes();document.getElementById("hres").textContent="set a budget";hp.classList.remove("on")};'
   + '  [["hlo","lo"],["hhi","hi"],["hblo","blo"],["hbhi","bhi"]].forEach(function(x){var el=document.getElementById(x[0]);el.oninput=function(){HB[x[1]]=+el.value;HB.on=true;drawHomes()}});'
@@ -6970,6 +6974,7 @@ const MAP_CHROME_JS = ''
   + '  var hasB=!!(hm||ur);if(PTAB==null)PTAB=hasB?\'b\':\'a\';var tab=(PTAB===\'b\'&&!hasB)?\'a\':PTAB;'
   + '  var tabs=\'<div class=ptabs><button data-t=b class="\'+(tab===\'b\'?\'on\':\'\')+\'">the building</button><button data-t=a class="\'+(tab===\'a\'?\'on\':\'\')+\'">around it</button></div>\';'
   + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+esc(title)+\'</div><div class=ps>\'+esc(line)+\'</div>\'+(wl?\'<div class=ps style="color:var(--gold)">waterfront \u00b7 \'+esc(wl)+\'</div>\':"")+tabs+(tab===\'b\'?bld:body)+(vv?videoHtml(vv):"");'
+  + '  el.querySelectorAll(".nb").forEach(function(r){r.onclick=function(){var x=near[+r.getAttribute("data-ix")];if(x)openAmenity(x[1],function(){openPanel(sel)})}});'   // v221 - these rows carried a data-ix and no handler: they looked exactly like the .nk rows, which open
   + '  el.classList.add("on");document.getElementById("px").onclick=function(){el.classList.remove("on");SEL=null;setSel(null);setNear([]);drawAm();hint();if(window.__onClear)try{window.__onClear()}catch(e){}};bindNext(el);el.querySelectorAll(\'.ptabs button\').forEach(function(b){b.onclick=function(){PTAB=b.getAttribute(\'data-t\');openPanel(sel)}});'
   + '  var _sel=sel;el.querySelectorAll(".nb").forEach(function(r){r.style.cursor="pointer";r.onclick=function(){var x=near[+r.getAttribute("data-ix")][1];openAmenity(x,function(){openPanel(_sel)})}});'
   + '  document.getElementById("hint").textContent="";}'
@@ -8548,7 +8553,7 @@ ${najNav(key, "twin")}
 }
 // v86 - twin context. Model tiles (a district split for the 5 MB budget) name themselves and point at the community polygon of their parent;
 // corridors group the rail into five doors instead of one long alphabetical row.
-const TWIN_TILE_NAME = { jltnorth: "JLT \u00b7 North (the towers)", jltsouth: "JLT \u00b7 South (Islands & Park)" };
+const TWIN_TILE_NAME = { liwan1: "Liwan", bukadra: "Bu Kadra · Meydan Horizon", jltnorth: "JLT \u00b7 North (the towers)", jltsouth: "JLT \u00b7 South (Islands & Park)" };
 const TWIN_TILE_PARENT = { jltnorth: "althanyahfifth", jltsouth: "althanyahfifth" };
 const TWIN_CORRIDORS = ["Coast", "Downtown & Creek", "New Dubai", "Meydan & MBR", "South & Outer", "Other"];
 const TWIN_CORRIDOR = {
@@ -8602,10 +8607,10 @@ function renderCity(key, rk) {
     'const ray=new THREE.Raycaster();const m2=new THREE.Vector2();let hot=-1;const tip=document.getElementById("tip");',
     'function pick(ev){const rct=canvas.getBoundingClientRect();m2.x=((ev.clientX-rct.left)/rct.width)*2-1;m2.y=-((ev.clientY-rct.top)/rct.height)*2+1;ray.setFromCamera(m2,cam);const hit=ray.intersectObject(mesh,false)[0];return hit?di[hit.instanceId]:-1}',
     'canvas.addEventListener("pointermove",ev=>{const ix=pick(ev);if(ix===hot)return;hot=ix;labels.forEach((l,i)=>l.e.classList.toggle("on",i===ix));if(ix>=0){const d=D.districts[ix];tip.style.display="block";tip.innerHTML="<b>"+d.name+"</b><s>"+d.buildings.toLocaleString("en")+" buildings \\u00b7 "+d.named.toLocaleString("en")+" named"+(d.tallest?" \\u00b7 tallest "+d.tallest+" "+d.tallest_m+" m":"")+"</s><a href=\\"/skyline/"+d.slug+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")+"\\">open the twin \\u2192</a>";ctl.autoRotate=false}else{tip.style.display="none"}});',
-    'let downAt=0;canvas.addEventListener("pointerdown",()=>{downAt=Date.now()});canvas.addEventListener("pointerup",ev=>{if(Date.now()-downAt>260)return;const ix=pick(ev);if(ix>=0)flyTo(ix,true)});',
-    'let anim=null;function flyTo(ix,go){const d=D.districts[ix];const from={p:cam.position.clone(),t:ctl.target.clone()};const to={p:new THREE.Vector3(d.x+2600,2200,d.z+3200),t:new THREE.Vector3(d.x,0,d.z)};const t0=performance.now();ctl.autoRotate=false;anim={from,to,t0,ms:1600,go:go?d.slug:null}}',
+    'let downAt=0;canvas.addEventListener("pointerdown",()=>{downAt=Date.now()});canvas.addEventListener("pointerup",ev=>{if(Date.now()-downAt>260)return;const ix=pick(ev);if(ix>=0)flyTo(ix,false)});',
+    'let anim=null;function flyTo(ix,go){const d=D.districts[ix];const from={p:cam.position.clone(),t:ctl.target.clone()};const to={p:new THREE.Vector3(d.x+2600,2200,d.z+3200),t:new THREE.Vector3(d.x,0,d.z)};const t0=performance.now();ctl.autoRotate=false;anim={from,to,t0,ms:1600,go:go?d.slug:null,spin:!go}}',
     'window.__cityFilm={fly:(slug,ms)=>{const ix=D.districts.findIndex(d=>d.slug===slug);if(ix<0)return false;flyTo(ix,false);anim.ms=ms||2400;return true},orbit:(on)=>{ctl.autoRotate=!!on},open:(slug)=>{location.href="/skyline/"+slug+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")},districts:()=>D.districts.map(d=>d.slug)};',
-    'function tick(){requestAnimationFrame(tick);if(anim){const k=Math.min(1,(performance.now()-anim.t0)/anim.ms),e=k<.5?2*k*k:-1+(4-2*k)*k;cam.position.lerpVectors(anim.from.p,anim.to.p,e);ctl.target.lerpVectors(anim.from.t,anim.to.t,e);if(k>=1){const go=anim.go;anim=null;if(go)location.href="/skyline/"+go+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")}}ctl.update();',
+    'function tick(){requestAnimationFrame(tick);if(anim){const k=Math.min(1,(performance.now()-anim.t0)/anim.ms),e=k<.5?2*k*k:-1+(4-2*k)*k;cam.position.lerpVectors(anim.from.p,anim.to.p,e);ctl.target.lerpVectors(anim.from.t,anim.to.t,e);if(k>=1){const go=anim.go,spin=anim.spin;anim=null;if(go)location.href="/skyline/"+go+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"");else if(spin)ctl.autoRotate=true}}ctl.update();',
     '  const w=innerWidth,h=innerHeight;const taken=[];const order=labels.map((l,i)=>i).sort((a,b)=>labels[b].d.buildings-labels[a].d.buildings);for(const i of order){const l=labels[i];const v=l.v.clone().project(cam);let vis=v.z<1&&Math.abs(v.x)<1.05&&Math.abs(v.y)<1.05;const px=(v.x+1)/2*w,py=(1-v.y)/2*h;if(vis){const bw=l.e.offsetWidth||90,bh=22;const r={x0:px-bw/2,x1:px+bw/2,y0:py-bh,y1:py};if(!l.e.classList.contains("on")&&taken.some(t=>r.x0<t.x1&&r.x1>t.x0&&r.y0<t.y1&&r.y1>t.y0))vis=false;else taken.push(r)}l.e.style.opacity=vis?"1":"0";if(vis){l.e.style.left=px+"px";l.e.style.top=py+"px"}}ren.render(scene,cam)}tick();',
     'addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});',
     CITY_STACK_MODULE_JS,   // v152.5 - HOMES and COLOUR BY on the city
@@ -9445,10 +9450,12 @@ function stkDraw(i,runs,gap){const ms=(STKM.get(i)||[]).map(x=>MESHES[x]).filter
     const cp=[new THREE.Plane(new THREE.Vector3(0,1,0),-lo),new THREE.Plane(new THREE.Vector3(0,-1,0),hi)];
     // a v3 tower is several meshes (walls, slab bands, crown) sharing faces; each gets its own small depth offset so they do not
     // fight for the same pixels once they are one colour
+    // OVER the facade, never instead of it: a chosen floor reads strongly, every other band is a wash you can see through
+    const strong=(q[4]||0)>=0.6,op=Math.min(q[3]===undefined?1:q[3],strong?0.82:0.46);
     ms.forEach((m,k)=>{const mt=new THREE.MeshStandardMaterial({color:q[2],emissive:q[2],emissiveIntensity:q[4]||0.14,roughness:0.62,metalness:0.02,flatShading:true,side:THREE.FrontSide,
-        transparent:q[3]<1,opacity:q[3],depthWrite:q[3]>=1,clippingPlanes:cp,polygonOffset:k>0,polygonOffsetFactor:-k,polygonOffsetUnits:-4*k});
+        transparent:true,opacity:op,depthWrite:false,clippingPlanes:cp,polygonOffset:true,polygonOffsetFactor:-1-k,polygonOffsetUnits:-4*(k+1)});
       const b=new THREE.Mesh(m.geometry,mt);b.matrixAutoUpdate=false;b.matrix.copy(m.matrixWorld);b.userData.stk={i:i,j0:q[0],j1:q[1],lo:lo,hi:hi,y0:y0,fh:h};g.add(b);bands.push(b);mats.push(mt)})}
-  ms.forEach(stkHide);scene.add(g);STKB.set(i,{g:g,mats:mats,bands:bands,ms:ms})}
+  scene.add(g);STKB.set(i,{g:g,mats:mats,bands:bands,ms:ms})}   // v215: the facade is NOT hidden any more
 function stkGhost(i){const m=MESHES[+i];if(!m||!m.visible)return;const g=new THREE.Mesh(m.geometry,STKGHOST);g.matrixAutoUpdate=false;m.updateWorldMatrix(true,false);g.matrix.copy(m.matrixWorld);stkHide(m);scene.add(g);STKG.set(i,g)}
 // consecutive floors with the same look become one band: the district view stays a few draw calls per tower
 function stkRuns(r,look){const out=[];r.floors.forEach((f,j)=>{const L=look(f,j);const p=out[out.length-1];if(p&&p[1]===j-1&&p[2]===L[0]&&p[3]===L[1]&&p[4]===L[2])p[1]=j;else out.push([j,j,L[0],L[1],L[2]])});return out}
@@ -9466,9 +9473,8 @@ function stkApply(){if(!STK||!MESHES||!stkMap())return;stkClear();STKSEL=null;
       const paint=()=>{own.forEach(i=>{const r=STK.buildings_by_id[i];stkDraw(i,stkRuns(r,stkLookBuilding(r)),false)});stkCount()};
       const key=own.join(",");
       if(STKTMR){clearTimeout(STKTMR);STKTMR=null}
-      // a new building: let its facade be seen before the type colours land on it. Re-applying to the same one paints now.
-      if(key!==STKLAST&&STKFLOOR<0){STKLAST=key;STKTMR=setTimeout(()=>{STKTMR=null;paint()},900)}
-      else{STKLAST=key;paint()}}
+      // v215 retired the v213 delay: the facade is no longer replaced, so there is nothing to wait for and a wait is lag.
+      STKLAST=key;paint()}
     else{STKLAST=null}
     stkCount();return}
   if(STKON){STKM.forEach((v,i)=>{if(shown(i))stkDraw(i,stkRuns(STK.buildings_by_id[i],stkLookDistrict(STK.buildings_by_id[i])),false)});MESHES.forEach((m,x)=>{if(!mine.has(x))stkGhost(x)})}
@@ -9476,6 +9482,25 @@ function stkApply(){if(!STK||!MESHES||!stkMap())return;stkClear();STKSEL=null;
 function stkAnchor(i){return ANCH&&ANCH.anchors.find(a=>String(a.i)===String(i))}
 // tapping a building opens ITS OWN PAGE (Kendall, 20 Sep: "instead of opening a panel, it should open a new pop up or page
 // within the ecosystem") - the Symphony viewer for that building, built from the registers.
+// A tap that misses every band: the building has no register record, so nothing was drawn over it. Hit the model instead and
+// say so - silence reads as a broken page, and on a villa district almost every tap lands here.
+let STKSAY=null,STKREV=null;
+// mesh index -> footprint id, from the same nearest-footprint mapping the bands are built from
+function stkRev(){if(STKREV)return STKREV;if(!window.BYFP)return null;STKREV=new Map();
+  for(const k in window.BYFP){const a=window.BYFP[k];if(a)a.forEach(x=>STKREV.set(x,k))}return STKREV}
+function stkTapModel(ray){
+  if(!MESHES||!MESHES.length)return;
+  const vis=MESHES.filter(m=>m&&m.visible);
+  const hit=ray.intersectObjects(vis,false)[0];if(!hit)return;
+  const rev=stkRev(),ix=MESHES.indexOf(hit.object),id=rev?rev.get(ix):null;
+  if(id!=null&&STK&&STK.buildings_by_id&&STK.buildings_by_id[id]){stkOpen(id);return}
+  stkSay("No register record for this building - the Land Department reaches "+(STK&&STK.buildings_by_id?Object.keys(STK.buildings_by_id).length:0)+" buildings in this district, and this is not one of them.");
+}
+function stkSay(msg){
+  let el=document.getElementById("stksay");
+  if(!el){el=document.createElement("div");el.id="stksay";document.body.appendChild(el)}
+  el.textContent=msg;el.className="on";clearTimeout(STKSAY);STKSAY=setTimeout(()=>{el.className=""},2600);
+}
 function stkOpen(i){location.href="/building/"+encodeURIComponent(window.__twinDistrict)+"/"+encodeURIComponent(i)+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")}
 function stkCount(){const c=document.getElementById("stkc");if(!c||!STK)return;let fl=0;const hit=[];
   const ids=STKM?[...STKM.keys()]:Object.keys(STK.buildings_by_id);
@@ -9509,7 +9534,7 @@ function stkUI(){
     "#ppanel .flr{display:none}#ppanel.floors .flr{display:block}#ppanel.floors .snap,#ppanel.floors .deep,#ppanel.floors .vw{display:none!important}"+
     ".flh{font:600 .66rem 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#C5A56A;margin:2px 0 0}.flh span{color:rgba(232,228,216,.55);font-weight:500;margin-left:6px}"+
     ".fwarn{font-size:.72rem;line-height:1.45;margin:6px 0 2px;padding:7px 9px;border:1px solid rgba(217,148,112,.55);border-radius:8px;color:#E8C4A8}"+
-    ".fopen{display:block;text-align:center;margin:8px 0 6px;padding:7px 0;border:1px solid rgba(197,165,106,.5);border-radius:99px;color:#C5A56A;text-decoration:none;font:600 .58rem monospace;letter-spacing:.12em;text-transform:uppercase}.fopen:hover{background:rgba(197,165,106,.12)}"+".fsel{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid rgba(197,165,106,.35);border-radius:8px;color:#E8E4D8;font:600 .8rem Fraunces,Georgia,serif;padding:6px 10px;cursor:pointer}.fsel option{background:#0C1413;font-size:.72rem}"+".fplate svg{display:block;width:100%;height:auto;margin:2px 0 4px}"+".fstk{margin:6px 0 8px;cursor:crosshair}.fstk svg{display:block;width:100%;height:auto}.fstk text{font:500 9px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.62)}"+
+    "#stksay{position:fixed;left:50%;bottom:86px;transform:translateX(-50%) translateY(8px);z-index:30;max-width:min(520px,86vw);padding:9px 14px;border-radius:10px;background:rgba(12,20,19,.94);border:1px solid rgba(197,165,106,.45);color:#E8E4D8;font:500 .62rem/1.5 monospace;text-align:center;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s}"+"#stksay.on{opacity:1;transform:translateX(-50%) translateY(0)}"+".fopen{display:block;text-align:center;margin:8px 0 6px;padding:7px 0;border:1px solid rgba(197,165,106,.5);border-radius:99px;color:#C5A56A;text-decoration:none;font:600 .58rem monospace;letter-spacing:.12em;text-transform:uppercase}.fopen:hover{background:rgba(197,165,106,.12)}"+".fsel{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid rgba(197,165,106,.35);border-radius:8px;color:#E8E4D8;font:600 .8rem Fraunces,Georgia,serif;padding:6px 10px;cursor:pointer}.fsel option{background:#0C1413;font-size:.72rem}"+".fplate svg{display:block;width:100%;height:auto;margin:2px 0 4px}"+".fstk{margin:6px 0 8px;cursor:crosshair}.fstk svg{display:block;width:100%;height:auto}.fstk text{font:500 9px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.62)}"+
     ".fstk .tl{font:600 9.5px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.9)}.fstk .zl{fill:rgba(232,228,216,.45);font-size:8.5px}"+
     ".fdet{font-size:.78rem;line-height:1.45;margin:6px 0;padding:8px 10px;border:1px solid rgba(197,165,106,.35);border-radius:8px}.fdet b{color:#F4D58D}"+
     ".ftyp{width:100%;border-collapse:collapse;font-size:.7rem;margin-top:4px}.ftyp td,.ftyp th{padding:3px 2px;text-align:right;font-weight:400}.ftyp th{opacity:.6;font-size:.62rem}.ftyp td:first-child,.ftyp th:first-child{text-align:left}"+
@@ -9638,11 +9663,12 @@ const _stkAP=applyProj;applyProj=function(name){STKFLOOR=-1;_stkAP(name);const p
 const _stkAD=applyDev;applyDev=function(d){_stkAD(d);if(STK)stkApply()};
 // a tap on a band: inside the open building it picks the floor; anywhere else it opens that building. Raycasts ignore clipping,
 // so a hit only counts where it lands inside its own band.
-addEventListener("pointerup",e=>{if(!STK||!STKB.size||!pd||Math.hypot(e.clientX-pd[0],e.clientY-pd[1])>6)return;
+addEventListener("pointerup",e=>{if(!STK||!pd||Math.hypot(e.clientX-pd[0],e.clientY-pd[1])>6)return;
   if(e.target&&e.target.closest&&e.target.closest("#ppanel,#stkp,#devwrap,.lb,.nnav,.rail,.tog,.feat"))return;
   ptr.x=(e.clientX/innerWidth)*2-1;ptr.y=-(e.clientY/innerHeight)*2+1;ray.setFromCamera(ptr,cam);
   const all=[];STKB.forEach(b=>b.bands.forEach(x=>all.push(x)));
-  const h=ray.intersectObjects(all,false).find(x=>{const u=x.object.userData.stk;return x.point.y>=u.lo-0.05&&x.point.y<=u.hi+0.05});if(!h)return;
+  const h=ray.intersectObjects(all,false).find(x=>{const u=x.object.userData.stk;return x.point.y>=u.lo-0.05&&x.point.y<=u.hi+0.05});
+  if(!h){stkTapModel(ray);return}
   const u=h.object.userData.stk;e.stopImmediatePropagation();pd=null;
   if(STKSEL&&STKSEL.has(u.i)){stkPick(u.i,Math.max(u.j0,Math.min(u.j1,Math.floor((h.point.y-u.y0)/u.fh))));return}
   stkOpen(u.i)});

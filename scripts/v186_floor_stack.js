@@ -51,10 +51,12 @@ function stkDraw(i,runs,gap){const ms=(STKM.get(i)||[]).map(x=>MESHES[x]).filter
     const cp=[new THREE.Plane(new THREE.Vector3(0,1,0),-lo),new THREE.Plane(new THREE.Vector3(0,-1,0),hi)];
     // a v3 tower is several meshes (walls, slab bands, crown) sharing faces; each gets its own small depth offset so they do not
     // fight for the same pixels once they are one colour
+    // OVER the facade, never instead of it: a chosen floor reads strongly, every other band is a wash you can see through
+    const strong=(q[4]||0)>=0.6,op=Math.min(q[3]===undefined?1:q[3],strong?0.82:0.46);
     ms.forEach((m,k)=>{const mt=new THREE.MeshStandardMaterial({color:q[2],emissive:q[2],emissiveIntensity:q[4]||0.14,roughness:0.62,metalness:0.02,flatShading:true,side:THREE.FrontSide,
-        transparent:q[3]<1,opacity:q[3],depthWrite:q[3]>=1,clippingPlanes:cp,polygonOffset:k>0,polygonOffsetFactor:-k,polygonOffsetUnits:-4*k});
+        transparent:true,opacity:op,depthWrite:false,clippingPlanes:cp,polygonOffset:true,polygonOffsetFactor:-1-k,polygonOffsetUnits:-4*(k+1)});
       const b=new THREE.Mesh(m.geometry,mt);b.matrixAutoUpdate=false;b.matrix.copy(m.matrixWorld);b.userData.stk={i:i,j0:q[0],j1:q[1],lo:lo,hi:hi,y0:y0,fh:h};g.add(b);bands.push(b);mats.push(mt)})}
-  ms.forEach(stkHide);scene.add(g);STKB.set(i,{g:g,mats:mats,bands:bands,ms:ms})}
+  scene.add(g);STKB.set(i,{g:g,mats:mats,bands:bands,ms:ms})}   // v215: the facade is NOT hidden any more
 function stkGhost(i){const m=MESHES[+i];if(!m||!m.visible)return;const g=new THREE.Mesh(m.geometry,STKGHOST);g.matrixAutoUpdate=false;m.updateWorldMatrix(true,false);g.matrix.copy(m.matrixWorld);stkHide(m);scene.add(g);STKG.set(i,g)}
 // consecutive floors with the same look become one band: the district view stays a few draw calls per tower
 function stkRuns(r,look){const out=[];r.floors.forEach((f,j)=>{const L=look(f,j);const p=out[out.length-1];if(p&&p[1]===j-1&&p[2]===L[0]&&p[3]===L[1]&&p[4]===L[2])p[1]=j;else out.push([j,j,L[0],L[1],L[2]])});return out}
@@ -72,9 +74,8 @@ function stkApply(){if(!STK||!MESHES||!stkMap())return;stkClear();STKSEL=null;
       const paint=()=>{own.forEach(i=>{const r=STK.buildings_by_id[i];stkDraw(i,stkRuns(r,stkLookBuilding(r)),false)});stkCount()};
       const key=own.join(",");
       if(STKTMR){clearTimeout(STKTMR);STKTMR=null}
-      // a new building: let its facade be seen before the type colours land on it. Re-applying to the same one paints now.
-      if(key!==STKLAST&&STKFLOOR<0){STKLAST=key;STKTMR=setTimeout(()=>{STKTMR=null;paint()},900)}
-      else{STKLAST=key;paint()}}
+      // v215 retired the v213 delay: the facade is no longer replaced, so there is nothing to wait for and a wait is lag.
+      STKLAST=key;paint()}
     else{STKLAST=null}
     stkCount();return}
   if(STKON){STKM.forEach((v,i)=>{if(shown(i))stkDraw(i,stkRuns(STK.buildings_by_id[i],stkLookDistrict(STK.buildings_by_id[i])),false)});MESHES.forEach((m,x)=>{if(!mine.has(x))stkGhost(x)})}
@@ -82,6 +83,25 @@ function stkApply(){if(!STK||!MESHES||!stkMap())return;stkClear();STKSEL=null;
 function stkAnchor(i){return ANCH&&ANCH.anchors.find(a=>String(a.i)===String(i))}
 // tapping a building opens ITS OWN PAGE (Kendall, 20 Sep: "instead of opening a panel, it should open a new pop up or page
 // within the ecosystem") - the Symphony viewer for that building, built from the registers.
+// A tap that misses every band: the building has no register record, so nothing was drawn over it. Hit the model instead and
+// say so - silence reads as a broken page, and on a villa district almost every tap lands here.
+let STKSAY=null,STKREV=null;
+// mesh index -> footprint id, from the same nearest-footprint mapping the bands are built from
+function stkRev(){if(STKREV)return STKREV;if(!window.BYFP)return null;STKREV=new Map();
+  for(const k in window.BYFP){const a=window.BYFP[k];if(a)a.forEach(x=>STKREV.set(x,k))}return STKREV}
+function stkTapModel(ray){
+  if(!MESHES||!MESHES.length)return;
+  const vis=MESHES.filter(m=>m&&m.visible);
+  const hit=ray.intersectObjects(vis,false)[0];if(!hit)return;
+  const rev=stkRev(),ix=MESHES.indexOf(hit.object),id=rev?rev.get(ix):null;
+  if(id!=null&&STK&&STK.buildings_by_id&&STK.buildings_by_id[id]){stkOpen(id);return}
+  stkSay("No register record for this building - the Land Department reaches "+(STK&&STK.buildings_by_id?Object.keys(STK.buildings_by_id).length:0)+" buildings in this district, and this is not one of them.");
+}
+function stkSay(msg){
+  let el=document.getElementById("stksay");
+  if(!el){el=document.createElement("div");el.id="stksay";document.body.appendChild(el)}
+  el.textContent=msg;el.className="on";clearTimeout(STKSAY);STKSAY=setTimeout(()=>{el.className=""},2600);
+}
 function stkOpen(i){location.href="/building/"+encodeURIComponent(window.__twinDistrict)+"/"+encodeURIComponent(i)+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")}
 function stkCount(){const c=document.getElementById("stkc");if(!c||!STK)return;let fl=0;const hit=[];
   const ids=STKM?[...STKM.keys()]:Object.keys(STK.buildings_by_id);
@@ -115,7 +135,7 @@ function stkUI(){
     "#ppanel .flr{display:none}#ppanel.floors .flr{display:block}#ppanel.floors .snap,#ppanel.floors .deep,#ppanel.floors .vw{display:none!important}"+
     ".flh{font:600 .66rem 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#C5A56A;margin:2px 0 0}.flh span{color:rgba(232,228,216,.55);font-weight:500;margin-left:6px}"+
     ".fwarn{font-size:.72rem;line-height:1.45;margin:6px 0 2px;padding:7px 9px;border:1px solid rgba(217,148,112,.55);border-radius:8px;color:#E8C4A8}"+
-    ".fopen{display:block;text-align:center;margin:8px 0 6px;padding:7px 0;border:1px solid rgba(197,165,106,.5);border-radius:99px;color:#C5A56A;text-decoration:none;font:600 .58rem monospace;letter-spacing:.12em;text-transform:uppercase}.fopen:hover{background:rgba(197,165,106,.12)}"+".fsel{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid rgba(197,165,106,.35);border-radius:8px;color:#E8E4D8;font:600 .8rem Fraunces,Georgia,serif;padding:6px 10px;cursor:pointer}.fsel option{background:#0C1413;font-size:.72rem}"+".fplate svg{display:block;width:100%;height:auto;margin:2px 0 4px}"+".fstk{margin:6px 0 8px;cursor:crosshair}.fstk svg{display:block;width:100%;height:auto}.fstk text{font:500 9px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.62)}"+
+    "#stksay{position:fixed;left:50%;bottom:86px;transform:translateX(-50%) translateY(8px);z-index:30;max-width:min(520px,86vw);padding:9px 14px;border-radius:10px;background:rgba(12,20,19,.94);border:1px solid rgba(197,165,106,.45);color:#E8E4D8;font:500 .62rem/1.5 monospace;text-align:center;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s}"+"#stksay.on{opacity:1;transform:translateX(-50%) translateY(0)}"+".fopen{display:block;text-align:center;margin:8px 0 6px;padding:7px 0;border:1px solid rgba(197,165,106,.5);border-radius:99px;color:#C5A56A;text-decoration:none;font:600 .58rem monospace;letter-spacing:.12em;text-transform:uppercase}.fopen:hover{background:rgba(197,165,106,.12)}"+".fsel{display:block;width:100%;margin:2px 0 6px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid rgba(197,165,106,.35);border-radius:8px;color:#E8E4D8;font:600 .8rem Fraunces,Georgia,serif;padding:6px 10px;cursor:pointer}.fsel option{background:#0C1413;font-size:.72rem}"+".fplate svg{display:block;width:100%;height:auto;margin:2px 0 4px}"+".fstk{margin:6px 0 8px;cursor:crosshair}.fstk svg{display:block;width:100%;height:auto}.fstk text{font:500 9px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.62)}"+
     ".fstk .tl{font:600 9.5px 'IBM Plex Mono',monospace;fill:rgba(232,228,216,.9)}.fstk .zl{fill:rgba(232,228,216,.45);font-size:8.5px}"+
     ".fdet{font-size:.78rem;line-height:1.45;margin:6px 0;padding:8px 10px;border:1px solid rgba(197,165,106,.35);border-radius:8px}.fdet b{color:#F4D58D}"+
     ".ftyp{width:100%;border-collapse:collapse;font-size:.7rem;margin-top:4px}.ftyp td,.ftyp th{padding:3px 2px;text-align:right;font-weight:400}.ftyp th{opacity:.6;font-size:.62rem}.ftyp td:first-child,.ftyp th:first-child{text-align:left}"+
@@ -244,11 +264,12 @@ const _stkAP=applyProj;applyProj=function(name){STKFLOOR=-1;_stkAP(name);const p
 const _stkAD=applyDev;applyDev=function(d){_stkAD(d);if(STK)stkApply()};
 // a tap on a band: inside the open building it picks the floor; anywhere else it opens that building. Raycasts ignore clipping,
 // so a hit only counts where it lands inside its own band.
-addEventListener("pointerup",e=>{if(!STK||!STKB.size||!pd||Math.hypot(e.clientX-pd[0],e.clientY-pd[1])>6)return;
+addEventListener("pointerup",e=>{if(!STK||!pd||Math.hypot(e.clientX-pd[0],e.clientY-pd[1])>6)return;
   if(e.target&&e.target.closest&&e.target.closest("#ppanel,#stkp,#devwrap,.lb,.nnav,.rail,.tog,.feat"))return;
   ptr.x=(e.clientX/innerWidth)*2-1;ptr.y=-(e.clientY/innerHeight)*2+1;ray.setFromCamera(ptr,cam);
   const all=[];STKB.forEach(b=>b.bands.forEach(x=>all.push(x)));
-  const h=ray.intersectObjects(all,false).find(x=>{const u=x.object.userData.stk;return x.point.y>=u.lo-0.05&&x.point.y<=u.hi+0.05});if(!h)return;
+  const h=ray.intersectObjects(all,false).find(x=>{const u=x.object.userData.stk;return x.point.y>=u.lo-0.05&&x.point.y<=u.hi+0.05});
+  if(!h){stkTapModel(ray);return}
   const u=h.object.userData.stk;e.stopImmediatePropagation();pd=null;
   if(STKSEL&&STKSEL.has(u.i)){stkPick(u.i,Math.max(u.j0,Math.min(u.j1,Math.floor((h.point.y-u.y0)/u.fh))));return}
   stkOpen(u.i)});
