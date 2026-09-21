@@ -3100,6 +3100,14 @@ async function appFetch(request, env, ctx) {
             if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
           }
         } catch (e) {}
+        // the dossier PDF: hers to pull and forward, so it is offered only to the owner key and only when one has been built
+        try {
+          const _kk = url.searchParams.get("key") || "";
+          if (env.READ_KEY && ctEq(_kk, env.READ_KEY)) {
+            const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
+            if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
+          }
+        } catch (e) {}
         return clientResp(env, url, buildingPageHtml(_bd, url.searchParams.get("key") || "", residentsKeyOf(env, url)),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }

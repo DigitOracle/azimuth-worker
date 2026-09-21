@@ -115,6 +115,13 @@ async function district(slug) {
     }
     const html = await renderCheck(slug, row.id, store);
     if (!html) { drift.push(row.id + " (" + row.name + "): the route did not return a page"); continue; }
+    // three "The dossier" buttons shipped because a patch script was run three times and its anchor survived each insert.
+    // A control that must appear once is checked here, where a re-applied patch shows up before a person does.
+    for (const [id, label] of [["id=dossbtn", "the dossier button"], ["id=plansbtn", "the plans button"],
+                               ["id=fpick", "the floor picker"], ["class=dossier", "the dossier link on the About card"]]) {
+      const n = html.split(id).length - 1;
+      if (n > 1) drift.push(row.id + " (" + row.name + "): " + n + " copies of " + label + " on one page");
+    }
     for (const [k, label, , marker] of SECTIONS) {
       if (marker && row.has.includes(k) && !html.includes(marker)) drift.push(row.id + " (" + row.name + "): " + label + " is in the data but not on the page");
     }
