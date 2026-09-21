@@ -773,11 +773,14 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         '<div class=row><span>' + esc(D.project.name || "this project") + (D.project.master ? "<br><small>" + esc(D.project.master) + "</small>" : "") +
           "</span><span>" + esc(String(D.project.status || "").toLowerCase() || "—") + "</span></div>" +
         (D.project.pct != null ? '<div class=row><span>Percent complete</span><span>' + D.project.pct + "%</span></div>" +
-          '<div class=bar style="margin:2px 0 6px"><i style="width:' + Math.max(0, Math.min(100, D.project.pct)) + '%"></i></div>' : "") +
+          '<div class=bar style="margin:2px 0 6px"><i style="width:' + Math.max(0, Math.min(100, D.project.pct)) + '%"></i></div>' +
+          (D.project.pct < 100 && D.project.end && D.project.end < new Date().toISOString().slice(0, 10)
+            ? '<div class=src style="margin:-2px 0 6px">The register still has it building, against a due date that has passed. Percent complete is the developer\'s own filing, not a survey, and this one has not been updated.</div>' : "") : "") +
         (D.project.end ? '<div class=row><span>' + (D.project.pct === 100 ? "Completed" : "Due") + "</span><span>" + esc(D.project.end) + "</span></div>" : "") +
         (D.project.escrow ? '<div class=row><span>Escrow account</span><span dir=auto>' + esc(D.project.escrow) + "</span></div>" : "") +
         (D.project.units ? '<div class=row><span>Units in the project</span><span>' + fmt(D.project.units) +
           (D.project.registered ? " · " + fmt(D.project.registered) + " registered" : "") + "</span></div>" : "") +
+        '<div class=src>Status, percent complete, dates and the escrow account are the Land Department project register, joined to this building by property id. Percent complete and the due date are the developer\'s own reporting: across Dubai hundreds of live schemes still show a due date that has gone by.</div>' +
         (D.permit ? '<div class=row><span>' + esc(D.permit.type || "Permit") + "<br><small>the plot's permit" +
           (D.permit.new_on_plot > 1 ? ", " + D.permit.new_on_plot + " new-building permits on this plot" : "") + "</small></span><span>" +
           esc(D.permit.date || "") + (D.permit.status ? "<br><small>" + esc(D.permit.status) + "</small>" : "") + "</span></div>" : "") +
