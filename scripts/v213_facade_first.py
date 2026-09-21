@@ -10,7 +10,9 @@ building does. A NEW selection waits 900 ms, which is long enough to read a faca
 anything that re-applies to the same building - picking a floor, toggling a type - paints at once, because by then the facade
 has been seen and the delay would only feel like lag.
 
-  python scripts/v212_facade_first.py && python scripts/v186_apply.py
+  python scripts/v213_facade_first.py && python scripts/v186_apply.py
+
+(Renumbered from v212: Azimuth Rings shipped the client-tier dossier as v212 while this sat on the branch.)
 """
 import io, os
 
