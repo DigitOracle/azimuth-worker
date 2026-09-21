@@ -3087,7 +3087,10 @@ async function appFetch(request, env, ctx) {
             if (String(x.area || "").toLowerCase().replace(/[^a-z0-9]/g, "") === _bs) { _bn = x.area; break; } } } catch (e) {}
         if (!_bn) _bn = TWIN_TILE_NAME[_bs] || _bs;
         const _px = await _get("plans_index");   // the floor-plan library the /plans page serves
-        const _bd = (_st && _um && _bi) ? buildingData(_bs, _bi, _st, _um, _bf, _ac, _pp, _bn, _px) : null;
+        const _un = await _get("units_" + _bs);  // the flats the units register puts on each floor, where coverage allows it
+        const _uu = _un && _un.buildings_by_id ? _un.buildings_by_id[_bi] : null;
+        const _pl = await _get("plate_" + _bs + "_" + _bi);   // the indicative floor plates, one key per building
+        const _bd = (_st && _um && _bi) ? buildingData(_bs, _bi, _st, _um, _bf, _ac, _pp, _bn, _px, _uu, _pl) : null;
         if (!_bd) return new Response("no register record for this building yet", { status: 404 });
         return clientResp(env, url, buildingPageHtml(_bd, url.searchParams.get("key") || "", residentsKeyOf(env, url)),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
@@ -6798,7 +6801,7 @@ const MAP_CHROME_JS = ''
   + '  var vv=videoFor(title,p.district);var wl=waterLine(c);var hm=homeFor(p.name,p.district);var slug=p.district||currentDistrict();'
   + '  if(slug&&!UMXC[slug]){loadUmx(slug,function(){if(SEL===sel)openPanel(sel)})}'
   + '  var ur=umxFor(slug,p.name,hm);var twinI=(hm&&hm.i!=null&&hm.i>=0)?hm.i:null;'
-  + '  var bld=(hm?homeBlock(hm):\'\')+(ur?umxTable(ur):\'\')+((!hm&&!ur)?\'<div class=ps style="text-transform:none;letter-spacing:0;margin-top:6px">no priced record under this name in the register yet \u00b7 <a href="/find?key=\'+encodeURIComponent(KEY)+\'&q=\'+encodeURIComponent(p.name)+\'">look it up in Find \u2192</a></div>\':\'\')+(slug&&!window.__twinDistrict?\'<div class=ps style="margin-top:8px"><a href="/skyline/\'+encodeURIComponent(slug)+\'?key=\'+encodeURIComponent(KEY)+(twinI!=null?\'&b=\'+twinI:\'\')+(window.__RKQ||"")+\'">on the twin \u2192</a></div>\':\'\');'
+  + '  var bld=(hm?homeBlock(hm):\'\')+(ur?umxTable(ur):\'\')+((!hm&&!ur)?\'<div class=ps style="text-transform:none;letter-spacing:0;margin-top:6px">no priced record under this name in the register yet \u00b7 <a href="/find?key=\'+encodeURIComponent(KEY)+\'&q=\'+encodeURIComponent(p.name)+\'">look it up in Find \u2192</a></div>\':\'\')+(slug&&!window.__twinDistrict?\'<div class=ps style="margin-top:8px"><a href="/skyline/\'+encodeURIComponent(slug)+\'?key=\'+encodeURIComponent(KEY)+(twinI!=null?\'&b=\'+twinI:\'\')+(window.__RKQ||"")+\'">on the twin \u2192</a>\'+(twinI!=null?\' &nbsp;<a target=_blank rel=noopener href="/building/\'+encodeURIComponent(slug)+\'/\'+twinI+\'?key=\'+encodeURIComponent(KEY)+(window.__RKQ||"")+\'">the building page \u2197</a>\':\'\')+\'</div>\':\'\');'
   + '  var hasB=!!(hm||ur);if(PTAB==null)PTAB=hasB?\'b\':\'a\';var tab=(PTAB===\'b\'&&!hasB)?\'a\':PTAB;'
   + '  var tabs=\'<div class=ptabs><button data-t=b class="\'+(tab===\'b\'?\'on\':\'\')+\'">the building</button><button data-t=a class="\'+(tab===\'a\'?\'on\':\'\')+\'">around it</button></div>\';'
   + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+esc(title)+\'</div><div class=ps>\'+esc(line)+\'</div>\'+(wl?\'<div class=ps style="color:var(--gold)">waterfront \u00b7 \'+esc(wl)+\'</div>\':"")+tabs+(tab===\'b\'?bld:body)+(vv?videoHtml(vv):"");'

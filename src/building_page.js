@@ -21,7 +21,7 @@ const fmt = (n) => (n == null ? "" : Math.round(n).toLocaleString("en-US"));
 const aed = (n) => (n == null ? "—" : n >= 1e6 ? "AED " + (n / 1e6).toFixed(2) + "M" : "AED " + fmt(n));
 
 // ---- what the registers can say about one building ---------------------------------------------------------------------------
-export function buildingData(slug, id, stack, umx, bf, anchors, people, districtName, plansIndex) {
+export function buildingData(slug, id, stack, umx, bf, anchors, people, districtName, plansIndex, units, plate) {
   const amen = stack.district_amenities || null;
   const r = stack && stack.buildings_by_id && stack.buildings_by_id[String(id)];
   const u = umx && umx.buildings_by_id && umx.buildings_by_id[String(id)];
@@ -78,6 +78,9 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     rent: r.rent || null, project: r.project || null, land: r.land || null, districtLand: stack.district_land || null,
     sold: r.sales || null, makani: r.makani || null, permit: r.permit || null,
     nameId: r.name_id || null, verdict: r.conflict_verdict || null,
+    flats: units || null,
+    // per-building key {note, building}, or a district file {note, buildings:{id:…}} - both read the same way
+    plate: (plate && (plate.building || (plate.buildings || {})[String(id)])) || null, plateNote: (plate && plate.note) || null,          // { units, registered, cover, floors: { '13': [{u, t, c, sqft, bal, sub}] } }
     schools: amen ? (amen.schools || []).slice(0, 8) : null,
     schoolsAll: amen ? (amen.schools || []).length : 0,
     healthN: amen ? amen.health_n || 0 : 0,
@@ -227,6 +230,11 @@ table.reg td:first-child,table.reg th:first-child{text-align:left}
 .bar{height:3px;border-radius:2px;background:rgba(197,165,106,.18);overflow:hidden;margin-top:2px}.bar i{display:block;height:100%;background:var(--gold)}
 .src{font-size:.52rem;color:rgba(143,163,155,.85);line-height:1.5;margin-top:7px}
 #tab{display:none}
+.lvl{font:600 .62rem 'IBM Plex Mono',monospace;letter-spacing:.24em;color:var(--gold);text-align:center;margin:4px 0 2px}
+.lgs{display:flex;flex-wrap:wrap;gap:4px 10px;margin:6px 0 2px}
+.lg{display:inline-flex;align-items:center;gap:5px;font-size:.55rem;letter-spacing:.04em;color:rgba(232,228,216,.8)}
+.lg i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.fsel{display:block;width:100%;margin:2px 0 4px;appearance:none;-webkit-appearance:none;background:rgba(12,20,19,.6);border:1px solid var(--line);border-radius:8px;color:var(--text);font:600 1.15rem/1.2 Fraunces,Georgia,serif;padding:7px 30px 7px 10px;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23C5A56A' stroke-width='1.4'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center}.fsel:hover{border-color:var(--gold)}.fsel option{background:#0C1413;font-size:.8rem}
 .plans{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}
 .plans a{display:block;text-decoration:none;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:rgba(12,20,19,.5)}
 .plans img{display:block;width:100%;height:92px;object-fit:cover;background:#F6F3EC}
@@ -562,13 +570,16 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     const f = floors[j], ts = (f.t || []).map((i) => D.types[i]).filter(Boolean);
     const msgTxt = encodeURIComponent(D.name + " · " + label(f) + (f.k ? " · " + f.k + " " + (USEN[f.u] || f.u) : "") +
       (ts.length ? " · " + ts.map((t) => t.t).join(", ") : "") + " — from the Dubai registers, on Azimuth");
-    open_('<div class=t>' + esc(D.name) + "</div><h2>" + esc(label(f)) + "</h2>" +
+    const opts = floors.map((g, k) => '<option value="' + k + '"' + (k === j ? " selected" : "") + ">" + esc(label(g)) +
+      (g.k ? " · " + g.k + " homes" : " · " + (USEN[g.u] || g.u)) + "</option>").join("");
+    open_('<div class=t>' + esc(D.name) + '</div><select id=fsel class=fsel>' + opts + "</select>" +
       '<span class="pill ' + (isHome(f) ? "a" : "n") + '">' + (f.k ? f.k + " " + (USEN[f.u] || f.u) : USEN[f.u] || f.u) + "</span>" +
       "<dl><dt>Use</dt><dd>" + esc(USEN[f.u] || f.u) + "</dd>" +
       (f.k ? "<dt>Homes on it</dt><dd>" + f.k + "</dd>" : "") +
       (f.a ? "<dt>Area</dt><dd>" + fmt(f.a * 10.764) + " sq ft</dd>" : "") +
       "<dt>Level</dt><dd>" + esc(f.l) + " of " + N + "</dd>" +
       (openOf(j) != null ? "<dt>Sees over the roofs</dt><dd>" + (openDirs(j).length ? openDirs(j).join(" · ") : "no side yet") + "</dd>" : "") + "</dl>" +
+      flatsHtml(f) +
       plateSVG(f) +
       (ts.length ? "<h3>The types the register puts on this floor</h3>" + ts.map((t) =>
         '<div class=row><span>' + esc(t.t) + (t.sqm ? "<br><small>" + fmt(t.sqm * 10.764) + " sq ft median</small>" : "") + "</span><span>" +
@@ -577,6 +588,8 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         : '<div class=src>No unit type is registered against this floor.</div>') +
       '<div class=acts><a class=w target=_blank href="https://wa.me/?text=' + msgTxt + '">Send by WhatsApp</a>' +
       '<a class=c href="/find?key=' + encodeURIComponent(KEY) + "&q=" + encodeURIComponent(D.name) + '">Look it up in Find</a></div>');
+    const sel = $("fsel");
+    if (sel) sel.onchange = () => { const k = +sel.value; state.sel = -1; pick(k); };
   }
   const aedC = (n) => (n >= 1e6 ? "AED " + (n / 1e6).toFixed(2) + "M" : "AED " + Math.round(n).toLocaleString("en"));
   // the plate: the true outline of the building at its base, from the model's own geometry, with the floor's homes beside it.
@@ -604,22 +617,102 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     PLATE = lower.slice(0, -1).concat(upper.slice(0, -1));
     return PLATE;
   }
+  // every flat the register puts on this floor: its number, what it is, how big. Not where it sits - nothing published says that.
+  function flatsHtml(f) {
+    const F = D.flats && D.flats.floors ? D.flats.floors[String(f.n)] : null;
+    if (!F || !F.length) return "";
+    const rows = F.map((x) => '<div class=row><span><b style="color:#E8E4D8">' + esc(x.u || "?") + "</b>" +
+      (x.sub && x.sub !== "Flat" ? " <small>" + esc(x.sub) + "</small>" : "") + "</span><span>" + esc(x.t || "") +
+      (x.sqft ? " · " + fmt(x.sqft) + " sq ft" : "") + (x.bal ? "<br><small>" + fmt(x.bal) + " sq ft balcony</small>" : "") +
+      "</span></div>").join("");
+    const mismatch = f.k && f.k !== F.length
+      ? " The Municipality's floor register counts " + f.k + " home" + (f.k === 1 ? "" : "s") + " on this floor and the Land Department registers " +
+        F.length + " flats: the two registers are counted differently and neither is adjusted here."
+      : "";
+    return "<h3>The flats on this floor · " + F.length + "</h3>" + rows +
+      '<div class=src>Dubai Land Department units register: every flat registered on this floor, by its own number. ' +
+      (D.flats.cover < 100 ? "It holds " + fmt(D.flats.units) + " of this building's " + fmt(D.flats.registered) + " registered homes (" + D.flats.cover + "%). " : "") +
+      "Which side of the floor each one sits on is not published anywhere - that comes from a Revit model or the developer's floor-plan deck." + mismatch + "</div>";
+  }
+
+  // The plate, from the handover: cells round the facade at the register's sizes, cores where the plate has them, the podium
+  // dashed with the floor inside it. Positions are indicative and the caveat under it says so.
+  const SHORT = { studio: "S", "1": "1", "2": "2", "3": "3", "4": "4", office: "O", retail: "R", other: "" };
+  const USEN2 = { homes: "homes", hotel: "hotel", office: "offices", retail: "retail", services: "services" };
+  const LIFT = "#5B6662", STAIR = "#9A95D6", PLATEBG = "#2B3532", INK = "#0E1613";
+  function plateFor(f) {
+    const b = D.plate;
+    if (!b || !b.floors) return null;
+    const ix = b.floors[String(f.l)];
+    if (ix === undefined || !b.plates || !b.plates[ix]) return null;
+    return { b: b, p: b.plates[ix], labels: (b.labels || {})[String(f.l)] };
+  }
+  function plateDraw(b, p, labels) {
+    const o = b.outline, xs = [], ys = [];
+    for (let i = 0; i < o.length; i += 2) { xs.push(o[i]); ys.push(o[i + 1]); }
+    const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+    const pad = Math.max(3, (x1 - x0) * 0.03), W = 1000, k = W / (x1 - x0 + 2 * pad), H = (y1 - y0 + 2 * pad) * k;
+    const T = (a) => { let t = ""; for (let i = 0; i < a.length; i += 2) t += ((a[i] - x0 + pad) * k).toFixed(1) + "," + ((y1 - a[i + 1] + pad) * k).toFixed(1) + " "; return t; };
+    let h = '<svg class=plate viewBox="0 0 ' + W + " " + H.toFixed(0) + '">';
+    if (p.tower)
+      h += '<polygon points="' + T(o) + '" fill="' + PLATEBG + '" fill-opacity=".3" stroke="#C5A56A" stroke-opacity=".45" stroke-width="1.4" stroke-dasharray="7 6"/>' +
+           '<polygon points="' + T(p.tower) + '" fill="' + PLATEBG + '" stroke="#C5A56A" stroke-opacity=".6" stroke-width="1.8"/>';
+    else
+      h += '<polygon points="' + T(o) + '" fill="' + (p.cells.length ? PLATEBG : (COL[p.use] || PLATEBG)) + '" fill-opacity="' +
+           (p.cells.length ? 1 : 0.35) + '" stroke="#C5A56A" stroke-opacity=".6" stroke-width="1.8"/>';
+    for (const cell of p.cells) {
+      const c = cell[0], a = cell[1], idx = cell[2];
+      const lab = labels && labels[idx] !== undefined ? labels[idx] : (SHORT[c] || "");
+      h += '<polygon points="' + T(a) + '" fill="' + (COL[c] || COL.other) + '" stroke="' + INK + '" stroke-width="1.5" stroke-linejoin="round"/>';
+      let cx = 0, cy = 0, mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9;
+      for (let i = 0; i < a.length; i += 2) { cx += a[i]; cy += a[i + 1];
+        mnx = Math.min(mnx, a[i]); mxx = Math.max(mxx, a[i]); mny = Math.min(mny, a[i + 1]); mxy = Math.max(mxy, a[i + 1]); }
+      cx /= a.length / 2; cy /= a.length / 2;
+      if (Math.max(mxx - mnx, mxy - mny) * k > 16 && Math.min(mxx - mnx, mxy - mny) * k > 9)
+        h += '<text x="' + ((cx - x0 + pad) * k).toFixed(1) + '" y="' + ((y1 - cy + pad) * k + 4).toFixed(1) + '" font-size="' +
+             (labels ? Math.min(12, Math.max(7.5, k * 1.5)) : Math.min(15, Math.max(9, k * 2.2))).toFixed(1) +
+             '" font-weight="600" text-anchor="middle" fill="' + INK + '" fill-opacity=".8">' + esc(lab) + "</text>";
+    }
+    for (const bl of p.blocks || [])
+      h += '<polygon points="' + T(bl[1]) + '" fill="' + (bl[0] === "lift" ? LIFT : STAIR) + '" stroke="' + INK + '" stroke-width="1.3"/>';
+    if (!p.cells.length)
+      h += '<text x="' + W / 2 + '" y="' + (H / 2 + 5).toFixed(1) + '" font-size="17" letter-spacing="3" text-anchor="middle" fill="#E8E4D8" fill-opacity=".8">' +
+           esc((USEN2[p.use] || p.use).toUpperCase()) + "</text>";
+    h += '<g transform="translate(' + (W - 40) + ',38) rotate(' + (-b.north).toFixed(1) + ')"><circle r="17" fill="' + INK +
+         '" fill-opacity=".6" stroke="#C5A56A" stroke-opacity=".6"/><path d="M0,-12 L5,7 L0,3 L-5,7 Z" fill="#C5A56A"/>' +
+         '<text y="-21" font-size="11" fill="#C5A56A" text-anchor="middle">N</text></g></svg>';
+    return h;
+  }
+  // the words that make it defensible - the handover's, verbatim
+  function plateSays(b, p) {
+    const basis = { units: "The unit numbers, types and sizes are the Land Department units register's, one row per unit; they are laid round the facade in unit-number order.",
+      municipality: "How many homes this floor carries is the Municipality's count for the floor, shared between the types the Land Department register puts on it.",
+      register: "How many homes of each type this floor carries is the Land Department register's units for the type, spread evenly over the floors the register gives it." }[p.basis] || "";
+    let extra = "";
+    if (p.basis !== "units") extra += " No unit numbers are shown: the units register does not cover this building well enough.";
+    if (p.dm_use) extra += " The Municipality records this floor as " + esc(p.dm_use) + "; the Land Department register lists these homes on it, so they are drawn.";
+    if (p.tower) extra += " The footprint (dashed) is far larger than the floor the register describes, so it is read as a podium: the floor is drawn inside it at the size the register implies.";
+    return "<b>Indicative layout.</b> The outline is this building's surveyed footprint; the sizes of the homes against each other are the register's. " +
+      basis + extra + " Where each home sits, and where the lifts and stairs are, is not published for this building — that comes from a Revit model or the developer's stacking plan, as on The Symphony.";
+  }
   function plateSVG(f) {
-    const hull = plateOutline();
-    if (!hull || hull.length < 3) return "";
-    const xs = hull.map((p) => p[0]), zs = hull.map((p) => p[1]);
-    const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), z0 = Math.min.apply(null, zs), z1 = Math.max.apply(null, zs);
-    const w = Math.max(1, x1 - x0), h = Math.max(1, z1 - z0), pad = Math.max(w, h) * 0.12;
-    const pts = hull.map((p) => (p[0] - x0 + pad).toFixed(1) + "," + (p[1] - z0 + pad).toFixed(1)).join(" ");
-    const homes = f.k ? f.k + (f.k === 1 ? " home" : " homes") : (USEN[f.u] || f.u);
+    const got = plateFor(f);
+    if (!got) return "";
+    const b = got.b, p = got.p;
+    if (p.skip)
+      return "<h3>The floor plate</h3><div class=src>" +
+        (p.skip === "small"
+          ? "Not drawn: the register puts more homes on this floor than this footprint can hold — several buildings are probably bound to one record."
+          : "Not drawn: too many units on one floor to draw.") + "</div>";
+    const legend = (p.counts || []).map((c) => '<span class=lg><i style="background:' + (COL[c[0]] || COL.other) + '"></i>' +
+      esc({ studio: "Studio", "1": "1 bed", "2": "2 bed", "3": "3 bed", "4": "4 bed +", office: "Office", retail: "Retail" }[c[0]] || c[0]) +
+      " · " + c[1] + (c[2] ? " · " + fmt(c[2] * 10.7639) + " sq ft" : "") + "</span>").join("") +
+      ((p.blocks || []).length ? '<span class=lg><i style="background:' + LIFT + '"></i>lifts' + (b.lifts ? " · " + b.lifts : "") + "</span>" +
+        '<span class=lg><i style="background:' + STAIR + '"></i>stairs</span>' : "");
     return "<h3>The floor plate</h3>" +
-      '<svg class=plate viewBox="0 0 ' + (w + 2 * pad).toFixed(1) + " " + (h + 2 * pad).toFixed(1) + '">' +
-      '<polygon points="' + pts + '" fill="rgba(197,165,106,.14)" stroke="#C5A56A" stroke-width="' + (Math.max(w, h) / 160).toFixed(2) + '"/>' +
-      '<text x="' + ((w + 2 * pad) / 2).toFixed(1) + '" y="' + (pad * 0.72).toFixed(1) + '" text-anchor="middle" style="fill:#8FA39B" font-size="' +
-      (Math.max(w, h) / 22).toFixed(1) + '">N &#8593;</text></svg>' +
-      '<div class=src>' + esc(label(f)) + " · " + esc(homes) + (f.a ? " · " + fmt(f.a * 10.764) + " sq ft on the floor" : "") +
-      ". The outline is this building's own footprint, from the survey the model is built on. Where the walls between those homes " +
-      "run is not published: that comes from a Revit model or the developer's floor-plan deck, as on The Symphony.</div>";
+      '<div class=lvl>LEVEL ' + esc(f.l) + "</div>" + plateDraw(b, p, got.labels) +
+      (legend ? '<div class=lgs>' + legend + "</div>" : "") +
+      '<div class=src>' + plateSays(b, p) + "</div>";
   }
 
   function pick(j) { state.sel = state.sel === j ? -1 : j; paint(); if (state.sel >= 0) floorCard(state.sel); else close_(); }
