@@ -933,7 +933,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
   // v237 - the page itself, with the client key. Built from location, so it is right for every building
   // route without this file knowing any of them.
   function pageUrl(share) {
-    const k = share ? (D.shareKey || "") : K;
+    const k = share ? (D.shareKey || "") : KEY;   // v245.1 - the SECOND one. v245 fixed dossierUrl and left this, and this is the path for a building with NO dossier - which after v244 is most of Dubai
     return location.origin + location.pathname + (k ? "?key=" + encodeURIComponent(k) : "");
   }
   // What a share sends: the PDF when one has been built for this building, otherwise the page.

@@ -15,6 +15,7 @@
 //
 // The fixtures are synthetic and inline on purpose — the real register files only exist on the machine that
 // builds the pipeline, and a check that silently skips elsewhere is not a check.
+import fs from "node:fs";
 import worker from "../src/index.js";
 
 const READ = "owner_admin_key_never_in_client_links_0001";
@@ -87,3 +88,20 @@ ok(asClient.status === 200 && !asClient.html.includes(READ), "opened with the cl
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
+
+// v245.1 — NO SERVER-ONLY IDENTIFIER MAY APPEAR IN THE CLIENT SCRIPT.
+// `K` is buildingPageHtml's own constant. dossierUrl read it from the browser, where it does not exist, and threw
+// ReferenceError on CLICK - not on load, which is why every harness here missed it - on every building with a dossier
+// from v220 until 22 Sep. v245 fixed dossierUrl and left the SAME line in pageUrl, which is the path for a building
+// with NO dossier: after v244 that is most of Dubai. One occurrence fixed and one left is how this shipped twice.
+{
+  const src = fs.readFileSync(new URL("../src/building_page.js", import.meta.url), "utf8");
+  const i = src.indexOf("function view(");
+  const client = i > 0 ? src.slice(i) : src;
+  const bare = [...client.matchAll(/(?<![A-Za-z0-9_.$"'])K(?![A-Za-z0-9_])/g)]
+    .filter((m) => !/\/\/[^\n]*$/.test(client.slice(client.lastIndexOf("\n", m.index), m.index)));
+  ok(bare.length === 0, "the client script contains no bare `K` - the server constant cannot be read from the browser",
+    bare.map((m) => client.slice(Math.max(0, m.index - 70), m.index + 20).replace(/\s+/g, " ")).join(" | "));
+  ok(/share \? \(D\.shareKey \|\| ""\) : KEY;/.test(client) && !/share \? \(D\.shareKey \|\| ""\) : K;/.test(client),
+    "both key readings use KEY, the parameter the browser actually receives");
+}
