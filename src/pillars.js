@@ -103,6 +103,25 @@ export function developerAxes(dev, thin) {
     read: dRead, why: dev.delivery == null ? (dev.delivery_why || "not scored") : null,
     note: "Not a financing measure. The registers hold no balance sheets, so whether a developer can fund itself is not answerable from this data."
       + (dev.escrow_named_pct != null ? " An escrow agent is named on " + dev.escrow_named_pct + "% of its projects." : "") };
+  // v238.7 - ON A BUILDING, THESE FIGURES COVER ONE REGISTERED ENTITY, and the card must say so.
+  //
+  // /dev aggregates a brand across its entities; a building page cannot, because it shows whatever company
+  // the register names on that building and most of them are not one of the fifteen board developers.
+  // Kendall read "DAMAC STAR PROPERTIES (L L C) - 12 projects" and asked whether that was really all they
+  // had built. It is all THAT ENTITY has: DAMAC is eighteen entities and 146 projects. Developers commonly
+  // register a company per scheme, so an entity's record is routinely a fraction of the brand's.
+  //
+  // Deliberately NOT solved by matching names. The register holds no parent-company id - master_developer_
+  // number is the master developer of the COMMUNITY, and DAMAC Properties Co points at Emaar under it, so
+  // grouping on it would file DAMAC's projects under Emaar. Clustering on the name is the text-matching
+  // trap this codebase has been bitten by repeatedly. Real grouping belongs in
+  // data/identity/developer_group_decisions.json, which exists for it and is empty. Until it is filled,
+  // the honest move is to state the scope rather than guess at the group.
+  if (!dev.entities) {
+    track.note = "This covers " + esc(dev.name || "the company the register names on this building")
+      + " only — the entity registered against this building. Developers often register a separate company "
+      + "per scheme, so a brand's full record can be spread across several and be much larger than this.";
+  }
   return [track, delivery];
 }
 

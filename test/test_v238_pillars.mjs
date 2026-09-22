@@ -12,7 +12,7 @@
 // built in the WORKER and handed down as a finished string, so what the page carries is the output and
 // only the output. That is the whole reason it was built server-side, and these assertions depend on it.
 import worker from "../src/index.js";
-import { buildingPillars, developerCardAxes, spiderSvg, locationAxis, priceReading, pillarsCard, developerPillarsCard } from "../src/pillars.js";
+import { buildingPillars, developerCardAxes, spiderSvg, locationAxis, priceReading, pillarsCard, developerPillarsCard, developerAxes } from "../src/pillars.js";
 
 const READ = "owner_admin_key_never_in_client_links_0001";
 const SLUG = "businessbay", ID = "6";
@@ -209,6 +209,22 @@ ok(!/its own portfolio lists/.test(gCard),
 const single = developerPillarsCard(PILL.developers["907"]);
 ok(/Licensed 2005/.test(single) && !/register entities/.test(single),
   "a plain entity record renders without claiming to be a group");
+
+// 10. v238.7 - SCOPE ON THE BUILDING CARD.
+// The grouping in v238.6 reaches /dev, which is a brand page. It cannot reach a BUILDING page, because a
+// building shows whatever company the register names on it and most are not one of the fifteen board
+// developers - so the card Kendall actually questioned was untouched by the fix his question prompted.
+// Not solvable by matching names: the register has no parent-company id (master_developer_number is the
+// COMMUNITY's master developer, and DAMAC Properties Co points at Emaar under it). So the card states its
+// scope instead of guessing at a group.
+const entityAxes = developerAxes(PILL.developers["907"]);
+ok(/covers DAMAC STAR PROPERTIES/.test(entityAxes[0].note || "") && /separate company per scheme/.test(entityAxes[0].note || ""),
+  "a single entity's card says the figures cover that entity only");
+const groupAxes = developerCardAxes({ name: "DAMAC", entities: 18, licensed: "2002-01-01", years: 24,
+  projects: { total: 146, finished: 100, cancelled: 0, due: 97, delivered: 93, overdue: 4, dated: 90, on_time: 84, late: 6 },
+  track: 99, delivery: 96, on_time_pct: 93 });
+ok(!/covers DAMAC only/.test(groupAxes[0].note || "") && !/separate company per scheme/.test(groupAxes[0].note || ""),
+  "a grouped card does NOT carry the scope caveat - it has already aggregated, and an unearned caveat is noise");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
