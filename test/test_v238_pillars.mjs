@@ -12,7 +12,7 @@
 // built in the WORKER and handed down as a finished string, so what the page carries is the output and
 // only the output. That is the whole reason it was built server-side, and these assertions depend on it.
 import worker from "../src/index.js";
-import { buildingPillars, developerCardAxes, spiderSvg, locationAxis, priceReading } from "../src/pillars.js";
+import { buildingPillars, developerCardAxes, spiderSvg, locationAxis, priceReading, pillarsCard } from "../src/pillars.js";
 
 const READ = "owner_admin_key_never_in_client_links_0001";
 const SLUG = "businessbay", ID = "6";
@@ -165,6 +165,22 @@ for (const [label, D] of [["named on the unit mix", { developer: "Emaar", projec
     schoolsAll: 26, healthN: 563, amenKm: 5, register: [{ median: 2000000, sqm: 100 }] }, D), PILL2, "Business Bay");
   const denies = got.axes.some((a) => /does not join/.test(a.why || ""));
   ok(!(got.name && denies), label + ": names a developer and does not also deny one");
+}
+
+// 8. v238.4 - THE THIN PAGE. The building page now opens for every footprint, not the 1,996 with a floor
+// stack, so this card renders on ~66,714 pages and most have nothing behind it. An empty polygon would
+// imply the data exists and is low; it does not exist.
+const emptyCard = pillarsCard({ axes: buildingPillars({}, PILL2).axes, price: buildingPillars({}, PILL2).price, subtitle: "x", sourceLine: "s" });
+ok(!/<svg/.test(emptyCard) && /nothing on this building yet/.test(emptyCard),
+  "with no score and no price the card draws no chart and says why");
+ok(/The pillars/.test(emptyCard),
+  "but it still names itself, so a thin page reads as empty rather than broken");
+const oneAxis = pillarsCard({ axes: buildingPillars({ district: "Business Bay", transit: [{ kind: "Metro", m: 400 }], schoolsAll: 26, healthN: 563, amenKm: 5, project: {} }, PILL2, "Business Bay").axes,
+  price: { why: "none" }, subtitle: "x", sourceLine: "s" });
+ok(/<svg/.test(oneAxis), "one held axis is still enough to draw the shape");
+for (const D of [{}, { district: "", register: [], transit: [], project: null }, { district: null, register: null, transit: null }]) {
+  const out = buildingPillars(D, PILL2, D.district);
+  ok(out.axes.every((a) => a.value != null || a.why), "every gap on a thin page carries a reason");
 }
 
 console.log("\n" + pass + " passed, " + fail + " failed");

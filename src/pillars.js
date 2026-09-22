@@ -228,6 +228,18 @@ function priceBlock(pr) {
 
 export function pillarsCard(o) {
   const axes = o.axes || [];
+  // v238.4 - a chart with no data points is not a chart. Since the building page opens for every footprint
+  // rather than the 1,996 with a floor stack, most pages have nothing behind this card at all: three dashed
+  // spokes and "not held" three times, on 59,580 pages reading "Unnamed building". An empty polygon implies
+  // data exists and is merely low; drawing nothing says the truth. One line instead, so the reader knows the
+  // card exists and why it is not filled, rather than wondering whether it failed to load.
+  const anyScore = axes.some((a) => a.value != null);
+  const anyPrice = o.price && o.price.aedSqft != null;
+  if (!anyScore && !anyPrice) {
+    return '<div class=pill><b>The pillars<span>nothing on this building yet</span></b>'
+      + '<div class=pnote>The register holds no location, developer or price figure for this building, so '
+      + 'there is nothing to chart. It appears here as soon as any of the three does.</div></div>';
+  }
   const shown = PRICE_ON_POLYGON && o.priceAxis ? axes.concat([o.priceAxis]) : axes;
   const rows = shown.map((a) =>
     '<div class="prow' + (a.value == null ? " miss" : "") + '"><i>' + esc(a.label) + "</i><s>"
