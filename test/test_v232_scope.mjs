@@ -52,8 +52,10 @@ function lift(name) {
 // ---- wired, and wired in the right place ---------------------------------------------------------
 const srcTable = lift("umxTable");
 ok(!!srcTable && /^function umxTable\(r,bu\)\{/.test(srcTable), "umxTable takes the building's registered count");
-const atCall = CHROME.indexOf("umxTable(ur,(p.units!=null&&p.units>0)?p.units:null)");
-ok(atCall >= 0, "openPanel passes p.units from the plot feature", `indexOf returned ${atCall}`);
+// Assert the BEHAVIOUR, not the spelling: v233 hoisted this into BU so both blocks share one value,
+// and an assertion pinned to the old inline expression failed on a refactor that changed nothing.
+ok(/umxTable\(ur,\s*(BU|\(p\.units)/.test(CHROME), "openPanel hands umxTable a registered count");
+ok(/p\.units!=null&&p\.units>0/.test(CHROME), "and that count comes from the plot feature's own units");
 ok(/var wide=\(bu&&r\.total_units&&r\.total_units>bu\*1\.15\)\?bu:null/.test(CHROME), "the scope test compares the record against the building");
 
 const PRELUDE = `function esc(s){return String(s==null?"":s);} function fmtM(n){return "AED "+n;}`;
