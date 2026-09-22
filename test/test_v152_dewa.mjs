@@ -49,10 +49,22 @@ r = await call("/img/community_resident_mix");
 ok(r.status === 404, "the public /img route cannot serve it");
 
 // 2. the private page: only its own key opens it
-for (const [label, q, e] of [["no key", "/residents", null], ["wrong key", "/residents?rk=nope", null], ["the client link key", "/residents?rk=" + CLIENT, null], ["key= from a client link", "/residents?key=" + CLIENT, null], ["READ_KEY as rk", "/residents?rk=" + READ, null], ["data with the client key as rk", "/residents/data?rk=" + CLIENT, null], ["RESIDENTS_KEY not set", "/residents?rk=" + RES, Object.assign({}, env, { RESIDENTS_KEY: "" })], ["a short RESIDENTS_KEY", "/residents?rk=short", Object.assign({}, env, { RESIDENTS_KEY: "short" })], ["data without the key", "/residents/data?key=" + READ, null]]) {
+for (const [label, q, e] of [["no key", "/residents", null], ["wrong key", "/residents?rk=nope", null], ["the client link key", "/residents?rk=" + CLIENT, null], ["READ_KEY as rk", "/residents?rk=" + READ, null], ["data with the client key as rk", "/residents/data?rk=" + CLIENT, null], ["RESIDENTS_KEY not set", "/residents?rk=" + RES, Object.assign({}, env, { RESIDENTS_KEY: "" })], ["a short RESIDENTS_KEY", "/residents?rk=short", Object.assign({}, env, { RESIDENTS_KEY: "short" })]]) {
   r = await call(q, {}, e || env);
   ok(r.status === 404, "residents: " + label + " gets 404");
 }
+// v235 (Kendall, 22 Sep 2026) - "nationality should not need a key": an app key now opens the layer on its
+// own. The residents key still works and is still the only thing that opens the private twin pages, and a
+// wrong key, a client key used AS rk, and no key at all are all still 404 above.
+r = await call("/residents?key=" + CLIENT);
+ok(r.status === 200, "residents: v235 - a client app key opens the page without rk");
+r = await call("/residents/data?key=" + READ);
+ok(r.status === 200, "residents: v235 - the data route answers an app key without rk");
+r = await call("/residents/data?key=" + CLIENT);
+ok(r.status === 200, "residents: v235 - and a client app key too");
+r = await call("/residents/data");
+ok(r.status === 404, "residents: no key at all still gets 404");
+
 r = await call("/residents?rk=" + RES);
 const page = await r.text();
 ok(r.status === 200 && page.includes("Residents by community") && !page.includes("Never for clients"), "residents: its own key opens the private page (no badge: Kendall asked for it gone");
@@ -88,7 +100,7 @@ async function runPage(width) {
 }
 const everything = (ids) => Object.values(ids).map(e => e.innerHTML + " " + e.textContent + " " + e.children.map(c => c.textContent).join(" ")).join(" ");
 let P = await runPage(1280);
-ok(P.M.asked.length === 1 && P.M.asked[0] === "/residents/data?rk=" + encodeURIComponent(RES) && P.ids.source.textContent.includes("Names from the Land Department"), "page: reads its data from the private route with its own key");
+ok(P.M.asked.length === 1 && P.M.asked[0].startsWith("/residents/data?rk=" + encodeURIComponent(RES)) && P.ids.source.textContent.includes("Names from the Land Department"), "page: reads its data from the private route with its own key");
 ok(P.ids.nats.children.length === 4 && P.ids.nats.children[0].getAttribute("aria-pressed") === "true" && P.ids.nats.children.slice(1).every(b => b.getAttribute("aria-pressed") === "false") && P.ids.mins.children.map(b => b.textContent).join(" ") === "5%+ 10%+ 20%+ 40%+", "page: nationality chips (first one on) and the minimum share buttons");
 ok(P.ids.list.rows.map(x => x.comm).join() === "914,126" && /40%\+<\/span>[\s\S]*20-40%<\/span>/.test(P.ids.list.innerHTML) && P.ids.listhead.textContent === "2 communities where India reach 5%+", "page: the list ranks communities by band, strongest first");
 ok(P.ids.legend.innerHTML.includes("fewer than 500 accounts: not shown") && P.ids.rules.textContent.startsWith("Communities with at least 500 residential accounts"), "page: legend and rules carry the thresholds from the data");

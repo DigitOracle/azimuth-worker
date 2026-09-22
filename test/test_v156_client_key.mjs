@@ -43,7 +43,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m); } };
 
 // The app pages a client may open - stated here on purpose, apart from CLIENT_PATHS in the worker, so widening the client surface takes two edits.
-const APP_PAGES = ["/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const APP_PAGES = ["/start", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
 // v187 put the building page on the client surface but never widened it here, so the sweep counted /building/ an escalation.
 const APP_PREFIXES = ["/skyline/", "/area/", "/report/", "/building/"];
 const isAppPage = (p) => APP_PAGES.includes(p.split("?")[0]) || APP_PREFIXES.some((x) => p.indexOf(x) === 0);
@@ -89,7 +89,11 @@ for (const p of routes) {
       if (cliOut.some((o) => PRIVATE_SERVICES.test(o.u)) || cliWrites.some((k) => !/^(esri|amen_|iso_)/.test(k))) leaks.push(method + " " + p + " (app page) wrote " + cliWrites.join(",") + " / called " + cliOut.map((o) => o.u).join(","));
       continue;
     }
-    if (cli.status !== 401 && cli.status !== anon.status) escalations.push(method + " " + p + ": no key " + anon.status + ", client key " + cli.status);
+    // v235 (Kendall, 22 Sep 2026) - the ONE declared escalation: "nationality should not need a key", so an app
+    // key now opens the residents layer where no key still gets 404. Declared here so the sweep keeps guarding
+    // every other route and this one change stays visible instead of quietly widening the rule.
+    const V235_RESIDENTS = method === "GET" && (p === "/residents" || p === "/residents/data") && cli.status === 200;
+    if (!V235_RESIDENTS && cli.status !== 401 && cli.status !== anon.status) escalations.push(method + " " + p + ": no key " + anon.status + ", client key " + cli.status);
     if (cli.status === 401 && (cliWrites.length || cliOut.length)) leaks.push(method + " " + p + " refused the client key but still wrote " + cliWrites.join(",") + " / called " + cliOut.map((o) => o.u).join(","));
     if (cliOut.some((o) => PRIVATE_SERVICES.test(o.u))) leaks.push(method + " " + p + " called a private service for a client key: " + cliOut.map((o) => o.u).join(","));
   }
@@ -134,10 +138,24 @@ for (const p of PAGES) {
   const html = await bodyOf(r);
   const nav = /class=nnav/.test(html);
   ok(r.status === 200 && !html.includes(READ) && !/href="\/(?:board|studio|trends)\b/.test(html) && !html.includes("<span>BOARD</span>")
-    && (!nav || (html.includes("<span>FIND</span>") && html.includes("<span>TIME</span>") && html.includes("/find?key=" + CLIENT))),
+    && (!nav || (html.includes("<span>FIND</span>") && html.includes("<span>MORE</span>") && html.includes("/find?key=" + CLIENT))),
     p + ", client key: no READ_KEY, no BOARD, no owner links" + (nav ? "; the nav carries the client key" : ""));
-  const own = await bodyOf(await call(withKey(p, READ)));
-  if (nav) ok(own.includes("<span>BOARD</span>") && own.includes("/board?key=" + READ), p + ", READ_KEY: the owner still has BOARD");
+
+
+}
+// v235 - BOARD and the card sheet left the tab bar for /more. The invariant did not move: the owner
+// still reaches both, a client key sees neither, and /more still opens for a client.
+{
+  const ownMore = await bodyOf(await call(withKey("/more", READ)));
+  ok(ownMore.includes("BOARD") && ownMore.includes("/board?key=" + READ) && ownMore.includes("CARD SHEET"),
+    "/more, READ_KEY: the owner still reaches BOARD and the card sheet");
+  const cliMore = await bodyOf(await call(withKey("/more", CLIENT)));
+  ok(!cliMore.includes(READ) && !/href="[/](?:board|studio|trends|charts)\b/.test(cliMore)
+    && !cliMore.includes("BOARD") && !cliMore.includes("CARD SHEET") && cliMore.includes("<span>MORE</span>"),
+    "/more, client key: no BOARD, no card sheet, no owner key - and the page still opens");
+  const cliStart = await bodyOf(await call(withKey("/start", CLIENT)));
+  ok(!cliStart.includes(READ) && cliStart.includes("Five ways") && cliStart.includes("<span>START</span>"),
+    "/start, client key: the five angles open and carry no owner key");
 }
 r = await call(withKey("/home", CLIENT));
 ok(!(await bodyOf(r)).includes("meetings board"), "/home, client key: the 'meetings board' link is gone");

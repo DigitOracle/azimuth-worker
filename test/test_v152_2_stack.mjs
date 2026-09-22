@@ -55,7 +55,7 @@ ok(r.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin" && /no
 const nav = navHrefs(mp);
 // v208 (Kendall, 21 Sep 2026): reverses v152.2. The key rides EVERY tab, because pinned to three it disappeared the
 // moment Naj tapped a fourth. Still every link, still only ever the real residents key, and RESIDENTS still sits after MAP.
-ok(nav.length === 11 && nav.filter(h => h.includes("rk=")).length === nav.length
+ok(nav.length === 7 && nav.filter(h => h.includes("rk=")).length === nav.length
   && nav.every(h => h.includes("rk=" + encodeURIComponent(RES)))
   && nav.indexOf("/residents?rk=" + encodeURIComponent(RES)) === nav.findIndex(h => h.startsWith("/map")) + 1,
   "MAP private: the residents key rides every tab, and RESIDENTS sits right after MAP");
@@ -103,7 +103,7 @@ const W = runPanel(1280);
 const settle = async () => { for (let i = 0; i < 30; i++) await new Promise(res => setTimeout(res, 5)); };
 ok(asked.length === 0 && !M.layers.length, "panel: nothing is fetched or drawn until RESIDENTS is opened");
 ids.rh.onclick(); await settle();
-ok(ids.rp.classList.contains("on") && W.opened === "rp" && asked.length === 1 && asked[0] === "/residents/data?rk=" + encodeURIComponent(RES), "panel: opening it reads the private route with the key, once");
+ok(ids.rp.classList.contains("on") && W.opened === "rp" && asked.length === 1 && asked[0].startsWith("/residents/data?rk=" + encodeURIComponent(RES)), "panel: opening it reads the private route with the key, once");
 ok(M.layers.map(l => l[0]).join() === "res-fill,res-line,res-label" && M.layers[0][1] === "place" && M.layers[2][2].join() === "Noto Sans Regular" && Object.values(M.vis).every(v => v === "none"), "panel: shading layers go under the basemap labels, in the basemap's own font, hidden until a nationality is picked");
 ok(ids.rnat.kids.length === 4 && ids.rres.textContent === "pick a nationality" && ids.rlh.textContent === "pick at least one nationality", "panel: four nationality chips, none picked, the header still asks");
 ids.rnat.kids[0].onclick(); await settle();

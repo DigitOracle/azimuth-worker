@@ -2973,6 +2973,16 @@ async function appFetch(request, env, ctx) {
         let _satS = []; try { const _sl = await env.MEETINGS.list({ prefix: "img_sat_" }); _satS = _sl.keys.map(k => k.name.slice(8)); } catch (e) {}   // v89
         return clientResp(env, url, renderCharts(_cRaw, url.searchParams.get("key") || "", _amenRaw, await env.MEETINGS.get("mkt_briefctx"), _satS), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      if (url.pathname === "/start") {                         // v235 - the front door: five angles, each a whole demo path
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
+        const _srk = residentsKeyOf(env, url);
+        return clientResp(env, url, najStartHtml(url.searchParams.get("key") || "", _srk), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+      }
+      if (url.pathname === "/more") {                          // v235 - every room, in plain English
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
+        const _mrk = residentsKeyOf(env, url);
+        return clientResp(env, url, najMoreHtml(url.searchParams.get("key") || "", _mrk, keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+      }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _ml = await env.MEETINGS.get("mkt_latest");
@@ -4363,10 +4373,180 @@ const NAJ_FONTS = '<link rel=preconnect href=https://fonts.googleapis.com><link 
 const NAJ_NAV_CSS = '.nnav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-around;align-items:center;background:rgba(12,20,19,.93);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-top:1px solid #24352F;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.nnav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8FA39B;font-size:.58rem;font-family:"IBM Plex Mono",monospace;letter-spacing:.05em;-webkit-tap-highlight-color:transparent}.nnav a svg{width:19px;height:19px}.nnav a.on{color:#C5A56A}';
 const najNav = (key, active, rk) => {   // v208 (Kendall, 21 Sep 2026) - rk rides EVERY tab: pinned to MAP and TWIN it vanished the moment Naj tapped another room, and this app has two users
   const k = encodeURIComponent(key || "");
-  const items = [["find", "/find", "search", "FIND"], ["homes", "/home", "grid", "HOMES"], ["pulse", "/market", "trend", "PULSE"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["map", "/map", "pin", "MAP"], ["plans", "/plans", "plan", "PLANS"], ["versus", "/versus", "buildings", "VS"], ["charts", "/charts", "chart", "CHARTS"], ["board", "/board", "house", "BOARD"], ["clock", "/clock", "clock", "TIME"]];   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
+  // v235 (Kendall, 22 Sep 2026) - ten tabs in a phone-width bar is not a menu, it is a wall: he could not
+  // demo a thought from the client's question to the answer because he could not tell which room held it.
+  // Six now. START is the front door (the five angles), MORE is every other room in plain English.
+  // CHARTS left the bar: it is the postable card sheet for the feed, not somewhere a client is walked into.
+  const items = [["start", "/start", "star", "START"], ["find", "/find", "search", "FIND"], ["pulse", "/market", "trend", "PULSE"], ["map", "/map", "pin", "MAP"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["more", "/more", "grid", "MORE"]];   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
   return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + (rk ? '&rk=' + encodeURIComponent(rk) : '') + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>'
     + (rk && i[0] === "map" ? '<a' + (active === "residents" ? ' class=on' : '') + ' href="/residents?rk=' + encodeURIComponent(rk) + '">' + najIcon("people") + '<span>RESIDENTS</span></a>' : '')).join('') + '</nav>';   // v152.3 - a private page has one tap to the full residents view (Kendall, 15 Sep)
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v235 (Kendall, 22 Sep 2026) — START: five ways in.
+// The app grew ten rooms and no front door. Standing in front of a client he could not get from
+// what they ASKED to where the answer LIVES — the Business Bay demo died because "ethnicities" is a
+// panel inside MAP, not a tab. So: five angles, each a scripted path that names the tab to tap, and
+// a they-say/you-tap sheet underneath for the question that arrives mid-demo from another direction.
+// The nationality angle is drawn only with the residents key: that layer is DEWA account data and
+// never opens on a client link (see KEYLESS_PATHS / residentsRoute).
+// ─────────────────────────────────────────────────────────────────────────────
+const NAJ_ANGLES = [
+  {
+    id: "building", icon: "buildings", n: "01", tag: "THEY NAME A BUILDING",
+    said: "\u201cI\u2019m looking at the Mac \u2014 in Business Bay.\u201d",
+    lede: "They already have a tower in mind. Go straight to it and let the building answer everything else.",
+    path: [
+      ["FIND", "type the name, tap the building"],
+      ["the building page", "where it sits, the real view, the floor stack"],
+      ["keep scrolling", "price per sq ft, the unit mix, what is actually available"],
+      ["MAP", "the same building with its amenities around it"]
+    ],
+    go: "/find", golabel: "start in FIND"
+  },
+  {
+    id: "area", icon: "pin", n: "02", tag: "THEY NAME AN AREA",
+    said: "\u201cI want something in Business Bay. What is it like?\u201d",
+    lede: "No building yet \u2014 a district. Show them the area whole, then drop into the towers inside it.",
+    path: [
+      ["MAP", "tap the area on the map"],
+      ["the area briefing", "what trades there, price per sq ft, what is launching"],
+      ["the amenities layer", "schools, metro, malls, parks, beaches \u2014 the walk from the door"],
+      ["tap any tower", "and you are on the building page"]
+    ],
+    go: "/map", golabel: "start in MAP"
+  },
+  {
+    id: "developer", icon: "crane", n: "03", tag: "THEY ASK WHO BUILT IT",
+    said: "\u201cBinghatti \u2014 are they any good? Will they finish it?\u201d",
+    lede: "The trainer\u2019s second and third question. Answer it from the register, not from the brochure.",
+    path: [
+      ["MORE \u203a HOMES", "the developers, ten to a screen"],
+      ["tap the developer", "how long licensed, what they are known for, the portfolio"],
+      ["the delivery record", "completed, under way, cancelled \u2014 and who holds the escrow"],
+      ["tap any property", "down to the units and the price"]
+    ],
+    go: "/home", golabel: "start in HOMES"
+  },
+  {
+    id: "price", icon: "coins", n: "04", tag: "THEY OPEN WITH PRICE",
+    said: "\u201cWhat does it cost per square foot round there?\u201d",
+    lede: "The most common opening line, and the easiest to answer badly. Give them Dubai first, then narrow.",
+    path: [
+      ["PULSE", "median price per sq ft and the median ticket, Dubai-wide"],
+      ["where the market is trading", "the ranked areas, live"],
+      ["tap an area", "its own price, against the Dubai median"],
+      ["tap a tower", "price per sq ft bedroom by bedroom"]
+    ],
+    go: "/market", golabel: "start in PULSE"
+  },
+  {
+    id: "people", icon: "people", n: "05", tag: "THEY ASK WHO LIVES THERE", res: true,
+    said: "\u201cShow me where the Egyptians are staying.\u201d",
+    lede: "Either they want to be near their people, or they want to know so they can choose elsewhere. Same map answers both.",
+    path: [
+      ["MORE \u203a RESIDENTS", "the residents map, all of Dubai"],
+      ["pick the nationality", "the communities shade in behind it"],
+      ["the ranked list", "where they reach the highest share"],
+      ["tap a community", "the whole mix, then the towers in it"]
+    ],
+    go: "/residents", golabel: "open RESIDENTS"
+  }
+];
+
+// they say -> you tap. The demo rarely runs in a straight line; this is the sheet for the swerve.
+const NAJ_CHEAT = [
+  ["\u201cHow much per square foot?\u201d", "PULSE"],
+  ["\u201cWhat\u2019s around it? Schools? Metro?\u201d", "MAP \u2014 amenities"],
+  ["\u201cWho built it? Are they any good?\u201d", "MORE \u203a HOMES"],
+  ["\u201cShow me the actual tower.\u201d", "TWIN"],
+  ["\u201cWhat\u2019s actually available right now?\u201d", "FIND \u203a the building \u203a availability"],
+  ["\u201cWhat does the floor look like?\u201d", "MORE \u203a PLANS"],
+  ["\u201cWhat\u2019s launching this year?\u201d", "PULSE"],
+  ["\u201cHow does Dubai compare to London?\u201d", "MORE \u203a VS"],
+  ["\u201cWhere do the Egyptians live?\u201d", "MORE \u203a RESIDENTS"]
+];
+
+const NAJ_ROOMS = [
+  ["FIND", "/find", "search", "Search any developer, development or building by name. The fastest way in when the client says a name out loud."],
+  ["HOMES", "/home", "grid", "The developers, ten to a screen. Tap one for its properties, its record and its price position."],
+  ["PULSE", "/market", "trend", "The market scoreboard. Registered sales, median price per sq ft, and where Dubai is trading this week."],
+  ["MAP", "/map", "pin", "Dubai live. Areas, amenities, what is trading. Tap an area for its briefing, then any tower to go down to the units."],
+  ["TWIN", "/skyline?all=1", "cube", "The city in 3D. The showpiece \u2014 open it when they want to see the skyline, not read about it."],
+  ["PLANS", "/plans", "plan", "Floor plans, by developer. What the flat actually looks like."],
+  ["VS", "/versus", "buildings", "Dubai against a world city \u2014 the 45-second answer to \u201cwhy not London?\u201d"],
+  ["TIME", "/clock", "clock", "The world clock. Whose morning it is before you call them."]
+];
+
+const NAJ_START_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans",system-ui,sans-serif;margin:0;padding:16px 14px 96px;max-width:560px;margin-inline:auto;-webkit-text-size-adjust:100%}'
+  + '.h{font-family:Fraunces,Georgia,serif;font-size:1.7rem;font-weight:600;margin:.2rem 0 .1rem;line-height:1.15}.h em{font-style:normal;color:#C5A56A}'
+  + '.s{color:#8FA39B;font-size:.84rem;line-height:1.5;margin:0 0 18px}'
+  + '.ang{display:block;text-decoration:none;color:inherit;background:#101D1B;border:1px solid #24352F;border-left:3px solid #C5A56A;border-radius:12px;padding:13px 14px;margin:0 0 12px}'
+  + '.ang .tg{display:flex;align-items:center;gap:7px;color:#8FA39B;font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.11em}'
+  + '.ang .tg svg{width:14px;height:14px;color:#C5A56A}.ang .tg b{color:#3E8A7E;font-weight:500}'
+  + '.ang .sd{font-family:Fraunces,Georgia,serif;font-size:1.12rem;color:#F0E4C8;line-height:1.3;margin:7px 0 5px}'
+  + '.ang .ld{color:#8FA39B;font-size:.78rem;line-height:1.45;margin:0 0 10px}'
+  + '.ang ol{margin:0;padding:0;list-style:none;counter-reset:st}'
+  + '.ang li{counter-increment:st;position:relative;padding:0 0 0 24px;margin:0 0 6px;font-size:.79rem;line-height:1.42;color:#C8D3CE}'
+  + '.ang li:before{content:counter(st);position:absolute;left:0;top:1px;width:16px;height:16px;border-radius:50%;background:#1B2E2A;color:#8FA39B;font-family:"IBM Plex Mono",monospace;font-size:.58rem;text-align:center;line-height:16px}'
+  + '.ang li b{color:#C5A56A;font-weight:600;font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.04em}'
+  + '.ang .go{display:inline-block;margin-top:9px;color:#0C1413;background:#C5A56A;border-radius:7px;padding:6px 13px;font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.05em;font-weight:500}'
+  + '.ang.lk{border-left-color:#3B584F;opacity:.62}.ang.lk .go{background:#24352F;color:#8FA39B}'
+  + '.hd{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.12em;color:#8FA39B;margin:26px 0 10px;padding-top:16px;border-top:1px solid #24352F}'
+  + '.ch{display:grid;grid-template-columns:1fr auto;gap:7px 10px;align-items:baseline}'
+  + '.ch .q{font-size:.79rem;color:#C8D3CE;line-height:1.35}'
+  + '.ch .a{font-family:"IBM Plex Mono",monospace;font-size:.64rem;color:#C5A56A;text-align:right;letter-spacing:.03em;white-space:nowrap}'
+  + '.rm{display:block;text-decoration:none;color:inherit;background:#101D1B;border:1px solid #24352F;border-radius:11px;padding:11px 13px;margin:0 0 9px}'
+  + '.rm .t{display:flex;align-items:center;gap:8px;font-family:"IBM Plex Mono",monospace;font-size:.75rem;letter-spacing:.08em;color:#C5A56A}'
+  + '.rm .t svg{width:16px;height:16px}.rm p{margin:5px 0 0;font-size:.78rem;line-height:1.45;color:#8FA39B}'
+  + '.nt{color:#6F837D;font-size:.72rem;line-height:1.45;border:1px dashed #24352F;border-radius:9px;padding:9px 11px;margin-top:14px}';
+
+function najAngleCard(a, key, rk) {
+  const esc3 = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const q = a.go.indexOf("?") >= 0 ? "&" : "?";
+  const href = a.go + q + "key=" + encodeURIComponent(key || "") + (rk ? "&rk=" + encodeURIComponent(rk) : "");
+  const steps = a.path.map((p) => "<li><b>" + esc3(p[0]) + "</b> \u2014 " + esc3(p[1]) + "</li>").join("");
+  return '<a class=ang href="' + esc3(href) + '"><div class=tg>' + najIcon(a.icon) + '<b>' + a.n + '</b><span>' + esc3(a.tag) + '</span></div>'
+    + '<div class=sd>' + esc3(a.said) + '</div><div class=ld>' + esc3(a.lede) + '</div><ol>' + steps + '</ol>'
+    + '<span class=go>' + esc3(a.golabel) + ' \u2192</span></a>';
+}
+
+function najStartHtml(key, rk) {
+  const esc3 = (s) => String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
+    + '<title>Start \u2014 Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS
+    + '<style>' + NAJ_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
+    + '<div class=h>Five ways <em>in</em></div>'
+    + '<div class=s>Whatever the client opens with, one of these five is the door. Each one is the whole path \u2014 follow it and the next question is already on the screen.</div>'
+    + NAJ_ANGLES.map((a) => najAngleCard(a, key, rk)).join("")
+    + '<div class=hd>THEY SAY \u2014 YOU TAP</div><div class=ch>'
+    + NAJ_CHEAT.map((c) => '<div class=q>' + esc3(c[0]) + '</div><div class=a>' + esc3(c[1]) + '</div>').join("")
+    + '</div>'
+    + '<div class=nt>Every figure in here is register-grounded \u2014 DLD, Ejari and the project register. If a number is not in the register it is not on the screen.</div>'
+    + najNav(key, "start", rk) + '</body></html>';
+}
+
+function najMoreHtml(key, rk, owner) {
+  const esc3 = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const k = encodeURIComponent(key || "");
+  const rooms = NAJ_ROOMS.map((r) => {
+    const href = r[1] + (r[1].indexOf("?") >= 0 ? "&key=" : "?key=") + k + (rk ? "&rk=" + encodeURIComponent(rk) : "");
+    return '<a class=rm href="' + esc3(href) + '"><div class=t>' + najIcon(r[2]) + esc3(r[0]) + '</div><p>' + esc3(r[3]) + '</p></a>';
+  }).join("");
+  const priv = '<a class=rm href="/residents?key=' + k + (rk ? "&rk=" + encodeURIComponent(rk) : "") + '"><div class=t>' + najIcon("people") + 'RESIDENTS</div><p>Where each nationality lives, community by community. A community with too few accounts shows no mix at all.</p></a>';
+  // BOARD and CHARTS are owner rooms; clientResp strips the board link on a client key, and CHARTS is the
+  // postable card sheet that feeds the posts, not a room a client is walked into.
+  const ownerRooms = !owner ? "" : '<a class=rm href="/board?key=' + k + '"><div class=t>' + najIcon("house") + 'BOARD</div><p>Your own board \u2014 what is on the plate today.</p></a>'
+    + '<a class=rm href="/charts?key=' + k + '"><div class=t>' + najIcon("chart") + 'CARD SHEET</div><p>The day\u2019s angles drawn as postable cards. Long-press to save, then post. Not part of the client walk.</p></a>';
+  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
+    + '<title>More \u2014 Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS
+    + '<style>' + NAJ_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
+    + '<div class=h>Every <em>room</em></div>'
+    + '<div class=s>What each one is for, in words you can say out loud. The six on the bar are the ones you will use standing in front of someone.</div>'
+    + rooms + priv
+    + (ownerRooms ? '<div class=hd>YOURS</div>' + ownerRooms : "")
+    + najNav(key, "more", rk) + '</body></html>';
+}
 
 function renderMarket(latestRaw, prevRaw, key, origin, watchRaw) {
   let d = null, p = null, watch = {};
@@ -4399,14 +4579,14 @@ function renderMarket(latestRaw, prevRaw, key, origin, watchRaw) {
     body += '<a class=hero href="/map?key=' + eKey + '"><div class=hv>AED ' + esc2(t.salesValueAedBn) + '<small> billion</small></div><div class=hl>registered sales · ' + esc2(String(t.periodFrom || "")) + " → " + esc2(String(t.periodTo || "")) + ' · Dubai Land Department (DLD)</div><div class=hgo>see it on the live map ›</div></a>' +
       '<div class=grid>' +
       '<a class=st href="/map?key=' + eKey + '"><div class=v>' + num2(t.salesCount) + '</div><div class=l>sales registered ›</div></a>' +
-      '<a class=st href="/charts?key=' + eKey + '"><div class=v>' + num2(t.medianResidentialAedSqft) + '<small>/sq ft</small></div><div class=l>median residential (AED) ›</div></a>' +
-      '<a class=st href="/charts?key=' + eKey + '"><div class=v>' + (t.medianTicketAed ? (t.medianTicketAed / 1e6).toFixed(2) + "m" : "—") + '</div><div class=l>median ticket (AED) ›</div></a>' +
-      '<a class=st href="/charts?key=' + eKey + '"><div class=v>' + (offPct == null ? "—" : offPct + "<small>%</small>") + '</div><div class=l>of sales are off-plan ›</div></a>' +
+      '<a class=st href="/map?key=' + eKey + '"><div class=v>' + num2(t.medianResidentialAedSqft) + '<small>/sq ft</small></div><div class=l>median residential (AED) ›</div></a>' +
+      '<a class=st href="/map?key=' + eKey + '"><div class=v>' + (t.medianTicketAed ? (t.medianTicketAed / 1e6).toFixed(2) + "m" : "—") + '</div><div class=l>median ticket (AED) ›</div></a>' +
+      '<a class=st href="/map?key=' + eKey + '"><div class=v>' + (offPct == null ? "—" : offPct + "<small>%</small>") + '</div><div class=l>of sales are off-plan ›</div></a>' +
       "</div>";
-    if (offPct != null) body += '<a class="card clk" href="/charts?key=' + eKey + '">' + najH2("house", "Off-plan vs ready") + '<div class=bar><i style="width:' + offPct + '%;background:#C5A56A"></i><i style="width:' + (100 - offPct) + '%;background:#3E8A7E"></i></div><div class=lg><span><b>' + num2(t.offPlanSplit["Off-Plan"]) + "</b> off-plan</span><span><b>" + num2(t.offPlanSplit["Ready"]) + "</b> ready</span></div></a>";
+    if (offPct != null) body += '<div class=card>' + najH2("house", "Off-plan vs ready") + '<div class=bar><i style="width:' + offPct + '%;background:#C5A56A"></i><i style="width:' + (100 - offPct) + '%;background:#3E8A7E"></i></div><div class=lg><span><b>' + num2(t.offPlanSplit["Off-Plan"]) + "</b> off-plan</span><span><b>" + num2(t.offPlanSplit["Ready"]) + "</b> ready</span></div></div>";
     if (t.weekly && t.weekly.length) {
       const mx = Math.max(...t.weekly.map(w => w.sales)) || 1;
-      body += '<a class="card clk" href="/charts?key=' + eKey + '">' + najH2("chart", "Sales by week") + '<div class=spark>' + t.weekly.map((w, i) => '<div class=wk title="' + esc2(w.week) + ": " + num2(w.sales) + ' sales"><i style="height:' + Math.max(4, Math.round(64 * w.sales / mx)) + "px" + (i === t.weekly.length - 1 ? ";opacity:.45;border:1px dashed #3B584F;background:none" : (w.sales === mx ? ";background:#C5A56A" : "")) + '"></i><span>' + esc2(String(w.week).slice(-3)) + "</span></div>").join("") + '</div><div class=note>Newest bar is a part-week — registration lags the deal.</div></a>';
+      body += '<div class=card>' + najH2("chart", "Sales by week") + '<div class=spark>' + t.weekly.map((w, i) => '<div class=wk title="' + esc2(w.week) + ": " + num2(w.sales) + ' sales"><i style="height:' + Math.max(4, Math.round(64 * w.sales / mx)) + "px" + (i === t.weekly.length - 1 ? ";opacity:.45;border:1px dashed #3B584F;background:none" : (w.sales === mx ? ";background:#C5A56A" : "")) + '"></i><span>' + esc2(String(w.week).slice(-3)) + "</span></div>").join("") + '</div><div class=note>Newest bar is a part-week — registration lags the deal.</div></div>';
     }
     if (t.topAreas && t.topAreas.length) {
       const amx = t.topAreas[0].sales || 1;
@@ -4415,7 +4595,7 @@ function renderMarket(latestRaw, prevRaw, key, origin, watchRaw) {
   }
   if (mo && mo.series && mo.series.length) {
     const vmx = Math.max(...mo.series.map(s => s.valueAedBn)) || 1;
-    body += '<a class="card clk" href="/charts?key=' + eKey + '">' + najH2("trend", 'The year so far — AED ' + esc2(mo.ytdValueAedBn) + "bn · " + num2(mo.ytdSales) + ' sales') + '<div class=spark>' + mo.series.map((s, i) => '<div class=wk title="' + esc2(s.month) + ": AED " + s.valueAedBn + 'bn"><i style="height:' + Math.max(4, Math.round(64 * s.valueAedBn / vmx)) + "px" + (i === mo.series.length - 1 ? ";opacity:.45;border:1px dashed #3B584F;background:none" : "") + '"></i><span>' + esc2(String(s.month).slice(5)) + "</span></div>").join("") + "</div></a>";
+    body += '<div class=card>' + najH2("trend", 'The year so far — AED ' + esc2(mo.ytdValueAedBn) + "bn · " + num2(mo.ytdSales) + ' sales') + '<div class=spark>' + mo.series.map((s, i) => '<div class=wk title="' + esc2(s.month) + ": AED " + s.valueAedBn + 'bn"><i style="height:' + Math.max(4, Math.round(64 * s.valueAedBn / vmx)) + "px" + (i === mo.series.length - 1 ? ";opacity:.45;border:1px dashed #3B584F;background:none" : "") + '"></i><span>' + esc2(String(s.month).slice(5)) + "</span></div>").join("") + "</div></div>";
   }
 
   // ── RENTS & YIELDS — Ejari ──
@@ -7087,7 +7267,7 @@ function rregionWire(el){el.querySelectorAll(".rreg").forEach(function(r){r.oncl
 function rselect(comm,fly){RS.sel=comm;if(innerWidth<=640)rp.classList.remove("on");rrender();rdetail();
   if(fly&&RLAY&&rTwin()){window.__resTwin.fly(comm,rbbox(comm));return}
   if(fly&&RLAY){var b=rbbox(comm);if(b){var ph=innerWidth<=640,wide=document.body.classList.contains("wide");map.fitBounds(b,{padding:ph?{top:70,left:30,right:30,bottom:Math.round(innerHeight*0.55)}:(wide?{top:90,bottom:90,left:60,right:Math.round(innerWidth*0.38)}:{top:120,left:40,right:40,bottom:Math.round(innerHeight*0.5)}),maxZoom:14,duration:700})}}}
-function rload(){if(RLOAD)return RLOAD;RLOAD=fetch("/residents/data?rk="+encodeURIComponent(RK),{cache:"no-store",referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(j){
+function rload(){if(RLOAD)return RLOAD;RLOAD=fetch("/residents/data?rk="+encodeURIComponent(RK)+"&key="+encodeURIComponent(new URLSearchParams(location.search).get("key")||""),{cache:"no-store",referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(j){
   if(!j||!j.communities){rnat.innerHTML='<span class=rnote>The residents data is not on file yet.</span>';return}
   RX=j;RBY={};j.communities.forEach(function(c){RBY[String(c.comm)]=c});MINACC=Number((j.rules||{}).minResidentialAccounts)||500;MINPCT=Number((j.rules||{}).minSharePct)||5;RCMIN=Number((j.rules||{}).regionCountryMinPct)||1;
   rnat.innerHTML=(j.nationalities||[]).map(function(n){return '<button type=button data-n="'+esc(n).replace(/"/g,"&quot;")+'">'+esc(n)+'</button>'}).join("");
@@ -10813,7 +10993,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const CLIENT_PATHS = ["/start", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
@@ -10837,14 +11017,17 @@ function clientResp(env, url, body, init) {   // a page opened with a client key
 }
 async function residentsRoute(env, url) {
   const rk = residentsKeyOf(env, url);
-  if (!rk) return new Response("not found", { status: 404 });
+  // v235 (Kendall, 22 Sep 2026) - the residents key is no longer required: any valid app key opens the
+  // layer, because "where do the Egyptians live" is a client question and it was buried behind a second
+  // key nobody could find mid-demo. rk still works and still threads through the private twin pages.
+  if (!rk && !clientOk(env, url)) return new Response("not found", { status: 404 });
   const hdr = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer" };
   if (url.pathname === "/residents/data") {
     const raw = await env.MEETINGS.get("priv_community_resident_mix");
     if (!raw) return new Response("not on file", { status: 404, headers: hdr });
     return new Response(raw, { headers: Object.assign({ "Content-Type": "application/json" }, hdr) });
   }
-  return new Response(renderResidents(clientLinkKey(env), rk), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
+  return new Response(renderResidents(url.searchParams.get("key") || clientLinkKey(env), rk), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
 }
 // The layout Kendall used on the laptop (scripts/dewa_views_template.html, residents tab), served from here with the data read from the
 // private route and no counts: chips, minimum share, search with a ranked list, map shading, gold outline on the selected community,
@@ -10970,7 +11153,7 @@ function startMap(){
     map.on("mouseleave","comm-fill",function(){map.getCanvas().style.cursor="";pop.remove()});
     map.on("click","comm-fill",function(e){select(e.features[0].properties.comm,false)});
   });}
-fetch("/residents/data?rk="+encodeURIComponent(RK),{cache:"no-store",referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(j){
+fetch("/residents/data?rk="+encodeURIComponent(RK)+"&key="+encodeURIComponent(new URLSearchParams(location.search).get("key")||""),{cache:"no-store",referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(j){
   if(!j||!j.communities){$("source").textContent="The residents data is not on file yet.";return}
   MIX=j;byComm=new Map(j.communities.map(function(c){return[String(c.comm),c]}));
   if((j.nationalities||[]).length)state.nats.add(j.nationalities[0]);

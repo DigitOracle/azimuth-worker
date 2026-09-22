@@ -41,10 +41,10 @@ const CLIENT = "client_only_key_abcdefgh0123";
 const envC = Object.assign({}, env, { CLIENT_KEY: CLIENT, OPENAI_API_KEY: "oai" });
 const callC = (p) => worker.fetch(new Request("https://azimuth-2.digitalchemy.workers.dev" + p), envC, ctx);
 r = await callC("/versus?key=" + CLIENT); html = await r.text();
-ok(r.status === 200 && html.includes('"OWNER":false') && html.includes('<nav class=nnav>') && html.includes('class=on href="/versus?key=' + CLIENT + '"') && html.includes("<span>VS</span>") && !html.includes(READ), "a client key opens the page: no send buttons, the tab bar with VS active, links carrying the client key, never the owner key");
+ok(r.status === 200 && html.includes('"OWNER":false') && html.includes('<nav class=nnav>') && html.includes('href="/find?key=' + CLIENT + '"') && html.includes("<span>MORE</span>") && !html.includes(READ), "a client key opens the page: no send buttons, the tab bar drawn, links carrying the client key, never the owner key");
 r = await callC("/versus?key=" + READ); html = await r.text();
-ok(r.status === 200 && html.includes('"OWNER":true') && html.includes("Make me a picture") && html.includes('href="/versus?key=' + READ + '"'), "the owner key opens it with the sends and the picture button, tab links carrying the owner key");
-ok((await callC("/versus?key=wrong")).status === 401 && html.indexOf("<span>PLANS</span>") < html.indexOf("<span>VS</span>") && html.indexOf("<span>VS</span>") < html.indexOf("<span>CHARTS</span>"), "wrong key refused; VS sits between PLANS and CHARTS in the bar");
+ok(r.status === 200 && html.includes('"OWNER":true') && html.includes("Make me a picture") && html.includes('href="/find?key=' + READ + '"'), "the owner key opens it with the sends and the picture button, tab links carrying the owner key");
+ok((await callC("/versus?key=wrong")).status === 401 && html.indexOf("<span>START</span>") < html.indexOf("<span>MAP</span>") && html.indexOf("<span>MAP</span>") < html.indexOf("<span>MORE</span>") && !html.includes("<span>CHARTS</span>"), "wrong key refused; v235 bar runs START -> MAP -> MORE, and CHARTS is off it (VS now lives under MORE)");
 // v164 - THE ONE THAT MATTERS: not one digit may reach the image service. A prompt that carries a price is a prompt that can
 // come back with the wrong price drawn into a picture she is about to publish.
 const anyDigits = (x) => /\d/.test(String(x).replace(/1024x1536|1024x1024/g, ""));
