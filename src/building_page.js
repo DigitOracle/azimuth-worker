@@ -90,6 +90,8 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     registeredAs: (dld.project && String(dld.project).toLowerCase() !== String(r.name || "").toLowerCase()) ? dld.project : null,
     people: communityMix(people, stack.district || slug, r.community),
     community: r.community || null, transit: r.transit || null,
+    occupancy: r.occupancy || null, districtOccupancy: stack.district_occupancy || null,
+    team: r.team || null, stage: r.stage || null,
     fps: ((anchors && anchors.anchors) || []).filter((x) => x.x != null).map((x) => [x.i, x.x, x.z]),
   };
 }
@@ -127,12 +129,40 @@ function communityMix(people, slug, comm) {
 function plansFor(index, name, project, developer) {
   const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(the|by|tower|towers|residences|residence|building)\b/g, " ").replace(/\s+/g, " ").trim();
   const mine = [norm(name), norm(project)].filter((x) => x.length > 3);
+  const CORP = /^(properties|property|developers|developer|development|developments|realty|real|estate|estates|group|holding|holdings|llc|pjsc|llp|fz|fze|international|investment|investments|co|company|the|and)$/;
+  const dtok = (x) => (String(x || "").toLowerCase().match(/[a-z0-9]+/g) || []).filter((t) => t.length > 1 && !CORP.test(t));
+  const knownDev = (a, b, bname) => {
+    const B = dtok(b);
+    if (!B.length) return false;
+    if (dtok(a).some((t) => B.indexOf(t) >= 0)) return true;
+    const nm = " " + String(bname || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim() + " ";
+    return B.some((t) => t.length > 3 && nm.indexOf(" " + t + " ") >= 0);
+  };
+  const sameDev = (a, b) => {
+    const A = dtok(a), B = dtok(b);
+    if (!A.length || !B.length) return true;   // unknown on either side is not a disagreement
+    return A.some((t) => B.indexOf(t) >= 0);
+  };
   if (!mine.length) return null;
+  // 22 Sep 2026: the index carries 1,254 plans that are not in Dubai at all - Sobha Siniya Island is in Umm Al Quwain -
+  // and the names are generic enough that four Dubai buildings were matching them. Another emirate's plans are worse than
+  // none, because they look like the answer. Skipped before any name is compared.
+  const OTHER_EMIRATE = /umm al quwain|uaq|siniya|abu dhabi|sharjah|ajman|ras al khaimah|rak\b|fujairah/;
   for (const d of ((index && index.developers) || [])) {
     for (const p of (d.projects || [])) {
       const pn = norm(p.name);
       if (!pn) continue;
-      if (!mine.some((m) => m === pn || (m.length > 5 && pn.indexOf(m) >= 0) || (pn.length > 5 && m.indexOf(pn) >= 0))) continue;
+      // the index's own answer first (bind_plans.py emirate_of), the regex second - two independent checks, and the
+      // field defaults to Dubai for an unrecognised area, so it fails in the direction the regex is there to catch.
+      if (p.emirate && String(p.emirate).toLowerCase().indexOf("dubai") < 0) continue;
+      if (OTHER_EMIRATE.test(String((p.area || "") + " " + (p.name || "")).toLowerCase())) continue;
+      const exact = mine.some((m) => m === pn);
+      // a name the index calls too generic to match by substring: Sobha's 'Waves' is inside six register projects. For
+      // those, a containment hit needs the developer positively known and agreeing - unknown is no longer good enough.
+      if (!exact && p.exact_only && !knownDev(developer, d.name, name)) continue;
+      if (!exact && !mine.some((m) => (m.length > 5 && pn.indexOf(m) >= 0) || (pn.length > 5 && m.indexOf(pn) >= 0))) continue;
+      // containment is how Creek Horizon reached Sobha's The Horizon. A name inside a name has to agree on the developer.
+      if (!exact && !sameDev(developer, d.name)) continue;
       const plans = (p.plans || []).filter((x) => x.url).slice(0, 12)
         .map((x) => ({ label: x.label || x.kind || "plan", url: x.url, source: x.source || null }));
       if (plans.length) return { developer: d.name || developer || null, project: p.name, note: p.note || null, plans };
@@ -901,6 +931,18 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
           "</span><span>" + (x.price ? aed(x.price) : "") + "</span></div>").join("") +
         '<div class=src>Dubai Land Department transactions registered against the name ' + esc(D.sold.name) +
         ". The transaction register carries no building id, only a name, so these are that name's sales rather than provably this footprint's. Settled prices, not asking.</div>" : "") +
+      (D.occupancy ? "<h3>When it filled up</h3>" +
+        '<div class=row><span>Meters connected</span><span>' + fmt(D.occupancy.connections) + "</span></div>" +
+        (D.occupancy.first ? '<div class=row><span>First connection</span><span>' + esc(D.occupancy.first) + "</span></div>" : "") +
+        (D.occupancy.last ? '<div class=row><span>Most recent</span><span>' + esc(D.occupancy.last) + "</span></div>" : "") +
+        (D.occupancy.y2025 ? '<div class=row><span>In 2025</span><span>' + fmt(D.occupancy.y2025) +
+          (D.occupancy.y2024 ? " &middot; " + fmt(D.occupancy.y2024) + " in 2024" : "") + "</span></div>" : "") +
+        (D.occupancy.residential ? '<div class=row><span>Homes / commercial</span><span>' + fmt(D.occupancy.residential) +
+          " / " + fmt(D.occupancy.commercial || 0) + "</span></div>" : "") +
+        '<div class=src>DEWA meter connections for this building, matched to it by its own entrance. <b>A connection is not a home:</b> one home let three times is three connections, so this cannot be divided by the number of homes to give an occupancy rate. It is the only thing any register says about a building being lived in rather than sold or let. Months only.' +
+        (D.districtOccupancy && D.districtOccupancy.withheld ? " Smaller buildings in this district - " + fmt(D.districtOccupancy.withheld) +
+          " of them - are withheld entirely: below " + esc(D.districtOccupancy.floor) + " connections the figure stops being a statistic and becomes a household." : "") +
+        "</div>" : "") +
       (D.rent ? "<h3>What it lets for</h3>" +
         '<div class=src style="margin:0 0 6px">Ejari registers a letting against the SCHEME, not the tower: these are ' +
         fmt(D.rent.n) + " contracts registered against " + esc(D.rent.scheme) + " since 2024, the scheme this building belongs to." +
