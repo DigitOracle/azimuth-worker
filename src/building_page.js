@@ -43,8 +43,21 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
   const mix = [band("office") && band("office") + " of offices", band("retail") && band("retail") + " of retail",
     homeFloors.length ? homeFloors.length + " residential floors" : null, band("services") && band("services") + " of services and parking"].filter(Boolean);
   if (mix.length) facts.push(["Floors", mix.join(" · ")]);
-  if (u.total_units || dld.units_registered) facts.push(["Units", fmt(u.total_units || dld.units_registered) + " registered" +
-    (u.asset_classes ? " — " + Object.entries(u.asset_classes).filter((e) => e[1]).map((e) => fmt(e[1]) + " " + e[0]).join(", ") : "")]);
+  // v234 - SCOPE, NOT IDENTITY (Kendall, 22 Sep 2026, after seeing this line on live). dld.units_registered is the register
+  // PROPERTY's count, and a property can span many buildings: REMRAAM's 195 buildings share one property_id, so every one of
+  // them printed "11,444 registered" for its own floors, above a title that had already named the building correctly. 720 of
+  // the 1,993 buildings that show this line are in that state. The figure is real; whose it is was not said. Where the
+  // property spans more than one building the line now says across how many and in what, and this building's own registered
+  // count is printed beside it when the register holds one - 42 records do. The breakdown belongs to the same scope as the
+  // total, so it stays on the same line and inherits the same wording.
+  const unitsReg = u.total_units || dld.units_registered;
+  if (unitsReg) {
+    const spans = dld.buildings > 1 ? dld.buildings : null;
+    const mine = u.registered_homes || null;
+    facts.push(["Units", fmt(unitsReg) + (spans ? " registered across " + fmt(spans) + " buildings" + (dld.project ? " in " + dld.project : "") : " registered") +
+      (mine ? " · " + fmt(mine) + " registered to this building" : "") +
+      (u.asset_classes ? " — " + Object.entries(u.asset_classes).filter((e) => e[1]).map((e) => fmt(e[1]) + " " + e[0]).join(", ") : "")]);
+  }
   if (dm.height_m) facts.push(["Height", Math.round(dm.height_m) + " m" + (a.h && Math.abs(a.h - dm.height_m) > 12 ? " (the model stands " + Math.round(a.h) + " m)" : "")]);
   if (dm.completed || dm.construction_year) facts.push(["Completed", String(dm.completed || dm.construction_year).slice(0, 10)]);
   else if (dm.permitted) facts.push(["Permit", String(dm.permitted).slice(0, 10) + (dm.dm_status ? " · " + dm.dm_status : "")]);
