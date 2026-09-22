@@ -2225,6 +2225,71 @@ async function appFetch(request, env, ctx) {
         await env.MEETINGS.put("cfg_bg_ct", _ct);
         return new Response(JSON.stringify({ ok: true, bytes: _buf.byteLength, contentType: _ct }), { headers: { "Content-Type": "application/json" } });
       }
+      // v243 - DOES THE MODEL HOLD THE BUILDINGS THE REGISTER SAYS IT SHOULD? (Kendall, 22 Sep 2026.)
+      //
+      // On 22 Sep the CityEngine pipeline shipped 202.6 MB of a 357.1 MB export - CityEngine splits an oversized GLTF into
+      // _0/_1/_2 and only _0 was opened - and reported 54 of 654 buildings as the whole district. It passed every eye test.
+      // Nothing downstream could catch it: the twin matches anchors to meshes BY POSITION, so a missing building is not an
+      // error, it is an anchor that finds nothing within 12 m and quietly owns no geometry. The district renders. It is just
+      // emptier than Dubai.
+      //
+      // The pipeline's own gates are the only thing standing between a truncated export and the twin, and a gate inside the
+      // process that produced the file is the weakest kind: it can only compare the file against itself. This compares what
+      // was PUBLISHED against an expectation the model had no part in making - the anchors, which come from the registers.
+      // It reads only the GLB's JSON chunk (the head of the gzip stream, cancelled as soon as that chunk is out), so it costs
+      // a few KB per district rather than the hundreds of MB the files weigh.
+      if (url.pathname === "/twin_audit") {
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const _only = (url.searchParams.get("d") || "").replace(/[^a-z0-9_,]/gi, "");
+        const _min = Math.max(0, Math.min(1, parseFloat(url.searchParams.get("min") || "0.9") || 0.9));
+        let _keys = [];
+        try { const _l = await env.MEETINGS.list({ prefix: "img_sky_" }); _keys = _l.keys.map((k) => k.name.slice(8)); } catch (e) {}
+        if (_only) { const _w = _only.split(",").filter(Boolean); _keys = _keys.filter((s) => _w.includes(s)); }
+        const _rows = [];
+        for (const _slug of _keys) {
+          const _row = { district: _slug };
+          try {
+            const _gz = await env.MEETINGS.get("img_sky_" + _slug, "arrayBuffer");
+            if (!_gz) { _row.error = "no model in the store"; _rows.push(_row); continue; }
+            _row.storedKB = Math.round(_gz.byteLength / 1024);
+            // gunzip only as far as the JSON chunk: header is 12 bytes, then a 4-byte length and a 4-byte type.
+            const _st = new Response(_gz).body.pipeThrough(new DecompressionStream("gzip"));
+            const _rd = _st.getReader();
+            let _acc = new Uint8Array(0), _need = 20, _json = null;
+            while (true) {
+              const { value, done } = await _rd.read();
+              if (value && value.length) { const _m = new Uint8Array(_acc.length + value.length); _m.set(_acc); _m.set(value, _acc.length); _acc = _m; }
+              if (_acc.length >= 20 && _need === 20) {
+                const _dv = new DataView(_acc.buffer, _acc.byteOffset, _acc.length);
+                if (String.fromCharCode(_acc[0], _acc[1], _acc[2], _acc[3]) !== "glTF") { _row.error = "not a GLB"; break; }
+                _need = 20 + _dv.getUint32(12, true);            // 12-byte header + 8-byte chunk header + JSON length
+              }
+              if (_need > 20 && _acc.length >= _need) { _json = new TextDecoder().decode(_acc.subarray(20, _need)); break; }
+              if (done) { if (!_row.error) _row.error = "model ended before its JSON chunk"; break; }
+            }
+            try { await _rd.cancel(); } catch (e) {}
+            if (_json) { const _g = JSON.parse(_json); _row.meshes = (_g.meshes || []).length; _row.nodes = (_g.nodes || []).length; }
+          } catch (e) { _row.error = "unreadable: " + ((e && e.message) || e); }
+          try {
+            const _a = await env.MEETINGS.get("img_anchors_" + _slug, "json");
+            const _list = (_a && (_a.anchors || _a.fps)) || [];
+            _row.anchors = _list.length;
+          } catch (e) {}
+          // A banded tower is several meshes, so meshes >= buildings when the export is whole. Fewer meshes than anchors is
+          // the shape of a truncated export, and that is what this flags - never the reverse, which is normal.
+          if (_row.meshes != null && _row.anchors) {
+            _row.ratio = Math.round((_row.meshes / _row.anchors) * 100) / 100;
+            if (_row.ratio < _min) _row.SHORT = _row.meshes + " meshes for " + _row.anchors + " buildings the register places here";
+          }
+          _rows.push(_row);
+        }
+        const _short = _rows.filter((r) => r.SHORT || r.error);
+        return new Response(JSON.stringify({
+          checked: _rows.length, threshold: _min, short: _short.length,
+          note: "meshes are counted from the GLB's own JSON chunk; anchors come from the registers, which the model had no part in making. Fewer meshes than buildings is the shape of a truncated export.",
+          districts: _rows.sort((a, b) => (a.ratio == null ? -1 : b.ratio == null ? 1 : a.ratio - b.ratio)),
+        }, null, 1), { headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/health") {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const ago = (iso) => { if (!iso) return null; const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 60 ? m + "m ago" : (m < 1440 ? Math.round(m / 60) + "h ago" : Math.round(m / 1440) + "d ago"); };

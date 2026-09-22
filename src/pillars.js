@@ -70,9 +70,20 @@ export function locationAxis(D, pill, areaLabel) {
     note: "The rail distance is this building's. The schools and clinics are its district's, so every tower in the district shares them." };
 }
 
-export function developerAxes(dev) {
+// v238.2 - `thin` is a developer the register DOES name but which is not scored: a name and three counts.
+// It exists because saying nothing and saying "no developer" are different claims, and the card was making
+// the second when the truth was the first. On /building/businessbay/12 that printed "the register does not
+// join this building to a developer" directly under a header reading OMNIYAT. A wrong reason is worse than
+// a missing one - a blank invites a question, an explanation gets believed.
+export function developerAxes(dev, thin) {
   if (!dev) {
-    const why = "the register does not join this building to a developer";
+    const why = !thin
+      ? "the register does not join this building to a developer"
+      : thin.total == null
+        ? esc(thin.name) + " is named on this building, but carries no scored record in the register"
+        : "too early to judge — " + esc(thin.name || "this developer") + " has "
+          + (thin.total === 1 ? "1 registered project" : thin.total + " registered projects")
+          + (thin.due ? ", " + thin.due + " past their due date" : ", none past their due date yet");
     return [{ key: "track", label: "TRACK RECORD", value: null, read: null, why },
       { key: "delivery", label: "DELIVERY RECORD", value: null, read: null, why }];
   }
@@ -237,14 +248,23 @@ export function buildingPillars(D, pill, areaLabel) {
   // By the register NUMBER first. The project row is joined to this building by property/project id with no
   // name comparison, so it is the sound route; the developer NAME on the unit mix reaches only 16% of
   // stacked buildings and matching it is guesswork. Name is the fallback, not the plan.
-  let dev = null;
+  let dev = null, thin = null;
+  const unscored = (pill && pill.unscored) || {};
   const no = D && D.project && D.project.developer_no;
-  if (no != null) dev = devs[String(no).replace(/\.0$/, "")] || null;
-  if (!dev) {
+  const key = no == null ? null : String(no).replace(/\.0$/, "");
+  if (key) { dev = devs[key] || null; if (!dev) thin = unscored[key] || null; }
+  if (!dev && !thin) {
     const want = normName(D && D.developer);
-    if (want && byName[want] && byName[want].length) dev = devs[byName[want][0]] || null;
+    const ks = (want && byName[want]) || [];
+    for (const k of ks) { if (devs[k]) { dev = devs[k]; break; } if (!thin && unscored[k]) thin = unscored[k]; }
   }
-  const axes = [locationAxis(D, pill, areaLabel)].concat(developerAxes(dev));
+  // Named in the register but absent from BOTH maps: still not "no developer". Say what is true - we have
+  // a name and no record - rather than reaching for the nearest sentence.
+  if (!dev && !thin && key) {
+    const named = (D.project && D.project.developer_name) || D.developer;
+    if (named) thin = { name: named, total: null, due: null, dated: null };
+  }
+  const axes = [locationAxis(D, pill, areaLabel)].concat(developerAxes(dev, thin));
   const price = priceReading(D, pill, areaLabel);
   return { axes, price, dev };
 }

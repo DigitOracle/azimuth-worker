@@ -112,5 +112,32 @@ ok(locationAxis({ district: "Business Bay", schoolsAll: 26, healthN: 563 }, PILL
 ok(/fewer than 200/.test(priceReading({ district: "Nowhere", register: [{ median: 1000000, sqm: 100 }] }, PILL).why || ""),
   "an area under the sales floor gets no median, and says why");
 
+// 6. v238.2 - THE THREE REASONS MUST STAY THREE.
+// Live shipped with all of them collapsed into "the register does not join this building to a developer",
+// printed on a card whose own header read OMNIYAT two lines above. The cause was upstream: the payload
+// carried only scored developers, so a real-but-unscored one resolved to nothing and the page reached for
+// the only sentence it had. A wrong reason is worse than a missing value - a blank invites a question, an
+// explanation gets believed.
+const PILL2 = Object.assign({}, PILL, { unscored: { "393": { name: "OMNIYAT PROPERTIES DEVELOPMENT CORPORATION", total: 2, due: 0, dated: 0 } } });
+const baseD = { district: "Business Bay", transit: [{ kind: "Metro", m: 400 }], schoolsAll: 26, healthN: 563, amenKm: 5, register: [{ median: 2000000, sqm: 100 }] };
+const whyOf = (x) => x.axes.find((a) => a.key === "track").why;
+
+const noDev = buildingPillars(Object.assign({}, baseD, { project: {} }), PILL2, "Business Bay");
+ok(/does not join this building to a developer/.test(whyOf(noDev)), "no developer at all: says so");
+
+const unscored = buildingPillars(Object.assign({}, baseD, { project: { developer_no: "393" } }), PILL2, "Business Bay");
+ok(/OMNIYAT/.test(whyOf(unscored)) && /2 registered projects/.test(whyOf(unscored)) && !/does not join/.test(whyOf(unscored)),
+  "named but unscored: names the developer and its project count, and does NOT claim it is unjoined");
+
+const missing = buildingPillars(Object.assign({}, baseD, { project: { developer_no: "99999", developer_name: "SOMEONE L.L.C" } }), PILL2, "Business Bay");
+ok(/SOMEONE/.test(whyOf(missing)) && /no scored record/.test(whyOf(missing)) && !/does not join/.test(whyOf(missing)),
+  "named but absent from both maps: says we have a name and no record, not that there is no developer");
+
+ok(new Set([noDev, unscored, missing].map(whyOf)).size === 3,
+  "the three cases produce three DIFFERENT sentences - collapsing them is how the live defect happened");
+
+ok(buildingPillars(Object.assign({}, baseD, { project: { developer_no: "907" } }), PILL2, "Business Bay").axes.every((a) => a.value != null),
+  "a scored developer is unaffected by any of this");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
