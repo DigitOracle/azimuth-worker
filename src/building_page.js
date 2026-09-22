@@ -159,7 +159,11 @@ function plansFor(index, name, project, developer) {
       const exact = mine.some((m) => m === pn);
       // a name the index calls too generic to match by substring: Sobha's 'Waves' is inside six register projects. For
       // those, a containment hit needs the developer positively known and agreeing - unknown is no longer good enough.
-      if (!exact && p.exact_only && !knownDev(developer, d.name, name)) continue;
+      // the index's flag is computed on the name AS WRITTEN; norm() strips the/by/tower/residences before comparing, so
+      // "The Pinnacle" is two tokens to them and one token - "pinnacle" - to me. Marina Pinnacle matched it on 22 Sep and
+      // was served Sobha's Sheikh Zayed Road layouts. A name that REDUCES to one word is the same danger, measured here.
+      const oneWordAfterNorm = pn.indexOf(" ") < 0;
+      if (!exact && (p.exact_only || oneWordAfterNorm) && !knownDev(developer, d.name, name)) continue;
       if (!exact && !mine.some((m) => (m.length > 5 && pn.indexOf(m) >= 0) || (pn.length > 5 && m.indexOf(pn) >= 0))) continue;
       // containment is how Creek Horizon reached Sobha's The Horizon. A name inside a name has to agree on the developer.
       if (!exact && !sameDev(developer, d.name)) continue;
