@@ -360,7 +360,7 @@ text-decoration:none;color:var(--text);font:600 .54rem 'IBM Plex Mono',monospace
 .dnote{font:400 .5rem 'IBM Plex Mono',monospace;color:var(--mut)}
 .qrw{background:#F6F3EC;padding:10px;border-radius:10px}.qrw svg{display:block;width:min(62vw,300px);height:auto}
 .qrn{font:400 .54rem 'IBM Plex Mono',monospace;color:var(--mut)}
-' + PILLAR_CSS + '
+${PILLAR_CSS}
 #dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
 background:rgba(197,165,106,.1);color:var(--gold);text-decoration:none;font:600 .56rem 'IBM Plex Mono',monospace;
 letter-spacing:.12em;text-transform:uppercase}#dossbtn:hover{background:rgba(197,165,106,.22)}

@@ -185,3 +185,19 @@ for (const D of [{}, { district: "", register: [], transit: [], project: null },
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
+
+// v238.5 — THE CHART'S OWN CSS MUST REACH THE PAGE.
+// Kendall saw a solid BLACK TRIANGLE in a frame of the episode. The rings carried class=spgrid and the page carried no
+// .spgrid rule at all, so an SVG polygon fell back to its default fill: black, on a near-black card. The cause was one
+// wrong interpolation - CSS is a template literal and the insertion was written as `' + PILLAR_CSS + '`, which is string
+// concatenation and inside a template literal is just text. The page shipped the literal characters into its stylesheet.
+// Styling that is merely PRESENT in a module is not styling that arrives; this asserts arrival.
+{
+  const { buildingPageHtml } = await import("../src/building_page.js");
+  const D = { name: "x", district: "d", facts: [], around: [], register: [], floors: [], types: [] };
+  const html = buildingPageHtml(D, "k", "");
+  ok(html.includes(".spgrid{") && html.includes(".spfill{"),
+    "the building page carries the chart's own CSS, so a polygon is never left to its default black fill");
+  ok(!html.includes("' + PILLAR_CSS + '") && !html.includes("+ PILLAR_CSS +"),
+    "and the insertion is interpolated, not concatenated as text into a template literal");
+}
