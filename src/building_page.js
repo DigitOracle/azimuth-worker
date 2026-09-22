@@ -898,7 +898,10 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
   // The dossier and the four ways to hand it over. Share links carry the CLIENT key the worker passed down, never the key
   // that opened this page - the owner browses with his own and must not post it into WhatsApp.
   function dossierUrl(share) {
-    const k = share ? (D.shareKey || "") : K;
+    // KEY, not K: this runs in the browser, where the key arrives as view()'s KEY parameter. K is the server's own
+    // constant in buildingPageHtml and does not exist here - it threw ReferenceError on every click, for every
+    // building that had a dossier, from v220 until 22 Sep 2026.
+    const k = share ? (D.shareKey || "") : KEY;
     return location.origin + "/sheet/" + encodeURIComponent(D.dossier.slug) + ".pdf" + (k ? "?key=" + encodeURIComponent(k) : "");
   }
   function dossierBlock() {
