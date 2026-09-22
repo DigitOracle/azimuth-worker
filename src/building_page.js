@@ -130,10 +130,15 @@ function plansFor(index, name, project, developer) {
   const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(the|by|tower|towers|residences|residence|building)\b/g, " ").replace(/\s+/g, " ").trim();
   const mine = [norm(name), norm(project)].filter((x) => x.length > 3);
   if (!mine.length) return null;
+  // 22 Sep 2026: the index carries 1,254 plans that are not in Dubai at all - Sobha Siniya Island is in Umm Al Quwain -
+  // and the names are generic enough that four Dubai buildings were matching them. Another emirate's plans are worse than
+  // none, because they look like the answer. Skipped before any name is compared.
+  const OTHER_EMIRATE = /umm al quwain|uaq|siniya|abu dhabi|sharjah|ajman|ras al khaimah|rak\b|fujairah/;
   for (const d of ((index && index.developers) || [])) {
     for (const p of (d.projects || [])) {
       const pn = norm(p.name);
       if (!pn) continue;
+      if (OTHER_EMIRATE.test(String((p.area || "") + " " + (p.name || "")).toLowerCase())) continue;
       if (!mine.some((m) => m === pn || (m.length > 5 && pn.indexOf(m) >= 0) || (pn.length > 5 && m.indexOf(pn) >= 0))) continue;
       const plans = (p.plans || []).filter((x) => x.url).slice(0, 12)
         .map((x) => ({ label: x.label || x.kind || "plan", url: x.url, source: x.source || null }));
