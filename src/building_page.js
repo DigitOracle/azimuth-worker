@@ -1008,7 +1008,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         'comes from them, but the floor-by-floor stack - the picker, the plate and the per-floor layout - is built ' +
         'separately and has not been built for this footprint. Nothing below is missing because the building lacks it; ' +
         'it is missing because we have not measured it.</div>' : "") +
-      (D.dossier ? dossierBlock() : "") +
+      dossierBlock() +   // v237 - EVERY building can be handed over, not only the 206 with a PDF; the row itself decides what it offers
       // v238 - the four pillars, built in the Worker and handed down as a string (see src/pillars.js)
       (D.pillarsHtml || "") +
       (D.project ? "<h3>Construction · the register</h3>" +

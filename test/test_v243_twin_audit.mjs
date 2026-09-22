@@ -29,15 +29,19 @@ const glb = (meshCount) => {
   return out;
 };
 
+// A node Buffer is a slice of a SHARED POOL, so .buffer hands back the whole pool and not these bytes. That read as a
+// valid GLB by luck for one run and as garbage the next - a test that passed for the wrong reason, which is the exact
+// failure this suite exists to catch, in the suite itself. Copy the bytes out.
+const ab = (b) => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
 const store = new Map();
 const put = (slug, meshes, anchors) => {
-  store.set("img_sky_" + slug, gzipSync(glb(meshes)).buffer);
+  store.set("img_sky_" + slug, ab(gzipSync(glb(meshes))));
   store.set("img_anchors_" + slug, JSON.stringify({ anchors: Array.from({ length: anchors }, (_, i) => ({ i })) }));
 };
 put("whole", 900, 654);        // a healthy district: more meshes than buildings, because a banded tower is several
 put("truncated", 54, 654);     // the real defect, at the real numbers
 put("noanchors", 10, 0);
-store.set("img_sky_notaglb", gzipSync(Buffer.from("this is not a model at all")).buffer);
+store.set("img_sky_notaglb", ab(gzipSync(Buffer.from("this is not a model at all"))));
 
 const KV = {
   async get(k, t) { if (!store.has(k)) return null; const v = store.get(k); return t === "json" ? JSON.parse(v) : v; },
