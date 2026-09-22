@@ -48,22 +48,29 @@ ok(![...store.keys()].some(k => k.startsWith("img_")), "private push: nothing wr
 r = await call("/img/community_resident_mix");
 ok(r.status === 404, "the public /img route cannot serve it");
 
-// 2. the private page: only its own key opens it
-for (const [label, q, e] of [["no key", "/residents", null], ["wrong key", "/residents?rk=nope", null], ["the client link key", "/residents?rk=" + CLIENT, null], ["READ_KEY as rk", "/residents?rk=" + READ, null], ["data with the client key as rk", "/residents/data?rk=" + CLIENT, null], ["RESIDENTS_KEY not set", "/residents?rk=" + RES, Object.assign({}, env, { RESIDENTS_KEY: "" })], ["a short RESIDENTS_KEY", "/residents?rk=short", Object.assign({}, env, { RESIDENTS_KEY: "short" })]]) {
+// 2. THE GATE IS GONE. This block asserted the opposite until v239: v152 made the page private to RESIDENTS_KEY
+// and every one of these cases was a 404. Kendall reversed it on 22 Sep 2026 - "i do not want any key, residents
+// is fully public, there is only one najma page, period" - so the same cases now assert 200. Kept as the same
+// list rather than deleted, so the reversal is visible in the file instead of the rule quietly disappearing.
+// What is behind it is community-level DEWA aggregate, floored and banded, with no counts and nobody identifiable.
+for (const [label, q, e] of [["no key", "/residents", null], ["a wrong rk", "/residents?rk=nope", null], ["the client link key as rk", "/residents?rk=" + CLIENT, null], ["READ_KEY as rk", "/residents?rk=" + READ, null], ["data with the client key as rk", "/residents/data?rk=" + CLIENT, null], ["RESIDENTS_KEY not set", "/residents?rk=" + RES, Object.assign({}, env, { RESIDENTS_KEY: "" })], ["a short RESIDENTS_KEY", "/residents?rk=short", Object.assign({}, env, { RESIDENTS_KEY: "short" })]]) {
   r = await call(q, {}, e || env);
-  ok(r.status === 404, "residents: " + label + " gets 404");
+  ok(r.status === 200, "residents: " + label + " now OPENS - v239, no gate at all: " + r.status);
 }
-// v235 (Kendall, 22 Sep 2026) - "nationality should not need a key": an app key now opens the layer on its
-// own. The residents key still works and is still the only thing that opens the private twin pages, and a
-// wrong key, a client key used AS rk, and no key at all are all still 404 above.
 r = await call("/residents?key=" + CLIENT);
-ok(r.status === 200, "residents: v235 - a client app key opens the page without rk");
+ok(r.status === 200, "residents: a client app key opens the page without rk");
 r = await call("/residents/data?key=" + READ);
-ok(r.status === 200, "residents: v235 - the data route answers an app key without rk");
+ok(r.status === 200, "residents: the data route answers an app key without rk");
 r = await call("/residents/data?key=" + CLIENT);
-ok(r.status === 200, "residents: v235 - and a client app key too");
+ok(r.status === 200, "residents: and a client app key too");
 r = await call("/residents/data");
-ok(r.status === 404, "residents: no key at all still gets 404");
+ok(r.status === 200, "residents: and no key at all - v239, it is public: " + r.status);
+// The one thing removing a gate must not do: hand a key to whoever walks in. renderResidents used to fall back
+// to clientLinkKey(env) for its own back-links, and that helper returns READ_KEY when no CLIENT_KEY is set.
+const anon = await call("/residents");
+const anonBody = await anon.text();
+ok(!anonBody.includes(READ) && !anonBody.includes(CLIENT) && !anonBody.includes(RES),
+  "residents: an anonymous visitor is handed NO key of any kind - the public page invents none");
 
 r = await call("/residents?rk=" + RES);
 const page = await r.text();

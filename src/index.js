@@ -11025,17 +11025,25 @@ function clientResp(env, url, body, init) {   // a page opened with a client key
 }
 async function residentsRoute(env, url) {
   const rk = residentsKeyOf(env, url);
-  // v235 (Kendall, 22 Sep 2026) - the residents key is no longer required: any valid app key opens the
-  // layer, because "where do the Egyptians live" is a client question and it was buried behind a second
-  // key nobody could find mid-demo. rk still works and still threads through the private twin pages.
-  if (!rk && !clientOk(env, url)) return new Response("not found", { status: 404 });
+  // v239 (Kendall, 22 Sep 2026: "i do not want any key, residents is fully public, there is only one najma
+  // page, period"). NO GATE. v152 put this behind RESIDENTS_KEY and v235 behind any app key; both are gone.
+  // "Where do the Egyptians live" is a question a client asks out loud, and the answer is community-level
+  // DEWA aggregate - floored at 500 residential accounts and a 5% share, banded, no counts and no address -
+  // so there is nothing here to hold back. rk is still read, because it is what threads the panel into the
+  // private twin pages; it is no longer what opens this one.
   const hdr = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer" };
   if (url.pathname === "/residents/data") {
     const raw = await env.MEETINGS.get("priv_community_resident_mix");
     if (!raw) return new Response("not on file", { status: 404, headers: hdr });
     return new Response(raw, { headers: Object.assign({ "Content-Type": "application/json" }, hdr) });
   }
-  return new Response(renderResidents(url.searchParams.get("key") || clientLinkKey(env), rk), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
+  // v239 - and NO invented key. This used to fall back to clientLinkKey(env) for its own back-links, which
+  // was safe while the page was gated: only a key-holder ever reached it. Public, that fallback would print
+  // a client key - or, where CLIENT_KEY is unset, the OWNER key - into a page anyone can open. A visitor who
+  // brought a key keeps threading it; a visitor who brought none is handed none, and the keyed links simply
+  // do not render for them.
+  const _lk = url.searchParams.get("key") || ((rk || keyTier(env, url) !== "") ? clientLinkKey(env) : "");
+  return new Response(renderResidents(_lk, rk), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
 }
 // The layout Kendall used on the laptop (scripts/dewa_views_template.html, residents tab), served from here with the data read from the
 // private route and no counts: chips, minimum share, search with a ranked list, map shading, gold outline on the selected community,

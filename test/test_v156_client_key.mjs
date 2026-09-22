@@ -177,12 +177,18 @@ ok(sentText().includes("/board?key=" + READ), "chat 'board': her own BOARD link 
 const readInAppLink = src.split("\n").filter((l) => /env\.READ_KEY/.test(l) && /key=/.test(l) && /["'`]\/(?:find|home|dev|compare|cards|avail|market|skyline|view|map|plans|charts|clock|area|report)\b/.test(l));
 ok(readInAppLink.length === 0, "no line of the worker puts READ_KEY into a link to an app page" + (readInAppLink.length ? "\n      " + readInAppLink.map((l) => l.trim().slice(0, 140)).join("\n      ") : ""));
 
-// 5. the residents flow: its own key only, never a client key; its page links back with the client key, never READ_KEY
+// 5. the residents flow. v239 (Kendall: "residents is fully public") removed the gate, so these no longer 404 -
+// the page opens for anyone. The invariant that survives is the one that was always the point: another key
+// PRESENTED AS rk is not honoured AS rk. It must not buy the private twin back-links, which are the only thing
+// rk still gates. Asserting the page 404s would now be asserting the old rule; asserting rk is ignored is the
+// same protection stated against behaviour rather than against a status code.
 for (const [label, k] of [["the client key", CLIENT], ["the older client key", LEGACY], ["READ_KEY", READ]]) {
   r = await call("/residents?rk=" + encodeURIComponent(k));
-  ok(r.status === 404, "residents: " + label + " as rk gets 404");
+  ok(r.status === 200, "residents: " + label + " as rk still opens the page - it is public now: " + r.status);
+  const b = await r.text();
+  ok(!/&rk=/.test(b) && !b.includes(READ), "residents: " + label + " as rk is NOT honoured as rk - no private twin links, no READ_KEY");
   r = await call("/residents/data?rk=" + encodeURIComponent(k));
-  ok(r.status === 404, "residents data: " + label + " as rk gets 404");
+  ok(r.status === 200, "residents data: " + label + " as rk still opens - public: " + r.status);
 }
 r = await call("/residents?rk=" + RES);
 const resPage = await bodyOf(r);
