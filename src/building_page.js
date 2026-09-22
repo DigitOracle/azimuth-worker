@@ -665,21 +665,29 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
       // the bedroom types only: "NA" is the register's unclassified bucket, not a home anyone asks for, and giving it a ring
       // put it on a row of its own at three times the size. It keeps its place in the table and in the drill-down.
       const rows = D.register.filter((r) => r.launched && r.c !== "other");
-      const left = rows.reduce((t, r) => t + Math.max(0, (r.launched || 0) - (r.sold || 0)), 0);
       const units = rows.reduce((t, r) => t + (r.launched || 0), 0);
-      if (tag) tag.textContent = fmt(left) + " left of " + fmt(units);
+      const salesN = rows.reduce((t, r) => t + (r.sold || 0), 0);
+      // A home resells. Where the register holds more transactions than units, units-minus-sales is not "what is left",
+      // it is an artefact, and flooring it at zero turns a meaningless subtraction into a confident sold-out.
+      const resell = rows.some((r) => (r.sold || 0) > (r.launched || 0));
+      const left = rows.reduce((t, r) => t + Math.max(0, (r.launched || 0) - (r.sold || 0)), 0);
+      if (tag) tag.textContent = resell ? fmt(salesN) + " sales across " + fmt(units) + " homes"
+        : fmt(left) + " left of " + fmt(units);
       // one ring per type, left against launched. A full ring is sold out; a gap is something to sell.
       const R = 19, C = 2 * Math.PI * R;
       host.innerHTML = '<div class=drow>' + rows.map((r, i) => {
-        const all = r.launched || 0, rest = Math.max(0, all - (r.sold || 0));
-        const frac = all ? rest / all : 0;
+        const all = r.launched || 0, sld = r.sold || 0;
+        const over = sld > all;                       // resold more times than there are homes
+        const none = !sld;                            // no transaction on record at all
+        const rest = Math.max(0, all - sld);
+        const frac = over || none ? 0 : (all ? rest / all : 0);
         return '<a class=dcell data-dt="' + i + '"><svg viewBox="0 0 48 48">' +
           '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="rgba(232,228,216,.14)" stroke-width=5.5></circle>' +
           (frac > 0 ? '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="' + col(r.c) + '" stroke-width=5.5 stroke-linecap=round ' +
             'stroke-dasharray="' + (frac * C).toFixed(1) + " " + C.toFixed(1) + '" transform="rotate(-90 24 24)"></circle>'
             : '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="' + col(r.c) + '" stroke-width=5.5 stroke-opacity=".35"></circle>') +
-          '<text x=24 y=28 text-anchor=middle class=dnum>' + fmt(rest) + "</text></svg>" +
-          "<b>" + esc(r.type) + "</b><small>of " + fmt(all) + "</small></a>";
+          '<text x=24 y=28 text-anchor=middle class=dnum>' + (over ? "\u00d7" + (sld / all).toFixed(1) : none ? "\u2014" : fmt(rest)) + "</text></svg>" +
+          "<b>" + esc(r.type) + "</b><small>" + (over ? "traded, " + fmt(all) + " homes" : none ? "not recorded" : "of " + fmt(all)) + "</small></a>";
       }).join("") + "</div>";
       host.querySelectorAll("[data-dt]").forEach((el) => {
         const r = rows[+el.dataset.dt];
@@ -691,11 +699,13 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
       return;
     }
     const sold = only.sold || 0, all = only.launched || 0, rest = Math.max(0, all - sold);
-    if (tag) tag.textContent = fmt(rest) + " left";
+    const overOne = sold > all;
+    if (tag) tag.textContent = overOne ? fmt(sold) + " sales, " + fmt(all) + " homes" : sold ? fmt(rest) + " left" : "not recorded";
     ring(host, [
       { name: "sold", pct: sold || 0.001, col: col(only.c), label: fmt(sold) + " · " + Math.round(100 * sold / (all || 1)) + "%" },
       { name: "still to sell", pct: rest || 0.001, col: "rgba(232,228,216,.16)", label: fmt(rest) },
-    ], [fmt(rest), "left of " + fmt(all)], () => { drawSold(null); });
+    ], overOne ? ["\u00d7" + (sold / all).toFixed(1), "each home, on average"] : [fmt(rest), sold ? "left of " + fmt(all) : "not recorded"],
+      () => { drawSold(null); });
     const note = document.createElement("div");
     note.className = "src";
     note.innerHTML = esc(only.type) + (only.median ? " · settles at " + (only.est ? "~" : "") + aed(only.median) : "") +
@@ -914,7 +924,10 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
   // The dossier and the four ways to hand it over. Share links carry the CLIENT key the worker passed down, never the key
   // that opened this page - the owner browses with his own and must not post it into WhatsApp.
   function dossierUrl(share) {
-    const k = share ? (D.shareKey || "") : K;
+    // KEY, not K: this runs in the browser, where the key arrives as view()'s KEY parameter. K is the server's own
+    // constant in buildingPageHtml and does not exist here - it threw ReferenceError on every click, for every
+    // building that had a dossier, from v220 until 22 Sep 2026.
+    const k = share ? (D.shareKey || "") : KEY;
     return location.origin + "/sheet/" + encodeURIComponent(D.dossier.slug) + ".pdf" + (k ? "?key=" + encodeURIComponent(k) : "");
   }
   // v237 - the page itself, with the client key. Built from location, so it is right for every building
