@@ -138,6 +138,23 @@ function plansFor(index, name, project, developer) {
     const nm = " " + String(bname || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim() + " ";
     return B.some((t) => t.length > 3 && nm.indexOf(" " + t + " ") >= 0);
   };
+  // A number in a project name is never decoration - Glitz 1 and Glitz 2 are different towers, Belgravia Heights I and
+  // II different phases. Roman numerals included, because Dubai uses both. Leading zeros normalised: 01 is 1.
+  const ROMAN = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10 };
+  const phaseNums = (x) => {
+    const out = [];
+    for (const t of String(x || "").toLowerCase().split(/[^a-z0-9]+/)) {
+      if (!t) continue;
+      if (/^[0-9]{1,3}$/.test(t)) out.push(parseInt(t, 10));
+      else if (ROMAN[t] !== undefined) out.push(ROMAN[t]);
+    }
+    return out;
+  };
+  const numbersConflict = (a, b) => {
+    const A = phaseNums(a), B = phaseNums(b);
+    if (!A.length || !B.length) return false;          // a number on one side only says nothing
+    return !A.some((n) => B.indexOf(n) >= 0);          // both numbered and sharing none: different buildings
+  };
   const sameDev = (a, b) => {
     const A = dtok(a), B = dtok(b);
     if (!A.length || !B.length) return true;   // unknown on either side is not a disagreement
@@ -156,6 +173,8 @@ function plansFor(index, name, project, developer) {
       // field defaults to Dubai for an unrecognised area, so it fails in the direction the regex is there to catch.
       if (p.emirate && String(p.emirate).toLowerCase().indexOf("dubai") < 0) continue;
       if (OTHER_EMIRATE.test(String((p.area || "") + " " + (p.name || "")).toLowerCase())) continue;
+      // both sides numbered and the numbers disagree: a different phase or tower, whoever built it
+      if (numbersConflict(name + " " + (project || ""), p.name)) continue;
       const exact = mine.some((m) => m === pn);
       // a name the index calls too generic to match by substring: Sobha's 'Waves' is inside six register projects. For
       // those, a containment hit needs the developer positively known and agreeing - unknown is no longer good enough.
