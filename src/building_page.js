@@ -859,24 +859,48 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     const k = share ? (D.shareKey || "") : K;
     return location.origin + "/sheet/" + encodeURIComponent(D.dossier.slug) + ".pdf" + (k ? "?key=" + encodeURIComponent(k) : "");
   }
+  // v237 - the page itself, with the client key. Built from location, so it is right for every building
+  // route without this file knowing any of them.
+  function pageUrl(share) {
+    const k = share ? (D.shareKey || "") : K;
+    return location.origin + location.pathname + (k ? "?key=" + encodeURIComponent(k) : "");
+  }
+  // What a share sends: the PDF when one has been built for this building, otherwise the page.
+  function handoverUrl(share) { return D.dossier ? dossierUrl(share) : pageUrl(share); }
+  function handoverLine() { return D.name + (D.district ? ", " + D.district : "") + " - the building in full"; }
+  // v237 - always drawn. It used to live inside `if (D.dossier)`, so a building with no dossier - most of
+  // Dubai - offered no way to hand it over at all.
   function dossierBlock() {
-    const pp = D.dossier.pages ? " \u00b7 " + D.dossier.pages + " pages" : "";
+    const pp = D.dossier && D.dossier.pages ? " \u00b7 " + D.dossier.pages + " pages" : "";
     const can = !!D.shareKey;
-    return '<div class=dossier><div class=dh><b>The dossier</b><span>everything on this page as a PDF' + pp + "</span></div>" +
+    const what = D.dossier ? "everything on this page as a PDF" + pp : "this building, as a link that opens for them";
+    return '<div class=dossier><div class=dh><b>' + (D.dossier ? "The dossier" : "Send this building") + "</b><span>" + what + "</span></div>" +
       '<div class=dacts>' +
-      '<a class=da target=_blank rel=noopener href="' + esc(dossierUrl(false)) + '" download>Download</a>' +
-      (can ? '<a class=da id=dwa>WhatsApp</a><a class=da id=dmail>Email</a><a class=da id=dqr>QR code</a>' :
+      (D.dossier ? '<a class=da target=_blank rel=noopener href="' + esc(dossierUrl(false)) + '" download>Download</a>' : "") +
+      (can ? '<a class=da id=dwa>WhatsApp</a><a class=da id=dmail>Email</a><a class=da id=dshare hidden>Share\u2026</a><a class=da id=dcopy>Copy link</a><a class=da id=dqr>QR code</a>' :
         '<span class=dnote>sharing needs a client key on this worker</span>') + "</div></div>";
   }
   function wireDossier() {
-    if (!D.dossier || !D.shareKey) return;
-    const u = dossierUrl(true), line = D.name + (D.district ? ", " + D.district : "") + " - the building in full";
+    if (!D.shareKey) return;
+    const u = handoverUrl(true), line = handoverLine();
     const wa = $("dwa");
     if (wa) { wa.href = "https://wa.me/?text=" + encodeURIComponent(line + "\n" + u); wa.target = "_blank"; wa.rel = "noopener"; }
     const em = $("dmail");
     if (em) em.href = "mailto:?subject=" + encodeURIComponent(line) + "&body=" + encodeURIComponent(line + "\n\n" + u);
     const qr = $("dqr");
     if (qr) qr.onclick = () => showQR(u, line);
+    // v237 - "message other chats": the phone's own share sheet, so it can go to any app she has.
+    // Shown only where the browser really has it, so it never sits there dead on a desktop.
+    const sh = $("dshare");
+    if (sh && navigator.share) {
+      sh.hidden = false;
+      sh.onclick = () => { navigator.share({ title: D.name, text: line, url: u }).catch(() => {}); };
+    }
+    const cp = $("dcopy");
+    if (cp) cp.onclick = () => {
+      const done = () => { const t = cp.textContent; cp.textContent = "Copied"; setTimeout(() => { cp.textContent = t; }, 1400); };
+      if (navigator.clipboard) navigator.clipboard.writeText(u).then(done).catch(() => {});
+    };
   }
   // rendered here, in the browser: the link is never handed to a third party to be turned into a picture
   function showQR(url, label) {
@@ -885,7 +909,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
       let lb = $("lbx");
       if (!lb) { lb = document.createElement("div"); lb.id = "lbx"; document.body.appendChild(lb); }
       lb.innerHTML = '<div class=qrw>' + q.createSvgTag({ cellSize: 6, margin: 4, scalable: true }) + "</div><b>" + esc(label) +
-        '</b><span class=qrn>scan to open the dossier</span>';
+        '</b><span class=qrn>scan to open ' + (D.dossier ? "the dossier" : "this building") + "</span>";
       lb.style.display = "flex";
       lb.onclick = () => { lb.style.display = "none"; };
     };
@@ -902,7 +926,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     open_('<div class=t>' + esc(D.district) + "</div><h2>" + esc(D.name) + "</h2>" +
       (D.grade ? '<span class="pill n">' + esc(String(D.grade).toLowerCase().replace(/_/g, " ")) + "</span>" : "") +
       // the whole building as one document, to keep or to send: at the top of the card about this building
-      (D.dossier ? dossierBlock() : "") +
+      dossierBlock() +
       (D.project ? "<h3>Construction · the register</h3>" +
         '<div class=row><span>' + esc(D.project.name || "this project") + (D.project.master ? "<br><small>" + esc(D.project.master) + "</small>" : "") +
           "</span><span>" + esc(String(D.project.status || "").toLowerCase() || "—") + "</span></div>" +

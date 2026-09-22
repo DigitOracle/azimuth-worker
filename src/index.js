@@ -3105,6 +3105,9 @@ async function appFetch(request, env, ctx) {
         // the dossier PDF, offered whenever one has been built. It was owner-only when v207 shipped, because the route was;
         // Kendall opened b_* dossiers to a client key (v212), so the button follows - a client could reach the file and not
         // see the way to it. The named client fact sheets stay owner-only, route and all.
+        // v237 - the share key is set whatever the dossier says: every building can be handed over, and the
+        // link a share carries is NEVER the key that opened this page (the owner browses with READ_KEY).
+        _bd.shareKey = clientKeysOf(env)[0] || "";
         try {
           const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
           if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
@@ -7165,7 +7168,7 @@ const MAP_CHROME_JS = ''
   // v228 - resolve a plot to its building by the footprint index the binding already proved, not by name.
   // ntok() name equality stays as the fallback for places that carry no index.
   + '  var pi=(p.i!=null&&p.i>=0)?p.i:null;var UX=UMXC[slug];var ur=(pi!=null&&UX&&UX[pi])?UX[pi]:umxFor(slug,p.name,hm);if(ur&&!corrob(p.name,ur.name))ur=null;var twinI=(pi!=null)?pi:((hm&&hm.i!=null&&hm.i>=0)?hm.i:null);'
-  // v236 - label on EITHER gate. Magnitude (v232/v233) and structure (v234 on the building page) guard
+  // v237 - label on EITHER gate. Magnitude (v232/v233) and structure (v234 on the building page) guard
   // the same lie from different sides and disagree on 9 of 1,254 plots, all of them a property spanning
   // two buildings whose totals sit inside the 1.15x ratio. The page called those out and the panel did
   // not, which made the quieter surface look like the more precise one. Neither gate replaces the other:
