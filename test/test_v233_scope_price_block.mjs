@@ -45,9 +45,11 @@ function lift(name) {
 }
 
 const srcHome = lift("homeBlock");
-ok(!!srcHome && /^function homeBlock\(it,bu\)\{/.test(srcHome), "homeBlock takes the building's registered count");
+// v236 added a third parameter carrying the structural fact, so match the prefix rather than the
+// full signature - an assertion pinned to the exact arity fails on a change that only adds to it.
+ok(!!srcHome && /^function homeBlock\(it,bu[,)]/.test(srcHome), "homeBlock takes the building's registered count");
 const atBU = CHROME.indexOf("var BU=(p.units!=null&&p.units>0)?p.units:null;");
-const atUse = CHROME.indexOf("homeBlock(hm,BU)");
+const atUse = Math.max(CHROME.indexOf("homeBlock(hm,BU)"), CHROME.indexOf("homeBlock(hm,BU,WN)"));
 ok(atBU >= 0, "openPanel computes the registered count once", `indexOf ${atBU}`);
 ok(atUse >= 0 && atBU < atUse, "and hands it to the price block", `BU at ${atBU}, use at ${atUse}`);
 ok(CHROME.indexOf("umxTable(ur,BU)") >= 0, "the unit-mix table is fed from the same value");

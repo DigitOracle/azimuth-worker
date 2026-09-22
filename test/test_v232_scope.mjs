@@ -56,7 +56,10 @@ ok(!!srcTable && /^function umxTable\(r,bu\)\{/.test(srcTable), "umxTable takes 
 // and an assertion pinned to the old inline expression failed on a refactor that changed nothing.
 ok(/umxTable\(ur,\s*(BU|\(p\.units)/.test(CHROME), "openPanel hands umxTable a registered count");
 ok(/p\.units!=null&&p\.units>0/.test(CHROME), "and that count comes from the plot feature's own units");
-ok(/var wide=\(bu&&r\.total_units&&r\.total_units>bu\*1\.15\)\?bu:null/.test(CHROME), "the scope test compares the record against the building");
+// v236 split this into `over` (the magnitude test) and `wide` (label on either gate). Assert the
+// comparison still happens rather than the exact spelling of the variable it lands in.
+ok(/r\.total_units>bu\*1\.15/.test(CHROME), "the magnitude test still compares the record against the building");
+ok(/r\.dld&&r\.dld\.buildings>1/.test(CHROME), "and the structural test sits beside it (v236)");
 
 const PRELUDE = `function esc(s){return String(s==null?"":s);} function fmtM(n){return "AED "+n;}`;
 const umxTable = new Function(PRELUDE + lift("umxHeld") + srcTable + "\nreturn umxTable;")();
@@ -76,7 +79,13 @@ const tight = umxTable(rec(772, 1), 772);
 ok(!/across the project/.test(tight), "a building-scoped record is not labelled");
 ok(!/registered at/.test(tight), "a building-scoped record gains no disclosure line");
 
-ok(!/across the project/.test(umxTable(rec(11444, 195), null)), "with no registered count there is no claim to make, so none is made");
+// BEHAVIOUR CHANGE in v236, not a stale assertion. This record has no registered count to compare
+// against, so magnitude is silent - but dld.buildings is 195, so structure speaks. The label fires
+// and simply omits the "registered at N" clause it cannot fill.
+const noCount = umxTable(rec(11444, 195), null);
+ok(/across the project/.test(noCount), "with no registered count, structure alone still labels it");
+ok(!/registered at/.test(noCount), "and the clause it cannot fill is omitted rather than guessed");
+ok(!/across the project/.test(umxTable(rec(11444, 1), null)), "with neither a count nor a multi-building property, no claim is made");
 ok(!/across the project/.test(umxTable(rec(100, 1), 95)), "a 5% difference is rounding, not a change of scope");
 ok(/across the project/.test(umxTable(rec(200, 2), 100)), "a 2x difference is a change of scope");
 
