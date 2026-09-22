@@ -23,9 +23,13 @@ const aed = (n) => (n == null ? "—" : n >= 1e6 ? "AED " + (n / 1e6).toFixed(2)
 // ---- what the registers can say about one building ---------------------------------------------------------------------------
 export function buildingData(slug, id, stack, umx, bf, anchors, people, districtName, plansIndex, units, plate) {
   const amen = stack.district_amenities || null;
-  const r = stack && stack.buildings_by_id && stack.buildings_by_id[String(id)];
   const u = umx && umx.buildings_by_id && umx.buildings_by_id[String(id)];
-  if (!r || !u) return null;
+  if (!u) return null;
+  // The stack is the 3% case. Without it there is no per-floor geometry, so the page is honestly thinner rather than the
+  // full page with holes: an empty object means every stack-sourced section is absent, which is the template contract.
+  const rr = stack && stack.buildings_by_id && stack.buildings_by_id[String(id)];
+  const noModel = !rr;
+  const r = rr || {};
   const dm = u.dm || {}, dld = u.dld || {}, sales = u.dld_sales || {};
   const a = ((anchors && anchors.anchors) || []).find((x) => String(x.i) === String(id)) || {};
   const sold = sales.sold_by_type || {};
@@ -37,6 +41,12 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
   const homeFloors = floors.filter((f) => f.u === "homes" || f.u === "hotel" || f.u === "villa");
   const band = (u2) => { const n = floors.filter((f) => f.u === u2).length; return n ? n + (n === 1 ? " floor" : " floors") : null; };
   const facts = [];
+  // a placeholder record carries floors and indicative homes even with no stack - say which they are
+  if (noModel) {
+    if (u.floors) facts.push(["Floors", u.floors + " levels, from the building register"]);
+    if (u.indicative_homes) facts.push(["Homes", fmt(u.indicative_homes) + " indicative"]);
+    if (u.registered_homes) facts.push(["Registered homes", fmt(u.registered_homes)]);
+  }
   if (u.developer) facts.push(["Developer", u.developer]);
   else if (dld.project && String(dld.project).toLowerCase() !== String(r.name || "").toLowerCase()) facts.push(["Registered as", dld.project]);
   if (dm.floors_label) facts.push(["Stack", String(dm.floors_label).replace(/\s+/g, " ").trim() + (r.basements ? "" : "") ]);
@@ -66,7 +76,10 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
   if (sales.mall) around.push(["Mall", sales.mall]);
   if (sales.landmark) around.push(["Landmark", sales.landmark]);
   return {
-    slug, id: String(id), name: r.name || a.name || "building", district: districtName || (stack.district || slug),
+    // 89% of footprints carry no name in any register we hold, so "building" would read as a bug. Say what is true.
+    slug, id: String(id), name: r.name || u.name || a.name || "Unnamed building", unnamed: !(r.name || u.name || a.name),
+    district: districtName || (stack.district || slug),
+    noModel,
     basis: r.basis, conflict: r.conflict, levelShift: r.level_shift, basements: r.basements, label: dm.floors_label,
     grade: a.identity_grade || null, mapName: a.name || null, x: a.x, z: a.z, h: a.h || dm.height_m,
     floors, types: r.types || [], register, facts, around,
@@ -74,7 +87,7 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     sheet: r.sheet || null, generated: stack.generated, asOf: (stack.sources || [])[0] || "",
     open: r.open || null, openFrom: r.open_from || null, openRadius: r.open_radius || 0, plot: r.plot || null,
     fits: r.fits !== false, heightFlag: r.height_flag || null, modelH: (anchors && a.h) || null,
-    plans: plansFor(plansIndex, r.name, (u.dld || {}).project, u.developer),
+    plans: plansFor(plansIndex, r.name, (u.dld || {}).project, u.developer, (u.dld || {}).property_id),
     rent: r.rent || null, project: r.project || null, land: r.land || null, districtLand: stack.district_land || null,
     sold: r.sales || null, makani: r.makani || null, permit: r.permit || null,
     nameId: r.name_id || null, verdict: r.conflict_verdict || null,
@@ -126,7 +139,7 @@ function communityMix(people, slug, comm) {
 
 // The floor plans this building's project has in the library. Matched on the project name, both ways, so "Bay Square - 02"
 // finds "Bay Square" and "The Symphony" finds "The Symphony by Imtiaz". Nothing is guessed: no match, no plans.
-function plansFor(index, name, project, developer) {
+function plansFor(index, name, project, developer, propertyId) {
   const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(the|by|tower|towers|residences|residence|building)\b/g, " ").replace(/\s+/g, " ").trim();
   const mine = [norm(name), norm(project)].filter((x) => x.length > 3);
   const CORP = /^(properties|property|developers|developer|development|developments|realty|real|estate|estates|group|holding|holdings|llc|pjsc|llp|fz|fze|international|investment|investments|co|company|the|and)$/;
@@ -160,6 +173,25 @@ function plansFor(index, name, project, developer) {
     if (!A.length || !B.length) return true;   // unknown on either side is not a disagreement
     return A.some((t) => B.indexOf(t) >= 0);
   };
+  // THE ID ROUTE. bind_plans.py joins a plan project to a DLD register project once and publishes its property_ids;
+  // a building carries its own. Where both exist and the binding was exact, that is an identifier the registers issued
+  // and it settles the question outright - no name is compared. Only "exact": the binding is itself made by name, and
+  // its prefix rule already mis-binds "The Crest" to the register's "the crestmark".
+  const boundById = (() => {
+    if (propertyId === undefined || propertyId === null) return null;
+    const want = [String(propertyId), String(Math.trunc(Number(propertyId)))];
+    for (const d of ((index && index.developers) || [])) {
+      for (const p of (d.projects || [])) {
+        if (p.bind_rule !== "exact" || !p.property_ids) continue;
+        if (!p.property_ids.some((x) => want.indexOf(String(x)) >= 0)) continue;
+        const plans = (p.plans || []).filter((x) => x.url).slice(0, 12)
+          .map((x) => ({ label: x.label || x.kind || "plan", url: x.url, source: x.source || null }));
+        if (plans.length) return { developer: d.name || developer || null, project: p.name, note: p.note || null, plans, byId: true };
+      }
+    }
+    return null;
+  })();
+  if (boundById) return boundById;
   if (!mine.length) return null;
   // 22 Sep 2026: the index carries 1,254 plans that are not in Dubai at all - Sobha Siniya Island is in Umm Al Quwain -
   // and the names are generic enough that four Dubai buildings were matching them. Another emirate's plans are worse than
@@ -230,10 +262,10 @@ export function buildingPageHtml(D, key, rk) {
       (D.open ? '<div class=grp>Open view <u>sees over the roofs</u></div><div id=dirs>' +
         ["N", "NE", "E", "SE", "S", "SW", "W", "NW"].map((x, k) => '<button class="tb dir off" data-d="' + k + '">' + x + "</button>").join("") + "</div>" : "") +
       '<button id=hide>Hide All</button>' +
-      '<div class=grp>Floors <u>' + D.floors.length + ' levels</u></div><select id=fpick class=fsel2><option value="">choose a floor…</option>' +
-      D.floors.map((g, k) => '<option value="' + k + '">' + esc(g.n != null ? "Floor " + g.n : (g.l === "G" ? "Ground floor" : g.l)) +
-        (g.k ? " · " + g.k + " homes" : " · " + esc({ homes: "homes", office: "offices", retail: "retail", hotel: "hotel", services: "services and parking" }[g.u] || g.u)) +
-        "</option>").join("") + "</select>" +
+      (D.floors.length ? '<div class=grp>Floors <u>' + D.floors.length + ' levels</u></div><select id=fpick class=fsel2><option value="">choose a floor…</option>' +
+        D.floors.map((g, k) => '<option value="' + k + '">' + esc(g.n != null ? "Floor " + g.n : (g.l === "G" ? "Ground floor" : g.l)) +
+          (g.k ? " · " + g.k + " homes" : " · " + esc({ homes: "homes", office: "offices", retail: "retail", hotel: "hotel", services: "services and parking" }[g.u] || g.u)) +
+          "</option>").join("") + "</select>" : "") +
       (D.plans ? '<button id=plansbtn>The plans · ' + D.plans.plans.length + "</button>" : "") +
       (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
         '">The dossier · PDF' + (D.dossier.pages ? " · " + D.dossier.pages + "pp" : "") + "</a>" : "") +
@@ -930,6 +962,12 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     open_('<div class=t>' + esc(D.district) + "</div><h2>" + esc(D.name) + "</h2>" +
       (D.grade ? '<span class="pill n">' + esc(String(D.grade).toLowerCase().replace(/_/g, " ")) + "</span>" : "") +
       // the whole building as one document, to keep or to send: at the top of the card about this building
+      (D.unnamed ? '<div class=src><b>The registers hold no name for this footprint.</b> It is identified by its place ' +
+        'and its plot, not by a name, which is normal for the majority of Dubai buildings outside the named schemes.</div>' : "") +
+      (D.noModel ? '<div class=src><b>This building has no floor model yet.</b> The registers know it and what is here ' +
+        'comes from them, but the floor-by-floor stack - the picker, the plate and the per-floor layout - is built ' +
+        'separately and has not been built for this footprint. Nothing below is missing because the building lacks it; ' +
+        'it is missing because we have not measured it.</div>' : "") +
       (D.dossier ? dossierBlock() : "") +
       (D.project ? "<h3>Construction · the register</h3>" +
         '<div class=row><span>' + esc(D.project.name || "this project") + (D.project.master ? "<br><small>" + esc(D.project.master) + "</small>" : "") +
