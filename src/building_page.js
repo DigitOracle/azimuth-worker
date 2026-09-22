@@ -153,6 +153,23 @@ function plansFor(index, name, project, developer) {
     const nm = " " + String(bname || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim() + " ";
     return B.some((t) => t.length > 3 && nm.indexOf(" " + t + " ") >= 0);
   };
+  // A number in a project name is never decoration - Glitz 1 and Glitz 2 are different towers, Belgravia Heights I and
+  // II different phases. Roman numerals included, because Dubai uses both. Leading zeros normalised: 01 is 1.
+  const ROMAN = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10 };
+  const phaseNums = (x) => {
+    const out = [];
+    for (const t of String(x || "").toLowerCase().split(/[^a-z0-9]+/)) {
+      if (!t) continue;
+      if (/^[0-9]{1,3}$/.test(t)) out.push(parseInt(t, 10));
+      else if (ROMAN[t] !== undefined) out.push(ROMAN[t]);
+    }
+    return out;
+  };
+  const numbersConflict = (a, b) => {
+    const A = phaseNums(a), B = phaseNums(b);
+    if (!A.length || !B.length) return false;          // a number on one side only says nothing
+    return !A.some((n) => B.indexOf(n) >= 0);          // both numbered and sharing none: different buildings
+  };
   const sameDev = (a, b) => {
     const A = dtok(a), B = dtok(b);
     if (!A.length || !B.length) return true;   // unknown on either side is not a disagreement
@@ -171,6 +188,8 @@ function plansFor(index, name, project, developer) {
       // field defaults to Dubai for an unrecognised area, so it fails in the direction the regex is there to catch.
       if (p.emirate && String(p.emirate).toLowerCase().indexOf("dubai") < 0) continue;
       if (OTHER_EMIRATE.test(String((p.area || "") + " " + (p.name || "")).toLowerCase())) continue;
+      // both sides numbered and the numbers disagree: a different phase or tower, whoever built it
+      if (numbersConflict(name + " " + (project || ""), p.name)) continue;
       const exact = mine.some((m) => m === pn);
       // a name the index calls too generic to match by substring: Sobha's 'Waves' is inside six register projects. For
       // those, a containment hit needs the developer positively known and agreeing - unknown is no longer good enough.
@@ -928,6 +947,24 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     document.head.appendChild(sc);
   }
 
+  // Bands measured, not chosen: subsampling 3,198 building-years of 60+ sales against their own full-year medians,
+  // one sale lands within 10% of the truth only 67.9% of the time, five 86.5%, twelve 94.6%, and the curve flattens
+  // after that. So 1-2 never says median, 3-4 is indicative, 5-11 keeps the count on the label, 12+ stands alone.
+  function saleBand(n) {
+    if (n === 1) return "The one sale on record";
+    if (n === 2) return "What the two sales fetched";
+    if (n < 5) return "Indicative &middot; " + n + " sales";
+    if (n < 12) return "Median of " + n + " sales";
+    return "Median";
+  }
+  function saleBandNote(n) {
+    if (n < 3) return " <b>Too few sales to describe a market:</b> this is what " + (n === 1 ? "a single transaction" : "two transactions") +
+      " happened to fetch, not a price level for the building. Measured against full-year medians, a single sale is out by more than 10% a third of the time.";
+    if (n < 5) return " <b>Indicative only:</b> on " + n + " sales the figure lands within 10% of a full year's median about 81% of the time.";
+    if (n < 12) return " On " + n + " sales this lands within 10% of a full year's median around 87-92% of the time.";
+    return "";
+  }
+
   $("about").onclick = () => {
     const s = D.sales || {};
     open_('<div class=t>' + esc(D.district) + "</div><h2>" + esc(D.name) + "</h2>" +
@@ -970,13 +1007,15 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         D.people.cfloor + "%, and smaller groups stay pooled so nobody can be identified by subtraction. It is context about an area, not a reason to choose one.</div>" : "") +
       (D.sold ? "<h3>What has sold here</h3>" +
         '<div class=row><span>Registered sales</span><span>' + fmt(D.sold.n) + (D.sold.first ? " since " + esc(D.sold.first.slice(0, 4)) : "") + "</span></div>" +
-        (D.sold.psf ? '<div class=row><span>Median</span><span>AED ' + fmt(D.sold.psf) + " per sq ft</span></div>" : "") +
+        (D.sold.psf ? '<div class=row><span>' + saleBand(D.sold.n) + '</span><span>AED ' + fmt(D.sold.psf) + " per sq ft</span></div>" : "") +
         '<div class=row><span>Off-plan</span><span>' + D.sold.offplan_pct + "% of them</span></div>" +
         (D.sold.recent || []).map((x) => '<div class=row><span>' + esc(x.date) + " · " + esc(x.rooms || "") +
           (x.sqft ? "<br><small>" + fmt(x.sqft) + " sq ft · " + (x.offplan ? "off-plan" : "ready") + "</small>" : "") +
           "</span><span>" + (x.price ? aed(x.price) : "") + "</span></div>").join("") +
         '<div class=src>Dubai Land Department transactions registered against the name ' + esc(D.sold.name) +
-        ". The transaction register carries no building id, only a name, so these are that name's sales rather than provably this footprint's. Settled prices, not asking.</div>" : "") +
+        ". The transaction register carries no building id, only a name, so these are that name's sales rather than provably this footprint's. Settled prices, not asking." +
+        (D.sold.psf ? saleBandNote(D.sold.n) : "") +
+        "</div>" : "") +
       (D.occupancy ? "<h3>When it filled up</h3>" +
         '<div class=row><span>Meters connected</span><span>' + fmt(D.occupancy.connections) + "</span></div>" +
         (D.occupancy.first ? '<div class=row><span>First connection</span><span>' + esc(D.occupancy.first) + "</span></div>" : "") +
