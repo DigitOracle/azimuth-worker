@@ -20,7 +20,13 @@
 // reads it, they look at the polygon and form an impression. And price has no agreed direction anyway:
 // cheaper than the area is value to a buyer and a warning to an investor, so no orientation of that spoke
 // is right for both. Beside the chart, "+18% vs the area median" is unambiguous and sayable out loud.
-// Flip PRICE_ON_POLYGON to true to put it back on the shape; everything else follows automatically.
+//
+// DECIDED, not defaulted. This deviates from the four-in-one-spider Kendall asked for, so it went to him
+// with the reasoning on both sides and his answer on 22 Sep 2026 was "keep price beside the chart". What
+// settled it was reading the real sentence back off a real building: "+28% above the Business Bay median
+// of AED 1,974/sq ft, across 425 registered sales" - the sale count is what makes the figure trustworthy
+// rather than merely sayable, and none of it survives being squeezed onto a spoke.
+// The flag still works if that is ever revisited; changing it needs a decision, not a preference.
 export const PRICE_ON_POLYGON = false;
 
 const R = 76, CX = 150, CY = 112;                 // the ring, and where it sits in the 300-wide box
