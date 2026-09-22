@@ -3190,8 +3190,11 @@ async function appFetch(request, env, ctx) {
           // the district amenity block's centre label is the AREA name the register uses, which is what the
           // area medians and district ranks are keyed by; the twin's rail may show a different one.
           const _area = (((_st || {}).district_amenities || {}).centre || {}).label || _bd.district;
-          if (_pl) _bd.pillarsHtml = pillarsCard(Object.assign(buildingPillars(_bd, _pl, _area), {
-            subtitle: (_bd.developer || ((_bd.project || {}).developer_name) || "developer not named in the register"),
+          const _pp = _pl ? buildingPillars(_bd, _pl, _area) : null;
+          if (_pp) _bd.pillarsHtml = pillarsCard(Object.assign(_pp, {
+            // v238.3 - the SAME resolution the axes used. Computing the header separately is how a card came
+            // to name a developer and deny one two lines below it.
+            subtitle: (_pp.name || "developer not named in the register"),
             sourceLine: "DLD project and developer registers, DLD transactions, RTA stations, KHDA schools, DHA facilities.",
           }));
         } catch (e) {}

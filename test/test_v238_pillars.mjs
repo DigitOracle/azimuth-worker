@@ -139,5 +139,33 @@ ok(new Set([noDev, unscored, missing].map(whyOf)).size === 3,
 ok(buildingPillars(Object.assign({}, baseD, { project: { developer_no: "907" } }), PILL2, "Business Bay").axes.every((a) => a.value != null),
   "a scored developer is unaffected by any of this");
 
+// 7. v238.3 - THE HEADER AND THE AXES MUST NEVER DISAGREE.
+// 287 buildings carry a developer NAME on the unit mix and no register NUMBER. The fallback that exists to
+// stop the false sentence was gated on having a number - the very thing it was a fallback for - so every
+// one of them named a developer in the header and denied one two lines below. Emaar, four times over, in
+// Al Khairan First alone.
+const nameOnly = buildingPillars({ district: "Business Bay", transit: [{ kind: "Metro", m: 400 }], schoolsAll: 26, healthN: 563,
+  amenKm: 5, register: [{ median: 2000000, sqm: 100 }], developer: "Emaar", project: {} }, PILL2, "Business Bay");
+ok(/Emaar/.test(whyOf(nameOnly)) && !/does not join/.test(whyOf(nameOnly)),
+  "a developer named on the unit mix with NO register number is not called unjoined");
+ok(nameOnly.name === "Emaar",
+  "and the card's header name comes from the same resolution the axes used");
+
+const trulyNone = buildingPillars({ district: "Business Bay", transit: [{ kind: "Metro", m: 400 }], schoolsAll: 26, healthN: 563,
+  amenKm: 5, register: [{ median: 2000000, sqm: 100 }], project: {} }, PILL2, "Business Bay");
+ok(trulyNone.name === null && /does not join/.test(whyOf(trulyNone)),
+  "with no name anywhere the sentence is still right - it was correct for its own case all along");
+
+// the contradiction itself, stated as the invariant rather than as one of its instances
+for (const [label, D] of [["named on the unit mix", { developer: "Emaar", project: {} }],
+                          ["named on the project row", { project: { developer_name: "SOMEONE L.L.C" } }],
+                          ["unscored by number", { project: { developer_no: "393" } }],
+                          ["scored by number", { project: { developer_no: "907" } }]]) {
+  const got = buildingPillars(Object.assign({ district: "Business Bay", transit: [{ kind: "Metro", m: 400 }],
+    schoolsAll: 26, healthN: 563, amenKm: 5, register: [{ median: 2000000, sqm: 100 }] }, D), PILL2, "Business Bay");
+  const denies = got.axes.some((a) => /does not join/.test(a.why || ""));
+  ok(!(got.name && denies), label + ": names a developer and does not also deny one");
+}
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);

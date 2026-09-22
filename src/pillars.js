@@ -258,15 +258,25 @@ export function buildingPillars(D, pill, areaLabel) {
     const ks = (want && byName[want]) || [];
     for (const k of ks) { if (devs[k]) { dev = devs[k]; break; } if (!thin && unscored[k]) thin = unscored[k]; }
   }
-  // Named in the register but absent from BOTH maps: still not "no developer". Say what is true - we have
-  // a name and no record - rather than reaching for the nearest sentence.
-  if (!dev && !thin && key) {
-    const named = (D.project && D.project.developer_name) || D.developer;
+  // Named anywhere but absent from BOTH maps: still not "no developer". Say what is true - we have a name
+  // and no record - rather than reaching for the nearest sentence.
+  //
+  // v238.3 - this used to require `key`, so it only caught buildings that had a register NUMBER. 287
+  // buildings across the districts carry a developer NAME on the unit mix and no number, and every one of
+  // them printed "the register does not join this building to a developer" beneath a header naming the
+  // developer. Emaar, four times over, in Al Khairan First alone. The guard existed precisely to stop that
+  // and was gated on the thing it was meant to be a fallback FOR.
+  if (!dev && !thin) {
+    const named = (D && D.project && D.project.developer_name) || (D && D.developer);
     if (named) thin = { name: named, total: null, due: null, dated: null };
   }
   const axes = [locationAxis(D, pill, areaLabel)].concat(developerAxes(dev, thin));
   const price = priceReading(D, pill, areaLabel);
-  return { axes, price, dev };
+  // v238.3 - the name the CARD should show, resolved here so the header and the axes cannot disagree.
+  // They were computed independently before: the subtitle read D.developer while the axes read the id
+  // join, which is a second route to the same contradiction even once the fallback above is fixed.
+  const name = (dev && dev.name) || (thin && thin.name) || null;
+  return { axes, price, dev, name };
 }
 
 export function normName(n) {
