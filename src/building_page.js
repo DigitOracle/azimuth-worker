@@ -90,6 +90,8 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     registeredAs: (dld.project && String(dld.project).toLowerCase() !== String(r.name || "").toLowerCase()) ? dld.project : null,
     people: communityMix(people, stack.district || slug, r.community),
     community: r.community || null, transit: r.transit || null,
+    occupancy: r.occupancy || null, districtOccupancy: stack.district_occupancy || null,
+    team: r.team || null, stage: r.stage || null,
     fps: ((anchors && anchors.anchors) || []).filter((x) => x.x != null).map((x) => [x.i, x.x, x.z]),
   };
 }
@@ -901,6 +903,18 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
           "</span><span>" + (x.price ? aed(x.price) : "") + "</span></div>").join("") +
         '<div class=src>Dubai Land Department transactions registered against the name ' + esc(D.sold.name) +
         ". The transaction register carries no building id, only a name, so these are that name's sales rather than provably this footprint's. Settled prices, not asking.</div>" : "") +
+      (D.occupancy ? "<h3>When it filled up</h3>" +
+        '<div class=row><span>Meters connected</span><span>' + fmt(D.occupancy.connections) + "</span></div>" +
+        (D.occupancy.first ? '<div class=row><span>First connection</span><span>' + esc(D.occupancy.first) + "</span></div>" : "") +
+        (D.occupancy.last ? '<div class=row><span>Most recent</span><span>' + esc(D.occupancy.last) + "</span></div>" : "") +
+        (D.occupancy.y2025 ? '<div class=row><span>In 2025</span><span>' + fmt(D.occupancy.y2025) +
+          (D.occupancy.y2024 ? " &middot; " + fmt(D.occupancy.y2024) + " in 2024" : "") + "</span></div>" : "") +
+        (D.occupancy.residential ? '<div class=row><span>Homes / commercial</span><span>' + fmt(D.occupancy.residential) +
+          " / " + fmt(D.occupancy.commercial || 0) + "</span></div>" : "") +
+        '<div class=src>DEWA meter connections for this building, matched to it by its own entrance. <b>A connection is not a home:</b> one home let three times is three connections, so this cannot be divided by the number of homes to give an occupancy rate. It is the only thing any register says about a building being lived in rather than sold or let. Months only.' +
+        (D.districtOccupancy && D.districtOccupancy.withheld ? " Smaller buildings in this district - " + fmt(D.districtOccupancy.withheld) +
+          " of them - are withheld entirely: below " + esc(D.districtOccupancy.floor) + " connections the figure stops being a statistic and becomes a household." : "") +
+        "</div>" : "") +
       (D.rent ? "<h3>What it lets for</h3>" +
         '<div class=src style="margin:0 0 6px">Ejari registers a letting against the SCHEME, not the tower: these are ' +
         fmt(D.rent.n) + " contracts registered against " + esc(D.rent.scheme) + " since 2024, the scheme this building belongs to." +
