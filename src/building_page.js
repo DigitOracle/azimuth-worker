@@ -131,6 +131,13 @@ function plansFor(index, name, project, developer) {
   const mine = [norm(name), norm(project)].filter((x) => x.length > 3);
   const CORP = /^(properties|property|developers|developer|development|developments|realty|real|estate|estates|group|holding|holdings|llc|pjsc|llp|fz|fze|international|investment|investments|co|company|the|and)$/;
   const dtok = (x) => (String(x || "").toLowerCase().match(/[a-z0-9]+/g) || []).filter((t) => t.length > 1 && !CORP.test(t));
+  const knownDev = (a, b, bname) => {
+    const B = dtok(b);
+    if (!B.length) return false;
+    if (dtok(a).some((t) => B.indexOf(t) >= 0)) return true;
+    const nm = " " + String(bname || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim() + " ";
+    return B.some((t) => t.length > 3 && nm.indexOf(" " + t + " ") >= 0);
+  };
   const sameDev = (a, b) => {
     const A = dtok(a), B = dtok(b);
     if (!A.length || !B.length) return true;   // unknown on either side is not a disagreement
@@ -150,6 +157,9 @@ function plansFor(index, name, project, developer) {
       if (p.emirate && String(p.emirate).toLowerCase().indexOf("dubai") < 0) continue;
       if (OTHER_EMIRATE.test(String((p.area || "") + " " + (p.name || "")).toLowerCase())) continue;
       const exact = mine.some((m) => m === pn);
+      // a name the index calls too generic to match by substring: Sobha's 'Waves' is inside six register projects. For
+      // those, a containment hit needs the developer positively known and agreeing - unknown is no longer good enough.
+      if (!exact && p.exact_only && !knownDev(developer, d.name, name)) continue;
       if (!exact && !mine.some((m) => (m.length > 5 && pn.indexOf(m) >= 0) || (pn.length > 5 && m.indexOf(pn) >= 0))) continue;
       // containment is how Creek Horizon reached Sobha's The Horizon. A name inside a name has to agree on the developer.
       if (!exact && !sameDev(developer, d.name)) continue;
