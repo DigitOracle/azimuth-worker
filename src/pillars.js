@@ -247,6 +247,7 @@ export function pillarsCard(o) {
       : esc(a.read || "") + (a.read ? " · " : "") + "<em>" + a.value + "/100</em>") + "</s></div>").join("");
   const notes = shown.filter((a) => a.note).map((a) => esc(a.label) + ": " + esc(a.note)).join(" ");
   return '<div class=pill><b>The pillars<span>' + esc(o.subtitle || "") + "</span></b>"
+    + (o.note ? '<div class=pnote style="margin:0 0 6px">' + esc(o.note) + "</div>" : "")
     + spiderSvg(shown) + rows
     + (PRICE_ON_POLYGON ? "" : priceBlock(o.price))
     + (notes ? '<div class=pnote>' + notes + "</div>" : "")
@@ -318,11 +319,32 @@ export function developerCardAxes(dev) {
   return [track, delivery, onTime];
 }
 
+// v238.6 - the card for a BRAND, aggregated across every register entity belonging to it.
+//
+// Kendall, reading a card that said "DAMAC STAR PROPERTIES (L L C) - 12 projects": "they have only
+// delivered 12 projects?" No. DAMAC is eighteen entities in the DLD register and 146 projects between
+// them; Emaar is five and 206. Scoring a legal entity and labelling it with a brand name is a true number
+// attached to a claim it does not support - and the most commercially dangerous version of that fault we
+// have hit, because a broker repeats it to a client in good faith and is badly wrong about the developer.
+//
+// The subtitle carries the entity count so the reader knows what is being counted, and `registerShortOf`
+// surfaces a thin grouping rather than letting it understate: the entity links are not complete, and
+// fixing one overstatement by shipping an understatement would be no better.
 export function developerPillarsCard(dev, sourceLine) {
+  const g = dev && dev.entities ? dev : null;
+  const bits = [];
+  if (dev && dev.licensed) bits.push("Licensed " + String(dev.licensed).slice(0, 4));
+  if (g) bits.push(g.entities === 1 ? "1 register entity" : g.entities + " register entities");
+  if (g && g.projects && g.projects.total) bits.push(g.projects.total + " projects between them");
+  const short = g && g.registerShortOf
+    ? "The register links " + g.projects.total + " projects to this developer; its own portfolio lists "
+      + g.registerShortOf + ". The scores below cover what the register holds, so they understate it."
+    : "";
   return pillarsCard({
     axes: developerCardAxes(dev),
     price: { why: "price is a building's figure, not a developer's — open any of its buildings for that" },
-    subtitle: dev && dev.licensed ? "Licensed " + String(dev.licensed).slice(0, 4) + " · register record" : "register record",
+    subtitle: bits.join(" · ") || "register record",
+    note: short,
     sourceLine: sourceLine || "DLD developer register and project register.",
   });
 }

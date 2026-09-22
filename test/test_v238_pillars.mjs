@@ -12,7 +12,7 @@
 // built in the WORKER and handed down as a finished string, so what the page carries is the output and
 // only the output. That is the whole reason it was built server-side, and these assertions depend on it.
 import worker from "../src/index.js";
-import { buildingPillars, developerCardAxes, spiderSvg, locationAxis, priceReading, pillarsCard } from "../src/pillars.js";
+import { buildingPillars, developerCardAxes, spiderSvg, locationAxis, priceReading, pillarsCard, developerPillarsCard } from "../src/pillars.js";
 
 const READ = "owner_admin_key_never_in_client_links_0001";
 const SLUG = "businessbay", ID = "6";
@@ -183,10 +183,37 @@ for (const D of [{}, { district: "", register: [], transit: [], project: null },
   ok(out.axes.every((a) => a.value != null || a.why), "every gap on a thin page carries a reason");
 }
 
+// 9. v238.6 - THE GROUPED DEVELOPER CARD.
+// Kendall read a card saying "DAMAC STAR PROPERTIES - 12 projects" and asked whether that was really all
+// they had delivered. It was not: DAMAC is 18 register entities and 146 projects. Scoring a legal entity
+// and labelling it with a brand name is a true number attached to a claim it does not support.
+const GROUP = { name: "DAMAC", entities: 18, licensed: "2002-01-01", years: 24,
+  projects: { total: 146, finished: 100, active: 40, not_started: 4, pending: 2, cancelled: 0,
+    due: 97, delivered: 93, overdue: 4, dated: 90, on_time: 84, late: 6 },
+  escrow_named_pct: 98, track: 99, delivery: 96, on_time_pct: 93, portfolio_count: null, registerShortOf: null };
+const gCard = developerPillarsCard(GROUP);
+ok(/18 register entities/.test(gCard) && /146 projects between them/.test(gCard),
+  "the card says how many entities it counted and their combined projects");
+ok(/93 of 97 due projects delivered/.test(gCard), "and the delivery figure is the group's, not one entity's");
+
+// the guard on the grouping itself: an incomplete link set must not quietly understate
+const SHORT = Object.assign({}, GROUP, { name: "Sobha", entities: 4, registerShortOf: 95,
+  projects: Object.assign({}, GROUP.projects, { total: 42 }) });
+const sCard = developerPillarsCard(SHORT);
+ok(/its own portfolio lists 95/.test(sCard) && /understate/.test(sCard),
+  "where the register links fewer projects than the developer's own portfolio, the card says so");
+ok(!/its own portfolio lists/.test(gCard),
+  "and says nothing when the grouping is not short - the caveat is earned, not decorative");
+
+// a single-entity developer still works and is not called a group of one thing it is not
+const single = developerPillarsCard(PILL.developers["907"]);
+ok(/Licensed 2005/.test(single) && !/register entities/.test(single),
+  "a plain entity record renders without claiming to be a group");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
 
-// v238.5 — THE CHART'S OWN CSS MUST REACH THE PAGE.
+// v238.6 — THE CHART'S OWN CSS MUST REACH THE PAGE.
 // Kendall saw a solid BLACK TRIANGLE in a frame of the episode. The rings carried class=spgrid and the page carried no
 // .spgrid rule at all, so an SVG polygon fell back to its default fill: black, on a near-black card. The cause was one
 // wrong interpolation - CSS is a template literal and the insertion was written as `' + PILLAR_CSS + '`, which is string

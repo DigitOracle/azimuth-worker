@@ -3108,8 +3108,11 @@ async function appFetch(request, env, ctx) {
         try {
           const _pl = JSON.parse((await env.MEETINGS.get("img_pillars")) || "null");
           if (_pl) {
+            // v238.6 - the GROUP first: this page is a brand, and a brand is many register entities.
+            // Falling back to a single entity would label 12 of DAMAC's 146 projects as DAMAC.
+            const _grp = (_pl.groups || {})[_dv.name];
             const _k = (_pl.by_name || {})[pillarName(_dv.name)];
-            const _rec = _k && _k.length ? (_pl.developers || {})[_k[0]] : null;
+            const _rec = _grp || (_k && _k.length ? (_pl.developers || {})[_k[0]] : null);
             if (_rec) _pdev = developerPillarsCard(_rec);
           }
         } catch (e) {}
