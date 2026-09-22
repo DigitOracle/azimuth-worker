@@ -2207,7 +2207,7 @@ async function appFetch(request, env, ctx) {
       }
       if (url.pathname.indexOf("/ig/") === 0 || url.pathname.indexOf("/ig_") === 0) return igRoute(env, url, request);   // v149 - Instagram insights (404 unless IG_APP_ID)
       if (url.pathname.indexOf("/gcal/") === 0) return gcalRoute(env, url);   // v150 - Google Calendar consent and status for Meet bookings (404 unless GMEET)
-      if (url.pathname === "/residents" || url.pathname === "/residents/data") return residentsRoute(env, url);   // v152 - PRIVATE Residents map, Kendall and Naj only (404 unless RESIDENTS_KEY and the right rk)
+      if (url.pathname === "/residents" || url.pathname === "/residents/data") return residentsRoute(env, url);   // v239 - PUBLIC: no key of any kind. What protects it is the flooring in the data (500+ accounts, 5% minimum, banded, no counts), not the audience
       if (url.pathname === "/setbg") {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         if (url.searchParams.get("clear")) { await env.MEETINGS.delete("cfg_bg"); await env.MEETINGS.delete("cfg_bg_ct"); return new Response("backdrop cleared"); }
@@ -10941,10 +10941,13 @@ async function igRoute(env, url, request) {
   }
   return new Response("not found", { status: 404 });
 }
-// v152 - PRIVATE DATA + THE RESIDENTS MAP (Kendall, 14 Sep 2026). The DEWA community resident mix - rounded shares of account holders'
-// nationalities per community - is for Kendall and Naj only: never reachable with the key in client links, never under img_ (which /img
-// serves publicly), never on HOMES, FIND, cards, feed posts or anything Azimuth says. Kendall approved keeping it on Cloudflare as rounded
-// community shares with no counts and nothing below community level, so whatever a push carries, counts are dropped here.
+// v152, REVISED v239 (Kendall, 22 Sep 2026: "residents is fully public"; and of the old audience line, "this is no longer true").
+// The DEWA community resident mix - rounded shares of account holders' nationalities per community - is now served to anyone, so the
+// audience is no longer any part of its protection. WHAT PROTECTS IT IS THE SHAPE OF THE DATA, and that is what must not be weakened:
+// rounded community shares with no counts, nothing below community level, floored at 500+ residential accounts and a 5% share. Lowering
+// any of those floors is not a tuning change, it is a re-run of the decision to publish. Counts are still dropped here whatever a push
+// carries, and this blob still never goes under img_ (which /img serves as files) and never appears on HOMES, FIND, cards, feed posts or
+// anything Azimuth says of its own accord - being public to someone who opens the map is not the same as Azimuth volunteering it.
 const PRIVATE_DATA = ["community_resident_mix", "question_bank"];   // v153 - question_bank: the Najma data session's question bank, stored only
 function cleanResidentMix(j) {
   const pct = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
@@ -11018,7 +11021,14 @@ function keyTier(env, url) {   // "admin" for READ_KEY, "client" for a client ke
 }
 const clientOk = (env, url) => keyTier(env, url) !== "";   // the check on the app pages: READ_KEY or a client key
 const clientPathOk = (p) => CLIENT_PATHS.includes(p) || KEYLESS_PATHS.includes(p) || CLIENT_PREFIXES.concat(KEYLESS_PREFIXES).some((x) => p.indexOf(x) === 0);
-const clientLinkKey = (env) => { const c = clientKeysOf(env); return c.length ? c[0] : String(env.READ_KEY || ""); };   // app links Azimuth hands the owner to forward
+// v239.1 - THE FALLBACK IS GONE. This returned READ_KEY when no client key was configured, and seven of its eight
+// call sites build a link that Azimuth SENDS to a phone: the market pulse, the charts (twice), the compare
+// deep-link, the versus skyline links. A page printing the owner key can be fixed by redeploying; a WhatsApp
+// message carrying it sits in someone else's chat history and cannot be unpublished. CLIENT_KEY is set on
+// azimuth-2 today, so this was latent rather than live - but "it happens to be configured" is not a guarantee,
+// and this codebase fails closed everywhere else. With no client key the link now carries no key and does not
+// open, which is a visible failure the owner will report, instead of a silent one nobody sees.
+const clientLinkKey = (env) => { const c = clientKeysOf(env); return c.length ? c[0] : ""; };   // app links Azimuth hands the owner to forward; NEVER the owner's own key
 const OWNER_LINK_RE = /<a\b[^>]*\bhref="\/(?:board|studio|trends)\b[^"]*"[^>]*>[\s\S]*?<\/a>/g;
 function clientResp(env, url, body, init) {   // a page opened with a client key loses its owner-only links (BOARD, the studio); those routes refuse the key anyway
   return new Response(typeof body === "string" && keyTier(env, url) === "client" ? body.replace(OWNER_LINK_RE, "") : body, init);
