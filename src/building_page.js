@@ -129,6 +129,13 @@ function communityMix(people, slug, comm) {
 function plansFor(index, name, project, developer) {
   const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(the|by|tower|towers|residences|residence|building)\b/g, " ").replace(/\s+/g, " ").trim();
   const mine = [norm(name), norm(project)].filter((x) => x.length > 3);
+  const CORP = /^(properties|property|developers|developer|development|developments|realty|real|estate|estates|group|holding|holdings|llc|pjsc|llp|fz|fze|international|investment|investments|co|company|the|and)$/;
+  const dtok = (x) => (String(x || "").toLowerCase().match(/[a-z0-9]+/g) || []).filter((t) => t.length > 1 && !CORP.test(t));
+  const sameDev = (a, b) => {
+    const A = dtok(a), B = dtok(b);
+    if (!A.length || !B.length) return true;   // unknown on either side is not a disagreement
+    return A.some((t) => B.indexOf(t) >= 0);
+  };
   if (!mine.length) return null;
   // 22 Sep 2026: the index carries 1,254 plans that are not in Dubai at all - Sobha Siniya Island is in Umm Al Quwain -
   // and the names are generic enough that four Dubai buildings were matching them. Another emirate's plans are worse than
@@ -138,8 +145,14 @@ function plansFor(index, name, project, developer) {
     for (const p of (d.projects || [])) {
       const pn = norm(p.name);
       if (!pn) continue;
+      // the index's own answer first (bind_plans.py emirate_of), the regex second - two independent checks, and the
+      // field defaults to Dubai for an unrecognised area, so it fails in the direction the regex is there to catch.
+      if (p.emirate && String(p.emirate).toLowerCase().indexOf("dubai") < 0) continue;
       if (OTHER_EMIRATE.test(String((p.area || "") + " " + (p.name || "")).toLowerCase())) continue;
-      if (!mine.some((m) => m === pn || (m.length > 5 && pn.indexOf(m) >= 0) || (pn.length > 5 && m.indexOf(pn) >= 0))) continue;
+      const exact = mine.some((m) => m === pn);
+      if (!exact && !mine.some((m) => (m.length > 5 && pn.indexOf(m) >= 0) || (pn.length > 5 && m.indexOf(pn) >= 0))) continue;
+      // containment is how Creek Horizon reached Sobha's The Horizon. A name inside a name has to agree on the developer.
+      if (!exact && !sameDev(developer, d.name)) continue;
       const plans = (p.plans || []).filter((x) => x.url).slice(0, 12)
         .map((x) => ({ label: x.label || x.kind || "plan", url: x.url, source: x.source || null }));
       if (plans.length) return { developer: d.name || developer || null, project: p.name, note: p.note || null, plans };
