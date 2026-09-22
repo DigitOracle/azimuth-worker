@@ -10,6 +10,8 @@
 // is parked on an unused layer. A type on a floor is the register's floor range, never a unit position - the page says so.
 // Unit positions belong to level A (a Revit model or a developer stacking plan) and are not invented here.
 
+import { PILLAR_CSS } from "./pillars.js";
+
 export const BP_COL = {                     // Najma's own scheme, the same colours the twin's floors use
   studio: "#B9A6C9", "1": "#C5A56A", "2": "#7FA8C9", "3": "#8FC7B9", "4": "#D9A441",
   office: "#8FA39B", retail: "#D98C6A", hotel: "#C58FB0", civic: "#7FA3B8", services: "#37423F", staff: "#9FB0A8", labour: "#7E8A86", homes: "#D9CFB8", villa: "#C9C0AC", other: "#8A8F96",
@@ -307,6 +309,7 @@ text-decoration:none;color:var(--text);font:600 .54rem 'IBM Plex Mono',monospace
 .dnote{font:400 .5rem 'IBM Plex Mono',monospace;color:var(--mut)}
 .qrw{background:#F6F3EC;padding:10px;border-radius:10px}.qrw svg{display:block;width:min(62vw,300px);height:auto}
 .qrn{font:400 .54rem 'IBM Plex Mono',monospace;color:var(--mut)}
+' + PILLAR_CSS + '
 #dossbtn{display:block;text-align:center;border:1px solid var(--gold);border-radius:99px;padding:6px 0;margin-top:6px;
 background:rgba(197,165,106,.1);color:var(--gold);text-decoration:none;font:600 .56rem 'IBM Plex Mono',monospace;
 letter-spacing:.12em;text-transform:uppercase}#dossbtn:hover{background:rgba(197,165,106,.22)}
@@ -931,6 +934,8 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
       (D.grade ? '<span class="pill n">' + esc(String(D.grade).toLowerCase().replace(/_/g, " ")) + "</span>" : "") +
       // the whole building as one document, to keep or to send: at the top of the card about this building
       dossierBlock() +
+      // v238 - the four pillars, built in the Worker and handed down as a string (see src/pillars.js)
+      (D.pillarsHtml || "") +
       (D.project ? "<h3>Construction · the register</h3>" +
         '<div class=row><span>' + esc(D.project.name || "this project") + (D.project.master ? "<br><small>" + esc(D.project.master) + "</small>" : "") +
           "</span><span>" + esc(String(D.project.status || "").toLowerCase() || "—") + "</span></div>" +

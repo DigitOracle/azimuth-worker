@@ -1,6 +1,7 @@
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { buildingData, buildingPageHtml } from "./building_page.js";   // v187 - the building page: the Symphony viewer for every register-bound building
+import { pillarsCard, buildingPillars, developerPillarsCard, normName as pillarName, PILLAR_CSS } from "./pillars.js";   // v238 - the four pillars, built in the Worker for the building page and /dev
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import { worldBackdrops, worldBackdrop, worldPlatePrompt, worldScenePrompt, worldPicSay, worldCardFields, worldPicSize } from "./world_pic.js";   // v164 - the Versus picture, made the way the morning pictures are made
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
@@ -3035,7 +3036,19 @@ async function appFetch(request, env, ctx) {
         let _cj = null; try { _cj = JSON.parse((await env.MEETINGS.get("img_card_joins")) || "null"); } catch (e) {}   // v168
         const _ls = keyTier(env, url) === "admin" ? await liveSheetSlugs(env) : null;   // v169 - only the owner can open a sheet, so only the owner pays for the list
         let _vids = []; try { _vids = (JSON.parse((await env.MEETINGS.get("img_videos")) || "{}").items) || []; } catch (e) {}   // v101
-        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids, keyTier(env, url) === "admin", _cj, _ls), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        // v238 - the developer's own pillars: TRACK RECORD, DELIVERY RECORD and ON TIME. A different axis set
+        // from the building card on purpose - a developer has no location, and the same label on both would
+        // invite comparing a developer's 86 with a building's 86.
+        let _pdev = null;
+        try {
+          const _pl = JSON.parse((await env.MEETINGS.get("img_pillars")) || "null");
+          if (_pl) {
+            const _k = (_pl.by_name || {})[pillarName(_dv.name)];
+            const _rec = _k && _k.length ? (_pl.developers || {})[_k[0]] : null;
+            if (_rec) _pdev = developerPillarsCard(_rec);
+          }
+        } catch (e) {}
+        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids, keyTier(env, url) === "admin", _cj, _ls, _pdev), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/compare") {                      // v73.3 - two developers side by side, click-only (dev_compare pushed by build_compare.py)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
@@ -3105,6 +3118,18 @@ async function appFetch(request, env, ctx) {
         // the dossier PDF, offered whenever one has been built. It was owner-only when v207 shipped, because the route was;
         // Kendall opened b_* dossiers to a client key (v212), so the button follows - a client could reach the file and not
         // see the way to it. The named client fact sheets stay owner-only, route and all.
+        // v238 - the four pillars. Built here rather than in the page because the About card is assembled in
+        // the browser inside a script string, and the scoring layer has no business being shipped to a client.
+        try {
+          const _pl = JSON.parse((await env.MEETINGS.get("img_pillars")) || "null");
+          // the district amenity block's centre label is the AREA name the register uses, which is what the
+          // area medians and district ranks are keyed by; the twin's rail may show a different one.
+          const _area = (((_st || {}).district_amenities || {}).centre || {}).label || _bd.district;
+          if (_pl) _bd.pillarsHtml = pillarsCard(Object.assign(buildingPillars(_bd, _pl, _area), {
+            subtitle: (_bd.developer || ((_bd.project || {}).developer_name) || "developer not named in the register"),
+            sourceLine: "DLD project and developer registers, DLD transactions, RTA stations, KHDA schools, DHA facilities.",
+          }));
+        } catch (e) {}
         // v237 - the share key is set whatever the dossier says: every building can be handed over, and the
         // link a share carries is NEVER the key that opened this page (the owner browses with READ_KEY).
         _bd.shareKey = clientKeysOf(env)[0] || "";
@@ -8334,7 +8359,7 @@ function videoBlock(v) {
   return '<div class=vtour><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="' + v.poster + '"><source src="' + v.src + '" type="video/mp4"></video>' +
          '<div class=vcap>' + esc2(v.title) + (v.approx ? ' \u00b7 pin on the map is approximate: plot ' + esc2(v.plot || '') + ', building not yet a footprint' : '') + '</div></div>';
 }
-function renderDev(dv, bd, galleries, key, umx, vids, owner, cardJoins, liveSheets) {   // v161 - owner: the client-sheet action on a developer card, never on a client link   // v168 - cardJoins: the precomputed join
+function renderDev(dv, bd, galleries, key, umx, vids, owner, cardJoins, liveSheets, pillarsHtml) {   // v161 - owner: the client-sheet action on a developer card, never on a client link   // v168 - cardJoins: the precomputed join
   // v165 - THE SLUG MUST AGREE WITH THE NAME ON THE CARD. umLookup exists to put a card near a building for the twin and map links, where a
   // near miss shows a neighbour and costs nothing. This hands a buyer a document with her name on it, so a near miss is a different kind of
   // thing entirely. Measured against the live file: 174 cards carry an icon today and 15 of them point at another building - "Golf Grand" is
@@ -8470,7 +8495,7 @@ ${UNIT_MIX_CSS}.umhover{display:none;position:absolute;left:8px;right:8px;top:ca
 .ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.pn{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1rem}.badge{border:1px solid #3E7C6C;color:#8FC7B9;border-radius:99px;padding:2px 8px;font-size:.62rem;white-space:nowrap}
 .pm{color:var(--text);font-size:.72rem;margin-top:4px;font-family:"IBM Plex Mono",monospace}.row{display:flex;gap:8px;align-items:center;margin-top:8px}.go{color:var(--gold);font-weight:600;font-size:.78rem}.mini{margin-left:auto;border:1px solid var(--line);border-radius:99px;padding:3px 9px;color:var(--text);text-decoration:none;font-size:.66rem}.mini+.mini{margin-left:6px}
 .act{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--text);text-decoration:none;font-size:.72rem;margin:0 6px 8px 0;background:var(--card)}
-${NAJ_NAV_CSS}</style></head><body>
+${PILLAR_CSS}${NAJ_NAV_CSS}</style></head><body>
 <script>window.addEventListener("DOMContentLoaded",function(){try{var p=new URLSearchParams(location.search).get("p");if(!p)return;var nk=function(t){return String(t||"").toLowerCase().replace(/[^a-z0-9]/g,"")};var cards=[].slice.call(document.querySelectorAll(".prop"));var hit=cards.find(function(c){var n=nk((c.querySelector(".pn")||{}).textContent);return n===p})||cards.find(function(c){var n=nk((c.querySelector(".pn")||{}).textContent);return n&&p&&(n.indexOf(p)>=0||p.indexOf(n)>=0)});if(!hit)return;hit.classList.add("on");hit.style.outline="1px solid #C5A56A";var d=hit.querySelector(".mb2[data-m]");if(d){d.classList.add("on");d.setAttribute("aria-expanded","true")}setTimeout(function(){hit.scrollIntoView({block:"start",behavior:"smooth"})},150)}catch(e){}});document.addEventListener("click",function(e){var mb=e.target.closest(".mb2[data-m]");if(mb){e.preventDefault();e.stopPropagation();var pr2=mb.closest(".prop");if(!pr2)return;var open=!pr2.classList.contains("on");pr2.classList.toggle("on",open);mb.classList.toggle("on",open);mb.setAttribute("aria-expanded",open?"true":"false");return}var ph=e.target.closest(".ph");if(!ph)return;var pr=ph.closest(".prop");if(!pr)return;document.querySelectorAll(".prop.on").forEach(function(x){if(x!==pr)x.classList.remove("on")});pr.classList.toggle("on")});</script>${owner ? "<script>" + sheetPanelJs(JSON.stringify(key)) + "<\/script>" : ""}
 <div class=hd>${devLogo(dv, 64)}<div><div class=mast>${dv.name}</div><div class=tier>${tierSvg(dv.icon)}<span>${dv.segment_label}</span></div></div></div>
 <div class=kpis>${kp}</div>
@@ -8478,6 +8503,7 @@ ${(dv.properties || []).some(p => p.kind === "ours") ? '<div class=sec>Modelled 
 ${cards || '<div class=prop><div class=pm>No properties on file yet - the first floor-plan deck or availability sheet posted to the group starts the file.</div></div>'}
 <div style="margin-top:14px"><a class=act href="/compare?a=${dv.key}&key=${encodeURIComponent(key)}">compare with another developer</a><a class=act href="/home?key=${encodeURIComponent(key)}">← developers</a><a class=act href="/board?key=${encodeURIComponent(key)}">board</a></div>
 <div class=sub style="color:var(--mut);font-size:.66rem;font-family:'IBM Plex Mono',monospace;margin-top:10px">${(dv.entities || []).length ? 'DLD entities: ' + dv.entities.join(' · ') : ''}</div>
+${pillarsHtml || ""}   <!-- v238 - the developer's own pillars: TRACK RECORD, DELIVERY RECORD, ON TIME -->
 ${najNav(key, "homes")}
 </body></html>`;
 }
