@@ -9378,6 +9378,23 @@ const KEY=${JSON.stringify(key || "")};let ANCH=null,MESHES=null,LIVE=new Map();
 const lblWrap=document.createElement("div");lblWrap.id="lbls";lblWrap.innerHTML='<svg xmlns="http://www.w3.org/2000/svg"></svg>';document.body.appendChild(lblWrap);
 const svgL=lblWrap.querySelector("svg");const legend=document.createElement("div");legend.id="legend";document.body.appendChild(legend);
 fetch("/img/anchors_${slugName}?t=${Math.floor(Date.now()/600000)}").then(r=>r.ok?r.json():null).then(a=>{if(!a||!a.anchors)return;ANCH=a;paintDevs()}).catch(()=>{});
+// v156 - DEVELOPER MASK (Kendall, 23 Sep 2026: "isolate the twin to Sobha-only projects"). data/board/<dev>_mask.json, built by
+// build_sobha_mask.py from the register (developer_number in the accepted group -> parcels -> footprints) and pushed as devmask_<dev>.
+// It names footprints the anchors cannot (an unnamed tower on a Sobha parcel), and says HOW SURE each one is: parcel / dm are exact,
+// radius / geocode and register placeholders are shown SOFT (half-opaque) so a guess never reads as a survey.
+const MASKDEVS=["sobha"];const MASK={};let MASKQ=MASKDEVS.length;
+for(const _d of MASKDEVS)fetch("/img/devmask_"+_d+"?t=${Math.floor(Date.now()/600000)}").then(r=>r.ok?r.json():null).then(j=>{if(j&&j.districts)MASK[_d]=j}).catch(()=>{}).then(()=>{MASKQ--;applyMask()});
+let MASKDONE=false;
+function applyMask(){
+  if(MASKDONE||MASKQ>0||!window.BYFP||!MESHES)return;MASKDONE=true;const mats=(m)=>Array.isArray(m.material)?m.material:[m.material];let n=0;
+  for(const d in MASK){const dd=(MASK[d].districts||{})[${JSON.stringify(slugName)}];if(!dd||!dd.by_i)continue;
+    for(const fi in dd.by_i){const rec=dd.by_i[fi];const soft=rec.method==="geocode"||rec.method==="radius"||!!rec.register_placeholder;
+      for(const mi of (window.BYFP[fi]||[])){const m=MESHES[mi];if(!m)continue;
+        if(!m.userData.dev){const dc=new THREE.Color(DEVCOL[d]||0xC5A56A);for(const mt of mats(m)){if(mt.map){mt.color.lerp(dc,0.35);mt.emissive=dc;mt.emissiveIntensity=0.16}else{mt.color.copy(dc);mt.emissive=dc.clone();mt.emissiveIntensity=0.12}}m.userData.dev=d;n++}
+        if(soft)m.userData.soft=true;m.userData.maskName=rec.name;m.userData.maskMethod=rec.method}}}
+  MASKN=n;const _ds=document.getElementById("devsel");if(_ds)_ds.remove();if(ANCH)buildDevSel();
+  try{const _q=new URLSearchParams(location.search);const _dv=(_q.get("dev")||"").toLowerCase();if(_dv&&DEVCOL[_dv]){setTimeout(()=>{const s=document.getElementById("devsel");if(s)s.value=_dv;applyDev(_dv)},300)}}catch(e){}}
+let MASKN=0;
 function paintDevs(){
   if(!ANCH||!MESHES||!ANCH.per_building_glb)return;
   // anchor -> mesh by POSITION (mesh order in a merged export is not the footprint order): nearest mesh centre within 12 m
@@ -9390,6 +9407,7 @@ function paintDevs(){
     if(bi>=0&&bd<=900)(byFp[bi]=byFp[bi]||[]).push(i)}
   for(const a of ANCH.anchors){const ms=byFp[a.i]||[];a.meshes=ms;a.mesh=ms.length?ms[0]:null}
   window.BYFP=byFp;   // v121: sub-community fallback highlights by footprint index
+  setTimeout(applyMask,0);   // v156: the developer mask paints by footprint index, so it waits for this map
   try{const _q=new URLSearchParams(location.search);const _b=_q.get("b"),_n=(_q.get("q")||"").trim().toLowerCase();   // v94 deep link: ?b=<anchor i> or ?q=<name>
     const _a=_b?ANCH.anchors.find(a=>String(a.i)===_b):_n?(ANCH.anchors.find(a=>(a.name||"").toLowerCase()===_n)||ANCH.anchors.find(a=>(a.name||"").toLowerCase().indexOf(_n)>=0)):null;
     if(_a&&_a.meshes&&_a.meshes.length)setTimeout(()=>openAnchor(_a),500)}catch(e){}
@@ -9406,17 +9424,18 @@ function paintDevs(){
 const MATS=(m)=>Array.isArray(m.material)?m.material:[m.material];
 const CORIG=new Map(),CDIM=new Set();   // v152 - colour by: each material's look before it was coloured, and the buildings with no record that recede
 function ghost(m,on){m.visible=!on;      // Kendall: the others must go, not fade - hide them outright; roads and ground stay for context
-  for(const mt of MATS(m)){if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity]);const o=DEVORIG.get(mt);mt.transparent=o[0];mt.opacity=o[1];if(CDIM.has(mt)){mt.transparent=true;mt.opacity=0.45}mt.depthWrite=true;mt.needsUpdate=true}}
+  for(const mt of MATS(m)){if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity]);const o=DEVORIG.get(mt);mt.transparent=o[0];mt.opacity=o[1];if(CDIM.has(mt)){mt.transparent=true;mt.opacity=0.45}if(!on&&m.userData.soft){mt.transparent=true;mt.opacity=0.5}mt.depthWrite=true;mt.needsUpdate=true}}   // v156: mask members reached by radius / geocode, or register placeholders, read as guesses
 // v74.4 - DEVELOPER FILTER (Kendall, 3 Sep): pick a developer and every other building fades to a ghost; only that developer's
 // towers stay solid, labelled, and the camera frames them. "all developers" restores the district.
 let SELDEV="";const DEVORIG=new Map();
 function buildDevSel(){
   if(document.getElementById("devsel"))return;
-  const present=[...new Set((ANCH.anchors||[]).filter(a=>a.dev&&a.meshes&&a.meshes.length).map(a=>a.dev))];
+  const _mk=Object.keys(MASK).filter(d=>((MASK[d].districts||{})[${JSON.stringify(slugName)}]||{}).n>0);   // v156
+  const present=[...new Set((ANCH.anchors||[]).filter(a=>a.dev&&a.meshes&&a.meshes.length).map(a=>a.dev).concat(_mk))];
   if(!present.length)return;
   const wrap=document.getElementById("devwrap")||document.createElement("div");wrap.id="devwrap";const first=wrap.firstChild;   // v152 - the colour menu may have made the banner already
   const sel=document.createElement("select");sel.id="devsel";
-  sel.innerHTML='<option value="">all developers</option>'+present.sort((x,y)=>DEVNAME[x].localeCompare(DEVNAME[y])).map(d=>'<option value="'+d+'">'+DEVNAME[d]+' ('+(ANCH.anchors.filter(a=>a.dev===d).length)+')</option>').join("");
+  sel.innerHTML='<option value="">all developers</option>'+present.sort((x,y)=>DEVNAME[x].localeCompare(DEVNAME[y])).map(d=>'<option value="'+d+'">'+DEVNAME[d]+' ('+Math.max(ANCH.anchors.filter(a=>a.dev===d).length,(((MASK[d]||{}).districts||{})[${JSON.stringify(slugName)}]||{}).n||0)+')</option>').join("");
   sel.onchange=()=>applyDev(sel.value);wrap.insertBefore(sel,first);
   const ps=document.createElement("select");ps.id="projsel";ps.style.display="none";ps.onchange=()=>applyProj(ps.value);wrap.insertBefore(ps,first);
   if(!wrap.parentNode)document.body.appendChild(wrap);}
