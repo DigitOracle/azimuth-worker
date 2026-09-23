@@ -9385,14 +9385,17 @@ fetch("/img/anchors_${slugName}?t=${Math.floor(Date.now()/600000)}").then(r=>r.o
 const MASKDEVS=["sobha"];const MASK={};let MASKQ=MASKDEVS.length;
 for(const _d of MASKDEVS)fetch("/img/devmask_"+_d+"?t=${Math.floor(Date.now()/600000)}").then(r=>r.ok?r.json():null).then(j=>{if(j&&j.districts)MASK[_d]=j}).catch(()=>{}).then(()=>{MASKQ--;applyMask()});
 let MASKDONE=false;
+function maskFpMap(){   // v156.1: footprint index from the mesh's own name ("b<i>_<class>_s<status>", walking up the node tree) - no anchors needed
+  if(window.BYFP)return window.BYFP;const by={};const RE=/^b(\d+)_/;
+  MESHES.forEach((m,mi)=>{for(let n=m;n;n=n.parent){const r=RE.exec(n.name||"");if(r){(by[r[1]]=by[r[1]]||[]).push(mi);return}}});return by}
 function applyMask(){
-  if(MASKDONE||MASKQ>0||!window.BYFP||!MESHES)return;MASKDONE=true;const mats=(m)=>Array.isArray(m.material)?m.material:[m.material];let n=0;
+  if(MASKDONE||MASKQ>0||!MESHES)return;const BY=maskFpMap();if(!Object.keys(BY).length)return;MASKDONE=true;const mats=(m)=>Array.isArray(m.material)?m.material:[m.material];let n=0;
   for(const d in MASK){const dd=(MASK[d].districts||{})[${JSON.stringify(slugName)}];if(!dd||!dd.by_i)continue;
     for(const fi in dd.by_i){const rec=dd.by_i[fi];const soft=rec.method==="geocode"||rec.method==="radius"||!!rec.register_placeholder;
-      for(const mi of (window.BYFP[fi]||[])){const m=MESHES[mi];if(!m)continue;
+      for(const mi of (BY[fi]||[])){const m=MESHES[mi];if(!m)continue;
         if(!m.userData.dev){const dc=new THREE.Color(DEVCOL[d]||0xC5A56A);for(const mt of mats(m)){if(mt.map){mt.color.lerp(dc,0.35);mt.emissive=dc;mt.emissiveIntensity=0.16}else{mt.color.copy(dc);mt.emissive=dc.clone();mt.emissiveIntensity=0.12}}m.userData.dev=d;n++}
         if(soft)m.userData.soft=true;m.userData.maskName=rec.name;m.userData.maskMethod=rec.method}}}
-  MASKN=n;const _ds=document.getElementById("devsel");if(_ds)_ds.remove();if(ANCH)buildDevSel();
+  MASKN=n;const _ds=document.getElementById("devsel");if(_ds)_ds.remove();if(!ANCH)ANCH={anchors:[],fps:[]};buildDevSel();   // v156.1: a tile with no anchors yet still gets the selector
   try{const _q=new URLSearchParams(location.search);const _dv=(_q.get("dev")||"").toLowerCase();if(_dv&&DEVCOL[_dv]){setTimeout(()=>{const s=document.getElementById("devsel");if(s)s.value=_dv;applyDev(_dv)},300)}}catch(e){}}
 let MASKN=0;
 function paintDevs(){
