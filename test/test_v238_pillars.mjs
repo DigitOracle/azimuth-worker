@@ -226,6 +226,30 @@ const groupAxes = developerCardAxes({ name: "DAMAC", entities: 18, licensed: "20
 ok(!/covers DAMAC only/.test(groupAxes[0].note || "") && !/separate company per scheme/.test(groupAxes[0].note || ""),
   "a grouped card does NOT carry the scope caveat - it has already aggregated, and an unearned caveat is noise");
 
+// 11. v247 - THE DECIDED GROUP REACHES THE BUILDING CARD.
+// Accepting DAMAC's 21 entities fixed /dev and left the building page resolving the single registered
+// company - which is the page Kendall was reading when he asked "they have only delivered 12 projects?".
+// group_of comes from the hand decisions only, never from a name match.
+const PILL3 = Object.assign({}, PILL, {
+  groups: { DAMAC: { name: "DAMAC", entities: 18, licensed: "2002-01-01", years: 24,
+    projects: { total: 146, finished: 100, cancelled: 0, due: 97, delivered: 93, overdue: 4, dated: 90, on_time: 81, late: 9 },
+    track: 100, delivery: 96, on_time_pct: 90, members: ["907"] } },
+  group_of: { "907": "DAMAC" },
+});
+const grouped = buildingPillars({ district: "Business Bay", transit: [{ kind: "Metro", m: 400 }], schoolsAll: 26,
+  healthN: 580, amenKm: 5, register: [{ median: 2000000, sqm: 100 }], project: { developer_no: "907" } }, PILL3, "Business Bay");
+ok(grouped.name === "DAMAC", "a building whose developer belongs to a decided group resolves to the BRAND");
+ok(/146 projects/.test(grouped.axes.find((a) => a.key === "track").read || ""),
+  "and reports the brand's 146 projects, not the entity's 12");
+ok(!/covers DAMAC only/.test(grouped.axes.find((a) => a.key === "track").note || ""),
+  "the single-entity scope caveat is gone, because the card is no longer showing a single entity");
+
+// and with NO decision the old behaviour stands - the group must never come from a name
+const undecided = buildingPillars({ district: "Business Bay", transit: [{ kind: "Metro", m: 400 }], schoolsAll: 26,
+  healthN: 580, amenKm: 5, register: [{ median: 2000000, sqm: 100 }], project: { developer_no: "907" } }, PILL, "Business Bay");
+ok(undecided.name === "DAMAC STAR PROPERTIES (L L C)" && /12 projects/.test(undecided.axes.find((a) => a.key === "track").read || ""),
+  "with no decision recorded it still shows the entity - grouping is never inferred from the name");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
 

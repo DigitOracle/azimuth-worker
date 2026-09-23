@@ -282,9 +282,20 @@ export function buildingPillars(D, pill, areaLabel) {
   // stacked buildings and matching it is guesswork. Name is the fallback, not the plan.
   let dev = null, thin = null;
   const unscored = (pill && pill.unscored) || {};
+  const groups = (pill && pill.groups) || {};
+  const groupOf = (pill && pill.group_of) || {};
   const no = D && D.project && D.project.developer_no;
   const key = no == null ? null : String(no).replace(/\.0$/, "");
-  if (key) { dev = devs[key] || null; if (!dev) thin = unscored[key] || null; }
+  // v247 - THE BRAND FIRST, where someone has decided one exists.
+  //
+  // A building names the registered company that built it, and a brand registers a company per scheme:
+  // DAMAC STAR PROPERTIES has 12 projects, DAMAC has 146 across 18 entities. Printing the entity's figure
+  // under a header reading DAMAC is a true number attached to a claim it does not support, and it is the
+  // question Kendall actually asked. group_of is built from the hand decisions in
+  // developer_group_decisions.json, so this only fires where a person has said these companies are one
+  // developer - never from a name match.
+  if (key && groupOf[key] && groups[groupOf[key]]) dev = groups[groupOf[key]];
+  if (!dev && key) { dev = devs[key] || null; if (!dev) thin = unscored[key] || null; }
   if (!dev && !thin) {
     const want = normName(D && D.developer);
     const ks = (want && byName[want]) || [];
