@@ -8752,14 +8752,19 @@ const _flatSky=(note)=>{if(note){const n=document.createElement("div");
   const _q=new URLSearchParams(location.search);
   const _con=navigator.connection||{};
   const _slow=!!(_con.saveData||/^(slow-)?2g$/.test(_con.effectiveType||""));
+  const AUTO_MB=8;   // below this the detail is free enough to take without asking; above it, it is the reader's call
+  const _offer=(mb,n)=>{const a=document.createElement("a");
+    const q=new URLSearchParams(location.search);q.set("full","1");a.href="?"+q.toString();
+    a.style.cssText="position:absolute;right:12px;bottom:12px;z-index:9;background:rgba(20,26,24,.9);color:#C5A56A;padding:7px 11px;border-radius:6px;font:12px system-ui;text-decoration:none;border:1px solid rgba(197,165,106,.35)";
+    a.textContent="Full detail: "+n+" parts, "+mb.toFixed(0)+" MB";document.body.appendChild(a)};
   if(_q.get("flat")==="1"){_flatSky(null)}
   else fetch("/img/skyparts_${slugName}").then(r=>r.ok?r.json():null).then(ix=>{
     const items=(ix&&ix.items)||[];
     if(!items.length){_flatSky(null);return}
     const mb=items.reduce((t,i)=>t+(i.gz||0),0)/1e6;
-    // A page that quietly spends 28 MB of someone's connection, or quietly withholds the detail, are both worse than
-    // saying which one it did and offering the other.
-    if(_slow&&_q.get("full")!=="1"){_flatSky('Showing the lighter model — this district\'s full detail is '+mb.toFixed(0)+' MB. <a href="?'+(_q.toString()?_q.toString()+"&":"")+'full=1" style="color:#C5A56A">Load it anyway</a>');return}
+    // v250: an index used to mean "a district someone picked for film". At 14 districts it does not, so the size
+    // decides and the reader is told what it is. 32 MB spent without asking cannot be undone by them; asking costs a click.
+    if(_q.get("full")!=="1"&&(_slow||mb>AUTO_MB)){_flatSky(null);_offer(mb,items.length);return}
     let done=0,failed=0;const group=new THREE.Group();
     msg.textContent="Loading "+items.length+" parts, "+mb.toFixed(0)+" MB of detail…";
     Promise.all(items.map(it=>loader.loadAsync("/img/"+it.key).then(p=>{group.add(p.scene)},()=>{failed++})
