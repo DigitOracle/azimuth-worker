@@ -8853,14 +8853,14 @@ ${najNav(key, "twin")}
 }
 // v86 - twin context. Model tiles (a district split for the 5 MB budget) name themselves and point at the community polygon of their parent;
 // corridors group the rail into five doors instead of one long alphabetical row.
-const TWIN_TILE_NAME = { liwan1: "Liwan", bukadra: "Bu Kadra · Meydan Horizon", jltnorth: "JLT \u00b7 North (the towers)", jltsouth: "JLT \u00b7 South (Islands & Park)" };
+const TWIN_TILE_NAME = { liwan1: "Liwan", bukadra: "Bu Kadra · Meydan Horizon", jltnorth: "JLT \u00b7 North (the towers)", jltsouth: "JLT \u00b7 South (Islands & Park)", rasalkhor: "Sobha One / Ras Al Khor" };
 const TWIN_TILE_PARENT = { jltnorth: "althanyahfifth", jltsouth: "althanyahfifth" };
 const TWIN_CORRIDORS = ["Coast", "Downtown & Creek", "New Dubai", "Meydan & MBR", "South & Outer", "Other"];
 const TWIN_CORRIDOR = {
   dubaimarina: "Coast", palmjumeirah: "Coast", alwasl: "Coast", alsatwa: "Coast", dubaimaritimecity: "Coast", jumeirah: "Coast",
   burjkhalifa: "Downtown & Creek", businessbay: "Downtown & Creek", samaaljadaf: "Downtown & Creek", alkhairanfirst: "Downtown & Creek", palmdeira: "Downtown & Creek", alkifaf: "Downtown & Creek",
   jltnorth: "New Dubai", jltsouth: "New Dubai", althanyahfifth: "New Dubai", jumeirahvillagecircle: "New Dubai", jumeirahvillagetriangle: "New Dubai", motorcity: "New Dubai", arjan: "New Dubai", dubaisportscity: "New Dubai", dubaiproductioncity: "New Dubai", dubaistudiocity: "New Dubai", dubaisciencepark: "New Dubai",
-  meydanone: "Meydan & MBR", sobhaheartland: "Meydan & MBR", nadalsheba: "Meydan & MBR", alyufrah1: "Meydan & MBR", alyufrah2: "Meydan & MBR",
+  meydanone: "Meydan & MBR", sobhaheartland: "Meydan & MBR", bukadra: "Meydan & MBR", rasalkhor: "Meydan & MBR", nadalsheba: "Meydan & MBR", alyufrah1: "Meydan & MBR", alyufrah2: "Meydan & MBR",
   dubaihills: "South & Outer", damachills: "South & Outer", alhebiahfifth: "South & Outer", alhebiahfourth: "South & Outer", alyelayiss1: "South & Outer", alyelayiss2: "South & Outer", wadialsafa5: "South & Outer", wadialsafa4: "South & Outer", madinatalmataar: "South & Outer", dubaiindustrialcity: "South & Outer", siliconoasis: "South & Outer", majan: "South & Outer", dubaiinvestmentpark: "South & Outer", dubaisouth: "South & Outer"
 };
 // v106 — the twin at city level: all Dubai as one instanced massing (KV city_overview, built by build_city_overview.py). Tap a district to open its twin.
