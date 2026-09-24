@@ -81,6 +81,8 @@ export function developerAxes(dev, thin) {
       ? "the register does not join this building to a developer"
       : thin.total == null
         ? esc(thin.name) + " is named on this building, but carries no scored record in the register"
+          + (thin.landowner ? ". That name comes from the project register, which on jointly-developed land "
+            + "carries the landowner rather than the developer" : "")
         : "too early to judge — " + esc(thin.name || "this developer") + " has "
           + (thin.total === 1 ? "1 registered project" : thin.total + " registered projects")
           + (thin.due ? ", " + thin.due + " past their due date" : ", none past their due date yet");
@@ -310,8 +312,15 @@ export function buildingPillars(D, pill, areaLabel) {
   // developer. Emaar, four times over, in Al Khairan First alone. The guard existed precisely to stop that
   // and was gated on the thing it was meant to be a fallback FOR.
   if (!dev && !thin) {
-    const named = (D && D.project && D.project.developer_name) || (D && D.developer);
-    if (named) thin = { name: named, total: null, due: null, dated: null };
+    // v251 - THE UNIT MIX NAME FIRST. project.developer_name comes from the DLD project register, and on
+    // jointly-developed land that column is the LANDOWNER, not the developer: Union Properties on Sobha's
+    // Orbis and Solis, DMCC on Verde, Dubai Properties on Ivory and Sapphire, Meydan on Waves. The
+    // developer_NUMBER carries the real developer on every one of those, which is why the id join above is
+    // the sound route and this is only a last resort. Preferring the project-register name, as this did,
+    // could head a card with the landowner and call it the developer.
+    const named = (D && D.developer) || (D && D.project && D.project.developer_name);
+    if (named) thin = { name: named, total: null, due: null, dated: null,
+      landowner: !(D && D.developer) && !!(D && D.project && D.project.developer_name) };
   }
   const axes = [locationAxis(D, pill, areaLabel)].concat(developerAxes(dev, thin));
   const price = priceReading(D, pill, areaLabel);
@@ -367,8 +376,9 @@ export function developerPillarsCard(dev, sourceLine) {
   if (g) bits.push(g.entities === 1 ? "1 register entity" : g.entities + " register entities");
   if (g && g.projects && g.projects.total) bits.push(g.projects.total + " projects between them");
   const short = g && g.registerShortOf
-    ? "The register links " + g.projects.total + " projects to this developer; its own portfolio lists "
-      + g.registerShortOf + ". The scores below cover what the register holds, so they understate it."
+    ? "The Dubai Land Department register links " + g.projects.total + " projects to this developer; its own "
+      + "portfolio lists " + g.registerShortOf + ". A portfolio counts what a developer has built in any "
+      + "emirate and this register covers Dubai only, so the two are measuring different things."
     : "";
   return pillarsCard({
     axes: developerCardAxes(dev),

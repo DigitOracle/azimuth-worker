@@ -200,8 +200,8 @@ ok(/93 of 97 due projects delivered/.test(gCard), "and the delivery figure is th
 const SHORT = Object.assign({}, GROUP, { name: "Sobha", entities: 4, registerShortOf: 95,
   projects: Object.assign({}, GROUP.projects, { total: 42 }) });
 const sCard = developerPillarsCard(SHORT);
-ok(/its own portfolio lists 95/.test(sCard) && /understate/.test(sCard),
-  "where the register links fewer projects than the developer's own portfolio, the card says so");
+ok(/portfolio lists 95/.test(sCard) && /measuring different things/.test(sCard) && !/understate/.test(sCard),
+  "a portfolio bigger than the register reads as a SCOPE difference, not a shortfall - the register is Dubai only");
 ok(!/its own portfolio lists/.test(gCard),
   "and says nothing when the grouping is not short - the caveat is earned, not decorative");
 
@@ -249,6 +249,25 @@ const undecided = buildingPillars({ district: "Business Bay", transit: [{ kind: 
   healthN: 580, amenKm: 5, register: [{ median: 2000000, sqm: 100 }], project: { developer_no: "907" } }, PILL, "Business Bay");
 ok(undecided.name === "DAMAC STAR PROPERTIES (L L C)" && /12 projects/.test(undecided.axes.find((a) => a.key === "track").read || ""),
   "with no decision recorded it still shows the entity - grouping is never inferred from the name");
+
+// 12. v251 - THE LANDOWNER IS NOT THE DEVELOPER.
+// On jointly-developed land the DLD project register's developer_name column carries the LANDOWNER:
+// Union Properties on Sobha's Orbis and Solis, DMCC on Verde, Dubai Properties on Ivory and Sapphire.
+// developer_NUMBER carries the real developer on all of them. The name fallback used to prefer the
+// project register, which could head a card with the landowner and call it the developer.
+const jv = buildingPillars({ district: "Business Bay", transit: [{ kind: "Metro", m: 400 }], schoolsAll: 26,
+  healthN: 580, amenKm: 5, register: [{ median: 2000000, sqm: 100 }],
+  developer: "Sobha", project: { developer_no: "99999", developer_name: "UNION PROPERTIES" } }, PILL, "Business Bay");
+ok(jv.name === "Sobha", "the unit-mix developer wins over the project register's name");
+const jvWhy = jv.axes.find((a) => a.key === "track").why || "";
+ok(!/landowner/.test(jvWhy), "and no landowner caveat, because the name we used is not from that column");
+
+const landownerOnly = buildingPillars({ district: "Business Bay", transit: [{ kind: "Metro", m: 400 }], schoolsAll: 26,
+  healthN: 580, amenKm: 5, register: [{ median: 2000000, sqm: 100 }],
+  project: { developer_no: "99999", developer_name: "UNION PROPERTIES" } }, PILL, "Business Bay");
+ok(landownerOnly.name === "UNION PROPERTIES"
+  && /landowner rather than the developer/.test(landownerOnly.axes.find((a) => a.key === "track").why || ""),
+  "with only the project-register name, the card says that column can be the landowner");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
