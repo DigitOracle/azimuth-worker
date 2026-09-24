@@ -9147,7 +9147,10 @@ const GROUPS={existing:{label:"existing",col:0x39434F,on:true,meshes:[]},constru
 function classify(hex){const d=(a,b)=>{const c1=new THREE.Color(a),c2=new THREE.Color(b);return (c1.r-c2.r)**2+(c1.g-c2.g)**2+(c1.b-c2.b)**2};
 let best="existing",bd=1e9;for(const k in GROUPS){const dd=d(hex,GROUPS[k].col);if(dd<bd){bd=dd;best=k}}return best}
 const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);   // compressed GLBs load too
-loader.load("/img/sky_${slugName}",g=>{
+// v248: one district can be several KV keys. This callback runs ONCE on a complete scene either way - it frames the
+// camera, sizes the ground and fits the shadow frustum from the full bounding box, none of which survives being run
+// against a model that is still arriving.
+const onSky=g=>{
   msg.remove();
   const root=g.scene;
   const box=new THREE.Box3().setFromObject(root);const c=box.getCenter(new THREE.Vector3());const sz=box.getSize(new THREE.Vector3());
@@ -9193,7 +9196,43 @@ loader.load("/img/sky_${slugName}",g=>{
     const b=document.createElement("span");b.className="tg on";b.textContent=gme.label+" ("+nB+")";
     b.onclick=()=>{gme.on=!gme.on;b.classList.toggle("on",gme.on);gme.meshes.forEach(m=>m.visible=gme.on)};fr.appendChild(b)}
   buildFeat();
-},undefined,()=>{msg.textContent="No 3D massing for this community yet — it gets built the first time CityEngine runs for it."});
+};
+const _noSky=()=>{msg.textContent="No 3D massing for this community yet — it gets built the first time CityEngine runs for it."};
+// the note must OUTLIVE the load: onSky removes msg on success, which would take the "load it anyway" offer with it
+const _flatSky=(note)=>{if(note){const n=document.createElement("div");
+    n.style.cssText="position:absolute;left:12px;bottom:12px;z-index:9;background:rgba(20,26,24,.86);color:#D9D4C7;padding:6px 10px;border-radius:6px;font:12px system-ui";
+    n.innerHTML=note;document.body.appendChild(n)}
+  loader.load("/img/sky_${slugName}",onSky,undefined,_noSky)};
+{
+  const _q=new URLSearchParams(location.search);
+  const _con=navigator.connection||{};
+  const _slow=!!(_con.saveData||/^(slow-)?2g$/.test(_con.effectiveType||""));
+  const AUTO_MB=8;   // below this the detail is free enough to take without asking; above it, it is the reader's call
+  const _offer=(mb,n)=>{const a=document.createElement("a");
+    const q=new URLSearchParams(location.search);q.set("full","1");a.href="?"+q.toString();
+    a.style.cssText="position:absolute;right:12px;bottom:12px;z-index:9;background:rgba(20,26,24,.9);color:#C5A56A;padding:7px 11px;border-radius:6px;font:12px system-ui;text-decoration:none;border:1px solid rgba(197,165,106,.35)";
+    a.textContent="Full detail: "+n+" parts, "+mb.toFixed(0)+" MB";document.body.appendChild(a)};
+  if(_q.get("flat")==="1"){_flatSky(null)}
+  else fetch("/img/skyparts_${slugName}").then(r=>r.ok?r.json():null).then(ix=>{
+    const items=(ix&&ix.items)||[];
+    if(!items.length){_flatSky(null);return}
+    const mb=items.reduce((t,i)=>t+(i.gz||0),0)/1e6;
+    // v250: an index used to mean "a district someone picked for film". At 14 districts it does not, so the size
+    // decides and the reader is told what it is. 32 MB spent without asking cannot be undone by them; asking costs a click.
+    if(_q.get("full")!=="1"&&(_slow||mb>AUTO_MB)){_flatSky(null);_offer(mb,items.length);return}
+    let done=0,failed=0;const group=new THREE.Group();
+    msg.textContent="Loading "+items.length+" parts, "+mb.toFixed(0)+" MB of detail…";
+    Promise.all(items.map(it=>loader.loadAsync("/img/"+it.key).then(p=>{group.add(p.scene)},()=>{failed++})
+      .then(()=>{done++;msg.textContent="Loading detail… "+done+" of "+items.length+" parts"})))
+      .then(()=>{
+        if(!group.children.length){_flatSky(null);return}   // nothing arrived at all - the single tile is better than an empty viewer
+        onSky({scene:group});
+        // a missing part is a gap in a district, not a broken page: mount what came and say what did not
+        if(failed){const w=document.createElement("div");w.style.cssText="position:absolute;left:12px;bottom:12px;z-index:9;background:rgba(20,26,24,.86);color:#C5A56A;padding:6px 10px;border-radius:6px;font:12px system-ui";
+          w.textContent=failed+" of "+items.length+" parts of this district did not load — what you see is the rest.";document.body.appendChild(w)}
+      });
+  }).catch(()=>_flatSky(null));
+}
 let META=null;
 fetch("/img/meta_${slugName}").then(r=>r.ok?r.json():null).then(m=>{META=m;buildFeat()}).catch(()=>{});
 let CTX=null,ctxG=null,ROOTREF=null;
