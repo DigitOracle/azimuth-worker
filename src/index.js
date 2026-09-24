@@ -2253,7 +2253,13 @@ async function appFetch(request, env, ctx) {
             if (!_gz) { _row.error = "no model in the store"; _rows.push(_row); continue; }
             _row.storedKB = Math.round(_gz.byteLength / 1024);
             // gunzip only as far as the JSON chunk: header is 12 bytes, then a 4-byte length and a 4-byte type.
-            const _st = new Response(_gz).body.pipeThrough(new DecompressionStream("gzip"));
+            // v243.1 - NOT EVERY MODEL IN THE STORE IS GZIPPED. push_sky_gz gzips; other paths do not, and two
+            // districts are stored raw. Decompressing unconditionally reported them as "unreadable" when nothing
+            // was wrong with them - the audit failing on its own assumption rather than on the thing it audits.
+            const _head = new Uint8Array(_gz, 0, Math.min(2, _gz.byteLength));
+            const _isGz = _head.length === 2 && _head[0] === 0x1f && _head[1] === 0x8b;
+            _row.stored = _isGz ? "gzip" : "raw";
+            const _st = _isGz ? new Response(_gz).body.pipeThrough(new DecompressionStream("gzip")) : new Response(_gz).body;
             const _rd = _st.getReader();
             let _acc = new Uint8Array(0), _need = 20, _json = null;
             while (true) {
