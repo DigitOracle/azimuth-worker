@@ -8682,7 +8682,10 @@ const GROUPS={existing:{label:"existing",col:0x39434F,on:true,meshes:[]},constru
 function classify(hex){const d=(a,b)=>{const c1=new THREE.Color(a),c2=new THREE.Color(b);return (c1.r-c2.r)**2+(c1.g-c2.g)**2+(c1.b-c2.b)**2};
 let best="existing",bd=1e9;for(const k in GROUPS){const dd=d(hex,GROUPS[k].col);if(dd<bd){bd=dd;best=k}}return best}
 const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);   // compressed GLBs load too
-loader.load("/img/sky_${slugName}",g=>{
+// v248: one district can be several KV keys. This callback runs ONCE on a complete scene either way - it frames the
+// camera, sizes the ground and fits the shadow frustum from the full bounding box, none of which survives being run
+// against a model that is still arriving.
+const onSky=g=>{
   msg.remove();
   const root=g.scene;
   const box=new THREE.Box3().setFromObject(root);const c=box.getCenter(new THREE.Vector3());const sz=box.getSize(new THREE.Vector3());
@@ -8728,7 +8731,38 @@ loader.load("/img/sky_${slugName}",g=>{
     const b=document.createElement("span");b.className="tg on";b.textContent=gme.label+" ("+nB+")";
     b.onclick=()=>{gme.on=!gme.on;b.classList.toggle("on",gme.on);gme.meshes.forEach(m=>m.visible=gme.on)};fr.appendChild(b)}
   buildFeat();
-},undefined,()=>{msg.textContent="No 3D massing for this community yet — it gets built the first time CityEngine runs for it."});
+};
+const _noSky=()=>{msg.textContent="No 3D massing for this community yet — it gets built the first time CityEngine runs for it."};
+// the note must OUTLIVE the load: onSky removes msg on success, which would take the "load it anyway" offer with it
+const _flatSky=(note)=>{if(note){const n=document.createElement("div");
+    n.style.cssText="position:absolute;left:12px;bottom:12px;z-index:9;background:rgba(20,26,24,.86);color:#D9D4C7;padding:6px 10px;border-radius:6px;font:12px system-ui";
+    n.innerHTML=note;document.body.appendChild(n)}
+  loader.load("/img/sky_${slugName}",onSky,undefined,_noSky)};
+{
+  const _q=new URLSearchParams(location.search);
+  const _con=navigator.connection||{};
+  const _slow=!!(_con.saveData||/^(slow-)?2g$/.test(_con.effectiveType||""));
+  if(_q.get("flat")==="1"){_flatSky(null)}
+  else fetch("/img/skyparts_${slugName}").then(r=>r.ok?r.json():null).then(ix=>{
+    const items=(ix&&ix.items)||[];
+    if(!items.length){_flatSky(null);return}
+    const mb=items.reduce((t,i)=>t+(i.gz||0),0)/1e6;
+    // A page that quietly spends 28 MB of someone's connection, or quietly withholds the detail, are both worse than
+    // saying which one it did and offering the other.
+    if(_slow&&_q.get("full")!=="1"){_flatSky('Showing the lighter model — this district\'s full detail is '+mb.toFixed(0)+' MB. <a href="?'+(_q.toString()?_q.toString()+"&":"")+'full=1" style="color:#C5A56A">Load it anyway</a>');return}
+    let done=0,failed=0;const group=new THREE.Group();
+    msg.textContent="Loading "+items.length+" parts, "+mb.toFixed(0)+" MB of detail…";
+    Promise.all(items.map(it=>loader.loadAsync("/img/"+it.key).then(p=>{group.add(p.scene)},()=>{failed++})
+      .then(()=>{done++;msg.textContent="Loading detail… "+done+" of "+items.length+" parts"})))
+      .then(()=>{
+        if(!group.children.length){_flatSky(null);return}   // nothing arrived at all - the single tile is better than an empty viewer
+        onSky({scene:group});
+        // a missing part is a gap in a district, not a broken page: mount what came and say what did not
+        if(failed){const w=document.createElement("div");w.style.cssText="position:absolute;left:12px;bottom:12px;z-index:9;background:rgba(20,26,24,.86);color:#C5A56A;padding:6px 10px;border-radius:6px;font:12px system-ui";
+          w.textContent=failed+" of "+items.length+" parts of this district did not load — what you see is the rest.";document.body.appendChild(w)}
+      });
+  }).catch(()=>_flatSky(null));
+}
 let META=null;
 fetch("/img/meta_${slugName}").then(r=>r.ok?r.json():null).then(m=>{META=m;buildFeat()}).catch(()=>{});
 let CTX=null,ctxG=null,ROOTREF=null;
