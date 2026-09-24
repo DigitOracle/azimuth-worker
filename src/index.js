@@ -2243,7 +2243,7 @@ async function appFetch(request, env, ctx) {
         const _only = (url.searchParams.get("d") || "").replace(/[^a-z0-9_,]/gi, "");
         const _min = Math.max(0, Math.min(1, parseFloat(url.searchParams.get("min") || "0.9") || 0.9));
         let _keys = [];
-        try { const _l = await env.MEETINGS.list({ prefix: "img_sky_" }); _keys = _l.keys.map((k) => k.name.slice(8)).filter((sl) => !/_p\d+$/.test(sl)); } catch (e) {}   // v247 - the FOURTH enumeration: a tile part is not a district, and this audit was counting seven of them
+        try { const _l = await env.MEETINGS.list({ prefix: "img_sky_" }); _keys = _l.keys.map((k) => k.name.slice(8)).filter((sl) => !skyPartOf(sl)); } catch (e) {}   // v247/v249 - the FOURTH enumeration: a tile part is not a district, and this audit was counting seven of them. One spelling, shared with the three page sites.
         if (_only) { const _w = _only.split(",").filter(Boolean); _keys = _keys.filter((s) => _w.includes(s)); }
         const _rows = [];
         for (const _slug of _keys) {
