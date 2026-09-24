@@ -9205,9 +9205,6 @@ const _flatSky=(note)=>{if(note){const n=document.createElement("div");
   loader.load("/img/sky_${slugName}",onSky,undefined,_noSky)};
 {
   const _q=new URLSearchParams(location.search);
-  const _con=navigator.connection||{};
-  const _slow=!!(_con.saveData||/^(slow-)?2g$/.test(_con.effectiveType||""));
-  const AUTO_MB=8;   // below this the detail is free enough to take without asking; above it, it is the reader's call
   const _offer=(mb,n)=>{const a=document.createElement("a");
     const q=new URLSearchParams(location.search);q.set("full","1");a.href="?"+q.toString();
     a.style.cssText="position:absolute;right:12px;bottom:12px;z-index:9;background:rgba(20,26,24,.9);color:#C5A56A;padding:7px 11px;border-radius:6px;font:12px system-ui;text-decoration:none;border:1px solid rgba(197,165,106,.35)";
@@ -9217,9 +9214,13 @@ const _flatSky=(note)=>{if(note){const n=document.createElement("div");
     const items=(ix&&ix.items)||[];
     if(!items.length){_flatSky(null);return}
     const mb=items.reduce((t,i)=>t+(i.gz||0),0)/1e6;
-    // v250: an index used to mean "a district someone picked for film". At 14 districts it does not, so the size
-    // decides and the reader is told what it is. 32 MB spent without asking cannot be undone by them; asking costs a click.
-    if(_q.get("full")!=="1"&&(_slow||mb>AUTO_MB)){_flatSky(null);_offer(mb,items.length);return}
+    // v250.1: full detail is NEVER automatic. Kendall, 24 Sep 2026, on disk-space grounds: "make it all opt-in".
+    // v250 carried an 8 MB threshold, below which the parts loaded unasked. Measured across the 14 parted districts,
+    // thirteen sat above it and one did not: alkhairanfirst at 6.6 MB would silently have gone from ~1.4 MB to
+    // 6.6 MB, roughly four times the data, with no prompt. A threshold also decays - every district that gains
+    // parts lands on whichever side of 8 MB it happens to fall. So the flat tile is always first and the parts
+    // are always a click. Data spent without asking cannot be given back; asking costs a click.
+    if(_q.get("full")!=="1"){_flatSky(null);_offer(mb,items.length);return}
     let done=0,failed=0;const group=new THREE.Group();
     msg.textContent="Loading "+items.length+" parts, "+mb.toFixed(0)+" MB of detail…";
     Promise.all(items.map(it=>loader.loadAsync("/img/"+it.key).then(p=>{group.add(p.scene)},()=>{failed++})
