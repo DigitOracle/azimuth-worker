@@ -9427,7 +9427,7 @@ function paintDevs(){
 const MATS=(m)=>Array.isArray(m.material)?m.material:[m.material];
 const CORIG=new Map(),CDIM=new Set();   // v152 - colour by: each material's look before it was coloured, and the buildings with no record that recede
 function ghost(m,on){m.visible=!on;      // Kendall: the others must go, not fade - hide them outright; roads and ground stay for context
-  for(const mt of MATS(m)){if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity]);const o=DEVORIG.get(mt);mt.transparent=o[0];mt.opacity=o[1];if(CDIM.has(mt)){mt.transparent=true;mt.opacity=0.45}if(!on&&m.userData.soft){mt.transparent=true;mt.opacity=0.5}mt.depthWrite=true;mt.needsUpdate=true}}   // v156: mask members reached by radius / geocode, or register placeholders, read as guesses
+  for(const mt of MATS(m)){if(!DEVORIG.has(mt))DEVORIG.set(mt,[mt.transparent,mt.opacity]);const o=DEVORIG.get(mt);mt.transparent=o[0];mt.opacity=o[1];if(CDIM.has(mt)){mt.transparent=true;mt.opacity=0.45}if(!on&&m.userData&&m.userData.soft){mt.transparent=true;mt.opacity=0.5}mt.depthWrite=true;mt.needsUpdate=true}}   // v156: mask members reached by radius / geocode, or register placeholders, read as guesses
 // v74.4 - DEVELOPER FILTER (Kendall, 3 Sep): pick a developer and every other building fades to a ghost; only that developer's
 // towers stay solid, labelled, and the camera frames them. "all developers" restores the district.
 let SELDEV="";const DEVORIG=new Map();
