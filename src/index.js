@@ -3222,6 +3222,9 @@ async function appFetch(request, env, ctx) {
       }
       if (url.pathname === "/skyline" || url.pathname.indexOf("/skyline/") === 0) { // v64 — 3D viewer + district rail (MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
+        // A multi-part tile stores sky_<slug>_p0..p<n> beside sky_<slug>; those parts are pieces of one district's
+        // geometry, not districts. Without this every part shows up as a tile you can open onto an empty viewer.
+        const SKY_PART_KEY = (sl) => /_p\d+$/.test(sl);
         // rail: every sky_<slug> GLB in KV, named from the register where it can be
         let _rail = [];
         let _names = {};
@@ -3230,7 +3233,7 @@ async function appFetch(request, env, ctx) {
         let _aud = {}; try { const _ta = JSON.parse((await env.MEETINGS.get("img_twin_audit")) || "null"); for (const d of ((_ta && _ta.districts) || [])) _aud[d.slug] = d; } catch (e) {}
         try {
           const _kl = await env.MEETINGS.list({ prefix: "img_sky_" });
-          const _have = new Set(_kl.keys.map(k => k.name.slice(8)));
+          const _have = new Set(_kl.keys.map(k => k.name.slice(8)).filter(sl => !SKY_PART_KEY(sl)));
           _rail = [..._have].filter(sl => !Object.values(TWIN_TILE_PARENT).includes(sl) || Object.keys(TWIN_TILE_PARENT).some(t => TWIN_TILE_PARENT[t] === sl && !_have.has(t)))
             .map(sl => { const a = _aud[sl] || null; const bound = a ? (a.bound || 0) : 0; const named = a ? (a.named || 0) : 0;
               return { s: sl, n: _names[sl] || TWIN_TILE_NAME[sl] || sl, c: TWIN_CORRIDOR[sl] || "Other", p: TWIN_TILE_PARENT[sl] || sl,
@@ -3251,7 +3254,7 @@ async function appFetch(request, env, ctx) {
       if (url.pathname === "/map") {                           // v50 — interactive community map (MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _sky64 = [];
-        try { const _kl2 = await env.MEETINGS.list({ prefix: "img_sky_" }); _sky64 = _kl2.keys.map(k => k.name.slice(8)); } catch (e) {}
+        try { const _kl2 = await env.MEETINGS.list({ prefix: "img_sky_" }); _sky64 = _kl2.keys.map(k => k.name.slice(8)).filter(sl => !/_p\d+$/.test(sl)); } catch (e) {}
         const _rk = url.searchParams.get("legacy") === "1" ? "" : residentsKeyOf(env, url);   // v152.2 - the private residents panel under HOMES
         return clientResp(env, url, url.searchParams.get("legacy") === "1"
           ? renderMap(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", env.WA_BOT_NUMBER || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET), await env.MEETINGS.get("mkt_prev"), _sky64, await env.MEETINGS.get("img_plots"))
@@ -6220,7 +6223,7 @@ async function clientMatch(env, to, briefText) {
     let skyLinks = "";
     try {
       const _kl = await env.MEETINGS.list({ prefix: "img_sky_" });                 // same enumeration the /skyline rail uses
-      const slugs = new Set(_kl.keys.map(k => k.name.slice(8)));
+      const slugs = new Set(_kl.keys.map(k => k.name.slice(8)).filter(sl => !/_p\d+$/.test(sl)));   // v247 - a tile part is not a district
       skyLinks = top.map(c => { const s = String(c.area || "").toLowerCase().replace(/[^a-z0-9]/g, ""); return slugs.has(s) ? "⬢ " + c.area + " in 3D: " + LI_ORIGIN(env) + "/skyline/" + s + "?key=" + encodeURIComponent(clientLinkKey(env)) : null; }).filter(Boolean).slice(0, 3).join("\n");
     } catch (e) {}
     await waSend(env, to, "🗂 On the board\n" + "Who builds " + (bedKey === "all" ? "this" : bedKey === "studio" ? "studios" : bedKey + "-beds") + (budget ? " under AED " + (budget / 1e6).toFixed(1) + " M" : "") + ", side by side: " + base + (skyLinks ? "\n" + skyLinks : ""));
