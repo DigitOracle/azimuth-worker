@@ -75,7 +75,7 @@ export function locationAxis(D, pill, areaLabel) {
 // the second when the truth was the first. On /building/businessbay/12 that printed "the register does not
 // join this building to a developer" directly under a header reading OMNIYAT. A wrong reason is worse than
 // a missing one - a blank invites a question, an explanation gets believed.
-export function developerAxes(dev, thin) {
+export function developerAxes(dev, thin, onBuilding) {
   if (!dev) {
     const why = !thin
       ? "the register does not join this building to a developer"
@@ -123,7 +123,7 @@ export function developerAxes(dev, thin) {
     track.note = "This covers " + esc(dev.name || "the company the register names on this building")
       + " only — the entity registered against this building. Developers often register a separate company "
       + "per scheme, so a brand's full record can be spread across several and be much larger than this.";
-  } else {
+  } else if (onBuilding !== false) {
     // v255 - THE GROUPED CASE SAID NOTHING AT ALL, which is the same fault wearing the opposite coat.
     //
     // The ungrouped card states its scope; the grouped card stated none, so a reader saw "146 projects"
@@ -132,7 +132,10 @@ export function developerAxes(dev, thin) {
     // will scope for themselves, and they will scope it to the company named above it. That is the exact
     // shape of the sentence Kendall queried, only larger and in our favour, which is not a defence.
     const n = dev.entities;
-    track.note = "This covers all " + n + " compan" + (n === 1 ? "y" : "ies") + " the register lists under "
+    // v255.2 - "the register LISTS 18 under DAMAC" is not true: it lists 21, and 3 of them hold no
+    // projects, so the group builder drops them. 18 is the count that CARRIES the 146, which is the
+    // number the sentence is scoping - say that, rather than a rounder claim about the register.
+    track.note = "This covers all " + n + " compan" + (n === 1 ? "y" : "ies") + " with projects in the register under "
       + esc(dev.name || "this developer")
       + (dev.projects && dev.projects.total ? " — " + dev.projects.total + " projects between them" : "")
       + ", not the single company registered against this building. Which companies belong together is "
@@ -363,7 +366,11 @@ export function normName(n) {
 // developer's 86 with a building's 86 would know they meant different things. ON TIME takes the third
 // place instead, and is genuinely about the developer.
 export function developerCardAxes(dev) {
-  const [track, delivery] = developerAxes(dev);
+  // v255.1 - FALSE on purpose: the building-scope sentence says "not the single company registered against
+  // this building", and there is no building on this page. It reached live in the preview render, on the
+  // Emaar and Sobha cards, which is the second time a note written for one card has been read on another.
+  // This card states its scope in the subtitle - "5 register entities · 206 projects between them".
+  const [track, delivery] = developerAxes(dev, null, false);
   const p = (dev && dev.projects) || {};
   const onTime = {
     key: "ontime", label: "ON TIME",

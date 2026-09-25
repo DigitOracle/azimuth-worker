@@ -12,7 +12,7 @@
 //
 // A sibling session fetched live and searched for an entity count that was never on this card at all. The
 // absence was not drift; the silence was the defect. This pins both halves so neither can go quiet again.
-import { developerAxes } from "../src/pillars.js";
+import { developerAxes, developerCardAxes, developerPillarsCard } from "../src/pillars.js";
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m); } };
@@ -25,7 +25,8 @@ const BASE = { licensed: "2005-04-11", years: 21, track: 90, delivery: 100, on_t
 const GROUP = { ...BASE, name: "DAMAC", entities: 21,
   projects: { ...BASE.projects, total: 146, due: 97, delivered: 93, overdue: 4 } };
 const g = trackNote(GROUP);
-ok(/covers all 21 compan/.test(g), "a grouped card says how many companies the figure covers");
+ok(/covers all 21 companies with projects in the register/.test(g),
+   "a grouped card counts the companies that CARRY the figure, not every one the register lists: 3 DAMAC entities hold no projects and are dropped, so \"the register lists 18\" would have been false");
 ok(/146 projects between them/.test(g), "and gives the total it is counting across them");
 ok(/not the single company registered against this building/i.test(g),
    "and says plainly that it is not this building's own company — the reader's default reading, corrected");
@@ -49,7 +50,20 @@ ok(!/portfolio lists/.test(g), "and stays quiet when registerShortOf is not set"
 
 // ── a group of one is still a group, and must not read as plural ───────────
 const ONE = { ...GROUP, entities: 1 };
-ok(/covers all 1 company the register/.test(trackNote(ONE)), "one entity reads 'company', not 'companys'");
+ok(/covers all 1 company with projects in the register/.test(trackNote(ONE)), "one entity reads 'company', not 'companys'");
+
+// -- v255.1: the note belongs to a BUILDING card and must not appear on /dev --
+//
+// The preview render caught this, not a test: "not the single company registered against this building"
+// was printing on the Emaar and Sobha developer cards, which have no building. A note written for one
+// card and read on another is the second time that has happened here, so it is pinned both ways.
+const devTrack = (developerCardAxes(GROUP).find((a) => /track/i.test(a.label || "")) || {}).note || "";
+ok(!/this building/.test(devTrack), "the /dev card never mentions a building, because it is not on one");
+ok(!/covers all/.test(devTrack), "and does not repeat the scope its own subtitle already states");
+ok(/covers all 21 compan/.test(trackNote(GROUP)), "while the building card still carries it - opting out did not opt everyone out");
+const devHtml = developerPillarsCard(GROUP);
+ok(!/registered against this building/.test(devHtml), "and the rendered /dev card is clean, not just its axes");
+ok(/21 register entities/.test(devHtml), "the /dev card states its scope where it always did - the subtitle");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
