@@ -49,7 +49,7 @@ def sub(old, new, where):
 sub('''    "#stkp h4{margin:0;font-size:.62rem;font-weight:600;letter-spacing:.14em;color:#C5A56A;text-transform:uppercase}"+''',
     '''    "#stkp h4{margin:0 0 2px;font-size:.62rem;font-weight:600;letter-spacing:.14em;color:#C5A56A;text-transform:uppercase;"+
     "cursor:grab;user-select:none;touch-action:none;padding:2px 0}"+
-    "#stkp h4:active{cursor:grabbing}#stkp h4::after{content:' \\\\2237';opacity:.5;letter-spacing:.1em}"+
+    "#stkp h4:active{cursor:grabbing}#stkp h4::after{content:' ∷';opacity:.5;letter-spacing:.1em}"+
     "#stkp.drag{transition:none;box-shadow:0 14px 40px rgba(0,0,0,.6)}"+''',
     "handle style")
 

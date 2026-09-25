@@ -96,15 +96,15 @@ sub("""  $("tab").onclick = () => { const p = $("panel"); p.style.display = p.st
   // Folded and closed are different needs and get different controls. Folding keeps every filter the reader has set
   // and gives back the screen; closing gets rid of the panel entirely and leaves a pill to bring it back.
   {
-    const p = $("panel"), ro = $("reopen"), K = "najpanel:" + D.slug + ":" + D.id;
-    const save = (v) => { try { sessionStorage.setItem(K, v); } catch (e) {} };
+    const p = $("panel"), ro = $("reopen"), PKEY = "najpanel:" + D.slug + ":" + D.id;
+    const save = (v) => { try { sessionStorage.setItem(PKEY, v); } catch (e) {} };
     const show = (st) => {
       p.classList.toggle("folded", st === "folded");
       p.style.display = st === "closed" ? "none" : "";
       ro.classList.toggle("on", st === "closed");
     };
     let st = "open";
-    try { st = sessionStorage.getItem(K) || "open"; } catch (e) {}   // a private window throws; the panel still opens
+    try { st = sessionStorage.getItem(PKEY) || "open"; } catch (e) {}   // a private window throws; the panel still opens
     show(st);
     $("phead").onclick = (e) => {
       if (e.target && e.target.id === "panelx") return;              // the X has its own job
