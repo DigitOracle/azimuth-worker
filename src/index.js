@@ -3175,7 +3175,7 @@ async function appFetch(request, env, ctx) {
         const _p = url.pathname.split("/").filter(Boolean);            // building / <district> / <id>
         const _bs = String(_p[1] || "").replace(/[^a-z0-9]/gi, "").toLowerCase(), _bi = String(_p[2] || "").replace(/[^0-9]/g, "");
         const _get = async (n) => { try { return JSON.parse((await env.MEETINGS.get("img_" + n)) || "null"); } catch (e) { return null; } };
-        const [_st, _um, _bf, _ac] = await Promise.all([_get("stack_" + _bs), _get("unitmix_" + _bs), _get("bldgfacts_" + _bs), _get("anchors_" + _bs)]);
+        const [_st, _um, _bf, _ac, _tn] = await Promise.all([_get("stack_" + _bs), _get("unitmix_" + _bs), _get("bldgfacts_" + _bs), _get("anchors_" + _bs), _get("tenancy_" + _bs)]);
         let _pp = null;   // the community's resident mix (private store, community grain only; Kendall 17 Sep: it may appear on a client surface)
         try { _pp = JSON.parse((await env.MEETINGS.get("priv_community_resident_mix")) || "null"); } catch (e) {}
         let _bn = "";   // the district's real name, as the twin's rail shows it
@@ -3187,7 +3187,7 @@ async function appFetch(request, env, ctx) {
         const _un = await _get("units_" + _bs);  // the flats the units register puts on each floor, where coverage allows it
         const _uu = _un && _un.buildings_by_id ? _un.buildings_by_id[_bi] : null;
         const _pl = await _get("plate_" + _bs + "_" + _bi);   // the indicative floor plates, one key per building
-        const _bd = (_st && _um && _bi) ? buildingData(_bs, _bi, _st, _um, _bf, _ac, _pp, _bn, _px, _uu, _pl) : null;
+        const _bd = (_st && _um && _bi) ? buildingData(_bs, _bi, _st, _um, _bf, _ac, _pp, _bn, _px, _uu, _pl, _tn) : null;
         if (!_bd) return new Response("no register record for this building yet", { status: 404 });
         // the dossier PDF, offered whenever one has been built. It was owner-only when v207 shipped, because the route was;
         // Kendall opened b_* dossiers to a client key (v212), so the button follows - a client could reach the file and not

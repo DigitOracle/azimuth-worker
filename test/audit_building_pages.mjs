@@ -27,6 +27,8 @@ const SECTIONS = [
   ["plate", "The floor plate", (D) => !!(D.plate && D.plate.floors && Object.keys(D.plate.floors).length), null],
   ["flats", "The flats on the floor", (D) => !!(D.flats && D.flats.floors && Object.keys(D.flats.floors).length), null],
   ["sells", "What it sells for", (D) => (D.register || []).some((t) => t.median), null],
+  // withheld on purpose below 0.5 district coverage, so a gap here is a decision and not a hole
+  ["let", "Homes let", (D) => !!(D.let_ && D.let_.live), "had a tenancy running on"],
   ["lets", "What it lets for", (D) => !!D.rent, "What it lets for"],
   ["sold", "What has sold here", (D) => !!D.sold, "What has sold here"],
   ["construction", "Construction", (D) => !!D.project, "<h3>Construction"],
@@ -82,13 +84,14 @@ async function district(slug) {
   const plans = rd(NAJ + "/board/plans_index.json");
   const people = rd(NAJ + "/internal/community_resident_mix.json");
 
+  const tenancy = rd(NAJ + "/board/tenancy_" + slug + ".json");
   const ids = Object.keys(stack.buildings_by_id || {});
   const have = {}, why = {}, rows = [];
   for (const [k] of SECTIONS.map((s) => [s[0]])) { have[k] = 0; why[k] = {}; }
   for (const id of ids) {
     const D = buildingData(slug, id, stack, umx, bf, anchors, people, stack.district || slug, plans,
       (units && units.buildings_by_id) ? units.buildings_by_id[id] : null,
-      plates ? { buildings: plates.buildings, note: plates.note } : null);
+      plates ? { buildings: plates.buildings, note: plates.note } : null, tenancy);
     if (!D) continue;
     const got = [];
     for (const [k, , test] of SECTIONS) {
@@ -106,6 +109,10 @@ async function district(slug) {
   put("unitmix_" + slug, NAJ + "/board/unitmix_" + slug + ".json");
   put("bldgfacts_" + slug, NAJ + "/board/bldgfacts_" + slug + ".json");
   put("anchors_" + slug, NAJ + "/names/anchors_" + slug + ".json");
+  // the render check is only as complete as what it puts in KV: without this the worker sees no tenancy data, the
+  // Homes-let block correctly does not render, and the audit reports DRIFT against its own fixture. 20 false
+  // positives before it was added - an instrument carrying the gap it exists to detect.
+  put("tenancy_" + slug, NAJ + "/board/tenancy_" + slug + ".json");
   put("plans_index", NAJ + "/board/plans_index.json");
   put("units_" + slug, NAJ + "/board/units_" + slug + ".json");
   const drift = [];
@@ -139,7 +146,13 @@ async function district(slug) {
 }
 
 let bad = 0;
-for (const slug of (process.argv.slice(2).length ? process.argv.slice(2) : ["businessbay"])) {
+const ALL = process.argv.includes("--all");
+const ARGS = process.argv.slice(2).filter((a) => !a.startsWith("-"));
+const SLUGS = ALL
+  ? fs.readdirSync(NAJ + "/board").filter((f) => /^stack_.*\.json$/.test(f)).map((f) => f.slice(6, -5)).sort()
+  : (ARGS.length ? ARGS : ["businessbay"]);
+const SUM = [];
+for (const slug of SLUGS) {
   const a = await district(slug);
   // nothing to score is not a failure: Al Thanyah Fifth shares its registers with JLT North, and the industrial districts
   // hold no building that meets both. A non-zero exit means DRIFT - the page not rendering what the data says it holds.
@@ -152,5 +165,23 @@ for (const slug of (process.argv.slice(2).length ? process.argv.slice(2) : ["bus
     console.log("  " + String(v.pct).padStart(3) + "%  " + v.label.padEnd(24) + w);
   }
   if (a.drift.length) { bad++; console.log("  DRIFT - the page does not render what the data holds:"); for (const d of a.drift) console.log("    ! " + d); }
+  SUM.push([slug, a.buildings, a.median, a.sections, a.full, a.drift.length, a.cover]);
+}
+if (SUM.length > 1) {
+  console.log("\n=== ALL CARDS: " + SUM.reduce((t, r) => t + r[1], 0) + " buildings in " + SUM.length + " districts ===");
+  console.log("  district                    bldgs  median  full  drift");
+  for (const [s, n, m, sec, full, dr] of SUM.sort((x, y) => y[1] - x[1])) {
+    console.log("  " + s.padEnd(26) + String(n).padStart(6) + String(m + "/" + sec).padStart(8) +
+      String(full).padStart(6) + String(dr || "").padStart(7));
+  }
+  // which sections are thin ACROSS the estate - the thing a per-district table cannot show
+  const agg = {};
+  for (const [, n, , , , , cover] of SUM) for (const [k, v] of Object.entries(cover)) {
+    (agg[k] = agg[k] || { label: v.label, have: 0, of: 0 }).have += Math.round(v.pct * n / 100); agg[k].of += n;
+  }
+  console.log("\n  section coverage across every district:");
+  for (const [, v] of Object.entries(agg).sort((a, b) => a[1].have / a[1].of - b[1].have / b[1].of)) {
+    console.log("  " + String(Math.round(100 * v.have / v.of)).padStart(4) + "%  " + v.label);
+  }
 }
 process.exit(bad ? 1 : 0);

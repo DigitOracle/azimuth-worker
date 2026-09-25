@@ -23,7 +23,7 @@ const fmt = (n) => (n == null ? "" : Math.round(n).toLocaleString("en-US"));
 const aed = (n) => (n == null ? "—" : n >= 1e6 ? "AED " + (n / 1e6).toFixed(2) + "M" : "AED " + fmt(n));
 
 // ---- what the registers can say about one building ---------------------------------------------------------------------------
-export function buildingData(slug, id, stack, umx, bf, anchors, people, districtName, plansIndex, units, plate) {
+export function buildingData(slug, id, stack, umx, bf, anchors, people, districtName, plansIndex, units, plate, tenancy) {
   const amen = stack.district_amenities || null;
   const u = umx && umx.buildings_by_id && umx.buildings_by_id[String(id)];
   if (!u) return null;
@@ -39,6 +39,21 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
     type: t.t, c: t.c, launched: t.units, sold: sold[t.t] || 0, median: t.aed, est: !!t.est, sqm: t.sqm, rent: t.rent, yield: t.yield,
     lo: t.lo, hi: t.hi,
   }));
+  // Ejari tenancies, and the whole reason this is gated: only 42.4% of live contracts reach a building, unevenly -
+  // 0.76 of them in Sobha Heartland, 0.01 in Al Hebiah Fifth. A card cannot show which of those it is standing in, so
+  // below half coverage the block does not render at all rather than print a tenth of the truth as though it were all.
+  let let_ = null;
+  {
+    const tc = tenancy && tenancy.coverage, tr = tenancy && tenancy.buildings_by_id && tenancy.buildings_by_id[String(id)];
+    if (tr && tc && (tc.share_bound || 0) >= 0.5) {
+      let_ = {
+        live: tr.live, byType: tr.by_type || {}, asAt: tr.as_at,
+        project: tr.scope === "project" ? tr.project : null,
+        buildings: tr.buildings_in_project || 1,
+        partial: !!tr.bulk_registration,
+      };
+    }
+  }
   const floors = r.floors || [];
   const homeFloors = floors.filter((f) => f.u === "homes" || f.u === "hotel" || f.u === "villa");
   const band = (u2) => { const n = floors.filter((f) => f.u === u2).length; return n ? n + (n === 1 ? " floor" : " floors") : null; };
@@ -92,6 +107,7 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
   if (sales.landmark) around.push(["Landmark", sales.landmark]);
   return {
     // 89% of footprints carry no name in any register we hold, so "building" would read as a bug. Say what is true.
+    let_,
     slug, id: String(id), name: r.name || u.name || a.name || "Unnamed building", unnamed: !(r.name || u.name || a.name),
     district: districtName || (stack.district || slug),
     noModel,
@@ -288,6 +304,16 @@ export function buildingPageHtml(D, key, rk) {
       (D.plans ? '<button id=plansbtn>The plans · ' + D.plans.plans.length + "</button>" : "") +
       (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
         '">The dossier · PDF' + (D.dossier.pages ? " · " + D.dossier.pages + "pp" : "") + "</a>" : "") +
+      (D.let_ && D.let_.live ? '<div class=grp>Homes let</div>' +
+        '<div class=letn><b>At least ' + fmt(D.let_.live) + '</b> ' + (D.let_.live === 1 ? "home" : "homes") +
+        (D.let_.project ? ' across the ' + D.let_.buildings + ' buildings of ' + esc(D.let_.project) : " here") +
+        ' had a tenancy running on ' + esc(D.let_.asAt) + '</div>' +
+        (Object.keys(D.let_.byType).length > 1 ? '<div class=lett>' + Object.keys(D.let_.byType).sort((x, y) => D.let_.byType[y] - D.let_.byType[x])
+          .map((t) => fmt(D.let_.byType[t]) + " " + esc(String(t).toLowerCase())).join(" \u00b7 ") + "</div>" : "") +
+        '<div class=src><b>At least</b>, because a tenancy registered without its project name never reaches the ' +
+        'building. This is not availability: a home with no tenancy may be owner-occupied, so the rest are not ' +
+        'vacant and are not for sale.' + (D.let_.partial ? ' Part of this project is registered in bulk on single ' +
+        'contracts, which are excluded, so the real figure is higher still.' : "") + '</div>' : "") +
       (D.register.length ? '<div class=grp>Sales on record <u id=soldtag></u></div><div id=sold></div>' +
         '<div class=src><b>This is the transaction history, not what is for sale.</b> The Dubai Land Department ' +
         'register records completed sales, by type and not by unit number. It does not hold listings, so neither ' +
@@ -322,6 +348,9 @@ html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-fami
 .glass{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.45);color:var(--text)}
 #panel{position:fixed;right:14px;top:62px;width:248px;box-sizing:border-box;padding:14px 15px 15px;max-height:calc(100% - 92px);overflow:auto;z-index:4}
 #panel h1{margin:0;font-size:.6rem;font-weight:600;letter-spacing:.14em;color:var(--gold);text-transform:uppercase}
+.letn{font-family:Fraunces,Georgia,serif;font-size:.92rem;line-height:1.35;margin:2px 0 4px}
+.letn b{color:var(--gold)}
+.lett{font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.05em;color:var(--mut);margin:0 0 4px}
 #count{font-family:Fraunces,Georgia,serif;font-size:1rem;font-weight:600;margin:7px 0 12px}
 #count b{color:var(--gold)}
 #count small{display:block;font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.06em;color:var(--mut);font-weight:400;margin-top:3px;line-height:1.5}
