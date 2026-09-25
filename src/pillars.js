@@ -123,6 +123,25 @@ export function developerAxes(dev, thin) {
     track.note = "This covers " + esc(dev.name || "the company the register names on this building")
       + " only — the entity registered against this building. Developers often register a separate company "
       + "per scheme, so a brand's full record can be spread across several and be much larger than this.";
+  } else {
+    // v255 - THE GROUPED CASE SAID NOTHING AT ALL, which is the same fault wearing the opposite coat.
+    //
+    // The ungrouped card states its scope; the grouped card stated none, so a reader saw "146 projects"
+    // under a header reading DAMAC with nothing to say that figure spans twenty-one registered companies
+    // rather than the one that built this tower. A number whose scope is unstated is a number the reader
+    // will scope for themselves, and they will scope it to the company named above it. That is the exact
+    // shape of the sentence Kendall queried, only larger and in our favour, which is not a defence.
+    const n = dev.entities;
+    track.note = "This covers all " + n + " compan" + (n === 1 ? "y" : "ies") + " the register lists under "
+      + esc(dev.name || "this developer")
+      + (dev.projects && dev.projects.total ? " — " + dev.projects.total + " projects between them" : "")
+      + ", not the single company registered against this building. Which companies belong together is "
+      + "recorded by hand, never matched on the name.";
+    if (dev.registerShortOf) {
+      track.note += " The register links " + dev.projects.total + " to them and their own portfolio lists "
+        + dev.registerShortOf + "; a portfolio counts any emirate and this register covers Dubai only, so "
+        + "the two are measuring different things.";
+    }
   }
   return [track, delivery];
 }
