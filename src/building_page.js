@@ -265,8 +265,12 @@ export function buildingPageHtml(D, key, rk) {
     '<a class=bk href="' + back + '">← the twin</a>' +
     '<div id=about class=glass>About the building</div>' +
     '<div id=tab>⌃</div>' +
+    '<div id=reopen>FILTERS</div>' +
     '<div id=panel class=glass>' +
-      "<h1>FILTERS</h1><div id=count></div>" +
+      '<div id=phead><h1>FILTERS</h1><span id=panelfold title="Fold">\u2304</span>' +
+      '<span id=panelx title="Close">\u00d7</span></div>' +
+      '<div id=pbody>' +
+      "<div id=count></div>" +
       '<div id=types>' + chips.map((c) => tb(c[0], c[1], BP_COL[c[0]], "t")).join("") + "</div>" +
       (uses.length ? '<div class=grp>Also in the tower</div><div id=others>' + uses.map((c) => tb(c[0], c[1], BP_COL[c[0]], "u")).join("") + "</div>" : "") +
       '<div class=grp>Size <u id=vhi></u></div><div class=range><div class=track></div><input id=lo type=range><input id=hi type=range></div>' +
@@ -284,8 +288,11 @@ export function buildingPageHtml(D, key, rk) {
       (D.plans ? '<button id=plansbtn>The plans · ' + D.plans.plans.length + "</button>" : "") +
       (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
         '">The dossier · PDF' + (D.dossier.pages ? " · " + D.dossier.pages + "pp" : "") + "</a>" : "") +
-      (D.register.length ? '<div class=grp>Sold so far <u id=soldtag></u></div><div id=sold></div>' +
-        '<div class=src>Dubai Land Department units register. Counts by type, not by unit number: which homes are sold is not published.</div>' : "") +
+      (D.register.length ? '<div class=grp>Sales on record <u id=soldtag></u></div><div id=sold></div>' +
+        '<div class=src><b>This is the transaction history, not what is for sale.</b> The Dubai Land Department ' +
+        'register records completed sales, by type and not by unit number. It does not hold listings, so neither ' +
+        'this building page nor anyone reading it can tell from here whether a particular home is available.</div>' : "") +
+      '</div>' +   // #pbody - everything above folds away, the header bar stays
     "</div>" +
     "<div id=card></div>" +
     '<div id=foot></div>' +
@@ -340,6 +347,19 @@ table.reg td:first-child,table.reg th:first-child{text-align:left}
 .bar{height:3px;border-radius:2px;background:rgba(197,165,106,.18);overflow:hidden;margin-top:2px}.bar i{display:block;height:100%;background:var(--gold)}
 .src{font-size:.52rem;color:rgba(143,163,155,.85);line-height:1.5;margin-top:7px}
 #tab{display:none}
+#phead{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+#phead h1{flex:1}
+#panelfold,#panelx{color:var(--gold);opacity:.72;font-size:.95rem;line-height:1;padding:2px 4px;border-radius:4px}
+#panelfold{transition:transform .18s ease}
+#panel.folded #panelfold{transform:rotate(-90deg)}
+#panel.folded #pbody{display:none}
+#panel.folded{max-height:none}
+#panelx{font-size:1.15rem}
+#panelfold:hover,#panelx:hover{opacity:1;background:rgba(197,165,106,.14)}
+#reopen{display:none;position:fixed;right:14px;top:62px;z-index:4;cursor:pointer;
+  background:rgba(20,26,24,.9);border:1px solid rgba(197,165,106,.35);color:var(--gold);
+  padding:7px 12px;border-radius:7px;font-size:.6rem;font-weight:600;letter-spacing:.14em}
+#reopen.on{display:block}
 .drow{display:flex;flex-wrap:wrap;gap:6px 4px;justify-content:flex-start;margin:4px 0 2px}
 .dcell{flex:1 1 52px;min-width:48px;max-width:72px;text-align:center;cursor:pointer;text-decoration:none;color:inherit}
 .dcell svg{display:block;width:100%;height:auto}
@@ -400,7 +420,7 @@ dt{color:var(--mut)}dd{margin:0;text-align:right}
 #foot{position:fixed;left:14px;bottom:14px;right:280px;font-size:.55rem;line-height:1.6;color:rgba(143,163,155,.8);pointer-events:none}
 #gcredit{position:fixed;right:280px;bottom:14px;font-size:.5rem;color:rgba(143,163,155,.55);pointer-events:none}
 #warn{position:fixed;left:14px;bottom:70px;max-width:440px;font-size:.62rem;line-height:1.5;color:#E8C4A8;background:rgba(12,20,19,.85);border:1px solid rgba(217,148,112,.5);border-radius:10px;padding:8px 11px;z-index:4}
-@media(max-width:820px){#title{position:static;transform:none;max-width:none;padding:44px 14px 0}#title b{font-size:1.05rem}#panel{left:10px;right:10px;width:auto;top:auto;bottom:10px;max-height:46vh}
+@media(max-width:820px){#title{position:static;transform:none;max-width:none;padding:44px 14px 0}#title b{font-size:1.05rem}#panel{left:10px;right:10px;width:auto;top:auto;bottom:10px;max-height:46vh}#panel.folded{max-height:none}#reopen{right:10px;top:auto;bottom:10px}
   #card{left:10px;right:10px;width:auto;top:96px;max-height:44vh}
   #foot{display:none}#warn{left:10px;right:10px;max-width:none;bottom:auto;top:104px}#about{top:18px;left:auto;right:14px}}
 `;
@@ -621,6 +641,26 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     hideLabel(); paint();
   };
   $("tab").onclick = () => { const p = $("panel"); p.style.display = p.style.display === "none" ? "" : "none"; };
+  // Folded and closed are different needs and get different controls. Folding keeps every filter the reader has set
+  // and gives back the screen; closing gets rid of the panel entirely and leaves a pill to bring it back.
+  {
+    const p = $("panel"), ro = $("reopen"), K = "najpanel:" + D.slug + ":" + D.id;
+    const save = (v) => { try { sessionStorage.setItem(K, v); } catch (e) {} };
+    const show = (st) => {
+      p.classList.toggle("folded", st === "folded");
+      p.style.display = st === "closed" ? "none" : "";
+      ro.classList.toggle("on", st === "closed");
+    };
+    let st = "open";
+    try { st = sessionStorage.getItem(K) || "open"; } catch (e) {}   // a private window throws; the panel still opens
+    show(st);
+    $("phead").onclick = (e) => {
+      if (e.target && e.target.id === "panelx") return;              // the X has its own job
+      st = st === "folded" ? "open" : "folded"; show(st); save(st);
+    };
+    $("panelx").onclick = (e) => { e.stopPropagation(); st = "closed"; show(st); save(st); };
+    ro.onclick = () => { st = "open"; show(st); save(st); };
+  }
 
   // ---- the cards ------------------------------------------------------------------------------------------------------------
   // Who lives here: a ring of regions, click one to drill into its countries, click the middle to come back
@@ -665,17 +705,21 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
       // the bedroom types only: "NA" is the register's unclassified bucket, not a home anyone asks for, and giving it a ring
       // put it on a row of its own at three times the size. It keeps its place in the table and in the drill-down.
       const rows = D.register.filter((r) => r.launched && r.c !== "other");
-      const units = rows.reduce((t, r) => t + (r.launched || 0), 0);
-      const salesN = rows.reduce((t, r) => t + (r.sold || 0), 0);
-      // A home resells. Where the register holds more transactions than units, units-minus-sales is not "what is left",
-      // it is an artefact, and flooring it at zero turns a meaningless subtraction into a confident sold-out.
-      const resell = rows.some((r) => (r.sold || 0) > (r.launched || 0));
-      const left = rows.reduce((t, r) => t + Math.max(0, (r.launched || 0) - (r.sold || 0)), 0);
-      if (tag) tag.textContent = resell ? fmt(salesN) + " sales across " + fmt(units) + " homes"
-        : fmt(left) + " left of " + fmt(units);
+      // A SHOP IS NOT A HOME. The Palm Tower's 792 "homes" were 430 homes and 362 retail units; 642 buildings across
+      // the estate summed 50,821 commercial units into a home count. They are counted, and counted separately.
+      const COMM = /^(retail|shop|office|showroom|warehouse)/i;
+      const homeRows = rows.filter((r) => !COMM.test(String(r.type || "")));
+      const commRows = rows.filter((r) => COMM.test(String(r.type || "")));
+      const units = homeRows.reduce((t, r) => t + (r.launched || 0), 0);
+      const salesN = homeRows.reduce((t, r) => t + (r.sold || 0), 0);
+      const commU = commRows.reduce((t, r) => t + (r.launched || 0), 0);
+      // The register counts transactions, so sales above units is turnover and not depletion, and the difference is
+      // not "what is left" at all. Neither number answers "is one available", which is why the card no longer implies it.
+      if (tag) tag.textContent = fmt(salesN) + (salesN === 1 ? " sale" : " sales") + " across " + fmt(units) +
+        (units === 1 ? " home" : " homes") + (commU ? " \u00b7 " + fmt(commU) + " retail or office units, counted apart" : "");
       // one ring per type, left against launched. A full ring is sold out; a gap is something to sell.
       const R = 19, C = 2 * Math.PI * R;
-      host.innerHTML = '<div class=drow>' + rows.map((r, i) => {
+      host.innerHTML = '<div class=drow>' + homeRows.map((r, i) => {
         const all = r.launched || 0, sld = r.sold || 0;
         const over = sld > all;                       // resold more times than there are homes
         const none = !sld;                            // no transaction on record at all
@@ -686,8 +730,9 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
           (frac > 0 ? '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="' + col(r.c) + '" stroke-width=5.5 stroke-linecap=round ' +
             'stroke-dasharray="' + (frac * C).toFixed(1) + " " + C.toFixed(1) + '" transform="rotate(-90 24 24)"></circle>'
             : '<circle cx=24 cy=24 r="' + R + '" fill=none stroke="' + col(r.c) + '" stroke-width=5.5 stroke-opacity=".35"></circle>') +
-          '<text x=24 y=28 text-anchor=middle class=dnum>' + (over ? "\u00d7" + (sld / all).toFixed(1) : none ? "\u2014" : fmt(rest)) + "</text></svg>" +
-          "<b>" + esc(r.type) + "</b><small>" + (over ? "traded, " + fmt(all) + " homes" : none ? "not recorded" : "of " + fmt(all)) + "</small></a>";
+          '<text x=24 y=28 text-anchor=middle class=dnum>' + (over ? "\u00d7" + (sld / all).toFixed(1) : none ? "\u2014" : fmt(sld)) + "</text></svg>" +
+          "<b>" + esc(r.type) + "</b><small>" + (over ? "changed hands, " + fmt(all) + " homes"
+            : none ? "none on record" : "of " + fmt(all) + " sold") + "</small></a>";
       }).join("") + "</div>";
       host.querySelectorAll("[data-dt]").forEach((el) => {
         const r = rows[+el.dataset.dt];
@@ -700,11 +745,13 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     }
     const sold = only.sold || 0, all = only.launched || 0, rest = Math.max(0, all - sold);
     const overOne = sold > all;
-    if (tag) tag.textContent = overOne ? fmt(sold) + " sales, " + fmt(all) + " homes" : sold ? fmt(rest) + " left" : "not recorded";
+    if (tag) tag.textContent = overOne ? fmt(sold) + " sales across " + fmt(all) + (all === 1 ? " home" : " homes")
+      : sold ? fmt(sold) + " of " + fmt(all) + " sold" : "no sale on record";
     ring(host, [
       { name: "sold", pct: sold || 0.001, col: col(only.c), label: fmt(sold) + " · " + Math.round(100 * sold / (all || 1)) + "%" },
       { name: "still to sell", pct: rest || 0.001, col: "rgba(232,228,216,.16)", label: fmt(rest) },
-    ], overOne ? ["\u00d7" + (sold / all).toFixed(1), "each home, on average"] : [fmt(rest), sold ? "left of " + fmt(all) : "not recorded"],
+    ], overOne ? ["\u00d7" + (sold / all).toFixed(1), "times each home has traded"]
+      : [fmt(sold), sold ? "sold of " + fmt(all) : "none on record"],
       () => { drawSold(null); });
     const note = document.createElement("div");
     note.className = "src";

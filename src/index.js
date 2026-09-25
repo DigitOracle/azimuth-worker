@@ -9909,7 +9909,10 @@ function stkUI(){
     ".stkb{font:600 .62rem 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#C5A56A;background:rgba(19,31,29,.92);border:1px solid rgba(197,165,106,.5);border-radius:99px;padding:6px 11px;cursor:pointer}.stkb.on{color:#0C1413;background:#C5A56A}"+
     "#stkp{position:fixed;right:14px;top:74px;width:268px;box-sizing:border-box;padding:14px 16px 16px;z-index:44;display:none;max-height:calc(100vh - 150px);overflow:auto;"+
     "background:rgba(19,31,29,.94);border:1px solid rgba(197,165,106,.4);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.45);color:#E8E4D8;font-family:'IBM Plex Mono',monospace}#stkp.on{display:block}"+
-    "#stkp h4{margin:0;font-size:.62rem;font-weight:600;letter-spacing:.14em;color:#C5A56A;text-transform:uppercase}"+
+    "#stkp h4{margin:0 0 2px;font-size:.62rem;font-weight:600;letter-spacing:.14em;color:#C5A56A;text-transform:uppercase;"+
+    "cursor:grab;user-select:none;touch-action:none;padding:2px 0}"+
+    "#stkp h4:active{cursor:grabbing}#stkp h4::after{content:' \\2237';opacity:.5;letter-spacing:.1em}"+
+    "#stkp.drag{transition:none;box-shadow:0 14px 40px rgba(0,0,0,.6)}"+
     "#stkc{font-family:Fraunces,Georgia,serif;font-size:1.02rem;font-weight:600;margin:8px 0 12px;color:#E8E4D8}#stkc b{color:#C5A56A}#stkc small{display:block;font-family:'IBM Plex Mono',monospace;font-size:.58rem;letter-spacing:.06em;color:#8FA39B;font-weight:400;margin-top:3px}"+
     ".stt{display:flex;align-items:center;gap:8px;width:100%;border:1px solid rgba(197,165,106,.28);background:rgba(12,20,19,.55);border-radius:8px;padding:7px 10px;margin:0 0 5px;font:500 .72rem/1 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#E8E4D8;cursor:pointer;transition:border-color .15s,opacity .15s}"+
     ".stt i{width:12px;height:12px;border-radius:3px;flex:none}.stt.off{opacity:.42}.stt.off i{filter:grayscale(1)}.stt:hover{border-color:rgba(197,165,106,.7)}"+
@@ -9940,6 +9943,44 @@ function stkUI(){
     '<button id=stkh>Hide all</button><div class=stg>List them <u>most floors that match</u></div><div id=stkl></div>'+
     '<div class=stn>Every building the registers describe, floor by floor. Floors: Dubai Municipality floor register. Types, prices and sizes: the Land Department units register - the floor range each type sits on, not unit positions.</div>';
   document.body.appendChild(p);
+  // v254 - the panel is anchored to the right edge, so a narrow window puts part of it outside the viewport with no
+  // way to reach it: the map drags underneath instead. Dragging is what Kendall asked for; the CLAMP is what fixes it
+  // for someone who never drags, and it runs on open and on every resize as well as on release.
+  {
+    const KEY="najStkPos";
+    const clamp=()=>{
+      const r=p.getBoundingClientRect(), W=innerWidth, H=innerHeight;
+      // where the panel is bigger than the window, keep the HEADER reachable - a handle you cannot see is not a handle
+      const x=Math.min(Math.max(8,r.left), Math.max(8,W-Math.min(r.width,W-16)-8));
+      const y=Math.min(Math.max(8,r.top),  Math.max(8,H-44));
+      p.style.left=Math.round(x)+"px"; p.style.top=Math.round(y)+"px"; p.style.right="auto";
+    };
+    const stkDrag=(e)=>{
+      const r=p.getBoundingClientRect();
+      p.style.left=r.left+"px"; p.style.top=r.top+"px"; p.style.right="auto";   // convert off the right anchor before moving
+      const dx=e.clientX-r.left, dy=e.clientY-r.top;
+      p.classList.add("drag");
+      const move=(ev)=>{ p.style.left=(ev.clientX-dx)+"px"; p.style.top=(ev.clientY-dy)+"px"; };
+      const up=()=>{ removeEventListener("pointermove",move); removeEventListener("pointerup",up);
+        p.classList.remove("drag"); clamp();
+        try{ localStorage.setItem(KEY,JSON.stringify([parseInt(p.style.left,10),parseInt(p.style.top,10)])); }catch(err){}
+      };
+      addEventListener("pointermove",move); addEventListener("pointerup",up);
+      e.preventDefault();
+    };
+    const head=p.querySelector("h4");
+    head.title="Drag to move · double-click to put it back";
+    head.addEventListener("pointerdown",stkDrag);
+    // double-click returns it to the corner it started in, because a dragged panel has no other way home
+    head.addEventListener("dblclick",()=>{ p.style.left=""; p.style.top=""; p.style.right="14px";
+      try{ localStorage.removeItem(KEY); }catch(err){} });
+    try{ const v=JSON.parse(localStorage.getItem(KEY)||"null");
+      if(v&&v.length===2){ p.style.left=v[0]+"px"; p.style.top=v[1]+"px"; p.style.right="auto"; } }catch(err){}
+    addEventListener("resize",()=>{ if(p.classList.contains("on")&&p.style.right==="auto") clamp(); });
+    // a panel opened into a window too narrow for it must not start out of reach
+    const _obs=new MutationObserver(()=>{ if(p.classList.contains("on")&&p.style.right==="auto") clamp(); });
+    _obs.observe(p,{attributes:true,attributeFilter:["class"]});
+  }
   const tt=document.getElementById("stkt"),tu=document.getElementById("stku");
   const chip=(set,k,label,host)=>{const b=document.createElement("button");b.className="stt";b.innerHTML='<i style="background:'+stkHex(STKCOL[k])+'"></i>'+label;
     const sync=()=>b.classList.toggle("off",!set.has(k));sync();b.onclick=()=>{set.has(k)?set.delete(k):set.add(k);sync();stkHideLbl();stkApply()};host.appendChild(b);return sync};
