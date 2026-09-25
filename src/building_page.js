@@ -173,6 +173,12 @@ function communityMix(people, slug, comm) {
 function plansFor(index, name, project, developer, propertyId) {
   const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(the|by|tower|towers|residences|residence|building)\b/g, " ").replace(/\s+/g, " ").trim();
   const mine = [norm(name), norm(project)].filter((x) => x.length > 3);
+  // Word order is not identity: "Binghatti Dusk" and the twin's "Dusk by Binghatti" normalise to the same two words
+  // in a different order. Set equality is STRICTER than the containment rule below, not looser - it requires every
+  // word on both sides, where containment only requires one name to sit inside the other.
+  const tset = (x) => { const s2 = new Set(String(x || "").split(" ").filter((t) => t.length > 1)); return s2; };
+  const setsEqual = (a, b) => a.size > 1 && a.size === b.size && [...a].every((t) => b.has(t));
+  const mineSets = mine.map(tset);
   const CORP = /^(properties|property|developers|developer|development|developments|realty|real|estate|estates|group|holding|holdings|llc|pjsc|llp|fz|fze|international|investment|investments|co|company|the|and)$/;
   const dtok = (x) => (String(x || "").toLowerCase().match(/[a-z0-9]+/g) || []).filter((t) => t.length > 1 && !CORP.test(t));
   const knownDev = (a, b, bname) => {
@@ -228,6 +234,7 @@ function plansFor(index, name, project, developer, propertyId) {
   // and the names are generic enough that four Dubai buildings were matching them. Another emirate's plans are worse than
   // none, because they look like the answer. Skipped before any name is compared.
   const OTHER_EMIRATE = /umm al quwain|uaq|siniya|abu dhabi|sharjah|ajman|ras al khaimah|rak\b|fujairah/;
+  let bestPlan = null, bestRank = 0;
   for (const d of ((index && index.developers) || [])) {
     for (const p of (d.projects || [])) {
       const pn = norm(p.name);
@@ -238,7 +245,8 @@ function plansFor(index, name, project, developer, propertyId) {
       if (OTHER_EMIRATE.test(String((p.area || "") + " " + (p.name || "")).toLowerCase())) continue;
       // both sides numbered and the numbers disagree: a different phase or tower, whoever built it
       if (numbersConflict(name + " " + (project || ""), p.name)) continue;
-      const exact = mine.some((m) => m === pn);
+      // the same words in a different order are the same name, and pass every guard an identical string passes
+      const exact = mine.some((m) => m === pn) || mineSets.some((ms) => setsEqual(ms, tset(pn)));
       // a name the index calls too generic to match by substring: Sobha's 'Waves' is inside six register projects. For
       // those, a containment hit needs the developer positively known and agreeing - unknown is no longer good enough.
       // the index's flag is computed on the name AS WRITTEN; norm() strips the/by/tower/residences before comparing, so
@@ -251,10 +259,19 @@ function plansFor(index, name, project, developer, propertyId) {
       if (!exact && !sameDev(developer, d.name)) continue;
       const plans = (p.plans || []).filter((x) => x.url).slice(0, 12)
         .map((x) => ({ label: x.label || x.kind || "plan", url: x.url, source: x.source || null }));
-      if (plans.length) return { developer: d.name || developer || null, project: p.name, note: p.note || null, plans };
+      if (!plans.length) continue;
+      // RANK, do not take the first. "Samana Boulevard Heights" was served Emaar's Downtown "Boulevard Heights"
+      // because that matched by containment and Emaar sits earlier in the index than Samana, whose project matches
+      // the name exactly. The right answer was in the list, further down; nothing was guarding it.
+      const rank = exact ? 3 : (mineSets.some((ms) => setsEqual(ms, tset(pn))) ? 3 : 1);
+      if (!bestPlan || rank > bestRank) {
+        bestRank = rank;
+        bestPlan = { developer: d.name || developer || null, project: p.name, note: p.note || null, plans };
+        if (rank === 3) return bestPlan;   // nothing can beat an exact name; stop looking
+      }
     }
   }
-  return null;
+  return bestPlan;
 }
 
 // ---- the page ------------------------------------------------------------------------------------------------------------------
