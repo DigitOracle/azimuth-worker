@@ -76,6 +76,9 @@ const STT = "@cf/openai/whisper-large-v3-turbo";
 // --- Two Claude tiers: cheap+fast for high-volume classification, strong for the judgement calls ---
 const CLAUDE_FAST = "claude-haiku-4-5";   // runs on EVERY message and email: intent classification, meeting parsing
 const CLAUDE_SMART = "claude-sonnet-5";   // low volume, high stakes: email -> task extraction, recall answers, drafting
+// v258 - see the note inside dailyFeedTick. airport: per-hour figures understated. buses: median from an old partial pull.
+// busStops: total predates the repeat fix and was never re-verified. All three are held until their source is re-verified.
+const FEED_CITYLIFE_HOLD = ["airport", "buses", "busStops"];
 // Sonnet 5 runs ADAPTIVE THINKING by default when the thinking field is omitted, and thinking shares max_tokens
 // with the answer - so every SMART call explicitly disables it (see claudeBody). Haiku 4.5 is never sent a
 // thinking field at all (older model: no thinking unless explicitly enabled).
@@ -5580,6 +5583,10 @@ async function dailyFeedTick(env, force, dry) {
   const raw = await env.MEETINGS.get("mkt_latest");
   if (!raw) return;
   let d; try { d = JSON.parse(raw); } catch (e) { return; }
+  // v258 - blocks held OUT of the feed because their figures are wrong or unfinished (DDA session, 26 Sep 2026).
+  // Remove an entry only when its source has been re-verified. Deleting here, once, covers the prompt AND the
+  // geo-guard below, which builds its list of real place names from d.cityLife.
+  if (d && d.cityLife) for (const _k of FEED_CITYLIFE_HOLD) delete d.cityLife[_k];
   const ageDays = (Date.now() - Date.parse(d.generatedAt || 0)) / 86400000;
   if (ageDays >= 8) {                                                              // stale gate + the refresh reminder
     if (dry) return "(dry run - nothing sent) no feed today: the market data is " + Math.round(ageDays) + " days old, so the morning run would stop here and tell her so.";   // v177
