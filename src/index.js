@@ -5819,6 +5819,8 @@ async function feedScenes(env, angles) {
   if (await env.MEETINGS.get("feed_scenes_off")) { try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued: 0, why: "feed_scenes_off" }), { expirationTtl: 7 * 86400 }); } catch (e) {} return 0; }
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const me = String((await env.MEETINGS.get("feed_scene_photo")) || "style_ref_21").replace(/[^a-z0-9_]/gi, "");
+  // v259 - a rotation: KV feed_scene_photos = JSON list of style_ref keys. Empty or absent = the single photo above, as before.
+  let _rot = []; try { const _r = JSON.parse((await env.MEETINGS.get("feed_scene_photos")) || "[]"); if (Array.isArray(_r)) _rot = _r.map(x => String(x).replace(/[^a-z0-9_]/gi, "")).filter(Boolean); } catch (e) {}
   const _used = [], _times = [];
   let queued = 0;
   let _last = null; try { _last = JSON.parse((await env.MEETINGS.get("feed_scenes_last")) || "null"); } catch (e) {}
@@ -5836,10 +5838,10 @@ async function feedScenes(env, angles) {
     const jk = "picjob_s" + "feed" + gstDateStr(new Date()).replace(/-/g, "") + n;
     if (await env.MEETINGS.get(jk)) continue;                                                     // one job per angle per morning, even if the tick fires twice
     try { await env.MEETINGS.put(jk, JSON.stringify({ scene: true, n, opt: opt.id, tid: FEED_SCENE_TIMES[(feedDayIndex() + i) % FEED_SCENE_TIMES.length] || "la", to: env.WA_ALLOWED, at: Date.now(), tries: 0,
-      post, option: opt, angle: a, meKey: me, extra: [], auto: "feed" }), { expirationTtl: 2 * 86400 }); queued++; } catch (e) {}
+      post, option: opt, angle: a, meKey: (_rot.length ? _rot[(feedDayIndex() + i) % _rot.length] : me), extra: [], auto: "feed" }), { expirationTtl: 2 * 86400 }); queued++; } catch (e) {}
   }
   if (queued) { try { await waSend(env, env.WA_ALLOWED, "On it. Your " + (queued === 5 ? "five" : String(queued)) + " pictures are being made now - they'll arrive over the next few minutes, each as a post and a story."); } catch (e) {} }
-  try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued, photo: me, backdrops: _used, times: _times }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued, photo: (_rot.length ? _rot.join(",") : me), backdrops: _used, times: _times }), { expirationTtl: 7 * 86400 }); } catch (e) {}
   if (_last && Array.isArray(_last.backdrops) && _used.length && _last.backdrops.join() === _used.join()) {   // v187 - say so rather than let her spot it
     try { await gcTellOwner(env, "Naj's cards today use the same backdrops as yesterday (" + _used.join(", ") + "). The rotation has run out of choices for these angles."); } catch (e) {}
   }
