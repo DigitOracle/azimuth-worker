@@ -9219,8 +9219,18 @@ const _flatSky=(note)=>{if(note){const n=document.createElement("div");
     a.style.cssText="position:absolute;right:12px;bottom:12px;z-index:9;background:rgba(20,26,24,.9);color:#C5A56A;padding:7px 11px;border-radius:6px;font:12px system-ui;text-decoration:none;border:1px solid rgba(197,165,106,.35)";
     a.textContent="Full detail: "+n+" parts, "+mb.toFixed(0)+" MB";document.body.appendChild(a)};
   if(_q.get("flat")==="1"){_flatSky(null)}
-  else fetch("/img/skyparts_${slugName}").then(r=>r.ok?r.json():null).then(ix=>{
+  // v258 - LOCAL-FRAME DETAIL (v5, 29 Sep 2026). The v4 parts hold absolute UTM in float32, which snaps every vertex
+  // to a 25 cm grid north-south (z ~ -2,772,000). v5 parts hold metres from a per-district origin (skyparts_<slug>_v5,
+  // origin in ix.origin and in skyorigin_<slug>): contract CE-frame = vertex + origin_ce_xyz, applied as a POSITION,
+  // never baked into vertices. The parts go in an inner group placed at the origin; onSky then centres the whole model
+  // by its box, so origin minus centre is taken in float64 on the CPU and only small numbers reach the GPU. Ground
+  // imagery, water and anchors key off ROOTREF.position exactly as before. v5 is preferred when it exists with an
+  // origin; ?v4=1 forces the old parts, and a district with no v5 index falls back to v4 unchanged.
+  else (_q.get("v4")==="1"?Promise.resolve(null):fetch("/img/skyparts_${slugName}_v5").then(r=>r.ok?r.json():null).catch(()=>null))
+    .then(v5=>(v5&&v5.items&&v5.items.length&&v5.origin&&Array.isArray(v5.origin.origin_ce_xyz))?v5
+      :fetch("/img/skyparts_${slugName}").then(r=>r.ok?r.json():null)).then(ix=>{
     const items=(ix&&ix.items)||[];
+    const O=(ix&&ix.origin&&ix.origin.origin_ce_xyz)||null;
     if(!items.length){_flatSky(null);return}
     const mb=items.reduce((t,i)=>t+(i.gz||0),0)/1e6;
     // v250.1: full detail is NEVER automatic. Kendall, 24 Sep 2026, on disk-space grounds: "make it all opt-in".
@@ -9231,11 +9241,12 @@ const _flatSky=(note)=>{if(note){const n=document.createElement("div");
     // are always a click. Data spent without asking cannot be given back; asking costs a click.
     if(_q.get("full")!=="1"){_flatSky(null);_offer(mb,items.length);return}
     let done=0,failed=0;const group=new THREE.Group();
+    const inner=O?new THREE.Group():group;if(O){inner.position.set(O[0],O[1],O[2]);group.add(inner)}
     msg.textContent="Loading "+items.length+" parts, "+mb.toFixed(0)+" MB of detail…";
-    Promise.all(items.map(it=>loader.loadAsync("/img/"+it.key).then(p=>{group.add(p.scene)},()=>{failed++})
+    Promise.all(items.map(it=>loader.loadAsync("/img/"+it.key).then(p=>{inner.add(p.scene)},()=>{failed++})
       .then(()=>{done++;msg.textContent="Loading detail… "+done+" of "+items.length+" parts"})))
       .then(()=>{
-        if(!group.children.length){_flatSky(null);return}   // nothing arrived at all - the single tile is better than an empty viewer
+        if(!inner.children.length){_flatSky(null);return}   // nothing arrived at all - the single tile is better than an empty viewer
         onSky({scene:group});
         // a missing part is a gap in a district, not a broken page: mount what came and say what did not
         if(failed){const w=document.createElement("div");w.style.cssText="position:absolute;left:12px;bottom:12px;z-index:9;background:rgba(20,26,24,.86);color:#C5A56A;padding:6px 10px;border-radius:6px;font:12px system-ui";
