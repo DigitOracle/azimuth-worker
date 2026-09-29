@@ -9902,8 +9902,13 @@ function stkTapMesh(ix){
   if(ix==null||ix<0)return false;
   const rev=stkRev(),id=rev?rev.get(ix):null;
   if(id!=null&&STK&&STK.buildings_by_id&&STK.buildings_by_id[id]){stkOpen(id);return true}
+  // v266 (Kendall, 29 Sep 2026: "all buildings clickable, with data connected"). The floor register reaches 3% of
+  // buildings (1,996 of 70,443); the building page renders from the unit-mix record, which 95% carry (66,714), and has a
+  // thinner no-model layout for exactly this case. So a building the register does not reach still opens its page; only
+  // one with no record at all is told so.
+  if(id!=null&&UMX&&UMX[id]){stkOpen(id);return true}
   if(!STK||!STK.buildings_by_id)return false;
-  stkSay("No register record for this building - the Land Department reaches "+Object.keys(STK.buildings_by_id).length+" buildings in this district, and this is not one of them.");
+  stkSay("No record for this building yet - "+(UMX?Object.keys(UMX).length:Object.keys(STK.buildings_by_id).length)+" buildings in this district have one, and this is not one of them.");
   return true;
 }
 window.__stkTapMesh=function(ix){try{return stkTapMesh(ix)}catch(e){return false}};
