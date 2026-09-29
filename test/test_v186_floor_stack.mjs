@@ -56,7 +56,7 @@ ok(block.includes("divided evenly"), "the card says the floors divide the model'
 ok(block.includes("The register numbers levels "), "the card says when the register's level numbering was shifted to fit");
 
 // 6. the panel: the filters of the Symphony viewer, and the building view named as Kendall asked
-ok(block.includes("<h4>Homes</h4>") && block.includes("Hide all") && block.includes("#hh,#hp{display:none"),
+ok(block.includes("<h4>Homes<u class=stkx id=stkx title=close>✕</u></h4>") && block.includes("Hide all") && block.includes("#hh,#hp{display:none"),
   "the district panel is the homes filter itself, in Najma chrome, and the old HOMES control is gone from the twin");
 ok(/STKCHIP=\[\["studio","Studio"\],\["1","1 BHK"\]/.test(block), "the type chips are studio / 1 / 2 / 3 / 4+ BHK");
 ok(block.includes('fb.textContent="Floor layout"'), "the building panel's third view is Floor layout");

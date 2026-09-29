@@ -9932,6 +9932,7 @@ function stkUI(){
     "#stkp h4{margin:0 0 2px;font-size:.62rem;font-weight:600;letter-spacing:.14em;color:#C5A56A;text-transform:uppercase;"+
     "cursor:grab;user-select:none;touch-action:none;padding:2px 0}"+
     "#stkp h4:active{cursor:grabbing}#stkp h4::after{content:' ∷';opacity:.5;letter-spacing:.1em}"+
+    "#stkp h4{position:relative}.stkx{position:absolute;top:0;right:0;width:16px;height:16px;line-height:16px;text-align:center;font-size:11px;color:#C5A56A;cursor:pointer;opacity:.75}.stkx:hover{opacity:1}"+
     "#stkp.drag{transition:none;box-shadow:0 14px 40px rgba(0,0,0,.6)}"+
     "#stkc{font-family:Fraunces,Georgia,serif;font-size:1.02rem;font-weight:600;margin:8px 0 12px;color:#E8E4D8}#stkc b{color:#C5A56A}#stkc small{display:block;font-family:'IBM Plex Mono',monospace;font-size:.58rem;letter-spacing:.06em;color:#8FA39B;font-weight:400;margin-top:3px}"+
     ".stt{display:flex;align-items:center;gap:8px;width:100%;border:1px solid rgba(197,165,106,.28);background:rgba(12,20,19,.55);border-radius:8px;padding:7px 10px;margin:0 0 5px;font:500 .72rem/1 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#E8E4D8;cursor:pointer;transition:border-color .15s,opacity .15s}"+
@@ -9957,7 +9958,7 @@ function stkUI(){
   document.head.appendChild(st);
   const tog=document.getElementById("filters")||document.body;const btn=document.createElement("button");btn.className="stkb on";btn.id="stkbtn";btn.textContent="HOMES";tog.appendChild(btn);
   const p=document.createElement("div");p.id="stkp";
-  p.innerHTML='<h4>Homes</h4><div id=stkc></div><div class=stg>Bedrooms</div><div id=stkt></div><div class=stg>Also in the towers</div><div id=stku></div>'+
+  p.innerHTML='<h4>Homes<u class=stkx id=stkx title=close>✕</u></h4><div id=stkc></div><div class=stg>Bedrooms</div><div id=stkt></div><div class=stg>Also in the towers</div><div id=stku></div>'+
     '<div class=stg>Budget <u id=svahi></u></div><div class=srg><i></i><input id=salo type=range min=0 max=100 value=0><input id=sahi type=range min=0 max=100 value=100></div><div class=svl><span id=svalo></span><span>and up to</span></div>'+
     '<div class=stg>Size <u id=svshi></u></div><div class=srg><i></i><input id=sslo type=range min=0 max=100 value=0><input id=sshi type=range min=0 max=100 value=100></div><div class=svl><span id=svslo></span><span>sq ft</span></div>'+
     '<button id=stkh>Hide all</button><div class=stg>List them <u>most floors that match</u></div><div id=stkl></div>'+
@@ -9990,7 +9991,7 @@ function stkUI(){
     };
     const head=p.querySelector("h4");
     head.title="Drag to move · double-click to put it back";
-    head.addEventListener("pointerdown",stkDrag);
+    head.addEventListener("pointerdown",(e)=>{if(e.target&&e.target.id==="stkx")return;stkDrag(e)});
     // double-click returns it to the corner it started in, because a dragged panel has no other way home
     head.addEventListener("dblclick",()=>{ p.style.left=""; p.style.top=""; p.style.right="14px";
       try{ localStorage.removeItem(KEY); }catch(err){} });
@@ -10012,6 +10013,8 @@ function stkUI(){
     upd();let t=0;[A,B].forEach(el=>el.addEventListener("input",ev=>{upd(ev);clearTimeout(t);t=setTimeout(()=>stkApply(),120)}))};
   pair("salo","sahi","svalo","svahi","alo","ahi",stkFmtA,stkAed);pair("sslo","sshi","svslo","svshi","slo","shi",stkFmtS,stkSq);
   btn.onclick=()=>{STKON=!STKON;btn.classList.toggle("on",STKON);p.classList.toggle("on",STKON&&!SELPROJ);stkApply()};
+  const stkx=document.getElementById("stkx");
+  if(stkx)stkx.onclick=(e)=>{e.stopPropagation();STKON=false;btn.classList.remove("on");p.classList.remove("on")};
   STKON=true;p.classList.add("on");                                   // the filter IS the twin's homes control now: open from the start
   const t0=setInterval(()=>{if(stkMap()){clearInterval(t0);stkApply()}},400);setTimeout(()=>clearInterval(t0),90000);   // draw as soon as the model and the anchors are in
   stkCount();
