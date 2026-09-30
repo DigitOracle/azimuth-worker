@@ -3671,7 +3671,7 @@ async function appFetch(request, env, ctx) {
             const _job = { kind: "scene", n: _n, oid: _oid, tid: _tm.id, to: from, post: _post, option: _opt, angle: _ang,
                            ask: "Good pick - " + _opt.name + " " + _tm.when + ". Which photo of you for this one?" };
             if (await meOffer(env, from, url.origin, _job)) return new Response("ok");
-            const _pool = await mePool(env);                                            // fewer than two photos to choose from: use what there is
+            const _pool = await scenePool(env);                                         // fewer than two photos to choose from: use what there is (v269 - a scene's pool)
             await sceneShow(env, from, Object.assign({}, _job, { meKey: _pool[0] || "style_me", extra: [] }));
             return new Response("ok");
           }
@@ -3723,7 +3723,7 @@ async function appFetch(request, env, ctx) {
                             post: Object.assign({}, worldCardFields(_vc.key)), option: _vo || { id: "P", name: "Both cities", place: "" }, angle: {},
                             ask: "Good pick - " + (_vo ? _vo.name + " " : "") + _tm.when + ". Which photo of you for this one?" };
             if (_vm === "me" && await meOffer(env, from, url.origin, _vjob)) return new Response("ok");
-            const _vpool = _vm === "me" ? await mePool(env) : [];
+            const _vpool = _vm === "me" ? await scenePool(env) : [];
             await sceneShow(env, from, Object.assign({}, _vjob, { meKey: _vpool[0] || (_vm === "me" ? "style_me" : ""), extra: [] }));
             return new Response("ok");
           }
@@ -5391,13 +5391,27 @@ function planAngle(a) {       // a Dubai 2040 angle: a plan figure, or a plan ci
   if (f.length >= 3 && DUBAI_2040.facts.some(p => { const pf = String(p.figure).toLowerCase(); return pf.includes(f) || f.includes(pf); })) return true;
   return PLAN_SRC_RX.test(String(a.source || "")) && planFigBacked(a);
 }
-function feedAudit(angles, famh) {
-  const seenFig = new Set(famh.filter(x => x.k).map(x => x.k)); const seenNum = new Map(); const seenSubj = new Map(); const seenFam = {}; const bad = [];
-  const today = Date.now();
-  const PLAN_WINDOW = PLAN_DAYS * 86400 * 1000;
+// v269 - ONE definition of "she has had this before", shared by the audit and the five-floor's readmission. Until v269 the floor
+// re-tested dropped angles against a 2-day window while the audit used her whole history (real estate) or PLAN_DAYS (plan), so an
+// angle dropped for a number used five days ago passed the floor's test and went back in (30 Sep 2026: "readmitted 1 to keep five
+// (number 7.78 already used on 2026-09-28)"). Two windows for one question is how a repeat gets through; now there is one.
+function feedSeenSets(famh) {
+  const today = Date.now(), PLAN_WINDOW = PLAN_DAYS * 86400 * 1000;
+  const seenFig = new Set(famh.filter(x => x.k).map(x => x.k)), seenNum = new Map();
   const recentFig = new Set(famh.filter(x => x.k && (today - Date.parse(x.d)) < PLAN_WINDOW).map(x => x.k)), recentNum = new Map();
-  for (const x of famh) if ((today - Date.parse(x.d)) < PLAN_WINDOW) for (const n of (x.n || [])) if (!recentNum.has(n)) recentNum.set(n, x.d);
-  for (const x of famh) { for (const n of (x.n || [])) if (!seenNum.has(n)) seenNum.set(n, x.d); if (x.s && (today - Date.parse(x.d)) < 5 * 86400 * 1000 && !seenSubj.has(x.s)) seenSubj.set(x.s, x.d); }
+  for (const x of famh) { for (const n of (x.n || [])) if (!seenNum.has(n)) seenNum.set(n, x.d); if ((today - Date.parse(x.d)) < PLAN_WINDOW) for (const n of (x.n || [])) if (!recentNum.has(n)) recentNum.set(n, x.d); }
+  return { seenFig, seenNum, recentFig, recentNum };
+}
+function feedRepeatWhy(a, sets) {   // "" when she has not had it; otherwise why
+  const plan = planAngle(a), figSeen = plan ? sets.recentFig : sets.seenFig, numSeen = plan ? sets.recentNum : sets.seenNum;
+  const k = figKey(a); if (k && figSeen.has(k)) return plan ? "plan figure already used in the last " + PLAN_DAYS + " days" : "figure already used before";
+  const hitN = numKeys(a).find(n => numSeen.has(n)); if (hitN) return "number " + hitN + " already used on " + numSeen.get(hitN);
+  return "";
+}
+function feedAudit(angles, famh) {
+  const { seenFig, seenNum, recentFig, recentNum } = feedSeenSets(famh); const seenSubj = new Map(); const seenFam = {}; const bad = [];
+  const today = Date.now();
+  for (const x of famh) { if (x.s && (today - Date.parse(x.d)) < 5 * 86400 * 1000 && !seenSubj.has(x.s)) seenSubj.set(x.s, x.d); }
   angles.forEach((a, i) => { const f = famOf(a), k = figKey(a), nums = numKeys(a), sk = subjKey(a); a.family = f; const why = [];
     if (seenFam[f] != null) why.push("same family as angle " + (seenFam[f] + 1) + " (" + f + ")"); else seenFam[f] = i;
     // v187 (Naj, 21 Sep 2026: "it gave me the same data as yesterday") - a plan fact may be restated, but not day after day:
@@ -5491,11 +5505,10 @@ async function feedFill(env, angles, sys, data, famh, qa) {
   }
   if (own().length < 5 && qa && Array.isArray(qa._droppedAngles)) {
     const dated = (w) => (String(w || "").match(/\d{4}-\d{2}-\d{2}/) || ["9999"])[0];
-    // v187 - never readmit something she had in the last two days: four fresh angles beat five with yesterday's in it
-    const _recent = famh.filter(x => (Date.now() - Date.parse(x.d)) < 2 * 86400 * 1000);
-    const _fresh = new Set(_recent.filter(x => x.k).map(x => x.k));
-    const _freshNums = new Set([].concat(..._recent.map(x => x.n || [])));   // v187.2 - and the NUMBERS, not just the whole figure: on 21 Sep '2,927 sales' came back because its figure key differed by a few words
-    const pool = qa._droppedAngles.filter(d => d && d.a && !d.a.campaign && honest(d.a) && !_fresh.has(figKey(d.a)) && !numKeys(d.a).some(n => _freshNums.has(n))).sort((x, y) => dated(x.why).localeCompare(dated(y.why)));
+    // v269 - readmit only what the audit itself would pass: the same test, the same window (feedSeenSets). Four fresh angles beat
+    // five with a repeat in them. In practice this empties the pool of repeats, so the floor now fills from the top-up or sends fewer.
+    const _sets = feedSeenSets(famh);
+    const pool = qa._droppedAngles.filter(d => d && d.a && !d.a.campaign && honest(d.a) && !feedRepeatWhy(d.a, _sets)).sort((x, y) => dated(x.why).localeCompare(dated(y.why)));
     const back = [];
     for (const strict of [true, false]) for (const d of pool) {   // the split first; then the floor wins over the split
       if (own().length >= 5) break;
@@ -5766,9 +5779,25 @@ async function dailyFeedTick(env, force, dry) {
   } catch (e) {}
   try { const _fl = await feedFill(env, angles, sys, data, famh, qa); if (_fl) qa.note += " | " + _fl; } catch (e) { qa.note += " | top-up failed: " + String((e && e.message) || e).slice(0, 80); }   // v184
   try { await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
-  if (!angles.filter(a => !a.campaign).length) {   // only when even the top-up and the dropped pool gave nothing
-    try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), why: "no angle survived, even after the top-up" }), { expirationTtl: 7 * 86400 }); } catch (e) {}
-    return dry ? "(dry run - nothing sent) no angle survived, even after the top-up" : undefined;
+  // v269 - THE GATE (Kendall, 30 Sep 2026, after her second "same ideas, same pictures" morning in nine days: "implement a qa / qc
+  // pass agent that runs ... before you feed her whatsapp"). v187's self-check ran after the message was built and only told
+  // Kendall; it now runs HERE, before anything is built, stored or sent, and it removes what it finds instead of reporting it.
+  // Mechanical checks (the audit, one figure per angle) plus a QA agent that reads today's hooks against what she has been sent
+  // and catches the same idea in new words, which no figure or number test can see.
+  let _gate = null;
+  try {
+    _gate = await feedGate(env, angles, famh, hist); qa.gate = _gate;
+    qa.note += " | gate: " + (_gate.dropped.length ? "removed " + _gate.dropped.length + " (" + _gate.dropped.map(x => x.why).join("; ").slice(0, 300) + ")" : "nothing removed") + "; " + _gate.agent;
+  } catch (e) { qa.note += " | gate failed: " + String((e && e.message) || e).slice(0, 80); _gate = { broken: true, dropped: [], structural: [] }; }
+  try { await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
+  if (_gate.broken) {   // a gate that could not run is not a pass: hold, and let the :30 tick try again
+    if (!dry) { try { await gcTellOwner(env, "Naj's morning HELD" + (force ? "" : " (attempt " + (attempts + 1) + " of 2)") + ": the quality gate failed to run. " + qa.note.slice(-200)); } catch (e) {} }
+    return dry ? "(dry run - nothing sent) the quality gate failed to run: " + qa.note : undefined;
+  }
+  if (!angles.filter(a => !a.campaign).length) {   // only when even the top-up and the dropped pool gave nothing - or the gate removed everything
+    try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), why: "no angle survived, even after the top-up and the gate" }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+    if (!dry) { try { await gcTellOwner(env, "Naj's morning HELD" + (force ? "" : " (attempt " + (attempts + 1) + " of 2)") + ": nothing survived the checks" + (_gate.dropped.length ? " - the gate removed " + _gate.dropped.map(x => '"' + String(x.hook).slice(0, 60) + '" (' + x.why + ")").join("; ") : "") + ". Nothing was sent to her." + (!force && attempts + 1 < 2 ? " The :30 run will try a fresh set." : "")); } catch (e) {} }
+    return dry ? "(dry run - nothing sent) no angle survived, even after the top-up and the gate. " + qa.note : undefined;
   }
   if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + "[" + (a.family || "-") + "] " + a.hook + "\n   " + a.figure + " · " + a.source + (a.trend ? "\n   trend: " + a.trend : "") + (a.shot ? "\n   shot: " + a.shot : "")).join("\n") + "\n\nQA: " + qa.note + (qa.repaired.length ? " | repaired " + qa.repaired.join(",") : "") + " | before " + qa.before.join(",") + " | after " + qa.after.join(",");
   // store as the drafting context (draftFromAngle reads this) + remember the hooks
@@ -5789,7 +5818,11 @@ async function dailyFeedTick(env, force, dry) {
     "\n\n_✔ " + qa.note + "_" +
     "\n\nPick one from the list — or just type the numbers for several, like “" + (angles.length > 1 ? (angles.length - 1) + " and " + angles.length : "1") + "”." +
     "\nYou'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
-  try { const _iss = await feedSelfCheck(env, angles, famh); if (_iss.length) qa.note += " | CHECK FAILED: " + _iss.join("; "); else qa.note += " | check passed"; } catch (e) {}   // v187
+  // v269 - the gate already ran (above) and removed what it found; this only tells Kendall what it removed and any shape problem
+  // left (fewer than five, an uneven split). Those are reported, not held for: four clean angles beat five with a repeat.
+  if (!dry && _gate && (_gate.dropped.length || _gate.structural.length)) {
+    try { await gcTellOwner(env, "Naj's morning has " + angles.filter(a => !a.campaign).length + " angles after the gate." + (_gate.dropped.length ? " The gate removed " + _gate.dropped.length + ": " + _gate.dropped.map(x => '"' + String(x.hook).slice(0, 60) + '" (' + x.why + ")").join("; ") + "." : "") + (_gate.structural.length ? " Shape: " + _gate.structural.join("; ") + "." : "")); } catch (e) {}
+  }
   try { await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
   const _rows = angles.slice(0, 10).map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + (a.figure || "").slice(0, 18), description: a.hook }));
   if (!(await ownerWindowOpen(env))) {   // v186 - her window is shut: hold it, nudge her, tell Kendall. Sending now would fail silently.
@@ -5832,11 +5865,16 @@ async function feedScenes(env, angles) {
   const me = String((await env.MEETINGS.get("feed_scene_photo")) || "style_ref_21").replace(/[^a-z0-9_]/gi, "");
   // v259 - a rotation: KV feed_scene_photos = JSON list of style_ref keys. Empty or absent = the single photo above, as before.
   let _rot = []; try { const _r = JSON.parse((await env.MEETINGS.get("feed_scene_photos")) || "[]"); if (Array.isArray(_r)) _rot = _r.map(x => String(x).replace(/[^a-z0-9_]/gi, "")).filter(Boolean); } catch (e) {}
+  if (!_rot.length && !(await env.MEETINGS.get("feed_scene_photo"))) _rot = await scenePool(env);   // v269 - no list set: every colour photo of her, not one
   const _used = [], _times = [];
   let queued = 0;
   let _last = null; try { _last = JSON.parse((await env.MEETINGS.get("feed_scenes_last")) || "null"); } catch (e) {}
-  const _shift = 0;   // set below if today's backdrops would repeat yesterday's
   const list = angles.filter(a => !a.campaign).slice(0, 5);
+  // v269 - v187 detected a repeat of yesterday's backdrops and only told Kendall; `_shift` was declared for the fix and never set.
+  // Now the set is planned first, and if it matches the last one it moves each angle on to its next backdrop (up to three tries).
+  const _plan = (sh) => list.map((a, i) => { const o = feedBackdrops(a, angleArea(a, d) || "") || []; return o.length ? o[(feedDayIndex() + sh + i) % o.length].id : ""; }).filter(Boolean).join();
+  let _shift = 0;
+  if (_last && Array.isArray(_last.backdrops) && _last.backdrops.length) { while (_shift < 3 && _plan(_shift) === _last.backdrops.join()) _shift++; }
   for (let i = 0; i < list.length; i++) {
     const a = list[i], n = String(angles.indexOf(a) + 1);
     const area = angleArea(a, d) || "";
@@ -5849,7 +5887,7 @@ async function feedScenes(env, angles) {
     const jk = "picjob_s" + "feed" + gstDateStr(new Date()).replace(/-/g, "") + n;
     if (await env.MEETINGS.get(jk)) continue;                                                     // one job per angle per morning, even if the tick fires twice
     try { await env.MEETINGS.put(jk, JSON.stringify({ scene: true, n, opt: opt.id, tid: FEED_SCENE_TIMES[(feedDayIndex() + i) % FEED_SCENE_TIMES.length] || "la", to: env.WA_ALLOWED, at: Date.now(), tries: 0,
-      post, option: opt, angle: a, meKey: (_rot.length ? _rot[(feedDayIndex() + i) % _rot.length] : me), extra: [], auto: "feed" }), { expirationTtl: 2 * 86400 }); queued++; } catch (e) {}
+      post, option: opt, angle: a, meKey: (_rot.length ? _rot[(feedDayIndex() * list.length + i) % _rot.length] : me)   /* v269 - each day starts where the last left off */, extra: [], auto: "feed" }), { expirationTtl: 2 * 86400 }); queued++; } catch (e) {}
   }
   if (queued) { try { await waSend(env, env.WA_ALLOWED, "On it. Your " + (queued === 5 ? "five" : String(queued)) + " pictures are being made now - they'll arrive over the next few minutes, each as a post and a story."); } catch (e) {} }
   try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued, photo: (_rot.length ? _rot.join(",") : me), backdrops: _used, times: _times }), { expirationTtl: 7 * 86400 }); } catch (e) {}
@@ -5858,28 +5896,47 @@ async function feedScenes(env, angles) {
   }
   return queued;
 }
-// v187 - THE MORNING'S OWN AUDIT (Kendall, 21 Sep 2026: "some form of quality check to make sure this doesn't keep happening").
-// Naj read the 21 Sep morning as "the same data as yesterday, and the same images". Both were true: the plan's facts had been
-// exempted from every repeat check, and every card since the feature went in had used the first backdrop. The checks below run
-// on the finished set, BEFORE she gets it: anything they find is written into the QA line and sent to Kendall, never to her.
-async function feedSelfCheck(env, angles, famh) {
+// v269 - THE GATE. Replaces v187's feedSelfCheck, which found repeats and then sent them anyway ("It has been sent anyway -
+// tell me to hold these instead"). Runs before the message is built. Removes, in place: any angle the audit fails against her
+// history (feedSeenSets - the same test the floor uses), any angle sharing a figure with an earlier one, and any angle the QA
+// agent reads as the same idea as something she has been sent. Shape problems (fewer than five, the split, the readers) are
+// returned for Kendall, never used to hold - an uneven clean morning is better than no morning.
+const FEED_QA_SCHEMA = { type: "object", additionalProperties: false, properties: { verdicts: { type: "array", items: { type: "object", additionalProperties: false, properties: { angle: { type: "integer" }, repeat: { type: "boolean" }, why: { type: "string" } }, required: ["angle", "repeat", "why"] } } }, required: ["verdicts"] };
+async function feedQAAgent(env, own, hist) {
+  if (!own.length) return [];
+  const sys = "You are the last quality check before a Dubai real-estate broker receives her morning list of post ideas. She has complained twice (21 and 30 Sep 2026) that she keeps getting the same ideas. " +
+    "For each angle in today (numbered from 1), decide whether it is essentially the SAME IDEA as a hook in recent (what she has been sent over the last few days) or as an EARLIER angle in today: the same story, the same claim or the same takeaway, even if the wording or the number differs. " +
+    "A genuinely different fact about the same area or developer is NOT a repeat. The same point made again IS. When unsure, it is not a repeat. " +
+    "Return exactly one verdict per angle in today, in order: angle number, repeat true or false, and a short why that names what it repeats. Return JSON only.";
+  const g = await claudeJSON(env, sys, JSON.stringify({ today: own.map((a, i) => ({ angle: i + 1, hook: a.hook, figure: a.figure })), recent: (hist || []).slice(0, 30) }), FEED_QA_SCHEMA, CLAUDE_SMART, 900);
+  if (!g || !Array.isArray(g.verdicts)) throw new Error("no verdicts");
+  return g.verdicts.filter(v => v && v.repeat && v.angle >= 1 && v.angle <= own.length).map(v => ({ i: v.angle - 1, why: "same idea as before: " + String(v.why || "").slice(0, 120) }));
+}
+async function feedGate(env, angles, famh, hist) {
   const own = angles.filter(a => !a.campaign);
-  const issues = [];
+  const drop = new Map();   // index in own -> the reason
   const audit = feedAudit(own.map(a => Object.assign({}, a)), famh);
-  for (const b of audit.bad) issues.push("angle " + (b.i + 1) + ": " + b.why[0]);
-  const yest = gstDateStr(new Date(Date.now() - 86400000));
-  const saidYesterday = new Set(famh.filter(x => x.d === yest && x.k).map(x => x.k));
-  for (let i = 0; i < own.length; i++) if (saidYesterday.has(figKey(own[i]))) issues.push("angle " + (i + 1) + ": the same figure as yesterday");
-  const figs = own.map(a => figKey(a)); if (new Set(figs).size < figs.length) issues.push("two angles share a figure");
-  const P = own.filter(planAngle).length, R = own.length - P;
-  if (own.length < 5) issues.push("only " + own.length + " angles");
-  if (P < 2 || P > 3 || R < 2 || R > 3) issues.push("the split is " + P + " plan and " + R + " real estate, not 2-3 of each");
-  const readers = new Set(own.map(a => a.reader).filter(Boolean));
-  if (readers.size < 3) issues.push("only " + [...readers].join(" and ") + " - one of the three readers is missing");
-  const rec = { at: gstNowIso(), issues, figures: figs, plan: P, real: R, readers: [...readers] };
+  for (const b of audit.bad) if (!drop.has(b.i)) drop.set(b.i, b.why[0]);
+  const figAt = new Map(); own.forEach((a, i) => { const k = figKey(a); if (!k) return; if (figAt.has(k)) { if (!drop.has(i)) drop.set(i, "shares a figure with angle " + (figAt.get(k) + 1)); } else figAt.set(k, i); });
+  let agent = "";
+  const judged = own.filter((a, i) => !drop.has(i)), judgedIdx = own.map((a, i) => i).filter(i => !drop.has(i));
+  try {
+    const r = await feedQAAgent(env, judged, hist);
+    for (const v of r) { const oi = judgedIdx[v.i]; if (oi != null && !drop.has(oi)) drop.set(oi, v.why); }
+    agent = "QA agent " + (r.length ? "removed " + r.length : "passed " + judged.length);
+  } catch (e) { agent = "QA agent did not run (" + String((e && e.message) || e).slice(0, 60) + ") - the mechanical checks still applied"; }
+  const dropped = [...drop.entries()].sort((x, y) => x[0] - y[0]).map(([i, why]) => ({ hook: own[i].hook, figure: own[i].figure, why }));
+  const kill = new Set([...drop.keys()].map(i => own[i]));
+  for (let i = angles.length - 1; i >= 0; i--) if (kill.has(angles[i])) angles.splice(i, 1);
+  const left = angles.filter(a => !a.campaign), P = left.filter(planAngle).length, R = left.length - P;
+  const structural = [];
+  if (left.length < 5) structural.push("only " + left.length + " angles");
+  if (left.length && (P < 2 || P > 3 || R < 2 || R > 3)) structural.push("the split is " + P + " plan and " + R + " real estate");
+  const readers = new Set(left.map(a => a.reader).filter(Boolean));
+  if (left.length && readers.size < 3) structural.push("readers: " + ([...readers].join(", ") || "none"));
+  const rec = { at: gstNowIso(), dropped, structural, agent, kept: left.map(a => a.hook) };
   try { await env.MEETINGS.put("mkt_feed_audit", JSON.stringify(rec), { expirationTtl: 14 * 86400 }); } catch (e) {}
-  if (issues.length) { try { await gcTellOwner(env, "Naj's morning failed its own check before it went: " + issues.join("; ") + ". It has been sent anyway - tell me to hold these instead if you would rather she got nothing."); } catch (e) {} }
-  return issues;
+  return rec;
 }
 // v188 - SHE CHOOSES AGAIN (Naj, 21 Sep 2026: "I don't get to choose anymore, it closes created"; Kendall's answer: Azimuth
 // offers, she taps). v185 made all five cards without asking, which took away the backdrop, the light and the photo she used to
@@ -11965,10 +12022,24 @@ async function mePool(env) {
     return (p && Array.isArray(p.usable)) ? p.usable.map(k => String(k).replace(/[^a-z0-9_]/gi, "")).filter(Boolean) : [];
   } catch (e) { return []; }
 }
+// v269 - the photos a SCENE may use: every colour photo of her, full-length or not. A scene is drawn by the image model from the
+// photo itself (sceneGenerate), so mePool's cut-out test - full-length standing, for pasting onto a plate - does not apply. Since
+// 23 Sep every photo she sent failed that test (five half-length, one black and white), so the picker kept offering the same six,
+// three at a time, in two fixed sets, while each new photo was acknowledged with "It will be in your pictures within the hour"
+// (Naj, 30 Sep 2026: "still only getting presented with the same two or three pictures"). Black and white stays out.
+async function scenePool(env) {
+  try {
+    const p = JSON.parse((await env.MEETINGS.get("img_style_me_pool")) || "null");
+    if (!p) return [];
+    const v = p.verdicts || {};
+    const keys = (Array.isArray(p.usable) ? p.usable : []).concat(Object.keys(v).filter(k => !/black and white/i.test(String((v[k] || {}).why || ""))));
+    return [...new Set(keys.map(k => String(k).replace(/[^a-z0-9_]/gi, "")).filter(Boolean))].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+  } catch (e) { return []; }
+}
 // Up to three, taken in turn round the pool (a cursor, so every photo gets its turn and none is favoured),
 // shown in the pool's own order so "Photo 1" is always the earlier photo. With three or fewer, all are offered.
 async function meOffer(env, from, origin, job) {
-  const pool = await mePool(env);
+  const pool = job && job.kind === "scene" ? await scenePool(env) : await mePool(env);   // v269 - a scene draws from the photo, a plate pastes a cut-out
   if (pool.length < 2) return false;
   let cur = 0; try { cur = parseInt((await env.MEETINGS.get("style_me_cursor")) || "0", 10) || 0; } catch (e) {}
   const take = Math.min(3, pool.length), pick = [];

@@ -85,11 +85,13 @@ const scenes = JSON.parse(tapped.store.get("feed_scenes_last"));
 ok(Array.isArray(scenes.backdrops) && scenes.backdrops.length === 5, "and what was used is recorded, so tomorrow can differ: " + JSON.stringify(scenes.backdrops));
 
 // ---- the morning checks itself before she gets it -----------------------------------------------------------------------------
-ok(okrun.audit && Array.isArray(okrun.audit.issues), "every morning writes its own check: " + JSON.stringify(okrun.audit && okrun.audit.issues));
-ok(okrun.qa && /check (passed|FAILED)/.test(okrun.qa.note), "and the QA line says whether it passed: " + (okrun.qa ? okrun.qa.note.slice(-60) : ""));
+// v269 - the check is now a gate (test_v269_feed_gate.mjs): it removes what it finds before the message is built, and reports
+// shape problems to Kendall. These assertions follow the record it writes now.
+ok(okrun.audit && Array.isArray(okrun.audit.dropped) && Array.isArray(okrun.audit.structural), "every morning writes its own check: " + JSON.stringify(okrun.audit && okrun.audit.structural));
+ok(okrun.qa && /\| gate: /.test(okrun.qa.note), "and the QA line says what the gate did: " + (okrun.qa ? okrun.qa.note.slice(-80) : ""));
 const thin = await run([], { serve: [POP, WALK, EDU], topup: [] });
-ok(thin.audit && thin.audit.issues.some((i) => /only \d angles|split is/.test(i)), "a short or lopsided morning is caught: " + JSON.stringify(thin.audit && thin.audit.issues));
-ok(owner.some((t) => /failed its own check/.test(t)), "and Kendall hears about it, not Naj");
+ok(thin.audit && thin.audit.structural.some((i) => /only \d angles|split is/.test(i)), "a short or lopsided morning is caught: " + JSON.stringify(thin.audit && thin.audit.structural));
+ok(owner.some((t) => /after the gate/.test(t) && /only 3 angles/.test(t)), "and Kendall hears about it, not Naj");
 
 // ---- v187.2: a readmitted angle must not repeat a NUMBER she had today either -----------------------------------------------
 // On 21 Sep the floor brought "2,927 sales" back an hour after she had already had it: the two figure keys differed by a few
