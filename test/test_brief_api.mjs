@@ -270,7 +270,7 @@ ok(writes === 0, "the route never writes to KV");
 // ---- 7. the change to src/index.js ----------------------------------------------------------------------------
 ok((SRC.match(/from "\.\/brief\.js"/g) || []).length === 1 && (SRC.match(/briefApi\(/g) || []).length === 1, "src/index.js: one import, one dispatch");
 ok(/if \(keyTier\(env, url\) === "client" && !clientPathOk[^\n]*\n\s*\/\/ ==== BRIEF \(Contract A\)[\s\S]{0,400}if \(url\.pathname === "\/brief_api"\) return briefApi\(request, env, url, \{ clientOk \}\);/.test(SRC), "the dispatch is marked and sits directly below the client-path gate");
-ok(/const CLIENT_PATHS = \[[^\]]*"\/brief_api"\]/.test(SRC), "/brief_api is in CLIENT_PATHS (and in APP_PAGES in test_v156, which checks the two agree)");
+ok(/const CLIENT_PATHS = \[[^\]]*"\/brief_api"[^\]]*\]/.test(SRC), "/brief_api is in CLIENT_PATHS (and in APP_PAGES in test_v156, which checks the two agree)");
 
 // ---- 8. the real index: the reference question ---------------------------------------------------------------
 const real = (() => { try { return fs.readFileSync(path.join(NAJ, "board", "rent_index.json"), "utf8"); } catch { return null; } })();
