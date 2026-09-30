@@ -4,6 +4,7 @@ import { buildingData, buildingPageHtml } from "./building_page.js";   // v187 -
 import { pillarsCard, buildingPillars, developerPillarsCard, normName as pillarName, PILLAR_CSS } from "./pillars.js";   // v238 - the four pillars, built in the Worker for the building page and /dev
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import { worldBackdrops, worldBackdrop, worldPlatePrompt, worldScenePrompt, worldPicSay, worldCardFields, worldPicSize } from "./world_pic.js";   // v164 - the Versus picture, made the way the morning pictures are made
+import { briefRoutes, briefStartCard } from "./brief_page.js";   // THE BRIEF (part B, 30 Sep 2026) - the /brief screens and the 00 way in on /start
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -1962,6 +1963,10 @@ async function appFetch(request, env, ctx) {
     // before any storage is touched. Returns null for anything that is not its own, so the handler carries on.
     const _sh = await sheetRoutes(request, env, url, { ctEq, waPost, ownerWindowOpen, noteErr, WA_GRAPH, clientKeyOk: (e, u) => keyTier(e, u) !== "" });   // v212 - the building dossier opens on a client key
     if (_sh) return _sh;
+    // ---- THE BRIEF (part B, 30 Sep 2026): GET /brief - the form, the ranked list and the output buttons. All logic in src/brief_page.js. ----
+    // After the client gate (/brief is in CLIENT_PATHS); briefRoutes applies clientOk itself. Returns null for any other path.
+    if (url.pathname === "/brief") { const _br = await briefRoutes(request, env, url, { clientOk, keyTier, clientLinkKey, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_br) return _br; }
+    // ---- end THE BRIEF ----
     // v110.1 - HOISTED (10 Sep 2026). Sitting lower down, this never matched: the request
     // fell through to the Telegram webhook secret check at the foot of the handler and came
     // back "unauthorized" for every path. Same trap the header comment already records.
@@ -4657,6 +4662,7 @@ function najStartHtml(key, rk) {
     + '<style>' + NAJ_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
     + '<div class=h>Five ways <em>in</em></div>'
     + '<div class=s>Whatever the client opens with, one of these five is the door. Each one is the whole path \u2014 follow it and the next question is already on the screen.</div>'
+    + briefStartCard(key, rk, najIcon("search"))   // THE BRIEF - "00 THEY TELL YOU WHAT THEY WANT", above the five angles (src/brief_page.js)
     + NAJ_ANGLES.map((a) => najAngleCard(a, key, rk)).join("")
     + '<div class=hd>THEY SAY \u2014 YOU TAP</div><div class=ch>'
     + NAJ_CHEAT.map((c) => '<div class=q>' + esc3(c[0]) + '</div><div class=a>' + esc3(c[1]) + '</div>').join("")
@@ -11474,7 +11480,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/start", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const CLIENT_PATHS = ["/start", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
