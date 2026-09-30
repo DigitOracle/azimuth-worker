@@ -2433,6 +2433,17 @@ async function appFetch(request, env, ctx) {
         }
         return new Response(JSON.stringify({ to, template: name, lang, param_count: params.length, result }, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
       }
+      if (url.pathname === "/feed_nudge_send") {               // v268 - a custom one-off message to HER (not the ring handset), via the
+        // approved azimuth_daily template - the only thing Meta delivers outside her 24h window. Kendall, 30 Sep 2026: an apology
+        // for the repeat-content bug needed to reach her regardless of window state. Recipient is always env.WA_ALLOWED, never a
+        // query override, same reasoning as /ring_test: READ_KEY is not a strong enough gate to let a URL pick who this app messages.
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        const head = url.searchParams.get("head") || "", body = url.searchParams.get("body") || "";
+        if (!head || !body) return new Response("need head and body", { status: 400 });
+        if (url.searchParams.get("dry") === "1") return new Response(JSON.stringify({ dry: true, to: env.WA_ALLOWED, template: env.FEED_TEMPLATE, lang: env.FEED_TEMPLATE_LANG || "en_US", head: head.replace(/\s+/g, " ").slice(0, 200), body: body.replace(/\s+/g, " ").slice(0, 900) }, null, 2), { headers: { "Content-Type": "application/json" } });
+        const r = await feedNudge(env, head, body);
+        return new Response(JSON.stringify(r), { headers: { "Content-Type": "application/json" } });
+      }
       if (url.pathname === "/nudge_run") {                     // v32 — force a real nudge pass now (for a live test)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const fired = await meetingNudges(env);
