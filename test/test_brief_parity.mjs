@@ -7,7 +7,7 @@
 //   1. the ten JVC buildings /brief_api lists for "1-bed, AED 60-68K" (the reference question): each dossier's page-2 box prints exactly the /brief_api row's
 //      {about, of} (Binghatti Amber jumeirahvillagecircle:1503 "about 380" of 502; Binghatti Nova "about 140" of 178), or - where the row
 //      withholds - "No estimate yet for this building"
-//   2. the one-sheet card carries "Still filling" exactly on the buildings that have an estimate
+//   2. the one-sheet card carries "Still filling" exactly where there is an estimate AND T - R > T / 2 (T=100, R=60: no line)
 //   3. a building genuinely not in the register: the list withholds and the PDF says "No estimate yet for this building"
 // NEGATIVE CONTROL (run by hand, see the commit message): make brief_docs.js compute its own estimate again and this file fails.
 //
@@ -78,9 +78,23 @@ ok(rows.filter((r) => r.estimated_left).length >= 8, "the register gives most of
 const { html: os } = await pdfHtml("kind=onesheet&keys=" + rows.map((r) => encodeURIComponent(r.key)).join(","));
 const cards = os.split('<div class="bcard"').slice(1);
 ok(cards.length === 10, "the one-sheet has ten cards", cards.length);
-const fillWant = rows.map((r) => !!r.estimated_left), fillGot = cards.map((c) => /Still filling: most of its 1-beds have no running tenancy on the government register\*/.test(c));
-ok(JSON.stringify(fillWant) === JSON.stringify(fillGot), "\"Still filling\" shows on every card whose building has an estimate, and on no other", JSON.stringify({ fillWant, fillGot }));
+const FILL_RX = /Still filling: most of its 1-beds have no running tenancy on the government register\*/;
+const fillWant = rows.map((r) => !!r.estimated_left && r.estimated_left.of - r.estimated_left.running > r.estimated_left.of / 2), fillGot = cards.map((c) => FILL_RX.test(c));
+ok(JSON.stringify(fillWant) === JSON.stringify(fillGot), "\"Still filling\" shows on every card whose building has an estimate with more than half its flats untenanted, and on no other", JSON.stringify({ fillWant, fillGot }));
 ok(!fillGot.some(Boolean) || /\*Dubai Land Department units list and tenancy register/.test(os), "and the asterisk's small print is there");
+// the sentence says "most": T = 100, R = 60 has an estimate (about 40 of 100) but most flats DO have a tenancy -> no line; R = 40 -> the line
+const withNova = async (T, R) => {
+  store.set("img_beds_left_" + JVC, JSON.stringify(Object.assign({}, REGISTER, { rows: REGISTER.rows.map((r) => r.key === nova.key && String(r.beds) === "1" ? Object.assign({}, r, { T, R }) : r) })));
+  const row = ((await api(Q + "&areas=" + JVC + "&limit=10")).results || []).find((r) => r.key === nova.key);
+  const card = (await pdfHtml("kind=onesheet&keys=" + nova.key)).html.split('<div class="bcard"')[1] || "";
+  const b = box((await pdfHtml("kind=dossier&keys=" + nova.key)).html);
+  store.set("img_beds_left_" + JVC, JSON.stringify(REGISTER));
+  return { est: row && row.estimated_left, fill: FILL_RX.test(card), box: boxSays(b) };
+};
+const r60 = await withNova(100, 60);
+ok(r60.est && r60.est.about === 40 && JSON.stringify(r60.box) === "[40,100]" && !r60.fill, "T=100, R=60: list and dossier both say about 40 of 100, and the card has NO 'Still filling' line", JSON.stringify(r60));
+const r40 = await withNova(100, 40);
+ok(r40.est && r40.est.about === 60 && JSON.stringify(r40.box) === "[60,100]" && r40.fill, "T=100, R=40: about 60 of 100, and the card says 'Still filling'", JSON.stringify(r40));
 
 // ---- 3. a building genuinely not in the register -------------------------------------------------------------------------------
 const drop = nova.key, dropName = nova.name;

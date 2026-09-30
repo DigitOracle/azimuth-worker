@@ -165,6 +165,13 @@ ok(html.includes("45 floors (one of 3 buildings)") && html.includes("944 homes i
 ok(/<svg style="width:700px;height:auto;display:block;" xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 1500 1000"/.test(html), "page 2 carries the LOD 100 block map as inline SVG (no picture to break)");
 ok((html.match(/class="hiblock"/g) || []).length === 2 && html.includes("Alpha Tower · where it is in Test District") && !html.includes("Map to follow"), "the building is drawn in gold (walls + roof) with its own title; no 'Map to follow'");
 ok(/fill="#C5A56A"/.test(html) && /fill="#E9E9E4"/.test(html) && /<g class="badge">/.test(html) && />N<\/text>/.test(html) && />500 m<\/text>/.test(html), "the approved palette, a numbered badge, a north arrow and a scale bar");
+{
+  const svg = (/<svg style="width:700px[\s\S]*?<\/svg>/.exec(html) || [""])[0];
+  const ctx = svg.match(/<path class="bm[wr]" d="[^"]*"\/>/g) || [];
+  const dup = (svg.match(/ d="[^"]*"/g) || []).some((d) => d.slice(4, -1).split(/[MZ]/).some((sub) => { const n = sub.trim().split(" "); for (let k = 2; k + 1 < n.length; k += 2) if (n[k] === n[k - 2] && n[k + 1] === n[k - 1]) return true; return false; }));
+  ok(/\.bmw\{fill:#D3D4CE;stroke:#BFC1BA;[^}]*\}\.bmr\{fill:#E9E9E4;stroke:#BFC1BA;/.test(svg) && ctx.length >= 3 && !dup,
+    "the map is slimmed without changing the picture: the other buildings share their paint through two classes, no point repeats the one before it", ctx.length + " ctx paths, dup " + dup);
+}
 ({ html } = await pdf("kind=dossier&keys=dld:betaheights"));
 ok(html.includes("Map to follow") && !/<svg[^>]*viewBox="0 0 1500 1000"/.test(html) && html.includes("this building has no verified map position yet"), "no position on record -> 'Map to follow', never a guessed pin");
 ok(html.includes("Distances not shown: our map position for this building is not yet verified"), "and no distances are measured from nowhere");

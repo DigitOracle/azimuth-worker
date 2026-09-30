@@ -525,9 +525,11 @@ function titleOf(C, q) {
   const budget = q.min && q.max && q.min < q.max ? ", AED " + money(q.min) + "&ndash;" + money(q.max) + " a year" : q.max ? ", around AED " + money(q.max) + " a year" : "";
   return count + " " + B.word + " option" + (n === 1 ? "" : "s") + " in " + esc(where) + budget;
 }
-// the card's "Still filling" line shows whenever the dossier's box gives an estimate (the same estimateLeft figure), never otherwise
+// the card's "Still filling" line ("most of its 1-beds have no running tenancy") shows only where the dossier's box gives an estimate
+// (the same estimateLeft figure) AND more than half the flats have no running tenancy (T - R > T / 2), so the sentence is always true
 function stillFilling(C, rec, q) {
-  return leftOf(C, rec, q).est != null;
+  const L = leftOf(C, rec, q);
+  return L.est != null && L.T > 0 && (L.T - L.R) > L.T / 2;
 }
 function oneSheetCards(C, q) {
   const B = BEDS[q.beds];
@@ -652,11 +654,19 @@ export function briefMapSvg(layer, marks, o) {
   const f1 = (n) => Math.round(n * 10) / 10;
   // whole canvas units (a canvas unit prints at 0.47 px on the dossier, 0.69 px on the one-sheet): a ten-building pack carries eleven
   // district maps, and this keeps each near half a megabyte instead of three quarters
-  const path = (pts, close) => "M" + pts.map((p) => { const [a, b] = S(p); return Math.round(a) + " " + Math.round(b); }).join("L") + (close ? "Z" : "");
+  // A point that rounds onto the one before it draws nothing (round joins), so it is dropped; after M the pairs are implicit line-tos.
+  // Same picture, fewer bytes: a pack carries eleven of these maps through the renderer.
+  const path = (pts, close) => {
+    const o = []; let last = "";
+    for (const p of pts) { const [a, b] = S(p), t = Math.round(a) + " " + Math.round(b); if (t !== last) o.push(t); last = t; }
+    return "M" + o.join(" ") + (close ? "Z" : "");
+  };
   const inBox = (x, y) => X0 < x && x < X1 && Y0 < y && y < Y1;
   const out = [];
   out.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1000" width="1500" height="1000" font-family="DejaVu Sans, Arial, sans-serif">');
   out.push('<rect width="1500" height="1000" fill="' + MAPC.BG + '"/>');
+  // the other buildings' walls and roofs (thousands of paths) share their paint through two classes instead of repeating it on each
+  out.push("<style>.bmw{fill:" + MAPC.CTX_WALL + ";stroke:" + MAPC.CTX_EDGE + ";stroke-width:" + f1(0.25 * PT) + ";stroke-linejoin:round}.bmr{fill:" + MAPC.CTX_ROOF + ";stroke:" + MAPC.CTX_EDGE + ";stroke-width:" + f1(0.25 * PT) + ";stroke-linejoin:round}</style>");
   out.push('<clipPath id="ax"><rect x="' + f1(bx) + '" y="' + f1(by) + '" width="' + f1((xmax - xmin) * sc) + '" height="' + f1((ymax - ymin) * sc) + '"/></clipPath><g clip-path="url(#ax)">');
   // streets: casing under fill, minor classes first
   const st = (layer.s || []).map(([c, f]) => ({ c, r: pairs(f) })).filter((s) => s.r.some(([x, y]) => inBox(x, y)));
@@ -683,6 +693,11 @@ export function briefMapSvg(layer, marks, o) {
     for (let k = 0; k + 1 < r.length; k++) { const [x0, y0] = r[k], [x1, y1] = r[k + 1]; if (x1 - x0 > 0) walls.push([(y0 + y1) / 2, [P(x0, y0), P(x1, y1), P(x1, y1, b.h), P(x0, y0, b.h)]]); }
     walls.sort((a, c) => c[0] - a[0]);
     const cls = b.kind === "ctx" ? "" : ' class="' + (b.kind === "hi" ? "hiblock" : "approxblock") + '"';
+    if (b.kind === "ctx") {
+      if (walls.length) out.push('<path class="bmw" d="' + walls.map((w) => path(w[1], true)).join("") + '"/>');
+      out.push('<path class="bmr" d="' + path(r.map(([x, y]) => P(x, y, b.h)), true) + '"/>');
+      continue;
+    }
     if (walls.length) out.push("<path" + cls + ' d="' + walls.map((w) => path(w[1], true)).join("") + '" fill="' + wall + '" stroke="' + edge + '" stroke-width="' + f1(lw * PT) + '" stroke-linejoin="round"' + dash + "/>");
     out.push("<path" + cls + ' d="' + path(r.map(([x, y]) => P(x, y, b.h)), true) + '" fill="' + roof + '" stroke="' + edge + '" stroke-width="' + f1(lw * PT) + '" stroke-linejoin="round"' + dash + "/>");
   }
