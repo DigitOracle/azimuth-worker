@@ -4660,7 +4660,7 @@ function najStartHtml(key, rk) {
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>Start \u2014 Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS
     + '<style>' + NAJ_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
-    + '<div class=h>Five ways <em>in</em></div>'
+    + '<div class=h>Six ways <em>in</em></div>'
     + '<div class=s>Whatever the client opens with, one of these five is the door. Each one is the whole path \u2014 follow it and the next question is already on the screen.</div>'
     + briefStartCard(key, rk, najIcon("search"))   // THE BRIEF - "00 THEY TELL YOU WHAT THEY WANT", above the five angles (src/brief_page.js)
     + NAJ_ANGLES.map((a) => najAngleCard(a, key, rk)).join("")

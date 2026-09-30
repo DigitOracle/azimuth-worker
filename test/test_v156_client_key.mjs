@@ -154,7 +154,7 @@ for (const p of PAGES) {
     && !cliMore.includes("BOARD") && !cliMore.includes("CARD SHEET") && cliMore.includes("<span>MORE</span>"),
     "/more, client key: no BOARD, no card sheet, no owner key - and the page still opens");
   const cliStart = await bodyOf(await call(withKey("/start", CLIENT)));
-  ok(!cliStart.includes(READ) && cliStart.includes("Five ways") && cliStart.includes("<span>START</span>"),
+  ok(!cliStart.includes(READ) && cliStart.includes("Six ways") && cliStart.includes("<span>START</span>"),
     "/start, client key: the five angles open and carry no owner key");
 }
 r = await call(withKey("/home", CLIENT));
