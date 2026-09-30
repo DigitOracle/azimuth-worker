@@ -43,7 +43,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m); } };
 
 // The app pages a client may open - stated here on purpose, apart from CLIENT_PATHS in the worker, so widening the client surface takes two edits.
-const APP_PAGES = ["/start", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const APP_PAGES = ["/start", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status",
+  "/brief_api"];   // THE BRIEF (Contract A, 30 Sep 2026): the search behind /brief is client-key gated like the app pages (spec), so it is declared here
 // v187 put the building page on the client surface but never widened it here, so the sweep counted /building/ an escalation.
 const APP_PREFIXES = ["/skyline/", "/area/", "/report/", "/building/"];
 const isAppPage = (p) => APP_PAGES.includes(p.split("?")[0]) || APP_PREFIXES.some((x) => p.indexOf(x) === 0);
