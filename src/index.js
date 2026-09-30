@@ -4,7 +4,8 @@ import { buildingData, buildingPageHtml } from "./building_page.js";   // v187 -
 import { pillarsCard, buildingPillars, developerPillarsCard, normName as pillarName, PILLAR_CSS } from "./pillars.js";   // v238 - the four pillars, built in the Worker for the building page and /dev
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import { worldBackdrops, worldBackdrop, worldPlatePrompt, worldScenePrompt, worldPicSay, worldCardFields, worldPicSize } from "./world_pic.js";   // v164 - the Versus picture, made the way the morning pictures are made
-import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
+import { sheetRoutes } from "./sheets.js";
+import { blocksRoute } from "./blocks_page.js";   // BLOCKS (30 Sep 2026) - LOD 100 blocks view, /blocks; all its logic lives in blocks_page.js   // v157 - the client fact sheet: receive, preview, send as a document
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -3280,6 +3281,9 @@ async function appFetch(request, env, ctx) {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         return new Response(renderStudio(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
+      // ---- BLOCKS (30 Sep 2026, Kendall) - /blocks, the LOD 100 view between the map and the twin. Client-key gated like /map; everything else is in src/blocks_page.js.
+      { const _blk = await blocksRoute(request, env, url, { clientOk, clientResp }); if (_blk) return _blk; }
+      // ---- /BLOCKS
       if (url.pathname === "/map") {                           // v50 — interactive community map (MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _sky64 = [];
@@ -11474,7 +11478,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/start", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const CLIENT_PATHS = ["/blocks", /* BLOCKS 30 Sep 2026 */ "/start", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
