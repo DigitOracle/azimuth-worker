@@ -9480,14 +9480,24 @@ function applyMask(){
 let MASKN=0;
 function paintDevs(){
   if(!ANCH||!MESHES||!ANCH.per_building_glb)return;
-  // anchor -> mesh by POSITION (mesh order in a merged export is not the footprint order): nearest mesh centre within 12 m
+  // anchor -> mesh by NAME first (v267): v3 tiles name meshes b<i>_<class>_s<status>, v4/v5 name them b<i>_<class> - a
+  // multi-part building (walls, bands, crown) shares the same b<i> prefix across all its meshes. Position was the ONLY
+  // signal before this, and it misjudges adjacent small buildings; a name match is exact, so it always wins when the tile
+  // carries one. A mesh with no b<i> name (the goldensymphony pilot's unnamed mesh_CityEngineMaterial* nodes) falls back
+  // to nearest-centre-within-30m, the only path that tile has ever had - so it never goes dark.
   const _cc=new THREE.Vector3(),_bb=new THREE.Box3();ROOTREF.updateWorldMatrix(true,true);   // v76: packed (quantized) GLBs carry a dequantise transform on the node, so measure in ROOT space, not geometry space
   const cents=MESHES.map(m=>{if(!m.geometry.boundingBox)m.geometry.computeBoundingBox();_bb.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld);_bb.getCenter(_cc).sub(ROOTREF.position);return [_cc.x,_cc.z]});
   // a banded tower is several meshes (walls, floor bands, crown): give EVERY mesh to its nearest footprint, then an anchor owns all
   // the meshes of its footprint (a.meshes); a.mesh keeps the first for compatibility
   const fps=ANCH.fps||ANCH.anchors.map(a=>[a.i,a.x,a.z,a.h]);const byFp={};
-  for(let i=0;i<cents.length;i++){let bi=-1,bd=1e9;for(const f of fps){if(f[1]==null)continue;const dx=f[1]-cents[i][0],dz=f[2]-cents[i][1],d=dx*dx+dz*dz;if(d<bd){bd=d;bi=f[0]}}
-    if(bi>=0&&bd<=900)(byFp[bi]=byFp[bi]||[]).push(i)}
+  const fpSet=new Set(fps.map(f=>String(f[0])));let byName=0,byPos=0;
+  for(let i=0;i<cents.length;i++){
+    const _nm=MESHES[i].name||"",_mm=/^b(\d+)/.exec(_nm);
+    if(_mm&&fpSet.has(_mm[1])){(byFp[_mm[1]]=byFp[_mm[1]]||[]).push(i);byName++;continue}
+    let bi=-1,bd=1e9;for(const f of fps){if(f[1]==null)continue;const dx=f[1]-cents[i][0],dz=f[2]-cents[i][1],d=dx*dx+dz*dz;if(d<bd){bd=d;bi=f[0]}}
+    if(bi>=0&&bd<=900){(byFp[bi]=byFp[bi]||[]).push(i);byPos++}
+  }
+  console.log("[byFp] ${slugName}: "+byName+" by name, "+byPos+" by proximity fallback ("+(cents.length?Math.round(100*byPos/cents.length):0)+"%) - a high rate here means this district's export is unnamed or wrong, not that the mapping failed");
   for(const a of ANCH.anchors){const ms=byFp[a.i]||[];a.meshes=ms;a.mesh=ms.length?ms[0]:null}
   window.BYFP=byFp;   // v121: sub-community fallback highlights by footprint index
   setTimeout(applyMask,0);   // v156: the developer mask paints by footprint index, so it waits for this map
