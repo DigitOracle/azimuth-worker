@@ -5516,6 +5516,33 @@ async function feedFill(env, angles, sys, data, famh, qa) {
     if (rej.length) notes.push("top-up refused " + rej.length + " (" + rej.map(r => String(r).slice(0, 60)).join("; ") + ")");
     if (!g) notes.push("top-up got no answer");
   }
+  // v272 - THE NEWS FILLS THE GAP (Kendall, 30 Sep 2026). The live dry run on v270 sent nothing: every register and plan figure
+  // the model could find she had already had, and the top-ups were refused for the same reason. The fresh material is the live
+  // news, so when the set is still short, ask for news angles specifically - one story each, the figure copied from that story,
+  // under the same news honesty rule and repeat audit as everything else. News may anchor up to FOUR of the five (was two); the
+  // plan / real-estate split is waived for these, because on such a morning the alternative is fewer angles, not a better split.
+  const isNews = (a) => !!a && !a.campaign && !planAngle(a) && NEWS_CITE_RX.test(String(a.source || ""));
+  const newsRoom = () => Math.min(5 - own().length, 4 - own().filter(isNews).length);
+  if (newsRoom() > 0 && Array.isArray(news) && news.length) {
+    const want = newsRoom();
+    const ask = sys + " NEWS TOP-UP (the registers and the plan have nothing new for her today): the current set has " + own().length + ". Return ONLY " + want +
+      " NEW angle(s), each built on a DIFFERENT story in news. Each angle's figure is a number copied exactly, with its unit, from that story's title or summary, and every other number in its hook comes from the same story; its source is 'reported by <the outlet>, <the date>'. " +
+      "Prefer today:true stories about Dubai transport, infrastructure, districts, developers and projects. Nothing may repeat an angle in current, and no figure in avoidFigures may be reused.";
+    let g = null; try { g = await claudeJSON(env, ask, JSON.stringify({ current: own(), news, avoidFigures: famh.map(x => x.k).filter(Boolean).slice(0, 60) }), FEED_SCHEMA, null, 1400); } catch (e) {}
+    let added = 0; const rej = [];
+    for (const a of (g && Array.isArray(g.angles) ? g.angles : [])) {
+      if (newsRoom() <= 0) break;
+      if (!a || !a.hook || !a.figure) { rej.push("empty"); continue; }
+      if (!isNews(a)) { rej.push("not cited to a news story"); continue; }
+      const cw = feedNewsTrue(a, news) || feedHookTrue(a, dataStr); if (cw) { rej.push(cw); continue; }
+      const o = own(); const au = feedAudit(o.concat([a]), famh).bad.find(b => b.i === o.length); if (au) { rej.push(au.why[0]); continue; }
+      try { await voiceGuard(env, [a]); } catch (e) {}
+      angles.splice(insertAt(), 0, a); added++;
+    }
+    if (added) notes.push("news top-up added " + added);
+    if (rej.length) notes.push("news top-up refused " + rej.length + " (" + rej.map(r => String(r).slice(0, 60)).join("; ") + ")");
+    if (!g) notes.push("news top-up got no answer");
+  }
   if (own().length < 5 && qa && Array.isArray(qa._droppedAngles)) {
     const dated = (w) => (String(w || "").match(/\d{4}-\d{2}-\d{2}/) || ["9999"])[0];
     // v269 - readmit only what the audit itself would pass: the same test, the same window (feedSeenSets). Four fresh angles beat
@@ -5526,6 +5553,7 @@ async function feedFill(env, angles, sys, data, famh, qa) {
     for (const strict of [true, false]) for (const d of pool) {   // the split first; then the floor wins over the split
       if (own().length >= 5) break;
       if ((strict && !fits(d.a)) || own().includes(d.a) || own().some(x => figKey(x) === figKey(d.a))) continue;
+      { const o = own(); if (feedAudit(o.concat([d.a]), famh).bad.find(b => b.i === o.length)) continue; }   // v272 - the full audit a top-up faces (subject, family, figure, number), not only the history test
       angles.splice(insertAt(), 0, d.a); back.push(d.why);
     }
     if (back.length) notes.push("readmitted " + back.length + " to keep five (" + back.join("; ") + ")");
