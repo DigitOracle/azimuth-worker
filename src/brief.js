@@ -42,7 +42,7 @@ const stem = (s) => fold(s).toLowerCase().replace(/\b(by|the|tower|towers|reside
 export const nkey = (s) => norm(stem(s));
 const snake = (s) => fold(s).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
-async function kvJson(env, name) {                // an img_* value: plain JSON, or gzipped JSON (the /img route passes 1f 8b through)
+export async function kvJson(env, name) {         // an img_* value: plain JSON, or gzipped JSON (the /img route passes 1f 8b through)
   let v = null;
   try { v = await env.MEETINGS.get("img_" + name, "arrayBuffer"); } catch (e) { return null; }
   if (v == null) return null;
@@ -119,7 +119,7 @@ function rentCandidates(RI, q, bed) {
     const s = best.s, newBasis = s.nn >= 3 && !!s.mn;
     out.push({
       it, d: it.d || null, i: it.i == null ? null : it.i, name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, dldArea: it.area,
-      key: it.i != null && it.d ? it.d + ":" + it.i : "dld:" + (it.p || nkey(it.n)),
+      key: candidateKey(it),
       verdict: best.verdict, v: best.v, n: s.n,
       evidence: { basis: "ejari", median: best.v, q1: newBasis ? s.q1n : s.q1, q3: newBasis ? s.q3n : s.q3, n: s.n, n_new: s.nn,
         median_of: newBasis ? "new_lettings" : "all_contracts", median_all: s.m, sqm: s.s, latest: s.last, home: best.villa ? "villa" : "apartment" },
@@ -260,6 +260,18 @@ export function estFromBedsLeft(BL, row) {
   };
 }
 
+// ---- THE one "estimated left" (Kendall 30 Sep): the /brief_api list row AND the /brief_pdf documents (src/brief_docs.js) both call
+// this, so the list and the PDF can never disagree. BL = the district's beds-left register (img_beds_left_<district>) or null; card =
+// its unit-mix record for the building; ten = the district's tenancy file (read only when BL is missing); c = {key, name, aliases, i}
+// as candidateKey() / the rent index give them; bed = 0..3. Returns {about, of, running, as_at, ...} or {withheld: why}.
+export function estimateLeft({ BL, card, ten, c, bed }) {
+  if (BL) { const row = bedsLeftRow(BL, c, bed); return row ? estFromBedsLeft(BL, row) : { withheld: "not in the beds-left register for this district (" + (BL.as_of || "undated") + ")" }; }
+  if (c.i != null) return estLeft(card, ten, c.i, bed);
+  return { withheld: "no building record in the app to count the units register against" };
+}
+// the key a rent-index record is listed under (before the route's [a-z0-9_:-] clean-up, which estimateLeft's match ignores anyway)
+export const candidateKey = (it) => (it.i != null && it.d ? it.d + ":" + it.i : "dld:" + (it.p || nkey(it.n)));
+
 // ---- the non-negotiables: a source or null --------------------------------------------------------------------------
 function mustsOf(c, card, brochure, AM) {
   const am = ((brochure && brochure.amenities) || []).join(" | ");
@@ -386,9 +398,7 @@ export async function briefApi(request, env, url, h) {
     };
     c.recordName = card ? card.name : null;
     if (q.mode === "rent") {
-      const BL = c.d ? bedsLeft[c.d] : null;
-      if (BL) { const row = bedsLeftRow(BL, c, bed); c.est = row ? estFromBedsLeft(BL, row) : { withheld: "not in the beds-left register for this district (" + (BL.as_of || "undated") + ")" }; }
-      else if (c.i != null) c.est = estLeft(card, tenancy[c.d], c.i, bed);
+      c.est = estimateLeft({ BL: c.d ? bedsLeft[c.d] : null, card, ten: c.d ? tenancy[c.d] : null, c, bed });
     }
     kept.push(c);
   }
@@ -419,7 +429,7 @@ export async function briefApi(request, env, url, h) {
     if (c.disputed) r.disputed_bind = c.disputed;
     if (c.brochureKey) r.brochure = "/img/" + c.brochureKey.slice(4);
     if (q.mode === "rent") {                                                   // present only when known; otherwise the reason, never a guess
-      const e = c.est || { withheld: "no building record in the app to count the units register against" };
+      const e = c.est;
       if (e.withheld) r.estimated_left_withheld = e.withheld; else { r.estimated_left = e; r.estimate_as_of = e.as_at; }
     }
     return r;

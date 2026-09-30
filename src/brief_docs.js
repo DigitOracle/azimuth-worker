@@ -27,7 +27,9 @@
 //   img_rent_index           the evidence: median / middle half / count per building per bedroom band (build_rent_index.py)
 //   img_unitmix_<d>          floors, homes, and flats per bedroom type (Land Department units register)
 //   img_units_<d>            flat by flat (size, balcony, floor) - the layouts table, where the register covers the building
-//   img_tenancy_<d>          tenancy contracts running, per bedroom type - the R in the "left" estimate
+//   img_beds_left_<d>        the beds-left register (T and R per building per bedroom band) - read FIRST for the "left" estimate
+//   img_tenancy_<d>          tenancy contracts running, per bedroom type - the old gated path, only where the register is missing
+//                            (both through estimateLeft() in src/brief.js, the one function /brief_api uses too)
 //   img_amenities            RTA metro, KHDA schools, DHA clinics - straight-line distances only
 //   img_districts_geo        district names
 //   img_brochure_<dir>       the developer's own page: amenities + photos (naj-market-pulse scripts/push_brochures.py)
@@ -38,6 +40,7 @@
 // building's name must agree with the record; straight-line distances only, no walking or driving times; rents are what homes let
 // for, never availability; the "left" figure is always "an estimate, not a count".
 import puppeteer from "@cloudflare/puppeteer";
+import { estimateLeft, candidateKey, kvJson as kvJsonGz } from "./brief.js";   // the ONE "left" estimate, shared with /brief_api
 
 export const FOOTER_TEXT = "Curated by Najjuko &middot; Dubai Decoded";
 export const WHATSAPP_NUMBER = "+971 56 548 4397";
@@ -53,7 +56,6 @@ export function __setLauncher(fn) { LAUNCH = fn || ((binding) => puppeteer.launc
 // ------------------------------------------------------------------------------------------------ small helpers
 export const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
 export const money = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
-const r10 = (n) => Math.round(n / 10) * 10;
 function km(a, b) {
   const p = Math.PI / 180, x = Math.sin((b[0] - a[0]) * p / 2) ** 2 + Math.cos(a[0] * p) * Math.cos(b[0] * p) * Math.sin((b[1] - a[1]) * p / 2) ** 2;
   return 2 * 6371 * Math.asin(Math.sqrt(x));
@@ -259,7 +261,9 @@ export async function loadContext(env, q, opts) {
     if (d && !C.district[d]) {
       C.district[d] = {
         name: C.dname[d] || pretty(it.area) || d,
-        unitmix: await kvJson(env, "unitmix_" + d), tenancy: await kvJson(env, "tenancy_" + d),
+        unitmix: await kvJson(env, "unitmix_" + d),
+        bedsLeft: q.mode === "rent" ? await kvJsonGz(env, "beds_left_" + d) : null,   // read exactly as /brief_api reads it (plain or gzipped)
+        tenancy: await kvJson(env, "tenancy_" + d),
         units: need.units ? await kvJson(env, "units_" + d) : null, layer: need.map ? await kvJson(env, "brief_fp_" + d) : null,
       };
     }
@@ -324,32 +328,20 @@ function strap(rec) {
   const f = rec.um && rec.um.floors;
   return (f ? (f >= 12 ? "A " + f + "-floor residential tower" : "A " + f + "-floor residential building") : "A residential building") + " in " + rec.dist;
 }
-// T and R for the "left" estimate: T = flats of that bedroom count on the Land Department units list, R = tenancy contracts of that count
-// running on the Ejari register. The SAME gates as Contract A's estimated_left (estLeft in src/brief.js, part A), so the figure on the
-// document is the figure on the /brief list row: both sources scoped to this one building, the district's tenancy coverage at least
-// half (the building page's own gate), no bulk registration. Otherwise it is withheld with the reason - never divided, never guessed.
-export const TENANCY_MIN_SHARE = 0.5;
-export function leftFigures(rec, beds, tenancyFile) {
-  const B = BEDS[beds], why = [], um = rec.um;
-  if (!um) return { why: "there is no unit-mix record for this building" };
-  if ((um.dld || {}).buildings !== 1) why.push("the units register property covers " + ((um.dld || {}).buildings || "an unknown number of") + " buildings");
-  const rows = (um.rows || []).filter((r) => r.basis === "DLD units register" && B.tn(String(r.type || "")));
-  const T = rows.length ? rows.reduce((a, r) => a + (+r.units || 0), 0) : null;
-  if (!T) why.push("the units register gives no count of this bedroom type");
-  const ten = tenancyFile, cov = ten && ten.coverage && ten.coverage.share_bound, tr = rec.tn;
-  if (!ten) why.push("there is no tenancy file for this district");
-  else if (!(cov >= TENANCY_MIN_SHARE)) why.push("only " + Math.round((cov || 0) * 100) + "% of this district's running tenancies reach a building");
-  if (ten && !tr) why.push("no running tenancy is on record for this building");
-  if (tr && tr.scope !== "building") why.push("the tenancy count covers the whole project");
-  if (tr && tr.bulk_registration) why.push("part of it is registered in bulk on single contracts");
-  if (why.length) return { T, why: why.join("; ") };
-  const R = Object.entries(tr.by_type || {}).filter(([k]) => B.tn(k)).reduce((a, [, v]) => a + (v || 0), 0);
-  const est = Math.max(0, r10(T - R));
+// The "left" estimate is NOT computed here. It is estimateLeft() in src/brief.js - the one function the /brief_api list row calls - so
+// the figure on the document is the figure on the list, always: the beds-left register (img_beds_left_<district>) first, matched by
+// key then by DLD project name including the "also filed as" names; the old gated tenancy path only where the register is missing.
+// This adapter only turns its answer into what the boxes print: {T, R, est, as_at} or {why}.
+export function leftFigures(rec, beds, district) {
+  const D = district || {}, B = BEDS[beds];
+  const e = estimateLeft({ BL: D.bedsLeft || null, card: rec.um || null, ten: D.tenancy || null,
+    c: { key: candidateKey(rec.it), name: rec.it.n, aliases: rec.it.a || [], i: rec.it.i == null ? null : rec.it.i }, bed: +B.band });
+  if (!e || e.withheld) return { why: (e && e.withheld) || "no estimate could be read" };
   // never print "about 0": rounded to ten, nothing left means the register shows a tenancy on nearly every one
-  if (!est) return { T, R, why: "the register shows a running tenancy for nearly every one of its " + T + " " + B.word + " flats" };
-  return { T, R, est, as_at: tr.as_at || ten.as_at || "" };
+  if (!e.about) return { T: e.of, R: e.running, why: "the register shows a running tenancy for nearly every one of its " + e.of + " " + B.word + " flats" };
+  return { T: e.of, R: e.running, est: e.about, as_at: e.as_at || "" };
 }
-const leftOf = (C, rec, q) => leftFigures(rec, q.beds, rec.d && C.district[rec.d] ? C.district[rec.d].tenancy : null);
+const leftOf = (C, rec, q) => leftFigures(rec, q.beds, rec.d ? C.district[rec.d] : null);
 
 function leftBlock(C, rec, q) {
   const B = BEDS[q.beds], L = leftOf(C, rec, q);
@@ -533,9 +525,9 @@ function titleOf(C, q) {
   const budget = q.min && q.max && q.min < q.max ? ", AED " + money(q.min) + "&ndash;" + money(q.max) + " a year" : q.max ? ", around AED " + money(q.max) + " a year" : "";
   return count + " " + B.word + " option" + (n === 1 ? "" : "s") + " in " + esc(where) + budget;
 }
+// the card's "Still filling" line shows whenever the dossier's box gives an estimate (the same estimateLeft figure), never otherwise
 function stillFilling(C, rec, q) {
-  const L = leftOf(C, rec, q);
-  return L.est != null && L.T > 0 && (L.T - L.R) / L.T > 0.5;
+  return leftOf(C, rec, q).est != null;
 }
 function oneSheetCards(C, q) {
   const B = BEDS[q.beds];
@@ -575,7 +567,7 @@ export function oneSheetHtml(C, q) {
     '<div style="padding:0 30px 4px 30px;font-size:8.3px;color:' + MUTED + ';line-height:1.3;">Rents: Dubai Land Department tenancy contracts, the pull of ' + esc(C.ri.as_of || "") + ", " + B.word +
     "-sized " + (q.type === "villa" ? "homes" : "flats") + ", each contract counted once. Metro distances are straight lines. Pictures: each developer's own project page." +
     (anyFill ? " *Dubai Land Department units list and tenancy register: in each building marked, most " + B.word + " flats have no tenancy contract running today &mdash; the buildings are still filling. " +
-      "That is not a count of flats to let (owners living in them and late renewals look the same)," : "") +
+      "That is not a count of flats to let (owners living in them and late renewals look the same)." : "") +
     " Availability, the rent and the actual flat must be confirmed with the leasing team or listing broker.</div>" + landFooter());
   return p1 + overviewMapPages(C, q);
 }

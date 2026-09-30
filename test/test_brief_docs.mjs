@@ -137,6 +137,15 @@ ok(html.includes("What AED 65,000 gets you here.</b> AED 65,000 a year is right 
 ok(html.includes("Nearest metro: Test, 1.0 km") && /Dubai Marina: \d+\.\d km/.test(html) && html.includes("All straight-line distances"), "distances are straight lines from the building's position");
 ok(html.includes("Test International School (Very good,") && html.includes("Test Family Clinic (") && !html.includes("Rough Point Clinic"), "nearby: KHDA rating kept, capitals softened, an approximate-position clinic left out");
 ok(!TIME_RX.test(html.replace(/<svg[\s\S]*?<\/svg>/g, "")), "no walking or driving times anywhere");
+ok(!html.includes(">COMPLETED<"), "the brochure has no 'completed': no COMPLETED line (never invented)");
+ok(html.includes(">RECENT LETTINGS</div>"), "the lettings count is labelled RECENT LETTINGS, as in the approved JVC pack");
+{
+  const k = "img_" + brochureKvName("testdistrict_10"), orig = store.get(k);
+  store.set(k, JSON.stringify(Object.assign(JSON.parse(orig), { completed: "2021" })));
+  const h2 = (await pdf("kind=dossier&keys=testdistrict:10")).html;
+  ok(/>COMPLETED<\/div><div[^>]*>2021<\/div>/.test(h2), "with brochure.json 'completed': 2021, the COMPLETED line reads 2021");
+  store.set(k, orig);
+}
 
 // ---- 4. the estimate box -------------------------------------------------------------------------------------------------------
 const box = (h) => { const m = /<div class="leftbox"[\s\S]*?<\/div><\/div>/.exec(h); return m ? m[0] : ""; };
