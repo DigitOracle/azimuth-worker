@@ -8,6 +8,7 @@ import { briefRoutes, briefStartCard } from "./brief_page.js";   // THE BRIEF (p
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
 import { briefApi } from "./brief.js";   // BRIEF (Contract A) - GET /brief_api, the ranked building search behind /brief
 import { blocksRoute } from "./blocks_page.js";   // BLOCKS (30 Sep 2026) - LOD 100 blocks view, /blocks; all its logic lives in blocks_page.js
+import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief_pdf documents and the /brief_blocks LOD 100 view (all logic in the module)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -4442,6 +4443,10 @@ export default {
   async fetch(request, env, ctx) {   // v153 - question notes: their routes first, then the question button on private app pages
     const url = new URL(request.url);
     if (url.pathname.indexOf("/questions/") === 0) return questionsRoute(request, env, url);
+    // ---- THE BRIEF part C (brief_docs.js) ---- /brief_pdf and /brief_blocks. Placed ahead of appFetch's client gate on purpose: the module
+    // checks the key itself (READ_KEY or a client key), so the integrator need not touch CLIENT_PATHS for it.
+    if (url.pathname === "/brief_pdf" || url.pathname === "/brief_blocks") return briefDocsRoute(request, env, url, { keyOk: (e, u) => keyTier(e, u) !== "" });
+    // ---- end THE BRIEF part C ----
     return qnDecorate(request, env, url, await appFetch(request, env, ctx));
   },
 
@@ -11488,7 +11493,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/start", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const CLIENT_PATHS = ["/start", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
