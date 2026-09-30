@@ -2672,6 +2672,17 @@ async function appFetch(request, env, ctx) {
         try { await marketBriefTick(env, true); } catch (e) { return new Response("brief error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
         return new Response("brief fired — check WhatsApp");
       }
+      if (url.pathname === "/news_live") {                     // v270 - READ-ONLY: the live news held (news_live), each feed's last fetch, and exactly what the morning feed would be handed. No fetch, no write.
+        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        let s = null; try { s = JSON.parse((await env.MEETINGS.get(LIVE_NEWS_KEY)) || "null"); } catch (e) {}
+        const items = (s && s.items) || [], q = (url.searchParams.get("q") || "").toLowerCase();
+        const bySource = {}; for (const it of items) bySource[it.outlet] = (bySource[it.outlet] || 0) + 1;
+        const feeds = LIVE_NEWS_FEEDS.map(f => Object.assign({ id: f.id, url: f.url }, (s && s.feeds && s.feeds[f.id]) || { never: true }));
+        const out = { on: env.LIVE_NEWS === "on", updated: (s && s.updated) || null, held: items.length, bySource, feeds,
+          morningFeedWouldGet: await feedNewsBlock(env),
+          items: items.filter(it => !q || (it.title + " " + (it.summary || "")).toLowerCase().includes(q)).slice(0, 100).map(it => ({ title: it.title, outlet: it.outlet, published: it.published, seen: it.seen, names: (it.entities || []).map(e => e.name), score: it.score, feeds: it.feeds, url: it.url })) };
+        return new Response(JSON.stringify(out, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/news_test") {                     // v37.1 — force a news sweep and return the matched stories + feed diagnostics
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         try { await newsTick(env, true); } catch (e) { return new Response("news error: " + (e && e.message ? e.message : String(e)), { status: 500 }); }
@@ -4433,6 +4444,7 @@ export default {
         try { await picResume(env, "", 90000); } catch (e) {}
         try { await deliveryWatch(env); } catch (e) {}   // v186 - accepted then failed is not sent
         try { await gcGuideTick(env); } catch (e) {}   // v150.1 - one follow-up if her Calendar link sits unused for twenty minutes
+        try { await liveNewsTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v270 - live city news, a few feeds every 5 minutes, 24/7 (LIVE_NEWS="on")
         try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
       })());
       return;
@@ -5473,12 +5485,13 @@ function feedHookTrue(a, dataStr) {
 async function feedFill(env, angles, sys, data, famh, qa) {
   const own = () => angles.filter(a => !a.campaign);
   const dataStr = String(data || "").replace(/,/g, "");
-  const bogus = []; for (let i = 0; i < angles.length; i++) { const a = angles[i]; if (a.campaign) continue; const w = feedHookTrue(a, dataStr); if (w) { bogus.push(w); angles.splice(i, 1); i--; } }
+  let news = []; try { news = (JSON.parse(data) || {}).news || []; } catch (e) {}   // v270 - the stories the model was handed
+  const bogus = []; for (let i = 0; i < angles.length; i++) { const a = angles[i]; if (a.campaign) continue; const w = feedHookTrue(a, dataStr) || feedNewsTrue(a, news); if (w) { bogus.push(w); angles.splice(i, 1); i--; } }
   const insertAt = () => { const i = angles.findIndex(a => a.campaign); return i < 0 ? angles.length : i; };
   const notes = []; if (bogus.length) notes.push("DROPPED " + bogus.length + " for content (" + bogus.join("; ") + ")");
   for (const kind of [true, false]) { let n = 0; for (let i = 0; i < angles.length; i++) { const a = angles[i]; if (a.campaign || planAngle(a) !== kind) continue; if (++n > 3) { angles.splice(i, 1); i--; notes.push("trimmed a " + (kind ? "plan" : "real-estate") + " angle over three"); } } }
   const fits = (a) => { const o = own(); const isP = planAngle(a); return isP ? o.filter(planAngle).length < 3 : o.filter(x => !planAngle(x)).length < 3; };
-  const honest = (a) => !(PLAN_SRC_RX.test(String(a.source || "")) && !planFigBacked(a)) && !feedHookTrue(a, dataStr);
+  const honest = (a) => !(PLAN_SRC_RX.test(String(a.source || "")) && !planFigBacked(a)) && !feedHookTrue(a, dataStr) && !feedNewsTrue(a, news);
   for (let pass = 0; pass < 2 && own().length < 5; pass++) {
     const cur = own(); const P = cur.filter(planAngle).length, R = cur.length - P, need = 5 - cur.length;
     let wantP = Math.max(0, 2 - P), wantR = Math.max(0, 2 - R), rest = need - wantP - wantR;
@@ -5493,7 +5506,7 @@ async function feedFill(env, angles, sys, data, famh, qa) {
       if (own().length >= 5) break;
       if (!a || !a.hook || !a.figure) { rej.push("empty"); continue; }
       if (!fits(a)) { rej.push((planAngle(a) ? "plan" : "real-estate") + " over three"); continue; }
-      const cw = feedHookTrue(a, dataStr); if (cw) { rej.push(cw); continue; }
+      const cw = feedHookTrue(a, dataStr) || feedNewsTrue(a, news); if (cw) { rej.push(cw); continue; }
       if (!honest(a)) { rej.push("cites the plan for a figure it does not contain"); continue; }
       const o = own(); const au = feedAudit(o.concat([a]), famh).bad.find(b => b.i === o.length); if (au) { rej.push(au.why[0]); continue; }
       try { await voiceGuard(env, [a]); } catch (e) {}
@@ -5682,9 +5695,9 @@ async function dailyFeedTick(env, force, dry) {
     trends,
     dubai2040: DUBAI_2040,   // v178 - the spine: official 2040 targets and progress, each sourced
     instagram: await igEvidence(env),   // v175 - what her audience actually responded to, from her own account
-    news: await (async () => { try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); return nn.slice(0, 8).map(x => ({ title: x.title, outlet: x.outlet, meedCrossReference: x.xref ? { project: x.xref.meedName, facts: x.xref.facts } : null })); } catch (e) { return null; } })(),
+    news: await (async () => { try { return await feedNewsBlock(env); } catch (e) { return null; } })(),   // v270 - live city news with outlet, time and summary (was 8 undated titles from mkt_news)
   });
-  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. THE SPLIT, FIRM (Kendall, 19 Sep 2026): exactly TWO or THREE of the five are Dubai 2040 angles - the figure taken from dubai2040 and citing that line's own source - and the other TWO or THREE are real-estate angles from the live market data (register sales, rents, projects, developer inventory). THE SPINE, AND IT FRAMES ALL FIVE (Kendall, 18 Sep 2026): her whole trajectory runs along the DUBAI 2040 URBAN MASTER PLAN, the emirate's official plan to 2040, given in the dubai2040 block with a source on every line. Every angle tells a piece of THAT story - where Dubai is going, and a figure that shows it moving. Write each one for ONE of three readers, with AT LEAST ONE angle for EACH of the three - move, invest AND authority: (move) someone deciding whether to MOVE here - what their life will look like: walkable streets, beaches, parks, schools, a Metro station near home; (invest) someone deciding whether to INVEST here - where the plan deliberately points growth: the five urban centres, the Blue Line, the population it is built for; (authority) and in every angle HER - the broker who knows the plan and watches whether Dubai is keeping to it, which no other broker posts; the authority angle itself sets a 2040 target against where Dubai stands today in the live data, so she is seen tracking the plan. The SHAPE of every hook: the change (what is coming, or what has just moved) -> the figure that proves it -> what it means for the reader. Not a statistic with a feeling attached. This shape overrides 'feeling first' in HER VOICE below: her judgement is the last beat, as what it means, never an opening 'I feel'. SPREAD THE PLAN ACROSS THE FAMILIES, because each of the five must have a different family: the Blue Line is transit; the Dubai Walk, beaches, parks and nature are city_life; schools and health are education; population, the urban centres, tourism and the economy are growth_plan. A figure may come from dubai2040 itself or from the live data (register, rents, cityLife, projects, news); the strongest angles set a live figure against a 2040 target - for example a district's register figure against its place as one of the plan's urban centres, but only where dubai2040 names that district. HONESTY FOR THE PLAN, strictly: a figure with status target is a TARGET and is said as one ('the plan targets', 'by 2040'), never as achieved; planned and announced stay planned - never 'Dubai is building' or 'has built' unless the status says delivered; the Blue Line's nine residential areas are NOT named in the block, so never say which district it reaches; quote each 2040 figure exactly, with the source and date given, and never derive a new number from two of them. A 2020 figure is a 2020 figure: never say 'now' or 'today' of it. The data holds NO schedule for the plan, so never say it is on time, on track, ahead or behind. Cite a source only for what that source contains: a dubai2040 figure cites the source on its own line, and a figure from anywhere else cites the block it came from - never borrow the plan's source for a fact it does not state (a post that does is removed before she sees it). The last beat, what it means, is what it means FOR THE READER - a family, an investor - never a claim about Dubai's performance, a developer's intentions or a trend the data does not show. Never compute a span of time or a share yourself: where the data gives a period, give its dates; where it gives a share, quote it. In developerInventory, 'current' is stock on a developer's sheet and never a release; only a move is released or taken up. Every number - including counts and spans of time (12 weeks, 9 days, 3 towers) - is written as numerals (6,500 km; 14 stations; 5.8 million), because these are read on a screen and must stop the scroll - never spelled out in words. HER DISPOSITION, AND IT DECIDES WHAT YOU CHOOSE (Kendall, 17 Sep 2026, relaying her): this is an honest digest AND she is selling Dubai. She posts about good things happening in the city, like a diary of it. So AT LEAST FOUR of the five must be good news - something rising, opening, completing, arriving, connecting, a record, a place becoming better to live in, money coming in. The register hands you hundreds of true figures every morning: pick the ones that are good news. HONESTY IS NEVER TRADED FOR IT. Never call a fall a rise, never soften a figure, never imply a direction the data does not show, never drop the unit or the period to make a number look better. If the honest reading of a figure is bad news, do not use that figure - use a different one. At most ONE of the five may carry a caution, and only where it is genuinely the buyer's gain (more choice, a softer entry price, room to negotiate), written as what it means for them and never as a complaint about the city. A morning with five flat or worrying angles is a failed morning even when every number in it is correct. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one or two short sentences in HER VOICE (below), built around ONE specific figure written as numerals the way her captions do (3,098 homes; AED 7.78B; 13.9%), never spelled out in words; figure = that exact figure WITH its unit (e.g. 'AED 7.78B', '13.9%', '3,098 homes'); source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer; reader = the reader it is written for: move, invest or authority. The five angles must cover DIFFERENT figures and span different sections. AT LEAST ONE of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all) - and where several deltas are available, prefer one that moved UP, because that is the morning she is writing; a delta that moved down is honest and may be used, but it spends the single caution. TWO FURTHER SOURCES. AT LEAST ONE of the five must come from cityLife, because it is what living in Dubai is like; developerInventory is OPTIONAL, and a handful of released or taken-up units is never a story of Dubai on its own - never headline a move of fewer than 20 units: `cityLife` is Dubai as a place to LIVE, from government registers - metro distance by district, bus coverage and stop counts by community, the airport's busiest and quietest hours, bus speeds; these are structural facts, so quote them exactly and name the body (e.g. 'RTA bus network coverage, 31 Dec 2024'); the strong hooks here are what the city has BUILT and what that gives a resident - a community well covered by stops, a district minutes from a metro, an airport hour quieter than people expect, a route that makes a place easy to live in. An ABSENCE (no stop, no metro within 5 km) is a true fact and no other broker posts it, but it is a complaint about Dubai and she is not writing that diary: use it only as the single permitted caution, only when it is genuinely a buyer's opportunity, and never as one of the four good ones. `developerInventory` is what each DEVELOPER ITSELF claims is still available, captured from their own sheets on the date they said it - `moves` shows the change between two sheets, and the rule is: a count that FELL was taken up, a count that ROSE was RELEASED by the developer, never call a rise a sale; family for these is `inventory`. GEOGRAPHY RULE for both: name the community, district or developer EXACTLY as it appears in that block, and use ONLY that block's figures - the community names in cityLife are a different geography from the register's areas, so never attach a sales, rent, price or transaction figure to a cityLife place; an angle that breaks this is discarded. TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". TOPIC FAMILIES: each of the five must come from a DIFFERENT family and name it in `family`, one of " + JSON.stringify(FEED_FAMILIES) + ". " + (lane ? "TODAY'S LANE (" + ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n.getUTCDay()] + "): at least THREE of the five from " + JSON.stringify(lane) + ". " : "") + "NO REPEATS: these numbers and these subjects were used in recent mornings and must not appear again in any form (a percentage of the same fact is the same fact): numbers " + JSON.stringify([...new Set(famh.flatMap(x => x.n || []))].slice(0, 80)) + "; subjects " + JSON.stringify([...new Set(famh.filter(x => (Date.now() - Date.parse(x.d)) < 5 * 86400 * 1000).map(x => x.s).filter(Boolean))].slice(0, 40)) + ". Prefer a figure the register has NOT yet been quoted on: a different area, a different bedroom count, a different month, a different developer. Families that ran on recent mornings and must be avoided today unless the figure is genuinely new: " + JSON.stringify(tired) + ". The SHAPE of every hook comes from HER VOICE above, never from past hooks. Subjects she has already used, do not repeat: " + JSON.stringify(picks.slice(0, 8).map(p => String(p.hook || "").slice(0, 60))) + ". TRENDING (what people are talking about today, context only - a trend never supplies a number): " + JSON.stringify((radar && radar.items || []).slice(0, 6).map(t => ({ platform: t.platform, title: t.title, family: t.family }))) + ". If an angle's subject matches a trending item, set `trend` to one short line naming the platform and what is moving; otherwise omit `trend`. " + feedVoice(await styleVoice(env)) + " WHAT SHE FAVOURS (learned from her choices; subjects and formats only, never style): " + ((await dnaSubjects(env)) || "(still learning)") + ". " + "WHAT HER AUDIENCE ACTUALLY DID (measured on her own account, in the instagram block, and it decides the SHAPE of an angle and NEVER a figure): engagement there is interactions per 1,000 reached, so it does not reward a large following - it asks whether the people who SAW a post answered it. Read herBest, herFurthest and herIgnored before you choose. They measure different things and you need both: engagement rate asks whether the people who saw a post answered it, while herFurthest is how far a post TRAVELLED - her widest post reached about twenty times her median and drew more total response than her best-rated one, so a low rate on a very wide post is not a failure. herIgnored is ranked by how many people actually responded, which is the honest weak end. The pattern points straight at this task: a bare launch announcement - a project, a price, a bedroom count, fresh availability - sits at the BOTTOM of her account, and its reach is NORMAL, so the platform delivered it and her audience simply did not respond. Her strongest posts are first person - what she saw, what it told her, how she judges it. So an angle must give her something to SAY about the figure, not just the figure: the hook carries the number AND a judgement only she could make. An angle she cannot say in her own voice is not an angle, however good the number is. This licenses no change to any number - the figure, its unit, its period and its source stay exactly as the data gives them, and a good shape never excuses a bent figure. Where the instagram block is absent, ignore this paragraph rather than inventing what she favours." + " NEWS RULES: news items may anchor at most TWO of the five angles; name the outlet in the source (e.g. 'reported by Khaleej Times'); if an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figures and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
+  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided. THE SPLIT, FIRM (Kendall, 19 Sep 2026): exactly TWO or THREE of the five are Dubai 2040 angles - the figure taken from dubai2040 and citing that line's own source - and the other TWO or THREE are real-estate angles from the live market data (register sales, rents, projects, developer inventory). THE SPINE, AND IT FRAMES ALL FIVE (Kendall, 18 Sep 2026): her whole trajectory runs along the DUBAI 2040 URBAN MASTER PLAN, the emirate's official plan to 2040, given in the dubai2040 block with a source on every line. Every angle tells a piece of THAT story - where Dubai is going, and a figure that shows it moving. Write each one for ONE of three readers, with AT LEAST ONE angle for EACH of the three - move, invest AND authority: (move) someone deciding whether to MOVE here - what their life will look like: walkable streets, beaches, parks, schools, a Metro station near home; (invest) someone deciding whether to INVEST here - where the plan deliberately points growth: the five urban centres, the Blue Line, the population it is built for; (authority) and in every angle HER - the broker who knows the plan and watches whether Dubai is keeping to it, which no other broker posts; the authority angle itself sets a 2040 target against where Dubai stands today in the live data, so she is seen tracking the plan. The SHAPE of every hook: the change (what is coming, or what has just moved) -> the figure that proves it -> what it means for the reader. Not a statistic with a feeling attached. This shape overrides 'feeling first' in HER VOICE below: her judgement is the last beat, as what it means, never an opening 'I feel'. SPREAD THE PLAN ACROSS THE FAMILIES, because each of the five must have a different family: the Blue Line is transit; the Dubai Walk, beaches, parks and nature are city_life; schools and health are education; population, the urban centres, tourism and the economy are growth_plan. A figure may come from dubai2040 itself or from the live data (register, rents, cityLife, projects, news); the strongest angles set a live figure against a 2040 target - for example a district's register figure against its place as one of the plan's urban centres, but only where dubai2040 names that district. HONESTY FOR THE PLAN, strictly: a figure with status target is a TARGET and is said as one ('the plan targets', 'by 2040'), never as achieved; planned and announced stay planned - never 'Dubai is building' or 'has built' unless the status says delivered; the Blue Line's nine residential areas are NOT named in the block, so never say which district it reaches; quote each 2040 figure exactly, with the source and date given, and never derive a new number from two of them. A 2020 figure is a 2020 figure: never say 'now' or 'today' of it. The data holds NO schedule for the plan, so never say it is on time, on track, ahead or behind. Cite a source only for what that source contains: a dubai2040 figure cites the source on its own line, and a figure from anywhere else cites the block it came from - never borrow the plan's source for a fact it does not state (a post that does is removed before she sees it). The last beat, what it means, is what it means FOR THE READER - a family, an investor - never a claim about Dubai's performance, a developer's intentions or a trend the data does not show. Never compute a span of time or a share yourself: where the data gives a period, give its dates; where it gives a share, quote it. In developerInventory, 'current' is stock on a developer's sheet and never a release; only a move is released or taken up. Every number - including counts and spans of time (12 weeks, 9 days, 3 towers) - is written as numerals (6,500 km; 14 stations; 5.8 million), because these are read on a screen and must stop the scroll - never spelled out in words. HER DISPOSITION, AND IT DECIDES WHAT YOU CHOOSE (Kendall, 17 Sep 2026, relaying her): this is an honest digest AND she is selling Dubai. She posts about good things happening in the city, like a diary of it. So AT LEAST FOUR of the five must be good news - something rising, opening, completing, arriving, connecting, a record, a place becoming better to live in, money coming in. The register hands you hundreds of true figures every morning: pick the ones that are good news. HONESTY IS NEVER TRADED FOR IT. Never call a fall a rise, never soften a figure, never imply a direction the data does not show, never drop the unit or the period to make a number look better. If the honest reading of a figure is bad news, do not use that figure - use a different one. At most ONE of the five may carry a caution, and only where it is genuinely the buyer's gain (more choice, a softer entry price, room to negotiate), written as what it means for them and never as a complaint about the city. A morning with five flat or worrying angles is a failed morning even when every number in it is correct. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one or two short sentences in HER VOICE (below), built around ONE specific figure written as numerals the way her captions do (3,098 homes; AED 7.78B; 13.9%), never spelled out in words; figure = that exact figure WITH its unit (e.g. 'AED 7.78B', '13.9%', '3,098 homes'); source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer; reader = the reader it is written for: move, invest or authority. The five angles must cover DIFFERENT figures and span different sections. AT LEAST ONE of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all) - and where several deltas are available, prefer one that moved UP, because that is the morning she is writing; a delta that moved down is honest and may be used, but it spends the single caution. TWO FURTHER SOURCES. AT LEAST ONE of the five must come from cityLife, because it is what living in Dubai is like; developerInventory is OPTIONAL, and a handful of released or taken-up units is never a story of Dubai on its own - never headline a move of fewer than 20 units: `cityLife` is Dubai as a place to LIVE, from government registers - metro distance by district, bus coverage and stop counts by community, the airport's busiest and quietest hours, bus speeds; these are structural facts, so quote them exactly and name the body (e.g. 'RTA bus network coverage, 31 Dec 2024'); the strong hooks here are what the city has BUILT and what that gives a resident - a community well covered by stops, a district minutes from a metro, an airport hour quieter than people expect, a route that makes a place easy to live in. An ABSENCE (no stop, no metro within 5 km) is a true fact and no other broker posts it, but it is a complaint about Dubai and she is not writing that diary: use it only as the single permitted caution, only when it is genuinely a buyer's opportunity, and never as one of the four good ones. `developerInventory` is what each DEVELOPER ITSELF claims is still available, captured from their own sheets on the date they said it - `moves` shows the change between two sheets, and the rule is: a count that FELL was taken up, a count that ROSE was RELEASED by the developer, never call a rise a sale; family for these is `inventory`. GEOGRAPHY RULE for both: name the community, district or developer EXACTLY as it appears in that block, and use ONLY that block's figures - the community names in cityLife are a different geography from the register's areas, so never attach a sales, rent, price or transaction figure to a cityLife place; an angle that breaks this is discarded. TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". TOPIC FAMILIES: each of the five must come from a DIFFERENT family and name it in `family`, one of " + JSON.stringify(FEED_FAMILIES) + ". " + (lane ? "TODAY'S LANE (" + ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n.getUTCDay()] + "): at least THREE of the five from " + JSON.stringify(lane) + ". " : "") + "NO REPEATS: these numbers and these subjects were used in recent mornings and must not appear again in any form (a percentage of the same fact is the same fact): numbers " + JSON.stringify([...new Set(famh.flatMap(x => x.n || []))].slice(0, 80)) + "; subjects " + JSON.stringify([...new Set(famh.filter(x => (Date.now() - Date.parse(x.d)) < 5 * 86400 * 1000).map(x => x.s).filter(Boolean))].slice(0, 40)) + ". Prefer a figure the register has NOT yet been quoted on: a different area, a different bedroom count, a different month, a different developer. Families that ran on recent mornings and must be avoided today unless the figure is genuinely new: " + JSON.stringify(tired) + ". The SHAPE of every hook comes from HER VOICE above, never from past hooks. Subjects she has already used, do not repeat: " + JSON.stringify(picks.slice(0, 8).map(p => String(p.hook || "").slice(0, 60))) + ". TRENDING (what people are talking about today, context only - a trend never supplies a number): " + JSON.stringify((radar && radar.items || []).slice(0, 6).map(t => ({ platform: t.platform, title: t.title, family: t.family }))) + ". If an angle's subject matches a trending item, set `trend` to one short line naming the platform and what is moving; otherwise omit `trend`. " + feedVoice(await styleVoice(env)) + " WHAT SHE FAVOURS (learned from her choices; subjects and formats only, never style): " + ((await dnaSubjects(env)) || "(still learning)") + ". " + "WHAT HER AUDIENCE ACTUALLY DID (measured on her own account, in the instagram block, and it decides the SHAPE of an angle and NEVER a figure): engagement there is interactions per 1,000 reached, so it does not reward a large following - it asks whether the people who SAW a post answered it. Read herBest, herFurthest and herIgnored before you choose. They measure different things and you need both: engagement rate asks whether the people who saw a post answered it, while herFurthest is how far a post TRAVELLED - her widest post reached about twenty times her median and drew more total response than her best-rated one, so a low rate on a very wide post is not a failure. herIgnored is ranked by how many people actually responded, which is the honest weak end. The pattern points straight at this task: a bare launch announcement - a project, a price, a bedroom count, fresh availability - sits at the BOTTOM of her account, and its reach is NORMAL, so the platform delivered it and her audience simply did not respond. Her strongest posts are first person - what she saw, what it told her, how she judges it. So an angle must give her something to SAY about the figure, not just the figure: the hook carries the number AND a judgement only she could make. An angle she cannot say in her own voice is not an angle, however good the number is. This licenses no change to any number - the figure, its unit, its period and its source stay exactly as the data gives them, and a good shape never excuses a bent figure. Where the instagram block is absent, ignore this paragraph rather than inventing what she favours." + " NEWS RULES: the news block is live city news from the last 48 hours - each item gives its outlet, when it was published, today (true when it was published today, Dubai time), a summary from the article, and names (the Dubai places, developers and infrastructure it mentions). When a today:true item is about Dubai's transport, infrastructure, a district, a developer or a project, ONE of the five SHOULD be built on it, because a morning that ignores the city's biggest story of the day reads stale - file it under whichever family fits (transit, developer, district, news). News items may anchor at most TWO of the five angles. A news angle's figure must be a number written in THAT item's title or summary, copied exactly with its unit, and every other number in its hook must be in the same item - never a number from memory and never one combined from two items; its source is 'reported by <the item's own outlet>, <date>' (a post that cites a story for a number the story does not contain is removed before she sees it). Say what the story says happened, and when, and nothing more - a launch is a launch, never a claim that prices moved because of it. If an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figure in its title or summary and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
   let g = null, genErr = null;
   try { g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 1400); } catch (e) { genErr = e && e.message ? e.message : String(e); }
   let angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 5) : [];
@@ -6039,7 +6052,9 @@ const untag = (x) => String(x || "").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/
 async function radarNews(env) {
   const out = []; const RE_KEEP = /dubai|uae|emirat|abu dhabi|property|real estate|rent|villa|apartment|off-?plan|developer|emaar|damac|nakheel|sobha|meraas|metro|golden visa|mortgage/i;
   // layer 1: the hourly sweep the Worker already runs (title, outlet, url, MEED cross-reference)
-  try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); for (const x of nn.slice(0, 20)) if (x && x.title) out.push({ platform: "news", outlet: x.outlet || "", title: String(x.title).slice(0, 140), url: x.url || x.link || "", when: (x.at || x.publishedAt || "").slice(0, 10), xref: x.xref ? x.xref.meedName : "" }); } catch (e) {}
+  try { const nn = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); for (const x of nn.slice(0, 20)) if (x && x.title) out.push({ platform: "news", outlet: x.outlet || "", title: String(x.title).slice(0, 140), url: x.url || x.link || "", when: (() => { const w = Number(x.at) || Date.parse(x.at || x.publishedAt || ""); return w ? new Date(w).toISOString().slice(0, 10) : ""; })(), xref: x.xref ? x.xref.meedName : "" }); } catch (e) {}
+  // v270 - and the live collector's items (its direct outlet feeds replace the radar's own paths below, which now answer 404)
+  try { const s = JSON.parse((await env.MEETINGS.get(LIVE_NEWS_KEY)) || "null"); for (const x of ((s && s.items) || []).slice().sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 25)) if (!out.some(o => o.title.slice(0, 60).toLowerCase() === String(x.title).slice(0, 60).toLowerCase())) out.push({ platform: "news", outlet: x.outlet || "", title: String(x.title).slice(0, 140), url: x.url || "", when: String(x.published || x.seen || "").slice(0, 10) }); } catch (e) {}
   // layer 2: Google News, UAE edition - one feed, every outlet
   const GN = ["https://news.google.com/rss/search?q=Dubai+property+OR+%22real+estate%22+when:3d&hl=en-AE&gl=AE&ceid=AE:en", "https://news.google.com/rss/search?q=Dubai+rent+OR+off-plan+OR+developer+when:3d&hl=en-AE&gl=AE&ceid=AE:en"];
   const feeds = GN.map(u => ["Google News", u]).concat(RADAR_FEEDS);
@@ -12341,6 +12356,244 @@ async function newsTick(env, force) {
   await env.MEETINGS.put("mkt_news", JSON.stringify(stored.slice(0, 24)), { expirationTtl: 4 * 86400 });
   for (const k of Object.keys(seen)) { if (Date.now() - seen[k] > 5 * 86400000) delete seen[k]; }
   await env.MEETINGS.put("mkt_news_seen", JSON.stringify(seen), { expirationTtl: 7 * 86400 });
+}
+
+// ── v270 - LIVE CITY NEWS (Kendall, 30 Sep 2026: Etihad Rail's passenger service opened today and the morning never mentioned it).
+// Why it was missed: the v37.1 sweep above reads two Bing queries scoped to "dubai real estate" and The National's all-news feed
+// filtered to property words, keeps TITLES only (no summary, so no figure the model may quote), sorts MEED-matched items first and
+// hands the model just 8 with no date - so a same-day transport story either never arrived or arrived as undated "context only".
+// The radar's own Khaleej Times / Gulf News / The National / Zawya paths all answer 404 now (checked 30 Sep 2026), and the
+// sweep only runs 06:00-22:59 GST, so nothing is gathered overnight before the 06:00 feed.
+// Now: the minute tick (cloud, 24/7, no laptop) reads LIVE_NEWS_PER_RUN feeds every LIVE_NEWS_EVERY_MIN minutes, each feed
+// refreshed at most every LIVE_NEWS_REFRESH_MIN minutes - a handful of subrequests per invocation, never the whole list at once.
+// Items are kept 48 hours in news_live, de-duplicated by canonical URL and by normalised title, filtered to Dubai/UAE city and
+// property relevance, and tagged with the places, developers and infrastructure they name. The morning feed gets the freshest,
+// most relevant ten WITH outlet, publish time and a summary, and a news angle whose numbers are not in its own story is removed.
+// Every URL below answered with items on 30 Sep 2026 (probed from the laptop; the Worker's view is on /news_live).
+const LIVE_NEWS_FEEDS = [
+  { id: "kt_uae", outlet: "Khaleej Times", url: "https://www.khaleejtimes.com/api/v1/collections/uae.rss" },
+  { id: "kt_top", outlet: "Khaleej Times", url: "https://www.khaleejtimes.com/api/v1/collections/top-section.rss" },
+  { id: "kt_business", outlet: "Khaleej Times", url: "https://www.khaleejtimes.com/api/v1/collections/business.rss" },
+  { id: "tn_uae", outlet: "The National", url: "https://www.thenationalnews.com/arc/outboundfeeds/rss/category/news/uae/?outputType=xml" },
+  { id: "tn_business", outlet: "The National", url: "https://www.thenationalnews.com/arc/outboundfeeds/rss/category/business/?outputType=xml" },
+  { id: "tn_property", outlet: "The National", url: "https://www.thenationalnews.com/arc/outboundfeeds/rss/category/business/property/?outputType=xml" },
+  { id: "tn_all", outlet: "The National", url: "https://www.thenationalnews.com/arc/outboundfeeds/rss/?outputType=xml" },
+  { id: "gn_all", outlet: "Gulf News", url: "https://gulfnews.com/feed" },
+  // WAM and the Dubai Media Office publish no working RSS (both answer an HTML page); Bing News reaches their stories and the
+  // outlets that carry them (Gulf Today, Emirates 24/7, Arabian Business), and Bing answers Cloudflare's IPs (v37.1).
+  { id: "bing_wam", outlet: null, url: "https://www.bing.com/news/search?q=site%3Awam.ae+Dubai&format=rss&mkt=en-AE" },
+  { id: "bing_dmo", outlet: null, url: "https://www.bing.com/news/search?q=%22Dubai+Media+Office%22&format=rss&mkt=en-AE" },
+  { id: "bing_rta", outlet: null, url: "https://www.bing.com/news/search?q=Dubai+RTA&format=rss&mkt=en-AE" },
+  { id: "bing_rail", outlet: null, url: "https://www.bing.com/news/search?q=Etihad+Rail&format=rss&mkt=en-AE" },
+  { id: "bing_metro", outlet: null, url: "https://www.bing.com/news/search?q=Dubai+Metro&format=rss&mkt=en-AE" },
+  { id: "bing_dld", outlet: null, url: "https://www.bing.com/news/search?q=Dubai+Land+Department&format=rss&mkt=en-AE" },
+  { id: "bing_re", outlet: null, url: "https://www.bing.com/news/search?q=Dubai+real+estate&format=rss&mkt=en-AE" },
+  { id: "bing_launch", outlet: null, url: "https://www.bing.com/news/search?q=Dubai+property+launch&format=rss&mkt=en-AE" },
+  { id: "bing_infra", outlet: null, url: "https://www.bing.com/news/search?q=Dubai+infrastructure+project&format=rss&mkt=en-AE" },
+];
+const LIVE_NEWS_KEY = "news_live";
+const LIVE_NEWS_EVERY_MIN = 5;        // the minute tick collects on minutes divisible by this
+const LIVE_NEWS_PER_RUN = 5;          // at most this many feed fetches (subrequests) per invocation
+const LIVE_NEWS_REFRESH_MIN = 20;     // a feed is not fetched again sooner than this
+const LIVE_NEWS_KEEP_H = 48;
+const LIVE_NEWS_MAX = 200;
+const LIVE_NEWS_FEED_BLOCK = 10;      // items handed to the morning feed
+// The Dubai things a story can name. t: infrastructure | district | developer | project | authority.
+const NEWS_ENTITIES = [
+  ["Etihad Rail", "infrastructure", /etihad rail/i], ["Hafeet Rail", "infrastructure", /hafeet rail/i], ["Dubai Metro", "infrastructure", /\bmetro\b/i],
+  ["Blue Line", "infrastructure", /blue line/i], ["Route 2020", "infrastructure", /route 2020/i], ["Dubai Tram", "infrastructure", /dubai tram/i],
+  ["Al Maktoum International Airport", "infrastructure", /al maktoum (?:international )?airport|\bdwc\b/i], ["Dubai International Airport", "infrastructure", /dubai international airport|\bdxb\b/i],
+  ["Dubai Loop", "infrastructure", /dubai loop|boring company/i], ["Salik", "infrastructure", /\bsalik\b/i], ["Sheikh Zayed Road", "infrastructure", /sheikh zayed road/i],
+  ["Al Khail Road", "infrastructure", /al khail road/i], ["Emirates Road", "infrastructure", /emirates road/i], ["Air taxi", "infrastructure", /air taxi|flying taxi|vertiport/i],
+  ["RTA", "authority", /\brta\b|roads and transport authority/i], ["Dubai Land Department", "authority", /dubai land department|\bdld\b/i], ["RERA", "authority", /\brera\b/i],
+  ["Dubai Municipality", "authority", /dubai municipality/i], ["Dubai Media Office", "authority", /dubai media office/i],
+  ["Dubai 2040 Urban Master Plan", "project", /2040/], ["Dubai Creek Tower", "project", /creek tower/i], ["Dubai Reefs", "project", /dubai reefs/i],
+  ["Dubai Walk", "project", /dubai walk/i], ["Therme Dubai", "project", /therme/i],
+  ["Al Yalayis", "district", /al yalayis/i], ["Jumeirah Golf Estates", "district", /jumeirah golf estates/i], ["Dubai Marina", "district", /dubai marina/i],
+  ["Downtown Dubai", "district", /downtown dubai/i], ["Business Bay", "district", /business bay/i], ["Jumeirah Village Circle", "district", /\bjvc\b|jumeirah village circle/i],
+  ["Jumeirah Village Triangle", "district", /\bjvt\b|jumeirah village triangle/i], ["Jumeirah Lake Towers", "district", /\bjlt\b|jumeirah lake/i],
+  ["Palm Jumeirah", "district", /palm jumeirah/i], ["Palm Jebel Ali", "district", /palm jebel ali/i], ["Dubai Hills", "district", /dubai hills/i],
+  ["Dubai Creek Harbour", "district", /creek harbour/i], ["Dubai South", "district", /dubai south/i], ["Dubai Islands", "district", /dubai islands/i],
+  ["Expo City Dubai", "district", /expo city/i], ["Al Barsha", "district", /al barsha/i], ["Deira", "district", /\bdeira\b/i], ["Bur Dubai", "district", /bur dubai/i],
+  ["Mirdif", "district", /mirdif/i], ["Al Furjan", "district", /al furjan/i], ["Meydan", "district", /meydan/i], ["MBR City", "district", /mbr city|mohammed bin rashid city/i],
+  ["Dubailand", "district", /dubailand/i], ["Dubai Silicon Oasis", "district", /silicon oasis/i], ["Dubai Sports City", "district", /sports city/i],
+  ["Motor City", "district", /motor city/i], ["Town Square", "district", /town square/i], ["Arabian Ranches", "district", /arabian ranches/i],
+  ["DAMAC Hills", "district", /damac hills/i], ["The Valley", "district", /the valley\b/i], ["Emaar South", "district", /emaar south/i], ["Jebel Ali", "district", /jebel ali/i],
+  ["Al Quoz", "district", /al quoz/i], ["Al Jaddaf", "district", /al ja?ddaf/i], ["Dubai Investments Park", "district", /dubai investments? park/i],
+  ["International City", "district", /international city/i], ["Arjan", "district", /\barjan\b/i], ["Tilal Al Ghaf", "district", /tilal al ghaf/i],
+  ["Dubai Harbour", "district", /dubai harbour/i], ["Bluewaters", "district", /bluewaters/i], ["City Walk", "district", /city walk/i], ["DIFC", "district", /\bdifc\b/i],
+  ["Nad Al Sheba", "district", /nad al sheba/i], ["Al Warsan", "district", /al warsan/i],
+  ["Emaar", "developer", /\bemaar\b/i], ["DAMAC", "developer", /\bdamac\b/i], ["Nakheel", "developer", /nakheel/i], ["Sobha", "developer", /\bsobha\b/i],
+  ["Meraas", "developer", /meraas/i], ["Dubai Holding", "developer", /dubai holding/i], ["Aldar", "developer", /\baldar\b/i], ["Binghatti", "developer", /binghatti/i],
+  ["Ellington", "developer", /ellington/i], ["Azizi", "developer", /\bazizi\b/i], ["Danube Properties", "developer", /danube/i], ["Omniyat", "developer", /omniyat/i],
+  ["Select Group", "developer", /select group/i], ["Imtiaz", "developer", /imtiaz/i], ["Samana", "developer", /\bsamana\b/i], ["Deyaar", "developer", /deyaar/i],
+  ["Union Properties", "developer", /union properties/i], ["Wasl", "developer", /\bwasl\b/i], ["Majid Al Futtaim", "developer", /majid al futtaim/i],
+  ["Arada", "developer", /\barada\b/i], ["Dubai Properties", "developer", /dubai properties/i], ["Meydan Group", "developer", /meydan group/i],
+];
+const NEWS_PLACE_RX = /\b(dubai|uae|u\.a\.e\.?|emirat(?:es|i)|abu dhabi|sharjah|ajman|ras al khaimah|fujairah|umm al quwain|al ain)\b/i;
+const NEWS_PROP_RX = /\b(propert(?:y|ies)|real estate|realty|developers?|off-?plan|handovers?|villas?|apartments?|townhouses?|penthouses?|freehold|mortgages?|rents?|rental|renters|landlords?|tenants?|homes?|housing|residential|sq ?ft|square f(?:ee|oo)t|towers?|master ?plan|escrow|service charges?|ejari|title deeds?)\b/i;
+const NEWS_INFRA_RX = /\b(rail(?:way)?|metro|tram|trains?|stations?|roads?|bridges?|tunnels?|interchanges?|highways?|flyovers?|airports?|rta|salik|bus(?:es)?|ferry|water taxi|air taxi|parking|infrastructure|transport|commut\w*|passengers?)\b/i;
+const NEWS_CITY_RX = /\b(schools?|hospitals?|parks?|beach(?:es)?|malls?|population|residents|tourism|tourists|hotels?|golden visa|visas?|2040|urban|communit(?:y|ies)|districts?|expansion|investments?|construction|opens?|opened|opening|launch(?:es|ed)?|inaugurat\w*|completed?|completion)\b/i;
+const NEWS_NOISE_RX = /\b(cricket|football|fifa|ipl|nba|formula 1|tennis|horoscope|recipe|celebrit(?:y|ies)|box office|movie|murder|killed|arrested|jailed|sentenced|gaza|israel|ukraine|russia|iran|trump|election)\b/i;
+
+function _nlDecode(s) {
+  return String(s || "").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ")
+    .replace(/&#x([0-9a-f]+);/gi, (m, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch (e) { return " "; } })
+    .replace(/&#(\d+);/g, (m, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch (e) { return " "; } })
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ").trim();
+}
+function _nlTag(block, names) {   // first non-empty tag among names, raw inner text
+  for (const n of names) { const m = block.match(new RegExp("<" + n + "(?:\\s[^>]*)?>([\\s\\S]*?)</" + n + ">", "i")); if (m && _nlDecode(m[1])) return m[1]; }
+  return "";
+}
+function _nlCanon(u) {   // canonical URL: https, lower host, no query/hash, no trailing slash; Bing click-through unwrapped
+  let s = String(u || "").trim(); if (!s) return "";
+  try {
+    let x = new URL(s);
+    if (/bing\.com$/i.test(x.hostname) && x.searchParams.get("url")) x = new URL(x.searchParams.get("url"));
+    return "https://" + x.hostname.toLowerCase().replace(/^www\./, "") + x.pathname.replace(/\/+$/, "");
+  } catch (e) { return s.split(/[?#]/)[0].replace(/\/+$/, ""); }
+}
+function _nlRealUrl(u) { try { const x = new URL(String(u || "")); if (/bing\.com$/i.test(x.hostname) && x.searchParams.get("url")) return x.searchParams.get("url"); } catch (e) {} return String(u || "").trim(); }
+const _nlTitleKey = (t) => String(t || "").toLowerCase().replace(/[‘’']/g, "").replace(/[^a-z0-9]+/g, " ").trim().slice(0, 90);
+function _nlHash(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, "0"); }
+
+// Parse one RSS 2.0 or Atom document into plain items.
+function parseNewsFeed(xml, feed) {
+  const out = []; const t = String(xml || "");
+  const blocks = rxAll(/<item[\s>]([\s\S]*?)<\/item>/gi, t).concat(rxAll(/<entry[\s>]([\s\S]*?)<\/entry>/gi, t)).slice(0, 60);
+  for (const m of blocks) {
+    const b = m[1];
+    const title = _nlDecode(_nlTag(b, ["title"]));
+    let link = _nlDecode(_nlTag(b, ["link"]));
+    if (!link) { const lm = b.match(/<link[^>]*href="([^"]+)"/i); if (lm) link = lm[1].replace(/&amp;/g, "&"); }
+    if (!link) { const g = _nlDecode(_nlTag(b, ["guid"])); if (/^https?:/.test(g)) link = g; }
+    const pubRaw = _nlDecode(_nlTag(b, ["pubDate", "dc:date", "published", "updated", "atom:updated"]));
+    const pub = Date.parse(pubRaw) || 0;
+    const body = _nlDecode(_nlTag(b, ["description", "summary", "content:encoded", "content"]));
+    const src = _nlDecode(_nlTag(b, ["News:Source", "source"]));
+    if (!title || !link) continue;
+    out.push({ title: title.slice(0, 220), url: _nlRealUrl(link), published: pub, summary: body.length > 420 ? body.slice(0, 420).replace(/\s+\S*$/, "") + "…" : body, outlet: (feed && feed.outlet) || src.replace(/\s+on MSN$/i, "") || "news" });
+  }
+  return out;
+}
+// Relevance: a named Dubai thing, or a UAE place together with a city/property subject. World news, sport and crime are out
+// unless the story also names a Dubai developer, district, project or piece of infrastructure.
+function newsRelevance(title, summary) {
+  const txt = String(title || "") + " " + String(summary || "").slice(0, 200);   // the headline and the lede, not the whole article
+  const ents = []; for (const [n, ty, rx] of NEWS_ENTITIES) if (rx.test(txt)) ents.push({ name: n, type: ty });
+  const place = NEWS_PLACE_RX.test(txt), prop = NEWS_PROP_RX.test(txt), infra = NEWS_INFRA_RX.test(txt), city = NEWS_CITY_RX.test(txt);
+  const named = ents.some(e => e.type !== "authority");
+  if (NEWS_NOISE_RX.test(title) && !named && !prop) return null;
+  // a named place/developer/project/infrastructure; or an authority, or a UAE place, WITH a property or transport subject.
+  // City words alone (residents, hotels, openings) only add score - on their own they let in expat profiles and gold prices.
+  if (!named && !((ents.length || place) && (prop || infra))) return null;
+  let score = 0;
+  for (const e of ents) score += e.type === "infrastructure" ? 4 : 3;
+  score += (prop ? 3 : 0) + (infra ? 2 : 0) + (city ? 1 : 0) + (/\bdubai\b/i.test(txt) ? 2 : 0);
+  return { entities: ents.slice(0, 8), score: Math.min(score, 30) };
+}
+
+// The collector. Runs on the minute tick; opts.force runs now with every due feed up to opts.max.
+async function liveNewsTick(env, nowMs, opts) {
+  opts = opts || {};
+  if (env.LIVE_NEWS !== "on" && !opts.force) return null;
+  const now = nowMs || Date.now();
+  if (!opts.force && new Date(now).getUTCMinutes() % LIVE_NEWS_EVERY_MIN !== 0) return null;
+  let store = null; try { store = JSON.parse((await env.MEETINGS.get(LIVE_NEWS_KEY)) || "null"); } catch (e) {}
+  if (!store || !Array.isArray(store.items)) store = { items: [], feeds: {} };
+  store.feeds = store.feeds || {};
+  const last = (f) => { const s = store.feeds[f.id]; return s && s.at ? Date.parse(s.at) : 0; };
+  const due = LIVE_NEWS_FEEDS.filter(f => now - last(f) >= LIVE_NEWS_REFRESH_MIN * 60000).sort((a, b) => last(a) - last(b)).slice(0, opts.max || LIVE_NEWS_PER_RUN);
+  if (!due.length) return { fetched: 0, held: store.items.length };
+  const res = await Promise.allSettled(due.map(f => fetchT(f.url, 8000, { headers: { "User-Agent": "Mozilla/5.0 (compatible; najma-news/1.0; +contact@digitalabbot.io)", "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*" }, redirect: "follow" })
+    .then(async r => ({ f, status: r.status, text: r.ok ? await r.text() : "" }))));
+  const byUrl = new Map(), byTitle = new Map();
+  for (const it of store.items) { byUrl.set(_nlCanon(it.url), it); byTitle.set(_nlTitleKey(it.title), it); }
+  const cutoff = now - LIVE_NEWS_KEEP_H * 3600000;
+  for (let i = 0; i < due.length; i++) {
+    const f = due[i], r = res[i];
+    const st = { at: new Date(now).toISOString(), outlet: f.outlet || "Bing News", status: null, parsed: 0, relevant: 0, added: 0 };
+    if (r.status !== "fulfilled") { st.error = String((r.reason && (r.reason.name || r.reason.message)) || r.reason).slice(0, 80); store.feeds[f.id] = st; continue; }
+    st.status = r.value.status;
+    if (!r.value.text) { store.feeds[f.id] = st; continue; }
+    const parsed = parseNewsFeed(r.value.text, f); st.parsed = parsed.length;
+    for (const p of parsed) {
+      const at = p.published && p.published <= now + 3600000 ? p.published : 0;
+      if (at && at < cutoff) continue;
+      const rel = newsRelevance(p.title, p.summary); if (!rel) continue;
+      st.relevant++;
+      const cu = _nlCanon(p.url), tk = _nlTitleKey(p.title);
+      const dup = byUrl.get(cu) || byTitle.get(tk);
+      if (dup) { if (!(dup.feeds || []).includes(f.id)) dup.feeds = (dup.feeds || []).concat(f.id).slice(0, 6); if (!dup.summary && p.summary) dup.summary = p.summary; continue; }
+      const it = { id: _nlHash(cu || tk), title: p.title, outlet: p.outlet, url: p.url, published: at ? new Date(at).toISOString() : null, seen: new Date(now).toISOString(), summary: p.summary, entities: rel.entities, score: rel.score, feeds: [f.id] };
+      store.items.push(it); byUrl.set(cu, it); byTitle.set(tk, it); st.added++;
+    }
+    store.feeds[f.id] = st;
+  }
+  const t = (x) => Date.parse(x.published || x.seen) || 0;
+  store.items = store.items.filter(x => t(x) >= cutoff).sort((a, b) => t(b) - t(a)).slice(0, LIVE_NEWS_MAX);
+  store.updated = new Date(now).toISOString();
+  await env.MEETINGS.put(LIVE_NEWS_KEY, JSON.stringify(store), { expirationTtl: 3 * 86400 });
+  return { fetched: due.map(f => f.id), held: store.items.length };
+}
+
+// What the morning feed is handed: today's (Dubai time) most relevant stories first, then yesterday's, each with outlet, time,
+// summary and entities; the older sweep's items (mkt_news) are merged in without duplicates and keep their MEED cross-reference.
+async function feedNewsBlock(env, nowMs) {
+  const now = nowMs || Date.now();
+  let live = []; try { const s = JSON.parse((await env.MEETINGS.get(LIVE_NEWS_KEY)) || "null"); live = (s && s.items) || []; } catch (e) {}
+  let old = []; try { old = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); } catch (e) {}
+  const gstDay = (ms) => gstDateStr(new Date(ms + OFFSET_MIN * 60000));
+  const today = gstDay(now), yest = gstDay(now - 86400000);
+  const seenK = new Set(), rows = [];
+  for (const x of live) {
+    const at = Date.parse(x.published || x.seen) || 0; if (now - at > LIVE_NEWS_KEEP_H * 3600000) continue;
+    const k = _nlTitleKey(x.title); if (seenK.has(k)) continue; seenK.add(k);
+    rows.push({ at, x, score: x.score || 0 });
+  }
+  for (const x of old) {
+    if (!x || !x.title) continue; const k = _nlTitleKey(x.title);
+    const twin = rows.find(r => _nlTitleKey(r.x.title) === k);
+    if (twin) { if (x.xref) twin.xref = x.xref; continue; }
+    const at = Number(x.at) || Date.parse(x.at) || 0; if (!at || now - at > LIVE_NEWS_KEEP_H * 3600000) continue;
+    const rel = newsRelevance(x.title, ""); if (!rel && !x.xref) continue;
+    seenK.add(k); rows.push({ at, x: { title: x.title, outlet: x.outlet, url: x.link || x.url || "", summary: "", entities: rel ? rel.entities : [] }, score: (rel ? rel.score : 0) + (x.xref ? 4 : 0), xref: x.xref || null });
+  }
+  const dayRank = (at) => gstDay(at) === today ? 6 : gstDay(at) === yest ? 3 : 0;   // today's story wins a tie, but a strong yesterday beats a weak today
+  rows.sort((a, b) => (b.score + dayRank(b.at)) - (a.score + dayRank(a.at)) || (b.at - a.at));
+  const fmt = (ms) => { const d = new Date(ms + OFFSET_MIN * 60000); return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear() + " " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + " GST"; };
+  // one big story is covered by every outlet (30 Sep: 32 Etihad Rail items) - at most 3 per story, so the other news still gets in
+  const perStory = {}, picked = [];
+  for (const r of rows) { if (picked.length >= LIVE_NEWS_FEED_BLOCK) break; const lead = (r.x.entities || []).find(e => e.type !== "authority"); const k = lead ? lead.name : _nlTitleKey(r.x.title); if ((perStory[k] = (perStory[k] || 0) + 1) > 3) continue; picked.push(r); }
+  return picked.map(r => ({
+    title: r.x.title, outlet: r.x.outlet, published: fmt(r.at), today: gstDay(r.at) === today, summary: r.x.summary || "",
+    names: (r.x.entities || []).map(e => e.name), url: r.x.url || "",
+    meedCrossReference: r.xref ? { project: r.xref.meedName, facts: r.xref.facts } : null,
+  }));
+}
+
+// The honesty rule for news angles, applied mechanically. An angle that cites a news story (and is not a Dubai 2040 plan angle)
+// must carry a figure, and EVERY number in its hook and figure must be written in ONE story the feed was handed - the story from
+// the outlet it names. MEED numbers count only when the angle also cites MEED and the story carries that cross-reference.
+const NEWS_CITE_RX = /\breported by\b|khaleej times|gulf news|the national\b|emirates news agency|\bwam\b|gulf today|arabian business|zawya|emirates ?24|gulf business|\bnews\b/i;
+const _nlNums = (s) => (String(s || "").match(/\d[\d,]*(?:\.\d+)?/g) || []).map(n => n.replace(/,/g, "").replace(/\.$/, ""));
+const _nlOutletKey = (o) => String(o || "").toLowerCase().replace(/\s+on msn$/, "").replace(/^the\s+/, "").replace(/\bwam\b/, "emirates news agency").trim();
+function feedNewsTrue(a, news) {
+  if (!a || a.campaign) return "";
+  const src = String(a.source || "");
+  if (!NEWS_CITE_RX.test(src) || planAngle(a)) return "";
+  const items = Array.isArray(news) ? news : [];
+  if (!items.length) return "cites a news story, and no news was handed to the feed";
+  const srcK = _nlOutletKey(src);
+  const mine = items.filter(it => { const k = _nlOutletKey(it.outlet); return k.length >= 3 && srcK.includes(k); });
+  if (!mine.length) return "cites a news outlet whose story the feed was not handed";
+  const want = [...new Set(_nlNums(String(a.hook || "") + " " + String(a.figure || "")))].filter(n => n !== "2040");
+  if (!_nlNums(a.figure).length) return "a news angle with no figure from the story";
+  const meed = /\bmeed\b/i.test(src);
+  const ok = mine.some(it => { const have = new Set(_nlNums(it.title + " " + (it.summary || "") + (meed && it.meedCrossReference ? " " + JSON.stringify(it.meedCrossReference.facts || {}) : ""))); return want.every(n => have.has(n)); });
+  return ok ? "" : "news: a number in it is not in the " + (mine[0].outlet || "cited") + " story it cites";
 }
 
 

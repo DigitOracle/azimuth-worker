@@ -108,6 +108,10 @@ RING_TEMPLATE_LANG = "en_US"
 RING_PARAMS = "CALLNAJ|1|meeting starting in 15 minutes"
 # v146 - meetings checked every minute (the half-hour tick never saw the T-15 ring window); picture jobs finished on the same tick.
 MINUTE_TICK = "on"
+# v270 - live city news (Kendall, 30 Sep 2026: the Etihad Rail launch never reached the morning). The minute tick reads 5 feeds every
+# 5 minutes (Khaleej Times, The National, Gulf News direct; WAM / Dubai Media Office / RTA / DLD via Bing News), keeps 48 h in
+# news_live, and the 06:00 feed is handed the freshest ten. Check it live at /news_live?key=READ_KEY. Remove to switch off.
+LIVE_NEWS = "on"
 # v185 - the five morning scene cards (Naj drawn into each place), queued after the 06:00 list and made by the minute tick (Kendall, 19 Sep 2026). Remove to switch off.
 FEED_SCENES = "on"
 # v186 - the approved template that reaches her when her 24-hour WhatsApp window is shut (21 Sep 2026: a whole morning was
