@@ -9387,6 +9387,15 @@ const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);   // com
 // against a model that is still arriving.
 const onSky=g=>{
   msg.remove();
+  // v276 - SELF-DESCRIBING LOCAL-FRAME TILES (1 Oct 2026). CityEngine 2026.1 can export a tile relative to the district
+  // origin (GLTFExportModelSettings global offset), which keeps full precision - measured 0.1 mm against 12.5 cm for the
+  // absolute-UTM float32 export. Such a tile carries its own origin in the glTF (extras.najma_origin_ce_xyz, CE frame:
+  // x = easting, y = up, z = -northing), so a tile and its origin can never be mismatched. The model is wrapped in a
+  // group placed at that origin, and the centring below then subtracts origin + centre in float64 on the CPU, exactly
+  // as v258 does for the detail parts - ground imagery, water and anchors line up unchanged. A tile without the extra
+  // (every tile live today) takes the old path untouched.
+  {const _j=g&&g.parser&&g.parser.json,_O=_j&&((_j.extras&&_j.extras.najma_origin_ce_xyz)||(_j.asset&&_j.asset.extras&&_j.asset.extras.najma_origin_ce_xyz));
+   if(Array.isArray(_O)&&_O.length===3&&_O.every(v=>typeof v==="number"&&isFinite(v))){const _outer=new THREE.Group();g.scene.position.set(_O[0],_O[1],_O[2]);_outer.add(g.scene);g={scene:_outer}}}
   const root=g.scene;
   const box=new THREE.Box3().setFromObject(root);const c=box.getCenter(new THREE.Vector3());const sz=box.getSize(new THREE.Vector3());
   root.position.sub(c);root.position.y+=sz.y/2- (c.y-box.min.y);
