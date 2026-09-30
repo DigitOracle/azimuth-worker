@@ -199,7 +199,8 @@ function msg(t){var e=$("msg");e.textContent=t;e.hidden=!t}
 function mLon(lat){return 111320*Math.cos(lat*Math.PI/180)}
 function fmtH(h){return Math.round(h)+" m tall"}
 function unknownH(hs){return hs==="unknown"||hs==="default12"}
-function htLine(h,hs){return unknownH(hs)?"Height not yet known (drawn at "+Math.round(h)+" m)":fmtH(h)}
+function estH(hs){hs=String(hs||"");return hs==="community_median"||hs.indexOf("typical_")===0}
+function htLine(h,hs){return unknownH(hs)?"Height not yet known (drawn at "+Math.round(h)+" m)":estH(hs)?"About "+Math.round(h)+" m - an estimate ("+(hs==="community_median"?"typical for this area":"typical for this kind of building")+"), not measured":fmtH(h)}
 function keyQ(){return CFG.key?"?key="+encodeURIComponent(CFG.key):""}
 function tidy(n){n=String(n||"");return n===n.toUpperCase()&&/[A-Z]{3}/.test(n)?n.toLowerCase().replace(/(^|[\s\-(\/])([a-z])/g,function(a,b,c){return b+c.toUpperCase()}):n}
 
