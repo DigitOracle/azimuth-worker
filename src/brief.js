@@ -23,16 +23,17 @@ export const BRIEF_MUSTS = ["balcony", "metro", "pool", "gym", "parking", "new",
 const BEDS = { studio: 0, "0": 0, "1": 1, "2": 2, "3": 3, "3+": 3 };
 const BED_WORD = ["studio", "1-bed", "2-bed", "3+ bed"];
 export const EVIDENCE_MIN = 3;          // spec: drop n < 3
-export const WITHIN_OVER = 0.03;        // spec: within = median >= min and <= max * 1.03
-const LITTLE_OVER = 0.10;               // a_little_above: up to max * 1.10; above: up to max * 1.15; beyond that it is not offered
+// Verdicts (Kendall, 30 Sep 2026): within = min <= median <= max, strictly; a_little_above = over max by at most 5%; above = more
+// than 5% over; below = under min. The offered window stays bounded: above only to +15%, below only to -10% (beyond: not listed).
+export const LITTLE_OVER = 0.05;
 const ABOVE_CAP = 0.15;
 const BELOW_FLOOR = 0.10;               // below: down to min * 0.90; cheaper than that is not offered
 const NEAR_M = 1000;                    // "near a metro" / "schools nearby": a straight-line kilometre (no walking or drive times)
 export const TENANCY_MIN_SHARE = 0.5;   // the building page's own gate (building_page.js): below half coverage the tenancy count is not shown
 const MAX_DISTRICT_CARDS = 12;          // unit-mix cards are ~1 MB each; an all-Dubai query reads the busiest districts' cards only
 const TIER = { within: 0, a_little_above: 1, below: 2, above: 3 };
-// the ranking order: strictly inside the budget first, then the +3% tolerance that still counts as "within", then the rest
-const rankTier = (c, q) => (c.verdict === "within" ? (q.max == null || c.v <= q.max ? 0 : 1) : 1 + TIER[c.verdict]);
+// the ranking order (Kendall, 30 Sep 2026): within, then a_little_above, then the rest (below and above together), by evidence inside each
+const rankTier = (c) => Math.min(TIER[c.verdict], 2);
 
 // the rent index's own name key (build_rent_index.py fold/norm/stem/nkey), so "the same name" means the same thing here
 const fold = (s) => String(s == null ? "" : s).normalize("NFKD").replace(/[^\x00-\x7f]/g, "");
@@ -92,7 +93,7 @@ export function parseBrief(sp) {
 export function verdictOf(v, min, max) {
   const lo = min || 0, hi = max == null ? Infinity : max;
   if (v < lo) return v >= lo * (1 - BELOW_FLOOR) ? "below" : null;
-  if (v <= hi * (1 + WITHIN_OVER)) return "within";
+  if (v <= hi) return "within";
   if (v <= hi * (1 + LITTLE_OVER)) return "a_little_above";
   if (v <= hi * (1 + ABOVE_CAP)) return "above";
   return null;
@@ -238,6 +239,27 @@ export function estLeft(card, ten, i, bed) {
   };
 }
 
+// ---- the beds-left register (img_beds_left_<district>, built by the DDA session from the full government tenancy register):
+// {as_of, source, rows: [{key | dld_project, name, beds, T, R}]} - T flats of the band in the Land Department units register, R tenancy
+// contracts of the band running on as_of. Preferred over the coverage-gated path above; matched by our key, else by DLD project name.
+const bandOf = (b) => { const t = String(b == null ? "" : b).trim().toLowerCase(); if (t === "studio" || t === "0") return 0; const m = /^(\d+)/.exec(t); return m ? Math.min(+m[1], 3) : null; };
+export function bedsLeftRow(BL, c, bed) {
+  if (!BL || !Array.isArray(BL.rows)) return null;
+  const rows = BL.rows.filter((r) => bandOf(r.beds) === bed && +r.T > 0 && r.R != null && isFinite(+r.R));
+  const names = [c.name].concat(c.aliases || []).map(nkey).filter(Boolean);
+  return rows.find((r) => r.key && String(r.key).toLowerCase() === String(c.key).toLowerCase())
+    || rows.find((r) => r.dld_project && names.includes(nkey(r.dld_project))) || null;
+}
+export function estFromBedsLeft(BL, row) {
+  const T = +row.T, R = +row.R;
+  return {
+    about: Math.max(0, Math.round((T - R) / 10) * 10), of: T, running: R, as_at: BL.as_of || null, source: BL.source || null,
+    label: "an estimate, not a count",
+    explain: "Flats of this type in the Land Department units register, less the tenancy contracts of this type running on " + (BL.as_of || "the register date") +
+      ". Owner-occupiers and renewals not registered are in it, so the real number is lower. It is never the number available.",
+  };
+}
+
 // ---- the non-negotiables: a source or null --------------------------------------------------------------------------
 function mustsOf(c, card, brochure, AM) {
   const am = ((brochure && brochure.amenities) || []).join(" | ");
@@ -344,7 +366,11 @@ export async function briefApi(request, env, url, h) {
   }));
   const AM = await kvJson(env, "amenities");
   const tenancy = {};
-  if (q.mode === "rent") await Promise.all([...new Set(cands.filter((c) => c.i != null && c.d).map((c) => c.d))].map(async (d) => { tenancy[d] = await kvJson(env, "tenancy_" + d); }));
+  const bedsLeft = {};
+  if (q.mode === "rent") await Promise.all([...new Set(cands.filter((c) => c.d).map((c) => c.d))].map(async (d) => {
+    bedsLeft[d] = await kvJson(env, "beds_left_" + d);
+    if (!bedsLeft[d]) tenancy[d] = await kvJson(env, "tenancy_" + d);                // the old gated path only where the register is missing
+  }));
 
   let droppedByMust = 0;
   const kept = [];
@@ -359,7 +385,11 @@ export async function briefApi(request, env, url, h) {
       photos: !!(c.brochure && (c.brochure.photos || []).length),
     };
     c.recordName = card ? card.name : null;
-    if (q.mode === "rent" && c.i != null) c.est = estLeft(card, tenancy[c.d], c.i, bed);
+    if (q.mode === "rent") {
+      const BL = c.d ? bedsLeft[c.d] : null;
+      if (BL) { const row = bedsLeftRow(BL, c, bed); c.est = row ? estFromBedsLeft(BL, row) : { withheld: "not in the beds-left register for this district (" + (BL.as_of || "undated") + ")" }; }
+      else if (c.i != null) c.est = estLeft(card, tenancy[c.d], c.i, bed);
+    }
     kept.push(c);
   }
   if (droppedByMust) notes.push(droppedByMust + " building" + (droppedByMust === 1 ? "" : "s") + " left out because a source says a non-negotiable is missing.");
@@ -370,7 +400,7 @@ export async function briefApi(request, env, url, h) {
   const score = (c) => (c.completeness.record ? 1 : 0) + (c.completeness.layouts ? 1 : 0) + (c.completeness.photos ? 1 : 0);
   const mid = q.max != null ? ((q.min || 0) + q.max) / 2 : (q.min || 0);
   const mustsMet = (c) => q.musts.filter((m) => c.musts[m] === true).length;
-  kept.sort((a, b) => (rankTier(a, q) - rankTier(b, q)) || (b.n - a.n) || (score(b) - score(a)) || (mustsMet(b) - mustsMet(a)) || (Math.abs(a.v - mid) - Math.abs(b.v - mid)) || String(a.name).localeCompare(String(b.name)));
+  kept.sort((a, b) => (rankTier(a) - rankTier(b)) || (b.n - a.n) || (score(b) - score(a)) || (mustsMet(b) - mustsMet(a)) || (Math.abs(a.v - mid) - Math.abs(b.v - mid)) || String(a.name).localeCompare(String(b.name)));
 
   const counts = { within: 0, a_little_above: 0, above: 0, below: 0 };
   for (const c of kept) counts[c.verdict]++;
@@ -390,13 +420,13 @@ export async function briefApi(request, env, url, h) {
     if (c.brochureKey) r.brochure = "/img/" + c.brochureKey.slice(4);
     if (q.mode === "rent") {                                                   // present only when known; otherwise the reason, never a guess
       const e = c.est || { withheld: "no building record in the app to count the units register against" };
-      if (e.withheld) r.estimated_left_withheld = e.withheld; else r.estimated_left = e;
+      if (e.withheld) r.estimated_left_withheld = e.withheld; else { r.estimated_left = e; r.estimate_as_of = e.as_at; }
     }
     return r;
   });
-  if (q.mode === "rent") notes.push("estimated_left is T minus R (flats of this type in the Land Department units list, less Ejari tenancies of this type running on the tenancy file's date), rounded to 10 and shown as {about, of}: an estimate, not a count, and never the number available. It is given only where both are scoped to the one building and the district's tenancy coverage reaches " + Math.round(TENANCY_MIN_SHARE * 100) + "%, the gate the building page uses; otherwise it is omitted and estimated_left_withheld says why.");
+  if (q.mode === "rent") notes.push("estimated_left is T minus R (flats of this type in the Land Department units list, less Ejari tenancies of this type running on the tenancy file's date), rounded to 10 and shown as {about, of} with estimate_as_of: an estimate, not a count, and never the number available. It is read from the beds-left register (KV img_beds_left_<district>, the full government tenancy register) where that is on file; otherwise it is given only where both are scoped to the one building and the district's tenancy coverage reaches " + Math.round(TENANCY_MIN_SHARE * 100) + "%, the gate the building page uses; otherwise it is omitted and estimated_left_withheld says why.");
   if (results.some((r) => r.record_name && r.record_name.agrees === "part")) notes.push("record_name.agrees = \"part\": the app's building record carries the register name plus a tower or phase suffix (e.g. Bloom Towers -> Bloom Towers B). The evidence may cover the whole project; check before the record's name goes on a client document.");
-  notes.push("Ranking: inside the budget first (within = typical figure at or above the minimum and no more than " + Math.round(WITHIN_OVER * 100) + "% over the maximum), then a little above (to +" + Math.round(LITTLE_OVER * 100) + "%), below (to -" + Math.round(BELOW_FLOOR * 100) + "%), above (to +" + Math.round(ABOVE_CAP * 100) + "%); within each, most evidence first, then the most complete record. Fewer than " + EVIDENCE_MIN + " contracts or sales: left out.");
+  notes.push("Ranking: within the budget first (typical figure at or above the minimum and at or below the maximum), then a little above (up to " + Math.round(LITTLE_OVER * 100) + "% over), then the rest - below (listed down to " + Math.round(BELOW_FLOOR * 100) + "% under) and above (listed up to " + Math.round(ABOVE_CAP * 100) + "% over); inside each group, most evidence first, then the most complete record. Fewer than " + EVIDENCE_MIN + " contracts or sales: left out.");
 
   return J({ query: q, as_of, source, ...extra, total_matched: kept.length, counts, results, notes });
 }

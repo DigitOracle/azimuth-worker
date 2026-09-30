@@ -8,16 +8,19 @@
 //      ranking (strictly inside the budget first, then most evidence), the verdicts, areas and home type
 //   3. a name must agree with the record: a bind to a building named otherwise is dropped, one building is never listed twice
 //   4. musts: null unless a source answers; a source's "no" removes the building; metro is a straight-line kilometre
-//   5. estimated left = T minus R only under the building page's own gate, labelled an estimate; otherwise null with the reason
+//   5. estimated left = T minus R: from the beds-left register (img_beds_left_<district>) when on file, matched by key then by DLD
+//      project name; otherwise only under the building page's own tenancy gate; labelled an estimate; otherwise omitted with the reason
 //   6. buy: register medians with a per-bedroom sale count; never an estimate; no count, no result
 //   7. the only change to src/index.js is one import and one marked dispatch
 //   8. against the real index (NAJ_DATA): the reference question - JVC, 1 bed, AED 60-68K
+// NEGATIVE CONTROL on the verdict boundary (Kendall's verdicts, 30 Sep 2026): make "within" allow 1 AED over the maximum - the
+// 68,000 / 68,001 edge check fails; restore - it passes.
 // NEGATIVE CONTROL (run 30 Sep 2026): (a) sort by n ascending instead of descending in src/brief.js - the ranking checks and the
 // reference top 10 fail; (b) remove the n >= 3 floor - "two contracts: left out" and the real-index floor check fail. Restored: all pass.
 //
 //   node test/test_brief_api.mjs
 import worker from "../src/index.js";
-import { nameAgrees, verdictOf, estLeft, nkey } from "../src/brief.js";
+import { nameAgrees, verdictOf, estLeft, nkey, bedsLeftRow } from "../src/brief.js";
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -106,6 +109,12 @@ const MP = { generated: "2026-09-09 14:58", items: [
   { p: "thin", n: "Thin Sales", d: JVC, i: 7004, lon: 55.2, lat: 25.05, b: { "1": 690000 } },
   { p: "launch", n: "A Launch", d: JVC, i: -1, lon: 55.2, lat: 25.05, b: { "1": 650000 } },
 ] };
+// the beds-left register as the DDA session will publish it (JVC 1-bed T and R, given 30 Sep 2026). Nova by our key, the rest by DLD project name.
+const BL_ROWS = [["Binghatti Amber", 502, 122], ["Bloom Towers", 463, 79], ["BLOOM HEIGHTS", 316, 66], ["Binghatti Nova", 178, 37], ["Binghatti Heights", 248, 57],
+  ["Binghatti Emerald", 217, 61], ["Elysee III by Pantheon", 80, 21], ["Binghatti Gardenia", 180, 38], ["Binghatti Luna", 160, 28], ["Binghatti Mirage", 92, 16]];
+const BEDS_LEFT = { as_of: "2026-09-30", source: "DLD units register + Ejari tenancy register (DDA iPaaS), stub for tests",
+  rows: BL_ROWS.map(([name, T, R]) => (name === "Binghatti Nova" ? { key: JVC + ":1490", name, beds: "1", T, R } : { dld_project: name, name, beds: 1, T, R }))
+    .concat([{ dld_project: "Binghatti Nova", name: "Binghatti Nova", beds: "2", T: 30, R: 7 }]) };
 const setAll = () => {
   store.clear();
   store.set("img_rent_index", JSON.stringify(RI));
@@ -137,8 +146,11 @@ let j = x.j, R = j.results, names = R.map(r => r.name);
 ok(j.as_of === "2026-09-30" && /img_rent_index/.test(j.source) && j.window[0] === "2026-08-01", "as_of, source and window come from the index", JSON.stringify([j.as_of, j.source]));
 ok(JSON.stringify(j.query) === JSON.stringify({ mode: "rent", beds: "1", min: 60000, max: 68000, areas: [JVC], type: "any", musts: [], limit: 10 }), "the query is echoed", JSON.stringify(j.query));
 ok(names.slice(0, 4).join("|") === "Binghatti Amber|Bloom Towers|Binghatti Nova|BLOOM HEIGHTS", "strictly inside the budget, most contracts first: Amber 29, Bloom Towers 24, Nova 16, Bloom Heights 15", names.join(" | "));
-ok(names.indexOf("THE HAVEN GARDEN") > names.indexOf("Chaimaa Avenue"), "70K (+2.9%, still 'within') ranks after every building strictly inside 60-68K, despite 37 contracts", names.join(" | "));
-ok(R.find(r => r.name === "THE HAVEN GARDEN").verdict === "within", "70K against a 68K ceiling is 'within' (spec: median up to max + 3%)");
+ok(names.indexOf("THE HAVEN GARDEN") > names.indexOf("Chaimaa Avenue"), "70K ranks after every building within 60-68K, despite 37 contracts", names.join(" | "));
+ok(R.find(r => r.name === "THE HAVEN GARDEN").verdict === "a_little_above", "70K against a 68K ceiling (+2.9%) is 'a_little_above' - within is strict");
+ok(R.filter(r => r.verdict === "within").every(r => r.evidence.median >= 60000 && r.evidence.median <= 68000), "every 'within' is inside 60-68K exactly");
+{ const tiers = R.map(r => Math.min({ within: 0, a_little_above: 1, below: 2, above: 2 }[r.verdict], 2));
+  ok(tiers.every((t, i) => !i || t >= tiers[i - 1]), "within first, then a_little_above, then the rest", R.map(r => r.verdict).join(",")); }
 ok(!names.includes("Luma Park Views"), "84.5K (+24%) is not offered");
 ok(!names.includes("Empire Residence"), "two contracts: left out (n < 3)");
 ok(!names.includes("CHEAP ONE"), "55K, more than 10% under the minimum: left out");
@@ -146,8 +158,8 @@ ok(R.find(r => r.name === "Bloom Towers").evidence.median === 65000 && R.find(r 
   "the figure is the map's own: the new-lettings median (65K) where there are 3+ new, the all-contract median kept alongside (68K)");
 const dm = R.find(r => r.name === "DUNES MARIGOLD");
 ok(dm && dm.evidence.median === 60680 && dm.evidence.median_of === "all_contracts" && dm.evidence.q1 === 58000, "with under 3 new lettings the median and middle half are of all contracts, never of one or two new lets", JSON.stringify(dm && dm.evidence));
-const mir = R.find(r => r.name === "Binghatti Mirage");
-ok(mir && mir.verdict === "a_little_above" && mir.evidence.median === 73500, "73.5K on a 68K ceiling (+8%) is 'a_little_above'", JSON.stringify(mir && [mir.verdict, mir.evidence.median]));
+const mir = (await brief(REF + "&limit=50")).j.results.find(r => r.name === "Binghatti Mirage");
+ok(mir && mir.verdict === "above" && mir.evidence.median === 73500, "73.5K on a 68K ceiling (+8%) is 'above' (more than 5% over)", JSON.stringify(mir && [mir.verdict, mir.evidence.median]));
 ok(R.filter(r => r.name === "BLOOM HEIGHTS" || r.aliases.includes("CANAL VIEWS")).length === 1 && R.find(r => r.name === "BLOOM HEIGHTS").aliases[0] === "CANAL VIEWS", "BLOOM HEIGHTS / CANAL VIEWS: one record, the other name an alias");
 const nova = R.find(r => r.name === "Binghatti Nova");
 ok(nova.key === JVC + ":1490" && nova.app_id === 1490 && nova.building_url === "/building/" + JVC + "/1490" && nova.district_name === "Jumeirah Village Circle", "a bound building: key district:id, its building page, the district's name", JSON.stringify([nova.key, nova.building_url, nova.district_name]));
@@ -163,9 +175,12 @@ ok(!names.includes("MARINA ONE"), "areas=jumeirahvillagecircle: Dubai Marina is 
 ok(names.includes("SOME VILLAS") && !(await brief(REF + "&type=apartment")).j.results.some(r => r.name === "SOME VILLAS") && (await brief(REF + "&type=villa")).j.results.map(r => r.name).join() === "SOME VILLAS", "home type: any includes the villas, apartment leaves them out, villa is villas only");
 ok((await brief(REF + "&type=apartment")).j.results.every(r => r.evidence.home === "apartment"), "type=apartment: apartments only");
 ok((await brief("mode=rent&beds=2&min=80000&max=100000&areas=" + JVC)).j.results.map(r => r.name).join() === "Binghatti Nova", "beds=2 reads the 2-bed band");
-ok(verdictOf(60000, 60000, 68000) === "within" && verdictOf(70040, 60000, 68000) === "within" && verdictOf(70041, 60000, 68000) === "a_little_above" &&
-  verdictOf(74800, 60000, 68000) === "a_little_above" && verdictOf(78000, 60000, 68000) === "above" && verdictOf(79000, 60000, 68000) === null &&
-  verdictOf(55000, 60000, 68000) === "below" && verdictOf(53000, 60000, 68000) === null && verdictOf(900000, 0, null) === "within", "the verdict edges");
+ok(verdictOf(68000, 60000, 68000) === "within" && verdictOf(68001, 60000, 68000) === "a_little_above", "the boundary: 68,000 is within, 68,001 is a_little_above on a 68K max",
+  verdictOf(68000, 60000, 68000) + " / " + verdictOf(68001, 60000, 68000));
+ok(verdictOf(60000, 60000, 68000) === "within" && verdictOf(59999, 60000, 68000) === "below" && verdictOf(71400, 60000, 68000) === "a_little_above" &&
+  verdictOf(71401, 60000, 68000) === "above" && verdictOf(78200, 60000, 68000) === "above" && verdictOf(78201, 60000, 68000) === null &&
+  verdictOf(54000, 60000, 68000) === "below" && verdictOf(53999, 60000, 68000) === null && verdictOf(900000, 0, null) === "within",
+  "the other edges: min is within, +5% exactly is a_little_above, beyond +5% above (listed to +15%), under min below (listed to -10%)");
 
 // ---- 3. names must agree with the record --------------------------------------------------------------------
 const rc = R.find(r => r.name === "Regent Court");
@@ -213,6 +228,23 @@ const hi = (await brief(REF)).j.results.find(r => r.name === "Binghatti Nova");
 ok(hi.estimated_left && hi.estimated_left.about === 140 && hi.estimated_left.of === 178 && !("estimated_left_withheld" in hi), "through the route, over the gate: estimated_left {about: 140, of: 178}", JSON.stringify(hi.estimated_left));
 setAll();
 ok(j.notes.some(n => /estimated_left is T minus R/.test(n) && /an estimate, not a count/.test(n)), "the notes define it");
+// the beds-left register, when on file, is preferred
+store.set("img_beds_left_" + JVC, JSON.stringify(BEDS_LEFT));
+let BLr = (await brief(REF + "&limit=50")).j.results;
+const el = (n) => { const r = BLr.find(x => x.name === n); return r && r.estimated_left ? [r.estimated_left.about, r.estimated_left.of] : null; };
+ok(JSON.stringify(el("Binghatti Nova")) === "[140,178]", "Nova, matched by key: about 140 of 178 (178 - 37 = 141, to the nearest 10) - the register wins over the 46% gate", JSON.stringify(el("Binghatti Nova")));
+ok(JSON.stringify(el("Binghatti Amber")) === "[380,502]" && JSON.stringify(el("Bloom Towers")) === "[380,463]" && JSON.stringify(el("BLOOM HEIGHTS")) === "[250,316]" && JSON.stringify(el("Binghatti Mirage")) === "[80,92]",
+  "matched by DLD project name, bound or not: Amber 380 of 502, Bloom Towers 380 of 463, Bloom Heights 250 of 316, Mirage 80 of 92", JSON.stringify(["Binghatti Amber", "Bloom Towers", "BLOOM HEIGHTS", "Binghatti Mirage"].map(el)));
+const bn1 = BLr.find(x => x.name === "Binghatti Nova");
+ok(bn1.estimate_as_of === "2026-09-30" && bn1.estimated_left.running === 37 && bn1.estimated_left.label === "an estimate, not a count" && /never the number available/.test(bn1.estimated_left.explain) && /DDA/.test(bn1.estimated_left.source),
+  "estimate_as_of, R, the label and the source are carried", JSON.stringify(bn1.estimated_left));
+ok(/not in the beds-left register/.test(BLr.find(x => x.name === "Regent Court").estimated_left_withheld) && !("estimated_left" in BLr.find(x => x.name === "Regent Court")),
+  "a building the register does not list: omitted, and why - never filled from the gated path");
+ok(String(JSON.stringify((await brief("mode=rent&beds=2&min=80000&max=100000&areas=" + JVC)).j.results[0].estimated_left)).includes('"about":20,"of":30'), "the bedroom band is matched: Nova 2-bed about 20 of 30");
+ok(bedsLeftRow({ rows: [{ dld_project: "CANAL VIEWS", beds: "1", T: 10, R: 1 }] }, { key: "x", name: "BLOOM HEIGHTS", aliases: ["CANAL VIEWS"] }, 1).T === 10 &&
+  bedsLeftRow({ rows: [{ dld_project: "Bloom", beds: "1", T: 10, R: 1 }] }, { key: "x", name: "Bloom Towers B", aliases: [] }, 1) === null &&
+  bedsLeftRow({ rows: [{ key: "a:1", beds: "3+", T: 10, R: 1 }] }, { key: "a:1", name: "Z" }, 3).T === 10, "matching: an alias counts, a different name does not, '3+' is band 3");
+setAll();
 
 // ---- 6. buy -------------------------------------------------------------------------------------------------
 let b = (await brief("mode=buy&beds=1&min=600000&max=700000&areas=" + JVC)).j;
@@ -247,6 +279,8 @@ else {
   store.clear();
   store.set("img_rent_index", real);
   for (const f of ["districts_geo", "unitmix_" + JVC, "tenancy_" + JVC]) { try { store.set("img_" + f, fs.readFileSync(path.join(NAJ, "board", f + ".json"), "utf8")); } catch {} }
+  const noBL = (await brief(REF + "&limit=50")).j.results;
+  store.set("img_beds_left_" + JVC, JSON.stringify(BEDS_LEFT));
   const rj = (await brief(REF + "&limit=50")).j, rr = rj.results;
   console.log("  real " + rj.source + ": " + rj.total_matched + " matched " + JSON.stringify(rj.counts) + "; top 10: " + rr.slice(0, 10).map(r => r.name + " " + r.evidence.median + " (" + r.evidence.n + ")").join(", "));
   const top10 = rr.slice(0, 10).map(r => [r.name].concat(r.aliases).map(nkey)).flat();
@@ -257,7 +291,12 @@ else {
   ok(rr.filter(r => [r.name].concat(r.aliases).some(n => /^CANAL VIEWS$/i.test(n))).length === 1, "CANAL VIEWS appears once");
   ok(new Set(rr.map(r => r.key)).size === rr.length, "no key twice");
   ok(rr.filter(r => r.app_id != null).every(r => r.record_name && r.record_name.agrees !== "no"), "no bound result disagrees with its record's name");
-  ok(rr.every(r => !("estimated_left" in r) && r.estimated_left_withheld), "JVC today (tenancy coverage 46%): no estimate on any row, each says why");
+  ok(noBL.every(r => !("estimated_left" in r) && r.estimated_left_withheld), "without the beds-left register (JVC tenancy coverage 46%): no estimate on any row, each says why");
+  const est = Object.fromEntries(rr.filter(r => r.estimated_left).map(r => [r.name, r.estimated_left.about + "/" + r.estimated_left.of]));
+  console.log("  real + beds-left stub, estimates: " + JSON.stringify(est));
+  ok(est["Binghatti Amber"] === "380/502" && est["Bloom Towers"] === "380/463" && est["BLOOM HEIGHTS"] === "250/316" && est["Binghatti Nova"] === "140/178" && est["Binghatti Heights"] === "190/248" &&
+     est["Binghatti Emerald"] === "160/217" && est["ROYALE GARDEN RESIDENCE"] === "60/80" && est["Binghatti Gardenia"] === "140/180" && est["Binghatti Luna"] === "130/160",
+    "with the register: every stubbed building in the list carries its estimate (Elysee III by Pantheon through its alias on ROYALE GARDEN RESIDENCE)", JSON.stringify(est));
   setAll();
 }
 
