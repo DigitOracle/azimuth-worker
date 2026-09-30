@@ -1215,6 +1215,9 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         (D.transit && D.transit.length ? '<div class=src>Distances are straight-line from this building, not walking minutes \u2014 every routed estimate we have checked has overstated them. Stops and stations are the RTA\'s own layers.</div>' : "") : "") +
       '<div class=src>' + esc(D.asOf) + ". Floors divide the model's surveyed height evenly; a double-height lobby is not drawn as one." +
       (D.levelShift ? " The register numbers levels " + D.levelShift + " higher than the permit here, so its ranges are shifted to match." : "") + "</div>");
+    // v273 - the Send buttons live in THIS card (dossierBlock above), but only the floor card ever wired them, so here they were
+    // anchors with no href and no handler: WhatsApp, Email, Copy link and QR code did nothing (Kendall, 30 Sep 2026).
+    wireDossier();
   };
   function stackLines() {
     const out = [], seen = [];
