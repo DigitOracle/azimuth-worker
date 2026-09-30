@@ -7151,6 +7151,98 @@ const HOMES_WIRE_JS = ''
   + '  hp.querySelectorAll(".seg button[data-t]").forEach(function(b){b.onclick=function(){HB.type=b.getAttribute("data-t");hp.querySelectorAll(".seg button[data-t]").forEach(function(x){x.classList.toggle("on",x===b)});drawHomes()}});'
   + '  hp.querySelectorAll(".seg button[data-x]").forEach(function(b){b.onclick=function(){var k=b.getAttribute("data-x");HB[k]=!HB[k];b.classList.toggle("on",HB[k]);drawHomes()}});var lt=document.getElementById("hlivet");if(lt)lt.onclick=function(){HB.live=!HB.live;lt.classList.toggle("on",HB.live);HB.on=true;drawHomes()};})();'
   ;
+// v274 - RENT mode on the HOMES panel (/map and the district twins). A client asked Naj for "three options in JVC, one bedroom,
+// AED 65K" - a yearly rent - and the panel only searched homes for sale. A Buy / Rent switch at the top: Rent reads the rent
+// index (/img/rent_index, built by naj-market-pulse scripts/build_rent_index.py from the daily Ejari pull) and lights / lists the
+// buildings whose median rent for the chosen bedrooms falls in the budget. These are REGISTERED CONTRACTS - what homes there
+// actually rented for - never live availability, and bedrooms are inferred from size (ROOMS is blank on ~95% of Ejari rows):
+// the panel says both. Buy mode is untouched: the switch stashes and restores the Buy list handler and headline, and every Buy
+// control still calls the original drawHomes. Runs inside the MAP chrome's scope (needs HB, drawHomes, j, map, CURD, KEY, esc,
+// dName, closePanel, LISTK). rentMount() puts the switch on a panel: the MAP chrome mounts it on #hp here, and the district
+// twin's floor-stack panel (#stkp, which replaces #hp there) mounts it through window.__rentMount.
+const HOMES_RENT_JS = `
+var RB={mode:"buy",on:false,lo:10,hi:30,blo:1,bhi:2,type:"any",load:false},RI=null,RENT_MIN=2,RENT_HOSTS=[];
+function stepRent(v){v=+v;return v<=30?20000+v*2000:(v<=50?80000+(v-30)*6000:200000+(v-50)*30000)}
+function fmtRent(a){return a>=1e6?("AED "+(a/1e6).toFixed(1)+"M"):("AED "+Math.round(a/1e3)+"k")}
+function rbLabel(b){return b>=3?"3+":(b===0?"studio":String(b))}
+function rbWord(b){return b===0?"studio":(b>=3?"3+ bed":b+"-bed")}
+function rentFig(s){return (s.nn>=3&&s.mn)?s.mn:s.m}
+function rentIqr(s){var n=s.nn>=3&&s.mn;return fmtRent(n?s.q1n:s.q1).replace("AED ","")+"\\u2013"+fmtRent(n?s.q3n:s.q3).replace("AED ","")}
+function rentDay(d){var M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];d=String(d||"");return d.length>=10?(+d.slice(8,10))+" "+M[+d.slice(5,7)-1]:d}
+function rbText(){var lo=Math.min(RB.lo,RB.hi),hi=Math.max(RB.lo,RB.hi);return "from "+fmtRent(stepRent(lo))+" to "+(hi>=60?"500k and up":fmtRent(stepRent(hi)).replace("AED ",""))}
+function rbdText(){var a=Math.min(RB.blo,RB.bhi),b=Math.max(RB.blo,RB.bhi);return a===b?rbLabel(a):"from "+rbLabel(a)+" to "+rbLabel(b)}
+function rentMatches(){if(!RI||!RI.items)return [];var lo=stepRent(Math.min(RB.lo,RB.hi)),hi=Math.max(RB.lo,RB.hi)>=60?Infinity:stepRent(Math.max(RB.lo,RB.hi)),blo=Math.min(RB.blo,RB.bhi),bhi=Math.max(RB.blo,RB.bhi),out=[];
+  RI.items.forEach(function(it){var best=null;[["b","apt"],["v","villa"]].forEach(function(kk){if(RB.type!=="any"&&RB.type!==kk[1])return;var bs=it[kk[0]]||{};
+    Object.keys(bs).forEach(function(k){var b=+k,s=bs[k];if(b<blo||b>bhi||!s||s.n<RENT_MIN)return;var v=rentFig(s);if(v<lo||v>hi)return;if(!best||s.n>best.s.n)best={b:b,s:s,v:v,villa:kk[1]==="villa"}})});
+    if(best)out.push({r:it,b:best.b,s:best.s,v:best.v,villa:best.villa})});
+  out.sort(function(a,b){return (b.s.n-a.s.n)||(a.v-b.v)});return out}
+function rentNote(){var w=(RI&&RI.window)||[];return "Registered Ejari contracts"+(w.length?", "+rentDay(w[0])+" to "+rentDay(w[1]):"")+": what homes in these buildings actually rented for (median, and the middle half), NOT live availability. Bedrooms are inferred from each home\\u2019s size. The median is of new lettings where there are 3 or more, otherwise of all contracts."}
+function rentArea(d){var ar=null;((RI&&RI.areas)||[]).forEach(function(a){if(a.d===d&&(!ar||((a.b&&a.b["1"]&&a.b["1"].n)||0)>((ar.b&&ar.b["1"]&&ar.b["1"].n)||0)))ar=a});
+  if(!ar)return "";var parts=[];for(var b=Math.min(RB.blo,RB.bhi);b<=Math.max(RB.blo,RB.bhi);b++){var s=ar.b&&ar.b[b];if(s)parts.push(rbWord(b)+" "+fmtRent(rentFig(s))+" <small>("+s.n+" contracts)</small>")}
+  return parts.length?"<div class=rnote>all of "+esc(dName(d))+", named buildings or not: "+parts.join(" \\u00b7 ")+"</div>":""}
+function rentHref(r){return "/building/"+encodeURIComponent(r.d)+"/"+encodeURIComponent(r.i)+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")}
+function rentRow(x){var r=x.r,s=x.s;return esc(r.d?dName(r.d):r.area)+(r.a&&r.a.length?" \\u00b7 also filed as "+esc(r.a.slice(0,2).join(", "))+(r.a.length>2?" +"+(r.a.length-2):""):"")+" \\u00b7 "+s.n+" contracts ("+s.nn+" new) \\u00b7 "+Math.round(s.s)+" m\\u00b2 \\u00b7 latest "+rentDay(s.last)+(x.villa?" \\u00b7 villa":"")}
+function rentLabels(){RENT_HOSTS.forEach(function(h){var px=h.px,a=document.getElementById(px+"bv"),b=document.getElementById(px+"bdv");if(a)a.textContent=rbText();if(b)b.textContent=rbdText();
+  [["lo","lo"],["hi","hi"],["blo","blo"],["bhi","bhi"]].forEach(function(x){var el=document.getElementById(px+x[0]);if(el&&+el.value!==RB[x[1]])el.value=RB[x[1]]});
+  var bp=document.getElementById(px+"band"),bb=document.getElementById(px+"bandb");if(bp){var x=Math.min(RB.lo,RB.hi)/60*100,y=Math.max(RB.lo,RB.hi)/60*100;bp.style.left=x+"%";bp.style.width=(y-x)+"%"}if(bb){var c=Math.min(RB.blo,RB.bhi)/3*100,d=Math.max(RB.blo,RB.bhi)/3*100;bb.style.left=c+"%";bb.style.width=(d-c)+"%"}
+  h.host.querySelectorAll(".rbox button[data-rt]").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-rt")===RB.type)})})}
+function loadRent(){if(RB.load)return;RB.load=true;j("/img/rent_index?v="+Math.floor(Date.now()/600000)).then(function(r){RI=(r&&r.items)?r:{items:[],areas:[],err:true};if(RB.mode==="rent")drawRent()})}
+function rentClear(){var src=map&&map.getSource("homes");if(src)src.setData({type:"FeatureCollection",features:[]});if(window.__onHomes)try{window.__onHomes(null)}catch(e){}}
+function drawRent(){rentLabels();
+  if(!RB.on||RB.mode!=="rent"){rentClear();return}
+  if(!RI){RENT_HOSTS.forEach(function(h){h.show(null,"loading rents\\u2026")});loadRent();return}
+  if(RI.err){RENT_HOSTS.forEach(function(h){h.show(null,"rents not loaded yet")});return}
+  var m=rentMatches(),tw=[];m.forEach(function(x){var r=x.r;if(r.d==null)return;(r.is||(r.i!=null?[r.i]:[])).forEach(function(i){tw.push({it:{d:r.d,i:i,n:r.n,p:r.p},b:x.b,v:x.v,rent:true})})});
+  if(window.__onHomes)try{window.__onHomes(tw)}catch(e){}
+  var src=map&&map.getSource("homes"),pins=m.filter(function(x){return x.r.lon!=null&&(!window.__twinDistrict||x.r.d===window.__twinDistrict)});
+  if(src)src.setData({type:"FeatureCollection",features:pins.map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x.r.lon,x.r.lat]},properties:{p:x.r.p,lab:x.r.n+" \\u00b7 "+fmtRent(x.v)+"/yr"}}})});
+  RENT_HOSTS.forEach(function(h){h.show(m)})}
+function listRent(m,inD){var el=document.getElementById("panel");LISTK=null;var rows=m.slice(0,60);
+  el.innerHTML="<span class=px id=px>\\u2715</span><div class=pt>homes to rent</div><div class=ps>"+m.length+" buildings"+(inD?" in "+esc(dName(inD)):"")+" \\u00b7 "+esc(rbText())+" a year \\u00b7 "+esc(rbdText())+" bed</div><div class=rnote>"+esc(rentNote())+"</div>"+(inD?rentArea(inD):"")
+    +"<div class=near>"+rows.map(function(x,ix){var r=x.r,pg=r.d!=null&&r.i!=null;
+      return "<div class=\\"n1"+(pg?" nk":"")+"\\" data-ix=\\""+ix+"\\"><em style=\\"color:var(--gold)\\">\\u25CF</em><span>"+esc(r.n)+(pg?" <small style=\\"color:var(--gold)\\">\\u2197</small>":"")+" <small style=\\"color:var(--mut)\\">"+rentRow(x)+(pg?"":" \\u00b7 no building page yet")+"</small></span><s>"+rbWord(x.b)+" "+fmtRent(x.v)+"/yr<br><small>"+rentIqr(x.s)+"</small></s></div>"}).join("")+"</div>";
+  el.classList.add("on");document.getElementById("px").onclick=closePanel;
+  el.querySelectorAll(".nk").forEach(function(row){row.onclick=function(){var r=rows[+row.getAttribute("data-ix")].r;var w=window.open(rentHref(r),"_blank");if(!w)location.href=rentHref(r)}})}
+function setRentMode(md){if(md===RB.mode)return;
+  if(md==="rent"){RENT_HOSTS.forEach(function(h){if(h.enter)h.enter()});RB.mode="rent";RB.on=true}else{RB.mode="buy";RB.on=false;rentClear()}
+  RENT_HOSTS.forEach(function(h){h.host.classList.toggle("rent",md==="rent");h.sw.querySelectorAll("button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-m")===md)})});
+  if(md==="rent")drawRent();else RENT_HOSTS.forEach(function(h){if(h.leave)h.leave()})}
+function rentStyle(){if(document.getElementById("rentcss"))return;var st=document.createElement("style");st.id="rentcss";
+  st.textContent=".hmode{margin:8px 0 4px}.hmode button{flex:1}.rbox{display:none}.rent .rbox{display:block}.hp.rent .hbody>.hrow,.hp.rent .hbody>.hlive{display:none}#stkp.rent>:not(h4):not(.hmode):not(.rbox){display:none!important}.rnote{font-family:'IBM Plex Mono',monospace;font-size:.56rem;letter-spacing:.02em;color:var(--mut,#8FA39B);line-height:1.5;padding:4px 0 6px;text-transform:none}.rnote small{color:var(--mut,#8FA39B)}.rres a{display:block;padding:6px 0;border-top:1px solid rgba(143,163,155,.25);cursor:pointer;color:#E8E4D8;text-decoration:none;font-size:.72rem}.rres a small{display:block;color:#8FA39B;font-size:.56rem;line-height:1.4}.rres a b{color:#C5A56A;font-weight:500}";document.head.appendChild(st)}
+function rentMount(o){var host=o.host;if(!host)return null;rentStyle();var px=o.px||"r",where=o.body||host;
+  var sw=document.createElement("div");sw.className="seg hmode";sw.innerHTML="<button type=button class=on data-m=buy>buy</button><button type=button data-m=rent>rent</button>";
+  var bx=document.createElement("div");bx.className="rbox";bx.id=px+"box";bx.innerHTML="<div class=rnote>What homes actually rent for: registered Ejari contracts, not live availability. Bedrooms are inferred from size.</div>"
+    +"<div class=hrow><label>rent a year <b id="+px+"bv></b></label><div class=dual><i class=band id="+px+"band></i><input type=range id="+px+"lo min=0 max=60 autocomplete=off><input type=range id="+px+"hi min=0 max=60 autocomplete=off></div></div>"
+    +"<div class=hrow><label>bedrooms <b id="+px+"bdv></b></label><div class=dual><i class=band id="+px+"bandb></i><input type=range id="+px+"blo min=0 max=3 autocomplete=off><input type=range id="+px+"bhi min=0 max=3 autocomplete=off></div></div>"
+    +"<div class=hrow><label>home type</label><div class=seg><button class=on data-rt=any type=button>any</button><button data-rt=apt type=button>apartment</button><button data-rt=villa type=button>villa &amp; townhouse</button></div></div>"
+    +(o.list?"<div class=rres id="+px+"res></div>":"");
+  where.insertBefore(sw,o.first||where.firstChild);where.insertBefore(bx,o.before||null);
+  var h={host:host,px:px,sw:sw,box:bx,enter:o.enter,leave:o.leave,show:o.show||function(m,msg){var el=document.getElementById(px+"res");if(!el)return;
+    if(!m){el.innerHTML="<div class=rnote>"+esc(msg||"")+"</div>";return}var d=window.__twinDistrict||CURD,mm=d?m.filter(function(x){return x.r.d===d}):m;
+    el.innerHTML="<div class=rnote><b style=\\"color:#C5A56A;font-size:.8rem\\">"+mm.length+"</b> buildings"+(d?" here":"")+" \\u00b7 "+m.length+" across Dubai</div>"+(d?rentArea(d):"")
+      +mm.slice(0,12).map(function(x,ix){return "<a data-ix=\\""+ix+"\\"><b>"+rbWord(x.b)+" "+fmtRent(x.v)+"/yr</b> "+esc(x.r.n)+(x.r.i!=null?" \\u2197":"")+"<small>"+rentIqr(x.s)+" \\u00b7 "+rentRow(x)+"</small></a>"}).join("")
+      +"<div class=rnote>"+esc(rentNote())+"</div>";
+    el.querySelectorAll("a[data-ix]").forEach(function(a){var x=mm[+a.getAttribute("data-ix")];if(x&&x.r.d!=null&&x.r.i!=null)a.onclick=function(){(o.open||function(r){location.href=rentHref(r)})(x.r)}})}};
+  RENT_HOSTS.push(h);
+  sw.querySelectorAll("button").forEach(function(b){b.onclick=function(ev){if(ev)ev.stopPropagation();setRentMode(b.getAttribute("data-m"))}});
+  [["lo","lo"],["hi","hi"],["blo","blo"],["bhi","bhi"]].forEach(function(x){var el=document.getElementById(px+x[0]);el.value=RB[x[1]];el.oninput=function(){RB[x[1]]=+el.value;RB.on=true;drawRent()}});
+  bx.querySelectorAll("button[data-rt]").forEach(function(b){b.onclick=function(){RB.type=b.getAttribute("data-rt");RB.on=true;drawRent()}});
+  if(RB.mode==="rent"){host.classList.add("rent");sw.querySelectorAll("button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-m")==="rent")});if(o.enter)o.enter();drawRent()}else rentLabels();
+  return h}
+(window.__qnParts=window.__qnParts||[]).push(function(){if(RB.mode!=="rent"||!RB.on)return {};return {filters:{mode:"rent",budget:rbText()+" a year",bedrooms:rbdText(),home_type:({any:"any",apt:"apartment",villa:"villa and townhouse"})[RB.type]||RB.type}}});
+window.__rentMount=rentMount;window.__rent={state:RB,matches:rentMatches,draw:drawRent,mode:setRentMode,get index(){return RI},set index(v){RI=v}};
+(function(){var hp=document.getElementById("hp"),body=hp&&hp.querySelector(".hbody");if(!body)return;var st={hl:null,hr:null};
+  rentMount({host:hp,body:body,px:"r",before:body.querySelector(".hfoot"),
+    enter:function(){var hl=document.getElementById("hlist"),hr=document.getElementById("hres");st.hl=hl?hl.onclick:null;st.hr=hr?hr.textContent:null},
+    leave:function(){var hl=document.getElementById("hlist"),hr=document.getElementById("hres");if(hl)hl.onclick=st.hl||null;if(hr)hr.textContent=st.hr||"set a budget";if(HB.on)drawHomes()},
+    show:function(m,msg){var hr=document.getElementById("hres");if(!m){if(hr)hr.textContent=msg||"";return}
+      var dsl=window.__twinDistrict||CURD,here=dsl?m.filter(function(x){return x.r.d===dsl}).length:null;
+      if(hr)hr.textContent="to rent \\u00b7 "+(dsl?here+" here \\u00b7 "+m.length+" across Dubai":m.length+" buildings across Dubai");
+      var hl=document.getElementById("hlist");if(hl)hl.onclick=function(){var d=window.__twinDistrict||CURD;listRent(d?m.filter(function(x){return x.r.d===d}):m,d)}}});
+  var hh=document.getElementById("hh"),hhBuy=hh&&hh.onclick;if(hh)hh.onclick=function(ev){if(RB.mode!=="rent")return hhBuy&&hhBuy.call(this,ev);var open=!hp.classList.contains("on");if(open)window.__stackOpen(hp);hp.classList.toggle("on",open);if(open&&!RB.on){RB.on=true;drawRent()}};
+  var hc=document.getElementById("hclear"),hcBuy=hc&&hc.onclick;if(hc)hc.onclick=function(ev){if(RB.mode==="rent")setRentMode("buy");RB.lo=10;RB.hi=30;RB.blo=1;RB.bhi=2;RB.type="any";
+    var r=hcBuy&&hcBuy.call(this,ev);RENT_HOSTS.forEach(function(h){h.sw.querySelectorAll("button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-m")==="buy")})});rentLabels();return r}})();
+`;
 const MAP_CHROME_JS = ''
   + 'window.__stackOpen=function(p){if(innerWidth<=640)document.querySelectorAll(".hstack .hp.on").forEach(function(x){if(x!==p)x.classList.remove("on")})};'   // v152.2 - on a phone one panel of the stack is open at a time
   + 'var DEVN={omniyat:"OMNIYAT",hh:"H&H",meraas:"Meraas",select:"Select Group",ellington:"Ellington",arada:"Arada",zaya:"ZAYA",palma:"Palma",fakhruddin:"Fakhruddin",beyond:"BEYOND",imtiaz:"Imtiaz",iman:"Iman",emaar:"Emaar",sobha:"Sobha",prestigeone:"Prestige One"};function devName(k){return DEVN[k]||k}function bedWord(b){return b===0?"studio":bedsLabel(b)+"-bed"}'
@@ -7197,6 +7289,7 @@ const MAP_CHROME_JS = ''
   + '  el.innerHTML=\'<span class=px id=px>\u2715</span><div class=pt>\'+esc(it.n)+\'</div><div class=ps>\'+esc(dName(it.d))+(it.dev?" \u00b7 "+esc(devName(it.dev)):"")+(it.u?" \u00b7 "+it.u+" units":"")+(it.la?" \u00b7 "+it.la+" launched":"")+(it.la&&it.so!=null?" \u00b7 "+it.so+" sold in the register":"")+(it.left?" \u00b7 "+it.left+" left on the availability list":"")+\'</div><div class=ct style="margin-top:8px">\'+lines+\'<div><i>more</i><a href="/find?key=\'+encodeURIComponent(KEY)+\'&q=\'+encodeURIComponent(it.n)+\'">open in Find \u2192</a>\'+(it.d&&!window.__twinDistrict?\' <a href="/skyline/\'+encodeURIComponent(it.d)+\'?key=\'+encodeURIComponent(KEY)+(window.__RKQ||"")+\'">on the twin \u2192</a>\':\'\')+\'</div></div>\'+(vv?videoHtml(vv):"");'
   + '  el.classList.add("on");document.getElementById("px").onclick=closePanel;document.getElementById("hint").textContent=""},700)}'
   + HOMES_WIRE_JS   // v152.5 - the HOMES panel's controls, shared with the all-Dubai twin (each page brings its own drawHomes)
+  + HOMES_RENT_JS   // v274 - the Buy / Rent switch and the Rent mode (MAP chrome only: /map and the district twins)
   + 'var DN={};function dName(slug){if(!DN[slug]&&D){(D.districts||[]).forEach(function(d){DN[d.slug]=d.name})}return DN[slug]||slug}'
   + 'function qnorm(t){return String(t||"").toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g," ").trim()}'
   + 'function searchAll(q){q=qnorm(q);if(q.length<2)return [];var toks=q.split(" ").filter(Boolean);var hit=function(t){t=qnorm(t);return toks.every(function(w){return t.indexOf(w)>=0})};var out=[];'
@@ -10145,6 +10238,11 @@ function stkUI(){
   const stkx=document.getElementById("stkx");
   if(stkx)stkx.onclick=(e)=>{e.stopPropagation();STKON=false;btn.classList.remove("on");p.classList.remove("on")};
   STKON=true;p.classList.add("on");                                   // the filter IS the twin's homes control now: open from the start
+  // v274 - Buy / Rent on the twin's homes panel. The rent logic is the MAP chrome's (window.__rentMount, HOMES_RENT_JS); here is only
+  // what Rent does to the floor stack: it steps aside (STKON off) so the buildings the rent index matches light gold, and Buy brings it back.
+  if(window.__rentMount)window.__rentMount({host:p,px:"sr",list:true,first:document.getElementById("stkc"),before:document.getElementById("stkc"),
+    enter:()=>{STKON=false;btn.classList.remove("on");stkApply()},
+    leave:()=>{STKON=true;btn.classList.add("on");p.classList.add("on");stkApply()}});
   const t0=setInterval(()=>{if(stkMap()){clearInterval(t0);stkApply()}},400);setTimeout(()=>clearInterval(t0),90000);   // draw as soon as the model and the anchors are in
   stkCount();
   if(new URLSearchParams(location.search).get("floors")==="1")btn.click();   // a link can open the twin with the floors on
