@@ -4682,13 +4682,11 @@ function najStartHtml(key, rk) {
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>Start \u2014 Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS
     + '<style>' + NAJ_START_CSS + BRIEF_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
-    + '<div class=h>Six ways <em>in</em></div>'
-    + '<div class=s>Whatever the client opens with, one of these is the door. Each one is the whole path \u2014 follow it and the next question is already on the screen.</div>'
-    + briefStartCard(key, rk, najIcon("search"))   // THE BRIEF - "00 THEY TELL YOU WHAT THEY WANT": two buttons, RENT / BUY (v277), above the five angles (src/brief_page.js)
-    + NAJ_ANGLES.map((a) => najAngleCard(a, key, rk)).join("")
-    + '<div class=hd>THEY SAY \u2014 YOU TAP</div><div class=ch>'
-    + NAJ_CHEAT.map((c) => '<div class=q>' + esc3(c[0]) + '</div><div class=a>' + esc3(c[1]) + '</div>').join("")
-    + '</div>'
+    // v277.1 (Kendall, 1 Oct 2026): "the only thing I wanted was the way to search ... the rest of these need to go away, they are noise."
+    // START is the Brief alone; the five angles (NAJ_ANGLES) and the cheat sheet (NAJ_CHEAT) are no longer drawn. The Ejari
+    // contract search card joins here when that feature ships - no card before its page exists (no dead control).
+    + '<div class=h>Start</div>'
+    + briefStartCard(key, rk, najIcon("search"))   // THE BRIEF - RENT / BUY (src/brief_page.js)
     + '<div class=nt>Every figure in here is register-grounded \u2014 DLD, Ejari and the project register. If a number is not in the register it is not on the screen.</div>'
     + najNav(key, "start", rk) + '</body></html>';
 }

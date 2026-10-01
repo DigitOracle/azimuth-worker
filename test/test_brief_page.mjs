@@ -45,8 +45,8 @@ const scripts = (html) => [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>
 const startHtml = await (await call("/start?key=" + READ)).text();
 const angs = [...startHtml.matchAll(/class="?ang[ "][^>]*>[\s\S]*?<div class=tg>[\s\S]*?<b>(\d\d)<\/b>/g)].map((m) => m[1]);
 ok(angs[0] === "00", "S1 /start: the first way in is 00", angs.join(","));
-ok(angs.slice(1).join(",") === "01,02,03,04,05", "S2 the five angles follow, untouched and in their order", angs.join(","));
-ok(startHtml.indexOf("THEY TELL YOU WHAT THEY WANT") < startHtml.indexOf("THEY NAME A BUILDING"), "S3 00 sits above 01");
+ok(angs.length === 1, "S2 v277.1 (Kendall 1 Oct): the Brief is the only card on START - the five angles are gone", angs.join(","));
+ok(!startHtml.includes("THEY NAME A BUILDING") && !startHtml.includes("THEY SAY") && !startHtml.includes("Six ways"), "S3 no angle cards, no cheat sheet, no 'Six ways in'");
 ok(/href="\/brief\?mode=rent&amp;key=client_read_key_in_links_123"/.test(startHtml) && /href="\/brief\?mode=buy&amp;key=/.test(startHtml), "S4 the 00 card opens /brief for Rent and for Buy, with the key");
 const startClient = await (await call("/start?key=" + CLIENT)).text();
 ok(startClient.includes("THEY TELL YOU WHAT THEY WANT") && startClient.includes("key=" + CLIENT), "S5 the 00 card is on the client-key /start too, threading the client key");
