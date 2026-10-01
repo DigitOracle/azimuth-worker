@@ -4329,8 +4329,9 @@ async function appFetch(request, env, ctx) {
             return new Response("ok");
           }
           if (/^(?:feed|daily|today(?:'s)?\s+(?:feed|angles|posts?))\s*\??$/i.test(text)) {
-            await waSend(env, from, "☀️ Building this morning's three — a moment…");
-            await waSend(env, from, "Building today's set now. About a minute.");   // v128
+            // v283 (Naj, 1 Oct: "why only 3?"): the feed has been five angles since 19 Sep; the old "three" wording and the
+            // second, duplicate "building" line are gone - one message, the right number.
+            await waSend(env, from, "☀️ Building this morning's five — about a minute…");
             try { await dailyFeedTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the feed just now — try again shortly."); }
             return new Response("ok");
           }
