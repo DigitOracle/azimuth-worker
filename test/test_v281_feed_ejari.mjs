@@ -47,7 +47,7 @@ globalThis.fetch = async (u, o) => {
 };
 const READ = "owner_admin_key_never_in_client_links_0001", CLIENT = "client_link_key_v281_abcdef";
 const mkEnv = (store) => {
-  const KV = { async get(k, t) { if (!store.has(k)) return null; const v = store.get(k); return t === "json" ? JSON.parse(v) : t === "arrayBuffer" ? (typeof v === "string" ? null : v) : v; },
+  const KV = { async get(k, t) { if (!store.has(k)) return null; const v = store.get(k); return t === "json" ? JSON.parse(v) : t === "arrayBuffer" ? (typeof v === "string" ? new TextEncoder().encode(v).buffer : v) : v; },   // like real KV: text comes back as bytes
     async put(k, v) { store.set(k, v); }, async delete(k) { store.delete(k); },
     async list(o) { return { keys: [...store.keys()].filter((k) => !o || !o.prefix || k.startsWith(o.prefix)).map((name) => ({ name })), list_complete: true }; } };
   return { MEETINGS: KV, AI: { run: async () => ({ response: "{}" }) }, READ_KEY: READ, CLIENT_KEY: CLIENT, MARKET_BRIEF: "on", ANTHROPIC_API_KEY: "test-only-not-a-key",
