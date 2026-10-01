@@ -31,6 +31,8 @@
 // Every page script is a plain string with no template holes: test/test_v278_twin_blocks.mjs runs node --check on each as
 // served. Phone-first: Naj uses it on her phone.
 
+import { TAPCARD_JS, TAPCARD_DARK_JS } from "./tapcards.js";   // v280 - tap any building, get its card
+
 export const TB_ZOOM_BLOCKS = 12.8;   // blocks draw from here (the /map rail's fitBounds on a district lands around 13-14)
 export const TB_ZOOM_DETAIL = 17;     // zooming past this on /map hands over to the twin (a few blocks wide on a phone)
 export const TB_CITY_HANDOVER_M = 1700;   // the city of blocks hands over when the camera comes this close (its minDistance is 1500)
@@ -97,14 +99,14 @@ export async function tbHave(env, slug) {
 // ---- 1 + 2. the blocks layer on /map -------------------------------------------------------------------------------------------
 // Runs inside renderMapBasic's chrome scope (map arrives as window.__najmap2 once the basemap style is chosen; D = districts_geo
 // with each district's bbox; KEY = the page's key). window.__BLOCKS_HAVE lists the districts with blocks on file.
-export const MAP_BLOCKS_JS = String.raw`
+export const MAP_BLOCKS_JS = TAPCARD_JS + TAPCARD_DARK_JS + String.raw`
 /* v278 - blocks on the map: a district's blocks rise in place, the twin only on request */
 (function(){
 "use strict";
 var HAVE=window.__BLOCKS_HAVE||[];if(!HAVE.length)return;
 ` + SHARED_JS + String.raw`
 var ZB=` + TB_ZOOM_BLOCKS + String.raw`,ZD=` + TB_ZOOM_DETAIL + String.raw`,CTX="#E4E4DE",CTX_UNK="#EFEEE8";
-var ST={},mp=null,PITCHED=false,NAV=false,BTN=null;
+var ST={},mp=null,PITCHED=false,NAV=false,BTN=null,GEO={},TAP=0;   /* v280 - GEO[slug][i]: the footprint as drawn, for the tap card checksum */
 function dist(s){var DD=(typeof D!=="undefined"&&D&&D.districts)||[];for(var k=0;k<DD.length;k++)if(DD[k].slug===s)return DD[k];return null}
 function slugBox(s){var st=ST[s];if(st&&st.bbox)return st.bbox;var d=dist(s);return (d&&d.bbox)||null}
 function view(){var b=mp.getBounds();return [b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]}
@@ -123,17 +125,26 @@ function go(s,extra,c){if(NAV)return;NAV=true;var cam=camNow(c);if(cam.zoom<14.5
 function load(s){ST[s]={state:"loading",bbox:slugBox(s)};
   fetch("/img/blocks_"+s).then(function(r){return r.ok?r.json():null}).then(function(fc){
     if(!fc||!fc.features){ST[s]={state:"none"};return}
-    var feats=[],bb=[999,999,-999,-999];
-    fc.features.forEach(function(f){var p=f.properties||{};if(p.k!=="b"||!f.geometry)return;extend(bb,f.geometry);
+    var feats=[],bb=[999,999,-999,-999],G=GEO[s]={};
+    fc.features.forEach(function(f){var p=f.properties||{};if(p.k!=="b"||!f.geometry)return;extend(bb,f.geometry);G[p.i]={geom:f.geometry,n:p.n||"",h:p.h,hs:p.hs||"",a:p.a||""};
       feats.push({type:"Feature",id:p.i,properties:{i:p.i,h:p.h||12,u:unknownH(p.hs)?1:0,n:p.n||""},geometry:f.geometry})});
     ST[s]={state:"on",bbox:(fc.meta&&fc.meta.bbox)||bb,n:feats.length};
     if(!mp.getSource("tb-"+s)){mp.addSource("tb-"+s,{type:"geojson",data:{type:"FeatureCollection",features:feats}});
       var before=["sel-halo","sub-bub","plot-dot","home-dot","vid-dot"].filter(function(id){return mp.getLayer(id)})[0];
       mp.addLayer({id:"tb-"+s,type:"fill-extrusion",source:"tb-"+s,minzoom:ZB,paint:{"fill-extrusion-color":["case",["==",["get","u"],1],CTX_UNK,CTX],"fill-extrusion-height":["get","h"],"fill-extrusion-base":0,"fill-extrusion-opacity":1,"fill-extrusion-vertical-gradient":false}},before);
-      mp.on("click","tb-"+s,function(e){var f=e.features&&e.features[0];if(!f)return;var p=f.properties||{};go(s,p.i!=null?"&b="+encodeURIComponent(p.i):"",centroid(f.geometry))});
+      mp.on("click","tb-"+s,function(e){var f=e.features&&e.features[0];if(!f)return;var p=f.properties||{};TAP=Date.now();tapCard(s,p,f)});   /* v280 - a tap shows the building's card; the card carries the hand-over */
       mp.on("mouseenter","tb-"+s,function(){mp.getCanvas().style.cursor="pointer"});mp.on("mouseleave","tb-"+s,function(){mp.getCanvas().style.cursor=""});}
     oblique();tick();
   }).catch(function(){ST[s]={state:"none"}})}
+/* v280 - the tap card. Today's name + height at once, the register card when the district's tap cards are in; its button opens
+   the detailed twin at that building, as the tap used to. */
+function tapCard(s,p,f){var g=(GEO[s]||{})[p.i]||{geom:f.geometry,n:p.n,h:p.h,hs:""},TC=window.__tapcards,DK=window.__tcPanel;if(!TC||!DK)return;
+  var blk={n:g.n,h:g.h,hs:g.hs,a:g.a},my=TAP,c=centroid(g.geom);
+  var twin=function(){go(s,p.i!=null?"&b="+encodeURIComponent(p.i):"",c)};
+  var paint=function(m,page){DK.show(TC.html(m,{page:page?"/building/"+encodeURIComponent(s)+"/"+p.i+keyQ():"",extra:'<div class=tcb><button type=button class=tctw>Open the twin here</button></div>'}));
+    var b=DK.el().querySelector(".tctw");if(b)b.onclick=twin;window.__lastTapcard=m};
+  paint(TC.plain(blk),false);
+  TC.card(s,p.i,g.geom,blk,typeof KEY!=="undefined"?KEY:"").then(function(m){if(my!==TAP||m.kind==="fallback"){window.__lastTapcard=m;return}paint(m,m.page)}).catch(function(){})}
 function unload(s){try{if(mp.getLayer("tb-"+s))mp.removeLayer("tb-"+s);if(mp.getSource("tb-"+s))mp.removeSource("tb-"+s)}catch(e){}ST[s]={state:"idle",bbox:ST[s]&&ST[s].bbox}}
 // the first blocks in view tilt the map (a portrait phone a little more from above); zooming back out lays it flat again
 function oblique(){if(PITCHED||mp.getPitch()>=20)return;PITCHED=true;mp.easeTo({pitch:(innerWidth<560&&innerHeight>innerWidth)?50:55,duration:700})}
@@ -154,8 +165,9 @@ function button(){BTN=document.createElement("button");BTN.type="button";BTN.id=
   BTN.style.cssText="position:fixed;left:50%;bottom:calc(104px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:36;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(197,165,106,.75);background:rgba(12,20,19,.92);color:#C5A56A;font:600 .72rem/1 'IBM Plex Mono',monospace;letter-spacing:.06em;text-transform:uppercase;padding:9px 14px;border-radius:999px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.35);-webkit-tap-highlight-color:transparent";
   BTN.onclick=function(){var s=here();if(s)go(s,"")};document.body.appendChild(BTN)}
 function arm(){mp=window.__najmap2;if(!mp){setTimeout(arm,250);return}button();
+  mp.on("click",function(){if(Date.now()-TAP>300&&window.__tcPanel)window.__tcPanel.hide()});   /* v280 - a tap off the blocks puts the card away */
   mp.on("moveend",tick);mp.on("zoomend",tick);mp.on("load",function(){READY=true;tick()});if(mp.isStyleLoaded()||mp.loaded()){READY=true;tick()}}
-window.__tbMap={state:function(){return ST},tick:tick,go:go};
+window.__tbMap={state:function(){return ST},tick:tick,go:go,tap:tapCard};
 arm();
 })();
 `;
@@ -167,14 +179,14 @@ export function twinBlocksTag(cfg) {
   const c = { slug: tbSlug(cfg && cfg.slug), have: !!(cfg && cfg.have), key: (cfg && cfg.key) || "" };
   return '<script>window.__TWIN_BLOCKS_CFG__=' + jsonInScript(c) + ';' + TWIN_BLOCKS_JS + '<\/script>';
 }
-export const TWIN_BLOCKS_JS = String.raw`
+export const TWIN_BLOCKS_JS = TAPCARD_JS + TAPCARD_DARK_JS + String.raw`
 /* v278 - the twin opens with the district's blocks; the detailed tile replaces them as it arrives, the camera carried across */
 (function(){
 "use strict";
 var CFG=window.__TWIN_BLOCKS_CFG__||{};
 ` + SHARED_JS + String.raw`
 var CTX=0xE4E4DE,CTX_UNK=0xEFEEE8,GROUND=0x16211E;
-var S={state:CFG.have?"waiting":"off",group:null,ground:null,box:null,held:false,cam:null};
+var S={state:CFG.have?"waiting":"off",group:null,ground:null,box:null,held:false,cam:null,tap:0};
 function unknownH(hs){return hs==="unknown"||hs==="default12"}
 function rings(g){return g.type==="Polygon"?[g.coordinates[0]]:g.type==="MultiPolygon"?g.coordinates.map(function(p){return p[0]}):[]}
 // the blocks' own frame: metres east / south of the blocks' bounding-box centre in UTM 40 N (x east, y up, z south)
@@ -183,18 +195,28 @@ function frameOf(fc){var b=(fc.meta&&fc.meta.bbox)||null;if(!b){b=[999,999,-999,
 function toScene(F,lon,lat){var u=llToUtm40(lon,lat);return [u[0]-F.E0,F.N0-u[1]]}
 // one BufferGeometry for the whole district: flat-roofed prisms, walls with outward flat normals, a colour per building
 function build(THREE,fc,F){
-  var pos=[],nor=[],col=[],cg=new THREE.Color(CTX),cu=new THREE.Color(CTX_UNK),n=0;
+  var pos=[],nor=[],col=[],cg=new THREE.Color(CTX),cu=new THREE.Color(CTX_UNK),n=0,spans=[],byI={};   /* v280 - spans: [first vertex, end, i] per building, for the tap */
   function tri(a,b,c,nx,ny,nz,C){pos.push(a[0],a[1],a[2],b[0],b[1],b[2],c[0],c[1],c[2]);for(var k=0;k<3;k++){nor.push(nx,ny,nz);col.push(C.r,C.g,C.b)}}
-  fc.features.forEach(function(f){var p=f.properties||{};if(p.k!=="b"||!f.geometry)return;var h=Math.max(1,+p.h||12),C=unknownH(p.hs)?cu:cg;
+  fc.features.forEach(function(f){var p=f.properties||{};if(p.k!=="b"||!f.geometry)return;var h=Math.max(1,+p.h||12),C=unknownH(p.hs)?cu:cg,v0=pos.length/3;byI[p.i]=f;
     rings(f.geometry).forEach(function(r){var pts=[],cx=0,cz=0;for(var k=0;k<r.length-1;k++){var s=toScene(F,r[k][0],r[k][1]);pts.push(s);cx+=s[0];cz+=s[1]}
       var m=pts.length;if(m<3)return;cx/=m;cz/=m;
       for(var i=0;i<m;i++){var a=pts[i],b=pts[(i+1)%m],dx=b[0]-a[0],dz=b[1]-a[1],L=Math.sqrt(dx*dx+dz*dz);if(L<0.01)continue;
         var nx=dz/L,nz=-dx/L;if(nx*((a[0]+b[0])/2-cx)+nz*((a[1]+b[1])/2-cz)<0){nx=-nx;nz=-nz}
         tri([a[0],0,a[1]],[b[0],0,b[1]],[b[0],h,b[1]],nx,0,nz,C);tri([a[0],0,a[1]],[b[0],h,b[1]],[a[0],h,a[1]],nx,0,nz,C)}
       var shape=pts.map(function(q){return new THREE.Vector2(q[0],q[1])}),idx;try{idx=THREE.ShapeUtils.triangulateShape(shape,[])}catch(e){idx=[]}
-      idx.forEach(function(t){tri([pts[t[0]][0],h,pts[t[0]][1]],[pts[t[1]][0],h,pts[t[1]][1]],[pts[t[2]][0],h,pts[t[2]][1]],0,1,0,C)});n++})});
+      idx.forEach(function(t){tri([pts[t[0]][0],h,pts[t[0]][1]],[pts[t[1]][0],h,pts[t[1]][1]],[pts[t[2]][0],h,pts[t[2]][1]],0,1,0,C)});n++});
+    if(pos.length/3>v0)spans.push([v0,pos.length/3,p.i])});
   var g=new THREE.BufferGeometry();g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));g.setAttribute("normal",new THREE.Float32BufferAttribute(nor,3));g.setAttribute("color",new THREE.Float32BufferAttribute(col,3));
-  return {geom:g,n:n}}
+  return {geom:g,n:n,spans:spans,byI:byI}}
+/* v280 - which building a hit triangle belongs to (spans are in vertex order) */
+function spanOf(spans,v){var lo=0,hi=spans.length-1;while(lo<=hi){var m=(lo+hi)>>1;if(v<spans[m][0])hi=m-1;else if(v>=spans[m][1])lo=m+1;else return spans[m][2]}return null}
+function tapAt(o,x,y){if(S.state!=="blocks"||!S.mesh)return null;var THREE=o.THREE,ray=new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(x/innerWidth*2-1,-(y/innerHeight)*2+1),o.cam);var h=ray.intersectObject(S.mesh,false)[0];
+  return h&&h.faceIndex!=null?spanOf(S.spans,h.faceIndex*3):null}
+function tapCard(i){var f=S.byI&&S.byI[i],TC=window.__tapcards,DK=window.__tcPanel;if(!f||!TC||!DK)return;var p=f.properties||{},blk={n:p.n,h:p.h,hs:p.hs,a:p.a},my=++S.tap;
+  var paint=function(m,page){DK.show(TC.html(m,{page:page?"/building/"+CFG.slug+"/"+i+"?key="+encodeURIComponent(CFG.key||"")+(window.__RKQ||""):""}));window.__lastTapcard=m};
+  paint(TC.plain(blk),false);
+  TC.card(CFG.slug,i,f.geometry,blk,CFG.key||"").then(function(m){if(my!==S.tap||m.kind==="fallback"){window.__lastTapcard=m;return}paint(m,m.page)}).catch(function(){})}
 function pill(msg,t){if(!msg)return;msg.textContent=t;msg.style.cssText="position:fixed;inset:auto;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);display:block;padding:6px 12px;border-radius:999px;background:rgba(19,31,29,.9);border:1px solid rgba(197,165,106,.4);color:#C5A56A;font:12px 'IBM Plex Mono',monospace;letter-spacing:.04em;white-space:nowrap;pointer-events:none;z-index:9"}
 // the camera: from the URL (the spot she was looking at on the map), else from the south over the whole district like /blocks
 function place(o,F){var THREE=o.THREE,cam=o.cam,ctl=o.ctl,q=null;try{q=tbCamFromParams(new URLSearchParams(location.search))}catch(e){}
@@ -213,7 +235,12 @@ window.__twinBlocksMount=function(o){if(!CFG.have||!o||!o.THREE){S.state="off";r
     mesh.castShadow=true;mesh.receiveShadow=true;var group=new THREE.Group();group.name="tb_blocks";group.add(mesh);
     S.box=new THREE.Box3().setFromObject(group);var R=Math.max(S.box.max.x-S.box.min.x,S.box.max.z-S.box.min.z);
     var ground=new THREE.Mesh(new THREE.CircleGeometry(R*1.4,64),new THREE.MeshStandardMaterial({color:GROUND,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.set((S.box.min.x+S.box.max.x)/2,-0.3,(S.box.min.z+S.box.max.z)/2);ground.receiveShadow=true;group.add(ground);
-    o.scene.add(group);S.group=group;S.ground=ground;S.F=F;S.n=made.n;
+    o.scene.add(group);S.group=group;S.ground=ground;S.F=F;S.n=made.n;S.mesh=mesh;S.spans=made.spans;S.byI=made.byI;
+    /* v280 - a tap on a block (a tap, not a drag; on the model, not on the chrome) shows its card */
+    var pd=null,cv=o.ren&&o.ren.domElement;
+    addEventListener("pointerdown",function(e){pd=[e.clientX,e.clientY]});
+    addEventListener("pointerup",function(e){var d=pd;pd=null;if(!d||Math.hypot(e.clientX-d[0],e.clientY-d[1])>6||S.state!=="blocks")return;
+      if(cv&&e.target!==cv)return;var i=tapAt(o,e.clientX,e.clientY);if(i==null){if(window.__tcPanel)window.__tcPanel.hide();return}tapCard(i)});
     if(o.scene.fog){o.scene.fog.near=R*1.3;o.scene.fog.far=R*3.6}o.cam.far=Math.max(o.cam.far,R*8);o.cam.updateProjectionMatrix();
     place(o,F);pill(o.msg,made.n+" blocks · detail loading…");S.state="blocks";
   }).catch(function(e){S.state="off";S.err=String(e&&e.message||e)})};
@@ -227,6 +254,7 @@ window.__twinBlocks={
       S.group.parent.remove(S.group);S.group.traverse(function(m){if(m.geometry)m.geometry.dispose();if(m.material)m.material.dispose()})}
     S.state="handed";return held},
   holdsCamera:function(){return S.held},
+  tapAt:function(o,x,y){return tapAt(o,x,y)},tap:function(i){tapCard(i)},   /* v280 */
   state:function(){return S}};
 })();
 `;

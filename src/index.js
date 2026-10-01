@@ -10,6 +10,7 @@ import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: re
 import { briefApi } from "./brief.js";   // BRIEF (Contract A) - GET /brief_api, the ranked building search behind /brief
 import { blocksRoute } from "./blocks_page.js";   // BLOCKS (30 Sep 2026) - LOD 100 blocks view, /blocks; all its logic lives in blocks_page.js
 import { MAP_BLOCKS_JS, CITY_BLOCKS_JS, twinBlocksTag, tbHaveList, tbHave } from "./twin_blocks.js";   // v278 - blocks on /map and blocks-first twin; all its logic lives in twin_blocks.js
+import { tapcardsRoute } from "./tapcards.js";   // v280 - tap any building, get its card; the card logic lives in tapcards.js
 import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief_pdf documents and the /brief_blocks LOD 100 view (all logic in the module)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -3302,6 +3303,7 @@ async function appFetch(request, env, ctx) {
       // ---- BLOCKS (30 Sep 2026, Kendall) - /blocks, the LOD 100 view between the map and the twin. Client-key gated like /map; everything else is in src/blocks_page.js.
       { const _blk = await blocksRoute(request, env, url, { clientOk, clientResp }); if (_blk) return _blk; }
       // ---- /BLOCKS
+      { const _tcr = await tapcardsRoute(request, env, url, { clientOk }); if (_tcr) return _tcr; }   // v280 - /tapcards/pages: which footprints have a building page (tapcards.js)
       if (url.pathname === "/map") {                           // v50 — interactive community map (MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _sky64 = [];
@@ -11521,7 +11523,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/start", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status"];
+const CLIENT_PATHS = ["/start", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card)
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
