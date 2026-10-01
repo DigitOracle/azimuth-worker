@@ -13,6 +13,7 @@ import { blocksRoute } from "./blocks_page.js";   // BLOCKS (30 Sep 2026) - LOD 
 import { MAP_BLOCKS_JS, CITY_BLOCKS_JS, twinBlocksTag, tbHaveList, tbHave } from "./twin_blocks.js";   // v278 - blocks on /map and blocks-first twin; all its logic lives in twin_blocks.js
 import { tapcardsRoute } from "./tapcards.js";   // v280 - tap any building, get its card; the card logic lives in tapcards.js
 import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief_pdf documents and the /brief_blocks LOD 100 view (all logic in the module)
+import { feedEjariCard } from "./feed_ejari.js";   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -5869,7 +5870,7 @@ async function dailyFeedTick(env, force, dry) {
     if (!dry) { try { await gcTellOwner(env, "Naj's morning HELD" + (force ? "" : " (attempt " + (attempts + 1) + " of 2)") + ": nothing survived the checks" + (_gate.dropped.length ? " - the gate removed " + _gate.dropped.map(x => '"' + String(x.hook).slice(0, 60) + '" (' + x.why + ")").join("; ") : "") + ". Nothing was sent to her." + (!force && attempts + 1 < 2 ? " The :30 run will try a fresh set." : "")); } catch (e) {} }
     return dry ? "(dry run - nothing sent) no angle survived, even after the top-up and the gate. " + qa.note : undefined;
   }
-  if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + "[" + (a.family || "-") + "] " + a.hook + "\n   " + a.figure + " · " + a.source + (a.trend ? "\n   trend: " + a.trend : "") + (a.shot ? "\n   shot: " + a.shot : "")).join("\n") + "\n\nQA: " + qa.note + (qa.repaired.length ? " | repaired " + qa.repaired.join(",") : "") + " | before " + qa.before.join(",") + " | after " + qa.after.join(",");
+  if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + "[" + (a.family || "-") + "] " + a.hook + "\n   " + a.figure + " · " + a.source + (a.trend ? "\n   trend: " + a.trend : "") + (a.shot ? "\n   shot: " + a.shot : "")).join("\n") + "\n\nQA: " + qa.note + (qa.repaired.length ? " | repaired " + qa.repaired.join(",") : "") + " | before " + qa.before.join(",") + " | after " + qa.after.join(",") + "\n\n" + (await feedEjariStep(env, true));   // v281 - what the card would say
   // store as the drafting context (draftFromAngle reads this) + remember the hooks
   const briefTxt = angles.map((a, i) => "ANGLE " + (i + 1) + ": " + a.hook + "\nFigure: " + a.figure + " (" + a.source + ")\nBuyer: " + a.buyer).join("\n\n");
   await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: briefTxt, data, angles }), { expirationTtl: 3 * 86400 });
@@ -5910,6 +5911,10 @@ async function dailyFeedTick(env, force, dry) {
   }
   await _famWrite();
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", _rows);
+  // v281 - EJARI · WHAT MOVED: the card goes straight after the morning list and its picker, only on a morning that passed the gate
+  // and was delivered (a held or refused morning returned above, so the card never arrives on its own). Missing or stale data, a
+  // failed render or any error skips the card and leaves a line in the QA note; the rest of the chain carries on regardless.
+  try { qa.ejari = await feedEjariStep(env, false); qa.note += " | " + qa.ejari; await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
   try { await feedSceneOffer(env, angles); } catch (e) {}   // v188 - the offer; she taps to have them made
   if (radar && radar.items && radar.items.length && !force) {                                   // v88 - the radar is its own tap, never inside the feed
     try { await waSend(env, env.WA_ALLOWED, "🔥 *Trend radar* - " + radar.items.length + " things people are talking about today (" + Object.keys(radar.sources || {}).filter(k => radar.sources[k]).join(" · ") + "). Open it when you want it:\n" + (env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev") + "/trends?key=" + env.READ_KEY + "\n\nSay *trend 3* and I'll draft from item 3."); } catch (e) {}
@@ -6945,6 +6950,18 @@ async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size, opt
   const k = opts && opts.key ? opts.key + (size === "story" ? "_s" : "") : cardKey(ctxAt, n, size);   // v109 - a plate card keys by its plate, not the morning brief
   try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: pubOrigin(env, origin) + "/img/" + k, area: angleArea(angle, null), size }; } catch (e) {}
   const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me, opts && opts.credit, opts && opts.align && opts.align[size], opts && opts.wash);
+  const png = await renderCardPng(env, html, W, H);
+  if (!png || png.byteLength < 5000) {
+    if (!RENDER_LAST_ERR) RENDER_LAST_ERR = "png too small";
+    if (wantedBy) { try { await env.MEETINGS.put("angle_wanted_" + k, JSON.stringify({ to: wantedBy, n, at: Date.now(), size }), { expirationTtl: 6 * 3600 }); } catch (e) {} }   // the PC fallback delivers it
+    return null;
+  }
+  await env.MEETINGS.put("img_" + k, png, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + k, "image/png", { expirationTtl: 14 * 86400 });
+  return { key: k, url: pubOrigin(env, origin) + "/img/" + k, area, size };
+}
+// v281 - the card renderer, lifted out of renderAngleCard unchanged so the Ejari card goes through the same path as every scene card:
+// the REST API when CF_RENDER_TOKEN is set, else the Browser Rendering binding. Sets RENDER_LAST_ERR; returns the PNG or null.
+async function renderCardPng(env, html, W, H) {
   let png = null;
   try {
     if (env.CF_RENDER_TOKEN) {                                                                     // REST API (needs an API token)
@@ -6959,13 +6976,20 @@ async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size, opt
       RENDER_LAST_ERR = "no renderer on this Worker - rendered on the DigitAlchemy machine within ~5 min";
     }
   } catch (e) { RENDER_LAST_ERR = "render exception: " + String((e && e.message) || e).slice(0, 120); }
-  if (!png || png.byteLength < 5000) {
-    if (!RENDER_LAST_ERR) RENDER_LAST_ERR = "png too small";
-    if (wantedBy) { try { await env.MEETINGS.put("angle_wanted_" + k, JSON.stringify({ to: wantedBy, n, at: Date.now(), size }), { expirationTtl: 6 * 3600 }); } catch (e) {} }   // the PC fallback delivers it
-    return null;
-  }
-  await env.MEETINGS.put("img_" + k, png, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + k, "image/png", { expirationTtl: 14 * 86400 });
-  return { key: k, url: pubOrigin(env, origin) + "/img/" + k, area, size };
+  return png;
+}
+// v281 - EJARI · WHAT MOVED (Kendall, 1 Oct 2026). The morning's Ejari card, built in feed_ejari.js and handed the shared renderer,
+// the /img/ store and the WhatsApp image send. The caption's link carries the CLIENT link key or none (v239.1), never READ_KEY.
+// Returns the feed-log line; never throws.
+async function feedEjariStep(env, dry) {
+  try {
+    return await feedEjariCard(env, {
+      dry, origin: pubOrigin(env, ""), linkKey: clientLinkKey(env),
+      render: (html, W, H) => renderCardPng(env, html, W, H),
+      store: async (k, png) => { await env.MEETINGS.put("img_" + k, png, { expirationTtl: 14 * 86400 }); await env.MEETINGS.put("img_ct_" + k, "image/png", { expirationTtl: 14 * 86400 }); return pubOrigin(env, "") + "/img/" + k; },
+      send: (link, caption) => waSendImage(env, env.WA_ALLOWED, link, caption)
+    });
+  } catch (e) { return "Ejari card SKIPPED (error: " + String((e && e.message) || e).slice(0, 80) + ")"; }
 }
 
 // v59 — AREA POSTCARD: 1080×1080 post card — real satellite of the community, Fraunces
