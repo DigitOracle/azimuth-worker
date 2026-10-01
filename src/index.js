@@ -9,6 +9,7 @@ import { findItem as briefFindItem } from "./brief_docs.js";   // v277 - the bui
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
 import { briefApi } from "./brief.js";   // BRIEF (Contract A) - GET /brief_api, the ranked building search behind /brief
 import { blocksRoute } from "./blocks_page.js";   // BLOCKS (30 Sep 2026) - LOD 100 blocks view, /blocks; all its logic lives in blocks_page.js
+import { MAP_BLOCKS_JS, CITY_BLOCKS_JS, twinBlocksTag, tbHaveList, tbHave } from "./twin_blocks.js";   // v278 - blocks on /map and blocks-first twin; all its logic lives in twin_blocks.js
 import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief_pdf documents and the /brief_blocks LOD 100 view (all logic in the module)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -3291,7 +3292,8 @@ async function appFetch(request, env, ctx) {
         }
         _sk = _sk.replace(/[^a-z0-9]/gi, "").toLowerCase();
         const _an2 = _names[_sk] || TWIN_TILE_NAME[_sk] || _sk;
-        return clientResp(env, url, renderSkyline(_sk, _an2, url.searchParams.get("key") || "", _rail, _rkT), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, resHeaders(_rkT)) });
+        const _tbOn = await tbHave(env, _sk);   // v278 - a district with blocks on file opens blocks-first (twin_blocks.js)
+        return clientResp(env, url, renderSkyline(_sk, _an2, url.searchParams.get("key") || "", _rail, _rkT, _tbOn), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, resHeaders(_rkT)) });
       }
       if (url.pathname === "/studio") {                        // v61 — editorial card studio (MUST sit above the keyed catch-all dump below)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -3305,9 +3307,10 @@ async function appFetch(request, env, ctx) {
         let _sky64 = [];
         try { const _kl2 = await env.MEETINGS.list({ prefix: "img_sky_" }); _sky64 = _kl2.keys.map(k => k.name.slice(8)).filter(sl => !skyPartOf(sl)); } catch (e) {}
         const _rk = url.searchParams.get("legacy") === "1" ? "" : residentsKeyOf(env, url);   // v152.2 - the private residents panel under HOMES
+        const _blk64 = await tbHaveList(env);   // v278 - the districts whose blocks rise on the map (twin_blocks.js)
         return clientResp(env, url, url.searchParams.get("legacy") === "1"
           ? renderMap(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", env.WA_BOT_NUMBER || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET), await env.MEETINGS.get("mkt_prev"), _sky64, await env.MEETINGS.get("img_plots"))
-          : renderMapBasic(url.searchParams.get("key") || "", _rk), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, resHeaders(_rk)) });
+          : renderMapBasic(url.searchParams.get("key") || "", _rk, _blk64), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, resHeaders(_rk)) });
       }
       if (url.pathname.indexOf("/area/") === 0) {              // v50 — per-community deep dive (MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
@@ -7835,7 +7838,7 @@ canvas.addEventListener("pointerdown",()=>{res3Down=Date.now()});
 canvas.addEventListener("pointerup",ev=>{if(Date.now()-res3Down>260||!RES3.cb)return;const comm=res3Hit(ev);if(comm)RES3.cb.pick(comm)});
 // ===== v152.5 RESIDENTS on the all-Dubai ground - end =====
 `;
-function renderMapBasic(key, rk) {
+function renderMapBasic(key, rk, blocksHave) {   // v278 - blocksHave: the districts with blocks on file
   const K = JSON.stringify(key || "");
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">' + (rk ? RES_HEAD : '') + '<title>Najma — the map</title>'
   + '<link rel=preconnect href="https://fonts.googleapis.com"><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">'
@@ -7853,6 +7856,7 @@ function renderMapBasic(key, rk) {
   + 'var KEY=' + K + ';'
   + MAP_CHROME_JS
   + (rk ? 'var RK=' + JSON.stringify(rk) + ';' + RES_PANEL_JS : '')
+  + 'window.__BLOCKS_HAVE=' + JSON.stringify((blocksHave || []).filter((s) => /^[a-z0-9]{1,40}$/.test(s))) + ';' + MAP_BLOCKS_JS   // v278 - a district's blocks rise in place; the twin only on request
   + '})();<\/script></body></html>';
 }
 
@@ -9172,11 +9176,13 @@ function renderCity(key, rk) {
     + 'document.getElementById("hd").querySelector("p").textContent=D.n.toLocaleString("en")+" buildings \\u00b7 "+D.districts.length+" districts \\u00b7 tap a district";document.getElementById("ld").remove();',
     'const ray=new THREE.Raycaster();const m2=new THREE.Vector2();let hot=-1;const tip=document.getElementById("tip");',
     'function pick(ev){const rct=canvas.getBoundingClientRect();m2.x=((ev.clientX-rct.left)/rct.width)*2-1;m2.y=-((ev.clientY-rct.top)/rct.height)*2+1;ray.setFromCamera(m2,cam);const hit=ray.intersectObject(mesh,false)[0];return hit?di[hit.instanceId]:-1}',
-    'canvas.addEventListener("pointermove",ev=>{const ix=pick(ev);if(ix===hot)return;hot=ix;labels.forEach((l,i)=>l.e.classList.toggle("on",i===ix));if(ix>=0){const d=D.districts[ix];tip.style.display="block";tip.innerHTML="<b>"+d.name+"</b><s>"+d.buildings.toLocaleString("en")+" buildings \\u00b7 "+d.named.toLocaleString("en")+" named"+(d.tallest?" \\u00b7 tallest "+d.tallest+" "+d.tallest_m+" m":"")+"</s><a href=\\"/skyline/"+d.slug+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")+"\\">open the twin \\u2192</a>";ctl.autoRotate=false}else{tip.style.display="none"}});',
+    'function tipFor(ix){const d=D.districts[ix];return "<b>"+d.name+"</b><s>"+d.buildings.toLocaleString("en")+" buildings \\u00b7 "+d.named.toLocaleString("en")+" named"+(d.tallest?" \\u00b7 tallest "+d.tallest+" "+d.tallest_m+" m":"")+"</s><a href=\\"/skyline/"+d.slug+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")+"\\">open the twin \\u2192</a>"}',   // v278 - the tip, shared with the arrival after a search fly
+    'canvas.addEventListener("pointermove",ev=>{const ix=pick(ev);if(ix===hot)return;hot=ix;labels.forEach((l,i)=>l.e.classList.toggle("on",i===ix));if(ix>=0){tip.style.display="block";tip.innerHTML=tipFor(ix);ctl.autoRotate=false}else{tip.style.display="none"}});',
+    'if(window.__cityBlocksMount)window.__cityBlocksMount({D,cam,ctl,labels,tip,tipFor,KEY});',   // v278 - zooming right in hands over to the district twin, with the camera (twin_blocks.js)
     'let downAt=0;canvas.addEventListener("pointerdown",()=>{downAt=Date.now()});canvas.addEventListener("pointerup",ev=>{if(Date.now()-downAt>260)return;const ix=pick(ev);if(ix>=0)flyTo(ix,false)});',
     'let anim=null;function flyTo(ix,go){const d=D.districts[ix];const from={p:cam.position.clone(),t:ctl.target.clone()};const to={p:new THREE.Vector3(d.x+2600,2200,d.z+3200),t:new THREE.Vector3(d.x,0,d.z)};const t0=performance.now();ctl.autoRotate=false;anim={from,to,t0,ms:1600,go:go?d.slug:null,spin:!go}}',
     'window.__cityFilm={fly:(slug,ms)=>{const ix=D.districts.findIndex(d=>d.slug===slug);if(ix<0)return false;flyTo(ix,false);anim.ms=ms||2400;return true},orbit:(on)=>{ctl.autoRotate=!!on},open:(slug)=>{location.href="/skyline/"+slug+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"")},districts:()=>D.districts.map(d=>d.slug)};',
-    'function tick(){requestAnimationFrame(tick);if(anim){const k=Math.min(1,(performance.now()-anim.t0)/anim.ms),e=k<.5?2*k*k:-1+(4-2*k)*k;cam.position.lerpVectors(anim.from.p,anim.to.p,e);ctl.target.lerpVectors(anim.from.t,anim.to.t,e);if(k>=1){const go=anim.go,spin=anim.spin;anim=null;if(go)location.href="/skyline/"+go+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"");else if(spin)ctl.autoRotate=true}}ctl.update();',
+    'function tick(){requestAnimationFrame(tick);if(anim){const k=Math.min(1,(performance.now()-anim.t0)/anim.ms),e=k<.5?2*k*k:-1+(4-2*k)*k;cam.position.lerpVectors(anim.from.p,anim.to.p,e);ctl.target.lerpVectors(anim.from.t,anim.to.t,e);if(k>=1){const go=anim.go,spin=anim.spin;anim=null;if(go){if(window.__cityArrive)window.__cityArrive(go);ctl.autoRotate=true}else if(spin)ctl.autoRotate=true}}ctl.update();',   // v278 - a search fly arrives and STAYS (Kendall: no automatic jump into the twin); the tip carries the explicit link
     '  const w=innerWidth,h=innerHeight;const taken=[];const order=labels.map((l,i)=>i).sort((a,b)=>labels[b].d.buildings-labels[a].d.buildings);for(const i of order){const l=labels[i];const v=l.v.clone().project(cam);let vis=v.z<1&&Math.abs(v.x)<1.05&&Math.abs(v.y)<1.05;const px=(v.x+1)/2*w,py=(1-v.y)/2*h;if(vis){const bw=l.e.offsetWidth||90,bh=22;const r={x0:px-bw/2,x1:px+bw/2,y0:py-bh,y1:py};if(!l.e.classList.contains("on")&&taken.some(t=>r.x0<t.x1&&r.x1>t.x0&&r.y0<t.y1&&r.y1>t.y0))vis=false;else taken.push(r)}l.e.style.opacity=vis?"1":"0";if(vis){l.e.style.left=px+"px";l.e.style.top=py+"px"}}ren.render(scene,cam)}tick();',
     'addEventListener("resize",()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});',
     CITY_STACK_MODULE_JS,   // v152.5 - HOMES and COLOUR BY on the city
@@ -9190,12 +9196,13 @@ function renderCity(key, rk) {
     + '<div id=sb><input id=q type=search placeholder="search a district or corridor\u2026" autocomplete=off spellcheck=false><div id=sr></div><select id=sel><option value="">jump to a district\u2026</option></select></div><div id=tip></div>'
     + '<div id=leg>massing by district <i style="background:#C5A56A"></i>towers lighter <i style="background:#3E8A7E"></i>sea <i style="background:#8FC7B9"></i>creek, canal, lakes</div>'
     + '<div class=hstack id=hstack>' + HOMES_PANEL_HTML + (rk ? RES_PANEL_HTML : '') + CITY_COLOUR_HTML + '</div><div id=panel></div>'   // v152.5 - the same stack as MAP and the district twins
+    + '<script>' + CITY_BLOCKS_JS + '<\/script>'   // v278 - the city of blocks keeps you until you zoom right in (twin_blocks.js); sits before the chrome so chrome + module stay adjacent
     + '<script>(function(){var KEY=' + JSON.stringify(key || "") + ';' + CITY_CHROME_JS + (rk ? 'var RK=' + JSON.stringify(rk) + ';' + RES_PANEL_JS : '') + '})();<\/script>'
     + '<script type="module">' + js + '</script>' + najNav(key, "twin", rk) + '</body></html>';
 }
 
 
-function renderSkyline(slugName, areaName, key, rail, rk) {
+function renderSkyline(slugName, areaName, key, rail, rk, blocksOn) {   // v278 - blocksOn: open with the district's blocks first
   const _esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const _cur = (rail || []).find(r => r.s === slugName) || null;
   const _openC = _cur ? _cur.c : ((rail || [])[0] ? rail[0].c : "Coast");
@@ -9336,6 +9343,7 @@ ${MAP_CHROME_HTML.replace('<!--hstack-->', rk ? RES_PANEL_HTML : '').replace('__
 ${najNav(key, "twin", rk)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>window.__twinPending=true;window.__twinDistrict=${JSON.stringify(slugName)};(function(){var KEY=${JSON.stringify(key || "")};${MAP_CHROME_JS}${rk ? 'var RK=' + JSON.stringify(rk) + ';' + RES_PANEL_JS : ''}})();</script>
+${twinBlocksTag({ slug: slugName, have: !!blocksOn, key: key || "" })}
 <script type="module">
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -9389,6 +9397,7 @@ function renderFrame(){
   finalC.render();}
 const ctl=new OrbitControls(cam,ren.domElement);ctl.enableDamping=true;ctl.autoRotate=true;ctl.autoRotateSpeed=0.5;ctl.maxPolarAngle=Math.PI*0.49;window.__najView=()=>({x:ctl.target.x-cam.position.x,z:ctl.target.z-cam.position.z});
 addEventListener("pointerdown",()=>ctl.autoRotate=false,{once:true});
+if(window.__twinBlocksMount)window.__twinBlocksMount({THREE,scene,cam,ctl,ren,msg});   // v278 - blocks first, while the tile streams in (twin_blocks.js)
 const GROUPS={existing:{label:"existing",col:0x39434F,on:true,meshes:[]},construction:{label:"under construction",col:0x3E8A7E,on:true,meshes:[]},pipeline:{label:"pipeline",col:0xC5A56A,on:true,meshes:[]}};
 function classify(hex){const d=(a,b)=>{const c1=new THREE.Color(a),c2=new THREE.Color(b);return (c1.r-c2.r)**2+(c1.g-c2.g)**2+(c1.b-c2.b)**2};
 let best="existing",bd=1e9;for(const k in GROUPS){const dd=d(hex,GROUPS[k].col);if(dd<bd){bd=dd;best=k}}return best}
@@ -9431,13 +9440,14 @@ const onSky=g=>{
     o.castShadow=grp!=="pipeline";o.receiveShadow=true;if(grp==="pipeline")o.layers.enable(BLOOM);   // ghosts glow, they do not throw shadows
     o.userData.grp=grp;GROUPS[grp].meshes.push(o);}});
   scene.add(root);
+  const _tbHold=!!(window.__twinBlocks&&window.__twinBlocks.tileArrived(root,THREE,cam,ctl));   // v278 - the blocks go, the camera is carried across; true = keep her view, skip the arrival framing below
   ROOTREF=root;drawCtx();
   MESHES=[];root.traverse(o=>{if(o.isMesh)MESHES.push(o)});   // v74: export order = mesh index (per-building GLB), used by the anchors
   paintDevs();
   const ground=new THREE.Mesh(new THREE.CircleGeometry(Math.max(sz.x,sz.z)*1.4,64),new THREE.MeshStandardMaterial({color:0x16211E,roughness:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:8}));   // v97: the disc is a horizon skirt; push it behind anything drawn on top of it
   ground.rotation.x=-Math.PI/2;ground.position.y=box.min.y-c.y+0.1;ground.receiveShadow=true;scene.add(ground);
   GROUND=ground;drawGroundImagery();
-  const R=Math.max(sz.x,sz.z);{root.updateMatrixWorld(true);let tall=null,th=-1;const _b=new THREE.Box3();for(const m of MESHES){_b.setFromObject(m);const hh=_b.max.y-_b.min.y;if(hh>th){th=hh;tall=_b.getCenter(new THREE.Vector3())}}const tgt=tall?new THREE.Vector3(tall.x,Math.min(th*0.35,120),tall.z):new THREE.Vector3(0,sz.y*0.18,0);const dist=Math.max(R*0.42,th*2.4,280),ang=26*Math.PI/180;const dv=new THREE.Vector3(tgt.x,0,tgt.z);if(dv.length()<20)dv.set(0.7071,0,0.7071);dv.normalize();cam.position.set(tgt.x+dv.x*dist*Math.cos(ang),tgt.y+dist*Math.sin(ang),tgt.z+dv.z*dist*Math.cos(ang));ctl.target.copy(tgt);ctl.autoRotateSpeed=0.7}   // v104: arrive close and low on the tallest cluster, turning (DA-AUD-003 #8)
+  const R=Math.max(sz.x,sz.z);if(!_tbHold){root.updateMatrixWorld(true);let tall=null,th=-1;const _b=new THREE.Box3();for(const m of MESHES){_b.setFromObject(m);const hh=_b.max.y-_b.min.y;if(hh>th){th=hh;tall=_b.getCenter(new THREE.Vector3())}}const tgt=tall?new THREE.Vector3(tall.x,Math.min(th*0.35,120),tall.z):new THREE.Vector3(0,sz.y*0.18,0);const dist=Math.max(R*0.42,th*2.4,280),ang=26*Math.PI/180;const dv=new THREE.Vector3(tgt.x,0,tgt.z);if(dv.length()<20)dv.set(0.7071,0,0.7071);dv.normalize();cam.position.set(tgt.x+dv.x*dist*Math.cos(ang),tgt.y+dist*Math.sin(ang),tgt.z+dv.z*dist*Math.cos(ang));ctl.target.copy(tgt);ctl.autoRotateSpeed=0.7}   // v104: arrive close and low on the tallest cluster, turning (DA-AUD-003 #8)
   scene.fog.near=R*1.3;scene.fog.far=R*3.6;cam.far=Math.max(20000,R*8);cam.updateProjectionMatrix();
   sky.scale.setScalar(Math.min(cam.far*0.8,R*6));
   {const rad=sz.length()*0.52,d=new THREE.Vector3(1,1.2,0.6).normalize();sun.position.copy(d.multiplyScalar(rad*2.2));sun.target.position.set(0,0,0);   // shadow frustum hugs the model's bounding sphere
