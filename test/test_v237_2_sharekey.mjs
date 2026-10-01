@@ -59,7 +59,9 @@ const page = async (clientKey, withKey) => {
 // The route must actually render, or everything below passes vacuously.
 const owner = await page(CLIENT, READ);
 ok(owner.status === 200 && owner.html.includes("Windsor Manor"), "the building renders through the real route (no dossier in the store)");
-ok(!owner.html.includes("sheetm_") && !/"dossier":/.test(owner.html), "this building genuinely has no dossier - the case v237 was written for");
+// v277: every building page offers the NEW-style dossier (/brief_pdf, built from the unit-mix register), so "no dossier in the store"
+// means no pre-Brief PDF - and the page must not reach for /sheet/ at all
+ok(!owner.html.includes("sheetm_") && !owner.html.includes("/sheet/") && /"dossier":\{"key":"businessbay:6"/.test(owner.html), "no pre-Brief dossier in the store: the page offers the /brief_pdf dossier and never /sheet/");
 
 // 1. what a share would carry
 const shareKeyOf = (html) => { const m = html.match(/"shareKey"\s*:\s*"([^"]*)"/); return m ? m[1] : null; };

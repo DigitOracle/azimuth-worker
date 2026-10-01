@@ -272,6 +272,54 @@ export function estimateLeft({ BL, card, ten, c, bed }) {
 // the key a rent-index record is listed under (before the route's [a-z0-9_:-] clean-up, which estimateLeft's match ignores anyway)
 export const candidateKey = (it) => (it.i != null && it.d ? it.d + ":" + it.i : "dld:" + (it.p || nkey(it.n)));
 
+// ---- DEVELOPER AVAILABILITY (v277, Kendall 1 Oct 2026) ------------------------------------------------------------------------
+// The register "left" estimate stays in the API (estimated_left, above) but is no longer on the client face. In its place the
+// list row and the dossier's page 2 say what a DEVELOPER'S OWN SHEET says, where we hold one: the availability lists the
+// developers post to Naj's WhatsApp group, read by naj-market-pulse scripts/extract_avail.py and published by
+// build_avail_index.py as KV img_avail_index ({sheets:[{sheet, note, mapped, d}]}) and, per developer, img_drill_<d>.claimed
+// ({as_of, source, rooms, detail:[{p, completion, plan, as_of, units:[[unit, type, sqft, aed, view], ...], types:[{t, n, ...}]}]}).
+// A building matches a sheet project by NAME, exactly (nkey), against the record name and its "also filed as" names - never by
+// prefix (a prefix fronting several sheets names a family, not a building). The two sources are never mixed: a row carries the
+// developer figure OR nothing; the estimate is a separate field nothing on screen reads now.
+const bandOfType = (t) => {
+  const s = String(t == null ? "" : t).toLowerCase();
+  if (/office|retail|shop|warehouse|showroom|hotel/.test(s)) return null;                 // not a home
+  if (/studio/.test(s)) return 0;
+  const m = /(\d+)\s*(?:b\/?r|br|bed|bhk)/.exec(s);
+  return m ? Math.min(+m[1], 3) : null;
+};
+const bandFits = (band, bed) => band != null && (bed === "all" || (bed === 3 ? band >= 3 : band === bed));
+export async function loadDevAvail(env) {
+  const idx = await kvJson(env, "avail_index");
+  const sheets = (idx && Array.isArray(idx.sheets) ? idx.sheets : []).filter((s) => s && s.d);
+  const out = [];
+  await Promise.all(sheets.map(async (s) => {
+    const dk = String(s.d).replace(/[^a-z0-9]/g, "");
+    const drill = dk ? await kvJson(env, "drill_" + dk) : null;
+    const cl = drill && drill.claimed;
+    if (!cl || !Array.isArray(cl.detail) || !cl.detail.length) return;
+    const developer = String(cl.source || s.sheet || dk).replace(/\s+sheets?\b.*$/i, "").replace(/\s+\d{4}-\d{2}-\d{2}$/, "").trim() || dk;
+    out.push({ d: dk, developer, as_of: cl.as_of || null, auto: /auto-read/i.test(String(cl.source || "")), projects: cl.detail.filter((p) => p && p.p) });
+  }));
+  return out.sort((a, b) => a.developer.localeCompare(b.developer));
+}
+// bed: 0..3 or "all". Returns null where no developer sheet names this building; otherwise {developer, as_of, project, count,
+// units: [{unit, type, sqft, aed, view}] (unit rows of the band, when the sheet holds rows) or types: [{type, n}] (a type-level sheet)}.
+export function devAvailFor(avail, c, bed) {
+  if (!avail || !avail.length) return null;
+  const names = [c.name].concat(c.aliases || []).map(nkey).filter(Boolean);
+  if (!names.length) return null;
+  for (const dev of avail) for (const p of dev.projects) {
+    if (!names.includes(nkey(p.p))) continue;
+    const units = (p.units || []).filter((u) => Array.isArray(u) && bandFits(bandOfType(u[1]), bed))
+      .map((u) => ({ unit: String(u[0] == null ? "" : u[0]), type: String(u[1] == null ? "" : u[1]), sqft: isFinite(+u[2]) && +u[2] > 0 ? Math.round(+u[2]) : null, aed: isFinite(+u[3]) && +u[3] > 0 ? Math.round(+u[3]) : null, view: u[4] ? String(u[4]) : "" }));
+    const types = (p.types || []).filter((t) => t && bandFits(bandOfType(t.t), bed) && isFinite(+t.n) && +t.n > 0).map((t) => ({ type: String(t.t), n: +t.n, from_aed: isFinite(+t.from_aed) ? +t.from_aed : null }));
+    const count = units.length || types.reduce((a, t) => a + t.n, 0);
+    return { developer: dev.developer, as_of: p.as_of || dev.as_of || null, auto: !!dev.auto, project: String(p.p), count, units: units.length ? units : undefined, types: !units.length && types.length ? types : undefined };
+  }
+  return null;
+}
+
 // ---- the non-negotiables: a source or null --------------------------------------------------------------------------
 function mustsOf(c, card, brochure, AM) {
   const am = ((brochure && brochure.amenities) || []).join(" | ");
@@ -377,6 +425,7 @@ export async function briefApi(request, env, url, h) {
     c.brochure = k ? await kvJson(env, k.slice(4)) : null;
   }));
   const AM = await kvJson(env, "amenities");
+  const AV = await loadDevAvail(env);                                          // v277 - the developers' own sheets, where we hold them
   const tenancy = {};
   const bedsLeft = {};
   if (q.mode === "rent") await Promise.all([...new Set(cands.filter((c) => c.d).map((c) => c.d))].map(async (d) => {
@@ -400,6 +449,7 @@ export async function briefApi(request, env, url, h) {
     if (q.mode === "rent") {
       c.est = estimateLeft({ BL: c.d ? bedsLeft[c.d] : null, card, ten: c.d ? tenancy[c.d] : null, c, bed });
     }
+    c.avail = devAvailFor(AV, c, bed);                                         // v277 - null where no developer sheet names this building
     kept.push(c);
   }
   if (droppedByMust) notes.push(droppedByMust + " building" + (droppedByMust === 1 ? "" : "s") + " left out because a source says a non-negotiable is missing.");
@@ -432,8 +482,10 @@ export async function briefApi(request, env, url, h) {
       const e = c.est;
       if (e.withheld) r.estimated_left_withheld = e.withheld; else { r.estimated_left = e; r.estimate_as_of = e.as_at; }
     }
+    if (c.avail) r.developer_availability = c.avail;                           // v277 - the developer's own sheet; the ONLY availability the screen shows
     return r;
   });
+  if (results.some((r) => r.developer_availability)) notes.push("developer_availability is what the developer's own availability sheet, posted to the broker group, lists for this building on the sheet's date (count of this bedroom type, and the unit rows where the sheet holds them). It is the developer's claim, not register data, and it is never combined with estimated_left.");
   if (q.mode === "rent") notes.push("estimated_left is T minus R (flats of this type in the Land Department units list, less Ejari tenancies of this type running on the tenancy file's date), rounded to 10 and shown as {about, of} with estimate_as_of: an estimate, not a count, and never the number available. It is read from the beds-left register (KV img_beds_left_<district>, the full government tenancy register) where that is on file; otherwise it is given only where both are scoped to the one building and the district's tenancy coverage reaches " + Math.round(TENANCY_MIN_SHARE * 100) + "%, the gate the building page uses; otherwise it is omitted and estimated_left_withheld says why.");
   if (results.some((r) => r.record_name && r.record_name.agrees === "part")) notes.push("record_name.agrees = \"part\": the app's building record carries the register name plus a tower or phase suffix (e.g. Bloom Towers -> Bloom Towers B). The evidence may cover the whole project; check before the record's name goes on a client document.");
   notes.push("Ranking: within the budget first (typical figure at or above the minimum and at or below the maximum), then a little above (up to " + Math.round(LITTLE_OVER * 100) + "% over), then the rest - below (listed down to " + Math.round(BELOW_FLOOR * 100) + "% under) and above (listed up to " + Math.round(ABOVE_CAP * 100) + "% over); inside each group, most evidence first, then the most complete record. Fewer than " + EVIDENCE_MIN + " contracts or sales: left out.");

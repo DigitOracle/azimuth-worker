@@ -300,5 +300,35 @@ else {
   setAll();
 }
 
+// ---- v277: developer_availability - the developer's own sheet, by exact name, never mixed with the estimate -------------------
+{
+  setAll();
+  store.set("img_beds_left_" + JVC, JSON.stringify(BEDS_LEFT));
+  store.set("img_avail_index", JSON.stringify({ updated: "2026-09-30", sheets: [{ sheet: "Binghatti 2026-09-08", note: "40 units · 3 projects", mapped: true, d: "binghatti" }, { sheet: "Brochure Only 2026-09-01", note: "", mapped: false, d: null }] }));
+  store.set("img_drill_binghatti", JSON.stringify({ title: "Binghatti (all projects)", claimed: { as_of: "2026-09-08", source: "Binghatti sheets", rooms: [{ r: "1 B/R", n: 3 }], detail: [
+    { p: "Binghatti Nova", as_of: "2026-09-08", units: [["BN-1203", "1 B/R", 741.1, 1250000, "Pool"], ["BN-1403", "1 B/R", 741.1, 1262000, ""], ["BN-0801", "2 B/R", 1100, 1900000, ""], ["BN-OF1", "Office", 900, 1500000, ""]] },
+    { p: "Binghatti Nova Tower 2", as_of: "2026-09-08", units: [["X-1", "1 B/R", 700, 1000000, ""]] },   // a prefix fronting another name is NOT this building
+    { p: "Bloom", as_of: "2026-09-08", types: [{ t: "Smart Flexi 1 BR", n: 12, from_aed: 999000 }, { t: "Smart Studio", n: 5, from_aed: 700000 }] },   // the rent index's "Bloom Towers": nkey strips "towers", so the names agree
+  ] } }));
+  const { j } = await brief("mode=rent&beds=1&min=60000&max=68000&areas=" + JVC + "&limit=10");
+  const by = Object.fromEntries((j.results || []).map(r => [r.name, r]));
+  const nv = by["Binghatti Nova"];
+  ok(nv && nv.developer_availability && nv.developer_availability.developer === "Binghatti" && nv.developer_availability.as_of === "2026-09-08" && nv.developer_availability.count === 2,
+    "Binghatti Nova carries the developer's sheet: Binghatti, 2026-09-08, 2 one-bedrooms (the 2-bed and the office rows are not counted)", JSON.stringify(nv && nv.developer_availability));
+  ok(nv && nv.developer_availability.units.length === 2 && nv.developer_availability.units[0].unit === "BN-1203" && nv.developer_availability.units[0].aed === 1250000 && nv.developer_availability.units[0].sqft === 741, "with the unit rows of that type");
+  ok(nv && nv.estimated_left && nv.estimated_left.about === 140, "and the register estimate is STILL in the JSON beside it (nothing on screen reads it now)");
+  const bt = by["Bloom Towers"];
+  ok(bt && bt.developer_availability && bt.developer_availability.count === 12 && bt.developer_availability.types && bt.developer_availability.types[0].type === "Smart Flexi 1 BR" && !bt.developer_availability.units, "a type-level sheet (counts per type, no unit rows) gives the count of the band as types", JSON.stringify(bt && bt.developer_availability));
+  ok((j.results || []).filter(r => r.developer_availability).length === 2 && !by["Binghatti Amber"].developer_availability && !by["BLOOM HEIGHTS"].developer_availability, "no other row carries one - a sheet project named 'Binghatti Nova Tower 2' does not reach Binghatti Nova, and a building no sheet names gets nothing");
+  ok(j.notes.some(n => /developer_availability/.test(n) && /never combined with estimated_left/.test(n)), "the notes say what it is and that the two are never mixed");
+  const { j: j2 } = await brief("mode=rent&beds=2&min=80000&max=95000&areas=" + JVC + "&limit=10");
+  const nv2 = (j2.results || []).find(r => r.name === "Binghatti Nova");
+  ok(nv2 && nv2.developer_availability && nv2.developer_availability.count === 1 && nv2.developer_availability.units[0].unit === "BN-0801", "for two bedrooms the same sheet gives the 2-bed row only");
+  store.delete("img_avail_index"); store.delete("img_drill_binghatti");
+  const { j: j3 } = await brief("mode=rent&beds=1&min=60000&max=68000&areas=" + JVC + "&limit=10");
+  ok((j3.results || []).every(r => !("developer_availability" in r)), "without a sheet on file no row carries the field");
+  setAll();
+}
+
 console.log((fail ? "FAIL" : "PASS") + " - brief api: " + pass + " ok, " + fail + " failed");
 process.exit(fail ? 1 : 0);

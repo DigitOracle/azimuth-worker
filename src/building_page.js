@@ -277,6 +277,13 @@ function plansFor(index, name, project, developer, propertyId) {
 // ---- the page ------------------------------------------------------------------------------------------------------------------
 export function buildingPageHtml(D, key, rk) {
   const K = encodeURIComponent(key || "");
+  const RKQ = rk ? "&rk=" + encodeURIComponent(rk) : "";
+  // v277 (Kendall, 1 Oct 2026) - "how do I get to the blocks?": this building gold on its plot in the LOD 100 view, key carried
+  D.blocksUrl = "/blocks?district=" + encodeURIComponent(D.slug) + "&gold=" + encodeURIComponent(D.id) + "&key=" + K + RKQ;
+  // v277 - the dossier is the NEW-style document (/brief_pdf, src/brief_docs.js), every bedroom type until the panel narrows it;
+  // the page's own script rebuilds this href as the chips change (dossierUrl). /sheet/<slug>.pdf is for old links only.
+  const dossierKey = D.dossier && D.dossier.key ? D.dossier.key : D.slug + ":" + D.id;
+  D.dossierUrl = "/brief_pdf?kind=dossier&keys=" + encodeURIComponent(dossierKey) + "&mode=rent&beds=all&key=" + K;
   const chips = CHIPS.filter((c) => D.register.some((t) => t.c === c[0]));
   const uses = USES.filter((c) => D.floors.some((f) => f.u === c[0]));
   const back = "/skyline/" + encodeURIComponent(D.slug) + "?key=" + K + "&b=" + encodeURIComponent(D.id) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
@@ -319,8 +326,7 @@ export function buildingPageHtml(D, key, rk) {
           (g.k ? " · " + g.k + " homes" : " · " + esc({ homes: "homes", office: "offices", retail: "retail", hotel: "hotel", services: "services and parking" }[g.u] || g.u)) +
           "</option>").join("") + "</select>" : "") +
       (D.plans ? '<button id=plansbtn>The plans · ' + D.plans.plans.length + "</button>" : "") +
-      (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="/sheet/' + esc(D.dossier.slug) + ".pdf?key=" + K +
-        '">The dossier · PDF' + (D.dossier.pages ? " · " + D.dossier.pages + "pp" : "") + "</a>" : "") +
+      (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="' + esc(D.dossierUrl) + '">The dossier · PDF</a>' : "") +
       (D.let_ && D.let_.live ? '<div class=grp>Homes let</div>' +
         '<div class=letn><b>At least ' + fmt(D.let_.live) + '</b> ' + (D.let_.live === 1 ? "home" : "homes") +
         (D.let_.project ? ' across the ' + D.let_.buildings + ' buildings of ' + esc(D.let_.project) : " here") +
@@ -644,7 +650,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     $("count").innerHTML = "<b>" + n + "</b> floor" + (n === 1 ? "" : "s") + (homes ? "<small>" + homes.toLocaleString("en") + " homes on them</small>" :
       "<small>of " + floors.length + " in the building</small>");
   }
-  document.querySelectorAll("[data-t]").forEach((b) => { b.onclick = () => { const k = b.dataset.t; state.on.has(k) ? state.on.delete(k) : state.on.add(k); b.classList.toggle("off", !state.on.has(k)); hideLabel(); paint(); }; });
+  document.querySelectorAll("[data-t]").forEach((b) => { b.onclick = () => { const k = b.dataset.t; state.on.has(k) ? state.on.delete(k) : state.on.add(k); b.classList.toggle("off", !state.on.has(k)); hideLabel(); paint(); syncDoss(); }; });
   document.querySelectorAll("[data-u]").forEach((b) => { b.classList.add("off"); b.onclick = () => { const k = b.dataset.u; state.use.has(k) ? state.use.delete(k) : state.use.add(k); b.classList.toggle("off", !state.use.has(k)); hideLabel(); paint(); }; });
   const lo = $("lo"), hi = $("hi");
   [lo, hi].forEach((e) => { e.min = 0; e.max = smax; e.step = 25; });
@@ -682,6 +688,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     const none = state.on.size === 0 && state.use.size === 0;
     state.on.clear(); state.use.clear();
     if (none) D.register.forEach((t) => state.on.add(t.c));
+    syncDoss();
     document.querySelectorAll("[data-t]").forEach((b) => b.classList.toggle("off", !state.on.has(b.dataset.t)));
     document.querySelectorAll("[data-u]").forEach((b) => b.classList.toggle("off", !state.use.has(b.dataset.u)));
     hideLabel(); paint();
@@ -782,7 +789,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
       }).join("") + "</div>";
       host.querySelectorAll("[data-dt]").forEach((el) => {
         const r = rows[+el.dataset.dt];
-        el.onclick = () => { state.on = new Set([r.c]); state.use = new Set();
+        el.onclick = () => { state.on = new Set([r.c]); state.use = new Set(); syncDoss();
           document.querySelectorAll("[data-t]").forEach((b) => b.classList.toggle("off", b.dataset.t !== r.c));
           document.querySelectorAll("[data-u]").forEach((b) => b.classList.add("off"));
           hideLabel(); paint(); drawSold(r); };
@@ -1016,12 +1023,27 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
 
   // The dossier and the four ways to hand it over. Share links carry the CLIENT key the worker passed down, never the key
   // that opened this page - the owner browses with his own and must not post it into WhatsApp.
+  // v277 - the NEW-style dossier: GET /brief_pdf?kind=dossier (src/brief_docs.js), for the bedroom type the panel has narrowed to,
+  // or every type (beds=all) when none or several are chosen. Buy-mode documents are not built yet, so mode is rent (the page has
+  // no Buy / Rent switch of its own; when one lands, read it here). Never the old sheet route, the pre-Brief document.
+  function bedsChoice() {
+    const on = [...state.on].filter((c) => c === "studio" || /^\d+$/.test(c));
+    if (on.length !== 1) return "all";
+    return on[0] === "studio" ? "studio" : +on[0] >= 3 ? "3" : on[0];
+  }
   function dossierUrl(share) {
     // KEY, not K: this runs in the browser, where the key arrives as view()'s KEY parameter. K is the server's own
     // constant in buildingPageHtml and does not exist here - it threw ReferenceError on every click, for every
     // building that had a dossier, from v220 until 22 Sep 2026.
     const k = share ? (D.shareKey || "") : KEY;
-    return location.origin + "/sheet/" + encodeURIComponent(D.dossier.slug) + ".pdf" + (k ? "?key=" + encodeURIComponent(k) : "");
+    return location.origin + "/brief_pdf?kind=dossier&keys=" + encodeURIComponent(D.dossier.key || (D.slug + ":" + D.id)) + "&mode=rent&beds=" + bedsChoice() + (k ? "&key=" + encodeURIComponent(k) : "");
+  }
+  // the panel's dossier button and the open card's Download follow the chips
+  function syncDoss() {
+    if (!D.dossier) return;
+    const b = $("dossbtn"); if (b) b.href = dossierUrl(false);
+    const d = $("ddl"); if (d) d.href = dossierUrl(false);
+    wireDossier();
   }
   // v237 - the page itself, with the client key. Built from location, so it is right for every building
   // route without this file knowing any of them.
@@ -1035,12 +1057,11 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
   // v237 - always drawn. It used to live inside `if (D.dossier)`, so a building with no dossier - most of
   // Dubai - offered no way to hand it over at all.
   function dossierBlock() {
-    const pp = D.dossier && D.dossier.pages ? " \u00b7 " + D.dossier.pages + " pages" : "";
     const can = !!D.shareKey;
-    const what = D.dossier ? "everything on this page as a PDF" + pp : "this building, as a link that opens for them";
+    const what = D.dossier ? "three pages: the building, where it is, the layouts" + (D.dossier.in_index ? ", with what it lets for" : "") : "this building, as a link that opens for them";
     return '<div class=dossier><div class=dh><b>' + (D.dossier ? "The dossier" : "Send this building") + "</b><span>" + what + "</span></div>" +
       '<div class=dacts>' +
-      (D.dossier ? '<a class=da target=_blank rel=noopener href="' + esc(dossierUrl(false)) + '" download>Download</a>' : "") +
+      (D.dossier ? '<a class=da id=ddl target=_blank rel=noopener href="' + esc(dossierUrl(false)) + '">Download</a>' : "") +
       (can ? '<a class=da id=dwa>WhatsApp</a><a class=da id=dmail>Email</a><a class=da id=dshare hidden>Share\u2026</a><a class=da id=dcopy>Copy link</a><a class=da id=dqr>QR code</a>' :
         '<span class=dnote>sharing needs a client key on this worker</span>') + "</div></div>";
   }
@@ -1107,6 +1128,8 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     const s = D.sales || {};
     open_('<div class=t>' + esc(D.district) + "</div><h2>" + esc(D.name) + "</h2>" +
       (D.grade ? '<span class="pill n">' + esc(String(D.grade).toLowerCase().replace(/_/g, " ")) + "</span>" : "") +
+      // v277 - the way to the blocks: this building gold on its plot among its neighbours (Kendall, 1 Oct 2026)
+      (D.blocksUrl ? '<div class=dacts style="margin:6px 0 2px"><a class=da id=blocksbtn href="' + esc(D.blocksUrl) + '">⬚ Blocks — on its plot</a></div>' : "") +
       // the whole building as one document, to keep or to send: at the top of the card about this building
       (D.unnamed ? '<div class=src><b>The registers hold no name for this footprint.</b> It is identified by its place ' +
         'and its plot, not by a name, which is normal for the majority of Dubai buildings outside the named schemes.</div>' : "") +

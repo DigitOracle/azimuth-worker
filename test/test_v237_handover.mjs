@@ -39,8 +39,9 @@ ok(/D\.dossier \? "The dossier" : "Send this building"/.test(FILE),
   "with a PDF it reads The dossier, without one it reads Send this building");
 
 // 2. inside the row, the parts that really do depend on a PDF
-ok(/\(D\.dossier \? '<a class=da target=_blank rel=noopener href="' \+ esc\(dossierUrl\(false\)\) \+ '" download>Download<\/a>' : ""\)/.test(FILE),
-  "Download is drawn only where a PDF was actually built");
+// v277: the Download is the NEW-style /brief_pdf dossier (id=ddl so the chips can re-point it); still drawn only with D.dossier
+ok(/\(D\.dossier \? '<a class=da id=ddl target=_blank rel=noopener href="' \+ esc\(dossierUrl\(false\)\) \+ '">Download<\/a>' : ""\)/.test(FILE),
+  "Download is drawn only where a dossier can be built");
 ok(/id=dwa[\s\S]{0,160}id=dmail[\s\S]{0,160}id=dshare[\s\S]{0,160}id=dcopy[\s\S]{0,160}id=dqr/.test(FILE),
   "WhatsApp, Email, the phone's share sheet, Copy link and QR are all in the row (\"message other chats\")");
 ok(FILE.includes("'<span class=dnote>sharing needs a client key on this worker</span>'"),

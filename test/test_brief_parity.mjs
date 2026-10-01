@@ -1,15 +1,17 @@
-// THE BRIEF - the "one-bedrooms left" estimate is IDENTICAL on the /brief list (GET /brief_api, src/brief.js) and in the documents
-// (GET /brief_pdf, src/brief_docs.js). Kendall, 30 Sep 2026: the list reads the beds-left register (img_beds_left_<district>) first; the
-// PDFs had re-implemented only the old gated tenancy path, so every JVC PDF said "No estimate yet" while the list showed figures.
-// Both now call estimateLeft() in src/brief.js. This test proves it on REAL data:
-//   KV = the real rent index, districts, JVC unit-mix and tenancy files (naj-market-pulse data/board) + the REAL register file
-//   data/dld/beds_left/beds_left_jumeirahvillagecircle.json as img_beds_left_jumeirahvillagecircle.
-//   1. the ten JVC buildings /brief_api lists for "1-bed, AED 60-68K" (the reference question): each dossier's page-2 box prints exactly the /brief_api row's
-//      {about, of} (Binghatti Amber jumeirahvillagecircle:1503 "about 380" of 502; Binghatti Nova "about 140" of 178), or - where the row
-//      withholds - "No estimate yet for this building"
-//   2. the one-sheet card carries "Still filling" exactly where there is an estimate AND T - R > T / 2 (T=100, R=60: no line)
-//   3. a building genuinely not in the register: the list withholds and the PDF says "No estimate yet for this building"
-// NEGATIVE CONTROL (run by hand, see the commit message): make brief_docs.js compute its own estimate again and this file fails.
+// THE BRIEF - parity between the /brief list (GET /brief_api, src/brief.js) and the documents (GET /brief_pdf, src/brief_docs.js),
+// on REAL data: the real rent index, districts, JVC unit-mix and tenancy files (naj-market-pulse data/board) + the REAL register file
+// data/dld/beds_left/beds_left_jumeirahvillagecircle.json as img_beds_left_jumeirahvillagecircle.
+//
+// v277 (Kendall, 1 Oct 2026): the register "left" estimate is OFF THE CLIENT FACE. Kendall found "Still filling: most of its 1-beds have
+// no running tenancy on the government register" unhelpful. So parity now means:
+//   1. the API STILL returns estimated_left for the ten JVC buildings (estimateLeft() in src/brief.js is kept, the data code untouched:
+//      Binghatti Amber about 380 of 502, Binghatti Nova about 140 of 178, as before)
+//   2. NONE of it reaches a document: no ESTIMATED ONE-BEDROOMS LEFT box on any dossier's page 2, no "Still filling" on any one-sheet
+//      card, no "an estimate, not a count", no T/R figures - for every one of the ten, with the register ON FILE
+//   3. where a developer's own sheet names a building, the list row and the dossier's page 2 carry the SAME developer availability
+//      (developer, date, count), and no other row or page carries anything
+// NEGATIVE CONTROL (run by hand, see the commit message): put the "Still filling" line back in oneSheetCards (src/brief_docs.js) and this
+// file fails on check 2.
 //
 //   node test/test_brief_parity.mjs      (skips, passing, when the naj-market-pulse data is not on this machine; set NAJ_DATA)
 import worker from "../src/index.js";
@@ -48,62 +50,50 @@ const call = (p) => worker.fetch(new Request(ORIGIN + p), env, { waitUntil() {} 
 const Q = "mode=rent&beds=1&min=60000&max=68000";   // the reference question of test_brief_api.mjs (Binghatti Amber ranks first)
 const api = async (qs) => (await call("/brief_api?" + qs + "&key=" + CLIENT)).json();
 async function pdfHtml(qs) { printed = []; const r = await call("/brief_pdf?" + qs + "&" + Q + "&key=" + CLIENT); return { status: r.status, html: printed[0] || "" }; }
-const box = (h) => { const m = /<div class="leftbox"[\s\S]*?<\/div><\/div>/.exec(h); return m ? m[0] : ""; };
-const boxSays = (b) => { const m = /about (\d+)<\/span><span[^>]*>of (\d+) one-bedroom flats/.exec(b); return m ? [+m[1], +m[2]] : /No estimate yet for this building/.test(b) ? "none" : "?"; };
+// anything of the old estimate: the box, its label, its wording, the card line, the asterisk small print
+const ESTIMATE_RX = /ESTIMATED [A-Z -]*LEFT|class="leftbox"|an estimate, not a count|No estimate yet|no running tenancy|Still filling|rounded to the nearest ten|owners living in their own flat|\*Dubai Land Department units list/i;
+const abox = (h) => { const m = /<div class="availbox"[\s\S]*?<\/div><\/div>/.exec(h); return m ? m[0] : ""; };
 
-// ---- 1. the ten JVC keys: the list row and the dossier agree -------------------------------------------------------------------
+// ---- 1. the API still carries the estimate --------------------------------------------------------------------------------
 const list = await api(Q + "&areas=" + JVC + "&limit=10");
 const rows = list.results || [];
 ok(rows.length === 10, "/brief_api lists ten JVC buildings for 1-bed AED 60-68K", rows.length);
-const said = {};
-for (const r of rows) {
-  const want = r.estimated_left ? [r.estimated_left.about, r.estimated_left.of] : "none";
-  const { status, html } = await pdfHtml("kind=dossier&keys=" + encodeURIComponent(r.key));
-  const got = boxSays(box(html));
-  said[r.name + " " + r.key] = JSON.stringify(got);
-  ok(status === 200 && JSON.stringify(got) === JSON.stringify(want), r.name + " (" + r.key + "): the PDF box says " + JSON.stringify(got) + ", the list row " + JSON.stringify(want), box(html).slice(0, 400));
-  if (r.estimated_left) ok(html.includes("contracts running on " + r.estimated_left.as_at) && /An estimate, not a count\./.test(box(html)), r.name + ": the dossier dates it to the register (" + r.estimated_left.as_at + ") and labels it an estimate, not a count");
-}
-console.log("  dossier boxes: " + JSON.stringify(said));
 const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
-const amber = byKey[JVC + ":1503"];
-ok(amber && amber.name === "Binghatti Amber" && amber.estimated_left && amber.estimated_left.about === 380 && amber.estimated_left.of === 502, "Binghatti Amber (jumeirahvillagecircle:1503) is in the ten, listed as about 380 of 502", JSON.stringify(amber && amber.estimated_left));
-ok(JSON.stringify(boxSays(box((await pdfHtml("kind=dossier&keys=" + JVC + ":1503")).html))) === "[380,502]", "and its dossier prints \"about 380\" of 502");
-const nova = rows.find((r) => r.name === "Binghatti Nova");
-ok(nova && nova.estimated_left && nova.estimated_left.about === 140 && nova.estimated_left.of === 178, "Binghatti Nova is listed as about 140 of 178", JSON.stringify(nova && nova.estimated_left));
-ok(nova && JSON.stringify(boxSays(box((await pdfHtml("kind=dossier&keys=" + nova.key)).html))) === "[140,178]", "and its dossier prints \"about 140\" of 178");
-ok(rows.filter((r) => r.estimated_left).length >= 8, "the register gives most of the ten an estimate (it is no longer 'No estimate yet' on every JVC PDF)", rows.filter((r) => r.estimated_left).length);
+const amber = byKey[JVC + ":1503"], nova = rows.find((r) => r.name === "Binghatti Nova");
+ok(amber && amber.name === "Binghatti Amber" && amber.estimated_left && amber.estimated_left.about === 380 && amber.estimated_left.of === 502, "the API still returns estimated_left for Binghatti Amber: about 380 of 502 (the data code is untouched)", JSON.stringify(amber && amber.estimated_left));
+ok(nova && nova.estimated_left && nova.estimated_left.about === 140 && nova.estimated_left.of === 178, "and for Binghatti Nova: about 140 of 178", JSON.stringify(nova && nova.estimated_left));
+ok(rows.filter((r) => r.estimated_left).length >= 8, "the register gives most of the ten an estimate in the JSON", rows.filter((r) => r.estimated_left).length);
 
-// ---- 2. the one-sheet: "Still filling" on exactly the buildings with an estimate --------------------------------------------------
+// ---- 2. none of it reaches a document ------------------------------------------------------------------------------------
+for (const r of rows) {
+  const { status, html } = await pdfHtml("kind=dossier&keys=" + encodeURIComponent(r.key));
+  const m = ESTIMATE_RX.exec(html);
+  ok(status === 200 && !m && !new RegExp("about " + (r.estimated_left ? r.estimated_left.about : 0) + "<").test(html), r.name + " (" + r.key + "): the dossier prints no estimate" + (r.estimated_left ? " although the API says about " + r.estimated_left.about + " of " + r.estimated_left.of : ""), m && m[0]);
+}
 const { html: os } = await pdfHtml("kind=onesheet&keys=" + rows.map((r) => encodeURIComponent(r.key)).join(","));
 const cards = os.split('<div class="bcard"').slice(1);
 ok(cards.length === 10, "the one-sheet has ten cards", cards.length);
-const FILL_RX = /Still filling: most of its 1-beds have no running tenancy on the government register\*/;
-const fillWant = rows.map((r) => !!r.estimated_left && r.estimated_left.of - r.estimated_left.running > r.estimated_left.of / 2), fillGot = cards.map((c) => FILL_RX.test(c));
-ok(JSON.stringify(fillWant) === JSON.stringify(fillGot), "\"Still filling\" shows on every card whose building has an estimate with more than half its flats untenanted, and on no other", JSON.stringify({ fillWant, fillGot }));
-ok(!fillGot.some(Boolean) || /\*Dubai Land Department units list and tenancy register/.test(os), "and the asterisk's small print is there");
-// the sentence says "most": T = 100, R = 60 has an estimate (about 40 of 100) but most flats DO have a tenancy -> no line; R = 40 -> the line
-const withNova = async (T, R) => {
-  store.set("img_beds_left_" + JVC, JSON.stringify(Object.assign({}, REGISTER, { rows: REGISTER.rows.map((r) => r.key === nova.key && String(r.beds) === "1" ? Object.assign({}, r, { T, R }) : r) })));
-  const row = ((await api(Q + "&areas=" + JVC + "&limit=10")).results || []).find((r) => r.key === nova.key);
-  const card = (await pdfHtml("kind=onesheet&keys=" + nova.key)).html.split('<div class="bcard"')[1] || "";
-  const b = box((await pdfHtml("kind=dossier&keys=" + nova.key)).html);
-  store.set("img_beds_left_" + JVC, JSON.stringify(REGISTER));
-  return { est: row && row.estimated_left, fill: FILL_RX.test(card), box: boxSays(b) };
-};
-const r60 = await withNova(100, 60);
-ok(r60.est && r60.est.about === 40 && JSON.stringify(r60.box) === "[40,100]" && !r60.fill, "T=100, R=60: list and dossier both say about 40 of 100, and the card has NO 'Still filling' line", JSON.stringify(r60));
-const r40 = await withNova(100, 40);
-ok(r40.est && r40.est.about === 60 && JSON.stringify(r40.box) === "[60,100]" && r40.fill, "T=100, R=40: about 60 of 100, and the card says 'Still filling'", JSON.stringify(r40));
+ok(!ESTIMATE_RX.test(os), "and not one card carries 'Still filling', nor the sheet its asterisk small print", (ESTIMATE_RX.exec(os) || [""])[0]);
+const { html: pk } = await pdfHtml("kind=pack&keys=" + rows.slice(0, 3).map((r) => encodeURIComponent(r.key)).join(","));
+ok(!ESTIMATE_RX.test(pk), "nor the full pack anywhere (sheet, map, three dossiers, appendix)", (ESTIMATE_RX.exec(pk) || [""])[0]);
 
-// ---- 3. a building genuinely not in the register -------------------------------------------------------------------------------
-const drop = nova.key, dropName = nova.name;
-store.set("img_beds_left_" + JVC, JSON.stringify(Object.assign({}, REGISTER, { rows: REGISTER.rows.filter((r) => r.key !== drop && r.app_key !== drop && !/binghatti nova/i.test(String(r.dld_project) + " " + String(r.name))) })));
-const gone = ((await api(Q + "&areas=" + JVC + "&limit=10")).results || []).find((r) => r.key === drop);
-ok(gone && !gone.estimated_left && /not in the beds-left register/.test(gone.estimated_left_withheld || ""), dropName + " taken out of the register: the list withholds it, and says why", JSON.stringify(gone && gone.estimated_left_withheld));
-const nb = box((await pdfHtml("kind=dossier&keys=" + drop)).html);
-ok(/No estimate yet for this building/.test(nb) && /not in the beds-left register/.test(nb) && !/about \d/.test(nb), "and the dossier says \"No estimate yet for this building\" - never the old gated figure, never a zero", nb.slice(0, 400));
-store.set("img_beds_left_" + JVC, JSON.stringify(REGISTER));
+// ---- 3. developer availability: the same on the list row and on page 2, and nowhere else ---------------------------------------
+// a developer's sheet naming Binghatti Nova, in the shape build_avail_index.py publishes (img_avail_index -> img_drill_<d>.claimed)
+store.set("img_avail_index", JSON.stringify({ updated: "2026-09-30", sheets: [{ sheet: "Binghatti 2026-09-08", note: "3 units · 1 project", mapped: true, d: "binghatti" }] }));
+store.set("img_drill_binghatti", JSON.stringify({ title: "Binghatti (all projects)", claimed: { as_of: "2026-09-08", source: "Binghatti sheets", rooms: [], detail: [
+  { p: "Binghatti Nova", as_of: "2026-09-08", units: [["BN-1203", "1 B/R", 741.1, 1250000, "Pool"], ["BN-1403", "1 B/R", 741.1, 1262000, ""], ["BN-0801", "2 B/R", 1100, 1900000, ""]] } ] } }));
+const list2 = (await api(Q + "&areas=" + JVC + "&limit=10")).results || [];
+const nv = list2.find((r) => r.name === "Binghatti Nova");
+ok(nv && nv.developer_availability && nv.developer_availability.developer === "Binghatti" && nv.developer_availability.as_of === "2026-09-08" && nv.developer_availability.count === 2, "the list row: Binghatti's sheet of 2026-09-08, 2 one-bedrooms", JSON.stringify(nv && nv.developer_availability));
+ok(list2.filter((r) => r.developer_availability).length === 1, "and no other row carries one");
+const nvDoc = (await pdfHtml("kind=dossier&keys=" + nv.key)).html, nb = abox(nvDoc);
+ok(nb.includes("Available now, per Binghatti&rsquo;s sheet of 8 September 2026: 2 one-bedrooms.") && nb.includes("BN-1203") && nb.includes("BN-1403") && !nb.includes("BN-0801"), "its dossier's page 2 says the same: Binghatti, 8 September 2026, 2 one-bedrooms, with those two rows", nb.slice(0, 400));
+ok(!ESTIMATE_RX.test(nvDoc), "and still no estimate beside it: the two sources are never mixed");
+for (const r of list2.filter((x) => x.key !== nv.key).slice(0, 3)) {
+  const h = (await pdfHtml("kind=dossier&keys=" + encodeURIComponent(r.key))).html;
+  ok(!abox(h) && !/availab/i.test(h.replace(/Availability, the rent and the actual flat/g, "")), r.name + ": no sheet names it, so page 2 shows no availability at all - no placeholder, no 'to follow'");
+}
+store.delete("img_avail_index"); store.delete("img_drill_binghatti");
 
 ok(writes.length === 0, "nothing is written to KV");
 console.log((fail ? "FAIL" : "PASS") + " - brief parity: " + pass + " ok, " + fail + " failed");

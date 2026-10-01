@@ -5,8 +5,10 @@
 //   1. the route is gated (no key 401, a client key opens it) and answers application/pdf with a filename
 //   2. a dossier is exactly 3 pages; the footer is ONLY "Curated by Najjuko · Dubai Decoded" + the WhatsApp mark + +971 56 548 4397;
 //      the header carries the Najjuko-with-the-N picture
-//   3. the "left" box says "an estimate, not a count", with T - R rounded to ten (178 - 37 -> about 140), and when the registers cannot be
-//      read for the building (coverage under half, as in JVC today) it says plainly there is no estimate yet - never a blank, never a zero
+//   3. v277: the register "left" estimate is NOT on the document (no ESTIMATED ... LEFT box, no "Still filling" card line). Page 2 carries
+//      DEVELOPER AVAILABILITY where a developer's own sheet names the building (named, dated, the rows of that type) and nothing where none
+//      does; beds=all renders every home type (figures per type, the layouts across types); a key the rent index lacks but the unit-mix
+//      register holds still builds (the building page's dossier)
 //   4. the map: an SVG block map with the building in gold where the layer and a position exist; "Map to follow" - never a broken
 //      image - where the layer is missing or the building has no position
 //   5. photos and amenities only from the developer's own page: a portal brochure is refused, a brochure naming another building is
@@ -59,7 +61,12 @@ J("amenities", { items: [
 J("unitmix_testdistrict", { buildings_by_id: {
   "10": { name: "Alpha Tower", total_units: 211, floors: 21, as_of: "2026-09-29", dld: { buildings: 1 }, rows: [{ type: "1 bedroom", units: 178, basis: "DLD units register", median_sqm: 59.5, levels: "1–15" }, { type: "2 bedroom", units: 30, basis: "DLD units register" }] },
   "11": { name: "Delta Court B", total_units: 944, floors: 45, dld: { buildings: 3 }, rows: [{ type: "1 bedroom", units: 400, basis: "DLD units register" }] },
+  "13": { name: "Register Only House", total_units: 50, floors: 8, dld: { buildings: 1 }, rows: [{ type: "1 bedroom", units: 40, basis: "DLD units register", median_sqm: 55 }, { type: "Studio", units: 10, basis: "DLD units register", median_sqm: 38 }] },   // v277: in the register, not in the rent index
 } });
+// v277: the developers' own sheets (img_avail_index -> img_drill_<d>.claimed), as build_avail_index.py publishes them
+J("avail_index", { updated: "2026-09-30", sheets: [{ sheet: "Alpha Developments 2026-09-20", note: "4 units · 1 project", mapped: true, d: "alpha" }] });
+J("drill_alpha", { title: "Alpha Developments (all projects)", claimed: { as_of: "2026-09-20", source: "Alpha Developments sheets", rooms: [], detail: [
+  { p: "Alpha Tower", as_of: "2026-09-20", units: [["A-1203", "1 B/R", 741.1, 1250000, "Pool"], ["A-1403", "1 B/R", 741.1, 1262000, ""], ["A-0801", "2 B/R", 1100, 1900000, "Park"], ["A-OF1", "Office", 900, 1500000, ""]] } ] } });
 J("tenancy_testdistrict", { as_at: "2026-09-09", coverage: { share_bound: 0.6 }, buildings_by_id: {
   "10": { live: 45, by_type: { "1 bedroom": 37, "2 bedroom": 7 }, scope: "building", as_at: "2026-09-09" },
   "11": { live: 90, by_type: { "1 bedroom": 88 }, scope: "building", as_at: "2026-09-09" },
@@ -147,18 +154,38 @@ ok(html.includes(">RECENT LETTINGS</div>"), "the lettings count is labelled RECE
   store.set(k, orig);
 }
 
-// ---- 4. the estimate box -------------------------------------------------------------------------------------------------------
-const box = (h) => { const m = /<div class="leftbox"[\s\S]*?<\/div><\/div>/.exec(h); return m ? m[0] : ""; };
-const b1 = box(html);
-ok(/ESTIMATED ONE-BEDROOMS LEFT/.test(b1) && /about 140<\/span>/.test(b1) && /of 178 one-bedroom flats/.test(b1), "the box reads ESTIMATED ONE-BEDROOMS LEFT: about 140 of 178 (178 - 37, rounded to ten)", b1.slice(0, 300));
-ok(/An estimate, not a count\./.test(b1) && /owners living in their own flat and renewals not yet registered/.test(b1) && !/flats available|available flats|units available/i.test(html), "labelled an estimate, not a count; never stated as flats available");
-ok(/rounded to the nearest ten/.test(html) && /is a minimum/.test(html), "the small print says how it is rounded and that the running count is a minimum");
+// ---- 4. v277: no register estimate on the client face; DEVELOPER AVAILABILITY where a sheet names the building ------------------
+const ESTIMATE_RX = /ESTIMATED [A-Z -]*LEFT|leftbox|an estimate, not a count|An estimate, not a count|no running tenancy|Still filling|rounded to the nearest ten/;
+ok(!ESTIMATE_RX.test(html), "page 2 carries NO estimate box: no ESTIMATED ONE-BEDROOMS LEFT, no 'estimate, not a count', no tenancy wording (Alpha Tower has T=178, R=37 on file, and it is still not printed)");
+const abox = (h) => { const m = /<div class="availbox"[\s\S]*?<\/div><\/div>/.exec(h); return m ? m[0] : ""; };
+const a1 = abox(html);
+ok(/DEVELOPER AVAILABILITY/.test(a1) && a1.includes("Available now, per Alpha Developments&rsquo;s sheet of 20 September 2026: 2 one-bedrooms."), "page 2: 'Available now, per Alpha Developments's sheet of 20 September 2026: 2 one-bedrooms' - the developer's own sheet, named and dated", a1.slice(0, 400));
+ok(a1.includes("A-1203") && a1.includes("A-1403") && a1.includes("1,250,000") && a1.includes(">Pool<") && !a1.includes("A-0801") && !a1.includes("A-OF1"), "with the sheet's one-bedroom rows (unit, size, price, view) and neither the two-bedroom nor the office row");
+ok(/developer&rsquo;s statement on that date, not register data/.test(a1) && /Availability: Alpha Developments's own availability sheet of 2026-09-20/.test(html), "it says whose statement it is, and the small print names the sheet");
 ({ html } = await pdf("kind=dossier&keys=nolayer:5"));
-const b2 = box(html);
-ok(/No estimate yet for this building/.test(b2) && /only 30% of this district&#x27;s running tenancies reach a building/.test(b2) && /estimate, not a count/.test(b2) && !/about \d/.test(b2), "coverage under half (JVC today): the box says plainly there is no estimate yet - no figure, no zero", b2.slice(0, 300));
+ok(!abox(html) && !ESTIMATE_RX.test(html) && !/availability to follow|Availability: to follow/i.test(html), "a building no developer sheet names: no availability box, no estimate box, no placeholder - nothing");
 ({ html } = await pdf("kind=dossier&keys=testdistrict:11"));
-ok(/No estimate yet/.test(box(html)) && /covers 3 buildings/.test(box(html)), "a units record covering 3 buildings is never divided");
+ok(!abox(html) && !ESTIMATE_RX.test(html), "a multi-building record, no sheet: nothing either");
 ok(html.includes("45 floors (one of 3 buildings)") && html.includes("944 homes in 3 buildings") && !html.includes("Delta Court B"), "a tower record of a multi-building project: floors and homes say so, and its own name ('... B') is never printed");
+// never mixed: a stubbed register estimate for Alpha (the parity test proves the API still returns it) does not reach the page
+J("beds_left_testdistrict", { as_of: "2026-09-30", source: "stub", rows: [{ key: "testdistrict:10", name: "Alpha Tower", beds: "1", T: 178, R: 37 }] });
+({ html } = await pdf("kind=dossier&keys=testdistrict:10"));
+ok(!ESTIMATE_RX.test(html) && !/about 140|of 178/.test(html) && abox(html).includes("2 one-bedrooms"), "with the beds-left register on file too, the page still prints the developer sheet only - the two sources are never mixed");
+store.delete("img_beds_left_testdistrict");
+// 4b. beds=all: every home type in the building
+let all;
+({ r, html: all } = await pdf("kind=dossier&keys=testdistrict:10&beds=all"));
+ok(r.status === 200 && pages(all) === 3 && /filename="Alpha_Tower_All\.pdf"/.test(r.headers.get("Content-Disposition") || ""), "beds=all: a 3-page dossier named ..._All.pdf", r.headers.get("Content-Disposition"));
+ok(all.includes("OPTION &middot; ALL HOME TYPES &middot; TEST DISTRICT"), "the header says ALL HOME TYPES");
+ok(all.includes("TYPICAL RENT A YEAR, BY TYPE") && />1 bedroom<\/td><td[^>]*>AED 65,000<\/td>/.test(all) && !all.includes("What AED 65,000 gets you here"), "page 1 gives the typical rent per type as a table, with no single-type budget line");
+ok(all.includes("The layouts, every type") && /<th[^>]*>TYPE<\/th><th[^>]*>LAYOUT<\/th>/.test(all) && (all.match(/>1 bedroom<\/td><td[^>]*>Layout [AB]<\/td>/g) || []).length === 2 && /2 other layouts/.test(all) && /Alpha Tower has 7 flats\./.test(all),
+  "page 3 lists the layouts of every type with a TYPE column: the two shared one-bedroom layouts, and the single studio and two-bedroom flats as '2 other layouts' (7 flats in all)");
+ok(abox(all).includes("Available now, per Alpha Developments&rsquo;s sheet of 20 September 2026: 3 homes.") && abox(all).includes("A-0801") && !abox(all).includes("A-OF1"), "page 2's availability counts every home on the sheet (3: the office is not a home)");
+ok(!ESTIMATE_RX.test(all) && !/one-bedroom flats/.test(all), "and no per-type 'left' wording anywhere");
+// 4c. a key the rent index does not know, but the unit-mix register does (every building page has one): the dossier still builds
+({ r, html } = await pdf("kind=dossier&keys=testdistrict:13&beds=all"));
+ok(r.status === 200 && pages(html) === 3 && html.includes(">Register Only House</div>") && html.includes("No lettings for this building in the latest pull"), "testdistrict:13 (unit-mix only): 3 pages from the register, the name from the record, and it says there is no rent figure", r.status + " " + html.slice(0, 200));
+ok(/>Studio<\/td><td[^>]*>10<\/td>/.test(html) && />1 bedroom<\/td><td[^>]*>40<\/td><td[^>]*>&mdash;<\/td>/.test(html) && html.includes("An 8-floor residential building"), "its layouts table is the register's per-type count (a missing floor range prints as a dash, not a broken entity)");
 
 // ---- 5. the map -----------------------------------------------------------------------------------------------------------------
 ({ html } = await pdf("kind=dossier&keys=testdistrict:10"));
@@ -197,6 +224,7 @@ for (const kind of ["onesheet", "compare"]) {
   ({ r, html } = await pdf("kind=" + kind + "&keys=" + KEYS));
   ok(r.status === 200 && pages(html) === 2 && (html.match(/class="sheet page land"/g) || []).length === 2, kind + ": 2 landscape pages (cards, then the overall map)", pages(html));
   ok((html.match(/class="bcard"/g) || []).length === 3 && html.includes("Three one-bedroom options in Test District, AED 60,000&ndash;65,000 a year"), kind + ": one card per building under the approved title");
+  ok(!/Still filling/.test(html) && !ESTIMATE_RX.test(html) && !/\*Dubai Land Department units list/.test(html), kind + ": no 'Still filling' line on any card and no asterisk small print (v277)");
   ok(html.includes("@page land { size: A4 landscape; margin: 0; }") && (html.match(/<div class="curator"/g) || []).length === 2, kind + ": A4 landscape, the curator line on both pages");
   ok(/<img class="najhead" src="[^"]+brand_najjuko_n" alt="Najma" style="height:68px/.test(html), kind + ": the one-sheet header picture is 68 px");
 }

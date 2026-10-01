@@ -4,7 +4,8 @@ import { buildingData, buildingPageHtml } from "./building_page.js";   // v187 -
 import { pillarsCard, buildingPillars, developerPillarsCard, normName as pillarName, PILLAR_CSS } from "./pillars.js";   // v238 - the four pillars, built in the Worker for the building page and /dev
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import { worldBackdrops, worldBackdrop, worldPlatePrompt, worldScenePrompt, worldPicSay, worldCardFields, worldPicSize } from "./world_pic.js";   // v164 - the Versus picture, made the way the morning pictures are made
-import { briefRoutes, briefStartCard } from "./brief_page.js";   // THE BRIEF (part B, 30 Sep 2026) - the /brief screens and the 00 way in on /start
+import { briefRoutes, briefStartCard, BRIEF_START_CSS } from "./brief_page.js";   // THE BRIEF (part B, 30 Sep 2026; v277 two-button 00 card) - the /brief screens and the 00 way in on /start
+import { findItem as briefFindItem } from "./brief_docs.js";   // v277 - the building page's dossier button goes to /brief_pdf: this says whether the rent index knows the building
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
 import { briefApi } from "./brief.js";   // BRIEF (Contract A) - GET /brief_api, the ranked building search behind /brief
 import { blocksRoute } from "./blocks_page.js";   // BLOCKS (30 Sep 2026) - LOD 100 blocks view, /blocks; all its logic lives in blocks_page.js
@@ -3246,12 +3247,17 @@ async function appFetch(request, env, ctx) {
         // v237 - the share key is set whatever the dossier says: every building can be handed over, and the
         // link a share carries is NEVER the key that opened this page (the owner browses with READ_KEY).
         _bd.shareKey = clientKeysOf(env)[0] || "";
+        // v277 (Kendall, 1 Oct 2026): the dossier button makes the NEW-style document - GET /brief_pdf?kind=dossier (src/brief_docs.js,
+        // the Brief's layout: Najma header, "Curated by Najjuko" footer) - never the pre-Brief /sheet/<slug>.pdf. That route stays
+        // for old links only. Every building this page opens has a unit-mix record, which is all brief_docs needs; where the rent
+        // index also knows it the document carries the lettings evidence (in_index says which, for the page's own wording).
         try {
-          const _dm = JSON.parse((await env.MEETINGS.get("sheetm_b_" + _bs + "_" + _bi)) || "null");
-          if (_dm && _dm.bytes) _bd.dossier = { slug: "b_" + _bs + "_" + _bi, pages: _dm.pages || 0, at: _dm.built_at || "" };
+          let _inIdx = false;
+          try { const _ri = JSON.parse((await env.MEETINGS.get("img_rent_index")) || "null"); _inIdx = !!briefFindItem(_ri, _bs + ":" + _bi); } catch (e) {}
+          _bd.dossier = { key: _bs + ":" + _bi, in_index: _inIdx };
           // what a shared link may carry. NEVER the key that opened this page: the owner browses with READ_KEY and a
           // WhatsApp share built from it would hand the owner key to the recipient.
-          if (_bd.dossier) _bd.shareKey = clientKeysOf(env)[0] || "";
+          _bd.shareKey = clientKeysOf(env)[0] || "";
         } catch (e) {}
         return clientResp(env, url, buildingPageHtml(_bd, url.searchParams.get("key") || "", residentsKeyOf(env, url)),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
@@ -4672,10 +4678,10 @@ function najStartHtml(key, rk) {
   const esc3 = (s) => String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>Start \u2014 Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS
-    + '<style>' + NAJ_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
+    + '<style>' + NAJ_START_CSS + BRIEF_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
     + '<div class=h>Six ways <em>in</em></div>'
-    + '<div class=s>Whatever the client opens with, one of these five is the door. Each one is the whole path \u2014 follow it and the next question is already on the screen.</div>'
-    + briefStartCard(key, rk, najIcon("search"))   // THE BRIEF - "00 THEY TELL YOU WHAT THEY WANT", above the five angles (src/brief_page.js)
+    + '<div class=s>Whatever the client opens with, one of these is the door. Each one is the whole path \u2014 follow it and the next question is already on the screen.</div>'
+    + briefStartCard(key, rk, najIcon("search"))   // THE BRIEF - "00 THEY TELL YOU WHAT THEY WANT": two buttons, RENT / BUY (v277), above the five angles (src/brief_page.js)
     + NAJ_ANGLES.map((a) => najAngleCard(a, key, rk)).join("")
     + '<div class=hd>THEY SAY \u2014 YOU TAP</div><div class=ch>'
     + NAJ_CHEAT.map((c) => '<div class=q>' + esc3(c[0]) + '</div><div class=a>' + esc3(c[1]) + '</div>').join("")
@@ -7077,6 +7083,7 @@ const MAP_CHROME_CSS = ''
   + '.top>*{pointer-events:auto}'
   + 'h1{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.3rem;margin:0 0 2px}h1 i{font-style:normal;color:var(--gold)}'
   + '.sub{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.07em;color:var(--mut);text-transform:uppercase;margin-bottom:8px}'
+  + '.blkbtn{display:inline-block;margin:-4px 0 8px;font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.08em;color:#C5A56A;text-decoration:none;border:1px solid rgba(197,165,106,.5);border-radius:99px;padding:4px 10px;background:rgba(12,20,19,.6)}'   // v277 - the Blocks way in
   + '.srow{display:flex;gap:8px;align-items:flex-start;max-width:640px}.srow .sbox{flex:1;margin:0 0 8px}'
   + STACK_CSS   // v152.5 - the stack's own rules, shared with the all-Dubai twin
   + '.sbox{position:relative;margin:0 0 8px;max-width:560px}.sbox input{width:100%;box-sizing:border-box;background:rgba(19,31,29,.94);border:1px solid var(--line);border-radius:12px;color:var(--text);font:inherit;font-size:.9rem;padding:9px 12px;outline:none}.sbox input:focus{border-color:rgba(197,165,106,.7)}'
@@ -7133,6 +7140,7 @@ const HOMES_PANEL_HTML = ''
   + '  <div class=hfoot><a id=hlist>list them \u2192</a><a id=hclear>clear</a></div></div></div>';
 const MAP_CHROME_HTML = ''
   + '<div class=top><u class=topx id=topx title=close>✕</u><u class=topo id=topo title=show>▾ show</u><h1>Najma <i>نجمة</i> — __TITLE__</h1><div class=sub id=st>pick a district</div>'
+  + '<a class=blkbtn id=blkbtn hidden href="#">⬚ BLOCKS</a>'   // v277 (Kendall, 1 Oct 2026: "how do I get to the blocks?") - the LOD 100 view of the district on screen; set by pickDistrict / the twin's district
   + '<div class=srow><div class=sbox><input id=q type=search placeholder="search a district, sub-community, plot, school, hospital, mall, metro, developer\u2026" autocomplete=off spellcheck=false><div id=qr></div></div></div>'
   + '<div class=rail id=rail></div><div class=am id=am></div></div>'
   + '<div id=scope><div class=sm><button class="on" data-mode=area>in this community</button><button data-mode=dist>by distance</button></div>'
@@ -7453,11 +7461,14 @@ const MAP_CHROME_JS = ''
   + 'function pickDistrict(slug,el){if(window.__twinDistrict){if(slug&&slug!==window.__twinDistrict){location.href="/skyline/"+encodeURIComponent(slug)+"?key="+encodeURIComponent(KEY)+(window.__RKQ||"");return}if(!slug){location.href="/skyline?all=1&key="+encodeURIComponent(KEY)+(window.__RKQ||"");return}}'
   + '  document.querySelectorAll(".rail .c").forEach(function(c){c.classList.toggle("on",c===el)});'
   + '  SEL=null;LISTK=null;document.getElementById("panel").classList.remove("on");setSel(null);setNear([]);'
-  + '  CURD="";if(!slug){map.flyTo({center:[55.23,25.10],zoom:9.4});document.getElementById("st").textContent="pick a district";filterTo(null);drawAm();return}'
+  + '  CURD="";blocksLink("");if(!slug){map.flyTo({center:[55.23,25.10],zoom:9.4});document.getElementById("st").textContent="pick a district";filterTo(null);drawAm();return}'
   + '  var d=(D.districts||[]).filter(function(x){return x.slug===slug})[0];if(!d)return;'
   + '  map.fitBounds([[d.bbox[0],d.bbox[1]],[d.bbox[2],d.bbox[3]]],{padding:{top:150,bottom:120,left:40,right:40},duration:900});'
   + '  document.getElementById("st").textContent=d.name+" · "+d.subs+" sub-communities · "+d.plots+" plots · "+d.named+" named buildings";'
-  + '  CURD=slug;filterTo(slug);drawAm();buildSubs(d);}'
+  + '  CURD=slug;blocksLink(slug);filterTo(slug);drawAm();buildSubs(d);}'
+  // v277 - BLOCKS, the LOD 100 view: the button follows the district on screen (the map's pick, or the twin's own district) and carries the key
+  + 'function blocksLink(slug){var b=document.getElementById("blkbtn");if(!b)return;if(!slug){b.hidden=true;b.href="#";return}b.href="/blocks?district="+encodeURIComponent(slug)+"&key="+encodeURIComponent(KEY)+(window.__RKQ||"");b.hidden=false}'
+  + 'blocksLink(window.__twinDistrict||"");'
   + 'function filterTo(slug){var f=slug?["==",["get","district"],slug]:null;'
   + '  ["sub-bub","sub-lab","plot-dot","plot-lab"].forEach(function(id){if(map.getLayer(id))map.setFilter(id,f)});}'
   + 'function currentDistrict(){return CURD||""}'
