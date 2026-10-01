@@ -54,7 +54,7 @@ export const EJARI_PROJECT_FIELDS = { en: ["name_en"], ar: ["name_ar"], area: ["
 export const EJARI_KV = { recent: (d) => "img_ejari_recent_" + d, daily: (d) => "img_ejari_daily_" + d, dubai: "img_ejari_daily_dubai",
   filed: (d) => "img_ejari_filed_" + d, filedDubai: "img_ejari_filed_dubai", projects: "img_ejari_projects_index" };
 export const BANDS = ["studio", "1", "2", "3", "3+", "office", "shop", "other"];
-const BAND_SAY = { studio: "Studio", "1": "1 bedroom", "2": "2 bedrooms", "3": "3 bedrooms", "3+": "Larger than 3 bedrooms", office: "Office", shop: "Shop", other: "Other" };
+const BAND_SAY = { studio: "Studio", "1": "1 bedroom", "2": "2 bedrooms", "3": "3 bedrooms", "3+": "3 bedrooms or more", office: "Office", shop: "Shop", other: "Other" };
 const BAND_CHIP = { studio: "Studio", "1": "1", "2": "2", "3": "3", "3+": "3+", office: "Office", shop: "Shop", other: "Other" };
 const BAND_IN = { studio: "studio", "0": "studio", "1": "1", "2": "2", "3": "3", "3+": "3+", "4": "3+", "4+": "3+", office: "office", shop: "shop", retail: "shop", other: "other" };
 export const TOPS = [5, 10, 15, 20];
