@@ -329,7 +329,18 @@ export function ejariCaption(m, origin, linkKey) {
 }
 
 // ---- loading ---------------------------------------------------------------------------------------------------------
-async function readJson(env, k) { try { const s = await env.MEETINGS.get(k); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+async function kvJsonAny(env, k) {   // v283.1 - plain or gzipped (1f 8b) JSON; push_ejari gzips values over 1 MB
+  if (!env || !env.MEETINGS) return null;
+  let v = null; try { v = await env.MEETINGS.get(k, "arrayBuffer"); } catch (e) { return null; }
+  if (v == null) return null;
+  try {
+    if (typeof v === "string") return JSON.parse(v);
+    let u8 = new Uint8Array(v);
+    if (u8.length > 2 && u8[0] === 0x1f && u8[1] === 0x8b) u8 = new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+    return JSON.parse(new TextDecoder().decode(u8));
+  } catch (e) { return null; }
+}
+async function readJson(env, k) { return kvJsonAny(env, k); }
 export async function ejariLoad(env, names0) {
   let basis = "filed", dubai = ejDoc(await readJson(env, EJ_KV.filedDubai), "filed");
   if (!dubai || !dubai.rows.length) { basis = "start"; dubai = ejDoc(await readJson(env, EJ_KV.startDubai), "start"); }

@@ -188,10 +188,21 @@ export function ejariRange(st, asOf) {
   return { from, to, prev: null };
 }
 
+async function kvJsonAny(env, k) {   // v283.1 - plain or gzipped (1f 8b) JSON; push_ejari gzips values over 1 MB
+  if (!env || !env.MEETINGS) return null;
+  let v = null; try { v = await env.MEETINGS.get(k, "arrayBuffer"); } catch (e) { return null; }
+  if (v == null) return null;
+  try {
+    if (typeof v === "string") return JSON.parse(v);
+    let u8 = new Uint8Array(v);
+    if (u8.length > 2 && u8[0] === 0x1f && u8[1] === 0x8b) u8 = new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+    return JSON.parse(new TextDecoder().decode(u8));
+  } catch (e) { return null; }
+}
 // ---- reading the files (read only), memoised per request -------------------------------------------------------------
 function reader(env) {
   const memo = new Map();
-  const raw = (k) => { if (!memo.has(k)) memo.set(k, (async () => { try { const s = env && env.MEETINGS ? await env.MEETINGS.get(k) : null; return s ? JSON.parse(s) : null; } catch (e) { return null; } })()); return memo.get(k); };
+  const raw = (k) => { if (!memo.has(k)) memo.set(k, kvJsonAny(env, k)); return memo.get(k); };   // v283.1 - gzip-aware
   const get = async (k) => ejariDoc(await raw(k));
   const docs = new Map();
   const doc = (k) => { if (!docs.has(k)) docs.set(k, get(k)); return docs.get(k); };

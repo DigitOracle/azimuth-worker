@@ -112,7 +112,18 @@ export function supplyBuildings(rows, district, names) {
 }
 
 // ---- reading ----
-async function readJson(env, k) { try { const s = env && env.MEETINGS ? await env.MEETINGS.get(k) : null; return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+async function kvJsonAny(env, k) {   // v283.1 - plain or gzipped (1f 8b) JSON; push_ejari gzips values over 1 MB
+  if (!env || !env.MEETINGS) return null;
+  let v = null; try { v = await env.MEETINGS.get(k, "arrayBuffer"); } catch (e) { return null; }
+  if (v == null) return null;
+  try {
+    if (typeof v === "string") return JSON.parse(v);
+    let u8 = new Uint8Array(v);
+    if (u8.length > 2 && u8[0] === 0x1f && u8[1] === 0x8b) u8 = new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+    return JSON.parse(new TextDecoder().decode(u8));
+  } catch (e) { return null; }
+}
+async function readJson(env, k) { return kvJsonAny(env, k); }
 async function supplyDistricts(env) {
   try { const l = await env.MEETINGS.list({ prefix: SUPPLY_KV.prefix }); return ((l && l.keys) || []).map((k) => k.name.slice(SUPPLY_KV.prefix.length)).filter((s) => /^[a-z0-9]{2,40}$/.test(s)); } catch (e) { return []; }
 }
