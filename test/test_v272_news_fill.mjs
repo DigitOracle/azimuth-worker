@@ -83,7 +83,8 @@ ok(!/22%/.test(n2.list) && /10 daily journeys/.test(n2.list), "N2 a news angle w
 ok(n2.qa && /news top-up refused 1 \(news: a number in it is not in the The National story/.test(n2.qa.note), "N2 and the QA line says why: " + (n2.qa ? (n2.qa.note.match(/news top-up refused[^|]*/) || [""])[0].slice(0, 120) : ""));
 // N3
 const n3 = await run({ news: NEWS, popResting: true, newsTop: [N_RAIL, N_VILLA, N_ROAD, N_DLD, N_BLUE] });   // the plan fact is resting too: nothing but news is left
-ok(n3.count === 4 && !/30 km/.test(n3.list), "N3 at most four news angles, even when a fifth is offered and the set is short: " + n3.count);
+// v284 - the short set no longer stays at four: the fact ledger fills the fifth, never with a fifth news angle
+ok((n3.list.match(/reported by/g) || []).length === 4 && !/Arabian Business/.test(n3.list) && n3.count === 5, "N3 at most four news angles, even when a fifth is offered and the set is short (v284: the fifth comes from the fact ledger): " + n3.count);
 // N4
 const n4 = await run({ news: [], newsTop: [N_RAIL] });
 ok(newsCalls === 0 && !/10 daily journeys/.test(n4.list), "N4 no news held: no news top-up");

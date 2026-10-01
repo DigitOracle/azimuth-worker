@@ -71,12 +71,12 @@ ok(!/readmitted/.test(a1.qa ? a1.qa.note : ""), "and the QA line does not claim 
 
 // ---- A2. the QA agent removes the same idea in new words, before the message is built --------------------------------------------
 const a2 = await run([], { qa: (today) => today.filter(t => /walking paths/.test(t.hook)).map(t => t.angle) });
-ok(qaCalls === 1, "the QA agent is asked once, before the send");
+ok(qaCalls === 2, "the QA agent is asked before the send - and again on the refill that replaces what it removed (v284)");
 ok(a2.morning && !/walking paths/.test(a2.morning), "the angle it flagged is not in the morning she receives");
 ok(a2.morning && /5\.8 million/.test(a2.morning), "the rest of the morning still goes");
 ok(a2.qa && /QA agent removed 1/.test(a2.qa.note), "the QA line records what the agent did: " + (a2.qa ? a2.qa.note.slice(-120) : ""));
 ok(owner.some(t => /The gate removed 1/.test(t) && /walking paths/.test(t)), "and Kendall is told what was removed and why");
-ok(a2.famh.length === 4 && !a2.famh.some(r => r.k && /6500/.test(r.k)), "only what she actually got is recorded against her history: " + a2.famh.length + " rows");
+ok(a2.famh.length === 5 && !a2.famh.some(r => r.k && /6500/.test(r.k)), "only what she actually got is recorded against her history: " + a2.famh.length + " rows");
 
 // ---- A3. nothing survives -> HELD: nothing reaches her, nothing is recorded, Kendall is told ------------------------------------
 const a3 = await run([], { qa: (today) => today.map(t => t.angle) });

@@ -81,7 +81,8 @@ ok(!/12,345 homes/.test(live.out), "a LIVE figure used five days ago is still bl
 // ---- nothing fresh at all: v179 sent nothing, and on 19 Sep that emptied her morning. v184 keeps the floor: when the top-up
 // brings nothing either, the least-bad repeats come back (oldest first, each figure once) and the QA line says so ------------
 const all = await run([RENT, WEEK, MAD, OFF, A("Rents again: 68,323.", "68,323 contracts", "DLD Open Data", "rents_yields", "move")], at0600);
-ok(!/68,323 contracts/.test(all.out) && all.qa && /five-floor: 0 sent/.test(all.qa.note), "v187 - when every angle repeats what she had TODAY and the top-up brings nothing, none is readmitted: four fresh beat five with yesterday's in them. Kendall is told, she is not: " + (all.qa ? all.qa.note.slice(-60) : ""));
+// v284 - none is readmitted still; what changed is that the floor now fills from the fact ledger (here: the plan lines she has not had)
+ok(!/68,323 contracts/.test(all.out) && all.qa && !/readmitted/.test(all.qa.note) && /filled \d from the fact ledger/.test(all.qa.note), "v187 - when every angle repeats what she had TODAY and the top-up brings nothing, none is readmitted (v284: the fact ledger fills the floor instead): " + (all.qa ? (all.qa.note.match(/filled[^;|]*|five-floor[^|]*/g) || []).join("; ") : ""));
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);

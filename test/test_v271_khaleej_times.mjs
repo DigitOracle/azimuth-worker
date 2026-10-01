@@ -67,7 +67,11 @@ ok(!/Land for schools and health rises 25%/.test(k1list) && (k1list.match(/^\d\.
 // K2
 const k2 = await run({ news: [ktItem], kt: [KT_BAD], dry: true });
 ok(!/15%/.test(k2.out), "K2 a Khaleej Times angle whose number is not in the story is not admitted");
-ok(k2.qa && /Khaleej Times: story held, but no angle passed \(news: a number in it is not in the Khaleej Times story/.test(k2.qa.note), "K2 and the QA line says why");
+// v284 - the model's dishonest angle is still refused; the story's own figure then comes from the fact ledger instead of no angle at all
+ok(k2.qa && /Khaleej Times: added from the fact ledger/.test(k2.qa.note) && /10 daily journeys/.test(k2.out.split("QA:")[0]), "K2 (v284) and the story's own figure is taken from the fact ledger instead: " + (k2.qa ? (k2.qa.note.match(/Khaleej Times:[^|]*/) || [""])[0] : ""));
+const ktBare = Object.assign({}, ktItem, { title: "Etihad Rail passenger service launches", summary: "Etihad Rail's passenger service launched between Dubai and Abu Dhabi." });
+const k2b = await run({ news: [ktBare], kt: [KT_BAD], dry: true });
+ok(!/15%/.test(k2b.out) && k2b.qa && /Khaleej Times: story held, but no angle passed \(news: a number in it is not in the Khaleej Times story/.test(k2b.qa.note), "K2 a story with no figure of its own: nothing to fall back on, and the QA line says why");
 // K3
 const k3 = await run({ news: [other(1)], kt: [KT_GOOD], dry: true });
 ok(ktCalls === 0 && k3.qa && /Khaleej Times: NO story held/.test(k3.qa.note), "K3 no Khaleej Times story held: nothing asked, and the QA line says the feed was not reached");
@@ -79,7 +83,7 @@ const many = Array.from({ length: 12 }, (_, i) => other(i));
 const k5 = await run({ news: many.concat([ktItem]), kt: [KT_GOOD], dry: true });
 ok(k5.data && Array.isArray(k5.data.news) && k5.data.news.some(n => n.outlet === "Khaleej Times"), "K5 a Khaleej Times story reaches the model even when twelve others outscore it (" + (k5.data && k5.data.news ? k5.data.news.length : 0) + " items)");
 // K6
-const k6 = await run({ news: [ktItem], kt: [KT_BAD] });
+const k6 = await run({ news: [ktBare], kt: [KT_BAD] });   // v284 - a story with no figure: the ledger cannot supply one either
 ok(k6.morning && !/15%/.test(k6.morning), "K6 the morning still goes without it");
 ok(owner.some(t => /NO Khaleej Times angle: story held, but no angle passed/.test(t)), "K6 and Kendall is told there is no Khaleej Times angle, and why");
 
