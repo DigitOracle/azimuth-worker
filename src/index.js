@@ -4356,7 +4356,15 @@ async function appFetch(request, env, ctx) {
             // v283 (Naj, 1 Oct: "why only 3?"): the feed has been five angles since 19 Sep; the old "three" wording and the
             // second, duplicate "building" line are gone - one message, the right number.
             await waSend(env, from, "☀️ Building this morning's five — about a minute…");
-            try { await dailyFeedTick(env, true); } catch (e) { await waSend(env, from, "Couldn't build the feed just now — try again shortly."); }
+            // v283 (1 Oct): Naj asked for "feed", got "building..." and then nothing - the gate and QA had removed every angle that
+            // repeated stale figures, and the run ended without a word. Now a run that sends nothing always says why.
+            const _fqBefore = await env.MEETINGS.get("mkt_feed_qa");
+            let _fErr = null;
+            try { await dailyFeedTick(env, true); } catch (e) { _fErr = e; }
+            const _fqAfter = await env.MEETINGS.get("mkt_feed_qa");
+            let _sentNow = false; try { const _q = JSON.parse(_fqAfter || "null"); _sentNow = !!(_q && _fqAfter !== _fqBefore && Array.isArray(_q.after) && _q.after.length); } catch (e) {}
+            if (_fErr) await waSend(env, from, "Couldn't build the feed just now — try again shortly.");
+            else if (!_sentNow) await waSend(env, from, "Today's market numbers haven't refreshed yet, so I held the feed back rather than repeat last week's figures. It'll come through as soon as the fresh data lands — or say “feed” again later.");
             return new Response("ok");
           }
           if (/^(?:help|menu|commands|what\s+can\s+you\s+do|what\s+do\s+you\s+do|how\s+do(?:es)?\s+(?:i|you|this)\s+(?:use\s+)?(?:you|this|work))\s*\??$/i.test(text)) {
