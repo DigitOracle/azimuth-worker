@@ -54,5 +54,22 @@ console.log("D - a developer on the filed basis (the filed files carry the name,
   ok(n === 8, "Emaar's filed rows are matched on the name (5 + 3), the other developer's 9 are not", n);
 }
 
+console.log("S - Advertised supply: a real district with no adverts yet (v287.1, \"damac hills\")");
+{
+  const s3 = new Map();
+  s3.set("img_pf_supply_businessbay", JSON.stringify({ district: "businessbay", crawled_at: "2026-10-01T08:00:00Z", buildings: [] }));
+  const KV3 = { async get(k, t) { const v = s3.has(k) ? s3.get(k) : null; if (v == null) return null; return t === "arrayBuffer" ? new TextEncoder().encode(v).buffer : v; }, async put(k, v) { s3.set(k, v); }, async delete(k) { s3.delete(k); },
+    async list(o) { const p = (o && o.prefix) || ""; return { keys: [...s3.keys()].filter((k) => k.startsWith(p)).map((name) => ({ name })), list_complete: true }; } };
+  const env3 = Object.assign({}, env, { MEETINGS: KV3 });
+  const get3 = (p) => worker.fetch(new Request(ORIGIN + p), env3, { waitUntil() {} }).then((r) => r.text());
+  const h1 = await get3("/supply?key=" + READ + "&q=" + encodeURIComponent("damac hills"));
+  ok(/No adverts fetched for DAMAC Hills yet/i.test(h1), "\"damac hills\" says no adverts fetched yet, not \"no district by that name\"", (h1.match(/id=sunone>[^<]*/) || [""])[0]);
+  ok(/class=rf data-district="damachills"[^>]*>Fetch the adverts for DAMAC Hills now/i.test(h1), "and offers to fetch DAMAC Hills now");
+  const h2 = await get3("/supply?key=" + READ + "&q=" + encodeURIComponent("zzqx nowhere"));
+  ok(/No building or district by that name/.test(h2) && !/Fetch the adverts/.test(h2), "a name that is no district still says so, with no fetch button");
+  const h3 = await get3("/supply?key=" + READ + "&d=damachills");
+  ok(/Fetch the adverts for DAMAC Hills now/i.test(h3), "?d=damachills offers the fetch too");
+}
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

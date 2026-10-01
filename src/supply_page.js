@@ -221,7 +221,8 @@ export function supplyPageHtml(o) {
   } else if (o.view === "building" && o.b) main = buildingCard(o.b, key);
   else if (o.matches) main = o.matches.length ? '<div class=hd>WHICH ONE?</div><div class=pick id=supick>' + o.matches.map((m) => '<a href="/supply?' + (m.kind === "district" ? "d=" + encodeURIComponent(m.id) : "b=" + encodeURIComponent(m.id) + "&d=" + encodeURIComponent(m.d)) + "&key=" + esc(encodeURIComponent(key)) + '">' + esc(m.name) + "<small>" + esc(m.sub) + "</small></a>").join("") + "</div>"
     : '<div class=nt id=sunone>No building or district by that name in the advert record.</div>';
-  else if (o.none) main = '<div class=nt id=sunone>' + esc(o.none) + "</div>";
+  else if (o.none) main = '<div class=nt id=sunone>' + esc(o.none) + "</div>"
+    + (o.fetchDistrict ? '<div class=card><button type=button class=rf data-district="' + esc(o.fetchDistrict) + '" data-slug="">Fetch the adverts for ' + esc(nm[o.fetchDistrict] || o.fetchDistrict) + ' now</button><div class=rs role=status></div></div>' : "");
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>Advertised supply \u2014 Najma</title><meta name=robots content=noindex><meta name=theme-color content="#0C1413">' + (o.fonts || "")
     + "<style>" + SU_CSS + (o.navCss || "") + "</style></head><body>"
@@ -269,7 +270,7 @@ export async function supplyRoutes(request, env, url, h) {
     { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   if (/^[a-z0-9]{2,40}$/.test(d)) {
     const D = await loadDistrict(env, d, names);
-    if (!D) return page({ none: "No adverts fetched for " + (nm[d] || d) + " yet." });
+    if (!D) return page({ none: "No adverts fetched for " + (nm[d] || d) + " yet.", fetchDistrict: nm[d] ? d : "" });
     if (b) { const one = D.buildings.find((x) => x.id === b || x.key === b); return one ? page({ view: "building", b: one, fetched: one.crawled }) : page({ none: "No adverts for that building in the last crawl.", fetched: D.crawled }); }
     return page({ view: "district", d: D, fetched: D.crawled });
   }
@@ -285,6 +286,12 @@ export async function supplyRoutes(request, env, url, h) {
       const hit = [x.name, x.project, x.siteName].map(nrm).some((n) => n && n.indexOf(qq) >= 0) || (x.key && x.key === q.trim().toLowerCase());
       if (hit) out.push({ kind: "building", id: x.id, d: s, name: x.name, sub: (x.matched ? "Building" : "Listing site name, not matched") + " · " + (nm[s] || s) + " · " + fmt(x.live) + " adverts", s: nrm(x.name) === qq ? 90 : 40 });
     }
+  }
+  if (!out.length) {   // v287.1: a real district we have not fetched adverts for yet - say so and offer to fetch it
+    const known = Object.keys(nm).filter((s) => { const n = nrm(nm[s] || s); return n === qq || n.indexOf(qq) >= 0 || s === qq.replace(/ /g, ""); });
+    const exact = known.find((s) => nrm(nm[s]) === qq || s === qq.replace(/ /g, ""));
+    const one = exact || (known.length === 1 ? known[0] : "");
+    if (one) return page({ none: "No adverts fetched for " + nm[one] + " yet. Adverts so far: " + ds.map((s) => nm[s] || s).join(", ") + ".", fetchDistrict: one });
   }
   out.sort((a, c) => c.s - a.s || a.name.localeCompare(c.name));
   if (out.length === 1 || (out.length > 1 && out[0].s >= 90 && out[1].s < out[0].s)) {
