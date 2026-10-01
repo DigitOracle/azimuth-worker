@@ -11,6 +11,7 @@
 // Unit positions belong to level A (a Revit model or a developer stacking plan) and are not invented here.
 
 import { PILLAR_CSS } from "./pillars.js";
+import { ejariBuildingPanel } from "./ejari_page.js";   // v279 - the "Contracts signed" panel (one marked block in the FILTERS panel)
 
 export const BP_COL = {                     // Najma's own scheme, the same colours the twin's floors use
   studio: "#B9A6C9", "1": "#C5A56A", "2": "#7FA8C9", "3": "#8FC7B9", "4": "#D9A441",
@@ -337,6 +338,9 @@ export function buildingPageHtml(D, key, rk) {
         'building. This is not availability: a home with no tenancy may be owner-occupied, so the rest are not ' +
         'vacant and are not for sale.' + (D.let_.partial ? ' Part of this project is registered in bulk on single ' +
         'contracts, which are excluded, so the real figure is higher still.' : "") + '</div>' : "") +
+      // ==== v279 CONTRACTS SIGNED (Ejari): 7 / 30 days, by bedroom, New vs Renewed, "see all" -> /contracts. All in src/ejari_page.js ====
+      ejariBuildingPanel(D.slug, D.id, key, rk) +
+      // ==== end CONTRACTS SIGNED ====
       (D.register.length ? '<div class=grp>Sales on record <u id=soldtag></u></div><div id=sold></div>' +
         '<div class=src><b>This is the transaction history, not what is for sale.</b> The Dubai Land Department ' +
         'register records completed sales, by type and not by unit number. It does not hold listings, so neither ' +

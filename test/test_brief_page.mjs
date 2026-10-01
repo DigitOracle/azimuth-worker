@@ -51,8 +51,9 @@ ok(/href="\/brief\?mode=rent&amp;key=client_read_key_in_links_123"/.test(startHt
 const startClient = await (await call("/start?key=" + CLIENT)).text();
 ok(startClient.includes('class="btn rent"') && startClient.includes("key=" + CLIENT), "S5 the Brief is on the client-key /start too, threading the client key");
 ok(!startClient.includes("ADVERTISED SUPPLY") && !startClient.includes("BLACK COFFEE"), "S6 client START: no Advertised supply (portal data never reaches a client), no Black Coffee");
-ok((startHtml.match(/data-soon="/g) || []).length === 2 && (startClient.match(/data-soon="/g) || []).length === 1, "S7 the placeholders open a coming panel, not a dead button (owner 2, client 1)");
-ok(/id="p-ejari" hidden>Coming this week/.test(startHtml) && /id="p-supply" hidden>Coming this week/.test(startHtml), "S8 each placeholder says what is coming");
+// v279: the two v278.1 placeholders are replaced by the real cards - a search that opens /contracts, and (owner only) /supply
+ok(/id=ejari0>[\s\S]*?action="\/contracts"/.test(startHtml) && /id=ejari0>[\s\S]*?action="\/contracts"/.test(startClient) && !/data-soon=/.test(startHtml + startClient), "S7 Contracts signed is a real search on both keys, no placeholder left (v279)");
+ok(/id=supply0>[\s\S]*?action="\/supply"/.test(startHtml) && !startClient.includes("supply0") && !startClient.includes("/supply"), "S8 Advertised supply is a real search for the owner, and absent for a client (v279)");
 for (const s of scripts(startHtml)) ok(parses(s.code), "P1 /start inline script parses (" + s.code.length + " chars)");
 
 // ---- R: /brief renders and is gated ----
