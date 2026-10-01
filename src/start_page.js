@@ -3,6 +3,9 @@
 // Kendall: "put the buttons in, even if they're only placeholders for now". The two new cards are NOT dead controls: a tap opens
 // a short panel saying what is coming and when, until their pages ship (v279). Advertised supply is drawn for the owner key only -
 // portal data never reaches a client (standing rule).
+// v279: the two placeholders are replaced by the real cards (src/ejari_page.js ejariStartCard, src/supply_page.js supplyStartCard).
+import { ejariStartCard, EJARI_START_CSS } from "./ejari_page.js";     // v279 CONTRACTS SIGNED - the real card
+import { supplyStartCard, SUPPLY_START_CSS } from "./supply_page.js";   // v279 ADVERTISED SUPPLY - the real card, owner only
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function greeting(isOwner) {
@@ -13,17 +16,12 @@ function greeting(isOwner) {
 
 const KEY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4.2"/><path d="M11 12.2 20 3.5M17 6.5l2.2 2.2M14.6 8.9l1.9 1.9"/></svg>';
 const HOUSE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#1A1407" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/></svg>';
-const DOC_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#7FC8A9" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10.5a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5Z"/><path d="M14 3.5V8h4"/><path d="m9 14 2 2 4-4.5"/></svg>';
-const TAG_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#E3C88F" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12.5V4.5a1 1 0 0 1 1-1h8l8 8-9 9-8-8Z"/><circle cx="8.5" cy="8.5" r="1.6"/></svg>';
 const SKY = '<svg class=sky viewBox="0 0 390 120" preserveAspectRatio="none" aria-hidden="true"><path fill="#C5A56A" d="M0 120V92h18V70h14v22h10V54h16v38h12V80h10V40h8V24h4v16h8v52h14V66h18v26h10V48h12v44h16V74h10v18h14V30h6V12h3v18h6v62h12V58h16v34h10V86h14V62h12v30h18V44h14v48h10V76h12v16h16V68h12v52z"/></svg>';
 
 export function startBody(key, rk, isOwner) {
   const q = "key=" + encodeURIComponent(key || "") + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const brief = (m, cls, icon, title, sub) => '<a class="btn ' + cls + '" href="/brief?mode=' + m + "&amp;" + esc(q) + '">'
     + '<span class=go>→</span><div class=ic>' + icon + '</div><div><div class=bt>' + title + '</div><div class=bs>' + sub + '</div></div><span class=glow></span></a>';
-  const soon = (id, icon, title, sub, body) => '<button type=button class="soon" data-soon="' + id + '"><span class=ic2>' + icon + '</span>'
-    + '<span class=st><b>' + title + '</b><span>' + sub + '</span></span><span class=pill>SOON</span></button>'
-    + '<div class=panel id="p-' + id + '" hidden>' + body + '</div>';
   return SKY
     + '<div class=hello>' + esc(greeting(isOwner)) + '</div>'
     + '<h1 class=hh>What’s the <em>client</em><br>after today?</h1>'
@@ -33,15 +31,12 @@ export function startBody(key, rk, isOwner) {
     + brief("rent", "rent", KEY_SVG, "They want<br>to rent", "a year’s lease · rent by bedroom")
     + brief("buy", "buy", HOUSE_SVG, "They want<br>to buy", "ready or off-plan · price by bedroom")
     + '</div>'
+    // v279 - the real cards in place of the v278.1 placeholders (all their logic in src/ejari_page.js and src/supply_page.js)
     + '<div class=tag>CONTRACTS SIGNED · EJARI <i></i></div>'
-    + soon("ejari", DOC_SVG, "Who’s letting, where", "contracts filed with Ejari · by building, developer, district",
-      "Coming this week: search any building, developer or district and see the tenancy contracts filed with Ejari — yesterday, this week or this month, by bedroom and type, with the register’s English and Arabic names. Contracts signed, not homes available.")
-    + (isOwner
-      ? '<div class=tag>ADVERTISED SUPPLY <i></i></div>'
-        + soon("supply", TAG_SVG, "What’s advertised now", "rental adverts across listing sites · for you only",
-          "Coming this week: how many rental adverts a building or district has across the listing sites we can read, by bedroom, with median asking rent and days listed. For you only — never shown to a client. Adverts, not vacancy.")
-      : "")
-    + '<script>document.addEventListener("click",function(e){var b=e.target.closest("[data-soon]");if(!b)return;var p=document.getElementById("p-"+b.getAttribute("data-soon"));if(p){p.hidden=!p.hidden;b.classList.toggle("open",!p.hidden);}});</script>';
+    + ejariStartCard(key, rk)
+    + (isOwner === true   // ADVERTISED SUPPLY: the owner key only - adverts data never reaches a client (standing rule); fails closed
+      ? '<div class=tag>ADVERTISED SUPPLY <i></i></div>' + supplyStartCard(key)
+      : "");
 }
 
 export const START_CSS = '.big,.big *,.soon,.soon *,.panel,.tag{box-sizing:border-box}'
@@ -68,4 +63,5 @@ export const START_CSS = '.big,.big *,.soon,.soon *,.panel,.tag{box-sizing:borde
   + '.soon .pill{flex:none;font:600 .62rem "IBM Plex Mono",monospace;letter-spacing:.14em;color:#C5A56A;border:1px solid #C5A56A;border-radius:999px;padding:3px 8px}'
   + '.soon.open{border-color:#C5A56A}'
   + '.panel{margin-top:8px;background:#0E1817;border:1px dashed #2C3B37;border-radius:14px;padding:12px 14px;font-size:.86rem;line-height:1.5;color:#C9D2CE}'
-  + '@media (max-width:340px){.big{grid-template-columns:1fr}.btn{min-height:140px}}';
+  + '@media (max-width:340px){.big{grid-template-columns:1fr}.btn{min-height:140px}}'
+  + EJARI_START_CSS + SUPPLY_START_CSS;   // v279 - the two cards' own rules

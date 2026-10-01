@@ -6,6 +6,8 @@ import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten ci
 import { worldBackdrops, worldBackdrop, worldPlatePrompt, worldScenePrompt, worldPicSay, worldCardFields, worldPicSize } from "./world_pic.js";   // v164 - the Versus picture, made the way the morning pictures are made
 import { briefRoutes, briefStartCard, BRIEF_START_CSS } from "./brief_page.js";
 import { startBody, START_CSS } from "./start_page.js";   // v278.1 - START redesign: the Brief, Contracts signed, Advertised supply (owner only)   // THE BRIEF (part B, 30 Sep 2026; v277 two-button 00 card) - the /brief screens and the 00 way in on /start
+import { ejariRoutes } from "./ejari_page.js";   // v279 CONTRACTS SIGNED (Ejari) - /contracts and /contracts_api; all logic in src/ejari_page.js (its START card is drawn by src/start_page.js)
+import { supplyRoutes, pollerRoutes } from "./supply_page.js";   // v279 ADVERTISED SUPPLY - owner only: /supply*, and /pf_queue + /pf_status for the laptop poller; all logic in src/supply_page.js
 import { findItem as briefFindItem } from "./brief_docs.js";   // v277 - the building page's dossier button goes to /brief_pdf: this says whether the rent index knows the building
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
 import { briefApi } from "./brief.js";   // BRIEF (Contract A) - GET /brief_api, the ranked building search behind /brief
@@ -1966,6 +1968,10 @@ async function handleCallback(env, cbq) {
 // its question button; everything else is exactly what this function returns.
 async function appFetch(request, env, ctx) {
     const url = new URL(request.url); const CHAT = env.TELEGRAM_CHAT_ID;
+    // ---- v279 ADVERTISED SUPPLY (owner only, Kendall 1 Oct 2026): /supply, /supply/summary, /supply/request, /supply/status. All in src/supply_page.js.
+    // ABOVE the client gate on purpose: it answers 404 (not 401) to a client key, to no key and to anything but the owner key, before any storage.
+    if (url.pathname === "/supply" || url.pathname.indexOf("/supply/") === 0) { const _su = await supplyRoutes(request, env, url, { keyTier, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_su) return _su; }
+    // ---- end ADVERTISED SUPPLY ----
     if (keyTier(env, url) === "client" && !clientPathOk(url.pathname) && !CLIENT_DOSSIER_RX.test(url.pathname)) return new Response("unauthorized", { status: 401 });   // v155 (DA-AUD-005) - a client key opens the app pages and nothing else; v212 - and one building dossier file
     // ==== BRIEF (Contract A) - GET /brief_api. All logic in src/brief.js; it refuses anything without READ_KEY or a client key (clientOk).
     // Listed in CLIENT_PATHS, so a client key passes the gate above, as on the other app pages. ====
@@ -1978,6 +1984,13 @@ async function appFetch(request, env, ctx) {
     // After the client gate (/brief is in CLIENT_PATHS); briefRoutes applies clientOk itself. Returns null for any other path.
     if (url.pathname === "/brief") { const _br = await briefRoutes(request, env, url, { clientOk, keyTier, clientLinkKey, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_br) return _br; }
     // ---- end THE BRIEF ----
+    // ---- v279 CONTRACTS SIGNED (Ejari, Kendall 1 Oct 2026): GET /contracts and /contracts_api. All logic in src/ejari_page.js. ----
+    // After the client gate (both are in CLIENT_PATHS); ejariRoutes applies clientOk itself and only ever READS KV.
+    if (url.pathname === "/contracts" || url.pathname === "/contracts_api") { const _ej = await ejariRoutes(request, env, url, { clientOk, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_ej) return _ej; }
+    // ---- end CONTRACTS SIGNED ----
+    // ---- v279 ADVERTISED SUPPLY poller: GET /pf_queue, POST /pf_status for the office laptop. X-Azimuth-Ingest header only (src/supply_page.js). ----
+    if (url.pathname === "/pf_queue" || url.pathname === "/pf_status") { const _pq = await pollerRoutes(request, env, url, { ctEq }); if (_pq) return _pq; }
+    // ---- end ADVERTISED SUPPLY poller ----
     // v110.1 - HOISTED (10 Sep 2026). Sitting lower down, this never matched: the request
     // fell through to the Telegram webhook secret check at the foot of the handler and came
     // back "unauthorized" for every path. Same trap the header comment already records.
@@ -2149,6 +2162,9 @@ async function appFetch(request, env, ctx) {
     }
     if (request.method === "HEAD" && url.pathname.indexOf("/img/") === 0) {  // v49 — board splash probes /img/splash without downloading it
       const _hn = url.pathname.slice(5).replace(/[^a-z0-9_]/gi, "");
+      // v279 - the same key lock as GET /img/ below: pf_* owner only (else 404), ejari_* owner or client (else 401)
+      if (_hn.toLowerCase().indexOf("pf_") === 0 && keyTier(env, url) !== "admin") return new Response(null, { status: 404 });
+      if (_hn.toLowerCase().indexOf("ejari_") === 0 && !clientOk(env, url)) return new Response(null, { status: 401 });
       const _hv = await env.MEETINGS.get("img_" + _hn, "arrayBuffer");
       return new Response(null, { status: _hv ? 200 : 404 });
     }
@@ -3070,13 +3086,21 @@ async function appFetch(request, env, ctx) {
       }
       if (url.pathname.indexOf("/img/") === 0) {               // v45 — serve a stored rendered image (public; WhatsApp fetches by link)
         const nm = url.pathname.slice(5).replace(/[^a-z0-9_]/gi, "");
+        // v279 (Kendall, 1 Oct 2026) - the new data is locked behind keys. ejari_* (img_ejari_*): the owner key or a client key, the
+        // app pages' check; no key 401. pf_* (img_pf_supply_* and the like): the OWNER key only; a client key, or none, gets 404.
+        // Everything else under /img/ stays keyless (the blocks, maps and brochure photos the pages and PDFs load). v279 ----
+        const _lk = nm.toLowerCase().indexOf("pf_") === 0 ? "owner" : nm.toLowerCase().indexOf("ejari_") === 0 ? "app" : "";
+        if (_lk === "owner" && keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
+        if (_lk === "app" && !clientOk(env, url)) return new Response("unauthorized", { status: 401 });
+        const _cc = _lk ? "private, no-store" : "public, max-age=3600";   // v279 - keyed data is never cached by a shared cache
+        // ---- end v279 ----
         const buf = await env.MEETINGS.get("img_" + nm, "arrayBuffer");
         if (!buf) return new Response("not found", { status: 404 });
         const ct = (await env.MEETINGS.get("img_ct_" + nm)) || "image/png";
         const _u8 = new Uint8Array(buf, 0, Math.min(2, buf.byteLength));
         if (_u8.length === 2 && _u8[0] === 0x1f && _u8[1] === 0x8b)       // v86: stored pre-gzipped (large district GLBs) - pass through as-is
-          return new Response(buf, { encodeBody: "manual", headers: { "Content-Type": ct, "Content-Encoding": "gzip", "Cache-Control": "public, max-age=3600" } });
-        return new Response(buf, { headers: { "Content-Type": ct, "Cache-Control": "public, max-age=3600" } });
+          return new Response(buf, { encodeBody: "manual", headers: { "Content-Type": ct, "Content-Encoding": "gzip", "Cache-Control": _cc } });
+        return new Response(buf, { headers: { "Content-Type": ct, "Cache-Control": _cc } });
       }
       if (url.pathname === "/charts") {                        // v41 — post-ready SVG charts from the register
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
@@ -11548,7 +11572,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/start", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card)
+const CLIENT_PATHS = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card)
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
