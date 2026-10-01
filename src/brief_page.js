@@ -77,6 +77,8 @@ const CORRIDOR_SAY = { "Meydan & MBR": "Meydan & Mohammed Bin Rashid City" };
 
 // v282: the client's criteria (Contract A's list, src/brief.js), each asked three ways: must / nice to have / don't care
 export const BRIEF_WANTS = BRIEF_CRITERIA;
+// v287 (Kendall, 1 Oct 2026: "add icons or emojis"): one emoji per must-have, on the page only (the PDF and API keep plain words)
+const WANT_ICON = { private_pool: "🏊", community_pool: "🌊", pets: "🐕", modern: "✨", long_term: "🗓️", metro: "🚇", schools: "🏫", gym: "🏋️", parking: "🅿️", balcony: "🌇" };
 const WANT_KEYS = BRIEF_WANTS.map((m) => m[0]);
 const WANT_ALIAS = { pool: "community_pool", new: "modern" };   // a v277 link's chips
 const BEDS = ["studio", "1", "2", "3"];
@@ -193,7 +195,7 @@ const BRIEF_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex S
 // the criteria marks and their sources on each row, and the owner-only furnished hint
 const BRIEF_CSS2 = '.seg.multi button{flex:1 1 20%}.hint2{color:#8FA39B;font-size:.74rem;margin:-2px 0 8px}'
   + '.str{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;margin:10px 0 0}.str span{color:#8FA39B;font-size:.78rem;white-space:nowrap}'
-  + '.wr{display:flex;flex-direction:column;gap:5px;padding:8px 0;border-top:1px solid #1B2E2A}.wr:first-child{border-top:0}.wr .wl{font-size:.86rem;color:#E8E4D8}'
+  + '.wr{display:flex;flex-direction:column;gap:5px;padding:8px 0;border-top:1px solid #1B2E2A}.wr:first-child{border-top:0}.wr .wl{font-size:.86rem;color:#E8E4D8}.ic{margin-right:6px;font-style:normal}'
   + '.w3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}.w3 button{min-height:38px;border:1px solid #2E4540;background:#0E1918;border-radius:8px;font-size:.74rem;padding:5px 4px;cursor:pointer}'
   + '.w3 button.on[data-l=must]{background:#C5A56A;border-color:#C5A56A;color:#0C1413;font-weight:600}.w3 button.on[data-l=nice]{background:#3E8A7E;border-color:#3E8A7E;color:#0C1413;font-weight:600}.w3 button.on[data-l=no]{border-color:#8FA39B;color:#E8E4D8}'
   + '.sw{display:flex;align-items:center;gap:10px;width:100%;margin:12px 0 0;min-height:48px;border:1px solid #3E8A7E;border-radius:10px;background:#0E1918;padding:8px 12px;font-size:.86rem;text-align:left;cursor:pointer}'
@@ -214,7 +216,7 @@ const BRIEF_CSS2 = '.seg.multi button{flex:1 1 20%}.hint2{color:#8FA39B;font-siz
 // v282 (Kendall, 1 Oct 2026, approved): rent or buy -> bedrooms (several; the kind of home on the same screen) -> budget (a target and
 // an optional "stretch up to") -> furnished -> where (with "Compare these areas side by side" when 2 or 3 are picked) -> must-haves
 function briefFormHtml(districts) {
-  const seg = (id, items, cls) => '<div class="seg' + (cls ? " " + cls : "") + '" id=' + id + ">" + items.map((x) => "<button type=button data-v=" + x[0] + ">" + esc(x[1]) + "</button>").join("") + "</div>";
+  const seg = (id, items, cls) => '<div class="seg' + (cls ? " " + cls : "") + '" id=' + id + ">" + items.map((x) => "<button type=button data-v=" + x[0] + ">" + (x[2] ? "<span class=ic aria-hidden=true>" + x[2] + "</span>" : "") + esc(x[1]) + "</button>").join("") + "</div>";
   const groups = CORRIDOR_ORDER.map((c) => {
     const ds = districts.filter((d) => d.c === c).sort((a, b) => a.n.localeCompare(b.n));
     if (!ds.length) return "";
@@ -224,9 +226,9 @@ function briefFormHtml(districts) {
   const step = (n, id, inner) => '<div class=step id=s-' + id + " data-n=" + n + ">" + inner + "</div>";
   return '<div class=card id=bform>'
     + '<div class=prog><button type=button id=fback>‹ BACK</button><span class=pt id=fstep></span><span class=dots id=fdots></span></div>'
-    + step(1, "mode", '<div class=q>They want to…</div>' + seg("fmode", [["rent", "Rent"], ["buy", "Buy"]], "big"))
-    + step(2, "beds", '<div class=q>How many <em>bedrooms</em>?</div><div class=hint2>Tap one or more.</div>' + seg("fbeds", [["studio", "Studio"], ["1", "1"], ["2", "2"], ["3", "3 or more"]], "big multi")
-      + '<div class=lb>WHAT KIND OF HOME <b id=ftypev></b></div>' + seg("ftype", [["apartment", "Apartment"], ["townhouse", "Townhouse"], ["villa", "Villa"], ["any", "Any"]], "multi")
+    + step(1, "mode", '<div class=q>They want to…</div>' + seg("fmode", [["rent", "Rent", "🔑"], ["buy", "Buy", "🏠"]], "big"))
+    + step(2, "beds", '<div class=q>How many <em>bedrooms</em>?</div><div class=hint2>Tap one or more.</div>' + seg("fbeds", [["studio", "Studio", "🛋️"], ["1", "1", "🛏️"], ["2", "2", "🛏️"], ["3", "3 or more", "🛏️"]], "big multi")
+      + '<div class=lb>WHAT KIND OF HOME <b id=ftypev></b></div>' + seg("ftype", [["apartment", "Apartment", "🏢"], ["townhouse", "Townhouse", "🏘️"], ["villa", "Villa", "🏡"], ["any", "Any", "✨"]], "multi")
       + '<div class=hint>The rent register files townhouses and villas together; a townhouse is marked where the project name says so.</div>'
       + '<button type=button class=go id=fnextbd>NEXT →</button><div class=msg id=fmsgb role=alert></div>')
     + step(3, "budget", '<div class=q id=fbudq>What is the <em>budget</em>?</div><div class=lb><span id=fbudl>BUDGET</span><b id=fbudv></b></div><div class=chips id=fpre></div>'
@@ -234,7 +236,7 @@ function briefFormHtml(districts) {
       + '<div class=str><span>stretch up to</span><input class=in id=fstr inputmode=decimal autocomplete=off placeholder="optional, e.g. 300k" aria-label="stretch up to"></div>'
       + '<div class=hint id=fbudh>Type it the way you say it: 65k, 1.2m or 65000. The stretch is the most they would pay for the right home.</div>'
       + '<button type=button class=go id=fnextb>NEXT →</button><div class=msg id=fmsg role=alert></div>')
-    + step(4, "furn", '<div class=q>Furnished?</div>' + seg("ffurn", [["furnished", "Furnished"], ["unfurnished", "Unfurnished"], ["either", "Either"]], "big")
+    + step(4, "furn", '<div class=q>Furnished?</div>' + seg("ffurn", [["furnished", "Furnished", "🛋️"], ["unfurnished", "Unfurnished", "📦"], ["either", "Either", "🤝"]], "big")
       + '<div class=hint>The rent register does not record furnishing, so every home shows it as not known; the leasing team confirms it.</div>')
     + step(5, "where", '<div class=q>Where?</div><div class=lb>DISTRICTS <b id=fdsel>Anywhere in Dubai</b></div>'
       + '<div class=chips><button type=button class="chip on" id=fany>Anywhere in Dubai</button></div>'
@@ -243,7 +245,7 @@ function briefFormHtml(districts) {
       + '<button type=button class="sw on" id=fcmp aria-pressed=true hidden><i></i><span>Compare these areas side by side</span></button>'
       + '<button type=button class=go id=fnextw>NEXT →</button>')
     + step(6, "musts", '<div class=q>What <em>matters</em> to them?</div><div class=lb>OPTIONAL <b id=fmustv></b></div><div id=fwant>'
-      + BRIEF_WANTS.map((m) => "<div class=wr data-k=" + m[0] + "><div class=wl>" + esc(m[1]) + "</div><div class=w3><button type=button data-l=must>Must</button><button type=button data-l=nice>Nice to have</button><button type=button data-l=no>Don’t care</button></div></div>").join("") + "</div>"
+      + BRIEF_WANTS.map((m) => "<div class=wr data-k=" + m[0] + "><div class=wl>" + (WANT_ICON[m[0]] ? "<span class=ic aria-hidden=true>" + WANT_ICON[m[0]] + "</span>" : "") + esc(m[1]) + "</div><div class=w3><button type=button data-l=must><span class=ic aria-hidden=true>⭐</span>Must</button><button type=button data-l=nice><span class=ic aria-hidden=true>👍</span>Nice to have</button><button type=button data-l=no>Don’t care</button></div></div>").join("") + "</div>"
       + '<div class=hint>A home is left out only where a record says no. Where nothing is known, it stays in, marked “not known”.</div>'
       + '<button type=button class=go id=fgo>SHOW ME THE HOMES →</button><button type=button class="go soft" id=fskip>Skip — nothing in particular</button><div class=msg id=fmsg2 role=alert></div>')
     + "</div>"

@@ -432,8 +432,13 @@ export async function ejariAnswer(env, st) {
   if (st.kind === "developer") {
     const dub = await dubaiSource(get, st.basis);
     let ds = new Set(), name = "";
-    if (dub) for (const r of dub.rows) if (r.devNo === st.id) { if (r.district) ds.add(r.district); if (!name && r.dev) name = r.dev; }
-    if (!ds.size) { const idx = await buildIndex(env); const x = idx.v.find((y) => y[0] === st.id); if (x) { name = name || x[1]; x[2].forEach((s) => ds.add(s)); } }
+    // v287: the filed files carry the developer's name but no number, so a row with no number is matched on the name
+    const idx = await buildIndex(env); const ix = idx.v.find((y) => y[0] === st.id);
+    if (ix) name = ix[1] || name;
+    const nk = (v) => String(v || "").toUpperCase().replace(/\s+/g, " ").trim();
+    const isMine = (r) => (r.devNo != null && r.devNo !== "" ? String(r.devNo) === String(st.id) : !!name && nk(r.dev) === nk(name));
+    if (dub) for (const r of dub.rows) if (isMine(r)) { if (r.district) ds.add(r.district); if (!name && r.dev) name = r.dev; }
+    if (ix) ix[2].forEach((s) => ds.add(s));
     if (!ds.size) return { notFound: true, why: "No contracts on record for that developer." };
     // every district on the same basis and the same window: the basis the Dubai-wide file came back on
     const basis = dub ? dub.basis : st.basis;
@@ -442,7 +447,7 @@ export async function ejariAnswer(env, st) {
     const rg = ejariRange(st, anchor);
     const parts = (await Promise.all([...ds].slice(0, 25).map((s) => districtSource(get, s, basis, () => rg)))).filter(Boolean);
     let mine = [];
-    for (const p of parts) mine = mine.concat(p.rows.filter((r) => r.devNo === st.id));
+    for (const p of parts) mine = mine.concat(p.rows.filter(isMine));
     for (const r of mine) if (!name && r.dev) name = r.dev;
     const used = parts.some((p) => p.basis === "start") ? "start" : basis;
     const A = finish({ kind: "developer", id: st.id, name: name || "Developer " + st.id, districts: [...ds].map((s) => names[s] || s), basis: used, fellBack: st.basis === "filed" && used === "start" }, mine, st, rg, anchor, parts);

@@ -3483,7 +3483,7 @@ async function appFetch(request, env, ctx) {
           return new Response(JSON.stringify({ ok: true, indexed: _mb.projectIndex.length }), { headers: { "Content-Type": "application/json" } });
         }
         if (_mb && _mb.image && _mb.imageName) {                                  // v45 — rendered heat-map (or other) PNG from the collector
-          const nm = String(_mb.imageName).replace(/[^a-z0-9_]/gi, "").slice(0, 40);
+          const nm = String(_mb.imageName).replace(/[^a-z0-9_]/gi, "").slice(0, 64);   // v287 - was 40: ejari_filed_recent_dubaiinvestmentparkfirst (43) was stored truncated and read back 404
           const bin = Uint8Array.from(atob(_mb.image), c => c.charCodeAt(0));
           if (bin.length > 5 * 1024 * 1024) return new Response("image too large", { status: 400 });
           await env.MEETINGS.put("img_" + nm, bin.buffer);
