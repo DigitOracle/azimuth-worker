@@ -78,9 +78,38 @@ export function supplyRow(raw) {
     price: num(g("price")), days: num(g("days")), delisted: num(g("delisted")), firstSeen: str(g("firstSeen")), crawled: str(g("crawled"))
   };
 }
+// v288 - how much of the district the bound listing-site locations cover (the crawler's `coverage`, additive), and the adverts by
+// home type (`home_types`, {Villa: n, Townhouse: n, Apartment: n, ...}). Both optional: a file without them draws as before.
+export function supplyCoverage(c) {
+  if (!c || typeof c !== "object" || Array.isArray(c)) return null;
+  const total = num(c.register_total), bound = num(c.register_bound);
+  if (total == null || bound == null || total <= 0 || bound < 0 || bound > total) return null;
+  const ca = c.community_adverts && typeof c.community_adverts === "object" ? c.community_adverts : null;
+  const shown = ca ? num(ca.total) : null, captured = ca ? num(ca.captured) : null;
+  return { total, bound, withAdverts: num(c.register_with_adverts), outside: num(c.bound_locations_outside_register) || 0,
+    siteTotal: shown != null && shown > 0 && captured != null ? shown : null, captured: shown != null && shown > 0 ? captured : null,
+    community: ca ? str(ca.community_name) : "" };
+}
+export function supplyHomeTypes(h) {
+  if (!h || typeof h !== "object" || Array.isArray(h)) return [];
+  return Object.keys(h).map((t) => ({ type: str(t), n: num(h[t]) })).filter((x) => x.type && x.n != null && x.n > 0).sort((a, b) => b.n - a.n || a.type.localeCompare(b.type));
+}
 export function supplyDoc(doc) {
   if (!doc || !Array.isArray(doc.rows)) return null;
-  return { asOf: str(doc.as_of), measure: str(doc.measure), rows: doc.rows.map(supplyRow).filter(Boolean) };
+  return { asOf: str(doc.as_of), measure: str(doc.measure), rows: doc.rows.map(supplyRow).filter(Boolean),
+    coverage: supplyCoverage(doc.coverage), homeTypes: supplyHomeTypes(doc.home_types) };
+}
+const HOME_SAY = { villa: "Villas", townhouse: "Townhouses", apartment: "Apartments", penthouse: "Penthouses", duplex: "Duplexes", "hotel apartment": "Hotel apartments" };
+const homeSay = (t) => HOME_SAY[String(t).toLowerCase()] || String(t);
+// "Covers 35 of 46 registered projects in this district · 1,180 of the 1,433 adverts the listing site shows for Damac Hills"
+export function coverageHtml(cv) {
+  if (!cv) return "";
+  return '<div class=dk id=sucov>Covers <b>' + fmt(cv.bound) + "</b> of " + fmt(cv.total) + " registered projects in this district (Dubai Land Department register)"
+    + (cv.siteTotal ? " · " + fmt(cv.captured) + " of the " + fmt(cv.siteTotal) + " adverts the listing site shows for " + esc(cv.community || "the community") : "") + ".</div>";
+}
+export function homeTypesHtml(hs) {
+  if (!hs || !hs.length) return "";
+  return '<div class=st id=suhome>' + hs.map((h) => "<span>" + esc(homeSay(h.type)) + " <b>" + fmt(h.n) + "</b></span>").join("") + "</div>";
 }
 // the median of per-band medians, weighted by adverts
 function wmed(pairs) {
@@ -138,7 +167,7 @@ async function loadDistrict(env, slug, names) {
   if (!doc) return null;
   const bs = supplyBuildings(doc.rows, slug, names);
   const crawled = bs.reduce((m, b) => (b.crawled > m ? b.crawled : m), "") || doc.asOf;
-  return { slug, asOf: doc.asOf, crawled, buildings: bs };
+  return { slug, asOf: doc.asOf, crawled, buildings: bs, coverage: doc.coverage, homeTypes: doc.homeTypes };
 }
 // one summary for the START card: the latest crawl and the adverts on record
 export async function supplySummary(env) {
@@ -215,6 +244,7 @@ export function supplyPageHtml(o) {
     const D = o.d, live = D.buildings.reduce((s, b) => s + b.live, 0), sites = new Set(); D.buildings.forEach((b) => Object.keys(b.sources).forEach((s) => sites.add(s)));
     main = '<div class=card data-district="' + esc(D.slug) + '"><div class=kt>DISTRICT</div><div class=nm>' + esc(nm[D.slug] || D.slug) + "</div>"
       + '<div class=hl><b>' + fmt(live) + "</b> adverts across " + sites.size + (sites.size === 1 ? " site" : " sites") + ", in " + D.buildings.length + " buildings</div>"
+      + homeTypesHtml(D.homeTypes) + coverageHtml(D.coverage)
       + '<div class=dk>Fetched ' + esc(dubaiTime(D.crawled) || "\u2014") + " (Dubai time).</div>"
       + '<button type=button class=rf data-district="' + esc(D.slug) + '" data-slug="">Refresh the district</button><div class=rs role=status></div></div>'
       + '<div class=hd>BUILDINGS, MOST ADVERTISED FIRST</div>' + D.buildings.slice(0, 30).map((b) => buildingCard(b, key)).join("");
