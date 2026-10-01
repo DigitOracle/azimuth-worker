@@ -52,6 +52,10 @@ import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailF
 export const FOOTER_TEXT = "Curated by Najjuko &middot; Dubai Decoded";
 export const WHATSAPP_NUMBER = "+971 56 548 4397";
 export const HEADER_IMG_KEY = "brand_najjuko_n";
+// pack audit, 1 Oct 2026: the same picture flattened on the header's white, as a JPEG at the printed size x2 (push_brochures.py). The
+// live 33-page pack carried the PNG 32 times (Flate + alpha, 99 KB each = 3.1 MB); a JPEG passes through at ~15 KB a copy. Preferred
+// when stored; the PNG stays the fallback.
+export const HEADER_JPG_KEY = "brand_najjuko_n_jpg";
 const NAVY = "#17283F", GOLD = "#A8814A", MUTED = "#626B78", INK = "#22262B";
 const SQFT = 10.7639;
 const MAX_KEYS = 10;
@@ -216,6 +220,62 @@ async function kvDataUrl(env, name, origin) {
   } catch (e) { return null; }
 }
 
+// THE PHOTOS STAY JPEG (pack audit, 1 Oct 2026). Cloudflare's Browser Rendering is Chrome 128 (the live pack says "Skia/PDF m128").
+// When it draws only PART of a picture - object-fit:cover, background-size:cover: a source-rectangle subset - its PDF writer decodes
+// the picture and stores the raw pixels (FlateDecode); a ten-building pack came out at 30.8 MB, 26 MB of it pictures that are
+// 150-300 KB JPEGs in KV. Drawn WHOLE (scaled) inside a box that clips it, the same picture is passed through as the JPEG it is
+// (DCTDecode). Measured in Chrome 128: one 702 x 300 hero, object-fit:cover 1854 KB, clipped whole picture 288 KB. So a picture is
+// drawn whole, at the size that covers its box, and the box clips it (fitImg). That needs the picture's pixel size: read from the
+// stored JPEG's own header (jpegSize). A picture whose size cannot be read (not a JPEG) keeps the old object-fit:cover.
+// Newer Chrome (145+) passes subsets through as JPEG too, so a local render with a current Chrome does NOT show the problem - test
+// against Chrome 128 (test/test_pack_jpeg.mjs, CHROME128=<path>).
+export function jpegSize(buf) {
+  const u = buf instanceof Uint8Array ? buf : new Uint8Array(buf || new ArrayBuffer(0));
+  if (u.length < 4 || u[0] !== 0xff || u[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 9 < u.length) {
+    if (u[i] !== 0xff) { i++; continue; }
+    const m = u[i + 1];
+    if (m === 0xff) { i++; continue; }
+    if (m === 0x01 || (m >= 0xd0 && m <= 0xd8)) { i += 2; continue; }
+    if (m === 0xda || m === 0xd9) return null;                     // image data before any frame header: not a JPEG we can size
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
+      const h = (u[i + 5] << 8) | u[i + 6], w = (u[i + 7] << 8) | u[i + 8];
+      return w > 0 && h > 0 ? { w, h } : null;
+    }
+    i += 2 + ((u[i + 2] << 8) | u[i + 3]);
+  }
+  return null;
+}
+// A stored picture for the document: {src, w, h} (w/h only for a JPEG whose header gives them). Same linking rule as kvDataUrl, and
+// stricter: a picture is used only when its bytes are stored, not just its content type.
+async function kvPic(env, name, origin) {
+  if (!name) return null;
+  try {
+    const [buf, ct] = await Promise.all([env.MEETINGS.get("img_" + name, "arrayBuffer"), env.MEETINGS.get("img_ct_" + name)]);
+    if (!buf || !buf.byteLength || (origin && !ct)) return null;
+    const type = ct || "image/jpeg";
+    const dim = /jpe?g/i.test(type) ? jpegSize(buf) : null;
+    return Object.assign({ src: origin ? origin + "/img/" + name : "data:" + type + ";base64," + b64(buf) }, dim || {});
+  } catch (e) { return null; }
+}
+async function firstPic(env, names, origin) {
+  for (const n of names) { if (!n) continue; const p = await kvPic(env, n, origin); if (p) return p; }
+  return null;
+}
+const r2 = (x) => Math.round(x * 100) / 100;
+// Draw a picture to cover a w x h box (posY: 0 top .. 1 bottom, like object-position) WITHOUT a source-rectangle subset.
+export function fitImg(pic, w, h, alt, posY) {
+  if (!pic || !pic.src) return "";
+  const py = posY == null ? 0.5 : posY;
+  if (!(pic.w > 0 && pic.h > 0))
+    return img(pic.src, "width:" + r2(w) + "px;height:" + r2(h) + "px;object-fit:cover;display:block;" + (posY != null ? "object-position:center " + Math.round(py * 100) + "%;" : ""), alt);
+  const s = Math.max(w / pic.w, h / pic.h), dw = pic.w * s, dh = pic.h * s;
+  if (Math.abs(dw - w) < 0.5 && Math.abs(dh - h) < 0.5) return img(pic.src, "width:" + r2(w) + "px;height:" + r2(h) + "px;display:block;", alt);
+  return '<div class="pic" style="width:' + r2(w) + "px;height:" + r2(h) + 'px;overflow:hidden;position:relative;">' +
+    img(pic.src, "position:absolute;left:" + r2((w - dw) / 2) + "px;top:" + r2((h - dh) * py) + "px;width:" + r2(dw) + "px;height:" + r2(dh) + "px;max-width:none;display:block;", alt) + "</div>";
+}
+
 // A key is "<district>:<appId>" or "dld:<normalised DLD project name>" (Contract A). Both resolve against the rent index, the one
 // record that carries the evidence; a key the index does not know is refused rather than drawn from somewhere else.
 export function findItem(ri, key) {
@@ -256,7 +316,7 @@ async function loadBrochure(env, it, recName) {
 
 export async function loadContext(env, q, opts) {
   const need = (opts && opts.need) || {};
-  const C = { today: todayLong(opts && opts.now), pages: 0, logo: await kvDataUrl(env, HEADER_IMG_KEY, opts && opts.origin), district: {}, recs: [], missing: [] };
+  const C = { today: todayLong(opts && opts.now), pages: 0, logo: (await kvDataUrl(env, HEADER_JPG_KEY, opts && opts.origin)) || (await kvDataUrl(env, HEADER_IMG_KEY, opts && opts.origin)), district: {}, recs: [], missing: [] };
   C.ri = await kvJson(env, "rent_index");
   if (!C.ri || !Array.isArray(C.ri.items)) return Object.assign(C, { error: "the rent index (img_rent_index) is not in storage" });
   const geo = await kvJson(env, "districts_geo");
@@ -302,12 +362,17 @@ export async function loadContext(env, q, opts) {
     rec.avail = devAvailFor(C.avail, { name: it.n, aliases: (it.a || []).concat(um && um.name ? [um.name] : []) }, B.all ? "all" : +B.band);
     if (br) {
       const ext = br.photos.find((p) => /^exterior/.test(p.file || ""));
-      rec.hero = ext ? await kvDataUrl(env, ext.key, opts && opts.origin) : null;
+      // hero_key / card_key: the same picture pre-cropped by push_brochures.py to the print aspect (2.34:1 hero, 3:2 card and page-3
+      // photo) - smaller, and drawn with no crop at all; the original key is the fallback (fitImg clips it whole)
+      const o = opts && opts.origin;
+      rec.heroPic = ext ? await firstPic(env, [ext.hero_key, ext.key], o) : null;
+      rec.cardPic = ext ? await firstPic(env, [ext.card_key, ext.key], o) : null;
+      rec.hero = rec.heroPic ? rec.heroPic.src : null;
       rec.heroPhoto = ext || null;
       if (need.photos) {
         const extra = br.photos.filter((p) => !/^exterior/.test(p.file || "") && photoRank(p) < 99).sort((a, b) => photoRank(a) - photoRank(b)).slice(0, 4);
         rec.photos = [];
-        for (const p of extra) { const u = await kvDataUrl(env, p.key, opts && opts.origin); if (u) rec.photos.push(Object.assign({ src: u }, p)); }
+        for (const p of extra) { const pic = await firstPic(env, [p.card_key, p.key], o); if (pic) rec.photos.push(Object.assign({ src: pic.src, pic }, p)); }
       }
     }
     C.recs.push(rec);
@@ -416,7 +481,7 @@ function rentSource(C, q, rec) {
 
 // ------------------------------------------------------------------------------------------------ the dossier: three pages
 function thumb(rec, w, h) {
-  if (rec.hero) return img(rec.hero, "width:" + w + "px;height:" + h + "px;object-fit:cover;display:block;", rec.name);
+  if (rec.cardPic || rec.heroPic) return fitImg(rec.cardPic || rec.heroPic, w, h, rec.name);
   return '<div style="width:' + w + "px;height:" + h + "px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:9px;color:" + MUTED + ';text-align:center;">photos<br>to follow</div>';
 }
 
@@ -445,7 +510,7 @@ function nearbyLines(C, rec) {
 
 function dossierPage1(C, rec, q, sub) {
   const B = BEDS[q.beds], st = rec.st;
-  const hero = rec.hero ? img(rec.hero, "width:702px;height:300px;object-fit:cover;display:block;object-position:center 38%;", rec.name)
+  const hero = rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38)
     : '<div style="width:702px;height:120px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:13px;color:' + MUTED + ";\">Photos to follow &mdash; the developer's own pictures are being verified</div>";
   const F = facts(rec);
   const factHtml = F.length ? '<div style="display:grid;grid-template-columns:' + (F.length === 4 ? "0.9fr 0.9fr 1.4fr 0.8fr" : "repeat(" + F.length + ",minmax(0,1fr))") + ';gap:12px;">' +
@@ -540,17 +605,21 @@ function layoutsBlock(rec, q) {
   } else if (st) {
     table = tbl([["left", "SIZE THAT WAS LET"], ["right", "TYPICAL RENT"], ["right", "HOW MANY"], ["right", "MIDDLE HALF, AED"]],
       [["about " + money(st.s * SQFT) + " sq ft", "AED " + money(st.m), String(st.n), money(st.q1) + " &ndash; " + money(st.q3)]]);
-    intro = "A flat-by-flat list of this building's layouts is not yet in our files, so here is what the " + B.word + " flats that were actually let this month were like. Sizes include the balcony.";
+    // pack audit, 1 Oct 2026: a building the units register does not yet list flat by flat gets this one row. The wording says what
+    // the row IS (the flats actually let here), not what is missing, so a thin page does not read as an error.
+    intro = "What " + (B.word === "home" ? "homes" : B.word + " flats") + " in " + esc(rec.name) + " actually let for in the latest pull of the tenancy register: their typical size and rent. " +
+      "The Land Department's flat-by-flat layout list does not cover this building yet; the leasing team can share the floor plans. Sizes include the balcony.";
   } else {
-    intro = "A flat-by-flat list of this building's layouts is not yet in our files, and no " + (B.all ? "" : B.word + " ") + "lettings are on record for it in the latest pull.";
+    intro = "No " + (B.all ? "" : B.word + " ") + "lettings are on record for " + esc(rec.name) + " in the latest pull of the tenancy register, and the Land Department's flat-by-flat layout list does not cover it yet; the leasing team can share the floor plans.";
   }
   return '<div style="display:flex;flex-direction:column;gap:6px;"><div class="serif" style="font-size:20px;color:' + NAVY + ';">The ' + (B.all ? "layouts, every type" : B.word + " layouts") + "</div>" +
     '<div style="font-size:11.5px;color:' + MUTED + ';line-height:1.42;">' + intro + "</div>" + table + "</div>";
 }
 function dossierPage3(C, rec, q, sub) {
   const ph = rec.photos || [];
-  const photos = ph.length ? '<div style="display:grid;grid-template-columns:repeat(' + Math.min(4, ph.length) + ',minmax(0,1fr));gap:8px;">' + ph.map((p) =>
-    '<div style="display:flex;flex-direction:column;gap:2px;">' + img(p.src, "width:100%;height:112px;object-fit:cover;display:block;", p.caption) +
+  const k = Math.min(4, ph.length), colW = (702 - 8 * (k - 1)) / Math.max(1, k);   // the grid's own column width: 702 px body, 8 px gaps
+  const photos = ph.length ? '<div style="display:grid;grid-template-columns:repeat(' + k + ',minmax(0,1fr));gap:8px;">' + ph.map((p) =>
+    '<div style="display:flex;flex-direction:column;gap:2px;">' + fitImg(p.pic || { src: p.src }, colW, 112, p.caption) +
     '<div style="font-size:9.5px;color:' + MUTED + ';">' + esc(String(p.caption || "").split(" (")[0].split(" - ").pop()) + "</div>" +
     '<div style="font-size:8px;color:#8C887C;">' + esc(hostOf(p.page_url || (rec.br && rec.br.source_url)) || "developer's page") + "</div></div>").join("") + "</div>"
     : '<div style="font-size:11px;color:' + MUTED + ";border:1px dashed #DED9D0;padding:8px 10px;\">The developer's page publishes no pictures of the pool, gym or lobby and no floor plans. Ask the leasing team or listing broker for photographs of the actual flat.</div>";
@@ -574,13 +643,16 @@ function titleOf(C, q) {
 // v277: the card carries no "Still filling" line any more (the register estimate is off the client face)
 function oneSheetCards(C, q) {
   const B = BEDS[q.beds];
+  // the card's own inner width (1123 px page - 2 x 30 px padding, 9 px gaps, 1 px border each side), so the picture can be clipped
+  // to it whole (fitImg) instead of object-fit:cover
+  const cols0 = Math.min(5, Math.max(3, C.recs.length)), cardW = (1063 - 9 * (cols0 - 1)) / cols0 - 2;
   const cards = C.recs.map((rec) => {
     const st = rec.st;
     const metro = rec.pos ? (() => { const m = nearestMetro(C, rec.pos); return m ? esc(m.n) + " metro, " + kmTxt(m.d) : "Metro distance to follow"; })() : "Metro distance to follow";
     const amen = ((rec.br && rec.br.amenities) || []).slice(0, 3).map((a) => esc(a.split(" (")[0])).join(", ") || "Amenities to follow";
     const perType = B.all ? Object.keys(rec.sts || {}).map((b) => '<div style="font-size:10px;color:' + INK + ';">' + esc(bandLabel(b)) + ": AED " + money(rec.sts[b].m) + " &middot; " + rec.sts[b].n + " let</div>").join("") : "";
     return '<div class="bcard" style="border:1px solid #E6E1D8;background:#FFF;display:flex;flex-direction:column;overflow:hidden;min-height:0;">' +
-      '<div style="position:relative;">' + thumb(rec, 199, 136).replace("width:199px", "width:100%") + '<div style="position:absolute;left:6px;top:6px;width:24px;height:24px;border-radius:12px;background:' + NAVY +
+      '<div style="position:relative;">' + thumb(rec, cardW, 136) + '<div style="position:absolute;left:6px;top:6px;width:24px;height:24px;border-radius:12px;background:' + NAVY +
       ';color:#FFF;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;">' + rec.n + "</div></div>" +
       '<div style="padding:7px 9px 8px 9px;display:flex;flex-direction:column;gap:3px;">' +
       '<div class="serif" style="font-size:16px;color:' + NAVY + ';line-height:1.05;">' + esc(rec.name) + "</div>" +
