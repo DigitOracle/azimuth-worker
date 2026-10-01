@@ -44,7 +44,7 @@ import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailF
 // v282 (Kendall, 1 Oct 2026): the client's criteria and the area comparison come from the SAME functions /brief_api uses, so the list
 // and the documents can never disagree. A document is a client document: the search is run with owner: false, and nothing here ever
 // prints a listing-site (portal) figure - furnishing is "not known" on every page.
-import { briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY } from "./brief.js";
+import { briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent } from "./brief.js";
 // v277 (Kendall, 1 Oct 2026): the register "left" estimate is OFF the client face - no "ESTIMATED ... LEFT" box on page 2, no
 // "Still filling" line on the one-sheet card. estimateLeft() stays in src/brief.js and the API still returns estimated_left; nothing
 // here prints it. In its place page 2 carries DEVELOPER AVAILABILITY where a developer's own sheet names the building (loadDevAvail /
@@ -358,20 +358,33 @@ export async function loadContext(env, q, opts) {
       if (card && card.name) it = { d: m[1], i: parseInt(m[2], 10), n: card.name, a: [], area: null, b: {}, v: {}, synth: true };
       if (!it) { C.missing.push(key); continue; }
     }
-    // v282 - the home kind (apartment "b", villa or townhouse "v") and the bedroom count this building's figure is for: of the kinds and
-    // bedroom counts asked, the one inside the budget first, then the one with most contracts (the rule /brief_api ranks by)
-    const kinds = kindsOfType(q.type);
+    // v285 - a "dld:" key for a record the index binds to an app building is one /brief_api UNBOUND (unbindDisputed: the app building is
+    // named otherwise - Capital Bay A is bound to "The Metropolis" - or is already listed under a better-evidenced record). The list shows
+    // it with no building page and no position, so the document must not borrow that other building's footprint, position or card
+    // either: the same record, without the disputed bind.
+    if (/^dld:/i.test(key) && it.i != null) it = Object.assign({}, it, { i: null, is: undefined, lat: null, lon: null, unbound: true });
+    // v282 - the home kind (apartment "b", villa or townhouse "v") and the bedroom count this building's figure is for.
+    // v285 - THE choice /brief_api makes (pickRent in src/brief.js: the best verdict, then most contracts) and THE figure it prints
+    // (rentFigure: the median of new lettings where there are 3 or more, else of all contracts, middle half on the same basis). Only a
+    // building the list would not offer (under 3 contracts, or outside the window) falls back to the loose choice below - still on
+    // rentFigure, so a number on a document is always the number on the screen.
+    const kinds = kindsOfType(q.type), bedNums = (q.bedsList || [q.beds]).map((bb) => +BEDS[bb].band);
+    const qv = { min: q.min || null, max: q.max || null, stretch: q.stretch || null };
     let pick = null;
-    if (!B.all) for (const k of kinds) for (const bb of (q.bedsList || [q.beds])) {
-      const rs = rentStat(it, k, +BEDS[bb].band); if (!rs) continue;
-      const vd = verdictOf(rs.s.nn >= 3 && rs.s.mn ? rs.s.mn : rs.s.m, q.min, q.max, q.stretch);
-      const tier = { within: 0, stretch: 1, a_little_above: 2, below: 3, above: 3 }[vd]; const t = tier == null ? 9 : tier;
-      if (!pick || t < pick.t || (t === pick.t && rs.s.n > pick.s.n)) pick = { k, bb, s: rs.s, basis: rs.basis, t };
+    if (!B.all) {
+      const ap = pickRent(it, kinds, bedNums, qv).best;
+      if (ap) pick = { k: ap.kind, bb: ap.bed === 0 ? "studio" : String(ap.bed), s: ap.s, basis: ap.basis };
+      else for (const k of kinds) for (const bb of (q.bedsList || [q.beds])) {
+        const rs = rentStat(it, k, +BEDS[bb].band); if (!rs) continue;
+        const vd = verdictOf(rentFigure(rs.s).m, qv.min, qv.max, qv.stretch);
+        const tier = { within: 0, stretch: 1, a_little_above: 2, below: 3, above: 4 }[vd]; const t = tier == null ? 9 : tier;
+        if (!pick || t < pick.t || (t === pick.t && rs.s.n > pick.s.n)) pick = { k, bb, s: rs.s, basis: rs.basis, t };
+      }
     }
     const kind = pick ? pick.k : (kinds.includes("b") && it.b ? "b" : "v");
     const set = (kind === "v" ? it.v : it.b) || {};
-    const st = B.all ? null : (pick ? pick.s : null);
-    const sts = {}; for (const b of BANDS) if (set[BEDS[b].band]) sts[b] = set[BEDS[b].band];   // v277 - every band, for the all-types document
+    const st = B.all ? null : (pick ? rentFigure(pick.s) : null);
+    const sts = {}; for (const b of BANDS) if (set[BEDS[b].band]) sts[b] = rentFigure(set[BEDS[b].band]);   // v277 - every band, for the all-types document
     const d = areaSlugOf(it);
     const D = d ? await district(d, it) : null;
     const um = D && D.unitmix && D.unitmix.buildings_by_id && it.i != null ? D.unitmix.buildings_by_id[String(it.i)] : null;
@@ -380,7 +393,7 @@ export async function loadContext(env, q, opts) {
     const bro = await loadBrochure(env, it, it.n);
     const br = bro && bro.br;
     const name = br && br.name ? br.name : pretty(it.n);
-    const pos = isFinite(it.lat) && isFinite(it.lon) ? [it.lat, it.lon] : null;
+    const pos = Number.isFinite(it.lat) && Number.isFinite(it.lon) ? [it.lat, it.lon] : null;   // v285: Number.isFinite - an unbound record's null is not a position
     const rec = { key, it, st, sts, d, dist: D ? D.name : pretty(it.area), um, tn, un, br, brRefused: bro && bro.refused, brDir: bro && bro.dir,
                   name, aliases: (it.a || []).map(pretty).filter((a) => stemKey(a) !== stemKey(name)), pos, exact: it.i != null && !!pos, n: C.recs.length + 1 };
     // v277 - what the developer's own sheet lists for this building, of this type (or every type): null where no sheet names it
@@ -404,6 +417,8 @@ export async function loadContext(env, q, opts) {
         for (const p of extra) { const pic = await firstPic(env, [p.card_key, p.key], o); if (pic) rec.photos.push(Object.assign({ src: pic.src, pic }, p)); }
       }
     }
+    // v285 - what the card's picture is: the developer's photograph, else the Blocks view of the building (see blocksThumb)
+    rec.picSource = rec.cardPic || rec.heroPic ? "photo" : blocksKind(rec, D && D.layer);
     C.recs.push(rec);
   }
   return C;
@@ -491,11 +506,15 @@ function dayLong(d) {
   return (+s.slice(8, 10)) + " " + ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][+s.slice(5, 7) - 1] + " " + s.slice(0, 4);
 }
 
+// "9 (4 new)" - the count the list on screen prints beside the same figure (/brief_api evidence.n, n_new)
+const lettingsTxt = (st) => String(st.n) + (st.nn != null ? " (" + st.nn + " new)" : "");
 function budgetLine(st, q, B) {
   const X = q.max, m = st.m, q1 = st.q1, q3 = st.q3;
   const where = X < q1 ? "below most rents here" : X < m ? "just under the typical rent here" : X === m ? "right at the typical rent here" : X <= q3 ? "a little above the typical rent here" : "above most rents here";
   const share = X >= q3 ? "about three in four or more" : X >= m ? "at least half" : X >= q1 ? "between a quarter and a half" : "fewer than one in four";
-  return "AED " + money(X) + " a year is " + where + ": " + share + " of the " + st.n + " " + B.word + " flats let here recently went for AED " + money(X) +
+  // v285: the quarters are those of the figure's own basis (rentFigure): the new lettings where there are 3 or more, else every contract
+  const of = st.median_of === "new_lettings" ? st.nn + " " + B.word + " flats newly let here" : st.n + " " + B.word + " flats let here";
+  return "AED " + money(X) + " a year is " + where + ": " + share + " of the " + of + " recently went for AED " + money(X) +
     " or less, typically about " + money(st.s * SQFT) + " sq ft.";
 }
 
@@ -505,13 +524,16 @@ function rentSource(C, q, rec) {
     (rec && rec.it.area ? ", " + esc(pretty(rec.it.area)) : "") + ", " + (B.all ? "every size of " : B.word + " ") + ((rec ? rec.kind === "v" : !kindsOfType(q.type).includes("b")) ? "villas and townhouses" : "flats") +
     " (bedrooms are read from the size - the register rarely records them), new and renewed contracts, each contract counted once. Where the record " +
     "files the same contracts under two names they are one building here." + (rec && rec.aliases.length ? " This building's contracts are also filed as &ldquo;" +
-    rec.aliases.map(esc).join("&rdquo;, &ldquo;") + "&rdquo;." : "") + " Typical rent is the median; the middle half is the range the middle 50% of rents fall in." +
+    rec.aliases.map(esc).join("&rdquo;, &ldquo;") + "&rdquo;." : "") + " Typical rent is the median of the new lettings where there are three or more, otherwise of every contract - the same figure the list on screen shows; the middle half is the range the middle 50% of those rents fall in." +
     (rec && rec.kind === "v" && rec.bedsBasis ? " Villas and townhouses: the register files both as Villa; " + esc(BEDS_BASIS_SAY[rec.bedsBasis] || "") + "." : "");
 }
 
 // ------------------------------------------------------------------------------------------------ the dossier: three pages
-function thumb(rec, w, h) {
+function thumb(rec, w, h, C) {
   if (rec.cardPic || rec.heroPic) return fitImg(rec.cardPic || rec.heroPic, w, h, rec.name);
+  // v285 - no developer photograph on file: the building's Blocks view (blocksThumb), never an empty box
+  const D = (C && C.district[rec.d]) || {}, bv = blocksThumb(rec, D.layer, w, h, { district: rec.dist });
+  if (bv) return bv.html;
   return '<div style="width:' + w + "px;height:" + h + "px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:9px;color:" + MUTED + ';text-align:center;">photos<br>to follow</div>';
 }
 
@@ -540,7 +562,8 @@ function nearbyLines(C, rec) {
 
 function dossierPage1(C, rec, q, sub) {
   const B = BEDS[q.beds], st = rec.st;
-  const hero = rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38)
+  const bvHero = rec.heroPic ? null : blocksThumb(rec, (C.district[rec.d] || {}).layer, 702, 300, { district: rec.dist, fs: 9.5 });   // v285
+  const hero = rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38) : bvHero ? bvHero.html
     : '<div style="width:702px;height:120px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:13px;color:' + MUTED + ";\">Photos to follow &mdash; the developer's own pictures are being verified</div>";
   const F = facts(rec);
   const factHtml = F.length ? '<div style="display:grid;grid-template-columns:' + (F.length === 4 ? "0.9fr 0.9fr 1.4fr 0.8fr" : "repeat(" + F.length + ",minmax(0,1fr))") + ';gap:12px;">' +
@@ -556,7 +579,7 @@ function dossierPage1(C, rec, q, sub) {
     : '<div style="border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;font-size:12px;color:' + INK + ';">No lettings for this building in the latest pull of the tenancy register, so no typical rent is shown.</div>')
     : st ? '<div style="display:grid;grid-template-columns:1.3fr 1.2fr 0.8fr 0.9fr;gap:12px;align-items:end;border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;">' +
     '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">' + rentLbl + '</div><div class="serif" style="font-size:29px;color:' + GOLD + ';line-height:1;white-space:nowrap;">AED ' + money(st.m) + "</div></div>" +
-    stat("AED " + money(st.q1) + " &ndash; " + money(st.q3), "MIDDLE HALF") + stat(String(st.n), "RECENT LETTINGS") + stat(money(st.s * SQFT) + " sq ft", "TYPICAL SIZE") + "</div>" +
+    stat("AED " + money(st.q1) + " &ndash; " + money(st.q3), "MIDDLE HALF") + stat(lettingsTxt(st), "RECENT LETTINGS") + stat(money(st.s * SQFT) + " sq ft", "TYPICAL SIZE") + "</div>" +
     (q.max ? '<div style="font-size:12px;color:' + INK + ';line-height:1.45;"><b>What AED ' + money(q.max) + " gets you here.</b> " + budgetLine(st, q, B) + "</div>" : "")
     : '<div style="border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;font-size:12px;color:' + INK + ';">No ' + B.word + " lettings for this building in the latest pull of the tenancy register, so no typical rent is shown.</div>";
   const amen = ((rec.br && rec.br.amenities) || []).map((a) => '<div style="font-size:11.5px;color:' + NAVY + ';line-height:1.35;">&#8226; ' + esc(a) + "</div>").join("") ||
@@ -576,9 +599,11 @@ function buildingSource(rec) {
   if (rec.br && rec.br.developer) bits.push("developer from the developer's own project page");
   return bits.length ? "The building: " + bits.join("; ") + "." : "";
 }
+const BV_SAY = "A Blocks view is the building as a simple block on the app's district model (footprints and streets &copy; OpenStreetMap contributors), heights to scale, seen from the south - a picture of where and how tall it is, not a photograph.";
 const nearbySource = () => "Metro: RTA station register. Schools (with their KHDA inspection rating) and clinics (Dubai Health Authority licence register): the nearest to this building, straight-line distances, not walking or driving times.";
 function pictureSource(rec) {
-  if (!rec.br) return rec.brRefused ? "Pictures and amenities: not shown - " + esc(rec.brRefused) + "." : "Pictures and amenities: to follow from the developer's own project page.";
+  const bv = rec.picSource && rec.picSource !== "photo" && rec.picSource !== "none" ? " The picture on page 1 is a Blocks view, not a photograph: " + BV_SAY : "";
+  if (!rec.br) return (rec.brRefused ? "Pictures and amenities: not shown - " + esc(rec.brRefused) + "." : "Pictures and amenities: to follow from the developer's own project page.") + bv;
   return "Pictures and amenities: the developer's own project page, " + esc(rec.br.source_url || "not yet verified") + (rec.br.retrieved ? ", retrieved " + esc(rec.br.retrieved) : "") + ". " +
     esc(rec.br.amenities_note || rec.br.photos_note || "");
 }
@@ -753,13 +778,13 @@ function oneSheetCards(C, q) {
     const amen = ((rec.br && rec.br.amenities) || []).slice(0, 3).map((a) => esc(a.split(" (")[0])).join(", ") || "Amenities to follow";
     const perType = B.all ? Object.keys(rec.sts || {}).map((b) => '<div style="font-size:10px;color:' + INK + ';">' + esc(bandLabel(b)) + ": AED " + money(rec.sts[b].m) + " &middot; " + rec.sts[b].n + " let</div>").join("") : "";
     return '<div class="bcard" style="border:1px solid #E6E1D8;background:#FFF;display:flex;flex-direction:column;overflow:hidden;min-height:0;">' +
-      '<div style="position:relative;">' + thumb(rec, cardW, 136) + '<div style="position:absolute;left:6px;top:6px;width:24px;height:24px;border-radius:12px;background:' + NAVY +
+      '<div style="position:relative;">' + thumb(rec, cardW, 136, C) + '<div style="position:absolute;left:6px;top:6px;width:24px;height:24px;border-radius:12px;background:' + NAVY +
       ';color:#FFF;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;">' + rec.n + "</div></div>" +
       '<div style="padding:7px 9px 8px 9px;display:flex;flex-direction:column;gap:3px;">' +
       '<div class="serif" style="font-size:16px;color:' + NAVY + ';line-height:1.05;">' + esc(rec.name) + "</div>" +
       (st ? '<div style="display:flex;align-items:baseline;gap:6px;"><span class="serif" style="font-size:20px;color:' + GOLD + ';">AED ' + money(st.m) + '</span><span style="font-size:9.5px;color:' + MUTED + ';">typical a year</span></div>' +
         '<div style="font-size:10px;color:' + INK + ';">Middle half AED ' + money(st.q1) + "&ndash;" + money(st.q3) + "</div>" +
-        '<div style="font-size:10px;color:' + INK + ';">' + st.n + " recent lettings &middot; about " + money(st.s * SQFT) + " sq ft</div>"
+        '<div style="font-size:10px;color:' + INK + ';">' + lettingsTxt(st) + " recent lettings &middot; about " + money(st.s * SQFT) + " sq ft</div>"
         : perType || '<div style="font-size:10px;color:' + INK + ';">No ' + (B.all ? "" : B.word + " ") + "lettings in the latest pull</div>") +
       '<div style="font-size:9.8px;color:' + MUTED + ';line-height:1.25;">' + amen + "</div>" +
       '<div style="font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + metro + "</div>" + criteriaLine(rec, q) +
@@ -779,7 +804,7 @@ export function oneSheetHtml(C, q) {
     '<div style="font-size:11px;color:' + MUTED + ';">' + C.today + " &middot; numbers match the map &middot; rents are rents recently agreed, not asking prices</div></div>" + logo(C, 68) + "</div>" +
     html +
     '<div style="padding:0 30px 4px 30px;font-size:8.3px;color:' + MUTED + ';line-height:1.3;">Rents: Dubai Land Department tenancy contracts, the pull of ' + esc(C.ri.as_of || "") + ", " + (B.all ? "every size of " : B.word + "-sized ") +
-    (!kindsOfType(q.type).includes("b") ? "villas and townhouses" : kindsOfType(q.type).includes("v") ? "homes" : "flats") + ", each contract counted once. Metro distances are straight lines. Pictures: each developer's own project page." +
+    (!kindsOfType(q.type).includes("b") ? "villas and townhouses" : kindsOfType(q.type).includes("v") ? "homes" : "flats") + ", each contract counted once; typical rent is the median of new lettings where there are three or more, else of every contract, as on screen. Metro distances are straight lines. Pictures: each developer's own project page" + (C.recs.some((r) => r.picSource && r.picSource !== "photo" && r.picSource !== "none") ? "; where none is on file, a Blocks view: the building as a simple block on the district model (&copy; OpenStreetMap contributors), heights to scale - not a photograph." : ".") +
     " Availability, the rent and the actual flat must be confirmed with the leasing team or listing broker.</div>" + landFooter());
   return p1 + overviewMapPages(C, q);
 }
@@ -802,7 +827,7 @@ export function matchAll(C, q) {
   const B = BEDS[q.beds];
   const ds = q.areas.length ? q.areas : [...new Set(C.recs.map((r) => r.d).filter(Boolean))];
   const lo = q.min || 0, hi = q.max ? q.max * 1.03 : Infinity;   // Contract A's "within": median within +3% of max and >= min
-  const stOf = (set) => { set = set || {}; if (!B.all) return set[B.band]; let best = null; for (const b of BANDS) { const s = set[BEDS[b].band]; if (s && (!best || s.n > best.n)) best = s; } return best; };   // v277: every type - the best-evidenced band stands for the building
+  const stOf = (set) => { set = set || {}; if (!B.all) return rentFigure(set[B.band]); let best = null; for (const b of BANDS) { const s = set[BEDS[b].band]; if (s && (!best || s.n > best.n)) best = s; } return rentFigure(best); };   // v277: every type - the best-evidenced band stands for the building; v285: on rentFigure, the list's own figure
   return C.ri.items.filter((it) => (!ds.length || ds.includes(it.d))).map((it) => ({ it, st: stOf(!kindsOfType(q.type).includes("b") ? it.v : it.b) }))
     .filter((x) => x.st && x.st.n >= 3 && x.st.m >= lo && x.st.m <= hi).sort((a, b) => b.st.n - a.st.n);
 }
@@ -840,6 +865,93 @@ export function markOf(rec, layer) {
     return Object.assign(base, { placed: true, approx: true, xy: [a * lon + b * lat + c, d * lon + e * lat + f], side: 40, h: floors ? floors * 3.4 : 30 });
   }
   return base;
+}
+
+// ------------------------------------------------------------------------------------------------ v285: the Blocks view picture
+// Kendall, 1 Oct 2026, filming the Business Bay Compare 10: "you need the pictures in the .pdf" - all ten cards said "photos to follow"
+// (15 brochure folders exist, mostly JVC). Where the developer's own photograph is not on file, the card (and the dossier's page-1 hero)
+// shows the building's LOD 100 view instead: the same projection, palette and district layer as briefMapSvg (50 degrees from the south,
+// heights to scale), cropped tight on the building - in gold, its neighbours in grey, the streets between. It is labelled "Blocks view"
+// on the picture itself, so it is never taken for a photograph. Three cases, never an empty box:
+//   blocks          the building's own footprint(s) on the layer (exact)
+//   blocks_approx   no footprint, but a map position: an indicative dashed block at that position (a small locator map)
+//   district        neither (an unbound register record): the district's blocks with nothing picked out, "position not yet verified"
+// A district with no layer (or a building outside every layer) is "none": the plain "picture to follow" box, as before.
+export function blocksKind(rec, layer) {
+  if (!layer || !Array.isArray(layer.b) || !layer.b.length) return "none";
+  const m = markOf(rec, layer);
+  return m.placed ? (m.approx ? "blocks_approx" : "blocks") : "district";
+}
+export function blocksThumb(rec, layer, w, h, o) {
+  const kind = blocksKind(rec, layer);
+  if (kind === "none") return null;
+  const mark = markOf(rec, layer);
+  const pairs = (f) => { const r = []; for (let k = 0; k + 1 < f.length; k += 2) r.push([f[k], f[k + 1]]); return r; };
+  const hiIds = new Set(kind === "blocks" ? mark.ids : []);
+  let tgt = layer.b.filter((b) => hiIds.has(b[0])).map(([, hh, f]) => ({ r: pairs(f), h: hh, kind: "hi" }));
+  if (kind === "blocks_approx") { const [cx, cy] = mark.xy, s = mark.side / 2; tgt = [{ r: [[cx - s, cy - s], [cx + s, cy - s], [cx + s, cy + s], [cx - s, cy + s], [cx - s, cy - s]], h: mark.h, kind: "approx" }]; }
+  // the frame, in the view's own units (metres across; metres up the picture after the 50-degree tilt)
+  let gx0 = Infinity, gx1 = -Infinity, gy0 = Infinity, gy1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+  const src = tgt.length ? tgt : layer.b.map(([, hh, f]) => ({ r: pairs(f), h: 0 }));
+  for (const b of src) for (const [x, y] of b.r) {
+    gx0 = Math.min(gx0, x); gx1 = Math.max(gx1, x); gy0 = Math.min(gy0, y); gy1 = Math.max(gy1, y);
+    v0 = Math.min(v0, y * KY); v1 = Math.max(v1, y * KY + (b.h || 0) * KH);
+  }
+  const asp = h / w;
+  let Wf;
+  const uc = (gx0 + gx1) / 2, vc = (v0 + v1) / 2;
+  if (tgt.length) {
+    Wf = Math.max(260, (gx1 - gx0) * 3.2, (gy1 - gy0) * 2.2);
+    if ((v1 - v0) * 1.35 > Wf * asp) Wf = (v1 - v0) * 1.35 / asp;          // a tall tower: widen until its full height fits
+  } else Wf = Math.max(gx1 - gx0, (v1 - v0) / asp) * 1.04;
+  const Hf = Wf * asp, U0 = uc - Wf / 2, V0 = vc - Hf / 2, k = w / Wf;
+  // the district view (a whole district on a card) is drawn coarse - whole pixels, roofs only, main roads only - so four of them on one
+  // sheet stay a few tens of KB each instead of 450; the building views keep a tenth of a pixel and their walls
+  const coarse = kind === "district", pr = coarse ? 1 : 10;
+  const X = (x) => Math.round((x - U0) * k * pr) / pr, Y = (y, hh) => Math.round((h - (y * KY + (hh || 0) * KH - V0) * k) * pr) / pr;
+  const path = (pts) => { const o2 = []; let last = ""; for (const [x, y, hh] of pts) { const t = X(x) + " " + Y(y, hh); if (t !== last) o2.push(t); last = t; } return o2.length < 3 ? "" : "M" + o2.join(" ") + "Z"; };
+  // what can show: footprints whose picture reaches the frame (tall ones to the south can rise into it)
+  const inFrame = (r, hh) => r.some(([x]) => x > U0 - 60 && x < U0 + Wf + 60) && r.some(([, y]) => y * KY + (hh || 0) * KH > V0 - 40 && y * KY < V0 + Hf + 40);
+  const blds = layer.b.filter((b) => !hiIds.has(b[0])).map(([, hh, f]) => ({ r: pairs(f), h: hh, kind: "ctx" })).filter((b) => inFrame(b.r, b.h)).concat(tgt);
+  const out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + r2(w) + " " + r2(h) + '" width="' + r2(w) + '" height="' + r2(h) + '" style="display:block;">',
+    "<style>.bvw{fill:" + MAPC.CTX_WALL + ";stroke:" + MAPC.CTX_EDGE + ";stroke-width:0.4;stroke-linejoin:round}.bvr{fill:" + MAPC.CTX_ROOF + ";stroke:" + MAPC.CTX_EDGE + ";stroke-width:" + (coarse ? 0.25 : 0.4) + ";stroke-linejoin:round}.bvg{fill-opacity:0.32;stroke-opacity:0.6}</style>",
+    '<rect width="' + r2(w) + '" height="' + r2(h) + '" fill="' + MAPC.BG + '"/>'];
+  const lw = Math.max(0.6, Math.min(3, k * 4));
+  const streets = (layer.s || []).map(([c, f]) => ({ c, r: pairs(f) })).filter((s) => (!coarse || s.c >= 6) && inFrame(s.r, 0));
+  for (const pass of [0, 1]) {
+    const d = streets.map((s) => { const o2 = []; let last = ""; for (const [x, y] of s.r) { const t = X(x) + " " + Y(y, 0); if (t !== last) o2.push(t); last = t; } return o2.length > 1 ? "M" + o2.join(" ") : ""; }).join("");
+    if (d) out.push('<path d="' + d + '" fill="none" stroke="' + (pass ? MAPC.STREET : MAPC.CASE) + '" stroke-width="' + r2(lw * (pass ? 1 : 1.6)) + '" stroke-linecap="round" stroke-linejoin="round"/>');
+  }
+  const area = (r) => { let s = 0; for (let q = 0; q + 1 < r.length; q++) s += r[q][0] * r[q + 1][1] - r[q + 1][0] * r[q][1]; return s / 2; };
+  blds.sort((a, b) => Math.min(...b.r.map((p) => p[1])) - Math.min(...a.r.map((p) => p[1])));   // painter's order: far (north) first
+  if (coarse) {
+    const d = blds.map((b) => path(b.r.map(([x, y]) => [x, y, b.h]))).join("");
+    if (d) out.push('<path class="bvr" d="' + d + '"/>');
+  } else {
+  // a neighbour standing in front of the building (south of it, and over it in the picture) is drawn see-through, so the gold block
+  // is never hidden behind a taller tower in front
+  const sb = (bb) => { let a = Infinity, c = -Infinity, e = Infinity, g = -Infinity; for (const [x, y] of bb.r) { a = Math.min(a, X(x)); c = Math.max(c, X(x)); e = Math.min(e, Y(y, bb.h)); g = Math.max(g, Y(y, 0)); } return [a, c, e, g]; };
+  const T = tgt.map(sb), tSouth = Math.min(...tgt.map((t) => Math.min(...t.r.map((p) => p[1]))));
+  const ghost = (bb) => { if (bb.kind !== "ctx" || !T.length || Math.min(...bb.r.map((p) => p[1])) >= tSouth) return false; const [a, c, e, g] = sb(bb); return T.some(([ta, tc, te, tg]) => a < tc && c > ta && e < tg && g > te); };
+  for (const b of blds) {
+    let r = b.r; if (area(r) < 0) r = r.slice().reverse();
+    const ctx = b.kind === "ctx", gh = ghost(b) ? " bvg" : "";
+    const [roof, wall, edge, sw] = b.kind === "hi" ? [MAPC.GOLD, MAPC.GOLD_WALL, MAPC.GOLD_EDGE, 0.9] : ["#E6D6B2", "#CDB684", MAPC.GOLD_EDGE, 0.9];
+    const dash = b.kind === "approx" ? ' stroke-dasharray="4 2.5"' : "";
+    const paint = (c, fill) => ctx ? ' class="' + c + gh + '"' : ' class="' + (b.kind === "hi" ? "hiblock" : "approxblock") + '" fill="' + fill + '" stroke="' + edge + '" stroke-width="' + sw + '" stroke-linejoin="round"' + dash;
+    const walls = [];
+    for (let q = 0; q + 1 < r.length; q++) { const [x0, y0] = r[q], [x1, y1] = r[q + 1]; if (x1 - x0 > 0) walls.push([(y0 + y1) / 2, [[x0, y0, 0], [x1, y1, 0], [x1, y1, b.h], [x0, y0, b.h]]]); }
+    walls.sort((a, c) => c[0] - a[0]);
+    const wd = walls.map((x) => path(x[1])).join("");
+    if (wd) out.push("<path" + paint("bvw", wall) + ' d="' + wd + '"/>');
+    const rd = path(r.map(([x, y]) => [x, y, b.h]));
+    if (rd) out.push("<path" + paint("bvr", roof) + ' d="' + rd + '"/>');
+  }
+  }
+  out.push("</svg>");
+  const say = kind === "blocks" ? "Blocks view" : kind === "blocks_approx" ? "Blocks view &middot; approximate position" : "Blocks view &middot; " + esc((o && o.district) || rec.dist || "") + " &middot; position not yet verified";
+  return { kind, html: '<div class="blocksview" data-kind="' + kind + '" style="width:' + r2(w) + "px;height:" + r2(h) + 'px;overflow:hidden;position:relative;">' + out.join("") +
+    '<div style="position:absolute;right:4px;bottom:3px;font-size:' + ((o && o.fs) || 7.5) + "px;line-height:1.2;color:#5E5B52;background:rgba(255,255,255,0.82);padding:1px 4px;letter-spacing:.2px;\">" + say + "</div></div>" };
 }
 
 export function briefMapSvg(layer, marks, o) {

@@ -162,31 +162,49 @@ export function rentStat(it, kind, bed) {
 export const BEDS_BASIS_SAY = { registered: "bedrooms as the register records them", size: "bedrooms read from the size", size_3plus: "3 or more bedrooms, read from the size (the register does not separate them here)" };
 
 // ---- rent: one candidate per index record, on the SAME figure the HOMES panel shows -------------------------------
-const rentFig = (s) => (s.nn >= 3 && s.mn ? s.mn : s.m);
+// v285 (Kendall, 1 Oct 2026, while filming: the Capital Bay A card said "typical rent AED 50k, middle half 49k-51k, 9 lettings (4 new)"
+// and the PDF for the same brief said "AED 55,000, middle half 50,000-55,650"). The list read the median of NEW lettings (3 or more),
+// the PDF read s.m / s.q1 / s.q3 - the median of ALL contracts. Same record, same window, same bedroom band, two bases. THE one figure
+// is rentFigure(): /brief_api's evidence row and every number the PDFs print (card, dossier, layouts, budget line, appendix, the
+// all-types table) come from it, and pickRent() is the one choice of home kind and bedroom count both make, as estimateLeft() is the
+// one "left" estimate.
+export function rentFigure(s) {
+  if (!s) return null;
+  const nb = s.nn >= 3 && !!s.mn;
+  return { m: nb ? s.mn : s.m, q1: nb ? s.q1n : s.q1, q3: nb ? s.q3n : s.q3, n: s.n, nn: s.nn, nr: s.nr, s: s.s, last: s.last,
+    median_of: nb ? "new_lettings" : "all_contracts", median_all: s.m };
+}
+const rentFig = (s) => rentFigure(s).m;
+// The /brief_api choice for one record: of the kinds and bedroom counts asked, the best verdict tier, then the most contracts; under
+// EVIDENCE_MIN contracts or outside the offered window is no choice. q: {min, max, stretch} (null = none). -> {best, thin}
+export function pickRent(it, kinds, beds, q) {
+  let best = null, thin = 0;
+  for (const k of kinds) for (const bed of beds) {
+    const rs = rentStat(it, k, bed);
+    if (!rs) continue;
+    const s = rs.s;
+    if (s.n < EVIDENCE_MIN) { thin++; continue; }
+    const fig = rentFigure(s), v = fig.m, verdict = verdictOf(v, q.min, q.max, q.stretch);
+    if (!verdict) continue;
+    if (!best || TIER[verdict] < TIER[best.verdict] || (TIER[verdict] === TIER[best.verdict] && s.n > best.s.n)) best = { s, fig, v, verdict, kind: k, villa: k === "v", bed, basis: rs.basis };
+  }
+  return { best, thin };
+}
 function rentCandidates(RI, q, beds) {
   const out = []; let thin = 0;
   const kinds = kindsOfType(q.type);
   for (const it of (RI && RI.items) || []) {
     const d = areaSlugOf(it);
     if (q.areas.length && !q.areas.includes(d)) continue;
-    let best = null;
-    for (const k of kinds) for (const bed of beds) {
-      const rs = rentStat(it, k, bed);
-      if (!rs) continue;
-      const s = rs.s;
-      if (s.n < EVIDENCE_MIN) { thin++; continue; }
-      const v = rentFig(s), verdict = verdictOf(v, q.min, q.max, q.stretch);
-      if (!verdict) continue;
-      if (!best || TIER[verdict] < TIER[best.verdict] || (TIER[verdict] === TIER[best.verdict] && s.n > best.s.n)) best = { s, v, verdict, villa: k === "v", bed, basis: rs.basis };
-    }
+    const pr = pickRent(it, kinds, beds, q), best = pr.best; thin += pr.thin;
     if (!best) continue;
-    const s = best.s, newBasis = s.nn >= 3 && !!s.mn;
+    const s = best.s, f = best.fig;
     out.push({
       it, d, i: it.i == null ? null : it.i, name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, dldArea: it.area,
       key: candidateKey(it), bed: best.bed,
       verdict: best.verdict, v: best.v, n: s.n,
-      evidence: { basis: "ejari", median: best.v, q1: newBasis ? s.q1n : s.q1, q3: newBasis ? s.q3n : s.q3, n: s.n, n_new: s.nn,
-        median_of: newBasis ? "new_lettings" : "all_contracts", median_all: s.m, sqm: s.s, latest: s.last, home: best.villa ? "villa" : "apartment",
+      evidence: { basis: "ejari", median: f.m, q1: f.q1, q3: f.q3, n: f.n, n_new: f.nn,
+        median_of: f.median_of, median_all: f.median_all, sqm: f.s, latest: f.last, home: best.villa ? "villa" : "apartment",
         beds: best.bed, beds_basis: best.basis },
     });
   }
