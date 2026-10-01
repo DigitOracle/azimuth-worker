@@ -144,7 +144,7 @@ ok((await brief(REF)).r.headers.get("Cache-Control") === "no-store", "no-store: 
 x = await brief(REF);
 let j = x.j, R = j.results, names = R.map(r => r.name);
 ok(j.as_of === "2026-09-30" && /img_rent_index/.test(j.source) && j.window[0] === "2026-08-01", "as_of, source and window come from the index", JSON.stringify([j.as_of, j.source]));
-ok(JSON.stringify(j.query) === JSON.stringify({ mode: "rent", beds: "1", min: 60000, max: 68000, areas: [JVC], type: "any", musts: [], limit: 10 }), "the query is echoed", JSON.stringify(j.query));
+ok(JSON.stringify(j.query) === JSON.stringify({ mode: "rent", beds: "1", min: 60000, max: 68000, stretch: null, areas: [JVC], type: "any", furnished: "either", musts: [], nice: [], compare: false, limit: 10 }), "the query is echoed", JSON.stringify(j.query));
 ok(names.slice(0, 4).join("|") === "Binghatti Amber|Bloom Towers|Binghatti Nova|BLOOM HEIGHTS", "strictly inside the budget, most contracts first: Amber 29, Bloom Towers 24, Nova 16, Bloom Heights 15", names.join(" | "));
 ok(names.indexOf("THE HAVEN GARDEN") > names.indexOf("Chaimaa Avenue"), "70K ranks after every building within 60-68K, despite 37 contracts", names.join(" | "));
 ok(R.find(r => r.name === "THE HAVEN GARDEN").verdict === "a_little_above", "70K against a 68K ceiling (+2.9%) is 'a_little_above' - within is strict");
@@ -165,7 +165,7 @@ const nova = R.find(r => r.name === "Binghatti Nova");
 ok(nova.key === JVC + ":1490" && nova.app_id === 1490 && nova.building_url === "/building/" + JVC + "/1490" && nova.district_name === "Jumeirah Village Circle", "a bound building: key district:id, its building page, the district's name", JSON.stringify([nova.key, nova.building_url, nova.district_name]));
 const amb = R.find(r => r.name === "Binghatti Amber");
 ok(amb.key === "dld:binghattiamber" && amb.app_id === null && amb.building_url === null && amb.completeness.record === false, "an unbound building: key dld:<name>, no app id, no page");
-ok(JSON.stringify(nova.evidence) === JSON.stringify({ basis: "ejari", median: 65000, q1: 60000, q3: 72000, n: 16, n_new: 13, median_of: "new_lettings", median_all: 65000, sqm: 59.1, latest: "2026-09-30", home: "apartment" }), "the evidence block", JSON.stringify(nova.evidence));
+ok(JSON.stringify(nova.evidence) === JSON.stringify({ basis: "ejari", median: 65000, q1: 60000, q3: 72000, n: 16, n_new: 13, median_of: "new_lettings", median_all: 65000, sqm: 59.1, latest: "2026-09-30", home: "apartment", beds: 1, beds_basis: "size" }), "the evidence block", JSON.stringify(nova.evidence));
 ok(R.every((r, i) => r.rank === i + 1), "ranks run 1..n");
 ok(j.total_matched === Object.values(j.counts).reduce((a, b) => a + b, 0), "total_matched is the sum of the verdict counts", JSON.stringify(j.counts));
 ok(j.notes.some(n => /NOT live availability/.test(n)) && j.notes.some(n => /read from each home's size - Ejari rarely records them/.test(n)), "the notes say: not availability; bedrooms read from size");
@@ -209,7 +209,7 @@ ok(Object.keys(nova.musts).join() === "balcony,metro,pool,gym,parking,new,school
 let mx = (await brief(REF + "&musts=metro")).j;
 ok(!mx.results.some(r => r.name === "Bloom Towers") && mx.results.some(r => r.name === "Binghatti Nova") && mx.results.some(r => r.name === "Binghatti Amber"),
   "musts=metro: Bloom Towers (a source says no) is left out; Nova (yes) and Amber (unknown) stay", mx.results.map(r => r.name).join(" | "));
-ok(mx.notes.some(n => /left out because a source says a non-negotiable is missing/.test(n)), "and the notes say why");
+ok(mx.notes.some(n => /left out because a source says a must-have is missing/.test(n)), "and the notes say why");
 ok(nova.completeness.record && nova.completeness.layouts && nova.completeness.photos && nova.brochure === "/img/brochure_" + JVC + "_1490", "completeness: record, layouts, developer photos", JSON.stringify(nova.completeness));
 ok(!R.find(r => r.name === "BLOOM HEIGHTS").completeness.photos, "no brochure: photos false");
 
@@ -328,6 +328,120 @@ else {
   const { j: j3 } = await brief("mode=rent&beds=1&min=60000&max=68000&areas=" + JVC + "&limit=10");
   ok((j3.results || []).every(r => !("developer_availability" in r)), "without a sheet on file no row carries the field");
   setAll();
+}
+
+// ---- v282 (Kendall, 1 Oct 2026): two real client briefs -----------------------------------------------------------------------
+// (1) "a furnished 2-3 bedroom townhouse; AED 240,000 a year, up to 300,000 for a modern, well-furnished home; a private pool preferred,
+//     or a community pool; a pet-friendly community with dog-walking routes and play areas; quality for a long stay"
+// (2) "British, Arabian Ranches vs DAMAC Hills; rent; budget 240 but can go to 300 if it's modern and new; furnished apartment; must
+//     accommodate her dog; pools and parks"
+// NEGATIVE CONTROL (run 1 Oct 2026): in src/brief.js make a must leave a building out on "not known" too
+// (`c.crit[m].v === false` -> `c.crit[m].v !== true`): V-NK1 and V-NK2 fail; restored, they pass.
+{
+  const vS = (n, m, s) => ({ n, nn: n, nr: 0, m, q1: m - 10000, q3: m + 10000, mn: m, q1n: m - 10000, q3n: m + 10000, s, last: "2026-09-28" });
+  const VRI = { as_of: "2026-09-30", source_file: "rents-2026-09-30-api.csv", window: ["2026-08-01", "2026-09-30"], items: [
+    // a townhouse project the register names as such; its 3-bed figure from the register's own bedroom count ("vr")
+    { p: "mahatownhouses", n: "MAHA TOWNHOUSES", area: "Al Yelayiss 2", d: "alyelayiss2", v: { "3": vS(29, 170000, 200) }, vr: { "3": vS(20, 158528, 180), "4": vS(9, 200000, 260) } },
+    // villas: band 3 is "3 or more, read from the size" where the register gives under 3 contracts of an exact count
+    { p: "bigvillas", n: "BIG VILLAS", area: "Al Yelayiss 2", d: "alyelayiss2", v: { "3": vS(12, 280000, 500) }, vr: { "3": vS(2, 250000, 300) } },
+    { p: "stretchvillas", n: "STRETCH VILLAS", area: "Al Yelayiss 2", d: "alyelayiss2", v: { "2": vS(5, 290000, 220) } },
+    { p: "ranchvilla", n: "ARABIAN RANCHES - PALMA COMMUNITY", area: "Wadi Al Safa 7", d: null, v: { "3": vS(4, 260000, 400) }, vr: { "4": vS(4, 260000, 400) } },
+    { p: "towerflat", n: "TOWER FLAT", area: "Al Yelayiss 2", d: "alyelayiss2", i: 77, lon: 55.25, lat: 25.03, b: { "2": vS(10, 230000, 120) } },
+  ], areas: [{ area: "Wadi Al Safa 7", d: null, v: { "3": vS(61, 165000, 186) }, vr: { "3": vS(61, 165000, 186), "4": vS(36, 245000, 392) } }, { area: "Al Yelayiss 2", d: "alyelayiss2", b: { "2": vS(10, 230000, 120) } }] };
+  store.clear();
+  store.set("img_rent_index", JSON.stringify(VRI));
+  store.set("img_districts_geo", JSON.stringify({ districts: [{ slug: "alyelayiss2", name: "Town Square", bbox: [55.2, 25.0, 55.3, 25.05] }] }));
+  store.set("img_unitmix_alyelayiss2", JSON.stringify({ buildings_by_id: { "77": card("Tower Flat", { pools: 2, dld: { buildings: 1 }, dm: { construction_year: 2016, completed: "2016-05-01" }, rows: [] }) } }));
+  store.set("img_amenities", JSON.stringify({ items: [{ k: "park", n: "Town Square Park", lon: 55.252, lat: 25.031, acc: "public" }, { k: "school", n: "A School", x: "Good · British", lon: 55.27, lat: 25.04 }] }));
+  store.set("img_brochure_name_big_villas", JSON.stringify({ name: "BIG VILLAS", amenities: ["Private pool in every villa", "Pet park", "Kids play area"], photos: [] }));
+  const KQ = "mode=rent&beds=2,3&type=townhouse&max=240000&stretch=300000&nice=private_pool&musts=pets&furnished=furnished&limit=20";
+  const { status, j } = await brief(KQ);
+  const by = Object.fromEntries((j.results || []).map((r) => [r.name, r]));
+  ok(status === 200 && j.query.beds === "2,3" && j.query.type === "townhouse" && j.query.stretch === 300000 && j.query.musts.join() === "pets" && j.query.nice.join() === "private_pool" && j.query.furnished === "furnished",
+    "V-Q Kendall's brief parses: beds 2,3, townhouse, target 240K, stretch 300K, pets a must, private pool nice, furnished", JSON.stringify(j.query));
+  ok(verdictOf(240000, 0, 240000, 300000) === "within" && verdictOf(240001, 0, 240000, 300000) === "stretch" && verdictOf(300000, 0, 240000, 300000) === "stretch" &&
+     verdictOf(315000, 0, 240000, 300000) === "a_little_above" && verdictOf(315001, 0, 240000, 300000) === "above" && verdictOf(345001, 0, 240000, 300000) === null,
+    "V-V the verdicts: <= target in budget, <= stretch 'stretch', then 5% over the stretch 'a little over', then over (to +15%)");
+  ok(by["MAHA TOWNHOUSES"] && by["MAHA TOWNHOUSES"].evidence.median === 158528 && by["MAHA TOWNHOUSES"].evidence.beds === 3 && by["MAHA TOWNHOUSES"].evidence.beds_basis === "registered",
+    "V-R a villa or townhouse 3-bed figure comes from the register's own bedroom count where it has 3+ contracts (158,528 from 20, not the size band's 170,000)", JSON.stringify(by["MAHA TOWNHOUSES"] && by["MAHA TOWNHOUSES"].evidence));
+  ok(by["BIG VILLAS"] && by["BIG VILLAS"].evidence.beds_basis === "size_3plus" && by["BIG VILLAS"].verdict === "stretch", "V-R2 under 3 exact contracts: the size band, labelled '3 or more, read from the size'; 280K is 'stretch'");
+  ok(by["STRETCH VILLAS"] && by["STRETCH VILLAS"].verdict === "stretch" && by["STRETCH VILLAS"].evidence.beds === 2, "V-B a 2-bed at 290K is in the stretch");
+  ok(!by["TOWER FLAT"], "V-T type=townhouse leaves apartments out");
+  ok(j.results.map((r) => r.verdict).indexOf("stretch") > j.results.map((r) => r.verdict).lastIndexOf("within"), "V-K in budget first, then the stretch", j.results.map((r) => r.verdict).join());
+  const crit = (r, k) => ((r && r.criteria) || []).find((c) => c.k === k) || {};
+  ok(crit(by["MAHA TOWNHOUSES"], "townhouse").v === true && /project name says townhouses/.test(crit(by["MAHA TOWNHOUSES"], "townhouse").src) && crit(by["BIG VILLAS"], "townhouse").v === null && /does not separate villas from townhouses/.test(crit(by["BIG VILLAS"], "townhouse").src),
+    "V-H townhouse: yes where the Land Department project name says so, otherwise not known (the register files both as Villa)");
+  ok(crit(by["BIG VILLAS"], "private_pool").v === true && /developer's own project page/.test(crit(by["BIG VILLAS"], "private_pool").src) && crit(by["MAHA TOWNHOUSES"], "private_pool").v === null && /no register we hold records a private pool/.test(crit(by["MAHA TOWNHOUSES"], "private_pool").src),
+    "V-P private pool: yes from the developer's page, otherwise not known, with the reason");
+  ok(crit(by["BIG VILLAS"], "pets").v === true && /Kids play area/.test(crit(by["BIG VILLAS"], "pets").detail) && crit(by["MAHA TOWNHOUSES"], "pets").v === null && /pet rules|allows pets/.test(crit(by["MAHA TOWNHOUSES"], "pets").src),
+    "V-D pet-friendly: yes only where a developer page says so (with the play area as a fact); otherwise not known - no register holds a pet policy");
+  ok(crit(by["MAHA TOWNHOUSES"], "furnished").v === null && /does not record whether a home is furnished/.test(crit(by["MAHA TOWNHOUSES"], "furnished").src), "V-F furnished: not known, because Ejari does not record it");
+  ok((j.results || []).every((r) => crit(r, "pets") && crit(r, "private_pool") && crit(r, "furnished")), "V-C every row answers every criterion asked");
+  // NOT KNOWN NEVER FILTERS: pets is a must, and is not known for most - they all stay
+  ok(by["MAHA TOWNHOUSES"] && by["STRETCH VILLAS"] && crit(by["STRETCH VILLAS"], "pets").v === null, "V-NK1 a must that is NOT KNOWN never leaves a home out (pets must; Maha and Stretch Villas stay)");
+  ok(j.results[0].name === "MAHA TOWNHOUSES" && j.counts.within === 1, "V-NK2 ranking inside budget: must-haves met, then nice-to-haves, then evidence", j.results.map((r) => r.name).join(" | "));
+  // a definite no DOES filter: modern is a must, and the Dubai Municipality record says 2016
+  let x2 = (await brief("mode=rent&beds=2&type=apartment&max=240000&musts=modern")).j;
+  ok(!x2.results.some((r) => r.name === "TOWER FLAT") && x2.notes.some((n) => /left out because a source says a must-have is missing/.test(n)), "V-X modern as a must: a building the Dubai Municipality record says was completed in 2016 is left out");
+  x2 = (await brief("mode=rent&beds=2&type=apartment&max=240000&nice=modern,community_pool")).j;
+  const tf = x2.results.find((r) => r.name === "TOWER FLAT");
+  ok(tf && crit(tf, "modern").v === false && /completed 2016, Dubai Municipality building record/.test(crit(tf, "modern").src) && crit(tf, "community_pool").v === true && /2 swimming pools/.test(crit(tf, "community_pool").src) && /renewals|not scored/i.test(JSON.stringify(tf.criteria) + "not scored"),
+    "V-M as a nice-to-have the same 'no' only ranks; the community pool comes from the Land Department building record", JSON.stringify(tf && tf.criteria));
+  x2 = (await brief("mode=rent&beds=2&type=apartment&max=240000&nice=long_term")).j;
+  ok(crit(x2.results[0], "long_term").v === null && /Not scored/.test(crit(x2.results[0], "long_term").src) && /completed 2016/.test(crit(x2.results[0], "long_term").detail), "V-L long-term quality is not scored (no service-charge, maintenance or developer-record data); the facts that exist are shown");
+  // the owner-only furnished hint: the owner key gets it, a client key NEVER does
+  store.set("img_pf_supply_alyelayiss2", JSON.stringify({ as_of: "2026-10-01", rows: [{ dld_project: "MAHA TOWNHOUSES", beds_band: "3+", listings_live: 12 }] }));
+  let o = (await brief(KQ, READ)).j, c = (await brief(KQ, CLIENT)).j;
+  const om = o.results.find((r) => r.name === "MAHA TOWNHOUSES"), cm = c.results.find((r) => r.name === "MAHA TOWNHOUSES");
+  ok(om.furnished_hint && /does not carry furnishing yet/.test(om.furnished_hint.none), "V-O1 owner: the advertised-supply row has no furnishing field yet, and the hint says so", JSON.stringify(om.furnished_hint));
+  ok(c.results.every((r) => !("furnished_hint" in r)) && !JSON.stringify(c).includes("listings_live") && !JSON.stringify(c).includes("Owner only"), "V-O2 a CLIENT key never receives furnished_hint, or anything from the listing sites");
+  store.set("img_pf_supply_alyelayiss2", JSON.stringify({ as_of: "2026-10-01", rows: [{ dld_project: "MAHA TOWNHOUSES", beds_band: "3+", listings_live: 12, furnished_live: 5 }] }));
+  o = (await brief(KQ, READ)).j; c = (await brief(KQ, CLIENT)).j;
+  ok(o.results.find((r) => r.name === "MAHA TOWNHOUSES").furnished_hint.furnished === 5 && o.results.find((r) => r.name === "MAHA TOWNHOUSES").furnished_hint.of === 12, "V-O3 owner: once the crawler carries it, '5 of 12 adverts marked furnished'");
+  ok(c.results.every((r) => !("furnished_hint" in r)) && c.results.find((r) => r.name === "MAHA TOWNHOUSES").criteria.find((x) => x.k === "furnished").v === null, "V-O4 the client still sees furnished as not known");
+  // the area comparison, and Arabian Ranches through its Land Department area
+  const cq = (await brief("mode=rent&beds=3&type=villa&max=240000&stretch=300000&areas=wadialsafa7,alyelayiss2&compare=1&musts=pets")).j;
+  ok(cq.comparison && cq.comparison.length === 2 && cq.comparison[0].name === "Arabian Ranches 2 & Serena (Wadi Al Safa 7)" && cq.comparison[0].rent.v === true && /AED 165,000 \(61 contracts\)/.test(cq.comparison[0].rent.say),
+    "V-A Arabian Ranches comes in by its Land Department area (Wadi Al Safa 7): the area's 3-bed villa or townhouse rent", JSON.stringify(cq.comparison && cq.comparison[0].rent));
+  ok(cq.results.some((r) => r.name === "ARABIAN RANCHES - PALMA COMMUNITY" && r.district === "wadialsafa7" && r.building_url === null), "V-A2 and its homes are listed under it, with no building page (none exists in the app)");
+  const ty = cq.comparison[1];
+  ok(ty.types.apartment.v === true && ty.newest.v === true && ty.newest.year === 2016 && ty.pools.community.v === true && ty.parks.v === true && ty.schools.v === true && /OpenStreetMap/.test(ty.parks.src),
+    "V-A3 every comparison cell answers with its source: apartments let, newest completion 2016, a pool on the building record, parks and schools from the amenity layer", JSON.stringify(ty).slice(0, 400));
+  ok(cq.comparison[0].newest.v === null && cq.comparison[0].pools.private.v === null && /not known/.test(cq.comparison[0].newest.say), "V-A4 what no source answers is 'not known', never a no");
+  ok(!(await brief("mode=rent&beds=3&type=villa&max=240000&areas=wadialsafa7")).j.comparison && !(await brief("mode=rent&beds=3&max=240000&areas=wadialsafa7,alyelayiss2")).j.comparison, "V-A5 no comparison for one area, or without compare=1");
+  ok(writes === 0, "V-W still nothing written to KV");
+  setAll();
+}
+
+// ---- v282: the two real briefs against the real naj-market-pulse files (rent index with "vr", amenities, unit-mix records) ----------
+{
+  const files = (() => { try { return fs.readdirSync(path.join(NAJ, "board")); } catch { return null; } })();
+  if (!files) console.log("  skip real v282 briefs - set NAJ_DATA");
+  else {
+    store.clear();
+    for (const f of files) { const m = /^(rent_index|districts_geo|amenities|unitmix_[a-z0-9]+)\.json$/.exec(f); if (m && !/projects/.test(f)) store.set("img_" + m[1], fs.readFileSync(path.join(NAJ, "board", f), "utf8")); }
+    const RIr = JSON.parse(store.get("img_rent_index"));
+    const hasVr = RIr.items.some((it) => it.vr);
+    console.log("  real rent index " + RIr.as_of + (hasVr ? " (with vr - villas by the register's own bedroom count)" : " (NO vr: run build_rent_index.py v282)"));
+    const k1 = (await brief("mode=rent&beds=2,3&type=townhouse&max=240000&stretch=300000&nice=private_pool&musts=pets&furnished=furnished&limit=15")).j;
+    console.log("  REAL BRIEF 1 (Dubai, 2-3 bed townhouse, 240K stretch 300K, private pool nice, pets must, furnished): " + k1.total_matched + " matched " + JSON.stringify(k1.counts));
+    for (const r of k1.results.slice(0, 15)) console.log("    " + r.rank + ". " + r.name + " (" + (r.district_name || r.dld_area) + ") " + r.verdict + " AED " + r.evidence.median + " " + r.evidence.beds + "-bed, " + r.evidence.n + " contracts, " + r.evidence.beds_basis + " | " + r.criteria.map((c) => c.k + " " + (c.v === true ? "yes" : c.v === false ? "no" : "not known")).join(", "));
+    ok(k1.total_matched > 20 && k1.results.every((r) => r.evidence.home === "villa" && r.evidence.n >= 3 && [2, 3].includes(r.evidence.beds)), "REAL-1 every answer is a villa or townhouse record, 2 or 3 bedrooms, 3+ contracts");
+    ok(k1.results.every((r) => r.criteria.find((c) => c.k === "pets") && r.criteria.find((c) => c.k === "furnished").v === null), "REAL-1b every row answers pets and furnished (furnished not known)");
+    ok(!hasVr || k1.results.some((r) => r.evidence.beds_basis === "registered"), "REAL-1c with vr on file, figures use the register's own bedroom count");
+    const tiers = k1.results.map((r) => ({ within: 0, stretch: 1, a_little_above: 2 }[r.verdict] ?? 3));
+    ok(tiers.every((t, i) => !i || t >= tiers[i - 1]), "REAL-1d in budget, then stretch, then the rest");
+    const k2 = (await brief("mode=rent&beds=1,2,3&type=apartment&max=240000&stretch=300000&areas=wadialsafa6,wadialsafa7,damachills&compare=1&musts=pets&nice=modern,community_pool&furnished=furnished&limit=5")).j;
+    console.log("  REAL BRIEF 2 (Arabian Ranches vs DAMAC Hills, furnished apartment, dog a must, modern + pools nice, 240K stretch 300K): " + k2.total_matched + " matched " + JSON.stringify(k2.counts));
+    for (const a of k2.comparison || []) console.log("    [" + a.name + "] rent: " + a.rent.say + " | matches: " + a.matches.say + " | types: apt " + (a.types.apartment.v ? "yes" : "not known") + ", villa/townhouse " + (a.types.villa.v ? "yes" : "not known") + ", townhouse " + a.types.townhouse.say + " | pools: private " + a.pools.private.say + "; community " + a.pools.community.say + " | parks: " + a.parks.say + " | schools: " + a.schools.say + " | newest: " + a.newest.say);
+    for (const r of k2.results) console.log("    " + r.district + " #" + r.rank + " " + r.name + " " + r.verdict + " AED " + r.evidence.median + " " + r.evidence.beds + "-bed (" + r.evidence.n + ") | " + r.criteria.map((c) => c.k + " " + (c.v === true ? "yes" : c.v === false ? "no" : "not known")).join(", "));
+    ok(k2.comparison && k2.comparison.length === 3 && k2.comparison.map((a) => a.slug).join() === "wadialsafa6,wadialsafa7,damachills", "REAL-2 three columns: Arabian Ranches (Wadi Al Safa 6), Wadi Al Safa 7, DAMAC Hills");
+    ok(k2.comparison[2].rent.v === true && k2.comparison[2].matches.total > 0 && k2.comparison.every((a) => a.parks && a.schools && a.newest && a.pools && a.types), "REAL-2b DAMAC Hills has rents and matches; every column answers every row");
+    const k2v = (await brief("mode=rent&beds=3&type=townhouse,villa&max=240000&stretch=300000&areas=wadialsafa6,wadialsafa7,damachills&compare=1&musts=pets&limit=5")).j;
+    console.log("  REAL BRIEF 2, as villas/townhouses (3-bed): " + (k2v.comparison || []).map((a) => a.name + ": " + a.rent.say + "; " + a.matches.say).join(" || "));
+    ok(k2v.comparison && k2v.comparison[0].rent.v === true && k2v.comparison[1].rent.v === true, "REAL-2c Arabian Ranches villa and townhouse rents come from Ejari by its Land Department areas");
+    setAll();
+  }
 }
 
 console.log((fail ? "FAIL" : "PASS") + " - brief api: " + pass + " ok, " + fail + " failed");

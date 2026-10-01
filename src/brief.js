@@ -20,6 +20,37 @@
 // Everything is in this file; src/index.js carries one import and one marked dispatch.
 
 export const BRIEF_MUSTS = ["balcony", "metro", "pool", "gym", "parking", "new", "schools"];
+// v282 (Kendall, 1 Oct 2026, a real client brief: "a furnished 2-3 bedroom townhouse, AED 240K a year, up to 300K for a modern,
+// well-furnished home; a private pool preferred, or a community pool; a pet-friendly community with dog-walking routes and play
+// areas; a quality home for a long stay"). Each item is asked three ways - must / nice to have / don't care - and answered per
+// building as true (a source says yes), false (a source says no) or null (NOT KNOWN). A must leaves a building out only on a
+// definite false; "not known" never filters; a nice-to-have only ranks. Every answer names its source.
+export const BRIEF_CRITERIA = [
+  ["private_pool", "private pool"], ["community_pool", "community pool"], ["pets", "pet-friendly (dog walks, play areas)"],
+  ["modern", "newer or modern (completed 2018 or later)"], ["long_term", "quality for a long-term stay"],
+  ["metro", "near a metro"], ["schools", "schools nearby"], ["gym", "gym"], ["parking", "parking"], ["balcony", "balcony"],
+];
+const CRIT_KEYS = BRIEF_CRITERIA.map((c) => c[0]);
+const CRIT_LABEL = Object.fromEntries(BRIEF_CRITERIA);
+const CRIT_ALIAS = { pool: "community_pool", new: "modern" };        // the v277 chips, still accepted on old links
+export const MODERN_FROM = 2018;
+export const HOME_TYPES = ["apartment", "townhouse", "villa", "any"];
+export const FURNISHED = ["furnished", "unfurnished", "either"];
+// the advertised-supply rows (img_pf_supply_<district>, src/supply_page.js, v279) carry no furnishing field yet; these are the names
+// the OWNER hint reads when the crawler adds one (adverts marked furnished, of listings_live). Until then the hint says so.
+export const FURNISHED_FIELDS = ["furnished_live", "furnished"];
+// v282 - areas the client asks for that are not among the app's 45 districts, but that the rent index covers by DLD area name
+// (build_rent_index.py keeps AREA_EN on every record; DLD_AREA has no slug for these, so their records carry d = null). The DLD
+// area is NOT the marketing community: Wadi Al Safa 6 holds Arabian Ranches villages (Alvorada, Aseel, Alma); Wadi Al Safa 7 holds
+// Arabian Ranches 2 (Reem, Camelia), more Arabian Ranches villages (Palma, Rasha, Samara, Yasmin, Azalea, Rosa, Casa, Lila), and
+// Serena, Rukan and The Sustainable City. The names on the chips say so. bbox: the Dubai Municipality community polygon
+// (naj-market-pulse data/blocks_city/<slug>/boundary.geojson), used only to count the amenity layer's parks and schools inside it.
+export const EXTRA_AREAS = {
+  wadialsafa6: { name: "Arabian Ranches (Wadi Al Safa 6)", dld: ["Wadi Al Safa 6"], corridor: "South & Outer", bbox: [55.24939, 25.03537, 55.30117, 25.06588] },
+  wadialsafa7: { name: "Arabian Ranches 2 & Serena (Wadi Al Safa 7)", dld: ["Wadi Al Safa 7"], corridor: "South & Outer", bbox: [55.26001, 25.02221, 55.3088, 25.05827] },
+};
+const EXTRA_BY_DLD = {}; for (const [s, x] of Object.entries(EXTRA_AREAS)) for (const a of x.dld) EXTRA_BY_DLD[a] = s;
+export const areaSlugOf = (it) => (it && (it.d || EXTRA_BY_DLD[it.area])) || null;
 const BEDS = { studio: 0, "0": 0, "1": 1, "2": 2, "3": 3, "3+": 3 };
 const BED_WORD = ["studio", "1-bed", "2-bed", "3+ bed"];
 export const EVIDENCE_MIN = 3;          // spec: drop n < 3
@@ -31,9 +62,10 @@ const BELOW_FLOOR = 0.10;               // below: down to min * 0.90; cheaper th
 const NEAR_M = 1000;                    // "near a metro" / "schools nearby": a straight-line kilometre (no walking or drive times)
 export const TENANCY_MIN_SHARE = 0.5;   // the building page's own gate (building_page.js): below half coverage the tenancy count is not shown
 const MAX_DISTRICT_CARDS = 12;          // unit-mix cards are ~1 MB each; an all-Dubai query reads the busiest districts' cards only
-const TIER = { within: 0, a_little_above: 1, below: 2, above: 3 };
-// the ranking order (Kendall, 30 Sep 2026): within, then a_little_above, then the rest (below and above together), by evidence inside each
-const rankTier = (c) => Math.min(TIER[c.verdict], 2);
+const TIER = { within: 0, stretch: 1, a_little_above: 2, below: 3, above: 4 };
+// the ranking order (Kendall, 30 Sep 2026; v282 1 Oct): within the target, then within the stretch, then a_little_above, then the rest
+// (below and above together); inside each group: musts met, then nice-to-haves met, then evidence (contracts or sales)
+const rankTier = (c) => Math.min(TIER[c.verdict], 3);
 
 // the rent index's own name key (build_rent_index.py fold/norm/stem/nkey), so "the same name" means the same thing here
 const fold = (s) => String(s == null ? "" : s).normalize("NFKD").replace(/[^\x00-\x7f]/g, "");
@@ -72,57 +104,90 @@ export function parseBrief(sp) {
   const errs = [];
   const mode = String(sp.get("mode") || "rent").toLowerCase();
   if (mode !== "rent" && mode !== "buy") errs.push("mode must be rent or buy");
-  const bedsRaw = String(sp.get("beds") || "1").toLowerCase();
-  const beds = BEDS[bedsRaw];
-  if (beds == null) errs.push("beds must be studio, 1, 2 or 3");
+  // v282: bedrooms are a LIST (beds=2,3); one value still works
+  const bedsRaw = String(sp.get("beds") || "1").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
+  const bedsList = [...new Set(bedsRaw.map((b) => BEDS[b]))].sort();
+  if (!bedsRaw.length || bedsList.some((b) => b == null)) errs.push("beds must be studio, 1, 2 or 3 (several may be given: beds=2,3)");
+  const beds = bedsList.filter((b) => b != null);
   const num = (k) => { const s = sp.get(k); if (s == null || s === "") return null; const n = Number(String(s).replace(/[,_\s]/g, "")); if (!isFinite(n) || n < 0) { errs.push(k + " must be a number of AED"); return null; } return n; };
-  let min = num("min"), max = num("max");
+  let min = num("min"), max = num("max"), stretch = num("stretch");
   if (min != null && max != null && max < min) { const t = min; min = max; max = t; }
+  if (stretch != null && (!stretch || max == null || stretch <= max)) stretch = null;   // a stretch is only ever above the target
   const areas = String(sp.get("areas") || "").split(",").map((s) => s.trim().toLowerCase().replace(/[^a-z0-9]/g, "")).filter(Boolean);
-  const type = String(sp.get("type") || "any").toLowerCase();
-  if (!["apartment", "villa", "any"].includes(type)) errs.push("type must be apartment, villa or any");
-  const musts = String(sp.get("musts") || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-  const badM = musts.filter((m) => !BRIEF_MUSTS.includes(m));
-  if (badM.length) errs.push("unknown musts: " + badM.join(", ") + " (allowed: " + BRIEF_MUSTS.join(", ") + ")");
+  // v282: home type is a LIST too (type=townhouse,villa); apartment / townhouse / villa / any
+  const typesRaw = String(sp.get("type") || "any").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
+  if (typesRaw.some((t) => !HOME_TYPES.includes(t))) errs.push("type must be apartment, townhouse, villa or any (several may be given)");
+  let types = [...new Set(typesRaw.filter((t) => HOME_TYPES.includes(t)))];
+  if (!types.length || types.includes("any") || ["apartment", "townhouse", "villa"].every((t) => types.includes(t))) types = ["any"];
+  const type = types.join(",");
+  const furnished = String(sp.get("furnished") || "either").toLowerCase();
+  if (!FURNISHED.includes(furnished)) errs.push("furnished must be furnished, unfurnished or either");
+  const listOf = (k) => String(sp.get(k) || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).map((m) => CRIT_ALIAS[m] || m);
+  const mustsIn = listOf("musts"), niceIn = listOf("nice");
+  const bad = mustsIn.concat(niceIn).filter((m) => !CRIT_KEYS.includes(m));
+  if (bad.length) errs.push("unknown musts or nice-to-haves: " + bad.join(", ") + " (allowed: " + CRIT_KEYS.join(", ") + ")");
+  const musts = [...new Set(mustsIn.filter((m) => CRIT_KEYS.includes(m)))];
+  const nice = [...new Set(niceIn.filter((m) => CRIT_KEYS.includes(m) && !musts.includes(m)))];
   let limit = parseInt(sp.get("limit") || "10", 10);
   if (!isFinite(limit) || limit < 1) limit = 10;
   limit = Math.min(limit, 50);
-  return { errs, q: { mode, beds: beds == null ? bedsRaw : (beds === 0 ? "studio" : String(beds)), min, max, areas, type, musts: [...new Set(musts)], limit }, bed: beds };
+  const compare = sp.get("compare") === "1" && areas.length >= 2 && areas.length <= 3;
+  const bedsOut = beds.length ? beds.map((b) => (b === 0 ? "studio" : String(b))).join(",") : bedsRaw.join(",");
+  return { errs, q: { mode, beds: bedsOut, min, max, stretch, areas, type, furnished, musts, nice, compare, limit }, bed: beds[0], beds };
 }
 
-export function verdictOf(v, min, max) {
-  const lo = min || 0, hi = max == null ? Infinity : max;
+// v282: max is the TARGET; stretch (optional) is "up to". within <= target; stretch <= stretch; then Kendall's 30 Sep rule on the TOP
+// (the stretch where there is one, else the target): up to 5% over is a_little_above, then above (listed to +15%).
+export function verdictOf(v, min, max, stretch) {
+  const lo = min || 0, hi = max == null ? Infinity : max, top = stretch != null && stretch > hi ? stretch : hi;
   if (v < lo) return v >= lo * (1 - BELOW_FLOOR) ? "below" : null;
   if (v <= hi) return "within";
-  if (v <= hi * (1 + LITTLE_OVER)) return "a_little_above";
-  if (v <= hi * (1 + ABOVE_CAP)) return "above";
+  if (v <= top && top > hi) return "stretch";
+  if (v <= top * (1 + LITTLE_OVER)) return "a_little_above";
+  if (v <= top * (1 + ABOVE_CAP)) return "above";
   return null;
 }
+export const kindsOfType = (type) => { const t = String(type || "any").split(","); return t.includes("any") ? ["b", "v"] : [...new Set(t.map((x) => (x === "apartment" ? "b" : "v")))]; };
+
+// v282 - the figure for one home kind and bedroom count. Apartments: the "b" band (bedrooms read from the size). Villas and
+// townhouses: the register's OWN bedroom count where it gives 3+ contracts (rent index "vr", build_rent_index.py v282), else the "v"
+// band, which is read from the size where the register is blank and where band 3 means "3 or more". The basis is carried.
+export function rentStat(it, kind, bed) {
+  if (kind === "b") { const s = it.b && it.b[String(bed)]; return s ? { s, basis: "size" } : null; }
+  const r = it.vr && it.vr[String(bed)];
+  if (r && r.n >= EVIDENCE_MIN) return { s: r, basis: "registered" };
+  const s = it.v && it.v[String(bed)];
+  return s ? { s, basis: bed === 3 ? "size_3plus" : "size" } : null;
+}
+export const BEDS_BASIS_SAY = { registered: "bedrooms as the register records them", size: "bedrooms read from the size", size_3plus: "3 or more bedrooms, read from the size (the register does not separate them here)" };
 
 // ---- rent: one candidate per index record, on the SAME figure the HOMES panel shows -------------------------------
 const rentFig = (s) => (s.nn >= 3 && s.mn ? s.mn : s.m);
-function rentCandidates(RI, q, bed) {
+function rentCandidates(RI, q, beds) {
   const out = []; let thin = 0;
-  const kinds = q.type === "apartment" ? ["b"] : q.type === "villa" ? ["v"] : ["b", "v"];
+  const kinds = kindsOfType(q.type);
   for (const it of (RI && RI.items) || []) {
-    if (q.areas.length && !q.areas.includes(it.d)) continue;
+    const d = areaSlugOf(it);
+    if (q.areas.length && !q.areas.includes(d)) continue;
     let best = null;
-    for (const k of kinds) {
-      const s = it[k] && it[k][String(bed)];
-      if (!s) continue;
+    for (const k of kinds) for (const bed of beds) {
+      const rs = rentStat(it, k, bed);
+      if (!rs) continue;
+      const s = rs.s;
       if (s.n < EVIDENCE_MIN) { thin++; continue; }
-      const v = rentFig(s), verdict = verdictOf(v, q.min, q.max);
+      const v = rentFig(s), verdict = verdictOf(v, q.min, q.max, q.stretch);
       if (!verdict) continue;
-      if (!best || TIER[verdict] < TIER[best.verdict] || (TIER[verdict] === TIER[best.verdict] && s.n > best.s.n)) best = { s, v, verdict, villa: k === "v" };
+      if (!best || TIER[verdict] < TIER[best.verdict] || (TIER[verdict] === TIER[best.verdict] && s.n > best.s.n)) best = { s, v, verdict, villa: k === "v", bed, basis: rs.basis };
     }
     if (!best) continue;
     const s = best.s, newBasis = s.nn >= 3 && !!s.mn;
     out.push({
-      it, d: it.d || null, i: it.i == null ? null : it.i, name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, dldArea: it.area,
-      key: candidateKey(it),
+      it, d, i: it.i == null ? null : it.i, name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, dldArea: it.area,
+      key: candidateKey(it), bed: best.bed,
       verdict: best.verdict, v: best.v, n: s.n,
       evidence: { basis: "ejari", median: best.v, q1: newBasis ? s.q1n : s.q1, q3: newBasis ? s.q3n : s.q3, n: s.n, n_new: s.nn,
-        median_of: newBasis ? "new_lettings" : "all_contracts", median_all: s.m, sqm: s.s, latest: s.last, home: best.villa ? "villa" : "apartment" },
+        median_of: newBasis ? "new_lettings" : "all_contracts", median_all: s.m, sqm: s.s, latest: s.last, home: best.villa ? "villa" : "apartment",
+        beds: best.bed, beds_basis: best.basis },
     });
   }
   return { cands: out, thin };
@@ -131,14 +196,14 @@ function rentCandidates(RI, q, bed) {
 // ---- buy: map_prices finds them (what Buy mode shows); the unit-mix card supplies the median AND the count ---------
 const isVilla = (it) => !!(it.fl && it.fl <= 3 && it.b && !it.b["0"] && !it.b["1"]) || /villa|townhouse|town house|mansion/i.test(it.n || "");   // homeMatches' own test
 const rowLabel = (b) => (b === 0 ? "studio" : b + " bedroom");
-function buyPrelim(MP, q, bed) {
-  const out = [];
+function buyPrelim(MP, q, beds) {
+  const out = [], kinds = kindsOfType(q.type);
   for (const it of (MP && MP.items) || []) {
     if (it.i == null || it.i < 0 || !it.d) continue;                          // a launch placed by name only has no card to count from
     if (q.areas.length && !q.areas.includes(it.d)) continue;
-    if (q.type === "villa" && !isVilla(it)) continue;
-    if (q.type === "apartment" && isVilla(it)) continue;
-    const bs = Object.keys(it.b || {}).map(Number).filter((b) => b !== 9 && (bed === 3 ? b >= 3 : b === bed) && !(it.e || []).includes(b));
+    if (!kinds.includes("b") && !isVilla(it)) continue;
+    if (!kinds.includes("v") && isVilla(it)) continue;
+    const bs = Object.keys(it.b || {}).map(Number).filter((b) => b !== 9 && beds.some((bed) => (bed === 3 ? b >= 3 : b === bed)) && !(it.e || []).includes(b));
     if (bs.length) out.push({ it, bs });
   }
   return out;
@@ -157,7 +222,7 @@ function buyCandidates(pre, cards, q) {
       const n = soldOf(b);
       if (n == null) { noCount++; continue; }
       if (n < EVIDENCE_MIN) { thin++; continue; }
-      const verdict = verdictOf(row.median_aed, q.min, q.max);
+      const verdict = verdictOf(row.median_aed, q.min, q.max, q.stretch);
       if (!verdict) continue;
       if (!best || TIER[verdict] < TIER[best.verdict] || (TIER[verdict] === TIER[best.verdict] && n > best.n)) best = { b, row, n, verdict };
     }
@@ -165,7 +230,7 @@ function buyCandidates(pre, cards, q) {
     const ds = card.dld_sales || {};
     out.push({
       it, d: it.d, i: it.i, name: card.name || it.n, aliases: it.n && card.name && nkey(it.n) !== nkey(card.name) ? [it.n] : [], lon: it.lon, lat: it.lat,
-      key: it.d + ":" + it.i, verdict: best.verdict, v: Math.round(best.row.median_aed), n: best.n, card,
+      key: it.d + ":" + it.i, verdict: best.verdict, v: Math.round(best.row.median_aed), n: best.n, card, bed: Math.min(best.b, 3),
       evidence: { basis: "dld_sales", median: Math.round(best.row.median_aed), q1: null, q3: null, n: best.n, n_new: null, sqm: best.row.median_sqm || null,
         latest: ds.last || null, first: ds.first || null, beds: best.b, dates_are: "the building's sales of every type" },
     });
@@ -321,7 +386,7 @@ export function devAvailFor(avail, c, bed) {
 }
 
 // ---- the non-negotiables: a source or null --------------------------------------------------------------------------
-function mustsOf(c, card, brochure, AM) {
+export function mustsOf(c, card, brochure, AM) {
   const am = ((brochure && brochure.amenities) || []).join(" | ");
   const pos = c.lon != null && c.lat != null ? [c.lon, c.lat] : null;
   let metro = null, nearest = null, schools = null;
@@ -340,11 +405,81 @@ function mustsOf(c, card, brochure, AM) {
       pool: /pool/i.test(am) || (card && card.pools >= 1) ? true : null,
       gym: /\bgym|fitness/i.test(am) ? true : null,
       parking: /parking|car park/i.test(am) || (card && (card.car_parks > 0 || card.parking_allocated > 0)) ? true : null,
-      new: null,
+      new: (() => { const cp = completionOf(card, brochure); return cp ? cp.year >= 2020 : null; })(),   // v282: the completion year, where one is on file
       schools,
     },
     nearest,
   };
+}
+
+// ---- v282: the client's criteria, one answer each, with its source -----------------------------------------------------------
+// {v: true | false | null, src: "where the answer comes from, in plain English", detail?: "supporting facts"}. Shared with the PDFs
+// (src/brief_docs.js), so the list and the documents give the same answer from the same sources.
+const yearOf = (s) => { const m = /\b(19[5-9]\d|20[0-4]\d)\b/.exec(String(s == null ? "" : s)); return m ? +m[1] : null; };
+export function completionOf(card, brochure) {
+  const dm = card && card.dm;
+  if (dm && (dm.construction_year || dm.completed)) { const y = +dm.construction_year || yearOf(dm.completed); if (y) return { year: y, src: "Dubai Municipality building record (completion " + (dm.completed || y) + ")" }; }
+  if (brochure && brochure.completed && yearOf(brochure.completed)) return { year: yearOf(brochure.completed), src: "the developer's own project page" };
+  return null;
+}
+const parksNear = (pos, AM, m) => !pos || !AM || !AM.items ? [] : AM.items.filter((a) => a.k === "park" && a.lon != null)
+  .map((a) => ({ n: a.n, acc: a.acc || null, m: Math.round(metres(pos, [a.lon, a.lat])) })).filter((a) => a.m <= m).sort((a, b) => a.m - b.m);
+export function criteriaOf({ c, card, brochure, AM, musts, villa, s }) {
+  const am = ((brochure && brochure.amenities) || []).map(String);
+  const has = (rx) => am.find((a) => rx.test(a)) || null;
+  const DEV = "the developer's own project page" + (brochure && brochure.source_url ? " (" + brochure.source_url + ")" : "");
+  const pos = c.lon != null && c.lat != null ? [c.lon, c.lat] : null;
+  const out = {};
+  const pp = has(/private\s+pool/i);
+  out.private_pool = pp ? { v: true, src: DEV + ": “" + pp + "”" }
+    : { v: null, src: "Not known: no register we hold records a private pool (Ejari, the Land Department units register and its property types do not), and no developer page we hold says so for this home." };
+  const cp = has(/^(?!.*private).*pool/i);
+  out.community_pool = cp ? { v: true, src: DEV + ": “" + cp + "”" }
+    : card && card.pools >= 1 ? { v: true, src: "Land Department building record: " + card.pools + " swimming pool" + (card.pools === 1 ? "" : "s") }
+    : { v: null, src: "Not known: no building record or developer page we hold lists a pool for it." };
+  const pet = has(/\b(pets?|dogs?|pet[- ]friendly)\b/i), play = has(/play|kids|children/i), parks = parksNear(pos, AM, NEAR_M);
+  const facts = [];
+  if (parks.length) facts.push("park" + (parks.length === 1 ? "" : "s") + " within 1 km on the map's amenity layer (OpenStreetMap): " + parks.slice(0, 3).map((p) => p.n + " " + p.m + " m" + (p.acc ? ", " + p.acc : "")).join("; "));
+  else if (pos) facts.push("no park within 1 km on the map's amenity layer (OpenStreetMap; none found is not proof of none)");
+  else facts.push("no map position for it, so parks nearby are not counted");
+  if (play) facts.push("play area on the developer's page: “" + play + "”");
+  out.pets = pet ? { v: true, src: DEV + ": “" + pet + "”", detail: facts.join(". ") }
+    : { v: null, src: "Not known: no register we hold records whether a community allows pets. Dog-walking space is shown as a fact, not as a yes.", detail: facts.join(". ") };
+  const comp = completionOf(card, brochure);
+  out.modern = comp ? { v: comp.year >= MODERN_FROM, src: "completed " + comp.year + ", " + comp.src }
+    : { v: null, src: "Not known: no completion year on file for it (the Dubai Municipality building record covers named apartment buildings, not villa communities)." };
+  const lt = [];
+  if (comp) lt.push("completed " + comp.year);
+  if (s && s.n) lt.push((s.nr != null ? s.nr : s.n - (s.nn || 0)) + " of its " + s.n + " recent contracts were renewals (tenants staying on)");
+  out.long_term = { v: null, src: "Not scored: no service-charge, maintenance or developer track-record figures are held per building, so no quality score is given.", detail: lt.join("; ") || "" };
+  const near = (k, yes, unk) => (musts[k] === true ? { v: true, src: yes } : musts[k] === false ? { v: false, src: k === "metro" ? "RTA station list: the nearest station is over 1 km away in a straight line" : "a source says no" } : { v: null, src: unk });
+  out.metro = near("metro", "RTA station list: a station within 1 km in a straight line", "Not known: no map position for it");
+  out.schools = near("schools", "a school within 1 km on the map's amenity layer (KHDA register)", "Not known: none found within 1 km on the amenity layer, or no map position (none found is not proof of none)");
+  out.gym = near("gym", DEV, "Not known: no developer page we hold lists a gym");
+  out.parking = near("parking", "the developer's page or the Land Department building record", "Not known: no record we hold lists parking");
+  out.balcony = near("balcony", DEV, "Not known: no record we hold lists balconies for it");
+  if (villa) {
+    const th = /town\s?-?houses?/i.test([c.name].concat(c.aliases || []).join(" "));
+    out.townhouse = th ? { v: true, src: "the Land Department project name says townhouses" } : { v: null, src: "Not known: filed as Villa; the Ejari register does not separate villas from townhouses" };
+  }
+  return out;
+}
+export const FURNISHED_UNKNOWN = "Not known: the Ejari register does not record whether a home is furnished.";
+// OWNER ONLY (never on a client key, never in a PDF): what the listing sites' adverts say about furnishing, from the advertised-supply
+// rows (img_pf_supply_<district>). Matched by our key, else the DLD project name, exactly. Says so when the data has no such field.
+export function furnishedHint(PS, c, bed) {
+  if (!PS || !Array.isArray(PS.rows)) return { none: "no advertised-supply data on file for this district" };
+  const names = [c.name].concat(c.aliases || []).map(nkey).filter(Boolean);
+  const band = bed >= 3 ? "3+" : bed === 0 ? "studio" : String(bed);
+  const rows = PS.rows.filter((r) => (r.key && String(r.key).toLowerCase() === String(c.key).toLowerCase()) || (r.dld_project && names.includes(nkey(r.dld_project))));
+  if (!rows.length) return { none: "no advertised-supply row matched to this building" };
+  const rb = rows.filter((r) => String(r.beds_band == null ? r.beds : r.beds_band) === band);
+  const use = rb.length ? rb : rows;
+  const f = (r) => { for (const k of FURNISHED_FIELDS) if (r[k] != null && isFinite(+r[k])) return +r[k]; return null; };
+  const fs = use.map(f);
+  if (fs.every((x) => x == null)) return { none: "the advertised-supply data does not carry furnishing yet", as_of: PS.as_of || null };
+  return { furnished: fs.reduce((a, x) => a + (x || 0), 0), of: use.reduce((a, r) => a + (+r.listings_live || 0), 0), as_of: PS.as_of || null,
+    label: "Owner only: listing-site adverts marked furnished, of the live adverts. Adverts, not homes free; never shown to a client." };
 }
 
 const brochureKeys = (c) => {
@@ -357,7 +492,7 @@ const brochureKeys = (c) => {
 function whyOf(c, q) {
   const e = c.evidence, parts = [];
   parts.push(q.mode === "rent" ? e.n + " lettings on the register (" + e.n_new + " new)" : e.n + " " + BED_WORD[Math.min(e.beds, 3)] + " sales on the register");
-  parts.push({ within: "typical " + (q.mode === "rent" ? "rent" : "price") + " inside the budget", a_little_above: "typical figure a little above the budget",
+  parts.push({ within: "typical " + (q.mode === "rent" ? "rent" : "price") + " inside the budget", stretch: "typical figure above the target, inside the stretch", a_little_above: "typical figure a little above the budget",
     above: "typical figure above the budget", below: "typical figure below the budget" }[c.verdict]);
   if (c.completeness.layouts) parts.push("full layout data");
   if (c.completeness.photos) parts.push("developer photos on file");
@@ -365,48 +500,135 @@ function whyOf(c, q) {
   return parts.join("; ");
 }
 
+// ---- v282: the area comparison (2 or 3 areas, compare=1) --------------------------------------------------------------
+// One column per area, each cell {v: true | false | null, say, src}: the typical rent for the brief's home type and bedrooms (the
+// rent index's whole-area figures, named projects or not), how many buildings match, the home types let there, pools, parks, schools
+// and the newest completion year. A cell says "not known" (v null) where no source answers; a count of none found is never a "no".
+const inBox = (b, lon, lat) => b && lon != null && lat != null && lon >= b[0] && lon <= b[2] && lat >= b[1] && lat <= b[3];
+export function compareAreas({ q, RI, kept, cards, AM, DG, DN }) {
+  const kinds = kindsOfType(q.type), beds = String(q.beds).split(",").map((b) => BEDS[b]).filter((b) => b != null);
+  const W = RI && RI.window ? RI.window[0] + " to " + RI.window[1] : "the latest pull";
+  const geo = {}; for (const d of (DG && DG.districts) || []) geo[d.slug] = d;
+  const homeSay = (k) => (k === "b" ? "apartment" : "villa or townhouse");
+  const bedSay = (b) => (b === 0 ? "studio" : b === 3 ? "3-bed" : b + "-bed");
+  return q.areas.map((slug) => {
+    const name = DN[slug] || slug, box = (EXTRA_AREAS[slug] && EXTRA_AREAS[slug].bbox) || (geo[slug] && geo[slug].bbox) || null;
+    const areaRows = ((RI && RI.areas) || []).filter((a) => areaSlugOf(a) === slug);
+    const items = ((RI && RI.items) || []).filter((it) => areaSlugOf(it) === slug);
+    const col = { slug, name, dld_areas: areaRows.map((a) => a.area) };
+    // typical rent, per home kind and bedroom count asked
+    const figs = [];
+    for (const k of kinds) for (const b of beds) {
+      let best = null;
+      for (const a of areaRows) { const rs = rentStat(a, k, b); if (rs && rs.s.n >= EVIDENCE_MIN && (!best || rs.s.n > best.rs.s.n)) best = { rs, a }; }
+      if (best) figs.push({ home: homeSay(k), beds: b, median: rentFig(best.rs.s), n: best.rs.s.n, basis: best.rs.basis, dld_area: best.a.area });
+      else figs.push({ home: homeSay(k), beds: b, median: null, n: 0 });
+    }
+    col.rent = { v: figs.some((f) => f.median) ? true : null, figures: figs,
+      say: figs.map((f) => (f.median ? bedSay(f.beds) + " " + f.home + ": AED " + Math.round(f.median).toLocaleString("en-US") + " (" + f.n + " contracts)" : bedSay(f.beds) + " " + f.home + ": not known (under " + EVIDENCE_MIN + " contracts)")).join("; "),
+      src: "Ejari rent contracts " + W + ", the whole Land Department area" + (areaRows.length ? " (" + areaRows.map((a) => a.area).join(", ") + ")" : "") + "; villas by the register's own bedroom count where it gives one" };
+    if (!areaRows.length) col.rent = { v: null, figures: [], say: "not known: no Ejari contracts for this area in the rent index", src: "the rent index (" + W + ")" };
+    // matches in budget / stretch
+    const mine = kept.filter((c) => c.d === slug);
+    const nIn = mine.filter((c) => c.verdict === "within").length, nSt = mine.filter((c) => c.verdict === "stretch").length;
+    col.matches = { v: mine.length ? (nIn + nSt > 0 ? true : null) : false, within: nIn, stretch: nSt, total: mine.length,
+      say: mine.length ? nIn + " in budget" + (q.stretch ? ", " + nSt + " in the stretch" : "") + " (" + mine.length + " listed in all)" : "none: no building here has " + EVIDENCE_MIN + "+ lettings of this type and size in the window", src: "this brief's list: buildings with " + EVIDENCE_MIN + "+ contracts of the type asked" };
+    // home types let there
+    const hasB = items.some((it) => it.b && Object.values(it.b).some((s) => s.n > 0)) || areaRows.some((a) => a.b && Object.keys(a.b).length);
+    const hasV = items.some((it) => it.v && Object.values(it.v).some((s) => s.n > 0)) || areaRows.some((a) => a.v && Object.keys(a.v).length);
+    const th = items.filter((it) => it.v && /town\s?-?houses?/i.test([it.n].concat(it.a || []).join(" "))).map((it) => it.n);
+    col.types = {
+      apartment: hasB ? { v: true, say: "apartments let here", src: "Ejari contracts " + W } : { v: null, say: "not known: no apartment lettings in the window", src: "Ejari contracts " + W },
+      villa: hasV ? { v: true, say: "villas or townhouses let here", src: "Ejari contracts " + W } : { v: null, say: "not known: no villa or townhouse lettings in the window", src: "Ejari contracts " + W },
+      townhouse: th.length ? { v: true, say: th.length + " project" + (th.length === 1 ? "" : "s") + " named as townhouses (" + th.slice(0, 2).join(", ") + ")", src: "Land Department project names" }
+        : { v: null, say: "not known: the register files townhouses as villas", src: "Ejari contracts " + W },
+    };
+    // pools
+    const pp = mine.filter((c) => c.crit && c.crit.private_pool.v === true).length;
+    const cardList = Object.values(cards[slug] || {}).filter((x) => x && x.name);
+    const poolCards = cardList.filter((x) => x.pools >= 1).length, cpList = mine.filter((c) => c.crit && c.crit.community_pool.v === true).length;
+    col.pools = {
+      private: pp ? { v: true, say: pp + " listed home" + (pp === 1 ? "" : "s") + " with a private pool on the developer's page", src: "developer project pages" } : { v: null, say: "not known: no register records private pools", src: "Ejari, the units register and the developer pages we hold" },
+      community: poolCards || cpList ? { v: true, say: (poolCards ? poolCards + " building" + (poolCards === 1 ? "" : "s") + " with a pool on the Land Department record" : "") + (poolCards && cpList ? "; " : "") + (cpList ? cpList + " listed with a pool" : ""), src: "Land Department building records; developer pages" }
+        : { v: null, say: "not known: no building record here lists a pool" + (cardList.length ? "" : " (no building records for this area)"), src: "Land Department building records" },
+    };
+    // parks and dog-friendly spaces, schools - the amenity layer, inside the area's box or tagged with it
+    const inArea = (a) => a.d === slug || inBox(box, a.lon, a.lat);
+    const parks = ((AM && AM.items) || []).filter((a) => a.k === "park" && inArea(a));
+    const acc = {}; for (const p of parks) acc[p.acc || "unknown"] = (acc[p.acc || "unknown"] || 0) + 1;
+    col.parks = parks.length ? { v: true, n: parks.length, say: parks.length + " park" + (parks.length === 1 ? "" : "s") + " (" + Object.entries(acc).map(([k, n]) => n + " " + k).join(", ") + ")" + (parks.some((p) => p.n && !/unnamed/i.test(p.n)) ? ": " + parks.filter((p) => p.n && !/unnamed/i.test(p.n)).slice(0, 2).map((p) => p.n).join(", ") : ""),
+      src: "the map's amenity layer (OpenStreetMap via Overture; access as tagged). Dog parks are not told apart from other parks there, and no register records pet rules." }
+      : { v: null, n: 0, say: "not known: none on the amenity layer here (none found is not proof of none)", src: "the map's amenity layer (OpenStreetMap)" };
+    const schools = ((AM && AM.items) || []).filter((a) => a.k === "school" && inArea(a));
+    col.schools = schools.length ? { v: true, n: schools.length, say: schools.length + " school" + (schools.length === 1 ? "" : "s") + ": " + schools.slice(0, 2).map((s) => s.n + (s.x ? " (" + String(s.x).split(/\s[·�]\s/)[0] + ")" : "")).join(", "), src: "KHDA private schools register and the government schools map, on the amenity layer" }
+      : { v: null, n: 0, say: "not known: none on the amenity layer here", src: "KHDA register on the amenity layer" };
+    // newest completion year on file
+    let newest = null;
+    for (const x of cardList) { const cp = completionOf(x, null); if (cp && (!newest || cp.year > newest.year)) newest = { year: cp.year, name: x.name }; }
+    for (const c of mine) { const cp = c.comp; if (cp && (!newest || cp.year > newest.year)) newest = { year: cp.year, name: c.name }; }
+    col.newest = newest ? { v: true, year: newest.year, say: newest.year + " (" + newest.name + ")", src: "Dubai Municipality building records (named apartment buildings; villa communities are not in them)" }
+      : { v: null, say: "not known: no completion year on file for this area", src: "Dubai Municipality building records" };
+    return col;
+  });
+}
+
+const ctEq = (a, b) => { a = String(a); b = String(b); if (a.length !== b.length) return false; let r = 0; for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i); return r === 0; };
+// the OWNER key (READ_KEY) - the same test as index.js keyTier() === "admin"; a client key never passes it
+export const isOwnerKey = (env, url, h) => (h && typeof h.keyTier === "function") ? h.keyTier(env, url) === "admin"
+  : !!(env && env.READ_KEY && url.searchParams.get("key") && ctEq(url.searchParams.get("key"), env.READ_KEY));
+
 // ---- the route ------------------------------------------------------------------------------------------------------
 export async function briefApi(request, env, url, h) {
   const hdr = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
-  const J = (o, st) => new Response(JSON.stringify(o), { status: st || 200, headers: hdr });
   if (request.method !== "GET") return new Response("method", { status: 405 });   // before the key: a client key on a POST gets exactly what no key gets (v156)
   if (!h || typeof h.clientOk !== "function" || !h.clientOk(env, url)) return new Response("unauthorized", { status: 401 });
-  const { errs, q, bed } = parseBrief(url.searchParams);
+  const out = await briefSearch(env, url.searchParams, { owner: isOwnerKey(env, url, h) });
+  return new Response(JSON.stringify(out.body), { status: out.status, headers: hdr });
+}
+// v282 - the search itself, shared by GET /brief_api and the PDFs (src/brief_docs.js reads the comparison from it, with owner: false,
+// so a document can never carry an owner-only field). Returns {status, body}.
+export async function briefSearch(env, sp, opts) {
+  const J = (o, st) => ({ body: o, status: st || 200 });
+  const { errs, q, beds } = parseBrief(sp);
   if (errs.length) return J({ error: errs }, 400);
+  const owner = !!(opts && opts.owner);
   const notes = [];
 
   const DG = await kvJson(env, "districts_geo");
   const DN = {}; for (const d of (DG && DG.districts) || []) DN[d.slug] = d.name;
+  for (const [s, x] of Object.entries(EXTRA_AREAS)) if (!DN[s]) DN[s] = x.name;
   const unknownAreas = DG ? q.areas.filter((a) => !DN[a]) : [];
   if (unknownAreas.length) notes.push("not a district slug the app knows: " + unknownAreas.join(", "));
+  if (q.areas.some((a) => EXTRA_AREAS[a])) notes.push("Arabian Ranches is not one of the app's districts: it is read from the rent register by its Land Department areas, which are not the marketing communities. Wadi Al Safa 6 holds Arabian Ranches villages (Alvorada, Aseel, Alma); Wadi Al Safa 7 holds Arabian Ranches 2 (Reem, Camelia), more Arabian Ranches villages (Palma, Rasha, Samara, Azalea, Casa ...), Serena, Rukan and The Sustainable City. Its homes have no building pages, map positions or building records in the app yet.");
 
-  let cands = [], as_of = null, source = null, extra = {};
+  let cands = [], as_of = null, source = null, extra = {}, RI = null;
   const cards = {};
   const loadCards = async (ds) => {
     const byCount = {}; for (const d of ds) if (d) byCount[d] = (byCount[d] || 0) + 1;
     const want = Object.keys(byCount).sort((a, b) => byCount[b] - byCount[a]);
     if (want.length > MAX_DISTRICT_CARDS) notes.push("read the unit-mix records of the " + MAX_DISTRICT_CARDS + " districts with most matches only (" + want.length + " matched); name the districts to see every one");
-    await Promise.all(want.slice(0, MAX_DISTRICT_CARDS).map(async (d) => { const u = await kvJson(env, "unitmix_" + d); cards[d] = (u && u.buildings_by_id) || null; }));
+    await Promise.all(want.slice(0, MAX_DISTRICT_CARDS).map(async (d) => { if (cards[d] !== undefined) return; const u = await kvJson(env, "unitmix_" + d); cards[d] = (u && u.buildings_by_id) || null; }));
   };
 
   if (q.mode === "rent") {
-    const RI = await kvJson(env, "rent_index");
+    RI = await kvJson(env, "rent_index");
     if (!RI || !Array.isArray(RI.items)) return J({ query: q, error: ["the rent index (KV img_rent_index) is not on file"] }, 503);
     as_of = RI.as_of || null; source = "KV img_rent_index (" + (RI.source_file || "Ejari rent contracts") + ")";
     extra.window = RI.window || null;
-    const r = rentCandidates(RI, q, bed); cands = r.cands;
+    const r = rentCandidates(RI, q, beds); cands = r.cands;
     await loadCards(cands.filter((c) => c.i != null).map((c) => c.d));
     const un = unbindDisputed(cands, cards);
     if (un) notes.push(un + " rent record" + (un === 1 ? " is" : "s are") + " bound in the index to an app building named otherwise, or to one already listed: shown by the register name only, with no building page (the name must agree with the record). See disputed_bind.");
     notes.push("Registered Ejari rent contracts" + (RI.window ? ", " + RI.window[0] + " to " + RI.window[1] : "") + ": what homes in these buildings actually let for, NOT live availability. Availability is confirmed with the leasing team.");
     notes.push("Bedrooms are read from each home's size - Ejari rarely records them" + (RI.bands && RI.bands.flat_accuracy_area ? " (right about " + Math.round(RI.bands.flat_accuracy_area * 100) + "% of the time on contracts that do carry the type)" : "") + ".");
+    if (kindsOfType(q.type).includes("v")) notes.push("Villas and townhouses: the register files both as Villa (it has no townhouse type). Their figure uses the register's own bedroom count where it gives 3 or more contracts (evidence.beds_basis = registered); otherwise the bedrooms are read from the size, and a 3 then means 3 or more.");
     notes.push("The typical rent is the median of new lettings where there are 3 or more, otherwise of all contracts - the same figure the map's Rent mode shows. The middle half (q1-q3) is on the same basis.");
     notes.push("A contract filed under several building names is counted once; the other names are listed as aliases (also filed as).");
     if (r.thin) notes.push(r.thin + " building" + (r.thin === 1 ? "" : "s") + " with fewer than " + EVIDENCE_MIN + " contracts of this size left out.");
   } else {
     const MP = await kvJson(env, "map_prices");
     if (!MP || !Array.isArray(MP.items)) return J({ query: q, error: ["the Buy data (KV img_map_prices) is not on file"] }, 503);
-    const pre = buyPrelim(MP, q, bed);
+    const pre = buyPrelim(MP, q, beds);
     await loadCards(pre.map((p) => p.it.d));
     const r = buyCandidates(pre, cards, q); cands = r.cands;
     as_of = String(MP.generated || "").slice(0, 10) || null; source = "KV img_map_prices (what the map's Buy mode shows) + img_unitmix_<district> (per-bedroom sale medians and counts)";
@@ -428,7 +650,7 @@ export async function briefApi(request, env, url, h) {
   const AV = await loadDevAvail(env);                                          // v277 - the developers' own sheets, where we hold them
   const tenancy = {};
   const bedsLeft = {};
-  if (q.mode === "rent") await Promise.all([...new Set(cands.filter((c) => c.d).map((c) => c.d))].map(async (d) => {
+  if (q.mode === "rent") await Promise.all([...new Set(cands.filter((c) => c.d && !EXTRA_AREAS[c.d]).map((c) => c.d))].map(async (d) => {
     bedsLeft[d] = await kvJson(env, "beds_left_" + d);
     if (!bedsLeft[d]) tenancy[d] = await kvJson(env, "tenancy_" + d);                // the old gated path only where the register is missing
   }));
@@ -439,7 +661,10 @@ export async function briefApi(request, env, url, h) {
     const card = c.card || (c.d && c.i != null && cards[c.d] ? cards[c.d][String(c.i)] : null);
     const mm = mustsOf(c, card, c.brochure, AM);
     c.musts = mm.musts; c.nearest = mm.nearest;
-    if (q.musts.some((m) => c.musts[m] === false)) { droppedByMust++; continue; }
+    const st = q.mode === "rent" ? (rentStat(c.it, c.evidence.home === "villa" ? "v" : "b", c.bed) || {}).s : null;
+    c.crit = criteriaOf({ c, card, brochure: c.brochure, AM, musts: c.musts, villa: c.evidence.home === "villa", s: st });
+    c.comp = completionOf(card, c.brochure);
+    if (q.musts.some((m) => c.crit[m] && c.crit[m].v === false)) { droppedByMust++; continue; }   // ONLY a definite no leaves it out
     c.completeness = {
       record: c.i != null && !!c.d,
       layouts: !!(card && (card.rows || []).some((r) => r.basis === "DLD units register" && /bedroom|studio/i.test(String(r.type || "")))),
@@ -447,34 +672,47 @@ export async function briefApi(request, env, url, h) {
     };
     c.recordName = card ? card.name : null;
     if (q.mode === "rent") {
-      c.est = estimateLeft({ BL: c.d ? bedsLeft[c.d] : null, card, ten: c.d ? tenancy[c.d] : null, c, bed });
+      c.est = estimateLeft({ BL: c.d ? bedsLeft[c.d] : null, card, ten: c.d ? tenancy[c.d] : null, c, bed: c.bed });
     }
-    c.avail = devAvailFor(AV, c, bed);                                         // v277 - null where no developer sheet names this building
+    c.avail = devAvailFor(AV, c, c.bed);                                       // v277 - null where no developer sheet names this building
     kept.push(c);
   }
-  if (droppedByMust) notes.push(droppedByMust + " building" + (droppedByMust === 1 ? "" : "s") + " left out because a source says a non-negotiable is missing.");
-  if (q.musts.length) notes.push("Non-negotiables: a building is left out only where a source says no; null means we do not know, and those buildings stay in the list. " +
-    "Metro: straight-line to the nearest RTA station, within 1 km. Schools: a school in the app's amenity layer within 1 km (none found is not proof of none). " +
-    "Pool, gym, parking: the developer's own project page or the Land Department building record. Balcony and 'newer building (2020+)' have no source in the app yet: always null.");
+  if (droppedByMust) notes.push(droppedByMust + " building" + (droppedByMust === 1 ? "" : "s") + " left out because a source says a must-have is missing.");
+  if (q.musts.length || q.nice.length) notes.push("Must-haves and nice-to-haves: each is answered yes, no or not known, with its source. A building is left out only where a source says no; not known never leaves a building out. Nice-to-haves only change the order. " +
+    "Metro: straight-line to the nearest RTA station, within 1 km. Schools and parks: the app's amenity layer within 1 km (none found is not proof of none). " +
+    "Pools, gym, parking: the developer's own project page or the Land Department building record. Private pools and pet rules are in no register we hold. Newer or modern: completed " + MODERN_FROM + " or later on the Dubai Municipality building record. Long-term quality is not scored: no service-charge, maintenance or developer-record data is held per building.");
+  if (q.furnished !== "either") notes.push("Furnished: not known for any home - the Ejari register does not record furnishing." + (owner ? " The owner view adds what listing-site adverts say, where the advertised-supply data carries it (furnished_hint); a client never sees it." : ""));
 
   const score = (c) => (c.completeness.record ? 1 : 0) + (c.completeness.layouts ? 1 : 0) + (c.completeness.photos ? 1 : 0);
   const mid = q.max != null ? ((q.min || 0) + q.max) / 2 : (q.min || 0);
-  const mustsMet = (c) => q.musts.filter((m) => c.musts[m] === true).length;
-  kept.sort((a, b) => (rankTier(a) - rankTier(b)) || (b.n - a.n) || (score(b) - score(a)) || (mustsMet(b) - mustsMet(a)) || (Math.abs(a.v - mid) - Math.abs(b.v - mid)) || String(a.name).localeCompare(String(b.name)));
+  const met = (c, ks) => ks.filter((m) => c.crit[m] && c.crit[m].v === true).length;
+  kept.sort((a, b) => (rankTier(a) - rankTier(b)) || (met(b, q.musts) - met(a, q.musts)) || (met(b, q.nice) - met(a, q.nice)) || (b.n - a.n) || (score(b) - score(a)) || (Math.abs(a.v - mid) - Math.abs(b.v - mid)) || String(a.name).localeCompare(String(b.name)));
 
-  const counts = { within: 0, a_little_above: 0, above: 0, below: 0 };
+  const counts = { within: 0, stretch: 0, a_little_above: 0, above: 0, below: 0 };
   for (const c of kept) counts[c.verdict]++;
   const seenKeys = new Set();
   for (const c of kept) {
     c.key = String(c.key).toLowerCase().replace(/[^a-z0-9_:-]/g, "");         // the /brief page joins keys with commas (keys=, pick=): [a-z0-9_:-] only
     if (seenKeys.has(c.key)) c.key += "-" + norm(c.dldArea || c.d || "x"); seenKeys.add(c.key); }   // one DLD name in two areas
-  const results = kept.slice(0, q.limit).map((c, ix) => {
+  const PS = {};
+  // in a comparison each area gets its own top `limit`; otherwise one list
+  const chosen = q.compare ? q.areas.flatMap((a) => kept.filter((c) => c.d === a).slice(0, q.limit)) : kept.slice(0, q.limit);
+  if (owner) await Promise.all([...new Set(chosen.map((c) => c.d).filter(Boolean))].map(async (d) => { PS[d] = await kvJson(env, "pf_supply_" + d); }));
+  const rankIn = {};
+  const results = chosen.map((c) => {
+    const g = q.compare ? c.d : "_"; rankIn[g] = (rankIn[g] || 0) + 1;
     const r = {
-      rank: ix + 1, key: c.key, name: c.name, aliases: c.aliases, district: c.d, district_name: c.d ? (DN[c.d] || c.d) : null,
-      dld_area: c.dldArea || null, app_id: c.i, building_url: c.i != null && c.d ? "/building/" + c.d + "/" + c.i : null,
+      rank: rankIn[g], key: c.key, name: c.name, aliases: c.aliases, district: c.d, district_name: c.d ? (DN[c.d] || c.d) : null,
+      dld_area: c.dldArea || null, app_id: c.i, building_url: c.i != null && c.d && !EXTRA_AREAS[c.d] ? "/building/" + c.d + "/" + c.i : null,
       evidence: c.evidence, verdict: c.verdict, musts: c.musts, nearest_metro: c.nearest, completeness: c.completeness,
       why: whyOf(c, q),
     };
+    // v282 - the client's own criteria, each with its answer and source (musts, then nice-to-haves, then home type and furnishing)
+    const crit = q.musts.map((k) => ({ k, label: CRIT_LABEL[k], level: "must", ...c.crit[k] })).concat(q.nice.map((k) => ({ k, label: CRIT_LABEL[k], level: "nice", ...c.crit[k] })));
+    if (c.crit.townhouse && String(q.type).includes("townhouse")) crit.push({ k: "townhouse", label: "townhouse", level: "asked", ...c.crit.townhouse });
+    if (q.furnished !== "either") crit.push({ k: "furnished", label: q.furnished, level: "asked", v: null, src: FURNISHED_UNKNOWN });
+    r.criteria = crit;
+    if (owner && q.mode === "rent") r.furnished_hint = furnishedHint(c.d ? PS[c.d] : null, c, c.bed);   // OWNER ONLY - a client key never gets this field
     if (c.recordName && c.i != null) r.record_name = { name: c.recordName, agrees: c.agree || nameAgrees([c.name].concat(c.aliases), c.recordName) };
     if (c.disputed) r.disputed_bind = c.disputed;
     if (c.brochureKey) r.brochure = "/img/" + c.brochureKey.slice(4);
@@ -488,7 +726,13 @@ export async function briefApi(request, env, url, h) {
   if (results.some((r) => r.developer_availability)) notes.push("developer_availability is what the developer's own availability sheet, posted to the broker group, lists for this building on the sheet's date (count of this bedroom type, and the unit rows where the sheet holds them). It is the developer's claim, not register data, and it is never combined with estimated_left.");
   if (q.mode === "rent") notes.push("estimated_left is T minus R (flats of this type in the Land Department units list, less Ejari tenancies of this type running on the tenancy file's date), rounded to 10 and shown as {about, of} with estimate_as_of: an estimate, not a count, and never the number available. It is read from the beds-left register (KV img_beds_left_<district>, the full government tenancy register) where that is on file; otherwise it is given only where both are scoped to the one building and the district's tenancy coverage reaches " + Math.round(TENANCY_MIN_SHARE * 100) + "%, the gate the building page uses; otherwise it is omitted and estimated_left_withheld says why.");
   if (results.some((r) => r.record_name && r.record_name.agrees === "part")) notes.push("record_name.agrees = \"part\": the app's building record carries the register name plus a tower or phase suffix (e.g. Bloom Towers -> Bloom Towers B). The evidence may cover the whole project; check before the record's name goes on a client document.");
-  notes.push("Ranking: within the budget first (typical figure at or above the minimum and at or below the maximum), then a little above (up to " + Math.round(LITTLE_OVER * 100) + "% over), then the rest - below (listed down to " + Math.round(BELOW_FLOOR * 100) + "% under) and above (listed up to " + Math.round(ABOVE_CAP * 100) + "% over); inside each group, most evidence first, then the most complete record. Fewer than " + EVIDENCE_MIN + " contracts or sales: left out.");
+  notes.push("Ranking: within the budget first (typical figure at or above the minimum and at or below the target)" + (q.stretch ? ", then within the stretch (above the target, at or below AED " + q.stretch + ")" : "") + ", then a little above (up to " + Math.round(LITTLE_OVER * 100) + "% over the top of the budget), then the rest - below (listed down to " + Math.round(BELOW_FLOOR * 100) + "% under) and above (listed up to " + Math.round(ABOVE_CAP * 100) + "% over); inside each group, the must-haves met, then the nice-to-haves met, then most evidence, then the most complete record. Fewer than " + EVIDENCE_MIN + " contracts or sales: left out.");
 
-  return J({ query: q, as_of, source, ...extra, total_matched: kept.length, counts, results, notes });
+  let comparison;
+  if (q.compare && q.mode === "rent") {
+    await loadCards(q.areas.filter((a) => !EXTRA_AREAS[a]));
+    comparison = compareAreas({ q, RI, kept, cards, AM, DG, DN });
+    notes.push("comparison: one column per area. Each cell is answered (v true) or not known (v null), with its source; a count of none found is never a no. Typical rents are the whole Land Department area's, named projects or not.");
+  }
+  return J({ query: q, as_of, source, ...extra, total_matched: kept.length, counts, ...(comparison ? { comparison } : {}), results, notes });
 }
