@@ -90,8 +90,11 @@ ok(/Dubai 2040|dubai2040|the Metro Blue Line|urban centres|family moving here|ap
    "one of today's two required emphases is drawn from the plan");
 
 let data = null; try { data = JSON.parse(pick.messages[0].content); } catch (e) {}   // parse it - a regex on JSON-inside-JSON trips on escaped quotes
-ok(!!(data && data.dubai2040 && Array.isArray(data.dubai2040.facts) && data.dubai2040.facts.length >= 14 && JSON.stringify(data.dubai2040).includes("Expo 2020 Centre") && JSON.stringify(data.dubai2040).includes("5.8 million")),
-   "the plan's facts are IN the data the model is given, as a field - not just described in the prompt");
+// v284 - the plan's lines now reach the model through the fact ledger (data.facts, block dubai2040): only the ones she has not had
+// lately, up to eight a morning, rotating by day - each still the official figure, with its own source, date and status
+const _pf = (data && Array.isArray(data.facts) ? data.facts : []).filter(f => f.block === "dubai2040");
+ok(_pf.length >= 6 && _pf.every(f => /Dubai Media Office|UAE Government/.test(f.source) && f.status && /^The Dubai 2040 Urban Master Plan: /.test(f.says)),
+   "the plan's facts are IN the data the model is given, as a field - not just described in the prompt (v284: as ledger facts, " + _pf.length + " today)");
 ok(/"reader"/.test(JSON.stringify(pick ? pick : {})) || /reader =/.test(sys), "each angle is asked to name its reader");
 
 const voice = requests.find((r) => /rewrite social-post hooks/.test(JSON.stringify(r.system || "")));
