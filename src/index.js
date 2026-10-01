@@ -4,7 +4,8 @@ import { buildingData, buildingPageHtml } from "./building_page.js";   // v187 -
 import { pillarsCard, buildingPillars, developerPillarsCard, normName as pillarName, PILLAR_CSS } from "./pillars.js";   // v238 - the four pillars, built in the Worker for the building page and /dev
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import { worldBackdrops, worldBackdrop, worldPlatePrompt, worldScenePrompt, worldPicSay, worldCardFields, worldPicSize } from "./world_pic.js";   // v164 - the Versus picture, made the way the morning pictures are made
-import { briefRoutes, briefStartCard, BRIEF_START_CSS } from "./brief_page.js";   // THE BRIEF (part B, 30 Sep 2026; v277 two-button 00 card) - the /brief screens and the 00 way in on /start
+import { briefRoutes, briefStartCard, BRIEF_START_CSS } from "./brief_page.js";
+import { startBody, START_CSS } from "./start_page.js";   // v278.1 - START redesign: the Brief, Contracts signed, Advertised supply (owner only)   // THE BRIEF (part B, 30 Sep 2026; v277 two-button 00 card) - the /brief screens and the 00 way in on /start
 import { findItem as briefFindItem } from "./brief_docs.js";   // v277 - the building page's dossier button goes to /brief_pdf: this says whether the rent index knows the building
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
 import { briefApi } from "./brief.js";   // BRIEF (Contract A) - GET /brief_api, the ranked building search behind /brief
@@ -3086,7 +3087,7 @@ async function appFetch(request, env, ctx) {
       if (url.pathname === "/start") {                         // v235 - the front door: five angles, each a whole demo path
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _srk = residentsKeyOf(env, url);
-        return clientResp(env, url, najStartHtml(url.searchParams.get("key") || "", _srk), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+        return clientResp(env, url, najStartHtml(url.searchParams.get("key") || "", _srk, keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname === "/more") {                          // v235 - every room, in plain English
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
@@ -4677,16 +4678,15 @@ function najAngleCard(a, key, rk) {
     + '<span class=go>' + esc3(a.golabel) + ' \u2192</span></a>';
 }
 
-function najStartHtml(key, rk) {
+function najStartHtml(key, rk, isOwner) {
   const esc3 = (s) => String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>Start \u2014 Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS
-    + '<style>' + NAJ_START_CSS + BRIEF_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
+    + '<style>' + NAJ_START_CSS + BRIEF_START_CSS + START_CSS + NAJ_NAV_CSS + '</style></head><body>'
     // v277.1 (Kendall, 1 Oct 2026): "the only thing I wanted was the way to search ... the rest of these need to go away, they are noise."
     // START is the Brief alone; the five angles (NAJ_ANGLES) and the cheat sheet (NAJ_CHEAT) are no longer drawn. The Ejari
     // contract search card joins here when that feature ships - no card before its page exists (no dead control).
-    + '<div class=h>Start</div>'
-    + briefStartCard(key, rk, najIcon("search"))   // THE BRIEF - RENT / BUY (src/brief_page.js)
+    + startBody(key, rk, !!isOwner)   // v278.1 - the approved design (src/start_page.js)
     + '<div class=nt>Every figure in here is register-grounded \u2014 DLD, Ejari and the project register. If a number is not in the register it is not on the screen.</div>'
     + najNav(key, "start", rk) + '</body></html>';
 }

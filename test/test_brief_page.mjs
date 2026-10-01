@@ -43,18 +43,16 @@ const scripts = (html) => [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>
 
 // ---- S: /start ----
 const startHtml = await (await call("/start?key=" + READ)).text();
-const angs = [...startHtml.matchAll(/class="?ang[ "][^>]*>[\s\S]*?<div class=tg>[\s\S]*?<b>(\d\d)<\/b>/g)].map((m) => m[1]);
-ok(angs[0] === "00", "S1 /start: the first way in is 00", angs.join(","));
-ok(angs.length === 1, "S2 v277.1 (Kendall 1 Oct): the Brief is the only card on START - the five angles are gone", angs.join(","));
-ok(!startHtml.includes("THEY NAME A BUILDING") && !startHtml.includes("THEY SAY") && !startHtml.includes("Six ways"), "S3 no angle cards, no cheat sheet, no 'Six ways in'");
-ok(/href="\/brief\?mode=rent&amp;key=client_read_key_in_links_123"/.test(startHtml) && /href="\/brief\?mode=buy&amp;key=/.test(startHtml), "S4 the 00 card opens /brief for Rent and for Buy, with the key");
+// v278.1 (Kendall 1 Oct): START redesign - THE BRIEF (rent / buy), CONTRACTS SIGNED, ADVERTISED SUPPLY (owner only)
+ok(/<a class="btn rent" href="\/brief\?mode=rent&amp;key=/.test(startHtml) && /<a class="btn buy" href="\/brief\?mode=buy&amp;key=/.test(startHtml), "S1 /start: the Brief buttons, rent and buy");
+ok(startHtml.includes("THE BRIEF") && startHtml.includes("CONTRACTS SIGNED") && startHtml.includes("ADVERTISED SUPPLY"), "S2 owner START: three ways in - the Brief, Contracts signed, Advertised supply");
+ok(!startHtml.includes("THEY NAME A BUILDING") && !startHtml.includes("THEY SAY") && !startHtml.includes("Six ways"), "S3 no angle cards, no cheat sheet, no Six ways in");
+ok(/href="\/brief\?mode=rent&amp;key=client_read_key_in_links_123"/.test(startHtml) && /href="\/brief\?mode=buy&amp;key=/.test(startHtml), "S4 the Brief opens /brief for Rent and for Buy, with the key");
 const startClient = await (await call("/start?key=" + CLIENT)).text();
-ok(startClient.includes("THEY TELL YOU WHAT THEY WANT") && startClient.includes("key=" + CLIENT), "S5 the 00 card is on the client-key /start too, threading the client key");
-// v277: two big buttons and nothing else on the card
-const card00 = (/<div class="ang brief0"[\s\S]*?<\/div><\/div>/.exec(startHtml) || [""])[0];
-ok(card00.includes(">THEY WANT TO RENT →</a>") && card00.includes(">THEY WANT TO BUY →</a>"), "S6 the 00 card is THEY WANT TO RENT / THEY WANT TO BUY");
-ok(!card00.includes("Three options") && !/<ol>|<li>/.test(card00) && !card00.includes("THE BRIEF"), "S7 and carries no quoted example and no three-step text");
-ok((card00.match(/<a /g) || []).length === 2, "S8 exactly two links on the card");
+ok(startClient.includes('class="btn rent"') && startClient.includes("key=" + CLIENT), "S5 the Brief is on the client-key /start too, threading the client key");
+ok(!startClient.includes("ADVERTISED SUPPLY") && !startClient.includes("BLACK COFFEE"), "S6 client START: no Advertised supply (portal data never reaches a client), no Black Coffee");
+ok((startHtml.match(/data-soon="/g) || []).length === 2 && (startClient.match(/data-soon="/g) || []).length === 1, "S7 the placeholders open a coming panel, not a dead button (owner 2, client 1)");
+ok(/id="p-ejari" hidden>Coming this week/.test(startHtml) && /id="p-supply" hidden>Coming this week/.test(startHtml), "S8 each placeholder says what is coming");
 for (const s of scripts(startHtml)) ok(parses(s.code), "P1 /start inline script parses (" + s.code.length + " chars)");
 
 // ---- R: /brief renders and is gated ----
