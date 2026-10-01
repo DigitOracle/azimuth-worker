@@ -29,6 +29,8 @@ export const BLOCKS_DEFAULT_GOLD = {
     "1489,1137",
 };
 
+import { TAPCARD_JS, TAPCARD_CSS_LIGHT } from "./tapcards.js";   // v280 - tap any building, get its card
+
 const DISTRICT_NAMES = { jumeirahvillagecircle: "Jumeirah Village Circle" };
 const DISTRICT_SHORT = { jumeirahvillagecircle: "JVC" };
 // a few named main streets, labelled on the view (the static map labels the same four)
@@ -122,10 +124,10 @@ export function blocksPageHtml(o) {
     + '<title>' + esc(title) + ' · Najma</title>'
     + '<link rel=preconnect href="https://fonts.googleapis.com"><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">'
     + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">'
-    + '<style>' + BLOCKS_CSS + '</style></head><body>'
+    + '<style>' + BLOCKS_CSS + TAPCARD_CSS_LIGHT + '</style></head><body>'
     + '<div id=m aria-label="3D blocks view of ' + esc(cfg.name) + '"></div>'
     + '<svg id=lead aria-hidden=true></svg><div id=badges></div><div id=slabels aria-hidden=true></div>'
-    + '<header id=top><div class=tt><h1>' + esc(title) + '</h1><p>' + esc(cfg.name) + ' · tap a block for its name and height</p></div>'
+    + '<header id=top><div class=tt><h1>' + esc(title) + '</h1><p>' + esc(cfg.name) + ' · tap any block for its card</p></div>'
     + '<a id=back class=pill href="/map' + (cfg.key ? '?key=' + encodeURIComponent(cfg.key) : '') + '">Map</a></header>'
     + '<div id=tools><button id=north type=button aria-label="Point north"><svg viewBox="0 0 40 40"><g id=narrow><path d="M20 5 L27 22 L20 18 L13 22 Z" fill="#0A4F4A"/><path d="M20 35 L27 22 L20 26 L13 22 Z" fill="#C9C6BB"/></g><text x=20 y=13.2 text-anchor=middle font-size=7.5 font-weight=700 fill="#fff" font-family="IBM Plex Sans,Arial">N</text></svg></button>'
     + '<button id=reset type=button class=pill>Reset view</button>'
@@ -138,6 +140,7 @@ export function blocksPageHtml(o) {
     + '<script>window.__BLOCKS_CFG__=' + jsonInScript(cfg) + ';</script>'
     + (o.data ? '<script>window.__BLOCKS_DATA__=' + jsonInScript(o.data) + ';</script>' : '')
     + '<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>'
+    + '<script>' + TAPCARD_JS + '</script>'   // v280 - the tap-card client (src/tapcards.js), before the page script
     + '<script>' + BLOCKS_JS + '</script>'
     + '</body></html>';
 }
@@ -400,7 +403,15 @@ function select(s,fly){
       if(fly&&g.c){var z=Math.max(map.getZoom(),16);map.easeTo({center:g.c,zoom:z,duration:700,offset:[0,-60]})}}
   }
   $("cb").innerHTML=html;$("card").hidden=false;$("key").hidden=true;overlay();
+  // v280 - the tap card: today's card shows at once; the register card replaces it when the district's tap cards are in
+  if(s.kind==="ctx")tapcard(s.i,"",false);
+  else{var gg=goldBy(s.num);if(gg&&!gg.ap&&!gg.missing)tapcard(gg.i,'<span class=n>'+gg.num+'</span>',gg.page)}
 }
+function tapcard(i,badge,goldPage){var b=BLD[i],my=SEL;if(!b||!window.__tapcards)return;
+  window.__tapcards.card(CFG.slug,i,b.geom,{n:b.n,h:b.h,hs:b.hs,a:b.a},CFG.key).then(function(m){window.__lastTapcard=m;
+    if(SEL!==my||m.kind==="fallback")return;   // another tap since, or no card for this footprint: today's card stands
+    $("cb").innerHTML=window.__tapcards.html(m,{badge:badge,page:(m.page||goldPage)?"/building/"+CFG.slug+"/"+i+keyQ():"",preview:CFG.preview});
+  }).catch(function(){})}
 function list(){var ol=$("lo");if(!ol)return;ol.innerHTML="";
   GOLDS.forEach(function(g){var li=document.createElement("li");
     li.innerHTML='<span class="n'+(g.ap?' ap':'')+'">'+g.num+'</span><span>'+esc(g.name||(g.missing?"Not in the district outlines":"Building "+g.num))+(g.ap?' <small>(approximate position)</small>':'')+'</span>';
