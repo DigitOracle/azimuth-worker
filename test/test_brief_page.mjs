@@ -63,9 +63,11 @@ ok(r1.status === 200, "R2 /brief opens on a client key", r1.status);
 const rA = await call("/brief?key=" + READ);
 const briefHtml = await rA.text();
 ok(rA.status === 200 && /<title>The brief/.test(briefHtml), "R3 /brief renders on the owner key");
-for (const w of ["They want to…", "How many <em>bedrooms</em>?", "What is the <em>budget</em>?", "Where?", "Anywhere in Dubai", "not do without", "Jumeirah Village Circle", "near a metro", "newer building (2020 or later)", "Studio", "3 or more", "SHOW ME THE BUILDINGS", "Skip"])
+for (const w of ["They want to…", "How many <em>bedrooms</em>?", "Tap one or more.", "WHAT KIND OF HOME", "Townhouse", "What is the <em>budget</em>?", "stretch up to", "Furnished?", "Unfurnished", "Where?", "Anywhere in Dubai",
+  "Compare these areas side by side", "What <em>matters</em> to them?", "Must", "Nice to have", "Don’t care", "private pool", "community pool", "pet-friendly (dog walks, play areas)", "newer or modern (completed 2018 or later)",
+  "quality for a long-term stay", "Jumeirah Village Circle", "Arabian Ranches (Wadi Al Safa 6)", "Arabian Ranches 2 &amp; Serena (Wadi Al Safa 7)", "near a metro", "Studio", "3 or more", "SHOW ME THE HOMES", "Skip"])
   ok(briefHtml.includes(w), "R4 the steps carry “" + w + "”");
-ok(!/HOME TYPE|Villa &amp; townhouse|HOW MANY BUILDINGS|id=ftype|id=flim/.test(briefHtml), "R4b home type and how-many are no longer asked (v277)");
+ok(!/HOW MANY BUILDINGS|id=flim/.test(briefHtml) && /id=ftype/.test(briefHtml) && /id=ffurn/.test(briefHtml) && /id=fstr/.test(briefHtml) && /id=fcmp/.test(briefHtml), "R4b v282: home type (on the bedrooms screen), the stretch, furnished and the compare switch are in the markup; how-many is still not asked");
 ok(briefHtml.includes("id=fback") && briefHtml.includes("id=fstep") && briefHtml.includes("id=fdots"), "R4c Back and a progress marker are in the markup");
 ok(!/goldensymphony/.test(briefHtml) && />Liwan</.test(briefHtml), "R5 the district list drops non-districts and fixes register spellings");
 ok(!/\b(LOD|DLD|IQR|DEWA|KV)\b/.test(briefHtml.replace(/<script[\s\S]*?<\/script>/g, "")), "R6 no unexplained acronyms in the page markup");
@@ -81,8 +83,12 @@ ok(liveHtml.includes("Test District 11") && !liveHtml.includes("Jumeirah Village
 store.delete("img_districts_geo");
 ok(![...store.keys()].length, "R9 the page wrote nothing to KV");
 const q = briefQuery(new URLSearchParams("mode=hack&beds=9&min=90000&max=60000&areas=JVC,,bad slug!,businessbay&type=castle&musts=pool,teleporter,pool&limit=999&pick=a:1,b:2"));
-ok(q.mode === "rent" && q.beds === "1" && q.min === 60000 && q.max === 90000 && q.areas.join() === "jvc,businessbay" && q.type === "any" && q.musts.join() === "pool" && q.limit === 50 && q.pick.join() === "a:1,b:2" && q.modeSet === false,
+ok(q.mode === "rent" && q.beds.join() === "1" && q.min === 60000 && q.max === 90000 && q.areas.join() === "jvc,businessbay" && q.types.join() === "any" && q.musts.join() === "community_pool" && q.limit === 50 && q.pick.join() === "a:1,b:2" && q.modeSet === false,
   "R10 a shared query is cleaned, never guessed: bad values fall back, min and max swap, limit caps at 50; a bad mode does not count as chosen", JSON.stringify(q));
+{ const k = briefQuery(new URLSearchParams("mode=rent&beds=3,2,9&type=townhouse,castle&max=240000&stretch=300000&furnished=furnished&musts=pets&nice=private_pool,pets&areas=wadialsafa6,damachills&compare=1"));
+  ok(k.beds.join() === "2,3" && k.types.join() === "townhouse" && k.stretch === 300000 && k.furnished === "furnished" && k.musts.join() === "pets" && k.nice.join() === "private_pool" && k.compare === true,
+    "R10b v282: several bedrooms (sorted, bad ones dropped), the home type list, the stretch, furnished, must and nice (a must is not also nice), compare", JSON.stringify(k));
+  ok(briefQuery(new URLSearchParams("max=240000&stretch=200000")).stretch === 0 && briefQuery(new URLSearchParams("furnished=sofa")).furnished === "either", "R10c a stretch below the target, and a made-up furnished value, are dropped"); }
 ok(briefQuery(new URLSearchParams("mode=buy")).modeSet === true && briefQuery(new URLSearchParams("")).modeSet === false, "R11 modeSet says whether the /start button chose rent or buy");
 
 // ---- a small DOM stand-in, enough for the page script (getElementById, querySelectorAll on simple selectors, innerHTML) ----
@@ -136,7 +142,11 @@ const RESULTS = Array.from({ length: 12 }, (_, i) => ({
   aliases: i === 3 ? ["CANAL VIEWS"] : [], district: "jumeirahvillagecircle", district_name: "Jumeirah Village Circle", app_id: i === 3 ? null : 1490 + i,
   building_url: i === 3 ? null : "/building/jumeirahvillagecircle/" + (1490 + i),
   evidence: { basis: "ejari", median: 60000 + i * 1000, q1: 57000 + i * 1000, q3: 66000 + i * 1000, n: 30 - i, n_new: 25 - i, sqm: 59, latest: "2026-09-28" },
-  verdict: ["within", "within", "within", "a_little_above", "above", "below"][i % 6], musts: { balcony: true, pool: i % 2 === 0, gym: null },
+  verdict: i === 6 ? "stretch" : ["within", "within", "within", "a_little_above", "above", "below"][i % 6], musts: { balcony: true, pool: i % 2 === 0, gym: null },
+  // v282: the client's criteria, each answered with its source (row 0 yes, row 1 no, the rest not known)
+  criteria: [{ k: "community_pool", label: "community pool", level: "must", v: i === 0 ? true : i === 1 ? false : null, src: i === 0 ? "Land Department building record: 2 swimming pools" : i === 1 ? "a source says no" : "Not known: no building record lists a pool." },
+    { k: "pets", label: "pet-friendly (dog walks, play areas)", level: "nice", v: null, src: "Not known: no register we hold records whether a community allows pets.", detail: "park within 1 km: Test Park 300 m" },
+    { k: "furnished", label: "furnished", level: "asked", v: null, src: "Not known: the Ejari register does not record whether a home is furnished." }],
   completeness: { record: true, layouts: i < 5, photos: i !== 2 }, why: i === 0 ? "most lettings; full layout data" : "",
   // the API still returns the register estimate (nothing on screen reads it now) and, on one row, a developer's own sheet
   ...(i === 0 ? { estimated_left: { about: 40, of: 310, running: 270, as_at: "2026-09-30" }, estimate_as_of: "2026-09-30" } : {}),
@@ -150,11 +160,14 @@ async function openPage(pathQ, opts) {
   const byId = (id) => { let f = null; const walk = (e) => { for (const c of e.children) { if (!f && c.id === id) f = c; if (!f) walk(c); } }; walk(doc.root); return f; };
   const u = new URL(ORIGIN + pathQ);
   const calls = [], jobsLive = { n: 0, max: 0 };
-  let pdfMode = opts.pdf || "ok";
+  let pdfMode = opts.pdf || "ok", apiDrops = 0, pdfDrops = 0;
   const pageFetch = async (href) => {
     calls.push(href);
     if (href.indexOf("/brief_api?") === 0) {
       if (opts.api === 404) return new Response("not found", { status: 404 });
+      if (opts.apiDrop && apiDrops < opts.apiDrop) { apiDrops++; await sleep(5); throw new TypeError("Failed to fetch"); }   // a dropped connection
+      if (opts.apiDelay) await sleep(opts.apiDelay);
+      if (opts.api === "cmp") return new Response(JSON.stringify(opts.cmpBody), { headers: { "content-type": "application/json" } });
       const sp = new URLSearchParams(href.split("?")[1]); const lim = +sp.get("limit") || 10;
       return new Response(JSON.stringify({ query: Object.fromEntries(sp), as_of: "2026-09-28", source: "img_rent_index", total_matched: RESULTS.length, results: RESULTS.slice(0, lim), notes: ["bedrooms read from size - the rent register rarely records them"] }), { headers: { "content-type": "application/json" } });
     }
@@ -163,6 +176,7 @@ async function openPage(pathQ, opts) {
       await sleep(15); jobsLive.n--;
       if (pdfMode === "fail") return new Response("render failed", { status: 500 });
       if (pdfMode === "slow") { const e = new Error("aborted"); e.name = "AbortError"; throw e; }
+      if (pdfMode === "dropOnce" && pdfDrops < 1) { pdfDrops++; throw new TypeError("Failed to fetch"); }
       if (pdfMode === "html") return new Response("<html>oops</html>", { headers: { "content-type": "text/html" } });
       return new Response(new Uint8Array([37, 80, 68, 70, 45]), { headers: { "content-type": "application/pdf" } });
     }
@@ -188,36 +202,77 @@ async function openPage(pathQ, opts) {
 const click = async (el, ms) => { if (!el || typeof el.onclick !== "function") return false; el.onclick({ preventDefault() {}, stopPropagation() {}, target: el }); await sleep(ms == null ? 60 : ms); return true; };
 const text = (el) => (el ? el.textContent : "");
 
-// ---- T: the stepped flow (v277) ----
-const stepShown = (Pg) => ["mode", "beds", "budget", "where", "musts"].filter((s) => !Pg.byId("s-" + s).hidden);
+// ---- T: the stepped flow (v277; v282 order, approved by Kendall 1 Oct: rent/buy, bedrooms + kind of home, budget, furnished, where, must-haves) ----
+const stepShown = (Pg) => ["mode", "beds", "budget", "furn", "where", "musts"].filter((s) => !Pg.byId("s-" + s).hidden);
 {
   const T0 = await openPage("/brief?key=" + READ);
-  ok(stepShown(T0).join() === "mode" && text(T0.byId("fstep")) === "STEP 1 OF 5", "T1 with nothing chosen the page opens on step 1, rent or buy, and only that step is on screen", stepShown(T0).join());
-  ok(T0.byId("fback").hidden && T0.byId("fdots").querySelectorAll("i").length === 5 && T0.byId("fdots").querySelectorAll("i.on").length === 1, "T2 no Back on the first step; five dots, the first lit");
+  ok(stepShown(T0).join() === "mode" && text(T0.byId("fstep")) === "STEP 1 OF 6", "T1 with nothing chosen the page opens on step 1, rent or buy, and only that step is on screen", stepShown(T0).join());
+  ok(T0.byId("fback").hidden && T0.byId("fdots").querySelectorAll("i").length === 6 && T0.byId("fdots").querySelectorAll("i.on").length === 1, "T2 no Back on the first step; six dots, the first lit");
   await click(T0.byId("fmode").querySelector("button[data-v=buy]"), 0);
   ok(stepShown(T0).join() === "beds" && T0.win.__brief.state.mode === "buy", "T3 tapping Buy moves to the bedrooms step");
   await click(T0.byId("fbeds").querySelector("button[data-v=2]"), 0);
-  ok(stepShown(T0).join() === "budget" && T0.win.__brief.state.beds === "2" && T0.byId("fbudl").textContent.includes("PRICE") && T0.byId("fbudq").textContent.includes("price"), "T4 tapping a bedroom count moves to the budget, worded as a price for Buy");
+  ok(T0.win.__brief.state.beds.join() === "2", "T4a the first tap replaces the 1 bedroom a fresh page starts on", T0.win.__brief.state.beds.join());
+  await click(T0.byId("fbeds").querySelector("button[data-v=3]"), 0);
+  await click(T0.byId("fbeds").querySelector("button[data-v=1]"), 0); await click(T0.byId("fbeds").querySelector("button[data-v=1]"), 0);
+  ok(stepShown(T0).join() === "beds" && T0.win.__brief.state.beds.join() === "2,3", "T4 bedrooms are several: 2 and 3 both picked (1 tapped on and off again); the step stays for the kind of home", T0.win.__brief.state.beds.join());
+  await click(T0.byId("ftype").querySelector("button[data-v=townhouse]"), 0);
+  await click(T0.byId("ftype").querySelector("button[data-v=villa]"), 0);
+  ok(T0.win.__brief.state.types.join() === "townhouse,villa" && T0.byId("ftype").querySelector("button[data-v=any]").classList.contains("on") === false, "T4b the kind of home is several too: townhouse and villa, Any goes off");
+  await click(T0.byId("ftype").querySelector("button[data-v=any]"), 0);
+  ok(T0.win.__brief.state.types.join() === "any", "T4c Any clears the others");
+  await click(T0.byId("fnextbd"), 0);
+  ok(stepShown(T0).join() === "budget" && T0.byId("fbudl").textContent.includes("PRICE") && T0.byId("fbudq").textContent.includes("price"), "T4d NEXT moves to the budget, worded as a price for Buy");
   await click(T0.byId("fnextb"), 20);
   ok(stepShown(T0).join() === "budget" && /budget/i.test(text(T0.byId("fmsg"))) && !T0.calls.length, "T5 NEXT without a budget stays put and says why; nothing is searched");
   await click(T0.byId("fback"), 0);
   ok(stepShown(T0).join() === "beds" && !T0.byId("fback").hidden, "T6 Back goes to the step before");
-  await click(T0.byId("fback"), 0); await click(T0.byId("fback"), 0);
+  await click(T0.byId("fback"), 0);
   ok(stepShown(T0).join() === "mode" && T0.byId("fback").hidden, "T7 Back all the way to step 1, where it disappears");
   const T1 = await openPage("/brief?mode=rent&key=" + READ);
-  ok(stepShown(T1).join() === "beds" && text(T1.byId("fstep")) === "STEP 2 OF 5" && T1.win.__brief.state.mode === "rent", "T8 from the /start RENT button the page opens on the bedrooms step: rent or buy is already chosen");
+  ok(stepShown(T1).join() === "beds" && text(T1.byId("fstep")) === "STEP 2 OF 6" && T1.win.__brief.state.mode === "rent", "T8 from the /start RENT button the page opens on the bedrooms step: rent or buy is already chosen");
   ok(T1.byId("fbudl").textContent.includes("RENT A YEAR"), "T9 and the budget is worded as rent a year");
-  await click(T1.byId("fbeds").querySelector("button[data-v=1]"), 0);
-  T1.byId("fmax").value = "65k";
+  T1.win.__brief.state.beds.length = 0; await click(T1.byId("fnextbd"), 0);
+  ok(stepShown(T1).join() === "beds" && /at least one bedroom/.test(text(T1.byId("fmsgb"))), "T9b with no bedroom count picked NEXT says so and stays");
+  await click(T1.byId("fbeds").querySelector("button[data-v=1]"), 0); await click(T1.byId("fnextbd"), 0);
+  T1.byId("fmax").value = "65k"; T1.byId("fstr").value = "60k";
   await click(T1.byId("fnextb"), 0);
-  ok(stepShown(T1).join() === "where" && T1.win.__brief.state.max === 65000, "T10 a typed budget passes NEXT to the where step");
+  ok(stepShown(T1).join() === "budget" && /stretch has to be above the target/.test(text(T1.byId("fmsg"))), "T9c a stretch under the target is refused, in words", text(T1.byId("fmsg")));
+  T1.byId("fstr").value = "75k";
+  await click(T1.byId("fnextb"), 0);
+  ok(stepShown(T1).join() === "furn" && T1.win.__brief.state.max === 65000 && T1.win.__brief.state.stretch === 75000, "T10 a typed target and stretch pass NEXT to the furnished step");
+  await click(T1.byId("ffurn").querySelector("button[data-v=furnished]"), 0);
+  ok(stepShown(T1).join() === "where" && T1.win.__brief.state.furnished === "furnished", "T10b tapping Furnished moves to where");
+  ok(T1.byId("fcmp").hidden, "T10c with no area picked the compare switch is not shown");
+  await click(T1.byId("fdl").querySelector("button[data-s=jumeirahvillagecircle]"), 0);
+  ok(T1.byId("fcmp").hidden, "T10d with ONE area it never shows");
+  await click(T1.byId("fdl").querySelector("button[data-s=damachills]"), 0);
+  ok(!T1.byId("fcmp").hidden && T1.byId("fcmp").classList.contains("on") && T1.byId("fcmp").getAttribute("aria-pressed") === "true", "T10e with TWO areas it shows, and it is on by default");
+  await click(T1.byId("fdl").querySelector("button[data-s=wadialsafa6]"), 0);
+  ok(!T1.byId("fcmp").hidden, "T10f three areas: still shown");
+  await click(T1.byId("fdl").querySelector("button[data-s=dubaimarina]"), 0);
+  ok(T1.byId("fcmp").hidden, "T10g four areas: gone (side by side is for 2 or 3)");
+  await click(T1.byId("fdl").querySelector("button[data-s=dubaimarina]"), 0); await click(T1.byId("fdl").querySelector("button[data-s=wadialsafa6]"), 0);
+  await click(T1.byId("fcmp"), 0);
+  ok(!T1.byId("fcmp").classList.contains("on") && T1.win.__brief.state.compare === false, "T10h the switch turns off");
+  await click(T1.byId("fcmp"), 0);
   await click(T1.byId("fnextw"), 0);
-  ok(stepShown(T1).join() === "musts" && text(T1.byId("fstep")) === "STEP 5 OF 5", "T11 NEXT on where (Anywhere in Dubai) reaches the must-haves");
-  await click(T1.byId("fskip"), 80);
-  ok(T1.calls[0] === "/brief_api?key=" + READ + "&mode=rent&beds=1&min=0&max=65000&areas=&type=any&musts=&limit=10", "T12 Skip runs the search with no must-haves, home type Any and ten buildings", T1.calls[0]);
-  ok(T1.byId("bform").hidden && !T1.byId("bsum").hidden && /To rent: 1 bedroom, up to AED 65k a year, anywhere in Dubai/.test(text(T1.byId("bsumt"))), "T13 the steps fold to one line above the list, with CHANGE", text(T1.byId("bsumt")));
+  ok(stepShown(T1).join() === "musts" && text(T1.byId("fstep")) === "STEP 6 OF 6", "T11 NEXT on where reaches the must-haves");
+  const wr = (k) => T1.byId("fwant").querySelector("div[data-k=" + k + "]");
+  ok(T1.byId("fwant").querySelectorAll(".wr").length === 10 && wr("private_pool").querySelector("button[data-l=no]").classList.contains("on"), "T11b ten criteria, each must / nice to have / don't care, starting on don't care");
+  await click(wr("pets").querySelector("button[data-l=must]"), 0);
+  await click(wr("private_pool").querySelector("button[data-l=nice]"), 0);
+  await click(wr("modern").querySelector("button[data-l=must]"), 0); await click(wr("modern").querySelector("button[data-l=no]"), 0);
+  ok(T1.win.__brief.state.musts.join() === "pets" && T1.win.__brief.state.nice.join() === "private_pool" && /1 must, 1 nice to have/.test(text(T1.byId("fmustv"))), "T11c three-way: pets a must, private pool nice to have, modern back to don't care");
+  await click(T1.byId("fgo"), 80);
+  ok(T1.calls[0] === "/brief_api?key=" + READ + "&mode=rent&beds=1&min=0&max=65000&stretch=75000&areas=jumeirahvillagecircle,damachills&type=any&furnished=furnished&musts=pets&nice=private_pool&compare=1&limit=10", "T12 the search carries the whole brief: beds, target, stretch, areas, type, furnished, must, nice, compare", T1.calls[0]);
+  ok(T1.byId("bform").hidden && !T1.byId("bsum").hidden && /To rent: 1 bedroom, up to AED 65k \(stretch to 75k\) a year, furnished, Jumeirah Village Circle, DAMAC Hills side by side, must: pet-friendly/.test(text(T1.byId("bsumt"))), "T13 the steps fold to one line above the list, with CHANGE", text(T1.byId("bsumt")));
   await click(T1.byId("bedit"), 0);
   ok(!T1.byId("bform").hidden && stepShown(T1).join() === "mode", "T14 CHANGE reopens the steps from the first");
+  const T2 = await openPage("/brief?mode=rent&key=" + READ);
+  await click(T2.byId("fbeds").querySelector("button[data-v=1]"), 0); await click(T2.byId("fnextbd"), 0);
+  T2.byId("fmax").value = "65k"; await click(T2.byId("fnextb"), 0); await click(T2.byId("ffurn").querySelector("button[data-v=either]"), 0); await click(T2.byId("fnextw"), 0);
+  await click(T2.byId("fskip"), 80);
+  ok(T2.calls[0] === "/brief_api?key=" + READ + "&mode=rent&beds=1&min=0&max=65000&areas=&type=any&furnished=either&musts=&nice=&limit=10", "T15 Skip runs the search with no must-haves, home type Any and ten buildings", T2.calls[0]);
 }
 
 // ---- W: every button is wired ----
@@ -225,7 +280,7 @@ const ids = [...briefHtml.replace(/<script[\s\S]*?<\/script>/g, "").matchAll(/<b
 ok(ids.length >= 12, "W0 /brief draws its buttons with ids: " + ids.join(" "));
 const P = await openPage("/brief?key=" + READ);
 for (const id of ids) ok(P.byId(id) && typeof P.byId(id).onclick === "function", "W1 #" + id + " has its handler");
-ok(P.byId("fdl").querySelectorAll("button").every((b) => typeof b.onclick === "function") && P.byId("fmust").querySelectorAll("button").every((b) => typeof b.onclick === "function"), "W2 every district chip and every must-have chip has its handler");
+ok(P.byId("fdl").querySelectorAll("button").every((b) => typeof b.onclick === "function") && P.byId("fwant").querySelectorAll("button").every((b) => typeof b.onclick === "function") && P.byId("fbeds").querySelectorAll("button").every((b) => typeof b.onclick === "function") && P.byId("ftype").querySelectorAll("button").every((b) => typeof b.onclick === "function") && P.byId("ffurn").querySelectorAll("button").every((b) => typeof b.onclick === "function"), "W2 every district chip, bedroom, home type, furnished and must-have button has its handler");
 // the form: a click changes the state the search will send
 await click(P.byId("fmode").querySelector("button[data-v=buy]"), 0);
 ok(P.win.__brief.state.mode === "buy" && P.byId("fbudl").textContent.includes("PRICE"), "W3 Buy switches the budget to a price");
@@ -234,16 +289,19 @@ await click(P.byId("fgo"), 20);
 ok(/budget/i.test(text(P.byId("fmsg"))) && !P.calls.length && stepShown(P).join() === "budget", "W4 no budget: the button SAYS what is missing, shows the budget step, and does not search");
 P.byId("fmax").value = "65k";
 await click(P.byId("fdl").querySelector("button[data-s=jumeirahvillagecircle]"), 0);
-await click(P.byId("fmust").querySelector("button[data-v=pool]"), 0);
+await click(P.byId("fwant").querySelector("div[data-k=community_pool]").querySelector("button[data-l=must]"), 0);
 await click(P.byId("fgo"), 80);
-ok(P.calls[0] === "/brief_api?key=" + READ + "&mode=rent&beds=1&min=0&max=65000&areas=jumeirahvillagecircle&type=any&musts=pool&limit=10", "W5 the search calls Contract A with the brief", P.calls[0]);
+ok(P.calls[0] === "/brief_api?key=" + READ + "&mode=rent&beds=1&min=0&max=65000&areas=jumeirahvillagecircle&type=any&furnished=either&musts=community_pool&nice=&limit=10", "W5 the search calls Contract A with the brief", P.calls[0]);
 ok(/[?&]run=1/.test(P.win.location.last || "") && /max=65000/.test(P.win.location.last || ""), "W6 the address bar now holds the brief (reload restores it)", P.win.location.last);
 const rows = P.byId("bres").querySelectorAll(".row");
 ok(rows.length === 10, "W7 the ranked list draws 10 rows", rows.length);
 ok(P.byId("bres").querySelectorAll("input[type=checkbox]").length === 10 && P.win.__brief.chosen().length === 10, "W8 each row has a checkbox; the ten are chosen to start with");
 ok(text(rows[0]).includes("in budget") && text(rows[3]).includes("a little over budget") && text(rows[4]).includes("over budget") && text(rows[5]).includes("under budget"), "W9 each row carries its verdict in words");
 ok(text(rows[0]).includes("AED 60k") && text(rows[0]).includes("middle half 57k – 66k") && text(rows[0]).includes("30 lettings (25 new)"), "W10 the row gives typical rent, the middle half and the lettings count");
-ok(text(rows[0]).includes("✓ pool") && text(rows[1]).includes("✗ no pool"), "W11 the must-haves show yes / no per building");
+ok(text(rows[0]).includes("✓ community pool (must)") && text(rows[1]).includes("✗ community pool (must)") && text(rows[2]).includes("pet-friendly (dog walks, play areas): not known"), "W11 each criterion shows yes / no / not known per building", text(rows[2]));
+ok(rows[0].querySelector("details") && /where these answers come from/.test(text(rows[0])) && /Land Department building record: 2 swimming pools/.test(text(rows[0])), "W11b with the source of each answer folded under the marks");
+ok(text(rows[2]).includes("furnished: not known") && !/OWNER ONLY/.test(text(P.byId("bres"))), "W11c furnished is not known; no owner hint where the API sends none");
+ok(text(rows[6]).includes("stretch"), "W11d the stretch verdict has its word on the row");
 ok(text(rows[3]).includes("also filed as CANAL VIEWS") && !rows[3].querySelector("a"), "W12 aliases shown; no building page link where the API has none");
 ok(rows[0].querySelector("a").getAttribute("href") === "/building/jumeirahvillagecircle/1490?key=" + READ, "W13 the building page link carries the key");
 // A: availability on the client face (v277)
@@ -265,7 +323,7 @@ const kindOf = (c) => !c ? null : new URLSearchParams(c.split("?")[1]).get("kind
 await click(P.byId("o-c5"), 120);
 let pc = pdfCalls();
 ok(pc.length === 1 && kindOf(pc[0]) === "compare" && keysOf(pc[0]).length === 5 && keysOf(pc[0])[0] === "jumeirahvillagecircle:1490" && keysOf(pc[0])[3] === "dld:bloom heights", "W14 Compare 5 asks for kind=compare with the first five chosen", pc[0]);
-ok(/[?&]mode=rent&beds=1&min=0&max=65000/.test(pc[0]) && pc[0].includes("key=" + READ), "W15 the PDF call carries mode, beds, min, max and the key", pc[0]);
+ok(/[?&]mode=rent&beds=1&min=0&max=65000&type=any&furnished=either&musts=community_pool&areas=jumeirahvillagecircle/.test(pc[0]) && pc[0].includes("key=" + READ), "W15 the PDF call carries mode, beds, budget, type, furnished, the must-haves, the areas and the key", pc[0]);
 let jobs = P.byId("jobs").querySelectorAll(".job");
 ok(jobs.length === 1 && text(jobs[0]).includes("Ready") && jobs[0].querySelector("a").getAttribute("href") === "blob:pdf-1", "W16 the PDF arrives: Ready, with Open the PDF", text(jobs[0]));
 await click(P.byId("o-c10"), 120);
@@ -325,14 +383,70 @@ ok(decodeURIComponent(P.byId("shwa").getAttribute("href")).includes(link), "W31 
 // opening the shared link on the client's phone restores the list and the choice
 const S = await openPage(link.slice(ORIGIN.length));
 await sleep(60);
-ok(S.calls[0] === "/brief_api?key=" + CLIENT + "&mode=rent&beds=1&min=0&max=65000&areas=jumeirahvillagecircle&type=any&musts=pool&limit=10", "W32 the shared link runs the same search on open", S.calls[0]);
+ok(S.calls[0] === "/brief_api?key=" + CLIENT + "&mode=rent&beds=1&min=0&max=65000&areas=jumeirahvillagecircle&type=any&furnished=either&musts=community_pool&nice=&limit=10", "W32 the shared link runs the same search on open", S.calls[0]);
 ok(S.win.__brief.chosen().join() === "jumeirahvillagecircle:1491,dld:bloom heights", "W33 with the same two buildings ticked", S.win.__brief.chosen().join());
-ok(S.byId("fmax").value === "65k" && S.byId("fdl").querySelector("button[data-s=jumeirahvillagecircle]").classList.contains("on") && S.byId("fmust").querySelector("button[data-v=pool]").classList.contains("on") && S.win.__brief.state.beds === "1" && S.win.__brief.state.mode === "rent", "W34 and the steps hold the whole brief it came from (rent, 1 bedroom, 65k, JVC, pool)");
-ok(S.byId("bform").hidden && /1 bedroom, up to AED 65k a year, Jumeirah Village Circle, with pool/.test(text(S.byId("bsumt"))), "W34b the shared link opens on the list, the brief folded to one line");
+ok(S.byId("fmax").value === "65k" && S.byId("fdl").querySelector("button[data-s=jumeirahvillagecircle]").classList.contains("on") && S.byId("fwant").querySelector("div[data-k=community_pool]").querySelector("button[data-l=must]").classList.contains("on") && S.win.__brief.state.beds.join() === "1" && S.win.__brief.state.mode === "rent", "W34 and the steps hold the whole brief it came from (rent, 1 bedroom, 65k, JVC, community pool a must)");
+ok(S.byId("bform").hidden && /1 bedroom, up to AED 65k a year, Jumeirah Village Circle, must: community pool/.test(text(S.byId("bsumt"))), "W34b the shared link opens on the list, the brief folded to one line", text(S.byId("bsumt")));
 // the search itself failing: said in words, with a working Try again
 const F = await openPage("/brief?key=" + READ + "&mode=rent&beds=1&max=65000&run=1", { api: 404 });
 ok(/not switched on yet/.test(text(F.byId("bres"))) && F.byId("bretry") && typeof F.byId("bretry").onclick === "function", "W35 a search that fails says so, with Try again", text(F.byId("bres")));
 ok(F.byId("bout").hidden, "W36 and no output buttons are offered on a failed search");
+
+// ---- v282: the retry, the comparison and tabs, the owner-only furnished hint ----
+{
+  // the search: a dropped connection is retried ONCE, with "Still working..." on screen, and the list then arrives
+  const R = await openPage("/brief?key=" + READ + "&mode=rent&beds=1&max=65000&run=1", { apiDrop: 1, apiDelay: 120 });
+  ok(/Still working/.test(text(R.byId("bres"))), "V1 a dropped search connection shows Still working... while it retries", text(R.byId("bres")));
+  await sleep(200);
+  ok(R.calls.filter((c) => c.indexOf("/brief_api?") === 0).length === 2 && R.byId("bres").querySelectorAll(".row").length === 10, "V2 it retries once by itself and the list arrives", R.calls.length);
+  const R2 = await openPage("/brief?key=" + READ + "&mode=rent&beds=1&max=65000&run=1", { apiDrop: 2 });
+  await sleep(60);
+  ok(R2.calls.filter((c) => c.indexOf("/brief_api?") === 0).length === 2 && /after two tries/.test(text(R2.byId("bres"))) && R2.byId("bretry"), "V3 dropped twice: only one retry, then it says so in words, with Try again", text(R2.byId("bres")));
+  const R3 = await openPage("/brief?key=" + READ + "&mode=rent&beds=1&max=65000&run=1", { api: 404 });
+  ok(R3.calls.filter((c) => c.indexOf("/brief_api?") === 0).length === 1, "V4 an answer from the server (404) is not retried");
+  // the PDF: one automatic retry on a dropped connection
+  R.setPdf("dropOnce");
+  const before = R.calls.filter((c) => c.indexOf("/brief_pdf?") === 0).length;
+  await click(R.byId("o-c5"), 150);
+  const pj = R.byId("jobs").querySelectorAll(".job"), lastJ = pj[pj.length - 1];
+  ok(R.calls.filter((c) => c.indexOf("/brief_pdf?") === 0).length === before + 2 && text(lastJ).includes("Ready"), "V5 a PDF whose connection drops is fetched once more by itself and comes back Ready", text(lastJ));
+  R.setPdf("slow"); await click(R.byId("o-c10"), 200);
+  const pj2 = R.byId("jobs").querySelectorAll(".job");
+  ok(/after two tries/.test(text(pj2[pj2.length - 1])), "V6 a PDF that times out twice says so after two tries", text(pj2[pj2.length - 1]));
+  // the comparison: one column per area, every cell answered or not known with its source, and the homes in one tab per area
+  const cellY = (say, src) => ({ v: true, say, src }), cellU = (say, src) => ({ v: null, say, src });
+  const col = (slug, name, extra) => Object.assign({ slug, name, matches: cellY("2 in budget, 1 in the stretch", "this brief's list"), rent: cellY("3-bed villa or townhouse: AED 260,000 (51 contracts)", "Ejari rent contracts 2026-08-01 to 2026-09-30"),
+    types: { apartment: cellU("not known: no apartment lettings in the window", "Ejari"), townhouse: cellU("not known: the register files townhouses as villas", "Ejari"), villa: cellY("villas or townhouses let here", "Ejari") },
+    pools: { private: cellU("not known: no register records private pools", "registers"), community: cellU("not known: no building record here lists a pool", "Land Department building records") },
+    parks: cellY("20 parks (15 community, 5 unknown)", "the map's amenity layer (OpenStreetMap)"), schools: cellY("2 schools: Safa Community School (Outstanding)", "KHDA"), newest: cellU("not known: no completion year on file", "Dubai Municipality building records") }, extra || {});
+  const cmpRows = RESULTS.slice(0, 6).map((r, i) => Object.assign({}, r, { key: "k" + i, district: i < 3 ? "wadialsafa6" : "damachills", rank: (i % 3) + 1 }));
+  cmpRows[0] = Object.assign({}, cmpRows[0], { furnished_hint: { none: "the advertised-supply data does not carry furnishing yet" } });
+  const body = { as_of: "2026-09-30", total_matched: 6, comparison: [col("wadialsafa6", "Arabian Ranches (Wadi Al Safa 6)"), col("damachills", "DAMAC Hills", { newest: cellY("2021 (DAMAC Hills - Carson)", "Dubai Municipality building records") })], results: cmpRows, notes: [] };
+  const Cp = await openPage("/brief?key=" + READ + "&mode=rent&beds=2,3&type=townhouse&max=240000&stretch=300000&areas=wadialsafa6,damachills&compare=1&musts=pets&nice=private_pool&furnished=furnished&run=1", { api: "cmp", cmpBody: body });
+  await sleep(40);
+  ok(Cp.calls[0].includes("&compare=1&") && Cp.calls[0].includes("beds=2,3") && Cp.calls[0].includes("stretch=300000"), "V7 a restored side-by-side brief asks the search for the comparison", Cp.calls[0]);
+  const cb = Cp.byId("bcmp");
+  ok(cb && /SIDE BY SIDE/.test(text(cb)) && /HOMES THAT MATCH/.test(text(cb)) && /TYPICAL RENT, LAST 60 DAYS/.test(text(cb)) && /HOME TYPES/.test(text(cb)) && /POOLS/.test(text(cb)) && /PARKS AND DOG-FRIENDLY SPACES/.test(text(cb)) && /SCHOOLS NEARBY/.test(text(cb)) && /NEWEST COMPLETION/.test(text(cb)),
+    "V8 the results open with the comparison: matches, typical rent, home types, pools, parks and dog-friendly spaces, schools, newest completion");
+  ok(cb.querySelectorAll(".cr").length === 7 && cb.querySelectorAll(".cc").length === 14 && /Arabian Ranches \(Wadi Al Safa 6\)/.test(text(cb)) && /DAMAC Hills/.test(text(cb)), "V9 one column per area in every row (7 rows x 2 areas)");
+  ok(/✓ 20 parks/.test(text(cb)) && /not known not known: no completion year/.test(text(cb)) && /✓ 2021 \(DAMAC Hills - Carson\)/.test(text(cb)) && /OpenStreetMap/.test(text(cb)), "V10 each cell is ✓ / ✗ / not known with its words and its source", text(cb).slice(0, 300));
+  const tabs = Cp.byId("btabs").querySelectorAll("button");
+  ok(tabs.length === 2 && /Arabian Ranches \(Wadi Al Safa 6\) \(3\)/.test(text(tabs[0])) && tabs[0].classList.contains("on"), "V11 below it the homes are in one tab per area, the first open", tabs.map(text).join(" | "));
+  const panes = Cp.byId("bres").querySelectorAll(".tabp");
+  ok(panes.length === 2 && !panes[0].hidden && panes[1].hidden && panes[0].querySelectorAll(".row").length === 3, "V12 only the open tab's homes show");
+  await click(tabs[1], 0);
+  ok(panes[0].hidden && !panes[1].hidden && tabs[1].classList.contains("on"), "V13 tapping the second tab shows its homes");
+  ok(Cp.win.__brief.chosen().length === 6, "V14 every row in both tabs can still be chosen for the PDFs");
+  ok(/OWNER ONLY/.test(text(Cp.byId("bres"))) && /does not carry furnishing yet/.test(text(Cp.byId("bres"))), "V15 the owner sees the furnished hint the API sends to the owner key");
+  await click(Cp.byId("o-pack"), 60);
+  const pp = Cp.calls.filter((c) => c.indexOf("/brief_pdf?") === 0).pop();
+  ok(/beds=2,3/.test(pp) && /stretch=300000/.test(pp) && /type=townhouse/.test(pp) && /furnished=furnished/.test(pp) && /musts=pets/.test(pp) && /nice=private_pool/.test(pp) && /areas=wadialsafa6,damachills/.test(pp) && /compare=1/.test(pp), "V16 the Full pack call carries the whole brief and compare=1, so the PDF opens with the same comparison", pp);
+  // a client's page: the API never sends furnished_hint to a client key, and the page draws none without it
+  const body2 = Object.assign({}, body, { results: cmpRows.map((r) => { const x = Object.assign({}, r); delete x.furnished_hint; return x; }) });
+  const Cc = await openPage("/brief?key=" + CLIENT + "&mode=rent&beds=2,3&areas=wadialsafa6,damachills&compare=1&max=240000&furnished=furnished&run=1", { api: "cmp", cmpBody: body2 });
+  await sleep(40);
+  ok(!/OWNER ONLY/.test(text(Cc.byId("bres"))) && /furnished: not known/.test(text(Cc.byId("bres"))), "V17 a client's page: furnished is not known, and no listing-site hint");
+}
 
 globalThis.fetch = realFetch;
 console.log("\n" + pass + " passed, " + fail + " failed");

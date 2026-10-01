@@ -41,6 +41,10 @@
 // for, never availability; the "left" figure is always "an estimate, not a count".
 import puppeteer from "@cloudflare/puppeteer";
 import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailFor } from "./brief.js";   // the ONE "left" estimate (API only since v277) and the developers' own sheets, shared with /brief_api
+// v282 (Kendall, 1 Oct 2026): the client's criteria and the area comparison come from the SAME functions /brief_api uses, so the list
+// and the documents can never disagree. A document is a client document: the search is run with owner: false, and nothing here ever
+// prints a listing-site (portal) figure - furnishing is "not known" on every page.
+import { briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY } from "./brief.js";
 // v277 (Kendall, 1 Oct 2026): the register "left" estimate is OFF the client face - no "ESTIMATED ... LEFT" box on page 2, no
 // "Still filling" line on the one-sheet card. estimateLeft() stays in src/brief.js and the API still returns estimated_left; nothing
 // here prints it. In its place page 2 carries DEVELOPER AVAILABILITY where a developer's own sheet names the building (loadDevAvail /
@@ -186,15 +190,24 @@ const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); 
 export function parseQuery(url) {
   const sp = url.searchParams;
   const num = (v) => { const n = Number(String(v || "").replace(/[^0-9.]/g, "")); return isFinite(n) && n > 0 ? n : 0; };
-  const beds = String(sp.get("beds") || "1").toLowerCase();
+  // v282: beds may be a list (beds=2,3): q.beds is the first, q.bedsList all of them; each building uses the one its figure is for
+  const one = (b) => (BEDS[b] ? b : (b === "0" ? "studio" : /^(any|every|\*)$/.test(b) ? "all" : null));
+  const bl = [...new Set(String(sp.get("beds") || "1").toLowerCase().split(",").map((b) => one(b.trim())).filter(Boolean))];
+  const bedsList = bl.includes("all") ? ["all"] : (bl.length ? bl : ["1"]);
+  const list = (k) => String(sp.get(k) || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).map((m) => (m === "pool" ? "community_pool" : m === "new" ? "modern" : m)).filter((m) => BRIEF_CRITERIA.some((c) => c[0] === m));
+  const musts = [...new Set(list("musts"))];
+  const areas = String(sp.get("areas") || "").split(",").map((a) => a.trim().toLowerCase().replace(/[^a-z0-9]/g, "")).filter(Boolean);
   return {
     kind: String(sp.get("kind") || "dossier").toLowerCase(),
     keys: String(sp.get("keys") || "").split(",").map((k) => k.trim()).filter(Boolean),
     mode: String(sp.get("mode") || "rent").toLowerCase(),
-    beds: BEDS[beds] ? beds : (beds === "0" ? "studio" : /^(any|every|\*)$/.test(beds) ? "all" : "1"),
-    min: num(sp.get("min")), max: num(sp.get("max")),
+    beds: bedsList[0], bedsList,
+    min: num(sp.get("min")), max: num(sp.get("max")), stretch: num(sp.get("stretch")),
+    furnished: ["furnished", "unfurnished"].includes(String(sp.get("furnished") || "")) ? String(sp.get("furnished")) : "either",
+    musts, nice: [...new Set(list("nice"))].filter((m) => !musts.includes(m)),
+    compare: sp.get("compare") === "1" && areas.length >= 2 && areas.length <= 3,
     type: String(sp.get("type") || "apartment").toLowerCase(),
-    areas: String(sp.get("areas") || "").split(",").map((a) => a.trim().toLowerCase().replace(/[^a-z0-9]/g, "")).filter(Boolean),
+    areas,
     num: Math.max(0, parseInt(sp.get("num") || "0", 10) || 0), of: Math.max(0, parseInt(sp.get("of") || "0", 10) || 0),
     format: String(sp.get("format") || "pdf").toLowerCase(),
   };
@@ -261,6 +274,7 @@ export async function loadContext(env, q, opts) {
   if (!C.ri || !Array.isArray(C.ri.items)) return Object.assign(C, { error: "the rent index (img_rent_index) is not in storage" });
   const geo = await kvJson(env, "districts_geo");
   C.dname = {}; for (const d of ((geo && geo.districts) || [])) C.dname[d.slug] = d.name;
+  for (const [s, x] of Object.entries(EXTRA_AREAS)) if (!C.dname[s]) C.dname[s] = x.name;   // v282 - Arabian Ranches, by its Land Department areas
   C.amen = need.amen === false ? null : await kvJson(env, "amenities");
   C.avail = need.avail === false ? [] : await loadDevAvail(env);   // v277 - the developers' own sheets (img_avail_index -> img_drill_<d>.claimed)
   const B = BEDS[q.beds];
@@ -284,10 +298,21 @@ export async function loadContext(env, q, opts) {
       if (card && card.name) it = { d: m[1], i: parseInt(m[2], 10), n: card.name, a: [], area: null, b: {}, v: {}, synth: true };
       if (!it) { C.missing.push(key); continue; }
     }
-    const set = (q.type === "villa" ? it.v : it.b) || {};
-    const st = B.all ? null : (set[B.band] || null);
+    // v282 - the home kind (apartment "b", villa or townhouse "v") and the bedroom count this building's figure is for: of the kinds and
+    // bedroom counts asked, the one inside the budget first, then the one with most contracts (the rule /brief_api ranks by)
+    const kinds = kindsOfType(q.type);
+    let pick = null;
+    if (!B.all) for (const k of kinds) for (const bb of (q.bedsList || [q.beds])) {
+      const rs = rentStat(it, k, +BEDS[bb].band); if (!rs) continue;
+      const vd = verdictOf(rs.s.nn >= 3 && rs.s.mn ? rs.s.mn : rs.s.m, q.min, q.max, q.stretch);
+      const tier = { within: 0, stretch: 1, a_little_above: 2, below: 3, above: 3 }[vd]; const t = tier == null ? 9 : tier;
+      if (!pick || t < pick.t || (t === pick.t && rs.s.n > pick.s.n)) pick = { k, bb, s: rs.s, basis: rs.basis, t };
+    }
+    const kind = pick ? pick.k : (kinds.includes("b") && it.b ? "b" : "v");
+    const set = (kind === "v" ? it.v : it.b) || {};
+    const st = B.all ? null : (pick ? pick.s : null);
     const sts = {}; for (const b of BANDS) if (set[BEDS[b].band]) sts[b] = set[BEDS[b].band];   // v277 - every band, for the all-types document
-    const d = it.d || null;
+    const d = areaSlugOf(it);
     const D = d ? await district(d, it) : null;
     const um = D && D.unitmix && D.unitmix.buildings_by_id && it.i != null ? D.unitmix.buildings_by_id[String(it.i)] : null;
     const tn = D && D.tenancy && D.tenancy.buildings_by_id && it.i != null ? D.tenancy.buildings_by_id[String(it.i)] : null;
@@ -299,7 +324,11 @@ export async function loadContext(env, q, opts) {
     const rec = { key, it, st, sts, d, dist: D ? D.name : pretty(it.area), um, tn, un, br, brRefused: bro && bro.refused, brDir: bro && bro.dir,
                   name, aliases: (it.a || []).map(pretty).filter((a) => stemKey(a) !== stemKey(name)), pos, exact: it.i != null && !!pos, n: C.recs.length + 1 };
     // v277 - what the developer's own sheet lists for this building, of this type (or every type): null where no sheet names it
-    rec.avail = devAvailFor(C.avail, { name: it.n, aliases: (it.a || []).concat(um && um.name ? [um.name] : []) }, B.all ? "all" : +B.band);
+    rec.beds = pick ? pick.bb : q.beds; rec.kind = kind; rec.bedsBasis = pick ? pick.basis : null;
+    rec.avail = devAvailFor(C.avail, { name: it.n, aliases: (it.a || []).concat(um && um.name ? [um.name] : []) }, B.all ? "all" : +BEDS[rec.beds].band);
+    // v282 - the client's criteria for this building: the same function and sources as the /brief list
+    const cc = { name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, key };
+    rec.crit = criteriaOf({ c: cc, card: um, brochure: br, AM: C.amen, musts: mustsOf(cc, um, br, C.amen).musts, villa: kind === "v", s: st });
     if (br) {
       const ext = br.photos.find((p) => /^exterior/.test(p.file || ""));
       rec.hero = ext ? await kvDataUrl(env, ext.key, opts && opts.origin) : null;
@@ -408,10 +437,11 @@ function budgetLine(st, q, B) {
 function rentSource(C, q, rec) {
   const ri = C.ri, B = BEDS[q.beds];
   return "Rents: Dubai Land Department tenancy contracts (Ejari), the pull of " + esc(ri.as_of || "") + (ri.source_file ? " (" + esc(ri.source_file) + ")" : "") +
-    (rec && rec.it.area ? ", " + esc(pretty(rec.it.area)) : "") + ", " + (B.all ? "every size of " : B.word + " ") + (q.type === "villa" ? "homes" : "flats") +
+    (rec && rec.it.area ? ", " + esc(pretty(rec.it.area)) : "") + ", " + (B.all ? "every size of " : B.word + " ") + ((rec ? rec.kind === "v" : !kindsOfType(q.type).includes("b")) ? "villas and townhouses" : "flats") +
     " (bedrooms are read from the size - the register rarely records them), new and renewed contracts, each contract counted once. Where the record " +
     "files the same contracts under two names they are one building here." + (rec && rec.aliases.length ? " This building's contracts are also filed as &ldquo;" +
-    rec.aliases.map(esc).join("&rdquo;, &ldquo;") + "&rdquo;." : "") + " Typical rent is the median; the middle half is the range the middle 50% of rents fall in.";
+    rec.aliases.map(esc).join("&rdquo;, &ldquo;") + "&rdquo;." : "") + " Typical rent is the median; the middle half is the range the middle 50% of rents fall in." +
+    (rec && rec.kind === "v" && rec.bedsBasis ? " Villas and townhouses: the register files both as Villa; " + esc(BEDS_BASIS_SAY[rec.bedsBasis] || "") + "." : "");
 }
 
 // ------------------------------------------------------------------------------------------------ the dossier: three pages
@@ -488,15 +518,86 @@ function pictureSource(rec) {
     esc(rec.br.amenities_note || rec.br.photos_note || "");
 }
 
+// ------------------------------------------------------------------------------------------------ v282: the client's brief, answered
+// Each criterion the client named (must, then nice to have, then the home type and furnishing they asked for): yes / no / not known,
+// with where the answer comes from, in plain English. "Not known" is said as such, never left blank and never turned into a no.
+const CRIT_NAME = Object.fromEntries(BRIEF_CRITERIA);
+export const briefAsked = (q) => !!((q.musts && q.musts.length) || (q.nice && q.nice.length) || (q.furnished && q.furnished !== "either") || /townhouse/.test(String(q.type || "")));
+export function criteriaRows(rec, q) {
+  const rows = [];
+  for (const k of q.musts || []) if (rec.crit && rec.crit[k]) rows.push([CRIT_NAME[k], "must", rec.crit[k]]);
+  for (const k of q.nice || []) if (rec.crit && rec.crit[k]) rows.push([CRIT_NAME[k], "nice to have", rec.crit[k]]);
+  if (/townhouse/.test(String(q.type || "")) && rec.crit && rec.crit.townhouse) rows.push(["townhouse", "asked", rec.crit.townhouse]);
+  if (q.furnished && q.furnished !== "either") rows.push([q.furnished, "asked", { v: null, src: FURNISHED_UNKNOWN }]);
+  return rows;
+}
+export const markWord = (v) => (v === true ? "&#10003; yes" : v === false ? "&#10007; no" : "not known");
+function criteriaBlock(rec, q) {
+  if (!briefAsked(q)) return "";
+  const rows = criteriaRows(rec, q);
+  if (!rows.length) return "";
+  return '<div class="critbox" style="border:1px solid #E6E1D8;background:#FFFFFF;padding:10px 14px;display:flex;flex-direction:column;gap:5px;">' +
+    '<div class="lbl" style="font-size:9.5px;">HOW IT MEETS THE BRIEF</div>' +
+    tbl([["left", "WHAT THEY ASKED FOR"], ["left", "ANSWER"], ["left", "WHERE THE ANSWER COMES FROM"]],
+      rows.map(([label, level, c]) => [esc(label) + ' <span style="color:' + MUTED + ';font-size:9.5px;">(' + level + ")</span>",
+        '<b style="color:' + (c.v === true ? "#2F6B55" : c.v === false ? "#9A3B3B" : MUTED) + ';white-space:nowrap;">' + markWord(c.v) + "</b>",
+        '<span style="font-size:9.6px;">' + esc(c.src || "") + (c.detail ? " " + esc(c.detail) + "." : "") + "</span>"])) +
+    '<div style="font-size:9.5px;color:' + MUTED + ';">&ldquo;Not known&rdquo; means no record we hold answers it: the leasing team confirms it. A building is left out of the list only where a record says no.</div></div>';
+}
+// one line of marks for a one-sheet card
+function criteriaLine(rec, q) {
+  if (!briefAsked(q)) return "";
+  const rows = criteriaRows(rec, q);
+  return rows.length ? '<div class="critline" style="font-size:9.2px;color:' + INK + ';line-height:1.3;">' + rows.map(([label, , c]) =>
+    (c.v === true ? "&#10003; " + esc(label) : c.v === false ? "&#10007; " + esc(label) : esc(label) + ": not known")).join(" &middot; ") + "</div>" : "";
+}
+
+// ------------------------------------------------------------------------------------------------ v282: the areas side by side
+// Compare and Full pack open with this page when 2 or 3 areas were chosen with "Compare these areas side by side": the SAME block the
+// /brief page shows (briefSearch -> compareAreas in src/brief.js, run as a client: owner false), one column per area.
+export async function comparisonFor(env, q) {
+  if (!q.compare || q.mode !== "rent") return null;
+  const sp = new URLSearchParams();
+  sp.set("mode", "rent"); sp.set("beds", (q.bedsList || [q.beds]).join(",")); if (q.min) sp.set("min", String(q.min)); if (q.max) sp.set("max", String(q.max));
+  if (q.stretch) sp.set("stretch", String(q.stretch)); sp.set("areas", q.areas.join(",")); sp.set("type", q.type);
+  sp.set("furnished", q.furnished || "either"); sp.set("musts", (q.musts || []).join(",")); sp.set("nice", (q.nice || []).join(",")); sp.set("compare", "1"); sp.set("limit", "1");
+  const out = await briefSearch(env, sp, { owner: false });
+  return out.status === 200 && out.body.comparison ? { cols: out.body.comparison, window: out.body.window, as_of: out.body.as_of } : null;
+}
+const CMP_ROWS = [["matches", "Homes that match"], ["rent", "Typical rent, last 60 days"], ["types", "Home types"], ["pools", "Pools"], ["parks", "Parks and dog-friendly spaces"], ["schools", "Schools nearby"], ["newest", "Newest completion"]];
+export function comparisonPage(C, q, cmp) {
+  const cols = cmp.cols;
+  const cell = (c) => !c ? "not known" : '<b style="color:' + (c.v === true ? "#2F6B55" : c.v === false ? "#9A3B3B" : MUTED) + ';">' + markWord(c.v) + "</b> " + esc(c.say || "") +
+    (c.src ? '<div style="font-size:8.4px;color:' + MUTED + ';margin-top:2px;">' + esc(c.src) + "</div>" : "");
+  const body = CMP_ROWS.map(([k, label]) => '<tr><td style="padding:6px 8px;border-bottom:1px solid #E6E1D8;font-size:10.5px;font-weight:600;color:' + NAVY + ';vertical-align:top;width:150px;">' + label + "</td>" +
+    cols.map((a) => {
+      const c = a[k];
+      const h = k === "types" ? ["apartment", "townhouse", "villa"].map((t) => "<div>" + (t === "villa" ? "villa or townhouse" : t) + ": " + cell(c && c[t]) + "</div>").join("")
+        : k === "pools" ? ["private", "community"].map((t) => "<div>" + t + ": " + cell(c && c[t]) + "</div>").join("") : cell(c);
+      return '<td style="padding:6px 8px;border-bottom:1px solid #E6E1D8;font-size:10px;line-height:1.35;vertical-align:top;">' + h + "</td>";
+    }).join("") + "</tr>").join("");
+  const head = '<tr style="background:' + NAVY + ';"><th style="padding:7px 8px;"></th>' + cols.map((a) => '<th style="text-align:left;padding:7px 8px;color:#FBFAF7;font-size:11px;font-weight:600;">' + esc(a.name) + "</th>").join("") + "</tr>";
+  const B = BEDS[q.beds];
+  return landPage(C, '<div style="height:74px;display:flex;align-items:center;justify-content:space-between;padding:0 30px;background:#FFF;border-bottom:1px solid #E6E1D8;flex-shrink:0;">' +
+    '<div style="display:flex;flex-direction:column;gap:3px;"><div class="serif" style="font-size:24px;color:' + NAVY + ';line-height:1;">The areas side by side</div>' +
+    '<div style="font-size:11px;color:' + MUTED + ';">' + C.today + " &middot; " + esc(cols.map((a) => a.name).join(" · ")) + (B && !B.all ? " &middot; " + esc(bedsWordOf(q)) : "") + "</div></div>" + logo(C, 68) + "</div>" +
+    '<div class="cmppage" style="flex:1;padding:10px 30px 4px 30px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;">' + head + body + "</table>" +
+    '<div style="font-size:8.6px;color:' + MUTED + ';line-height:1.35;margin-top:6px;">&#10003; a record says yes &middot; &#10007; a record says no &middot; not known: no record we hold answers it, and the leasing team confirms it. ' +
+    "Rents are registered tenancy contracts (Ejari) " + esc(cmp.window ? cmp.window[0] + " to " + cmp.window[1] : "") + " for the whole Land Department area, named projects or not; what homes let for, not what is free. Furnishing is not recorded by the register.</div></div>" + landFooter());
+}
+const bedsWordOf = (q) => { const bl = (q.bedsList || [q.beds]).filter((b) => BEDS[b] && !BEDS[b].all); if (bl.length < 2) return BEDS[q.beds].word; const w = bl.map((b) => (b === "studio" ? "studio" : b === "3" ? "3+" : b)); return w.slice(0, -1).join(", ") + " or " + w[w.length - 1] + "-bedroom"; };
+
 const MAP_TO_FOLLOW = (h) => '<div class="maptofollow" style="height:' + h + 'px;border:1px dashed #DED9D0;display:flex;align-items:center;justify-content:center;font-size:14px;color:' + MUTED + ';">Map to follow</div>';
 
 function dossierPage2(C, rec, q, sub) {
   const D = C.district[rec.d] || {};
   const mark = markOf(rec, D.layer);
   const svg = D.layer && mark.placed ? briefMapSvg(D.layer, [mark], { single: true, district: rec.dist, districtSlug: rec.d }) : "";
-  const map = svg ? '<div style="width:702px;border:1px solid #E6E1D8;line-height:0;">' + svg.replace("<svg ", '<svg style="width:700px;height:auto;display:block;" ') + "</div>" : MAP_TO_FOLLOW(468);
+  const cb = criteriaBlock(rec, q);                    // v282 - how it meets the client's brief; the map shrinks to make room
+  const mw = cb ? (rec.avail && rec.avail.count ? 470 : 560) : 700;
+  const map = svg ? '<div style="width:' + (mw + 2) + 'px;border:1px solid #E6E1D8;line-height:0;">' + svg.replace("<svg ", '<svg style="width:' + mw + 'px;height:auto;display:block;" ') + "</div>" : MAP_TO_FOLLOW(cb ? 300 : 468);
   const body = '<div class="serif" style="font-size:24px;color:' + NAVY + ';">Where it is</div><div class="sub">The building in gold on its own plot, among the other buildings of ' + esc(rec.dist) +
-    ". Simple blocks, heights to scale, seen from the south.</div>" + map + availBlock(rec, q);
+    ". Simple blocks, heights to scale, seen from the south.</div>" + map + cb + availBlock(rec, q);
   return page(C, sub, body, smallPrint([
     svg ? "Map: footprints and streets &copy; OpenStreetMap contributors; building position from the app's district model" + (mark.approx ? " (this one approximate, from a public map listing)" : "") + "." : "Map: to follow - " + (D.layer ? "this building has no verified map position yet" : "the district map layer is not yet published") + ".",
     rec.avail && rec.avail.count ? "Availability: " + esc(rec.avail.developer) + "'s own availability sheet of " + esc(rec.avail.as_of || "") + ", as posted to the broker group; the developer's statement, not a register." : ""]));
@@ -569,7 +670,7 @@ function titleOf(C, q) {
   const where = ds.length === 1 ? ds[0] : ds.length === 2 ? ds.join(" and ") : ds.length + " districts";
   const count = n <= 10 ? NUMWORD[n] : String(n);
   const budget = q.min && q.max && q.min < q.max ? ", AED " + money(q.min) + "&ndash;" + money(q.max) + " a year" : q.max ? ", around AED " + money(q.max) + " a year" : "";
-  return count + " " + (B.all ? "" : B.word + " ") + "option" + (n === 1 ? "" : "s") + " in " + esc(where) + budget;
+  return count + " " + (B.all ? "" : bedsWordOf(q) + " ") + "option" + (n === 1 ? "" : "s") + " in " + esc(where) + budget;
 }
 // v277: the card carries no "Still filling" line any more (the register estimate is off the client face)
 function oneSheetCards(C, q) {
@@ -589,7 +690,7 @@ function oneSheetCards(C, q) {
         '<div style="font-size:10px;color:' + INK + ';">' + st.n + " recent lettings &middot; about " + money(st.s * SQFT) + " sq ft</div>"
         : perType || '<div style="font-size:10px;color:' + INK + ';">No ' + (B.all ? "" : B.word + " ") + "lettings in the latest pull</div>") +
       '<div style="font-size:9.8px;color:' + MUTED + ';line-height:1.25;">' + amen + "</div>" +
-      '<div style="font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + metro + "</div>" +
+      '<div style="font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + metro + "</div>" + criteriaLine(rec, q) +
       "</div></div>";
   }).join("");
   const cols = Math.min(5, Math.max(3, C.recs.length));
@@ -606,7 +707,7 @@ export function oneSheetHtml(C, q) {
     '<div style="font-size:11px;color:' + MUTED + ';">' + C.today + " &middot; numbers match the map &middot; rents are rents recently agreed, not asking prices</div></div>" + logo(C, 68) + "</div>" +
     html +
     '<div style="padding:0 30px 4px 30px;font-size:8.3px;color:' + MUTED + ';line-height:1.3;">Rents: Dubai Land Department tenancy contracts, the pull of ' + esc(C.ri.as_of || "") + ", " + (B.all ? "every size of " : B.word + "-sized ") +
-    (q.type === "villa" ? "homes" : "flats") + ", each contract counted once. Metro distances are straight lines. Pictures: each developer's own project page." +
+    (!kindsOfType(q.type).includes("b") ? "villas and townhouses" : kindsOfType(q.type).includes("v") ? "homes" : "flats") + ", each contract counted once. Metro distances are straight lines. Pictures: each developer's own project page." +
     " Availability, the rent and the actual flat must be confirmed with the leasing team or listing broker.</div>" + landFooter());
   return p1 + overviewMapPages(C, q);
 }
@@ -630,7 +731,7 @@ export function matchAll(C, q) {
   const ds = q.areas.length ? q.areas : [...new Set(C.recs.map((r) => r.d).filter(Boolean))];
   const lo = q.min || 0, hi = q.max ? q.max * 1.03 : Infinity;   // Contract A's "within": median within +3% of max and >= min
   const stOf = (set) => { set = set || {}; if (!B.all) return set[B.band]; let best = null; for (const b of BANDS) { const s = set[BEDS[b].band]; if (s && (!best || s.n > best.n)) best = s; } return best; };   // v277: every type - the best-evidenced band stands for the building
-  return C.ri.items.filter((it) => (!ds.length || ds.includes(it.d))).map((it) => ({ it, st: stOf(q.type === "villa" ? it.v : it.b) }))
+  return C.ri.items.filter((it) => (!ds.length || ds.includes(it.d))).map((it) => ({ it, st: stOf(!kindsOfType(q.type).includes("b") ? it.v : it.b) }))
     .filter((x) => x.st && x.st.n >= 3 && x.st.m >= lo && x.st.m <= hi).sort((a, b) => b.st.n - a.st.n);
 }
 function appendixHtml(C, q) {
@@ -645,7 +746,7 @@ function appendixHtml(C, q) {
   return page(C, "APPENDIX &middot; " + B.upper + (C.recs[0] ? " &middot; " + esc(C.recs[0].dist).toUpperCase() : ""), body, smallPrint([rentSource(C, q, null)]));
 }
 export function packHtml(C, q) {
-  return oneSheetHtml(C, q) + C.recs.map((r) => dossierHtml(C, r, q, r.n, C.recs.length)).join("") + appendixHtml(C, q);
+  return oneSheetHtml(C, q) + C.recs.map((r) => dossierHtml(C, r, Object.assign({}, q, { beds: r.beds || q.beds }), r.n, C.recs.length)).join("") + appendixHtml(C, q);
 }
 
 // ------------------------------------------------------------------------------------------------ the LOD 100 map (make_map.py, as SVG)
@@ -854,7 +955,7 @@ export async function buildDocument(env, q, opts) {
   const B = BEDS[q.beds], tag = (q.beds === "studio" ? "Studio" : q.beds === "all" ? "All" : q.beds + "BR");
   if (q.kind === "dossier") {
     const rec = C.recs[0];
-    html = dossierHtml(C, rec, q, q.num, q.of);
+    html = dossierHtml(C, rec, Object.assign({}, q, { beds: rec.beds || q.beds }), q.num, q.of);
     title = rec.name + " - " + B.word;
     fname = (q.num ? String(q.num).padStart(2, "0") + "_" : "") + rec.name.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") + "_" + tag + ".pdf";
   } else if (q.kind === "pack") {
@@ -862,6 +963,8 @@ export async function buildDocument(env, q, opts) {
   } else {
     html = oneSheetHtml(C, q); title = "One-sheet - " + B.word; fname = "One_sheet_" + tag + ".pdf";
   }
+  // v282 - Compare and Full pack open with the areas side by side when 2 or 3 areas were compared (the same block as the /brief page)
+  if (q.kind === "compare" || q.kind === "pack") { const cmp = await comparisonFor(env, q); if (cmp) html = comparisonPage(C, q, cmp) + html; }
   return { status: 200, html: HEAD(title, html), pages: C.pages, fname, C };
 }
 

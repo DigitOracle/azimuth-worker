@@ -51,7 +51,7 @@ J("rent_index", { as_of: "2026-09-30", source_file: "rents-test.csv", items: [
   { p: "portalhouse", n: "Portal House", d: "testdistrict", i: 12, lon: 55.202, lat: 25.052, area: "Al Test Fourth", b: { "1": st(7, 63000, 61000, 65000, 58, "2026-09-11") } },
   { p: "otherplace", n: "Other Place", d: "nolayer", i: 5, lon: 55.3, lat: 25.1, area: "Elsewhere", b: { "1": st(4, 61000, 60000, 62000, 55, "2026-09-12") } },
 ] });
-J("districts_geo", { districts: [{ slug: "testdistrict", name: "Test District" }, { slug: "nolayer", name: "No Layer Town" }] });
+J("districts_geo", { districts: [{ slug: "testdistrict", name: "Test District", bbox: [55.19, 25.04, 55.21, 25.06] }, { slug: "nolayer", name: "No Layer Town" }] });
 J("amenities", { items: [
   { k: "metro", n: "Test Metro Station", lat: 25.059, lon: 55.2 },
   { k: "school", n: "Test International School L.L.C", x: "Very good · British", lat: 25.0511, lon: 55.2013 },
@@ -270,6 +270,42 @@ ok((await (await call("/brief_blocks?d=nolayer&key=" + CLIENT)).text()).includes
 ok(fnv16("jumeirahvillagecircle_1490/exterior.jpg") === "128f5165764ff4ce", "fnv16 matches push_brochures.py (value computed by the Python script)");
 ok(brochureKvName("jumeirahvillagecircle_1490") === "brochure_jumeirahvillagecircle_1490" && brochureKvName("name_binghatti_amber") === "brochure_name_binghatti_amber", "short brochure names are stored as img_brochure_<dir>, the names Contract A reads");
 ok(brochureKvName("name_a_very_long_building_name_that_overflows_forty") === "brochure_h209e7dce9131fa21", "a name over the 40-character ingest cap becomes a hash, not a truncation");
+
+// ---- v282 (Kendall, 1 Oct 2026): the client's criteria on the documents, and the areas side by side ------------------------------
+{
+  store.set("img_pf_supply_testdistrict", JSON.stringify({ as_of: "2026-10-01", rows: [{ key: "testdistrict:10", dld_project: "Alpha Tower", beds_band: "1", listings_live: 9, furnished_live: 4 }] }));
+  const BQ = "&musts=pets&nice=private_pool,community_pool&furnished=furnished&type=apartment";
+  let d = await pdf("kind=dossier&keys=testdistrict:10&beds=1,2" + BQ);
+  ok(d.r.status === 200 && pages(d.html) === 3, "a dossier with the client's criteria is still exactly 3 pages", pages(d.html));
+  ok(d.html.includes("HOW IT MEETS THE BRIEF") && d.html.includes("WHERE THE ANSWER COMES FROM"), "page 2 says how the building meets the brief, with where each answer comes from");
+  ok(/community pool <span[^>]*>\(nice to have\)<\/span><\/td><td[^>]*><b[^>]*>&#10003; yes<\/b>/.test(d.html) && d.html.includes("the developer&#x27;s own project page"), "community pool: yes, from the developer's own page", (d.html.match(/community pool.{0,400}/) || [""])[0]);
+  ok(/pet-friendly \(dog walks, play areas\) <span[^>]*>\(must\)<\/span><\/td><td[^>]*><b[^>]*>not known<\/b>/.test(d.html) && d.html.includes("Kids&#x27; play area"), "pet-friendly: not known (no register holds a pet policy), with the play area on the developer's page as a fact");
+  ok(/private pool <span[^>]*>\(nice to have\)<\/span><\/td><td[^>]*><b[^>]*>not known<\/b>/.test(d.html), "private pool: not known, never a no");
+  ok(/furnished <span[^>]*>\(asked\)<\/span><\/td><td[^>]*><b[^>]*>not known<\/b>/.test(d.html) && d.html.includes("does not record whether a home is furnished"), "furnished: not known, with the reason");
+  ok(!/advert|listings_live|furnished_live|OWNER ONLY|4 of 9/i.test(d.html), "no listing-site (portal) furnishing figure on a client document, though the advertised-supply data carries one");
+  printed = []; await call("/brief_pdf?kind=dossier&keys=testdistrict:10&beds=1" + BQ + Q + "&key=" + READ);
+  ok(printed[0] && !/advert|furnished_live|OWNER ONLY|4 of 9/i.test(printed[0]), "not even when the OWNER key asks for the PDF: a document is always a client document");
+  ok(/filename="Alpha_Tower_1BR\.pdf"/.test(d.r.headers.get("Content-Disposition") || "") && d.html.includes("TYPICAL 1-BED RENT A YEAR"), "beds=1,2 on a building with 1-bed lettings only: its document is for the 1-bed figure");
+  d = await pdf("kind=dossier&keys=testdistrict:10");
+  ok(!d.html.includes("HOW IT MEETS THE BRIEF"), "no criteria asked: no criteria box (the approved layout is unchanged)");
+  // the one-sheet cards carry one line of marks
+  d = await pdf("kind=compare&keys=testdistrict:10,dld:betaheights" + BQ);
+  ok(d.html.includes('class="critline"') && /&#10003; community pool/.test(d.html) && /pet-friendly \(dog walks, play areas\): not known/.test(d.html), "each one-sheet card carries a line of yes / not known marks");
+  ok(!d.html.includes("The areas side by side") && pages(d.html) === 2, "no compare=1: no comparison page (cards + map, as before)");
+  // the areas side by side: Compare and Full pack open with it when 2 or 3 areas were compared
+  d = await pdf("kind=compare&keys=testdistrict:10,dld:betaheights&areas=testdistrict,nolayer&compare=1" + BQ);
+  ok(d.r.status === 200 && pages(d.html) === 3 && d.html.indexOf("The areas side by side") > -1 && d.html.indexOf("The areas side by side") < d.html.indexOf('class="bcard"'), "Compare with compare=1 and two areas opens with the comparison page (3 pages)", pages(d.html));
+  const cp = d.html.slice(d.html.indexOf("The areas side by side"), d.html.indexOf('class="bcard"'));
+  for (const row of ["Homes that match", "Typical rent, last 60 days", "Home types", "Pools", "Parks and dog-friendly spaces", "Schools nearby", "Newest completion"]) ok(cp.includes(row), "the comparison page has the row “" + row + "”");
+  ok(cp.includes(">Test District</th>") && cp.includes(">No Layer Town</th>"), "one column per area");
+  ok(/&#10003; yes<\/b> 1 school/.test(cp) && /not known<\/b> not known: no completion year/.test(cp) && cp.includes("KHDA"), "each cell is yes / no / not known with its words and its source", cp.slice(0, 300));
+  ok(!/advert|furnished_live|OWNER ONLY/i.test(cp), "and no listing-site data");
+  d = await pdf("kind=pack&keys=testdistrict:10,dld:betaheights&areas=testdistrict,nolayer&compare=1" + BQ);
+  ok(d.r.status === 200 && d.html.indexOf("The areas side by side") > -1 && d.html.indexOf("The areas side by side") < d.html.indexOf('class="bcard"') && pages(d.html) === 1 + 2 + 3 * 2 + 1, "the Full pack opens with the same comparison page (1 + one-sheet 2 + 3 per building + appendix)", pages(d.html));
+  d = await pdf("kind=dossier&keys=testdistrict:10&areas=testdistrict,nolayer&compare=1" + BQ);
+  ok(!d.html.includes("The areas side by side") && pages(d.html) === 3, "an Individual PDF never carries the comparison");
+  store.delete("img_pf_supply_testdistrict");
+}
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
