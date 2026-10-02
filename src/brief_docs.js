@@ -437,7 +437,7 @@ export async function loadContext(env, q, opts) {
   // v290 - a community with no position of its own gets the centre of its attributed homes, for straight-line distances (metro)
   for (const r of C.recs) if (!r.pos) { const t = svTarget(r, (C.district[r.d] || {}).layer); if (t) r.cpos = t.c; }
   // v290 - Street View for every card without a developer photograph, aimed at its own footprints; all at once, each with a short timeout
-  console.log("v290 pictures: map=" + !!need.map + " key=" + !!(env && env.GOOGLE_MAPS_KEY) + " recs=" + C.recs.length + " targets=" + C.recs.filter((r) => svTarget(r, (C.district[r.d] || {}).layer)).length);
+  
   if (need.map && env && env.GOOGLE_MAPS_KEY) {
     await Promise.all(C.recs.filter((r) => !r.cardPic && !r.heroPic).map(async (r) => {
       const t = svTarget(r, (C.district[r.d] || {}).layer);
@@ -977,7 +977,9 @@ export async function streetViewFor(env, tgt) {
     // the first panorama, from the centre then the spread homes, that is Google's own (not a public upload), 2019 or later, and within
     // SV.maxDist of the building or community; the metadata calls cost nothing
     let meta = null, pano = null;
+    const until = Date.now() + 5000;   // the whole search, however many probes: a slow Google never stalls a document
     for (const p of (tgt.probes || [tgt.c])) {
+      if (Date.now() > until) break;
       const mr = await fetchTimed("https://maps.googleapis.com/maps/api/streetview/metadata?location=" + p[0].toFixed(6) + "," + p[1].toFixed(6) +
         "&radius=" + SV.radius + "&source=outdoor&key=" + encodeURIComponent(key), SV.metaMs);
       if (!mr.ok) { console.log("sv meta http " + mr.status); continue; }

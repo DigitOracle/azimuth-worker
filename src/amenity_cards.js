@@ -131,9 +131,11 @@ export function pictureOf(sp, haveKey) {
   const p = sp && sp.picture;
   if (!haveKey || !p || !(p.route in ROUTE_PREF)) return null;
   if (p.route === "places_photo") {
+    // v290.2 - a stored photo name expires and the spots files carry no authors: the photo and its author are fetched fresh from the
+    // place id when the card is made (freshSpot); here a place id is enough to offer the picture
+    if (!p.place_id || !/^[A-Za-z0-9_-]{4,}$/.test(String(p.place_id))) return null;
     const authors = (Array.isArray(p.photo_authors) ? p.photo_authors : []).filter((a) => typeof a === "string" && a.trim());
-    if (!p.photo_name || !/^places\/[^/]+\/photos\/[^/]+$/.test(String(p.photo_name)) || !authors.length) return null;   // Google's terms: a Places photo is shown with its author
-    return { route: "places_photo", credit: "Photo: " + authors.slice(0, 2).join(", ") + " · Google Maps" };
+    return { route: "places_photo", credit: authors.length ? "Photo: " + authors.slice(0, 2).join(", ") + " · Google Maps" : "Google Maps" };
   }
   if (p.route === "street_view") {
     if (!p.pano_id) return null;
@@ -150,6 +152,26 @@ export function googleUrl(sp, key, w) {
   if (p.route === "street_view") return "https://maps.googleapis.com/maps/api/streetview?size=" + sw + "x" + sh + "&pano=" + encodeURIComponent(p.pano_id) +
     (isFinite(+p.heading) && p.heading !== "" && p.heading != null ? "&heading=" + Math.round(+p.heading) : "") + "&fov=80&return_error_code=true&key=" + k;
   return "https://maps.googleapis.com/maps/api/staticmap?center=" + (+sp.lat).toFixed(6) + "," + (+sp.lng).toFixed(6) + "&zoom=18&size=" + sw + "x" + sh + "&maptype=satellite&key=" + k;
+}
+// v290.2 - a spot ready to fetch: for a Places photo, the place's CURRENT first photo and its author (Place Details, photos field only),
+// else the same spot as a satellite picture of its position (Google's terms: a Places photo is shown with its author, so none without)
+export async function freshSpot(env, spot) {
+  const p = (spot && spot.picture) || {};
+  if (p.route !== "places_photo") return spot;
+  const asSat = Object.assign({}, spot, { picture: Object.assign({}, p, { route: "satellite" }) });
+  try {
+    const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const t = setTimeout(() => { try { ac && ac.abort(); } catch (e) {} }, 2000);   // a small JSON answer: 2 s is ample
+    let j = null;
+    try {
+      const r = await FETCH("https://places.googleapis.com/v1/places/" + encodeURIComponent(String(p.place_id)), {
+        signal: ac ? ac.signal : undefined, headers: { "X-Goog-Api-Key": env.GOOGLE_MAPS_KEY, "X-Goog-FieldMask": "photos" } });
+      j = r && r.ok ? await r.json() : null;
+    } finally { clearTimeout(t); }
+    const ph = j && Array.isArray(j.photos) ? j.photos.find((x) => x && x.name && Array.isArray(x.authorAttributions) && x.authorAttributions.some((a) => a && a.displayName)) : null;
+    if (!ph) return asSat;
+    return Object.assign({}, spot, { picture: Object.assign({}, p, { photo_name: ph.name, photo_authors: ph.authorAttributions.map((a) => a && a.displayName).filter(Boolean) }) });
+  } catch (e) { return null; }   // timed out or unreachable: no picture (a second slow try would blow the card's time budget)
 }
 // fetch one picture with a short timeout; null on any failure (never throws, never echoes the URL)
 async function fetchPicture(url, stream) {
@@ -237,6 +259,15 @@ export async function amenityCards(env, o) {
     }
     per.push({ d, out });
   }));
+  // v290.2 - each card's Places photo: fresh name and author now, so the credit under the picture names the photographer
+  const spotsBy = {};
+  for (const x of per) for (const c of x.out) if (haveKey && c.picture && c.picture.route === "places_photo") live.push((async () => {
+    if (!spotsBy[c.d]) spotsBy[c.d] = loadSpots(env, c.d);
+    const S = await spotsBy[c.d], sp = S && S.spots.find((s) => s.id === c.picture.id);
+    const f = sp ? await freshSpot(env, sp) : null, fp = f && pictureOf(f, true);
+    if (!fp) { c.picture = null; return; }
+    c.picture.route = fp.route; c.picture.credit = fp.credit;
+  })());
   await Promise.all(live);
   for (const x of per) for (const c of x.out) {
     // schools: our records are sparse, so Google's live count leads where it answered
@@ -269,7 +300,9 @@ export async function amenityRoutes(request, env, url, h) {
   const S = await loadSpots(env, d);
   const spot = S && S.spots.find((s) => String(s.id) === id);
   if (!spot || !pictureOf(spot, true)) return none("no picture");
-  const pic = await fetchPicture(googleUrl(spot, env.GOOGLE_MAPS_KEY, 800), true);
+  const fsp = await freshSpot(env, spot);   // v290.2 - fresh photo name
+  if (!fsp) return none("no picture");
+  const pic = await fetchPicture(googleUrl(fsp, env.GOOGLE_MAPS_KEY, 800), true);
   if (!pic) return none("no picture");
   return new Response(pic.body, { headers: { "Content-Type": pic.ct, "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } });
 }
@@ -290,7 +323,8 @@ export async function amenityDocPages(env, q, recs, chrome) {
   await Promise.all(cards.map(async (c) => {
     if (!c.picture || !env.GOOGLE_MAPS_KEY) { c.picture = null; return; }
     const spot = S[c.d] && S[c.d].spots.find((s) => s.id === c.picture.id);
-    const got = spot ? await fetchPicture(googleUrl(spot, env.GOOGLE_MAPS_KEY, 640), false) : null;
+    const fsp = spot ? await freshSpot(env, spot) : null;   // v290.2
+    const got = fsp ? await fetchPicture(googleUrl(fsp, env.GOOGLE_MAPS_KEY, 640), false) : null;
     if (!got) { c.picture = null; return; }
     const dim = /jpe?g/.test(got.ct) && chrome && chrome.jpegSize ? chrome.jpegSize(got.buf) : null;
     c.picture.src = "data:" + got.ct + ";base64," + b64(got.buf);

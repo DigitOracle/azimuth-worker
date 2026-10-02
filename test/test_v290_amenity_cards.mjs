@@ -51,6 +51,12 @@ globalThis.fetch = async (u, o) => {
       if (/places:searchNearby$/.test(s)) return Response.json({ places: LIVE_SCHOOLS.map((t) => ({ displayName: { text: t } })).concat([{ displayName: { text: "Closed School" }, businessStatus: "CLOSED_PERMANENTLY" }]) });
       return new Response("?", { status: 404 });
     }
+    // v290.2 - Place Details (photos only): the place's current photo and its author, from the fixture's authors (Carson Pool has none)
+    const det = /places\.googleapis\.com\/v1\/places\/ChIJ([A-Za-z0-9]+)$/.exec(s.split("?")[0]);
+    if (det && GOOGLE_MODE === "ok") {
+      const AUTH = { dog1: ["Test Author One"], portal: ["Someone"], pool1: ["Pool Author"], pool2: [], gym1: ["Gym Author"], g3: ["X"] }[det[1]] || [];
+      return Response.json({ photos: [{ name: "places/ChIJ" + det[1] + "/photos/AaTEST" + det[1], authorAttributions: AUTH.map((a) => ({ displayName: a })) }] });
+    }
     googleCalls.push(s);
     if (GOOGLE_MODE === "500") return new Response("server error", { status: 500 });
     if (GOOGLE_MODE === "html") return new Response("<html>quota</html>", { status: 200, headers: { "Content-Type": "text/html" } });
