@@ -436,6 +436,7 @@ export async function loadContext(env, q, opts) {
   // v290 - a community with no position of its own gets the centre of its attributed homes, for straight-line distances (metro)
   for (const r of C.recs) if (!r.pos) { const t = svTarget(r, (C.district[r.d] || {}).layer); if (t) r.cpos = t.c; }
   // v290 - Street View for every card without a developer photograph, aimed at its own footprints; all at once, each with a short timeout
+  console.log("v290 pictures: map=" + !!need.map + " key=" + !!(env && env.GOOGLE_MAPS_KEY) + " recs=" + C.recs.length + " targets=" + C.recs.filter((r) => svTarget(r, (C.district[r.d] || {}).layer)).length);
   if (need.map && env && env.GOOGLE_MAPS_KEY) {
     await Promise.all(C.recs.filter((r) => !r.cardPic && !r.heroPic).map(async (r) => {
       const t = svTarget(r, (C.district[r.d] || {}).layer);
@@ -978,9 +979,9 @@ export async function streetViewFor(env, tgt) {
     for (const p of (tgt.probes || [tgt.c])) {
       const mr = await fetchTimed("https://maps.googleapis.com/maps/api/streetview/metadata?location=" + p[0].toFixed(6) + "," + p[1].toFixed(6) +
         "&radius=" + SV.radius + "&source=outdoor&key=" + encodeURIComponent(key), SV.metaMs);
-      if (!mr.ok) continue;
+      if (!mr.ok) { console.log("sv meta http " + mr.status); continue; }
       const m = await mr.json();
-      if (!m || m.status !== "OK" || !m.location || !m.pano_id) continue;
+      if (!m || m.status !== "OK" || !m.location || !m.pano_id) { console.log("sv meta " + (m && m.status) + " " + String((m && m.error_message) || "").slice(0, 120)); continue; }
       if (!/google/i.test(String(m.copyright || ""))) continue;
       if (!(parseInt(String(m.date || "").slice(0, 4), 10) >= SV.minYear)) continue;
       const at = [m.location.lat, m.location.lng];
@@ -1014,11 +1015,11 @@ export async function satelliteFor(env, tgt) {
     const r = await fetchTimed("https://maps.googleapis.com/maps/api/staticmap?center=" + tgt.c[0].toFixed(6) + "," + tgt.c[1].toFixed(6) + "&zoom=" + z +
       "&size=640x400&maptype=satellite&key=" + encodeURIComponent(key), SV.imgMs);
     const ct = r.headers.get("Content-Type") || "";
-    if (!r.ok || !ct.startsWith("image/")) return null;
+    if (!r.ok || !ct.startsWith("image/")) { console.log("sat http " + r.status + " " + ct + " " + (await r.text()).slice(0, 160)); return null; }
     const buf = await r.arrayBuffer();
     if (buf.byteLength < 4000) return null;
     return { src: "data:" + ct + ";base64," + b64(buf), w: 640, h: 400, kind: "satellite" };
-  } catch (e) { return null; }
+  } catch (e) { console.log("sat error " + String(e && e.message || e).slice(0, 120)); return null; }
 }
 function svFigure(pic, w, h, alt) {
   if (pic.kind === "satellite") return '<div style="position:relative;width:' + r2(w) + "px;height:" + r2(h) + 'px;">' + fitImg(pic, w, h, alt) +
