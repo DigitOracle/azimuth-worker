@@ -30,6 +30,10 @@ export const BLOCKS_DEFAULT_GOLD = {
 };
 
 import { TAPCARD_JS, TAPCARD_CSS_LIGHT } from "./tapcards.js";   // v280 - tap any building, get its card
+import { areaIndex } from "./brief_docs.js";   // v291 CHECKLIST - a sub-community's homes: the anchors with the owner's corrections merged (the Brief's own index)
+import { kvJson as kvJsonGz } from "./brief.js";
+import { normName } from "./checklist_data.js";
+export const CLUSTER_MAX_GOLD = 200;   // v291 - a whole sub-community (DAMAC Hills: up to 84 homes) is gold, not just the first 30
 
 const DISTRICT_NAMES = { jumeirahvillagecircle: "Jumeirah Village Circle" };
 const DISTRICT_SHORT = { jumeirahvillagecircle: "JVC" };
@@ -81,7 +85,16 @@ export async function blocksRoute(request, env, url, h) {
   if (!h.clientOk(env, url)) return new Response("unauthorized", { status: 401 });
   const slug = blocksSlug(url.searchParams.get("district")) || BLOCKS_DEFAULT_DISTRICT;
   const key = url.searchParams.get("key") || "";
-  const gold = parseGold(url.searchParams.has("gold") ? url.searchParams.get("gold") : (BLOCKS_DEFAULT_GOLD[slug] || ""));
+  let gold = parseGold(url.searchParams.has("gold") ? url.searchParams.get("gold") : (BLOCKS_DEFAULT_GOLD[slug] || ""));
+  // v291 CHECKLIST - cluster=<Land Department sub-community> (no gold=): that community's homes in gold, from the SAME index the Brief
+  // documents use (areaIndex: img_anchors_<d> with img_anchor_overrides_<d> merged, overrides winning). Unknown name: nothing gold.
+  const _cl = url.searchParams.get("cluster");
+  if (_cl && !url.searchParams.has("gold")) {
+    let ids = null;
+    try { const ix = areaIndex(await kvJsonGz(env, "anchors_" + slug), await kvJsonGz(env, "anchor_overrides_" + slug)); ids = ix ? ix.get(normName(_cl)) : null; } catch (e) {}
+    gold = (ids || []).slice(0, CLUSTER_MAX_GOLD).map((i, ix) => ({ num: ix + 1, i }));
+  }
+  // ---- end v291 ----
   let have = false;
   try { have = !!(await env.MEETINGS.get("img_ct_blocks_" + slug)) || !!(await env.MEETINGS.get("img_blocks_" + slug, "arrayBuffer")); } catch (e) {}
   // which of the gold buildings have a building page: the page needs the district's stack and a unit-mix record for the id

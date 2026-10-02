@@ -15,6 +15,7 @@ import { amenityRoutes } from "./amenity_cards.js";   // v290 AMENITY CARDS - /a
 import { blocksRoute } from "./blocks_page.js";   // BLOCKS (30 Sep 2026) - LOD 100 blocks view, /blocks; all its logic lives in blocks_page.js
 import { MAP_BLOCKS_JS, CITY_BLOCKS_JS, twinBlocksTag, tbHaveList, tbHave } from "./twin_blocks.js";   // v278 - blocks on /map and blocks-first twin; all its logic lives in twin_blocks.js
 import { tapcardsRoute } from "./tapcards.js";   // v280 - tap any building, get its card; the card logic lives in tapcards.js
+import { checklistRoutes } from "./checklist.js";   // v291 CHECKLIST - owner-only /checklist (DAMAC Hills 100% check); all logic in src/checklist.js
 import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief_pdf documents and the /brief_blocks LOD 100 view (all logic in the module)
 import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_ejari.js";
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
@@ -4499,6 +4500,10 @@ export default {
     // checks the key itself (READ_KEY or a client key), so the integrator need not touch CLIENT_PATHS for it.
     if (url.pathname === "/brief_pdf" || url.pathname === "/brief_blocks") return briefDocsRoute(request, env, url, { keyOk: (e, u) => keyTier(e, u) !== "" });
     // ---- end THE BRIEF part C ----
+    // ---- v291 CHECKLIST (src/checklist.js) - /checklist and /checklist/*: the OWNER key only (401 for a client key or none), checked in the
+    // module (header X-Owner-Key; the page alone also takes ?key= once). Ahead of appFetch so no question button or client gate touches it.
+    if (url.pathname === "/checklist" || url.pathname.indexOf("/checklist/") === 0) { const _ck = await checklistRoutes(request, env, url, { keyTier }); if (_ck) return _ck; }
+    // ---- end v291 CHECKLIST ----
     return qnDecorate(request, env, url, await appFetch(request, env, ctx));
   },
 
