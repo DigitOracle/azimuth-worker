@@ -43,7 +43,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m); } };
 
 // The app pages a client may open - stated here on purpose, apart from CLIENT_PATHS in the worker, so widening the client surface takes two edits.
-const APP_PAGES = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages"];   // v280 - the tap card asks which footprints have a building page
+const APP_PAGES = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo"];   // v280 - the tap card asks which footprints have a building page; v290 - the Brief's amenity cards and their pictures
 // v187 put the building page on the client surface but never widened it here, so the sweep counted /building/ an escalation.
 const APP_PREFIXES = ["/skyline/", "/area/", "/report/", "/building/"];
 const isAppPage = (p) => APP_PAGES.includes(p.split("?")[0]) || APP_PREFIXES.some((x) => p.indexOf(x) === 0);
@@ -86,7 +86,10 @@ for (const p of routes) {
       if (cli.status === 401 || typeof cli.status !== "number") appShut.push(p + " with the client key: " + cli.status);
       const legacy = await call(withKey(p, LEGACY), init);
       if (legacy.status === 401 || typeof legacy.status !== "number") appShut.push(p + " with the older client key: " + legacy.status);
-      if (cliOut.some((o) => PRIVATE_SERVICES.test(o.u)) || cliWrites.some((k) => !/^(esri|amen_|iso_)/.test(k))) leaks.push(method + " " + p + " (app page) wrote " + cliWrites.join(",") + " / called " + cliOut.map((o) => o.u).join(","));
+      // v290 - the ONE declared Google call on a client key (Kendall, 2 Oct 2026, approved Google pictures for the Brief's amenity cards):
+      // /amenity_photo fetches a Places / Street View / Maps Static picture server-side and streams it, never stored. Nothing else from Google.
+      const V290_PICTURE = (o) => p.split("?")[0] === "/amenity_photo" && /^https:\/\/(places|maps)\.googleapis\.com\/(v1\/places\/|maps\/api\/(streetview|staticmap)\?)/.test(o.u);
+      if (cliOut.some((o) => PRIVATE_SERVICES.test(o.u) && !V290_PICTURE(o)) || cliWrites.some((k) => !/^(esri|amen_|iso_)/.test(k))) leaks.push(method + " " + p + " (app page) wrote " + cliWrites.join(",") + " / called " + cliOut.map((o) => o.u).join(","));
       continue;
     }
     // v235 (Kendall, 22 Sep 2026) - the ONE declared escalation: "nationality should not need a key", so an app

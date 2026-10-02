@@ -40,6 +40,7 @@
 // building's name must agree with the record; straight-line distances only, no walking or driving times; rents are what homes let
 // for, never availability; the "left" figure is always "an estimate, not a count".
 import puppeteer from "@cloudflare/puppeteer";
+import { withAmenityPages } from "./amenity_cards.js";   // v290 AMENITY CARDS - the "Around the community" page in Compare and Full pack
 import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailFor } from "./brief.js";   // the ONE "left" estimate (API only since v277) and the developers' own sheets, shared with /brief_api
 // v282 (Kendall, 1 Oct 2026): the client's criteria and the area comparison come from the SAME functions /brief_api uses, so the list
 // and the documents can never disagree. A document is a client document: the search is run with owner: false, and nothing here ever
@@ -1319,6 +1320,8 @@ export async function buildDocument(env, q, opts) {
   }
   // v282 - Compare and Full pack open with the areas side by side when 2 or 3 areas were compared (the same block as the /brief page)
   if (q.kind === "compare" || q.kind === "pack") { const cmp = await comparisonFor(env, q); if (cmp) html = comparisonPage(C, q, cmp) + html; }
+  // v290 AMENITY CARDS (src/amenity_cards.js): one card per ticked must-have per district, pictures fetched now and embedded, never stored
+  html = await withAmenityPages(env, q, C, html, { landPage: (inner) => landPage(C, inner), footer: landFooter(), logo: logo(C, 68), today: C.today, fitImg, jpegSize });
   return { status: 200, html: HEAD(title, html), pages: C.pages, fname, C };
 }
 

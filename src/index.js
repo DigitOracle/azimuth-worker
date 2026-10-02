@@ -11,6 +11,7 @@ import { supplyRoutes, pollerRoutes } from "./supply_page.js";   // v279 ADVERTI
 import { findItem as briefFindItem } from "./brief_docs.js";   // v277 - the building page's dossier button goes to /brief_pdf: this says whether the rent index knows the building
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
 import { briefApi, kvJson as briefKvJson } from "./brief.js";   // BRIEF (Contract A) - GET /brief_api, the ranked building search behind /brief
+import { amenityRoutes } from "./amenity_cards.js";   // v290 AMENITY CARDS - /amenity_cards and /amenity_photo (all logic in the module)
 import { blocksRoute } from "./blocks_page.js";   // BLOCKS (30 Sep 2026) - LOD 100 blocks view, /blocks; all its logic lives in blocks_page.js
 import { MAP_BLOCKS_JS, CITY_BLOCKS_JS, twinBlocksTag, tbHaveList, tbHave } from "./twin_blocks.js";   // v278 - blocks on /map and blocks-first twin; all its logic lives in twin_blocks.js
 import { tapcardsRoute } from "./tapcards.js";   // v280 - tap any building, get its card; the card logic lives in tapcards.js
@@ -1977,6 +1978,10 @@ async function appFetch(request, env, ctx) {
     // ==== BRIEF (Contract A) - GET /brief_api. All logic in src/brief.js; it refuses anything without READ_KEY or a client key (clientOk).
     // Listed in CLIENT_PATHS, so a client key passes the gate above, as on the other app pages. ====
     if (url.pathname === "/brief_api") return briefApi(request, env, url, { clientOk });
+    // ---- v290 AMENITY CARDS (src/amenity_cards.js): /amenity_cards (JSON) and /amenity_photo (a Google picture fetched here, no-store).
+    // Both in CLIENT_PATHS, as /brief_api; the module applies clientOk itself (the owner key or a client key) and 401s anything else.
+    if (url.pathname === "/amenity_cards" || url.pathname === "/amenity_photo") { const _am = await amenityRoutes(request, env, url, { clientOk }); if (_am) return _am; }
+    // ---- end AMENITY CARDS ----
     // v157 - the fact-sheet routes, placed AFTER the client gate on purpose: a client key is refused above
     // before any storage is touched. Returns null for anything that is not its own, so the handler carries on.
     const _sh = await sheetRoutes(request, env, url, { ctEq, waPost, ownerWindowOpen, noteErr, WA_GRAPH, clientKeyOk: (e, u) => keyTier(e, u) !== "" });   // v212 - the building dossier opens on a client key
@@ -11719,7 +11724,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card)
+const CLIENT_PATHS = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
