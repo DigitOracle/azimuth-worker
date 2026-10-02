@@ -42,6 +42,7 @@
 //   - Arabian Ranches is offered through its Land Department areas (EXTRA_AREAS in src/brief.js), not as an app district
 //   - the search and each PDF retry ONCE on a timeout or a dropped connection, saying "Still working..." while they do
 import { BRIEF_CRITERIA, EXTRA_AREAS } from "./brief.js";
+import { AMENITY_CARDS_CSS, AMENITY_CARDS_JS } from "./amenity_cards.js";   // v290 AMENITY CARDS - the cards above the homes list
 // The app's districts: slug, name, corridor. Snapshot of img_districts_geo (naj-market-pulse data/board/districts_geo.json,
 // 23 Sep 2026). The route reads the live KV copy first and falls back to this.
 export const BRIEF_DISTRICTS = [
@@ -270,7 +271,7 @@ export function briefPageHtml(o) {
   const boot = { key, shareKey: o.shareKey || "", rk, q: o.q, districts: o.districts.map((d) => ({ s: d.s, n: d.n })), wants: BRIEF_WANTS };
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>The brief — Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413"><meta name=robots content=noindex>' + (o.fonts || "")
-    + "<style>" + BRIEF_CSS + BRIEF_CSS2 + (o.navCss || "") + "</style></head><body>"
+    + "<style>" + BRIEF_CSS + BRIEF_CSS2 + AMENITY_CARDS_CSS + (o.navCss || "") + "</style></head><body>"
     + '<a class=bk href="/start?key=' + esc(encodeURIComponent(key)) + (rk ? "&amp;rk=" + esc(encodeURIComponent(rk)) : "") + '">‹ START</a>'
     + '<div class=h>The <em>brief</em></div>'
     + '<div class=s id=bsub>One question at a time. You get the homes that fit, ranked by what homes there actually let or sell for, then choose what to send.</div>'
@@ -280,6 +281,7 @@ export function briefPageHtml(o) {
     + '<button type=button class=pill id=bpill hidden></button>'
     + '<script>window.__BRIEF=' + safeJson(boot) + ";</script>"
     + "<script>" + BRIEF_JS + "</script>"
+    + "<script>" + AMENITY_CARDS_JS + "</script>"   // v290 AMENITY CARDS
     + (o.nav || "") + "</body></html>";
 }
 
@@ -454,7 +456,8 @@ function drawRes(){var st=LAST,rs=RES.results||[],tot=RES.total_matched!=null?RE
   each($("bres").querySelectorAll("input[type=checkbox]"),function(cb){cb.onchange=function(){var r=rs[+cb.getAttribute("data-ix")];if(!r)return;SEL[r.key]=!!cb.checked;var row=$("row"+cb.getAttribute("data-ix"));if(row)row.classList.toggle("off",!cb.checked);counts()}});
   $("ball").onclick=function(){each(rs,function(r){SEL[r.key]=true});drawRes()};$("bnone").onclick=function(){SEL={};drawRes()};
   var m20=$("more20"),m50=$("more50");if(m20)m20.onclick=function(){ST.limit=20;run()};if(m50)m50.onclick=function(){ST.limit=50;run()};
-  $("bout").hidden=!rs.length;$("shbox").hidden=true;omsg("");counts()}
+  $("bout").hidden=!rs.length;$("shbox").hidden=true;omsg("");counts();
+  if(window.__amenCards)window.__amenCards(st,RES,KEY)}   // v290 AMENITY CARDS (src/amenity_cards.js): one card per ticked must-have per district, above the homes
 function notes(){var n=(RES&&RES.notes)||[],src=[];if(RES&&RES.as_of)src.push("evidence as of "+day(RES.as_of));
   var t=(LAST&&LAST.mode==="buy")?"What homes here actually sold for, from the Land Department’s registered sales":"What homes here actually let for, from registered tenancy contracts (Ejari, Dubai’s rent register)";
   return "<div class=nt>"+esc(t)+". This is not a list of homes on the market today: where a developer’s own sheet names a building it is shown, dated; otherwise the leasing or sales team confirms what is free."+(n.length?"<br>"+n.map(esc).join("<br>"):"")+(src.length?"<br>"+esc(src.join(" · ")):"")+"</div>"}
