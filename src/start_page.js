@@ -36,6 +36,10 @@ export function startBody(key, rk, isOwner) {
     + ejariStartCard(key, rk)
     + (isOwner === true   // ADVERTISED SUPPLY: the owner key only - adverts data never reaches a client (standing rule); fails closed
       ? '<div class=tag>ADVERTISED SUPPLY <i></i></div>' + supplyStartCard(key)
+        // v292 (Kendall: "this should be the normal link, I don't want multiple"): the DAMAC Hills checklist opens from START, owner only
+        + '<div class=tag>DAMAC HILLS CHECKLIST <i></i></div>'
+        + '<div class=sustart><div class="ejc suc"><div class=ejh><div class="ic suic">&#9989;</div><div><b>Check every DAMAC Hills community</b><span>Map it, add what you saw on site, upload photos</span></div></div>'
+        + '<a class=ejin href="/checklist?d=damachills&key=' + esc(encodeURIComponent(key || "")) + '" style="display:block;text-align:center;text-decoration:none;color:inherit;padding:12px">OPEN THE CHECKLIST &rarr;</a></div></div>'
       : "");
 }
 

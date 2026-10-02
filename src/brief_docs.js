@@ -636,8 +636,15 @@ function dossierPage1(C, rec, q, sub) {
     stat("AED " + money(st.q1) + " &ndash; " + money(st.q3), "MIDDLE HALF") + stat(lettingsTxt(st), "RECENT LETTINGS") + stat(money(st.s * SQFT) + " sq ft", "TYPICAL SIZE") + "</div>" +
     (q.max ? '<div style="font-size:12px;color:' + INK + ';line-height:1.45;"><b>What AED ' + money(q.max) + " gets you here.</b> " + budgetLine(st, q, B) + "</div>" : "")
     : '<div style="border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;font-size:12px;color:' + INK + ';">No ' + B.word + " lettings for this building in the latest pull of the tenancy register, so no typical rent is shown.</div>";
-  const amen = ((rec.br && rec.br.amenities) || []).map((a) => '<div style="font-size:11.5px;color:' + NAVY + ';line-height:1.35;">&#8226; ' + esc(a) + "</div>").join("") ||
-    '<div style="font-size:11.5px;color:' + MUTED + ';">To follow</div>';
+  // v292 (Kendall, 2 Oct: "unacceptable" - the building page said "Amenities: To follow"): the developer's list where there is one, then every
+  // sourced must-have answer (yes AND no), each with its level - never "to follow" while a register, the facts file, the broker or Google says
+  const AM_ROWS = [["private_pool", "Private pool"], ["community_pool", "Community pool"], ["pets", "Pet-friendly"], ["gym", "Gym"], ["parking", "Parking"], ["balcony", "Balcony"], ["modern", "Newer build (2018 or later)"]];
+  const LVL = { community: "community", cluster: "this cluster", building: "this building", broker: "checked on site" };
+  const row = (t, c) => '<div style="font-size:11.5px;color:' + c + ';line-height:1.35;">' + t + "</div>";
+  const critRows = AM_ROWS.filter(([k]) => rec.crit && rec.crit[k] && (rec.crit[k].v === true || rec.crit[k].v === false))
+    .map(([k, lab]) => { const c = rec.crit[k], lv = c.level ? LVL[c.level] || c.level : ""; return row((c.v ? "&#10003; " : "&#10007; ") + esc(lab) + (lv ? ' <span style="color:' + MUTED + ';">(' + esc(lv) + ")</span>" : ""), NAVY); });
+  const amen = ((rec.br && rec.br.amenities) || []).map((a) => row("&#8226; " + esc(a), NAVY)).join("") + critRows.join("") ||
+    row("Not on record for this building", MUTED);
   const lines = (xs) => xs.map((x) => '<div style="font-size:11.5px;color:' + NAVY + ';line-height:1.35;">' + x + "</div>").join("");
   const cards = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;">' +
     '<div class="card" style="padding:10px;"><div class="lbl" style="font-size:9.5px;">AMENITIES</div>' + amen + "</div>" +
