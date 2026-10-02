@@ -122,8 +122,12 @@ export async function liveSchools(env, counts) {
   const j = await postJson("https://places.googleapis.com/v1/places:searchNearby", env.GOOGLE_MAPS_KEY,
     { includedTypes: ["school", "primary_school", "secondary_school"], maxResultCount: 10, rankPreference: "DISTANCE", locationRestriction: { circle: { center: { latitude: +c.lat, longitude: +c.lng }, radius: Math.round(r) } } },
     "places.displayName,places.businessStatus");
+  // v290.3 - Google tags sports clubs, tutors and mislabelled places as schools ("Skateraati Sports Club", a Spanish "Escuela Primaria" in
+  // DAMAC Hills): keep only names that say they are a school, and not a club, coaching or tuition centre
+  const SCHOOLISH = /\b(school|academy|nursery|kindergarten|college|montessori|early learning)\b/i;
+  const NOT_SCHOOL = /\b(club|sports?|coaching|tuition|tutor|training|driving|swim|dance|music|skate|football|cricket|escuela|ecole|colegio)\b/i;
   return [...new Set(((j && j.places) || []).filter((p) => p && p.displayName && p.displayName.text && p.businessStatus !== "CLOSED_PERMANENTLY")
-    .map((p) => String(p.displayName.text).trim()).filter(Boolean))];
+    .map((p) => String(p.displayName.text).trim()).filter((n) => n && SCHOOLISH.test(n) && !NOT_SCHOOL.test(n)))];
 }
 
 // The picture a spot can give, or null. Never a URL: the Google address is built only in googleUrl(), server-side.
