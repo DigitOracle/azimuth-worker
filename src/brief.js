@@ -731,8 +731,10 @@ export async function briefSearch(env, sp, opts) {
   const liveWanted = !(opts && opts.live === false) && !!(env && env.GOOGLE_MAPS_KEY) && asked.some((k) => LIVE_CRITS[k]);
   const pDG = rd("districts_geo"), pMain = rd(q.mode === "rent" ? "rent_index" : "map_prices"), pAM = rd("amenities");
   const pAV = loadDevAvail(env, read), pHave = env && env.MEETINGS ? kvKeysMemo(env, "img_brochure_", 5) : kvKeys(env, "img_brochure_", 5);
+  const pBRK = {};                                                            // v291 CHECKLIST - the broker's on-site facts, read fresh (the owner edits them) but started in wave 2
   const warm = (ds) => {                                                      // start wave 2; the awaits below pick the same promises up
     for (const d of new Set(ds.filter(Boolean))) {
+      if (!pBRK[d]) pBRK[d] = kvJson(env, "broker_facts_" + d);
       rd("amenities_" + d);
       if (q.mode === "rent" && !EXTRA_AREAS[d]) rd("beds_left_" + d).then((bl) => (bl ? null : rd("tenancy_" + d)));
       if (liveWanted) { rd("amenity_counts_" + d); rd("anchors_" + d); }
@@ -796,7 +798,7 @@ export async function briefSearch(env, sp, opts) {
   const AMF = {};                                                              // v289 - the amenity facts per district (img_amenities_<district>)
   await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].map(async (d) => { AMF[d] = amenIndex(await rd("amenities_" + d)); }));
   const BRK = {};                                                              // v291 CHECKLIST - the broker's on-site facts (img_broker_facts_<district>); read fresh, not memoised: the owner edits them
-  await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].map(async (d) => { BRK[d] = await kvJson(env, "broker_facts_" + d); }));
+  await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].map(async (d) => { BRK[d] = await (pBRK[d] || (pBRK[d] = kvJson(env, "broker_facts_" + d))); }));
   const AV = await pAV;                                                       // v277 - the developers' own sheets, where we hold them
   const tenancy = {};
   const bedsLeft = {};

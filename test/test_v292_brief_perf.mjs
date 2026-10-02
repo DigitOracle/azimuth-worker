@@ -44,7 +44,7 @@ let log = [], T0 = 0;
 const KV = {
   async get(k, t) {
     const ty = t && typeof t === "object" ? t.type : t;
-    log.push({ k, at: performance.now() - T0 });
+    if (!/^img_broker_facts_/.test(k)) log.push({ k, at: performance.now() - T0 });   // v291: the owner's broker facts are read fresh every search by design - not part of the memo counts
     await new Promise((r) => setTimeout(r, LAT));
     if (!store.has(k)) return null;
     const v = store.get(k);
