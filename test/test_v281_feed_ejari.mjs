@@ -54,9 +54,9 @@ const mkEnv = (store) => {
     PUBLIC_ORIGIN: "https://azimuth-2.example", CF_RENDER_TOKEN: "test-only", CF_ACCOUNT_ID: "acc",
     WA_ALLOWED: "971565484397", WHATSAPP_TOKEN: "t", WA_PHONE_ID: "1", FEED_SCENES: "on", OWNER_NOTE_URL: "https://mc/owner_note", INGEST_TOKEN: "i" };
 };
-// a fixed Dubai morning: 06:00 GST on `day` (02:00 UTC). gstNow() and the card read Date.now().
+// a fixed Dubai morning: 05:00 GST on `day` (01:00 UTC) - the feed hour since v289 (was 06:00). gstNow() and the card read Date.now().
 const realNow = Date.now;
-const at = (day) => { const t = Date.parse(day + "T02:00:00Z"); Date.now = () => t; };
+const at = (day) => { const t = Date.parse(day + "T01:00:00Z"); Date.now = () => t; };
 const addD = (s, n) => new Date(Date.parse(s + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
 const run = async (day, kv, opts) => {
   opts = opts || {}; at(day); sent = []; owner = []; renders = []; renderFail = !!opts.renderFail;
