@@ -433,6 +433,16 @@ export async function loadContext(env, q, opts) {
     rec.picSource = rec.cardPic || rec.heroPic ? "photo" : blocksKind(rec, D && D.layer);
     C.recs.push(rec);
   }
+  // v290 - a community with no position of its own gets the centre of its attributed homes, for straight-line distances (metro)
+  for (const r of C.recs) if (!r.pos) { const t = svTarget(r, (C.district[r.d] || {}).layer); if (t) r.cpos = t.c; }
+  // v290 - Street View for every card without a developer photograph, aimed at its own footprints; all at once, each with a short timeout
+  if (need.map && env && env.GOOGLE_MAPS_KEY) {
+    await Promise.all(C.recs.filter((r) => !r.cardPic && !r.heroPic).map(async (r) => {
+      const t = svTarget(r, (C.district[r.d] || {}).layer);
+      const sv = await streetViewFor(env, t) || await satelliteFor(env, t);
+      if (sv) { r.svPic = sv; r.picSource = sv.kind === "satellite" ? "satellite" : "street_view"; }
+    }));
+  }
   return C;
 }
 
@@ -543,6 +553,7 @@ function rentSource(C, q, rec) {
 // ------------------------------------------------------------------------------------------------ the dossier: three pages
 function thumb(rec, w, h, C) {
   if (rec.cardPic || rec.heroPic) return fitImg(rec.cardPic || rec.heroPic, w, h, rec.name);
+  if (rec.svPic) return svFigure(rec.svPic, w, h, rec.name);   // v290 - Street View aimed at it, before the Blocks view
   // v285 - no developer photograph on file: the building's Blocks view (blocksThumb), never an empty box
   const D = (C && C.district[rec.d]) || {}, bv = blocksThumb(rec, D.layer, w, h, { district: rec.dist });
   if (bv) return bv.html;
@@ -575,7 +586,7 @@ function nearbyLines(C, rec) {
 function dossierPage1(C, rec, q, sub) {
   const B = BEDS[q.beds], st = rec.st;
   const bvHero = rec.heroPic ? null : blocksThumb(rec, (C.district[rec.d] || {}).layer, 702, 300, { district: rec.dist, fs: 9.5 });   // v285
-  const hero = rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38) : bvHero ? bvHero.html
+  const hero = rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38) : rec.svPic ? svFigure(rec.svPic, 702, 300, rec.name) : bvHero ? bvHero.html
     : '<div style="width:702px;height:120px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:13px;color:' + MUTED + ";\">Photos to follow &mdash; the developer's own pictures are being verified</div>";
   const F = facts(rec);
   const factHtml = F.length ? '<div style="display:grid;grid-template-columns:' + (F.length === 4 ? "0.9fr 0.9fr 1.4fr 0.8fr" : "repeat(" + F.length + ",minmax(0,1fr))") + ';gap:12px;">' +
@@ -806,7 +817,9 @@ function oneSheetCards(C, q) {
   const cols0 = Math.min(5, Math.max(3, C.recs.length)), cardW = (1063 - 9 * (cols0 - 1)) / cols0 - 2;
   const cards = C.recs.map((rec) => {
     const st = rec.st;
-    const metro = rec.pos ? (() => { const m = nearestMetro(C, rec.pos); return m ? esc(m.n) + " metro, " + kmTxt(m.d) : amenMetro(rec) || "Metro distance to follow"; })() : amenMetro(rec) || "Metro distance to follow";
+    // v290 - a community with no position of its own is measured from the centre of its homes (svTarget), said so; never "to follow" when known
+    const mp = rec.pos || rec.cpos, mFrom = rec.pos ? "" : " (from the community's centre)";
+    const metro = mp ? (() => { const m = nearestMetro(C, mp); return m ? esc(m.n) + " metro, " + kmTxt(m.d) + mFrom : amenMetro(rec) || "Metro distance to follow"; })() : amenMetro(rec) || "Metro distance to follow";
     const amen = ((rec.br && rec.br.amenities) || []).slice(0, 3).map((a) => esc(a.split(" (")[0])).join(", ") || amenLine(rec) || "Amenities to follow";
     const perType = B.all ? Object.keys(rec.sts || {}).map((b) => '<div style="font-size:10px;color:' + INK + ';">' + esc(bandLabel(b)) + ": AED " + money(rec.sts[b].m) + " &middot; " + rec.sts[b].n + " let</div>").join("") : "";
     return '<div class="bcard" style="border:1px solid #E6E1D8;background:#FFF;display:flex;flex-direction:column;overflow:hidden;min-height:0;">' +
@@ -912,6 +925,106 @@ export function areaIndex(anchors) {
   const m = new Map();
   for (const a of list) { if (!a || !a.cluster || a.i == null) continue; const k = norm(a.cluster); if (!k) continue; if (!m.has(k)) m.set(k, []); m.get(k).push(a.i); }
   return m;
+}
+
+// ------------------------------------------------------------------------------------------------ v290: the Street View picture
+// Kendall, 2 Oct 2026 ("where is the actual picture of the building?" / "approve Street View in the report"): where no developer photograph
+// is on file, the card shows Google Street View aimed at the building - or, for a register community (DAMAC Hills villas), at the centre of
+// the homes the district model attributes to it. Fetched at render time and embedded in the document only, never stored (Google's terms);
+// "© Google" and the capture month on the picture. Any miss - no secret, no panorama, too far, too old, an error or a timeout - falls back to
+// the Blocks view, so a card is never worse than before. Buildings with only an approximate position, or none, never get Street View.
+const SV = { radius: 150, maxDist: 120, minYear: 2019, metaMs: 3500, imgMs: 6000 };
+function llOfXy(layer, x, y) {
+  const [a, b, c, d, e, f] = layer.ll, det = a * e - b * d;
+  if (!det) return null;
+  return [(a * (y - f) - d * (x - c)) / det, (e * (x - c) - b * (y - f)) / det];   // [lat, lon]
+}
+const mDist = (p, q) => { const R = 6371000, la = (p[0] + q[0]) / 2 * Math.PI / 180; return R * Math.hypot((q[0] - p[0]) * Math.PI / 180, (q[1] - p[1]) * Math.PI / 180 * Math.cos(la)); };
+const bearing = (p, q) => { const r = Math.PI / 180, y = Math.sin((q[1] - p[1]) * r) * Math.cos(q[0] * r), x = Math.cos(p[0] * r) * Math.sin(q[0] * r) - Math.sin(p[0] * r) * Math.cos(q[0] * r) * Math.cos((q[1] - p[1]) * r); return (Math.atan2(y, x) / r + 360) % 360; };
+// what to aim at: the building's own footprint(s), or a community's attributed homes; else nothing (approximate or unknown position)
+export function svTarget(rec, layer) {
+  if (!layer || !Array.isArray(layer.ll) || !Array.isArray(layer.b)) return null;
+  const m = markOf(rec, layer);
+  if (!m.placed || m.approx || !Array.isArray(m.ids) || !m.ids.length) return null;
+  const want = new Set(m.ids), pts = [];
+  for (const [id, , f] of layer.b) if (want.has(id)) {
+    const n = f.length >= 4 && f[0] === f[f.length - 2] && f[1] === f[f.length - 1] ? f.length - 2 : f.length;   // a closed ring repeats its first corner
+    for (let k = 0; k + 1 < n; k += 2) { const ll = llOfXy(layer, f[k], f[k + 1]); if (ll) pts.push(ll); }
+  }
+  if (!pts.length) return null;
+  const c = [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length];
+  // where to look from: the centre, then (a community of many homes) up to four homes spread across it - Street View inside gated
+  // villa communities is patchy, so the centre alone often finds nothing
+  const homes = [];
+  for (const [id, , f] of layer.b) if (want.has(id)) {
+    let sx = 0, sy = 0, n = 0; for (let k = 0; k + 1 < f.length; k += 2) { sx += f[k]; sy += f[k + 1]; n++; }
+    const ll = n ? llOfXy(layer, sx / n, sy / n) : null; if (ll) homes.push(ll);
+  }
+  const probes = [c];
+  if (homes.length > 1) { const step = Math.max(1, Math.floor(homes.length / 4)); for (let k = 0; k < homes.length && probes.length < 5; k += step) probes.push(homes[k]); }
+  return { c, pts, homes, probes, tall: !m.area && rec.um && rec.um.floors > 6 };
+}
+async function fetchTimed(url, ms) {
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms);
+  try { return await fetch(url, { signal: ac.signal }); } finally { clearTimeout(t); }
+}
+export async function streetViewFor(env, tgt) {
+  const key = env && env.GOOGLE_MAPS_KEY;
+  if (!key || !tgt) return null;
+  try {
+    // the first panorama, from the centre then the spread homes, that is Google's own (not a public upload), 2019 or later, and within
+    // SV.maxDist of the building or community; the metadata calls cost nothing
+    let meta = null, pano = null;
+    for (const p of (tgt.probes || [tgt.c])) {
+      const mr = await fetchTimed("https://maps.googleapis.com/maps/api/streetview/metadata?location=" + p[0].toFixed(6) + "," + p[1].toFixed(6) +
+        "&radius=" + SV.radius + "&source=outdoor&key=" + encodeURIComponent(key), SV.metaMs);
+      if (!mr.ok) continue;
+      const m = await mr.json();
+      if (!m || m.status !== "OK" || !m.location || !m.pano_id) continue;
+      if (!/google/i.test(String(m.copyright || ""))) continue;
+      if (!(parseInt(String(m.date || "").slice(0, 4), 10) >= SV.minYear)) continue;
+      const at = [m.location.lat, m.location.lng];
+      if (!(Math.min(...tgt.pts.map((q) => mDist(at, q))) <= SV.maxDist)) continue;
+      meta = m; pano = at; break;
+    }
+    if (!meta) return null;
+    const yr = parseInt(String(meta.date).slice(0, 4), 10);
+    // aim: a building at its centre; a community at its nearest home (the centre of a large community is out of sight)
+    const aimAt = tgt.homes && tgt.homes.length > 1 ? tgt.homes.reduce((b, h) => (mDist(pano, h) < mDist(pano, b) ? h : b)) : tgt.c;
+    const heading = Math.round(bearing(pano, aimAt));
+    const ir = await fetchTimed("https://maps.googleapis.com/maps/api/streetview?size=640x400&pano=" + encodeURIComponent(meta.pano_id) + "&heading=" + heading +
+      "&fov=" + (tgt.tall ? 75 : 70) + "&pitch=" + (tgt.tall ? 10 : 3) + "&key=" + encodeURIComponent(key), SV.imgMs);
+    const ct = ir.headers.get("Content-Type") || "";
+    if (!ir.ok || !ct.startsWith("image/")) return null;
+    const buf = await ir.arrayBuffer();
+    if (buf.byteLength < 4000) return null;   // Google's grey "no imagery" tile is tiny
+    const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][(parseInt(String(meta.date).slice(5, 7), 10) || 1) - 1];
+    return { src: "data:" + ct + ";base64," + b64(buf), w: 640, h: 400, date: mon + " " + yr };
+  } catch (e) { return null; }
+}
+// v290 - where Street View has no panorama (Google never drove most gated villa streets: 2 of 10 DAMAC Hills communities), the satellite
+// picture of the same homes - a real image of exactly that place, framed on its footprints; same rules: render time, never stored, credited
+export async function satelliteFor(env, tgt) {
+  const key = env && env.GOOGLE_MAPS_KEY;
+  if (!key || !tgt) return null;
+  try {
+    const ext = Math.max(40, ...tgt.pts.map((p) => mDist(tgt.c, p)));
+    const mpp = (z) => 156543.03 * Math.cos(tgt.c[0] * Math.PI / 180) / Math.pow(2, z);
+    let z = 19; while (z > 14 && ext * 2.6 > 640 * mpp(z)) z--;
+    const r = await fetchTimed("https://maps.googleapis.com/maps/api/staticmap?center=" + tgt.c[0].toFixed(6) + "," + tgt.c[1].toFixed(6) + "&zoom=" + z +
+      "&size=640x400&maptype=satellite&key=" + encodeURIComponent(key), SV.imgMs);
+    const ct = r.headers.get("Content-Type") || "";
+    if (!r.ok || !ct.startsWith("image/")) return null;
+    const buf = await r.arrayBuffer();
+    if (buf.byteLength < 4000) return null;
+    return { src: "data:" + ct + ";base64," + b64(buf), w: 640, h: 400, kind: "satellite" };
+  } catch (e) { return null; }
+}
+function svFigure(pic, w, h, alt) {
+  if (pic.kind === "satellite") return '<div style="position:relative;width:' + r2(w) + "px;height:" + r2(h) + 'px;">' + fitImg(pic, w, h, alt) +
+    '<div style="position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,0.55);color:#FFF;font-size:8px;padding:1px 4px;border-radius:2px;">Satellite view &middot; &copy; Google</div></div>';
+  return '<div style="position:relative;width:' + r2(w) + "px;height:" + r2(h) + 'px;">' + fitImg(pic, w, h, alt) +
+    '<div style="position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,0.55);color:#FFF;font-size:8px;padding:1px 4px;border-radius:2px;">Street View &middot; &copy; Google &middot; ' + esc(pic.date) + "</div></div>";
 }
 
 // ------------------------------------------------------------------------------------------------ v285: the Blocks view picture
