@@ -40,7 +40,8 @@
 // building's name must agree with the record; straight-line distances only, no walking or driving times; rents are what homes let
 // for, never availability; the "left" figure is always "an estimate, not a count".
 import puppeteer from "@cloudflare/puppeteer";
-import { withAmenityPages } from "./amenity_cards.js";   // v290 AMENITY CARDS - the "Around the community" page in Compare and Full pack
+import { withAmenityPages } from "./amenity_cards.js";
+import { liveCtx, fillLive } from "./live_answers.js";   // v291 - live Google answers for gym, community pool and dog park (never stored)   // v290 AMENITY CARDS - the "Around the community" page in Compare and Full pack
 import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailFor } from "./brief.js";   // the ONE "left" estimate (API only since v277) and the developers' own sheets, shared with /brief_api
 // v282 (Kendall, 1 Oct 2026): the client's criteria and the area comparison come from the SAME functions /brief_api uses, so the list
 // and the documents can never disagree. A document is a client document: the search is run with owner: false, and nothing here ever
@@ -436,8 +437,20 @@ export async function loadContext(env, q, opts) {
   }
   // v290 - a community with no position of its own gets the centre of its attributed homes, for straight-line distances (metro)
   for (const r of C.recs) if (!r.pos) { const t = svTarget(r, (C.district[r.d] || {}).layer); if (t) r.cpos = t.c; }
+  // v291 - LIVE GOOGLE (src/live_answers.js): gym, community pool and dog park asked of Google now where every other source leaves them
+  // not known - the home's own sub-community first, then the community; the same function and words as /brief_api. Never stored. It
+  // runs alongside the Street View search below (and, for a document, alongside the amenity pages: opts.deferLive leaves it on C.live
+  // for buildDocument to await), so a slow Google costs a document no more time than before (2 s cap).
+  const live = (async () => {
+    if (!(env && env.GOOGLE_MAPS_KEY && C.recs.length)) return;
+    const LV = liveCtx(env, opts);
+    await fillLive(LV, C.recs.map((r) => { const p = r.pos || r.cpos || null;
+      return { crit: r.crit, d: r.d, dn: (C.district[r.d] || {}).name, name: r.it.n, aliases: r.it.a || [], i: r.it.i, is: r.it.is, lat: p ? p[0] : null, lon: p ? p[1] : null, noSub: !!r.it.unbound }; }),
+      [...new Set((q.musts || []).concat(q.nice || []))], { cluster: true });
+    C.liveCalls = LV.calls;
+  })();
   // v290 - Street View for every card without a developer photograph, aimed at its own footprints; all at once, each with a short timeout
-  
+
   if (need.map && env && env.GOOGLE_MAPS_KEY) {
     await Promise.all(C.recs.filter((r) => !r.cardPic && !r.heroPic).map(async (r) => {
       const t = svTarget(r, (C.district[r.d] || {}).layer);
@@ -445,6 +458,7 @@ export async function loadContext(env, q, opts) {
       if (sv) { r.svPic = sv; r.picSource = sv.kind === "satellite" ? "satellite" : "street_view"; }
     }));
   }
+  if (opts && opts.deferLive) C.live = live; else await live;
   return C;
 }
 
@@ -665,7 +679,7 @@ function criteriaLine(rec, q) {
   if (!briefAsked(q)) return "";
   const rows = criteriaRows(rec, q);
   return rows.length ? '<div class="critline" style="font-size:9.2px;color:' + INK + ';line-height:1.3;">' + rows.map(([label, , c]) =>
-    (c.v === true ? "&#10003; " + esc(label) : c.v === false ? "&#10007; " + esc(label) : esc(label) + ": not known")).join(" &middot; ") + "</div>" : "";
+    (c.v === true ? "&#10003; " + esc(label) + (c.live && c.say ? " (" + esc(c.say) + ")" : "") : c.v === false ? "&#10007; " + esc(label) : esc(label) + ": not known")).join(" &middot; ") + "</div>" : "";
 }
 
 // ------------------------------------------------------------------------------------------------ v282: the areas side by side
@@ -677,7 +691,7 @@ export async function comparisonFor(env, q) {
   sp.set("mode", "rent"); sp.set("beds", (q.bedsList || [q.beds]).join(",")); if (q.min) sp.set("min", String(q.min)); if (q.max) sp.set("max", String(q.max));
   if (q.stretch) sp.set("stretch", String(q.stretch)); sp.set("areas", q.areas.join(",")); sp.set("type", q.type);
   sp.set("furnished", q.furnished || "either"); sp.set("musts", (q.musts || []).join(",")); sp.set("nice", (q.nice || []).join(",")); sp.set("compare", "1"); sp.set("limit", "1");
-  const out = await briefSearch(env, sp, { owner: false });
+  const out = await briefSearch(env, sp, { owner: false, live: false });   // v291 - the comparison reads no per-home answer: no Google call
   return out.status === 200 && out.body.comparison ? { cols: out.body.comparison, window: out.body.window, as_of: out.body.as_of } : null;
 }
 const CMP_ROWS = [["matches", "Homes that match"], ["rent", "Typical rent, last 60 days"], ["types", "Home types"], ["pools", "Pools"], ["parks", "Parks and dog-friendly spaces"], ["schools", "Schools nearby"], ["newest", "Newest completion"]];
@@ -1305,9 +1319,13 @@ export async function buildDocument(env, q, opts) {
     }) } };
   }
   const dossierish = q.kind === "dossier" || q.kind === "pack";
-  const C = await loadContext(env, q, { now: opts && opts.now, origin: opts && opts.origin, need: { units: dossierish, photos: dossierish, map: true } });
+  const C = await loadContext(env, q, { now: opts && opts.now, origin: opts && opts.origin, need: { units: dossierish, photos: dossierish, map: true }, deferLive: true });
   if (C.error) return { status: 503, body: { ok: false, reason: C.error } };
   if (C.missing.length) return { status: 404, body: { ok: false, reason: "not in the rent index", keys: C.missing } };
+  // v290 AMENITY CARDS (src/amenity_cards.js): one card per ticked must-have per district, pictures fetched now and embedded, never stored.
+  // v291 - started here, alongside the live Google answers (C.live), which the pages below need before they are drawn
+  const chrome = { landPage: (inner) => landPage(C, inner), footer: landFooter(), logo: logo(C, 68), today: C.today, fitImg, jpegSize };
+  const [amenPages] = await Promise.all([withAmenityPages(env, q, C, "", chrome), C.live]);
   let html, title, fname;
   const B = BEDS[q.beds], tag = (q.beds === "studio" ? "Studio" : q.beds === "all" ? "All" : q.beds + "BR");
   if (q.kind === "dossier") {
@@ -1322,8 +1340,8 @@ export async function buildDocument(env, q, opts) {
   }
   // v282 - Compare and Full pack open with the areas side by side when 2 or 3 areas were compared (the same block as the /brief page)
   if (q.kind === "compare" || q.kind === "pack") { const cmp = await comparisonFor(env, q); if (cmp) html = comparisonPage(C, q, cmp) + html; }
-  // v290 AMENITY CARDS (src/amenity_cards.js): one card per ticked must-have per district, pictures fetched now and embedded, never stored
-  html = await withAmenityPages(env, q, C, html, { landPage: (inner) => landPage(C, inner), footer: landFooter(), logo: logo(C, 68), today: C.today, fitImg, jpegSize });
+  // the amenity pages (withAmenityPages' own rule): at the end of Compare; in a Full pack, before the appendix (its last portrait page)
+  if (amenPages) { const at = q.kind === "pack" ? html.lastIndexOf('<div class="sheet page">') : -1; html = at > 0 ? html.slice(0, at) + amenPages + html.slice(at) : html + amenPages; }
   return { status: 200, html: HEAD(title, html), pages: C.pages, fname, C };
 }
 

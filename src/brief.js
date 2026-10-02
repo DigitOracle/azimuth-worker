@@ -18,6 +18,7 @@
 //          running on its as_at date). Only under the gates building_page.js already applies - see estLeft().
 //
 // Everything is in this file; src/index.js carries one import and one marked dispatch.
+import { liveCtx, fillLive } from "./live_answers.js";   // v291 - gym, community pool and dog park asked of Google live where all else is not known
 
 export const BRIEF_MUSTS = ["balcony", "metro", "pool", "gym", "parking", "new", "schools"];
 // v282 (Kendall, 1 Oct 2026, a real client brief: "a furnished 2-3 bedroom townhouse, AED 240K a year, up to 300K for a modern,
@@ -760,6 +761,13 @@ export async function briefSearch(env, sp, opts) {
     " (KV img_amenities_<district>): the Land Department buildings and units registers, the developer's own pages, owners' association budgets and OpenStreetMap. Each answer names its source and says whether it is a building fact (this building's own record or page) or a community fact (the master community's, which every home in it shares). Not known means no source we hold says.");
   if (q.furnished !== "either") notes.push("Furnished: not known for any home - the Ejari register does not record furnishing." + (owner ? " The owner view adds what listing-site adverts say, where the advertised-supply data carries it (furnished_hint); a client never sees it." : ""));
 
+  // v291 - LIVE GOOGLE (src/live_answers.js): where registers, broker facts and the amenity file all leave gym, community pool or pets
+  // not known, Google Places is asked now - first the community (one call per district per criterion), so the ranking counts it; then,
+  // below, each shown home's own sub-community. Never a no, never stored; any miss stays not known.
+  const LV = liveCtx(opts && opts.live === false ? null : env, opts);       // live: false (the PDFs' area comparison) asks nothing
+  const asked = [...new Set(q.musts.concat(q.nice))];
+  const liveItem = (c) => ({ crit: c.crit, d: c.d, dn: DN[c.d], name: c.name, aliases: c.aliases, i: c.i, is: c.it && c.it.is, lat: c.lat, lon: c.lon, noSub: !!c.disputed });
+  await fillLive(LV, kept.map(liveItem), asked, { cluster: false });
   const score = (c) => (c.completeness.record ? 1 : 0) + (c.completeness.layouts ? 1 : 0) + (c.completeness.photos ? 1 : 0);
   const mid = q.max != null ? ((q.min || 0) + q.max) / 2 : (q.min || 0);
   const met = (c, ks) => ks.filter((m) => c.crit[m] && c.crit[m].v === true).length;
@@ -774,6 +782,8 @@ export async function briefSearch(env, sp, opts) {
   const PS = {};
   // in a comparison each area gets its own top `limit`; otherwise one list
   const chosen = q.compare ? q.areas.flatMap((a) => kept.filter((c) => c.d === a).slice(0, q.limit)) : kept.slice(0, q.limit);
+  await fillLive(LV, chosen.map(liveItem), asked, { cluster: true });     // v291 - the shown homes, each by its own sub-community
+  if (LV.used) notes.push("Gym, community pool and dog park: where no register, broker fact or amenity file answers, Google Maps was asked live when this list was made (Places, not kept): a gym, a community or residence pool, or a dog park inside the home's own sub-community (its mapped homes, plus 150 m) answers yes as a cluster fact; else one inside the community's boundary answers yes as a community fact, with how far it is. Google finding none is never a no: it stays not known.");
   if (owner) await Promise.all([...new Set(chosen.map((c) => c.d).filter(Boolean))].map(async (d) => { PS[d] = await kvJson(env, "pf_supply_" + d); }));
   const rankIn = {};
   const results = chosen.map((c) => {
