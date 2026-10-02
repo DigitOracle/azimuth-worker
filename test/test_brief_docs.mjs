@@ -21,13 +21,16 @@
 //
 //   node test/test_brief_docs.mjs
 import worker from "../src/index.js";
+import { __resetKvMemo } from "../src/brief.js";
 import { __setLauncher, fnv16, brochureKvName, isPortal, FOOTER_TEXT, WHATSAPP_NUMBER } from "../src/brief_docs.js";
 
 let pass = 0, fail = 0;
 const ok = (c, m, d) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m + (d ? "\n         " + String(d).slice(0, 500) : "")); } };
 
 // ---- KV ------------------------------------------------------------------------------------------------------------------------
-const store = new Map();
+// v292 - the search keeps what it reads in a per-isolate memo (src/brief.js kvJsonMemo); this test swaps stored values in place
+// between requests, so a write here drops the memo (live, a new value is read within KV_MEMO_TTL_MS).
+const store = new (class extends Map { set(k, v) { __resetKvMemo(); return super.set(k, v); } delete(k) { __resetKvMemo(); return super.delete(k); } })();
 const KV = {
   async get(k, t) {
     if (!store.has(k)) return null;

@@ -83,7 +83,7 @@ const titleCase = (s) => String(s).toLowerCase().replace(/(^|[\s(\/-])([a-z])/g,
 // One per request: the in-memory cache (promises, so parallel askers share one call) and the call count.
 export function liveCtx(env, opts) {
   const now = (opts && opts.now) ? new Date(opts.now) : new Date();
-  return { env, key: env && env.GOOGLE_MAPS_KEY, day: dayOf(now), iso: now.toISOString().slice(0, 10), cache: new Map(), calls: 0, failed: 0, used: 0 };
+  return { env, read: (opts && opts.read) || kvJson, key: env && env.GOOGLE_MAPS_KEY, day: dayOf(now), iso: now.toISOString().slice(0, 10), cache: new Map(), calls: 0, failed: 0, used: 0 };
 }
 const once = (ctx, k, fn) => { if (!ctx.cache.has(k)) ctx.cache.set(k, fn()); return ctx.cache.get(k); };
 
@@ -117,7 +117,7 @@ const placeOf = (p) => p && p.displayName && p.displayName.text && p.location &&
 // ---- the district: its polygon, centre and name (the counts file), and its sub-communities (the anchors file) -------------------------
 function district(ctx, d, dn) {
   return once(ctx, "d:" + d, async () => {
-    const [counts, anchors] = await Promise.all([kvJson(ctx.env, "amenity_counts_" + d), kvJson(ctx.env, "anchors_" + d)]);
+    const [counts, anchors] = await Promise.all([ctx.read(ctx.env, "amenity_counts_" + d), ctx.read(ctx.env, "anchors_" + d)]);   // v292 - the search's reader (memo)
     const coords = (((((counts || {}).google_requests || {}).body || {}).filter || {}).locationFilter || {}).customArea;
     const ring = coords && coords.polygon && Array.isArray(coords.polygon.coordinates)
       ? coords.polygon.coordinates.filter((p) => p && isFinite(+p.latitude) && isFinite(+p.longitude)).map((p) => [+p.latitude, +p.longitude]) : [];

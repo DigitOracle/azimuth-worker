@@ -15,6 +15,7 @@
 //
 //   node test/test_brief_parity.mjs      (skips, passing, when the naj-market-pulse data is not on this machine; set NAJ_DATA)
 import worker from "../src/index.js";
+import { __resetKvMemo } from "../src/brief.js";
 import { __setLauncher } from "../src/brief_docs.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -29,7 +30,9 @@ const REG = path.join(NAJ, "dld", "beds_left", "beds_left_" + JVC + ".json");
 const need = [path.join(NAJ, "board", "rent_index.json"), path.join(NAJ, "board", "unitmix_" + JVC + ".json"), REG];
 if (need.some((f) => !fs.existsSync(f))) { console.log("  skip - the naj-market-pulse data is not here (" + need.filter((f) => !fs.existsSync(f)).join(", ") + ")\nPASS - brief parity: skipped"); process.exit(0); }
 
-const store = new Map();
+// v292 - the search keeps what it reads in a per-isolate memo (src/brief.js kvJsonMemo); this test swaps stored values in place
+// between requests, so a write here drops the memo (live, a new value is read within KV_MEMO_TTL_MS).
+const store = new (class extends Map { set(k, v) { __resetKvMemo(); return super.set(k, v); } delete(k) { __resetKvMemo(); return super.delete(k); } })();
 const KV = {
   async get(k, t) { if (!store.has(k)) return null; const v = store.get(k); if (t === "arrayBuffer") return typeof v === "string" ? new TextEncoder().encode(v).buffer : v; return typeof v === "string" ? v : new TextDecoder().decode(v); },
   async put(k) { writes.push(k); }, async delete() {},

@@ -21,6 +21,7 @@
 //
 //   node test/test_v289_amenities.mjs
 import worker from "../src/index.js";
+import { __resetKvMemo } from "../src/brief.js";
 import { amenIndex, amenFor, amenSrc, criteriaOf } from "../src/brief.js";
 import { loadContext, parseQuery, criteriaRows, oneSheetHtml } from "../src/brief_docs.js";
 import fs from "node:fs";
@@ -32,9 +33,12 @@ let pass = 0, fail = 0;
 const ok = (c, m, d) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m + (d ? "\n         " + String(d).slice(0, 600) : "")); } };
 
 const READ = "client_read_key_in_links_123", CLIENT = "a_client_key_for_links_456";
-const store = new Map();
+// v292 - the search keeps what it reads in a per-isolate memo (src/brief.js kvJsonMemo); this test swaps stored values in place
+// between requests, so a write here drops the memo (live, a new value is read within KV_MEMO_TTL_MS).
+const store = new (class extends Map { set(k, v) { __resetKvMemo(); return super.set(k, v); } delete(k) { __resetKvMemo(); return super.delete(k); } })();
 const KV = {
   async get(k, t) {
+    if (t && typeof t === "object") t = t.type;                                  // v292 - KV's options form, {type, cacheTtl}, as the real binding takes it
     if (!store.has(k)) return null;
     const v = store.get(k);
     if (t === "arrayBuffer") return typeof v === "string" ? new TextEncoder().encode(v).buffer : v;

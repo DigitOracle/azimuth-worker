@@ -18,7 +18,7 @@
 //          running on its as_at date). Only under the gates building_page.js already applies - see estLeft().
 //
 // Everything is in this file; src/index.js carries one import and one marked dispatch.
-import { liveCtx, fillLive } from "./live_answers.js";   // v291 - gym, community pool and dog park asked of Google live where all else is not known
+import { liveCtx, fillLive, LIVE_CRITS } from "./live_answers.js";   // v291 - gym, community pool and dog park asked of Google live where all else is not known
 
 export const BRIEF_MUSTS = ["balcony", "metro", "pool", "gym", "parking", "new", "schools"];
 // v282 (Kendall, 1 Oct 2026, a real client brief: "a furnished 2-3 bedroom townhouse, AED 240K a year, up to 300K for a modern,
@@ -76,16 +76,67 @@ export const nkey = (s) => norm(stem(s));
 const snake = (s) => fold(s).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
 export async function kvJson(env, name) {         // an img_* value: plain JSON, or gzipped JSON (the /img route passes 1f 8b through)
-  let v = null;
-  try { v = await env.MEETINGS.get("img_" + name, "arrayBuffer"); } catch (e) { return null; }
-  if (v == null) return null;
-  try {
-    if (typeof v === "string") return JSON.parse(v);
-    let u8 = new Uint8Array(v);
-    if (u8.length > 2 && u8[0] === 0x1f && u8[1] === 0x8b) u8 = new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
-    return JSON.parse(new TextDecoder().decode(u8));
-  } catch (e) { return null; }
+  return (await readJson(env, name, "arrayBuffer")).v;
 }
+async function readJson(env, name, opts) {        // -> {v, bytes}; bytes = the stored size, which the memo budgets by
+  let v = null;
+  try { v = await env.MEETINGS.get("img_" + name, opts); } catch (e) { return { v: null, bytes: 0 }; }
+  if (v == null) return { v: null, bytes: 0 };
+  try {
+    if (typeof v === "string") return { v: JSON.parse(v), bytes: v.length };
+    let u8 = new Uint8Array(v);
+    const bytes = u8.length;
+    if (u8.length > 2 && u8[0] === 0x1f && u8[1] === 0x8b) u8 = new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+    return { v: JSON.parse(new TextDecoder().decode(u8)), bytes };
+  } catch (e) { return { v: null, bytes: 0 }; }
+}
+
+// ---- v292 (2 Oct 2026, "every search takes 45 s"): THE PER-ISOLATE MEMO for the files a search reads ----------------------------
+// Measured on the live worker (wrangler tail): a single-district search is 0.1-0.5 s of wall time on the server; the 43-49 s was
+// the laptop's own connection set-up (PowerShell's first request to ANY host, example.com included, took the same 43 s). What the
+// server did have: every search read its files ONE AFTER ANOTHER - districts, rent index, unit-mix cards, the 1.1 MB amenity layer,
+// the amenity facts, the developer sheets, the beds-left register, the Google district files, the advertised supply - eleven KV
+// round trips in a row, each a cold read when the last search was more than a minute ago (KV's own edge cache keeps a value 60 s),
+// and an all-Dubai search with must-haves read 258 values (40 MB) and took 7-13 s cold. Now: the reads that do not depend on each
+// other start together (three waves, not eleven), each value asks KV's edge to keep it for KV_EDGE_TTL_S, and the parsed value is
+// kept in this isolate for KV_MEMO_TTL_MS, so the next search in the same two minutes reads nothing. The memo is bounded by
+// KV_MEMO_MAX_BYTES of stored size (least recently used out first); a value bigger than half of it is never kept. A miss (null)
+// is kept too, for the same short time. The values kept are SHARED between searches: nothing in this file, live_answers.js or
+// loadDevAvail() writes into them (candidates, criteria and indexes are new objects), and only those use the memo - the PDFs
+// (brief_docs.js) still read through kvJson().
+export const KV_MEMO_TTL_MS = 120000;           // 2 minutes: the pipelines publish these files at most a few times a day
+export const KV_EDGE_TTL_S = 300;               // KV's edge cache (the cacheTtl read option; the default is 60 s)
+export const KV_MEMO_MAX_BYTES = 12e6;          // stored size; a single-district search reads about 4 MB of it
+const MEMO = new WeakMap();                     // KV binding -> Map(name -> {t, p, bytes}), in recency order
+const memoBindings = new Set();
+let memoNow = () => Date.now();
+export function __setKvMemoClock(fn) { memoNow = fn || (() => Date.now()); }   // tests
+export function __resetKvMemo() { for (const k of memoBindings) MEMO.delete(k); memoBindings.clear(); }
+export function kvMemoStats(kv) { const m = kv && MEMO.get(kv); if (!m) return { entries: 0, bytes: 0 }; let b = 0; for (const e of m.values()) b += e.bytes; return { entries: m.size, bytes: b }; }
+function memo(env, name, load) {                // load() -> Promise<{v, bytes}>
+  const kv = env.MEETINGS;
+  let m = MEMO.get(kv);
+  if (!m) { m = new Map(); MEMO.set(kv, m); memoBindings.add(kv); }
+  const now = memoNow(), hit = m.get(name);
+  if (hit && now - hit.t < KV_MEMO_TTL_MS) { m.delete(name); m.set(name, hit); return hit.p; }   // most recently used goes last
+  const e = { t: now, bytes: 0, p: null };
+  e.p = load().then((r) => {
+    e.bytes = r.bytes;
+    if (m.get(name) === e) {
+      if (r.bytes > KV_MEMO_MAX_BYTES / 2) m.delete(name);
+      else { let tot = 0; for (const x of m.values()) tot += x.bytes; for (const [k, x] of m) { if (tot <= KV_MEMO_MAX_BYTES) break; if (x === e || !x.done) continue; m.delete(k); tot -= x.bytes; } }
+    }
+    e.done = true;
+    return r.v;
+  }, () => { if (m.get(name) === e) m.delete(name); return null; });
+  m.set(name, e);                                // kept at once, as a promise: two readers at the same moment share one read
+  return e.p;
+}
+export function kvJsonMemo(env, name) {
+  if (!env || !env.MEETINGS) return kvJson(env, name);
+  return memo(env, name, () => readJson(env, name, { type: "arrayBuffer", cacheTtl: KV_EDGE_TTL_S }));
+}
+const kvKeysMemo = (env, prefix, pages) => memo(env, "keys:" + prefix, async () => { const s = await kvKeys(env, prefix, pages); return { v: s, bytes: s.size * 40 }; });
 
 async function kvKeys(env, prefix, pages) {     // every key under a prefix, a few pages at most
   const out = new Set(); let cursor;
@@ -373,13 +424,14 @@ const bandOfType = (t) => {
   return m ? Math.min(+m[1], 3) : null;
 };
 const bandFits = (band, bed) => band != null && (bed === "all" || (bed === 3 ? band >= 3 : band === bed));
-export async function loadDevAvail(env) {
-  const idx = await kvJson(env, "avail_index");
+export async function loadDevAvail(env, read) {         // read: kvJson (the PDFs) or kvJsonMemo (the search, v292)
+  read = read || kvJson;
+  const idx = await read(env, "avail_index");
   const sheets = (idx && Array.isArray(idx.sheets) ? idx.sheets : []).filter((s) => s && s.d);
   const out = [];
   await Promise.all(sheets.map(async (s) => {
     const dk = String(s.d).replace(/[^a-z0-9]/g, "");
-    const drill = dk ? await kvJson(env, "drill_" + dk) : null;
+    const drill = dk ? await read(env, "drill_" + dk) : null;
     const cl = drill && drill.claimed;
     if (!cl || !Array.isArray(cl.detail) || !cl.detail.length) return;
     const developer = String(cl.source || s.sheet || dk).replace(/\s+sheets?\b.*$/i, "").replace(/\s+\d{4}-\d{2}-\d{2}$/, "").trim() || dk;
@@ -667,7 +719,25 @@ export async function briefSearch(env, sp, opts) {
   const owner = !!(opts && opts.owner);
   const notes = [];
 
-  const DG = await kvJson(env, "districts_geo");
+  // v292 - every file is read once per search (rd: a per-search promise map over the per-isolate memo), and the reads that do not
+  // depend on each other start together: wave 1 here (districts, the rent index or Buy data, the amenity layer, the developer sheets,
+  // the brochure list), wave 2 as soon as the candidates' districts are known (unit-mix cards, amenity facts, beds-left register or
+  // tenancy file, the Google district files when Google will be asked), then the brochures of the candidates kept.
+  const local = new Map();
+  const rd = (n) => { let p = local.get(n); if (!p) { p = kvJsonMemo(env, n); local.set(n, p); } return p; };
+  const read = (e, n) => rd(n);
+  const asked = [...new Set(q.musts.concat(q.nice))];
+  const liveWanted = !(opts && opts.live === false) && !!(env && env.GOOGLE_MAPS_KEY) && asked.some((k) => LIVE_CRITS[k]);
+  const pDG = rd("districts_geo"), pMain = rd(q.mode === "rent" ? "rent_index" : "map_prices"), pAM = rd("amenities");
+  const pAV = loadDevAvail(env, read), pHave = env && env.MEETINGS ? kvKeysMemo(env, "img_brochure_", 5) : kvKeys(env, "img_brochure_", 5);
+  const warm = (ds) => {                                                      // start wave 2; the awaits below pick the same promises up
+    for (const d of new Set(ds.filter(Boolean))) {
+      rd("amenities_" + d);
+      if (q.mode === "rent" && !EXTRA_AREAS[d]) rd("beds_left_" + d).then((bl) => (bl ? null : rd("tenancy_" + d)));
+      if (liveWanted) { rd("amenity_counts_" + d); rd("anchors_" + d); }
+    }
+  };
+  const DG = await pDG;
   const DN = {}; for (const d of (DG && DG.districts) || []) DN[d.slug] = d.name;
   for (const [s, x] of Object.entries(EXTRA_AREAS)) if (!DN[s]) DN[s] = x.name;
   const unknownAreas = DG ? q.areas.filter((a) => !DN[a]) : [];
@@ -680,15 +750,16 @@ export async function briefSearch(env, sp, opts) {
     const byCount = {}; for (const d of ds) if (d) byCount[d] = (byCount[d] || 0) + 1;
     const want = Object.keys(byCount).sort((a, b) => byCount[b] - byCount[a]);
     if (want.length > MAX_DISTRICT_CARDS) notes.push("read the unit-mix records of the " + MAX_DISTRICT_CARDS + " districts with most matches only (" + want.length + " matched); name the districts to see every one");
-    await Promise.all(want.slice(0, MAX_DISTRICT_CARDS).map(async (d) => { if (cards[d] !== undefined) return; const u = await kvJson(env, "unitmix_" + d); cards[d] = (u && u.buildings_by_id) || null; }));
+    await Promise.all(want.slice(0, MAX_DISTRICT_CARDS).map(async (d) => { if (cards[d] !== undefined) return; const u = await rd("unitmix_" + d); cards[d] = (u && u.buildings_by_id) || null; }));
   };
 
   if (q.mode === "rent") {
-    RI = await kvJson(env, "rent_index");
+    RI = await pMain;
     if (!RI || !Array.isArray(RI.items)) return J({ query: q, error: ["the rent index (KV img_rent_index) is not on file"] }, 503);
     as_of = RI.as_of || null; source = "KV img_rent_index (" + (RI.source_file || "Ejari rent contracts") + ")";
     extra.window = RI.window || null;
     const r = rentCandidates(RI, q, beds); cands = r.cands;
+    warm(cands.map((c) => c.d));
     await loadCards(cands.filter((c) => c.i != null).map((c) => c.d));
     const un = unbindDisputed(cands, cards);
     if (un) notes.push(un + " rent record" + (un === 1 ? " is" : "s are") + " bound in the index to an app building named otherwise, or to one already listed: shown by the register name only, with no building page (the name must agree with the record). See disputed_bind.");
@@ -699,9 +770,10 @@ export async function briefSearch(env, sp, opts) {
     notes.push("A contract filed under several building names is counted once; the other names are listed as aliases (also filed as).");
     if (r.thin) notes.push(r.thin + " building" + (r.thin === 1 ? "" : "s") + " with fewer than " + EVIDENCE_MIN + " contracts of this size left out.");
   } else {
-    const MP = await kvJson(env, "map_prices");
+    const MP = await pMain;
     if (!MP || !Array.isArray(MP.items)) return J({ query: q, error: ["the Buy data (KV img_map_prices) is not on file"] }, 503);
     const pre = buyPrelim(MP, q, beds);
+    warm(pre.map((p) => p.it.d));
     await loadCards(pre.map((p) => p.it.d));
     const r = buyCandidates(pre, cards, q); cands = r.cands;
     as_of = String(MP.generated || "").slice(0, 10) || null; source = "KV img_map_prices (what the map's Buy mode shows) + img_unitmix_<district> (per-bedroom sale medians and counts)";
@@ -713,21 +785,21 @@ export async function briefSearch(env, sp, opts) {
   }
 
   // photos: which developer brochures exist (one listing), then read the few that do, for amenities
-  const have = await kvKeys(env, "img_brochure_", 5);
+  const have = await pHave;
   await Promise.all(cands.map(async (c) => {
     const k = brochureKeys(c).find((x) => have.has(x));
     c.brochureKey = k || null;
-    c.brochure = k ? await kvJson(env, k.slice(4)) : null;
+    c.brochure = k ? await rd(k.slice(4)) : null;
   }));
-  const AM = await kvJson(env, "amenities");
+  const AM = await pAM;
   const AMF = {};                                                              // v289 - the amenity facts per district (img_amenities_<district>)
-  await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].map(async (d) => { AMF[d] = amenIndex(await kvJson(env, "amenities_" + d)); }));
-  const AV = await loadDevAvail(env);                                         // v277 - the developers' own sheets, where we hold them
+  await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].map(async (d) => { AMF[d] = amenIndex(await rd("amenities_" + d)); }));
+  const AV = await pAV;                                                       // v277 - the developers' own sheets, where we hold them
   const tenancy = {};
   const bedsLeft = {};
   if (q.mode === "rent") await Promise.all([...new Set(cands.filter((c) => c.d && !EXTRA_AREAS[c.d]).map((c) => c.d))].map(async (d) => {
-    bedsLeft[d] = await kvJson(env, "beds_left_" + d);
-    if (!bedsLeft[d]) tenancy[d] = await kvJson(env, "tenancy_" + d);                // the old gated path only where the register is missing
+    bedsLeft[d] = await rd("beds_left_" + d);
+    if (!bedsLeft[d]) tenancy[d] = await rd("tenancy_" + d);                       // the old gated path only where the register is missing
   }));
 
   let droppedByMust = 0;
@@ -764,8 +836,7 @@ export async function briefSearch(env, sp, opts) {
   // v291 - LIVE GOOGLE (src/live_answers.js): where registers, broker facts and the amenity file all leave gym, community pool or pets
   // not known, Google Places is asked now - first the community (one call per district per criterion), so the ranking counts it; then,
   // below, each shown home's own sub-community. Never a no, never stored; any miss stays not known.
-  const LV = liveCtx(opts && opts.live === false ? null : env, opts);       // live: false (the PDFs' area comparison) asks nothing
-  const asked = [...new Set(q.musts.concat(q.nice))];
+  const LV = liveCtx(opts && opts.live === false ? null : env, { ...(opts || {}), read });   // live: false (the PDFs' area comparison) asks nothing
   const liveItem = (c) => ({ crit: c.crit, d: c.d, dn: DN[c.d], name: c.name, aliases: c.aliases, i: c.i, is: c.it && c.it.is, lat: c.lat, lon: c.lon, noSub: !!c.disputed });
   await fillLive(LV, kept.map(liveItem), asked, { cluster: false });
   const score = (c) => (c.completeness.record ? 1 : 0) + (c.completeness.layouts ? 1 : 0) + (c.completeness.photos ? 1 : 0);
@@ -782,9 +853,10 @@ export async function briefSearch(env, sp, opts) {
   const PS = {};
   // in a comparison each area gets its own top `limit`; otherwise one list
   const chosen = q.compare ? q.areas.flatMap((a) => kept.filter((c) => c.d === a).slice(0, q.limit)) : kept.slice(0, q.limit);
-  await fillLive(LV, chosen.map(liveItem), asked, { cluster: true });     // v291 - the shown homes, each by its own sub-community
+  // v291 - the shown homes, each by its own sub-community; v292 - the owner's advertised-supply files are read at the same time
+  await Promise.all([fillLive(LV, chosen.map(liveItem), asked, { cluster: true }),
+    owner ? Promise.all([...new Set(chosen.map((c) => c.d).filter(Boolean))].map(async (d) => { PS[d] = await rd("pf_supply_" + d); })) : null]);
   if (LV.used) notes.push("Gym, community pool and dog park: where no register, broker fact or amenity file answers, Google Maps was asked live when this list was made (Places, not kept): a gym, a community or residence pool, or a dog park inside the home's own sub-community (its mapped homes, plus 150 m) answers yes as a cluster fact; else one inside the community's boundary answers yes as a community fact, with how far it is. Google finding none is never a no: it stays not known.");
-  if (owner) await Promise.all([...new Set(chosen.map((c) => c.d).filter(Boolean))].map(async (d) => { PS[d] = await kvJson(env, "pf_supply_" + d); }));
   const rankIn = {};
   const results = chosen.map((c) => {
     const g = q.compare ? c.d : "_"; rankIn[g] = (rankIn[g] || 0) + 1;

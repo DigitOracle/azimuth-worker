@@ -20,6 +20,7 @@
 //
 //   node test/test_brief_api.mjs
 import worker from "../src/index.js";
+import { __resetKvMemo } from "../src/brief.js";
 import { nameAgrees, verdictOf, estLeft, nkey, bedsLeftRow } from "../src/brief.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -34,7 +35,9 @@ const ok = (c, m, d) => { if (c) { pass++; console.log("  ok - " + m); } else { 
 
 // ---- the worker harness (v186 / v274) -------------------------------------------------------------------
 const READ = "client_read_key_in_links_123", CLIENT = "a_client_key_for_links_456";
-const store = new Map();
+// v292 - the search keeps what it reads in a per-isolate memo (src/brief.js kvJsonMemo); this test swaps stored values in place
+// between requests, so a write here drops the memo (live, a new value is read within KV_MEMO_TTL_MS).
+const store = new (class extends Map { set(k, v) { __resetKvMemo(); return super.set(k, v); } delete(k) { __resetKvMemo(); return super.delete(k); } })();
 let writes = 0;
 const KV = {
   async get(k) { return store.has(k) ? store.get(k) : null; },
