@@ -440,9 +440,58 @@ export function completionOf(card, brochure) {
   if (brochure && brochure.completed && yearOf(brochure.completed)) return { year: yearOf(brochure.completed), src: "the developer's own project page" };
   return null;
 }
+// ---- v289 (Kendall, 2 Oct 2026: a DAMAC Hills brief came back "not known" for pool, pets and gym on every home - "we need to know if
+// they have it, 99% do"). The amenity facts file, one per district: naj-market-pulse scripts/build_amenities.py ->
+// data/amenities/amenities_<district>.json -> KV img_amenities_<district> (plain or gzipped JSON). Per home {key, keys, names, facts:
+// {criterion: {v, level: building | cluster | community, say, source_name, as_of, quote?, url?, detail?}}}: the Land Department
+// buildings and units registers, the developer's own pages, the owners' association budgets and OpenStreetMap, each naming its
+// source, with a community's facts inherited by every home in it. A file answer fills only what the answers above leave open.
+export const AMEN_CRITS = ["private_pool", "community_pool", "pets", "gym", "parking", "balcony"];
+export function amenIndex(doc) {
+  if (!doc || !Array.isArray(doc.homes)) return null;
+  const byKey = new Map(), byName = new Map(), dup = new Set();
+  for (const h of doc.homes) {
+    for (const k of (h.keys || []).concat(h.key ? [h.key] : [])) if (k) byKey.set(String(k).toLowerCase(), h);
+    for (const n of h.names || []) { const k = nkey(n); if (!k) continue; if (byName.has(k) && byName.get(k) !== h) dup.add(k); else byName.set(k, h); }
+  }
+  for (const k of dup) byName.delete(k);                                         // a name two homes share answers for neither
+  return { doc, byKey, byName };
+}
+// c: {key?, d?, i?, it?: {p}, name, aliases} -> the file's home, by our key, then the rent record's DLD key, then the exact name (nkey)
+export function amenFor(AX, c) {
+  if (!AX || !c) return null;
+  const ks = [];
+  if (c.key) ks.push(String(c.key).toLowerCase());
+  if (c.d && c.i != null) ks.push((c.d + ":" + c.i).toLowerCase());
+  if (c.it && c.it.p) ks.push("dld:" + String(c.it.p).toLowerCase());
+  for (const k of ks) if (AX.byKey.has(k)) return AX.byKey.get(k);
+  for (const n of [c.name].concat(c.aliases || [])) { const h = AX.byName.get(nkey(n)); if (h) return h; }
+  return null;
+}
+const LEVEL_SAY = { building: "a building fact", cluster: "a cluster fact", community: "a community fact" };
+// "Community pools (DAMAC Hills: temperature-controlled swimming pools) - a community fact, per DAMAC's own DAMAC Hills page (2026-09-18)"
+export function amenSrc(f) {
+  return String(f.say || "") + " - " + (LEVEL_SAY[f.level] || "a fact") + ", per " + (f.source_name || "a named source") +
+    (f.as_of ? " (" + f.as_of + ")" : "") + (f.quote ? ": “" + f.quote + "”" : "") + (f.src === "osm" ? ". © OpenStreetMap contributors" : "");
+}
+function applyAmen(out, af) {
+  for (const k of AMEN_CRITS) {
+    const cur = out[k];
+    if (cur && cur.v != null && !cur.level) { cur.level = "building"; cur.src = cur.src + " (a building fact)"; }   // the developer page or the building record
+  }
+  if (!af || !af.facts) return out;
+  for (const k of AMEN_CRITS) {
+    const f = af.facts[k], cur = out[k];
+    if (!f || typeof f.v !== "boolean" || (cur && cur.v != null)) continue;      // an answer already given stands; the file fills "not known"
+    out[k] = { v: f.v, src: amenSrc(f), level: f.level || null, source: f.source_name || null, ...(f.url ? { url: f.url } : {}),
+      ...((f.detail || (cur && cur.detail)) ? { detail: [f.detail, cur && cur.detail].filter(Boolean).join(". ") } : {}) };
+  }
+  return out;
+}
+
 const parksNear = (pos, AM, m) => !pos || !AM || !AM.items ? [] : AM.items.filter((a) => a.k === "park" && a.lon != null)
   .map((a) => ({ n: a.n, acc: a.acc || null, m: Math.round(metres(pos, [a.lon, a.lat])) })).filter((a) => a.m <= m).sort((a, b) => a.m - b.m);
-export function criteriaOf({ c, card, brochure, AM, musts, villa, s }) {
+export function criteriaOf({ c, card, brochure, AM, musts, villa, s, af }) {
   const am = ((brochure && brochure.amenities) || []).map(String);
   const has = (rx) => am.find((a) => rx.test(a)) || null;
   const DEV = "the developer's own project page" + (brochure && brochure.source_url ? " (" + brochure.source_url + ")" : "");
@@ -480,7 +529,7 @@ export function criteriaOf({ c, card, brochure, AM, musts, villa, s }) {
     const th = /town\s?-?houses?/i.test([c.name].concat(c.aliases || []).join(" "));
     out.townhouse = th ? { v: true, src: "the Land Department project name says townhouses" } : { v: null, src: "Not known: filed as Villa; the Ejari register does not separate villas from townhouses" };
   }
-  return out;
+  return applyAmen(out, af);                                                     // v289 - the amenity facts file fills what is left open
 }
 export const FURNISHED_UNKNOWN = "Not known: the Ejari register does not record whether a home is furnished.";
 // OWNER ONLY (never on a client key, never in a PDF): what the listing sites' adverts say about furnishing, from the advertised-supply
@@ -515,6 +564,11 @@ function whyOf(c, q) {
   if (c.completeness.layouts) parts.push("full layout data");
   if (c.completeness.photos) parts.push("developer photos on file");
   if (!c.completeness.record) parts.push("no building page in the app yet");
+  // v289 - the must-haves and nice-to-haves met, each with its level and source
+  for (const k of (q.musts || []).concat(q.nice || [])) {
+    const a = c.crit && c.crit[k];
+    if (a && a.v === true) parts.push(CRIT_LABEL[k] + ": yes (" + (a.level ? LEVEL_SAY[a.level] + ", " : "") + "per " + (a.source || (a.level === "building" ? "the building's own record or page" : "the source shown")) + ")");
+  }
   return parts.join("; ");
 }
 
@@ -665,7 +719,9 @@ export async function briefSearch(env, sp, opts) {
     c.brochure = k ? await kvJson(env, k.slice(4)) : null;
   }));
   const AM = await kvJson(env, "amenities");
-  const AV = await loadDevAvail(env);                                          // v277 - the developers' own sheets, where we hold them
+  const AMF = {};                                                              // v289 - the amenity facts per district (img_amenities_<district>)
+  await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].map(async (d) => { AMF[d] = amenIndex(await kvJson(env, "amenities_" + d)); }));
+  const AV = await loadDevAvail(env);                                         // v277 - the developers' own sheets, where we hold them
   const tenancy = {};
   const bedsLeft = {};
   if (q.mode === "rent") await Promise.all([...new Set(cands.filter((c) => c.d && !EXTRA_AREAS[c.d]).map((c) => c.d))].map(async (d) => {
@@ -680,7 +736,7 @@ export async function briefSearch(env, sp, opts) {
     const mm = mustsOf(c, card, c.brochure, AM);
     c.musts = mm.musts; c.nearest = mm.nearest;
     const st = q.mode === "rent" ? (rentStat(c.it, c.evidence.home === "villa" ? "v" : "b", c.bed) || {}).s : null;
-    c.crit = criteriaOf({ c, card, brochure: c.brochure, AM, musts: c.musts, villa: c.evidence.home === "villa", s: st });
+    c.crit = criteriaOf({ c, card, brochure: c.brochure, AM, musts: c.musts, villa: c.evidence.home === "villa", s: st, af: amenFor(AMF[c.d], c) });
     c.comp = completionOf(card, c.brochure);
     if (q.musts.some((m) => c.crit[m] && c.crit[m].v === false)) { droppedByMust++; continue; }   // ONLY a definite no leaves it out
     c.completeness = {
@@ -699,6 +755,9 @@ export async function briefSearch(env, sp, opts) {
   if (q.musts.length || q.nice.length) notes.push("Must-haves and nice-to-haves: each is answered yes, no or not known, with its source. A building is left out only where a source says no; not known never leaves a building out. Nice-to-haves only change the order. " +
     "Metro: straight-line to the nearest RTA station, within 1 km. Schools and parks: the app's amenity layer within 1 km (none found is not proof of none). " +
     "Pools, gym, parking: the developer's own project page or the Land Department building record. Private pools and pet rules are in no register we hold. Newer or modern: completed " + MODERN_FROM + " or later on the Dubai Municipality building record. Long-term quality is not scored: no service-charge, maintenance or developer-record data is held per building.");
+  const amenDs = Object.keys(AMF).filter((d) => AMF[d]);
+  if (amenDs.length && (q.musts.length || q.nice.length)) notes.push("Pools, pets, gym, parking and balconies are also answered from the amenity facts file for " + amenDs.map((d) => DN[d] || d).join(", ") +
+    " (KV img_amenities_<district>): the Land Department buildings and units registers, the developer's own pages, owners' association budgets and OpenStreetMap. Each answer names its source and says whether it is a building fact (this building's own record or page) or a community fact (the master community's, which every home in it shares). Not known means no source we hold says.");
   if (q.furnished !== "either") notes.push("Furnished: not known for any home - the Ejari register does not record furnishing." + (owner ? " The owner view adds what listing-site adverts say, where the advertised-supply data carries it (furnished_hint); a client never sees it." : ""));
 
   const score = (c) => (c.completeness.record ? 1 : 0) + (c.completeness.layouts ? 1 : 0) + (c.completeness.photos ? 1 : 0);

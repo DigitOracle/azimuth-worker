@@ -44,7 +44,7 @@ import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailF
 // v282 (Kendall, 1 Oct 2026): the client's criteria and the area comparison come from the SAME functions /brief_api uses, so the list
 // and the documents can never disagree. A document is a client document: the search is run with owner: false, and nothing here ever
 // prints a listing-site (portal) figure - furnishing is "not known" on every page.
-import { briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent } from "./brief.js";
+import { amenIndex, amenFor, briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent } from "./brief.js";
 // v277 (Kendall, 1 Oct 2026): the register "left" estimate is OFF the client face - no "ESTIMATED ... LEFT" box on page 2, no
 // "Still filling" line on the one-sheet card. estimateLeft() stays in src/brief.js and the API still returns estimated_left; nothing
 // here prints it. In its place page 2 carries DEVELOPER AVAILABILITY where a developer's own sheet names the building (loadDevAvail /
@@ -346,6 +346,7 @@ export async function loadContext(env, q, opts) {
       // v289 - the layer through the gzip-aware reader (src/brief.js kvJson): a layer published gzipped must not read as "no layer"
       units: need.units ? await kvJson(env, "units_" + d) : null, layer: need.map ? await kvJsonGz(env, "brief_fp_" + d) : null,
       areaIdx: undefined,                            // v289 - the register community -> footprints index (areaIndex), read on first need
+      amen: amenIndex(await kvJsonGz(env, "amenities_" + d)),   // v289 - the amenity facts file, plain or gzipped (src/brief.js), same answers as the list
     };
     return C.district[d];
   };
@@ -403,7 +404,8 @@ export async function loadContext(env, q, opts) {
     rec.avail = devAvailFor(C.avail, { name: it.n, aliases: (it.a || []).concat(um && um.name ? [um.name] : []) }, B.all ? "all" : +BEDS[rec.beds].band);
     // v282 - the client's criteria for this building: the same function and sources as the /brief list
     const cc = { name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, key };
-    rec.crit = criteriaOf({ c: cc, card: um, brochure: br, AM: C.amen, musts: mustsOf(cc, um, br, C.amen).musts, villa: kind === "v", s: st });
+    rec.af = D ? amenFor(D.amen, { key, d, i: it.i, it, name: it.n, aliases: it.a || [] }) : null;   // v289
+    rec.crit = criteriaOf({ c: cc, card: um, brochure: br, AM: C.amen, musts: mustsOf(cc, um, br, C.amen).musts, villa: kind === "v", s: st, af: rec.af });
     if (br) {
       const ext = br.photos.find((p) => /^exterior/.test(p.file || ""));
       // hero_key / card_key: the same picture pre-cropped by push_brochures.py to the print aspect (2.34:1 hero, 3:2 card and page-3
@@ -778,6 +780,24 @@ function titleOf(C, q) {
   const budget = q.min && q.max && q.min < q.max ? ", AED " + money(q.min) + "&ndash;" + money(q.max) + " a year" : q.max ? ", around AED " + money(q.max) + " a year" : "";
   return count + " " + (B.all ? "" : bedsWordOf(q) + " ") + "option" + (n === 1 ? "" : "s") + " in " + esc(where) + budget;
 }
+// v289 - where the developer's page lists no amenities, the card says what the amenity facts file answers (img_amenities_<district>,
+// the same answers as the criteria), grouped by level: "Community (DAMAC Hills): community pool, pet-friendly, gym &middot; This building: parking"
+const AMEN_SHORT = { community_pool: "community pool", private_pool: "private pool", pets: "pet-friendly", gym: "gym", parking: "parking", balcony: "balconies" };
+export function amenLine(rec) {
+  const lv = { building: [], cluster: [], community: [] };
+  for (const k of Object.keys(AMEN_SHORT)) { const c = rec.crit && rec.crit[k]; if (c && c.v === true && lv[c.level || "building"]) lv[c.level || "building"].push(AMEN_SHORT[k]); }
+  const where = rec.af && rec.af.community_name ? " (" + esc(rec.af.community_name) + ")" : "";
+  const out = [];
+  if (lv.community.length) out.push("Community" + where + ": " + lv.community.join(", "));
+  if (lv.cluster.length) out.push("This cluster: " + lv.cluster.join(", "));
+  if (lv.building.length) out.push("This building: " + lv.building.join(", "));
+  return out.join(" &middot; ");
+}
+// v289 - no map position (villa clusters): the file's metro fact, where a source gives one ("No metro nearby (DAMAC Hills)")
+export function amenMetro(rec) {
+  const f = rec.af && rec.af.facts && rec.af.facts.metro;
+  return f && typeof f.v === "boolean" ? esc(f.say) + " - " + (f.level === "community" ? "a community fact" : "a building fact") + ", per " + esc(f.source_name || "a named source") : "";
+}
 // v277: the card carries no "Still filling" line any more (the register estimate is off the client face)
 function oneSheetCards(C, q) {
   const B = BEDS[q.beds];
@@ -786,8 +806,8 @@ function oneSheetCards(C, q) {
   const cols0 = Math.min(5, Math.max(3, C.recs.length)), cardW = (1063 - 9 * (cols0 - 1)) / cols0 - 2;
   const cards = C.recs.map((rec) => {
     const st = rec.st;
-    const metro = rec.pos ? (() => { const m = nearestMetro(C, rec.pos); return m ? esc(m.n) + " metro, " + kmTxt(m.d) : "Metro distance to follow"; })() : "Metro distance to follow";
-    const amen = ((rec.br && rec.br.amenities) || []).slice(0, 3).map((a) => esc(a.split(" (")[0])).join(", ") || "Amenities to follow";
+    const metro = rec.pos ? (() => { const m = nearestMetro(C, rec.pos); return m ? esc(m.n) + " metro, " + kmTxt(m.d) : amenMetro(rec) || "Metro distance to follow"; })() : amenMetro(rec) || "Metro distance to follow";
+    const amen = ((rec.br && rec.br.amenities) || []).slice(0, 3).map((a) => esc(a.split(" (")[0])).join(", ") || amenLine(rec) || "Amenities to follow";
     const perType = B.all ? Object.keys(rec.sts || {}).map((b) => '<div style="font-size:10px;color:' + INK + ';">' + esc(bandLabel(b)) + ": AED " + money(rec.sts[b].m) + " &middot; " + rec.sts[b].n + " let</div>").join("") : "";
     return '<div class="bcard" style="border:1px solid #E6E1D8;background:#FFF;display:flex;flex-direction:column;overflow:hidden;min-height:0;">' +
       '<div style="position:relative;">' + thumb(rec, cardW, 136, C) + '<div style="position:absolute;left:6px;top:6px;width:24px;height:24px;border-radius:12px;background:' + NAVY +
