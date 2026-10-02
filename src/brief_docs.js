@@ -343,7 +343,9 @@ export async function loadContext(env, q, opts) {
       name: C.dname[d] || (it && pretty(it.area)) || d,
       unitmix: await kvJson(env, "unitmix_" + d),
       bedsLeft: null, tenancy: null,                 // v277 - the "left" estimate is no longer printed, so its sources are not read
-      units: need.units ? await kvJson(env, "units_" + d) : null, layer: need.map ? await kvJson(env, "brief_fp_" + d) : null,
+      // v289 - the layer through the gzip-aware reader (src/brief.js kvJson): a layer published gzipped must not read as "no layer"
+      units: need.units ? await kvJson(env, "units_" + d) : null, layer: need.map ? await kvJsonGz(env, "brief_fp_" + d) : null,
+      areaIdx: undefined,                            // v289 - the register community -> footprints index (areaIndex), read on first need
     };
     return C.district[d];
   };
@@ -418,6 +420,14 @@ export async function loadContext(env, q, opts) {
       }
     }
     // v285 - what the card's picture is: the developer's photograph, else the Blocks view of the building (see blocksThumb)
+    // v289 - a register record with no app building and no position (every DAMAC Hills villa and townhouse community: "dld:" keys such
+    // as DAMAC HILLS - TOPANGA) is located by its OWN name: the footprints the district model (img_anchors_<d>) attributes to the Land
+    // Department sub-community of exactly that name. Exact name only - a prefix names a family (Brookfield-1 is not Brookfield-2) - and
+    // never for a record /brief_api unbound from another building (it must not borrow that building's land).
+    if (need.map && D && D.layer && it.i == null && !it.unbound && !rec.cardPic && !rec.heroPic) {
+      if (D.areaIdx === undefined) D.areaIdx = areaIndex(await kvJsonGz(env, "anchors_" + d));
+      if (D.areaIdx) for (const n of [it.n].concat(it.a || [])) { const ids = D.areaIdx.get(norm(n)); if (ids) { rec.areaIds = ids; break; } }
+    }
     rec.picSource = rec.cardPic || rec.heroPic ? "photo" : blocksKind(rec, D && D.layer);
     C.recs.push(rec);
   }
@@ -602,7 +612,8 @@ function buildingSource(rec) {
 const BV_SAY = "A Blocks view is the building as a simple block on the app's district model (footprints and streets &copy; OpenStreetMap contributors), heights to scale, seen from the south - a picture of where and how tall it is, not a photograph.";
 const nearbySource = () => "Metro: RTA station register. Schools (with their KHDA inspection rating) and clinics (Dubai Health Authority licence register): the nearest to this building, straight-line distances, not walking or driving times.";
 function pictureSource(rec) {
-  const bv = rec.picSource && rec.picSource !== "photo" && rec.picSource !== "none" ? " The picture on page 1 is a Blocks view, not a photograph: " + BV_SAY : "";
+  const bv = rec.picSource && rec.picSource !== "photo" && rec.picSource !== "none" ? " The picture on page 1 is a Blocks view, not a photograph: " + BV_SAY +
+    (rec.picSource === "blocks_area" ? " This record is a community of homes, not one building: the homes in gold are those the district model places in its Land Department sub-community - an approximate area." : "") : "";
   if (!rec.br) return (rec.brRefused ? "Pictures and amenities: not shown - " + esc(rec.brRefused) + "." : "Pictures and amenities: to follow from the developer's own project page.") + bv;
   return "Pictures and amenities: the developer's own project page, " + esc(rec.br.source_url || "not yet verified") + (rec.br.retrieved ? ", retrieved " + esc(rec.br.retrieved) : "") + ". " +
     esc(rec.br.amenities_note || rec.br.photos_note || "");
@@ -686,10 +697,11 @@ function dossierPage2(C, rec, q, sub) {
   const cb = criteriaBlock(rec, q);                    // v282 - how it meets the client's brief; the map shrinks to make room
   const mw = cb ? (rec.avail && rec.avail.count ? 470 : 560) : 700;
   const map = svg ? '<div style="width:' + (mw + 2) + 'px;border:1px solid #E6E1D8;line-height:0;">' + svg.replace("<svg ", '<svg style="width:' + mw + 'px;height:auto;display:block;" ') + "</div>" : MAP_TO_FOLLOW(cb ? 300 : 468);
-  const body = '<div class="serif" style="font-size:24px;color:' + NAVY + ';">Where it is</div><div class="sub">The building in gold on its own plot, among the other buildings of ' + esc(rec.dist) +
+  const body = '<div class="serif" style="font-size:24px;color:' + NAVY + ';">Where it is</div><div class="sub">' + (mark.area ? "The community&rsquo;s homes in gold (an approximate area), among the other buildings of " : "The building in gold on its own plot, among the other buildings of ") + esc(rec.dist) +
     ". Simple blocks, heights to scale, seen from the south.</div>" + map + cb + availBlock(rec, q);
   return page(C, sub, body, smallPrint([
-    svg ? "Map: footprints and streets &copy; OpenStreetMap contributors; building position from the app's district model" + (mark.approx ? " (this one approximate, from a public map listing)" : "") + "." : "Map: to follow - " + (D.layer ? "this building has no verified map position yet" : "the district map layer is not yet published") + ".",
+    svg ? "Map: footprints and streets &copy; OpenStreetMap contributors; building position from the app's district model" + (mark.approx ? " (this one approximate, from a public map listing)" : "") +
+      (mark.area ? " - here the homes the district model places in the Land Department sub-community of this name, an approximate area, not a surveyed boundary" : "") + "." : "Map: to follow - " + (D.layer ? "this building has no verified map position yet" : "the district map layer is not yet published") + ".",
     rec.avail && rec.avail.count ? "Availability: " + esc(rec.avail.developer) + "'s own availability sheet of " + esc(rec.avail.as_of || "") + ", as posted to the broker group; the developer's statement, not a register." : ""]));
 }
 
@@ -864,7 +876,22 @@ export function markOf(rec, layer) {
     const floors = rec.um && rec.um.floors;
     return Object.assign(base, { placed: true, approx: true, xy: [a * lon + b * lat + c, d * lon + e * lat + f], side: 40, h: floors ? floors * 3.4 : 30 });
   }
+  // v289 - a register community (no app building, no position): the footprints the district model attributes to its own name (areaIds,
+  // set in loadContext). Approximate by nature - the register geocodes a sub-community once - so it is drawn and labelled as such.
+  if (Array.isArray(rec.areaIds) && rec.areaIds.length) {
+    const want = new Set(rec.areaIds), got = layer.b.filter((b) => want.has(b[0])).map((b) => b[0]);
+    if (got.length) return Object.assign(base, { placed: true, area: true, ids: got });
+  }
   return base;
+}
+// v289 - the district model's register attribution: normalised sub-community name -> the layer footprint ids (anchor i = layer id,
+// scripts/brief_map_layers.py writes the layer in the anchors' feature order). null when the district has no anchors.
+export function areaIndex(anchors) {
+  const list = anchors && Array.isArray(anchors.anchors) ? anchors.anchors : null;
+  if (!list) return null;
+  const m = new Map();
+  for (const a of list) { if (!a || !a.cluster || a.i == null) continue; const k = norm(a.cluster); if (!k) continue; if (!m.has(k)) m.set(k, []); m.get(k).push(a.i); }
+  return m;
 }
 
 // ------------------------------------------------------------------------------------------------ v285: the Blocks view picture
@@ -875,20 +902,24 @@ export function markOf(rec, layer) {
 // on the picture itself, so it is never taken for a photograph. Three cases, never an empty box:
 //   blocks          the building's own footprint(s) on the layer (exact)
 //   blocks_approx   no footprint, but a map position: an indicative dashed block at that position (a small locator map)
-//   district        neither (an unbound register record): the district's blocks with nothing picked out, "position not yet verified"
+//   blocks_area     v289 - a register community with no building of its own (DAMAC Hills villas): the footprints the district model
+//                   attributes to that community, in pale gold, "approximate area"
+//   district        none of these: the district's blocks with nothing picked out, "position not yet verified"
 // A district with no layer (or a building outside every layer) is "none": the plain "picture to follow" box, as before.
+// v289 (Kendall, 2 Oct 2026): Naj's DAMAC Hills rent brief came out with "no pictures" - every villa and townhouse result is a "dld:"
+// register community, so EVERY card was the same whole-district view with nothing picked out (and the map page "Map to follow").
 export function blocksKind(rec, layer) {
   if (!layer || !Array.isArray(layer.b) || !layer.b.length) return "none";
   const m = markOf(rec, layer);
-  return m.placed ? (m.approx ? "blocks_approx" : "blocks") : "district";
+  return m.placed ? (m.area ? "blocks_area" : m.approx ? "blocks_approx" : "blocks") : "district";
 }
 export function blocksThumb(rec, layer, w, h, o) {
   const kind = blocksKind(rec, layer);
   if (kind === "none") return null;
   const mark = markOf(rec, layer);
   const pairs = (f) => { const r = []; for (let k = 0; k + 1 < f.length; k += 2) r.push([f[k], f[k + 1]]); return r; };
-  const hiIds = new Set(kind === "blocks" ? mark.ids : []);
-  let tgt = layer.b.filter((b) => hiIds.has(b[0])).map(([, hh, f]) => ({ r: pairs(f), h: hh, kind: "hi" }));
+  const hiIds = new Set(kind === "blocks" || kind === "blocks_area" ? mark.ids : []);
+  let tgt = layer.b.filter((b) => hiIds.has(b[0])).map(([, hh, f]) => ({ r: pairs(f), h: hh, kind: kind === "blocks_area" ? "area" : "hi" }));
   if (kind === "blocks_approx") { const [cx, cy] = mark.xy, s = mark.side / 2; tgt = [{ r: [[cx - s, cy - s], [cx + s, cy - s], [cx + s, cy + s], [cx - s, cy + s], [cx - s, cy - s]], h: mark.h, kind: "approx" }]; }
   // the frame, in the view's own units (metres across; metres up the picture after the 50-degree tilt)
   let gx0 = Infinity, gx1 = -Infinity, gy0 = Infinity, gy1 = -Infinity, v0 = Infinity, v1 = -Infinity;
@@ -901,7 +932,8 @@ export function blocksThumb(rec, layer, w, h, o) {
   let Wf;
   const uc = (gx0 + gx1) / 2, vc = (v0 + v1) / 2;
   if (tgt.length) {
-    Wf = Math.max(260, (gx1 - gx0) * 3.2, (gy1 - gy0) * 2.2);
+    // v289 - a community is many small homes: frame the community itself with a margin, not three times its width
+    Wf = kind === "blocks_area" ? Math.max(260, (gx1 - gx0) * 1.4, (gy1 - gy0) * 1.25) : Math.max(260, (gx1 - gx0) * 3.2, (gy1 - gy0) * 2.2);
     if ((v1 - v0) * 1.35 > Wf * asp) Wf = (v1 - v0) * 1.35 / asp;          // a tall tower: widen until its full height fits
   } else Wf = Math.max(gx1 - gx0, (v1 - v0) / asp) * 1.04;
   const Hf = Wf * asp, U0 = uc - Wf / 2, V0 = vc - Hf / 2, k = w / Wf;
@@ -914,7 +946,8 @@ export function blocksThumb(rec, layer, w, h, o) {
   const inFrame = (r, hh) => r.some(([x]) => x > U0 - 60 && x < U0 + Wf + 60) && r.some(([, y]) => y * KY + (hh || 0) * KH > V0 - 40 && y * KY < V0 + Hf + 40);
   const blds = layer.b.filter((b) => !hiIds.has(b[0])).map(([, hh, f]) => ({ r: pairs(f), h: hh, kind: "ctx" })).filter((b) => inFrame(b.r, b.h)).concat(tgt);
   const out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + r2(w) + " " + r2(h) + '" width="' + r2(w) + '" height="' + r2(h) + '" style="display:block;">',
-    "<style>.bvw{fill:" + MAPC.CTX_WALL + ";stroke:" + MAPC.CTX_EDGE + ";stroke-width:0.4;stroke-linejoin:round}.bvr{fill:" + MAPC.CTX_ROOF + ";stroke:" + MAPC.CTX_EDGE + ";stroke-width:" + (coarse ? 0.25 : 0.4) + ";stroke-linejoin:round}.bvg{fill-opacity:0.32;stroke-opacity:0.6}</style>",
+    // v289 - the coarse district view's roofs in the wall grey with a darker edge: in roof grey on the page's off-white they all but vanished
+    "<style>.bvw{fill:" + MAPC.CTX_WALL + ";stroke:" + MAPC.CTX_EDGE + ";stroke-width:0.4;stroke-linejoin:round}.bvr{fill:" + (coarse ? MAPC.CTX_WALL : MAPC.CTX_ROOF) + ";stroke:" + (coarse ? "#A9ABA3" : MAPC.CTX_EDGE) + ";stroke-width:" + (coarse ? 0.35 : 0.4) + ";stroke-linejoin:round}.bvg{fill-opacity:0.32;stroke-opacity:0.6}</style>",
     '<rect width="' + r2(w) + '" height="' + r2(h) + '" fill="' + MAPC.BG + '"/>'];
   const lw = Math.max(0.6, Math.min(3, k * 4));
   const streets = (layer.s || []).map(([c, f]) => ({ c, r: pairs(f) })).filter((s) => (!coarse || s.c >= 6) && inFrame(s.r, 0));
@@ -936,9 +969,9 @@ export function blocksThumb(rec, layer, w, h, o) {
   for (const b of blds) {
     let r = b.r; if (area(r) < 0) r = r.slice().reverse();
     const ctx = b.kind === "ctx", gh = ghost(b) ? " bvg" : "";
-    const [roof, wall, edge, sw] = b.kind === "hi" ? [MAPC.GOLD, MAPC.GOLD_WALL, MAPC.GOLD_EDGE, 0.9] : ["#E6D6B2", "#CDB684", MAPC.GOLD_EDGE, 0.9];
+    const [roof, wall, edge, sw] = b.kind === "hi" || b.kind === "area" ? [MAPC.GOLD, MAPC.GOLD_WALL, MAPC.GOLD_EDGE, b.kind === "area" ? 0.5 : 0.9] : ["#E6D6B2", "#CDB684", MAPC.GOLD_EDGE, 0.9];
     const dash = b.kind === "approx" ? ' stroke-dasharray="4 2.5"' : "";
-    const paint = (c, fill) => ctx ? ' class="' + c + gh + '"' : ' class="' + (b.kind === "hi" ? "hiblock" : "approxblock") + '" fill="' + fill + '" stroke="' + edge + '" stroke-width="' + sw + '" stroke-linejoin="round"' + dash;
+    const paint = (c, fill) => ctx ? ' class="' + c + gh + '"' : ' class="' + (b.kind === "hi" ? "hiblock" : b.kind === "area" ? "areablock" : "approxblock") + '" fill="' + fill + '" stroke="' + edge + '" stroke-width="' + sw + '" stroke-linejoin="round"' + dash;
     const walls = [];
     for (let q = 0; q + 1 < r.length; q++) { const [x0, y0] = r[q], [x1, y1] = r[q + 1]; if (x1 - x0 > 0) walls.push([(y0 + y1) / 2, [[x0, y0, 0], [x1, y1, 0], [x1, y1, b.h], [x0, y0, b.h]]]); }
     walls.sort((a, c) => c[0] - a[0]);
@@ -949,7 +982,8 @@ export function blocksThumb(rec, layer, w, h, o) {
   }
   }
   out.push("</svg>");
-  const say = kind === "blocks" ? "Blocks view" : kind === "blocks_approx" ? "Blocks view &middot; approximate position" : "Blocks view &middot; " + esc((o && o.district) || rec.dist || "") + " &middot; position not yet verified";
+  const say = kind === "blocks" ? "Blocks view" : kind === "blocks_approx" ? "Blocks view &middot; approximate position"
+    : kind === "blocks_area" ? "Blocks view &middot; the community&rsquo;s homes, approximate area" : "Blocks view &middot; " + esc((o && o.district) || rec.dist || "") + " &middot; position not yet verified";
   return { kind, html: '<div class="blocksview" data-kind="' + kind + '" style="width:' + r2(w) + "px;height:" + r2(h) + 'px;overflow:hidden;position:relative;">' + out.join("") +
     '<div style="position:absolute;right:4px;bottom:3px;font-size:' + ((o && o.fs) || 7.5) + "px;line-height:1.2;color:#5E5B52;background:rgba(255,255,255,0.82);padding:1px 4px;letter-spacing:.2px;\">" + say + "</div></div>" };
 }
@@ -958,7 +992,7 @@ export function briefMapSvg(layer, marks, o) {
   const pairs = (f) => { const r = []; for (let k = 0; k + 1 < f.length; k += 2) r.push([f[k], f[k + 1]]); return r; };
   const hiById = new Map();
   for (const m of marks) if (m.placed && m.ids) for (const i of m.ids) hiById.set(i, m);
-  const blds = layer.b.map(([i, h, f]) => ({ r: pairs(f), h, kind: hiById.has(i) ? "hi" : "ctx", m: hiById.get(i) || null }));
+  const blds = layer.b.map(([i, h, f]) => ({ r: pairs(f), h, kind: hiById.has(i) ? (hiById.get(i).area ? "area" : "hi") : "ctx", m: hiById.get(i) || null }));   // v289 - "area": a register community's homes
   for (const m of marks) if (m.placed && m.approx) {
     const [cx, cy] = m.xy, s = m.side / 2;
     blds.push({ r: [[cx - s, cy - s], [cx + s, cy - s], [cx + s, cy + s], [cx - s, cy + s], [cx - s, cy - s]], h: m.h, kind: "approx", m });
@@ -1010,12 +1044,12 @@ export function briefMapSvg(layer, marks, o) {
   blds.sort((a, b) => Math.min(...b.r.map((p) => p[1])) - Math.min(...a.r.map((p) => p[1])));
   for (const b of blds) {
     let r = b.r; if (area(r) < 0) r = r.slice().reverse();
-    const [roof, wall, edge, lw] = b.kind === "ctx" ? [MAPC.CTX_ROOF, MAPC.CTX_WALL, MAPC.CTX_EDGE, 0.25] : b.kind === "hi" ? [MAPC.GOLD, MAPC.GOLD_WALL, MAPC.GOLD_EDGE, 0.5] : ["#E6D6B2", "#CDB684", MAPC.GOLD_EDGE, 0.6];
+    const [roof, wall, edge, lw] = b.kind === "ctx" ? [MAPC.CTX_ROOF, MAPC.CTX_WALL, MAPC.CTX_EDGE, 0.25] : b.kind === "hi" || b.kind === "area" ? [MAPC.GOLD, MAPC.GOLD_WALL, MAPC.GOLD_EDGE, 0.5] : ["#E6D6B2", "#CDB684", MAPC.GOLD_EDGE, 0.6];
     const dash = b.kind === "approx" ? ' stroke-dasharray="4 2.5"' : "";
     const walls = [];
     for (let k = 0; k + 1 < r.length; k++) { const [x0, y0] = r[k], [x1, y1] = r[k + 1]; if (x1 - x0 > 0) walls.push([(y0 + y1) / 2, [P(x0, y0), P(x1, y1), P(x1, y1, b.h), P(x0, y0, b.h)]]); }
     walls.sort((a, c) => c[0] - a[0]);
-    const cls = b.kind === "ctx" ? "" : ' class="' + (b.kind === "hi" ? "hiblock" : "approxblock") + '"';
+    const cls = b.kind === "ctx" ? "" : ' class="' + (b.kind === "hi" ? "hiblock" : b.kind === "area" ? "areablock" : "approxblock") + '"';
     if (b.kind === "ctx") {
       if (walls.length) out.push('<path class="bmw" d="' + walls.map((w) => path(w[1], true)).join("") + '"/>');
       out.push('<path class="bmr" d="' + path(r.map(([x, y]) => P(x, y, b.h)), true) + '"/>');
@@ -1048,9 +1082,9 @@ export function briefMapSvg(layer, marks, o) {
     const m = anch.get(n)[3], rp2 = S(roofPt.get(n)), c = S([bxd, byd]), top = S([bxd, byd - R * 0.95]), rr = R * sc;
     out.push('<g class="badge"><line x1="' + f1(rp2[0]) + '" y1="' + f1(rp2[1]) + '" x2="' + f1(top[0]) + '" y2="' + f1(top[1]) + '" stroke="' + MAPC.TEAL + '" stroke-width="' + f1(0.9 * PT) + '" stroke-linecap="round"/>' +
       '<circle cx="' + f1(rp2[0]) + '" cy="' + f1(rp2[1]) + '" r="' + f1(Math.max(1.5, 7 * sc)) + '" fill="' + MAPC.TEAL + '"/>' +
-      (m.approx ? '<circle cx="' + f1(c[0]) + '" cy="' + f1(c[1]) + '" r="' + f1(rr) + '" fill="#FFFFFF" stroke="' + MAPC.TEAL + '" stroke-width="' + f1(1.6 * PT) + '" stroke-dasharray="3 2"/>'
+      (m.approx || m.area ? '<circle cx="' + f1(c[0]) + '" cy="' + f1(c[1]) + '" r="' + f1(rr) + '" fill="#FFFFFF" stroke="' + MAPC.TEAL + '" stroke-width="' + f1(1.6 * PT) + '" stroke-dasharray="3 2"/>'
         : '<circle cx="' + f1(c[0]) + '" cy="' + f1(c[1]) + '" r="' + f1(rr) + '" fill="' + MAPC.TEAL + '" stroke="' + MAPC.GOLD + '" stroke-width="' + f1(1.8 * PT) + '"/>') +
-      '<text x="' + f1(c[0]) + '" y="' + f1(c[1]) + '" font-size="' + f1(Math.min(11 * PT, rr * 1.2)) + '" font-weight="bold" fill="' + (m.approx ? MAPC.TEAL : "#FFFFFF") + '" text-anchor="middle" dominant-baseline="central">' + n + "</text></g>");
+      '<text x="' + f1(c[0]) + '" y="' + f1(c[1]) + '" font-size="' + f1(Math.min(11 * PT, rr * 1.2)) + '" font-weight="bold" fill="' + (m.approx || m.area ? MAPC.TEAL : "#FFFFFF") + '" text-anchor="middle" dominant-baseline="central">' + n + "</text></g>");
   }
   // scale bar (east-west is true scale in this view) and north arrow
   const sb = (u, v) => S([xmin + 120 + u, 40 + v]);
@@ -1079,24 +1113,26 @@ export function briefMapSvg(layer, marks, o) {
   out.push('<text x="1117.5" y="188" font-size="' + f1(8.6 * PT) + '" fill="#5E5B52">' + esc(single ? "Numbered " + first.n + ", as on the one-sheet" : none ? "No building chosen" : "1–" + marks.length + " = rental options" + (B && !B.all ? ", " + B.short.replace(/s$/, "") + (o.q && o.q.max ? " around AED " + money(o.q.max) : "") : "")) + "</text>");
   let yy = 235;
   for (const m of marks) {
-    const ap = m.approx, cx = 1135.5, cy = yy - 4;
+    const ap = m.approx || m.area, cx = 1135.5, cy = yy - 4;   // v289 - a community: dashed, "approximate area"
     out.push(ap ? '<circle cx="' + cx + '" cy="' + cy + '" r="11" fill="#FFFFFF" stroke="' + MAPC.TEAL + '" stroke-width="1.9" stroke-dasharray="3 2"/>' : '<circle cx="' + cx + '" cy="' + cy + '" r="11" fill="' + MAPC.TEAL + '" stroke="' + MAPC.GOLD + '" stroke-width="1.9"/>');
     out.push('<text x="' + cx + '" y="' + cy + '" font-size="' + f1(9 * PT) + '" font-weight="bold" fill="' + (ap ? MAPC.TEAL : "#FFFFFF") + '" text-anchor="middle" dominant-baseline="central">' + m.n + "</text>");
     const nm = m.name.length > 34 ? m.name.slice(0, 33) + "…" : m.name;
-    out.push('<text x="1165.5" y="' + yy + '" font-size="' + f1(9.6 * PT) + '" fill="#2B2A26">' + esc(nm + (ap ? "  (approximate position)" : m.placed ? "" : "  (no map position yet)")) + "</text>");
+    out.push('<text x="1165.5" y="' + yy + '" font-size="' + f1(9.6 * PT) + '" fill="#2B2A26">' + esc(nm + (m.area ? "  (approximate area)" : ap ? "  (approximate position)" : m.placed ? "" : "  (no map position yet)")) + "</text>");
     yy += 52;
   }
   const key = (y, fc, ec, dash, label) => '<rect x="1117.5" y="' + (y - 16) + '" width="33" height="16" fill="' + fc + '" stroke="' + ec + '" stroke-width="1.2"' + (dash ? ' stroke-dasharray="3 2"' : "") + '/><text x="1165.5" y="' + (y - 4) + '" font-size="' + f1(8.3 * PT) + '" fill="#2B2A26">' + label + "</text>";
   out.push('<text x="1117.5" y="755" font-size="' + f1(10.5 * PT) + '" font-weight="bold" fill="' + MAPC.TEAL + '">Key</text>');
   out.push(key(785, MAPC.GOLD, MAPC.GOLD_EDGE, false, single ? "This building, on its plot" : "Rental option, building on its plot"));
   if (marks.some((m) => m.approx)) out.push(key(815, "#E6D6B2", MAPC.GOLD_EDGE, true, "Approximate position, indicative block"));
+  else if (marks.some((m) => m.area)) out.push(key(815, MAPC.GOLD, MAPC.GOLD_EDGE, true, "A community&#8217;s homes, approximate area"));
   out.push(key(845, MAPC.CTX_ROOF, MAPC.CTX_EDGE, false, "Other " + esc(dShort) + " buildings"));
   out.push('<line x1="1117.5" y1="867" x2="1150.5" y2="867" stroke="' + MAPC.CASE + '" stroke-width="4"/><line x1="1117.5" y1="867" x2="1150.5" y2="867" stroke="#FFFFFF" stroke-width="2.2"/>' +
     '<text x="1165.5" y="871" font-size="' + f1(8.3 * PT) + '" fill="#2B2A26">Streets</text>');
   ["Simple massing (LOD 100): each footprint raised to its", "height with a flat roof; heights to scale. View from", "the south, looking north."].forEach((t, k) =>
     out.push('<text x="1117.5" y="' + (897 + 14 * k) + '" font-size="' + f1(7.2 * PT) + '" fill="#8C887C">' + t + "</text>"));
   out.push('<text x="45" y="988" font-size="' + f1(6.5 * PT) + '" fill="#8C887C">Footprints and streets: &#169; OpenStreetMap contributors (district model). Positions: the app\'s district model' +
-    (marks.some((m) => m.approx) ? "; dashed blocks are approximate, from a public map listing" : "") + ".</text>");
+    (marks.some((m) => m.approx) ? "; dashed blocks are approximate, from a public map listing" : "") +
+    (marks.some((m) => m.area) ? "; a dashed number marks a community: the homes the district model places in that Land Department sub-community, approximate" : "") + ".</text>");
   out.push("</svg>");
   return out.join("");
 }
