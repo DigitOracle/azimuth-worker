@@ -44,7 +44,7 @@ import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailF
 // v282 (Kendall, 1 Oct 2026): the client's criteria and the area comparison come from the SAME functions /brief_api uses, so the list
 // and the documents can never disagree. A document is a client document: the search is run with owner: false, and nothing here ever
 // prints a listing-site (portal) figure - furnishing is "not known" on every page.
-import { briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent } from "./brief.js";
+import { amenIndex, amenFor, briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent } from "./brief.js";
 // v277 (Kendall, 1 Oct 2026): the register "left" estimate is OFF the client face - no "ESTIMATED ... LEFT" box on page 2, no
 // "Still filling" line on the one-sheet card. estimateLeft() stays in src/brief.js and the API still returns estimated_left; nothing
 // here prints it. In its place page 2 carries DEVELOPER AVAILABILITY where a developer's own sheet names the building (loadDevAvail /
@@ -344,6 +344,7 @@ export async function loadContext(env, q, opts) {
       unitmix: await kvJson(env, "unitmix_" + d),
       bedsLeft: null, tenancy: null,                 // v277 - the "left" estimate is no longer printed, so its sources are not read
       units: need.units ? await kvJson(env, "units_" + d) : null, layer: need.map ? await kvJson(env, "brief_fp_" + d) : null,
+      amen: amenIndex(await kvJsonGz(env, "amenities_" + d)),   // v289 - the amenity facts file, plain or gzipped (src/brief.js), same answers as the list
     };
     return C.district[d];
   };
@@ -401,7 +402,8 @@ export async function loadContext(env, q, opts) {
     rec.avail = devAvailFor(C.avail, { name: it.n, aliases: (it.a || []).concat(um && um.name ? [um.name] : []) }, B.all ? "all" : +BEDS[rec.beds].band);
     // v282 - the client's criteria for this building: the same function and sources as the /brief list
     const cc = { name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, key };
-    rec.crit = criteriaOf({ c: cc, card: um, brochure: br, AM: C.amen, musts: mustsOf(cc, um, br, C.amen).musts, villa: kind === "v", s: st });
+    rec.crit = criteriaOf({ c: cc, card: um, brochure: br, AM: C.amen, musts: mustsOf(cc, um, br, C.amen).musts, villa: kind === "v", s: st,
+      af: D ? amenFor(D.amen, { key, d, i: it.i, it, name: it.n, aliases: it.a || [] }) : null });
     if (br) {
       const ext = br.photos.find((p) => /^exterior/.test(p.file || ""));
       // hero_key / card_key: the same picture pre-cropped by push_brochures.py to the print aspect (2.34:1 hero, 3:2 card and page-3
