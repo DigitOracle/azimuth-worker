@@ -19,6 +19,7 @@
 //
 // Everything is in this file; src/index.js carries one import and one marked dispatch.
 
+import { applyBrokerFacts, brokerFor } from "./checklist_data.js";   // v291 CHECKLIST - Najjuko's on-site facts: below every register, above "not known"
 export const BRIEF_MUSTS = ["balcony", "metro", "pool", "gym", "parking", "new", "schools"];
 // v282 (Kendall, 1 Oct 2026, a real client brief: "a furnished 2-3 bedroom townhouse, AED 240K a year, up to 300K for a modern,
 // well-furnished home; a private pool preferred, or a community pool; a pet-friendly community with dog-walking routes and play
@@ -721,6 +722,8 @@ export async function briefSearch(env, sp, opts) {
   const AM = await kvJson(env, "amenities");
   const AMF = {};                                                              // v289 - the amenity facts per district (img_amenities_<district>)
   await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].map(async (d) => { AMF[d] = amenIndex(await kvJson(env, "amenities_" + d)); }));
+  const BRK = {};                                                              // v291 CHECKLIST - the broker's on-site facts (img_broker_facts_<district>)
+  await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].map(async (d) => { BRK[d] = await kvJson(env, "broker_facts_" + d); }));
   const AV = await loadDevAvail(env);                                         // v277 - the developers' own sheets, where we hold them
   const tenancy = {};
   const bedsLeft = {};
@@ -737,6 +740,7 @@ export async function briefSearch(env, sp, opts) {
     c.musts = mm.musts; c.nearest = mm.nearest;
     const st = q.mode === "rent" ? (rentStat(c.it, c.evidence.home === "villa" ? "v" : "b", c.bed) || {}).s : null;
     c.crit = criteriaOf({ c, card, brochure: c.brochure, AM, musts: c.musts, villa: c.evidence.home === "villa", s: st, af: amenFor(AMF[c.d], c) });
+    applyBrokerFacts(c.crit, brokerFor(BRK[c.d], [c.name, c.it && c.it.n].concat(c.aliases || [])));   // v291 CHECKLIST - fills only what is still not known
     c.comp = completionOf(card, c.brochure);
     if (q.musts.some((m) => c.crit[m] && c.crit[m].v === false)) { droppedByMust++; continue; }   // ONLY a definite no leaves it out
     c.completeness = {
@@ -787,7 +791,7 @@ export async function briefSearch(env, sp, opts) {
     // v282 - the client's own criteria, each with its answer and source (musts, then nice-to-haves, then home type and furnishing)
     const crit = q.musts.map((k) => ({ k, label: CRIT_LABEL[k], level: "must", ...c.crit[k] })).concat(q.nice.map((k) => ({ k, label: CRIT_LABEL[k], level: "nice", ...c.crit[k] })));
     if (c.crit.townhouse && String(q.type).includes("townhouse")) crit.push({ k: "townhouse", label: "townhouse", level: "asked", ...c.crit.townhouse });
-    if (q.furnished !== "either") crit.push({ k: "furnished", label: q.furnished, level: "asked", v: null, src: FURNISHED_UNKNOWN });
+    if (q.furnished !== "either") crit.push({ k: "furnished", label: q.furnished, level: "asked", v: null, src: (c.crit.furnished && c.crit.furnished.src) || FURNISHED_UNKNOWN });   // v291 CHECKLIST - the broker's note, when there is one
     r.criteria = crit;
     if (owner && q.mode === "rent") r.furnished_hint = furnishedHint(c.d ? PS[c.d] : null, c, c.bed);   // OWNER ONLY - a client key never gets this field
     if (c.recordName && c.i != null) r.record_name = { name: c.recordName, agrees: c.agree || nameAgrees([c.name].concat(c.aliases), c.recordName) };

@@ -45,6 +45,7 @@ import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailF
 // v282 (Kendall, 1 Oct 2026): the client's criteria and the area comparison come from the SAME functions /brief_api uses, so the list
 // and the documents can never disagree. A document is a client document: the search is run with owner: false, and nothing here ever
 // prints a listing-site (portal) figure - furnishing is "not known" on every page.
+import { applyAnchorOverrides, applyBrokerFacts, brokerFor, ownPhotoFor, PHOTO_CREDIT, longDate } from "./checklist_data.js";   // v291 CHECKLIST - the owner's on-site corrections (map, broker facts, own photos)
 import { amenIndex, amenFor, briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent } from "./brief.js";
 // v277 (Kendall, 1 Oct 2026): the register "left" estimate is OFF the client face - no "ESTIMATED ... LEFT" box on page 2, no
 // "Still filling" line on the one-sheet card. estimateLeft() stays in src/brief.js and the API still returns estimated_left; nothing
@@ -348,6 +349,7 @@ export async function loadContext(env, q, opts) {
       units: need.units ? await kvJson(env, "units_" + d) : null, layer: need.map ? await kvJsonGz(env, "brief_fp_" + d) : null,
       areaIdx: undefined,                            // v289 - the register community -> footprints index (areaIndex), read on first need
       amen: amenIndex(await kvJsonGz(env, "amenities_" + d)),   // v289 - the amenity facts file, plain or gzipped (src/brief.js), same answers as the list
+      bf: await kvJsonGz(env, "broker_facts_" + d), own: await kvJsonGz(env, "ownphotos_" + d),   // v291 CHECKLIST - broker facts and own photos
     };
     return C.district[d];
   };
@@ -407,6 +409,7 @@ export async function loadContext(env, q, opts) {
     const cc = { name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, key };
     rec.af = D ? amenFor(D.amen, { key, d, i: it.i, it, name: it.n, aliases: it.a || [] }) : null;   // v289
     rec.crit = criteriaOf({ c: cc, card: um, brochure: br, AM: C.amen, musts: mustsOf(cc, um, br, C.amen).musts, villa: kind === "v", s: st, af: rec.af });
+    if (D) applyBrokerFacts(rec.crit, brokerFor(D.bf, [it.n].concat(it.a || [])));   // v291 CHECKLIST - the broker's on-site facts fill only what is still not known
     if (br) {
       const ext = br.photos.find((p) => /^exterior/.test(p.file || ""));
       // hero_key / card_key: the same picture pre-cropped by push_brochures.py to the print aspect (2.34:1 hero, 3:2 card and page-3
@@ -428,8 +431,14 @@ export async function loadContext(env, q, opts) {
     // Department sub-community of exactly that name. Exact name only - a prefix names a family (Brookfield-1 is not Brookfield-2) - and
     // never for a record /brief_api unbound from another building (it must not borrow that building's land).
     if (need.map && D && D.layer && it.i == null && !it.unbound && !rec.cardPic && !rec.heroPic) {
-      if (D.areaIdx === undefined) D.areaIdx = areaIndex(await kvJsonGz(env, "anchors_" + d));
+      if (D.areaIdx === undefined) D.areaIdx = areaIndex(await kvJsonGz(env, "anchors_" + d), await kvJsonGz(env, "anchor_overrides_" + d));   // v291 CHECKLIST - the owner's map corrections merged
       if (D.areaIdx) for (const n of [it.n].concat(it.a || [])) { const ids = D.areaIdx.get(norm(n)); if (ids) { rec.areaIds = ids; break; } }
+    }
+    // v291 CHECKLIST - Najjuko's own photograph of the community (img_ownphotos_<d>) is the card picture FIRST, above the developer's
+    {
+      const own = D ? ownPhotoFor(D.own, [it.n].concat(it.a || []), d) : null;
+      const op = own ? await kvPic(env, own.key, opts && opts.origin) : null;
+      if (op) { rec.ownPic = Object.assign(op, { own: true, at: own.at || null }); rec.cardPic = rec.heroPic = rec.ownPic; rec.hero = op.src; }
     }
     rec.picSource = rec.cardPic || rec.heroPic ? "photo" : blocksKind(rec, D && D.layer);
     C.recs.push(rec);
@@ -553,7 +562,13 @@ function rentSource(C, q, rec) {
 }
 
 // ------------------------------------------------------------------------------------------------ the dossier: three pages
+// v291 CHECKLIST - an own photo carries its credit on the picture itself
+function ownFigure(pic, w, h, alt) {
+  return '<div class="ownpic" style="position:relative;width:' + r2(w) + "px;height:" + r2(h) + 'px;">' + fitImg(pic, w, h, alt) +
+    '<div style="position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,0.55);color:#FFF;font-size:8px;padding:1px 4px;border-radius:2px;">' + PHOTO_CREDIT + "</div></div>";
+}
 function thumb(rec, w, h, C) {
+  if (rec.ownPic) return ownFigure(rec.ownPic, w, h, rec.name);   // v291 CHECKLIST
   if (rec.cardPic || rec.heroPic) return fitImg(rec.cardPic || rec.heroPic, w, h, rec.name);
   if (rec.svPic) return svFigure(rec.svPic, w, h, rec.name);   // v290 - Street View aimed at it, before the Blocks view
   // v285 - no developer photograph on file: the building's Blocks view (blocksThumb), never an empty box
@@ -588,7 +603,7 @@ function nearbyLines(C, rec) {
 function dossierPage1(C, rec, q, sub) {
   const B = BEDS[q.beds], st = rec.st;
   const bvHero = rec.heroPic ? null : blocksThumb(rec, (C.district[rec.d] || {}).layer, 702, 300, { district: rec.dist, fs: 9.5 });   // v285
-  const hero = rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38) : rec.svPic ? svFigure(rec.svPic, 702, 300, rec.name) : bvHero ? bvHero.html
+  const hero = rec.ownPic ? ownFigure(rec.ownPic, 702, 300, rec.name) : rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38) : rec.svPic ? svFigure(rec.svPic, 702, 300, rec.name) : bvHero ? bvHero.html
     : '<div style="width:702px;height:120px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:13px;color:' + MUTED + ";\">Photos to follow &mdash; the developer's own pictures are being verified</div>";
   const F = facts(rec);
   const factHtml = F.length ? '<div style="display:grid;grid-template-columns:' + (F.length === 4 ? "0.9fr 0.9fr 1.4fr 0.8fr" : "repeat(" + F.length + ",minmax(0,1fr))") + ';gap:12px;">' +
@@ -629,6 +644,8 @@ const nearbySource = () => "Metro: RTA station register. Schools (with their KHD
 function pictureSource(rec) {
   const bv = rec.picSource && rec.picSource !== "photo" && rec.picSource !== "none" ? " The picture on page 1 is a Blocks view, not a photograph: " + BV_SAY +
     (rec.picSource === "blocks_area" ? " This record is a community of homes, not one building: the homes in gold are those the district model places in its Land Department sub-community - an approximate area." : "") : "";
+  if (rec.ownPic) return "Picture on page 1: Najjuko's own photograph, taken on site" + (rec.ownPic.at ? " (" + esc(longDate(rec.ownPic.at)) + ")" : "") + " - " + PHOTO_CREDIT + "." +   // v291 CHECKLIST
+    (rec.br ? " Amenities: the developer's own project page, " + esc(rec.br.source_url || "not yet verified") + "." : "");
   if (!rec.br) return (rec.brRefused ? "Pictures and amenities: not shown - " + esc(rec.brRefused) + "." : "Pictures and amenities: to follow from the developer's own project page.") + bv;
   return "Pictures and amenities: the developer's own project page, " + esc(rec.br.source_url || "not yet verified") + (rec.br.retrieved ? ", retrieved " + esc(rec.br.retrieved) : "") + ". " +
     esc(rec.br.amenities_note || rec.br.photos_note || "");
@@ -644,7 +661,7 @@ export function criteriaRows(rec, q) {
   for (const k of q.musts || []) if (rec.crit && rec.crit[k]) rows.push([CRIT_NAME[k], "must", rec.crit[k]]);
   for (const k of q.nice || []) if (rec.crit && rec.crit[k]) rows.push([CRIT_NAME[k], "nice to have", rec.crit[k]]);
   if (/townhouse/.test(String(q.type || "")) && rec.crit && rec.crit.townhouse) rows.push(["townhouse", "asked", rec.crit.townhouse]);
-  if (q.furnished && q.furnished !== "either") rows.push([q.furnished, "asked", { v: null, src: FURNISHED_UNKNOWN }]);
+  if (q.furnished && q.furnished !== "either") rows.push([q.furnished, "asked", (rec.crit && rec.crit.furnished) || { v: null, src: FURNISHED_UNKNOWN }]);   // v291 CHECKLIST - the broker's furnishing note, when there is one
   return rows;
 }
 export const markWord = (v) => (v === true ? "&#10003; yes" : v === false ? "&#10007; no" : "not known");
@@ -921,12 +938,12 @@ export function markOf(rec, layer) {
 }
 // v289 - the district model's register attribution: normalised sub-community name -> the layer footprint ids (anchor i = layer id,
 // scripts/brief_map_layers.py writes the layer in the anchors' feature order). null when the district has no anchors.
-export function areaIndex(anchors) {
+export function areaIndex(anchors, overrides) {   // v291 CHECKLIST - overrides: img_anchor_overrides_<d>, merged over the anchors (checklist_data.js)
   const list = anchors && Array.isArray(anchors.anchors) ? anchors.anchors : null;
-  if (!list) return null;
+  if (!list) return overrides ? applyAnchorOverrides(null, overrides) : null;
   const m = new Map();
   for (const a of list) { if (!a || !a.cluster || a.i == null) continue; const k = norm(a.cluster); if (!k) continue; if (!m.has(k)) m.set(k, []); m.get(k).push(a.i); }
-  return m;
+  return overrides ? applyAnchorOverrides(m, overrides) : m;   // v291 CHECKLIST
 }
 
 // ------------------------------------------------------------------------------------------------ v290: the Street View picture
