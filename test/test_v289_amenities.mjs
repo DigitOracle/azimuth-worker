@@ -11,16 +11,18 @@
 //   A3 a home is matched by our key, then by the rent record's DLD key, then by an exact name; a name two homes share answers neither
 //   A4 a file "no" is a definite no: a must leaves the building out; "not known" (nothing in the file) still never does
 //   A5 the reasons (why) name the level and the source of each must met; the notes say where the facts come from
-//   A6 the PDF loader gives the SAME answers and source text as the list, from the same gzipped key
+//   A6 the PDF loader gives the SAME answers and source text as the list, from the same gzipped key; the one-sheet card says the facts
+//      by level instead of "Amenities to follow", and a cluster with no map position gives the file's metro fact
 //   A7 NEGATIVE CONTROL in the test: with the KV key removed, the same query answers "not known" for pets, community pool and gym
 //   A8 against the real file and the real rent index (NAJ_DATA), DAMAC Hills: every result answers pets, community pool, gym and parking
 // NEGATIVE CONTROL (run by hand, 2 Oct 2026): make applyAmen() return before reading the file (`if (!af || !af.facts) return out;` ->
-// `return out;`) - 12 fail (A1, A1b, A1c, A3, A3c, A4b, A5, A6, A6b, A7b, A8 at pets 0/18 gym 0/18, A8b); restored - 21 pass.
+// `return out;`) - 13 fail (A1, A1b, A1c, A3, A3c, A4b, A5, A6, A6b, A6c, A7b, A8 at pets 0/18 gym 0/18, A8b); restored - 23 pass.
+// (A6d, the metro line, reads the file directly and is not behind applyAmen, so it passes either way.)
 //
 //   node test/test_v289_amenities.mjs
 import worker from "../src/index.js";
 import { amenIndex, amenFor, amenSrc, criteriaOf } from "../src/brief.js";
-import { loadContext, parseQuery, criteriaRows } from "../src/brief_docs.js";
+import { loadContext, parseQuery, criteriaRows, oneSheetHtml } from "../src/brief_docs.js";
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -66,7 +68,7 @@ const POOL = COMM("community_pool", "Community pools (DAMAC Hills: temperature-c
 const GYM = COMM("gym", "Community gyms (DAMAC Hills)", "dev_damac_carson_blog", "DAMAC's own DAMAC Hills page", "2026-09-18");
 const vparks = { v: true, level: "building", say: "Parking on the plot (118 of 118 villas carry car parks on the register)", src: "dld_buildings", source_name: "the Land Department buildings register", as_of: "2026-09-25" };
 const AMF = { district: D, schema: 1, homes: [
-  { key: "dld:damachillsrichmond", keys: ["dld:damachillsrichmond"], names: ["DAMAC HILLS -  RICHMOND"], community: "damac_hills", facts: { pets: { ...PETS, detail: "inside DAMAC Hills on OpenStreetMap: 9 parks, 2 playgrounds, 1 dog park" }, community_pool: POOL, gym: GYM, parking: vparks } },
+  { key: "dld:damachillsrichmond", keys: ["dld:damachillsrichmond"], names: ["DAMAC HILLS -  RICHMOND"], community: "damac_hills", community_name: "DAMAC Hills", facts: { metro: { v: false, level: "community", say: "No metro nearby (DAMAC Hills)", src: "research:damachills.json", source_name: "DAMAC Properties - DAMAC Hills Area Guide (developer site)", as_of: "2026-10-02" }, pets: { ...PETS, detail: "inside DAMAC Hills on OpenStreetMap: 9 parks, 2 playgrounds, 1 dog park" }, community_pool: POOL, gym: GYM, parking: vparks } },
   { key: "dld:damachillstopanga", keys: ["dld:damachillstopanga"], names: ["DAMAC HILLS -  TOPANGA"], community: "damac_hills", facts: { pets: PETS, community_pool: POOL, gym: GYM, parking: vparks } },
   { key: "damachills:1003", keys: ["damachills:1003", "dld:damachillscarson"], names: ["DAMAC HILLS - CARSON"], community: "damac_hills",
     facts: { pets: PETS, community_pool: { v: true, level: "building", say: "Swimming pool in the building (3 pools on 3 of its 4 building records)", src: "dld_buildings", source_name: "the Land Department buildings register", as_of: "2026-09-25" }, gym: GYM,
@@ -120,6 +122,14 @@ ok(rows.length === 5 && rows.find((x) => x[0].startsWith("pet")) && rows.find((x
   && rows.find((x) => x[0] === "parking")[2].src === crit(rich, "parking").src && rows.find((x) => x[0] === "community pool")[2].v === true,
   "A6 the PDF rows give the same answers and the same source words as the list", JSON.stringify(rows.map((x) => [x[0], x[2].v, x[2].src])));
 ok(rc && rc.crit.pets.v === true && rc.crit.community_pool.level === "building", "A6b the PDF reaches a bound building by its key too");
+// the one-sheet card (Kendall's screenshot, 2 Oct: "Amenities to follow" and "community pool: not known · pet-friendly: not known")
+const sheet = oneSheetHtml(C, pq);
+const card1 = sheet.split('class="bcard"')[1] || "";
+ok(!/Amenities to follow/.test(card1) && /Community \(DAMAC Hills\): community pool, pet-friendly, gym &middot; This building: parking/.test(card1)
+  && /&#10003; pet-friendly/.test(card1) && /&#10003; community pool/.test(card1) && !/pet-friendly[^&<]*: not known/.test(card1) && !/community pool: not known/.test(card1),
+  "A6c the one-sheet card: no 'Amenities to follow', no 'not known' for pool or pets - the facts by level", card1.replace(/<img[^>]*>/g, "").slice(0, 1500));
+ok(/No metro nearby \(DAMAC Hills\) - a community fact, per DAMAC Properties - DAMAC Hills Area Guide/.test(card1) && !/Metro distance to follow/.test(card1),
+  "A6d a villa cluster with no map position: the card gives the file's metro fact, not 'Metro distance to follow'");
 
 // ---- A7 NEGATIVE CONTROL: no file -> not known ------------------------------------------------------------------------------------
 store.delete("img_amenities_" + D);
