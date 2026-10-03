@@ -62,11 +62,11 @@ ok(sent.length === 1 && sent[0].type === "video" && sent[0].video.link === "http
   "'show me Golf Place' -> one video message, /video/<key>, caption 'Golf Place · Damac Hills' (" + JSON.stringify(sent[0] && (sent[0].video || sent[0].text)) + ")");
 sent.length = 0;
 await say("play golf vista");
-ok(sent.length === 1 && sent[0].type === "text" && sent[0].text.body.indexOf("/board?key=RK&video=1#film=unreal_damachills_c2") !== -1 && sent[0].text.body.indexOf("Park Residences · Damac Hills") !== -1,
-  "'play golf vista' (17 MB stored) -> the board player link with #film=<key>, no video message (" + JSON.stringify(sent[0] && (sent[0].video || sent[0].text)) + ")");
+ok(sent.length === 1 && sent[0].type === "text" && sent[0].text.body.indexOf("/board") === -1 && sent[0].text.body.indexOf("RK") === -1 && /too large to send in WhatsApp/.test(sent[0].text.body) && sent[0].text.body.indexOf("Park Residences · Damac Hills") !== -1,
+  "'play golf vista' (17 MB stored) -> v294: no board link; says in words it is too large to send here, no video message (" + JSON.stringify(sent[0] && (sent[0].video || sent[0].text)) + ")");
 sent.length = 0;
 await say("show the board");
-ok(sent.length === 1 && sent[0].type === "text" && sent[0].text.body.indexOf("/board?key=RK") !== -1 && sent[0].text.body.indexOf("#film") === -1, "'show the board' still reaches the board command first");
+ok(sent.length === 1 && sent[0].type === "text" && sent[0].text.body.indexOf("/board") === -1 && sent[0].text.body.indexOf("#film") === -1 && /right here in this chat/.test(sent[0].text.body), "'show the board' (v294) still reaches the board command first and answers in the chat");
 sent.length = 0;
 await say("show me damac hills");
 ok(!sent.some(m => m.type === "video") && !sent.some(m => m.type === "text" && m.text.body.indexOf("#film") !== -1), "'show me damac hills' matches no cluster -> not answered as a film");

@@ -176,7 +176,7 @@ ok(sentText().includes("/market?key=" + CLIENT) && !sentText().includes(READ), "
 outbound = []; await inbound({ type: "text", text: { body: "charts" } });
 ok(sentText().includes("/charts?key=" + CLIENT) && !sentText().includes(READ), "chat 'charts': the charts link carries the client key");
 outbound = []; await inbound({ type: "text", text: { body: "board" } });
-ok(sentText().includes("/board?key=" + READ), "chat 'board': her own BOARD link keeps READ_KEY (owner only)");
+ok(!sentText().includes("/board") && !sentText().includes(READ) && !/https?:\/\//.test(sentText()), "chat 'board' (v294): answered in the chat - no board link, no READ_KEY, no link at all");
 const readInAppLink = src.split("\n").filter((l) => /env\.READ_KEY/.test(l) && /key=/.test(l) && /["'`]\/(?:find|home|dev|compare|cards|avail|market|skyline|view|map|plans|charts|clock|area|report)\b/.test(l));
 ok(readInAppLink.length === 0, "no line of the worker puts READ_KEY into a link to an app page" + (readInAppLink.length ? "\n      " + readInAppLink.map((l) => l.trim().slice(0, 140)).join("\n      ") : ""));
 

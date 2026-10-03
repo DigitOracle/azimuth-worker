@@ -224,7 +224,7 @@ async function ownerNotify(env, html, buttons) {
     const lines = text.split(/\n+/).map(s => s.trim()).filter(Boolean);
     const head = lines.shift() || "Azimuth";
     const t = await waSendTemplate(env, env.WA_ALLOWED, env.OWNER_TEMPLATE, env.OWNER_TEMPLATE_LANG || "en_US",
-      [head.replace(/\s+/g, " ").slice(0, 200), (lines.join(" · ") || "Details are on your board.").replace(/\s+/g, " ").slice(0, 900)]);
+      [head.replace(/\s+/g, " ").slice(0, 200), (lines.join(" · ") || "Details are in this chat.").replace(/\s+/g, " ").slice(0, 900)]);
     return !!(t && t.ok);
   } catch (e) { try { await noteErr(env, "owner-notify", String(e && e.message || e)); } catch (e2) {} return false; }
 }
@@ -2733,7 +2733,7 @@ async function appFetch(request, env, ctx) {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
         const nm = (url.searchParams.get("name") || "").replace(/[^a-z0-9_]/gi, "");
         if (!(await env.MEETINGS.get("img_" + nm))) return new Response("no such image: " + nm, { status: 404 });
-        try { await waSendImage(env, env.WA_ALLOWED, url.origin + "/img/" + nm, url.searchParams.get("caption") || undefined); }
+        try { await waSendImage(env, env.WA_ALLOWED, pubOrigin(env, url.origin) + "/img/" + nm, url.searchParams.get("caption") || undefined); }
         catch (e) { return new Response("send failed", { status: 502 }); }
         return new Response("sent " + nm);
       }
@@ -3850,7 +3850,7 @@ async function appFetch(request, env, ctx) {
             await waSend(env, from, _on ? ("👀 Watching “" + _gr.name + "”. Commitments and meetings from it will land on your ledger. Reply “stop watching " + _gr.name + "” anytime.")
                                         : ("🙈 Ignoring “" + _gr.name + "”. Azimuth won't read it. If you change your mind, tell me “watch " + _gr.name + "”."));
           }
-          else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + url.origin + "/market?key=" + clientLinkKey(env)); }
+          else if (bid === "mkt:dash") { await waSend(env, from, "📊 Najma — your market pulse:\n" + pubOrigin(env, url.origin) + "/market?key=" + clientLinkKey(env)); }
           else if (/^deep:(no|\d{1,2})$/.test(bid)) {                                   // v88.2 - the deeper dive menu
             const _dn = bid.slice(5);
             if (_dn === "no") { await waSend(env, from, "👍 Quick hit it is. The options are always there - say “draft video 2” or “questions 2” any time."); }
@@ -4175,11 +4175,11 @@ async function appFetch(request, env, ctx) {
         {                                                      // v36.1 — board / market / help intents (routed BEFORE question-recall, which
           // can only answer from filed items and says so — the "I only do tasks" trap for new users)
           if (/^(?:show\s+|open\s+|what(?:'|’| i)?s\s+on\s+)?(?:my\s+|the\s+)?(?:board|dashboard)\s*\??$/i.test(text)) {
-            await waSend(env, from, "🖥 Your board:" + NL10 + url.origin + "/board?key=" + env.READ_KEY + NL10 + NL10 + "Open it and use “Add to Home Screen” — it becomes an app icon and updates live as we talk.");
+            await waSend(env, from, "Everything happens right here in this chat - there is no separate board to open." + NL10 + NL10 + "Say “feed” for today's angles, “market” for the market pulse, “charts” for post-ready charts, or just ask me a question.");   // v294 (Kendall, 3 Oct: all of this should take place within the WhatsApp feed)
             return new Response("ok");
           }
           if (/^(?:show\s+|open\s+)?(?:my\s+|the\s+)?(?:najma|market(?:\s+pulse)?|pulse)\s*\??$/i.test(text)) {
-            await waSend(env, from, "📈 Najma — your market pulse:" + NL10 + url.origin + "/market?key=" + clientLinkKey(env) + NL10 + NL10 + "Built from the official registers. Your weekly brief lands here every Sunday morning, and I'll flag same-day movements when something shifts.");
+            await waSend(env, from, "📈 Najma — your market pulse:" + NL10 + pubOrigin(env, url.origin) + "/market?key=" + clientLinkKey(env) + NL10 + NL10 + "Built from the official registers. Your weekly brief lands here every Sunday morning, and I'll flag same-day movements when something shifts.");
             return new Response("ok");
           }
           {                                                      // v58 — "report <area> [for <client>]": client briefing link in seconds
@@ -4198,7 +4198,7 @@ async function appFetch(request, env, ctx) {
               const _id = [...crypto.getRandomValues(new Uint8Array(9))].map(b => b.toString(16).padStart(2, "0")).join("");
               const _snap = { v: 1, at: gstNowIso(), client: _cl, area: _a, sup: _sup, projs: _projs, amen: _amen, period: _d3.transactions ? [_d3.transactions.periodFrom, _d3.transactions.periodTo] : null };
               await env.MEETINGS.put("rpt_" + _id, JSON.stringify(_snap), { expirationTtl: 60 * 86400 });
-              await waSend(env, from, "📄 " + _a.area + " briefing" + (_cl ? " for " + _cl : "") + " — ready to forward:\n" + url.origin + "/r/" + _id + "\n\nFrozen to today's register figures · link lives 60 days · shows the client nothing but the briefing.");
+              await waSend(env, from, "📄 " + _a.area + " briefing" + (_cl ? " for " + _cl : "") + " — ready to forward:\n" + pubOrigin(env, url.origin) + "/r/" + _id + "\n\nFrozen to today's register figures · link lives 60 days · shows the client nothing but the briefing.");
               return new Response("ok");
             }
           }
@@ -4335,22 +4335,22 @@ async function appFetch(request, env, ctx) {
           if (/^(?:maps?|heat\s*maps?|heatmap)\s*\??$/i.test(text)) {
             const has = await env.MEETINGS.get("img_heatmap_story");
             if (has) {
-              await waSendImage(env, from, url.origin + "/img/heatmap_story", "🗺 Dubai — where it's trading. Registered sales heat, straight from the register. Long-press to save and post.");
-              await waSendImage(env, from, url.origin + "/img/heatmap_square", "Square version for your grid.");
+              await waSendImage(env, from, pubOrigin(env, url.origin) + "/img/heatmap_story", "🗺 Dubai — where it's trading. Registered sales heat, straight from the register. Long-press to save and post.");
+              await waSendImage(env, from, pubOrigin(env, url.origin) + "/img/heatmap_square", "Square version for your grid.");
             } else {
-              await waSend(env, from, "🗺 The map's rendering on the next refresh — for now your charts (incl. a map) are here:\n" + url.origin + "/charts?key=" + clientLinkKey(env));
+              await waSend(env, from, "🗺 The map's rendering on the next refresh — for now your charts (incl. a map) are here:\n" + pubOrigin(env, url.origin) + "/charts?key=" + clientLinkKey(env));
             }
             return new Response("ok");
           }
           if (/^(?:charts?|graphs?|visuals?)\s*\??$/i.test(text)) {
-            await waSend(env, from, "📊 Your charts — bar, line, off-plan split, yields, and a Dubai map, all from the register:\n" + url.origin + "/charts?key=" + clientLinkKey(env) + "\n\nLong-press any one to save it, then post — the source line is already on it.");
+            await waSend(env, from, "📊 Your charts — bar, line, off-plan split, yields, and a Dubai map, all from the register:\n" + pubOrigin(env, url.origin) + "/charts?key=" + clientLinkKey(env) + "\n\nLong-press any one to save it, then post — the source line is already on it.");
             return new Response("ok");
           }
           if (/^(?:radar|trends?|trend radar|what(?:'s| is) trending)\s*\??$/i.test(text)) {          // v88
             let _tr = null; try { _tr = JSON.parse((await env.MEETINGS.get("trend_radar")) || "null"); } catch (e) {}
             if (!_tr || !_tr.items || !_tr.items.length || Date.now() - Date.parse(_tr.generated) > 20 * 3600 * 1000) { await waSend(env, from, "🔥 Building today's radar - a minute…"); try { _tr = await trendRadarTick(env, true); } catch (e) {} }
             const _top = ((_tr && _tr.items) || []).slice(0, 3).map(x => x.id + ". " + x.title + " _(" + x.platform + ")_").join("\n");
-            await waSend(env, from, "🔥 *Trend radar*\n" + (_top || "nothing moving today") + "\n\nAll of it: " + url.origin + "/trends?key=" + env.READ_KEY + "\nSay *trend 2* and I'll draft from item 2.");
+            await waSend(env, from, "🔥 *Trend radar*\n" + (_top || "nothing moving today") + "\n\nSay *trend 2* and I'll draft from item 2.");
             return new Response("ok");
           }
           { const _tm = text.match(/^trend\s*(\d{1,2})$/i); if (_tm) { await waSend(env, from, "On it - drafting from trend " + _tm[1] + "…"); try { await trendDraft(env, from, parseInt(_tm[1], 10), url.origin); } catch (e) { await waSend(env, from, "Couldn't draft from that trend just now."); } return new Response("ok"); } }
@@ -4383,7 +4383,6 @@ async function appFetch(request, env, ctx) {
               "📡 “track <project>” / “untrack <project>” — curate your development radar" + NL10 +
               "🤝 “who owes me” · “what do I owe” · “status with <name>”" + NL10 +
               "👀 “list groups” · “watch <name>” — what I listen to" + NL10 +
-              "🖥 “board” — your live board link" + NL10 +
               "📈 “market” — your Najma market pulse" + NL10 +
               "📊 “charts” — post-ready bar/line/pie + a Dubai map" + NL10 +
               "🎯 “client has 1.5M, wants a 1-bed to rent” — instant register-grounded advice for a meeting" + NL10 +
@@ -4407,7 +4406,7 @@ async function appFetch(request, env, ctx) {
             const _cap = (_fv.name || "") + " \u00b7 Damac Hills";
             let _fb = null; try { _fb = await env.MEETINGS.get("vid_" + _fv.key, "arrayBuffer"); } catch (e) {}
             if (_fb && _fb.byteLength <= 16 * 1024 * 1024) await waSendVideo(env, from, pubOrigin(env, url.origin) + "/video/" + _fv.key, _cap);
-            else await waSend(env, from, "\u{1F3AC} " + _cap + NL10 + pubOrigin(env, url.origin) + "/board?key=" + env.READ_KEY + "&video=1#film=" + _fv.key);
+            else await waSend(env, from, "\u{1F3AC} " + _cap + NL10 + "This film is too large to send in WhatsApp. Ask me for a shorter cut and I'll send that here.");
             return new Response("ok");
           }
         }
@@ -6099,7 +6098,7 @@ async function dailyFeedTick(env, force, dry) {
   try { qa.ejari = await feedEjariStep(env, false); qa.note += " | " + qa.ejari; await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
   try { await feedSceneOffer(env, angles); } catch (e) {}   // v188 - the offer; she taps to have them made
   if (radar && radar.items && radar.items.length && !force) {                                   // v88 - the radar is its own tap, never inside the feed
-    try { await waSend(env, env.WA_ALLOWED, "🔥 *Trend radar* - " + radar.items.length + " things people are talking about today (" + Object.keys(radar.sources || {}).filter(k => radar.sources[k]).join(" · ") + "). Open it when you want it:\n" + (env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev") + "/trends?key=" + env.READ_KEY + "\n\nSay *trend 3* and I'll draft from item 3."); } catch (e) {}
+    try { await waSend(env, env.WA_ALLOWED, "🔥 *Trend radar* - " + radar.items.length + " things people are talking about today (" + Object.keys(radar.sources || {}).filter(k => radar.sources[k]).join(" · ") + "). Say *trends* to see them, or *trend 3* and I'll draft from item 3."); } catch (e) {}
   }
   if (!force) { try { await env.MEETINGS.put(fk, "done", { expirationTtl: 2 * 86400 }); } catch (e) {} }
 }
@@ -6379,7 +6378,7 @@ ${radar && radar.note ? '<div class=note>' + esc2(radar.note) + '</div>' : ''}
 async function trendDraft(env, to, n, origin) {
   let radar = null; try { radar = JSON.parse((await env.MEETINGS.get("trend_radar")) || "null"); } catch (e) {}
   const it = radar && radar.items && radar.items.find(x => x.id === n);
-  if (!it) { await waSend(env, to, "No trend " + n + " on today's radar. Open it here: " + origin + "/trends?key=" + env.READ_KEY); return; }
+  if (!it) { await waSend(env, to, "No trend " + n + " on today's radar. Say *trends* to see today's list."); return; }
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const reg = d ? { sales: d.transactions ? { period: [d.transactions.periodFrom, d.transactions.periodTo], salesCount: d.transactions.salesCount, medianTicketAed: d.transactions.medianTicketAed, medianResidentialAedSqft: d.transactions.medianResidentialAedSqft } : null, rents: d.rents ? { medianAnnualRentAed: d.rents.medianAnnualRentAed } : null } : null;
   const sys = "Write for a Dubai property broker from ONE trending item plus the official register figures supplied. Return JSON with: linkedin (<=140 words, <=3 hashtags, ends with a one-line source note), reel (30-45 second to-camera script at 142 words a minute, so 70-105 words, first six words must stop a thumb), caption (Instagram, <=5 hashtags). " +
