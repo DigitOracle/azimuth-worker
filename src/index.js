@@ -3651,7 +3651,7 @@ async function appFetch(request, env, ctx) {
             if (!_a) { await waSend(env, from, "That angle isn't on file any more - say \u201cfeed\u201d and I'll show today's again."); return new Response("ok"); }
             let _d = null; try { _d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
             const _area = angleArea(_a, _d);
-            const _opts = feedBackdrops(_a, _area);
+            const _opts = feedBackdrops(_a, _area, true);   // v296 - her list carries "Describe your own"
             try { await env.MEETINGS.put("fbg_" + _n, JSON.stringify({ n: _n, area: _area || "", angle: _a, options: _opts }), { expirationTtl: 7 * 86400 }); } catch (e) {}
             const _mh = await mediaFor(env, _a);                                     // v124 - do we hold the developer's own renders?
             if (_mh) {
@@ -3801,6 +3801,11 @@ async function appFetch(request, env, ctx) {
             let _st = null; try { _st = JSON.parse((await env.MEETINGS.get("fbg_" + _n)) || "null"); } catch (e) {}
             const _opt = _st && (_st.options || []).find(o => o.id === _oid);
             if (!_opt) { await waSend(env, from, "Those backdrops have expired - pick the angle again and I'll offer them fresh."); return new Response("ok"); }
+            if (_opt.own) {                                              // v296 - Describe your own: ask for the scene, her next line is it
+              try { await env.MEETINGS.put("fbgown_" + from, JSON.stringify({ n: _n }), { expirationTtl: 1800 }); } catch (e) {}
+              await waSend(env, from, "Describe the scene in a line - for example \u201cat a petrol station at dusk, filling up the car\u201d. I'll build the picture around it.");
+              return new Response("ok");
+            }
             const _ang = _st.angle || {};
             const _post = { n: _n, idp: "feed_", hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "",
                             masthead: _st.area || "Dubai",
@@ -4084,6 +4089,24 @@ async function appFetch(request, env, ctx) {
             try { await env.MEETINGS.delete("scedit_" + from); } catch (e) {}
             let _r = null; try { _r = JSON.parse((await env.MEETINGS.get("scpend_" + _se)) || "null"); } catch (e) {}
             if (_r) { _r.extra = (_r.extra || []).concat([text.slice(0, 300)]).slice(-5); await sceneShow(env, from, _r); return new Response("ok"); }
+          }
+        }
+        {                                                                            // v296 - her own scene for a backdrop: this line is it (or a command cancels)
+          const _fo = await env.MEETINGS.get("fbgown_" + from);
+          if (_fo) {
+            try { await env.MEETINGS.delete("fbgown_" + from); } catch (e) {}
+            let _fn = ""; try { _fn = String(JSON.parse(_fo).n || "").replace(/[^0-9]/g, ""); } catch (e) {}
+            let _fs = null; try { _fs = JSON.parse((await env.MEETINGS.get("fbg_" + _fn)) || "null"); } catch (e) {}
+            const _isCmd = /^(?:feed|cancel|stop|never ?mind|menu|help|board|market|charts|trends?)\s*$/i.test(text.trim()) || /^\d{1,2}(?:\s*(?:,|and|&|\+|\s)\s*\d{1,2})*$/.test(text.trim());
+            const _xo = _fs && (_fs.options || []).find(o => o.id === "X");
+            if (_xo && !_isCmd) {
+              const _w = text.trim().replace(/\s+/g, " ").slice(0, 300);
+              _xo.name = "Your scene"; _xo.note = _w.slice(0, 70); _xo.place = _w + ", Dubai - realistic and natural, as it would really look";
+              try { await env.MEETINGS.put("fbg_" + _fn, JSON.stringify(_fs), { expirationTtl: 7 * 86400 }); } catch (e) {}
+              await waSendList(env, from, "Got it - " + _w.slice(0, 60) + ". What time of day?", "Time of day", SCENE_TIMES.map(t => ({ id: "stm:" + _fn + ":X:" + t.id, title: t.name, description: t.note })));
+              return new Response("ok");
+            }
+            // a command, or the angle expired: drop the waiting state and let the line be handled as usual
           }
         }
         {                                                                            // v112 - her one-line change to the style card
@@ -12548,10 +12571,10 @@ async function styleKeep(env, bytes, mime, kind, cap) {
 // v120 - backdrops for an ordinary morning angle. The IPS pack was written by hand for one event;
 // this builds the same three shapes from whatever the angle is about, so every angle can become a picture.
 // Deliberately three: a wide view of the place, a street-level human one, and a lived-in interior.
-function feedBackdrops(angle, area) {
+function feedBackdrops(angle, area, withOwn) {   // v296 - withOwn: the list SHE is shown gets the "Describe your own" row; automatic picks never see it
   const where = area ? ("Dubai, " + area) : "Dubai";
   const A = area || "Dubai";
-  return [
+  const _all = [
     { id: "A", name: "Skyline, blue hour", note: "Towers across water, lights just on",
       place: "The " + where + " skyline seen across open water or a wide boulevard at blue hour - towers in silhouette with their lights just on, calm water or empty road in the foreground" },
     { id: "B", name: "Street level", note: "A real residential street, lived-in",
@@ -12568,7 +12591,9 @@ function feedBackdrops(angle, area) {
       place: "A villa street in " + A + ", Dubai - two-storey homes set back behind low walls and mature gardens, a wide pavement and street trees, cars on the drives, early morning" },
     { id: "H", name: "Waterfront walk", note: "Promenade, water, towers behind",
       place: "A waterfront promenade in " + A + ", Dubai - boardwalk and railing along the water, planting and benches, moored boats or open water across the middle distance, the towers of the community behind" },
+    { id: "X", name: "Describe your own", note: "Tell me the scene in a line", own: true, place: "" },   // v296 - her own scene (Kendall, 3 Oct: the petrol angle is not on the list)
   ];
+  return withOwn ? _all : _all.filter(o => !o.own);
 }
 function bgPromptBlock(angle, place, pal, timeId) {   // v151 - timeId (em|md|la|ss|nt): her time of day sets the light
   const PC = Object.assign({ beige: "#F0DECC", gold: "#A88448", green: "#003C1E", ink: "#00120C" }, pal || {});
