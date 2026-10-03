@@ -139,8 +139,8 @@ store.set("img_style_me_pool", JSON.stringify({ usable: ["style_ref_17", "style_
 for (const k of ["style_ref_17", "style_ref_21", "style_ref_22"]) { store.set("img_" + k, "PHOTO:" + k); store.set("img_" + k + "_cut", "CUT:" + k); }
 let i = sent.length; await tap("fbg:4:B"); await settle();
 await tap("stm:4:B:ss"); await settle();
-const ask = sent.slice(i).find(x => x.type === "interactive" && x.interactive.type === "button");
-const mp = ask ? ask.interactive.action.buttons.map(b => b.reply.id) : [];
+const ask = sent.slice(i).filter(x => x.type === "interactive" && x.interactive.type === "list").pop();
+const mp = ask ? ask.interactive.action.sections[0].rows.map(b => b.id) : [];
 i = sent.length; await tap(mp[1]); await settle();
 const show = sent.slice(i).find(x => x.type === "interactive");
 const tok = show ? show.interactive.action.buttons[0].reply.id.slice(3) : "";

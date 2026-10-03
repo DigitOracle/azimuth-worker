@@ -6,12 +6,12 @@ let pass = 0, fail = 0;
 const ok = (c, w) => { if (c) { pass++; console.log("  ok - " + w); } else { fail++; console.log("  FAIL - " + w); } };
 
 const a = SRC.indexOf("async function feedScenes(");
-const fn = SRC.slice(a, a + 6000);
+const fn = SRC.slice(a, a + 9000);
 
 ok(/get\("feed_scene_photos"\)/.test(fn), "the rotation list is read from KV feed_scene_photos");
 ok(/get\("feed_scene_photo"\)\) \|\| "style_ref_21"/.test(fn), "with no list, the single photo and the style_ref_21 default are unchanged");
 // v269 - the day advances by a whole morning (list.length), so consecutive mornings do not share four of five photos
-ok(/meKey: \(_rot\.length \? _rot\[\(feedDayIndex\(\) \* list\.length \+ i\) % _rot\.length\] : me\)/.test(fn), "each angle takes its own photo from the list by day and position");
+ok(fn.includes("_rot[(feedDayIndex() * list.length + i) % _rot.length] : me)") && fn.includes("_pickd && _pickd.picks[i]"), "each angle takes its own photo: v297 history pick first, then the list by day and position");
 ok(/if \(!_rot\.length && !\(await env\.MEETINGS\.get\("feed_scene_photo"\)\)\) _rot = await scenePool\(env\)/.test(fn), "v269 - no list and no single photo set: rotate through every colour photo of her, not one");
 ok(/replace\(\/\[\^a-z0-9_\]\/gi, ""\)\)\.filter\(Boolean\)/.test(fn), "list entries are sanitised the same way as the single photo, and empties dropped");
 ok(/photo: \(_rot\.length \? _rot\.join\(","\) : me\)/.test(fn), "feed_scenes_last records which photos were in play");

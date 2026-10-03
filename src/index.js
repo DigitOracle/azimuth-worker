@@ -3715,13 +3715,20 @@ async function appFetch(request, env, ctx) {
             } catch (e) { await waSend(env, from, "Couldn't save that one - send it again."); }
             return new Response("ok");
           }
+          if (bid.indexOf("mpm:") === 0) {                                             // v297 - the next nine photos
+            const _p = bid.split(":"), _tok = String(_p[1] || "").replace(/[^a-z0-9]/gi, ""), _pg = parseInt(_p[2], 10) || 0;
+            let _pk = null; try { _pk = JSON.parse((await env.MEETINGS.get("mepick_" + _tok)) || "null"); } catch (e) {}
+            if (!_pk || !_pk.cands) { await waSend(env, from, "Those photo choices have expired - pick the backdrop again and I'll offer them fresh."); return new Response("ok"); }
+            await meOfferList(env, from, _pk.ask, _tok, _pk.cands, _pg);
+            return new Response("ok");
+          }
           if (bid.indexOf("mp:") === 0) {                                              // v141 - she chose which photo of her goes in
             const _p = bid.split(":"), _tok = String(_p[1] || "").replace(/[^a-z0-9]/gi, ""), _ix = parseInt(_p[2], 10) || 0;
             let _pk = null; try { _pk = JSON.parse((await env.MEETINGS.get("mepick_" + _tok)) || "null"); } catch (e) {}
             if (!_pk || !_pk.cands || !_pk.cands[_ix]) { await waSend(env, from, "Those photo choices have expired - pick the backdrop again and I'll offer them fresh."); return new Response("ok"); }
             try { await env.MEETINGS.delete("mepick_" + _tok); } catch (e) {}
             const _mk = _pk.cands[_ix];
-            try { const _u = JSON.parse((await env.MEETINGS.get("style_me_used")) || "{}"); _u[_mk] = new Date().toISOString(); await env.MEETINGS.put("style_me_used", JSON.stringify(_u)); } catch (e) {}
+            await scenePhotoNote(env, _mk); try { const _u = JSON.parse((await env.MEETINGS.get("style_me_used")) || "{}"); _u[_mk] = new Date().toISOString(); await env.MEETINGS.put("style_me_used", JSON.stringify(_u)); } catch (e) {}
             if (_pk.kind === "scene") { await sceneShow(env, from, Object.assign({}, _pk, { meKey: _mk, extra: [] })); return new Response("ok"); }   // v147 - show what the picture will be before it is made
             const _jk = "picjob_" + _pk.n + "_" + String(_pk.oid || "a").toLowerCase();
             try { await env.MEETINGS.put(_jk, JSON.stringify({ n: _pk.n, opt: _pk.oid, to: _pk.to || from, at: Date.now(), tries: 0, post: _pk.post, option: Object.assign({}, _pk.option, { meKey: _mk }), angle: _pk.angle }), { expirationTtl: 2 * 86400 }); } catch (e) {}
@@ -6366,6 +6373,26 @@ const FEED_SCENE_TIMES = ["la", "md", "ss", "em", "la"];
 // v187 - the backdrop and the light turn with the day, so two mornings never look alike. Every card on 20 and 21 Sep used
 // the first backdrop ("Skyline, blue hour") and the same five times, which is what she saw as "the same images".
 const feedDayIndex = () => Math.floor(Date.parse(gstDateStr(new Date())) / 86400000);
+// v297 (Kendall, 3 Oct 2026: "she keeps getting the same photos ... whatever she picked on a Tuesday doesn't come on a Wednesday")
+// scene_photo_hist = { "YYYY-MM-DD": [photo keys] }, written by the automatic morning AND by her own picks. The morning takes the
+// photos not used yesterday or earlier today, least recently used first, so all of them take their turn.
+async function scenePhotoHist(env) { try { const h = JSON.parse((await env.MEETINGS.get("scene_photo_hist")) || "{}"); return h && typeof h === "object" ? h : {}; } catch (e) { return {}; } }
+async function scenePhotoNote(env, key) {
+  try {
+    const h = await scenePhotoHist(env), d = gstDateStr(new Date());
+    h[d] = (h[d] || []).concat(String(key)).filter((x, i, a) => a.indexOf(x) === i);
+    for (const k of Object.keys(h).sort().slice(0, -14)) delete h[k];
+    await env.MEETINGS.put("scene_photo_hist", JSON.stringify(h), { expirationTtl: 30 * 86400 });
+  } catch (e) {}
+}
+function scenePhotoPick(pool, hist, today, count) {
+  const yest = new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10);
+  const barred = new Set(hist[yest] || []), todayUsed = new Set(hist[today] || []);
+  const last = k => { let m = ""; for (const d of Object.keys(hist)) if (d < today && (hist[d] || []).includes(k) && d > m) m = d; return m; };
+  const ok = pool.filter(k => !barred.has(k) && !todayUsed.has(k)).sort((a, b) => (last(a) < last(b) ? -1 : last(a) > last(b) ? 1 : pool.indexOf(a) - pool.indexOf(b)));
+  const out = ok.slice(0, count);
+  return { picks: out, short: out.length < count };
+}
 async function feedScenes(env, angles) {
   if (env.FEED_SCENES !== "on" || !env.WA_ALLOWED) return 0;
   // v187.1 (Naj, 21 Sep 2026: "I don't get to choose anymore") - a switch that needs no deploy: set feed_scenes_off and the
@@ -6376,6 +6403,10 @@ async function feedScenes(env, angles) {
   // v259 - a rotation: KV feed_scene_photos = JSON list of style_ref keys. Empty or absent = the single photo above, as before.
   let _rot = []; try { const _r = JSON.parse((await env.MEETINGS.get("feed_scene_photos")) || "[]"); if (Array.isArray(_r)) _rot = _r.map(x => String(x).replace(/[^a-z0-9_]/gi, "")).filter(Boolean); } catch (e) {}
   if (!_rot.length && !(await env.MEETINGS.get("feed_scene_photo"))) _rot = await scenePool(env);   // v269 - no list set: every colour photo of her, not one
+  const _pool297 = await scenePool(env);                                                           // v297 - the whole colour bank beats a pinned five
+  const _hist = await scenePhotoHist(env), _today = gstDateStr(new Date());
+  let _pickd = null;
+  if (_pool297.length >= 6) { _pickd = scenePhotoPick(_pool297, _hist, _today, 5); }
   const _used = [], _times = [];
   let queued = 0;
   let _last = null; try { _last = JSON.parse((await env.MEETINGS.get("feed_scenes_last")) || "null"); } catch (e) {}
@@ -6396,11 +6427,13 @@ async function feedScenes(env, angles) {
       caption: [a.hook || "", (a.figure || "") + " \u2014 " + (a.source || "")].filter(Boolean).join("\n\n").slice(0, 1000) };
     const jk = "picjob_s" + "feed" + gstDateStr(new Date()).replace(/-/g, "") + n;
     if (await env.MEETINGS.get(jk)) continue;                                                     // one job per angle per morning, even if the tick fires twice
+    if (_pickd && _pickd.picks[i]) await scenePhotoNote(env, _pickd.picks[i]);
     try { await env.MEETINGS.put(jk, JSON.stringify({ scene: true, n, opt: opt.id, tid: FEED_SCENE_TIMES[(feedDayIndex() + i) % FEED_SCENE_TIMES.length] || "la", to: env.WA_ALLOWED, at: Date.now(), tries: 0,
-      post, option: opt, angle: a, meKey: (_rot.length ? _rot[(feedDayIndex() * list.length + i) % _rot.length] : me)   /* v269 - each day starts where the last left off */, extra: [], auto: "feed" }), { expirationTtl: 2 * 86400 }); queued++; } catch (e) {}
+      post, option: opt, angle: a, meKey: (_pickd && _pickd.picks[i]) || (_rot.length ? _rot[(feedDayIndex() * list.length + i) % _rot.length] : me)   /* v297 - from the whole bank, none of yesterday's; v269 fallback */, extra: [], auto: "feed" }), { expirationTtl: 2 * 86400 }); queued++; } catch (e) {}
   }
   if (queued) { try { await waSend(env, env.WA_ALLOWED, "On it. Your " + (queued === 5 ? "five" : String(queued)) + " pictures are being made now - they'll arrive over the next few minutes, each as a post and a story."); } catch (e) {} }
   try { await env.MEETINGS.put("feed_scenes_last", JSON.stringify({ at: gstNowIso(), queued, photo: (_rot.length ? _rot.join(",") : me), backdrops: _used, times: _times }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  if (_pickd && _pickd.short) { try { await gcTellOwner(env, "Naj's photo rotation could only find " + _pickd.picks.length + " photos she has not had since yesterday (bank of " + _pool297.length + "). Some cards reuse an older pinned photo - more photos of her are needed."); } catch (e) {} }
   if (_last && Array.isArray(_last.backdrops) && _used.length && _last.backdrops.join() === _used.join()) {   // v187 - say so rather than let her spot it
     try { await gcTellOwner(env, "Naj's cards today use the same backdrops as yesterday (" + _used.join(", ") + "). The rotation has run out of choices for these angles."); } catch (e) {}
   }
@@ -12680,10 +12713,12 @@ async function mePool(env) {
 // (Naj, 30 Sep 2026: "still only getting presented with the same two or three pictures"). Black and white stays out.
 async function scenePool(env) {
   try {
-    const p = JSON.parse((await env.MEETINGS.get("img_style_me_pool")) || "null");
-    if (!p) return [];
+    const p = JSON.parse((await env.MEETINGS.get("img_style_me_pool")) || "null") || {};
     const v = p.verdicts || {};
-    const keys = (Array.isArray(p.usable) ? p.usable : []).concat(Object.keys(v).filter(k => !/black and white/i.test(String((v[k] || {}).why || ""))));
+    let _pile = []; try { _pile = JSON.parse((await env.MEETINGS.get("style_refs")) || "[]"); } catch (e) {}
+    const _bw = k => /black and white/i.test(String((v[k] || {}).why || ""));
+    // v297 - every photo of her in the pile that is not black and white, judged or not (29 and 30 had never been judged)
+    const keys = (Array.isArray(p.usable) ? p.usable : []).concat(Object.keys(v).filter(k => !_bw(k)), _pile.filter(r => r && r.kind === "me" && r.key && !_bw(r.key)).map(r => r.key));
     return [...new Set(keys.map(k => String(k).replace(/[^a-z0-9_]/gi, "")).filter(Boolean))].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
   } catch (e) { return []; }
 }
@@ -12692,17 +12727,23 @@ async function scenePool(env) {
 async function meOffer(env, from, origin, job) {
   const pool = job && job.kind === "scene" ? await scenePool(env) : await mePool(env);   // v269 - a scene draws from the photo, a plate pastes a cut-out
   if (pool.length < 2) return false;
-  let cur = 0; try { cur = parseInt((await env.MEETINGS.get("style_me_cursor")) || "0", 10) || 0; } catch (e) {}
-  const take = Math.min(3, pool.length), pick = [];
-  for (let i = 0; i < take; i++) pick.push(pool[(cur + i) % pool.length]);
-  const cands = pool.filter(k => pick.includes(k));
-  try { await env.MEETINGS.put("style_me_cursor", String((cur + take) % pool.length)); } catch (e) {}
-  const tok = rid();
+  // v297 (Kendall: "provide the 15 as small tiles she can choose from") - every photo is shown, numbered, then she picks from a list.
+  // WhatsApp lists hold 10 rows, so nine photos and a "More photos" row; the tiles are sent once, the list pages.
+  const hist = await scenePhotoHist(env), today = gstDateStr(new Date());
+  const yest = new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10);
+  const used = new Set([].concat(hist[yest] || []));
+  const cands = pool.slice(0, 18), tok = rid();
   await env.MEETINGS.put("mepick_" + tok, JSON.stringify(Object.assign({}, job, { cands, at: Date.now() })), { expirationTtl: 6 * 3600 });
   const o = pubOrigin(env, origin);
-  for (let i = 0; i < cands.length; i++) { try { await waSendImage(env, from, o + "/img/" + cands[i], "Photo " + (i + 1)); } catch (e) {} }
-  await waSendButtons(env, from, job.ask, cands.map((k, i) => ({ id: "mp:" + tok + ":" + i, title: "Photo " + (i + 1) })));
+  for (let i = 0; i < cands.length; i++) { try { await waSendImage(env, from, o + "/img/" + cands[i], "Photo " + (i + 1) + (used.has(cands[i]) ? " (yesterday's)" : "")); } catch (e) {} }
+  await meOfferList(env, from, job.ask, tok, cands, 0);
   return true;
+}
+async function meOfferList(env, from, ask, tok, cands, page) {
+  const slice = cands.slice(page * 9, page * 9 + 9), more = cands.length > page * 9 + 9;
+  const rows = slice.map((k, i) => ({ id: "mp:" + tok + ":" + (page * 9 + i), title: "Photo " + (page * 9 + i + 1) }));
+  if (more) rows.push({ id: "mpm:" + tok + ":" + (page + 1), title: "More photos" });
+  await waSendList(env, from, ask || "Which photo of you for this one?", "Choose photo", rows);
 }
 // The cut-out to place: the photo she chose (opt.meKey) in this light, then its base, then the default look.
 // tag goes into the card's cache key, so the default look keeps its old keys and a chosen photo gets its own.

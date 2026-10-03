@@ -64,11 +64,11 @@ ok(rows[3] && rows[3].id === "stm:4:B:ss", "time list: Sunset carries stm:4:B:ss
 // 2. time of day -> which photo of her
 i = sent.length; await tap("stm:4:B:ss"); await settle();
 m = since(i);
-ok(m.filter(x => x.type === "image").length === 3, "time: three photos of her offered");
+ok(m.filter(x => x.type === "image").length >= 3, "time: every photo of her shown as a tile (v297)");
 const ask = m.find(x => x.type === "interactive");
 ok(ask && ask.interactive.body.text === "Good pick - Street level at sunset. Which photo of you for this one?", "time: 'Good pick - Street level at sunset. Which photo of you for this one?'");
-const mp = ask ? ask.interactive.action.buttons.map(b => b.reply.id) : [];
-ok(mp.length === 3 && mp.every(id => /^mp:[a-z0-9]+:\d$/i.test(id)), "time: three photo buttons");
+const mp = ask ? ask.interactive.action.sections[0].rows.map(b => b.id) : [];
+ok(mp.length >= 3 && mp.slice(0, 3).every(id => /^mp:[a-z0-9]+:\d$/i.test(id)), "time: photo list rows (v297)");
 
 // 3. her photo -> what the picture will be
 i = sent.length; await tap(mp[1]); await settle();
