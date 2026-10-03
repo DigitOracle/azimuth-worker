@@ -50,7 +50,7 @@ const mkEnv = (store) => {
     async put(k, v) { store.set(k, v); }, async delete(k) { store.delete(k); },
     async list(o) { return { keys: [...store.keys()].filter((k) => !o || !o.prefix || k.startsWith(o.prefix)).map((name) => ({ name })), list_complete: true }; } };
   return { MEETINGS: KV, AI: { run: async () => ({ response: "{}" }) }, READ_KEY: READ, MARKET_BRIEF: "on", ANTHROPIC_API_KEY: "test-only-not-a-key", PUBLIC_ORIGIN: "https://x",
-    WA_ALLOWED: "971565484397", WHATSAPP_TOKEN: "t", WA_PHONE_ID: "1", FEED_SCENES: "on", OWNER_NOTE_URL: "https://mc/owner_note", INGEST_TOKEN: "i" };
+    WA_ALLOWED: "971565484397", WHATSAPP_TOKEN: "t", WA_PHONE_ID: "1", FEED_SCENES: "on", FEED_SLOTS: "off", OWNER_NOTE_URL: "https://mc/owner_note", INGEST_TOKEN: "i" };
 };
 const run = async (famhist, opts) => {
   opts = opts || {}; serve = opts.serve || FIVE; topup = opts.topup || []; qaFn = opts.qa || (() => []); qaCalls = 0; sent = []; owner = [];
@@ -78,11 +78,13 @@ ok(a2.qa && /QA agent removed 1/.test(a2.qa.note), "the QA line records what the
 ok(owner.some(t => /The gate removed 1/.test(t) && /walking paths/.test(t)), "and Kendall is told what was removed and why");
 ok(a2.famh.length === 5 && !a2.famh.some(r => r.k && /6500/.test(r.k)), "only what she actually got is recorded against her history: " + a2.famh.length + " rows");
 
-// ---- A3. nothing survives -> HELD: nothing reaches her, nothing is recorded, Kendall is told ------------------------------------
+// ---- A3. every model angle fails -> v295: the morning is NOT held; the plan's fresh facts fill it and she is told the real number ----
+// (v269 held it: "nothing survives -> HELD". v295, Kendall 3 Oct 2026 "it should consistently send 5": a same-idea verdict can no longer
+// empty the morning while fresh unused facts exist. With only the plan to draw on there are three, so she gets three, said plainly.)
 const a3 = await run([], { qa: (today) => today.map(t => t.angle) });
-ok(!a3.morning, "when every angle fails, no morning is sent to her");
-ok(a3.famh.length === 0, "and nothing is written into her history");
-ok(owner.some(t => /HELD/.test(t) && /Nothing was sent to her/.test(t)), "Kendall is told it was held: " + (owner.find(t => /HELD/.test(t)) || "").slice(0, 140));
+ok(a3.morning && /3 you could post today/.test(a3.morning) && /I have 3 fresh ones today, not five/.test(a3.morning), "when every model angle fails and only the plan is fresh, she gets the three that exist, and is told so");
+ok(a3.famh.length === 3, "and exactly what she got is written to her history: " + a3.famh.length);
+ok(owner.some(t => /SHORT/.test(t) && /Full note:/.test(t)), "Kendall is told why it is short: " + (owner.find(t => /SHORT/.test(t)) || "").slice(0, 140));
 
 // ---- A4. a QA agent that cannot answer does not stop the morning; the mechanical checks still apply ---------------------------------
 const a4 = await run([], { qa: () => "garbage" });

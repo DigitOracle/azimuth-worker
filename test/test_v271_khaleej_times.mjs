@@ -85,7 +85,8 @@ ok(k5.data && Array.isArray(k5.data.news) && k5.data.news.some(n => n.outlet ===
 // K6
 const k6 = await run({ news: [ktBare], kt: [KT_BAD] });   // v284 - a story with no figure: the ledger cannot supply one either
 ok(k6.morning && !/15%/.test(k6.morning), "K6 the morning still goes without it");
-ok(owner.some(t => /NO Khaleej Times angle: story held, but no angle passed/.test(t)), "K6 and Kendall is told there is no Khaleej Times angle, and why");
+ok(/Etihad Rail passenger service launches/.test(k6.morning), "K6 v295: the Khaleej Times slot is filled from the figureless story itself, with its property tie-in: " + ((k6.morning.match(/Etihad Rail passenger service launches[^\n]*/) || [""])[0]).slice(0, 150));
+ok(!owner.some(t => /NO Khaleej Times angle/.test(t)), "K6 and Kendall is therefore not told there is none (a story without a number is still a story)");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);

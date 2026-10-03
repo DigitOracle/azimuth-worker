@@ -189,14 +189,23 @@ export function newsFacts(news) {
   const out = [];
   for (const it of (Array.isArray(news) ? news : [])) {
     const txt = String(it.title || "") + " " + String(it.summary || "");
-    const m = txt.match(NEWS_FIG_RX); if (!m) continue;
-    const fig = m[0].trim();
-    if (/^20\d\d\b/.test(fig.replace(/[^0-9]/g, "")) && !/[%]|AED|Dh/i.test(fig)) continue;
+    // v295 - a story WITHOUT a figure is a fact too (qual: true): the guaranteed source slots (Khaleej Times, international, developer,
+    // infrastructure) cannot wait for a headline that happens to carry a number. Its "figure" is the thing it is about; it is never
+    // handed to the generator (the menu skips qual facts) and the news honesty rule asks no number of it, only that it is the story.
+    const m = txt.match(NEWS_FIG_RX);
+    const ents = Array.isArray(it.ents) ? it.ents : [];
     const lead = (Array.isArray(it.names) ? it.names : []).find(Boolean) || "";
-    const fam = /metro|rail|tram|road|rta|station|bus|airport|transport|commute|petrol/i.test(txt) ? "transit" : /develop|launch|project|tower/i.test(txt) ? "developer" : /rent|tenan|lease|landlord/i.test(txt) ? "rents_yields" : "news";
+    const area = (ents.find((e) => e.type === "district") || {}).name || "";
+    let fig = m ? m[0].trim() : "", qual = false;
+    if (m && /^20\d\d\b/.test(fig.replace(/[^0-9]/g, "")) && !/[%]|AED|Dh/i.test(fig)) { fig = ""; }
+    if (!fig) {
+      if (!lead && !/rail|metro|road|station|school|hospital|launch|handover|completion|unveil|opens?\b|petrol|fuel|oil\b|rates?\b|inflation|market|invest|rent|propert|real estate|villa|apartment|transparen/i.test(txt)) continue;
+      fig = lead || String(it.title || "").split(/\s+/).slice(0, 4).join(" "); qual = true;
+    }
+    const fam = /(metro|rail|tram|roads?|rta|stations?|buses|bus|airport|transport|commutw*|petrol)/i.test(txt) ? "transit" : /develop|launch|project|tower/i.test(txt) ? "developer" : /rent|tenan|lease|landlord/i.test(txt) ? "rents_yields" : "news";
     const date = String(it.published || "").replace(/\s+\d{2}:\d{2}.*$/, "");
     out.push({ id: "news:" + slug(it.outlet) + ":" + slug(it.title).slice(0, 60), block: "news", kind: "news", family: fam, subject: low(lead), figure: fig,
-      says: String(it.title || "").replace(/\s+/g, " ").trim().replace(/\.?$/, "."), buyer: "Today's city news, as reported.", source: "reported by " + it.outlet + ", " + date, reader: fam === "transit" ? "move" : "invest", good: true, outlet: it.outlet, today: !!it.today });
+      says: String(it.title || "").replace(/\s+/g, " ").trim().replace(/\.?$/, "."), buyer: "Today's city news, as reported.", source: "reported by " + it.outlet + ", " + date, reader: fam === "transit" ? "move" : "invest", good: true, outlet: it.outlet, today: !!it.today, qual, area: low(area), ents: ents.map((e) => e.type).filter((v, i, a) => a.indexOf(v) === i) });
   }
   return out;
 }

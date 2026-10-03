@@ -19,10 +19,10 @@ const NEWS = [
   item("Emirates News Agency", "Dubai Land Department reports quarter", "The Dubai Land Department recorded 42,300 transactions in the third quarter.", "Dubai Land Department"),
   item("Arabian Business", "Blue Line tender awarded", "The Blue Line's 30 km tender was awarded this week.", "Blue Line"),
 ];
-const N_RAIL = A("Etihad Rail runs 10 daily journeys from Dubai.", "10 daily journeys", "reported by Khaleej Times, 30 Sep 2026", "transit", "move");
+const N_RAIL = A("Etihad Rail runs 10 daily journeys from Dubai, which lifts homes for tenants and buyers in Jebel Ali.", "10 daily journeys", "reported by Khaleej Times, 30 Sep 2026", "transit", "move");
 const N_VILLA = A("A Palm Jumeirah villa just sold for Dh170 million.", "Dh170 million", "reported by The National, 30 Sep 2026", "luxury", "invest");
-const N_ROAD = A("The RTA opened 4 new lanes on Al Ittihad Road.", "4 new lanes", "reported by Gulf News, 30 Sep 2026", "roads", "move");
-const N_DLD = A("The DLD recorded 42,300 transactions last quarter.", "42,300 transactions", "reported by Emirates News Agency, 30 Sep 2026", "volume", "authority");
+const N_ROAD = A("The RTA opened 4 new lanes on Al Ittihad Road, easing travel for tenants in Al Qusais.", "4 new lanes", "reported by Gulf News, 30 Sep 2026", "roads", "move");
+const N_DLD = A("The DLD recorded 42,300 transactions last quarter across Dubai.", "42,300 transactions", "reported by Emirates News Agency, 30 Sep 2026", "volume", "authority");
 const N_BLUE = A("The Blue Line's 30 km tender was awarded.", "30 km", "reported by Arabian Business, 30 Sep 2026", "developer", "invest");
 const N_FAKE = A("The villa market jumped 22% this week.", "22%", "reported by The National, 30 Sep 2026", "luxury", "invest");
 

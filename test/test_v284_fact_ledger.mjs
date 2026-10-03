@@ -70,7 +70,7 @@ const run = async (opts) => {
     async put(k, v) { store.set(k, v); }, async delete(k) { store.delete(k); },
     async list(o) { return { keys: [...store.keys()].filter((k) => !o || !o.prefix || k.startsWith(o.prefix)).map((name) => ({ name })), list_complete: true }; } };
   const env = { MEETINGS: KV, AI: { run: async () => ({ response: "{}" }) }, READ_KEY: READ, MARKET_BRIEF: "on", ANTHROPIC_API_KEY: "test-only-not-a-key", PUBLIC_ORIGIN: "https://x",
-    WA_ALLOWED: "971565484397", WHATSAPP_TOKEN: "t", WA_PHONE_ID: "1", LIVE_NEWS: "on", OWNER_NOTE_URL: "https://mc/owner_note", INGEST_TOKEN: "i" };
+    WA_ALLOWED: "971565484397", WHATSAPP_TOKEN: "t", WA_PHONE_ID: "1", FEED_SLOTS: opts.slots, LIVE_NEWS: "on", OWNER_NOTE_URL: "https://mc/owner_note", INGEST_TOKEN: "i" };
   const r = await worker.fetch(new Request("https://x/feed_test?key=" + READ + (opts.live ? "" : "&dry=1")), env, { waitUntil() {} });
   const out = await r.text();
   const list = out.split("\n\nQA:")[0];
@@ -122,7 +122,7 @@ ok(l5.morning && todays.length === 5 && todays.filter(x => x.id).length >= 3, "L
 
 // ---- L6. the gate removes, the ledger refills, the gate runs again ---------------------------------------------------------------
 let qaRound = 0;
-const l6 = await run({ qa: (today) => (++qaRound === 1 ? today.filter(t => /^The Dubai 2040/.test(t.hook)).slice(0, 1).map(t => t.angle) : []) });
+const l6 = await run({ slots: "off", qa: (today) => (++qaRound === 1 ? today.filter(t => /^The Dubai 2040/.test(t.hook)).slice(0, 1).map(t => t.angle) : []) });
 ok(l6.angles.length === 5 && l6.qa && /after the gate: refilled 1 from the fact ledger/.test(l6.qa.note), "L6 the gate removes one, the ledger refills it and the gate checks the refill: " + l6.angles.length + " | " + (l6.qa ? (l6.qa.note.match(/after the gate[^|]*/) || ["(no refill)"])[0].slice(0, 140) : ""));
 
 console.log("\n" + pass + " passed, " + fail + " failed");

@@ -4362,7 +4362,7 @@ async function appFetch(request, env, ctx) {
           if (/^(?:feed|daily|today(?:'s)?\s+(?:feed|angles|posts?))\s*\??$/i.test(text)) {
             // v283 (Naj, 1 Oct: "why only 3?"): the feed has been five angles since 19 Sep; the old "three" wording and the
             // second, duplicate "building" line are gone - one message, the right number.
-            await waSend(env, from, "☀️ Building this morning's five — about a minute…");
+            await waSend(env, from, "☀️ Building this morning's list — about a minute…");   // v295 - the count is not known until it is built; the header of the list says the real number
             // v283 (1 Oct): Naj asked for "feed", got "building..." and then nothing - the gate and QA had removed every angle that
             // repeated stale figures, and the run ended without a word. Now a run that sends nothing always says why.
             const _fqBefore = await env.MEETINGS.get("mkt_feed_qa");
@@ -5507,10 +5507,10 @@ function feedSubjLock(famh) { const now = Date.now(), m = new Map(); for (const 
 // generator's own figure ("5.8million2040targetvs3.3million2020"), which never equals the plan's wording, and plan numbers are too
 // short for the number test - so before v284 a plan line was "fresh" the day after it ran. Every number of the plan figure in one
 // recent row is that line (a single-number figure such as "60%" only within its own family).
-function feedPlanRested(f, famh) {
-  const want = (String(f.figure).match(/\d+(?:\.\d+)?/g) || []); if (!want.length) return "";
+function feedPlanRested(f, famh, days) {   // v295 - days: the window (default PLAN_DAYS)
+  const want = (String(f.figure).replace(/,/g, "").match(/\d+(?:\.\d+)?/g) || []); if (!want.length) return "";   // v295 - commas out: "40,000" was read as 40 and 000, so that line never rested
   for (const x of famh) {
-    if (!x.k || (Date.now() - Date.parse(x.d)) >= PLAN_DAYS * 86400 * 1000) continue;
+    if (!x.k || (Date.now() - Date.parse(x.d)) >= (days || PLAN_DAYS) * 86400 * 1000) continue;
     const have = new Set(String(x.k).match(/\d+(?:\.\d+)?/g) || []);
     if (want.every(n => have.has(n)) && (want.length >= 2 || x.f === f.family)) return "plan line used on " + x.d;
   }
@@ -5520,7 +5520,7 @@ function feedPlanRested(f, famh) {
 // there as "the same idea" (1 Oct 2026: the 5.8 million and the AED 55 billion lines, five and four days after they ran), so it is
 // kept back here instead of being offered and then removed. Two or more of its numbers in one hook, or a one-number figure verbatim.
 function feedPlanInHooks(f, hooks) {
-  const want = (String(f.figure).match(/\d+(?:\.\d+)?/g) || []).filter(n => n !== "2040"); if (!want.length) return "";
+  const want = (String(f.figure).replace(/,/g, "").match(/\d+(?:\.\d+)?/g) || []).filter(n => n !== "2040"); if (!want.length) return "";
   const fig = String(f.figure).toLowerCase();
   for (const h of hooks) { const t = String(h || "").toLowerCase().replace(/,/g, ""); const hit = want.filter(n => new RegExp("(^|[^0-9.])" + n.replace(".", "\\.") + "([^0-9]|$)").test(t));
     if (want.length >= 2 ? hit.length === want.length : t.includes(fig)) return "plan line in her recent hooks"; }
@@ -5539,13 +5539,13 @@ function feedLedger(facts, famh, dayIndex, hooks) {
   hooks = (hooks || []).slice(0, 30);
   const sets = feedSeenSets(famh), subj = feedSubjLock(famh), idSeen = new Map();
   for (const x of famh) if (x.id && (!idSeen.has(x.id) || x.d > idSeen.get(x.id))) idSeen.set(x.id, x.d);
-  const fresh = [], used = [], ids = new Set();
-  for (const f of facts) { if (!f || !f.id || ids.has(f.id)) continue; ids.add(f.id); const w = feedFactUsedWhy(f, sets, subj, idSeen, famh, hooks); if (w) used.push({ id: f.id, block: f.block, why: w }); else fresh.push(f); }
+  const fresh = [], used = [], usedF = [], ids = new Set();
+  for (const f of facts) { if (!f || !f.id || ids.has(f.id)) continue; ids.add(f.id); const w = feedFactUsedWhy(f, sets, subj, idSeen, famh, hooks); if (w) { used.push({ id: f.id, block: f.block, why: w }); usedF.push({ f, why: w }); } else fresh.push(f); }
   const recentSubjects = new Set(famh.filter(x => x.s && (Date.now() - Date.parse(x.d)) < 5 * 86400 * 1000).map(x => x.s.split(":").slice(1).join(":")).filter(s => s && s !== "-" && !/^fig:/.test(s)));
-  const menu = factMenu(fresh, { dayIndex, recentSubjects });
+  const menu = factMenu(fresh.filter(f => !f.qual), { dayIndex, recentSubjects });   // v295 - a story without a figure (qual) is for the source slots, never for the generator
   const by = (L) => { const o = {}; for (const f of L) o[f.block] = (o[f.block] || 0) + 1; return o; };
   const bm = by(menu);
-  return { all: ids.size, fresh, used, menu, byAll: by(facts), byFresh: by(fresh),
+  return { all: ids.size, fresh, used, usedF, menu, byAll: by(facts), byFresh: by(fresh),
     note: "ledger: " + ids.size + " facts from " + Object.keys(by(facts)).length + " sources, " + fresh.length + " fresh, " + menu.length + " handed to the generator (" + Object.keys(bm).map(k => k + " " + bm[k]).join(", ") + ")" };
 }
 function feedFactMap(data) { const m = new Map(); try { const o = typeof data === "string" ? JSON.parse(data) : data; for (const f of ((o && o.facts) || [])) if (f && f.id) m.set(f.id, f); } catch (e) {} return m; }
@@ -5563,10 +5563,226 @@ function feedBind(a, fm) {
   return a;
 }
 // the ledger's own angle for a fact, in plain English - the floor's last resort before any readmission
-function feedFactAngle(f) { return { hook: f.says, figure: f.figure, source: f.source, buyer: f.buyer || "", family: f.family, reader: f.reader || "invest", fact: f.id, subject: f.subject || "", ledger: true }; }
+function feedFactAngle(f) { return { hook: f.says, figure: f.figure, source: f.source, buyer: f.buyer || "", family: f.family, reader: f.reader || "invest", fact: f.id, subject: f.subject || "", ledger: true, qual: !!f.qual, area: f.area || "" }; }
 // the data a top-up is handed: the facts already in the set are taken out, so it cannot offer them again
 function feedDataLess(data, cur) {
   try { const o = JSON.parse(data); if (Array.isArray(o.facts)) { const ids = new Set(cur.map(a => a.fact).filter(Boolean)), figs = new Set(cur.map(figKey)); o.facts = o.facts.filter(f => !ids.has(f.id) && !figs.has(figKey(f))); } return o; } catch (e) { return null; }
+}
+// v295 - ALWAYS FIVE, AND NOTHING INTERNAL REACHES HER (Kendall, 3 Oct 2026: "it should consistently send 5").
+// On 3 Oct the model's five were all removed as "same idea as before" (the gate, then the QA agent), a refill of three from the fact
+// ledger was removed the same way, and she got two. "Same idea" is a judgement about THEME, and a judgement that can empty the
+// morning is not a gate. THE RULE, in one place:
+//   HARD - nothing is sent past these, for the model's angles and for every refill alike: no figure, number or fact id she had in
+//          the last 14 days (a plan line: PLAN_DAYS), a real source with a date, numbers that are really in the data (feedHookTrue and the
+//          plan-citation test), and the 2-3 plan / 2-3 register split. (FEED_HARD_RX names the audit's wording for the first of these.)
+//   SOFT - "same idea as before": the QA agent's verdict, the five-day subject lock and the one-family-per-angle rule. They still
+//          remove the MODEL's angles. For a ledger refill candidate they only rank (a different family, subject and reader first)
+//          and are reported to the owner as warnings, never as removals.
+//   WIDEN - if the fresh facts run out before five: (1) plan lines not said in the last 30 days (the hooks check had rested them),
+//          (2) the same fact again only when its figure has changed. Last resort: send what exists, tell her "I have N fresh ones
+//          today, not five", and tell the owner why. A repeat is never the way to reach five.
+// v295 - EVERY ANGLE IS RELEVANT TODAY AND TIED TO REAL ESTATE (Kendall, 3 Oct 2026). A post has to catch a stranger's eye in its first line,
+// but the point must always land in property. A news item is never dropped for "not being real estate": the link is found. Petrol up ->
+// where people will want to live and buy (closer to a metro, shorter commutes); Etihad Rail, a new station, road or school -> the area it
+// lifts. Mechanically: feedPropertyLink() must pass (a buyer / tenant / investor / home / rent / yield word, and for news and
+// infrastructure the AREA named); an angle that fails is REWRITTEN once by the model (feedPropertyRewrite), then tied in from its own
+// buyer line and area (feedTieIn); only an angle that still cannot be tied is rejected. Ledger refills get the same tie-in sentence, and
+// today's news / trends / city life / developments rank above old 2040-plan lines when the five are chosen (FEED_TODAY_BLOCKS).
+const FEED_PROPERTY_RULE = " THE PROPERTY TIE-IN, FIRM (Kendall, 3 Oct 2026): every angle must be relevant TODAY and tied to real estate. The first line hooks - it is read across six platforms - but the point always lands in property: tie EVERY item to what it means for buyers, tenants or investors, with the AREA named (petrol prices up: where people will want to live and buy, closer to a metro, shorter commutes; Etihad Rail, a new metro station, road or school: the area it lifts and why homes there gain). Never leave a news item out because it is not about real estate - find the real-estate link and say it. Today's news and infrastructure rank above old 2040-plan lines. An angle with no property link will be rejected.";
+const FEED_TODAY_BLOCKS = new Set(["news", "trends", "cityLife", "developments"]);
+const FEED_PROP_RX = /\b(buyers?|tenants?|investors?|renters?|landlords?|homes?|propert(?:y|ies)|apartments?|villas?|rents?|rental|yields?|off-plan|real estate|housing|neighbou?rhoods?|where to live|commut\w*|sq ft|per sq|sales?|sold|transactions?|leases?|mortgages?)\b/i;
+const FEED_AREAFAM = new Set(["news", "transit", "city_life"]);
+function feedPropertyLink(a) {   // "" when tied to property (and, for news and infrastructure, an area); otherwise why not
+  if (!a || a.campaign) return "";
+  const h = String(a.hook || "");
+  if (!FEED_PROP_RX.test(h)) return "no property link (no buyer, tenant, investor, home, rent or yield in the hook)";
+  const fam = a.family || famOf(a);
+  if (!planAngle(a) && (FEED_AREAFAM.has(fam) || NEWS_CITE_RX.test(String(a.source || ""))) && !(a.subject || ENTITY_RX.test(h) || /\b(?:in|across|near|around|at)\s+[A-Z][a-z]+/.test(h))) return "no area named";
+  return "";
+}
+const FEED_TIE = { transit: "easier transport is what pulls tenants and buyers towards homes near it", rents_yields: "it is one more thing to weigh when choosing where to rent", handover_supply: "it shapes which new homes will be there to choose from" };
+function feedTieIn(a, f) {   // the tie-in sentence from the angle's own buyer line and area; "" when it cannot honestly be made
+  const area = String(f ? (f.block === "news" ? f.area : (f.area || f.subject)) : (a.area || a.subject || "")).replace(/^[a-z]+:/, "").trim(), fam = a.family || famOf(a);
+  const title = area ? area.replace(/\b\w/g, c => c.toUpperCase()) : "";
+  const buyer = String((f && f.buyer) || a.buyer || "").trim().replace(/[.\s]+$/, "");
+  if (planAngle(a)) return "For buyers and investors, it is the backdrop the city's homes are priced against.";
+  if (!title && !(f && f.block === "news")) return "";
+  return "For buyers, tenants and investors " + (title ? "in " + title : "across Dubai") + ", " + (FEED_TIE[fam] || "it is one more thing to weigh when choosing where to live or buy") + ".";
+}
+async function feedPropertyRewrite(env, bad) {   // one model call: same figure, same source, a property link added; returns the rewritten hooks by index
+  if (!bad.length) return {};
+  const sys = "PROPERTY TIE-IN REWRITE. For each angle, rewrite ONLY the hook so its first line still catches attention but the point lands in real estate: what it means for buyers, tenants or investors, with the area named. Keep every number and the fact exactly as given; add no new number and no claim the source does not make. Plain words, under 45 words. Return JSON: items, each with i and hook.";
+  const g = await claudeJSON(env, sys, JSON.stringify({ angles: bad.map(x => ({ i: x.i, hook: x.a.hook, figure: x.a.figure, source: x.a.source, area: x.a.subject || "", buyer: x.a.buyer || "" })) }), { type: "object", properties: { items: { type: "array", items: { type: "object", properties: { i: { type: "number" }, hook: { type: "string" } }, required: ["i", "hook"] } } }, required: ["items"] }, null, 700);
+  const m = {}; for (const it of ((g && g.items) || [])) if (it && typeof it.hook === "string") m[it.i] = it.hook; return m;
+}
+async function feedPropertyGate(env, angles) {   // rewrite, then tie in, then (only then) reject; returns the notes for the owner
+  const notes = []; const bad = []; angles.forEach((a, i) => { if (a.campaign) return; const w = feedPropertyLink(a); if (w) bad.push({ i, a, w }); });
+  if (!bad.length) return notes;
+  let rw = {}; try { rw = await feedPropertyRewrite(env, bad); } catch (e) {}
+  const drop = [];
+  for (const x of bad) {
+    const old = x.a.hook, nums = (t) => (String(t).match(/\d[\d,]*(?:\.\d+)?/g) || []).map(n => n.replace(/,/g, "")).sort().join();
+    if (rw[x.i] && nums(rw[x.i]) === nums(old) && !feedPropertyLink(Object.assign({}, x.a, { hook: rw[x.i] }))) { x.a.hook = rw[x.i]; notes.push("rewrote with a property link: " + String(old).slice(0, 50)); continue; }
+    const tie = feedTieIn(x.a, null);
+    if (tie && !feedPropertyLink(Object.assign({}, x.a, { hook: old + " " + tie }))) { x.a.hook = old + " " + tie; notes.push("tied in: " + String(old).slice(0, 50)); continue; }
+    drop.push(x.a); notes.push("REJECTED, " + x.w + ": " + String(old).slice(0, 60));
+  }
+  for (const a of drop) angles.splice(angles.indexOf(a), 1);
+  return notes;
+}
+// v295 - GUARANTEED SOURCE SLOTS (Kendall, 3 Oct 2026, restated: "the feed must be built from slots, not from whatever survives the gates").
+// Every morning, five angles, one per slot, each filled BEFORE the quality gates and each tied to real estate:
+//   1 kt        Khaleej Times (the day before or recent days is fine)
+//   2 intl      an international or regional source (Financial Times, BBC, Reuters, Bloomberg, Al Jazeera, Zawya, Gulf Business, Wikipedia) or a
+//               market / petrol-price story: how does it change where people buy, rent or invest in Dubai?
+//   3 ejari     the Ejari contracts: which parts of the city are hot this week (filed leases by area, bedroom count or sub-type)
+//   4 developer a developer or project announcement (launch, handover, completion; Emaar, DAMAC and others) - via NEWS coverage and the
+//               project register, never from emaar.com or damacproperties.com
+//   5 infra     infrastructure (Etihad Rail, metro, roads, schools) or a plan line, tied to the area it lifts
+// THE GATES CANNOT EMPTY A SLOT. They may only reject a duplicate figure or fact id from her last 14 days (the HARD rules, FEED_HARD_RX),
+// and then the slot is refilled from the same source's next item (feedSlotFill, called again by feedFiveRefill with the repeat on the skip
+// list). A slot with no candidate that passes is REPORTED to the owner with the reason ("developer: no candidate in the pool"), and the
+// morning is backfilled to five from any other fact so she still gets five. A story without a number is still a story (ledger qual facts).
+// This replaces the 19 Sep "2-3 plan / 2-3 register" split: only slot 5 may be a plan line. FEED_SLOTS=off in the environment restores the split.
+const FEED_SLOT_IDS = ["kt", "intl", "ejari", "developer", "infra"];
+const FEED_SLOT_LABEL = { kt: "Khaleej Times", intl: "international / regional news", ejari: "Ejari contracts", developer: "developer or project announcement", infra: "infrastructure or plan line" };
+const FEED_INTL_RX = /financial times|\bft\b|bbc|reuters|bloomberg|al jazeera|zawya|gulf business|cnbc|guardian|economist|middle east|wikipedia|associated press/i;
+const FEED_MARKET_RX = /\b(petrol|fuel|diesel|oil|brent|opec|interest rates?|inflation|mortgage rates?|dollar|gold|stocks?|markets?|economy|gdp|tariffs?|transparency)\b/i;
+const FEED_DEV_RX = /\b(launch(?:es|ed)?|handover|handed over|completion|completes|completed|unveils?|announces?|breaks ground|groundbreaking|new project|sells out|sold out|residences)\b/i;
+const FEED_DEVNAME_RX = /\b(emaar|damac|nakheel|sobha|meraas|dubai holding|dhg|aldar|binghatti|ellington|azizi|danube|omniyat|select group|imtiaz|samana|deyaar|union properties|wasl|majid al futtaim|arada|dubai properties|meydan|developers?)\b/i;
+function feedSlotView(x, fm) {   // a ledger fact, or an angle (looked up by its fact id), seen as { block, src, txt }
+  const f = x && x.id && x.block ? x : (x && x.fact && fm ? fm.get(x.fact) : null);
+  const src = String((x && x.source) || (f && f.source) || ""), txt = String((x && (x.says || x.hook)) || "") + " " + String((f && f.says) || "");
+  let block = f ? f.block : "";
+  if (!block) { if (planAngle(x)) block = "dubai2040"; else if (/ejari/i.test(src)) block = "ejari"; else if (NEWS_CITE_RX.test(src)) block = "news"; else if (/meed|project register|availability|sheet/i.test(src)) block = "developments"; else if (/\brta\b|dubai culture/i.test(src)) block = "cityLife"; }
+  return { block, src, txt };
+}
+function feedSlotFits(slot, v) {
+  const news = v.block === "news", kt = news && KT_RX.test(v.src);
+  if (slot === "kt") return kt;
+  if (slot === "intl") return news && !kt && (FEED_INTL_RX.test(v.src) || FEED_MARKET_RX.test(v.txt));
+  if (slot === "ejari") return v.block === "ejari";
+  if (slot === "developer") return v.block === "developments" || v.block === "projects" || (news && FEED_DEV_RX.test(v.txt) && FEED_DEVNAME_RX.test(v.txt));
+  if (slot === "infra") return v.block === "cityLife" || v.block === "dubai2040" || (news && NEWS_INFRA_RX.test(v.txt));
+  return false;
+}
+function feedSlotRank(slot, f) {   // today's story first, then the newest; the busiest Ejari areas first
+  let r = f.today ? 4 : 0; const m = String(f.source || "").match(/(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* (\d{4})/);
+  if (m) { const t = Date.parse(m[1] + " " + m[2] + " " + m[3] + " UTC"); if (t) r += Math.max(0, 3 - (Date.now() - t) / 172800000); }
+  if (slot === "ejari") r += /^ejari:area/.test(f.id) ? 3 : /^ejari:sub/.test(f.id) ? 2 : 0;
+  if (slot === "developer" && f.block === "news") r += 2;
+  return r;
+}
+function feedSlotAssign(own, fm) {   // the best way to give each slot one of the angles already in the set: an array of five, angle or null
+  const views = own.map(a => feedSlotView(a, fm)); let best = [];
+  const count = (c) => c.filter(Boolean).length;
+  const rec = (k, used, cur) => {
+    if (k === FEED_SLOT_IDS.length) { if (count(cur) > count(best)) best = cur.slice(); return; }
+    for (let i = 0; i < own.length; i++) if (!used.has(i) && feedSlotFits(FEED_SLOT_IDS[k], views[i])) { used.add(i); cur.push(own[i]); rec(k + 1, used, cur); cur.pop(); used.delete(i); if (count(best) === 5) return; }
+    cur.push(null); rec(k + 1, used, cur); cur.pop();
+  };
+  rec(0, new Set(), []);
+  return best.length ? best : FEED_SLOT_IDS.map(() => null);
+}
+function feedAcceptCtx(L, famh, skip, data) {
+  const dataStr = L.map(f => f.figure + " " + f.says + " " + f.source).join(" ").replace(/,/g, "");
+  let news = []; try { news = (JSON.parse(data) || {}).news || []; } catch (e) {}
+  const honest = (a) => !(PLAN_SRC_RX.test(String(a.source || "")) && !planFigBacked(a)) && !feedHookTrue(a, dataStr) && !feedNewsTrue(a, news);
+  return { sets: feedSeenSets(famh), skip: skip || new Set(), honest };
+}
+function feedAcceptFact(f, cur, ctx) {   // the angle for fact f when it passes the HARD rules against the set so far; otherwise the reason, a string
+  if (!f || !f.id) return "no id";
+  if (ctx.skip.has(f.id) || ctx.skip.has(figKey(f))) return "removed by the gate as a repeat";
+  if (cur.some(x => x.fact === f.id || figKey(x) === figKey(f))) return "already in the set";
+  const a = feedFactAngle(f);
+  if (feedPropertyLink(a)) { const tie = feedTieIn(a, f); if (tie) a.hook = a.hook + " " + tie; }
+  if (feedPropertyLink(a)) return "no property link";
+  if (!String(f.source || "").trim() || !FEED_DATE_RX.test(f.source + " " + f.says + " " + f.figure)) return "no source or date";
+  if (!ctx.honest(a)) return "numbers not in the data or a bad citation";
+  const w = feedRepeatWhy(a, ctx.sets); if (w) return w;
+  const nk = numKeys(a); if (nk.some(n => cur.some(x => numKeys(x).includes(n)))) return "shares a number with the set";
+  return a;
+}
+async function feedSlotFill(env, angles, ledger, data, famh, o) {
+  o = o || {};
+  const fm = new Map(); for (const f of (ledger.fresh || [])) fm.set(f.id, f); for (const x of (ledger.usedF || [])) fm.set(x.f.id, x.f);
+  const own = () => angles.filter(a => !a.campaign), insertAt = () => { const i = angles.findIndex(a => a.campaign); return i < 0 ? angles.length : i; };
+  const tiers = feedFiveTiers(ledger, famh), all = [].concat(...tiers.map(t => t.L)), ctx = feedAcceptCtx(all, famh, o.skip, data);
+  const rep = { slots: {}, filled: [], unfilled: [], backfill: 0 };
+  const assign = feedSlotAssign(own(), fm);
+  // an older plan line holding the infrastructure slot gives way to today's infrastructure story or city-life fact, when one passes
+  { const ki = FEED_SLOT_IDS.indexOf("infra"); if (assign[ki] && feedSlotView(assign[ki], fm).block === "dubai2040") { const up = []; for (const t of tiers) for (const f of t.L) { const v = feedSlotView(f); if (v.block !== "dubai2040" && feedSlotFits("infra", v)) up.push(f); } up.sort((a, b) => feedSlotRank("infra", b) - feedSlotRank("infra", a)); const rest = own().filter(a => a !== assign[ki]); for (const f of up) { const a = feedAcceptFact(f, rest, ctx); if (typeof a === "string") continue; a._tier = "fresh facts"; angles.splice(angles.indexOf(assign[ki]), 1); assign[ki] = null; rep.upgraded = (rep.upgraded || []).concat("infra: plan line replaced by " + f.id.slice(0, 40)); break; } } }
+  for (let k = 0; k < FEED_SLOT_IDS.length; k++) {
+    const sl = FEED_SLOT_IDS[k];
+    if (assign[k]) { rep.slots[sl] = assign[k].ledger ? "ledger" : "model"; continue; }
+    const why = {}; let got = null, n = 0;
+    for (const t of tiers) {
+      const cands = t.L.filter(f => feedSlotFits(sl, feedSlotView(f))).sort((a, b) => feedSlotRank(sl, b) - feedSlotRank(sl, a));
+      for (const f of cands) { n++; const a = feedAcceptFact(f, own(), ctx); if (typeof a === "string") { why[a] = (why[a] || 0) + 1; continue; } got = a; break; }
+      if (got) { got._tier = t.name; break; }
+    }
+    if (got) { try { await voiceGuard(env, [got]); } catch (e) {} angles.splice(insertAt(), 0, got); if (o.soft) o.soft.add(got); assign[k] = got; rep.slots[sl] = "ledger" + (got._tier && got._tier !== "fresh facts" ? " (" + got._tier + ")" : ""); rep.filled.push(sl); }
+    else { rep.slots[sl] = "EMPTY"; rep.unfilled.push(sl + " (" + FEED_SLOT_LABEL[sl] + "): " + (n ? n + " candidates, all refused - " + Object.keys(why).map(w => why[w] + " " + w).join(", ") : "no candidate in the pool")); }
+  }
+  const reps = assign.filter(Boolean), extras = own().filter(a => !reps.includes(a)), camp = angles.filter(a => a.campaign);
+  angles.splice(0, angles.length, ...reps.concat(extras.slice(0, Math.max(0, 5 - reps.length))), ...camp);
+  if (own().length < 5) rep.backfill = await feedSoftFill(env, angles, all, famh, { skip: o.skip, theme: o.theme, soft: o.soft, data, noSplit: true });
+  rep.summary = FEED_SLOT_IDS.map(sl => sl + " " + rep.slots[sl]).join(", ") + (rep.unfilled.length ? "; NOT FILLED: " + rep.unfilled.join("; ") : "") + (rep.backfill ? "; backfilled " + rep.backfill + " from other facts" : "");
+  return rep;
+}
+const FEED_HARD_RX = /already used|shares a number|shares a figure/;
+const FEED_DATE_RX = /\b(19|20)\d\d\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\bq[1-4]\b/i;
+function feedDeepOrder(L, day) {   // round-robin over the sources, each rotated by the day, so no source or area always goes first
+  const by = {}; for (const f of L) (by[f.block] = by[f.block] || []).push(f);
+  const lists = Object.keys(by).sort().map(b => { const l = by[b], r = l.length ? day % l.length : 0; return l.slice(r).concat(l.slice(0, r)); });
+  const out = []; for (let k = 0; lists.some(l => l[k]); k++) for (const l of lists) if (l[k]) out.push(l[k]);
+  return out;
+}
+function feedFiveTiers(ledger, famh) {
+  const day = feedDayIndex(), used = ledger.usedF || [];
+  const t1 = used.filter(x => x.f.kind === "plan" && !feedPlanRested(x.f, famh, 30) && !famh.some(r => r.id === x.f.id && (Date.now() - Date.parse(r.d)) < 30 * 86400000)).map(x => x.f);
+  const t2 = used.filter(x => x.f.kind !== "plan" && /^fact used on/.test(x.why) && !famh.some(r => r.id === x.f.id && r.k === figKey(x.f))).map(x => x.f);   // the SAME fact only when its figure is not the one she was given
+  return [{ name: "fresh facts", L: feedDeepOrder(ledger.fresh || [], day) }, { name: "plan lines unsaid for 30 days", L: feedDeepOrder(t1, day) }, { name: "the same fact with a changed figure", L: feedDeepOrder(t2, day) }];
+}
+// takes facts from L (already in preferred order) until there are five own angles; HARD rules only, theme only ranks
+async function feedSoftFill(env, angles, L, famh, o) {
+  const own = () => angles.filter(a => !a.campaign), theme = o.theme || new Set(), ctx = feedAcceptCtx(L, famh, o.skip, o.data);
+  const insertAt = () => { const i = angles.findIndex(a => a.campaign); return i < 0 ? angles.length : i; };
+  let added = 0;
+  while (own().length < 5) {
+    const cur = own(), P = cur.filter(planAngle).length, R = cur.length - P, s = 5 - cur.length;
+    const onlyP = !o.noSplit && Math.max(0, 2 - P) >= s, onlyR = !o.noSplit && Math.max(0, 2 - R) >= s;
+    const fams = new Set(cur.map(a => a.family || famOf(a))), subs = new Set(cur.map(subjKey)), rds = new Set(cur.map(a => a.reader));
+    let best = null, bs = -1;
+    for (const f of L) {
+      const a = feedAcceptFact(f, cur, ctx); if (typeof a === "string") continue;
+      const isP = planAngle(a);
+      if (isP ? P >= 3 : (!o.noSplit && R >= 3)) continue; if ((onlyP && !isP) || (onlyR && isP)) continue;
+      const sc = (!isP && FEED_TODAY_BLOCKS.has(f.block) ? 16 : 0) + (fams.has(a.family) ? 0 : 8) + (subs.has(subjKey(a)) ? 0 : 4) + (rds.has(a.reader) ? 0 : 2) + (theme.has(figKey(f)) ? 0 : 1);
+      if (sc > bs) { best = a; bs = sc; }
+    }
+    if (!best) break;
+    try { await voiceGuard(env, [best]); } catch (e) {}
+    angles.splice(insertAt(), 0, best); if (o.soft) o.soft.add(best); added++;
+  }
+  return added;
+}
+async function feedFiveRefill(env, angles, ledger, data, famh, hist, gate, slots) {
+  const soft = new Set(), skip = new Set(), theme = new Set(), out = { added: 0, tiers: [], dropped: [], warnings: [], gate: null };
+  const own = () => angles.filter(a => !a.campaign), tiers = feedFiveTiers(ledger, famh);
+  const classify = (dr) => { for (const x of dr) { if (FEED_HARD_RX.test(x.why)) { skip.add(figKey(x)); if (x.fact) skip.add(x.fact); } else theme.add(figKey(x)); } };
+  classify(gate.dropped);
+  for (let round = 0; round < 3 && own().length < 5; round++) {
+    let n = 0;
+    if (slots) { const r = await feedSlotFill(env, angles, ledger, data, famh, { skip, theme, soft }); out.slots = r; n = r.filled.length + r.backfill; if (n) out.tiers.push(r.filled.length + " slot(s) refilled from the same source (" + r.filled.join(",") + ")" + (r.backfill ? ", " + r.backfill + " backfilled" : "")); }
+    else for (const t of tiers) { if (own().length >= 5) break; const k = await feedSoftFill(env, angles, t.L, famh, { skip, theme, soft, data }); if (k) { n += k; out.tiers.push(k + " from " + t.name); } }
+    if (!n) break;
+    out.added += n;
+    const g = await feedGate(env, angles, famh, hist, soft);
+    out.gate = g; out.dropped = out.dropped.concat(g.dropped); out.warnings = out.warnings.concat(g.warnings || []); classify(g.dropped);
+    if (!g.dropped.length) break;
+  }
+  return out;
 }
 function feedAudit(angles, famh) {
   const { seenFig, seenNum, recentFig, recentNum } = feedSeenSets(famh); const seenSubj = new Map(); const seenFam = {}; const bad = [];
@@ -5922,7 +6138,7 @@ async function dailyFeedTick(env, force, dry) {
     data = JSON.stringify({ facts: ledger.menu, dubai2040: { plan: DUBAI_2040.plan, launched: DUBAI_2040.launched, note: "the plan's lines she has not been given in the last " + PLAN_DAYS + " days are in facts (block dubai2040), each with its own source and status" }, news: _full.news, instagram: _full.instagram });
   } catch (e) { ledger = { error: String((e && e.message) || e).slice(0, 80) }; data = JSON.stringify(_full); }
   const _ledgerRule = ledger && ledger.menu ? " THE FACT LEDGER, AND IT OVERRIDES ANY RULE BELOW THAT NAMES A BLOCK (Kendall, 1 Oct 2026): `facts` is the ONLY material for today. Every figure in it is one she has NOT been given recently - everything she has already had has been taken out, so a figure that is not in facts is not available today, however well you know it. Build EACH angle on exactly ONE fact: put that fact's id in `fact`, copy its figure exactly as `figure` and its source exactly as `source`, use that fact's family as `family`, and take every number in the hook from that fact's own `says` line. Five angles, five different facts, five different families. Each fact names the block it came from (dubai2040, dldSales, monthly, trends, rents, areaIntel, projects, cityLife, developments, supply, developerInventory, ejari, news), so every rule below about a block applies to the facts from that block; a rule that asks for a block with no fact today is skipped, never met with an old figure. Prefer facts marked good: true. ejari facts are tenancy contracts FILED with the Ejari register - contracts signed, never homes available - and they count as register (Dubai Land Department) facts. news facts are news angles under the NEWS RULES below." : "";
-  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided." + _ledgerRule + " THE SPLIT, FIRM (Kendall, 19 Sep 2026): exactly TWO or THREE of the five are Dubai 2040 angles - the figure taken from dubai2040 and citing that line's own source - and the other TWO or THREE are real-estate angles from the live market data (register sales, rents, projects, developer inventory). THE SPINE, AND IT FRAMES ALL FIVE (Kendall, 18 Sep 2026): her whole trajectory runs along the DUBAI 2040 URBAN MASTER PLAN, the emirate's official plan to 2040, given in the dubai2040 block with a source on every line. Every angle tells a piece of THAT story - where Dubai is going, and a figure that shows it moving. Write each one for ONE of three readers, with AT LEAST ONE angle for EACH of the three - move, invest AND authority: (move) someone deciding whether to MOVE here - what their life will look like: walkable streets, beaches, parks, schools, a Metro station near home; (invest) someone deciding whether to INVEST here - where the plan deliberately points growth: the five urban centres, the Blue Line, the population it is built for; (authority) and in every angle HER - the broker who knows the plan and watches whether Dubai is keeping to it, which no other broker posts; the authority angle itself sets a 2040 target against where Dubai stands today in the live data, so she is seen tracking the plan. The SHAPE of every hook: the change (what is coming, or what has just moved) -> the figure that proves it -> what it means for the reader. Not a statistic with a feeling attached. This shape overrides 'feeling first' in HER VOICE below: her judgement is the last beat, as what it means, never an opening 'I feel'. SPREAD THE PLAN ACROSS THE FAMILIES, because each of the five must have a different family: the Blue Line is transit; the Dubai Walk, beaches, parks and nature are city_life; schools and health are education; population, the urban centres, tourism and the economy are growth_plan. A figure may come from dubai2040 itself or from the live data (register, rents, cityLife, projects, news); the strongest angles set a live figure against a 2040 target - for example a district's register figure against its place as one of the plan's urban centres, but only where dubai2040 names that district. HONESTY FOR THE PLAN, strictly: a figure with status target is a TARGET and is said as one ('the plan targets', 'by 2040'), never as achieved; planned and announced stay planned - never 'Dubai is building' or 'has built' unless the status says delivered; the Blue Line's nine residential areas are NOT named in the block, so never say which district it reaches; quote each 2040 figure exactly, with the source and date given, and never derive a new number from two of them. A 2020 figure is a 2020 figure: never say 'now' or 'today' of it. The data holds NO schedule for the plan, so never say it is on time, on track, ahead or behind. Cite a source only for what that source contains: a dubai2040 figure cites the source on its own line, and a figure from anywhere else cites the block it came from - never borrow the plan's source for a fact it does not state (a post that does is removed before she sees it). The last beat, what it means, is what it means FOR THE READER - a family, an investor - never a claim about Dubai's performance, a developer's intentions or a trend the data does not show. Never compute a span of time or a share yourself: where the data gives a period, give its dates; where it gives a share, quote it. In developerInventory, 'current' is stock on a developer's sheet and never a release; only a move is released or taken up. Every number - including counts and spans of time (12 weeks, 9 days, 3 towers) - is written as numerals (6,500 km; 14 stations; 5.8 million), because these are read on a screen and must stop the scroll - never spelled out in words. HER DISPOSITION, AND IT DECIDES WHAT YOU CHOOSE (Kendall, 17 Sep 2026, relaying her): this is an honest digest AND she is selling Dubai. She posts about good things happening in the city, like a diary of it. So AT LEAST FOUR of the five must be good news - something rising, opening, completing, arriving, connecting, a record, a place becoming better to live in, money coming in. The register hands you hundreds of true figures every morning: pick the ones that are good news. HONESTY IS NEVER TRADED FOR IT. Never call a fall a rise, never soften a figure, never imply a direction the data does not show, never drop the unit or the period to make a number look better. If the honest reading of a figure is bad news, do not use that figure - use a different one. At most ONE of the five may carry a caution, and only where it is genuinely the buyer's gain (more choice, a softer entry price, room to negotiate), written as what it means for them and never as a complaint about the city. A morning with five flat or worrying angles is a failed morning even when every number in it is correct. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one or two short sentences in HER VOICE (below), built around ONE specific figure written as numerals the way her captions do (3,098 homes; AED 7.78B; 13.9%), never spelled out in words; figure = that exact figure WITH its unit (e.g. 'AED 7.78B', '13.9%', '3,098 homes'); source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer; reader = the reader it is written for: move, invest or authority. The five angles must cover DIFFERENT figures and span different sections. AT LEAST ONE of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all) - and where several deltas are available, prefer one that moved UP, because that is the morning she is writing; a delta that moved down is honest and may be used, but it spends the single caution. TWO FURTHER SOURCES. AT LEAST ONE of the five must come from cityLife, because it is what living in Dubai is like; developerInventory is OPTIONAL, and a handful of released or taken-up units is never a story of Dubai on its own - never headline a move of fewer than 20 units: `cityLife` is Dubai as a place to LIVE, from government registers - metro distance by district, bus coverage and stop counts by community, the airport's busiest and quietest hours, bus speeds; these are structural facts, so quote them exactly and name the body (e.g. 'RTA bus network coverage, 31 Dec 2024'); the strong hooks here are what the city has BUILT and what that gives a resident - a community well covered by stops, a district minutes from a metro, an airport hour quieter than people expect, a route that makes a place easy to live in. An ABSENCE (no stop, no metro within 5 km) is a true fact and no other broker posts it, but it is a complaint about Dubai and she is not writing that diary: use it only as the single permitted caution, only when it is genuinely a buyer's opportunity, and never as one of the four good ones. `developerInventory` is what each DEVELOPER ITSELF claims is still available, captured from their own sheets on the date they said it - `moves` shows the change between two sheets, and the rule is: a count that FELL was taken up, a count that ROSE was RELEASED by the developer, never call a rise a sale; family for these is `inventory`. GEOGRAPHY RULE for both: name the community, district or developer EXACTLY as it appears in that block, and use ONLY that block's figures - the community names in cityLife are a different geography from the register's areas, so never attach a sales, rent, price or transaction figure to a cityLife place; an angle that breaks this is discarded. TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". TOPIC FAMILIES: each of the five must come from a DIFFERENT family and name it in `family`, one of " + JSON.stringify(FEED_FAMILIES) + ". " + (lane ? "TODAY'S LANE (" + ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n.getUTCDay()] + "): at least THREE of the five from " + JSON.stringify(lane) + ". " : "") + "NO REPEATS: these numbers and these subjects were used in recent mornings and must not appear again in any form (a percentage of the same fact is the same fact): numbers " + JSON.stringify([...new Set(famh.flatMap(x => x.n || []))].slice(0, 80)) + "; subjects " + JSON.stringify([...new Set(famh.filter(x => (Date.now() - Date.parse(x.d)) < 5 * 86400 * 1000).map(x => x.s).filter(Boolean))].slice(0, 40)) + ". Prefer a figure the register has NOT yet been quoted on: a different area, a different bedroom count, a different month, a different developer. Families that ran on recent mornings and must be avoided today unless the figure is genuinely new: " + JSON.stringify(tired) + ". The SHAPE of every hook comes from HER VOICE above, never from past hooks. Subjects she has already used, do not repeat: " + JSON.stringify(picks.slice(0, 8).map(p => String(p.hook || "").slice(0, 60))) + ". TRENDING (what people are talking about today, context only - a trend never supplies a number): " + JSON.stringify((radar && radar.items || []).slice(0, 6).map(t => ({ platform: t.platform, title: t.title, family: t.family }))) + ". If an angle's subject matches a trending item, set `trend` to one short line naming the platform and what is moving; otherwise omit `trend`. " + feedVoice(await styleVoice(env)) + " WHAT SHE FAVOURS (learned from her choices; subjects and formats only, never style): " + ((await dnaSubjects(env)) || "(still learning)") + ". " + "WHAT HER AUDIENCE ACTUALLY DID (measured on her own account, in the instagram block, and it decides the SHAPE of an angle and NEVER a figure): engagement there is interactions per 1,000 reached, so it does not reward a large following - it asks whether the people who SAW a post answered it. Read herBest, herFurthest and herIgnored before you choose. They measure different things and you need both: engagement rate asks whether the people who saw a post answered it, while herFurthest is how far a post TRAVELLED - her widest post reached about twenty times her median and drew more total response than her best-rated one, so a low rate on a very wide post is not a failure. herIgnored is ranked by how many people actually responded, which is the honest weak end. The pattern points straight at this task: a bare launch announcement - a project, a price, a bedroom count, fresh availability - sits at the BOTTOM of her account, and its reach is NORMAL, so the platform delivered it and her audience simply did not respond. Her strongest posts are first person - what she saw, what it told her, how she judges it. So an angle must give her something to SAY about the figure, not just the figure: the hook carries the number AND a judgement only she could make. An angle she cannot say in her own voice is not an angle, however good the number is. This licenses no change to any number - the figure, its unit, its period and its source stay exactly as the data gives them, and a good shape never excuses a bent figure. Where the instagram block is absent, ignore this paragraph rather than inventing what she favours." + " NEWS RULES: the news block is live city news from the last 48 hours - each item gives its outlet, when it was published, today (true when it was published today, Dubai time), a summary from the article, and names (the Dubai places, developers and infrastructure it mentions). When a today:true item is about Dubai's transport, infrastructure, a district, a developer or a project, ONE of the five SHOULD be built on it, because a morning that ignores the city's biggest story of the day reads stale - file it under whichever family fits (transit, developer, district, news). News items may anchor at most TWO of the five angles. KHALEEJ TIMES (Kendall, 30 Sep 2026): whenever the news block holds a Khaleej Times item, ONE of the five MUST be built on a Khaleej Times story, cited 'reported by Khaleej Times, <date>'. A news angle's figure must be a number written in THAT item's title or summary, copied exactly with its unit, and every other number in its hook must be in the same item - never a number from memory and never one combined from two items; its source is 'reported by <the item's own outlet>, <date>' (a post that cites a story for a number the story does not contain is removed before she sees it). Say what the story says happened, and when, and nothing more - a launch is a launch, never a claim that prices moved because of it. If an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figure in its title or summary and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + ". Return JSON only.";
+  const sys = "You pick FIVE distinct, post-worthy story angles for a Dubai property broker's daily social content, from the data provided." + _ledgerRule + " THE SPLIT, FIRM (Kendall, 19 Sep 2026): exactly TWO or THREE of the five are Dubai 2040 angles - the figure taken from dubai2040 and citing that line's own source - and the other TWO or THREE are real-estate angles from the live market data (register sales, rents, projects, developer inventory). THE SPINE, AND IT FRAMES ALL FIVE (Kendall, 18 Sep 2026): her whole trajectory runs along the DUBAI 2040 URBAN MASTER PLAN, the emirate's official plan to 2040, given in the dubai2040 block with a source on every line. Every angle tells a piece of THAT story - where Dubai is going, and a figure that shows it moving. Write each one for ONE of three readers, with AT LEAST ONE angle for EACH of the three - move, invest AND authority: (move) someone deciding whether to MOVE here - what their life will look like: walkable streets, beaches, parks, schools, a Metro station near home; (invest) someone deciding whether to INVEST here - where the plan deliberately points growth: the five urban centres, the Blue Line, the population it is built for; (authority) and in every angle HER - the broker who knows the plan and watches whether Dubai is keeping to it, which no other broker posts; the authority angle itself sets a 2040 target against where Dubai stands today in the live data, so she is seen tracking the plan. The SHAPE of every hook: the change (what is coming, or what has just moved) -> the figure that proves it -> what it means for the reader. Not a statistic with a feeling attached. This shape overrides 'feeling first' in HER VOICE below: her judgement is the last beat, as what it means, never an opening 'I feel'. SPREAD THE PLAN ACROSS THE FAMILIES, because each of the five must have a different family: the Blue Line is transit; the Dubai Walk, beaches, parks and nature are city_life; schools and health are education; population, the urban centres, tourism and the economy are growth_plan. A figure may come from dubai2040 itself or from the live data (register, rents, cityLife, projects, news); the strongest angles set a live figure against a 2040 target - for example a district's register figure against its place as one of the plan's urban centres, but only where dubai2040 names that district. HONESTY FOR THE PLAN, strictly: a figure with status target is a TARGET and is said as one ('the plan targets', 'by 2040'), never as achieved; planned and announced stay planned - never 'Dubai is building' or 'has built' unless the status says delivered; the Blue Line's nine residential areas are NOT named in the block, so never say which district it reaches; quote each 2040 figure exactly, with the source and date given, and never derive a new number from two of them. A 2020 figure is a 2020 figure: never say 'now' or 'today' of it. The data holds NO schedule for the plan, so never say it is on time, on track, ahead or behind. Cite a source only for what that source contains: a dubai2040 figure cites the source on its own line, and a figure from anywhere else cites the block it came from - never borrow the plan's source for a fact it does not state (a post that does is removed before she sees it). The last beat, what it means, is what it means FOR THE READER - a family, an investor - never a claim about Dubai's performance, a developer's intentions or a trend the data does not show. Never compute a span of time or a share yourself: where the data gives a period, give its dates; where it gives a share, quote it. In developerInventory, 'current' is stock on a developer's sheet and never a release; only a move is released or taken up. Every number - including counts and spans of time (12 weeks, 9 days, 3 towers) - is written as numerals (6,500 km; 14 stations; 5.8 million), because these are read on a screen and must stop the scroll - never spelled out in words. HER DISPOSITION, AND IT DECIDES WHAT YOU CHOOSE (Kendall, 17 Sep 2026, relaying her): this is an honest digest AND she is selling Dubai. She posts about good things happening in the city, like a diary of it. So AT LEAST FOUR of the five must be good news - something rising, opening, completing, arriving, connecting, a record, a place becoming better to live in, money coming in. The register hands you hundreds of true figures every morning: pick the ones that are good news. HONESTY IS NEVER TRADED FOR IT. Never call a fall a rise, never soften a figure, never imply a direction the data does not show, never drop the unit or the period to make a number look better. If the honest reading of a figure is bad news, do not use that figure - use a different one. At most ONE of the five may carry a caution, and only where it is genuinely the buyer's gain (more choice, a softer entry price, room to negotiate), written as what it means for them and never as a complaint about the city. A morning with five flat or worrying angles is a failed morning even when every number in it is correct. Use ONLY the figures provided — never invent or sharpen a number. Each angle: hook = one or two short sentences in HER VOICE (below), built around ONE specific figure written as numerals the way her captions do (3,098 homes; AED 7.78B; 13.9%), never spelled out in words; figure = that exact figure WITH its unit (e.g. 'AED 7.78B', '13.9%', '3,098 homes'); source = its source and period exactly as given (e.g. 'DLD Open Data, 30 Jun-25 Aug'); buyer = one line on what it means for a buyer; reader = the reader it is written for: move, invest or authority. The five angles must cover DIFFERENT figures and span different sections. AT LEAST ONE of the five must come from the Dubai Land Department register data (dldSales, monthly, rents, trends) — the register is a primary story source, and its `trends` entries are precomputed movement deltas that make the strongest hooks (quote them exactly, direction and all) - and where several deltas are available, prefer one that moved UP, because that is the morning she is writing; a delta that moved down is honest and may be used, but it spends the single caution. TWO FURTHER SOURCES. AT LEAST ONE of the five must come from cityLife, because it is what living in Dubai is like; developerInventory is OPTIONAL, and a handful of released or taken-up units is never a story of Dubai on its own - never headline a move of fewer than 20 units: `cityLife` is Dubai as a place to LIVE, from government registers - metro distance by district, bus coverage and stop counts by community, the airport's busiest and quietest hours, bus speeds; these are structural facts, so quote them exactly and name the body (e.g. 'RTA bus network coverage, 31 Dec 2024'); the strong hooks here are what the city has BUILT and what that gives a resident - a community well covered by stops, a district minutes from a metro, an airport hour quieter than people expect, a route that makes a place easy to live in. An ABSENCE (no stop, no metro within 5 km) is a true fact and no other broker posts it, but it is a complaint about Dubai and she is not writing that diary: use it only as the single permitted caution, only when it is genuinely a buyer's opportunity, and never as one of the four good ones. `developerInventory` is what each DEVELOPER ITSELF claims is still available, captured from their own sheets on the date they said it - `moves` shows the change between two sheets, and the rule is: a count that FELL was taken up, a count that ROSE was RELEASED by the developer, never call a rise a sale; family for these is `inventory`. GEOGRAPHY RULE for both: name the community, district or developer EXACTLY as it appears in that block, and use ONLY that block's figures - the community names in cityLife are a different geography from the register's areas, so never attach a sales, rent, price or transaction figure to a cityLife place; an angle that breaks this is discarded. TODAY'S REQUIRED EMPHASES (at least one angle each): (A) " + lensA + "; (B) " + lensB + ". TOPIC FAMILIES: each of the five must come from a DIFFERENT family and name it in `family`, one of " + JSON.stringify(FEED_FAMILIES) + ". " + (lane ? "TODAY'S LANE (" + ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n.getUTCDay()] + "): at least THREE of the five from " + JSON.stringify(lane) + ". " : "") + "NO REPEATS: these numbers and these subjects were used in recent mornings and must not appear again in any form (a percentage of the same fact is the same fact): numbers " + JSON.stringify([...new Set(famh.flatMap(x => x.n || []))].slice(0, 80)) + "; subjects " + JSON.stringify([...new Set(famh.filter(x => (Date.now() - Date.parse(x.d)) < 5 * 86400 * 1000).map(x => x.s).filter(Boolean))].slice(0, 40)) + ". Prefer a figure the register has NOT yet been quoted on: a different area, a different bedroom count, a different month, a different developer. Families that ran on recent mornings and must be avoided today unless the figure is genuinely new: " + JSON.stringify(tired) + ". The SHAPE of every hook comes from HER VOICE above, never from past hooks. Subjects she has already used, do not repeat: " + JSON.stringify(picks.slice(0, 8).map(p => String(p.hook || "").slice(0, 60))) + ". TRENDING (what people are talking about today, context only - a trend never supplies a number): " + JSON.stringify((radar && radar.items || []).slice(0, 6).map(t => ({ platform: t.platform, title: t.title, family: t.family }))) + ". If an angle's subject matches a trending item, set `trend` to one short line naming the platform and what is moving; otherwise omit `trend`. " + feedVoice(await styleVoice(env)) + " WHAT SHE FAVOURS (learned from her choices; subjects and formats only, never style): " + ((await dnaSubjects(env)) || "(still learning)") + ". " + "WHAT HER AUDIENCE ACTUALLY DID (measured on her own account, in the instagram block, and it decides the SHAPE of an angle and NEVER a figure): engagement there is interactions per 1,000 reached, so it does not reward a large following - it asks whether the people who SAW a post answered it. Read herBest, herFurthest and herIgnored before you choose. They measure different things and you need both: engagement rate asks whether the people who saw a post answered it, while herFurthest is how far a post TRAVELLED - her widest post reached about twenty times her median and drew more total response than her best-rated one, so a low rate on a very wide post is not a failure. herIgnored is ranked by how many people actually responded, which is the honest weak end. The pattern points straight at this task: a bare launch announcement - a project, a price, a bedroom count, fresh availability - sits at the BOTTOM of her account, and its reach is NORMAL, so the platform delivered it and her audience simply did not respond. Her strongest posts are first person - what she saw, what it told her, how she judges it. So an angle must give her something to SAY about the figure, not just the figure: the hook carries the number AND a judgement only she could make. An angle she cannot say in her own voice is not an angle, however good the number is. This licenses no change to any number - the figure, its unit, its period and its source stay exactly as the data gives them, and a good shape never excuses a bent figure. Where the instagram block is absent, ignore this paragraph rather than inventing what she favours." + " NEWS RULES: the news block is live city news from the last 48 hours - each item gives its outlet, when it was published, today (true when it was published today, Dubai time), a summary from the article, and names (the Dubai places, developers and infrastructure it mentions). When a today:true item is about Dubai's transport, infrastructure, a district, a developer or a project, ONE of the five SHOULD be built on it, because a morning that ignores the city's biggest story of the day reads stale - file it under whichever family fits (transit, developer, district, news). News items may anchor at most TWO of the five angles. KHALEEJ TIMES (Kendall, 30 Sep 2026): whenever the news block holds a Khaleej Times item, ONE of the five MUST be built on a Khaleej Times story, cited 'reported by Khaleej Times, <date>'. A news angle's figure must be a number written in THAT item's title or summary, copied exactly with its unit, and every other number in its hook must be in the same item - never a number from memory and never one combined from two items; its source is 'reported by <the item's own outlet>, <date>' (a post that cites a story for a number the story does not contain is removed before she sees it). Say what the story says happened, and when, and nothing more - a launch is a launch, never a claim that prices moved because of it. If an item carries meedCrossReference, weave those corpus facts in as the second layer of the story (stage, value, completion — source 'MEED Projects corpus') — that cross-reference IS the angle's strength; a news item with no figure in its title or summary and no cross-reference is context only, never the hook. DO NOT reuse any of these recent hooks: " + JSON.stringify(hist.slice(0, 12)) + "." + FEED_PROPERTY_RULE + " Return JSON only.";
   let g = null, genErr = null;
   try { g = await claudeJSON(env, sys, data, FEED_SCHEMA, null, 1400); } catch (e) { genErr = e && e.message ? e.message : String(e); }
   let angles = g && Array.isArray(g.angles) ? g.angles.slice(0, 5) : [];
@@ -6021,24 +6237,29 @@ async function dailyFeedTick(env, force, dry) {
   } catch (e) {}
   try { const _fl = await feedFill(env, angles, sys, data, famh, qa); if (_fl) qa.note += " | " + _fl; } catch (e) { qa.note += " | top-up failed: " + String((e && e.message) || e).slice(0, 80); }   // v184
   try { qa.kt = await feedKhaleej(env, angles, sys, data, famh); qa.note += " | " + qa.kt; } catch (e) { qa.kt = "Khaleej Times step failed"; qa.note += " | Khaleej Times step failed: " + String((e && e.message) || e).slice(0, 80); }   // v271
+  const _slotsOn = env.FEED_SLOTS !== "off" && !!(ledger && ledger.fresh && ledger.fresh.length);   // v295 - see FEED_SLOT_IDS
+  if (_slotsOn) { try { const _sr = await feedSlotFill(env, angles, ledger, data, famh, {}); qa.slots = { slots: _sr.slots, unfilled: _sr.unfilled, summary: _sr.summary }; qa.note += " | slots: " + _sr.summary; } catch (e) { qa.note += " | slot step failed: " + String((e && e.message) || e).slice(0, 80); } }
+  else if (env.FEED_SLOTS !== "off") qa.note += " | slots not built: no fact ledger this morning";
   try { await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
   // v269 - THE GATE (Kendall, 30 Sep 2026, after her second "same ideas, same pictures" morning in nine days: "implement a qa / qc
   // pass agent that runs ... before you feed her whatsapp"). v187's self-check ran after the message was built and only told
   // Kendall; it now runs HERE, before anything is built, stored or sent, and it removes what it finds instead of reporting it.
   // Mechanical checks (the audit, one figure per angle) plus a QA agent that reads today's hooks against what she has been sent
   // and catches the same idea in new words, which no figure or number test can see.
+  try { const _pn = await feedPropertyGate(env, angles); if (_pn.length) qa.note += " | property tie-in: " + _pn.join("; ").slice(0, 400); } catch (e) { qa.note += " | property tie-in failed: " + String((e && e.message) || e).slice(0, 60); }   // v295
   let _gate = null;
   try {
-    _gate = await feedGate(env, angles, famh, hist); qa.gate = _gate;
+    _gate = await feedGate(env, angles, famh, hist, _slotsOn ? new Set(angles.filter(a => !a.campaign)) : null); qa.gate = _gate;   // v295 - with slots, every angle is a slot: the gate may only reject a repeated figure or fact id
     qa.note += " | gate: " + (_gate.dropped.length ? "removed " + _gate.dropped.length + " (" + _gate.dropped.map(x => x.why).join("; ").slice(0, 300) + ")" : "nothing removed") + "; " + _gate.agent;
   } catch (e) { qa.note += " | gate failed: " + String((e && e.message) || e).slice(0, 80); _gate = { broken: true, dropped: [], structural: [] }; }
   // v284 - THE GATE NO LONGER EMPTIES THE MORNING. What it removed is replaced from the fact ledger (never the removed facts again),
   // and the refilled set goes through the gate once more - the QA agent included - so nothing reaches her unchecked.
-  if (!_gate.broken && angles.filter(a => !a.campaign).length < 5 && feedFactMap(data).size) {
+  if (!_gate.broken && angles.filter(a => !a.campaign).length < 5 && ledger && ledger.fresh && ledger.fresh.length) {   // v295 - the refill is judged on the HARD rules only (see FEED_HARD_RX)
     try {
-      const _skip = new Set(); for (const x of _gate.dropped) { _skip.add(figKey(x)); }
-      const _n = await feedLedgerFill(env, angles, data, famh, _skip);
-      if (_n) { const _g2 = await feedGate(env, angles, famh, hist); qa.gate2 = _g2; qa.note += " | after the gate: refilled " + _n + " from the fact ledger, gate again " + (_g2.dropped.length ? "removed " + _g2.dropped.length + " (" + _g2.dropped.map(x => x.why).join("; ").slice(0, 200) + ")" : "nothing removed") + "; " + _g2.agent; _gate = { broken: false, dropped: _gate.dropped.concat(_g2.dropped), structural: _g2.structural, agent: _gate.agent + "; " + _g2.agent }; }
+      const _fr = await feedFiveRefill(env, angles, ledger, data, famh, hist, _gate, _slotsOn);
+      qa.refill = { added: _fr.added, tiers: _fr.tiers, warnings: _fr.warnings };
+      if (_fr.gate) { qa.gate2 = _fr.gate; qa.note += " | after the gate: refilled " + _fr.added + " from the fact ledger (" + _fr.tiers.join(", ") + "), hard rules only; gate again " + (_fr.dropped.length ? "removed " + _fr.dropped.length + " (" + _fr.dropped.map(x => x.why).join("; ").slice(0, 200) + ")" : "nothing removed") + (_fr.warnings.length ? "; same-theme warnings kept " + _fr.warnings.length + " (" + _fr.warnings.map(x => x.why).join("; ").slice(0, 240) + ")" : "") + "; " + _fr.gate.agent; _gate = { broken: false, dropped: _gate.dropped.concat(_fr.dropped), structural: _fr.gate.structural, agent: _gate.agent + "; " + _fr.gate.agent, warnings: _fr.warnings }; }
+      else qa.note += " | after the gate: the fact ledger had nothing more that passes the hard rules (" + (ledger.fresh || []).length + " fresh facts)";
     } catch (e) { qa.note += " | refill after the gate failed: " + String((e && e.message) || e).slice(0, 80); }
   }
   try { await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
@@ -6064,18 +6285,26 @@ async function dailyFeedTick(env, force, dry) {
   };
   const nCamp = angles.filter(a => a.campaign).length;
   const dLeft = camp && camp.contest ? Math.max(0, Math.round((Date.parse(camp.contest.closes) - Date.now()) / 86400000)) : 0;
+  // v295 - she sees ONE friendly line. The gate, the QA agent, the ledger and every removed count stay in qa.note (mkt_feed_qa) and go to
+  // the owner below; none of it is ever in her text. When fewer than five exist she is told the real number, plainly.
+  const _herNote = angles.length >= 5 ? "\u2714 Checked against the registers: fresh figures, nothing repeated from the last two weeks." : "\u2714 Checked against the registers: nothing repeated from the last two weeks. I have " + angles.length + " fresh one" + (angles.length === 1 ? "" : "s") + " today, not five.";
+  qa.sent = angles.length; qa.short = angles.length < 5;
   const bodyTxt = "☀️ *Najma daily — " + (angles.length === 5 ? "five" : String(angles.length)) + " you could post today*" +
     (nCamp ? "\n_the last " + (nCamp === 1 ? "one is" : String(nCamp) + " are") + " for the Valley contest · " + dLeft + " day" + (dLeft === 1 ? "" : "s") + " left_" : "") + "\n\n" +
     angles.map((a, i) => (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + a.hook + "\n     " + a.figure + " · " + a.source + (a.trend ? "\n     📈 " + a.trend : "") + (a.shot ? "\n     🎬 " + a.shot : "")).join("\n\n") +
-    "\n\n_✔ " + qa.note + "_" +
+    "\n\n_" + _herNote + "_" +
     "\n\nPick one from the list — or just type the numbers for several, like “" + (angles.length > 1 ? (angles.length - 1) + " and " + angles.length : "1") + "”." +
     "\nYou'll get the Instagram package, the LinkedIn post with one-tap publish, and the image prompt in both sizes.";
   // v269 - the gate already ran (above) and removed what it found; this only tells Kendall what it removed and any shape problem
   // left (fewer than five, an uneven split). Those are reported, not held for: four clean angles beat five with a repeat.
   const _ktIn = angles.some(a => !a.campaign && KT_RX.test(String(a.source || "")));   // v271 - and whether the required Khaleej Times angle survived
-  if (!dry && _gate && (_gate.dropped.length || _gate.structural.length || !_ktIn)) {
-    try { await gcTellOwner(env, "Naj's morning has " + angles.filter(a => !a.campaign).length + " angles after the gate." + (_gate.dropped.length ? " The gate removed " + _gate.dropped.length + ": " + _gate.dropped.map(x => '"' + String(x.hook).slice(0, 60) + '" (' + x.why + ")").join("; ") + "." : "") + (_gate.structural.length ? " Shape: " + _gate.structural.join("; ") + "." : "") +
-      (_ktIn ? "" : " NO Khaleej Times angle: " + (/^Khaleej Times: (added|in the set)/.test(String(qa.kt || "")) ? "one was in the set, and the gate removed it as a repeat" : String(qa.kt || "not attempted").replace(/^Khaleej Times: /, "")) + ".")); } catch (e) {}
+  if (!dry && _gate) {   // v295 - every morning: the owner gets the full technical note (she gets one friendly line)
+    try { await gcTellOwner(env, "Naj's morning went out with " + angles.filter(a => !a.campaign).length + " angles." + (_gate.dropped.length ? " The gate removed " + _gate.dropped.length + ": " + _gate.dropped.map(x => '"' + String(x.hook).slice(0, 60) + '" (' + x.why + ")").join("; ") + "." : "") + (_gate.structural.length ? " Shape: " + _gate.structural.join("; ") + "." : "") +
+      (_ktIn ? "" : " NO Khaleej Times angle: " + (/^Khaleej Times: (added|in the set)/.test(String(qa.kt || "")) ? "one was in the set, and the gate removed it as a repeat" : String(qa.kt || "not attempted").replace(/^Khaleej Times: /, "")) + ".") +
+      (_gate.warnings && _gate.warnings.length ? " Same-theme warnings, kept (hard rules passed): " + _gate.warnings.map(x => '"' + String(x.hook).slice(0, 50) + '" (' + String(x.why).slice(0, 90) + ")").join("; ") + "." : "") +
+      (qa.slots ? " SLOTS: " + qa.slots.summary + (qa.refill && qa.refill.tiers && qa.refill.tiers.length ? " | after the gate: " + qa.refill.tiers.join(", ") : "") + "." : "") +
+      (angles.length < 5 ? " SHORT: she was told \"I have " + angles.length + " fresh ones today, not five\". The fact ledger had " + ((ledger && ledger.fresh && ledger.fresh.length) || 0) + " fresh facts; after the widening (plan lines unsaid 30 days, same fact with a changed figure) none more passed the hard rules (no figure or fact repeated in 14 days, a source and date, honest numbers, the split)." : "") +
+      "\nFull note: " + qa.note); } catch (e) {}
   }
   try { await env.MEETINGS.put("mkt_feed_qa", JSON.stringify(qa), { expirationTtl: 14 * 86400 }); } catch (e) {}
   const _rows = angles.slice(0, 10).map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + (a.figure || "").slice(0, 18), description: a.hook }));
@@ -6170,20 +6399,21 @@ async function feedQAAgent(env, own, hist) {
   if (!g || !Array.isArray(g.verdicts)) throw new Error("no verdicts");
   return g.verdicts.filter(v => v && v.repeat && v.angle >= 1 && v.angle <= own.length).map(v => ({ i: v.angle - 1, why: "same idea as before: " + String(v.why || "").slice(0, 120) }));
 }
-async function feedGate(env, angles, famh, hist) {
+async function feedGate(env, angles, famh, hist, soft) {   // v295 - soft: ledger refill candidates, judged on the HARD rules only (theme -> warnings)
   const own = angles.filter(a => !a.campaign);
   const drop = new Map();   // index in own -> the reason
   const audit = feedAudit(own.map(a => Object.assign({}, a)), famh);
-  for (const b of audit.bad) if (!drop.has(b.i)) drop.set(b.i, b.why[0]);
+  const warn = [];
+  for (const b of audit.bad) { if (drop.has(b.i)) continue; if (soft && soft.has(own[b.i])) { const hd = b.why.find(w => FEED_HARD_RX.test(w)); if (hd) drop.set(b.i, hd); else warn.push({ hook: own[b.i].hook, why: b.why[0] }); } else drop.set(b.i, b.why[0]); }
   const figAt = new Map(); own.forEach((a, i) => { const k = figKey(a); if (!k) return; if (figAt.has(k)) { if (!drop.has(i)) drop.set(i, "shares a figure with angle " + (figAt.get(k) + 1)); } else figAt.set(k, i); });
   let agent = "";
   const judged = own.filter((a, i) => !drop.has(i)), judgedIdx = own.map((a, i) => i).filter(i => !drop.has(i));
   try {
     const r = await feedQAAgent(env, judged, hist);
-    for (const v of r) { const oi = judgedIdx[v.i]; if (oi != null && !drop.has(oi)) drop.set(oi, v.why); }
-    agent = "QA agent " + (r.length ? "removed " + r.length : "passed " + judged.length);
+    let _rm = 0, _wn = 0; for (const v of r) { const oi = judgedIdx[v.i]; if (oi == null || drop.has(oi)) continue; if (soft && soft.has(own[oi])) { warn.push({ hook: own[oi].hook, why: v.why }); _wn++; } else { drop.set(oi, v.why); _rm++; } }
+    agent = "QA agent " + (_rm ? "removed " + _rm : "passed " + (judged.length - _wn)) + (_wn ? ", flagged " + _wn + " as the same theme and kept " + (_wn === 1 ? "it" : "them") + " (the slot rule)" : "");
   } catch (e) { agent = "QA agent did not run (" + String((e && e.message) || e).slice(0, 60) + ") - the mechanical checks still applied"; }
-  const dropped = [...drop.entries()].sort((x, y) => x[0] - y[0]).map(([i, why]) => ({ hook: own[i].hook, figure: own[i].figure, why }));
+  const dropped = [...drop.entries()].sort((x, y) => x[0] - y[0]).map(([i, why]) => ({ hook: own[i].hook, figure: own[i].figure, fact: own[i].fact || "", why }));
   const kill = new Set([...drop.keys()].map(i => own[i]));
   for (let i = angles.length - 1; i >= 0; i--) if (kill.has(angles[i])) angles.splice(i, 1);
   const left = angles.filter(a => !a.campaign), P = left.filter(planAngle).length, R = left.length - P;
@@ -6192,7 +6422,7 @@ async function feedGate(env, angles, famh, hist) {
   if (left.length && (P < 2 || P > 3 || R < 2 || R > 3)) structural.push("the split is " + P + " plan and " + R + " real estate");
   const readers = new Set(left.map(a => a.reader).filter(Boolean));
   if (left.length && readers.size < 3) structural.push("readers: " + ([...readers].join(", ") || "none"));
-  const rec = { at: gstNowIso(), dropped, structural, agent, kept: left.map(a => a.hook) };
+  const rec = { at: gstNowIso(), dropped, structural, agent, warnings: warn, kept: left.map(a => a.hook) };
   try { await env.MEETINGS.put("mkt_feed_audit", JSON.stringify(rec), { expirationTtl: 14 * 86400 }); } catch (e) {}
   return rec;
 }
@@ -6241,7 +6471,7 @@ async function feedHold(env, bodyTxt, rows, angles) {
   const famRows = angles.filter(a => !a.campaign).map(a => ({ d: gstDateStr(new Date()), f: a.family || famOf(a), k: figKey(a), n: numKeys(a), s: subjKey(a), id: a.fact || "" }));   // v284 - id: the ledger fact
   const rec = { at: Date.now(), at_gst: gstNowIso(), bodyTxt, rows, angles, famRows };
   try { await env.MEETINGS.put("mkt_feed_pending", JSON.stringify(rec), { expirationTtl: 3 * 86400 }); } catch (e) {}
-  const n = await feedNudge(env, "Your five for today are ready", "Reply with anything here and I'll send them straight over, with your pictures.");
+  const n = await feedNudge(env, "Your " + (angles.length === 5 ? "five" : String(angles.length)) + " for today are ready", "Reply with anything here and I'll send them straight over, with your pictures.");
   try { await gcTellOwner(env, "Naj's morning is HELD: her 24-hour WhatsApp window is shut (she last wrote " + String((await env.MEETINGS.get("wa_owner_last_in")) || "?").slice(0, 16) + "). " +
     (n.ok ? "I've sent her the template nudge; it goes the moment she replies." : "The template nudge did NOT go (" + (n.why || n.status) + ") - she needs a message from you to reopen the window.")); } catch (e) {}
   try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), why: "held: her 24-hour window is shut", nudge: n }), { expirationTtl: 7 * 86400 }); } catch (e) {}
@@ -12696,14 +12926,15 @@ async function newsTick(env, force) {
       const xml = await r.text();
       feedStats[feedStats.length - 1].bytes = xml.length;
       feedStats[feedStats.length - 1].rawItems = xml.split("<item>").length - 1;
-      for (const it of xml.split("<item>").slice(1, 40)) {
+      const _kept0 = items.length;
+      for (const it of xml.split("<item>").slice(1, 120)) {   // v295 - was 40 of the 100 The National sends
         const ti = (it.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s) || [])[1] || "";
         const src = (it.match(/<source[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/source>/s) || [])[1] || (it.match(/<News:Source[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/News:Source>/s) || [])[1] || f.outlet || "";
         const lnk = (it.match(/<link>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/link>/s) || [])[1] || "";
         const pd = Date.parse((it.match(/<pubDate>(.*?)<\/pubDate>/s) || [])[1] || "") || 0;
         const title = ti.replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').trim();
         if (!title || Date.now() - pd > 48 * 3600 * 1000) continue;
-        if (f.outlet && !NEWS_KEYWORDS.test(title)) continue;                      // The National is general news — filter
+        if (f.outlet && !NEWS_KEYWORDS.test(title) && !newsRelevance(title, "")) continue;   // v295 - kept when it has a property OR a named Dubai place, developer or infrastructure link (the keyword list alone kept 1 of 100); was:                      // The National is general news — filter
         const key = title.toLowerCase().slice(0, 80);
         if (seen[key]) continue;
         const ht = _newsTok(title), hl = title.toLowerCase();
@@ -12712,6 +12943,7 @@ async function newsTick(env, force) {
         items.push({ title, outlet: src.trim(), link: lnk.trim(), at: pd, xref });
         seen[key] = Date.now();
       }
+      feedStats[feedStats.length - 1].kept = items.length - _kept0;
     } catch (e) { feedStats.push({ url: f.url.slice(0, 60), error: String((e && e.message) || e).slice(0, 80) }); }
   }
   // collector-shipped Google News batch (arrives already query-scoped — no keyword filter)
@@ -12730,7 +12962,7 @@ async function newsTick(env, force) {
       seen[key] = Date.now();
     }
   } catch (e) {}
-  try { await env.MEETINGS.put("mkt_news_stats", JSON.stringify({ at: gstNowIso(), feeds: feedStats, kept: items.length }), { expirationTtl: 2 * 86400 }); } catch (e) {}
+  try { let _oldSt = {}; try { _oldSt = JSON.parse((await env.MEETINGS.get("mkt_news_stats")) || "{}") || {}; } catch (e) {} await env.MEETINGS.put("mkt_news_stats", JSON.stringify({ at: gstNowIso(), feeds: feedStats, kept: items.length, live: _oldSt.live || null }), { expirationTtl: 2 * 86400 }); } catch (e) {}   // v295 - keeps the live collector's per-source counts
   if (!items.length && !force) return;
   // keep a rolling window: cross-referenced first, then newest
   let stored = []; try { stored = JSON.parse((await env.MEETINGS.get("mkt_news")) || "[]"); } catch (e) {}
@@ -12762,6 +12994,24 @@ const LIVE_NEWS_FEEDS = [
   { id: "tn_property", outlet: "The National", url: "https://www.thenationalnews.com/arc/outboundfeeds/rss/category/business/property/?outputType=xml" },
   { id: "tn_all", outlet: "The National", url: "https://www.thenationalnews.com/arc/outboundfeeds/rss/?outputType=xml" },
   { id: "gn_all", outlet: "Gulf News", url: "https://gulfnews.com/feed" },
+  // v295 - the source slots (see FEED_SLOT_IDS). Probed from the laptop on 3 Oct 2026 with an honest user agent; Khaleej Times'
+  // robots.txt disallows nothing under /api/ for other crawlers. intl: true feeds keep a business or Gulf story that names no Dubai place
+  // (oil, interest rates, the Gulf economy), because the slot is "how does it change where people buy, rent or invest in Dubai".
+  // Zawya, Arabian Business and Construction Week publish no usable RSS to us (Zawya answers an HTML page, the other two answer 403),
+  // so they and Gulf News / Emirates 24/7 are reached through Bing News site: searches, which answer Cloudflare's IPs and carry the outlet.
+  // Reuters, Bloomberg and the FT publish no open RSS for the Gulf (probed: 0 items); the FT home feed and the BBC business feed do.
+  // Wikipedia's current-events portal has no feed, so it is not collected.
+  { id: "kt_world", outlet: "Khaleej Times", url: "https://www.khaleejtimes.com/api/v1/collections/world.rss", intl: true },
+  { id: "bing_kt", outlet: null, url: "https://www.bing.com/news/search?q=site%3Akhaleejtimes.com+property&format=rss&mkt=en-AE" },
+  { id: "bing_kt_infra", outlet: null, url: "https://www.bing.com/news/search?q=site%3Akhaleejtimes.com+Dubai+metro+OR+rail+OR+road&format=rss&mkt=en-AE" },
+  { id: "bbc_business", outlet: "BBC News", url: "https://feeds.bbci.co.uk/news/business/rss.xml", intl: true },
+  { id: "ft_home", outlet: "Financial Times", url: "https://www.ft.com/rss/home", intl: true },
+  { id: "bing_mideast", outlet: null, url: "https://www.bing.com/news/search?q=Middle+East+economy+real+estate&format=rss&mkt=en-AE", intl: true },
+  { id: "bing_zawya", outlet: null, url: "https://www.bing.com/news/search?q=site%3Azawya.com+Dubai+property&format=rss&mkt=en-AE" },
+  { id: "bing_ab", outlet: null, url: "https://www.bing.com/news/search?q=site%3Aarabianbusiness.com+Dubai&format=rss&mkt=en-AE" },
+  { id: "bing_cw", outlet: null, url: "https://www.bing.com/news/search?q=site%3Aconstructionweekonline.com+Dubai&format=rss&mkt=en-AE" },
+  { id: "bing_gn", outlet: null, url: "https://www.bing.com/news/search?q=site%3Agulfnews.com+Dubai+property&format=rss&mkt=en-AE" },
+  { id: "bing_e247", outlet: null, url: "https://www.bing.com/news/search?q=site%3Aemirates247.com+property&format=rss&mkt=en-AE" },
   // WAM and the Dubai Media Office publish no working RSS (both answer an HTML page); Bing News reaches their stories and the
   // outlets that carry them (Gulf Today, Emirates 24/7, Arabian Business), and Bing answers Cloudflare's IPs (v37.1).
   { id: "bing_wam", outlet: null, url: "https://www.bing.com/news/search?q=site%3Awam.ae+Dubai&format=rss&mkt=en-AE" },
@@ -12813,6 +13063,7 @@ const NEWS_ENTITIES = [
   ["Union Properties", "developer", /union properties/i], ["Wasl", "developer", /\bwasl\b/i], ["Majid Al Futtaim", "developer", /majid al futtaim/i],
   ["Arada", "developer", /\barada\b/i], ["Dubai Properties", "developer", /dubai properties/i], ["Meydan Group", "developer", /meydan group/i],
 ];
+const FEED_INTL_KEEP_RX = /\b(oil|brent|opec|petrol|fuel|interest rates?|inflation|gulf|middle east|uae|dubai|saudi|property|real estate|housing|mortgage|rents?|construction|investors?)\b/i;
 const NEWS_PLACE_RX = /\b(dubai|uae|u\.a\.e\.?|emirat(?:es|i)|abu dhabi|sharjah|ajman|ras al khaimah|fujairah|umm al quwain|al ain)\b/i;
 const NEWS_PROP_RX = /\b(propert(?:y|ies)|real estate|realty|developers?|off-?plan|handovers?|villas?|apartments?|townhouses?|penthouses?|freehold|mortgages?|rents?|rental|renters|landlords?|tenants?|homes?|housing|residential|sq ?ft|square f(?:ee|oo)t|towers?|master ?plan|escrow|service charges?|ejari|title deeds?)\b/i;
 const NEWS_INFRA_RX = /\b(rail(?:way)?|metro|tram|trains?|stations?|roads?|bridges?|tunnels?|interchanges?|highways?|flyovers?|airports?|rta|salik|bus(?:es)?|ferry|water taxi|air taxi|parking|infrastructure|transport|commut\w*|passengers?)\b/i;
@@ -12905,7 +13156,7 @@ async function liveNewsTick(env, nowMs, opts) {
     for (const p of parsed) {
       const at = p.published && p.published <= now + 3600000 ? p.published : 0;
       if (at && at < cutoff) continue;
-      const rel = newsRelevance(p.title, p.summary); if (!rel) continue;
+      const rel = newsRelevance(p.title, p.summary) || (f.intl && FEED_INTL_KEEP_RX.test(p.title + " " + String(p.summary || "").slice(0, 200)) ? { entities: [], score: 2 } : null); if (!rel) continue;   // v295 - intl feeds keep a market or Gulf story
       st.relevant++;
       const cu = _nlCanon(p.url), tk = _nlTitleKey(p.title);
       const dup = byUrl.get(cu) || byTitle.get(tk);
@@ -12919,6 +13170,14 @@ async function liveNewsTick(env, nowMs, opts) {
   store.items = store.items.filter(x => t(x) >= cutoff).sort((a, b) => t(b) - t(a)).slice(0, LIVE_NEWS_MAX);
   store.updated = new Date(now).toISOString();
   await env.MEETINGS.put(LIVE_NEWS_KEY, JSON.stringify(store), { expirationTtl: 3 * 86400 });
+  // v295 - per-source counts, so a morning that could not fill a slot can say which source was empty and why
+  try {
+    const by = {}; for (const x of store.items) { const o = String(x.outlet || "news"); by[o] = (by[o] || 0) + 1; }
+    const per = {}; for (const f of LIVE_NEWS_FEEDS) { const st = store.feeds[f.id]; if (st) per[f.id] = { outlet: st.outlet, status: st.status, parsed: st.parsed, relevant: st.relevant, added: st.added, at: st.at }; }
+    let old = {}; try { old = JSON.parse((await env.MEETINGS.get("mkt_news_stats")) || "{}") || {}; } catch (e) {}
+    old.live = { at: new Date(now).toISOString(), held: store.items.length, bySource: by, feeds: per };
+    await env.MEETINGS.put("mkt_news_stats", JSON.stringify(old), { expirationTtl: 2 * 86400 });
+  } catch (e) {}
   return { fetched: due.map(f => f.id), held: store.items.length };
 }
 
@@ -12954,9 +13213,12 @@ async function feedNewsBlock(env, nowMs) {
   // stories are always in the block, even when other outlets outscore them: up to three, added on top of the ten.
   const isKT = (r) => KT_RX.test(String(r.x.outlet || ""));
   for (const r of rows) { if (picked.filter(isKT).length >= 3) break; if (isKT(r) && !picked.includes(r)) picked.push(r); }
+  // v295 - and the best of the other slots (international / regional, developer, infrastructure): two each, on top of the ten
+  const _slotViews = (r) => { const t = String(r.x.title || "") + " " + String(r.x.summary || "").slice(0, 200), o = String(r.x.outlet || ""); return { intl: !KT_RX.test(o) && (FEED_INTL_RX.test(o) || FEED_MARKET_RX.test(t)), developer: FEED_DEV_RX.test(t) && FEED_DEVNAME_RX.test(t), infra: NEWS_INFRA_RX.test(t) }; };
+  for (const k of ["intl", "developer", "infra"]) for (const r of rows) { if (picked.filter(x => _slotViews(x)[k]).length >= 2) break; if (!picked.includes(r) && _slotViews(r)[k]) picked.push(r); }
   return picked.map(r => ({
     title: r.x.title, outlet: r.x.outlet, published: fmt(r.at), today: gstDay(r.at) === today, summary: r.x.summary || "",
-    names: (r.x.entities || []).map(e => e.name), url: r.x.url || "",
+    names: (r.x.entities || []).map(e => e.name), ents: (r.x.entities || []).map(e => ({ name: e.name, type: e.type })), url: r.x.url || "",
     meedCrossReference: r.xref ? { project: r.xref.meedName, facts: r.xref.facts } : null,
   }));
 }
@@ -12977,7 +13239,7 @@ function feedNewsTrue(a, news) {
   const mine = items.filter(it => { const k = _nlOutletKey(it.outlet); return k.length >= 3 && srcK.includes(k); });
   if (!mine.length) return "cites a news outlet whose story the feed was not handed";
   const want = [...new Set(_nlNums(String(a.hook || "") + " " + String(a.figure || "")))].filter(n => n !== "2040");
-  if (!_nlNums(a.figure).length) return "a news angle with no figure from the story";
+  if (!_nlNums(a.figure).length && !a.qual) return "a news angle with no figure from the story";   // v295 - a ledger story without a figure is the story itself
   const meed = /\bmeed\b/i.test(src);
   const ok = mine.some(it => { const have = new Set(_nlNums(it.title + " " + (it.summary || "") + (meed && it.meedCrossReference ? " " + JSON.stringify(it.meedCrossReference.facts || {}) : ""))); return want.every(n => have.has(n)); });
   return ok ? "" : "news: a number in it is not in the " + (mine[0].outlet || "cited") + " story it cites";
