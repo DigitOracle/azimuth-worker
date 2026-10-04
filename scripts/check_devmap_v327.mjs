@@ -23,7 +23,7 @@ let slots = 0, rentalOnly = 0, empty = [], badQ = 0, inferredSlots = 0, matchedS
 for (const s of areas) for (const [k, d] of Object.entries(j.areas[s].devs || {})) {
   if (k === "_") continue;
   slots++;
-  const n = sum(d.c) || (d.ev && d.ev.all && d.ev.all[0]) || sum(d.b), rent = (d.r || []).length > 0;
+  const n = sum(d.c) || sum(d.c12) || (d.ev && d.ev.all && d.ev.all[0]) || sum(d.b), rent = (d.r || []).length > 0;
   if (!(n > 0)) { if (rent) rentalOnly++; else empty.push(s + "/" + k); }
   for (const f of ["q", "q12"]) if (d[f] != null && !(Array.isArray(d[f]) && d[f].length === 2 && d[f].every((x) => Number.isFinite(x) && x >= 0))) badQ++;
   if (d.q && d.q[1] > 0) { inferredSlots++; matchedSales += d.q[1]; }

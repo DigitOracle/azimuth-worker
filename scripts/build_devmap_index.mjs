@@ -143,7 +143,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
   for (const s of Object.keys(areas)) for (const k of Object.keys(areas[s].devs)) {
     if (k === "_") continue;
     const d = areas[s].devs[k];
-    if (!d.c.length && !(d.c12 || []).length && !(d.r || []).length) continue;   // v322: a slot with nothing to show
+    if (!d.c.length && !(d.c12 || []).length && !(d.r || []).length) { delete areas[s].devs[k]; continue; }   // v322: a slot with nothing to show; v327: and it is not left in the area either (a named developer with no sales and no rental contracts)
     const e = devList[k] || (devList[k] = { name: d.n, areas: 0, n: 0, profile: { projects: 0, homes: 0 } });
     e.areas++; e.profile.projects += (d.b || []).length; e.profile.homes += d.h || 0; e.n += DM.wmedian ? (d.c.length ? d.c : (d.c12 || [])).reduce((a, c) => a + c[0], 0) : 0;   // v321: project count and homes; v322: sales total, falling back to the last 12 months slot
   }

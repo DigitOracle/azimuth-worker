@@ -6,7 +6,8 @@ import { buildAreaPdf, parseParams } from "../src/devmap_pdf.js";
 const [dir, out, area, kind, budget, beds] = process.argv.slice(2);
 const files = { devmap_index: "index.json", district_polygons: "geo.json", ["brief_fp_" + area]: "fp_" + area + ".json", ["unitmix_" + area]: "unitmix_" + area + ".json", map_prices: "map_prices.json", rent_index: "rent_index.json" };
 const KV = { async get(k) { const n = files[String(k).replace(/^img_/, "")]; if (!n || !fs.existsSync(dir + "/" + n)) return null; return fs.readFileSync(dir + "/" + n, "utf8"); } };
-const ten = "omniyat,nakheel,meraas,emaar,imtiaz,zaya,ellington,select-group,damac,mered";
+// SAMPLE_DEVS="omniyat,nakheel,...,select group,..." (comma separated, raw saved ids) overrides the ten; the document resolves them the way the page does
+const ten = process.env.SAMPLE_DEVS || "omniyat,nakheel,meraas,emaar,imtiaz,zaya,ellington,select-group,damac,mered";
 const u = new URL("https://x/developers_pdf?kind=" + kind + "&area=" + area + "&developers=" + ten + "&mode=buy" + (budget ? "&budget=" + budget + "&beds=" + beds : ""));
 const d = await buildAreaPdf({ MEETINGS: KV }, parseParams(u), { now: Date.parse("2026-10-04T08:00:00Z") });
 if (d.status !== 200) { console.log(d); process.exit(1); }
