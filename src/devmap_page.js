@@ -236,7 +236,7 @@ function areaHtml(slug){
   h+='<div class=box><label style="display:flex;gap:8px;align-items:center;font-size:12.5px"><input type=checkbox id=onlymine style="width:auto"'+(onlyMine?' checked':'')+'> only my developers ('+mineList().length+')</label>'
    +'<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:6px"><input type=checkbox id=fbud style="width:auto"'+(S.filterBud?' checked':'')+'> drop developers outside the budget'+(S.bud.max!=null||S.bud.min!=null?'':' (set it on screen 3)')+'</label></div>';
   view.tiers.forEach(function(t){
-    h+='<div class=th style="border-left-color:'+TC[t.tier]+'"><b>'+t.name+'</b><span>'+t.nDevs+' developer'+(t.nDevs===1?'':'s')+(t.median?' · median AED '+fmt(pu(t.median))+' '+pul():'')+'</span></div><div class=note style="margin:2px 0 4px">'+esc(t.band)+'</div>';
+    h+='<div class=th style="border-left-color:'+TC[t.tier]+'"><b>'+t.name+'</b><span>'+t.nDevs+' developer'+(t.nDevs===1?'':'s')+(t.median?' · median AED '+fmt(pu(t.median))+' '+pul():'')+'</span></div><div class=note style="margin:2px 0 4px">'+esc(t.band)+'</div><div class=note style="margin:0 0 4px">'+esc(t.prices||'')+(t.share?' · '+esc(t.share):'')+'</div>';
     var rows=t.devs.map(function(d){return devRow(d,area,st)}).join("");
     h+=rows||'<p class=note>No developer with 3+ sales sits in this tier here.</p>'});
   if(view.notEnough.length)h+='<p class=label style="margin-top:14px">Not enough sales (under 3)</p>'+view.notEnough.map(function(d){return '<div class=dv><button class=star type=button data-k="'+esc(d.k)+'" aria-pressed="'+(S.mine[d.k]?'true':'false')+'">'+(S.mine[d.k]?'★':'☆')+'</button><div class=nm>'+esc(d.name)+'</div><div class=ms>'+d.n+' sale'+(d.n===1?'':'s')+'</div></div>'}).join("");
@@ -286,7 +286,7 @@ Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
   var sl=r[2]&&r[2].devs&&r[2].devs.length?r[2].devs:(cacheGet()||[]);sl.forEach(function(k){S.mine[k]=true});
   $("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Tier bands: "+IDX.cuts.rule;
-  if(DM.TIER_CFG.bounds)$("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Tier bands set by you: "+DM.TIER_CFG.bounds.join(" / ")+" AED per sq m.";
+  if(DM.TIER_CFG.bounds)$("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Tier bands (value-weighted: each tier holds about a quarter of the money spent): "+DM.TIER_CFG.bounds.join(" / ")+" AED per sq m.";
   if(mineList().length)S.screen=2;
   renderAll();
   if(window.maplibregl)startMap();else $("map").innerHTML='<p class=note style="padding:16px">The map could not load. The lists still work.</p>';
