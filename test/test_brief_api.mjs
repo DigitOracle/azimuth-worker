@@ -180,10 +180,10 @@ ok((await brief(REF + "&type=apartment")).j.results.every(r => r.evidence.home =
 ok((await brief("mode=rent&beds=2&min=80000&max=100000&areas=" + JVC)).j.results.map(r => r.name).join() === "Binghatti Nova", "beds=2 reads the 2-bed band");
 ok(verdictOf(68000, 60000, 68000) === "within" && verdictOf(68001, 60000, 68000) === "a_little_above", "the boundary: 68,000 is within, 68,001 is a_little_above on a 68K max",
   verdictOf(68000, 60000, 68000) + " / " + verdictOf(68001, 60000, 68000));
-ok(verdictOf(60000, 60000, 68000) === "within" && verdictOf(59999, 60000, 68000) === "below" && verdictOf(71400, 60000, 68000) === "a_little_above" &&
+ok(verdictOf(60000, 60000, 68000) === "within" && verdictOf(59999, 60000, 68000) === null && verdictOf(71400, 60000, 68000) === "a_little_above" &&
   verdictOf(71401, 60000, 68000) === "above" && verdictOf(78200, 60000, 68000) === "above" && verdictOf(78201, 60000, 68000) === null &&
-  verdictOf(54000, 60000, 68000) === "below" && verdictOf(53999, 60000, 68000) === null && verdictOf(900000, 0, null) === "within",
-  "the other edges: min is within, +5% exactly is a_little_above, beyond +5% above (listed to +15%), under min below (listed to -10%)");
+  verdictOf(54000, 60000, 68000) === null && verdictOf(53999, 60000, 68000) === null && verdictOf(900000, 0, null) === "within",
+  "the other edges: min is within, +5% exactly is a_little_above, beyond +5% above (listed to +15%), under min not offered (v302 hard floor)");
 
 // ---- 3. names must agree with the record --------------------------------------------------------------------
 const rc = R.find(r => r.name === "Regent Court");
