@@ -4586,8 +4586,8 @@ export default {
       try { const _n = gstNow(); if (_n.getUTCHours() === 6 && _n.getUTCMinutes() < 30) { const rk = "reindex_" + gstDateStr(_n); if (!(await env.MEETINGS.get(rk))) { await env.MEETINGS.put(rk, "1", { expirationTtl: 2 * 86400 }); await peopleReindex(env); } } } catch (e) {}   // v35 — daily party reindex ~06:00 GST
       try { await dnaReflect(env); } catch (e) {}             // v39 — nightly DNA reflection (~20:00 GST, only when new signals exist)
       try { await newsTick(env); } catch (e) {}               // v37.1 — hourly news sweep + MEED cross-reference
-      try { await trendRadarTick(env); } catch (e) {}         // v88 — trend radar first (~07:00 GST), so the feed can touch it
-      try { await dailyFeedTick(env); } catch (e) {}          // v37 — Najma daily feed: three post-ready angles ~07:00 GST
+      try { await trendRadarTick(env); } catch (e) {}         // v88 — trend radar first (in the feed's hour, FEED_HOUR_GST), so the feed can touch it
+      try { await dailyFeedTick(env); } catch (e) {}          // v37 — Najma daily feed: five post-ready angles at FEED_HOUR_GST (azimuth-2: 05:00 GST since v289)
       try { await worldTick(env); } catch (e) {}              // v154 - Dubai versus a world city, Mon/Wed/Fri ~07:00 GST after the feed (WORLD_TALK="on")
       try { await marketBriefTick(env); } catch (e) {}        // v36 — weekly Market Pulse brief (Sunday ~09:00 GST, MARKET_BRIEF="on" only)
     })());
@@ -5996,6 +5996,8 @@ const CAMPAIGN_SCHEMA = { type: "object", additionalProperties: false, propertie
 
 // v140 - the hour (GST) the daily feed and its trend radar run in. Najjuko asked for 06:00 on 13 Sep 2026; the instance
 // cron must include that hour. Default 7 keeps every other instance exactly as it was.
+// v289 - azimuth-2 moved to 05:00 (Kendall, 2 Oct 2026). FEED_HOUR_GST in wrangler.toml is the only place the hour is set;
+// its cron now starts at 01:00 UTC. Never write the hour as a literal anywhere else - read it through this function.
 function feedHourGst(env) { const h = parseInt(env.FEED_HOUR_GST || "7", 10); return h >= 0 && h <= 23 ? h : 7; }
 // v178 - THE DUBAI 2040 URBAN MASTER PLAN is the spine of her morning (Kendall, 18 Sep 2026: "my trajectory in terms of
 // delivering information is always around the Dubai 2040 master plan"). OFFICIAL figures only, each with the page it was read

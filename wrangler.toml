@@ -100,7 +100,9 @@ MAILBOXES = ""
 MARKET_BRIEF = "on"
 WA_ALLOWED = "971565484397"
 # v140 - Najjuko asked for her feed at 06:00 (13 Sep 2026); the trend radar follows the same hour.
-FEED_HOUR_GST = "6"
+# v289 - moved to 05:00 (Kendall, 2 Oct 2026: "move Najj feed from 6am to 5am"). THE ONE PLACE the feed hour is set: the code reads it
+# through feedHourGst(), and the cron below must start at (this hour - 4) UTC or the feed never gets a tick (test_v289_feed_hour checks both).
+FEED_HOUR_GST = "5"
 # v140 - her meeting ring: the shared dialler handset, her own CALLNAJ marker, no meeting title on the handset.
 # RING_WA_TO = "971585446093"   # rings off (Kendall, 15 Sep 2026): the dialler handset's open microphone relayed room noise
 RING_TEMPLATE = "daily_meeting_reminder"
@@ -110,9 +112,9 @@ RING_PARAMS = "CALLNAJ|1|meeting starting in 15 minutes"
 MINUTE_TICK = "on"
 # v270 - live city news (Kendall, 30 Sep 2026: the Etihad Rail launch never reached the morning). The minute tick reads 5 feeds every
 # 5 minutes (Khaleej Times, The National, Gulf News direct; WAM / Dubai Media Office / RTA / DLD via Bing News), keeps 48 h in
-# news_live, and the 06:00 feed is handed the freshest ten. Check it live at /news_live?key=READ_KEY. Remove to switch off.
+# news_live, and the morning feed (FEED_HOUR_GST) is handed the freshest ten. Check it live at /news_live?key=READ_KEY. Remove to switch off.
 LIVE_NEWS = "on"
-# v185 - the five morning scene cards (Naj drawn into each place), queued after the 06:00 list and made by the minute tick (Kendall, 19 Sep 2026). Remove to switch off.
+# v185 - the five morning scene cards (Naj drawn into each place), queued after the morning list (FEED_HOUR_GST) and made by the minute tick (Kendall, 19 Sep 2026). Remove to switch off.
 FEED_SCENES = "on"
 # v186 - the approved template that reaches her when her 24-hour WhatsApp window is shut (21 Sep 2026: a whole morning was
 # accepted by Meta and then failed). Two body variables: the headline and the line under it. Remove to switch the nudge off.
@@ -137,7 +139,7 @@ GMEET = "on"   # 16 Sep 2026, Kendall: Naj tests calendar scheduling in parallel
 # WORLD_TALK = "on"   # OFF until Kendall approves the sample wording (16 Sep 2026); set to "on" in that commit and deploy from it
 
 [env.azimuth2.triggers]
-crons = ["0,30 2-18 * * *", "* * * * *"]   # v140 - starts 06:00 GST (was 07:00) so the 06:00 feed has a tick; v146 - the minute tick
+crons = ["0,30 1-18 * * *", "* * * * *"]   # v140 - started 06:00 GST (was 07:00) so the 06:00 feed had a tick; v289 - starts 01:00 UTC = 05:00 GST for the 05:00 feed (FEED_HOUR_GST); v146 - the minute tick
 
 # secrets on azimuth-2 (set already; note WA_PHONE_ID is a SECRET here, not a var):
 #   IG_APP_SECRET (v149, the "Azimuth Insights" Instagram app secret - put by Kendall, never seen by the assistant)
