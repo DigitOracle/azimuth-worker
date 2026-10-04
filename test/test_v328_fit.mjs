@@ -627,5 +627,19 @@ ev = await E2("2026-10-04T17:05:00Z");
 eq(ev.sent.map((x) => x.to), [HER], "30 hours since he wrote: his 24-hour window is shut, so nothing is sent to him");
 delete env.FIT_USERS;
 
+console.log("v335: polish found by looking at the page");
+store.clear(); delete env.FIT_USERS; delete env.FIT_TOKEN; outbound = [];
+await fit.fitSaveCfg(env, fit.fitCleanCfg({ start: fit.addDays(today, -3) }, fit.FIT_CFG_DEFAULT));
+await fit.fitPause(env, "me", fit.addDays(today, 10), 2, "trip");
+const pj2 = (await jget("/fit_api")).j;
+eq(pj2.paused, [fit.addDays(today, 10), fit.addDays(today, 11)], "rest days booked 10 days ahead are listed (they used to vanish when they fell outside the viewed week)");
+await fit.fitAdd(env, { k: "w", x: "waist", v: 78, d: today });
+const hp = (await jget("/fit_api?view=history")).j;
+eq([hp.measures.waist.count, hp.measures.waist.change], [1, 0], "one reading: count 1, change 0");
+await text("momo history");
+ok(/📏 Waist: 78 cm \(first reading\)/.test(said()) && !/\(\+?0 cm since/.test(said()), "and the history says 'first reading' instead of '0 since the first reading'");
+const pg2 = await (await call(K("/fit"))).text();
+ok(/\(first reading\)/.test(pg2), "the page says it too");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
