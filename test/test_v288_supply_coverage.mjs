@@ -65,7 +65,7 @@ console.log("C2 home types");
 console.log("C3 a file without the new keys draws as before");
 {
   const html = (await page("/supply?d=businessbay&" + K)).html, v = visible(html);
-  ok(/12 adverts across/.test(v) && !/id=sucov/.test(html) && !/id=suhome/.test(html) && !/Covers/.test(v), "C3.1 Business Bay: the adverts line, no coverage line, no home-type chips");
+  ok(/12 adverts, in 1 building/.test(v) && !/0 sites?/.test(v) && !/id=sucov/.test(html) && !/id=suhome/.test(html) && !/Covers/.test(v), "C3.1 Business Bay: the adverts line, no coverage line, no home-type chips");
   const d = supplyDoc(bbDoc);
   ok(d.coverage === null && Array.isArray(d.homeTypes) && d.homeTypes.length === 0 && d.rows.length === 1, "C3.2 supplyDoc: coverage null, home types empty, rows unchanged");
 }

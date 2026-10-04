@@ -97,7 +97,53 @@ export function supplyHomeTypes(h) {
 export function supplyDoc(doc) {
   if (!doc || !Array.isArray(doc.rows)) return null;
   return { asOf: str(doc.as_of), measure: str(doc.measure), rows: doc.rows.map(supplyRow).filter(Boolean),
-    coverage: supplyCoverage(doc.coverage), homeTypes: supplyHomeTypes(doc.home_types) };
+    coverage: supplyCoverage(doc.coverage), homeTypes: supplyHomeTypes(doc.home_types),
+    sourceSay: str(doc.source_say), sites: num(doc.sites) > 0 ? num(doc.sites) : 0, srcs: supplySources(doc.sources) };
+}
+// v313 - where the data come from. The crawler's `sources` [{site, url, what, fetched, method}] and `source_say` are additive: an old
+// file has neither, and then the line says what we can know (Property Finder, the crawl time) and never a number of sites.
+export function supplySources(a) {
+  if (!Array.isArray(a)) return [];
+  return a.filter((x) => x && typeof x === "object" && str(x.site)).map((x) => ({ site: str(x.site), url: httpUrl(x.url), what: str(x.what), fetched: str(x.fetched) }));
+}
+export function sourceLine(D) {
+  if (!D) return "";
+  if (D.sourceSay) return D.sourceSay;
+  const l = D.srcs || [];
+  if (l.length) {
+    const names = [...new Set(l.map((x) => siteSay(x.site)))], f = l.map((x) => x.fetched).find(Boolean) || D.asOf || dubaiTime(D.crawled);
+    const what = l.map((x) => x.what).find(Boolean);
+    return names.join(" and ") + " rental adverts, fetched " + f + (what ? "; " + what : "") + ". Not vacancy; research only.";
+  }
+  const t = dubaiTime(D.crawled) || D.asOf;
+  return "Property Finder rental adverts" + (t ? ", fetched " + t : "");
+}
+// v313 - the registered projects with no advert location matched (img_pf_unbound_<district>, owner only, optional)
+export function unboundDoc(doc) {
+  if (!doc || !Array.isArray(doc.projects)) return null;
+  const ps = doc.projects.filter((p) => p && typeof p === "object" && str(p.project)).map((p) => ({
+    name: str(p.project), plots: num(p.land_plots), sales: num(p.sales_all_time), sales12: num(p.sales_last_12m), salesMed: num(p.sales_median_price_last_12m),
+    contracts: num(p.ejari_contracts_all_time), lets12: num(p.ejari_new_lettings_last_12m), letMed: num(p.ejari_new_median_annual_rent_last_12m) }));
+  return ps.length ? { asOf: str(doc.as_of), why: str(doc.why_not_listed), projects: ps } : null;
+}
+const aedM = (v) => v >= 1e6 ? "AED " + (v / 1e6).toFixed(1) + "m" : "AED " + fmt(v);
+export function unboundSay(p) {
+  const n = (v) => v || 0, out = [];
+  if (!n(p.sales)) out.push("no sales recorded");
+  else out.push(fmt(p.sales) + (p.sales === 1 ? " sale" : " sales") + " recorded, " + (n(p.sales12) ? fmt(p.sales12) + " in the last 12 months" + (p.salesMed != null ? " at a median " + aedM(p.salesMed) : "") : "none in the last 12 months"));
+  if (n(p.lets12)) out.push(fmt(p.lets12) + (p.lets12 === 1 ? " new letting" : " new lettings") + " in 12 months" + (p.letMed != null ? " at a median AED " + fmt(p.letMed) : ""));
+  else if (n(p.contracts)) out.push("no new lettings in the last 12 months (" + fmt(p.contracts) + " rental contracts on record)");
+  else out.push("no lettings recorded");
+  return out.join("; ");
+}
+export function unboundHtml(u) {
+  if (!u) return "";
+  return '<div class=hd id=suunb>Registered here, no advert location matched</div>'
+    + '<div class=dk>' + fmt(u.projects.length) + " registered " + (u.projects.length === 1 ? "project" : "projects") + " with no advert location matched, so no advert count is shown. They are still sold and let; these figures come from the Dubai Land Department register"
+    + (u.asOf ? " (as of " + esc(u.asOf) + ")" : "") + ". Research only.</div>"
+    + u.projects.map((p) => '<div class=card><div class=nm>' + esc(p.name) + "</div>"
+      + (p.plots ? '<div class=sb>' + fmt(p.plots) + (p.plots === 1 ? " land plot" : " land plots") + "</div>" : "")
+      + '<div class=dk>' + esc(unboundSay(p)) + ".</div></div>").join("");
 }
 const HOME_SAY = { villa: "Villas", townhouse: "Townhouses", apartment: "Apartments", penthouse: "Penthouses", duplex: "Duplexes", "hotel apartment": "Hotel apartments" };
 const homeSay = (t) => HOME_SAY[String(t).toLowerCase()] || String(t);
@@ -167,15 +213,16 @@ async function loadDistrict(env, slug, names) {
   if (!doc) return null;
   const bs = supplyBuildings(doc.rows, slug, names);
   const crawled = bs.reduce((m, b) => (b.crawled > m ? b.crawled : m), "") || doc.asOf;
-  return { slug, asOf: doc.asOf, crawled, buildings: bs, coverage: doc.coverage, homeTypes: doc.homeTypes };
+  return { slug, asOf: doc.asOf, crawled, buildings: bs, coverage: doc.coverage, homeTypes: doc.homeTypes, sourceSay: doc.sourceSay, sites: doc.sites, srcs: doc.srcs };
 }
+async function withUnbound(env, D) { if (D) D.unbound = unboundDoc(await readJson(env, "img_pf_unbound_" + D.slug)); return D; }
 // one summary for the START card: the latest crawl and the adverts on record
 export async function supplySummary(env) {
   const ds = await supplyDistricts(env);
   if (!ds.length) return { ok: false };
-  let crawled = "", live = 0, sites = new Set(), buildings = 0;
-  for (const d of ds) { const x = await loadDistrict(env, d, null); if (!x) continue; if (x.crawled > crawled) crawled = x.crawled; for (const b of x.buildings) { live += b.live; buildings++; Object.keys(b.sources).forEach((s) => sites.add(s)); } }
-  return { ok: !!buildings, crawled, crawled_say: dubaiTime(crawled), live, sites: sites.size, buildings, districts: ds.length };
+  let crawled = "", live = 0, sites = new Set(), buildings = 0, say = "", nsites = 0;
+  for (const d of ds) { const x = await loadDistrict(env, d, null); if (!x) continue; if (x.crawled > crawled) { crawled = x.crawled; say = sourceLine(x); } nsites = Math.max(nsites, x.sites || 0); for (const b of x.buildings) { live += b.live; buildings++; Object.keys(b.sources).forEach((s) => sites.add(s)); } }
+  return { ok: !!buildings, crawled, crawled_say: dubaiTime(crawled), live, sites: Math.max(sites.size, nsites), source_say: say, buildings, districts: ds.length };
 }
 
 // ---- the START card (owner only: index.js draws it only for the owner key) ----
@@ -183,17 +230,17 @@ const SUPPLY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#E3C88F" stroke
 export function supplyStartCard(key) {
   const boot = { key: key || "" };
   return '<div class=sustart id=supply0><div class="ejc suc">'   // the rule above it is drawn by src/start_page.js (owner key only)
-    + '<div class=ejh><div class="ic suic">' + SUPPLY_SVG + '</div><div><b>What\u2019s advertised, where</b><span id=susub>' + esc(SUPPLY_LABEL) + "</span></div></div>"
+    + '<div class=ejh><div class="ic suic">' + SUPPLY_SVG + '</div><div><b>What\u2019s advertised, where</b><span id=susub>' + esc(SUPPLY_LABEL) + '</span><span id=susrc style="display:block;margin-top:3px"></span></div></div>'
     + '<form class=ejf method=get action="/supply"><input type=hidden name=key value="' + esc(key || "") + '"><input class=ejin type=search name=q autocomplete=off enterkeyhint=search placeholder="A building or a district" aria-label="search a building or a district"><button type=submit class=ejgo aria-label="search">\u2192</button></form>'
     + "</div><script>window.__SUS=" + safeJson(boot) + ";</script><script>" + SUPPLY_START_JS + "</script></div>";
 }
 export const SUPPLY_START_CSS = '.sustart{position:relative;z-index:1;margin:0}.suc{border-color:#3A3222}.suic{background:rgba(197,165,106,.16)!important}';
 export const SUPPLY_START_JS = String.raw`
 (function(){
-var P=window.__SUS||{},el=document.getElementById("susub");if(!el)return;
+var P=window.__SUS||{},el=document.getElementById("susub"),sr=document.getElementById("susrc");if(!el)return;
 fetch("/supply/summary?key="+encodeURIComponent(P.key||""),{credentials:"same-origin"}).then(function(r){return r.ok?r.json():{ok:false}}).then(function(j){
   if(!j||!j.ok){el.textContent="Advertised supply \u00b7 live rental adverts from listing sites, not vacancy \u00b7 nothing fetched yet";return}
-  el.textContent=Math.round(j.live).toLocaleString("en-US")+" adverts"+(j.sites>0?" across "+j.sites+(j.sites===1?" site":" sites"):"")+" \u00b7 fetched "+j.crawled_say+" \u00b7 live rental adverts from listing sites, not vacancy"},function(){});
+  el.textContent=Math.round(j.live).toLocaleString("en-US")+" adverts"+(j.sites>0?" across "+j.sites+(j.sites===1?" site":" sites"):"")+" \u00b7 fetched "+j.crawled_say+" \u00b7 live rental adverts from listing sites, not vacancy";if(sr&&j.source_say)sr.textContent="Source: "+j.source_say},function(){});
 })();
 `;
 
@@ -242,12 +289,13 @@ export function supplyPageHtml(o) {
   let main = "";
   if (o.view === "district" && o.d) {
     const D = o.d, live = D.buildings.reduce((s, b) => s + b.live, 0), sites = new Set(); D.buildings.forEach((b) => Object.keys(b.sources).forEach((s) => sites.add(s)));
+    const siteN = Math.max(sites.size, D.sites || 0);
     main = '<div class=card data-district="' + esc(D.slug) + '"><div class=kt>DISTRICT</div><div class=nm>' + esc(nm[D.slug] || D.slug) + "</div>"
-      + '<div class=hl><b>' + fmt(live) + "</b> adverts across " + sites.size + (sites.size === 1 ? " site" : " sites") + ", in " + D.buildings.length + " buildings</div>"
+      + '<div class=hl><b>' + fmt(live) + "</b> " + (live === 1 ? "advert" : "adverts") + (siteN > 0 ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + ", in " + D.buildings.length + (D.buildings.length === 1 ? " building" : " buildings") + "</div>"
       + homeTypesHtml(D.homeTypes) + coverageHtml(D.coverage)
       + '<div class=dk>Fetched ' + esc(dubaiTime(D.crawled) || "\u2014") + " (Dubai time).</div>"
       + '<button type=button class=rf data-district="' + esc(D.slug) + '" data-slug="">Refresh the district</button><div class=rs role=status></div></div>'
-      + '<div class=hd>BUILDINGS, MOST ADVERTISED FIRST</div>' + D.buildings.slice(0, 30).map((b) => buildingCard(b, key)).join("");
+      + '<div class=hd>BUILDINGS, MOST ADVERTISED FIRST</div>' + D.buildings.slice(0, 30).map((b) => buildingCard(b, key)).join("") + unboundHtml(D.unbound);
   } else if (o.view === "building" && o.b) main = buildingCard(o.b, key);
   else if (o.matches) main = o.matches.length ? '<div class=hd>WHICH ONE?</div><div class=pick id=supick>' + o.matches.map((m) => '<a href="/supply?' + (m.kind === "district" ? "d=" + encodeURIComponent(m.id) : "b=" + encodeURIComponent(m.id) + "&d=" + encodeURIComponent(m.d)) + "&key=" + esc(encodeURIComponent(key)) + '">' + esc(m.name) + "<small>" + esc(m.sub) + "</small></a>").join("") + "</div>"
     : '<div class=nt id=sunone>No building or district by that name in the advert record.</div>';
@@ -258,6 +306,7 @@ export function supplyPageHtml(o) {
     + "<style>" + SU_CSS + (o.navCss || "") + "</style></head><body>"
     + '<a class=bk href="/start?key=' + esc(encodeURIComponent(key)) + '">\u2039 START</a>'
     + '<div class=h>Advertised <em>supply</em></div><div class=lab id=sulabel>' + esc(SUPPLY_LABEL) + (o.fetched ? " \u00b7 fetched " + esc(dubaiTime(o.fetched)) : "") + "</div>"
+    + (o.src ? '<div class=s id=susource>Source: ' + esc(o.src) + "</div>" : "")
     + '<div class=s>Owner only. Adverts are not homes free: one home can be on several sites, and a home can let without being advertised.</div>'
     + '<div class=srch><form method=get action="/supply"><input type=hidden name=key value="' + esc(key) + '"><input class=in type=search name=q value="' + esc(o.q || "") + '" placeholder="a building or a district" aria-label="search a building or a district"><button type=submit class=gob>SEARCH</button></form></div>'
     + main
@@ -299,10 +348,10 @@ export async function supplyRoutes(request, env, url, h) {
   const page = (o) => new Response(supplyPageHtml(Object.assign({ key, q, nav: h.najNav(key, "start", ""), navCss: h.NAJ_NAV_CSS, fonts: h.NAJ_FONTS }, o)),
     { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   if (/^[a-z0-9]{2,40}$/.test(d)) {
-    const D = await loadDistrict(env, d, names);
+    const D = await withUnbound(env, await loadDistrict(env, d, names)), src = sourceLine(D);
     if (!D) return page({ none: "No adverts fetched for " + (nm[d] || d) + " yet.", fetchDistrict: nm[d] ? d : "" });
-    if (b) { const one = D.buildings.find((x) => x.id === b || x.key === b); return one ? page({ view: "building", b: one, fetched: one.crawled }) : page({ none: "No adverts for that building in the last crawl.", fetched: D.crawled }); }
-    return page({ view: "district", d: D, fetched: D.crawled });
+    if (b) { const one = D.buildings.find((x) => x.id === b || x.key === b); return one ? page({ view: "building", b: one, fetched: one.crawled, src }) : page({ none: "No adverts for that building in the last crawl.", fetched: D.crawled, src }); }
+    return page({ view: "district", d: D, fetched: D.crawled, src });
   }
   const ds = await supplyDistricts(env);
   if (!ds.length) return page({ none: "No adverts have been fetched yet. The crawler on the office computer publishes them." });
@@ -325,9 +374,9 @@ export async function supplyRoutes(request, env, url, h) {
   }
   out.sort((a, c) => c.s - a.s || a.name.localeCompare(c.name));
   if (out.length === 1 || (out.length > 1 && out[0].s >= 90 && out[1].s < out[0].s)) {
-    const m = out[0], D = await loadDistrict(env, m.kind === "district" ? m.id : m.d, names);
-    if (m.kind === "district") return page({ view: "district", d: D, fetched: D.crawled });
-    const one = D.buildings.find((x) => x.id === m.id); return page({ view: "building", b: one, fetched: one.crawled });
+    const m = out[0], D = await loadDistrict(env, m.kind === "district" ? m.id : m.d, names), src = sourceLine(D);
+    if (m.kind === "district") return page({ view: "district", d: await withUnbound(env, D), fetched: D.crawled, src });
+    const one = D.buildings.find((x) => x.id === m.id); return page({ view: "building", b: one, fetched: one.crawled, src });
   }
   return page({ matches: out.slice(0, 15) });
 }
