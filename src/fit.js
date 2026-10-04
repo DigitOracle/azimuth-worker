@@ -17,7 +17,7 @@
 // is read with list() alone, no per-entry get. fitc_* = config, flags, one-turn pending answers.
 // Entry: { id, d: "YYYY-MM-DD" (GST), t: ms, k: "food"|"ex", x: text, m: minutes, n: steps, o: 1 if outside the eating windows, s: source }
 
-import { FIT_IMG } from "./fit_img.js";   // the page photos, bundled (scripts/gen_fit_img.mjs; Pexels licence, assets/fit/CREDITS.md)
+import { FIT_IMG, FIT_IMG_TYPE } from "./fit_img.js";   // the page photos, bundled (scripts/gen_fit_img.mjs; Pexels licence, assets/fit/CREDITS.md)
 
 const GST_MS = 4 * 3600 * 1000, DAY_MS = 86400000;
 export const gstDate = (ms) => new Date(ms + GST_MS).toISOString().slice(0, 10);
@@ -554,10 +554,10 @@ export async function fitRoutes(request, env, url, h) {
   if (h.keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });   // a client key, no key, a wrong key: all the same 404
   const key = url.searchParams.get("key") || "";
   if (isImg) {   // the bundled photos, served from the worker itself: the page never asks a third party for anything
-    const n = p.slice(9).replace(/\.jpg$/, "");
+    const n = p.slice(9).replace(/\.(jpg|png)$/, "");
     if (!Object.prototype.hasOwnProperty.call(FIT_IMG, n)) return new Response("not found", { status: 404 });
     const bytes = IMG_BYTES[n] || (IMG_BYTES[n] = Uint8Array.from(atob(FIT_IMG[n]), (c) => c.charCodeAt(0)));   // constants of the bundle, never user data: safe to keep between requests
-    return new Response(bytes, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400", "X-Robots-Tag": "noindex", "Referrer-Policy": "no-referrer" } });
+    return new Response(bytes, { headers: { "Content-Type": FIT_IMG_TYPE[n] || "image/jpeg", "Cache-Control": "private, max-age=86400", "X-Robots-Tag": "noindex", "Referrer-Policy": "no-referrer" } });
   }
   if (p === "/fit") {
     const html = fitPageHtml({ key, nav: h.najNav(key, "fit", ""), navCss: h.NAJ_NAV_CSS, fonts: h.NAJ_FONTS });
@@ -614,16 +614,16 @@ const FIT_CSS = ".fw{max-width:640px;margin:0 auto;padding:18px 16px calc(96px +
   ".strip{display:flex;gap:6px;margin:6px 0}.strip button{flex:1;min-width:0;border:1px solid #2E4540;background:#0E1918;color:#CFD8D3;border-radius:12px;padding:7px 2px;font:inherit;font-size:.66rem;cursor:pointer;line-height:1.35}.strip button.on{border-color:#C5A56A;color:#F2EFE6}.strip .dot{display:block;font-size:.95rem}" +
   ".dn{display:flex;align-items:center;justify-content:space-between;margin:8px 0}.dn button{background:none;border:1px solid #2E4540;color:#CFD8D3;border-radius:10px;min-width:40px;min-height:36px;font-size:1rem;cursor:pointer}.dn span{font-size:.9rem;color:#F2EFE6}" +
   ".it{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid #1b2a26;font-size:.88rem;color:#E6E9E4}.it:first-of-type{border-top:0}.it .x{flex:1;min-width:0;word-break:break-word}.it small{color:#8FA39B;font-size:.7rem;display:block}.it .w{color:#E0A458}.it button{background:none;border:0;color:#8FA39B;font-size:1rem;min-width:34px;min-height:34px;cursor:pointer}" +
-  ".fc .add+.row{margin-top:12px}.hero{position:relative;height:176px;border-radius:16px;overflow:hidden;background:#16241f center/cover no-repeat;margin:0 0 12px}.hero:after,.ph:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(12,20,19,.04) 28%,rgba(12,20,19,.80))}.hero .ht{position:absolute;left:16px;right:16px;bottom:12px;z-index:1}.hero h1.ft{margin:0}.hero .fsub{margin:2px 0 0;color:#E6E9E4}.ph{position:relative;height:92px;margin:-14px -14px 12px;border-radius:14px 14px 0 0;background:#16241f center/cover no-repeat;overflow:hidden}.ph b{position:absolute;left:14px;bottom:8px;z-index:1;font-family:'IBM Plex Mono',monospace;font-size:.7rem;letter-spacing:.12em;color:#C5A56A;font-weight:500}.cred{text-align:center;color:#6E847B;font-size:.66rem;margin:6px 0 0}.empty{color:#8FA39B;font-size:.8rem;padding:6px 0}.add{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.add input,.add select,.add textarea,.set input,.set select{background:#0C1413;border:1px solid #2E4540;color:#F2EFE6;border-radius:10px;padding:9px 10px;font:inherit;font-size:.88rem;min-width:0}.add textarea{flex:1 1 100%;min-height:44px;resize:vertical}.add input.g{flex:1}" +
+  ".fc .add+.row{margin-top:12px}.brand{background:#FCF9F4;border-radius:16px;text-align:center;padding:14px 10px 10px;margin:0 0 12px}.brand .logo{display:block;width:min(172px,50%);height:auto;margin:0 auto}.brand .fsub{margin:8px 0 0;color:#4A5C55}.ph:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(12,20,19,.04) 28%,rgba(12,20,19,.80))}.ph{position:relative;height:92px;margin:-14px -14px 12px;border-radius:14px 14px 0 0;background:#16241f center/cover no-repeat;overflow:hidden}.ph b{position:absolute;left:14px;bottom:8px;z-index:1;font-family:'IBM Plex Mono',monospace;font-size:.7rem;letter-spacing:.12em;color:#C5A56A;font-weight:500}.cred{text-align:center;color:#6E847B;font-size:.66rem;margin:6px 0 0}.empty{color:#8FA39B;font-size:.8rem;padding:6px 0}.add{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.add input,.add select,.add textarea,.set input,.set select{background:#0C1413;border:1px solid #2E4540;color:#F2EFE6;border-radius:10px;padding:9px 10px;font:inherit;font-size:.88rem;min-width:0}.add textarea{flex:1 1 100%;min-height:44px;resize:vertical}.add input.g{flex:1}" +
   ".btn{background:#C5A56A;color:#0C1413;border:0;border-radius:10px;padding:9px 14px;font:inherit;font-weight:600;font-size:.85rem;cursor:pointer;min-height:40px}.btn.s{background:#0E1918;color:#CFD8D3;border:1px solid #2E4540;font-weight:500}" +
   ".chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.chips button.on{border-color:#C5A56A;color:#F2EFE6}.chips button{border:1px solid #2E4540;background:#0C1413;color:#CFD8D3;border-radius:99px;padding:7px 12px;font:inherit;font-size:.78rem;cursor:pointer}" +
   ".set label{display:block;font-size:.72rem;color:#8FA39B;margin:10px 0 4px;font-family:'IBM Plex Mono',monospace}.set input,.set select{width:100%;box-sizing:border-box}.wr{display:flex;gap:6px;margin-top:6px}.wr input{flex:1}.note{color:#8FA39B;font-size:.72rem;margin-top:10px;line-height:1.5}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#16241f;border:1px solid #C5A56A;color:#F2EFE6;border-radius:12px;padding:10px 14px;font-size:.84rem;max-width:88%;display:none;z-index:50}";
 
 function fitPageHtml(o) {
-  const keyJs = JSON.stringify(o.key || "").replace(/</g, "\\u003c");
-  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#0C1413"><title>Momo</title><link rel="icon" href="/naj_icon.svg">' + (o.fonts || "") +
+  const keyJs = JSON.stringify(o.key || "").replace(/</g, "\\u003c"), keyQ = encodeURIComponent(o.key || "");
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#0C1413"><title>Momo</title><link rel="icon" type="image/png" href="/fit_img/icon.png?key=' + keyQ + '"><link rel="apple-touch-icon" href="/fit_img/icon.png?key=' + keyQ + '">' + (o.fonts || "") +
     '<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0C1413;color:#E6E9E4;font-family:"IBM Plex Sans",system-ui,sans-serif}' + FIT_CSS + (o.navCss || "") + '</style></head><body><div class="fw">' +
-    '<div class="hero" data-img="hero"><div class="ht"><h1 class="ft">Momo</h1><div class="fsub" id="sub">&nbsp;</div></div></div><div class="chips" id="usr" style="margin:0 0 4px"></div>' +
+    '<div class="brand"><img class="logo" src="/fit_img/logo.jpg?key=' + keyQ + '" alt="Momo"><div class="fsub" id="sub">&nbsp;</div></div><div class="chips" id="usr" style="margin:0 0 4px"></div>' +
     '<div class="fc" id="ch"></div>' +
     '<div class="dn"><button id="prev" aria-label="Previous day">&#8249;</button><span id="dl"></span><button id="next" aria-label="Next day">&#8250;</button></div><div class="strip" id="strip"></div>' +
     '<div class="fc"><div class="ph" data-img="food"><b>FOOD</b></div><div id="food"></div><div class="note" id="win"></div>' +

@@ -249,14 +249,18 @@ eq([r.ok, r.target.minutes], [true, 450], "the page can set it too");
 eq((await (await post("/fit_api", { op: "weektarget", hours: -3 })).json()).ok, false, "a negative target is refused");
 
 console.log("photos on the page");
-const imgOwner = await call(K("/fit_img/hero.jpg"));
+const imgOwner = await call(K("/fit_img/logo.jpg"));
 const imgBytes = new Uint8Array(await imgOwner.arrayBuffer());
 ok(imgOwner.status === 200 && imgOwner.headers.get("content-type") === "image/jpeg" && imgBytes[0] === 0xff && imgBytes[1] === 0xd8 && imgBytes.length > 10000, "the owner gets a real JPEG from the worker itself");
-for (const nm of ["hero", "food", "exercise", "walk", "win"]) { const r2 = await call(K("/fit_img/" + nm + ".jpg")); ok(r2.status === 200, "bundled photo: " + nm); }
-eq([(await call("/fit_img/hero.jpg")).status, (await call(K("/fit_img/hero.jpg", CLIENT))).status, (await call(K("/fit_img/nope.jpg"))).status, (await call(K("/fit_img/..%2Fsecret.jpg"))).status], [404, 404, 404, 404], "no key, a client key, an unknown name and a path trick are all 404");
+for (const nm of ["logo", "food", "exercise", "walk", "win"]) { const r2 = await call(K("/fit_img/" + nm + ".jpg")); ok(r2.status === 200 && r2.headers.get("content-type") === "image/jpeg", "bundled image: " + nm); }
+const icoR = await call(K("/fit_img/icon.png")), ico = new Uint8Array(await icoR.arrayBuffer());
+ok(icoR.status === 200 && icoR.headers.get("content-type") === "image/png" && ico[0] === 0x89 && ico[1] === 0x50 && ico[2] === 0x4e && ico[3] === 0x47, "the page icon is a real PNG served as image/png");
+eq([(await call("/fit_img/logo.jpg")).status, (await call(K("/fit_img/logo.jpg", CLIENT))).status, (await call(K("/fit_img/nope.jpg"))).status, (await call(K("/fit_img/..%2Fsecret.jpg"))).status], [404, 404, 404, 404], "no key, a client key, an unknown name and a path trick are all 404");
 const pageHtml = await (await call(K("/fit"))).text();
 ok(!/https?:\/\/(?!fonts\.(googleapis|gstatic)\.com)[^"'\s)]*\.(jpe?g|png|webp)/i.test(pageHtml) && !/pexels\.com\/[^ ]*photo/i.test(pageHtml), "the page asks no third party for a picture (only the app's own fonts)");
-ok(/data-img="hero"/.test(pageHtml) && /data-img="food"/.test(pageHtml) && /data-img="exercise"/.test(pageHtml) && /data-img="walk"/.test(pageHtml), "hero, food, exercise and walking banners are on the page");
+ok(/<img class="logo" src="\/fit_img\/logo\.jpg\?key=[^"]+" alt="Momo">/.test(pageHtml) && !/data-img="hero"/.test(pageHtml) && /data-img="food"/.test(pageHtml) && /data-img="exercise"/.test(pageHtml) && /data-img="walk"/.test(pageHtml), "the Motion logo is the banner (no header photo any more); food, exercise and walking banners are on the page");
+ok(/<link rel="icon" type="image\/png" href="\/fit_img\/icon\.png\?key=[^"]+">/.test(pageHtml) && /<link rel="apple-touch-icon" href="\/fit_img\/icon\.png\?key=/.test(pageHtml) && !/naj_icon\.svg/.test(pageHtml), "the page icon and the home-screen icon are the Momo tile, not the Najma one");
+eq([(await call("/fit_img/icon.png")).status, (await call(K("/fit_img/icon.png", CLIENT))).status], [404, 404], "the icon is owner-only too");
 
 console.log("FIT stands aside for Azimuth's other flows");
 store.clear(); outbound = [];
