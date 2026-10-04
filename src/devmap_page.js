@@ -19,6 +19,10 @@ export const DEVMAP_PATHS = ["/developers_map", "/developers_map_api"];
 const JSON_HDR = { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer" };
 const J = (o, status) => new Response(JSON.stringify(o), { status: status || 200, headers: JSON_HDR });
 export const SHORTLIST_MAX = 60;
+// NAJJUKO'S TEN: the default shortlist (step 1 of the developers map) when a key has no saved list. MULTI-REALTOR FUTURE: this one constant is applied
+// to EVERY key today because the only users are Kendall and Najjuko; when other realtors arrive, the default must come per key (a saved list still wins).
+// ids are the developer_crosswalk brand ids (src/devcross_data.js); the page shows them ordered by sales, developers with no area yet last.
+export const DEFAULT_SHORTLIST = [{ id: "omniyat", name: "Omniyat" }, { id: "nakheel", name: "Nakheel" }, { id: "meraas", name: "Meraas" }, { id: "emaar", name: "Emaar" }, { id: "imtiaz", name: "Imtiaz" }, { id: "zaya", name: "Zaya" }, { id: "ellington", name: "Ellington" }, { id: "select-group", name: "Select Group" }, { id: "damac", name: "DAMAC" }, { id: "mered", name: "Mered" }];
 
 // the realtor's slot: a hash of the key they hold, never the key
 export async function shortlistName(key) {
@@ -99,6 +103,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .row:hover,.row.sel{background:var(--raise)}
 .row .n{font-weight:600;font-size:13px}.row .m{color:var(--muted);font-size:11.5px}
 .tag{font-size:11.5px;padding:1px 7px;border-radius:4px;color:#0b1211;white-space:nowrap;align-self:center;font-weight:600}
+.btn{border:1px solid var(--line);background:var(--raise);color:var(--ink);border-radius:6px;padding:4px 9px;font:inherit;font-size:12px;cursor:pointer;align-self:center}
 .big{font-family:Fraunces,Georgia,serif;font-size:26px;line-height:1.1}
 .mix{display:flex;height:12px;border-radius:3px;overflow:hidden;margin:4px 0 2px;background:#26312f}.mix i{display:block}
 .th{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:baseline;margin-top:14px;padding:6px 8px;border-radius:6px;background:var(--raise);border-left:4px solid var(--gold)}
@@ -136,7 +141,7 @@ function api(what,opt){return fetch("/developers_map_api?what="+what+"&key="+enc
 var TC=["#c5a56a","#2f8a7f","#3987e5","#8a9a96"];
 var IDX=null,GEO=null,map=null;
 window.__devmap={get map(){return map},get idx(){return IDX},get state(){return S},select:function(s){select(s,true)}};   // a handle for the preview and the tests; reads only
-var S={screen:1,mode:"buy",unit:"sqft",sel:null,onlyMine:null,mine:{},bud:{mode:"sqft",min:null,max:null,beds:null},filterBud:false,named:"",dv:{ppsm:null,tier:null},cmp:null,q:""};
+var S={screen:1,mode:"buy",unit:"sqft",sel:null,onlyMine:null,mine:{},isDefault:false,bud:{mode:"sqft",min:null,max:null,beds:null},filterBud:false,named:"",dv:{ppsm:null,tier:null},cmp:null,q:""};
 function fmt(n){return n==null?"-":Math.round(n).toLocaleString("en-US")}
 function pu(ppsm){return ppsm==null?null:(S.unit==="sqft"?Math.round(ppsm/DM.SQFT):Math.round(ppsm))}
 function pul(){return S.unit==="sqft"?"per sq ft":"per sq m"}
@@ -171,9 +176,12 @@ function sideHtml(){
   var tabs='<div class=seg id=tabs><button data-s=1>1 MY DEVELOPERS</button><button data-s=2>2 WHERE</button><button data-s=3>3 CLIENT MEETING</button></div>';
   var body="";
   if(S.screen===1){
-    var all=Object.keys(IDX.devs).map(function(k){return{k:k,d:IDX.devs[k]}}).sort(function(a,b){return b.d.n-a.d.n});
-    var q=S.q.toLowerCase();
-    body='<div class=card><p class=label>Choose your developers (about ten)</p><input type=search id=q placeholder="Search a developer" value="'+esc(S.q)+'"><p class=note id=cnt></p><div class=picks id=picks>'+all.filter(function(x){return !q||x.d.name.toLowerCase().indexOf(q)>=0||x.k.indexOf(q)>=0}).slice(0,200).map(function(x){var t=devTier(x.k);return '<label class=pk><input type=checkbox data-k="'+esc(x.k)+'"'+(S.mine[x.k]?' checked':'')+'><span>'+esc(x.d.name)+'<span class=note style="display:block;margin:0">'+x.d.areas+' area'+(x.d.areas===1?'':'s')+' · '+fmt(x.d.n)+' sales</span></span>'+(t>=0?'<span class=tag style="background:'+TC[t]+'">'+DM.TIER_NAMES[t]+'</span>':'')+'</label>'}).join("")+'</div></div><p class=note>Your list is saved for your key, so it is the same on every device you open this link on. The tier shown is where most of the developer’s sales across Dubai fall.</p>';
+    var q=S.q.toLowerCase().trim(),mn=mineList().map(function(k){var d=IDX.devs[k];return{k:k,name:d?d.name:(DEFAULT_NAMES[k]||k),n:d?d.n:0,areas:d?d.areas:0}});
+    mn.sort(function(a,b){return (b.areas>0)-(a.areas>0)||b.n-a.n});
+    var chosenH=mn.map(function(x){var t=x.areas>0?devTier(x.k):-1;return '<div class=pk><span>'+esc(x.name)+'<span class=note style="display:block;margin:0">'+(x.areas>0?x.areas+' area'+(x.areas===1?'':'s')+' - '+fmt(x.n)+' sales':'not on the map yet')+'</span></span>'+(t>=0?'<span class=tag style="background:'+TC[t]+'">'+DM.TIER_NAMES[t]+'</span>':'')+'<button type=button class="rm btn" data-k="'+esc(x.k)+'" aria-label="remove '+esc(x.name)+'">remove</button></div>'}).join("");
+    var res=q?Object.keys(IDX.devs).filter(function(k){return !S.mine[k]&&(IDX.devs[k].name.toLowerCase().indexOf(q)>=0||k.indexOf(q)>=0)}).sort(function(a,b){return IDX.devs[b].n-IDX.devs[a].n}).slice(0,20):[];
+    var resH=q?(res.length?res.map(function(k){var x=IDX.devs[k],t=devTier(k);return '<label class=pk><input type=checkbox data-k="'+esc(k)+'"><span>'+esc(x.name)+'<span class=note style="display:block;margin:0">add - '+x.areas+' area'+(x.areas===1?'':'s')+' - '+fmt(x.n)+' sales</span></span>'+(t>=0?'<span class=tag style="background:'+TC[t]+'">'+DM.TIER_NAMES[t]+'</span>':'')+'</label>'}).join(""):'<p class=note>No developer matches.</p>'):'';
+    body='<div class=card><p class=label>My developers</p><p class=note id=cnt></p><div class=picks id=chosen>'+chosenH+'</div><button type=button id=reset class=btn style="margin-top:8px">Reset to Najjuko\'s ten</button></div><div class=card><p class=label>Add another developer</p><input type=search id=q placeholder="Type a developer name" value="'+esc(S.q)+'"><div class=picks id=picks>'+resH+'</div></div><p class=note>Your list is saved for your key, so it is the same on every device you open this link on. The tier shown is where most of the developer\'s sales across Dubai fall.</p>';
   }else if(S.screen===2){
     var m=mineList();
     body='<div class=card><p class=label>Where your developers are</p>'+(m.length?'<p class=note>'+m.length+' developer'+(m.length===1?'':'s')+' chosen. Tap an area: your developers there, by tier, with price per sq ft.</p>':'<p class=note>Choose your developers on screen 1 first.</p>')+'<div class=card id=legend>'+legendHtml()+'</div></div>';
@@ -205,7 +213,10 @@ function runMeeting(){
 function wireSide(){
   [].forEach.call($("tabs").querySelectorAll("button"),function(b){b.setAttribute("aria-pressed",Number(b.getAttribute("data-s"))===S.screen?"true":"false");b.onclick=function(){S.screen=Number(b.getAttribute("data-s"));if(S.screen!==3)S.meeting=null;S.onlyMine=null;renderAll()}});
   if(S.screen===1){var q=$("q");q.oninput=function(){S.q=q.value;var pos=q.selectionStart;renderSide();var q2=$("q");q2.focus();q2.setSelectionRange(pos,pos)};
-    [].forEach.call(document.querySelectorAll("#picks input"),function(c){c.onchange=function(){var k=c.getAttribute("data-k");if(c.checked)S.mine[k]=true;else delete S.mine[k];saveMine();$("cnt").textContent=mineList().length+" chosen";refreshMap();renderDetail()}});$("cnt").textContent=mineList().length+" chosen"}
+    [].forEach.call(document.querySelectorAll("#picks input"),function(c){c.onchange=function(){S.mine[c.getAttribute("data-k")]=true;S.q="";S.isDefault=false;saveMine();renderAll()}});
+    [].forEach.call(document.querySelectorAll(".rm"),function(b){b.onclick=function(){delete S.mine[b.getAttribute("data-k")];S.isDefault=false;saveMine();renderAll()}});
+    var rs=$("reset");if(rs)rs.onclick=function(){S.mine={};DEFAULT_SL.forEach(function(k){S.mine[k]=true});S.q="";S.isDefault=false;saveMine();renderAll()};
+    $("cnt").textContent=mineList().length+" chosen"}
   if(S.screen===3){
     [].forEach.call($("modeseg").querySelectorAll("button"),function(b){b.setAttribute("aria-pressed",b.getAttribute("data-m")===S.mode?"true":"false");b.onclick=function(){S.mode=b.getAttribute("data-m");S.bud.mode=S.mode==="buy"?"sqft":"total";renderAll()}});
     var bm=$("bmode");if(bm){bm.value=S.bud.mode;bm.onchange=function(){S.bud.mode=bm.value;runMeeting();renderDetail()}}
@@ -227,7 +238,7 @@ function devRow(d,area,st){
   return '<div class="dv'+(out?' out':'')+'"><button class=star type=button data-k="'+esc(d.k)+'" aria-pressed="'+(S.mine[d.k]?'true':'false')+'" title="my developer">'+(S.mine[d.k]?'★':'☆')+'</button><div><div class=nm>'+esc(d.name)+(out?' <span class=ms>(outside budget)</span>':'')+'</div><div class=ms>'+sub+'</div></div><div class=pr>'+price+'</div></div>'}
 function areaHtml(slug){
   var area=IDX.areas[slug],st=stats(slug);if(!st)return '<p class=note>Tap an area on the map.</p>';
-  var onlyMine=S.onlyMine==null?(S.screen===2&&mineList().length>0):S.onlyMine;
+  var onlyMine=S.onlyMine==null?(mineList().length>0):S.onlyMine;
   var view=onlyMine&&mineList().length?DM.shortlistFilter(st,S.mine,area):st;
   var h='<p class=label>Area</p><h2>'+esc(area.name)+'</h2>';
   if(!st.enough)return h+'<p class=note>Not enough sales: fewer than 3 settled sales with a price and a size in this area on the register.</p>'+src();
@@ -286,10 +297,10 @@ Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
   IDX=r[0];GEO=r[1];
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l});
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
-  var sl=r[2]&&r[2].devs&&r[2].devs.length?r[2].devs:(cacheGet()||[]);sl.forEach(function(k){S.mine[k]=true});
+  var saved=r[2]&&r[2].at&&r[2].devs?r[2].devs:null,cg=cacheGet(),sl=saved||(cg&&cg.length?cg:null);if(!sl){sl=DEFAULT_SL.slice();S.isDefault=true}sl.forEach(function(k){S.mine[k]=true});
   $("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Tier bands: "+IDX.cuts.rule;
   if(DM.TIER_CFG.bounds)$("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Tier bands (value-weighted: each tier holds about a quarter of the money spent): "+DM.TIER_CFG.bounds.join(" / ")+" AED per sq m.";
-  if(mineList().length)S.screen=2;
+  if(mineList().length&&!S.isDefault)S.screen=2;
   renderAll();
   if(window.maplibregl)startMap();else $("map").innerHTML='<p class=note style="padding:16px">The map could not load. The lists still work.</p>';
 }).catch(function(){$("sidebody").innerHTML='<p class=note>The developers data did not load.</p>'});
@@ -298,7 +309,7 @@ Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
 
 export function devmapHtml(key, deps) {
   const nav = deps && deps.NAJ_FONTS ? deps.NAJ_FONTS : "";
-  const js = DEVMAP_CORE_JS + "var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
+  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - developers by area</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0e1413">' + nav
     + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + '</style></head><body>'
     + '<div id=map role=region aria-label="Map of Dubai areas: developers and prices"></div>'
