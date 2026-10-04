@@ -136,17 +136,18 @@ function clientMeetingRent(index,set,q){
 // A tie goes to the higher tier. If the index carries no project list (an index built before v321), the brand tier falls back to where most of its SALES fall, and says so.
 var TIER_WORDS=TIER_NAMES.slice();
 var POSITION_WORDS=["Ultra-luxury","Luxury","Premium","Mass-market"];   // a developer's BRAND position (market words), never a price band
-var SCALE_PCT=[80,95]; // Boutique = up to the 80th percentile of project counts across all developers on the map; Mass-market = above the 95th (the largest 5 in every 100); Mid-size between
+var SCALE_PCT=[80,95]; // Boutique = up to the 80th percentile of project counts among developers with SCALE_MIN_SALES or more settled sales; Large-scale = above the 95th (the largest 5 in every 100); Mid-size between
+var SCALE_MIN_SALES=100; // small project companies are left out of the percentiles (a developer is still given a word)
 function projCount(index,k){var d=index&&index.devs&&index.devs[k];return d&&d.profile&&d.profile.projects>0?d.profile.projects:null}
 function scaleCuts(index){var ps=[],k,v;
-  for(k in (index&&index.devs)||{}){v=projCount(index,k);if(v>0)ps.push(v)}
+  for(k in (index&&index.devs)||{}){v=projCount(index,k);if(v>0&&(index.devs[k].n||0)>=SCALE_MIN_SALES)ps.push(v)}
   if(!ps.length)return null;ps.sort(function(a,b){return a-b});
   function q(p){return ps[Math.min(ps.length-1,Math.max(0,Math.ceil(p/100*ps.length)-1))]}
   var lo=q(SCALE_PCT[0]),hi=Math.max(q(SCALE_PCT[1]),lo);
   return {boutiqueMax:lo,midMax:hi,developers:ps.length,lowPct:SCALE_PCT[0],highPct:SCALE_PCT[1]}}
-function scaleWord(p,cuts){if(p==null||!cuts)return null;return p<=cuts.boutiqueMax?"Boutique":p<=cuts.midMax?"Mid-size":"Mass-market"}
+function scaleWord(p,cuts){if(p==null||!cuts)return null;return p<=cuts.boutiqueMax?"Boutique":p<=cuts.midMax?"Mid-size":"Large-scale"}
 function scaleSay(cuts){if(!cuts)return "";
-  return "Scale words come from the number of projects each of the "+cuts.developers+" developers on the map has. Boutique: up to "+cuts.boutiqueMax+" project"+(cuts.boutiqueMax===1?"":"s")+" (the smaller "+cuts.lowPct+" in every 100 developers). Mid-size: "+(cuts.boutiqueMax+1)+" to "+cuts.midMax+". Mass-market: more than "+cuts.midMax+" (the largest "+(100-cuts.highPct)+" in every 100)."}
+  return "Scale words come from the number of projects each of the "+cuts.developers+" developers with "+SCALE_MIN_SALES+" or more settled sales has. Boutique: up to "+cuts.boutiqueMax+" project"+(cuts.boutiqueMax===1?"":"s")+" (the smaller "+cuts.lowPct+" in every 100 developers). Mid-size: "+(cuts.boutiqueMax+1)+" to "+cuts.midMax+". Large-scale: more than "+cuts.midMax+" (the largest "+(100-cuts.highPct)+" in every 100)."}
 function pctOf(a){var t=0,i;for(i=0;i<a.length;i++)t+=a[i];return a.map(function(x){return t?Math.round(100*x/t):0})}
 function devProfile(index,k,cfg){
   var bounds=boundsOf(index,cfg),dv=(index&&index.devs&&index.devs[k])||null,i,s,t;
@@ -163,7 +164,7 @@ function devProfile(index,k,cfg){
   var src=out.basis==="projects"?out.tierProjects:(out.areas?sN:null),best=-1;
   if(src){best=0;for(i=1;i<4;i++)if(src[i]>src[best])best=i;if(!(src[best]>0))best=-1;if(!out.basis)out.basis="sales"}
   out.brandTier=best;out.scale=scaleWord(out.projects,out.cuts);
-  var mv=BRAND_PERCEPTION[k];out.market=mv&&mv.tier>=0?mv.tier:-1;out.headline=out.market>=0?out.market:best;
+  var mv=BRAND_PERCEPTION[k];out.market=mv&&mv.tier>=0?mv.tier:-1;out.headline=out.market;   // a developer class only ever comes from the curated market view, never from price
   out.priced.sort(function(x,y){return y.medianSqm-x.medianSqm});out.thin.sort(function(x,y){return y.n-x.n});
   if(out.priced.length)out.spread={hi:out.priced[0],lo:out.priced[out.priced.length-1],several:out.priced.length>1};
   if(!out.areas)out.limits.push("No sales on the map yet.");
@@ -187,8 +188,9 @@ function brandLabel(t){return t>=0?POSITION_WORDS[t]+" brand":""}
 // When a developer is here, its headline brand label is the market view and the data is shown beside it. tier: 0 ultra-luxury, 1 luxury, 2 premium, 3 budget.
 var BRAND_PERCEPTION={omniyat:{tier:0,why:"the market always calls Omniyat ultra-luxury"}};
 function hasProjects(index){var k;for(k in (index&&index.devs)||{})if(projCount(index,k))return true;return false}
-function dataLine(p){if(!p||p.brandTier<0)return "";var w=TIER_WORDS[p.brandTier].toLowerCase();
-  return p.basis==="projects"?p.tierProjects[p.brandTier]+" of "+p.projects+" project"+(p.projects===1?"":"s")+(p.tierProjects[p.brandTier]===1?" sits in the ":" sit in the ")+w:"most of its sales sit in the "+w}
+function dataLine(p){if(!p||p.brandTier<0)return "";var i,o=[0,1,2,3].sort(function(a,b){return p.tierProjects[b]-p.tierProjects[a]||a-b}).filter(function(x){return p.tierProjects[x]>0});
+  if(p.basis!=="projects")return "most of its sales sit in the "+TIER_WORDS[p.brandTier];
+  return o.map(function(x,j){return j===0?p.tierProjects[x]+" of "+p.projects+" project"+(p.projects===1?"":"s")+" in the "+TIER_WORDS[x]:p.tierProjects[x]+" "+TIER_WORDS[x].replace(/ band$/,"")}).join(", ")}
 // DRILL-DOWN: the projects (buildings) of one developer sitting in one tier, grouped by area (areaSlug limits it to one area)
 function drillProjects(index,k,t,areaSlug,cfg){var bounds=boundsOf(index,cfg),groups=[],s,i;
   for(s in (index&&index.areas)||{}){if(areaSlug&&s!==areaSlug)continue;var a=index.areas[s],d=a.devs&&a.devs[k];if(!d||!d.b)continue;
@@ -201,11 +203,13 @@ function priceRanking(index){var list=[],k,s;
     if(nOf(cells)>=EVIDENCE_MIN)list.push({k:k,name:index.devs[k].name,ppsm:round(wmedian(pooled(cells,1))),n:nOf(cells)})}
   list.sort(function(a,b){return a.ppsm-b.ppsm||a.k.localeCompare(b.k)});return list}
 function mixDist(a,b){var t=0,i;for(i=0;i<4;i++)t+=Math.abs(a[i]-b[i]);return t/2}
-var PEER_MIN_SALES=100; // neighbours and peers are named only among developers with this many settled sales or more (3 sales is enough for a price, not for a comparison)
-function pricePosition(index,k,ranking){var full=ranking||priceRanking(index),i,at=-1;ranking=full.filter(function(x){return x.n>=PEER_MIN_SALES||x.k===k});
+var KNOWN_DEVELOPERS=["Omniyat","Nakheel","Meraas","Emaar","Imtiaz","Zaya","Ellington","Select Group","Damac","Mered","Sobha","Binghatti","Arada","Danube","Azizi","Deyaar","Dubai Properties","Union Properties","Aldar","Nshama","Samana","Beyond","Majid Al Futtaim","Dubai Holding","Wasl","Marquis","Object 1"]; // CONFIG: neighbours and peers are named only from this list
+function isKnown(k,name){var a=devKey(k.replace(/-/g," ")),b=devKey(name),i;for(i=0;i<KNOWN_DEVELOPERS.length;i++){var n=devKey(KNOWN_DEVELOPERS[i]);if(n&&(n===a||n===b))return true}return false}
+var PEER_MIN_SALES=0; // neighbours and peers are named only among developers with this many settled sales or more (3 sales is enough for a price, not for a comparison)
+function pricePosition(index,k,ranking){var full=ranking||priceRanking(index),i,at=-1;ranking=full.filter(function(x){return x.k===k||isKnown(x.k,x.name)});
   for(i=0;i<ranking.length;i++)if(ranking[i].k===k)at=i;
   var inFull=false;for(i=0;i<full.length;i++)if(full[i].k===k)inFull=true;
-  var out={ranked:inFull,total:full.length,minSales:PEER_MIN_SALES,below:null,above:null,self:at>=0?ranking[at]:null,peers:[],limit:null};
+  var out={ranked:inFull,total:full.length,rankedKnown:ranking.length,below:null,above:null,self:at>=0?ranking[at]:null,peers:[],limit:null};
   if(!inFull){var dv=index&&index.devs&&index.devs[k];out.limit=dv?"not enough settled sales (under "+EVIDENCE_MIN+") for a price position":"no sales yet";return out}
   out.below=at>0?ranking[at-1]:null;out.above=at<ranking.length-1?ranking[at+1]:null;
   var me=devProfile(index,k),sc=[];
@@ -257,6 +261,6 @@ function talkingPoint(index,k,unit,cfg){var p=devProfile(index,k,cfg),f=devFacto
   return {lines:lines,text:lines.join("\n")}}
 // percentile bounds from a pool of [n,ppsm,...] cells (used by the index builder)
 function percentileBounds(cells,percentiles){var p=pooled(cells,1),ps=percentiles||TIER_CFG.percentiles;return ps.map(function(q){return round(wquant(p,q/100))})}
-return {POSITION_WORDS:POSITION_WORDS,PRIME_AREAS:PRIME_AREAS,QUALITY_NOTES:QUALITY_NOTES,bandLine:bandLine,devFactors:devFactors,suggestedPosition:suggestedPosition,talkingPoint:talkingPoint,BRAND_PERCEPTION:BRAND_PERCEPTION,hasProjects:hasProjects,dataLine:dataLine,drillProjects:drillProjects,priceRanking:priceRanking,pricePosition:pricePosition,TIER_WORDS:TIER_WORDS,SCALE_PCT:SCALE_PCT,projCount:projCount,scaleCuts:scaleCuts,scaleWord:scaleWord,scaleSay:scaleSay,devProfile:devProfile,profileSentence:profileSentence,brandLabel:brandLabel,SQFT:SQFT,EVIDENCE_MIN:EVIDENCE_MIN,TIER_IDS:TIER_IDS,TIER_NAMES:TIER_NAMES,TIER_CFG:TIER_CFG,wquant:wquant,wmedian:wmedian,tierOf:tierOf,bandSay:bandSay,devKey:devKey,tierPrices:tierPrices,tierShare:tierShare,TYPICAL_SQFT:TYPICAL_SQFT,devStats:devStats,areaStats:areaStats,shortlistFilter:shortlistFilter,budgetFit:budgetFit,developerView:developerView,compareAreas:compareAreas,rentStats:rentStats,rentFit:rentFit,whereMine:whereMine,clientMeeting:clientMeeting,clientMeetingRent:clientMeetingRent,percentileBounds:percentileBounds,boundsOf:boundsOf,sqftOf:sqftOf};
+return {KNOWN_DEVELOPERS:KNOWN_DEVELOPERS,isKnown:isKnown,SCALE_MIN_SALES:SCALE_MIN_SALES,POSITION_WORDS:POSITION_WORDS,PRIME_AREAS:PRIME_AREAS,QUALITY_NOTES:QUALITY_NOTES,bandLine:bandLine,devFactors:devFactors,suggestedPosition:suggestedPosition,talkingPoint:talkingPoint,BRAND_PERCEPTION:BRAND_PERCEPTION,hasProjects:hasProjects,dataLine:dataLine,drillProjects:drillProjects,priceRanking:priceRanking,pricePosition:pricePosition,TIER_WORDS:TIER_WORDS,SCALE_PCT:SCALE_PCT,projCount:projCount,scaleCuts:scaleCuts,scaleWord:scaleWord,scaleSay:scaleSay,devProfile:devProfile,profileSentence:profileSentence,brandLabel:brandLabel,SQFT:SQFT,EVIDENCE_MIN:EVIDENCE_MIN,TIER_IDS:TIER_IDS,TIER_NAMES:TIER_NAMES,TIER_CFG:TIER_CFG,wquant:wquant,wmedian:wmedian,tierOf:tierOf,bandSay:bandSay,devKey:devKey,tierPrices:tierPrices,tierShare:tierShare,TYPICAL_SQFT:TYPICAL_SQFT,devStats:devStats,areaStats:areaStats,shortlistFilter:shortlistFilter,budgetFit:budgetFit,developerView:developerView,compareAreas:compareAreas,rentStats:rentStats,rentFit:rentFit,whereMine:whereMine,clientMeeting:clientMeeting,clientMeetingRent:clientMeetingRent,percentileBounds:percentileBounds,boundsOf:boundsOf,sqftOf:sqftOf};
 })();
 `;

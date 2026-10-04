@@ -25,9 +25,10 @@ const IDX = { as_of: "2026-10-03", cuts: { bounds: B }, devs: {}, areas: {
   jvc: { name: "Jumeirah Village Circle", devs: { ellington: dev("Ellington", times(1, [2, 12500]), 100), tiny: dev("Tiny Builder", [[2, 40000]], 10) } },
 } };
 const projCountOf = (k) => Object.values(IDX.areas).reduce((a, ar) => a + ((ar.devs[k] || { b: [] }).b.length), 0);
-for (const k of ["omni", "ellington", "emaar", "tiny"]) IDX.devs[k] = { name: Object.values(IDX.areas).map((a) => a.devs[k]).find(Boolean).n, areas: Object.values(IDX.areas).filter((a) => a.devs[k]).length, n: 1, profile: { projects: projCountOf(k), homes: 0 } };
+for (const k of ["omni", "ellington", "emaar", "tiny"]) IDX.devs[k] = { name: Object.values(IDX.areas).map((a) => a.devs[k]).find(Boolean).n, areas: Object.values(IDX.areas).filter((a) => a.devs[k]).length, n: 500, profile: { projects: projCountOf(k), homes: 0 } };
 // 56 filler developers with 1 project each so the percentiles are meaningful: 60 developers in all
-for (let i = 0; i < 56; i++) IDX.devs["f" + i] = { name: "Filler " + i, areas: 1, n: 5, profile: { projects: 1, homes: 5 } };
+for (let i = 0; i < 56; i++) IDX.devs["f" + i] = { name: "Filler " + i, areas: 1, n: 500, profile: { projects: i < 40 ? 1 : i < 50 ? 3 : 6, homes: 5 } };
+IDX.devs.small = { name: "Small Project Company", areas: 1, n: 12, profile: { projects: 80, homes: 1 } };   // under 100 sales: left out of the percentiles
 
 console.log("A - brand tier by projects, and where it differs from where it sells");
 const om = DM.devProfile(IDX, "omni");
@@ -52,10 +53,10 @@ ok(po.projects === null && po.basis === "sales" && po.brandTier === 0 && po.limi
 
 console.log("B - scale words from percentiles of project counts");
 const cuts = DM.scaleCuts(IDX);
-ok(cuts && cuts.developers === 60 && cuts.boutiqueMax === 1 && cuts.midMax >= cuts.boutiqueMax, "cut-offs are computed from the developers' project counts, not typed in", JSON.stringify(cuts));
-ok(DM.scaleWord(1, cuts) === "Boutique" && DM.scaleWord(cuts.midMax + 1, cuts) === "Mass-market" && DM.scaleWord(cuts.boutiqueMax + 1, cuts) === (cuts.midMax > cuts.boutiqueMax ? "Mid-size" : "Mass-market"), "boutique / mid-size / mass-market from the cut-offs");
-ok(DM.scaleWord(26, cuts) === "Mass-market" && DM.scaleWord(10, cuts) !== "Boutique" || cuts.midMax >= 10, "bigger developers do not read boutique");
-ok(/Boutique: up to 1 project/.test(DM.scaleSay(cuts)) && /Mass-market: more than/.test(DM.scaleSay(cuts)) && /in every 100/.test(DM.scaleSay(cuts)), "the cut-offs are written out in plain words for the page", DM.scaleSay(cuts));
+ok(cuts && cuts.developers === 60 && cuts.boutiqueMax === 3 && cuts.midMax === 6 && cuts.midMax >= cuts.boutiqueMax, "cut-offs are computed from the developers' project counts, not typed in", JSON.stringify(cuts));
+ok(DM.scaleWord(1, cuts) === "Boutique" && DM.scaleWord(cuts.midMax + 1, cuts) === "Large-scale" && DM.scaleWord(cuts.boutiqueMax + 1, cuts) === "Mid-size", "Boutique / Mid-size / Large-scale from the cut-offs (never the word Mass-market, which is a market view)");
+ok(DM.scaleWord(25, cuts) === "Large-scale" && DM.scaleWord(10, cuts) === "Large-scale", "bigger developers read Large-scale (a developer with 80 projects but 12 sales did not move the cut-offs)");
+ok(/Boutique: up to 3 projects/.test(DM.scaleSay(cuts)) && /Large-scale: more than 6/.test(DM.scaleSay(cuts)) && /100 or more settled sales/.test(DM.scaleSay(cuts)) && !/Mass-market/.test(DM.scaleSay(cuts)) && /in every 100/.test(DM.scaleSay(cuts)), "the cut-offs are written out in plain words for the page", DM.scaleSay(cuts));
 ok(om.scale === DM.scaleWord(10, cuts) && px.scale === DM.scaleWord(3, DM.scaleCuts(X)), "the profile carries the scale word");
 ok(DM.scaleCuts({ devs: {} }) === null && DM.scaleWord(5, null) === null, "no developers, no scale word");
 
@@ -82,6 +83,7 @@ ok(k0 && bd[k0].b.length === 2 && bd[k0].b[0][0] === 12 && bd[k0].b[1][0] === 4 
 const wm = Math.round(DM.wmedian([[25000, 5], [28571, 7]]));
 ok(bd[k0].b[0][1] === wm, "a building's price per sq m is the sale-weighted median of its bedroom types", bd[k0].b[0][1] + " vs " + wm);
 
+ok(/e\.profile\.homes \+= d\.h \|\| 0; e\.n \+= /.test(fs.readFileSync(new URL("../scripts/build_devmap_index.mjs", import.meta.url), "utf8")), "the builder still adds each developer's sales total (a comment once swallowed it): n is not left at 0");
 console.log("E - the page");
 const html = devmapHtml("k", { NAJ_NAV_CSS: "", NAJ_FONTS: "", najNav: () => "" });
 const js = html.slice(html.indexOf("<script>", html.indexOf("maplibre-gl.js")) + 8, html.lastIndexOf("</script>"));
@@ -102,10 +104,10 @@ const mkPage = (script) => {
 const P = mkPage(js);
 const card = P.profileHtml("omni");
 const text = card.replace(/<title>[^<]*<\/title>/g, "").replace(/<[^>]*>/g, " ").replace(/&[a-z#0-9]+;/g, " ").replace(/\s+/g, " ");
-ok(/Ultra-luxury brand/.test(card) && /Developer profile/.test(card) && /Omniyat: 7 of 10 projects sit in the top band; prices run from AED \d/.test(text), "profile card: brand tier tag and the one plain sentence from the data", text.slice(0, 400));
+ok(!/brand/.test(card.slice(0, card.indexOf("Market view"))) && /Developer profile/.test(card) && /Omniyat: 7 of 10 projects sit in the top band; prices run from AED \d/.test(text), "profile card: no developer class from price alone, and the one plain sentence from the data", text.slice(0, 400));
 ok(/Projects by price band:/.test(card) && /Top band 7 · Middle band 3 \(of 10 projects\)/.test(text), "mix by projects: a doughnut and spelled-out counts");
 ok(/By number of sales Top band \d+% · Upper band \d+% · Middle band \d+% · Entry band \d+%/.test(text) && /By value Top band \d+% · Upper band \d+% · Middle band \d+% · Entry band \d+%/.test(text), "mix bars use spelled-out names", text);
-ok(/10 projects · 3 areas/.test(text) && !/homes/.test(text.slice(text.indexOf("Scale"), text.indexOf("Price by area"))) && /Boutique|Mid-size|Mass-market/.test(text) && /Boutique: up to 1 project/.test(text), "scale: projects, homes, areas, the scale word and its cut-offs shown on the page", text);
+ok(/10 projects · 3 areas/.test(text) && !/homes/.test(text.slice(text.indexOf("Scale"), text.indexOf("Price by area"))) && /Boutique|Mid-size|Large-scale/.test(text) && /Boutique: up to 3 projects/.test(text), "scale: projects, homes, areas, the scale word and its cut-offs shown on the page", text);
 const rows = [...card.matchAll(/<tr><td>([^<]*)<\/td><td class=r>AED ([\d,]+)<\/td>/g)].map((m) => [m[1], Number(m[2].replace(/,/g, ""))]);
 ok(rows.length === 3 && rows[0][0] === "Downtown" && rows[2][0] === "Business Bay" && rows[0][1] > rows[1][1] && rows[1][1] > rows[2][1], "the price-by-area table reads highest first (Downtown, Palm Jumeirah, Business Bay)", JSON.stringify(rows));
 ok(/Price band here/.test(card) && /<td>Middle band<\/td>/.test(card), "the table says the price band in each area (Middle band in Business Bay)");
@@ -116,9 +118,9 @@ ok(/Median price per sq m/.test(P.profileHtml("omni")) && /AED 52,000/.test(P.pr
 const thin = P.profileHtml("tiny").replace(/<[^>]*>/g, " ");
 ok(/Only 1 project/.test(thin) && /No area has 3 or more settled sales yet/.test(thin), "thin developer: both limits shown on the card");
 ok(/no sales on the map yet/.test(P.profileHtml("mered")) && /Mered/.test(P.profileHtml("mered")), "Mered: 'no sales on the map yet'");
-ok(P.brandLine({ k: "omni", tier: 2 }) === "<div class=ms><b>Ultra-luxury brand</b> (data suggests) · sells in the Middle band here</div>", "area row line: '<position> brand (<source>) · sells in the <band> here'", P.brandLine({ k: "omni", tier: 2 }));
-ok(P.pickNote("omni", IDX.devs.omni) === "10 projects · " + DM.scaleWord(10, cuts).toLowerCase() + " · 3 areas · 1 sales" && P.pickNote("mered", { areas: 0 }) === "no sales on the map yet", "picker line: '10 projects · <scale> · 3 areas · N sales'; no area: 'no sales on the map yet'", P.pickNote("omni", IDX.devs.omni));
-ok(/<div class=pk><span><a href="#" class=dlink/.test(js) && /DM\.brandLabel\(t\)/.test(js) && !/DM\.TIER_NAMES\[t\]\+'<\/span>':''\)\+'<button type=button class="rm btn"/.test(js), "picker chosen rows: tappable name and the brand tier tag");
+ok(P.brandLine({ k: "omni", tier: 2 }) === "<div class=ms>sells in the Middle band here</div>", "area row line without a market view: 'sells in the <band> here'", P.brandLine({ k: "omni", tier: 2 }));
+ok(P.pickNote("omni", IDX.devs.omni) === "10 projects · " + DM.scaleWord(10, cuts).toLowerCase() + " · 3 areas · 500 sales" && P.pickNote("mered", { areas: 0 }) === "no sales on the map yet", "picker line: '10 projects · <scale> · 3 areas · N sales'; no area: 'no sales on the map yet'", P.pickNote("omni", IDX.devs.omni));
+ok(/<div class=pk><span><a href="#" class=dlink/.test(js) && /tagText\(x\.k\)/.test(js) && !/DM\.TIER_NAMES\[t\]\+'<\/span>':''\)\+'<button type=button class="rm btn"/.test(js), "picker chosen rows: tappable name and a tag (market view, else the band most projects sit in)");
 ok(/replace\(\/\\bJLT\\b\/g,"Jumeirah Lakes Towers"\)/.test(js), "an area the data names with an initial (JLT) is spelled out on the page");
 ok(/brandLine\(d\)/.test(js) && /class=dlink data-k=/.test(js) && /openProf/.test(js), "area rows: brand line under a tappable name that opens the profile");
 { // plain language: no initials or shorthand anywhere a user can read
@@ -158,10 +160,10 @@ ok(Object.keys(DM.BRAND_PERCEPTION).join() === "omniyat" && DM.BRAND_PERCEPTION.
   ok(m.market === 0 && m.headline === 0 && m.brandTier === 0, "configured developer: headline is the market view");
   DM.BRAND_PERCEPTION.emaar = { tier: 0 };
   const e = DM.devProfile(IDX, "emaar");
-  ok(e.market === 0 && e.headline === 0 && e.brandTier !== 0 && /top band|upper band|middle band|entry band/.test(DM.dataLine(e)), "market view overrides the headline while the data line keeps the data's own tier", DM.dataLine(e));
+  ok(e.market === 0 && e.headline === 0 && e.brandTier !== 0 && /Upper band|Middle band|Entry band|Top band/.test(DM.dataLine(e)) && /^\d+ of 9 projects in the /.test(DM.dataLine(e)), "market view sets the headline while the price line keeps the band mix", DM.dataLine(e));
   const c3 = P.profileHtml("emaar").replace(/<title>[^<]*<\/title>/g, "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
-  ok(/Ultra-luxury brand \(market view\)/.test(c3) && /Market view: Ultra-luxury brand, as the market names it\./.test(c3) && /What the data suggests: \w+(-\w+)? brand — \d+ of 9 projects sit in the/.test(c3) && /no hidden score/.test(c3) && /Its projects by price band/.test(c3), "card: 'Ultra-luxury brand (market view)', the data beside it and a plain explanation of which is which", c3.slice(0, 500));
-  ok(P.brandLine({ k: "emaar", tier: 2 }).indexOf("Ultra-luxury brand") > 0, "area rows use the headline label");
+  ok(/Ultra-luxury brand \(market view\)/.test(c3) && /Market view: Ultra-luxury brand, as the market names it\./.test(c3) && /Where its projects sit on price: \d+ of 9 projects in the (Top|Upper|Middle|Entry) band/.test(c3) && !/What the data suggests/.test(c3) && /no class is given from price/.test(c3) && /no hidden score/.test(c3) && /Its projects by price band/.test(c3), "card: 'Ultra-luxury brand (market view)', the data beside it and a plain explanation of which is which", c3.slice(0, 500));
+  ok(P.brandLine({ k: "emaar", tier: 2 }) === "<div class=ms><b>Ultra-luxury brand</b> (market view) · sells in the Middle band here</div>" && P.brandLine({ k: "ellington", tier: 3 }) === "<div class=ms>sells in the Entry band here</div>", "area rows use the headline label");
   delete DM.BRAND_PERCEPTION.emaar;
 }
 ok(!/(\d|,)\s*homes\b/.test(P.profileHtml("omni").replace(/<[^>]*>/g, " ")), "the units register total is never a headline on the card");
@@ -188,7 +190,7 @@ ok(DM.devFactors(IDX, "omni").quality === null, "a note without source and date 
 delete DM.QUALITY_NOTES.omni;
 const ev = P.profileHtml("omni"), evt = ev.replace(/<title>[^<]*<\/title>/g, "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
 ok(/Positioning evidence/.test(evt) && /There is no hidden score/.test(evt) && ["Price level", "Price against its surroundings", "Inventory and scale", "Unit mix", "Location mix", "Delivery record"].every((x) => evt.includes(x)) && /Curated judgement Quality, finish, design partners, branded residences Not filled in/.test(evt) && /coastal and prime areas/.test(evt), "the profile card shows every factor with its number and a plain label, data and curated judgement marked apart", evt.slice(evt.indexOf("Positioning"), evt.indexOf("Positioning") + 500));
-ok(/Market view: not set yet\./.test(evt) && /What the data suggests: Ultra-luxury brand — 7 of 10 projects sit in the top band\./.test(evt) && /A judgement, shown with its evidence below, not a rating/.test(evt), "two separate lines: 'Market view' and 'What the data suggests', with the one stated rule");
+ok(/Market view: not set yet\./.test(evt) && /Where its projects sit on price: 7 of 10 projects in the Top band, 3 Middle\./.test(evt) && !/What the data suggests|Ultra-luxury brand —|Mass-market brand/.test(evt), "two separate lines: 'Market view' and 'Where its projects sit on price' (band mix in band words, no developer class)");
 ok(/Price bands \(per sq ft\)/.test(evt) && /Top band\s*: AED 2,787 and above per sq ft/.test(evt) && /describe homes, not developers/.test(evt), "price band key with the AED range and the caption that bands describe homes");
 {
   const tp = DM.talkingPoint(IDX, "omni", "sqft");
@@ -222,6 +224,18 @@ ok(!/(\d|,)\s*homes\b/.test(evt), "still no homes figure as a headline");
   ok(/None of your developers fit this budget with enough sales \(3\+\)/.test(js) && /named_dev_unused|n\.mine\?/.test(js) || /is not one of your developers/.test(js), "the budget logic and the 'not one of my developers' referral text are untouched");
 }
 
+{
+  console.log("I - neighbours and peers come only from the well-known list");
+  const J = JSON.parse(JSON.stringify(IDX));
+  const obscure = [["اسم عربي ش.ذ.م.م", 3500], ["Little Project Company", 3700], ["Ahead Real Estate Development", 4500]];
+  obscure.forEach(([nm, p], i) => { const k = "obs" + i; J.devs[k] = { name: nm, areas: 1, n: 900, profile: { projects: 2, homes: 0 } }; J.areas.bb.devs[k] = dev(nm, times(2, [450, p]), 0); });
+  const pp = DM.pricePosition(J, "emaar");
+  ok(DM.isKnown("emaar", "Emaar") && DM.isKnown("select-group", "Select Group") && !DM.isKnown("obs0", "اسم عربي ش.ذ.م.م") && !DM.isKnown("obs1", "Little Project Company"), "the curated list knows the ten and the major names, not project companies");
+  ok(pp.below.name === "Ellington" && pp.above.name === "Omniyat" && pp.peers.every((x) => DM.isKnown(x.k, x.name)), "'priced between' names the next KNOWN developer above and below, skipping the obscure ones priced in between", JSON.stringify([pp.below.name, pp.above.name]));
+  ok(DM.KNOWN_DEVELOPERS.includes("Omniyat") && DM.KNOWN_DEVELOPERS.includes("Majid Al Futtaim") && DM.KNOWN_DEVELOPERS.includes("Object 1") && DM.KNOWN_DEVELOPERS.length === 27, "the list is one config array (Kendall's ten plus the named list)");
+  const po = DM.pricePosition(J, "obs1");
+  ok(po.ranked && (po.below || po.above) && [po.below, po.above].filter(Boolean).every((x) => DM.isKnown(x.k, x.name)), "an obscure developer's own card still gets its position, between two known developers");
+}
 console.log("F - negative control against legend-v320");
 let oldPage = "", oldCore = "";
 try { oldPage = execFileSync("git", ["show", "legend-v320:src/devmap_page.js"], { cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, "")), ".."), encoding: "utf8", maxBuffer: 1 << 26 }); oldCore = execFileSync("git", ["show", "legend-v320:src/devmap_core.js"], { cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, "")), ".."), encoding: "utf8", maxBuffer: 1 << 26 }); } catch (e) { console.log("git show failed", e.message); }

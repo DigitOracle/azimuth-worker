@@ -105,7 +105,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
   for (const s of Object.keys(areas)) for (const k of Object.keys(areas[s].devs)) {
     if (k === "_") continue;
     const d = areas[s].devs[k]; const e = devList[k] || (devList[k] = { name: d.n, areas: 0, n: 0, profile: { projects: 0, homes: 0 } });
-    e.areas++; e.profile.projects += (d.b || []).length; e.profile.homes += d.h || 0;   // v321 e.n += DM.wmedian ? d.c.reduce((a, c) => a + c[0], 0) : 0;
+    e.areas++; e.profile.projects += (d.b || []).length; e.profile.homes += d.h || 0; e.n += DM.wmedian ? d.c.reduce((a, c) => a + c[0], 0) : 0;   // v321: project count and homes added to the existing sales total
   }
   // alias: DM.devKey(any spelling the page may be given) -> canonical id, for curated developers only (the page cannot import devcross.js)
   const alias = {};
