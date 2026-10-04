@@ -1166,6 +1166,25 @@ function isBgCaption(c) {
   if (!c) return false;
   return /\b(this is me|that'?s me|it'?s me|my (photo|picture|pic|portrait|face)|(set|use|make)\b.*\b(background|backdrop|board)|background|backdrop|wallpaper)\b/i.test(c);
 }
+// v334 - MOMO. Kendall's food and exercise log lives on azimuth-2. These say whether a message of his is PLAINLY Momo (and so is handed on there).
+// Deliberately strict: a message that is not obviously Momo stays here and is handled exactly as it always was.
+function momoLooksLikeText(t, voice) {
+  t = String(t || "").trim();
+  if (/^\s*momo\b/i.test(t)) return true;
+  if (voice) return false;   // a voice note is only Momo when it opens with the word
+  if (/^\s*fit\s+(week|this week|history|totals?|weeks|progress|help|commands|pause|resume|undo|again|fix|share|weight|waist|target|goal|tone|extend|start|restart|log|status)\b/i.test(t)) return true;
+  if (/^\s*(?:\u{1F37D}\uFE0F?|(?:food|meal|ate|eating|breakfast|lunch|dinner|snack|brunch|supper|ex|exercise|workout|gym|train|training)\s*[:\-\u2013\u2014])\s*\S/iu.test(t)) return true;
+  if (/^\s*(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*k?\s*steps?(?:\s+(?:today|yesterday))?\s*$/i.test(t)) return true;
+  if (/^\s*(?:gym|run|ran|walk|walked|swim|swam|cycle|cycled|padel|tennis|yoga|pilates|hiit|boxing|workout)\s+(?:for\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\s*(?:today|yesterday)?\s*$/i.test(t)) return true;
+  return false;
+}
+function momoLooksLikeMomo(msg) {
+  if (!msg) return false;
+  if (msg.type === "text") return momoLooksLikeText(msg.text && msg.text.body);
+  if (msg.type === "image") return /^\s*(?:\u{1F37D}|food\b|meal\b|ate\b|eating\b|breakfast\b|lunch\b|dinner\b|snack\b|brunch\b|supper\b|momo\b)/iu.test(String((msg.image && msg.image.caption) || ""));
+  if (msg.type === "interactive") { const r = msg.interactive && msg.interactive.button_reply, id = String((r && r.id) || ""); return id.indexOf("fit:") === 0; }
+  return false;
+}
 async function waTranscribe(env, mediaId) {
   const meta = await (await fetch(`${WA_GRAPH}/${mediaId}`, { headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN } })).json();
   if (!meta.url) throw new Error("no media url");
@@ -3337,6 +3356,23 @@ async function appFetch(request, env, ctx) {
             return new Response("ok");                                 // owned by the destination instance now
           }
           try { const _p = JSON.parse((await env.MEETINGS.get("diag_walog")) || "[]"); if (_p[0]) { _p[0].router = _tr; await env.MEETINGS.put("diag_walog", JSON.stringify(_p), { expirationTtl: 86400 }); } } catch (e) {}
+        }
+        // v334 - MOMO. Kendall's food and exercise log lives on azimuth-2. A message of his that is PLAINLY Momo - "momo ...", "food: ...", "gym: ...", "gym 40 min",
+        // "12000 steps", a photo captioned "lunch", a Momo Undo button, or a voice note that opens with "momo" - is handed on, byte for byte, over the same service binding
+        // and shared secret that already carry Najjuko's messages the other way. Anything else of his stays here and is handled exactly as before.
+        // Opt-in: MOMO_FORWARD = the binding name (AZIMUTH_2); unset = inert. A message that arrived forwarded is never forwarded again, so there is no loop.
+        if (!_viaForward && msg && env.MOMO_FORWARD && env.WA_FORWARD_TOKEN && env.WA_ALLOWED && from === env.WA_ALLOWED && env[env.MOMO_FORWARD] && typeof env[env.MOMO_FORWARD].fetch === "function") {
+          let _momo = momoLooksLikeMomo(msg);
+          if (!_momo && msg.type === "audio" && msg.audio && msg.audio.id) { try { _momo = momoLooksLikeText(await waTranscribe(env, msg.audio.id), true); } catch (e) {} }
+          if (_momo) {
+            let _st = null;
+            try { const _fr = await env[env.MOMO_FORWARD].fetch(new Request("https://internal/wa", { method: "POST", headers: { "Content-Type": "application/json", "X-Azimuth-Forward": env.WA_FORWARD_TOKEN }, body: raw })); _st = _fr.status; await _fr.text(); } catch (e) { await noteErr(env, "momo-forward", String(e && e.message || e)); }
+            try { const _p = JSON.parse((await env.MEETINGS.get("diag_walog")) || "[]"); if (_p[0]) { _p[0].momo = { forwarded: _st !== null && _st < 300, status: _st }; await env.MEETINGS.put("diag_walog", JSON.stringify(_p), { expirationTtl: 86400 }); } } catch (e) {}
+            if (_st !== null && _st < 300) return new Response("ok");
+            await noteErr(env, "momo-forward", "HTTP " + _st);
+            try { await waSend(env, from, "Momo could not be reached just now - please send that again in a minute."); } catch (e) {}
+            return new Response("ok");   // not filed here: a food line must never become a task
+          }
         }
         if (!msg) return new Response("ok");                           // v133 - a receipt: recorded above, nothing more to do
         if (env.WA_ALLOWED && from !== env.WA_ALLOWED) {                       // only you can drive it
