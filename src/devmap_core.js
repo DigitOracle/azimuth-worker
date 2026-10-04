@@ -47,6 +47,12 @@ function tierPrices(t,bounds){if(!bounds)return "";
   var edge=t===0?bounds[0]:t===1?bounds[1]:bounds[2],i,o=[];
   for(i=0;i<TYPICAL_SQFT.length;i++)o.push(TYPICAL_SQFT[i][0]+" "+(t===3?"under ":"from ")+money(edge*TYPICAL_SQFT[i][1]/SQFT));
   return o.join(" · ")}
+// v314 - the tier header as DATA, not a paragraph: the band edges (per sq m), four price cards (label + "from AED 842k" / "under AED 622k") and the Dubai-wide shares
+function tierCards(t,bounds){if(!bounds)return [];var edge=t===0?bounds[0]:t===1?bounds[1]:bounds[2],i,o=[];
+  for(i=0;i<TYPICAL_SQFT.length;i++)o.push([TYPICAL_SQFT[i][0],(t===3?"under ":"from ")+money(edge*TYPICAL_SQFT[i][1]/SQFT)]);
+  return o}
+function tierEdges(t,b){return b?{lo:t===0?b[0]:t===1?b[1]:t===2?b[2]:null,hi:t===0?null:t===1?b[0]:t===2?b[1]:b[2]}:null}
+function tierShares(t,index){var s=index&&index.cuts&&index.cuts.shares;return s?{n:s.n[t],money:s.money[t]}:null}
 function tierShare(t,index){var s=index&&index.cuts&&index.cuts.shares;if(!s)return "";
   return "Dubai-wide: "+s.n[t]+"% of buyers, "+s.money[t]+"% of the money"}
 // ---- one developer in one area ----
@@ -70,7 +76,7 @@ function areaStats(area,index,cfg){
   var vt=0,nt=0,i;
   for(i=0;i<all.length;i++){var t=tierOf(all[i][1],bounds);if(t>=0){res.mixN[t]+=all[i][0];res.mixValue[t]+=all[i][0]*(all[i][2]||0);nt+=all[i][0];vt+=all[i][0]*(all[i][2]||0)}}
   for(i=0;i<4;i++){res.mixN[i]=nt?Math.round(100*res.mixN[i]/nt):0;res.mixValue[i]=vt?Math.round(100*res.mixValue[i]/vt):0}
-  for(i=0;i<4;i++){res.tiers.push({tier:i,id:TIER_IDS[i],name:TIER_NAMES[i],band:bounds?bandSay(i,bounds):"",prices:tierPrices(i,bounds),share:tierShare(i,index),devs:[],median:null,medianSqft:null})}
+  for(i=0;i<4;i++){res.tiers.push({tier:i,id:TIER_IDS[i],name:TIER_NAMES[i],band:bounds?bandSay(i,bounds):"",prices:tierPrices(i,bounds),share:tierShare(i,index),cards:tierCards(i,bounds),edges:tierEdges(i,bounds),shares:tierShares(i,index),devs:[],median:null,medianSqft:null})}
   for(i=0;i<list.length;i++){var s=list[i];if(!s.enough){res.notEnough.push(s);continue}res.tiers[s.tier].devs.push(s)}
   for(i=0;i<4;i++){var tr=res.tiers[i];tr.devs.sort(function(a,b){return b.n-a.n||(b.median-a.median)});tr.nDevs=tr.devs.length;
     var cells=[];for(var j=0;j<tr.devs.length;j++)cells=cells.concat(devs[tr.devs[j].k].c||[]);

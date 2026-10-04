@@ -1,6 +1,6 @@
 // Builds the Developers Map index (KV img_devmap_index) from files the app already publishes. READ-ONLY on KV; writes ONE local file.
 //   node scripts/build_devmap_index.mjs --um <dir> --prices <img_map_prices json> --rent <img_rent_index json> --geo <img_districts_geo json>
-//        [--ejari <img_ejari_projects_index json>] [--projects <DLD projects csv>] [--shares <dld_tier_shares.py json>] --out <devmap_index.json>
+//        [--offplan <dir of unitmix_<slug>.synthetic.json from scripts/build_coverage_cards.py> --offplan-slugs palmdeira] [--ejari <img_ejari_projects_index json>] [--projects <DLD projects csv>] [--shares <dld_tier_shares.py json>] --out <devmap_index.json>
 // <dir> holds one file per district named um_<slug>.raw (or img_unitmix_<slug>), each the KV value of img_unitmix_<slug> (plain JSON).
 // To fetch them (read only), from C:\Dev\azimuth-worker-dewa:
 //   npx wrangler kv key get img_unitmix_<slug> --text --env azimuth2 --namespace-id 2cdf36a27f834b5f9c726294d36770fb > <dir>/um_<slug>.raw
@@ -58,7 +58,20 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP) {
   return devs;
 }
 
-export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares }) {
+// v314 - register-built (off-plan) cards for areas whose unit-mix cards hold almost none of the register's sales (Palm Deira: 17 of 9,145). They are ADDED to the
+// district's cards under ids 900000+; a project already on a priced card is skipped (nothing counted twice). Off-plan prices are contract values, and the area says so.
+const projKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function addOffplan(U, file) {
+  const syn = JSON.parse(fs.readFileSync(file, "utf8")).buildings_by_id || {}, B = U.buildings_by_id = U.buildings_by_id || {};
+  const have = new Set(); for (const c of Object.values(B)) if ((c.rows || []).some((r) => r.median_aed)) for (const n of [c.name, c.dld && c.dld.project, c.dld_sales && c.dld_sales.project]) if (n) have.add(projKey(n));
+  let added = 0, offSales = 0, all = 0;
+  for (const [id, c] of Object.entries(syn)) {
+    const k = projKey(c.name); if (!k || have.has(k) || B[id]) continue;
+    B[id] = c; added++; const n = (c.dld_sales && c.dld_sales.sold_total) || 0; all += n; offSales += n * (c.offplan_share || 0);
+  }
+  return { added, sales: all, offplan_share: all ? Math.round(100 * offSales / all) : 0 };
+}
+export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs }) {
   const projDev = {};
   // the Ejari projects index: every project Dubai-wide with its developer (KV img_ejari_projects_index)
   if (ejariProjects && ejariProjects.index) for (const k of Object.keys(ejariProjects.index)) { const p = ejariProjects.index[k]; if (p.name_en && p.developer) projDev[nameKey(p.name_en)] = p.developer; }
@@ -73,10 +86,14 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
   for (const g of geo.districts) {
     const f = [path.join(umDir, "um_" + g.slug + ".raw"), path.join(umDir, "img_unitmix_" + g.slug)].find((p) => fs.existsSync(p));
     let U = null; if (f) { try { U = JSON.parse(fs.readFileSync(f, "utf8")); } catch (e) { U = null; } }
+    let op = null;
+    const opf = offplanDir && (offplanSlugs || []).includes(g.slug) ? path.join(offplanDir, "unitmix_" + g.slug + ".synthetic.json") : null;
+    if (opf && fs.existsSync(opf)) { U = U || { buildings_by_id: {} }; op = addOffplan(U, opf); }
     if (!U || !U.buildings_by_id) continue;
     const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP);
     if (!Object.keys(devs).length) continue;
     areas[g.slug] = { name: g.name, corridor: g.corridor, bbox: g.bbox, centre: g.centre, devs };
+    if (op && op.added) areas[g.slug].offplan = { projects: op.added, sales: op.sales, share_pct: op.offplan_share, note: "Includes off-plan sales built from the Land Department register by project (" + op.added + " projects, " + op.sales + " sales). Off-plan prices are contract values agreed with the developer, not resale prices. Where the developer is not recorded the register names only the land owner." };
     if (communitiesOf(g.slug).length) { areas[g.slug].label = labelledName(g.slug, g.name); areas[g.slug].community = communitiesOf(g.slug); }   // v307 - community label next to the DLD name
     for (const k of Object.keys(devs)) all.push(...devs[k].c);
   }
@@ -103,7 +120,7 @@ if (isMain) {
   const a = {}; for (let i = 2; i < process.argv.length; i += 2) a[process.argv[i].replace(/^--/, "")] = process.argv[i + 1];
   const rd = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
   const prices = rd(a.prices);
-  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null });
+  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean) });
   fs.writeFileSync(a.out, JSON.stringify(idx));
   console.log("areas", Object.keys(idx.areas).length, "developers", Object.keys(idx.devs).length, "bounds", idx.cuts.bounds, "bytes", fs.statSync(a.out).size);
 }
