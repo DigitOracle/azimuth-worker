@@ -165,7 +165,19 @@ export function ejariModel(src, view, today) {
   // the last day the file holds, never today's half-filed day. Dubai-wide there is no day without a contract, so a missing day is
   // a day not yet in the file, not a zero - the card never reports one as 0.
   const lastDay = D.last && D.last < D.asOf ? D.last : D.asOf;
-  const anchor = lastDay < yest ? lastDay : yest;
+  let anchor = lastDay < yest ? lastDay : yest;
+  // v299 (Kendall, 3-4 Oct 2026: "45 new leases, down 97%"): a day the file holds may still be filling. A day counts as complete only
+  // if its contracts are at least half the median of the same weekday over the weeks before it (the register's weekdays run ~2.8-3.4k,
+  // Saturdays ~1.2k, Sundays ~0.6k, so a weekday-aware test); a partial day is stepped back over, up to three days, and reported.
+  const dayTot = {}; for (const r of D.rows) if (!r.desk) dayTot[r.date] = (dayTot[r.date] || 0) + r.n;
+  const isComplete = (d) => {
+    const refs = []; for (let k = 1; k <= 4; k++) { const t = dayTot[addD(d, -7 * k)]; if (t) refs.push(t); }
+    if (refs.length < 2) return true;                       // nothing to compare with: do not block
+    refs.sort((x, y) => x - y); const med = refs.length % 2 ? refs[(refs.length - 1) / 2] : (refs[refs.length / 2 - 1] + refs[refs.length / 2]) / 2;
+    return (dayTot[d] || 0) >= 0.5 * med;
+  };
+  const skippedPartial = [];
+  for (let g = 0; g < 3 && !isComplete(anchor); g++) { skippedPartial.push(anchor); anchor = addD(anchor, -1); }
   const to = anchor, from = addD(to, -(V.len - 1));
   const pTo = addD(from, -1), pFrom = addD(pTo, -(V.prevLen - 1));
   const inR = (r, a, b) => r.date >= a && r.date <= b;
@@ -214,7 +226,7 @@ export function ejariModel(src, view, today) {
     return { app, en, ar, no: p.no || "", district: dName(p.district || ""), n: p.n, mix };
   });
   return {
-    view, basis: D.basis === "filed" ? "filed" : "start", today, anchor, from, to, asOf: D.asOf, isYesterday: anchor === yest,
+    view, skippedPartial, basis: D.basis === "filed" ? "filed" : "start", today, anchor, from, to, asOf: D.asOf, isYesterday: anchor === yest,
     newLeases: nw, renewals: rn, oneBed, where, types, most, cmpOk,
     source: D.source || "Dubai Land Department, Ejari tenancy register", caveat: D.caveat
   };
