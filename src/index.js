@@ -1,3 +1,4 @@
+import { templateRoutes, feedTemplateFlag } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { buildingData, buildingPageHtml } from "./building_page.js";   // v187 - the building page: the Symphony viewer for every register-bound building
@@ -4528,6 +4529,7 @@ async function appFetch(request, env, ctx) {
 export default {
   async fetch(request, env, ctx) {   // v153 - question notes: their routes first, then the question button on private app pages
     const url = new URL(request.url);
+    { const _wt = await templateRoutes(request, env, url, { graph: WA_GRAPH }); if (_wt) return _wt; }   // v329 - /wa_template_create, /wa_template_status, /wa_template_use (owner key; POST writes; dry-run by default)
     if (url.pathname.indexOf("/questions/") === 0) return questionsRoute(request, env, url);
     // ---- THE BRIEF part C (brief_docs.js) ---- /brief_pdf and /brief_blocks. Placed ahead of appFetch's client gate on purpose: the module
     // checks the key itself (READ_KEY or a client key), so the integrator need not touch CLIENT_PATHS for it.
@@ -6524,6 +6526,10 @@ async function feedSceneOfferButton(env, from, bid) {
 // never read as a send.
 const FEED_HOLD_MAX_MS = 20 * 3600 * 1000;   // a held morning older than this is stale: it is dropped rather than sent late
 async function feedNudge(env, head, body) {
+  if (env.WA_ALLOWED && (await feedTemplateFlag(env)) === "najma_feed_ready") {   // v329 - the new plain template: no variables, so no params; used only once /wa_template_use saw it APPROVED
+    try { const r = await waSendTemplate(env, env.WA_ALLOWED, "najma_feed_ready", "en_US", []); return { ok: !!(r && r.ok), status: r && r.status, template: "najma_feed_ready" }; }
+    catch (e) { return { ok: false, why: String((e && e.message) || e).slice(0, 120) }; }
+  }
   if (!env.FEED_TEMPLATE || !env.WA_ALLOWED) return { ok: false, why: "no template configured" };
   try {
     const r = await waSendTemplate(env, env.WA_ALLOWED, env.FEED_TEMPLATE, env.FEED_TEMPLATE_LANG || "en_US",
