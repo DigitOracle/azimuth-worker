@@ -1,0 +1,23 @@
+// Checks a devmap_delivery payload before it is published (v339). node scripts/check_devmap_delivery.mjs <delivery.json> [--min-areas 35] [--min-records 30]
+import fs from "node:fs";
+const f = process.argv[2], arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? Number(process.argv[i + 1]) : d; };
+const minAreas = arg("--min-areas", 35), minRecords = arg("--min-records", 30);
+let fails = 0;
+const ok = (c, m) => { console.log((c ? "  ok - " : "  FAIL - ") + m); if (!c) fails++; };
+const raw = fs.readFileSync(f, "utf8"), d = JSON.parse(raw);
+const areas = Object.keys(d.area || {}), recs = Object.keys(d.by || {});
+console.log("size " + Math.round(raw.length / 1024) + " KB, " + areas.length + " areas, " + recs.length + " developer-in-area records, as of " + d.as_of);
+ok(raw.length > 5000 && raw.length < 2e6, "size is sensible (5 KB to 2 MB)");
+ok(/^\d{4}-\d{2}-\d{2}$/.test(d.as_of || ""), "as_of is a date");
+ok(areas.length >= minAreas, "at least " + minAreas + " areas");
+ok(recs.length >= minRecords, "at least " + minRecords + " developer-in-area records");
+const totalProjects = areas.reduce((q, s) => q + d.area[s].done[0] + d.area[s].active[0] + d.area[s].pending[0], 0);
+ok(totalProjects > 1500, totalProjects + " projects counted across the areas (more than 1,500)");
+const sob = d.by["sobhaheartland|sobha"], bing = d.by["jumeirahvillagecircle|binghatti"];
+ok(sob && sob.done[0] >= 10 && sob.active[0] >= 1, "spot check: Sobha in Sobha Hartland has handed-over and active projects" + (sob ? " (" + sob.done[0] + " done, " + sob.active[0] + " active)" : ""));
+ok(bing && bing.done[0] >= 5 && bing.active[0] >= 1, "spot check: Binghatti in Jumeirah Village Circle has handed-over and active projects" + (bing ? " (" + bing.done[0] + " done, " + bing.active[0] + " active)" : ""));
+const az = recs.filter((k) => k.endsWith("|azizi")).map((k) => [k, d.by[k]]).filter(([, v]) => v.active[0] + v.done[0] >= 3);
+ok(az.length >= 1, "spot check: Azizi (Riviera and others) appears in at least one area" + (az.length ? " (" + az.map(([k, v]) => k.split("|")[0] + ": " + v.done[0] + " done, " + v.active[0] + " active").join("; ") + ")" : ""));
+ok(recs.every((k) => { const v = d.by[k]; return v.done && v.active && v.pending && v.active[2] == null || (v.active[2] >= 0 && v.active[2] <= 100); }), "every percent complete is between 0 and 100");
+ok(recs.every((k) => !/[؀-ۿ]/.test(JSON.stringify(d.by[k].top))), "no Arabic project names in the lists");
+process.exit(fails ? 1 : 0);
