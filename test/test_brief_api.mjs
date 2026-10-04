@@ -168,7 +168,9 @@ const nova = R.find(r => r.name === "Binghatti Nova");
 ok(nova.key === JVC + ":1490" && nova.app_id === 1490 && nova.building_url === "/building/" + JVC + "/1490" && nova.district_name === "Jumeirah Village Circle", "a bound building: key district:id, its building page, the district's name", JSON.stringify([nova.key, nova.building_url, nova.district_name]));
 const amb = R.find(r => r.name === "Binghatti Amber");
 ok(amb.key === "dld:binghattiamber" && amb.app_id === null && amb.building_url === null && amb.completeness.record === false, "an unbound building: key dld:<name>, no app id, no page");
-ok(JSON.stringify(nova.evidence) === JSON.stringify({ basis: "ejari", median: 65000, q1: 60000, q3: 72000, n: 16, n_new: 13, median_of: "new_lettings", median_all: 65000, sqm: 59.1, latest: "2026-09-30", home: "apartment", beds: 1, beds_basis: "size" }), "the evidence block", JSON.stringify(nova.evidence));
+{ const { few, say, window, scope, ...core } = nova.evidence;   // v310: how many lettings, over which dates, whose evidence (R4, R6, R7) ride along
+  ok(JSON.stringify(core) === JSON.stringify({ basis: "ejari", median: 65000, q1: 60000, q3: 72000, n: 16, n_new: 13, median_of: "new_lettings", median_all: 65000, sqm: 59.1, latest: "2026-09-30", home: "apartment", beds: 1, beds_basis: "size" }), "the evidence block", JSON.stringify(nova.evidence));
+  ok(few === false && say === "16 recent lettings (13 new)" && scope === null && window && window.basis === "registered" && /^lettings registered between 1 Aug 2026 and 30 Sep 2026$/.test(window.say), "v310 the evidence says how many lettings, the dates and what they are", JSON.stringify([few, say, scope, window])); }
 ok(R.every((r, i) => r.rank === i + 1), "ranks run 1..n");
 ok(j.total_matched === Object.values(j.counts).reduce((a, b) => a + b, 0), "total_matched is the sum of the verdict counts", JSON.stringify(j.counts));
 ok(j.notes.some(n => /NOT live availability/.test(n)) && j.notes.some(n => /read from each home's size - Ejari rarely records them/.test(n)), "the notes say: not availability; bedrooms read from size");

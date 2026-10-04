@@ -18,6 +18,7 @@
 // cache (one call per district per criterion, one per sub-community per criterion), all calls run in parallel with a 2 s timeout, and
 // any failure, timeout or missing key leaves the answer not known. The key travels only in the X-Goog-Api-Key header, never in output.
 import { kvJson } from "./brief.js";
+import { isCountableGym, NEAR_FACT_M } from "./brief_rules.js";   // v310 R1/R2 - an address-like name is not a gym; a community answer only within 500 m
 
 export const LIVE_TIMEOUT_MS = 2000;
 export const COMMUNITY_RADIUS_MAX = 1500;
@@ -35,13 +36,8 @@ export const LIVE_CRITS = {
     label: "Gym", types: ["gym", "fitness_center"],
     // a gym, not a personal trainer, a festival, an aqua-aerobics class or a club tagged "gym" (all seen in DAMAC Hills, 2 Oct 2026);
     // a ladies-only gym does not answer "gym" for every client, so it is not counted
-    ok: (p, toks) => {
-      const n = p.name;
-      if (/\b(personal\s+train\w*|trainer|coach\w*|festival|tennis|swimming|pool|aqua|yoga|dance|martial|karate|academy|physio\w*|outdoor)\b/i.test(n)) return false;
-      if (/\b(ladies|women|womens|female)\b|\bmen\s+only\b/i.test(n)) return false;
-      if (/\b(gym|fitness|health\s+club|crossfit|workout)\b/i.test(n)) return true;
-      return (p.primaryType === "gym" || p.primaryType === "fitness_center") && toks.some((t) => fold(n).includes(t));
-    },
+    // v310 R2: a name that reads like a villa or unit address ("Damac 307 Rochester") is not a gym unless the name itself says gym or fitness
+    ok: (p, toks) => isCountableGym(p.name, p.primaryType, toks),
   },
   community_pool: {
     label: "Community pool", types: ["swimming_pool"],
@@ -216,8 +212,16 @@ export async function fillLive(ctx, items, crits, opts) {
     } else if (com && com.length) {
       const from = s && !s.none ? { at: s.c, n: s.pretty } : Number.isFinite(it.lat) && Number.isFinite(it.lon) ? { at: [it.lat, it.lon], n: s ? s.pretty : (it.name ? titleCase(it.name) : "this home") } : null;
       const p = from ? com.slice().sort((a, b) => metres(from.at, a.at) - metres(from.at, b.at))[0] : com[0];
-      const far = from ? kmSay(metres(from.at, p.at)) + " from " + from.n : "";
-      ans = { ...base, level: "community", place: p.name,
+      const dm = from ? metres(from.at, p.at) : null;
+      const far = from ? kmSay(dm) + " from " + from.n : "";
+      // v310 R1: a community place counts as a yes for the home only within 500 m of it; further off it is kept as the community's own fact (with how
+      // far it is), never as a yes for this home. With nothing to measure from it stays the community's answer, labelled as the community's.
+      if (dm != null && dm > NEAR_FACT_M) {
+        if (!prev.community_fact) it.crit[k] = { ...(it.crit[k] || { v: null }), v: it.crit[k] && it.crit[k].v != null ? it.crit[k].v : null,
+          community_fact: { k, what: L.toLowerCase(), name: p.name, m: dm == null ? null : Math.round(dm), community: D.name, say: "In " + D.name + ": " + p.name + (dm != null ? ", " + kmSay(dm) + " away" : ""), source: "Google Maps", asked: ctx.iso } };
+        continue;
+      }
+      ans = { ...base, level: dm == null ? "community" : "near", place: p.name,
         src: L + " in " + D.name + " on Google Maps (asked live, " + ctx.day + "): " + p.name + (far ? ", " + far : "") +
           (s && s.none ? ". No footprints are on file for " + s.pretty + ", so this is the community's answer" : ""),
         say: p.name + ", in " + D.name + (far ? ", " + far : "") + " (Google Maps, asked live " + ctx.day + ")" };
