@@ -203,10 +203,10 @@ ok(/fill="#C5A56A"/.test(html) && /fill="#E9E9E4"/.test(html) && /<g class="badg
     "the map is slimmed without changing the picture: the other buildings share their paint through two classes, no point repeats the one before it", ctx.length + " ctx paths, dup " + dup);
 }
 ({ html } = await pdf("kind=dossier&keys=dld:betaheights"));
-ok(html.includes("Map to follow") && !/<svg[^>]*viewBox="0 0 1500 1000"/.test(html) && html.includes("this building has no verified map position yet"), "no position on record -> 'Map to follow', never a guessed pin");
-ok(html.includes("Distances not shown: our map position for this building is not yet verified"), "and no distances are measured from nowhere");
+ok(html.includes("Your realtor will verify these details with you.") && !html.includes("Map to follow") && !/<svg[^>]*viewBox="0 0 1500 1000"/.test(html) && !html.includes("no verified map position"), "v302 no position on record -> the neutral realtor line (no gap notice), never a guessed pin");
+ok(!html.includes("Distances not shown") && !html.includes("not yet verified"), "v302 and no gap notice about distances (the lines are left out)");
 ({ html } = await pdf("kind=dossier&keys=nolayer:5"));
-ok(html.includes("Map to follow") && html.includes("the district map layer is not yet published") && !/<img[^>]+src="[^"]*brief_fp/.test(html), "no district layer -> 'Map to follow', never a broken image");
+ok(html.includes("Your realtor will verify these details with you.") && !html.includes("Map to follow") && !html.includes("not yet published") && !/<img[^>]+src="[^"]*brief_fp/.test(html), "no district layer -> 'Map to follow', never a broken image");
 
 // ---- 6. photos: the developer's own page only ------------------------------------------------------------------------------------
 ({ html } = await pdf("kind=dossier&keys=testdistrict:10"));
@@ -214,9 +214,9 @@ ok(html.includes(ORIGIN + "/img/bph_alpha_ext") && html.includes(ORIGIN + "/img/
 ok(!html.includes("bph_alpha_pool2") && !html.includes("bph_alpha_gym_not_stored"), "pool_2 is never used, and a picture that is not stored is not linked (no broken image)");
 ok(html.includes("alphadev.example") && html.includes("Pictures and amenities: the developer's own project page, https://alphadev.example/alpha-tower"), "each picture is credited, and the small print names the developer's page");
 ({ html } = await pdf("kind=dossier&keys=testdistrict:12"));
-ok(!html.includes("bph_portal") && html.includes("the brochure&#x27;s source is a listing portal") && !html.includes("Photos to follow") && /<div class="blocksview" data-kind="blocks" style="width:702px;height:300px;/.test(html), "a brochure from a listing portal is refused whole (v285: page 1 shows its Blocks view instead of an empty box)");
+ok(!html.includes("bph_portal") && !html.includes("listing portal") && !html.includes("Photos to follow") && /<div class="blocksview" data-kind="blocks" style="width:702px;height:300px;/.test(html), "a brochure from a listing portal is refused whole (v285: page 1 shows its Blocks view instead of an empty box)");
 ({ html } = await pdf("kind=dossier&keys=testdistrict:11"));
-ok(!html.includes("bph_wrong") && !html.includes("Sauna") && html.includes("the brochure is for Somewhere Else Entirely, not Delta Court"), "a brochure naming another building is refused (the name must agree with the record)");
+ok(!html.includes("bph_wrong") && !html.includes("Sauna") && !html.includes("Somewhere Else Entirely"), "a brochure naming another building is refused (the name must agree with the record)");
 ({ html } = await pdf("kind=dossier&keys=dld:beta-heights"));
 ok(html.includes(">Beta Heights</div>") && html.includes("also filed as &ldquo;Gamma Views&rdquo;"), "a dld: key resolves by name; the brochure found by name agrees; the other filing name is said");
 ok(isPortal("https://www.propertyfinder.ae/en/plp/1") && isPortal("https://www.bayut.com/x") && !isPortal("https://www.binghatti.com/en/projects/binghatti-nova"), "the portal rule");
@@ -267,7 +267,7 @@ ok(bv.status === 200 && /viewBox="0 0 1500 1000"/.test(bvh) && (bvh.match(/<g cl
 const bd = await (await call("/brief_blocks?d=testdistrict&key=" + CLIENT)).text();
 ok(bd.includes("every building as a simple block") && !bd.includes('class="hiblock"'), "/brief_blocks?d= draws the district alone");
 ok((await call("/brief_blocks?d=testdistrict")).status === 401, "/brief_blocks is gated like the rest");
-ok((await (await call("/brief_blocks?d=nolayer&key=" + CLIENT)).text()).includes("Map to follow"), "/brief_blocks without a layer -> 'Map to follow'");
+ok((await (await call("/brief_blocks?d=nolayer&key=" + CLIENT)).text()).includes("Your realtor will verify these details with you."), "/brief_blocks without a layer -> the neutral realtor line");
 
 // ---- 11. the brochure names agree with scripts/push_brochures.py ---------------------------------------------------------------------
 ok(fnv16("jumeirahvillagecircle_1490/exterior.jpg") === "128f5165764ff4ce", "fnv16 matches push_brochures.py (value computed by the Python script)");
@@ -282,9 +282,9 @@ ok(brochureKvName("name_a_very_long_building_name_that_overflows_forty") === "br
   ok(d.r.status === 200 && pages(d.html) === 3, "a dossier with the client's criteria is still exactly 3 pages", pages(d.html));
   ok(d.html.includes("HOW IT MEETS THE BRIEF") && d.html.includes("WHERE THE ANSWER COMES FROM"), "page 2 says how the building meets the brief, with where each answer comes from");
   ok(/community pool <span[^>]*>\(nice to have\)<\/span><\/td><td[^>]*><b[^>]*>&#10003; yes<\/b>/.test(d.html) && d.html.includes("the developer&#x27;s own project page"), "community pool: yes, from the developer's own page", (d.html.match(/community pool.{0,400}/) || [""])[0]);
-  ok(/pet-friendly \(dog walks, play areas\) <span[^>]*>\(must\)<\/span><\/td><td[^>]*><b[^>]*>not known<\/b>/.test(d.html) && d.html.includes("Kids&#x27; play area"), "pet-friendly: not known (no register holds a pet policy), with the play area on the developer's page as a fact");
-  ok(/private pool <span[^>]*>\(nice to have\)<\/span><\/td><td[^>]*><b[^>]*>not known<\/b>/.test(d.html), "private pool: not known, never a no");
-  ok(/furnished <span[^>]*>\(asked\)<\/span><\/td><td[^>]*><b[^>]*>not known<\/b>/.test(d.html) && d.html.includes("does not record whether a home is furnished"), "furnished: not known, with the reason");
+  ok(!/pet-friendly \(dog walks, play areas\) <span/.test(d.html) && d.html.includes("Kids&#x27; play area"), "v302 pet-friendly: not answered, so the row is left out (never a 'not known'), with the play area on the developer's page as a fact");
+  ok(!/private pool <span/.test(d.html), "v302 private pool: no answer, row left out, never a no");
+  ok(!/furnished <span/.test(d.html) && !d.html.includes("does not record whether a home is furnished") && d.html.includes("Your realtor will verify these details with you."), "v302 furnished: no answer, row left out, the realtor line instead");
   ok(!/advert|listings_live|furnished_live|OWNER ONLY|4 of 9/i.test(d.html), "no listing-site (portal) furnishing figure on a client document, though the advertised-supply data carries one");
   printed = []; await call("/brief_pdf?kind=dossier&keys=testdistrict:10&beds=1" + BQ + Q + "&key=" + READ);
   ok(printed[0] && !/advert|furnished_live|OWNER ONLY|4 of 9/i.test(printed[0]), "not even when the OWNER key asks for the PDF: a document is always a client document");
@@ -293,15 +293,15 @@ ok(brochureKvName("name_a_very_long_building_name_that_overflows_forty") === "br
   ok(!d.html.includes("HOW IT MEETS THE BRIEF"), "no criteria asked: no criteria box (the approved layout is unchanged)");
   // the one-sheet cards carry one line of marks
   d = await pdf("kind=compare&keys=testdistrict:10,dld:betaheights" + BQ);
-  ok(d.html.includes('class="critline"') && /&#10003; community pool/.test(d.html) && /pet-friendly \(dog walks, play areas\): not known/.test(d.html), "each one-sheet card carries a line of yes / not known marks");
+  ok(d.html.includes('class="critline"') && /&#10003; community pool/.test(d.html) && !/not known/.test(d.html), "v302 each one-sheet card carries a line of yes marks only, no 'not known'");
   ok(!d.html.includes("The areas side by side") && pages(d.html) === 2, "no compare=1: no comparison page (cards + map, as before)");
   // the areas side by side: Compare and Full pack open with it when 2 or 3 areas were compared
   d = await pdf("kind=compare&keys=testdistrict:10,dld:betaheights&areas=testdistrict,nolayer&compare=1" + BQ);
   ok(d.r.status === 200 && pages(d.html) === 3 && d.html.indexOf("The areas side by side") > -1 && d.html.indexOf("The areas side by side") < d.html.indexOf('class="bcard"'), "Compare with compare=1 and two areas opens with the comparison page (3 pages)", pages(d.html));
   const cp = d.html.slice(d.html.indexOf("The areas side by side"), d.html.indexOf('class="bcard"'));
-  for (const row of ["Homes that match", "Typical rent, last 60 days", "Home types", "Pools", "Parks and dog-friendly spaces", "Schools nearby", "Newest completion"]) ok(cp.includes(row), "the comparison page has the row “" + row + "”");
+  for (const row of ["Homes that match", "Home types", "Pools", "Schools nearby"]) ok(cp.includes(row), "the comparison page has the row “" + row + "”");
   ok(cp.includes(">Test District</th>") && cp.includes(">No Layer Town</th>"), "one column per area");
-  ok(/&#10003; yes<\/b> 1 school/.test(cp) && /not known<\/b> not known: no completion year/.test(cp) && cp.includes("KHDA"), "each cell is yes / no / not known with its words and its source", cp.slice(0, 300));
+  ok(/&#10003; yes<\/b> 1 school/.test(cp) && !/not known/.test(cp) && !cp.includes("Newest completion") && cp.includes("KHDA"), "v302 each cell is yes / no with its words and its source; a row with no answers is left out", cp.slice(0, 300));
   ok(!/advert|furnished_live|OWNER ONLY/i.test(cp), "and no listing-site data");
   d = await pdf("kind=pack&keys=testdistrict:10,dld:betaheights&areas=testdistrict,nolayer&compare=1" + BQ);
   ok(d.r.status === 200 && d.html.indexOf("The areas side by side") > -1 && d.html.indexOf("The areas side by side") < d.html.indexOf('class="bcard"') && pages(d.html) === 1 + 2 + 3 * 2 + 1, "the Full pack opens with the same comparison page (1 + one-sheet 2 + 3 per building + appendix)", pages(d.html));
@@ -358,7 +358,7 @@ ok(brochureKvName("name_a_very_long_building_name_that_overflows_forty") === "br
   ok(/<img [^>]*\/img\/bph_alpha_ext/.test(cardOf("Alpha Tower")), "Alpha Tower keeps the developer's photograph");
   ok(/data-kind="blocks"/.test(cardOf("New Basis Tower")) && (cardOf("New Basis Tower").match(/class="hiblock"/g) || []).length === 2, "a footprinted building with no photo: its Blocks view, the building in gold (walls + roof)");
   ok(/data-kind="blocks_approx"/.test(cardOf("Pin Only House")) && /class="approxblock"/.test(cardOf("Pin Only House")) && cardOf("Pin Only House").includes("Blocks view &middot; approximate position"), "a map position but no footprint: an indicative dashed block, said to be approximate");
-  ok(/data-kind="district"/.test(cardOf("Wrong Bind Court")) && !/class="hiblock"/.test(cardOf("Wrong Bind Court")) && cardOf("Wrong Bind Court").includes("position not yet verified"),
+  ok(/data-kind="district"/.test(cardOf("Wrong Bind Court")) && !/class="hiblock"/.test(cardOf("Wrong Bind Court")) && !cardOf("Wrong Bind Court").includes("not yet verified"),
     "an unbound record: the district's blocks with nothing in gold - never the footprint of the building it was wrongly bound to");
   ok(!/>Totally Different Tower</.test(d.html) && d.html.includes("Wrong Bind Court  (no map position yet)"), "and the overview map lists it as unplaced, as the list has no position for it");
   ok(d.html.includes("a Blocks view: the building as a simple block on the district model") && d.html.includes("not a photograph"), "the small print says what a Blocks view is: not a photograph");
@@ -371,7 +371,7 @@ ok(brochureKvName("name_a_very_long_building_name_that_overflows_forty") === "br
     "its page 1 shows the Blocks view as the hero, and page 3's small print says it is not a photograph");
   // only a district with no layer keeps the plain box
   const nl = await pdf("kind=compare&keys=nolayer:5,testdistrict:99");
-  ok(/photos<br>to follow/.test(nl.html.split('<div class="bcard"')[1] || "") && /data-kind="blocks"/.test(nl.html.split('<div class="bcard"')[2] || ""), "no district layer at all: the plain box (nothing to draw); the footprinted card beside it has its Blocks view");
+  ok(!/to follow/.test(nl.html) && /Najma<\/div>/.test(nl.html.split('<div class="bcard"')[1] || "") && /data-kind="blocks"/.test(nl.html.split('<div class="bcard"')[2] || ""), "no district layer at all: the plain box (nothing to draw); the footprinted card beside it has its Blocks view");
   store.set("img_rent_index", RI0); store.set("img_unitmix_testdistrict", UM0);
 }
 

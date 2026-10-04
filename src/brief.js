@@ -57,10 +57,10 @@ const BEDS = { studio: 0, "0": 0, "1": 1, "2": 2, "3": 3, "3+": 3 };
 const BED_WORD = ["studio", "1-bed", "2-bed", "3+ bed"];
 export const EVIDENCE_MIN = 3;          // spec: drop n < 3
 // Verdicts (Kendall, 30 Sep 2026): within = min <= median <= max, strictly; a_little_above = over max by at most 5%; above = more
-// than 5% over; below = under min. The offered window stays bounded: above only to +15%, below only to -10% (beyond: not listed).
+// than 5% over; below = under min. v302 (Kendall, 4 Oct 2026): the budget MINIMUM is a HARD FLOOR (a realtor's commission starts there) - nothing under it is offered, no
+// below window. Above the top only to +15% (labelled a little over / over; the stretch keeps its meaning).
 export const LITTLE_OVER = 0.05;
 const ABOVE_CAP = 0.15;
-const BELOW_FLOOR = 0.10;               // below: down to min * 0.90; cheaper than that is not offered
 const NEAR_M = 1000;                    // "near a metro" / "schools nearby": a straight-line kilometre (no walking or drive times)
 export const TENANCY_MIN_SHARE = 0.5;   // the building page's own gate (building_page.js): below half coverage the tenancy count is not shown
 const MAX_DISTRICT_CARDS = 12;          // unit-mix cards are ~1 MB each; an all-Dubai query reads the busiest districts' cards only
@@ -193,7 +193,7 @@ export function parseBrief(sp) {
 // (the stretch where there is one, else the target): up to 5% over is a_little_above, then above (listed to +15%).
 export function verdictOf(v, min, max, stretch) {
   const lo = min || 0, hi = max == null ? Infinity : max, top = stretch != null && stretch > hi ? stretch : hi;
-  if (v < lo) return v >= lo * (1 - BELOW_FLOOR) ? "below" : null;
+  if (v < lo) return null;                                  // v302: the minimum is a hard floor
   if (v <= hi) return "within";
   if (v <= top && top > hi) return "stretch";
   if (v <= top * (1 + LITTLE_OVER)) return "a_little_above";
@@ -231,25 +231,25 @@ const rentFig = (s) => rentFigure(s).m;
 // The /brief_api choice for one record: of the kinds and bedroom counts asked, the best verdict tier, then the most contracts; under
 // EVIDENCE_MIN contracts or outside the offered window is no choice. q: {min, max, stretch} (null = none). -> {best, thin}
 export function pickRent(it, kinds, beds, q) {
-  let best = null, thin = 0;
+  let best = null, thin = 0, hid = false;
   for (const k of kinds) for (const bed of beds) {
     const rs = rentStat(it, k, bed);
     if (!rs) continue;
     const s = rs.s;
     if (s.n < EVIDENCE_MIN) { thin++; continue; }
     const fig = rentFigure(s), v = fig.m, verdict = verdictOf(v, q.min, q.max, q.stretch);
-    if (!verdict) continue;
+    if (!verdict) { if (q.min && v < q.min) hid = true; continue; }
     if (!best || TIER[verdict] < TIER[best.verdict] || (TIER[verdict] === TIER[best.verdict] && s.n > best.s.n)) best = { s, fig, v, verdict, kind: k, villa: k === "v", bed, basis: rs.basis };
   }
-  return { best, thin };
+  return { best, thin, hid: !best && hid };
 }
 function rentCandidates(RI, q, beds) {
-  const out = []; let thin = 0;
+  const out = []; let thin = 0, hidden = 0;
   const kinds = kindsOfType(q.type);
   for (const it of (RI && RI.items) || []) {
     const d = areaSlugOf(it);
     if (q.areas.length && !q.areas.includes(d)) continue;
-    const pr = pickRent(it, kinds, beds, q), best = pr.best; thin += pr.thin;
+    const pr = pickRent(it, kinds, beds, q), best = pr.best; thin += pr.thin; if (pr.hid) hidden++;
     if (!best) continue;
     const s = best.s, f = best.fig;
     out.push({
@@ -261,7 +261,7 @@ function rentCandidates(RI, q, beds) {
         beds: best.bed, beds_basis: best.basis },
     });
   }
-  return { cands: out, thin };
+  return { cands: out, thin, hidden };
 }
 
 // ---- buy: map_prices finds them (what Buy mode shows); the unit-mix card supplies the median AND the count ---------
@@ -280,13 +280,13 @@ function buyPrelim(MP, q, beds) {
   return out;
 }
 function buyCandidates(pre, cards, q) {
-  const out = []; let thin = 0, noCount = 0, noCard = 0;
+  const out = []; let thin = 0, noCount = 0, noCard = 0, hidden = 0;
   for (const { it, bs } of pre) {
     const card = cards[it.d] && cards[it.d][String(it.i)];
     if (!card) { noCard++; continue; }
     const sold = (card.dld_sales && card.dld_sales.sold_by_type) || {};
     const soldOf = (b) => { for (const k of Object.keys(sold)) if (k.toLowerCase() === rowLabel(b)) return sold[k]; return null; };
-    let best = null;
+    let best = null, hid = false;
     for (const b of bs) {
       const row = (card.rows || []).find((r) => String(r.type || "").toLowerCase() === rowLabel(b));
       if (!row || !row.median_aed) continue;                                   // an estimate (est_aed) is never a sale price
@@ -294,10 +294,10 @@ function buyCandidates(pre, cards, q) {
       if (n == null) { noCount++; continue; }
       if (n < EVIDENCE_MIN) { thin++; continue; }
       const verdict = verdictOf(row.median_aed, q.min, q.max, q.stretch);
-      if (!verdict) continue;
+      if (!verdict) { if (q.min && row.median_aed < q.min) hid = true; continue; }
       if (!best || TIER[verdict] < TIER[best.verdict] || (TIER[verdict] === TIER[best.verdict] && n > best.n)) best = { b, row, n, verdict };
     }
-    if (!best) continue;
+    if (!best) { if (hid) hidden++; continue; }
     const ds = card.dld_sales || {};
     out.push({
       it, d: it.d, i: it.i, name: card.name || it.n, aliases: it.n && card.name && nkey(it.n) !== nkey(card.name) ? [it.n] : [], lon: it.lon, lat: it.lat,
@@ -306,7 +306,7 @@ function buyCandidates(pre, cards, q) {
         latest: ds.last || null, first: ds.first || null, beds: best.b, dates_are: "the building's sales of every type" },
     });
   }
-  return { cands: out, thin, noCount, noCard };
+  return { cands: out, thin, noCount, noCard, hidden };
 }
 
 // ---- a name lookup must agree with the record (v231): a rent record bound to an app building named otherwise loses the bind -----
@@ -747,6 +747,7 @@ export async function briefSearch(env, sp, opts) {
   if (unknownAreas.length) notes.push("not a district slug the app knows: " + unknownAreas.join(", "));
   if (q.areas.some((a) => EXTRA_AREAS[a])) notes.push("Arabian Ranches is not one of the app's districts: it is read from the rent register by its Land Department areas, which are not the marketing communities. Wadi Al Safa 6 holds Arabian Ranches villages (Alvorada, Aseel, Alma); Wadi Al Safa 7 holds Arabian Ranches 2 (Reem, Camelia), more Arabian Ranches villages (Palma, Rasha, Samara, Azalea, Casa ...), Serena, Rukan and The Sustainable City. Its homes have no building pages, map positions or building records in the app yet.");
 
+  let hiddenBelow = 0;
   let cands = [], as_of = null, source = null, extra = {}, RI = null;
   const cards = {};
   const loadCards = async (ds) => {
@@ -761,7 +762,7 @@ export async function briefSearch(env, sp, opts) {
     if (!RI || !Array.isArray(RI.items)) return J({ query: q, error: ["the rent index (KV img_rent_index) is not on file"] }, 503);
     as_of = RI.as_of || null; source = "KV img_rent_index (" + (RI.source_file || "Ejari rent contracts") + ")";
     extra.window = RI.window || null;
-    const r = rentCandidates(RI, q, beds); cands = r.cands;
+    const r = rentCandidates(RI, q, beds); cands = r.cands; hiddenBelow = r.hidden;
     warm(cands.map((c) => c.d));
     await loadCards(cands.filter((c) => c.i != null).map((c) => c.d));
     const un = unbindDisputed(cands, cards);
@@ -778,7 +779,7 @@ export async function briefSearch(env, sp, opts) {
     const pre = buyPrelim(MP, q, beds);
     warm(pre.map((p) => p.it.d));
     await loadCards(pre.map((p) => p.it.d));
-    const r = buyCandidates(pre, cards, q); cands = r.cands;
+    const r = buyCandidates(pre, cards, q); cands = r.cands; hiddenBelow = r.hidden;
     as_of = String(MP.generated || "").slice(0, 10) || null; source = "KV img_map_prices (what the map's Buy mode shows) + img_unitmix_<district> (per-bedroom sale medians and counts)";
     notes.push("Buy figures are DLD registered sale medians per bedroom count over the building's whole sales record (the dates shown are the first and last sale of any type) - what homes here sold for, NOT what is for sale now.");
     notes.push("The Buy data has no middle half (q1, q3) and no new-versus-resale split: those fields are null. A developer's asking price and a size-based estimate are never used.");
@@ -891,7 +892,8 @@ export async function briefSearch(env, sp, opts) {
   if (results.some((r) => r.developer_availability)) notes.push("developer_availability is what the developer's own availability sheet, posted to the broker group, lists for this building on the sheet's date (count of this bedroom type, and the unit rows where the sheet holds them). It is the developer's claim, not register data, and it is never combined with estimated_left.");
   if (q.mode === "rent") notes.push("estimated_left is T minus R (flats of this type in the Land Department units list, less Ejari tenancies of this type running on the tenancy file's date), rounded to 10 and shown as {about, of} with estimate_as_of: an estimate, not a count, and never the number available. It is read from the beds-left register (KV img_beds_left_<district>, the full government tenancy register) where that is on file; otherwise it is given only where both are scoped to the one building and the district's tenancy coverage reaches " + Math.round(TENANCY_MIN_SHARE * 100) + "%, the gate the building page uses; otherwise it is omitted and estimated_left_withheld says why.");
   if (results.some((r) => r.record_name && r.record_name.agrees === "part")) notes.push("record_name.agrees = \"part\": the app's building record carries the register name plus a tower or phase suffix (e.g. Bloom Towers -> Bloom Towers B). The evidence may cover the whole project; check before the record's name goes on a client document.");
-  notes.push("Ranking: within the budget first (typical figure at or above the minimum and at or below the target)" + (q.stretch ? ", then within the stretch (above the target, at or below AED " + q.stretch + ")" : "") + ", then a little above (up to " + Math.round(LITTLE_OVER * 100) + "% over the top of the budget), then the rest - below (listed down to " + Math.round(BELOW_FLOOR * 100) + "% under) and above (listed up to " + Math.round(ABOVE_CAP * 100) + "% over); inside each group, the must-haves met, then the nice-to-haves met, then most evidence, then the most complete record. Fewer than " + EVIDENCE_MIN + " contracts or sales: left out.");
+  notes.push("Ranking: within the budget first (typical figure at or above the minimum and at or below the target)" + (q.stretch ? ", then within the stretch (above the target, at or below AED " + q.stretch + ")" : "") + ", then a little above (up to " + Math.round(LITTLE_OVER * 100) + "% over the top of the budget), then above (listed up to " + Math.round(ABOVE_CAP * 100) + "% over); inside each group, the must-haves met, then the nice-to-haves met, then most evidence, then the most complete record. Fewer than " + EVIDENCE_MIN + " contracts or sales: left out.");
+  if (q.min) notes.push("Budget minimum is a hard floor: only homes at AED " + q.min + " or more are offered. " + hiddenBelow + " option" + (hiddenBelow === 1 ? "" : "s") + " under the minimum hidden.");
 
   let comparison;
   if (q.compare && q.mode === "rent") {

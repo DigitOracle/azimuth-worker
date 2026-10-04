@@ -441,16 +441,17 @@ function compHtml(cmp){var n=cmp.length,rowsC=[["matches","HOMES THAT MATCH"],["
       else h=cell(c);
       return "<div class=cc><b>"+esc(a.name)+"</b>"+h+"</div>"}).join("")+"</div></div>"}).join("")+"</div>"}
 function moreHtml(tot,n){if(tot<=n)return "";var a=[];if(n<20&&tot>10)a.push("<a id=more20>Show 20</a>");if(n<50&&tot>20)a.push("<a id=more50>Show 50</a>");return a.length?"<div class=more>the best "+n+" of "+tot+" · "+a.join(" · ")+"</div>":""}
+function floorLine(st){return st.min?"<div class=nt>Showing "+esc(fmtAed(st.min))+" and above</div>":""}
 function drawRes(){var st=LAST,rs=RES.results||[],tot=RES.total_matched!=null?RES.total_matched:rs.length,cmp=RES.comparison;
   if(!rs.length&&!cmp){$("bres").innerHTML="<div class=rh>Nothing matched "+esc(summary(st))+".</div><div class=nt>Try a wider budget, another district or two, or fewer must-haves. A building needs at least three recorded "+(st.mode==="rent"?"lettings":"sales")+" to be listed.</div>"+notes();$("bout").hidden=true;$("bpill").hidden=true;return}
   var body;
   if(cmp){var areas=cmp.map(function(a){return a.slug});if(!TAB||!has(areas,TAB))TAB=areas[0];
     body="<div class=tabs id=btabs>"+cmp.map(function(a){var k=rs.filter(function(r){return r.district===a.slug}).length;return "<button type=button data-a="+esc(a.slug)+(a.slug===TAB?" class=on":"")+">"+esc(a.name)+" ("+k+")</button>"}).join("")+"</div>"
       +cmp.map(function(a){var part=[];each(rs,function(r,i){if(r.district===a.slug)part.push(rowHtml(r,i,st))});return "<div class=tabp data-a="+esc(a.slug)+(a.slug===TAB?"":" hidden")+">"+(part.join("")||"<div class=nt>Nothing here matches this brief: no building with three or more recorded lettings of this type in the budget.</div>")+"</div>"}).join("");
-    $("bres").innerHTML="<div class=rh><b>"+tot+"</b> homes match · side by side<br>"+esc(summary(st))+"</div>"+compHtml(cmp)
+    $("bres").innerHTML="<div class=rh><b>"+tot+"</b> homes match · side by side<br>"+esc(summary(st))+"</div>"+floorLine(st)+compHtml(cmp)
       +"<div class=sa><span id=bcount></span><button type=button id=ball>choose all</button><button type=button id=bnone>clear</button></div>"+body+notes();
     each($("btabs").querySelectorAll("button"),function(b){b.onclick=function(){TAB=b.getAttribute("data-a");each($("btabs").querySelectorAll("button"),function(x){x.classList.toggle("on",x===b)});each($("bres").querySelectorAll(".tabp"),function(p){p.hidden=p.getAttribute("data-a")!==TAB})}})}
-  else $("bres").innerHTML="<div class=rh><b>"+tot+"</b> buildings match · the best "+rs.length+" below<br>"+esc(summary(st))+"</div>"
+  else $("bres").innerHTML="<div class=rh><b>"+tot+"</b> buildings match · the best "+rs.length+" below<br>"+esc(summary(st))+"</div>"+floorLine(st)
     +"<div class=sa><span id=bcount></span><button type=button id=ball>choose all</button><button type=button id=bnone>clear</button></div>"
     +rs.map(function(r,i){return rowHtml(r,i,st)}).join("")+moreHtml(tot,rs.length)+notes();
   each($("bres").querySelectorAll("input[type=checkbox]"),function(cb){cb.onchange=function(){var r=rs[+cb.getAttribute("data-ix")];if(!r)return;SEL[r.key]=!!cb.checked;var row=$("row"+cb.getAttribute("data-ix"));if(row)row.classList.toggle("off",!cb.checked);counts()}});
@@ -461,7 +462,8 @@ function drawRes(){var st=LAST,rs=RES.results||[],tot=RES.total_matched!=null?RE
 function notes(){var n=(RES&&RES.notes)||[],src=[];if(RES&&RES.as_of)src.push("evidence as of "+day(RES.as_of));
   var t=(LAST&&LAST.mode==="buy")?"What homes here actually sold for, from the Land Department’s registered sales":"What homes here actually let for, from registered tenancy contracts (Ejari, Dubai’s rent register)";
   return "<div class=nt>"+esc(t)+". This is not a list of homes on the market today: where a developer’s own sheet names a building it is shown, dated; otherwise the leasing or sales team confirms what is free."+(n.length?"<br>"+n.map(esc).join("<br>"):"")+(src.length?"<br>"+esc(src.join(" · ")):"")+"</div>"}
-function counts(){var n=chosen().length;var c=$("bcount");if(c)c.textContent=n+" chosen";$("ochosen").textContent=n?n+" chosen":"none chosen";
+function counts(){var n=chosen().length;var c=$("bcount");if(c)c.textContent=n+" chosen";
+  var bi=$("o-ind"),b5=$("o-c5");if(bi&&bi.firstChild)bi.firstChild.nodeValue=n>=1?"Individual PDFs ("+n+")":"Individual PDFs";if(b5&&b5.firstChild)b5.firstChild.nodeValue=(n>=2&&n<5)?"Compare these "+n:"Compare 5";var b10=$("o-c10");if(b10)b10.hidden=(n>=2&&n<=5);$("ochosen").textContent=n?n+" chosen":"none chosen";
   var p=$("bpill");p.hidden=!RES||!(RES.results||[]).length;p.textContent=n+" chosen · what to send ↓"}
 
 // ---- the outputs (Contract B: GET /brief_pdf) ----

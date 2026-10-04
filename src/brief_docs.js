@@ -40,7 +40,8 @@
 // building's name must agree with the record; straight-line distances only, no walking or driving times; rents are what homes let
 // for, never availability; the "left" figure is always "an estimate, not a count".
 import puppeteer from "@cloudflare/puppeteer";
-import { withAmenityPages } from "./amenity_cards.js";
+import { withAmenityPages, loadSpots } from "./amenity_cards.js";
+export const REALTOR_VERIFIES = "Your realtor will verify these details with you.";   // v302 - the ONE line a client document uses where a fact is missing; gaps live only in owner places (API notes, diagnostics)
 import { liveCtx, fillLive } from "./live_answers.js";   // v291 - live Google answers for gym, community pool and dog park (never stored)   // v290 AMENITY CARDS - the "Around the community" page in Compare and Full pack
 import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailFor } from "./brief.js";   // the ONE "left" estimate (API only since v277) and the developers' own sheets, shared with /brief_api
 // v282 (Kendall, 1 Oct 2026): the client's criteria and the area comparison come from the SAME functions /brief_api uses, so the list
@@ -349,6 +350,7 @@ export async function loadContext(env, q, opts) {
       // v289 - the layer through the gzip-aware reader (src/brief.js kvJson): a layer published gzipped must not read as "no layer"
       units: need.units ? await kvJson(env, "units_" + d) : null, layer: need.map ? await kvJsonGz(env, "brief_fp_" + d) : null,
       areaIdx: undefined,                            // v289 - the register community -> footprints index (areaIndex), read on first need
+      spots: await loadSpots(env, d).catch(() => null),   // v302 - gyms and the rest of the amenity-spots layer (same file as the Around-the-community page)
       amen: amenIndex(await kvJsonGz(env, "amenities_" + d)),   // v289 - the amenity facts file, plain or gzipped (src/brief.js), same answers as the list
       bf: await kvJsonGz(env, "broker_facts_" + d), own: await kvJsonGz(env, "ownphotos_" + d),   // v291 CHECKLIST - broker facts and own photos
     };
@@ -588,7 +590,7 @@ function thumb(rec, w, h, C) {
   // v285 - no developer photograph on file: the building's Blocks view (blocksThumb), never an empty box
   const D = (C && C.district[rec.d]) || {}, bv = blocksThumb(rec, D.layer, w, h, { district: rec.dist });
   if (bv) return bv.html;
-  return '<div style="width:' + w + "px;height:" + h + "px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:9px;color:" + MUTED + ';text-align:center;">photos<br>to follow</div>';
+  return '<div style="width:' + w + "px;height:" + h + "px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:9px;color:" + MUTED + ';text-align:center;">Najma</div>';
 }
 
 function dossierSub(rec, q, i, of) {
@@ -597,28 +599,36 @@ function dossierSub(rec, q, i, of) {
 }
 
 function whereLines(C, rec) {
-  if (!rec.pos) return ["Distances not shown: our map position for this building is not yet verified"];
+  const pos = rec.pos || rec.cpos;
+  if (!pos) return [];                                  // v302 - no position: the lines are left out, never a gap notice
   const out = [];
-  const m = nearestMetro(C, rec.pos);
+  const m = nearestMetro(C, pos);
   if (m) out.push("Nearest metro: " + esc(m.n) + ", " + kmTxt(m.d));
-  for (const [n, la, lo] of REF) out.push(n + ": " + kmTxt(km(rec.pos, [la, lo])));
+  for (const [n, la, lo] of REF) out.push(n + ": " + kmTxt(km(pos, [la, lo])));
   out.push("All straight-line distances" + (rec.exact ? "" : ", from an approximate position"));
   return out;
 }
 function nearbyLines(C, rec) {
-  if (!rec.pos) return ["Schools and clinics: to follow, once the building's position is verified"];
-  const sc = nearest(C, rec.pos, "school", 3), cl = nearest(C, rec.pos, "clinic", 3);
+  const pos = rec.pos || rec.cpos;
+  if (!pos) return [];
+  const sc = nearest(C, pos, "school", 3), cl = nearest(C, pos, "clinic", 3), gy = nearestGyms(C, rec, pos, 2);
   const out = [];
   if (sc.length) out.push("Schools: " + sc.map((s) => esc(cleanName(s.i.n)) + " (" + (s.i.x ? esc(String(s.i.x).split(" · ")[0]) + ", " : "") + kmTxt(s.d) + ")").join(", "));
   if (cl.length) out.push("Clinics: " + cl.map((s) => esc(cleanName(s.i.n)) + " (" + kmTxt(s.d) + ")").join(", "));
-  return out.length ? out : ["Schools and clinics: none in the registers we hold near this building"];
+  if (gy.length) out.push("Gyms: " + gy.map((s) => esc(s.n) + " (" + kmTxt(s.d) + ")").join(", "));
+  return out;
+}
+// v302 - gyms from the amenity-spots layer of the home's district (the layer behind the Around-the-community page): named places, straight-line
+function nearestGyms(C, rec, pos, n) {
+  const sp = ((C.district[rec.d] || {}).spots || {}).spots || [];
+  return sp.filter((s) => s.type === "gym").map((s) => ({ n: cleanName(s.name).replace(/\s*\(Ladies Only\)\s*$/i, ""), d: km(pos, [+s.lat, +s.lng]) })).sort((a, b) => a.d - b.d).slice(0, n);
 }
 
 function dossierPage1(C, rec, q, sub) {
   const B = BEDS[q.beds], st = rec.st;
   const bvHero = rec.heroPic ? null : blocksThumb(rec, (C.district[rec.d] || {}).layer, 702, 300, { district: rec.dist, fs: 9.5 });   // v285
   const hero = rec.ownPic ? ownFigure(rec.ownPic, 702, 300, rec.name) : rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38) : rec.svPic ? svFigure(rec.svPic, 702, 300, rec.name) : bvHero ? bvHero.html
-    : '<div style="width:702px;height:120px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:13px;color:' + MUTED + ";\">Photos to follow &mdash; the developer's own pictures are being verified</div>";
+    : '<div style="width:702px;height:120px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:13px;color:' + MUTED + ";\">Najma</div>";
   const F = facts(rec);
   const factHtml = F.length ? '<div style="display:grid;grid-template-columns:' + (F.length === 4 ? "0.9fr 0.9fr 1.4fr 0.8fr" : "repeat(" + F.length + ",minmax(0,1fr))") + ';gap:12px;">' +
     F.map(([k, v]) => '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:10px;">' + k + '</div><div style="font-size:13px;">' + esc(v) + "</div></div>").join("") + "</div>" : "";
@@ -644,12 +654,12 @@ function dossierPage1(C, rec, q, sub) {
   const critRows = AM_ROWS.filter(([k]) => rec.crit && rec.crit[k] && (rec.crit[k].v === true || rec.crit[k].v === false))
     .map(([k, lab]) => { const c = rec.crit[k], lv = c.level ? LVL[c.level] || c.level : ""; return row((c.v ? "&#10003; " : "&#10007; ") + esc(lab) + (lv ? ' <span style="color:' + MUTED + ';">(' + esc(lv) + ")</span>" : ""), NAVY); });
   const amen = ((rec.br && rec.br.amenities) || []).map((a) => row("&#8226; " + esc(a), NAVY)).join("") + critRows.join("") ||
-    row("Not on record for this building", MUTED);
+    row(REALTOR_VERIFIES, MUTED);
   const lines = (xs) => xs.map((x) => '<div style="font-size:11.5px;color:' + NAVY + ';line-height:1.35;">' + x + "</div>").join("");
   const cards = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;">' +
     '<div class="card" style="padding:10px;"><div class="lbl" style="font-size:9.5px;">AMENITIES</div>' + amen + "</div>" +
-    '<div class="card" style="padding:10px;"><div class="lbl" style="font-size:9.5px;">WHERE IT IS</div>' + lines(whereLines(C, rec)) + "</div>" +
-    '<div class="card" style="padding:10px;"><div class="lbl" style="font-size:9.5px;">NEARBY</div>' + lines(nearbyLines(C, rec)) + "</div></div>";
+    '<div class="card" style="padding:10px;"><div class="lbl" style="font-size:9.5px;">WHERE IT IS</div>' + (lines(whereLines(C, rec)) || row(REALTOR_VERIFIES, MUTED)) + "</div>" +
+    '<div class="card" style="padding:10px;"><div class="lbl" style="font-size:9.5px;">NEARBY</div>' + (lines(nearbyLines(C, rec)) || row(REALTOR_VERIFIES, MUTED)) + "</div></div>";
   const title = '<div style="display:flex;flex-direction:column;gap:4px;"><div class="serif" style="font-size:33px;color:' + NAVY + ';line-height:1;">' + esc(rec.name) +
     '</div><div style="font-size:13px;color:' + MUTED + ';">' + esc(strap(rec)) + "</div></div>";
   return page(C, sub, hero + title + factHtml + rent + cards, "");   // page 1 carries no sources in the approved layout; they are on page 3
@@ -661,14 +671,14 @@ function buildingSource(rec) {
   return bits.length ? "The building: " + bits.join("; ") + "." : "";
 }
 const BV_SAY = "A Blocks view is the building as a simple block on the app's district model (footprints and streets &copy; OpenStreetMap contributors), heights to scale, seen from the south - a picture of where and how tall it is, not a photograph.";
-const nearbySource = () => "Metro: RTA station register. Schools (with their KHDA inspection rating) and clinics (Dubai Health Authority licence register): the nearest to this building, straight-line distances, not walking or driving times.";
+const nearbySource = () => "Metro: RTA station register. Schools (with their KHDA inspection rating) and clinics (Dubai Health Authority licence register): the nearest to this building, straight-line distances, not walking or driving times. Gyms: the community's mapped places (OpenStreetMap and Google Maps listings).";
 function pictureSource(rec) {
   const bv = rec.picSource && rec.picSource !== "photo" && rec.picSource !== "none" ? " The picture on page 1 is a Blocks view, not a photograph: " + BV_SAY +
     (rec.picSource === "blocks_area" ? " This record is a community of homes, not one building: the homes in gold are those the district model places in its Land Department sub-community - an approximate area." : "") : "";
   if (rec.ownPic) return "Picture on page 1: Najjuko's own photograph, taken on site" + (rec.ownPic.at ? " (" + esc(longDate(rec.ownPic.at)) + ")" : "") + " - " + PHOTO_CREDIT + "." +   // v291 CHECKLIST
-    (rec.br ? " Amenities: the developer's own project page, " + esc(rec.br.source_url || "not yet verified") + "." : "");
-  if (!rec.br) return (rec.brRefused ? "Pictures and amenities: not shown - " + esc(rec.brRefused) + "." : "Pictures and amenities: to follow from the developer's own project page.") + bv;
-  return "Pictures and amenities: the developer's own project page, " + esc(rec.br.source_url || "not yet verified") + (rec.br.retrieved ? ", retrieved " + esc(rec.br.retrieved) : "") + ". " +
+    (rec.br && rec.br.source_url ? " Amenities: the developer's own project page, " + esc(rec.br.source_url) + "." : "");
+  if (!rec.br) return bv.trim();
+  return "Pictures and amenities: the developer's own project page" + (rec.br.source_url ? ", " + esc(rec.br.source_url) : "") + (rec.br.retrieved ? ", retrieved " + esc(rec.br.retrieved) : "") + ". " +
     esc(rec.br.amenities_note || rec.br.photos_note || "");
 }
 
@@ -685,10 +695,10 @@ export function criteriaRows(rec, q) {
   if (q.furnished && q.furnished !== "either") rows.push([q.furnished, "asked", (rec.crit && rec.crit.furnished) || { v: null, src: FURNISHED_UNKNOWN }]);   // v291 CHECKLIST - the broker's furnishing note, when there is one
   return rows;
 }
-export const markWord = (v) => (v === true ? "&#10003; yes" : v === false ? "&#10007; no" : "not known");
+export const markWord = (v) => (v === true ? "&#10003; yes" : v === false ? "&#10007; no" : "");
 function criteriaBlock(rec, q) {
   if (!briefAsked(q)) return "";
-  const rows = criteriaRows(rec, q);
+  const all = criteriaRows(rec, q), rows = all.filter((r) => r[2].v === true || r[2].v === false);   // v302 - a gap is left out, not printed
   if (!rows.length) return "";
   return '<div class="critbox" style="border:1px solid #E6E1D8;background:#FFFFFF;padding:10px 14px;display:flex;flex-direction:column;gap:5px;">' +
     '<div class="lbl" style="font-size:9.5px;">HOW IT MEETS THE BRIEF</div>' +
@@ -696,14 +706,14 @@ function criteriaBlock(rec, q) {
       rows.map(([label, level, c]) => [esc(label) + ' <span style="color:' + MUTED + ';font-size:9.5px;">(' + level + ")</span>",
         '<b style="color:' + (c.v === true ? "#2F6B55" : c.v === false ? "#9A3B3B" : MUTED) + ';white-space:nowrap;">' + markWord(c.v) + "</b>",
         '<span style="font-size:9.6px;">' + esc(c.src || "") + (c.detail ? " " + esc(c.detail) + "." : "") + "</span>"])) +
-    '<div style="font-size:9.5px;color:' + MUTED + ';">&ldquo;Not known&rdquo; means no record we hold answers it: the leasing team confirms it. A building is left out of the list only where a record says no.</div></div>';
+    (rows.length < all.length ? '<div style="font-size:9.5px;color:' + MUTED + ';">' + REALTOR_VERIFIES + "</div>" : "") + "</div>";
 }
 // one line of marks for a one-sheet card
 function criteriaLine(rec, q) {
   if (!briefAsked(q)) return "";
-  const rows = criteriaRows(rec, q);
+  const rows = criteriaRows(rec, q).filter((r) => r[2].v === true || r[2].v === false);
   return rows.length ? '<div class="critline" style="font-size:9.2px;color:' + INK + ';line-height:1.3;">' + rows.map(([label, , c]) =>
-    (c.v === true ? "&#10003; " + esc(label) + (c.live && c.say ? " (" + esc(c.say) + ")" : "") : c.v === false ? "&#10007; " + esc(label) : esc(label) + ": not known")).join(" &middot; ") + "</div>" : "";
+    (c.v === true ? "&#10003; " + esc(label) + (c.live && c.say ? " (" + esc(c.say) + ")" : "") : "&#10007; " + esc(label))).join(" &middot; ") + "</div>" : "";
 }
 
 // ------------------------------------------------------------------------------------------------ v282: the areas side by side
@@ -721,14 +731,15 @@ export async function comparisonFor(env, q) {
 const CMP_ROWS = [["matches", "Homes that match"], ["rent", "Typical rent, last 60 days"], ["types", "Home types"], ["pools", "Pools"], ["parks", "Parks and dog-friendly spaces"], ["schools", "Schools nearby"], ["newest", "Newest completion"]];
 export function comparisonPage(C, q, cmp) {
   const cols = cmp.cols;
-  const cell = (c) => !c ? "not known" : '<b style="color:' + (c.v === true ? "#2F6B55" : c.v === false ? "#9A3B3B" : MUTED) + ';">' + markWord(c.v) + "</b> " + esc(c.say || "") +
+  const cell = (c) => !c || (c.v !== true && c.v !== false) ? "" : '<b style="color:' + (c.v === true ? "#2F6B55" : c.v === false ? "#9A3B3B" : MUTED) + ';">' + markWord(c.v) + "</b> " + esc(c.say || "") +
     (c.src ? '<div style="font-size:8.4px;color:' + MUTED + ';margin-top:2px;">' + esc(c.src) + "</div>" : "");
-  const body = CMP_ROWS.map(([k, label]) => '<tr><td style="padding:6px 8px;border-bottom:1px solid #E6E1D8;font-size:10.5px;font-weight:600;color:' + NAVY + ';vertical-align:top;width:150px;">' + label + "</td>" +
+  const cellHtml = (a, k) => { const c = a[k]; return k === "types" ? ["apartment", "townhouse", "villa"].some((t) => cell(c && c[t])) : k === "pools" ? ["private", "community"].some((t) => cell(c && c[t])) : !!cell(c); };
+  const body = CMP_ROWS.filter(([k]) => cols.some((a) => cellHtml(a, k))).map(([k, label]) => '<tr><td style="padding:6px 8px;border-bottom:1px solid #E6E1D8;font-size:10.5px;font-weight:600;color:' + NAVY + ';vertical-align:top;width:150px;">' + label + "</td>" +
     cols.map((a) => {
       const c = a[k];
-      const h = k === "types" ? ["apartment", "townhouse", "villa"].map((t) => "<div>" + (t === "villa" ? "villa or townhouse" : t) + ": " + cell(c && c[t]) + "</div>").join("")
-        : k === "pools" ? ["private", "community"].map((t) => "<div>" + t + ": " + cell(c && c[t]) + "</div>").join("") : cell(c);
-      return '<td style="padding:6px 8px;border-bottom:1px solid #E6E1D8;font-size:10px;line-height:1.35;vertical-align:top;">' + h + "</td>";
+      const h = k === "types" ? ["apartment", "townhouse", "villa"].map((t) => cell(c && c[t]) ? "<div>" + (t === "villa" ? "villa or townhouse" : t) + ": " + cell(c && c[t]) + "</div>" : "").join("")
+        : k === "pools" ? ["private", "community"].map((t) => cell(c && c[t]) ? "<div>" + t + ": " + cell(c && c[t]) + "</div>" : "").join("") : cell(c);
+      return '<td style="padding:6px 8px;border-bottom:1px solid #E6E1D8;font-size:10px;line-height:1.35;vertical-align:top;">' + (h || "&mdash;") + "</td>";
     }).join("") + "</tr>").join("");
   const head = '<tr style="background:' + NAVY + ';"><th style="padding:7px 8px;"></th>' + cols.map((a) => '<th style="text-align:left;padding:7px 8px;color:#FBFAF7;font-size:11px;font-weight:600;">' + esc(a.name) + "</th>").join("") + "</tr>";
   const B = BEDS[q.beds];
@@ -736,12 +747,12 @@ export function comparisonPage(C, q, cmp) {
     '<div style="display:flex;flex-direction:column;gap:3px;"><div class="serif" style="font-size:24px;color:' + NAVY + ';line-height:1;">The areas side by side</div>' +
     '<div style="font-size:11px;color:' + MUTED + ';">' + C.today + " &middot; " + esc(cols.map((a) => a.name).join(" · ")) + (B && !B.all ? " &middot; " + esc(bedsWordOf(q)) : "") + "</div></div>" + logo(C, 68) + "</div>" +
     '<div class="cmppage" style="flex:1;padding:10px 30px 4px 30px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;">' + head + body + "</table>" +
-    '<div style="font-size:8.6px;color:' + MUTED + ';line-height:1.35;margin-top:6px;">&#10003; a record says yes &middot; &#10007; a record says no &middot; not known: no record we hold answers it, and the leasing team confirms it. ' +
+    '<div style="font-size:8.6px;color:' + MUTED + ';line-height:1.35;margin-top:6px;">&#10003; a record says yes &middot; &#10007; a record says no. ' + REALTOR_VERIFIES + ' ' +
     "Rents are registered tenancy contracts (Ejari) " + esc(cmp.window ? cmp.window[0] + " to " + cmp.window[1] : "") + " for the whole Land Department area, named projects or not; what homes let for, not what is free. Furnishing is not recorded by the register.</div></div>" + landFooter());
 }
 const bedsWordOf = (q) => { const bl = (q.bedsList || [q.beds]).filter((b) => BEDS[b] && !BEDS[b].all); if (bl.length < 2) return BEDS[q.beds].word; const w = bl.map((b) => (b === "studio" ? "studio" : b === "3" ? "3+" : b)); return w.slice(0, -1).join(", ") + " or " + w[w.length - 1] + "-bedroom"; };
 
-const MAP_TO_FOLLOW = (h) => '<div class="maptofollow" style="height:' + h + 'px;border:1px dashed #DED9D0;display:flex;align-items:center;justify-content:center;font-size:14px;color:' + MUTED + ';">Map to follow</div>';
+const MAP_TO_FOLLOW = (h) => '<div class="maptofollow" style="height:' + h + 'px;border:1px dashed #DED9D0;display:flex;align-items:center;justify-content:center;font-size:14px;color:' + MUTED + ';">' + REALTOR_VERIFIES + '</div>';
 
 function dossierPage2(C, rec, q, sub) {
   const D = C.district[rec.d] || {};
@@ -754,7 +765,7 @@ function dossierPage2(C, rec, q, sub) {
     ". Simple blocks, heights to scale, seen from the south.</div>" + map + cb + availBlock(rec, q);
   return page(C, sub, body, smallPrint([
     svg ? "Map: footprints and streets &copy; OpenStreetMap contributors; building position from the app's district model" + (mark.approx ? " (this one approximate, from a public map listing)" : "") +
-      (mark.area ? " - here the homes the district model places in the Land Department sub-community of this name, an approximate area, not a surveyed boundary" : "") + "." : "Map: to follow - " + (D.layer ? "this building has no verified map position yet" : "the district map layer is not yet published") + ".",
+      (mark.area ? " - here the homes the district model places in the Land Department sub-community of this name, an approximate area, not a surveyed boundary" : "") + "." : "",
     rec.avail && rec.avail.count ? "Availability: " + esc(rec.avail.developer) + "'s own availability sheet of " + esc(rec.avail.as_of || "") + ", as posted to the broker group; the developer's statement, not a register." : ""]));
 }
 
@@ -792,7 +803,7 @@ function layoutsBlock(rec, q) {
       return s ? "AED " + money(s.m) + " &middot; " + s.n + " let" : "none let recently"; };
     const rows = rec.um.rows.filter((r) => B.tn(r.type)).map((r) => [esc(pretty(r.type)), String(r.units || "&mdash;"), r.levels ? esc(r.levels) : "&mdash;", r.median_sqm ? money(r.median_sqm * SQFT) : "&mdash;", letOf(r)]);
     table = tbl([["left", "TYPE"], ["right", "FLATS"], ["left", "FLOORS"], ["right", "TYPICAL SIZE, SQ FT"], ["right", "RENTED RECENTLY"]], rows);
-    intro = "A flat-by-flat list of this building's layouts is not yet in our files, so here is its " + (B.all ? "home" : B.word) + " count from the Land Department units register, with the typical size. Sizes include the balcony.";
+    intro = "Here is this building's " + (B.all ? "home" : B.word) + " count from the Land Department units register, with the typical size. Sizes include the balcony.";
   } else if (st) {
     table = tbl([["left", "SIZE THAT WAS LET"], ["right", "TYPICAL RENT"], ["right", "HOW MANY"], ["right", "MIDDLE HALF, AED"]],
       [["about " + money(st.s * SQFT) + " sq ft", "AED " + money(st.m), String(st.n), money(st.q1) + " &ndash; " + money(st.q3)]]);
@@ -859,8 +870,8 @@ function oneSheetCards(C, q) {
     const st = rec.st;
     // v290 - a community with no position of its own is measured from the centre of its homes (svTarget), said so; never "to follow" when known
     const mp = rec.pos || rec.cpos, mFrom = rec.pos ? "" : " (from the community's centre)";
-    const metro = mp ? (() => { const m = nearestMetro(C, mp); return m ? esc(m.n) + " metro, " + kmTxt(m.d) + mFrom : amenMetro(rec) || "Metro distance to follow"; })() : amenMetro(rec) || "Metro distance to follow";
-    const amen = ((rec.br && rec.br.amenities) || []).slice(0, 3).map((a) => esc(a.split(" (")[0])).join(", ") || amenLine(rec) || "Amenities to follow";
+    const metro = mp ? (() => { const m = nearestMetro(C, mp); return m ? esc(m.n) + " metro, " + kmTxt(m.d) + mFrom : amenMetro(rec) || ""; })() : amenMetro(rec) || "";
+    const amen = ((rec.br && rec.br.amenities) || []).slice(0, 3).map((a) => esc(a.split(" (")[0])).join(", ") || amenLine(rec) || "";
     const perType = B.all ? Object.keys(rec.sts || {}).map((b) => '<div style="font-size:10px;color:' + INK + ';">' + esc(bandLabel(b)) + ": AED " + money(rec.sts[b].m) + " &middot; " + rec.sts[b].n + " let</div>").join("") : "";
     return '<div class="bcard" style="border:1px solid #E6E1D8;background:#FFF;display:flex;flex-direction:column;overflow:hidden;min-height:0;">' +
       '<div style="position:relative;">' + thumb(rec, cardW, 136, C) + '<div style="position:absolute;left:6px;top:6px;width:24px;height:24px;border-radius:12px;background:' + NAVY +
@@ -1158,7 +1169,7 @@ export function blocksThumb(rec, layer, w, h, o) {
   }
   out.push("</svg>");
   const say = kind === "blocks" ? "Blocks view" : kind === "blocks_approx" ? "Blocks view &middot; approximate position"
-    : kind === "blocks_area" ? "Blocks view &middot; the community&rsquo;s homes, approximate area" : "Blocks view &middot; " + esc((o && o.district) || rec.dist || "") + " &middot; position not yet verified";
+    : kind === "blocks_area" ? "Blocks view &middot; the community&rsquo;s homes, approximate area" : "Blocks view &middot; " + esc((o && o.district) || rec.dist || "") + "";
   return { kind, html: '<div class="blocksview" data-kind="' + kind + '" style="width:' + r2(w) + "px;height:" + r2(h) + 'px;overflow:hidden;position:relative;">' + out.join("") +
     '<div style="position:absolute;right:4px;bottom:3px;font-size:' + ((o && o.fs) || 7.5) + "px;line-height:1.2;color:#5E5B52;background:rgba(255,255,255,0.82);padding:1px 4px;letter-spacing:.2px;\">" + say + "</div></div>" };
 }
@@ -1418,7 +1429,7 @@ export async function briefBlocksPage(env, url) {
     title = "Blocks · " + nm;
   } else return J({ ok: false, reason: "keys= or d= is required" }, 400);
   const body = svgs.map((s) => s ? '<div class="blk">' + s.replace("<svg ", '<svg style="width:100%;height:auto;display:block;" ') + "</div>"
-    : '<div class="blk"><div class="maptofollow" style="aspect-ratio:3/2;border:1px dashed #DED9D0;display:flex;align-items:center;justify-content:center;font:14px Arial,sans-serif;color:' + MUTED + ';">Map to follow</div></div>').join("");
+    : '<div class="blk"><div class="maptofollow" style="aspect-ratio:3/2;border:1px dashed #DED9D0;display:flex;align-items:center;justify-content:center;font:14px Arial,sans-serif;color:' + MUTED + ';">' + REALTOR_VERIFIES + '</div></div>').join("");
   return new Response('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + esc(title) + "</title>" +
     "<style>:root{color-scheme:light}html,body{margin:0;background:#F6F4EE}.blk{max-width:1500px;margin:0 auto 12px auto;overflow:auto}</style></head><body>" + body + "</body></html>",
     { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } });
