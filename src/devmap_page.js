@@ -185,7 +185,7 @@ function ixOf(win){
     o.areas[s]=b});
   // v323 - the developer list, project counts and scale cut-offs for the window, so a profile never mixes a 12-month count with all-years cut-offs
   Object.keys(o.areas).forEach(function(s){var ds=o.areas[s].devs;Object.keys(ds).forEach(function(dk){if(dk==="_")return;var d=ds[dk];if(!d.c.length&&!(d.r||[]).length)return;
-    var e=dl[dk]||(dl[dk]={name:d.n,areas:0,n:0,profile:{projects:0,homes:0}});e.areas++;e.profile.projects+=(d.b||[]).length;e.profile.homes+=d.h||0;d.c.forEach(function(c){e.n+=c[0]})})});
+    var e=dl[dk]||(dl[dk]={name:d.n,areas:0,n:0,profile:{projects:0,homes:0}});e.areas++;e.profile.projects+=d.c.length?(d.b||[]).length:0;e.profile.homes+=d.h||0;d.c.forEach(function(c){e.n+=c[0]})})});
   o.devs=dl;o.scale=DM.scaleCuts({devs:dl});o.window_say=typeof dsay==="function"?winTxt():"";o.fellBack=fb;
   IXC.l12=o;return o}
 function winTxt(){var M=IDX&&IDX.ev;if(S.win==="l12"&&M)return 'Sales settled '+dsay(M.l12_from)+' to '+dsay(M.l12_to)+' (the last 12 months).';return M?'Every settled sale since '+dsay(M.since)+' (all years).':'Every settled sale on record (all years).'}
@@ -482,7 +482,7 @@ Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
   if(IDX&&IDX.ev)S.win="l12";   // v322 - prices a realtor quotes today: the last 12 months, unless the index carries no evidence yet
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l;IDX.areas[s].name=IDX.areas[s].name.replace(/\bJLT\b/g,"Jumeirah Lakes Towers")});   // v321 - an area is never shown as an initial
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
-  var saved=r[2]&&r[2].at&&r[2].devs?r[2].devs:null,cg=cacheGet(),sl=saved||(cg&&cg.length?cg:null);if(!sl){sl=DEFAULT_SL.slice();S.isDefault=true}sl.forEach(function(k){S.mine[k]=true});
+  var saved=r[2]&&r[2].at&&r[2].devs?r[2].devs:null,cg=cacheGet(),sl=saved||(cg&&cg.length?cg:null);if(!sl){sl=DEFAULT_SL.slice();S.isDefault=true}var sl0=sl.join("|");sl=DM.resolveSaved(IDX,sl);sl.forEach(function(k){S.mine[k]=true});if(!S.isDefault&&sl.join("|")!==sl0)saveMine();   // v326 - ids saved before the developer crosswalk ("select", "damac ( )") are moved to today's id, so they list their projects and show on the map
   $("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Price bands: "+IDX.cuts.rule;
   if(DM.TIER_CFG.bounds)$("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Price bands (cut from all Dubai settled sales so each holds about a quarter of the money spent; they describe homes, not developers): "+DM.TIER_CFG.bounds.join(" / ")+" AED per sq m.";
   if(mineList().length&&!S.isDefault)S.screen=2;
