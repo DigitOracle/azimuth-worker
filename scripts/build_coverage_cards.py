@@ -44,6 +44,17 @@ TARGETS = {
     "wadialsafa7": {"areas": ["Wadi Al Safa 7"], "label": "Arabian Ranches 2 and Serena (Wadi Al Safa 7)", "new_district": True},
     "palmdeira": {"areas": ["Palm Deira"], "label": "Dubai Islands (Palm Deira)"},
     "rasalkhor": {"areas": ["Ras Al Khor Industrial First"], "label": "Ras Al Khor"},
+    # name-mismatch / alias-missing districts (binding audit, fix class S): the district HAS building cards, but whole projects the register sells are on none of them
+    # (Binghatti Vintage 1,506 sales in Majan, Azizi Venice 14 in Madinat Al Mataar, Sobha Central in Jabal Ali First, Creek Bay in Al Khairan First, REMRAAM in Al Hebiah
+    # Fifth ...). The same register-built card, added only for projects no priced card names.
+    "majan": {"areas": ["Wadi Al Safa 3"], "label": "Majan (Wadi Al Safa 3)"},
+    "madinatalmataar": {"areas": ["Madinat Al Mataar"], "label": "Dubai South"},
+    "jabalalifirst": {"areas": ["Jabal Ali First"], "label": "Jabal Ali First"},
+    "alkhairanfirst": {"areas": ["Al Khairan First"], "label": "Dubai Creek Harbour"},
+    "alhebiahfifth": {"areas": ["Al Hebiah Fifth"], "label": "DAMAC Lagoons"},
+    "dubaiinvestmentparkfirst": {"areas": ["Dubai Investment Park First"], "label": "Dubai Investment Park First"},
+    "dubaiinvestmentparksecond": {"areas": ["Dubai Investment Park Second"], "label": "Dubai Investment Park Second"},
+    "alyelayiss2": {"areas": ["Al Yelayiss 2"], "label": "Al Yelayiss 2"},
     "liwan1": {"areas": ["Wadi Al Safa 2"], "label": "Liwan (Wadi Al Safa 2)", "existing_items": True},
 }
 # HELD, not built: the app maps jltsouth to the DLD area "Al Thanyah Third", but in the register that area is Emirates Living (The Greens, The Springs,

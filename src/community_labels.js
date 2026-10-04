@@ -15,6 +15,7 @@ export const COMMUNITY_LABELS = {
   madinatalmataar: { dld: "Madinat Al Mataar", labels: ["Dubai South", "Emaar South", "Expo Living"], why: "one area holding several communities: Dubai South, Emaar South and Expo Living" },
   zaabeelsecond: { dld: "Zaabeel Second", labels: ["d3", "Artistry"], why: "one area holding d3 and Artistry" },
   alkhairanfirst: { dld: "Al Khairan First", labels: ["Dubai Creek Harbour"], why: "Dubai Creek Harbour is registered in this area" },
+  majan: { dld: "Wadi Al Safa 3", labels: ["Majan"], why: "Majan is the Dubai Municipality community (645) that the Land Department files as Wadi Al Safa 3; the app's district slug is majan (the slug wadialsafa3 in the area map is the same ground)" },
   palmdeira: { dld: "Palm Deira", labels: ["Dubai Islands"], why: "Dubai Islands is registered in this area (Palm Deira)" },
   dubaiinvestmentparksecond: { dld: "Dubai Investment Park Second", labels: ["DAMAC Riverside", "Grand Polo Club"], why: "one area holding DAMAC Riverside and Grand Polo Club (Emaar)" },
 };

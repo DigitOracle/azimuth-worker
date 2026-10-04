@@ -75,6 +75,7 @@ function areaStats(area,index,cfg){
   if(res.enough){var p=pooled(all,1);res.median=round(wquant(p,0.5));res.medianSqft=round(sqftOf(res.median));res.q1=round(wquant(p,0.25));res.q3=round(wquant(p,0.75))}
   var vt=0,nt=0,i;
   for(i=0;i<all.length;i++){var t=tierOf(all[i][1],bounds);if(t>=0){res.mixN[t]+=all[i][0];res.mixValue[t]+=all[i][0]*(all[i][2]||0);nt+=all[i][0];vt+=all[i][0]*(all[i][2]||0)}}
+  res.unknownTier=[0,0,0,0];if(devs._)for(i=0;i<(devs._.c||[]).length;i++){var tu=tierOf(devs._.c[i][1],bounds);if(tu>=0)res.unknownTier[tu]+=devs._.c[i][0]}   // v314 - sales per tier with no developer recorded
   for(i=0;i<4;i++){res.mixN[i]=nt?Math.round(100*res.mixN[i]/nt):0;res.mixValue[i]=vt?Math.round(100*res.mixValue[i]/vt):0}
   for(i=0;i<4;i++){res.tiers.push({tier:i,id:TIER_IDS[i],name:TIER_NAMES[i],band:bounds?bandSay(i,bounds):"",prices:tierPrices(i,bounds),share:tierShare(i,index),cards:tierCards(i,bounds),edges:tierEdges(i,bounds),shares:tierShares(i,index),devs:[],median:null,medianSqft:null})}
   for(i=0;i<list.length;i++){var s=list[i];if(!s.enough){res.notEnough.push(s);continue}res.tiers[s.tier].devs.push(s)}
