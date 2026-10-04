@@ -32,29 +32,29 @@ let parsed = true; try { execFileSync(process.execPath, ["--check", f], { stdio:
 ok(parsed, "the page script still parses");
 ok(!/esc\(t\.prices/.test(js) && !/esc\(t\.band\)/.test(js), "the tier header no longer prints the run-on prices line or the single band sentence");
 ok(/class=pg/.test(js) && /class=pc/.test(js) && /\.pg\{display:grid;grid-template-columns:1fr 1fr/.test(html), "the 2 x 2 grid of price cards (two columns at every width)");
-ok(/in every 100 Dubai sales are in this tier/.test(js) && /together they are '\+t\.shares\.money\+'% of all money spent/.test(js) && /All Dubai sales, '\+winSay\(\)/.test(js) && !/Buyers '/.test(js) && !/Dubai-wide share of sales/.test(js), "tier shares read in plain words: 'N in every 100 Dubai sales are in this tier', 'together they are M% of all money spent', caption 'All Dubai sales, <window>'");
+ok(/in every 100 Dubai sales are in this price band/.test(js) && /together they are '\+t\.shares\.money\+'% of all money spent/.test(js) && /All Dubai sales, '\+winSay\(\)/.test(js) && !/Buyers '/.test(js) && !/Dubai-wide share of sales/.test(js), "tier shares read in plain words: 'N in every 100 Dubai sales are in this price band', 'together they are M% of all money spent', caption 'All Dubai sales, <window>'");
 ok(/S\.unit==="sqft"\?"sqm":"sqft"/.test(js), "the band: the chosen unit first, the other smaller beneath");
 ok(/This view is not complete yet/.test(js) && /loaded for this area so far \(the register holds many more\)/.test(js), "a thin area says only N sales are loaded and the view is not complete");
-ok(/thin\|\|mineHides\?'':filtered\?'<p class=note>None of your developers/.test(js) && /No developer with 3\+ sales sits in this tier here/.test(js), "the per-tier empty line is not shown for a thin area or when my-developers hides everyone; with the filter on it is the plain 'None of your developers' wording");
+ok(/thin\|\|mineHides\?'':filtered\?'<p class=note>None of your developers/.test(js) && /No developer with 3\+ sales sits in this price band here/.test(js), "the per-tier empty line is not shown for a thin area or when my-developers hides everyone; with the filter on it is the plain 'None of your developers' wording");
 ok(/None of your '\+mineList\(\)\.length\+' have 3 or more recorded sales here yet/.test(js) && /id=showall>Show all developers here/.test(js) && /showall/.test(js.split("showall").slice(-1)[0] === "" ? "" : js), "'None of your ten have 3 or more recorded sales here yet' with a one-tap 'Show all developers here' link");
 ok(/\(t\.nDevs\|\|!\(thin\|\|mineHides\|\|filtered/.test(js), "a tier header never prints a bare '0 developers' for a data gap");
 ok(!/sales with the developer not recorded'/.test(js), "the old 'with the developer not recorded' wording is replaced");
 
 console.log("C - Majan sense checks and developer chips");
 ok(Array.isArray(st.unknownTier) && st.unknownTier.reduce((a, b) => a + b, 0) === 17 && st.unknownTier[1] === 17, "unknownTier: the 17 sales with no developer sit in LUXURY (28,000 per sq m), for the plain-words tier line", JSON.stringify(st.unknownTier));
-ok(/Sales in this tier \('\+fmt\(st\.unknownTier\[t\.tier\]\)\+'\) have no developer recorded/.test(js), "a tier with sales but no developer recorded says 'Sales in this tier (N) have no developer recorded'");
+ok(/Sales in this price band \('\+fmt\(st\.unknownTier\[t\.tier\]\)\+'\) have no developer recorded/.test(js), "a tier with sales but no developer recorded says 'Sales in this tier (N) have no developer recorded'");
 ok(/of about '\+fmt\(reg\)\+' settled sales in this area are loaded/.test(js) && /register_sales_all_time/.test(js), "loaded vs real: 'X of about Y settled sales in this area are loaded' from area.register_sales_all_time");
 ok(/ here<\/b>; '\+\(st\.devCount-shown\)\+' other developer/.test(js) && /hidden by your filter\. <a href="#" id=showall>Show all developers here/.test(js), "header vs list: 'N of your M here; K other developers hidden by your filter' with the show-all link");
-ok(/None of your developers have 3 or more sales in this tier here/.test(js), "with only-my-developers on, an empty tier says 'None of your developers have 3 or more sales in this tier here'");
-ok(/function donut\(ts\)/.test(js) && /<svg width=48 height=48/.test(js) && /\.dn\{grid-column/.test(html), "v318: each developer row carries an inline SVG doughnut of its sales split across tiers");
+ok(/None of your developers have 3 or more sales in this price band here/.test(js), "with only-my-developers on, an empty tier says 'None of your developers have 3 or more sales in this tier here'");
+ok(/function donut\(ts[,)]/.test(js) && /<svg width=48 height=48/.test(js) && /\.dn\{grid-column/.test(html), "v318: each developer row carries an inline SVG doughnut of its sales split across tiers");
 ok(!/class=tcs/.test(js) && !/class=tc /.test(js), "v318: the tier pills (class tcs / tc) are gone from the row");
 {
-  const src = js.slice(js.indexOf("function donut(ts)"), js.indexOf("function devRow("));
+  const src = js.slice(js.indexOf("function donut(ts"), js.indexOf("function devRow("));
   const mk = new Function("TC", "DM", "esc", src + "; return donut;");
   const donut = mk(["#c5a56a", "#2f8a7f", "#3987e5", "#8a9a96"], { TIER_NAMES: ["ULTRA-LUXURY", "LUXURY", "PREMIUM", "BUDGET"] }, (x) => String(x));
   const h = donut([0, 79, 5, 16]);
   const ps = [...h.matchAll(/data-tier=(\d) data-p=(\d+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
-  ok(/<svg/.test(h) && /role=img/.test(h) && /aria-label="Sales by tier: LUXURY 79%, BUDGET 16%, PREMIUM 5%"/.test(h) && /<title>LUXURY 79%/.test(h), "doughnut has an aria-label, title and hover text with the exact split", h.slice(0, 300));
+  ok(/<svg/.test(h) && /role=img/.test(h) && /aria-label="Sales by price band: LUXURY 79%, BUDGET 16%, PREMIUM 5%"/.test(h) && /<title>LUXURY 79%/.test(h), "doughnut has an aria-label, title and hover text with the exact split", h.slice(0, 300));
   ok(ps.length === 3 && ps.reduce((t, x) => t + x[1], 0) === 100 && ps.find((x) => x[0] === 1)[1] === 79, "segment values sum to the split (79 + 16 + 5 = 100)", JSON.stringify(ps));
   const C = 2 * Math.PI * 20, lens = [...h.matchAll(/stroke-dasharray="([\d.]+) /g)].map((m) => Number(m[1]));
   ok(Math.abs(lens.reduce((t, x) => t + x, 0) + 1.6 * lens.length - C) < 0.1, "arc lengths plus the thin gaps fill the ring exactly");
@@ -68,7 +68,7 @@ ok(!/class=tcs/.test(js) && !/class=tc /.test(js), "v318: the tier pills (class 
   ok(donut(null) === "" && donut([0, 0, 0, 0]) === "" && donut([NaN, undefined, null, -3]) === "", "missing or zero data omits the chart");
 }
 ok(!/ also '\+d\.second/.test(js), "the single 'also N% TIER' text is gone");
-ok(/Each developer sits in the tier where most of its sales here fall \(by number of sales\)/.test(js), "the placement rule is stated once, as a caption");
+ok(/Each developer sits in the price band where most of its sales here fall \(by number of sales\)/.test(js), "the placement rule is stated once, as a caption");
 const CL = await import("../src/community_labels.js");
 ok(CL.labelledName("majan", "Majan") === "Majan (Wadi Al Safa 3)" && CL.communitiesOf("majan")[0] === "Majan", "the header names both: Majan (Wadi Al Safa 3)");
 

@@ -66,7 +66,7 @@ function runPage({ saved, savedAt, cache } = {}, htmlSrc) {
   const q = (sel) => document.querySelectorAll(sel);
   return { ctx, els, posts, side, tick, q, state: () => ctx.__devmap.state, type: async (t) => { els.q.value = t; els.q.oninput(); await tick(); } };
 }
-const names = (h) => [...h.matchAll(/<div class=pk><span>([^<]*)</g)].map((m) => m[1]);
+const names = (h) => [...h.matchAll(/<div class=pk><span>(?:<a[^>]*>)?([^<]*)</g)].map((m) => m[1]);
 
 // ---- 2. default list ----
 let P = runPage(); await P.tick(); await P.tick();
@@ -74,7 +74,7 @@ let h = P.side();
 let shown = names(h);
 ok(shown.length === 10 && IDS.every((i) => P.state().mine[i]), "no saved list: the ten are chosen and shown on step 1", shown);
 ok(!/Other Builder/.test(h), "the other developers are NOT listed until the realtor searches");
-ok(shown[shown.length - 1] === "Mered" && /not on the map yet/.test(h) && shown.indexOf("Emaar") === 0, "ordered by sales (Emaar first); Mered (no area) last, 'not on the map yet'", shown);
+ok(shown[shown.length - 1] === "Mered" && /(?:not|no sales) on the map yet/.test(h) && shown.indexOf("Emaar") === 0, "ordered by sales (Emaar first); Mered (no area) last, 'not on the map yet'", shown);
 ok(/Add another developer/.test(h) && /10 chosen/.test(P.els.cnt.textContent) && /Reset to Najjuko/.test(h), "search box, '10 chosen' and the reset control are on screen", P.els.cnt.textContent);
 ok(/class=tag/.test(h) && (h.match(/class=tag/g) || []).length === 9, "a tier chip on each developer that has sales (Mered has none yet)", (h.match(/class=tag/g) || []).length);
 ok(P.state().screen === 1, "a default list lands on step 1, not step 2");

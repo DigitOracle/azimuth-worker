@@ -40,7 +40,7 @@ const DEVS = {
 const IDX = { as_of: "2026-09-29", cuts: { bounds: B }, devs: { alpha: { name: "Alpha", areas: 2, n: 15 }, beta: { name: "Beta", areas: 1, n: 6 }, gamma: { name: "Gamma", areas: 1, n: 2 } },
   areas: { testville: { name: "Testville", devs: DEVS }, otherton: { name: "Otherton", devs: { alpha: { n: "Alpha", h: 5, c: [[6, 14000, 800000, 1]], r: [] } } } } };
 const st = DM.areaStats(IDX.areas.testville, IDX);
-ok(JSON.stringify(DM.TIER_NAMES) === JSON.stringify(["ULTRA-LUXURY", "LUXURY", "PREMIUM", "BUDGET"]), "the four tier names, in that order (BUDGET, not standard)");
+ok(JSON.stringify(DM.TIER_NAMES) === JSON.stringify(["Top band", "Upper band", "Middle band", "Entry band"]), "the four price band names, in that order (v321: neutral names that describe homes, not developers)");
 ok(st.n === 33 && st.enough, "area n counts every sale incl. the developer-not-recorded ones", st.n);
 ok(st.median === 22000 && st.medianSqft === 2044, "area median per sq m 22,000 = 2,044 per sq ft (weighted median)", [st.median, st.medianSqft]);
 ok(st.q1 === 9000 && st.q3 === 35000, "middle range q1..q3 from the same weights", [st.q1, st.q3]);
@@ -82,7 +82,7 @@ f = DM.budgetFit(DEVS.gamma, st.notEnough[0], { mode: "sqft", max: 9999 }, B);
 ok(f.fit === null, "a developer under 3 sales never 'fits'");
 // developer view and compare
 let v = DM.developerView(st, { ppsm: 26000 });
-ok(v.ok && v.tier === 1 && v.tierName === "LUXURY" && v.shareN === 21 && /21% of settled sales in Testville/.test(v.say) && /No developer with 3\+ sales sits in that tier/.test(v.say), "developer view: 26,000 per sq m lands in LUXURY; 21% of sales; no competitor there", v.say);
+ok(v.ok && v.tier === 1 && v.tierName === "Upper band" && v.shareN === 21 && /21% of settled sales in Testville/.test(v.say) && /No developer with 3\+ sales sits in that tier/.test(v.say), "developer view: 26,000 per sq m lands in the Upper band; 21% of sales; no competitor there", v.say);
 v = DM.developerView(st, { tier: 0 });
 ok(v.ok && v.shareN === 30 && v.competitors.length === 1 && v.competitors[0].k === "alpha", "developer view by tier: ULTRA-LUXURY, 30% of sales, alpha is the competitor");
 ok(!DM.developerView(thin, { ppsm: 20000 }).ok, "developer view on an area with too few sales says so, no number");
@@ -158,7 +158,7 @@ ok(/\+971 56 548 4397/.test(sc[0]) && !/58 |\+971 ?58/.test(DEVMAP_FOOTER), "the
 ok(!/bayut|propertyfinder|property finder|dubizzle|zoopla/i.test(html), "no listing portal is named anywhere on the page");
 ok(!/\b(claude|chatgpt|gpt-?\d|openai|gemini|anthropic)\b/i.test(html), "no LLM is named on the page");
 ok(/Dubai Land Department sales register, /.test(sc[0]), "the sources line names the Dubai Land Department sales register with its as-of date");
-ok(/ULTRA-LUXURY/.test(sc[0]) && /BUDGET/.test(sc[0]) && !/STANDARD/.test(sc[0]), "the page uses ULTRA-LUXURY / LUXURY / PREMIUM / BUDGET");
+ok(/Top band/.test(sc[0]) && /Entry band/.test(sc[0]) && !/STANDARD|ULTRA-LUXURY/.test(sc[0]), "the page uses Top / Upper / Middle / Entry band");
 ok(!/dewa|owner data|residents key|rk=/i.test(html), "no DEWA / residents / owner data on the page");
 ok(html.indexOf('data-s=1>1 MY DEVELOPERS') > 0 || sc[0].includes("1 MY DEVELOPERS"), "the three screens: MY DEVELOPERS, WHERE, CLIENT MEETING");
 

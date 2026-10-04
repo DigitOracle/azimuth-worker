@@ -25,7 +25,7 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP) {
   const slot = (dev) => {
     const k = dev ? canonicalOf(dev) : "_";
     const kk = k || "_";
-    if (!devs[kk]) devs[kk] = { n: kk === "_" ? "Developer not recorded" : "", h: 0, c: [], r: [] };
+    if (!devs[kk]) devs[kk] = { n: kk === "_" ? "Developer not recorded" : "", h: 0, c: [], r: [], b: [] };
     if (kk !== "_") { names[kk] = names[kk] || {}; names[kk][dev] = (names[kk][dev] || 0) + 1; }
     return devs[kk];
   };
@@ -36,13 +36,14 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP) {
     devOfCard[id] = dev;
     const sold = (c.dld_sales && c.dld_sales.sold_by_type) || {};
     const soldOf = (t) => { for (const k of Object.keys(sold)) if (k.toLowerCase() === String(t).toLowerCase()) return sold[k]; return 0; };
-    let added = false;
+    let added = false; const mine = [];
     for (const r of c.rows || []) {
       if (!r.median_aed || !r.median_sqm) continue;                 // an estimate (est_aed) is never a sale price
       const n = soldOf(r.type), bed = bedOf(r.type);
       if (!n || bed == null) continue;
-      slot(dev).c.push([n, Math.round(r.median_aed / r.median_sqm), Math.round(r.median_aed), bed]); added = true;
+      slot(dev).c.push([n, Math.round(r.median_aed / r.median_sqm), Math.round(r.median_aed), bed]); added = true; mine.push([n, Math.round(r.median_aed / r.median_sqm)]);
     }
+    if (added) slot(dev).b.push([mine.reduce((a, x) => a + x[0], 0), Math.round(DM.wmedian(mine.map((x) => [x[1], x[0]]))), String(c.name || (c.dld && c.dld.project) || "")]);   // v321 - one project (building) = its sales and its median price per sq m
     if (added && dev) slot(dev).h += Number(c.registered_homes || (c.dld && c.dld.units_registered) || c.total_units || 0);
   }
   for (const it of rentItems || []) {                                // Ejari contracts, community-level labelled on the page
@@ -103,8 +104,8 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
   const devList = {};
   for (const s of Object.keys(areas)) for (const k of Object.keys(areas[s].devs)) {
     if (k === "_") continue;
-    const d = areas[s].devs[k]; const e = devList[k] || (devList[k] = { name: d.n, areas: 0, n: 0 });
-    e.areas++; e.n += DM.wmedian ? d.c.reduce((a, c) => a + c[0], 0) : 0;
+    const d = areas[s].devs[k]; const e = devList[k] || (devList[k] = { name: d.n, areas: 0, n: 0, profile: { projects: 0, homes: 0 } });
+    e.areas++; e.profile.projects += (d.b || []).length; e.profile.homes += d.h || 0;   // v321 e.n += DM.wmedian ? d.c.reduce((a, c) => a + c[0], 0) : 0;
   }
   // alias: DM.devKey(any spelling the page may be given) -> canonical id, for curated developers only (the page cannot import devcross.js)
   const alias = {};
@@ -114,6 +115,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     source: "Dubai Land Department sales register (settled sales, unit-mix cards) and Ejari tenancy contracts; developers from the register and the developers' own sheets",
     cuts: { bounds, percentiles: DM.TIER_CFG.percentiles, shares: shares || null, typical_sqft: DM.TYPICAL_SQFT, rule: DM.TIER_CFG.bounds ? "Dubai-wide, value-weighted: each tier holds about a quarter of the money spent in the last 12 months of Land Department sales. A price band, not a judgement of any developer." : "Dubai-wide: BUDGET is the cheapest half of settled sales by price per sq m, PREMIUM the next 30%, LUXURY the next 15%, ULTRA-LUXURY the top 5%. A price band, not a judgement of any developer." },
     devs: devList, alias, areas,
+    scale: DM.scaleCuts({ devs: devList }),   // v321 - the project-count cut-offs behind Boutique / Mid-size / Mass-market, written into the data
   };
 }
 
