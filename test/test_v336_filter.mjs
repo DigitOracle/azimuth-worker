@@ -16,4 +16,5 @@ ok(js.includes("class=prow") && js.includes("select(r.getAttribute"), "profile r
 ok(js.includes("<details class=evd") && js.includes("caret-down"), "positioning evidence is collapsible with a chevron icon");
 ok(js.includes("lg.id=\"maplg\"") && js.includes("function mapLegend"), "legend overlay on the map");
 ok(js.includes("dlink evc peer"), "peers are cards that open the profile");
+ok(js.includes("class=dvg") && js.includes("class=pjg") && js.includes("dir=auto"), "developer and project lists are card grids; names use dir=auto");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
