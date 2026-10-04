@@ -51,6 +51,8 @@ const KV = {
 globalThis.fetch = async () => new Response("{}", { status: 200 });
 const env = { MEETINGS: KV, READ_KEY: READ, CLIENT_KEY: CLIENT, INGEST_TOKEN: "ING", PUBLIC_ORIGIN: "https://azimuth-2.digitalchemy.workers.dev" };
 const call = (p) => worker.fetch(new Request("https://azimuth-2.digitalchemy.workers.dev" + p), env, { waitUntil() {} });
+// v309: the technical notes are OWNER ONLY - a client key gets none; the note assertions read them with the owner key
+const briefO = async (qs) => { const r = await call("/brief_api?" + qs + "&key=" + READ); return r.json(); };
 const brief = async (qs) => { const r = await call("/brief_api?" + qs + "&key=" + CLIENT); return r.status === 200 ? r.json() : { status: r.status, text: await r.text() }; };
 const gz = (o) => { const b = zlib.gzipSync(Buffer.from(JSON.stringify(o))); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
 const crit = (r, k) => (r.criteria || []).find((c) => c.k === k);
@@ -111,11 +113,11 @@ const orchid = by["DAMAC HILLS - ORCHID"];
 ok(orchid && crit(orchid, "gym").v === true && crit(orchid, "gym").level === "building", "A3c matched by the exact name when the key is not in the file (Orchid: a gymnasium unit)");
 ok(Object.keys(by).length === 5, "A4a not known never leaves a home out: all five listed with four musts", Object.keys(by).join(" | "));
 const jb = await brief("mode=rent&beds=2&type=apartment&max=240000&areas=" + D + "&musts=balcony&limit=20");
-ok(!(jb.results || []).some((r) => r.name === "DAMAC HILLS - CARSON") && (jb.results || []).some((r) => r.name === "DAMAC HILLS - ORCHID") && (jb.notes || []).some((n) => /1 building left out because a source says a must-have is missing/.test(n)),
+ok(!(jb.results || []).some((r) => r.name === "DAMAC HILLS - CARSON") && (jb.results || []).some((r) => r.name === "DAMAC HILLS - ORCHID") && ((await briefO("mode=rent&beds=2&type=apartment&max=240000&areas=" + D + "&musts=balcony&limit=20")).notes || []).some((n) => /1 building left out because a source says a must-have is missing/.test(n)),
   "A4b a file NO is definite: balcony a must leaves Carson out (units register: no balcony area on its flats); not-known Orchid stays", JSON.stringify((jb.results || []).map((r) => r.name)));
 ok(rich && /pet-friendly \(dog walks, play areas\): yes \(a community fact, per DAMAC's own DAMAC Hills page\)/.test(rich.why) && /parking: yes \(a building fact, per the Land Department buildings register\)/.test(rich.why),
   "A5 the reasons name the level and the source of each must met", rich && rich.why);
-ok((j.notes || []).some((n) => /amenity facts file for DAMAC Hills/.test(n) && /building fact/.test(n) && /community fact/.test(n)), "A5b the notes say where the facts come from and what the levels mean");
+ok(((await briefO(Q)).notes || []).some((n) => /amenity facts file for DAMAC Hills/.test(n) && /building fact/.test(n) && /community fact/.test(n)), "A5b the notes say where the facts come from and what the levels mean");
 
 // ---- A6 the PDF loader: the same answers and words, from the same key -------------------------------------------------------------
 const pq = parseQuery(new URL("https://x/brief_pdf?kind=onesheet&keys=dld:damachillsrichmond,damachills:1003&mode=rent&beds=3&type=villa&max=240000&musts=pets,community_pool,gym,parking&nice=private_pool"));

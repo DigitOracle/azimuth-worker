@@ -18,7 +18,7 @@ const env = { MEETINGS: { async get(k) { return store.has(k) ? store.get(k) : nu
 const run = async (qs, owner) => { __resetKvMemo(); return (await briefSearch(env, new URLSearchParams("mode=rent&beds=3&type=townhouse&areas=damachills&limit=50&" + qs), { owner: !!owner, live: false })).body; };
 const names = (j) => j.results.map((r) => r.name + ":" + r.evidence.median).join(", ");
 
-let j = await run("min=250000&max=300000");
+let j = await run("min=250000&max=300000", true);   // v309: the notes are owner only
 ok(j.results.every((r) => r.evidence.median >= 250000), "A1 min 250K: nothing under 250K is offered", names(j));
 ok(!j.results.some((r) => [180000, 183000, 190000, 193000, 230000].includes(r.evidence.median)), "A2 the 180-193K and 230K options are gone (230K was inside the old -10% window)", names(j));
 ok(j.results.length === 4 && j.results[0].verdict === "within", "A3 250K, 275K, 300K within, 330K above (+10%) listed; 400K out", names(j));

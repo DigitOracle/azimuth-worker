@@ -36,6 +36,7 @@ const KV = {
 globalThis.fetch = async () => new Response("{}", { status: 404 });            // nothing else answers
 const env = { MEETINGS: KV, READ_KEY: READ, CLIENT_KEY: CLIENT, INGEST_TOKEN: "ING", GOOGLE_MAPS_KEY: GKEY, PUBLIC_ORIGIN: "https://azimuth-2.digitalchemy.workers.dev" };
 const call = (e, p) => worker.fetch(new Request("https://azimuth-2.digitalchemy.workers.dev" + p), e, { waitUntil() {} });
+const briefO = async (qs, e) => { const r = await call(e || env, "/brief_api?" + qs + "&key=" + READ); return r.json(); };   // v309: technical notes are owner only
 const brief = async (qs, e) => { const r = await call(e || env, "/brief_api?" + qs + "&key=" + CLIENT); const t = await r.text(); try { return Object.assign(JSON.parse(t), { _raw: t }); } catch (x) { return { status: r.status, _raw: t }; } };
 const crit = (r, k) => (r && r.criteria || []).find((c) => c.k === k);
 
@@ -126,7 +127,7 @@ ok(seen.every((s) => s.b.locationRestriction.circle.radius <= 1500) && seen.filt
   "L7b radius: the community at most 1500 m, a sub-community at most 800 m");
 ok(seen.every((s) => s.h["X-Goog-Api-Key"] === GKEY && !s.u.includes(GKEY) && !s.b.toString().includes(GKEY)) && !j._raw.includes(GKEY),
   "L8 the key goes in the header only: not in a URL, not in the list's JSON");
-ok((j.notes || []).some((n) => /Google Maps was asked live/.test(n) && /never a no/.test(n)), "L10 the notes say Google was asked live and its silence is never a no");
+ok(((await briefO(Q)).notes || []).some((n) => /Google Maps was asked live/.test(n) && /never a no/.test(n)), "L10 the notes say Google was asked live and its silence is never a no");
 const allCrit = (jj) => (jj.results || []).flatMap((r) => r.criteria || []);
 ok(!allCrit(j).some((c) => c.live && c.v !== true), "L6a never false: a live answer is only ever yes");
 

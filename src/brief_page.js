@@ -444,7 +444,7 @@ function compHtml(cmp){var n=cmp.length,rowsC=[["matches","HOMES THAT MATCH"],["
 function moreHtml(tot,n){if(tot<=n)return "";var a=[];if(n<20&&tot>10)a.push("<a id=more20>Show 20</a>");if(n<50&&tot>20)a.push("<a id=more50>Show 50</a>");return a.length?"<div class=more>the best "+n+" of "+tot+" · "+a.join(" · ")+"</div>":""}
 function floorLine(st){return st.min?"<div class=nt>Showing "+esc(fmtAed(st.min))+" and above</div>":""}
 function drawRes(){var st=LAST,rs=RES.results||[],tot=RES.total_matched!=null?RES.total_matched:rs.length,cmp=RES.comparison;
-  if(!rs.length&&!cmp){$("bres").innerHTML="<div class=rh>Nothing matched "+esc(summary(st))+".</div><div class=nt>Try a wider budget, another district or two, or fewer must-haves. A building needs at least three recorded "+(st.mode==="rent"?"lettings":"sales")+" to be listed.</div>"+notes();$("bout").hidden=true;$("bpill").hidden=true;return}
+  if(!rs.length&&!cmp){$("bres").innerHTML=""+emptyHtml(st)+notes();$("bout").hidden=true;$("bpill").hidden=true;return}
   var body;
   if(cmp){var areas=cmp.map(function(a){return a.slug});if(!TAB||!has(areas,TAB))TAB=areas[0];
     body="<div class=tabs id=btabs>"+cmp.map(function(a){var k=rs.filter(function(r){return r.district===a.slug}).length;return "<button type=button data-a="+esc(a.slug)+(a.slug===TAB?" class=on":"")+">"+esc(a.name)+" ("+k+")</button>"}).join("")+"</div>"
@@ -460,9 +460,8 @@ function drawRes(){var st=LAST,rs=RES.results||[],tot=RES.total_matched!=null?RE
   var m20=$("more20"),m50=$("more50");if(m20)m20.onclick=function(){ST.limit=20;run()};if(m50)m50.onclick=function(){ST.limit=50;run()};
   $("bout").hidden=!rs.length;$("shbox").hidden=true;omsg("");counts();
   if(window.__amenCards)window.__amenCards(st,RES,KEY)}   // v290 AMENITY CARDS (src/amenity_cards.js): one card per ticked must-have per district, above the homes
-function notes(){var n=(RES&&RES.notes)||[],src=[];if(RES&&RES.as_of)src.push("evidence as of "+day(RES.as_of));
-  var t=(LAST&&LAST.mode==="buy")?"What homes here actually sold for, from the Land Department’s registered sales":"What homes here actually let for, from registered tenancy contracts (Ejari, Dubai’s rent register)";
-  return "<div class=nt>"+esc(t)+". This is not a list of homes on the market today: where a developer’s own sheet names a building it is shown, dated; otherwise the leasing or sales team confirms what is free."+(n.length?"<br>"+n.map(esc).join("<br>"):"")+(src.length?"<br>"+esc(src.join(" · ")):"")+"</div>"}
+function emptyHtml(st){var e=RES&&RES.empty;if(!e)return "<div class=rh>Nothing matched "+esc(summary(st))+".</div><div class=nt>Try a wider budget, another district or two, or fewer must-haves.</div>";return "<div class=rh>"+esc(e.title)+"<br><small>"+esc(summary(st))+"</small></div><div class=nt>"+(e.reasons||[]).map(esc).join("<br>")+"<br><b>Next step:</b> "+esc(e.next||"")+"</div>"}
+function notes(){var n=(RES&&RES.notes)||[],sm=(RES&&RES.summary)||[];var t=(LAST&&LAST.mode==="buy")?"What homes here actually sold for, from the Land Department’s registered sales":"What homes here actually let for, from registered tenancy contracts (Ejari, Dubai’s rent register)";var body=sm.length?sm.map(esc).join("<br>"):esc(t)+". This is not a list of homes on the market today.";return "<div class=nt>"+body+"</div>"+(n.length?"<details class=nt><summary>Details for the team</summary>"+n.map(esc).join("<br>")+"</details>":"")}
 function counts(){var n=chosen().length;var c=$("bcount");if(c)c.textContent=n+" chosen";
   var bi=$("o-ind"),b5=$("o-c5");if(bi&&bi.firstChild)bi.firstChild.nodeValue=n>=1?"Individual PDFs ("+n+")":"Individual PDFs";if(b5&&b5.firstChild)b5.firstChild.nodeValue=(n>=2&&n<5)?"Compare these "+n:"Compare 5";var b10=$("o-c10");if(b10)b10.hidden=(n>=2&&n<=5);$("ochosen").textContent=n?n+" chosen":"none chosen";
   var p=$("bpill");p.hidden=!RES||!(RES.results||[]).length;p.textContent=n+" chosen · what to send ↓"}

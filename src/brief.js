@@ -705,6 +705,38 @@ const ctEq = (a, b) => { a = String(a); b = String(b); if (a.length !== b.length
 export const isOwnerKey = (env, url, h) => (h && typeof h.keyTier === "function") ? h.keyTier(env, url) === "admin"
   : !!(env && env.READ_KEY && url.searchParams.get("key") && ctEq(url.searchParams.get("key"), env.READ_KEY));
 
+// ---- v309 - plain-language summary and empty-state reasons (Kendall, 4 Oct 2026: nothing internal on the page; say why nothing matched) ----------------
+const plainAed = (n) => "AED " + (n >= 1e6 ? +(n / 1e6).toFixed(2) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : Math.round(n));
+const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+export function plainOf({ q, as_of, hiddenBelow, thin, droppedByMust, noData, DN, shown, comparison, market }) {
+  const buy = q.mode === "buy", rec = buy ? "sales" : "lettings";
+  const areaWord = q.areas.length ? q.areas.map((a) => DN[a] || a).join(" and ") : "Dubai";
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], dm = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(as_of || ""));
+  const day = dm ? " Evidence to " + (+dm[3]) + " " + MON[+dm[2] - 1] + " " + dm[1] + "." : "";
+  const summary = [(buy ? "What homes here actually sold for, from the Land Department's registered sales." : "What homes here actually let for, from registered tenancy contracts (Ejari, Dubai's rent register).") + " This is not a list of homes on the market." + day];
+  const left = [];
+  if (hiddenBelow) left.push(plural(hiddenBelow, "building was", "buildings were") + " below your " + plainAed(q.min) + " minimum and " + (hiddenBelow === 1 ? "is" : "are") + " not shown.");
+  if (thin) left.push(plural(thin, "building was", "buildings were") + " left out: fewer than three registered " + rec + " of this size.");
+  if (droppedByMust) left.push(plural(droppedByMust, "building was", "buildings were") + " left out because a must-have is known to be missing.");
+  if (shown) summary.push(...left);
+  let empty = null;
+  if (!shown && !comparison) {
+    const reasons = [];
+    const nd = noData.map((a) => DN[a] || a).join(" and ");
+    if (noData.length) reasons.push(buy && noData.some((a) => EXTRA_AREAS[a]) ? "Sales for " + nd + " are not loaded into the Brief yet, so it cannot say what homes there sold for. That is a gap in the tool, not a sign that nothing sold." : "We do not have registered " + rec + " for " + nd + " yet.");
+    for (const m of (market || [])) if (q.min && m.m && m.m * 1.5 < q.min) reasons.push((m.bed === 0 ? "Studios" : m.bed + "-bedroom homes") + " in " + (DN[m.slug] || m.slug) + " " + (buy ? "sell" : "let") + " for about " + plainAed(Math.round(m.m / 1000) * 1000) + " a year typically" + (m.q1 && m.q3 ? " (middle half " + plainAed(Math.round(m.q1 / 1000) * 1000) + " to " + plainAed(Math.round(m.q3 / 1000) * 1000) + ")" : "") + ", well below your " + plainAed(q.min) + " minimum.");
+    reasons.push(...left);
+    if (!reasons.length) reasons.push("No building in " + areaWord + " has registered " + rec + " of this size and type with a typical price inside your budget.");
+    const next = noData.length ? (buy && noData.some((a) => EXTRA_AREAS[a]) ? "Choose another area for now, or check this one with your sales team." : "Choose another area, or ask the " + (buy ? "sales" : "leasing") + " team for the latest on " + (noData.length === 1 ? "this one" : "these") + ".")
+      : hiddenBelow ? "Lower your minimum to see them."
+      : thin ? "Try a nearby area, or another bedroom count."
+      : droppedByMust ? "Untick a must-have to see more."
+      : "Widen the budget, or try a nearby area.";
+    empty = { title: "No " + (buy ? "homes to buy" : "homes to rent") + " in " + areaWord + " matched.", reasons, next };
+  }
+  return { summary, empty };
+}
+
 // ---- the route ------------------------------------------------------------------------------------------------------
 export async function briefApi(request, env, url, h) {
   const hdr = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
@@ -750,6 +782,7 @@ export async function briefSearch(env, sp, opts) {
   if (q.areas.some((a) => EXTRA_AREAS[a])) notes.push("Arabian Ranches is not one of the app's districts: it is read from the rent register by its Land Department areas, which are not the marketing communities. Wadi Al Safa 6 holds Arabian Ranches villages (Alvorada, Aseel, Alma); Wadi Al Safa 7 holds Arabian Ranches 2 (Reem, Camelia), more Arabian Ranches villages (Palma, Rasha, Samara, Azalea, Casa ...), Serena, Rukan and The Sustainable City. Its homes have no building pages, map positions or building records in the app yet.");
 
   let hiddenBelow = 0;
+  const diag = { thin: 0, noCount: 0, noCard: 0, noData: [], market: [] };                 // v309 - the counts the plain-language reasons are made from
   let cands = [], as_of = null, source = null, extra = {}, RI = null;
   const cards = {};
   const loadCards = async (ds) => {
@@ -761,10 +794,11 @@ export async function briefSearch(env, sp, opts) {
 
   if (q.mode === "rent") {
     RI = await pMain;
-    if (!RI || !Array.isArray(RI.items)) return J({ query: q, error: ["the rent index (KV img_rent_index) is not on file"] }, 503);
+    if (!RI || !Array.isArray(RI.items)) return J({ query: q, error: [owner ? "the rent index (KV img_rent_index) is not on file" : "Rent figures are not available right now. Please try again shortly."] }, 503);
     as_of = RI.as_of || null; source = "KV img_rent_index (" + (RI.source_file || "Ejari rent contracts") + ")";
     extra.window = RI.window || null;
-    const r = rentCandidates(RI, q, beds); cands = r.cands; hiddenBelow = r.hidden;
+    const r = rentCandidates(RI, q, beds); cands = r.cands; hiddenBelow = r.hidden; diag.thin = r.thin; diag.noData = q.areas.filter((a) => !RI.items.some((it) => areaSlugOf(it) === a));
+    if (q.min && beds.length === 1) for (const a of q.areas) { const rows = (RI.areas || []).filter((x) => areaSlugOf(x) === a); let best = null; for (const k of kindsOfType(q.type)) for (const row of rows) { const rs = rentStat(row, k, beds[0]); if (rs && rs.s.n >= EVIDENCE_MIN && (!best || rs.s.n > best.s.n)) best = rs; } if (best) { const f = rentFigure(best.s); diag.market.push({ slug: a, bed: beds[0], m: f.m, q1: f.q1, q3: f.q3 }); } }
     warm(cands.map((c) => c.d));
     await loadCards(cands.filter((c) => c.i != null).map((c) => c.d));
     const un = unbindDisputed(cands, cards);
@@ -777,11 +811,12 @@ export async function briefSearch(env, sp, opts) {
     if (r.thin) notes.push(r.thin + " building" + (r.thin === 1 ? "" : "s") + " with fewer than " + EVIDENCE_MIN + " contracts of this size left out.");
   } else {
     const MP = await pMain;
-    if (!MP || !Array.isArray(MP.items)) return J({ query: q, error: ["the Buy data (KV img_map_prices) is not on file"] }, 503);
+    if (!MP || !Array.isArray(MP.items)) return J({ query: q, error: [owner ? "the Buy data (KV img_map_prices) is not on file" : "Sales figures are not available right now. Please try again shortly."] }, 503);
     const pre = buyPrelim(MP, q, beds);
     warm(pre.map((p) => p.it.d));
     await loadCards(pre.map((p) => p.it.d));
-    const r = buyCandidates(pre, cards, q); cands = r.cands; hiddenBelow = r.hidden;
+    const r = buyCandidates(pre, cards, q); cands = r.cands; hiddenBelow = r.hidden; diag.thin = r.thin; diag.noCount = r.noCount; diag.noCard = r.noCard; diag.noData = q.areas.filter((a) => !MP.items.some((it) => it.d === a && it.i != null && it.i >= 0));
+    if (q.areas.some((a) => EXTRA_AREAS[a])) notes.push("Arabian Ranches buy: the Land Department does register villa and townhouse sales in Wadi Al Safa 5, 6 and 7, but the Brief holds no unit-mix cards for them (they are not among its districts), so it cannot answer. Caveats for when they are added: the register leaves bedrooms blank for Casa, Lila, Palma, Rasha, Samara, Azalea, Rosa, Yasmin, Alvorada, Aseel and La Avenida; about 10,000 older Arabian Ranches 1 sales carry no project name; a villa's area in the register is its plot size, so a price per sq ft there is per sq ft of plot.");
     as_of = String(MP.generated || "").slice(0, 10) || null; source = "KV img_map_prices (what the map's Buy mode shows) + img_unitmix_<district> (per-bedroom sale medians and counts)";
     notes.push("Buy figures are DLD registered sale medians per bedroom count over the building's whole sales record (the dates shown are the first and last sale of any type) - what homes here sold for, NOT what is for sale now.");
     notes.push("The Buy data has no middle half (q1, q3) and no new-versus-resale split: those fields are null. A developer's asking price and a size-based estimate are never used.");
@@ -903,5 +938,8 @@ export async function briefSearch(env, sp, opts) {
     comparison = compareAreas({ q, RI, kept, cards, AM, DG, DN });
     notes.push("comparison: one column per area. Each cell is answered (v true) or not known (v null), with its source; a count of none found is never a no. Typical rents are the whole Land Department area's, named projects or not.");
   }
-  return J({ query: q, as_of, source, ...extra, total_matched: kept.length, counts, ...(comparison ? { comparison } : {}), results, notes });
+  // v309 - what a person sees: a short plain summary and, when nothing matched, the reasons and one next step. The technical notes and the
+  // internal source name are OWNER ONLY (the page shows them under "Details for the team"); a client key never receives them.
+  const plain = plainOf({ q, as_of, hiddenBelow, thin: diag.thin + diag.noCount + diag.noCard, droppedByMust, noData: diag.noData, DN, shown: kept.length, comparison: !!comparison, market: diag.market });
+  return J({ query: q, as_of, source: owner ? source : null, ...extra, total_matched: kept.length, counts, ...(comparison ? { comparison } : {}), results, summary: plain.summary, ...(plain.empty ? { empty: plain.empty } : {}), notes: owner ? notes : [] });
 }
