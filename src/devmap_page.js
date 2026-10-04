@@ -35,6 +35,8 @@ export function cleanShortlist(devs) {
 export async function devmapRoutes(request, env, url, deps) {
   const p = url.pathname;
   if (p !== "/developers_map" && p !== "/developers_map_api") return null;
+  const isShortlistPost = p === "/developers_map_api" && url.searchParams.get("what") === "shortlist" && request.method === "POST";
+  if (request.method !== "GET" && !isShortlistPost) return new Response("method", { status: 405 });   // before the key: a client key on a POST gets exactly what no key gets (v156); the one write is the shortlist
   if (!deps.clientOk(env, url)) return new Response("not authorised", { status: 401, headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" } });
   const key = url.searchParams.get("key") || "";
   if (p === "/developers_map") {

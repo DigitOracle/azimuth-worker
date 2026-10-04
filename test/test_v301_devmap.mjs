@@ -141,6 +141,8 @@ r = await call("/developers_map_api?what=index");
 ok(r.status === 401, "/developers_map_api with no key: 401");
 r = await call("/developers_map_api?what=shortlist", { method: "POST", body: JSON.stringify({ devs: ["alpha"] }) });
 ok(r.status === 401 && ![...store.keys()].some((k) => k.startsWith("devmap_shortlist_")), "a POST with no key: 401 and nothing written");
+r = await call("/developers_map?key=" + CLIENT, { method: "POST", body: "{}" });
+ok(r.status === 405, "the page itself takes GET only (a POST is 405 before any key)");
 r = await call("/developers_map?key=" + CLIENT);
 const html = await r.text();
 ok(r.status === 200 && /text\/html/.test(r.headers.get("Content-Type") || ""), "/developers_map opens with the normal CLIENT key (it is Land Department data, like /brief)");
