@@ -22,7 +22,7 @@ import { checklistRoutes } from "./checklist.js";   // v291 CHECKLIST - owner-on
 import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief_pdf documents and the /brief_blocks LOD 100 view (all logic in the module)
 import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_ejari.js";
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
-import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitCaptionIsFood } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
+import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitCaptionIsFood, fitGuest } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -3591,6 +3591,7 @@ async function appFetch(request, env, ctx) {
         }
         if (!msg) return new Response("ok");                           // v133 - a receipt: recorded above, nothing more to do
         if (env.WA_ALLOWED && from !== env.WA_ALLOWED) {                       // only you can drive it
+          if (_viaForward && await fitGuest(env, from, msg, fitDeps())) return new Response("ok");   // v334 - MOMO: a person in FIT_USERS whose number lives on the other instance may send Momo messages, forwarded with the shared secret; nothing else of Azimuth opens to them
           try { await env.MEETINGS.put("diag_lastdrop", JSON.stringify({ from: String(from), phone_number_id: (val && val.metadata && val.metadata.phone_number_id) || null, display_phone_number: (val && val.metadata && val.metadata.display_phone_number) || null, type: msg.type || null, at: new Date().toISOString(), had_route_key: !!env["WA_ROUTE_" + String(from).replace(/[^0-9]/g, "")], via_forward: !!_viaForward }), { expirationTtl: 86400 }); } catch (e) {}
           return new Response("ok");
         }
@@ -12080,7 +12081,7 @@ async function fitBusy(env, from) {
 }
 // v328 FIT - what src/fit.js needs from this file (it imports nothing from here). Called per use, never cached across requests.
 function fitDeps() {
-  return { keyTier, najNav, NAJ_NAV_CSS, NAJ_FONTS, claudeJSON, CLAUDE_FAST, CLAUDE_SMART, b64of, waSend, waSendButtons, waSendTemplate, waFetchMedia, ownerWindowOpen };
+  return { keyTier, najNav, NAJ_NAV_CSS, NAJ_FONTS, claudeJSON, CLAUDE_FAST, CLAUDE_SMART, b64of, waSend, waSendButtons, waSendTemplate, waFetchMedia, waTranscribe, readPhoto, ownerWindowOpen };
 }
 async function residentsRoute(env, url) {
   const rk = residentsKeyOf(env, url);

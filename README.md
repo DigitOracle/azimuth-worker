@@ -54,6 +54,9 @@ GST verdict. No calories, no macros. Photos are read once and never stored. All 
 from `assets/fit/*.jpg|png` - the Motion logo (banner), the page icon and four Pexels photos (credits and licence terms: `assets/fit/CREDITS.md`).
 - **Owner only.** `/fit`, `/fit_api` and `/fit_img/` answer 404 to anything but READ_KEY. Najjuko and Kendall use the same START link at the owner tier today, so both see
   the MOMO tab. **If a client key is ever turned on for her, MOMO disappears for her by design** (health data never opens on a client link; the tab is stripped from client pages).
+- **Your own number (Kendall).** meeting-capture holds his number and forwards ONLY his Momo messages here over the same service binding and secret it already uses for hers (a message starting `momo` or `fit`, `food:` / `gym:` / `ex:` prefixes, a plain `12000 steps`,
+  a photo captioned `lunch`/`food`, a voice note that opens with `momo`, and the Undo buttons). `azimuth-2` takes them through `fitGuest` (src/fit.js): the shared secret must verify, the sender must be a person in `FIT_USERS`, and only Momo is handled - never a task, meeting,
+  calendar or board; anything else gets one line saying so. Because his messages arrive here, the 21:00 verdict can also go to him while his own 24-hour window (his last Momo message) is open.
 - **Two people, one instance.** `FIT_USERS` in `[env.azimuth2.vars]` (`id:WhatsApp number:name shown on the page`; the page says "Dr. Doli" and "Black Coffee", the stored log is keyed by the id, so renaming never moves a log) keeps a separate log, plan and target per person; the page has a "Whose log"
   switch for whoever holds the owner link, so either of them can open the other's. Remove the var and it runs as one person on WA_ALLOWED.
 - **The 21:00 verdict** goes only to the number the instance talks to (hers). It is sent only while her 24-hour window is open; with `LOG_NUDGE_TEMPLATE` set it falls

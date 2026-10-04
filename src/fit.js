@@ -688,6 +688,39 @@ export async function fitPhotoRead(env, from, rd, cap, deps) {
   return true;
 }
 
+// ---- a guest: someone in FIT_USERS who is NOT this instance's owner --------------------------------------------------------
+// Kendall's number belongs to the older instance (meeting-capture), which forwards ONLY his Momo messages here, exactly as it forwards Najjuko's
+// to azimuth-2. The caller has already verified the forward secret. This door takes a sender who is in FIT_USERS with that number and nobody else,
+// handles Momo (text, a voice note, a photo, an Undo button) and NOTHING ELSE of Azimuth: no tasks, no meetings, no calendar, no board.
+// It also notes when he last wrote, so the 21:00 verdict may go to him while his 24-hour window is open. Returns true when it took the message.
+const recentIn = async (env, u) => { try { const t = await env.MEETINGS.get("fitc_in_" + u); return !!t && Date.now() - Date.parse(t) < 23 * 3600 * 1000; } catch (e) { return false; } };
+export async function fitGuest(env, from, msg, deps) {
+  const d = String(from || "").replace(/\D/g, ""), person = fitUsers(env).find((x) => x.wa && x.wa === d);
+  if (!person || !msg) return false;
+  if (msg.id) { const k = "wamsg_" + msg.id; if (await env.MEETINGS.get(k)) return true; await env.MEETINGS.put(k, "1", { expirationTtl: 3 * 86400 }); }
+  const rule = "Momo handles food and exercise from this number. Try \"food: grilled chicken and rice\", \"gym 40 min\" or \"momo help\".";
+  let text = "";
+  if (msg.type === "interactive" && msg.interactive && msg.interactive.button_reply) {
+    const bid = String(msg.interactive.button_reply.id || "");
+    if (bid.indexOf("fit:") !== 0) return false;
+    await env.MEETINGS.put("fitc_in_" + person.id, new Date().toISOString(), { expirationTtl: 3 * 86400 });
+    return fitButton(env, from, bid, deps);
+  }
+  if (msg.type === "text" && msg.text) text = String(msg.text.body || "").trim();
+  else if (msg.type === "audio" && msg.audio && msg.audio.id && deps.waTranscribe) { try { text = await deps.waTranscribe(env, msg.audio.id); } catch (e) {} if (!text) { await reply(env, deps, from, "I could not read that voice note - try text."); return true; } }
+  else if (msg.type === "image" && msg.image && msg.image.id) {
+    await env.MEETINGS.put("fitc_in_" + person.id, new Date().toISOString(), { expirationTtl: 3 * 86400 });
+    const cap = String(msg.image.caption || "").trim();
+    if (await fitPhotoCaptioned(env, from, msg.image.id, cap, deps)) return true;
+    try { const m = await deps.waFetchMedia(env, msg.image.id); if (m.bytes.byteLength <= 4 * 1024 * 1024 && deps.readPhoto) { const rd = await deps.readPhoto(env, m.bytes, m.mime, cap); if (await fitPhotoRead(env, from, rd, cap, deps)) return true; } } catch (e) {}
+    await reply(env, deps, from, "That did not look like a meal. Add a caption like \"lunch\", or say it: \"food: grilled chicken and rice\"."); return true;
+  } else return false;
+  if (!text) return false;
+  await env.MEETINGS.put("fitc_in_" + person.id, new Date().toISOString(), { expirationTtl: 3 * 86400 });
+  if (!(await fitWhatsAppText(env, from, text, deps))) await reply(env, deps, from, rule);
+  return true;
+}
+
 // ---- WhatsApp: buttons ------------------------------------------------------------------------------------------------
 export async function fitButton(env, from, bid, deps) {
   bid = String(bid || "");
@@ -709,24 +742,26 @@ export async function fitEvening(env, deps, nowMs) {
   if (!env.WA_ALLOWED) return false;
   const mine = String(env.WA_ALLOWED).replace(/\D/g, ""); let sent = false;
   for (const user of fitUsers(env)) {
-    if (user.wa !== mine) continue;   // this instance can only speak to its own number: the others read their verdict on the page
-    if (await eveningFor(env, deps, nowMs, user.id)) sent = true;
+    // the owner of this instance: its own 24-hour window. A forwarded guest (Kendall): the window opened by his last Momo message, which arrived here.
+    // Anyone else reads their verdict on the page.
+    if (user.wa === mine) { if (await eveningFor(env, deps, nowMs, user.id, user.wa)) sent = true; }
+    else if (user.wa && await recentIn(env, user.id)) { if (await eveningFor(env, deps, nowMs, user.id, user.wa, true)) sent = true; }
   }
   return sent;
 }
-async function eveningFor(env, deps, nowMs, u) {
+async function eveningFor(env, deps, nowMs, u, to, guestWindowOpen) {
   const cfg = await fitCfg(env, u); if (!cfg.start) return false;
   const today = gstDate(nowMs); if (today < cfg.start) return false;
   const end = addDays(cfg.start, cfg.days - 1); if (today > end) return false;
   // the window check comes BEFORE the once-a-day flag: a closed window must not use up the day's verdict (the next cron tick tries again)
-  let open = false; try { open = deps.ownerWindowOpen ? await deps.ownerWindowOpen(env) : false; } catch (e) {}
+  let open = !!guestWindowOpen; if (!guestWindowOpen) { try { open = deps.ownerWindowOpen ? await deps.ownerWindowOpen(env) : false; } catch (e) {} }
   if (!open) {
     // The 24-hour window is shut. The verdict itself never goes out as a template (it waits on the page). The approved no-variable nudge
     // (LOG_NUDGE_TEMPLATE, off until Meta approves it) may: once a day, and only if nothing has been logged yet today.
     if (env.LOG_NUDGE_TEMPLATE && deps.waSendTemplate) {
       const first = await fitSummary(env, today, cfg, today);
       if (!first.entries.length && await flagOnce(env, "fitc_nudge_" + u + "_" + today)) {
-        try { await deps.waSendTemplate(env, env.WA_ALLOWED, env.LOG_NUDGE_TEMPLATE, env.LOG_NUDGE_LANG || "en_US", []); } catch (e) {}
+        try { await deps.waSendTemplate(env, to || env.WA_ALLOWED, env.LOG_NUDGE_TEMPLATE, env.LOG_NUDGE_LANG || "en_US", []); } catch (e) {}
         return true;
       }
     }
@@ -749,7 +784,7 @@ async function eveningFor(env, deps, nowMs, u) {
   try { await env.MEETINGS.put("fitc_lastsent_" + u, today, { expirationTtl: 30 * 86400 }); } catch (e) {}
   const buttons = [];
   if (today === end) { L.push("", "🏁 Challenge complete: " + ch.hit + " of " + cfg.days + " days hit. Extend it?"); buttons.push({ id: "fit:extend", title: "➕ Extend 30 days" }); }
-  await reply(env, deps, env.WA_ALLOWED, L.join("\n"), buttons);
+  await reply(env, deps, to || env.WA_ALLOWED, L.join("\n"), buttons);
   return true;
 }
 
