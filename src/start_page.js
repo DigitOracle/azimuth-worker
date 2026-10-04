@@ -6,6 +6,7 @@
 // v279: the two placeholders are replaced by the real cards (src/ejari_page.js ejariStartCard, src/supply_page.js supplyStartCard).
 import { ejariStartCard, EJARI_START_CSS } from "./ejari_page.js";     // v279 CONTRACTS SIGNED - the real card
 import { supplyStartCard, SUPPLY_START_CSS } from "./supply_page.js";   // v279 ADVERTISED SUPPLY - the real card, owner only
+import { devmapStartCard } from "./devmap_page.js";   // v301 DEVELOPERS BY AREA - the card
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function greeting(isOwner) {
@@ -34,6 +35,9 @@ export function startBody(key, rk, isOwner) {
     // v279 - the real cards in place of the v278.1 placeholders (all their logic in src/ejari_page.js and src/supply_page.js)
     + '<div class=tag>CONTRACTS SIGNED · EJARI <i></i></div>'
     + ejariStartCard(key, rk)
+    // v301 - developers by area (Land Department register only, so it opens on the normal client key)
+    + '<div class=tag>DEVELOPERS BY AREA <i></i></div>'
+    + devmapStartCard(key)
     + (isOwner === true   // ADVERTISED SUPPLY: the owner key only - adverts data never reaches a client (standing rule); fails closed
       ? '<div class=tag>ADVERTISED SUPPLY <i></i></div>' + supplyStartCard(key)
         // v292 (Kendall: "this should be the normal link, I don't want multiple"): the DAMAC Hills checklist opens from START, owner only

@@ -7,6 +7,7 @@ import { worldBackdrops, worldBackdrop, worldPlatePrompt, worldScenePrompt, worl
 import { briefRoutes, briefStartCard, BRIEF_START_CSS } from "./brief_page.js";
 import { startBody, START_CSS } from "./start_page.js";   // v278.1 - START redesign: the Brief, Contracts signed, Advertised supply (owner only)   // THE BRIEF (part B, 30 Sep 2026; v277 two-button 00 card) - the /brief screens and the 00 way in on /start
 import { ejariRoutes } from "./ejari_page.js";   // v279 CONTRACTS SIGNED (Ejari) - /contracts and /contracts_api; all logic in src/ejari_page.js (its START card is drawn by src/start_page.js)
+import { devmapRoutes } from "./devmap_page.js";   // v301 DEVELOPERS BY AREA
 import { supplyRoutes, pollerRoutes } from "./supply_page.js";   // v279 ADVERTISED SUPPLY - owner only: /supply*, and /pf_queue + /pf_status for the laptop poller; all logic in src/supply_page.js
 import { findItem as briefFindItem } from "./brief_docs.js";   // v277 - the building page's dossier button goes to /brief_pdf: this says whether the rent index knows the building
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
@@ -1994,6 +1995,8 @@ async function appFetch(request, env, ctx) {
     // ---- v279 CONTRACTS SIGNED (Ejari, Kendall 1 Oct 2026): GET /contracts and /contracts_api. All logic in src/ejari_page.js. ----
     // After the client gate (both are in CLIENT_PATHS); ejariRoutes applies clientOk itself and only ever READS KV.
     if (url.pathname === "/contracts" || url.pathname === "/contracts_api") { const _ej = await ejariRoutes(request, env, url, { clientOk, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_ej) return _ej; }
+    // v301 - developers by area: Land Department register data only, so a client key opens it (both paths are in CLIENT_PATHS); devmapRoutes applies clientOk itself and 401s anything else.
+    if (url.pathname === "/developers_map" || url.pathname === "/developers_map_api") { const _dm = await devmapRoutes(request, env, url, { clientOk, keyTier, clientResp, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_dm) return _dm; }
     // ---- end CONTRACTS SIGNED ----
     // ---- v279 ADVERTISED SUPPLY poller: GET /pf_queue, POST /pf_status for the office laptop. X-Azimuth-Ingest header only (src/supply_page.js). ----
     if (url.pathname === "/pf_queue" || url.pathname === "/pf_status") { const _pq = await pollerRoutes(request, env, url, { ctEq }); if (_pq) return _pq; }
@@ -12016,7 +12019,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
+const CLIENT_PATHS = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
