@@ -363,7 +363,7 @@ export function shortName(name, max) {
 }
 function devLine(C, d) {
   const prj = ((C.area.devs[d.k] || {}).b || []).length;
-  return '<div class="dl"><span class="st">' + (C.mine[d.k] ? icon("star", 11, GOLDI) : "") + '</span><span class="dn2">' + esc(shortName(d.name, 34)) + "</span><span>" + aed(d.medianSqft) + " per sq ft</span><span>" + plural(d.n, "sale") + "</span><span>" + (prj ? plural(prj, "project") : "") + "</span></div>" + (qWords(C.area.devs[d.k]) ? '<div class="qn2">' + esc(shortName(d.name, 30)) + ": " + qWords(C.area.devs[d.k]) + "</div>" : "");
+  return '<div class="dl"><span class="st">' + (C.mine[d.k] ? icon("star", 11, GOLDI) : "") + '</span><span class="dn2">' + esc(shortName(d.name, 24)) + "</span><span>" + aed(d.medianSqft) + " per sq ft</span><span>" + plural(d.n, "sale") + "</span><span>" + (prj ? plural(prj, "project") : "") + "</span></div>" + (qWords(C.area.devs[d.k]) ? '<div class="qn2">' + esc(shortName(d.name, 24)) + ": " + qWords(C.area.devs[d.k]) + "</div>" : "");
 }
 
 function bandCard(C, t, lineCap) {
@@ -439,6 +439,19 @@ function devBlock(C, d, peers) {
   return { html, h: 30 + 82 + 12 + pj.lines * LH + (pj.lines ? 14 : 0) + 6 };
 }
 
+function compactDev(C, d) {
+  const q = qWords(C.area.devs[d.k]), prof = DM.devProfile(C.ix, d.k), dn = donut(d.tierShare, 40);
+  const html = '<div class="db" style="padding:6px 10px"><div style="display:flex;gap:10px;align-items:center">' + dn.svg + '<div><div class="dbn">' + (C.mine[d.k] ? icon("star", 12, GOLDI) + " " : "") + esc(shortName(d.name, 40)) + '</div><div class="dbm">' + aed(d.medianSqft) + " per sq ft &middot; " + plural(d.n, "sale") + (prof.projects ? " &middot; " + plural(prof.projects, "project") : "") + (q ? " &middot; " + q : "") + "</div></div></div></div>";
+  return { html, h: 58 };
+}
+function denseList(C, devs, title, cont) {
+  const per = 3 * 40, out = [];
+  for (let i = 0; i < devs.length; i += per) {
+    const ch = devs.slice(i, i + per), cols = [0, 1, 2].map((c) => ch.slice(c * 40, c * 40 + 40).map((d) => '<div class="ul"><span class="sp"></span><span class="un">' + esc(shortName(d.name, 24)) + (qWords(C.area.devs[d.k]) ? ' <i class="qn">(by project name)</i>' : "") + '</span><span class="uv">' + aed(d.medianSqft) + " &middot; " + d.n + "</span></div>").join(""));
+    out.push({ h: 40 + Math.ceil(ch.length / 3) * 17, html: '<div class="otl"><div class="otlh">' + (i === 0 ? title : title + " (continued)") + '</div><div class="ulg">' + cols.map((c) => '<div class="ulc">' + c + "</div>").join("") + "</div></div>" });
+  }
+  return out;
+}
 function otherRows(C, devs) {
   if (!devs.length) return null;
   const rows = devs.map((d) => '<tr><td>' + esc(shortName(d.name, 44)) + (qWords(C.area.devs[d.k]) ? ' <span class="qn">' + qWords(C.area.devs[d.k]) + "</span>" : "") + "</td><td class=\"r\">" + aed(d.medianSqft) + "</td><td class=\"r\">" + fmt(d.n) + "</td><td class=\"r\">" + (((C.area.devs[d.k] || {}).b || []).length || "") + "</td></tr>");
@@ -446,7 +459,7 @@ function otherRows(C, devs) {
 }
 
 function bandSections(C) {
-  const blocks = [], peers = C.st.tiers.flatMap((t) => t.devs);
+  const blocks = [], peers = C.st.tiers.flatMap((t) => t.devs), nChosen = peers.filter((d) => C.mine[d.k]).length;
   for (let t = 0; t < 4; t++) {
     const tr = C.st.tiers[t], B = BAND[t];
     if (!tr.devs.length) continue;
@@ -455,16 +468,10 @@ function bandSections(C) {
     const rest = devs.filter((d) => !full.includes(d));
     const sub = "Developers by price band";
     blocks.push({ sub, h: 70, keep: true, html: '<div class="bsh" style="border-left:5px solid ' + B.fill + ";background:" + B.tint + '">' + icon("stack", 22, B.ink) + '<div><div class="serif sech" style="color:' + B.ink + '">' + B.name + "</div><div class=\"secs\">" + esc(bandRange(t, C.st.bounds)) + " &middot; " + C.st.mixN[t] + "% of sales and " + C.st.mixValue[t] + "% of the money here &middot; " + plural(tr.devs.length, "developer") + ". Price bands describe homes, not developers.</div></div></div>" });
-    for (const d of full) { const b = devBlock(C, d, peers); blocks.push({ sub, h: b.h, html: b.html }); }
-    if (rest.length) {
-      const per = 26;
-      for (let i = 0; i < rest.length; i += per) {
-        const chunk = rest.slice(i, i + per);
-        blocks.push({ sub, h: 36 + chunk.length * 17, html: '<div class="otl"><div class="otlh">' + (i === 0 ? "Other developers in the " + B.name.toLowerCase() + " here" : "Other developers in the " + B.name.toLowerCase() + " here (continued)") + '</div><table class="tb"><thead><tr><th>Developer</th><th class="r">Median per sq ft</th><th class="r">Sales</th><th class="r">Projects</th></tr></thead><tbody>' + otherRows(C, chunk).join("") + "</tbody></table></div>" });
-      }
-    }
+    for (const d of full) { const b = nChosen > 3 ? compactDev(C, d) : devBlock(C, d, peers); blocks.push({ sub, h: b.h, html: b.html }); }
+    if (rest.length) for (const x of denseList(C, rest, "Other developers in the " + B.name.toLowerCase() + " here (name, median per sq ft, sales)")) blocks.push({ sub, h: x.h, html: x.html });
   }
-  if (C.st.notEnough.length) blocks.push({ sub: "Developers by price band", h: 24 + Math.ceil(C.st.notEnough.reduce((a, d) => a + d.name.length + 8, 0) / 115) * 14, html: '<div class="more">Developers with fewer than 3 sales here, so no price: ' + C.st.notEnough.map((d) => esc(d.name) + " (" + d.n + ")").join(", ") + ".</div>" });
+  if (C.st.notEnough.length) blocks.push({ sub: "Developers by price band", h: 24 + Math.ceil(Math.min(C.st.notEnough.length, 60) * 28 / 115) * 14, html: '<div class="more">Developers with fewer than 3 sales here, so no price: ' + C.st.notEnough.slice(0, 60).map((d) => esc(shortName(d.name, 28)) + " (" + d.n + ")").join(", ") + (C.st.notEnough.length > 60 ? " and " + (C.st.notEnough.length - 60) + " more" : "") + ".</div>" });
   return blocks;
 }
 
@@ -527,6 +534,28 @@ function developerMaps(C, M, chosen) {
 }
 
 // the developer profile pages (the page's own profile, in print)
+function compactProfile(C, M, chosen) {
+  const blocks = [], ix = C.ix;
+  for (const d of chosen) {
+    const k = d.k, p = DM.devProfile(ix, k), f = DM.devFactors(ix, k), tp = DM.talkingPoint(ix, k, "sqft");
+    if (!p.areas) continue;
+    const sub = "Developer profile &middot; " + esc(p.name), nm = esc(p.name);
+    const dn = donut(p.basis === "projects" ? p.mixProjects : p.mixSales, 70);
+    const market = p.market >= 0 ? '<div class="card2"><div class="ck">Market view</div><div class="cv" style="font-size:15px">' + esc(DM.brandLabel(p.market)) + "</div></div>" : "";
+    const where = '<div class="card2" style="flex:1"><div class="ck">Where its projects sit on price</div><div class="cv" style="font-size:13px">' + esc(DM.dataLine(p)) + '</div><div class="dnw" style="margin-top:4px">' + dn.svg + '<div class="lgs">' + dn.legend + "</div></div></div>";
+    const q = qWords(C.area.devs[k]);
+    const rows = []; const row = (name, txt) => rows.push('<div class="fr"><b>' + name + "</b><span>" + txt + "</span></div>");
+    const pl = f.priceLevel, iv = f.inventory, um = f.unitMix;
+    if (pl) row("Price level", "Median " + aed(pl.medianSqft) + " per sq ft, " + Math.abs(Math.round(100 * (pl.ratio - 1))) + "% " + (pl.ratio >= 1 ? "above" : "below") + " the Dubai-wide median of " + aed(pl.dubaiSqft) + ".");
+    if (iv) row("Inventory and scale", iv.projects != null ? plural(iv.projects, "project") + ", " + plural(iv.sales, "settled sale") + ", " + plural(iv.areas, "area") + "." : plural(iv.sales, "settled sale") + " in " + plural(iv.areas, "area") + ".");
+    if (um) row("Unit mix", um.studioOne + "% studios and one-bedrooms, " + um.shares[2] + "% two-bedrooms, " + um.shares[3] + "% three bedrooms or more.");
+    const prs = projectsOf(C).filter((x) => x.k === k).sort((a, b) => b.n - a.n), top = prs.slice(0, 6);
+    const tbl = top.length ? '<table class="tb"><thead><tr><th>Project here</th><th class="r">Median per sq ft</th><th class="r">Sales</th><th>Price band</th></tr></thead><tbody>' + top.map((x) => "<tr><td>" + esc(x.name || "Unnamed project") + '</td><td class="r">' + (x.enough ? aed(x.ppsm / SQFT) : "") + '</td><td class="r">' + fmt(x.n) + "</td><td>" + (x.tier >= 0 ? '<span class="bd" style="background:' + BAND[x.tier].tint + ";color:" + BAND[x.tier].ink + '">' + BAND[x.tier].name + "</span>" : "") + "</td></tr>").join("") + "</tbody></table>" + (prs.length > top.length ? '<div class="more">and ' + plural(prs.length - top.length, "more project") + " here</div>" : "") : "";
+    blocks.push({ sub, h: 600, html: '<div class="pf">' + icon("buildings", 24, TEAL) + '<div><h2 class="serif">' + nm + '</h2><div class="tsub">Developer profile &middot; ' + esc(C.winText) + (q ? " &middot; " + q : "") + '</div></div></div><div class="two">' + market + where + "</div>" +
+      (rows.length ? '<div class="frs">' + rows.join("") + "</div>" : "") + tbl + '<div class="tpb">' + tp.lines.slice(0, 2).map((l) => "<p>" + esc(l) + "</p>").join("") + "</div>" });
+  }
+  return blocks;
+}
 function profileBlocks(C, chosen) {
   const blocks = [], bounds = C.st.bounds, ix = C.ix;
   for (const d of chosen) {
@@ -613,8 +642,8 @@ const EXTRA_CSS = `
   .bcp b { font-size:10.2px; font-weight:600; white-space:nowrap; }
   .bcs { font-size:10px; color:#3d4249; border-top:1px solid rgba(0,0,0,0.08); padding-top:5px; }
   .bcl { display:flex; flex-direction:column; border-top:1px solid rgba(0,0,0,0.08); }
-  .dl { display:grid; grid-template-columns:12px minmax(0,1fr) 92px 52px 62px; gap:4px; align-items:center; font-size:9.2px; padding:2.2px 0; border-bottom:1px solid rgba(0,0,0,0.05); line-height:1.25; }
-  .dl span { white-space:nowrap; } .dl .dn2 { overflow:hidden; text-overflow:ellipsis; font-weight:500; font-size:9.6px; }
+  .dl { display:grid; grid-template-columns:12px minmax(0,1fr) 84px 44px 54px; gap:4px; align-items:center; font-size:9.2px; padding:2.2px 0; border-bottom:1px solid rgba(0,0,0,0.05); line-height:1.25; }
+  .dl span { white-space:nowrap; } .dl .dn2 { white-space:normal; overflow-wrap:break-word; font-weight:500; font-size:9.6px; line-height:1.15; }
   .dl .st { display:flex; align-items:center; }
   .qn, .qn2 { color:${MUTED}; font-size:8.4px; font-style:italic; } .qn2 { padding:0 0 2px 16px; line-height:1.2; border-bottom:1px solid rgba(0,0,0,0.05); }
   .more { font-size:9.6px; color:${MUTED}; margin-top:3px; }
@@ -645,7 +674,7 @@ const EXTRA_CSS = `
   .mapbox { border:1px solid ${HAIR}; background:${MAPC.BG}; } .mkey { display:flex; flex-wrap:wrap; gap:4px 16px; } .mnote { font-size:9.6px; color:${MUTED}; line-height:1.4; }
   .ulg { display:grid; grid-template-columns:1fr 1fr 1fr; gap:0 16px; }
   .ul { display:grid; grid-template-columns:11px minmax(0,1fr) auto; gap:4px; font-size:8.6px; line-height:1.25; padding:1.6px 0; border-bottom:1px solid ${HAIR}; align-items:center; }
-  .ul .sp { width:9px; display:block; } .ul .uv { color:${MUTED}; white-space:nowrap; font-size:8.2px; } .ul .un { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ul .sp { width:9px; display:block; } .ul .uv { color:${MUTED}; white-space:nowrap; font-size:8.2px; } .ul .un { white-space:normal; overflow-wrap:break-word; }
   .pf { display:flex; gap:12px; align-items:center; padding-bottom:8px; border-bottom:1px solid ${GOLDI}; }
   .two { display:flex; gap:12px; align-items:stretch; }
   .card2 { border:1px solid ${HAIR}; background:#fff; padding:10px 14px; display:flex; flex-direction:column; gap:3px; min-width:0; }
@@ -666,6 +695,7 @@ function pageHtml(C, pg, i, total) {
 
 // the page-packer: blocks carry an estimated height (px); a page holds PAGE_H of them
 export const PAGE_H = 830;
+export const PDF_PAGE_TARGET = 12;
 export function pack(blocks) {
   const pages = []; let cur = null;
   for (let i = 0; i < blocks.length; i++) {
@@ -689,10 +719,12 @@ export async function buildAreaPdf(env, p, opts) {
     const blocks = bandSections(C);
     const M = await loadMapData(env, C);
     for (const pg of pack(blocks)) pages.push(pg);
-    for (const m of mapPages(C, M)) pages.push({ sub: m.sub, html: m.html });
-    for (const m of developerMaps(C, M, chosen)) pages.push({ sub: m.sub, html: m.html });
-    const prof = profileBlocks(C, chosen);
-    for (const pg of pack(prof)) pages.push(pg);
+    // v327 - about 12 pages at most: the area map and ONE page of projects not yet on the map, then the full treatment (map, profile) for the chosen developers while it fits,
+    // otherwise one page each for the chosen developers (the others stay in the compact lists above)
+    const mp0 = mapPages(C, M); for (const m of mp0.slice(0, 2)) pages.push({ sub: m.sub, html: m.html });
+    const dm = developerMaps(C, M, chosen), pf = pack(profileBlocks(C, chosen));
+    if (pages.length + 1 + dm.length + pf.length <= PDF_PAGE_TARGET) { for (const m of dm) pages.push({ sub: m.sub, html: m.html }); for (const pg of pf) pages.push(pg); }
+    else for (const pg of pack(compactProfile(C, M, chosen))) pages.push(pg);
     for (const b of budgetPages(C)) pages.push({ sub: b.sub, html: b.html });
     const mp = methodPage(C); pages.push({ sub: mp.sub, html: mp.html });
   } else if (p.kind === "detailed") {

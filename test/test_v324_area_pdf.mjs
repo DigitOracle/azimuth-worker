@@ -88,7 +88,13 @@ console.log("snapshot content");
 
 console.log("detailed content");
 {
-  const h = docs["detailed:testvillagecircle:12m"].html;
+  // v327 - with ten developers chosen the document gives each ONE page (about 12 pages in all); with a few chosen it gives the full treatment
+  const ten = docs["detailed:testvillagecircle:12m"];
+  ok(ten.pages <= 13, "ten chosen developers: the detailed document stays at about 12 pages (" + ten.pages + ")");
+  ok(/Developer profile/.test(ten.html) && !/Where [A-Za-z]+ sits in/.test(text(ten.html).slice(0, 0)), "ten chosen developers: each still has a profile page");
+  const few = await build({ kind: "detailed", area: "testvillagecircle", window: "12m", budget: "1.2m-1.8m", beds: "1", developers: "imtiaz,damac" });
+  docs["detailed:testvillagecircle:12m"] = few;
+  const h = few.html;
   for (const t of ["Developers by price band", "The area map", "Where Imtiaz sits", "Developer profile", "Positioning evidence", "Price by area, highest to lowest", "Talking point", "How these numbers are worked out", "Your client&rsquo;s budget, by location", "Against the other developers here"]) ok(h.includes(t), "detailed has '" + t + "'");
   ok(/Registered here, no map position yet/.test(h) && h.includes("Never Mapped Place"), "a project with no building outline is listed as 'registered here, no map position yet', not dropped");
   ok(h.includes("Skyline One") && /<svg[^>]*aria-label="Map of Test Village Circle/.test(h), "projects with an outline are on the area map");
