@@ -36,7 +36,7 @@ ok(/in every 100 Dubai sales are in this price band/.test(js) && /together they 
 ok(/S\.unit==="sqft"\?"sqm":"sqft"/.test(js), "the band: the chosen unit first, the other smaller beneath");
 ok(/This view is not complete yet/.test(js) && /loaded for this area so far \(the register holds many more\)/.test(js), "a thin area says only N sales are loaded and the view is not complete");
 ok(/thin\|\|mineHides\?'':filtered\?'<p class=note>None of your developers/.test(js) && /No developer with 3\+ sales sits in this price band here/.test(js), "the per-tier empty line is not shown for a thin area or when my-developers hides everyone; with the filter on it is the plain 'None of your developers' wording");
-ok(/None of your '\+mineList\(\)\.length\+' have 3 or more recorded sales here yet/.test(js) && /id=showall>Show all developers here/.test(js) && /showall/.test(js.split("showall").slice(-1)[0] === "" ? "" : js), "'None of your ten have 3 or more recorded sales here yet' with a one-tap 'Show all developers here' link");
+ok(/None of your '\+mineList\(\)\.length\+' have 3 or more recorded sales here yet/.test(js) && /id=showall class=golink>Show all developers here/.test(js) && /showall/.test(js.split("showall").slice(-1)[0] === "" ? "" : js), "'None of your ten have 3 or more recorded sales here yet' with a one-tap 'Show all developers here' link");
 ok(/\(t\.nDevs\|\|!\(thin\|\|mineHides\|\|filtered/.test(js), "a tier header never prints a bare '0 developers' for a data gap");
 ok(!/sales with the developer not recorded'/.test(js), "the old 'with the developer not recorded' wording is replaced");
 
@@ -44,7 +44,7 @@ console.log("C - Majan sense checks and developer chips");
 ok(Array.isArray(st.unknownTier) && st.unknownTier.reduce((a, b) => a + b, 0) === 17 && st.unknownTier[1] === 17, "unknownTier: the 17 sales with no developer sit in LUXURY (28,000 per sq m), for the plain-words tier line", JSON.stringify(st.unknownTier));
 ok(/Sales in this price band \('\+fmt\(st\.unknownTier\[t\.tier\]\)\+'\) have no developer recorded/.test(js), "a tier with sales but no developer recorded says 'Sales in this tier (N) have no developer recorded'");
 ok(/of about '\+fmt\(reg\)\+' settled sales in this area are loaded/.test(js) && /register_sales_all_time/.test(js), "loaded vs real: 'X of about Y settled sales in this area are loaded' from area.register_sales_all_time");
-ok(/ here<\/b>; '\+\(st\.devCount-shown\)\+' other developer/.test(js) && /hidden by your filter\. <a href="#" id=showall>Show all developers here/.test(js), "header vs list: 'N of your M here; K other developers hidden by your filter' with the show-all link");
+ok(/ here<\/b>; '\+\(st\.devCount-shown\)\+' other developer/.test(js) && /hidden by your filter\. <a href="#" id=showall class=golink>Show all developers here/.test(js), "header vs list: 'N of your M here; K other developers hidden by your filter' with the show-all link");
 ok(/None of your developers have 3 or more sales in this price band here/.test(js), "with only-my-developers on, an empty tier says 'None of your developers have 3 or more sales in this tier here'");
 ok(/function donut\(ts[,)]/.test(js) && /<svg width=48 height=48/.test(js) && /\.dn\{grid-column/.test(html), "v318: each developer row carries an inline SVG doughnut of its sales split across tiers");
 ok(!/class=tcs/.test(js) && !/class=tc /.test(js), "v318: the tier pills (class tcs / tc) are gone from the row");
