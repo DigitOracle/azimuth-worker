@@ -48,7 +48,8 @@ import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailF
 // and the documents can never disagree. A document is a client document: the search is run with owner: false, and nothing here ever
 // prints a listing-site (portal) figure - furnishing is "not known" on every page.
 import { applyAnchorOverrides, applyBrokerFacts, brokerFor, ownPhotoFor, PHOTO_CREDIT, longDate } from "./checklist_data.js";   // v291 CHECKLIST - the owner's on-site corrections (map, broker facts, own photos)
-import { amenIndex, amenFor, briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent } from "./brief.js";
+import { canonicalOf, displayOf, resolve as devResolve, isCurated } from "./devcross.js";   // v306 - the developer's canonical name
+import { amenIndex, amenFor, briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent, ratingOf, EVIDENCE_MIN } from "./brief.js";
 // v277 (Kendall, 1 Oct 2026): the register "left" estimate is OFF the client face - no "ESTIMATED ... LEFT" box on page 2, no
 // "Still filling" line on the one-sheet card. estimateLeft() stays in src/brief.js and the API still returns estimated_left; nothing
 // here prints it. In its place page 2 carries DEVELOPER AVAILABILITY where a developer's own sheet names the building (loadDevAvail /
@@ -169,11 +170,12 @@ function header(C, sub) {
     '<div style="display:flex;flex-direction:column;gap:4px;"><div class="lbl">' + sub + '</div>' +
     '<div style="font-size:12px;color:' + MUTED + ';">' + C.today + "</div></div>" + logo(C, 112) + "</div>";
 }
-function footer(small) {
+function footer(small, buy) {
   return '<div style="padding:8px 46px 16px 46px;display:flex;flex-direction:column;gap:6px;">' + (small || "") +
-    '<div style="font-size:10.5px;color:' + MUTED + ';line-height:1.35;">Availability, the rent and the actual flat must be ' +
+    '<div style="font-size:10.5px;color:' + MUTED + ';line-height:1.35;">' + (buy ? "Availability, the price and the actual home must be confirmed with the developer's sales team or the listing broker. " +
+    "Prices shown are sales recorded at the Land Department, not asking prices or an offer." : "Availability, the rent and the actual flat must be " +
     "confirmed with the building's leasing team or the listing broker. Rents shown are rents already agreed, " +
-    "not asking prices or an offer.</div>" +
+    "not asking prices or an offer.") + "</div>" +
     '<div style="height:1px;background:#DED9D0;margin-top:2px;"></div>' +
     '<div class="curator" style="display:flex;justify-content:center;align-items:center;gap:8px;font-size:12px;color:' + NAVY + ';' +
     'letter-spacing:.3px;">' + CURATOR + "</div></div>";
@@ -183,7 +185,7 @@ const smallPrint = (items) => '<div class="prov" style="display:flex;flex-direct
 function page(C, sub, body, small) {
   C.pages++;
   return '<div class="sheet page">' + header(C, sub) + '<div style="flex:1;display:flex;flex-direction:column;padding:16px 46px 0 46px;' +
-    'gap:12px;overflow:hidden;">' + body + "</div>" + footer(small) + "</div>";
+    'gap:12px;overflow:hidden;">' + body + "</div>" + footer(small, C.buy) + "</div>";
 }
 function tbl(head, rows) {
   const th = head.map(([al, t]) => '<th style="text-align:' + al + ';font-size:8.8px;font-weight:600;letter-spacing:.6px;color:#FBFAF7;padding:6px 5px;">' + t + "</th>").join("");
@@ -333,8 +335,10 @@ async function loadBrochure(env, it, recName) {
 
 export async function loadContext(env, q, opts) {
   const need = (opts && opts.need) || {};
-  const C = { today: todayLong(opts && opts.now), pages: 0, logo: (await kvDataUrl(env, HEADER_JPG_KEY, opts && opts.origin)) || (await kvDataUrl(env, HEADER_IMG_KEY, opts && opts.origin)), district: {}, recs: [], missing: [] };
+  const C = { buy: q.mode === "buy", noEvidence: [], today: todayLong(opts && opts.now), pages: 0, logo: (await kvDataUrl(env, HEADER_JPG_KEY, opts && opts.origin)) || (await kvDataUrl(env, HEADER_IMG_KEY, opts && opts.origin)), district: {}, recs: [], missing: [] };
   C.ri = await kvJson(env, "rent_index");
+  if (C.buy && !(C.ri && Array.isArray(C.ri.items))) C.ri = { items: [] };   // v306 - a purchase does not need the rent index
+  if (C.buy) { C.mp = await kvJsonGz(env, "map_prices").catch(() => null); C.dmIdx = await kvJsonGz(env, "devmap_index").catch(() => null); }   // v306 - positions of register-only buildings; the Dubai-wide tier shares
   if (!C.ri || !Array.isArray(C.ri.items)) return Object.assign(C, { error: "the rent index (img_rent_index) is not in storage" });
   const geo = await kvJson(env, "districts_geo");
   C.dname = {}; for (const d of ((geo && geo.districts) || [])) C.dname[d.slug] = d.name;
@@ -364,7 +368,12 @@ export async function loadContext(env, q, opts) {
       const m = /^([a-z0-9]+):(\d{1,7})$/.exec(String(key || "").toLowerCase());
       const DD = m ? await district(m[1], null) : null;
       const card = DD && DD.unitmix && DD.unitmix.buildings_by_id ? DD.unitmix.buildings_by_id[m[2]] : null;
-      if (card && card.name) it = { d: m[1], i: parseInt(m[2], 10), n: card.name, a: [], area: null, b: {}, v: {}, synth: true };
+      if (card && card.name) {
+        it = { d: m[1], i: parseInt(m[2], 10), n: card.name, a: [], area: null, b: {}, v: {}, synth: true };
+        // v306 - a purchase: the position the Buy map holds for this building (img_map_prices), so the distances are exact
+        const mpi = C.buy && C.mp && Array.isArray(C.mp.items) ? C.mp.items.find((x) => x.d === it.d && x.i === it.i) : null;
+        if (mpi && Number.isFinite(mpi.lat) && Number.isFinite(mpi.lon)) { it.lat = mpi.lat; it.lon = mpi.lon; }
+      }
       if (!it) { C.missing.push(key); continue; }
     }
     // v285 - a "dld:" key for a record the index binds to an app building is one /brief_api UNBOUND (unbindDisputed: the app building is
@@ -380,7 +389,7 @@ export async function loadContext(env, q, opts) {
     const kinds = kindsOfType(q.type), bedNums = (q.bedsList || [q.beds]).map((bb) => +BEDS[bb].band);
     const qv = { min: q.min || null, max: q.max || null, stretch: q.stretch || null };
     let pick = null;
-    if (!B.all) {
+    if (!B.all && !C.buy) {
       const ap = pickRent(it, kinds, bedNums, qv).best;
       if (ap) pick = { k: ap.kind, bb: ap.bed === 0 ? "studio" : String(ap.bed), s: ap.s, basis: ap.basis };
       else for (const k of kinds) for (const bb of (q.bedsList || [q.beds])) {
@@ -399,16 +408,21 @@ export async function loadContext(env, q, opts) {
     const um = D && D.unitmix && D.unitmix.buildings_by_id && it.i != null ? D.unitmix.buildings_by_id[String(it.i)] : null;
     const tn = D && D.tenancy && D.tenancy.buildings_by_id && it.i != null ? D.tenancy.buildings_by_id[String(it.i)] : null;
     const un = D && D.units && D.units.buildings_by_id && it.i != null ? D.units.buildings_by_id[String(it.i)] : null;
+    // v306 - a purchase is built from the building's own settled sales (the unit-mix card): no evidence of 3+ sales inside the budget, no option
+    const buy = C.buy ? buyOf(um, q) : null;
+    if (C.buy && !buy) { C.noEvidence.push(key); continue; }
     const bro = await loadBrochure(env, it, it.n);
     const br = bro && bro.br;
-    const name = br && br.name ? br.name : pretty(it.n);
+    const name = br && br.name ? br.name : pretty(C.buy && um && um.name ? um.name : it.n);
     const pos = Number.isFinite(it.lat) && Number.isFinite(it.lon) ? [it.lat, it.lon] : null;   // v285: Number.isFinite - an unbound record's null is not a position
     const rec = { key, it, st, sts, d, dist: D ? D.name : pretty(it.area), um, tn, un, br, brRefused: bro && bro.refused, brDir: bro && bro.dir,
                   name, aliases: (it.a || []).map(pretty).filter((a) => stemKey(a) !== stemKey(name)), pos, exact: it.i != null && !!pos, n: C.recs.length + 1 };
+    if (C.buy) { const mpi = C.mp && Array.isArray(C.mp.items) ? C.mp.items.find((x) => x.d === d && x.i === it.i) : null; const dv = devOf(um, mpi && mpi.dev); Object.assign(rec, { buy, devId: dv.id, devName: dv.name }); }   // v306
     if (Array.isArray(it.fp) && it.fp.length) rec.exact = true;   // v298 - placed by its own footprint in the district layer; its centre is set below
     // v277 - what the developer's own sheet lists for this building, of this type (or every type): null where no sheet names it
-    rec.beds = pick ? pick.bb : q.beds; rec.kind = kind; rec.bedsBasis = pick ? pick.basis : null;
-    rec.avail = devAvailFor(C.avail, { name: it.n, aliases: (it.a || []).concat(um && um.name ? [um.name] : []) }, B.all ? "all" : +BEDS[rec.beds].band);
+    rec.beds = buy ? (BEDS[q.beds].all ? "all" : labelBed(buy.best.label)) : pick ? pick.bb : q.beds; rec.kind = kind; rec.bedsBasis = pick ? pick.basis : null;
+    if (C.buy) { rec.avail = null; rec.st = null; rec.sts = {}; }   // v306 - no rent figure and no availability claim on a purchase document
+    if (!C.buy) rec.avail = devAvailFor(C.avail, { name: it.n, aliases: (it.a || []).concat(um && um.name ? [um.name] : []) }, B.all ? "all" : +BEDS[rec.beds].band);
     // v282 - the client's criteria for this building: the same function and sources as the /brief list
     const cc = { name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, key };
     rec.af = D ? amenFor(D.amen, { key, d, i: it.i, it, name: it.n, aliases: it.a || [] }) : null;   // v289
@@ -494,11 +508,15 @@ function nearest(C, pos, k, n) {
     .map((i) => ({ i, d: km(pos, [i.lat, i.lon]) })).sort((a, b) => a.d - b.d).slice(0, n);
 }
 const cleanName = (s) => pretty(String(s || "").replace(/\s*[-,]?\s*\b(L\.?\s?L\.?\s?C\.?|FZ-?LLC|FZE|Br(anch)? of.*)\s*$/i, "").trim());
-const kmTxt = (d) => d.toFixed(1) + " km";
+// v306 - a distance under 50 m would print "0.0 km": said "on site" only where the building's own position is exact, otherwise left out ("" - callers skip it)
+const kmTxt = (d, exact) => (d < 0.05 ? (exact ? "on site" : "") : d.toFixed(1) + " km");
+// v306 - a school's inspection line is shown only when it is a rating; "Not inspected due to COVID 19" / "not yet inspected" is left out
+const isPharmacy = (i) => /pharmac|chemist|drug\s?store/i.test(String(i.n || "") + " " + String(i.x || ""));
+const join = (xs) => xs.filter(Boolean).join(", ");
 
 function facts(rec) {
   const out = [];
-  if (rec.br && rec.br.developer) out.push(["DEVELOPER", rec.br.developer]);
+  { const dv = rec.devName || (rec.br && rec.br.developer); if (dv) out.push(["DEVELOPER", dv]); }
   if (rec.br && rec.br.completed) out.push(["COMPLETED", rec.br.completed]);
   // the unit-mix record can be one tower of a multi-building project (Bloom Towers is filed as "Bloom Towers B"): its floors are that
   // tower's, its homes the project's, and the record's own name is never printed
@@ -610,7 +628,7 @@ function thumb(rec, w, h, C) {
 
 function dossierSub(rec, q, i, of) {
   const B = BEDS[q.beds];
-  return (i && of ? "OPTION " + i + " OF " + of : "OPTION") + " &middot; " + B.upper + " &middot; " + esc(rec.dist).toUpperCase();
+  return (i && of ? "OPTION " + i + " OF " + of : "OPTION") + " &middot; " + B.upper + " &middot; " + esc(rec.dist).toUpperCase() + (rec.buy ? " &middot; PURCHASE" : "");
 }
 
 function whereLines(C, rec) {
@@ -618,19 +636,19 @@ function whereLines(C, rec) {
   if (!pos) return [];                                  // v302 - no position: the lines are left out, never a gap notice
   const out = [];
   const m = nearestMetro(C, pos);
-  if (m) out.push("Nearest metro: " + esc(m.n) + ", " + kmTxt(m.d));
-  for (const [n, la, lo] of REF) out.push(n + ": " + kmTxt(km(pos, [la, lo])));
+  if (m && kmTxt(m.d, rec.exact)) out.push("Nearest metro: " + esc(m.n) + ", " + kmTxt(m.d, rec.exact));
+  for (const [n, la, lo] of REF) { const t = kmTxt(km(pos, [la, lo])); if (t) out.push(n + ": " + t); }
   out.push("All straight-line distances" + (rec.exact ? "" : ", from an approximate position"));
   return out;
 }
 function nearbyLines(C, rec) {
   const pos = rec.pos || rec.cpos;
   if (!pos) return [];
-  const sc = nearest(C, pos, "school", 3), cl = nearest(C, pos, "clinic", 3), gy = nearestGyms(C, rec, pos, 2);
+  const sc = nearest(C, pos, "school", 3), cl = nearest(C, pos, "clinic", 8).filter((s) => !isPharmacy(s.i)).slice(0, 3), gy = nearestGyms(C, rec, pos, 2);   // v306 - a pharmacy is not a clinic
   const out = [];
-  if (sc.length) out.push("Schools: " + sc.map((s) => esc(cleanName(s.i.n)) + " (" + (s.i.x ? esc(String(s.i.x).split(" · ")[0]) + ", " : "") + kmTxt(s.d) + ")").join(", "));
-  if (cl.length) out.push("Clinics: " + cl.map((s) => esc(cleanName(s.i.n)) + " (" + kmTxt(s.d) + ")").join(", "));
-  if (gy.length) out.push("Gyms: " + gy.map((s) => esc(s.n) + " (" + kmTxt(s.d) + ")").join(", "));
+  if (sc.length) out.push("Schools: " + sc.map((s) => esc(cleanName(s.i.n)) + (join([esc(ratingOf(s.i.x)), kmTxt(s.d, rec.exact)]) ? " (" + join([esc(ratingOf(s.i.x)), kmTxt(s.d, rec.exact)]) + ")" : "")).join(", "));
+  if (cl.length) out.push("Clinics: " + cl.map((s) => esc(cleanName(s.i.n)) + (kmTxt(s.d, rec.exact) ? " (" + kmTxt(s.d, rec.exact) + ")" : "")).join(", "));
+  if (gy.length) out.push("Gyms: " + gy.map((s) => esc(s.n) + (kmTxt(s.d, rec.exact) ? " (" + kmTxt(s.d, rec.exact) + ")" : "")).join(", "));
   return out;
 }
 // v302 - gyms from the amenity-spots layer of the home's district (the layer behind the Around-the-community page): named places, straight-line
@@ -651,16 +669,16 @@ function dossierPage1(C, rec, q, sub) {
   const rentLbl = "TYPICAL " + (q.beds === "studio" ? "STUDIO" : q.beds === "3" ? "3+ BED" : q.beds + "-BED") + " RENT A YEAR";
   const bands = Object.keys(rec.sts || {});
   // v277 - every home type: one row per type the register has lettings for, no budget line (a budget is for one type)
-  const rent = B.all ? (bands.length ? '<div style="border:1px solid #E6E1D8;background:#FFFFFF;padding:9px 14px 6px 14px;display:flex;flex-direction:column;gap:5px;">' +
+  const rent = rec.buy ? buyBox(C, rec, q) : B.all ? (bands.length ? '<div style="border:1px solid #E6E1D8;background:#FFFFFF;padding:9px 14px 6px 14px;display:flex;flex-direction:column;gap:5px;">' +
       '<div class="lbl" style="font-size:9.5px;">TYPICAL RENT A YEAR, BY TYPE</div>' +
       tbl([["left", "TYPE"], ["right", "TYPICAL RENT"], ["right", "MIDDLE HALF, AED"], ["right", "RECENT LETTINGS"], ["right", "TYPICAL SIZE"]],
         bands.map((b) => { const s = rec.sts[b]; return [esc(bandLabel(b)), "AED " + money(s.m), money(s.q1) + " &ndash; " + money(s.q3), String(s.n), money(s.s * SQFT) + " sq ft"]; })) + "</div>"
-    : '<div style="border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;font-size:12px;color:' + INK + ';">No lettings for this building in the latest pull of the tenancy register, so no typical rent is shown.</div>')
+    : "")
     : st ? '<div style="display:grid;grid-template-columns:1.3fr 1.2fr 0.8fr 0.9fr;gap:12px;align-items:end;border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;">' +
     '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">' + rentLbl + '</div><div class="serif" style="font-size:29px;color:' + GOLD + ';line-height:1;white-space:nowrap;">AED ' + money(st.m) + "</div></div>" +
     stat("AED " + money(st.q1) + " &ndash; " + money(st.q3), "MIDDLE HALF") + stat(lettingsTxt(st), "RECENT LETTINGS") + stat(money(st.s * SQFT) + " sq ft", "TYPICAL SIZE") + "</div>" +
     (q.max ? '<div style="font-size:12px;color:' + INK + ';line-height:1.45;"><b>What AED ' + money(q.max) + " gets you here.</b> " + budgetLine(st, q, B) + "</div>" : "")
-    : '<div style="border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;font-size:12px;color:' + INK + ';">No ' + B.word + " lettings for this building in the latest pull of the tenancy register, so no typical rent is shown.</div>";
+    : "";
   // v292 (Kendall, 2 Oct: "unacceptable" - the building page said "Amenities: To follow"): the developer's list where there is one, then every
   // sourced must-have answer (yes AND no), each with its level - never "to follow" while a register, the facts file, the broker or Google says
   const AM_ROWS = [["private_pool", "Private pool"], ["community_pool", "Community pool"], ["pets", "Pet-friendly"], ["gym", "Gym"], ["parking", "Parking"], ["balcony", "Balcony"], ["modern", "Newer build (2018 or later)"]];
@@ -814,9 +832,9 @@ function layoutsBlock(rec, q) {
     intro = esc(rec.name) + " has " + G.total + " " + flatsOf + ". Flats of the same size and balcony share a layout; the commonest are listed. Sizes include the balcony. " +
       (st ? "The rent register does not say which layout was let, so the typical rent above covers all of them (AED " + money(st.m) + ", " + st.n + " recent lettings)." : "");
   } else if (rec.um && Array.isArray(rec.um.rows) && rec.um.rows.some((r) => B.tn(r.type))) {
-    const letOf = (r) => { if (!B.all) return st ? "AED " + money(st.m) + " &middot; " + st.n + " let" : "none let recently";
+    const letOf = (r) => { if (!B.all) return st ? "AED " + money(st.m) + " &middot; " + st.n + " let" : "&mdash;";
       const m = /^(\d+) bedroom/i.exec(String(r.type || "")), b = /^studio$/i.test(String(r.type || "")) ? "studio" : m ? (+m[1] >= 3 ? "3" : m[1]) : null, s = b && rec.sts ? rec.sts[b] : null;
-      return s ? "AED " + money(s.m) + " &middot; " + s.n + " let" : "none let recently"; };
+      return s ? "AED " + money(s.m) + " &middot; " + s.n + " let" : "&mdash;"; };
     const rows = rec.um.rows.filter((r) => B.tn(r.type)).map((r) => [esc(pretty(r.type)), String(r.units || "&mdash;"), r.levels ? esc(r.levels) : "&mdash;", r.median_sqm ? money(r.median_sqm * SQFT) : "&mdash;", letOf(r)]);
     table = tbl([["left", "TYPE"], ["right", "FLATS"], ["left", "FLOORS"], ["right", "TYPICAL SIZE, SQ FT"], ["right", "RENTED RECENTLY"]], rows);
     intro = "Here is this building's " + (B.all ? "home" : B.word) + " count from the Land Department units register, with the typical size. Sizes include the balcony.";
@@ -826,9 +844,9 @@ function layoutsBlock(rec, q) {
     // pack audit, 1 Oct 2026: a building the units register does not yet list flat by flat gets this one row. The wording says what
     // the row IS (the flats actually let here), not what is missing, so a thin page does not read as an error.
     intro = "What " + (B.word === "home" ? "homes" : B.word + " flats") + " in " + esc(rec.name) + " actually let for in the latest pull of the tenancy register: their typical size and rent. " +
-      "The Land Department's flat-by-flat layout list does not cover this building yet; the leasing team can share the floor plans. Sizes include the balcony.";
+      "The leasing team can share the floor plans. Sizes include the balcony.";
   } else {
-    intro = "No " + (B.all ? "" : B.word + " ") + "lettings are on record for " + esc(rec.name) + " in the latest pull of the tenancy register, and the Land Department's flat-by-flat layout list does not cover it yet; the leasing team can share the floor plans.";
+    intro = REALTOR_VERIFIES;
   }
   return '<div style="display:flex;flex-direction:column;gap:6px;"><div class="serif" style="font-size:20px;color:' + NAVY + ';">The ' + (B.all ? "layouts, every type" : B.word + " layouts") + "</div>" +
     '<div style="font-size:11.5px;color:' + MUTED + ';line-height:1.42;">' + intro + "</div>" + table + "</div>";
@@ -846,7 +864,7 @@ function dossierPage3(C, rec, q, sub) {
 }
 export function dossierHtml(C, rec, q, i, of) {
   const sub = dossierSub(rec, q, i, of);
-  return dossierPage1(C, rec, q, sub) + dossierPage2(C, rec, q, sub) + dossierPage3(C, rec, q, sub);
+  return dossierPage1(C, rec, q, sub) + dossierPage2(C, rec, q, sub) + (rec.buy ? buyPage3(C, rec, q, sub) : dossierPage3(C, rec, q, sub));
 }
 
 // ------------------------------------------------------------------------------------------------ the one-sheet (A4 landscape)
@@ -886,7 +904,7 @@ function oneSheetCards(C, q) {
     const st = rec.st;
     // v290 - a community with no position of its own is measured from the centre of its homes (svTarget), said so; never "to follow" when known
     const mp = rec.pos || rec.cpos, mFrom = rec.pos ? "" : " (from the community's centre)";
-    const metro = mp ? (() => { const m = nearestMetro(C, mp); return m ? esc(m.n) + " metro, " + kmTxt(m.d) + mFrom : amenMetro(rec) || ""; })() : amenMetro(rec) || "";
+    const metro = mp ? (() => { const m = nearestMetro(C, mp); return m && kmTxt(m.d, rec.exact) ? esc(m.n) + " metro, " + kmTxt(m.d, rec.exact) + mFrom : (m ? "" : amenMetro(rec) || ""); })() : amenMetro(rec) || "";
     const amen = ((rec.br && rec.br.amenities) || []).slice(0, 3).map((a) => esc(a.split(" (")[0])).join(", ") || amenLine(rec) || "";
     const perType = B.all ? Object.keys(rec.sts || {}).map((b) => '<div style="font-size:10px;color:' + INK + ';">' + esc(bandLabel(b)) + ": AED " + money(rec.sts[b].m) + " &middot; " + rec.sts[b].n + " let</div>").join("") : "";
     return '<div class="bcard" style="border:1px solid #E6E1D8;background:#FFF;display:flex;flex-direction:column;overflow:hidden;min-height:0;">' +
@@ -897,7 +915,7 @@ function oneSheetCards(C, q) {
       (st ? '<div style="display:flex;align-items:baseline;gap:6px;"><span class="serif" style="font-size:20px;color:' + GOLD + ';">AED ' + money(st.m) + '</span><span style="font-size:9.5px;color:' + MUTED + ';">typical a year</span></div>' +
         '<div style="font-size:10px;color:' + INK + ';">Middle half AED ' + money(st.q1) + "&ndash;" + money(st.q3) + "</div>" +
         '<div style="font-size:10px;color:' + INK + ';">' + lettingsTxt(st) + (rec.it.ev_scope ? " recent lettings in " + esc(rec.it.ev_scope) + " (the community&rsquo;s, not this home&rsquo;s)" : " recent lettings") + " &middot; about " + money(st.s * SQFT) + " sq ft</div>"
-        : perType || '<div style="font-size:10px;color:' + INK + ';">No ' + (B.all ? "" : B.word + " ") + "lettings in the latest pull</div>") +
+        : perType) +
       '<div style="font-size:9.8px;color:' + MUTED + ';line-height:1.25;">' + amen + "</div>" +
       '<div style="font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + metro + "</div>" + criteriaLine(rec, q) +
       "</div></div>";
@@ -909,6 +927,7 @@ const landFooter = () => '<div class="curator" style="border-top:1px solid #DED9
 function landPage(C, inner) { C.pages++; return '<div class="sheet page land" style="width:1123px;height:794px;">' + inner + "</div>"; }
 
 export function oneSheetHtml(C, q) {
+  if (C.buy) return buyOneSheetHtml(C, q);   // v306
   const B = BEDS[q.beds];
   const { html } = oneSheetCards(C, q);
   const p1 = landPage(C, '<div style="height:74px;display:flex;align-items:center;justify-content:space-between;padding:0 30px;background:#FFF;border-bottom:1px solid #E6E1D8;flex-shrink:0;">' +
@@ -958,7 +977,7 @@ function appendixHtml(C, q) {
   return page(C, "APPENDIX &middot; " + B.upper + (C.recs[0] ? " &middot; " + esc(C.recs[0].dist).toUpperCase() : ""), body, smallPrint([rentSource(C, q, null)]));
 }
 export function packHtml(C, q) {
-  return oneSheetHtml(C, q) + C.recs.map((r) => dossierHtml(C, r, Object.assign({}, q, { beds: r.beds || q.beds }), r.n, C.recs.length)).join("") + appendixHtml(C, q);
+  return oneSheetHtml(C, q) + C.recs.map((r) => dossierHtml(C, r, Object.assign({}, q, { beds: r.beds || q.beds }), r.n, C.recs.length)).join("") + (C.buy ? "" : appendixHtml(C, q));   // v306 - a purchase has no rent appendix
 }
 
 // ------------------------------------------------------------------------------------------------ the LOD 100 map (make_map.py, as SVG)
@@ -1323,6 +1342,218 @@ export function briefMapSvg(layer, marks, o) {
   return out.join("");
 }
 
+// ------------------------------------------------------------------------------------------------ v306: THE BUY DOCUMENTS (mode=buy)
+// Kendall, 4 Oct 2026: the realtor's flow is developers -> locations -> price -> a client PDF, BUYING first. Until v306 every buy document was
+// a 501 and the journey stopped. These are the SAME layouts as the rent documents (the same CSS, pages, header, footer and maps), with the
+// evidence of a purchase in place of a rent:
+//   - price per sq ft = the building's typical price for that bedroom type divided by its typical size (the Developers map's own rule:
+//     devmap_core.js), the price and the size being the register medians on the unit-mix card; the count is the sales recorded for that
+//     type (dld_sales.sold_by_type) - the SAME numbers /brief_api reads in buy mode (buyCandidates), and a type with fewer than 3 sales is
+//     never shown. A building has no middle half of its own (the cards carry medians, not single sales), so the middle half printed is
+//     the one ACROSS the developer's buildings in the community (sale-weighted, devmap_core.js wquant) and it says so.
+//   - never an asking price and never an estimate: a row with only est_aed has no median_aed and is not a sale.
+//   - the budget is a TOTAL PRICE; its minimum is a hard floor (verdictOf, v302): an option under it is not in the document at all.
+//   - NO availability claim of any kind: no developer-sheet box, no "left", no "for sale now" (nothing records vacancy).
+//   - the developer is named as src/devcross.js names it (canonicalOf -> displayOf).
+// The tier floors are TIER_CFG.bounds of src/devmap_core.js (AED per sq m); test/test_v306_buy_pdf.mjs reads them from that file so the two
+// cannot drift. The Dubai-wide buyer share comes from the published Developers index (img_devmap_index cuts.shares) where it is on file,
+// and the line is left out where it is not.
+export const TIER_BOUNDS = [32292, 22604, 16684];
+const TIER_NAME = ["Ultra-luxury", "Luxury", "Premium", "Budget"];
+export const tierOfPpsm = (p) => (p >= TIER_BOUNDS[0] ? 0 : p >= TIER_BOUNDS[1] ? 1 : p >= TIER_BOUNDS[2] ? 2 : 3);
+const edgeSqft = (i) => Math.round(TIER_BOUNDS[i] / SQFT);
+export const tierBandSqft = (t) => (t === 0 ? "AED " + money(edgeSqft(0)) + " per sq ft and above" : t === 1 ? "AED " + money(edgeSqft(1)) + " to " + money(edgeSqft(0)) + " per sq ft" :
+  t === 2 ? "AED " + money(edgeSqft(2)) + " to " + money(edgeSqft(1)) + " per sq ft" : "under AED " + money(edgeSqft(2)) + " per sq ft");
+const FIT_SAY = { within: "Within the budget", stretch: "In the stretch", a_little_above: "A little over the budget", above: "Over the budget" };
+const FIT_COL = { within: ["#2F6B55", "#E6F1EC"], stretch: ["#8A6A1F", "#F6EEDC"], a_little_above: ["#8A6A1F", "#F6EEDC"], above: ["#9A3B3B", "#F6E6E6"] };
+const VERDICT_RANK = { within: 0, stretch: 1, a_little_above: 2, above: 3 };
+const NWORD = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+const typeLabel = (t) => String(t || "").toLowerCase();
+const homeLabels = (card) => (card.rows || []).map((r) => typeLabel(r.type)).filter((l) => l === "studio" || /^\d+ bedroom$/.test(l));
+const labelsFor = (card, b) => (b === "all" ? homeLabels(card) : b === "studio" ? ["studio"] : b === "3" ? homeLabels(card).filter((l) => +l.split(" ")[0] >= 3) : [b + " bedroom"]);
+const labelWord = (l) => (l === "studio" ? "studio" : (NWORD[+l.split(" ")[0]] || l.split(" ")[0]) + "-bedroom");
+const labelBed = (l) => (l === "studio" ? "studio" : +l.split(" ")[0] >= 3 ? "3" : l.split(" ")[0]);
+const labelShort = (l) => (l === "studio" ? "Studio" : l.split(" ")[0] + "-bed");
+const monthYear = (d) => { const s = String(d || ""); return /^\d{4}-\d{2}/.test(s) ? ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][+s.slice(5, 7) - 1] + " " + s.slice(0, 4) : ""; };
+
+// one building, one type: the settled-sales figure, or null (no median price or size on the card, no count, or fewer than 3 sales)
+export function buyFig(card, label) {
+  if (!card) return null;
+  const sold = (card.dld_sales && card.dld_sales.sold_by_type) || {};
+  let n = null; for (const k of Object.keys(sold)) if (k.toLowerCase() === label) n = sold[k];
+  const row = (card.rows || []).find((r) => typeLabel(r.type) === label);
+  if (!row || !row.median_aed || !(row.median_sqm > 0) || n == null || n < EVIDENCE_MIN) return null;   // an estimate (est_aed) is never a sale price
+  const ppsm = row.median_aed / row.median_sqm;
+  return { label, n, aed: Math.round(row.median_aed), sqm: row.median_sqm, sqft: Math.round(row.median_sqm * SQFT), ppsm, ppsf: ppsm / SQFT, psf: Math.round(ppsm / SQFT), tier: tierOfPpsm(ppsm), homes: row.units || null };
+}
+// the building's figures for a query: every asked type that has evidence AND a verdict (the minimum is a hard floor: under it, nothing)
+export function buyOf(card, q) {
+  if (!card) return null;
+  const seen = new Set(), figs = [];
+  for (const b of (q.bedsList || [q.beds])) for (const l of labelsFor(card, b)) {
+    if (seen.has(l)) continue; seen.add(l);
+    const f = buyFig(card, l); if (!f) continue;
+    f.verdict = verdictOf(f.aed, q.min || 0, q.max || null, q.stretch || null); if (!f.verdict) continue;
+    figs.push(f);
+  }
+  if (!figs.length) return null;
+  figs.sort((a, b) => (VERDICT_RANK[a.verdict] - VERDICT_RANK[b.verdict]) || (b.n - a.n));
+  const ds = card.dld_sales || {};
+  return { figs, best: figs[0], first: ds.first || null, last: ds.last || null };
+}
+// the developer, as src/devcross.js names it: the card's developer, else the Buy map's, else (a curated brand only) the project's own name
+function devOf(card, mpDev) {
+  const raw = (card && card.developer) || mpDev || "";
+  if (raw) { const id = canonicalOf(raw); return { id, name: displayOf(id) || pretty(raw) }; }
+  const nm = card && (card.name || (card.dld && card.dld.project));
+  if (nm) { const r = devResolve(nm, "project"); if (isCurated(r.id)) return { id: r.id, name: displayOf(r.id) }; }
+  return { id: "", name: "" };
+}
+export function wquant(pairs, p) {
+  const a = pairs.filter((x) => x[0] != null && x[1] > 0 && isFinite(x[0])).sort((x, y) => x[0] - y[0]);
+  if (!a.length) return null;
+  const t = a.reduce((s, x) => s + x[1], 0) * p; let c = 0;
+  for (const x of a) { c += x[1]; if (c >= t) return x[0]; }
+  return a[a.length - 1][0];
+}
+// the middle half ACROSS buildings: the developer's buildings in this community that sold this type (3+ sales each), sale-weighted; where the
+// developer has fewer than two such buildings, every building of the community. Never presented as the middle half of single sales.
+export function buyContext(D, rec) {
+  const cards = D && D.unitmix && D.unitmix.buildings_by_id; if (!cards || !rec.buy) return null;
+  const label = rec.buy.best.label;
+  const gather = (id) => { const pairs = []; let n = 0, nb = 0;
+    for (const c of Object.values(cards)) { if (!c || (id && devOf(c).id !== id)) continue; const f = buyFig(c, label); if (!f) continue; pairs.push([f.ppsf, f.n]); n += f.n; nb++; }
+    return { pairs, n, nb }; };
+  let g = rec.devId ? gather(rec.devId) : null, scope = rec.devName;
+  if (!g || g.nb < 2) { g = gather(""); scope = ""; }
+  if (g.nb < 2 || g.n < EVIDENCE_MIN) return null;
+  return { q1: Math.round(wquant(g.pairs, 0.25)), med: Math.round(wquant(g.pairs, 0.5)), q3: Math.round(wquant(g.pairs, 0.75)), n: g.n, nb: g.nb, scope };
+}
+
+function buyBudgetLine(rec, q) {
+  const f = rec.buy.best;
+  const range = q.min && q.max ? "AED " + money(q.min) + " to " + money(q.max) : q.max ? "up to AED " + money(q.max) : "from AED " + money(q.min);
+  const say = { within: "inside the budget", stretch: "above the budget but inside the stretch of AED " + money(q.stretch), a_little_above: "a little over the budget", above: "over the budget" }[f.verdict];
+  return "A budget of " + range + ": the typical " + labelWord(f.label) + " home here sold for AED " + money(f.aed) + " (about " + money(f.sqft) + " sq ft), " + say + ".";
+}
+const fitChip = (v, sz) => { const [c, bg] = FIT_COL[v] || FIT_COL.within; return '<span class="fit" style="display:inline-block;background:' + bg + ';color:' + c + ';font-size:' + (sz || 10.5) + 'px;font-weight:600;padding:1px 7px;border-radius:9px;white-space:nowrap;">' + FIT_SAY[v] + "</span>"; };
+const budgetAsked = (q) => !!(q.min || q.max);
+
+// page 1: the price box, the tier and the community's middle half, and (when a budget was given) whether it fits
+function buyBox(C, rec, q) {
+  const b = rec.buy, f = b.best;
+  const stat = (v, l) => '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">' + l + '</div><div style="font-size:15px;font-weight:500;color:' + NAVY + ';white-space:nowrap;">' + v + "</div></div>";
+  const box = '<div style="display:grid;grid-template-columns:1.3fr 1.2fr 0.8fr 0.9fr;gap:12px;align-items:end;border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;">' +
+    '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">TYPICAL ' + (f.label === "studio" ? "STUDIO" : f.label.split(" ")[0] + "-BED") + ' SALE PRICE</div><div class="serif" style="font-size:29px;color:' + GOLD + ';line-height:1;white-space:nowrap;">AED ' + money(f.aed) + "</div></div>" +
+    stat("AED " + money(f.psf) + " per sq ft", "PRICE PER SQ FT") + stat(String(f.n), "SALES RECORDED") + stat(money(f.sqft) + " sq ft", "TYPICAL SIZE") + "</div>";
+  const sh = C.dmIdx && C.dmIdx.cuts && C.dmIdx.cuts.shares;
+  const share = sh && sh.n && sh.money && sh.n[f.tier] != null && sh.money[f.tier] != null ? " Dubai-wide, " + sh.n[f.tier] + "% of buyers and " + sh.money[f.tier] + "% of the money buy in this tier." : "";
+  const ctx = buyContext(C.district[rec.d], rec);
+  const tierCell = '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">PRICE TIER</div><div style="font-size:12px;color:' + INK + ';line-height:1.4;"><b style="color:' + NAVY + ';">' + TIER_NAME[f.tier] + "</b> &middot; " + tierBandSqft(f.tier) + "." + share + "</div></div>";
+  const ctxCell = ctx ? '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">ACROSS ' + (ctx.scope ? esc(ctx.scope).toUpperCase() + "&rsquo;S " : "THE ") + ctx.nb + " BUILDINGS IN " + esc(rec.dist).toUpperCase() + '</div><div style="font-size:12px;color:' + INK + ';line-height:1.4;">Middle half of ' + labelWord(f.label) + " prices per sq ft: <b style=\"color:" + NAVY + ';">AED ' + money(ctx.q1) + " &ndash; " + money(ctx.q3) + "</b> (" + money(ctx.n) + " sales recorded).</div></div>" : "";
+  const strip = '<div style="display:grid;grid-template-columns:' + (ctxCell ? "1fr 1fr" : "1fr") + ';gap:12px;border:1px solid #E6E1D8;background:#FFFFFF;padding:9px 14px;">' + tierCell + ctxCell + "</div>";
+  const fit = budgetAsked(q) ? '<div style="font-size:12px;color:' + INK + ';line-height:1.45;">' + fitChip(f.verdict, 11) + " <b>What the budget buys here.</b> " + esc(buyBudgetLine(rec, q)) + "</div>" : "";
+  return box + strip + fit;
+}
+
+// page 3: the sales by type (with the fit when a budget was given), then the flat-by-flat layouts where the register lists them
+function buySalesTable(rec, q) {
+  const bedN = (l) => (l === "studio" ? 0 : +l.split(" ")[0]);
+  const figs = rec.buy.figs.slice().sort((a, b) => bedN(a.label) - bedN(b.label));
+  const fit = budgetAsked(q);
+  const head = [["left", "TYPE"], ["right", "TYPICAL PRICE, AED"], ["right", "PER SQ FT, AED"], ["right", "SALES RECORDED"], ["right", "TYPICAL SIZE"]].concat(fit ? [["left", "THE BUDGET"]] : []);
+  const rows = figs.map((f) => [esc(typeOfC(f.label === "studio" ? "studio" : f.label.split(" ")[0])), money(f.aed), money(f.psf), String(f.n), money(f.sqft) + " sq ft"].concat(fit ? [fitChip(f.verdict, 9.5)] : []));
+  const span = rec.buy.first && rec.buy.last ? " Sales recorded " + monthYear(rec.buy.first) + " to " + monthYear(rec.buy.last) + "." : "";
+  return '<div style="display:flex;flex-direction:column;gap:6px;"><div class="serif" style="font-size:20px;color:' + NAVY + ';">What homes here sold for</div>' +
+    '<div style="font-size:11.5px;color:' + MUTED + ';line-height:1.42;">Sales recorded at the Land Department for ' + esc(rec.name) + ', by home type: the typical price, the typical size and the price per sq ft (the typical price divided by the typical size). Sizes include the balcony.' + span + "</div>" + tbl(head, rows) + "</div>";
+}
+function buyPage3(C, rec, q, sub) {
+  const ph = rec.photos || [];
+  const k = Math.min(4, ph.length), colW = (702 - 8 * (k - 1)) / Math.max(1, k);
+  const photos = ph.length ? '<div style="display:grid;grid-template-columns:repeat(' + k + ',minmax(0,1fr));gap:8px;">' + ph.map((p) =>
+    '<div style="display:flex;flex-direction:column;gap:2px;">' + fitImg(p.pic || { src: p.src }, colW, 112, p.caption) +
+    '<div style="font-size:9.5px;color:' + MUTED + ';">' + esc(String(p.caption || "").split(" (")[0].split(" - ").pop()) + "</div>" +
+    '<div style="font-size:8px;color:#8C887C;">' + esc(hostOf(p.page_url || (rec.br && rec.br.source_url)) || "developer's page") + "</div></div>").join("") + "</div>" : "";
+  const B = BEDS[q.beds];
+  const G = rec.un && rec.un.floors ? groupLayouts(rec, B) : null;
+  const lay = G && G.top.length ? layoutsBlock(rec, q) : "";
+  return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + photos + buySalesTable(rec, q) + lay,
+    smallPrint([buySource(C, q, rec), buildingSource(rec), rec.un ? "Layouts: Dubai Land Department units register, flat by flat." : "", nearbySource(), pictureSource(rec)]));
+}
+function buySource(C, q, rec) {
+  const f = rec ? rec.buy.best : null;
+  return "Prices: Dubai Land Department registered sales (the transactions register)" + (rec && rec.buy.first && rec.buy.last ? ", " + esc(monthYear(rec.buy.first)) + " to " + esc(monthYear(rec.buy.last)) : "") + (rec ? ", " + esc(rec.name) : "") +
+    ". Sales recorded at the Land Department, not asking prices: what homes here sold for, not what is for sale. The typical price is the median of the building's sales of that home type (three or more are needed to show one); the typical size is the median size; " +
+    "the price per sq ft is the typical price divided by the typical size. The middle half is across the developer's buildings in the community, sale-weighted, not a spread of single sales." +
+    (f ? " Price tiers are price bands per sq ft only (Budget under AED " + money(edgeSqft(2)) + ", Premium AED " + money(edgeSqft(2)) + " to " + money(edgeSqft(1)) + ", Luxury AED " + money(edgeSqft(1)) + " to " + money(edgeSqft(0)) + ", Ultra-luxury " + money(edgeSqft(0)) + " and above), not a rating." : "") +
+    (rec && rec.devName ? " Developer: " + esc(rec.devName) + ", as the Land Department register names it." : "");
+}
+
+// ---- the one-sheet ----
+function titleBuy(C, q) {
+  const B = BEDS[q.beds], n = C.recs.length;
+  const ds = [...new Set(C.recs.map((r) => r.dist))];
+  const where = ds.length === 1 ? ds[0] : ds.length === 2 ? ds.join(" and ") : ds.length + " districts";
+  const count = n <= 10 ? NUMWORD[n] : String(n);
+  const budget = q.min && q.max && q.min < q.max ? ", AED " + money(q.min) + "&ndash;" + money(q.max) : q.max ? ", up to AED " + money(q.max) : q.min ? ", from AED " + money(q.min) : "";
+  return count + " " + (B.all ? "" : bedsWordOf(q) + " ") + "option" + (n === 1 ? "" : "s") + " to buy in " + esc(where) + budget;
+}
+function buyOneSheetCards(C, q) {
+  const cols0 = Math.min(5, Math.max(3, C.recs.length)), cardW = (1063 - 9 * (cols0 - 1)) / cols0 - 2;
+  const cards = C.recs.map((rec) => {
+    const f = rec.buy.best;
+    const mp = rec.pos || rec.cpos, mFrom = rec.pos ? "" : " (from the community's centre)";
+    const metro = mp ? (() => { const m = nearestMetro(C, mp); return m && kmTxt(m.d, rec.exact) ? esc(m.n) + " metro, " + kmTxt(m.d, rec.exact) + mFrom : (m ? "" : amenMetro(rec) || ""); })() : amenMetro(rec) || "";
+    const amen = ((rec.br && rec.br.amenities) || []).slice(0, 3).map((a) => esc(a.split(" (")[0])).join(", ") || amenLine(rec) || "";
+    return '<div class="bcard" style="border:1px solid #E6E1D8;background:#FFF;display:flex;flex-direction:column;overflow:hidden;min-height:0;">' +
+      '<div style="position:relative;">' + thumb(rec, cardW, 136, C) + '<div style="position:absolute;left:6px;top:6px;width:24px;height:24px;border-radius:12px;background:' + NAVY +
+      ';color:#FFF;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;">' + rec.n + "</div></div>" +
+      '<div style="padding:7px 9px 8px 9px;display:flex;flex-direction:column;gap:3px;">' +
+      '<div class="serif" style="font-size:16px;color:' + NAVY + ';line-height:1.05;">' + esc(rec.name) + "</div>" +
+      (rec.devName ? '<div style="font-size:9.5px;color:' + MUTED + ';">' + esc(rec.devName) + "</div>" : "") +
+      '<div style="display:flex;align-items:baseline;gap:6px;"><span class="serif" style="font-size:20px;color:' + GOLD + ';">AED ' + money(f.aed) + '</span><span style="font-size:9.5px;color:' + MUTED + ';">typical ' + labelShort(f.label).toLowerCase() + " price</span></div>" +
+      '<div style="font-size:10px;color:' + INK + ';">AED ' + money(f.psf) + " per sq ft &middot; " + f.n + " sales recorded</div>" +
+      '<div style="font-size:10px;color:' + INK + ';">about ' + money(f.sqft) + " sq ft &middot; " + TIER_NAME[f.tier] + " tier</div>" +
+      (budgetAsked(q) ? "<div>" + fitChip(f.verdict, 9.5) + "</div>" : "") +
+      '<div style="font-size:9.8px;color:' + MUTED + ';line-height:1.25;">' + amen + "</div>" +
+      '<div style="font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + metro + "</div>" + criteriaLine(rec, q) +
+      "</div></div>";
+  }).join("");
+  const cols = Math.min(5, Math.max(3, C.recs.length));
+  return { html: '<div style="flex:1;display:grid;grid-template-columns:repeat(' + cols + ',minmax(0,1fr));grid-template-rows:repeat(' + Math.ceil(C.recs.length / cols) + ',minmax(0,1fr));min-height:0;gap:9px;padding:10px 30px 6px 30px;">' + cards + "</div>" };
+}
+function buyOneSheetHtml(C, q) {
+  const { html } = buyOneSheetCards(C, q);
+  const p1 = landPage(C, '<div style="height:74px;display:flex;align-items:center;justify-content:space-between;padding:0 30px;background:#FFF;border-bottom:1px solid #E6E1D8;flex-shrink:0;">' +
+    '<div style="display:flex;flex-direction:column;gap:3px;"><div class="serif" style="font-size:26px;color:' + NAVY + ';line-height:1;">' + titleBuy(C, q) + "</div>" +
+    '<div style="font-size:11px;color:' + MUTED + ';">' + C.today + " &middot; numbers match the map &middot; prices are sales recorded at the Land Department, not asking prices</div></div>" + logo(C, 68) + "</div>" +
+    html +
+    '<div style="padding:0 30px 4px 30px;font-size:8.3px;color:' + MUTED + ';line-height:1.3;">Prices: Dubai Land Department registered sales. The typical price is the median of the building\'s sales of that home type (three or more are needed to show one); the price per sq ft is the typical price divided by the typical size. ' +
+    "Price tiers are price bands per sq ft, not a rating. Metro distances are straight lines. Pictures: each developer's own project page" + (C.recs.some((r) => r.picSource && r.picSource !== "photo" && r.picSource !== "none" && r.picSource !== "street_view" && r.picSource !== "render") ? "; where none is on file, a Blocks view: the building as a simple block on the district model (&copy; OpenStreetMap contributors), heights to scale - not a photograph." : ".") +
+    (C.recs.some((r) => r.picSource === "street_view") ? " Street View: Google, aimed at the building, the month shown on the picture." : "") +
+    (C.recs.some((r) => r.picSource === "render") ? " An illustration is Najma's own render, not a photograph." : "") +
+    " Availability, the price and the actual home must be confirmed with the developer's sales team or the listing broker.</div>" + landFooter());
+  return p1 + overviewMapPages(C, q);
+}
+// the areas side by side, built from the chosen options themselves (the rent comparison reads the rent index; a purchase has none)
+export function buyComparisonPage(C, q) {
+  const byD = {}; for (const r of C.recs) (byD[r.d || "_"] = byD[r.d || "_"] || []).push(r);
+  const ds = Object.keys(byD); if (ds.length < 2) return "";
+  const rng = (xs, f) => { const a = xs.map(f).filter((x) => x != null).sort((x, y) => x - y); return !a.length ? "" : a[0] === a[a.length - 1] ? "AED " + money(a[0]) : "AED " + money(a[0]) + " &ndash; " + money(a[a.length - 1]); };
+  const ROWS = [["Options in this brief", (rs) => rs.map((r) => esc(r.name) + (r.devName ? ' <span style="color:' + MUTED + ';">(' + esc(r.devName) + ")</span>" : "")).join("<br>")],
+    ["Typical price", (rs) => rng(rs, (r) => r.buy.best.aed)], ["Price per sq ft", (rs) => rng(rs, (r) => r.buy.best.psf)],
+    ["Price tier", (rs) => [...new Set(rs.map((r) => TIER_NAME[r.buy.best.tier]))].join(", ")], ["Sales recorded", (rs) => money(rs.reduce((s, r) => s + r.buy.best.n, 0)) + " across these options"]];
+  const head = '<tr style="background:' + NAVY + ';"><th style="padding:7px 8px;"></th>' + ds.map((d) => '<th style="text-align:left;padding:7px 8px;color:#FBFAF7;font-size:11px;font-weight:600;">' + esc(byD[d][0].dist) + "</th>").join("") + "</tr>";
+  const body = ROWS.map(([label, f]) => '<tr><td style="padding:6px 8px;border-bottom:1px solid #E6E1D8;font-size:10.5px;font-weight:600;color:' + NAVY + ';vertical-align:top;width:150px;">' + label + "</td>" +
+    ds.map((d) => '<td style="padding:6px 8px;border-bottom:1px solid #E6E1D8;font-size:10px;line-height:1.35;vertical-align:top;">' + (f(byD[d]) || "&mdash;") + "</td>").join("") + "</tr>").join("");
+  const B = BEDS[q.beds];
+  return landPage(C, '<div style="height:74px;display:flex;align-items:center;justify-content:space-between;padding:0 30px;background:#FFF;border-bottom:1px solid #E6E1D8;flex-shrink:0;">' +
+    '<div style="display:flex;flex-direction:column;gap:3px;"><div class="serif" style="font-size:24px;color:' + NAVY + ';line-height:1;">The areas side by side</div>' +
+    '<div style="font-size:11px;color:' + MUTED + ';">' + C.today + " &middot; " + esc(ds.map((d) => byD[d][0].dist).join(" · ")) + (B && !B.all ? " &middot; " + esc(bedsWordOf(q)) : "") + "</div></div>" + logo(C, 68) + "</div>" +
+    '<div class="cmppage" style="flex:1;padding:10px 30px 4px 30px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;">' + head + body + "</table>" +
+    '<div style="font-size:8.6px;color:' + MUTED + ';line-height:1.35;margin-top:6px;">Prices are sales recorded at the Land Department, not asking prices; the figures are those of the options in this brief, by area.</div></div>' + landFooter());
+}
+
 // ------------------------------------------------------------------------------------------------ rendering and the route
 async function renderPdf(env, html) {
   const browser = await LAUNCH(env.BROWSER);
@@ -1341,7 +1572,7 @@ const J = (o, status) => new Response(JSON.stringify(o, null, 1), { status: stat
 // Build the whole document for a request. Exported so the tests and the local preview build exactly what the route renders.
 export async function buildDocument(env, q, opts) {
   if (!["dossier", "onesheet", "compare", "pack"].includes(q.kind)) return { status: 400, body: { ok: false, reason: "kind must be dossier, onesheet, compare or pack" } };
-  if (q.mode !== "rent") return { status: 501, body: { ok: false, reason: "buy-mode documents are not built yet: the approved layouts are for rentals; the Buy evidence comes from Contract A when it lands" } };
+  if (q.mode !== "rent" && q.mode !== "buy") return { status: 400, body: { ok: false, reason: "mode must be rent or buy" } };
   if (!q.keys.length) return { status: 400, body: { ok: false, reason: "keys= is required (one key per building, from /brief_api)" } };
   if (q.keys.length > MAX_KEYS) return { status: 400, body: { ok: false, reason: "at most " + MAX_KEYS + " buildings per document" } };
   if (q.kind === "dossier" && q.keys.length > 1) {
@@ -1356,7 +1587,8 @@ export async function buildDocument(env, q, opts) {
   const dossierish = q.kind === "dossier" || q.kind === "pack";
   const C = await loadContext(env, q, { now: opts && opts.now, origin: opts && opts.origin, need: { units: dossierish, photos: dossierish, map: true }, deferLive: true });
   if (C.error) return { status: 503, body: { ok: false, reason: C.error } };
-  if (C.missing.length) return { status: 404, body: { ok: false, reason: "not in the rent index", keys: C.missing } };
+  if (C.missing.length) return { status: 404, body: { ok: false, reason: C.buy ? "not found in the unit-mix register" : "not in the rent index", keys: C.missing } };
+  if (C.buy && (C.noEvidence.length && q.kind === "dossier" || !C.recs.length)) return { status: 422, body: { ok: false, reason: "no settled-sales evidence (3 or more recorded sales of the asked home type, inside the budget) for this option", keys: C.noEvidence } };   // v306 - an owner message, never a client page
   // v290 AMENITY CARDS (src/amenity_cards.js): one card per ticked must-have per district, pictures fetched now and embedded, never stored.
   // v291 - started here, alongside the live Google answers (C.live), which the pages below need before they are drawn
   const chrome = { landPage: (inner) => landPage(C, inner), footer: landFooter(), logo: logo(C, 68), today: C.today, fitImg, jpegSize };
@@ -1369,12 +1601,12 @@ export async function buildDocument(env, q, opts) {
     title = rec.name + " - " + B.word;
     fname = (q.num ? String(q.num).padStart(2, "0") + "_" : "") + rec.name.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") + "_" + tag + ".pdf";
   } else if (q.kind === "pack") {
-    html = packHtml(C, q); title = "Rental options - " + B.word; fname = "Rental_options_" + tag + ".pdf";
+    html = packHtml(C, q); title = (C.buy ? "Purchase options - " : "Rental options - ") + B.word; fname = (C.buy ? "Purchase_options_" : "Rental_options_") + tag + ".pdf";
   } else {
     html = oneSheetHtml(C, q); title = "One-sheet - " + B.word; fname = "One_sheet_" + tag + ".pdf";
   }
   // v282 - Compare and Full pack open with the areas side by side when 2 or 3 areas were compared (the same block as the /brief page)
-  if (q.kind === "compare" || q.kind === "pack") { const cmp = await comparisonFor(env, q); if (cmp) html = comparisonPage(C, q, cmp) + html; }
+  if (q.kind === "compare" || q.kind === "pack") { const cmp = await comparisonFor(env, q); if (cmp) html = comparisonPage(C, q, cmp) + html; if (C.buy && q.compare) html = buyComparisonPage(C, q) + html; }
   // the amenity pages (withAmenityPages' own rule): at the end of Compare; in a Full pack, before the appendix (its last portrait page)
   if (amenPages) { const at = q.kind === "pack" ? html.lastIndexOf('<div class="sheet page">') : -1; html = at > 0 ? html.slice(0, at) + amenPages + html.slice(at) : html + amenPages; }
   return { status: 200, html: HEAD(title, html), pages: C.pages, fname, C };

@@ -187,7 +187,7 @@ ok(abox(all).includes("Available now, per Alpha Developments&rsquo;s sheet of 20
 ok(!ESTIMATE_RX.test(all) && !/one-bedroom flats/.test(all), "and no per-type 'left' wording anywhere");
 // 4c. a key the rent index does not know, but the unit-mix register does (every building page has one): the dossier still builds
 ({ r, html } = await pdf("kind=dossier&keys=testdistrict:13&beds=all"));
-ok(r.status === 200 && pages(html) === 3 && html.includes(">Register Only House</div>") && html.includes("No lettings for this building in the latest pull"), "testdistrict:13 (unit-mix only): 3 pages from the register, the name from the record, and it says there is no rent figure", r.status + " " + html.slice(0, 200));
+ok(r.status === 200 && pages(html) === 3 && html.includes(">Register Only House</div>") && !html.includes("No lettings for this building in the latest pull"), "testdistrict:13 (unit-mix only): 3 pages from the register, the name from the record, and (v306) no gap notice where there is no rent figure", r.status + " " + html.slice(0, 200));
 ok(/>Studio<\/td><td[^>]*>10<\/td>/.test(html) && />1 bedroom<\/td><td[^>]*>40<\/td><td[^>]*>&mdash;<\/td>/.test(html) && html.includes("An 8-floor residential building"), "its layouts table is the register's per-type count (a missing floor range prints as a dash, not a broken entity)");
 
 // ---- 5. the map -----------------------------------------------------------------------------------------------------------------
@@ -242,7 +242,7 @@ ok(html.includes("OPTION 2 OF 3 &middot; ONE BEDROOM"), "pack dossiers are numbe
 const multi = await r.json();
 ok(r.status === 400 && multi.dossiers && multi.dossiers.length === 2 && /keys=testdistrict%3A10/.test(multi.dossiers[0].url) && /num=2&of=2/.test(multi.dossiers[1].url), "several keys on a dossier -> 400 with one link per building", JSON.stringify(multi).slice(0, 300));
 ok((await pdf("kind=dossier&keys=testdistrict:777")).r.status === 404, "a key the rent index does not know -> 404");
-printed = []; ok((await call("/brief_pdf?kind=dossier&keys=testdistrict:10&mode=buy&key=" + CLIENT)).status === 501 && !printed.length, "buy mode -> 501 (not built yet), nothing rendered");
+printed = []; ok((await call("/brief_pdf?kind=dossier&keys=testdistrict:10&mode=buy&key=" + CLIENT)).status === 422 && !printed.length, "buy mode (v306): an option with no settled-sales evidence -> 422, nothing rendered (was 501 before v306)");
 ok((await pdf("kind=poster&keys=testdistrict:10")).r.status === 400, "an unknown kind -> 400");
 ok((await call("/brief_pdf?kind=dossier&keys=testdistrict:10&key=" + CLIENT, Object.assign({}, env, { BROWSER: undefined }))).status === 503, "no Browser Rendering binding -> 503");
 launchError = "Unable to create new browser: code: 429: message: Too many browsers already running";

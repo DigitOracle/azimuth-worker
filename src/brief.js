@@ -55,6 +55,8 @@ const EXTRA_BY_DLD = {}; for (const [s, x] of Object.entries(EXTRA_AREAS)) for (
 export const areaSlugOf = (it) => (it && (it.d || EXTRA_BY_DLD[it.area])) || null;
 const BEDS = { studio: 0, "0": 0, "1": 1, "2": 2, "3": 3, "3+": 3 };
 const BED_WORD = ["studio", "1-bed", "2-bed", "3+ bed"];
+// v306 - a school's inspection line is shown only when it is a rating; "Not inspected due to COVID 19" / "not yet inspected" is left out of every client page
+export const ratingOf = (x) => { const r = String(x || "").split(" \u00b7 ")[0].trim(); return !r || /inspect|covid|not rated|n\/a|unrated/i.test(r) ? "" : r; };
 export const EVIDENCE_MIN = 3;          // spec: drop n < 3
 // Verdicts (Kendall, 30 Sep 2026): within = min <= median <= max, strictly; a_little_above = over max by at most 5%; above = more
 // than 5% over; below = under min. v302 (Kendall, 4 Oct 2026): the budget MINIMUM is a HARD FLOOR (a realtor's commission starts there) - nothing under it is offered, no
@@ -686,7 +688,7 @@ export function compareAreas({ q, RI, kept, cards, AM, DG, DN }) {
       src: "the map's amenity layer (OpenStreetMap via Overture; access as tagged). Dog parks are not told apart from other parks there, and no register records pet rules." }
       : { v: null, n: 0, say: "not known: none on the amenity layer here (none found is not proof of none)", src: "the map's amenity layer (OpenStreetMap)" };
     const schools = ((AM && AM.items) || []).filter((a) => a.k === "school" && inArea(a));
-    col.schools = schools.length ? { v: true, n: schools.length, say: schools.length + " school" + (schools.length === 1 ? "" : "s") + ": " + schools.slice(0, 2).map((s) => s.n + (s.x ? " (" + String(s.x).split(/\s[·�]\s/)[0] + ")" : "")).join(", "), src: "KHDA private schools register and the government schools map, on the amenity layer" }
+    col.schools = schools.length ? { v: true, n: schools.length, say: schools.length + " school" + (schools.length === 1 ? "" : "s") + ": " + schools.slice(0, 2).map((s) => s.n + (ratingOf(s.x) ? " (" + ratingOf(s.x) + ")" : "")).join(", "), src: "KHDA private schools register and the government schools map, on the amenity layer" }
       : { v: null, n: 0, say: "not known: none on the amenity layer here", src: "KHDA register on the amenity layer" };
     // newest completion year on file
     let newest = null;
