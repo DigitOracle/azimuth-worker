@@ -58,5 +58,17 @@ from `assets/fit/*.jpg|png` - the Motion logo (banner), the page icon and four P
   switch for whoever holds the owner link, so either of them can open the other's. Remove the var and it runs as one person on WA_ALLOWED.
 - **The 21:00 verdict** goes only to the number the instance talks to (hers). It is sent only while her 24-hour window is open; with `LOG_NUDGE_TEMPLATE` set it falls
   back to the no-variable template, once a day, when nothing has been logged. Kendall's verdict waits on the page until he has a WhatsApp route.
-- **Commands** (`momo ...` or `fit ...`): `week`, `history`, `target 10` (hours; on a Sunday it is next week's), `goal <text>`, `tone kind|firm|brutal`, `extend`, `start`.
+- **Commands** (`momo ...` or `fit ...`; `momo help` lists them): `week`, `history`, `again` (repeat the last meal), `undo`, `fix <text or number>` (correct the last entry), `pause [days] [why]` / `resume` (rest days),
+  `weight 82.5` / `waist 90`, `target 10` (hours; on a Sunday it is next week's), `goal <text>`, `tone kind|firm|brutal`, `share on|off`, `extend`, `start`. A plain `gym 40 min` or `12000 steps` is logged with no model call.
+- **Rest days.** `momo pause 3 flu` (or the Rest day button on the page) books today and the next days: a rest day is neither a win nor a miss, the streak holds, it is left out of "days hit of N", the 21:00 message says rest,
+  and that week's target shrinks by 1/7 per rest day. It cannot be booked for a past day. The 30 calendar days do not move.
+- **Steps are a day total**: a typed count and the phone's count never add up, the largest wins.
+- **Automatic steps (optional).** Set the secret `FIT_TOKEN` (16+ random characters; `wrangler secret put FIT_TOKEN --env azimuth2`; never commit it) and the endpoint `POST /fit_steps` turns on. It has its own token,
+  not the owner key, and can only write a step count. On each iPhone make a Shortcut: *Find Health Samples* (Steps, since the start of today) -> *Calculate* (Sum) -> *Get Contents of URL*: POST
+  `https://azimuth-2.digitalchemy.workers.dev/fit_steps`, header `X-Momo-Token` = the token, JSON body `{"user":"kendall","steps":<the sum>}` (`najjuko` for her phone); then *Automation* -> Time of Day 20:30 -> run the Shortcut.
+  Re-sending replaces that day's automatic count, so it may run as often as you like. The 21:00 verdict reads whatever has arrived.
+- **Weight and waist** are optional (`momo weight 82.5`): the last reading of each day, the change since the first shown in `momo history`, on the page's Total tab and in the CSV.
+- **Sharing** (`momo share on`): counts only (week minutes, streak, today done), never food, and only when BOTH people switch it on.
+- **Export and health.** The plan card has "Download my log (CSV)" (`/fit_api?view=csv`, cells starting with = + - @ are defused). `/fit_api?view=health` (owner key) says when the evening check last ran, when the last verdict went and when the last entry came.
+- **The Sunday message** adds this week against last, the best day, the days missed and the weekday that keeps going wrong. Verdict wording rotates between a few lines per situation, chosen by day.
 - **Do not run a line-ending conversion on `src/index.js`**: git treats it as binary (a NUL byte), several tests match its text, and a CRLF rewrite breaks them.

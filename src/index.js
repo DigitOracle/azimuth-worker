@@ -1982,7 +1982,7 @@ async function appFetch(request, env, ctx) {
     if (url.pathname === "/supply" || url.pathname.indexOf("/supply/") === 0) { const _su = await supplyRoutes(request, env, url, { keyTier, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_su) return _su; }
     // ---- end ADVERTISED SUPPLY ----
     // ---- v328 FIT (owner only): /fit and /fit_api. ABOVE the client gate on purpose, like /supply: a client key, no key or a wrong key gets 404 before any storage is touched. All in src/fit.js.
-    if (url.pathname === "/fit" || url.pathname === "/fit_api" || url.pathname.indexOf("/fit_img/") === 0) { const _ft = await fitRoutes(request, env, url, fitDeps()); if (_ft) return _ft; }
+    if (url.pathname === "/fit" || url.pathname === "/fit_api" || url.pathname === "/fit_steps" || url.pathname.indexOf("/fit_img/") === 0) { const _ft = await fitRoutes(request, env, url, fitDeps()); if (_ft) return _ft; }
     // ---- end FIT ----
     if (keyTier(env, url) === "client" && !clientPathOk(url.pathname) && !CLIENT_DOSSIER_RX.test(url.pathname)) return new Response("unauthorized", { status: 401 });   // v155 (DA-AUD-005) - a client key opens the app pages and nothing else; v212 - and one building dossier file
     // ==== BRIEF (Contract A) - GET /brief_api. All logic in src/brief.js; it refuses anything without READ_KEY or a client key (clientOk).

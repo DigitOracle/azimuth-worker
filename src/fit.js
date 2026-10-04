@@ -15,7 +15,8 @@
 //
 // Storage (KV namespace MEETINGS): fit_<date>_<ms>_<rand> = one entry, with the entry repeated as KV metadata so a range
 // is read with list() alone, no per-entry get. fitc_* = config, flags, one-turn pending answers.
-// Entry: { id, d: "YYYY-MM-DD" (GST), t: ms, k: "food"|"ex", x: text, m: minutes, n: steps, o: 1 if outside the eating windows, s: source }
+// Entry: { u, id, d: "YYYY-MM-DD" (GST), t: ms, k: "food"|"ex"|"w", x: text (or "weight"/"waist" for k "w"), m: minutes, n: steps (a DAY TOTAL: the day keeps the largest),
+//          v: a measurement (k "w": kg or cm), o: 1 if outside the eating windows, s: source }
 
 import { FIT_IMG, FIT_IMG_TYPE } from "./fit_img.js";   // the page photos, bundled (scripts/gen_fit_img.mjs; Pexels licence, assets/fit/CREDITS.md)
 
@@ -134,6 +135,7 @@ export function quickExercise(text) {
   if (w && dur) return { type: exLabel(w[1] || w[0]), minutes: dur, steps: 0 };
   return null;
 }
+const FUTURE_RX = /\b(tomorrow|tonight|later|will|going to|gonna|plan|planning|next|want|wanna|should|need|maybe|could|goal|target|book|booked|at \d|\d\s?(am|pm))\b/i;
 const FOOD_PREFIX = /^\s*(?:🍽️?\s*|(?:food|meal|ate|eating|breakfast|lunch|dinner|snack|brunch|supper)\s*[:\-–—]\s*)(.+)$/is;
 const EX_PREFIX = /^\s*(ex|exercise|workout|gym|train(?:ing)?)\s*[:\-–—]\s*(.+)$/is;
 export const fitCaptionIsFood = (c) => /^\s*(?:🍽|food\b|meal\b|ate\b|eating\b|breakfast\b|lunch\b|dinner\b|snack\b|brunch\b|supper\b)/i.test(String(c || ""));
@@ -156,8 +158,10 @@ async function putEntry(env, e) {
   return e;
 }
 export async function fitAdd(env, f) {
-  const t = f.t || Date.now(), d = f.d || gstDate(t);
-  const e = { u: pickUser(env, f.u), id: d + "_" + String(t).padStart(10, "0") + "_" + rnd(), d, t, k: f.k === "ex" ? "ex" : "food", x: clip(f.x, 140), m: f.k === "ex" ? Math.max(0, Math.round(f.m || 0)) : 0, n: f.k === "ex" ? Math.max(0, Math.round(f.n || 0)) : 0, s: clip(f.s || "web", 12) };
+  const t = f.t || Date.now(), d = f.d || gstDate(t), kind = f.k === "ex" ? "ex" : f.k === "w" ? "w" : "food";
+  const id = f.id && ID_RX.test(String(f.id)) ? String(f.id) : d + "_" + String(t).padStart(10, "0") + "_" + rnd();   // a caller may fix the id so a re-send REPLACES (automatic steps)
+  const e = { u: pickUser(env, f.u), id, d, t, k: kind, x: clip(f.x, 140), m: kind === "ex" ? Math.max(0, Math.round(f.m || 0)) : 0, n: kind === "ex" ? Math.max(0, Math.round(f.n || 0)) : 0, s: clip(f.s || "web", 12) };
+  if (kind === "w") e.v = Math.round((Number(f.v) || 0) * 10) / 10;
   if (f.o) e.o = 1;
   return putEntry(env, e);
 }
@@ -169,6 +173,7 @@ export async function fitDelete(env, id, u) { if (!ID_RX.test(String(id))) retur
 export async function fitEdit(env, id, patch, u) {
   const e = await fitGet(env, id, u); if (!e) return null;
   if ("x" in patch) e.x = clip(patch.x, 140) || e.x;
+  if (e.k === "w" && "v" in patch) { const r = MEASURES[e.x]; const v = Math.round((Number(patch.v) || 0) * 10) / 10; if (r && v >= r.lo && v <= r.hi) e.v = v; }
   if (e.k === "ex") { if ("m" in patch) e.m = Math.max(0, Math.min(1440, Math.round(patch.m || 0))); if ("n" in patch) e.n = Math.max(0, Math.min(200000, Math.round(patch.n || 0))); }
   return putEntry(env, e);
 }
@@ -191,6 +196,36 @@ export async function fitRange(env, from, to, u) {
   }
   return out.sort((a, b) => a.t - b.t);
 }
+
+// ---- rest days: illness, travel, an injury --------------------------------------------------------------------------------
+// A paused day is neither a win nor a miss: it does not break the streak, it is left out of "days hit of N", the verdict says "rest day" instead of
+// calling it a failure, and that week's target shrinks in proportion (a week with 2 rest days asks for 5/7 of the target). A pause can start today
+// or later, never in the past, so a missed day cannot be hidden afterwards. The 30 calendar days do not move.
+export async function fitPausedDates(env, u, from, to) {
+  const base = "fitc_pause_" + pickUser(env, u) + "_", out = new Set(); let cursor;
+  for (let g = 0; g < 5; g++) {
+    const r = await env.MEETINGS.list({ prefix: base, cursor, limit: 1000 });
+    for (const k of r.keys || []) { const d = k.name.slice(base.length); if (DATE_RX.test(d) && d >= from && d <= to) out.add(d); }
+    if (r.list_complete || !r.cursor) break; cursor = r.cursor;
+  }
+  return out;
+}
+export async function fitPause(env, u, today, days, reason) {
+  const n = intIn(days, 1, 14, 1), base = "fitc_pause_" + pickUser(env, u) + "_", dates = [];
+  for (let i = 0; i < n; i++) { const d = addDays(today, i); await env.MEETINGS.put(base + d, clip(reason, 60) || "rest"); dates.push(d); }
+  return dates;
+}
+export async function fitResume(env, u, today) {
+  const base = "fitc_pause_" + pickUser(env, u) + "_"; let n = 0, cursor;
+  for (let g = 0; g < 5; g++) {
+    const r = await env.MEETINGS.list({ prefix: base, cursor, limit: 1000 });
+    for (const k of r.keys || []) { const d = k.name.slice(base.length); if (DATE_RX.test(d) && d >= today) { await env.MEETINGS.delete(k.name); n++; } }
+    if (r.list_complete || !r.cursor) break; cursor = r.cursor;
+  }
+  return n;
+}
+export async function fitPauseReason(env, u, d) { try { return (await env.MEETINGS.get("fitc_pause_" + pickUser(env, u) + "_" + d)) || ""; } catch (e) { return ""; } }
+const scaledTarget = (target, rest) => (rest > 0 ? Math.round(target * Math.max(0, 7 - rest) / 7) : target);
 
 // ---- the weekly target is set every Sunday, for the week ahead --------------------------------------------------------
 // A week runs Monday-Sunday. Sunday is the day the week is judged AND the next one is set: "fit target 10" sent on a Sunday
@@ -215,7 +250,7 @@ export function dayStats(entries, cfg) {
   const s = { meals: 0, out: 0, ex: 0, steps: 0, qualifies: false };
   for (const e of entries || []) {
     if (e.k === "food") { s.meals++; if (e.o) s.out++; }
-    else if (e.k === "ex") { if (e.n) s.steps += e.n; else s.ex += e.m || 0; }
+    else if (e.k === "ex") { if (e.n) s.steps = Math.max(s.steps, e.n); else s.ex += e.m || 0; }   // steps are a total for the day (typed, or sent by the phone): the largest wins, they never add
   }
   s.qualifies = s.ex >= cfg.minDay || (cfg.stepsFloor > 0 && s.steps >= cfg.stepsFloor);
   return s;
@@ -226,28 +261,32 @@ export function weekMinutes(byDay, d) {
   for (let i = 0; i < 7; i++) for (const e of byDay[addDays(ws, i)] || []) if (e.k === "ex" && !e.n) m += e.m || 0;
   return { start: ws, minutes: m };
 }
-export function challengeStats(byDay, cfg, today) {
+export function challengeStats(byDay, cfg, today, paused) {
   if (!cfg.start) return null;
   const end = addDays(cfg.start, cfg.days - 1);
-  if (today < cfg.start) return { start: cfg.start, end, day: 0, days: cfg.days, hit: 0, streak: 0, done: false, over: false };
+  if (today < cfg.start) return { start: cfg.start, end, day: 0, days: cfg.days, hit: 0, rest: 0, counted: 0, streak: 0, done: false, over: false };
   const last = today < end ? today : end;
-  let hit = 0, streak = 0, run = 0;
+  let hit = 0, streak = 0, run = 0, rest = 0;
   for (let d = cfg.start; d <= last; d = addDays(d, 1)) {
+    if (paused && paused.has(d)) { rest++; continue; }   // a rest day is neither a win nor a miss: the run carries over it
     const q = dayStats(byDay[d], cfg).qualifies;
     if (q) { hit++; run++; } else if (d < today) run = 0;   // today may still be won; yesterday's miss resets the run
   }
   streak = run;
-  return { start: cfg.start, end, day: daysBetween(cfg.start, last) + 1, days: cfg.days, hit, streak, done: today >= end, over: today > end };
+  const day = daysBetween(cfg.start, last) + 1;
+  return { start: cfg.start, end, day, days: cfg.days, hit, rest, counted: day - rest, streak, done: today >= end, over: today > end };
 }
 // one read that serves the page, the replies and the evening verdict
 export async function fitSummary(env, d, cfg, today) {
   const sFrom = (() => { const hi = addDays(d, 3) < today ? addDays(d, 3) : today; return { from: addDays(hi, -6), to: hi }; })();   // the 7-day strip ends 3 days after the chosen day, never past today
   const wk = weekStart(d), chStart = cfg.start || d, chEnd = cfg.start ? (addDays(cfg.start, cfg.days - 1) < today ? addDays(cfg.start, cfg.days - 1) : today) : d;
   const from = [sFrom.from, wk, chStart, d].sort()[0], to = [sFrom.to, addDays(wk, 6), chEnd, d].sort().slice(-1)[0];
-  const all = await fitRange(env, from, to, cfg.u), by = groupByDay(all);
-  const days = []; for (let x = sFrom.from; x <= sFrom.to; x = addDays(x, 1)) { const s = dayStats(by[x], cfg); days.push({ d: x, meals: s.meals, out: s.out, ex: s.ex, steps: s.steps, ok: s.qualifies }); }
-  const week = weekMinutes(by, d); week.target = await weekTarget(env, cfg, week.start);
-  return { today, d, entries: by[d] || [], stats: dayStats(by[d], cfg), strip: days, week, challenge: challengeStats(by, cfg, today), by };
+  const all = await fitRange(env, from, to, cfg.u), by = groupByDay(all), paused = await fitPausedDates(env, cfg.u, from, to);
+  const days = []; for (let x = sFrom.from; x <= sFrom.to; x = addDays(x, 1)) { const s = dayStats(by[x], cfg); days.push({ d: x, meals: s.meals, out: s.out, ex: s.ex, steps: s.steps, ok: s.qualifies, rest: paused.has(x) }); }
+  const week = weekMinutes(by, d); week.base = await weekTarget(env, cfg, week.start);
+  week.rest = 0; for (let i = 0; i < 7; i++) if (paused.has(addDays(week.start, i))) week.rest++;
+  week.target = scaledTarget(week.base, week.rest);
+  return { today, d, entries: by[d] || [], stats: dayStats(by[d], cfg), rest: paused.has(d), strip: days, week, challenge: challengeStats(by, cfg, today, paused), paused: [...paused].filter((x) => x >= today).sort(), by };
 }
 
 // ---- cumulative: day by day, week by week, month by month, and the whole challenge ------------------------------------
@@ -276,61 +315,177 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 export async function fitHistory(env, cfg, today) {
   let from = cfg.start && cfg.start <= today ? cfg.start : addDays(today, -29);
   if (from < addDays(today, -400)) from = addDays(today, -400);
-  const by = groupByDay(await fitRange(env, from, today, cfg.u)), stored = await storedTargets(env, cfg.u);
+  const all = await fitRange(env, from, today, cfg.u), by = groupByDay(all), stored = await storedTargets(env, cfg.u), paused = await fitPausedDates(env, cfg.u, from, addDays(today, 14));
   const days = [], weeks = {}, months = {};
-  const t = { days: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0, bestStreak: 0, weeksMet: 0, weeksDone: 0, from, to: today };
+  const t = { days: 0, rest: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0, bestStreak: 0, weeksMet: 0, weeksDone: 0, from, to: today };
   let run = 0;
   for (let d = from; d <= today; d = addDays(d, 1)) {
-    const s = dayStats(by[d], cfg), ok = s.qualifies;
-    days.push({ d, meals: s.meals, out: s.out, ex: s.ex, steps: s.steps, ok });
-    t.days++; t.minutes += s.ex; t.steps += s.steps; t.meals += s.meals; t.out += s.out;
-    if (ok) { t.hit++; run++; if (run > t.bestStreak) t.bestStreak = run; } else if (d < today) run = 0;
-    const ws = weekStart(d), w = weeks[ws] || (weeks[ws] = { ws, from: d, to: d, days: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0 });
-    w.to = d; w.days++; w.minutes += s.ex; w.steps += s.steps; w.meals += s.meals; w.out += s.out; if (ok) w.hit++;
-    const mk = d.slice(0, 7), m = months[mk] || (months[mk] = { m: mk, label: MONTHS[parseInt(mk.slice(5), 10) - 1] + " " + mk.slice(0, 4), days: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0 });
-    m.days++; m.minutes += s.ex; m.steps += s.steps; m.meals += s.meals; m.out += s.out; if (ok) m.hit++;
+    const s = dayStats(by[d], cfg), ok = s.qualifies, rest = paused.has(d);
+    days.push({ d, meals: s.meals, out: s.out, ex: s.ex, steps: s.steps, ok, rest });
+    t.minutes += s.ex; t.steps += s.steps; t.meals += s.meals; t.out += s.out;
+    const ws = weekStart(d), w = weeks[ws] || (weeks[ws] = { ws, from: d, to: d, days: 0, rest: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0 });
+    const mk = d.slice(0, 7), m = months[mk] || (months[mk] = { m: mk, label: MONTHS[parseInt(mk.slice(5), 10) - 1] + " " + mk.slice(0, 4), days: 0, rest: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0 });
+    w.to = d; w.minutes += s.ex; w.steps += s.steps; w.meals += s.meals; w.out += s.out;
+    m.minutes += s.ex; m.steps += s.steps; m.meals += s.meals; m.out += s.out;
+    if (rest) { t.rest++; w.rest++; m.rest++; continue; }   // a rest day is not a day to be judged: it is left out of "days hit of N" and it does not break the run
+    t.days++; w.days++; m.days++;
+    if (ok) { t.hit++; w.hit++; m.hit++; run++; if (run > t.bestStreak) t.bestStreak = run; } else if (d < today) run = 0;
   }
   const wl = Object.values(weeks).sort((a, b) => (a.ws < b.ws ? -1 : 1));
   for (const w of wl) {
-    w.target = carryTarget(stored, w.ws, cfg.weekMin); w.complete = addDays(w.ws, 6) < today;   // the week is over only once its Sunday has passed w.met = w.target > 0 && w.minutes >= w.target;
+    w.base = carryTarget(stored, w.ws, cfg.weekMin);
+    let rest = 0; for (let i = 0; i < 7; i++) if (paused.has(addDays(w.ws, i))) rest++;
+    w.target = scaledTarget(w.base, rest);
+    w.complete = addDays(w.ws, 6) < today;   // the week is over only once its Sunday has passed
+    w.met = w.target > 0 && w.minutes >= w.target;
     if (w.complete) { t.weeksDone++; if (w.met) t.weeksMet++; }
   }
-  return { today, cfg, days, weeks: wl, months: Object.values(months).sort((a, b) => (a.m < b.m ? -1 : 1)), totals: t };
+  return { today, cfg, days, weeks: wl, months: Object.values(months).sort((a, b) => (a.m < b.m ? -1 : 1)), totals: t, measures: fitMeasures(all) };
 }
+// ---- weight and waist (optional; nothing asks for them) ---------------------------------------------------------------------
+// The challenge has an end goal but nothing measures it. "momo weight 82.5" / "momo waist 90" keep the last reading of each day.
+export const MEASURES = { weight: { unit: "kg", lo: 20, hi: 400 }, waist: { unit: "cm", lo: 30, hi: 250 } };
+export function fitMeasures(entries) {
+  const by = {};
+  for (const e of entries || []) if (e.k === "w" && MEASURES[e.x]) (by[e.x] = by[e.x] || []).push(e);
+  const out = {};
+  for (const [what, list] of Object.entries(by)) {
+    list.sort((a, b) => a.t - b.t);
+    const perDay = {}; for (const e of list) perDay[e.d] = e;
+    const series = Object.values(perDay).sort((a, b) => (a.d < b.d ? -1 : 1));
+    out[what] = { unit: MEASURES[what].unit, first: series[0].v, latest: series[series.length - 1].v, change: Math.round((series[series.length - 1].v - series[0].v) * 10) / 10, count: series.length, series: series.slice(-8).map((e) => ({ d: e.d, v: e.v, id: e.id })) };
+  }
+  return out;
+}
+const sgn = (n) => (n > 0 ? "+" : n < 0 ? "-" : "") + Math.abs(n);
 const wd = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" });
 const dm = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 function weekText(cfg, sum) {
   const ws = sum.week.start, L = ["📅 This week (" + dm(ws) + " - " + dm(addDays(ws, 6)) + ")"];
   for (let i = 0; i < 7; i++) {
-    const d = addDays(ws, i), s = dayStats(sum.by[d], cfg), future = d > sum.today;
-    L.push(wd(d) + " " + (future ? "·" : s.qualifies ? "✅" : d === sum.today ? "⏳" : "❌") + (future ? "" : " " + fmtMin(s.ex) + (s.steps ? " + " + fmtSteps(s.steps) + " steps" : "") + " · " + s.meals + " meal" + (s.meals === 1 ? "" : "s") + (s.out ? " (" + s.out + " outside)" : "")));
+    const d = addDays(ws, i), s = dayStats(sum.by[d], cfg), future = d > sum.today, rest = sum.paused && sum.paused.includes(d) || (sum.restDays && sum.restDays.has && sum.restDays.has(d));
+    L.push(wd(d) + " " + (rest ? "⏸" : future ? "·" : s.qualifies ? "✅" : d === sum.today ? "⏳" : "❌") + (future ? "" : " " + fmtMin(s.ex) + (s.steps ? " + " + fmtSteps(s.steps) + " steps" : "") + " · " + s.meals + " meal" + (s.meals === 1 ? "" : "s") + (s.out ? " (" + s.out + " outside)" : "")));
   }
   L.push("", "Week: " + fmtMin(sum.week.minutes) + " of " + fmtMin(sum.week.target) + (sum.week.target && sum.week.minutes >= sum.week.target ? " ✅" : ""));
   return L.join("\n");
 }
 function historyText(h) {
   const t = h.totals, L = ["📈 " + (h.cfg.start ? "Since " + dm(h.cfg.start) : "Last " + t.days + " days") + " · " + t.days + " days"];
-  L.push("Days hit: " + t.hit + " of " + t.days + " · best streak " + t.bestStreak);
+  L.push("Days hit: " + t.hit + " of " + t.days + (t.rest ? " (" + t.rest + " rest day" + (t.rest === 1 ? "" : "s") + " left out)" : "") + " · best streak " + t.bestStreak);
   L.push("Exercise: " + fmtMin(t.minutes) + (t.steps ? " · " + fmtSteps(t.steps) + " steps" : ""));
   L.push("Weeks on target: " + t.weeksMet + " of " + t.weeksDone + " finished · meals outside windows: " + t.out + " of " + t.meals);
+  for (const [what, m] of Object.entries(h.measures || {})) L.push((what === "weight" ? "⚖️ Weight: " : "📏 Waist: ") + m.latest + " " + m.unit + " (" + sgn(m.change) + " " + m.unit + " since the first reading)");
   L.push("");
-  for (const w of h.weeks.slice(-8)) L.push("Wk " + dm(w.ws) + ": " + fmtMin(w.minutes) + " of " + fmtMin(w.target) + (w.complete ? (w.met ? " ✅" : " ❌") : " ⏳") + " · " + w.hit + "/" + w.days + " days");
+  for (const w of h.weeks.slice(-8)) L.push("Wk " + dm(w.ws) + ": " + fmtMin(w.minutes) + " of " + fmtMin(w.target) + (w.complete ? (w.met ? " ✅" : " ❌") : " ⏳") + " · " + w.hit + "/" + w.days + " days" + (w.rest ? " · " + w.rest + " rest" : ""));
   return L.join("\n");
+}
+
+// ---- sharing the week and the streak (mutual opt-in) --------------------------------------------------------------------
+// Only counts are shared, never what anyone ate. You see the other person's week and streak only if BOTH of you switched it on ("momo share on").
+export async function fitShareOn(env, u) { try { return !!(await env.MEETINGS.get("fitc_share_" + pickUser(env, u))); } catch (e) { return false; } }
+export async function fitSetShare(env, u, on) { const k = "fitc_share_" + pickUser(env, u); if (on) await env.MEETINGS.put(k, "1"); else await env.MEETINGS.delete(k); return !!on; }
+const niceName = (x) => x.name || x.id.charAt(0).toUpperCase() + x.id.slice(1);
+export async function fitPartners(env, cfg, today) {
+  if (!(await fitShareOn(env, cfg.u))) return [];
+  const out = [];
+  for (const p of fitUsers(env)) {
+    if (p.id === cfg.u || !(await fitShareOn(env, p.id))) continue;
+    const pc = await fitCfg(env, p.id), ps = await fitSummary(env, today, pc, today), ch = ps.challenge;
+    out.push({ id: p.id, name: niceName(p), week: ps.week.minutes, target: ps.week.target, streak: ch ? ch.streak : 0, hit: ch ? ch.hit : 0, counted: ch ? ch.counted : 0, today: ps.stats.qualifies });
+  }
+  return out;
+}
+export const partnerLine = (p) => "🤝 " + p.name + ": " + fmtMin(p.week) + " of " + fmtMin(p.target) + " this week" + (p.streak > 1 ? " · streak " + p.streak : "") + (p.today ? " · today done" : "");
+
+// ---- Sunday, the long look: this week against the last, the best day, the days missed, the weekday that keeps going wrong ----
+function sundayExtras(cfg, sum, today) {
+  const L = [], ws = sum.week.start, DN = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+  const paused = new Set(sum.paused || []);
+  if (cfg.start && cfg.start < ws) {
+    const lw = weekMinutes(sum.by, addDays(ws, -7)), diff = sum.week.minutes - lw.minutes;
+    L.push("📈 Against last week: " + (diff === 0 ? "level" : (diff > 0 ? "+" : "-") + fmtMin(Math.abs(diff))) + " (" + fmtMin(lw.minutes) + " then, " + fmtMin(sum.week.minutes) + " now)");
+  }
+  let best = null; const missed = [];
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(ws, i); if (d > today) break;
+    const s = dayStats(sum.by[d], cfg);
+    if (s.ex > 0 && (!best || s.ex > best.ex)) best = { d, ex: s.ex };
+    if (!s.qualifies && !paused.has(d) && d >= (cfg.start || ws)) missed.push(wd(d));
+  }
+  if (best) L.push("🏅 Best day: " + wd(best.d) + ", " + fmtMin(best.ex));
+  if (missed.length) L.push("❌ Missed: " + missed.join(", "));
+  const tally = {};
+  for (let d = cfg.start || today; d < today; d = addDays(d, 1)) {
+    if (paused.has(d)) continue;
+    const k = new Date(d + "T00:00:00Z").getUTCDay(), t = tally[k] || (tally[k] = { n: 0, hit: 0 });
+    t.n++; if (dayStats(sum.by[d], cfg).qualifies) t.hit++;
+  }
+  let worst = null; for (const [k, t] of Object.entries(tally)) if (t.n >= 3 && t.hit / t.n <= 0.34 && (!worst || t.hit / t.n < worst.r)) worst = { k: +k, r: t.hit / t.n, hit: t.hit, n: t.n };
+  if (worst) L.push("🔎 Pattern: you tend to miss " + DN[worst.k] + " (" + worst.hit + " of " + worst.n + "). Plan that day first next week.");
+  return L;
+}
+
+// ---- export: everything one person has logged, as a spreadsheet ------------------------------------------------------------
+const csvCell = (v) => { let t = String(v == null ? "" : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };   // a leading = + - @ would run as a formula in a spreadsheet
+export async function fitCsv(env, cfg, today) {
+  const from = cfg.start && cfg.start <= today ? (cfg.start < addDays(today, -400) ? addDays(today, -400) : cfg.start) : addDays(today, -400);
+  const rows = [["date", "time_gst", "kind", "what", "minutes", "steps", "value", "outside_eating_window", "source"]];
+  for (const e of await fitRange(env, from, today, cfg.u)) rows.push([e.d, gstHM(e.t), e.k === "ex" ? "exercise" : e.k === "w" ? "measurement" : "food", e.x, e.k === "ex" && !e.n ? e.m : "", e.n || "", e.k === "w" ? e.v : "", e.k === "food" ? (e.o ? "yes" : "no") : "", e.s]);
+  return rows.map((r) => r.map(csvCell).join(",")).join("\n") + "\n";
+}
+// ---- is it working? one look at when things last happened ----------------------------------------------------------------
+export async function fitHealth(env, cfg, today) {
+  const g = async (k) => { try { return (await env.MEETINGS.get(k)) || null; } catch (e) { return null; } };
+  const recent = await fitRange(env, addDays(today, -30), today, cfg.u);
+  const last = recent.length ? recent[recent.length - 1] : null;
+  return { u: cfg.u, today, entries_30d: recent.length, last_entry: last ? { d: last.d, at: new Date(last.t).toISOString(), source: last.s } : null,
+    evening_check_last_ran: await g("fitc_lastrun"), verdict_last_sent_for_day: await g("fitc_lastsent_" + cfg.u), steps_token_set: !!env.FIT_TOKEN, nudge_template_set: !!env.LOG_NUDGE_TEMPLATE };
 }
 
 // ---- how it talks -----------------------------------------------------------------------------------------------------
 // kind: gentle. firm: plain and direct. brutal: no padding - and still about what was DONE, never about who the person is.
 const SAY = {
-  dayDone: { kind: "Today's minimum is done. Well done.", firm: "Minimum done. That is the standard - repeat it tomorrow.", brutal: "Floor cleared. That is the bare minimum, so do not get comfortable." },
-  weekDone: { kind: "🎉 Weekly target hit - a brilliant week.", firm: "🎉 Weekly target hit. This is what sticking to the plan looks like.", brutal: "🎉 Weekly target hit. Now do it again - one week proves nothing." },
-  dayPass: { kind: "Great day - minimum done and meals on plan.", firm: "Good day. Minimum done, meals in their windows. That is the plan working.", brutal: "Clean day. Minimum done and every meal in its window. Exactly what was promised - now repeat it." },
-  mixed: { kind: "Movement done - a couple of meals fell outside your windows. Easy to fix tomorrow.", firm: "Movement done, but {out} meal{s} outside your eating windows. Half a win - the windows are part of the plan.", brutal: "You moved, but {out} meal{s} landed outside your eating windows. The windows were your rule and you broke them. Half a win is still half a miss." },
-  dayFail: { kind: "Today's movement did not happen. Tomorrow is a fresh start - and even {steps} steps counts.", firm: "You missed today: no {min}-minute workout and no {steps} steps. There was always an option and none was taken. Tomorrow starts the moment you wake up.", brutal: "Today was weak. No workout, and not even the {steps} steps that existed for exactly this day. String days like this together and you will be heavier and slower by next month - by your own choice. Fix it tomorrow." },
-  weekMiss: { kind: "Weekly target missed this time ({got} of {want}). New week, new start.", firm: "Weekly target missed: {got} of {want}. Look at which days were skipped and close that gap next week.", brutal: "Weekly target missed: {got} of {want}. The days you skipped are the gap. Close it next week or stop calling it a target." }
+  dayDone: {
+    kind: ["Today's minimum is done. Well done.", "That is today's floor cleared - lovely.", "Done for the day: you showed up. Well done."],
+    firm: ["Minimum done. That is the standard - repeat it tomorrow.", "Floor cleared. This is what the plan asks, every day.", "Done. Now do the same tomorrow without being asked."],
+    brutal: ["Floor cleared. That is the bare minimum, so do not get comfortable.", "Minimum met. Anyone can do it once - tomorrow is the test.", "Done - and it was the least you promised. Keep going."]
+  },
+  weekDone: {
+    kind: ["🎉 Weekly target hit - a brilliant week.", "🎉 You hit the week's target. Be proud of that.", "🎉 Target met for the week - lovely work."],
+    firm: ["🎉 Weekly target hit. This is what sticking to the plan looks like.", "🎉 Week's target reached. That is consistency, not luck.", "🎉 Target hit. Set the next one on Sunday and go again."],
+    brutal: ["🎉 Weekly target hit. Now do it again - one week proves nothing.", "🎉 Target hit. It only counts if next week looks the same.", "🎉 You did the week. Do not let it be a one-off."]
+  },
+  dayPass: {
+    kind: ["Great day - minimum done and meals on plan.", "A lovely day: you moved and you ate to plan.", "Movement done, meals in their windows - a good day."],
+    firm: ["Good day. Minimum done, meals in their windows. That is the plan working.", "On plan today: the floor and the windows both held.", "Solid day. Floor met, every meal inside its window."],
+    brutal: ["Clean day. Minimum done and every meal in its window. Exactly what was promised - now repeat it.", "Nothing to criticise today. Floor met, windows held. Do it again.", "Clean sheet. That is the standard, not a bonus."]
+  },
+  mixed: {
+    kind: ["Movement done - {out} meal{s} outside your windows. Easy to fix tomorrow.", "You moved, which counts - just {out} meal{s} outside the windows. Tomorrow is a fresh go.", "Floor met, with {out} meal{s} outside your windows. A small thing to tidy up."],
+    firm: ["Movement done, but {out} meal{s} outside your eating windows. Half a win - the windows are part of the plan.", "You moved, yet {out} meal{s} outside the windows. Fix the timing tomorrow.", "Floor met; {out} meal{s} outside the windows keep this from a clean day."],
+    brutal: ["You moved, but {out} meal{s} landed outside your eating windows. The windows were your rule and you broke them. Half a win is still half a miss.", "Floor met, {out} meal{s} outside the windows. You set that rule yourself - hold to it.", "Movement done and {out} meal{s} outside the windows. Do not call that a clean day."]
+  },
+  dayFail: {
+    kind: ["Today's movement did not happen. Tomorrow is a fresh start - and even {steps} steps counts.", "No movement today - it happens. Even {steps} steps would have counted; try again tomorrow.", "Today slipped. Be kind to yourself and take the {steps}-step option tomorrow if nothing else."],
+    firm: ["You missed today: no {min}-minute workout and no {steps} steps. There was always an option and none was taken. Tomorrow starts the moment you wake up.", "You missed today: nothing hit the {min}-minute floor and the {steps} steps never happened. The option was there. Take it tomorrow, early.", "You missed today. No {min} minutes, no {steps} steps - and both were on offer. Reset tomorrow and do not negotiate with it."],
+    brutal: ["Today was weak. No workout, and not even the {steps} steps that existed for exactly this day. String days like this together and you will be heavier and slower by next month - by your own choice. Fix it tomorrow.", "Weak day. No workout and not even {steps} steps - the one thing that was always available. Keep doing this and you will be heavier and slower by next month, and nobody did that to you. Fix it tomorrow.", "Nothing today. The {steps}-step floor exists so you have no excuse, and you still did not meet it. Repeat this often enough and you will be heavier and slower - your decision. Tomorrow, first thing."]
+  },
+  weekMiss: {
+    kind: ["Weekly target missed this time ({got} of {want}). New week, new start.", "The week fell short ({got} of {want}) - set a fair target on Sunday and begin again.", "Not this week ({got} of {want}). Next week is yours."],
+    firm: ["Weekly target missed: {got} of {want}. Look at which days were skipped and close that gap next week.", "Weekly target missed: {got} of {want}. The gap is in the days you skipped - plan those first next week.", "Weekly target missed: {got} of {want}. Be honest about why, then fix that one thing."],
+    brutal: ["Weekly target missed: {got} of {want}. The days you skipped are the gap. Close it next week or stop calling it a target.", "Weekly target missed: {got} of {want}. A target you do not hit is just a wish - hit the next one.", "Weekly target missed: {got} of {want}. You know exactly which days did it. Do not repeat them."]
+  },
+  rest: {
+    kind: ["⏸ Rest day{why}. No judgement - rest is part of it. Back tomorrow.", "⏸ A day off{why}. Look after yourself; the plan will be here."],
+    firm: ["⏸ Rest day{why}. It does not count against you. Back at it tomorrow.", "⏸ Paused{why}. No miss recorded. Resume tomorrow."],
+    brutal: ["⏸ Rest day{why}. Granted - but it is a pause, not a holiday. Back tomorrow.", "⏸ Paused{why}. Recorded as rest, not as a win. Tomorrow you are back."]
+  }
 };
-function say(cfg, key, vars) {
-  const t = (SAY[key] && (SAY[key][cfg.tone] || SAY[key].firm)) || "";
-  return t.replace(/\{(\w+)\}/g, (_, k) => (vars && k in vars ? vars[k] : ""));
+// one of several lines, chosen by person + day + situation: the same day always says the same thing, tomorrow says something else
+export function say(cfg, key, vars, day) {
+  const v = SAY[key] && (SAY[key][cfg.tone] || SAY[key].firm), arr = Array.isArray(v) ? v : [v || ""];
+  let h = 0; for (const ch of String((cfg.u || "") + (day || "") + key)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return String(arr[h % arr.length]).replace(/\{(\w+)\}/g, (_, k) => (vars && k in vars ? vars[k] : ""));
 }
 const sayVars = (cfg, extra) => Object.assign({ steps: fmtSteps(cfg.stepsFloor), min: cfg.minDay }, extra || {});
 
@@ -338,9 +493,9 @@ const sayVars = (cfg, extra) => Object.assign({ steps: fmtSteps(cfg.stepsFloor),
 function stateLines(cfg, sum) {
   const st = sum.stats, L = [];
   L.push("Today: " + st.meals + " meal" + (st.meals === 1 ? "" : "s") + " · " + fmtMin(st.ex) + (st.steps ? " · " + fmtSteps(st.steps) + " steps" : ""));
-  L.push(st.qualifies ? "✅ Daily minimum done" : "⏳ Still needed: " + cfg.minDay + " min of exercise" + (cfg.stepsFloor ? " or " + fmtSteps(cfg.stepsFloor) + " steps" : ""));
+  L.push(sum.rest ? "⏸ Rest day - not counted against you" : st.qualifies ? "✅ Daily minimum done" : "⏳ Still needed: " + cfg.minDay + " min of exercise" + (cfg.stepsFloor ? " or " + fmtSteps(cfg.stepsFloor) + " steps" : ""));
   if (sum.week.target) L.push("Week: " + fmtMin(sum.week.minutes) + " of " + fmtMin(sum.week.target));
-  const ch = sum.challenge; if (ch && ch.day) L.push("Challenge: day " + Math.min(ch.day, ch.days) + " of " + ch.days + " · " + ch.hit + " days hit" + (ch.streak > 1 ? " · streak " + ch.streak : ""));
+  const ch = sum.challenge; if (ch && ch.day) L.push("Challenge: day " + Math.min(ch.day, ch.days) + " of " + ch.days + " · " + ch.hit + " days hit" + (ch.streak > 1 ? " · streak " + ch.streak : "") + (ch.rest ? " · " + ch.rest + " rest" : ""));
   return L.join("\n");
 }
 
@@ -364,8 +519,8 @@ async function logEntry(env, deps, from, f) {
   if (o) parts.push("⚠ That is outside your eating windows (" + windowsText(cfg) + ").");
   parts.push("", stateLines(cfg, sum));
   // positive reinforcement the moment a target is reached, once each
-  if (e.k === "ex" && sum.stats.qualifies && await flagOnce(env, "fitc_flag_" + u + "_" + d + "_day")) parts.push("", "✅ " + say(cfg, "dayDone", sayVars(cfg)));
-  if (e.k === "ex" && sum.week.target && sum.week.minutes >= sum.week.target && await flagOnce(env, "fitc_flag_" + u + "_" + sum.week.start + "_week")) parts.push("", say(cfg, "weekDone", sayVars(cfg)));
+  if (e.k === "ex" && sum.stats.qualifies && await flagOnce(env, "fitc_flag_" + u + "_" + d + "_day")) parts.push("", "✅ " + say(cfg, "dayDone", sayVars(cfg), d));
+  if (e.k === "ex" && sum.week.target && sum.week.minutes >= sum.week.target && await flagOnce(env, "fitc_flag_" + u + "_" + sum.week.start + "_week")) parts.push("", say(cfg, "weekDone", sayVars(cfg), sum.week.start));
   await reply(env, deps, from, parts.join("\n"), [{ id: "fit:undo:" + u + ":" + e.id, title: "↩ Undo" }]);
   return e;
 }
@@ -390,15 +545,20 @@ async function classify(env, deps, text) {
   const g = deps.claudeJSON ? await deps.claudeJSON(env, sys, text, CLASS_SCHEMA, deps.CLAUDE_FAST, 250) : null;
   return g && g.kind ? g : null;
 }
-function statusText(cfg, sum) {
+function statusText(cfg, sum, partners) {
   const L = ["📊 " + (sum.d === sum.today ? "Today" : sum.d), stateLines(cfg, sum)];
   if (cfg.goal) L.push("Goal: " + cfg.goal);
-  const ents = sum.entries.slice(-8).map((e) => (e.k === "food" ? "🍽 " + e.x + (e.o ? " ⚠" : "") : e.n ? "👟 " + fmtSteps(e.n) + " steps" : "🏃 " + e.x + " " + fmtMin(e.m)));
+  for (const p of partners || []) L.push(partnerLine(p));
+  if (sum.paused && sum.paused.length) L.push("⏸ Rest days booked: " + sum.paused.map(dm).join(", "));
+  const ents = sum.entries.slice(-8).map((e) => (e.k === "food" ? "🍽 " + e.x + (e.o ? " ⚠" : "") : e.k === "w" ? "⚖️ " + e.x + " " + e.v + " " + (MEASURES[e.x] || {}).unit : e.n ? "👟 " + fmtSteps(e.n) + " steps" : "🏃 " + e.x + " " + fmtMin(e.m)));
   if (ents.length) L.push("", ents.join("\n"));
   if (sum.today === sum.d && new Date(sum.today + "T00:00:00Z").getUTCDay() === 0) L.push("", SUNDAY_ASK(cfg, sum.week.target));
   L.push("", "Open Momo in the bottom bar for the full view.");
   return L.join("\n");
 }
+const HELP_TEXT = "Momo - just say it and it is logged.\nfood: grilled chicken and rice (or send a photo of the plate)\ngym 45 min · 10k steps\n\nmomo - today · momo week · momo history\nmomo again (repeat your last meal) · momo undo · momo fix <the right text or number>\nmomo pause [days] [why] · momo resume\nmomo weight 82.5 · momo waist 90\nmomo target 10 · momo goal <text> · momo tone kind|firm|brutal\nmomo share on|off · momo extend";
+const entryText = (e) => (e.k === "food" ? e.x : e.k === "w" ? e.x + " " + e.v + " " + ((MEASURES[e.x] || {}).unit || "") : e.n ? fmtSteps(e.n) + " steps" : e.x + " " + fmtMin(e.m));
+async function lastEntry(env, u, today) { const l = await fitRange(env, addDays(today, -2), today, u); return l.length ? l[l.length - 1] : null; }
 // true when the message was FIT's and has been answered; false leaves it for the rest of the webhook
 export async function fitWhatsAppText(env, from, text, deps) {
   text = String(text || "").trim(); if (!text) return false;
@@ -413,7 +573,7 @@ export async function fitWhatsAppText(env, from, text, deps) {
   }
   // commands
   let c;
-  if (/^\s*(fit|my fit|fit log|fit status|my log|food log)\s*\??\s*$/i.test(text)) { const cfg = await fitCfg(env, U), today = gstDate(Date.now()); await reply(env, deps, from, statusText(cfg, await fitSummary(env, today, cfg, today))); return true; }
+  if (/^\s*(fit|my fit|fit log|fit status|my log|food log)\s*\??\s*$/i.test(text)) { const cfg = await fitCfg(env, U), today = gstDate(Date.now()); const sm = await fitSummary(env, today, cfg, today); let pl = []; try { pl = await fitPartners(env, cfg, today); } catch (e) {} await reply(env, deps, from, statusText(cfg, sm, pl)); return true; }
   if (/^\s*fit\s+(week|this week)\s*$/i.test(text)) { const cfg = await fitCfg(env, U), today = gstDate(Date.now()); await reply(env, deps, from, weekText(cfg, await fitSummary(env, today, cfg, today))); return true; }
   if (/^\s*fit\s+(history|total|totals|weeks|progress)\s*$/i.test(text)) { const cfg = await fitCfg(env, U); await reply(env, deps, from, historyText(await fitHistory(env, cfg, gstDate(Date.now())))); return true; }
   if ((c = /^\s*fit\s+goal\s*[:\-–—]?\s*(.{3,200})$/i.exec(text))) { const cfg = await fitCfg(env, U); cfg.goal = clip(c[1], 200); await fitSaveCfg(env, cfg); await reply(env, deps, from, "🎯 Goal set: " + cfg.goal); return true; }
@@ -425,6 +585,45 @@ export async function fitWhatsAppText(env, from, text, deps) {
   if ((c = /^\s*fit\s+tone\s*[:\-–—]?\s*(kind|firm|brutal)\s*$/i.exec(text))) { const cfg = await fitCfg(env, U); cfg.tone = c[1].toLowerCase(); await fitSaveCfg(env, cfg); await reply(env, deps, from, "Tone set to " + cfg.tone + "."); return true; }
   if (/^\s*fit\s+extend\s*$/i.test(text)) { const cfg = await fitCfg(env, U); cfg.days = Math.min(365, cfg.days + 30); await fitSaveCfg(env, cfg); await reply(env, deps, from, "➕ Challenge extended to " + cfg.days + " days."); return true; }
   if (/^\s*fit\s+(start|restart)\s*$/i.test(text)) { const cfg = await fitCfg(env, U); cfg.start = gstDate(Date.now()); await fitSaveCfg(env, cfg); await reply(env, deps, from, "▶️ Challenge starts today - " + cfg.days + " days."); return true; }
+  if (/^\s*fit\s+(help|commands|\?)\s*$/i.test(text)) { await reply(env, deps, from, HELP_TEXT); return true; }
+  if ((c = /^\s*fit\s+pause\b\s*(\d{1,2})?\s*(.{0,60})$/i.exec(text))) {
+    const today = gstDate(Date.now()), days = c[1] ? Math.max(1, Math.min(14, parseInt(c[1], 10))) : 1, dates = await fitPause(env, U, today, days, c[2]);
+    await reply(env, deps, from, dates.length === 1 ? "⏸ Today is a rest day. It will not count against you, and the streak holds. \"momo resume\" ends it." : "⏸ Rest days: " + dm(dates[0]) + " to " + dm(dates[dates.length - 1]) + ". They will not count against you, and the streak holds. \"momo resume\" ends it early.");
+    return true;
+  }
+  if (/^\s*fit\s+resume\s*$/i.test(text)) { const n = await fitResume(env, U, gstDate(Date.now())); await reply(env, deps, from, n ? "▶️ Back on. Rest days from today on are cleared." : "Nothing was paused."); return true; }
+  if (/^\s*fit\s+undo\s*$/i.test(text)) {
+    const today = gstDate(Date.now()), e = await lastEntry(env, U, today);
+    if (!e) { await reply(env, deps, from, "Nothing to undo."); return true; }
+    await fitDelete(env, e.id, U); await reply(env, deps, from, "↩ Removed - " + entryText(e)); return true;
+  }
+  if (/^\s*fit\s+again\s*$/i.test(text)) {
+    const today = gstDate(Date.now()), meals = (await fitRange(env, addDays(today, -3), today, U)).filter((e) => e.k === "food"), e = meals[meals.length - 1];
+    if (!e) { await reply(env, deps, from, "Nothing to repeat yet - log a meal first."); return true; }
+    await logEntry(env, deps, from, { k: "food", x: e.x, s: "wa" }); return true;
+  }
+  if ((c = /^\s*fit\s+fix\s*[:\-–—]?\s*(.{1,140})$/i.exec(text))) {
+    const today = gstDate(Date.now()), e = await lastEntry(env, U, today);
+    if (!e) { await reply(env, deps, from, "Nothing to fix yet."); return true; }
+    const what = c[1].trim(), patch = {}, bare = /^\s*(\d+(?:[.,]\d+)?)\s*$/.exec(what);
+    if (e.k === "food") patch.x = what;
+    else if (e.k === "w") { if (!bare) { await reply(env, deps, from, "Give the right number, like \"momo fix 82.1\"."); return true; } patch.v = parseFloat(bare[1].replace(",", ".")); }
+    else if (e.n) { const n = parseSteps(what) || (bare && parseFloat(bare[1]) >= 100 ? Math.round(parseFloat(bare[1])) : 0); if (!n) { await reply(env, deps, from, "Give the right step count, like \"momo fix 9500 steps\"."); return true; } patch.n = n; }
+    else { const dur = parseDuration(what) || (bare && parseFloat(bare[1]) >= 6 ? Math.round(parseFloat(bare[1])) : 0); if (dur) patch.m = dur; else patch.x = what; }
+    const up = await fitEdit(env, e.id, patch, U); await reply(env, deps, from, up ? "✏️ Updated - " + entryText(up) : "Could not change that one."); return true;
+  }
+  if ((c = /^\s*fit\s+share\s*(on|off)\s*$/i.exec(text))) {
+    const on = c[1].toLowerCase() === "on"; await fitSetShare(env, U, on);
+    await reply(env, deps, from, on ? "🤝 Sharing is ON: only your week and streak (never what you ate). You will see the other person's too once they switch it on." : "Sharing is OFF. Nobody sees your week or streak."); return true;
+  }
+  if ((c = /^\s*fit\s+(weight|waist)\s*[:\-–—]?\s*(\d+(?:[.,]\d+)?)\s*(?:kg|cm)?\s*$/i.exec(text))) {
+    const what = c[1].toLowerCase(), r = MEASURES[what], v = Math.round(parseFloat(c[2].replace(",", ".")) * 10) / 10;
+    if (!(v >= r.lo && v <= r.hi)) { await reply(env, deps, from, "That does not look right for " + what + " (" + r.lo + "-" + r.hi + " " + r.unit + ")."); return true; }
+    const cfg = await fitCfg(env, U), today = gstDate(Date.now()), e = await fitAdd(env, { u: U, k: "w", x: what, v, d: today, s: "wa" });
+    const m = fitMeasures(await fitRange(env, cfg.start && cfg.start < today ? cfg.start : addDays(today, -400), today, U))[what];
+    await reply(env, deps, from, (what === "weight" ? "⚖️ Weight " : "📏 Waist ") + v + " " + r.unit + " logged." + (m && m.count > 1 ? "\nSince the first reading: " + sgn(m.change) + " " + r.unit + " (" + m.first + " to " + m.latest + ")." : "\nThat is your first reading - the next ones show the change."), [{ id: "fit:undo:" + U + ":" + e.id, title: "↩ Undo" }]);
+    return true;
+  }
   // explicit prefixes need no model: "food: grilled chicken and rice", "gym: 45 min"
   if ((c = EX_PREFIX.exec(text))) {
     const rest = c[2].trim(), steps = parseSteps(rest), dur = parseDuration(rest);
@@ -438,6 +637,11 @@ export async function fitWhatsAppText(env, from, text, deps) {
   // anything else must LOOK like food or exercise before a model is asked, so ordinary tasks and meetings never pay for it
   if (!fitLooksRelevant(text)) return false;
   const quick = quickExercise(text);
+  // ...and a plain "gym 40 min" / "12000 steps" is unambiguous: no model, no cost, no chance of it being called a plan
+  if (quick && text.length <= 40 && !FUTURE_RX.test(text)) {
+    const off = /\byesterday\b/i.test(text) ? -1 : 0;
+    await logEntry(env, deps, from, { k: "ex", x: quick.type, m: quick.minutes, n: quick.steps, s: "wa", off }); return true;
+  }
   const g = await classify(env, deps, text);
   if (g) {
     if (g.kind === "other") return false;
@@ -490,7 +694,7 @@ export async function fitButton(env, from, bid, deps) {
   if (bid.indexOf("fit:undo:") === 0) {
     const rest = bid.slice(9), m = /^([a-z0-9]{1,12}):(.+)$/.exec(rest), u = m ? m[1] : fitUserFor(env, from), id = m ? m[2] : rest;
     const e = await fitGet(env, id, u);
-    if (e) { await fitDelete(env, e.id, u); await reply(env, deps, from, "↩ Removed - " + (e.k === "ex" ? (e.n ? fmtSteps(e.n) + " steps" : e.x + " " + fmtMin(e.m)) : e.x)); }
+    if (e) { await fitDelete(env, e.id, u); await reply(env, deps, from, "↩ Removed - " + entryText(e)); }
     else await reply(env, deps, from, "Already removed.");
     return true;
   }
@@ -501,6 +705,7 @@ export async function fitButton(env, from, bid, deps) {
 // ---- the evening verdict (21:00-21:29 GST, once a day, only while the 24-hour window is open) -------------------------
 export async function fitEvening(env, deps, nowMs) {
   const hm = gstHM(nowMs); if (hm < "21:00" || hm >= "21:30") return false;
+  try { await env.MEETINGS.put("fitc_lastrun", new Date(nowMs).toISOString(), { expirationTtl: 3 * 86400 }); } catch (e) {}   // so /fit_api?view=health can say the check ran
   if (!env.WA_ALLOWED) return false;
   const mine = String(env.WA_ALLOWED).replace(/\D/g, ""); let sent = false;
   for (const user of fitUsers(env)) {
@@ -528,20 +733,45 @@ async function eveningFor(env, deps, nowMs, u) {
     return false;
   }
   if (!(await flagOnce(env, "fitc_sent_" + u + "_" + today))) return false;
-  const sum = await fitSummary(env, today, cfg, today), st = sum.stats, ch = sum.challenge, V = sayVars(cfg);
+  const sum = await fitSummary(env, today, cfg, today), st = sum.stats, ch = sum.challenge, V = sayVars(cfg), head = "Day " + ch.day + " of " + cfg.days + " - ";
   const L = [];
-  if (!st.qualifies) L.push("🔴 Day " + ch.day + " of " + cfg.days + " - " + say(cfg, "dayFail", V));
-  else if (st.out > 0) L.push("🟡 Day " + ch.day + " of " + cfg.days + " - " + say(cfg, "mixed", Object.assign({}, V, { out: st.out, s: st.out === 1 ? "" : "s" })));
-  else L.push("🟢 Day " + ch.day + " of " + cfg.days + " - " + say(cfg, "dayPass", V));
+  if (sum.rest) { const why = await fitPauseReason(env, u, today); L.push("⏸ " + head + say(cfg, "rest", { why: why && why !== "rest" ? " (" + why + ")" : "" }, today).replace(/^⏸\s*/, "")); }
+  else if (!st.qualifies) L.push("🔴 " + head + say(cfg, "dayFail", V, today));
+  else if (st.out > 0) L.push("🟡 " + head + say(cfg, "mixed", Object.assign({}, V, { out: st.out, s: st.out === 1 ? "" : "s" }), today));
+  else L.push("🟢 " + head + say(cfg, "dayPass", V, today));
   L.push("", stateLines(cfg, sum));
+  try { for (const p of await fitPartners(env, cfg, today)) L.push(partnerLine(p)); } catch (e) {}
   if (new Date(today + "T00:00:00Z").getUTCDay() === 0) {   // Sunday: this week is judged, next week is set
-    if (sum.week.target) L.push("", sum.week.minutes >= sum.week.target ? say(cfg, "weekDone", V) : say(cfg, "weekMiss", Object.assign({}, V, { got: fmtMin(sum.week.minutes), want: fmtMin(sum.week.target) })));
+    if (sum.week.target) L.push("", sum.week.minutes >= sum.week.target ? say(cfg, "weekDone", V, sum.week.start) : say(cfg, "weekMiss", Object.assign({}, V, { got: fmtMin(sum.week.minutes), want: fmtMin(sum.week.target) }), sum.week.start));
+    const extra = sundayExtras(cfg, sum, today); if (extra.length) L.push("", extra.join("\n"));
     if (!(await env.MEETINGS.get("fitc_wk_" + u + "_" + addDays(today, 1)))) L.push("", SUNDAY_ASK(cfg, cfg.weekMin));
   }
+  try { await env.MEETINGS.put("fitc_lastsent_" + u, today, { expirationTtl: 30 * 86400 }); } catch (e) {}
   const buttons = [];
   if (today === end) { L.push("", "🏁 Challenge complete: " + ch.hit + " of " + cfg.days + " days hit. Extend it?"); buttons.push({ id: "fit:extend", title: "➕ Extend 30 days" }); }
   await reply(env, deps, env.WA_ALLOWED, L.join("\n"), buttons);
   return true;
+}
+
+// ---- steps sent by the phone ------------------------------------------------------------------------------------------------
+// POST /fit_steps  {"user":"kendall","steps":10234,"date":"2026-10-04"}  with header  X-Momo-Token: <FIT_TOKEN>
+// An iPhone Shortcut (README) sends the day's steps from Apple Health each evening. It has its OWN token, not the owner key: the token can write a step
+// count and nothing else. Re-sending replaces that day's automatic count (the id is fixed), so the Shortcut can run as often as it likes. Off until FIT_TOKEN is set.
+function ctEqual(a, b) { a = String(a || ""); b = String(b || ""); if (a.length !== b.length) return false; let r = 0; for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i); return r === 0; }
+export async function fitStepsRoute(request, env) {
+  if (!env.FIT_TOKEN || String(env.FIT_TOKEN).length < 16) return new Response("not found", { status: 404 });
+  if (request.method !== "POST") return J({ ok: false, why: "POST only" }, 405);
+  if (!ctEqual(request.headers.get("X-Momo-Token"), env.FIT_TOKEN)) return new Response("unauthorized", { status: 401 });
+  let b; try { b = await request.json(); } catch (e) { return J({ ok: false, why: "bad json" }, 400); }
+  const user = String((b && b.user) || "").toLowerCase(), steps = Math.round(Number(b && b.steps)), today = gstDate(Date.now());
+  if (!fitUsers(env).some((x) => x.id === user)) return J({ ok: false, why: "unknown user" }, 400);
+  if (!(steps >= 0 && steps <= 200000)) return J({ ok: false, why: "steps out of range" }, 400);
+  const d = DATE_RX.test(String((b && b.date) || "")) ? b.date : today;
+  if (d > today || d < addDays(today, -2)) return J({ ok: false, why: "date must be today or one of the last two days" }, 400);
+  if (steps < 100) return J({ ok: true, skipped: "under 100 steps - not logged" });
+  const idT = Date.parse(d + "T16:00:00Z");   // the id is fixed per day so a re-send replaces it; the entry itself carries the real time
+  await fitAdd(env, { u: user, id: d + "_" + String(idT).padStart(10, "0") + "_autosteps", d, t: d === today ? Date.now() : idT, k: "ex", x: "Steps", n: steps, s: "auto" });
+  return J({ ok: true, user, date: d, steps });
 }
 
 // ---- the page and its API (owner only) --------------------------------------------------------------------------------
@@ -550,6 +780,7 @@ const J = (o, status) => new Response(JSON.stringify(o), { status: status || 200
 // h: { keyTier, najNav, NAJ_NAV_CSS, NAJ_FONTS } + the WhatsApp deps (claudeJSON, CLAUDE_FAST, b64of) for the photo upload.
 export async function fitRoutes(request, env, url, h) {
   const p = url.pathname, isImg = p.indexOf("/fit_img/") === 0;
+  if (p === "/fit_steps") return fitStepsRoute(request, env);   // its own token, not the owner key
   if (p !== "/fit" && p !== "/fit_api" && !isImg) return null;
   if (h.keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });   // a client key, no key, a wrong key: all the same 404
   const key = url.searchParams.get("key") || "";
@@ -566,9 +797,11 @@ export async function fitRoutes(request, env, url, h) {
   const now = Date.now(), today = gstDate(now), ulist = fitUsers(env), us = ulist.map((x) => x.id), names = Object.fromEntries(ulist.map((x) => [x.id, x.name || x.id.charAt(0).toUpperCase() + x.id.slice(1)])), cfg = await fitCfg(env, url.searchParams.get("u"));
   if (request.method === "GET") {
     if (url.searchParams.get("view") === "history") return J(Object.assign({ ok: true, u: cfg.u, users: us, names }, await fitHistory(env, cfg, today)));
+    if (url.searchParams.get("view") === "csv") return new Response(await fitCsv(env, cfg, today), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="momo-' + cfg.u + '-' + today + '.csv"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    if (url.searchParams.get("view") === "health") return J(Object.assign({ ok: true }, await fitHealth(env, cfg, today)));
     let d = url.searchParams.get("d") || today; if (!DATE_RX.test(d) || d > today) d = today;
     const sum = await fitSummary(env, d, cfg, today);
-    return J({ ok: true, u: cfg.u, users: us, names, today, d, cfg, entries: sum.entries, stats: sum.stats, strip: sum.strip, week: sum.week, challenge: sum.challenge });
+    return J({ ok: true, u: cfg.u, users: us, names, share: await fitShareOn(env, cfg.u), partners: await fitPartners(env, cfg, today), rest: sum.rest, paused: sum.paused, today, d, cfg, entries: sum.entries, stats: sum.stats, strip: sum.strip, week: sum.week, challenge: sum.challenge });
   }
   if (request.method !== "POST") return J({ ok: false, why: "method" }, 405);
   if (url.searchParams.get("op") === "photo") {   // read once, drop: nothing about the image is stored
@@ -598,8 +831,16 @@ export async function fitRoutes(request, env, url, h) {
   }
   if (op === "del") return J({ ok: await fitDelete(env, b.id, cfg.u) });
   if (op === "edit") {
-    const patch = {}; if (typeof b.text === "string") patch.x = b.text; if (b.minutes != null) patch.m = b.minutes; if (b.steps != null) patch.n = b.steps;
+    const patch = {}; if (typeof b.text === "string") patch.x = b.text; if (b.minutes != null) patch.m = b.minutes; if (b.steps != null) patch.n = b.steps; if (b.value != null) patch.v = b.value;
     const e = await fitEdit(env, b.id, patch, cfg.u); return e ? J({ ok: true, entry: e }) : J({ ok: false, why: "no such entry" }, 404);
+  }
+  if (op === "pause") { const dates = await fitPause(env, cfg.u, today, b.days, b.reason); return J({ ok: true, dates }); }
+  if (op === "resume") return J({ ok: true, cleared: await fitResume(env, cfg.u, today) });
+  if (op === "share") return J({ ok: true, share: await fitSetShare(env, cfg.u, !!b.on) });
+  if (op === "measure") {
+    const what = String(b.what || ""), r = MEASURES[what], v = Math.round(Number(b.value) * 10) / 10;
+    if (!r || !(v >= r.lo && v <= r.hi)) return J({ ok: false, why: "that does not look right" }, 400);
+    return J({ ok: true, entry: await fitAdd(env, { u: cfg.u, k: "w", x: what, v, d: today, s: "web" }) });
   }
   if (op === "weektarget") { const r = await fitSetWeekTarget(env, cfg, Math.round(Number(b.hours) * 60), today); return r ? J({ ok: true, target: r }) : J({ ok: false, why: "hours out of range" }, 400); }
   if (op === "cfg") { const next = fitCleanCfg(b.cfg, cfg); await fitSaveCfg(env, next); return J({ ok: true, cfg: next }); }
@@ -615,7 +856,7 @@ const FIT_CSS = ".fw{max-width:640px;margin:0 auto;padding:18px 16px calc(96px +
   ".dn{display:flex;align-items:center;justify-content:space-between;margin:8px 0}.dn button{background:none;border:1px solid #2E4540;color:#CFD8D3;border-radius:10px;min-width:40px;min-height:36px;font-size:1rem;cursor:pointer}.dn span{font-size:.9rem;color:#F2EFE6}" +
   ".it{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid #1b2a26;font-size:.88rem;color:#E6E9E4}.it:first-of-type{border-top:0}.it .x{flex:1;min-width:0;word-break:break-word}.it small{color:#8FA39B;font-size:.7rem;display:block}.it .w{color:#E0A458}.it button{background:none;border:0;color:#8FA39B;font-size:1rem;min-width:34px;min-height:34px;cursor:pointer}" +
   ".fc .add+.row{margin-top:12px}.brand{background:#FCF9F4;border-radius:16px;text-align:center;padding:14px 10px 10px;margin:0 0 12px}.brand .logo{display:block;width:min(172px,50%);height:auto;margin:0 auto}.brand .fsub{margin:8px 0 0;color:#4A5C55}.ph:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(12,20,19,.04) 28%,rgba(12,20,19,.80))}.ph{position:relative;height:92px;margin:-14px -14px 12px;border-radius:14px 14px 0 0;background:#16241f center/cover no-repeat;overflow:hidden}.ph b{position:absolute;left:14px;bottom:8px;z-index:1;font-family:'IBM Plex Mono',monospace;font-size:.7rem;letter-spacing:.12em;color:#C5A56A;font-weight:500}.cred{text-align:center;color:#6E847B;font-size:.66rem;margin:6px 0 0}.empty{color:#8FA39B;font-size:.8rem;padding:6px 0}.add{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.add input,.add select,.add textarea,.set input,.set select{background:#0C1413;border:1px solid #2E4540;color:#F2EFE6;border-radius:10px;padding:9px 10px;font:inherit;font-size:.88rem;min-width:0}.add textarea{flex:1 1 100%;min-height:44px;resize:vertical}.add input.g{flex:1}" +
-  ".btn{background:#C5A56A;color:#0C1413;border:0;border-radius:10px;padding:9px 14px;font:inherit;font-weight:600;font-size:.85rem;cursor:pointer;min-height:40px}.btn.s{background:#0E1918;color:#CFD8D3;border:1px solid #2E4540;font-weight:500}" +
+  ".btn{background:#C5A56A;color:#0C1413;border:0;border-radius:10px;padding:9px 14px;font:inherit;font-weight:600;font-size:.85rem;cursor:pointer;min-height:40px}a.btn{display:inline-flex;align-items:center;text-decoration:none}.set label.chk{display:flex;gap:8px;align-items:flex-start;font-size:.78rem;color:#CFD8D3;margin-top:14px;font-family:inherit}.chk input{margin-top:3px}.btn.s{background:#0E1918;color:#CFD8D3;border:1px solid #2E4540;font-weight:500}" +
   ".chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.chips button.on{border-color:#C5A56A;color:#F2EFE6}.chips button{border:1px solid #2E4540;background:#0C1413;color:#CFD8D3;border-radius:99px;padding:7px 12px;font:inherit;font-size:.78rem;cursor:pointer}" +
   ".set label{display:block;font-size:.72rem;color:#8FA39B;margin:10px 0 4px;font-family:'IBM Plex Mono',monospace}.set input,.set select{width:100%;box-sizing:border-box}.wr{display:flex;gap:6px;margin-top:6px}.wr input{flex:1}.note{color:#8FA39B;font-size:.72rem;margin-top:10px;line-height:1.5}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#16241f;border:1px solid #C5A56A;color:#F2EFE6;border-radius:12px;padding:10px 14px;font-size:.84rem;max-width:88%;display:none;z-index:50}";
 
@@ -631,13 +872,13 @@ function fitPageHtml(o) {
     '<div class="note">A photo is read once and thrown away. Only the description is kept.</div></div>' +
     '<div class="fc"><div class="ph" data-img="exercise"><b>EXERCISE</b></div><div id="ex"></div>' +
     '<div class="chips" id="chips"></div><div class="add"><input class="g" id="et" placeholder="Activity" maxlength="40"><input id="en" type="number" inputmode="decimal" min="0" step="any" placeholder="min" style="width:84px"><select id="eu"><option value="m">min</option><option value="h">hours</option><option value="s">steps</option></select><button class="btn" id="ea">Add</button></div></div>' +
-    '<details class="fc" id="hist"><summary style="cursor:pointer;color:#C5A56A;font-family:\'IBM Plex Mono\',monospace;font-size:.7rem;letter-spacing:.12em">PROGRESS &middot; DAY BY DAY, WEEK BY WEEK</summary><div class="ph" data-img="walk" style="margin:12px 0 10px;border-radius:12px;height:104px;background-position:center 76%"><b>EVERY STEP COUNTS</b></div><div class="chips" id="hv"></div><div id="hb"></div></details>' +
+    '<details class="fc" id="hist"><summary style="cursor:pointer;color:#C5A56A;font-family:\'IBM Plex Mono\',monospace;font-size:.7rem;letter-spacing:.12em">PROGRESS &middot; DAY BY DAY, WEEK BY WEEK</summary><div class="ph" data-img="walk" style="margin:12px 0 10px;border-radius:12px;height:104px;background-position:center 76%"><b>EVERY STEP COUNTS</b></div><div class="add" id="mf"><select id="mw"><option value="weight">Weight (kg)</option><option value="waist">Waist (cm)</option></select><input id="mv" type="number" step="0.1" inputmode="decimal" placeholder="e.g. 82.5" style="width:110px"><button class="btn s" id="mb">Log it</button></div><div class="chips" id="hv"></div><div id="hb"></div></details>' +
     '<details class="fc set" id="set"><summary style="cursor:pointer;color:#C5A56A;font-family:\'IBM Plex Mono\',monospace;font-size:.7rem;letter-spacing:.12em">THE PLAN</summary>' +
     '<label>END GOAL</label><input id="s_goal" maxlength="200" placeholder="What is this 30 days for?"><label>CHALLENGE STARTS</label><input id="s_start" type="date"><label>CHALLENGE LENGTH (DAYS)</label><input id="s_days" type="number" min="1" max="365">' +
     '<label>WEEKLY TARGET (HOURS) - CARRIES OVER UNTIL YOU SET IT ON A SUNDAY</label><input id="s_week" type="number" min="0" step="0.5"><label>DAILY FLOOR: WORKOUT MINUTES</label><input id="s_min" type="number" min="5">' +
     '<label>DAILY FLOOR: OR THIS MANY STEPS (0 = OFF)</label><input id="s_steps" type="number" min="0"><label>FEEDBACK TONE</label><select id="s_tone"><option value="kind">Kind</option><option value="firm">Firm</option><option value="brutal">Brutal</option></select>' +
     '<label>EATING WINDOWS (NAME, FROM, TO)</label><div id="s_win"></div>' +
-    '<div class="add"><button class="btn" id="save">Save the plan</button><button class="btn s" id="ext">Extend +30 days</button></div></details>' +
+    '<label class="chk" id="shl"><input type="checkbox" id="s_share"><span>Share my week and streak with the other person (counts only, never what I ate). It shows only when we both switch it on.</span></label><div class="add"><a class="btn s" id="csv" href="#">Download my log (CSV)</a></div><div class="add"><button class="btn" id="save">Save the plan</button><button class="btn s" id="ext">Extend +30 days</button></div></details>' +
     '<div class="cred">Photos: Pexels</div><div class="toast" id="toast"></div></div>' + (o.nav || "") +
     '<script>' + FIT_JS.replace("__KEY__", keyJs) + '</script></body></html>';
 }
@@ -651,23 +892,26 @@ const FIT_JS = "(function(){var KEY=__KEY__;var S={d:null,data:null,u:null};try{
   "function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}" +
   "function hm(ms){var d=new Date(ms+4*3600000);return d.toISOString().slice(11,16)}" +
   "function dlab(d,today){if(d===today)return 'Today';var a=new Date(d+'T00:00:00Z');return a.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'})}" +
+  "function dl2(d){return new Date(d+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'})}" +
   "function bar(p,ok){var b=el('div','bar'),i=el('i',ok?'ok':'');i.style.width=Math.max(0,Math.min(100,p))+'%';b.appendChild(i);return b}" +
   "function pills(j){var o=$('usr');o.textContent='';if(!j.users||j.users.length<2)return;var lb=el('span',null,'Whose log:');lb.style.cssText='color:#8FA39B;font-size:.72rem;align-self:center;margin-right:2px';o.appendChild(lb);j.users.forEach(function(n){var b=el('button',n===j.u?'on':null,(j.names&&j.names[n])||n.charAt(0).toUpperCase()+n.slice(1));b.onclick=function(){S.u=n;try{localStorage.setItem('fit_u',n)}catch(e){}load()};o.appendChild(b)})}" +
   "function load(d){api('GET',null,d?'&d='+d:'').then(function(j){if(!j.ok)return;S.data=j;S.d=j.d;S.u=j.u;pills(j);draw()})}" +
   "function draw(){var j=S.data,c=j.cfg,st=j.stats,ch=j.challenge;$('sub').textContent=ch&&ch.day?'Day '+Math.min(ch.day,ch.days)+' of '+ch.days:'Log your first entry to start the 30 days';" +
   "var box=$('ch');box.textContent='';box.appendChild(el('h2',null,'THE CHALLENGE'));if(c.goal)box.appendChild(el('div','goal',c.goal));" +
-  "if(ch&&ch.day){var r=el('div','row');r.appendChild(el('span',null,'Days hit'));r.appendChild(el('b',null,ch.hit+' of '+Math.min(ch.day,ch.days)+(ch.streak>1?'  ·  streak '+ch.streak:'')));box.appendChild(r);box.appendChild(bar(ch.hit/c.days*100,ch.hit>=c.days));if(ch.over)box.appendChild(el('div','note','The '+c.days+' days are up. Extend it from THE PLAN below.'))}" +
+  "if(ch&&ch.day){var r=el('div','row');r.appendChild(el('span',null,'Days hit'));r.appendChild(el('b',null,ch.hit+' of '+ch.counted+(ch.streak>1?'  ·  streak '+ch.streak:'')+(ch.rest?'  ·  '+ch.rest+' rest':'')));box.appendChild(r);box.appendChild(bar(ch.hit/c.days*100,ch.hit>=c.days));if(ch.over)box.appendChild(el('div','note','The '+c.days+' days are up. Extend it from THE PLAN below.'))}" +
   "var w=el('div','row');w.appendChild(el('span',null,'This week'));w.appendChild(el('b',null,fm(j.week.minutes)+' of '+fm(j.week.target)));box.appendChild(w);box.appendChild(bar(j.week.target?j.week.minutes/j.week.target*100:0,j.week.target&&j.week.minutes>=j.week.target));" +
   "if(new Date(j.today+'T00:00:00Z').getUTCDay()===0&&S.d===j.today){var sb=el('div','add');var si=el('input');si.type='number';si.min='0';si.step='0.5';si.placeholder='Next week target, hours';si.value=Math.round(c.weekMin/6)/10;si.style.flex='1';var sg=el('button','btn','Set');sg.onclick=function(){api('POST',{op:'weektarget',hours:parseFloat(si.value)}).then(function(r){say(r.ok?'Next week: '+fm(r.target.minutes):(r.why||'Could not save'));load(S.d)})};sb.appendChild(si);sb.appendChild(sg);box.appendChild(el('div','note','It is Sunday - this is when the target for next week is set.'));box.appendChild(sb)}" +
-  "var q=el('div','row');q.appendChild(el('span',null,'Daily floor ('+c.minDay+' min'+(c.stepsFloor?' or '+c.stepsFloor.toLocaleString()+' steps':'')+')'));q.appendChild(el('b',null,st.qualifies?'✅ done':'⏳ not yet'));box.appendChild(q);" +
+  "var q=el('div','row');q.appendChild(el('span',null,'Daily floor ('+c.minDay+' min'+(c.stepsFloor?' or '+c.stepsFloor.toLocaleString()+' steps':'')+')'));q.appendChild(el('b',null,j.rest?'⏸ rest day':(st.qualifies?'✅ done':'⏳ not yet')));box.appendChild(q);" +
+  "(j.partners||[]).forEach(function(p){var pr=el('div','row');pr.style.marginTop='8px';pr.appendChild(el('span',null,'🤝 '+p.name));pr.appendChild(el('b',null,fm(p.week)+' of '+fm(p.target)+(p.streak>1?'  ·  streak '+p.streak:'')+(p.today?'  ·  today done':'')));box.appendChild(pr)});" +
+  "if(S.d===j.today){var rb=el('div','add'),rbb=el('button','btn s',j.rest?'Back on (end the rest)':'Rest day…');rbb.onclick=function(){if(j.rest){api('POST',{op:'resume'}).then(function(){say('Back on');load(S.d)});return}var n=prompt('How many days of rest, starting today? (1 to 14)','1');if(n===null)return;var why=prompt('Why? (optional: ill, travel, injury)','');if(why===null)return;api('POST',{op:'pause',days:parseInt(n,10)||1,reason:why}).then(function(r){say(r.ok?'Rest booked - it will not count against you':'Could not save');load(S.d)})};rb.appendChild(rbb);box.appendChild(rb);if(j.paused&&j.paused.length>(j.rest?1:0))box.appendChild(el('div','note','Rest days booked: '+j.paused.map(dl2).join(', ')))}" +
   "var wm=j.week.target&&j.week.minutes>=j.week.target;if((st.qualifies&&S.d===j.today)||wm){var wb=el('div','ph');wb.style.cssText='margin:12px 0 0;border-radius:12px;height:96px;background-position:center 22%';wb.style.backgroundImage=img('win');wb.appendChild(el('b',null,wm?'WEEKLY TARGET HIT':'DAILY FLOOR DONE'));box.appendChild(wb)}" +
   "$('dl').textContent=dlab(S.d,j.today);$('next').disabled=S.d>=j.today;$('next').style.opacity=S.d>=j.today?.3:1;" +
-  "var sp=$('strip');sp.textContent='';j.strip.forEach(function(x){var b=el('button',x.d===S.d?'on':'');var wd=new Date(x.d+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'narrow',timeZone:'UTC'});b.appendChild(el('span',null,wd+' '+x.d.slice(8)));b.appendChild(el('span','dot',x.ok?'🟢':(x.d<j.today?'🔴':'⚪')));b.appendChild(el('span',null,fm(x.ex)));b.onclick=function(){load(x.d)};sp.appendChild(b)});" +
+  "var sp=$('strip');sp.textContent='';j.strip.forEach(function(x){var b=el('button',x.d===S.d?'on':'');var wd=new Date(x.d+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'narrow',timeZone:'UTC'});b.appendChild(el('span',null,wd+' '+x.d.slice(8)));b.appendChild(el('span','dot',x.rest?'⏸':x.ok?'🟢':(x.d<j.today?'🔴':'⚪')));b.appendChild(el('span',null,fm(x.ex)));b.onclick=function(){load(x.d)};sp.appendChild(b)});" +
   "var f=$('food');f.textContent='';var fe=j.entries.filter(function(e){return e.k==='food'});if(!fe.length)f.appendChild(el('div','empty','Nothing logged yet.'));fe.forEach(function(e){f.appendChild(item(e))});" +
   "$('win').textContent=c.windows.length?'Eating windows: '+c.windows.map(function(w){return w.n+' '+w.a+'–'+w.b}).join('  ·  '):'';" +
   "var x=$('ex');x.textContent='';var xe=j.entries.filter(function(e){return e.k==='ex'});if(!xe.length)x.appendChild(el('div','empty','Nothing logged yet.'));xe.forEach(function(e){x.appendChild(item(e))});" +
   "fillSet(c)}" +
-  "function item(e){var r=el('div','it'),b=el('div','x');var t=e.k==='food'?e.x:(e.n?e.n.toLocaleString()+' steps':e.x+' · '+fm(e.m));b.appendChild(document.createTextNode(t));var s=el('small',e.o?'w':null,hm(e.t)+(e.k==='food'&&e.o?'  ·  outside your eating windows':'')+(e.s==='photo'?'  ·  from a photo':''));b.appendChild(s);r.appendChild(b);" +
+  "function item(e){var r=el('div','it'),b=el('div','x');var t=e.k==='food'?e.x:(e.n?e.n.toLocaleString()+' steps':e.x+' · '+fm(e.m));b.appendChild(document.createTextNode(t));var s=el('small',e.o?'w':null,hm(e.t)+(e.k==='food'&&e.o?'  ·  outside your eating windows':'')+(e.s==='photo'?'  ·  from a photo':'')+(e.s==='auto'?'  ·  from your phone':''));b.appendChild(s);r.appendChild(b);" +
   "var ed=el('button',null,'✎');ed.onclick=function(){edit(e)};var de=el('button',null,'✕');de.onclick=function(){api('POST',{op:'del',id:e.id}).then(function(){load(S.d)})};r.appendChild(ed);r.appendChild(de);return r}" +
   "function edit(e){var t=prompt(e.k==='food'?'Edit the description':(e.n?'Edit steps':'Edit minutes'),e.k==='food'?e.x:(e.n?e.n:e.m));if(t==null)return;var b={op:'edit',id:e.id};if(e.k==='food')b.text=t;else if(e.n)b.steps=parseInt(t,10);else b.minutes=parseInt(t,10);api('POST',b).then(function(r){if(!r.ok)say(r.why||'Could not save');load(S.d)})}" +
   "$('prev').onclick=function(){var a=new Date(S.d+'T00:00:00Z');a.setUTCDate(a.getUTCDate()-1);load(a.toISOString().slice(0,10))};$('next').onclick=function(){if(S.d>=S.data.today)return;var a=new Date(S.d+'T00:00:00Z');a.setUTCDate(a.getUTCDate()+1);load(a.toISOString().slice(0,10))};" +
@@ -675,9 +919,11 @@ const FIT_JS = "(function(){var KEY=__KEY__;var S={d:null,data:null,u:null};try{
   "$('ea').onclick=function(){var t=$('et').value.trim(),n=parseFloat($('en').value),u=$('eu').value;if(u==='s'){t=t||'Steps'}if(!t||!(n>0)){say('Give the exercise and a number');return}var b={op:'add',kind:'ex',text:t,d:S.d};if(u==='s')b.steps=Math.round(n);else b.minutes=Math.round(u==='h'?n*60:n);api('POST',b).then(function(r){if(!r.ok){say(r.why||'Could not save');return}$('et').value='';$('en').value='';load(S.d)})};" +
   "var CH=[['Gym','m'],['Walk','m'],['Run','m'],['Steps','s']];CH.forEach(function(c){var b=el('button',null,c[0]==='Steps'?'10,000 steps':c[0]);b.onclick=function(){$('et').value=c[0];$('eu').value=c[1];if(c[0]==='Steps'){$('en').value=S.data&&S.data.cfg.stepsFloor||10000}else{$('en').value='';$('en').focus()}};$('chips').appendChild(b)});" +
   "$('ph').onchange=function(){var f=this.files[0];this.value='';if(!f)return;say('Reading the photo…');var im=new Image();im.onload=function(){var s=Math.min(1,1280/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(function(bl){fetch('/fit_api?op=photo&key='+encodeURIComponent(KEY),{method:'POST',headers:{'Content-Type':'image/jpeg'},body:bl}).then(function(r){return r.json()}).then(function(r){if(r.ok&&r.meal){$('ft').value=r.meal;say('Check it, then tap Add food')}else say('No food found in that photo')}).catch(function(){say('Could not read the photo')})},'image/jpeg',.8)};im.onerror=function(){say('Could not open that photo')};im.src=URL.createObjectURL(f)};" +
-  "function fillSet(c){if(document.activeElement&&$('set').contains(document.activeElement))return;$('s_goal').value=c.goal;$('s_start').value=c.start;$('s_days').value=c.days;$('s_week').value=c.weekMin/60;$('s_min').value=c.minDay;$('s_steps').value=c.stepsFloor;$('s_tone').value=c.tone;var w=$('s_win');w.textContent='';var ws=c.windows.slice();while(ws.length<4)ws.push({n:'',a:'',b:''});ws.forEach(function(x){var r=el('div','wr'),n=el('input'),a=el('input'),b=el('input');n.placeholder='Name';n.value=x.n;a.type='time';a.value=x.a;b.type='time';b.value=x.b;r.appendChild(n);r.appendChild(a);r.appendChild(b);w.appendChild(r)})}" +
+  "function fillSet(c){$('csv').href='/fit_api?view=csv&key='+encodeURIComponent(KEY)+(S.u?'&u='+encodeURIComponent(S.u):'');$('shl').style.display=(S.data.users&&S.data.users.length>1)?'flex':'none';$('s_share').checked=!!S.data.share;if(document.activeElement&&$('set').contains(document.activeElement))return;$('s_goal').value=c.goal;$('s_start').value=c.start;$('s_days').value=c.days;$('s_week').value=c.weekMin/60;$('s_min').value=c.minDay;$('s_steps').value=c.stepsFloor;$('s_tone').value=c.tone;var w=$('s_win');w.textContent='';var ws=c.windows.slice();while(ws.length<4)ws.push({n:'',a:'',b:''});ws.forEach(function(x){var r=el('div','wr'),n=el('input'),a=el('input'),b=el('input');n.placeholder='Name';n.value=x.n;a.type='time';a.value=x.a;b.type='time';b.value=x.b;r.appendChild(n);r.appendChild(a);r.appendChild(b);w.appendChild(r)})}" +
   "$('save').onclick=function(){var ws=[].slice.call($('s_win').children).map(function(r){var i=r.querySelectorAll('input');return{n:i[0].value,a:i[1].value,b:i[2].value}}).filter(function(x){return x.n&&x.a&&x.b});" +
   "api('POST',{op:'cfg',cfg:{goal:$('s_goal').value,start:$('s_start').value,days:parseInt($('s_days').value,10),weekMin:Math.round(parseFloat($('s_week').value)*60),minDay:parseInt($('s_min').value,10),stepsFloor:parseInt($('s_steps').value,10)||0,tone:$('s_tone').value,windows:ws}}).then(function(r){say(r.ok?'Plan saved':'Could not save');$('set').open=false;load(S.d)})};" +
+  "$('s_share').onchange=function(){api('POST',{op:'share',on:this.checked}).then(function(){say(S.data.users.length>1?'Sharing updated':'');load(S.d)})};" +
+  "$('mb').onclick=function(){var v=parseFloat($('mv').value);if(!(v>0)){say('Type the number first');return}api('POST',{op:'measure',what:$('mw').value,value:v}).then(function(r){if(!r.ok){say(r.why||'Could not save');return}$('mv').value='';say('Logged');hload()})};" +
   "$('ext').onclick=function(){api('POST',{op:'extend'}).then(function(r){say(r.ok?'Extended to '+r.cfg.days+' days':'Could not extend');load(S.d)})};" +
   "var HV='weeks',HD=null,HN=[['days','Days'],['weeks','Weeks'],['months','Months'],['total','Total']];" +
   "HN.forEach(function(n){var b=el('button',null,n[1]);b.id='hv_'+n[0];b.onclick=function(){HV=n[0];hdraw()};$('hv').appendChild(b)});" +
@@ -685,10 +931,11 @@ const FIT_JS = "(function(){var KEY=__KEY__;var S={d:null,data:null,u:null};try{
   "function hrow(l,r,sub,pct,ok,red){var w=el('div','it');var b=el('div','x');b.appendChild(document.createTextNode(l));if(sub)b.appendChild(el('small',red?'w':null,sub));if(pct!=null)b.appendChild(bar(pct,ok));w.appendChild(b);w.appendChild(el('b',null,r));return w}" +
   "function dl(d){return new Date(d+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'})}" +
   "function hdraw(){if(!HD)return;HN.forEach(function(n){$('hv_'+n[0]).style.borderColor=n[0]===HV?'#C5A56A':''});var o=$('hb');o.textContent='';var t=HD.totals;" +
-  "if(HV==='days'){HD.days.slice().reverse().forEach(function(x){var s=(x.steps?x.steps.toLocaleString()+' steps · ':'')+x.meals+' meal'+(x.meals===1?'':'s')+(x.out?' ('+x.out+' outside)':'');o.appendChild(hrow(dl(x.d),(x.ok?'🟢 ':(x.d<HD.today?'🔴 ':'⚪ '))+fm(x.ex),s,null,false,x.out>0))})}" +
-  "else if(HV==='weeks'){HD.weeks.slice().reverse().forEach(function(w){var r=fm(w.minutes)+' of '+fm(w.target)+(w.complete?(w.met?' ✅':' ❌'):' ⏳');o.appendChild(hrow('Week of '+dl(w.ws),r,w.hit+' of '+w.days+' days hit'+(w.out?' · '+w.out+' meal'+(w.out===1?'':'s')+' outside windows':''),w.target?w.minutes/w.target*100:0,w.met,w.out>0))})}" +
+  "if(HV==='days'){HD.days.slice().reverse().forEach(function(x){var s=(x.steps?x.steps.toLocaleString()+' steps · ':'')+x.meals+' meal'+(x.meals===1?'':'s')+(x.out?' ('+x.out+' outside)':'');o.appendChild(hrow(dl(x.d),(x.rest?'⏸ ':x.ok?'🟢 ':(x.d<HD.today?'🔴 ':'⚪ '))+fm(x.ex),s,null,false,x.out>0))})}" +
+  "else if(HV==='weeks'){HD.weeks.slice().reverse().forEach(function(w){var r=fm(w.minutes)+' of '+fm(w.target)+(w.complete?(w.met?' ✅':' ❌'):' ⏳');o.appendChild(hrow('Week of '+dl(w.ws),r,w.hit+' of '+w.days+' days hit'+(w.rest?' · '+w.rest+' rest':'')+(w.out?' · '+w.out+' meal'+(w.out===1?'':'s')+' outside windows':''),w.target?w.minutes/w.target*100:0,w.met,w.out>0))})}" +
   "else if(HV==='months'){HD.months.slice().reverse().forEach(function(m){o.appendChild(hrow(m.label,fm(m.minutes),m.hit+' of '+m.days+' days hit'+(m.steps?' · '+m.steps.toLocaleString()+' steps':'')+' · '+m.meals+' meals',m.days?m.hit/m.days*100:0,m.hit===m.days,false))})}" +
-  "else{[['Days hit',t.hit+' of '+t.days],['Best streak',t.bestStreak+' days'],['Exercise in total',fm(t.minutes)],['Steps in total',t.steps.toLocaleString()],['Weeks on target',t.weeksMet+' of '+t.weeksDone+' finished'],['Meals logged',String(t.meals)],['Outside eating windows',t.out+' of '+t.meals]].forEach(function(r){var w=el('div','row');w.style.padding='7px 0';w.appendChild(el('span',null,r[0]));w.appendChild(el('b',null,r[1]));o.appendChild(w)});o.appendChild(bar(t.days?t.hit/t.days*100:0,t.hit===t.days&&t.days>0));o.appendChild(el('div','note','From '+dl(t.from)+' to '+dl(t.to)))}}" +
+  "else{[['Days hit',t.hit+' of '+t.days+(t.rest?' ('+t.rest+' rest left out)':'')],['Best streak',t.bestStreak+' days'],['Exercise in total',fm(t.minutes)],['Steps in total',t.steps.toLocaleString()],['Weeks on target',t.weeksMet+' of '+t.weeksDone+' finished'],['Meals logged',String(t.meals)],['Outside eating windows',t.out+' of '+t.meals]].forEach(function(r){var w=el('div','row');w.style.padding='7px 0';w.appendChild(el('span',null,r[0]));w.appendChild(el('b',null,r[1]));o.appendChild(w)});o.appendChild(bar(t.days?t.hit/t.days*100:0,t.hit===t.days&&t.days>0));o.appendChild(el('div','note','From '+dl(t.from)+' to '+dl(t.to)));" +
+  "Object.keys(HD.measures||{}).forEach(function(k){var m=HD.measures[k];var w=el('div','row');w.style.padding='9px 0 3px';w.appendChild(el('span',null,(k==='weight'?'⚖️ Weight':'📏 Waist')));w.appendChild(el('b',null,m.latest+' '+m.unit+'  ('+(m.change>0?'+':'')+m.change+' since the first reading)'));o.appendChild(w);m.series.slice().reverse().forEach(function(p){var rr=el('div','it'),bb=el('div','x');bb.appendChild(document.createTextNode(p.v+' '+m.unit));bb.appendChild(el('small',null,dl(p.d)));rr.appendChild(bb);var dx=el('button',null,'✕');dx.onclick=function(){api('POST',{op:'del',id:p.id}).then(function(){hload()})};rr.appendChild(dx);o.appendChild(rr)})})}}" +
   "$('hist').addEventListener('toggle',function(){if(this.open)hload()});" +
   "var _ld=load;load=function(d){_ld(d);if($('hist').open)hload()};" +
   "[].forEach.call(document.querySelectorAll('[data-img]'),function(e){e.style.backgroundImage=img(e.getAttribute('data-img'))});" +
