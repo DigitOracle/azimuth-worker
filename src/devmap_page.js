@@ -110,6 +110,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .th b{font-size:12.5px;letter-spacing:.6px}.th span{color:var(--muted);font-size:11.5px}
 .bnd{margin:4px 0 2px}.bnd b{font-size:14px}.bnd small{display:block;color:var(--muted);font-size:11px;margin-top:1px}
 .pg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0}.pc{background:var(--raise);border-radius:6px;padding:5px 8px;border-top:3px solid var(--gold);min-width:0}.pc small{display:block;color:var(--muted);font-size:10.5px}.pc b{display:block;font-size:14px;white-space:nowrap}
+.dn{grid-column:2/-1;display:flex;align-items:center;gap:10px;margin-top:2px}.dn svg{flex:none;display:block}.dn text{fill:var(--ink);font-size:11px;font-weight:600;font-family:inherit}.dn .lg{display:flex;flex-wrap:wrap;gap:2px 10px;font-size:11px;color:var(--muted)}.dn .lg span{white-space:nowrap}.dn .lg i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.sh{border-left:3px solid var(--gold);padding:1px 0 1px 8px;margin:0 0 6px}.sh p{margin:0;font-size:12px}.sh small{color:var(--muted);font-size:10.5px}
 .tcs{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}.tc{border:1px solid var(--gold);border-radius:9px;padding:0 6px;font-size:10px;color:var(--muted)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 6px}.chip{background:var(--raise);border-radius:11px;padding:2px 9px;font-size:11.5px}.chips small{color:var(--muted);font-size:10.5px}
 .dv{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);align-items:center}
@@ -231,6 +233,18 @@ function wireSide(){
 }
 // ---- the area panel: tiers with developers, shown at once ----
 function bar(arr){return '<div class=mix>'+arr.map(function(v,i){return v?'<i style="width:'+v+'%;background:'+TC[i]+'" title="'+DM.TIER_NAMES[i]+' '+v+'%"></i>':''}).join("")+'</div><div class=note style="margin:0">'+arr.map(function(v,i){return DM.TIER_NAMES[i]+' '+v+'%'}).join(' · ')+'</div>'}
+// v318 - inline SVG doughnut of a developer's sales split across the four tiers. No library, no network. Returns '' for missing or zero data.
+function winSay(){var w=IDX.cuts&&IDX.cuts.shares&&IDX.cuts.shares.window,M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function d(x){var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||""));return m?Number(m[3])+' '+M[Number(m[2])-1]+' '+m[1]:''}
+  var p=Array.isArray(w)?w:(w&&typeof w==="object"?[w.from||w.start,w.to||w.end]:(typeof w==="string"?w.split(/\s+to\s+|\s*\/\s*/):[])),x=d(p[0]),y=d(p[1]);return x&&y?x+' to '+y:'last 12 months'}
+function donut(ts){
+  if(!ts)return '';var v=[0,1,2,3].map(function(i){var x=Number(ts[i]);return isFinite(x)&&x>0?x:0}),tot=v[0]+v[1]+v[2]+v[3];if(!(tot>0))return '';
+  var R=20,C=2*Math.PI*R,live=v.filter(function(x){return x>0}).length,gap=live>1?1.6:0,off=0,segs='',top=0,i;
+  for(i=0;i<4;i++){if(v[i]>v[top])top=i}
+  for(i=0;i<4;i++){if(!(v[i]>0))continue;var len=v[i]/tot*C;segs+='<circle cx=26 cy=26 r='+R+' fill=none stroke="'+TC[i]+'" stroke-width=6 data-tier='+i+' data-p='+v[i]+' stroke-dasharray="'+Math.max(len-gap,0.01).toFixed(2)+' '+(C-Math.max(len-gap,0.01)).toFixed(2)+'" stroke-dashoffset="'+(-off).toFixed(2)+'"></circle>';off+=len}
+  var split=[0,1,2,3].filter(function(k){return v[k]>0}).sort(function(a,b){return v[b]-v[a]}).map(function(k){return DM.TIER_NAMES[k]+' '+v[k]+'%'}).join(', ');
+  var lg=[0,1,2,3].filter(function(k){return v[k]>=5}).sort(function(a,b){return v[b]-v[a]}),one=lg.length===1;
+  return '<div class=dn title="'+esc(split)+'"><svg width=48 height=48 viewBox="0 0 52 52" role=img aria-label="Sales by tier: '+esc(split)+'"><title>'+esc(split)+'</title><g transform="rotate(-90 26 26)">'+segs+'</g><text x=26 y=30 text-anchor=middle>'+Math.round(v[top])+'%</text></svg><div class=lg>'+lg.map(function(k){return '<span><i style="background:'+TC[k]+'"></i>'+(one?DM.TIER_NAMES[k]:DM.TIER_NAMES[k].charAt(0))+' '+v[k]+'%</span>'}).join("")+'</div></div>'}
 function devRow(d,area,st){
   var fit=null,entry=area.devs[d.k];
   if(S.screen===3||S.filterBud){if(S.mode==="buy"){fit=DM.budgetFit(entry,d,{mode:S.bud.mode,min:S.bud.min,max:S.bud.max,beds:S.bud.beds},st.bounds)}else{fit=DM.rentFit(entry,{min:S.bud.min,max:S.bud.max,beds:S.bud.beds})}}
@@ -239,9 +253,8 @@ function devRow(d,area,st){
   var price,sub;
   if(S.mode==="rent"){var rs=DM.rentStats(entry);price=rs.enough?'AED '+fmt(S.unit==="sqft"?rs.rpsf:rs.rpsm)+'<small>'+pul()+' a year</small>':'<small>not enough contracts</small>';sub=(rs.enough?'typical rent AED '+fmt(rs.rent)+' a year · '+rs.n+' contracts':'under 3 contracts');}
   else{price='AED '+fmt(pu(d.median))+'<small>'+pul()+' · '+other(d.median).replace(/^/,'')+'</small>';sub=d.n+' sales · '+(d.homes?fmt(d.homes)+' homes':'homes not on record')}
-  var chips='';if(S.mode!=="rent"&&d.tierShare){var order=[0,1,2,3].filter(function(i){return d.tierShare[i]>=5}).sort(function(a,b){return d.tierShare[b]-d.tierShare[a]});
-    if(order.length>1)chips='<div class=tcs>'+order.map(function(i){return '<span class=tc style="border-color:'+TC[i]+'">'+(DM.TIER_NAMES[i]==="ULTRA-LUXURY"?"ULTRA":DM.TIER_NAMES[i])+' '+d.tierShare[i]+'%</span>'}).join("")+'</div>'}   // v314 - the split of its sales across tiers, in tier colours
-  return '<div class="dv'+(out?' out':'')+'"><button class=star type=button data-k="'+esc(d.k)+'" aria-pressed="'+(S.mine[d.k]?'true':'false')+'" title="my developer">'+(S.mine[d.k]?'★':'☆')+'</button><div><div class=nm>'+esc(d.name)+(out?' <span class=ms>(outside budget)</span>':'')+'</div><div class=ms>'+sub+'</div>'+chips+'</div><div class=pr>'+price+'</div></div>'}
+  var chips=S.mode!=="rent"?donut(d.tierShare):'';   // v318 - the split of its sales across tiers as a doughnut, in tier colours (was pills)
+  return '<div class="dv'+(out?' out':'')+'"><button class=star type=button data-k="'+esc(d.k)+'" aria-pressed="'+(S.mine[d.k]?'true':'false')+'" title="my developer">'+(S.mine[d.k]?'★':'☆')+'</button><div><div class=nm>'+esc(d.name)+(out?' <span class=ms>(outside budget)</span>':'')+'</div><div class=ms>'+sub+'</div></div><div class=pr>'+price+'</div>'+chips+'</div>'}
 function areaHtml(slug){
   var area=IDX.areas[slug],st=stats(slug);if(!st)return '<p class=note>Tap an area on the map.</p>';
   var onlyMine=S.onlyMine==null?(mineList().length>0):S.onlyMine;
@@ -264,7 +277,7 @@ function areaHtml(slug){
     if(e){var f=function(u,x){return Math.round(u==="sqft"?x/DM.SQFT:x).toLocaleString("en-US")},say=function(u){return (e.lo==null?'under AED '+f(u,e.hi):e.hi==null?'AED '+f(u,e.lo)+' and above':'AED '+f(u,e.lo)+' to '+f(u,e.hi))+(u==="sqft"?' per sq ft':' per sq m')},o2=S.unit==="sqft"?"sqm":"sqft";
       o+='<div class=bnd><b>'+say(S.unit)+'</b><small>'+say(o2)+'</small></div>'}
     if(t.cards&&t.cards.length)o+='<div class=pg style="--gold:'+TC[t.tier]+'">'+t.cards.map(function(c){return '<div class=pc><small>'+esc(c[0])+'</small><b>'+esc(c[1])+'</b></div>'}).join("")+'</div>';
-    if(t.shares)o+='<div class=chips><span class=chip>Buyers '+t.shares.n+'%</span><span class=chip>Money '+t.shares.money+'%</span><small>Dubai-wide share of sales</small></div>';
+    if(t.shares)o+='<div class=sh style="border-left-color:'+TC[t.tier]+'"><p>'+t.shares.n+' in every 100 Dubai sales are in this tier</p><p>together they are '+t.shares.money+'% of all money spent</p><small>All Dubai sales, '+winSay()+'</small></div>';
     return o}
   h+='<p class=note style="margin:10px 0 0">Each developer sits in the tier where most of its sales here fall (by number of sales). The chips show how its sales split across tiers, so its median can sit in a neighbouring band.</p>';
   view.tiers.forEach(function(t){

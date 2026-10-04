@@ -32,7 +32,7 @@ let parsed = true; try { execFileSync(process.execPath, ["--check", f], { stdio:
 ok(parsed, "the page script still parses");
 ok(!/esc\(t\.prices/.test(js) && !/esc\(t\.band\)/.test(js), "the tier header no longer prints the run-on prices line or the single band sentence");
 ok(/class=pg/.test(js) && /class=pc/.test(js) && /\.pg\{display:grid;grid-template-columns:1fr 1fr/.test(html), "the 2 x 2 grid of price cards (two columns at every width)");
-ok(/Buyers '\+t\.shares\.n\+'%/.test(js) && /Money '\+t\.shares\.money\+'%/.test(js) && /Dubai-wide share of sales/.test(js), "chips 'Buyers n%' and 'Money n%' with the caption 'Dubai-wide share of sales'");
+ok(/in every 100 Dubai sales are in this tier/.test(js) && /together they are '\+t\.shares\.money\+'% of all money spent/.test(js) && /All Dubai sales, '\+winSay\(\)/.test(js) && !/Buyers '/.test(js) && !/Dubai-wide share of sales/.test(js), "tier shares read in plain words: 'N in every 100 Dubai sales are in this tier', 'together they are M% of all money spent', caption 'All Dubai sales, <window>'");
 ok(/S\.unit==="sqft"\?"sqm":"sqft"/.test(js), "the band: the chosen unit first, the other smaller beneath");
 ok(/This view is not complete yet/.test(js) && /loaded for this area so far \(the register holds many more\)/.test(js), "a thin area says only N sales are loaded and the view is not complete");
 ok(/thin\|\|mineHides\?'':filtered\?'<p class=note>None of your developers/.test(js) && /No developer with 3\+ sales sits in this tier here/.test(js), "the per-tier empty line is not shown for a thin area or when my-developers hides everyone; with the filter on it is the plain 'None of your developers' wording");
@@ -46,7 +46,27 @@ ok(/Sales in this tier \('\+fmt\(st\.unknownTier\[t\.tier\]\)\+'\) have no devel
 ok(/of about '\+fmt\(reg\)\+' settled sales in this area are loaded/.test(js) && /register_sales_all_time/.test(js), "loaded vs real: 'X of about Y settled sales in this area are loaded' from area.register_sales_all_time");
 ok(/ here<\/b>; '\+\(st\.devCount-shown\)\+' other developer/.test(js) && /hidden by your filter\. <a href="#" id=showall>Show all developers here/.test(js), "header vs list: 'N of your M here; K other developers hidden by your filter' with the show-all link");
 ok(/None of your developers have 3 or more sales in this tier here/.test(js), "with only-my-developers on, an empty tier says 'None of your developers have 3 or more sales in this tier here'");
-ok(/class=tcs/.test(js) && /d\.tierShare\[i\]>=5/.test(js) && /"ULTRA"/.test(js) && /\.tc\{border:1px solid/.test(html), "each developer row carries chips of its sales split across tiers (every tier with 5% or more), in tier colours");
+ok(/function donut\(ts\)/.test(js) && /<svg width=48 height=48/.test(js) && /\.dn\{grid-column/.test(html), "v318: each developer row carries an inline SVG doughnut of its sales split across tiers");
+ok(!/class=tcs/.test(js) && !/class=tc /.test(js), "v318: the tier pills (class tcs / tc) are gone from the row");
+{
+  const src = js.slice(js.indexOf("function donut(ts)"), js.indexOf("function devRow("));
+  const mk = new Function("TC", "DM", "esc", src + "; return donut;");
+  const donut = mk(["#c5a56a", "#2f8a7f", "#3987e5", "#8a9a96"], { TIER_NAMES: ["ULTRA-LUXURY", "LUXURY", "PREMIUM", "BUDGET"] }, (x) => String(x));
+  const h = donut([0, 79, 5, 16]);
+  const ps = [...h.matchAll(/data-tier=(\d) data-p=(\d+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+  ok(/<svg/.test(h) && /role=img/.test(h) && /aria-label="Sales by tier: LUXURY 79%, BUDGET 16%, PREMIUM 5%"/.test(h) && /<title>LUXURY 79%/.test(h), "doughnut has an aria-label, title and hover text with the exact split", h.slice(0, 300));
+  ok(ps.length === 3 && ps.reduce((t, x) => t + x[1], 0) === 100 && ps.find((x) => x[0] === 1)[1] === 79, "segment values sum to the split (79 + 16 + 5 = 100)", JSON.stringify(ps));
+  const C = 2 * Math.PI * 20, lens = [...h.matchAll(/stroke-dasharray="([\d.]+) /g)].map((m) => Number(m[1]));
+  ok(Math.abs(lens.reduce((t, x) => t + x, 0) + 1.6 * lens.length - C) < 0.1, "arc lengths plus the thin gaps fill the ring exactly");
+  ok(/>79%<\/text>/.test(h), "the dominant tier's percentage sits in the centre");
+  const lg = h.slice(h.indexOf("class=lg"));
+  ok(/L 79%/.test(lg) && /B 16%/.test(lg) && /P 5%/.test(lg), "legend lists tiers at 5% or more as initial + %");
+  const h2 = donut([0, 80, 4, 16]), lg2 = h2.slice(h2.indexOf("class=lg"));
+  ok(!/P 4%/.test(lg2) && /data-tier=2/.test(h2), "a tier under 5% is left out of the legend but kept as an arc");
+  const h3 = donut([0, 100, 0, 0]);
+  ok((h3.match(/<circle/g) || []).length === 1 && /LUXURY 100%/.test(h3) && /stroke-dasharray="125\.6\d? /.test(h3), "a 100% developer shows one full ring and 'LUXURY 100%'", h3);
+  ok(donut(null) === "" && donut([0, 0, 0, 0]) === "" && donut([NaN, undefined, null, -3]) === "", "missing or zero data omits the chart");
+}
 ok(!/ also '\+d\.second/.test(js), "the single 'also N% TIER' text is gone");
 ok(/Each developer sits in the tier where most of its sales here fall \(by number of sales\)/.test(js), "the placement rule is stated once, as a caption");
 const CL = await import("../src/community_labels.js");
