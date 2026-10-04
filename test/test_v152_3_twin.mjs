@@ -43,7 +43,7 @@ ok(/<div id=hp class=hp>[\s\S]*?<\/div><\/div><\/div><div id=rp class="hp rp">/.
 const privMod = (priv.match(/<script type="module">([\s\S]*?)<\/script><\/body><\/html>/) || [])[1] || "";
 ok(privMod.length > 20000 && parses(privMod, ".mjs"), "private twin: the scene script parses with the renderer in it");
 const navP = [...(((priv.match(/<nav class=nnav>([\s\S]*?)<\/nav>/) || [])[1]) || "").matchAll(/href="([^"]+)"/g)].map(m => m[1]);
-ok(navP.length === 7 && navP[navP.findIndex(h => h.startsWith("/map")) + 1] === "/residents?rk=" + encodeURIComponent(RES) && priv.includes("<span>RESIDENTS</span>"), "private twin: a RESIDENTS tab right after MAP opens the full residents view");
+ok(navP.length === 8 && navP[navP.findIndex(h => h.startsWith("/map")) + 1] === "/residents?rk=" + encodeURIComponent(RES) && priv.includes("<span>RESIDENTS</span>"), "private twin: a RESIDENTS tab right after MAP opens the full residents view");
 r = await call("/map?key=" + READ);
 ok(!(await r.text()).includes("RESIDENTS</span>"), "client MAP: no RESIDENTS tab");
 

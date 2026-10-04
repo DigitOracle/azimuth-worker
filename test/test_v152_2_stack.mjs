@@ -55,7 +55,7 @@ ok(r.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin" && /no
 const nav = navHrefs(mp);
 // v208 (Kendall, 21 Sep 2026): reverses v152.2. The key rides EVERY tab, because pinned to three it disappeared the
 // moment Naj tapped a fourth. Still every link, still only ever the real residents key, and RESIDENTS still sits after MAP.
-ok(nav.length === 7 && nav.filter(h => h.includes("rk=")).length === nav.length
+ok(nav.length === 8 && nav.filter(h => h.includes("rk=")).length === nav.length
   && nav.every(h => h.includes("rk=" + encodeURIComponent(RES)))
   && nav.indexOf("/residents?rk=" + encodeURIComponent(RES)) === nav.findIndex(h => h.startsWith("/map")) + 1,
   "MAP private: the residents key rides every tab, and RESIDENTS sits right after MAP");
