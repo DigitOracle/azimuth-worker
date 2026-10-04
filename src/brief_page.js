@@ -42,6 +42,7 @@
 //   - Arabian Ranches is offered through its Land Department areas (EXTRA_AREAS in src/brief.js), not as an app district
 //   - the search and each PDF retry ONCE on a timeout or a dropped connection, saying "Still working..." while they do
 import { BRIEF_CRITERIA, EXTRA_AREAS } from "./brief.js";
+import { labelledName } from "./community_labels.js";   // v307 - community name next to the Land Department name
 import { AMENITY_CARDS_CSS, AMENITY_CARDS_JS } from "./amenity_cards.js";   // v290 AMENITY CARDS - the cards above the homes list
 // The app's districts: slug, name, corridor. Snapshot of img_districts_geo (naj-market-pulse data/board/districts_geo.json,
 // 23 Sep 2026). The route reads the live KV copy first and falls back to this.
@@ -125,7 +126,7 @@ async function briefDistricts(env) {
   if (!rows) rows = BRIEF_DISTRICTS;
   // v282 - the areas the rent register covers that are not app districts (Arabian Ranches, by its Land Department areas)
   for (const [s, x] of Object.entries(EXTRA_AREAS)) if (!rows.some((r) => r[0] === s)) rows = rows.concat([[s, x.name, x.corridor]]);
-  return rows.filter((r) => !NOT_A_DISTRICT.has(r[0])).map((r) => ({ s: r[0], n: NAME_FIX[r[0]] || r[1], c: CORRIDOR_ORDER.includes(r[2]) ? r[2] : "Other" }));
+  return rows.filter((r) => !NOT_A_DISTRICT.has(r[0])).map((r) => ({ s: r[0], n: labelledName(r[0], NAME_FIX[r[0]] || r[1]), c: CORRIDOR_ORDER.includes(r[2]) ? r[2] : "Other" }));
 }
 
 

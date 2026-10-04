@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEVMAP_CORE_JS } from "../src/devmap_core.js";
+import { labelledName, communitiesOf } from "../src/community_labels.js";   // v307
 import { canonicalOf, displayOf, aliasesOf, isCurated } from "../src/devcross.js";   // developer CROSSWALK (4 Oct 2026): one id per developer, however the sources spell it
 export const DM = new Function(DEVMAP_CORE_JS + "; return DM;")();
 
@@ -76,6 +77,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP);
     if (!Object.keys(devs).length) continue;
     areas[g.slug] = { name: g.name, corridor: g.corridor, bbox: g.bbox, centre: g.centre, devs };
+    if (communitiesOf(g.slug).length) { areas[g.slug].label = labelledName(g.slug, g.name); areas[g.slug].community = communitiesOf(g.slug); }   // v307 - community label next to the DLD name
     for (const k of Object.keys(devs)) all.push(...devs[k].c);
   }
   const bounds = (DM.TIER_CFG.bounds && DM.TIER_CFG.bounds.slice()) || DM.percentileBounds(all, DM.TIER_CFG.percentiles);

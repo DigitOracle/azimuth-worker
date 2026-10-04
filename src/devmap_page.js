@@ -12,6 +12,7 @@
 // Wiring in src/index.js: one import, one marked dispatch after /brief, the two paths on CLIENT_PATHS, one card on /start.
 // The page script is a String.raw block with no substitutions and no backticks (the rule src/brief_page.js keeps), checked with node --check.
 import { DEVMAP_CORE_JS } from "./devmap_core.js";
+import { COMMUNITY_LABELS, labelledName } from "./community_labels.js";   // v307 - community name next to the Land Department name
 import { kvJson } from "./brief.js";
 
 export const DEVMAP_PATHS = ["/developers_map", "/developers_map_api"];
@@ -283,6 +284,7 @@ function startMap(){
 // ---- start ----
 Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
   IDX=r[0];GEO=r[1];
+  if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l});
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
   var sl=r[2]&&r[2].devs&&r[2].devs.length?r[2].devs:(cacheGet()||[]);sl.forEach(function(k){S.mine[k]=true});
   $("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Tier bands: "+IDX.cuts.rule;
@@ -296,7 +298,7 @@ Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
 
 export function devmapHtml(key, deps) {
   const nav = deps && deps.NAJ_FONTS ? deps.NAJ_FONTS : "";
-  const js = DEVMAP_CORE_JS + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
+  const js = DEVMAP_CORE_JS + "var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - developers by area</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0e1413">' + nav
     + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + '</style></head><body>'
     + '<div id=map role=region aria-label="Map of Dubai areas: developers and prices"></div>'

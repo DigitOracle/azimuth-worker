@@ -212,7 +212,7 @@ ok(html.includes("Your realtor will verify these details with you.") && !html.in
 ({ html } = await pdf("kind=dossier&keys=testdistrict:10"));
 ok(html.includes(ORIGIN + "/img/bph_alpha_ext") && html.includes(ORIGIN + "/img/bph_alpha_pool"), "the hero and the pool picture come from the published brochure");
 ok(!html.includes("bph_alpha_pool2") && !html.includes("bph_alpha_gym_not_stored"), "pool_2 is never used, and a picture that is not stored is not linked (no broken image)");
-ok(html.includes("alphadev.example") && html.includes("Pictures and amenities: the developer's own project page, https://alphadev.example/alpha-tower"), "each picture is credited, and the small print names the developer's page");
+ok(!html.includes("alphadev.example") && html.includes("Pictures and amenities: the developer's own project page"), "each picture is credited, and the small print names the developer's page");
 ({ html } = await pdf("kind=dossier&keys=testdistrict:12"));
 ok(!html.includes("bph_portal") && !html.includes("listing portal") && !html.includes("Photos to follow") && /<div class="blocksview" data-kind="blocks" style="width:702px;height:300px;/.test(html), "a brochure from a listing portal is refused whole (v285: page 1 shows its Blocks view instead of an empty box)");
 ({ html } = await pdf("kind=dossier&keys=testdistrict:11"));

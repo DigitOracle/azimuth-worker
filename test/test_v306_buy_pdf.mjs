@@ -29,19 +29,19 @@ const scan = (label, h) => { const t = text(h); const hit = BANNED.map((r) => r.
 // ---- A. the documents exist ------------------------------------------------------------------------------------------------------
 const VIDA = "dubaimarina:10", RES = "burjkhalifa:67";
 const dmar = await build("kind=dossier&keys=" + VIDA + "&beds=2&min=1800000&max=2500000&num=1&of=3");
-ok(dmar.status === 200 && dmar.pages === 3, "A1 an Emaar Dubai Marina buy dossier builds: 3 pages (not a 501)", dmar.status + " " + JSON.stringify(dmar.body || ""));
+ok(dmar.status === 200 && dmar.pages === 2, "A1 an Emaar Dubai Marina buy dossier builds: 2 pages (v307) (not a 501)", dmar.status + " " + JSON.stringify(dmar.body || ""));
 const dres = await build("kind=dossier&keys=" + RES + "&beds=2&min=4000000&max=5500000");
-ok(dres.status === 200 && dres.pages === 3, "A2 an Emaar Downtown buy dossier builds");
+ok(dres.status === 200 && dres.pages === 2, "A2 an Emaar Downtown buy dossier builds");
 // a DAMAC Business Bay option: the card carries no developer, the name does (devcross project rule)
 const bbKey = "businessbay:" + Object.keys(FX.unitmix.businessbay.buildings_by_id).find((i) => /paramount/i.test(FX.unitmix.businessbay.buildings_by_id[i].name));
 const ddam = await build("kind=dossier&keys=" + bbKey + "&beds=1&min=1500000&max=2600000");
-ok(ddam.status === 200 && ddam.pages === 3, "A3 a DAMAC Business Bay buy dossier builds", ddam.status + JSON.stringify(ddam.body || ""));
+ok(ddam.status === 200 && ddam.pages === 2, "A3 a DAMAC Business Bay buy dossier builds", ddam.status + JSON.stringify(ddam.body || ""));
 const cmp = await build("kind=compare&keys=" + [VIDA, RES].join(",") + "&beds=2&min=1800000&max=5500000&compare=1&areas=dubaimarina,burjkhalifa");
 ok(cmp.status === 200 && /The areas side by side/.test(cmp.html) && cmp.pages === 4, "A4 a buy compare: the areas side by side + the one-sheet + a map per area = 4 pages", cmp.pages);
 const one = await build("kind=onesheet&keys=" + [VIDA, RES, bbKey].join(",") + "&beds=2&min=1000000&max=6000000");
 ok(one.status === 200 && /options to buy in/.test(one.html), "A5 a buy one-sheet builds (several options)", one.status + JSON.stringify(one.body || ""));
 const pack = await build("kind=pack&keys=" + [VIDA, RES].join(",") + "&beds=2&min=1800000&max=5500000");
-ok(pack.status === 200 && pack.pages === 2 + 6 + 0 || pack.pages >= 8, "A6 a buy pack: one-sheet, map(s), 3 pages per option, no rent appendix", pack.pages);
+ok(pack.status === 200 && pack.pages >= 2 + 2 * 3 - 1 && pack.pages <= 2 + 6, "A6 a buy pack: one-sheet, map(s), 2 or 3 pages per option (v307), no rent appendix", pack.pages);
 
 // ---- B. the numbers: price per sq ft, n >= 3, never an estimate --------------------------------------------------------------------
 const vida = FX.unitmix.dubaimarina.buildings_by_id["10"], row2 = vida.rows.find((r) => r.type === "2 bedroom");
@@ -85,7 +85,7 @@ ok(three.status === 200 && /three-bedroom/.test(text(three.html)), "C8 beds=3 re
 for (const [l, d] of [["Marina dossier", dmar], ["Downtown dossier", dres], ["DAMAC dossier", ddam], ["compare", cmp], ["one-sheet", one], ["pack", pack]]) scan(l, d.html);
 ok(!/DEVELOPER AVAILABILITY|availbox|for sale now|Available now/.test(dmar.html + one.html), "D1 no availability claim anywhere");
 const cur = [...dmar.html.matchAll(/<div class="curator"[^>]*>([\s\S]*?)<\/div>/g)].map((m) => m[1].replace(/<svg[\s\S]*?<\/svg>/, "[WA]"));
-ok(cur.length === 3 && cur.every((c) => c === "Curated by Najjuko &middot; Dubai Decoded [WA] +971 56 548 4397"), "D2 the footer is only 'Curated by Najjuko · Dubai Decoded' + WhatsApp +971 56 548 4397");
+ok(cur.length === 2 && cur.every((c) => c === "Curated by Najjuko &middot; Dubai Decoded [WA] +971 56 548 4397"), "D2 the footer is only 'Curated by Najjuko · Dubai Decoded' + WhatsApp +971 56 548 4397");
 // the audit fixes
 const nb = text(dmar.html);
 ok(!/not (yet )?inspected|COVID/i.test(nb) && /Good School/.test(nb), "D3 school inspection lines ('Not inspected due to COVID 19', 'not yet inspected') are omitted", nb.match(/Schools:[^C]*/));

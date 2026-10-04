@@ -49,6 +49,7 @@ import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailF
 // prints a listing-site (portal) figure - furnishing is "not known" on every page.
 import { applyAnchorOverrides, applyBrokerFacts, brokerFor, ownPhotoFor, PHOTO_CREDIT, longDate } from "./checklist_data.js";   // v291 CHECKLIST - the owner's on-site corrections (map, broker facts, own photos)
 import { canonicalOf, displayOf, resolve as devResolve, isCurated } from "./devcross.js";   // v306 - the developer's canonical name
+import { labelledName } from "./community_labels.js";   // v307
 import { amenIndex, amenFor, briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent, ratingOf, EVIDENCE_MIN } from "./brief.js";
 // v277 (Kendall, 1 Oct 2026): the register "left" estimate is OFF the client face - no "ESTIMATED ... LEFT" box on page 2, no
 // "Still filling" line on the one-sheet card. estimateLeft() stays in src/brief.js and the API still returns estimated_left; nothing
@@ -415,7 +416,7 @@ export async function loadContext(env, q, opts) {
     const br = bro && bro.br;
     const name = br && br.name ? br.name : pretty(C.buy && um && um.name ? um.name : it.n);
     const pos = Number.isFinite(it.lat) && Number.isFinite(it.lon) ? [it.lat, it.lon] : null;   // v285: Number.isFinite - an unbound record's null is not a position
-    const rec = { key, it, st, sts, d, dist: D ? D.name : pretty(it.area), um, tn, un, br, brRefused: bro && bro.refused, brDir: bro && bro.dir,
+    const rec = { key, it, st, sts, d, dist: D ? labelledName(d, D.name) : pretty(it.area), um, tn, un, br, brRefused: bro && bro.refused, brDir: bro && bro.dir,
                   name, aliases: (it.a || []).map(pretty).filter((a) => stemKey(a) !== stemKey(name)), pos, exact: it.i != null && !!pos, n: C.recs.length + 1 };
     if (C.buy) { const mpi = C.mp && Array.isArray(C.mp.items) ? C.mp.items.find((x) => x.d === d && x.i === it.i) : null; const dv = devOf(um, mpi && mpi.dev); Object.assign(rec, { buy, devId: dv.id, devName: dv.name }); }   // v306
     if (Array.isArray(it.fp) && it.fp.length) rec.exact = true;   // v298 - placed by its own footprint in the district layer; its centre is set below
@@ -475,7 +476,7 @@ export async function loadContext(env, q, opts) {
     if (!(env && env.GOOGLE_MAPS_KEY && C.recs.length)) return;
     const LV = liveCtx(env, opts);
     await fillLive(LV, C.recs.map((r) => { const p = r.pos || r.cpos || null;
-      return { crit: r.crit, d: r.d, dn: (C.district[r.d] || {}).name, name: r.it.n, aliases: r.it.a || [], i: r.it.i, is: r.it.is, lat: p ? p[0] : null, lon: p ? p[1] : null, noSub: !!r.it.unbound }; }),
+      return { crit: r.crit, d: r.d, dn: labelledName(r.d, (C.district[r.d] || {}).name), name: r.it.n, aliases: r.it.a || [], i: r.it.i, is: r.it.is, lat: p ? p[0] : null, lon: p ? p[1] : null, noSub: !!r.it.unbound }; }),
       [...new Set((q.musts || []).concat(q.nice || []))], { cluster: true });
     C.liveCalls = LV.calls;
   })();
@@ -512,6 +513,8 @@ const cleanName = (s) => pretty(String(s || "").replace(/\s*[-,]?\s*\b(L\.?\s?L\
 const kmTxt = (d, exact) => (d < 0.05 ? (exact ? "on site" : "") : d.toFixed(1) + " km");
 // v306 - a school's inspection line is shown only when it is a rating; "Not inspected due to COVID 19" / "not yet inspected" is left out
 const isPharmacy = (i) => /pharmac|chemist|drug\s?store/i.test(String(i.n || "") + " " + String(i.x || ""));
+// v307 - a client document never prints the developer's web address, and a "retrieved" date is printed only when it is a real date on or before today
+const retrievedSay = (r) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(r || "")); if (!m) return ""; const t = Date.UTC(+m[1], +m[2] - 1, +m[3]); return isFinite(t) && t <= Date.now() + 4 * 3600e3 ? ", retrieved " + longDate(r) : ""; };
 const join = (xs) => xs.filter(Boolean).join(", ");
 
 function facts(rec) {
@@ -644,7 +647,7 @@ function whereLines(C, rec) {
 function nearbyLines(C, rec) {
   const pos = rec.pos || rec.cpos;
   if (!pos) return [];
-  const sc = nearest(C, pos, "school", 3), cl = nearest(C, pos, "clinic", 8).filter((s) => !isPharmacy(s.i)).slice(0, 3), gy = nearestGyms(C, rec, pos, 2);   // v306 - a pharmacy is not a clinic
+  const sc = nearest(C, pos, "school", 40).filter((s) => ratingOf(s.i.x)).slice(0, 3), cl = nearest(C, pos, "clinic", 8).filter((s) => !isPharmacy(s.i)).slice(0, 3), gy = nearestGyms(C, rec, pos, 2);   // v306 - a pharmacy is not a clinic
   const out = [];
   if (sc.length) out.push("Schools: " + sc.map((s) => esc(cleanName(s.i.n)) + (join([esc(ratingOf(s.i.x)), kmTxt(s.d, rec.exact)]) ? " (" + join([esc(ratingOf(s.i.x)), kmTxt(s.d, rec.exact)]) + ")" : "")).join(", "));
   if (cl.length) out.push("Clinics: " + cl.map((s) => esc(cleanName(s.i.n)) + (kmTxt(s.d, rec.exact) ? " (" + kmTxt(s.d, rec.exact) + ")" : "")).join(", "));
@@ -706,13 +709,13 @@ function buildingSource(rec) {
 const BV_SAY = "A Blocks view is the building as a simple block on the app's district model (footprints and streets &copy; OpenStreetMap contributors), heights to scale, seen from the south - a picture of where and how tall it is, not a photograph.";
 const nearbySource = () => "Metro: RTA station register. Schools (with their KHDA inspection rating) and clinics (Dubai Health Authority licence register): the nearest to this building, straight-line distances, not walking or driving times. Gyms: the community's mapped places (OpenStreetMap and Google Maps listings).";
 function pictureSource(rec) {
-  if (rec.picSource === "render" && !rec.ownPic) return "Picture on page 1: an illustration, Najma's own render, not a photograph" + (renderBasis(rec) ? " - modelled from the plot polygon and the as-built outline." : " - it does not claim to show this building as built.") + (rec.br ? " Amenities: the developer's own project page, " + esc(rec.br.source_url || "not yet verified") + "." : "");
+  if (rec.picSource === "render" && !rec.ownPic) return "Picture on page 1: an illustration, Najma's own render, not a photograph" + (renderBasis(rec) ? " - modelled from the plot polygon and the as-built outline." : " - it does not claim to show this building as built.") + (rec.br ? " Amenities: the developer's own project page." : "");
   const bv = rec.picSource && rec.picSource !== "photo" && rec.picSource !== "none" && rec.picSource !== "street_view" ? " The picture on page 1 is a Blocks view, not a photograph: " + BV_SAY +
     (rec.picSource === "blocks_area" ? " This record is a community of homes, not one building: the homes in gold are those the district model places in its Land Department sub-community - an approximate area." : "") : "";
   if (rec.ownPic) return "Picture on page 1: Najjuko's own photograph, taken on site" + (rec.ownPic.at ? " (" + esc(longDate(rec.ownPic.at)) + ")" : "") + " - " + PHOTO_CREDIT + "." +   // v291 CHECKLIST
-    (rec.br && rec.br.source_url ? " Amenities: the developer's own project page, " + esc(rec.br.source_url) + "." : "");
+    (rec.br ? " Amenities: the developer's own project page." : "");
   if (!rec.br) return bv.trim();
-  return "Pictures and amenities: the developer's own project page" + (rec.br.source_url ? ", " + esc(rec.br.source_url) : "") + (rec.br.retrieved ? ", retrieved " + esc(rec.br.retrieved) : "") + ". " +
+  return "Pictures and amenities: the developer's own project page" + retrievedSay(rec.br.retrieved) + ". " +
     esc(rec.br.amenities_note || rec.br.photos_note || "");
 }
 
@@ -788,7 +791,7 @@ const bedsWordOf = (q) => { const bl = (q.bedsList || [q.beds]).filter((b) => BE
 
 const MAP_TO_FOLLOW = (h) => '<div class="maptofollow" style="height:' + h + 'px;border:1px dashed #DED9D0;display:flex;align-items:center;justify-content:center;font-size:14px;color:' + MUTED + ';">' + REALTOR_VERIFIES + '</div>';
 
-function dossierPage2(C, rec, q, sub) {
+function dossierPage2(C, rec, q, sub, more) {   // v307 - more: a purchase puts the sales table under the map ({ html, small })
   const D = C.district[rec.d] || {};
   const mark = markOf(rec, D.layer);
   const svg = D.layer && mark.placed ? briefMapSvg(D.layer, [mark], { single: true, district: rec.dist, districtSlug: rec.d }) : "";
@@ -796,11 +799,11 @@ function dossierPage2(C, rec, q, sub) {
   const mw = cb ? (rec.avail && rec.avail.count ? 470 : 560) : 700;
   const map = svg ? '<div style="width:' + (mw + 2) + 'px;border:1px solid #E6E1D8;line-height:0;">' + svg.replace("<svg ", '<svg style="width:' + mw + 'px;height:auto;display:block;" ') + "</div>" : MAP_TO_FOLLOW(cb ? 300 : 468);
   const body = '<div class="serif" style="font-size:24px;color:' + NAVY + ';">Where it is</div><div class="sub">' + (mark.area ? "The community&rsquo;s homes in gold (an approximate area), among the other buildings of " : "The building in gold on its own plot, among the other buildings of ") + esc(rec.dist) +
-    ". Simple blocks, heights to scale, seen from the south.</div>" + map + cb + availBlock(rec, q);
+    ". Simple blocks, heights to scale, seen from the south.</div>" + map + cb + availBlock(rec, q) + (more ? more.html : "");
   return page(C, sub, body, smallPrint([
     svg ? "Map: footprints and streets &copy; OpenStreetMap contributors; building position from the app's district model" + (mark.approx ? " (this one approximate, from a public map listing)" : "") +
       (mark.area ? " - here the homes the district model places in the Land Department sub-community of this name, an approximate area, not a surveyed boundary" : "") + "." : "",
-    rec.avail && rec.avail.count ? "Availability: " + esc(rec.avail.developer) + "'s own availability sheet of " + esc(rec.avail.as_of || "") + ", as posted to the broker group; the developer's statement, not a register." : ""]));
+    rec.avail && rec.avail.count ? "Availability: " + esc(rec.avail.developer) + "'s own availability sheet of " + esc(rec.avail.as_of || "") + ", as posted to the broker group; the developer's statement, not a register." : ""].concat(more ? more.small : [])));
 }
 
 function groupLayouts(rec, B) {
@@ -857,14 +860,14 @@ function dossierPage3(C, rec, q, sub) {
   const photos = ph.length ? '<div style="display:grid;grid-template-columns:repeat(' + k + ',minmax(0,1fr));gap:8px;">' + ph.map((p) =>
     '<div style="display:flex;flex-direction:column;gap:2px;">' + fitImg(p.pic || { src: p.src }, colW, 112, p.caption) +
     '<div style="font-size:9.5px;color:' + MUTED + ';">' + esc(String(p.caption || "").split(" (")[0].split(" - ").pop()) + "</div>" +
-    '<div style="font-size:8px;color:#8C887C;">' + esc(hostOf(p.page_url || (rec.br && rec.br.source_url)) || "developer's page") + "</div></div>").join("") + "</div>"
+    '<div style="font-size:8px;color:#8C887C;">' + "The developer&rsquo;s page" + "</div></div>").join("") + "</div>"
     : '<div style="font-size:11px;color:' + MUTED + ";border:1px dashed #DED9D0;padding:8px 10px;\">The developer's page publishes no pictures of the pool, gym or lobby and no floor plans. Ask the leasing team or listing broker for photographs of the actual flat.</div>";
   return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + photos + layoutsBlock(rec, q),
     smallPrint([rentSource(C, q, rec), buildingSource(rec), rec.un ? "Layouts: Dubai Land Department units register, flat by flat." : "", nearbySource(), pictureSource(rec)]));
 }
 export function dossierHtml(C, rec, q, i, of) {
   const sub = dossierSub(rec, q, i, of);
-  return dossierPage1(C, rec, q, sub) + dossierPage2(C, rec, q, sub) + (rec.buy ? buyPage3(C, rec, q, sub) : dossierPage3(C, rec, q, sub));
+  return dossierPage1(C, rec, q, sub) + dossierPage2(C, rec, q, sub, rec.buy ? { html: buySalesTable(rec, q), small: [buySource(C, q, rec)] } : null) + (rec.buy ? buyPages(C, rec, q, sub) : dossierPage3(C, rec, q, sub));
 }
 
 // ------------------------------------------------------------------------------------------------ the one-sheet (A4 landscape)
@@ -1467,17 +1470,23 @@ function buySalesTable(rec, q) {
   return '<div style="display:flex;flex-direction:column;gap:6px;"><div class="serif" style="font-size:20px;color:' + NAVY + ';">What homes here sold for</div>' +
     '<div style="font-size:11.5px;color:' + MUTED + ';line-height:1.42;">Sales recorded at the Land Department for ' + esc(rec.name) + ', by home type: the typical price, the typical size and the price per sq ft (the typical price divided by the typical size). Sizes include the balcony.' + span + "</div>" + tbl(head, rows) + "</div>";
 }
+// v307 - page 2 carries the map and the sales table; a third page exists only when there are photographs or flat-by-flat layouts to put on it
+function buyPages(C, rec, q, sub) {
+  const B = BEDS[q.beds], G = rec.un && rec.un.floors ? groupLayouts(rec, B) : null;
+  const needP3 = (rec.photos && rec.photos.length) || (G && G.top.length);
+  return needP3 ? buyPage3(C, rec, q, sub) : "";
+}
 function buyPage3(C, rec, q, sub) {
   const ph = rec.photos || [];
   const k = Math.min(4, ph.length), colW = (702 - 8 * (k - 1)) / Math.max(1, k);
   const photos = ph.length ? '<div style="display:grid;grid-template-columns:repeat(' + k + ',minmax(0,1fr));gap:8px;">' + ph.map((p) =>
     '<div style="display:flex;flex-direction:column;gap:2px;">' + fitImg(p.pic || { src: p.src }, colW, 112, p.caption) +
     '<div style="font-size:9.5px;color:' + MUTED + ';">' + esc(String(p.caption || "").split(" (")[0].split(" - ").pop()) + "</div>" +
-    '<div style="font-size:8px;color:#8C887C;">' + esc(hostOf(p.page_url || (rec.br && rec.br.source_url)) || "developer's page") + "</div></div>").join("") + "</div>" : "";
+    '<div style="font-size:8px;color:#8C887C;">' + "The developer&rsquo;s page" + "</div></div>").join("") + "</div>" : "";
   const B = BEDS[q.beds];
   const G = rec.un && rec.un.floors ? groupLayouts(rec, B) : null;
   const lay = G && G.top.length ? layoutsBlock(rec, q) : "";
-  return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + photos + buySalesTable(rec, q) + lay,
+  return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + photos + lay,
     smallPrint([buySource(C, q, rec), buildingSource(rec), rec.un ? "Layouts: Dubai Land Department units register, flat by flat." : "", nearbySource(), pictureSource(rec)]));
 }
 function buySource(C, q, rec) {
