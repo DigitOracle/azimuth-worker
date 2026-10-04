@@ -122,6 +122,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .lc{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:10px;background:var(--raise);cursor:pointer}.lh{display:flex;justify-content:space-between;align-items:center;gap:8px}.lh b{font-family:Fraunces,Georgia,serif;font-size:15px}.badge{background:var(--gold);color:#1d1608;border-radius:999px;min-width:22px;text-align:center;padding:0 7px;font-size:12px;font-weight:700}
 .dg2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}@media(max-width:340px){.dg2{grid-template-columns:1fr}}
 .dc{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;min-width:0}.dcn{font-weight:600;font-size:13px}.dcm{color:var(--gold);font-size:11px}.dcb{font-family:Fraunces,Georgia,serif;font-size:16px;line-height:1.15;margin-top:4px;overflow-wrap:anywhere}.dcs{color:var(--muted);font-size:11.5px}.dce{color:var(--muted);font-size:10.5px;margin-top:2px}.rb{position:relative;height:3px;border-radius:2px;background:var(--line);margin-top:8px}.rb i{position:absolute;top:-3px;width:9px;height:9px;margin-left:-4px;border-radius:50%;background:var(--gold)}
+.qn{color:var(--gold);font-size:11.5px}
 .ev{font-size:12.5px;margin:6px 0;padding-left:8px;border-left:3px solid var(--line)}.ev b{margin-right:4px}.evt{display:block;font-size:10.5px;color:var(--gold)}
 .dlink{color:inherit;text-decoration:underline dotted var(--gold);text-underline-offset:3px;cursor:pointer}
 .pt{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}.pt th{text-align:left;color:var(--muted);font-weight:400;font-size:11px;padding:3px 4px;border-bottom:1px solid var(--line)}.pt td{padding:5px 4px;border-bottom:1px solid var(--line)}.pt .r{text-align:right}
@@ -181,7 +182,7 @@ function ixOf(win){
   Object.keys(IDX.areas).forEach(function(s){var a=IDX.areas[s];
     if(!hasEv(a)){o.areas[s]=a;fb.push(a.name);return}
     var b={},f;for(f in a)b[f]=a[f];b.devs={};
-    Object.keys(a.devs).forEach(function(dk){var d=a.devs[dk],e={},g;for(g in d)e[g]=d[g];e.c=d.c12||[];e.b=d.b12!==undefined?d.b12:(d.b||[]);if(!e.c.length&&!(d.r||[]).length)return;b.devs[dk]=e});
+    Object.keys(a.devs).forEach(function(dk){var d=a.devs[dk],e={},g;for(g in d)e[g]=d[g];e.c=d.c12||[];e.q=d.q12||null;e.b=d.b12!==undefined?d.b12:(d.b||[]);if(!e.c.length&&!(d.r||[]).length)return;b.devs[dk]=e});
     o.areas[s]=b});
   // v323 - the developer list, project counts and scale cut-offs for the window, so a profile never mixes a 12-month count with all-years cut-offs
   Object.keys(o.areas).forEach(function(s){var ds=o.areas[s].devs;Object.keys(ds).forEach(function(dk){if(dk==="_")return;var d=ds[dk];if(!d.c.length&&!(d.r||[]).length)return;
@@ -347,6 +348,8 @@ function donut(ts,dk,ar){
   var split=[0,1,2,3].filter(function(k){return v[k]>0}).sort(function(a,b){return v[b]-v[a]}).map(function(k){return DM.TIER_NAMES[k]+' '+v[k]+'%'}).join(', ');
   var lg=[0,1,2,3].filter(function(k){return v[k]>=5}).sort(function(a,b){return v[b]-v[a]}),one=lg.length===1;
   return '<div class=dn title="'+esc(split)+'"><svg width=48 height=48 viewBox="0 0 52 52" role=img aria-label="Sales by price band: '+esc(split)+'"><title>'+esc(split)+'</title><g transform="rotate(-90 26 26)">'+segs+'</g><text x=26 y=30 text-anchor=middle>'+Math.round(v[top])+'%</text></svg><div class=lg>'+lg.map(function(k){return '<span'+(dk?' class=dseg style="cursor:pointer" data-tier='+k+' data-dk="'+esc(dk)+'" data-ar="'+esc(ar||'')+'"':'')+'><i style="background:'+TC[k]+'"></i>'+tierWord(k)+' '+v[k]+'%</span>'}).join("")+'</div></div>'}
+// v325 - HOW SURE is the developer? q = [sales the Land Department register confirms, sales matched by project name]. Absent (an older index) or all confirmed: no note.
+function qNote(e){var q=e&&e.q;if(!q||!(q[1]>0))return '';var t=q[0]+q[1];return ' · <span class=qn title="The register does not name this developer for these sales. The project name or the developer sheet does.">'+(q[0]===0?'developer matched by project name':Math.round(100*q[0]/t)+'% confirmed by the register, the rest matched by project name')+'</span>'}
 function devRow(d,area,st){
   var fit=null,entry=area.devs[d.k];
   if(S.screen===3||S.filterBud){if(S.mode==="buy"){fit=DM.budgetFit(entry,d,{mode:S.bud.mode,min:S.bud.min,max:S.bud.max,beds:S.bud.beds},st.bounds)}else{fit=DM.rentFit(entry,{min:S.bud.min,max:S.bud.max,beds:S.bud.beds})}}
@@ -354,7 +357,7 @@ function devRow(d,area,st){
   var out=fit&&fit.fit===false&&(S.bud.max!=null||S.bud.min!=null);
   var price,sub,hasD=false;
   if(S.mode==="rent"){var rs=DM.rentStats(entry);price=rs.enough?'AED '+fmt(S.unit==="sqft"?rs.rpsf:rs.rpsm)+'<small>'+pul()+' a year</small>':'<small>not enough contracts</small>';sub=(rs.enough?'typical rent AED '+fmt(rs.rent)+' a year · '+rs.n+' contracts':'under 3 contracts');}
-  else{price='AED '+fmt(pu(d.median))+'<small>'+pul()+' · '+other(d.median).replace(/^/,'')+'</small>';var rawd=IDX.areas[S.sel]&&IDX.areas[S.sel].devs[d.k];hasD=!!(rawd&&rawd.ev);sub=d.n+' sales'+(function(n){return n?' across '+n+' project'+(n===1?'':'s'):''})((entry.b||[]).length)+(hasEv(IDX.areas[S.sel])&&st.median?' · area AED '+fmt(pu(st.median)):'')+(hasD?' · <a href="#" class=evl data-k="'+esc(d.k)+'">Show the sales behind this number</a>':'')}
+  else{price='AED '+fmt(pu(d.median))+'<small>'+pul()+' · '+other(d.median).replace(/^/,'')+'</small>';var rawd=IDX.areas[S.sel]&&IDX.areas[S.sel].devs[d.k];hasD=!!(rawd&&rawd.ev);sub=d.n+' sales'+(function(n){return n?' across '+n+' project'+(n===1?'':'s'):''})((entry.b||[]).length)+(hasEv(IDX.areas[S.sel])&&st.median?' · area AED '+fmt(pu(st.median)):'')+qNote(entry)+(hasD?' · <a href="#" class=evl data-k="'+esc(d.k)+'">Show the sales behind this number</a>':'')}
   var chips=S.mode!=="rent"?donut(d.tierShare,d.k,S.sel):'';   // v318 - the split of its sales across tiers as a doughnut, in tier colours (was pills)
   return '<div class="dv'+(out?' out':'')+'"><button class=star type=button data-k="'+esc(d.k)+'" aria-pressed="'+(S.mine[d.k]?'true':'false')+'" title="my developer">'+(S.mine[d.k]?'★':'☆')+'</button><div><div class=nm><a href="#" class=dlink data-k="'+esc(d.k)+'">'+esc(d.name)+'</a>'+(out?' <span class=ms>(outside budget)</span>':'')+'</div>'+brandLine(d)+'<div class=ms>'+sub+'</div></div><div class=pr>'+price+'</div>'+chips+'</div>'+(S.drawer===d.k&&hasD&&S.mode!=="rent"?evHtml(S.sel,d.k):'')}
 // ---- v322 - THE SALES BEHIND THE NUMBER (reads index data only; nothing here is computed from anywhere else) ----
