@@ -71,7 +71,10 @@ QN_STORE = "AZIMUTH_2"
 APPROVED_SEND = "najjuko:971565484397"
 
 [triggers]
-crons = ["*/5 3-18 * * *"]
+# v334 - EMPTY ON PURPOSE. The live meeting-capture has NO schedule: reminders were switched off at Kendall's request and its cron was removed. This tree used to list
+# crons = ["*/5 3-18 * * *"]; a plain `wrangler deploy` or `triggers deploy` from here would put the reminders back. Ship this tree ONLY with `wrangler versions upload`
+# and `wrangler versions deploy` (they do not touch triggers). Do not restore the schedule unless Kendall asks for reminders again.
+crons = []
 
 # secrets on meeting-capture (set already; DO NOT re-enter unless a fresh worker):
 #   ANTHROPIC_API_KEY CF_RENDER_TOKEN GH_PAT INGEST_TOKEN MISTRAL_API_KEY MS_CLIENT_SECRET
