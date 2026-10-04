@@ -109,6 +109,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     let op = null;
     const opf = offplanDir && (offplanSlugs || []).includes(g.slug) ? path.join(offplanDir, "unitmix_" + g.slug + ".synthetic.json") : null;
     if (opf && fs.existsSync(opf)) { U = U || { buildings_by_id: {} }; op = addOffplan(U, opf); }
+    if ((!U || !U.buildings_by_id) && evidence && evidence.areas && evidence.areas[g.slug]) U = { buildings_by_id: {} };   // v322: a district with register sales but no card file still gets its evidence
     if (!U || !U.buildings_by_id) continue;
     const nameDev = {};
     const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev);

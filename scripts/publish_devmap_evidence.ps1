@@ -2,6 +2,7 @@
 # KENDALL RUNS THIS (it writes production KV). Claude has run it only with -DryRun, which writes nothing.
 #   powershell -File scripts\publish_devmap_evidence.ps1 [-DryRun] [-Cards <cov_cards dir>] [-Shares <dld_tier_shares json>] [-Slugs <off-plan districts>] [-Work <dir>]
 # What it does, in order (stops at the first failure and prints the real error):
+#   0  (new) the district list also takes every district that has a municipality polygon but was missing from img_districts_geo
 #   1  reads the LIVE inputs (read-only) and BACKS UP the live img_devmap_index to <Work>\devmap_index.backup.json, plus a second copy in <Work>\..\devmap_backups
 #   2  asks the lake (read-only, one short query) for the register's home-sale counts per district
 #   3  first build (the same index as today, plus the project-to-developer map), then the evidence from the lake, then the final build WITH the evidence
@@ -21,20 +22,24 @@ $um = Join-Path $Work "um"; New-Item -ItemType Directory -Force $um | Out-Null
 $bk = Join-Path (Split-Path -Parent $Work) "devmap_backups"; New-Item -ItemType Directory -Force $bk | Out-Null
 Write-Host "1/5 reading live inputs (read-only) and backing up the live index"
 foreach ($k in "districts_geo", "map_prices", "rent_index") { Read-Live "img_$k" "$Work\$k.json" }
+Read-Live "img_district_polygons" "$Work\district_polygons.json"
+# the district list = img_districts_geo PLUS every district with a municipality polygon that the list lacks (Ras Al Khor, Bukadra, Liwan): see scripts\merge_districts_geo.mjs
+& node "$Here\merge_districts_geo.mjs" "$Work\districts_geo.json" "$Work\district_polygons.json" "$Work\districts_geo_all.json"
+if ($LASTEXITCODE -ne 0) { Stop-Here "merging the district list failed (message above)" }
 Read-Live "img_ejari_projects_index" "$Work\ejari_projects_index.json" -AllowMissing
 Read-Live "img_devmap_index" "$Work\devmap_index.backup.json"
 Copy-Item "$Work\devmap_index.backup.json" (Join-Path $bk ("img_devmap_index_before_evidence_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".json"))
-$geo = Get-Content "$Work\districts_geo.json" -Raw | ConvertFrom-Json
+$geo = Get-Content "$Work\districts_geo_all.json" -Raw | ConvertFrom-Json
 foreach ($d in $geo.districts) { Read-Live "img_unitmix_$($d.slug)" "$um\um_$($d.slug).raw" -AllowMissing }
 Write-Host "2/5 register counts from the lake (read-only)"
-& python "$Here\build_area_register_counts.py" --geo "$Work\districts_geo.json" --out "$Work\area_register.json"
+& python "$Here\build_area_register_counts.py" --geo "$Work\districts_geo_all.json" --out "$Work\area_register.json"
 if ($LASTEXITCODE -ne 0) { Stop-Here "the register counts failed (message above)" }
 Write-Host "3/5 building: first pass, evidence from the lake, final pass"
-$common = @("--um", $um, "--prices", "$Work\map_prices.json", "--rent", "$Work\rent_index.json", "--geo", "$Work\districts_geo.json", "--shares", $Shares, "--register", "$Work\area_register.json", "--offplan", $Cards, "--offplan-slugs", $Slugs)
+$common = @("--um", $um, "--prices", "$Work\map_prices.json", "--rent", "$Work\rent_index.json", "--geo", "$Work\districts_geo_all.json", "--shares", $Shares, "--register", "$Work\area_register.json", "--offplan", $Cards, "--offplan-slugs", $Slugs)
 if (Test-Path "$Work\ejari_projects_index.json") { $common += @("--ejari", "$Work\ejari_projects_index.json") }
 & node "$Here\build_devmap_index.mjs" @common --projdev-out "$Work\projdev.json" --out "$Work\devmap_index.first.json"
 if ($LASTEXITCODE -ne 0) { Stop-Here "the first index build failed (message above)" }
-& python "$Here\build_area_evidence.py" --geo "$Work\districts_geo.json" --projdev "$Work\projdev.json" --out "$Work\area_evidence.json"
+& python "$Here\build_area_evidence.py" --geo "$Work\districts_geo_all.json" --projdev "$Work\projdev.json" --out "$Work\area_evidence.json"
 if ($LASTEXITCODE -ne 0) { Stop-Here "the evidence build failed (message above)" }
 $out = "$Work\devmap_index.new.json"
 & node "$Here\build_devmap_index.mjs" @common --evidence "$Work\area_evidence.json" --out $out

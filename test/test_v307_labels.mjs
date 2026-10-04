@@ -13,7 +13,7 @@ const ok = (c, m, d) => { if (c) { pass++; console.log("  ok - " + m); } else { 
 ok(labelledName("alhebiahfifth", "Al Hebiah 5") === "DAMAC Lagoons (Al Hebiah Fifth)", "Al Hebiah Fifth -> DAMAC Lagoons");
 ok(labelledName("alyelayiss1", "x") === "DAMAC Islands (Al Yelayiss 1)", "Al Yelayiss 1 -> DAMAC Islands");
 ok(labelledName("madinathind4", "x") === "DAMAC Hills 2 (Madinat Hind 4)", "Madinat Hind 4 -> DAMAC Hills 2");
-ok(labelledName("alyufrah1", "x") === "The Valley (Al Yufrah 1)" && !/sobha/i.test(JSON.stringify(COMMUNITY_LABELS)), "Al Yufrah 1 -> The Valley only (Sobha Sanctuary is not in the research)");
+ok(labelledName("alyufrah1", "x") === "The Valley (Al Yufrah 1)" && !/sobha/i.test(JSON.stringify(COMMUNITY_LABELS.alyufrah1)), "Al Yufrah 1 -> The Valley only (Sobha Sanctuary is not in the research)");
 ok(labelledName("madinatalmataar", "x") === "Dubai South / Emaar South / Expo Living (Madinat Al Mataar)", "several communities are listed whole");
 ok(communitiesOf("zaabeelsecond")[0] === "d3" && communitiesOf("wadialsafa5")[0] === "Arabian Ranches III", "d3 and Arabian Ranches III");
 ok(labelledName("jltsouth", "Jumeirah Islands") === "Jumeirah Islands" && labelledName("burjkhalifa", "Downtown Dubai") === "Downtown Dubai", "unlabelled districts keep their name");

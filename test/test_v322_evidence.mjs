@@ -3,6 +3,8 @@
 //   node test/test_v322_evidence.mjs
 import { devmapHtml } from "../src/devmap_page.js";
 import { buildIndex, DM } from "../scripts/build_devmap_index.mjs";
+import { mergeDistricts } from "../scripts/merge_districts_geo.mjs";
+import { labelledName, communitiesOf } from "../src/community_labels.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -127,6 +129,28 @@ console.log("G - the scripts");
   const ps = fs.readFileSync(path.join(root, "scripts", "publish_devmap_evidence.ps1"), "utf8");
   ok(/Test-QuietWindow/.test(ps) && /devmap_index\.backup\.json/.test(ps) && /Stop-Here/.test(ps) && !/--remote/.test(ps.replace(/no --remote flag/g, "")), "publish script: quiet-window guard, backup of the live index, stops at first failure, no --remote flag");
   ok(/-DryRun/.test(ps) && /Put-Kv "img_devmap_index"/.test(ps) && ps.indexOf("if ($DryRun)") < ps.indexOf("Put-Kv"), "dry run exits before the put");
+}
+
+console.log("H - districts that had polygons but were missing from the district list (Ras Al Khor, Bukadra, Liwan)");
+{
+  const geo = { districts: [{ slug: "a", name: "A", bbox: [1, 1, 2, 2], centre: [1.5, 1.5] }] };
+  const polys = { features: [
+    { properties: { slug: "a", name: "A again" }, geometry: { type: "Polygon", coordinates: [[[1, 1], [2, 1], [2, 2], [1, 1]]] } },
+    { properties: { slug: "rasalkhor", name: "Sobha One / Ras Al Khor" }, geometry: { type: "MultiPolygon", coordinates: [[[[55.30, 25.15], [55.34, 25.15], [55.34, 25.19], [55.30, 25.15]]], [[[55.31, 25.14], [55.32, 25.14], [55.32, 25.16], [55.31, 25.14]]]] } },
+    { properties: { slug: "nogeometry", name: "x" } } ] };
+  const m = mergeDistricts(geo, polys);
+  const r = m.districts.find((d) => d.slug === "rasalkhor");
+  ok(m.districts.length === 2 && m.added.join() === "rasalkhor", "a district already in the list is not added twice; one without an outline is skipped; Ras Al Khor is added", JSON.stringify(m.added));
+  ok(r && r.name === "Sobha One / Ras Al Khor" && JSON.stringify(r.bbox) === JSON.stringify([55.3, 25.14, 55.34, 25.19]) && Math.abs(r.centre[0] - 55.32) < 1e-9, "its box and centre are worked out from the outline, name from the polygon file", JSON.stringify(r));
+  ok(labelledName("rasalkhor", "x") === "Sobha One (Ras Al Khor Industrial First)" && labelledName("bukadra", "x") === "Sobha Hartland II (Bukadra)", "community labels: Sobha One and Sobha Hartland II");
+  const { COMMUNITY_LABELS } = await import("../src/community_labels.js");
+  ok(/wildlife sanctuary/.test(COMMUNITY_LABELS.rasalkhor.why) && /82%/.test(COMMUNITY_LABELS.bukadra.why) && communitiesOf("bukadra").length === 1, "each new label carries its reason (the share of register sales that backs it)");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dm322nocards_"));
+  const ev = { meta: { l12_to: "2026-08-31" }, areas: { rasalkhor: { dld: ["Ras Al Khor Industrial First"], shared: false, ev: { all: [10, 20000, 0, 0, 10, 20000, 10, 20000, 0, 0, 50, 70, 120], l12: [4, 21000, 0, 0, 4, 21000, 4, 21000, 0, 0, 50, 70, 120], y: [], first: "2024-03-19", last: "2026-08-27" }, devs: { sobha: { c12: [[4, 21000, 1.4e6, 1]], ev: { all: [10, 20000, 0, 0, 10, 20000, 10, 20000, 0, 0, 50, 70, 120], l12: [4, 21000, 0, 0, 4, 21000, 4, 21000, 0, 0, 50, 70, 120] } } } } } };
+  const idx = buildIndex({ umDir: dir, prices: { items: [] }, rent: { items: [] }, geo: m, ejariProjects: null, outAsOf: "x", shares: null, offplanDir: null, offplanSlugs: [], register: null, evidence: ev });
+  ok(idx.areas.rasalkhor && idx.areas.rasalkhor.label === "Sobha One (Ras Al Khor Industrial First)" && idx.areas.rasalkhor.devs.sobha.c12.length === 1, "a district with register sales but no card file is built from the evidence alone, with its label");
+  const idx0 = buildIndex({ umDir: dir, prices: { items: [] }, rent: { items: [] }, geo: m, ejariProjects: null, outAsOf: "x", shares: null, offplanDir: null, offplanSlugs: [], register: null });
+  ok(!idx0.areas.rasalkhor, "without evidence and without cards the district is still left out (old behaviour)");
 }
 
 console.log("\n" + pass + " passed, " + fail + " failed");
