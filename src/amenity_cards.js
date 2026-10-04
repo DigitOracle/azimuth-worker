@@ -146,7 +146,7 @@ export function pictureOf(sp, haveKey) {
     const when = monthYear(p.pano_date);
     return { route: "street_view", credit: "© Google · Street View" + (when ? ", " + when : "") };
   }
-  return { route: "satellite", credit: "© Google · satellite view" };
+  return null;   // v298 - no satellite route
 }
 // the Google request for a spot's picture (server-side only; it carries the key)
 export function googleUrl(sp, key, w) {
@@ -155,14 +155,13 @@ export function googleUrl(sp, key, w) {
   const sw = Math.min(640, W), sh = Math.round(sw * 0.5625);
   if (p.route === "street_view") return "https://maps.googleapis.com/maps/api/streetview?size=" + sw + "x" + sh + "&pano=" + encodeURIComponent(p.pano_id) +
     (isFinite(+p.heading) && p.heading !== "" && p.heading != null ? "&heading=" + Math.round(+p.heading) : "") + "&fov=80&return_error_code=true&key=" + k;
-  return "https://maps.googleapis.com/maps/api/staticmap?center=" + (+sp.lat).toFixed(6) + "," + (+sp.lng).toFixed(6) + "&zoom=18&size=" + sw + "x" + sh + "&maptype=satellite&key=" + k;
+  return null;   // v298 - there is no Maps Static / satellite address any more
 }
 // v290.2 - a spot ready to fetch: for a Places photo, the place's CURRENT first photo and its author (Place Details, photos field only),
 // else the same spot as a satellite picture of its position (Google's terms: a Places photo is shown with its author, so none without)
 export async function freshSpot(env, spot) {
   const p = (spot && spot.picture) || {};
   if (p.route !== "places_photo") return spot;
-  const asSat = Object.assign({}, spot, { picture: Object.assign({}, p, { route: "satellite" }) });
   try {
     const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
     const t = setTimeout(() => { try { ac && ac.abort(); } catch (e) {} }, 2000);   // a small JSON answer: 2 s is ample
@@ -173,12 +172,13 @@ export async function freshSpot(env, spot) {
       j = r && r.ok ? await r.json() : null;
     } finally { clearTimeout(t); }
     const ph = j && Array.isArray(j.photos) ? j.photos.find((x) => x && x.name && Array.isArray(x.authorAttributions) && x.authorAttributions.some((a) => a && a.displayName)) : null;
-    if (!ph) return asSat;
+    if (!ph) return null;   // v298 - no author, no Places photo; and never a satellite stand-in
     return Object.assign({}, spot, { picture: Object.assign({}, p, { photo_name: ph.name, photo_authors: ph.authorAttributions.map((a) => a && a.displayName).filter(Boolean) }) });
   } catch (e) { return null; }   // timed out or unreachable: no picture (a second slow try would blow the card's time budget)
 }
 // fetch one picture with a short timeout; null on any failure (never throws, never echoes the URL)
 async function fetchPicture(url, stream) {
+  if (!url) return null;   // v298
   const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
   const t = setTimeout(() => { try { ac && ac.abort(); } catch (e) {} }, PIC_TIMEOUT_MS);
   try {

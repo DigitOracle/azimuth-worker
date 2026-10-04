@@ -67,7 +67,7 @@ function renderSet(RIDX, d) {
   return new Set(xs.map((x) => String(x).toLowerCase().replace(new RegExp("^" + d + "_"), "")));
 }
 const PIC = {
-  own_photo: "Own photo (Photo: Najjuko)", photo: "Developer's photo", street_view: "Street View, else satellite (Google, at print time)",
+  own_photo: "Own photo (Photo: Najjuko)", photo: "Developer's photo", street_view: "Street View (Google, at print time)",
   blocks: "Blocks view (a render of the district model)", district: "District map - nothing picked out", none: "Nothing (no district layer)",
 };
 export const PIC_OK = new Set(["own_photo", "photo", "street_view"]);
