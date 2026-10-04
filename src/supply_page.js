@@ -193,7 +193,7 @@ export const SUPPLY_START_JS = String.raw`
 var P=window.__SUS||{},el=document.getElementById("susub");if(!el)return;
 fetch("/supply/summary?key="+encodeURIComponent(P.key||""),{credentials:"same-origin"}).then(function(r){return r.ok?r.json():{ok:false}}).then(function(j){
   if(!j||!j.ok){el.textContent="Advertised supply \u00b7 live rental adverts from listing sites, not vacancy \u00b7 nothing fetched yet";return}
-  el.textContent=Math.round(j.live).toLocaleString("en-US")+" adverts across "+j.sites+(j.sites===1?" site":" sites")+" \u00b7 fetched "+j.crawled_say+" \u00b7 live rental adverts from listing sites, not vacancy"},function(){});
+  el.textContent=Math.round(j.live).toLocaleString("en-US")+" adverts"+(j.sites>0?" across "+j.sites+(j.sites===1?" site":" sites"):"")+" \u00b7 fetched "+j.crawled_say+" \u00b7 live rental adverts from listing sites, not vacancy"},function(){});
 })();
 `;
 
