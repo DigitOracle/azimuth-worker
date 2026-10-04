@@ -220,10 +220,12 @@ export async function loadMapData(env, C) {
 
 // ------------------------------------------------------------------------------------------------ vector outlines: where the area is in Dubai, and its own shape
 function ringsOf(g) { if (!g) return []; if (g.type === "Polygon") return g.coordinates; if (g.type === "MultiPolygon") return [].concat(...g.coordinates); return []; }
+const trimName = (s, n) => (s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, "") + "…" : s);
+// v337 - the header carries one picture: where the area is in Dubai (its buildings are the 3D blocks picture at the foot of the page)
 export function outlinePanels(C) {
   const feats = C.geo && Array.isArray(C.geo.features) ? C.geo.features.filter((f) => f && f.geometry && f.properties) : [];
-  let mine = feats.find((f) => f.properties.slug === C.slug), rings = mine ? ringsOf(mine.geometry) : null;
-  let bb = C.area.bbox; if (!(rings && rings.length) && !(bb && bb.length === 4)) return "";
+  const mine = feats.find((f) => f.properties.slug === C.slug), rings = mine ? ringsOf(mine.geometry) : null;
+  const bb = C.area.bbox; if (!feats.length || (!(rings && rings.length) && !(bb && bb.length === 4))) return "";
   const lat0 = 25.1, kx = Math.cos(lat0 * Math.PI / 180);
   const proj = (box, w, h, pad) => {
     const [x0, y0, x1, y1] = box, sx = (x1 - x0) * kx, sy = (y1 - y0), k = Math.min((w - 2 * pad) / sx, (h - 2 * pad) / sy);
@@ -232,18 +234,18 @@ export function outlinePanels(C) {
   };
   const pathOf = (rs, P) => rs.map((r) => { let last = ""; const o = []; for (const c of r) { const [a, b] = P(c), t = a + " " + b; if (t !== last) o.push(t); last = t; } return o.length > 2 ? "M" + o.join("L") + "Z" : ""; }).join("");
   const boxOf = (rs) => { let a = 1e9, b = 1e9, c = -1e9, d = -1e9; for (const r of rs) for (const [x, y] of r) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); } return [a, b, c, d]; };
-  // the locator: every area of the page as a pale silhouette of the city, this one in gold
-  let loc = "";
-  if (feats.length) {
-    const all = [].concat(...feats.map((f) => ringsOf(f.geometry))), P = proj(boxOf(all), 190, 120, 6);
-    const rest = feats.filter((f) => f.properties.slug !== C.slug).map((f) => pathOf(ringsOf(f.geometry), P)).join("");
-    const me = mine ? pathOf(rings, P) : (bb ? pathOf([[[bb[0], bb[1]], [bb[2], bb[1]], [bb[2], bb[3]], [bb[0], bb[3]]]], P) : "");
-    loc = '<svg class="loc" viewBox="0 0 190 120" width="190" height="120" role="img" aria-label="Where ' + esc(C.names.plain) + ' is in Dubai"><rect width="190" height="120" fill="#FBFAF7"/><path d="' + rest + '" fill="#E4E0D5" stroke="#CFC9B9" stroke-width="0.4" fill-rule="evenodd"/>' + (me ? '<path d="' + me + '" fill="' + GOLDI + '" stroke="' + TEAL + '" stroke-width="1" fill-rule="evenodd"/>' : "") + "</svg>";
-  }
+  const W = 190, H = 76, plain = C.names.plain, nm = trimName(plain, 26);
   const own = (rings && rings.length ? rings : [[[bb[0], bb[1]], [bb[2], bb[1]], [bb[2], bb[3]], [bb[0], bb[3]]]]);
-  const Q = proj(boxOf(own), 120, 120, 8);
-  const shape = '<svg class="loc" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="The outline of ' + esc(C.names.plain) + '"><rect width="120" height="120" fill="#FBFAF7"/><path d="' + pathOf(own, Q) + '" fill="' + GOLDI + '" fill-opacity="0.35" stroke="' + TEAL + '" stroke-width="1.3" stroke-linejoin="round" fill-rule="evenodd"/></svg>';
-  return '<div class="locs">' + loc + shape + "</div>";
+  const all = [].concat(...feats.map((f) => ringsOf(f.geometry))), P = proj(boxOf(all), W, H, 8);
+  const rest = feats.filter((f) => f.properties.slug !== C.slug).map((f) => pathOf(ringsOf(f.geometry), P)).join("");
+  const me = pathOf(own, P), [bx0, by0, bx1, by1] = boxOf(own), [cx, cy] = P([(bx0 + bx1) / 2, (by0 + by1) / 2]);
+  const tw = nm.length * 5.1, left = cx + 10 + tw > W - 3, lx = left ? cx - 10 : cx + 10, ly = Math.max(11, Math.min(H - 5, cy - 9));
+  const halo = ' stroke="#FBFAF7" stroke-width="2.6" stroke-linejoin="round" paint-order="stroke"';
+  const svg = '<svg class="loc" viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Where ' + esc(plain) + ' is in Dubai"><rect width="' + W + '" height="' + H + '" fill="#FBFAF7"/><path d="' + rest + '" fill="#E4E0D5" stroke="#CFC9B9" stroke-width="0.4" fill-rule="evenodd"/>' +
+    (me ? '<path d="' + me + '" fill="' + GOLDI + '" stroke="' + TEAL + '" stroke-width="0.9" fill-rule="evenodd"/>' : "") +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="6" fill="none" stroke="' + TEAL + '" stroke-width="1.2"/>' +
+    '<text x="' + lx + '" y="' + ly + '" font-size="8.8" font-weight="600" fill="' + TEAL + '" text-anchor="' + (left ? "end" : "start") + '" font-family="IBM Plex Sans, Segoe UI, Arial, sans-serif"' + halo + ">" + esc(nm) + "</text></svg>";
+  return '<div class="locs"><div class="lcard"><div class="lch">' + icon("map-pin", 11, TEAL) + "<span>Where in Dubai</span></div>" + svg + '<div class="lcap">Gold, ringed: ' + esc(nm) + ". Grey: other areas in this set.</div></div></div>";
 }
 
 // ------------------------------------------------------------------------------------------------ the oblique footprint map (the Brief's view: 50 degrees, heights to scale)
@@ -404,13 +406,13 @@ function snapshotBody(C) {
   const st = C.st, lab = C.names.label;
   const head = '<div class="ttl"><div>' + '<div class="lbl" style="margin-bottom:3px;text-transform:uppercase">Developers by area</div><h1 class="serif">' + esc(C.names.title) + "</h1>" +
     '<div class="tsub">' + (lab ? "Market name " + esc(lab.labels.join(" / ")) + ". Land Department area " + esc(lab.dld) + "." : "Land Department area " + esc(C.names.plain) + ".") + "</div></div>" + outlinePanels(C) + "</div>";
-  if (!st.enough) return head + '<div class="note2">' + icon("info", 16, TEAL) + "<div>Not enough sales: fewer than 3 settled sales with a price and a size are on the register for this area, so there is no price to show. " + esc(C.winText) + ".</div></div>";
+  if (!st.enough) return head + '<div class="note2">' + icon("info", 16, TEAL) + "<div>Not enough sales: fewer than 3 settled sales with a price and a size are on the register for this area, so there is no price to show. " + esc(C.winText) + ".</div></div>" + snapshotFigure(C);
   const tiles = '<div class="tiles"><div class="tile"><div class="tk">Median price</div><div class="tv">' + aed(st.medianSqft) + '</div><div class="tu">per sq ft</div></div>' +
     '<div class="tile"><div class="tk">Middle half of sales</div><div class="tv">' + fmt(st.q1 / SQFT) + " to " + fmt(st.q3 / SQFT) + '</div><div class="tu">AED per sq ft</div></div>' +
     '<div class="tile"><div class="tk">Sales loaded</div><div class="tv">' + fmt(st.n) + '</div><div class="tu">' + (C.registerTotal && st.n <= C.registerTotal ? "of " + fmt(C.registerTotal) + " in the register" : "settled sales") + "</div></div></div>";
-  const cap = 7;
+  const cap = 3;
   const grid = '<div class="bgrid">' + [0, 1, 2, 3].map((t) => bandCard(C, t, cap)).join("") + "</div>";
-  return head + tiles + incompleteNote(C) + grid + budgetLineHtml(C);
+  return head + tiles + incompleteNote(C) + grid + budgetLineHtml(C) + snapshotFigure(C);
 }
 
 // ------------------------------------------------------------------------------------------------ the detailed pages
@@ -483,17 +485,32 @@ function unboundList(M, C, title, items) {
   const line = (p) => '<div class="ul">' + (p.mine ? icon("star", 9, GOLDI) : '<span class="sp"></span>') + "<span class=\"un\">" + esc(p.name || "Unnamed project") + "</span><span class=\"uv\">" + (p.enough ? aed(p.ppsm / SQFT) + " &middot; " : "") + plural(p.n, "sale") + "</span></div>";
   return { items, line, title };
 }
+// v337 - the 3D blocks picture (one builder for the snapshot foot and the area map page): bound projects coloured by price band
+function blocksPicture(C, M, w, h, frame) {
+  if (!M || !M.layer) return null;
+  const bound = M.projects.filter((p) => p.ids);
+  if (!bound.length) return null;
+  const hi = new Map(); const cnt = [0, 0, 0, 0, 0];
+  for (const p of bound) { const c = bandColour(p.tier); cnt[p.tier < 0 ? 4 : p.tier]++; for (const id of p.ids) if (!hi.has(id)) hi.set(id, { fill: c.fill, wall: c.wall, edge: c.edge }); }
+  const svg = obliqueMap(M.layer, hi, { w, h, frame: frame || "all", label: "Map of " + C.names.plain + ": project footprints coloured by price band" });
+  const key = [0, 1, 2, 3].filter((t) => cnt[t]).map((t) => '<div class="lg" style="font-size:10.5px"><i style="background:' + BAND[t].fill + '"></i>' + BAND[t].name + ": " + plural(cnt[t], "project") + "</div>").join("") + (cnt[4] ? '<div class="lg" style="font-size:10.5px"><i style="background:#CFCBC0"></i>Under 3 sales, no price: ' + plural(cnt[4], "project") + "</div>" : "");
+  return { svg, key, bound };
+}
+const MAP_NOTE = "Buildings with no colour are other buildings. The picture is the Brief&rsquo;s map view: each outline raised to its height, seen from the south.";
+function snapshotFigure(C) {
+  const pic = blocksPicture(C, C.M, 440, 230, "hi");
+  if (!pic) return '<div class="figq">' + icon("buildings", 22, "#8A9A96") + "<div><b>Buildings for this area are not in the data yet.</b> The prices above come from the sales register and do not depend on them.</div></div>";
+  return '<div class="fig"><div class="figm">' + pic.svg + '</div><div class="figt"><div class="figh">' + icon("buildings", 16, TEAL) + '<span class="serif">The area in blocks</span></div><div class="figs">' + plural(pic.bound.length, "project") + " with a building outline, coloured by the price band its price per sq ft falls in</div>" + '<div class="mkey" style="flex-direction:column">' + pic.key + '</div><div class="mnote">' + MAP_NOTE + "</div></div></div>";
+}
+
 function mapPages(C, M) {
   const pages = [];
   if (!M.projects.length) return pages;
   const bound = M.projects.filter((p) => p.ids), unbound = M.projects.filter((p) => !p.ids);
   const subA = "Where the projects are";
-  if (M.layer && bound.length) {
-    const hi = new Map(); let cnt = [0, 0, 0, 0, 0];
-    for (const p of bound) { const c = bandColour(p.tier); cnt[p.tier < 0 ? 4 : p.tier]++; for (const id of p.ids) if (!hi.has(id)) hi.set(id, { fill: c.fill, wall: c.wall, edge: c.edge }); }
-    const svg = obliqueMap(M.layer, hi, { w: 702, h: 600, frame: "all", label: "Map of " + C.names.plain + ": project footprints coloured by price band" });
-    const key = [0, 1, 2, 3].filter((t) => cnt[t]).map((t) => '<div class="lg" style="font-size:10.5px"><i style="background:' + BAND[t].fill + '"></i>' + BAND[t].name + ": " + plural(cnt[t], "project") + "</div>").join("") + (cnt[4] ? '<div class="lg" style="font-size:10.5px"><i style="background:#CFCBC0"></i>Under 3 sales, no price: ' + plural(cnt[4], "project") + "</div>" : "");
-    pages.push({ sub: subA, h: 640, html: secHead("map-trifold", "The area map", plural(bound.length, "project") + " with a building outline on the map, coloured by the price band its price per sq ft falls in") + '<div class="mapbox">' + svg + '</div><div class="mkey">' + key + '</div><div class="mnote">Buildings with no colour are other buildings. The picture is the Brief&rsquo;s map view: each outline raised to its height, seen from the south.</div>' });
+  const pic = M.layer && bound.length ? blocksPicture(C, M, 702, 600) : null;
+  if (pic) {
+    pages.push({ sub: subA, h: 640, html: secHead("map-trifold", "The area map", plural(bound.length, "project") + " with a building outline on the map, coloured by the price band its price per sq ft falls in") + '<div class="mapbox">' + pic.svg + '</div><div class="mkey">' + pic.key + '</div><div class="mnote">' + MAP_NOTE + "</div>" });
   }
   const ul = unboundList(M, C, "", unbound);
   if (ul) {
@@ -625,7 +642,15 @@ const EXTRA_CSS = `
   .ttl { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
   .tsub { font-size:11px; color:${MUTED}; margin-top:4px; line-height:1.35; }
   .locs { display:flex; gap:8px; flex:none; }
-  .loc { display:block; border:1px solid ${HAIR}; }
+  .lcard { width:190px; border:1px solid ${HAIR}; border-radius:8px; overflow:hidden; background:#FBFAF7; display:flex; flex-direction:column; }
+  .lch { display:flex; gap:5px; align-items:center; height:19px; padding:0 8px; background:#F3EFE6; border-bottom:1px solid ${HAIR}; font-size:8.6px; font-weight:600; letter-spacing:.5px; color:${TEAL}; text-transform:uppercase; }
+  .lcap { padding:3px 8px 4px; font-size:7.4px; line-height:1.25; color:${MUTED}; background:#fff; border-top:1px solid ${HAIR}; }
+  .loc { display:block; }
+  .fig { flex:1; min-height:120px; display:flex; gap:16px; align-items:stretch; border:1px solid ${HAIR}; border-radius:8px; background:#fff; padding:8px; overflow:hidden; }
+  .figm { flex:none; width:440px; position:relative; background:${MAPC.BG}; border-radius:5px; overflow:hidden; } .figm svg { position:absolute; left:0; top:0; width:100%; height:100%; }
+  .figt { flex:1; display:flex; flex-direction:column; gap:7px; justify-content:center; }
+  .figh { display:flex; gap:7px; align-items:center; font-size:17px; color:${NAVY}; } .figs { font-size:10.5px; color:${MUTED}; line-height:1.4; }
+  .figq { display:flex; gap:12px; align-items:center; border:1px solid ${HAIR}; border-radius:8px; background:#fff; padding:14px 18px; font-size:11px; color:${MUTED}; line-height:1.45; }
   .tiles { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
   .tile { border:1px solid ${HAIR}; border-top:3px solid ${GOLDI}; background:#fff; padding:10px 14px 9px; }
   .tk { font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:${MUTED}; font-weight:600; }
@@ -713,11 +738,11 @@ export async function buildAreaPdf(env, p, opts) {
   const L = await loadData(env, p, opts);
   if (L.status !== 200) return L;
   const C = L.C, pages = [];
+  const M = await loadMapData(env, C); C.M = M;
   pages.push({ sub: p.kind === "snapshot" ? "Snapshot" : "Snapshot", html: snapshotBody(C), alone: true });
   if (p.kind === "detailed" && C.st.enough) {
     const chosen = C.st.tiers.flatMap((t) => t.devs).filter((d) => C.mine[d.k]).sort((a, b) => b.n - a.n);
     const blocks = bandSections(C);
-    const M = await loadMapData(env, C);
     for (const pg of pack(blocks)) pages.push(pg);
     // v327 - about 12 pages at most: the area map and ONE page of projects not yet on the map, then the full treatment (map, profile) for the chosen developers while it fits,
     // otherwise one page each for the chosen developers (the others stay in the compact lists above)
