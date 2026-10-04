@@ -12,6 +12,9 @@
 //          img_unitmix_<district>    the unit-mix card map_prices is folded from - the per-bedroom register median (DLD settled
 //                                    sales) AND the per-bedroom sale count (dld_sales.sold_by_type). map_prices carries no count,
 //                                    so a building is offered only where the card gives one (never an estimate, never an asking).
+//   buy+   img_buy_extra             v314 - Brief-only Buy items (scripts/build_coverage_cards.py): projects the register sells that the map does
+//                                    not place (Al Yelayiss 1, Bukadra, Al Yufrah 1, Wadi Al Safa 4-7, Palm Deira, Ras Al Khor, Liwan); their
+//                                    cards sit in img_unitmix_<district> under ids 900000+ ("synthetic"). The public map reads none of them.
 //   musts  img_amenities (metro stations, schools), img_unitmix_<district> (pools, car parks), img_brochure_* (developer amenities).
 //          null = we do not know. A must is false only where a source says so.
 //   T, R   img_unitmix_<district> (flats of the bedroom count in the DLD units register) and img_tenancy_<district> (Ejari tenancies
@@ -21,6 +24,7 @@
 import { liveCtx, fillLive, LIVE_CRITS } from "./live_answers.js";   // v291 - gym, community pool and dog park asked of Google live where all else is not known
 
 import { applyNearRule, completionFromFacts, evidenceSay, windowOf, sizeSane, nearestPlace, NEAR_FACT_M } from "./brief_rules.js";   // v310 - the DAMAC Hills rules
+import { foldArea, communitySlugOfArea } from "./community_labels.js";   // v314 - the DLD area -> district map the community labels use
 import { applyBrokerFacts, brokerFor, applyAnchorOverrides } from "./checklist_data.js";   // v291 CHECKLIST - Najjuko's on-site facts: below every register, above "not known"
 export const BRIEF_MUSTS = ["balcony", "metro", "pool", "gym", "parking", "new", "schools"];
 // v282 (Kendall, 1 Oct 2026, a real client brief: "a furnished 2-3 bedroom townhouse, AED 240K a year, up to 300K for a modern,
@@ -54,6 +58,14 @@ export const EXTRA_AREAS = {
 };
 const EXTRA_BY_DLD = {}; for (const [s, x] of Object.entries(EXTRA_AREAS)) for (const a of x.dld) EXTRA_BY_DLD[a] = s;
 export const areaSlugOf = (it) => (it && (it.d || EXTRA_BY_DLD[it.area])) || null;
+// v314 (Kendall, 4 Oct 2026: "no page should drop a registered project"). 129 rent-index records carry no district (their Land Department
+// area is not one of the app's districts: Al Warsan First, Warsan Fourth, Mirdif, Jumeirah First ...), so areas=<that area> never reached
+// them and 46 of the audit's 410 query cells came back empty while the register held 48,679 lettings in them. An AREA SEARCH now also
+// reaches a record by its Land Department area name, case-folded with the spaces dropped - the same fold community_labels.js uses to map
+// a DLD area to a district. A record that has a district is matched exactly as before; nothing is matched by prefix or fuzzily.
+// areaSlugOf stays the DISTRICT (null for these records): it drives the unit-mix cards, the building page and the amenity files.
+export const searchAreaOf = (it) => areaSlugOf(it) || (it && it.area ? (communitySlugOfArea(it.area) || foldArea(it.area)) : null) || null;
+const titleArea = (s) => String(s || "").toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
 const BEDS = { studio: 0, "0": 0, "1": 1, "2": 2, "3": 3, "3+": 3 };
 const BED_WORD = ["studio", "1-bed", "2-bed", "3+ bed"];
 // v306 - a school's inspection line is shown only when it is a rating; "Not inspected due to COVID 19" / "not yet inspected" is left out of every client page
@@ -252,13 +264,13 @@ function rentCandidates(RI, q, beds) {
   const out = []; let thin = 0, hidden = 0;
   const kinds = kindsOfType(q.type);
   for (const it of (RI && RI.items) || []) {
-    const d = areaSlugOf(it);
-    if (q.areas.length && !q.areas.includes(d)) continue;
+    const d = areaSlugOf(it), sa = searchAreaOf(it);
+    if (q.areas.length && !q.areas.includes(sa)) continue;
     const pr = pickRent(it, kinds, beds, q), best = pr.best; thin += pr.thin; if (pr.hid) hidden++;
     if (!best) continue;
     const s = best.s, f = best.fig;
     out.push({
-      it, d, i: it.i == null ? null : it.i, name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, dldArea: it.area,
+      it, d, sa, i: it.i == null ? null : it.i, name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, dldArea: it.area,
       key: candidateKey(it), bed: best.bed,
       verdict: best.verdict, v: best.v, n: s.n,
       evidence: { basis: "ejari", median: f.m, q1: f.q1, q3: f.q3, n: f.n, n_new: f.nn,
@@ -269,6 +281,41 @@ function rentCandidates(RI, q, beds) {
     });
   }
   return { cands: out, thin, hidden };
+}
+
+// ---- v314 - THE AREA FIGURE (Kendall, 4 Oct 2026: "if the app says nothing while the register has the data that is our failure") -----
+// The rent index holds two months of lettings; many buildings have fewer than three of a given size in that window although the area
+// has plenty. Where an area was asked for and NO building of it can be listed, the area's own figure for the home type and bedroom count
+// is offered instead: one row per area, named for the whole area (never for a building), with its own contract count, labelled as the
+// area's. It is the same Ejari figure the area comparison shows (RI.areas: the whole Land Department area, named projects or not).
+// It needs AREA_FIGURE_MIN contracts of that size and type. It is never attached to a building, has no building page and no map position.
+export const AREA_FIGURE_MIN = 10;
+export function areaFigureCands(RI, q, beds, covered, DN) {
+  const out = [], kinds = kindsOfType(q.type);
+  const W = RI && RI.window ? " between " + RI.window[0] + " and " + RI.window[1] : "";
+  for (const a of q.areas) {
+    if (covered.has(a)) continue;
+    let best = null;
+    for (const row of ((RI && RI.areas) || []).filter((r) => searchAreaOf(r) === a))
+      for (const k of kinds) for (const bed of beds) {
+        const rs = rentStat(row, k, bed);
+        if (!rs || rs.s.n < AREA_FIGURE_MIN) continue;
+        const fig = rentFigure(rs.s), verdict = verdictOf(fig.m, q.min, q.max, q.stretch);
+        if (!verdict) continue;
+        if (!best || TIER[verdict] < TIER[best.verdict] || (TIER[verdict] === TIER[best.verdict] && rs.s.n > best.s.n)) best = { row, s: rs.s, fig, verdict, kind: k, bed, basis: rs.basis };
+      }
+    if (!best) continue;
+    const f = best.fig, area = DN[a] || titleArea(best.row.area), homeWord = best.kind === "v" ? "villa or townhouse" : "apartment";
+    out.push({
+      it: best.row, d: null, sa: a, i: null, areaFigure: true, name: area + " (whole area)", aliases: [], lon: null, lat: null, dldArea: best.row.area,
+      key: "area:" + a, bed: best.bed, verdict: best.verdict, v: f.m, n: f.n,
+      why: "Area figure, not one building: typical " + (best.bed === 0 ? "studio" : best.bed === 3 ? "3-bed" : best.bed + "-bed") + " " + homeWord + " rent across all of " + area + ", from " + f.n + " registered lettings" + W +
+        ". No single building here has three lettings of this size in that window, so the area's own figure is shown instead of a building's.",
+      evidence: { basis: "ejari_area", scope: "area", median: f.m, q1: f.q1, q3: f.q3, n: f.n, n_new: f.nn, median_of: f.median_of, median_all: f.median_all, sqm: f.s, latest: f.last,
+        home: best.kind === "v" ? "villa" : "apartment", beds: best.bed, beds_basis: best.basis },
+    });
+  }
+  return out;
 }
 
 // ---- buy: map_prices finds them (what Buy mode shows); the unit-mix card supplies the median AND the count ---------
@@ -306,11 +353,17 @@ function buyCandidates(pre, cards, q) {
     }
     if (!best) { if (hid) hidden++; continue; }
     const ds = card.dld_sales || {};
+    const syn = !!(it.x || card.synthetic);                                    // v314 - built from the register by project: no footprint, no building page, no map position
+    const cav = [];
+    if (card.price_basis) cav.push(card.price_basis);
+    if (card.plot_size_note) cav.push(card.plot_size_note + " No price per sq ft is given for it.");
+    if (card.bedrooms_basis) cav.push("Bedrooms are as the Land Department register records them" + (ds.unspecified_bedroom_sales ? "; " + ds.unspecified_bedroom_sales + " sales here carry no bedroom count and are not in these figures" : "") + ".");
     out.push({
-      it, d: it.d, i: it.i, name: card.name || it.n, aliases: it.n && card.name && nkey(it.n) !== nkey(card.name) ? [it.n] : [], lon: it.lon, lat: it.lat,
+      syn, it, d: it.d, i: it.i, name: card.name || it.n, aliases: it.n && card.name && nkey(it.n) !== nkey(card.name) ? [it.n] : [], lon: it.lon, lat: it.lat,
       key: it.d + ":" + it.i, verdict: best.verdict, v: Math.round(best.row.median_aed), n: best.n, card, bed: Math.min(best.b, 3),
       evidence: { basis: "dld_sales", median: Math.round(best.row.median_aed), q1: null, q3: null, n: best.n, n_new: null, sqm: best.row.median_sqm || null,
-        latest: ds.last || null, first: ds.first || null, beds: best.b, dates_are: "the building's sales of every type" },
+        latest: ds.last || null, first: ds.first || null, beds: best.b, dates_are: syn && ds.window_from ? "this project's registered sales since " + ds.window_from : "the building's sales of every type",
+        ...(syn ? { scope: "project", price_basis: card.price_basis || null, window_from: ds.window_from || null, caveats: cav } : {}) },
     });
   }
   return { cands: out, thin, noCount, noCard, hidden };
@@ -638,7 +691,8 @@ const brochureKeys = (c) => {
 
 function whyOf(c, q) {
   const e = c.evidence, parts = [];
-  parts.push(q.mode === "rent" ? e.n + " lettings on the register (" + e.n_new + " new)" : e.n + " " + BED_WORD[Math.min(e.beds, 3)] + " sales on the register");
+  parts.push(q.mode === "rent" ? e.n + " lettings on the register (" + e.n_new + " new)" : e.n + " " + BED_WORD[Math.min(e.beds, 3)] + " sales on the register" + (e.window_from ? " since " + e.window_from : ""));
+  if (e.price_basis) parts.push(e.price_basis);
   parts.push({ within: "typical " + (q.mode === "rent" ? "rent" : "price") + " inside the budget", stretch: "typical figure above the target, inside the stretch", a_little_above: "typical figure a little above the budget",
     above: "typical figure above the budget", below: "typical figure below the budget" }[c.verdict]);
   if (c.completeness.layouts) parts.push("full layout data");
@@ -665,8 +719,8 @@ export function compareAreas({ q, RI, kept, cards, AM, DG, DN }) {
   const bedSay = (b) => (b === 0 ? "studio" : b === 3 ? "3-bed" : b + "-bed");
   return q.areas.map((slug) => {
     const name = DN[slug] || slug, box = (EXTRA_AREAS[slug] && EXTRA_AREAS[slug].bbox) || (geo[slug] && geo[slug].bbox) || null;
-    const areaRows = ((RI && RI.areas) || []).filter((a) => areaSlugOf(a) === slug);
-    const items = ((RI && RI.items) || []).filter((it) => areaSlugOf(it) === slug);
+    const areaRows = ((RI && RI.areas) || []).filter((a) => searchAreaOf(a) === slug);
+    const items = ((RI && RI.items) || []).filter((it) => searchAreaOf(it) === slug);
     const col = { slug, name, dld_areas: areaRows.map((a) => a.area) };
     // typical rent, per home kind and bedroom count asked
     const figs = [];
@@ -681,7 +735,7 @@ export function compareAreas({ q, RI, kept, cards, AM, DG, DN }) {
       src: "Ejari rent contracts " + W + ", the whole Land Department area" + (areaRows.length ? " (" + areaRows.map((a) => a.area).join(", ") + ")" : "") + "; villas by the register's own bedroom count where it gives one" };
     if (!areaRows.length) col.rent = { v: null, figures: [], say: "not known: no Ejari contracts for this area in the rent index", src: "the rent index (" + W + ")" };
     // matches in budget / stretch
-    const mine = kept.filter((c) => c.d === slug);
+    const mine = kept.filter((c) => (c.sa || c.d) === slug && !c.areaFigure);
     const nIn = mine.filter((c) => c.verdict === "within").length, nSt = mine.filter((c) => c.verdict === "stretch").length;
     col.matches = { v: mine.length ? (nIn + nSt > 0 ? true : null) : false, within: nIn, stretch: nSt, total: mine.length,
       say: mine.length ? nIn + " in budget" + (q.stretch ? ", " + nSt + " in the stretch" : "") + " (" + mine.length + " listed in all)" : "none: no building here has " + EVIDENCE_MIN + "+ lettings of this type and size in the window", src: "this brief's list: buildings with " + EVIDENCE_MIN + "+ contracts of the type asked" };
@@ -788,6 +842,7 @@ export async function briefSearch(env, sp, opts) {
   const asked = [...new Set(q.musts.concat(q.nice))];
   const liveWanted = !(opts && opts.live === false) && !!(env && env.GOOGLE_MAPS_KEY) && asked.some((k) => LIVE_CRITS[k]);
   const pDG = rd("districts_geo"), pMain = rd(q.mode === "rent" ? "rent_index" : "map_prices"), pAM = rd("amenities");
+  const pBX = q.mode === "buy" ? rd("buy_extra") : null;                     // v314 - the Brief-only Buy items
   const pAV = loadDevAvail(env, read), pHave = env && env.MEETINGS ? kvKeysMemo(env, "img_brochure_", 5) : kvKeys(env, "img_brochure_", 5);
   const pBRK = {};                                                            // v291 CHECKLIST - the broker's on-site facts, read fresh (the owner edits them) but started in wave 2
   const warm = (ds, anch) => {                                                // start wave 2; the awaits below pick the same promises up
@@ -803,6 +858,10 @@ export async function briefSearch(env, sp, opts) {
   const DG = await pDG;
   const DN = {}; for (const d of (DG && DG.districts) || []) DN[d.slug] = d.name;
   for (const [s, x] of Object.entries(EXTRA_AREAS)) if (!DN[s]) DN[s] = x.name;
+  if (q.mode === "rent") {                                                    // v314 - a Land Department area the index holds by name (no district) is named from its own record
+    const R0 = await pMain;
+    if (R0 && Array.isArray(R0.items)) for (const a of q.areas) if (!DN[a]) { const hit = R0.items.find((it) => searchAreaOf(it) === a) || (R0.areas || []).find((r) => searchAreaOf(r) === a); if (hit && hit.area) DN[a] = titleArea(hit.area); }
+  }
   const unknownAreas = DG ? q.areas.filter((a) => !DN[a]) : [];
   if (unknownAreas.length) notes.push("not a district slug the app knows: " + unknownAreas.join(", "));
   if (q.areas.some((a) => EXTRA_AREAS[a])) notes.push("Arabian Ranches is not one of the app's districts: it is read from the rent register by its Land Department areas, which are not the marketing communities. Wadi Al Safa 6 holds Arabian Ranches villages (Alvorada, Aseel, Alma); Wadi Al Safa 7 holds Arabian Ranches 2 (Reem, Camelia), more Arabian Ranches villages (Palma, Rasha, Samara, Azalea, Casa ...), Serena, Rukan and The Sustainable City. Its homes have no building pages, map positions or building records in the app yet.");
@@ -823,8 +882,8 @@ export async function briefSearch(env, sp, opts) {
     if (!RI || !Array.isArray(RI.items)) return J({ query: q, error: [owner ? "the rent index (KV img_rent_index) is not on file" : "Rent figures are not available right now. Please try again shortly."] }, 503);
     as_of = RI.as_of || null; source = "KV img_rent_index (" + (RI.source_file || "Ejari rent contracts") + ")";
     extra.window = RI.window || null;
-    const r = rentCandidates(RI, q, beds); cands = r.cands; hiddenBelow = r.hidden; diag.thin = r.thin; diag.noData = q.areas.filter((a) => !RI.items.some((it) => areaSlugOf(it) === a));
-    if (q.min && beds.length === 1) for (const a of q.areas) { const rows = (RI.areas || []).filter((x) => areaSlugOf(x) === a); let best = null; for (const k of kindsOfType(q.type)) for (const row of rows) { const rs = rentStat(row, k, beds[0]); if (rs && rs.s.n >= EVIDENCE_MIN && (!best || rs.s.n > best.s.n)) best = rs; } if (best) { const f = rentFigure(best.s); diag.market.push({ slug: a, bed: beds[0], m: f.m, q1: f.q1, q3: f.q3 }); } }
+    const r = rentCandidates(RI, q, beds); cands = r.cands; hiddenBelow = r.hidden; diag.thin = r.thin; diag.noData = q.areas.filter((a) => !RI.items.some((it) => searchAreaOf(it) === a) && !(RI.areas || []).some((r) => searchAreaOf(r) === a));
+    if (q.min && beds.length === 1) for (const a of q.areas) { const rows = (RI.areas || []).filter((x) => searchAreaOf(x) === a); let best = null; for (const k of kindsOfType(q.type)) for (const row of rows) { const rs = rentStat(row, k, beds[0]); if (rs && rs.s.n >= EVIDENCE_MIN && (!best || rs.s.n > best.s.n)) best = rs; } if (best) { const f = rentFigure(best.s); diag.market.push({ slug: a, bed: beds[0], m: f.m, q1: f.q1, q3: f.q3 }); } }
     warm(cands.map((c) => c.d), new Set(cands.filter((c) => c.lon == null).map((c) => c.d)));
     await loadCards(cands.filter((c) => c.i != null).map((c) => c.d));
     const un = unbindDisputed(cands, cards);
@@ -836,13 +895,18 @@ export async function briefSearch(env, sp, opts) {
     notes.push("A contract filed under several building names is counted once; the other names are listed as aliases (also filed as).");
     if (r.thin) notes.push(r.thin + " building" + (r.thin === 1 ? "" : "s") + " with fewer than " + EVIDENCE_MIN + " contracts of this size left out.");
   } else {
-    const MP = await pMain;
-    if (!MP || !Array.isArray(MP.items)) return J({ query: q, error: [owner ? "the Buy data (KV img_map_prices) is not on file" : "Sales figures are not available right now. Please try again shortly."] }, 503);
+    const MP0 = await pMain;
+    if (!MP0 || !Array.isArray(MP0.items)) return J({ query: q, error: [owner ? "the Buy data (KV img_map_prices) is not on file" : "Sales figures are not available right now. Please try again shortly."] }, 503);
+    const BX = await pBX;                                                       // v314 - Brief-only items; a map item with the same district and id wins
+    const have = new Set(MP0.items.map((m) => m.d + ":" + m.i));
+    const xs = BX && Array.isArray(BX.items) ? BX.items.filter((x) => x && x.d && x.i != null && !have.has(x.d + ":" + x.i)) : [];
+    const MP = xs.length ? { ...MP0, items: MP0.items.concat(xs) } : MP0;
     const pre = buyPrelim(MP, q, beds);
     warm(pre.map((p) => p.it.d));
     await loadCards(pre.map((p) => p.it.d));
     const r = buyCandidates(pre, cards, q); cands = r.cands; hiddenBelow = r.hidden; diag.thin = r.thin; diag.noCount = r.noCount; diag.noCard = r.noCard; diag.noData = q.areas.filter((a) => !MP.items.some((it) => it.d === a && it.i != null && it.i >= 0));
-    if (q.areas.some((a) => EXTRA_AREAS[a])) notes.push("Arabian Ranches buy: the Land Department does register villa and townhouse sales in Wadi Al Safa 5, 6 and 7, but the Brief holds no unit-mix cards for them (they are not among its districts), so it cannot answer. Caveats for when they are added: the register leaves bedrooms blank for Casa, Lila, Palma, Rasha, Samara, Azalea, Rosa, Yasmin, Alvorada, Aseel and La Avenida; about 10,000 older Arabian Ranches 1 sales carry no project name; a villa's area in the register is its plot size, so a price per sq ft there is per sq ft of plot.");
+    if (q.areas.some((a) => EXTRA_AREAS[a] && diag.noData.includes(a))) notes.push("Arabian Ranches buy: the Land Department does register villa and townhouse sales in Wadi Al Safa 5, 6 and 7, but the Brief holds no unit-mix cards for them (they are not among its districts), so it cannot answer. Caveats for when they are added: the register leaves bedrooms blank for Casa, Lila, Palma, Rasha, Samara, Azalea, Rosa, Yasmin, Alvorada, Aseel and La Avenida; about 10,000 older Arabian Ranches 1 sales carry no project name; a villa's area in the register is its plot size, so a price per sq ft there is per sq ft of plot.");
+    if (cands.some((c) => c.syn)) notes.push(cands.filter((c) => c.syn).length + " project" + (cands.filter((c) => c.syn).length === 1 ? "" : "s") + " built from the Land Department sales register (img_buy_extra, cards under ids 900000+ in img_unitmix_<district>): counts and medians per bedroom type from the register's own bedroom count, sales since the window date shown, villas by plot size (no price per sq ft), off-plan prices are contract values. These have no building page, footprint or map position, so distances and must-haves from the map are not known for them.");
     as_of = String(MP.generated || "").slice(0, 10) || null; source = "KV img_map_prices (what the map's Buy mode shows) + img_unitmix_<district> (per-bedroom sale medians and counts)";
     notes.push("Buy figures are DLD registered sale medians per bedroom count over the building's whole sales record (the dates shown are the first and last sale of any type) - what homes here sold for, NOT what is for sale now.");
     notes.push("The Buy data has no middle half (q1, q3) and no new-versus-resale split: those fields are null. A developer's asking price and a size-based estimate are never used.");
@@ -891,7 +955,7 @@ export async function briefSearch(env, sp, opts) {
     c.comp = completionOf(card, c.brochure);
     if (q.musts.some((m) => c.crit[m] && c.crit[m].v === false)) { droppedByMust++; continue; }   // ONLY a definite no leaves it out
     c.completeness = {
-      record: c.i != null && !!c.d,
+      record: c.i != null && !!c.d && !c.syn,
       layouts: !!(card && (card.rows || []).some((r) => r.basis === "DLD units register" && /bedroom|studio/i.test(String(r.type || "")))),
       photos: !!(c.brochure && (c.brochure.photos || []).length),
     };
@@ -916,12 +980,24 @@ export async function briefSearch(env, sp, opts) {
   // below, each shown home's own sub-community. Never a no, never stored; any miss stays not known.
   const LV = liveCtx(opts && opts.live === false ? null : env, { ...(opts || {}), read });   // live: false (the PDFs' area comparison) asks nothing
   const liveItem = (c) => ({ crit: c.crit, d: c.d, dn: DN[c.d], name: c.name, aliases: c.aliases, i: c.i, is: c.it && c.it.is, lat: c.lat, lon: c.lon, noSub: !!c.disputed });
-  await fillLive(LV, kept.map(liveItem), asked, { cluster: false });
+  await fillLive(LV, kept.filter((c) => !c.areaFigure).map(liveItem), asked, { cluster: false });
   const score = (c) => (c.completeness.record ? 1 : 0) + (c.completeness.layouts ? 1 : 0) + (c.completeness.photos ? 1 : 0);
   const mid = q.max != null ? ((q.min || 0) + q.max) / 2 : (q.min || 0);
   const met = (c, ks) => ks.filter((m) => c.crit[m] && c.crit[m].v === true).length;
   kept.sort((a, b) => (rankTier(a) - rankTier(b)) || (met(b, q.musts) - met(a, q.musts)) || (met(b, q.nice) - met(a, q.nice)) || (b.n - a.n) || (score(b) - score(a)) || (Math.abs(a.v - mid) - Math.abs(b.v - mid)) || String(a.name).localeCompare(String(b.name)));
 
+  // v314 - the area figure: an area asked for with no building to list gets its own (labelled) figure, after every building row
+  let areaFigs = 0;
+  if (q.mode === "rent" && q.areas.length && !(opts && opts.areaFigure === false)) {   // opts.areaFigure === false: the coverage replay's "before the area figure" run
+    const covered = new Set(kept.map((c) => c.sa || c.d).filter(Boolean));
+    const nullCrit = () => { const o = {}; for (const k of CRIT_KEYS) o[k] = { v: null, src: "This is the area's figure, not a building, so there is nothing to check this against." }; return o; };
+    for (const c of areaFigureCands(RI, q, beds, covered, DN)) {
+      c.musts = { balcony: null, metro: null, pool: null, gym: null, parking: null, new: null, schools: null }; c.nearest = null; c.crit = nullCrit();
+      c.completeness = { record: null, layouts: null, photos: null }; c.est = null; c.avail = null; c.comp = null; c.recordName = null;
+      kept.push(c); areaFigs++;
+    }
+    if (areaFigs) notes.push(areaFigs + " area" + (areaFigs === 1 ? "" : "s") + " shown as an area figure (evidence.basis = ejari_area): no building there has " + EVIDENCE_MIN + " lettings of this home type and size in the rent window, but the Land Department area has " + AREA_FIGURE_MIN + " or more. The row is named for the whole area, carries the area's own contract count, has no building page or map position, and is never a building's figure.");
+  }
   const counts = { within: 0, stretch: 0, a_little_above: 0, above: 0, below: 0 };
   for (const c of kept) counts[c.verdict]++;
   const seenKeys = new Set();
@@ -930,9 +1006,9 @@ export async function briefSearch(env, sp, opts) {
     if (seenKeys.has(c.key)) c.key += "-" + norm(c.dldArea || c.d || "x"); seenKeys.add(c.key); }   // one DLD name in two areas
   const PS = {};
   // in a comparison each area gets its own top `limit`; otherwise one list
-  const chosen = q.compare ? q.areas.flatMap((a) => kept.filter((c) => c.d === a).slice(0, q.limit)) : kept.slice(0, q.limit);
+  const chosen = q.compare ? q.areas.flatMap((a) => kept.filter((c) => (c.sa || c.d) === a).slice(0, q.limit)) : kept.slice(0, q.limit);
   // v291 - the shown homes, each by its own sub-community; v292 - the owner's advertised-supply files are read at the same time
-  await Promise.all([fillLive(LV, chosen.map(liveItem), asked, { cluster: true }),
+  await Promise.all([fillLive(LV, chosen.filter((c) => !c.areaFigure).map(liveItem), asked, { cluster: true }),
     owner ? Promise.all([...new Set(chosen.map((c) => c.d).filter(Boolean))].map(async (d) => { PS[d] = await rd("pf_supply_" + d); })) : null]);
   if (LV.used) notes.push("Gym, community pool and dog park: where no register, broker fact or amenity file answers, Google Maps was asked live when this list was made (Places, not kept): a gym, a community or residence pool, or a dog park inside the home's own sub-community (its mapped homes, plus 150 m) answers yes as a cluster fact; else one inside the community's boundary answers yes as a community fact, with how far it is. Google finding none is never a no: it stays not known.");
   const rankIn = {};
@@ -940,20 +1016,21 @@ export async function briefSearch(env, sp, opts) {
     const g = q.compare ? c.d : "_"; rankIn[g] = (rankIn[g] || 0) + 1;
     const r = {
       rank: rankIn[g], key: c.key, name: c.name, aliases: c.aliases, district: c.d, district_name: c.d ? (DN[c.d] || c.d) : null,
-      dld_area: c.dldArea || null, app_id: c.i, building_url: c.i != null && c.d && !EXTRA_AREAS[c.d] ? "/building/" + c.d + "/" + c.i : null,
+      dld_area: c.dldArea || null, app_id: c.syn ? null : c.i, building_url: !c.syn && c.i != null && c.d && !EXTRA_AREAS[c.d] ? "/building/" + c.d + "/" + c.i : null,
       evidence: c.evidence, verdict: c.verdict, musts: c.musts, nearest_metro: c.nearest, completeness: c.completeness,
-      why: whyOf(c, q),
+      why: c.why || whyOf(c, q),
     };
+    if (c.areaFigure) r.area_figure = true;                                    // v314 - the row is the whole area's figure, not a building's
     // v282 - the client's own criteria, each with its answer and source (musts, then nice-to-haves, then home type and furnishing)
     const crit = q.musts.map((k) => ({ k, label: CRIT_LABEL[k], level: "must", ...c.crit[k] })).concat(q.nice.map((k) => ({ k, label: CRIT_LABEL[k], level: "nice", ...c.crit[k] })));
     if (c.crit.townhouse && String(q.type).includes("townhouse")) crit.push({ k: "townhouse", label: "townhouse", level: "asked", ...c.crit.townhouse });
     if (q.furnished !== "either") crit.push({ k: "furnished", label: q.furnished, level: "asked", v: null, src: (c.crit.furnished && c.crit.furnished.src) || FURNISHED_UNKNOWN });   // v291 CHECKLIST - the broker's note, when there is one
     r.criteria = crit;
-    if (owner && q.mode === "rent") r.furnished_hint = furnishedHint(c.d ? PS[c.d] : null, c, c.bed);   // OWNER ONLY - a client key never gets this field
+    if (owner && q.mode === "rent" && !c.areaFigure) r.furnished_hint = furnishedHint(c.d ? PS[c.d] : null, c, c.bed);   // OWNER ONLY - a client key never gets this field
     if (c.recordName && c.i != null) r.record_name = { name: c.recordName, agrees: c.agree || nameAgrees([c.name].concat(c.aliases), c.recordName) };
     if (c.disputed) r.disputed_bind = c.disputed;
     if (c.brochureKey) r.brochure = "/img/" + c.brochureKey.slice(4);
-    if (q.mode === "rent") {                                                   // present only when known; otherwise the reason, never a guess
+    if (q.mode === "rent" && c.est) {                                          // present only when known; otherwise the reason, never a guess
       const e = c.est;
       if (e.withheld) r.estimated_left_withheld = e.withheld; else { r.estimated_left = e; r.estimate_as_of = e.as_at; }
     }

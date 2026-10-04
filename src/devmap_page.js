@@ -108,6 +108,10 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .mix{display:flex;height:12px;border-radius:3px;overflow:hidden;margin:4px 0 2px;background:#26312f}.mix i{display:block}
 .th{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:baseline;margin-top:14px;padding:6px 8px;border-radius:6px;background:var(--raise);border-left:4px solid var(--gold)}
 .th b{font-size:12.5px;letter-spacing:.6px}.th span{color:var(--muted);font-size:11.5px}
+.bnd{margin:4px 0 2px}.bnd b{font-size:14px}.bnd small{display:block;color:var(--muted);font-size:11px;margin-top:1px}
+.pg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0}.pc{background:var(--raise);border-radius:6px;padding:5px 8px;border-top:3px solid var(--gold);min-width:0}.pc small{display:block;color:var(--muted);font-size:10.5px}.pc b{display:block;font-size:14px;white-space:nowrap}
+.tcs{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}.tc{border:1px solid var(--gold);border-radius:9px;padding:0 6px;font-size:10px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 6px}.chip{background:var(--raise);border-radius:11px;padding:2px 9px;font-size:11.5px}.chips small{color:var(--muted);font-size:10.5px}
 .dv{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);align-items:center}
 .dv.out{opacity:.45}.dv .nm{font-weight:600;font-size:13px}.dv .ms{color:var(--muted);font-size:11.5px}.dv .pr{text-align:right;font-size:13px;font-weight:600}.dv .pr small{display:block;color:var(--muted);font-weight:400;font-size:11px}
 .star{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0 2px}.star[aria-pressed="true"]{color:var(--gold)}
@@ -234,23 +238,39 @@ function devRow(d,area,st){
   var out=fit&&fit.fit===false&&(S.bud.max!=null||S.bud.min!=null);
   var price,sub;
   if(S.mode==="rent"){var rs=DM.rentStats(entry);price=rs.enough?'AED '+fmt(S.unit==="sqft"?rs.rpsf:rs.rpsm)+'<small>'+pul()+' a year</small>':'<small>not enough contracts</small>';sub=(rs.enough?'typical rent AED '+fmt(rs.rent)+' a year · '+rs.n+' contracts':'under 3 contracts');}
-  else{price='AED '+fmt(pu(d.median))+'<small>'+pul()+' · '+other(d.median).replace(/^/,'')+'</small>';sub=d.n+' sales · '+(d.homes?fmt(d.homes)+' homes':'homes not on record')+(d.second?' · also '+d.second.share+'% '+DM.TIER_NAMES[d.second.tier]:'')}
-  return '<div class="dv'+(out?' out':'')+'"><button class=star type=button data-k="'+esc(d.k)+'" aria-pressed="'+(S.mine[d.k]?'true':'false')+'" title="my developer">'+(S.mine[d.k]?'★':'☆')+'</button><div><div class=nm>'+esc(d.name)+(out?' <span class=ms>(outside budget)</span>':'')+'</div><div class=ms>'+sub+'</div></div><div class=pr>'+price+'</div></div>'}
+  else{price='AED '+fmt(pu(d.median))+'<small>'+pul()+' · '+other(d.median).replace(/^/,'')+'</small>';sub=d.n+' sales · '+(d.homes?fmt(d.homes)+' homes':'homes not on record')}
+  var chips='';if(S.mode!=="rent"&&d.tierShare){var order=[0,1,2,3].filter(function(i){return d.tierShare[i]>=5}).sort(function(a,b){return d.tierShare[b]-d.tierShare[a]});
+    if(order.length>1)chips='<div class=tcs>'+order.map(function(i){return '<span class=tc style="border-color:'+TC[i]+'">'+(DM.TIER_NAMES[i]==="ULTRA-LUXURY"?"ULTRA":DM.TIER_NAMES[i])+' '+d.tierShare[i]+'%</span>'}).join("")+'</div>'}   // v314 - the split of its sales across tiers, in tier colours
+  return '<div class="dv'+(out?' out':'')+'"><button class=star type=button data-k="'+esc(d.k)+'" aria-pressed="'+(S.mine[d.k]?'true':'false')+'" title="my developer">'+(S.mine[d.k]?'★':'☆')+'</button><div><div class=nm>'+esc(d.name)+(out?' <span class=ms>(outside budget)</span>':'')+'</div><div class=ms>'+sub+'</div>'+chips+'</div><div class=pr>'+price+'</div></div>'}
 function areaHtml(slug){
   var area=IDX.areas[slug],st=stats(slug);if(!st)return '<p class=note>Tap an area on the map.</p>';
   var onlyMine=S.onlyMine==null?(mineList().length>0):S.onlyMine;
   var view=onlyMine&&mineList().length?DM.shortlistFilter(st,S.mine,area):st;
+  // v314 - a thin area is a DATA GAP, never a market fact: fewer than 100 sales loaded, or the developer missing on most of them
+  var thin=st.enough&&(st.n<100||(st.unknown&&st.unknown.n>=st.n*0.5));
+  var opNote=area.offplan&&area.offplan.note?'<div class=box><b>Off-plan sales included.</b> '+esc(area.offplan.note)+'</div>':'';
+  var reg=area.register_sales_all_time||0, partial=!!(reg&&st.n<reg*0.7);                       // v314 - loaded vs the register's own count
+  var shown=0;view.tiers.forEach(function(t){shown+=t.devs.length});
+  var filtered=!!(onlyMine&&mineList().length&&st.devCount>shown);
+  var mineHides=!!(onlyMine&&mineList().length&&st.devCount>0&&shown===0&&!view.notEnough.length);
   var h='<p class=label>Area</p><h2>'+esc(area.name)+'</h2>';
   if(!st.enough)return h+'<p class=note>Not enough sales: fewer than 3 settled sales with a price and a size in this area on the register.</p>'+src();
   h+='<div class=seg style="margin-top:10px" id=useg><button data-u=sqft>per sq ft</button><button data-u=sqm>per sq m</button></div>';
-  h+='<div class=card><div class=big>AED '+fmt(pu(st.median))+' <span style="font-size:13px;color:var(--muted)">'+pul()+' median</span></div><div class=note>'+other(st.median)+' · middle half of sales: AED '+fmt(pu(st.q1))+' to '+fmt(pu(st.q3))+' · '+fmt(st.n)+' settled sales · '+st.devCount+' developer'+(st.devCount===1?'':'s')+(st.unknown?' · '+fmt(st.unknown.n)+' sales with the developer not recorded':'')+'</div></div>';
+  h+='<div class=card><div class=big>AED '+fmt(pu(st.median))+' <span style="font-size:13px;color:var(--muted)">'+pul()+' median</span></div><div class=note>'+other(st.median)+' · middle half of sales: AED '+fmt(pu(st.q1))+' to '+fmt(pu(st.q3))+' · '+fmt(st.n)+' settled sales'+(thin&&!st.devCount?'':' · '+st.devCount+' developer'+(st.devCount===1?'':'s'))+(st.unknown?' · '+fmt(st.unknown.n)+' sale'+(st.unknown.n===1?'':'s')+' where the developer is not recorded yet':'')+'</div></div>'+((thin||partial)?'<div class=box><b>This view is not complete yet.</b> '+(partial?fmt(st.n)+' of about '+fmt(reg)+' settled sales in this area are loaded'+(st.unknown&&st.unknown.n>=st.n*0.3?', and the developer is not recorded on '+fmt(st.unknown.n)+' of them':'')+'. Read the figures below as a first look, not as the whole market.':st.n<100?'Only '+fmt(st.n)+' sale'+(st.n===1?' is':'s are')+' loaded for this area so far (the register holds many more)'+(st.unknown&&st.unknown.n>=st.n*0.5?', and the developer is not recorded on most of them':'')+'. Read the figures below as a first look, not as the market.':'The developer is not recorded on '+fmt(st.unknown.n)+' of the '+fmt(st.n)+' sales here, so the developer figures below are partial. Read them as a first look, not as the whole market.')+'</div>':'')+opNote+(mineHides?'<div class=box>None of your '+mineList().length+' have 3 or more recorded sales here yet'+(st.devCount?'; '+st.devCount+' other developer'+(st.devCount===1?' is':'s are')+' hidden by your filter':'')+'. <a href="#" id=showall>Show all developers here</a></div>':filtered?'<div class=box><b>'+shown+' of your '+mineList().length+' here</b>; '+(st.devCount-shown)+' other developer'+(st.devCount-shown===1?'':'s')+' hidden by your filter. <a href="#" id=showall>Show all developers here</a></div>':'');
   h+='<div class=card><p class=label>Tier mix of settled sales</p><p class=note style="margin:0">by number of sales</p>'+bar(st.mixN)+'<p class=note style="margin:6px 0 0">by value</p>'+bar(st.mixValue)+'</div>';
   h+='<div class=box><label style="display:flex;gap:8px;align-items:center;font-size:12.5px"><input type=checkbox id=onlymine style="width:auto"'+(onlyMine?' checked':'')+'> only my developers ('+mineList().length+')</label>'
    +'<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:6px"><input type=checkbox id=fbud style="width:auto"'+(S.filterBud?' checked':'')+'> drop developers outside the budget'+(S.bud.max!=null||S.bud.min!=null?'':' (set it on screen 3)')+'</label></div>';
+  function tierHead(t){var e=t.edges,o='';
+    if(e){var f=function(u,x){return Math.round(u==="sqft"?x/DM.SQFT:x).toLocaleString("en-US")},say=function(u){return (e.lo==null?'under AED '+f(u,e.hi):e.hi==null?'AED '+f(u,e.lo)+' and above':'AED '+f(u,e.lo)+' to '+f(u,e.hi))+(u==="sqft"?' per sq ft':' per sq m')},o2=S.unit==="sqft"?"sqm":"sqft";
+      o+='<div class=bnd><b>'+say(S.unit)+'</b><small>'+say(o2)+'</small></div>'}
+    if(t.cards&&t.cards.length)o+='<div class=pg style="--gold:'+TC[t.tier]+'">'+t.cards.map(function(c){return '<div class=pc><small>'+esc(c[0])+'</small><b>'+esc(c[1])+'</b></div>'}).join("")+'</div>';
+    if(t.shares)o+='<div class=chips><span class=chip>Buyers '+t.shares.n+'%</span><span class=chip>Money '+t.shares.money+'%</span><small>Dubai-wide share of sales</small></div>';
+    return o}
+  h+='<p class=note style="margin:10px 0 0">Each developer sits in the tier where most of its sales here fall (by number of sales). The chips show how its sales split across tiers, so its median can sit in a neighbouring band.</p>';
   view.tiers.forEach(function(t){
-    h+='<div class=th style="border-left-color:'+TC[t.tier]+'"><b>'+t.name+'</b><span>'+t.nDevs+' developer'+(t.nDevs===1?'':'s')+(t.median?' · median AED '+fmt(pu(t.median))+' '+pul():'')+'</span></div><div class=note style="margin:2px 0 4px">'+esc(t.band)+'</div><div class=note style="margin:0 0 4px">'+esc(t.prices||'')+(t.share?' · '+esc(t.share):'')+'</div>';
+    h+='<div class=th style="border-left-color:'+TC[t.tier]+'"><b>'+t.name+'</b><span>'+(t.nDevs||!(thin||mineHides||filtered||(st.unknownTier&&st.unknownTier[t.tier]>0))?t.nDevs+' developer'+(t.nDevs===1?'':'s'):'')+(t.median?' · median AED '+fmt(pu(t.median))+' '+pul():'')+'</span></div>'+tierHead(t);
     var rows=t.devs.map(function(d){return devRow(d,area,st)}).join("");
-    h+=rows||'<p class=note>No developer with 3+ sales sits in this tier here.</p>'});
+    h+=rows||(st.unknownTier&&st.unknownTier[t.tier]>0?'<p class=note>Sales in this tier ('+fmt(st.unknownTier[t.tier])+') have no developer recorded.</p>':(thin||mineHides?'':filtered?'<p class=note>None of your developers have 3 or more sales in this tier here.</p>':'<p class=note>No developer with 3+ sales sits in this tier here.</p>'))});
   if(view.notEnough.length)h+='<p class=label style="margin-top:14px">Not enough sales (under 3)</p>'+view.notEnough.map(function(d){return '<div class=dv><button class=star type=button data-k="'+esc(d.k)+'" aria-pressed="'+(S.mine[d.k]?'true':'false')+'">'+(S.mine[d.k]?'★':'☆')+'</button><div class=nm>'+esc(d.name)+'</div><div class=ms>'+d.n+' sale'+(d.n===1?'':'s')+'</div></div>'}).join("");
   h+='<p class=note style="margin-top:10px">A developer sits in the tier where most of its sales in this area fall; when a second tier holds 20% or more, it is shown beside it. Medians weigh each building’s median price per sq m by the sales behind it. Tiers are price bands from all Dubai settled sales, not a view of any developer.</p>';
   h+='<div class=box><p class=label>Developer view: where would a price land here?</p><div class=two><input id=dvp inputmode=numeric placeholder="AED '+pul()+'" value="'+(S.dv.ppsm==null?'':pu(S.dv.ppsm))+'"><select id=dvt><option value="">or pick a tier</option>'+DM.TIER_NAMES.map(function(n,i){return '<option value='+i+(S.dv.tier===i?' selected':'')+'>'+n+'</option>'}).join("")+'</select></div><div id=dvout></div>'
@@ -262,7 +282,7 @@ function dvHtml(st,name){var tg=S.dv.tier!=null?{tier:S.dv.tier}:(S.dv.ppsm!=nul
 function wireDetail(el,slug){
   [].forEach.call(el.querySelectorAll(".star"),function(b){b.onclick=function(){toggleMine(b.getAttribute("data-k"))}});
   var u=el.querySelector("#useg");if(u)[].forEach.call(u.querySelectorAll("button"),function(b){b.setAttribute("aria-pressed",b.getAttribute("data-u")===S.unit?"true":"false");b.onclick=function(){S.unit=b.getAttribute("data-u");renderAll()}});
-  var om=el.querySelector("#onlymine");if(om)om.onchange=function(){S.onlyMine=om.checked;renderDetail()};
+  var om=el.querySelector("#onlymine");if(om)om.onchange=function(){S.onlyMine=om.checked;renderDetail()};var sa=el.querySelector("#showall");if(sa)sa.onclick=function(e){e.preventDefault();S.onlyMine=false;renderDetail()};
   var fb=el.querySelector("#fbud");if(fb)fb.onchange=function(){S.filterBud=fb.checked;renderDetail()};
   var st=stats(slug);if(!st||!st.enough)return;
   var dvp=el.querySelector("#dvp"),dvt=el.querySelector("#dvt"),dvo=el.querySelector("#dvout"),cs=el.querySelector("#cmps"),co=el.querySelector("#cmpout");
@@ -301,6 +321,7 @@ Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
   $("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Tier bands: "+IDX.cuts.rule;
   if(DM.TIER_CFG.bounds)$("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Tier bands (value-weighted: each tier holds about a quarter of the money spent): "+DM.TIER_CFG.bounds.join(" / ")+" AED per sq m.";
   if(mineList().length&&!S.isDefault)S.screen=2;
+  var pa=new URLSearchParams(location.search).get("area");if(pa&&IDX.areas[pa])S.sel=pa;   // v314 - a link can open one area (also used by scripts/devmap_preview.mjs)
   renderAll();
   if(window.maplibregl)startMap();else $("map").innerHTML='<p class=note style="padding:16px">The map could not load. The lists still work.</p>';
 }).catch(function(){$("sidebody").innerHTML='<p class=note>The developers data did not load.</p>'});
