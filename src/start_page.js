@@ -19,6 +19,8 @@ const KEY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width
 const HOUSE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#1A1407" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/></svg>';
 const SKY = '<svg class=sky viewBox="0 0 390 120" preserveAspectRatio="none" aria-hidden="true"><path fill="#C5A56A" d="M0 120V92h18V70h14v22h10V54h16v38h12V80h10V40h8V24h4v16h8v52h14V66h18v26h10V48h12v44h16V74h10v18h14V30h6V12h3v18h6v62h12V58h16v34h10V86h14V62h12v30h18V44h14v48h10V76h12v16h16V68h12v52z"/></svg>';
 
+const tile = (label, html) => '<div class=tile><div class=tl>' + label + '</div>' + html + '</div>';   // v308 - one grid cell: a small label, then the card
+
 export function startBody(key, rk, isOwner) {
   const q = "key=" + encodeURIComponent(key || "") + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const brief = (m, cls, icon, title, sub) => '<a class="btn ' + cls + '" href="/brief?mode=' + m + "&amp;" + esc(q) + '">'
@@ -33,18 +35,20 @@ export function startBody(key, rk, isOwner) {
     + brief("buy", "buy", HOUSE_SVG, "They want<br>to buy", "ready or off-plan · price by bedroom")
     + '</div>'
     // v279 - the real cards in place of the v278.1 placeholders (all their logic in src/ejari_page.js and src/supply_page.js)
-    + '<div class=tag>CONTRACTS SIGNED · EJARI <i></i></div>'
-    + ejariStartCard(key, rk)
+    // v308 (Kendall, 4 Oct 2026: "these need to be in a 2x2 grid"): the four lower cards sit in one 2 x 2 grid, each under its own small label.
+    // The client key sees two of them (adverts and the checklist are owner only), which fill one row.
+    + '<div class=tag>TOOLS <i></i></div>'
+    + '<div class=tools>'
+    + tile("CONTRACTS SIGNED · EJARI", ejariStartCard(key, rk))
     // v301 - developers by area (Land Department register only, so it opens on the normal client key)
-    + '<div class=tag>DEVELOPERS BY AREA <i></i></div>'
-    + devmapStartCard(key)
+    + tile("DEVELOPERS BY AREA", devmapStartCard(key))
     + (isOwner === true   // ADVERTISED SUPPLY: the owner key only - adverts data never reaches a client (standing rule); fails closed
-      ? '<div class=tag>ADVERTISED SUPPLY <i></i></div>' + supplyStartCard(key)
+      ? tile("ADVERTISED SUPPLY", supplyStartCard(key))
         // v292 (Kendall: "this should be the normal link, I don't want multiple"): the DAMAC Hills checklist opens from START, owner only
-        + '<div class=tag>DAMAC HILLS CHECKLIST <i></i></div>'
-        + '<div class=sustart><div class="ejc suc"><div class=ejh><div class="ic suic">&#9989;</div><div><b>Check every DAMAC Hills community</b><span>Map it, add what you saw on site, upload photos</span></div></div>'
-        + '<a class=ejin href="/checklist?d=damachills&key=' + esc(encodeURIComponent(key || "")) + '" style="display:block;text-align:center;text-decoration:none;color:inherit;padding:12px">OPEN THE CHECKLIST &rarr;</a></div></div>'
-      : "");
+        + tile("DAMAC HILLS CHECKLIST", '<div class=sustart><div class="ejc suc"><div class=ejh><div class="ic suic">&#9989;</div><div><b>Check every DAMAC Hills community</b><span>Map it, add what you saw on site, upload photos</span></div></div>'
+          + '<a class=ejin href="/checklist?d=damachills&key=' + esc(encodeURIComponent(key || "")) + '" style="display:block;text-align:center;text-decoration:none;color:inherit;padding:12px">OPEN THE CHECKLIST &rarr;</a></div></div>')
+      : "")
+    + '</div>';
 }
 
 export const START_CSS = '.big,.big *,.soon,.soon *,.panel,.tag{box-sizing:border-box}'
@@ -56,6 +60,12 @@ export const START_CSS = '.big,.big *,.soon,.soon *,.panel,.tag{box-sizing:borde
   + '.lede{color:#93A39E;font-size:.95rem;margin-top:8px}'
   + '.tag{display:flex;align-items:center;gap:8px;margin:24px 0 10px;font:600 .68rem "IBM Plex Mono",monospace;letter-spacing:.18em;color:#93A39E}.tag i{flex:1;height:1px;background:#22302D}'
   + '.big{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}'
+  // v308 - the 2 x 2 grid of the lower cards: two columns always, the cards stack their icon above the text so they fit a phone
+  + '.tools{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;position:relative;z-index:1;align-items:stretch}'
+  + '.tools .tile{min-width:0;display:flex;flex-direction:column}.tools .tile>*:last-child{flex:1}'
+  + '.tl{font:600 .6rem "IBM Plex Mono",monospace;letter-spacing:.14em;color:#93A39E;margin:0 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+  + '.tools .ejc{height:100%;padding:14px}.tools .ejh{flex-direction:column;align-items:flex-start;gap:8px}.tools .ejh b{font-size:.98rem}.tools .ejh span{font-size:.74rem}'
+  + '.tools .ejin{display:block}'
   + '.btn{position:relative;border-radius:22px;padding:18px 16px 16px;min-height:178px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;text-decoration:none;transition:transform .12s;min-width:0}'
   + '.btn:active{transform:scale(.98)}'
   + '.btn.rent{background:linear-gradient(150deg,#2E9B8D 0%,#1C5E56 70%);box-shadow:0 14px 34px -12px rgba(44,140,128,.75),inset 0 1px 0 rgba(255,255,255,.18)}'
