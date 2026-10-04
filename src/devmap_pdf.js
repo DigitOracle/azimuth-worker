@@ -1,4 +1,5 @@
 // DEVELOPERS BY AREA - THE TWO PDFs (v324, 4 Oct 2026).
+//   (v339: kind=investor&developer=<id>&client=<name> is the investor sheet, src/devmap_investor.js)
 //   GET /developers_pdf?kind=snapshot|detailed&area=<slug>&window=12m|all&developers=<ids, comma separated>&mode=buy|rent
 //                      &budget=<from-to>&beds=<0..5>&basis=total|sqft|sqm&key=<client key or owner key>
 //
@@ -22,6 +23,7 @@ import { kvJson } from "./brief.js";
 import { DEFAULT_SHORTLIST, shortlistName } from "./devmap_page.js";
 import { PHOSPHOR_LIGHT } from "./devmap_icons.js";
 import { BRIEF_KIT, esc, FOOTER_TEXT, WHATSAPP_NUMBER, HEADER_IMG_KEY, HEADER_JPG_KEY } from "./brief_docs.js";
+import { buildInvestorPdf } from "./devmap_investor.js";   // v339 - kind=investor (one developer in one area); circular import, used only at call time
 
 const { NAVY, GOLD, MUTED, MAPC, KY, KH, PT } = BRIEF_KIT;
 const TEAL = "#0A4F4A", GOLDI = "#C5A56A", INK = "#22262B", HAIR = "#E6E1D8";
@@ -55,7 +57,7 @@ export function icon(name, size, color) {
   const ds = PHOSPHOR_LIGHT[name]; if (!ds) return "";
   return '<svg class="ic" viewBox="0 0 256 256" width="' + size + '" height="' + size + '" fill="' + (color || TEAL) + '" aria-hidden="true">' + ds.map((d) => '<path d="' + d + '"/>').join("") + "</svg>";
 }
-const secHead = (ic, title, sub) =>
+export const secHead = (ic, title, sub) =>
   '<div class="sec"><span class="icw">' + icon(ic, 22, TEAL) + '</span><div><div class="serif sech">' + title + "</div>" + (sub ? '<div class="secs">' + sub + "</div>" : "") + "</div></div>";
 
 // ------------------------------------------------------------------------------------------------ the window (the page's own ixOf, for the Worker)
@@ -121,7 +123,9 @@ export function parseParams(url) {
   const win = /^(all|alltime|all-years)$/i.test(String(sp.get("window") || "")) ? "all" : "l12";
   const basis = ["total", "sqft", "sqm"].includes(String(sp.get("basis") || "").toLowerCase()) ? String(sp.get("basis")).toLowerCase() : "total";
   const devs = sp.get("developers") == null ? null : String(sp.get("developers")).split(",").map((s) => s.toLowerCase().replace(/[^a-z0-9 -]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60)).filter(Boolean).slice(0, MAX_DEVELOPERS);
-  return { kind, mode, win, basis, area: String(sp.get("area") || "").toLowerCase().replace(/[^a-z0-9]/g, ""), devs, bud: parseBudget(sp), format: String(sp.get("format") || "pdf").toLowerCase(), key: sp.get("key") || "" };
+  const developer = String(sp.get("developer") || "").toLowerCase().replace(/[^a-z0-9 -]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+  const client = String(sp.get("client") || "").replace(/[<>&"\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+  return { kind, mode, win, basis, developer, client, area: String(sp.get("area") || "").toLowerCase().replace(/[^a-z0-9]/g, ""), devs, bud: parseBudget(sp), format: String(sp.get("format") || "pdf").toLowerCase(), key: sp.get("key") || "" };
 }
 
 // ------------------------------------------------------------------------------------------------ what the document is built from
@@ -494,14 +498,19 @@ function unboundList(M, C, title, items) {
   return { items, line, title };
 }
 // v337 - the 3D blocks picture (one builder for the snapshot foot and the area map page): bound projects coloured by price band
-function blocksPicture(C, M, w, h, frame) {
+export function blocksPicture(C, M, w, h, frame, focus) {
   if (!M || !M.layer) return null;
   const bound = M.projects.filter((p) => p.ids);
   if (!bound.length) return null;
   const hi = new Map(); const cnt = [0, 0, 0, 0, 0];
-  for (const p of bound) { const c = bandColour(p.tier); cnt[p.tier < 0 ? 4 : p.tier]++; for (const id of p.ids) if (!hi.has(id)) hi.set(id, { fill: c.fill, wall: c.wall, edge: c.edge }); }
+  // v339 - focus: one developer's projects keep their price-band colour, every other developer's are grey
+  const OTHER = { fill: "#D9D5CA", wall: "#BDB8AB", edge: "#9A9486" }; let others = 0;
+  for (const p of bound) {
+    if (focus && p.k !== focus) { others++; for (const id of p.ids) if (!hi.has(id)) hi.set(id, OTHER); continue; }
+    const c = bandColour(p.tier); cnt[p.tier < 0 ? 4 : p.tier]++; for (const id of p.ids) if (!hi.has(id)) hi.set(id, { fill: c.fill, wall: c.wall, edge: c.edge });
+  }
   const svg = obliqueMap(M.layer, hi, { w, h, frame: frame || "all", label: "Map of " + C.names.plain + ": project footprints coloured by price band" });
-  const key = [0, 1, 2, 3].filter((t) => cnt[t]).map((t) => '<div class="lg" style="font-size:10.5px"><i style="background:' + BAND[t].fill + '"></i>' + BAND[t].name + ": " + plural(cnt[t], "project") + "</div>").join("") + (cnt[4] ? '<div class="lg" style="font-size:10.5px"><i style="background:#CFCBC0"></i>Under 3 sales, no price: ' + plural(cnt[4], "project") + "</div>" : "");
+  const key = [0, 1, 2, 3].filter((t) => cnt[t]).map((t) => '<div class="lg" style="font-size:10.5px"><i style="background:' + BAND[t].fill + '"></i>' + BAND[t].name + ": " + plural(cnt[t], "project") + "</div>").join("") + (cnt[4] ? '<div class="lg" style="font-size:10.5px"><i style="background:#CFCBC0"></i>Under 3 sales, no price: ' + plural(cnt[4], "project") + "</div>" : "") + (others ? '<div class="lg" style="font-size:10.5px"><i style="background:#D9D5CA"></i>Other developers: ' + plural(others, "project") + "</div>" : "");
   return { svg, key, bound };
 }
 const MAP_NOTE = "Buildings with no colour are other buildings. The picture is the Brief&rsquo;s map view: each outline raised to its height, seen from the south.";
@@ -641,7 +650,7 @@ function methodPage(C) {
 }
 
 // ------------------------------------------------------------------------------------------------ assembling the document
-const EXTRA_CSS = `
+export const EXTRA_CSS = `
   .dm-body { color:${INK}; }
   .serif { font-family: Newsreader, Georgia, "Times New Roman", serif; }
   h1.serif { margin:0; font-size:30px; font-weight:400; color:${NAVY}; line-height:1.1; }
@@ -740,7 +749,8 @@ export function pack(blocks) {
 }
 
 export async function buildAreaPdf(env, p, opts) {
-  if (!["snapshot", "detailed"].includes(p.kind)) return { status: 400, body: { ok: false, reason: "kind must be snapshot or detailed" } };
+  if (p.kind === "investor") return buildInvestorPdf(env, p, opts);
+  if (!["snapshot", "detailed"].includes(p.kind)) return { status: 400, body: { ok: false, reason: "kind must be snapshot, detailed or investor" } };
   if (p.mode !== "buy" && p.mode !== "rent") return { status: 400, body: { ok: false, reason: "mode must be buy or rent" } };
   const L = await loadData(env, p, opts);
   if (L.status !== 200) return L;
