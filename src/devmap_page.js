@@ -126,6 +126,10 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .pk input{width:auto}
 .maplibregl-popup-content{background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:7px 10px;font:12.5px/1.35 "IBM Plex Sans","Segoe UI",system-ui,sans-serif}
 .maplibregl-popup-tip{display:none}
+.evt{width:100%;border-collapse:collapse;font-size:11.5px;margin:6px 0}.evt th{text-align:left;color:var(--muted);font-weight:400}.evt td,.evt th{padding:2px 6px 2px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.evl{color:var(--gold);font-size:12px}.evbox h3{margin:2px 0 4px;font-size:13px}.evbox svg text{fill:var(--ink);font-size:10px;font-family:inherit}.evbox svg .ax{fill:var(--muted)}
+.evbox .cl{background:var(--raise);border-left:3px solid var(--gold);padding:5px 8px;margin:8px 0;font-size:12px;border-radius:0 6px 6px 0}.evbox .why{margin:6px 0;font-size:12px}
+.wnote{color:var(--muted);font-size:11.5px;margin:6px 0 0}
 #grab{display:none}.dwrap{display:none}
 @media(max-width:1100px){#detail{display:none}#map{right:0}#side .dwrap{display:block}}
 @media(max-width:760px){
@@ -147,7 +151,7 @@ function api(what,opt){return fetch("/developers_map_api?what="+what+"&key="+enc
 var TC=["#c5a56a","#2f8a7f","#3987e5","#8a9a96"];
 var IDX=null,GEO=null,map=null;
 window.__devmap={get map(){return map},get idx(){return IDX},get state(){return S},select:function(s){select(s,true)}};   // a handle for the preview and the tests; reads only
-var S={screen:1,mode:"buy",unit:"sqft",sel:null,onlyMine:null,mine:{},isDefault:false,bud:{mode:"sqft",min:null,max:null,beds:null},filterBud:false,named:"",dv:{ppsm:null,tier:null},cmp:null,q:""};
+var S={win:"all",drawer:null,screen:1,mode:"buy",unit:"sqft",sel:null,onlyMine:null,mine:{},isDefault:false,bud:{mode:"sqft",min:null,max:null,beds:null},filterBud:false,named:"",dv:{ppsm:null,tier:null},cmp:null,q:""};
 function fmt(n){return n==null?"-":Math.round(n).toLocaleString("en-US")}
 function pu(ppsm){return ppsm==null?null:(S.unit==="sqft"?Math.round(ppsm/DM.SQFT):Math.round(ppsm))}
 function pul(){return S.unit==="sqft"?"per sq ft":"per sq m"}
@@ -161,8 +165,20 @@ function mineList(){return Object.keys(S.mine).filter(function(k){return S.mine[
 function saveMine(){cachePut(mineList());clearTimeout(saveT);saveT=setTimeout(function(){api("shortlist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({devs:mineList()})})},400)}
 function toggleMine(k){S.mine[k]=!S.mine[k];if(!S.mine[k])delete S.mine[k];saveMine();renderAll()}
 // ---- the areas ----
-var STATS={};
-function stats(slug){if(!STATS[slug]){var a=IDX.areas[slug];STATS[slug]=a?DM.areaStats(a,IDX):null}return STATS[slug]}
+var STATS={},IXC={};
+// v322 - the WINDOW. "l12" (the default when the index carries evidence) swaps each developer's building cells for the register's last-12-month cells (c12); "all" is the old view, untouched.
+function hasEv(a){return !!(a&&a.ev&&a.ev.all)}
+function ixOf(win){
+  if(win!=="l12"||!IDX.ev)return IDX;
+  if(IXC.l12)return IXC.l12;
+  var o={},k;for(k in IDX)o[k]=IDX[k];o.areas={};
+  Object.keys(IDX.areas).forEach(function(s){var a=IDX.areas[s];
+    if(!hasEv(a)){o.areas[s]=a;return}
+    var b={},f;for(f in a)b[f]=a[f];b.devs={};
+    Object.keys(a.devs).forEach(function(dk){var d=a.devs[dk],e={},g;for(g in d)e[g]=d[g];e.c=d.c12||[];if(!e.c.length&&!(d.r||[]).length)return;b.devs[dk]=e});
+    o.areas[s]=b});
+  IXC.l12=o;return o}
+function stats(slug,win){win=win||S.win;if(win==="l12"&&!IDX.ev)win="all";var key=win+":"+slug;if(!STATS[key]){var ix=ixOf(win),a=ix.areas[slug];STATS[key]=a?DM.areaStats(a,ix):null}return STATS[key]}
 function features(){
   var sh=shading(),feats=[];
   if(GEO&&GEO.features&&GEO.features.length){GEO.features.forEach(function(f){var s=f.properties.slug;if(!IDX.areas[s])return;feats.push({type:"Feature",geometry:f.geometry,properties:{slug:s,label:IDX.areas[s].name,v:sh[s]||0,sel:S.sel===s}})})}
@@ -172,7 +188,7 @@ function features(){
 function shading(){var o={},s;
   if(S.screen===1){for(s in IDX.areas){var st=stats(s);o[s]=st&&st.enough?4-DM.tierOf(st.median,st.bounds):0}return o}
   if(S.screen===3&&S.meeting){S.meeting.forEach(function(a){o[a.slug]=a.devs.length});return o}
-  return DM.whereMine(IDX,S.mine)}
+  return DM.whereMine(ixOf(S.win),S.mine)}
 function legendHtml(){
   if(S.screen===1)return TC.map(function(c,i){return '<div><span class=sw style="display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:7px;background:'+c+'"></span>'+DM.TIER_NAMES[i]+'</div>'}).join("")+'<p class=note>Shading: the tier the area’s median price per sq m falls in.</p>';
   return '<p class=note>Shading: the more of '+(S.screen===3?'your developers fit the budget':'your developers are active')+' in an area, the stronger the colour. Grey: none.</p>'}
@@ -203,13 +219,13 @@ function sideHtml(){
   }
   return tabs+body;
 }
-function devTier(k){var c=[],s,a;for(s in IDX.areas){a=IDX.areas[s].devs[k];if(a)c=c.concat(a.c||[])}if(DM.devStats({k:k,n:"",c:c},DM.boundsOf(IDX)).enough)return DM.devStats({k:k,n:"",c:c},DM.boundsOf(IDX)).tier;return -1}
+function devTier(k){var c=[],s,a,ixw=ixOf(S.win);for(s in ixw.areas){a=ixw.areas[s].devs[k];if(a)c=c.concat(a.c||[])}if(DM.devStats({k:k,n:"",c:c},DM.boundsOf(IDX)).enough)return DM.devStats({k:k,n:"",c:c},DM.boundsOf(IDX)).tier;return -1}
 function runMeeting(){
   var b=S.bud,q={mode:b.mode,min:b.min,max:b.max,beds:b.beds};
-  if(S.mode==="buy"){var r=DM.clientMeeting(IDX,S.mine,q,S.named);S.meeting=r.areas;S.namedRes=r.named;
+  if(S.mode==="buy"){var r=DM.clientMeeting(ixOf(S.win),S.mine,q,S.named);S.meeting=r.areas;S.namedRes=r.named;
     $("mh").textContent=r.areas.length?"Your developers that fit, by location":"";
     $("mlist").innerHTML=r.areas.map(function(a){return '<div class=row data-s="'+a.slug+'"><div><div class=n>'+esc(a.name)+'</div>'+a.devs.map(function(d){return '<div class=m>'+esc(d.name)+' · '+DM.TIER_NAMES[d.tier]+' · AED '+fmt(pu(d.median))+' '+pul()+(d.basis==="total"?' (median AED '+fmt(d.fitMedian)+')':'')+'</div>'}).join("")+'</div><span class=tag style="background:#c5a56a">'+a.devs.length+'</span></div>'}).join("")||'<p class=note>'+(b.max==null&&b.min==null?'Enter a budget.':'None of your developers fit this budget with enough sales (3+).')+'</p>';
-  }else{var rr=DM.clientMeetingRent(IDX,S.mine,{min:b.min,max:b.max,beds:b.beds});S.meeting=rr;S.namedRes=S.named?DM.clientMeeting(IDX,S.mine,{mode:"sqft"},S.named).named:null;
+  }else{var rr=DM.clientMeetingRent(ixOf(S.win),S.mine,{min:b.min,max:b.max,beds:b.beds});S.meeting=rr;S.namedRes=S.named?DM.clientMeeting(ixOf(S.win),S.mine,{mode:"sqft"},S.named).named:null;
     $("mh").textContent=rr.length?"Your developers’ buildings that fit, by location (Ejari contracts, community level)":"";
     $("mlist").innerHTML=rr.map(function(a){return '<div class=row data-s="'+a.slug+'"><div><div class=n>'+esc(a.name)+'</div>'+a.devs.map(function(d){return '<div class=m>'+esc(d.name)+' · typical AED '+fmt(d.rent)+' a year · AED '+fmt(S.unit==="sqft"?d.rpsf:d.rpsf*DM.SQFT)+' '+pul()+' a year · '+d.n+' contracts</div>'}).join("")+'</div><span class=tag style="background:#c5a56a">'+a.devs.length+'</span></div>'}).join("")||'<p class=note>None of your developers’ buildings fit, with 3+ contracts.</p>'}
   var n=S.namedRes;$("namedout").innerHTML=n?(n.mine?esc(n.name)+' is one of your developers.':(n.known?'<b>'+esc(n.name)+' is not one of your developers.</b> You can refer the client to another agent.':'<b>'+esc(n.name)+' is not one of your developers</b>, and is not in the register data here.')):"";
@@ -251,26 +267,71 @@ function devRow(d,area,st){
   if(S.screen===3||S.filterBud){if(S.mode==="buy"){fit=DM.budgetFit(entry,d,{mode:S.bud.mode,min:S.bud.min,max:S.bud.max,beds:S.bud.beds},st.bounds)}else{fit=DM.rentFit(entry,{min:S.bud.min,max:S.bud.max,beds:S.bud.beds})}}
   if(S.filterBud&&fit&&fit.fit===false&&(S.bud.max!=null||S.bud.min!=null))return "";
   var out=fit&&fit.fit===false&&(S.bud.max!=null||S.bud.min!=null);
-  var price,sub;
+  var price,sub,hasD=false;
   if(S.mode==="rent"){var rs=DM.rentStats(entry);price=rs.enough?'AED '+fmt(S.unit==="sqft"?rs.rpsf:rs.rpsm)+'<small>'+pul()+' a year</small>':'<small>not enough contracts</small>';sub=(rs.enough?'typical rent AED '+fmt(rs.rent)+' a year · '+rs.n+' contracts':'under 3 contracts');}
-  else{price='AED '+fmt(pu(d.median))+'<small>'+pul()+' · '+other(d.median).replace(/^/,'')+'</small>';sub=d.n+' sales · '+(d.homes?fmt(d.homes)+' homes':'homes not on record')}
+  else{price='AED '+fmt(pu(d.median))+'<small>'+pul()+' · '+other(d.median).replace(/^/,'')+'</small>';var rawd=IDX.areas[S.sel]&&IDX.areas[S.sel].devs[d.k];hasD=!!(rawd&&rawd.ev);sub=d.n+' sales · '+(d.homes?fmt(d.homes)+' homes':'homes not on record')+(hasEv(IDX.areas[S.sel])&&st.median?' · area AED '+fmt(pu(st.median)):'')+(hasD?' · <a href="#" class=evl data-k="'+esc(d.k)+'">Show the sales behind this number</a>':'')}
   var chips=S.mode!=="rent"?donut(d.tierShare):'';   // v318 - the split of its sales across tiers as a doughnut, in tier colours (was pills)
-  return '<div class="dv'+(out?' out':'')+'"><button class=star type=button data-k="'+esc(d.k)+'" aria-pressed="'+(S.mine[d.k]?'true':'false')+'" title="my developer">'+(S.mine[d.k]?'★':'☆')+'</button><div><div class=nm>'+esc(d.name)+(out?' <span class=ms>(outside budget)</span>':'')+'</div><div class=ms>'+sub+'</div></div><div class=pr>'+price+'</div>'+chips+'</div>'}
+  return '<div class="dv'+(out?' out':'')+'"><button class=star type=button data-k="'+esc(d.k)+'" aria-pressed="'+(S.mine[d.k]?'true':'false')+'" title="my developer">'+(S.mine[d.k]?'★':'☆')+'</button><div><div class=nm>'+esc(d.name)+(out?' <span class=ms>(outside budget)</span>':'')+'</div><div class=ms>'+sub+'</div></div><div class=pr>'+price+'</div>'+chips+'</div>'+(S.drawer===d.k&&hasD&&S.mode!=="rent"?evHtml(S.sel,d.k):'')}
+// ---- v322 - THE SALES BEHIND THE NUMBER (reads index data only; nothing here is computed from anywhere else) ----
+var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function dsay(x){var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||""));return m?Number(m[3])+' '+MON[Number(m[2])-1]+' '+m[1]:''}
+function pq(x){return x?'AED '+fmt(pu(x)):null}
+function wcell(W,i){var n=W&&W[i],m=W&&W[i+1];return !n?'none':fmt(n)+' sales · '+(m?'AED '+fmt(pu(m)):'under 3 sales, no figure')}
+function sizeSay(W){if(!W||!W[11])return '';var f=function(x){return fmt(S.unit==="sqft"?x*DM.SQFT:x)},u=S.unit==="sqft"?'sq ft':'sq m';return '<p class=why>Home sizes: the middle 80% are between '+f(W[10])+' and '+f(W[12])+' '+u+' (typical '+f(W[11])+' '+u+').</p>'}
+function barsSvg(ys,nm){
+  var pts=ys.map(function(y){return{y:y[0],n:y[1],v:y[2]?pu(y[2]):null}}),mx=0;pts.forEach(function(p){if(p.v>mx)mx=p.v});if(!pts.length||!mx)return '';
+  var w=300,top=16,base=104,step=(w-8)/pts.length,bw=14,s='';
+  pts.forEach(function(p,i){var x=4+i*step+(step-bw)/2,cx=x+bw/2;
+    if(p.v){var h=Math.max(2,(p.v/mx)*(base-top-4)),yy=base-h;s+='<rect x="'+x.toFixed(1)+'" y="'+yy.toFixed(1)+'" width="'+bw+'" height="'+h.toFixed(1)+'" rx="3" fill="#2f8a7f"'+(i===pts.length-1?' fill-opacity="0.65"':'')+'><title>'+p.y+': '+fmt(p.n)+' sales, median '+fmt(p.v)+' '+pul()+'</title></rect><text x="'+cx.toFixed(1)+'" y="'+(yy-3).toFixed(1)+'" text-anchor="middle">'+fmt(p.v)+'</text>'}
+    else s+='<text class=ax x="'+cx.toFixed(1)+'" y="'+(base-4)+'" text-anchor="middle">under 3</text>';
+    s+='<text class=ax x="'+cx.toFixed(1)+'" y="'+(base+12)+'" text-anchor="middle">'+p.y+(i===pts.length-1?'*':'')+'</text>'});
+  return '<svg viewBox="0 0 '+w+' 124" width="100%" role=img aria-label="'+esc(nm)+': median price '+pul()+' by year"><line x1=4 x2='+(w-4)+' y1='+base+' y2='+base+' stroke="#26312f"/>'+s+'</svg>'}
+function evWhy(E,AE,isA,mi){ // mi: index into the window block (0 = all years, 1 = last 12 months)
+  var W=mi?E.l12:E.all,AW=mi?AE.l12:AE.all,out=[];
+  if(isA||!W||!AW||!W[1]||!AW[1])return '';
+  var r=W[1]/AW[1];if(Math.abs(r-1)<0.2)return '<p class=why>This developer is within 20% of its area, so no further explanation is needed.</p>';
+  var off=W[0]?Math.round(100*W[4]/W[0]):0,aoff=AW[0]?Math.round(100*AW[4]/AW[0]):0;
+  if(Math.abs(off-aoff)>=20)out.push(off+'% of its sales here are off-plan, against '+aoff+'% for the area');
+  if(W[11]&&AW[11]&&(W[11]/AW[11]>=1.3||W[11]/AW[11]<=0.77))out.push('its homes are typically '+fmt(S.unit==="sqft"?W[11]*DM.SQFT:W[11])+' '+(S.unit==="sqft"?'sq ft':'sq m')+', against '+fmt(S.unit==="sqft"?AW[11]*DM.SQFT:AW[11])+' for the area');
+  var vs=W[0]?Math.round(100*W[8]/W[0]):0,avs=AW[0]?Math.round(100*AW[8]/AW[0]):0;if(Math.abs(vs-avs)>=20)out.push(vs+'% of its sales are villas, against '+avs+'% for the area');
+  if(!mi&&AE.all[1]&&AE.l12[1]&&Math.abs(AE.l12[1]/AE.all[1]-1)>=0.1)out.push('the area’s all-years figure includes older sales at lower prices (AED '+fmt(pu(AE.all[1]))+' over all years, AED '+fmt(pu(AE.l12[1]))+' in the last 12 months)');
+  if(W[0]<30)out.push('only '+fmt(W[0])+' sale'+(W[0]===1?'':'s')+' stand behind it, so one project can move it');
+  return '<p class=why><b>Why it is '+Math.round(Math.abs(r-1)*100)+'% '+(r>1?'above':'below')+' its area.</b> '+(out.length?'What the register shows: '+out.join('; ')+'. These are the differences we can see; we cannot say how much of the gap each one explains.':'The register shows no clear difference in timing, off-plan share, size or villas, so the gap may come from where the buildings stand inside the area.')+'</p>'}
+function evHtml(slug,k){
+  var A=IDX.areas[slug],isA=k==="__area",D=isA?null:A.devs[k],E=isA?A.ev:(D&&D.ev),M=IDX.ev||{};
+  if(!E)return '<div class="box evbox"><b>The sales behind this number</b><p class=note>The register holds fewer than 10 sales for this developer here, so there is no yearly view.</p></div>';
+  var nm=isA?A.name:D.n,mi=S.win==="l12"?1:0,W=E.all,L=E.l12,AE=A.ev,h='<div class="box evbox"><p class=label>The sales behind this number</p><h3>'+esc(nm)+': median price '+pul()+' by year</h3>';
+  h+=barsSvg(E.y||[],nm);
+  if(E.y&&E.y.length){h+='<table class=evt><tr><th>Year<th>Sales<th>Median '+pul()+'</tr>'+E.y.map(function(y){return '<tr><td>'+y[0]+(y===E.y[E.y.length-1]?' (to '+dsay(M.l12_to)+')':'')+'<td>'+fmt(y[1])+'<td>'+(y[2]?'AED '+fmt(pu(y[2])):'under 3 sales')+'</tr>'}).join("")+'</table>'}
+  else h+='<p class=note>No year-by-year view for this developer (under 50 sales on record).</p>';
+  h+='<table class=evt><tr><th><th>Last 12 months<th>All years</tr>'+[["All sales",0],["Ready",2],["Off-plan",4],["Apartments",6],["Villas",8]].map(function(r){return '<tr><td>'+r[0]+'<td>'+wcell(L,r[1])+'<td>'+wcell(W,r[1])+'</tr>'}).join("")+'</table>';
+  h+=sizeSay(W);
+  var as=stats(slug,"all"),al=stats(slug,"l12");
+  if(isA){h+='<div class=cl>The list shows <b>AED '+fmt(pu(as&&as.median))+'</b> '+pul()+' (all years) and <b>AED '+fmt(pu(al&&al.median))+'</b> (last 12 months), both the middle of building medians. The middle of the individual sales in the register is '+pq(W[1])+' (all years, '+fmt(W[0])+' sales) and '+pq(L[1])+' (last 12 months, '+fmt(L[0])+' sales).</div>'}
+  else{h+='<div class=cl>This developer '+(L[1]?'<b>'+pq(L[1])+'</b> '+pul()+' in the last 12 months':'has no figure for the last 12 months')+(W[1]?' ('+pq(W[1])+' over all years)':'')+'; its area '+(as&&as.median?'<b>'+pq(as.median)+'</b> (all years)':'')+(al&&al.median?' / <b>'+pq(al.median)+'</b> (last 12 months)':'')+'.</div>'+evWhy(E,AE,false,mi)}
+  if(E.top&&E.top.length){h+='<p class=label style="margin-top:10px">Its biggest projects here</p>'+E.top.map(function(t){
+      var own=t[4]?pq(t[4])+' '+pul()+' (last 12 months, '+fmt(t[3])+' sales)':pq(t[2])+' '+pul()+' (all years, '+fmt(t[1])+' sales)';
+      return '<div class=why><b>'+esc(t[0]||'Project name not recorded')+'</b><br>This project '+own+'; its area '+(as&&as.median?pq(as.median)+' (all years)':'')+(al&&al.median?' / '+pq(al.median)+' (last 12 months)':'')+'.'+(t[3]?' '+Math.round(100*t[5]/t[3])+'% of its last-12-month sales are off-plan.':'')+'</div>'}).join("")}
+  h+='<p class=why><b>Dates.</b> Sales settled from '+dsay(isA?AE.first:M.since)+' to '+dsay(M.l12_to)+' (the register itself runs to '+dsay(M.source_as_of)+'; the last part month is left out so every month is whole). “Last 12 months” means '+dsay(M.l12_from)+' to '+dsay(M.l12_to)+'. *The latest year is partial.</p>';
+  h+='<p class=why><b>How the figures are worked out.</b> Each sale is its price divided by its size. A year’s figure is the middle sale of that year: half the sales cost less per '+(S.unit==="sqft"?'sq ft':'sq m')+', half cost more. It is never shown when fewer than 3 sales stand behind it. These come from every settled home sale the register holds here; '+esc(M.filters||'')+' The figure in the list is different on purpose: it takes the middle of building medians, weighted by the sales behind each building, so a big building counts more and a building with no record in our building cards is missing.'+(isA&&AE.shared?' This register area is shared with another map area (Golden Symphony, one tower), so these figures cover the whole register area.':'')+'</p>';
+  return h+'</div>'}
+function wsegHtml(area){if(!hasEv(area))return '';var M=IDX.ev||{};
+  return '<div class=seg style="margin-top:10px" id=wseg><button data-w=l12>Last 12 months</button><button data-w=all>All years</button></div><p class=wnote>'+(S.win==="l12"?'Showing sales settled '+esc(dsay(M.l12_from))+' to '+esc(dsay(M.l12_to))+': what a buyer pays today. This is the default.':'Showing every settled sale since '+esc(dsay(M.since))+' from the building records: old and new prices mixed together.')+'</p>'}
 function areaHtml(slug){
-  var area=IDX.areas[slug],st=stats(slug);if(!st)return '<p class=note>Tap an area on the map.</p>';
+  var area=ixOf(S.win).areas[slug],st=stats(slug);if(!st)return '<p class=note>Tap an area on the map.</p>';
   var onlyMine=S.onlyMine==null?(mineList().length>0):S.onlyMine;
   var view=onlyMine&&mineList().length?DM.shortlistFilter(st,S.mine,area):st;
   // v314 - a thin area is a DATA GAP, never a market fact: fewer than 100 sales loaded, or the developer missing on most of them
   var thin=st.enough&&(st.n<100||(st.unknown&&st.unknown.n>=st.n*0.5));
   var opNote=area.offplan&&area.offplan.note?'<div class=box><b>Off-plan sales included.</b> '+esc(area.offplan.note)+'</div>':'';
-  var reg=area.register_sales_all_time||0, partial=!!(reg&&st.n<reg*0.7);                       // v314 - loaded vs the register's own count
+  var reg=(S.win==="l12"&&hasEv(area)&&area.register_sales_12m!=null)?area.register_sales_12m:(area.register_sales_all_time||0), partial=!!(reg&&st.n<reg*0.7);                       // v314 - loaded vs the register's own count
   var shown=0;view.tiers.forEach(function(t){shown+=t.devs.length});
   var filtered=!!(onlyMine&&mineList().length&&st.devCount>shown);
   var mineHides=!!(onlyMine&&mineList().length&&st.devCount>0&&shown===0&&!view.notEnough.length);
-  var h='<p class=label>Area</p><h2>'+esc(area.name)+'</h2>';
+  var h='<p class=label>Area</p><h2>'+esc(area.name)+'</h2>'+wsegHtml(area);
   if(!st.enough)return h+'<p class=note>Not enough sales: fewer than 3 settled sales with a price and a size in this area on the register.</p>'+src();
   h+='<div class=seg style="margin-top:10px" id=useg><button data-u=sqft>per sq ft</button><button data-u=sqm>per sq m</button></div>';
-  h+='<div class=card><div class=big>AED '+fmt(pu(st.median))+' <span style="font-size:13px;color:var(--muted)">'+pul()+' median</span></div><div class=note>'+other(st.median)+' · middle half of sales: AED '+fmt(pu(st.q1))+' to '+fmt(pu(st.q3))+' · '+fmt(st.n)+' settled sales'+(thin&&!st.devCount?'':' · '+st.devCount+' developer'+(st.devCount===1?'':'s'))+(st.unknown?' · '+fmt(st.unknown.n)+' sale'+(st.unknown.n===1?'':'s')+' where the developer is not recorded yet':'')+'</div></div>'+((thin||partial)?'<div class=box><b>This view is not complete yet.</b> '+(partial?fmt(st.n)+' of about '+fmt(reg)+' settled sales in this area are loaded'+(st.unknown&&st.unknown.n>=st.n*0.3?', and the developer is not recorded on '+fmt(st.unknown.n)+' of them':'')+'. Read the figures below as a first look, not as the whole market.':st.n<100?'Only '+fmt(st.n)+' sale'+(st.n===1?' is':'s are')+' loaded for this area so far (the register holds many more)'+(st.unknown&&st.unknown.n>=st.n*0.5?', and the developer is not recorded on most of them':'')+'. Read the figures below as a first look, not as the market.':'The developer is not recorded on '+fmt(st.unknown.n)+' of the '+fmt(st.n)+' sales here, so the developer figures below are partial. Read them as a first look, not as the whole market.')+'</div>':'')+opNote+(mineHides?'<div class=box>None of your '+mineList().length+' have 3 or more recorded sales here yet'+(st.devCount?'; '+st.devCount+' other developer'+(st.devCount===1?' is':'s are')+' hidden by your filter':'')+'. <a href="#" id=showall>Show all developers here</a></div>':filtered?'<div class=box><b>'+shown+' of your '+mineList().length+' here</b>; '+(st.devCount-shown)+' other developer'+(st.devCount-shown===1?'':'s')+' hidden by your filter. <a href="#" id=showall>Show all developers here</a></div>':'');
+  h+='<div class=card><div class=big>AED '+fmt(pu(st.median))+' <span style="font-size:13px;color:var(--muted)">'+pul()+' median'+(hasEv(area)?', '+(S.win==="l12"?'last 12 months':'all years'):'')+'</span></div><div class=note>'+other(st.median)+' · middle half of sales: AED '+fmt(pu(st.q1))+' to '+fmt(pu(st.q3))+' · '+fmt(st.n)+' settled sales'+(thin&&!st.devCount?'':' · '+st.devCount+' developer'+(st.devCount===1?'':'s'))+(st.unknown?' · '+fmt(st.unknown.n)+' sale'+(st.unknown.n===1?'':'s')+' where the developer is not recorded yet':'')+'</div>'+(hasEv(area)?'<p style="margin:8px 0 0"><a href="#" class=evl data-k="__area">Show the sales behind this number</a></p>':'')+'</div>'+(S.drawer==="__area"&&hasEv(area)?evHtml(slug,"__area"):'')+((thin||partial)?'<div class=box><b>This view is not complete yet.</b> '+(partial?fmt(st.n)+' of about '+fmt(reg)+' settled sales in this area are loaded'+(st.unknown&&st.unknown.n>=st.n*0.3?', and the developer is not recorded on '+fmt(st.unknown.n)+' of them':'')+'. Read the figures below as a first look, not as the whole market.':st.n<100?'Only '+fmt(st.n)+' sale'+(st.n===1?' is':'s are')+' loaded for this area so far (the register holds many more)'+(st.unknown&&st.unknown.n>=st.n*0.5?', and the developer is not recorded on most of them':'')+'. Read the figures below as a first look, not as the market.':'The developer is not recorded on '+fmt(st.unknown.n)+' of the '+fmt(st.n)+' sales here, so the developer figures below are partial. Read them as a first look, not as the whole market.')+'</div>':'')+opNote+(mineHides?'<div class=box>None of your '+mineList().length+' have 3 or more recorded sales here yet'+(st.devCount?'; '+st.devCount+' other developer'+(st.devCount===1?' is':'s are')+' hidden by your filter':'')+'. <a href="#" id=showall>Show all developers here</a></div>':filtered?'<div class=box><b>'+shown+' of your '+mineList().length+' here</b>; '+(st.devCount-shown)+' other developer'+(st.devCount-shown===1?'':'s')+' hidden by your filter. <a href="#" id=showall>Show all developers here</a></div>':'');
   h+='<div class=card><p class=label>Tier mix of settled sales</p><p class=note style="margin:0">by number of sales</p>'+bar(st.mixN)+'<p class=note style="margin:6px 0 0">by value</p>'+bar(st.mixValue)+'</div>';
   h+='<div class=box><label style="display:flex;gap:8px;align-items:center;font-size:12.5px"><input type=checkbox id=onlymine style="width:auto"'+(onlyMine?' checked':'')+'> only my developers ('+mineList().length+')</label>'
    +'<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:6px"><input type=checkbox id=fbud style="width:auto"'+(S.filterBud?' checked':'')+'> drop developers outside the budget'+(S.bud.max!=null||S.bud.min!=null?'':' (set it on screen 3)')+'</label></div>';
@@ -295,6 +356,8 @@ function dvHtml(st,name){var tg=S.dv.tier!=null?{tier:S.dv.tier}:(S.dv.ppsm!=nul
   return '<p style="margin:8px 0 2px"><b>'+(name?esc(name)+': ':'')+v.tierName+'</b> · '+esc(v.band)+'</p><p class=note style="margin:0">'+esc(v.say)+'</p>'+v.competitors.map(function(d){return '<div class=ms>'+esc(d.name)+' · AED '+fmt(pu(d.median))+' '+pul()+' · '+d.n+' sales'+(d.homes?' · '+fmt(d.homes)+' homes':'')+'</div>'}).join("")}
 function wireDetail(el,slug){
   [].forEach.call(el.querySelectorAll(".star"),function(b){b.onclick=function(){toggleMine(b.getAttribute("data-k"))}});
+  [].forEach.call(el.querySelectorAll(".evl"),function(b){b.onclick=function(e){e.preventDefault();var k=b.getAttribute("data-k");S.drawer=S.drawer===k?null:k;renderDetail()}});
+  var ws=el.querySelector("#wseg");if(ws)[].forEach.call(ws.querySelectorAll("button"),function(b){b.setAttribute("aria-pressed",b.getAttribute("data-w")===S.win?"true":"false");b.onclick=function(){S.win=b.getAttribute("data-w");renderAll()}});
   var u=el.querySelector("#useg");if(u)[].forEach.call(u.querySelectorAll("button"),function(b){b.setAttribute("aria-pressed",b.getAttribute("data-u")===S.unit?"true":"false");b.onclick=function(){S.unit=b.getAttribute("data-u");renderAll()}});
   var om=el.querySelector("#onlymine");if(om)om.onchange=function(){S.onlyMine=om.checked;renderDetail()};var sa=el.querySelector("#showall");if(sa)sa.onclick=function(e){e.preventDefault();S.onlyMine=false;renderDetail()};
   var fb=el.querySelector("#fbud");if(fb)fb.onchange=function(){S.filterBud=fb.checked;renderDetail()};
@@ -308,7 +371,7 @@ function renderDetail(){var h=S.sel?areaHtml(S.sel):'<p class=note>Tap an area o
   $("detail").innerHTML=h;$("detail2").innerHTML=S.sel?h:"";$("detail2").style.display=S.sel?"":"none";wireDetail($("detail"),S.sel);wireDetail($("detail2"),S.sel)}
 function renderSide(){$("sidebody").innerHTML=sideHtml();wireSide()}
 function renderAll(){renderSide();renderDetail();refreshMap()}
-function select(slug,fly){S.sel=slug;S.cmp=null;S.onlyMine=null;renderDetail();refreshMap();if(innerWidth<=760)setSheet(false);
+function select(slug,fly){S.sel=slug;S.cmp=null;S.drawer=null;S.onlyMine=null;renderDetail();refreshMap();if(innerWidth<=760)setSheet(false);
   if(fly&&map){var b=IDX.areas[slug]&&IDX.areas[slug].bbox;if(b)map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:innerWidth<=760?{top:40,left:30,right:30,bottom:Math.round(innerHeight*0.46)+20}:60,maxZoom:13.5,duration:600})}}
 function setSheet(max){var s=$("side"),g=$("grab");s.classList.toggle("max",!!max);g.setAttribute("aria-expanded",max?"true":"false");g.textContent=max?"Tap to see more of the map":"Tap to expand"}
 $("grab").onclick=function(){setSheet(!$("side").classList.contains("max"))};
@@ -329,13 +392,14 @@ function startMap(){
 // ---- start ----
 Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
   IDX=r[0];GEO=r[1];
+  if(IDX&&IDX.ev)S.win="l12";   // v322 - prices a realtor quotes today: the last 12 months, unless the index carries no evidence yet
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l});
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
   var saved=r[2]&&r[2].at&&r[2].devs?r[2].devs:null,cg=cacheGet(),sl=saved||(cg&&cg.length?cg:null);if(!sl){sl=DEFAULT_SL.slice();S.isDefault=true}sl.forEach(function(k){S.mine[k]=true});
   $("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Tier bands: "+IDX.cuts.rule;
   if(DM.TIER_CFG.bounds)$("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Tier bands (value-weighted: each tier holds about a quarter of the money spent): "+DM.TIER_CFG.bounds.join(" / ")+" AED per sq m.";
   if(mineList().length&&!S.isDefault)S.screen=2;
-  var pa=new URLSearchParams(location.search).get("area");if(pa&&IDX.areas[pa])S.sel=pa;   // v314 - a link can open one area (also used by scripts/devmap_preview.mjs)
+  var pa=new URLSearchParams(location.search).get("area");if(pa&&IDX.areas[pa])S.sel=pa;var pdr=new URLSearchParams(location.search).get("evidence");if(pdr&&S.sel)S.drawer=pdr;var pw=new URLSearchParams(location.search).get("window");if(pw==="all"||pw==="l12")S.win=pw;   // v322 - a link can open the drawer and the window (also used by the preview)   // v314 - a link can open one area (also used by scripts/devmap_preview.mjs)
   renderAll();
   if(window.maplibregl)startMap();else $("map").innerHTML='<p class=note style="padding:16px">The map could not load. The lists still work.</p>';
 }).catch(function(){$("sidebody").innerHTML='<p class=note>The developers data did not load.</p>'});
