@@ -96,9 +96,10 @@ const mkPage = (script) => {
   const s1 = cut("function fmt(n)", "(function(){var b=new URLSearchParams(location.search).get(\"bounds\")");
   const s2 = cut("function bar(arr", "function devRow(");
   const s3 = cut("var DRILLSET=null", "function devTier(k)");
-  const S = { prof: null, drill: null, sel: "bb", unit: "sqft" };
+  const s4 = cut("var STATS={},IXC={};", "function features()") + cut("var MON=", "function barsSvg(");   // v323 - the window helpers the profile now reads
+  const S = { prof: null, drill: null, sel: "bb", unit: "sqft", win: "all" };
   const TC = ["#c5a56a", "#2f8a7f", "#3987e5", "#8a9a96"];
-  const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", s0 + s1 + s2 + s3 + "; return {drillHtml:drillHtml,setDrill:setDrill,dimOf:dimOf,donut:donut,profileHtml:profileHtml,pickNote:pickNote,brandLine:brandLine,prof:prof};");
+  const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", s0 + s1 + s4 + s2 + s3 + "; return {drillHtml:drillHtml,setDrill:setDrill,dimOf:dimOf,donut:donut,profileHtml:profileHtml,pickNote:pickNote,brandLine:brandLine,prof:prof};");
   return { S, ...fn(DM, IDX, S, TC, { mered: "Mered" }, () => {}, () => {}, () => {}) };
 };
 const P = mkPage(js);
@@ -208,8 +209,8 @@ ok(/Price bands \(per sq ft\)/.test(evt) && /Top band\s*: AED 2,787 and above pe
 DM.PRIME_AREAS.length -= 2;
 ok(!/(\d|,)\s*homes\b/.test(evt), "still no homes figure as a headline");
 { // the client meeting cards
-  const s0 = cut("function esc(t)", "function api("), s1 = cut("function fmt(n)", "(function(){var b=new URLSearchParams(location.search).get(\"bounds\")"), s3 = cut("var DRILLSET=null", "function devTier(k)"), s4 = cut("function mny(", "function runMeeting(");
-  const SS = { prof: null, drill: null, sel: "jvc", unit: "sqft" };
+  const s0 = cut("function esc(t)", "function api("), s1 = cut("function fmt(n)", "(function(){var b=new URLSearchParams(location.search).get(\"bounds\")"), s3 = cut("var DRILLSET=null", "function devTier(k)"), s4 = cut("function mny(", "function runMeeting(") + cut("var STATS={},IXC={};", "function features()") + cut("var MON=", "function barsSvg(");
+  const SS = { prof: null, drill: null, sel: "jvc", unit: "sqft", win: "all" };
   const mk = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", s0 + s1 + s3 + s4 + "; return {locCards:locCards,mny:mny};")(DM, IDX, SS, ["a", "b", "c", "d"], {}, () => {}, () => {}, () => {});
   ok(mk.mny(1800000) === "AED 1.8m" && mk.mny(950000) === "AED 950k", "buyer figure reads 'AED 1.8m' / 'AED 950k'");
   const names = ["DAMAC", "Binghatti", "Samana", "Ellington", "Danube"], rents = [54000, 61000, 48000, 70000, 52000];

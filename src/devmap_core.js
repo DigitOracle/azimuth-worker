@@ -169,8 +169,8 @@ function devProfile(index,k,cfg){
   if(out.priced.length)out.spread={hi:out.priced[0],lo:out.priced[out.priced.length-1],several:out.priced.length>1};
   if(!out.areas)out.limits.push("No sales on the map yet.");
   else{
-    if(out.basis==="sales")out.limits.push("Project counts are not in the data yet, so the brand tier here is where most of its sales fall.");
-    else if(out.projects<3)out.limits.push("Only "+out.projects+" project"+(out.projects===1?"":"s")+" with settled sales on record, so read the brand tier as a first look.");
+    if(out.basis==="sales")out.limits.push("Project counts are not in the data yet, so the brand position here is where most of its sales fall.");
+    else if(out.projects<3)out.limits.push("Only "+out.projects+" project"+(out.projects===1?"":"s")+" with settled sales on record, so read the brand position as a first look.");
     if(!out.priced.length)out.limits.push("No area has 3 or more settled sales yet, so there is no price to show.");
     else if(out.priced.length===1)out.limits.push("Only one area has 3 or more settled sales, so there is no price range yet.")}
   return out}
@@ -255,7 +255,7 @@ function talkingPoint(index,k,unit,cfg){var p=devProfile(index,k,cfg),f=devFacto
   function fm(x){return Math.round(unit==="sqm"?x:sqftOf(x)).toLocaleString("en-US")}var u=unit==="sqm"?"per sq m":"per sq ft";
   var fact=nm+": "+(p.mixSales[top]>=50?p.mixSales[top]+"% of sales sit in the ":"its largest share of sales ("+p.mixSales[top]+"%) sits in the ")+TIER_WORDS[top]+(f.priceLevel?", median AED "+fm(f.priceLevel.medianSqm)+" "+u:"");
   if(f.premium){var d=Math.round(100*(f.premium.ratio-1));fact+=d===0?", level with the other developers in the same areas":", "+Math.abs(d)+"% "+(d>0?"above":"below")+" the other developers in the same areas"}
-  lines.push(fact+", Dubai Land Department sales to "+asof+".");
+  lines.push(fact+(index&&index.window_say?", Dubai Land Department sales register. "+index.window_say.replace(/\.$/,"")+".":", Dubai Land Department sales to "+asof+"."));   // v323 - says which window the figures are from
   if(p.market>=0){lines.push("The market calls it "+POSITION_WORDS[p.market]+"."+(p.market===top?" Its sales sit mostly in the same band.":" Its sales sit mostly in the "+TIER_WORDS[top]+"."))}
   lines.push("When someone calls a developer luxury, is that price per square foot, quality, or who it is built for?");
   return {lines:lines,text:lines.join("\n")}}

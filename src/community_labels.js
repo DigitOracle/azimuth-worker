@@ -17,6 +17,8 @@ export const COMMUNITY_LABELS = {
   alkhairanfirst: { dld: "Al Khairan First", labels: ["Dubai Creek Harbour"], why: "Dubai Creek Harbour is registered in this area" },
   majan: { dld: "Wadi Al Safa 3", labels: ["Majan"], why: "Majan is the Dubai Municipality community (645) that the Land Department files as Wadi Al Safa 3; the app's district slug is majan (the slug wadialsafa3 in the area map is the same ground)" },
   palmdeira: { dld: "Palm Deira", labels: ["Dubai Islands"], why: "Dubai Islands is registered in this area (Palm Deira)" },
+  rasalkhor: { dld: "Ras Al Khor Industrial First", labels: ["Sobha One"], why: "3,349 of the 3,621 register sales (92%) are Sobha One and The Element at Sobha One; the scheme stands on the edge of the Ras Al Khor wildlife sanctuary (the flamingo sanctuary). The other 272 are Amaal 8 (Meydan Group)" },
+  bukadra: { dld: "Bukadra", labels: ["Sobha Hartland II"], why: "8,249 of the 10,050 register sales (82%) are Sobha Skyvue, Skyscape and the six Riverside Crescent towers, the launches of Sobha Hartland II; the rest are Meydan Group projects (Claydon House by Ellington, Prestige One Parkway and Waterway, The Highgrove, Belmore). The Dubai Municipality community is named Sobha Hartland II / Bukadra" },
   dubaiinvestmentparksecond: { dld: "Dubai Investment Park Second", labels: ["DAMAC Riverside", "Grand Polo Club"], why: "one area holding DAMAC Riverside and Grand Polo Club (Emaar)" },
 };
 
