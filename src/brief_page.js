@@ -404,7 +404,8 @@ function money(r,st){var e=r.evidence||{},sale=e.basis==="dld_sales";
   var mid=(e.q1&&e.q3)?" · middle half "+esc(short(e.q1))+" – "+esc(short(e.q3)):"";
   return "<div class=r3>"+head+mid+"</div>"}
 function facts(r){var e=r.evidence||{},sale=e.basis==="dld_sales",p=[];
-  if(e.n!=null)p.push(e.n+(sale?(e.n===1?" sale":" sales"):(e.n===1?" letting":" lettings"))+(e.n_new!=null&&!sale?" ("+e.n_new+" new)":""));
+  if(e.say&&!sale)p.push(e.say);else if(e.n!=null)p.push(e.n+(sale?(e.n===1?" sale":" sales"):(e.n===1?" letting":" lettings"))+(e.n_new!=null&&!sale?" ("+e.n_new+" new)":""));
+  if(e.window&&e.window.say&&!sale)p.push(e.window.say);
   if(e.home==="villa")p.push("villa or townhouse");if(e.beds_basis==="size_3plus")p.push("3 or more bedrooms, read from the size");
   if(e.sqm)p.push("about "+Math.round(e.sqm)+" m²");if(e.latest)p.push("latest "+day(e.latest));
   return p.length?"<div class=r4>"+esc(p.join(" · "))+"</div>":""}
@@ -415,7 +416,7 @@ function crits(r,st){var cs=r.criteria;
     return "<div class=mu>"+keys.map(function(k){return "<span class=y>✓ "+esc(k)+"</span>"}).join("")+"</div>"}
   if(!cs.length)return "";
   var lab=function(c){return c.k==="furnished"?c.label:(MN[c.k]||c.label||c.k)};
-  return "<div class=mu>"+cs.map(function(c){var w=lab(c)+(c.level==="must"?" (must)":"");return c.v===true?"<span class=y>✓ "+esc(w)+"</span>":(c.v===false?"<span class=n>✗ "+esc(w)+"</span>":"<span class=u>"+esc(w)+": not known</span>")}).join("")+"</div>"
+  return "<div class=mu>"+cs.map(function(c){var w=lab(c)+(c.level==="must"?" (must)":"");return c.v===true?"<span class=y>✓ "+esc(w)+"</span>":(c.v===false?"<span class=n>✗ "+esc(w)+"</span>":"<span class=u>"+esc(w)+(c.community_fact?": the community's own - "+esc(c.community_fact.say):": not known")+"</span>")}).join("")+"</div>"
     +"<details class=cs><summary>where these answers come from</summary>"+cs.map(function(c){return "<div>"+esc(lab(c))+" — "+esc(c.src||"")+(c.detail?" "+esc(c.detail)+".":"")+"</div>"}).join("")+"</details>"}
 // OWNER ONLY: the API sends furnished_hint to the owner key alone; a client page never receives it
 function fhint(r){var h=r.furnished_hint;if(!h)return "";

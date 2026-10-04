@@ -20,7 +20,8 @@
 // Everything is in this file; src/index.js carries one import and one marked dispatch.
 import { liveCtx, fillLive, LIVE_CRITS } from "./live_answers.js";   // v291 - gym, community pool and dog park asked of Google live where all else is not known
 
-import { applyBrokerFacts, brokerFor } from "./checklist_data.js";   // v291 CHECKLIST - Najjuko's on-site facts: below every register, above "not known"
+import { applyNearRule, completionFromFacts, evidenceSay, windowOf, sizeSane, nearestPlace, NEAR_FACT_M } from "./brief_rules.js";   // v310 - the DAMAC Hills rules
+import { applyBrokerFacts, brokerFor, applyAnchorOverrides } from "./checklist_data.js";   // v291 CHECKLIST - Najjuko's on-site facts: below every register, above "not known"
 export const BRIEF_MUSTS = ["balcony", "metro", "pool", "gym", "parking", "new", "schools"];
 // v282 (Kendall, 1 Oct 2026, a real client brief: "a furnished 2-3 bedroom townhouse, AED 240K a year, up to 300K for a modern,
 // well-furnished home; a private pool preferred, or a community pool; a pet-friendly community with dog-walking routes and play
@@ -223,10 +224,12 @@ export const BEDS_BASIS_SAY = { registered: "bedrooms as the register records th
 // is rentFigure(): /brief_api's evidence row and every number the PDFs print (card, dossier, layouts, budget line, appendix, the
 // all-types table) come from it, and pickRent() is the one choice of home kind and bedroom count both make, as estimateLeft() is the
 // one "left" estimate.
-export function rentFigure(s) {
+export function rentFigure(s, ctx) {
   if (!s) return null;
   const nb = s.nn >= 3 && !!s.mn;
-  return { m: nb ? s.mn : s.m, q1: nb ? s.q1n : s.q1, q3: nb ? s.q3n : s.q3, n: s.n, nn: s.nn, nr: s.nr, s: s.s, last: s.last,
+  // v310 (R5): the size is kept only where it is possible for the home kind and bedroom count (ctx = {kind, bed}); without a ctx it is kept as it was
+  const size_ok = ctx && ctx.kind != null ? sizeSane(s.s, ctx.kind, ctx.bed) : true;
+  return { m: nb ? s.mn : s.m, q1: nb ? s.q1n : s.q1, q3: nb ? s.q3n : s.q3, n: s.n, nn: s.nn, nr: s.nr, s: size_ok ? s.s : null, size_ok, last: s.last,
     median_of: nb ? "new_lettings" : "all_contracts", median_all: s.m };
 }
 const rentFig = (s) => rentFigure(s).m;
@@ -239,7 +242,7 @@ export function pickRent(it, kinds, beds, q) {
     if (!rs) continue;
     const s = rs.s;
     if (s.n < EVIDENCE_MIN) { thin++; continue; }
-    const fig = rentFigure(s), v = fig.m, verdict = verdictOf(v, q.min, q.max, q.stretch);
+    const fig = rentFigure(s, { kind: k, bed }), v = fig.m, verdict = verdictOf(v, q.min, q.max, q.stretch);
     if (!verdict) { if (q.min && v < q.min) hid = true; continue; }
     if (!best || TIER[verdict] < TIER[best.verdict] || (TIER[verdict] === TIER[best.verdict] && s.n > best.s.n)) best = { s, fig, v, verdict, kind: k, villa: k === "v", bed, basis: rs.basis };
   }
@@ -260,7 +263,9 @@ function rentCandidates(RI, q, beds) {
       verdict: best.verdict, v: best.v, n: s.n,
       evidence: { basis: "ejari", median: f.m, q1: f.q1, q3: f.q3, n: f.n, n_new: f.nn,
         median_of: f.median_of, median_all: f.median_all, sqm: f.s, latest: f.last, home: best.villa ? "villa" : "apartment",
-        beds: best.bed, beds_basis: best.basis },
+        beds: best.bed, beds_basis: best.basis,
+        // v310 - R4/R6/R7: how many lettings, over which dates, and whose evidence it is (the community's, where the record says so)
+        few: f.n < 5, say: evidenceSay(f, it.ev_scope || null), window: windowOf(it, RI), scope: it.ev_scope || null },
     });
   }
   return { cands: out, thin, hidden };
@@ -524,7 +529,7 @@ export function amenFor(AX, c) {
   for (const n of [c.name].concat(c.aliases || [])) { const h = AX.byName.get(nkey(n)); if (h) return h; }
   return null;
 }
-const LEVEL_SAY = { building: "a building fact", cluster: "a cluster fact", community: "a community fact" };
+const LEVEL_SAY = { building: "a building fact", near: "a fact about a place close to this home", cluster: "a cluster fact", community: "a community fact" };
 // "Community pools (DAMAC Hills: temperature-controlled swimming pools) - a community fact, per DAMAC's own DAMAC Hills page (2026-09-18)"
 export function amenSrc(f) {
   return String(f.say || "") + " - " + (LEVEL_SAY[f.level] || "a fact") + ", per " + (f.source_name || "a named source") +
@@ -545,9 +550,26 @@ function applyAmen(out, af) {
   return out;
 }
 
+// v310 R1 - the homes of a register sub-community (the footprints the district model attributes to its exact Land Department name, with the
+// owner's map corrections), as [lon, lat] points: where "within 500 m" is measured from for a villa community with no position of its own
+export function subOrigins(anchors, overrides, names) {
+  const list = anchors && Array.isArray(anchors.anchors) ? anchors.anchors : null;
+  if (!list) return null;
+  const m = new Map();
+  for (const a of list) { if (!a || !a.cluster || a.i == null) continue; const k = norm(a.cluster); if (!k) continue; if (!m.has(k)) m.set(k, []); m.get(k).push(a.i); }
+  const idx = overrides ? applyAnchorOverrides(m, overrides) : m;
+  if (!idx) return null;
+  const byId = new Map(list.map((a) => [a && a.i, a]));
+  for (const n of names || []) {
+    const ids = idx.get(norm(n)); if (!ids || !ids.length) continue;
+    const pts = ids.map((i) => byId.get(i)).filter((a) => a && isFinite(+a.lon) && isFinite(+a.lat)).map((a) => [+a.lon, +a.lat]);
+    if (pts.length) return pts;
+  }
+  return null;
+}
 const parksNear = (pos, AM, m) => !pos || !AM || !AM.items ? [] : AM.items.filter((a) => a.k === "park" && a.lon != null)
   .map((a) => ({ n: a.n, acc: a.acc || null, m: Math.round(metres(pos, [a.lon, a.lat])) })).filter((a) => a.m <= m).sort((a, b) => a.m - b.m);
-export function criteriaOf({ c, card, brochure, AM, musts, villa, s, af }) {
+export function criteriaOf({ c, card, brochure, AM, musts, villa, s, af, spots, origins }) {
   const am = ((brochure && brochure.amenities) || []).map(String);
   const has = (rx) => am.find((a) => rx.test(a)) || null;
   const DEV = "the developer's own project page" + (brochure && brochure.source_url ? " (" + brochure.source_url + ")" : "");
@@ -568,9 +590,9 @@ export function criteriaOf({ c, card, brochure, AM, musts, villa, s, af }) {
   if (play) facts.push("play area on the developer's page: “" + play + "”");
   out.pets = pet ? { v: true, src: DEV + ": “" + pet + "”", detail: facts.join(". ") }
     : { v: null, src: "Not known: no register we hold records whether a community allows pets. Dog-walking space is shown as a fact, not as a yes.", detail: facts.join(". ") };
-  const comp = completionOf(card, brochure);
+  const comp = completionOf(card, brochure) || completionFromFacts(af);        // v310 R3 - the Dubai Municipality year, for villa communities too
   out.modern = comp ? { v: comp.year >= MODERN_FROM, src: "completed " + comp.year + ", " + comp.src }
-    : { v: null, src: "Not known: no completion year on file for it (the Dubai Municipality building record covers named apartment buildings, not villa communities)." };
+    : { v: null, src: "Not known: no completion year on file for it." };
   const lt = [];
   if (comp) lt.push("completed " + comp.year);
   if (s && s.n) lt.push((s.nr != null ? s.nr : s.n - (s.nn || 0)) + " of its " + s.n + " recent contracts were renewals (tenants staying on)");
@@ -585,7 +607,9 @@ export function criteriaOf({ c, card, brochure, AM, musts, villa, s, af }) {
     const th = /town\s?-?houses?/i.test([c.name].concat(c.aliases || []).join(" "));
     out.townhouse = th ? { v: true, src: "the Land Department project name says townhouses" } : { v: null, src: "Not known: filed as Villa; the Ejari register does not separate villas from townhouses" };
   }
-  return applyAmen(out, af);                                                     // v289 - the amenity facts file fills what is left open
+  applyAmen(out, af);                                                            // v289 - the amenity facts file fills what is left open
+  // v310 R1 - a master-community fact is a yes for THIS home only within 500 m of it; further off it is the community's, with the distance
+  return applyNearRule(out, { spots, origins: origins || (pos ? [pos] : null), community_name: af && af.community_name });
 }
 export const FURNISHED_UNKNOWN = "Not known: the Ejari register does not record whether a home is furnished.";
 // OWNER ONLY (never on a client key, never in a PDF): what the listing sites' adverts say about furnishing, from the advertised-supply
@@ -766,10 +790,12 @@ export async function briefSearch(env, sp, opts) {
   const pDG = rd("districts_geo"), pMain = rd(q.mode === "rent" ? "rent_index" : "map_prices"), pAM = rd("amenities");
   const pAV = loadDevAvail(env, read), pHave = env && env.MEETINGS ? kvKeysMemo(env, "img_brochure_", 5) : kvKeys(env, "img_brochure_", 5);
   const pBRK = {};                                                            // v291 CHECKLIST - the broker's on-site facts, read fresh (the owner edits them) but started in wave 2
-  const warm = (ds) => {                                                      // start wave 2; the awaits below pick the same promises up
+  const warm = (ds, anch) => {                                                // start wave 2; the awaits below pick the same promises up
     for (const d of new Set(ds.filter(Boolean))) {
       if (!pBRK[d]) pBRK[d] = kvJson(env, "broker_facts_" + d);
       rd("amenities_" + d);
+      rd("amenity_spots_" + d);                                               // v310 R1 - the places with coordinates, for "within 500 m"
+      if (anch && anch.has(d) && !liveWanted) { rd("anchors_" + d); rd("anchor_overrides_" + d); }   // and the homes of a villa community, where it has no position of its own (live Google reads anchors anyway)
       if (q.mode === "rent" && !EXTRA_AREAS[d]) rd("beds_left_" + d).then((bl) => (bl ? null : rd("tenancy_" + d)));
       if (liveWanted) { rd("amenity_counts_" + d); rd("anchors_" + d); }
     }
@@ -799,7 +825,7 @@ export async function briefSearch(env, sp, opts) {
     extra.window = RI.window || null;
     const r = rentCandidates(RI, q, beds); cands = r.cands; hiddenBelow = r.hidden; diag.thin = r.thin; diag.noData = q.areas.filter((a) => !RI.items.some((it) => areaSlugOf(it) === a));
     if (q.min && beds.length === 1) for (const a of q.areas) { const rows = (RI.areas || []).filter((x) => areaSlugOf(x) === a); let best = null; for (const k of kindsOfType(q.type)) for (const row of rows) { const rs = rentStat(row, k, beds[0]); if (rs && rs.s.n >= EVIDENCE_MIN && (!best || rs.s.n > best.s.n)) best = rs; } if (best) { const f = rentFigure(best.s); diag.market.push({ slug: a, bed: beds[0], m: f.m, q1: f.q1, q3: f.q3 }); } }
-    warm(cands.map((c) => c.d));
+    warm(cands.map((c) => c.d), new Set(cands.filter((c) => c.lon == null).map((c) => c.d)));
     await loadCards(cands.filter((c) => c.i != null).map((c) => c.d));
     const un = unbindDisputed(cands, cards);
     if (un) notes.push(un + " rent record" + (un === 1 ? " is" : "s are") + " bound in the index to an app building named otherwise, or to one already listed: shown by the register name only, with no building page (the name must agree with the record). See disputed_bind.");
@@ -835,6 +861,11 @@ export async function briefSearch(env, sp, opts) {
   const AM = await pAM;
   const AMF = {};                                                              // v289 - the amenity facts per district (img_amenities_<district>)
   await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].map(async (d) => { AMF[d] = amenIndex(await rd("amenities_" + d)); }));
+  const SPT = {}, ANC = {}, OVR = {};                                          // v310 R1 - the places with coordinates, and each sub-community's homes, for "within 500 m"
+  await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].filter((d) => AMF[d]).map(async (d) => {
+    const sp = await rd("amenity_spots_" + d); SPT[d] = sp && Array.isArray(sp.spots) ? sp.spots.filter((x) => x && !/bayut|propertyfinder|dubizzle/i.test(String(x.source_url || "") + " " + String(x.source || ""))) : null;   // a listing portal is never a source of a place
+    if (cands.some((c) => c.d === d && c.lon == null)) { ANC[d] = await rd("anchors_" + d); OVR[d] = await rd("anchor_overrides_" + d); }
+  }));
   const BRK = {};                                                              // v291 CHECKLIST - the broker's on-site facts (img_broker_facts_<district>); read fresh, not memoised: the owner edits them
   await Promise.all([...new Set(cands.map((c) => c.d).filter(Boolean))].map(async (d) => { BRK[d] = await (pBRK[d] || (pBRK[d] = kvJson(env, "broker_facts_" + d))); }));
   const AV = await pAV;                                                       // v277 - the developers' own sheets, where we hold them
@@ -849,10 +880,13 @@ export async function briefSearch(env, sp, opts) {
   const kept = [];
   for (const c of cands) {
     const card = c.card || (c.d && c.i != null && cards[c.d] ? cards[c.d][String(c.i)] : null);
-    const mm = mustsOf(c, card, c.brochure, AM);
+    const origins = c.lon != null && c.lat != null ? [[c.lon, c.lat]] : (ANC[c.d] ? subOrigins(ANC[c.d], OVR[c.d], [c.name].concat(c.aliases || [])) : null);
+    // v310 - a villa community with mapped homes is placed at the middle of them for the straight-line answers (metro, schools): the RTA list is the whole network, so "no" is a real answer
+    const cm = c.lon == null && origins && origins.length ? { ...c, lon: origins.reduce((t, p) => t + p[0], 0) / origins.length, lat: origins.reduce((t, p) => t + p[1], 0) / origins.length } : c;
+    const mm = mustsOf(cm, card, c.brochure, AM);
     c.musts = mm.musts; c.nearest = mm.nearest;
     const st = q.mode === "rent" ? (rentStat(c.it, c.evidence.home === "villa" ? "v" : "b", c.bed) || {}).s : null;
-    c.crit = criteriaOf({ c, card, brochure: c.brochure, AM, musts: c.musts, villa: c.evidence.home === "villa", s: st, af: amenFor(AMF[c.d], c) });
+    c.crit = criteriaOf({ c, card, brochure: c.brochure, AM, musts: c.musts, villa: c.evidence.home === "villa", s: st, af: amenFor(AMF[c.d], c), spots: SPT[c.d], origins });
     applyBrokerFacts(c.crit, brokerFor(BRK[c.d], [c.name, c.it && c.it.n].concat(c.aliases || [])));   // v291 CHECKLIST - fills only what is still not known
     c.comp = completionOf(card, c.brochure);
     if (q.musts.some((m) => c.crit[m] && c.crit[m].v === false)) { droppedByMust++; continue; }   // ONLY a definite no leaves it out

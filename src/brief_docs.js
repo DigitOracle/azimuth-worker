@@ -50,6 +50,8 @@ import { estimateLeft, candidateKey, kvJson as kvJsonGz, loadDevAvail, devAvailF
 import { applyAnchorOverrides, applyBrokerFacts, brokerFor, ownPhotoFor, PHOTO_CREDIT, longDate } from "./checklist_data.js";   // v291 CHECKLIST - the owner's on-site corrections (map, broker facts, own photos)
 import { canonicalOf, displayOf, resolve as devResolve, isCurated } from "./devcross.js";   // v306 - the developer's canonical name
 import { labelledName } from "./community_labels.js";   // v307
+import { evidenceSay, shownRent, windowOf, distSay, isCountableGym, FEW_LETTINGS } from "./brief_rules.js";   // v310 - the DAMAC Hills rules
+import { subOrigins } from "./brief.js";   // v310 R1
 import { amenIndex, amenFor, briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent, ratingOf, EVIDENCE_MIN } from "./brief.js";
 // v277 (Kendall, 1 Oct 2026): the register "left" estimate is OFF the client face - no "ESTIMATED ... LEFT" box on page 2, no
 // "Still filling" line on the one-sheet card. estimateLeft() stays in src/brief.js and the API still returns estimated_left; nothing
@@ -402,8 +404,8 @@ export async function loadContext(env, q, opts) {
     }
     const kind = pick ? pick.k : (kinds.includes("b") && it.b ? "b" : "v");
     const set = (kind === "v" ? it.v : it.b) || {};
-    const st = B.all ? null : (pick ? rentFigure(pick.s) : null);
-    const sts = {}; for (const b of BANDS) if (set[BEDS[b].band]) sts[b] = rentFigure(set[BEDS[b].band]);   // v277 - every band, for the all-types document
+    const st = B.all ? null : (pick ? rentFigure(pick.s, { kind: pick.k, bed: +BEDS[pick.bb].band }) : null);
+    const sts = {}; for (const b of BANDS) if (set[BEDS[b].band]) sts[b] = rentFigure(set[BEDS[b].band], { kind, bed: +BEDS[b].band });   // v277 - every band, for the all-types document
     const d = areaSlugOf(it);
     const D = d ? await district(d, it) : null;
     const um = D && D.unitmix && D.unitmix.buildings_by_id && it.i != null ? D.unitmix.buildings_by_id[String(it.i)] : null;
@@ -427,7 +429,8 @@ export async function loadContext(env, q, opts) {
     // v282 - the client's criteria for this building: the same function and sources as the /brief list
     const cc = { name: it.n, aliases: it.a || [], lon: it.lon, lat: it.lat, key };
     rec.af = D ? amenFor(D.amen, { key, d, i: it.i, it, name: it.n, aliases: it.a || [] }) : null;   // v289
-    rec.crit = criteriaOf({ c: cc, card: um, brochure: br, AM: C.amen, musts: mustsOf(cc, um, br, C.amen).musts, villa: kind === "v", s: st, af: rec.af });
+    rec._ca = { c: cc, card: um, brochure: br, AM: C.amen, musts: mustsOf(cc, um, br, C.amen).musts, villa: kind === "v", s: st, af: rec.af };   // v310 - kept: the criteria are answered again once a community's homes are placed (below)
+    rec.crit = criteriaOf({ ...rec._ca, spots: D && D.spots && D.spots.spots, origins: pos ? [[pos[1], pos[0]]] : null });
     if (D) applyBrokerFacts(rec.crit, brokerFor(D.bf, [it.n].concat(it.a || [])));   // v291 CHECKLIST - the broker's on-site facts fill only what is still not known
     if (br) {
       const ext = br.photos.find((p) => /^exterior/.test(p.file || ""));
@@ -464,7 +467,24 @@ export async function loadContext(env, q, opts) {
     C.recs.push(rec);
   }
   // v290 - a community with no position of its own gets the centre of its attributed homes, for straight-line distances (metro)
-  for (const r of C.recs) if (!r.pos) { const t = svTarget(r, (C.district[r.d] || {}).layer); if (t) { r.cpos = t.c; if (Array.isArray(r.it.fp) && r.it.fp.length) r.pos = t.c; } }   // v298 - an own footprint IS a position (distances, no "not verified")
+  for (const r of C.recs) if (!r.pos) { const t = svTarget(r, (C.district[r.d] || {}).layer); if (t) { r.cpos = t.c; r.cpts = t.pts; if (Array.isArray(r.it.fp) && r.it.fp.length) r.pos = t.c; } }   // v298 - an own footprint IS a position (distances, no "not verified")
+  // v310 R1 - a master-community fact answers yes for a home only within 500 m of it: measured from the building, or (a villa community) from the
+  // nearest of the homes the district model attributes to it. Same function and sources as the /brief list.
+  for (const r of C.recs) {
+    const D = r.d ? C.district[r.d] : null;
+    if (!r._ca || !D) continue;
+    const own = Array.isArray(r.it.fp) && r.it.fp.length;
+    let origins = r.exact && r.pos && !own ? [[r.pos[1], r.pos[0]]] : null;
+    if (!origins && r.it.i == null && !own && D.spots) {   // a villa community: its own homes in the district model, as the list reads them
+      if (D.anch === undefined) { D.anch = await kvJsonGz(env, "anchors_" + r.d); D.ovr = await kvJsonGz(env, "anchor_overrides_" + r.d); }
+      origins = subOrigins(D.anch, D.ovr, [r.it.n].concat(r.it.a || []));
+    }
+    if (!origins) origins = r.cpts ? r.cpts.map((p) => [p[1], p[0]]) : r.pos ? [[r.pos[1], r.pos[0]]] : null;
+    // a villa community placed by its mapped homes: the straight-line answers (metro, schools) read from the middle of them, as in the list
+    const mid = !r._ca.c.lon && origins && origins.length ? { ...r._ca.c, lon: origins.reduce((t, p) => t + p[0], 0) / origins.length, lat: origins.reduce((t, p) => t + p[1], 0) / origins.length } : null;
+    r.crit = criteriaOf({ ...r._ca, ...(mid ? { c: mid, musts: mustsOf(mid, r._ca.card, r._ca.brochure, r._ca.AM).musts } : {}), spots: D.spots && D.spots.spots, origins });
+    applyBrokerFacts(r.crit, brokerFor(D.bf, [r.it.n].concat(r.it.a || [])));
+  }
   // v298 - OUR OWN RENDER (Kendall, 4 Oct 2026): KV img_render_<key with ":" as "-">, a plain image of our own making (CityEngine / Unreal /
   // Blender), no Google terms. Drawn after the photo and Street View, before the Blocks view, labelled "Illustration" - never a photograph.
   for (const r of C.recs) { r.renderPic = await kvPic(env, "render_" + String(r.key).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), opts && opts.origin); if (r.renderPic) r.picSource = r.picSource === "photo" || r.picSource === "street_view" ? r.picSource : "render"; }
@@ -583,19 +603,31 @@ function dayLong(d) {
 
 // "9 (4 new)" - the count the list on screen prints beside the same figure (/brief_api evidence.n, n_new)
 const lettingsTxt = (st) => String(st.n) + (st.nn != null ? " (" + st.nn + " new)" : "");
+// v310 R5 - a size that is not possible for the home (a 680 m2 "3-bed") is never printed: no text at all, so the line reads whole without it
+const sqftBit = (st) => (st && st.s ? money(st.s * SQFT) + " sq ft" : "");
+// v310 R4/R6/R7 - one muted line under every rent figure: how many lettings, whose they are, which dates
+const evidenceLine = (st, rec, C) => {
+  const w = windowOf(rec && rec.it, C && C.ri);
+  return esc(evidenceSay(st, rec && rec.it && rec.it.ev_scope)) + (w ? " &middot; " + esc(w.say) : "");
+};
 function budgetLine(st, q, B) {
   const X = q.max, m = st.m, q1 = st.q1, q3 = st.q3;
+  if (st.n < FEW_LETTINGS) {   // v310 R4 - a handful of lettings gives no "share of lettings": only where the budget sits against the typical rent, and how thin the record is
+    const sh = shownRent(st);
+    return "AED " + money(X) + " a year is " + (X < sh.m ? "just under" : X === sh.m ? "right at" : "above") + " the typical rent here (about AED " + money(sh.m) + "), but it rests on only " + st.n + " lettings, so treat it as a guide.";
+  }
   const where = X < q1 ? "below most rents here" : X < m ? "just under the typical rent here" : X === m ? "right at the typical rent here" : X <= q3 ? "a little above the typical rent here" : "above most rents here";
   const share = X >= q3 ? "about three in four or more" : X >= m ? "at least half" : X >= q1 ? "between a quarter and a half" : "fewer than one in four";
   // v285: the quarters are those of the figure's own basis (rentFigure): the new lettings where there are 3 or more, else every contract
   const of = st.median_of === "new_lettings" ? st.nn + " " + B.word + " flats newly let here" : st.n + " " + B.word + " flats let here";
   return "AED " + money(X) + " a year is " + where + ": " + share + " of the " + of + " recently went for AED " + money(X) +
-    " or less, typically about " + money(st.s * SQFT) + " sq ft.";
+    " or less" + (st.s ? ", typically about " + money(st.s * SQFT) + " sq ft" : "") + ".";
 }
 
 function rentSource(C, q, rec) {
   const ri = C.ri, B = BEDS[q.beds];
-  return "Rents: Dubai Land Department tenancy contracts (Ejari), the pull of " + esc(ri.as_of || "") + (ri.source_file ? " (" + esc(ri.source_file) + ")" : "") +
+  const win = windowOf(rec && rec.it, ri);   // v310 R6 - the dates, and what they are (contracts that started, or were registered); never a file name
+  return "Rents: Dubai Land Department tenancy contracts (Ejari), " + (win ? esc(win.say) : "the pull of " + esc(ri.as_of || "")) +
     (rec && rec.it.area ? ", " + esc(pretty(rec.it.area)) : "") + ", " + (B.all ? "every size of " : B.word + " ") + ((rec ? rec.kind === "v" : !kindsOfType(q.type).includes("b")) ? "villas and townhouses" : "flats") +
     " (bedrooms are read from the size - the register rarely records them), new and renewed contracts, each contract counted once. Where the record " +
     "files the same contracts under two names they are one building here." + (rec && rec.aliases.length ? " This building's contracts are also filed as &ldquo;" +
@@ -657,7 +689,7 @@ function nearbyLines(C, rec) {
 // v302 - gyms from the amenity-spots layer of the home's district (the layer behind the Around-the-community page): named places, straight-line
 function nearestGyms(C, rec, pos, n) {
   const sp = ((C.district[rec.d] || {}).spots || {}).spots || [];
-  return sp.filter((s) => s.type === "gym").map((s) => ({ n: cleanName(s.name), d: km(pos, [+s.lat, +s.lng]) })).sort((a, b) => a.d - b.d).slice(0, n);
+  return sp.filter((s) => s.type === "gym" && isCountableGym(s.name, "gym", [])).map((s) => ({ n: cleanName(s.name), d: km(pos, [+s.lat, +s.lng]) })).sort((a, b) => a.d - b.d).slice(0, n);   // v310 R2
 }
 
 function dossierPage1(C, rec, q, sub) {
@@ -675,20 +707,27 @@ function dossierPage1(C, rec, q, sub) {
   const rent = rec.buy ? buyBox(C, rec, q) : B.all ? (bands.length ? '<div style="border:1px solid #E6E1D8;background:#FFFFFF;padding:9px 14px 6px 14px;display:flex;flex-direction:column;gap:5px;">' +
       '<div class="lbl" style="font-size:9.5px;">TYPICAL RENT A YEAR, BY TYPE</div>' +
       tbl([["left", "TYPE"], ["right", "TYPICAL RENT"], ["right", "MIDDLE HALF, AED"], ["right", "RECENT LETTINGS"], ["right", "TYPICAL SIZE"]],
-        bands.map((b) => { const s = rec.sts[b]; return [esc(bandLabel(b)), "AED " + money(s.m), money(s.q1) + " &ndash; " + money(s.q3), String(s.n), money(s.s * SQFT) + " sq ft"]; })) + "</div>"
+        bands.map((b) => { const s = rec.sts[b]; return [esc(bandLabel(b)), "AED " + money(s.m), money(s.q1) + " &ndash; " + money(s.q3), String(s.n), sqftBit(s) || "&mdash;"]; })) + "</div>"
     : "")
-    : st ? '<div style="display:grid;grid-template-columns:1.3fr 1.2fr 0.8fr 0.9fr;gap:12px;align-items:end;border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;">' +
-    '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">' + rentLbl + '</div><div class="serif" style="font-size:29px;color:' + GOLD + ';line-height:1;white-space:nowrap;">AED ' + money(st.m) + "</div></div>" +
-    stat("AED " + money(st.q1) + " &ndash; " + money(st.q3), "MIDDLE HALF") + stat(lettingsTxt(st), "RECENT LETTINGS") + stat(money(st.s * SQFT) + " sq ft", "TYPICAL SIZE") + "</div>" +
+    : st ? (() => {   // v310 R4/R5: under five lettings the rent is rounded to AED 500, there is no middle half, and the box says "based on only N lettings"; no impossible size
+      const sh = shownRent(st), stats = (sh.few ? [stat("based on only " + st.n + " lettings", "HOW MANY")] : [stat("AED " + money(st.q1) + " &ndash; " + money(st.q3), "MIDDLE HALF"), stat(lettingsTxt(st), "RECENT LETTINGS")])
+        .concat(st.s ? [stat(sqftBit(st), "TYPICAL SIZE")] : []);
+      return '<div style="display:grid;grid-template-columns:1.3fr ' + stats.map(() => "1fr").join(" ") + ';gap:12px;align-items:end;border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;">' +
+        '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">' + rentLbl + '</div><div class="serif" style="font-size:29px;color:' + GOLD + ';line-height:1;white-space:nowrap;">AED ' + money(sh.m) + "</div></div>" +
+        stats.join("") + "</div>" + '<div style="font-size:10px;color:' + MUTED + ';line-height:1.35;">' + evidenceLine(st, rec, C) + "</div>";
+    })() +
     (q.max ? '<div style="font-size:12px;color:' + INK + ';line-height:1.45;"><b>What AED ' + money(q.max) + " gets you here.</b> " + budgetLine(st, q, B) + "</div>" : "")
     : "";
   // v292 (Kendall, 2 Oct: "unacceptable" - the building page said "Amenities: To follow"): the developer's list where there is one, then every
   // sourced must-have answer (yes AND no), each with its level - never "to follow" while a register, the facts file, the broker or Google says
   const AM_ROWS = [["private_pool", "Private pool"], ["community_pool", "Community pool"], ["pets", "Pet-friendly"], ["gym", "Gym"], ["parking", "Parking"], ["balcony", "Balcony"], ["modern", "Newer build (2018 or later)"]];
-  const LVL = { community: "community", cluster: "this cluster", building: "this building", broker: "checked on site" };
+  const LVL = { community: "community", near: "close by", cluster: "this cluster", building: "this building", broker: "checked on site" };
   const row = (t, c) => '<div style="font-size:11.5px;color:' + c + ';line-height:1.35;">' + t + "</div>";
   const critRows = AM_ROWS.filter(([k]) => rec.crit && rec.crit[k] && (rec.crit[k].v === true || rec.crit[k].v === false))
-    .map(([k, lab]) => { const c = rec.crit[k], lv = c.level ? LVL[c.level] || c.level : ""; return row((c.v ? "&#10003; " : "&#10007; ") + esc(lab) + (lv ? ' <span style="color:' + MUTED + ';">(' + esc(lv) + ")</span>" : ""), NAVY); });
+    .map(([k, lab]) => { const c = rec.crit[k], lv = c.level ? LVL[c.level] || c.level : ""; return row((c.v ? "&#10003; " : "&#10007; ") + esc(lab) + (lv ? ' <span style="color:' + MUTED + ';">(' + esc(lv) + ")</span>" : "") +
+      (c.level === "near" && c.near && c.near.m != null ? ' <span style="color:' + MUTED + ';">' + esc(distSay(c.near.m)) + "</span>" : ""), NAVY); })
+    .concat(AM_ROWS.filter(([k]) => rec.crit && rec.crit[k] && rec.crit[k].v == null && rec.crit[k].community_fact)   // v310 R1 - the community has it, this home is not shown to be near it: labelled as the community's
+      .map(([k, lab]) => { const f = rec.crit[k].community_fact; return row("In the wider community: " + esc(lab.toLowerCase()) + (f.m != null ? " (nearest " + esc(distSay(f.m)) + " away)" : ""), MUTED); }));
   const amen = ((rec.br && rec.br.amenities) || []).map((a) => row("&#8226; " + esc(a), NAVY)).join("") + critRows.join("") ||
     row(REALTOR_VERIFIES, MUTED);
   const lines = (xs) => xs.map((x) => '<div style="font-size:11.5px;color:' + NAVY + ';line-height:1.35;">' + x + "</div>").join("");
@@ -735,14 +774,14 @@ export function criteriaRows(rec, q) {
 export const markWord = (v) => (v === true ? "&#10003; yes" : v === false ? "&#10007; no" : "");
 function criteriaBlock(rec, q) {
   if (!briefAsked(q)) return "";
-  const all = criteriaRows(rec, q), rows = all.filter((r) => r[2].v === true || r[2].v === false);   // v302 - a gap is left out, not printed
+  const all = criteriaRows(rec, q), rows = all.filter((r) => r[2].v === true || r[2].v === false || (r[2].v == null && r[2].community_fact));   // v302 - a gap is left out, not printed; v310 - the community's own fact is printed as the community's
   if (!rows.length) return "";
   return '<div class="critbox" style="border:1px solid #E6E1D8;background:#FFFFFF;padding:10px 14px;display:flex;flex-direction:column;gap:5px;">' +
     '<div class="lbl" style="font-size:9.5px;">HOW IT MEETS THE BRIEF</div>' +
     tbl([["left", "WHAT THEY ASKED FOR"], ["left", "ANSWER"], ["left", "WHERE THE ANSWER COMES FROM"]],
       rows.map(([label, level, c]) => [esc(label) + ' <span style="color:' + MUTED + ';font-size:9.5px;">(' + level + ")</span>",
-        '<b style="color:' + (c.v === true ? "#2F6B55" : c.v === false ? "#9A3B3B" : MUTED) + ';white-space:nowrap;">' + markWord(c.v) + "</b>",
-        '<span style="font-size:9.6px;">' + esc(c.src || "") + (c.detail ? " " + esc(c.detail) + "." : "") + "</span>"])) +
+        '<b style="color:' + (c.v === true ? "#2F6B55" : c.v === false ? "#9A3B3B" : MUTED) + ';white-space:nowrap;">' + (c.v == null && c.community_fact ? "in the community" : markWord(c.v)) + "</b>",
+        '<span style="font-size:9.6px;">' + esc(c.v == null && c.community_fact ? c.community_fact.say + ". The community's, not shown to be at this home." : c.src || "") + (c.detail && c.v != null ? " " + esc(c.detail) + "." : "") + "</span>"])) +
     (rows.length < all.length ? '<div style="font-size:9.5px;color:' + MUTED + ';">' + REALTOR_VERIFIES + "</div>" : "") + "</div>";
 }
 // one line of marks for a one-sheet card
@@ -842,8 +881,9 @@ function layoutsBlock(rec, q) {
     table = tbl([["left", "TYPE"], ["right", "FLATS"], ["left", "FLOORS"], ["right", "TYPICAL SIZE, SQ FT"], ["right", "RENTED RECENTLY"]], rows);
     intro = "Here is this building's " + (B.all ? "home" : B.word) + " count from the Land Department units register, with the typical size. Sizes include the balcony.";
   } else if (st) {
-    table = tbl([["left", "SIZE THAT WAS LET"], ["right", "TYPICAL RENT"], ["right", "HOW MANY"], ["right", "MIDDLE HALF, AED"]],
-      [["about " + money(st.s * SQFT) + " sq ft", "AED " + money(st.m), String(st.n), money(st.q1) + " &ndash; " + money(st.q3)]]);
+    const few = st.n < FEW_LETTINGS;   // v310 R4 - no middle half under five lettings: the column is left out, not left blank
+    table = tbl([["left", st.s ? "SIZE THAT WAS LET" : "WHAT WAS LET"], ["right", "TYPICAL RENT"], ["right", "HOW MANY"]].concat(few ? [] : [["right", "MIDDLE HALF, AED"]]),
+      [[st.s ? "about " + sqftBit(st) : "recent lettings", "AED " + money(shownRent(st).m), few ? "based on only " + st.n : String(st.n)].concat(few ? [] : [money(st.q1) + " &ndash; " + money(st.q3)])]);
     // pack audit, 1 Oct 2026: a building the units register does not yet list flat by flat gets this one row. The wording says what
     // the row IS (the flats actually let here), not what is missing, so a thin page does not read as an error.
     intro = "What " + (B.word === "home" ? "homes" : B.word + " flats") + " in " + esc(rec.name) + " actually let for in the latest pull of the tenancy register: their typical size and rent. " +
@@ -883,10 +923,16 @@ function titleOf(C, q) {
 // the same answers as the criteria), grouped by level: "Community (DAMAC Hills): community pool, pet-friendly, gym &middot; This building: parking"
 const AMEN_SHORT = { community_pool: "community pool", private_pool: "private pool", pets: "pet-friendly", gym: "gym", parking: "parking", balcony: "balconies" };
 export function amenLine(rec) {
-  const lv = { building: [], cluster: [], community: [] };
-  for (const k of Object.keys(AMEN_SHORT)) { const c = rec.crit && rec.crit[k]; if (c && c.v === true && lv[c.level || "building"]) lv[c.level || "building"].push(AMEN_SHORT[k]); }
+  const lv = { building: [], cluster: [], community: [], near: [] }, wide = [];
+  for (const k of Object.keys(AMEN_SHORT)) {
+    const c = rec.crit && rec.crit[k];
+    if (c && c.v === true && lv[c.level || "building"]) lv[c.level || "building"].push(AMEN_SHORT[k] + (c.level === "near" && c.near && c.near.m != null ? " (" + distSay(c.near.m) + ")" : ""));
+    else if (c && c.community_fact) wide.push(AMEN_SHORT[k] + (c.community_fact.m != null ? " (nearest " + distSay(c.community_fact.m) + " away)" : ""));   // v310 R1 - labelled as the community's, never a yes for the home
+  }
   const where = rec.af && rec.af.community_name ? " (" + esc(rec.af.community_name) + ")" : "";
   const out = [];
+  if (lv.near.length) out.push("Close by: " + lv.near.join(", "));
+  if (wide.length) out.push("In the wider community" + where + ": " + wide.join(", "));
   if (lv.community.length) out.push("Community" + where + ": " + lv.community.join(", "));
   if (lv.cluster.length) out.push("This cluster: " + lv.cluster.join(", "));
   if (lv.building.length) out.push("This building: " + lv.building.join(", "));
@@ -915,9 +961,9 @@ function oneSheetCards(C, q) {
       ';color:#FFF;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;">' + rec.n + "</div></div>" +
       '<div style="padding:7px 9px 8px 9px;display:flex;flex-direction:column;gap:3px;">' +
       '<div class="serif" style="font-size:16px;color:' + NAVY + ';line-height:1.05;">' + esc(rec.name) + "</div>" +
-      (st ? '<div style="display:flex;align-items:baseline;gap:6px;"><span class="serif" style="font-size:20px;color:' + GOLD + ';">AED ' + money(st.m) + '</span><span style="font-size:9.5px;color:' + MUTED + ';">typical a year</span></div>' +
-        '<div style="font-size:10px;color:' + INK + ';">Middle half AED ' + money(st.q1) + "&ndash;" + money(st.q3) + "</div>" +
-        '<div style="font-size:10px;color:' + INK + ';">' + lettingsTxt(st) + (rec.it.ev_scope ? " recent lettings in " + esc(rec.it.ev_scope) + " (the community&rsquo;s, not this home&rsquo;s)" : " recent lettings") + " &middot; about " + money(st.s * SQFT) + " sq ft</div>"
+      (st ? '<div style="display:flex;align-items:baseline;gap:6px;"><span class="serif" style="font-size:20px;color:' + GOLD + ';">AED ' + money(shownRent(st).m) + '</span><span style="font-size:9.5px;color:' + MUTED + ';">typical a year</span></div>' +
+        (st.n < FEW_LETTINGS ? "" : '<div style="font-size:10px;color:' + INK + ';">Middle half AED ' + money(st.q1) + "&ndash;" + money(st.q3) + "</div>") +
+        '<div style="font-size:10px;color:' + INK + ';">' + (st.n < FEW_LETTINGS ? esc(evidenceSay(st, rec.it.ev_scope)) : lettingsTxt(st) + (rec.it.ev_scope ? " recent lettings in " + esc(rec.it.ev_scope) + " (the community&rsquo;s, not this home&rsquo;s)" : " recent lettings")) + (st.s ? " &middot; about " + sqftBit(st) : "") + "</div>"
         : perType) +
       '<div style="font-size:9.8px;color:' + MUTED + ';line-height:1.25;">' + amen + "</div>" +
       '<div style="font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + metro + "</div>" + criteriaLine(rec, q) +
@@ -937,7 +983,7 @@ export function oneSheetHtml(C, q) {
     '<div style="display:flex;flex-direction:column;gap:3px;"><div class="serif" style="font-size:26px;color:' + NAVY + ';line-height:1;">' + titleOf(C, q) + "</div>" +
     '<div style="font-size:11px;color:' + MUTED + ';">' + C.today + " &middot; numbers match the map &middot; rents are rents recently agreed, not asking prices</div></div>" + logo(C, 68) + "</div>" +
     html +
-    '<div style="padding:0 30px 4px 30px;font-size:8.3px;color:' + MUTED + ';line-height:1.3;">Rents: Dubai Land Department tenancy contracts, the pull of ' + esc(C.ri.as_of || "") + ", " + (B.all ? "every size of " : B.word + "-sized ") +
+    '<div style="padding:0 30px 4px 30px;font-size:8.3px;color:' + MUTED + ';line-height:1.3;">Rents: Dubai Land Department tenancy contracts, ' + ((w) => (w ? esc(w.say) : "the pull of " + esc(C.ri.as_of || "")))(windowOf(C.recs[0] && C.recs[0].it, C.ri)) + ", " + (B.all ? "every size of " : B.word + "-sized ") +
     (!kindsOfType(q.type).includes("b") ? "villas and townhouses" : kindsOfType(q.type).includes("v") ? "homes" : "flats") + ", each contract counted once; typical rent is the median of new lettings where there are three or more, else of every contract, as on screen. Metro distances are straight lines. Pictures: each developer's own project page" + (C.recs.some((r) => r.picSource && r.picSource !== "photo" && r.picSource !== "none" && r.picSource !== "street_view" && r.picSource !== "render") ? "; where none is on file, a Blocks view: the building as a simple block on the district model (&copy; OpenStreetMap contributors), heights to scale - not a photograph." : ".") +
     (C.recs.some((r) => r.picSource === "street_view") ? " Street View: Google, aimed at the building, the month shown on the picture." : "") +
     (C.recs.some((r) => r.picSource === "render") ? " An illustration is Najma's own render, not a photograph." : "") +
@@ -971,7 +1017,7 @@ export function matchAll(C, q) {
 function appendixHtml(C, q) {
   const all = matchAll(C, q), CAP = 30;
   const rows = all.slice(0, CAP).map(({ it, st }) => [esc(pretty(it.n)) + ((it.a || []).length ? ' <span style="color:' + MUTED + ';font-size:9.5px;">(also filed as ' + esc(it.a.map(pretty).join(", ")) + ")</span>" : ""),
-    "AED " + money(st.m), money(st.q1) + "&ndash;" + money(st.q3), String(st.n), money(st.s * SQFT) + " sq ft", esc(st.last || it.last || "")]);
+    "AED " + money(st.m), money(st.q1) + "&ndash;" + money(st.q3), String(st.n), sqftBit(st) || "&mdash;", esc(st.last || it.last || "")]);
   const B = BEDS[q.beds];
   const body = '<div style="display:flex;flex-direction:column;gap:3px;"><div class="serif" style="font-size:24px;color:' + NAVY + ';">Appendix &mdash; every building this brief matches</div>' +
     '<div class="sub">Every building whose typical ' + (B.all ? "" : B.word + " ") + "rent in the latest pull is" + (q.min ? " at least AED " + money(q.min) + " and" : "") + (q.max ? " within 3% of AED " + money(q.max) : " on record") +

@@ -96,7 +96,8 @@ const j = await brief(Q);
 const by = {}; for (const r of j.results || []) by[r.name] = r;
 const rich = by["DAMAC HILLS -  RICHMOND"];
 ok(!!rich && crit(rich, "pets").v === true && crit(rich, "pets").level === "community"
-  && crit(rich, "pets").src === "Pet-friendly community (DAMAC Hills, with dedicated pet parks) - a community fact, per DAMAC's own DAMAC Hills page (2026-09-18): “With dedicated pet parks, DAMAC Hills is a haven for pet owners”",
+  && crit(rich, "pets").src.startsWith("Pet-friendly community (DAMAC Hills, with dedicated pet parks) - a community fact, per DAMAC's own DAMAC Hills page (2026-09-18): “With dedicated pet parks, DAMAC Hills is a haven for pet owners”")   // v310: with no position it also says it is the community's
+  && crit(rich, "pets").unplaced === true,
   "A1 gzipped file read: pets answered yes, a community fact, with DAMAC's page and the quote", JSON.stringify(rich && crit(rich, "pets")));
 ok(rich && /Community pools \(DAMAC Hills/.test(crit(rich, "community_pool").src) && /a community fact, per DAMAC's own DAMAC Hills page/.test(crit(rich, "community_pool").src)
   && crit(rich, "gym").v === true && crit(rich, "parking").v === true && crit(rich, "parking").level === "building" && /a building fact, per the Land Department buildings register \(2026-09-25\)/.test(crit(rich, "parking").src),

@@ -107,18 +107,19 @@ const DAY = /asked live, \d{1,2} [A-Z][a-z]{2} 20\d\d\)/;
 ok(car && crit(car, "gym").v === true && crit(car, "gym").level === "cluster" && /^Gym in Carson on Google Maps \(asked live, \d{1,2} [A-Z][a-z]{2} 20\d\d\): Carson Fitness Gym$/.test(crit(car, "gym").src),
   "L1 a gym inside Carson's own footprints (+150 m): yes, a cluster fact, named, Google Maps, the date", JSON.stringify(crit(car, "gym")));
 ok(car && crit(car, "gym").attribution === "Google Maps" && crit(car, "gym").live === true && !/Yavuz|Aqua Gym|Ladies Only/.test(JSON.stringify(car)), "L1b attribution Google Maps; a personal trainer, an aqua-aerobics class and a ladies-only gym are not \"a gym\"");
-ok(top && crit(top, "gym").v === true && crit(top, "gym").level === "community" && /^Gym in DAMAC Hills on Google Maps \(asked live, [^)]+\): Damac Hills - Gym, about [\d.]+ (km|m) from Topanga$/.test(crit(top, "gym").src),
-  "L2 nothing in Topanga: the community's gym, inside the polygon, with how far it is from Topanga", JSON.stringify(crit(top, "gym")));
+// v310 R1: the community's gym is 817 m from Topanga's homes: further than 500 m, so it is NOT a yes for Topanga; it is kept as the community's own, with the distance
+ok(top && crit(top, "gym").v === null && crit(top, "gym").community_fact && crit(top, "gym").community_fact.name === "Damac Hills - Gym" && crit(top, "gym").community_fact.m > 500 && /about [\d.]+ (km|m) away/.test(crit(top, "gym").community_fact.say),
+  "L2 nothing in Topanga: the community's gym is 800 m off - not a yes for Topanga, shown as the community's with the distance", JSON.stringify(crit(top, "gym")));
 ok(!/Fitness First Mudon|Old Gym/.test(j._raw), "L2b a gym outside the district polygon, or closed, is never named");
 ok(bel && crit(bel, "gym").level === "community" && /^Gym in DAMAC Hills on Google Maps \([^)]+\): Damac Hills - Gym\. No footprints are on file for Bel Air, so this is the community's answer$/.test(crit(bel, "gym").src),
   "L3 Bel Air (no attributed footprints): the community's answer only, and it says so", JSON.stringify(crit(bel, "gym")));
-ok(car && crit(car, "community_pool").v === true && crit(car, "community_pool").level === "community" && /: Queens Meadow pool, about [\d.]+ (km|m) from Carson$/.test(crit(car, "community_pool").src)
+ok(car && crit(car, "community_pool").v === null && crit(car, "community_pool").community_fact && crit(car, "community_pool").community_fact.name === "Queens Meadow pool" && crit(car, "community_pool").community_fact.m > 500
   && !/Carson Hotel Pool|Shisha|Urban Swim/.test(j._raw),
-  "L4 pools: a hotel pool, a restaurant and a swim academy never count; Queens Meadow's pool (a sub-community's own) does", JSON.stringify(crit(car, "community_pool")));
+  "L4 pools: a hotel pool, a restaurant and a swim academy never count; Queens Meadow's pool is 1.4 km from Carson, so it is the community's, not a yes for Carson", JSON.stringify(crit(car, "community_pool")));
 ok(ric && crit(ric, "gym").v === true && crit(ric, "gym").level === "building" && /units register/.test(crit(ric, "gym").src) && !crit(ric, "gym").live,
   "L5 a register answer is never overridden (Richmond: the units register's gymnasium)", JSON.stringify(crit(ric, "gym")));
-ok(car && crit(car, "pets").v === true && /^Dog park in DAMAC Hills on Google Maps \([^)]+\): Dog Park \| Damac Hills, about [\d.]+ km from Carson$/.test(crit(car, "pets").src),
-  "L4b pets: a dog park inside DAMAC Hills answers pets where nothing else does", JSON.stringify(crit(car, "pets")));
+ok(car && crit(car, "pets").v === null && crit(car, "pets").community_fact && /Dog Park \| Damac Hills, about [\d.]+ km away/.test(crit(car, "pets").community_fact.say),
+  "L4b pets: the dog park inside DAMAC Hills is 2 km from Carson: the community's, not a yes for Carson, with the distance", JSON.stringify(crit(car, "pets")));
 // cost: 3 community calls + 3 for Carson + 3 for Topanga (+ Queens Meadow never asked: no home there); Bel Air and Richmond: none of their own
 const cl = (lat, lon) => seen.filter((s) => near(s.b, lat, lon)).length;
 ok(seen.length === 9 && cl(25.0225, 55.254) === 3 && cl(25.0305, 55.246) === 3 && cl(25.01525, 55.2605) === 3,
@@ -169,8 +170,8 @@ ok(!sheet.includes(GKEY) && seen.length <= 9 && seen.length > 0, "L9c no key in 
 seen = [];
 const rd = await call(env, "/brief_pdf?kind=pack&keys=dld:damachillscarson,dld:damachillstopanga&mode=rent&beds=3&type=villa&max=240000&areas=" + D + "&musts=gym,community_pool,pets&format=html&key=" + CLIENT);
 const dh = await rd.text();
-ok(rd.status === 200 && dh.includes("Gym in Carson on Google Maps (asked live, ") && dh.includes("Carson Fitness Gym") && /Dog park in DAMAC Hills on Google Maps/.test(dh) && !dh.includes(GKEY),
-  "L9d the Full pack (through /brief_pdf) prints the live answers with their source words and Google Maps, and no key", rd.status + " " + dh.replace(/<img[^>]*>/g, "").replace(/data:[^"']+/g, "").slice(0, 400));
+ok(rd.status === 200 && dh.includes("Gym in Carson on Google Maps (asked live, ") && dh.includes("Carson Fitness Gym") && /In the wider community/.test(dh) && !/Dog park in DAMAC Hills on Google Maps/.test(dh) && !dh.includes(GKEY),
+  "L9d the Full pack (through /brief_pdf) prints the live answers with their source words and Google Maps, a far dog park as the community's, and no key", rd.status + " " + dh.replace(/<img[^>]*>/g, "").replace(/data:[^"']+/g, "").slice(0, 400));
 // L7d a compare pack's area comparison (briefSearch with live: false) asks Google nothing of its own
 seen = [];
 const rc2 = await call(env, "/brief_pdf?kind=compare&keys=dld:damachillscarson&mode=rent&beds=3&type=villa&max=240000&areas=" + D + "&compare=1&musts=gym&format=html&key=" + CLIENT);

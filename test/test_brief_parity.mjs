@@ -132,12 +132,15 @@ store.delete("img_avail_index"); store.delete("img_drill_binghatti");
       for (let k = 0; k < rows4.length; k++) {
         const row = rows4[k], e = row.evidence, c = cards4[k] || "";
         const m = /AED ([\d,]+)<\/span><span[^>]*>typical a year/.exec(c), mh = /Middle half AED ([\d,]+)&ndash;([\d,]+)/.exec(c), n = /(\d+) \((\d+) new\) recent lettings/.exec(c);
-        const cardOk = m && mh && n && money(m[1]) === e.median && money(mh[1]) === e.q1 && money(mh[2]) === e.q3 && +n[1] === e.n && +n[2] === e.n_new;
+        const few = e.n < 5, r500 = (v) => Math.round(v / 500) * 500;   // v310 R4: under five lettings - rent to the nearest AED 500, no middle half, "based on only N lettings"
+        const cardOk = few ? m && !mh && (/based on only (\d+) lettings/.exec(c) || [])[1] == e.n && money(m[1]) === r500(e.median)
+          : m && mh && n && money(m[1]) === e.median && money(mh[1]) === e.q1 && money(mh[2]) === e.q3 && +n[1] === e.n && +n[2] === e.n_new;
         printed = [];
         await call("/brief_pdf?kind=dossier&keys=" + encodeURIComponent(row.key) + "&" + bq + "&key=" + CLIENT);
         const dh = printed[0] || "";
         const dm = /RENT A YEAR<\/div><div class="serif"[^>]*>AED ([\d,]+)<\/div>/.exec(dh), dmh = /<div[^>]*>AED ([\d,]+) &ndash; ([\d,]+)<\/div><\/div>/.exec(dh), dn = />(\d+) \((\d+) new\)<\/div>/.exec(dh);
-        const dosOk = dm && dmh && dn && money(dm[1]) === e.median && money(dmh[1]) === e.q1 && money(dmh[2]) === e.q3 && +dn[1] === e.n && +dn[2] === e.n_new;
+        const dosOk = few ? dm && !dmh && (/>based on only (\d+) lettings<\/div>/.exec(dh) || [])[1] == e.n && money(dm[1]) === r500(e.median)
+          : dm && dmh && dn && money(dm[1]) === e.median && money(dmh[1]) === e.q1 && money(dmh[2]) === e.q3 && +dn[1] === e.n && +dn[2] === e.n_new;
         ok(cardOk && dosOk, label + " - " + row.name + " (" + row.key + "): card and dossier = the list row: AED " + e.median + ", " + e.q1 + "-" + e.q3 + ", " + e.n + " (" + e.n_new + " new), " + e.median_of,
           "card " + (m && m[1]) + " " + (mh && mh.slice(1).join("-")) + " " + (n && n.slice(1).join("/")) + " | dossier " + (dm && dm[1]) + " " + (dmh && dmh.slice(1).join("-")) + " " + (dn && dn.slice(1).join("/")));
         if (cardOk && dosOk) same++;

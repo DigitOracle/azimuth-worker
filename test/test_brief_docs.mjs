@@ -349,6 +349,10 @@ ok(brochureKvName("name_a_very_long_building_name_that_overflows_forty") === "br
   rows.forEach((row, k) => {
     const c = cards[k] || "", e = row.evidence;
     const m = /AED ([\d,]+)<\/span><span[^>]*>typical a year/.exec(c), mh = /Middle half AED ([\d,]+)&ndash;([\d,]+)/.exec(c), n = /(\d+) \((\d+) new\) recent lettings/.exec(c);
+    if (e.n < 5) {   // v310 R4: under five lettings - rent to the nearest AED 500, no middle half, "based on only N lettings"
+      const fo = /based on only (\d+) lettings/.exec(c);
+      ok(m && !mh && fo && money(m[1]) === Math.round(e.median / 500) * 500 && +fo[1] === e.n, row.name + ": under five lettings the card rounds to AED 500, has no middle half and says how thin it is (n " + e.n + ")", (m && m[1]) + " " + (fo && fo[0]));
+    } else
     ok(m && mh && n && money(m[1]) === e.median && money(mh[1]) === e.q1 && money(mh[2]) === e.q3 && +n[1] === e.n && +n[2] === e.n_new,
       row.name + ": the card's typical / middle half / count equal the list row's (AED " + e.median + ", " + e.q1 + "-" + e.q3 + ", " + e.n + " (" + e.n_new + " new))", (m && m[1]) + " " + (mh && mh[0]) + " " + (n && n[0]));
     const pic = /<img [^>]*src="[^"]*\/img\/bph_/.test(c) ? "photo" : ((/<div class="blocksview" data-kind="(\w+)"/.exec(c) || [])[1] || "none");
