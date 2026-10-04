@@ -694,8 +694,8 @@ function nearestGyms(C, rec, pos, n) {
 
 function dossierPage1(C, rec, q, sub) {
   const B = BEDS[q.beds], st = rec.st;
-  const bvHero = rec.heroPic ? null : blocksThumb(rec, (C.district[rec.d] || {}).layer, 702, 300, { district: rec.dist, fs: 9.5 });   // v285
-  const hero = rec.ownPic ? ownFigure(rec.ownPic, 702, 300, rec.name) : rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38) : rec.svPic ? svFigure(rec.svPic, 702, 300, rec.name) : bvHero ? bvHero.html
+  const bvHero = (rec.heroPic || rec.renderPic) ? null : blocksThumb(rec, (C.district[rec.d] || {}).layer, 702, 300, { district: rec.dist, fs: 9.5 });   // v285
+  const hero = rec.ownPic ? ownFigure(rec.ownPic, 702, 300, rec.name) : rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38) : rec.svPic ? svFigure(rec.svPic, 702, 300, rec.name) : rec.renderPic ? renderFigure(rec, 702, 300) : bvHero ? bvHero.html
     : '<div style="width:702px;height:120px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:13px;color:' + MUTED + ";\">Najma</div>";
   const F = facts(rec);
   const factHtml = F.length ? '<div style="display:grid;grid-template-columns:' + (F.length === 4 ? "0.9fr 0.9fr 1.4fr 0.8fr" : "repeat(" + F.length + ",minmax(0,1fr))") + ';gap:12px;">' +
