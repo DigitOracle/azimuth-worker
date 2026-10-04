@@ -641,5 +641,37 @@ ok(/📏 Waist: 78 cm \(first reading\)/.test(said()) && !/\(\+?0 cm since/.test
 const pg2 = await (await call(K("/fit"))).text();
 ok(/\(first reading\)/.test(pg2), "the page says it too");
 
+console.log("v336: a write must say whose log it is (Najjuko's plan landed on Dr. Doli's)");
+store.clear(); outbound = [];
+env.FIT_USERS = "kendall:" + KEN + ":Dr. Doli,najjuko:" + HER + ":Black Coffee";
+const firstView = (await jget("/fit_api")).j;
+eq([firstView.ok, firstView.u, firstView.users], [true, "kendall", ["kendall", "najjuko"]], "a GET with no person still loads (the page needs it to ask who this is): it answers with the first person and the list");
+const w0 = writes.length; writes = [];
+let rw = await call(K("/fit_api"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "cfg", cfg: { goal: "saved onto the wrong person", weekMin: 480 } }) });
+eq([rw.status, (await rw.json()).ok, writes.length, [...store.keys()].some((k) => k.startsWith("fitc_cfg_"))], [400, false, 0, false], "a plan save with NO person is refused (400) and writes nothing - it used to land on the first person and say saved");
+rw = await post("/fit_api?u=nobody", { op: "cfg", cfg: { goal: "x" } });
+eq([rw.status, writes.length], [400, 0], "an unknown person is refused too, never quietly mapped to the first");
+for (const op of [{ op: "add", kind: "food", text: "x" }, { op: "pause", days: 1 }, { op: "share", on: true }, { op: "measure", what: "weight", value: 80 }, { op: "weektarget", hours: 8 }, { op: "extend" }, { op: "resume" }, { op: "del", id: "2026-10-04_1791100000000_abc123" }, { op: "edit", id: "2026-10-04_1791100000000_abc123", text: "x" }]) {
+  const rr = await call(K("/fit_api"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(op) });
+  if (rr.status !== 400) ok(false, "write op '" + op.op + "' was accepted without a person (" + rr.status + ")");
+}
+ok(writes.length === 0, "every kind of write (add, pause, share, measure, target, extend, resume, delete, edit) is refused without a person, and nothing was written");
+await post("/fit_api?u=najjuko", { op: "cfg", cfg: { goal: "Fit for the wedding in March", weekMin: 480, tone: "kind" } });
+const njv = (await jget("/fit_api?u=najjuko")).j, kdv = (await jget("/fit_api?u=kendall")).j;
+eq([njv.cfg.goal, njv.cfg.weekMin, njv.cfg.tone, kdv.cfg.goal, kdv.cfg.weekMin, kdv.cfg.tone], ["Fit for the wedding in March", 480, "kind", "", 600, "firm"], "with the person named, hers is saved on hers and his is untouched");
+const photoRes = await call(K("/fit_api?op=photo"), { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: mediaBytes });
+eq(photoRes.status, 200, "the photo reader (it writes nothing) does not need a person");
+const pgw = await (await call(K("/fit"))).text();
+ok(/id="who"/.test(pgw) && /id="whob"/.test(pgw) && /WHO IS THIS\?/.test(pgw) && /nowho/.test(pgw), "the page carries a 'Who is this?' chooser that hides everything until a name is picked");
+ok(/id="plw"/.test(pgw) && /This plan belongs to/.test(pgw) && /Plan saved for/.test(pgw), "the plan says whose it is, and the save names the person");
+ok(/id="dirt"/.test(pgw) && /unsaved changes/.test(pgw), "unsaved plan edits are flagged, and not overwritten by a reload");
+ok(/S\.picked=true/.test(pgw) && /localStorage\.setItem\('fit_u',n\)/.test(pgw), "choosing a name marks it picked and remembers it on this phone");
+let okScript = true; try { new Function(pgw.match(/<script>([\s\S]*?)<\/script>/)[1]); } catch (e) { okScript = false; }
+ok(okScript, "the page script is still valid JavaScript");
+delete env.FIT_USERS;
+store.clear();
+const solo = await call(K("/fit_api"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "cfg", cfg: { goal: "solo" } }) });
+eq([solo.status, (await solo.json()).ok], [200, true], "one person on the instance: no name needed, as before");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
