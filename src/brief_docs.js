@@ -621,7 +621,7 @@ function nearbyLines(C, rec) {
 // v302 - gyms from the amenity-spots layer of the home's district (the layer behind the Around-the-community page): named places, straight-line
 function nearestGyms(C, rec, pos, n) {
   const sp = ((C.district[rec.d] || {}).spots || {}).spots || [];
-  return sp.filter((s) => s.type === "gym").map((s) => ({ n: cleanName(s.name).replace(/\s*\(Ladies Only\)\s*$/i, ""), d: km(pos, [+s.lat, +s.lng]) })).sort((a, b) => a.d - b.d).slice(0, n);
+  return sp.filter((s) => s.type === "gym").map((s) => ({ n: cleanName(s.name), d: km(pos, [+s.lat, +s.lng]) })).sort((a, b) => a.d - b.d).slice(0, n);
 }
 
 function dossierPage1(C, rec, q, sub) {
