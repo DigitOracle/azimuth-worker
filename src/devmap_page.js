@@ -238,13 +238,14 @@ function winSay(){var w=IDX.cuts&&IDX.cuts.shares&&IDX.cuts.shares.window,M=["Ja
   function d(x){var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||""));return m?Number(m[3])+' '+M[Number(m[2])-1]+' '+m[1]:''}
   var p=Array.isArray(w)?w:(w&&typeof w==="object"?[w.from||w.start,w.to||w.end]:(typeof w==="string"?w.split(/\s+to\s+|\s*\/\s*/):[])),x=d(p[0]),y=d(p[1]);return x&&y?x+' to '+y:'last 12 months'}
 function donut(ts){
+  var tierWord=function(k){var n=String(DM.TIER_NAMES[k]||'');return n.charAt(0).toUpperCase()+n.slice(1).toLowerCase()};   // v320 - the tier spelled out, never an initial
   if(!ts)return '';var v=[0,1,2,3].map(function(i){var x=Number(ts[i]);return isFinite(x)&&x>0?x:0}),tot=v[0]+v[1]+v[2]+v[3];if(!(tot>0))return '';
   var R=20,C=2*Math.PI*R,live=v.filter(function(x){return x>0}).length,gap=live>1?1.6:0,off=0,segs='',top=0,i;
   for(i=0;i<4;i++){if(v[i]>v[top])top=i}
   for(i=0;i<4;i++){if(!(v[i]>0))continue;var len=v[i]/tot*C;segs+='<circle cx=26 cy=26 r='+R+' fill=none stroke="'+TC[i]+'" stroke-width=6 data-tier='+i+' data-p='+v[i]+' stroke-dasharray="'+Math.max(len-gap,0.01).toFixed(2)+' '+(C-Math.max(len-gap,0.01)).toFixed(2)+'" stroke-dashoffset="'+(-off).toFixed(2)+'"></circle>';off+=len}
   var split=[0,1,2,3].filter(function(k){return v[k]>0}).sort(function(a,b){return v[b]-v[a]}).map(function(k){return DM.TIER_NAMES[k]+' '+v[k]+'%'}).join(', ');
   var lg=[0,1,2,3].filter(function(k){return v[k]>=5}).sort(function(a,b){return v[b]-v[a]}),one=lg.length===1;
-  return '<div class=dn title="'+esc(split)+'"><svg width=48 height=48 viewBox="0 0 52 52" role=img aria-label="Sales by tier: '+esc(split)+'"><title>'+esc(split)+'</title><g transform="rotate(-90 26 26)">'+segs+'</g><text x=26 y=30 text-anchor=middle>'+Math.round(v[top])+'%</text></svg><div class=lg>'+lg.map(function(k){return '<span><i style="background:'+TC[k]+'"></i>'+(one?DM.TIER_NAMES[k]:DM.TIER_NAMES[k].charAt(0))+' '+v[k]+'%</span>'}).join("")+'</div></div>'}
+  return '<div class=dn title="'+esc(split)+'"><svg width=48 height=48 viewBox="0 0 52 52" role=img aria-label="Sales by tier: '+esc(split)+'"><title>'+esc(split)+'</title><g transform="rotate(-90 26 26)">'+segs+'</g><text x=26 y=30 text-anchor=middle>'+Math.round(v[top])+'%</text></svg><div class=lg>'+lg.map(function(k){return '<span><i style="background:'+TC[k]+'"></i>'+tierWord(k)+' '+v[k]+'%</span>'}).join("")+'</div></div>'}
 function devRow(d,area,st){
   var fit=null,entry=area.devs[d.k];
   if(S.screen===3||S.filterBud){if(S.mode==="buy"){fit=DM.budgetFit(entry,d,{mode:S.bud.mode,min:S.bud.min,max:S.bud.max,beds:S.bud.beds},st.bounds)}else{fit=DM.rentFit(entry,{min:S.bud.min,max:S.bud.max,beds:S.bud.beds})}}

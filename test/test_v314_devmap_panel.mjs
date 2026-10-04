@@ -60,7 +60,7 @@ ok(!/class=tcs/.test(js) && !/class=tc /.test(js), "v318: the tier pills (class 
   ok(Math.abs(lens.reduce((t, x) => t + x, 0) + 1.6 * lens.length - C) < 0.1, "arc lengths plus the thin gaps fill the ring exactly");
   ok(/>79%<\/text>/.test(h), "the dominant tier's percentage sits in the centre");
   const lg = h.slice(h.indexOf("class=lg"));
-  ok(/L 79%/.test(lg) && /B 16%/.test(lg) && /P 5%/.test(lg), "legend lists tiers at 5% or more as initial + %");
+  ok(/Luxury 79%/.test(lg) && /Budget 16%/.test(lg) && /Premium 5%/.test(lg) && !/>[LBPU] \d/.test(lg), "legend spells each tier out (v320), never an initial");
   const h2 = donut([0, 80, 4, 16]), lg2 = h2.slice(h2.indexOf("class=lg"));
   ok(!/P 4%/.test(lg2) && /data-tier=2/.test(h2), "a tier under 5% is left out of the legend but kept as an arc");
   const h3 = donut([0, 100, 0, 0]);
