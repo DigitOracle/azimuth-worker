@@ -67,13 +67,18 @@ export function fitCleanCfg(inp, base) {
   return out;
 }
 // ---- who: one instance can serve more than one person -----------------------------------------------------------------
-// FIT_USERS = "kendall:971562276093,najjuko:971565484397" (id : WhatsApp number). Every entry, setting, target and flag is keyed by the
+// FIT_USERS = "kendall:971562276093:Dr. Doli,najjuko:971565484397:Black Coffee" (id : WhatsApp number : the name shown on the page; the name is optional and
+// is NEVER part of a storage key - the id is, so renaming someone does not move their log). Every entry, setting, target and flag is keyed by the
 // person, so two people on one instance never mix. Unset = one person ("me", reached on WA_ALLOWED): exactly the single-user behaviour.
 export function fitUsers(env) {
   const out = [];
   for (const part of String((env && env.FIT_USERS) || "").split(",")) {
-    const m = /^\s*([a-z0-9]{1,12})\s*:\s*(\d{8,15})?\s*$/i.exec(part);
-    if (m && !out.some((u) => u.id === m[1].toLowerCase())) out.push({ id: m[1].toLowerCase(), wa: m[2] || "" });
+    const m = /^\s*([a-z0-9]{1,12})\s*:\s*(\d{8,15})?\s*(?::\s*([^:,]{1,24}?))?\s*$/i.exec(part);
+    if (m && !out.some((u) => u.id === m[1].toLowerCase())) {
+      const u = { id: m[1].toLowerCase(), wa: m[2] || "" }, name = clip(String(m[3] || "").replace(/[^A-Za-z0-9 .'\-]/g, ""), 24);
+      if (name) u.name = name;
+      out.push(u);
+    }
   }
   if (!out.length) out.push({ id: "me", wa: String((env && env.WA_ALLOWED) || "").replace(/\D/g, "") });
   return out;
@@ -558,12 +563,12 @@ export async function fitRoutes(request, env, url, h) {
     const html = fitPageHtml({ key, nav: h.najNav(key, "fit", ""), navCss: h.NAJ_NAV_CSS, fonts: h.NAJ_FONTS });
     return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer" } });
   }
-  const now = Date.now(), today = gstDate(now), us = fitUsers(env).map((x) => x.id), cfg = await fitCfg(env, url.searchParams.get("u"));
+  const now = Date.now(), today = gstDate(now), ulist = fitUsers(env), us = ulist.map((x) => x.id), names = Object.fromEntries(ulist.map((x) => [x.id, x.name || x.id.charAt(0).toUpperCase() + x.id.slice(1)])), cfg = await fitCfg(env, url.searchParams.get("u"));
   if (request.method === "GET") {
-    if (url.searchParams.get("view") === "history") return J(Object.assign({ ok: true, u: cfg.u, users: us }, await fitHistory(env, cfg, today)));
+    if (url.searchParams.get("view") === "history") return J(Object.assign({ ok: true, u: cfg.u, users: us, names }, await fitHistory(env, cfg, today)));
     let d = url.searchParams.get("d") || today; if (!DATE_RX.test(d) || d > today) d = today;
     const sum = await fitSummary(env, d, cfg, today);
-    return J({ ok: true, u: cfg.u, users: us, today, d, cfg, entries: sum.entries, stats: sum.stats, strip: sum.strip, week: sum.week, challenge: sum.challenge });
+    return J({ ok: true, u: cfg.u, users: us, names, today, d, cfg, entries: sum.entries, stats: sum.stats, strip: sum.strip, week: sum.week, challenge: sum.challenge });
   }
   if (request.method !== "POST") return J({ ok: false, why: "method" }, 405);
   if (url.searchParams.get("op") === "photo") {   // read once, drop: nothing about the image is stored
@@ -647,7 +652,7 @@ const FIT_JS = "(function(){var KEY=__KEY__;var S={d:null,data:null,u:null};try{
   "function hm(ms){var d=new Date(ms+4*3600000);return d.toISOString().slice(11,16)}" +
   "function dlab(d,today){if(d===today)return 'Today';var a=new Date(d+'T00:00:00Z');return a.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'})}" +
   "function bar(p,ok){var b=el('div','bar'),i=el('i',ok?'ok':'');i.style.width=Math.max(0,Math.min(100,p))+'%';b.appendChild(i);return b}" +
-  "function pills(j){var o=$('usr');o.textContent='';if(!j.users||j.users.length<2)return;var lb=el('span',null,'Whose log:');lb.style.cssText='color:#8FA39B;font-size:.72rem;align-self:center;margin-right:2px';o.appendChild(lb);j.users.forEach(function(n){var b=el('button',n===j.u?'on':null,n.charAt(0).toUpperCase()+n.slice(1));b.onclick=function(){S.u=n;try{localStorage.setItem('fit_u',n)}catch(e){}load()};o.appendChild(b)})}" +
+  "function pills(j){var o=$('usr');o.textContent='';if(!j.users||j.users.length<2)return;var lb=el('span',null,'Whose log:');lb.style.cssText='color:#8FA39B;font-size:.72rem;align-self:center;margin-right:2px';o.appendChild(lb);j.users.forEach(function(n){var b=el('button',n===j.u?'on':null,(j.names&&j.names[n])||n.charAt(0).toUpperCase()+n.slice(1));b.onclick=function(){S.u=n;try{localStorage.setItem('fit_u',n)}catch(e){}load()};o.appendChild(b)})}" +
   "function load(d){api('GET',null,d?'&d='+d:'').then(function(j){if(!j.ok)return;S.data=j;S.d=j.d;S.u=j.u;pills(j);draw()})}" +
   "function draw(){var j=S.data,c=j.cfg,st=j.stats,ch=j.challenge;$('sub').textContent=ch&&ch.day?'Day '+Math.min(ch.day,ch.days)+' of '+ch.days:'Log your first entry to start the 30 days';" +
   "var box=$('ch');box.textContent='';box.appendChild(el('h2',null,'THE CHALLENGE'));if(c.goal)box.appendChild(el('div','goal',c.goal));" +

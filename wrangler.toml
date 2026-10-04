@@ -99,9 +99,9 @@ BOARD_BG = "off"
 MAILBOXES = ""
 MARKET_BRIEF = "on"
 WA_ALLOWED = "971565484397"
-# v328 - MOMO, the food and exercise log (src/fit.js). Who it keeps a log for: id:WhatsApp number. Her number files under najjuko; kendall logs on the /fit page
+# v328 - MOMO, the food and exercise log (src/fit.js). Who it keeps a log for: id:WhatsApp number:name shown on the page (the id keys the log, so the name can change freely). Her number files under najjuko; kendall logs on the /fit page
 # (his own WhatsApp number reaches the other instance). Without this line the code runs as ONE person on WA_ALLOWED, so a deploy must not lose it (test_v328_fit checks it).
-FIT_USERS = "kendall:971562276093,najjuko:971565484397"
+FIT_USERS = "kendall:971562276093:Dr. Doli,najjuko:971565484397:Black Coffee"
 # v328 - the nudge that reaches her when her 24-hour window is shut: najma_log_day, no variables. OFF until Meta approves it; then remove the #.
 # LOG_NUDGE_TEMPLATE = "najma_log_day"
 # LOG_NUDGE_LANG = "en_US"   # the language the template was created with

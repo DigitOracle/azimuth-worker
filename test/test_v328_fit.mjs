@@ -317,6 +317,8 @@ ok(/📈 Since/.test(said()) && /Days hit: 8 of 16 · best streak 3/.test(said()
 console.log("two people on one instance (Momo)");
 eq(fit.fitUsers({ FIT_USERS: "Kendall:971562276093, najjuko:971565484397, bad entry, x:12" }).map((u) => u.id + ":" + u.wa), ["kendall:971562276093", "najjuko:971565484397"], "FIT_USERS is parsed, lower-cased, and a bad entry is dropped");
 eq(fit.fitUsers({ WA_ALLOWED: "971565484397" }), [{ id: "me", wa: "971565484397" }], "unset: one person on WA_ALLOWED - the single-user behaviour");
+eq(fit.fitUsers({ FIT_USERS: "kendall:971562276093:Dr. Doli,najjuko:971565484397:Black Coffee,x::Only Name,y:971500000000:<b>Bad,Name</b>" }).map((u) => [u.id, u.wa, u.name]),
+  [["kendall", "971562276093", "Dr. Doli"], ["najjuko", "971565484397", "Black Coffee"], ["x", "", "Only Name"], ["y", "971500000000", "bBad"]], "display names are parsed (spaces and a full stop are fine), optional, and stripped of anything but letters, digits, space . ' -");
 const KEN = "971562276093";
 env.FIT_USERS = "kendall:" + KEN + ",najjuko:" + HER;
 eq([fit.fitUserFor(env, HER), fit.fitUserFor(env, KEN), fit.fitUserFor(env, "+971 56 548 4397"), fit.fitUserFor(env, "999")], ["najjuko", "kendall", "najjuko", "kendall"], "the sender's number decides whose log it is; a stranger falls to the first person");
@@ -329,6 +331,12 @@ ok(r.ok && fitKeys().some((k) => k.startsWith("fit_kendall_")), "an add on the p
 let kd = (await jget("/fit_api?u=kendall")).j, nj = (await jget("/fit_api?u=najjuko")).j;
 eq([kd.u, kd.entries.map((e) => e.x), nj.u, nj.entries.map((e) => e.x)], ["kendall", ["his eggs"], "najjuko", ["her oats"]], "each person sees only their own day");
 eq(kd.users, ["kendall", "najjuko"], "the page is told who the people are");
+eq(kd.names, { kendall: "Kendall", najjuko: "Najjuko" }, "with no display names set, the page falls back to the capitalised id");
+env.FIT_USERS = "kendall:" + KEN + ":Dr. Doli,najjuko:" + HER + ":Black Coffee";
+const named = (await jget("/fit_api?u=najjuko")).j;
+eq([named.names, named.users, named.u], [{ kendall: "Dr. Doli", najjuko: "Black Coffee" }, ["kendall", "najjuko"], "najjuko"], "with display names set: the page shows Dr. Doli and Black Coffee while the ids (and so every storage key) stay kendall and najjuko");
+ok(fitKeys().every((k) => /^fit_(kendall|najjuko)_/.test(k)), "no storage key contains a display name");
+env.FIT_USERS = "kendall:" + KEN + ",najjuko:" + HER;
 const nobody = (await jget("/fit_api?u=nobody")).j;
 ok(nobody.u === "kendall" && !fitKeys().some((k) => k.includes("nobody")) && ![...store.keys()].some((k) => k.includes("nobody")), "an unknown person falls back to the first - and never opens a new keyspace");
 const hisId = kd.entries[0].id;
@@ -357,6 +365,7 @@ const fu = /^FIT_USERS = "([^"]+)"/m.exec(az2);
 ok(!!fu, "wrangler.toml [env.azimuth2.vars] carries FIT_USERS, so a deploy never runs as a single person by accident");
 const parsed = fit.fitUsers({ FIT_USERS: fu ? fu[1] : "" });
 eq(parsed.map((u) => u.id), ["kendall", "najjuko"], "it parses to kendall and najjuko");
+eq(parsed.map((u) => u.name), ["Dr. Doli", "Black Coffee"], "the page names are Dr. Doli and Black Coffee");
 ok(parsed[1].wa === /^WA_ALLOWED = "(\d+)"/m.exec(az2)[1], "najjuko's number is the one this instance talks to (WA_ALLOWED)");
 ok(parsed[0].wa === /^WA_ALLOWED = "(\d+)"/m.exec(toml)[1] && parsed[0].wa !== parsed[1].wa, "kendall's number is the default instance's, and the two differ");
 ok(!/^\s*LOG_NUDGE_TEMPLATE\s*=/m.test(toml), "the nudge template is OFF in the committed config (commented out) until Meta approves it");
