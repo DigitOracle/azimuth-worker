@@ -213,8 +213,8 @@ function bandGauge(m) {
   let s = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Price per sq ft against the area and Dubai" font-family="' + FONT + '"><rect x="' + L + '" y="30" width="' + (W - L - R) + '" height="8" rx="4" fill="#ECE8DE"/>';
   if (b) s += '<rect x="' + X(b[2]).toFixed(1) + '" y="30" width="' + (X(b[1]) - X(b[2])).toFixed(1) + '" height="8" fill="#DCE9E6"/><rect x="' + X(b[1]).toFixed(1) + '" y="30" width="' + (X(b[0]) - X(b[1])).toFixed(1) + '" height="8" fill="#BBD5D0"/>';
   const tick = (v, lab, up) => '<line x1="' + X(v).toFixed(1) + '" x2="' + X(v).toFixed(1) + '" y1="28" y2="40" stroke="#7B8A86" stroke-width="1"/><text x="' + X(v).toFixed(1) + '" y="' + (up ? 24 : 52) + '" font-size="8.4" fill="' + MUTED + '" text-anchor="middle">' + lab + "</text>";
-  s += tick(dub, "Dubai median " + fmt(dub), false);
-  if (b) s += '<text x="' + (W - R) + '" y="64" font-size="8" fill="' + MUTED + '" text-anchor="end">Dearest 1 in 20 Dubai sales from ' + fmt(b[0]) + "</text>";
+  s += tick(dub, "Dubai median AED " + fmt(dub), false);
+  if (b) s += '<text x="' + (W - R) + '" y="64" font-size="8" fill="' + MUTED + '" text-anchor="end">The dearest 1 in 20 Dubai sales are above AED ' + fmt(b[0]) + " per sq ft." + "</text>";
   if (m.areaL12.psf) s += '<circle cx="' + X(m.areaL12.psf).toFixed(1) + '" cy="34" r="5" fill="#FFFFFF" stroke="' + TEAL + '" stroke-width="1.8"/>';
   s += '<circle cx="' + X(m.l12.psf).toFixed(1) + '" cy="34" r="5.5" fill="' + GOLDI + '" stroke="' + TEAL + '" stroke-width="1.8"/>';
   return s + "</svg>";
@@ -269,7 +269,7 @@ function mixCard(m) {
   const mx = m.mix, sz = m.l12.size; if (!mx && !sz) return "";
   const lab = ["Studio", "1 bed", "2 bed", "3+ bed"];
   const bars = mx ? lab.map((l, i) => mx.share[i] >= 0.005 ? '<div class="ivbr"><span class="ivbl">' + l + '</span><span class="ivbt"><i style="width:' + Math.max(2, Math.round(mx.share[i] * 100)) + '%;background:' + TEAL + '"></i></span><span class="ivbv"><b>' + Math.round(mx.share[i] * 100) + "%</b></span></div>" : "").join("") : "";
-  const size = sz ? '<div class="ivcap">Typical home ' + fmt(sz[1]) + " sq ft. Eight in ten are between " + fmt(sz[0]) + " and " + fmt(sz[2]) + " sq ft.</div>" : "";
+  const size = sz ? '<div class="ivcap">The typical home is ' + fmt(sz[1]) + " sq ft. Eight in ten are between " + fmt(sz[0]) + " and " + fmt(sz[2]) + " sq ft.</div>" : "";
   return card("ruler", "Home sizes", bars + size);
 }
 function liquidityCard(m) {
@@ -280,21 +280,30 @@ function liquidityCard(m) {
 function priceCard(m, areaName) {
   if (!m.l12.psf) return "";
   const parts = [], a = m.areaL12.psf, d = m.dubaiPsf;
-  if (a) { const c = pctChange(a, m.l12.psf); parts.push(Math.abs(c) < 0.005 ? "level with the area median (" + aed(a) + ")" : pct1(c) + (c > 0 ? " above" : " below") + " the median of all homes in " + areaName + " (" + aed(a) + ")"); }
-  if (d) { const c = pctChange(d, m.l12.psf); parts.push(Math.abs(c) < 0.005 ? "level with the Dubai median" : pct1(c) + (c > 0 ? " above" : " below") + " the Dubai median (" + aed(d) + ")"); }
-  return card("stack", "Price against the area and Dubai", bandGauge(m) + '<div class="ivcap"><b>Gold dot</b>: ' + esc(shortName(m.name, 24)) + " " + aed(m.l12.psf) + " per sq ft, last 12 months. <b>Ring</b>: the area. " + esc(CAP(parts.join(", and "))) + ".</div>");
+  if (a) { const c = pctChange(a, m.l12.psf); parts.push(Math.abs(c) < 0.005 ? "level with the area median (" + aed(a) + ")" : pct1(c) + (c > 0 ? " above" : " below") + " the area median (" + aed(a) + ")"); }
+  if (d) { const c = pctChange(d, m.l12.psf); parts.push(Math.abs(c) < 0.005 ? "level with the Dubai median (" + aed(d) + ")" : pct1(c) + (c > 0 ? " above" : " below") + " the Dubai median (" + aed(d) + ")"); }
+  return card("stack", "Price against the area and Dubai", bandGauge(m) + '<div class="ivcap"><b>Gold dot</b>: ' + esc(shortName(m.name, 24)) + ", " + aed(m.l12.psf) + " per sq ft over the last 12 months. <b>Ring</b>: all homes in " + esc(areaName) + ". " + esc(shortName(m.name, 24)) + " is " + esc(parts.join(" and ")) + ".</div>");
 }
 function deliveryCard(m) {
   const dv = m.deliv; if (!dv) return "";
   const stat = (k, p) => '<div class="ivst"><b>' + fmt(p ? p[0] : 0) + '</b><span>' + k + (p && p[1] ? "<br>" + fmt(p[1]) + " homes" : "") + "</span></div>";
   const act = dv.active && dv.active[0] ? dv.active : null;
   const top = (dv.top || []).slice(0, 3).map((t) => '<div class="ivbr"><span class="ivbl" style="width:112px">' + esc(shortName(t[0], 22)) + '</span><span class="ivbt"><i style="width:' + Math.max(2, Math.min(100, Math.round(t[2] || 0))) + '%;background:' + GOLDI + '"></i></span><span class="ivbv"><b>' + Math.round(t[2] || 0) + "%</b> complete</span></div>").join("");
-  return card("buildings", "Delivery status of its projects here", '<div class="ivsts">' + stat("handed over", dv.done) + stat("under construction" + (act && act[2] != null ? ", " + Math.round(act[2]) + "% on average" : ""), act) + stat("not started", dv.pending) + "</div>" + top + '<div class="ivcap">Status and percent complete from the Dubai Land Department project register' + (m.delivAsOf ? " of " + esc(dateLong(m.delivAsOf)) : "") + ". The register records status, not whether a project was early or late.</div>");
+  return card("buildings", "Delivery status of its projects here", '<div class="ivsts">' + stat("handed over", dv.done) + stat("under construction" + (act && act[2] != null ? ", " + Math.round(act[2]) + "% done on average" : ""), act) + stat("not started", dv.pending) + "</div>" + top + '<div class="ivcap">Status and percent complete from the Dubai Land Department project register' + (m.delivAsOf ? " of " + esc(dateLong(m.delivAsOf)) : "") + ". The register records status, not whether a project was early or late.</div>");
 }
 function supplyCard(m, areaName) {
   const s = m.supply; if (!s || !((s.active && s.active[0]) || (s.pending && s.pending[0]))) return "";
   const a = s.active || [0, 0], p = s.pending || [0, 0];
   return card("map-trifold", "Homes coming in " + esc(areaName), '<div class="ivsts">' + '<div class="ivst"><b>' + fmt(a[1]) + "</b><span>homes in " + plural(a[0], "project") + " under construction</span></div>" + '<div class="ivst"><b>' + fmt(p[1]) + "</b><span>homes in " + plural(p[0], "project") + " not yet started</span></div></div>" + '<div class="ivcap">All developers in this area, from the project register' + (m.delivAsOf ? " of " + esc(dateLong(m.delivAsOf)) : "") + ". Registered homes, not a forecast of sales.</div>");
+}
+
+function methodCard(m) {
+  const row = (ic, t, x) => '<div class="ivmr">' + icon(ic, 18, TEAL) + "<div><b>" + t + "</b><p>" + x + "</p></div></div>";
+  return '<div class="ivc"><div class="ivch">' + icon("calculator", 17, TEAL) + '<span class="serif">How the figures are worked out</span></div>' +
+    '<div class="ivmg">' + row("chart-bar", "Medians, not averages", "Each price is the middle value of the homes sold, so a few very cheap or very dear sales do not move it.") +
+    row("stack", "At least " + MIN_SALES + " sales a year", "A year is drawn only when " + MIN_SALES + " or more sales stand behind it. Years with fewer are named under the chart and left out.") +
+    row("buildings", "Which sales belong to this developer", "Each sale is matched to a developer through its project. Sales that cannot be matched are left out of the developer figures.") +
+    row("wallet", "Gross rental yield", "A year's rent as a share of the purchase price, before service charges, fees and empty months.") + "</div></div>";
 }
 
 export function disclaimerText(m) {
@@ -327,6 +336,8 @@ const INV_CSS = `
   .ivsts { display:flex; gap:8px; } .ivst { flex:1; background:#F8F5EE; border-radius:6px; padding:5px 8px; display:flex; flex-direction:column; gap:1px; } .ivst b { font-family:Newsreader, Georgia, serif; font-size:21px; color:${NAVY}; font-weight:400; line-height:1.1; } .ivst span { font-size:8.8px; color:#3d4249; line-height:1.3; }
   .ivfig { border:1px solid ${HAIR}; border-radius:8px; background:#fff; padding:7px 9px 6px; display:flex; flex-direction:column; gap:5px; }
   .ivfm { background:#EFEFEA; border-radius:5px; overflow:hidden; } .ivfm svg { display:block; width:100%; height:auto; }
+  .ivnoblk { display:flex; gap:12px; align-items:center; border:1px solid ${HAIR}; border-radius:8px; background:#fff; padding:12px 16px; font-size:11px; color:${MUTED}; line-height:1.45; }
+  .ivmg { display:grid; grid-template-columns:1fr 1fr; gap:4px 18px; } .ivmr { display:flex; gap:9px; align-items:flex-start; padding:5px 0; border-top:1px solid ${HAIR}; } .ivmr b { color:${NAVY}; font-size:11px; } .ivmr p { margin:1px 0 0; font-size:10px; line-height:1.42; color:#3d4249; }
   .ivsrc { background:#FBFAF7; } .ivsrct { font-size:9px; line-height:1.42; color:#3d4249; }
   .ivnone { display:flex; gap:14px; align-items:center; border:1px solid ${HAIR}; border-radius:8px; background:#fff; padding:22px 24px; margin-top:20px; font-size:13px; color:${NAVY}; line-height:1.5; }
 `;
@@ -347,10 +358,11 @@ function page2(C, m, pic) {
   const areaName = C.names.plain;
   const cards = [readyOffCard(m), mixCard(m), liquidityCard(m), priceCard(m, areaName), deliveryCard(m), supplyCard(m, areaName)].filter(Boolean);
   const grid = '<div class="ivgrid">' + cards.join("") + "</div>";
-  const picH = cards.length >= 5 ? 190 : cards.length >= 3 ? 250 : 300;
+  const picH = cards.length >= 5 ? 165 : cards.length >= 3 ? 250 : 300;
   const fig = pic ? '<div class="ivfig"><div class="ivch">' + icon("map-trifold", 17, TEAL) + '<span class="serif">' + esc(areaName) + ' in blocks</span><span class="ivcap" style="margin-left:6px;white-space:nowrap">' + esc(shortName(m.name, 24)) + " in colour by price band, other developers grey</span></div>" +
     '<div class="ivfm" style="height:' + picH + 'px">' + pic.svg + '</div><div class="mkey">' + pic.key + '</div><div class="ivcap">Each outline is raised to its height and seen from the south.</div></div>' : "";
-  return grid + fig + sourcesCard(m);
+  const none = '<div class="ivnoblk">' + icon("buildings", 22, "#8A9A96") + "<div><b>Buildings for this area are not in the data yet.</b> The prices on these pages come from the sales register and do not depend on them.</div></div>";
+  return grid + (fig || none + methodCard(m)) + sourcesCard(m);
 }
 
 // the page for a pair with too little on the register

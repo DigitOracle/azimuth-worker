@@ -18,6 +18,7 @@ try {
 }
 const buf = raw[0] === 0x1f && raw[1] === 0x8b ? zlib.gunzipSync(raw) : raw;
 const txt = buf.toString("utf8"), at = txt.search(/[\[{]/);
+if (at < 0 && allowMissing && /value not found/i.test(txt)) { console.log(key + ": MISSING (no value on file)"); process.exit(0); }
 if (at < 0) { console.error(key + ": the value is not JSON (first 200 chars): " + txt.slice(0, 200)); process.exit(1); }
 const v = JSON.parse(txt.slice(at));
 fs.writeFileSync(out, JSON.stringify(v));
