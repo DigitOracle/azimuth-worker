@@ -234,17 +234,17 @@ export function outlinePanels(C) {
   };
   const pathOf = (rs, P) => rs.map((r) => { let last = ""; const o = []; for (const c of r) { const [a, b] = P(c), t = a + " " + b; if (t !== last) o.push(t); last = t; } return o.length > 2 ? "M" + o.join("L") + "Z" : ""; }).join("");
   const boxOf = (rs) => { let a = 1e9, b = 1e9, c = -1e9, d = -1e9; for (const r of rs) for (const [x, y] of r) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); } return [a, b, c, d]; };
-  const W = 190, H = 76, plain = C.names.plain, nm = trimName(plain, 26);
+  const W = 190, H = 58, plain = C.names.plain, nm = trimName(plain, 26);
   const own = (rings && rings.length ? rings : [[[bb[0], bb[1]], [bb[2], bb[1]], [bb[2], bb[3]], [bb[0], bb[3]]]]);
   const all = [].concat(...feats.map((f) => ringsOf(f.geometry))), P = proj(boxOf(all), W, H, 8);
   const rest = feats.filter((f) => f.properties.slug !== C.slug).map((f) => pathOf(ringsOf(f.geometry), P)).join("");
   const me = pathOf(own, P), [bx0, by0, bx1, by1] = boxOf(own), [cx, cy] = P([(bx0 + bx1) / 2, (by0 + by1) / 2]);
-  const tw = nm.length * 5.1, left = cx + 10 + tw > W - 3, lx = left ? cx - 10 : cx + 10, ly = Math.max(11, Math.min(H - 5, cy - 9));
+  const roomR = W - 3 - (cx + 10), roomL = cx - 10 - 3, left = roomL > roomR, room = Math.max(roomL, roomR), nm2 = trimName(nm, Math.max(8, Math.floor(room / 5.1))), lx = left ? cx - 10 : cx + 10, ly = Math.max(11, Math.min(H - 4, cy - 8));
   const halo = ' stroke="#FBFAF7" stroke-width="2.6" stroke-linejoin="round" paint-order="stroke"';
   const svg = '<svg class="loc" viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Where ' + esc(plain) + ' is in Dubai"><rect width="' + W + '" height="' + H + '" fill="#FBFAF7"/><path d="' + rest + '" fill="#E4E0D5" stroke="#CFC9B9" stroke-width="0.4" fill-rule="evenodd"/>' +
     (me ? '<path d="' + me + '" fill="' + GOLDI + '" stroke="' + TEAL + '" stroke-width="0.9" fill-rule="evenodd"/>' : "") +
-    '<circle cx="' + cx + '" cy="' + cy + '" r="6" fill="none" stroke="' + TEAL + '" stroke-width="1.2"/>' +
-    '<text x="' + lx + '" y="' + ly + '" font-size="8.8" font-weight="600" fill="' + TEAL + '" text-anchor="' + (left ? "end" : "start") + '" font-family="IBM Plex Sans, Segoe UI, Arial, sans-serif"' + halo + ">" + esc(nm) + "</text></svg>";
+    '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="none" stroke="' + TEAL + '" stroke-width="1.2"/>' +
+    '<text x="' + lx + '" y="' + ly + '" font-size="8.8" font-weight="600" fill="' + TEAL + '" text-anchor="' + (left ? "end" : "start") + '" font-family="IBM Plex Sans, Segoe UI, Arial, sans-serif"' + halo + ">" + esc(nm2) + "</text></svg>";
   return '<div class="locs"><div class="lcard"><div class="lch">' + icon("map-pin", 11, TEAL) + "<span>Where in Dubai</span></div>" + svg + '<div class="lcap">Gold, ringed: ' + esc(nm) + ". Grey: other areas in this set.</div></div></div>";
 }
 
@@ -254,12 +254,20 @@ export function obliqueMap(layer, hi, o) {
   const w = o.w, h = o.h, asp = h / w;
   const pairs = (f) => { const r = []; for (let k = 0; k + 1 < f.length; k += 2) r.push([f[k], f[k + 1]]); return r; };
   const all = layer.b.map(([id, hh, f]) => ({ id, h: hh, r: pairs(f) }));
-  let src = o.frame === "hi" ? all.filter((b) => hi.has(b.id)) : all;
+  let src = o.frame === "hi" || o.frame === "fit" ? all.filter((b) => hi.has(b.id)) : all;
   if (!src.length) src = all;
+  // "fit": bounds from the middle of the coloured buildings only (a building whose centre lies beyond 1.5 x the 10th-90th percentile spread outside it is left out of the bounds, not out of the picture)
+  if (o.frame === "fit" && src.length >= 6) {
+    const cs = src.map((b) => [b.r.reduce((a, q) => a + q[0], 0) / b.r.length, b.r.reduce((a, q) => a + q[1], 0) / b.r.length]);
+    const lim = (i) => { const v = cs.map((c) => c[i]).sort((a, b) => a - b), q = (p) => v[Math.min(v.length - 1, Math.floor(p * (v.length - 1)))], lo = q(0.1), hi2 = q(0.9), sp = Math.max(hi2 - lo, 50); return [lo - 1.5 * sp, hi2 + 1.5 * sp]; };
+    const lx = lim(0), ly = lim(1), keep = src.filter((b, i) => cs[i][0] >= lx[0] && cs[i][0] <= lx[1] && cs[i][1] >= ly[0] && cs[i][1] <= ly[1]);
+    if (keep.length >= 3) src = keep;
+  }
   let gx0 = 1e12, gx1 = -1e12, v0 = 1e12, v1 = -1e12, gy0 = 1e12, gy1 = -1e12;
   for (const b of src) for (const [x, y] of b.r) { gx0 = Math.min(gx0, x); gx1 = Math.max(gx1, x); gy0 = Math.min(gy0, y); gy1 = Math.max(gy1, y); v0 = Math.min(v0, y * KY); v1 = Math.max(v1, y * KY + (b.h || 0) * KH); }
   const uc = (gx0 + gx1) / 2, vc = (v0 + v1) / 2;
-  let Wf = o.frame === "hi" ? Math.max(320, (gx1 - gx0) * 1.5) : Math.max(gx1 - gx0, (v1 - v0) / asp) * 1.05;
+  if (o.frame === "fit") { /* sized below */ }
+  let Wf = o.frame === "fit" ? Math.max(160, Math.max(gx1 - gx0, (v1 - v0) / asp) * 1.1) : o.frame === "hi" ? Math.max(320, (gx1 - gx0) * 1.5) : Math.max(gx1 - gx0, (v1 - v0) / asp) * 1.05;
   if (o.frame === "hi" && (v1 - v0) * 1.5 > Wf * asp) Wf = (v1 - v0) * 1.5 / asp;
   const Hf = Wf * asp, U0 = uc - Wf / 2, V0 = vc - Hf / 2, k = w / Wf;
   const X = (x) => Math.round((x - U0) * k * 10) / 10, Y = (y, hh) => Math.round((h - (y * KY + (hh || 0) * KH - V0) * k) * 10) / 10;
@@ -267,7 +275,7 @@ export function obliqueMap(layer, hi, o) {
   const path = (pts) => { const q = []; let last = ""; for (const [x, y, hh] of pts) { const t = X(x) + " " + Y(y, hh); if (t !== last) q.push(t); last = t; } return q.length < 3 ? "" : "M" + q.join(" ") + "Z"; };
   const out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + " " + h + '" width="' + w + '" height="' + h + '" style="display:block;" role="img" aria-label="' + esc(o.label || "Map") + '">',
     "<style>.cr{fill:#E3E3DD;stroke:#C4C6BE;stroke-width:0.3;stroke-linejoin:round}</style>", '<rect width="' + w + '" height="' + h + '" fill="' + MAPC.BG + '"/>'];
-  const coarse = o.frame !== "hi", lw = Math.max(0.5, Math.min(3, k * 4));
+  const coarse = o.frame === "all", lw = Math.max(0.5, Math.min(3, k * 4));
   const streets = (layer.s || []).map(([c, f]) => ({ c, r: pairs(f) })).filter((s) => (!coarse || s.c >= 4) && inFrame(s.r, 0));
   for (const pass of [0, 1]) {
     const d = streets.map((s) => { const q = []; let last = ""; for (const [x, y] of s.r) { const t = X(x) + " " + Y(y, 0); if (t !== last) q.push(t); last = t; } return q.length > 1 ? "M" + q.join(" ") : ""; }).join("");
@@ -375,7 +383,7 @@ function bandCard(C, t, lineCap) {
   const shown = devs.slice(0, cap), more = devs.length - shown.length;
   const prices = typicalPrices(t, st.bounds);
   return '<div class="bc" style="background:' + B.tint + ";border-left:5px solid " + B.fill + '"><div class="bch"><span class="bcn" style="color:' + B.ink + '">' + B.name + '</span><span class="bcr">' + esc(bandRange(t, st.bounds)) + "</span></div>" +
-    '<div class="bcp">' + prices.map((c) => "<div><small>" + c[0] + "</small><b>" + c[1] + "</b></div>").join("") + "</div>" +
+    '<div class="bcp">' + prices.map((c) => "<div><small><span>" + c[0] + "</span><span>" + (c[1].indexOf("under ") === 0 ? "under" : "from") + "</span></small><b>" + c[1].replace(/^(under|from) /, "") + "</b></div>").join("") + "</div>" +
     '<div class="bcs"><b>' + st.mixN[t] + "%</b> of sales here &middot; <b>" + st.mixValue[t] + "%</b> of the money</div>" +
     (shown.length ? '<div class="bcl">' + shown.map((d) => devLine(C, d)).join("") + (more > 0 ? '<div class="more">and ' + plural(more, "more developer") + " in this band</div>" : "") + "</div>"
       : '<div class="more" style="margin-top:6px">No developer with 3 or more sales sits in this band here.</div>') + "</div>";
@@ -410,7 +418,7 @@ function snapshotBody(C) {
   const tiles = '<div class="tiles"><div class="tile"><div class="tk">Median price</div><div class="tv">' + aed(st.medianSqft) + '</div><div class="tu">per sq ft</div></div>' +
     '<div class="tile"><div class="tk">Middle half of sales</div><div class="tv">' + fmt(st.q1 / SQFT) + " to " + fmt(st.q3 / SQFT) + '</div><div class="tu">AED per sq ft</div></div>' +
     '<div class="tile"><div class="tk">Sales loaded</div><div class="tv">' + fmt(st.n) + '</div><div class="tu">' + (C.registerTotal && st.n <= C.registerTotal ? "of " + fmt(C.registerTotal) + " in the register" : "settled sales") + "</div></div></div>";
-  const cap = 3;
+  const cap = 2;
   const grid = '<div class="bgrid">' + [0, 1, 2, 3].map((t) => bandCard(C, t, cap)).join("") + "</div>";
   return head + tiles + incompleteNote(C) + grid + budgetLineHtml(C) + snapshotFigure(C);
 }
@@ -498,9 +506,9 @@ function blocksPicture(C, M, w, h, frame) {
 }
 const MAP_NOTE = "Buildings with no colour are other buildings. The picture is the Brief&rsquo;s map view: each outline raised to its height, seen from the south.";
 function snapshotFigure(C) {
-  const pic = blocksPicture(C, C.M, 440, 230, "hi");
+  const pic = blocksPicture(C, C.M, 702, 255, "fit");
   if (!pic) return '<div class="figq">' + icon("buildings", 22, "#8A9A96") + "<div><b>Buildings for this area are not in the data yet.</b> The prices above come from the sales register and do not depend on them.</div></div>";
-  return '<div class="fig"><div class="figm">' + pic.svg + '</div><div class="figt"><div class="figh">' + icon("buildings", 16, TEAL) + '<span class="serif">The area in blocks</span></div><div class="figs">' + plural(pic.bound.length, "project") + " with a building outline, coloured by the price band its price per sq ft falls in</div>" + '<div class="mkey" style="flex-direction:column">' + pic.key + '</div><div class="mnote">' + MAP_NOTE + "</div></div></div>";
+  return '<div class="fig"><div class="figh">' + icon("buildings", 15, TEAL) + '<span class="serif">The area in blocks</span><span class="figs">' + plural(pic.bound.length, "project") + " coloured by price band &middot; outlines raised to height, seen from the south &middot; no colour = other buildings</span></div>" + '<div class="figm">' + pic.svg + '</div><div class="mkey" style="margin-top:5px">' + pic.key + "</div></div>";
 }
 
 function mapPages(C, M) {
@@ -643,29 +651,28 @@ const EXTRA_CSS = `
   .tsub { font-size:11px; color:${MUTED}; margin-top:4px; line-height:1.35; }
   .locs { display:flex; gap:8px; flex:none; }
   .lcard { width:190px; border:1px solid ${HAIR}; border-radius:8px; overflow:hidden; background:#FBFAF7; display:flex; flex-direction:column; }
-  .lch { display:flex; gap:5px; align-items:center; height:19px; padding:0 8px; background:#F3EFE6; border-bottom:1px solid ${HAIR}; font-size:8.6px; font-weight:600; letter-spacing:.5px; color:${TEAL}; text-transform:uppercase; }
+  .lch { display:flex; gap:5px; align-items:center; height:17px; padding:0 8px; background:#F3EFE6; border-bottom:1px solid ${HAIR}; font-size:8.6px; font-weight:600; letter-spacing:.5px; color:${TEAL}; text-transform:uppercase; }
   .lcap { padding:3px 8px 4px; font-size:7.4px; line-height:1.25; color:${MUTED}; background:#fff; border-top:1px solid ${HAIR}; }
   .loc { display:block; }
-  .fig { flex:1; min-height:120px; display:flex; gap:16px; align-items:stretch; border:1px solid ${HAIR}; border-radius:8px; background:#fff; padding:8px; overflow:hidden; }
-  .figm { flex:none; width:440px; position:relative; background:${MAPC.BG}; border-radius:5px; overflow:hidden; } .figm svg { position:absolute; left:0; top:0; width:100%; height:100%; }
-  .figt { flex:1; display:flex; flex-direction:column; gap:7px; justify-content:center; }
-  .figh { display:flex; gap:7px; align-items:center; font-size:17px; color:${NAVY}; } .figs { font-size:10.5px; color:${MUTED}; line-height:1.4; }
+  .fig { flex:none; display:flex; flex-direction:column; border:1px solid ${HAIR}; border-radius:8px; background:#fff; padding:7px 8px 6px; overflow:hidden; }
+  .figm { height:255px; background:${MAPC.BG}; border-radius:5px; overflow:hidden; margin-top:5px; } .figm svg { display:block; width:100%; height:100%; }
+  .figh { display:flex; gap:7px; align-items:center; white-space:nowrap; font-size:15px; color:${NAVY}; } .figs { font-size:8.6px; color:${MUTED}; margin-left:6px; font-family:IBM Plex Sans, Segoe UI, Arial, sans-serif; }
   .figq { display:flex; gap:12px; align-items:center; border:1px solid ${HAIR}; border-radius:8px; background:#fff; padding:14px 18px; font-size:11px; color:${MUTED}; line-height:1.45; }
   .tiles { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
-  .tile { border:1px solid ${HAIR}; border-top:3px solid ${GOLDI}; background:#fff; padding:10px 14px 9px; }
+  .tile { border:1px solid ${HAIR}; border-top:3px solid ${GOLDI}; background:#fff; padding:6px 14px 5px; }
   .tk { font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:${MUTED}; font-weight:600; }
-  .tv { font-family:Newsreader, Georgia, serif; font-size:30px; color:${NAVY}; line-height:1.12; margin-top:2px; white-space:nowrap; }
+  .tv { font-family:Newsreader, Georgia, serif; font-size:25px; color:${NAVY}; line-height:1.1; margin-top:1px; white-space:nowrap; }
   .tu { font-size:10.5px; color:${MUTED}; }
-  .bgrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .bc { padding:9px 12px 9px 11px; display:flex; flex-direction:column; gap:6px; min-width:0; }
+  .bgrid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .bc { padding:6px 10px 6px 10px; display:flex; flex-direction:column; gap:4px; min-width:0; }
   .bch { display:flex; flex-direction:column; gap:1px; }
   .bcn { font-family:Newsreader, Georgia, serif; font-size:19px; line-height:1.1; }
   .bcr { font-size:10.5px; color:#3d4249; font-weight:500; }
-  .bcp { display:grid; grid-template-columns:1fr 1fr; gap:3px 8px; }
-  .bcp div { background:rgba(255,255,255,0.7); padding:2px 6px; }
-  .bcp small { display:block; font-size:8.8px; color:${MUTED}; }
-  .bcp b { font-size:10.2px; font-weight:600; white-space:nowrap; }
-  .bcs { font-size:10px; color:#3d4249; border-top:1px solid rgba(0,0,0,0.08); padding-top:5px; }
+  .bcp { display:grid; grid-template-columns:repeat(4,1fr); gap:2px 4px; }
+  .bcp div { background:rgba(255,255,255,0.7); padding:1px 5px; }
+  .bcp small { display:flex; justify-content:space-between; gap:3px; font-size:7.8px; color:${MUTED}; white-space:nowrap; }
+  .bcp b { font-size:9px; font-weight:600; white-space:nowrap; }
+  .bcs { font-size:10px; color:#3d4249; border-top:1px solid rgba(0,0,0,0.08); padding-top:3px; }
   .bcl { display:flex; flex-direction:column; border-top:1px solid rgba(0,0,0,0.08); }
   .dl { display:grid; grid-template-columns:12px minmax(0,1fr) 84px 44px 54px; gap:4px; align-items:center; font-size:9.2px; padding:2.2px 0; border-bottom:1px solid rgba(0,0,0,0.05); line-height:1.25; }
   .dl span { white-space:nowrap; } .dl .dn2 { white-space:normal; overflow-wrap:break-word; font-weight:500; font-size:9.6px; line-height:1.15; }
