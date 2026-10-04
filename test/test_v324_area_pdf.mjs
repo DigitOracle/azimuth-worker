@@ -77,7 +77,7 @@ console.log("snapshot content");
 {
   const h = docs["snapshot:testvillagecircle:12m"].html;
   for (const t of ["Median price", "Middle half of sales", "Sales loaded", "Top band", "Upper band", "Middle band", "Entry band", "Studio", "3 bedrooms", "of sales here", "of the money"]) ok(h.includes(t), "snapshot has '" + t + "'");
-  ok(h.includes('class="loc"') && (h.match(/<svg class="loc"/g) || []).length === 2, "the locator and the area outline are both drawn as vector");
+  ok(h.includes('class="loc"') && (h.match(/<svg class="loc"/g) || []).length === 1 && /The area in blocks|not in the data yet/.test(h), "v337: the locator is vector in the header and the 3D blocks picture (or its quiet card) sits at the foot");
   ok(/Client budget: 1 bedroom, AED 1,200,000 to AED 1,800,000/.test(h), "a client budget gives one line on who fits");
   const t = text(h);
   ok(t.indexOf("Imtiaz") > 0 && h.indexOf("Imtiaz") < h.indexOf("Sobha Reserve") + 99999, "the developers are listed");
