@@ -174,7 +174,7 @@ await call("/amenity_photo?d=damachills&id=" + encodeURIComponent("dm:park:a") +
 ok(/maps\/api\/streetview\?size=640x360&pano=PANO_A&heading=120&fov=80&return_error_code=true&key=/.test(googleCalls[0] || ""), "Street View by pano and heading, asking Google for an error rather than a grey 'no imagery' picture", googleCalls[0]);
 googleCalls = [];
 await call("/amenity_photo?d=damachills&id=" + encodeURIComponent("dm:park:b") + "&key=" + CLIENT);
-ok(/maps\/api\/staticmap\?center=25\.019000,55\.254000&zoom=18&size=640x360&maptype=satellite&key=/.test(googleCalls[0] || ""), "satellite: Maps Static centred on the spot", googleCalls[0]);
+ok(googleCalls.length === 0 && !googleCalls.some((u) => /staticmap|satellite/.test(u)), "v298: a spot filed 'satellite' asks Google for nothing (NEVER satellite in the Brief)", googleCalls[0]);
 r = await call("/amenity_photo?d=damachills&id=nope&key=" + CLIENT);
 ok(r.status === 404, "an unknown spot -> 404");
 r = await call("/amenity_photo?d=damachills&id=" + encodeURIComponent("dm:park:c") + "&key=" + CLIENT);

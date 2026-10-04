@@ -403,6 +403,7 @@ export async function loadContext(env, q, opts) {
     const pos = Number.isFinite(it.lat) && Number.isFinite(it.lon) ? [it.lat, it.lon] : null;   // v285: Number.isFinite - an unbound record's null is not a position
     const rec = { key, it, st, sts, d, dist: D ? D.name : pretty(it.area), um, tn, un, br, brRefused: bro && bro.refused, brDir: bro && bro.dir,
                   name, aliases: (it.a || []).map(pretty).filter((a) => stemKey(a) !== stemKey(name)), pos, exact: it.i != null && !!pos, n: C.recs.length + 1 };
+    if (Array.isArray(it.fp) && it.fp.length) rec.exact = true;   // v298 - placed by its own footprint in the district layer; its centre is set below
     // v277 - what the developer's own sheet lists for this building, of this type (or every type): null where no sheet names it
     rec.beds = pick ? pick.bb : q.beds; rec.kind = kind; rec.bedsBasis = pick ? pick.basis : null;
     rec.avail = devAvailFor(C.avail, { name: it.n, aliases: (it.a || []).concat(um && um.name ? [um.name] : []) }, B.all ? "all" : +BEDS[rec.beds].band);
@@ -431,7 +432,8 @@ export async function loadContext(env, q, opts) {
     // as DAMAC HILLS - TOPANGA) is located by its OWN name: the footprints the district model (img_anchors_<d>) attributes to the Land
     // Department sub-community of exactly that name. Exact name only - a prefix names a family (Brookfield-1 is not Brookfield-2) - and
     // never for a record /brief_api unbound from another building (it must not borrow that building's land).
-    if (need.map && D && D.layer && it.i == null && !it.unbound && !rec.cardPic && !rec.heroPic) {
+    // v298 - a record with its own footprint (it.fp) is placed exactly (markOf); it never borrows a community's homes
+    if (need.map && D && D.layer && it.i == null && !it.unbound && !rec.cardPic && !rec.heroPic && !(Array.isArray(it.fp) && it.fp.length)) {
       if (D.areaIdx === undefined) D.areaIdx = areaIndex(await kvJsonGz(env, "anchors_" + d), await kvJsonGz(env, "anchor_overrides_" + d));   // v291 CHECKLIST - the owner's map corrections merged
       if (D.areaIdx) for (const n of [it.n].concat(it.a || [])) { const ids = D.areaIdx.get(norm(n)); if (ids) { rec.areaIds = ids; break; } }
     }
@@ -445,7 +447,10 @@ export async function loadContext(env, q, opts) {
     C.recs.push(rec);
   }
   // v290 - a community with no position of its own gets the centre of its attributed homes, for straight-line distances (metro)
-  for (const r of C.recs) if (!r.pos) { const t = svTarget(r, (C.district[r.d] || {}).layer); if (t) r.cpos = t.c; }
+  for (const r of C.recs) if (!r.pos) { const t = svTarget(r, (C.district[r.d] || {}).layer); if (t) { r.cpos = t.c; if (Array.isArray(r.it.fp) && r.it.fp.length) r.pos = t.c; } }   // v298 - an own footprint IS a position (distances, no "not verified")
+  // v298 - OUR OWN RENDER (Kendall, 4 Oct 2026): KV img_render_<key with ":" as "-">, a plain image of our own making (CityEngine / Unreal /
+  // Blender), no Google terms. Drawn after the photo and Street View, before the Blocks view, labelled "Illustration" - never a photograph.
+  for (const r of C.recs) { r.renderPic = await kvPic(env, "render_" + String(r.key).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), opts && opts.origin); if (r.renderPic) r.picSource = r.picSource === "photo" || r.picSource === "street_view" ? r.picSource : "render"; }
   // v291 - LIVE GOOGLE (src/live_answers.js): gym, community pool and dog park asked of Google now where every other source leaves them
   // not known - the home's own sub-community first, then the community; the same function and words as /brief_api. Never stored. It
   // runs alongside the Street View search below (and, for a document, alongside the amenity pages: opts.deferLive leaves it on C.live
@@ -463,8 +468,8 @@ export async function loadContext(env, q, opts) {
   if (need.map && env && env.GOOGLE_MAPS_KEY) {
     await Promise.all(C.recs.filter((r) => !r.cardPic && !r.heroPic).map(async (r) => {
       const t = svTarget(r, (C.district[r.d] || {}).layer);
-      const sv = await streetViewFor(env, t) || await satelliteFor(env, t);
-      if (sv) { r.svPic = sv; r.picSource = sv.kind === "satellite" ? "satellite" : "street_view"; }
+      const sv = await streetViewFor(env, t);   // v298 - Street View only; NEVER a satellite stand-in (Kendall, 4 Oct 2026)
+      if (sv) { r.svPic = sv; r.picSource = "street_view"; }
     }));
   }
   if (opts && opts.deferLive) C.live = live; else await live;
@@ -572,6 +577,7 @@ function rentSource(C, q, rec) {
     " (bedrooms are read from the size - the register rarely records them), new and renewed contracts, each contract counted once. Where the record " +
     "files the same contracts under two names they are one building here." + (rec && rec.aliases.length ? " This building's contracts are also filed as &ldquo;" +
     rec.aliases.map(esc).join("&rdquo;, &ldquo;") + "&rdquo;." : "") + " Typical rent is the median of the new lettings where there are three or more, otherwise of every contract - the same figure the list on screen shows; the middle half is the range the middle 50% of those rents fall in." +
+    (rec && rec.it.ev_scope ? " The lettings counted are those of the whole community, " + esc(rec.it.ev_scope) + " (the register does not file them by home): this is the community's rent evidence, not this home's own." : "") +
     (rec && rec.kind === "v" && rec.bedsBasis ? " Villas and townhouses: the register files both as Villa; " + esc(BEDS_BASIS_SAY[rec.bedsBasis] || "") + "." : "");
 }
 
@@ -581,10 +587,19 @@ function ownFigure(pic, w, h, alt) {
   return '<div class="ownpic" style="position:relative;width:' + r2(w) + "px;height:" + r2(h) + 'px;">' + fitImg(pic, w, h, alt) +
     '<div style="position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,0.55);color:#FFF;font-size:8px;padding:1px 4px;border-radius:2px;">' + PHOTO_CREDIT + "</div></div>";
 }
+// v298 - our own render: an illustration, never a photograph. "modelled from the plot polygon and as-built outline" only where the record
+// says so (it.render_basis === "plot_outline"); otherwise it claims nothing about being this building.
+const renderBasis = (rec) => rec.it && rec.it.render_basis === "plot_outline";
+const renderCaption = (rec) => "Illustration &middot; Najma render" + (renderBasis(rec) ? " &middot; modelled from the plot and as-built outline" : "");
+function renderFigure(rec, w, h) {
+  return '<div class="renderpic" style="position:relative;width:' + r2(w) + "px;height:" + r2(h) + 'px;">' + fitImg(rec.renderPic, w, h, rec.name + " (illustration)") +
+    '<div style="position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,0.55);color:#FFF;font-size:8px;padding:1px 4px;border-radius:2px;">' + renderCaption(rec) + "</div></div>";
+}
 function thumb(rec, w, h, C) {
   if (rec.ownPic) return ownFigure(rec.ownPic, w, h, rec.name);   // v291 CHECKLIST
   if (rec.cardPic || rec.heroPic) return fitImg(rec.cardPic || rec.heroPic, w, h, rec.name);
   if (rec.svPic) return svFigure(rec.svPic, w, h, rec.name);   // v290 - Street View aimed at it, before the Blocks view
+  if (rec.renderPic) return renderFigure(rec, w, h);   // v298 - then our own render, then the Blocks view
   // v285 - no developer photograph on file: the building's Blocks view (blocksThumb), never an empty box
   const D = (C && C.district[rec.d]) || {}, bv = blocksThumb(rec, D.layer, w, h, { district: rec.dist });
   if (bv) return bv.html;
@@ -663,7 +678,8 @@ function buildingSource(rec) {
 const BV_SAY = "A Blocks view is the building as a simple block on the app's district model (footprints and streets &copy; OpenStreetMap contributors), heights to scale, seen from the south - a picture of where and how tall it is, not a photograph.";
 const nearbySource = () => "Metro: RTA station register. Schools (with their KHDA inspection rating) and clinics (Dubai Health Authority licence register): the nearest to this building, straight-line distances, not walking or driving times.";
 function pictureSource(rec) {
-  const bv = rec.picSource && rec.picSource !== "photo" && rec.picSource !== "none" ? " The picture on page 1 is a Blocks view, not a photograph: " + BV_SAY +
+  if (rec.picSource === "render" && !rec.ownPic) return "Picture on page 1: an illustration, Najma's own render, not a photograph" + (renderBasis(rec) ? " - modelled from the plot polygon and the as-built outline." : " - it does not claim to show this building as built.") + (rec.br ? " Amenities: the developer's own project page, " + esc(rec.br.source_url || "not yet verified") + "." : "");
+  const bv = rec.picSource && rec.picSource !== "photo" && rec.picSource !== "none" && rec.picSource !== "street_view" ? " The picture on page 1 is a Blocks view, not a photograph: " + BV_SAY +
     (rec.picSource === "blocks_area" ? " This record is a community of homes, not one building: the homes in gold are those the district model places in its Land Department sub-community - an approximate area." : "") : "";
   if (rec.ownPic) return "Picture on page 1: Najjuko's own photograph, taken on site" + (rec.ownPic.at ? " (" + esc(longDate(rec.ownPic.at)) + ")" : "") + " - " + PHOTO_CREDIT + "." +   // v291 CHECKLIST
     (rec.br ? " Amenities: the developer's own project page, " + esc(rec.br.source_url || "not yet verified") + "." : "");
@@ -869,7 +885,7 @@ function oneSheetCards(C, q) {
       '<div class="serif" style="font-size:16px;color:' + NAVY + ';line-height:1.05;">' + esc(rec.name) + "</div>" +
       (st ? '<div style="display:flex;align-items:baseline;gap:6px;"><span class="serif" style="font-size:20px;color:' + GOLD + ';">AED ' + money(st.m) + '</span><span style="font-size:9.5px;color:' + MUTED + ';">typical a year</span></div>' +
         '<div style="font-size:10px;color:' + INK + ';">Middle half AED ' + money(st.q1) + "&ndash;" + money(st.q3) + "</div>" +
-        '<div style="font-size:10px;color:' + INK + ';">' + lettingsTxt(st) + " recent lettings &middot; about " + money(st.s * SQFT) + " sq ft</div>"
+        '<div style="font-size:10px;color:' + INK + ';">' + lettingsTxt(st) + (rec.it.ev_scope ? " recent lettings in " + esc(rec.it.ev_scope) + " (the community&rsquo;s, not this home&rsquo;s)" : " recent lettings") + " &middot; about " + money(st.s * SQFT) + " sq ft</div>"
         : perType || '<div style="font-size:10px;color:' + INK + ';">No ' + (B.all ? "" : B.word + " ") + "lettings in the latest pull</div>") +
       '<div style="font-size:9.8px;color:' + MUTED + ';line-height:1.25;">' + amen + "</div>" +
       '<div style="font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + metro + "</div>" + criteriaLine(rec, q) +
@@ -889,7 +905,10 @@ export function oneSheetHtml(C, q) {
     '<div style="font-size:11px;color:' + MUTED + ';">' + C.today + " &middot; numbers match the map &middot; rents are rents recently agreed, not asking prices</div></div>" + logo(C, 68) + "</div>" +
     html +
     '<div style="padding:0 30px 4px 30px;font-size:8.3px;color:' + MUTED + ';line-height:1.3;">Rents: Dubai Land Department tenancy contracts, the pull of ' + esc(C.ri.as_of || "") + ", " + (B.all ? "every size of " : B.word + "-sized ") +
-    (!kindsOfType(q.type).includes("b") ? "villas and townhouses" : kindsOfType(q.type).includes("v") ? "homes" : "flats") + ", each contract counted once; typical rent is the median of new lettings where there are three or more, else of every contract, as on screen. Metro distances are straight lines. Pictures: each developer's own project page" + (C.recs.some((r) => r.picSource && r.picSource !== "photo" && r.picSource !== "none") ? "; where none is on file, a Blocks view: the building as a simple block on the district model (&copy; OpenStreetMap contributors), heights to scale - not a photograph." : ".") +
+    (!kindsOfType(q.type).includes("b") ? "villas and townhouses" : kindsOfType(q.type).includes("v") ? "homes" : "flats") + ", each contract counted once; typical rent is the median of new lettings where there are three or more, else of every contract, as on screen. Metro distances are straight lines. Pictures: each developer's own project page" + (C.recs.some((r) => r.picSource && r.picSource !== "photo" && r.picSource !== "none" && r.picSource !== "street_view" && r.picSource !== "render") ? "; where none is on file, a Blocks view: the building as a simple block on the district model (&copy; OpenStreetMap contributors), heights to scale - not a photograph." : ".") +
+    (C.recs.some((r) => r.picSource === "street_view") ? " Street View: Google, aimed at the building, the month shown on the picture." : "") +
+    (C.recs.some((r) => r.picSource === "render") ? " An illustration is Najma's own render, not a photograph." : "") +
+    (C.recs.some((r) => r.it.ev_scope) ? " For a home with no lettings of its own in the register, the rent is the community's (" + [...new Set(C.recs.filter((r) => r.it.ev_scope).map((r) => esc(r.it.ev_scope)))].join(", ") + "): this is the community's rent evidence, not that home's own." : "") +
     " Availability, the rent and the actual flat must be confirmed with the leasing team or listing broker.</div>" + landFooter());
   return p1 + overviewMapPages(C, q);
 }
@@ -942,7 +961,8 @@ const CLS_W = [0.6, 0.8, 1.3, 1.0, 1.0, 1.0, 2.0, 2.6, 2.8, 3.2];   // residenti
 export function markOf(rec, layer) {
   const base = { n: rec.n, name: rec.name, placed: false, approx: false };
   if (!layer) return base;
-  const ids = [rec.it.i].concat(rec.it.is || []).filter((x) => x != null);
+  // v298 - fp: layer footprint ids a record carries for itself (a townhouse placed by its own plot, no app building id)
+  const ids = [rec.it.i].concat(rec.it.is || []).concat(rec.it.fp || []).filter((x) => x != null);
   if (ids.length && layer.b.some((b) => ids.includes(b[0]))) return Object.assign(base, { placed: true, ids });
   if (rec.pos && Array.isArray(layer.ll)) {
     const [a, b, c, d, e, f] = layer.ll, lat = rec.pos[0], lon = rec.pos[1];
@@ -1044,27 +1064,7 @@ export async function streetViewFor(env, tgt) {
     return { src: "data:" + ct + ";base64," + b64(buf), w: 640, h: 400, date: mon + " " + yr };
   } catch (e) { return null; }
 }
-// v290 - where Street View has no panorama (Google never drove most gated villa streets: 2 of 10 DAMAC Hills communities), the satellite
-// picture of the same homes - a real image of exactly that place, framed on its footprints; same rules: render time, never stored, credited
-export async function satelliteFor(env, tgt) {
-  const key = env && env.GOOGLE_MAPS_KEY;
-  if (!key || !tgt) return null;
-  try {
-    const ext = Math.max(40, ...tgt.pts.map((p) => mDist(tgt.c, p)));
-    const mpp = (z) => 156543.03 * Math.cos(tgt.c[0] * Math.PI / 180) / Math.pow(2, z);
-    let z = 19; while (z > 14 && ext * 2.6 > 640 * mpp(z)) z--;
-    const r = await fetchTimed("https://maps.googleapis.com/maps/api/staticmap?center=" + tgt.c[0].toFixed(6) + "," + tgt.c[1].toFixed(6) + "&zoom=" + z +
-      "&size=640x400&maptype=satellite&key=" + encodeURIComponent(key), SV.imgMs);
-    const ct = r.headers.get("Content-Type") || "";
-    if (!r.ok || !ct.startsWith("image/")) { console.log("sat http " + r.status + " " + ct + " " + (await r.text()).slice(0, 160)); return null; }
-    const buf = await r.arrayBuffer();
-    if (buf.byteLength < 4000) return null;
-    return { src: "data:" + ct + ";base64," + b64(buf), w: 640, h: 400, kind: "satellite" };
-  } catch (e) { console.log("sat error " + String(e && e.message || e).slice(0, 120)); return null; }
-}
 function svFigure(pic, w, h, alt) {
-  if (pic.kind === "satellite") return '<div style="position:relative;width:' + r2(w) + "px;height:" + r2(h) + 'px;">' + fitImg(pic, w, h, alt) +
-    '<div style="position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,0.55);color:#FFF;font-size:8px;padding:1px 4px;border-radius:2px;">Satellite view &middot; &copy; Google</div></div>';
   return '<div style="position:relative;width:' + r2(w) + "px;height:" + r2(h) + 'px;">' + fitImg(pic, w, h, alt) +
     '<div style="position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,0.55);color:#FFF;font-size:8px;padding:1px 4px;border-radius:2px;">Street View &middot; &copy; Google &middot; ' + esc(pic.date) + "</div></div>";
 }

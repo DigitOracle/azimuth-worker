@@ -52,17 +52,12 @@ ok(await streetViewFor({ GOOGLE_MAPS_KEY: KEY }, tb) === null, "Google's tiny no
 globalThis.fetch = async () => { throw new Error("network"); };
 ok(await streetViewFor({ GOOGLE_MAPS_KEY: KEY }, tb) === null, "a network failure: null, no crash");
 
-console.log("A - the satellite picture when Street View has none");
+console.log("A - v298: there is no satellite picture any more (Kendall, 4 Oct 2026)");
 {
-  const { satelliteFor } = await import("../src/brief_docs.js");
-  calls = [];
-  globalThis.fetch = stub({ status: "ZERO_RESULTS" });
-  ok(await satelliteFor({}, ta) === null && calls.length === 0, "no secret: no satellite call");
-  const sat = await satelliteFor({ GOOGLE_MAPS_KEY: KEY }, ta);
-  ok(sat && sat.kind === "satellite" && sat.src.startsWith("data:image/jpeg;base64,") && /maptype=satellite/.test(calls[calls.length - 1]), "a community gets its satellite picture, framed on its centre");
-  ok(sat && !JSON.stringify(sat).includes(KEY), "the key is not in the satellite picture");
-  globalThis.fetch = stub(near, true, 1200);
-  ok(await satelliteFor({ GOOGLE_MAPS_KEY: KEY }, ta) === null, "a tiny error tile: null (the Blocks view stays)");
+  const mod = await import("../src/brief_docs.js");
+  ok(mod.satelliteFor === undefined, "satelliteFor no longer exists");
+  calls = []; globalThis.fetch = stub({ status: "ZERO_RESULTS" });
+  ok(await streetViewFor({ GOOGLE_MAPS_KEY: KEY }, ta) === null && !calls.some((u) => /staticmap|satellite/.test(u)), "no panorama: null, and no satellite request");
 }
 
 console.log("\n" + pass + " passed, " + fail + " failed");
