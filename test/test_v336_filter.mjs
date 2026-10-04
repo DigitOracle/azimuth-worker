@@ -14,6 +14,6 @@ ok(/function dimOf\(s\)\{[^\n]*S\.prof\|\|S\.fdev/.test(js), "a profile dims the
 ok(js.includes("data-b=") && js.includes("Show all price bands"), "price bands are toggles with a show-all state");
 ok(js.includes("class=prow") && js.includes("select(r.getAttribute"), "profile rows select the area");
 ok(js.includes("<details class=evd") && js.includes("caret-down"), "positioning evidence is collapsible with a chevron icon");
-ok(js.includes("id=maplg") && js.includes("function mapLegend"), "legend overlay on the map");
+ok(js.includes("lg.id=\"maplg\"") && js.includes("function mapLegend"), "legend overlay on the map");
 ok(js.includes("dlink evc peer"), "peers are cards that open the profile");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
