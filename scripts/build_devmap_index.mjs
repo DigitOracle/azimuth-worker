@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEVMAP_CORE_JS } from "../src/devmap_core.js";
 import { labelledName, communitiesOf } from "../src/community_labels.js";   // v307
+import { decide, isGenericName, looseKeyOf } from "../src/devattr.js";   // v325 - the attribution rules: the register first, a bare common word is not evidence
 import { canonicalOf, displayOf, aliasesOf, isCurated } from "../src/devcross.js";   // developer CROSSWALK (4 Oct 2026): one id per developer, however the sources spell it
 export const DM = new Function(DEVMAP_CORE_JS + "; return DM;")();
 
@@ -23,7 +24,7 @@ const titleCase = (s) => { s = s.replace(LEGAL, "").replace(/\s+/g, " ").trim();
 const nameKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 // one district's unit-mix cards -> cells per developer. projDev: {nameKey(project): developer}, priceDev: {"d:i": developer}
-export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nameDev) {
+export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nameDev, trace, regDev) {
   const B = (U && U.buildings_by_id) || {}, devs = {}, names = {};
   const slot = (dev) => {
     const k = dev ? canonicalOf(dev) : "_";
@@ -35,7 +36,15 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nam
   const devOfCard = {};
   for (const id of Object.keys(B)) {
     const c = B[id];
-    const dev = c.developer || (c.dld && projDev[nameKey(c.dld.project)]) || projDev[nameKey(c.name)] || priceDev[slug + ":" + id] || null;
+    // v325 - ATTRIBUTION: a candidate from the old order (card field, Ejari list by name, price list), then src/devattr.js decides with the REGISTER first
+    const cand = c.developer || (c.dld && projDev[nameKey(c.dld.project)]) || projDev[nameKey(c.name)] || priceDev[slug + ":" + id] || null;
+    const route = c.developer ? (c.synthetic ? "card_register:" + String(c.developer_basis || "") : "card_field") : (c.dld && projDev[nameKey(c.dld.project)]) ? "ejari_name:dld_project" : projDev[nameKey(c.name)] ? "ejari_name:card_name" : priceDev[slug + ":" + id] ? "price_index" : "none";
+    const bnames = [c.dld && c.dld.project, c.name, c.dld_sales && c.dld_sales.project];
+    // the register's answer for this building: every name the card carries is looked up; two names that lead to DIFFERENT register developers (a footprint named "The Portman"
+    // linked to the DLD project "DANA TOWER") mean the link itself is doubtful, so the register stays silent rather than override on a guess
+    let regd = null; if (regDev) { const found = []; for (const nm of bnames) { if (!nm) continue; const r = regDev[nameKey(nm)] || regDev[looseKeyOf(nm)] || null; if (r) found.push(r); } if (found.length && found.every((r) => r.c === found[0].c)) regd = found[0]; }
+    const D = decide({ names: bnames, cand: cand || "", candDisplay: cand ? (displayOf(canonicalOf(cand)) || cand) : "", nameOnly: !!cand && (route !== "card_field"), regd });
+    const dev = D.dev || null, q = D.q;
     devOfCard[id] = dev;
     if (nameDev && dev) for (const nm of [c.name, c.dld && c.dld.project, c.dld_sales && c.dld_sales.project]) if (nm) nameDev[nameKey(nm)] = canonicalOf(dev) || "_";   // v322
     const sold = (c.dld_sales && c.dld_sales.sold_by_type) || {};
@@ -47,6 +56,8 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nam
       if (!n || bed == null) continue;
       slot(dev).c.push([n, Math.round(r.median_aed / r.median_sqm), Math.round(r.median_aed), bed]); added = true; mine.push([n, Math.round(r.median_aed / r.median_sqm)]);
     }
+    if (added && dev) { const sq = slot(dev); (sq.q = sq.q || [0, 0])[q === "v" ? 0 : 1] += mine.reduce((a, x) => a + x[0], 0); }   // v325 - sales by confidence: [verified by the register, inferred from a name]
+    if (added && trace) trace.push({ slug, id, name: String(c.name || ""), project: String((c.dld_sales && c.dld_sales.project) || (c.dld && c.dld.project) || ""), dev: dev || null, q, why: D.why, cand: cand || null, route, n: mine.reduce((a, x) => a + x[0], 0), aed: (c.rows || []).reduce((a, r) => a + ((r.median_aed && r.median_sqm && soldOf(r.type) && bedOf(r.type) != null) ? soldOf(r.type) * r.median_aed : 0), 0) });
     if (added) slot(dev).b.push([mine.reduce((a, x) => a + x[0], 0), Math.round(DM.wmedian(mine.map((x) => [x[1], x[0]]))), String(c.name || (c.dld && c.dld.project) || "")]);   // v321 - one project (building) = its sales and its median price per sq m
     if (added && dev) slot(dev).h += Number(c.registered_homes || (c.dld && c.dld.units_registered) || c.total_units || 0);
   }
@@ -86,14 +97,15 @@ function attachEvidence(areas, evidence) {
     const A = areas[s]; A.ev = { ...E.ev, dld: E.dld, shared: !!E.shared };
     for (const dk of Object.keys(E.devs)) {
       let d = A.devs[dk];
-      if (!d) { d = A.devs[dk] = { n: dk === "_" ? "Developer not recorded" : (displayOf(dk) || known[dk] || titleCase(dk.replace(/-/g, " "))), h: 0, c: [], r: [] }; }
+      if (!d) { d = A.devs[dk] = { n: dk === "_" ? "Developer not recorded" : (displayOf(dk) || known[dk] || (E.names && E.names[dk] ? titleCase(E.names[dk]) : "") || titleCase(dk.replace(/-/g, " "))), h: 0, c: [], r: [] }; }
       if (E.devs[dk].ev) d.ev = E.devs[dk].ev;
       d.c12 = E.devs[dk].c12;
+      if (E.devs[dk].q12) d.q12 = E.devs[dk].q12;   // v325 - last-12-month sales [verified by the register, inferred from a name]
       if (E.devs[dk].b12) d.b12 = E.devs[dk].b12;   // v323 - projects with 3 or more sales in the last 12 months, so a profile can follow the window
     }
   }
 }
-export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs, register, evidence, projdevOut }) {
+export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs, register, evidence, projdevOut, traceOut, regdev }) {
   const projDev = {};
   // the Ejari projects index: every project Dubai-wide with its developer (KV img_ejari_projects_index)
   if (ejariProjects && ejariProjects.index) for (const k of Object.keys(ejariProjects.index)) { const p = ejariProjects.index[k]; if (p.name_en && p.developer) projDev[nameKey(p.name_en)] = p.developer; }
@@ -114,7 +126,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     if ((!U || !U.buildings_by_id) && evidence && evidence.areas && evidence.areas[g.slug]) U = { buildings_by_id: {} };   // v322: a district with register sales but no card file still gets its evidence
     if (!U || !U.buildings_by_id) continue;
     const nameDev = {};
-    const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev);
+    const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev, traceOut, regdev && regdev[g.slug]);
     if (projdevOut) projdevOut.slugs[g.slug] = nameDev;
     if (!Object.keys(devs).length && !(evidence && evidence.areas && evidence.areas[g.slug])) continue;
     areas[g.slug] = { name: g.name, corridor: g.corridor, bbox: g.bbox, centre: g.centre, devs };
@@ -124,7 +136,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     if (communitiesOf(g.slug).length) { areas[g.slug].label = labelledName(g.slug, g.name); areas[g.slug].community = communitiesOf(g.slug); }   // v307 - community label next to the DLD name
     for (const k of Object.keys(devs)) all.push(...devs[k].c);
   }
-  if (projdevOut) for (const k of Object.keys(projDev)) { const c = canonicalOf(projDev[k]); if (c) projdevOut.global[k] = c; }
+  if (projdevOut) for (const k of Object.keys(projDev)) { const c = canonicalOf(projDev[k]); if (c && !isGenericName(k)) projdevOut.global[k] = c; }   // v325: a bare common-word name ("symphony", "park central") never carries a developer Dubai-wide
   if (evidence && evidence.areas) attachEvidence(areas, evidence);
   const bounds = (DM.TIER_CFG.bounds && DM.TIER_CFG.bounds.slice()) || DM.percentileBounds(all, DM.TIER_CFG.percentiles);
   const devList = {};
@@ -154,7 +166,7 @@ if (isMain) {
   const rd = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
   const prices = rd(a.prices);
   const projdevOut = a["projdev-out"] ? { slugs: {}, global: {} } : null;
-  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean), register: a.register ? rd(a.register) : null, evidence: a.evidence ? rd(a.evidence) : null, projdevOut });
+  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean), register: a.register ? rd(a.register) : null, evidence: a.evidence ? rd(a.evidence) : null, regdev: a.regdev ? rd(a.regdev) : null, projdevOut });
   if (projdevOut) fs.writeFileSync(a["projdev-out"], JSON.stringify(projdevOut));
   fs.writeFileSync(a.out, JSON.stringify(idx));
   console.log("areas", Object.keys(idx.areas).length, "developers", Object.keys(idx.devs).length, "bounds", idx.cuts.bounds, "bytes", fs.statSync(a.out).size);

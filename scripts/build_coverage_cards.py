@@ -90,21 +90,29 @@ _DEV = {}
 
 def dev_ctx(con):
     if not _DEV:
+        import devattr_register as R          # v325
         _DEV["projdev"] = {k: d for k, d, _ in con.execute("select project_key, dev_name, dev_key from project_developer").fetchall()}
         _DEV["reg"] = {int(r[0]): r for r in con.execute("select project_number, developer_name from g_dld__projects where project_number is not null").fetchall()}
+        _DEV["regdev"] = R.register_devs(con)
+        _DEV["R"] = R
     return _DEV
 
 
 def developer(con, pnum, name):
-    D = dev_ctx(con); k = re.sub(r"[^a-z0-9]", "", fold(name).lower())
+    """v325 (4 Oct 2026, the Town Square 'Symphony' case). ORDER: 1 the REGISTER's developer of the project_number (developer_id -> the developers register, English name -
+    NOT g_dld__projects.developer_name, which is the Arabic MASTER name: it made Azizi Venice 'Dubai Aviation City' and Binghatti Vintage 'Liwan'); 2 the crosswalk table
+    project_developer by project NAME, but never for a bare common-word name ('symphony' is Imtiaz's shorthand for Imtiaz Symphony Tower in Bukadra; the register says Nshama
+    for this one); 3 a 'by X' suffix; 4 a Nakheel entity is the land owner of record, not the delivery partner -> not recorded."""
+    D = dev_ctx(con); R = D["R"]; k = re.sub(r"[^a-z0-9]", "", fold(name).lower())
+    rd = D["regdev"].get(int(pnum)) if pnum is not None and pnum == pnum else None
+    if rd and not rd["land_owner"] and rd["canon"] not in R.MASTER_LIKE and rd["name_en"]:
+        return rd["name_en"], "register developer of record (developer_id of project_number %s)" % int(pnum)
+    generic = R.is_generic_name(name)
     for kk, d in D["projdev"].items():
-        if len(kk) >= 6 and (kk == k or k.startswith(kk) or kk in k): return d, "crosswalk project_developer"
+        if len(kk) >= 6 and (kk == k or k.startswith(kk) or kk in k) and not generic: return d, "crosswalk project_developer"
     m = SUFFIX_DEV.search(str(name or "").strip())
     if m: return m.group(1).strip().title(), "inferred from the project name suffix 'by X'"
-    r = D["reg"].get(int(pnum)) if pnum is not None and pnum == pnum else None
-    if r and r[1]:
-        if any(a in r[1] for a in NAKHEEL_AR): return None, "not recorded (the register names a Nakheel entity, the land owner of record, not the delivery partner)"
-        return r[1], "register developer of record"
+    if rd and rd["land_owner"]: return None, "not recorded (the register names a Nakheel entity, the land owner of record, not the delivery partner)"
     return None, "not recorded"
 
 

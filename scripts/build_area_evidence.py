@@ -12,7 +12,7 @@ A sale is OFF-PLAN when the register type starts with "Off", otherwise READY. Vi
 Developer of a sale: the project name is looked up in the index builder's own map (building cards, then the Ejari projects list); not found = "_" (developer not recorded).
 The 3-sales rule: a median over fewer than 3 sales is written null, never a number.
 A shared register area (one DLD area behind two app districts) goes to the FIRST district only, marked shared."""
-import argparse, datetime as dt, json, re, sys
+import argparse, datetime as dt, json, os, re, sys
 import numpy as np
 sys.path.insert(0, r"C:\Dev\naj-market-pulse\scripts")
 from dld_rent_buildings import DLD_AREA
@@ -34,8 +34,12 @@ end = (last.replace(day=1) - dt.timedelta(days=1)) if (last + dt.timedelta(days=
 l12_from = dt.date(end.year - 1, end.month + 1, 1) if end.month < 12 else dt.date(end.year, 1, 1)       # the 12 months ending at `end`
 since = dt.date(2019, 1, 1)
 names = list(area_slug)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import devattr_register as R                 # v325 - the register developer of a project_number
+RD = R.register_devs(con)
+CUR = R.CUR                                  # curated brands (src/devcross.js ids)
 rows = con.execute("""select transaction_id, any_value(instance_date), any_value(actual_worth), any_value(procedure_area), any_value(reg_type_en), any_value(property_type_en),
-  any_value(area_name_en), any_value(project_name_en), any_value(rooms_en)
+  any_value(area_name_en), any_value(project_name_en), any_value(rooms_en), any_value(project_number)
  from g_dld__transactions where trans_group_en='Sales'
   and procedure_name_en in ('Sell','Sell - Pre registration','Delayed Sell','Sell Development','Sale On Payment Plan')
   and property_usage_en='Residential' and property_type_en in ('Unit','Villa') and coalesce(property_sub_type_en,'Flat') in ('Flat','Villa','Hotel Apartment','Stacked Townhouses')
@@ -48,11 +52,15 @@ def bedof(r):
     m = re.match(r"^(\d+)\s*(?:bed|br|b/r)", t)
     return min(int(m.group(1)), 5) if m else 6          # 6 = not stated (penthouse, villas without a room count): counted in every total, matches no bedroom filter
 
+def pick(slug, pname, pnum):      # v325 - the REGISTER first (project_number -> developer_id), then the index builder name map; see devattr_register.pick
+    return R.pick(RD, PD, slug, pname, pnum, nk)
 S = {}   # slug -> list of sale tuples
-for tid, d, w, ar, rt, pt, an, pn, rooms in rows:
+NAMES = {}   # canonical id -> register company name, for developers the crosswalk does not know as a brand
+for tid, d, w, ar, rt, pt, an, pn, rooms, pnum in rows:
     slug, sh = area_slug[an]
-    dev = PD["slugs"].get(slug, {}).get(nk(pn)) or PD["global"].get(nk(pn)) or "_"
-    S.setdefault(slug, []).append((d, float(w), float(ar), str(rt or "").startswith("Off"), pt == "Villa", dev, pn or "", bedof(rooms), sh))
+    dev, q = pick(slug, pn, pnum)
+    if q == "v" and dev not in CUR and pnum is not None and int(pnum) in RD: NAMES[dev] = RD[int(pnum)]["name_en"]
+    S.setdefault(slug, []).append((d, float(w), float(ar), str(rt or "").startswith("Off"), pt == "Villa", dev, pn or "", bedof(rooms), sh, q))
 def med(v): return float(np.median(v)) if len(v) >= 3 else None
 def sqm_to(x): return None if x is None else int(round(x))
 def W(sub):      # sub: list of sale tuples -> one summary
@@ -107,6 +115,9 @@ for slug, sub in S.items():
         for s in x12: pj12.setdefault(s[6], []).append(s)
         b12 = [[len(px), sqm_to(med([s[1] / s[2] for s in px])), str(pn)] for pn, px in pj12.items() if len(px) >= 3 and str(pn).strip()]   # v323: a project = a building with 3 or more sales in the window
         A["devs"][dk] = {"c12": cells(x12), "b12": b12}
+        if dk != "_":
+            A["devs"][dk]["q12"] = [sum(1 for s in x12 if s[9] == "v"), sum(1 for s in x12 if s[9] != "v")]      # v325: last-12-month sales [verified by the register, inferred from a name]
+            if dk in NAMES: A.setdefault("names", {})[dk] = NAMES[dk]
         if len(x) >= a.min_dev: A["devs"][dk]["ev"] = e       # a developer with fewer sales has no drawer: the page says so
     out["areas"][slug] = A
     tot_att[slug] = (len(sub), sum(len(v) for k, v in byd.items() if k != "_"), len(l12), sum(len([s for s in v if s[0] >= l12_from]) for k, v in byd.items() if k != "_"))
