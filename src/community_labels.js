@@ -11,7 +11,7 @@ export const COMMUNITY_LABELS = {
   alyelayiss1: { dld: "Al Yelayiss 1", labels: ["DAMAC Islands"], why: "3,674 of 3,680 register sales are DAMAC Islands projects" },
   madinathind4: { dld: "Madinat Hind 4", labels: ["DAMAC Hills 2"], why: "all 727 register sales are DAMAC Hills 2 (Akoya) projects" },
   alyufrah1: { dld: "Al Yufrah 1", labels: ["The Valley"], why: "all 172 register sales are The Valley (Emaar)" },
-  wadialsafa5: { dld: "Wadi Al Safa 5", labels: ["Arabian Ranches III"], why: "Arabian Ranches III sales rows sit under this area (checked in the sales rows)" },
+  wadialsafa5: { dld: "Wadi Al Safa 5", labels: ["Arabian Ranches III", "Dubai Land Residence Complex"], why: "one area holding Arabian Ranches III and Dubai Land Residence Complex (Dubai Municipality community 648: Imtiaz Cove Edition Residences 1 to 6, Cove Grand, Cove Boulevard, Cove Living, Le Blanc); the 3,601 Imtiaz sales here are not Arabian Ranches III (4 Oct 2026 check)" },
   madinatalmataar: { dld: "Madinat Al Mataar", labels: ["Dubai South", "Emaar South", "Expo Living"], why: "one area holding several communities: Dubai South, Emaar South and Expo Living" },
   zaabeelsecond: { dld: "Zaabeel Second", labels: ["d3", "Artistry"], why: "one area holding d3 and Artistry" },
   alkhairanfirst: { dld: "Al Khairan First", labels: ["Dubai Creek Harbour"], why: "Dubai Creek Harbour is registered in this area" },

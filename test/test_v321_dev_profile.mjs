@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import vm from "node:vm";
 
 let pass = 0, fail = 0;
 const ok = (c, m, d) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m + (d !== undefined ? "\n         " + String(d).slice(0, 400) : "")); } };
@@ -87,8 +88,8 @@ ok(/e\.profile\.homes \+= d\.h \|\| 0; e\.n \+= /.test(fs.readFileSync(new URL("
 console.log("E - the page");
 const html = devmapHtml("k", { NAJ_NAV_CSS: "", NAJ_FONTS: "", najNav: () => "" });
 const js = html.slice(html.indexOf("<script>", html.indexOf("maplibre-gl.js")) + 8, html.lastIndexOf("</script>"));
-const f = path.join(os.tmpdir(), "dm321_" + Math.random().toString(36).slice(2) + ".js"); fs.writeFileSync(f, js);
-let parsed = true; try { execFileSync(process.execPath, ["--check", f], { stdio: "pipe" }); } catch (e) { parsed = false; }
+// v327 - parsed in this process. It used to write a temp file and spawn "node --check" on it; under load on Windows (a virus scan holding the new file, a slow spawn) that failed once inside the full suite while passing alone.
+let parsed = true; try { new vm.Script(js, { filename: "devmap_page_script.js" }); } catch (e) { parsed = false; console.log("  parse error: " + e.message); }
 ok(parsed, "the page script parses");
 const cut = (a, b) => js.slice(js.indexOf(a), js.indexOf(b));
 const mkPage = (script) => {

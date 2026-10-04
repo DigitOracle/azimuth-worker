@@ -1730,3 +1730,7 @@ export async function briefDocsRoute(request, env, url, deps) {
   }
   return briefPdfRoute(request, env, url, deps);
 }
+
+// ------------------------------------------------------------------------------------------------ v324: the kit the Developers-by-area PDFs reuse (src/devmap_pdf.js)
+// The same browser launcher, header picture, footer, fonts/CSS and map colours and projection as the Brief documents: one house look, one place to change it.
+export const BRIEF_KIT = { renderPdf, footer, logo, kvDataUrl, todayLong, CSS, MAPC, KY, KH, PT, NAVY, GOLD, MUTED, CURATOR, WA_SVG, smallPrint };
