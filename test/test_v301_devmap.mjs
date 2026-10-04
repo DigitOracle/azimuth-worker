@@ -19,6 +19,7 @@ import worker from "../src/index.js";
 import { DEVMAP_CORE_JS } from "../src/devmap_core.js";
 import { devmapHtml, shortlistName, cleanShortlist, DEVMAP_FOOTER } from "../src/devmap_page.js";
 import { DM, buildArea } from "../scripts/build_devmap_index.mjs";
+const DEFAULT_BOUNDS = DM.TIER_CFG.bounds; DM.TIER_CFG.bounds = null;   // 4 Oct 2026: the default is now Kendall's value-weighted bounds; the aggregation tests below run on the index's own cuts
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -59,6 +60,7 @@ const thin = DM.areaStats({ name: "Thin", devs: { z: { n: "Z", h: 0, c: [[2, 200
 ok(!thin.enough && thin.median === null, "an area under 3 sales shows no median");
 // negative control (a): the same text with the gate at 0 would print a number for gamma
 const DM0 = new Function(DEVMAP_CORE_JS.replace("EVIDENCE_MIN=3", "EVIDENCE_MIN=0") + "; return DM;")();
+DM0.TIER_CFG.bounds = null;
 const st0 = DM0.areaStats(IDX.areas.testville, IDX);
 ok(st0.notEnough.length === 0 && st0.tiers[3].devs.some((d) => d.k === "gamma" && d.median === 8000), "NEGATIVE CONTROL: with the gate removed gamma gets a number - so the gate check above can fail");
 // shortlist
@@ -100,7 +102,7 @@ const cr = DM.clientMeetingRent(IDX, { alpha: true, beta: true }, { max: 100000,
 ok(cr.length === 1 && cr[0].devs.length === 1 && cr[0].devs[0].k === "alpha" && cr[0].devs[0].rpsf === 65, "rental: alpha has 3 contracts (fits, AED 65 per sq ft a year); beta has 2 -> left out", JSON.stringify(cr));
 ok(DM.rentStats(DEVS.beta).enough === false && DM.rentStats(DEVS.alpha).enough === true, "rent: the same n >= 3 rule");
 ok(DM.devKey("IMTIAZ DEVELOPMENTS L.L.C") === "imtiaz" && DM.devKey("Imtiaz") === "imtiaz" && DM.devKey("Prestige One Developments") === "prestige one", "one developer however the register spells it");
-ok(DM.TIER_CFG.bounds === null && DM.percentileBounds([[50, 100], [50, 200], [50, 300], [50, 400]], [75, 50, 25]).join() === "300,200,100", "tier bounds: one config object, null = Dubai-wide percentiles; percentileBounds works");
+ok(DEFAULT_BOUNDS.join() === "32292,22604,16684" && DM.percentileBounds([[50, 100], [50, 200], [50, 300], [50, 400]], [75, 50, 25]).join() === "300,200,100", "tier bounds: one config object, default = value-weighted AED 3,000 / 2,100 / 1,550 per sq ft; percentileBounds still works");
 const own = DM.areaStats(IDX.areas.testville, IDX, { bounds: [40000, 30000, 20000] });
 ok(own.mixN.join("/") !== st.mixN.join("/") && own.bounds.join() === "40000,30000,20000", "Kendall's own bounds in the config object change the bands");
 

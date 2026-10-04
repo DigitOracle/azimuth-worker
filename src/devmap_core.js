@@ -20,7 +20,8 @@ var TIER_NAMES=["ULTRA-LUXURY","LUXURY","PREMIUM","BUDGET"];
 // THE ONE CONFIG OBJECT for the four tiers. bounds = the three lower edges in AED per sq m: [ultra-luxury from, luxury from,
 // premium from]; below the last is BUDGET. null = the Dubai-wide percentile bands the index carries (p50 / p80 / p95 of settled
 // sales by price per sq m). Kendall: set bounds to [a,b,c] to use your own.
-var TIER_CFG={bounds:null, percentiles:[95,80,50]};
+var TIER_CFG={bounds:[32292,22604,16684], percentiles:[95,80,50]}; // 4 Oct 2026, Kendall: value-weighted bounds, each tier about a quarter of the money: AED 3,000 / 2,100 / 1,550 per sq ft
+var TYPICAL_SQFT=[["Studio",401],["1-bed",779],["2-bed",1248],["3-bed",1848]]; // median Dubai sizes in the sales register, last 12 months
 function sqftOf(m){return m==null?null:m/SQFT}
 function round(x){return x==null?null:Math.round(x)}
 function wquant(pairs,p){ // pairs [[value,weight]]; weighted quantile, p 0..1
@@ -40,6 +41,14 @@ function bandSay(t,bounds){ // the tier's price band, per sq m and per sq ft
   return m+" per sq m ("+s+" per sq ft)"}
 // a developer's name key: one developer however the register spells it
 function devKey(s){var t=String(s==null?"":s).toLowerCase().replace(/[.,&]/g," ").replace(/\b(l l c|llc|fz|fzc|fze|ltd|limited|co|the|real estate|properties|property|developments?|developers?|investments?|group|holding|holdings|company|est)\b/g," ").replace(/\s+/g," ").trim();return t}
+function money(x){return x>=1e6?"AED "+(Math.round(x/1e4)/100).toFixed(2)+"m":"AED "+Math.round(x/1e3).toLocaleString("en-US")+"k"}
+// the TOTAL PURCHASE PRICE of a typical home at the floor of a tier's per sq m band (BUDGET: under the premium floor)
+function tierPrices(t,bounds){if(!bounds)return "";
+  var edge=t===0?bounds[0]:t===1?bounds[1]:bounds[2],i,o=[];
+  for(i=0;i<TYPICAL_SQFT.length;i++)o.push(TYPICAL_SQFT[i][0]+" "+(t===3?"under ":"from ")+money(edge*TYPICAL_SQFT[i][1]/SQFT));
+  return o.join(" · ")}
+function tierShare(t,index){var s=index&&index.cuts&&index.cuts.shares;if(!s)return "";
+  return "Dubai-wide: "+s.n[t]+"% of buyers, "+s.money[t]+"% of the money"}
 // ---- one developer in one area ----
 function devStats(d,bounds){
   var c=d.c||[],n=nOf(c),out={k:d.k,name:d.n,homes:d.h||0,n:n,enough:n>=EVIDENCE_MIN,median:null,medianSqft:null,tier:-1,tierN:[0,0,0,0],tierShare:[0,0,0,0],second:null,aed:null};
@@ -61,7 +70,7 @@ function areaStats(area,index,cfg){
   var vt=0,nt=0,i;
   for(i=0;i<all.length;i++){var t=tierOf(all[i][1],bounds);if(t>=0){res.mixN[t]+=all[i][0];res.mixValue[t]+=all[i][0]*(all[i][2]||0);nt+=all[i][0];vt+=all[i][0]*(all[i][2]||0)}}
   for(i=0;i<4;i++){res.mixN[i]=nt?Math.round(100*res.mixN[i]/nt):0;res.mixValue[i]=vt?Math.round(100*res.mixValue[i]/vt):0}
-  for(i=0;i<4;i++){res.tiers.push({tier:i,id:TIER_IDS[i],name:TIER_NAMES[i],band:bounds?bandSay(i,bounds):"",devs:[],median:null,medianSqft:null})}
+  for(i=0;i<4;i++){res.tiers.push({tier:i,id:TIER_IDS[i],name:TIER_NAMES[i],band:bounds?bandSay(i,bounds):"",prices:tierPrices(i,bounds),share:tierShare(i,index),devs:[],median:null,medianSqft:null})}
   for(i=0;i<list.length;i++){var s=list[i];if(!s.enough){res.notEnough.push(s);continue}res.tiers[s.tier].devs.push(s)}
   for(i=0;i<4;i++){var tr=res.tiers[i];tr.devs.sort(function(a,b){return b.n-a.n||(b.median-a.median)});tr.nDevs=tr.devs.length;
     var cells=[];for(var j=0;j<tr.devs.length;j++)cells=cells.concat(devs[tr.devs[j].k].c||[]);
@@ -107,7 +116,7 @@ function clientMeeting(index,set,q,named){
     for(k in a.devs){if(k==="_"||!set[k])continue;var st=devStats({k:k,n:a.devs[k].n,h:a.devs[k].h,c:a.devs[k].c},bounds),bf=budgetFit(a.devs[k],st,q,bounds);if(bf.fit)rows.push({k:k,name:st.name,tier:st.tier,median:st.median,medianSqft:st.medianSqft,n:st.n,fitMedian:bf.median,basis:bf.basis})}
     if(rows.length){rows.sort(function(x,y){return x.medianSqft-y.medianSqft});out.areas.push({slug:s,name:a.name,devs:rows})}}
   out.areas.sort(function(x,y){return y.devs.length-x.devs.length});
-  if(named){var nk=devKey(named);out.named={key:nk,mine:!!set[nk],known:!!index.devs[nk],name:(index.devs[nk]||{}).name||named}}
+  if(named){var nk=devKey(named);nk=(index.alias&&index.alias[nk])||nk;out.named={key:nk,mine:!!set[nk],known:!!index.devs[nk],name:(index.devs[nk]||{}).name||named}}
   return out}
 function clientMeetingRent(index,set,q){
   var out=[],s,k;for(s in index.areas){var a=index.areas[s],rows=[];
@@ -116,6 +125,6 @@ function clientMeetingRent(index,set,q){
   out.sort(function(x,y){return y.devs.length-x.devs.length});return out}
 // percentile bounds from a pool of [n,ppsm,...] cells (used by the index builder)
 function percentileBounds(cells,percentiles){var p=pooled(cells,1),ps=percentiles||TIER_CFG.percentiles;return ps.map(function(q){return round(wquant(p,q/100))})}
-return {SQFT:SQFT,EVIDENCE_MIN:EVIDENCE_MIN,TIER_IDS:TIER_IDS,TIER_NAMES:TIER_NAMES,TIER_CFG:TIER_CFG,wquant:wquant,wmedian:wmedian,tierOf:tierOf,bandSay:bandSay,devKey:devKey,devStats:devStats,areaStats:areaStats,shortlistFilter:shortlistFilter,budgetFit:budgetFit,developerView:developerView,compareAreas:compareAreas,rentStats:rentStats,rentFit:rentFit,whereMine:whereMine,clientMeeting:clientMeeting,clientMeetingRent:clientMeetingRent,percentileBounds:percentileBounds,boundsOf:boundsOf,sqftOf:sqftOf};
+return {SQFT:SQFT,EVIDENCE_MIN:EVIDENCE_MIN,TIER_IDS:TIER_IDS,TIER_NAMES:TIER_NAMES,TIER_CFG:TIER_CFG,wquant:wquant,wmedian:wmedian,tierOf:tierOf,bandSay:bandSay,devKey:devKey,tierPrices:tierPrices,tierShare:tierShare,TYPICAL_SQFT:TYPICAL_SQFT,devStats:devStats,areaStats:areaStats,shortlistFilter:shortlistFilter,budgetFit:budgetFit,developerView:developerView,compareAreas:compareAreas,rentStats:rentStats,rentFit:rentFit,whereMine:whereMine,clientMeeting:clientMeeting,clientMeetingRent:clientMeetingRent,percentileBounds:percentileBounds,boundsOf:boundsOf,sqftOf:sqftOf};
 })();
 `;

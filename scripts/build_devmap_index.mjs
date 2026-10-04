@@ -1,6 +1,6 @@
 // Builds the Developers Map index (KV img_devmap_index) from files the app already publishes. READ-ONLY on KV; writes ONE local file.
 //   node scripts/build_devmap_index.mjs --um <dir> --prices <img_map_prices json> --rent <img_rent_index json> --geo <img_districts_geo json>
-//        [--ejari <img_ejari_projects_index json>] [--projects <DLD projects csv>] --out <devmap_index.json>
+//        [--ejari <img_ejari_projects_index json>] [--projects <DLD projects csv>] [--shares <dld_tier_shares.py json>] --out <devmap_index.json>
 // <dir> holds one file per district named um_<slug>.raw (or img_unitmix_<slug>), each the KV value of img_unitmix_<slug> (plain JSON).
 // To fetch them (read only), from C:\Dev\azimuth-worker-dewa:
 //   npx wrangler kv key get img_unitmix_<slug> --text --env azimuth2 --namespace-id 2cdf36a27f834b5f9c726294d36770fb > <dir>/um_<slug>.raw
@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEVMAP_CORE_JS } from "../src/devmap_core.js";
+import { canonicalOf, displayOf, aliasesOf, isCurated } from "../src/devcross.js";   // developer CROSSWALK (4 Oct 2026): one id per developer, however the sources spell it
 export const DM = new Function(DEVMAP_CORE_JS + "; return DM;")();
 
 const bedOf = (t) => { t = String(t || "").toLowerCase(); if (t === "studio") return 0; const m = t.match(/^(\d+)\s*(?:bed|br|b\/r)/); return m ? Math.min(+m[1], 5) : null; };
@@ -21,7 +22,7 @@ const nameKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ")
 export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP) {
   const B = (U && U.buildings_by_id) || {}, devs = {}, names = {};
   const slot = (dev) => {
-    const k = dev ? DM.devKey(dev) : "_";
+    const k = dev ? canonicalOf(dev) : "_";
     const kk = k || "_";
     if (!devs[kk]) devs[kk] = { n: kk === "_" ? "Developer not recorded" : "", h: 0, c: [], r: [] };
     if (kk !== "_") { names[kk] = names[kk] || {}; names[kk][dev] = (names[kk][dev] || 0) + 1; }
@@ -51,12 +52,12 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP) {
       slot(dev).r.push([s.n, Math.round(s.m / s.s), Math.round(s.m), bed]);
     }
   }
-  for (const k of Object.keys(devs)) if (k !== "_") { const o = names[k] || {}; const best = Object.keys(o).sort((a, b) => o[b] - o[a])[0]; devs[k].n = titleCase(best || k); }
+  for (const k of Object.keys(devs)) if (k !== "_") { const o = names[k] || {}; const best = Object.keys(o).sort((a, b) => o[b] - o[a])[0]; devs[k].n = displayOf(k) || titleCase(best || k); }
   for (const k of Object.keys(devs)) if (!devs[k].c.length && !devs[k].r.length) delete devs[k];
   return devs;
 }
 
-export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf }) {
+export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares }) {
   const projDev = {};
   // the Ejari projects index: every project Dubai-wide with its developer (KV img_ejari_projects_index)
   if (ejariProjects && ejariProjects.index) for (const k of Object.keys(ejariProjects.index)) { const p = ejariProjects.index[k]; if (p.name_en && p.developer) projDev[nameKey(p.name_en)] = p.developer; }
@@ -77,18 +78,21 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     areas[g.slug] = { name: g.name, corridor: g.corridor, bbox: g.bbox, centre: g.centre, devs };
     for (const k of Object.keys(devs)) all.push(...devs[k].c);
   }
-  const bounds = DM.percentileBounds(all, DM.TIER_CFG.percentiles);
+  const bounds = (DM.TIER_CFG.bounds && DM.TIER_CFG.bounds.slice()) || DM.percentileBounds(all, DM.TIER_CFG.percentiles);
   const devList = {};
   for (const s of Object.keys(areas)) for (const k of Object.keys(areas[s].devs)) {
     if (k === "_") continue;
     const d = areas[s].devs[k]; const e = devList[k] || (devList[k] = { name: d.n, areas: 0, n: 0 });
     e.areas++; e.n += DM.wmedian ? d.c.reduce((a, c) => a + c[0], 0) : 0;
   }
+  // alias: DM.devKey(any spelling the page may be given) -> canonical id, for curated developers only (the page cannot import devcross.js)
+  const alias = {};
+  for (const k of Object.keys(devList)) if (isCurated(k)) for (const nm of [displayOf(k)].concat(aliasesOf(k))) { const dk = DM.devKey(nm); if (dk && dk !== k && !alias[dk]) alias[dk] = k; }
   return {
     as_of: outAsOf || null, generated: new Date().toISOString().slice(0, 10),
     source: "Dubai Land Department sales register (settled sales, unit-mix cards) and Ejari tenancy contracts; developers from the register and the developers' own sheets",
-    cuts: { bounds, percentiles: DM.TIER_CFG.percentiles, rule: "Dubai-wide: BUDGET is the cheapest half of settled sales by price per sq m, PREMIUM the next 30%, LUXURY the next 15%, ULTRA-LUXURY the top 5%. A price band, not a judgement of any developer." },
-    devs: devList, areas,
+    cuts: { bounds, percentiles: DM.TIER_CFG.percentiles, shares: shares || null, typical_sqft: DM.TYPICAL_SQFT, rule: DM.TIER_CFG.bounds ? "Dubai-wide, value-weighted: each tier holds about a quarter of the money spent in the last 12 months of Land Department sales. A price band, not a judgement of any developer." : "Dubai-wide: BUDGET is the cheapest half of settled sales by price per sq m, PREMIUM the next 30%, LUXURY the next 15%, ULTRA-LUXURY the top 5%. A price band, not a judgement of any developer." },
+    devs: devList, alias, areas,
   };
 }
 
@@ -97,7 +101,7 @@ if (isMain) {
   const a = {}; for (let i = 2; i < process.argv.length; i += 2) a[process.argv[i].replace(/^--/, "")] = process.argv[i + 1];
   const rd = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
   const prices = rd(a.prices);
-  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10) });
+  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null });
   fs.writeFileSync(a.out, JSON.stringify(idx));
   console.log("areas", Object.keys(idx.areas).length, "developers", Object.keys(idx.devs).length, "bounds", idx.cuts.bounds, "bytes", fs.statSync(a.out).size);
 }
