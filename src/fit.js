@@ -547,6 +547,56 @@ const SAY = {
     firm: ["Weekly target missed: {got} of {want}. Look at which days were skipped and close that gap next week.", "Weekly target missed: {got} of {want}. The gap is in the days you skipped - plan those first next week.", "Weekly target missed: {got} of {want}. Be honest about why, then fix that one thing."],
     brutal: ["Weekly target missed: {got} of {want}. The days you skipped are the gap. Close it next week or stop calling it a target.", "Weekly target missed: {got} of {want}. A target you do not hit is just a wish - hit the next one.", "Weekly target missed: {got} of {want}. You know exactly which days did it. Do not repeat them."]
   },
+  fbMorning: {
+    kind: ["Good morning. Here is how today can go.", "A fresh day. Here is the plan, nice and simple."],
+    firm: ["Today's plan.", "Here is what today asks of you."],
+    brutal: ["Today starts now. Here is what is owed.", "The day is empty. Here is what you promised to put in it."]
+  },
+  fbGoing: {
+    kind: ["You are on track today. Lovely.", "Going well so far - keep it gentle and steady."],
+    firm: ["On track today. Hold it.", "Floor met so far. Keep the rest clean."],
+    brutal: ["On track so far. Do not coast.", "Floor met. Do not waste the rest of the day."]
+  },
+  fbOpen: {
+    kind: ["There is still room to make today count - a walk would do it.", "Plenty of day left. Something small will do."],
+    firm: ["Today's floor is still open. Close it.", "Not done yet today. There is time to fix that."],
+    brutal: ["Nothing counted yet. The day will not do it for you.", "The floor is still open and the clock is running."]
+  },
+  fbLate: {
+    kind: ["There is still time tonight - even a short walk counts.", "The evening is yours. A few minutes of movement is enough."],
+    firm: ["The floor is still open this evening. Get it done.", "Evening, and today is not done yet. Close it."],
+    brutal: ["Evening and the floor is still open. Get up and do it.", "The day is nearly gone and you still owe it. Move."]
+  },
+  fbClosing: {
+    kind: ["Today's floor is done. Finish the evening well.", "You did the main thing today. Close the day gently."],
+    firm: ["Floor done. Close the day clean.", "The floor is met. Keep the last meal inside its window."],
+    brutal: ["Floor done. Do not undo it with a careless evening.", "Floor met. Finish the way you started."]
+  },
+  fbEmpty: {
+    kind: ["Nothing logged yet today - a good moment to start.", "A blank page so far. The first entry is the hardest."],
+    firm: ["Nothing logged yet. Start with the first thing you eat or do.", "Nothing logged yet today. Log the first one."],
+    brutal: ["Nothing logged yet. Silence is not a plan.", "Nothing logged. If it is not written down, it did not count."]
+  },
+  fbWeekBehind: {
+    kind: ["A little behind the week: {left} to go over {days} day{s}. Very doable.", "The week is a touch behind - {left} over {days} day{s} gets you there."],
+    firm: ["Behind the week: {left} still to do over {days} day{s}. Plan it now.", "Week is behind pace: {left} left, {days} day{s} to do it."],
+    brutal: ["Behind. {left} still owed over {days} day{s}. Stop negotiating.", "The week is slipping: {left} owed, {days} day{s} left. Fix it."]
+  },
+  fbWeekOn: {
+    kind: ["The week is on track.", "Right on pace for the week."],
+    firm: ["Week is on pace.", "On pace for the week's target."],
+    brutal: ["On pace. Stay there.", "On pace. That is the minimum, not a reward."]
+  },
+  fbWeekAhead: {
+    kind: ["Ahead of the week - lovely.", "You are ahead of the week. Well done."],
+    firm: ["Ahead of pace. Bank it.", "Ahead of the week. Keep it that way."],
+    brutal: ["Ahead of pace. Do not spend it.", "Ahead. Do not let it turn into a day off."]
+  },
+  fbWeekFresh: {
+    kind: ["A fresh week: target {want}.", "New week, target {want}. A good start is all it takes."],
+    firm: ["Fresh week. Target {want}.", "Week starts now. Target {want}."],
+    brutal: ["New week. Target {want}. Earn it from day one.", "Target {want}. The week starts with today."]
+  },
   rest: {
     kind: ["⏸ Rest day{why}. No judgement - rest is part of it. Back tomorrow.", "⏸ A day off{why}. Look after yourself; the plan will be here."],
     firm: ["⏸ Rest day{why}. It does not count against you. Back at it tomorrow.", "⏸ Paused{why}. No miss recorded. Resume tomorrow."],
@@ -1050,6 +1100,70 @@ async function eveningFor(env, deps, nowMs, u, to, guestWindowOpen) {
   return true;
 }
 
+// ---- "How you are doing": the pop-up sheet. Built from ONE person's own data, in that person's tone, by the same wording engine as the 21:00 verdict.
+// It reads nothing of the other person (no partner line) and never the text of the journal (a count only, and not even that when a PIN is set).
+const FB_EMOJI = /[\u{1F000}-\u{1FAFF}\u{2300}-\u{23FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu;
+const fbClean = (t) => String(t || "").replace(FB_EMOJI, "").replace(/\s{2,}/g, " ").trim();
+export const fbMode = (hm) => (hm < "11:00" ? "morning" : hm < "17:00" ? "midday" : hm < "21:00" ? "evening" : "verdict");
+export async function fitFeedback(env, cfg, nowMs) {
+  const today = gstDate(nowMs), hm = gstHM(nowMs), mode = fbMode(hm), sum = await fitSummary(env, today, cfg, today), st = sum.stats, ch = sum.challenge;
+  const V = sayVars(cfg), tone = cfg.tone, rest = !!sum.rest, ents = sum.entries.filter((e) => e.k === "food" || e.k === "ex"), empty = !ents.length;
+  // the windows against the clock
+  const windows = (cfg.windows || []).map((w) => {
+    const n = sum.entries.filter((e) => e.k === "food" && !e.o && e.t && windowFor(cfg, e.t).name === w.n).length;
+    return { n: w.n, a: w.a, b: w.b, count: n, state: n ? "done" : hm >= w.b ? "missed" : hm >= w.a ? "open" : "later" };
+  });
+  // what is still open for today's qualification
+  const needMin = Math.max(0, cfg.minDay - st.ex), needSteps = cfg.stepsFloor ? Math.max(0, cfg.stepsFloor - st.steps) : 0;
+  const floor = { done: !!st.qualifies, rest, needMin, needSteps: cfg.stepsFloor ? needSteps : 0 };
+  const open = [];
+  if (!rest && !st.qualifies) open.push({ i: "barbell", t: "Exercise: " + fmtMin(needMin) + " more" + (cfg.stepsFloor ? ", or " + fmtSteps(needSteps) + " more steps" : "") });
+  if (!rest) for (const w of windows) { if (w.state === "open") open.push({ i: "meal", t: w.n + " is open until " + w.b + " - nothing logged" }); else if (w.state === "later" && mode !== "verdict") open.push({ i: "clock", t: "Coming up: " + w.n + ", " + w.a + " to " + w.b }); }
+  if (st.out > 0) open.push({ i: "warn", t: st.out + " meal" + (st.out === 1 ? "" : "s") + " outside the windows today" });
+  // the week, scaled for rest days
+  let week = null;
+  if (sum.week.target) {
+    const ws = sum.week.start, before = daysBetween(ws, today);   // days of this week already finished (0 on Monday)
+    const restDays = await fitPausedDates(env, cfg.u, ws, today); let restBefore = 0; for (let i = 0; i < before; i++) if (restDays.has(addDays(ws, i))) restBefore++;
+    const activeTotal = Math.max(1, 7 - (sum.week.rest || 0)), activeBefore = Math.max(0, before - restBefore), expected = Math.round(sum.week.target * activeBefore / activeTotal);
+    const left = Math.max(0, sum.week.target - sum.week.minutes), daysLeft = Math.max(1, activeTotal - activeBefore), diff = sum.week.minutes - expected;
+    const state = sum.week.minutes >= sum.week.target ? "done" : activeBefore === 0 && !st.ex ? "fresh" : diff >= 15 ? "ahead" : diff >= 0 ? "on" : "behind";
+    const line = state === "done" ? fbClean(say(cfg, "weekDone", V, ws)) : say(cfg, state === "behind" ? "fbWeekBehind" : state === "ahead" ? "fbWeekAhead" : state === "fresh" ? "fbWeekFresh" : "fbWeekOn", Object.assign({}, V, { left: fmtMin(left), days: daysLeft, s: daysLeft === 1 ? "" : "s", want: fmtMin(sum.week.target) }), ws + today);
+    week = { minutes: sum.week.minutes, target: sum.week.target, expected, state, line, restDays: sum.week.rest || 0 };
+  }
+  // the headline, in the person's own tone
+  let head;
+  if (rest) { const why = await fitPauseReason(env, cfg.u, today); head = fbClean(say(cfg, "rest", { why: why && why !== "rest" ? " (" + why + ")" : "" }, today)); }
+  else if (mode === "verdict") head = fbClean(!st.qualifies ? say(cfg, "dayFail", V, today) : st.out > 0 ? say(cfg, "mixed", Object.assign({}, V, { out: st.out, s: st.out === 1 ? "" : "s" }), today) : say(cfg, "dayPass", V, today));
+  else if (empty) head = say(cfg, "fbEmpty", V, today + mode);
+  else if (mode === "morning") head = say(cfg, "fbMorning", V, today);
+  else if (st.qualifies) head = say(cfg, mode === "evening" ? "fbClosing" : "fbGoing", V, today + mode);
+  else head = say(cfg, mode === "evening" ? "fbLate" : "fbOpen", V, today + mode);
+  // ONE next step
+  const live = windows.find((w) => w.state === "open"), later = windows.find((w) => w.state === "later");
+  let next;
+  if (rest) next = "Rest, and be back tomorrow.";
+  else if (mode === "verdict") {
+    const sunday = new Date(today + "T00:00:00Z").getUTCDay() === 0;
+    next = sunday ? "Set next week's target before you sleep." : !st.qualifies ? "Tomorrow: " + cfg.minDay + " minutes of anything that moves" + (cfg.stepsFloor ? ", or " + fmtSteps(cfg.stepsFloor) + " steps" : "") + ", before lunch." : st.out > 0 ? "Tomorrow: keep every meal inside its window." : "Do the same again tomorrow.";
+  }
+  else if (empty && mode === "morning") next = "Log your first meal or a short walk - that starts the day.";
+  else if (!st.qualifies) next = "Do " + fmtMin(needMin) + " of anything that moves" + (cfg.stepsFloor ? " or " + fmtSteps(needSteps) + " more steps" : "") + ": a walk counts." + (mode === "evening" ? " Before 21:00." : "");
+  else if (live) next = "Log your " + live.n + " meal before " + live.b + ".";
+  else if (week && week.state === "behind") next = "Add one more session this week to close the gap.";
+  else if (later) next = "Keep " + later.n + " inside " + later.a + " to " + later.b + " and log it.";
+  else next = "Nothing else is needed today. Log what you eat and drink.";
+  // journal and book: one line, counts only
+  const bits = [];
+  try {
+    if (cfg.bookOn) { const bk = await bookInfo(env, cfg, today); bits.push(bk.doneToday ? "Book: written today" + (bk.streak > 1 ? " (streak " + bk.streak + ")" : "") : bk.restToday ? "Book: rest day" : "Book: not yet today" + (bk.streak > 1 ? " (streak " + bk.streak + ")" : "")); }
+    if (!(await jHasPin(env, cfg.u))) { const n = (await jList(env, cfg.u, { day: today, limit: 50 })).length; if (n || cfg.journalRemind) bits.push(n ? "Journal: " + n + " entr" + (n === 1 ? "y" : "ies") + " today" : "Journal: nothing yet today"); }
+  } catch (e) {}
+  return { ok: true, u: cfg.u, mode, key: cfg.u + "_" + today + "_" + mode, day: today, head: fbClean(head), empty: empty && !rest,
+    today: { meals: st.meals, out: st.out, minutes: st.ex, steps: st.steps, protein: st.pmeals > 0 ? st.protein : null, guide: cfg.proteinTarget || 0 },
+    windows, floor, open, week, challenge: ch && ch.day ? { day: Math.min(ch.day, ch.days), days: ch.days, hit: ch.hit, streak: ch.streak, rest: ch.rest } : null, next, note: bits.join("  ·  ") };
+}
+
 // ---- steps sent by the phone ------------------------------------------------------------------------------------------------
 // POST /fit_steps  {"user":"kendall","steps":10234,"date":"2026-10-04"}  with header  X-Momo-Token: <FIT_TOKEN>
 // An iPhone Shortcut (README) sends the day's steps from Apple Health each evening. It has its OWN token, not the owner key: the token can write a step
@@ -1095,6 +1209,7 @@ export async function fitRoutes(request, env, url, h) {
   if (request.method === "GET") {
     if (url.searchParams.get("view") === "history") return J(Object.assign({ ok: true, u: cfg.u, users: us, names }, await fitHistory(env, cfg, today, h)));
     if (url.searchParams.get("view") === "csv") return new Response(await fitCsv(env, cfg, today), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="momo-' + cfg.u + '-' + today + '.csv"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    if (url.searchParams.get("view") === "feedback") return J(await fitFeedback(env, cfg, now));
     if (url.searchParams.get("view") === "journal") {
       const pin = await jHasPin(env, cfg.u), authed = await jAuthed(env, cfg.u, url.searchParams.get("jt")), idq = url.searchParams.get("id");
       if (idq) { if (!authed) return J({ ok: false, locked: true }, 403); const e = await jGet(env, cfg.u, idq); return e ? J({ ok: true, entry: e }) : J({ ok: false, why: "no such entry" }, 404); }
@@ -1181,6 +1296,7 @@ function fitPageHtml(o) {
     '<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0C1413;color:#E6E9E4;font-family:"IBM Plex Sans",system-ui,sans-serif}' + FIT_CSS + FIT_CSS2 + (o.navCss || "") + '</style></head><body><div class="fw">' +
     '<div class="brand"><img class="logo" src="/fit_img/logo.jpg?key=' + keyQ + '" alt="Momo"><div class="fsub" id="sub">&nbsp;</div></div><div class="chips" id="usr" style="margin:0 0 4px"></div>' +
     '<div class="fc" id="who" style="display:none"><h2>WHO IS THIS?</h2><div class="chips" id="whob"></div><div class="note">Pick your name once. This phone remembers it, and everything you log or save here goes under that name.</div></div>' +
+    '<div class="seg"><button class="sw on" id="vb_m">Log</button><button class="sw" id="vb_j">Journal</button><button class="fbb" id="fbopen">Show my feedback</button></div><div id="vm">' +
     '<div class="fc" id="ch"></div>' +
     '<div class="dn"><button id="prev" aria-label="Previous day">&#8249;</button><span id="dl"></span><button id="next" aria-label="Next day">&#8250;</button></div><div class="strip" id="strip"></div>' +
     '<div class="fc"><div class="ph" data-img="food"><b>WHAT I ATE</b></div><div class="pc" id="prot" style="display:none"></div><div id="food"></div><div class="note" id="win"></div>' +
@@ -1194,8 +1310,10 @@ function fitPageHtml(o) {
     '<label>WEEKLY TARGET (HOURS) - CARRIES OVER UNTIL YOU SET IT ON A SUNDAY</label><input id="s_week" type="number" min="0" step="0.5"><label>DAILY FLOOR: WORKOUT MINUTES</label><input id="s_min" type="number" min="5">' +
     '<label>DAILY FLOOR: OR THIS MANY STEPS (0 = OFF)</label><input id="s_steps" type="number" min="0"><label>FEEDBACK TONE</label><select id="s_tone"><option value="kind">Kind</option><option value="firm">Firm</option><option value="brutal">Brutal</option></select>' +
     '<label>PROTEIN GUIDE (GRAMS A DAY, OPTIONAL, 0 = NONE) - A ROUGH GUIDE YOU SET FOR YOURSELF, NOT NUTRITION ADVICE</label><input id="s_protein" type="number" min="0" max="400" step="5">' +
-    '<label>EATING WINDOWS (NAME, FROM, TO)</label><div id="s_win"></div>' +
+    '<label class="chk"><input type="checkbox" id="s_bookon"><span>Remind me to write in my book every day (WhatsApp, only while your 24-hour window is open)</span></label><label>BOOK REMINDER TIME (DUBAI)</label><input id="s_booktime" type="time"><label class="chk"><input type="checkbox" id="s_jrem"><span>Also remind me to add a line to my journal in the app</span></label><label>EATING WINDOWS (NAME, FROM, TO)</label><div id="s_win"></div>' +
     '<div class="note" id="dirt" style="display:none;color:#E0A458">You have unsaved changes - tap "Save the plan" below.</div><label class="chk" id="shl"><input type="checkbox" id="s_share"><span>Share my week and streak with the other person (counts only, never what I ate). It shows only when we both switch it on.</span></label><div class="add"><a class="btn s" id="csv" href="#">Download my log (CSV)</a></div><div class="add"><button class="btn" id="save">Save the plan</button><button class="btn s" id="ext">Extend +30 days</button></div></details>' +
-    '<div class="cred">Photos: Pexels</div><div class="toast" id="toast"></div></div>' + (o.nav || "") +
+    '</div><div id="vj" style="display:none"><div class="fc" id="bk"></div><div class="fc" id="jr"><h2>JOURNAL</h2><div id="jb"></div></div></div>' +
+    '<div class="cred">Photos: Pexels</div><div class="toast" id="toast"></div></div>' +
+    '<div class="sheet" id="fbs" hidden><div class="sbg" id="fbbg"></div><div class="sp" role="dialog" aria-modal="true" aria-label="How you are doing"><div class="grab"></div><div id="fbc"></div><div class="add"><button class="btn" id="fbx" style="width:100%;justify-content:center">Got it</button></div></div></div>' + (o.nav || "") +
     '<script>' + FIT_JS.replace("__KEY__", keyJs).replace("__ICONS__", JSON.stringify(FIT_ICONS)) + '</script></body></html>';
 }

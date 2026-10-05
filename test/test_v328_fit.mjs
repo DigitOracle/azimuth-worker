@@ -978,5 +978,92 @@ delete env.FIT_USERS;
 const idxSrc = (await import("node:fs")).readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 eq((idxSrc.match(/fitReminders\(env, fitDeps\(\)/g) || []).length, 2, "the reminder runs on both cron paths (the minute tick and the 5/30-minute run)");
 
+
+console.log("v352: HOW YOU ARE DOING - the pop-up sheet (clock-pinned, per person, in their tone)");
+store.clear(); outbound = [];
+env.FIT_USERS = "kendall:" + KEN + ":Dr. Doli,najjuko:" + HER + ":Black Coffee";
+const EMOJIZ = /[\u{1F000}-\u{1FAFF}\u{2300}-\u{23FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
+const mkcfgZ = async (u, o) => { const c = fit.fitCleanCfg(Object.assign({ start: "2026-10-01" }, o || {}), Object.assign({}, fit.FIT_CFG_DEFAULT, { u })); await fit.fitSaveCfg(env, c); return await fit.fitCfg(env, u); };
+const FBZ = async (u, iso) => fit.fitFeedback(env, await fit.fitCfg(env, u), T(iso));
+const ATZ = (u, k, o) => fit.fitAdd(env, Object.assign({ u, k }, o));
+// Wed 7 Oct 2026. GST = UTC+4: 08:30 = 04:30Z, 12:00 = 08:00Z, 19:00 = 15:00Z, 21:10 = 17:10Z
+const WEDZ = "2026-10-07", MZ = "2026-10-07T04:30:00Z", MIDZ = "2026-10-07T08:00:00Z", EVEZ = "2026-10-07T15:00:00Z", VERZ = "2026-10-07T17:10:00Z";
+await mkcfgZ("kendall", { tone: "firm" }); await mkcfgZ("najjuko", { tone: "kind" });
+let f = await FBZ("kendall", MZ);
+eq([f.mode, f.empty, f.key], ["morning", true, "kendall_" + WEDZ + "_morning"], "08:30 is the morning, an empty day says so, and the key names person, day and mode");
+ok(/Nothing logged yet/.test(f.head), "an empty day: a friendly 'nothing logged yet' (" + f.head + ")");
+eq([(await FBZ("kendall", MIDZ)).mode, (await FBZ("kendall", EVEZ)).mode, (await FBZ("kendall", VERZ)).mode, (await FBZ("kendall", "2026-10-07T06:59:00Z")).mode, (await FBZ("kendall", "2026-10-07T07:00:00Z")).mode, (await FBZ("kendall", "2026-10-07T12:59:00Z")).mode, (await FBZ("kendall", "2026-10-07T13:00:00Z")).mode, (await FBZ("kendall", "2026-10-07T17:00:00Z")).mode],
+  ["midday", "evening", "verdict", "morning", "midday", "midday", "evening", "verdict"], "the four times of day: before 11:00, 11:00-17:00, 17:00-21:00, from 21:00");
+const eggsFb = await ATZ("kendall", "food", { x: "Eggs on toast", t: T("2026-10-07T03:30:00Z"), d: WEDZ, s: "wa", est: { g: 14, how: "rough" } });
+const gymFb = await ATZ("kendall", "ex", { x: "Gym", m: 45, t: T("2026-10-07T03:00:00Z"), d: WEDZ });
+f = await FBZ("kendall", MIDZ);
+eq([f.empty, f.floor.done, f.windows.map((w) => w.state)], [false, true, ["done", "open", "later"]], "midday with breakfast and a workout: floor done, breakfast done, lunch open, evening later");
+ok(/^Log your Lunch meal before 14:00/.test(f.next) && f.open.some((x) => /Lunch is open until 14:00/.test(x.t)), "midday names what is missing: the lunch window, and the ONE next step is that meal (" + f.next + ")");
+eq([f.today.meals, f.today.minutes, f.today.protein], [1, 45, 14], "today so far: meals, minutes, rough protein");
+await fit.fitDelete(env, gymFb.id, "kendall");
+f = await FBZ("kendall", MIDZ);
+ok(!f.floor.done && f.floor.needMin === 30 && f.open.some((x) => /Exercise: 30 min more/.test(x.t)) && /^Do 30 min of anything that moves/.test(f.next), "no workout yet: 30 min still open for today's qualification, and that is the one next step (" + f.next + ")");
+f = await FBZ("kendall", EVEZ);
+ok(f.mode === "evening" && /Before 21:00\.$/.test(f.next), "evening: the closing push says before 21:00 (" + f.next + ")");
+f = await FBZ("kendall", VERZ);
+ok(f.mode === "verdict" && /You missed today/.test(f.head) && /^Tomorrow: 30 minutes/.test(f.next), "after 21:00 it is the verdict, in firm tone, and the one step is tomorrow's (" + f.head.slice(0, 60) + ")");
+const headsFb = {};
+for (const tone of ["kind", "firm", "brutal"]) { await mkcfgZ("kendall", { tone }); headsFb[tone] = (await FBZ("kendall", VERZ)).head; }
+ok(new Set(Object.values(headsFb)).size === 3, "the three tones say three different things for the same bad day");
+ok(!/heavier|fat|horrible person|stupid|lazy/i.test(headsFb.kind + headsFb.firm), "kind and firm never shame: " + headsFb.kind.slice(0, 50));
+ok(/weak|nothing|owe|bare|promise/i.test(headsFb.brutal) && !/you are (a )?(horrible|worthless|disgusting)/i.test(headsFb.brutal), "brutal is about the behaviour, never a verdict on the person");
+await mkcfgZ("kendall", { tone: "firm" });
+const gymFb2 = await ATZ("kendall", "ex", { x: "Gym", m: 45, t: T("2026-10-07T03:00:00Z"), d: WEDZ });
+await ATZ("kendall", "food", { x: "Late shawarma", t: T("2026-10-07T07:00:00Z"), d: WEDZ, o: true, s: "wa" });
+f = await FBZ("kendall", VERZ);
+ok(/outside/i.test(f.head) && f.open.some((x) => /outside the windows/.test(x.t)), "floor met but a meal outside its window: the verdict says so, in the open list too");
+await fit.fitDelete(env, gymFb2.id, "kendall");
+// Monday: the week starts
+f = await FBZ("kendall", "2026-10-05T04:30:00Z");
+eq([f.week.state, f.week.expected, f.week.minutes], ["fresh", 0, 0], "Monday morning is a fresh week: nothing expected yet");
+await ATZ("kendall", "ex", { x: "Run", m: 60, t: T("2026-10-05T03:00:00Z"), d: "2026-10-05" });
+f = await FBZ("kendall", "2026-10-05T08:00:00Z");
+eq([f.week.minutes, f.week.state], [60, "ahead"], "Monday with a 60 min run: the week starts on Monday, and it is ahead of pace");
+f = await FBZ("kendall", "2026-10-11T08:00:00Z");   // the Sunday: six days finished
+ok(f.week.expected === Math.round(600 * 6 / 7) && ["behind", "on", "ahead", "done"].includes(f.week.state), "Sunday: six of seven days are expected (" + f.week.expected + " of 600)");
+// a rest day
+await fit.fitPause(env, "kendall", WEDZ, 1, "ill");
+f = await FBZ("kendall", MIDZ);
+ok(f.floor.rest && /Rest day|Paused|day off/.test(f.head) && /ill/.test(f.head) && !f.open.some((x) => x.i === "barbell") && /^Rest/.test(f.next), "a rest day: kind about it, nothing is owed, no exercise item (" + f.head + ")");
+eq([f.week.restDays, f.week.target], [1, Math.round(600 * 6 / 7)], "and the week's target is scaled for the rest day (6/7 of 10 hours)");
+await fit.fitResume(env, "kendall", WEDZ);
+// isolation
+await mkcfgZ("kendall", { tone: "firm" });
+await ATZ("najjuko", "food", { x: "NAJ-ONLY-MEAL", t: T("2026-10-07T03:30:00Z"), d: WEDZ, s: "wa" });
+await ATZ("najjuko", "ex", { x: "NAJ-ONLY-RUN", m: 99, t: T("2026-10-07T03:00:00Z"), d: WEDZ });
+await fit.jAdd(env, "kendall", { text: "his private journal line " + SECRET, d: WEDZ, t: T("2026-10-07T05:00:00Z") });
+const fkZ = await FBZ("kendall", MIDZ), fnZ = await FBZ("najjuko", MIDZ);
+const jkZ = JSON.stringify(fkZ), jnZ = JSON.stringify(fnZ);
+ok(!/NAJ-ONLY|najjuko|Black Coffee/i.test(jkZ) && !jnZ.includes("Eggs on toast") && fnZ.today.minutes === 99 && fkZ.today.minutes === 0, "each sheet holds only that person's own data");
+ok(!jkZ.includes(SECRET) && !jnZ.includes(SECRET), "no journal text in either sheet");
+ok(fkZ.u === "kendall" && fnZ.u === "najjuko" && fkZ.key !== fnZ.key, "the key differs per person");
+ok(!EMOJIZ.test(jkZ) && !EMOJIZ.test(jnZ), "no emoji in the sheet");
+// the line about book and journal: counts only
+await fit.fitSaveCfg(env, Object.assign(await fit.fitCfg(env, "kendall"), { bookOn: true }));
+f = await FBZ("kendall", MIDZ);
+ok(/Book: not yet today/.test(f.note) && /Journal: 1 entry today/.test(f.note) && !f.note.includes(SECRET), "one line for the book and the journal: status and a count, never the words (" + f.note + ")");
+await post("/fit_api?u=kendall", { op: "jpin", pin: "4821" });
+f = await FBZ("kendall", MIDZ);
+ok(!/Journal/.test(f.note), "with a PIN set, not even a journal count is shown on the sheet");
+await fit.bookMark(env, "kendall", WEDZ, true);
+ok(/Book: written today/.test((await FBZ("kendall", MIDZ)).note), "once the book is ticked the line says so");
+// once a day per open: the key is stable inside a mode and changes with day, mode and person
+const k1Z = (await FBZ("kendall", MIDZ)).key, k2Z = (await FBZ("kendall", "2026-10-07T09:30:00Z")).key, k3Z = (await FBZ("kendall", "2026-10-08T08:00:00Z")).key;
+ok(k1Z === k2Z && k1Z !== k3Z && k1Z !== (await FBZ("kendall", EVEZ)).key, "the same sheet keeps one key all through its time of day; a new day or time of day is a new sheet");
+const pageSrc = await (await call(K("/fit"))).text();
+ok(/localStorage\.getItem\('fit_fb_'\+j\.key\)==='1'/.test(pageSrc) && /localStorage\.setItem\('fit_fb_'\+FB\.key/.test(pageSrc) && /FBSEEN\[S\.u\]/.test(pageSrc), "the page pops it once per open, remembers a dismissal per person per day and time of day, and has a button to show it again");
+ok(/id="fbopen"[^>]*>Show my feedback/.test(pageSrc), "a 'Show my feedback' button is on the page");
+ok(!EMOJIZ.test(pageSrc.replace(/<style[\s\S]*?<\/style>/, "")), "no emoji anywhere in the page");
+// the route
+const rjZ = await jget("/fit_api?u=najjuko&view=feedback");
+ok(rjZ.j && rjZ.j.ok && rjZ.j.u === "najjuko" && !JSON.stringify(rjZ.j).includes("Eggs on toast"), "GET view=feedback answers for the named person only");
+eq((await call(K("/fit_api?u=najjuko&view=feedback", CLIENT))).status, 404, "a client key gets 404 on it, like every Momo route");
+delete env.FIT_USERS;
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
