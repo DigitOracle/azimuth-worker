@@ -1,8 +1,8 @@
 // v351 - the investor PDF grows from two pages to as many as five: 3 The investor decision, 4 The evidence, 5 Scenarios.
 // Synthetic index and a sample record with the shape of KV img_investor3 (built by scripts/investor3_build.py in the data repo). Nothing live is read or written.
 import { buildAreaPdf, parseParams, devmapPdfRoute } from "../src/devmap_pdf.js";
-import { irr, npv, backtest, replay, scenario, annual, TRANSFER_FEE } from "../src/devmap_irr.js";
-import { page3, page4, page5, scenarioSet, figures, SCENARIO_DISCLAIMER, BACKTEST_NOTE } from "../src/devmap_investor3.js";
+import { irr, npv, backtest, replay, scenario, annual, cases, svcSensitivity, TRANSFER_FEE } from "../src/devmap_irr.js";
+import { page3, page4, page5, page6, scenarioSet, figures, SCENARIO_DISCLAIMER, BACKTEST_NOTE, NA_SVC, WARN_SVC, NOT_FORECAST } from "../src/devmap_investor3.js";
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m); } };
@@ -85,9 +85,49 @@ console.log("the scenario arithmetic");
   ok(Math.abs(npv(r.irr, r.cfs)) < 1e-4, "the scenario's IRR zeroes its own cash flows");
   ok(near(annual(0.4, 5), Math.pow(1.4, 0.2) - 1, 1e-12), "a five-year change becomes a yearly rate");
   const S = scenarioSet(mkRec(), AREA3, DUBAI, META);
-  ok(S && S.cons.r.irr < S.mid.r.irr && S.mid.r.irr < S.up.r.irr, "conservative < base < upside");
+  ok(S && S.stress.r.irr < S.moderate.r.irr && S.moderate.r.irr < S.firm.r.irr, "stress < moderate < firm");
+  ok(S.stress.g === 0 && S.moderate.g === 0.03 && S.firm.g === 0.06, "the three fixed cases grow 0%, 3% and 6% a year");
+  ok(S.hist.w.from === 2019 && near(S.hist.g, annual(0.3182, 5), 1e-12), "the historical case is the register's middle window (2019 to 2024)");
+  ok(S.lower.g < S.hist.g && S.hist.g < S.upper.g, "the lower and upper historical windows bracket it");
   ok(S.sens.vac[0].irr > S.sens.vac[2].irr && S.sens.gro[0].irr < S.sens.gro[2].irr, "more vacancy lowers the IRR, more growth raises it");
   ok(scenarioSet(Object.assign(mkRec(), { size_sqft: null }), Object.assign({}, AREA3, { size_sqft: null }), DUBAI, META) == null, "no home size: no scenario inputs");
+}
+
+console.log("v351.2: the cases, the profit identity, the splits, the service charge sensitivity (hand-checked)");
+{
+  const a = { price: 1000000, feeTransfer: 0.04, feeOther: 0.02, rent0: 60000, rentGrowth: 0, svc: 0, vacancy: 0.05, mgmt: 0.05, sellCost: 0.02, years: 5 };
+  const z = scenario(Object.assign({}, a, { growth: 0 }));
+  // the 0% case by hand: in 1,060,000; income after vacancy and management 54,000 a year = 270,000; sale 1,000,000 less 2% = 980,000
+  ok(near(z.cash0, 1060000) && near(z.cumInc, 270000) && near(z.cum, 270000) && near(z.exitGross, 1000000) && near(z.exitNet, 980000) && near(z.sellCost, 20000), "0% case: 1,060,000 in, 270,000 of income, 980,000 from the sale after 20,000 selling cost");
+  ok(near(z.profit, 270000 + 980000 - 1060000) && near(z.profit, 190000), "0% case: modeled profit is 190,000");
+  ok(near(z.profit, z.totalOut - z.totalIn) && near(z.totalOut, 1250000), "profit = total out - total in (1,250,000 - 1,060,000)");
+  let sc = 0, sa = Infinity; for (let k = 0; k <= 100000; k++) { const x = k / 1e6, v = Math.abs([-1060000, 54000, 54000, 54000, 54000, 1034000].reduce((p, c, t) => p + c / Math.pow(1 + x, t), 0)); if (v < sa) { sa = v; sc = x; } }
+  ok(near(z.irr, sc, 2e-6) && z.irr > 0.0369 && z.irr < 0.0370, "0% case IRR is 3.69%: -1,060,000, then 54,000 four times, then 54,000 + 980,000; a brute-force scan finds the same rate (" + (sc * 100).toFixed(3) + "%)");
+  ok(near(z.cashOnCash1, 54000 / 1060000, 1e-12) && near(z.incomeReturn1, z.cashOnCash1, 1e-12), "year-one cash return = 54,000 / 1,060,000 with no service charge");
+  ok(near(z.grossYield, 0.06) && near(z.afterCostsYield, 0.054), "waterfall: gross yield 6.0%, less vacancy and management 0.6 points, cash return before service charges 5.4%");
+  ok(near(z.split.exit, 0) && near(z.split.rent, 1), "no appreciation: all of the gain comes from rent, none from the sale price");
+  // a case with growth: split arithmetic by hand. price 1,000,000, 5% a year: exit 1,276,281.56; appreciation 276,281.56; income 270,000
+  const g = scenario(Object.assign({}, a, { growth: 0.05 }));
+  const app = 1000000 * (Math.pow(1.05, 5) - 1), tot = app + 270000;
+  ok(near(g.appreciation, app, 1e-6) && near(g.split.exit, app / tot, 1e-12) && near(g.split.rent, 270000 / tot, 1e-12) && near(g.split.exit + g.split.rent, 1, 1e-12), "split: " + Math.round(g.split.exit * 100) + "% from the sale price, " + Math.round(g.split.rent * 100) + "% from rent (276,282 against 270,000)");
+  ok(near(g.profit, g.cum + g.exitNet - g.cash0, 1e-6) && near(g.profit, g.totalOut - g.totalIn, 1e-6), "profit identity with growth");
+  // a service charge lowers year one by exactly its amount and the profit by five times that
+  const w = scenario(Object.assign({}, a, { growth: 0.05, svc: 10000 }));
+  ok(near(g.rows[0].net - w.rows[0].net, 10000) && near(g.profit - w.profit, 50000, 1e-6), "a 10,000 service charge takes 10,000 off year one and 50,000 off the profit");
+  ok(near(w.rows[0].inc, g.rows[0].inc), "income after vacancy and management does not move with the service charge");
+  // cases() and the service charge sensitivity
+  const rp = { slow: { change: 0.2, from: 2018, to: 2023 }, mid: { change: 0.3, from: 2019, to: 2024 }, fast: { change: 0.4, from: 2020, to: 2025 } };
+  const K = cases(a, rp);
+  ok(K.stress.g === 0 && K.moderate.g === 0.03 && K.firm.g === 0.06 && near(K.hist.g, annual(0.3, 5), 1e-12), "cases: 0%, 3%, 6% and the middle window");
+  ok(near(K.lower.g, annual(0.2, 5), 1e-12) && near(K.upper.g, annual(0.4, 5), 1e-12), "lower and upper historical windows are the slowest and fastest past windows");
+  ok(K.vac.length === 3 && near(K.vac[1].irr, K.hist.r.irr, 1e-12), "the 5% vacancy point of the strip is the historical case itself");
+  ok(near(K.gro[1].irr, K.hist.r.irr, 1e-12) && K.gro[0].irr < K.gro[2].irr, "the zero-shift growth point is the historical case");
+  const SS = svcSensitivity(a, 800, K.hist.g, null);
+  ok(SS.map((r) => r.psf).join() === "0,15,20" && SS.every((r) => r.kind === "illustrative"), "no register figure: 0, 15 and 20 per sq ft, all illustrative");
+  ok(near(SS[1].svc, 12000) && near(SS[1].cash1, (54000 - 12000) / 1060000, 1e-12), "15 per sq ft on 800 sq ft is 12,000 a year; year-one cash return (54,000 - 12,000) / 1,060,000");
+  ok(near(SS[0].irr, K.hist.r.irr, 1e-12), "0 per sq ft equals the case with no service charge");
+  const SR = svcSensitivity(Object.assign({}, a, { svc: 13440 }), 800, K.hist.g, 16.8);
+  ok(SR.map((r) => r.psf).join() === "0,15,16.8,20" && SR.find((r) => r.psf === 16.8).kind === "register", "a register figure is added to the strip and marked register");
 }
 
 // ---------------------------------------------------------------- the whole document
@@ -114,26 +154,26 @@ const build = (inv3, o) => buildAreaPdf(mkEnv(inv3), parseParams(new URL(url(o))
 console.log("page counts by data availability");
 {
   const full = await build(mkInv3(mkRec()));
-  ok(full.status === 200 && full.pages === 5, "full record: five pages (" + full.pages + ")");
-  ok((full.html.match(/class="sheet page/g) || []).length === 5, "five A4 sheets");
-  ok(/Page 1 of 5/.test(text(full.html)) && /Page 5 of 5/.test(text(full.html)), "the footers count to five");
+  ok(full.status === 200 && full.pages === 7, "full record: seven pages (" + full.pages + ")");
+  ok((full.html.match(/class="sheet page/g) || []).length === 7, "seven A4 sheets");
+  ok(/Page 1 of 7/.test(text(full.html)) && /Page 7 of 7/.test(text(full.html)), "the footers count to seven");
   const none = await build(null);
   ok(none.pages === 2 && /Page 2 of 2/.test(text(none.html)), "no record on file: exactly the two pages, footers as before");
   const wrongPair = await build({ meta: META, dubai: DUBAI, areas: { testvillagecircle: AREA3 }, pairs: { "testvillagecircle|other": mkRec() } });
   ok(wrongPair.pages === 2, "a record without this pair: two pages");
   const noScen = mkRec(); noScen.size_sqft = null;
   const d4 = await build(mkInv3(noScen, Object.assign({}, AREA3, { size_sqft: null })));
-  ok(d4.pages === 4, "scenario inputs missing: four pages (" + d4.pages + ")");
+  ok(d4.pages === 5, "scenario inputs missing: five pages (" + d4.pages + ")");
   const noEv = mkRec(); noEv.blds = []; noEv.rent_y = {}; noEv.liq_y = {};
   const d4b = await build(mkInv3(noEv, Object.assign({}, AREA3, { supply: null })));
-  ok(d4b.pages === 4 && /scenarios/i.test(text(d4b.html)) && !/The evidence/.test(text(d4b.html)), "no evidence at all: the evidence page is left out, scenarios stay (4)");
+  ok(d4b.pages === 6 && /scenarios/i.test(text(d4b.html)) && !/The evidence/.test(text(d4b.html)), "no evidence at all: the evidence page is left out, the two scenario pages stay (6)");
   const d3 = await build(mkInv3(Object.assign(noEv, { size_sqft: null }), Object.assign({}, AREA3, { supply: null, size_sqft: null })));
-  ok(d3.pages === 3, "no evidence and no scenario inputs: three pages (" + d3.pages + ")");
+  ok(d3.pages === 4, "no evidence and no scenario inputs: four pages (" + d3.pages + ")");
   // the same code path serves the client key and the owner key: 5 pages for both, no owner gate
   for (const [nm, key] of [["client", "client_key_123456"], ["owner", "owner_key_abcdefgh"]]) {
     const r = await devmapPdfRoute(new Request(url({ key, format: "html" })), mkEnv(mkInv3(mkRec())), new URL(url({ key, format: "html" })), { keyOk: () => true });
     const h = await r.text();
-    ok(r.status === 200 && r.headers.get("X-Brief-Pages") === "5" && /Scenarios/.test(text(h)), nm + " key: five pages and the scenarios page");
+    ok(r.status === 200 && r.headers.get("X-Brief-Pages") === "7" && /Scenarios/.test(text(h)), nm + " key: seven pages and the scenarios pages");
     ok(!/INTERNAL|NOT FOR CLIENTS/i.test(h), nm + " key: no internal strip");
   }
 }
@@ -141,7 +181,7 @@ console.log("page counts by data availability");
 console.log("what the pages say");
 {
   const d = await build(mkInv3(mkRec()), { client: "Najjuko" });
-  const t = text(d.html), p3 = text(d.html.split('class="sheet page')[3]), p4 = text(d.html.split('class="sheet page')[4]), p5 = text(d.html.split('class="sheet page')[5]);
+  const t = text(d.html), p3 = text(d.html.split('class="sheet page')[4]), p4 = text(d.html.split('class="sheet page')[5]), p5 = text(d.html.split('class="sheet page')[6]), p6 = text(d.html.split('class="sheet page')[7]);
   ok(!EMOJI.test(d.html), "no emoji code points");
   ok(!BANNED.test(t), "none of the banned words appear (" + (BANNED.exec(t) || [""])[0] + ")");
   ok(/The investor decision/.test(p3) && /Income/.test(p3) && /Growth/.test(p3) && /Liquidity/.test(p3) && /Supply/.test(p3) && /Most activity/.test(p3), "page 3: the five boxes");
@@ -164,10 +204,31 @@ console.log("what the pages say");
   ok(/Repeat sales of the same unit/.test(p4) && /not in the register/.test(p4), "page 4: repeat sales are not in the register");
   ok(/Payment plans and rent at delivery are not in any register/.test(p4) && /Planned completion 30 March 2027/.test(p4), "page 4: off-plan context with the register's planned date");
   ok(/new contracts/.test(p4) && /renewals/.test(p4), "page 4: new and renewed contracts are split");
-  ok(/Scenarios/.test(p5) && /Conservative/.test(p5) && /Base/.test(p5) && /Upside/.test(p5), "page 5: three scenario cards");
-  ok(p5.includes(SCENARIO_DISCLAIMER), "page 5: the scenario disclaimer is printed verbatim");
-  ok(/assumption/.test(p5) && (p5.match(/assumption/g) || []).length >= 4, "page 5: the assumed numbers are labelled assumption");
-  ok(/The middle scenario, year by year/.test(p5) && /How the middle scenario moves/.test(p5), "page 5: worked cash-flow table and the sensitivity strip");
+  ok(/Scenarios/.test(p5) && /Stress case/.test(p5) && /Moderate case/.test(p5) && /Firm case/.test(p5) && /Historical case/.test(p5), "page 5: the four cases by price growth");
+  ok(!/Conservative|Upside|Base case/.test(t), "the old Conservative / Base / Upside labels are gone");
+  ok(/0% a year: the property does not appreciate/.test(p5) && /Based on the 2019 to 2024 window/.test(p5), "page 5: the stress case and the historical window are named");
+  ok(p5.includes(NOT_FORECAST), "page 5: 'These are scenarios, not forecasts.'");
+  ok(/How much cash do I need\?/.test(p5) && /What does it generate while I own it\?/.test(p5) && /What has to happen for the historical-case return\?/.test(p5) && /What happens if it does not\?/.test(p5), "page 5: the four-answer box");
+  ok(/With no price growth the five-year return is \d+\.\d%/.test(p5) && /The price must rise about \d+\.\d% a year/.test(p5) && /all-in/.test(p5), "page 5: the four answers carry numbers");
+  ok(/IRR \d+\.\d%: the modeled yearly return across the whole five years, counting rent and the sale\./.test(p5), "page 5: the IRR in plain English");
+  ok(/The money, historical case/.test(p5) && /Cash invested \(price \+ buying costs\)/.test(p5) && /Modeled profit/.test(p5) && /in, AED [\d,]+ out/.test(p5) && /Stress case \(no price growth\)/.test(p5), "page 5: the AED profit block and the stress line");
+  ok(/Where the return comes from/.test(p5) && /of the modeled gain comes from the sale price/.test(p5) && /Gross yield \(rent over price\)/.test(p5) && /Cash return before service charges/.test(p5), "page 5: where the return comes from and the waterfall");
+  ok(!/Net income/i.test(p5 + p6), "no 'Net income' anywhere: it is 'Income after vacancy and management'");
+  const noSvcRec = mkRec(); noSvcRec.svc = { n: 0, of: 5 };
+  const dn = await build(mkInv3(noSvcRec)), pn = dn.html.split('class="sheet page'), q5 = text(pn[6]), q6 = text(pn[7]);
+  ok(q5.includes(WARN_SVC) && q6.includes(NA_SVC) && /before service charges/.test(q5), "no service charge on the register: the warning strip and NOT AVAILABLE");
+  ok(!/Service charge[^A-Za-z]{0,12}(AED )?0\b/.test(q5 + q6) && !/Less service charge/.test(q6), "and never a printed 0 service charge");
+  ok(/If the service charge were/.test(q6) && /15 \(illustrative\)/.test(q6) && /20 \(illustrative\)/.test(q6) && /not register data/.test(q6), "page 6: the service charge sensitivity, 15 and 20 labelled illustrative when the register has none");
+  ok(!p5.includes(WARN_SVC), "a record that holds a service charge: no warning strip");
+  ok(/From the register/.test(p6) && /Model assumptions/.test(p6) && /Not available/.test(p6) && /Maintenance/.test(p6) && /Financing/.test(p6) && /Furnishing/.test(p6), "page 6: the assumptions in three boxes");
+  ok(/Income after vacancy and management/.test(p6) && /The historical case, year by year/.test(p6) && /Lower historical window/.test(p6) && /Upper historical window/.test(p6), "page 6: the table and the sensitivity strip with the lower and upper windows");
+  ok(p5.includes(SCENARIO_DISCLAIMER) && p6.includes(SCENARIO_DISCLAIMER), "pages 5 and 6: the scenario disclaimer, verbatim");
+  ok(/assumption/.test(p6) && (p6.match(/assumption/g) || []).length >= 4, "page 6: the assumed numbers are labelled assumption");
+  ok(/This page is about Acme Developments in Test Village Circle/.test(p3) && /This page is about Acme Developments in Test Village Circle/.test(p4) && /This page is about Acme Developments in Test Village Circle/.test(p5) && /This page is about Acme Developments in Test Village Circle/.test(p6), "pages 3 to 6: the strip 'This page is about <developer> in <area>'");
+  ok(/The middle scenario|Conservative/.test(t) === false, "no leftover old labels");
+  // a record that holds a service charge: no warning, the figure is used and the sensitivity marks it
+  const withS = text(d.html), hasSvc = withS.includes("Less service charge") && !withS.includes(WARN_SVC);
+  ok(hasSvc && /\(register\)/.test(p6), "service charge on the register: used, no warning strip, marked register in the sensitivity");
   ok(/for discussion/i.test(p5), "page 5: the figures are for discussion");
   ok(!/–0|-0\b/.test(p5.replace(/-0\.\d/g, "")), "page 5: no minus zero");
   const none = await build(null);
@@ -180,7 +241,7 @@ console.log("v351.1: headline basis, thin series, cap");
   thin.rent_cagr = { from: 2022, to: 2025, rate: 0.1569 };
   const S = scenarioSet(thin, AREA3, DUBAI, META);
   ok(S.rentScope === "area" && S.rentShort && near(S.rentGrowth, 0.04), "own series too short: the area's rent growth (4%) is used, not the pair's 15.7%");
-  const html = text(page5({ names: {} }, {}, S));
+  const html = text(page6({ names: { plain: "T" } }, { name: "A" }, S));
   ok(/this developer's own rent series is too short/.test(html), "page 5 says the pair's own rent series is too short");
   const long = mkRec(); long.rent_y = {}; for (let y = 2020; y <= 2025; y++) long.rent_y[y] = { n: 150, rent: 50000 * Math.pow(1.2, y - 2020), psf: 100 };
   const S2 = scenarioSet(long, AREA3, DUBAI, META);
@@ -195,6 +256,28 @@ console.log("v351.1: headline basis, thin series, cap");
   ok(/933/.test(d) && /6\.4%/.test(d) && /1,507 rent contracts/.test(d) && !/>962</.test(d), "page 3 headline: 933 sales, 6.4%, 1,507 contracts (the index figures)");
   ok(/\+10\.0%/.test(d) && /1,022 sales in 2025/.test(d), "page 3 growth and last-year sales follow the page 1 series");
   ok(/small differences between the pages are normal/.test(d), "page 3 says the later figures are a recount");
+}
+console.log("v353: the executive summary is page 1, only when there is a record");
+{
+  const d = await build(mkInv3(mkRec()), { client: "Najjuko" });
+  const sheets = d.html.split('class="sheet page'), s1 = text(sheets[1]), s2 = text(sheets[2]), s3 = text(sheets[3]);
+  ok(d.pages === 7 && /Page 1\s+executive summary/i.test(s1), "seven pages; page 1 is the executive summary");
+  ok(/Should you invest here\? What the register says/.test(s1) && /Reading:/.test(s1), "page 1: the title and the reading chip");
+  ok(/Three reasons the register supports a closer look/.test(s1) && /Three reasons for caution/.test(s1) && /What would change this view/.test(s1) && /Questions to ask before buying/.test(s1) && /Where to find the evidence/.test(s1), "page 1: reasons, cautions, changers, questions, pointers");
+  ok(/How this reading is made/.test(s1) && /No score, no model/.test(s1) && /not a forecast, not a promised return, not financial advice and not an offer/.test(s1), "page 1: the one-line method note and the disclaimer");
+  ok(/Page 2\s+the headline case/i.test(s2) && /Investor summary/.test(s2) && /Page 3\s+the supporting figures/i.test(s3), "the old pages 1 and 2 are now pages 2 and 3");
+  ok(/Price history chart: page 2/.test(s1) && /unit types: page 4/.test(s1) && /off-plan: page 5/.test(s1) && /Scenarios: page 6, workings: page 7/.test(s1), "the pointers name the pages that exist");
+  ok(/Page 1 of 7/.test(s1) && /Page 2 of 7/.test(s2), "footers count to seven");
+  const p4t = text(sheets[4]);
+  ok(/This page is about/.test(p4t) && /Page 5 splits off-plan/.test(p4t) && /pages 2 and 3/.test(p4t), "the decision page points at the shifted page numbers");
+  ok(!EMOJI.test(sheets[1]) && !BANNED.test(s1) && !/\b(AI|KV)\b/.test(s1), "page 1: no emoji, no banned words");
+  const noScen = mkRec(); noScen.size_sqft = null;
+  const d5 = await build(mkInv3(noScen, Object.assign({}, AREA3, { size_sqft: null })));
+  ok(d5.pages === 5 && !/Scenarios: page/.test(text(d5.html.split('class="sheet page')[1])) && !/page undefined/.test(d5.html), "no scenarios: the summary does not point at pages that are not there");
+  const none = await build(null);
+  ok(none.pages === 2 && !/Should you invest here|executive summary/i.test(none.html) && /Page 1 &middot; the headline case/.test(none.html), "no record: no summary, the headline page is still page 1 of 2");
+  const wrongPair = await build({ meta: META, dubai: DUBAI, areas: { testvillagecircle: AREA3 }, pairs: { "testvillagecircle|other": mkRec() } });
+  ok(wrongPair.pages === 2 && !/executive summary/i.test(wrongPair.html), "a record without this pair: no summary");
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -6,7 +6,7 @@
 // All of it is read from the precomputed record KV img_investor3 (scripts/investor3_build.py in the data repo). Nothing is invented here: vacancy, fees and loans are not in any register.
 import { BRIEF_KIT, esc } from "./brief_docs.js";
 import { icon, dateLong, shortName } from "./devmap_pdf.js";
-import { backtest, replay, scenario, annual, TRANSFER_FEE, MIN_N } from "./devmap_irr.js";
+import { backtest, replay, scenario, annual, cases, svcSensitivity, TRANSFER_FEE, MIN_N } from "./devmap_irr.js";
 
 const { NAVY, MUTED } = BRIEF_KIT;
 const TEAL = "#0A4F4A", GOLDI = "#C5A56A", INK = "#22262B", HAIR = "#E6E1D8";
@@ -16,7 +16,7 @@ const fmt = (n) => (n == null || !isFinite(n) ? "" : Math.round(n).toLocaleStrin
 const aed = (n) => "AED " + fmt(n);
 const p1 = (x) => (Math.round(Math.abs(x) * 1000) / 10).toFixed(1) + "%";
 const p0 = (x) => Math.round(Math.abs(x) * 100) + "%";
-const sg = (x) => (x < 0 ? "&minus;" : "+") + p1(x);
+const sg = (x) => (Math.abs(x) < 0.0005 ? "" : x < 0 ? "&minus;" : "+") + p1(x);
 const sg0 = (x) => (x < 0 ? "&minus;" : "+") + p0(x);
 
 export const ASSUMPTIONS = { feeOther: 0.02, vacancy: 0.05, mgmt: 0.05, sellCost: 0.02 };   // printed as assumptions on page 5; none of them is a register figure
@@ -72,14 +72,14 @@ export function scenarioSet(rec0, area, dubai, meta, m) {
   const rec = m ? headRec(rec0, m) : rec0;
   const f = figures(rec, area, dubai, meta), y = rec.yield || area.yield;
   if (!f.psf || !f.size || !y || !f.rp) return null;
-  const price = f.psf * f.size, rent0 = y.rate * price, svc = f.svcPsf != null ? f.svcPsf * f.size : 0;
+  const price = f.psf * f.size, rent0 = y.rate * price, svcKnown = f.svcPsf != null, svc = svcKnown ? f.svcPsf * f.size : 0;
   const rentGrowth = f.rentG ? f.rentG.rate : 0;
   const base = { price, feeTransfer: TRANSFER_FEE, feeOther: ASSUMPTIONS.feeOther, rent0, rentGrowth, svc, vacancy: ASSUMPTIONS.vacancy, mgmt: ASSUMPTIONS.mgmt, sellCost: ASSUMPTIONS.sellCost, years: 5 };
-  const mk = (w) => { const g = annual(w.change, 5); return { w, g, r: scenario(Object.assign({}, base, { growth: g })) }; };
-  const S = { f, base, size: f.size, psf: f.psf, price, rent0, svc, svcKnown: f.svcPsf != null, rentGrowth, rentScope: f.rentG ? f.rentG.scope : null, rentFrom: f.rentG ? f.rentG.from : null, rentTo: f.rentG ? f.rentG.to : null, rentShort: !!(f.rentG && f.rentG.short), rentCapped: !!(f.rentG && f.rentG.capped), rentCapFrom: f.rentG && f.rentG.capFrom, rentCapTo: f.rentG && f.rentG.capTo, yieldScope: rec.yield ? "developer" : "area", scope: f.rp.scope,
-    cons: mk(f.rp.slow), mid: mk(f.rp.mid), up: mk(f.rp.fast) };
-  S.sens = { vac: [0, 0.05, 0.10].map((v) => ({ v, irr: scenario(Object.assign({}, base, { growth: S.mid.g, vacancy: v })).irr })), gro: [-0.02, 0, 0.02].map((d) => ({ d, g: S.mid.g + d, irr: scenario(Object.assign({}, base, { growth: S.mid.g + d })).irr })) };
-  return S;
+  const K = cases(base, f.rp);
+  return { f, base, size: f.size, psf: f.psf, price, rent0, svc, svcKnown, svcPsf: f.svcPsf, gy: y.rate, rentGrowth, rentScope: f.rentG ? f.rentG.scope : null, rentFrom: f.rentG ? f.rentG.from : null, rentTo: f.rentG ? f.rentG.to : null,
+    rentShort: !!(f.rentG && f.rentG.short), rentCapped: !!(f.rentG && f.rentG.capped), rentCapFrom: f.rentG && f.rentG.capFrom, rentCapTo: f.rentG && f.rentG.capTo,
+    yieldScope: rec.yield ? "developer" : "area", scope: f.rp.scope, rp: f.rp, K, stress: K.stress, moderate: K.moderate, firm: K.firm, hist: K.hist, lower: K.lower, upper: K.upper,
+    sens: { vac: K.vac, gro: K.gro }, svcSens: svcSensitivity(base, f.size, K.hist.g, svcKnown ? f.svcPsf : null) };
 }
 
 // ------------------------------------------------------------------------------------------------ small drawings
@@ -137,7 +137,7 @@ function fiveBoxes(rec, area, f, m) {
   // LIQUIDITY
   const hr = rec.head && rec.head.rows ? rec.head.rows.find((r) => r.year === f.lastFull) : null;
   const lastN = hr ? hr.sales : rec.price_y && rec.price_y[f.lastFull] ? rec.price_y[f.lastFull][0] : null;
-  const liqBox = box("chart-donut", "Liquidity", fmt(rec.sales_l12) + " <small>sales, last 12 months</small>", '<div class="i3cap">' + (lastN ? fmt(lastN) + " sales in " + f.lastFull + ". " : "") + "The register does not say who sold to whom, so resale against first sale is not shown. Page 4 splits off-plan from existing-property registrations.</div>", 2);
+  const liqBox = box("chart-donut", "Liquidity", fmt(rec.sales_l12) + " <small>sales, last 12 months</small>", '<div class="i3cap">' + (lastN ? fmt(lastN) + " sales in " + f.lastFull + ". " : "") + "The register does not say who sold to whom, so resale against first sale is not shown. Page " + (4 + (PGOFF || 0)) + " splits off-plan from existing-property registrations.</div>", 2);
   // SUPPLY
   let sup;
   if (S && S.homes) {
@@ -193,12 +193,14 @@ function irrCards(f) {
   const scope = b.level === "developer" ? "this developer in this area" : "all homes in this area";
   return card("calculator", "Past five-year windows: the annualised return (IRR) a buyer at the median would have had", '<div class="i3rps">' + b.pick.map((w, i) => one(lab[i], w)).join("") + '</div><div class="i3cap">' + "Of " + (b.count + b.skipped.length) + " five-year windows with price data for " + scope + ", " + b.count + (b.count === 1 ? " has" : " have") + " a complete rent series and " + (b.count === 1 ? "is" : "are") + " shown" + (b.skipped.length ? " (" + b.skipped.length + " left out for missing rent years)" : "") + ". Bought at the median price per sq ft of the first year plus the 4% Dubai Land Department transfer fee, the median rent each year" + (b.svcKnown ? " less the register service charge held at today's figure" : ", before service charges (none on the register for these buildings)") + ", sold at the median of the fifth year. " + BACKTEST_NOTE + "</div>");
 }
+let PGOFF = 0;   // v353: pages after the executive summary are numbered one higher
 export function page3(C, m, rec, area, dubai, meta) {
+  PGOFF = C.pgOff || 0;
   rec = headRec(rec, m);
   const f = figures(rec, area, dubai, meta), areaName = esc(C.names.plain);
-  const title = '<div class="i3title"><div class="lbl" style="text-transform:uppercase">The investor decision</div><h1 class="serif" style="font-size:24px">Where the register shows: ' + esc(shortName(m.name, 30)) + " in " + areaName + '</h1><div class="i3cap">Past registered figures to ' + esc(dateLong(m.asOf)) + ". Sales counted as on pages 1 and 2, including registered delayed sales. The headline sales, yield, price and growth are the same as on pages 1 and 2; the unit types, spread, buildings and later pages come from a full recount of the register, so small differences between the pages are normal.</div></div>";
+  const title = '<div class="i3title"><h1 class="serif" style="font-size:21px;margin:0">The investor decision. Where the register shows: ' + esc(shortName(m.name, 30)) + " in " + areaName + '</h1><div class="i3cap">Past registered figures to ' + esc(dateLong(m.asOf)) + ". Sales counted as on pages " + (1 + PGOFF) + " and " + (2 + PGOFF) + ", including registered delayed sales. Headline sales, yield, price and growth are as on pages " + (1 + PGOFF) + " and " + (2 + PGOFF) + "; the unit types, spread, buildings and later pages are a full recount of the register, so small differences between the pages are normal.</div></div>";
   const disc = '<div class="i3disc"><b>Please read.</b> Past figures only: no forecast, no promised return, not financial advice and not an offer. Vacancy, management fees, other running costs and any loan are not in any register; add your own. A developer\'s figures cover the buildings the register attributes to it in this area. Check each property and your own circumstances with a licensed adviser before buying.</div>';
-  return title + fiveBoxes(rec, area, f, m) + unitCards(rec) + '<div class="i3two">' + spreadCard(rec) + netCard(rec, f) + '</div><div class="i3two">' + replayCards(f) + irrCards(f) + "</div>" + disc;
+  return devStrip(m, C) + title + fiveBoxes(rec, area, f, m) + unitCards(rec) + '<div class="i3two">' + spreadCard(rec) + netCard(rec, f) + '</div><div class="i3two">' + replayCards(f) + irrCards(f) + "</div>" + disc;
 }
 
 // ------------------------------------------------------------------------------------------------ page 4
@@ -256,35 +258,90 @@ export function page4(C, m, rec, area, dubai, meta) {
   const f = figures(rec, area, dubai, meta);
   const title = '<div class="i3title"><h1 class="serif" style="font-size:20px;margin:0">The evidence: the figures behind the decision</h1></div>';
   const repeat = '<div class="i3rep">' + icon("info", 14, "#8A9A96") + "<span><b>Repeat sales of the same unit</b> are not in the register: a sale carries no unit number, so resale and flip rates cannot be shown.</span></div>";
-  return title + buildingCards(rec) + '<div class="i3two">' + rentCard(rec, area, f, meta) + liqCard(rec, meta) + '</div><div class="i3two">' + supplyCard(rec, area) + offplanCards(rec) + "</div>" + repeat;
+  return devStrip(m, C) + title + buildingCards(rec) + '<div class="i3two">' + rentCard(rec, area, f, meta) + liqCard(rec, meta) + '</div><div class="i3two">' + supplyCard(rec, area) + offplanCards(rec) + "</div>" + repeat;
 }
 
 // ------------------------------------------------------------------------------------------------ page 5
 const tag = (t) => '<em class="i3tag ' + (t === "assumption" ? "i3ta" : "") + '">' + t + "</em>";
-export function page5(C, m, S) {
-  const A = ASSUMPTIONS, f = S.f;
-  const row = (l, v, t) => '<div class="i3ar"><span>' + l + "</span><b>" + v + "</b>" + tag(t) + "</div>";
-  const assume = '<div class="i3c"><div class="i3h">' + icon("calculator", 16, TEAL) + '<span class="serif">Assumptions</span></div><div class="i3ag">' +
-    row("Home size", fmt(S.size) + " sq ft", "register: typical home") + row("Purchase price", aed(S.price), "register: median price per sq ft x size") +
-    row("Dubai Land Department transfer fee", p0(TRANSFER_FEE), "published fee") + row("Agent and other buying costs", p0(A.feeOther), "assumption") +
-    row("Starting rent a year", aed(S.rent0), "register: " + (S.yieldScope === "developer" ? "gross yield" : "area gross yield") + " x price") +
-    row("Service charge a year", S.svcKnown ? aed(S.svc) : "none on the register, left out", S.svcKnown ? "register: budget per sq ft x size" : "register") +
-    row("Rent growth a year", S.rentScope ? sg(S.rentGrowth) : "held flat", S.rentScope ? "register: past compound change " + S.rentFrom + " to " + S.rentTo + ", " + (S.rentCapped ? "capped at the area's own long-run rate" : S.rentScope === "area" ? "the area's: this developer's own rent series is too short" : "this developer") : "assumption") +
-    row("Empty months (vacancy)", p0(A.vacancy) + " of rent", "assumption") + row("Management fee", p0(A.mgmt) + " of rent", "assumption") + row("Selling cost at the end", p0(A.sellCost) + " of the price", "assumption") +
-    row("Price growth a year", "from the past windows below", "register: slowest, middle, fastest five years") + "</div></div>";
-  const sc = (lab, o) => '<div class="i3c i3sc"><div class="i3h"><span class="serif">' + lab + '</span></div><div class="i3scb"><b>' + p1(o.r.irr) + '</b><span>IRR (yearly return rate) on these cash flows</span></div><div class="i3rows">' +
-    "<div><span>Price growth a year</span><b>" + sg(o.g) + "</b></div><div><span>Window used</span><b>" + o.w.from + " to " + o.w.to + "</b></div><div><span>Value after 5 years</span><b>" + aed(o.r.exitGross) + "</b></div><div><span>Net income, 5 years</span><b>" + aed(o.r.cum) + "</b></div><div><span>Cash return, year 1</span><b>" + p1(o.r.cashOnCash1) + "</b></div></div></div>";
-  const R = S.mid.r;
+export const NA_SVC = "NOT AVAILABLE: excluded from the calculation";
+export const WARN_SVC = "Return shown before service charges and maintenance";
+export const NOT_FORECAST = "These are scenarios, not forecasts.";
+export const IRR_PLAIN = (v) => "IRR " + p1(v) + ": the modeled yearly return across the whole five years, counting rent and the sale.";
+const devStrip = (m, C) => '<div class="i3dev">' + icon("buildings", 14, TEAL) + "<span>This page is about <b>" + esc(shortName(m.name, 34)) + "</b> in <b>" + esc(C.names.plain) + "</b>.</span></div>";
+function parts(C, m, S) {
+  const A = ASSUMPTIONS, H = S.hist, R = H.r, ST = S.stress.r, f = S.f;
+  const warn = S.svcKnown ? "" : '<div class="i3warn">' + icon("info", 14, "#8A4B1E") + "<span><b>" + WARN_SVC + ".</b> The register holds no service charge for these buildings.</span></div>";
+  // (2) the four answers
+  const ans = (q, big, sub) => '<div class="i3an"><span class="i3anq">' + q + '</span><b>' + big + "</b><em>" + sub + "</em></div>";
+  const four = '<div class="i3ans">' +
+    ans("How much cash do I need?", aed(R.cash0) + " all-in", "price " + aed(S.price) + " + " + p0(TRANSFER_FEE) + " transfer fee + " + p0(A.feeOther) + " agent and other (assumption)") +
+    ans("What does it generate while I own it?", "About " + p1(R.cashOnCash1) + " in year one", S.svcKnown ? "after vacancy, management and the register service charge" : "before service charges") +
+    ans("What has to happen for the historical-case return?", "The price must rise about " + p1(H.g) + " a year", "the register's middle past window, " + H.w.from + " to " + H.w.to) +
+    ans("What happens if it does not?", "With no price growth the five-year return is " + p1(ST.irr), "the stress case: the property does not appreciate") + "</div>";
+  // (1) the four cases
+  const sc = (lab, sub, o, cls) => '<div class="i3c i3sc ' + (cls || "") + '"><div class="i3h"><span class="serif">' + lab + '</span></div><div class="i3cap" style="margin-top:-3px">' + sub + '</div><div class="i3scb"><b>' + p1(o.r.irr) + "</b><span>IRR, five years</span></div><div class=\"i3rows\">" +
+    "<div><span>Price growth a year</span><b>" + sg(o.g) + "</b></div><div><span>Value after 5 years</span><b>" + aed(o.r.exitGross) + "</b></div><div><span>Cash return, year 1</span><b>" + p1(o.r.cashOnCash1) + "</b></div><div><span>Modeled profit</span><b>" + aed(o.r.profit) + "</b></div></div></div>";
+  const cards = '<div class="i3grid4">' + sc("Stress case", "0% a year: the property does not appreciate", S.stress) + sc("Moderate case", "3% a year", S.moderate) + sc("Firm case", "6% a year", S.firm) +
+    sc("Historical case", "Based on the " + H.w.from + " to " + H.w.to + " window", H, "i3hc") + "</div>" +
+    '<div class="i3cap"><b>' + NOT_FORECAST + "</b> " + IRR_PLAIN(R.irr) + "</div>";
+  // (8) profit block
+  const line = (l, v, strong) => "<div" + (strong ? ' class="i3tot"' : "") + "><span>" + l + "</span><b>" + v + "</b></div>";
+  const rentLbl = S.svcKnown ? "Rent kept over 5 years (after vacancy, management and service charge)" : "Rent received over 5 years (after vacancy and management)";
+  const profit = '<div class="i3c"><div class="i3h">' + icon("wallet", 16, TEAL) + '<span class="serif">The money, historical case</span></div><div class="i3rows">' +
+    line("Cash invested (price + buying costs)", aed(R.cash0)) + line(rentLbl, aed(R.cum)) + line("Sale value modeled", aed(R.exitGross)) + line("Selling cost (" + p0(A.sellCost) + ")", "&minus;" + aed(R.sellCost)) +
+    line("Modeled profit", aed(R.profit), true) + "</div>" +
+    '<div class="i3cap"><b>' + aed(R.totalIn) + " in, " + aed(R.totalOut) + " out.</b> Modeled profit = rent received + sale value &minus; selling cost &minus; cash invested." + (S.svcKnown ? "" : " " + WARN_SVC + ".") + "</div>" +
+    '<div class="i3cap i3small">Stress case (no price growth): ' + aed(ST.totalIn) + " in, " + aed(ST.totalOut) + " out, modeled profit " + aed(ST.profit) + ".</div></div>";
+  // (5) where the return comes from + (6) waterfall
+  const sp = R.split;
+  const sentence = sp ? "About " + p0(sp.exit) + " of the modeled gain comes from the sale price, " + p0(sp.rent) + " from rent (before buying and selling costs)." : "In this case the sale price adds nothing to the gain; rent is the only source.";
+  const wf = (l, v, cls) => '<div class="i3wf ' + (cls || "") + '"><span>' + l + "</span><b>" + v + "</b></div>";
+  const where = '<div class="i3c"><div class="i3h">' + icon("chart-donut", 16, TEAL) + '<span class="serif">Where the return comes from</span></div><div class="i3sts">' +
+    stat(p1(R.incomeReturn1), "Income return, year one", S.svcKnown ? "before service charge" : "before service charges") + stat(sg(H.g), "Assumed price growth a year", "historical case") + stat(p1(R.irr), "Five-year modeled IRR", "rent and sale") + "</div>" +
+    '<div class="i3cap"><b>' + sentence + "</b></div>" +
+    '<div class="i3wfs">' + wf("Gross yield (rent over price)", p1(R.grossYield)) + '<i>&rarr;</i>' + wf("Less vacancy and management", "&minus;" + p1(R.grossYield - R.afterCostsYield)) + '<i>&rarr;</i>' + wf("Cash return before service charges", p1(R.afterCostsYield), "i3wfe") + "</div>" +
+    '<div class="i3cap i3small">As a share of the price. On all the cash invested (price plus buying costs) the year-one cash return is ' + p1(R.cashOnCash1) + ".</div></div>";
+  // (9) assumptions in three boxes
+  const row = (l, v, t) => '<div class="i3ar"><span>' + l + "</span><b>" + v + "</b>" + (t ? tag(t) : "") + "</div>";
+  const rp = S.rp, scope = rp.scope === "developer" ? "this developer here" : rp.scope === "area" ? "the area" : "Dubai";
+  const rentSrc = S.rentScope ? "past compound change " + S.rentFrom + " to " + S.rentTo + ", " + (S.rentCapped ? "capped at the area's own long-run rate" : S.rentScope === "area" ? "the area's: this developer's own rent series is too short" : "this developer") : "assumption";
+  const box3 = (title, cls, body) => '<div class="i3c i3as ' + cls + '"><div class="i3h"><span class="serif">' + title + "</span></div>" + body + "</div>";
+  const reg = box3("From the register", "i3asr",
+    row("Home size", fmt(S.size) + " sq ft", "typical home") + row("Purchase price", aed(S.price), "median per sq ft x size") + row("Starting rent a year", aed(S.rent0), "gross yield x price") +
+    row("Gross yield (rent over price)", p1(S.gy), S.yieldScope === "developer" ? "this developer" : "area") + row("Transfer fee", p0(TRANSFER_FEE), "published fee") +
+    row("Historical windows", rp.windows.length + " of five years", scope + ": " + sg(rp.slow.change) + " to " + sg(rp.fast.change) + " in total") +
+    (S.svcKnown ? row("Service charge a year", aed(S.svc), "AED " + S.svcPsf.toFixed(1) + " per sq ft, budget") : ""));
+  const mod = box3("Model assumptions", "i3asm",
+    row("Vacancy", p0(A.vacancy) + " of rent", "assumption") + row("Management", p0(A.mgmt) + " of rent", "assumption") + row("Selling cost", p0(A.sellCost) + " of the price", "assumption") + row("Agent and other buying costs", p0(A.feeOther), "assumption") +
+    row("Rent growth a year", S.rentScope ? sg(S.rentGrowth) : "held flat", rentSrc) + row("Hold", "5 years", "assumption"));
+  const na = box3("Not available", "i3asn",
+    (S.svcKnown ? "" : row("Service charge", NA_SVC)) + row("Maintenance", "not in any register") + row("Financing", "not included: no loan modeled") + row("Furnishing", "not included"));
+  const assume = '<div class="i3grid3 i3as3">' + reg + mod + na + "</div>";
+  // table: the historical case year by year
   const trow = (l, arr, strong) => "<tr" + (strong ? ' class="i3tt"' : "") + "><td>" + l + "</td>" + arr.map((x) => "<td>" + (x == null ? "" : Math.round(x) === 0 ? "0" : fmt(x)) + "</td>").join("") + "</tr>";
   const yrs = R.rows;
-  const table = '<div class="i3c"><div class="i3h">' + icon("chart-bar", 16, TEAL) + '<span class="serif">The middle scenario, year by year (AED)</span></div><table class="i3tb"><tr><th></th><th>Start</th>' + yrs.map((r) => "<th>Year " + r.year + "</th>").join("") + "</tr>" +
-    trow("Rent", [null].concat(yrs.map((r) => r.rent))) + trow("Less vacancy", [null].concat(yrs.map((r) => -r.vac))) + trow("Less management fee", [null].concat(yrs.map((r) => -r.mg))) + trow("Less service charge", [null].concat(yrs.map((r) => -r.sv))) +
-    trow("Net income", [null].concat(yrs.map((r) => r.net)), true) + trow("Price, fees and sale", [-R.cash0, null, null, null, null, R.exitNet]) + trow("Cash flow", R.cfs, true) + "</table>" +
-    '<div class="i3cap">IRR is the yearly rate at which these cash flows add up to zero: ' + p1(R.irr) + ". The start is the price plus " + p0(TRANSFER_FEE + A.feeOther) + " buying costs; the last year includes the sale at " + aed(R.exitGross) + " less " + p0(A.sellCost) + " selling cost.</div></div>";
-  const sens = '<div class="i3c"><div class="i3h">' + icon("stack", 16, TEAL) + '<span class="serif">How the middle scenario moves</span></div><div class="i3sens"><div><span>Vacancy</span>' + S.sens.vac.map((x) => "<b>" + p0(x.v) + ": " + p1(x.irr) + "</b>").join("") + "</div><div><span>Price growth a year</span>" + S.sens.gro.map((x) => "<b>" + (x.d === 0 ? "base" : (x.d < 0 ? "&minus;" : "+") + "2 points") + " (" + sg(x.g) + "): " + p1(x.irr) + "</b>").join("") + '</div></div><div class="i3cap">IRR on the middle scenario when one assumption changes.</div></div>';
-  const title = '<div class="i3title"><div class="lbl" style="text-transform:uppercase">Scenarios</div><h1 class="serif" style="font-size:24px">What the register\'s past windows would imply under stated assumptions</h1><div class="i3cap">For discussion. Each scenario applies one of the register\'s past five-year price changes to ' + fmt(S.size) + " sq ft at " + aed(S.psf) + " per sq ft, " + (S.scope === "developer" ? "for this developer in this area" : S.scope === "area" ? "for all homes in this area" : "for Dubai as a whole") + ".</div></div>";
-  return title + assume + '<div class="i3grid3">' + sc("Conservative", S.cons) + sc("Base", S.mid) + sc("Upside", S.up) + "</div>" + table + sens + '<div class="i3disc">' + SCENARIO_DISCLAIMER + "</div>";
+  const svcRow = S.svcKnown ? trow("Less service charge", [null].concat(yrs.map((r) => -r.sv))) : '<tr class="i3na"><td>Service charge</td><td colspan="6">' + NA_SVC + "</td></tr>";
+  const table = '<div class="i3c"><div class="i3h">' + icon("chart-bar", 16, TEAL) + '<span class="serif">The historical case, year by year (AED)</span></div><table class="i3tb"><tr><th></th><th>Start</th>' + yrs.map((r) => "<th>Year " + r.year + "</th>").join("") + "</tr>" +
+    trow("Rent", [null].concat(yrs.map((r) => r.rent))) + trow("Less vacancy", [null].concat(yrs.map((r) => -r.vac))) + trow("Less management fee", [null].concat(yrs.map((r) => -r.mg))) +
+    trow("Income after vacancy and management", [null].concat(yrs.map((r) => r.inc)), true) + svcRow + trow("Price, fees and sale", [-R.cash0, null, null, null, null, R.exitNet]) + trow("Cash flow", R.cfs, true) + "</table>" +
+    '<div class="i3cap">' + IRR_PLAIN(R.irr).replace(/^IRR/, "IRR") + " The start is the price plus " + p0(TRANSFER_FEE + A.feeOther) + " buying costs; year five includes the sale at " + aed(R.exitGross) + " less " + p0(A.sellCost) + " selling cost.</div></div>";
+  // (3)(d) sensitivities
+  const k = S.K, hv = (o) => p1(o.r.irr);
+  const sens = '<div class="i3c"><div class="i3h">' + icon("stack", 16, TEAL) + '<span class="serif">How the historical case moves (IRR)</span></div><div class="i3sens">' +
+    "<div><span>Vacancy</span>" + k.vac.map((x) => "<b>" + p0(x.v) + ": " + p1(x.irr) + "</b>").join("") + "</div>" +
+    "<div><span>Price growth</span>" + k.gro.map((x) => "<b>" + (x.d === 0 ? "historical" : (x.d < 0 ? "&minus;" : "+") + "2 points") + " (" + sg(x.g) + "): " + p1(x.irr) + "</b>").join("") + "</div>" +
+    "<div><span>Other windows</span><b>Lower historical window (" + sg(k.lower.g) + ", " + k.lower.w.from + " to " + k.lower.w.to + "): " + hv(k.lower) + "</b><b>Upper historical window (" + sg(k.upper.g) + ", " + k.upper.w.from + " to " + k.upper.w.to + "): " + hv(k.upper) + "</b></div></div></div>";
+  const ssv = '<div class="i3c"><div class="i3h">' + icon("calculator", 16, TEAL) + '<span class="serif">If the service charge were...</span></div><div class="i3svs"><div class="i3svh"><span>AED per sq ft</span><span>Per year</span><span>Cash return, year 1</span><span>Five-year IRR</span></div>' +
+    S.svcSens.map((r) => '<div class="' + (r.kind === "register" ? "i3svr" : "") + '"><span>' + r.psf.toFixed(r.psf % 1 ? 1 : 0) + (r.kind === "register" ? " (register)" : " (illustrative)") + "</span><span>" + aed(r.svc) + "</span><span>" + p1(r.cash1) + "</span><span>" + p1(r.irr) + "</span></div>").join("") + "</div>" +
+    '<div class="i3cap">Historical case. ' + (S.svcKnown ? "The register's own figure is marked; the others are illustrative." : "The register holds no figure for this pair: 15 and 20 are illustrative, not register data.") + "</div></div>";
+  const title = '<div class="i3title"><div class="lbl" style="text-transform:uppercase">Scenarios</div><h1 class="serif" style="font-size:22px">What the register\'s past windows would imply under stated assumptions</h1><div class="i3cap">For discussion. ' + fmt(S.size) + " sq ft at " + aed(S.psf) + " per sq ft, " + (S.scope === "developer" ? "for this developer in this area" : S.scope === "area" ? "for all homes in this area" : "for Dubai as a whole") + ".</div></div>";
+  const disc = '<div class="i3disc">' + SCENARIO_DISCLAIMER + "</div>";
+  const title2 = '<div class="i3title"><div class="lbl" style="text-transform:uppercase">Scenarios, continued</div><h1 class="serif" style="font-size:22px">The workings: assumptions, year by year, and what moves the return</h1></div>';
+  return { p5: devStrip(m, C) + title + four + warn + cards + '<div class="i3two">' + profit + where + "</div>" + disc,
+    p6: devStrip(m, C) + title2 + (S.svcKnown ? "" : warn) + assume + table + '<div class="i3two">' + sens + ssv + "</div>" + disc };
 }
+export const page5 = (C, m, S) => parts(C, m, S).p5;
+export const page6 = (C, m, S) => parts(C, m, S).p6;
 
 // ------------------------------------------------------------------------------------------------ css
 export const I3_CSS = `
@@ -314,4 +371,13 @@ export const I3_CSS = `
   .i3tb { width:100%; border-collapse:collapse; font-size:9px; } .i3tb th { text-align:right; color:${MUTED}; font-weight:500; padding:2px 4px; border-bottom:1px solid ${HAIR}; } .i3tb td { text-align:right; padding:2px 4px; border-bottom:1px solid #F0ECE2; color:#3d4249; } .i3tb td:first-child, .i3tb th:first-child { text-align:left; } .i3tt td { color:${INK}; font-weight:600; background:#F8F5EE; }
   .i3stack { display:flex; flex-direction:column; gap:5px; } .i3rep { display:flex; gap:7px; align-items:center; font-size:9px; color:#6b7a76; border:1px dashed ${HAIR}; border-radius:6px; padding:5px 9px; background:#FBFAF7; } .i3rep b { color:#4a5753; font-weight:600; }
   .i3sens { display:flex; flex-direction:column; gap:3px; } .i3sens > div { display:flex; gap:10px; align-items:baseline; font-size:9.6px; color:#3d4249; } .i3sens span { width:110px; color:${MUTED}; } .i3sens b { font-weight:600; color:${INK}; background:#F8F5EE; border-radius:4px; padding:2px 7px; }
+  .i3dev { display:flex; gap:7px; align-items:center; font-size:10px; color:${NAVY}; background:#EEF4F2; border:1px solid #D3E3DF; border-radius:5px; padding:3px 10px; } .i3dev b { font-weight:600; }
+  .i3ans { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; } .i3an { border:1px solid ${HAIR}; border-top:3px solid ${TEAL}; border-radius:6px; background:#fff; padding:6px 9px 7px; display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .i3anq { font-size:8.6px; color:${MUTED}; text-transform:uppercase; letter-spacing:.03em; } .i3an b { font-family:Newsreader, Georgia, serif; font-size:14.5px; font-weight:400; color:${NAVY}; line-height:1.18; } .i3an em { font-style:normal; font-size:8.2px; color:${MUTED}; line-height:1.3; }
+  .i3warn { display:flex; gap:7px; align-items:center; font-size:9.6px; color:#6E3A18; background:#FBEEE2; border:1px solid #EBCDB4; border-radius:5px; padding:4px 10px; }
+  .i3hc { border-color:${GOLDI}; border-top:3px solid ${GOLDI}; } .i3small { font-size:8.4px; }
+  .i3wfs { display:flex; align-items:center; gap:5px; } .i3wfs i { font-style:normal; color:${MUTED}; font-size:12px; } .i3wf { flex:1; background:#F8F5EE; border-radius:5px; padding:3px 6px; display:flex; flex-direction:column; } .i3wf span { font-size:8px; color:#3d4249; line-height:1.25; } .i3wf b { font-family:Newsreader, Georgia, serif; font-weight:400; font-size:15px; color:${NAVY}; } .i3wfe { background:#E3EFEC; }
+  .i3as .i3ar { grid-template-columns:1fr auto; } .i3as3 { align-items:stretch; } .i3asr { border-top:3px solid ${TEAL}; } .i3asm { border-top:3px solid ${GOLDI}; } .i3asn { border-top:3px solid #C9B6A4; background:#FBF6F1; }
+  .i3na td { color:#7A3B1E; font-weight:600; text-align:left !important; background:#FBF6F1; }
+  .i3svs > div { display:grid; grid-template-columns:1.3fr 1fr 1fr 1fr; gap:6px; font-size:9.2px; padding:2px 0; border-top:1px solid ${HAIR}; color:#3d4249; } .i3svs span:nth-child(n+2) { text-align:right; } .i3svh { color:${MUTED}; border-top:0 !important; font-size:8.4px !important; } .i3svr { background:#E3EFEC; font-weight:600; }
 `;

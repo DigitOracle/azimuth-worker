@@ -12,7 +12,9 @@ import { DM } from "./devmap_dm.js";
 import { kvJson } from "./brief.js";
 import { BRIEF_KIT, esc } from "./brief_docs.js";
 import { icon, secHead, outlinePanels, windowIndex, loadData, loadMapData, blocksPicture, dateLong, shortName, EXTRA_CSS } from "./devmap_pdf.js";
-import { page3, page4, page5, scenarioSet, I3_CSS } from "./devmap_investor3.js";   // v351 - pages 3 to 5, built from the precomputed record img_investor3
+import { page3, page4, page5, page6, scenarioSet, I3_CSS } from "./devmap_investor3.js";
+import { assess, numbersFrom } from "./devmap_summary.js";   // v353 - the executive summary: the rule-based reading
+import { summaryPage, SUMMARY_CSS } from "./devmap_summary_page.js";   // v351 - pages 3 to 5, built from the precomputed record img_investor3
 
 const { NAVY, MUTED } = BRIEF_KIT;
 const TEAL = "#0A4F4A", GOLDI = "#C5A56A", INK = "#22262B", HAIR = "#E6E1D8";
@@ -343,7 +345,7 @@ const INV_CSS = `
   .ivnone { display:flex; gap:14px; align-items:center; border:1px solid ${HAIR}; border-radius:8px; background:#fff; padding:22px 24px; margin-top:20px; font-size:13px; color:${NAVY}; line-height:1.5; }
 `;
 const head = (title, body) => '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>' + esc(title) + "</title>" +
-  '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400&display=swap" rel="stylesheet"><style>' + BRIEF_KIT.CSS + EXTRA_CSS + INV_CSS + I3_CSS + "</style></head><body>" + body + "</body></html>";
+  '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400&display=swap" rel="stylesheet"><style>' + BRIEF_KIT.CSS + EXTRA_CSS + INV_CSS + I3_CSS + SUMMARY_CSS + "</style></head><body>" + body + "</body></html>";
 function page(C, m, sub, body, i, total) {
   const hdr = '<div style="height:96px;display:flex;align-items:center;justify-content:space-between;padding:0 46px;background:#FFFFFF;border-bottom:1px solid #E6E1D8;flex-shrink:0;"><div style="display:flex;flex-direction:column;gap:4px;max-width:560px;"><div class="lbl" style="text-transform:uppercase">' + esc(m.name) + " in " + esc(C.names.title) + " &middot; " + sub + '</div><div style="font-size:10.5px;color:' + MUTED + ';line-height:1.35;">' + C.today + " &middot; Sales settled " + esc(dateLong(m.from)) + " to " + esc(dateLong(m.to)) + " (the last 12 months)</div></div>" + BRIEF_KIT.logo(C, 70) + "</div>";
   const small = BRIEF_KIT.smallPrint(["Source: Dubai Land Department registers, " + esc(dateLong(m.asOf)) + ". Past prices only: no forecast, no promised return, not financial advice." + (total > 1 ? " &middot; Page " + (i + 1) + " of " + total : "")]);
@@ -385,25 +387,35 @@ export async function buildInvestorPdf(env, p, opts) {
   // v351 - the precomputed record (img_investor3): pages 3 to 5 exist only when the record holds this pair. No record: exactly the two pages.
   const inv3 = m.enough ? await kvJson(env, "investor3") : null;
   const rec = inv3 && inv3.pairs ? inv3.pairs[p.area + "|" + k] || null : null, ar3 = inv3 && inv3.areas ? inv3.areas[p.area] || null : null;
-  const extra = [];
+  const extra = [];   // [label after "Page n", html]
+  let summary = null;
   if (rec && ar3) {
     const meta = inv3.meta || {}, dub = inv3.dubai || {};
+    C.pgOff = 1;      // v353 - the executive summary is page 1 whenever pages 3 and later exist, so every page number below moves up by one
     try {
-      extra.push(["Page 3 &middot; the investor decision", page3(C, m, rec, ar3, dub, meta)]);
+      const pg = { headline: 2 };
+      extra.push(["the investor decision", page3(C, m, rec, ar3, dub, meta)]); pg.decision = 3 + C.pgOff - 0;
       const hasEvidence = (rec.blds && rec.blds.length) || (ar3.supply && ar3.supply.homes) || Object.keys(rec.rent_y || {}).length >= 2 || Object.keys(rec.liq_y || {}).length >= 2;
-      if (hasEvidence) extra.push(["Page 4 &middot; the evidence", page4(C, m, rec, ar3, dub, meta)]);
+      if (hasEvidence) { extra.push(["the evidence", page4(C, m, rec, ar3, dub, meta)]); pg.evidence = 2 + extra.length + C.pgOff; }
       const S = scenarioSet(rec, ar3, dub, meta, m);
-      if (S) extra.push(["Page " + (3 + extra.length) + " &middot; scenarios", page5(C, m, S)]);
-    } catch (e) { extra.length = 0; }   // a record that cannot be drawn leaves the two pages as they were
+      if (S) { extra.push(["scenarios", page5(C, m, S)]); pg.scen = 2 + extra.length + C.pgOff; }
+      if (S) { extra.push(["scenario workings", page6(C, m, S)]); pg.work = 2 + extra.length + C.pgOff; }
+      pg.decision = 3 + C.pgOff;
+      const ga = growthFigures(m.area), yrs3 = (t) => (t ? { change: t.change, from: t.from.year, to: t.to.year } : null);
+      const A = assess(numbersFrom(rec, ar3, m, S, { g3: yrs3(m.growth.three), areaG3: yrs3(ga.three), cagr: m.growth.cagr ? m.growth.cagr.rate : null, areaCagr: ga.cagr ? ga.cagr.rate : null, pg }));
+      summary = summaryPage(C, m, A, { headline: 2, decision: pg.decision, evidence: pg.evidence, scen: pg.scen, work: pg.work });
+      pg.headline = 2;
+    } catch (e) { extra.length = 0; summary = null; C.pgOff = 0; }   // a record that cannot be drawn leaves the two pages as they were
   }
-  const total = 2 + extra.length;
+  const off = summary ? 1 : 0, total = 2 + extra.length + off;
   if (!m.enough) pages.push(page(C, m, "Investor summary", degradedPage(C, m, m.name), 0, 1));
   else {
     const M = await loadMapData(env, C); C.M = M;
     const pic = blocksPicture(C, M, 702, 300, "fit", k);
-    pages.push(page(C, m, "Page 1 &middot; the headline case", page1(C, m), 0, total));
-    pages.push(page(C, m, "Page 2 &middot; the supporting figures", page2(C, m, pic), 1, total));
-    extra.forEach((x, i) => pages.push(page(C, m, x[0], x[1], 2 + i, total)));
+    if (summary) pages.push(page(C, m, "Page 1 &middot; executive summary", summary, 0, total));
+    pages.push(page(C, m, "Page " + (1 + off) + " &middot; the headline case", page1(C, m), off, total));
+    pages.push(page(C, m, "Page " + (2 + off) + " &middot; the supporting figures", page2(C, m, pic), 1 + off, total));
+    extra.forEach((x, i) => pages.push(page(C, m, "Page " + (3 + off + i) + " &middot; " + x[0], x[1], 2 + off + i, total)));
   }
   const nm = (m.name + "_" + C.names.plain).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
   return { status: 200, html: head("Investor summary - " + m.name + " in " + C.names.plain, pages.join("")), pages: pages.length, fname: "Investor_" + nm + ".pdf", C, model: m };
