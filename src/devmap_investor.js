@@ -392,7 +392,7 @@ export async function buildInvestorPdf(env, p, opts) {
       extra.push(["Page 3 &middot; the investor decision", page3(C, m, rec, ar3, dub, meta)]);
       const hasEvidence = (rec.blds && rec.blds.length) || (ar3.supply && ar3.supply.homes) || Object.keys(rec.rent_y || {}).length >= 2 || Object.keys(rec.liq_y || {}).length >= 2;
       if (hasEvidence) extra.push(["Page 4 &middot; the evidence", page4(C, m, rec, ar3, dub, meta)]);
-      const S = scenarioSet(rec, ar3, dub, meta);
+      const S = scenarioSet(rec, ar3, dub, meta, m);
       if (S) extra.push(["Page " + (3 + extra.length) + " &middot; scenarios", page5(C, m, S)]);
     } catch (e) { extra.length = 0; }   // a record that cannot be drawn leaves the two pages as they were
   }

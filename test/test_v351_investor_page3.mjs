@@ -151,7 +151,7 @@ console.log("what the pages say");
   ok(/what the register shows for past windows, not a forecast/i.test(p3), "page 3: the replay card says it is not a forecast");
   ok(p3.includes(BACKTEST_NOTE), "page 3: the back-test note is printed verbatim");
   ok(/not financial advice and not an offer/.test(p3) && /no promised return/.test(p3), "page 3: the disclaimer block");
-  ok(/Past five-year windows: the annualised return \(IRR\)/.test(p3) && /3 windows of five years/.test(p3) && /1 skipped for an incomplete rent series/.test(p3), "page 3: the back-test cards name the windows and the skipped one");
+  ok(/Past five-year windows: the annualised return \(IRR\)/.test(p3) && /Of 4 five-year windows with price data/.test(p3) && /3 have a complete rent series/.test(p3) && /1 left out for missing rent years/.test(p3), "page 3: the back-test cards name the windows and the skipped one");
   ok(/2018 to 2023/.test(p3) && /2019 to 2024/.test(p3) && /2020 to 2025/.test(p3), "page 3: each window is named by its years");
   const bt = backtest(mkRec(), AREA3, 2025);
   ok(p3.includes((Math.round(bt.pick[1].irr * 1000) / 10).toFixed(1) + "%"), "page 3: the middle window's IRR is the solver's value");
@@ -172,6 +172,29 @@ console.log("what the pages say");
   ok(!/–0|-0\b/.test(p5.replace(/-0\.\d/g, "")), "page 5: no minus zero");
   const none = await build(null);
   ok(!/Scenarios|The investor decision/.test(text(none.html)), "no record: none of the new text appears");
+}
+console.log("v351.1: headline basis, thin series, cap");
+{
+  // a pair whose own rent series is only 4 full years of 100+ contracts: the area's growth is used, and said so
+  const thin = mkRec(); thin.rent_y = { 2022: { n: 185, rent: 74000, psf: 85 }, 2023: { n: 187, rent: 85000, psf: 93 }, 2024: { n: 394, rent: 100000, psf: 119 }, 2025: { n: 590, rent: 114571, psf: 130 }, 2026: { n: 419, rent: 110000, psf: 127 } };
+  thin.rent_cagr = { from: 2022, to: 2025, rate: 0.1569 };
+  const S = scenarioSet(thin, AREA3, DUBAI, META);
+  ok(S.rentScope === "area" && S.rentShort && near(S.rentGrowth, 0.04), "own series too short: the area's rent growth (4%) is used, not the pair's 15.7%");
+  const html = text(page5({ names: {} }, {}, S));
+  ok(/this developer's own rent series is too short/.test(html), "page 5 says the pair's own rent series is too short");
+  const long = mkRec(); long.rent_y = {}; for (let y = 2020; y <= 2025; y++) long.rent_y[y] = { n: 150, rent: 50000 * Math.pow(1.2, y - 2020), psf: 100 };
+  const S2 = scenarioSet(long, AREA3, DUBAI, META);
+  ok(S2.rentCapped && near(S2.rentGrowth, 0.04), "a long series growing faster than the area is capped at the area's own rate");
+  const slow = mkRec(); slow.rent_y = {}; for (let y = 2020; y <= 2025; y++) slow.rent_y[y] = { n: 150, rent: 50000 * Math.pow(1.02, y - 2020), psf: 100 };
+  const S3 = scenarioSet(slow, AREA3, DUBAI, META);
+  ok(S3.rentScope === "developer" && !S3.rentCapped && near(S3.rentGrowth, 0.02, 1e-9), "a long series growing slower than the area keeps its own rate");
+  const fewp = mkRec(); fewp.price_y = { 2022: [100, 1000], 2023: [100, 1100], 2024: [100, 1200] };
+  ok(replay(fewp, AREA3, DUBAI).scope === "dubai", "fewer than 5 solid years of its own price series: not its own windows");
+  const m = { name: "Acme", asOf: "2026-08-31", l12: { sales: 933, psf: 2048 }, yield: { rate: 0.064, contracts: 1507 }, dev: { rows: [{ year: 2022, solid: true, partial: false, psf: 1000, sales: 100 }, { year: 2025, solid: true, partial: false, psf: 1100, sales: 1022 }] } };
+  const d = text(page3({ names: { plain: "Test", title: "Test" } }, m, mkRec(), AREA3, DUBAI, META));
+  ok(/933/.test(d) && /6\.4%/.test(d) && /1,507 rent contracts/.test(d) && !/>962</.test(d), "page 3 headline: 933 sales, 6.4%, 1,507 contracts (the index figures)");
+  ok(/\+10\.0%/.test(d) && /1,022 sales in 2025/.test(d), "page 3 growth and last-year sales follow the page 1 series");
+  ok(/small differences between the pages are normal/.test(d), "page 3 says the later figures are a recount");
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

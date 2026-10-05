@@ -29,29 +29,54 @@ const stat = (big, lab, sub) => '<div class="i3st"><b>' + big + "</b><span>" + l
 const blank = (label, w) => '<span class="i3bl">' + label + ' <i style="width:' + (w || 46) + 'px"></i></span>';
 
 // ------------------------------------------------------------------------------------------------ the figures taken from the record
+// HEADLINE BASIS: pages 3 to 5 quote the same last-12-month sales, gross yield, median price and yearly growth as pages 1 and 2 (the index figures, m);
+// the recount of the register (this record) supplies only the new fields: unit types, spread, buildings, rent history, liquidity, supply, back-test.
+export function headRec(rec, m) {
+  const r = Object.assign({}, rec);
+  if (m && m.l12 && m.l12.sales > 0) r.sales_l12 = m.l12.sales;
+  if (m && m.yield) r.yield = { rate: m.yield.rate, contracts: m.yield.contracts };
+  r.head = m ? { psf: m.l12 && m.l12.psf ? m.l12.psf : null, rows: m.dev && m.dev.rows ? m.dev.rows.filter((x) => x.solid && !x.partial) : null, sales: m.l12 ? m.l12.sales : null } : null;
+  return r;
+}
+// the longest run of consecutive full years that each hold 100 or more rent contracts, and its compound yearly change
+function ownRentGrowth(rec, lastFull) {
+  const ry = rec.rent_y || {}, ys = Object.keys(ry).map(Number).filter((y) => y <= lastFull && ry[y].n >= 100 && ry[y].rent > 0).sort((a, b) => a - b);
+  let best = [], cur = [];
+  for (const y of ys) { if (cur.length && y === cur[cur.length - 1] + 1) cur.push(y); else cur = [y]; if (cur.length >= best.length) best = cur.slice(); }
+  if (best.length < 5) return null;
+  const a = best[0], b = best[best.length - 1];
+  return { rate: Math.pow(ry[b].rent / ry[a].rent, 1 / (b - a)) - 1, from: a, to: b, years: best.length };
+}
 export function figures(rec, area, dubai, meta) {
-  const lastFull = meta.last_full_year, py = rec.price_y || {};
-  const chg = (a, b) => (py[a] && py[b] && py[a][0] >= MIN_N && py[b][0] >= MIN_N ? { from: a, to: b, change: py[b][1] / py[a][1] - 1 } : null);
+  const lastFull = meta.last_full_year, py = rec.price_y || {}, H = rec.head || null;
+  const hy = H && H.rows ? new Map(H.rows.map((r) => [r.year, r])) : null;
+  const chg = hy ? (a, b) => (hy.has(a) && hy.has(b) ? { from: a, to: b, change: hy.get(b).psf / hy.get(a).psf - 1 } : null)
+    : (a, b) => (py[a] && py[b] && py[a][0] >= MIN_N && py[b][0] >= MIN_N ? { from: a, to: b, change: py[b][1] / py[a][1] - 1 } : null);
   const f = { lastFull, growth: [1, 3, 6].map((k) => ({ k, v: chg(lastFull - k, lastFull) })) };
-  f.psf = rec.pct && rec.pct.p50 ? rec.pct.p50 : null;
+  f.psf = H && H.psf ? H.psf : rec.pct && rec.pct.p50 ? rec.pct.p50 : null;
   f.size = rec.size_sqft || area.size_sqft || null;
   f.gross = rec.yield ? rec.yield.rate : null;
   f.svcPsf = rec.svc && rec.svc.n > 0 ? rec.svc.median : null;
   f.net = f.gross != null && f.svcPsf != null && f.psf ? f.gross - f.svcPsf / f.psf : null;
   f.bt = backtest(rec, area, lastFull);
   f.rp = replay(rec, area, dubai);
-  f.rentG = rec.rent_cagr ? { rate: rec.rent_cagr.rate, from: rec.rent_cagr.from, to: rec.rent_cagr.to, scope: "developer" } : area.rent_cagr ? { rate: area.rent_cagr.rate, from: area.rent_cagr.from, to: area.rent_cagr.to, scope: "area" } : null;
+  // RENT GROWTH for page 5: the pair's own series only when it has 5 or more full years of 100+ contracts each, else the area's own; never above the area's long-run rate
+  const own = ownRentGrowth(rec, lastFull), ac = area.rent_cagr ? { rate: area.rent_cagr.rate, from: area.rent_cagr.from, to: area.rent_cagr.to } : null;
+  f.rentG = own ? Object.assign({ scope: "developer" }, own) : ac ? Object.assign({ scope: "area", short: true }, ac) : null;
+  if (f.rentG && ac && f.rentG.rate > ac.rate) { f.rentG = Object.assign({}, f.rentG, { rate: ac.rate, capped: true, capFrom: ac.from, capTo: ac.to }); }
+  f.rentGOld = rec.rent_cagr ? { rate: rec.rent_cagr.rate, from: rec.rent_cagr.from, to: rec.rent_cagr.to, scope: "developer" } : area.rent_cagr ? { rate: area.rent_cagr.rate, from: area.rent_cagr.from, to: area.rent_cagr.to, scope: "area" } : null;
   return f;
 }
 // the scenario inputs for page 5, or null when the record cannot support them
-export function scenarioSet(rec, area, dubai, meta) {
+export function scenarioSet(rec0, area, dubai, meta, m) {
+  const rec = m ? headRec(rec0, m) : rec0;
   const f = figures(rec, area, dubai, meta), y = rec.yield || area.yield;
   if (!f.psf || !f.size || !y || !f.rp) return null;
   const price = f.psf * f.size, rent0 = y.rate * price, svc = f.svcPsf != null ? f.svcPsf * f.size : 0;
   const rentGrowth = f.rentG ? f.rentG.rate : 0;
   const base = { price, feeTransfer: TRANSFER_FEE, feeOther: ASSUMPTIONS.feeOther, rent0, rentGrowth, svc, vacancy: ASSUMPTIONS.vacancy, mgmt: ASSUMPTIONS.mgmt, sellCost: ASSUMPTIONS.sellCost, years: 5 };
   const mk = (w) => { const g = annual(w.change, 5); return { w, g, r: scenario(Object.assign({}, base, { growth: g })) }; };
-  const S = { f, base, size: f.size, psf: f.psf, price, rent0, svc, svcKnown: f.svcPsf != null, rentGrowth, rentScope: f.rentG ? f.rentG.scope : null, rentFrom: f.rentG ? f.rentG.from : null, rentTo: f.rentG ? f.rentG.to : null, yieldScope: rec.yield ? "developer" : "area", scope: f.rp.scope,
+  const S = { f, base, size: f.size, psf: f.psf, price, rent0, svc, svcKnown: f.svcPsf != null, rentGrowth, rentScope: f.rentG ? f.rentG.scope : null, rentFrom: f.rentG ? f.rentG.from : null, rentTo: f.rentG ? f.rentG.to : null, rentShort: !!(f.rentG && f.rentG.short), rentCapped: !!(f.rentG && f.rentG.capped), rentCapFrom: f.rentG && f.rentG.capFrom, rentCapTo: f.rentG && f.rentG.capTo, yieldScope: rec.yield ? "developer" : "area", scope: f.rp.scope,
     cons: mk(f.rp.slow), mid: mk(f.rp.mid), up: mk(f.rp.fast) };
   S.sens = { vac: [0, 0.05, 0.10].map((v) => ({ v, irr: scenario(Object.assign({}, base, { growth: S.mid.g, vacancy: v })).irr })), gro: [-0.02, 0, 0.02].map((d) => ({ d, g: S.mid.g + d, irr: scenario(Object.assign({}, base, { growth: S.mid.g + d })).irr })) };
   return S;
@@ -110,7 +135,8 @@ function fiveBoxes(rec, area, f, m) {
   const gr = f.growth.map((g) => g.v ? stat(sg(g.v.change), g.k + (g.k === 1 ? " year" : " years"), g.v.from + " to " + g.v.to) : stat("&ndash;", g.k + (g.k === 1 ? " year" : " years"), "not enough sales")).join("");
   const grBox = '<div class="i3box" style="grid-column:span 2"><div class="i3h">' + icon("chart-bar", 16, TEAL) + '<span class="serif">Growth</span></div><div class="i3sts">' + gr + '</div><div class="i3cap">Change in the median price per sq ft between full years. Past changes only.</div></div>';
   // LIQUIDITY
-  const lastN = rec.price_y && rec.price_y[f.lastFull] ? rec.price_y[f.lastFull][0] : null;
+  const hr = rec.head && rec.head.rows ? rec.head.rows.find((r) => r.year === f.lastFull) : null;
+  const lastN = hr ? hr.sales : rec.price_y && rec.price_y[f.lastFull] ? rec.price_y[f.lastFull][0] : null;
   const liqBox = box("chart-donut", "Liquidity", fmt(rec.sales_l12) + " <small>sales, last 12 months</small>", '<div class="i3cap">' + (lastN ? fmt(lastN) + " sales in " + f.lastFull + ". " : "") + "The register does not say who sold to whom, so resale against first sale is not shown. Page 4 splits off-plan from existing-property registrations.</div>", 2);
   // SUPPLY
   let sup;
@@ -151,25 +177,26 @@ function netCard(rec, f) {
 function spreadCard(rec) {
   if (!rec.pct) return quiet("Price spread", "Not enough registered sales for a spread.");
   const q = rec.pct;
-  return card("ruler", "Price spread, per sq ft", rangeBar(q) + '<div class="i3cap">Lower quarter, middle and upper quarter of the ' + fmt(q.n) + " sales in the last 12 months (AED per sq ft). The middle half of sales sit within " + p0((q.p75 - q.p25) / q.p50) + " of the middle price.</div>");
+  return card("ruler", "Price spread, per sq ft", rangeBar(q) + '<div class="i3cap">Lower quarter, middle and upper quarter of the ' + fmt(q.n) + " sales in the recount of the last 12 months (AED per sq ft). The middle half of sales sit within " + p0((q.p75 - q.p25) / q.p50) + " of the middle price.</div>");
 }
 function replayCards(f) {
   const r = f.rp; if (!r) return quiet("Past five-year price changes", "Not enough years on the register for three five-year windows.");
   const scope = r.scope === "developer" ? "this developer in this area" : r.scope === "area" ? "all homes in this area" : "all of Dubai";
   const one = (lab, w) => '<div class="i3rp"><span>' + lab + "</span><b>" + sg0(w.change) + "</b><em>" + w.from + " to " + w.to + "</em></div>";
-  return card("chart-bar", "Past five-year price changes: slowest, middle and fastest", '<div class="i3rps">' + one("Slowest", r.slow) + one("Middle", r.mid) + one("Fastest", r.fast) + '</div><div class="i3cap">What the register shows for past windows, not a forecast. Median price per sq ft, ' + scope + ", " + r.windows.length + " windows of five years.</div>");
+  return card("chart-bar", "Past five-year price changes: slowest, middle and fastest", '<div class="i3rps">' + one("Slowest", r.slow) + one("Middle", r.mid) + one("Fastest", r.fast) + '</div><div class="i3cap">What the register shows for past windows, not a forecast. Median price per sq ft, ' + scope + ", " + r.windows.length + " five-year windows with price data.</div>");
 }
 function irrCards(f) {
   const b = f.bt;
-  if (!b.count) return quiet("Past five-year windows: the annualised return", "Not enough years with 30 or more rent contracts and sales to run a five-year back-test" + (b.skipped.length ? " (" + b.skipped.length + " windows had an incomplete rent series)" : "") + ".");
+  if (!b.count) return quiet("Past five-year windows: the annualised return", "Not enough years with 30 or more rent contracts and sales to run a five-year back-test" + (b.skipped.length ? " (" + b.skipped.length + (b.skipped.length === 1 ? " window" : " windows") + " had an incomplete rent series)" : "") + ".");
   const lab = b.pick.length === 3 ? ["Slowest window", "Middle window", "Fastest window"] : b.pick.length === 1 ? ["The one window"] : b.pick.map((_, i) => (i === 0 ? "Slower window" : "Faster window"));
   const one = (l, w) => '<div class="i3rp"><span>' + l + "</span><b>" + p1(w.irr) + "</b><em>" + w.from + " to " + w.to + "</em></div>";
   const scope = b.level === "developer" ? "this developer in this area" : "all homes in this area";
-  return card("calculator", "Past five-year windows: the annualised return (IRR) a buyer at the median would have had", '<div class="i3rps">' + b.pick.map((w, i) => one(lab[i], w)).join("") + '</div><div class="i3cap">' + b.count + (b.count === 1 ? " window" : " windows") + " of five years for " + scope + (b.skipped.length ? "; " + b.skipped.length + " skipped for an incomplete rent series" : "") + ". Bought at the median price per sq ft of the first year plus the 4% Dubai Land Department transfer fee, the median rent each year" + (b.svcKnown ? " less the register service charge held at today's figure" : ", before service charges (none on the register for these buildings)") + ", sold at the median of the fifth year. " + BACKTEST_NOTE + "</div>");
+  return card("calculator", "Past five-year windows: the annualised return (IRR) a buyer at the median would have had", '<div class="i3rps">' + b.pick.map((w, i) => one(lab[i], w)).join("") + '</div><div class="i3cap">' + "Of " + (b.count + b.skipped.length) + " five-year windows with price data for " + scope + ", " + b.count + (b.count === 1 ? " has" : " have") + " a complete rent series and " + (b.count === 1 ? "is" : "are") + " shown" + (b.skipped.length ? " (" + b.skipped.length + " left out for missing rent years)" : "") + ". Bought at the median price per sq ft of the first year plus the 4% Dubai Land Department transfer fee, the median rent each year" + (b.svcKnown ? " less the register service charge held at today's figure" : ", before service charges (none on the register for these buildings)") + ", sold at the median of the fifth year. " + BACKTEST_NOTE + "</div>");
 }
 export function page3(C, m, rec, area, dubai, meta) {
+  rec = headRec(rec, m);
   const f = figures(rec, area, dubai, meta), areaName = esc(C.names.plain);
-  const title = '<div class="i3title"><div class="lbl" style="text-transform:uppercase">The investor decision</div><h1 class="serif" style="font-size:24px">Where the register shows: ' + esc(shortName(m.name, 30)) + " in " + areaName + '</h1><div class="i3cap">Past registered figures to ' + esc(dateLong(m.asOf)) + ". Sales counted as on pages 1 and 2, including registered delayed sales.</div></div>";
+  const title = '<div class="i3title"><div class="lbl" style="text-transform:uppercase">The investor decision</div><h1 class="serif" style="font-size:24px">Where the register shows: ' + esc(shortName(m.name, 30)) + " in " + areaName + '</h1><div class="i3cap">Past registered figures to ' + esc(dateLong(m.asOf)) + ". Sales counted as on pages 1 and 2, including registered delayed sales. The headline sales, yield, price and growth are the same as on pages 1 and 2; the unit types, spread, buildings and later pages come from a full recount of the register, so small differences between the pages are normal.</div></div>";
   const disc = '<div class="i3disc"><b>Please read.</b> Past figures only: no forecast, no promised return, not financial advice and not an offer. Vacancy, management fees, other running costs and any loan are not in any register; add your own. A developer\'s figures cover the buildings the register attributes to it in this area. Check each property and your own circumstances with a licensed adviser before buying.</div>';
   return title + fiveBoxes(rec, area, f, m) + unitCards(rec) + '<div class="i3two">' + spreadCard(rec) + netCard(rec, f) + '</div><div class="i3two">' + replayCards(f) + irrCards(f) + "</div>" + disc;
 }
@@ -198,7 +225,7 @@ function rentCard(rec, area, f, meta) {
   if (!ry) return quiet("Rent history", "Not enough registered data: fewer than two years of rent contracts for this developer here.");
   const c = rec.rent_cagr, l = rec.rent_l12, fl = rec.rent_flow;
   let t = "";
-  if (c) t += "Compound yearly change " + c.from + " to " + c.to + ": <b>" + sg(c.rate) + "</b>. ";
+  if (c) t += "Compound yearly change " + c.from + " to " + c.to + ": <b>" + sg(c.rate) + "</b>" + (c.to - c.from < 5 ? " (a short series)" : "") + ". ";
   if (l) t += "Last 12 months " + aed(l.median) + " against " + aed(l.prior) + " the 12 months before: <b>" + sg(l.change) + "</b>. ";
   if (fl && (fl.new || fl.renew)) t += "Last 12 months: " + fmt(fl.new) + " new contracts" + (fl.new_median ? " (median " + aed(fl.new_median) + ")" : "") + " and " + fmt(fl.renew) + " renewals" + (fl.renew_median ? " (median " + aed(fl.renew_median) + ")" : "") + ". ";
   return card("wallet", "Median annual rent, by year", rentChart(ry, meta.last_full_year) + '<div class="i3cap">' + t + "Flat rent contracts by start year, count under each bar; * part year. Contracts registered, not market rent.</div>");
@@ -225,6 +252,7 @@ function offplanCards(rec) {
   return '<div class="i3c"><div class="i3h">' + icon("buildings", 16, TEAL) + '<span class="serif">Off-plan context</span></div><div class="i3stack">' + cs.join("") + '</div><div class="i3cap">Off-plan prices are the contract price, not what a home would fetch today. Payment plans and rent at delivery are not in any register.</div></div>';
 }
 export function page4(C, m, rec, area, dubai, meta) {
+  rec = headRec(rec, m);
   const f = figures(rec, area, dubai, meta);
   const title = '<div class="i3title"><h1 class="serif" style="font-size:20px;margin:0">The evidence: the figures behind the decision</h1></div>';
   const repeat = '<div class="i3rep">' + icon("info", 14, "#8A9A96") + "<span><b>Repeat sales of the same unit</b> are not in the register: a sale carries no unit number, so resale and flip rates cannot be shown.</span></div>";
@@ -241,7 +269,7 @@ export function page5(C, m, S) {
     row("Dubai Land Department transfer fee", p0(TRANSFER_FEE), "published fee") + row("Agent and other buying costs", p0(A.feeOther), "assumption") +
     row("Starting rent a year", aed(S.rent0), "register: " + (S.yieldScope === "developer" ? "gross yield" : "area gross yield") + " x price") +
     row("Service charge a year", S.svcKnown ? aed(S.svc) : "none on the register, left out", S.svcKnown ? "register: budget per sq ft x size" : "register") +
-    row("Rent growth a year", S.rentScope ? sg(S.rentGrowth) : "held flat", S.rentScope ? "register: past compound change " + S.rentFrom + " to " + S.rentTo + ", " + (S.rentScope === "area" ? "area" : "this developer") : "assumption") +
+    row("Rent growth a year", S.rentScope ? sg(S.rentGrowth) : "held flat", S.rentScope ? "register: past compound change " + S.rentFrom + " to " + S.rentTo + ", " + (S.rentCapped ? "capped at the area's own long-run rate" : S.rentScope === "area" ? "the area's: this developer's own rent series is too short" : "this developer") : "assumption") +
     row("Empty months (vacancy)", p0(A.vacancy) + " of rent", "assumption") + row("Management fee", p0(A.mgmt) + " of rent", "assumption") + row("Selling cost at the end", p0(A.sellCost) + " of the price", "assumption") +
     row("Price growth a year", "from the past windows below", "register: slowest, middle, fastest five years") + "</div></div>";
   const sc = (lab, o) => '<div class="i3c i3sc"><div class="i3h"><span class="serif">' + lab + '</span></div><div class="i3scb"><b>' + p1(o.r.irr) + '</b><span>IRR (yearly return rate) on these cash flows</span></div><div class="i3rows">' +

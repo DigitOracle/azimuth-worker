@@ -51,8 +51,10 @@ export function backtest(rec, area, lastFull) {
 }
 
 export function replay(rec, area, dubai) {
+  const fullYears = (o) => Object.keys((o && o.price_y) || {}).filter((y) => o.price_y[y][0] >= MIN_N).length;
   const mk = (arr, scope) => { const w = (arr || []).filter((x) => num(x.change) != null).slice().sort((a, b) => a.change - b.change); return w.length >= 3 ? { scope, windows: w, slow: w[0], mid: w[Math.floor(w.length / 2)], fast: w[w.length - 1] } : null; };
-  return mk(rec && rec.replay, "developer") || mk(area && area.replay, "area") || mk(dubai && dubai.replay, "dubai");
+  // the pair's own windows only when its series holds 5 or more years with 30+ sales each; else the area's, else Dubai's
+  return (fullYears(rec) >= 5 ? mk(rec && rec.replay, "developer") : null) || (fullYears(area) >= 5 ? mk(area && area.replay, "area") : null) || mk(dubai && dubai.replay, "dubai");
 }
 
 // ---- page 5: a scenario on stated assumptions. a = { price, feeTransfer, feeOther, rent0, rentGrowth, svc, vacancy, mgmt, growth, years, sellCost }
