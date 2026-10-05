@@ -67,7 +67,7 @@ ok(r.status === 401, "/blocks with a wrong key: 401");
 r = await call("/blocks?key=" + READ);
 let html = await r.text();
 ok(r.status === 200 && /text\/html/.test(r.headers.get("Content-Type") || ""), "/blocks with the owner key: 200 html");
-ok(cfgOf(html) && cfgOf(html).have === false && BLOCKS_JS.includes("The blocks for this district are not ready yet."), "no img_blocks_<slug> on file: the page knows (have:false) and says the blocks are not ready");
+ok(cfgOf(html) && cfgOf(html).have === false && BLOCKS_JS.includes("The digital footprint for this district is not ready yet."), "no img_blocks_<slug> on file: the page knows (have:false) and says the blocks are not ready");
 
 // ---- stub KV with the real file, stored the way build_blocks.py --push stores it (gzip, application/json) ---------------------
 store.set("img_blocks_" + SLUG, zlib.gzipSync(blocksRaw).buffer);

@@ -68,7 +68,7 @@ function renderSet(RIDX, d) {
 }
 const PIC = {
   own_photo: "Own photo (Photo: Najjuko)", photo: "Developer's photo", street_view: "Street View (Google, at print time)",
-  blocks: "Blocks view (a render of the district model)", district: "District map - nothing picked out", none: "Nothing (no district layer)",
+  blocks: "Digital footprint view (a render of the district digital footprint)", district: "District map - nothing picked out", none: "Nothing (no district layer)",
 };
 export const PIC_OK = new Set(["own_photo", "photo", "street_view"]);
 
@@ -338,7 +338,7 @@ var CUR=-1,FORM={};
 function open(i){CUR=i;var r=D.rows[i];FORM={};var bf=r.broker||{};Object.keys(FIELDS).forEach(function(k){FORM[k]=bf[k]||""});FORM.notes=bf.notes||"";sheet();$("sheet").classList.add("on");$("sheet").scrollTop=0}
 function sheet(){var r=D.rows[CUR];var o='<div class="sh"><h2>'+h(r.name)+'</h2><button class="x" type="button" id="sx" aria-label="Close">×</button></div>';
   o+='<div class="box"><div class="chips">'+chips(r)+'</div>'+(r.missing.length?'<div class="miss">To do: '+h(r.missing.join("; "))+'</div>':'<div class="miss">Complete.</div>')+'</div>';
-  o+='<div class="box"><h3>MAPPED</h3><div class="am">'+(r.how==="building"?"Placed by its own building footprint ("+r.mapped.n+").":r.mapped.n+" homes attributed.")+'</div>'+(r.mapped.warn?'<div class="am" style="color:#E8C27A">⚠ '+h(r.mapped.warn)+'</div>':"")+(r.mapped.override?'<div class="am"><span>Owner corrections: +'+r.mapped.override.add+' / −'+r.mapped.override.remove+(r.mapped.override.at?" ("+h(String(r.mapped.override.at).slice(0,10))+")":"")+'</span></div>':"")+(r.how==="community"?'<button class="go" type="button" id="omap">Open the map and fix the homes</button>':"")+'</div>';
+  o+='<div class="box"><h3>MAPPED</h3><div class="am">'+(r.how==="building"?"Placed by its own building building outline ("+r.mapped.n+").":r.mapped.n+" homes attributed.")+'</div>'+(r.mapped.warn?'<div class="am" style="color:#E8C27A">⚠ '+h(r.mapped.warn)+'</div>':"")+(r.mapped.override?'<div class="am"><span>Owner corrections: +'+r.mapped.override.add+' / −'+r.mapped.override.remove+(r.mapped.override.at?" ("+h(String(r.mapped.override.at).slice(0,10))+")":"")+'</span></div>':"")+(r.how==="community"?'<button class="go" type="button" id="omap">Open the map and fix the homes</button>':"")+'</div>';
   o+='<div class="box"><h3>PICTURE A REPORT WOULD SHOW</h3><div class="am"><b>'+h(r.picture.label)+'</b></div><div class="ph">'+r.photos.map(function(p){return '<img src="'+h(p.url)+'" alt="Own photo">'}).join("")+'</div>'+(r.photos.length?'<div class="cred">Photo: Najjuko · the newest is the card picture</div>':"")+'<label class="go soft" style="display:flex;align-items:center;justify-content:center">Add a photo (camera or library)<input id="pf" type="file" accept="image/*" hidden></label></div>';
   o+='<div class="box"><h3>AMENITIES</h3>'+r.amen.map(function(a){return '<div class="am"><b>'+h(a.label)+': '+(a.ok?(a.v===true?"yes":a.v===false?"no":h(a.v)):"not known")+'</b> <span>'+h(a.src||"")+'</span></div>'}).join("")+'</div>';
   o+='<div class="box"><h3>FACTS FROM THE BROKER</h3>'+(r.broker?'<div class="am"><span>Saved: '+h(r.broker.by)+', '+h(r.broker.say)+'</span></div>':"");

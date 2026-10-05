@@ -45,7 +45,7 @@ const call = (p) => worker.fetch(new Request("https://azimuth-2.digitalchemy.wor
 
 // ---- (a) the map and the twin --------------------------------------------------------------------------------------------
 const mapHtml = await (await call("/map?key=" + READ)).text();
-ok(/<a class=blkbtn id=blkbtn hidden href="#">⬚ BLOCKS<\/a>/.test(mapHtml), "/map carries the BLOCKS button in its top chrome, hidden until a district is picked");
+ok(/<a class=blkbtn id=blkbtn hidden href="#">⬚ DIGITAL FOOTPRINT<\/a>/.test(mapHtml), "/map carries the DIGITAL FOOTPRINT button in its top chrome, hidden until a district is picked");
 const chrome = scripts(mapHtml).find((s) => s.code.includes("function blocksLink("));
 ok(!!chrome && parses(chrome.code), "the map chrome script with blocksLink parses");
 ok(chrome && chrome.code.includes('b.href="/blocks?district="+encodeURIComponent(slug)+"&key="+encodeURIComponent(KEY)+(window.__RKQ||"")') && chrome.code.includes("CURD=slug;blocksLink(slug);") && chrome.code.includes('CURD="";blocksLink("");'),

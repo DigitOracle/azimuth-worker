@@ -111,7 +111,7 @@ ok(car && crit(car, "gym").attribution === "Google Maps" && crit(car, "gym").liv
 ok(top && crit(top, "gym").v === null && crit(top, "gym").community_fact && crit(top, "gym").community_fact.name === "Damac Hills - Gym" && crit(top, "gym").community_fact.m > 500 && /about [\d.]+ (km|m) away/.test(crit(top, "gym").community_fact.say),
   "L2 nothing in Topanga: the community's gym is 800 m off - not a yes for Topanga, shown as the community's with the distance", JSON.stringify(crit(top, "gym")));
 ok(!/Fitness First Mudon|Old Gym/.test(j._raw), "L2b a gym outside the district polygon, or closed, is never named");
-ok(bel && crit(bel, "gym").level === "community" && /^Gym in DAMAC Hills on Google Maps \([^)]+\): Damac Hills - Gym\. No footprints are on file for Bel Air, so this is the community's answer$/.test(crit(bel, "gym").src),
+ok(bel && crit(bel, "gym").level === "community" && /^Gym in DAMAC Hills on Google Maps \([^)]+\): Damac Hills - Gym\. No building outlines are on file for Bel Air, so this is the community's answer$/.test(crit(bel, "gym").src),
   "L3 Bel Air (no attributed footprints): the community's answer only, and it says so", JSON.stringify(crit(bel, "gym")));
 ok(car && crit(car, "community_pool").v === null && crit(car, "community_pool").community_fact && crit(car, "community_pool").community_fact.name === "Queens Meadow pool" && crit(car, "community_pool").community_fact.m > 500
   && !/Carson Hotel Pool|Shisha|Urban Swim/.test(j._raw),

@@ -693,7 +693,7 @@ function rankHtml(list, st, key, rk, opt) {
       sub = esc(fmt(x.n) + " in all \u00b7 " + fmt(x.nw) + " new \u00b7 " + fmt(x.rn) + " renewed");
     } else {
       const id = appIdOf(x.key);
-      if (id) more = ' \u00b7 <a href="' + esc(bpage(x.district, id, key, rk)) + '">building page \u2197</a> \u00b7 <a href="' + esc(blocks(x.district, id, key, rk)) + '">blocks \u2197</a>';
+      if (id) more = ' \u00b7 <a href="' + esc(bpage(x.district, id, key, rk)) + '">building page \u2197</a> \u00b7 <a href="' + esc(blocks(x.district, id, key, rk)) + '">digital footprint \u2197</a>';
       name = '<a href="' + esc(linker(Object.assign({}, st, { kind: "building", id: x.key, d: id ? "" : x.district }), key, rk)()) + '">' + pname(x.en, x.ar, x.app) + "</a>";
       sub = esc([opt.withDistrict ? x.dname : "", x.no ? "#" + x.no : "", fmt(x.nw) + " new \u00b7 " + fmt(x.rn) + " renewed"].filter(Boolean).join(" \u00b7 "));
     }
@@ -711,7 +711,7 @@ function answerHtml(A, st, key, rk) {
       + (A.identity ? '<div class=idn id=ejid>' + [A.en ? esc(A.en) : "", A.ar ? '<span lang=ar dir=rtl>' + esc(A.ar) + "</span>" : "", A.no ? "#" + esc(A.no) : ""].filter(Boolean).join(" \u00b7 ") + "</div>" : "")
       + "<div class=sb>" + esc([A.dname, A.dev].filter(Boolean).join(" \u00b7 ")) + "</div>"
       + headline(A.appName ? esc(A.appName) : pname(A.en, A.ar), A) + strip + bands + subs
-      + (A.appId ? '<div class=lk><a href="' + esc(bpage(A.district, A.appId, key, rk)) + '">Building page \u2197</a><a href="' + esc(blocks(A.district, A.appId, key, rk)) + '">See it in blocks \u2197</a></div>' : "")
+      + (A.appId ? '<div class=lk><a href="' + esc(bpage(A.district, A.appId, key, rk)) + '">Building page \u2197</a><a href="' + esc(blocks(A.district, A.appId, key, rk)) + '">See its digital footprint \u2197</a></div>' : "")
       + "</div>";
   }
   if (A.kind === "developer") {

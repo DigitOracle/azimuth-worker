@@ -101,7 +101,7 @@ export function buildingData(slug, id, stack, umx, bf, anchors, people, district
   if (r.name_id && r.name_id.name && !r.name_id.backs_register) facts.push([r.name_id.broader ? "The scheme" : "Named by the land registry",
     r.name_id.name + (r.name_id.plot_code ? " · plot " + r.name_id.plot_code : "")]);
   if (r.makani && r.makani.makani) facts.push(["Makani", String(r.makani.makani).replace(/(\d{4})(\d{5})/, "$1 $2") +
-    (r.makani.dist_m ? " · entrance " + Math.round(r.makani.dist_m) + " m from the footprint" : "")]);
+    (r.makani.dist_m ? " · entrance " + Math.round(r.makani.dist_m) + " m from the building outline" : "")]);
   const around = [];
   if (sales.metro) around.push(["Metro", sales.metro]);
   if (sales.mall) around.push(["Mall", sales.mall]);
@@ -352,8 +352,8 @@ export function buildingPageHtml(D, key, rk) {
     (D.conflict ? '<div id=warn>The map calls this building ' + esc(D.conflict) + ', and the floors here are the register record for ' +
       esc(D.name) + ". " + (D.verdict === "map" && D.nameId
         ? "The Land Department's own name for this building, reached through parcel ids rather than by matching text, is " +
-          esc(D.nameId.name) + " — which agrees with the map. So the register record shown here is very probably bound to the wrong footprint: treat these floors as unverified."
-        : "One of the two is bound to the wrong footprint, so read them with care.") + "</div>" : "");
+          esc(D.nameId.name) + " — which agrees with the map. So the register record shown here is very probably bound to the wrong building outline: treat these floors as unverified."
+        : "One of the two is bound to the wrong building outline, so read them with care.") + "</div>" : "");
   const json = JSON.stringify(D).replace(/<\//g, "<\\/");
   const tail = '<script type="module">import * as THREE from "three";import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";' +
     'import { OrbitControls } from "three/addons/controls/OrbitControls.js";import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";' +
@@ -554,7 +554,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
       for (const f of D.fps) { const dx = f[1] - c.x, dz = f[2] - c.z, d = dx * dx + dz * dz; if (d < bd) { bd = d; best = f[0]; } }
       (String(best) === D.id && bd <= 900 ? mine : others).push(m);
     }
-    if (!mine.length) { const w = document.createElement("div"); w.id = "msg"; w.textContent = "this footprint is not in the model"; document.body.appendChild(w); return; }
+    if (!mine.length) { const w = document.createElement("div"); w.id = "msg"; w.textContent = "this building outline is not in the model"; document.body.appendChild(w); return; }
     // context: the neighbours stay, quietly, so the tower is somewhere rather than nowhere
     // the neighbours keep their own facades so the tower stands in a city, only quieter than the subject
     const dim = (mt) => { const c = mt.clone(); if (c.map) { c.map.colorSpace = THREE.SRGBColorSpace; c.color.multiplyScalar(0.72); } else { c.color.lerp(new THREE.Color(0x2b3533), 0.55); }
@@ -966,9 +966,9 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     let extra = "";
     if (!real && p.basis !== "units") extra += " No unit numbers are shown: the units register does not cover this building well enough.";
     if (p.dm_use) extra += " The Municipality records this floor as " + esc(p.dm_use) + "; the Land Department register lists these homes on it, so they are drawn.";
-    if (p.tower) extra += " The footprint (dashed) is far larger than the floor the register describes, so it is read as a podium: the floor is drawn inside it at the size the register implies.";
-    if (real) return "<b>The built layout.</b> " + basis + " " + esc(D.plateNote || "The outline is this building's surveyed footprint.") + extra + " What is not claimed is which way a flat faces: the model's own labels are to project north, which is not true north here.";
-    return "<b>Indicative layout.</b> The outline is this building's surveyed footprint; the sizes of the homes against each other are the register's. " +
+    if (p.tower) extra += " The building outline (dashed) is far larger than the floor the register describes, so it is read as a podium: the floor is drawn inside it at the size the register implies.";
+    if (real) return "<b>The built layout.</b> " + basis + " " + esc(D.plateNote || "The outline is this building's surveyed building outline.") + extra + " What is not claimed is which way a flat faces: the model's own labels are to project north, which is not true north here.";
+    return "<b>Indicative layout.</b> The outline is this building's surveyed building outline; the sizes of the homes against each other are the register's. " +
       basis + extra + " Where each home sits, and where the lifts and stairs are, is not published for this building — that comes from a Revit model or the developer's stacking plan, as on The Symphony.";
   }
   function plateSVG(f) {
@@ -978,7 +978,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     if (p.skip)
       return "<h3>The floor plate</h3><div class=src>" +
         (p.skip === "small"
-          ? "Not drawn: the register puts more homes on this floor than this footprint can hold — several buildings are probably bound to one record."
+          ? "Not drawn: the register puts more homes on this floor than this building outline can hold — several buildings are probably bound to one record."
           : "Not drawn: too many units on one floor to draw.") + "</div>";
     const legend = (p.counts || []).map((c) => '<span class=lg><i style="background:' + (COL[c[0]] || COL.other) + '"></i>' +
       esc({ studio: "Studio", "1": "1 bed", "2": "2 bed", "3": "3 bed", "4": "4 bed +", office: "Office", retail: "Retail" }[c[0]] || c[0]) +
@@ -1133,13 +1133,13 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     open_('<div class=t>' + esc(D.district) + "</div><h2>" + esc(D.name) + "</h2>" +
       (D.grade ? '<span class="pill n">' + esc(String(D.grade).toLowerCase().replace(/_/g, " ")) + "</span>" : "") +
       // v277 - the way to the blocks: this building gold on its plot among its neighbours (Kendall, 1 Oct 2026)
-      (D.blocksUrl ? '<div class=dacts style="margin:6px 0 2px"><a class=da id=blocksbtn href="' + esc(D.blocksUrl) + '">⬚ Blocks — on its plot</a></div>' : "") +
+      (D.blocksUrl ? '<div class=dacts style="margin:6px 0 2px"><a class=da id=blocksbtn href="' + esc(D.blocksUrl) + '">⬚ Digital footprint — on its plot</a></div>' : "") +
       // the whole building as one document, to keep or to send: at the top of the card about this building
-      (D.unnamed ? '<div class=src><b>The registers hold no name for this footprint.</b> It is identified by its place ' +
+      (D.unnamed ? '<div class=src><b>The registers hold no name for this building outline.</b> It is identified by its place ' +
         'and its plot, not by a name, which is normal for the majority of Dubai buildings outside the named schemes.</div>' : "") +
       (D.noModel ? '<div class=src><b>This building has no floor model yet.</b> The registers know it and what is here ' +
         'comes from them, but the floor-by-floor stack - the picker, the plate and the per-floor layout - is built ' +
-        'separately and has not been built for this footprint. Nothing below is missing because the building lacks it; ' +
+        'separately and has not been built for this building outline. Nothing below is missing because the building lacks it; ' +
         'it is missing because we have not measured it.</div>' : "") +
       dossierBlock() +   // v237 - EVERY building can be handed over, not only the 206 with a PDF; the row itself decides what it offers
       // v238 - the four pillars, built in the Worker and handed down as a string (see src/pillars.js)
@@ -1167,7 +1167,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         (s.first ? '<div class=row><span>First and last sale</span><span>' + esc(String(s.first).slice(0, 7)) + " – " + esc(String(s.last).slice(0, 7)) + "</span></div>" : "") : "") +
       (D.openFrom ? "<h3>What it sees over</h3>" + D.openFrom.map((fl, k) => '<div class=row><span>' + DIRN[k] + "</span><span>" +
         (fl == null ? "blocked at every floor" : fl === 0 ? "open from the ground" : "open from floor " + (floors[fl] ? floors[fl].l : fl)) + "</span></div>").join("") +
-        '<div class=src>Measured against every footprint within ' + D.openRadius + " m in this district's model, on flat ground: it says whether a floor looks over the neighbours on that side, not what is beyond them. Buildings outside this district are not counted.</div>" : "") +
+        '<div class=src>Measured against every building outline within ' + D.openRadius + " m in this district's model, on flat ground: it says whether a floor looks over the neighbours on that side, not what is beyond them. Buildings outside this district are not counted.</div>" : "") +
       (D.people ? "<h3>Who lives here · " + esc(D.people.label) + "</h3>" +
         '<div id=donut></div>' +
         (D.people.unknown ? '<div class=src style="margin-top:2px">A further ' + D.people.unknown +
@@ -1184,7 +1184,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
           (x.sqft ? "<br><small>" + fmt(x.sqft) + " sq ft · " + (x.offplan ? "off-plan" : "ready") + "</small>" : "") +
           "</span><span>" + (x.price ? aed(x.price) : "") + "</span></div>").join("") +
         '<div class=src>Dubai Land Department transactions registered against the name ' + esc(D.sold.name) +
-        ". The transaction register carries no building id, only a name, so these are that name's sales rather than provably this footprint's. Settled prices, not asking." +
+        ". The transaction register carries no building id, only a name, so these are that name's sales rather than provably this building outline's. Settled prices, not asking." +
         (D.sold.psf ? saleBandNote(D.sold.n) : "") +
         "</div>" : "") +
       (D.occupancy ? "<h3>When it filled up</h3>" +
@@ -1257,6 +1257,6 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     return out.reverse();
   }
   $("foot").innerHTML = esc(D.name) + " · " + esc(D.district) + " — " + N + " levels" + (D.basements ? " above " + D.basements + " basement" + (D.basements > 1 ? "s" : "") : "") +
-    ", from the Dubai Municipality floor register and the Land Department units register. Model: CityEngine massing over ArcGIS footprints, cut into floors — not a survey of the building.";
+    ", from the Dubai Municipality floor register and the Land Department units register. Model: CityEngine massing over ArcGIS building outlines, cut into floors — not a survey of the building.";
   hideLabel(); count(); drawSold(null);
 }

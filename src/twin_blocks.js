@@ -242,7 +242,7 @@ window.__twinBlocksMount=function(o){if(!CFG.have||!o||!o.THREE){S.state="off";r
     addEventListener("pointerup",function(e){var d=pd;pd=null;if(!d||Math.hypot(e.clientX-d[0],e.clientY-d[1])>6||S.state!=="blocks")return;
       if(cv&&e.target!==cv)return;var i=tapAt(o,e.clientX,e.clientY);if(i==null){if(window.__tcPanel)window.__tcPanel.hide();return}tapCard(i)});
     if(o.scene.fog){o.scene.fog.near=R*1.3;o.scene.fog.far=R*3.6}o.cam.far=Math.max(o.cam.far,R*8);o.cam.updateProjectionMatrix();
-    place(o,F);pill(o.msg,made.n+" blocks · detail loading…");S.state="blocks";
+    place(o,F);pill(o.msg,made.n+" buildings · digital footprint, detail loading…");S.state="blocks";
   }).catch(function(e){S.state="off";S.err=String(e&&e.message||e)})};
 window.__twinBlocks={
   // the detailed tile has landed (root is positioned and in the scene): take the blocks away and carry the camera across by

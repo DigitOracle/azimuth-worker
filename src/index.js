@@ -7661,7 +7661,7 @@ const HOMES_PANEL_HTML = ''
   + '  <div class=hfoot><a id=hlist>list them \u2192</a><a id=hclear>clear</a></div></div></div>';
 const MAP_CHROME_HTML = ''
   + '<div class=top><u class=topx id=topx title=close>✕</u><u class=topo id=topo title=show>▾ show</u><h1>Najma <i>نجمة</i> — __TITLE__</h1><div class=sub id=st>pick a district</div>'
-  + '<a class=blkbtn id=blkbtn hidden href="#">⬚ BLOCKS</a>'   // v277 (Kendall, 1 Oct 2026: "how do I get to the blocks?") - the LOD 100 view of the district on screen; set by pickDistrict / the twin's district
+  + '<a class=blkbtn id=blkbtn hidden href="#">⬚ DIGITAL FOOTPRINT</a>'   // v277 (Kendall, 1 Oct 2026: "how do I get to the blocks?") - the LOD 100 view of the district on screen; set by pickDistrict / the twin's district
   + '<div class=srow><div class=sbox><input id=q type=search placeholder="search a district, sub-community, plot, school, hospital, mall, metro, developer\u2026" autocomplete=off spellcheck=false><div id=qr></div></div></div>'
   + '<div class=rail id=rail></div><div class=am id=am></div></div>'
   + '<div id=scope><div class=sm><button class="on" data-mode=area>in this community</button><button data-mode=dist>by distance</button></div>'
@@ -7926,7 +7926,7 @@ const MAP_CHROME_JS = ''
   + 'function fmtM(a){return a==null?\'\u00b7\':(a>=1e6?(a/1e6).toFixed(2)+\'m\':Math.round(a/1e3)+\'k\')}'
   // v223 - a record with no unit rows still knows its floors and its indicative homes; umxFor used to drop it
   // and the tab went blank on 97% of buildings. Everything derived from our own massing says so on the card.
-  + 'function umxHeld(r){var bits=[];if(r.floors)bits.push(r.floors+\' floors\'+(r.floors_basis?\'\':\' (modelled)\'));if(r.car_parks)bits.push(r.car_parks+\' car parks\');if(r.registered_homes)bits.push(r.registered_homes+\' homes registered\');var h=\'<div class=umx><div class=ps>what we hold for this building</div>\';if(bits.length)h+=\'<div class=ct><div>\'+bits.join(\' \u00b7 \')+\'</div></div>\';if(r.indicative_homes)h+=\'<div class=ps style="text-transform:none;letter-spacing:0;margin-top:6px">about \'+r.indicative_homes+\' homes \u00b7 <small style=color:var(--mut)>modelled from our own massing (footprint \u00d7 storeys), an upper bound \u2014 not a register count</small></div>\';if(r.needs&&r.needs.length)h+=\'<div class=ps style="text-transform:none;letter-spacing:0;margin-top:6px">not held yet \u00b7 <small style=color:var(--mut)>\'+esc(r.needs[0])+\'</small></div>\';return h+\'</div>\'}'
+  + 'function umxHeld(r){var bits=[];if(r.floors)bits.push(r.floors+\' floors\'+(r.floors_basis?\'\':\' (modelled)\'));if(r.car_parks)bits.push(r.car_parks+\' car parks\');if(r.registered_homes)bits.push(r.registered_homes+\' homes registered\');var h=\'<div class=umx><div class=ps>what we hold for this building</div>\';if(bits.length)h+=\'<div class=ct><div>\'+bits.join(\' \u00b7 \')+\'</div></div>\';if(r.indicative_homes)h+=\'<div class=ps style="text-transform:none;letter-spacing:0;margin-top:6px">about \'+r.indicative_homes+\' homes \u00b7 <small style=color:var(--mut)>modelled from our own massing (building outline \u00d7 storeys), an upper bound \u2014 not a register count</small></div>\';if(r.needs&&r.needs.length)h+=\'<div class=ps style="text-transform:none;letter-spacing:0;margin-top:6px">not held yet \u00b7 <small style=color:var(--mut)>\'+esc(r.needs[0])+\'</small></div>\';return h+\'</div>\'}'
   // v232 - scope, not identity. A record bound by footprint index can be scoped to the parcel or the
   // project rather than the one building (449 of 1,267 plots). The names corroborate in those cases, so
   // v231's check cannot see it: the headline total is labelled the project's and the building's own
@@ -9210,7 +9210,7 @@ function videoBlock(v) {
   // drew a video tour: /dev?d=emaar and /dev?d=sobha returned Error 1101. It carries its own escaper now.
   const esc2 = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   return '<div class=vtour><div class=vtt>\u25B6 video tour</div><video controls playsinline preload=none poster="' + v.poster + '"><source src="' + v.src + '" type="video/mp4"></video>' +
-         '<div class=vcap>' + esc2(v.title) + (v.approx ? ' \u00b7 pin on the map is approximate: plot ' + esc2(v.plot || '') + ', building not yet a footprint' : '') + '</div></div>';
+         '<div class=vcap>' + esc2(v.title) + (v.approx ? ' \u00b7 pin on the map is approximate: plot ' + esc2(v.plot || '') + ', building not yet a building outline' : '') + '</div></div>';
 }
 function renderDev(dv, bd, galleries, key, umx, vids, owner, cardJoins, liveSheets, pillarsHtml) {   // v161 - owner: the client-sheet action on a developer card, never on a client link   // v168 - cardJoins: the precomputed join
   // v165 - THE SLUG MUST AGREE WITH THE NAME ON THE CARD. umLookup exists to put a card near a building for the twin and map links, where a
@@ -9857,7 +9857,7 @@ ${MAP_CHROME_HTML.replace('<!--hstack-->', rk ? RES_PANEL_HTML : '').replace('__
 <div class=tog id=filters></div>
 <div class=feat id=feat></div>
 <div id=msg>loading massing…</div>
-<div class=foot>model: CityEngine from OSM footprints + DLD register · facades: Esri CityEngine texture library · © OpenStreetMap contributors</div>
+<div class=foot>model: CityEngine from OSM building outlines + DLD register · facades: Esri CityEngine texture library · © OpenStreetMap contributors</div>
 ${najNav(key, "twin", rk)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>window.__twinPending=true;window.__twinDistrict=${JSON.stringify(slugName)};(function(){var KEY=${JSON.stringify(key || "")};${MAP_CHROME_JS}${rk ? 'var RK=' + JSON.stringify(rk) + ';' + RES_PANEL_JS : ''}})();</script>
@@ -10365,7 +10365,7 @@ function applyProj(name){
   const bf=a0&&BF?BF[String(a0.i)]:null;
   if(bf){
     if(bf.storeys>1&&!(f&&f.storeys))rows.splice(2,0,["Storeys (model)",String(bf.storeys)]);
-    if(bf.plate_suspect)rows.splice(3,0,["Footprint","podium or plot"]);
+    if(bf.plate_suspect)rows.splice(3,0,["Building outline","podium or plot"]);
     else if(bf.envelope_sqft)rows.splice(3,0,["Envelope (model)",fmA(bf.envelope_sqft)+" sq ft"]);
     if(bf.units_registered)rows.splice(4,0,["Homes (registered)",String(bf.units_registered)]);
     else if(bf.units_indicative)rows.splice(4,0,["Homes (indicative)","~"+bf.units_indicative]);}
@@ -10393,7 +10393,7 @@ function applyProj(name){
     "Sold by type":"M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 21v-6h6v6M9 9h.01M15 9h.01","Nearest metro":"M6 3h12v12H6zM6 15l-2 4M18 15l2 4M9 11h6M9 7h6",
     "Nearest mall":"M6 8h12l1 12H5zM9 8a3 3 0 0 1 6 0","Landmark":"M5 21V4M5 4h12l-2 4 2 4H5","On the availability list":"M6 3h12v18H6zM9 8h6M9 12h6M9 16h4",
     "Last registration":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2","Height (model)":"M12 20V6M8 10l4-4 4 4",
-    "Envelope (model)":"M4 4h16v16H4zM4 10h16M10 4v16","Footprint":"M4 20h16M7 20V12h10v8M7 12l5-4 5 4","Storeys (model)":"M4 20h16M6 20V4h12v16M6 9h12M6 14h12",
+    "Envelope (model)":"M4 4h16v16H4zM4 10h16M10 4v16","Building outline":"M4 20h16M7 20V12h10v8M7 12l5-4 5 4","Storeys (model)":"M4 20h16M6 20V4h12v16M6 9h12M6 14h12",
     "Homes (registered)":"M4 21V10l8-6 8 6v11M9 21v-6h6v6M15 6l3-2","Homes (indicative)":"M4 21V10l8-6 8 6v11M9 21v-6h6v6"};
   const tile=(r)=>'<div class=tl><svg viewBox="0 0 24 24" fill="none" stroke="#C5A56A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+(ICO[r[0]]||"M12 12h.01")+'"/></svg><b>'+esc(r[1])+'</b><i>'+esc(r[0])+'</i></div>';
   // how well this building is known, said on the card rather than implied. VERIFIED = an authoritative register named it;
@@ -10415,7 +10415,7 @@ function applyProj(name){
     '<div class=pa id=unrealrow style="display:none;margin:6px 0 2px"><a class="act unreal" id=unrealbtn data-i="'+(a0?a0.i:"")+'" style="border-color:var(--gold);color:var(--gold);font-weight:600">UnReal</a></div>'+
     '<div class=snap>'+(rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+'</div>'+
     '<div class=deep>'+_vidHtml+tstrip+astrip+umxHtml+acts+'</div>'+
-    '<div class=pn>developer site · availability sheet · DLD Open Data 2026 · identity resolved across every source we hold, graded on the chip; tenants are recorded against the building, never as its name; envelope is footprint × storeys, an upper bound; blockers within this district only</div>';
+    '<div class=pn>developer site · availability sheet · DLD Open Data 2026 · identity resolved across every source we hold, graded on the chip; tenants are recorded against the building, never as its name; envelope is building outline × storeys, an upper bound; blockers within this district only</div>';
   pp.classList.add("on");document.getElementById("ppx").onclick=()=>{document.getElementById("projsel").value="";applyProj("")};
   pp.classList.remove("deep");pp.scrollTop=0;                                                     // v94: a phone opens on the snapshot
   const _mb=pp.querySelector(".modeb");_mb.querySelector("#mob").onclick=()=>_mb.classList.toggle("open");
@@ -10850,7 +10850,7 @@ function stkPlateSVG(f){
   if(!STKPL||!STKPL.floors)return"";
   const ix=STKPL.floors[String(f.l)];if(ix===undefined)return"";
   const p=STKPL.plates[ix];if(!p)return"";
-  if(p.skip)return'<div class=fbas>'+(p.skip==="small"?"Not drawn: the register puts more homes on this floor than this footprint can hold - several buildings are probably bound to one record.":"Not drawn: too many units on one floor to draw.")+"</div>";
+  if(p.skip)return'<div class=fbas>'+(p.skip==="small"?"Not drawn: the register puts more homes on this floor than this building outline can hold - several buildings are probably bound to one record.":"Not drawn: too many units on one floor to draw.")+"</div>";
   const lab=(STKPL.labels||{})[String(f.l)],o=STKPL.outline,xs=[],ys=[];
   for(let i=0;i<o.length;i+=2){xs.push(o[i]);ys.push(o[i+1])}
   const x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs),y0=Math.min.apply(null,ys),y1=Math.max.apply(null,ys);
@@ -10871,8 +10871,8 @@ function stkPlateSVG(f){
   if(!p.cells.length)h+='<text x="'+W/2+'" y="'+(H/2+5).toFixed(1)+'" font-size="17" letter-spacing="3" text-anchor="middle" fill="#E8E4D8" fill-opacity=".8">'+stkEsc(String(p.use).toUpperCase())+"</text>";
   h+='<g transform="translate('+(W-40)+',38) rotate('+(-STKPL.north).toFixed(1)+')"><circle r="17" fill="#0E1613" fill-opacity=".6" stroke="#C5A56A" stroke-opacity=".6"/><path d="M0,-12 L5,7 L0,3 L-5,7 Z" fill="#C5A56A"/><text y="-21" font-size="11" fill="#C5A56A" text-anchor="middle">N</text></g></svg>';
   const says={units:"The unit numbers, types and sizes are the Land Department units register's, one row per unit; they are laid round the facade in unit-number order.",municipality:"How many homes this floor carries is the Municipality's count for the floor, shared between the types the Land Department register puts on it.",register:"How many homes of each type this floor carries is the Land Department register's units for the type, spread evenly over the floors the register gives it.",revit:"The unit numbers, types and sizes are the developer's Revit model of this building, floor by floor, and each flat is drawn where the model puts it."}[p.basis]||"";
-  if(p.basis==="revit")return h+'<div class=fbas><b>The built layout.</b> '+says+" "+stkEsc(STKPL.note||"The outline is this building's surveyed footprint.")+" What is not claimed is which way a flat faces: the model's own labels are to project north, which is not true north here."+"</div>";
-  return h+'<div class=fbas><b>Indicative layout.</b> The outline is this building’s surveyed footprint; the sizes of the homes against each other are the register’s. '+says+(p.basis!=="units"?" No unit numbers are shown: the units register does not cover this building well enough.":"")+(p.dm_use?" The Municipality records this floor as "+stkEsc(p.dm_use)+"; the Land Department register lists these homes on it, so they are drawn.":"")+(p.tower?" The footprint (dashed) is far larger than the floor the register describes, so it is read as a podium.":"")+" Where each home sits, and where the lifts and stairs are, is not published for this building.</div>"}
+  if(p.basis==="revit")return h+'<div class=fbas><b>The built layout.</b> '+says+" "+stkEsc(STKPL.note||"The outline is this building's surveyed building outline.")+" What is not claimed is which way a flat faces: the model's own labels are to project north, which is not true north here."+"</div>";
+  return h+'<div class=fbas><b>Indicative layout.</b> The outline is this building’s surveyed building outline; the sizes of the homes against each other are the register’s. '+says+(p.basis!=="units"?" No unit numbers are shown: the units register does not cover this building well enough.":"")+(p.dm_use?" The Municipality records this floor as "+stkEsc(p.dm_use)+"; the Land Department register lists these homes on it, so they are drawn.":"")+(p.tower?" The building outline (dashed) is far larger than the floor the register describes, so it is read as a podium.":"")+" Where each home sits, and where the lifts and stairs are, is not published for this building.</div>"}
 function stkPanel(){const pp=document.getElementById("ppanel");if(!pp||!STKSEL||!pp.classList.contains("on"))return;
   const i=[...STKSEL].sort((a,b)=>STK.buildings_by_id[b].floors.length-STK.buildings_by_id[a].floors.length)[0],r=STK.buildings_by_id[i];
   const mb=pp.querySelector(".modeb");if(!mb||mb.querySelector('[data-m="floors"]'))return;
@@ -10887,7 +10887,7 @@ function stkPanel(){const pp=document.getElementById("ppanel");if(!pp||!STKSEL||
     :"No Municipality floor register on this building yet: floors from the Land Department register's "+N+" levels";
   // the register record and the map disagree on which building this is: one of the two bindings is wrong, and the floors below
   // are the register's. Say it rather than draw one building's floors on another in silence (footprint 53, Business Bay).
-  const clash=r.conflict?'<div class=fwarn>The map calls this building '+stkEsc(r.conflict)+'. These floors are the register record for '+stkEsc(r.name)+' - one of the two is bound to the wrong footprint, so read them with care.</div>':"";
+  const clash=r.conflict?'<div class=fwarn>The map calls this building '+stkEsc(r.conflict)+'. These floors are the register record for '+stkEsc(r.name)+' - one of the two is bound to the wrong building outline, so read them with care.</div>':"";
 
   const d=document.createElement("div");d.className="flr";
   d.innerHTML=clash+unfit+'<div class=flh>Floor layout <span>'+N+' levels'+(r.basements?' + '+r.basements+' below ground':'')+'</span></div>'+
@@ -11169,11 +11169,11 @@ function renderStock(slug, areaName, key, bfRaw, ancRaw, pfRaw, mktRaw) {
   const trow = (b) => '<div class=prow><div style="display:flex;justify-content:space-between;gap:8px"><b>' + esc2(b.name) + '</b><span class=sv>' + (b.height_m ? Math.round(b.height_m) + ' m' : '\u2014') + '</span></div>' +
     '<div class=pm><span>' + (b.dev ? esc2(devName(b.dev)) + (b.project ? ' \u00b7 ' + esc2(b.project) : '') : 'owner not on the list') + '</span><span>' + (b.storeys > 1 ? b.storeys + ' storeys' : '') +
     (b.units_registered ? ' \u00b7 ' + num2(b.units_registered) + ' homes' : '') +
-    (b.plate_suspect ? ' \u00b7 <span class=fl>podium footprint</span>' : ' \u00b7 ' + mm(sqft(b.envelope_m2)) + ' sqft envelope') + '</span></div></div>';
+    (b.plate_suspect ? ' \u00b7 <span class=fl>podium building outline</span>' : ' \u00b7 ' + mm(sqft(b.envelope_m2)) + ' sqft envelope') + '</span></div></div>';
   body += '<div class=card>' + najH2("star", "Tallest on file") + tallest.map(trow).join('') +
-    '<div class=note>Tap any of these in the twin to walk its facades and see what each side actually looks at. <span class=fl>podium footprint</span> means the outline we hold covers the whole plot, so no area is quoted for that building.</div></div>';
-  if (biggest.length) body += '<div class=card>' + najH2("house", "Largest envelopes on a clean footprint") + biggest.map(trow).join('') +
-    '<div class=note>Only buildings whose footprint reads as the building itself, so these envelopes are the closest this model gets to a floor area.</div></div>';
+    '<div class=note>Tap any of these in the twin to walk its facades and see what each side actually looks at. <span class=fl>podium building outline</span> means the outline we hold covers the whole plot, so no area is quoted for that building.</div></div>';
+  if (biggest.length) body += '<div class=card>' + najH2("house", "Largest envelopes on a clean building outline") + biggest.map(trow).join('') +
+    '<div class=note>Only buildings whose building outline reads as the building itself, so these envelopes are the closest this model gets to a floor area.</div></div>';
   if (A) body += '<div class=card>' + najH2("coins", "What it sells for") +
     '<div class=srow><span>Settled sales this period</span><span class=sv>' + num2(A.sales) + '</span></div>' +
     '<div class=srow><span>Median</span><span class=sv>' + num2(A.medianAedSqft) + ' AED/sqft</span></div>' +
@@ -11185,9 +11185,9 @@ function renderStock(slug, areaName, key, bfRaw, ancRaw, pfRaw, mktRaw) {
     '<div class=srow><span>Buildings carrying a name</span><span class=sv>' + num2(named.length) + ' of ' + num2(B.length) + '</span></div>' +
     '<div class=srow><span>Bound to a developer</span><span class=sv>' + num2(B.filter(b => b.dev).length) + '</span></div>' +
     '<div class=srow><span>Home counts from the register</span><span class=sv>' + num2(B.filter(b => b.units_registered).length) + ' buildings</span></div>' +
-    '<div class=srow><span>Footprints reading as podium or plot</span><span class=sv>' + num2(BF.plate_suspect || 0) + '</span></div>' +
+    '<div class=srow><span>Building outlines reading as podium or plot</span><span class=sv>' + num2(BF.plate_suspect || 0) + '</span></div>' +
     '<div class=note><b>Heights, storeys and building counts are solid</b> \u2014 they come from the survey and the open registers. ' +
-    '<b>Areas are an envelope, not a floor area.</b> The model extrudes each footprint straight up, so the area is footprint \u00d7 storeys: an upper bound. ' +
+    '<b>Areas are an envelope, not a floor area.</b> The model extrudes each building outline straight up, so the area is building outline \u00d7 storeys: an upper bound. ' +
     'It is close for a plain tower or slab whose outline is the building itself, and far too high wherever the outline we hold covers a podium or the whole plot \u2014 ' + num2(BF.plate_suspect || 0) + ' building' + ((BF.plate_suspect || 0) === 1 ? '' : 's') + ' here read that way and carry no area at all. ' +
     'Home counts are the register\u2019s or the developer\u2019s own wherever we hold one; anywhere else the twin shows an indicative figure at ' + Math.round((BF.efficiency || 0.78) * 100) + '% efficiency on a ' + Math.round(BF.unit_m2 || 105) + ' m\u00b2 apartment, which is a planning figure for scale and never a schedule of units.</div></div>';
   return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=robots content=noindex><title>' + esc2(areaName) + ' \u2014 stock report</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS + '<style>' +
@@ -11209,7 +11209,7 @@ function renderStock(slug, areaName, key, bfRaw, ancRaw, pfRaw, mktRaw) {
     NAJ_NAV_CSS + '</style></head><body>' +
     '<div class=hd><a class=bk href="/skyline/' + esc2(slug) + '?key=' + K + '">\u2190 back to the twin</a>' +
     '<div class=mast>' + esc2(areaName) + '</div><div class=sub>stock report \u00b7 built from the model</div></div>' + body +
-    '<div class=pv>Heights, storeys and footprints come from our own massing of this district, built on open survey footprints. Names and ownership come from the open registers and the developers\u2019 own published schemes. Sales figures are Dubai Land Department (DLD) Open Data \u2014 settled registrations, not asking prices. Contains information from the Government of Dubai.</div>' +
+    '<div class=pv>Heights, storeys and building outlines come from our own massing of this district, built on open survey building outlines. Names and ownership come from the open registers and the developers\u2019 own published schemes. Sales figures are Dubai Land Department (DLD) Open Data \u2014 settled registrations, not asking prices. Contains information from the Government of Dubai.</div>' +
     najNav(key, "twin") + '</body></html>';
 }
 

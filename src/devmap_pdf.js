@@ -509,7 +509,7 @@ export function blocksPicture(C, M, w, h, frame, focus) {
     if (focus && p.k !== focus) { others++; for (const id of p.ids) if (!hi.has(id)) hi.set(id, OTHER); continue; }
     const c = bandColour(p.tier); cnt[p.tier < 0 ? 4 : p.tier]++; for (const id of p.ids) if (!hi.has(id)) hi.set(id, { fill: c.fill, wall: c.wall, edge: c.edge });
   }
-  const svg = obliqueMap(M.layer, hi, { w, h, frame: frame || "all", label: "Map of " + C.names.plain + ": project footprints coloured by price band" });
+  const svg = obliqueMap(M.layer, hi, { w, h, frame: frame || "all", label: "Map of " + C.names.plain + ": project building outlines coloured by price band" });
   const key = [0, 1, 2, 3].filter((t) => cnt[t]).map((t) => '<div class="lg" style="font-size:10.5px"><i style="background:' + BAND[t].fill + '"></i>' + BAND[t].name + ": " + plural(cnt[t], "project") + "</div>").join("") + (cnt[4] ? '<div class="lg" style="font-size:10.5px"><i style="background:#CFCBC0"></i>Under 3 sales, no price: ' + plural(cnt[4], "project") + "</div>" : "") + (others ? '<div class="lg" style="font-size:10.5px"><i style="background:#D9D5CA"></i>Other developers: ' + plural(others, "project") + "</div>" : "");
   return { svg, key, bound };
 }
@@ -517,7 +517,7 @@ const MAP_NOTE = "Buildings with no colour are other buildings. The picture is t
 function snapshotFigure(C) {
   const pic = blocksPicture(C, C.M, 702, 255, "fit");
   if (!pic) return '<div class="figq">' + icon("buildings", 22, "#8A9A96") + "<div><b>Buildings for this area are not in the data yet.</b> The prices above come from the sales register and do not depend on them.</div></div>";
-  return '<div class="fig"><div class="figh">' + icon("buildings", 15, TEAL) + '<span class="serif">The area in blocks</span><span class="figs">' + plural(pic.bound.length, "project") + " coloured by price band &middot; outlines raised to height, seen from the south &middot; no colour = other buildings</span></div>" + '<div class="figm">' + pic.svg + '</div><div class="mkey" style="margin-top:5px">' + pic.key + "</div></div>";
+  return '<div class="fig"><div class="figh">' + icon("buildings", 15, TEAL) + '<span class="serif">The area&rsquo;s digital footprint</span><span class="figs">' + plural(pic.bound.length, "project") + " coloured by price band &middot; outlines raised to height, seen from the south &middot; no colour = other buildings</span></div>" + '<div class="figm">' + pic.svg + '</div><div class="mkey" style="margin-top:5px">' + pic.key + "</div></div>";
 }
 
 function mapPages(C, M) {
@@ -642,7 +642,7 @@ function methodPage(C) {
     ["buildings", "Off-plan sales and contract prices", "A home bought before it is finished (off-plan) is recorded at the contract price agreed with the developer, not at a price the home would fetch today. These sales are included at that contract price" + (C.area.offplan && C.area.offplan.note ? ": " + esc(C.area.offplan.note) : "") + "."],
     ["ruler", "Villas and plot size", "For villas and townhouses the size recorded may be the land plot or the built area, depending on how the sale was recorded, so a price per sq ft can mislead. Compare villas by total price and plot size with the developer&rsquo;s sales team. Sizes are in square feet (sq ft); 1 square metre is 10.76 sq ft."],
     ["info", "The 3 or more sales rule", "A price is only shown when 3 or more settled sales stand behind it. With fewer, the sales are counted but no price is printed. A project counts in the last 12 months when 3 or more of its sales settled in the window."],
-    ["map-trifold", "The maps", "Footprints and streets are from OpenStreetMap contributors (the app&rsquo;s district model). A project is placed on the map only where it matches a building outline; every other project is listed under &ldquo;Registered here, no map position yet&rdquo; with its sales and price, and is never dropped."],
+    ["map-trifold", "The maps", "Building outlines and streets are from OpenStreetMap contributors (the app&rsquo;s district digital footprint). A project is placed on the map only where it matches a building outline; every other project is listed under &ldquo;Registered here, no map position yet&rdquo; with its sales and price, and is never dropped."],
   ];
   const body = secHead("calculator", "How these numbers are worked out", "Sources: Dubai Land Department sales register" + (C.p.mode === "rent" ? "; registered rental contracts (the Dubai rent register, community level)" : "") + ", " + esc(dateLong(ix0.as_of)) + ".") +
     items.map((i) => '<div class="mth">' + icon(i[0], 20, TEAL) + "<div><b>" + i[1] + "</b><p>" + i[2] + "</p></div></div>").join("") + (M.filters ? '<div class="mnote">Which sales are counted: ' + esc(M.filters) + "</div>" : "");

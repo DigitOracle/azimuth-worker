@@ -61,7 +61,7 @@ ok(block.includes("<h4>Homes<u class=stkx id=stkx title=close>✕</u></h4>") && 
 ok(/STKCHIP=\[\["studio","Studio"\],\["1","1 BHK"\]/.test(block), "the type chips are studio / 1 / 2 / 3 / 4+ BHK");
 ok(block.includes('fb.textContent="Floor layout"'), "the building panel's third view is Floor layout");
 ok(block.includes("Floor layout <span>"), "the floor-range chart carries its heading");
-ok(block.includes("The map calls this building ") && block.includes("bound to the wrong footprint"), "a register record bound to the wrong footprint is said on the card, not drawn in silence");
+ok(block.includes("The map calls this building ") && block.includes("bound to the wrong building outline"), "a register record bound to the wrong footprint is said on the card, not drawn in silence");
 
 // 7. the district file is served from KV like every other /img/ asset, and is keyless
 store.set("img_stack_businessbay", JSON.stringify({ district: "businessbay", buildings_by_id: { 574: { name: "Al Habtoor Tower", basis: "dm_floors", floors: [], types: [] } } }));

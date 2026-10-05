@@ -131,7 +131,7 @@ console.log("C - Buy cards built from the register");
   ok(/Registered|Off-plan/.test(r0.why) && /since 20/.test(r0.why) && /no building page in the app yet/.test(r0.why), "the 'why' states the sales window and that there is no building page", r0.why);
   ok(!/not known/i.test(JSON.stringify(b.results.map((r) => [r.why, r.evidence.caveats]))), "no 'not known' in the client text");
   const bo = await run(NEW, env, q("alyelayiss1", Math.min(bed, 3), "villa,townhouse"), { owner: true });
-  ok(bo.notes.some((n) => /built from the Land Department sales register/.test(n) && /no building page, footprint or map position/.test(n)), "the owner's notes say what these rows are");
+  ok(bo.notes.some((n) => /built from the Land Department sales register/.test(n) && /no building page, building outline or map position/.test(n)), "the owner's notes say what these rows are");
   const a0 = await run(OLD, env, q("alyelayiss1", Math.min(bed, 3), "villa,townhouse"));
   ok(a0.results.length === 0, "NEGATIVE CONTROL: release-v312 returns NOTHING for the same Buy query (the cards are in KV; no item reaches them)", a0.results.length);
   // off-plan: contract values, said so

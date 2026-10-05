@@ -745,12 +745,12 @@ function buildingSource(rec) {
   if (rec.br && rec.br.developer) bits.push("developer from the developer's own project page");
   return bits.length ? "The building: " + bits.join("; ") + "." : "";
 }
-const BV_SAY = "A Blocks view is the building as a simple block on the app's district model (footprints and streets &copy; OpenStreetMap contributors), heights to scale, seen from the south - a picture of where and how tall it is, not a photograph.";
+const BV_SAY = "A digital footprint view is the building as a simple model on the app's district digital footprint (building outlines and streets &copy; OpenStreetMap contributors), heights to scale, seen from the south - a picture of where and how tall it is, not a photograph.";
 const nearbySource = () => "Metro: RTA station register. Schools (with their KHDA inspection rating) and clinics (Dubai Health Authority licence register): the nearest to this building, straight-line distances, not walking or driving times. Gyms: the community's mapped places (OpenStreetMap and Google Maps listings).";
 function pictureSource(rec) {
   if (rec.picSource === "render" && !rec.ownPic) return "Picture on page 1: an illustration, Najma's own render, not a photograph" + (renderBasis(rec) ? " - modelled from the plot polygon and the as-built outline." : " - it does not claim to show this building as built.") + (rec.br ? " Amenities: the developer's own project page." : "");
-  const bv = rec.picSource && rec.picSource !== "photo" && rec.picSource !== "none" && rec.picSource !== "street_view" ? " The picture on page 1 is a Blocks view, not a photograph: " + BV_SAY +
-    (rec.picSource === "blocks_area" ? " This record is a community of homes, not one building: the homes in gold are those the district model places in its Land Department sub-community - an approximate area." : "") : "";
+  const bv = rec.picSource && rec.picSource !== "photo" && rec.picSource !== "none" && rec.picSource !== "street_view" ? " The picture on page 1 is a digital footprint of the buildings, not a photograph: " + BV_SAY +
+    (rec.picSource === "blocks_area" ? " This record is a community of homes, not one building: the homes in gold are those the district digital footprint places in its Land Department sub-community - an approximate area." : "") : "";
   if (rec.ownPic) return "Picture on page 1: Najjuko's own photograph, taken on site" + (rec.ownPic.at ? " (" + esc(longDate(rec.ownPic.at)) + ")" : "") + " - " + PHOTO_CREDIT + "." +   // v291 CHECKLIST
     (rec.br ? " Amenities: the developer's own project page." : "");
   if (!rec.br) return bv.trim();
@@ -838,9 +838,9 @@ function dossierPage2(C, rec, q, sub, more) {   // v307 - more: a purchase puts 
   const mw = cb ? (rec.avail && rec.avail.count ? 470 : 560) : 700;
   const map = svg ? '<div style="width:' + (mw + 2) + 'px;border:1px solid #E6E1D8;line-height:0;">' + svg.replace("<svg ", '<svg style="width:' + mw + 'px;height:auto;display:block;" ') + "</div>" : MAP_TO_FOLLOW(cb ? 300 : 468);
   const body = '<div class="serif" style="font-size:24px;color:' + NAVY + ';">Where it is</div><div class="sub">' + (mark.area ? "The community&rsquo;s homes in gold (an approximate area), among the other buildings of " : "The building in gold on its own plot, among the other buildings of ") + esc(rec.dist) +
-    ". Simple blocks, heights to scale, seen from the south.</div>" + map + cb + availBlock(rec, q) + (more ? more.html : "");
+    ". Simple models, heights to scale, seen from the south.</div>" + map + cb + availBlock(rec, q) + (more ? more.html : "");
   return page(C, sub, body, smallPrint([
-    svg ? "Map: footprints and streets &copy; OpenStreetMap contributors; building position from the app's district model" + (mark.approx ? " (this one approximate, from a public map listing)" : "") +
+    svg ? "Map: building outlines and streets &copy; OpenStreetMap contributors; building position from the app's district digital footprint" + (mark.approx ? " (this one approximate, from a public map listing)" : "") +
       (mark.area ? " - here the homes the district model places in the Land Department sub-community of this name, an approximate area, not a surveyed boundary" : "") + "." : "",
     rec.avail && rec.avail.count ? "Availability: " + esc(rec.avail.developer) + "'s own availability sheet of " + esc(rec.avail.as_of || "") + ", as posted to the broker group; the developer's statement, not a register." : ""].concat(more ? more.small : [])));
 }
@@ -984,7 +984,7 @@ export function oneSheetHtml(C, q) {
     '<div style="font-size:11px;color:' + MUTED + ';">' + C.today + " &middot; numbers match the map &middot; rents are rents recently agreed, not asking prices</div></div>" + logo(C, 68) + "</div>" +
     html +
     '<div style="padding:0 30px 4px 30px;font-size:8.3px;color:' + MUTED + ';line-height:1.3;">Rents: Dubai Land Department tenancy contracts, ' + ((w) => (w ? esc(w.say) : "the pull of " + esc(C.ri.as_of || "")))(windowOf(C.recs[0] && C.recs[0].it, C.ri)) + ", " + (B.all ? "every size of " : B.word + "-sized ") +
-    (!kindsOfType(q.type).includes("b") ? "villas and townhouses" : kindsOfType(q.type).includes("v") ? "homes" : "flats") + ", each contract counted once; typical rent is the median of new lettings where there are three or more, else of every contract, as on screen. Metro distances are straight lines. Pictures: each developer's own project page" + (C.recs.some((r) => r.picSource && r.picSource !== "photo" && r.picSource !== "none" && r.picSource !== "street_view" && r.picSource !== "render") ? "; where none is on file, a Blocks view: the building as a simple block on the district model (&copy; OpenStreetMap contributors), heights to scale - not a photograph." : ".") +
+    (!kindsOfType(q.type).includes("b") ? "villas and townhouses" : kindsOfType(q.type).includes("v") ? "homes" : "flats") + ", each contract counted once; typical rent is the median of new lettings where there are three or more, else of every contract, as on screen. Metro distances are straight lines. Pictures: each developer's own project page" + (C.recs.some((r) => r.picSource && r.picSource !== "photo" && r.picSource !== "none" && r.picSource !== "street_view" && r.picSource !== "render") ? "; where none is on file, a digital footprint view: the building as a simple model on the district digital footprint (&copy; OpenStreetMap contributors), heights to scale - not a photograph." : ".") +
     (C.recs.some((r) => r.picSource === "street_view") ? " Street View: Google, aimed at the building, the month shown on the picture." : "") +
     (C.recs.some((r) => r.picSource === "render") ? " An illustration is Najma's own render, not a photograph." : "") +
     (C.recs.some((r) => r.it.ev_scope) ? " For a home with no lettings of its own in the register, the rent is the community's (" + [...new Set(C.recs.filter((r) => r.it.ev_scope).map((r) => esc(r.it.ev_scope)))].join(", ") + "): this is the community's rent evidence, not that home's own." : "") +
@@ -1236,8 +1236,8 @@ export function blocksThumb(rec, layer, w, h, o) {
   }
   }
   out.push("</svg>");
-  const say = kind === "blocks" ? "Blocks view" : kind === "blocks_approx" ? "Blocks view &middot; approximate position"
-    : kind === "blocks_area" ? "Blocks view &middot; the community&rsquo;s homes, approximate area" : "Blocks view &middot; " + esc((o && o.district) || rec.dist || "") + "";
+  const say = kind === "blocks" ? "Digital footprint view" : kind === "blocks_approx" ? "Digital footprint view &middot; approximate position"
+    : kind === "blocks_area" ? "Digital footprint view &middot; the community&rsquo;s homes, approximate area" : "Digital footprint view &middot; " + esc((o && o.district) || rec.dist || "") + "";
   return { kind, html: '<div class="blocksview" data-kind="' + kind + '" style="width:' + r2(w) + "px;height:" + r2(h) + 'px;overflow:hidden;position:relative;">' + out.join("") +
     '<div style="position:absolute;right:4px;bottom:3px;font-size:' + ((o && o.fs) || 7.5) + "px;line-height:1.2;color:#5E5B52;background:rgba(255,255,255,0.82);padding:1px 4px;letter-spacing:.2px;\">" + say + "</div></div>" };
 }
@@ -1357,11 +1357,11 @@ export function briefMapSvg(layer, marks, o) {
   const B = o.q ? BEDS[o.q.beds] : null;
   const none = !marks.length;
   const title = single ? first.name + " · where it is in " + dShort
-    : none ? dShort + " · every building as a simple block"
+    : none ? dShort + " · every building as a simple model"
     : dShort + " · " + (B ? (B.all ? "rentals" : B.word + " rentals") : "the chosen buildings") + (o.q && o.q.max ? " around AED " + money(o.q.max) : "");
   const cnt = marks.length <= 10 ? NUMWORD[marks.length].toLowerCase() : String(marks.length);
   out.push('<text x="45" y="55" font-size="' + f1(22 * PT) + '" font-weight="bold" fill="' + MAPC.TEAL + '">' + esc(title) + "</text>");
-  out.push('<text x="45" y="90" font-size="' + f1(10.5 * PT) + '" fill="#5E5B52">' + esc((o.district || "") + ", Dubai  ·  " + (single ? "the building on its own plot as a simple massing block, among its neighbours" : none ? "every footprint raised to its height" : cnt + " rental options, each dropped on its own plot as a simple massing block")) + "</text>");
+  out.push('<text x="45" y="90" font-size="' + f1(10.5 * PT) + '" fill="#5E5B52">' + esc((o.district || "") + ", Dubai  ·  " + (single ? "the building on its own plot as a simple massing model, among its neighbours" : none ? "every building outline raised to its height" : cnt + " rental options, each dropped on its own plot as a simple massing model")) + "</text>");
   out.push('<rect x="1099.5" y="130" width="382.5" height="820" fill="#FFFFFF" stroke="#E2DED3" stroke-width="1.1"/>');
   out.push('<text x="1117.5" y="165" font-size="' + f1(14 * PT) + '" font-weight="bold" fill="' + MAPC.TEAL + '">' + (single ? "This building" : none ? "This district" : "Rental options") + "</text>");
   out.push('<text x="1117.5" y="188" font-size="' + f1(8.6 * PT) + '" fill="#5E5B52">' + esc(single ? "Numbered " + first.n + ", as on the one-sheet" : none ? "No building chosen" : "1–" + marks.length + " = rental options" + (B && !B.all ? ", " + B.short.replace(/s$/, "") + (o.q && o.q.max ? " around AED " + money(o.q.max) : "") : "")) + "</text>");
@@ -1377,16 +1377,16 @@ export function briefMapSvg(layer, marks, o) {
   const key = (y, fc, ec, dash, label) => '<rect x="1117.5" y="' + (y - 16) + '" width="33" height="16" fill="' + fc + '" stroke="' + ec + '" stroke-width="1.2"' + (dash ? ' stroke-dasharray="3 2"' : "") + '/><text x="1165.5" y="' + (y - 4) + '" font-size="' + f1(8.3 * PT) + '" fill="#2B2A26">' + label + "</text>";
   out.push('<text x="1117.5" y="755" font-size="' + f1(10.5 * PT) + '" font-weight="bold" fill="' + MAPC.TEAL + '">Key</text>');
   out.push(key(785, MAPC.GOLD, MAPC.GOLD_EDGE, false, single ? "This building, on its plot" : "Rental option, building on its plot"));
-  if (marks.some((m) => m.approx)) out.push(key(815, "#E6D6B2", MAPC.GOLD_EDGE, true, "Approximate position, indicative block"));
+  if (marks.some((m) => m.approx)) out.push(key(815, "#E6D6B2", MAPC.GOLD_EDGE, true, "Approximate position, indicative model"));
   else if (marks.some((m) => m.area)) out.push(key(815, MAPC.GOLD, MAPC.GOLD_EDGE, true, "A community&#8217;s homes, approximate area"));
   out.push(key(845, MAPC.CTX_ROOF, MAPC.CTX_EDGE, false, "Other " + esc(dShort) + " buildings"));
   out.push('<line x1="1117.5" y1="867" x2="1150.5" y2="867" stroke="' + MAPC.CASE + '" stroke-width="4"/><line x1="1117.5" y1="867" x2="1150.5" y2="867" stroke="#FFFFFF" stroke-width="2.2"/>' +
     '<text x="1165.5" y="871" font-size="' + f1(8.3 * PT) + '" fill="#2B2A26">Streets</text>');
-  ["Simple massing (LOD 100): each footprint raised to its", "height with a flat roof; heights to scale. View from", "the south, looking north."].forEach((t, k) =>
+  ["Simple massing (LOD 100): each building outline raised to its", "height with a flat roof; heights to scale. View from", "the south, looking north."].forEach((t, k) =>
     out.push('<text x="1117.5" y="' + (897 + 14 * k) + '" font-size="' + f1(7.2 * PT) + '" fill="#8C887C">' + t + "</text>"));
-  out.push('<text x="45" y="988" font-size="' + f1(6.5 * PT) + '" fill="#8C887C">Footprints and streets: &#169; OpenStreetMap contributors (district model). Positions: the app\'s district model' +
-    (marks.some((m) => m.approx) ? "; dashed blocks are approximate, from a public map listing" : "") +
-    (marks.some((m) => m.area) ? "; a dashed number marks a community: the homes the district model places in that Land Department sub-community, approximate" : "") + ".</text>");
+  out.push('<text x="45" y="988" font-size="' + f1(6.5 * PT) + '" fill="#8C887C">Building outlines and streets: &#169; OpenStreetMap contributors (district model). Positions: the app\'s district model' +
+    (marks.some((m) => m.approx) ? "; dashed models are approximate, from a public map listing" : "") +
+    (marks.some((m) => m.area) ? "; a dashed number marks a community: the homes the district digital footprint places in that Land Department sub-community, approximate" : "") + ".</text>");
   out.push("</svg>");
   return out.join("");
 }
@@ -1584,7 +1584,7 @@ function buyOneSheetHtml(C, q) {
     '<div style="font-size:11px;color:' + MUTED + ';">' + C.today + " &middot; numbers match the map &middot; prices are sales recorded at the Land Department, not asking prices</div></div>" + logo(C, 68) + "</div>" +
     html +
     '<div style="padding:0 30px 4px 30px;font-size:8.3px;color:' + MUTED + ';line-height:1.3;">Prices: Dubai Land Department registered sales. The typical price is the median of the building\'s sales of that home type (three or more are needed to show one); the price per sq ft is the typical price divided by the typical size. ' +
-    "Price tiers are price bands per sq ft, not a rating. Metro distances are straight lines. Pictures: each developer's own project page" + (C.recs.some((r) => r.picSource && r.picSource !== "photo" && r.picSource !== "none" && r.picSource !== "street_view" && r.picSource !== "render") ? "; where none is on file, a Blocks view: the building as a simple block on the district model (&copy; OpenStreetMap contributors), heights to scale - not a photograph." : ".") +
+    "Price tiers are price bands per sq ft, not a rating. Metro distances are straight lines. Pictures: each developer's own project page" + (C.recs.some((r) => r.picSource && r.picSource !== "photo" && r.picSource !== "none" && r.picSource !== "street_view" && r.picSource !== "render") ? "; where none is on file, a digital footprint view: the building as a simple model on the district digital footprint (&copy; OpenStreetMap contributors), heights to scale - not a photograph." : ".") +
     (C.recs.some((r) => r.picSource === "street_view") ? " Street View: Google, aimed at the building, the month shown on the picture." : "") +
     (C.recs.some((r) => r.picSource === "render") ? " An illustration is Najma's own render, not a photograph." : "") +
     " Availability, the price and the actual home must be confirmed with the developer's sales team or the listing broker.</div>" + landFooter());
@@ -1696,7 +1696,7 @@ export async function briefBlocksPage(env, url) {
   const q = parseQuery(url);
   const d = String(url.searchParams.get("d") || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const svgs = [];
-  let title = "Blocks";
+  let title = "Digital footprint";
   if (q.keys.length) {
     if (q.keys.length > MAX_KEYS) return J({ ok: false, reason: "at most " + MAX_KEYS + " buildings" }, 400);
     const C = await loadContext(env, q, { need: { map: true, amen: false } });
@@ -1708,12 +1708,12 @@ export async function briefBlocksPage(env, url) {
       const D = C.district[dd] || {}, marks = recs.map((r) => markOf(r, D.layer));
       svgs.push(D.layer && marks.some((m) => m.placed) ? briefMapSvg(D.layer, marks, { single: recs.length === 1, district: recs[0].dist, districtSlug: dd, q }) : "");
     }
-    title = "Blocks · " + C.recs.map((r) => r.name).join(", ");
+    title = "Digital footprint · " + C.recs.map((r) => r.name).join(", ");
   } else if (d) {
     const layer = await kvJson(env, "brief_fp_" + d), geo = await kvJson(env, "districts_geo");
     const nm = (((geo && geo.districts) || []).find((x) => x.slug === d) || {}).name || d;
     svgs.push(layer ? briefMapSvg(layer, [], { single: false, district: nm, districtSlug: d }) : "");
-    title = "Blocks · " + nm;
+    title = "Digital footprint · " + nm;
   } else return J({ ok: false, reason: "keys= or d= is required" }, 400);
   const body = svgs.map((s) => s ? '<div class="blk">' + s.replace("<svg ", '<svg style="width:100%;height:auto;display:block;" ') + "</div>"
     : '<div class="blk"><div class="maptofollow" style="aspect-ratio:3/2;border:1px dashed #DED9D0;display:flex;align-items:center;justify-content:center;font:14px Arial,sans-serif;color:' + MUTED + ';">' + REALTOR_VERIFIES + '</div></div>').join("");

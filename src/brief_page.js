@@ -261,7 +261,7 @@ function briefOutHtml() {
     + '<button type=button id=o-c5>Compare 5<small>one sheet and a map</small></button>'
     + '<button type=button id=o-c10>Compare 10<small>one sheet and a map</small></button>'
     + '<button type=button id=o-pack>Full pack<small>sheet, map, every building</small></button>'
-    + '<button type=button class=blk id=o-blocks>See them in blocks<small>the chosen buildings, gold on their plots</small></button>'
+    + '<button type=button class=blk id=o-blocks>See them as a digital footprint<small>the chosen buildings, gold on their plots</small></button>'
     + '</div><div class=omsg id=omsg role=status></div>'
     + '<div class=shb id=shbox hidden><input class=in id=shurl readonly aria-label="the link to this list"><div class=shr><button type=button id=shcopy>Copy link</button><a id=shwa href="#" target=_blank rel=noopener>WhatsApp</a></div></div>'
     + '<div id=jobs></div></div>';
@@ -512,8 +512,8 @@ function outWire(){
     each(ks,function(k){var r=byKey(k);job("dossier",[k],(r?r.name:k)+" — its own PDF")});omsg((over?"The first 10 chosen, ":"")+ks.length+(ks.length===1?" PDF":" PDFs, one per building,")+" on the way. Each is ready to open or send on its own.")};
   $("o-c5").onclick=function(){cmp(5)};$("o-c10").onclick=function(){cmp(10)};
   $("o-pack").onclick=function(){var ks=chosen();if(!ks.length)return need(1);var over=ks.length>10;if(over)ks=ks.slice(0,10);job("pack",ks,"Full pack — "+ks.length+" buildings");omsg((over?"The pack takes the first 10 chosen. ":"")+"The full pack is on the way. It is the biggest, so it takes the longest.")};
-  $("o-blocks").onclick=function(){var ks=chosen();if(!ks.length)return need(1);var b=blocksUrl();if(!b){omsg("None of the chosen buildings has a footprint on the blocks map yet.");return}
-    var skipped=ks.length-b.ids.length;omsg(skipped?"Opening the blocks with "+b.ids.length+" of the "+ks.length+" chosen: the rest have no footprint yet, or sit in another district.":"");location.href=b.url};
+  $("o-blocks").onclick=function(){var ks=chosen();if(!ks.length)return need(1);var b=blocksUrl();if(!b){omsg("None of the chosen buildings has a building outline on the digital footprint yet.");return}
+    var skipped=ks.length-b.ids.length;omsg(skipped?"Opening the digital footprint with "+b.ids.length+" of the "+ks.length+" chosen: the rest have no building outline yet, or sit in another district.":"");location.href=b.url};
   $("o-share").onclick=share;$("shcopy").onclick=function(){copy($("shurl").value)}}
 function cmp(n){var ks=chosen();if(ks.length<2)return need(2);var cut=ks.length>n;ks=ks.slice(0,n);job("compare",ks,"Compare "+ks.length+" — one sheet and a map");omsg(cut?"Compare "+n+" takes the first "+n+" you chose, in the order of the list.":"")}
 function shareUrl(){var ks=chosen();return location.origin+"/brief?"+qs(LAST,SKEY||null)+"&run=1"+(ks.length?"&pick="+ks.map(encodeURIComponent).join(","):"")}

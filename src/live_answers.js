@@ -223,7 +223,7 @@ export async function fillLive(ctx, items, crits, opts) {
       }
       ans = { ...base, level: dm == null ? "community" : "near", place: p.name,
         src: L + " in " + D.name + " on Google Maps (asked live, " + ctx.day + "): " + p.name + (far ? ", " + far : "") +
-          (s && s.none ? ". No footprints are on file for " + s.pretty + ", so this is the community's answer" : ""),
+          (s && s.none ? ". No building outlines are on file for " + s.pretty + ", so this is the community's answer" : ""),
         say: p.name + ", in " + D.name + (far ? ", " + far : "") + " (Google Maps, asked live " + ctx.day + ")" };
     }
     if (ans) { it.crit[k] = ans; n++; }

@@ -344,12 +344,12 @@ ok(P.jobsLive.max <= 2, "W21 at most two PDFs are made at once", P.jobsLive.max)
 await click(P.byId("bnone"), 0);
 for (const i of [4, 3, 0, 2]) { const cb = P.byId("bres").querySelectorAll("input[type=checkbox]")[i]; cb.checked = true; cb.onchange(); }
 P.win.location.href = ""; await click(P.byId("o-blocks"), 20);
-ok(P.win.location.href === "/blocks?district=jumeirahvillagecircle&gold=1490,1492,1494&key=" + READ, "B1 See them in blocks opens /blocks with the district, the ticked ids in rank order (the dld: one skipped) and the key", P.win.location.href);
+ok(P.win.location.href === "/blocks?district=jumeirahvillagecircle&gold=1490,1492,1494&key=" + READ, "B1 See them as a digital footprint opens /blocks with the district, the ticked ids in rank order (the dld: one skipped) and the key", P.win.location.href);
 ok(/3 of the 4 chosen/.test(text(P.byId("omsg"))), "B2 and says one of the four has no footprint", text(P.byId("omsg")));
 await click(P.byId("bnone"), 0);
 { const cb = P.byId("bres").querySelectorAll("input[type=checkbox]")[3]; cb.checked = true; cb.onchange(); }
 P.win.location.href = ""; await click(P.byId("o-blocks"), 20);
-ok(P.win.location.href === "" && /None of the chosen buildings has a footprint/.test(text(P.byId("omsg"))), "B3 only a dld: key ticked: nothing opens, and it says why", text(P.byId("omsg")));
+ok(P.win.location.href === "" && /None of the chosen buildings has a building outline/.test(text(P.byId("omsg"))), "B3 only a dld: key ticked: nothing opens, and it says why", text(P.byId("omsg")));
 // nothing chosen: every output button says so, none is silent
 await click(P.byId("bnone"), 0);
 for (const id of ["o-ind", "o-c5", "o-c10", "o-pack", "o-blocks"]) { P.byId("omsg").textContent = ""; const before = pdfCalls().length; await click(P.byId(id), 20);

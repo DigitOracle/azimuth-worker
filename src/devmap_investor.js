@@ -359,7 +359,7 @@ function page2(C, m, pic) {
   const cards = [readyOffCard(m), mixCard(m), liquidityCard(m), priceCard(m, areaName), deliveryCard(m), supplyCard(m, areaName)].filter(Boolean);
   const grid = '<div class="ivgrid">' + cards.join("") + "</div>";
   const picH = cards.length >= 5 ? 165 : cards.length >= 3 ? 250 : 300;
-  const fig = pic ? '<div class="ivfig"><div class="ivch">' + icon("map-trifold", 17, TEAL) + '<span class="serif">' + esc(areaName) + ' in blocks</span><span class="ivcap" style="margin-left:6px;white-space:nowrap">' + esc(shortName(m.name, 24)) + " in colour by price band, other developers grey</span></div>" +
+  const fig = pic ? '<div class="ivfig"><div class="ivch">' + icon("map-trifold", 17, TEAL) + '<span class="serif">' + esc(areaName) + ' digital footprint</span><span class="ivcap" style="margin-left:6px;white-space:nowrap">' + esc(shortName(m.name, 24)) + " in colour by price band, other developers grey</span></div>" +
     '<div class="ivfm" style="height:' + picH + 'px">' + pic.svg + '</div><div class="mkey">' + pic.key + '</div><div class="ivcap">Each outline is raised to its height and seen from the south.</div></div>' : "";
   const none = '<div class="ivnoblk">' + icon("buildings", 22, "#8A9A96") + "<div><b>Buildings for this area are not in the data yet.</b> The prices on these pages come from the sales register and do not depend on them.</div></div>";
   return grid + (fig || none + methodCard(m)) + sourcesCard(m);

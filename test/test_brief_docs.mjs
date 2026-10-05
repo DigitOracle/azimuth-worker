@@ -265,7 +265,7 @@ const bv = await call("/brief_blocks?keys=testdistrict:10,testdistrict:11&beds=1
 const bvh = await bv.text();
 ok(bv.status === 200 && /viewBox="0 0 1500 1000"/.test(bvh) && (bvh.match(/<g class="badge">/g) || []).length === 2 && !/<script/i.test(bvh), "/brief_blocks draws the same SVG map for the chosen buildings, with no script to fail on a phone");
 const bd = await (await call("/brief_blocks?d=testdistrict&key=" + CLIENT)).text();
-ok(bd.includes("every building as a simple block") && !bd.includes('class="hiblock"'), "/brief_blocks?d= draws the district alone");
+ok(bd.includes("every building as a simple model") && !bd.includes('class="hiblock"'), "/brief_blocks?d= draws the district alone");
 ok((await call("/brief_blocks?d=testdistrict")).status === 401, "/brief_blocks is gated like the rest");
 ok((await (await call("/brief_blocks?d=nolayer&key=" + CLIENT)).text()).includes("Your realtor will verify these details with you."), "/brief_blocks without a layer -> the neutral realtor line");
 
@@ -356,23 +356,23 @@ ok(brochureKvName("name_a_very_long_building_name_that_overflows_forty") === "br
     ok(m && mh && n && money(m[1]) === e.median && money(mh[1]) === e.q1 && money(mh[2]) === e.q3 && +n[1] === e.n && +n[2] === e.n_new,
       row.name + ": the card's typical / middle half / count equal the list row's (AED " + e.median + ", " + e.q1 + "-" + e.q3 + ", " + e.n + " (" + e.n_new + " new))", (m && m[1]) + " " + (mh && mh[0]) + " " + (n && n[0]));
     const pic = /<img [^>]*src="[^"]*\/img\/bph_/.test(c) ? "photo" : ((/<div class="blocksview" data-kind="(\w+)"/.exec(c) || [])[1] || "none");
-    ok(pic !== "none" && !/photos<br>to follow/i.test(c) && (pic === "photo" || c.includes("Blocks view")), row.name + ": the card has a picture (" + pic + "), never 'photos to follow'", c.slice(0, 300));
+    ok(pic !== "none" && !/photos<br>to follow/i.test(c) && (pic === "photo" || c.includes("Digital footprint view")), row.name + ": the card has a picture (" + pic + "), never 'photos to follow'", c.slice(0, 300));
   });
   const cardOf = (name) => cards.find((c) => c.includes(">" + name + "</div>")) || "";
   ok(/<img [^>]*\/img\/bph_alpha_ext/.test(cardOf("Alpha Tower")), "Alpha Tower keeps the developer's photograph");
   ok(/data-kind="blocks"/.test(cardOf("New Basis Tower")) && (cardOf("New Basis Tower").match(/class="hiblock"/g) || []).length === 2, "a footprinted building with no photo: its Blocks view, the building in gold (walls + roof)");
-  ok(/data-kind="blocks_approx"/.test(cardOf("Pin Only House")) && /class="approxblock"/.test(cardOf("Pin Only House")) && cardOf("Pin Only House").includes("Blocks view &middot; approximate position"), "a map position but no footprint: an indicative dashed block, said to be approximate");
+  ok(/data-kind="blocks_approx"/.test(cardOf("Pin Only House")) && /class="approxblock"/.test(cardOf("Pin Only House")) && cardOf("Pin Only House").includes("Digital footprint view &middot; approximate position"), "a map position but no footprint: an indicative dashed block, said to be approximate");
   ok(/data-kind="district"/.test(cardOf("Wrong Bind Court")) && !/class="hiblock"/.test(cardOf("Wrong Bind Court")) && !cardOf("Wrong Bind Court").includes("not yet verified"),
     "an unbound record: the district's blocks with nothing in gold - never the footprint of the building it was wrongly bound to");
   ok(!/>Totally Different Tower</.test(d.html) && d.html.includes("Wrong Bind Court  (no map position yet)"), "and the overview map lists it as unplaced, as the list has no position for it");
-  ok(d.html.includes("a Blocks view: the building as a simple block on the district model") && d.html.includes("not a photograph"), "the small print says what a Blocks view is: not a photograph");
+  ok(d.html.includes("a digital footprint view: the building as a simple model on the district digital footprint") && d.html.includes("not a photograph"), "the small print says what a digital footprint view is: not a photograph");
   // the dossier says the same numbers as the list row, on page 1
   const dn = await pdf("kind=dossier&keys=testdistrict:99");
   ok(dn.html.includes(">AED 62,000</div>") && dn.html.includes("AED 61,500 &ndash; 63,000") && dn.html.includes(">9 (4 new)</div>") && !dn.html.includes("66,000"),
     "New Basis Tower's dossier: AED 62,000, 61,500-63,000, 9 (4 new) - not the all-contracts 66,000");
   ok(dn.html.includes("of the 4 one-bedroom flats newly let here recently went for"), "its budget line counts the lettings the quarters are of (the 4 new ones)");
-  ok(/<div class="blocksview" data-kind="blocks" style="width:702px;height:300px;/.test(dn.html) && !dn.html.includes("Photos to follow") && dn.html.includes("The picture on page 1 is a Blocks view, not a photograph"),
-    "its page 1 shows the Blocks view as the hero, and page 3's small print says it is not a photograph");
+  ok(/<div class="blocksview" data-kind="blocks" style="width:702px;height:300px;/.test(dn.html) && !dn.html.includes("Photos to follow") && dn.html.includes("The picture on page 1 is a digital footprint of the buildings, not a photograph"),
+    "its page 1 shows the digital footprint view as the hero, and page 3's small print says it is not a photograph");
   // only a district with no layer keeps the plain box
   const nl = await pdf("kind=compare&keys=nolayer:5,testdistrict:99");
   ok(!/to follow/.test(nl.html) && /Najma<\/div>/.test(nl.html.split('<div class="bcard"')[1] || "") && /data-kind="blocks"/.test(nl.html.split('<div class="bcard"')[2] || ""), "no district layer at all: the plain box (nothing to draw); the footprinted card beside it has its Blocks view");

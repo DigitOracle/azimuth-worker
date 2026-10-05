@@ -130,7 +130,7 @@ export function blocksPageHtml(o) {
     gold: o.gold || [], pages: o.pages || [], have: !!(o.have || o.data), preview: !!o.preview,
     dataUrl: "/img/blocks_" + slug, labels: STREET_LABELS[slug] || [],
   };
-  const title = cfg.short + " in blocks";
+  const title = cfg.short + " digital footprint";
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<meta name=robots content="noindex,nofollow"><meta name=theme-color content="#F6F4EE">'
@@ -138,15 +138,15 @@ export function blocksPageHtml(o) {
     + '<link rel=preconnect href="https://fonts.googleapis.com"><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">'
     + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">'
     + '<style>' + BLOCKS_CSS + TAPCARD_CSS_LIGHT + '</style></head><body>'
-    + '<div id=m aria-label="3D blocks view of ' + esc(cfg.name) + '"></div>'
+    + '<div id=m aria-label="3D digital footprint of ' + esc(cfg.name) + '"></div>'
     + '<svg id=lead aria-hidden=true></svg><div id=badges></div><div id=slabels aria-hidden=true></div>'
-    + '<header id=top><div class=tt><h1>' + esc(title) + '</h1><p>' + esc(cfg.name) + ' · tap any block for its card</p></div>'
+    + '<header id=top><div class=tt><h1>' + esc(title) + '</h1><p>' + esc(cfg.name) + ' · tap any building for its card</p></div>'
     + '<a id=back class=pill href="/map' + (cfg.key ? '?key=' + encodeURIComponent(cfg.key) : '') + '">Map</a></header>'
     + '<div id=tools><button id=north type=button aria-label="Point north"><svg viewBox="0 0 40 40"><g id=narrow><path d="M20 5 L27 22 L20 18 L13 22 Z" fill="#0A4F4A"/><path d="M20 35 L27 22 L20 26 L13 22 Z" fill="#C9C6BB"/></g><text x=20 y=13.2 text-anchor=middle font-size=7.5 font-weight=700 fill="#fff" font-family="IBM Plex Sans,Arial">N</text></svg></button>'
     + '<button id=reset type=button class=pill>Reset view</button>'
     + (cfg.gold.length ? '<button id=listb type=button class=pill>The ' + cfg.gold.length + '</button>' : '') + '</div>'
     + '<div id=key><span><i class=kg></i>Chosen</span>' + (cfg.gold.some((g) => g.approx) ? '<span><i class=ka></i>Approximate position</span>' : '') + '<span><i class=kc></i>Other buildings</span><span><i class=ku></i>Height not yet known</span></div>'
-    + '<div id=attr>Footprints and streets © OpenStreetMap contributors · heights: district model</div>'
+    + '<div id=attr>Building outlines and streets © OpenStreetMap contributors · heights: district model</div>'
     + '<section id=card hidden><button id=cx type=button aria-label=Close>×</button><div id=cb></div></section>'
     + '<section id=list hidden><div class=lh><b>The chosen buildings</b><button id=lx type=button aria-label=Close>×</button></div><ol id=lo></ol></section>'
     + '<div id=msg hidden></div>'
@@ -404,13 +404,13 @@ function select(s,fly){
     html='<div class=nm><b>'+esc(nm||(b.a?b.a:"A building without a name on our map"))+'</b></div>'
       +'<p class=ht>'+htLine(b.h,b.hs)+'</p>'
       +(nm&&b.a?'<p class=nt>'+esc(b.a)+'</p>':'')
-      +'<p class=nt>Grey blocks are the other buildings around the chosen ones.</p>';
+      +'<p class=nt>Grey shapes are the other buildings around the chosen ones.</p>';
   }else{var g=goldBy(s.num);if(!g){SEL=null;return}
     if(g.missing){html='<div class=nm><span class=n>'+g.num+'</span><b>Building '+g.num+'</b></div><p class=nt>This building is not in the district outlines, so it cannot be drawn.</p>'}
     else{setState(g.ap?"approx":"gold",g.ap?100000+g.num:g.i,true);
       html='<div class=nm><span class="n'+(g.ap?' ap':'')+'">'+g.num+'</span><b>'+esc(g.name||(g.addr?g.addr:"Building "+g.num))+'</b></div>'
         +'<p class=ht>'+(g.ap?"About "+fmtH(g.h):htLine(g.h,g.hs))+'</p>'
-        +(g.ap?'<p class=nt>Approximate position. This building has no surveyed outline on our map yet, so the block is indicative: about '+Math.round(g.s)+' m across, placed from a public map listing.</p>':'')
+        +(g.ap?'<p class=nt>Approximate position. This building has no surveyed outline on our map yet, so the model is indicative: about '+Math.round(g.s)+' m across, placed from a public map listing.</p>':'')
         +(g.page?(CFG.preview?'<span class="pill go" title="Opens in the app">Open the building page</span>':'<a class="pill go" href="/building/'+CFG.slug+'/'+g.i+keyQ()+'">Open the building page</a>'):'')
         +(!g.ap&&!g.page?'<p class=nt>No building page for this one yet.</p>':'');
       if(fly&&g.c){var z=Math.max(map.getZoom(),16);map.easeTo({center:g.c,zoom:z,duration:700,offset:[0,-60]})}}
@@ -439,7 +439,7 @@ $("lx").onclick=function(){$("list").hidden=true};
 window.addEventListener("resize",overlay);
 window.__blocksSelect=select;
 
-if(!CFG.have){msg("The blocks for this district are not ready yet.");return}
+if(!CFG.have){msg("The digital footprint for this district is not ready yet.");return}
 var got=window.__BLOCKS_DATA__?Promise.resolve(window.__BLOCKS_DATA__):fetch(CFG.dataUrl).then(function(r){if(!r.ok)throw new Error("status "+r.status);return r.json()});
-got.then(function(d){DATA_BBOX=(d.meta&&d.meta.bbox)||null;build(d)}).catch(function(){msg("The blocks could not be loaded. Reload to try again.")});
+got.then(function(d){DATA_BBOX=(d.meta&&d.meta.bbox)||null;build(d)}).catch(function(){msg("The digital footprint could not be loaded. Reload to try again.")});
 })();`;

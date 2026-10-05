@@ -195,7 +195,7 @@ let S = await blocksSandbox(html);
 ok(S.__blocksReady === true && typeof S.__blocksSelect === "function" && typeof S.__tapcards === "object", "the /blocks page script runs as served, its blocks fetched from the worker");
 const cb = () => S.document.getElementById("cb").innerHTML;
 S.__lastTapcard = null; S.__blocksSelect({ kind: "ctx", i: commI });
-ok(/Grey blocks are the other buildings/.test(cb()), "(a) a tap on a grey block shows today's card at once");
+ok(/Grey shapes are the other buildings/.test(cb()), "(a) a tap on a grey shape shows today's card at once");
 await until(() => S.__lastTapcard);
 ok(S.__lastTapcard && S.__lastTapcard.kind === "community" && /The community: home to about 55,200 people/.test(cb()) && /This building: /.test(cb()) && !/Developer/.test(cb()), "(a) ...and the community card replaces it: the community's facts, the building's height", cb());
 S.__lastTapcard = null; S.__blocksSelect({ kind: "gold", num: 1 });
@@ -210,7 +210,7 @@ store.delete("img_tapcard_" + SLUG);
 S = await blocksSandbox(html);
 S.__lastTapcard = null; S.__blocksSelect({ kind: "ctx", i: commI });
 await until(() => S.__lastTapcard);
-ok(S.__lastTapcard && S.__lastTapcard.why === "none" && /Grey blocks are the other buildings/.test(cb()), "(a) no tap-card file for the district: today's name + height card stands", cb());
+ok(S.__lastTapcard && S.__lastTapcard.why === "none" && /Grey shapes are the other buildings/.test(cb()), "(a) no tap-card file for the district: today's name + height card stands", cb());
 putGz("tapcard_" + SLUG, payRaw);
 
 // ---- 3b. /map --------------------------------------------------------------------------------------------------------------------
