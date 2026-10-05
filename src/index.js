@@ -1141,7 +1141,7 @@ Read dates from the date map above; never calculate a weekday yourself. Prefer "
 // its caller, so a failure here can never cost her a reply.
 async function inboxNote(env, msg) {
   const it = { at: new Date().toISOString(), type: String(msg.type || "?") };
-  if (msg.type === "text" && msg.text) { const _b = String(msg.text.body || "").slice(0, 4000); it.text = (/^\s*\?/.test(_b) ? qnScrub(_b) : _b).slice(0, 400); }   // v153 - a question note is logged with its phone numbers, emails and IDs already out
+  if (msg.type === "text" && msg.text) { const _b = String(msg.text.body || "").slice(0, 4000); it.text = MOMO_JOURNAL_RX.test(_b) ? "(journal entry)" : (/^\s*\?/.test(_b) ? qnScrub(_b) : _b).slice(0, 400); }   // v352 - a private journal line is never copied into this log   // v153 - a question note is logged with its phone numbers, emails and IDs already out
   else if (msg.type === "interactive" && msg.interactive) {
     const r = msg.interactive.button_reply || msg.interactive.list_reply || {};
     it.tapped = String(r.id || ""); it.text = String(r.title || "");     // the id for us, the words for whoever reads this back
@@ -1168,10 +1168,12 @@ function isBgCaption(c) {
 }
 // v334 - MOMO. Kendall's food and exercise log lives on azimuth-2. These say whether a message of his is PLAINLY Momo (and so is handed on there).
 // Deliberately strict: a message that is not obviously Momo stays here and is handled exactly as it always was.
+const MOMO_JOURNAL_RX = /^\s*(?:(?:momo|fit)\s+)?journal\s*[:\-\u2013\u2014]/i;   // v352 - the same test azimuth-2 uses
 function momoLooksLikeText(t, voice) {
   t = String(t || "").trim();
   if (/^\s*momo\b/i.test(t)) return true;
-  if (voice) return false;   // a voice note is only Momo when it opens with the word
+  if (MOMO_JOURNAL_RX.test(t)) return true;   // v352 - "journal: ..." is the private journal on azimuth-2, never a task here
+  if (voice) return /^\s*journal\b/i.test(t);   // a voice note is only Momo when it opens with the word "momo" or "journal"
   if (/^\s*fit\s+(week|this week|history|totals?|weeks|progress|help|commands|pause|resume|undo|again|fix|share|weight|waist|target|goal|tone|extend|start|restart|log|status)\b/i.test(t)) return true;
   if (/^\s*(?:\u{1F37D}\uFE0F?|(?:food|meal|ate|eating|breakfast|lunch|dinner|snack|brunch|supper|ex|exercise|workout|gym|train|training)\s*[:\-\u2013\u2014])\s*\S/iu.test(t)) return true;
   if (/^\s*(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*k?\s*steps?(?:\s+(?:today|yesterday))?\s*$/i.test(t)) return true;

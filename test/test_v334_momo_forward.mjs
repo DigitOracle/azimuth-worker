@@ -90,5 +90,26 @@ ok(rf.status === 200 && out.length === 1 && /Momo could not be reached/.test(JSO
 const errs = JSON.parse(store.get("diag_errs") || "[]");
 ok(errs.some((e) => e.where === "momo-forward" && /unreachable/.test(e.detail)) && errs.some((e) => e.where === "momo-forward" && /HTTP 500/.test(e.detail)), "both failures are noted in diag_errs (where: momo-forward) so /health can show them");
 
+console.log("v352 - the private journal: Kendall's journal lines go to azimuth-2, and are never copied into this instance's inbox log");
+const JTXT = "JOURNAL-SECRET-WORDS";
+for (const t of ["journal: " + JTXT, "Journal - " + JTXT, "momo journal: " + JTXT, "fit journal: " + JTXT, "momo journal"]) {
+  reset(); store.delete("wa_inbox"); await text(KEN, t);
+  ok(fwd.length === 1 && out.length === 0 && taskKeys().length === 0, "forwarded, no task and no reply from here: " + JSON.stringify(t.slice(0, 22)));
+  ok(!(store.get("wa_inbox") || "").includes("JOURNAL-SECRET"), "and this instance's inbox log does not hold the words: " + JSON.stringify(t.slice(0, 22)));
+}
+reset(); store.delete("wa_inbox"); await text(KEN, "journal: " + JTXT);
+ok(/journal entry/.test(store.get("wa_inbox") || ""), "the inbox log only records that a journal entry arrived");
+reset(); aiText = "Journal. Today I walked and thought about the week"; await send(KEN, { type: "audio", audio: { id: "AUD7", mime_type: "audio/ogg" } });
+ok(fwd.length === 1, "a voice note that opens with the word 'journal' is forwarded");
+reset(); aiText = "I keep a journal every night and it helps"; await send(KEN, { type: "audio", audio: { id: "AUD8", mime_type: "audio/ogg" } });
+ok(fwd.length === 0, "a voice note that merely mentions a journal is not forwarded");
+for (const t of ["journal entry is due on Friday", "my journal is on the desk", "the journal: reply to the editor"]) {
+  reset(); await text(KEN, t);
+  ok(fwd.length === 0, "not forwarded (stays exactly as before): " + JSON.stringify(t));
+}
+reset(); await text(NAJ, "journal: " + JTXT);
+ok(fwd.length === 1 && fwd[0].token === TOKEN, "Najjuko's journal line goes through the existing number router, once, as before (not twice)");
+ok(!(store.get("wa_inbox") || "").includes("JOURNAL-SECRET"), "and it is not copied into the inbox log here either");
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
