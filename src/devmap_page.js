@@ -103,7 +103,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:7px 6px;border-bottom:1px solid var(--line);cursor:pointer}
 .row:hover,.row.sel{background:var(--raise)}
 .row .n{font-weight:600;font-size:13px}.row .m{color:var(--muted);font-size:11.5px}
-.tag{font-size:11.5px;padding:1px 7px;border-radius:4px;color:#0b1211;white-space:nowrap;align-self:center;font-weight:600}
+.tag{font-size:11.5px;padding:2px 7px;border-radius:4px;color:#0b1211;align-self:center;font-weight:600;flex:none;text-align:center;line-height:1.2}.tag .tg1{display:block;font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;opacity:.8}.tag .tg2{display:block;font-weight:600;white-space:nowrap}
 .btn{border:1px solid var(--line);background:var(--raise);color:var(--ink);border-radius:6px;padding:4px 9px;font:inherit;font-size:12px;cursor:pointer;align-self:center}
 .big{font-family:Fraunces,Georgia,serif;font-size:26px;line-height:1.1}
 .mix{display:flex;height:12px;border-radius:3px;overflow:hidden;margin:4px 0 2px;background:#26312f}.mix i{display:block}
@@ -335,7 +335,9 @@ function pickNote(k,x){var wd=ixOf(S.win).devs[k],x0=x;if(!(wd&&wd.areas>0))retu
   a.push(x.areas+' area'+(x.areas===1?'':'s'));a.push(fmt(x.n)+' sales');return a.join(' · ')}
 // v321 - under a developer's name in an area: the brand tier first, then the tier it sits in here
 function brandLine(d){var p=prof(d.k);if(!p)return '';return '<div class=ms>'+(p.market>=0?'<b>'+DM.brandLabel(p.market)+'</b> (market view) · ':'')+'sells in the '+DM.TIER_WORDS[d.tier]+' here</div>'}
-function tagText(k){var p=prof(k);return p.market>=0?DM.brandLabel(p.market):(p.brandTier>=0?'Mostly '+DM.TIER_WORDS[p.brandTier]:'')}
+function tagText(k){var p=prof(k);if(p.market>=0)return DM.brandLabel(p.market);if(!(p.brandTier>=0))return '';var bd=DM.TIER_CFG.bounds||(IDX.cuts&&IDX.cuts.bounds),t=p.brandTier;if(!bd)return '';
+  var f=function(x){return 'AED '+fmt(pu(x))},say=t===0?'above '+f(bd[0]):t===1?f(bd[1])+' to '+fmt(pu(bd[0])):t===2?f(bd[2])+' to '+fmt(pu(bd[1])):'under '+f(bd[2]);
+  return '<small class=tg1>Most sales</small><span class=tg2>'+say+'</span><small class=tg1 style="text-transform:none">'+pul()+'</small>'}
 function openProf(k){S.pj=null;S.prof=k;S.fdev=null;renderDetail();refreshMap();if(innerWidth<=760)setSheet(true)}
 function profileHtml(k){
   var p=DM.devProfile(ixOf(S.win),k);if(!p.known)p.name=DEFAULT_NAMES[k]||k;

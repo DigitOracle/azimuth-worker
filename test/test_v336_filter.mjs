@@ -20,4 +20,7 @@ ok(js.includes("class=dvg") && js.includes("class=pjg") && js.includes("dir=auto
 ok(js.includes("function pjCard") && js.includes("/img/blocks_") && js.includes("No map position yet") && js.includes("pj-fill"), "project cards place on the map from the district footprints; unplaced say so");
 ok(js.includes("function rowGo") && js.includes('addEventListener("click",rowGo)') && !js.includes("r.onclick=go"), "price-by-area rows use one delegated click handler per panel");
 ok(js.includes("if(!dvp||!dvt||!dvo||!cs||!co)return") && js.includes("function safeWire") && js.includes("function dedupeIds"), "a profile open cannot throw in wireDetail; duplicate ids are renamed in the hidden copy");
+ok(!js.includes("'Mostly '") && !/Mostly [^<]{0,12}band/.test(js), "no developer tag says Mostly + band any more");
+ok(js.includes("Most sales") && /function tagText[^\n]*[^\n]*\n[^\n]*fmt\(pu\(x\)\)/.test(js) && js.includes("pul()+'</small>'"), "the tag states the measured range in the unit the page shows (pu/pul follow the toggle)");
+ok(!/function tagText[\s\S]{0,700}(budget|luxury|premium)/i.test(js.replace("Ultra-luxury","")), "the new tag does not use budget, luxury or premium");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
