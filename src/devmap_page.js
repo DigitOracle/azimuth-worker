@@ -563,7 +563,7 @@ function startMap(){
     map.on("click","a-fill",function(e){if(pjHit(e).length)return;select(e.features[0].properties.slug,false)})})}
 // ---- start ----
 Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
-  IDX=r[0];GEO=r[1];
+  IDX=r[0];GEO=r[1];DM.mergeAreas(IDX);
   if(IDX&&IDX.ev)S.win="l12";   // v322 - prices a realtor quotes today: the last 12 months, unless the index carries no evidence yet
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l;IDX.areas[s].name=IDX.areas[s].name.replace(/\bJLT\b/g,"Jumeirah Lakes Towers")});   // v321 - an area is never shown as an initial
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
@@ -571,7 +571,7 @@ Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
   $("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Price bands: "+IDX.cuts.rule;
   if(DM.TIER_CFG.bounds)$("source").textContent="Land Department sales register, "+(IDX.as_of||"")+". Price bands (cut from all Dubai settled sales so each holds about a quarter of the money spent; they describe homes, not developers): "+DM.TIER_CFG.bounds.join(" / ")+" AED per sq m.";
   if(mineList().length&&!S.isDefault)S.screen=2;
-  var pa=new URLSearchParams(location.search).get("area");if(pa&&IDX.areas[pa])S.sel=pa;var pdr=new URLSearchParams(location.search).get("evidence");if(pdr&&S.sel)S.drawer=pdr;var pw=new URLSearchParams(location.search).get("window");if(pw==="all"||pw==="l12")S.win=pw;   // v314 - a link can open one area (also used by scripts/devmap_preview.mjs); v322 - and the evidence drawer and the window
+  var pa=DM.resolveArea(new URLSearchParams(location.search).get("area"));if(pa&&IDX.areas[pa])S.sel=pa;var pdr=new URLSearchParams(location.search).get("evidence");if(pdr&&S.sel)S.drawer=pdr;var pw=new URLSearchParams(location.search).get("window");if(pw==="all"||pw==="l12")S.win=pw;   // v314 - a link can open one area (also used by scripts/devmap_preview.mjs); v322 - and the evidence drawer and the window
   var pq=new URLSearchParams(location.search);if(pq.get("prof"))S.prof=pq.get("prof");var dq=pq.get("drill");if(dq){var q2=dq.split(":");S.drill={k:q2[0],t:Number(q2[1]),ar:q2[2]||null}}if(pq.get("meet")){S.screen=3;S.mode=pq.get("meet")==="rent"?"rent":"buy";S.bud.mode=S.mode==="buy"?"sqft":"total"}   // v321 - a link can open a profile, a drill-down or the client meeting (used by scripts/devmap_preview.mjs and the tests)
   renderAll();if(S.drill)setDrill(S.drill);if(pq.get("sheet")==="max")setSheet(true);
   if(window.maplibregl)startMap();else $("map").innerHTML='<p class=note style="padding:16px">The map could not load. The lists still work.</p>';

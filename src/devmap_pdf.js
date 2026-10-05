@@ -161,6 +161,8 @@ export function budgetSay(p) {
 
 export async function loadData(env, p, opts) {
   const IDX0 = await kvJson(env, "devmap_index");
+  DM.mergeAreas(IDX0);                               // v346 - Jumeirah Lakes Towers is one area; the old slug resolves to it
+  p.area = DM.resolveArea(p.area);
   if (!IDX0 || !IDX0.areas) return { status: 503, body: { ok: false, reason: "the developers index (KV img_devmap_index) is not on file yet" } };
   if (!p.area || !IDX0.areas[p.area]) return { status: 404, body: { ok: false, reason: "area not in the developers index", area: p.area } };
   const ix = windowIndex(IDX0, p.win);
@@ -241,7 +243,7 @@ export function outlinePanels(C) {
   const W = 190, H = 58, plain = C.names.plain, nm = trimName(plain, 26);
   const own = (rings && rings.length ? rings : [[[bb[0], bb[1]], [bb[2], bb[1]], [bb[2], bb[3]], [bb[0], bb[3]]]]);
   const all = [].concat(...feats.map((f) => ringsOf(f.geometry))), P = proj(boxOf(all), W, H, 8);
-  const rest = feats.filter((f) => f.properties.slug !== C.slug).map((f) => pathOf(ringsOf(f.geometry), P)).join("");
+  const rest = feats.filter((f) => f.properties.slug !== C.slug && !DM.AREA_ALIAS[f.properties.slug]).map((f) => pathOf(ringsOf(f.geometry), P)).join("");
   const me = pathOf(own, P), [bx0, by0, bx1, by1] = boxOf(own), [cx, cy] = P([(bx0 + bx1) / 2, (by0 + by1) / 2]);
   const roomR = W - 3 - (cx + 10), roomL = cx - 10 - 3, left = roomL > roomR, room = Math.max(roomL, roomR), nm2 = trimName(nm, Math.max(8, Math.floor(room / 5.1))), lx = left ? cx - 10 : cx + 10, ly = Math.max(11, Math.min(H - 4, cy - 8));
   const halo = ' stroke="#FBFAF7" stroke-width="2.6" stroke-linejoin="round" paint-order="stroke"';
@@ -377,7 +379,7 @@ export function shortName(name, max) {
 }
 function devLine(C, d) {
   const prj = ((C.area.devs[d.k] || {}).b || []).length;
-  return '<div class="dl"><span class="st">' + (C.mine[d.k] ? icon("star", 11, GOLDI) : "") + '</span><span class="dn2">' + esc(shortName(d.name, 24)) + "</span><span>" + aed(d.medianSqft) + " per sq ft</span><span>" + plural(d.n, "sale") + "</span><span>" + (prj ? plural(prj, "project") : "") + "</span></div>" + (qWords(C.area.devs[d.k]) ? '<div class="qn2">' + esc(shortName(d.name, 24)) + ": " + qWords(C.area.devs[d.k]) + "</div>" : "");
+  return '<div class="dl"><span class="st">' + (C.mine[d.k] ? icon("star", 11, GOLDI) : "") + '</span><span class="dn2">' + esc(shortName(d.name, 24)) + "</span><span>" + aed(d.medianSqft) + " per sq ft</span> <span>" + plural(d.n, "sale") + "</span> <span>" + (prj ? "&middot; " + plural(prj, "project") : "") + "</span></div>" + (qWords(C.area.devs[d.k]) ? '<div class="qn2">' + esc(shortName(d.name, 24)) + ": " + qWords(C.area.devs[d.k]) + "</div>" : "");
 }
 
 function bandCard(C, t, lineCap) {
@@ -683,7 +685,7 @@ export const EXTRA_CSS = `
   .bcp b { font-size:9px; font-weight:600; white-space:nowrap; }
   .bcs { font-size:10px; color:#3d4249; border-top:1px solid rgba(0,0,0,0.08); padding-top:3px; }
   .bcl { display:flex; flex-direction:column; border-top:1px solid rgba(0,0,0,0.08); }
-  .dl { display:grid; grid-template-columns:12px minmax(0,1fr) 84px 44px 54px; gap:4px; align-items:center; font-size:9.2px; padding:2.2px 0; border-bottom:1px solid rgba(0,0,0,0.05); line-height:1.25; }
+  .dl { display:grid; grid-template-columns:12px minmax(0,1fr) 78px 62px 66px; gap:4px; align-items:center; font-size:9.2px; padding:2.2px 0; border-bottom:1px solid rgba(0,0,0,0.05); line-height:1.25; }
   .dl span { white-space:nowrap; } .dl .dn2 { white-space:normal; overflow-wrap:break-word; font-weight:500; font-size:9.6px; line-height:1.15; }
   .dl .st { display:flex; align-items:center; }
   .qn, .qn2 { color:${MUTED}; font-size:8.4px; font-style:italic; } .qn2 { padding:0 0 2px 16px; line-height:1.2; border-bottom:1px solid rgba(0,0,0,0.05); }
