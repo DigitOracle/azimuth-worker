@@ -27,4 +27,8 @@ ok(html.includes(".pk>.tag{order:3;flex:0 0 100%;min-width:110px") && html.inclu
 ok(js.includes("function devHead") && js.includes("class=dvtile") && js.includes("class=dvcg") && js.includes("No developer with 3+ sales sits here") && js.includes("About these numbers"), "area panel: developer count tile, first cards, quiet no-developer card, About these numbers");
 ok(js.includes("lim=S.devAll?all.length:6") && js.includes("Show all '+all.length+' developers"), "first six developers as cards with a Show all button");
 ok(js.includes("where the developer is not recorded yet"), "the unrecorded-sales sentence is kept (in About these numbers)");
+ok(/function devHead\(st,area,thin\)\{\s*var all=\[\];st\.tiers/.test(js) && !/function devHead[^\n]*view\./.test(js), "tile and cards are built from all developers (st), so the only-my-developers filter cannot change them");
+ok(js.includes("<span class=inl>") && js.includes("in your list") && js.includes("none of them in your list"), "a card shows an in your list chip only for list members; the tile says when none are");
+ok(js.includes("the price bands below are filtered to your list") && !js.includes("hidden by your filter"), "the confusing hidden-by-your-filter box is replaced by one quiet note");
+ok(js.includes("function clipName") && html.includes("a.dvc.dlink{text-decoration:none}") && js.includes("function panelTop"), "long names clipped, card has no link underline, panel scrolls to its top on select");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
