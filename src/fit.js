@@ -16,9 +16,12 @@
 // Storage (KV namespace MEETINGS): fit_<date>_<ms>_<rand> = one entry, with the entry repeated as KV metadata so a range
 // is read with list() alone, no per-entry get. fitc_* = config, flags, one-turn pending answers.
 // Entry: { u, id, d: "YYYY-MM-DD" (GST), t: ms, k: "food"|"ex"|"w", x: text (or "weight"/"waist" for k "w"), m: minutes, n: steps (a DAY TOTAL: the day keeps the largest),
-//          v: a measurement (k "w": kg or cm), o: 1 if outside the eating windows, s: source }
+//          v: a measurement (k "w": kg or cm), o: 1 if outside the eating windows, s: source,
+//          p: ROUGH grams of protein in a meal (pr: "rough"), or pr: "none" when it was tried and could not be told; no pr = not tried yet }
 
-import { FIT_IMG, FIT_IMG_TYPE } from "./fit_img.js";   // the page photos, bundled (scripts/gen_fit_img.mjs; Pexels licence, assets/fit/CREDITS.md)
+import { FIT_IMG, FIT_IMG_TYPE } from "./fit_img.js";
+import { FIT_ICONS } from "./fit_icons.js";   // the page icons (Phosphor, MIT), generated
+import { FIT_JS, FIT_CSS2 } from "./fit_page.js";   // the page script and the card styles   // the page photos, bundled (scripts/gen_fit_img.mjs; Pexels licence, assets/fit/CREDITS.md)
 
 const GST_MS = 4 * 3600 * 1000, DAY_MS = 86400000;
 export const gstDate = (ms) => new Date(ms + GST_MS).toISOString().slice(0, 10);
@@ -47,6 +50,7 @@ export const FIT_CFG_DEFAULT = {
   minDay: 30,           // a workout counts toward the daily floor when the day's total reaches this
   stepsFloor: 10000,    // ...or the day's steps reach this: the "no excuse" option
   tone: "firm",         // kind | firm | brutal - how the verdict talks
+  proteinTarget: 0,     // an optional daily guide in grams, 0 = none. A guide the person sets for themselves; Momo never suggests a number
   windows: [{ n: "Breakfast", a: "06:00", b: "09:00" }, { n: "Lunch", a: "11:00", b: "14:00" }, { n: "Evening", a: "17:00", b: "21:00" }]   // eating windows (GST)
 };
 const intIn = (v, lo, hi, dflt) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : dflt; };
@@ -61,6 +65,7 @@ export function fitCleanCfg(inp, base) {
   if ("minDay" in c) out.minDay = intIn(c.minDay, 5, 600, b.minDay);
   if ("stepsFloor" in c) out.stepsFloor = intIn(c.stepsFloor, 0, 100000, b.stepsFloor);
   if ("tone" in c) out.tone = ["kind", "firm", "brutal"].includes(c.tone) ? c.tone : b.tone;
+  if ("proteinTarget" in c) out.proteinTarget = intIn(c.proteinTarget, 0, 400, b.proteinTarget);
   if ("windows" in c && Array.isArray(c.windows)) {
     out.windows = c.windows.slice(0, 6).map((w) => ({ n: clip(w && w.n, 20), a: String((w && w.a) || ""), b: String((w && w.b) || "") }))
       .filter((w) => w.n && HM_RX.test(w.a) && HM_RX.test(w.b) && w.a < w.b);
@@ -151,6 +156,60 @@ export function windowFor(cfg, ms) {
 }
 export const windowsText = (cfg) => ((cfg && cfg.windows) || []).map((w) => w.n + " " + w.a + "-" + w.b).join(" · ") || "none set";
 
+// ---- rough protein ----------------------------------------------------------------------------------------------------------
+// A ROUGH guess for a food diary, for one normal serving of what the label says. It is not exact and it is not nutrition advice, and every place that
+// shows it says "rough". A small built-in table answers the common foods for free; only a label the table cannot read goes to the model that already
+// reads the meals (no other service). Drinks and foods with none count as 0 g; a label nobody can read is "not estimated" - never a made-up number.
+const NUMW = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+const PROTEIN_GROUPS = [   // within a group the largest match counts; the groups add up
+  ["meat", [[/\b(chicken|shawarma|tikka|rotisserie|nuggets|wings)\b/i, 30], [/\b(beef|steak|burger|kebab|kofta|lamb|mutton|meatballs?|mince|ribs?|brisket|veal)\b/i, 28], [/\b(fish|salmon|tuna|sea ?bass|hammour|shrimps?|prawns?|seafood|sardines?|cod|tilapia|sushi|sashimi)\b/i, 25], [/\b(turkey|duck|bacon|sausages?|salami|ham|pastrami)\b/i, 18]]],
+  ["supp", [[/\b(protein (?:shake|bar|powder|drink)|whey)\b/i, 25]]],
+  ["yogurt", [[/\b(greek yogh?urt|skyr|quark|cottage cheese)\b/i, 15], [/\b(yogh?urt|laban|labneh|kefir)\b/i, 8]]],
+  ["milk", [[/\b(milk|latte|cappuccino|flat white|mocha|milkshake)\b/i, 8]]],
+  ["cheese", [[/\b(halloumi|paneer|cheese|feta|mozzarella|cheddar)\b/i, 10]]],
+  ["plant", [[/\b(tofu|tempeh|seitan|edamame)\b/i, 15], [/\b(lentils?|dal|daal|chickpeas?|beans?|ful|foul|falafel|hummus|hommus|peas)\b/i, 10]]],
+  ["nuts", [[/\b(almonds?|nuts?|cashews?|walnuts?|pistachios?|peanuts?|peanut butter|seeds?|tahini)\b/i, 6]]],
+  ["starch", [[/\b(pizza)\b/i, 18], [/\b(oats?|oatmeal|porridge|granola|muesli|cereal|bread|toast|bagel|croissant|pita|wrap|roti|paratha|naan|sandwich|pastry|cake|cookies?|muffin)\b/i, 6], [/\b(rice|pasta|spaghetti|noodles?|biryani|couscous|quinoa|potato|fries|chips)\b/i, 5]]],
+  ["plants", [[/\b(salad|vegetables?|veggies|soup|fruit|apple|banana|berries|strawberr\w*|grapes?|dates?|avocado)\b/i, 2]]]
+];
+const PROTEIN_ZERO = /\b(water|sparkling|soda water|tea|karak|black coffee|americano|espresso|coffee|juice|lemonade|soda|cola|coke|pepsi|sprite|fanta|energy drink|beverage|sweets?|candy|gum)\b/i;
+export function tableProtein(text) {
+  const t = String(text || ""); if (!t.trim()) return null;
+  let g = 0, hit = false;
+  const eggs = /\b(\d+|an?|one|two|three|four|five|six)?\s*(?:large |boiled |fried |scrambled |poached )?eggs?\b/i.exec(t), omelet = /\bomelet(?:te)?s?\b/i.test(t);
+  if (omelet) { g += 14; hit = true; } else if (eggs) { const q = eggs[1] ? (NUMW[eggs[1].toLowerCase()] || parseInt(eggs[1], 10) || 2) : 2; g += Math.min(q, 8) * 6; hit = true; }
+  for (const [, rows] of PROTEIN_GROUPS) { let best = 0; for (const [rx, n] of rows) if (rx.test(t) && n > best) best = n; if (best) { g += best; hit = true; } }
+  if (!hit) return PROTEIN_ZERO.test(t) ? { g: 0, how: "rough" } : null;
+  return { g: Math.min(g, 90), how: "rough" };
+}
+const PROTEIN_SCHEMA = { type: "object", additionalProperties: false, properties: { protein_g: { type: ["integer", "null"] } }, required: ["protein_g"] };
+const PROTEIN_SYS = "You give a ROUGH estimate of the protein in one meal or drink from a short description, for a person's own food diary. Assume one normal serving. Answer in whole grams. Water, tea, black coffee, juice, soda and anything else with no protein is 0. If the description is not food or drink, or you cannot tell, answer null. This is a rough guess, not advice: never refuse.";
+// { g, how } an estimate - null: asked and could not tell - undefined: could not ask right now (try again later)
+export async function proteinFor(env, deps, text) {
+  const t = tableProtein(text); if (t) return t;
+  if (!deps || !deps.claudeJSON) return undefined;
+  let r; try { r = await deps.claudeJSON(env, PROTEIN_SYS, clip(text, 140), PROTEIN_SCHEMA, deps.CLAUDE_FAST, 80); } catch (e) { return undefined; }
+  if (!r) return undefined;
+  const n = Math.round(Number(r.protein_g));
+  return r.protein_g == null || !(n >= 0 && n <= 150) ? null : { g: n, how: "rough" };
+}
+function applyProtein(e, est) { if (est === undefined) return e; if (est === null) { e.pr = "none"; delete e.p; } else { e.p = Math.max(0, Math.min(150, Math.round(est.g))); e.pr = "rough"; } return e; }
+// meals that were logged before this existed (or when the model was away) get their estimate the first time the day is opened; a few at a time
+export async function fitBackfillProtein(env, deps, entries, limit) {
+  let n = 0;
+  for (const e of entries || []) {
+    if (e.k !== "food" || e.pr) continue;
+    const est = await proteinFor(env, deps, e.x); if (est === undefined) continue;
+    applyProtein(e, est); await putEntry(env, e); if (++n >= (limit || 8)) break;
+  }
+  return n;
+}
+export function weekProtein(byDay, ws, cfg) {
+  let total = 0, days = 0;
+  for (let i = 0; i < 7; i++) { const s = dayStats(byDay[addDays(ws, i)], cfg); if (s.pmeals > 0) { total += s.protein; days++; } }
+  return { total, days, avg: days ? Math.round(total / days) : 0 };
+}
+
 // ---- storage ----------------------------------------------------------------------------------------------------------
 async function putEntry(env, e) {
   const body = JSON.stringify(e);
@@ -163,6 +222,7 @@ export async function fitAdd(env, f) {
   const e = { u: pickUser(env, f.u), id, d, t, k: kind, x: clip(f.x, 140), m: kind === "ex" ? Math.max(0, Math.round(f.m || 0)) : 0, n: kind === "ex" ? Math.max(0, Math.round(f.n || 0)) : 0, s: clip(f.s || "web", 12) };
   if (kind === "w") e.v = Math.round((Number(f.v) || 0) * 10) / 10;
   if (f.o) e.o = 1;
+  if (kind === "food" && f.est !== undefined) applyProtein(e, f.est);
   return putEntry(env, e);
 }
 export async function fitGet(env, id, u) {
@@ -172,7 +232,7 @@ export async function fitGet(env, id, u) {
 export async function fitDelete(env, id, u) { if (!ID_RX.test(String(id))) return false; await env.MEETINGS.delete("fit_" + pickUser(env, u) + "_" + id); return true; }
 export async function fitEdit(env, id, patch, u) {
   const e = await fitGet(env, id, u); if (!e) return null;
-  if ("x" in patch) e.x = clip(patch.x, 140) || e.x;
+  if ("x" in patch) { const nx = clip(patch.x, 140); if (nx && nx !== e.x && e.k === "food") { delete e.p; delete e.pr; } e.x = nx || e.x; }   // a new description needs a new estimate
   if (e.k === "w" && "v" in patch) { const r = MEASURES[e.x]; const v = Math.round((Number(patch.v) || 0) * 10) / 10; if (r && v >= r.lo && v <= r.hi) e.v = v; }
   if (e.k === "ex") { if ("m" in patch) e.m = Math.max(0, Math.min(1440, Math.round(patch.m || 0))); if ("n" in patch) e.n = Math.max(0, Math.min(200000, Math.round(patch.n || 0))); }
   return putEntry(env, e);
@@ -247,9 +307,9 @@ const SUNDAY_ASK = (cfg, cur) => "📅 It's Sunday - set next week's target. Rep
 
 // ---- the numbers ------------------------------------------------------------------------------------------------------
 export function dayStats(entries, cfg) {
-  const s = { meals: 0, out: 0, ex: 0, steps: 0, qualifies: false };
+  const s = { meals: 0, out: 0, ex: 0, steps: 0, protein: 0, pmeals: 0, qualifies: false };
   for (const e of entries || []) {
-    if (e.k === "food") { s.meals++; if (e.o) s.out++; }
+    if (e.k === "food") { s.meals++; if (e.o) s.out++; if (e.pr === "rough" && Number.isFinite(e.p)) { s.protein += e.p; s.pmeals++; } }
     else if (e.k === "ex") { if (e.n) s.steps = Math.max(s.steps, e.n); else s.ex += e.m || 0; }   // steps are a total for the day (typed, or sent by the phone): the largest wins, they never add
   }
   s.qualifies = s.ex >= cfg.minDay || (cfg.stepsFloor > 0 && s.steps >= cfg.stepsFloor);
@@ -286,6 +346,7 @@ export async function fitSummary(env, d, cfg, today) {
   const week = weekMinutes(by, d); week.base = await weekTarget(env, cfg, week.start);
   week.rest = 0; for (let i = 0; i < 7; i++) if (paused.has(addDays(week.start, i))) week.rest++;
   week.target = scaledTarget(week.base, week.rest);
+  week.protein = weekProtein(by, week.start, cfg);
   return { today, d, entries: by[d] || [], stats: dayStats(by[d], cfg), rest: paused.has(d), strip: days, week, challenge: challengeStats(by, cfg, today, paused), paused: [...paused].filter((x) => x >= today).sort(), by };
 }
 
@@ -312,20 +373,22 @@ async function storedTargets(env, u) {
   return out;
 }
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-export async function fitHistory(env, cfg, today) {
+export async function fitHistory(env, cfg, today, deps) {
   let from = cfg.start && cfg.start <= today ? cfg.start : addDays(today, -29);
   if (from < addDays(today, -400)) from = addDays(today, -400);
-  const all = await fitRange(env, from, today, cfg.u), by = groupByDay(all), stored = await storedTargets(env, cfg.u), paused = await fitPausedDates(env, cfg.u, from, addDays(today, 14));
+  const all = await fitRange(env, from, today, cfg.u);
+  await fitBackfillProtein(env, deps, all.filter((e) => e.d >= addDays(today, -14)).sort((a, b) => b.t - a.t), 8);   // the last two weeks, NEWEST first, so the days you look at are done before the older ones
+  const by = groupByDay(all), stored = await storedTargets(env, cfg.u), paused = await fitPausedDates(env, cfg.u, from, addDays(today, 14));
   const days = [], weeks = {}, months = {};
-  const t = { days: 0, rest: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0, bestStreak: 0, weeksMet: 0, weeksDone: 0, from, to: today };
+  const t = { days: 0, rest: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0, protein: 0, pdays: 0, bestStreak: 0, weeksMet: 0, weeksDone: 0, from, to: today };
   let run = 0;
   for (let d = from; d <= today; d = addDays(d, 1)) {
     const s = dayStats(by[d], cfg), ok = s.qualifies, rest = paused.has(d);
-    days.push({ d, meals: s.meals, out: s.out, ex: s.ex, steps: s.steps, ok, rest });
-    t.minutes += s.ex; t.steps += s.steps; t.meals += s.meals; t.out += s.out;
-    const ws = weekStart(d), w = weeks[ws] || (weeks[ws] = { ws, from: d, to: d, days: 0, rest: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0 });
+    days.push({ d, meals: s.meals, out: s.out, ex: s.ex, steps: s.steps, protein: s.protein, pmeals: s.pmeals, ok, rest });
+    t.minutes += s.ex; t.steps += s.steps; t.meals += s.meals; t.out += s.out; if (s.pmeals > 0) { t.protein += s.protein; t.pdays++; }
+    const ws = weekStart(d), w = weeks[ws] || (weeks[ws] = { ws, from: d, to: d, days: 0, rest: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0, protein: 0, pdays: 0 });
     const mk = d.slice(0, 7), m = months[mk] || (months[mk] = { m: mk, label: MONTHS[parseInt(mk.slice(5), 10) - 1] + " " + mk.slice(0, 4), days: 0, rest: 0, hit: 0, minutes: 0, steps: 0, meals: 0, out: 0 });
-    w.to = d; w.minutes += s.ex; w.steps += s.steps; w.meals += s.meals; w.out += s.out;
+    w.to = d; w.minutes += s.ex; w.steps += s.steps; w.meals += s.meals; w.out += s.out; if (s.pmeals > 0) { w.protein += s.protein; w.pdays++; }
     m.minutes += s.ex; m.steps += s.steps; m.meals += s.meals; m.out += s.out;
     if (rest) { t.rest++; w.rest++; m.rest++; continue; }   // a rest day is not a day to be judged: it is left out of "days hit of N" and it does not break the run
     t.days++; w.days++; m.days++;
@@ -338,8 +401,10 @@ export async function fitHistory(env, cfg, today) {
     w.target = scaledTarget(w.base, rest);
     w.complete = addDays(w.ws, 6) < today;   // the week is over only once its Sunday has passed
     w.met = w.target > 0 && w.minutes >= w.target;
+    w.pavg = w.pdays ? Math.round(w.protein / w.pdays) : 0;
     if (w.complete) { t.weeksDone++; if (w.met) t.weeksMet++; }
   }
+  t.pavg = t.pdays ? Math.round(t.protein / t.pdays) : 0;
   return { today, cfg, days, weeks: wl, months: Object.values(months).sort((a, b) => (a.m < b.m ? -1 : 1)), totals: t, measures: fitMeasures(all) };
 }
 // ---- weight and waist (optional; nothing asks for them) ---------------------------------------------------------------------
@@ -375,6 +440,7 @@ function historyText(h) {
   L.push("Exercise: " + fmtMin(t.minutes) + (t.steps ? " · " + fmtSteps(t.steps) + " steps" : ""));
   L.push("Weeks on target: " + t.weeksMet + " of " + t.weeksDone + " finished · meals outside windows: " + t.out + " of " + t.meals);
   for (const [what, m] of Object.entries(h.measures || {})) L.push((what === "weight" ? "⚖️ Weight: " : "📏 Waist: ") + m.latest + " " + m.unit + (m.count > 1 ? " (" + sgn(m.change) + " " + m.unit + " since the first reading)" : " (first reading)"));
+  if (t.pdays) L.push("Protein: about " + t.pavg + " g a day on days with logged meals (rough estimate, not nutrition advice)");
   L.push("");
   for (const w of h.weeks.slice(-8)) L.push("Wk " + dm(w.ws) + ": " + fmtMin(w.minutes) + " of " + fmtMin(w.target) + (w.complete ? (w.met ? " ✅" : " ❌") : " ⏳") + " · " + w.hit + "/" + w.days + " days" + (w.rest ? " · " + w.rest + " rest" : ""));
   return L.join("\n");
@@ -429,8 +495,8 @@ function sundayExtras(cfg, sum, today) {
 const csvCell = (v) => { let t = String(v == null ? "" : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };   // a leading = + - @ would run as a formula in a spreadsheet
 export async function fitCsv(env, cfg, today) {
   const from = cfg.start && cfg.start <= today ? (cfg.start < addDays(today, -400) ? addDays(today, -400) : cfg.start) : addDays(today, -400);
-  const rows = [["date", "time_gst", "kind", "what", "minutes", "steps", "value", "outside_eating_window", "source"]];
-  for (const e of await fitRange(env, from, today, cfg.u)) rows.push([e.d, gstHM(e.t), e.k === "ex" ? "exercise" : e.k === "w" ? "measurement" : "food", e.x, e.k === "ex" && !e.n ? e.m : "", e.n || "", e.k === "w" ? e.v : "", e.k === "food" ? (e.o ? "yes" : "no") : "", e.s]);
+  const rows = [["date", "time_gst", "kind", "what", "minutes", "steps", "value", "outside_eating_window", "source", "protein_g_rough"]];
+  for (const e of await fitRange(env, from, today, cfg.u)) rows.push([e.d, gstHM(e.t), e.k === "ex" ? "exercise" : e.k === "w" ? "measurement" : "food", e.x, e.k === "ex" && !e.n ? e.m : "", e.n || "", e.k === "w" ? e.v : "", e.k === "food" ? (e.o ? "yes" : "no") : "", e.s, e.k === "food" && e.pr === "rough" ? e.p : ""]);
   return rows.map((r) => r.map(csvCell).join(",")).join("\n") + "\n";
 }
 // ---- is it working? one look at when things last happened ----------------------------------------------------------------
@@ -492,6 +558,7 @@ const sayVars = (cfg, extra) => Object.assign({ steps: fmtSteps(cfg.stepsFloor),
 // the one-line state of the day, week and challenge - appended to every acknowledgement
 function stateLines(cfg, sum) {
   const st = sum.stats, L = [];
+  if (st.pmeals > 0) L.push("Protein today: about " + st.protein + (cfg.proteinTarget ? " of " + cfg.proteinTarget : "") + " g (rough)");
   L.push("Today: " + st.meals + " meal" + (st.meals === 1 ? "" : "s") + " · " + fmtMin(st.ex) + (st.steps ? " · " + fmtSteps(st.steps) + " steps" : ""));
   L.push(sum.rest ? "⏸ Rest day - not counted against you" : st.qualifies ? "✅ Daily minimum done" : "⏳ Still needed: " + cfg.minDay + " min of exercise" + (cfg.stepsFloor ? " or " + fmtSteps(cfg.stepsFloor) + " steps" : ""));
   if (sum.week.target) L.push("Week: " + fmtMin(sum.week.minutes) + " of " + fmtMin(sum.week.target));
@@ -509,7 +576,8 @@ async function logEntry(env, deps, from, f) {
   await ensureStarted(env, cfg, d);
   let o = false, win = "";
   if (f.k === "food" && off === 0) { const w = windowFor(cfg, t); o = w.out; win = w.name; }   // an earlier day has no clock time to judge
-  const e = await fitAdd(env, { u, k: f.k, x: f.x, m: f.m, n: f.n, t, d, o, s: f.s });
+  const est = f.k === "food" ? (Number.isFinite(f.p) && f.p >= 0 && f.p <= 150 ? { g: f.p, how: "rough" } : await proteinFor(env, deps, f.x)) : undefined;   // the table first, the model only when it cannot tell
+  const e = await fitAdd(env, { u, k: f.k, x: f.x, m: f.m, n: f.n, t, d, o, s: f.s, est });
   const today = gstDate(now), sum = await fitSummary(env, d, cfg, today);
   let head;
   if (e.k === "food") head = "🍽 Logged - " + e.x + (off ? " (" + (off === -1 ? "yesterday" : "2 days ago") + ")" : "") + (win ? " · " + win : "");
@@ -517,6 +585,7 @@ async function logEntry(env, deps, from, f) {
   else head = "🏃 Logged - " + e.x + " · " + fmtMin(e.m) + (off ? " (" + (off === -1 ? "yesterday" : "2 days ago") + ")" : "");
   const parts = [head];
   if (o) parts.push("⚠ That is outside your eating windows (" + windowsText(cfg) + ").");
+  if (e.k === "food") parts.push(e.pr === "rough" ? "About " + e.p + " g protein (rough estimate)" : e.pr === "none" ? "Protein: not estimated" : "Protein: not estimated yet");
   parts.push("", stateLines(cfg, sum));
   // positive reinforcement the moment a target is reached, once each
   if (e.k === "ex" && sum.stats.qualifies && await flagOnce(env, "fitc_flag_" + u + "_" + d + "_day")) parts.push("", "✅ " + say(cfg, "dayDone", sayVars(cfg), d));
@@ -534,13 +603,14 @@ async function reply(env, deps, to, body, buttons) {
 // ---- WhatsApp: text (and voice notes, once transcribed) ---------------------------------------------------------------
 const CLASS_SCHEMA = { type: "object", additionalProperties: false, properties: {
   kind: { type: "string", enum: ["food", "exercise", "other"] }, text: { type: ["string", "null"] }, type: { type: ["string", "null"] },
-  minutes: { type: ["integer", "null"] }, steps: { type: ["integer", "null"] }, day_offset: { type: "integer" } },
-  required: ["kind", "text", "type", "minutes", "steps", "day_offset"] };
+  minutes: { type: ["integer", "null"] }, steps: { type: ["integer", "null"] }, day_offset: { type: "integer" }, protein_g: { type: ["integer", "null"] } },
+  required: ["kind", "text", "type", "minutes", "steps", "day_offset", "protein_g"] };
 async function classify(env, deps, text) {
   const sys = "You log food and exercise for one person. Decide whether the message reports something ALREADY eaten, drunk or done (past tense or just now).\n" +
     "- \"food\": a meal, snack or drink. text = what was eaten, plain, under 100 characters, no calories, no judgement.\n" +
     "- \"exercise\": a workout, sport, walk or step count. type = a short label (Gym, Walk, Run, Padel, Steps...). minutes = total minutes as an integer (1 hour = 60), null when no duration is given. For a step count use type \"Steps\" and steps = the number, minutes null.\n" +
     "- \"other\": anything else - plans, questions, meetings (\"lunch with Sara on Friday\"), tasks, future intent (\"gym tomorrow at 6\"), bookings, anything not yet done.\n" +
+    "protein_g: for food, a ROUGH whole-number guess of the grams of protein in one normal serving (0 for water, tea, black coffee, juice, soda); null for exercise, other, or when you cannot tell.\n" +
     "day_offset: 0 for today, -1 when the message says yesterday, -2 for the day before. Output ONLY the JSON.";
   const g = deps.claudeJSON ? await deps.claudeJSON(env, sys, text, CLASS_SCHEMA, deps.CLAUDE_FAST, 250) : null;
   return g && g.kind ? g : null;
@@ -556,7 +626,15 @@ function statusText(cfg, sum, partners) {
   L.push("", "Open Momo in the bottom bar for the full view.");
   return L.join("\n");
 }
-const HELP_TEXT = "Momo - just say it and it is logged.\nfood: grilled chicken and rice (or send a photo of the plate)\ngym 45 min · 10k steps\n\nmomo - today · momo week · momo history\nmomo again (repeat your last meal) · momo undo · momo fix <the right text or number>\nmomo pause [days] [why] · momo resume\nmomo weight 82.5 · momo waist 90\nmomo target 10 · momo goal <text> · momo tone kind|firm|brutal\nmomo share on|off · momo extend";
+const HELP_TEXT = "Momo - just say it and it is logged. (Protein figures are rough estimates, not nutrition advice.)\nfood: grilled chicken and rice (or send a photo of the plate)\ngym 45 min · 10k steps\n\nmomo - today · momo today (what you ate, with rough protein) · momo week · momo history\nmomo again (repeat your last meal) · momo undo · momo fix <the right text or number>\nmomo pause [days] [why] · momo resume\nmomo weight 82.5 · momo waist 90\nmomo target 10 · momo protein 120 (an optional guide; momo protein off removes it) · momo goal <text> · momo tone kind|firm|brutal\nmomo share on|off · momo extend";
+function mealsText(cfg, sum) {
+  const meals = sum.entries.filter((e) => e.k === "food"), st = sum.stats, L = [(sum.d === sum.today ? "Today" : dm(sum.d)) + " - what you ate"];
+  if (!meals.length) L.push("Nothing logged yet.");
+  meals.forEach((e, i) => { const w = windowFor(cfg, e.t), where = e.o ? "outside your windows" : w.name; L.push((i + 1) + ". " + gstHM(e.t) + (where ? " " + where : "") + " - " + e.x + " - " + (e.pr === "rough" ? "about " + e.p + " g protein" : "protein not estimated")); });
+  if (st.pmeals > 0) L.push("", "Protein so far: about " + st.protein + " g" + (cfg.proteinTarget ? " (your guide: " + cfg.proteinTarget + " g)" : "") + " - rough estimate, not nutrition advice");
+  if (sum.week.protein && sum.week.protein.days > 1) L.push("This week: about " + sum.week.protein.avg + " g a day on days with meals (rough)");
+  return L.join("\n");
+}
 const entryText = (e) => (e.k === "food" ? e.x : e.k === "w" ? e.x + " " + e.v + " " + ((MEASURES[e.x] || {}).unit || "") : e.n ? fmtSteps(e.n) + " steps" : e.x + " " + fmtMin(e.m));
 async function lastEntry(env, u, today) { const l = await fitRange(env, addDays(today, -2), today, u); return l.length ? l[l.length - 1] : null; }
 // true when the message was FIT's and has been answered; false leaves it for the rest of the webhook
@@ -585,6 +663,17 @@ export async function fitWhatsAppText(env, from, text, deps) {
   if ((c = /^\s*fit\s+tone\s*[:\-–—]?\s*(kind|firm|brutal)\s*$/i.exec(text))) { const cfg = await fitCfg(env, U); cfg.tone = c[1].toLowerCase(); await fitSaveCfg(env, cfg); await reply(env, deps, from, "Tone set to " + cfg.tone + "."); return true; }
   if (/^\s*fit\s+extend\s*$/i.test(text)) { const cfg = await fitCfg(env, U); cfg.days = Math.min(365, cfg.days + 30); await fitSaveCfg(env, cfg); await reply(env, deps, from, "➕ Challenge extended to " + cfg.days + " days."); return true; }
   if (/^\s*fit\s+(start|restart)\s*$/i.test(text)) { const cfg = await fitCfg(env, U); cfg.start = gstDate(Date.now()); await fitSaveCfg(env, cfg); await reply(env, deps, from, "▶️ Challenge starts today - " + cfg.days + " days."); return true; }
+  if (/^\s*fit\s+(today|meals|what i ate)\s*$/i.test(text)) {
+    const cfg = await fitCfg(env, U), today = gstDate(Date.now()); let sm = await fitSummary(env, today, cfg, today);
+    if (await fitBackfillProtein(env, deps, sm.entries, 8)) sm = await fitSummary(env, today, cfg, today);
+    await reply(env, deps, from, mealsText(cfg, sm)); return true;
+  }
+  if ((c = /^\s*fit\s+protein\s*[:\-–—]?\s*(\d{2,3}|off|none|0)\s*(?:g|grams?)?\s*$/i.exec(text))) {
+    const cfg = await fitCfg(env, U), v = /^\d+$/.test(c[1]) ? parseInt(c[1], 10) : 0;
+    if (v > 400) { await reply(env, deps, from, "That is out of range - try a number of grams up to 400, or \"momo protein off\"."); return true; }
+    cfg.proteinTarget = v; await fitSaveCfg(env, cfg);
+    await reply(env, deps, from, v ? "Protein guide set: " + v + " g a day. It is your own guide for comparing against the rough estimates - not nutrition advice." : "Protein guide off."); return true;
+  }
   if (/^\s*fit\s+(help|commands|\?)\s*$/i.test(text)) { await reply(env, deps, from, HELP_TEXT); return true; }
   if ((c = /^\s*fit\s+pause\b\s*(\d{1,2})?\s*(.{0,60})$/i.exec(text))) {
     const today = gstDate(Date.now()), days = c[1] ? Math.max(1, Math.min(14, parseInt(c[1], 10))) : 1, dates = await fitPause(env, U, today, days, c[2]);
@@ -646,7 +735,7 @@ export async function fitWhatsAppText(env, from, text, deps) {
   if (g) {
     if (g.kind === "other") return false;
     const off = Math.max(-2, Math.min(0, Math.round(g.day_offset || 0)));
-    if (g.kind === "food" && clip(g.text, 140)) { await logEntry(env, deps, from, { k: "food", x: g.text, s: "wa", off }); return true; }
+    if (g.kind === "food" && clip(g.text, 140)) { await logEntry(env, deps, from, { k: "food", x: g.text, s: "wa", off, p: Number.isFinite(g.protein_g) ? g.protein_g : undefined }); return true; }
     if (g.kind === "exercise") {
       const steps = g.steps || (quick && quick.steps) || 0, dur = g.minutes || (quick && quick.minutes) || 0, type = clip(g.type, 40) || (quick && quick.type) || "Workout";
       if (steps) { await logEntry(env, deps, from, { k: "ex", x: "Steps", n: steps, s: "wa", off }); return true; }
@@ -831,11 +920,12 @@ export async function fitRoutes(request, env, url, h) {
   }
   const now = Date.now(), today = gstDate(now), ulist = fitUsers(env), us = ulist.map((x) => x.id), names = Object.fromEntries(ulist.map((x) => [x.id, x.name || x.id.charAt(0).toUpperCase() + x.id.slice(1)])), cfg = await fitCfg(env, url.searchParams.get("u"));
   if (request.method === "GET") {
-    if (url.searchParams.get("view") === "history") return J(Object.assign({ ok: true, u: cfg.u, users: us, names }, await fitHistory(env, cfg, today)));
+    if (url.searchParams.get("view") === "history") return J(Object.assign({ ok: true, u: cfg.u, users: us, names }, await fitHistory(env, cfg, today, h)));
     if (url.searchParams.get("view") === "csv") return new Response(await fitCsv(env, cfg, today), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="momo-' + cfg.u + '-' + today + '.csv"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
     if (url.searchParams.get("view") === "health") return J(Object.assign({ ok: true }, await fitHealth(env, cfg, today)));
     let d = url.searchParams.get("d") || today; if (!DATE_RX.test(d) || d > today) d = today;
-    const sum = await fitSummary(env, d, cfg, today);
+    let sum = await fitSummary(env, d, cfg, today);
+    if (await fitBackfillProtein(env, h, sum.entries, 8)) sum = await fitSummary(env, d, cfg, today);   // opening a day estimates its meals that have no estimate yet
     return J({ ok: true, u: cfg.u, users: us, names, share: await fitShareOn(env, cfg.u), partners: await fitPartners(env, cfg, today), rest: sum.rest, paused: sum.paused, today, d, cfg, entries: sum.entries, stats: sum.stats, strip: sum.strip, week: sum.week, challenge: sum.challenge });
   }
   if (request.method !== "POST") return J({ ok: false, why: "method" }, 405);
@@ -864,7 +954,7 @@ export async function fitRoutes(request, env, url, h) {
     await ensureStarted(env, cfg, d);
     const t = d === today ? now : Date.parse(d + "T12:00:00Z") - GST_MS;   // an earlier day has no clock time
     let o = false; if (kind === "food" && d === today) o = windowFor(cfg, t).out;
-    const e = await fitAdd(env, { u: cfg.u, k: kind, x: kind === "ex" && n ? "Steps" : x, m, n, t, d, o, s: "web" });
+    const e = await fitAdd(env, { u: cfg.u, k: kind, x: kind === "ex" && n ? "Steps" : x, m, n, t, d, o, s: "web", est: kind === "food" ? await proteinFor(env, h, x) : undefined });
     return J({ ok: true, entry: e });
   }
   if (op === "del") return J({ ok: await fitDelete(env, b.id, cfg.u) });
@@ -901,13 +991,13 @@ const FIT_CSS = ".fw{max-width:640px;margin:0 auto;padding:18px 16px calc(96px +
 function fitPageHtml(o) {
   const keyJs = JSON.stringify(o.key || "").replace(/</g, "\\u003c"), keyQ = encodeURIComponent(o.key || "");
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#0C1413"><title>Momo</title><link rel="icon" type="image/png" href="/fit_img/icon.png?key=' + keyQ + '"><link rel="apple-touch-icon" href="/fit_img/icon.png?key=' + keyQ + '">' + (o.fonts || "") +
-    '<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0C1413;color:#E6E9E4;font-family:"IBM Plex Sans",system-ui,sans-serif}' + FIT_CSS + (o.navCss || "") + '</style></head><body><div class="fw">' +
+    '<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0C1413;color:#E6E9E4;font-family:"IBM Plex Sans",system-ui,sans-serif}' + FIT_CSS + FIT_CSS2 + (o.navCss || "") + '</style></head><body><div class="fw">' +
     '<div class="brand"><img class="logo" src="/fit_img/logo.jpg?key=' + keyQ + '" alt="Momo"><div class="fsub" id="sub">&nbsp;</div></div><div class="chips" id="usr" style="margin:0 0 4px"></div>' +
     '<div class="fc" id="who" style="display:none"><h2>WHO IS THIS?</h2><div class="chips" id="whob"></div><div class="note">Pick your name once. This phone remembers it, and everything you log or save here goes under that name.</div></div>' +
     '<div class="fc" id="ch"></div>' +
     '<div class="dn"><button id="prev" aria-label="Previous day">&#8249;</button><span id="dl"></span><button id="next" aria-label="Next day">&#8250;</button></div><div class="strip" id="strip"></div>' +
-    '<div class="fc"><div class="ph" data-img="food"><b>FOOD</b></div><div id="food"></div><div class="note" id="win"></div>' +
-    '<div class="add"><textarea id="ft" placeholder="What did you eat or drink?" maxlength="140"></textarea><label class="btn s" for="ph" style="display:inline-flex;align-items:center">&#128247; Photo</label><input id="ph" type="file" accept="image/*" hidden><button class="btn" id="fa">Add food</button></div>' +
+    '<div class="fc"><div class="ph" data-img="food"><b>WHAT I ATE</b></div><div class="pc" id="prot" style="display:none"></div><div id="food"></div><div class="note" id="win"></div>' +
+    '<div class="add"><textarea id="ft" placeholder="What did you eat or drink?" maxlength="140"></textarea><label class="btn s" for="ph" style="display:inline-flex;align-items:center"><span id="phi"></span>&nbsp;Photo</label><input id="ph" type="file" accept="image/*" hidden><button class="btn" id="fa">Add food</button></div>' +
     '<div class="note">A photo is read once and thrown away. Only the description is kept.</div></div>' +
     '<div class="fc"><div class="ph" data-img="exercise"><b>EXERCISE</b></div><div id="ex"></div>' +
     '<div class="chips" id="chips"></div><div class="add"><input class="g" id="et" placeholder="Activity" maxlength="40"><input id="en" type="number" inputmode="decimal" min="0" step="any" placeholder="min" style="width:84px"><select id="eu"><option value="m">min</option><option value="h">hours</option><option value="s">steps</option></select><button class="btn" id="ea">Add</button></div></div>' +
@@ -916,69 +1006,9 @@ function fitPageHtml(o) {
     '<label>END GOAL</label><input id="s_goal" maxlength="200" placeholder="What is this 30 days for?"><label>CHALLENGE STARTS</label><input id="s_start" type="date"><label>CHALLENGE LENGTH (DAYS)</label><input id="s_days" type="number" min="1" max="365">' +
     '<label>WEEKLY TARGET (HOURS) - CARRIES OVER UNTIL YOU SET IT ON A SUNDAY</label><input id="s_week" type="number" min="0" step="0.5"><label>DAILY FLOOR: WORKOUT MINUTES</label><input id="s_min" type="number" min="5">' +
     '<label>DAILY FLOOR: OR THIS MANY STEPS (0 = OFF)</label><input id="s_steps" type="number" min="0"><label>FEEDBACK TONE</label><select id="s_tone"><option value="kind">Kind</option><option value="firm">Firm</option><option value="brutal">Brutal</option></select>' +
+    '<label>PROTEIN GUIDE (GRAMS A DAY, OPTIONAL, 0 = NONE) - A ROUGH GUIDE YOU SET FOR YOURSELF, NOT NUTRITION ADVICE</label><input id="s_protein" type="number" min="0" max="400" step="5">' +
     '<label>EATING WINDOWS (NAME, FROM, TO)</label><div id="s_win"></div>' +
     '<div class="note" id="dirt" style="display:none;color:#E0A458">You have unsaved changes - tap "Save the plan" below.</div><label class="chk" id="shl"><input type="checkbox" id="s_share"><span>Share my week and streak with the other person (counts only, never what I ate). It shows only when we both switch it on.</span></label><div class="add"><a class="btn s" id="csv" href="#">Download my log (CSV)</a></div><div class="add"><button class="btn" id="save">Save the plan</button><button class="btn s" id="ext">Extend +30 days</button></div></details>' +
     '<div class="cred">Photos: Pexels</div><div class="toast" id="toast"></div></div>' + (o.nav || "") +
-    '<script>' + FIT_JS.replace("__KEY__", keyJs) + '</script></body></html>';
+    '<script>' + FIT_JS.replace("__KEY__", keyJs).replace("__ICONS__", JSON.stringify(FIT_ICONS)) + '</script></body></html>';
 }
-
-// the page's script. No template literals and no ${ in here: it is spliced into a string above.
-const FIT_JS = "(function(){var KEY=__KEY__;var S={d:null,data:null,u:null,picked:false,dirty:false};try{S.u=localStorage.getItem('fit_u')||null;S.picked=!!S.u}catch(e){}var $=function(i){return document.getElementById(i)};" +
-  "function img(n){return 'url(/fit_img/'+n+'.jpg?key='+encodeURIComponent(KEY)+')'}" +
-  "function api(method,body,q){var u='/fit_api?key='+encodeURIComponent(KEY)+(S.u?'&u='+encodeURIComponent(S.u):'')+(q||'');return fetch(u,{method:method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined}).then(function(r){return r.json()})}" +
-  "function say(t){var e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(say.t);say.t=setTimeout(function(){e.style.display='none'},3200)}" +
-  "function fm(m){m=Math.round(m||0);if(m<60)return m+' min';var h=Math.floor(m/60),r=m%60;return r?h+'h'+(r<10?'0':'')+r:h+'h'}" +
-  "function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}" +
-  "function hm(ms){var d=new Date(ms+4*3600000);return d.toISOString().slice(11,16)}" +
-  "function dlab(d,today){if(d===today)return 'Today';var a=new Date(d+'T00:00:00Z');return a.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'})}" +
-  "function dl2(d){return new Date(d+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'})}" +
-  "function bar(p,ok){var b=el('div','bar'),i=el('i',ok?'ok':'');i.style.width=Math.max(0,Math.min(100,p))+'%';b.appendChild(i);return b}" +
-  "function pills(j){var o=$('usr');o.textContent='';if(!j.users||j.users.length<2)return;var lb=el('span',null,'Whose log:');lb.style.cssText='color:#8FA39B;font-size:.72rem;align-self:center;margin-right:2px';o.appendChild(lb);j.users.forEach(function(n){var b=el('button',n===j.u?'on':null,(j.names&&j.names[n])||n.charAt(0).toUpperCase()+n.slice(1));b.onclick=function(){S.u=n;S.picked=true;S.dirty=false;try{localStorage.setItem('fit_u',n)}catch(e){}load()};o.appendChild(b)})}" +
-  "function nm(j){return (j.names&&j.names[j.u])||j.u}" +
-  "function who(j){document.body.classList.add('nowho');$('sub').textContent='Pick your name to begin';var w=$('who');w.style.display='block';var o=$('whob');o.textContent='';j.users.forEach(function(n){var b=el('button',null,(j.names&&j.names[n])||n);b.onclick=function(){S.u=n;S.picked=true;S.dirty=false;try{localStorage.setItem('fit_u',n)}catch(e){}document.body.classList.remove('nowho');w.style.display='none';load()};o.appendChild(b)})}" +
-  "function load(d){api('GET',null,d?'&d='+d:'').then(function(j){if(!j.ok)return;if(j.users&&j.users.length>1&&!S.picked){who(j);return}S.data=j;S.d=j.d;S.u=j.u;pills(j);draw()})}" +
-  "function draw(){var j=S.data,c=j.cfg,st=j.stats,ch=j.challenge;$('sub').textContent=ch&&ch.day?'Day '+Math.min(ch.day,ch.days)+' of '+ch.days:'Log your first entry to start the 30 days';" +
-  "var box=$('ch');box.textContent='';box.appendChild(el('h2',null,'THE CHALLENGE'));if(c.goal)box.appendChild(el('div','goal',c.goal));" +
-  "if(ch&&ch.day){var r=el('div','row');r.appendChild(el('span',null,'Days hit'));r.appendChild(el('b',null,ch.hit+' of '+ch.counted+(ch.streak>1?'  ·  streak '+ch.streak:'')+(ch.rest?'  ·  '+ch.rest+' rest':'')));box.appendChild(r);box.appendChild(bar(ch.hit/c.days*100,ch.hit>=c.days));if(ch.over)box.appendChild(el('div','note','The '+c.days+' days are up. Extend it from THE PLAN below.'))}" +
-  "var w=el('div','row');w.appendChild(el('span',null,'This week'));w.appendChild(el('b',null,fm(j.week.minutes)+' of '+fm(j.week.target)));box.appendChild(w);box.appendChild(bar(j.week.target?j.week.minutes/j.week.target*100:0,j.week.target&&j.week.minutes>=j.week.target));" +
-  "if(new Date(j.today+'T00:00:00Z').getUTCDay()===0&&S.d===j.today){var sb=el('div','add');var si=el('input');si.type='number';si.min='0';si.step='0.5';si.placeholder='Next week target, hours';si.value=Math.round(c.weekMin/6)/10;si.style.flex='1';var sg=el('button','btn','Set');sg.onclick=function(){api('POST',{op:'weektarget',hours:parseFloat(si.value)}).then(function(r){say(r.ok?'Next week: '+fm(r.target.minutes):(r.why||'Could not save'));load(S.d)})};sb.appendChild(si);sb.appendChild(sg);box.appendChild(el('div','note','It is Sunday - this is when the target for next week is set.'));box.appendChild(sb)}" +
-  "var q=el('div','row');q.appendChild(el('span',null,'Daily floor ('+c.minDay+' min'+(c.stepsFloor?' or '+c.stepsFloor.toLocaleString()+' steps':'')+')'));q.appendChild(el('b',null,j.rest?'⏸ rest day':(st.qualifies?'✅ done':'⏳ not yet')));box.appendChild(q);" +
-  "(j.partners||[]).forEach(function(p){var pr=el('div','row');pr.style.marginTop='8px';pr.appendChild(el('span',null,'🤝 '+p.name));pr.appendChild(el('b',null,fm(p.week)+' of '+fm(p.target)+(p.streak>1?'  ·  streak '+p.streak:'')+(p.today?'  ·  today done':'')));box.appendChild(pr)});" +
-  "if(S.d===j.today){var rb=el('div','add'),rbb=el('button','btn s',j.rest?'Back on (end the rest)':'Rest day…');rbb.onclick=function(){if(j.rest){api('POST',{op:'resume'}).then(function(){say('Back on');load(S.d)});return}var n=prompt('How many days of rest, starting today? (1 to 14)','1');if(n===null)return;var why=prompt('Why? (optional: ill, travel, injury)','');if(why===null)return;api('POST',{op:'pause',days:parseInt(n,10)||1,reason:why}).then(function(r){say(r.ok?'Rest booked - it will not count against you':'Could not save');load(S.d)})};rb.appendChild(rbb);box.appendChild(rb);if(j.paused&&j.paused.length>(j.rest?1:0))box.appendChild(el('div','note','Rest days booked: '+j.paused.map(dl2).join(', ')))}" +
-  "var wm=j.week.target&&j.week.minutes>=j.week.target;if((st.qualifies&&S.d===j.today)||wm){var wb=el('div','ph');wb.style.cssText='margin:12px 0 0;border-radius:12px;height:96px;background-position:center 22%';wb.style.backgroundImage=img('win');wb.appendChild(el('b',null,wm?'WEEKLY TARGET HIT':'DAILY FLOOR DONE'));box.appendChild(wb)}" +
-  "$('dl').textContent=dlab(S.d,j.today);$('next').disabled=S.d>=j.today;$('next').style.opacity=S.d>=j.today?.3:1;" +
-  "var sp=$('strip');sp.textContent='';j.strip.forEach(function(x){var b=el('button',x.d===S.d?'on':'');var wd=new Date(x.d+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'narrow',timeZone:'UTC'});b.appendChild(el('span',null,wd+' '+x.d.slice(8)));b.appendChild(el('span','dot',x.rest?'⏸':x.ok?'🟢':(x.d<j.today?'🔴':'⚪')));b.appendChild(el('span',null,fm(x.ex)));b.onclick=function(){load(x.d)};sp.appendChild(b)});" +
-  "var f=$('food');f.textContent='';var fe=j.entries.filter(function(e){return e.k==='food'});if(!fe.length)f.appendChild(el('div','empty','Nothing logged yet.'));fe.forEach(function(e){f.appendChild(item(e))});" +
-  "$('win').textContent=c.windows.length?'Eating windows: '+c.windows.map(function(w){return w.n+' '+w.a+'–'+w.b}).join('  ·  '):'';" +
-  "var x=$('ex');x.textContent='';var xe=j.entries.filter(function(e){return e.k==='ex'});if(!xe.length)x.appendChild(el('div','empty','Nothing logged yet.'));xe.forEach(function(e){x.appendChild(item(e))});" +
-  "fillSet(c)}" +
-  "function item(e){var r=el('div','it'),b=el('div','x');var t=e.k==='food'?e.x:(e.n?e.n.toLocaleString()+' steps':e.x+' · '+fm(e.m));b.appendChild(document.createTextNode(t));var s=el('small',e.o?'w':null,hm(e.t)+(e.k==='food'&&e.o?'  ·  outside your eating windows':'')+(e.s==='photo'?'  ·  from a photo':'')+(e.s==='auto'?'  ·  from your phone':''));b.appendChild(s);r.appendChild(b);" +
-  "var ed=el('button',null,'✎');ed.onclick=function(){edit(e)};var de=el('button',null,'✕');de.onclick=function(){api('POST',{op:'del',id:e.id}).then(function(){load(S.d)})};r.appendChild(ed);r.appendChild(de);return r}" +
-  "function edit(e){var t=prompt(e.k==='food'?'Edit the description':(e.n?'Edit steps':'Edit minutes'),e.k==='food'?e.x:(e.n?e.n:e.m));if(t==null)return;var b={op:'edit',id:e.id};if(e.k==='food')b.text=t;else if(e.n)b.steps=parseInt(t,10);else b.minutes=parseInt(t,10);api('POST',b).then(function(r){if(!r.ok)say(r.why||'Could not save');load(S.d)})}" +
-  "$('prev').onclick=function(){var a=new Date(S.d+'T00:00:00Z');a.setUTCDate(a.getUTCDate()-1);load(a.toISOString().slice(0,10))};$('next').onclick=function(){if(S.d>=S.data.today)return;var a=new Date(S.d+'T00:00:00Z');a.setUTCDate(a.getUTCDate()+1);load(a.toISOString().slice(0,10))};" +
-  "$('fa').onclick=function(){var t=$('ft').value.trim();if(!t){say('Say what it was');return}api('POST',{op:'add',kind:'food',text:t,d:S.d}).then(function(r){if(!r.ok){say(r.why||'Could not save');return}$('ft').value='';var e=r.entry;load(S.d);if(e.o)say('Logged - but outside your eating windows')})};" +
-  "$('ea').onclick=function(){var t=$('et').value.trim(),n=parseFloat($('en').value),u=$('eu').value;if(u==='s'){t=t||'Steps'}if(!t||!(n>0)){say('Give the exercise and a number');return}var b={op:'add',kind:'ex',text:t,d:S.d};if(u==='s')b.steps=Math.round(n);else b.minutes=Math.round(u==='h'?n*60:n);api('POST',b).then(function(r){if(!r.ok){say(r.why||'Could not save');return}$('et').value='';$('en').value='';load(S.d)})};" +
-  "var CH=[['Gym','m'],['Walk','m'],['Run','m'],['Steps','s']];CH.forEach(function(c){var b=el('button',null,c[0]==='Steps'?'10,000 steps':c[0]);b.onclick=function(){$('et').value=c[0];$('eu').value=c[1];if(c[0]==='Steps'){$('en').value=S.data&&S.data.cfg.stepsFloor||10000}else{$('en').value='';$('en').focus()}};$('chips').appendChild(b)});" +
-  "$('ph').onchange=function(){var f=this.files[0];this.value='';if(!f)return;say('Reading the photo…');var im=new Image();im.onload=function(){var s=Math.min(1,1280/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(function(bl){fetch('/fit_api?op=photo&key='+encodeURIComponent(KEY),{method:'POST',headers:{'Content-Type':'image/jpeg'},body:bl}).then(function(r){return r.json()}).then(function(r){if(r.ok&&r.meal){$('ft').value=r.meal;say('Check it, then tap Add food')}else say('No food found in that photo')}).catch(function(){say('Could not read the photo')})},'image/jpeg',.8)};im.onerror=function(){say('Could not open that photo')};im.src=URL.createObjectURL(f)};" +
-  "function fillSet(c){$('plw').textContent='This plan belongs to '+nm(S.data)+(S.data.users&&S.data.users.length>1?'. Wrong person? Use the names at the top.':'.');$('csv').href='/fit_api?view=csv&key='+encodeURIComponent(KEY)+(S.u?'&u='+encodeURIComponent(S.u):'');$('shl').style.display=(S.data.users&&S.data.users.length>1)?'flex':'none';$('s_share').checked=!!S.data.share;if(S.dirty||(document.activeElement&&$('set').contains(document.activeElement)))return;$('s_goal').value=c.goal;$('s_start').value=c.start;$('s_days').value=c.days;$('s_week').value=c.weekMin/60;$('s_min').value=c.minDay;$('s_steps').value=c.stepsFloor;$('s_tone').value=c.tone;var w=$('s_win');w.textContent='';var ws=c.windows.slice();while(ws.length<4)ws.push({n:'',a:'',b:''});ws.forEach(function(x){var r=el('div','wr'),n=el('input'),a=el('input'),b=el('input');n.placeholder='Name';n.value=x.n;a.type='time';a.value=x.a;b.type='time';b.value=x.b;r.appendChild(n);r.appendChild(a);r.appendChild(b);w.appendChild(r)})}" +
-  "$('save').onclick=function(){var ws=[].slice.call($('s_win').children).map(function(r){var i=r.querySelectorAll('input');return{n:i[0].value,a:i[1].value,b:i[2].value}}).filter(function(x){return x.n&&x.a&&x.b});" +
-  "api('POST',{op:'cfg',cfg:{goal:$('s_goal').value,start:$('s_start').value,days:parseInt($('s_days').value,10),weekMin:Math.round(parseFloat($('s_week').value)*60),minDay:parseInt($('s_min').value,10),stepsFloor:parseInt($('s_steps').value,10)||0,tone:$('s_tone').value,windows:ws}}).then(function(r){if(r.ok){S.dirty=false;$('dirt').style.display='none'}say(r.ok?'Plan saved for '+nm(S.data):(r.why||'Could not save'));if(r.ok)$('set').open=false;load(S.d)})};" +
-  "$('set').addEventListener('input',function(e){if(e.target&&e.target.id==='s_share')return;S.dirty=true;$('dirt').style.display='block'});" +
-  "$('s_share').onchange=function(){api('POST',{op:'share',on:this.checked}).then(function(){say(S.data.users.length>1?'Sharing updated':'');load(S.d)})};" +
-  "$('mb').onclick=function(){var v=parseFloat($('mv').value);if(!(v>0)){say('Type the number first');return}api('POST',{op:'measure',what:$('mw').value,value:v}).then(function(r){if(!r.ok){say(r.why||'Could not save');return}$('mv').value='';say('Logged');hload()})};" +
-  "$('ext').onclick=function(){api('POST',{op:'extend'}).then(function(r){say(r.ok?'Extended to '+r.cfg.days+' days':'Could not extend');load(S.d)})};" +
-  "var HV='weeks',HD=null,HN=[['days','Days'],['weeks','Weeks'],['months','Months'],['total','Total']];" +
-  "HN.forEach(function(n){var b=el('button',null,n[1]);b.id='hv_'+n[0];b.onclick=function(){HV=n[0];hdraw()};$('hv').appendChild(b)});" +
-  "function hload(){api('GET',null,'&view=history').then(function(j){if(!j.ok)return;HD=j;hdraw()})}" +
-  "function hrow(l,r,sub,pct,ok,red){var w=el('div','it');var b=el('div','x');b.appendChild(document.createTextNode(l));if(sub)b.appendChild(el('small',red?'w':null,sub));if(pct!=null)b.appendChild(bar(pct,ok));w.appendChild(b);w.appendChild(el('b',null,r));return w}" +
-  "function dl(d){return new Date(d+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'})}" +
-  "function hdraw(){if(!HD)return;HN.forEach(function(n){$('hv_'+n[0]).style.borderColor=n[0]===HV?'#C5A56A':''});var o=$('hb');o.textContent='';var t=HD.totals;" +
-  "if(HV==='days'){HD.days.slice().reverse().forEach(function(x){var s=(x.steps?x.steps.toLocaleString()+' steps · ':'')+x.meals+' meal'+(x.meals===1?'':'s')+(x.out?' ('+x.out+' outside)':'');o.appendChild(hrow(dl(x.d),(x.rest?'⏸ ':x.ok?'🟢 ':(x.d<HD.today?'🔴 ':'⚪ '))+fm(x.ex),s,null,false,x.out>0))})}" +
-  "else if(HV==='weeks'){HD.weeks.slice().reverse().forEach(function(w){var r=fm(w.minutes)+' of '+fm(w.target)+(w.complete?(w.met?' ✅':' ❌'):' ⏳');o.appendChild(hrow('Week of '+dl(w.ws),r,w.hit+' of '+w.days+' days hit'+(w.rest?' · '+w.rest+' rest':'')+(w.out?' · '+w.out+' meal'+(w.out===1?'':'s')+' outside windows':''),w.target?w.minutes/w.target*100:0,w.met,w.out>0))})}" +
-  "else if(HV==='months'){HD.months.slice().reverse().forEach(function(m){o.appendChild(hrow(m.label,fm(m.minutes),m.hit+' of '+m.days+' days hit'+(m.steps?' · '+m.steps.toLocaleString()+' steps':'')+' · '+m.meals+' meals',m.days?m.hit/m.days*100:0,m.hit===m.days,false))})}" +
-  "else{[['Days hit',t.hit+' of '+t.days+(t.rest?' ('+t.rest+' rest left out)':'')],['Best streak',t.bestStreak+' days'],['Exercise in total',fm(t.minutes)],['Steps in total',t.steps.toLocaleString()],['Weeks on target',t.weeksMet+' of '+t.weeksDone+' finished'],['Meals logged',String(t.meals)],['Outside eating windows',t.out+' of '+t.meals]].forEach(function(r){var w=el('div','row');w.style.padding='7px 0';w.appendChild(el('span',null,r[0]));w.appendChild(el('b',null,r[1]));o.appendChild(w)});o.appendChild(bar(t.days?t.hit/t.days*100:0,t.hit===t.days&&t.days>0));o.appendChild(el('div','note','From '+dl(t.from)+' to '+dl(t.to)));" +
-  "Object.keys(HD.measures||{}).forEach(function(k){var m=HD.measures[k];var w=el('div','row');w.style.padding='9px 0 3px';w.appendChild(el('span',null,(k==='weight'?'⚖️ Weight':'📏 Waist')));w.appendChild(el('b',null,m.latest+' '+m.unit+(m.count>1?'  ('+(m.change>0?'+':'')+m.change+' since the first reading)':'  (first reading)')));o.appendChild(w);m.series.slice().reverse().forEach(function(p){var rr=el('div','it'),bb=el('div','x');bb.appendChild(document.createTextNode(p.v+' '+m.unit));bb.appendChild(el('small',null,dl(p.d)));rr.appendChild(bb);var dx=el('button',null,'✕');dx.onclick=function(){api('POST',{op:'del',id:p.id}).then(function(){hload()})};rr.appendChild(dx);o.appendChild(rr)})})}}" +
-  "$('hist').addEventListener('toggle',function(){if(this.open)hload()});" +
-  "var _ld=load;load=function(d){_ld(d);if($('hist').open)hload()};" +
-  "[].forEach.call(document.querySelectorAll('[data-img]'),function(e){e.style.backgroundImage=img(e.getAttribute('data-img'))});" +
-  "load()})();";

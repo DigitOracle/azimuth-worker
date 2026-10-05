@@ -22,3 +22,6 @@ logo.jpg and icon.png are Kendall's own choice, option 03 "Motion" (runner figur
 ("WhatsApp Image 2026-10-04 at 6.09.00 PM.jpeg"): logo.jpg is the lockup (runner above "Momo", on the sheet's cream background #FCF9F4, which the page banner matches),
 icon.png is the dark app-icon tile with rounded transparent corners, used as the page icon and the home-screen icon. The previous header photo (a city runner) was
 removed from the page when the logo took the banner.
+
+## Icons
+The page icons (src/fit_icons.js) are Phosphor Icons, regular weight, MIT licence (https://github.com/phosphor-icons/core). They are drawn inline from their path data, so nothing is fetched when the page opens.

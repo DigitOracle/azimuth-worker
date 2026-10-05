@@ -52,7 +52,7 @@ eq(fit.dayStats([ex(20)], cfg).qualifies, false, "20 minutes is under the floor"
 eq(fit.dayStats([ex(20), ex(15)], cfg).qualifies, true, "two sessions add up to the floor");
 eq(fit.dayStats([ex(0, 9999)], cfg).qualifies, false, "9,999 steps is not 10,000");
 eq(fit.dayStats([ex(0, 10000)], cfg).qualifies, true, "10,000 steps is the no-excuse option");
-eq(fit.dayStats([{ k: "food", x: "a", o: 1 }, { k: "food", x: "b" }], cfg), { meals: 2, out: 1, ex: 0, steps: 0, qualifies: false }, "meals and outside-window count");
+eq(fit.dayStats([{ k: "food", x: "a", o: 1 }, { k: "food", x: "b" }], cfg), { meals: 2, out: 1, ex: 0, steps: 0, protein: 0, pmeals: 0, qualifies: false }, "meals and outside-window count (and no protein yet: none was estimated)");
 const by = { "2026-09-28": [ex(60)], "2026-09-29": [ex(0, 10000), ex(30)], "2026-10-04": [ex(45)] };
 eq(fit.weekMinutes(by, "2026-10-04").minutes, 135, "week minutes count exercise only, never steps");
 const chal = fit.challengeStats({ "2026-10-01": [ex(40)], "2026-10-02": [ex(40)], "2026-10-04": [ex(0, 11000)] }, Object.assign({}, cfg, { start: "2026-10-01" }), "2026-10-04");
@@ -508,10 +508,12 @@ eq([(await jget("/fit_api?u=najjuko")).j.partners.length, (await jget("/fit_api?
 await text("momo share on");
 ok(/Sharing is ON/.test(said()) && /never what you ate/.test(said()), "momo share on (from her number) explains what is shared");
 const pj = (await jget("/fit_api?u=najjuko")).j;
-eq([pj.share, pj.partners.length, pj.partners[0].name, pj.partners[0].streak, pj.partners[0].week], [true, 1, "Dr. Doli", 2, 90], "both on: she sees his name, streak and week minutes - counts only");
+// the fixture is two 45-minute days (2 days ago and yesterday); how many of them fall inside the CURRENT week depends on the weekday, so the expectation is built from the week start
+const wkNow = fit.weekStart(today), inThisWeek = [2, 1].filter((o) => fit.addDays(today, -o) >= wkNow).length * 45;
+eq([pj.share, pj.partners.length, pj.partners[0].name, pj.partners[0].streak, pj.partners[0].week], [true, 1, "Dr. Doli", 2, inThisWeek], "both on: she sees his name, streak and week minutes - counts only (the streak runs across the week boundary; the week minutes only count this week)");
 ok(!JSON.stringify(pj.partners).includes("Oats"), "no food text travels with it");
 store.set("wa_owner_last_in", { v: new Date().toISOString() }); outbound = [];
-ok(await E(today + "T17:05:00Z") && /🤝 Dr\. Doli: 1h30 of/.test(said()), "her 21:00 message carries his week line");
+ok(await E(today + "T17:05:00Z") && new RegExp("🤝 Dr\\. Doli: " + fit.fmtMin(inThisWeek) + " of").test(said()), "her 21:00 message carries his week line");
 await text("momo");
 ok(/🤝 Dr\. Doli/.test(said()), "momo shows the partner line too");
 await text("momo share off"); ok(/Sharing is OFF/.test(said()) && (await jget("/fit_api?u=kendall")).j.partners.length === 0, "switching off removes it for both");
@@ -547,7 +549,7 @@ await fit.fitAdd(env, { k: "food", x: "=SUM(1,1) \"quoted\", with comma", t: Dat
 const csvR = await call(K("/fit_api?view=csv")), csv = await csvR.text();
 ok(csvR.status === 200 && /text\/csv/.test(csvR.headers.get("content-type")) && /attachment; filename="momo-me-/.test(csvR.headers.get("content-disposition") || ""), "the CSV downloads as an attachment");
 const rowsC = csv.trim().split("\n");
-ok(rowsC[0] === "date,time_gst,kind,what,minutes,steps,value,outside_eating_window,source" && rowsC.length === 4, "header plus one row per entry (" + (rowsC.length - 1) + " rows)");
+ok(rowsC[0] === "date,time_gst,kind,what,minutes,steps,value,outside_eating_window,source,protein_g_rough" && rowsC.length === 4, "header plus one row per entry (" + (rowsC.length - 1) + " rows)");
 ok(csv.includes("\"'=SUM(1,1) \"\"quoted\"\", with comma\""), "a cell that starts with = is defused and quotes are escaped, so it cannot run as a formula");
 ok(/exercise,Gym,30,/.test(csv) && /measurement,weight,,,80,/.test(csv), "exercise and measurement rows carry their numbers");
 eq([(await call("/fit_api?view=csv")).status, (await call(K("/fit_api?view=csv", CLIENT))).status, (await call(K("/fit_api?view=health", CLIENT))).status], [404, 404, 404], "CSV and health are owner-only");
@@ -563,7 +565,7 @@ const pg = await (await call(K("/fit"))).text();
 ok(/id="mf"/.test(pg) && /id="mw"/.test(pg) && /id="mv"/.test(pg) && /id="mb"/.test(pg), "a weight / waist form is in the Progress card");
 ok(/id="csv"/.test(pg) && /id="s_share"/.test(pg) && /id="shl"/.test(pg), "the CSV link and the share switch are in the plan card");
 ok(/op:'pause'/.test(pg) && /op:'resume'/.test(pg) && /op:'measure'/.test(pg) && /op:'share'/.test(pg), "the page script can pause, resume, log a measurement and switch sharing");
-ok(/from your phone/.test(pg) && /rest left out/.test(pg) && /⏸/.test(pg), "automatic steps are labelled and rest days are shown");
+ok(/From your phone/.test(pg) && /rest left out/.test(pg) && /ic\('rest'/.test(pg), "automatic steps are labelled and rest days are shown (as an icon)");
 ok(!pg.includes(env.FIT_TOKEN) && !/FIT_TOKEN|X-Momo-Token/.test(pg), "the steps token (and its name) appear nowhere on the page");
 delete env.FIT_TOKEN;
 const scriptOnly = pg.match(/<script>([\s\S]*?)<\/script>/)[1];
@@ -639,7 +641,7 @@ eq([hp.measures.waist.count, hp.measures.waist.change], [1, 0], "one reading: co
 await text("momo history");
 ok(/📏 Waist: 78 cm \(first reading\)/.test(said()) && !/\(\+?0 cm since/.test(said()), "and the history says 'first reading' instead of '0 since the first reading'");
 const pg2 = await (await call(K("/fit"))).text();
-ok(/\(first reading\)/.test(pg2), "the page says it too");
+ok(/First reading/.test(pg2), "the page says it too");
 
 console.log("v336: a write must say whose log it is (Najjuko's plan landed on Dr. Doli's)");
 store.clear(); outbound = [];
@@ -672,6 +674,139 @@ delete env.FIT_USERS;
 store.clear();
 const solo = await call(K("/fit_api"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "cfg", cfg: { goal: "solo" } }) });
 eq([solo.status, (await solo.json()).ok], [200, true], "one person on the instance: no name needed, as before");
+
+console.log("v348: rough protein - the table");
+const tp = (t) => { const r = fit.tableProtein(t); return r ? r.g : null; };
+eq([tp("Strawberry Greek yogurt"), tp("Green tea beverage in bottle"), tp("2 eggs"), tp("an egg"), tp("omelette"), tp("eggs on toast"), tp("grilled chicken, rice and salad"), tp("chicken wrap"), tp("latte"), tp("black coffee"), tp("water"), tp("kunafa"), tp("")],
+  [17, 0, 12, 6, 14, 18, 37, 36, 8, 0, 0, null, null], "the built-in table: Greek yogurt 15 (not also plain yogurt) + fruit 2; a bottled tea is 0; 2 eggs 12; an omelette 14; eggs on toast 18; chicken + rice + salad 37; a latte 8; coffee and water 0; an unknown label is null");
+let pcalls = 0;
+const depsP = (ans) => ({ CLAUDE_FAST: "x", claudeJSON: async () => { pcalls++; return ans; } });
+eq([(await fit.proteinFor(env, depsP({ protein_g: 14 }), "grilled chicken")).g, pcalls], [30, 0], "the table answers first: no model call for a food it knows");
+eq([(await fit.proteinFor(env, depsP({ protein_g: 14 }), "kunafa")).g, pcalls], [14, 1], "a label the table cannot read goes to the model");
+eq(await fit.proteinFor(env, depsP({ protein_g: null }), "mystery"), null, "asked and could not tell -> null (stored as 'not estimated')");
+eq(await fit.proteinFor(env, depsP(null), "mystery"), undefined, "the model unreachable -> undefined (tried again later, never stored as 'none')");
+eq(await fit.proteinFor(env, {}, "mystery"), undefined, "no model wired -> undefined");
+eq(await fit.proteinFor(env, depsP({ protein_g: 999 }), "mystery"), null, "an absurd answer is never stored");
+
+console.log("v348: rough protein - logging on WhatsApp");
+store.clear(); delete env.FIT_USERS; outbound = []; aiCalls = [];
+const PSYS = /ROUGH estimate of the protein/;
+aiAnswer = (sys) => (PSYS.test(sys) ? { protein_g: 14 } : {});
+const entryOf = (needle) => { const k = fitKeys().find((x) => JSON.parse(store.get(x).v).x === needle); return k ? JSON.parse(store.get(k).v) : null; };
+await text("food: grilled chicken and rice");
+ok(/About 35 g protein \(rough estimate\)/.test(said()) && aiCalls.length === 0, "'food: grilled chicken and rice' says about 35 g, from the table, with no model call");
+eq([entryOf("grilled chicken and rice").p, entryOf("grilled chicken and rice").pr], [35, "rough"], "and the estimate is stored on the entry");
+await text("food: Green tea beverage in bottle");
+ok(/About 0 g protein/.test(said()), "a bottled tea is 0 g");
+await text("food: kunafa");
+ok(/About 14 g protein/.test(said()) && aiCalls.filter((c) => PSYS.test(c.sys)).length === 1, "an unknown label asks the model once and says about 14 g");
+aiAnswer = () => ({});
+await text("food: halwa");
+ok(/Protein: not estimated/.test(said()) && entryOf("halwa").pr === "none" && entryOf("halwa").p === undefined, "when nobody can tell it says 'not estimated' and stores no number");
+aiAnswer = (sys, u) => (/log food and exercise/.test(sys) ? { kind: "food", text: "Mixed salad with halloumi", type: null, minutes: null, steps: null, day_offset: 0, protein_g: 21 } : {});
+aiCalls = []; await text("had a salad with halloumi for lunch");
+ok(entryOf("Mixed salad with halloumi").p === 21 && !aiCalls.some((c) => PSYS.test(c.sys)), "free text: the classifier's own protein guess is used, with no second model call");
+
+console.log("v348: momo today");
+store.clear(); outbound = []; aiAnswer = () => ({});
+await text("food: eggs and toast"); await text("food: Strawberry Greek yogurt");
+await text("momo today"); const mt = said();
+ok(/what you ate/.test(mt) && /1\. \d\d:\d\d/.test(mt) && /eggs and toast - about 18 g protein/.test(mt) && /2\. \d\d:\d\d/.test(mt) && /Strawberry Greek yogurt - about 17 g protein/.test(mt), "momo today lists each meal with its time and its rough protein");
+ok(/Protein so far: about 35 g/.test(mt) && /rough estimate, not nutrition advice/.test(mt), "with the day's total, called rough, and not advice");
+ok(!/\p{Extended_Pictographic}/u.test(mt), "and no emoji in it");
+await text("momo meals"); ok(/what you ate/.test(said()), "'momo meals' is the same");
+await text("momo protein 120");
+ok(/Protein guide set: 120 g a day/.test(said()) && /not nutrition advice/.test(said()), "momo protein 120 sets an optional guide (and says it is not advice)");
+await text("food: 2 eggs"); ok(/Protein today: about 47 of 120 g \(rough\)/.test(said()), "with a guide set, the day's state shows about 47 of 120 g");
+await text("momo protein 999"); ok(/out of range/.test(said()), "an absurd guide is refused");
+eq((await (await post("/fit_api", { op: "cfg", cfg: { proteinTarget: 9999 } })).json()).cfg.proteinTarget, 120, "the page cannot save an absurd guide either: the previous one stays");
+await text("momo protein off"); eq((await jget("/fit_api")).j.cfg.proteinTarget, 0, "momo protein off removes the guide (default: none)");
+
+console.log("v348: catching up meals logged before this existed");
+store.clear(); outbound = [];
+await fit.fitSaveCfg(env, fit.fitCleanCfg({ start: fit.addDays(today, -25) }, fit.FIT_CFG_DEFAULT));
+for (const x of ["Oats with berries", "mystery stew"]) await fit.fitAdd(env, { k: "food", x, t: Date.now(), d: today, s: "web" });
+aiAnswer = (sys) => (PSYS.test(sys) ? { protein_g: 11 } : {});
+let dayR = (await jget("/fit_api")).j;
+const byX = (j, x) => j.entries.find((e) => e.x === x);
+eq([byX(dayR, "Oats with berries").p, byX(dayR, "Oats with berries").pr, byX(dayR, "mystery stew").p, dayR.stats.protein, dayR.stats.pmeals], [8, "rough", 11, 19, 2], "opening a day estimates its old meals: the table for oats and berries, the model for the stew");
+ok(JSON.parse(store.get(fitKeys().find((k) => JSON.parse(store.get(k).v).x === "mystery stew")).v).pr === "rough", "and the estimate is saved, so it is not asked again");
+for (let k = 0; k < 10; k++) await fit.fitAdd(env, { k: "food", x: "2 eggs", t: Date.now() + k + 1, d: today, s: "web" });
+eq((await jget("/fit_api")).j.stats.pmeals, 10, "at most 8 meals are caught up per request (2 already + 8 = 10)");
+eq((await jget("/fit_api")).j.stats.pmeals, 12, "the next request finishes the rest");
+const old20 = fit.addDays(today, -20); await fit.fitAdd(env, { k: "food", x: "2 eggs", t: Date.parse(old20 + "T08:00:00Z"), d: old20, s: "web" });
+const y1 = fit.addDays(today, -1); await fit.fitAdd(env, { k: "food", x: "2 eggs", t: Date.parse(y1 + "T08:00:00Z"), d: y1, s: "web" });
+const hx = (await jget("/fit_api?view=history")).j;
+eq([hx.days.find((x) => x.d === y1).pmeals, hx.days.find((x) => x.d === old20).pmeals], [1, 0], "the history catches up the last two weeks, not older days");
+eq((await jget("/fit_api?d=" + old20)).j.stats.pmeals, 1, "an older day is caught up when it is opened");
+const kOff = env.ANTHROPIC_API_KEY; env.ANTHROPIC_API_KEY = undefined;
+const y2 = fit.addDays(today, -2); await fit.fitAdd(env, { k: "food", x: "kunafa special", t: Date.parse(y2 + "T08:00:00Z"), d: y2, s: "web" });
+const dOff = (await jget("/fit_api?d=" + y2)).j;
+ok(dOff.entries[0].pr === undefined && dOff.stats.pmeals === 0, "with the model unreachable a meal is left as it was (not marked 'none'), to be tried again");
+env.ANTHROPIC_API_KEY = kOff;
+eq((await jget("/fit_api?d=" + y2)).j.entries[0].p, 11, "and it is estimated on the next visit");
+const edited = (await jget("/fit_api?d=" + y2)).j.entries[0];
+await post("/fit_api", { op: "edit", id: edited.id, text: "2 eggs" });
+const afterEdit = (await jget("/fit_api?d=" + y2)).j.entries[0];
+eq([afterEdit.x, afterEdit.p], ["2 eggs", 12], "changing a meal's description re-estimates it");
+
+console.log("v348: the history catches up the newest days first");
+store.clear(); outbound = [];
+await fit.fitSaveCfg(env, fit.fitCleanCfg({ start: fit.addDays(today, -9) }, fit.FIT_CFG_DEFAULT));
+for (let o = 0; o < 6; o++) for (const hm of ["08:00", "13:00"]) { const d = fit.addDays(today, -o); await fit.fitAdd(env, { k: "food", x: "2 eggs", t: Date.parse(d + "T" + hm + ":00Z"), d, s: "web" }); }
+const hNew = (await jget("/fit_api?view=history")).j;
+eq([0, 1, 2, 3, 4, 5].map((o) => hNew.days.find((x) => x.d === fit.addDays(today, -o)).pmeals), [2, 2, 2, 2, 0, 0], "12 old meals, 8 per request: the four newest days are done first, the two oldest wait for the next visit");
+eq((await jget("/fit_api?view=history")).j.days.find((x) => x.d === fit.addDays(today, -5)).pmeals, 2, "and the next visit finishes them");
+
+console.log("v348: a day with a photo meal and a text meal");
+store.clear(); outbound = [];
+aiAnswer = (sys) => (/read a photo someone sent to log what they ate/.test(sys) ? { meal: "Chicken shawarma plate with salad" } : {});
+await wa({ type: "image", image: { id: "mid5", mime_type: "image/jpeg", caption: "lunch" } });
+await text("food: eggs and toast");
+const dd = (await jget("/fit_api")).j, ml = dd.entries.filter((e) => e.k === "food");
+eq(ml.map((e) => [e.s, e.x, e.p, e.pr]), [["photo", "Chicken shawarma plate with salad", 32, "rough"], ["wa", "eggs and toast", 18, "rough"]], "the photo meal and the text meal are both on the day, with their source and protein");
+eq([dd.stats.protein, dd.stats.pmeals, dd.stats.meals], [50, 2, 2], "the day adds up to about 50 g");
+ok(![...store.values()].some((e) => String(e.v).includes(MARK)), "and still no picture is stored anywhere");
+
+console.log("v348: weekly average, and the people never mix");
+store.clear(); outbound = [];
+const lw = fit.addDays(fit.weekStart(today), -7);
+await fit.fitSaveCfg(env, fit.fitCleanCfg({ start: fit.addDays(lw, -3) }, fit.FIT_CFG_DEFAULT));
+for (const [o, g] of [[0, 40], [1, 60]]) { const d = fit.addDays(lw, o); await fit.fitAdd(env, { k: "food", x: "a meal", t: Date.parse(d + "T08:00:00Z"), d, s: "web", est: { g, how: "rough" } }); }
+const sm = await fit.fitSummary(env, fit.addDays(lw, 3), await fit.fitCfg(env), today);
+eq([sm.week.protein.total, sm.week.protein.days, sm.week.protein.avg], [100, 2, 50], "the week's protein: total 100, on 2 days with estimated meals, average 50");
+const hw = (await jget("/fit_api?view=history")).j, wkp = hw.weeks.find((w) => w.ws === lw);
+eq([wkp.pavg, hw.totals.pavg, hw.totals.pdays], [50, 50, 2], "history carries the weekly and overall average");
+store.clear(); aiAnswer = () => ({});
+env.FIT_USERS = "kendall:" + KEN + ":Dr. Doli,najjuko:" + HER + ":Black Coffee";
+await post("/fit_api?u=kendall", { op: "add", kind: "food", text: "his chicken and rice" });
+await text("food: her oats");
+const foods = (j) => j.entries.filter((e) => e.k === "food").map((e) => e.x);
+eq([foods((await jget("/fit_api?u=kendall")).j), foods((await jget("/fit_api?u=najjuko")).j)], [["his chicken and rice"], ["her oats"]], "each person's list shows only their own meals");
+const hk = (await jget("/fit_api?view=history&u=kendall")).j, hn = (await jget("/fit_api?view=history&u=najjuko")).j;
+eq([hk.days[hk.days.length - 1].meals, hn.days[hn.days.length - 1].meals, hk.days[hk.days.length - 1].protein, hn.days[hn.days.length - 1].protein], [1, 1, 35, 6], "History counts and protein are per person (35 g his, 6 g hers)");
+await text("momo today"); ok(/her oats/.test(said()) && !/his chicken/.test(said()), "momo today from her number lists only hers");
+const csvN = await (await call(K("/fit_api?view=csv&u=najjuko"))).text();
+ok(/her oats/.test(csvN) && !/his chicken/.test(csvN) && /protein_g_rough/.test(csvN), "her CSV never carries his meals, and has the protein column");
+delete env.FIT_USERS; store.clear();
+
+console.log("v348: the page - cards, icons, no emoji, nothing internal");
+const pgM = await (await call(K("/fit"))).text();
+const scriptM = pgM.match(/<script>([\s\S]*?)<\/script>/)[1];
+ok(!/\p{Extended_Pictographic}/u.test(pgM) && !/&#1\d{5};|&#x1f/i.test(pgM), "the page has no emoji (every mark is an icon)");
+ok(/"meal":"M/.test(pgM) && /"check":"M/.test(pgM) && /"del":"M/.test(pgM) && /function ic\(/.test(scriptM), "the icons are drawn inline from the icon set");
+ok(!/<ul|<ol|<li\b/i.test(pgM) && !/createElement\('(ul|ol|li)'\)/.test(scriptM) && /'mc'/.test(scriptM) && /'dc/.test(scriptM), "meals, days and weeks are cards, not lists");
+ok(/What I ate/.test(pgM) && /WHAT I ATE/.test(pgM) && /Rough estimate, not nutrition advice/.test(pgM) && /id="prot"/.test(pgM) && /id="s_protein"/.test(pgM), "the page says What I ate, shows the protein card, and says rough and not advice");
+ok(/openDay\(/.test(scriptM) && /What I ate \(/.test(scriptM) && /Open this day/.test(scriptM) && /tap a week/i.test(scriptM), "a day opens its meals, a week opens its days");
+const BAD = /claude|haiku|sonnet|anthropic|openai|\bgpt\b|\bllm\b|\bmodel\b|fitc_|\bKV\b|worker|endpoint|FIT_TOKEN|FIT_USERS/i;   // words that must never reach a person
+const BROKEN = /undefined|NaN|\[object/;   // a rendering slip: checked in what a person SEES (the page with its script removed, and every reply), not in the script, where undefined is a normal keyword
+ok(!BAD.test(pgM), "no model is named and nothing internal appears anywhere on the page, script included");
+ok(!BROKEN.test(pgM.replace(/<script>[\s\S]*?<\/script>/, "")), "and no undefined, NaN or [object] in the visible page");
+store.clear(); outbound = []; aiAnswer = () => ({});
+await text("food: grilled chicken and rice"); const r1m = said(); await text("momo today"); const r2m = said(); await text("momo protein 120"); const r3m = said(); await text("momo help"); const r4m = said();
+ok(![r1m, r2m, r3m, r4m].some((m) => BAD.test(m) || BROKEN.test(m)), "no model is named, nothing internal and no undefined/NaN appears in any new WhatsApp reply");
+ok(!/\p{Extended_Pictographic}/u.test(r2m) && !/\p{Extended_Pictographic}/u.test(r3m), "the new replies carry no emoji");
+let okScript2 = true; try { new Function(scriptM); } catch (e) { okScript2 = false; } ok(okScript2, "the page script is valid JavaScript");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
