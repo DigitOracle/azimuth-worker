@@ -103,7 +103,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:7px 6px;border-bottom:1px solid var(--line);cursor:pointer}
 .row:hover,.row.sel{background:var(--raise)}
 .row .n{font-weight:600;font-size:13px}.row .m{color:var(--muted);font-size:11.5px}
-.tag{font-size:11.5px;padding:2px 7px;border-radius:4px;color:#0b1211;align-self:center;font-weight:600;flex:none;text-align:center;line-height:1.2}.tag .tg1{display:block;font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;opacity:.8}.tag .tg2{display:block;font-weight:600;white-space:nowrap}
+.tag{font-size:11.5px;padding:2px 7px;border-radius:4px;color:#0b1211;align-self:center;font-weight:600;text-align:center;line-height:1.2}.tag .tg1{display:block;font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;opacity:.8}.tag .tg2{display:block;font-weight:600;white-space:nowrap}
 .btn{border:1px solid var(--line);background:var(--raise);color:var(--ink);border-radius:6px;padding:4px 9px;font:inherit;font-size:12px;cursor:pointer;align-self:center}
 .big{font-family:Fraunces,Georgia,serif;font-size:26px;line-height:1.1}
 .mix{display:flex;height:12px;border-radius:3px;overflow:hidden;margin:4px 0 2px;background:#26312f}.mix i{display:block}
@@ -141,8 +141,8 @@ a.peer{color:var(--ink);text-decoration:none}a.peer b{color:var(--gold)}
 .src{color:var(--muted);font-size:11.5px;margin-top:14px;border-top:1px solid var(--line);padding-top:8px}
 .foot{color:var(--muted);font-size:11px;margin-top:6px}
 .picks{display:grid;gap:4px}
-.pk{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}
-.pk input{width:auto}
+.pk{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}
+.pk input{width:auto;flex:none}.pk>span:not(.tag){flex:1 1 0;min-width:0}.pk>.btn{flex:none}.pk>.tag{order:3;flex:0 0 100%;min-width:110px;box-sizing:border-box;align-self:flex-start;text-align:left;white-space:nowrap}.pk>.tag .tg2,.pk>.tag .tg1{white-space:nowrap}
 .maplibregl-popup-content{background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:7px 10px;font:12.5px/1.35 "IBM Plex Sans","Segoe UI",system-ui,sans-serif}
 .maplibregl-popup-tip{display:none}
 .evtab{width:100%;border-collapse:collapse;font-size:11.5px;margin:6px 0}.evtab th{text-align:left;color:var(--muted);font-weight:400}.evtab td,.evtab th{padding:2px 6px 2px 0;border-bottom:1px solid var(--line);vertical-align:top}

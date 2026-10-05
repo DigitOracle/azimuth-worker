@@ -23,4 +23,5 @@ ok(js.includes("if(!dvp||!dvt||!dvo||!cs||!co)return") && js.includes("function 
 ok(!js.includes("'Mostly '") && !/Mostly [^<]{0,12}band/.test(js), "no developer tag says Mostly + band any more");
 ok(js.includes("Most sales") && /function tagText[^\n]*[^\n]*\n[^\n]*fmt\(pu\(x\)\)/.test(js) && js.includes("pul()+'</small>'"), "the tag states the measured range in the unit the page shows (pu/pul follow the toggle)");
 ok(!/function tagText[\s\S]{0,700}(budget|luxury|premium)/i.test(js.replace("Ultra-luxury","")), "the new tag does not use budget, luxury or premium");
+ok(html.includes(".pk>.tag{order:3;flex:0 0 100%;min-width:110px") && html.includes("white-space:nowrap") && /\.pk\{display:flex;flex-wrap:wrap/.test(html), "a developer tag sits on its own full-width line with a min-width and cannot wrap mid-word");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
