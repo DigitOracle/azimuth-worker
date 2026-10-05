@@ -24,4 +24,7 @@ ok(!js.includes("'Mostly '") && !/Mostly [^<]{0,12}band/.test(js), "no developer
 ok(js.includes("Most sales") && /function tagText[^\n]*[^\n]*\n[^\n]*fmt\(pu\(x\)\)/.test(js) && js.includes("pul()+'</small>'"), "the tag states the measured range in the unit the page shows (pu/pul follow the toggle)");
 ok(!/function tagText[\s\S]{0,700}(budget|luxury|premium)/i.test(js.replace("Ultra-luxury","")), "the new tag does not use budget, luxury or premium");
 ok(html.includes(".pk>.tag{order:3;flex:0 0 100%;min-width:110px") && html.includes("white-space:nowrap") && /\.pk\{display:flex;flex-wrap:wrap/.test(html), "a developer tag sits on its own full-width line with a min-width and cannot wrap mid-word");
+ok(js.includes("function devHead") && js.includes("class=dvtile") && js.includes("class=dvcg") && js.includes("No developer with 3+ sales sits here") && js.includes("About these numbers"), "area panel: developer count tile, first cards, quiet no-developer card, About these numbers");
+ok(js.includes("lim=S.devAll?all.length:6") && js.includes("Show all '+all.length+' developers"), "first six developers as cards with a Show all button");
+ok(js.includes("where the developer is not recorded yet"), "the unrecorded-sales sentence is kept (in About these numbers)");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
