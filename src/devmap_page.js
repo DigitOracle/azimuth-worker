@@ -131,7 +131,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .dvg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0}.dvg .dv{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:4px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--raise);min-width:0;overflow-wrap:anywhere}.dvg .dv .star{position:absolute;top:4px;right:4px}.dvg .dv .nm{font-size:14px;padding-right:26px}.dvg .dv .pr{text-align:left}.dvg .dv .evi{width:18px;height:18px}.dvg .dv svg{max-width:100%}
 .pjg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}.pjc{border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--raise);font-size:12px;min-width:0;overflow-wrap:anywhere}.pjc b{display:block}.pjc .evi{width:16px;height:16px;color:var(--gold);display:block}
 .pjc.loc{display:block;width:100%;text-align:left;color:inherit;font:inherit;font-size:12px;cursor:pointer;border-color:var(--gold)}.pjc.loc:focus-visible,.pjc.loc:hover{background:#1c2827}.pjc.noloc{opacity:.7}.pjc .big{font-size:14px;font-weight:600;display:block;margin:2px 0 1px}.pjc .evi.mu{color:var(--muted)}.pjc .tagl{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:11px;margin-top:4px}.pjc .tagl svg{width:13px;height:13px}.pjc .tagl.go{color:var(--gold)}.offbar{height:4px;background:var(--line);border-radius:2px;margin-top:4px}.offbar i{display:block;height:4px;background:var(--gold);border-radius:2px}.pjcap{margin:6px 0 0}
-.maplibregl-popup-content{background:#0e1413;color:#f5efe2;border:1px solid #3a4a48;font-size:12px;padding:8px 10px}.maplibregl-popup-tip{display:none}.pjtip b{display:block;font-size:13px}.pjtip i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
+.maplibregl-popup-content{background:#0e1413;color:#f5efe2;border:1px solid #3a4a48;font-size:12px;padding:8px 10px}.maplibregl-popup-tip{display:none}#bsnap{position:absolute;left:8px;top:8px;z-index:4;max-width:min(260px,calc(100% - 70px));background:#0e1413;color:#f5efe2;border:1px solid var(--gold);border-radius:8px;padding:8px 10px;font-size:12px;pointer-events:none}.pjtip b{display:block;font-size:13px}.pjtip i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
 a.peer{color:var(--ink);text-decoration:none}a.peer b{color:var(--gold)}
 #maplg{position:absolute;left:8px;bottom:26px;z-index:3;max-width:min(260px,calc(100% - 70px));background:rgba(14,20,19,.92);border:1px solid var(--line);border-radius:8px;padding:4px;font-size:10.5px}#maplg .lgh{display:flex;align-items:center;gap:6px;width:100%;border:0;background:none;color:var(--muted);font:inherit;font-size:10.5px;padding:2px 4px;cursor:pointer}#maplg .chev{width:12px;height:12px}#maplg .lgb{font-size:10.5px;padding:3px 4px}#maplg .lgb small{display:block;color:var(--muted);font-size:9.5px}#maplg.min .lgrow{display:flex}#maplg.min .lgb{width:auto;padding:4px}#maplg.min .lgb span.t{display:none}#maplg.min .lgh span.t{display:none}
 @media(max-width:760px){#maplg{bottom:calc(46vh + 10px)}}
@@ -258,14 +258,15 @@ function dimOf(s){if(S.pj)return 1;if(S.drill&&DRILLSET&&!DRILLSET[s])return 1;v
 // matched to the register's project name. A project with no footprint of that name has no map position, and its card says so.
 var BLK={},PJ={},PJLOC={};
 function pkey(n){return String(n||"").toLowerCase().replace(/\s+by\s+.*$/,"").replace(/[^a-z0-9\u0600-\u06ff]+/g,"")}
+function ringM2(g){var rs=g.type==="Polygon"?[g.coordinates[0]]:g.type==="MultiPolygon"?g.coordinates.map(function(p){return p[0]}):[],t=0,kx=111320*Math.cos(25.1*Math.PI/180),ky=110540;rs.forEach(function(r){for(var i=0;i<r.length-1;i++)t+=(r[i][0]*kx)*(r[i+1][1]*ky)-(r[i+1][0]*kx)*(r[i][1]*ky)});return Math.round(Math.abs(t)/2)}
 function ensureBlocks(slug,again){if(!slug||BLK[slug])return;BLK[slug]={state:"loading"};
   fetch("/img/blocks_"+encodeURIComponent(slug),{referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(fc){
-    var f=[];((fc&&fc.features)||[]).forEach(function(x){var q=x.properties||{};if(q.k==="b"&&x.geometry)f.push({type:"Feature",geometry:x.geometry,properties:{i:q.i,n:q.n||"",k:pkey(q.n)}})});
+    var f=[];((fc&&fc.features)||[]).forEach(function(x){var q=x.properties||{};if(q.k==="b"&&x.geometry)f.push({type:"Feature",geometry:x.geometry,properties:{i:q.i,n:q.n||"",k:pkey(q.n),a:ringM2(x.geometry)}})});
     BLK[slug]=f.length?{state:"ok",feats:f}:{state:"none",feats:[]};if(again)again()}).catch(function(){BLK[slug]={state:"none",feats:[]};if(again)again()})}
 function locate(slug,name){var b=BLK[slug];if(!b||b.state!=="ok"||!name)return null;var key=slug+"|"+pkey(name);if(PJLOC[key]!==undefined)return PJLOC[key];var k=pkey(name),out=[];
   if(k.length>=3)b.feats.forEach(function(f){var fk=f.properties.k;if(!fk)return;if(fk===k||(Math.min(fk.length,k.length)>=8&&(fk.indexOf(k)>=0||k.indexOf(fk)>=0)))out.push(f)});
   return PJLOC[key]=out.length?out:null}
-function pjInfo(slug,name,ppsm,n){var bd=DM.TIER_CFG.bounds||(IDX.cuts&&IDX.cuts.bounds),t=bd&&ppsm?DM.tierOf(ppsm,bd):-1;PJ[slug+"|"+pkey(name)]={name:name,ppsm:ppsm,n:n,color:t>=0?TC[t]:"#c5a56a",band:t>=0?DM.TIER_NAMES[t]:""}}
+function pjInfo(slug,name,ppsm,n){PJ[slug+"|"+pkey(name)]=null;var bd=DM.TIER_CFG.bounds||(IDX.cuts&&IDX.cuts.bounds),t=bd&&ppsm?DM.tierOf(ppsm,bd):-1;var fs=locate(slug,name),m2=fs?fs.reduce(function(a,f){return a+(f.properties.a||0)},0):0;PJ[slug+"|"+pkey(name)]={name:name,ppsm:ppsm,n:n,color:t>=0?TC[t]:"#c5a56a",band:t>=0?DM.TIER_NAMES[t]:"",approx:m2<300?1:0}}
 function bbox(feats){var b=[181,91,-181,-91];function w(c){if(typeof c[0]==="number"){b[0]=Math.min(b[0],c[0]);b[1]=Math.min(b[1],c[1]);b[2]=Math.max(b[2],c[0]);b[3]=Math.max(b[3],c[1])}else c.forEach(w)}feats.forEach(function(f){w(f.geometry.coordinates)});return b}
 // one project card: tappable only when a footprint of that name is on file; "No map position yet" when the district file is loaded and holds none
 function pjCard(slug,name,ppsm,n,extra,nameDef){
@@ -276,22 +277,29 @@ function pjCard(slug,name,ppsm,n,extra,nameDef){
   var b=BLK[slug];if(!b&&name)ensureBlocks(slug,function(){if(S.sel===slug||S.drill)renderDetail();updatePj()});
   var said=b&&b.state!=="loading"||!name;
   return '<div class="pjc noloc">'+inner.replace('class="evi"','class="evi mu"')+(said?'<span class=tagl>'+icoSvg("map-pin","")+'No map position yet</span>':'')+'</div>'}
-function pjFeatures(){var out=[];if(!S.sel)return out;var sel=S.pj&&S.pj.slug===S.sel?S.pj.key:null;
-  Object.keys(PJ).forEach(function(k){if(k.indexOf(S.sel+"|")!==0)return;var info=PJ[k],fs=locate(S.sel,info.name);if(!fs)return;fs.forEach(function(f){out.push({type:"Feature",geometry:f.geometry,properties:{key:k,name:info.name,ppsm:info.ppsm,n:info.n,color:info.color,band:info.band,sel:sel===k?1:0}})})});return out}
+function pjFeatures(pts){var out=[];if(!S.sel)return out;var sel=S.pj&&S.pj.slug===S.sel?S.pj.key:null;
+  Object.keys(PJ).forEach(function(k){if(k.indexOf(S.sel+"|")!==0)return;var info=PJ[k];if(!info)return;var fs=locate(S.sel,info.name);if(!fs)return;var pr={key:k,name:info.name,ppsm:info.ppsm,n:info.n,color:info.color,band:info.band,approx:info.approx,sel:sel===k?1:0};
+    if(pts){var b=bbox(fs);out.push({type:"Feature",geometry:{type:"Point",coordinates:[(b[0]+b[2])/2,(b[1]+b[3])/2]},properties:pr});return}
+    fs.forEach(function(f){out.push({type:"Feature",geometry:f.geometry,properties:pr})})});return out}
 function ctxFeatures(){return S.pj&&BLK[S.pj.slug]&&BLK[S.pj.slug].state==="ok"?BLK[S.pj.slug].feats:[]}
 var PULSE=0;
-function updatePj(){if(!map||!map.getSource||!map.getSource("pj"))return;map.getSource("pj").setData({type:"FeatureCollection",features:pjFeatures()});map.getSource("pjctx").setData({type:"FeatureCollection",features:ctxFeatures()});
-  if(S.pj&&!PULSE&&!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches)){var t0=Date.now();(function tick(){if(!S.pj||!map.getLayer("pj-sel")){PULSE=0;return}var ph=(Date.now()-t0)/500;map.setPaintProperty("pj-sel","line-width",3+2*Math.sin(ph));map.setPaintProperty("pj-halo","line-opacity",0.35+0.3*Math.sin(ph));PULSE=requestAnimationFrame(tick)})()}}
+function updatePj(){if(!map||!map.getSource||!map.getSource("pj"))return;map.getSource("pj").setData({type:"FeatureCollection",features:pjFeatures()});map.getSource("pjpt").setData({type:"FeatureCollection",features:pjFeatures(1)});map.getSource("pjctx").setData({type:"FeatureCollection",features:ctxFeatures()});
+  if(!S.pj)hideSnap();
+  if(S.pj&&!PULSE&&!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches)){var t0=Date.now();(function tick(){if(!S.pj||!map.getLayer("pj-ring")){PULSE=0;return}var ph=(Date.now()-t0)/450;map.setPaintProperty("pj-ring","circle-radius",24+7*Math.sin(ph));map.setPaintProperty("pj-ring","circle-stroke-opacity",0.65+0.35*Math.sin(ph));map.setPaintProperty("pj-halo","line-opacity",0.4+0.3*Math.sin(ph));PULSE=requestAnimationFrame(tick)})()}}
+// the building snapshot: one DOM card in the map frame (hover on desktop, tap on touch, open after "Show on the map"); a tap elsewhere closes it
+var SNAP=null;
+function showSnap(p,pin){var el=$("bsnap");if(!el)return;SNAP=pin?p.key:SNAP;el.innerHTML=tipHtml(p);el.style.display="block"}
+function hideSnap(){var el=$("bsnap");SNAP=null;if(el)el.style.display="none"}
 function focusProject(slug,key){var info=PJ[key];if(!info)return;var fs=locate(slug,info.name);if(!fs)return;
   var keep=S.fdev;select(slug,false,keep);S.pj={slug:slug,key:key};renderDetail();refreshMap();updatePj();
-  if(map){var b=bbox(fs);map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:innerWidth<=760?{top:40,left:30,right:30,bottom:Math.round(innerHeight*0.46)+20}:70,maxZoom:17.5,duration:700})}
+  if(map){var b=bbox(fs),dx=0.00155,dy=0.00135;map.fitBounds([[b[0]-dx,b[1]-dy],[b[2]+dx,b[3]+dy]],{padding:innerWidth<=760?{top:40,left:30,right:30,bottom:Math.round(innerHeight*0.46)+20}:70,maxZoom:16.5,duration:700});showSnap(Object.assign({key:key},info),true)}
   if(innerWidth<=760)setSheet(false)}
-function tipHtml(p){return '<div class=pjtip><b dir=auto>'+esc(p.name)+'</b>'+(p.ppsm?'<i style="background:'+p.color+'"></i>AED '+fmt(pu(Number(p.ppsm)))+' '+pul()+'<br>':'')+(p.n!=null&&p.n!=="null"?fmt(Number(p.n))+' sale'+(Number(p.n)===1?'':'s'):'')+(p.band?' · '+esc(p.band):'')+'</div>'}
+function tipHtml(p){return '<div class=pjtip><b dir=auto>'+esc(p.name)+'</b>'+(p.ppsm?'<i style="background:'+p.color+'"></i>AED '+fmt(pu(Number(p.ppsm)))+' '+pul()+'<br>':'')+(p.n!=null&&p.n!=="null"?fmt(Number(p.n))+' sale'+(Number(p.n)===1?'':'s'):'')+(p.band?' · '+esc(p.band):'')+(Number(p.approx)?'<br><span style="color:#c5a56a">Approximate location</span>':'')+'</div>'}
 // v321 - tap a doughnut segment: the projects behind that share, grouped by location
 function drillHtml(){var dr=S.drill;if(!dr)return '';var nm=(IDX.devs[dr.k]||{}).name||DEFAULT_NAMES[dr.k]||dr.k,g=DM.drillProjects(ixOf(S.win),dr.k,dr.t,dr.ar),np=0;g.forEach(function(x){np+=x.projects.length});
   var h='<div class=box style="margin-bottom:12px"><p class=label>'+esc(nm)+': projects in the '+DM.TIER_WORDS[dr.t].toLowerCase()+(dr.ar&&IDX.areas[dr.ar]?', in '+esc(IDX.areas[dr.ar].name):', by location')+'</p>';
   if(!g.length)h+='<p class=note style="margin:0">'+(DM.hasProjects(ixOf(S.win))?'No project sits in this price band here.':'The project list is not in the data yet; it arrives with the next data update.')+'</p>';
-  else{h+='<p class=note style="margin:0">'+np+' project'+(np===1?'':'s')+' in '+g.length+' place'+(g.length===1?'':'s')+'. Shaded on the map.</p>';
+  else{h+='<p class=note style="margin:0">'+np+' project'+(np===1?'':'s')+' in '+g.length+' place'+(g.length===1?'':'s')+'. Shaded on the map.'+(function(){var all=0;for(var tt=0;tt<4;tt++)DM.drillProjects(ixOf(S.win),dr.k,tt,dr.ar).forEach(function(x){all+=x.projects.length});return all>np?' '+np+' of its '+all+' project'+(all===1?'':'s')+(dr.ar?' here':'')+' are in this price band; the others sit in other bands.':''})()+'</p>';
     g.forEach(function(x){h+='<div style="margin-top:8px"><b dir=auto>'+esc(x.name)+'</b> <span class=note>AED '+fmt(pu(x.ppsm))+' '+pul()+' · '+fmt(x.n)+' sales</span>'+'<div class=pjg>'+x.projects.map(function(p){return pjCard(x.slug,p.name,p.ppsm,p.n,'','name not in the data yet')}).join("")+'</div></div>'})}
   return h+'<button type=button class=btn id=dclear style="margin-top:10px">Clear and show the whole map</button><p class=note>A project is a building with settled sales on record, placed by its median price per sq m. '+esc(winTxt())+' Dubai Land Department settled sales register, to '+esc(IDX.as_of||"")+'.</p></div>'}
 function bandKey(bounds){return '<div class=sh style="border-left-color:var(--line)"><p class=label style="margin:0 0 4px">Price bands (per '+(S.unit==="sqft"?'sq ft':'sq m')+')</p>'+[0,1,2,3].map(function(i){return '<p><i style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:'+TC[i]+'"></i><b>'+DM.TIER_NAMES[i]+'</b>: '+esc(DM.bandLine(i,bounds,S.unit))+'</p>'}).join("")+'<small>Price bands are cut from all Dubai settled sales so that each holds about a quarter of the money spent; they describe homes, not developers.</small></div>'}
@@ -374,7 +382,7 @@ function runMeeting(){
 }
 function wireSide(){
   [].forEach.call($("tabs").querySelectorAll("button"),function(b){b.setAttribute("aria-pressed",Number(b.getAttribute("data-s"))===S.screen?"true":"false");b.onclick=function(){S.screen=Number(b.getAttribute("data-s"));if(S.screen!==3)S.meeting=null;S.onlyMine=null;renderAll()}});
-  if(S.screen===1){  [].forEach.call(document.querySelectorAll("#sidebody .dlink"),function(a){a.onclick=function(e){e.preventDefault();e.stopPropagation();openProf(a.getAttribute("data-k"))}});var q=$("q");q.oninput=function(){S.q=q.value;var pos=q.selectionStart;renderSide();var q2=$("q");q2.focus();q2.setSelectionRange(pos,pos)};
+  if(S.screen===1){  [].forEach.call(document.querySelectorAll("#sidebody .dlink"),function(a){a.onclick=function(e){e.preventDefault();e.stopPropagation();openProf(a.getAttribute("data-k"))}});var q=$("q");if(q)q.oninput=function(){S.q=q.value;var pos=q.selectionStart;renderSide();var q2=$("q");q2.focus();q2.setSelectionRange(pos,pos)};
     [].forEach.call(document.querySelectorAll("#picks input"),function(c){c.onchange=function(){S.mine[c.getAttribute("data-k")]=true;S.q="";S.isDefault=false;saveMine();renderAll()}});
     [].forEach.call(document.querySelectorAll(".rm"),function(b){b.onclick=function(){delete S.mine[b.getAttribute("data-k")];S.isDefault=false;saveMine();renderAll()}});
     var rs=$("reset");if(rs)rs.onclick=function(){S.mine={};DEFAULT_SL.forEach(function(k){S.mine[k]=true});S.q="";S.isDefault=false;saveMine();renderAll()};
@@ -384,7 +392,7 @@ function wireSide(){
     var bm=$("bmode");if(bm){bm.value=S.bud.mode;bm.onchange=function(){S.bud.mode=bm.value;runMeeting();renderDetail()}}
     var num=function(id){var v=$(id).value.replace(/[^0-9.]/g,"");return v===""?null:Number(v)};
     var ch=function(){S.bud.min=num("bmin");S.bud.max=num("bmax");var bd=$("bbeds").value;S.bud.beds=bd===""?null:Number(bd);S.named=$("named").value;runMeeting();renderDetail()};
-    ["bmin","bmax","bbeds","named"].forEach(function(id){$(id).onchange=ch;$(id).oninput=id==="bbeds"?null:ch});
+    ["bmin","bmax","bbeds","named"].forEach(function(id){var el2=$(id);if(!el2)return;el2.onchange=ch;el2.oninput=id==="bbeds"?null:ch});
     $("bbeds").value=S.bud.beds==null?"":String(S.bud.beds);runMeeting()}
 }
 // ---- the area panel: tiers with developers, shown at once ----
@@ -527,7 +535,7 @@ function select(slug,fly,fk){S.sel=slug;S.prof=null;S.pj=null;S.fdev=fk||null;S.
 function setSheet(max){var s=$("side"),g=$("grab");s.classList.toggle("max",!!max);g.setAttribute("aria-expanded",max?"true":"false");g.textContent=max?"Tap to see more of the map":"Tap to expand"}
 $("grab").onclick=function(){setSheet(!$("side").classList.contains("max"))};
 function startMap(){
-  var lg=document.createElement("div");lg.id="maplg";$("map").appendChild(lg);
+  var lg=document.createElement("div");lg.id="maplg";$("map").appendChild(lg);var bs=document.createElement("div");bs.id="bsnap";bs.setAttribute("role","tooltip");bs.setAttribute("aria-live","polite");bs.style.display="none";$("map").appendChild(bs);
   map=new maplibregl.Map({container:"map",style:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",center:[55.2,25.08],zoom:9.6,attributionControl:{compact:true}});
   mapLegend();map.addControl(new maplibregl.NavigationControl({showCompass:false}),"top-right");
   map.on("load",function(){
@@ -537,19 +545,22 @@ function startMap(){
     map.addLayer({id:"a-fill",type:"fill",source:"areas",paint:{"fill-color":["match",["get","v"],0,"#6f7a78",1,"#2f8a7f",2,"#3987e5",3,"#c98500","#c5a56a"],"fill-opacity":["case",["==",["get","dim"],1],0.04,["==",["get","v"],0],0.12,0.55]}},fs);
     map.addLayer({id:"a-line",type:"line",source:"areas",paint:{"line-color":["case",["==",["get","dim"],1],"rgba(197,165,106,0.1)",["get","sel"],"#c5a56a","rgba(197,165,106,0.45)"],"line-width":["case",["get","sel"],2.6,0.8]}},fs);
     map.addLayer({id:"a-label",type:"symbol",source:"areas",layout:{"text-field":["get","label"],"text-font":font,"text-size":11.5,"text-max-width":9},paint:{"text-color":"#f5efe2","text-halo-color":"#0b0f0f","text-halo-width":1.4}});
-    map.addSource("pjctx",{type:"geojson",data:{type:"FeatureCollection",features:[]}});map.addSource("pj",{type:"geojson",data:{type:"FeatureCollection",features:[]}});
-    map.addLayer({id:"pj-ctx",type:"fill",source:"pjctx",paint:{"fill-color":"#8a9694","fill-opacity":0.16}},"a-label");
-    map.addLayer({id:"pj-fill",type:"fill",source:"pj",paint:{"fill-color":["get","color"],"fill-opacity":["case",["==",["get","sel"],1],0.85,0.55]}},"a-label");
-    map.addLayer({id:"pj-halo",type:"line",source:"pj",filter:["==",["get","sel"],1],paint:{"line-color":"#c5a56a","line-width":9,"line-opacity":0.5,"line-blur":4}},"a-label");
-    map.addLayer({id:"pj-sel",type:"line",source:"pj",filter:["==",["get","sel"],1],paint:{"line-color":"#f5efe2","line-width":3}},"a-label");
-    var ptip=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:8,maxWidth:"240px"});
-    map.on("mousemove","pj-fill",function(e){map.getCanvas().style.cursor="pointer";ptip.setLngLat(e.lngLat).setHTML(tipHtml(e.features[0].properties)).addTo(map)});
-    map.on("mouseleave","pj-fill",function(){map.getCanvas().style.cursor="";ptip.remove()});
+    map.addSource("pjctx",{type:"geojson",data:{type:"FeatureCollection",features:[]}});map.addSource("pj",{type:"geojson",data:{type:"FeatureCollection",features:[]}});map.addSource("pjpt",{type:"geojson",data:{type:"FeatureCollection",features:[]}});
+    map.addLayer({id:"pj-ctx",type:"fill",source:"pjctx",paint:{"fill-color":"#9aa7a4","fill-opacity":0.3}},"a-label");
+    map.addLayer({id:"pj-ctxl",type:"line",source:"pjctx",paint:{"line-color":"#c9d2d0","line-width":0.6,"line-opacity":0.5}},"a-label");
+    map.addLayer({id:"pj-fill",type:"fill",source:"pj",paint:{"fill-color":["get","color"],"fill-opacity":["case",["==",["get","sel"],1],0.9,0.65]}},"a-label");
+    map.addLayer({id:"pj-halo",type:"line",source:"pj",filter:["==",["get","sel"],1],paint:{"line-color":"#c5a56a","line-width":10,"line-opacity":0.5,"line-blur":4}},"a-label");
+    map.addLayer({id:"pj-sel",type:"line",source:"pj",filter:["==",["get","sel"],1],paint:{"line-color":"#ffffff","line-width":4}},"a-label");
+    map.addLayer({id:"pj-hit",type:"circle",source:"pjpt",paint:{"circle-radius":20,"circle-color":"#c5a56a","circle-opacity":0.02}},"a-label");
+    map.addLayer({id:"pj-ring",type:"circle",source:"pjpt",filter:["==",["get","sel"],1],paint:{"circle-radius":26,"circle-color":"#c5a56a","circle-opacity":0.12,"circle-stroke-color":"#c5a56a","circle-stroke-width":4,"circle-stroke-opacity":0.9}},"a-label");
+    var pjHit=function(e){return map.queryRenderedFeatures(e.point,{layers:["pj-hit","pj-fill"]})};
+    map.on("mousemove",function(e){var h=pjHit(e);map.getCanvas().style.cursor=h.length?"pointer":"";if(h.length)showSnap(h[0].properties,false);else if(!SNAP)hideSnap()});
+    map.on("click",function(e){var h=pjHit(e);if(h.length){e.originalEvent.stopPropagation();showSnap(h[0].properties,true)}else hideSnap()});
     updatePj();
     var pop=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:12});
-    map.on("mousemove","a-fill",function(e){if(map.queryRenderedFeatures(e.point,{layers:["pj-fill"]}).length){pop.remove();return}map.getCanvas().style.cursor="pointer";pop.setLngLat(e.lngLat).setHTML("<b>"+esc(e.features[0].properties.label)+"</b>").addTo(map)});
+    map.on("mousemove","a-fill",function(e){if(pjHit(e).length){pop.remove();return}map.getCanvas().style.cursor="pointer";pop.setLngLat(e.lngLat).setHTML("<b>"+esc(e.features[0].properties.label)+"</b>").addTo(map)});
     map.on("mouseleave","a-fill",function(){map.getCanvas().style.cursor="";pop.remove()});
-    map.on("click","a-fill",function(e){var hit=map.queryRenderedFeatures(e.point,{layers:["pj-fill"]});if(hit.length){ptip.setLngLat(e.lngLat).setHTML(tipHtml(hit[0].properties)).addTo(map);return}select(e.features[0].properties.slug,false)})})}
+    map.on("click","a-fill",function(e){if(pjHit(e).length)return;select(e.features[0].properties.slug,false)})})}
 // ---- start ----
 Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
   IDX=r[0];GEO=r[1];
