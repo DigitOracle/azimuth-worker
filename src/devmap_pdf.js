@@ -227,6 +227,17 @@ export async function loadMapData(env, C) {
 // ------------------------------------------------------------------------------------------------ vector outlines: where the area is in Dubai, and its own shape
 function ringsOf(g) { if (!g) return []; if (g.type === "Polygon") return g.coordinates; if (g.type === "MultiPolygon") return [].concat(...g.coordinates); return []; }
 const trimName = (s, n) => (s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, "") + "…" : s);
+// v358 - the locator label wraps onto a second line before it is cut ("Jumeirah Village Circle" was printed as "Jumeirah…" when the area sits mid-map)
+export function wrapLabel(s, n, maxLines) {
+  const words = String(s || "").split(/\s+/).filter(Boolean), lines = [];
+  let cur = "";
+  for (const w of words) {
+    if (!cur) cur = w; else if ((cur + " " + w).length <= n) cur += " " + w; else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) { const keep = lines.slice(0, maxLines - 1), rest = lines.slice(maxLines - 1).join(" "); return keep.concat(trimName(rest, n)); }
+  return lines.map((l) => (l.length > n ? trimName(l, n) : l));
+}
 // v337 - the header carries one picture: where the area is in Dubai (its buildings are the 3D blocks picture at the foot of the page)
 export function outlinePanels(C) {
   const feats = C.geo && Array.isArray(C.geo.features) ? C.geo.features.filter((f) => f && f.geometry && f.properties) : [];
@@ -245,12 +256,12 @@ export function outlinePanels(C) {
   const all = [].concat(...feats.map((f) => ringsOf(f.geometry))), P = proj(boxOf(all), W, H, 8);
   const rest = feats.filter((f) => f.properties.slug !== C.slug && !DM.AREA_ALIAS[f.properties.slug]).map((f) => pathOf(ringsOf(f.geometry), P)).join("");
   const me = pathOf(own, P), [bx0, by0, bx1, by1] = boxOf(own), [cx, cy] = P([(bx0 + bx1) / 2, (by0 + by1) / 2]);
-  const roomR = W - 3 - (cx + 10), roomL = cx - 10 - 3, left = roomL > roomR, room = Math.max(roomL, roomR), nm2 = trimName(nm, Math.max(8, Math.floor(room / 5.1))), lx = left ? cx - 10 : cx + 10, ly = Math.max(11, Math.min(H - 4, cy - 8));
+  const roomR = W - 3 - (cx + 10), roomL = cx - 10 - 3, left = roomL > roomR, room = Math.max(roomL, roomR), lines = wrapLabel(nm, Math.max(8, Math.floor(room / 5.1)), 2), lx = left ? cx - 10 : cx + 10, ly = Math.max(11, Math.min(H - 4 - (lines.length - 1) * 10, cy - 8 - (lines.length - 1) * 5));
   const halo = ' stroke="#FBFAF7" stroke-width="2.6" stroke-linejoin="round" paint-order="stroke"';
   const svg = '<svg class="loc" viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="Where ' + esc(plain) + ' is in Dubai"><rect width="' + W + '" height="' + H + '" fill="#FBFAF7"/><path d="' + rest + '" fill="#E4E0D5" stroke="#CFC9B9" stroke-width="0.4" fill-rule="evenodd"/>' +
     (me ? '<path d="' + me + '" fill="' + GOLDI + '" stroke="' + TEAL + '" stroke-width="0.9" fill-rule="evenodd"/>' : "") +
     '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="none" stroke="' + TEAL + '" stroke-width="1.2"/>' +
-    '<text x="' + lx + '" y="' + ly + '" font-size="8.8" font-weight="600" fill="' + TEAL + '" text-anchor="' + (left ? "end" : "start") + '" font-family="IBM Plex Sans, Segoe UI, Arial, sans-serif"' + halo + ">" + esc(nm2) + "</text></svg>";
+    '<text x="' + lx + '" y="' + ly + '" font-size="8.8" font-weight="600" fill="' + TEAL + '" text-anchor="' + (left ? "end" : "start") + '" font-family="IBM Plex Sans, Segoe UI, Arial, sans-serif"' + halo + ">" + lines.map((l, i) => '<tspan x="' + lx + '"' + (i ? ' dy="10"' : "") + ">" + esc(l) + "</tspan>").join("") + "</text></svg>";
   return '<div class="locs"><div class="lcard"><div class="lch">' + icon("map-pin", 11, TEAL) + "<span>Where in Dubai</span></div>" + svg + '<div class="lcap">Gold, ringed: ' + esc(nm) + ". Grey: other areas in this set.</div></div></div>";
 }
 
@@ -507,12 +518,15 @@ export function blocksPicture(C, M, w, h, frame, focus) {
   const hi = new Map(); const cnt = [0, 0, 0, 0, 0];
   // v339 - focus: one developer's projects keep their price-band colour, every other developer's are grey
   const OTHER = { fill: "#D9D5CA", wall: "#BDB8AB", edge: "#9A9486" }; let others = 0;
+  const unplaced = focus ? M.projects.filter((p) => !p.ids && p.k === focus).length : 0;
   for (const p of bound) {
     if (focus && p.k !== focus) { others++; for (const id of p.ids) if (!hi.has(id)) hi.set(id, OTHER); continue; }
     const c = bandColour(p.tier); cnt[p.tier < 0 ? 4 : p.tier]++; for (const id of p.ids) if (!hi.has(id)) hi.set(id, { fill: c.fill, wall: c.wall, edge: c.edge });
   }
   const svg = obliqueMap(M.layer, hi, { w, h, frame: frame || "all", label: "Map of " + C.names.plain + ": project building outlines coloured by price band" });
-  const key = [0, 1, 2, 3].filter((t) => cnt[t]).map((t) => '<div class="lg" style="font-size:10.5px"><i style="background:' + BAND[t].fill + '"></i>' + BAND[t].name + ": " + plural(cnt[t], "project") + "</div>").join("") + (cnt[4] ? '<div class="lg" style="font-size:10.5px"><i style="background:#CFCBC0"></i>Under 3 sales, no price: ' + plural(cnt[4], "project") + "</div>" : "") + (others ? '<div class="lg" style="font-size:10.5px"><i style="background:#D9D5CA"></i>Other developers: ' + plural(others, "project") + "</div>" : "");
+  const key = [0, 1, 2, 3].filter((t) => cnt[t]).map((t) => '<div class="lg" style="font-size:10.5px"><i style="background:' + BAND[t].fill + '"></i>' + BAND[t].name + ": " + plural(cnt[t], "project") + "</div>").join("") + (cnt[4] ? '<div class="lg" style="font-size:10.5px"><i style="background:#CFCBC0"></i>Under 3 sales, no price: ' + plural(cnt[4], "project") + "</div>" : "") + (others ? '<div class="lg" style="font-size:10.5px"><i style="background:#D9D5CA"></i>Other developers: ' + plural(others, "project") + "</div>" : "")
+    // v358 - the developer's projects with sales but no building outline yet are counted too, so the legend (3) and the buildings list (4) read as one story
+    + (unplaced ? '<div class="lg" style="font-size:10.5px"><i style="background:#FFFFFF;border:1px solid #BDB8AB"></i>Not yet on the map: ' + plural(unplaced, "project") + "</div>" : "");
   return { svg, key, bound };
 }
 const MAP_NOTE = "Buildings with no colour are other buildings. The picture is the Brief&rsquo;s map view: each outline raised to its height, seen from the south.";
