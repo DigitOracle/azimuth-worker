@@ -50,6 +50,9 @@ export const FIT_CFG_DEFAULT = {
   minDay: 30,           // a workout counts toward the daily floor when the day's total reaches this
   stepsFloor: 10000,    // ...or the day's steps reach this: the "no excuse" option
   tone: "firm",         // kind | firm | brutal - how the verdict talks
+  bookOn: false,        // "Write in my book": a daily reminder to write in a paper book. Off until the person turns it on
+  bookTime: "21:30",    // when, Dubai time
+  journalRemind: false, // the reminder also nudges a line in the Momo journal
   proteinTarget: 0,     // an optional daily guide in grams, 0 = none. A guide the person sets for themselves; Momo never suggests a number
   windows: [{ n: "Breakfast", a: "06:00", b: "09:00" }, { n: "Lunch", a: "11:00", b: "14:00" }, { n: "Evening", a: "17:00", b: "21:00" }]   // eating windows (GST)
 };
@@ -65,6 +68,9 @@ export function fitCleanCfg(inp, base) {
   if ("minDay" in c) out.minDay = intIn(c.minDay, 5, 600, b.minDay);
   if ("stepsFloor" in c) out.stepsFloor = intIn(c.stepsFloor, 0, 100000, b.stepsFloor);
   if ("tone" in c) out.tone = ["kind", "firm", "brutal"].includes(c.tone) ? c.tone : b.tone;
+  if ("bookOn" in c) out.bookOn = c.bookOn === true || c.bookOn === "true" || c.bookOn === 1;
+  if ("bookTime" in c) out.bookTime = HM_RX.test(String(c.bookTime)) ? String(c.bookTime) : b.bookTime;
+  if ("journalRemind" in c) out.journalRemind = c.journalRemind === true || c.journalRemind === "true" || c.journalRemind === 1;
   if ("proteinTarget" in c) out.proteinTarget = intIn(c.proteinTarget, 0, 400, b.proteinTarget);
   if ("windows" in c && Array.isArray(c.windows)) {
     out.windows = c.windows.slice(0, 6).map((w) => ({ n: clip(w && w.n, 20), a: String((w && w.a) || ""), b: String((w && w.b) || "") }))
@@ -626,7 +632,7 @@ function statusText(cfg, sum, partners) {
   L.push("", "Open Momo in the bottom bar for the full view.");
   return L.join("\n");
 }
-const HELP_TEXT = "Momo - just say it and it is logged. (Protein figures are rough estimates, not nutrition advice.)\nfood: grilled chicken and rice (or send a photo of the plate)\ngym 45 min · 10k steps\n\nmomo - today · momo today (what you ate, with rough protein) · momo week · momo history\nmomo again (repeat your last meal) · momo undo · momo fix <the right text or number>\nmomo pause [days] [why] · momo resume\nmomo weight 82.5 · momo waist 90\nmomo target 10 · momo protein 120 (an optional guide; momo protein off removes it) · momo goal <text> · momo tone kind|firm|brutal\nmomo share on|off · momo extend";
+const HELP_TEXT = "Momo - just say it and it is logged. (Protein figures are rough estimates, not nutrition advice.)\nfood: grilled chicken and rice (or send a photo of the plate)\ngym 45 min · 10k steps\n\nmomo - today · momo today (what you ate, with rough protein) · momo week · momo history\nmomo again (repeat your last meal) · momo undo · momo fix <the right text or number>\nmomo pause [days] [why] · momo resume\nmomo weight 82.5 · momo waist 90\nmomo target 10 · momo protein 120 (an optional guide; momo protein off removes it) · momo goal <text> · momo tone kind|firm|brutal\nmomo share on|off · momo extend\njournal: <text> (or a voice note that starts with \"journal\") · momo journal (today's entries)\nmomo book 21:30 · momo book off · momo booked (write in your paper book: a daily reminder)";
 function mealsText(cfg, sum) {
   const meals = sum.entries.filter((e) => e.k === "food"), st = sum.stats, L = [(sum.d === sum.today ? "Today" : dm(sum.d)) + " - what you ate"];
   if (!meals.length) L.push("Nothing logged yet.");
@@ -638,10 +644,35 @@ function mealsText(cfg, sum) {
 const entryText = (e) => (e.k === "food" ? e.x : e.k === "w" ? e.x + " " + e.v + " " + ((MEASURES[e.x] || {}).unit || "") : e.n ? fmtSteps(e.n) + " steps" : e.x + " " + fmtMin(e.m));
 async function lastEntry(env, u, today) { const l = await fitRange(env, addDays(today, -2), today, u); return l.length ? l[l.length - 1] : null; }
 // true when the message was FIT's and has been answered; false leaves it for the rest of the webhook
-export async function fitWhatsAppText(env, from, text, deps) {
+export async function fitWhatsAppText(env, from, text, deps, opts) {
   text = String(text || "").trim(); if (!text) return false;
   text = text.replace(/^\s*momo\b/i, "fit");   // the app is called Momo: "momo week" is "fit week"
   const U = fitUserFor(env, from);
+  // journal: "journal: ...", or a voice note that OPENS with the word. Handled before anything else, saved for the sender, never read by a model and never copied to a log.
+  const voice = !!(opts && opts.voice);
+  let jm = /^\s*(?:fit\s+)?journal\s*[:\-\u2013\u2014]\s*([\s\S]+)$/i.exec(text);
+  if (!jm && voice) jm = /^\s*(?:fit\s+)?journal\b[\s,.:;\-\u2013\u2014]*([\s\S]+)$/i.exec(text);
+  if (jm && jm[1].trim()) {
+    const e = await jAdd(env, U, { text: jm[1], s: voice ? "voice" : "wa" });
+    await reply(env, deps, from, "Saved to your journal", [{ id: "fit:jundo:" + U + ":" + e.id, title: "Undo" }]); return true;
+  }
+  if (/^\s*fit\s+journal\s*$/i.test(text)) {
+    const metas = (await jList(env, U, { day: gstDate(Date.now()), limit: 20 })).reverse(), L = [];
+    for (const m of metas) { const e = await jGet(env, U, m.id); if (e) L.push(gstHM(e.t) + (e.title ? " - " + e.title : "") + (e.mood ? " (mood " + e.mood + " of 5)" : "") + "\n" + e.x.slice(0, 600)); }
+    await reply(env, deps, from, L.length ? "Your journal today (" + L.length + ")\n\n" + L.join("\n\n") : "Nothing in your journal today. Say \"journal: ...\" to add a line."); return true;
+  }
+  let bk;
+  if ((bk = /^\s*fit\s+book(?:\s+(.+))?\s*$/i.exec(text))) {
+    const cfg = await fitCfg(env, U), arg = (bk[1] || "").trim(), today = gstDate(Date.now());
+    if (/^(off|stop|no|none)$/i.test(arg)) { cfg.bookOn = false; await fitSaveCfg(env, cfg); await reply(env, deps, from, "Book reminder off."); return true; }
+    const clock = arg ? parseClock(arg) : null;
+    if (arg && !clock) { await reply(env, deps, from, "I did not catch the time. Try \"momo book 21:30\" or \"momo book off\"."); return true; }
+    if (clock) cfg.bookTime = clock;
+    if (arg || !cfg.bookOn) { cfg.bookOn = true; await bookEnsureStart(env, U, today); await fitSaveCfg(env, cfg); await reply(env, deps, from, "Book reminder on: every day at " + cfg.bookTime + " (Dubai time), here on WhatsApp while your chat window is open. \"momo booked\" or the Done button marks it. \"momo book off\" stops it."); return true; }
+    const info = await bookInfo(env, cfg, today);
+    await reply(env, deps, from, "Book reminder: on, at " + cfg.bookTime + " (Dubai time).\n" + (info.doneToday ? "Written today." : info.restToday ? "Rest day today." : "Not yet today.") + (info.streak > 0 ? " Streak: " + info.streak + " day" + (info.streak === 1 ? "" : "s") + "." : "")); return true;
+  }
+  if (/^\s*fit\s+booked\s*$/i.test(text)) { const cfg = await fitCfg(env, U), today = gstDate(Date.now()); await bookMark(env, U, today, true); await reply(env, deps, from, bookedSay(cfg, (await bookInfo(env, cfg, today)).streak)); return true; }
   // a one-turn follow-up: "How long was the gym?" -> "45 min"
   let pend = null; try { pend = JSON.parse((await env.MEETINGS.get("fitc_pend_" + from)) || "null"); } catch (e) {}
   if (pend) {
@@ -806,11 +837,151 @@ export async function fitGuest(env, from, msg, deps) {
   } else return false;
   if (!text) return false;
   await env.MEETINGS.put("fitc_in_" + person.id, new Date().toISOString(), { expirationTtl: 3 * 86400 });
-  if (!(await fitWhatsAppText(env, from, text, deps))) await reply(env, deps, from, rule);
+  if (!(await fitWhatsAppText(env, from, text, deps, { voice: msg.type === "audio" }))) await reply(env, deps, from, rule);
   return true;
 }
 
+// ---- journal ---------------------------------------------------------------------------------------------------------------
+// A private place to write, per person: fitj_<user>_<id>. It is NEVER part of sharing, the CSV, the history, the day view, the 21:00 message or the other
+// person's view; it is never given to a model and never copied to a log. Anyone who holds the link can switch person on the page, so an OPTIONAL 4-digit
+// PIN per person locks the journal ON THE PAGE (on WhatsApp the lock is the person's own phone number). The metadata of an entry carries only a title and a
+// short preview, so the list needs one list() call; the full text is read when an entry is opened.
+const JMAX = 4000;
+const jKey = (env, u, id) => "fitj_" + pickUser(env, u) + "_" + id;
+function jMeta(e) {
+  const m = { id: e.id, d: e.d, t: e.t, ti: clip(e.title, 60), pv: clip(e.x, 80), mood: e.mood || 0 };
+  const size = () => new TextEncoder().encode(JSON.stringify(m)).length;
+  while (size() > 900 && m.pv.length > 8) m.pv = m.pv.slice(0, Math.max(8, m.pv.length - 12));
+  while (size() > 900 && m.ti.length > 8) m.ti = m.ti.slice(0, Math.max(8, m.ti.length - 12));
+  return m;
+}
+async function jPut(env, e) { await env.MEETINGS.put(jKey(env, e.u, e.id), JSON.stringify(e), { metadata: jMeta(e) }); return e; }
+export async function jAdd(env, u, f) {
+  const text = String((f && f.text) || "").replace(/\r\n/g, "\n").trim().slice(0, JMAX); if (!text) return null;
+  const t = (f && f.t) || Date.now(), d = (f && f.d) || gstDate(t), id = d + "_" + String(t).padStart(10, "0") + "_" + rnd();
+  return jPut(env, { u: pickUser(env, u), id, d, t, title: clip(f && f.title, 80), x: text, mood: intIn(f && f.mood, 1, 5, 0), s: clip((f && f.s) || "web", 8) });
+}
+export async function jGet(env, u, id) { if (!ID_RX.test(String(id))) return null; try { return JSON.parse((await env.MEETINGS.get(jKey(env, u, id))) || "null"); } catch (e) { return null; } }
+export async function jDel(env, u, id) { if (!ID_RX.test(String(id))) return false; await env.MEETINGS.delete(jKey(env, u, id)); return true; }
+export async function jEdit(env, u, id, patch) {
+  const e = await jGet(env, u, id); if (!e) return null;
+  if ("title" in patch) e.title = clip(patch.title, 80);
+  if ("text" in patch) { const x = String(patch.text || "").replace(/\r\n/g, "\n").trim().slice(0, JMAX); if (!x) return null; e.x = x; }
+  if ("mood" in patch) e.mood = intIn(patch.mood, 1, 5, 0);
+  return jPut(env, e);
+}
+export async function jList(env, u, opts) {
+  const base = "fitj_" + pickUser(env, u) + "_", out = []; let cursor;
+  for (let g = 0; g < 10; g++) {
+    const r = await env.MEETINGS.list({ prefix: base + ((opts && opts.day) || ""), cursor, limit: 1000 });
+    for (const k of r.keys || []) {
+      let m = k.metadata;
+      if (!m || !m.id) { try { m = jMeta(JSON.parse((await env.MEETINGS.get(k.name)) || "null")); } catch (e) { continue; } }
+      if (m && m.id) out.push(m);
+    }
+    if (r.list_complete || !r.cursor) break; cursor = r.cursor;
+  }
+  out.sort((a, b) => (a.id < b.id ? 1 : -1));   // newest first: ids start with the date and the time
+  return out.slice(0, (opts && opts.limit) || 120);
+}
+export const fitIsJournalText = (t) => /^\s*(?:(?:momo|fit)\s+)?journal\s*[:\-\u2013\u2014]/i.test(String(t || ""));   // used to keep a journal line out of the inbound log
+
+// the optional PIN: 4 digits, salted and hashed, five wrong tries lock it for 15 minutes, an unlock lasts 30 minutes and dies when the PIN changes
+const pinKey = (env, u) => "fitc_pin_" + pickUser(env, u);
+async function sha256hex(x) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(x)); return [...new Uint8Array(b)].map((v) => v.toString(16).padStart(2, "0")).join(""); }
+const randHex = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((v) => v.toString(16).padStart(2, "0")).join("");
+async function pinRec(env, u) { try { return JSON.parse((await env.MEETINGS.get(pinKey(env, u))) || "null"); } catch (e) { return null; } }
+export async function jHasPin(env, u) { return !!(await pinRec(env, u)); }
+async function pinCheck(env, u, pin) {
+  const rec = await pinRec(env, u); if (!rec) return { ok: true, rec: null };
+  const fk = "fitc_pinfail_" + pickUser(env, u), n = parseInt((await env.MEETINGS.get(fk)) || "0", 10) || 0;
+  if (n >= 5) return { ok: false, locked: true };
+  if (ctEqual(await sha256hex(rec.salt + ":" + pickUser(env, u) + ":" + String(pin || "")), rec.hash)) { await env.MEETINGS.delete(fk); return { ok: true, rec }; }
+  await env.MEETINGS.put(fk, String(n + 1), { expirationTtl: 900 });
+  return { ok: false, left: Math.max(0, 4 - n) };
+}
+export async function jUnlock(env, u, pin) {
+  const r = await pinCheck(env, u, pin); if (!r.ok) return r;
+  if (!r.rec) return { ok: true, token: "" };
+  const token = randHex(12); await env.MEETINGS.put("fitc_jtok_" + pickUser(env, u) + "_" + token, r.rec.salt, { expirationTtl: 1800 });
+  return { ok: true, token };
+}
+export async function jAuthed(env, u, token) {
+  const rec = await pinRec(env, u); if (!rec) return true;
+  if (!/^[0-9a-f]{24}$/.test(String(token || ""))) return false;
+  const v = await env.MEETINGS.get("fitc_jtok_" + pickUser(env, u) + "_" + token); return !!v && ctEqual(v, rec.salt);
+}
+export async function jPinSet(env, u, pin, current) {
+  if (await pinRec(env, u)) { const r = await pinCheck(env, u, current); if (!r.ok) return r; }
+  if (pin === "" || pin == null) { await env.MEETINGS.delete(pinKey(env, u)); return { ok: true, pin: false }; }
+  if (!/^\d{4}$/.test(String(pin))) return { ok: false, why: "The PIN is 4 digits." };
+  const salt = randHex(8); await env.MEETINGS.put(pinKey(env, u), JSON.stringify({ salt, hash: await sha256hex(salt + ":" + pickUser(env, u) + ":" + pin) }));
+  return { ok: true, pin: true };
+}
+
+// ---- "Write in my book": a daily habit for a paper book ---------------------------------------------------------------------
+// A reminder at the person's time (default 21:30 Dubai), by WhatsApp ONLY while their 24-hour window is open (no template: the approved nudge is not wired), a
+// one-tap Done, a streak and a 30-day row. A rest day does not break the streak and is not reminded.
+export function parseClock(x) {
+  const m = /^\s*(\d{1,2})(?:[:.h](\d{2}))?\s*(am|pm)?\s*$/i.exec(String(x || "")); if (!m) return null;
+  let h = parseInt(m[1], 10); const mi = m[2] ? parseInt(m[2], 10) : 0, ap = m[3] && m[3].toLowerCase();
+  if (ap) { if (h < 1 || h > 12) return null; if (ap === "pm" && h < 12) h += 12; if (ap === "am" && h === 12) h = 0; }
+  if (h > 23 || mi > 59) return null; return String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0");
+}
+export function bookStreak(done, paused, today) {
+  let n = 0, d = today;
+  if (!done.has(d) && !paused.has(d)) d = addDays(d, -1);   // today is not over: it neither counts nor breaks
+  for (let i = 0; i < 400; i++, d = addDays(d, -1)) { if (done.has(d)) n++; else if (paused.has(d)) continue; else break; }
+  return n;
+}
+async function bookDoneDates(env, u, from, to) {
+  const base = "fitc_book_" + pickUser(env, u) + "_", out = new Set(); let cursor;
+  for (let g = 0; g < 5; g++) {
+    const r = await env.MEETINGS.list({ prefix: base, cursor, limit: 1000 });
+    for (const k of r.keys || []) { const d = k.name.slice(base.length); if (DATE_RX.test(d) && d >= from && d <= to) out.add(d); }
+    if (r.list_complete || !r.cursor) break; cursor = r.cursor;
+  }
+  return out;
+}
+export async function bookEnsureStart(env, u, d) { const k = "fitc_bookstart_" + pickUser(env, u); if (!(await env.MEETINGS.get(k))) await env.MEETINGS.put(k, d); }
+export async function bookMark(env, u, d, on) {
+  const k = "fitc_book_" + pickUser(env, u) + "_" + d;
+  if (on) { await env.MEETINGS.put(k, "1"); await bookEnsureStart(env, u, d); } else await env.MEETINGS.delete(k);
+}
+export async function bookInfo(env, cfg, today) {
+  const u = cfg.u, from = addDays(today, -400), done = await bookDoneDates(env, u, from, today), paused = await fitPausedDates(env, u, from, today);
+  const start = (await env.MEETINGS.get("fitc_bookstart_" + pickUser(env, u))) || "", days = [];
+  for (let i = 29; i >= 0; i--) { const d = addDays(today, -i); days.push({ d, s: done.has(d) ? "done" : paused.has(d) ? "rest" : d === today ? "today" : (start && d >= start ? "missed" : "none") }); }
+  return { on: !!cfg.bookOn, time: cfg.bookTime, remindJournal: !!cfg.journalRemind, doneToday: done.has(today), restToday: paused.has(today), streak: bookStreak(done, paused, today), days };
+}
+function bookSay(cfg, streak, withJournal) {
+  let m = cfg.tone === "brutal" ? "Book time. You said you would write in it - do it now." : cfg.tone === "kind" ? "A gentle reminder: it is time to write in your book." : "Time to write in your book.";
+  if (streak > 1) m += " Streak: " + streak + " days.";
+  if (withJournal) m += " If you like, add a line to your Momo journal too.";
+  return m + " Tap Done once you have.";
+}
+const mins = (hm) => parseInt(hm.slice(0, 2), 10) * 60 + parseInt(hm.slice(3), 10);
+// runs on every cron tick; sends once a day, inside the window, only while the person's 24-hour WhatsApp window is open (a closed window does not use up the day)
+export async function fitReminders(env, deps, nowMs) {
+  if (!env.WA_ALLOWED) return 0;
+  const hm = gstHM(nowMs), today = gstDate(nowMs), mine = String(env.WA_ALLOWED).replace(/\D/g, ""); let sent = 0;
+  for (const user of fitUsers(env)) {
+    const cfg = await fitCfg(env, user.id); if (!cfg.bookOn) continue;
+    const a = mins(cfg.bookTime), now = mins(hm); if (now < a || now >= a + 30) continue;
+    let open = false;
+    if (user.wa === mine) { try { open = deps.ownerWindowOpen ? !!(await deps.ownerWindowOpen(env)) : false; } catch (e) {} }
+    else if (user.wa && await recentIn(env, user.id)) open = true;
+    if (!open) continue;   // no template here: the page still shows the card, and the person can say "momo booked"
+    const info = await bookInfo(env, cfg, today); if (info.doneToday || info.restToday) continue;
+    if (!(await flagOnce(env, "fitc_bk_sent_" + user.id + "_" + today))) continue;
+    const jToday = cfg.journalRemind ? (await jList(env, user.id, { day: today, limit: 1 })).length : 1;
+    await reply(env, deps, user.wa, bookSay(cfg, info.streak, cfg.journalRemind && !jToday), [{ id: "fit:booked:" + user.id, title: "Done" }]); sent++;
+  }
+  return sent;
+}
+
 // ---- WhatsApp: buttons ------------------------------------------------------------------------------------------------
+function bookedSay(cfg, streak) { return "Marked: you wrote in your book today." + (streak > 1 ? " Streak: " + streak + " days." : "") + (cfg.tone === "brutal" ? " Do it again tomorrow." : cfg.tone === "kind" ? " Well done." : ""); }
 export async function fitButton(env, from, bid, deps) {
   bid = String(bid || "");
   if (bid.indexOf("fit:undo:") === 0) {
@@ -820,6 +991,8 @@ export async function fitButton(env, from, bid, deps) {
     else await reply(env, deps, from, "Already removed.");
     return true;
   }
+  if (bid.indexOf("fit:booked:") === 0) { const u = fitUserFor(env, from), cfg = await fitCfg(env, u), today = gstDate(Date.now()); await bookMark(env, u, today, true); const info = await bookInfo(env, cfg, today); await reply(env, deps, from, bookedSay(cfg, info.streak)); return true; }
+  if (bid.indexOf("fit:jundo:") === 0) { const u = fitUserFor(env, from), id = bid.slice(10).split(":").pop(); await reply(env, deps, from, (await jDel(env, u, id)) ? "Removed from your journal." : "Already removed."); return true; }
   if (bid === "fit:extend") { const cfg = await fitCfg(env, fitUserFor(env, from)); cfg.days = Math.min(365, cfg.days + 30); await fitSaveCfg(env, cfg); await reply(env, deps, from, "➕ Challenge extended to " + cfg.days + " days. Keep going."); return true; }
   return false;
 }
@@ -922,6 +1095,11 @@ export async function fitRoutes(request, env, url, h) {
   if (request.method === "GET") {
     if (url.searchParams.get("view") === "history") return J(Object.assign({ ok: true, u: cfg.u, users: us, names }, await fitHistory(env, cfg, today, h)));
     if (url.searchParams.get("view") === "csv") return new Response(await fitCsv(env, cfg, today), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="momo-' + cfg.u + '-' + today + '.csv"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    if (url.searchParams.get("view") === "journal") {
+      const pin = await jHasPin(env, cfg.u), authed = await jAuthed(env, cfg.u, url.searchParams.get("jt")), idq = url.searchParams.get("id");
+      if (idq) { if (!authed) return J({ ok: false, locked: true }, 403); const e = await jGet(env, cfg.u, idq); return e ? J({ ok: true, entry: e }) : J({ ok: false, why: "no such entry" }, 404); }
+      return J({ ok: true, u: cfg.u, users: us, names, pin, locked: pin && !authed, book: await bookInfo(env, cfg, today), entries: authed ? await jList(env, cfg.u, { limit: 120 }) : [] });
+    }
     if (url.searchParams.get("view") === "health") return J(Object.assign({ ok: true }, await fitHealth(env, cfg, today)));
     let d = url.searchParams.get("d") || today; if (!DATE_RX.test(d) || d > today) d = today;
     let sum = await fitSummary(env, d, cfg, today);
@@ -961,6 +1139,15 @@ export async function fitRoutes(request, env, url, h) {
   if (op === "edit") {
     const patch = {}; if (typeof b.text === "string") patch.x = b.text; if (b.minutes != null) patch.m = b.minutes; if (b.steps != null) patch.n = b.steps; if (b.value != null) patch.v = b.value;
     const e = await fitEdit(env, b.id, patch, cfg.u); return e ? J({ ok: true, entry: e }) : J({ ok: false, why: "no such entry" }, 404);
+  }
+  if (op === "junlock") { const r = await jUnlock(env, cfg.u, b.pin); return r.ok ? J({ ok: true, token: r.token }) : J({ ok: false, why: r.locked ? "Too many tries. Wait 15 minutes." : "That PIN is not right (" + r.left + " tries left)." }, r.locked ? 429 : 403); }
+  if (op === "jpin") { const r = await jPinSet(env, cfg.u, b.pin, b.current); return r.ok ? J({ ok: true, pin: r.pin }) : J({ ok: false, why: r.why || (r.locked ? "Too many tries. Wait 15 minutes." : "The current PIN is not right.") }, r.locked ? 429 : (r.why ? 400 : 403)); }
+  if (op === "bookdone") { await bookMark(env, cfg.u, today, !b.undo); return J({ ok: true, book: await bookInfo(env, cfg, today) }); }
+  if (op === "jadd" || op === "jedit" || op === "jdel") {
+    if (!(await jAuthed(env, cfg.u, b.jt))) return J({ ok: false, locked: true, why: "The journal is locked." }, 403);
+    if (op === "jadd") { const e = await jAdd(env, cfg.u, { title: b.title, text: b.text, mood: b.mood, s: "web" }); return e ? J({ ok: true, entry: e }) : J({ ok: false, why: "Write something first." }, 400); }
+    if (op === "jdel") return J({ ok: await jDel(env, cfg.u, b.id) });
+    const e = await jEdit(env, cfg.u, b.id, { title: b.title, text: b.text, mood: b.mood }); return e ? J({ ok: true, entry: e }) : J({ ok: false, why: "no such entry, or it is empty" }, 404);
   }
   if (op === "pause") { const dates = await fitPause(env, cfg.u, today, b.days, b.reason); return J({ ok: true, dates }); }
   if (op === "resume") return J({ ok: true, cleared: await fitResume(env, cfg.u, today) });

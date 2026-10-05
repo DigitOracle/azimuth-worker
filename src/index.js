@@ -22,7 +22,7 @@ import { checklistRoutes } from "./checklist.js";   // v291 CHECKLIST - owner-on
 import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief_pdf documents and the /brief_blocks LOD 100 view (all logic in the module)
 import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_ejari.js";
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
-import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitCaptionIsFood, fitGuest } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
+import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -933,7 +933,7 @@ async function waPost(env, payload, kind) {
         const id = j && j.messages && j.messages[0] && j.messages[0].id;
         const cap = (payload && ((payload.text && payload.text.body) || (payload.image && payload.image.caption) ||
                      (payload.interactive && payload.interactive.body && payload.interactive.body.text) || "")) || "";
-        await noteOutbound(env, kind, id, cap);
+        await noteOutbound(env, kind, id, /^s*(?:Your journal|Saved to your journal)/i.test(cap) ? "(journal reply)" : cap);   // private journal text is never copied into the outbox log
       } catch (e) {}
     }
     return r;
@@ -1166,7 +1166,7 @@ Read dates from the date map above; never calculate a weekday yourself. Prefer "
 // its caller, so a failure here can never cost her a reply.
 async function inboxNote(env, msg) {
   const it = { at: new Date().toISOString(), type: String(msg.type || "?") };
-  if (msg.type === "text" && msg.text) { const _b = String(msg.text.body || "").slice(0, 4000); it.text = (/^\s*\?/.test(_b) ? qnScrub(_b) : _b).slice(0, 400); }   // v153 - a question note is logged with its phone numbers, emails and IDs already out
+  if (msg.type === "text" && msg.text) { const _b = String(msg.text.body || "").slice(0, 4000); it.text = fitIsJournalText(_b) ? "(journal entry)" : (/^\s*\?/.test(_b) ? qnScrub(_b) : _b).slice(0, 400); }   // v351 - a journal line is private: it never goes into this log   // v153 - a question note is logged with its phone numbers, emails and IDs already out
   else if (msg.type === "interactive" && msg.interactive) {
     const r = msg.interactive.button_reply || msg.interactive.list_reply || {};
     it.tapped = String(r.id || ""); it.text = String(r.title || "");     // the id for us, the words for whoever reads this back
@@ -4105,7 +4105,7 @@ async function appFetch(request, env, ctx) {
           if (_qn) { await qnFromWhatsApp(env, from, msg, _qn); return new Response("ok"); }
         }
         if (!text) { await waSend(env, from, "Send a meeting or task (text or voice) and I'll file it. \u{1F9ED}"); return new Response("ok"); }
-        if (!(await fitBusy(env, from)) && await fitWhatsAppText(env, from, text, fitDeps())) return new Response("ok");   // v328 - FIT: "food: ...", "gym 45 min", "10k steps", "fit" (a voice note reaches here as text). Anything that is not food or exercise returns false and carries on below.
+        if ((fitIsJournalText(text) || /^\s*momo\b/i.test(text) || (msg.type === "audio" && /^\s*journal\b/i.test(text)) || !(await fitBusy(env, from))) && await fitWhatsAppText(env, from, text, fitDeps(), { voice: msg.type === "audio" })) return new Response("ok");   // an EXPLICIT journal line or "momo ..." is meant for Momo even while another flow waits for a free-text line: a private journal line must never be eaten as a meeting time   // v328 - FIT: "food: ...", "gym 45 min", "10k steps", "fit" (a voice note reaches here as text). Anything that is not food or exercise returns false and carries on below.
         {                                                                            // v147 - her one line for Change it on a scene picture
           const _se = await env.MEETINGS.get("scedit_" + from);
           if (_se) {
@@ -4564,7 +4564,8 @@ export default {
       ctx.waitUntil((async () => {
         try { await env.MEETINGS.put("minute_tick_at", new Date().toISOString(), { expirationTtl: 86400 }); } catch (e) {}
         try { await meetingNudges(env); } catch (e) {}
-        try { await fitEvening(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v328 - the 21:00 GST FIT verdict; once a day, only while the 24-hour window is open
+        try { await fitEvening(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}
+        try { await fitReminders(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v351 - the daily "write in my book" reminder, inside the 24-hour window only   // v328 - the 21:00 GST FIT verdict; once a day, only while the 24-hour window is open
         try { await picResume(env, "", 90000); } catch (e) {}
         try { await deliveryWatch(env); } catch (e) {}   // v186 - accepted then failed is not sent
         try { await gcGuideTick(env); } catch (e) {}   // v150.1 - one follow-up if her Calendar link sits unused for twenty minutes
@@ -4581,7 +4582,8 @@ export default {
       // change, so this is now the only trigger. scheduledTime is the exact cron slot, so :00 and :30 each
       // match exactly once even when the handler starts a few seconds late.
       try { if (env.GH_PAT && new Date(event.scheduledTime).getUTCMinutes() % 30 === 0) await fetch(GH_DISPATCH, { method: "POST", headers: { "Authorization": "Bearer " + env.GH_PAT, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "meeting-capture-cron", "Content-Type": "application/json" }, body: JSON.stringify({ ref: "main", inputs: { force_mode: "auto" } }) }); } catch (e) {}
-      try { await fitEvening(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v328 - same verdict on the 5/30-minute crons; the once-a-day flag makes the two paths safe together
+      try { await fitEvening(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}
+        try { await fitReminders(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v351 - the daily "write in my book" reminder, inside the 24-hour window only   // v328 - same verdict on the 5/30-minute crons; the once-a-day flag makes the two paths safe together
       try { const tok = await msToken(env); await scanEmails(env, tok); } catch (e) {}
       try { const tok = await msToken(env); await scanSent(env, tok, { sinceMin: 90, cap: 40 }); } catch (e) {}   // v35.1 — sent-items promises
       try { const n = gstNow(); if (n.getUTCHours() === 7 && n.getUTCMinutes() < 30) { const dk = "digest_" + n.getUTCFullYear() + pad(n.getUTCMonth() + 1) + pad(n.getUTCDate()); if (!(await env.MEETINGS.get(dk))) { await env.MEETINGS.put(dk, "1", { expirationTtl: 2 * 86400 }); await morningDigest(env); } } } catch (e) {}
