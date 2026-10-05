@@ -19,7 +19,10 @@ export const BP_COL = {                     // Najma's own scheme, the same colo
 };
 const CHIPS = [["studio", "Studio"], ["1", "1 BHK"], ["2", "2 BHK"], ["3", "3 BHK"], ["4", "4 BHK +"]];
 const USES = [["office", "Office"], ["retail", "Retail"], ["hotel", "Hotel"], ["staff", "Staff housing"], ["labour", "Labour housing"]];
-const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+// v360 - no raw Arabic on the building page (it is not a bilingual page; Kendall): the Arabic characters are dropped from any shown text, and a string that was only Arabic reads "name in Arabic on the register"
+const AR_TEST = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+export const arFree = (s) => { s = String(s == null ? "" : s); if (!AR_TEST.test(s)) return s; const t = s.replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+/g, "").replace(/(\s*[\u00b7|,\/]\s*){2,}/g, " \u00b7 ").replace(/^[\s\u00b7|,\/-]+|[\s\u00b7|,\/-]+$/g, "").replace(/\s{2,}/g, " "); return t || "name in Arabic on the register"; };
+const esc = (s) => arFree(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const fmt = (n) => (n == null ? "" : Math.round(n).toLocaleString("en-US"));
 const aed = (n) => (n == null ? "—" : n >= 1e6 ? "AED " + (n / 1e6).toFixed(2) + "M" : "AED " + fmt(n));
 
@@ -485,7 +488,7 @@ dt{color:var(--mut)}dd{margin:0;text-align:right}
 function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder, D, KEY, COL) {
   const el = document.getElementById("stage"), msg = document.getElementById("msg"), $ = (id) => document.getElementById(id);
   // its own, because this function is shipped as text: the module's helpers are renamed by the bundler and are not here
-  const esc = (v) => String(v == null ? "" : v).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const esc = (v) => { let t = String(v == null ? "" : v); const AR = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+/g; if (AR.test(t)) { t = t.replace(AR, "").replace(/(\s*[\u00b7|,\/]\s*){2,}/g, " \u00b7 ").replace(/^[\s\u00b7|,\/-]+|[\s\u00b7|,\/-]+$/g, "").replace(/\s{2,}/g, " ") || "name in Arabic on the register"; } return t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); };
   const fmt = (v) => (v == null ? "" : Math.round(v).toLocaleString("en-US"));
   const aed = (v) => (v == null ? "\u2014" : v >= 1e6 ? "AED " + (v / 1e6).toFixed(2) + "M" : "AED " + fmt(v));
 
@@ -566,19 +569,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     { const g = new THREE.Mesh(new THREE.CircleGeometry(Math.max(s0.x, s0.z) * 1.3, 64),
         new THREE.MeshStandardMaterial({ color: 0x16211E, roughness: 1, metalness: 0, polygonOffset: true, polygonOffsetFactor: 4, polygonOffsetUnits: 8 }));
       g.rotation.x = -Math.PI / 2; g.position.set(c0.x, b0.min.y + 0.05, c0.z); g.receiveShadow = true; scene.add(g); }
-    // the district's aerial, the same Esri sheet the twin drapes under its massing: roads, greenery and water, in the model's metres
-    fetch("/img/ground_" + D.slug).then((r) => (r.ok ? r.json() : null)).then((g) => {
-      if (!g || !g.scene) return;
-      const G = g.scene, tex = new THREE.TextureLoader().load("/img/ground_" + D.slug + "_jpg");
-      tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(8, ren.capabilities.getMaxAnisotropy());
-      const geo = new THREE.PlaneGeometry(G.x1 - G.x0, G.z1 - G.z0); geo.rotateX(-Math.PI / 2);
-      const pl = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 1, metalness: 0, color: 0xBFC4BC,
-        polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 }));
-      pl.position.set((G.x0 + G.x1) / 2, b0.min.y + 0.1, (G.z0 + G.z1) / 2); pl.receiveShadow = true; pl.renderOrder = -1; scene.add(pl);
-      const cr = document.createElement("div"); cr.id = "gcredit";
-      cr.textContent = g.attribution || "Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community";
-      document.body.appendChild(cr);
-    }).catch(() => {});
+    // no aerial or satellite ground here (Kendall, standing rule: our own renders only); the plain dark disc above is the ground
     const box = new THREE.Box3(); mine.forEach((m) => box.expandByObject(m));
     y0 = box.min.y; const H = box.max.y - y0; fh = H / Math.max(N, 1);
     const ctr = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());

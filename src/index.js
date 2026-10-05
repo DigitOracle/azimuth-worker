@@ -4955,7 +4955,7 @@ function renderMarket(latestRaw, prevRaw, key, origin, watchRaw) {
       const l = _nz(loc || ""); const hitA = aiAreas.find(a2 => l.indexOf(_nz(a2.area)) >= 0);
       const alt = hitA ? najSat(hitA.area) : "";
       return '<img class=devimg src="/img/dev_' + devSlug(nm) + '" alt="" loading=lazy' +
-        (alt ? ' data-sat="' + alt + '" onerror="if(this.dataset.sat&&this.src.indexOf(\'sat_\')<0){this.src=this.dataset.sat}else{this.remove()}"' : ' onerror="this.remove()"') + '>';
+        ' onerror="this.remove()">';
     };
     const scored = devPool.map(dv => {
       const dp = dv.dldPulse; let s = 0; const why = [];
@@ -8576,7 +8576,7 @@ fetch("/img/mp_basemap").then(function(r){if(!r.ok)throw 0;return r.json()}).the
 // /img/mp_areas, and cached drive-time rings via /iso. The offline canvas stays untouched
 // as the automatic fallback — any failure and the map still works.
 (function(){if(!ESRI)return;
-var VIEWS={dark:"arcgis/dark-gray",light:"arcgis/light-gray",sat:"arcgis/imagery",streets:"arcgis/navigation",data:"arcgis/human-geography-dark"};
+var VIEWS={dark:"arcgis/dark-gray",light:"arcgis/light-gray",streets:"arcgis/navigation",data:"arcgis/human-geography-dark"};
 var VIEW=localStorage.getItem("naj_view")||((THM==="light")?"light":"dark");if(!VIEWS[VIEW])VIEW="dark";
 var LANG=localStorage.getItem("naj_lang")||"en";
 var TOKEN=null,map=null,AR2=null,ISO_ON=null;
@@ -8658,7 +8658,7 @@ function reStyle(){if(!map)return;fetchTok(function(){map.setStyle(styleUrl())})
 function fetchTok(cb){fetch("/esri_token?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){TOKEN=j.token;cb()}}).catch(function(){})}
 // view chips
 var vrow=document.createElement("div");vrow.className="tog";vrow.style.top="104px";
-[["dark","🌑 dark"],["light","☀️ light"],["sat","🛰 satellite"],["streets","🛣️ streets"],["data","📊 data"]].forEach(function(v){
+[["dark","🌑 dark"],["light","☀️ light"],["streets","🛣️ streets"],["data","📊 data"]].forEach(function(v){
 var el=document.createElement("span");el.className="tg"+(VIEW===v[0]?" on":"");el.textContent=v[1];el.setAttribute("data-v",v[0]);
 el.onclick=function(){VIEW=v[0];try{localStorage.setItem("naj_view",VIEW)}catch(e){}
 THM=(VIEW==="light")?"light":"dark";document.documentElement.setAttribute("data-theme",THM);
@@ -8751,10 +8751,10 @@ function renderReport(sn, esriTok, poly) {
       (sn.sup.nextEnd ? '<div class=srow><span>Next completion on file</span><span class=sv>' + esc2(String(sn.sup.nextEnd).slice(0, 10)) + '</span></div>' : '') + '</div>' : '') +
     ((sn.projs || []).length ? '<div class=card><h2>Projects on the register</h2>' + sn.projs.map(pj =>
       '<div class=srow><span>' + esc2(pj.project) + (pj.escrowRegistered ? ' <span style="color:#56B584;font-size:.7rem">escrow ✓</span>' : '') + '</span><span class=sv>' + (pj.percentComplete != null ? pj.percentComplete + '% built' : esc2(pj.status || '')) + '</span></div>').join('') + '</div>' : '') +
-    (esriTok ? '<div class=card style="padding:8px"><div id=bmap style="height:330px;border-radius:8px"></div><div class=note style="padding:0 6px 4px">Pan and zoom — the gold line is the community boundary. Imagery: Esri.</div></div>' +
+    (esriTok ? '<div class=card style="padding:8px"><div id=bmap style="height:330px;border-radius:8px"></div><div class=note style="padding:0 6px 4px">Pan and zoom — the gold line is the community boundary. Map: CARTO and OpenStreetMap contributors.</div></div>' +
       '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></' + 'script>' +
       '<script>(function(){try{var P=' + JSON.stringify(poly || null) + ',A=' + JSON.stringify((sn.amen || []).slice(0, 6)) + ';' +
-      'var m=new maplibregl.Map({container:"bmap",style:"https://basemapstyles-api.arcgis.com/arcgis/rest/services/styles/v2/styles/arcgis/imagery?token=' + encodeURIComponent(esriTok) + '&worldview=unitedArabEmirates",center:[55.27,25.19],zoom:12,attributionControl:{compact:true}});' +
+      'var m=new maplibregl.Map({container:"bmap",style:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",center:[55.27,25.19],zoom:12,attributionControl:{compact:true}});' +
       'm.on("load",function(){if(P){m.addSource("cm",{type:"geojson",data:{type:"Feature",geometry:P}});' +
       'm.addLayer({id:"cmf",type:"fill",paint:{"fill-color":"#C5A56A","fill-opacity":0.08},source:"cm"});' +
       'm.addLayer({id:"cml",type:"line",paint:{"line-color":"#C5A56A","line-width":2.5},source:"cm"});' +
@@ -10096,9 +10096,9 @@ let CTX=null,ctxG=null,ROOTREF=null;
 // v75 - AERIAL GROUND (Kendall, 3 Sep): Esri World Imagery draped under the massing (ground_<slug> json + ground_<slug>_jpg in KV,
 // exported by scripts/ground_imagery.py in the GLB's own metres). Photographed roads/parks replace the drawn ctx roads/green.
 let GROUND=null,GIMG=null,GPLANE=null,HAVE_GROUND=false;
-fetch("/img/ground_${slugName}").then(r=>r.ok?r.json():null).then(g=>{if(!g||!g.scene)return;GIMG=g;HAVE_GROUND=true;drawGroundImagery();
-  if(ctxG)ctxG.children.forEach(ch=>{if(ch.userData.k==="roads"||ch.userData.k==="green")ch.visible=false})}).catch(()=>{});
-function drawGroundImagery(){
+// v360 - no aerial/satellite ground (Kendall's standing rule): the ground_<slug> sheet is no longer fetched, so the drawn roads and green stay
+function drawGroundImagery(){return}
+function drawGroundImagery_off(){
   if(!GIMG||!GROUND||!ROOTREF||GPLANE)return;
   const G=GIMG.scene;const tex=new THREE.TextureLoader().load("/img/ground_${slugName}_jpg");
   tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=Math.min(8,ren.capabilities.getMaxAnisotropy());
@@ -11328,10 +11328,9 @@ function renderArea(latestRaw, name, key) {
     '.prow{padding:6px 0;border-bottom:1px solid #182823;font-size:.82rem}.prow:last-child{border-bottom:none}.prow .pm{display:flex;justify-content:space-between;gap:8px;color:var(--mut);font-size:.72rem;margin-top:2px}' +
     '.note{color:var(--mut);font-size:.72rem;margin-top:.5rem}.pv{font-size:.72rem;color:var(--mut)}' +
     '</style></head><body>' +
-    '<div class=ahead style="background-image:linear-gradient(180deg,rgba(12,20,19,.15) 0%,rgba(12,20,19,.62) 55%,rgba(12,20,19,.94) 88%,#0C1413 100%),url(' + najSat(a.area) + ')">' +
+    '<div class=ahead style="background-image:linear-gradient(180deg,#16211E 0%,#101a18 55%,#0C1413 100%)">' +
     '<a class=bk href="/map?key=' + encodeURIComponent(key || '') + '">← back to the map</a>' +
     '<div class=mast>' + esc2(a.area) + '</div><div class=sub>' + esc2(period) + ' · settled, not asking</div>' +
-    '<div class=satc>Esri World Imagery</div>' +
     '<a href="/skyline/' + najSlug(a.area) + '?key=' + encodeURIComponent(key || '') + '" style="position:absolute;top:8px;left:12px;font-family:\'IBM Plex Mono\',monospace;font-size:.6rem;letter-spacing:.04em;color:#C5A56A;background:rgba(12,20,19,.6);border:1px solid rgba(197,165,106,.4);border-radius:99px;padding:4px 10px;text-decoration:none">⬢ view in 3D</a></div>' +
     body +
     '<div class=pv style="margin-top:1rem;line-height:1.6">Source: Dubai Land Department (DLD) Open Data. Contains information from the Government of Dubai. Areas under 20 settled sales are omitted; layouts shown only at 8+ sales. Every source passes a fail-closed sanity gate.</div>' +

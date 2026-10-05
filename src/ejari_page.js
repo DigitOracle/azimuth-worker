@@ -123,7 +123,8 @@ export function subSay(s) {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 // the register's identity for a building: "THE VOGUE · <arabic> · #444"
-export function ejariIdentity(en, ar, no) { return [en, ar, no ? "#" + no : ""].filter(Boolean).join(" \u00b7 "); }
+// v360 - no raw Arabic on a client page that is not bilingual (Kendall): English name and number; Arabic-only says so without the characters
+export function ejariIdentity(en, ar, no) { return [en || (ar ? "name in Arabic on the register" : ""), no ? "#" + no : ""].filter(Boolean).join(" \u00b7 "); }
 
 // ---- small helpers --------------------------------------------------------------------------------------------------
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -886,12 +887,13 @@ export const EJARI_PANEL_JS = String.raw`
 (function(){
 var P=window.__EJP||{},el=document.getElementById("ejp");if(!el)return;
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function noAr(s){var t=String(s==null?"":s),R=/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+/g;if(!R.test(t))return t;t=t.replace(R,"").replace(/(\s*[\u00b7|,\/]\s*){2,}/g," \u00b7 ").replace(/^[\s\u00b7|,\/-]+|[\s\u00b7|,\/-]+$/g,"").replace(/\s{2,}/g," ");return t||"name in Arabic on the register"}
 function n(v){return Math.round(v||0).toLocaleString("en-US")}
 var RKQ=P.rk?"&rk="+encodeURIComponent(P.rk):"";
 fetch("/contracts_api?kind=building&panel=1&id="+encodeURIComponent(P.k)+"&key="+encodeURIComponent(P.key)+RKQ,{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(j){
   if(!j||!j.ok){el.innerHTML="No Ejari contracts on record for this building in the last 30 days.";return}
   var w7=j.d7,w30=j.d30;
-  el.innerHTML=(j.identity?"<div style=\"color:#C5A56A\">"+esc(j.identity)+"</div>":"")
+  el.innerHTML=(j.identity?"<div style=\"color:#C5A56A\">"+esc(noAr(j.identity))+"</div>":"")
     +"<div class=letn><b>"+n(w7.n)+"</b> in the last 7 days \u00b7 <b>"+n(w30.n)+"</b> in 30</div>"
     +"<div class=lett>Last 30 days: "+n(w30.nw)+" new \u00b7 "+n(w30.rn)+" renewed"+(w30.bands.length?"<br>"+w30.bands.map(function(b){return esc(b.label.toLowerCase())+" "+n(b.n)}).join(" \u00b7 "):"")+"</div>"
     +(w30.desk?"<div class=lett>Plus "+n(w30.desk)+" flexi-desk licences, not counted.</div>":"")
