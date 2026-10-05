@@ -79,6 +79,12 @@ console.log("snapshot content");
   for (const t of ["Median price", "Middle half of sales", "Sales loaded", "Top band", "Upper band", "Middle band", "Entry band", "Studio", "3 bedrooms", "of sales here", "of the money"]) ok(h.includes(t), "snapshot has '" + t + "'");
   ok(h.includes('class="loc"') && (h.match(/<svg class="loc"/g) || []).length === 1 && /The area in blocks|not in the data yet/.test(h), "v337: the locator is vector in the header and the 3D blocks picture (or its quiet card) sits at the foot");
   ok(/Client budget: 1 bedroom, AED 1,200,000 to AED 1,800,000/.test(h), "a client budget gives one line on who fits");
+  { // v358 - the 12-month headline is the register's own median (area.ev.l12 = 1,600 per sq m = AED 149 per sq ft), the same figure the investor sheet prints
+    const tile = (html) => (html.match(/Median price<\/div><div class="tv">([^<]*)</) || [])[1];
+    ok(tile(h) === "AED 149", "v358: snapshot 12m 'Median price' is the register median of every sale (AED 149 per sq ft from area.ev.l12), got " + tile(h));
+    const all = docs["snapshot:testvillagecircle:all"].html;
+    ok(tile(all) !== "AED 149" && /AED \d/.test(tile(all) || ""), "v358: the all-years window keeps the pooled developer figure (" + tile(all) + ")");
+  }
   const t = text(h);
   ok(t.indexOf("Imtiaz") > 0 && h.indexOf("Imtiaz") < h.indexOf("Sobha Reserve") + 99999, "the developers are listed");
   const mid = h.slice(h.indexOf("Middle band")), iImt = mid.indexOf("Imtiaz"), iAz = mid.indexOf("Azizi");

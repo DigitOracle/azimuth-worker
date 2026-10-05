@@ -171,6 +171,10 @@ export async function loadData(env, p, opts) {
   for (const dv of Object.values(ix.devs || {})) if (dv && dv.name) dv.name = cleanName(dv.name);
   for (const dv of Object.values(ix.areas[p.area].devs || {})) if (dv && dv.n) dv.n = cleanName(dv.n);
   const area = ix.areas[p.area], st = DM.areaStats(area, ix);
+  // v358 - ONE area median across the documents: in the last-12-months window the headline is the register's own median of every sale (area.ev.l12, the figure the investor sheet prints),
+  // not a median of developer cell medians (which read 1,535 against 1,501 in Jumeirah Village Circle). Only when that median stands on 30 or more sales; otherwise the cell figure stays.
+  const evA = p.win === "l12" && hasEv(IDX0.areas[p.area]) ? IDX0.areas[p.area].ev : null;
+  if (evA && evA.l12 && evA.l12[0] >= 30 && evA.l12[1] > 0 && st.enough) { st.median = Math.round(evA.l12[1]); st.medianSqft = Math.round(evA.l12[1] / SQFT); st.medianBasis = "register"; }
   const mine = {}; for (const k of await chosenKeys(env, p, IDX0)) mine[k] = true;
   const C = { p, IDX0, ix, slug: p.area, area, st, mine, buy: p.mode !== "rent", pages: 0 };
   C.today = BRIEF_KIT.todayLong(opts && opts.now);
