@@ -548,9 +548,9 @@ const SAY = {
     brutal: ["Weekly target missed: {got} of {want}. The days you skipped are the gap. Close it next week or stop calling it a target.", "Weekly target missed: {got} of {want}. A target you do not hit is just a wish - hit the next one.", "Weekly target missed: {got} of {want}. You know exactly which days did it. Do not repeat them."]
   },
   fbMorning: {
-    kind: ["Good morning. Here is how today can go.", "A fresh day. Here is the plan, nice and simple."],
-    firm: ["Today's plan.", "Here is what today asks of you."],
-    brutal: ["Today starts now. Here is what is owed.", "The day is empty. Here is what you promised to put in it."]
+    kind: ["Good morning. You have made a start - here is what is still open.", "A good start to the day. Here is what is left."],
+    firm: ["Started. Here is what is still open today.", "Today so far, and what is still to do."],
+    brutal: ["You have logged something. Here is what is still owed today.", "A start is not the day. Here is what is left to do."]
   },
   fbGoing: {
     kind: ["You are on track today. Lovely.", "Going well so far - keep it gentle and steady."],
@@ -560,7 +560,7 @@ const SAY = {
   fbOpen: {
     kind: ["There is still room to make today count - a walk would do it.", "Plenty of day left. Something small will do."],
     firm: ["Today's floor is still open. Close it.", "Not done yet today. There is time to fix that."],
-    brutal: ["Nothing counted yet. The day will not do it for you.", "The floor is still open and the clock is running."]
+    brutal: ["Your exercise has not counted yet. The day will not do it for you.", "The floor is still open and the clock is running."]
   },
   fbLate: {
     kind: ["There is still time tonight - even a short walk counts.", "The evening is yours. A few minutes of movement is enough."],
@@ -1136,7 +1136,7 @@ export async function fitFeedback(env, cfg, nowMs) {
   if (rest) { const why = await fitPauseReason(env, cfg.u, today); head = fbClean(say(cfg, "rest", { why: why && why !== "rest" ? " (" + why + ")" : "" }, today)); }
   else if (mode === "verdict") head = fbClean(!st.qualifies ? say(cfg, "dayFail", V, today) : st.out > 0 ? say(cfg, "mixed", Object.assign({}, V, { out: st.out, s: st.out === 1 ? "" : "s" }), today) : say(cfg, "dayPass", V, today));
   else if (empty) head = say(cfg, "fbEmpty", V, today + mode);
-  else if (mode === "morning") head = say(cfg, "fbMorning", V, today);
+  else if (mode === "morning" && !st.qualifies) head = say(cfg, "fbMorning", V, today);
   else if (st.qualifies) head = say(cfg, mode === "evening" ? "fbClosing" : "fbGoing", V, today + mode);
   else head = say(cfg, mode === "evening" ? "fbLate" : "fbOpen", V, today + mode);
   // ONE next step

@@ -1065,5 +1065,24 @@ ok(rjZ.j && rjZ.j.ok && rjZ.j.u === "najjuko" && !JSON.stringify(rjZ.j).includes
 eq((await call(K("/fit_api?u=najjuko&view=feedback", CLIENT))).status, 404, "a client key gets 404 on it, like every Momo route");
 delete env.FIT_USERS;
 
+// the headline must follow what is logged: a day with entries is never called empty, an empty day is never called busy (every tone, every time of day)
+env.FIT_USERS = "kendall:" + KEN + ":Dr. Doli,najjuko:" + HER + ":Black Coffee";
+const D14 = "2026-10-14", at14 = (hm) => "2026-10-14T" + hm + ":00Z";
+const TIMES14 = { morning: "04:30", midday: "08:00", evening: "15:00", verdict: "17:10" };
+const STATES14 = { empty: async () => {}, mealsOnly: async () => { await ATZ("kendall", "food", { x: "Oats", t: T(at14("03:30")), d: D14, s: "wa" }); await ATZ("kendall", "food", { x: "Chicken", t: T(at14("08:30")), d: D14, s: "wa" }); }, mealsAndWalk: async () => { await ATZ("kendall", "food", { x: "Oats", t: T(at14("03:30")), d: D14, s: "wa" }); await ATZ("kendall", "ex", { x: "Walk", m: 45, t: T(at14("03:00")), d: D14 }); } };
+for (const [sname, setup] of Object.entries(STATES14)) {
+  for (const e of await fit.fitRange(env, D14, D14, "kendall")) await fit.fitDelete(env, e.id, "kendall");
+  await setup();
+  for (const tone of ["kind", "firm", "brutal"]) {
+    await mkcfgZ("kendall", { tone });
+    for (const [mode, hm] of Object.entries(TIMES14)) {
+      const g = await fit.fitFeedback(env, await fit.fitCfg(env, "kendall"), T(at14(hm)));
+      const bad = sname === "empty" ? (mode !== "verdict" && !/Nothing logged|blank page|Silence|If it is not written down/i.test(g.head)) : /empty|nothing logged|nothing counted|blank|silence|not written down/i.test(g.head);
+      ok(!bad && g.mode === mode && g.empty === (sname === "empty"), "headline matches what is logged [" + sname + " / " + tone + " / " + mode + "]: " + g.head.slice(0, 70));
+    }
+  }
+}
+delete env.FIT_USERS;
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
