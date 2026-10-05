@@ -1,3 +1,4 @@
+import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { templateRoutes, feedTemplateFlag } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
@@ -1213,6 +1214,65 @@ async function waVerifySig(env, raw, sig) {
   const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw));
   const hex = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, "0")).join("");
   return ("sha256=" + hex) === sig;
+}
+// v356 - files ONE meeting: the Outlook entry (when mail is wired), the evt_ record, the search index. The same three steps a photographed meeting and a schedule picture both use.
+async function fileMeetingEvent(env, ev) {
+  let inOutlook = false;
+  try { const tk = await msToken(env); const oid = await msCreate(env, tk, AT(env), ev); if (oid) { inOutlook = true; ev.outlook_id = oid; ev.mailbox = AT(env); } } catch (e) {}
+  await env.MEETINGS.put("evt_" + Date.now() + "_" + rid(), JSON.stringify(ev), { expirationTtl: 60 * 60 * 24 * 21 });
+  try { await indexDoc(env, "evt_" + rid(), "meeting", (ev.summary || "") + " " + (ev.location || "") + " " + humanGst(ev.start_iso), ev.src); } catch (e) {}
+  return inOutlook;
+}
+// v356 - what is already filed, as title|date+time keys, so Add all twice does not file twice
+async function schedFiledKeys(env) {
+  const have = new Set();
+  try { const l = await env.MEETINGS.list({ prefix: "evt_" }); for (const k of l.keys) { const v = await env.MEETINGS.get(k.name); if (v) { try { have.add(schedKey(JSON.parse(v))); } catch (e) {} } } } catch (e) {}
+  return have;
+}
+// v356 - read a picture once for dated events and ask before filing. Returns true when it answered her.
+// forced: her caption says it is a schedule, so "nothing found" is answered; otherwise a picture that is not clearly a schedule returns false and the old behaviour carries on.
+async function schedImageTry(env, from, msgId, bytes, mime, forced) {
+  let clean = null;
+  try {
+    const g = await claudeJSON(env, schedPrompt(gstNowIso(), dateHints()), [{ type: "image", source: { type: "base64", media_type: mime || "image/jpeg", data: b64of(bytes) } }, { type: "text", text: "List the dated events in this picture." }], SCHED_SCHEMA, CLAUDE_SMART, 2000);
+    clean = schedSanitise(g, gstDateStr(gstNow()));
+  } catch (e) { clean = null; }
+  if (!clean || !clean.events.length || (clean.kind === "other" && !forced)) {
+    if (forced) { await waSend(env, from, SCHED_MSG.none); return true; }
+    return false;
+  }
+  const id = rid();
+  await env.MEETINGS.put("imgsched_" + id, JSON.stringify({ from, events: clean.events, at: Date.now() }), { expirationTtl: SCHED_TTL });
+  const body = { messaging_product: "whatsapp", to: from, type: "interactive",
+    interactive: { type: "button", body: { text: schedCard(clean.events) }, action: { buttons: [
+      { type: "reply", reply: { id: "isc:" + id + ":y", title: "Add all" } },
+      { type: "reply", reply: { id: "isc:" + id + ":n", title: "No thanks" } }] } } };
+  if (msgId) body.context = { message_id: msgId };
+  await waPost(env, body, "buttons");
+  return true;
+}
+// v356 - her tap on the schedule card
+async function schedTap(env, from, bid) {
+  const p = bid.split(":"), id = String(p[1] || "").replace(/[^a-z0-9]/gi, ""), yes = p[2] === "y";
+  let pend = null; try { pend = JSON.parse((await env.MEETINGS.get("imgsched_" + id)) || "null"); } catch (e) {}
+  if (!pend || !Array.isArray(pend.events) || (pend.from && pend.from !== from)) { await waSend(env, from, SCHED_MSG.expired); return; }
+  try { await env.MEETINGS.delete("imgsched_" + id); } catch (e) {}
+  if (!yes) { await waSend(env, from, SCHED_MSG.no); return; }
+  const have = await schedFiledKeys(env);
+  let n = 0, skipped = 0;
+  for (const e of pend.events) {
+    const ev = schedToMeeting(e);
+    ev.source = "whatsapp"; ev.src = { type: "captured", channel: "whatsapp-schedule-photo" };
+    if (!ev.location) delete ev.location;
+    ev.location = ev.location || "";
+    const k = schedKey(ev);
+    if (have.has(k)) { skipped++; continue; }
+    have.add(k);
+    await fileMeetingEvent(env, ev);
+    n++;
+  }
+  if (!n) await waSend(env, from, SCHED_MSG.already);
+  else await waSend(env, from, SCHED_MSG.added(n) + (skipped ? " " + skipped + (skipped === 1 ? " was" : " were") + " already there." : ""));
 }
 // Files a meeting or task from free text; returns a reply string. Channel-agnostic core.
 async function captureText(env, text, source, from) {
@@ -3715,6 +3775,7 @@ async function appFetch(request, env, ctx) {
             if (ctx) ctx.waitUntil(picJobRun(env, _jk, url.origin));
             return new Response("ok");
           }
+          if (/^isc:[a-z0-9]+:[yn]$/i.test(bid)) { await schedTap(env, from, bid); return new Response("ok"); }   // v356 - schedule picture: Add all / No thanks
           if (bid.indexOf("mq:") === 0) {                                              // v143 - is this a photo of her? only a yes files it
             const _p = bid.split(":"), _tok = String(_p[1] || "").replace(/[^a-z0-9]/gi, ""), _yes = _p[2] === "y";
             let _meta = null; try { _meta = JSON.parse((await env.MEETINGS.get("mephoto_meta_" + _tok)) || "null"); } catch (e) {}
@@ -3940,10 +4001,7 @@ async function appFetch(request, env, ctx) {
             await env.MEETINGS.delete("pimg_" + bid.slice(5));
             if (_p.kind === "meeting" && _p.meeting && _p.meeting.start_iso) {
               const ev = { summary: _p.meeting.title || "Meeting", start_iso: _p.meeting.start_iso, location: _p.meeting.location || "", source: "whatsapp", src: { type: "captured", channel: "whatsapp-photo" } };
-              let inOutlook = false;
-              try { const tk = await msToken(env); const oid = await msCreate(env, tk, AT(env), ev); if (oid) { inOutlook = true; ev.outlook_id = oid; ev.mailbox = AT(env); } } catch (e) {}
-              await env.MEETINGS.put("evt_" + Date.now() + "_" + rid(), JSON.stringify(ev), { expirationTtl: 60 * 60 * 24 * 21 });
-              try { await indexDoc(env, "evt_" + rid(), "meeting", (ev.summary || "") + " " + (ev.location || "") + " " + humanGst(ev.start_iso), ev.src); } catch (e) {}
+              const inOutlook = await fileMeetingEvent(env, ev);   // v356 - shared with the schedule picture
               await waSend(env, from, "✅ " + ev.summary + "\n" + humanGst(ev.start_iso) + " GST" + (inOutlook ? "\n📅 On your calendar." : "") + " 🧭");
             } else {
               let n = 0;
@@ -4005,6 +4063,7 @@ async function appFetch(request, env, ctx) {
               try {
                 const _lm = await waFetchMedia(env, msg.image.id);
                 if (_lm.bytes.byteLength > 4 * 1024 * 1024) { await waSend(env, from, "That one's a bit large - try a smaller copy."); return new Response("ok"); }
+                if (await schedImageTry(env, from, msg.id, _lm.bytes, _lm.mime, schedCaptionHit(_cap))) return new Response("ok");   // v356 - a poster of dated events is not "a photo of you"
                 // v143 - ask before filing. A flyer or a screenshot is not a photo of her (two flyers were filed as her on 12 Sep).
                 // The question is sent as a reply to her picture, so with several at once each question sits under its own photo.
                 const _qt = rid();
@@ -4078,6 +4137,7 @@ async function appFetch(request, env, ctx) {
           try {
             const _img2 = await waFetchMedia(env, msg.image.id);
             if (_img2.bytes.byteLength > 4 * 1024 * 1024) { await waSend(env, from, "That photo is a bit large to read — try a smaller one."); return new Response("ok"); }
+            if (await schedImageTry(env, from, msg.id, _img2.bytes, _img2.mime, schedCaptionHit(_cap))) return new Response("ok");   // v356 - dated events in the picture: confirm, then file. Anything else falls through to the old reading below.
             const _rd = await readPhoto(env, _img2.bytes, _img2.mime, _cap);
             if (await fitPhotoRead(env, from, _rd, _cap, fitDeps())) return new Response("ok");   // v328 - a meal: logged, and the picture is dropped here (nothing below stores it)
             if (!_rd || _rd.kind === "nothing") {
