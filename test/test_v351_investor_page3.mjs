@@ -154,26 +154,26 @@ const build = (inv3, o) => buildAreaPdf(mkEnv(inv3), parseParams(new URL(url(o))
 console.log("page counts by data availability");
 {
   const full = await build(mkInv3(mkRec()));
-  ok(full.status === 200 && full.pages === 6, "full record: six pages (" + full.pages + ")");
-  ok((full.html.match(/class="sheet page/g) || []).length === 6, "six A4 sheets");
-  ok(/Page 1 of 6/.test(text(full.html)) && /Page 6 of 6/.test(text(full.html)), "the footers count to six");
+  ok(full.status === 200 && full.pages === 7, "full record: seven pages (" + full.pages + ")");
+  ok((full.html.match(/class="sheet page/g) || []).length === 7, "seven A4 sheets");
+  ok(/Page 1 of 7/.test(text(full.html)) && /Page 7 of 7/.test(text(full.html)), "the footers count to seven");
   const none = await build(null);
   ok(none.pages === 2 && /Page 2 of 2/.test(text(none.html)), "no record on file: exactly the two pages, footers as before");
   const wrongPair = await build({ meta: META, dubai: DUBAI, areas: { testvillagecircle: AREA3 }, pairs: { "testvillagecircle|other": mkRec() } });
   ok(wrongPair.pages === 2, "a record without this pair: two pages");
   const noScen = mkRec(); noScen.size_sqft = null;
   const d4 = await build(mkInv3(noScen, Object.assign({}, AREA3, { size_sqft: null })));
-  ok(d4.pages === 4, "scenario inputs missing: four pages (" + d4.pages + ")");
+  ok(d4.pages === 5, "scenario inputs missing: five pages (" + d4.pages + ")");
   const noEv = mkRec(); noEv.blds = []; noEv.rent_y = {}; noEv.liq_y = {};
   const d4b = await build(mkInv3(noEv, Object.assign({}, AREA3, { supply: null })));
-  ok(d4b.pages === 5 && /scenarios/i.test(text(d4b.html)) && !/The evidence/.test(text(d4b.html)), "no evidence at all: the evidence page is left out, the two scenario pages stay (5)");
+  ok(d4b.pages === 6 && /scenarios/i.test(text(d4b.html)) && !/The evidence/.test(text(d4b.html)), "no evidence at all: the evidence page is left out, the two scenario pages stay (6)");
   const d3 = await build(mkInv3(Object.assign(noEv, { size_sqft: null }), Object.assign({}, AREA3, { supply: null, size_sqft: null })));
-  ok(d3.pages === 3, "no evidence and no scenario inputs: three pages (" + d3.pages + ")");
+  ok(d3.pages === 4, "no evidence and no scenario inputs: four pages (" + d3.pages + ")");
   // the same code path serves the client key and the owner key: 5 pages for both, no owner gate
   for (const [nm, key] of [["client", "client_key_123456"], ["owner", "owner_key_abcdefgh"]]) {
     const r = await devmapPdfRoute(new Request(url({ key, format: "html" })), mkEnv(mkInv3(mkRec())), new URL(url({ key, format: "html" })), { keyOk: () => true });
     const h = await r.text();
-    ok(r.status === 200 && r.headers.get("X-Brief-Pages") === "6" && /Scenarios/.test(text(h)), nm + " key: six pages and the scenarios pages");
+    ok(r.status === 200 && r.headers.get("X-Brief-Pages") === "7" && /Scenarios/.test(text(h)), nm + " key: seven pages and the scenarios pages");
     ok(!/INTERNAL|NOT FOR CLIENTS/i.test(h), nm + " key: no internal strip");
   }
 }
@@ -181,7 +181,7 @@ console.log("page counts by data availability");
 console.log("what the pages say");
 {
   const d = await build(mkInv3(mkRec()), { client: "Najjuko" });
-  const t = text(d.html), p3 = text(d.html.split('class="sheet page')[3]), p4 = text(d.html.split('class="sheet page')[4]), p5 = text(d.html.split('class="sheet page')[5]), p6 = text(d.html.split('class="sheet page')[6]);
+  const t = text(d.html), p3 = text(d.html.split('class="sheet page')[4]), p4 = text(d.html.split('class="sheet page')[5]), p5 = text(d.html.split('class="sheet page')[6]), p6 = text(d.html.split('class="sheet page')[7]);
   ok(!EMOJI.test(d.html), "no emoji code points");
   ok(!BANNED.test(t), "none of the banned words appear (" + (BANNED.exec(t) || [""])[0] + ")");
   ok(/The investor decision/.test(p3) && /Income/.test(p3) && /Growth/.test(p3) && /Liquidity/.test(p3) && /Supply/.test(p3) && /Most activity/.test(p3), "page 3: the five boxes");
@@ -215,7 +215,7 @@ console.log("what the pages say");
   ok(/Where the return comes from/.test(p5) && /of the modeled gain comes from the sale price/.test(p5) && /Gross yield \(rent over price\)/.test(p5) && /Cash return before service charges/.test(p5), "page 5: where the return comes from and the waterfall");
   ok(!/Net income/i.test(p5 + p6), "no 'Net income' anywhere: it is 'Income after vacancy and management'");
   const noSvcRec = mkRec(); noSvcRec.svc = { n: 0, of: 5 };
-  const dn = await build(mkInv3(noSvcRec)), pn = dn.html.split('class="sheet page'), q5 = text(pn[5]), q6 = text(pn[6]);
+  const dn = await build(mkInv3(noSvcRec)), pn = dn.html.split('class="sheet page'), q5 = text(pn[6]), q6 = text(pn[7]);
   ok(q5.includes(WARN_SVC) && q6.includes(NA_SVC) && /before service charges/.test(q5), "no service charge on the register: the warning strip and NOT AVAILABLE");
   ok(!/Service charge[^A-Za-z]{0,12}(AED )?0\b/.test(q5 + q6) && !/Less service charge/.test(q6), "and never a printed 0 service charge");
   ok(/If the service charge were/.test(q6) && /15 \(illustrative\)/.test(q6) && /20 \(illustrative\)/.test(q6) && /not register data/.test(q6), "page 6: the service charge sensitivity, 15 and 20 labelled illustrative when the register has none");
@@ -256,6 +256,28 @@ console.log("v351.1: headline basis, thin series, cap");
   ok(/933/.test(d) && /6\.4%/.test(d) && /1,507 rent contracts/.test(d) && !/>962</.test(d), "page 3 headline: 933 sales, 6.4%, 1,507 contracts (the index figures)");
   ok(/\+10\.0%/.test(d) && /1,022 sales in 2025/.test(d), "page 3 growth and last-year sales follow the page 1 series");
   ok(/small differences between the pages are normal/.test(d), "page 3 says the later figures are a recount");
+}
+console.log("v353: the executive summary is page 1, only when there is a record");
+{
+  const d = await build(mkInv3(mkRec()), { client: "Najjuko" });
+  const sheets = d.html.split('class="sheet page'), s1 = text(sheets[1]), s2 = text(sheets[2]), s3 = text(sheets[3]);
+  ok(d.pages === 7 && /Page 1\s+executive summary/i.test(s1), "seven pages; page 1 is the executive summary");
+  ok(/Should you invest here\? What the register says/.test(s1) && /Reading:/.test(s1), "page 1: the title and the reading chip");
+  ok(/Three reasons the register supports a closer look/.test(s1) && /Three reasons for caution/.test(s1) && /What would change this view/.test(s1) && /Questions to ask before buying/.test(s1) && /Where to find the evidence/.test(s1), "page 1: reasons, cautions, changers, questions, pointers");
+  ok(/How this reading is made/.test(s1) && /No score, no model/.test(s1) && /not a forecast, not a promised return, not financial advice and not an offer/.test(s1), "page 1: the one-line method note and the disclaimer");
+  ok(/Page 2\s+the headline case/i.test(s2) && /Investor summary/.test(s2) && /Page 3\s+the supporting figures/i.test(s3), "the old pages 1 and 2 are now pages 2 and 3");
+  ok(/Price history chart: page 2/.test(s1) && /unit types: page 4/.test(s1) && /off-plan: page 5/.test(s1) && /Scenarios: page 6, workings: page 7/.test(s1), "the pointers name the pages that exist");
+  ok(/Page 1 of 7/.test(s1) && /Page 2 of 7/.test(s2), "footers count to seven");
+  const p4t = text(sheets[4]);
+  ok(/This page is about/.test(p4t) && /Page 5 splits off-plan/.test(p4t) && /pages 2 and 3/.test(p4t), "the decision page points at the shifted page numbers");
+  ok(!EMOJI.test(sheets[1]) && !BANNED.test(s1) && !/\b(AI|KV)\b/.test(s1), "page 1: no emoji, no banned words");
+  const noScen = mkRec(); noScen.size_sqft = null;
+  const d5 = await build(mkInv3(noScen, Object.assign({}, AREA3, { size_sqft: null })));
+  ok(d5.pages === 5 && !/Scenarios: page/.test(text(d5.html.split('class="sheet page')[1])) && !/page undefined/.test(d5.html), "no scenarios: the summary does not point at pages that are not there");
+  const none = await build(null);
+  ok(none.pages === 2 && !/Should you invest here|executive summary/i.test(none.html) && /Page 1 &middot; the headline case/.test(none.html), "no record: no summary, the headline page is still page 1 of 2");
+  const wrongPair = await build({ meta: META, dubai: DUBAI, areas: { testvillagecircle: AREA3 }, pairs: { "testvillagecircle|other": mkRec() } });
+  ok(wrongPair.pages === 2 && !/executive summary/i.test(wrongPair.html), "a record without this pair: no summary");
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

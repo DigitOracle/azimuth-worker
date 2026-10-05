@@ -137,7 +137,7 @@ function fiveBoxes(rec, area, f, m) {
   // LIQUIDITY
   const hr = rec.head && rec.head.rows ? rec.head.rows.find((r) => r.year === f.lastFull) : null;
   const lastN = hr ? hr.sales : rec.price_y && rec.price_y[f.lastFull] ? rec.price_y[f.lastFull][0] : null;
-  const liqBox = box("chart-donut", "Liquidity", fmt(rec.sales_l12) + " <small>sales, last 12 months</small>", '<div class="i3cap">' + (lastN ? fmt(lastN) + " sales in " + f.lastFull + ". " : "") + "The register does not say who sold to whom, so resale against first sale is not shown. Page 4 splits off-plan from existing-property registrations.</div>", 2);
+  const liqBox = box("chart-donut", "Liquidity", fmt(rec.sales_l12) + " <small>sales, last 12 months</small>", '<div class="i3cap">' + (lastN ? fmt(lastN) + " sales in " + f.lastFull + ". " : "") + "The register does not say who sold to whom, so resale against first sale is not shown. Page " + (4 + (PGOFF || 0)) + " splits off-plan from existing-property registrations.</div>", 2);
   // SUPPLY
   let sup;
   if (S && S.homes) {
@@ -193,10 +193,12 @@ function irrCards(f) {
   const scope = b.level === "developer" ? "this developer in this area" : "all homes in this area";
   return card("calculator", "Past five-year windows: the annualised return (IRR) a buyer at the median would have had", '<div class="i3rps">' + b.pick.map((w, i) => one(lab[i], w)).join("") + '</div><div class="i3cap">' + "Of " + (b.count + b.skipped.length) + " five-year windows with price data for " + scope + ", " + b.count + (b.count === 1 ? " has" : " have") + " a complete rent series and " + (b.count === 1 ? "is" : "are") + " shown" + (b.skipped.length ? " (" + b.skipped.length + " left out for missing rent years)" : "") + ". Bought at the median price per sq ft of the first year plus the 4% Dubai Land Department transfer fee, the median rent each year" + (b.svcKnown ? " less the register service charge held at today's figure" : ", before service charges (none on the register for these buildings)") + ", sold at the median of the fifth year. " + BACKTEST_NOTE + "</div>");
 }
+let PGOFF = 0;   // v353: pages after the executive summary are numbered one higher
 export function page3(C, m, rec, area, dubai, meta) {
+  PGOFF = C.pgOff || 0;
   rec = headRec(rec, m);
   const f = figures(rec, area, dubai, meta), areaName = esc(C.names.plain);
-  const title = '<div class="i3title"><h1 class="serif" style="font-size:21px;margin:0">The investor decision. Where the register shows: ' + esc(shortName(m.name, 30)) + " in " + areaName + '</h1><div class="i3cap">Past registered figures to ' + esc(dateLong(m.asOf)) + ". Sales counted as on pages 1 and 2, including registered delayed sales. Headline sales, yield, price and growth are as on pages 1 and 2; the unit types, spread, buildings and later pages are a full recount of the register, so small differences between the pages are normal.</div></div>";
+  const title = '<div class="i3title"><h1 class="serif" style="font-size:21px;margin:0">The investor decision. Where the register shows: ' + esc(shortName(m.name, 30)) + " in " + areaName + '</h1><div class="i3cap">Past registered figures to ' + esc(dateLong(m.asOf)) + ". Sales counted as on pages " + (1 + PGOFF) + " and " + (2 + PGOFF) + ", including registered delayed sales. Headline sales, yield, price and growth are as on pages " + (1 + PGOFF) + " and " + (2 + PGOFF) + "; the unit types, spread, buildings and later pages are a full recount of the register, so small differences between the pages are normal.</div></div>";
   const disc = '<div class="i3disc"><b>Please read.</b> Past figures only: no forecast, no promised return, not financial advice and not an offer. Vacancy, management fees, other running costs and any loan are not in any register; add your own. A developer\'s figures cover the buildings the register attributes to it in this area. Check each property and your own circumstances with a licensed adviser before buying.</div>';
   return devStrip(m, C) + title + fiveBoxes(rec, area, f, m) + unitCards(rec) + '<div class="i3two">' + spreadCard(rec) + netCard(rec, f) + '</div><div class="i3two">' + replayCards(f) + irrCards(f) + "</div>" + disc;
 }
