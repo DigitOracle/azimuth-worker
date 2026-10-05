@@ -58,19 +58,48 @@ export function replay(rec, area, dubai) {
 }
 
 // ---- page 5: a scenario on stated assumptions. a = { price, feeTransfer, feeOther, rent0, rentGrowth, svc, vacancy, mgmt, growth, years, sellCost }
+// Per year: rent; less vacancy; less management; = INCOME AFTER VACANCY AND MANAGEMENT (inc); less the service charge (sv, 0 when the register has none: the caller says so);
+// = net (what the owner keeps). Identities used by the page and the tests:
+//   profit = totalOut - totalIn, where totalIn = cash0 (price + buying costs) and totalOut = rent kept over the hold (cum) + sale value less selling cost (exitNet)
+//   gain split (before buying and selling costs): rent share = cumInc / (cumInc + appreciation), exit share = appreciation / (cumInc + appreciation), appreciation = exitGross - price
 export function scenario(a) {
   const n = a.years || 5, cfs = [], rows = [];
   const cash0 = a.price * (1 + a.feeTransfer + a.feeOther);
   cfs.push(-cash0);
-  let cum = 0;
+  let cum = 0, cumInc = 0, cumRent = 0;
   for (let t = 1; t <= n; t++) {
     const rent = a.rent0 * Math.pow(1 + a.rentGrowth, t - 1), vac = rent * a.vacancy, mg = rent * a.mgmt, sv = a.svc || 0;
-    const net = rent - vac - mg - sv; cum += net;
-    rows.push({ year: t, rent, vac, mg, sv, net });
+    const inc = rent - vac - mg, net = inc - sv; cum += net; cumInc += inc; cumRent += rent;
+    rows.push({ year: t, rent, vac, mg, inc, sv, net });
     cfs.push(net);
   }
-  const exitGross = a.price * Math.pow(1 + a.growth, n), exitNet = exitGross * (1 - a.sellCost);
+  const exitGross = a.price * Math.pow(1 + a.growth, n), exitNet = exitGross * (1 - a.sellCost), sellCost = exitGross - exitNet;
   cfs[n] += exitNet;
-  return { cash0, rows, cum, exitGross, exitNet, cfs, irr: irr(cfs), cashOnCash1: rows[0].net / cash0, netYield1: rows[0].net / a.price };
+  const totalOut = cum + exitNet, profit = totalOut - cash0, appreciation = exitGross - a.price, gainBase = cumInc + appreciation;
+  const split = gainBase > 0 && appreciation >= 0 ? { rent: cumInc / gainBase, exit: appreciation / gainBase } : null;
+  return { cash0, rows, cum, cumInc, cumRent, exitGross, exitNet, sellCost, totalIn: cash0, totalOut, profit, appreciation, split, cfs, irr: irr(cfs),
+    cashOnCash1: rows[0].net / cash0, incomeReturn1: rows[0].inc / cash0, netYield1: rows[0].net / a.price, grossYield: a.rent0 / a.price, afterCostsYield: rows[0].inc / a.price };
 }
 export const annual = (change, years) => Math.pow(1 + change, 1 / (years || 5)) - 1;
+
+// The four price-growth cases of page 5 and the strips under them. base = the scenario inputs without growth; hist/lower/upper are the register's past five-year changes.
+export const CASE_GROWTH = { stress: 0, moderate: 0.03, firm: 0.06 };
+export function cases(base, rp) {
+  const run = (g, extra) => Object.assign({ g, r: scenario(Object.assign({}, base, { growth: g })) }, extra || {});
+  const mk = (w) => run(annual(w.change, 5), { w });
+  const hist = mk(rp.mid);
+  return {
+    stress: run(CASE_GROWTH.stress), moderate: run(CASE_GROWTH.moderate), firm: run(CASE_GROWTH.firm), hist,
+    lower: mk(rp.slow), upper: mk(rp.fast),
+    vac: [0, 0.05, 0.10].map((v) => ({ v, irr: scenario(Object.assign({}, base, { growth: hist.g, vacancy: v })).irr })),
+    gro: [-0.02, 0, 0.02].map((d) => ({ d, g: hist.g + d, irr: scenario(Object.assign({}, base, { growth: hist.g + d })).irr })),
+  };
+}
+// service charge sensitivity: AED per sq ft (0, 15, 20 illustrative; plus the register's own figure when held), year-one cash return and five-year IRR of the historical case
+export function svcSensitivity(base, size, growth, registerPsf) {
+  const rows = [{ psf: 0, kind: "illustrative" }, { psf: 15, kind: "illustrative" }, { psf: 20, kind: "illustrative" }];
+  if (registerPsf != null && !rows.some((r) => Math.abs(r.psf - registerPsf) < 0.05)) rows.push({ psf: registerPsf, kind: "register" });
+  else if (registerPsf != null) rows.forEach((r) => { if (Math.abs(r.psf - registerPsf) < 0.05) r.kind = "register"; });
+  rows.sort((a, b) => a.psf - b.psf);
+  return rows.map((r) => { const x = scenario(Object.assign({}, base, { growth, svc: r.psf * size })); return Object.assign({}, r, { cash1: x.cashOnCash1, irr: x.irr, svc: r.psf * size }); });
+}

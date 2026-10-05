@@ -12,7 +12,7 @@ import { DM } from "./devmap_dm.js";
 import { kvJson } from "./brief.js";
 import { BRIEF_KIT, esc } from "./brief_docs.js";
 import { icon, secHead, outlinePanels, windowIndex, loadData, loadMapData, blocksPicture, dateLong, shortName, EXTRA_CSS } from "./devmap_pdf.js";
-import { page3, page4, page5, scenarioSet, I3_CSS } from "./devmap_investor3.js";   // v351 - pages 3 to 5, built from the precomputed record img_investor3
+import { page3, page4, page5, page6, scenarioSet, I3_CSS } from "./devmap_investor3.js";   // v351 - pages 3 to 5, built from the precomputed record img_investor3
 
 const { NAVY, MUTED } = BRIEF_KIT;
 const TEAL = "#0A4F4A", GOLDI = "#C5A56A", INK = "#22262B", HAIR = "#E6E1D8";
@@ -394,6 +394,7 @@ export async function buildInvestorPdf(env, p, opts) {
       if (hasEvidence) extra.push(["Page 4 &middot; the evidence", page4(C, m, rec, ar3, dub, meta)]);
       const S = scenarioSet(rec, ar3, dub, meta, m);
       if (S) extra.push(["Page " + (3 + extra.length) + " &middot; scenarios", page5(C, m, S)]);
+      if (S) extra.push(["Page " + (3 + extra.length) + " &middot; scenario workings", page6(C, m, S)]);
     } catch (e) { extra.length = 0; }   // a record that cannot be drawn leaves the two pages as they were
   }
   const total = 2 + extra.length;
