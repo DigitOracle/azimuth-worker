@@ -186,8 +186,8 @@ function cachePut(a){try{localStorage.setItem("devmap_sl",JSON.stringify(a))}cat
 var saveT=null;
 // v361 - curated project names a developer is found by. Attached to ONE developer key each (never a bare substring rule), so
 // Shamal Estates (register id 1273, DAMAC Bay) and Lootah Real Estate Investement (id 876) are not merged into Lootah Real Estate Development (id 37).
-// Key = DM devKey of the register name: "Lootah Real Estate Development" -> "lootah".
-var DEV_TAGS={lootah:["Lootah","Lootah Real Estate","Shamal","Shamal Waves","Shamal Terraces","Shamal Residences","Loci","Living Garden"]};
+// Key = DM devKey of the register name: "Lootah Real Estate Development" -> "lootah-real-estate-development" (the key live img_devmap_index uses).
+var DEV_TAGS={"lootah-real-estate-development":["Lootah","Lootah Real Estate","Shamal","Shamal Waves","Shamal Terraces","Shamal Residences","Loci","Living Garden"]};
 function tagMatch(k,q){var t=DEV_TAGS[k];if(!t||!IDX.devs[k]||q.length<3)return [];var hit=t.filter(function(x){return x.toLowerCase().indexOf(q)>=0&&!/^lootah/i.test(x)});
   return hit.filter(function(x){return !hit.some(function(y){return y!==x&&x.toLowerCase().indexOf(y.toLowerCase()+" ")===0})})}
 function mineList(){return Object.keys(S.mine).filter(function(k){return S.mine[k]})}

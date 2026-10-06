@@ -15,7 +15,7 @@ const resExpr = (src.match(/var tagHit=\{\},res=[^\n]*?:\[\];/) || [""])[0];
 ok(tagBlock && resExpr, "tag map, matcher and result filter are in the page script");
 const IDX = { devs: {
   nshama: { name: "Nshama", n: 900 },
-  lootah: { name: "Lootah Real Estate Development", n: 40 },
+  "lootah-real-estate-development": { name: "Lootah Real Estate Development", n: 40 },
   "shamal estates": { name: "Shamal Estates", n: 300 },
   "lootah investement": { name: "Lootah Real Estate Investement", n: 20 },
   emaar: { name: "Emaar Properties", n: 5000 } } };
@@ -26,20 +26,20 @@ function run(q, mine = {}) {
   return ctx.out;
 }
 console.log("search");
-ok(run("shama").res.join() === "nshama,shamal estates,lootah", "'shama': Nshama and Shamal Estates by name first (by size), Lootah after by project");
-ok(run("shama").tagHit.lootah.join() === "Shamal", "'shama' shows the project line 'Shamal' on Lootah");
-for (const w of ["shamal", "shamal waves", "shamal terraces", "shamal residences", "loci", "living garden", "lootah", "lootah real estate"]) ok(run(w).res.includes("lootah"), "'" + w + "' finds Lootah Real Estate Development");
-ok(run("shamal").tagHit.lootah.join() === "Shamal" && run("shamal w").tagHit.lootah.join() === "Shamal Waves", "the project line names the project matched ('shamal w' gives Shamal Waves)");
-ok(run("loci").tagHit.lootah.join() === "Loci" && run("living").tagHit.lootah.join() === "Living Garden", "Loci and Living Garden show their own names");
+ok(run("shama").res.join() === "nshama,shamal estates,lootah-real-estate-development", "'shama': Nshama and Shamal Estates by name first (by size), Lootah after by project");
+ok(run("shama").tagHit["lootah-real-estate-development"].join() === "Shamal", "'shama' shows the project line 'Shamal' on Lootah");
+for (const w of ["shamal", "shamal waves", "shamal terraces", "shamal residences", "loci", "living garden", "lootah", "lootah real estate"]) ok(run(w).res.includes("lootah-real-estate-development"), "'" + w + "' finds Lootah Real Estate Development");
+ok(run("shamal").tagHit["lootah-real-estate-development"].join() === "Shamal" && run("shamal w").tagHit["lootah-real-estate-development"].join() === "Shamal Waves", "the project line names the project matched ('shamal w' gives Shamal Waves)");
+ok(run("loci").tagHit["lootah-real-estate-development"].join() === "Loci" && run("living").tagHit["lootah-real-estate-development"].join() === "Living Garden", "Loci and Living Garden show their own names");
 console.log("no merging");
 ok(!run("shamal waves").res.includes("shamal estates") && !run("loci").res.includes("shamal estates"), "Shamal Estates (id 1273) does not appear for a Lootah project name");
 ok(!run("loci").res.includes("lootah investement") && !run("shamal waves").res.includes("lootah investement"), "Lootah Real Estate Investement (id 876) does not get the Lootah project tags");
-ok(!run("shamal estates").res.includes("lootah"), "'shamal estates' does not pull in Lootah");
+ok(!run("shamal estates").res.includes("lootah-real-estate-development"), "'shamal estates' does not pull in Lootah");
 ok(!run("shamal").tagHit["shamal estates"] && !run("shamal").tagHit["lootah investement"], "tags are attached to the Lootah key only");
-ok(run("lootah").res.includes("lootah investement") && !run("lootah").tagHit.lootah, "'lootah' still lists both Lootah developers by name, with no project line for a name match");
-ok(!run("sh").res.includes("lootah") && run("sha").res.includes("lootah"), "two letters do not trigger tags; three do");
-ok(!run("shamal", { lootah: true }).res.includes("lootah"), "a developer already chosen is not offered again");
-ok(!run("emaar").res.includes("lootah"), "an unrelated query is unaffected");
+ok(run("lootah").res.includes("lootah investement") && !run("lootah").tagHit["lootah-real-estate-development"], "'lootah' still lists both Lootah developers by name, with no project line for a name match");
+ok(!run("sh").res.includes("lootah-real-estate-development") && run("sha").res.includes("lootah-real-estate-development"), "two letters do not trigger tags; three do");
+ok(!run("shamal", { "lootah-real-estate-development": true }).res.includes("lootah-real-estate-development"), "a developer already chosen is not offered again");
+ok(!run("emaar").res.includes("lootah-real-estate-development"), "an unrelated query is unaffected");
 console.log("page");
 const html = await devmapHtml("k", { clientOk: () => true, keyTier: () => "t", najNav: () => "", NAJ_NAV_CSS: "", NAJ_FONTS: "", clientResp: (h) => h });
 const text = typeof html === "string" ? html : (html && html.body) || (html && typeof html.text === "function" ? await html.text() : "");
