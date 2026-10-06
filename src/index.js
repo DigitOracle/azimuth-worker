@@ -1,4 +1,5 @@
-import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
+import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
+import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { templateRoutes, feedTemplateFlag } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
@@ -1232,7 +1233,7 @@ async function schedFiledKeys(env) {
 }
 // v356 - read a picture once for dated events and ask before filing. Returns true when it answered her.
 // forced: her caption says it is a schedule, so "nothing found" is answered; otherwise a picture that is not clearly a schedule returns false and the old behaviour carries on.
-async function schedImageTry(env, from, msgId, bytes, mime, forced) {
+async function schedImageTry(env, from, msgId, bytes, mime, forced, intake) {   // intake (v370): "photo" when her caption names an event, so what is filed is tagged speaking_engagement
   let clean = null;
   try {
     const g = await claudeJSON(env, schedPrompt(gstNowIso(), dateHints()), [{ type: "image", source: { type: "base64", media_type: mime || "image/jpeg", data: b64of(bytes) } }, { type: "text", text: "List the dated events in this picture." }], SCHED_SCHEMA, CLAUDE_SMART, 2000);
@@ -1242,14 +1243,32 @@ async function schedImageTry(env, from, msgId, bytes, mime, forced) {
     if (forced) { await waSend(env, from, SCHED_MSG.none); return true; }
     return false;
   }
+  await schedOffer(env, from, msgId, clean.events, intake || null);
+  return true;
+}
+// v370 - the confirm card (Add all / No thanks), shared by the picture route and the typed "event ..." route
+async function schedOffer(env, from, msgId, events, intake) {
   const id = rid();
-  await env.MEETINGS.put("imgsched_" + id, JSON.stringify({ from, events: clean.events, at: Date.now() }), { expirationTtl: SCHED_TTL });
+  await env.MEETINGS.put("imgsched_" + id, JSON.stringify({ from, events, at: Date.now(), intake: intake || null }), { expirationTtl: SCHED_TTL });
   const body = { messaging_product: "whatsapp", to: from, type: "interactive",
-    interactive: { type: "button", body: { text: schedCard(clean.events) }, action: { buttons: [
+    interactive: { type: "button", body: { text: schedCard(events) }, action: { buttons: [
       { type: "reply", reply: { id: "isc:" + id + ":y", title: "Add all" } },
       { type: "reply", reply: { id: "isc:" + id + ":n", title: "No thanks" } }] } } };
   if (msgId) body.context = { message_id: msgId };
   await waPost(env, body, "buttons");
+}
+// v370 - EVENT INTAKE by text: "event Panel on resilience, 14 Nov, 18:00, DIFC" (or a voice note that starts "event", already transcribed, or a forwarded message pasted after "event")
+// goes through the same extraction call as a picture, with text input, and shows the same confirm card before anything is filed.
+function evtTextMatch(text) { const m = /^\s*event\b[\s,:.\-]*([\s\S]*)$/i.exec(String(text || "")); return m ? m[1].trim() : null; }
+async function schedTextTry(env, from, msgId, rest, source) {
+  if (!rest) { await waSend(env, from, "To add an event, type: event, then the name, date, time and place."); return true; }
+  let clean = null;
+  try {
+    const g = await claudeJSON(env, schedPrompt(gstNowIso(), dateHints() + " This is typed or forwarded text, not a picture."), String(rest).slice(0, 2000), SCHED_SCHEMA, CLAUDE_SMART, 1500);
+    clean = schedSanitise(g, gstDateStr(gstNow()));
+  } catch (e) { clean = null; }
+  if (!clean || !clean.events.length) { await waSend(env, from, "I could not find a date in that. Type: event, then the name, date, time and place."); return true; }
+  await schedOffer(env, from, msgId, clean.events, source || "text");
   return true;
 }
 // v356 - her tap on the schedule card
@@ -1263,7 +1282,8 @@ async function schedTap(env, from, bid) {
   let n = 0, skipped = 0;
   for (const e of pend.events) {
     const ev = schedToMeeting(e);
-    ev.source = "whatsapp"; ev.src = { type: "captured", channel: "whatsapp-schedule-photo" };
+    ev.source = "whatsapp"; ev.src = { type: "captured", channel: pend.intake ? "whatsapp-event-intake" : "whatsapp-schedule-photo" };
+    if (pend.intake) ev.tag = "speaking_engagement";   // v370 - the meeting record is free JSON; the tag rides on it
     if (!ev.location) delete ev.location;
     ev.location = ev.location || "";
     const k = schedKey(ev);
@@ -1271,6 +1291,14 @@ async function schedTap(env, from, bid) {
     have.add(k);
     await fileMeetingEvent(env, ev);
     n++;
+    if (pend.intake) {   // v370 - the engagement list, in KV najj_events (only after her yes tap)
+      try {
+        let L = []; try { L = JSON.parse((await env.MEETINGS.get("najj_events")) || "[]") || []; } catch (e) {}
+        if (!Array.isArray(L)) L = [];
+        L.push({ title: e.title, date: e.date, time: e.time || "", place: e.place || "", note: e.note || "", source: pend.intake === "photo" || pend.intake === "forward" ? pend.intake : "text", at: new Date().toISOString() });
+        await env.MEETINGS.put("najj_events", JSON.stringify(L.slice(-200)));
+      } catch (e2) {}
+    }
   }
   if (!n) await waSend(env, from, SCHED_MSG.already);
   else await waSend(env, from, SCHED_MSG.added(n) + (skipped ? " " + skipped + (skipped === 1 ? " was" : " were") + " already there." : ""));
@@ -2229,6 +2257,21 @@ async function appFetch(request, env, ctx) {
       if (!_intro || _intro.length > 900) return new Response("intro required, max 900 characters", { status: 400 });
       const _r = await planAsk(env, _intro, url.searchParams.get("dry") !== "0");
       return new Response(JSON.stringify(_r, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
+    if (url.pathname === "/ask_set" && request.method === "POST") {   // v370 - owner key; recipient is env.WA_ALLOWED and nothing else; dry unless dry=0; the questions are constants in src/ask_sets.js
+      if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      let _ab = {}; try { _ab = await request.json(); } catch (e) { return new Response("json body required", { status: 400 }); }
+      const _view = _ab && typeof _ab.set === "string" && typeof _ab.part === "string" && Object.prototype.hasOwnProperty.call(NS_SETS, _ab.set) ? nsPartView(_ab.set, _ab.part) : null;
+      if (!_view) return new Response("unknown set or part", { status: 400 });
+      let _ai = _view.intro;
+      if (_ab.intro !== undefined) { _ai = typeof _ab.intro === "string" ? _ab.intro.trim() : ""; if (!_ai || _ai.length > 900) return new Response("intro must be a string, 1 to 900 characters", { status: 400 }); }
+      const _ar = await nsAsk(env, _view, _ai, url.searchParams.get("dry") !== "0");
+      return new Response(JSON.stringify(_ar, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
+    if (url.pathname === "/intake_status") {   // v370 - events=1 returns the engagement list instead
+      if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      const _ev = url.searchParams.get("events") === "1";
+      return new Response((await env.MEETINGS.get(_ev ? "najj_events" : "najj_intake")) || (_ev ? "[]" : "{}"), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
     }
     if (url.pathname === "/plan_status") {   // v367
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -3689,6 +3732,7 @@ async function appFetch(request, env, ctx) {
         try { await env.MEETINGS.put("wa_owner_last_in", new Date().toISOString(), { expirationTtl: 3 * 86400 }); } catch (e) {}   // v137 - opens ownerNotify's 24-hour window
         try { if (await env.MEETINGS.get("mkt_feed_pending")) { const _fl = feedFlush(env); if (ctx && ctx.waitUntil) ctx.waitUntil(_fl); else await _fl; } } catch (e) {}   // v186 - she wrote back: the held morning goes now
         try { if (await env.MEETINGS.get("plan_pending")) { const _pf = planFlush(env); if (ctx && ctx.waitUntil) ctx.waitUntil(_pf); else await _pf; } } catch (e) {}   // v367 - she wrote back: the queued plan questions go now
+        try { if (await env.MEETINGS.get("ns_pending")) { const _nf = nsFlush(env); if (ctx && ctx.waitUntil) ctx.waitUntil(_nf); else await _nf; } } catch (e) {}   // v370 - and the queued questionnaire part
         if (env.OWNER_TEMPLATE && env.APPROVED_SEND) {                 // v155 - approved sends: "show <ref>" and the Send / Discard buttons
           const _sm = msg.type === "text" && msg.text && String(msg.text.body || "").trim().match(/^show\s+([A-Z0-9]{6})$/i);
           if (_sm) { await sendReqShow(env, from, _sm[1].toUpperCase()); return new Response("ok"); }
@@ -3698,6 +3742,7 @@ async function appFetch(request, env, ctx) {
         if (msg.type === "interactive" && msg.interactive && (msg.interactive.button_reply || msg.interactive.list_reply)) {
           const bid = (msg.interactive.button_reply && msg.interactive.button_reply.id) || (msg.interactive.list_reply && msg.interactive.list_reply.id) || "";
           if (bid.indexOf("plan_") === 0 && await planReply(env, from, bid)) return new Response("ok");   // v367 - her plan answers
+          if (bid.indexOf("ns_") === 0 && await nsReply(env, from, bid)) return new Response("ok");   // v370 - questionnaire answers
           if (bid.indexOf("fit:") === 0 && await fitButton(env, from, bid, fitDeps())) return new Response("ok");   // v328 - FIT: Undo on a logged entry, Extend on the 30-day verdict
           if (bid.indexOf("done:") === 0) { await env.MEETINGS.delete("act_" + bid.slice(5)); await waSend(env, from, "✅ Done — cleared from your plate."); }
           // v137 - buttons that used to live on Telegram: proposal cards and email meeting candidates
@@ -4095,7 +4140,7 @@ async function appFetch(request, env, ctx) {
               try {
                 const _lm = await waFetchMedia(env, msg.image.id);
                 if (_lm.bytes.byteLength > 4 * 1024 * 1024) { await waSend(env, from, "That one's a bit large - try a smaller copy."); return new Response("ok"); }
-                if (await schedImageTry(env, from, msg.id, _lm.bytes, _lm.mime, schedCaptionHit(_cap))) return new Response("ok");   // v356 - a poster of dated events is not "a photo of you"
+                if (await schedImageTry(env, from, msg.id, _lm.bytes, _lm.mime, schedCaptionHit(_cap) || eventCaptionHit(_cap), eventCaptionHit(_cap) ? "photo" : null)) return new Response("ok");   // v356 - a poster of dated events is not "a photo of you"
                 // v143 - ask before filing. A flyer or a screenshot is not a photo of her (two flyers were filed as her on 12 Sep).
                 // The question is sent as a reply to her picture, so with several at once each question sits under its own photo.
                 const _qt = rid();
@@ -4169,7 +4214,7 @@ async function appFetch(request, env, ctx) {
           try {
             const _img2 = await waFetchMedia(env, msg.image.id);
             if (_img2.bytes.byteLength > 4 * 1024 * 1024) { await waSend(env, from, "That photo is a bit large to read — try a smaller one."); return new Response("ok"); }
-            if (await schedImageTry(env, from, msg.id, _img2.bytes, _img2.mime, schedCaptionHit(_cap))) return new Response("ok");   // v356 - dated events in the picture: confirm, then file. Anything else falls through to the old reading below.
+            if (await schedImageTry(env, from, msg.id, _img2.bytes, _img2.mime, schedCaptionHit(_cap) || eventCaptionHit(_cap), eventCaptionHit(_cap) ? "photo" : null)) return new Response("ok");   // v356 - dated events in the picture: confirm, then file. Anything else falls through to the old reading below.
             const _rd = await readPhoto(env, _img2.bytes, _img2.mime, _cap);
             if (await fitPhotoRead(env, from, _rd, _cap, fitDeps())) return new Response("ok");   // v328 - a meal: logged, and the picture is dropped here (nothing below stores it)
             if (!_rd || _rd.kind === "nothing") {
@@ -4197,6 +4242,8 @@ async function appFetch(request, env, ctx) {
           if (_qn) { await qnFromWhatsApp(env, from, msg, _qn); return new Response("ok"); }
         }
         if (!text) { await waSend(env, from, "Send a meeting or task (text or voice) and I'll file it. \u{1F9ED}"); return new Response("ok"); }
+        if ((msg.type === "text" || msg.type === "audio") && await nsTextTry(env, from, text)) return new Response("ok");   // v370 - her one line after tapping Other
+        { const _er = evtTextMatch(text); if (_er !== null && await schedTextTry(env, from, msg.id, _er, msg.context && msg.context.forwarded ? "forward" : "text")) return new Response("ok"); }   // v370 - "event ..." by text, forward or voice note
         if ((fitIsJournalText(text) || /^\s*momo\b/i.test(text) || (msg.type === "audio" && /^\s*journal\b/i.test(text)) || !(await fitBusy(env, from))) && await fitWhatsAppText(env, from, text, fitDeps(), { voice: msg.type === "audio" })) return new Response("ok");   // an EXPLICIT journal line or "momo ..." is meant for Momo even while another flow waits for a free-text line: a private journal line must never be eaten as a meeting time   // v328 - FIT: "food: ...", "gym 45 min", "10k steps", "fit" (a voice note reaches here as text). Anything that is not food or exercise returns false and carries on below.
         {                                                                            // v147 - her one line for Change it on a scene picture
           const _se = await env.MEETINGS.get("scedit_" + from);
@@ -6691,6 +6738,73 @@ async function planReply(env, from, bid) {
   await env.MEETINGS.put("najj_plan", JSON.stringify(rec));
   await waSend(env, from, "Locked in: " + q.body.replace(/\?$/, "") + " - " + row.v + ".");
   if (rec.q1 && rec.q2 && rec.q3 && rec.q4) await waSend(env, from, PLAN_SIGNOFF_ALL);
+  return true;
+}
+// v370 - QUESTIONNAIRE ENGINE: /ask_set sends one part of a fixed set (src/ask_sets.js) as an intro text and WhatsApp lists; ns_<part>_<q>_<opt> row ids are answered by nsReply
+// into KV najj_intake {A:{q1:..},B:{..},C:{..},at}. Same guards as /plan_ask: recipient is env.WA_ALLOWED, a closed window sends the najma_feed_ready template and queues the part for 1 hour.
+// Parts never chain: the next part goes only when Kendall fires /ask_set for it. "Other" asks for one typed line (KV ns_other, 30 minutes) and stores her next message under that question.
+const NS_OTHER_MS = 30 * 60 * 1000;
+async function nsSendLists(env, to, view) {
+  for (const q of view.questions) await waSendList(env, to, q.body, q.button, q.rows.map(r => ({ id: r.id, title: r.title, description: r.description })));
+}
+async function nsAsk(env, view, intro, dry) {
+  const to = env.WA_ALLOWED;
+  const open = await ownerWindowOpen(env);
+  const plan = { to, set: view.set, part: view.part, window_open: open, intro, questions: view.questions.map(q => ({ body: q.body, button: q.button, rows: q.rows.map(r => ({ id: r.id, title: r.title, description: r.description || "" })) })),
+    path: open ? "intro text, then " + view.questions.length + " lists" : "template najma_feed_ready (no variables); intro and lists queued in KV ns_pending for 1 hour and sent when she replies" };
+  if (dry) return Object.assign({ dry: true }, plan);
+  if (!to || !env.WHATSAPP_TOKEN) return { ok: false, why: "unconfigured" };
+  if (open) {
+    const r = await waSend(env, to, intro);
+    if (!(r && r.ok)) return { ok: false, why: "intro refused", status: r && r.status };
+    await nsSendLists(env, to, view);
+    return { ok: true, sent: "intro + " + view.questions.length + " lists" };
+  }
+  await env.MEETINGS.put("ns_pending", JSON.stringify({ set: view.set, part: view.part, intro, at: Date.now() }), { expirationTtl: 3600 });
+  const n = await feedNudge(env, "A few quick questions", "Reply with anything here and I'll send them straight over.");
+  return { ok: !!n.ok, queued: true, nudge: n };
+}
+async function nsFlush(env) {
+  let p = null; try { p = JSON.parse((await env.MEETINGS.get("ns_pending")) || "null"); } catch (e) {}
+  if (!p || !p.intro || !NS_SETS[p.set]) return false;
+  await env.MEETINGS.delete("ns_pending");
+  const view = nsPartView(p.set, p.part); if (!view) return false;
+  const r = await waSend(env, env.WA_ALLOWED, p.intro);
+  if (!(r && r.ok)) return false;
+  await nsSendLists(env, env.WA_ALLOWED, view);
+  return true;
+}
+async function nsStore(env, from, view, q, value) {
+  let rec = {}; try { rec = JSON.parse((await env.MEETINGS.get("najj_intake")) || "{}") || {}; } catch (e) {}
+  const was = rec[view.part] && view.questions.every(x => rec[view.part][x.key]);
+  rec[view.part] = rec[view.part] || {}; rec[view.part][q.key] = value; rec.at = new Date().toISOString();
+  await env.MEETINGS.put("najj_intake", JSON.stringify(rec));
+  await waSend(env, from, "Locked in: " + q.label + " - " + value + ".");
+  if (!was && view.questions.every(x => rec[view.part][x.key])) {
+    await waSend(env, from, "Part " + view.part + " done, Black Coffee." + (view.done ? " " + view.done : "") + "\n\nCurated by Papi");
+  }
+}
+async function nsReply(env, from, bid) {
+  const f = nsFindRow(bid); if (!f) return false;
+  if (f.row.other) {
+    await env.MEETINGS.put("ns_other", JSON.stringify({ part: f.part, q: f.q.key, at: Date.now() }), { expirationTtl: 1800 });
+    await waSend(env, from, "Type it in one line.");
+    return true;
+  }
+  try { await env.MEETINGS.delete("ns_other"); } catch (e) {}
+  await nsStore(env, from, f.view, f.q, f.row.v);
+  return true;
+}
+// her next text (or transcribed voice note) after Other: stored under that question. Returns true when it took the message.
+async function nsTextTry(env, from, text) {
+  let o = null; try { o = JSON.parse((await env.MEETINGS.get("ns_other")) || "null"); } catch (e) {}
+  if (!o) return false;
+  if (!o.at || Date.now() - o.at > NS_OTHER_MS) { try { await env.MEETINGS.delete("ns_other"); } catch (e) {} return false; }
+  const view = nsPartView("najjesty_intake", o.part), q = view && view.questions.find(x => x.key === o.q);
+  const v = String(text || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+  if (!q || !v) return false;
+  await env.MEETINGS.delete("ns_other");
+  await nsStore(env, from, view, q, v);
   return true;
 }
 async function feedNudge(env, head, body) {

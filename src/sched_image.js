@@ -81,3 +81,5 @@ export const SCHED_MSG = {
   already: "Those were already on your plate.",
   added: (n) => "Added " + n + (n === 1 ? " event" : " events") + " to your plate."
 };
+// v370 - a caption that names a speaking engagement claims the picture and tags what is filed
+export function eventCaptionHit(cap) { return /\b(events?|speaking|panel|talk|keynote)\b/i.test(String(cap || "")); }
