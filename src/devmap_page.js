@@ -184,6 +184,12 @@ function other(ppsm){return S.unit==="sqft"?fmt(ppsm)+" per sq m":fmt(Math.round
 function cacheGet(){try{return JSON.parse(localStorage.getItem("devmap_sl")||"null")}catch(e){return null}}
 function cachePut(a){try{localStorage.setItem("devmap_sl",JSON.stringify(a))}catch(e){}}
 var saveT=null;
+// v361 - curated project names a developer is found by. Attached to ONE developer key each (never a bare substring rule), so
+// Shamal Estates (register id 1273, DAMAC Bay) and Lootah Real Estate Investement (id 876) are not merged into Lootah Real Estate Development (id 37).
+// Key = DM devKey of the register name: "Lootah Real Estate Development" -> "lootah".
+var DEV_TAGS={lootah:["Lootah","Lootah Real Estate","Shamal","Shamal Waves","Shamal Terraces","Shamal Residences","Loci","Living Garden"]};
+function tagMatch(k,q){var t=DEV_TAGS[k];if(!t||!IDX.devs[k]||q.length<3)return [];var hit=t.filter(function(x){return x.toLowerCase().indexOf(q)>=0&&!/^lootah/i.test(x)});
+  return hit.filter(function(x){return !hit.some(function(y){return y!==x&&x.toLowerCase().indexOf(y.toLowerCase()+" ")===0})})}
 function mineList(){return Object.keys(S.mine).filter(function(k){return S.mine[k]})}
 function saveMine(){cachePut(mineList());clearTimeout(saveT);saveT=setTimeout(function(){api("shortlist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({devs:mineList()})})},400)}
 function toggleMine(k){S.mine[k]=!S.mine[k];if(!S.mine[k])delete S.mine[k];saveMine();renderAll()}
@@ -233,8 +239,8 @@ function sideHtml(){
     var q=S.q.toLowerCase().trim(),mn=mineList().map(function(k){var d=IDX.devs[k];return{k:k,name:d?d.name:(DEFAULT_NAMES[k]||k),n:d?d.n:0,areas:d?d.areas:0}});
     mn.sort(function(a,b){return (b.areas>0)-(a.areas>0)||b.n-a.n});
     var chosenH=mn.map(function(x){var t=x.areas>0?devTier(x.k):-1;return '<div class=pk><span><a href="#" class=dlink data-k="'+esc(x.k)+'">'+esc(x.name)+'</a><span class=note style="display:block;margin:0">'+pickNote(x.k,x)+'</span></span>'+(t>=0?'<span class=tag style="background:'+TC[t]+'">'+tagText(x.k)+'</span>':'')+'<button type=button class="rm btn" data-k="'+esc(x.k)+'" aria-label="remove '+esc(x.name)+'">remove</button></div>'}).join("");
-    var res=q?Object.keys(IDX.devs).filter(function(k){return !S.mine[k]&&(IDX.devs[k].name.toLowerCase().indexOf(q)>=0||k.indexOf(q)>=0)}).sort(function(a,b){return IDX.devs[b].n-IDX.devs[a].n}).slice(0,20):[];
-    var resH=q?(res.length?res.map(function(k){var x=IDX.devs[k],t=devTier(k);return '<label class=pk><input type=checkbox data-k="'+esc(k)+'"><span>'+esc(x.name)+'<span class=note style="display:block;margin:0">add - '+pickNote(k,x)+' - <a href="#" class=dlink data-k="'+esc(k)+'">profile</a></span></span>'+(t>=0?'<span class=tag style="background:'+TC[t]+'">'+tagText(k)+'</span>':'')+'</label>'}).join(""):'<p class=note>No developer matches.</p>'):'';
+    var tagHit={},res=q?Object.keys(IDX.devs).filter(function(k){if(S.mine[k])return false;if(IDX.devs[k].name.toLowerCase().indexOf(q)>=0||k.indexOf(q)>=0)return true;var th=tagMatch(k,q);if(th.length){tagHit[k]=th;return true}return false}).sort(function(a,b){return (tagHit[a]?1:0)-(tagHit[b]?1:0)||IDX.devs[b].n-IDX.devs[a].n}).slice(0,20):[];
+    var resH=q?(res.length?res.map(function(k){var x=IDX.devs[k],t=devTier(k);return '<label class=pk><input type=checkbox data-k="'+esc(k)+'"><span>'+esc(x.name)+(tagHit[k]?'<span class=note style="display:block;margin:0">project: '+esc(tagHit[k].join(", "))+'</span>':'')+'<span class=note style="display:block;margin:0">add - '+pickNote(k,x)+' - <a href="#" class=dlink data-k="'+esc(k)+'">profile</a></span></span>'+(t>=0?'<span class=tag style="background:'+TC[t]+'">'+tagText(k)+'</span>':'')+'</label>'}).join(""):'<p class=note>No developer matches.</p>'):'';
     body='<div class=card><p class=label>My developers</p><p class=note id=cnt></p><div class=picks id=chosen>'+chosenH+'</div><button type=button id=reset class=btn style="margin-top:8px">Reset to Najjuko\'s ten</button></div><div class=card><p class=label>Add another developer</p><input type=search id=q placeholder="Type a developer name" value="'+esc(S.q)+'"><div class=picks id=picks>'+resH+'</div></div><p class=note>Your list is saved for your key, so it is the same on every device you open this link on. The tag is the market view where one is set, otherwise the price band most of its projects sit in. Price bands describe homes, not developers. Tap a name for its profile. Counts follow the window set on an area or a profile (now: '+(S.win==="l12"&&IDX.ev?'last 12 months':'all years')+').</p>';
   }else if(S.screen===2){
     var m=mineList();
