@@ -7,6 +7,7 @@ import { pillarsCard, buildingPillars, developerPillarsCard, normName as pillarN
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import { worldBackdrops, worldBackdrop, worldPlatePrompt, worldScenePrompt, worldPicSay, worldCardFields, worldPicSize } from "./world_pic.js";   // v164 - the Versus picture, made the way the morning pictures are made
 import { briefRoutes, briefStartCard, BRIEF_START_CSS } from "./brief_page.js";
+import { loadThread, threadView, communityPics, communityBlockHtml, districtSlugOfArea, renderSuffixOfKey, aboutHtml } from "./thread.js";   // v364 - thread reader + community picture slot
 import { startBody, START_CSS } from "./start_page.js";   // v278.1 - START redesign: the Brief, Contracts signed, Advertised supply (owner only)   // THE BRIEF (part B, 30 Sep 2026; v277 two-button 00 card) - the /brief screens and the 00 way in on /start
 import { ejariRoutes } from "./ejari_page.js";   // v279 CONTRACTS SIGNED (Ejari) - /contracts and /contracts_api; all logic in src/ejari_page.js (its START card is drawn by src/start_page.js)
 import { devmapPdfRoute } from "./devmap_pdf.js";   // v324 - the two Developers-by-area PDFs (snapshot, detailed)
@@ -3162,8 +3163,17 @@ async function appFetch(request, env, ctx) {
               if (_ar2 && _ar2.features) { const _f = _ar2.features.find(f => f.properties && f.properties.n === (sn.area && sn.area.area)); if (_f) _poly = _f.geometry; } } catch (e) {}
         return new Response(renderReport(sn, _tok, _poly), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
+      if (url.pathname.indexOf("/render/") === 0) {            // v364 - our own render (img_render_<name>), client key or owner key; the thread is never served
+        if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
+        const _rn = url.pathname.slice(8);
+        if (!/^[a-z0-9][a-z0-9-]{0,100}$/.test(_rn)) return new Response("not found", { status: 404 });
+        const _rb = await env.MEETINGS.get("img_render_" + _rn, "arrayBuffer");
+        if (!_rb || !_rb.byteLength) return new Response("not found", { status: 404 });
+        return new Response(_rb, { headers: { "Content-Type": (await env.MEETINGS.get("img_ct_render_" + _rn)) || "image/jpeg", "Cache-Control": "private, max-age=3600" } });
+      }
       if (url.pathname.indexOf("/img/") === 0) {               // v45 — serve a stored rendered image (public; WhatsApp fetches by link)
         const nm = url.pathname.slice(5).replace(/[^a-z0-9_]/gi, "");
+        if (nm.toLowerCase().indexOf("thread_") === 0) return new Response("not found", { status: 404 });   // v364 - the digital thread is never served
         // v279 (Kendall, 1 Oct 2026) - the new data is locked behind keys. ejari_* (img_ejari_*): the owner key or a client key, the
         // app pages' check; no key 401. pf_* (img_pf_supply_* and the like): the OWNER key only; a client key, or none, gets 404.
         // Everything else under /img/ stays keyless (the blocks, maps and brochure photos the pages and PDFs load). v279 ----
@@ -3365,6 +3375,14 @@ async function appFetch(request, env, ctx) {
           // WhatsApp share built from it would hand the owner key to the recipient.
           _bd.shareKey = clientKeysOf(env)[0] || "";
         } catch (e) {}
+        // v364 - our own render of this building, with the thread note: only where the render is stored (KV img_render_<key>); else nothing
+        try {
+          const _rs = renderSuffixOfKey(_bs + ":" + _bi);
+          if (_rs && await env.MEETINGS.get("img_ct_render_" + _rs)) {
+            const _rv = threadView(await loadThread(env, _rs));
+            _bd.renderPic = { url: "/render/" + _rs, caption: _rv ? _rv.caption : "Illustration &middot; Najma render", about: _rv ? aboutHtml(_rv, { dark: true }) : "" };
+          }
+        } catch (e) {}
         return clientResp(env, url, buildingPageHtml(_bd, url.searchParams.get("key") || "", residentsKeyOf(env, url)),
           { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
@@ -3421,7 +3439,7 @@ async function appFetch(request, env, ctx) {
       if (url.pathname.indexOf("/area/") === 0) {              // v50 — per-community deep dive (MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         let _an = ""; try { _an = decodeURIComponent(url.pathname.slice(6)); } catch (e) { _an = url.pathname.slice(6); }
-        return clientResp(env, url, renderArea(await env.MEETINGS.get("mkt_latest"), _an, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        return clientResp(env, url, renderArea(await env.MEETINGS.get("mkt_latest"), _an, url.searchParams.get("key") || "", communityBlockHtml(await communityPics(env, districtSlugOfArea(_an), 6), url.searchParams.get("key") || "")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/amenities") {                     // v58 — nearest POIs per community via geocoder category search; ONE paid call set per area, cached forever
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -11278,7 +11296,7 @@ function renderStock(slug, areaName, key, bfRaw, ancRaw, pfRaw, mktRaw) {
     najNav(key, "twin") + '</body></html>';
 }
 
-function renderArea(latestRaw, name, key) {
+function renderArea(latestRaw, name, key, picBlock) {
   let d = null; try { d = JSON.parse(latestRaw || "null"); } catch (e) {}
   const esc2 = (s) => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
   const ai = (d && d.areaIntel && d.areaIntel.areas) || [];
@@ -11290,7 +11308,7 @@ function renderArea(latestRaw, name, key) {
   const num2 = (v) => (v == null ? "—" : Number(v).toLocaleString("en-US"));
   const rooms = najRooms(a.byRoom);
   const rmax = Math.max(...rooms.map(r => r[1].medianAed || 0), 1);
-  let body = '<div class=grid>' +
+  let body = (picBlock || "") + '<div class=grid>' +
     '<div class=st><div class=v>' + num2(a.sales) + '</div><div class=l>settled sales</div></div>' +
     '<div class=st><div class=v>' + num2(a.medianAedSqft) + '<small>/sqft</small></div><div class=l>median (AED)</div></div>' +
     '<div class=st><div class=v>' + (a.medianTicketAed ? (a.medianTicketAed / 1e6).toFixed(2) + 'm' : '—') + '</div><div class=l>median ticket (AED)</div></div>' +
@@ -12107,7 +12125,7 @@ function residentsKeyOf(env, url) {
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
 const CLIENT_PATHS = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
-const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/"];   // v187 - a building page is a client page
+const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/", "/render/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
 const KEYLESS_PREFIXES = ["/img/", "/video/", "/r/"];
 function clientKeysOf(env) {

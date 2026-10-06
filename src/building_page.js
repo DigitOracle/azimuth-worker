@@ -331,6 +331,9 @@ export function buildingPageHtml(D, key, rk) {
           "</option>").join("") + "</select>" : "") +
       (D.plans ? '<button id=plansbtn>The plans · ' + D.plans.plans.length + "</button>" : "") +
       (D.dossier ? '<a id=dossbtn target=_blank rel=noopener href="' + esc(D.dossierUrl) + '">The dossier · PDF</a>' : "") +
+      // v364 - our own render of this building and its thread note (only when a render is stored)
+      (D.renderPic ? '<div class=rndfig style="margin:8px 0"><img src="' + esc(D.renderPic.url + '?key=' + K + RKQ) + '" alt="' + esc(D.name) + ' (illustration)" loading=lazy style="display:block;width:100%;height:auto;border-radius:4px">' +
+        '<div style="font-size:.7rem;color:#8FA39B;margin-top:3px">' + D.renderPic.caption + '</div>' + D.renderPic.about + '</div>' : "") +
       (D.let_ && D.let_.live ? '<div class=grp>Homes let</div>' +
         '<div class=letn><b>At least ' + fmt(D.let_.live) + '</b> ' + (D.let_.live === 1 ? "home" : "homes") +
         (D.let_.project ? ' across the ' + D.let_.buildings + ' buildings of ' + esc(D.let_.project) : " here") +

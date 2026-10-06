@@ -227,6 +227,7 @@ export function parseQuery(url) {
 }
 
 // ------------------------------------------------------------------------------------------------ data
+import { loadThread, threadView, aboutHtml, renderSuffixOfKey, communitySuffix, ABOUT_PRINT_CSS } from "./thread.js";   // v364 - the digital thread behind our own renders, and the community picture slot
 async function kvJson(env, name) { try { const t = await env.MEETINGS.get("img_" + name); return t ? JSON.parse(typeof t === "string" ? t : new TextDecoder().decode(t)) : null; } catch (e) { return null; } }
 // A picture for the document. With an origin (the live route) it is a link to the Worker's own public /img/ route, so a ten-building
 // pack stays a few hundred KB of HTML instead of megabytes of base64 pushed through the browser session; it is linked only when the
@@ -488,6 +489,18 @@ export async function loadContext(env, q, opts) {
   // v298 - OUR OWN RENDER (Kendall, 4 Oct 2026): KV img_render_<key with ":" as "-">, a plain image of our own making (CityEngine / Unreal /
   // Blender), no Google terms. Drawn after the photo and Street View, before the Blocks view, labelled "Illustration" - never a photograph.
   for (const r of C.recs) { r.renderPic = await kvPic(env, "render_" + String(r.key).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), opts && opts.origin); if (r.renderPic) r.picSource = r.picSource === "photo" || r.picSource === "street_view" ? r.picSource : "render"; }
+  // v364 - a register community (no app building, no footprint of its own) takes the community render
+  // img_render_community-<district>-<name>, and every render carries its thread (KV thread_<suffix>) for the "About this picture" note.
+  // No key in KV: nothing changes.
+  for (const r of C.recs) {
+    let suf = renderSuffixOfKey(r.key);
+    if (!r.renderPic && r.it && r.it.i == null && r.d && !(Array.isArray(r.it.fp) && r.it.fp.length)) {
+      const cs = communitySuffix(r.d, r.it.n);
+      const cp = cs ? await kvPic(env, "render_" + cs, opts && opts.origin) : null;
+      if (cp) { r.renderPic = cp; r.renderKind = "community"; suf = cs; r.picSource = r.picSource === "photo" || r.picSource === "street_view" ? r.picSource : "render"; }
+    }
+    if (r.renderPic) r.renderView = threadView(await loadThread(env, suf)) || (r.renderKind === "community" ? threadView({ kind: "render_community_illustration", caveats: ["illustration_not_as_built"] }) : null);
+  }
   // v291 - LIVE GOOGLE (src/live_answers.js): gym, community pool and dog park asked of Google now where every other source leaves them
   // not known - the home's own sub-community first, then the community; the same function and words as /brief_api. Never stored. It
   // runs alongside the Street View search below (and, for a document, alongside the amenity pages: opts.deferLive leaves it on C.live
@@ -645,10 +658,11 @@ function ownFigure(pic, w, h, alt) {
 // v298 - our own render: an illustration, never a photograph. "modelled from the plot polygon and as-built outline" only where the record
 // says so (it.render_basis === "plot_outline"); otherwise it claims nothing about being this building.
 const renderBasis = (rec) => rec.it && rec.it.render_basis === "plot_outline";
-const renderCaption = (rec) => "Illustration &middot; Najma render" + (renderBasis(rec) ? " &middot; modelled from the plot and as-built outline" : "");
+const renderCaption = (rec) => rec.renderKind === "community" ? (rec.renderView ? rec.renderView.caption : "Illustration &middot; Najma render &middot; not as built") : "Illustration &middot; Najma render" + (renderBasis(rec) ? " &middot; modelled from the plot and as-built outline" : "") + (rec.renderView && rec.renderView.estimate ? " &middot; heights are an estimate" : "");   // v364
 function renderFigure(rec, w, h) {
   return '<div class="renderpic" style="position:relative;width:' + r2(w) + "px;height:" + r2(h) + 'px;">' + fitImg(rec.renderPic, w, h, rec.name + " (illustration)") +
-    '<div style="position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,0.55);color:#FFF;font-size:8px;padding:1px 4px;border-radius:2px;">' + renderCaption(rec) + "</div></div>";
+    '<div style="position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,0.55);color:#FFF;font-size:8px;padding:1px 4px;border-radius:2px;">' + renderCaption(rec) + "</div>" +
+    (rec.renderView && w >= 400 ? ABOUT_PRINT_CSS + aboutHtml(rec.renderView, { float: true }) : "") + "</div>";   // v364 - tap-to-open note on the large figure only; hidden in print
 }
 function thumb(rec, w, h, C) {
   if (rec.ownPic) return ownFigure(rec.ownPic, w, h, rec.name);   // v291 CHECKLIST
