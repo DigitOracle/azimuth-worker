@@ -276,10 +276,13 @@ async function kvPic(env, name, origin) {
   if (!name) return null;
   try {
     const [buf, ct] = await Promise.all([env.MEETINGS.get("img_" + name, "arrayBuffer"), env.MEETINGS.get("img_ct_" + name)]);
-    if (!buf || !buf.byteLength || (origin && !ct)) return null;
+    // v364 - our own renders (render_<key>, render_community-<d>-<n>) are NEVER linked: /img/ strips hyphens from the name (so the link 404ed in a live PDF)
+    // and /render/ needs a key a PDF renderer must not carry. They are embedded as data URIs, in the page itself, whether or not there is an origin.
+    const link = origin && !/^render_/.test(name);
+    if (!buf || !buf.byteLength || (link && !ct)) return null;
     const type = ct || "image/jpeg";
     const dim = /jpe?g/i.test(type) ? jpegSize(buf) : null;
-    return Object.assign({ src: origin ? origin + "/img/" + name : "data:" + type + ";base64," + b64(buf) }, dim || {});
+    return Object.assign({ src: link ? origin + "/img/" + name : "data:" + type + ";base64," + b64(buf) }, dim || {});
   } catch (e) { return null; }
 }
 async function firstPic(env, names, origin) {

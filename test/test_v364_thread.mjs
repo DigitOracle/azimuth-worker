@@ -102,6 +102,22 @@ ok(!EMOJI.test(strip(d1.html).split("About this picture")[1].slice(0, 900)), "no
 const hit = LEAKS.map((r) => (r.exec(strip(d1.html).split("About this picture")[1].slice(0, 900)) || [])[0]).filter(Boolean);
 ok(!hit.length, "no internal field in the Brief note", hit.join(" | "));
 
+console.log("4b - PDF image access: renders are embedded, never linked");
+{
+  const env = { MEETINGS: mkKV(briefInit(pg)) };
+  const q = parseQuery(new URL("https://x/brief_pdf?kind=dossier&mode=rent&beds=3&type=villa&keys=" + encodeURIComponent("dld:damachillspiccadillygreen") + "&format=html"));
+  const dd = await buildDocument(env, q, { now: new Date("2026-10-06T08:00:00Z"), origin: "https://x.example" });
+  const m = /<div class="renderpic"[\s\S]*?<img[^>]+src="([^"]+)"/.exec(dd.html);
+  ok(m && m[1].startsWith("data:image/jpeg;base64,") && Buffer.from(m[1].split(",")[1], "base64").equals(Buffer.from(JPEG)), "with an origin the render is a data URI holding the exact stored bytes", m && m[1].slice(0, 60));
+  ok(!/\/img\/render_/.test(dd.html) && !/key=/.test(dd.html.split('class="renderpic"')[1] || ""), "no /img/render_ link and no key in the picture markup");
+  const ee = envOf(withThread());
+  const r1 = await get(ee, "/render/community-damachills-artesia?key=" + CLI);
+  ok(r1.status === 200 && r1.headers.get("content-type") === "image/jpeg" && Buffer.from(await r1.arrayBuffer()).equals(Buffer.from(JPEG)), "/render/<name> serves the stored bytes with the stored content type");
+  ee.MEETINGS.store.set("img_ct_render_community-damachills-artesia", "image/png");
+  ok((await get(ee, "/render/community-damachills-artesia?key=" + CLI)).headers.get("content-type") === "image/png", "the content type is the stored one");
+  ok((await get(ee, "/render/community-damachills-nothere?key=" + CLI)).status === 404, "an unstored name is 404");
+}
+
 console.log("5 - dark launch: nothing in KV, nothing changes");
 const unrelated = { thread_zzz_other: "{}", img_render_somewhere: JPEG, "img_ct_render_somewhere": "image/jpeg" };
 const [x0, x1] = [await doc(briefInit(), "dossier"), await doc(briefInit(unrelated), "dossier")];
