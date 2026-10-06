@@ -164,6 +164,13 @@ function unitCards(rec) {
       '<div class="i3cap">' + fmt(e.sales) + " sales &middot; " + (e.rents >= MIN_N ? "rent " + aed(e.rent) + " a year (" + fmt(e.rents) + ")" : "rent: not enough contracts") + " &middot; gross yield " + (e.yield != null ? "<b>" + p1(e.yield) + "</b>" : "&ndash;") + "</div></div>";
   }).join("") + "</div>";
 }
+function occCap(rec) {
+  const o = rec && rec.occ; if (!o || o.share == null || !o.units) return "";
+  const nb = Array.isArray(o.buildings) ? o.buildings.length : 0;
+  const when = o.as_of ? " (" + esc(dateLong(o.as_of)) + ")" : "";
+  const sup = o.suppressed > 0 ? " " + fmt(o.suppressed) + (o.suppressed === 1 ? " building" : " buildings") + " with fewer than 10 homes " + (o.suppressed === 1 ? "is" : "are") + " left out." : "";
+  return '<div class="i3cap"><b>DEWA connection proxy:</b> ' + Math.round(o.share * 100) + "% of " + fmt(o.units) + " registered homes" + (nb ? " in " + nb + " of this developer's buildings we could place" : "") + " have an active DEWA connection" + when + ". A lower bound: it is not a vacancy rate and not a household count, and it does not replace the vacancy you assume." + sup + " Source: Dubai Electricity and Water Authority customer premises data via Dubai Pulse open data.</div>";
+}
 function netCard(rec, f) {
   const blanks = '<div class="i3blanks">' + blank("Vacancy", 40) + " % " + blank("Management fee", 40) + " % " + blank("Other costs", 60) + " AED</div>";
   let body;
@@ -172,7 +179,7 @@ function netCard(rec, f) {
       (f.svcPsf != null ? "<div><span>Register service charge</span><b>AED " + f.svcPsf.toFixed(1) + " /sq ft</b></div><div class=\"i3tot\"><span>Gross less service charge</span><b>" + p1(f.net) + "</b></div>" : "<div><span>Register service charge</span><b>not on the register</b></div>") + "</div>" +
       '<div class="i3cap">' + (f.svcPsf != null ? "Median of " + rec.svc.n + " of " + rec.svc.of + " buildings that carry the developer's name (range AED " + rec.svc.min.toFixed(1) + " to " + rec.svc.max.toFixed(1) + ", budget year " + rec.svc.year + "); service charge known for " + rec.svc.n + " of " + rec.svc.of + " buildings. " : "") + "Before vacancy, management fees and other costs, which are in no register: you add them.</div>" + blanks;
   } else body = '<div class="i3cap">Not enough rent contracts for a gross yield.</div>' + blanks;
-  return card("calculator", "Income after the service charge", body);
+  return card("calculator", "Income after the service charge", body + occCap(rec));
 }
 function spreadCard(rec) {
   if (!rec.pct) return quiet("Price spread", "Not enough registered sales for a spread.");
