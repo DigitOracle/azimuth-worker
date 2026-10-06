@@ -22,7 +22,7 @@ import { checklistRoutes } from "./checklist.js";   // v291 CHECKLIST - owner-on
 import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief_pdf documents and the /brief_blocks LOD 100 view (all logic in the module)
 import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_ejari.js";
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
-import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
+import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitMorning, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -4565,6 +4565,7 @@ export default {
         try { await env.MEETINGS.put("minute_tick_at", new Date().toISOString(), { expirationTtl: 86400 }); } catch (e) {}
         try { await meetingNudges(env); } catch (e) {}
         try { await fitEvening(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}
+        try { await fitMorning(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v355 - the 05:00 opener, inside the 24-hour window only
         try { await fitReminders(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v351 - the daily "write in my book" reminder, inside the 24-hour window only   // v328 - the 21:00 GST FIT verdict; once a day, only while the 24-hour window is open
         try { await picResume(env, "", 90000); } catch (e) {}
         try { await deliveryWatch(env); } catch (e) {}   // v186 - accepted then failed is not sent
@@ -4583,6 +4584,7 @@ export default {
       // match exactly once even when the handler starts a few seconds late.
       try { if (env.GH_PAT && new Date(event.scheduledTime).getUTCMinutes() % 30 === 0) await fetch(GH_DISPATCH, { method: "POST", headers: { "Authorization": "Bearer " + env.GH_PAT, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "meeting-capture-cron", "Content-Type": "application/json" }, body: JSON.stringify({ ref: "main", inputs: { force_mode: "auto" } }) }); } catch (e) {}
       try { await fitEvening(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}
+        try { await fitMorning(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v355 - the 05:00 opener, inside the 24-hour window only
         try { await fitReminders(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v351 - the daily "write in my book" reminder, inside the 24-hour window only   // v328 - same verdict on the 5/30-minute crons; the once-a-day flag makes the two paths safe together
       try { const tok = await msToken(env); await scanEmails(env, tok); } catch (e) {}
       try { const tok = await msToken(env); await scanSent(env, tok, { sinceMin: 90, cap: 40 }); } catch (e) {}   // v35.1 — sent-items promises
