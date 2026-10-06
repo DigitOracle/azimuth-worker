@@ -20,6 +20,7 @@
 //          p: ROUGH grams of protein in a meal (pr: "rough"), or pr: "none" when it was tried and could not be told; no pr = not tried yet }
 
 import { FIT_IMG, FIT_IMG_TYPE } from "./fit_img.js";
+import { FIT_QUOTES, QUOTE_TIERS } from "./fit_quotes.js";   // the curated quote bank (originals + a few honestly attributed public-domain sayings)
 import { FIT_ICONS } from "./fit_icons.js";   // the page icons (Phosphor, MIT), generated
 import { FIT_JS, FIT_CSS2 } from "./fit_page.js";   // the page script and the card styles   // the page photos, bundled (scripts/gen_fit_img.mjs; Pexels licence, assets/fit/CREDITS.md)
 
@@ -547,6 +548,31 @@ const SAY = {
     firm: ["Weekly target missed: {got} of {want}. Look at which days were skipped and close that gap next week.", "Weekly target missed: {got} of {want}. The gap is in the days you skipped - plan those first next week.", "Weekly target missed: {got} of {want}. Be honest about why, then fix that one thing."],
     brutal: ["Weekly target missed: {got} of {want}. The days you skipped are the gap. Close it next week or stop calling it a target.", "Weekly target missed: {got} of {want}. A target you do not hit is just a wish - hit the next one.", "Weekly target missed: {got} of {want}. You know exactly which days did it. Do not repeat them."]
   },
+  bMissed: {
+    kind: ["{D} did not get the movement in. It happens. Reset, starting now.", "No movement {day}. Be honest about why, then reset."],
+    firm: ["{D} missed the floor: {min} minutes or {steps} steps, and neither was reached.", "You missed {day}. The floor was there and it was not met."],
+    brutal: ["You did not do enough {day}. That is on you, and only you can change it.", "{D} was a miss. The floor was not reached, and no excuse holds.", "{D} fell short of the floor. The plan was clear and it was not followed."]
+  },
+  bNone: {
+    kind: ["Nothing logged {day}. No judgement, but a blank day does not move you forward.", "A blank {day}. Start the record again with one entry."],
+    firm: ["Nothing logged {day}. A blank day counts as a missed day.", "No entries {day}. Not logged means not done."],
+    brutal: ["Nothing logged {day}. If it is not written down, it did not happen.", "A blank {day}: no meals, no movement, no record. That is a missed day."]
+  },
+  bPartial: {
+    kind: ["{D} was a good start with one thing slipping. Tighten it up.", "{D} was mostly on plan. One thing slipped."],
+    firm: ["{D} was half on plan: the floor was met, something else slipped.", "Floor met {day}, but not the whole plan."],
+    brutal: ["{D} was half done. The floor was met, the rules were not.", "You moved {day}, then broke your own rules. Half a day is half a miss."]
+  },
+  bHit: {
+    kind: ["{D} was a great day: every goal hit. Well done.", "Everything on plan {day}. Lovely."],
+    firm: ["Every goal hit {day}. Repeat it.", "{D} was on plan, start to finish."],
+    brutal: ["You hit every goal {day}. Now do better.", "Clean sheet {day}. That is the standard, not the ceiling."]
+  },
+  bStreak: {
+    kind: ["Every goal hit again: {streak} days in a row. Lovely consistency.", "{streak} days running, all on plan. Well done."],
+    firm: ["{streak} days running with every goal hit. Keep the chain.", "Every goal hit again. {streak} in a row."],
+    brutal: ["Every goal hit again, {streak} days running. Do not let it get comfortable.", "{streak} clean days in a row. Raise the bar, do not coast."]
+  },
   fbMorning: {
     kind: ["Good morning. You have made a start - here is what is still open.", "A good start to the day. Here is what is left."],
     firm: ["Started. Here is what is still open today.", "Today so far, and what is still to do."],
@@ -612,13 +638,15 @@ export function say(cfg, key, vars, day) {
 const sayVars = (cfg, extra) => Object.assign({ steps: fmtSteps(cfg.stepsFloor), min: cfg.minDay }, extra || {});
 
 // the one-line state of the day, week and challenge - appended to every acknowledgement
-function stateLines(cfg, sum) {
-  const st = sum.stats, L = [];
-  if (st.pmeals > 0) L.push("Protein today: about " + st.protein + (cfg.proteinTarget ? " of " + cfg.proteinTarget : "") + " g (rough)");
-  L.push("Today: " + st.meals + " meal" + (st.meals === 1 ? "" : "s") + " · " + fmtMin(st.ex) + (st.steps ? " · " + fmtSteps(st.steps) + " steps" : ""));
-  L.push(sum.rest ? "⏸ Rest day - not counted against you" : st.qualifies ? "✅ Daily minimum done" : "⏳ Still needed: " + cfg.minDay + " min of exercise" + (cfg.stepsFloor ? " or " + fmtSteps(cfg.stepsFloor) + " steps" : ""));
-  if (sum.week.target) L.push("Week: " + fmtMin(sum.week.minutes) + " of " + fmtMin(sum.week.target));
-  const ch = sum.challenge; if (ch && ch.day) L.push("Challenge: day " + Math.min(ch.day, ch.days) + " of " + ch.days + " · " + ch.hit + " days hit" + (ch.streak > 1 ? " · streak " + ch.streak : "") + (ch.rest ? " · " + ch.rest + " rest" : ""));
+function stateLines(cfg, sum, word, sumT) {
+  const st = sum.stats, L = [], w = word || "today", W = w.charAt(0).toUpperCase() + w.slice(1), past = w !== "today", wk = sumT || sum;
+  if (st.pmeals > 0) L.push("Protein " + w + ": about " + st.protein + (cfg.proteinTarget ? " of " + cfg.proteinTarget : "") + " g (rough)");
+  L.push(W + ": " + st.meals + " meal" + (st.meals === 1 ? "" : "s") + " · " + fmtMin(st.ex) + (st.steps ? " · " + fmtSteps(st.steps) + " steps" : ""));
+  if (past) L.push(sum.rest ? "⏸ Rest day - not counted against you" : st.qualifies ? "✅ Daily minimum was done" : "❌ Daily minimum was missed: " + cfg.minDay + " min of exercise" + (cfg.stepsFloor ? " or " + fmtSteps(cfg.stepsFloor) + " steps" : "") + " needed");
+  else L.push(sum.rest ? "⏸ Rest day - not counted against you" : st.qualifies ? "✅ Daily minimum done" : "⏳ Still needed: " + cfg.minDay + " min of exercise" + (cfg.stepsFloor ? " or " + fmtSteps(cfg.stepsFloor) + " steps" : ""));
+  if (st.out > 0) L.push("Meals outside your windows: " + st.out + " of " + st.meals);
+  if (wk.week.target) L.push("Week: " + fmtMin(wk.week.minutes) + " of " + fmtMin(wk.week.target));
+  const ch = wk.challenge; if (ch && ch.day) L.push("Challenge: day " + Math.min(ch.day, ch.days) + " of " + ch.days + " · " + ch.hit + " days hit" + (ch.streak > 1 ? " · streak " + ch.streak : "") + (ch.rest ? " · " + ch.rest + " rest" : ""));
   return L.join("\n");
 }
 
@@ -1061,6 +1089,100 @@ export async function fitEvening(env, deps, nowMs) {
   }
   return sent;
 }
+// ---- the accountability messages: a 21:00 verdict on the day and a 05:00 opener ------------------------------------------------------------
+// Both lead with one hard line about the ACTIONS (never about the body or the person), then the facts block, then "the line in the sand" (one concrete
+// commitment) and a quote from the local bank. Wording follows the person's own tone: brutal is for the person who chose it.
+const capFirst = (x) => String(x).charAt(0).toUpperCase() + String(x).slice(1);
+// the outcome of a finished (or nearly finished) day: rest | none (nothing logged) | missed | partial | hit | streak
+export function dayOutcome(cfg, sum) {
+  const st = sum.stats, ch = sum.challenge, flaws = [];
+  if (sum.rest) return { kind: "rest", tier: "hit", flaws };
+  if (!sum.entries.some((e) => e.k === "food" || e.k === "ex")) return { kind: "none", tier: "missed", flaws };
+  if (!st.qualifies) { if (st.out > 0) flaws.push("windows"); return { kind: "missed", tier: "missed", flaws }; }
+  if (st.out > 0) flaws.push("windows");
+  if (cfg.proteinTarget > 0 && st.pmeals > 0 && st.protein < cfg.proteinTarget * 0.8) flaws.push("protein");
+  if (flaws.length) return { kind: "partial", tier: "partial", flaws };
+  return ch && ch.streak >= 3 ? { kind: "streak", tier: "streak", flaws, streak: ch.streak } : { kind: "hit", tier: "hit", flaws };
+}
+export function brutalHead(cfg, oc, day, dateKey, streak) {
+  const key = { missed: "bMissed", none: "bNone", partial: "bPartial", hit: "bHit", streak: "bStreak" }[oc.kind];
+  return fbClean(say(cfg, key, { day, D: capFirst(day), min: cfg.minDay, streak: oc.streak || streak || 0 }, dateKey));
+}
+// the one concrete commitment: what the day just judged got wrong, said as a rule for the next one. before = "12:00" style deadline word
+export function lineInSand(cfg, sum, oc, when) {
+  const st = sum.stats, parts = [], by = when === "today" ? "before 12:00" : "before lunch";
+  const ex = "Move " + cfg.minDay + " minutes " + by + (cfg.stepsFloor ? ", or walk " + fmtSteps(cfg.stepsFloor) + " steps" : "") + ".";
+  if (oc.kind === "missed" || oc.kind === "none") parts.push(ex + (cfg.tone === "brutal" ? " No negotiating." : ""));
+  if (oc.flaws.includes("windows") || (oc.kind === "missed" && st.out > 0)) parts.push("Every meal inside its window: " + windowsText(cfg) + ".");
+  if (oc.flaws.includes("protein")) parts.push("Reach " + cfg.proteinTarget + " g of protein (you got about " + st.protein + " g).");
+  if (!parts.length) {
+    const target = Math.max(cfg.minDay, Math.round(((st.ex || cfg.minDay) + 10) / 5) * 5);
+    parts.push("Beat it: " + target + " minutes " + by + ", ten more than the last time." + (oc.kind === "streak" ? " Protect the " + oc.streak + "-day streak." : ""));
+  }
+  return parts.join(" ");
+}
+// a quote that has not been used for this person in the last 30 days: the outcome's own tier first, then the nearest tiers, then any; when the
+// whole bank is used up inside 30 days it takes the oldest. 64 lines against two draws a day means that last case cannot happen in 30 days.
+export async function fitQuote(env, u, tier, day) {
+  const key = "fitc_qused_" + pickUser(env, u); let used = [];
+  try { used = JSON.parse((await env.MEETINGS.get(key)) || "[]"); } catch (e) {}
+  const since = addDays(day, -29); used = used.filter((x) => x && x.d >= since);
+  const ids = new Set(used.map((x) => x.i)), order = { missed: ["missed", "partial", "hit", "streak"], partial: ["partial", "missed", "hit", "streak"], hit: ["hit", "streak", "partial", "missed"], streak: ["streak", "hit", "partial", "missed"] }[tier] || QUOTE_TIERS;
+  let pick = null;
+  for (const t of order) {
+    const free = FIT_QUOTES[t].map((q, k) => ({ i: t + ":" + k, q })).filter((x) => !ids.has(x.i));
+    if (free.length) { let h = 0; for (const ch of String(u + day + t + used.length)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; pick = free[h % free.length]; break; }
+  }
+  if (!pick) { const oldest = used.slice().sort((a, b) => (a.d < b.d ? -1 : 1))[0], [t, k] = oldest ? oldest.i.split(":") : ["missed", "0"]; pick = { i: t + ":" + k, q: FIT_QUOTES[t][+k] }; used = used.filter((x) => x.i !== pick.i); }
+  used.push({ i: pick.i, d: day });
+  try { await env.MEETINGS.put(key, JSON.stringify(used.slice(-70)), { expirationTtl: 40 * 86400 }); } catch (e) {}
+  return "\"" + pick.q[0] + "\"" + (pick.q[1] ? " - " + pick.q[1] : "");
+}
+const sandTitle = (cfg, when) => (cfg.tone === "kind" ? (when === "today" ? "Today, one thing" : "Tomorrow, one thing") : (when === "today" ? "TODAY'S LINE IN THE SAND" : "TOMORROW'S LINE IN THE SAND"));
+// 05:00 - 05:30: open the day. Honest about yesterday, one commitment for today. Same window rules as the 21:00 message.
+export async function fitMorning(env, deps, nowMs) {
+  const hm = gstHM(nowMs); if (hm < "05:00" || hm >= "05:30") return false;
+  if (!env.WA_ALLOWED) return false;
+  const mine = String(env.WA_ALLOWED).replace(/\D/g, ""); let sent = false;
+  for (const user of fitUsers(env)) {
+    if (user.wa === mine) { if (await morningFor(env, deps, nowMs, user.id, user.wa)) sent = true; }
+    else if (user.wa && await recentIn(env, user.id)) { if (await morningFor(env, deps, nowMs, user.id, user.wa, true)) sent = true; }
+  }
+  return sent;
+}
+async function morningFor(env, deps, nowMs, u, to, guestWindowOpen) {
+  const cfg = await fitCfg(env, u); if (!cfg.start) return false;
+  const today = gstDate(nowMs); if (today < cfg.start) return false;
+  const end = addDays(cfg.start, cfg.days - 1); if (today > end) return false;
+  let open = !!guestWindowOpen; if (!guestWindowOpen) { try { open = deps.ownerWindowOpen ? await deps.ownerWindowOpen(env) : false; } catch (e) {} }
+  if (!open) {
+    // closed window: at most ONE approved nudge a day (shared with the 21:00 one, so never two), only when nothing was logged yesterday or today, and only to the
+    // instance owner (the template greets her by name)
+    if (!guestWindowOpen && env.LOG_NUDGE_TEMPLATE && deps.waSendTemplate) {
+      const yday = addDays(today, -1), logged = (await fitRange(env, yday, today, u)).some((e) => e.k === "food" || e.k === "ex");
+      if (!logged && await flagOnce(env, "fitc_nudge_" + u + "_" + today)) {
+        try { await deps.waSendTemplate(env, to || env.WA_ALLOWED, env.LOG_NUDGE_TEMPLATE, env.LOG_NUDGE_LANG || "en_US", []); } catch (e) {}
+        return true;
+      }
+    }
+    return false;
+  }
+  if (!(await flagOnce(env, "fitc_msent_" + u + "_" + today))) return false;
+  const sumT = await fitSummary(env, today, cfg, today), ch = sumT.challenge, yday = addDays(today, -1);
+  if (sumT.rest) return false;   // a booked rest day has no commitment to make
+  const L = [(cfg.tone === "kind" ? "*Good morning - day " : "*LET'S GET IT - DAY ") + ch.day + (cfg.tone === "kind" ? " of " : " OF ") + cfg.days + "*"];
+  let oc, sumY = null;
+  if (yday < cfg.start) { L.push("*" + (cfg.tone === "brutal" ? "Day one. The record is blank. Make the first entry count." : "Day one. The record starts today.") + "*", "", "Goal: " + (cfg.goal || "the 30 days") + "\n" + (sumT.week.target ? "Week target: " + fmtMin(sumT.week.target) : "")); oc = { kind: "none", tier: "hit", flaws: [] }; L.push("", "*" + sandTitle(cfg, "today") + "*", "Move " + cfg.minDay + " minutes before 12:00" + (cfg.stepsFloor ? ", or walk " + fmtSteps(cfg.stepsFloor) + " steps" : "") + ", and log every meal in its window: " + windowsText(cfg) + "."); }
+  else {
+    sumY = await fitSummary(env, yday, cfg, yday); oc = dayOutcome(cfg, sumY);
+    L.push("*" + (oc.kind === "rest" ? fbClean(say(cfg, "rest", { why: "" }, yday)).replace(/\.$/, "") + " yesterday" : brutalHead(cfg, oc, "yesterday", yday)) + "*", "", stateLines(cfg, sumY, "yesterday", sumT));
+    L.push("", "*" + sandTitle(cfg, "today") + "*", lineInSand(cfg, sumY, oc.kind === "rest" ? { kind: "hit", flaws: [] } : oc, "today"));
+  }
+  L.push("", await fitQuote(env, u, oc.tier, today));
+  try { await env.MEETINGS.put("fitc_lastmorning_" + u, today, { expirationTtl: 30 * 86400 }); } catch (e) {}
+  await reply(env, deps, to || env.WA_ALLOWED, L.join("\n"));
+  return true;
+}
 async function eveningFor(env, deps, nowMs, u, to, guestWindowOpen) {
   const cfg = await fitCfg(env, u); if (!cfg.start) return false;
   const today = gstDate(nowMs); if (today < cfg.start) return false;
@@ -1080,12 +1202,10 @@ async function eveningFor(env, deps, nowMs, u, to, guestWindowOpen) {
     return false;
   }
   if (!(await flagOnce(env, "fitc_sent_" + u + "_" + today))) return false;
-  const sum = await fitSummary(env, today, cfg, today), st = sum.stats, ch = sum.challenge, V = sayVars(cfg), head = "Day " + ch.day + " of " + cfg.days + " - ";
+  const sum = await fitSummary(env, today, cfg, today), st = sum.stats, ch = sum.challenge, V = sayVars(cfg), oc = dayOutcome(cfg, sum);
   const L = [];
-  if (sum.rest) { const why = await fitPauseReason(env, u, today); L.push("⏸ " + head + say(cfg, "rest", { why: why && why !== "rest" ? " (" + why + ")" : "" }, today).replace(/^⏸\s*/, "")); }
-  else if (!st.qualifies) L.push("🔴 " + head + say(cfg, "dayFail", V, today));
-  else if (st.out > 0) L.push("🟡 " + head + say(cfg, "mixed", Object.assign({}, V, { out: st.out, s: st.out === 1 ? "" : "s" }), today));
-  else L.push("🟢 " + head + say(cfg, "dayPass", V, today));
+  if (sum.rest) { const why = await fitPauseReason(env, u, today); L.push("*REST DAY " + ch.day + " OF " + cfg.days + "*", say(cfg, "rest", { why: why && why !== "rest" ? " (" + why + ")" : "" }, today).replace(/^⏸\s*/, "")); }
+  else L.push((cfg.tone === "kind" ? "*Today's check-in - day " : "*VERDICT - DAY ") + ch.day + (cfg.tone === "kind" ? " of " : " OF ") + cfg.days + "*", "*" + brutalHead(cfg, oc, "today", today) + "*");
   L.push("", stateLines(cfg, sum));
   try { for (const p of await fitPartners(env, cfg, today)) L.push(partnerLine(p)); } catch (e) {}
   if (new Date(today + "T00:00:00Z").getUTCDay() === 0) {   // Sunday: this week is judged, next week is set
@@ -1093,6 +1213,7 @@ async function eveningFor(env, deps, nowMs, u, to, guestWindowOpen) {
     const extra = sundayExtras(cfg, sum, today); if (extra.length) L.push("", extra.join("\n"));
     if (!(await env.MEETINGS.get("fitc_wk_" + u + "_" + addDays(today, 1)))) L.push("", SUNDAY_ASK(cfg, cfg.weekMin));
   }
+  if (oc.kind !== "rest") L.push("", "*" + sandTitle(cfg, "tomorrow") + "*", lineInSand(cfg, sum, oc, "tomorrow"), "", await fitQuote(env, u, oc.tier, today));
   try { await env.MEETINGS.put("fitc_lastsent_" + u, today, { expirationTtl: 30 * 86400 }); } catch (e) {}
   const buttons = [];
   if (today === end) { L.push("", "🏁 Challenge complete: " + ch.hit + " of " + cfg.days + " days hit. Extend it?"); buttons.push({ id: "fit:extend", title: "➕ Extend 30 days" }); }

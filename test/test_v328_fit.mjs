@@ -205,17 +205,17 @@ ok(!(await E("2026-10-04T10:00:00Z")), "nothing before 21:00 GST");
 ok(!(await E("2026-10-04T17:05:00Z")) && outbound.length === 0, "window closed: nothing is sent...");
 store.set("wa_owner_last_in", { v: new Date().toISOString() });
 ok(await E("2026-10-04T17:05:00Z"), "...and the same evening still goes out once the window is open (the day was not used up)");
-ok(/🔴 Day 2 of 30/.test(said()) && /You missed today/.test(said()) && /10,000 steps/.test(said()), "a missed day: red, firm, names the 10,000-step option");
+ok(/\*VERDICT - DAY 2 OF 30\*/.test(said()) && (/\*[^*\r\n]*(missed|Missed|fell short|not do enough)[^*\r\n]*\*/.test(said()) || /\*[^*\r\n]*(Nothing logged|No entries)/.test(said())) && /10,000 steps/.test(said()) && /TOMORROW'S LINE IN THE SAND/.test(said()), "a missed day: a bold one-line verdict, the facts block, the 10,000-step option, and tomorrow's line in the sand");
 ok(!(await E("2026-10-04T17:10:00Z")), "only once per day");
 await fit.fitAdd(env, { k: "ex", x: "Gym", m: 60, t: T("2026-10-05T12:00:00Z"), d: "2026-10-05" });
 await fit.fitAdd(env, { k: "food", x: "Pizza", t: T("2026-10-05T07:00:00Z"), d: "2026-10-05", o: true });
-ok(await E("2026-10-05T17:05:00Z") && /🟡/.test(said()) && /1 meal outside/.test(said()), "exercise done but a meal outside its window: yellow, half a win");
+ok(await E("2026-10-05T17:05:00Z") && /half on plan|Floor met/.test(said()) && /Meals outside your windows: 1 of 1/.test(said()) && /Every meal inside its window/.test(said()), "exercise done but a meal outside its window: half a win, the number, and the window rule as tomorrow's line");
 await fit.fitSaveCfg(env, fit.fitCleanCfg({ tone: "brutal" }, await fit.fitCfg(env)));
 await fit.fitAdd(env, { k: "food", x: "Eggs", t: T("2026-10-06T04:00:00Z"), d: "2026-10-06" });
-ok(await E("2026-10-06T17:05:00Z") && /🔴/.test(said()) && /heavier and slower/.test(said()) && !/horrible person/i.test(said()), "brutal tone: blunt about the consequence, never about who the person is");
+ok(await E("2026-10-06T17:05:00Z") && /You did not do enough today|was a miss|fell short/.test(said()) && /No negotiating/.test(said()) && !/horrible person|fat|heavier|ugly|disgusting|worthless|pathetic/i.test(said()), "brutal tone: unflinching about the missed actions, never about the body or the person");
 await fit.fitAdd(env, { k: "ex", x: "Walk", m: 40, t: T("2026-10-07T12:00:00Z"), d: "2026-10-07" });
 await fit.fitAdd(env, { k: "food", x: "Eggs", t: T("2026-10-07T04:00:00Z"), d: "2026-10-07" });
-ok(await E("2026-10-07T17:05:00Z") && /🟢/.test(said()), "a clean day: green");
+ok(await E("2026-10-07T17:05:00Z") && /every goal|Clean sheet|on plan/i.test(said()) && /Beat it: /.test(said()), "a clean day: says so, and raises the bar for tomorrow");
 await fit.fitSaveCfg(env, fit.fitCleanCfg({ start: "2026-09-02", days: 30 }, await fit.fitCfg(env)));
 await fit.fitAdd(env, { k: "ex", x: "Gym", m: 60, t: T("2026-10-01T12:00:00Z"), d: "2026-10-01" });
 ok(await E("2026-10-01T17:05:00Z") && /Extend/.test(JSON.stringify(outbound[outbound.length - 1])), "the last day of the challenge offers Extend");
@@ -373,7 +373,8 @@ eq(parsed.map((u) => u.id), ["kendall", "najjuko"], "it parses to kendall and na
 eq(parsed.map((u) => u.name), ["Dr. Doli", "Black Coffee"], "the page names are Dr. Doli and Black Coffee");
 ok(parsed[1].wa === /^WA_ALLOWED = "(\d+)"/m.exec(az2)[1], "najjuko's number is the one this instance talks to (WA_ALLOWED)");
 ok(parsed[0].wa === /^WA_ALLOWED = "(\d+)"/m.exec(toml)[1] && parsed[0].wa !== parsed[1].wa, "kendall's number is the default instance's, and the two differ");
-ok(!/^\s*LOG_NUDGE_TEMPLATE\s*=/m.test(toml), "the nudge template is OFF in the committed config (commented out) until Meta approves it");
+ok(/^\s*LOG_NUDGE_TEMPLATE\s*=\s*"najma_log_day"/m.test(toml) && /^\s*LOG_NUDGE_LANG\s*=\s*"en_US"/m.test(toml.split("[env.azimuth2.vars]")[1] || ""), "the nudge template is ON in the azimuth2 config now that Meta shows it ACTIVE (no variables, en_US)");
+ok(!/^\s*LOG_NUDGE_TEMPLATE\s*=/m.test(toml.split("[env.azimuth2]")[0]), "and it is not set on the older instance");
 ok(/MOMO/.test(fs.readFileSync(new URL("../README.md", import.meta.url), "utf8")) && /disappears for her by design/.test(fs.readFileSync(new URL("../README.md", import.meta.url), "utf8")), "the README says MOMO disappears for her if a client key is turned on");
 // the template branch
 store.clear(); outbound = []; let tpl = [];
@@ -1083,6 +1084,127 @@ for (const [sname, setup] of Object.entries(STATES14)) {
   }
 }
 delete env.FIT_USERS;
+
+console.log("v355: brutal 9 PM verdict and 5 AM opener - outcome tiers, wording, quotes, the window rules");
+store.clear(); outbound = [];
+env.FIT_USERS = "kendall:" + KEN + ":Dr. Doli,najjuko:" + HER + ":Black Coffee";
+env.LOG_NUDGE_TEMPLATE = undefined;
+const cfgBr = async (u, o) => { const c = fit.fitCleanCfg(Object.assign({ start: "2026-10-01" }, o || {}), Object.assign({}, fit.FIT_CFG_DEFAULT, { u })); await fit.fitSaveCfg(env, c); return await fit.fitCfg(env, u); };
+const addBr = (u, k, o) => fit.fitAdd(env, Object.assign({ u, k }, o));
+const sumBr = async (u, d, today) => fit.fitSummary(env, d, await fit.fitCfg(env, u), today || d);
+// outcome tiers
+await cfgBr("kendall", { tone: "brutal", proteinTarget: 100 });
+const D20 = "2026-10-20";
+let oBr = fit.dayOutcome(await fit.fitCfg(env, "kendall"), await sumBr("kendall", D20));
+eq([oBr.kind, oBr.tier], ["none", "missed"], "a day with nothing logged is 'none', and uses the missed quotes");
+await addBr("kendall", "food", { x: "Oats", t: T("2026-10-20T03:30:00Z"), d: D20, s: "wa" });
+oBr = fit.dayOutcome(await fit.fitCfg(env, "kendall"), await sumBr("kendall", D20));
+eq(oBr.kind, "missed", "a meal but no exercise: missed");
+const gBr = await addBr("kendall", "ex", { x: "Gym", m: 45, t: T("2026-10-20T03:00:00Z"), d: D20 });
+await fit.fitDelete(env, (await fit.fitRange(env, D20, D20, "kendall")).find((e) => e.k === "food").id, "kendall");
+await addBr("kendall", "food", { x: "Chicken", t: T("2026-10-20T03:30:00Z"), d: D20, s: "wa", est: { g: 20, how: "rough" } });
+oBr = fit.dayOutcome(await fit.fitCfg(env, "kendall"), await sumBr("kendall", D20));
+eq([oBr.kind, oBr.flaws], ["partial", ["protein"]], "floor met but rough protein far under the guide: partial, and it names the protein");
+await fit.fitSaveCfg(env, Object.assign(await fit.fitCfg(env, "kendall"), { proteinTarget: 0 }));
+oBr = fit.dayOutcome(await fit.fitCfg(env, "kendall"), await sumBr("kendall", D20));
+eq(oBr.kind, "hit", "floor met, windows kept, no guide set: a clean hit");
+await addBr("kendall", "food", { x: "Late snack", t: T("2026-10-20T07:00:00Z"), d: D20, o: true, s: "wa" });
+oBr = fit.dayOutcome(await fit.fitCfg(env, "kendall"), await sumBr("kendall", D20));
+eq([oBr.kind, oBr.flaws], ["partial", ["windows"]], "a meal outside its window: partial, naming the windows");
+for (const e of await fit.fitRange(env, D20, D20, "kendall")) await fit.fitDelete(env, e.id, "kendall");
+for (const d of ["2026-10-17", "2026-10-18", "2026-10-19", D20]) await addBr("kendall", "ex", { x: "Run", m: 40, t: T(d + "T03:00:00Z"), d });
+oBr = fit.dayOutcome(await fit.fitCfg(env, "kendall"), await sumBr("kendall", D20));
+eq([oBr.kind, oBr.streak >= 3], ["streak", true], "a clean day on a run of three or more: streak");
+await fit.fitPause(env, "kendall", D20, 1, "ill"); oBr = fit.dayOutcome(await fit.fitCfg(env, "kendall"), await sumBr("kendall", D20)); eq(oBr.kind, "rest", "a booked rest day is rest"); await fit.fitResume(env, "kendall", D20);
+// the wording: one bold-able line, three tones, never about the body or the person, no emoji
+const BADW = /\b(fat|heavier|slower|ugly|disgusting|worthless|pathetic|stupid|lazy|loser|horrible person|body|weight|belly|skinny|obese)\b/i;
+const EMOJI_BR = /[\u{1F000}-\u{1FAFF}\u{2300}-\u{23FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
+let wordsBr = 0; const badBr = [];
+for (const tone of ["kind", "firm", "brutal"]) for (const kind of ["missed", "none", "partial", "hit", "streak"]) for (const day of ["today", "yesterday"]) for (let k = 0; k < 8; k++) {
+  const h = fit.brutalHead(Object.assign({}, fit.FIT_CFG_DEFAULT, { u: "kendall", tone }), { kind, streak: 5, flaws: [] }, day, fit.addDays("2026-10-01", k)); wordsBr++;
+  if (BADW.test(h) || EMOJI_BR.test(h) || /[\r\n]/.test(h) || !h || /[{}]/.test(h)) badBr.push(h);
+}
+eq(badBr, [], "all " + wordsBr + " headlines (3 tones x 5 outcomes x today/yesterday): one line, no placeholders, no emoji, nothing about the body or the person");
+const cB = Object.assign({}, fit.FIT_CFG_DEFAULT, { u: "kendall", tone: "brutal" }), cK = Object.assign({}, fit.FIT_CFG_DEFAULT, { u: "kendall", tone: "kind" });
+const hB = fit.brutalHead(cB, { kind: "missed", flaws: [] }, "yesterday", "2026-10-21"), hK = fit.brutalHead(cK, { kind: "missed", flaws: [] }, "yesterday", "2026-10-21");
+ok(hB !== hK && /yesterday/i.test(hB), "brutal and kind say different things, and the morning one is about yesterday (" + hB + ")");
+ok(/hit every goal today|Clean sheet today/.test(fit.brutalHead(cB, { kind: "hit", flaws: [] }, "today", "2026-10-01") + fit.brutalHead(cB, { kind: "hit", flaws: [] }, "today", "2026-10-02") + fit.brutalHead(cB, { kind: "hit", flaws: [] }, "today", "2026-10-03")), "a hit in brutal: 'you hit every goal, now do better' in spirit");
+// the line in the sand
+const cfgSand = Object.assign({}, fit.FIT_CFG_DEFAULT, { u: "kendall", tone: "brutal", proteinTarget: 120 }), sumSand = { stats: { out: 2, ex: 20, protein: 60, meals: 3 } };
+const sandMissed = fit.lineInSand(cfgSand, sumSand, { kind: "missed", flaws: ["windows"] }, "today");
+ok(/Move 30 minutes before 12:00/.test(sandMissed) && /Every meal inside its window/.test(sandMissed), "a missed day with meals out of window: move first, and keep the windows");
+ok(/Reach 120 g of protein/.test(fit.lineInSand(cfgSand, sumSand, { kind: "partial", flaws: ["protein"] }, "tomorrow")), "a protein miss: the commitment names the target");
+ok(/Beat it: 40 minutes/.test(fit.lineInSand(cfgSand, { stats: { out: 0, ex: 30 } }, { kind: "hit", flaws: [] }, "tomorrow")), "a hit: raise the bar by ten minutes");
+// the quote bank
+const Q = await import("../src/fit_quotes.js");
+const allQ = Q.QUOTE_TIERS.flatMap((t) => Q.FIT_QUOTES[t].map((q) => q));
+ok(Q.QUOTE_COUNT >= 60 && new Set(allQ.map((q) => q[0])).size === allQ.length, "at least 60 distinct quotes (two a day for 30 days)");
+ok(allQ.every((q) => !EMOJI_BR.test(q[0]) && q[0].length < 140 && !BADW.test(q[0])), "short, no emoji, nothing about the body");
+ok(allQ.filter((q) => q[1]).every((q) => /^(Lao Tzu|Marcus Aurelius|attributed to|traditional proverb)/.test(q[1])) && allQ.filter((q) => q[1]).length <= 8, "an author appears only on a few long-public-domain sayings, and says 'attributed to' / 'traditional' where it is not verified");
+store.clear(); await cfgBr("kendall", { tone: "brutal" }); await cfgBr("najjuko", { tone: "kind" });
+const seenQ = []; let dayQ = "2026-11-01";
+for (let k = 0; k < 30; k++) { for (let n = 0; n < 2; n++) seenQ.push(await fit.fitQuote(env, "kendall", "missed", dayQ)); dayQ = fit.addDays(dayQ, 1); }
+eq([seenQ.length, new Set(seenQ).size], [60, 60], "60 draws in 30 days, all in the 'missed' tier: not one repeated (it widens to other tiers before repeating)");
+const hitQ = await fit.fitQuote(env, "najjuko", "hit", "2026-11-01"); ok(Q.FIT_QUOTES.hit.some((q) => hitQ.includes(q[0])), "a hit draws from the hit tier first");
+ok(store.has("fitc_qused_kendall") && store.has("fitc_qused_najjuko"), "each person has their own rotation record");
+ok(!!(await fit.fitQuote(env, "kendall", "missed", "2026-12-15")), "a new month can reuse the bank");
+// 21:00 text: whole message
+store.clear(); outbound = [];
+await cfgBr("kendall", { tone: "brutal", start: "2026-10-01" });
+store.set("fitc_in_kendall", { v: new Date().toISOString() });
+const sentBr = [];
+const depsBr = { waSend: async (en, to, b) => sentBr.push({ to, b }), waSendButtons: async (en, to, b) => sentBr.push({ to, b }), waSendTemplate: async (en, to, name) => sentBr.push({ to, tpl: name }), ownerWindowOpen: async () => false };
+await fit.fitEvening(env, depsBr, T("2026-10-08T17:05:00Z"));
+const nine = sentBr.find((x) => x.to === KEN);
+ok(nine && /^\*VERDICT - DAY 8 OF 30\*\n\*[^*\n]+\*\n\nToday: 0 meals/.test(nine.b) && /TOMORROW'S LINE IN THE SAND\*\nMove 30 minutes before lunch/.test(nine.b) && /\n"[^"]+"/.test(nine.b), "9 PM: bold title, a hard one-line verdict, the facts block, the line in the sand, the quote - in that order (" + (nine ? nine.b.slice(0, 80).replace(/\n/g, " / ") : "none") + ")");
+ok(nine && !BADW.test(nine.b), "and nothing in it is about his body");
+// 5 AM
+const M5 = async (iso, d2) => { sentBr.length = 0; const r = await fit.fitMorning(env, d2 || depsBr, T(iso)); return { r, sent: sentBr.slice() }; };
+let m5 = await M5("2026-10-09T00:30:00Z"); eq([m5.r, m5.sent.length], [false, 0], "04:30 Dubai: nothing yet");
+m5 = await M5("2026-10-09T01:40:00Z"); eq([m5.r, m5.sent.length], [false, 0], "05:40 Dubai: too late for the opener");
+m5 = await M5("2026-10-09T01:05:00Z");
+const msg5 = (m5.sent.find((x) => x.to === KEN) || {}).b || "";
+ok(m5.r && /^\*LET'S GET IT - DAY 9 OF 30\*\n\*[^*\n]+\*\n\n/.test(msg5) && /Yesterday: 0 meals/.test(msg5) && /Daily minimum was missed/.test(msg5) && /TODAY'S LINE IN THE SAND\*\nMove 30 minutes before 12:00/.test(msg5) && /\n"[^"]+"/.test(msg5), "05:05 Dubai, his window open: opener with day, honest about yesterday, the numbers, today's line in the sand and a quote (" + msg5.slice(0, 90).replace(/\n/g, " / ") + ")");
+ok(/yesterday/i.test(msg5.split("\n")[1]), "'missed everything' is said plainly, about yesterday");
+m5 = await M5("2026-10-09T01:10:00Z"); eq(m5.sent.length, 0, "once a day");
+store.delete("fitc_in_kendall"); for (const k of [...store.keys()]) if (k.startsWith("fitc_msent_")) store.delete(k);
+m5 = await M5("2026-10-09T01:05:00Z"); eq(m5.sent.length, 0, "his window closed: no free text, and no template for him (it greets her by name)");
+env.LOG_NUDGE_TEMPLATE = "najma_log_day"; env.FIT_USERS = "najjuko:" + HER + ":Black Coffee"; await cfgBr("najjuko", { start: "2026-10-01", tone: "kind" });
+m5 = await M5("2026-10-09T01:05:00Z"); eq(m5.sent.map((x) => x.tpl), ["najma_log_day"], "her window closed and nothing logged: ONE approved nudge");
+m5 = await M5("2026-10-09T01:20:00Z"); eq(m5.sent.length, 0, "never a second one the same day");
+for (const k of [...store.keys()]) if (k.startsWith("fitc_nudge_")) store.delete(k);
+await addBr("najjuko", "food", { x: "Oats", t: T("2026-10-08T04:00:00Z"), d: "2026-10-08", s: "wa" });
+m5 = await M5("2026-10-09T01:05:00Z"); eq(m5.sent.length, 0, "she logged yesterday: no paid nudge");
+env.LOG_NUDGE_TEMPLATE = undefined;
+const dOpen = Object.assign({}, depsBr, { ownerWindowOpen: async () => true });
+store.clear(); await cfgBr("najjuko", { start: "2026-10-01", tone: "kind" });
+m5 = await M5("2026-10-10T01:05:00Z", dOpen);
+const hers = (m5.sent[0] || {}).b || "";
+ok(/^\*Good morning - day 10 of 30\*/.test(hers) && /Yesterday: 0 meals/.test(hers) && /Today, one thing/.test(hers), "kind tone: a kind opener, same structure (" + hers.slice(0, 60).replace(/\n/g, " / ") + ")");
+// day one: no yesterday to judge
+store.clear(); await cfgBr("najjuko", { start: "2026-10-12", tone: "firm" });
+m5 = await M5("2026-10-12T01:05:00Z", dOpen); const d1 = (m5.sent[0] || {}).b || "";
+ok(/DAY 1 OF 30/.test(d1) && /Day one/.test(d1) && !/Yesterday:/.test(d1), "day one: no yesterday, a first commitment");
+// rest day today: no commitment; after the challenge: nothing
+await fit.fitPause(env, "najjuko", "2026-10-13", 1, "ill");
+m5 = await M5("2026-10-13T01:05:00Z", dOpen); eq(m5.sent.length, 0, "a booked rest day today: no commitment is asked");
+m5 = await M5("2026-12-01T01:05:00Z", dOpen); eq(m5.sent.length, 0, "after the 30 days are over: nothing");
+// isolation: his opener holds only his data, and nothing touches the Najma morning chain
+store.clear(); env.FIT_USERS = "kendall:" + KEN + ":Dr. Doli,najjuko:" + HER + ":Black Coffee";
+await cfgBr("kendall", { start: "2026-10-01", tone: "brutal" }); await cfgBr("najjuko", { start: "2026-10-01", tone: "kind" });
+await addBr("najjuko", "food", { x: "HER-ONLY-MEAL", t: T("2026-10-08T04:00:00Z"), d: "2026-10-08", s: "wa" }); await addBr("najjuko", "ex", { x: "HER-RUN", m: 99, t: T("2026-10-08T03:00:00Z"), d: "2026-10-08" });
+await fit.jAdd(env, "kendall", { text: "his journal " + SECRET, d: "2026-10-08" });
+store.set("fitc_in_kendall", { v: new Date().toISOString() });
+m5 = await M5("2026-10-09T01:05:00Z", dOpen);
+const toKen = (m5.sent.find((x) => x.to === KEN) || {}).b || "", toHer = (m5.sent.find((x) => x.to === HER) || {}).b || "";
+ok(toKen && toHer && !/HER-|Black Coffee|99 min/.test(toKen) && !toHer.includes("his journal") && !toKen.includes(SECRET) && !toHer.includes(SECRET) && /1h39/.test(toHer), "each opener holds only that person's own numbers; no journal text in either (" + toHer.slice(0, 200).replace(/\n/g, " / ") + ")");
+ok([...store.keys()].every((k) => !/^(picjob_|gmp_)/.test(k)), "the Najma morning chain keys (picjob_, gmp_) are never touched");
+ok(!EMOJI_BR.test(toKen.replace(/[✅❌⏳⏸]/g, "")), "no new emoji in the opener (only the existing facts-block marks)");
+const idxSrc2 = (await import("node:fs")).readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+eq((idxSrc2.match(/fitMorning\(env, fitDeps\(\)/g) || []).length, 2, "the 05:00 opener runs on both cron paths; no new cron was added");
+const tomlSrc = (await import("node:fs")).readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+ok(/crons = \["0,30 1-18 \* \* \*", "\* \* \* \* \*"\]/.test(tomlSrc), "the azimuth2 cron line is unchanged");
+delete env.FIT_USERS; env.LOG_NUDGE_TEMPLATE = undefined;
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
