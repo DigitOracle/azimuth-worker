@@ -2222,6 +2222,18 @@ async function appFetch(request, env, ctx) {
       } catch (e) { return new Response("send failed: " + String(e && e.message || e).slice(0, 120), { status: 502 }); }
       return new Response("poll sent: " + qs.length + " questions");
     }
+    if (url.pathname === "/plan_ask" && request.method === "POST") {   // v367 - owner key; recipient is env.WA_ALLOWED and nothing else; dry unless dry=0
+      if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      let _pb = {}; try { _pb = await request.json(); } catch (e) { return new Response("json body required", { status: 400 }); }
+      const _intro = String((_pb && _pb.intro) || "").trim();
+      if (!_intro || _intro.length > 900) return new Response("intro required, max 900 characters", { status: 400 });
+      const _r = await planAsk(env, _intro, url.searchParams.get("dry") !== "0");
+      return new Response(JSON.stringify(_r, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
+    if (url.pathname === "/plan_status") {   // v367
+      if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      return new Response((await env.MEETINGS.get("najj_plan")) || "{}", { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
     if (url.pathname === "/poll_status") {
       if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       const pid = String(url.searchParams.get("id") || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 40);
@@ -3676,6 +3688,7 @@ async function appFetch(request, env, ctx) {
         if (msg.id) { const _mk = "wamsg_" + msg.id; if (await env.MEETINGS.get(_mk)) return new Response("ok"); await env.MEETINGS.put(_mk, "1", { expirationTtl: 3 * 86400 }); }
         try { await env.MEETINGS.put("wa_owner_last_in", new Date().toISOString(), { expirationTtl: 3 * 86400 }); } catch (e) {}   // v137 - opens ownerNotify's 24-hour window
         try { if (await env.MEETINGS.get("mkt_feed_pending")) { const _fl = feedFlush(env); if (ctx && ctx.waitUntil) ctx.waitUntil(_fl); else await _fl; } } catch (e) {}   // v186 - she wrote back: the held morning goes now
+        try { if (await env.MEETINGS.get("plan_pending")) { const _pf = planFlush(env); if (ctx && ctx.waitUntil) ctx.waitUntil(_pf); else await _pf; } } catch (e) {}   // v367 - she wrote back: the queued plan questions go now
         if (env.OWNER_TEMPLATE && env.APPROVED_SEND) {                 // v155 - approved sends: "show <ref>" and the Send / Discard buttons
           const _sm = msg.type === "text" && msg.text && String(msg.text.body || "").trim().match(/^show\s+([A-Z0-9]{6})$/i);
           if (_sm) { await sendReqShow(env, from, _sm[1].toUpperCase()); return new Response("ok"); }
@@ -3684,6 +3697,7 @@ async function appFetch(request, env, ctx) {
         }
         if (msg.type === "interactive" && msg.interactive && (msg.interactive.button_reply || msg.interactive.list_reply)) {
           const bid = (msg.interactive.button_reply && msg.interactive.button_reply.id) || (msg.interactive.list_reply && msg.interactive.list_reply.id) || "";
+          if (bid.indexOf("plan_") === 0 && await planReply(env, from, bid)) return new Response("ok");   // v367 - her plan answers
           if (bid.indexOf("fit:") === 0 && await fitButton(env, from, bid, fitDeps())) return new Response("ok");   // v328 - FIT: Undo on a logged entry, Extend on the 30-day verdict
           if (bid.indexOf("done:") === 0) { await env.MEETINGS.delete("act_" + bid.slice(5)); await waSend(env, from, "✅ Done — cleared from your plate."); }
           // v137 - buttons that used to live on Telegram: proposal cards and email meeting candidates
@@ -6620,6 +6634,65 @@ async function feedSceneOfferButton(env, from, bid) {
 // tells Kendall, and flushes the moment she writes back. And every morning's receipts are checked, so a failed delivery is
 // never read as a send.
 const FEED_HOLD_MAX_MS = 20 * 3600 * 1000;   // a held morning older than this is stale: it is dropped rather than sent late
+// v367 - PLAN QUESTIONS BY DROPDOWN (Kendall, 6 Oct 2026: Najjuko answers by WhatsApp list, "as always, the quickest way").
+// /plan_ask sends one intro text and four interactive lists; plan_q<N>_<code> row ids are answered by planReply, which keeps
+// them in KV najj_plan. Recipient is always env.WA_ALLOWED. Q3 is informational: it records her answer and changes no schedule.
+const PLAN_QS = [
+  { n: 1, body: "Which days for your NAJJESTY plan?", button: "Pick days", key: "q1", rows: [
+    { id: "plan_q1_montue", title: "Mon + Thu", v: "Mon + Thu" }, { id: "plan_q1_tuefri", title: "Tue + Fri", v: "Tue + Fri" },
+    { id: "plan_q1_wedsat", title: "Wed + Sat", v: "Wed + Sat" }, { id: "plan_q1_weekly", title: "Weekly (one day)", v: "Weekly (one day)" }] },
+  { n: 2, body: "What time?", button: "Pick a time", key: "q2", rows: [
+    { id: "plan_q2_0800", title: "08:00", v: "08:00" }, { id: "plan_q2_1200", title: "12:00", v: "12:00" },
+    { id: "plan_q2_1700", title: "17:00", v: "17:00" }, { id: "plan_q2_2000", title: "20:00", v: "20:00" }] },
+  { n: 3, body: "Your NAJMA morning five", button: "Pick a time", key: "q3", rows: [
+    { id: "plan_q3_keep0500", title: "Keep at 05:00", description: "Current time", v: "Keep at 05:00" },
+    { id: "plan_q3_0600", title: "06:00", v: "06:00" }, { id: "plan_q3_0700", title: "07:00", v: "07:00" }] },
+  { n: 4, body: "Momo check-ins", button: "Pick a plan", key: "q4", rows: [
+    { id: "plan_q4_keep", title: "Keep 21:00 + 05:00", v: "Keep 21:00 + 05:00" },
+    { id: "plan_q4_move", title: "Move to 20:00 + 06:00", v: "Move to 20:00 + 06:00" },
+    { id: "plan_q4_eve", title: "Evening only", v: "Evening only" }] },
+];
+const PLAN_SIGNOFF_ALL = "All set, Black Coffee. Curated by Papi";
+async function planSendLists(env, to) {
+  for (const q of PLAN_QS) await waSendList(env, to, q.body, q.button, q.rows.map(r => ({ id: r.id, title: r.title, description: r.description })));
+}
+async function planAsk(env, intro, dry) {
+  const to = env.WA_ALLOWED;
+  const open = await ownerWindowOpen(env);
+  const plan = { to, window_open: open, intro, questions: PLAN_QS.map(q => ({ body: q.body, button: q.button, rows: q.rows.map(r => ({ id: r.id, title: r.title, description: r.description || "" })) })),
+    path: open ? "intro text, then four lists" : "template najma_feed_ready (no variables); intro and lists queued in KV plan_pending for 1 hour and sent when she replies" };
+  if (dry) return Object.assign({ dry: true }, plan);
+  if (!to || !env.WHATSAPP_TOKEN) return { ok: false, why: "unconfigured" };
+  if (open) {
+    const r = await waSend(env, to, intro);
+    if (!(r && r.ok)) return { ok: false, why: "intro refused", status: r && r.status };
+    await planSendLists(env, to);
+    return { ok: true, sent: "intro + 4 lists" };
+  }
+  await env.MEETINGS.put("plan_pending", JSON.stringify({ intro, at: Date.now() }), { expirationTtl: 3600 });
+  const n = await feedNudge(env, "Four quick questions for your plan", "Reply with anything here and I'll send them straight over.");
+  return { ok: !!n.ok, queued: true, nudge: n };
+}
+// Her next message reopens the window: send the queued intro and lists (older than the 1-hour KV expiry, it is simply gone).
+async function planFlush(env) {
+  let p = null; try { p = JSON.parse((await env.MEETINGS.get("plan_pending")) || "null"); } catch (e) {}
+  if (!p || !p.intro) return false;
+  await env.MEETINGS.delete("plan_pending");
+  const r = await waSend(env, env.WA_ALLOWED, p.intro);
+  if (!(r && r.ok)) return false;
+  await planSendLists(env, env.WA_ALLOWED);
+  return true;
+}
+async function planReply(env, from, bid) {
+  const m = /^plan_q([1-4])_[a-z0-9]+$/.exec(bid || ""); if (!m) return false;
+  const q = PLAN_QS[+m[1] - 1], row = q.rows.find(r => r.id === bid); if (!row) return false;
+  let rec = {}; try { rec = JSON.parse((await env.MEETINGS.get("najj_plan")) || "{}") || {}; } catch (e) {}
+  rec[q.key] = row.v; rec.at = new Date().toISOString();
+  await env.MEETINGS.put("najj_plan", JSON.stringify(rec));
+  await waSend(env, from, "Locked in: " + q.body.replace(/\?$/, "") + " - " + row.v + ".");
+  if (rec.q1 && rec.q2 && rec.q3 && rec.q4) await waSend(env, from, PLAN_SIGNOFF_ALL);
+  return true;
+}
 async function feedNudge(env, head, body) {
   if (env.WA_ALLOWED && (await feedTemplateFlag(env)) === "najma_feed_ready") {   // v329 - the new plain template: no variables, so no params; used only once /wa_template_use saw it APPROVED
     try { const r = await waSendTemplate(env, env.WA_ALLOWED, "najma_feed_ready", "en_US", []); return { ok: !!(r && r.ok), status: r && r.status, template: "najma_feed_ready" }; }
