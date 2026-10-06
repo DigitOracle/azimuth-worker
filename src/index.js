@@ -7208,8 +7208,8 @@ function _chWrap(title, sub, body) {
 }
 
 
-// v89 — ANGLE CARD: the postcard tied to the work. One angle -> one finished square image: the district's satellite (or the
-// skyline banner), the hook, the figure, the source. Sent with the draft; shown five-up on /charts.
+// v89 — ANGLE CARD: the postcard tied to the work. One angle -> one finished square image: the market background (made plate
+// when supplied), the hook, the figure, the source. Sent with the draft; shown five-up on /charts.
 const AREA_SLUG = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function angleArea(angle, d) {
   if (angle && typeof angle.area === "string" && angle.area.trim()) return angle.area.trim();   // v106 - an angle may name its own masthead (an event, or Dubai-wide), overriding the district match
@@ -7484,7 +7484,7 @@ const cardKey = (ctxAt, n, size) => "angle_" + String(ctxAt || 0) + "_" + n + (s
 async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl, credit, imgAlign, wash) {
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const area = angleArea(angle, d); let img = imgOverride || null;   // v109 - a made plate wins over the satellite
-  if (!img && area) { const sl = AREA_SLUG(area); try { if (await env.MEETINGS.get("img_sat_" + sl, "arrayBuffer")) img = origin + "/img/sat_" + sl; } catch (e) {} }
+  // v363 - no satellite lookup: a card without a made plate uses the market background
   if (!img) img = origin + "/img/bg_market";
   const story = size === "story", W = 1080, H = story ? 1920 : 1080;
   const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "", palette: await stylePalette(env), credit: credit || "", imgAlign: imgAlign || "", wash: Array.isArray(wash) ? wash : null });   // v124 - the credit rides through; this builder never saw opts
@@ -7550,7 +7550,7 @@ async function feedEjariStep(env, dry) {
   } catch (e) { return "Ejari card SKIPPED (error: " + String((e && e.message) || e).slice(0, 80) + ")"; }
 }
 
-// v59 — AREA POSTCARD: 1080×1080 post card — real satellite of the community, Fraunces
+// v59 — AREA POSTCARD: 1080×1080 post card — flat brand teal panel (v363), Fraunces
 // masthead, five dot-leader facts (price, ticket, net yield, who lives there, what's near,
 // what's coming). Screenshot-and-post, like every /charts card.
 function chPostcard(a, sup, amen) {
@@ -7573,7 +7573,8 @@ function chPostcard(a, sup, amen) {
     `<defs><clipPath id="pcclip"><rect x="24" y="24" width="1032" height="1032" rx="28"/></clipPath>` +
     `<linearGradient id="pcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0.3" stop-color="#0C1413" stop-opacity="0"/><stop offset="0.62" stop-color="#0C1413" stop-opacity="0.82"/><stop offset="1" stop-color="#0C1413" stop-opacity="0.97"/></linearGradient></defs>` +
     `<rect width="1080" height="1080" fill="#0C1413"/>` +
-    `<g clip-path="url(#pcclip)"><image href="/img/sat_${slug}" x="24" y="24" width="1032" height="1032" preserveAspectRatio="xMidYMid slice"/>` +
+    `<g clip-path="url(#pcclip)"><rect x="24" y="24" width="1032" height="1032" fill="#0A4F4A"/>` +   // v363 - flat brand teal; no satellite imagery in client-facing pictures
+    `<circle cx="900" cy="170" r="420" fill="#C5A56A" fill-opacity="0.07"/>` +
     `<rect x="24" y="24" width="1032" height="1032" fill="url(#pcg)"/></g>` +
     `<rect x="24" y="24" width="1032" height="1032" rx="28" fill="none" stroke="#24352F" stroke-width="2"/>` +
     `<rect x="40" y="40" width="1000" height="1000" rx="20" fill="none" stroke="rgba(232,228,216,.28)" stroke-width="2" stroke-dasharray="1 6" stroke-linecap="round"/>` +
@@ -7583,7 +7584,7 @@ function chPostcard(a, sup, amen) {
     `<text x="88" y="600" fill="#E8E4D8" font-size="76" font-weight="600" font-family="Fraunces,Georgia,serif">${_sx(a.area)}</text>` +
     `<text x="88" y="644" fill="#8FA39B" font-size="26" font-family="'IBM Plex Sans',sans-serif">settled, not asking — the register's own numbers</text>` +
     rows +
-    `<text x="88" y="1020" fill="#8FA39B" font-size="22" font-family="'IBM Plex Sans',sans-serif">Source: Dubai Land Department (DLD) Open Data · imagery: Esri World Imagery</text>` +
+    `<text x="88" y="1020" fill="#8FA39B" font-size="22" font-family="'IBM Plex Sans',sans-serif">Source: Dubai Land Department (DLD) Open Data</text>` +
     `</svg>`;
 }
 
@@ -7596,7 +7597,7 @@ function renderCharts(latestRaw, key, amenRaw, briefCtxRaw, satSlugs) { satSlugs
   // v89 - today's angles lead the sheet as cards (the postcard tied to the work); the generic area postcard only when there is no feed yet
   let _todayAngles = []; try { const _bc = JSON.parse(briefCtxRaw || "null"); if (_bc && Array.isArray(_bc.angles) && Date.now() - (_bc.at || 0) < 36 * 3600 * 1000) _todayAngles = _bc.angles.filter(a => !a.campaign).slice(0, 5); } catch (e) {}
   if (_todayAngles.length) {
-    _todayAngles.forEach((a, i) => { const ar = angleArea(a, d); const sl = ar ? AREA_SLUG(ar) : ""; cards.push(angleCardSvg(a, ar, sl && satSlugs.includes(sl) ? "/img/sat_" + sl : "/img/bg_market", i + 1)); });
+    _todayAngles.forEach((a, i) => { const ar = angleArea(a, d); const sl = ar ? AREA_SLUG(ar) : ""; cards.push(angleCardSvg(a, ar, "/img/bg_market", i + 1)); });   // v363 - never a satellite plate
   } else {
   const topA = (d.areaIntel && d.areaIntel.areas && d.areaIntel.areas[0]) || null;
   if (topA) {
@@ -8697,7 +8698,7 @@ s.onerror=function(){};document.head.appendChild(s);})();
 
 // v58 — CLIENT BRIEFING (/r/<id>): a polished, client-safe page Naj builds from chat in
 // seconds ("report business bay for Ahmed") and forwards after a viewing. Snapshot frozen
-// in KV (60d TTL, unguessable id), no keys, no internal controls, satellite hero, every
+// in KV (60d TTL, unguessable id), no keys, no internal controls, teal hero (v363), every
 // figure sourced. Our native answer to "StoryMaps for clients".
 function renderReport(sn, esriTok, poly) {
   const esc2 = (x) => String(x == null ? "" : x).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
@@ -8710,7 +8711,7 @@ function renderReport(sn, esriTok, poly) {
   return '<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=robots content=noindex><title>' + esc2(a.area) + ' — Najma briefing</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS + '<style>' +
     ':root{--ink:#0C1413;--card:#131F1D;--card2:#182823;--line:#24352F;--text:#E8E4D8;--mut:#8FA39B;--gold:#C5A56A;--teal:#3E8A7E}' +
     'body{font-family:"IBM Plex Sans",system-ui,sans-serif;background:var(--ink);color:var(--text);margin:auto;padding:0 14px 48px;max-width:560px}' +
-    '.hero{margin:0 -14px;padding:150px 18px 18px;background-image:linear-gradient(180deg,rgba(12,20,19,.10) 0%,rgba(12,20,19,.55) 55%,rgba(12,20,19,.93) 86%,#0C1413 100%),url(/img/sat_' + slug + ');background-size:cover;background-position:center}' +
+    '.hero{margin:0 -14px;padding:150px 18px 18px;background-color:#0A4F4A;background-image:linear-gradient(180deg,rgba(12,20,19,.10) 0%,rgba(12,20,19,.55) 55%,rgba(12,20,19,.93) 86%,#0C1413 100%);background-size:cover;background-position:center}' +
     '.brand{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.16em;color:var(--gold);text-transform:uppercase}' +
     'h1{font-family:Fraunces,Georgia,serif;font-size:2rem;font-weight:600;margin:.25rem 0 .15rem;text-shadow:0 2px 16px rgba(12,20,19,.8)}' +
     '.for{color:#B8C4BD;font-size:.85rem;text-shadow:0 1px 8px rgba(12,20,19,.8)}' +
@@ -8763,7 +8764,7 @@ function renderReport(sn, esriTok, poly) {
       'var cs=(P.type==="Polygon"?P.coordinates[0]:P.coordinates[0][0]);var xs=cs.map(function(c){return c[0]}),ys=cs.map(function(c){return c[1]});' +
       'm.fitBounds([[Math.min.apply(0,xs),Math.min.apply(0,ys)],[Math.max.apply(0,xs),Math.max.apply(0,ys)]],{padding:34,animate:false});}});' +
       '}catch(e){}})();</' + 'script>' : '') +
-    '<div class=foot>Every figure on this page comes from official registers: Dubai Land Department (DLD) Open Data (sales and Ejari rentals; contains information from the Government of Dubai) and the DLD registered-projects file. Satellite imagery: Esri World Imagery. Communities under 20 settled sales are not reported; layouts shown only at 8+ sales. Figures are period medians, not valuations of any specific unit. Prepared with Najma.</div>' +
+    '<div class=foot>Every figure on this page comes from official registers: Dubai Land Department (DLD) Open Data (sales and Ejari rentals; contains information from the Government of Dubai) and the DLD registered-projects file. Communities under 20 settled sales are not reported; layouts shown only at 8+ sales. Figures are period medians, not valuations of any specific unit. Prepared with Najma.</div>' +
     '</body></html>';
 }
 
