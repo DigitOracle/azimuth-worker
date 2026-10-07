@@ -27,6 +27,7 @@ import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief
 import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_ejari.js";
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
 import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitMorning, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
+import { deskHandle, isDeskEvent, deskWindowOpen, deskOn } from "./desk.js";   // v388 - KENDALL DESK step 1: a second WhatsApp number that answers only the owner (all logic in src/desk.js)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
 // v29 (17 Aug 2026) — GET /health?key= : last inbound, last SUCCESSFUL outbound, router result,
@@ -917,9 +918,9 @@ async function noteReceipt(env, st) {
 }
 // Send and CHECK. Previously the fetch result was discarded, so a Meta rejection was silent —
 // which is exactly how a whole day of "she got two ticks and nothing back" stays mysterious.
-async function waPost(env, payload, kind) {
+async function waPost(env, payload, kind, fromPhoneId) {   // v388 - optional fromPhoneId: send from another number of the account (the desk); default WA_PHONE_ID
   try {
-    const r = await fetch(`${WA_GRAPH}/${env.WA_PHONE_ID}/messages`, {
+    const r = await fetch(`${WA_GRAPH}/${fromPhoneId || env.WA_PHONE_ID}/messages`, {
       method: "POST",
       headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -943,16 +944,16 @@ async function waPost(env, payload, kind) {
     return r;
   } catch (e) { await noteErr(env, "whatsapp-send:" + kind, String(e && e.message || e)); throw e; }
 }
-async function waSend(env, to, body) {
+async function waSend(env, to, body, fromPhoneId) {
   body = String(body == null ? "" : body);
-  if (body.length <= 4000) return waPost(env, { messaging_product: "whatsapp", to, type: "text", text: { body } }, "text");
+  if (body.length <= 4000) return waPost(env, { messaging_product: "whatsapp", to, type: "text", text: { body } }, "text", fromPhoneId);
   // v108.2 - WhatsApp rejects a body over 4096; split at paragraph breaks rather than fail silently
   let last = null;
   while (body.length) {
     let cut = body.length <= 4000 ? body.length : body.lastIndexOf("\n\n", 4000);
     if (cut < 800) cut = body.lastIndexOf("\n", 4000);
     if (cut < 800) cut = 4000;
-    last = await waPost(env, { messaging_product: "whatsapp", to, type: "text", text: { body: body.slice(0, cut).trimEnd() } }, "text");
+    last = await waPost(env, { messaging_product: "whatsapp", to, type: "text", text: { body: body.slice(0, cut).trimEnd() } }, "text", fromPhoneId);
     body = body.slice(cut).replace(/^\s+/, "");
   }
   return last;
@@ -2280,6 +2281,19 @@ async function appFetch(request, env, ctx) {
       if (!_so) return new Response(JSON.stringify({ ok: false, why: "window closed, nothing sent" }), { status: 409, headers: { "Content-Type": "application/json" } });
       const _sr = await waSend(env, env.WA_ALLOWED, _st);
       return new Response(JSON.stringify({ ok: !!(_sr && _sr.ok), chars: _st.length }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
+    if (url.pathname === "/desk_say" && request.method === "POST") {   // v388 - owner key; ONE plain text to env.WA_DESK_OWNER from the desk number, dry unless dry=0; refuses when the owner's desk window (wa_desk_last_in within 23 h) is closed; recipient fixed, same pattern as /najj_say
+      if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      let _db = {}; try { _db = await request.json(); } catch (e) { return new Response("json body required", { status: 400 }); }
+      const _dt = _db && typeof _db.text === "string" ? _db.text.trim() : "";
+      if (!_dt || _dt.length > 3800) return new Response("text must be a string, 1 to 3800 characters", { status: 400 });
+      const _dw = await deskWindowOpen(env);
+      const _dto = String(env.WA_DESK_OWNER || "").replace(/[^0-9]/g, "");
+      if (url.searchParams.get("dry") !== "0") return new Response(JSON.stringify({ dry: true, to: _dto || null, from_desk: deskOn(env), window_open: _dw, chars: _dt.length, text: _dt }, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      if (!deskOn(env) || !_dto || !env.WHATSAPP_TOKEN) return new Response(JSON.stringify({ ok: false, why: "unconfigured" }), { status: 500, headers: { "Content-Type": "application/json" } });
+      if (!_dw) return new Response(JSON.stringify({ ok: false, why: "window closed, nothing sent" }), { status: 409, headers: { "Content-Type": "application/json" } });
+      const _dr = await waSend(env, _dto, _dt, String(env.WA_DESK_PHONE_ID).replace(/[^0-9]/g, ""));
+      return new Response(JSON.stringify({ ok: !!(_dr && _dr.ok), chars: _dt.length }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
     }
     if (url.pathname === "/intake_status") {   // v370 - events=1 returns the engagement list instead
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -3702,6 +3716,7 @@ async function appFetch(request, env, ctx) {
         if (!_viaForward && env.WA_FORWARD_TOKEN && !env.WA_APP_SECRET) return new Response("forward token required", { status: 401 });   // receiver-only instance (no Meta secret): forwarding is the ONLY door
         if (!_viaForward && !(await waVerifySig(env, raw, request.headers.get("X-Hub-Signature-256")))) return new Response("bad sig", { status: 401 });
         let body; try { body = JSON.parse(raw); } catch (e) { return new Response("ok"); }
+        if (isDeskEvent(env, body)) { await deskHandle(env, body, { waSend }); return new Response("ok"); }   // v388 - the desk number: consumed here BEFORE the shape probe and the router, never handed to the ordinary handlers, never routed on, no stranger digits stored
         try {                                                          // v20 shape probe — no message content stored
           const _v = body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
           const _m = _v && _v.messages && _v.messages[0];
@@ -3714,7 +3729,7 @@ async function appFetch(request, env, ctx) {
           const _prev = JSON.parse((await env.MEETINGS.get("diag_walog")) || "[]"); _prev.unshift(_rec);
           await env.MEETINGS.put("diag_walog", JSON.stringify(_prev.slice(0, 10)), { expirationTtl: 86400 });
         } catch (e) {}
-        const val = body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
+        const val =body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
         const msg = val && val.messages && val.messages[0];
         const _sts = (val && val.statuses) || [];
         // v132 - a delivery/read receipt is the answer to "did she get it". v133 - record it here AND
@@ -3726,9 +3741,11 @@ async function appFetch(request, env, ctx) {
         // v133 - a status-only payload has no `from`; its subject is statuses[0].recipient_id, and that
         // is the same number the router keys on for her messages.
         const _routeNum = from || (_sts[0] && _sts[0].recipient_id) || "";
+        const _evPid = String((val && val.metadata && val.metadata.phone_number_id) || "").replace(/[^0-9]/g, "");   // v388 - a phone-id rule (WA_ROUTE_PHONE_<id>) wins over the sender rule, so a number's whole traffic can go to one instance (the desk number -> azimuth-2)
+        const _pidDest = (!_viaForward && _evPid) ? env["WA_ROUTE_PHONE_" + _evPid] : null;
         if (!_viaForward && _routeNum) {                               // sender-keyed router (one number, many instances)
-          const _rk = "WA_ROUTE_" + String(_routeNum).replace(/[^0-9]/g, "");
-          const _dest = env[_rk];
+          const _rk = _pidDest ? "WA_ROUTE_PHONE_" + _evPid : "WA_ROUTE_" + String(_routeNum).replace(/[^0-9]/g, "");
+          const _dest = _pidDest || env[_rk];
           const _tr = { routeKey: _rk, destSet: !!_dest, destPrefix: _dest ? String(_dest).slice(0, 48) : null, tokenSet: !!env.WA_FORWARD_TOKEN, forwarded: false, fwdStatus: null, fwdErr: null };
           if (_dest && env.WA_FORWARD_TOKEN) {
             try {
