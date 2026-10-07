@@ -3340,9 +3340,11 @@ async function appFetch(request, env, ctx) {
         // v133 - a status-only payload has no `from`; its subject is statuses[0].recipient_id, and that
         // is the same number the router keys on for her messages.
         const _routeNum = from || (_sts[0] && _sts[0].recipient_id) || "";
+        const _evPid = String((val && val.metadata && val.metadata.phone_number_id) || "").replace(/[^0-9]/g, "");   // v388r - a phone-id rule (WA_ROUTE_PHONE_<id>) wins over the sender rule, so a number's whole traffic can go to one instance (the desk number -> azimuth-2)
+        const _pidDest = (!_viaForward && _evPid) ? env["WA_ROUTE_PHONE_" + _evPid] : null;
         if (!_viaForward && _routeNum) {                               // sender-keyed router (one number, many instances)
-          const _rk = "WA_ROUTE_" + String(_routeNum).replace(/[^0-9]/g, "");
-          const _dest = env[_rk];
+          const _rk = _pidDest ? "WA_ROUTE_PHONE_" + _evPid : "WA_ROUTE_" + String(_routeNum).replace(/[^0-9]/g, "");
+          const _dest = _pidDest || env[_rk];
           const _tr = { routeKey: _rk, destSet: !!_dest, destPrefix: _dest ? String(_dest).slice(0, 48) : null, tokenSet: !!env.WA_FORWARD_TOKEN, forwarded: false, fwdStatus: null, fwdErr: null };
           if (_dest && env.WA_FORWARD_TOKEN) {
             try {
