@@ -27,7 +27,19 @@ const nameKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ")
 // v373 - districtName: the app district's own name (for the project area label); claims: optional {nameKey: [canonical developer ids]} of projects a developer's own web site lists (a CLAIM, never evidence).
 //   Every slot also carries `ce` (one evidence code per entry of `c`: V verified by the register, N name only, D developer claimed, U unverified) and `bx` (one evidence record per
 //   entry of `b`): {p register project number, di register developer_id, dn registered developer name, m match basis, e label, a area shown, as area source, h homes}. Additive only.
-export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nameDev, trace, regDev, districtName, claims, dldAreas, keep) {
+// v390 - BUILDING KEY. bindKey() says whether the footprint behind a unit-mix card is bound to the Land Department REGISTER, and returns the footprint index (the id of the card = the id the building page and the Brief use,
+//   key '<district slug>:<id>') or "". Bound = the transactions register is bound to the footprint (tx_bindings) or the units register is bound by PROPERTY ID (reg_bindings, and the card carries that same property id).
+//   A card that only got a register name by a name lookup, a register-built off-plan card (id 900000+, no footprint) and a synthetic card get no key. Without the two binding files (binds == null) only a card that carries
+//   its own transactions binding (dld_sales, written only from tx_bindings) gets one.
+export function bindKey(c, id, slug, binds) {
+  if (!c || c.synthetic || !/^\d{1,6}$/.test(String(id)) || Number(id) >= 900000) return "";
+  if (!binds) return c.dld_sales ? String(id) : "";
+  const tb = binds.tx && binds.tx[slug] && binds.tx[slug][id], rb = binds.reg && binds.reg[slug] && binds.reg[slug][id];
+  if (tb) return String(id);
+  if (rb && c.dld && c.dld.property_id != null && String(rb.property_id) === String(c.dld.property_id)) return String(id);
+  return "";
+}
+export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nameDev, trace, regDev, districtName, claims, dldAreas, keep, binds) {
   const B = (U && U.buildings_by_id) || {}, devs = {}, names = {};
   const slot = (dev) => {
     const k = dev ? canonicalOf(dev) : "_";
@@ -68,6 +80,7 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nam
     if (added && trace) trace.push({ slug, id, name: String(c.name || ""), project: String((c.dld_sales && c.dld_sales.project) || (c.dld && c.dld.project) || ""), dev: dev || null, q, why: D.why, cand: cand || null, route, evidence: ev.e, basis: ev.m, area: own.label, area_source: own.source, n: mine.reduce((a, x) => a + x[0], 0), aed: (c.rows || []).reduce((a, r) => a + ((r.median_aed && r.median_sqm && soldOf(r.type) && bedOf(r.type) != null) ? soldOf(r.type) * r.median_aed : 0), 0) });
     if (added) slot(dev).b.push([mine.reduce((a, x) => a + x[0], 0), Math.round(DM.wmedian(mine.map((x) => [x[1], x[0]]))), String(c.name || (c.dld && c.dld.project) || "")]);   // v321 - one project (building) = its sales and its median price per sq m
     if (added) slot(dev).bx.push({ p: ev.p, di: ev.di, dn: ev.dn, m: ev.m, e: ev.e, a: own.label, as: own.source, h: Number(c.registered_homes || (c.dld && c.dld.units_registered) || c.total_units || 0) });   // v373 - parallel to b
+    if (added) { const bk = bindKey(c, id, slug, binds); if (bk) slot(dev).bx[slot(dev).bx.length - 1].bk = bk; }   // v390 - the building key (footprint index), only for a register-bound footprint
     if (added && dev) slot(dev).h += Number(c.registered_homes || (c.dld && c.dld.units_registered) || c.total_units || 0);
   }
   for (const it of rentItems || []) {                                // Ejari contracts, community-level labelled on the page
@@ -120,6 +133,15 @@ function attachEvidence(areas, evidence, geoName) {
 // v386 - REGISTER FACTS (scripts/build_register_facts.py), additive: onto bx[i] and b12x[i] that carry a register project number `p`, the keys
 //   st (register status), pc (percent complete), pe (planned end date), u (registered units), mix ([studio, 1, 2, 3, 4+] bedroom counts), pl (registered land parcels).
 //   A fact the register file does not have is NOT written (no placeholder); a key the record already has is never overwritten; old keys are untouched. Without the file the index is byte-for-byte the old one.
+// v390 - b12x[i] (the 12-month list) has no card of its own: it takes the building key of the all-years record of the SAME register project number in the SAME area (the one with the most sales when a project
+//   has several bound buildings). No project number, or no keyed all-years record of that number: no key. Never a name match.
+export function attachBk(areas) {
+  for (const s of Object.keys(areas)) {
+    const best = new Map();
+    for (const d of Object.values(areas[s].devs || {})) (d.bx || []).forEach((x, i) => { if (!x || x.p == null || x.p === "" || !x.bk) return; const n = (d.b && d.b[i] && d.b[i][0]) || 0, o = best.get(String(x.p)); if (!o || n > o.n) best.set(String(x.p), { n, bk: x.bk }); });
+    for (const d of Object.values(areas[s].devs || {})) for (const x of d.b12x || []) { if (!x || x.p == null || x.p === "" || x.bk) continue; const o = best.get(String(x.p)); if (o) x.bk = o.bk; }
+  }
+}
 const RF_KEYS = ["st", "pc", "pe", "u", "mix", "pl"];
 export function attachRegFacts(areas, rf) {
   for (const s of Object.keys(areas)) for (const d of Object.values(areas[s].devs || {})) for (const k of ["bx", "b12x"]) for (const x of d[k] || []) {
@@ -128,7 +150,7 @@ export function attachRegFacts(areas, rf) {
     for (const q of RF_KEYS) if (f[q] != null && f[q] !== "" && !(q in x)) x[q] = f[q];
   }
 }
-export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs, register, evidence, projdevOut, traceOut, regdev, claims, keep, regfacts }) {
+export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs, register, evidence, projdevOut, traceOut, regdev, claims, keep, regfacts, binds }) {
   const projDev = {};
   // the Ejari projects index: every project Dubai-wide with its developer (KV img_ejari_projects_index)
   if (ejariProjects && ejariProjects.index) for (const k of Object.keys(ejariProjects.index)) { const p = ejariProjects.index[k]; if (p.name_en && p.developer) projDev[nameKey(p.name_en)] = p.developer; }
@@ -149,7 +171,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     if ((!U || !U.buildings_by_id) && evidence && evidence.areas && evidence.areas[g.slug]) U = { buildings_by_id: {} };   // v322: a district with register sales but no card file still gets its evidence
     if (!U || !U.buildings_by_id) continue;
     const nameDev = {};
-    const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev, traceOut, regdev && regdev[g.slug], g.name, claims, register && register[g.slug] && register[g.slug].areas, keep);
+    const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev, traceOut, regdev && regdev[g.slug], g.name, claims, register && register[g.slug] && register[g.slug].areas, keep, binds || null);
     if (projdevOut) projdevOut.slugs[g.slug] = nameDev;
     if (!Object.keys(devs).length && !(evidence && evidence.areas && evidence.areas[g.slug])) continue;
     areas[g.slug] = { name: headingName(g.slug, g.name), corridor: g.corridor, bbox: g.bbox, centre: g.centre, devs };
@@ -162,6 +184,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
   if (projdevOut) for (const k of Object.keys(projDev)) { const c = canonicalOf(projDev[k]); if (c && !isGenericName(k)) projdevOut.global[k] = c; }   // v325: a bare common-word name ("symphony", "park central") never carries a developer Dubai-wide
   const geoName = {}; for (const g of geo.districts) geoName[g.slug] = g.name;
   if (evidence && evidence.areas) attachEvidence(areas, evidence, geoName);
+  attachBk(areas);   // v390 - the building key onto the 12-month records of the same register project
   if (regfacts && regfacts.p) attachRegFacts(areas, regfacts.p);   // v386 - register facts onto every evidence record that has a register project number
   // v382 - the quiet second line of each heading: the communities its projects sit in (both windows, one count per project name), from the data
   for (const s of Object.keys(areas)) {
@@ -207,7 +230,7 @@ if (isMain) {
   const rd = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
   const prices = rd(a.prices);
   const projdevOut = a["projdev-out"] ? { slugs: {}, global: {} } : null;
-  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean), register: a.register ? rd(a.register) : null, evidence: a.evidence ? rd(a.evidence) : null, regfacts: a.regfacts ? rd(a.regfacts) : null, regdev: a.regdev ? rd(a.regdev) : null, claims: a.claims ? rd(a.claims) : null, keep: (() => { const f = a.keep || fileURLToPath(new URL("./attribution_keep.json", import.meta.url)); return fs.existsSync(f) ? rd(f).keep || [] : []; })(), projdevOut });
+  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean), register: a.register ? rd(a.register) : null, evidence: a.evidence ? rd(a.evidence) : null, regfacts: a.regfacts ? rd(a.regfacts) : null, binds: a.regbind || a.txbind ? { reg: a.regbind ? rd(a.regbind) : null, tx: a.txbind ? rd(a.txbind) : null } : null, regdev: a.regdev ? rd(a.regdev) : null, claims: a.claims ? rd(a.claims) : null, keep: (() => { const f = a.keep || fileURLToPath(new URL("./attribution_keep.json", import.meta.url)); return fs.existsSync(f) ? rd(f).keep || [] : []; })(), projdevOut });
   if (projdevOut) fs.writeFileSync(a["projdev-out"], JSON.stringify(projdevOut));
   fs.writeFileSync(a.out, JSON.stringify(idx));
   console.log("areas", Object.keys(idx.areas).length, "developers", Object.keys(idx.devs).length, "bounds", idx.cuts.bounds, "bytes", fs.statSync(a.out).size);

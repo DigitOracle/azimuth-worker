@@ -43,7 +43,7 @@ const card = (name, ppsm, n, ev, nd) => P.pjCard("dist", name, ppsm, n, "<span c
 const dkOf = (h) => (h.match(/data-pd="([^"]+)"/) || [])[1];
 // the fixture adds a building key to one project (the Client sheet needs it) and one investor facts record
 S.inv = [{ id: "INV-BUILT", name: "Built Tower", brand: "Built Tower", pn: 777 }]; P.invIndex();
-const EVB = Object.assign({}, EV.built, { bk: "b_dist_77" });
+const EVB = Object.assign({}, EV.built, { bk: "77" });
 const mk = (name, ev, ppsm, n) => { const h = P.pjCard("dist", name, ppsm, n, "", "Project name not recorded", ev); return h; };
 const cardNotyet = mk("Not Yet Tower", EV.notyet, 21000, 8), cardBuilt = mk("Built Tower", EVB, 22000, 7), cardTower = mk("Tower One", EV.tower, 35000, 10), cardAnon = mk(null, null, 18000, 4);
 const open = (h) => { P.pdOpen(dkOf(h), mkEl("from")); return els.pjdet.innerHTML; };
@@ -54,7 +54,7 @@ const sects = (h) => [...h.matchAll(/<button type=button class=pdacb id=(\S+) ar
 console.log("A - the header is always visible, the four sections are closed");
 const pn = open(cardNotyet);
 ok(/<b dir=auto>Not Yet Tower<\/b>/.test(pn) && /id=pdx/.test(pn), "the panel's bar always shows the project name and the close button");
-ok(/<div class=pdhead><span class=pdk>AED 1,9\d\d per sq ft &middot; 8 sales<\/span>/.test(pn), "the header shows the price per sq ft and the sales count, outside any section");
+ok(/<div class=pdhead><span class=pdk>AED 1,9\d\d per sq ft &middot; Upper band &middot; 8 sales<\/span>/.test(pn), "the header shows the price per sq ft and the sales count, outside any section");
 ok(/<span class="note pdwy">[\s\S]*Not built yet, so there is no building to show on the map\.<\/span>/.test(pn), "the header shows the ONE why-no-map-position line (first sentence), outside any section");
 const ss = sects(pn);
 ok(ss.length === 4 && ss.map((s) => s.title).join("|") === SECS.join("|"), "exactly four sections: " + SECS.join(", "));
@@ -88,7 +88,7 @@ const btns = (b) => [...b.matchAll(/<(a|button) (?:type=button )?class="pdfbtn p
 const bt = btns(bb);
 ok(bt.length === 3 && bt.map((b) => b.label).join("|") === "Investor PDF|Client sheet|Broker sheet", "three buttons at the bottom, in one row: Investor PDF, Client sheet, Broker sheet");
 ok(/<div class="pdfrow pdsmrow">/.test(bb) && /\.pdsmrow\{[^}]*margin-top:8px/.test(css) && /\.pdfrow\{display:flex;flex-wrap:wrap/.test(css), "one wrapping row");
-ok(bt.every((b) => !b.off) && /href="\/developers_pdf\?kind=investor_selector&amp;project=INV-BUILT/.test(bt[0].attrs) && /href="\/brief_pdf\?kind=dossier&amp;keys=b_dist_77&amp;beds=all&amp;mode=rent&amp;key=k"/.test(bt[1].attrs) && /href="\/developers_pdf\?kind=snapshot&amp;area=dist&amp;/.test(bt[2].attrs) && /developers=x&amp;key=k"/.test(bt[2].attrs), "a project with a facts record, a building key and a mapped developer: all three are real links (investor selector, Brief dossier, developer snapshot for this area)");
+ok(bt.every((b) => !b.off) && /href="\/developers_pdf\?kind=investor_selector&amp;project=INV-BUILT/.test(bt[0].attrs) && /href="\/brief_pdf\?kind=dossier&amp;keys=dist%3A77&amp;beds=all&amp;mode=rent&amp;key=k"/.test(bt[1].attrs) && /href="\/developers_pdf\?kind=snapshot&amp;area=dist&amp;/.test(bt[2].attrs) && /developers=x&amp;key=k"/.test(bt[2].attrs), "a project with a facts record, a building key and a mapped developer: all three are real links (investor selector, Brief dossier, developer snapshot for this area)");
 ok(bt.every((b) => /<svg class="pdfic"/.test(bb)) && /\.pdsm\{min-height:36px/.test(css), "icons from the existing set and a 36 px height");
 const bnt = btns(bn);
 ok(bnt.length === 3 && bnt.map((b) => b.off).join() === "true,true,true", "a project with no facts record, no building key and no mapped developer: all three are disabled, none hidden");
@@ -96,12 +96,12 @@ ok(bnt.every((b) => /aria-disabled=true/.test(b.attrs) && /data-why="[^"]{20,}"/
 ok(/<p class="note pdwhyn" role=status hidden><\/p>/.test(bn), "the reason has a status line under the row, hidden until a tap");
 {
   const note = { textContent: "", hidden: true }; const wrap = { querySelector: (q) => (q === ".pdwhyn" ? note : null) };
-  const b = { parentNode: { parentNode: wrap }, getAttribute: (k) => (k === "data-why" ? "No client sheet is tied to this project yet." : "") };
-  P.pdBtnTap(b); ok(note.textContent === "No client sheet is tied to this project yet." && note.hidden === false, "tapping a disabled button shows its one-line reason");
+  const b = { parentNode: { parentNode: wrap }, getAttribute: (k) => (k === "data-why" ? "A client sheet needs a building with rent history; this project has no building on the map yet." : "") };
+  P.pdBtnTap(b); ok(note.textContent === "A client sheet needs a building with rent history; this project has no building on the map yet." && note.hidden === false, "tapping a disabled button shows its one-line reason");
 }
 ok(/Investor PDF/.test(bn) && !/investor_selector/.test(bn), "the Investor button only enables with a facts record");
 ok(!/Download PDF/.test(pn + pb), "no long 'Download PDF: ...' row inside the project details");
-ok(/No investor facts record for this project yet\./.test(bn) && /No client sheet is tied to this project yet\./.test(bn) && /no broker sheet\./.test(bn), "plain reasons, no unexplained acronyms");
+ok(/No investor facts record for this project yet\./.test(bn) && /A client sheet needs a building with rent history; this project has no building on the map yet\./.test(bn) && /no broker sheet\./.test(bn), "plain reasons, no unexplained acronyms");
 ok(P.pdDevKey({ slug: "dist", name: "Built Tower" }) === "x" && P.pdDevKey({ slug: "dist", name: "Nobody Tower" }) === "" && P.pdDevKey({ slug: "dist", name: "" }) === "", "the broker sheet's developer is found by project name in the area, never guessed");
 
 console.log("D - the pinned building snapshot carries the same accordion and the same three buttons");
