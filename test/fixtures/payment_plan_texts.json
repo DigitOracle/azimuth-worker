@@ -1,0 +1,15 @@
+{
+  "note": "Developer sentences as they are on the developer web pages (data/dev_meta/*_portfolio.json), plus the ambiguous ones that must be left out. v375.",
+  "cases": [
+    { "name": "simple", "text": "The payment plan is structured as 20% on booking, followed by 40% in installments, and 40% on completion in June 2027." },
+    { "name": "before-handover total", "text": "The post-handover payment plan comprises 55% before handover, 10% upon handover and 35% after handover." },
+    { "name": "fee in brackets is not a step", "text": "The payment plan is structured as 20% on booking (+4% DLD), followed by installments during construction, and 40% payable on handover in February 2026." },
+    { "name": "two options", "text": "Cove Grand offers two structured payment plans: • Option 1: 50/50 payment plan – 50% during construction and 50% on completion. • Option 2: Post-handover plan – 70% payable up to completion, with the remaining 30% payable over 3 years post-handover in quarterly instalments." },
+    { "name": "instalment list", "text": "Sunset Bay Grand offers a construction-linked payment plan structured as 20% on booking, followed by six instalments of 5%, 5%, 10%, 10%, 5%, and 5% between February 2026 and July 2027, with 40% due on completion in December 2027." },
+    { "name": "AMBIGUOUS range", "text": "We offer structured and flexible payment plans. Typical structures include 10% on booking, 40–50% during construction, and the remaining balance on handover." },
+    { "name": "AMBIGUOUS label with no breakdown", "text": "Cove by Imtiaz offers: • Option 1: 60/40 payment plan • Option 2: Post-handover plan with 30% payable over 3 years" },
+    { "name": "AMBIGUOUS hides two payments", "text": "The project offers a post-handover payment structure, typically comprising: • 20% on booking • Payments during construction • 30% payable over 3 years post-handover in quarterly instalments" },
+    { "name": "AMBIGUOUS post-handover not quantified", "text": "20% on booking, staged construction payments, 15% on completion, and the remaining balance payable post-handover over 3 years." },
+    { "name": "not a payment plan", "text": "Don't miss a great opportunity to invest. 40% Revenue Share, Returns up to 8%, 50% discount on bookings, and more!" }
+  ]
+}

@@ -1,0 +1,3993 @@
+{
+ "version": 1,
+ "generated": "2026-10-07 07:23",
+ "evidence": "DEVELOPER_CLAIMED",
+ "rule": "A plan is listed only where a developer's own text says what is paid when; a printed code (60/40, 5/5/5/5/5/5/70) is kept as a label and is never read as before or after handover.",
+ "coverage": {
+  "projects_in_projfacts": 891,
+  "before_with_plan_label": 30,
+  "after_structured_plan": 41,
+  "after_label_only_extra": 26,
+  "after_any_plan_on_file": 67,
+  "structured_plan_projects_total": 41,
+  "projects_not_in_projfacts": 1
+ },
+ "projects": {
+  "arada|akalahotelsand": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Akala Hotels And Residences",
+   "in_projfacts": true,
+   "aliases": [
+    "Akala Hotels And Residences",
+    "Akala Hotels and Residences"
+   ],
+   "handover_text": "31-Oct-2029",
+   "plans": [],
+   "labels": [
+    {
+     "text": "10/10/5/5/5/5/60",
+     "figures": [
+      10.0,
+      10.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      60.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[2].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 5,
+      "from_aed": 3799000,
+      "median_aed": 3835000
+     },
+     "2 B/R": {
+      "n": 7,
+      "from_aed": 6020000,
+      "median_aed": 8510000
+     },
+     "3 B/R": {
+      "n": 8,
+      "from_aed": 12580000,
+      "median_aed": 16077500.0
+     },
+     "4 B/R": {
+      "n": 2,
+      "from_aed": 18380000,
+      "median_aed": 21075000.0
+     },
+     "5 B/R": {
+      "n": 1,
+      "from_aed": 34545000,
+      "median_aed": 34545000
+     },
+     "6 B/R": {
+      "n": 1,
+      "from_aed": 88000000,
+      "median_aed": 88000000
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|anantarasharjah": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Anantara Sharjah Residences",
+   "in_projfacts": true,
+   "aliases": [
+    "Anantara Sharjah Residences"
+   ],
+   "handover_text": "31-Dec-2027",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/75",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      75.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[9].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 5,
+      "from_aed": 2510000,
+      "median_aed": 2528000
+     },
+     "2 B/R": {
+      "n": 13,
+      "from_aed": 3490000,
+      "median_aed": 4599000
+     },
+     "3 B/R": {
+      "n": 11,
+      "from_aed": 5609000,
+      "median_aed": 6821000
+     },
+     "4 B/R": {
+      "n": 4,
+      "from_aed": 7756000,
+      "median_aed": 8303000.0
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|centralbusinessdistrict": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Central Business District",
+   "in_projfacts": false,
+   "aliases": [
+    "Central Business District"
+   ],
+   "handover_text": "30-Apr-2027",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/70",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      70.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[10].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "null": {
+      "n": 4,
+      "from_aed": 5195000,
+      "median_aed": 5235000.0
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|gate": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "The Gate",
+   "in_projfacts": true,
+   "aliases": [
+    "The Gate"
+   ],
+   "handover_text": "30-Jun-2028",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/70",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      70.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[15].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 1,
+      "from_aed": 1030000,
+      "median_aed": 1030000
+     },
+     "2 B/R": {
+      "n": 98,
+      "from_aed": 1520000,
+      "median_aed": 1771000.0
+     },
+     "3 B/R": {
+      "n": 31,
+      "from_aed": 2140000,
+      "median_aed": 2603000
+     },
+     "4 B/R": {
+      "n": 3,
+      "from_aed": 3125000,
+      "median_aed": 3190000
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|inauradowntown": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Inaura Downtown",
+   "in_projfacts": true,
+   "aliases": [
+    "Inaura Downtown"
+   ],
+   "handover_text": "30-Jun-2030",
+   "plans": [],
+   "labels": [
+    {
+     "text": "10/10/5/5/5/5/60",
+     "figures": [
+      10.0,
+      10.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      60.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[0].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 4,
+      "from_aed": 3625000,
+      "median_aed": 3652500.0
+     },
+     "2 B/R": {
+      "n": 10,
+      "from_aed": 6425000,
+      "median_aed": 6627500.0
+     },
+     "4 B/R": {
+      "n": 1,
+      "from_aed": 20730000,
+      "median_aed": 20730000
+     },
+     "5 B/R": {
+      "n": 1,
+      "from_aed": 41050000,
+      "median_aed": 41050000
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|jenna": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Jenna",
+   "in_projfacts": true,
+   "aliases": [
+    "Jenna"
+   ],
+   "handover_text": "31-Mar-2029",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/70",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      70.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[12].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "2 B/R": {
+      "n": 4,
+      "from_aed": 1555000,
+      "median_aed": 1602500.0
+     },
+     "3 B/R": {
+      "n": 3,
+      "from_aed": 2640000,
+      "median_aed": 2665000
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|lareendana": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Lareen / Dana",
+   "in_projfacts": true,
+   "aliases": [
+    "Lareen / Dana"
+   ],
+   "handover_text": "31-Mar-2029",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/5/65",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      65.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[4].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "3 B/R": {
+      "n": 1,
+      "from_aed": 2950000,
+      "median_aed": 2950000
+     },
+     "4 B/R": {
+      "n": 11,
+      "from_aed": 2900000,
+      "median_aed": 4622000
+     },
+     "5 B/R": {
+      "n": 4,
+      "from_aed": 6210000,
+      "median_aed": 6250000.0
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|laura": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Laura",
+   "in_projfacts": true,
+   "aliases": [
+    "Laura"
+   ],
+   "handover_text": "31-Mar-2029",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/5/65",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      65.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[5].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "3 B/R": {
+      "n": 1,
+      "from_aed": 2905000,
+      "median_aed": 2905000
+     },
+     "4 B/R": {
+      "n": 21,
+      "from_aed": 2875000,
+      "median_aed": 3570000
+     },
+     "5 B/R": {
+      "n": 4,
+      "from_aed": 6190000,
+      "median_aed": 6212500.0
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|layan": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Layan",
+   "in_projfacts": true,
+   "aliases": [
+    "Layan"
+   ],
+   "handover_text": "30-Sept-2029",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/5/65",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      65.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[6].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "3 B/R": {
+      "n": 7,
+      "from_aed": 2915000,
+      "median_aed": 2915000
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|melianarenjcoralanber": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Melia / Narenj / Coral / Anber",
+   "in_projfacts": true,
+   "aliases": [
+    "Melia / Narenj / Coral / Anber"
+   ],
+   "handover_text": "31-Dec-2027",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/70",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      70.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[8].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "4 B/R": {
+      "n": 2,
+      "from_aed": 5195000,
+      "median_aed": 5260000.0
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|naseejdistrict": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Naseej District",
+   "in_projfacts": true,
+   "aliases": [
+    "Naseej District"
+   ],
+   "handover_text": "30-Sept-2026",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/70",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      70.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[11].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 5,
+      "from_aed": 1465000,
+      "median_aed": 2375000
+     },
+     "2 B/R": {
+      "n": 24,
+      "from_aed": 3035000,
+      "median_aed": 3128000.0
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|nesba": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Nesba",
+   "in_projfacts": true,
+   "aliases": [
+    "Nesba"
+   ],
+   "handover_text": "31-Dec-2027",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/70",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      70.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[13].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "2 B/R": {
+      "n": 6,
+      "from_aed": 1665000,
+      "median_aed": 1922500.0
+     },
+     "3 B/R": {
+      "n": 1,
+      "from_aed": 2825000,
+      "median_aed": 2825000
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|safa": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Safa",
+   "in_projfacts": true,
+   "aliases": [
+    "Safa"
+   ],
+   "handover_text": "30-Jun-2028",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/70",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      70.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[14].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 4,
+      "from_aed": 1195000,
+      "median_aed": 1587000.0
+     },
+     "2 B/R": {
+      "n": 40,
+      "from_aed": 1530000,
+      "median_aed": 1978000.0
+     },
+     "3 B/R": {
+      "n": 13,
+      "from_aed": 2432000,
+      "median_aed": 2770000
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|saro": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Saro",
+   "in_projfacts": true,
+   "aliases": [
+    "Saro"
+   ],
+   "handover_text": "30-Sept-2026",
+   "plans": [],
+   "labels": [
+    {
+     "text": "20/80",
+     "figures": [
+      20.0,
+      80.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[1].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "4 B/R": {
+      "n": 1,
+      "from_aed": 5875000,
+      "median_aed": 5875000
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|sedra": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "Sedra",
+   "in_projfacts": true,
+   "aliases": [
+    "Sedra"
+   ],
+   "handover_text": "31-Mar-2029",
+   "plans": [],
+   "labels": [
+    {
+     "text": "5/5/5/5/5/5/5/65",
+     "figures": [
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      65.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[7].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "4 B/R": {
+      "n": 23,
+      "from_aed": 2880000,
+      "median_aed": 3520000
+     },
+     "5 B/R": {
+      "n": 7,
+      "from_aed": 5990000,
+      "median_aed": 6235000
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "arada|watharbour": {
+   "developer": "Arada",
+   "dev": "arada",
+   "project": "W Residences at Dubai Harbour",
+   "in_projfacts": true,
+   "aliases": [
+    "W Residences At Dubai Harbour",
+    "W Residences at Dubai Harbour"
+   ],
+   "handover_text": "31-Dec-2028",
+   "plans": [],
+   "labels": [
+    {
+     "text": "10/10/5/5/5/5/60",
+     "figures": [
+      10.0,
+      10.0,
+      5.0,
+      5.0,
+      5.0,
+      5.0,
+      60.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/arada_2026-09-22.json",
+      "ref": "projects[3].plan",
+      "sheet_date": "2026-09-22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/arada_2026-09-22.json",
+    "sheet_date": "2026-09-22",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 22,
+      "from_aed": 3911000,
+      "median_aed": 4563000.0
+     },
+     "2 B/R": {
+      "n": 10,
+      "from_aed": 5845000,
+      "median_aed": 6863000.0
+     },
+     "3 B/R": {
+      "n": 9,
+      "from_aed": 11701000,
+      "median_aed": 13199000
+     },
+     "4 B/R": {
+      "n": 7,
+      "from_aed": 15107000,
+      "median_aed": 18603000
+     },
+     "5 B/R": {
+      "n": 3,
+      "from_aed": 26733000,
+      "median_aed": 27114000
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "emaar|addressgranddowntown": {
+   "developer": "Emaar",
+   "dev": "emaar",
+   "project": "Address Grand Downtown Dubai",
+   "in_projfacts": true,
+   "aliases": [
+    "Address Grand Downtown Dubai"
+   ],
+   "handover_text": null,
+   "plans": [],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/emaar_portfolio.json",
+      "ref": "Address Grand Downtown Dubai / facts.payment_plans[0]",
+      "url": "https://www.emaar.com/en/properties/address-grand-downtown-dubai",
+      "fetched": "2026-09-07 11:48"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": null
+  },
+  "imtiaz|archive": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "The Archive by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "The Archive",
+    "The Archive by Imtiaz"
+   ],
+   "handover_text": null,
+   "plans": [],
+   "labels": [
+    {
+     "text": "50/50",
+     "figures": [
+      50.0,
+      50.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/imtiaz_2026-09-12.json",
+      "ref": "projects[0].plan",
+      "sheet_date": "2026-09-12"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/imtiaz_2026-09-12.json",
+    "sheet_date": "2026-09-12",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 4,
+      "from_aed": 1141619.0,
+      "median_aed": 1147787.5
+     },
+     "2 B/R": {
+      "n": 3,
+      "from_aed": 1611218.0,
+      "median_aed": 1625785.0
+     },
+     "Studio": {
+      "n": 3,
+      "from_aed": 677209.0,
+      "median_aed": 677824.0
+     }
+    }
+   },
+   "confidence": null
+  },
+  "imtiaz|beachwalk": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Beach Walk Residence by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Beach Walk Residence by Imtiaz"
+   ],
+   "handover_text": null,
+   "plans": [],
+   "labels": [
+    {
+     "text": "50/50",
+     "figures": [
+      50.0,
+      50.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Beach Walk Residence by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/beach-walk-residence-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    },
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Beach Walk Residence by Imtiaz / facts.payment_plans[1]",
+      "url": "https://imtiaz.ae/property/beach-walk-residence-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": null
+  },
+  "imtiaz|beachwalk2": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Beach Walk Residence II by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Beach Walk Residence II by Imtiaz",
+    "Beach Walk Residences 2"
+   ],
+   "handover_text": "April 2026",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Beach Walk Residence II by Imtiaz / faq[3].a",
+      "url": "https://imtiaz.ae/property/beach-walk-residence-ii-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking, followed by 40% in installments, and the remaining 40% on completion in April 2026."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|beachwalk3": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Beach Walk III by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "BEACH WALK RESIDENCES 3 BY IMTIAZ",
+    "Beach Walk III by Imtiaz"
+   ],
+   "handover_text": "June 2026",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Beach Walk III by Imtiaz / faq[4].a",
+      "url": "https://imtiaz.ae/property/beach-walk-iii-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "We offer a simple construction-linked plan with 20% on booking, 40% payable in installments during construction, and 40% on completion in June 2026 ."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|beachwalk4": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Beach Walk 4 by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Beach Walk 4 by Imtiaz",
+    "Beach Walk Residences 4 by Imtiaz"
+   ],
+   "handover_text": "June 2027",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Beach Walk 4 by Imtiaz / faq[5].a",
+      "url": "https://imtiaz.ae/property/beach-walk-4-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking, followed by 40% in installments, and 40% on completion in June 2027."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|beachwalkgrand": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Beach Walk Grand by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Beach Walk Grand By Imtiaz",
+    "Beach Walk Grand by Imtiaz"
+   ],
+   "handover_text": "November 2026",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0,
+       "when": "November 2024"
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Beach Walk Grand by Imtiaz / faq[6].a",
+      "url": "https://imtiaz.ae/property/beach-walk-grand-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking (November 2024), 40% payable in installments during construction, and 40% on completion in November 2026."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|beachwalkgrand2": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Beach Walk Grand 2 by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "BEACH WALK GRAND 2 BY IMTIAZ",
+    "Beach Walk Grand 2 by Imtiaz"
+   ],
+   "handover_text": "Q4 2027",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0,
+       "list": [
+        40.0
+       ]
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Beach Walk Grand 2 by Imtiaz / faq[5].a",
+      "url": "https://imtiaz.ae/property/beach-walk-grand-2-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "We offer 20% on booking, followed by installments of 40% during construction, with the remaining 40% payable on completion in Q4 2027."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|cove": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Cove by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Cove by Imtiaz"
+   ],
+   "handover_text": null,
+   "plans": [],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/cove-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": null
+  },
+  "imtiaz|coveboulevard": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Cove Boulevard by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Cove Boulevard By Imtiaz",
+    "Cove Boulevard by Imtiaz"
+   ],
+   "handover_text": "June 2028",
+   "plans": [
+    {
+     "label": "60/40",
+     "indicative": false,
+     "on_booking_pct": null,
+     "instalments_pct": 60.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "instalments_before_handover",
+       "pct": 60.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Boulevard by Imtiaz / faq[2].a",
+      "url": "https://imtiaz.ae/property/cove-boulevard-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "Two payment plans are offered • Option 1: 60/40 payment plan - 60% during construction and 40% on completion • Option 2: 70/30 payment plan - 70% up to completion, with 30% payable post-handover over 3 years in quarterly instalments"
+     },
+     "label_on_sheet": null
+    },
+    {
+     "label": "70/30",
+     "indicative": false,
+     "on_booking_pct": null,
+     "instalments_pct": null,
+     "before_handover_pct": 70.0,
+     "on_handover_pct": 0,
+     "after_handover_pct": 30.0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "before_handover_total",
+       "pct": 70.0
+      },
+      {
+       "kind": "after_handover",
+       "pct": 30.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Boulevard by Imtiaz / faq[2].a",
+      "url": "https://imtiaz.ae/property/cove-boulevard-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "Two payment plans are offered • Option 1: 60/40 payment plan - 60% during construction and 40% on completion • Option 2: 70/30 payment plan - 70% up to completion, with 30% payable post-handover over 3 years in quarterly instalments"
+     },
+     "label_on_sheet": null
+    }
+   ],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Boulevard by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/cove-boulevard-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    },
+    {
+     "text": "70/30",
+     "figures": [
+      70.0,
+      30.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Boulevard by Imtiaz / facts.payment_plans[1]",
+      "url": "https://imtiaz.ae/property/cove-boulevard-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/imtiaz_2026-09-14.json",
+    "sheet_date": "2026-09-14",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "Office": {
+      "n": 2,
+      "from_aed": 1886667.55,
+      "median_aed": 2875893.57
+     }
+    }
+   },
+   "confidence": "high",
+   "handover_source": "developer sheet"
+  },
+  "imtiaz|coveedition1": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Cove Edition I by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Cove Edition I by Imtiaz",
+    "Cove Edition Residence 1 By Imtiaz"
+   ],
+   "handover_text": "June 2026",
+   "plans": [
+    {
+     "label": "50/50",
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 30.0,
+     "before_handover_pct": 50.0,
+     "on_handover_pct": 50.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 30.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 50.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition I by Imtiaz / faq[4].a",
+      "url": "https://imtiaz.ae/property/cove-edition-i-by-imtiaz-1",
+      "fetched": "2026-09-02 18:22",
+      "text": "Cove Edition by Imtiaz offers two payment options: • 50/50 Plan: 20% on booking, followed by construction-linked installments, with 50% payable on completion in June 2026. • 3-Year Post-Handover Plan: 20% on booking, staged construction payments, 15% on completion, and the remaining balance payable post-handover over 3 years."
+     },
+     "label_on_sheet": null
+    }
+   ],
+   "labels": [
+    {
+     "text": "50/50",
+     "figures": [
+      50.0,
+      50.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition I by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/cove-edition-i-by-imtiaz-1",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": "medium"
+  },
+  "imtiaz|coveedition2": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Cove Edition 2 by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Cove Edition 2 by Imtiaz",
+    "Cove Edition Residence 2 By Imtiaz"
+   ],
+   "handover_text": "October 2026",
+   "plans": [],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/imtiaz_2026-09-14.json",
+      "ref": "projects[5].plan",
+      "sheet_date": "2026-09-14"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/imtiaz_2026-09-14.json",
+    "sheet_date": "2026-09-14",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 1,
+      "from_aed": 1344526.0,
+      "median_aed": 1344526.0
+     },
+     "2 B/R": {
+      "n": 2,
+      "from_aed": 1881000.0,
+      "median_aed": 1881000.0
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "imtiaz|coveedition3": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Cove Edition III by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Cove Edition III by Imtiaz",
+    "Cove Edition Residence 3 By Imtiaz"
+   ],
+   "handover_text": "November 2026",
+   "plans": [
+    {
+     "label": "50/50",
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 30.0,
+     "before_handover_pct": 50.0,
+     "on_handover_pct": 50.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0,
+       "when": "December 2024"
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 30.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 50.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition III by Imtiaz / faq[3].a",
+      "url": "https://imtiaz.ae/property/cove-edition-iii-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "We offer two flexible payment options: • 50/50 Plan: 20% on booking (December 2024), followed by construction-linked installments, with 50% payable on completion in November 2026. • 70/30 Post-Handover Plan: 20% on booking (December 2024), staged construction payments, 15% on completion (November 2026), and the remaining 30% payable post-handover over 3 years at 2.5% per quarter."
+     },
+     "label_on_sheet": null
+    },
+    {
+     "label": "70/30",
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 35.0,
+     "before_handover_pct": 55.0,
+     "on_handover_pct": 15.0,
+     "after_handover_pct": 30.0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0,
+       "when": "December 2024"
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 35.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 15.0
+      },
+      {
+       "kind": "after_handover",
+       "pct": 30.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition III by Imtiaz / faq[3].a",
+      "url": "https://imtiaz.ae/property/cove-edition-iii-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "We offer two flexible payment options: • 50/50 Plan: 20% on booking (December 2024), followed by construction-linked installments, with 50% payable on completion in November 2026. • 70/30 Post-Handover Plan: 20% on booking (December 2024), staged construction payments, 15% on completion (November 2026), and the remaining 30% payable post-handover over 3 years at 2.5% per quarter."
+     },
+     "label_on_sheet": null
+    }
+   ],
+   "labels": [
+    {
+     "text": "50/50",
+     "figures": [
+      50.0,
+      50.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition III by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/cove-edition-iii-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    },
+    {
+     "text": "70/30",
+     "figures": [
+      70.0,
+      30.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition III by Imtiaz / facts.payment_plans[1]",
+      "url": "https://imtiaz.ae/property/cove-edition-iii-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": "medium"
+  },
+  "imtiaz|coveedition4": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Cove Edition 4 by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Cove Edition 4 by Imtiaz",
+    "Cove Edition Residence 4 By Imtiaz"
+   ],
+   "handover_text": "December 2026",
+   "plans": [
+    {
+     "label": "50/50",
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 30.0,
+     "before_handover_pct": 50.0,
+     "on_handover_pct": 50.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 30.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 50.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition 4 by Imtiaz / faq[1].a",
+      "url": "https://imtiaz.ae/property/cove-edition-4-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "We offer two flexible payment options designed to suit different investment preferences: • 50/50 Plan: 20% on booking, followed by construction-linked installments, with the remaining 50% payable on handover in December 2026. • 70/30 Post-Handover Plan: 20% on booking, staged construction payments, 15% on completion, and the remaining balance payable post-handover over 3 years."
+     },
+     "label_on_sheet": null
+    }
+   ],
+   "labels": [
+    {
+     "text": "50/50",
+     "figures": [
+      50.0,
+      50.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition 4 by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/cove-edition-4-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    },
+    {
+     "text": "70/30",
+     "figures": [
+      70.0,
+      30.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition 4 by Imtiaz / facts.payment_plans[1]",
+      "url": "https://imtiaz.ae/property/cove-edition-4-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": "medium"
+  },
+  "imtiaz|coveedition5": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Cove Edition 5 by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "COVE EDITION RESIDENCE 5 by Imtiaz",
+    "Cove Edition 5 by Imtiaz"
+   ],
+   "handover_text": "June 2027",
+   "plans": [
+    {
+     "label": "50/50",
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 30.0,
+     "before_handover_pct": 50.0,
+     "on_handover_pct": 50.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 30.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 50.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition 5 by Imtiaz / faq[1].a",
+      "url": "https://imtiaz.ae/property/cove-edition-5-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "We offer two flexible, investment-friendly payment options: • 50/50 Plan: 20% on booking, followed by construction-linked installments, with the remaining 50% payable on completion in June 2027. • 3-Year Post-Handover Plan: 20% on booking, staged construction payments, completion in June 2027, and the remaining 30% payable post-handover over 3 years at 2.5% per quarter."
+     },
+     "label_on_sheet": null
+    }
+   ],
+   "labels": [
+    {
+     "text": "50/50",
+     "figures": [
+      50.0,
+      50.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Edition 5 by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/cove-edition-5-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": "medium"
+  },
+  "imtiaz|covegrand": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Cove Grand by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Cove Grand Residence by Imtiaz",
+    "Cove Grand by Imtiaz"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": "50/50",
+     "indicative": false,
+     "on_booking_pct": null,
+     "instalments_pct": 50.0,
+     "before_handover_pct": 50.0,
+     "on_handover_pct": 50.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "instalments_before_handover",
+       "pct": 50.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 50.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Grand by Imtiaz / faq[1].a",
+      "url": "https://imtiaz.ae/property/cove-grand-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "Cove Grand offers two structured payment plans: • Option 1: 50/50 payment plan – 50% during construction and 50% on completion. • Option 2: Post-handover plan – 70% payable up to completion, with the remaining 30% payable over 3 years post-handover in quarterly instalments."
+     },
+     "label_on_sheet": null
+    },
+    {
+     "label": "Post-handover plan",
+     "indicative": false,
+     "on_booking_pct": null,
+     "instalments_pct": null,
+     "before_handover_pct": 70.0,
+     "on_handover_pct": 0,
+     "after_handover_pct": 30.0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "before_handover_total",
+       "pct": 70.0
+      },
+      {
+       "kind": "after_handover",
+       "pct": 30.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Grand by Imtiaz / faq[1].a",
+      "url": "https://imtiaz.ae/property/cove-grand-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "Cove Grand offers two structured payment plans: • Option 1: 50/50 payment plan – 50% during construction and 50% on completion. • Option 2: Post-handover plan – 70% payable up to completion, with the remaining 30% payable over 3 years post-handover in quarterly instalments."
+     }
+    }
+   ],
+   "labels": [
+    {
+     "text": "50/50",
+     "figures": [
+      50.0,
+      50.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Cove Grand by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/cove-grand-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|enre": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "ENRE Residence by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "ENRE RESIDENCE BY IMTIAZ",
+    "ENRE Residence by Imtiaz"
+   ],
+   "handover_text": "Q1 2028",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "ENRE Residence by Imtiaz / faq[0].a",
+      "url": "https://imtiaz.ae/property/enre-residence-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "You can lock in your home at Enre Residence with a flexible 60/40 interest-free payment plan which lets you get a head start on owning your home sooner rather than later - 20% down when you make the booking, then spread the remaining 40% over easy-to-manage construction-linked instalments, and then just 40% to pay off when your new home is handed over in Q1 2028."
+     }
+    }
+   ],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "ENRE Residence by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/enre-residence-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|kore": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Kore By Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "KORE by Imtiaz",
+    "Kore By Imtiaz"
+   ],
+   "handover_text": "Q4 2028",
+   "plans": [
+    {
+     "label": "50/50",
+     "indicative": true,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 30.0,
+     "before_handover_pct": 50.0,
+     "on_handover_pct": 50.0,
+     "after_handover_pct": 0.0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "label": "1st instalment: booking",
+       "pct": 20.0,
+       "indicative": true,
+       "kind": "booking"
+      },
+      {
+       "label": "2nd instalment",
+       "pct": 5.0,
+       "when": "2027-02-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "3rd instalment",
+       "pct": 5.0,
+       "when": "2027-06-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "4th instalment",
+       "pct": 5.0,
+       "when": "2027-10-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "5th instalment",
+       "pct": 5.0,
+       "when": "2028-02-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "6th instalment",
+       "pct": 5.0,
+       "when": "2028-04-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "7th instalment",
+       "pct": 5.0,
+       "when": "2028-09-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "On completion",
+       "pct": 50.0,
+       "when": "Q4 2028*",
+       "indicative": true,
+       "kind": "on_handover"
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer brochure",
+      "file": "docs/kore/KORE_PRODUCT_DATA_SHEET.json",
+      "ref": "commercial.payment_plans[50/50]",
+      "page": "brochure p08",
+      "as_of": "2026-10-06",
+      "note": "dates marked * on the brochure; the footnote for * is not visible in the supplied page"
+     },
+     "label_on_sheet": null
+    },
+    {
+     "label": "60/40 post-handover",
+     "indicative": true,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 35.0,
+     "before_handover_pct": 55.0,
+     "on_handover_pct": 5.0,
+     "after_handover_pct": 40.0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "label": "1st instalment: booking",
+       "pct": 20.0,
+       "indicative": true,
+       "kind": "booking"
+      },
+      {
+       "label": "2nd instalment",
+       "pct": 5.0,
+       "when": "2027-02-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "3rd instalment",
+       "pct": 10.0,
+       "when": "2027-06-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "4th instalment",
+       "pct": 5.0,
+       "when": "2027-10-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "5th instalment",
+       "pct": 10.0,
+       "when": "2028-02-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "6th instalment",
+       "pct": 5.0,
+       "when": "2028-04-15",
+       "indicative": true,
+       "kind": "instalments_before_handover"
+      },
+      {
+       "label": "On completion",
+       "pct": 5.0,
+       "when": "Q4 2028",
+       "indicative": true,
+       "kind": "on_handover"
+      },
+      {
+       "label": "Post handover: 12 quarterly instalments over 3 years",
+       "pct": 40.0,
+       "indicative": true,
+       "kind": "after_handover"
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer brochure",
+      "file": "docs/kore/KORE_PRODUCT_DATA_SHEET.json",
+      "ref": "commercial.payment_plans[60/40 post-handover]",
+      "page": "brochure p08",
+      "as_of": "2026-10-06",
+      "note": "dates marked * on the brochure except the 4th; post-handover 40% = 12 x 3.3333% (3.33% printed)"
+     }
+    }
+   ],
+   "labels": [],
+   "prices": {
+    "source": "developer brochure",
+    "file": "docs/kore/KORE_PRODUCT_DATA_SHEET.json",
+    "sheet_date": "2026-10-06",
+    "kind": "starting price per unit type printed in the developer's brochure (brochure p07)",
+    "by_type": {
+     "Studio": {
+      "n": null,
+      "from_aed": 679000,
+      "median_aed": null
+     },
+     "1 B/R": {
+      "n": null,
+      "from_aed": 1100000,
+      "median_aed": null
+     },
+     "2 B/R": {
+      "n": null,
+      "from_aed": 1550000,
+      "median_aed": null
+     }
+    }
+   },
+   "confidence": "high",
+   "handover_source": "developer brochure brochure p08"
+  },
+  "imtiaz|leblanc": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Le Blanc by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Le Blanc Residence by Imtiaz",
+    "Le Blanc by Imtiaz"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": "60/40",
+     "indicative": false,
+     "on_booking_pct": null,
+     "instalments_pct": 60.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "instalments_before_handover",
+       "pct": 60.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Le Blanc by Imtiaz / faq[5].a",
+      "url": "https://imtiaz.ae/property/le-blanc",
+      "fetched": "2026-09-02 18:22",
+      "text": "Le Blanc offers two structured payment plans: • Option 1: 60/40 Payment Plan 60% payable during construction, with 40% due on completion (June 2028). • Option 2: 70/30 Payment Plan with Post-Handover 70% payable up to completion, with the remaining 30% payable post-handover over 3 years , in quarterly instalments."
+     },
+     "label_on_sheet": null
+    },
+    {
+     "label": "70/30",
+     "indicative": false,
+     "on_booking_pct": null,
+     "instalments_pct": null,
+     "before_handover_pct": 70.0,
+     "on_handover_pct": 0,
+     "after_handover_pct": 30.0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "before_handover_total",
+       "pct": 70.0
+      },
+      {
+       "kind": "after_handover",
+       "pct": 30.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Le Blanc by Imtiaz / faq[5].a",
+      "url": "https://imtiaz.ae/property/le-blanc",
+      "fetched": "2026-09-02 18:22",
+      "text": "Le Blanc offers two structured payment plans: • Option 1: 60/40 Payment Plan 60% payable during construction, with 40% due on completion (June 2028). • Option 2: 70/30 Payment Plan with Post-Handover 70% payable up to completion, with the remaining 30% payable post-handover over 3 years , in quarterly instalments."
+     },
+     "label_on_sheet": null
+    }
+   ],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Le Blanc by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/le-blanc",
+      "fetched": "2026-09-02 18:22"
+     }
+    },
+    {
+     "text": "70/30",
+     "figures": [
+      70.0,
+      30.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Le Blanc by Imtiaz / facts.payment_plans[1]",
+      "url": "https://imtiaz.ae/property/le-blanc",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|luxor": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Luxor by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Luxor by Imtiaz"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Luxor by Imtiaz / faq[6].a",
+      "url": "https://imtiaz.ae/property/luxor-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking, followed by 40% as installments during construction, with the remaining 40% payable on completion."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|pearlhouse": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Pearl House by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Pearl House by Imtiaz"
+   ],
+   "handover_text": "June 2026",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Pearl House by Imtiaz / faq[4].a",
+      "url": "https://imtiaz.ae/property/pearl-house-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "We offer a simple construction-linked plan with 20% on booking, 40% payable in installments during construction, and 40% on completion in June 2026."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|pearlhouse2": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Pearl House II by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Pearl House II By Imtiaz",
+    "Pearl House II by Imtiaz"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Pearl House II by Imtiaz / faq[6].a",
+      "url": "https://imtiaz.ae/property/pearl-house-ii-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking, followed by 40% in installments, and the remaining 40% on completion."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|pearlhouse3": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Pearl House III by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Pearl House III by Imtiaz"
+   ],
+   "handover_text": "February 2026",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Pearl House III by Imtiaz / faq[7].a",
+      "url": "https://imtiaz.ae/property/pearl-house-iii-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking (+4% DLD), followed by installments during construction, and 40% payable on handover in February 2026."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "medium"
+  },
+  "imtiaz|pearlhouse4": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Pearl House 4 by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "PEARL HOUSE IV BY IMTIAZ",
+    "Pearl House 4 by Imtiaz"
+   ],
+   "handover_text": "June 2026",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Pearl House 4 by Imtiaz / faq[4].a",
+      "url": "https://imtiaz.ae/property/pearl-house-4-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "We offer a simple construction-linked plan with 20% on booking, 40% payable in installments during construction, and 40% on completion in June 2026."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|seacliff": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Sea Cliff by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Sea Cliff by Imtiaz",
+    "Seacliff by Imtiaz"
+   ],
+   "handover_text": "Q1 2028",
+   "plans": [],
+   "labels": [
+    {
+     "text": "50/50",
+     "figures": [
+      50.0,
+      50.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Sea Cliff by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/sea-cliff",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/imtiaz_2026-09-14.json",
+    "sheet_date": "2026-09-14",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 7,
+      "from_aed": 2097465.0,
+      "median_aed": 2288479.0
+     },
+     "2 B/R": {
+      "n": 1,
+      "from_aed": 3454101.0,
+      "median_aed": 3454101.0
+     },
+     "3 B/R": {
+      "n": 2,
+      "from_aed": 4571213.0,
+      "median_aed": 4573865.5
+     }
+    }
+   },
+   "confidence": null,
+   "handover_source": "developer sheet"
+  },
+  "imtiaz|sunsetbay": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Sunset Bay by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Sunset Bay by Imtiaz"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Sunset Bay by Imtiaz / faq[5].a",
+      "url": "https://imtiaz.ae/property/sunset-bay-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking, followed by 40% in installments, and the remaining 40% on completion."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|sunsetbay2": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Sunset Bay 2 by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Sunset Bay 2 by Imtiaz",
+    "Sunset Bay Two By Imtiaz"
+   ],
+   "handover_text": null,
+   "plans": [],
+   "labels": [
+    {
+     "text": "50/50",
+     "figures": [
+      50.0,
+      50.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Sunset Bay 2 by Imtiaz / facts.payment_plans[0]",
+      "url": "https://imtiaz.ae/property/sunset-bay-2-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    },
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Sunset Bay 2 by Imtiaz / facts.payment_plans[1]",
+      "url": "https://imtiaz.ae/property/sunset-bay-2-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    },
+    {
+     "text": "70/30",
+     "figures": [
+      70.0,
+      30.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Sunset Bay 2 by Imtiaz / facts.payment_plans[2]",
+      "url": "https://imtiaz.ae/property/sunset-bay-2-by-imtiaz",
+      "fetched": "2026-09-02 18:22"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": null
+  },
+  "imtiaz|sunsetbay3": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Sunset Bay 3 by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "SUNSET BAY THREE BY IMTIAZ",
+    "Sunset Bay 3 by Imtiaz"
+   ],
+   "handover_text": "June 2026",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Sunset Bay 3 by Imtiaz / faq[4].a",
+      "url": "https://imtiaz.ae/property/sunset-bay-3-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "We offer a simple construction-linked plan with 20% on booking, 40% payable in installments during construction, and 40% on completion in June 2026."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|sunsetbay4": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Sunset Bay 4 by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "SUNSET BAY FOUR BY IMTIAZ",
+    "Sunset Bay 4 by Imtiaz"
+   ],
+   "handover_text": "June 2027",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0,
+       "when": "May 2025"
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Sunset Bay 4 by Imtiaz / faq[6].a",
+      "url": "https://imtiaz.ae/property/sunset-bay-4-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "We offer a construction-linked payment plan structured as 20% on booking (May 2025), 40% payable in installments during construction, and 40% on completion in June 2027."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "imtiaz|sunsetbay5": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Sunset Bay 5 by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "SUNSET BAY FIVE by Imtiaz",
+    "Sunset Bay 5 by Imtiaz"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Sunset Bay 5 by Imtiaz / faq[4].a",
+      "url": "https://imtiaz.ae/property/sunset-bay-5-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking, followed by installments during construction, with the remaining 40% payable on completion."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "medium"
+  },
+  "imtiaz|sunsetbaygrand": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Sunset Bay Grand by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "SUNSET BAY GRAND BY IMTIAZ",
+    "Sunset Bay Grand by Imtiaz"
+   ],
+   "handover_text": "December 2027",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0,
+       "list": [
+        5.0,
+        5.0,
+        10.0,
+        10.0,
+        5.0,
+        5.0
+       ]
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Sunset Bay Grand by Imtiaz / faq[4].a",
+      "url": "https://imtiaz.ae/property/sunset-bay-grand-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "Sunset Bay Grand offers a construction-linked payment plan structured as 20% on booking, followed by six instalments of 5%, 5%, 10%, 10%, 5%, and 5% between February 2026 and July 2027, with 40% due on completion in December 2027."
+     }
+    }
+   ],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/imtiaz_2026-09-14.json",
+      "ref": "projects[3].plan",
+      "sheet_date": "2026-09-14"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/imtiaz_2026-09-14.json",
+    "sheet_date": "2026-09-14",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 5,
+      "from_aed": 2343960.0,
+      "median_aed": 2467484.43
+     },
+     "2 B/R": {
+      "n": 5,
+      "from_aed": 3317618.16,
+      "median_aed": 3379219.2
+     }
+    }
+   },
+   "confidence": "high"
+  },
+  "imtiaz|symphony": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "The Symphony by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "IMTIAZ SYMPHONY TOWER",
+    "Symphony",
+    "The Symphony by Imtiaz"
+   ],
+   "handover_text": "Q2 2029",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "The Symphony by Imtiaz / faq[7].a",
+      "url": "https://imtiaz.ae/property/the-symphony-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking, staggered installments during construction between 2026 and 2028, and 40% on completion in Q2 2029."
+     }
+    }
+   ],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/imtiaz_2026-09-14.json",
+      "ref": "projects[1].plan",
+      "sheet_date": "2026-09-14"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/imtiaz_2026-09-14.json",
+    "sheet_date": "2026-09-14",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "2 B/R": {
+      "n": 1,
+      "from_aed": 3581343.18,
+      "median_aed": 3581343.18
+     },
+     "4 B/R Duplex": {
+      "n": 1,
+      "from_aed": 14683880.0,
+      "median_aed": 14683880.0
+     },
+     "Office": {
+      "n": 7,
+      "from_aed": 2449269.0,
+      "median_aed": 2775625.0
+     },
+     "Retail": {
+      "n": 1,
+      "from_aed": 7273819.8,
+      "median_aed": 7273819.8
+     }
+    }
+   },
+   "confidence": "medium"
+  },
+  "imtiaz|wynwood": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Wynwood by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "WYNWOOD RESIDENCES BY IMTIAZ",
+    "Wynwood by Imtiaz"
+   ],
+   "handover_text": "Q3 2027",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Wynwood by Imtiaz / faq[5].a",
+      "url": "https://imtiaz.ae/property/wynwood-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking, followed by installments during construction, with the remaining 40% payable on completion."
+     }
+    }
+   ],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/imtiaz_2026-09-14.json",
+      "ref": "projects[4].plan",
+      "sheet_date": "2026-09-14"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/imtiaz_2026-09-14.json",
+    "sheet_date": "2026-09-14",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "3 B/R": {
+      "n": 4,
+      "from_aed": 3998000.0,
+      "median_aed": 4098000.0
+     }
+    }
+   },
+   "confidence": "medium",
+   "handover_source": "developer sheet"
+  },
+  "imtiaz|wynwoodhorizon": {
+   "developer": "Imtiaz",
+   "dev": "imtiaz",
+   "project": "Wynwood Horizon by Imtiaz",
+   "in_projfacts": true,
+   "aliases": [
+    "Wynwood Horizon by Imtiaz"
+   ],
+   "handover_text": "May 2028",
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "ref": "Wynwood Horizon by Imtiaz / faq[6].a",
+      "url": "https://imtiaz.ae/property/wynwood-horizon-by-imtiaz",
+      "fetched": "2026-09-02 18:22",
+      "text": "The payment plan is structured as 20% on booking, followed by 40% in installments, with the remaining 40% payable on completion in May 2028."
+     }
+    }
+   ],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer sheet",
+      "file": "data/avail/imtiaz_2026-09-14.json",
+      "ref": "projects[0].plan",
+      "sheet_date": "2026-09-14"
+     }
+    }
+   ],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/imtiaz_2026-09-14.json",
+    "sheet_date": "2026-09-14",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 6,
+      "from_aed": 1923209.57,
+      "median_aed": 2324451.605
+     },
+     "2 B/R": {
+      "n": 1,
+      "from_aed": 3318577.41,
+      "median_aed": 3318577.41
+     },
+     "Retail": {
+      "n": 1,
+      "from_aed": 8144475.93,
+      "median_aed": 8144475.93
+     }
+    }
+   },
+   "confidence": "high"
+  },
+  "prestigeone|1": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "The One",
+   "in_projfacts": true,
+   "aliases": [
+    "THE ONE by Prestige One",
+    "The One"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 45.0,
+     "before_handover_pct": 65.0,
+     "on_handover_pct": 0,
+     "after_handover_pct": 35.0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 45.0
+      },
+      {
+       "kind": "after_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "The One / faq[4].a",
+      "url": "https://prestigeone.ae/projects/the-one-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The payment plan comprises 20% on booking, 45% during construction and 35% post-handover."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "prestigeone|berkeleysquarenorth": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Berkeley Square North",
+   "in_projfacts": true,
+   "aliases": [
+    "Berkeley Square North"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": null,
+     "instalments_pct": null,
+     "before_handover_pct": 55.0,
+     "on_handover_pct": 10.0,
+     "after_handover_pct": 35.0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "before_handover_total",
+       "pct": 55.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 10.0
+      },
+      {
+       "kind": "after_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Berkeley Square North / faq[4].a",
+      "url": "https://prestigeone.ae/projects/berkeley-square-north",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The post-handover payment plan comprises 55% before handover, 10% upon handover and 35% after handover."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "prestigeone|berkeleysquaresouth": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Berkeley Square South",
+   "in_projfacts": true,
+   "aliases": [
+    "Berkeley Square South"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": null,
+     "instalments_pct": null,
+     "before_handover_pct": 55.0,
+     "on_handover_pct": 10.0,
+     "after_handover_pct": 35.0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "before_handover_total",
+       "pct": 55.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 10.0
+      },
+      {
+       "kind": "after_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Berkeley Square South / faq[4].a",
+      "url": "https://prestigeone.ae/projects/berkeley-square-south",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The post-handover payment plan comprises 55% before handover, 10% upon handover and 35% after handover."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "prestigeone|boulevard": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "The Boulevard",
+   "in_projfacts": true,
+   "aliases": [
+    "THE BOULEVARD BY PRESTIGE ONE",
+    "The Boulevard"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": null,
+     "instalments_pct": 65.0,
+     "before_handover_pct": 65.0,
+     "on_handover_pct": 35.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "instalments_before_handover",
+       "pct": 65.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "The Boulevard / faq[3].a",
+      "url": "https://prestigeone.ae/projects/the-boulevard-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The payment plan is structured as 65% in total installments and 35% upon handover."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "prestigeone|coastalhavenbyprestigeharbour": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Coastal Haven by Prestige Harbour",
+   "in_projfacts": true,
+   "aliases": [
+    "Coastal Haven by Prestige Harbour"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 45.0,
+     "before_handover_pct": 65.0,
+     "on_handover_pct": 35.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 45.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Coastal Haven by Prestige Harbour / faq[4].a",
+      "url": "https://prestigeone.ae/projects/coastal-haven-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The payment plan comprises 65% before handover and 35% upon handover, beginning with 20% at booking and staged construction instalments."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "medium"
+  },
+  "prestigeone|golf": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Golf Residences",
+   "in_projfacts": true,
+   "aliases": [
+    "GOLF RESIDENCES BY PRESTIGE ONE",
+    "Golf Residences"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 20.0,
+     "before_handover_pct": 40.0,
+     "on_handover_pct": 60.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 20.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 60.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Golf Residences / faq[4].a",
+      "url": "https://prestigeone.ae/projects/golf-residences-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The standard payment plan is 20% as the down payment, 20% during construction and 60% upon handover."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "prestigeone|hiltonmaritimecity": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Hilton Residences Dubai Maritime City",
+   "in_projfacts": true,
+   "aliases": [
+    "Hilton Residences Dubai Maritime City"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 40.0,
+     "before_handover_pct": 60.0,
+     "on_handover_pct": 40.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 40.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 40.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Hilton Residences Dubai Maritime City / faq[4].a",
+      "url": "https://prestigeone.ae/projects/hilton-residences-dubai-maritime-city",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The payment plan is 20% on booking, 40% during construction and 40% on handover."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "prestigeone|luxurycanal": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Luxury Canal Residences",
+   "in_projfacts": true,
+   "aliases": [
+    "LUXURY CANAL RESIDENCES",
+    "Luxury Canal Residences"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 45.0,
+     "before_handover_pct": 65.0,
+     "on_handover_pct": 35.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 45.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Luxury Canal Residences / faq[4].a",
+      "url": "https://prestigeone.ae/projects/luxury-canal-residences-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The payment plan comprises 65% before handover and 35% upon handover, beginning with 20% at booking and staged construction instalments."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "medium"
+  },
+  "prestigeone|parkway": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Parkway",
+   "in_projfacts": true,
+   "aliases": [
+    "PARKWAY BY PRESTIGE ONE",
+    "Parkway"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 30.0,
+     "instalments_pct": 70.0,
+     "before_handover_pct": 100.0,
+     "on_handover_pct": 0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 30.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 70.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Parkway / faq[4].a",
+      "url": "https://prestigeone.ae/projects/parkway-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The payment plan comprises a 30% down payment followed by 70% during construction."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "prestigeone|sanctuary": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Sanctuary Residences",
+   "in_projfacts": true,
+   "aliases": [
+    "Sanctuary Residences"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 45.0,
+     "before_handover_pct": 65.0,
+     "on_handover_pct": 35.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 45.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Sanctuary Residences / faq[4].a",
+      "url": "https://prestigeone.ae/projects/sanctuary-residences-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The 65/35 payment plan begins with 20% on booking, followed by 45% across construction milestones and 35% on completion."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": {
+    "source": "developer sheet",
+    "file": "data/avail/prestigeone_2026-09-15.json",
+    "sheet_date": "2026-09-15",
+    "kind": "list price per unit on the developer's availability sheet",
+    "by_type": {
+     "1 B/R": {
+      "n": 20,
+      "from_aed": 1859000.0,
+      "median_aed": 2189000.0
+     },
+     "2 B/R": {
+      "n": 22,
+      "from_aed": 2805000.0,
+      "median_aed": 3162500.0
+     },
+     "3 B/R": {
+      "n": 1,
+      "from_aed": 5280000.0,
+      "median_aed": 5280000.0
+     }
+    }
+   },
+   "confidence": "high"
+  },
+  "prestigeone|sanctuaryhive": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Sanctuary Hive",
+   "in_projfacts": true,
+   "aliases": [
+    "Sanctuary Hive"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 45.0,
+     "before_handover_pct": 65.0,
+     "on_handover_pct": 35.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 45.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Sanctuary Hive / faq[4].a",
+      "url": "https://prestigeone.ae/projects/sanctuary-hive-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The 65/35 payment plan begins with 20% on booking, followed by 45% across construction milestones and 35% on completion."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "prestigeone|seaside": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Seaside",
+   "in_projfacts": true,
+   "aliases": [
+    "Seaside",
+    "Seaside by Prestige One"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 45.0,
+     "before_handover_pct": 65.0,
+     "on_handover_pct": 35.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 45.0,
+       "derived_remainder": true
+      },
+      {
+       "kind": "on_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": true,
+     "confidence": "medium",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Seaside / faq[4].a",
+      "url": "https://prestigeone.ae/projects/seaside-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The payment plan comprises a 20% down payment, 5% quarterly installments and 35% at handover."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "medium"
+  },
+  "prestigeone|vista": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "Vista",
+   "in_projfacts": true,
+   "aliases": [
+    "Vista",
+    "Vista by Prestige One"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 10.0,
+     "instalments_pct": 55.0,
+     "before_handover_pct": 65.0,
+     "on_handover_pct": 35.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 10.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 55.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "Vista / faq[4].a",
+      "url": "https://prestigeone.ae/projects/vista-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The launch-sheet payment plan comprises 10% at booking, a further 55% across scheduled construction installments and 35% upon handover."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "prestigeone|waterway": {
+   "developer": "Prestige One",
+   "dev": "prestigeone",
+   "project": "The Waterway",
+   "in_projfacts": true,
+   "aliases": [
+    "The Waterway",
+    "The Waterway by Prestige One"
+   ],
+   "handover_text": null,
+   "plans": [
+    {
+     "label": null,
+     "indicative": false,
+     "on_booking_pct": 20.0,
+     "instalments_pct": 45.0,
+     "before_handover_pct": 65.0,
+     "on_handover_pct": 35.0,
+     "after_handover_pct": 0,
+     "total_pct": 100,
+     "steps": [
+      {
+       "kind": "booking",
+       "pct": 20.0
+      },
+      {
+       "kind": "instalments_before_handover",
+       "pct": 45.0
+      },
+      {
+       "kind": "on_handover",
+       "pct": 35.0
+      }
+     ],
+     "derived_remainder": false,
+     "confidence": "high",
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/prestigeone_portfolio.json",
+      "ref": "The Waterway / faq[4].a",
+      "url": "https://prestigeone.ae/projects/waterway-by-prestige-one",
+      "fetched": "2026-09-09T11:56:59",
+      "text": "The 65/35 payment plan begins with 20% on booking, followed by 45% during construction and 35% on completion."
+     }
+    }
+   ],
+   "labels": [],
+   "prices": null,
+   "confidence": "high"
+  },
+  "select|6sensespalm": {
+   "developer": "Select Group",
+   "dev": "select",
+   "project": "Six Senses Residences The Palm, Dubai",
+   "in_projfacts": true,
+   "aliases": [
+    "Six Senses Residences The Palm, Dubai"
+   ],
+   "handover_text": null,
+   "plans": [],
+   "labels": [
+    {
+     "text": "40/60",
+     "figures": [
+      40.0,
+      60.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/select_portfolio.json",
+      "ref": "Six Senses Residences The Palm, Dubai / facts.payment_plans[0]",
+      "url": "https://www.select-group.ae/developments/six-senses-residences-the-palm-dubai",
+      "fetched": "2026-09-03 04:57"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": null
+  },
+  "select|edge": {
+   "developer": "Select Group",
+   "dev": "select",
+   "project": "The EDGE",
+   "in_projfacts": true,
+   "aliases": [
+    "The EDGE"
+   ],
+   "handover_text": null,
+   "plans": [],
+   "labels": [
+    {
+     "text": "40/60",
+     "figures": [
+      40.0,
+      60.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/select_portfolio.json",
+      "ref": "The EDGE / facts.payment_plans[0]",
+      "url": "https://www.select-group.ae/developments/the-edge",
+      "fetched": "2026-09-03 04:57"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": null
+  },
+  "select|nautica": {
+   "developer": "Select Group",
+   "dev": "select",
+   "project": "Nautica",
+   "in_projfacts": true,
+   "aliases": [
+    "Nautica"
+   ],
+   "handover_text": null,
+   "plans": [],
+   "labels": [
+    {
+     "text": "40/60",
+     "figures": [
+      40.0,
+      60.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/select_portfolio.json",
+      "ref": "Nautica / facts.payment_plans[0]",
+      "url": "https://www.select-group.ae/developments/nautica",
+      "fetched": "2026-09-03 04:57"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": null
+  },
+  "sobha|capeside": {
+   "developer": "Sobha",
+   "dev": "sobha",
+   "project": "Capeside",
+   "in_projfacts": true,
+   "aliases": [
+    "Capeside"
+   ],
+   "handover_text": null,
+   "plans": [],
+   "labels": [
+    {
+     "text": "60/40",
+     "figures": [
+      60.0,
+      40.0
+     ],
+     "source": {
+      "kind": "developer site",
+      "file": "data/dev_meta/sobha_portfolio.json",
+      "ref": "Capeside / facts.payment_plans[0]",
+      "url": "https://sobharealty.com/properties-in-uaq/sobha-siniya-island/marina-residences/capeside",
+      "fetched": "2026-09-09 15:16"
+     }
+    }
+   ],
+   "prices": null,
+   "confidence": null
+  }
+ }
+}

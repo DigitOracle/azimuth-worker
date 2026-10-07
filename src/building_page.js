@@ -1138,6 +1138,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
       dossierBlock() +   // v237 - EVERY building can be handed over, not only the 206 with a PDF; the row itself decides what it offers
       // v238 - the four pillars, built in the Worker and handed down as a string (see src/pillars.js)
       (D.pillarsHtml || "") +
+      (D.cashHtml || "") +   // v375 - cash needed up to handover: only an off-plan project with a stated plan AND a developer list price (src/cash_card.js)
       (D.project ? "<h3>Construction · the register</h3>" +
         '<div class=row><span>' + esc(D.project.name || "this project") + (D.project.master ? "<br><small>" + esc(D.project.master) + "</small>" : "") +
           "</span><span>" + esc(String(D.project.status || "").toLowerCase() || "—") + "</span></div>" +

@@ -58,6 +58,10 @@ export async function devmapRoutes(request, env, url, deps) {
     const g = await kvJson(env, "district_polygons");                       // optional: the DM community boundaries per district
     return J(g && g.features ? g : { type: "FeatureCollection", features: [] });
   }
+  if (what === "delay") {                                                  // v375 - the delivery file (scripts/build_delivery_record.py); absent = the page shows no delivery card
+    const dl = await kvJson(env, "devmap_delay");
+    return J(dl && dl.by ? dl : {});
+  }
   if (what === "shortlist") {
     const name = await shortlistName(key);
     if (request.method === "POST") {
@@ -174,7 +178,7 @@ function api(what,opt){return fetch("/developers_map_api?what="+what+"&key="+enc
 var TC=["#c5a56a","#2f8a7f","#3987e5","#8a9a96"];
 var IDX=null,GEO=null,map=null;
 window.__devmap={get map(){return map},get idx(){return IDX},get state(){return S},select:function(s){select(s,true)}};   // a handle for the preview and the tests; reads only
-var S={win:"all",drawer:null,drill:null,prof:null,screen:1,mode:"buy",unit:"sqft",sel:null,onlyMine:null,mine:{},isDefault:false,bud:{mode:"sqft",min:null,max:null,beds:null},filterBud:false,named:"",dv:{ppsm:null,tier:null},cmp:null,q:""};
+var S={win:"all",drawer:null,drill:null,prof:null,screen:1,mode:"buy",unit:"sqft",sel:null,onlyMine:null,mine:{},isDefault:false,bud:{mode:"sqft",min:null,max:null,beds:null},filterBud:false,named:"",dv:{ppsm:null,tier:null},cmp:null,q:"",delay:null};
 function fmt(n){return n==null?"-":Math.round(n).toLocaleString("en-US")}
 function pu(ppsm){return ppsm==null?null:(S.unit==="sqft"?Math.round(ppsm/DM.SQFT):Math.round(ppsm))}
 function pul(){return S.unit==="sqft"?"per sq ft":"per sq m"}
@@ -323,7 +327,7 @@ function evidenceHtml(k){var f=DM.devFactors(ixOf(S.win),k),op=S.evOpen==null?in
   h+=row('Data','Inventory and scale',iv.projects!=null?iv.projects+' project'+(iv.projects===1?'':'s')+', '+fmt(iv.sales)+' settled sales, '+iv.areas+' area'+(iv.areas===1?'':'s')+', about '+fmt(iv.salesPerProject)+' sales per project'+(iv.homesPerProject?' (about '+fmt(iv.homesPerProject)+' registered homes per project)':'')+'.':fmt(iv.sales)+' settled sales in '+iv.areas+' area'+(iv.areas===1?'':'s')+'; project counts are not in the data yet.');
   h+=row('Data','Unit mix',um?um.studioOne+'% of sales are studios and one-bedrooms, '+um.shares[2]+'% two-bedrooms, '+um.shares[3]+'% three bedrooms or more. Median home size '+fmt(um.medianSqft)+' sq ft.':'No sales.');
   h+=row('Data','Location mix',lo?lo.primePct+'% of its sales are in coastal and prime areas, '+lo.inlandPct+'% elsewhere. The coastal and prime list: '+DM.PRIME_AREAS.map(function(s){return esc((IDX.areas[s]||{}).name||s)}).join(', ')+'.':'No sales.');
-  h+=row('Data','Delivery record','Not in this data yet: it needs the register’s planned and actual completion dates.');
+  h+=row('Data','Delivery record',(typeof delayRow==="function"&&delayRow(k))||'Not in this data yet: it needs the register’s planned and actual completion dates.');
   h+=row('Curated judgement','Quality, finish, design partners, branded residences',f.quality?esc(f.quality.note)+' <span class=note>Source: '+esc(f.quality.source)+', '+esc(f.quality.date)+'.</span>':'Not filled in. These are in no register; a note needs its source and date.');
   return h+'</div></details></div>'}
 function talkHtml(k){var tp=DM.talkingPoint(ixOf(S.win),k,S.unit);
@@ -370,6 +374,15 @@ function ncHtml(k){var win=S.win==="l12"&&IDX.ev?"l12":"all",l=DM.attrUnconfirme
   var nm=(IDX.devs[k]||{}).name||DEFAULT_NAMES[k]||k;
   return '<details class="card nconf" id=nconf><summary><b>Not confirmed by the register</b> <span class=note>'+l.length+' project'+(l.length===1?'':'s')+', outside the numbers</span></summary><p class=note style="margin:6px 0">These projects are listed under '+esc(nm)+' by a project name or by the developer&rsquo;s own site, but the Land Department register does not confirm it. They are not in the totals, the scale word, the price bands or the area counts on this page.</p><div class=pjg>'+l.map(function(q){var ev=q.ev;
     return pjCard(q.slug,q.name,q.ppsm,q.n,'<span class=note style="display:block;margin:0">'+esc(ev&&ev.a?ev.a:q.area)+'</span>'+srcLine(ev,nm)+(ev&&ev.dn&&ev.e!=="REGISTER_VERIFIED"?'<span class="note srcl" style="display:block;margin:2px 0 0;font-size:10.5px">Register names: '+esc(ev.dn)+'</span>':''),'name not in the data yet')}).join("")+'</div></details>'}
+// v375 - DELIVERY RECORD card (derived from the Land Department project register; the file is KV img_devmap_delay, absent = no card)
+function delayStat(k){return S.delay&&DM.delayRecord?DM.delayRecord(S.delay,IDX,k):null}
+function delayRow(k){return delayStat(k)?"Shown in the Delivery record card on this page.":""}
+function delayHtml(k){var r=delayStat(k);if(!r)return "";var D=S.delay||{},nm=r.names.slice(0,3).map(esc).join("; ")+(r.names.length>3?" and "+(r.names.length-3)+" more":"");
+  var say=r.late===0?"None of its "+r.n+" finished projects was finished later than the planned end date.":r.late+" of its "+r.n+" finished projects ("+r.share+"%) were finished later than the planned end date.";
+  var med=r.late>0&&r.median!=null?" The middle one of the late projects was "+(r.median<1?"under 1 month":(r.median===1?"1 month":"about "+r.median+" months"))+" late.":"";
+  return '<div class=card id=delay><p class=label>Delivery record <span class=tag style="background:#8a9a96">DERIVED</span></p><div class=evc>'+icoSvg("stack","evi")+'<span>'+say+med+'</span></div>'
+    +'<p class=note style="margin:8px 0 0"><b>Read this with care.</b> Developers can revise the planned end date on the register, so a project that moved its own date may not show as late. This is history, not a forecast.</p>'
+    +'<p class=note style="margin:6px 0 0">Source: Dubai Land Department project register, planned end date and completion date of finished projects'+(D.generated?", read "+esc(String(D.generated).slice(0,10)):"")+'. Method: the finished projects with both dates and no cancellation of the register-confirmed developer '+(r.companies===1?"company":r.companies+" companies")+(nm?" ("+nm+")":"")+'; the share is those finished after the planned end date; the middle figure is taken over the late ones only.</p></div>'}
 function toggleArea(s){S.parea=S.parea===s?null:s;renderDetail();refreshMap();var e=$("aprojs");if(e&&e.scrollIntoView){try{e.scrollIntoView({block:"nearest",behavior:"smooth"})}catch(x){}}}
 function profileHtml(k){
   var p=DM.devProfile(ixOf(S.win),k);if(!p.known)p.name=DEFAULT_NAMES[k]||k;
@@ -378,7 +391,7 @@ function profileHtml(k){
   if(!p.areas)return h+'<p class=note>'+esc(p.name)+': no sales on the map yet.</p>'+profSrc();
   h+=wsegProf();
   h+='<div class=seg style="margin-top:10px" id=useg><button data-u=sqft>per sq ft</button><button data-u=sqm>per sq m</button></div>';
-  h+=areaCardsHtml(p,k);h+=ncHtml(k);h+='<div class=card>'+(p.market>=0?'<span class=tag style="background:'+TC[p.market]+'">'+DM.brandLabel(p.market)+' (market view)</span>':'')+'<p style="margin:10px 0 0"><b>Market view:</b> '+(p.market>=0?DM.brandLabel(p.market)+', as the market names it.':'not set yet.')+'</p><p style="margin:4px 0 0"><b>Where its projects sit on price:</b> '+esc(DM.dataLine(p))+'.</p><p class=note style="margin:4px 0 0">The market view is how people name the brand, and is set by a person. Price alone does not say whether a developer is luxury: design, quality, who it is built for and how few homes it builds in each place all matter, so no class is given from price. The evidence below shows each factor as a number.</p><p style="margin:10px 0 0">'+esc(DM.profileSentence(p,S.unit))+'</p>'+pricePosHtml(k)+'</div>'+bandKey(DM.boundsOf(IDX))+evidenceHtml(k)+talkHtml(k);
+  h+=areaCardsHtml(p,k);h+=ncHtml(k);h+='<div class=card>'+(p.market>=0?'<span class=tag style="background:'+TC[p.market]+'">'+DM.brandLabel(p.market)+' (market view)</span>':'')+'<p style="margin:10px 0 0"><b>Market view:</b> '+(p.market>=0?DM.brandLabel(p.market)+', as the market names it.':'not set yet.')+'</p><p style="margin:4px 0 0"><b>Where its projects sit on price:</b> '+esc(DM.dataLine(p))+'.</p><p class=note style="margin:4px 0 0">The market view is how people name the brand, and is set by a person. Price alone does not say whether a developer is luxury: design, quality, who it is built for and how few homes it builds in each place all matter, so no class is given from price. The evidence below shows each factor as a number.</p><p style="margin:10px 0 0">'+esc(DM.profileSentence(p,S.unit))+'</p>'+pricePosHtml(k)+'</div>'+bandKey(DM.boundsOf(IDX))+evidenceHtml(k)+delayHtml(k)+talkHtml(k);
   h+='<div class=card><p class=label>Its projects by price band</p>';
   if(p.basis==="projects"){
     h+=donut(p.mixProjects,k,'').replace('Sales by price band:','Projects by price band:')+'<p class=note style="margin:6px 0 0">'+[0,1,2,3].filter(function(i){return p.tierProjects[i]>0}).map(function(i){return DM.TIER_WORDS[i]+' '+p.tierProjects[i]}).join(' · ')+' (of '+p.projects+' project'+(p.projects===1?'':'s')+')</p>'}
@@ -611,8 +624,8 @@ function startMap(){
     map.on("mouseleave","a-fill",function(){map.getCanvas().style.cursor="";pop.remove()});
     map.on("click","a-fill",function(e){if(pjHit(e).length)return;select(e.features[0].properties.slug,false)})})}
 // ---- start ----
-Promise.all([api("index"),api("geo"),api("shortlist")]).then(function(r){
-  IDX=r[0];GEO=r[1];DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
+Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null})]).then(function(r){
+  IDX=r[0];GEO=r[1];S.delay=r[3]&&r[3].by?r[3]:null;DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
   if(IDX&&IDX.ev)S.win="l12";   // v322 - prices a realtor quotes today: the last 12 months, unless the index carries no evidence yet
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l;IDX.areas[s].name=IDX.areas[s].name.replace(/\bJLT\b/g,"Jumeirah Lakes Towers")});   // v321 - an area is never shown as an initial
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}

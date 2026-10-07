@@ -4,6 +4,7 @@ import { templateRoutes, feedTemplateFlag } from "./wa_templates.js";   // v329 
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { buildingData, buildingPageHtml } from "./building_page.js";   // v187 - the building page: the Symphony viewer for every register-bound building
+import { findRecord as cashFindRecord, cashCardHtml } from "./cash_card.js";   // v375 - cash needed up to handover (an off-plan project with a stated plan and a developer list price)
 import { pillarsCard, buildingPillars, developerPillarsCard, normName as pillarName, PILLAR_CSS } from "./pillars.js";   // v238 - the four pillars, built in the Worker for the building page and /dev
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
 import { worldBackdrops, worldBackdrop, worldPlatePrompt, worldScenePrompt, worldPicSay, worldCardFields, worldPicSize } from "./world_pic.js";   // v164 - the Versus picture, made the way the morning pictures are made
@@ -3426,6 +3427,16 @@ async function appFetch(request, env, ctx) {
             subtitle: (_pp.name || "developer not named in the register"),
             sourceLine: "DLD project and developer registers, DLD transactions, RTA stations, KHDA schools, DHA facilities.",
           }));
+        } catch (e) {}
+        // v375 - CASH NEEDED UP TO HANDOVER (src/cash_card.js). The card needs an off-plan project, a payment plan the developer states in words and a developer list price;
+        // KV img_payment_plans is built offline (scripts/build_payment_plans.py) and absent today = nothing is added to the page.
+        try {
+          const _pd = JSON.parse((await env.MEETINGS.get("img_payment_plans")) || "null");
+          if (_pd && _pd.projects && _bd.project) {
+            const _stt = String(_bd.project.status || "").toUpperCase();
+            const _rec = cashFindRecord(_pd, [_bd.name, _bd.project.name], ((_um.buildings_by_id || {})[_bi] || {}).developer || null);
+            if (_rec) _bd.cashHtml = cashCardHtml(_rec, { offplan: _stt !== "FINISHED" && !(_bd.project.pct >= 100) });
+          }
         } catch (e) {}
         // v237 - the share key is set whatever the dossier says: every building can be handed over, and the
         // link a share carries is NEVER the key that opened this page (the owner browses with READ_KEY).
