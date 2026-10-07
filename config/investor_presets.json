@@ -1,0 +1,27 @@
+{
+ "version": 2,
+ "note": "Investor-type presets (researched taxonomy, 7 Oct 2026). A preset only chooses a tier, segments and published figures. It cannot touch the locked core; any other key, an unknown segment or stat, a dropped type or a nationality-defined type is rejected. status 'draft' means: needs an official check before client use.",
+ "dropped_types": ["portfolio", "multi_unit", "hni", "diaspora", "returning_diaspora", "community", "school_led"],
+ "order_flags": [
+  { "id": "multi_unit", "title": "Buying more than one home", "note": "Several homes in one order: this report describes each home size separately. It does not add prices together or say what a combined purchase qualifies for." }
+ ],
+ "languages": { "note": "Nationality may pick the language of a report, never its content.", "allowed": ["en"] },
+ "rule_cards": {
+  "note": "A dated, sourced official rule card goes here. Empty means the report states no rule, threshold or eligibility. Shape: { text, threshold_aed, source, url, as_of }.",
+  "golden_visa": null,
+  "assignment": null
+ },
+ "presets": [
+  { "id": "prime", "group": "investment", "title": "Prime or wealthy, price-led", "blurb": "Registered prices against the best nearby sales, who else bought, how many sold.", "tier": "standard", "status": "ready", "segments": ["price_charts", "comparables", "unit_mix_prices", "market_history", "demand_momentum", "developer_detail", "supply_nearby"], "stats": ["S13", "S15"] },
+  { "id": "yield", "group": "investment", "title": "Yield or rental income", "blurb": "Rent contracts and the yield method, with what is not known.", "tier": "full", "status": "draft", "needs_check": "Thin evidence: the rent data is partial. Needs an official check before client use.", "segments": ["yield_rent", "unit_mix_prices", "comparables", "supply_nearby", "developer_detail", "market_history", "price_charts", "demand_momentum"], "stats": [] },
+  { "id": "capital_growth", "group": "investment", "title": "Capital growth, long hold", "blurb": "For the investor who holds through handover and beyond: past registered prices and sales pace, said as history only.", "tier": "standard", "status": "ready", "segments": ["price_charts", "comparables", "demand_momentum", "market_history", "supply_nearby", "developer_detail"], "stats": [] },
+  { "id": "flipper", "group": "investment", "title": "Flipper or short-term trader", "blurb": "Payment plan, cash before handover, registered resale activity, fees and how the developer has delivered. Conditions for resale differ by developer.", "tier": "full", "status": "draft", "needs_check": "The conditions for resale before handover are not stated until a dated official rule card exists. Needs an official check before client use.", "segments": ["payment_plan_cash", "resale_activity", "resale_conditions", "comparables", "developer_detail"], "stats": ["S21"] },
+  { "id": "residency", "group": "investment", "title": "Residency-led (Golden Visa)", "blurb": "Registered prices by home size and the build status. The visa rule is stated only from a dated official rule card.", "tier": "standard", "status": "draft", "needs_check": "The Golden Visa rule reads differently across sources. Needs a dated rule card from the official service page before client use.", "segments": ["residency_rule", "unit_mix_prices", "delivery_progress", "developer_detail"], "stats": [] },
+  { "id": "first_timer", "group": "investment", "title": "Overseas first-timer", "blurb": "Short first, then the buyer protections in full evidence.", "tier": "summary", "status": "ready", "segments": ["area_story", "developer_detail", "delivery_progress", "unit_mix_prices", "buyer_protections"], "full_sections": ["buyer_protections"], "stats": ["S04"] },
+  { "id": "uae_resident", "group": "investment", "title": "UAE-resident investor", "blurb": "Prices by home size, the handover and the developer, for someone already living here.", "tier": "standard", "status": "ready", "segments": ["unit_mix_prices", "comparables", "delivery_progress", "developer_detail", "supply_nearby"], "stats": ["S01"] },
+  { "id": "family", "group": "end_user", "title": "Family, community- or school-led", "blurb": "Short and story-led: the home, the place, the handover.", "tier": "summary", "status": "ready", "segments": ["area_story", "amenities", "unit_mix_prices", "delivery_progress"], "stats": ["S25"] },
+  { "id": "professional", "group": "end_user", "title": "Relocating professional", "blurb": "Short: sizes, the place and when it is due.", "tier": "summary", "status": "ready", "segments": ["area_story", "unit_mix_prices", "delivery_progress"], "stats": ["S25"] },
+  { "id": "tenant_to_owner", "group": "end_user", "title": "Tenant converting to owner", "blurb": "Sizes, prices, the handover and the developer, for someone moving from renting.", "tier": "standard", "status": "ready", "segments": ["unit_mix_prices", "comparables", "delivery_progress", "developer_detail"], "stats": ["S03"] },
+  { "id": "holiday", "group": "end_user", "title": "Holiday or second home", "blurb": "Short: the place, what the developer says, home sizes.", "tier": "summary", "status": "ready", "segments": ["area_story", "amenities", "unit_mix_prices"], "stats": [] }
+ ]
+}
