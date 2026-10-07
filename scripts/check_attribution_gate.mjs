@@ -17,7 +17,7 @@ export const FIXTURES = {
   // v373b: ABSENT from the brand's lists entirely (any label, either window, by name or by register project number): the register names another company and only a name linked it
   absentFrom: [{ name: "vento tower", dev: "beyond", projects: [2776, 536844615], register: "ANAX Developments" }, { name: "the pad", dev: "beyond", projects: [1173], register: "Pad Properties Nine (Omniyat)" }],
   // v373c: these stay ON their brand (the register names only an unlinked shell company, or none): NAME_ONLY or REGISTER_VERIFIED, never dropped
-  stayOn: [{ name: "bay central", dev: "select-group" }, { name: "botanica", dev: "select-group" }, { name: "the royal oceanic", dev: "select-group" }, { name: "cove edition i", dev: "imtiaz" }, { name: "pearl house 4", dev: "imtiaz" }, { name: "creek beach vida residences", dev: "emaar" }],
+  stayOn: [{ name: "bay central", dev: "select-group" }, { name: "the royal oceanic", dev: "select-group" }, { name: "the point", dev: "select-group" }, { name: "cove edition i", dev: "imtiaz" }, { name: "pearl house 4", dev: "imtiaz" }, { name: "creek beach vida residences", dev: "emaar" }, { name: "alba tower", dev: "omniyat" }, { name: "vela viento", dev: "omniyat" }],
   notVerifiedUnder: [{ name: "vento tower", dev: "beyond" }, { name: "the pad", dev: "beyond" }],
   verifiedUnder: [{ name: "marina vista", dev: "emaar" }, { name: "jumeirah living marina gate", dev: "select-group" }, { name: "ocean heights", dev: "damac" }],
   areaIs: [{ name: "imtiaz symphony tower", area: "Meydan Horizon" }, { name: "wynwood horizon", area: "Meydan Horizon" }, { name: "cove grand", area: "Dubai Land Residence Complex" }, { name: "westwood by imtiaz", area: "Al Furjan" }],
