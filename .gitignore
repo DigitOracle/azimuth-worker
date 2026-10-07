@@ -6,3 +6,5 @@ node_modules/
 _cb.json
 market_pulse_out.json
 __pycache__/
+
+data/sales_filed/

@@ -2326,7 +2326,7 @@ async function appFetch(request, env, ctx) {
       const _hn = url.pathname.slice(5).replace(/[^a-z0-9_]/gi, "");
       // v279 - the same key lock as GET /img/ below: pf_* owner only (else 404), ejari_* owner or client (else 401)
       if (_hn.toLowerCase().indexOf("pf_") === 0 && keyTier(env, url) !== "admin") return new Response(null, { status: 404 });
-      if (_hn.toLowerCase().indexOf("ejari_") === 0 && !clientOk(env, url)) return new Response(null, { status: 401 });
+      if ((_hn.toLowerCase().indexOf("ejari_") === 0 || _hn.toLowerCase().indexOf("sales_filed_") === 0) && !clientOk(env, url)) return new Response(null, { status: 401 });
       const _hv = await env.MEETINGS.get("img_" + _hn, "arrayBuffer");
       return new Response(null, { status: _hv ? 200 : 404 });
     }
@@ -3260,7 +3260,7 @@ async function appFetch(request, env, ctx) {
         // v279 (Kendall, 1 Oct 2026) - the new data is locked behind keys. ejari_* (img_ejari_*): the owner key or a client key, the
         // app pages' check; no key 401. pf_* (img_pf_supply_* and the like): the OWNER key only; a client key, or none, gets 404.
         // Everything else under /img/ stays keyless (the blocks, maps and brochure photos the pages and PDFs load). v279 ----
-        const _lk = nm.toLowerCase().indexOf("pf_") === 0 ? "owner" : nm.toLowerCase().indexOf("ejari_") === 0 ? "app" : "";
+        const _lk = nm.toLowerCase().indexOf("pf_") === 0 ? "owner" : (nm.toLowerCase().indexOf("ejari_") === 0 || nm.toLowerCase().indexOf("sales_filed_") === 0) ? "app" : "";
         if (_lk === "owner" && keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
         if (_lk === "app" && !clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _cc = _lk ? "private, no-store" : "public, max-age=3600";   // v279 - keyed data is never cached by a shared cache

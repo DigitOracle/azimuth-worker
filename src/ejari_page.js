@@ -33,6 +33,7 @@
 import { BRIEF_DISTRICTS } from "./brief_page.js";
 import { COVERAGE_MIN, coverageOf, pctSay } from "./coverage_guard.js";   // v394: never offer a bedroom filter the contracts cannot answer
 export { COVERAGE_MIN, coverageOf };
+import { VIEWS, SALES_CSS, SALES_CAVEAT, salesAnswer, salesOnlyBuilding, salesIndexData, viewSwitchHtml, salesBodyHtml } from "./sales_view.js";   // v396: sales beside rentals; every hook below is inert when no sales file is loaded
 
 // ---- the adapter: the one place the files' field names are written ---------------------------------------------------
 // canonical name -> the field name(s) in the DDA files, first present wins. A rename in the files is a one-line change here.
@@ -174,6 +175,7 @@ export function ejariQuery(sp) {
     q: g("q").slice(0, 80), kind, id: kind === "dubai" ? "dubai" : g("id").slice(0, 160), d: /^[a-z0-9]{2,40}$/.test(g("d")) ? g("d") : "",
     range: RANGES.includes(r) ? r : "week", from: iso(g("from")), to: iso(g("to")),
     reg: ["new", "renew"].includes(g("reg")) ? g("reg") : "both", beds: [...new Set(beds)], sub: [...new Set(subs)],
+    view: VIEWS.includes(g("view")) ? g("view") : "both",   // v396: Rentals | Sales | Both (only drawn when sales files are loaded)
     top: TOPS.includes(top) ? top : 5,
     basis: g("basis") === "start" ? "start" : "filed",   // the date axis: filed with Ejari (default) or contract start
     lang: g("lang") === "ar" ? "ar" : (g("lang") === "en" ? "en" : "")   // project names in English or Arabic; "" = the viewer's remembered choice
@@ -299,12 +301,15 @@ async function buildIndex(env) {
     if (ds && !d.has(ds) && names[ds]) d.set(ds, names[ds]);
   }
   if (dubai) for (const r of dubai.rows) { addDev(r.devNo, r.dev, r.district, r.desk ? 0 : r.n); if (r.district && !d.has(r.district)) d.set(r.district, names[r.district] || r.area || r.district); }
+  let hasSales = false;
+  try { const sx = await salesIndexData(get.raw); hasSales = !!(sx.projects.length || sx.devs.length); for (const p of sx.projects) addB(p.key, p.en, p.ar, p.no, p.district, 0); for (const v of sx.devs) { for (const s of (v.ds.length ? v.ds : [""])) addDev(v.no, v.name, s, 0); for (const s of v.ds) if (!d.has(s) && names[s]) d.set(s, names[s]); } } catch (e) {}   // v396
   IDX = {
     ok: true, as_of: asOf,
     b: [...b.entries()].sort((x, y) => y[1].c - x[1].c).map(([k, x]) => [k, apps.get(k) || x.en || x.ar || k, x.d, d.get(x.d) || names[x.d] || x.d, x.en, x.ar, x.no]),
     v: [...v.entries()].filter(([, x]) => x.n).sort((x, y) => y[1].c - x[1].c).map(([k, x]) => [k, x.n, [...x.ds]]),
     d: [["dubai", "All of Dubai", "dubai all"]].concat([...d.entries()].sort((x, y) => x[1].localeCompare(y[1])).map(([k, n]) => [k, n, SAY_AS[k] || ""]))
   };
+  if (hasSales) IDX.sales = true;   // v396
   IDX_T = Date.now();
   return IDX;
 }
@@ -325,6 +330,8 @@ export function ejariMatch(idx, text) {
   if (!q || (q.length < 2 && !qNo)) return out;
   for (const x of idx.d) { const s = score(q, x[1], x[0] + " " + x[2]); if (s) out.push({ kind: x[0] === "dubai" ? "dubai" : "district", id: x[0], name: x[1], sub: x[0] === "dubai" ? "Every district" : "District", s: s + 3 }); }
   for (const x of idx.v) { const s = score(q, x[1]); if (s) out.push({ kind: "developer", id: x[0], name: x[1], sub: "Developer \u00b7 " + plural(x[2].length, "district", "districts"), s: s + 1 }); }
+  // v396: one brand, several registered companies (Imtiaz is nine): the brand word alone offers them all together - rentals and sales are filed under different companies
+  if (idx.sales && q.length >= 4 && q.indexOf(" ") < 0) { const hits = idx.v.filter((x) => ejariNorm(x[1]).split(" ")[0] === q); if (hits.length >= 2) out.push({ kind: "developer", id: "group:" + q, name: q.charAt(0).toUpperCase() + q.slice(1) + " (all " + hits.length + " registered companies)", sub: "Developer group \u00b7 rentals and sales together", s: 104 }); }
   for (const x of idx.b) {
     let s = Math.max(score(q, x[1]), score(q, x[4]), score(q, x[5]));
     if (qNo && x[6] === qNo[1]) s = 100;
@@ -413,6 +420,7 @@ function finish(base, subject, st, rg, anchor, srcs) {
   A.subsAll = ejariCount(subject.filter(keep(st, rg.from, rg.to, true))).subs.map((s) => ({ sub: s.sub, label: s.label, n: s.n }));
   A.cmp = rg.prev ? compare(A, subject.filter(keep(stE, rg.prev.from, rg.prev.to)), rg, covers(rg.prev.from)) : null;
   Object.defineProperty(A, "_rows", { value: rows, enumerable: false });
+  Object.defineProperty(A, "_win", { value: (f, t) => subject.filter(keep(stE, f, t)).filter((r) => !r.desk), enumerable: false });   // v396
   return A;
 }
 const need = (rg) => (rg.prev && rg.prev.from < rg.from ? rg.prev.from : rg.from);
@@ -448,10 +456,14 @@ export async function ejariAnswer(env, st) {
     const dub = await dubaiSource(get, st.basis);
     let ds = new Set(), name = "";
     // v287: the filed files carry the developer's name but no number, so a row with no number is matched on the name
-    const idx = await buildIndex(env); const ix = idx.v.find((y) => y[0] === st.id);
+    const idx = await buildIndex(env); let ix = idx.v.find((y) => y[0] === st.id);
+    // v396: a developer group (st.id = group:<brand word>): every registered company whose name starts with the word
+    const grp = idx.sales && /^group:[a-z0-9]{3,30}$/.test(st.id) ? idx.v.filter((y) => ejariNorm(y[1]).split(" ")[0] === st.id.slice(6)) : null;
+    if (grp && grp.length) ix = [st.id, st.id.charAt(6).toUpperCase() + st.id.slice(7) + " (all " + grp.length + " registered companies)", [...new Set(grp.reduce((a, y) => a.concat(y[2]), []))]];
     if (ix) name = ix[1] || name;
     const nk = (v) => String(v || "").toUpperCase().replace(/\s+/g, " ").trim();
-    const isMine = (r) => (r.devNo != null && r.devNo !== "" ? String(r.devNo) === String(st.id) : !!name && nk(r.dev) === nk(name));
+    const gIds = grp && grp.length ? new Set(grp.map((y) => String(y[0]))) : null, gNames = grp && grp.length ? new Set(grp.map((y) => nk(y[1]))) : null;   // v396
+    const isMine = (r) => gIds ? (r.devNo != null && r.devNo !== "" ? gIds.has(String(r.devNo)) : gNames.has(nk(r.dev))) : (r.devNo != null && r.devNo !== "" ? String(r.devNo) === String(st.id) : !!name && nk(r.dev) === nk(name));
     if (dub) for (const r of dub.rows) if (isMine(r)) { if (r.district) ds.add(r.district); if (!name && r.dev) name = r.dev; }
     if (ix) ix[2].forEach((s) => ds.add(s));
     if (!ds.size) return { notFound: true, why: "No contracts on record for that developer." };
@@ -465,7 +477,7 @@ export async function ejariAnswer(env, st) {
     for (const p of parts) mine = mine.concat(p.rows.filter(isMine));
     for (const r of mine) if (!name && r.dev) name = r.dev;
     const used = parts.some((p) => p.basis === "start") ? "start" : basis;
-    const A = finish({ kind: "developer", id: st.id, name: name || "Developer " + st.id, districts: [...ds].map((s) => names[s] || s), basis: used, fellBack: st.basis === "filed" && used === "start" }, mine, st, rg, anchor, parts);
+    const A = finish(Object.assign({ kind: "developer", id: st.id, name: name || "Developer " + st.id, districts: [...ds].map((s) => names[s] || s), basis: used, fellBack: st.basis === "filed" && used === "start" }, gIds ? { group: { ids: [...gIds], names: [...gNames] } } : {}), mine, st, rg, anchor, parts);
     A.projects = ejariRank(A._rows, names, await appNames(get));
     return A;
   }
@@ -601,10 +613,10 @@ const EJ_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans
   + '.nt{color:#8FA39B;font-size:.8rem;line-height:1.5;margin:6px 0 10px}';
 
 function linker(st, key, rk) {
-  const base = { kind: st.kind, id: st.kind === "dubai" ? "" : st.id, d: st.d, range: st.range, from: st.range === "custom" ? st.from : "", to: st.range === "custom" ? st.to : "", reg: st.reg, beds: st.beds.join(","), sub: st.sub.join(","), top: String(st.top), basis: st.basis, lang: st.lang };
+  const base = { kind: st.kind, id: st.kind === "dubai" ? "" : st.id, d: st.d, range: st.range, from: st.range === "custom" ? st.from : "", to: st.range === "custom" ? st.to : "", reg: st.reg, beds: st.beds.join(","), sub: st.sub.join(","), top: String(st.top), basis: st.basis, lang: st.lang, view: st.view };
   return (over) => {
     const o = Object.assign({}, base, over || {}), p = [];
-    for (const k of ["kind", "id", "d", "range", "from", "to", "reg", "beds", "sub", "top", "basis", "lang"]) if (o[k] && !(k === "reg" && o[k] === "both") && !(k === "top" && o[k] === "5") && !(k === "basis" && o[k] === "filed")) p.push(k + "=" + encodeURIComponent(o[k]));
+    for (const k of ["kind", "id", "d", "range", "from", "to", "reg", "beds", "sub", "top", "basis", "lang", "view"]) if (o[k] && !(k === "view" && o[k] === "both") && !(k === "reg" && o[k] === "both") && !(k === "top" && o[k] === "5") && !(k === "basis" && o[k] === "filed")) p.push(k + "=" + encodeURIComponent(o[k]));
     p.push(kq(key, rk));
     return "/contracts?" + p.join("&");
   };
@@ -626,29 +638,38 @@ function toggleHtml(st, A, link, key, rk) {
     const anchor = A && A.asOf ? A.asOf : "", lim = anchor ? ' min="' + addD(anchor, -399) + '" max="' + anchor + '"' : "";
     const hid = (n, v) => v ? '<input type=hidden name=' + n + ' value="' + esc(v) + '">' : "";
     h += '<form class=cus method=get action="/contracts">' + hid("kind", st.kind) + hid("id", st.kind === "dubai" ? "" : st.id) + hid("d", st.d) + hid("reg", st.reg === "both" ? "" : st.reg)
-      + hid("beds", st.beds.join(",")) + hid("sub", st.sub.join(",")) + hid("top", st.top === 5 ? "" : String(st.top)) + hid("basis", st.basis === "start" ? "start" : "") + '<input type=hidden name=range value=custom>' + hid("key", key || " ").replace(' value=" "', ' value=""') + hid("rk", rk)
+      + hid("beds", st.beds.join(",")) + hid("sub", st.sub.join(",")) + hid("top", st.top === 5 ? "" : String(st.top)) + hid("basis", st.basis === "start" ? "start" : "") + hid("view", st.view === "both" ? "" : st.view) + '<input type=hidden name=range value=custom>' + hid("key", key || " ").replace(' value=" "', ' value=""') + hid("rk", rk)
       + '<label>From<input type=date name=from value="' + esc(A ? A.from : st.from) + '"' + lim + "></label>"
       + '<label>To<input type=date name=to value="' + esc(A ? A.to : st.to) + '"' + lim + "></label>"
       + '<button type=submit class=gob>SHOW</button></form><div class=sb style="margin:0 0 8px">Any span up to 400 days back. No comparison is drawn for a custom span.</div>';
   }
   return h;
 }
-function filtersHtml(st, A, link) {
-  let h = '<div class=flt><div class=fl>NEW OR RENEWED</div><div class=fr id=ejreg>' + [["both", "Both"], ["new", "New"], ["renew", "Renewals"]].map((r) => chip(st.reg === r[0], link({ reg: r[0] }), r[1])).join("") + "</div>";
+// v396: with sales on the page, the bedroom chips follow the guard of the side(s) shown; New / Renewed and property type are rentals words
+function bedsFor(A, S, st) {
+  const sb = S.beds || { ok: true, active: st.beds, share: null };
+  if (st.view === "sales") return Object.assign({}, sb, { note: sb.ok ? "" : "Bedrooms are recorded for only " + pctSay(sb.share) + " of these sales, so they cannot be split by bedrooms here." });
+  const a = A.beds || { ok: true, active: st.beds, share: null }, ok = a.ok || sb.ok;
+  const side = ok && st.beds.length && (!a.ok || !sb.ok) ? (!a.ok ? "The bedroom choice applies to the sales only: rentals do not record bedrooms for most contracts, so they are counted without it." : "The bedroom choice applies to the rentals only: too few sales record bedrooms, so they are counted without it.") : "";
+  return { ok, share: a.share, active: st.beds, note: ok ? "" : "Neither the rentals nor the sales record bedrooms for most of these, so they cannot be split by bedrooms here.", side };
+}
+function filtersHtml(st, A, link, S) {
+  const sOnly = !!S && st.view === "sales";
+  let h = '<div class=flt>' + (sOnly ? "" : '<div class=fl>NEW OR RENEWED' + (S && st.view === "both" ? " (RENTALS)" : "") + '</div><div class=fr id=ejreg>' + [["both", "Both"], ["new", "New"], ["renew", "Renewals"]].map((r) => chip(st.reg === r[0], link({ reg: r[0] }), r[1])).join("") + "</div>");
   const tog = (list, v, order) => { const s = new Set(list); if (s.has(v)) s.delete(v); else s.add(v); return (order ? order.filter((x) => s.has(x)) : [...s]).join(","); };
-  const bd = A.beds || { ok: true, active: st.beds };
+  const bd = S && st.view !== "rentals" ? bedsFor(A, S, st) : (A.beds || { ok: true, active: st.beds });
   if (bd.ok) h += '<div class=fl>BEDROOMS</div><div class=fr id=ejbeds>' + chip(!st.beds.length, link({ beds: "" }), "All") + BANDS.filter((b) => b !== "other").map((b) => chip(st.beds.includes(b), link({ beds: tog(st.beds, b, BANDS) }), BAND_CHIP[b])).join("") + "</div>";
   else {   // v394: not offered where the contracts do not record bedrooms: greyed, with the reason, and nothing remembered is applied
     h += '<div class=fl>BEDROOMS</div><div class=fr id=ejbeds data-off=1>' + '<span class="ch on dis" aria-disabled=true>All</span>'
       + BANDS.filter((b) => b !== "other").map((b) => '<span class="ch dis" aria-disabled=true>' + esc(BAND_CHIP[b]) + "</span>").join("") + "</div>"
-      + '<div class=dk id=ejbedsnote>' + (A.basis === "filed" ? "Bedrooms are not recorded on contracts filed in the last days. Switch to contract start to split by bedrooms."
+      + '<div class=dk id=ejbedsnote>' + (bd.note ? esc(bd.note) : A.basis === "filed" ? "Bedrooms are not recorded on contracts filed in the last days. Switch to contract start to split by bedrooms."
         : "Bedrooms are recorded for only " + esc(pctSay(bd.share)) + " of these contracts, so they cannot be split by bedrooms here.") + "</div>";
   }
   // property type, in Ejari's own words; a chosen type stays on the row even when the other filters leave it empty
   const subs = (A.subsAll || []).slice(0, 12), seen = new Set(subs.map((s) => s.sub));
   for (const s of st.sub) if (!seen.has(s)) subs.push({ sub: s, label: subSay(s), n: 0 });
-  if (subs.length > 1 || st.sub.length) h += '<div class=fl>PROPERTY TYPE</div><div class=fr id=ejsub>' + chip(!st.sub.length, link({ sub: "" }), "All") + subs.map((s) => chip(st.sub.includes(s.sub), link({ sub: tog(st.sub, s.sub) }), s.label, " data-sub=\"" + esc(s.sub) + "\"")).join("") + "</div>";
-  return h + "</div>";
+  if (!sOnly && (subs.length > 1 || st.sub.length)) h += '<div class=fl>PROPERTY TYPE</div><div class=fr id=ejsub>' + chip(!st.sub.length, link({ sub: "" }), "All") + subs.map((s) => chip(st.sub.includes(s.sub), link({ sub: tog(st.sub, s.sub) }), s.label, " data-sub=\"" + esc(s.sub) + "\"")).join("") + "</div>";
+  return h + (bd.side ? "<div class=dk id=ejbedside>" + esc(bd.side) + "</div>" : "") + "</div>";
 }
 // the daily bar strip: New in gold under Renewals in green; a week to a bar beyond three months
 function stripHtml(A) {
@@ -735,60 +756,68 @@ function rankHtml(list, st, key, rk, opt) {
       + '<div class=rc>' + fmt(v) + "<small>" + esc(opt.unit || "contracts") + "</small></div></div>";
   }).join("");
 }
-function answerHtml(A, st, key, rk) {
+function answerHtml(A, st, key, rk, S) {
   const link = linker(st, key, rk);
   const strip = stripHtml(A), bands = table(A.count.bands, "HOME"), subs = A.count.subs.some((s) => s.sub !== "not stated") ? '<div class=hd>BY PROPERTY TYPE</div>' + table(A.count.subs, "TYPE") : "";
+  // v396: with sales loaded and Sales or Both chosen, the sales module draws the headline, chart, tables and building list; otherwise this is the v395 card
+  const mode = S && st.view !== "rentals" ? st.view : "";
+  const R = { headline, strip: stripHtml, bands: (a) => table(a.count.bands, "HOME"), subs: (a) => a.count.subs.some((s) => s.sub !== "not stated") ? '<div class=hd>BY PROPERTY TYPE</div>' + table(a.count.subs, "TYPE") : "", top: st.top,
+    name: (x) => { const id = appIdOf(x.key); return '<a href="' + esc(linker(Object.assign({}, st, { kind: "building", id: x.key, d: id ? "" : x.district }), key, rk)()) + '">' + pname(x.en, x.ar, x.app) + "</a>"; },
+    districtHref: (slug) => linker(Object.assign({}, st, { kind: "district", id: slug, d: "" }), key, rk)() };
+  const body = (subjectHtml) => mode ? salesBodyHtml(mode, subjectHtml, A, S, st, R) : headline(subjectHtml, A) + strip + bands + subs;
   if (A.kind === "building") {
     return '<div class=card id=ejans data-kind=building><div class=kt>BUILDING</div><div class=nm id=ejname>' + (A.appName ? esc(A.appName) : pname(A.en, A.ar)) + "</div>"
       + (A.identity ? '<div class=idn id=ejid>' + [A.en ? esc(A.en) : "", A.ar ? '<span lang=ar dir=rtl>' + esc(A.ar) + "</span>" : "", A.no ? "#" + esc(A.no) : ""].filter(Boolean).join(" \u00b7 ") + "</div>" : "")
       + "<div class=sb>" + esc([A.dname, A.dev].filter(Boolean).join(" \u00b7 ")) + "</div>"
-      + headline(A.appName ? esc(A.appName) : pname(A.en, A.ar), A) + strip + bands + subs
+      + body(A.appName ? esc(A.appName) : pname(A.en, A.ar))
       + (A.appId ? '<div class=lk><a href="' + esc(bpage(A.district, A.appId, key, rk)) + '">Building page \u2197</a><a href="' + esc(blocks(A.district, A.appId, key, rk)) + '">See its digital footprint \u2197</a></div>' : "")
       + "</div>";
   }
   if (A.kind === "developer") {
     return '<div class=card id=ejans data-kind=developer><div class=kt>DEVELOPER</div><div class=nm>' + esc(A.name) + "</div><div class=sb>" + esc("Across " + plural(A.projects.length, "building", "buildings") + " that signed contracts in this window") + "</div>"
-      + headline(esc(A.name), A) + strip + bands + subs
-      + (A.projects.length ? '<div class=hd>BY BUILDING</div><div id=ejproj>' + rankHtml(A.projects, st, key, rk, { withDistrict: true }) + "</div>" : "") + "</div>";
+      + body(esc(A.name))
+      + (!mode && A.projects.length ? '<div class=hd>BY BUILDING</div><div id=ejproj>' + rankHtml(A.projects, st, key, rk, { withDistrict: true }) + "</div>" : "") + "</div>";
   }
   if (A.kind === "district") {
     const list = A.ranking.slice(0, st.top);
     return '<div class=card id=ejans data-kind=district><div class=kt>DISTRICT</div><div class=nm>' + esc(A.name) + "</div>"
-      + headline(esc(A.name), A) + strip + bands + subs
-      + (A.ranking.length ? '<div class=hd>MOST LET BUILDINGS<small>flexi-desk licences left out</small></div>' + topHtml(st, link) + '<div id=ejrank>' + rankHtml(list, st, key, rk, {}) + "</div>" : "") + "</div>";
+      + body(esc(A.name))
+      + (!mode && A.ranking.length ? '<div class=hd>MOST LET BUILDINGS<small>flexi-desk licences left out</small></div>' + topHtml(st, link) + '<div id=ejrank>' + rankHtml(list, st, key, rk, {}) + "</div>" : "") + "</div>";
   }
   // all of Dubai: where the new leases are, and the most let buildings, under one Top 5 / 10 / 15 / 20 choice
   const where = A.where.slice(0, st.top), bl = A.buildings.slice(0, st.top);
   return '<div class=card id=ejans data-kind=dubai><div class=kt>ALL OF DUBAI</div><div class=nm>Dubai</div>'
-    + headline("Dubai", A) + strip + bands + subs
-    + '<div class=hd>SHOW</div>' + topHtml(st, link)
-    + (where.length ? '<div class=hd>WHERE THE ' + (A.whereBy === "renewals" ? "RENEWALS" : "NEW LEASES") + ' ARE<small>by district</small></div><div id=ejwhere>' + rankHtml(where, st, key, rk, { where: true, metric: "v", unit: A.whereBy }) + "</div>" : "")
-    + (bl.length ? '<div class=hd>MOST LET BUILDINGS<small>flexi-desk licences left out</small></div><div id=ejrank>' + rankHtml(bl, st, key, rk, { withDistrict: true }) + "</div>" : "")
+    + body("Dubai")
+    + (mode === "sales" ? "" : '<div class=hd>SHOW</div>') + topHtml(st, link)
+    + (!mode && where.length ? '<div class=hd>WHERE THE ' + (A.whereBy === "renewals" ? "RENEWALS" : "NEW LEASES") + ' ARE<small>by district</small></div><div id=ejwhere>' + rankHtml(where, st, key, rk, { where: true, metric: "v", unit: A.whereBy }) + "</div>" : "")
+    + (mode !== "sales" && bl.length ? '<div class=hd>MOST LET BUILDINGS<small>flexi-desk licences left out</small></div><div id=ejrank>' + rankHtml(bl, st, key, rk, { withDistrict: true }) + "</div>" : "")
     + "</div>";
 }
 
 export function ejariPageHtml(o) {
   const st = o.st, key = o.key || "", rk = o.rk || "", link = linker(st, key, rk);
   let main = "";
-  if (o.answer && !o.answer.notFound) main = toggleHtml(st, o.answer, link, key, rk) + filtersHtml(st, o.answer, link) + answerHtml(o.answer, st, key, rk);
+  const S = o.sales || null;   // v396: the sales answer, null when no sales file is loaded - then everything below is the v395 page
+  if (o.answer && !o.answer.notFound && !(o.answer.noRentals && (!S || st.view === "rentals"))) main = (S ? viewSwitchHtml(st, link) : "") + toggleHtml(st, o.answer, link, key, rk) + filtersHtml(st, o.answer, link, S) + answerHtml(o.answer, st, key, rk, S);
+  else if (o.answer && o.answer.noRentals) main = (S ? viewSwitchHtml(st, link) : "") + '<div class=nt id=ejnone>No contracts on record for this building. Choose Sales or Both to see its sales.</div>';
   else if (o.answer && o.answer.notFound) main = '<div class=nt id=ejnone>' + esc(o.answer.why) + "</div>";
   else if (o.matches) {
     if (!o.matches.length) main = '<div class=nt id=ejnone>Nothing in the contract record matches \u201c' + esc(st.q) + '\u201d. Try part of the name, the Arabic name, or the project number.</div>';
     else main = '<div class=hd>WHICH ONE?</div><div class=sug id=ejpick>' + o.matches.map((m) => '<a href="' + esc(linker(Object.assign({}, st, { kind: m.kind, id: m.id, d: m.d || "" }), key, rk)()) + '">' + (m.kind === "building" ? pname(m.en, m.ar, m.app) : esc(m.name)) + "<small>" + esc(m.sub) + "</small></a>").join("") + "</div>";
   }
-  const boot = { key, rk, range: st.range, basis: st.basis, lang: st.lang };
+  const boot = { key, rk, range: st.range, basis: st.basis, lang: st.lang };   // v396: the suggestion links keep to the default view
   return '<!doctype html><html lang=en data-lang=' + (st.lang === "ar" ? "ar" : "en") + '><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>Contracts signed \u2014 Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413"><meta name=robots content=noindex>' + (o.fonts || "")
-    + "<style>" + EJ_CSS + (o.navCss || "") + "</style></head><body>"
+    + "<style>" + EJ_CSS + (o.sales ? SALES_CSS : "") + (o.navCss || "") + "</style></head><body>"
     + '<a class=bk href="/start?' + esc(kq(key, rk)) + '">\u2039 START</a>'
     + '<div class=lng id=ejlang role=group aria-label="names in"><a data-l=en href="' + esc(link({ lang: "en" })) + '">EN</a><a data-l=ar lang=ar href="' + esc(link({ lang: "ar" })) + '">\u0639\u0631\u0628\u064A</a></div>'
     + '<div class=h>Contracts <em>signed</em></div>'
-    + '<div class=s>Tenancy contracts registered with Ejari, Dubai\u2019s rent register. Who is letting, and where.</div>'
+    + '<div class=s>' + (S && st.view !== "rentals" ? "Tenancy contracts registered with Ejari and sales registered with the Land Department. Who is letting, who is selling, and where." : "Tenancy contracts registered with Ejari, Dubai\u2019s rent register. Who is letting, and where.") + '</div>'
     + '<div class=srch><form method=get action="/contracts" autocomplete=off><input type=hidden name=key value="' + esc(key) + '">' + (rk ? '<input type=hidden name=rk value="' + esc(rk) + '">' : "")
     + '<input type=hidden name=range value="' + esc(st.range === "custom" ? "week" : st.range) + '"><input class=in id=ejq type=search name=q value="' + esc(st.q) + '" placeholder="building, developer, district or project number" aria-label="search a building, developer, district or project number">'
     + '<button type=submit class=gob>SEARCH</button></form><div class=sug id=ejs role=listbox></div></div>'
     + main
-    + '<div class=cav id=ejcav>' + esc(o.answer && !o.answer.notFound ? ejariCaveat(o.answer.basis, o.answer.fellBack) : ejariCaveat(st.basis)) + (o.answer && o.answer.asOf ? " Register as of " + esc(dSay(o.answer.asOf)) + "." : "") + "</div>"
+    + '<div class=cav id=ejcav>' + esc(o.answer && !o.answer.notFound ? ejariCaveat(o.answer.basis, o.answer.fellBack) : ejariCaveat(st.basis)) + (S && st.view !== "rentals" && o.answer && !o.answer.notFound ? " " + esc(SALES_CAVEAT) + (S.asOf ? " Sales registered to " + esc(dSay(S.asOf)) + "." : "") : "") + (o.answer && o.answer.asOf ? " Register as of " + esc(dSay(o.answer.asOf)) + "." : "") + "</div>"
     + "<script>window.__EJ=" + safeJson(boot) + ";</script><script>" + EJARI_JS + "</script>"
     + (o.nav || "") + "</body></html>";
 }
@@ -799,6 +828,11 @@ export function ejariBuildingPanel(slug, id, key, rk) {
   const boot = { k: slug + ":" + id, key: key || "", rk: rk || "" };
   return '<div class=grp>Contracts signed <u>Ejari</u></div><div id=ejp class=src style="font-size:.72rem">Counting the contracts\u2026</div>'
     + "<script>window.__EJP=" + safeJson(boot) + ";</script><script>" + EJARI_PANEL_JS + "</script>";
+}
+
+// v396: the sales answer for the subject on screen; null (the v395 page) when no sales file is loaded or anything goes wrong
+async function salesFor(env, st, A) {
+  try { return await salesAnswer(reader(env).raw, st, A, await districtNames(env)); } catch (e) { return null; }
 }
 
 // ---- the routes -----------------------------------------------------------------------------------------------------
@@ -826,7 +860,8 @@ export async function ejariRoutes(request, env, url, h) {
     if (!st.kind) return json({ ok: false, why: "say kind=building|developer|district|dubai and id" }, 400);
     const A = await ejariAnswer(env, st);
     if (!A || A.notFound) return json({ ok: false, why: A ? A.why : "" }, 404);
-    return json(Object.assign({ ok: true }, A));
+    const S = await salesFor(env, st, A);   // v396
+    return json(Object.assign({ ok: true }, A, S ? { sales: S } : {}));
   }
   let answer = null, matches = null;
   if (st.kind && st.id) answer = await ejariAnswer(env, st);
@@ -838,7 +873,10 @@ export async function ejariRoutes(request, env, url, h) {
       answer = await ejariAnswer(env, st); matches = null;
     }
   } else { st.kind = "dubai"; st.id = "dubai"; answer = await ejariAnswer(env, st); }   // no subject: all of Dubai
-  const html = ejariPageHtml({ st, key, rk, answer, matches, nav: h.najNav(key, "start", rk), navCss: h.NAJ_NAV_CSS, fonts: h.NAJ_FONTS });
+  // v396: a building with sales and no rentals (KORE by Imtiaz) is still a page; the sales are read for whatever subject is on screen
+  if (answer && answer.notFound && st.kind === "building") { try { const stub = await salesOnlyBuilding(reader(env).raw, st, st.id, st.d, await districtNames(env), (asOf) => ejariRange(st, asOf)); if (stub) answer = stub; } catch (e) {} }
+  const sales = answer && !answer.notFound ? await salesFor(env, st, answer) : null;
+  const html = ejariPageHtml({ st, key, rk, answer, matches, sales, nav: h.najNav(key, "start", rk), navCss: h.NAJ_NAV_CSS, fonts: h.NAJ_FONTS });
   return h.clientResp(env, url, html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
 }
 
