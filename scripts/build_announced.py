@@ -417,6 +417,10 @@ def main():
             e["url"] = c["url"]
         if c["f"]:
             e["f"] = c["f"]
+        # lw = 'listed, no register entry found' wording: a handover year of 2025 or earlier (already built, so 'not yet registered' would be wrong), or a hotel, mall or staff-accommodation type by name
+        my = re.search(r"\b(20\d\d)\b", str(c["ho"] or ""))
+        if (my and int(my.group(1)) <= 2025) or re.search(r"\b(hotel|resort|mall|staff accommodation)\b", c["name"], re.I):
+            e["lw"] = 1
         d[c["slug"] or "~" + nk(c["dn"])][dist or "_"].append(e)
     out = {}
     for dev in sorted(d):
@@ -428,7 +432,7 @@ def main():
     by_dev = collections.Counter({dev: sum(len(l) for l in ds.values()) for dev, ds in out.items()})
     meta = {"built": a.built, "count": total, "label": LABEL, "rule": "DEVELOPER_CLAIMED only; matched/held/skipped as described in scripts/build_announced.py", "register": "Land Department project register extract 15 Jun 2026 + delta 1 Sep 2026 + sales/building-register-only projects (3,915 rows)",
             "candidates": len(cands), "matched": len(matched), "held_possible_register_match": len(held), "held_same_name_developer_unconfirmed": len(collide), "skipped": len(skipped), "shown": total, "with_profile": with_profile, "without_profile": total - with_profile,
-            "in_a_district": n_dist, "area_text_only": total - n_dist, "units_dropped_page_level_figure": dropped_units, "index_generated": IX.get("generated"), "index_as_of": IX.get("as_of"),
+            "in_a_district": n_dist, "area_text_only": total - n_dist, "units_dropped_page_level_figure": dropped_units, "label_listed": "Listed by the developer, no register entry found", "listed_wording": sum(1 for ds in out.values() for l in ds.values() for e in l if e.get("lw")), "index_generated": IX.get("generated"), "index_as_of": IX.get("as_of"),
             "no_profile": sorted(dev[1:] for dev in out if dev.startswith("~"))}
     res = {"meta": meta, "d": out}
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
@@ -451,6 +455,8 @@ def main():
         for dist in sorted(out[dev]):
             for e in out[dev][dist]:
                 it = {"n": e["n"], "t": "development", "ann": 1}
+                if e.get("lw"):
+                    it["lw"] = 1
                 if not dev.startswith("~"):
                     it["dev"] = dev
                 if e.get("a"):
