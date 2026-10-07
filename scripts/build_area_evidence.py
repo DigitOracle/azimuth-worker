@@ -37,7 +37,8 @@ names = list(area_slug)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import devattr_register as R                 # v325 - the register developer of a project_number
 RD = R.register_devs(con)
-CUR = R.CUR                                  # curated brands (src/devcross.js ids)
+SA = R.sales_area_index()                    # v382 - the community AREA_EN of each project from the open sales extracts (the lake keeps only the DLD land area), the same source the all-years path uses
+CUR = R.CUR                                # curated brands (src/devcross.js ids)
 rows = con.execute("""select transaction_id, any_value(instance_date), any_value(actual_worth), any_value(procedure_area), any_value(reg_type_en), any_value(property_type_en),
   any_value(area_name_en), any_value(project_name_en), any_value(rooms_en), any_value(project_number), any_value(coalesce(master_project_en,''))
  from g_dld__transactions where trans_group_en='Sales'
@@ -93,12 +94,16 @@ def cell_labels(sub):  # v373 - one evidence label per cell of cells(sub), in th
         g.setdefault((s[6], s[7]), []).append(s); byname.setdefault(s[6], []).append(s[13])
     ordered = sorted(g.items(), key=lambda kv: -len(kv[1]))          # cells() sorts by -len with a stable sort over the same insertion order
     return [R.worst(byname[k[0]]) for k, x in ordered]               # a cell takes the label of its PROJECT (every sale of that name in the window), the same label b12x carries
-def project_evidence(px):  # v373 - the evidence record of one project (a building with sales in the window): its register project number, register developer, label, own area
+def project_evidence(px, pname=""):  # v373 - the evidence record of one project (a building with sales in the window): its register project number, register developer, label, own area
     pns = [s[10] for s in px if s[10] is not None]
     p = max(set(pns), key=pns.count) if pns else None
     rd = RD.get(p) if p is not None else None
     ars = [s[11] for s in px if s[11]]; mss = [s[12] for s in px if s[12]]
     lab = R.worst([s[13] for s in px])
+    sa = SA.get(nk(pname)) or SA.get("~" + R.nkey(pname)) if pname else None      # v382 - the project's own community (AREA_EN) and master community, looked up by name exactly as the all-years path does
+    if sa:
+        ars = [sa[0]] if sa[0] else ars
+        if sa[1]: mss = [sa[1]]      # the extract's master community beats the lake's (the lake master is blank for many Meydan Horizon rows)
     return {"p": p, "di": rd["developer_id"] if rd else None, "dn": rd["name_en"] if rd else "", "m": ("project_id" if rd else ("exact_name" if lab != "UNVERIFIED" else "none")), "e": lab,
             "ar": max(set(ars), key=ars.count) if ars else "", "ms": max(set(mss), key=mss.count) if mss else ""}
 def block(sub, l12, deep=True):
@@ -134,7 +139,7 @@ for slug, sub in S.items():
         for s in x12a: pj12.setdefault(s[6], []).append(s)
         b12 = [[len(px), sqm_to(med([s[1] / s[2] for s in px])), str(pn)] for pn, px in pj12.items() if len(px) >= 3 and str(pn).strip()]   # v323: a project = a building with 3 or more sales in the window
         A["devs"][dk] = {"c12": cells(x12a), "b12": b12, "c12e": [R.LABEL_CODE[l] for l in cell_labels(x12a)],
-                         "b12x": [project_evidence(px) for pn, px in pj12.items() if len(px) >= 3 and str(pn).strip()]}   # v373: evidence, parallel to c12 / b12
+                         "b12x": [project_evidence(px, pn) for pn, px in pj12.items() if len(px) >= 3 and str(pn).strip()]}   # v373: evidence, parallel to c12 / b12
         if dk != "_":
             A["devs"][dk]["q12"] = [sum(1 for s in x12a if s[13] == "REGISTER_VERIFIED"), sum(1 for s in x12a if s[13] != "REGISTER_VERIFIED")]      # v325: last-12-month sales [verified by the register, inferred from a name]
             if dk in NAMES: A.setdefault("names", {})[dk] = NAMES[dk]

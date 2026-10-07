@@ -4,7 +4,8 @@
 // Kendall, 7 Oct 2026: the Land Department register is the authority; a developer's own web site is a claim; the check must be a deterministic join, with humans only for exceptions.
 //   FAILS when  1 the index carries no attribution evidence (no `bx`), or the share of projects that are not REGISTER_VERIFIED is above the configured threshold;
 //               2 a fixture breaks: Vento Tower or The Pad verified under Beyond; Marina Vista (Emaar), Jumeirah Living Marina Gate (Select Group) or Ocean Heights (DAMAC) not verified;
-//                 Imtiaz Symphony Tower / Wynwood Horizon not in Meydan Horizon; Cove Grand not in Dubai Land Residence Complex; Westwood By Imtiaz not in Al Furjan.
+//                 Imtiaz Symphony Tower / Wynwood Horizon not in Meydan Horizon; Cove Grand and Le Blanc not in Dubai Land Residence Complex; Westwood By Imtiaz not in Al Furjan - each in BOTH windows (v382);
+//               3 (v382) a district heading, its second line or a project's area contains ' / ' (a combined label that borrows a community).
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +21,8 @@ export const FIXTURES = {
   stayOn: [{ name: "bay central", dev: "select-group" }, { name: "the royal oceanic", dev: "select-group" }, { name: "the point", dev: "select-group" }, { name: "cove edition i", dev: "imtiaz" }, { name: "pearl house 4", dev: "imtiaz" }, { name: "creek beach vida residences", dev: "emaar" }, { name: "alba tower", dev: "omniyat" }, { name: "vela viento", dev: "omniyat" }],
   notVerifiedUnder: [{ name: "vento tower", dev: "beyond" }, { name: "the pad", dev: "beyond" }],
   verifiedUnder: [{ name: "marina vista", dev: "emaar" }, { name: "jumeirah living marina gate", dev: "select-group" }, { name: "ocean heights", dev: "damac" }],
-  areaIs: [{ name: "imtiaz symphony tower", area: "Meydan Horizon" }, { name: "wynwood horizon", area: "Meydan Horizon" }, { name: "cove grand", area: "Dubai Land Residence Complex" }, { name: "westwood by imtiaz", area: "Al Furjan" }],
+  // v382: the project's OWN area in BOTH windows (all years and the last 12 months), never a neighbour of the same land district and never the combined district label
+  areaIs: [{ name: "imtiaz symphony tower", area: "Meydan Horizon" }, { name: "wynwood horizon", area: "Meydan Horizon" }, { name: "cove grand", area: "Dubai Land Residence Complex" }, { name: "le blanc", area: "Dubai Land Residence Complex" }, { name: "westwood by imtiaz", area: "Al Furjan" }],
 };
 
 // every project of the index, with its evidence, for both windows. returns {rows, hasEvidence}
@@ -70,11 +72,15 @@ export function runGate(index, cfg, opts) {
     const hit = find(f.name, ["all"]); const ok = hit.some((r) => r.dev_id === f.dev && r.e === VERIFIED);
     if (!ok && (hit.length || need)) { out.ok = false; failures.push("fixture: " + f.name + (hit.length ? " is not REGISTER_VERIFIED under " + f.dev + " (found: " + hit.map((r) => r.dev_id + "/" + r.e).join(", ") + ")" : " is not in the index")); }
   }
-  for (const f of FIXTURES.areaIs) {
-    const hit = find(f.name, ["all"]).filter((r) => r.hasEv);
-    if (!hit.length) { if (need) { out.ok = false; failures.push("fixture: " + f.name + " is not in the index (area " + f.area + " cannot be checked)"); } continue; }
-    for (const r of hit) if (r.a !== f.area) { out.ok = false; failures.push("fixture: " + r.project + " is shown in " + JSON.stringify(r.a) + ", expected " + f.area); }
+  for (const f of FIXTURES.areaIs) for (const w of ["all", "l12"]) {
+    const hit = find(f.name, [w]).filter((r) => r.hasEv);
+    if (!hit.length) { if (need) { out.ok = false; failures.push("fixture: " + f.name + " is not in the index for the " + (w === "all" ? "all-years" : "12-month") + " window (area " + f.area + " cannot be checked)"); } continue; }
+    for (const r of hit) if (r.a !== f.area) { out.ok = false; failures.push("fixture: " + r.project + " is shown in " + JSON.stringify(r.a) + " (" + (w === "all" ? "all years" : "12 months") + ", " + r.slug + "), expected " + f.area); }
   }
+  // v382 - no district HEADING (name, label or second line) is a join of two names ("Sobha Hartland II / Bukadra"): a heading is the plain Land Department name, the second line lists communities from the data
+  for (const slug of Object.keys(index.areas)) { const a = index.areas[slug]; for (const t of [a.name, a.label].concat(a.comms || [])) if (/ \/ /.test(String(t || ""))) { out.ok = false; failures.push("heading: " + slug + " shows " + JSON.stringify(t) + ", a join of two names (a borrowed community)"); } }
+  // and no project carries a combined label as its area
+  for (const r of rows) if (r.hasEv && / \/ /.test(r.a || "")) { out.ok = false; failures.push("area: " + r.project + " (" + r.window + ", " + r.slug + ") carries the combined area " + JSON.stringify(r.a)); }
   return out;
 }
 

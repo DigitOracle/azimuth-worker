@@ -13,7 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEVMAP_CORE_JS } from "../src/devmap_core.js";
-import { labelledName, communitiesOf, projectAreaLabel } from "../src/community_labels.js";   // v307; v373 projectAreaLabel: a project is labelled by its own area
+import { labelledName, communitiesOf, projectAreaLabel, headingName, areaCommunities } from "../src/community_labels.js";   // v307; v373 projectAreaLabel: a project is labelled by its own area
 import { decide, isGenericName, looseKeyOf, evidenceOf, displacedByRegister, LABEL_CODE, EVIDENCE_LABELS } from "../src/devattr.js";   // v325 - the attribution rules: the register first, a bare common word is not evidence
 import { canonicalOf, displayOf, aliasesOf, isCurated } from "../src/devcross.js";   // developer CROSSWALK (4 Oct 2026): one id per developer, however the sources spell it
 export const DM = new Function(DEVMAP_CORE_JS + "; return DM;")();
@@ -56,7 +56,7 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nam
     let added = false; const mine = [];
     // v373 - the evidence behind this building's developer and the area it is shown under
     const ev = evidenceOf({ D, cand: cand || "", route, regd, how, claimed: claims ? new Set(bnames.filter(Boolean).flatMap((nm) => claims[nameKey(nm)] || [])) : null, basisText: c.developer_basis });
-    const own = projectAreaLabel({ slug, districtName: districtName || slug, salesArea: areaEv && areaEv.ar, masterCommunity: (areaEv && areaEv.ms) || (regd && regd.ms), dldAreas });
+    const own = projectAreaLabel({ slug, districtName: headingName(slug, districtName || slug), salesArea: areaEv && areaEv.ar, masterCommunity: (areaEv && areaEv.ms) || (regd && regd.ms), dldAreas, aka: [districtName] });   // v382 - a project that has no community of its own shows the district's plain Land Department name (the heading), never a borrowed join
     const code = LABEL_CODE[ev.e];
     for (const r of c.rows || []) {
       if (!r.median_aed || !r.median_sqm) continue;                 // an estimate (est_aed) is never a sale price
@@ -98,7 +98,7 @@ function addOffplan(U, file) {
 }
 // v322 - the evidence file (scripts/build_area_evidence.py) onto the built areas. A developer that has sales in the last 12 months but no building card in the area gets a slot with
 // c: [] (the page drops a slot with nothing in the window it shows). Names for those slots come from the crosswalk, else from any other area that already holds the developer.
-function attachEvidence(areas, evidence) {
+function attachEvidence(areas, evidence, geoName) {
   const known = {};
   for (const s of Object.keys(areas)) for (const k of Object.keys(areas[s].devs)) if (areas[s].devs[k].n && !known[k]) known[k] = areas[s].devs[k].n;
   for (const s of Object.keys(areas)) {
@@ -112,7 +112,7 @@ function attachEvidence(areas, evidence) {
       if (E.devs[dk].q12) d.q12 = E.devs[dk].q12;   // v325 - last-12-month sales [verified by the register, inferred from a name]
       if (E.devs[dk].b12) d.b12 = E.devs[dk].b12;   // v323 - projects with 3 or more sales in the last 12 months, so a profile can follow the window
       // v373 - evidence for the window: b12x is parallel to b12 (the evidence builder gives p, di, dn, m, e and the project's raw sales area `ar` / master `ms`; the area LABEL is made here, by the one rule in community_labels.js); c12e is parallel to c12
-      if (E.devs[dk].b12x) d.b12x = E.devs[dk].b12x.map((x) => { const o = projectAreaLabel({ slug: s, districtName: A.name, salesArea: x.ar, masterCommunity: x.ms, dldAreas: E.dld }); return { p: x.p == null ? null : x.p, di: x.di == null ? null : x.di, dn: x.dn || "", m: x.m || "none", e: x.e || "UNVERIFIED", a: o.label, as: o.source }; });
+      if (E.devs[dk].b12x) d.b12x = E.devs[dk].b12x.map((x) => { const o = projectAreaLabel({ slug: s, districtName: A.name, salesArea: x.ar, masterCommunity: x.ms, dldAreas: E.dld, aka: [(geoName && geoName[s]) || A.name] }); return { p: x.p == null ? null : x.p, di: x.di == null ? null : x.di, dn: x.dn || "", m: x.m || "none", e: x.e || "UNVERIFIED", a: o.label, as: o.source }; });
       if (E.devs[dk].c12e) d.c12e = E.devs[dk].c12e;
     }
   }
@@ -141,7 +141,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev, traceOut, regdev && regdev[g.slug], g.name, claims, register && register[g.slug] && register[g.slug].areas, keep);
     if (projdevOut) projdevOut.slugs[g.slug] = nameDev;
     if (!Object.keys(devs).length && !(evidence && evidence.areas && evidence.areas[g.slug])) continue;
-    areas[g.slug] = { name: g.name, corridor: g.corridor, bbox: g.bbox, centre: g.centre, devs };
+    areas[g.slug] = { name: headingName(g.slug, g.name), corridor: g.corridor, bbox: g.bbox, centre: g.centre, devs };
     if (op && op.added) areas[g.slug].offplan = { projects: op.added, sales: op.sales, share_pct: op.offplan_share, note: "Includes off-plan sales built from the Land Department register by project (" + op.added + " projects, " + op.sales + " sales). Off-plan prices are contract values agreed with the developer, not resale prices. Where the developer is not recorded the register names only the land owner." };
     if (op && op.added && !(op.offplan_share > 0)) areas[g.slug].offplan.note = "Includes sales built from the Land Department register by project (" + op.added + " projects, " + op.sales + " sales) that the building records did not hold. Where the developer is not recorded it is shown as not recorded.";
     if (register && register[g.slug]) { const r = register[g.slug]; if (r.sales_all_time != null && !r.shared) { areas[g.slug].register_sales_all_time = r.sales_all_time; areas[g.slug].register_sales_12m = r.sales_12m; } }
@@ -149,7 +149,18 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     for (const k of Object.keys(devs)) all.push(...devs[k].c);
   }
   if (projdevOut) for (const k of Object.keys(projDev)) { const c = canonicalOf(projDev[k]); if (c && !isGenericName(k)) projdevOut.global[k] = c; }   // v325: a bare common-word name ("symphony", "park central") never carries a developer Dubai-wide
-  if (evidence && evidence.areas) attachEvidence(areas, evidence);
+  const geoName = {}; for (const g of geo.districts) geoName[g.slug] = g.name;
+  if (evidence && evidence.areas) attachEvidence(areas, evidence, geoName);
+  // v382 - the quiet second line of each heading: the communities its projects sit in (both windows, one count per project name), from the data
+  for (const s of Object.keys(areas)) {
+    const seen = new Map();
+    for (const d of Object.values(areas[s].devs)) {
+      (d.b || []).forEach((b, i) => { const x = d.bx && d.bx[i]; if (x) seen.set(nameKey(b[2]), { a: x.a, as: x.as, n: b[0] }); });
+      (d.b12 || []).forEach((b, i) => { const x = d.b12x && d.b12x[i]; if (x && !seen.has(nameKey(b[2]))) seen.set(nameKey(b[2]), { a: x.a, as: x.as, n: b[0] }); });
+    }
+    const cm = areaCommunities([...seen.values()], areas[s].label ? areas[s].community[0] : areas[s].name, 5, 0.1);
+    if (cm.length) areas[s].comms = cm;
+  }
   const bounds = (DM.TIER_CFG.bounds && DM.TIER_CFG.bounds.slice()) || DM.percentileBounds(all, DM.TIER_CFG.percentiles);
   const devList = {};
   for (const s of Object.keys(areas)) for (const k of Object.keys(areas[s].devs)) {
