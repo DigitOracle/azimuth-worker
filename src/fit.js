@@ -127,18 +127,27 @@ export function parseSteps(s) {
   let v = parseFloat(m[1].replace(/,/g, "")); if (m[2]) v *= 1000;
   v = Math.round(v); return v >= 100 && v <= 200000 ? v : null;
 }
-const EX_WORDS = /\b(gym|weights?|lift(?:ed|ing)?|run|ran|running|jog(?:ged|ging)?|walk(?:ed|ing)?|swim|swam|swimming|cycl(?:e|ed|ing)|bike|biked|biking|spin|padel|tennis|squash|football|basketball|golf|yoga|pilates|hiit|crossfit|boxing|row(?:ed|ing)?|hik(?:e|ed|ing)|climb(?:ed|ing)?|danc(?:e|ed|ing)|stretch(?:ed|ing)?|workout|work(?:ed)? out|training|cardio|treadmill|elliptical)\b/i;
+const EX_WORDS = /\b(weight\s+training|spin\s+class|outdoor\s+cycl(?:e|ing)|cross\s*-?\s*trainer|bike\s+ride|gym|weights?|lift(?:ed|ing)?|run|ran|running|jog(?:ged|ging)?|walk(?:ed|ing)?|swim|swam|swimming|cycl(?:e|ed|ing)|bike|biked|biking|spin|padel|tennis|squash|football|basketball|golf|yoga|pilates|hiit|crossfit|boxing|row(?:ed|ing)?|hik(?:e|ed|ing)|climb(?:ed|ing)?|danc(?:e|ed|ing)|stretch(?:ed|ing)?|workout|work(?:ed)? out|training|cardio|treadmill|elliptical)\b/i;
 const FOODISH = /\b(ate|eat|eaten|eating|breakfast|lunch|dinner|supper|snack|brunch|had|drank|coffee|smoothie|shake|meal|food|pizza|burger|salad|rice|chicken|sandwich|pasta|eggs?|steak|fish|sushi|fruit|oats?|yogh?urt|steps?)\b/i;
+// The exercise types Momo knows by name. Anything else (padel, yoga, rowing...) is logged under its own capitalised word.
+export const EX_TYPES = ["Walk", "Run", "Weight training", "Spin class", "Outdoor cycling", "Swimming", "Elliptical"];
 export function exLabel(w) {
-  w = String(w || "").toLowerCase();
-  if (/^(gym|weights?|lift|lifted|lifting|training|workout|work out|worked out|crossfit)$/.test(w)) return "Gym";
+  w = String(w || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (/^(gym|weights?|weight training|lift|lifted|lifting|training|workout|work out|worked out|crossfit)$/.test(w)) return "Weight training";
   if (/^(run|ran|running|jog|jogged|jogging|treadmill)$/.test(w)) return "Run";
   if (/^(walk|walked|walking)$/.test(w)) return "Walk";
-  if (/^(swim|swam|swimming)$/.test(w)) return "Swim";
-  if (/^(cycle|cycled|cycling|bike|biked|biking|spin)$/.test(w)) return "Cycle";
+  if (/^(swim|swam|swimming)$/.test(w)) return "Swimming";
+  if (/^spin( class)?$/.test(w)) return "Spin class";
+  if (/^(outdoor cycle|outdoor cycling|cycle|cycled|cycling|bike|biked|biking|bike ride|ride|rode|riding)$/.test(w)) return "Outdoor cycling";
+  if (/^(elliptical|cross ?-?trainer)$/.test(w)) return "Elliptical";
   if (/^(hike|hiked|hiking)$/.test(w)) return "Hike";
   return w.charAt(0).toUpperCase() + w.slice(1);
 }
+// History keeps its meaning: entries logged before the rename read "Gym" / "Swim" / "Cycle". They are SHOWN under the new names (nothing is rewritten in storage).
+const EX_LEGACY = { gym: "Weight training", swim: "Swimming", cycle: "Cycling" };
+// a label typed or guessed by the model ("gym", "Swim", "weights") becomes the canonical name when it is one of ours; anything else is kept as given
+export const exCanon = (x) => { const l = exLabel(x); return EX_TYPES.includes(l) ? l : String(x || ""); };
+const exShown = (e) => { if (e && e.k === "ex" && !e.n && typeof e.x === "string" && EX_LEGACY[e.x.toLowerCase()]) return Object.assign({}, e, { x: EX_LEGACY[e.x.toLowerCase()] }); return e; };
 // No model needed: "gym 45 min", "ran 5k in 30 min", "10k steps". Returns { type, minutes, steps } or null.
 export function quickExercise(text) {
   const steps = parseSteps(text);
@@ -149,7 +158,7 @@ export function quickExercise(text) {
 }
 const FUTURE_RX = /\b(tomorrow|tonight|later|will|going to|gonna|plan|planning|next|want|wanna|should|need|maybe|could|goal|target|book|booked|at \d|\d\s?(am|pm))\b/i;
 const FOOD_PREFIX = /^\s*(?:🍽️?\s*|(?:food|meal|ate|eating|breakfast|lunch|dinner|snack|brunch|supper)\s*[:\-–—]\s*)(.+)$/is;
-const EX_PREFIX = /^\s*(ex|exercise|workout|gym|train(?:ing)?)\s*[:\-–—]\s*(.+)$/is;
+const EX_PREFIX = /^\s*(ex|exercise|workout|gym|train(?:ing)?|weight\s+training|weights?|walk|run|swim(?:ming)?|spin(?:\s+class)?|(?:outdoor\s+)?cycl(?:e|ing)|bike|elliptical)\s*[:\-–—]\s*(.+)$/is;
 export const fitCaptionIsFood = (c) => /^\s*(?:🍽|food\b|meal\b|ate\b|eating\b|breakfast\b|lunch\b|dinner\b|snack\b|brunch\b|supper\b)/i.test(String(c || ""));
 export const fitLooksRelevant = (t) => { t = String(t || ""); return t.length > 1 && t.length <= 240 && !/\?\s*$/.test(t) && (FOODISH.test(t) || EX_WORDS.test(t)); };
 
@@ -234,7 +243,7 @@ export async function fitAdd(env, f) {
 }
 export async function fitGet(env, id, u) {
   if (!ID_RX.test(String(id))) return null;
-  try { return JSON.parse((await env.MEETINGS.get("fit_" + pickUser(env, u) + "_" + id)) || "null"); } catch (e) { return null; }
+  try { return exShown(JSON.parse((await env.MEETINGS.get("fit_" + pickUser(env, u) + "_" + id)) || "null")); } catch (e) { return null; }
 }
 export async function fitDelete(env, id, u) { if (!ID_RX.test(String(id))) return false; await env.MEETINGS.delete("fit_" + pickUser(env, u) + "_" + id); return true; }
 export async function fitEdit(env, id, patch, u) {
@@ -256,7 +265,7 @@ export async function fitRange(env, from, to, u) {
       if (!DATE_RX.test(d) || d < from || d > to) continue;
       let e = k.metadata;
       if (!e || !e.id) { try { e = JSON.parse((await env.MEETINGS.get(k.name)) || "null"); } catch (x) { e = null; } }
-      if (e && e.id) out.push(e);
+      if (e && e.id) out.push(exShown(e));
     }
     if (r.list_complete || !r.cursor) break;
     cursor = r.cursor;
@@ -661,7 +670,7 @@ async function logEntry(env, deps, from, f) {
   let o = false, win = "";
   if (f.k === "food" && off === 0) { const w = windowFor(cfg, t); o = w.out; win = w.name; }   // an earlier day has no clock time to judge
   const est = f.k === "food" ? (Number.isFinite(f.p) && f.p >= 0 && f.p <= 150 ? { g: f.p, how: "rough" } : await proteinFor(env, deps, f.x)) : undefined;   // the table first, the model only when it cannot tell
-  const e = await fitAdd(env, { u, k: f.k, x: f.x, m: f.m, n: f.n, t, d, o, s: f.s, est });
+  const e = await fitAdd(env, { u, k: f.k, x: f.k === "ex" && !f.n ? exCanon(f.x) : f.x, m: f.m, n: f.n, t, d, o, s: f.s, est });
   const today = gstDate(now), sum = await fitSummary(env, d, cfg, today);
   let head;
   if (e.k === "food") head = "🍽 Logged - " + e.x + (off ? " (" + (off === -1 ? "yesterday" : "2 days ago") + ")" : "") + (win ? " · " + win : "");
@@ -692,7 +701,7 @@ const CLASS_SCHEMA = { type: "object", additionalProperties: false, properties: 
 async function classify(env, deps, text) {
   const sys = "You log food and exercise for one person. Decide whether the message reports something ALREADY eaten, drunk or done (past tense or just now).\n" +
     "- \"food\": a meal, snack or drink. text = what was eaten, plain, under 100 characters, no calories, no judgement.\n" +
-    "- \"exercise\": a workout, sport, walk or step count. type = a short label (Gym, Walk, Run, Padel, Steps...). minutes = total minutes as an integer (1 hour = 60), null when no duration is given. For a step count use type \"Steps\" and steps = the number, minutes null.\n" +
+    "- \"exercise\": a workout, sport, walk or step count. type = a short label (Weight training, Walk, Run, Spin class, Outdoor cycling, Swimming, Elliptical, Padel, Steps...). minutes = total minutes as an integer (1 hour = 60), null when no duration is given. For a step count use type \"Steps\" and steps = the number, minutes null.\n" +
     "- \"other\": anything else - plans, questions, meetings (\"lunch with Sara on Friday\"), tasks, future intent (\"gym tomorrow at 6\"), bookings, anything not yet done.\n" +
     "protein_g: for food, a ROUGH whole-number guess of the grams of protein in one normal serving (0 for water, tea, black coffee, juice, soda); null for exercise, other, or when you cannot tell.\n" +
     "day_offset: 0 for today, -1 when the message says yesterday, -2 for the day before. Output ONLY the JSON.";
@@ -710,7 +719,7 @@ function statusText(cfg, sum, partners) {
   L.push("", "Open Momo in the bottom bar for the full view.");
   return L.join("\n");
 }
-const HELP_TEXT = "Momo - just say it and it is logged. (Protein figures are rough estimates, not nutrition advice.)\nfood: grilled chicken and rice (or send a photo of the plate)\ngym 45 min · 10k steps\n\nmomo - today · momo today (what you ate, with rough protein) · momo week · momo history\nmomo again (repeat your last meal) · momo undo · momo fix <the right text or number>\nmomo pause [days] [why] · momo resume\nmomo weight 82.5 · momo waist 90\nmomo target 10 · momo protein 120 (an optional guide; momo protein off removes it) · momo goal <text> · momo tone kind|firm|brutal\nmomo share on|off · momo extend\njournal: <text> (or a voice note that starts with \"journal\") · momo journal (today's entries)\nmomo book 21:30 · momo book off · momo booked (write in your paper book: a daily reminder)";
+const HELP_TEXT = "Momo - just say it and it is logged. (Protein figures are rough estimates, not nutrition advice.)\nfood: grilled chicken and rice (or send a photo of the plate)\nweights 45 min · spin class 40 min · 10k steps\nexercise types: walk, run, weight training, spin class, outdoor cycling, swimming, elliptical (anything else is logged under its own name)\n\nmomo - today · momo today (what you ate, with rough protein) · momo week · momo history\nmomo again (repeat your last meal) · momo undo · momo fix <the right text or number>\nmomo pause [days] [why] · momo resume\nmomo weight 82.5 · momo waist 90\nmomo target 10 · momo protein 120 (an optional guide; momo protein off removes it) · momo goal <text> · momo tone kind|firm|brutal\nmomo share on|off · momo extend\njournal: <text> (or a voice note that starts with \"journal\") · momo journal (today's entries)\nmomo book 21:30 · momo book off · momo booked (write in your paper book: a daily reminder)";
 function mealsText(cfg, sum) {
   const meals = sum.entries.filter((e) => e.k === "food"), st = sum.stats, L = [(sum.d === sum.today ? "Today" : dm(sum.d)) + " - what you ate"];
   if (!meals.length) L.push("Nothing logged yet.");
@@ -1368,7 +1377,7 @@ export async function fitRoutes(request, env, url, h) {
     await ensureStarted(env, cfg, d);
     const t = d === today ? now : Date.parse(d + "T12:00:00Z") - GST_MS;   // an earlier day has no clock time
     let o = false; if (kind === "food" && d === today) o = windowFor(cfg, t).out;
-    const e = await fitAdd(env, { u: cfg.u, k: kind, x: kind === "ex" && n ? "Steps" : x, m, n, t, d, o, s: "web", est: kind === "food" ? await proteinFor(env, h, x) : undefined });
+    const e = await fitAdd(env, { u: cfg.u, k: kind, x: kind === "ex" ? (n ? "Steps" : exCanon(x)) : x, m, n, t, d, o, s: "web", est: kind === "food" ? await proteinFor(env, h, x) : undefined });
     return J({ ok: true, entry: e });
   }
   if (op === "del") return J({ ok: await fitDelete(env, b.id, cfg.u) });
