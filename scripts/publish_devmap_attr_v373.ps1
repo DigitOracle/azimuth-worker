@@ -41,6 +41,8 @@ if ($LASTEXITCODE -ne 0) { Stop-Here "the register developer map failed (message
 Write-Host "3/5 building: first pass, evidence from the lake (register first), final pass"
 $common = @("--um", $um, "--prices", "$Work\map_prices.json", "--rent", "$Work\rent_index.json", "--geo", "$Work\districts_geo_all.json", "--shares", $Shares, "--register", "$Work\area_register.json", "--offplan", $Cards, "--offplan-slugs", $Slugs, "--regdev", "$Work\regdev.json")
 if (Test-Path "$Work\ejari_projects_index.json") { $common += @("--ejari", "$Work\ejari_projects_index.json") }
+$rf = Join-Path (Split-Path -Parent $Here) "data\regfacts\register_facts.json"   # v386 - status, percent complete, planned end, units, unit mix and parcel count of every register project (build_register_facts.py), carried in bx / b12x
+if (Test-Path $rf) { $common += @("--regfacts", $rf); Write-Host "register facts: $rf" } else { Write-Host "register facts: none (run scripts\build_register_facts.py first); the index is built without them" }
 & node "$Here\build_devmap_index.mjs" @common --projdev-out "$Work\projdev.json" --out "$Work\devmap_index.first.json"
 if ($LASTEXITCODE -ne 0) { Stop-Here "the first index build failed (message above)" }
 & python "$Here\build_area_evidence.py" --geo "$Work\districts_geo_all.json" --projdev "$Work\projdev.json" --out "$Work\area_evidence.json"
