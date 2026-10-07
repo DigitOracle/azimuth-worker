@@ -14,6 +14,8 @@
 import { DEVMAP_CORE_JS } from "./devmap_core.js";
 import { COMMUNITY_LABELS, labelledName } from "./community_labels.js";   // v307 - community name next to the Land Department name
 import { kvJson } from "./brief.js";
+import { CENTRES_JS, CENTRES_CSS } from "./centres2040_page.js";   // v380 - the five Dubai 2040 centres: opening map and the filter bar (all new logic lives in the two centres2040 files)
+import { CENTRES_KV_NAME, cleanCentres } from "./centres2040.js";
 
 import { PHOSPHOR_LIGHT } from "./devmap_icons.js";
 export const DEVMAP_PATHS = ["/developers_map", "/developers_map_api"];
@@ -66,6 +68,10 @@ export async function devmapRoutes(request, env, url, deps) {
     const iv = await kvJson(env, "investor_tiers_facts");
     const ps = iv && iv.projects ? Object.keys(iv.projects).map(id => { const f = iv.projects[id] || {}, pr = f.project || {}; return { id, name: pr.name || id, brand: pr.brand_name || pr.name || id }; }) : [];
     return J({ projects: ps });
+  }
+  if (what === "centres") {                                                // v380 - our grouping of districts into the five Dubai 2040 centres (scripts/build_centres2040.py); absent or malformed = {} and the page keeps the old opening
+    const cz = cleanCentres(await kvJson(env, CENTRES_KV_NAME));
+    return J(cz || {});
   }
   if (what === "shortlist") {
     const name = await shortlistName(key);
@@ -182,8 +188,9 @@ function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return
 function api(what,opt){return fetch("/developers_map_api?what="+what+"&key="+encodeURIComponent(KEY),Object.assign({cache:"no-store",referrerPolicy:"no-referrer"},opt||{})).then(function(r){return r.ok?r.json():null})}
 var TC=["#c5a56a","#2f8a7f","#3987e5","#8a9a96"];
 var IDX=null,GEO=null,map=null;
-window.__devmap={get map(){return map},get idx(){return IDX},get state(){return S},select:function(s){select(s,true)}};   // a handle for the preview and the tests; reads only
+window.__devmap={get map(){return map},get idx(){return IDX},get state(){return S},select:function(s){select(s,true)},get cf(){return CF}};   // a handle for the preview and the tests; reads only
 var S={win:"all",drawer:null,drill:null,prof:null,screen:1,mode:"buy",unit:"sqft",sel:null,onlyMine:null,mine:{},isDefault:false,bud:{mode:"sqft",min:null,max:null,beds:null},filterBud:false,named:"",dv:{ppsm:null,tier:null},cmp:null,q:"",delay:null};
+var CF=(typeof CENTRES2040!=="undefined")?CENTRES2040.make({S:S,$:$,DM:DM,idx:function(){return IDX},map:function(){return map},ixOf:function(w){return ixOf(w)},stats:function(s){return stats(s)},mineList:function(){return mineList()},devName:function(k){return (IDX.devs[k]||{}).name||DEFAULT_NAMES[k]||k},pu:function(x){return pu(x)},pul:function(){return pul()},icoSvg:function(n,cl){return icoSvg(n,cl)},select:function(s,f,k){select(s,f,k)},renderAll:function(){renderAll()},renderSide:function(){renderSide()},renderDetail:function(){renderDetail()},refreshMap:function(){refreshMap()},leaveProf:function(){leaveProf()},openProf:function(k){openProf(k)},setWin:function(w){S.win=w;drillSet();renderAll()},pad:function(){return innerWidth<=760?{top:60,left:30,right:30,bottom:Math.round(innerHeight*0.46)+20}:60}}):null;   // v380 - src/centres2040_page.js
 function fmt(n){return n==null?"-":Math.round(n).toLocaleString("en-US")}
 function pu(ppsm){return ppsm==null?null:(S.unit==="sqft"?Math.round(ppsm/DM.SQFT):Math.round(ppsm))}
 function pul(){return S.unit==="sqft"?"per sq ft":"per sq m"}
@@ -229,25 +236,25 @@ function features(){
   return {type:"FeatureCollection",features:feats}}
 // what the shading means: screen 1 = the area's typical tier; WHERE / CLIENT = how many of my developers are there (or fit)
 function shading(){var o={},s;
-  if(S.screen===1){for(s in IDX.areas){var st=stats(s);o[s]=st&&st.enough?4-DM.tierOf(st.median,st.bounds):0}return o}
+  if(S.screen===1){if(typeof CF!=="undefined"&&CF&&CF.noBands())return o;for(s in IDX.areas){var st=stats(s);o[s]=st&&st.enough?4-DM.tierOf(st.median,st.bounds):0}return o}
   if(S.screen===3&&S.meeting){S.meeting.forEach(function(a){o[a.slug]=a.devs.length});return o}
   return DM.whereMine(ixOf(S.win),S.mine)}
 function legendHtml(){
   return '<p class=note>Shading: the more of '+(S.screen===3?'your developers fit the budget':'your developers are active')+' in an area, the stronger the colour. Grey: none.</p>'}
-function mapLegend(){var el=$("maplg");if(!el)return;if(S.screen!==1){el.style.display="none";return}el.style.display="";
+function mapLegend(){var el=$("maplg");if(!el)return;if(S.screen!==1||(typeof CF!=="undefined"&&CF&&CF.hideBands())){el.style.display="none";return}el.style.display="";
   var bd=DM.TIER_CFG.bounds||(IDX.cuts&&IDX.cuts.bounds),op=S.lgOpen==null?innerWidth>760:S.lgOpen;el.className=op?"":"min";
   el.innerHTML='<button type=button class=lgh id=lgt aria-expanded='+(op?'true':'false')+' aria-label="Price bands legend">'+icoSvg('caret-down','chev')+'<span class=t>Price bands (tap one to filter)</span></button><div class=lgrow>'+[0,1,2,3].map(function(i){return '<button type=button class=lgb data-b='+i+' aria-pressed='+(S.band===i?'true':'false')+' aria-label="'+DM.TIER_NAMES[i]+'"><span class=sw style="display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:7px;flex:none;background:'+TC[i]+'"></span><span class=t><b>'+DM.TIER_NAMES[i]+'</b>'+(bd?'<small>'+esc(DM.bandLine(i,bd,S.unit))+'</small>':'')+'</span></button>'}).join("")+'</div>'+(op&&S.band!=null?'<button type=button class=btn id=bandall style="margin:4px">Show all price bands</button>':'');
   $("lgt").onclick=function(){S.lgOpen=!op;mapLegend()};
   [].forEach.call(el.querySelectorAll(".lgb"),function(b){b.onclick=function(){var i=Number(b.getAttribute("data-b"));S.band=S.band===i?null:i;if(S.prof)renderDetail();mapLegend();refreshMap()}});var ba=$("bandall");if(ba)ba.onclick=function(){S.band=null;if(S.prof)renderDetail();mapLegend();refreshMap()}}
-function refreshMap(){lockChips();mapLegend();if(map&&map.getSource&&map.getSource("areas"))map.getSource("areas").setData(features())}
+function refreshMap(){lockChips();mapLegend();if(map&&map.getSource&&map.getSource("areas"))map.getSource("areas").setData(features());if(typeof CF!=="undefined"&&CF)CF.refresh()}
 // ---- the screens (side panel) ----
 function sideHtml(){
   var tabs='<div class=seg id=tabs><button data-s=1>1 MY DEVELOPERS</button><button data-s=2>2 WHERE</button><button data-s=3>3 CLIENT MEETING</button></div>';
   var body="";
   if(S.screen===1){
     var q=S.q.toLowerCase().trim(),mn=mineList().map(function(k){var d=IDX.devs[k];return{k:k,name:d?d.name:(DEFAULT_NAMES[k]||k),n:d?d.n:0,areas:d?d.areas:0}});
-    mn.sort(function(a,b){return (b.areas>0)-(a.areas>0)||b.n-a.n});
-    var chosenH=mn.map(function(x){var t=x.areas>0?devTier(x.k):-1;return '<div class=pk><span><a href="#" class=dlink data-k="'+esc(x.k)+'">'+esc(x.name)+'</a><span class=note style="display:block;margin:0">'+pickNote(x.k,x)+'</span></span>'+(t>=0?'<span class=tag style="background:'+TC[t]+'">'+tagText(x.k)+'</span>':'')+'<button type=button class="rm btn" data-k="'+esc(x.k)+'" aria-label="remove '+esc(x.name)+'">remove</button></div>'}).join("");
+    mn.sort(function(a,b){return (b.areas>0)-(a.areas>0)||b.n-a.n});mn=cfDevOrder(mn);
+    var chosenH=mn.map(function(x){var t=x.areas>0?devTier(x.k):-1;return '<div class=pk><span><a href="#" class=dlink data-k="'+esc(x.k)+'">'+esc(x.name)+'</a><span class=note style="display:block;margin:0">'+pickNote(x.k,x)+'</span>'+cfDevNote(x.k)+'</span>'+(t>=0?'<span class=tag style="background:'+TC[t]+'">'+tagText(x.k)+'</span>':'')+'<button type=button class="rm btn" data-k="'+esc(x.k)+'" aria-label="remove '+esc(x.name)+'">remove</button></div>'}).join("");
     var tagHit={},res=q?Object.keys(IDX.devs).filter(function(k){if(S.mine[k])return false;if(IDX.devs[k].name.toLowerCase().indexOf(q)>=0||k.indexOf(q)>=0)return true;var th=tagMatch(k,q);if(th.length){tagHit[k]=th;return true}return false}).sort(function(a,b){return (tagHit[a]?1:0)-(tagHit[b]?1:0)||IDX.devs[b].n-IDX.devs[a].n}).slice(0,20):[];
     var resH=q?(res.length?res.map(function(k){var x=IDX.devs[k],t=devTier(k);return '<label class=pk><input type=checkbox data-k="'+esc(k)+'"><span>'+esc(x.name)+(tagHit[k]?'<span class=note style="display:block;margin:0">project: '+esc(tagHit[k].join(", "))+'</span>':'')+'<span class=note style="display:block;margin:0">add - '+pickNote(k,x)+' - <a href="#" class=dlink data-k="'+esc(k)+'">profile</a></span></span>'+(t>=0?'<span class=tag style="background:'+TC[t]+'">'+tagText(k)+'</span>':'')+'</label>'}).join(""):'<p class=note>No developer matches.</p>'):'';
     body='<div class=card><p class=label>My developers</p><p class=note id=cnt></p><div class=picks id=chosen>'+chosenH+'</div><button type=button id=reset class=btn style="margin-top:8px">Reset to Najjuko\'s ten</button></div><div class=card><p class=label>Add another developer</p><input type=search id=q placeholder="Type a developer name" value="'+esc(S.q)+'"><div class=picks id=picks>'+resH+'</div></div><p class=note>Your list is saved for your key, so it is the same on every device you open this link on. The tag is the market view where one is set, otherwise the price band most of its projects sit in. Price bands describe homes, not developers. Tap a name for its profile. Counts follow the window set on an area or a profile (now: '+(S.win==="l12"&&IDX.ev?'last 12 months':'all years')+').</p>';
@@ -264,13 +271,13 @@ function sideHtml(){
      +'<div class=card><p class=label>The client names a developer</p><input id=named list=devlist placeholder="Developer name" value="'+esc(S.named)+'"><datalist id=devlist>'+Object.keys(IDX.devs).map(function(k){return '<option value="'+esc(IDX.devs[k].name)+'">'}).join("")+'</datalist><div id=namedout class=note></div></div>'
      +'<div class=card><p class=label id=mh></p><p class=note id=msub style="margin:0 0 6px"></p><div class=list id=mlist></div></div>';
   }
-  return tabs+body;
+  return tabs+(typeof CF!=="undefined"&&CF?CF.cardsHtml():"")+body;
 }
 var DRILLSET=null;
 function drillSet(){DRILLSET=null;var dr=S.drill;if(dr){DRILLSET={};DM.drillProjects(ixOf(S.win),dr.k,dr.t,dr.ar).forEach(function(g){DRILLSET[g.slug]=1})}}
 function setDrill(dr){S.drill=dr;drillSet();renderDetail();refreshMap()}
 var FSETS={};function fset(k){var key=S.win+":"+k;if(!FSETS[key]){var o={};((prof(k)||{}).priced||[]).forEach(function(a){o[a.slug]=1});FSETS[key]=o}return FSETS[key]}
-function dimOf(s){if(S.pj)return 1;if(S.prof){if(!fset(S.prof)[s])return 1;if(S.parea&&s!==S.parea)return 1;if(S.band!=null&&!DM.drillProjects(ixOf(S.win),S.prof,S.band,s).length)return 1;return 0}if(S.drill&&DRILLSET&&!DRILLSET[s])return 1;var fk=S.prof||S.fdev;if(fk&&!fset(fk)[s])return 1;if(S.band!=null&&S.screen===1){var st=stats(s);if(!(st&&st.enough&&DM.tierOf(st.median,st.bounds)===S.band))return 1}return 0}
+function dimOf(s){if(typeof CF!=="undefined"&&CF&&!CF.ok(s))return 1;if(S.pj)return 1;if(S.prof){if(!fset(S.prof)[s])return 1;if(S.parea&&s!==S.parea)return 1;if(S.band!=null&&!DM.drillProjects(ixOf(S.win),S.prof,S.band,s).length)return 1;return 0}if(S.drill&&DRILLSET&&!DRILLSET[s])return 1;var fk=S.prof||S.fdev;if(fk&&!fset(fk)[s])return 1;if(S.band!=null&&S.screen===1){var st=stats(s);if(!(st&&st.enough&&DM.tierOf(st.median,st.bounds)===S.band))return 1}return 0}
 // ---- v342 - where a project stands: the district's building footprints (/img/blocks_<district>, the file the Blocks view draws),
 // matched to the register's project name. A project with no footprint of that name has no map position, and its card says so.
 var BLK={},PJ={},PJLOC={};
@@ -390,13 +397,13 @@ function delayHtml(k){var r=delayStat(k);if(!r)return "";var D=S.delay||{},nm=r.
     +'<p class=note style="margin:6px 0 0">Source: Dubai Land Department project register, planned end date and completion date of finished projects'+(D.generated?", read "+esc(String(D.generated).slice(0,10)):"")+'. Method: the finished projects with both dates and no cancellation of the register-confirmed developer '+(r.companies===1?"company":r.companies+" companies")+(nm?" ("+nm+")":"")+'; the share is those finished after the planned end date; the middle figure is taken over the late ones only.</p></div>'}
 function toggleArea(s){S.parea=S.parea===s?null:s;renderDetail();refreshMap();var e=$("aprojs");if(e&&e.scrollIntoView){try{e.scrollIntoView({block:"nearest",behavior:"smooth"})}catch(x){}}}
 function profileHtml(k){
-  var p=DM.devProfile(ixOf(S.win),k);if(!p.known)p.name=DEFAULT_NAMES[k]||k;
+  var p=DM.devProfile(ixOf(S.win),k);if(!p.known)p.name=DEFAULT_NAMES[k]||k;if(typeof CF!=="undefined"&&CF)p=CF.filterProfile(p);
   var back=S.sel&&IDX.areas[S.sel]?'Back to '+esc(IDX.areas[S.sel].name):'Close';
   var h='<p class=label>Developer profile</p><h2>'+esc(p.name)+'</h2><button type=button class=btn id=pback style="margin-top:8px">'+back+'</button>'+(typeof pdfRowProf==="function"?pdfRowProf(k,p):"");
   if(!p.areas)return h+'<p class=note>'+esc(p.name)+': no sales on the map yet.</p>'+profSrc();
   h+=wsegProf();
   h+='<div class=seg style="margin-top:10px" id=useg><button data-u=sqft>per sq ft</button><button data-u=sqm>per sq m</button></div>';
-  h+=areaCardsHtml(p,k);h+=ncHtml(k);h+='<div class=card>'+(p.market>=0?'<span class=tag style="background:'+TC[p.market]+'">'+DM.brandLabel(p.market)+' (market view)</span>':'')+'<p style="margin:10px 0 0"><b>Market view:</b> '+(p.market>=0?DM.brandLabel(p.market)+', as the market names it.':'not set yet.')+'</p><p style="margin:4px 0 0"><b>Where its projects sit on price:</b> '+esc(DM.dataLine(p))+'.</p><p class=note style="margin:4px 0 0">The market view is how people name the brand, and is set by a person. Price alone does not say whether a developer is luxury: design, quality, who it is built for and how few homes it builds in each place all matter, so no class is given from price. The evidence below shows each factor as a number.</p><p style="margin:10px 0 0">'+esc(DM.profileSentence(p,S.unit))+'</p>'+pricePosHtml(k)+'</div>'+bandKey(DM.boundsOf(IDX))+evidenceHtml(k)+delayHtml(k)+talkHtml(k);
+  h+=(typeof CF!=="undefined"&&CF?CF.profNote():"")+areaCardsHtml(p,k);h+=ncHtml(k);h+='<div class=card>'+(p.market>=0?'<span class=tag style="background:'+TC[p.market]+'">'+DM.brandLabel(p.market)+' (market view)</span>':'')+'<p style="margin:10px 0 0"><b>Market view:</b> '+(p.market>=0?DM.brandLabel(p.market)+', as the market names it.':'not set yet.')+'</p><p style="margin:4px 0 0"><b>Where its projects sit on price:</b> '+esc(DM.dataLine(p))+'.</p><p class=note style="margin:4px 0 0">The market view is how people name the brand, and is set by a person. Price alone does not say whether a developer is luxury: design, quality, who it is built for and how few homes it builds in each place all matter, so no class is given from price. The evidence below shows each factor as a number.</p><p style="margin:10px 0 0">'+esc(DM.profileSentence(p,S.unit))+'</p>'+pricePosHtml(k)+'</div>'+bandKey(DM.boundsOf(IDX))+evidenceHtml(k)+delayHtml(k)+talkHtml(k);
   h+='<div class=card><p class=label>Its projects by price band</p>';
   if(p.basis==="projects"){
     h+=donut(p.mixProjects,k,'').replace('Sales by price band:','Projects by price band:')+'<p class=note style="margin:6px 0 0">'+[0,1,2,3].filter(function(i){return p.tierProjects[i]>0}).map(function(i){return DM.TIER_WORDS[i]+' '+p.tierProjects[i]}).join(' · ')+' (of '+p.projects+' project'+(p.projects===1?'':'s')+')</p>'}
@@ -407,7 +414,7 @@ function profileHtml(k){
   h+='<div class=card><p class=label>Price by area (3 or more settled sales; '+(S.win==="l12"&&IDX.ev?'last 12 months':'all years')+')</p>';
   if(p.priced.length){h+='<table class=pt><tr><th>Area</th><th class=r>Median price '+pul()+'</th><th class=r>Sales</th><th>Price band here</th></tr>'+p.priced.map(function(a){return '<tr class=prow data-ap=1 tabindex=0 role=button style="cursor:pointer" data-slug="'+esc(a.slug)+'" data-k="'+esc(k)+'" aria-label="Show the projects in '+esc(a.name)+'"><td>'+esc(a.name)+'</td><td class=r>AED '+fmt(pu(a.medianSqm))+'</td><td class=r>'+fmt(a.n)+'</td><td>'+DM.TIER_WORDS[a.tierHere]+'</td></tr>'}).join("")+'</table>';
     h+='<p class=note>Highest first. The same price in the other unit: '+(S.unit==="sqft"?'multiply by 10.76 for per sq m.':'divide by 10.76 for per sq ft.')+'</p>'}
-  else h+='<p class=note style="margin:0">No area has 3 or more settled sales yet.</p>';
+  else h+='<p class=note style="margin:0">'+(p._cf?'No area in this choice has 3 or more settled sales.':'No area has 3 or more settled sales yet.')+'</p>';
   if(p.thin.length)h+='<p class=note>Also sold in, but under 3 sales so no price: '+p.thin.map(function(a){return esc(a.name)+' ('+a.n+')'}).join(', ')+'.</p>';
   h+='</div>';
   if(p.limits.length)h+='<div class=box><b>Limits.</b> '+p.limits.map(esc).join(' ')+'</div>';
@@ -415,6 +422,7 @@ function profileHtml(k){
 function wsegProf(){if(!IDX.ev)return '';var fb=ixOf(S.win).fellBack||[];return '<div class=seg style="margin-top:10px" id=wseg><button data-w=l12>Last 12 months</button><button data-w=all>All years</button></div><p class=wnote>'+esc(winTxt())+' Project counts, price bands, prices by area and the talking point all follow this window.'+(S.win==="l12"&&fb.length?' Areas with no yearly record show all years: '+esc(fb.join(', '))+'.':'')+(S.win==="l12"?' In the last 12 months a project counts when 3 or more of its sales settled in the window.':'')+'</p>'}
 function profSrc(){return '<div class=src>Source: Dubai Land Department settled sales to '+esc(IDX.as_of||"")+'. Price bands are cut from all Dubai settled sales so that each holds about a quarter of the money spent; they describe homes, not developers. Medians weigh each building’s median price per sq m by the sales behind it.<div class=foot>__FOOT__</div></div>'}
 function devTier(k){return prof(k).brandTier}
+function cfList(a){return typeof CF!=="undefined"&&CF?a.filter(function(x){return CF.ok(x.slug)}):a}function cfDevNote(k){return typeof CF!=="undefined"&&CF?CF.devNote(k):""}function cfDevOrder(m){return typeof CF!=="undefined"&&CF?CF.devOrder(m):m}   // v380 - the centre / coastal choice filters these lists
 function mny(x){return x>=1e6?'AED '+(Math.round(x/1e5)/10)+'m':'AED '+fmt(Math.round(x/1e3))+'k'}
 // v321 - the client meeting results as cards: one card per location, one small card per developer inside it. fig(d) -> {v: the figure it is placed by, big, small, ev}
 function locCards(areas,fig){return areas.map(function(a){var f=a.devs.map(fig),vs=f.map(function(x){return x.v}),lo=Math.min.apply(null,vs),hi=Math.max.apply(null,vs);
@@ -422,10 +430,10 @@ function locCards(areas,fig){return areas.map(function(a){var f=a.devs.map(fig),
     return '<div class=dc><div class=dcn>'+esc(d.name)+'</div>'+(pf&&pf.market>=0?'<div class=dcm>'+DM.brandLabel(pf.market)+'</div>':'')+'<div class=dcb>'+x.big+'</div><div class=dcs>'+x.small+'</div><div class=dce>'+x.ev+'</div>'+(pos==null?'':'<div class=rb role=img aria-label="Placed '+pos+' in 100 of the way from the cheapest to the dearest of your developers here"><i style="left:'+pos+'%"></i></div>')+'</div>'}).join("")+'</div></div>'}).join("")}
 function runMeeting(){
   var b=S.bud,q={mode:b.mode,min:b.min,max:b.max,beds:b.beds};
-  if(S.mode==="buy"){var r=DM.clientMeeting(ixOf(S.win),S.mine,q,S.named);S.meeting=r.areas;S.namedRes=r.named;
+  if(S.mode==="buy"){var r=DM.clientMeeting(ixOf(S.win),S.mine,q,S.named);r.areas=cfList(r.areas);S.meeting=r.areas;S.namedRes=r.named;
     $("mh").textContent=r.areas.length?"Your developers that fit, by location":"";
     $("msub").textContent=winTxt()+" Prices follow the window chosen on an area.";$("mlist").innerHTML=locCards(r.areas,function(d){var v=d.basis==="total"&&d.fitMedian?d.fitMedian:d.aed;return {v:v,big:mny(v),small:'AED '+fmt(pu(d.median))+' '+pul(),ev:fmt(d.n)+' sale'+(d.n===1?'':'s')}})||'<p class=note>'+(b.max==null&&b.min==null?'Enter a budget.':'None of your developers fit this budget with enough sales (3+).')+'</p>';
-  }else{var rr=DM.clientMeetingRent(ixOf(S.win),S.mine,{min:b.min,max:b.max,beds:b.beds});S.meeting=rr;S.namedRes=S.named?DM.clientMeeting(ixOf(S.win),S.mine,{mode:"sqft"},S.named).named:null;
+  }else{var rr=cfList(DM.clientMeetingRent(ixOf(S.win),S.mine,{min:b.min,max:b.max,beds:b.beds}));S.meeting=rr;S.namedRes=S.named?DM.clientMeeting(ixOf(S.win),S.mine,{mode:"sqft"},S.named).named:null;
     $("mh").textContent=rr.length?"Your developers’ buildings that fit, by location":"";$("msub").textContent=rr.length?"Registered rental contracts (the Dubai rent register), community level":"";
     $("mlist").innerHTML=locCards(rr,function(d){return {v:d.rent,big:'AED '+fmt(d.rent)+' a year',small:'AED '+fmt(S.unit==="sqft"?d.rpsf:d.rpsf*DM.SQFT)+' '+pul(),ev:fmt(d.n)+' registered rental contracts'}})||'<p class=note>None of your developers’ buildings fit, with 3 or more registered rental contracts.</p>'}
   var n=S.namedRes;$("namedout").innerHTML=n?(n.mine?esc(n.name)+' is one of your developers.':(n.known?'<b>'+esc(n.name)+' is not one of your developers.</b> You can refer the client to another agent.':'<b>'+esc(n.name)+' is not one of your developers</b>, and is not in the register data here.')):"";
@@ -543,7 +551,7 @@ function areaHtml(slug){
   var shown=0;view.tiers.forEach(function(t){shown+=t.devs.length});
   var filtered=!!(onlyMine&&mineList().length&&st.devCount>shown);
   var mineHides=!!(onlyMine&&mineList().length&&st.devCount>0&&shown===0&&!view.notEnough.length);
-  var h='<p class=label>Area</p><h2>'+esc(area.name)+'</h2>'+wsegHtml(area)+(typeof pdfRow==="function"?pdfRow(slug,mineList(),S.screen===3):"");
+  var h='<p class=label>Area</p><h2>'+esc(area.name)+'</h2>'+(typeof CF!=="undefined"&&CF?CF.areaLine(slug):"")+wsegHtml(area)+(typeof pdfRow==="function"?pdfRow(slug,mineList(),S.screen===3):"");
   if(!st.enough)return h+'<p class=note>Not enough sales: fewer than 3 settled sales with a price and a size in this area on the register.</p>'+src();
   h+='<div class=seg style="margin-top:10px" id=useg><button data-u=sqft>per sq ft</button><button data-u=sqm>per sq m</button></div>';
   h+='<div class=card><div class=big>AED '+fmt(pu(st.median))+' <span style="font-size:13px;color:var(--muted)">'+pul()+' median'+(hasEv(area)?', '+(S.win==="l12"?'last 12 months':'all years'):'')+'</span></div><div class=note>'+other(st.median)+'</div>'+(hasEv(area)?'<p style="margin:8px 0 0"><a href="#" class=evl data-k="__area">Show the sales behind this number</a></p>':'')+'</div>'+devHead(st,area,thin)+(S.drawer==="__area"&&hasEv(area)?evHtml(slug,"__area"):'')+((thin||partial)?'<div class=box><b>This view is not complete yet.</b> '+(partial?fmt(st.n)+' of about '+fmt(reg)+' settled sales in this area are loaded'+(st.unknown&&st.unknown.n>=st.n*0.3?', and the developer is not recorded on '+fmt(st.unknown.n)+' of them':'')+'. Read the figures below as a first look, not as the whole market.':st.n<100?'Only '+fmt(st.n)+' sale'+(st.n===1?' is':'s are')+' loaded for this area so far (the register holds many more)'+(st.unknown&&st.unknown.n>=st.n*0.5?', and the developer is not recorded on most of them':'')+'. Read the figures below as a first look, not as the market.':'The developer is not recorded on '+fmt(st.unknown.n)+' of the '+fmt(st.n)+' sales here, so the developer figures below are partial. Read them as a first look, not as the whole market.')+'</div>':'')+opNote+((mineHides||filtered)?'<p class=note>Showing all '+st.devCount+' developer'+(st.devCount===1?'':'s')+' above; the price bands below are filtered to your list. <a href="#" id=showall class=golink>Show the price bands for all developers</a></p>':'');
@@ -596,10 +604,10 @@ function rowGo(e){var t=e.target&&e.target.closest?e.target.closest(".prow,.acar
 function safeWire(el,slug){try{wireDetail(el,slug)}catch(e){if(window.console)console.warn("wireDetail",e)}}
 function renderDetail(){var h=S.prof?profileHtml(S.prof):S.sel?areaHtml(S.sel):'<p class=note>Tap an area on the map: the developers there, grouped by price band.</p>'+src();
   if(S.pj&&PJ[S.pj.key])h='<div class=fbar><span class=note style="margin:0">Showing <b dir=auto>'+esc(PJ[S.pj.key].name)+'</b> on the map.</span><button type=button class=btn id=pjclear>Show the whole district</button></div>'+h;if(S.drill&&!S.prof)h=drillHtml()+h;if(S.fdev&&!S.prof&&S.sel)h='<div class=fbar><span class=note style="margin:0">Map shows only '+esc((IDX.devs[S.fdev]||{}).name||DEFAULT_NAMES[S.fdev]||S.fdev)+' areas.</span><button type=button class=btn id=fback>Back to profile</button><button type=button class=btn id=fclear>Show all areas</button></div>'+h;$("detail").innerHTML=h;$("detail2").innerHTML=(S.sel||S.prof)?h:"";$("detail2").style.display=(S.sel||S.prof)?"":"none";safeWire($("detail"),S.sel);safeWire($("detail2"),S.sel);dedupeIds()}
-function renderSide(){$("sidebody").innerHTML=sideHtml();wireSide()}
+function renderSide(){$("sidebody").innerHTML=sideHtml();wireSide();if(typeof CF!=="undefined"&&CF)CF.wire($("sidebody"))}
 function renderAll(){renderSide();renderDetail();refreshMap()}
 function panelTop(){var sd=$("side"),d2=$("detail2");if(sd&&d2&&innerWidth<=1100&&d2.style.display!=="none")sd.scrollTop=Math.max(0,d2.offsetTop-44)}
-function select(slug,fly,fk){if(S.prof){if(!fset(S.prof)[slug])return;if(fly)S.parea=slug;fk=S.prof}var lk=S.prof;S.devAll=false;S.sel=slug;S.prof=lk||null;S.pj=null;S.fdev=fk||null;S.cmp=null;S.drawer=null;if(S.drill&&S.drill.ar&&S.drill.ar!==slug){S.drill=null;DRILLSET=null}S.onlyMine=null;renderDetail();panelTop();refreshMap();updatePj();if(innerWidth<=760)setSheet(false);
+function select(slug,fly,fk){if(S.prof){if(!fset(S.prof)[slug])return;if(fly)S.parea=slug;fk=S.prof}var lk=S.prof;if(typeof CF!=="undefined"&&CF)CF.onSelect(slug);S.devAll=false;S.sel=slug;S.prof=lk||null;S.pj=null;S.fdev=fk||null;S.cmp=null;S.drawer=null;if(S.drill&&S.drill.ar&&S.drill.ar!==slug){S.drill=null;DRILLSET=null}S.onlyMine=null;renderDetail();panelTop();refreshMap();updatePj();if(innerWidth<=760)setSheet(false);
   if(fly&&map){var b=IDX.areas[slug]&&IDX.areas[slug].bbox;if(b)map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:innerWidth<=760?{top:40,left:30,right:30,bottom:Math.round(innerHeight*0.46)+20}:60,maxZoom:13.5,duration:600})}}
 function setSheet(max){var s=$("side"),g=$("grab");s.classList.toggle("max",!!max);g.setAttribute("aria-expanded",max?"true":"false");g.textContent=max?"Tap to see more of the map":"Tap to expand"}
 $("grab").onclick=function(){setSheet(!$("side").classList.contains("max"))};
@@ -614,6 +622,7 @@ function startMap(){
     map.addLayer({id:"a-fill",type:"fill",source:"areas",paint:{"fill-color":["match",["get","v"],0,"#6f7a78",1,"#2f8a7f",2,"#3987e5",3,"#c98500","#c5a56a"],"fill-opacity":["case",["==",["get","dim"],1],0.04,["==",["get","v"],0],0.12,0.55]}},fs);
     map.addLayer({id:"a-line",type:"line",source:"areas",paint:{"line-color":["case",["==",["get","dim"],1],"rgba(197,165,106,0.1)",["get","sel"],"#c5a56a","rgba(197,165,106,0.45)"],"line-width":["case",["get","sel"],2.6,0.8]}},fs);
     map.addLayer({id:"a-label",type:"symbol",source:"areas",layout:{"text-field":["get","label"],"text-font":font,"text-size":11.5,"text-max-width":9},paint:{"text-color":"#f5efe2","text-halo-color":"#0b0f0f","text-halo-width":1.4}});
+    if(typeof CF!=="undefined"&&CF){CF.addLayers(map,font);CF.bind(map,maplibregl);CF.refresh()}
     map.addSource("pjctx",{type:"geojson",data:{type:"FeatureCollection",features:[]}});map.addSource("pj",{type:"geojson",data:{type:"FeatureCollection",features:[]}});map.addSource("pjpt",{type:"geojson",data:{type:"FeatureCollection",features:[]}});
     map.addLayer({id:"pj-ctx",type:"fill",source:"pjctx",paint:{"fill-color":"#9aa7a4","fill-opacity":0.3}},"a-label");
     map.addLayer({id:"pj-ctxl",type:"line",source:"pjctx",paint:{"line-color":"#c9d2d0","line-width":0.6,"line-opacity":0.5}},"a-label");
@@ -627,12 +636,12 @@ function startMap(){
     map.on("click",function(e){var h=pjHit(e);if(h.length){e.originalEvent.stopPropagation();showSnap(h[0].properties,true)}else hideSnap()});
     updatePj();
     var pop=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:12});
-    map.on("mousemove","a-fill",function(e){if(pjHit(e).length){pop.remove();return}map.getCanvas().style.cursor="pointer";pop.setLngLat(e.lngLat).setHTML("<b>"+esc(e.features[0].properties.label)+"</b>").addTo(map)});
+    map.on("mousemove","a-fill",function(e){if(pjHit(e).length||(typeof CF!=="undefined"&&CF&&CF.fillMode())){pop.remove();return}map.getCanvas().style.cursor="pointer";pop.setLngLat(e.lngLat).setHTML("<b>"+esc(e.features[0].properties.label)+"</b>").addTo(map)});
     map.on("mouseleave","a-fill",function(){map.getCanvas().style.cursor="";pop.remove()});
-    map.on("click","a-fill",function(e){if(pjHit(e).length)return;select(e.features[0].properties.slug,false)})})}
+    map.on("click","a-fill",function(e){if(pjHit(e).length||(typeof CF!=="undefined"&&CF&&CF.fillMode()))return;select(e.features[0].properties.slug,false)})})}
 // ---- start ----
-Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null})]).then(function(r){
-  IDX=r[0];GEO=r[1];S.delay=r[3]&&r[3].by?r[3]:null;S.inv=r[4]&&r[4].projects&&r[4].projects.length?r[4].projects:null;DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
+Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null}),api("centres").catch(function(){return null})]).then(function(r){
+  IDX=r[0];GEO=r[1];if(CF)CF.load(r[5]);S.delay=r[3]&&r[3].by?r[3]:null;S.inv=r[4]&&r[4].projects&&r[4].projects.length?r[4].projects:null;DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
   if(IDX&&IDX.ev)S.win="l12";   // v322 - prices a realtor quotes today: the last 12 months, unless the index carries no evidence yet
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l;IDX.areas[s].name=IDX.areas[s].name.replace(/\bJLT\b/g,"Jumeirah Lakes Towers")});   // v321 - an area is never shown as an initial
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
@@ -642,7 +651,7 @@ Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(functio
   if(mineList().length&&!S.isDefault)S.screen=2;
   var pa=DM.resolveArea(new URLSearchParams(location.search).get("area"));if(pa&&IDX.areas[pa])S.sel=pa;var pdr=new URLSearchParams(location.search).get("evidence");if(pdr&&S.sel)S.drawer=pdr;var pw=new URLSearchParams(location.search).get("window");if(pw==="all"||pw==="l12")S.win=pw;   // v314 - a link can open one area (also used by scripts/devmap_preview.mjs); v322 - and the evidence drawer and the window
   var pq=new URLSearchParams(location.search);if(pq.get("prof"))S.prof=pq.get("prof");var dq=pq.get("drill");if(dq){var q2=dq.split(":");S.drill={k:q2[0],t:Number(q2[1]),ar:q2[2]||null}}if(pq.get("meet")){S.screen=3;S.mode=pq.get("meet")==="rent"?"rent":"buy";S.bud.mode=S.mode==="buy"?"sqft":"total"}   // v321 - a link can open a profile, a drill-down or the client meeting (used by scripts/devmap_preview.mjs and the tests)
-  renderAll();if(S.sel||S.prof)setTimeout(panelTop,0);if(S.drill)setDrill(S.drill);if(pq.get("sheet")==="max")setSheet(true);
+  if(CF)CF.afterOpen(pq);renderAll();if(S.sel||S.prof)setTimeout(panelTop,0);if(S.drill)setDrill(S.drill);if(pq.get("sheet")==="max")setSheet(true);
   if(window.maplibregl)startMap();else $("map").innerHTML='<p class=note style="padding:16px">The map could not load. The lists still work.</p>';
 }).catch(function(){$("sidebody").innerHTML='<p class=note>The developers data did not load.</p>'});
 })();
@@ -650,9 +659,9 @@ Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(functio
 
 export function devmapHtml(key, deps) {
   const nav = deps && deps.NAJ_FONTS ? deps.NAJ_FONTS : "";
-  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
+  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - developers by area</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0e1413">' + nav
-    + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + '</style></head><body>'
+    + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + CENTRES_CSS + '</style></head><body>'
     + '<div id=map role=region aria-label="Map of Dubai areas: developers and prices"></div>'
     + '<aside id=side><button id=grab aria-expanded=false>Tap to expand</button><h1>Developers by area</h1><div class=sub id=source>Loading...</div>'
     + '<div id=sidebody></div><div class="card dwrap" id=detail2 style="display:none"></div></aside><aside id=detail></aside>'
