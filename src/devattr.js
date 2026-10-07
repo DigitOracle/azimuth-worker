@@ -75,6 +75,19 @@ export function decide({ names, cand, candDisplay, nameOnly, regd }) {
 //   UNVERIFIED         nothing behind it
 // match basis m: "project_id" (the register row was reached through the sales rows' project_number, one project number for the name) | "exact_name" | "partial_name" |
 //   "website_only" | "none".   regd = {c, d, p, s, lo, di, sp, loose}; how = "exact" | "loose" (which key found the register row).
+// v373b - DISPLACEMENT (Kendall, 7 Oct 2026: keep Vento Tower out of Beyond). A building whose register row names a DIFFERENT company than the brand shown, where the only link to
+// that brand is a name (the register is not silent, the company is not the brand's SPV, not a land owner or master-plan company, and the register row itself was reached by an exact
+// name or project number), does not belong in that brand's lists AT ALL, not even as "not confirmed". decide() already hands it to the register developer when that is a curated brand;
+// when it is not, the building is left out of every named developer (it falls to "Developer not recorded") and keeps NAME_ONLY with the register company's name for the audit trail.
+export function displacedByRegister({ D, cand, regd, how }) {
+  const reg = regd && regd.s >= 0.6 && regd.c ? regd : null;
+  if (!reg || !D || !D.dev || D.q !== "i" || how === "loose") return false;
+  if (reg.lo || MASTER_LIKE.has(reg.c)) return false;
+  const cc = cand ? canonicalOf(cand) : canonicalOf(D.dev);
+  if (!cc || reg.c === cc) return false;
+  if (Array.isArray(reg.sp) && reg.sp.indexOf(cc) >= 0) return false;
+  return true;
+}
 export const EVIDENCE_LABELS = ["REGISTER_VERIFIED", "NAME_ONLY", "DEVELOPER_CLAIMED", "UNVERIFIED"];
 export const LABEL_CODE = { REGISTER_VERIFIED: "V", NAME_ONLY: "N", DEVELOPER_CLAIMED: "D", UNVERIFIED: "U" };
 export function evidenceOf({ D, cand, route, regd, how, claimed, basisText }) {

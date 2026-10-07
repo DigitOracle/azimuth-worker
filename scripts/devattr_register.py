@@ -110,7 +110,9 @@ def pick(RD, PD, slug, pname, pnum, nk_=None, legacy=False):
         if nm and c == nm: return nm, "v"
         if rd["land_owner"] or c in MASTER_LIKE: return (nm, "i") if nm else ("_", "")
         if c in CUR: return c, "v"
-        if nm and nm in CUR: return (nm, "v") if nm in (rd.get("spv_of") or ()) else (nm, "i")    # v373: the register company is an SPV of that brand: verified
+        if nm and nm in CUR:
+            if nm in (rd.get("spv_of") or ()): return nm, "v"                      # v373: the register company is an SPV of that brand: verified
+            return "_", ""        # v373b: the register names a DIFFERENT company and only a name links the brand: dropped from the brand (src/devattr.js displacedByRegister)
         return c, "v"
     return (nm, "i") if nm else ("_", "")
 

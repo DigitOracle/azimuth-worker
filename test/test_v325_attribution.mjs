@@ -56,7 +56,7 @@ eq(oldDev(symphony), "imtiaz", "NEGATIVE CONTROL: the v323 rule reproduces the e
 // 4. a register project company (SPV, not a brand) gives way to a curated brand on a CARD field, but is used when there is nothing else
 {
   const d = build({ 1: card("Harbour Gate", { developer: "Emaar" }) }, { "harbour gate": { c: "the-lagoons-phase-one", d: "THE LAGOONS PHASE ONE L.L.C", p: 7, s: 1, lo: false } });
-  ok(d.emaar, "4: card brand kept over an SPV");
+  ok(!d.emaar && d._, "4 (v373b): a card brand is NOT kept over an unrelated register project company: the name link is dropped, the project is left out of Emaar");
   const d2 = build({ 1: card("Aurora Dune") }, { "aurora dune": { c: "aurora-spv-3", d: "AURORA SPV 3 L.L.C", p: 8, s: 1, lo: false } });
   ok(d["aurora-spv-3"] || d2["aurora-spv-3"], "4: register project company is the developer of record when nothing else exists");
 }

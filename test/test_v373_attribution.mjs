@@ -23,7 +23,7 @@ const slugsGeo = [["businessbay", "Business Bay"], ["dubaimarina", "Dubai Marina
 const geo = { districts: slugsGeo.map(([slug, name]) => ({ slug, name, corridor: "x", bbox: [0, 0, 1, 1], centre: [0, 0] })) };
 const registerAreas = { businessbay: { areas: ["Business Bay"] }, dubaimarina: { areas: ["Marsa Dubai"] }, bukadra: { areas: ["Bukadra"] }, wadialsafa5: { areas: ["Wadi Al Safa 5"] }, jebelali: { areas: ["Jabal Ali First"] } };
 const UM = {
-  businessbay: { 1: card("Vento Tower", "Beyond", 54, "VENTO TOWER"), 2: card("The Pad by Beyond", null, 534, "THE PAD"), 3: card("Kanyon", "Beyond", 40, "KANYON"), 4: card("Opus", "Omniyat", 20, "OPUS") },
+  businessbay: { 1: card("Vento Tower", "Beyond", 54, "VENTO TOWER"), 2: card("The Pad by Beyond", null, 534, "THE PAD"), 3: card("Kanyon", "Beyond", 40, "KANYON"), 5: card("Doubtful Tower", "Beyond", 15, "DOUBTFUL TOWER"), 6: card("Zed Tower", "Azizi", 25, "ZED TOWER"), 7: card("Alpha Tower", "Azizi", 22, "ALPHA TOWER"), 8: card("Loose Tower", "Azizi", 21, "LOOSE TOWER"), 4: card("Opus", "Omniyat", 20, "OPUS") },
   dubaimarina: { 1: card("Marina Vista", "Emaar", 300, "MARINA VISTA"), 2: card("Jumeirah Living Marina Gate", "Select Group", 200, "JUMEIRAH LIVING MARINA GATE"), 3: card("Ocean Heights", "DAMAC", 150, "OCEAN HEIGHTS"), 4: card("Marina Promenade", "Emaar", 120, "MARINA PROMENADE") },
   bukadra: { 1: card("Imtiaz Symphony Tower", "Imtiaz", 978, "IMTIAZ SYMPHONY TOWER"), 2: card("Wynwood Horizon by Imtiaz", "Imtiaz", 135, "WYNWOOD HORIZON BY IMTIAZ") },
   wadialsafa5: { 1: card("Cove Grand Residence by Imtiaz", "Imtiaz", 90, "COVE GRAND RESIDENCE BY IMTIAZ"), 2: card("Cove Edition Residence 1 by Imtiaz", "Imtiaz", 70, "COVE EDITION RESIDENCE 1 BY IMTIAZ") },
@@ -33,6 +33,7 @@ const UM = {
 const REGDEV = {
   businessbay: { "vento tower": reg("anax-developments", "ANAX DEVELOPMENTS L.L.C", 2776, 428642006), "@vento tower": { ar: "BUSINESS BAY", ms: "Business Bay" },
     "the pad": reg("pad-properties-nine", "PAD PROPERTIES NINE LIMITED", 1173, 22103305, ["omniyat"]), "@the pad": { ar: "BUSINESS BAY", ms: "Business Bay" },
+    "zed tower": reg("zed-spv", "ZED SPV L.L.C", 9001, 901), "alpha tower": reg("alpha-spv", "ALPHA SPV L.L.C", 9002, 902, ["azizi"]), "~loose": reg("loose-spv", "LOOSE SPV L.L.C", 9003, 903),
     kanyon: reg("cobia-real-estate", "COBIA REAL ESTATE L.L.C", 2001, 111, ["beyond"]), opus: reg("omniyat", "OMNIYAT PROPERTIES L.L.C", 2002, 112, ["omniyat"]) },
   dubaimarina: { "marina vista": reg("emaar", "EMAAR DEVELOPMENT P.J.S.C.", 2094, 137044480, ["emaar"]), "jumeirah living marina gate": reg("select-group", "SELECT GLOBAL DEVELOPMENT L.L.C", 1743, 10706845, ["select-group"]), "ocean heights": reg("damac", "DAMAC PROPERTIES CO (L.L.C)", 431, 260, ["damac"]), "marina promenade": reg("emaar", "EMAAR DEVELOPMENT P.J.S.C.", 2095, 137044480, ["emaar"]) },
   bukadra: { "imtiaz symphony tower": reg("imtiaz", "IMTIAZ GI REAL ESTATE DEVELOPMENT L.L.C", 4193, 748565993, ["imtiaz"]), "@imtiaz symphony tower": { ar: "HORIZON" },
@@ -55,8 +56,14 @@ const proj = (index, name) => { const out = []; for (const s of Object.keys(inde
 
 console.log("A - the builder carries the evidence for every project");
 const vento = proj(idx, "Vento Tower")[0], pad = proj(idx, "The Pad by Beyond")[0], kan = proj(idx, "Kanyon")[0], mv = proj(idx, "Marina Vista")[0];
-ok(vento && vento.dev === "beyond" && vento.x.e === "NAME_ONLY" && vento.x.p === 2776 && vento.x.di === 428642006 && /ANAX/.test(vento.x.dn), "Vento Tower: shown under Beyond, NAME_ONLY, the register project number 2776, developer id 428642006 and ANAX Developments are carried", JSON.stringify(vento && vento.x));
-ok(pad && pad.x.e === "NAME_ONLY" && pad.x.p === 1173 && /PAD PROPERTIES NINE/.test(pad.x.dn), "The Pad by Beyond: NAME_ONLY, the register names Pad Properties Nine Limited (an Omniyat project company, not a Beyond one)", JSON.stringify(pad && pad.x));
+ok(vento && vento.dev === "_" && vento.x.e === "NAME_ONLY" && vento.x.p === 2776 && vento.x.di === 428642006 && /ANAX/.test(vento.x.dn), "Vento Tower (v373b): the register names ANAX Developments and only a name linked it to Beyond, so it is NOT under Beyond: it falls to Developer not recorded, NAME_ONLY, project 2776, developer id 428642006 and ANAX kept for the audit trail", JSON.stringify(vento && vento.x));
+ok(pad && pad.dev === "_" && pad.x.e === "NAME_ONLY" && pad.x.p === 1173 && /PAD PROPERTIES NINE/.test(pad.x.dn), "The Pad by Beyond (v373b): the register names Pad Properties Nine Limited (an Omniyat project company, not a Beyond one): not under Beyond either", JSON.stringify(pad && pad.x));
+ok(Object.values(idx.areas).every((a) => !a.devs.beyond || a.devs.beyond.b.every((b) => !/^(Vento Tower|The Pad)/.test(b[2]))) && !JSON.stringify(idx.areas.businessbay.devs.beyond).match(/Vento|The Pad|2776|1173/), "neither is anywhere in Beyond's slot (b, bx, c, ce)");
+const dt = proj(idx, "Doubtful Tower")[0];
+ok(dt && dt.dev === "beyond" && dt.x.e === "DEVELOPER_CLAIMED", "a card-field claim with the register silent still stays under its brand as DEVELOPER_CLAIMED (the rule drops only a name link the register contradicts)");
+// the rule is general, not a name hack: any brand, any project
+const zed = proj(idx, "Zed Tower");
+ok(zed.length === 1 && zed[0].dev === "_" && zed[0].x.e === "NAME_ONLY" && /ZED SPV/.test(zed[0].x.dn) && proj(idx, "Alpha Tower")[0].dev === "azizi" && proj(idx, "Alpha Tower")[0].x.e === "REGISTER_VERIFIED" && proj(idx, "Loose Tower")[0].dev === "azizi" && proj(idx, "Loose Tower")[0].x.e === "NAME_ONLY", "general rule: an Azizi card whose register company is an unrelated SPV is dropped from Azizi; the same brand with the register company an SPV of it stays verified; a register row reached only by a loose name does not drop it");
 ok(kan && kan.x.e === "REGISTER_VERIFIED" && kan.x.m === "project_id", "Kanyon: the register company is an SPV of Beyond (its register web page / the developer file names the brand): REGISTER_VERIFIED by project number", JSON.stringify(kan && kan.x));
 ok(mv && mv.dev === "emaar" && mv.x.e === "REGISTER_VERIFIED" && mv.x.m === "project_id" && mv.x.p === 2094, "Marina Vista stays verified under Emaar by project number 2094");
 ok(proj(idx, "Jumeirah Living Marina Gate")[0].x.e === "REGISTER_VERIFIED" && proj(idx, "Ocean Heights")[0].x.e === "REGISTER_VERIFIED", "Jumeirah Living Marina Gate and Ocean Heights stay verified");
@@ -64,7 +71,7 @@ const myst = proj(idx, "Mystery Heights"), claimed = proj(idx, "Claimed Heights"
 ok(myst.length === 1 && myst[0].dev === "_" && myst[0].x.e === "UNVERIFIED" && myst[0].x.m === "none", "no developer and no register row: UNVERIFIED, basis none");
 ok(claimed && claimed.dev === "azizi" && claimed.x.e === "DEVELOPER_CLAIMED" && claimed.x.m === "website_only" && claimed.x.dn === "", "the developer sheet names it and the register has no row: DEVELOPER_CLAIMED (a claim, not evidence)", JSON.stringify(claimed && claimed.x));
 ok(Object.values(idx.areas).every((a) => Object.values(a.devs).every((d) => d.ce.length === d.c.length && d.bx.length === d.b.length)), "ce is parallel to c and bx is parallel to b in every slot");
-ok(idx.attr && idx.attr.version === 373 && idx.attr.projects.REGISTER_VERIFIED > 0 && idx.attr.projects.NAME_ONLY === 2 && /authority/.test(idx.attr.rule), "the index says what it holds: counts per label, the rule and the layout", JSON.stringify(idx.attr && idx.attr.projects));
+ok(idx.attr && idx.attr.version === 373 && idx.attr.projects.REGISTER_VERIFIED > 0 && idx.attr.projects.NAME_ONLY === 1 && /authority/.test(idx.attr.rule), "the index says what it holds: counts per label, the rule and the layout", JSON.stringify(idx.attr && idx.attr.projects));
 // backwards compatible: the old keys and their values are untouched
 const bm = idx.areas.dubaimarina.devs.emaar;
 ok(bm.n === "Emaar" && bm.h === 200 && JSON.stringify(bm.c[0]) === JSON.stringify([300, 20000, 1500000, 1]) && JSON.stringify(bm.b[0]) === JSON.stringify([300, 20000, "Marina Vista"]) && Array.isArray(bm.r) && JSON.stringify(bm.q) === JSON.stringify([420, 0]), "old keys n, h, c, r, b, q are unchanged in shape and value (the v372 worker ignores ce and bx)");
@@ -111,7 +118,7 @@ const text = (h) => h.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
 const IDX = JSON.parse(JSON.stringify(idx));
 const beforeSplit = { projects: Object.values(IDX.devs).reduce((a, d) => a + d.profile.projects, 0) };
 const st = DM.attrSplit(IDX);
-ok(st && st.hidden === 3 && st.kept === beforeSplit.projects - 3, "attrSplit hides the projects the register does not confirm (Vento Tower, The Pad by Beyond, and Claimed Heights, a developer claim) and keeps the rest", JSON.stringify(st));
+ok(st && st.hidden === 3 && st.kept === beforeSplit.projects - 3, "attrSplit hides the projects the register does not confirm under a named developer (Claimed Heights, Doubtful Tower, Loose Tower) and keeps the rest", JSON.stringify(st));
 ok(DM.attrSplit(IDX) === null, "and is idempotent");
 ok(!IDX.devs.beyond || IDX.devs.beyond.profile.projects === 1, "Beyond's project count is its confirmed projects only (Kanyon)", JSON.stringify(IDX.devs.beyond));
 ok(IDX.areas.businessbay.devs.beyond.b.length === 1 && IDX.areas.businessbay.devs.beyond.b[0][2] === "Kanyon" && IDX.areas.businessbay.devs.beyond.c.length === 1 && IDX.areas.businessbay.devs.beyond.c[0][0] === 40, "Beyond in Business Bay: one project and one cell, 40 sales (Vento Tower's 54 and The Pad's 534 are outside the numbers)");
@@ -121,8 +128,9 @@ const P = harness(IDX, S);
 const hb = P.profileHtml("beyond");
 ok(/id=nconf/.test(hb) && /Not confirmed by the register/.test(hb) && /<details/.test(hb) && !/<details[^>]*open/.test(hb), "Beyond's page has a collapsed group 'Not confirmed by the register'");
 const nc = hb.slice(hb.indexOf("id=nconf"), hb.indexOf("</details>"));
-ok(/Vento Tower/.test(nc) && /The Pad by Beyond/.test(nc) && /2 projects, outside the numbers/.test(text(nc)), "Vento Tower and The Pad sit in it, counted as outside the numbers");
-ok(/Matched by name only, not confirmed by the register/.test(nc) && /Register names: ANAX DEVELOPMENTS/.test(text(nc)) && /Register names: PAD PROPERTIES NINE/.test(text(nc)), "each says where the attribution came from and what the register names instead");
+ok(/Doubtful Tower/.test(nc) && /1 project, outside the numbers/.test(text(nc)), "Doubtful Tower sits in it, counted as outside the numbers");
+ok(/Developer says \(website\); the register has no record of it/.test(text(nc)), "it says where the attribution came from");
+ok(!/Vento|The Pad|ANAX|PAD PROPERTIES/.test(hb), "Beyond's page, including its Not confirmed group, never mentions Vento Tower or The Pad");
 const outside = hb.slice(0, hb.indexOf("id=nconf")) + hb.slice(hb.indexOf("</details>"));
 ok(!/Vento Tower|The Pad/.test(outside), "neither appears anywhere else on Beyond's page (area counts, project lists, price bands)");
 const p = P.prof("beyond");
@@ -177,8 +185,13 @@ ok(lines.some((l) => /Vento Tower/.test(l) && /ANAX DEVELOPMENTS/.test(l) && /NA
 ok(!runGate(idx, { ...cfg, max_not_verified_share: 0.05 }).ok, "the threshold is live: 5% fails the same index");
 console.log("   negative controls: the gate must FAIL a deliberately corrupted index");
 const neg = (m, mut, expect, c2) => { const x = clone(idx); mut(x); const r = runGate(x, c2 || cfg); ok(!r.ok && r.failures.some((f) => expect.test(f)), "negative control - " + m, JSON.stringify(r.failures)); };
-neg("Vento Tower marked REGISTER_VERIFIED under Beyond", (x) => { const d = x.areas.businessbay.devs.beyond; d.bx[d.b.findIndex((b) => b[2] === "Vento Tower")].e = "REGISTER_VERIFIED"; }, /Vento Tower is REGISTER_VERIFIED under beyond/);
-neg("The Pad marked REGISTER_VERIFIED under Beyond", (x) => { const d = x.areas.businessbay.devs.beyond; d.bx[d.b.findIndex((b) => b[2] === "The Pad by Beyond")].e = "REGISTER_VERIFIED"; }, /The Pad by Beyond is REGISTER_VERIFIED under beyond/);
+const inject = (x, name, p, e, win) => { const d = x.areas.businessbay.devs.beyond; const bk = win === "l12" ? "b12" : "b", xk = win === "l12" ? "b12x" : "bx"; (d[bk] = d[bk] || []).push([54, 20000, name]); (d[xk] = d[xk] || []).push({ p, di: 1, dn: "ANAX DEVELOPMENTS L.L.C", m: "exact_name", e, a: "Business Bay", as: "district" }); };
+neg("v373b: Vento Tower re-introduced under Beyond as NAME_ONLY (even outside the numbers)", (x) => inject(x, "Vento Tower", 2776, "NAME_ONLY"), /Vento Tower is listed under beyond/);
+neg("v373b: Vento Tower under Beyond by register project number only (renamed)", (x) => inject(x, "Vento Residences", 2776, "NAME_ONLY"), /Vento Residences is listed under beyond/);
+neg("v373b: Vento Tower in the 12-month list under Beyond", (x) => inject(x, "Vento Tower", 2776, "NAME_ONLY", "l12"), /Vento Tower is listed under beyond \(l12/);
+neg("Vento Tower marked REGISTER_VERIFIED under Beyond", (x) => inject(x, "Vento Tower", 2776, "REGISTER_VERIFIED"), /Vento Tower is REGISTER_VERIFIED under beyond/);
+neg("v373b: The Pad by Beyond re-introduced under Beyond", (x) => inject(x, "The Pad by Beyond", 1173, "NAME_ONLY"), /The Pad by Beyond is listed under beyond/);
+neg("The Pad marked REGISTER_VERIFIED under Beyond", (x) => inject(x, "The Pad", 1173, "REGISTER_VERIFIED"), /The Pad is REGISTER_VERIFIED under beyond/);
 neg("most projects demoted to NAME_ONLY (share above the limit)", (x) => { for (const a of Object.values(x.areas)) for (const d of Object.values(a.devs)) (d.bx || []).forEach((b, i) => { if (i % 2 === 0) b.e = "NAME_ONLY"; }); }, /share not REGISTER_VERIFIED/);
 neg("Marina Vista demoted", (x) => { x.areas.dubaimarina.devs.emaar.bx[0].e = "NAME_ONLY"; }, /marina vista is not REGISTER_VERIFIED under emaar/);
 neg("Ocean Heights moved to another developer", (x) => { const a = x.areas.dubaimarina.devs; a.zzz = a.damac; delete a.damac; }, /ocean heights is not REGISTER_VERIFIED under damac/);
@@ -193,7 +206,7 @@ ok(runGate(lenient, { ...cfg, require_fixtures: false, max_not_verified_share: 0
 // the CLI: exit codes and the CSV file
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dm373gate_"));
 fs.writeFileSync(path.join(dir, "good.json"), JSON.stringify(idx));
-const badIdx = clone(idx); badIdx.areas.businessbay.devs.beyond.bx[0].e = "REGISTER_VERIFIED"; badIdx.areas.businessbay.devs.beyond.bx[1].e = "REGISTER_VERIFIED";
+const badIdx = clone(idx); inject(badIdx, "Vento Tower", 2776, "NAME_ONLY");
 fs.writeFileSync(path.join(dir, "bad.json"), JSON.stringify(badIdx));
 const gate = path.join(HERE, "..", "scripts", "check_attribution_gate.mjs");
 const r1 = spawnSync(process.execPath, [gate, path.join(dir, "good.json"), "--audit-csv", path.join(dir, "good.csv")], { encoding: "utf8" });
