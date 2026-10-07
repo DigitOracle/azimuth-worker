@@ -27,7 +27,7 @@ eq(fit.parseSteps("10,000 steps"), 10000, "10,000 steps");
 eq(fit.parseSteps("10k steps today"), 10000, "10k steps");
 eq(fit.parseSteps("8.5k steps"), 8500, "8.5k steps");
 eq(fit.parseSteps("walked 12000 steps"), 12000, "12000 steps");
-eq(fit.quickExercise("gym 45 min"), { type: "Gym", minutes: 45, steps: 0 }, "gym 45 min");
+eq(fit.quickExercise("gym 45 min"), { type: "Weight training", minutes: 45, steps: 0 }, "gym 45 min (now logged as Weight training)");
 eq(fit.quickExercise("went for a run, 40 mins"), { type: "Run", minutes: 40, steps: 0 }, "run 40 mins");
 eq(fit.quickExercise("lunch with Sara"), null, "a lunch plan is not exercise");
 ok(fit.fitCaptionIsFood("lunch") && fit.fitCaptionIsFood("Food: noodles") && !fit.fitCaptionIsFood("this is me"), "photo captions that claim a photo for FIT");
@@ -167,7 +167,7 @@ ok(/Daily minimum done/.test(said()) && /✅/.test(said()), "30 minutes meets th
 await text("gym");
 ok(/How long was the gym/.test(said()), "no duration -> it asks");
 await text("45 min");
-ok(/Logged - Gym · 45 min/.test(said()) && !/Today's minimum|Minimum done|Floor cleared/.test(said().split("Challenge")[1] || ""), "the answer logs it, and the day-done cheer is not repeated");
+ok(/Logged - Weight training · 45 min/.test(said()) && !/Today's minimum|Minimum done|Floor cleared/.test(said().split("Challenge")[1] || ""), "the answer logs it, and the day-done cheer is not repeated");
 await text("had a salad for lunch yesterday");
 ok(/\(yesterday\)/.test(said()) && fitKeys().some((k) => k.includes(fit.addDays(today, -1))), "\"yesterday\" files it on yesterday");
 const stepsBefore = fitKeys().length;
@@ -295,7 +295,7 @@ await text("2");
 ok(fitKeys().length === 0, "a bare 2 (a feed pick) is not logged as 2 minutes");
 await text("gym");
 await text("45");
-ok(fitKeys().length === 1 && /Gym · 45 min/.test(said()), "a real duration still completes it");
+ok(fitKeys().length === 1 && /Weight training · 45 min/.test(said()), "a real duration still completes it");
 
 console.log("cumulative: day by day, week by week, month by month, total");
 eq([fit.carryTarget({}, "2026-10-05", 600), fit.carryTarget({ "2026-10-05": 480 }, "2026-09-28", 600), fit.carryTarget({ "2026-10-05": 480 }, "2026-10-19", 600), fit.carryTarget({ "2026-10-05": 480, "2026-10-12": 300 }, "2026-10-19", 600)], [600, 480, 480, 300], "a week with no target carries the latest earlier one; one before the first uses the first; none set uses the default");
@@ -453,7 +453,7 @@ delete env.FIT_TOKEN;
 
 console.log("v333: a plain log needs no model");
 store.clear(); outbound = []; aiCalls = []; aiAnswer = () => ({ kind: "other", text: null, type: null, minutes: null, steps: null, day_offset: 0 });
-await text("gym 40 min"); ok(/Logged - Gym · 40 min/.test(said()) && fitKeys().length === 1, "\"gym 40 min\" is logged even when the model would have said 'other'");
+await text("gym 40 min"); ok(/Logged - Weight training · 40 min/.test(said()) && fitKeys().length === 1, "\"gym 40 min\" is logged even when the model would have said 'other'");
 await text("12000 steps yesterday"); ok(/\(yesterday\)/.test(said()) && fitKeys().length === 2, "\"12000 steps yesterday\" lands on yesterday");
 ok(!aiCalls.some((c) => /log food and exercise/.test(c.sys)), "and neither asked the model anything");
 await text("gym 40 min tomorrow at 6"); ok(fitKeys().length === 2, "a plan with a time in it is NOT logged (\"gym 40 min tomorrow at 6\")");
@@ -492,8 +492,8 @@ ok(fitKeys().length === 1 && /Removed - eggs and toast/.test(said()), "momo undo
 await text("momo fix scrambled eggs");
 ok(/Updated - scrambled eggs/.test(said()) && (await jget("/fit_api")).j.entries[0].x === "scrambled eggs", "momo fix rewrites a meal");
 await text("gym 40 min"); await text("momo fix 55");
-ok(/Updated - Gym 55 min/.test(said()), "momo fix changes minutes");
-await text("momo fix 4 min"); ok(/Updated - Gym 4 min/.test(said()), "a duration with its unit is taken as written");
+ok(/Updated - Weight training 55 min/.test(said()), "momo fix changes minutes");
+await text("momo fix 4 min"); ok(/Updated - Weight training 4 min/.test(said()), "a duration with its unit is taken as written");
 store.clear(); await text("momo undo"); ok(/Nothing to undo/.test(said()), "undo with nothing logged says so");
 await text("momo again"); ok(/Nothing to repeat/.test(said()), "again with nothing logged says so");
 await text("momo help");
@@ -552,7 +552,7 @@ ok(csvR.status === 200 && /text\/csv/.test(csvR.headers.get("content-type")) && 
 const rowsC = csv.trim().split("\n");
 ok(rowsC[0] === "date,time_gst,kind,what,minutes,steps,value,outside_eating_window,source,protein_g_rough" && rowsC.length === 4, "header plus one row per entry (" + (rowsC.length - 1) + " rows)");
 ok(csv.includes("\"'=SUM(1,1) \"\"quoted\"\", with comma\""), "a cell that starts with = is defused and quotes are escaped, so it cannot run as a formula");
-ok(/exercise,Gym,30,/.test(csv) && /measurement,weight,,,80,/.test(csv), "exercise and measurement rows carry their numbers");
+ok(/exercise,Weight training,30,/.test(csv) && /measurement,weight,,,80,/.test(csv), "exercise and measurement rows carry their numbers");
 eq([(await call("/fit_api?view=csv")).status, (await call(K("/fit_api?view=csv", CLIENT))).status, (await call(K("/fit_api?view=health", CLIENT))).status], [404, 404, 404], "CSV and health are owner-only");
 store.set("wa_owner_last_in", { v: new Date().toISOString() });
 await E(today + "T17:05:00Z");
@@ -1205,6 +1205,39 @@ eq((idxSrc2.match(/fitMorning\(env, fitDeps\(\)/g) || []).length, 2, "the 05:00 
 const tomlSrc = (await import("node:fs")).readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
 ok(/crons = \["0,30 1-18 \* \* \*", "\* \* \* \* \*"\]/.test(tomlSrc), "the azimuth2 cron line is unchanged");
 delete env.FIT_USERS; env.LOG_NUDGE_TEMPLATE = undefined;
+
+console.log("v356: exercise types - Walk, Run, Weight training, Spin class, Outdoor cycling, Swimming, Elliptical");
+const typesCaseTp = [["gym 45 min", "Weight training"], ["weights 30 min", "Weight training"], ["weight training 50 min", "Weight training"], ["lifted for 40 minutes", "Weight training"], ["walked 40 min", "Walk"], ["ran 30 min", "Run"], ["run 5k in 28 min", "Run"], ["jog 20 min", "Run"], ["spin class 45 min", "Spin class"], ["spin 45 min", "Spin class"], ["outdoor cycling 90 min", "Outdoor cycling"], ["cycled 60 min", "Outdoor cycling"], ["bike ride 75 min", "Outdoor cycling"], ["swim 30 min", "Swimming"], ["swam 40 min", "Swimming"], ["swimming 1h", "Swimming"], ["elliptical 30 min", "Elliptical"], ["cross trainer 25 min", "Elliptical"]];
+for (const [t, want] of typesCaseTp) eq(fit.quickExercise(t) && fit.quickExercise(t).type, want, "'" + t + "' is " + want);
+eq(fit.EX_TYPES, ["Walk", "Run", "Weight training", "Spin class", "Outdoor cycling", "Swimming", "Elliptical"], "the seven types, in the order Kendall gave them");
+eq([fit.exCanon("Gym"), fit.exCanon("swim"), fit.exCanon("Padel"), fit.exCanon("Weight training")], ["Weight training", "Swimming", "Padel", "Weight training"], "a label from the model is made canonical when it is one of ours, and kept when it is not");
+// WhatsApp end to end, one per type, and the prefixed forms
+store.clear(); outbound = []; env.FIT_USERS = "kendall:" + KEN + ":Dr. Doli,najjuko:" + HER + ":Black Coffee";
+store.set("wa_owner_last_in", { v: new Date().toISOString() });
+for (const [t, want] of [["spin class 45 min", "Spin class"], ["swim: 30 min", "Swimming"], ["elliptical 20 min", "Elliptical"], ["weights: 40 min", "Weight training"], ["cycling: 90 min", "Outdoor cycling"]]) {
+  const nB = [...store.keys()].filter((k) => k.startsWith("fit_najjuko_")).length; outbound = []; await text(t);
+  ok([...store.keys()].filter((k) => k.startsWith("fit_najjuko_")).length === nB + 1 && new RegExp("Logged - " + want + " ·").test(said()), "WhatsApp '" + t + "' logs " + want);
+}
+// the old name keeps its meaning: stored 'Gym', shown as Weight training everywhere it is read
+await fit.fitAdd(env, { u: "kendall", k: "ex", x: "Gym", m: 45, t: T("2026-10-02T04:00:00Z"), d: "2026-10-02" });
+await fit.fitAdd(env, { u: "kendall", k: "ex", x: "Swim", m: 30, t: T("2026-10-02T09:00:00Z"), d: "2026-10-02" });
+const oldDayTp = await fit.fitRange(env, "2026-10-02", "2026-10-02", "kendall");
+eq(oldDayTp.map((e) => e.x).sort(), ["Swimming", "Weight training"], "entries logged as Gym and Swim before the change are shown under the new names");
+eq(fit.dayStats(oldDayTp, fit.FIT_CFG_DEFAULT).ex, 75, "and their minutes still count towards the day, the week and the challenge");
+const rawOldTp = [...store.entries()].find(([k, v]) => k.startsWith("fit_kendall_2026-10-02") && /"Gym"/.test(typeof v.v === "string" ? v.v : JSON.stringify(v.v)));
+ok(!!rawOldTp, "nothing was rewritten in storage: the old 'Gym' is still what is stored (the history cannot be damaged by the rename)");
+const gotOldTp = await fit.fitGet(env, oldDayTp.find((e) => e.x === "Weight training").id, "kendall"); eq(gotOldTp.x, "Weight training", "a single entry read back (momo fix, edit) also shows the new name");
+const csvOldTp = await fit.fitCsv(env, await fit.fitCfg(env, "kendall"), "2026-10-05"); ok(/exercise,Weight training,45,/.test(csvOldTp) && !/exercise,Gym,/.test(csvOldTp), "the CSV export carries the new names");
+const hvTp = (await jget("/fit_api?u=kendall&view=history")).j; ok(JSON.stringify(hvTp).includes("Weight training") || !JSON.stringify(hvTp).includes("Gym"), "the history view never says Gym");
+// the web page: the type buttons, the icons per type, and a plain-text add
+const pgTp = await (await call(K("/fit"))).text();
+ok(["Walk", "Run", "Weight training", "Spin class", "Outdoor cycling", "Swimming", "Elliptical"].every((n) => pgTp.includes("['" + n + "','m']")) && !pgTp.includes("['Gym','m']"), "the page offers the seven types as buttons (and no Gym)");
+ok(/function exIcon/.test(pgTp) && ["run", "walk", "bike", "swim", "pulse"].every((k) => new RegExp("\"" + k + "\":").test(pgTp)), "each type has its own icon (run, walk, bike, swim, pulse; barbell for weights)");
+const addWTp = await (await post("/fit_api?u=kendall", { op: "add", kind: "ex", text: "gym", minutes: 20 })).json(); eq(addWTp.entry.x, "Weight training", "adding 'gym' from the page stores Weight training");
+const addSTp = await (await post("/fit_api?u=kendall", { op: "add", kind: "ex", text: "Spin class", minutes: 20 })).json(); eq(addSTp.entry.x, "Spin class", "adding Spin class from the page stores it as typed");
+const addPTp = await (await post("/fit_api?u=kendall", { op: "add", kind: "ex", text: "Padel", minutes: 60 })).json(); eq(addPTp.entry.x, "Padel", "a type that is not one of ours is kept as the person typed it");
+await text("momo help"); ok(/spin class, outdoor cycling, swimming, elliptical/.test(said()), "momo help lists the types");
+delete env.FIT_USERS;
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
