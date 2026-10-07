@@ -62,6 +62,11 @@ export async function devmapRoutes(request, env, url, deps) {
     const dl = await kvJson(env, "devmap_delay");
     return J(dl && dl.by ? dl : {});
   }
+  if (what === "inv") {                                                    // v376 - which projects have an investor-PDF facts record (KV img_investor_tiers_facts); names only, absent = no investor buttons
+    const iv = await kvJson(env, "investor_tiers_facts");
+    const ps = iv && iv.projects ? Object.keys(iv.projects).map(id => { const f = iv.projects[id] || {}, pr = f.project || {}; return { id, name: pr.name || id, brand: pr.brand_name || pr.name || id }; }) : [];
+    return J({ projects: ps });
+  }
   if (what === "shortlist") {
     const name = await shortlistName(key);
     if (request.method === "POST") {
@@ -564,7 +569,9 @@ function areaHtml(slug){
 function pdfUrl(kind,slug,devs,bud){var u='/developers_pdf?kind='+kind+'&area='+encodeURIComponent(slug)+'&window='+(S.win==='l12'&&IDX.ev?'12m':'all')+'&mode='+S.mode+'&developers='+encodeURIComponent(devs.join(','));if(bud){var b=S.bud;if(b.min!=null)u+='&min='+b.min;if(b.max!=null)u+='&max='+b.max;if(b.beds!=null)u+='&beds='+b.beds;if(S.mode==='buy')u+='&basis='+b.mode}return u+'&key='+encodeURIComponent(KEY)}
 function investorUrl(slug,k){return '/developers_pdf?kind=investor&area='+encodeURIComponent(slug)+'&developer='+encodeURIComponent(k)+'&window='+(S.win==='l12'&&IDX.ev?'12m':'all')+'&key='+encodeURIComponent(KEY)}
 function pdfRow(slug,devs,bud,inv){if(!slug)return '';return '<div class=pdfrow><a class=pdfbtn target=_blank rel=noopener href="'+esc(pdfUrl('snapshot',slug,devs,bud))+'">Download PDF: snapshot</a><a class=pdfbtn target=_blank rel=noopener href="'+esc(pdfUrl('detailed',slug,devs,bud))+'">Download PDF: detailed</a>'+(inv?'<a class=pdfbtn target=_blank rel=noopener href="'+esc(investorUrl(slug,inv))+'">'+icoSvg('chart-bar','pdfic')+'Investor PDF</a>':'')+'</div>'}
-function pdfRowProf(k,p){var sl=S.sel&&IDX.areas[S.sel]?S.sel:null;if(!sl&&p.priced.length)sl=p.priced.slice().sort(function(a,b){return b.n-a.n})[0].slug;return pdfRow(sl,[k],S.screen===3,k)}
+// v376 - one 'Investor PDF: <project>' button per project of this developer that has an investor-PDF facts record (exact project-name match; the selector page shows the register project number so a wrong match would be visible)
+function invProjRow(k){if(!S.inv||!S.inv.length)return '';var seen={},h='';Object.keys(IDX.areas).forEach(function(sl){var d=IDX.areas[sl].devs&&IDX.areas[sl].devs[k];if(!d)return;(d.b||[]).concat(d.b12||[]).forEach(function(x){var kk=pkey(x[2]);S.inv.forEach(function(q){if(pkey(q.brand)===kk&&!seen[q.id]){seen[q.id]=1;h+='<a class=pdfbtn target=_blank rel=noopener href="'+esc('/developers_pdf?kind=investor_selector&project='+encodeURIComponent(q.id)+'&format=html&key='+encodeURIComponent(KEY))+'">'+icoSvg('chart-bar','pdfic')+'Investor PDF: '+esc(q.name)+'</a>'}})})});return h?'<div class=pdfrow>'+h+'</div>':''}
+function pdfRowProf(k,p){var sl=S.sel&&IDX.areas[S.sel]?S.sel:null;if(!sl&&p.priced.length)sl=p.priced.slice().sort(function(a,b){return b.n-a.n})[0].slug;return pdfRow(sl,[k],S.screen===3,k)+invProjRow(k)}
 function src(){return '<div class=src>Sources: Dubai Land Department sales register, '+esc(IDX.as_of||"")+(S.mode==="rent"?'; registered rental contracts (the Dubai rent register, community level, 3 or more contracts)':'')+'.<div class=foot>__FOOT__</div></div>'}
 function dvHtml(st,name){var tg=S.dv.tier!=null?{tier:S.dv.tier}:(S.dv.ppsm!=null?{ppsm:S.dv.ppsm}:null);if(!tg)return '';var v=DM.developerView(st,tg);if(!v.ok)return '<p class=note>'+esc(v.why)+'</p>';
   return '<p style="margin:8px 0 2px"><b>'+(name?esc(name)+': ':'')+v.tierName+'</b> · '+esc(v.band)+'</p><p class=note style="margin:0">'+esc(v.say)+'</p>'+v.competitors.map(function(d){return '<div class=ms>'+esc(d.name)+' · AED '+fmt(pu(d.median))+' '+pul()+' · '+d.n+' sales'+'</div>'}).join("")}
@@ -624,8 +631,8 @@ function startMap(){
     map.on("mouseleave","a-fill",function(){map.getCanvas().style.cursor="";pop.remove()});
     map.on("click","a-fill",function(e){if(pjHit(e).length)return;select(e.features[0].properties.slug,false)})})}
 // ---- start ----
-Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null})]).then(function(r){
-  IDX=r[0];GEO=r[1];S.delay=r[3]&&r[3].by?r[3]:null;DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
+Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null})]).then(function(r){
+  IDX=r[0];GEO=r[1];S.delay=r[3]&&r[3].by?r[3]:null;S.inv=r[4]&&r[4].projects&&r[4].projects.length?r[4].projects:null;DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
   if(IDX&&IDX.ev)S.win="l12";   // v322 - prices a realtor quotes today: the last 12 months, unless the index carries no evidence yet
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l;IDX.areas[s].name=IDX.areas[s].name.replace(/\bJLT\b/g,"Jumeirah Lakes Towers")});   // v321 - an area is never shown as an initial
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
