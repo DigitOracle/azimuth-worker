@@ -47,6 +47,37 @@ def norm(s):
 def slug(s, n=44):
     return re.sub(r"[^a-z0-9]+", "-", str(s or "").lower()).strip("-")[:n].strip("-")
 
+# v382 - AREA HEADING = the project's OWN community, never the Land Department land district (Chelsea Residences by DAMAC: "Dubai Maritime City", not "Madinat Dubai Almelaheyah").
+# Rule (Kendall, 7 Oct 2026; mirrors src/community_labels.js projectAreaLabel): the register master community of the project (g_dld__projects.master_project_en, by project_number) if it
+# is not just the land district, else the community AREA_EN of the open sales extracts under the project's exact name (a name that is not a common word), else the register district.
+# The master comes first here (the reverse of the index builder) because a facts record is keyed by project_number and a bare name can sit in two districts. register_area stays as filed (it picks the shard).
+AREA_DISPLAY = {"horizon": "Meydan Horizon", "jlt": "Jumeirah Lakes Towers", "arabianranches3": "Arabian Ranches III", "arabianranchesiii": "Arabian Ranches III",
+                "jumeriahbeachresidencejbr": "Jumeirah Beach Residence", "sobhaheartland": "Sobha Hartland"}      # mirrors src/community_labels.js AREA_DISPLAY
+
+
+def area_display(raw):
+    t = re.sub(r"\s+", " ", str(raw or "")).strip()
+    if not t:
+        return ""
+    k = norm(t)
+    if k in AREA_DISPLAY:
+        return AREA_DISPLAY[k]
+    return t if (re.search(r"[a-z]", t) and re.search(r"[A-Z]", t)) else re.sub(r"\b[a-z]", lambda m: m.group(0).upper(), t.lower())
+
+
+def own_area(register_area, master, names, SA, generic):
+    """returns (heading, source) source: register_master | sales_area | register_district"""
+    own = {norm(register_area)}
+    if master and norm(master) not in own:
+        return area_display(master), "register_master"
+    for nm in names:
+        if not nm or generic(nm):
+            continue
+        sa = SA.get(re.sub(r"[^a-z0-9]+", " ", str(nm).lower()).strip())
+        if sa and sa[0] and norm(sa[0]) not in own:
+            return area_display(sa[0]), "sales_area"
+    return (register_area or "Area not recorded on the register"), "register_district"
+
 
 def district_slug(s):
     return re.sub(r"[^a-z0-9]+", "", str(s or "").lower()) or "unknown"
@@ -112,6 +143,10 @@ def main():
     from lake import connect  # noqa: E402
     import build_developer_crosswalk as X  # noqa: E402  (canonical_of / BY_ID: the company-name brand rules, parity-tested with src/devcross.js)
     con = connect()
+    sys.path.insert(0, HERE)
+    import devattr_register as DR  # noqa: E402  (v382: the sales extracts' own community per project name, and the common-word test)
+    SA = DR.sales_area_index()
+    area_src = collections.Counter()
 
     def rows(sql):
         r = con.execute(sql)
@@ -386,7 +421,8 @@ def main():
         nm_en = r["name_en"] or brand_name.get(pn)
         bname = title_case(brand_name.get(pn) or nm_en) if (brand_name.get(pn) or nm_en) else "Registered project " + str(pn)
         name = short_name(title_case(nm_en)) if nm_en else short_name(bname)
-        area = r["area"] or "Area not recorded on the register"
+        area, asrc = own_area(r["area"], clean(r["master"]), [nm_en, brand_name.get(pn)], SA, DR.is_generic_name)      # v382
+        area_src[asrc] += 1
         pid = LEGACY_IDS.get(pn) or ((slug(bname) or "project") + "-" + str(pn))
         # status
         code = r["st"]
@@ -489,7 +525,7 @@ def main():
             counters["plan"] += 1
         am = amen_by_pn.get(pn)
         f = {"schema": 1,
-             "project": {"id": pid, "name": name, "brand_name": bname, "area": area, "register_area": r["area"], "master_project": r["master"], "project_number": pn},
+             "project": {"id": pid, "name": name, "brand_name": bname, "area": area, "area_source": asrc, "register_area": r["area"], "master_project": r["master"], "project_number": pn},
              "as_of": {"sales": iso(tx_max), "register": iso(reg_asof), "rents": iso(rent_asof) if rents else None, "built": a.built},
              "window": {"from": iso(l12_from), "to": iso(tx_max)},
              "developer": D, "delivery": delivery, "status": stt, "sales": X_, "price_plan": price_plan}
@@ -556,7 +592,7 @@ def main():
                     kz = None
                 alr = area_l12.get(karea)
                 kf = {"schema": 1,
-                      "project": {"id": "kore-by-imtiaz-offregister", "name": "KORE by Imtiaz", "brand_name": "KORE by Imtiaz", "area": karea, "register_area": karea, "master_project": "Dubai Land Residence Complex", "project_number": None,
+                      "project": {"id": "kore-by-imtiaz-offregister", "name": "KORE by Imtiaz", "brand_name": "KORE by Imtiaz", "area": area_display("Dubai Land Residence Complex"), "area_source": "register_master", "register_area": karea, "master_project": "Dubai Land Residence Complex", "project_number": None,
                                   "off_register": True, "off_register_note": "KORE is not on the Dubai Land Department project register: it has a building and unit register entry (project id " + str(kid) + ") and no project register row, so no register project number exists"},
                       "as_of": {"sales": iso(tx_max), "register": None, "rents": None, "built": a.built}, "window": {"from": iso(l12_from), "to": iso(tx_max)},
                       "developer": {"brand": "Imtiaz", "legal_entity": None, "evidence": "DEVELOPER_CLAIMED", "reason": "The developer's own material names Imtiaz as the brand (developer says); the project register has no record of KORE, so the company behind it is not named by the register"},
@@ -609,7 +645,7 @@ def main():
     for f in records:
         for k, v in known(f).items():
             dist[(k, v)] += 1
-    report.update({"built": a.built, "records": len(records), "districts": len(shards), "register_projects": len(projs), "counters": dict(counters),
+    report.update({"built": a.built, "records": len(records), "districts": len(shards), "register_projects": len(projs), "counters": dict(counters), "area_source": dict(area_src),
                    "distribution": {k: {"known": dist[(k, True)], "unknown": dist[(k, False)]} for k in known(records[0])},
                    "largest_shard": max(sizes.items(), key=lambda kv: kv[1]), "total_bytes": sum(sizes.values()), "index_bytes": os.path.getsize(os.path.join(a.out_dir, "index.json")),
                    "sizes": sizes, "as_of": {"sales": iso(tx_max), "register": iso(reg_asof)}})

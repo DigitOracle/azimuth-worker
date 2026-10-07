@@ -26,7 +26,7 @@ const UM = {
   businessbay: { 1: card("Vento Tower", "Beyond", 54, "VENTO TOWER"), 2: card("The Pad by Beyond", null, 534, "THE PAD"), 3: card("Kanyon", "Beyond", 40, "KANYON"), 5: card("Doubtful Tower", "Beyond", 15, "DOUBTFUL TOWER"), 6: card("Zed Tower", "Azizi", 25, "ZED TOWER"), 9: card("Shell Tower", "Azizi", 18, "SHELL TOWER"), 7: card("Alpha Tower", "Azizi", 22, "ALPHA TOWER"), 8: card("Loose Tower", "Azizi", 21, "LOOSE TOWER"), 4: card("Opus", "Omniyat", 20, "OPUS"), 10: card("Alba Tower", "Omniyat", 20, "ALBA TOWER"), 11: card("Vela Viento", "Omniyat", 20, "VELA VIENTO") },
   dubaimarina: { 1: card("Marina Vista", "Emaar", 300, "MARINA VISTA"), 2: card("Jumeirah Living Marina Gate", "Select Group", 200, "JUMEIRAH LIVING MARINA GATE"), 3: card("Ocean Heights", "DAMAC", 150, "OCEAN HEIGHTS"), 4: card("Marina Promenade", "Emaar", 120, "MARINA PROMENADE"), 5: card("Bay Central", "Select Group", 30, "BAY CENTRAL"), 6: card("Botanica", "Select Group", 30, "BOTANICA"), 7: card("The Royal Oceanic", "Select Group", 30, "THE ROYAL OCEANIC"), 9: card("The Point", "Select Group", 30, "THE POINT"), 8: card("Creek Beach - Vida Residences", "Emaar", 30, "CREEK BEACH - VIDA RESIDENCES"), ...Object.fromEntries(Array.from({ length: 40 }, (_, i) => [100 + i, card("Filler Tower " + i, "Emaar", 5, "FILLER TOWER " + i)])) },
   bukadra: { 1: card("Imtiaz Symphony Tower", "Imtiaz", 978, "IMTIAZ SYMPHONY TOWER"), 2: card("Wynwood Horizon by Imtiaz", "Imtiaz", 135, "WYNWOOD HORIZON BY IMTIAZ") },
-  wadialsafa5: { 1: card("Cove Grand Residence by Imtiaz", "Imtiaz", 90, "COVE GRAND RESIDENCE BY IMTIAZ"), 2: card("Cove Edition Residence 1 by Imtiaz", "Imtiaz", 70, "COVE EDITION RESIDENCE 1 BY IMTIAZ"), 3: card("Cove Edition I by Imtiaz", "Imtiaz", 20, "COVE EDITION I BY IMTIAZ"), 4: card("Pearl House 4 by Imtiaz", "Imtiaz", 20, "PEARL HOUSE 4 BY IMTIAZ") },
+  wadialsafa5: { 1: card("Cove Grand Residence by Imtiaz", "Imtiaz", 90, "COVE GRAND RESIDENCE BY IMTIAZ"), 2: card("Cove Edition Residence 1 by Imtiaz", "Imtiaz", 70, "COVE EDITION RESIDENCE 1 BY IMTIAZ"), 3: card("Cove Edition I by Imtiaz", "Imtiaz", 20, "COVE EDITION I BY IMTIAZ"), 4: card("Pearl House 4 by Imtiaz", "Imtiaz", 20, "PEARL HOUSE 4 BY IMTIAZ"), 5: card("Le Blanc Residence by Imtiaz", "Imtiaz", 30, "LE BLANC RESIDENCE BY IMTIAZ") },
   jebelali: { 1: card("Westwood by Imtiaz", "Imtiaz", 182, "WESTWOOD BY IMTIAZ") },
   madinatalmataar: { 1: card("Mystery Heights", null, 10, "MYSTERY HEIGHTS"), 2: card("Claimed Heights", "Azizi", 12, "CLAIMED HEIGHTS") },
 };
@@ -41,7 +41,7 @@ const REGDEV = {
     ...Object.fromEntries(Array.from({ length: 40 }, (_, i) => ["filler tower " + i, reg("emaar", "EMAAR DEVELOPMENT P.J.S.C.", 7000 + i, 137044480, ["emaar"])])) },
   bukadra: { "imtiaz symphony tower": reg("imtiaz", "IMTIAZ GI REAL ESTATE DEVELOPMENT L.L.C", 4193, 748565993, ["imtiaz"]), "@imtiaz symphony tower": { ar: "HORIZON" },
     "wynwood horizon by imtiaz": reg("imtiaz", "IMTIAZ GI REAL ESTATE DEVELOPMENT L.L.C", 4133, 748565993, ["imtiaz"]), "@wynwood horizon by imtiaz": { ar: "HORIZON" } },
-  wadialsafa5: { "cove grand residence by imtiaz": reg("imtiaz", "IMTIAZ COVE REAL ESTATE DEVELOPMENT L.L.C", 3774, 733293217, ["imtiaz"]), "cove edition i by imtiaz": reg("cove-spv", "COVE SHELL L.L.C", 3001, 301), "pearl house 4 by imtiaz": reg("pearl-spv", "PEARL SHELL L.L.C", 3002, 302), "@cove grand residence by imtiaz": { ar: "DUBAI LAND RESIDENCE COMPLEX", ms: "Dubai Land Residence Complex" },
+  wadialsafa5: { "@le blanc residence by imtiaz": { ar: "DUBAI LAND RESIDENCE COMPLEX" }, "le blanc residence by imtiaz": reg("imtiaz", "IMTIAZ REAL ESTATE INVESTMENT & DEVELOPMENT L.L.C", 4174, 29075838, ["imtiaz"]), "cove grand residence by imtiaz": reg("imtiaz", "IMTIAZ COVE REAL ESTATE DEVELOPMENT L.L.C", 3774, 733293217, ["imtiaz"]), "cove edition i by imtiaz": reg("cove-spv", "COVE SHELL L.L.C", 3001, 301), "pearl house 4 by imtiaz": reg("pearl-spv", "PEARL SHELL L.L.C", 3002, 302), "@cove grand residence by imtiaz": { ar: "DUBAI LAND RESIDENCE COMPLEX", ms: "Dubai Land Residence Complex" },
     "cove edition residence 1 by imtiaz": reg("imtiaz", "IMTIAZ REAL ESTATE INVESTMENT & DEVELOPMENT L.L.C", 3248, 29075838, ["imtiaz"]), "@cove edition residence 1 by imtiaz": { ar: "Wadi Al Safa 5", ms: "Dubai Land Residence Complex" } },   // the sales area is only the land area: the register master community is used
   jebelali: { "westwood by imtiaz": reg("imtiaz", "IMTIAZ REAL ESTATE INVESTMENT & DEVELOPMENT L.L.C", 2431, 29075838, ["imtiaz"]), "@westwood by imtiaz": { ar: "AL FURJAN", ms: "Al Furjan" } },
   madinatalmataar: {},
@@ -54,7 +54,14 @@ const mk = (over) => {
   fs.rmSync(dir, { recursive: true, force: true });
   return idx;
 };
-const idx = mk();
+
+// v382 - the 12-month window of the five area fixtures (the gate now checks the own area in BOTH windows)
+const ev12 = (name, p, ar, ms) => ({ c12: [[20, 26000, 2e6, 1]], c12e: ["V"], b12: [[20, 26000, name]], b12x: [{ p, di: 1, dn: "IMTIAZ", m: "project_id", e: "REGISTER_VERIFIED", ar, ms: ms || "" }] });
+const EV12 = { meta: { l12_to: "2026-08-31" }, areas: {
+  bukadra: { dld: ["Bukadra"], shared: false, ev: {}, devs: { imtiaz: { c12: [[20, 26000, 2e6, 1], [20, 26000, 2e6, 1]], c12e: ["V", "V"], b12: [[20, 26000, "Wynwood Horizon by Imtiaz"], [20, 26000, "IMTIAZ SYMPHONY TOWER"]], b12x: [{ p: 4133, di: 1, dn: "IMTIAZ", m: "project_id", e: "REGISTER_VERIFIED", ar: "HORIZON", ms: "" }, { p: 4193, di: 1, dn: "IMTIAZ", m: "exact_name", e: "REGISTER_VERIFIED", ar: "HORIZON", ms: "" }] } } },
+  wadialsafa5: { dld: ["Wadi Al Safa 5"], shared: false, ev: {}, devs: { imtiaz: { c12: [[20, 26000, 2e6, 1], [20, 26000, 2e6, 1]], c12e: ["V", "V"], b12: [[20, 26000, "Cove Grand Residence by Imtiaz"], [20, 26000, "Le Blanc Residence by Imtiaz"]], b12x: [{ p: 3774, di: 1, dn: "IMTIAZ", m: "project_id", e: "REGISTER_VERIFIED", ar: "DUBAI LAND RESIDENCE COMPLEX", ms: "" }, { p: 4174, di: 1, dn: "IMTIAZ", m: "project_id", e: "REGISTER_VERIFIED", ar: "DUBAI LAND RESIDENCE COMPLEX", ms: "" }] } } },
+  jebelali: { dld: ["Jabal Ali First"], shared: false, ev: {}, devs: { imtiaz: ev12("Westwood By Imtiaz", 2431, "AL FURJAN", "Al Furjan") } } } };
+const idx = mk({ evidence: EV12 });
 const proj = (index, name) => { const out = []; for (const s of Object.keys(index.areas)) for (const k of Object.keys(index.areas[s].devs)) { const d = index.areas[s].devs[k]; (d.b || []).forEach((b, i) => { if (b[2] === name) out.push({ slug: s, dev: k, b, x: (d.bx || [])[i], ce: (d.ce || [])[i], d }); }); } return out; };
 
 console.log("A - the builder carries the evidence for every project");
@@ -128,9 +135,9 @@ const harness = (IDXX, S) => {
 };
 const text = (h) => h.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
 const IDX = JSON.parse(JSON.stringify(idx));
-const beforeSplit = { projects: Object.values(IDX.devs).reduce((a, d) => a + d.profile.projects, 0) };
+const beforeSplit = { projects: Object.values(IDX.devs).reduce((a, d) => a + d.profile.projects, 0), n12: Object.values(IDX.areas).reduce((a, ar) => a + Object.values(ar.devs).reduce((b, d) => b + (d.b12 || []).length, 0), 0) };   // v382: the stub now has a 12-month list too, and attrSplit counts both windows
 const st = DM.attrSplit(IDX);
-ok(st && st.hidden === 13 && st.kept === beforeSplit.projects - 13, "attrSplit hides the projects the register does not confirm under a named developer (Claimed Heights, Doubtful Tower and the eleven name-only ones) and keeps the rest", JSON.stringify(st));
+ok(st && st.hidden === 13 && st.kept === beforeSplit.projects - 13 + beforeSplit.n12, "attrSplit hides the projects the register does not confirm under a named developer (Claimed Heights, Doubtful Tower and the eleven name-only ones) and keeps the rest", JSON.stringify(st));
 ok(DM.attrSplit(IDX) === null, "and is idempotent");
 ok(!IDX.devs.beyond || IDX.devs.beyond.profile.projects === 1, "Beyond's project count is its confirmed projects only (Kanyon)", JSON.stringify(IDX.devs.beyond));
 ok(IDX.areas.businessbay.devs.beyond.b.length === 1 && IDX.areas.businessbay.devs.beyond.b[0][2] === "Kanyon" && IDX.areas.businessbay.devs.beyond.c.length === 1 && IDX.areas.businessbay.devs.beyond.c[0][0] === 40, "Beyond in Business Bay: one project and one cell, 40 sales (Vento Tower's 54 and The Pad's 534 are outside the numbers)");
@@ -210,8 +217,8 @@ neg("The Pad marked REGISTER_VERIFIED under Beyond", (x) => inject(x, "The Pad",
 neg("most projects demoted to NAME_ONLY (share above the limit)", (x) => { for (const a of Object.values(x.areas)) for (const d of Object.values(a.devs)) (d.bx || []).forEach((b, i) => { if (i % 2 === 0) b.e = "NAME_ONLY"; }); }, /share not REGISTER_VERIFIED/);
 neg("Marina Vista demoted", (x) => { x.areas.dubaimarina.devs.emaar.bx[0].e = "NAME_ONLY"; }, /marina vista is not REGISTER_VERIFIED under emaar/);
 neg("Ocean Heights moved to another developer", (x) => { const a = x.areas.dubaimarina.devs; a.zzz = a.damac; delete a.damac; }, /ocean heights is not REGISTER_VERIFIED under damac/);
-neg("Imtiaz Symphony Tower back under the borrowed Sobha label", (x) => { x.areas.bukadra.devs.imtiaz.bx[0].a = "Sobha Hartland II (Bukadra)"; }, /Imtiaz Symphony Tower is shown in "Sobha Hartland II \(Bukadra\)", expected Meydan Horizon/);
-neg("Westwood By Imtiaz under Jebel Ali", (x) => { x.areas.jebelali.devs.imtiaz.bx[0].a = "Jebel Ali"; }, /Westwood by Imtiaz is shown in "Jebel Ali", expected Al Furjan/);
+neg("Imtiaz Symphony Tower back under the borrowed Sobha label", (x) => { x.areas.bukadra.devs.imtiaz.bx[0].a = "Sobha Hartland II (Bukadra)"; }, /Imtiaz Symphony Tower is shown in "Sobha Hartland II \(Bukadra\)" \(all years, bukadra\), expected Meydan Horizon/);
+neg("Westwood By Imtiaz under Jebel Ali", (x) => { x.areas.jebelali.devs.imtiaz.bx[0].a = "Jebel Ali"; }, /Westwood by Imtiaz is shown in "Jebel Ali" \(all years, jebelali\), expected Al Furjan/);
 neg("Cove Grand under Arabian Ranches III", (x) => { x.areas.wadialsafa5.devs.imtiaz.bx[0].a = "Arabian Ranches III / Dubai Land Residence Complex (Wadi Al Safa 5)"; }, /Cove Grand Residence by Imtiaz is shown in/);
 neg("evidence stripped (an index built without v373)", (x) => { for (const a of Object.values(x.areas)) for (const d of Object.values(a.devs)) { delete d.bx; delete d.ce; delete d.b12x; } }, /no attribution evidence/);
 neg("a fixture project missing from the index", (x) => { delete x.areas.dubaimarina.devs.damac; }, /ocean heights is not in the index/);
@@ -231,7 +238,7 @@ ok(r1.status === 0 && /ATTRIBUTION GATE: PASS/.test(r1.stdout) && fs.existsSync(
 ok(r2.status === 1 && /ATTRIBUTION GATE: FAIL/.test(r2.stdout) && fs.existsSync(path.join(dir, "bad.csv")), "CLI: the corrupted index exits 1 (and still writes the audit trail)", r2.stdout + r2.stderr);
 ok(r3.status === 2, "CLI: a missing file exits 2");
 fs.rmSync(dir, { recursive: true, force: true });
-ok(FIXTURES.stayOn.length === 8 && FIXTURES.absentFrom.length === 2 && FIXTURES.notVerifiedUnder.length === 2 && FIXTURES.verifiedUnder.length === 3 && FIXTURES.areaIs.length === 4, "all nine fixtures are in the script");
+ok(FIXTURES.stayOn.length === 8 && FIXTURES.absentFrom.length === 2 && FIXTURES.notVerifiedUnder.length === 2 && FIXTURES.verifiedUnder.length === 3 && FIXTURES.areaIs.length === 5, "all ten fixtures are in the script (v382: Le Blanc added, areas checked in both windows)");
 const { rows } = projectRows(idx);
 ok(rows.some((r) => r.dev_id === "_" && r.e === "UNVERIFIED") && rows.filter((r) => r.window === "all").length === Object.values(idx.areas).reduce((a, ar) => a + Object.values(ar.devs).reduce((b, d) => b + d.b.length, 0), 0), "the audit rows cover every project, including those under 'Developer not recorded'");
 
