@@ -141,9 +141,10 @@ async function picKind(key) {
   const t = (api.results || []).find((x) => norm(x.name) === "damachillstopanga");
   const C = t ? Object.fromEntries(t.criteria.map((c) => [c.k, c])) : {};
   const say = "per Najjuko, checked on site " + longDate(TODAY);
-  ok(t && C.private_pool && C.private_pool.v === true && C.private_pool.src.includes(say) && /some homes/.test(C.private_pool.src), "the Brief list: private pool answered from the broker - \"" + say + "\"", t && JSON.stringify(C.private_pool));
+  // v374: private pool and furnished are not offered in the Brief; the broker's notes for them stay on file but no row is built for them
+  ok(t && !C.private_pool && !C.furnished, "the Brief list: no private pool or furnished row (pulled), whatever the broker noted");
   ok(t && C.gym && C.gym.v === true && !/Najjuko/.test(C.gym.src), "the Brief list: the amenity file's gym yes is NOT overridden by the broker's no", t && JSON.stringify(C.gym));
-  ok(t && C.furnished && C.furnished.src.includes(say) && /come up often/.test(C.furnished.src), "the Brief list: furnishing carries the broker's note, still not known for the home");
+  ok(t && !JSON.stringify(api).includes("come up often"), "the Brief list: the broker's furnishing note is not shown");
   printed = [];
   const pr = await call("/brief_pdf?kind=dossier&keys=dld:damachillstopanga&mode=rent&beds=3&type=villa,townhouse&furnished=furnished&musts=private_pool,gym&key=" + CLIENT);
   const html = printed[0] || "";

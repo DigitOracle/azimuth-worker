@@ -52,7 +52,7 @@ import { canonicalOf, displayOf, resolve as devResolve, isCurated } from "./devc
 import { labelledName } from "./community_labels.js";   // v307
 import { evidenceSay, shownRent, windowOf, distSay, isCountableGym, FEW_LETTINGS } from "./brief_rules.js";   // v310 - the DAMAC Hills rules
 import { subOrigins } from "./brief.js";   // v310 R1
-import { amenIndex, amenFor, briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, FURNISHED_UNKNOWN, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent, ratingOf, EVIDENCE_MIN } from "./brief.js";
+import { amenIndex, amenFor, briefSearch, criteriaOf, mustsOf, rentStat, verdictOf, kindsOfType, BRIEF_CRITERIA, EXTRA_AREAS, areaSlugOf, BEDS_BASIS_SAY, rentFigure, pickRent, ratingOf, EVIDENCE_MIN } from "./brief.js";
 // v277 (Kendall, 1 Oct 2026): the register "left" estimate is OFF the client face - no "ESTIMATED ... LEFT" box on page 2, no
 // "Still filling" line on the one-sheet card. estimateLeft() stays in src/brief.js and the API still returns estimated_left; nothing
 // here prints it. In its place page 2 carries DEVELOPER AVAILABILITY where a developer's own sheet names the building (loadDevAvail /
@@ -207,7 +207,7 @@ export function parseQuery(url) {
   const one = (b) => (BEDS[b] ? b : (b === "0" ? "studio" : /^(any|every|\*)$/.test(b) ? "all" : null));
   const bl = [...new Set(String(sp.get("beds") || "1").toLowerCase().split(",").map((b) => one(b.trim())).filter(Boolean))];
   const bedsList = bl.includes("all") ? ["all"] : (bl.length ? bl : ["1"]);
-  const list = (k) => String(sp.get(k) || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).map((m) => (m === "pool" ? "community_pool" : m === "new" ? "modern" : m)).filter((m) => BRIEF_CRITERIA.some((c) => c[0] === m));
+  const list = (k) => String(sp.get(k) || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).filter((m) => BRIEF_CRITERIA.some((c) => c[0] === m));   // v374: an old link's pulled criteria (pool, pets, modern...) fall away
   const musts = [...new Set(list("musts"))];
   const areas = String(sp.get("areas") || "").split(",").map((a) => a.trim().toLowerCase().replace(/[^a-z0-9]/g, "")).filter(Boolean);
   return {
@@ -216,7 +216,6 @@ export function parseQuery(url) {
     mode: String(sp.get("mode") || "rent").toLowerCase(),
     beds: bedsList[0], bedsList,
     min: num(sp.get("min")), max: num(sp.get("max")), stretch: num(sp.get("stretch")),
-    furnished: ["furnished", "unfurnished"].includes(String(sp.get("furnished") || "")) ? String(sp.get("furnished")) : "either",
     musts, nice: [...new Set(list("nice"))].filter((m) => !musts.includes(m)),
     compare: sp.get("compare") === "1" && areas.length >= 2 && areas.length <= 3,
     type: String(sp.get("type") || "apartment").toLowerCase(),
@@ -737,7 +736,7 @@ function dossierPage1(C, rec, q, sub) {
     : "";
   // v292 (Kendall, 2 Oct: "unacceptable" - the building page said "Amenities: To follow"): the developer's list where there is one, then every
   // sourced must-have answer (yes AND no), each with its level - never "to follow" while a register, the facts file, the broker or Google says
-  const AM_ROWS = [["private_pool", "Private pool"], ["community_pool", "Community pool"], ["pets", "Pet-friendly"], ["gym", "Gym"], ["parking", "Parking"], ["balcony", "Balcony"], ["modern", "Newer build (2018 or later)"]];
+  const AM_ROWS = [["gym", "Gym"], ["parking", "Parking"], ["balcony", "Balcony"]];   // v374: pools, pets and newer-build are not offered
   const LVL = { community: "community", near: "close by", cluster: "this cluster", building: "this building", broker: "checked on site" };
   const row = (t, c) => '<div style="font-size:11.5px;color:' + c + ';line-height:1.35;">' + t + "</div>";
   const critRows = AM_ROWS.filter(([k]) => rec.crit && rec.crit[k] && (rec.crit[k].v === true || rec.crit[k].v === false))
@@ -779,13 +778,12 @@ function pictureSource(rec) {
 // Each criterion the client named (must, then nice to have, then the home type and furnishing they asked for): yes / no / not known,
 // with where the answer comes from, in plain English. "Not known" is said as such, never left blank and never turned into a no.
 const CRIT_NAME = Object.fromEntries(BRIEF_CRITERIA);
-export const briefAsked = (q) => !!((q.musts && q.musts.length) || (q.nice && q.nice.length) || (q.furnished && q.furnished !== "either") || /townhouse/.test(String(q.type || "")));
+export const briefAsked = (q) => !!((q.musts && q.musts.length) || (q.nice && q.nice.length) || /townhouse/.test(String(q.type || "")));
 export function criteriaRows(rec, q) {
   const rows = [];
   for (const k of q.musts || []) if (rec.crit && rec.crit[k]) rows.push([CRIT_NAME[k], "must", rec.crit[k]]);
   for (const k of q.nice || []) if (rec.crit && rec.crit[k]) rows.push([CRIT_NAME[k], "nice to have", rec.crit[k]]);
   if (/townhouse/.test(String(q.type || "")) && rec.crit && rec.crit.townhouse) rows.push(["townhouse", "asked", rec.crit.townhouse]);
-  if (q.furnished && q.furnished !== "either") rows.push([q.furnished, "asked", (rec.crit && rec.crit.furnished) || { v: null, src: FURNISHED_UNKNOWN }]);   // v291 CHECKLIST - the broker's furnishing note, when there is one
   return rows;
 }
 export const markWord = (v) => (v === true ? "&#10003; yes" : v === false ? "&#10007; no" : "");
@@ -817,21 +815,20 @@ export async function comparisonFor(env, q) {
   const sp = new URLSearchParams();
   sp.set("mode", "rent"); sp.set("beds", (q.bedsList || [q.beds]).join(",")); if (q.min) sp.set("min", String(q.min)); if (q.max) sp.set("max", String(q.max));
   if (q.stretch) sp.set("stretch", String(q.stretch)); sp.set("areas", q.areas.join(",")); sp.set("type", q.type);
-  sp.set("furnished", q.furnished || "either"); sp.set("musts", (q.musts || []).join(",")); sp.set("nice", (q.nice || []).join(",")); sp.set("compare", "1"); sp.set("limit", "1");
+  sp.set("musts", (q.musts || []).join(",")); sp.set("nice", (q.nice || []).join(",")); sp.set("compare", "1"); sp.set("limit", "1");
   const out = await briefSearch(env, sp, { owner: false, live: false });   // v291 - the comparison reads no per-home answer: no Google call
   return out.status === 200 && out.body.comparison ? { cols: out.body.comparison, window: out.body.window, as_of: out.body.as_of } : null;
 }
-const CMP_ROWS = [["matches", "Homes that match"], ["rent", "Typical rent, last 60 days"], ["types", "Home types"], ["pools", "Pools"], ["parks", "Parks and dog-friendly spaces"], ["schools", "Schools nearby"], ["newest", "Newest completion"]];
+const CMP_ROWS = [["matches", "Homes that match"], ["rent", "Typical rent, last 60 days"], ["types", "Home types"], ["schools", "Schools nearby"]];
 export function comparisonPage(C, q, cmp) {
   const cols = cmp.cols;
   const cell = (c) => !c || (c.v !== true && c.v !== false) ? "" : '<b style="color:' + (c.v === true ? "#2F6B55" : c.v === false ? "#9A3B3B" : MUTED) + ';">' + markWord(c.v) + "</b> " + esc(c.say || "") +
     (c.src ? '<div style="font-size:8.4px;color:' + MUTED + ';margin-top:2px;">' + esc(c.src) + "</div>" : "");
-  const cellHtml = (a, k) => { const c = a[k]; return k === "types" ? ["apartment", "townhouse", "villa"].some((t) => cell(c && c[t])) : k === "pools" ? ["private", "community"].some((t) => cell(c && c[t])) : !!cell(c); };
+  const cellHtml = (a, k) => { const c = a[k]; return k === "types" ? ["apartment", "townhouse", "villa"].some((t) => cell(c && c[t])) : !!cell(c); };
   const body = CMP_ROWS.filter(([k]) => cols.some((a) => cellHtml(a, k))).map(([k, label]) => '<tr><td style="padding:6px 8px;border-bottom:1px solid #E6E1D8;font-size:10.5px;font-weight:600;color:' + NAVY + ';vertical-align:top;width:150px;">' + label + "</td>" +
     cols.map((a) => {
       const c = a[k];
-      const h = k === "types" ? ["apartment", "townhouse", "villa"].map((t) => cell(c && c[t]) ? "<div>" + (t === "villa" ? "villa or townhouse" : t) + ": " + cell(c && c[t]) + "</div>" : "").join("")
-        : k === "pools" ? ["private", "community"].map((t) => cell(c && c[t]) ? "<div>" + t + ": " + cell(c && c[t]) + "</div>" : "").join("") : cell(c);
+      const h = k === "types" ? ["apartment", "townhouse", "villa"].map((t) => cell(c && c[t]) ? "<div>" + (t === "villa" ? "villa or townhouse" : t) + ": " + cell(c && c[t]) + "</div>" : "").join("") : cell(c);
       return '<td style="padding:6px 8px;border-bottom:1px solid #E6E1D8;font-size:10px;line-height:1.35;vertical-align:top;">' + (h || "&mdash;") + "</td>";
     }).join("") + "</tr>").join("");
   const head = '<tr style="background:' + NAVY + ';"><th style="padding:7px 8px;"></th>' + cols.map((a) => '<th style="text-align:left;padding:7px 8px;color:#FBFAF7;font-size:11px;font-weight:600;">' + esc(a.name) + "</th>").join("") + "</tr>";
@@ -938,7 +935,7 @@ function titleOf(C, q) {
 }
 // v289 - where the developer's page lists no amenities, the card says what the amenity facts file answers (img_amenities_<district>,
 // the same answers as the criteria), grouped by level: "Community (DAMAC Hills): community pool, pet-friendly, gym &middot; This building: parking"
-const AMEN_SHORT = { community_pool: "community pool", private_pool: "private pool", pets: "pet-friendly", gym: "gym", parking: "parking", balcony: "balconies" };
+const AMEN_SHORT = { gym: "gym", parking: "parking", balcony: "balconies" };   // v374: pools and pets are not offered
 export function amenLine(rec) {
   const lv = { building: [], cluster: [], community: [], near: [] }, wide = [];
   for (const k of Object.keys(AMEN_SHORT)) {

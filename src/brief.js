@@ -26,20 +26,21 @@ import { liveCtx, fillLive, LIVE_CRITS } from "./live_answers.js";   // v291 - g
 import { applyNearRule, completionFromFacts, evidenceSay, windowOf, sizeSane, nearestPlace, NEAR_FACT_M } from "./brief_rules.js";   // v310 - the DAMAC Hills rules
 import { foldArea, communitySlugOfArea } from "./community_labels.js";   // v314 - the DLD area -> district map the community labels use
 import { applyBrokerFacts, brokerFor, applyAnchorOverrides } from "./checklist_data.js";   // v291 CHECKLIST - Najjuko's on-site facts: below every register, above "not known"
-export const BRIEF_MUSTS = ["balcony", "metro", "pool", "gym", "parking", "new", "schools"];
+// v374 (Kendall, 7 Oct 2026): only what a register can say, or a picture can show, is offered. PULLED from every question, chip, filter and
+// placeholder: private pool, community pool, pet-friendly, newer or modern, long-term quality, furnished. The data stays; it is not offered.
+export const BRIEF_MUSTS = ["balcony", "metro", "gym", "parking", "schools"];
 // v282 (Kendall, 1 Oct 2026, a real client brief: "a furnished 2-3 bedroom townhouse, AED 240K a year, up to 300K for a modern,
 // well-furnished home; a private pool preferred, or a community pool; a pet-friendly community with dog-walking routes and play
 // areas; a quality home for a long stay"). Each item is asked three ways - must / nice to have / don't care - and answered per
 // building as true (a source says yes), false (a source says no) or null (NOT KNOWN). A must leaves a building out only on a
 // definite false; "not known" never filters; a nice-to-have only ranks. Every answer names its source.
 export const BRIEF_CRITERIA = [
-  ["private_pool", "private pool"], ["community_pool", "community pool"], ["pets", "pet-friendly (dog walks, play areas)"],
-  ["modern", "newer or modern (completed 2018 or later)"], ["long_term", "quality for a long-term stay"],
   ["metro", "near a metro"], ["schools", "schools nearby"], ["gym", "gym"], ["parking", "parking"], ["balcony", "balcony"],
 ];
+// v374: what an old shared link may still carry. Dropped silently on the way in: it is never answered, never an error, never shown.
+export const PULLED_CRITS = ["private_pool", "community_pool", "pets", "modern", "long_term", "pool", "new"];
 const CRIT_KEYS = BRIEF_CRITERIA.map((c) => c[0]);
 const CRIT_LABEL = Object.fromEntries(BRIEF_CRITERIA);
-const CRIT_ALIAS = { pool: "community_pool", new: "modern" };        // the v277 chips, still accepted on old links
 export const MODERN_FROM = 2018;
 export const HOME_TYPES = ["apartment", "townhouse", "villa", "any"];
 export const FURNISHED = ["furnished", "unfurnished", "either"];
@@ -188,9 +189,8 @@ export function parseBrief(sp) {
   let types = [...new Set(typesRaw.filter((t) => HOME_TYPES.includes(t)))];
   if (!types.length || types.includes("any") || ["apartment", "townhouse", "villa"].every((t) => types.includes(t))) types = ["any"];
   const type = types.join(",");
-  const furnished = String(sp.get("furnished") || "either").toLowerCase();
-  if (!FURNISHED.includes(furnished)) errs.push("furnished must be furnished, unfurnished or either");
-  const listOf = (k) => String(sp.get(k) || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).map((m) => CRIT_ALIAS[m] || m);
+  const furnished = "either";                                                   // v374: furnishing is not asked (no register records it); an old link's furnished= is ignored
+  const listOf = (k) => String(sp.get(k) || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).filter((m) => !PULLED_CRITS.includes(m));
   const mustsIn = listOf("musts"), niceIn = listOf("nice");
   const bad = mustsIn.concat(niceIn).filter((m) => !CRIT_KEYS.includes(m));
   if (bad.length) errs.push("unknown musts or nice-to-haves: " + bad.join(", ") + " (allowed: " + CRIT_KEYS.join(", ") + ")");
@@ -534,10 +534,8 @@ export function mustsOf(c, card, brochure, AM) {
     musts: {
       balcony: /balcon/i.test(am) ? true : null,
       metro,
-      pool: /pool/i.test(am) || (card && card.pools >= 1) ? true : null,
       gym: /\bgym|fitness/i.test(am) ? true : null,
       parking: /parking|car park/i.test(am) || (card && (card.car_parks > 0 || card.parking_allocated > 0)) ? true : null,
-      new: (() => { const cp = completionOf(card, brochure); return cp ? cp.year >= 2020 : null; })(),   // v282: the completion year, where one is on file
       schools,
     },
     nearest,
@@ -708,8 +706,8 @@ function whyOf(c, q) {
 
 // ---- v282: the area comparison (2 or 3 areas, compare=1) --------------------------------------------------------------
 // One column per area, each cell {v: true | false | null, say, src}: the typical rent for the brief's home type and bedrooms (the
-// rent index's whole-area figures, named projects or not), how many buildings match, the home types let there, pools, parks, schools
-// and the newest completion year. A cell says "not known" (v null) where no source answers; a count of none found is never a "no".
+// rent index's whole-area figures, named projects or not), how many buildings match, the home types let there and the schools
+// nearby. A cell is shown only where a source answers; a count of none found is never a "no" (v374: pools, parks and newest completion pulled).
 const inBox = (b, lon, lat) => b && lon != null && lat != null && lon >= b[0] && lon <= b[2] && lat >= b[1] && lat <= b[3];
 export function compareAreas({ q, RI, kept, cards, AM, DG, DN }) {
   const kinds = kindsOfType(q.type), beds = String(q.beds).split(",").map((b) => BEDS[b]).filter((b) => b != null);
@@ -749,31 +747,11 @@ export function compareAreas({ q, RI, kept, cards, AM, DG, DN }) {
       townhouse: th.length ? { v: true, say: th.length + " project" + (th.length === 1 ? "" : "s") + " named as townhouses (" + th.slice(0, 2).join(", ") + ")", src: "Land Department project names" }
         : { v: null, say: "not known: the register files townhouses as villas", src: "Ejari contracts " + W },
     };
-    // pools
-    const pp = mine.filter((c) => c.crit && c.crit.private_pool.v === true).length;
-    const cardList = Object.values(cards[slug] || {}).filter((x) => x && x.name);
-    const poolCards = cardList.filter((x) => x.pools >= 1).length, cpList = mine.filter((c) => c.crit && c.crit.community_pool.v === true).length;
-    col.pools = {
-      private: pp ? { v: true, say: pp + " listed home" + (pp === 1 ? "" : "s") + " with a private pool on the developer's page", src: "developer project pages" } : { v: null, say: "not known: no register records private pools", src: "Ejari, the units register and the developer pages we hold" },
-      community: poolCards || cpList ? { v: true, say: (poolCards ? poolCards + " building" + (poolCards === 1 ? "" : "s") + " with a pool on the Land Department record" : "") + (poolCards && cpList ? "; " : "") + (cpList ? cpList + " listed with a pool" : ""), src: "Land Department building records; developer pages" }
-        : { v: null, say: "not known: no building record here lists a pool" + (cardList.length ? "" : " (no building records for this area)"), src: "Land Department building records" },
-    };
-    // parks and dog-friendly spaces, schools - the amenity layer, inside the area's box or tagged with it
+    // v374: pools, parks and dog-friendly spaces, and the newest completion are no longer compared (no register says them; no picture is shown). Schools stay.
     const inArea = (a) => a.d === slug || inBox(box, a.lon, a.lat);
-    const parks = ((AM && AM.items) || []).filter((a) => a.k === "park" && inArea(a));
-    const acc = {}; for (const p of parks) acc[p.acc || "unknown"] = (acc[p.acc || "unknown"] || 0) + 1;
-    col.parks = parks.length ? { v: true, n: parks.length, say: parks.length + " park" + (parks.length === 1 ? "" : "s") + " (" + Object.entries(acc).map(([k, n]) => n + " " + k).join(", ") + ")" + (parks.some((p) => p.n && !/unnamed/i.test(p.n)) ? ": " + parks.filter((p) => p.n && !/unnamed/i.test(p.n)).slice(0, 2).map((p) => p.n).join(", ") : ""),
-      src: "the map's amenity layer (OpenStreetMap via Overture; access as tagged). Dog parks are not told apart from other parks there, and no register records pet rules." }
-      : { v: null, n: 0, say: "not known: none on the amenity layer here (none found is not proof of none)", src: "the map's amenity layer (OpenStreetMap)" };
     const schools = ((AM && AM.items) || []).filter((a) => a.k === "school" && inArea(a));
     col.schools = schools.length ? { v: true, n: schools.length, say: schools.length + " school" + (schools.length === 1 ? "" : "s") + ": " + schools.slice(0, 2).map((s) => s.n + (ratingOf(s.x) ? " (" + ratingOf(s.x) + ")" : "")).join(", "), src: "KHDA private schools register and the government schools map, on the amenity layer" }
       : { v: null, n: 0, say: "not known: none on the amenity layer here", src: "KHDA register on the amenity layer" };
-    // newest completion year on file
-    let newest = null;
-    for (const x of cardList) { const cp = completionOf(x, null); if (cp && (!newest || cp.year > newest.year)) newest = { year: cp.year, name: x.name }; }
-    for (const c of mine) { const cp = c.comp; if (cp && (!newest || cp.year > newest.year)) newest = { year: cp.year, name: c.name }; }
-    col.newest = newest ? { v: true, year: newest.year, say: newest.year + " (" + newest.name + ")", src: "Dubai Municipality building records (named apartment buildings; villa communities are not in them)" }
-      : { v: null, say: "not known: no completion year on file for this area", src: "Dubai Municipality building records" };
     return col;
   });
 }
@@ -969,11 +947,10 @@ export async function briefSearch(env, sp, opts) {
   if (droppedByMust) notes.push(droppedByMust + " building" + (droppedByMust === 1 ? "" : "s") + " left out because a source says a must-have is missing.");
   if (q.musts.length || q.nice.length) notes.push("Must-haves and nice-to-haves: each is answered yes, no or not known, with its source. A building is left out only where a source says no; not known never leaves a building out. Nice-to-haves only change the order. " +
     "Metro: straight-line to the nearest RTA station, within 1 km. Schools and parks: the app's amenity layer within 1 km (none found is not proof of none). " +
-    "Pools, gym, parking: the developer's own project page or the Land Department building record. Private pools and pet rules are in no register we hold. Newer or modern: completed " + MODERN_FROM + " or later on the Dubai Municipality building record. Long-term quality is not scored: no service-charge, maintenance or developer-record data is held per building.");
+    "Gym and parking: the developer's own project page or the Land Department building record. Balcony: the units register or the developer's page.");
   const amenDs = Object.keys(AMF).filter((d) => AMF[d]);
-  if (amenDs.length && (q.musts.length || q.nice.length)) notes.push("Pools, pets, gym, parking and balconies are also answered from the amenity facts file for " + amenDs.map((d) => DN[d] || d).join(", ") +
+  if (amenDs.length && (q.musts.length || q.nice.length)) notes.push("Gym, parking and balconies are also answered from the amenity facts file for " + amenDs.map((d) => DN[d] || d).join(", ") +
     " (KV img_amenities_<district>): the Land Department buildings and units registers, the developer's own pages, owners' association budgets and OpenStreetMap. Each answer names its source and says whether it is a building fact (this building's own record or page) or a community fact (the master community's, which every home in it shares). Not known means no source we hold says.");
-  if (q.furnished !== "either") notes.push("Furnished: not known for any home - the Ejari register does not record furnishing." + (owner ? " The owner view adds what listing-site adverts say, where the advertised-supply data carries it (furnished_hint); a client never sees it." : ""));
 
   // v291 - LIVE GOOGLE (src/live_answers.js): where registers, broker facts and the amenity file all leave gym, community pool or pets
   // not known, Google Places is asked now - first the community (one call per district per criterion), so the ranking counts it; then,
@@ -1009,7 +986,7 @@ export async function briefSearch(env, sp, opts) {
   const chosen = q.compare ? q.areas.flatMap((a) => kept.filter((c) => (c.sa || c.d) === a).slice(0, q.limit)) : kept.slice(0, q.limit);
   // v291 - the shown homes, each by its own sub-community; v292 - the owner's advertised-supply files are read at the same time
   await Promise.all([fillLive(LV, chosen.filter((c) => !c.areaFigure).map(liveItem), asked, { cluster: true }),
-    owner ? Promise.all([...new Set(chosen.map((c) => c.d).filter(Boolean))].map(async (d) => { PS[d] = await rd("pf_supply_" + d); })) : null]);
+    null]);                                                                     // v374: the owner's advertised-supply (furnished) read is gone with the furnished question
   if (LV.used) notes.push("Gym, community pool and dog park: where no register, broker fact or amenity file answers, Google Maps was asked live when this list was made (Places, not kept): a gym, a community or residence pool, or a dog park inside the home's own sub-community (its mapped homes, plus 150 m) answers yes as a cluster fact; else one inside the community's boundary answers yes as a community fact, with how far it is. Google finding none is never a no: it stays not known.");
   const rankIn = {};
   const results = chosen.map((c) => {
@@ -1024,9 +1001,7 @@ export async function briefSearch(env, sp, opts) {
     // v282 - the client's own criteria, each with its answer and source (musts, then nice-to-haves, then home type and furnishing)
     const crit = q.musts.map((k) => ({ k, label: CRIT_LABEL[k], level: "must", ...c.crit[k] })).concat(q.nice.map((k) => ({ k, label: CRIT_LABEL[k], level: "nice", ...c.crit[k] })));
     if (c.crit.townhouse && String(q.type).includes("townhouse")) crit.push({ k: "townhouse", label: "townhouse", level: "asked", ...c.crit.townhouse });
-    if (q.furnished !== "either") crit.push({ k: "furnished", label: q.furnished, level: "asked", v: null, src: (c.crit.furnished && c.crit.furnished.src) || FURNISHED_UNKNOWN });   // v291 CHECKLIST - the broker's note, when there is one
     r.criteria = crit;
-    if (owner && q.mode === "rent" && !c.areaFigure) r.furnished_hint = furnishedHint(c.d ? PS[c.d] : null, c, c.bed);   // OWNER ONLY - a client key never gets this field
     if (c.recordName && c.i != null) r.record_name = { name: c.recordName, agrees: c.agree || nameAgrees([c.name].concat(c.aliases), c.recordName) };
     if (c.disputed) r.disputed_bind = c.disputed;
     if (c.brochureKey) r.brochure = "/img/" + c.brochureKey.slice(4);

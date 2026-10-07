@@ -98,7 +98,7 @@ __setLiveFetch(async (u, o) => {
 
 console.log("v291 live Google answers (gym, community pool, dog park)");
 ok(inPoly([25.02, 55.25], RING) && !inPoly([25.04, 55.275], RING), "L0 the polygon test: inside is inside, Mudon is out");
-const Q = "mode=rent&beds=3&type=villa&max=240000&areas=" + D + "&musts=gym,community_pool,pets&limit=20";
+const Q = "mode=rent&beds=3&type=villa&max=240000&areas=" + D + "&musts=gym,community_pool,pets&limit=20";   // v374: only gym survives the old link
 seen = [];
 const j = await brief(Q);
 const by = {}; for (const r of j.results || []) by[r.name] = r;
@@ -113,17 +113,14 @@ ok(top && crit(top, "gym").v === null && crit(top, "gym").community_fact && crit
 ok(!/Fitness First Mudon|Old Gym/.test(j._raw), "L2b a gym outside the district polygon, or closed, is never named");
 ok(bel && crit(bel, "gym").level === "community" && /^Gym in DAMAC Hills on Google Maps \([^)]+\): Damac Hills - Gym\. No building outlines are on file for Bel Air, so this is the community's answer$/.test(crit(bel, "gym").src),
   "L3 Bel Air (no attributed footprints): the community's answer only, and it says so", JSON.stringify(crit(bel, "gym")));
-ok(car && crit(car, "community_pool").v === null && crit(car, "community_pool").community_fact && crit(car, "community_pool").community_fact.name === "Queens Meadow pool" && crit(car, "community_pool").community_fact.m > 500
-  && !/Carson Hotel Pool|Shisha|Urban Swim/.test(j._raw),
-  "L4 pools: a hotel pool, a restaurant and a swim academy never count; Queens Meadow's pool is 1.4 km from Carson, so it is the community's, not a yes for Carson", JSON.stringify(crit(car, "community_pool")));
+// v374: community pool and pets (dog park) are not offered; a link that still names them is answered for gym only, and no pool or dog-park call is made
+ok(car && !crit(car, "community_pool") && !crit(car, "pets") && !/Queens Meadow|Dog Park/.test(JSON.stringify(j.results)), "L4 v374: no pool or dog-park criterion on any row (pulled)", JSON.stringify(car && car.criteria));
 ok(ric && crit(ric, "gym").v === true && crit(ric, "gym").level === "building" && /units register/.test(crit(ric, "gym").src) && !crit(ric, "gym").live,
   "L5 a register answer is never overridden (Richmond: the units register's gymnasium)", JSON.stringify(crit(ric, "gym")));
-ok(car && crit(car, "pets").v === null && crit(car, "pets").community_fact && /Dog Park \| Damac Hills, about [\d.]+ km away/.test(crit(car, "pets").community_fact.say),
-  "L4b pets: the dog park inside DAMAC Hills is 2 km from Carson: the community's, not a yes for Carson, with the distance", JSON.stringify(crit(car, "pets")));
 // cost: 3 community calls + 3 for Carson + 3 for Topanga (+ Queens Meadow never asked: no home there); Bel Air and Richmond: none of their own
 const cl = (lat, lon) => seen.filter((s) => near(s.b, lat, lon)).length;
-ok(seen.length === 9 && cl(25.0225, 55.254) === 3 && cl(25.0305, 55.246) === 3 && cl(25.01525, 55.2605) === 3,
-  "L7 cost: one community call per criterion, at most 3 per sub-community: 9 in all for 4 homes and 3 criteria", seen.length + " calls: " + seen.map((s) => s.b.includedTypes[0] + "@" + s.b.locationRestriction.circle.center.latitude.toFixed(4) + "/" + s.b.locationRestriction.circle.radius).join(" "));
+ok(seen.length === 3 && cl(25.0225, 55.254) === 1 && cl(25.0305, 55.246) === 1 && cl(25.01525, 55.2605) === 1,
+  "L7 cost: one community call for gym, one per sub-community: 3 in all for 4 homes (pool and dog-park calls are gone)", seen.length + " calls: " + seen.map((s) => s.b.includedTypes[0] + "@" + s.b.locationRestriction.circle.center.latitude.toFixed(4) + "/" + s.b.locationRestriction.circle.radius).join(" "));
 ok(seen.every((s) => s.b.locationRestriction.circle.radius <= 1500) && seen.filter((s) => !near(s.b, 25.0225, 55.254)).every((s) => s.b.locationRestriction.circle.radius <= 800),
   "L7b radius: the community at most 1500 m, a sub-community at most 800 m");
 ok(seen.every((s) => s.h["X-Goog-Api-Key"] === GKEY && !s.u.includes(GKEY) && !s.b.toString().includes(GKEY)) && !j._raw.includes(GKEY),
@@ -140,9 +137,9 @@ for (const m of ["outside", "none", "error", "timeout"]) {
   const ms = Date.now() - t0;
   const cm = (jm.results || []).find((r) => r.name === "DAMAC HILLS - CARSON");
   const lives = allCrit(jm).filter((c) => c.live);
-  ok(cm && crit(cm, "gym").v === null && crit(cm, "community_pool").v === null && crit(cm, "pets").v === null && !lives.length && !allCrit(jm).some((c) => ["gym", "community_pool", "pets"].includes(c.k) && c.v === false)
+  ok(cm && crit(cm, "gym").v === null && !lives.length && !allCrit(jm).some((c) => ["gym"].includes(c.k) && c.v === false)
     && (jm.results || []).length === 4 && (m !== "timeout" || ms < 6000),
-    "L6 " + m + ": gym, community pool and pets stay NOT KNOWN (never no), all 4 homes still listed" + (m === "timeout" ? " - in " + ms + " ms (2 s per round)" : ""), JSON.stringify(cm && cm.criteria));
+    "L6 " + m + ": gym stays NOT KNOWN (never no), all 4 homes still listed" + (m === "timeout" ? " - in " + ms + " ms (2 s per round)" : ""), JSON.stringify(cm && cm.criteria));
 }
 MODE = "normal";
 
@@ -154,7 +151,7 @@ ok(seen.length === 0 && crit((jn.results || [])[0], "gym") && !allCrit(jn).some(
 
 // ---- L9 the PDF rows and the one-sheet --------------------------------------------------------------------------------------------
 seen = [];
-const pq = parseQuery(new URL("https://x/brief_pdf?kind=onesheet&keys=dld:damachillscarson,dld:damachillstopanga,dld:damachillsbelair&mode=rent&beds=3&type=villa&max=240000&musts=gym,community_pool,pets"));
+const pq = parseQuery(new URL("https://x/brief_pdf?kind=onesheet&keys=dld:damachillscarson,dld:damachillstopanga,dld:damachillsbelair&mode=rent&beds=3&type=villa&max=240000&musts=gym"));
 const C = await loadContext(env, pq, { need: { avail: false } });
 const rc = C.recs.find((r) => r.key === "dld:damachillscarson");
 const rows = rc ? criteriaRows(rc, pq) : [];
@@ -164,14 +161,14 @@ const sheet = oneSheetHtml(C, pq);
 const card1 = sheet.split('class="bcard"')[1] || "";
 ok(/&#10003; gym \(Carson Fitness Gym, in Carson \(Google Maps, asked live \d{1,2} [A-Z][a-z]{2} 20\d\d\)\)/.test(card1) && /This cluster: gym/.test(card1),
   "L9b the one-sheet card names the gym, where, and Google Maps", card1.replace(/<img[^>]*>/g, "").slice(0, 1600));
-ok(!sheet.includes(GKEY) && seen.length <= 9 && seen.length > 0, "L9c no key in the document; its own calls (" + seen.length + ") stay within 3 per criterion plus 3 per sub-community");
+ok(!sheet.includes(GKEY) && seen.length <= 3 && seen.length > 0, "L9c no key in the document; its own calls (" + seen.length + ") stay within one per sub-community plus the community");
 
 // ---- L9d the real document route (buildDocument: the live answers run alongside the amenity pages, then the page is drawn) -------------
 seen = [];
-const rd = await call(env, "/brief_pdf?kind=pack&keys=dld:damachillscarson,dld:damachillstopanga&mode=rent&beds=3&type=villa&max=240000&areas=" + D + "&musts=gym,community_pool,pets&format=html&key=" + CLIENT);
+const rd = await call(env, "/brief_pdf?kind=pack&keys=dld:damachillscarson,dld:damachillstopanga&mode=rent&beds=3&type=villa&max=240000&areas=" + D + "&musts=gym&format=html&key=" + CLIENT);
 const dh = await rd.text();
-ok(rd.status === 200 && dh.includes("Gym in Carson on Google Maps (asked live, ") && dh.includes("Carson Fitness Gym") && /In the wider community/.test(dh) && !/Dog park in DAMAC Hills on Google Maps/.test(dh) && !dh.includes(GKEY),
-  "L9d the Full pack (through /brief_pdf) prints the live answers with their source words and Google Maps, a far dog park as the community's, and no key", rd.status + " " + dh.replace(/<img[^>]*>/g, "").replace(/data:[^"']+/g, "").slice(0, 400));
+ok(rd.status === 200 && dh.includes("Gym in Carson on Google Maps (asked live, ") && dh.includes("Carson Fitness Gym") && !/Dog park|dog park|community pool/i.test(dh) && !dh.includes(GKEY),
+  "L9d the Full pack (through /brief_pdf) prints the live answers with their source words and Google Maps, no dog-park or pool line, and no key", rd.status + " " + dh.replace(/<img[^>]*>/g, "").replace(/data:[^"']+/g, "").slice(0, 400));
 // L7d a compare pack's area comparison (briefSearch with live: false) asks Google nothing of its own
 seen = [];
 const rc2 = await call(env, "/brief_pdf?kind=compare&keys=dld:damachillscarson&mode=rent&beds=3&type=villa&max=240000&areas=" + D + "&compare=1&musts=gym&format=html&key=" + CLIENT);
