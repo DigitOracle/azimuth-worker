@@ -23,6 +23,7 @@ import { kvJson } from "./brief.js";
 import { DEFAULT_SHORTLIST, shortlistName } from "./devmap_page.js";
 import { PHOSPHOR_LIGHT } from "./devmap_icons.js";
 import { BRIEF_KIT, esc, FOOTER_TEXT, WHATSAPP_NUMBER, HEADER_IMG_KEY, HEADER_JPG_KEY } from "./brief_docs.js";
+import { buildInvestorTiersPdf, parseInvestorParams } from "./investor_tiers_page.js";   // v376 - kind=investor_tiers and kind=investor_selector (new files; circular import, used only at call time)
 import { buildInvestorPdf } from "./devmap_investor.js";   // v339 - kind=investor (one developer in one area); circular import, used only at call time
 
 const { NAVY, GOLD, MUTED, MAPC, KY, KH, PT } = BRIEF_KIT;
@@ -125,7 +126,7 @@ export function parseParams(url) {
   const devs = sp.get("developers") == null ? null : String(sp.get("developers")).split(",").map((s) => s.toLowerCase().replace(/[^a-z0-9 -]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60)).filter(Boolean).slice(0, MAX_DEVELOPERS);
   const developer = String(sp.get("developer") || "").toLowerCase().replace(/[^a-z0-9 -]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
   const client = String(sp.get("client") || "").replace(/[<>&"\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
-  return { kind, mode, win, basis, developer, client, area: String(sp.get("area") || "").toLowerCase().replace(/[^a-z0-9]/g, ""), devs, bud: parseBudget(sp), format: String(sp.get("format") || "pdf").toLowerCase(), key: sp.get("key") || "" };
+  return { kind, mode, win, basis, developer, client, area: String(sp.get("area") || "").toLowerCase().replace(/[^a-z0-9]/g, ""), devs, bud: parseBudget(sp), inv: parseInvestorParams(sp), format: String(sp.get("format") || "pdf").toLowerCase(), key: sp.get("key") || "" };
 }
 
 // ------------------------------------------------------------------------------------------------ what the document is built from
@@ -771,6 +772,7 @@ export function pack(blocks) {
 
 export async function buildAreaPdf(env, p, opts) {
   if (p.kind === "investor") return buildInvestorPdf(env, p, opts);
+  if (p.kind === "investor_tiers" || p.kind === "investor_selector") return buildInvestorTiersPdf(env, p, opts);   // v376
   if (!["snapshot", "detailed"].includes(p.kind)) return { status: 400, body: { ok: false, reason: "kind must be snapshot, detailed or investor" } };
   if (p.mode !== "buy" && p.mode !== "rent") return { status: 400, body: { ok: false, reason: "mode must be buy or rent" } };
   const L = await loadData(env, p, opts);
@@ -808,7 +810,9 @@ export async function devmapPdfRoute(request, env, url, deps) {
   const doc = await buildAreaPdf(env, p, { origin: p.format === "html" ? url.origin : String(env.PUBLIC_ORIGIN || url.origin).replace(/\/+$/, "") });
   if (doc.status !== 200) return J(doc.body, doc.status);
   const hdr = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer", "X-Brief-Pages": String(doc.pages) };
-  if (p.format === "html") return new Response(doc.html, { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
+  if (doc.audit && p.format === "audit") return J(doc.audit);   // v376 - the audit record as JSON (the sidecar)
+  if (doc.audit) hdr["X-Investor-Tier"] = doc.audit.tier;
+  if (p.format === "html" || doc.htmlOnly) return new Response(doc.html, { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
   if (!env.BROWSER) return J({ ok: false, reason: "no Browser Rendering binding on this Worker; add format=html to see the document" }, 503);
   let pdf;
   try { pdf = await BRIEF_KIT.renderPdf(env, doc.html); } catch (e) {

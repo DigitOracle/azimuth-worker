@@ -1,0 +1,15 @@
+{
+ "version": 1,
+ "note": "Published figures that a report may print. Every row carries its source and date, copied from docs/INVESTOR_DNA_RESEARCH_07OCT2026.csv (naj-market-pulse). Only PUBLISHED and OUR DATA rows are allowed; SNIPPET ONLY, NO SOURCE FOUND and NOT IN OUR DATA rows (S09, S23, S26, S28, S29, S30, R06) are refused by the loader.",
+ "stats": [
+  { "id": "S01", "figure": "Resident investors were 56.6% of all Dubai property investors in 2025 (193.1 thousand investors in total).", "source": "Dubai Land Department, via Dubai Media Office", "date": "2026-01-12", "status": "PUBLISHED", "basis": "all investors" },
+  { "id": "S03", "figure": "Renters took on average 4.8 years to become property investors.", "source": "Dubai Land Department, via Dubai Media Office", "date": "2026-01-12", "status": "PUBLISHED", "basis": "renters who became investors" },
+  { "id": "S04", "figure": "UAE residents were 45% of the 59,075 new investors in the first half of 2025.", "source": "Dubai Land Department, via Dubai Media Office", "date": "2025-07-20", "status": "PUBLISHED", "basis": "new investors, a different base from the 56.6% of all investors" },
+  { "id": "S11", "figure": "Off-plan was 71% of 87,800 deals in the first half of 2026.", "source": "Provident Estate press release, via Zawya (a developer and broker, not the Land Department)", "date": "2026-07", "status": "PUBLISHED", "basis": "deals" },
+  { "id": "S13", "figure": "500 homes sold at US$10 million or more in 2025 (143 in the last quarter).", "source": "Knight Frank, Dubai residential market review Q4 2025", "date": "2026-02", "status": "PUBLISHED", "basis": "deals above US$10 million" },
+  { "id": "S15", "figure": "1,417 transactions above AED 15 million in the second quarter of 2025.", "source": "Betterhomes, via Gulf News", "date": "2025-07-20", "status": "PUBLISHED", "basis": "Betterhomes' own definition of luxury" },
+  { "id": "S21", "figure": "Of 70,000+ off-plan homes resold before handover (2009 to 2026), the median gross gain was 9.1% after a median 19 months; about 4.1% after roughly 5% costs. These are past medians of those who resold, not what any buyer will get.", "source": "Smart Bricks study, via Khaleej Times", "date": "2026-07-26", "status": "PUBLISHED", "basis": "a commercial study" },
+  { "id": "S25", "figure": "Dubai's population was 4,807,185 in late September 2026, against 4,580,300 at the end of 2025.", "source": "Dubai Data and Statistics Establishment, via Gulf News", "date": "2026-09", "status": "PUBLISHED", "basis": "reported by the press" },
+  { "id": "R01", "figure": "Off-plan was 74.3% of unit sales from 1 October 2025 to 30 September 2026 in our 44 area files (101,515 of 136,680); 70.8% the year before.", "source": "Our own count of Dubai Land Department sales records (44 area files, not the whole city)", "date": "2026-09-17", "status": "OUR DATA", "basis": "sale records, not buyers" }
+ ]
+}
