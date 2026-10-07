@@ -21,7 +21,7 @@ var COMMPOS=(function(){
     var n=0;Object.keys(d.p).forEach(function(k){var x=d.p[k];if(x&&C[x.c]&&typeof x.l==="string"&&x.l){P[k]=x;n++}});return n}
   // a card that PLOTPOS already positions is higher on the ladder: no answer here
   function higher(ev){return typeof PLOTPOS!=="undefined"&&PLOTPOS.has&&PLOTPOS.has(ev)}
-  function get(slug,name,ev){if(higher(ev))return null;var x=P[key(slug,name)];if(!x)return null;var c=C[x.c];return {lon:c.lon,lat:c.lat,bb:c.bb||null,km2:c.area_km2||null,label:x.l,evidence:"DERIVED",basis:"community_polygon",area:x.a||"",pn:x.pn||"",community:c.n||""}}
+  function get(slug,name,ev){if(higher(ev))return null;var x=P[key(slug,name)];if(!x)return typeof COMMPOSP!=="undefined"?COMMPOSP.get(ev):null;var c=C[x.c];return {lon:c.lon,lat:c.lat,bb:c.bb||null,km2:c.area_km2||null,label:x.l,evidence:"DERIVED",basis:"community_polygon",area:x.a||"",pn:x.pn||"",community:c.n||""}}
   function has(slug,name,ev){return !!get(slug,name,ev)}
   function why(d){var x=d?get(d.slug,d.name,d.ev):null;return x?x.label+" The marker shows the middle of the community, not the building.":""}
   function cardTag(slug,name,ev,ico){return has(slug,name,ev)?'<span class="tagl go">'+ico("map-pin","")+'Show on the map</span>':""}
