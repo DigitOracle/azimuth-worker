@@ -8,7 +8,7 @@
 #     each put is read back and counted. First failure stops everything and prints wrangler's own error and the rollback commands.
 # -DryRun does steps 1-2 only and writes nothing to KV.
 param([string]$Cards = "C:\Users\kwils\AppData\Local\Temp\claude\C--Users-kwils-Downloads\cfd69a2f-a784-4bee-87d0-17cb12cabffb\scratchpad\cov_cards",
-      [string]$Work = "", [switch]$DryRun)
+      [string]$Work = "", [switch]$DryRun, [switch]$SkipGate)
 . "$PSScriptRoot\_kv_common.ps1"
 Test-QuietWindow
 if (-not $Work) { $Work = Join-Path $env:TEMP ("cov_cards_publish_" + (Get-Date -Format "yyyyMMdd_HHmmss")) }
@@ -29,6 +29,15 @@ $sum = Get-Content $summary -Raw | ConvertFrom-Json
 $sum.districts | Format-Table slug, cards_before, replaced_previous_synthetic, added, dropped_already_answered, cards_after, new_file -AutoSize | Out-String | Write-Host
 Write-Host "buy_extra: $($sum.buy_extra.items_written) items | map_prices: $($sum.map_prices.items_before) -> $($sum.map_prices.items_after) (added: $($sum.map_prices.added -join '; '))"
 if ($sum.dropped_as_already_answered.Count) { Write-Host "dropped as already answered: $($sum.dropped_as_already_answered -join '; ')" }
+# v397g HARD STOP: the completeness gate (scripts\gate_guard.py) runs with the new file substituted for its layer and must pass before anything is written; -SkipGate publishes UNGATED and says so loudly
+$gg = Join-Path $PSScriptRoot "gate_guard.py"
+if ($SkipGate) { $skipMsg = "!!! COMPLETENESS GATE SKIPPED (-SkipGate): THIS PUBLISH IS UNGATED. Nothing has checked that it keeps every fixture and surface. !!!"; Write-Host $skipMsg -ForegroundColor Red; [Console]::Error.WriteLine($skipMsg) }
+elseif (-not (Test-Path $gg)) { Stop-Here "scripts\gate_guard.py is missing: refusing to publish without the completeness gate (-SkipGate overrides it, loudly)" }
+else {
+  $ggArgs = @("--layer", "map_prices", "--file", "$new\map_prices.json"); if ($DryRun) { $ggArgs += "--dry-run" }; $ggArgs += "--also"; $ggArgs += "buy_extra=$new\buy_extra.json"
+  & python $gg @ggArgs
+  if ($LASTEXITCODE -ne 0) { if ($DryRun) { Write-Host "DRY RUN: the completeness gate WOULD BLOCK this publish (table above)." -ForegroundColor Yellow } else { Stop-Here "the COMPLETENESS GATE blocked the publish (table above): nothing was written. -SkipGate overrides it, loudly." } }
+}
 if ($DryRun) { Write-Host "DRY RUN: nothing written. Files: $new"; exit 0 }
 Write-Host "3/3 putting"
 $rollback = @()
