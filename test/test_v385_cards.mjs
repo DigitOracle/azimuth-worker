@@ -26,7 +26,7 @@ const s0 = cut("function esc(t)", "function api("), s1 = cut("function fmt(n)", 
 const body = "var $=function(id){return document.getElementById(id)};var KEY=\"k\";var fetch=function(){return new Promise(function(){})};" + s0 + s1
   + cut("function clipName", "function devHead(") + cut("function icoSvg", "function evidenceHtml")
   + cut("var BLK={}", "var PULSE=0") + cut("function showSnap(p,pin)", "function focusProject") + cut("function tipHtml", "function drillHtml")
-  + cut("function invFromApi", "function invProjRow")
+  + cut("function invFromApi", "function pdfRowProf")
   + "; return {BLK:BLK,PJ:PJ,PDET:PDET,pjCard:pjCard,pjFeatures:pjFeatures,showSnap:showSnap,pdOpen:pdOpen,pdClose:pdClose,pdWhy:pdWhy,invIndex:invIndex,pjDetailHtml:pjDetailHtml,locate:locate};";
 const mkEl = (id) => ({ id, innerHTML: "", style: {}, className: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, focus() { this.focused = true; } });
 const els = {}, keys = [];
@@ -74,8 +74,8 @@ ok(/Sales in the window\s+7 sales; median AED 2,0\d\d per sq ft/.test(t1) && /se
 S.unit = "sqm"; const tsq = text(open("built")); S.unit = "sqft";
 ok(/median AED 22,000 per sq m/.test(tsq), "the median follows the chosen unit (sq m)");
 ok(/Area\s+Fixture District/.test(t1), "the project's own area label");
-ok(/href="\/developers_pdf\?kind=investor_selector&amp;project=INV-BUILT&amp;format=html&amp;key=k"/.test(p1) && /Investor PDF/.test(t1), "Investor PDF link when a facts record exists (same href as the card link)");
-{ const h = open("notyet"); ok(!/href="[^"]*investor_selector/.test(h) && /pdoff[^>]*aria-disabled=true[^>]*>[^<]*<svg[\s\S]*?<\/svg>Investor PDF/.test(h), "no Investor PDF link when no facts record exists (v389: a disabled button with its reason, not a link)"); }
+ok(/href="\/developers_pdf\?kind=investor_selector&amp;project=INV-BUILT&amp;format=html&amp;key=k"/.test(p1) && /Investor/.test(t1), "Investor link when a facts record exists (same href as the card link)");
+{ const h = open("notyet"); ok(!/href="[^"]*investor_selector/.test(h) && /pdoff[^>]*aria-disabled=true[^>]*>[^<]*<svg[\s\S]*?<\/svg>Investor/.test(h), "no Investor link when no facts record exists (v389: a disabled button with its reason, not a link)"); }
 ok(["Project", "Register project number", "Registered developer", "Registered units", "Sales in the window", "Area", "Map position"].every((l) => new RegExp(l + "[^]*?Source: ").test(text(open("built")))) && (p1.match(/Source: /g) || []).length >= 6 && (p1.match(/class=tag>/g) || []).length >= 6, "every line carries 'Source:' and an evidence tag");
 const tc = text(open("claimed"));
 ok(/Registered developer\s+Not recorded/.test(tc) && /Developer says \(website\); the register has no record of it/.test(tc) && /NOT_AVAILABLE/.test(tc), "no developer on the register: said plainly, with the developer's-own-website line");

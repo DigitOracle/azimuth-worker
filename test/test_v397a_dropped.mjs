@@ -68,7 +68,7 @@ console.log("D - the page");
   const body = NOTCONF_JS + "var DEFAULT_NAMES={};var $=function(id){return document.getElementById(id)};var KEY=\"k\";var fetch=function(){return new Promise(function(){})};" + s0 + s1
     + cut("function clipName", "function devHead(") + cut("function icoSvg", "function evidenceHtml")
     + cut("var BLK={}", "var PULSE=0") + cut("function showSnap(p,pin)", "function focusProject") + cut("function tipHtml", "function drillHtml")
-    + cut("function ncHtml", "// v375 - DELIVERY RECORD card") + cut("function pdfUrl", "function invProjRow")
+    + cut("function ncHtml", "// v375 - DELIVERY RECORD card") + cut("function pdfUrl", "function pdfRowProf")
     + "; return {pdOpen:pdOpen,pjCard:pjCard,PDET:PDET,ncHtml:ncHtml,invIndex:invIndex,NOTCONF:NOTCONF,BLK:BLK,esc:esc,pdWords:pdWords};";
   const mkEl = (id) => ({ id, innerHTML: "", style: {}, className: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, focus() {} });
   const els = {}, doc = { getElementById: (i) => els[i] || null, createElement: () => mkEl(""), body: { appendChild: (e) => { els[e.id] = e; } }, addEventListener: () => {} };

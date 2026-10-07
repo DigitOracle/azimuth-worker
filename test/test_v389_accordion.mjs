@@ -26,7 +26,7 @@ const s0 = cut("function esc(t)", "function api("), s1 = cut("function fmt(n)", 
 const body = "var $=function(id){return document.getElementById(id)};var KEY=\"k\";var fetch=function(){return new Promise(function(){})};" + s0 + s1
   + cut("function clipName", "function devHead(") + cut("function icoSvg", "function evidenceHtml")
   + cut("var BLK={}", "var PULSE=0") + cut("function showSnap(p,pin)", "function focusProject") + cut("function tipHtml", "function drillHtml")
-  + cut("function pdfUrl", "function invProjRow")
+  + cut("function pdfUrl", "function pdfRowProf")
   + "; return {pdfRow:pdfRow,pdAccToggle:pdAccToggle,pdBtnTap:pdBtnTap,pdTap:pdTap,pdBtn:pdBtn,pdDevKey:pdDevKey,BLK:BLK,PJ:PJ,PDET:PDET,pjCard:pjCard,pjFeatures:pjFeatures,showSnap:showSnap,pdOpen:pdOpen,pdClose:pdClose,pdWhy:pdWhy,invIndex:invIndex,pjDetailHtml:pjDetailHtml,locate:locate};";
 const mkEl = (id) => ({ id, innerHTML: "", style: {}, className: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, focus() { this.focused = true; } });
 const els = {}, keys = [];
@@ -86,7 +86,7 @@ const pan = open(cardAnon), bn = bar(pan), bb = bar(pb);   // the nameless card 
 open(cardBuilt);
 const btns = (b) => [...b.matchAll(/<(a|button) (?:type=button )?class="pdfbtn pdsm( pdoff)?"([^>]*)>([\s\S]*?)<\/\1>/g)].map((m) => ({ tag: m[1], off: !!m[2], attrs: m[3], label: text(m[4]) }));
 const bt = btns(bb);
-ok(bt.length === 3 && bt.map((b) => b.label).join("|") === "Investor PDF|Client sheet|Broker sheet", "three buttons at the bottom, in one row: Investor PDF, Client sheet, Broker sheet");
+ok(bt.length === 3 && bt.map((b) => b.label).join("|") === "Investor|Client|Broker", "three buttons at the bottom, in one row: Investor, Client, Broker");
 ok(/<div class="pdfrow pdsmrow">/.test(bb) && /\.pdsmrow\{[^}]*margin-top:8px/.test(css) && /\.pdfrow\{display:flex;flex-wrap:wrap/.test(css), "one wrapping row");
 ok(bt.every((b) => !b.off) && /href="\/developers_pdf\?kind=investor_selector&amp;project=INV-BUILT/.test(bt[0].attrs) && /href="\/brief_pdf\?kind=dossier&amp;keys=dist%3A77&amp;beds=all&amp;mode=rent&amp;key=k"/.test(bt[1].attrs) && /href="\/developers_pdf\?kind=snapshot&amp;area=dist&amp;/.test(bt[2].attrs) && /developers=x&amp;key=k"/.test(bt[2].attrs), "a project with a facts record, a building key and a mapped developer: all three are real links (investor selector, Brief dossier, developer snapshot for this area)");
 ok(bt.every((b) => /<svg class="pdfic"/.test(bb)) && /\.pdsm\{min-height:36px/.test(css), "icons from the existing set and a 36 px height");
@@ -99,7 +99,7 @@ ok(/<p class="note pdwhyn" role=status hidden><\/p>/.test(bn), "the reason has a
   const b = { parentNode: { parentNode: wrap }, getAttribute: (k) => (k === "data-why" ? "A client sheet needs a building with rent history; this project has no building on the map yet." : "") };
   P.pdBtnTap(b); ok(note.textContent === "A client sheet needs a building with rent history; this project has no building on the map yet." && note.hidden === false, "tapping a disabled button shows its one-line reason");
 }
-ok(/Investor PDF/.test(bn) && !/investor_selector/.test(bn), "the Investor button only enables with a facts record");
+ok(/>Investor</.test(bn) && !/investor_selector/.test(bn), "the Investor button only enables with a facts record");
 ok(!/Download PDF/.test(pn + pb), "no long 'Download PDF: ...' row inside the project details");
 ok(/No investor facts record for this project yet\./.test(bn) && /A client sheet needs a building with rent history; this project has no building on the map yet\./.test(bn) && /no broker sheet\./.test(bn), "plain reasons, no unexplained acronyms");
 ok(P.pdDevKey({ slug: "dist", name: "Built Tower" }) === "x" && P.pdDevKey({ slug: "dist", name: "Nobody Tower" }) === "" && P.pdDevKey({ slug: "dist", name: "" }) === "", "the broker sheet's developer is found by project name in the area, never guessed");
@@ -120,7 +120,7 @@ P.showSnap(Object.assign({ key: "dist|towerone" }, P.PJ["dist|towerone"]), true)
 console.log("E - the developer profile row");
 {
   const r = P.pdfRow("dist", ["x"], false, "x"), rb = btns(r);
-  ok(rb.length === 3 && rb.map((b) => b.label).join("|") === "Snapshot PDF|Detailed PDF|Investor PDF" && rb.every((b) => !b.off), "snapshot, detailed and Investor PDF: three small buttons, same destinations");
+  ok(rb.length === 3 && rb.map((b) => b.label).join("|") === "Snapshot|Detailed|Investor" && rb.every((b) => !b.off), "snapshot, detailed and Investor PDF: three small buttons, same destinations");
   ok(/kind=snapshot&amp;area=dist/.test(rb[0].attrs) && /kind=detailed&amp;area=dist/.test(rb[1].attrs) && /kind=investor&amp;area=dist&amp;developer=x/.test(rb[2].attrs), "the same three routes as before");
   const r2 = btns(P.pdfRow("dist", ["x", "y"], false, "")); ok(r2[2].off && /data-why="[^"]+"/.test(r2[2].attrs), "with no single developer the Investor PDF button is disabled with its reason, not hidden");
   ok(P.pdfRow("", ["x"], false, "x") === "", "no area, no row (unchanged)");
@@ -136,13 +136,13 @@ ok(/\.pdacb\{[^}]*min-height:44px/.test(css) && /\.pdacp\[hidden\]\{display:none
   ok(/@media\(min-width:761px\)\{#pjdet\{left:auto;right:16px;bottom:16px;width:420px/.test(css), "the 420 px width is only on wide screens");
 }
 ok(!EMOJI.test(pn + pb + bar(pb) + css), "no emoji in the panel, the buttons or the CSS");
-{ const t = text(pn + pb); ok(!/\b(PDF)\b(?!.*)/.test("") && /Investor PDF/.test(t), "labels are plain words (PDF is the one short term and every button says what the document is)"); }
+{ const t = text(pn + pb); ok(!/\b(PDF)\b(?!.*)/.test("") && /Investor/.test(t), "labels are plain words (PDF is the one short term and every button says what the document is)"); }
 ok(/<script>/.test(html), "page loads");
 { let okParse = true; try { new Function(js.replace(/^[\s\S]*?/, "")); } catch (e) { okParse = false; console.log(String(e)); } ok(okParse, "the whole page script parses"); }
 ok(!/\$\{|`/.test(js.slice(js.indexOf("function pdSec"), js.indexOf("function pjFeatures"))), "the new code has no backtick or substitution (the page script is a String.raw block)");
 // old behaviour: position cards and the three rungs
 ok(/class="pjc loc" data-pj="dist\|towerone"/.test(mk("Tower One", EV.tower, 35000, 10)) && /Show on the map/.test(mk("Tower One", EV.tower, 35000, 10)), "a card with a footprint still reads 'Show on the map'");
 ok(/data-pd="[^"]+"/.test(cardNotyet) && /Project details/.test(cardNotyet), "a card with no position still opens the project details");
-ok(/function invCardLink/.test(js) && /Investor PDF<\/a>/.test(js), "the Investor PDF link on the project cards (v376/v383) is untouched");
+ok(/function docRow/.test(js) && !/function invCardLink/.test(js) && !/Investor PDF/.test(js.replace(/\/\/[^\n]*/g, "")), "v398: the project cards use the shared docRow (no lone Investor PDF link function)");
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

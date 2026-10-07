@@ -7,7 +7,7 @@ const m = html.match(/function pdfRowProf\([^)]*\)\{[^\n]*/);
 ok(!!m, "pdfRowProf is in the page");
 ok(m && !/invProjRow\(/.test(m[0]), "the profile header does not call the per-project button row", m && m[0].slice(0, 260));
 ok(m && /pdfRow\(sl,\[k\],S\.screen===3,k\)/.test(m[0]), "the developer-level row (snapshot, detailed, Investor PDF) is still there");
-ok(/function invCardLink\(/.test(html) && /pjw/.test(html), "project cards still carry their own Investor PDF link");
+ok(/function docRow\(/.test(html) && /pjw/.test(html) && /docRow\(d,"card"\)/.test(html), "project cards still carry their own Investor button (v398: via the shared docRow)");
 const pf = html.indexOf("function profileHtml(k)");
 const body = html.slice(pf, html.indexOf("\nfunction ", pf + 30));
 const iCards = body.indexOf("areaCardsHtml(p,k)"), iPdf = body.indexOf("pdfRowProf(k,p)", iCards), iPdfFirst = body.indexOf("pdfRowProf(k,p)");

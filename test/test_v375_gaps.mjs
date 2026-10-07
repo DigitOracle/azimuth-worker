@@ -134,7 +134,7 @@ const harness = (jsSrc, IDXX, S, withDelay) => {
   const s0 = cut("function esc(t)", "function api("), s1 = cut("function fmt(n)", "(function(){var b=new URLSearchParams(location.search).get(\"bounds\")");
   const s4 = cut("var STATS={},IXC={};", "function features()") + cut("var MON=", "function barsSvg(");
   const s3 = cut("var DRILLSET=null", "function devTier(k)");
-  const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", "EVI", "innerWidth", "var fetch=function(){return new Promise(function(){})};" + s0 + s1 + s4 + cut("function clipName", "function devHead(") + cut("function bar(arr", "function devRow(") + s3 +
+  const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", "EVI", "innerWidth", "var KEY=\"k\";var fetch=function(){return new Promise(function(){})};" + s0 + s1 + s4 + cut("function clipName", "function devHead(") + cut("function bar(arr", "function devRow(") + s3 +
     "; return {profileHtml:profileHtml,evidenceHtml:evidenceHtml" + (withDelay ? ",delayHtml:delayHtml,delayRow:delayRow" : "") + "};");
   return fn(DM, IDXX, S, ["#c5a56a", "#2f8a7f", "#3987e5", "#8a9a96"], {}, () => {}, () => {}, () => {}, PHOSPHOR_LIGHT, 1200);
 };
@@ -192,8 +192,8 @@ const oldHtml = old.devmapHtml("k", { NAJ_NAV_CSS: "", NAJ_FONTS: "", najNav: ()
 const oldJs = oldHtml.slice(oldHtml.indexOf("<script>", oldHtml.indexOf("maplibre-gl.js")) + 8, oldHtml.lastIndexOf("</script>"));
 const Pold = harness(oldJs, mkIdx(), { evOpen: false, prof: null, drill: null, parea: null, sel: "a", unit: "sqft", win: "all" }, false);
 const Pnew = harness(js, mkIdx(), { evOpen: false, prof: null, drill: null, parea: null, sel: "a", unit: "sqft", win: "all" }, true);
-// v385: a card with no map position is now a 'Project details' button instead of a div; that one change is normalised away so every other character is still compared
-const v385 = (h) => String(h).replace(/<button type=button class="pjc noloc"[^>]*>([^]*?)<\/button>/g, '<div class="pjc noloc">$1</div>').replace(/<span class="tagl pd">[^]*?<\/span>/g, "");
+// v385: a card with no map position is now a 'Project details' button instead of a div; that one change is normalised away so every other character is still compared ; v398: the three document buttons under each card (docRow) are normalised away too
+const v385 = (h) => String(h).replace(/<div class=pjw>(<button[^]*?<\/button>)<div class="pdbar pdcard">[^]*?<\/p><\/div><\/div>/g, "$1").replace(/<button type=button class="pjc noloc"[^>]*>([^]*?)<\/button>/g, '<div class="pjc noloc">$1</div>').replace(/<span class="tagl pd">[^]*?<\/span>/g, "");
 for (const k of ["x", "y", "w", "z"]) ok(v385(Pold.profileHtml(k)) === v385(Pnew.profileHtml(k)),"developer " + k + ": the profile with no delay file is identical, character for character, to v373's");
 const Pnull = harness(js, mkIdx(), { evOpen: false, prof: null, drill: null, parea: null, sel: "a", unit: "sqft", win: "all", delay: {} }, true);
 ok(v385(Pnull.profileHtml("x")) === v385(Pold.profileHtml("x")),"an empty delay file ({}) changes nothing either");

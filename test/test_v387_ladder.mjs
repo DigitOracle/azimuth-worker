@@ -100,7 +100,7 @@ const s0 = cut("function esc(t)", "function api("), s1 = cut("function fmt(n)", 
 const body = (mods) => "var $=function(id){return document.getElementById(id)};var KEY=\"k\";var fetch=function(){return new Promise(function(){})};" + (mods.plot ? PLOTPOS_JS : "") + (mods.comm ? COMMPOS_JS : "") + s0 + s1
   + cut("function clipName", "function devHead(") + cut("function icoSvg", "function evidenceHtml")
   + cut("var BLK={}", "var PULSE=0") + cut("function showSnap(p,pin)", "function focusProject") + cut("function tipHtml", "function drillHtml")
-  + cut("function invFromApi", "function invProjRow")
+  + cut("function invFromApi", "function pdfRowProf")
   + "; return {BLK:BLK,PJ:PJ,PDET:PDET,pjCard:pjCard,pdOpen:pdOpen,pdClose:pdClose,pdWhy:pdWhy,invIndex:invIndex,pjDetailHtml:pjDetailHtml,locate:locate" + (mods.plot ? ",PLOTPOS:PLOTPOS" : "") + (mods.comm ? ",COMMPOS:COMMPOS" : "") + "};";
 const mkEl = (id) => ({ id, innerHTML: "", style: {}, className: "", offsetHeight: 300, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, focus() { this.focused = true; } });
 const mkMap = () => { const m = { src: {}, layers: [], flown: [], getSource(n) { return m.src[n] || null; }, addSource(n, o) { m.src[n] = { data: o.data, setData(d) { this.data = d; } }; }, addLayer(l) { m.layers.push(l); }, isStyleLoaded: () => true, flyTo(o) { m.flown.push(o); } }; return m; };

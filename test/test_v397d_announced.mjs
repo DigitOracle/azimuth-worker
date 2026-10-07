@@ -86,7 +86,7 @@ console.log("C - the page");
   const body = NOSALES_JS + ANNOUNCED_JS + PLOTPOS_JS + "var $=function(id){return document.getElementById(id)};var KEY=\"k\";var fetch=function(){return new Promise(function(){})};" + s0 + s1
     + cut("function clipName", "function devHead(") + cut("function icoSvg", "function evidenceHtml")
     + cut("var BLK={}", "var PULSE=0") + cut("function showSnap(p,pin)", "function focusProject") + cut("function tipHtml", "function drillHtml")
-    + cut("function nsHtml", "// v375 - DELIVERY RECORD card") + cut("function pdfUrl", "function invProjRow")
+    + cut("function nsHtml", "// v375 - DELIVERY RECORD card") + cut("function pdfUrl", "function pdfRowProf")
     + "; return {pdOpen:pdOpen,PDET:PDET,nsHtml:nsHtml,anHtml:anHtml,invIndex:invIndex,ANNOUNCED:ANNOUNCED,BLK:BLK};";
   const mkEl = (id) => ({ id, innerHTML: "", style: {}, className: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, focus() {} });
   const els = {}, doc = { getElementById: (i) => els[i] || null, createElement: () => mkEl(""), body: { appendChild: (e) => { els[e.id] = e; } }, addEventListener: () => {} };

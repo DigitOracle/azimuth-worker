@@ -22,7 +22,7 @@ const s0 = cut("function esc(t)", "function api("), s1 = cut("function fmt(n)", 
 const s4 = cut("var STATS={},IXC={};", "function features()") + cut("var MON=", "function barsSvg(");
 const s3 = cut("var DRILLSET=null", "function devTier(k)");
 const S = { evOpen: false, prof: null, drill: null, parea: null, sel: "a", unit: "sqft", win: "all" };
-const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", "EVI", "innerWidth", "var fetch=function(){return new Promise(function(){})};" + s0 + s1 + s4 + cut("function clipName", "function devHead(") + cut("function bar(arr", "function devRow(") + s3 + "; return {profileHtml:profileHtml,drillHtml:drillHtml,setDrill:setDrill,areaProjs:areaProjs,lockProjs:lockProjs,dimOf:dimOf,openProf:openProf,areaPanelHtml:areaPanelHtml,prof:prof};");
+const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", "EVI", "innerWidth", "var KEY=\"k\";var fetch=function(){return new Promise(function(){})};" + s0 + s1 + s4 + cut("function clipName", "function devHead(") + cut("function bar(arr", "function devRow(") + s3 + "; return {profileHtml:profileHtml,drillHtml:drillHtml,setDrill:setDrill,areaProjs:areaProjs,lockProjs:lockProjs,dimOf:dimOf,openProf:openProf,areaPanelHtml:areaPanelHtml,prof:prof};");
 const P = fn(DM, IDX, S, ["#c5a56a", "#2f8a7f", "#3987e5", "#8a9a96"], {}, () => {}, () => {}, () => {}, PHOSPHOR_LIGHT, 1200);
 const text = (h) => h.replace(/<title>[^<]*<\/title>/g, "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
 

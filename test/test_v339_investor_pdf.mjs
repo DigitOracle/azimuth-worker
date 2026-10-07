@@ -138,8 +138,8 @@ console.log("the model and the request");
 console.log("the entry point on the page");
 {
   const h = devmapHtml({}) + "";
-  ok(/Investor PDF/.test(h) && /kind=investor&area=/.test(h), "the Investor PDF button is in the developers page script");
-  ok(/class=pdfbtn[^>]*>'\+icoSvg\('chart-bar','pdfic'\)\+'Investor PDF/.test(h), "it carries an icon and the same button style");
+  ok(/'Investor'/.test(h) && /kind=investor&area=/.test(h), "the Investor button is in the developers page script (v398: short label)");
+  ok(/class=pdfbtn[^>]*>'\+icoSvg\('chart-bar','pdfic'\)\+'Investor'/.test(h) || /pdBtn\('chart-bar','Investor'/.test(h), "it carries an icon and the same button style (v398: pdBtn, short label)");
 }
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

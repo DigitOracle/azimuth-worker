@@ -146,7 +146,7 @@ ok(pkey("Chelsea Residences by DAMAC") === pkey("Chelsea Residences"), "pkey: th
 const html = devmapHtml("k", deps);
 const js = (html.match(/<script>([\s\S]*?)<\/script>/g) || []).map((s) => s.replace(/^<script>|<\/script>$/g, "")).sort((a, b) => b.length - a.length)[0];
 const grab = (name) => { const m = new RegExp("^function " + name + "\\(.*$", "m").exec(js); return m ? m[0] : ""; };
-const fnNames = ["pkey", "invFromApi", "invIndex", "invFind", "invHref", "invCardLink", "invProjRow"];
+const fnNames = ["pkey", "invFromApi", "invIndex", "invFind", "invHref"];   // v398: invCardLink and invProjRow (dead since v383) are gone; every surface uses docRow, matching stays in invFind
 ok(fnNames.every((n) => grab(n)), "the page script carries the matching and button functions", fnNames.filter((n) => !grab(n)).join());
 ok(html.includes("function pjCard0") && /function pjCard\(slug,name,ppsm,n,extra,nameDef,ev\)/.test(js), "project cards: pjCard wraps the unchanged card (pjCard0) and takes the evidence");
 {
@@ -155,7 +155,7 @@ ok(html.includes("function pjCard0") && /function pjCard\(slug,name,ppsm,n,extra
 }
 const mk = (apiJson, areas) => {
   const S = { inv: null }, IDX = { areas };
-  const src = fnNames.map(grab).join("\n") + "\nS.inv=invFromApi(API);invIndex();return {S:S, invProjRow:invProjRow, invCardLink:invCardLink, invFind:invFind};";
+  const src = fnNames.map(grab).join("\n") + "\nS.inv=invFromApi(API);invIndex();return {S:S, invFind:invFind, invHref:invHref};";
   return new Function("S", "IDX", "API", "esc", "icoSvg", "KEY", src)(S, IDX, apiJson, (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;"), () => "<svg/>", "KEY1");
 };
 const API = { cols: ["id", "name", "brand", "pn"], rows: ROWS.map((r) => [r[0], r[1], r[2] === r[1] ? "" : r[2], r[3]]), projects: [] };
@@ -164,21 +164,21 @@ const AREAS = { one: { devs: { acme: {
   bx: [{ p: 1001 }, { p: 7777 }, { p: null }, { p: 4001 }],
   b12: [[5, 1000, "Alpha Tower by Acme"]], b12x: [{ p: 1001 }] } } } };
 {
-  const g = mk(API, AREAS), row = g.invProjRow("acme");
-  const hrefs = [...row.matchAll(/project=([a-z0-9-]+)&amp;format|project=([a-z0-9-]+)&format/g)].map((m) => m[1] || m[2]);
-  ok(hrefs.join() === "alpha-tower-1001,solo-4001", "profile: one button per matching project; by number (Alpha Tower, Solo); the same project in both windows once; 'Alpha Tower 2' with number 7777 (not in the index) and 'Twin' (two projects) get none", hrefs.join() + " :: " + row.slice(0, 300));
-  ok(/Investor PDF: Alpha Tower</.test(row) && /Investor PDF: Solo</.test(row) && /kind=investor_selector/.test(row) && /key=KEY1/.test(row), "profile: the button reads 'Investor PDF: <project>' and opens the selector with the same page key");
-  ok(g.invProjRow("nobody") === "", "profile: a developer with no projects in the index has no row");
+  const g = mk(API, AREAS), d = AREAS.one.devs.acme;
+  const ids = d.b.map((x, i) => { const q = g.invFind(x[2], d.bx[i]); return q ? q.id : ""; }).filter(Boolean);
+  ok(ids.join() === "alpha-tower-1001,solo-4001", "matching per project: by number (Alpha Tower, Solo); 'Alpha Tower 2' with number 7777 (not in the index) and 'Twin' (two projects) get none", ids.join());
+  const hr = g.invHref("alpha-tower-1001");
+  ok(/kind=investor_selector/.test(hr) && /key=KEY1/.test(hr), "the link opens the selector with the same page key");
 }
 {
   const AREAS2 = { one: { devs: { acme: { b: [[10, 1000, "Alpha Tower"], [10, 1000, "Solo"]] } } } };    // an older index: no evidence at all, names only
-  const g = mk(API, AREAS2), row = g.invProjRow("acme");
-  ok((row.match(/Investor PDF: /g) || []).length === 2, "profile: an index without the v373 evidence falls back to the exact normalised name");
-  ok(g.invCardLink("Solo", { p: 4001 }).includes("solo-4001") && g.invCardLink("Solo", { p: 1001 }).includes("alpha-tower-1001") && g.invCardLink("Twin", null) === "" && g.invCardLink("Solo", { p: 12345 }) === "" && g.invCardLink("", null) === "", "project card: the link follows the project number first, then the unique name, otherwise nothing");
+  const g = mk(API, AREAS2), idOf = (n, e) => { const q = g.invFind(n, e); return q ? q.id : ""; };
+  ok(idOf("Alpha Tower", null) === "alpha-tower-1001" && idOf("Solo", null) === "solo-4001", "an index without the v373 evidence falls back to the exact normalised name");
+  ok(idOf("Solo", { p: 4001 }).includes("solo-4001") && idOf("Solo", { p: 1001 }).includes("alpha-tower-1001") && idOf("Twin", null) === "" && idOf("Solo", { p: 12345 }) === "" && idOf("", null) === "", "project card: the match follows the project number first, then the unique name, otherwise nothing");
   const empty = mk({ cols: [], rows: [], projects: [] }, AREAS2);
-  ok(empty.S.inv === null && empty.invProjRow("acme") === "" && empty.invCardLink("Solo", null) === "", "nothing published: no button anywhere");
+  ok(empty.S.inv === null && empty.invFind("Solo", null) === null, "nothing published: no match anywhere");
   const legacy = mk({ rows: [], projects: [{ id: "chelsea-residences-by-damac", name: "Chelsea Residences", brand: "Chelsea Residences by DAMAC" }] }, { one: { devs: { damac: { b: [[10, 1000, "Chelsea Residences by DAMAC"]] } } } });
-  ok(/Investor PDF: Chelsea Residences</.test(legacy.invProjRow("damac")), "v378 behaviour kept: Chelsea from the single key still gets its button on the developer profile");
+  ok((legacy.invFind("Chelsea Residences by DAMAC", null) || {}).id === "chelsea-residences-by-damac", "v378 behaviour kept: Chelsea from the single key still matches by name");
 }
 
 // ------------------------------------------------------------------------------------------------ every tier and preset builds from the fixtures; the text guard and the locked core hold

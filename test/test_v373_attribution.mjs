@@ -130,7 +130,7 @@ const harness = (IDXX, S) => {
   const s0 = cut("function esc(t)", "function api("), s1 = cut("function fmt(n)", "(function(){var b=new URLSearchParams(location.search).get(\"bounds\")");
   const s4 = cut("var STATS={},IXC={};", "function features()") + cut("var MON=", "function barsSvg(");
   const s3 = cut("var DRILLSET=null", "function devTier(k)");
-  const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", "EVI", "innerWidth", "var fetch=function(){return new Promise(function(){})};" + s0 + s1 + s4 + cut("function clipName", "function devHead(") + cut("function bar(arr", "function devRow(") + s3 + "; return {profileHtml:profileHtml,areaProjs:areaProjs,lockProjs:lockProjs,ncHtml:ncHtml,areaPanelHtml:areaPanelHtml,prof:prof,srcLine:srcLine};");
+  const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", "EVI", "innerWidth", "var KEY=\"k\";var fetch=function(){return new Promise(function(){})};" + s0 + s1 + s4 + cut("function clipName", "function devHead(") + cut("function bar(arr", "function devRow(") + s3 + "; return {profileHtml:profileHtml,areaProjs:areaProjs,lockProjs:lockProjs,ncHtml:ncHtml,areaPanelHtml:areaPanelHtml,prof:prof,srcLine:srcLine};");
   return fn(DM, IDXX, S, ["#c5a56a", "#2f8a7f", "#3987e5", "#8a9a96"], {}, () => {}, () => {}, () => {}, PHOSPHOR_LIGHT, 1200);
 };
 const text = (h) => h.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");

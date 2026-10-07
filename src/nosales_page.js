@@ -1,7 +1,7 @@
 // v392 - "LAUNCHED, NO REGISTERED SALES YET" on the Developers-by-area page (the data is src/nosales.js + KV img_devmap_nosales).
 // The developer index builds a project card only from a project with settled sales, so a launched project with none (The Archive by Imtiaz, KORE by Imtiaz and about 770 others) had no card at all.
 // In each developer's profile this module adds ONE collapsed group after the area cards: "Registered, no unit sales yet (N)". Each card opens the same Project details panel as every
-// other card (register facts, developer, area and position; the plot or community position and the Investor PDF button where they exist). When an area card is selected the group is
+// other card (register facts, developer, area and position; the plot or community position and the three document buttons). When an area card is selected the group is
 // filtered to that area. These projects are NEVER counted: not in a total, a price band, the scale word or an area count (the group sits outside every number, like "Not confirmed by the register").
 // Absent file = the page exactly as v390: every hook in src/devmap_page.js is typeof NOSALES !== "undefined" and every answer is empty without data.
 // The page script gets this module ahead of its own script (NOSALES_JS defines the global NOSALES). String.raw, no substitutions and no backticks; checked with node --check by test/test_v392_nosales.mjs.

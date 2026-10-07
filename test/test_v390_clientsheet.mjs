@@ -26,7 +26,7 @@ const s0 = cut("function esc(t)", "function api("), s1 = cut("function fmt(n)", 
 const body = "var $=function(id){return document.getElementById(id)};var KEY=\"k\";var fetch=function(){return new Promise(function(){})};" + s0 + s1
   + cut("function clipName", "function devHead(") + cut("function icoSvg", "function evidenceHtml")
   + cut("var BLK={}", "var PULSE=0") + cut("function showSnap(p,pin)", "function focusProject") + cut("function tipHtml", "function drillHtml")
-  + cut("function pdfUrl", "function invProjRow")
+  + cut("function pdfUrl", "function pdfRowProf")
   + "; return {pdfRow:pdfRow,pdAccToggle:pdAccToggle,pdBtnTap:pdBtnTap,pdTap:pdTap,pdBtn:pdBtn,pdDevKey:pdDevKey,BLK:BLK,PJ:PJ,PDET:PDET,pjCard:pjCard,pjFeatures:pjFeatures,showSnap:showSnap,pdOpen:pdOpen,pdClose:pdClose,pdWhy:pdWhy,invIndex:invIndex,pjDetailHtml:pjDetailHtml,locate:locate};";
 const mkEl = (id) => ({ id, innerHTML: "", style: {}, className: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, focus() { this.focused = true; } });
 const els = {}, keys = [];
@@ -77,7 +77,7 @@ console.log("A - the price band in the always-visible header");
 console.log("B - the Client sheet button reads the building key");
 {
   const pb = open(mk("Built Tower", withBk("77"), 22000, 7)), b = btns(bar(pb));
-  ok(b.length === 3 && b[1].label === "Client sheet" && !b[1].off && b[1].tag === "a", "with a building key the Client sheet button is a real link");
+  ok(b.length === 3 && b[1].label === "Client" && !b[1].off && b[1].tag === "a", "with a building key the Client sheet button is a real link");
   const href = (b[1].attrs.match(/href="([^"]+)"/) || [])[1].replace(/&amp;/g, "&");
   ok(href === "/brief_pdf?kind=dossier&keys=dist%3A77&beds=all&mode=rent&key=k", "the URL is the Brief dossier for <district>:<footprint index>", href);
   const u = new URL("https://x" + href);
