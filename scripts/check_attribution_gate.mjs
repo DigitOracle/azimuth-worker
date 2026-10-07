@@ -14,6 +14,8 @@ const VERIFIED = "REGISTER_VERIFIED";
 
 // the fixtures (project-name key = the start of the name key; dev = developer id the index uses)
 export const FIXTURES = {
+  // v373b: ABSENT from the brand's lists entirely (any label, either window, by name or by register project number): the register names another company and only a name linked it
+  absentFrom: [{ name: "vento tower", dev: "beyond", projects: [2776, 536844615], register: "ANAX Developments" }, { name: "the pad", dev: "beyond", projects: [1173], register: "Pad Properties Nine (Omniyat)" }],
   notVerifiedUnder: [{ name: "vento tower", dev: "beyond" }, { name: "the pad", dev: "beyond" }],
   verifiedUnder: [{ name: "marina vista", dev: "emaar" }, { name: "jumeirah living marina gate", dev: "select-group" }, { name: "ocean heights", dev: "damac" }],
   areaIs: [{ name: "imtiaz symphony tower", area: "Meydan Horizon" }, { name: "wynwood horizon", area: "Meydan Horizon" }, { name: "cove grand", area: "Dubai Land Residence Complex" }, { name: "westwood by imtiaz", area: "Al Furjan" }],
@@ -56,6 +58,7 @@ export function runGate(index, cfg, opts) {
   if (!(out.share <= max)) { out.ok = false; failures.push("share not REGISTER_VERIFIED " + (100 * out.share).toFixed(1) + "% is above the limit " + (100 * max).toFixed(1) + "% (" + bad + " of " + named.length + " projects)"); }
   const need = !cfg || cfg.require_fixtures !== false;
   const find = (key, wins) => rows.filter((r) => (wins || ["all", "l12"]).includes(r.window) && (nk(r.project) + " ").startsWith(key + " "));
+  for (const f of FIXTURES.absentFrom) for (const r of rows) if (r.dev_id === f.dev && ((nk(r.project) + " ").startsWith(f.name + " ") || (r.p != null && f.projects.includes(Number(r.p))))) { out.ok = false; failures.push("fixture: " + r.project + " is listed under " + f.dev + " (" + r.window + ", " + r.slug + ", " + r.e + "); the register names " + f.register + ", so it must be absent from " + f.dev + " entirely"); }
   for (const f of FIXTURES.notVerifiedUnder) for (const r of find(f.name)) if (r.dev_id === f.dev && r.e === VERIFIED) { out.ok = false; failures.push("fixture: " + r.project + " is REGISTER_VERIFIED under " + f.dev + " (" + r.window + ", " + r.slug + "); the register names " + (r.dn || "another company")); }
   for (const f of FIXTURES.verifiedUnder) {
     const hit = find(f.name, ["all"]); const ok = hit.some((r) => r.dev_id === f.dev && r.e === VERIFIED);

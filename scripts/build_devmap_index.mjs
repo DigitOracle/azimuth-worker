@@ -14,7 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEVMAP_CORE_JS } from "../src/devmap_core.js";
 import { labelledName, communitiesOf, projectAreaLabel } from "../src/community_labels.js";   // v307; v373 projectAreaLabel: a project is labelled by its own area
-import { decide, isGenericName, looseKeyOf, evidenceOf, LABEL_CODE, EVIDENCE_LABELS } from "../src/devattr.js";   // v325 - the attribution rules: the register first, a bare common word is not evidence
+import { decide, isGenericName, looseKeyOf, evidenceOf, displacedByRegister, LABEL_CODE, EVIDENCE_LABELS } from "../src/devattr.js";   // v325 - the attribution rules: the register first, a bare common word is not evidence
 import { canonicalOf, displayOf, aliasesOf, isCurated } from "../src/devcross.js";   // developer CROSSWALK (4 Oct 2026): one id per developer, however the sources spell it
 export const DM = new Function(DEVMAP_CORE_JS + "; return DM;")();
 
@@ -46,7 +46,8 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nam
     // the register's answer for this building: every name the card carries is looked up; two names that lead to DIFFERENT register developers (a footprint named "The Portman"
     // linked to the DLD project "DANA TOWER") mean the link itself is doubtful, so the register stays silent rather than override on a guess
     let regd = null, how = "exact", areaEv = null; if (regDev) { const found = [], hows = []; for (const nm of bnames) { if (!nm) continue; const rx = regDev[nameKey(nm)] || null, r = rx || regDev[looseKeyOf(nm)] || null; if (r) { found.push(r); hows.push(rx ? "exact" : "loose"); } if (!areaEv) areaEv = regDev["@" + nameKey(nm)] || regDev["@" + looseKeyOf(nm)] || null; } if (found.length && found.every((r) => r.c === found[0].c)) { regd = found[0]; how = hows.indexOf("exact") >= 0 ? "exact" : "loose"; } }
-    const D = decide({ names: bnames, cand: cand || "", candDisplay: cand ? (displayOf(canonicalOf(cand)) || cand) : "", nameOnly: !!cand && (route !== "card_field"), regd });
+    let D = decide({ names: bnames, cand: cand || "", candDisplay: cand ? (displayOf(canonicalOf(cand)) || cand) : "", nameOnly: !!cand && (route !== "card_field"), regd });
+    if (displacedByRegister({ D, cand: cand || "", regd, how })) D = { dev: "", q: "", why: "register names another company (" + regd.d + "); the name link to " + D.dev + " is dropped" };   // v373b
     const dev = D.dev || null, q = D.q;
     devOfCard[id] = dev;
     if (nameDev && dev) for (const nm of [c.name, c.dld && c.dld.project, c.dld_sales && c.dld_sales.project]) if (nm) nameDev[nameKey(nm)] = canonicalOf(dev) || "_";   // v322
