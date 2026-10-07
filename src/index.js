@@ -2268,6 +2268,18 @@ async function appFetch(request, env, ctx) {
       const _ar = await nsAsk(env, _view, _ai, url.searchParams.get("dry") !== "0");
       return new Response(JSON.stringify(_ar, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
     }
+    if (url.pathname === "/najj_say" && request.method === "POST") {   // v372 - owner key; ONE plain text to env.WA_ALLOWED (Najjuko), dry unless dry=0; refuses when her 23 h window is closed (no template fallback, no queue); Kendall approves the text before it is fired
+      if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      let _sb = {}; try { _sb = await request.json(); } catch (e) { return new Response("json body required", { status: 400 }); }
+      const _st = _sb && typeof _sb.text === "string" ? _sb.text.trim() : "";
+      if (!_st || _st.length > 3800) return new Response("text must be a string, 1 to 3800 characters", { status: 400 });
+      const _so = await ownerWindowOpen(env);
+      if (url.searchParams.get("dry") !== "0") return new Response(JSON.stringify({ dry: true, to: env.WA_ALLOWED, window_open: _so, chars: _st.length, text: _st }, null, 2), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      if (!env.WA_ALLOWED || !env.WHATSAPP_TOKEN) return new Response(JSON.stringify({ ok: false, why: "unconfigured" }), { status: 500, headers: { "Content-Type": "application/json" } });
+      if (!_so) return new Response(JSON.stringify({ ok: false, why: "window closed, nothing sent" }), { status: 409, headers: { "Content-Type": "application/json" } });
+      const _sr = await waSend(env, env.WA_ALLOWED, _st);
+      return new Response(JSON.stringify({ ok: !!(_sr && _sr.ok), chars: _st.length }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
     if (url.pathname === "/intake_status") {   // v370 - events=1 returns the engagement list instead
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       const _ev = url.searchParams.get("events") === "1";
