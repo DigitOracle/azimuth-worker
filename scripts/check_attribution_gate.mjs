@@ -16,6 +16,8 @@ const VERIFIED = "REGISTER_VERIFIED";
 export const FIXTURES = {
   // v373b: ABSENT from the brand's lists entirely (any label, either window, by name or by register project number): the register names another company and only a name linked it
   absentFrom: [{ name: "vento tower", dev: "beyond", projects: [2776, 536844615], register: "ANAX Developments" }, { name: "the pad", dev: "beyond", projects: [1173], register: "Pad Properties Nine (Omniyat)" }],
+  // v373c: these stay ON their brand (the register names only an unlinked shell company, or none): NAME_ONLY or REGISTER_VERIFIED, never dropped
+  stayOn: [{ name: "bay central", dev: "select-group" }, { name: "the royal oceanic", dev: "select-group" }, { name: "the point", dev: "select-group" }, { name: "cove edition i", dev: "imtiaz" }, { name: "pearl house 4", dev: "imtiaz" }, { name: "creek beach vida residences", dev: "emaar" }, { name: "alba tower", dev: "omniyat" }, { name: "vela viento", dev: "omniyat" }],
   notVerifiedUnder: [{ name: "vento tower", dev: "beyond" }, { name: "the pad", dev: "beyond" }],
   verifiedUnder: [{ name: "marina vista", dev: "emaar" }, { name: "jumeirah living marina gate", dev: "select-group" }, { name: "ocean heights", dev: "damac" }],
   areaIs: [{ name: "imtiaz symphony tower", area: "Meydan Horizon" }, { name: "wynwood horizon", area: "Meydan Horizon" }, { name: "cove grand", area: "Dubai Land Residence Complex" }, { name: "westwood by imtiaz", area: "Al Furjan" }],
@@ -59,6 +61,10 @@ export function runGate(index, cfg, opts) {
   const need = !cfg || cfg.require_fixtures !== false;
   const find = (key, wins) => rows.filter((r) => (wins || ["all", "l12"]).includes(r.window) && (nk(r.project) + " ").startsWith(key + " "));
   for (const f of FIXTURES.absentFrom) for (const r of rows) if (r.dev_id === f.dev && ((nk(r.project) + " ").startsWith(f.name + " ") || (r.p != null && f.projects.includes(Number(r.p))))) { out.ok = false; failures.push("fixture: " + r.project + " is listed under " + f.dev + " (" + r.window + ", " + r.slug + ", " + r.e + "); the register names " + f.register + ", so it must be absent from " + f.dev + " entirely"); }
+  for (const f of FIXTURES.stayOn) {
+    const hit = find(f.name, ["all"]);
+    if (!hit.some((r) => r.dev_id === f.dev && (r.e === VERIFIED || r.e === "NAME_ONLY")) && (hit.length || need)) { out.ok = false; failures.push("fixture: " + f.name + " must stay under " + f.dev + " (verified or name-only)" + (hit.length ? ", found: " + hit.map((r) => r.dev_id + "/" + r.e).join(", ") : ", but it is not in the index")); }
+  }
   for (const f of FIXTURES.notVerifiedUnder) for (const r of find(f.name)) if (r.dev_id === f.dev && r.e === VERIFIED) { out.ok = false; failures.push("fixture: " + r.project + " is REGISTER_VERIFIED under " + f.dev + " (" + r.window + ", " + r.slug + "); the register names " + (r.dn || "another company")); }
   for (const f of FIXTURES.verifiedUnder) {
     const hit = find(f.name, ["all"]); const ok = hit.some((r) => r.dev_id === f.dev && r.e === VERIFIED);

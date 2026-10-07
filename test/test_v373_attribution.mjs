@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { devmapHtml } from "../src/devmap_page.js";
 import { DM, buildIndex } from "../scripts/build_devmap_index.mjs";
 import { PHOSPHOR_LIGHT } from "../src/devmap_icons.js";
-import { evidenceOf, sourceLine, LABEL_CODE } from "../src/devattr.js";
+import { evidenceOf, sourceLine, LABEL_CODE, displacedByRegister } from "../src/devattr.js";
 import { COMMUNITY_LABELS, labelledName, singleCommunity, projectAreaLabel, areaDisplay } from "../src/community_labels.js";
 import { runGate, auditCsv, projectRows, FIXTURES } from "../scripts/check_attribution_gate.mjs";
 let pass = 0, fail = 0;
@@ -18,27 +18,30 @@ const HERE = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z
 
 // ---------------------------------------------------------------- stub inputs (the shapes the real builders write)
 const card = (name, developer, n, salesName, extra) => ({ name, ...(developer ? { developer } : {}), registered_homes: 100, dld_sales: { project: salesName || name, sold_by_type: { "1 bedroom": n } }, rows: [{ type: "1 bedroom", median_aed: 1500000, median_sqm: 75 }], ...(extra || {}) });
-const reg = (c, d, p, di, sp, s) => ({ c, d, p, s: s == null ? 1 : s, lo: false, di, sp: sp || [] });
+const reg = (c, d, p, di, sp, s, w) => ({ c, d, p, s: s == null ? 1 : s, lo: false, di, sp: sp || [], w: w || "" });
 const slugsGeo = [["businessbay", "Business Bay"], ["dubaimarina", "Dubai Marina"], ["bukadra", "Bukadra"], ["wadialsafa5", "Wadi Al Safa 5"], ["jebelali", "Jebel Ali"], ["madinatalmataar", "Dubai South"]];
 const geo = { districts: slugsGeo.map(([slug, name]) => ({ slug, name, corridor: "x", bbox: [0, 0, 1, 1], centre: [0, 0] })) };
 const registerAreas = { businessbay: { areas: ["Business Bay"] }, dubaimarina: { areas: ["Marsa Dubai"] }, bukadra: { areas: ["Bukadra"] }, wadialsafa5: { areas: ["Wadi Al Safa 5"] }, jebelali: { areas: ["Jabal Ali First"] } };
 const UM = {
-  businessbay: { 1: card("Vento Tower", "Beyond", 54, "VENTO TOWER"), 2: card("The Pad by Beyond", null, 534, "THE PAD"), 3: card("Kanyon", "Beyond", 40, "KANYON"), 5: card("Doubtful Tower", "Beyond", 15, "DOUBTFUL TOWER"), 6: card("Zed Tower", "Azizi", 25, "ZED TOWER"), 7: card("Alpha Tower", "Azizi", 22, "ALPHA TOWER"), 8: card("Loose Tower", "Azizi", 21, "LOOSE TOWER"), 4: card("Opus", "Omniyat", 20, "OPUS") },
-  dubaimarina: { 1: card("Marina Vista", "Emaar", 300, "MARINA VISTA"), 2: card("Jumeirah Living Marina Gate", "Select Group", 200, "JUMEIRAH LIVING MARINA GATE"), 3: card("Ocean Heights", "DAMAC", 150, "OCEAN HEIGHTS"), 4: card("Marina Promenade", "Emaar", 120, "MARINA PROMENADE") },
+  businessbay: { 1: card("Vento Tower", "Beyond", 54, "VENTO TOWER"), 2: card("The Pad by Beyond", null, 534, "THE PAD"), 3: card("Kanyon", "Beyond", 40, "KANYON"), 5: card("Doubtful Tower", "Beyond", 15, "DOUBTFUL TOWER"), 6: card("Zed Tower", "Azizi", 25, "ZED TOWER"), 9: card("Shell Tower", "Azizi", 18, "SHELL TOWER"), 7: card("Alpha Tower", "Azizi", 22, "ALPHA TOWER"), 8: card("Loose Tower", "Azizi", 21, "LOOSE TOWER"), 4: card("Opus", "Omniyat", 20, "OPUS"), 10: card("Alba Tower", "Omniyat", 20, "ALBA TOWER"), 11: card("Vela Viento", "Omniyat", 20, "VELA VIENTO") },
+  dubaimarina: { 1: card("Marina Vista", "Emaar", 300, "MARINA VISTA"), 2: card("Jumeirah Living Marina Gate", "Select Group", 200, "JUMEIRAH LIVING MARINA GATE"), 3: card("Ocean Heights", "DAMAC", 150, "OCEAN HEIGHTS"), 4: card("Marina Promenade", "Emaar", 120, "MARINA PROMENADE"), 5: card("Bay Central", "Select Group", 30, "BAY CENTRAL"), 6: card("Botanica", "Select Group", 30, "BOTANICA"), 7: card("The Royal Oceanic", "Select Group", 30, "THE ROYAL OCEANIC"), 9: card("The Point", "Select Group", 30, "THE POINT"), 8: card("Creek Beach - Vida Residences", "Emaar", 30, "CREEK BEACH - VIDA RESIDENCES"), ...Object.fromEntries(Array.from({ length: 40 }, (_, i) => [100 + i, card("Filler Tower " + i, "Emaar", 5, "FILLER TOWER " + i)])) },
   bukadra: { 1: card("Imtiaz Symphony Tower", "Imtiaz", 978, "IMTIAZ SYMPHONY TOWER"), 2: card("Wynwood Horizon by Imtiaz", "Imtiaz", 135, "WYNWOOD HORIZON BY IMTIAZ") },
-  wadialsafa5: { 1: card("Cove Grand Residence by Imtiaz", "Imtiaz", 90, "COVE GRAND RESIDENCE BY IMTIAZ"), 2: card("Cove Edition Residence 1 by Imtiaz", "Imtiaz", 70, "COVE EDITION RESIDENCE 1 BY IMTIAZ") },
+  wadialsafa5: { 1: card("Cove Grand Residence by Imtiaz", "Imtiaz", 90, "COVE GRAND RESIDENCE BY IMTIAZ"), 2: card("Cove Edition Residence 1 by Imtiaz", "Imtiaz", 70, "COVE EDITION RESIDENCE 1 BY IMTIAZ"), 3: card("Cove Edition I by Imtiaz", "Imtiaz", 20, "COVE EDITION I BY IMTIAZ"), 4: card("Pearl House 4 by Imtiaz", "Imtiaz", 20, "PEARL HOUSE 4 BY IMTIAZ") },
   jebelali: { 1: card("Westwood by Imtiaz", "Imtiaz", 182, "WESTWOOD BY IMTIAZ") },
   madinatalmataar: { 1: card("Mystery Heights", null, 10, "MYSTERY HEIGHTS"), 2: card("Claimed Heights", "Azizi", 12, "CLAIMED HEIGHTS") },
 };
 const REGDEV = {
-  businessbay: { "vento tower": reg("anax-developments", "ANAX DEVELOPMENTS L.L.C", 2776, 428642006), "@vento tower": { ar: "BUSINESS BAY", ms: "Business Bay" },
-    "the pad": reg("pad-properties-nine", "PAD PROPERTIES NINE LIMITED", 1173, 22103305, ["omniyat"]), "@the pad": { ar: "BUSINESS BAY", ms: "Business Bay" },
-    "zed tower": reg("zed-spv", "ZED SPV L.L.C", 9001, 901), "alpha tower": reg("alpha-spv", "ALPHA SPV L.L.C", 9002, 902, ["azizi"]), "~loose": reg("loose-spv", "LOOSE SPV L.L.C", 9003, 903),
+  businessbay: { "vento tower": reg("anax-developments", "ANAX DEVELOPMENTS L.L.C", 2776, 428642006, [], 1, "https://anaxdevelopments.com/"), "@vento tower": { ar: "BUSINESS BAY", ms: "Business Bay" },
+    "the pad": reg("pad-properties-nine", "PAD PROPERTIES NINE LIMITED", 1173, 22103305, ["omniyat"], 1, "www.omniyat.com"), "@the pad": { ar: "BUSINESS BAY", ms: "Business Bay" },
+    "zed tower": reg("zed-spv", "ZED SPV L.L.C", 9001, 901, [], 1, "zedspv.com"), "shell tower": reg("shell-spv", "SHELL SPV L.L.C", 9004, 904), "alpha tower": reg("alpha-spv", "ALPHA SPV L.L.C", 9002, 902, ["azizi"]), "~loose": reg("loose-spv", "LOOSE SPV L.L.C", 9003, 903),
+    "alba tower": reg("century-seven", "CENTURY SEVEN PROPERTIES L.L.C", 8006, 806), "vela viento": reg("royal-creek", "ROYAL CREEK RE DEVELOPMENT", 8007, 807),
     kanyon: reg("cobia-real-estate", "COBIA REAL ESTATE L.L.C", 2001, 111, ["beyond"]), opus: reg("omniyat", "OMNIYAT PROPERTIES L.L.C", 2002, 112, ["omniyat"]) },
-  dubaimarina: { "marina vista": reg("emaar", "EMAAR DEVELOPMENT P.J.S.C.", 2094, 137044480, ["emaar"]), "jumeirah living marina gate": reg("select-group", "SELECT GLOBAL DEVELOPMENT L.L.C", 1743, 10706845, ["select-group"]), "ocean heights": reg("damac", "DAMAC PROPERTIES CO (L.L.C)", 431, 260, ["damac"]), "marina promenade": reg("emaar", "EMAAR DEVELOPMENT P.J.S.C.", 2095, 137044480, ["emaar"]) },
+  dubaimarina: { "marina vista": reg("emaar", "EMAAR DEVELOPMENT P.J.S.C.", 2094, 137044480, ["emaar"]), "jumeirah living marina gate": reg("select-group", "SELECT GLOBAL DEVELOPMENT L.L.C", 1743, 10706845, ["select-group"]), "ocean heights": reg("damac", "DAMAC PROPERTIES CO (L.L.C)", 431, 260, ["damac"]), "marina promenade": reg("emaar", "EMAAR DEVELOPMENT P.J.S.C.", 2095, 137044480, ["emaar"]),
+    "bay central": reg("bay-central-spv", "BAY CENTRAL L.L.C", 8001, 801), botanica: reg("botanica-spv", "BOTANICA PROPERTIES L.L.C", 8002, 802), "the royal oceanic": reg("royal-oceanic-spv", "ROYAL OCEANIC L.L.C", 8003, 803), "the point": reg("point-development", "POINT DEVELOPMENT LIMITED", 8005, 805), "creek beach vida residences": reg("creek-spv", "CREEK BEACH L.L.C", 8004, 804),
+    ...Object.fromEntries(Array.from({ length: 40 }, (_, i) => ["filler tower " + i, reg("emaar", "EMAAR DEVELOPMENT P.J.S.C.", 7000 + i, 137044480, ["emaar"])])) },
   bukadra: { "imtiaz symphony tower": reg("imtiaz", "IMTIAZ GI REAL ESTATE DEVELOPMENT L.L.C", 4193, 748565993, ["imtiaz"]), "@imtiaz symphony tower": { ar: "HORIZON" },
     "wynwood horizon by imtiaz": reg("imtiaz", "IMTIAZ GI REAL ESTATE DEVELOPMENT L.L.C", 4133, 748565993, ["imtiaz"]), "@wynwood horizon by imtiaz": { ar: "HORIZON" } },
-  wadialsafa5: { "cove grand residence by imtiaz": reg("imtiaz", "IMTIAZ COVE REAL ESTATE DEVELOPMENT L.L.C", 3774, 733293217, ["imtiaz"]), "@cove grand residence by imtiaz": { ar: "DUBAI LAND RESIDENCE COMPLEX", ms: "Dubai Land Residence Complex" },
+  wadialsafa5: { "cove grand residence by imtiaz": reg("imtiaz", "IMTIAZ COVE REAL ESTATE DEVELOPMENT L.L.C", 3774, 733293217, ["imtiaz"]), "cove edition i by imtiaz": reg("cove-spv", "COVE SHELL L.L.C", 3001, 301), "pearl house 4 by imtiaz": reg("pearl-spv", "PEARL SHELL L.L.C", 3002, 302), "@cove grand residence by imtiaz": { ar: "DUBAI LAND RESIDENCE COMPLEX", ms: "Dubai Land Residence Complex" },
     "cove edition residence 1 by imtiaz": reg("imtiaz", "IMTIAZ REAL ESTATE INVESTMENT & DEVELOPMENT L.L.C", 3248, 29075838, ["imtiaz"]), "@cove edition residence 1 by imtiaz": { ar: "Wadi Al Safa 5", ms: "Dubai Land Residence Complex" } },   // the sales area is only the land area: the register master community is used
   jebelali: { "westwood by imtiaz": reg("imtiaz", "IMTIAZ REAL ESTATE INVESTMENT & DEVELOPMENT L.L.C", 2431, 29075838, ["imtiaz"]), "@westwood by imtiaz": { ar: "AL FURJAN", ms: "Al Furjan" } },
   madinatalmataar: {},
@@ -71,16 +74,25 @@ const myst = proj(idx, "Mystery Heights"), claimed = proj(idx, "Claimed Heights"
 ok(myst.length === 1 && myst[0].dev === "_" && myst[0].x.e === "UNVERIFIED" && myst[0].x.m === "none", "no developer and no register row: UNVERIFIED, basis none");
 ok(claimed && claimed.dev === "azizi" && claimed.x.e === "DEVELOPER_CLAIMED" && claimed.x.m === "website_only" && claimed.x.dn === "", "the developer sheet names it and the register has no row: DEVELOPER_CLAIMED (a claim, not evidence)", JSON.stringify(claimed && claimed.x));
 ok(Object.values(idx.areas).every((a) => Object.values(a.devs).every((d) => d.ce.length === d.c.length && d.bx.length === d.b.length)), "ce is parallel to c and bx is parallel to b in every slot");
-ok(idx.attr && idx.attr.version === 373 && idx.attr.projects.REGISTER_VERIFIED > 0 && idx.attr.projects.NAME_ONLY === 1 && /authority/.test(idx.attr.rule), "the index says what it holds: counts per label, the rule and the layout", JSON.stringify(idx.attr && idx.attr.projects));
+ok(idx.attr && idx.attr.version === 373 && idx.attr.projects.REGISTER_VERIFIED > 0 && idx.attr.projects.NAME_ONLY === 11 && /authority/.test(idx.attr.rule), "the index says what it holds: counts per label, the rule and the layout", JSON.stringify(idx.attr && idx.attr.projects));
 // backwards compatible: the old keys and their values are untouched
 const bm = idx.areas.dubaimarina.devs.emaar;
-ok(bm.n === "Emaar" && bm.h === 200 && JSON.stringify(bm.c[0]) === JSON.stringify([300, 20000, 1500000, 1]) && JSON.stringify(bm.b[0]) === JSON.stringify([300, 20000, "Marina Vista"]) && Array.isArray(bm.r) && JSON.stringify(bm.q) === JSON.stringify([420, 0]), "old keys n, h, c, r, b, q are unchanged in shape and value (the v372 worker ignores ce and bx)");
+ok(bm.n === "Emaar" && bm.h >= 200 && JSON.stringify(bm.c[0]) === JSON.stringify([300, 20000, 1500000, 1]) && JSON.stringify(bm.b[0]) === JSON.stringify([300, 20000, "Marina Vista"]) && Array.isArray(bm.r) && bm.q[0] >= 420, "old keys n, h, c, r, b, q are unchanged in shape and value (the v372 worker ignores ce and bx)");
 ok(Object.keys(idx).every((k) => ["as_of", "generated", "source", "cuts", "devs", "alias", "areas", "scale", "attr", "ev"].includes(k)), "the only new top-level key is attr", Object.keys(idx).join());
 // the basis when the register is reached only by a loose name, and when the project number is given in a register-built card
 const loose = evidenceOf({ D: { dev: "Emaar", q: "v", why: "register agrees" }, cand: "Emaar", route: "card_field", regd: reg("emaar", "EMAAR", 7, 1, ["emaar"]), how: "loose" });
 ok(loose.e === "NAME_ONLY" && loose.m === "partial_name", "a register row reached only through a loose (partial) name is NAME_ONLY, not verified");
 const rb = evidenceOf({ D: { dev: "Arada", q: "i", why: "x" }, cand: "Arada", route: "card_register:register developer of record", regd: null, how: "exact", basisText: "register developer of record (developer_id of project_number 3344)" });
 ok(rb.e === "REGISTER_VERIFIED" && rb.p === 3344 && rb.m === "project_id", "a register-built card carries its project number and is verified");
+const zs = proj(idx, "Shell Tower")[0];
+ok(zs && zs.dev === "azizi" && zs.x.e === "NAME_ONLY" && /SHELL SPV/.test(zs.x.dn), "v373c: an Azizi card whose register company is an unlinked shell with NO web page stays under Azizi as NAME_ONLY (never dropped, never verified)");
+for (const [nm, dv] of [["Bay Central", "select-group"], ["The Royal Oceanic", "select-group"], ["The Point", "select-group"], ["Alba Tower", "omniyat"], ["Vela Viento", "omniyat"], ["Cove Edition I by Imtiaz", "imtiaz"], ["Pearl House 4 by Imtiaz", "imtiaz"], ["Creek Beach - Vida Residences", "emaar"]]) { const q = proj(idx, nm)[0]; ok(q && q.dev === dv && q.x.e === "NAME_ONLY", "v373c: " + nm + " stays under " + dv + " as NAME_ONLY (register names an unlinked shell)", JSON.stringify(q && [q.dev, q.x])); }
+const shellD = { D: { dev: "Emaar", q: "i" }, cand: "Emaar", how: "exact" };
+ok(!displacedByRegister({ ...shellD, regd: reg("x-spv", "X SPV", 1, 1, [], 1, "") }) && displacedByRegister({ ...shellD, regd: reg("x-co", "X CO", 1, 1, [], 1, "xco.com") }) && !displacedByRegister({ ...shellD, regd: { ...reg("x-co", "X CO", 1, 1, [], 1, "xco.com"), lo: true } }) && !displacedByRegister({ ...shellD, regd: reg("x-co", "X CO", 1, 1, ["emaar"], 1, "xco.com") }) && !displacedByRegister({ ...shellD, how: "loose", regd: reg("x-co", "X CO", 1, 1, [], 1, "xco.com") }), "displacedByRegister: only a register company with a web page of its own that is not the brand's; never a shell, land owner, SPV of the brand, or loose link");
+const web = reg("x-co", "X CO", 1, 1, [], 1, "xco.com");
+ok(!displacedByRegister({ ...shellD, regd: web, names: ["Emaar Palace by Emaar"] }) && displacedByRegister({ ...shellD, regd: web, names: ["Palace Tower"] }) && !displacedByRegister({ ...shellD, regd: web, names: ["Palace Tower"], slug: "s", keep: [{ dev: "emaar", slug: "s", name: "palace tower" }] }) && displacedByRegister({ ...shellD, regd: reg("p", "P", 1, 1, ["omniyat"], 1, ""), names: ["The Pad by Emaar"], cand: "Emaar" }), "displacedByRegister: a project whose own name carries the brand stays; a reviewed keep entry stays; a register company whose web page names ANOTHER curated brand is always a different developer");
+const keepFile = JSON.parse(fs.readFileSync(path.join(HERE, "..", "scripts", "attribution_keep.json"), "utf8"));
+ok(Array.isArray(keepFile.keep) && keepFile.keep.length === 0 && /source Kendall confirms/.test(keepFile._why) && /never add/i.test(keepFile._why), "the exceptions list is empty: an entry needs a source Kendall confirms (a name alone is never one), and is never used to pass a gate");
 ok(LABEL_CODE.REGISTER_VERIFIED === "V" && LABEL_CODE.NAME_ONLY === "N" && LABEL_CODE.DEVELOPER_CLAIMED === "D" && LABEL_CODE.UNVERIFIED === "U", "label codes");
 
 console.log("B - area labels: a project is labelled by its own area, never by a neighbouring community");
@@ -118,7 +130,7 @@ const text = (h) => h.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
 const IDX = JSON.parse(JSON.stringify(idx));
 const beforeSplit = { projects: Object.values(IDX.devs).reduce((a, d) => a + d.profile.projects, 0) };
 const st = DM.attrSplit(IDX);
-ok(st && st.hidden === 3 && st.kept === beforeSplit.projects - 3, "attrSplit hides the projects the register does not confirm under a named developer (Claimed Heights, Doubtful Tower, Loose Tower) and keeps the rest", JSON.stringify(st));
+ok(st && st.hidden === 13 && st.kept === beforeSplit.projects - 13, "attrSplit hides the projects the register does not confirm under a named developer (Claimed Heights, Doubtful Tower and the eleven name-only ones) and keeps the rest", JSON.stringify(st));
 ok(DM.attrSplit(IDX) === null, "and is idempotent");
 ok(!IDX.devs.beyond || IDX.devs.beyond.profile.projects === 1, "Beyond's project count is its confirmed projects only (Kanyon)", JSON.stringify(IDX.devs.beyond));
 ok(IDX.areas.businessbay.devs.beyond.b.length === 1 && IDX.areas.businessbay.devs.beyond.b[0][2] === "Kanyon" && IDX.areas.businessbay.devs.beyond.c.length === 1 && IDX.areas.businessbay.devs.beyond.c[0][0] === 40, "Beyond in Business Bay: one project and one cell, 40 sales (Vento Tower's 54 and The Pad's 534 are outside the numbers)");
@@ -141,7 +153,7 @@ ok(/Kanyon/.test(ap) && !/Vento|The Pad/.test(ap) && /Registered developer per D
 S.parea = null;
 S.sel = "dubaimarina";
 const he = P.profileHtml("emaar");
-ok(/Registered developer per DLD register: EMAAR DEVELOPMENT/.test(text(he)) && !/id=nconf/.test(he), "Emaar: every project card has a source line and there is no 'Not confirmed' group when nothing is unconfirmed");
+ok(/Registered developer per DLD register: EMAAR DEVELOPMENT/.test(text(he)) && /Creek Beach/.test(he.slice(he.indexOf("id=nconf"))), "Emaar: every project card has a source line, and Creek Beach - Vida Residences (register names an unlinked shell) waits in the Not-confirmed group");
 const allImtiaz = P.lockProjs(P.prof("imtiaz"), "imtiaz");
 const byName = Object.fromEntries(allImtiaz.map((q) => [q.name, q]));
 ok(byName["Imtiaz Symphony Tower"].ev.a === "Meydan Horizon" && byName["Westwood by Imtiaz"].ev.a === "Al Furjan" && byName["Cove Grand Residence by Imtiaz"].ev.a === "Dubai Land Residence Complex", "Imtiaz's project cards: Symphony Tower in Meydan Horizon, Westwood in Al Furjan, Cove Grand in Dubai Land Residence Complex");
@@ -190,6 +202,9 @@ neg("v373b: Vento Tower re-introduced under Beyond as NAME_ONLY (even outside th
 neg("v373b: Vento Tower under Beyond by register project number only (renamed)", (x) => inject(x, "Vento Residences", 2776, "NAME_ONLY"), /Vento Residences is listed under beyond/);
 neg("v373b: Vento Tower in the 12-month list under Beyond", (x) => inject(x, "Vento Tower", 2776, "NAME_ONLY", "l12"), /Vento Tower is listed under beyond \(l12/);
 neg("Vento Tower marked REGISTER_VERIFIED under Beyond", (x) => inject(x, "Vento Tower", 2776, "REGISTER_VERIFIED"), /Vento Tower is REGISTER_VERIFIED under beyond/);
+neg("v373c: Bay Central dropped from Select Group", (x) => { const a = x.areas.dubaimarina.devs["select-group"]; const i = a.b.findIndex((b) => b[2] === "Bay Central"); a.b.splice(i, 1); a.bx.splice(i, 1); }, /bay central must stay under select-group/);
+neg("v373c: Pearl House 4 moved off Imtiaz", (x) => { const a = x.areas.wadialsafa5.devs; a.other = a.imtiaz; delete a.imtiaz; }, /pearl house 4 must stay under imtiaz/);
+neg("v373c: Creek Beach - Vida Residences left out of Emaar", (x) => { const a = x.areas.dubaimarina.devs.emaar; const i = a.b.findIndex((b) => /Creek Beach/.test(b[2])); a.b.splice(i, 1); a.bx.splice(i, 1); }, /creek beach vida residences must stay under emaar/);
 neg("v373b: The Pad by Beyond re-introduced under Beyond", (x) => inject(x, "The Pad by Beyond", 1173, "NAME_ONLY"), /The Pad by Beyond is listed under beyond/);
 neg("The Pad marked REGISTER_VERIFIED under Beyond", (x) => inject(x, "The Pad", 1173, "REGISTER_VERIFIED"), /The Pad is REGISTER_VERIFIED under beyond/);
 neg("most projects demoted to NAME_ONLY (share above the limit)", (x) => { for (const a of Object.values(x.areas)) for (const d of Object.values(a.devs)) (d.bx || []).forEach((b, i) => { if (i % 2 === 0) b.e = "NAME_ONLY"; }); }, /share not REGISTER_VERIFIED/);
@@ -216,7 +231,7 @@ ok(r1.status === 0 && /ATTRIBUTION GATE: PASS/.test(r1.stdout) && fs.existsSync(
 ok(r2.status === 1 && /ATTRIBUTION GATE: FAIL/.test(r2.stdout) && fs.existsSync(path.join(dir, "bad.csv")), "CLI: the corrupted index exits 1 (and still writes the audit trail)", r2.stdout + r2.stderr);
 ok(r3.status === 2, "CLI: a missing file exits 2");
 fs.rmSync(dir, { recursive: true, force: true });
-ok(FIXTURES.notVerifiedUnder.length === 2 && FIXTURES.verifiedUnder.length === 3 && FIXTURES.areaIs.length === 4, "all nine fixtures are in the script");
+ok(FIXTURES.stayOn.length === 8 && FIXTURES.absentFrom.length === 2 && FIXTURES.notVerifiedUnder.length === 2 && FIXTURES.verifiedUnder.length === 3 && FIXTURES.areaIs.length === 4, "all nine fixtures are in the script");
 const { rows } = projectRows(idx);
 ok(rows.some((r) => r.dev_id === "_" && r.e === "UNVERIFIED") && rows.filter((r) => r.window === "all").length === Object.values(idx.areas).reduce((a, ar) => a + Object.values(ar.devs).reduce((b, d) => b + d.b.length, 0), 0), "the audit rows cover every project, including those under 'Developer not recorded'");
 

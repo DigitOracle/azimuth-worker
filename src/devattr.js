@@ -79,13 +79,20 @@ export function decide({ names, cand, candDisplay, nameOnly, regd }) {
 // that brand is a name (the register is not silent, the company is not the brand's SPV, not a land owner or master-plan company, and the register row itself was reached by an exact
 // name or project number), does not belong in that brand's lists AT ALL, not even as "not confirmed". decide() already hands it to the register developer when that is a curated brand;
 // when it is not, the building is left out of every named developer (it falls to "Developer not recorded") and keeps NAME_ONLY with the register company's name for the audit trail.
-export function displacedByRegister({ D, cand, regd, how }) {
+export function displacedByRegister({ D, cand, regd, how, names, slug, keep }) {
   const reg = regd && regd.s >= 0.6 && regd.c ? regd : null;
   if (!reg || !D || !D.dev || D.q !== "i" || how === "loose") return false;
   if (reg.lo || MASTER_LIKE.has(reg.c)) return false;
   const cc = cand ? canonicalOf(cand) : canonicalOf(D.dev);
   if (!cc || reg.c === cc) return false;
   if (Array.isArray(reg.sp) && reg.sp.indexOf(cc) >= 0) return false;
+  // v373c: only a register company with an identity of its own is a different developer. An unlinked shell or project company with no web page stays under the brand as
+  // NAME_ONLY (outside the numbers, in the Not-confirmed group); so does a project whose own name carries the brand ("by Imtiaz"); so does a human-reviewed exception (keep).
+  const nks = (names || []).filter(Boolean).map((x) => toks(x).join(" "));
+  if ((keep || []).some((k) => k.dev === cc && (!k.slug || k.slug === slug) && nks.some((n) => n === k.name || n.indexOf(k.name + " ") === 0))) return false;
+  if (Array.isArray(reg.sp) && reg.sp.length) return true;                       // its web page names ANOTHER curated brand (Pad Properties Nine: omniyat.com, versus Beyond)
+  if (!(typeof reg.w === "string" && reg.w.trim())) return false;                // no web page of its own: an unlinked shell
+  if ((names || []).some((x) => brandInName(x, cc, cc.replace(/-/g, " ")))) return false;
   return true;
 }
 export const EVIDENCE_LABELS = ["REGISTER_VERIFIED", "NAME_ONLY", "DEVELOPER_CLAIMED", "UNVERIFIED"];
