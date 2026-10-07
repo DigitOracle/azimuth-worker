@@ -21,7 +21,7 @@ WHAT IT CHANGES (and nothing else)
 ROLLBACK line per district (put the backup file back). The put keeps the live storage format (a gzipped live value is put gzipped, the way the page route passes it through; a plain one plain); the backup is in that same format, so the rollback restores it exactly.
 The live read is binary-safe (scripts/_cardlib.py kv_read): the blocks keys are stored gzipped and scripts/kv_read_live.mjs (--text) cannot read them.
 """
-import argparse, collections, csv, datetime, fnmatch, json, os, re, shutil, subprocess, sys, tempfile, time
+import time, argparse, collections, csv, datetime, fnmatch, json, os, re, shutil, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _cardlib as L
@@ -150,7 +150,7 @@ def plan_district(slug, rows, raw):
 def kv_put(key, path):
     """path is the file to store AS IS (gzipped when the live value was gzipped: the page route passes a gzip value through with Content-Encoding)"""
     npx = shutil.which("npx.cmd") or shutil.which("npx") or "npx"
-    r = subprocess.run([npx, "wrangler", "kv", "key", "put", key, "--path", path, "--env", ENVN, "--namespace-id", NS], cwd=WORKER, capture_output=True, text=True)
+    r = subprocess.run([npx, "wrangler", "kv", "key", "put", key, "--path", path, "--env", ENVN, "--namespace-id", NS], cwd=WORKER, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         L.stop("wrangler kv key put %s failed (exit %d):\n%s" % (key, r.returncode, (r.stdout or "") + (r.stderr or "")))
 
@@ -246,8 +246,24 @@ def main():
                 L.stop("%s changed in KV since it was read. Nothing was put for it. Run again." % key)
             kv_put(key, putp)
             back = os.path.join(work, s + ".live_after.json")
-            L.kv_read(key, back)
-            if json.load(open(back, encoding="utf-8")) != json.loads(new):
+            same = False
+            def _via_route(k, dest):   # v387c - read the value back THROUGH THE LIVE ROUTE (the page reads it the same way), gunzipped; wrangler kv get proved unreliable for these gzipped values
+                import gzip, urllib.request
+                u = "https://azimuth-2.digitalchemy.workers.dev/img/" + k[len("img_"):] + "?cb=" + str(int(time.time() * 1000))
+                raw_b = urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": "najma-ops/1.0", "Cache-Control": "no-cache"}), timeout=120).read()
+                if raw_b[:2] == b"\x1f\x8b":
+                    raw_b = gzip.decompress(raw_b)
+                open(dest, "wb").write(raw_b)
+            for _try in range(6):   # v387b - KV can answer with the old value for a few seconds after a put: read back up to 6 times, 4 s apart, before calling it a mismatch
+                _via_route(key, back)
+                try:
+                    same = json.load(open(back, encoding="utf-8")) == json.loads(new)
+                except Exception:
+                    same = False
+                if same:
+                    break
+                time.sleep(4)
+            if not same:
                 print("\nTHE READ-BACK OF %s DOES NOT MATCH THE NEW FILE. Roll back now (from %s):\n  %s" % (key, WORKER, rb))
                 sys.exit(1)
             print("    put and verified: " + key)
