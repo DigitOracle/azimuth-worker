@@ -31,6 +31,8 @@
 // Page scripts are String.raw blocks with no ${} and no backticks (the rule src/brief_page.js keeps), checked with node --check
 // by test/test_v279_contracts.mjs.
 import { BRIEF_DISTRICTS } from "./brief_page.js";
+import { COVERAGE_MIN, coverageOf, pctSay } from "./coverage_guard.js";   // v394: never offer a bedroom filter the contracts cannot answer
+export { COVERAGE_MIN, coverageOf };
 
 // ---- the adapter: the one place the files' field names are written ---------------------------------------------------
 // canonical name -> the field name(s) in the DDA files, first present wins. A rename in the files is a one-line change here.
@@ -58,6 +60,7 @@ const BAND_SAY = { studio: "Studio", "1": "1 bedroom", "2": "2 bedrooms", "3": "
 const BAND_CHIP = { studio: "Studio", "1": "1", "2": "2", "3": "3", "3+": "3+", office: "Office", shop: "Shop", other: "Other" };
 const BAND_IN = { studio: "studio", "0": "studio", "1": "1", "2": "2", "3": "3", "3+": "3+", "4": "3+", "4+": "3+", office: "office", shop: "shop", retail: "shop", other: "other" };
 export const TOPS = [5, 10, 15, 20];
+const RES_BANDS = new Set(["studio", "1", "2", "3", "3+"]);
 
 const present = (v) => v !== undefined && v !== null && !(typeof v === "string" && v.trim() === "");
 const pickF = (o, names) => { for (const f of names) if (present(o[f])) return o[f]; return null; };
@@ -393,11 +396,22 @@ function compare(A, prevRows, rg, covered) {
 // ---- the answer: one building, one developer, one district or all of Dubai, for one window ----------------------------
 function finish(base, subject, st, rg, anchor, srcs) {
   const covers = (day) => srcs.every((s) => !s || s.start <= day);
-  const rows = subject.filter(keep(st, rg.from, rg.to));
+  // v394: how many of the window's contracts (under the other filters, bedrooms off) record a bedroom at all. Below COVERAGE_MIN the
+  // bedroom chips are not offered and a remembered selection is ignored, so a stored chip can never zero the page.
+  const win = subject.filter(keep(Object.assign({}, st, { beds: [] }), rg.from, rg.to)).filter((r) => !r.desk);
+  // a bedroom is "known" when the band is Studio / 1 / 2 / 3 / 3+; an office, a shop or no band at all is not a bedroom (the register's
+  // office and shop rows carry a band word, which is why 58% for Business Bay on contract start, not 100%)
+  const hasBed = (r) => RES_BANDS.has(r.band);
+  const share = coverageOf(win, (r) => hasBed(r) || null), bedsOk = share === null || share >= COVERAGE_MIN;
+  const effBeds = bedsOk ? st.beds : [], stE = effBeds === st.beds ? st : Object.assign({}, st, { beds: effBeds });
+  const sum = (a) => a.reduce((t, r) => t + r.n, 0);
+  const rows = subject.filter(keep(stE, rg.from, rg.to));
   const A = Object.assign(base, { asOf: anchor, from: rg.from, to: rg.to, range: st.range, short: !covers(rg.from), count: ejariCount(rows) });
+  A.beds = { ok: bedsOk, share, min: COVERAGE_MIN, active: effBeds, ignored: bedsOk ? [] : st.beds, windowN: sum(win),
+    unknownN: sum(win.filter((r) => !hasBed(r))), allN: sum(subject.filter(keep({ reg: "both", beds: [], sub: [] }, rg.from, rg.to)).filter((r) => !r.desk)) };
   // the property types the chips offer: every type in the window under the other filters, whatever the type filter says
   A.subsAll = ejariCount(subject.filter(keep(st, rg.from, rg.to, true))).subs.map((s) => ({ sub: s.sub, label: s.label, n: s.n }));
-  A.cmp = rg.prev ? compare(A, subject.filter(keep(st, rg.prev.from, rg.prev.to)), rg, covers(rg.prev.from)) : null;
+  A.cmp = rg.prev ? compare(A, subject.filter(keep(stE, rg.prev.from, rg.prev.to)), rg, covers(rg.prev.from)) : null;
   Object.defineProperty(A, "_rows", { value: rows, enumerable: false });
   return A;
 }
@@ -471,7 +485,8 @@ export async function ejariAnswer(env, st) {
     A.whereBy = st.reg === "renew" ? "renewals" : "new leases";
     const busiest = ejariWhere(dub.rows.filter((r) => r.date >= rg.from && r.date <= rg.to), names, "n").filter((x) => x.district).slice(0, 20).map((x) => x.district);
     const parts = (await Promise.all(busiest.map((s) => districtSource(get, s, dub.basis, () => rg)))).filter(Boolean);
-    let brows = []; for (const p of parts) brows = brows.concat(p.rows.filter(keep(st, rg.from, rg.to)));
+    let brows = []; const stB = A.beds.ok ? st : Object.assign({}, st, { beds: [] });
+    for (const p of parts) brows = brows.concat(p.rows.filter(keep(stB, rg.from, rg.to)));
     A.buildings = ejariRank(brows, names, await appNames(get)).slice(0, 20);
     if (!canSub) { let all = []; for (const p of parts) all = all.concat(p.rows.filter(keep(st, rg.from, rg.to, true))); A.subsAll = ejariCount(all).subs.map((s) => ({ sub: s.sub, label: s.label, n: s.n })); }
     return A;
@@ -563,7 +578,7 @@ const EJ_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans
   + '.pn .ar,html[data-lang=ar] .pn .en{display:none}html[data-lang=ar] .pn .ar{display:inline}.tgx{display:inline-block;margin:0 0 0 6px;padding:0 5px;border:1px solid #2E4540;border-radius:4px;font:500 .52rem "IBM Plex Mono",monospace;letter-spacing:.05em;color:#8FA39B;vertical-align:2px}'
   + '.lng{float:right;display:flex;border:1px solid #2E4540;border-radius:999px;overflow:hidden;margin:0 0 0 8px}.lng a{min-width:44px;padding:5px 10px;text-align:center;font-size:.72rem;color:#8FA39B;text-decoration:none}html:not([data-lang=ar]) .lng a[data-l=en],html[data-lang=ar] .lng a[data-l=ar]{background:#C5A56A;color:#0C1413;font-weight:600}'
   + '.flt{margin:0 0 12px}.fr{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 4px}'
-  + '.ch{display:inline-flex;align-items:center;min-height:34px;border:1px solid #2E4540;background:#0E1918;border-radius:999px;padding:5px 11px;font-size:.78rem;color:#C8D3CE;text-decoration:none}.ch.on{background:#C5A56A;border-color:#C5A56A;color:#0C1413;font-weight:600}'
+  + '.ch{display:inline-flex;align-items:center;min-height:34px;border:1px solid #2E4540;background:#0E1918;border-radius:999px;padding:5px 11px;font-size:.78rem;color:#C8D3CE;text-decoration:none}.ch.dis{opacity:.4;cursor:not-allowed;pointer-events:none}.ch.on.dis{background:#6E6246;border-color:#6E6246}.ch.on{background:#C5A56A;border-color:#C5A56A;color:#0C1413;font-weight:600}'
   + '.fl{font-family:"IBM Plex Mono",monospace;font-size:.56rem;letter-spacing:.1em;color:#6F837D;margin:8px 0 5px}'
   + '.cus{display:grid;grid-template-columns:1fr 1fr auto;gap:7px;align-items:end;margin:0 0 4px}.cus label{font-size:.7rem;color:#8FA39B}.cus input{display:block;width:100%;margin-top:3px;min-height:40px;background:#0E1918;border:1px solid #2E4540;border-radius:8px;color:#E8E4D8;padding:6px 8px;font-size:15px;color-scheme:dark}'
   + '.card{background:#101D1B;border:1px solid #24352F;border-left:3px solid #3E8A7E;border-radius:12px;padding:13px;margin:0 0 12px}'
@@ -621,7 +636,14 @@ function toggleHtml(st, A, link, key, rk) {
 function filtersHtml(st, A, link) {
   let h = '<div class=flt><div class=fl>NEW OR RENEWED</div><div class=fr id=ejreg>' + [["both", "Both"], ["new", "New"], ["renew", "Renewals"]].map((r) => chip(st.reg === r[0], link({ reg: r[0] }), r[1])).join("") + "</div>";
   const tog = (list, v, order) => { const s = new Set(list); if (s.has(v)) s.delete(v); else s.add(v); return (order ? order.filter((x) => s.has(x)) : [...s]).join(","); };
-  h += '<div class=fl>BEDROOMS</div><div class=fr id=ejbeds>' + chip(!st.beds.length, link({ beds: "" }), "All") + BANDS.filter((b) => b !== "other").map((b) => chip(st.beds.includes(b), link({ beds: tog(st.beds, b, BANDS) }), BAND_CHIP[b])).join("") + "</div>";
+  const bd = A.beds || { ok: true, active: st.beds };
+  if (bd.ok) h += '<div class=fl>BEDROOMS</div><div class=fr id=ejbeds>' + chip(!st.beds.length, link({ beds: "" }), "All") + BANDS.filter((b) => b !== "other").map((b) => chip(st.beds.includes(b), link({ beds: tog(st.beds, b, BANDS) }), BAND_CHIP[b])).join("") + "</div>";
+  else {   // v394: not offered where the contracts do not record bedrooms: greyed, with the reason, and nothing remembered is applied
+    h += '<div class=fl>BEDROOMS</div><div class=fr id=ejbeds data-off=1>' + '<span class="ch on dis" aria-disabled=true>All</span>'
+      + BANDS.filter((b) => b !== "other").map((b) => '<span class="ch dis" aria-disabled=true>' + esc(BAND_CHIP[b]) + "</span>").join("") + "</div>"
+      + '<div class=dk id=ejbedsnote>' + (A.basis === "filed" ? "Bedrooms are not recorded on contracts filed in the last days. Switch to contract start to split by bedrooms."
+        : "Bedrooms are recorded for only " + esc(pctSay(bd.share)) + " of these contracts, so they cannot be split by bedrooms here.") + "</div>";
+  }
   // property type, in Ejari's own words; a chosen type stays on the row even when the other filters leave it empty
   const subs = (A.subsAll || []).slice(0, 12), seen = new Set(subs.map((s) => s.sub));
   for (const s of st.sub) if (!seen.has(s)) subs.push({ sub: s, label: subSay(s), n: 0 });
@@ -671,9 +693,18 @@ export function pname(en, ar, app) {
   return '<span class=pn><span class=en>' + (e ? esc(e) : arS(a) + '<small class=tgx>AR only</small>') + '</span><span class=ar>' + (a ? arS(a) : esc(e) + '<small class=tgx>EN only</small>') + "</span></span>";
 }
 function headline(subjectHtml, A) {
-  const c = A.count;
+  const c = A.count, b = A.beds || { ok: true, active: [], allN: c.n, windowN: c.n, unknownN: 0 };
   const how = A.basis === "filed" ? ", filed with Ejari " : " through Ejari, by contract start date, ";
-  return '<div class=hl id=ejhl>' + subjectHtml + " signed <b>" + fmt(c.n) + "</b> " + (c.n === 1 ? "contract" : "contracts") + esc(how + ejariPeriod(A.from, A.to)) + ".</div>"
+  // v394: never a bare 0 over contracts that exist: say how many there were, and that the filter is what emptied it
+  const zeroHid = c.n === 0 && b.allN > 0;
+  const lead = zeroHid
+    ? subjectHtml + ": <b>0</b> match this filter; <b>" + fmt(b.allN) + "</b> " + (b.allN === 1 ? "contract was" : "contracts were") + (A.basis === "filed" ? " filed with Ejari " : " signed through Ejari, by contract start date, ") + esc(ejariPeriod(A.from, A.to)) + "."
+    : subjectHtml + " signed <b>" + fmt(c.n) + "</b> " + (c.n === 1 ? "contract" : "contracts") + esc(how + ejariPeriod(A.from, A.to)) + ".";
+  const excl = b.active.length && b.unknownN > 0
+    ? '<div class=dk id=ejexcl>' + fmt(b.unknownN) + " of " + fmt(b.windowN) + " contracts have no bedroom recorded and are not in this count.</div>" : "";
+  const covl = A.basis === "filed" && b.share !== null && b.share !== undefined
+    ? '<div class=dk id=ejcov>Bedrooms known for ' + esc(pctSay(b.share)) + " of these contracts.</div>" : "";
+  return '<div class=hl id=ejhl>' + lead + "</div>" + excl + covl
     + cmpHtml(A.cmp)
     + '<div class=nr><i class=cn></i>' + plural(c.nw, "new lease", "new leases") + " \u00a0 <i class=cr></i>" + plural(c.rn, "renewal", "renewals") + "</div>"
     + (c.desk ? '<div class=dk id=ejdesk>Plus ' + plural(c.desk, "flexi-desk licence", "flexi-desk licences") + " (office desks rented by the month), left out of these counts and the rankings.</div>" : "")
