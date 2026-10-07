@@ -86,7 +86,7 @@ const fromEl = mkEl("from"); P.pdOpen(dkOf(cards.notyet), fromEl); P.pdClose();
 ok(els.pjdet.style.display === "none" && fromEl.focused === true, "closing hides the panel and returns focus to the card");
 P.pdOpen(dkOf(cards.notyet), null); keys.forEach((f) => f({ key: "Escape" }));
 ok(els.pjdet.style.display === "none", "Escape closes it");
-ok(!/lat|lng|lon|center|coordinates/i.test(text(open("notyet"))) && /function pjPlotHook\(d\)\{return ""\}/.test(js) && /v386 HOOK/.test(js), "no position is drawn or stated; the v386 plot-centre hook is a marked empty function");
+ok(!/lat|lng|lon|center|coordinates/i.test(text(open("notyet"))) && /function pjPlotHook\(d\)\{return typeof PLOTPOS!=="undefined"\?PLOTPOS\.rows\(d\.ev,pdRow\):""\}/.test(js), "no position is drawn or stated without plot data; the v386 plot-centre hook answers empty when PLOTPOS is absent (v386 replaced the empty v385 hook)");
 
 console.log("D - the snapshot and the 'Show on the map' path are unchanged");
 const feats = P.pjFeatures(false);
