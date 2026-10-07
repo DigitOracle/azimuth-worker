@@ -48,7 +48,8 @@ export const EJARI_FIELDS = {
   band: ["beds", "beds_band"], reg: ["reg_type"], n: ["contracts"], props: ["props"],
   med: ["rent_median", "median_rent"], q1: ["rent_q1", "q1_rent"], q3: ["rent_q3", "q3_rent"], desk: ["desk_like"],
   sub: ["sub_type", "property_sub_type"],                 // the register's own words: "1bed room+Hall", "Hotel", "Villa", "Office"
-  usage: ["usage", "property_usage"]                      // Residential / Commercial
+  usage: ["usage", "property_usage"],                     // Residential / Commercial
+  bsrc: ["beds_src"]                                      // v397e: where a filed row's bedroom band came from: rooms | portal_join
 };
 // img_ejari_projects_index: {as_of, source, projects, index: {"<project_number>": {...}}}
 export const EJARI_PROJECT_FIELDS = { en: ["name_en"], ar: ["name_ar"], area: ["area"], district: ["district"], key: ["key"], dev: ["developer"], devNo: ["developer_number"] };
@@ -87,7 +88,7 @@ export function ejariRow(raw, fields) {
     reg: /renew/i.test(str(g("reg"))) ? "Renew" : "New",
     n: Math.max(0, num(g("n")) || 0), props: num(g("props")), med: num(g("med")), q1: num(g("q1")), q3: num(g("q3")),
     desk: d === true || d === 1 || d === "true" || d === "1",
-    sub: str(g("sub")) || null, usage: str(g("usage")) || null
+    sub: str(g("sub")) || null, usage: str(g("usage")) || null, bsrc: str(g("bsrc")) || null
   };
 }
 // a whole contract file: {asOf, source, basis, first, rows}. asOf is the file's as_of date, or the latest row date when the file
@@ -415,7 +416,7 @@ function finish(base, subject, st, rg, anchor, srcs) {
   const rows = subject.filter(keep(stE, rg.from, rg.to));
   const A = Object.assign(base, { asOf: anchor, from: rg.from, to: rg.to, range: st.range, short: !covers(rg.from), count: ejariCount(rows) });
   A.beds = { ok: bedsOk, share, min: COVERAGE_MIN, active: effBeds, ignored: bedsOk ? [] : st.beds, windowN: sum(win),
-    unknownN: sum(win.filter((r) => !hasBed(r))), allN: sum(subject.filter(keep({ reg: "both", beds: [], sub: [] }, rg.from, rg.to)).filter((r) => !r.desk)) };
+    unknownN: sum(win.filter((r) => !hasBed(r))), joinN: sum(win.filter((r) => r.bsrc === "portal_join" && hasBed(r))), allN: sum(subject.filter(keep({ reg: "both", beds: [], sub: [] }, rg.from, rg.to)).filter((r) => !r.desk)) };
   // the property types the chips offer: every type in the window under the other filters, whatever the type filter says
   A.subsAll = ejariCount(subject.filter(keep(st, rg.from, rg.to, true))).subs.map((s) => ({ sub: s.sub, label: s.label, n: s.n }));
   A.cmp = rg.prev ? compare(A, subject.filter(keep(stE, rg.prev.from, rg.prev.to)), rg, covers(rg.prev.from)) : null;
@@ -536,6 +537,7 @@ export async function ejariPulse(env, basis, nowMs) {
 
 // ---- the screens ----------------------------------------------------------------------------------------------------
 export const EJARI_CAVEAT = "Ejari records each contract\u2019s start date; it can be filed before or after that day. No unit numbers are published.";
+export const EJARI_JOIN_NOTE = "Bedrooms on filed days come from matching the contract to the Ejari export; the latest 2 to 3 days have no bedroom split yet.";
 export const EJARI_CAVEAT_FILED = "Counted by the day each contract was filed with Ejari, usually within hours of signing. No unit numbers are published.";
 // the caveat line always matches the date axis on screen; a fallback says so
 export function ejariCaveat(basis, fellBack) {
@@ -725,7 +727,9 @@ function headline(subjectHtml, A) {
     ? '<div class=dk id=ejexcl>' + fmt(b.unknownN) + " of " + fmt(b.windowN) + " contracts have no bedroom recorded and are not in this count.</div>" : "";
   const covl = A.basis === "filed" && b.share !== null && b.share !== undefined
     ? '<div class=dk id=ejcov>Bedrooms known for ' + esc(pctSay(b.share)) + " of these contracts.</div>" : "";
-  return '<div class=hl id=ejhl>' + lead + "</div>" + excl + covl
+  // v397e: filed-basis bedrooms matched from the Ejari export say so, and that the newest days have none yet
+  const joinl = A.basis === "filed" && b.joinN > 0 ? '<div class=dk id=ejjoin>' + esc(EJARI_JOIN_NOTE) + "</div>" : "";
+  return '<div class=hl id=ejhl>' + lead + "</div>" + excl + covl + joinl
     + cmpHtml(A.cmp)
     + '<div class=nr><i class=cn></i>' + plural(c.nw, "new lease", "new leases") + " \u00a0 <i class=cr></i>" + plural(c.rn, "renewal", "renewals") + "</div>"
     + (c.desk ? '<div class=dk id=ejdesk>Plus ' + plural(c.desk, "flexi-desk licence", "flexi-desk licences") + " (office desks rented by the month), left out of these counts and the rankings.</div>" : "")
