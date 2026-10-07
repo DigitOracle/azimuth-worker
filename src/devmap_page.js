@@ -179,7 +179,7 @@ a.peer{color:var(--ink);text-decoration:none}a.peer b{color:var(--gold)}
 .evl{color:var(--gold);font-size:12px}.evbox h3{margin:2px 0 4px;font-size:13px}.evbox svg text{fill:var(--ink);font-size:10px;font-family:inherit}.evbox svg .ax{fill:var(--muted)}
 .evbox .cl{background:var(--raise);border-left:3px solid var(--gold);padding:5px 8px;margin:8px 0;font-size:12px;border-radius:0 6px 6px 0}.evbox .why{margin:6px 0;font-size:12px}
 .golink{display:inline-block;padding:8px 2px;color:var(--gold);font-weight:600;text-decoration:underline;text-decoration-color:rgba(197,165,106,.55);text-underline-offset:3px;cursor:pointer}
-.pdfrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.pjw{min-width:0;display:flex;flex-direction:column;gap:4px}.pjinv{min-height:30px;padding:0 10px;font-size:11.5px;justify-content:center}.pdfbtn{display:inline-flex;align-items:center;min-height:38px;padding:0 14px;border:1px solid var(--gold);border-radius:6px;color:var(--gold);text-decoration:none;font-size:12.5px;font-weight:600}.pdfbtn:hover{background:var(--raise)}.pdfic{width:15px;height:15px;margin-right:7px;flex:none}
+.pdfrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.pjw{min-width:0;display:flex;flex-direction:column;gap:4px}.pjinv{min-height:30px;padding:0 10px;font-size:11.5px;justify-content:center}.pdfbtn{display:inline-flex;align-items:center;min-height:38px;padding:0 14px;border:1px solid var(--gold);border-radius:6px;color:var(--gold);text-decoration:none;font-size:12.5px;font-weight:600}.pdfbtn:hover{background:var(--raise)}.pdfic{width:15px;height:15px;margin-right:7px;flex:none}.pdhead{display:flex;flex-direction:column;gap:2px;padding:6px 0;font-size:12px;min-width:0;overflow-wrap:anywhere}.pdk{font-weight:600}.pdwy{display:flex;gap:6px;align-items:flex-start}.pdwy .evi{flex:0 0 14px;width:14px;height:14px;margin-top:1px;color:var(--gold)}.pdacb{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;box-sizing:border-box;padding:0;background:none;border:0;border-top:1px solid var(--line);color:inherit;font:inherit;font-size:13px;font-weight:600;text-align:left;cursor:pointer}.pdacb .evi{flex:0 0 16px;width:16px;height:16px;color:var(--gold)}.pdacb span{flex:1;min-width:0}.pdacb .chev{flex:0 0 14px;width:14px;height:14px;transition:transform .15s}.pdacb[aria-expanded=true] .chev{transform:rotate(180deg)}.pdacp[hidden]{display:none}.pdsm{min-height:36px;padding:0 10px;font-size:12px;background:none;font-family:inherit;box-sizing:border-box}.pdsmrow{margin-top:8px;gap:6px}.pdoff{opacity:.55;cursor:help}.pdwhyn{margin:6px 0 0;font-size:11.5px}
 .wnote{color:var(--muted);font-size:11.5px;margin:6px 0 0}
 #grab{display:none}.dwrap{display:none}
 @media(max-width:1100px){#detail{display:none}#map{right:0}#side .dwrap{display:block}}
@@ -337,25 +337,46 @@ function pjPlotHook(d){return typeof PLOTPOS!=="undefined"?PLOTPOS.rows(d.ev,pdR
 function pjCommHook(d){return typeof COMMPOS!=="undefined"?COMMPOS.rows(d,pdRow):""}   // v387 - the community-centre rows (ladder rung 3): empty without data or when a plot centre exists
 function pdRow(ic,lab,val,src,tag){return '<div class=pdr>'+icoSvg(ic,"evi")+'<div><span class=pdl>'+lab+'</span> <b dir=auto>'+val+'</b><span class="note pds">Source: '+esc(src)+' <span class=tag>'+esc(tag)+'</span></span></div></div>'}
 function pdWords(s){s=String(s||"").replace(/_/g," ").toLowerCase();return s.charAt(0).toUpperCase()+s.slice(1)}
-function pjDetailHtml(dk,located){var d=PDET[dk];if(!d)return "";var e=d.ev||{},reg=e.e==="REGISTER_VERIFIED",tg=e.e||"DATA",REGSRC="Dubai Land Department project register",h='<div class=pdet>';
-  h+=pdRow("buildings","Project",esc(d.name||d.nameDef),d.name&&reg?REGSRC:"Dubai Land Department settled sales register, project name as sold",d.name?(reg?"REGISTER_VERIFIED":"DATA"):"NOT_AVAILABLE");
-  if(e.p!=null&&e.p!=="")h+=pdRow("stack","Register project number",esc(String(e.p)),REGSRC,tg);
-  var sl=typeof DM!=="undefined"&&DM.sourceLine?DM.sourceLine(e,""):"";
-  h+=pdRow("wallet","Registered developer",e.dn?esc(e.dn):"Not recorded",sl||"The register has no developer for this project",e.dn?tg:"NOT_AVAILABLE");
+// v389 (Kendall, 7 Oct 2026): the project details are an ACCORDION - a short header always visible, then four sections, all closed until tapped - and the documents are THREE SMALL BUTTONS at the bottom.
+// Each section is a button (aria-expanded, 44 px tall, Enter and Space work as on any button) that shows or hides its panel; every row inside keeps its Source line and evidence tag.
+var ACCN="",ACCI=0,PDCLK=0;   // ids come from the project key and the context, so the same project renders the same markup twice and two open projects never share an id
+function pdHash(t){var n=0,i;t=String(t);for(i=0;i<t.length;i++)n=(n*31+t.charCodeAt(i))%1000003;return n}
+function pdSec(ic,title,rows){var id=ACCN+(++ACCI);return '<div class=pdsec><button type=button class=pdacb id='+id+'b aria-expanded=false aria-controls='+id+'>'+icoSvg(ic,"evi")+'<span>'+title+'</span>'+icoSvg("caret-down","chev")+'</button><div class=pdacp id='+id+' hidden>'+rows+'</div></div>'}
+function pdAccToggle(b){var p=$(b.getAttribute("aria-controls")),o=b.getAttribute("aria-expanded")==="true";b.setAttribute("aria-expanded",o?"false":"true");if(p)p.hidden=o}
+function pdBtnTap(b){var r=b.parentNode,w=r&&r.parentNode,n=w&&w.querySelector?w.querySelector(".pdwhyn"):null;if(n){n.textContent=b.getAttribute("data-why")||"";n.hidden=false}}
+function pdTap(ev){var t=ev&&ev.target,b=t&&t.closest?t.closest(".pdacb,.pdoff"):null;if(!b)return;if(String(b.className).indexOf("pdacb")>=0)pdAccToggle(b);else pdBtnTap(b)}
+function pdTapInit(){if(!PDCLK&&typeof document!=="undefined"&&document.addEventListener){PDCLK=1;document.addEventListener("click",pdTap)}}
+// one small document button: a real link where the document exists, else a DISABLED button (aria-disabled, so a tap still works) that says why on tap or hover. Never hidden, never a dead link.
+function pdBtn(ic,label,href,why){if(href)return '<a class="pdfbtn pdsm" target=_blank rel=noopener href="'+esc(href)+'">'+icoSvg(ic,"pdfic")+label+'</a>';return '<button type=button class="pdfbtn pdsm pdoff" aria-disabled=true data-why="'+esc(why||"Not available yet.")+'" title="'+esc(why||"Not available yet.")+'">'+icoSvg(ic,"pdfic")+label+'</button>'}
+function pdBar(btns){return '<div class=pdbar><div class="pdfrow pdsmrow">'+btns.join("")+'</div><p class="note pdwhyn" role=status hidden></p></div>'}
+// the developer of a project, as the map knows it in that area: the one developer whose project list in the area carries this project name (never a guess when two do)
+function pdDevKey(d){var A=IDX&&IDX.areas&&IDX.areas[d.slug],ds=A&&A.devs;if(!ds||!d.name)return "";var pk=pkey(d.name),f=[];Object.keys(ds).forEach(function(k){(ds[k].b||[]).forEach(function(b){if(pkey(b[2]||"")===pk&&f.indexOf(k)<0)f.push(k)})});return f.length===1?f[0]:""}
+// the three documents of a project card: Investor PDF (the tiered selector; only with a facts record), Client sheet (the Brief dossier; only where the project is tied to a building in the rent index, ev.bk) and Broker sheet (the developer snapshot for this developer in this area).
+function pjDocBar(d){var e=d.ev||{},q=d.name&&typeof invFind==="function"?invFind(d.name,e):null,bk=d.bk||e.bk||"",dv=pdDevKey(d);
+  return pdBar([pdBtn("chart-bar","Investor PDF",q?invHref(q.id):"","No investor facts record for this project yet."),
+    pdBtn("buildings","Client sheet",bk?'/brief_pdf?kind=dossier&keys='+encodeURIComponent(bk)+'&beds=all&mode=rent&key='+encodeURIComponent(KEY):"","No client sheet is tied to this project yet."),
+    pdBtn("stack","Broker sheet",dv&&d.slug&&typeof pdfUrl==="function"?pdfUrl("snapshot",d.slug,[dv],false):"","This project's developer is not matched on the map in this area, so there is no broker sheet.")])}
+function pjDetailHtml(dk,located){var d=PDET[dk];if(!d)return "";var e=d.ev||{},reg=e.e==="REGISTER_VERIFIED",tg=e.e||"DATA",REGSRC="Dubai Land Department project register",h='<div class=pdet>',why=!located?String(pdWhy(d)):"";pdTapInit();ACCN="pda"+pdHash(dk)+(located?"s":"p");ACCI=0;
+  h+='<div class=pdhead><span class=pdk>'+(d.ppsm?'AED '+fmt(pu(d.ppsm))+' '+pul():'No price per area recorded')+(d.n!=null?' &middot; '+fmt(d.n)+' sale'+(d.n===1?'':'s'):'')+'</span>'+(why?'<span class="note pdwy">'+icoSvg("map-pin","evi")+esc(why.split(". ")[0].replace(/[.]+$/,"")+".")+'</span>':'')+'</div>';
+  var f=pdRow("buildings","Project",esc(d.name||d.nameDef),d.name&&reg?REGSRC:"Dubai Land Department settled sales register, project name as sold",d.name?(reg?"REGISTER_VERIFIED":"DATA"):"NOT_AVAILABLE");
+  if(e.p!=null&&e.p!=="")f+=pdRow("stack","Register project number",esc(String(e.p)),REGSRC,tg);
   var st=[];if(e.st)st.push(pdWords(e.st));if(e.pc!=null&&e.pc!=="")st.push(esc(String(e.pc))+"% complete");if(e.pe)st.push("planned end "+esc(String(e.pe)));
-  if(st.length)h+=pdRow("chart-bar","Register status",st.join(", "),REGSRC,tg);
+  if(st.length)f+=pdRow("chart-bar","Register status",st.join(", "),REGSRC,tg);
   var u=e.u!=null&&e.u!==""?Number(e.u):(Number(e.h)>0?Number(e.h):0),mx=e.mix?(typeof e.mix==="string"?e.mix:Array.isArray(e.mix)?["Studio","1 bed","2 bed","3 bed","4+ bed"].map(function(l,i){return e.mix[i]>0?l+": "+fmt(e.mix[i]):""}).filter(Boolean).join(", "):Object.keys(e.mix).map(function(k){return k+": "+e.mix[k]}).join(", ")):"";   // v386: the index carries mix as [studio, 1, 2, 3, 4+]
-  if(u>0||mx)h+=pdRow("ruler","Registered units",(u>0?fmt(u)+" units":"")+(u>0&&mx?"; ":"")+esc(mx),REGSRC+(mx&&u>0?", units and unit mix":""),tg);
-  if(d.n!=null)h+=pdRow("chart-donut","Sales in the window",fmt(d.n)+" sale"+(d.n===1?"":"s")+(d.ppsm?"; median AED "+fmt(pu(d.ppsm))+" "+pul():""),"Dubai Land Department settled sales register, "+(d.win==="l12"&&IDX&&IDX.ev?"last 12 months":"all years"),"DATA");
-  var ar=e.a||(IDX&&IDX.areas&&IDX.areas[d.slug]?IDX.areas[d.slug].name:"");
-  if(ar)h+=pdRow("map-pin","Area",esc(ar),e.as||"Dubai Land Department sales area of the project","DATA");
-  var inv=typeof invCardLink==="function"&&d.name?invCardLink(d.name,e):"";if(inv)h+='<div class=pdr>'+inv+'</div>';
-  if(!located){h+=pdRow("map-pin","Map position",esc(pdWhy(d)),"Dubai Land Department project and land registers, and our building outlines","DERIVED");h+=pjPlotHook(d)+pjCommHook(d)}
-  return h+'</div>'}
+  if(u>0||mx)f+=pdRow("ruler","Registered units",(u>0?fmt(u)+" units":"")+(u>0&&mx?"; ":"")+esc(mx),REGSRC+(mx&&u>0?", units and unit mix":""),tg);
+  h+=pdSec("stack","Register facts",f);
+  var sl=typeof DM!=="undefined"&&DM.sourceLine?DM.sourceLine(e,""):"";
+  h+=pdSec("wallet","Developer",pdRow("wallet","Registered developer",e.dn?esc(e.dn):"Not recorded",sl||"The register has no developer for this project",e.dn?tg:"NOT_AVAILABLE"));
+  h+=pdSec("chart-donut","Sales",d.n!=null?pdRow("chart-donut","Sales in the window",fmt(d.n)+" sale"+(d.n===1?"":"s")+(d.ppsm?"; median AED "+fmt(pu(d.ppsm))+" "+pul():""),"Dubai Land Department settled sales register, "+(d.win==="l12"&&IDX&&IDX.ev?"last 12 months":"all years"),"DATA"):pdRow("chart-donut","Sales in the window","Not recorded","Dubai Land Department settled sales register","NOT_AVAILABLE"));
+  var ar=e.a||(IDX&&IDX.areas&&IDX.areas[d.slug]?IDX.areas[d.slug].name:""),a="";
+  if(ar)a+=pdRow("map-pin","Area",esc(ar),e.as||"Dubai Land Department sales area of the project","DATA");
+  if(!located){a+=pdRow("map-pin","Map position",esc(pdWhy(d)),"Dubai Land Department project and land registers, and our building outlines","DERIVED");a+=pjPlotHook(d)+pjCommHook(d)}
+  h+=pdSec("map-pin","Area and position",a||pdRow("map-pin","Area","Not recorded","Dubai Land Department sales area of the project","NOT_AVAILABLE"));
+  return h+pjDocBar(d)+'</div>'}
 function pdClose(){var el=$("pjdet"),f=PDFROM;PDOPEN=null;PDFROM=null;if(el)el.style.display="none";if(f&&f.focus){try{f.focus()}catch(x){}}}
 function pdOpen(dk,from){var d=PDET[dk];if(!d)return false;var el=$("pjdet");
   if(!el){el=document.createElement("div");el.id="pjdet";el.setAttribute("role","dialog");el.setAttribute("aria-label","Project details");document.body.appendChild(el)}
-  if(!PDKEY&&document.addEventListener){PDKEY=1;document.addEventListener("keydown",function(ev){if(ev.key==="Escape"&&PDOPEN)pdClose()})}
+  pdTapInit();if(!PDKEY&&document.addEventListener){PDKEY=1;document.addEventListener("keydown",function(ev){if(ev.key==="Escape"&&PDOPEN)pdClose()})}
   PDOPEN=dk;PDFROM=from||null;el.innerHTML='<div class=pdh><b dir=auto>'+esc(d.name||d.nameDef)+'</b><button type=button id=pdx aria-label="Close project details">'+icoSvg("x","evi")+'</button></div>'+pjDetailHtml(dk,false);el.style.display="block";if(typeof PLOTPOS!=="undefined")PLOTPOS.open({map:map,ev:d.ev,el:el,wide:innerWidth,collapse:function(){setSheet(false)}});if(typeof COMMPOS!=="undefined")COMMPOS.open({map:map,slug:d.slug,name:d.name,ev:d.ev,el:el,wide:innerWidth,collapse:function(){setSheet(false)}});
   var x=$("pdx");if(x){x.onclick=pdClose;if(x.focus)x.focus()}return true}
 function pjFeatures(pts){var out=[];if(!S.sel)return out;var sel=S.pj&&S.pj.slug===S.sel?S.pj.key:null;
@@ -369,7 +390,7 @@ function updatePj(){if(!map||!map.getSource||!map.getSource("pj"))return;map.get
   if(S.pj&&!PULSE&&!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches)){var t0=Date.now();(function tick(){if(!S.pj||!map.getLayer("pj-ring")){PULSE=0;return}var ph=(Date.now()-t0)/450;map.setPaintProperty("pj-ring","circle-radius",24+7*Math.sin(ph));map.setPaintProperty("pj-ring","circle-stroke-opacity",0.65+0.35*Math.sin(ph));map.setPaintProperty("pj-halo","line-opacity",0.4+0.3*Math.sin(ph));PULSE=requestAnimationFrame(tick)})()}}
 // the building snapshot: one DOM card in the map frame (hover on desktop, tap on touch, open after "Show on the map"); a tap elsewhere closes it
 var SNAP=null;
-function showSnap(p,pin){var el=$("bsnap");if(!el)return;SNAP=pin?p.key:SNAP;var d=pin?(p.dk||(PJ[p.key]||{}).dk):null,has=d&&PDET[d];el.innerHTML=tipHtml(p)+(has?'<div class=pjdsec><b class=pdsh>Project details</b>'+pjDetailHtml(d,true)+'</div>':'');el.className=has?"pin":"";el.style.display="block"}
+function showSnap(p,pin){var el=$("bsnap");if(!el)return;pdTapInit();SNAP=pin?p.key:SNAP;var d=pin?(p.dk||(PJ[p.key]||{}).dk):null,has=d&&PDET[d];el.innerHTML=tipHtml(p)+(has?'<div class=pjdsec><b class=pdsh>Project details</b>'+pjDetailHtml(d,true)+'</div>':'');el.className=has?"pin":"";el.style.display="block"}
 function hideSnap(){var el=$("bsnap");SNAP=null;if(el)el.style.display="none"}
 function focusProject(slug,key){var info=PJ[key];if(!info)return;if(typeof PLOTPOS!=="undefined")PLOTPOS.clear(map);if(typeof COMMPOS!=="undefined")COMMPOS.clear(map);var fs=locate(slug,info.name);if(!fs)return;
   var keep=S.fdev;select(slug,false,keep);S.pj={slug:slug,key:key};renderDetail();refreshMap();updatePj();
@@ -632,7 +653,7 @@ function areaHtml(slug){
   h+=src();return h}
 function pdfUrl(kind,slug,devs,bud){var u='/developers_pdf?kind='+kind+'&area='+encodeURIComponent(slug)+'&window='+(S.win==='l12'&&IDX.ev?'12m':'all')+'&mode='+S.mode+'&developers='+encodeURIComponent(devs.join(','));if(bud){var b=S.bud;if(b.min!=null)u+='&min='+b.min;if(b.max!=null)u+='&max='+b.max;if(b.beds!=null)u+='&beds='+b.beds;if(S.mode==='buy')u+='&basis='+b.mode}return u+'&key='+encodeURIComponent(KEY)}
 function investorUrl(slug,k){return '/developers_pdf?kind=investor&area='+encodeURIComponent(slug)+'&developer='+encodeURIComponent(k)+'&window='+(S.win==='l12'&&IDX.ev?'12m':'all')+'&key='+encodeURIComponent(KEY)}
-function pdfRow(slug,devs,bud,inv){if(!slug)return '';return '<div class=pdfrow><a class=pdfbtn target=_blank rel=noopener href="'+esc(pdfUrl('snapshot',slug,devs,bud))+'">Download PDF: snapshot</a><a class=pdfbtn target=_blank rel=noopener href="'+esc(pdfUrl('detailed',slug,devs,bud))+'">Download PDF: detailed</a>'+(inv?'<a class=pdfbtn target=_blank rel=noopener href="'+esc(investorUrl(slug,inv))+'">'+icoSvg('chart-bar','pdfic')+'Investor PDF</a>':'')+'</div>'}
+function pdfRow(slug,devs,bud,inv){if(!slug)return '';return pdBar([pdBtn('stack','Snapshot PDF',pdfUrl('snapshot',slug,devs,bud),''),pdBtn('buildings','Detailed PDF',pdfUrl('detailed',slug,devs,bud),''),pdBtn('chart-bar','Investor PDF',inv?investorUrl(slug,inv):'','The investor PDF is for one developer: open a developer first.')])}
 // v376/v379 - one 'Investor PDF: <project>' button per project of this developer that has an investor-PDF facts record. Matching: the register project number from the v373 evidence (bx[i].p) when there is one - and a number that is not in the index never falls back to a name;
 // with no number, the exact normalised name, and only when that name is one project in the index. The button opens the selector page on the same page key; it shows the register project number, so a wrong match would be visible. The index arrives as compact arrays (what=inv).
 function invFromApi(j){var out=[];if(j&&j.rows)j.rows.forEach(function(x){out.push({id:x[0],name:x[1],brand:x[2]||x[1],pn:x[3]||0})});if(j&&j.projects)j.projects.forEach(function(x){out.push({id:x.id,name:x.name,brand:x.brand||x.name,pn:x.pn||0})});return out.length?out:null}

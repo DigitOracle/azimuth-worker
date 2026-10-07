@@ -175,7 +175,7 @@ console.log("the route and its keys");
 console.log("the page: buttons and the gold link");
 {
   const js = devmapHtml("k", {});
-  ok(js.includes("Download PDF: snapshot") && js.includes("Download PDF: detailed") && js.includes("/developers_pdf"), "the page has both download buttons");
+  ok(js.includes("Snapshot PDF") && js.includes("Detailed PDF") && js.includes("/developers_pdf"), "the page has both download buttons (v389: the small row, Snapshot PDF and Detailed PDF)");
   ok(/pdfRow\(slug,mineList\(\),S\.screen===3\)/.test(js) && /pdfRowProf\(k,p\)/.test(js) && /pdfRow\(a\.slug,mineList\(\),true\)/.test(js), "buttons sit on the area panel, the developer profile and the client meeting results (which pass the budget)");
   ok((js.match(/id=showall class=golink/g) || []).length === 2 && /\.golink\{[^}]*padding:8px[^}]*var\(--gold\)/.test(js), "'Show all developers here' uses the gold link style with a clear tap target");
   const script = js.split("<script>")[1].split("</script>")[0];

@@ -75,7 +75,7 @@ S.unit = "sqm"; const tsq = text(open("built")); S.unit = "sqft";
 ok(/median AED 22,000 per sq m/.test(tsq), "the median follows the chosen unit (sq m)");
 ok(/Area\s+Fixture District/.test(t1), "the project's own area label");
 ok(/href="\/developers_pdf\?kind=investor_selector&amp;project=INV-BUILT&amp;format=html&amp;key=k"/.test(p1) && /Investor PDF/.test(t1), "Investor PDF link when a facts record exists (same href as the card link)");
-ok(!/Investor PDF/.test(text(open("notyet"))), "no Investor PDF link when no facts record exists");
+{ const h = open("notyet"); ok(!/href="[^"]*investor_selector/.test(h) && /pdoff[^>]*aria-disabled=true[^>]*>[^<]*<svg[\s\S]*?<\/svg>Investor PDF/.test(h), "no Investor PDF link when no facts record exists (v389: a disabled button with its reason, not a link)"); }
 ok(["Project", "Register project number", "Registered developer", "Registered units", "Sales in the window", "Area", "Map position"].every((l) => new RegExp(l + "[^]*?Source: ").test(text(open("built")))) && (p1.match(/Source: /g) || []).length >= 6 && (p1.match(/class=tag>/g) || []).length >= 6, "every line carries 'Source:' and an evidence tag");
 const tc = text(open("claimed"));
 ok(/Registered developer\s+Not recorded/.test(tc) && /Developer says \(website\); the register has no record of it/.test(tc) && /NOT_AVAILABLE/.test(tc), "no developer on the register: said plainly, with the developer's-own-website line");
