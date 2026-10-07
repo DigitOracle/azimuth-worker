@@ -23,6 +23,8 @@ import { COMMPOS_JS, COMMPOS_CSS } from "./commpos_page.js";   // v387 - communi
 import { COMMPOS_KV_NAME, cleanCommPos } from "./commpos.js";
 import { NOSALES_JS } from "./nosales_page.js";   // v392 - launched projects with no registered sales yet (all new logic lives in the two nosales files)
 import { NOSALES_KV_NAME, cleanNosales, addNosalesPlots } from "./nosales.js";
+import { ANNOUNCED_JS } from "./announced_page.js";   // v397d - projects the developer announces that are in no register (all new logic lives in the two announced files)
+import { ANNOUNCED_KV_NAME, cleanAnnounced } from "./announced.js";
 
 import { PHOSPHOR_LIGHT } from "./devmap_icons.js";
 export const DEVMAP_PATHS = ["/developers_map", "/developers_map_api"];
@@ -90,6 +92,10 @@ export async function devmapRoutes(request, env, url, deps) {
   if (what === "nosales") {                                                // v392 - launched projects with no registered sales yet (scripts/build_nosales.py, KV img_devmap_nosales); absent or malformed = {} and the page is exactly v390
     const ns = cleanNosales(await kvJson(env, NOSALES_KV_NAME));
     return J(ns || {});
+  }
+  if (what === "announced") {                                              // v397d - projects the developer announces that are in no register (scripts/build_announced.py, KV img_devmap_announced); absent or malformed = {} and the page is exactly v395
+    const an = cleanAnnounced(await kvJson(env, ANNOUNCED_KV_NAME));
+    return J(an || {});
   }
   if (what === "shortlist") {
     const name = await shortlistName(key);
@@ -367,6 +373,7 @@ function pjDocBar(d){var e=d.ev||{},q=d.name&&typeof invFind==="function"?invFin
     pdBtn("buildings","Client sheet",bk?'/brief_pdf?kind=dossier&keys='+encodeURIComponent(bk)+'&beds=all&mode=rent&key='+encodeURIComponent(KEY):"","A client sheet needs a building with rent history; this project has no building on the map yet."),
     pdBtn("stack","Broker sheet",dv&&d.slug&&typeof pdfUrl==="function"?pdfUrl("snapshot",d.slug,[dv],false):"","This project's developer is not matched on the map in this area, so there is no broker sheet.")])}
 function pjDetailHtml(dk,located){var d=PDET[dk];if(!d)return "";var e=d.ev||{},reg=e.e==="REGISTER_VERIFIED",tg=e.e||"DATA",REGSRC="Dubai Land Department project register",h='<div class=pdet>',why=!located?String(pdWhy(d)):"";pdTapInit();ACCN="pda"+pdHash(dk)+(located?"s":"p");ACCI=0;
+  if(e.an&&typeof ANNOUNCED!=="undefined")return ANNOUNCED.detail(d,{pdRow:pdRow,pdSec:pdSec,esc:esc,icoSvg:icoSvg});   // v397d - an announced project: the developer-says panel, never a project number
   h+='<div class=pdhead><span class=pdk>'+(d.ppsm?'AED '+fmt(pu(d.ppsm))+' '+pul():'No price per area recorded')+(pdBandTier(d.ppsm)>=0?' &middot; '+esc(DM.TIER_NAMES[pdBandTier(d.ppsm)]):'')+(d.n!=null?' &middot; '+fmt(d.n)+' sale'+(d.n===1?'':'s'):'')+'</span>'+(why?'<span class="note pdwy">'+icoSvg("map-pin","evi")+esc(why.split(". ")[0].replace(/[.]+$/,"")+".")+'</span>':'')+'</div>';
   var f=pdRow("buildings","Project",esc(d.name||d.nameDef),d.name&&reg?REGSRC:"Dubai Land Department settled sales register, project name as sold",d.name?(reg?"REGISTER_VERIFIED":"DATA"):"NOT_AVAILABLE");
   if(e.p!=null&&e.p!==""&&!e.off)f+=pdRow("stack","Register project number",esc(String(e.p)),REGSRC,tg);
@@ -476,6 +483,8 @@ function ncHtml(k){var win=S.win==="l12"&&IDX.ev?"l12":"all",l=DM.attrUnconfirme
     return pjCard(q.slug,q.name,q.ppsm,q.n,'<span class=note style="display:block;margin:0">'+esc(ev&&ev.a?ev.a:q.area)+'</span>'+srcLine(ev,nm)+(ev&&ev.dn&&ev.e!=="REGISTER_VERIFIED"?'<span class="note srcl" style="display:block;margin:2px 0 0;font-size:10.5px">Register names: '+esc(ev.dn)+'</span>':''),'name not in the data yet',ev)}).join("")+'</div></details>'}
 // v392 - the collapsed group of launched projects with no registered sales yet (src/nosales_page.js); empty without the file
 function nsHtml(k){if(typeof NOSALES==="undefined")return "";var ar=S.parea&&IDX.areas[S.parea]?IDX.areas[S.parea]:null;return NOSALES.html(k,S.parea||null,{pjCard:pjCard,esc:esc,words:pdWords,areaNames:function(){return ar?[ar.name].concat(ar.comms||[]):[]}})}
+// v397d - the collapsed group of projects the developer announces that are in no register (src/announced_page.js); empty without the file
+function anHtml(k){if(typeof ANNOUNCED==="undefined")return "";var ar=S.parea&&IDX.areas[S.parea]?IDX.areas[S.parea]:null;return ANNOUNCED.html(k,S.parea||null,{pjCard:pjCard,esc:esc,BLK:BLK,areaNames:function(){return ar?[ar.name].concat(ar.comms||[]):[]}})}
 // v375 - DELIVERY RECORD card (derived from the Land Department project register; the file is KV img_devmap_delay, absent = no card)
 function delayStat(k){return S.delay&&DM.delayRecord?DM.delayRecord(S.delay,IDX,k):null}
 function delayRow(k){return delayStat(k)?"Shown in the Delivery record card on this page.":""}
@@ -490,10 +499,10 @@ function profileHtml(k){
   var p=DM.devProfile(ixOf(S.win),k);if(!p.known)p.name=DEFAULT_NAMES[k]||k;if(typeof CF!=="undefined"&&CF)p=CF.filterProfile(p);
   var back=S.sel&&IDX.areas[S.sel]?'Back to '+esc(IDX.areas[S.sel].name):'Close';
   var h='<p class=label>Developer profile</p><h2>'+esc(p.name)+'</h2><button type=button class=btn id=pback style="margin-top:8px">'+back+'</button>';
-  if(!p.areas)return h+nsHtml(k)+(typeof pdfRowProf==="function"?pdfRowProf(k,p):"")+'<p class=note>'+esc(p.name)+': no sales on the map yet.</p>'+profSrc();
+  if(!p.areas)return h+nsHtml(k)+anHtml(k)+(typeof pdfRowProf==="function"?pdfRowProf(k,p):"")+'<p class=note>'+esc(p.name)+': no sales on the map yet.</p>'+profSrc();
   h+=wsegProf();
   h+='<div class=seg style="margin-top:10px" id=useg><button data-u=sqft>per sq ft</button><button data-u=sqm>per sq m</button></div>';
-  h+=(typeof CF!=="undefined"&&CF?CF.profNote():"")+areaCardsHtml(p,k);h+=ncHtml(k);h+=nsHtml(k);h+=(typeof pdfRowProf==="function"?pdfRowProf(k,p):"");h+='<div class=card>'+(p.market>=0?'<span class=tag style="background:'+TC[p.market]+'">'+DM.brandLabel(p.market)+' (market view)</span>':'')+'<p style="margin:10px 0 0"><b>Market view:</b> '+(p.market>=0?DM.brandLabel(p.market)+', as the market names it.':'not set yet.')+'</p><p style="margin:4px 0 0"><b>Where its projects sit on price:</b> '+esc(DM.dataLine(p))+'.</p><p class=note style="margin:4px 0 0">The market view is how people name the brand, and is set by a person. Price alone does not say whether a developer is luxury: design, quality, who it is built for and how few homes it builds in each place all matter, so no class is given from price. The evidence below shows each factor as a number.</p><p style="margin:10px 0 0">'+esc(DM.profileSentence(p,S.unit))+'</p>'+pricePosHtml(k)+'</div>'+bandKey(DM.boundsOf(IDX))+evidenceHtml(k)+delayHtml(k)+talkHtml(k);
+  h+=(typeof CF!=="undefined"&&CF?CF.profNote():"")+areaCardsHtml(p,k);h+=ncHtml(k);h+=nsHtml(k);h+=anHtml(k);h+=(typeof pdfRowProf==="function"?pdfRowProf(k,p):"");h+='<div class=card>'+(p.market>=0?'<span class=tag style="background:'+TC[p.market]+'">'+DM.brandLabel(p.market)+' (market view)</span>':'')+'<p style="margin:10px 0 0"><b>Market view:</b> '+(p.market>=0?DM.brandLabel(p.market)+', as the market names it.':'not set yet.')+'</p><p style="margin:4px 0 0"><b>Where its projects sit on price:</b> '+esc(DM.dataLine(p))+'.</p><p class=note style="margin:4px 0 0">The market view is how people name the brand, and is set by a person. Price alone does not say whether a developer is luxury: design, quality, who it is built for and how few homes it builds in each place all matter, so no class is given from price. The evidence below shows each factor as a number.</p><p style="margin:10px 0 0">'+esc(DM.profileSentence(p,S.unit))+'</p>'+pricePosHtml(k)+'</div>'+bandKey(DM.boundsOf(IDX))+evidenceHtml(k)+delayHtml(k)+talkHtml(k);
   h+='<div class=card><p class=label>Its projects by price band</p>';
   if(p.basis==="projects"){
     h+=donut(p.mixProjects,k,'').replace('Sales by price band:','Projects by price band:')+'<p class=note style="margin:6px 0 0">'+[0,1,2,3].filter(function(i){return p.tierProjects[i]>0}).map(function(i){return DM.TIER_WORDS[i]+' '+p.tierProjects[i]}).join(' · ')+' (of '+p.projects+' project'+(p.projects===1?'':'s')+')</p>'}
@@ -736,8 +745,8 @@ function startMap(){
     map.on("mouseleave","a-fill",function(){map.getCanvas().style.cursor="";pop.remove()});
     map.on("click","a-fill",function(e){if(pjHit(e).length||(typeof CF!=="undefined"&&CF&&CF.fillMode()))return;select(e.features[0].properties.slug,false)})})}
 // ---- start ----
-Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null}),api("centres").catch(function(){return null}),api("plotpos").catch(function(){return null}),api("commpos").catch(function(){return null}),api("nosales").catch(function(){return null})]).then(function(r){
-  IDX=r[0];GEO=r[1];if(CF)CF.load(r[5]);if(typeof PLOTPOS!=="undefined")PLOTPOS.load(r[6]);if(typeof COMMPOS!=="undefined")COMMPOS.load(r[7]);if(typeof NOSALES!=="undefined")NOSALES.load(r[8]);S.delay=r[3]&&r[3].by?r[3]:null;S.inv=invFromApi(r[4]);invIndex();DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
+Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null}),api("centres").catch(function(){return null}),api("plotpos").catch(function(){return null}),api("commpos").catch(function(){return null}),api("nosales").catch(function(){return null}),api("announced").catch(function(){return null})]).then(function(r){
+  IDX=r[0];GEO=r[1];if(CF)CF.load(r[5]);if(typeof PLOTPOS!=="undefined")PLOTPOS.load(r[6]);if(typeof COMMPOS!=="undefined")COMMPOS.load(r[7]);if(typeof NOSALES!=="undefined")NOSALES.load(r[8]);if(typeof ANNOUNCED!=="undefined")ANNOUNCED.load(r[9]);S.delay=r[3]&&r[3].by?r[3]:null;S.inv=invFromApi(r[4]);invIndex();DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
   if(IDX&&IDX.ev)S.win="l12";   // v322 - prices a realtor quotes today: the last 12 months, unless the index carries no evidence yet
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l;IDX.areas[s].name=IDX.areas[s].name.replace(/\bJLT\b/g,"Jumeirah Lakes Towers")});   // v321 - an area is never shown as an initial
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
@@ -755,7 +764,7 @@ Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(functio
 
 export function devmapHtml(key, deps) {
   const nav = deps && deps.NAJ_FONTS ? deps.NAJ_FONTS : "";
-  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + PLOTPOS_JS + COMMPOS_JS + NOSALES_JS + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
+  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + PLOTPOS_JS + COMMPOS_JS + NOSALES_JS + ANNOUNCED_JS + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - developers by area</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0e1413">' + nav
     + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + CENTRES_CSS + PLOTPOS_CSS + COMMPOS_CSS + '</style></head><body>'
     + '<div id=map role=region aria-label="Map of Dubai areas: developers and prices"></div>'

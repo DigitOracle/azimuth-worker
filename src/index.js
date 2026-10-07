@@ -15,6 +15,7 @@ import { ejariRoutes } from "./ejari_page.js";   // v279 CONTRACTS SIGNED (Ejari
 import { devmapPdfRoute } from "./devmap_pdf.js";   // v324 - the two Developers-by-area PDFs (snapshot, detailed)
 import { devmapRoutes } from "./devmap_page.js";   // v301 DEVELOPERS BY AREA
 import { mergePlots, SEARCH_EXTRA_KV } from "./nosales.js";   // v392 - no-sales projects with a plot position join the map search
+import { mergeSearchItems, SEARCH_EXTRA_ANNOUNCED_KV } from "./announced.js";   // v397d - announced, not yet registered: Find-page items; both extra keys merge, each only when present
 import { supplyRoutes, pollerRoutes } from "./supply_page.js";   // v279 ADVERTISED SUPPLY - owner only: /supply*, and /pf_queue + /pf_status for the laptop poller; all logic in src/supply_page.js
 import { findItem as briefFindItem } from "./brief_docs.js";   // v277 - the building page's dossier button goes to /brief_pdf: this says whether the rent index knows the building
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
@@ -3266,7 +3267,19 @@ async function appFetch(request, env, ctx) {
         const _cc = _lk ? "private, no-store" : "public, max-age=3600";   // v279 - keyed data is never cached by a shared cache
         // ---- end v279 ----
         if (nm === "plots") {   // v392 - the map search list: img_search_extra (launched projects with no registered sales, plot positions) is added when present; absent or nothing new = img_plots untouched
-          try { const _xtra = await env.MEETINGS.get(SEARCH_EXTRA_KV); if (_xtra) { const _pt = await env.MEETINGS.get("img_plots"); const _mg = _pt ? mergePlots(_pt, _xtra) : null; if (_mg) return new Response(_mg, { headers: { "Content-Type": "application/json", "Cache-Control": _cc } }); } } catch (e) {}
+          try {   // v397d - BOTH extra keys merge, one after the other, each only when present and only when it adds something: img_search_extra, then img_search_extra_announced (features, if it ever holds any)
+            let _pt = null, _mg = null;
+            for (const _xk of [SEARCH_EXTRA_KV, SEARCH_EXTRA_ANNOUNCED_KV]) {
+              const _xtra = await env.MEETINGS.get(_xk); if (!_xtra) continue;
+              if (_pt === null) _pt = (await env.MEETINGS.get("img_plots")) || "";
+              if (!_pt) break;
+              const _m1 = mergePlots(_pt, _xtra); if (_m1) { _pt = _m1; _mg = _m1; }
+            }
+            if (_mg) return new Response(_mg, { headers: { "Content-Type": "application/json", "Cache-Control": _cc } });
+          } catch (e) {}
+        }
+        if (nm === "search_index") {   // v397d - the Find page list: announced-by-the-developer items (KV img_search_extra_announced) are added when present; absent or nothing new = img_search_index untouched
+          try { const _ax = await env.MEETINGS.get(SEARCH_EXTRA_ANNOUNCED_KV); if (_ax) { const _si = await env.MEETINGS.get("img_search_index"); const _sm = _si ? mergeSearchItems(_si, _ax) : null; if (_sm) return new Response(_sm, { headers: { "Content-Type": "application/json", "Cache-Control": _cc } }); } } catch (e) {}
         }
         const buf = await env.MEETINGS.get("img_" + nm, "arrayBuffer");
         if (!buf) return new Response("not found", { status: 404 });
@@ -9398,7 +9411,7 @@ function renderFind(key, q0, owner, liveSheets) {
     'var hl=function(n,toks){var h=esc(n);toks.forEach(function(t){if(t.length<2)return;h=h.replace(new RegExp("("+t.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&")+")","ig"),"<i>$1</i>")});return h};' +
     'var twin=function(r){if(r.d&&r.i!=null)return"/skyline/"+encodeURIComponent(r.d)+"?key="+encodeURIComponent(KEY)+"&b="+encodeURIComponent(r.i);if(r.d)return"/skyline/"+encodeURIComponent(r.d)+"?key="+encodeURIComponent(KEY)+"&q="+encodeURIComponent(r.n);return null};' +
     'var link=function(r){if(r.t==="developer"&&r.dev)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY);if(r.dev&&r.p)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY)+"&p="+encodeURIComponent(r.p);if(r.dev)return"/dev?d="+encodeURIComponent(r.dev)+"&key="+encodeURIComponent(KEY);return twin(r)};' +
-    'var where=function(r){var w=[];if(r.a)w.push(r.a);if(r.m&&r.m!==r.n)w.push(r.m);if(r.units)w.push(Number(r.units).toLocaleString("en")+" units");if(r.nb)w.push(r.nb+" buildings");if(r.st==="verified")w.push("register");if(r.off)w.push("in the register, not yet on the twin");if(r.dev&&r.t!=="developer")w.push(r.dev);return w.join(" \\u00b7 ")};' +
+    'var where=function(r){var w=[];if(r.a)w.push(r.a);if(r.m&&r.m!==r.n)w.push(r.m);if(r.units)w.push(Number(r.units).toLocaleString("en")+" units");if(r.nb)w.push(r.nb+" buildings");if(r.st==="verified")w.push("register");if(r.off)w.push("in the register, not yet on the twin");if(r.ann)w.push("announced by the developer, not yet registered");if(r.dev&&r.t!=="developer")w.push(r.dev);return w.join(" \\u00b7 ")};' +
     'var render=function(){if(!IDX)return;var s=nk(q.value),toks=s?s.split(" "):[];var rows=IDX.items.filter(function(r){if(T&&r.t!==T)return false;if(!toks.length)return r.t==="developer";var hay=nk(r.n)+" "+nk(r.m)+" "+nk(r.a)+" "+nk(r.dev);return toks.every(function(t){return hay.indexOf(t)>=0})});' +
     'if(window.__qnFind)try{window.__qnFind(q.value,rows.length,T)}catch(e){}' +   // v153 - on Kendall's and Naj's devices an empty search becomes a question note (nothing on client links)
     'rows.sort(function(a,b){var sa=nk(a.n).indexOf(s)===0?0:1,sb=nk(b.n).indexOf(s)===0?0:1;if(sa!==sb)return sa-sb;var ta={developer:0,development:1,building:2};if(ta[a.t]!==ta[b.t])return ta[a.t]-ta[b.t];return (Number(b.units)||0)-(Number(a.units)||0)});' +
