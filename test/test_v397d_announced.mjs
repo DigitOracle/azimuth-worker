@@ -132,7 +132,7 @@ console.log("C - the page");
 }
 console.log("D - the accounting: every candidate in exactly one bucket");
 {
-  const parse = (t) => t.replace(/^﻿/, "").trim().split("\n").slice(1).map((l) => { const m = l.match(/^(c\d+),([^,]*),(".*?"|[^,]*),(.*),(matched|shown-outside-Dubai|shown-possible-match|shown|skipped-duplicate|skipped-malformed),(.*)$/); return m ? { id: m[1], bucket: m[5] } : null; });
+  const parse = (t) => t.replace(/^﻿/, "").trim().split(/\r?\n/).slice(1).map((l) => { const m = l.match(/^(c\d+),([^,]*),(".*?"|[^,]*),(.*),(matched|shown-outside-Dubai|shown-possible-match|shown|skipped-duplicate|skipped-malformed),(.*)$/); return m ? { id: m[1], bucket: m[5] } : null; });
   const rows = parse(rd("../data/announced/announced_accounting.csv"));
   ok(rows.every(Boolean), "every accounting row parses");
   const ids = new Set(rows.map((r) => r.id));
