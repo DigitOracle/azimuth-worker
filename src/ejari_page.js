@@ -94,8 +94,10 @@ export function ejariRow(raw, fields) {
 // a whole contract file: {asOf, source, basis, first, rows}. asOf is the file's as_of date, or the latest row date when the file
 // has none; first is the earliest row date (how far back a file whose length is not fixed actually reaches).
 export function ejariDoc(doc) {
-  if (!doc || !Array.isArray(doc.rows)) return null;
-  const rows = doc.rows.map((r) => ejariRow(r, doc.fields)).filter(Boolean);
+  // v396: the all-Dubai files are {as_of, per_area: {fields, rows}, per_developer} - the rows live under per_area (the page said 'not landed yet' for them)
+  const pa = doc && !Array.isArray(doc.rows) && doc.per_area && Array.isArray(doc.per_area.rows) ? doc.per_area : null;
+  if (!doc || (!Array.isArray(doc.rows) && !pa)) return null;
+  const rows = (pa ? pa.rows : doc.rows).map((r) => ejariRow(r, pa ? pa.fields : doc.fields)).filter(Boolean);
   let asOf = str(doc.as_of).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) asOf = rows.reduce((m, r) => (r.date > m ? r.date : m), "");
   const first = rows.reduce((m, r) => (!m || r.date < m ? r.date : m), "");

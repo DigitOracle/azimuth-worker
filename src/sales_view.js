@@ -77,7 +77,7 @@ export function salesDoc(doc, part) {
   let asOf = str(doc.as_of).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) asOf = rows.reduce((m, r) => (r.date > m ? r.date : m), "");
   const first = rows.reduce((m, r) => (!m || r.date < m ? r.date : m), "");
-  return { asOf, first, source: doc.source || "", rows };
+  return { district: str(doc.district).toLowerCase(), asOf, first, source: doc.source || "", rows };
 }
 // the developer rows of the Dubai-wide file: {date, area, district, devNo, dev, stage, n}
 function devDoc(doc) {
@@ -202,9 +202,18 @@ export async function salesAnswer(raw, st, A, names) {
     const w = salesWindow(st, A, asOf), lo = w.prev ? w.prev.from : w.from;
     for (const r of dev) { if (!mine(r) || r.date < lo || r.date > w.to) continue; if (r.district) slugs.set(r.district, (slugs.get(r.district) || 0) + r.n); else if (r.date >= w.from) unmapped += r.n; else unmappedPrev += r.n; }
     const top = [...slugs.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 25).map((x) => x[0]);
-    const files = (await Promise.all(top.map(async (s) => salesDoc(await raw(SALES_KV.district(s)))))).filter(Boolean);
+    const word = g ? String(id).slice(6) : norm(A.name).split(" ")[0];
+    // the districts whose projects carry the brand word with no developer recorded are read too (for the separate line only)
+    const bd = new Set(); const pj = dub && dub.projects;
+    if (word && word.length >= 4 && pj && Array.isArray(pj.rows)) { const fi = (n) => (pj.fields || []).indexOf(n); for (const a of pj.rows) if (a[fi("developer")] == null && (" " + norm(a[fi("name")]) + " ").indexOf(" " + word + " ") >= 0 && a[fi("district")]) bd.add(String(a[fi("district")]).toLowerCase()); }
+    const dists = [...new Set(top.concat([...bd]))];
+    const filesAll = (await Promise.all(dists.map(async (s) => salesDoc(await raw(SALES_KV.district(s)))))).filter(Boolean);
+    const files = filesAll.filter((f) => !f.district || top.indexOf(f.district) >= 0);
     rows = []; for (const f of files) for (const r of f.rows) if (mine(r)) rows.push(r);
-    devExtra = { unmapped, districts: top.length };
+    // sales whose project name carries the brand word but whose developer the register does not record: shown on their own line, never in the counts
+    const brandRows = [];
+    if (word && word.length >= 4) for (const f of filesAll) for (const r of f.rows) if (r.kind === "sale" && !r.dev && !r.devNo && (" " + norm(r.project) + " ").indexOf(" " + word + " ") >= 0) brandRows.push(r);
+    devExtra = { unmapped, districts: top.length, word, brandRows };
     if (files.length) first = files.reduce((m, f) => (!m || f.first < m ? f.first : m), "");
   } else if (A.kind === "dubai") {
     const dd = salesDoc(await raw(SALES_KV.dubai), "per_area");
@@ -235,7 +244,11 @@ export async function salesAnswer(raw, st, A, names) {
       S.cmp = { n: p, base, pct: base > 0 ? Math.round(((count.n - base) / base) * 100) : null, days: w.prev.days, avg: !!w.prev.avg, from: w.prev.from, to: w.prev.to };
     }
   } else S.cmp = null;
-  if (devExtra) S.dev = devExtra;
+  if (devExtra) {
+    const br = devExtra.brandRows.filter(keepSale(stE, w.from, w.to));
+    S.dev = { unmapped: devExtra.unmapped, districts: devExtra.districts };
+    S.brand = { word: devExtra.word ? devExtra.word.charAt(0).toUpperCase() + devExtra.word.slice(1) : "", n: sum(br) };
+  }
   const sale = inWin.filter((r) => r.kind === "sale");
   if (A.kind === "developer" || A.kind === "district") S.projects = projectsOf(inWin.concat(alsoRows), names).slice(0, 60);
   if (A.kind === "developer" || A.kind === "dubai") {
@@ -470,6 +483,7 @@ export function salesBodyHtml(mode, subjectHtml, A, S, st, R) {
     h += '<div class=hd2>RENTALS<small>' + (A.basis === "filed" ? "filed with Ejari" : "by contract start date") + "</small></div>" + (A.noRentals ? '<div class=dk>No rentals are on record with Ejari for this place in this window.</div>' : R.bands(A) + R.subs(A));
   }
   h += salesTablesHtml(S, st) + attrLine(S, kind);
+  if (S.brand && S.brand.n > 0) h += '<div class=dk id=ejbrand>' + plural(S.brand.n, "more sale has", "more sales have") + " " + esc(S.brand.word) + " in the project name; the register records no developer for " + (S.brand.n === 1 ? "it" : "them") + ". Matched on the name only, and not in the counts above.</div>";
   if (kind === "developer") {
     if (S.dev && S.dev.unmapped > 0) h += '<div class=dk id=ejunmapped>Plus ' + plural(S.dev.unmapped, "sale", "sales") + " in areas the app has no district file for; they are in the all-Dubai figures but not in the lists below.</div>";
     if (mode === "both") h += weeksHtml(A, S) + areasHtml(A, S, st);

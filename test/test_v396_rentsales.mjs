@@ -190,5 +190,52 @@ console.log("F. parse, emoji");
   const w = salesWindow({ range: "week" }, { from: "2026-10-01", to: "2026-10-07" }, "2026-10-06");
   ok(w.from === "2026-10-01" && w.to === "2026-10-06" && w.prev.days === 6, "a lagging week compares the same number of days", JSON.stringify(w));
 }
+// ---- G. the REAL all-Dubai file shape (per_area {fields, rows}), as ejari_filed_dubai / ejari_daily_dubai are live ------------------------------------
+console.log("G. all-Dubai in the live per_area shape: rentals, the START pulse, and the sales view");
+{
+  const { ejariDoc, ejariPulse } = await import("../src/ejari_page.js");
+  const S3 = stores(true);
+  const pa = [], pd = [];
+  for (let i = 0; i < 40; i++) { const d = addD(ASOF, -i); pa.push([d, "Marsa Dubai", "Flat", "New", 10], [d, "Business Bay", "Flat", "New", 20], [d, "Business Bay", "Flat", "Renew", 5]); }
+  // the live filed file: {as_of, basis, source, caveat, per_area: {fields: [date, area, sub_type, reg_type, contracts], rows}}
+  S3.set("img_ejari_filed_dubai", JSON.stringify({ as_of: ASOF, basis: "filed", source: "stub", caveat: "x", per_area: { fields: ["date", "area", "sub_type", "reg_type", "contracts"], rows: pa } }));
+  // the live start file: per_area with beds and props, plus per_developer
+  S3.set("img_ejari_daily_dubai", JSON.stringify({ as_of: ASOF, source: "stub", caveat: "x", per_area: { fields: ["date", "area", "beds", "reg_type", "contracts", "props"], rows: pa.map((r) => [r[0], r[1], "1", r[3], r[4], r[4]]) }, per_developer: { fields: ["date", "developer_number", "developer", "beds", "reg_type", "contracts", "props"], rows: pd } }));
+  const d = ejariDoc(JSON.parse(S3.get("img_ejari_filed_dubai")));
+  ok(d && d.rows.length === 120 && d.rows[0].area && d.rows[0].n > 0 && d.basis === "filed", "ejariDoc reads the per_area shape (filed)", d && d.rows.length);
+  const d2 = ejariDoc(JSON.parse(S3.get("img_ejari_daily_dubai")));
+  ok(d2 && d2.rows.length === 120 && d2.basis === "start", "and on the start basis");
+  ok(ejariDoc({ as_of: "2026-10-07" }) === null, "a file with neither rows nor per_area is still null");
+  for (const qs of ["kind=dubai&id=dubai&range=week", "kind=dubai&id=dubai&range=week&basis=start", "kind=dubai&id=dubai&range=week&view=rentals", "kind=dubai&id=dubai&range=week&view=sales"]) {
+    const h = await page(S3, qs);
+    ok(!/not landed yet/.test(h) && /id=ejhl/.test(h), "Dubai page answers: " + qs, hl(h));
+  }
+  const h = await page(S3, "kind=dubai&id=dubai&range=week");
+  ok(/^Dubai: 245 rentals filed with Ejari and \d+ sales registered with the Land Department between 1 Oct and 7 Oct 2026\.$/.test(hl(h)), "Dubai headline carries both numbers (7 days x 35 rentals)", hl(h));
+  const hr = await page(S3, "kind=dubai&id=dubai&range=week&view=rentals");
+  ok(/Dubai signed <b>245<\/b> contracts, filed with Ejari/.test(hr), "Dubai Rentals view: 245");
+  const pulse = await ejariPulse(mkEnv(S3), "filed", Date.parse(ASOF + "T08:00:00Z"));
+  ok(pulse.ok && pulse.week.n === 210 && pulse.day.n === 30, "the START pulse reads the same file: 210 new leases in the week, 30 on the day", JSON.stringify([pulse.ok, pulse.week && pulse.week.n, pulse.day && pulse.day.n]));
+  const hd = await page(S3, "kind=dubai&id=dubai&range=week");
+  ok(/WHERE THE ACTIVITY IS/.test(hd) && /id=ejwhere2/.test(hd), "where the activity is, rentals and sales");
+}
+
+// ---- H. the brand line: sales with the brand in the project name and no recorded developer --------------------------------------------------
+console.log("H. brand line");
+{
+  const S4 = stores(true);
+  const d = JSON.parse(S4.get("img_sales_filed_dmc"));
+  for (let i = 0; i < 6; i++) d.rows.push(srow(addD(SALES_ASOF, -i), 1, { dld_project: "ACME RAW DISTRICT", key: "dld:acmerawdistrict", dld_project_number: null, developer_number: null, developer: null, attribution: null }));
+  S4.set("img_sales_filed_dmc", JSON.stringify(d));
+  const dub = JSON.parse(S4.get("img_sales_filed_dubai"));
+  dub.projects.rows.push(["dld:acmerawdistrict", "ACME RAW DISTRICT", null, null, "dmc", "Dubai Maritime City", null, null, 6, 0, 0]);
+  S4.set("img_sales_filed_dubai", JSON.stringify(dub));
+  const h = await page(S4, "q=acme&range=week");
+  ok(/6 more sales have Acme in the project name; the register records no developer for them/.test(text(h)), "the separate plain line", (text(h).match(/\d+ more sales?[^.]*\./) || [])[0]);
+  ok(/Acme \(all 2 registered companies\): \d+ rentals filed with Ejari and (\d+) sales/.test(hl(h)), "headline unchanged");
+  const base = hl(await page(stores(true), "q=acme&range=week"));
+  ok(base === hl(h), "the line is never added to the headline counts", base + " | " + hl(h));
+}
+
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
