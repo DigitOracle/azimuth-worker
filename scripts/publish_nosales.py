@@ -6,6 +6,7 @@ Dry run is the DEFAULT: it validates the local file, reads the live value throug
   add --apply to put the key (refuses if a value is already there); add --apply --replace to replace one (the old value is backed up first)
   options: --file <json>  --work <dir>      (the PowerShell spellings -Apply and -Replace work too)
 
+v397b: the search file may be split by district (img_search_extra_<d>, parts first, the main index key last); every key is read, backed up and verified in turn.
 Order (it stops at the first failure and prints the real error):
   0  with --apply, refuses to run 04:00-06:15 Dubai time (the morning chain) or while Najma_Daily_Refresh / Najma_Avail_Sweep is Running
   1  validates the file (size, shape, every position inside Dubai, no entry without a name or an evidence label)
@@ -24,7 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 KINDS = {
     "nosales": {"key": "img_devmap_nosales", "file": os.path.join(REPO, "data", "nosales", "nosales.json"), "limit": 600 * 1024},
-    "search": {"key": "img_search_extra", "file": os.path.join(REPO, "data", "search_extra", "search_extra.json"), "limit": 200 * 1024},
+    "search": {"key": "img_search_extra", "file": os.path.join(REPO, "data", "search_extra", "search_extra.json"), "limit": 400 * 1024},     # v397b: per KV value; a larger file is split by district (img_search_extra_<d>), the main key holds the index
 }
 LABELS = ("REGISTER_VERIFIED", "NAME_ONLY", "DEVELOPER_CLAIMED", "UNVERIFIED")
 
@@ -46,6 +47,19 @@ def quiet_window():
 
 def in_dubai(lon, lat):
     return isinstance(lon, (int, float)) and isinstance(lat, (int, float)) and 54.5 <= lon <= 56.6 and 24.0 <= lat <= 25.6
+
+
+def fpath_part(path, d):
+    return path[:-5] + "_" + d + ".json"
+
+
+def items_of(kind, path):
+    """(KV key, file) in publish order. v397b: a split search file publishes its district parts FIRST and the main key (the index that activates them) LAST."""
+    key = KINDS[kind]["key"]
+    if kind != "search" or not os.path.exists(path):
+        return [(key, path)]
+    parts = json.load(open(path, encoding="utf8")).get("parts") or {}
+    return [(key + "_" + d, fpath_part(path, d)) for d in sorted(parts)] + [(key, path)]
 
 
 def validate(kind, path):
@@ -71,14 +85,33 @@ def validate(kind, path):
             stop("the file holds no entries")
         print("  file ok: %d bytes, %d entries" % (size, n))
     else:
-        fs = d.get("features")
-        if not isinstance(fs, list) or not fs:
-            stop("the file holds no features")
+        fs = d.get("features") or []
+        sx = list(d.get("sx") or [])
+        parts = d.get("parts") or {}
+        for dd in sorted(parts):          # v397b: the district parts are validated with the main file
+            fp = fpath_part(path, dd)
+            if not os.path.exists(fp):
+                stop("the part file is not there: " + fp)
+            if os.path.getsize(fp) > KINDS[kind]["limit"]:
+                stop("%s is %d bytes, over the %d KB limit" % (fp, os.path.getsize(fp), KINDS[kind]["limit"] // 1024))
+            pj = json.load(open(fp, encoding="utf8"))
+            if len(pj.get("sx") or []) != parts[dd]:
+                stop("%s holds %d entries, the index says %d" % (fp, len(pj.get("sx") or []), parts[dd]))
+            sx += pj["sx"]
+        if not fs and not sx:
+            stop("the file holds no features and no sx entries")
         for f in fs:
             p, g = f.get("properties") or {}, (f.get("geometry") or {}).get("coordinates") or [None, None]
             if not p.get("name") or not in_dubai(g[0], g[1]):
                 stop("a feature has no name or a position outside Dubai: %s" % p.get("name"))
-        print("  file ok: %d bytes, %d features" % (size, len(fs)))
+        for x in sx:
+            if not x.get("n") or x.get("s") not in (1, 2, 3):
+                stop("an sx entry has no name or no surface flag: %s" % x.get("n"))
+            if ("lo" in x or "la" in x) and not in_dubai(x.get("lo"), x.get("la")):
+                stop("sx entry %s: position outside Dubai" % x.get("n"))
+            if x.get("dv") and x.get("ev") not in LABELS:
+                stop("sx entry %s: developer without an evidence label" % x.get("n"))
+        print("  file ok: %d bytes, %d features, %d sx entries in %d part file(s)" % (size, len(fs), len(sx), len(parts)))
     return d
 
 
@@ -115,7 +148,17 @@ def main():
     print("Work folder: " + work)
     print("1/3 validating " + fpath)
     validate(a.what, fpath)
-    print("2/3 reading the live key through the live /img route (read-only)")
+    its = items_of(a.what, fpath)
+    if len(its) > 1:
+        print("  split file: %d KV keys, parts first, the main key last: %s" % (len(its), ", ".join(k for k, _ in its[:3]) + " ... " + its[-1][0]))
+    total = 0
+    for k, fp in its:
+        total += one(a, k, fp, work, bk)
+    print("\n%s: %d KV key(s), %d KB in all%s" % ("DRY RUN" if not a.apply else "DONE", len(its), round(total / 1024), "" if a.apply else " (nothing written)"))
+
+
+def one(a, key, fpath, work, bk):
+    print("2/3 reading the live key " + key + " through the live /img route (read-only)")
     raw = live_get(key)
     backup = os.path.join(work, key + ".backup.json")
     if raw is not None:
@@ -129,10 +172,9 @@ def main():
         print("  no live value yet (first publish)")
     rb = ("npx wrangler kv key put %s --path \"%s\" --env %s --namespace-id %s" % (key, backup, ENVN, NS)) if raw is not None else ("npx wrangler kv key delete %s --env %s --namespace-id %s" % (key, ENVN, NS))
     if not a.apply:
-        print("\nDRY RUN: nothing written to the live store. It would put %s (%d KB)." % (key, round(os.path.getsize(fpath) / 1024)))
-        print("Roll-back line it would print (from %s):\n  %s" % (WORKER, rb))
-        return
-    print("3/3 putting")
+        print("  DRY RUN: it would put %s (%d KB). Roll-back line (from %s):\n    %s" % (key, round(os.path.getsize(fpath) / 1024), WORKER, rb))
+        return os.path.getsize(fpath)
+    print("3/3 putting " + key)
     npx = shutil.which("npx.cmd") or shutil.which("npx") or "npx"
     r = subprocess.run([npx, "wrangler", "kv", "key", "put", key, "--path", fpath, "--env", ENVN, "--namespace-id", NS], cwd=WORKER, capture_output=True, text=True)
     if r.returncode != 0:
@@ -144,7 +186,8 @@ def main():
         print("\nTHE READ-BACK THROUGH THE LIVE /img ROUTE DOES NOT MATCH THE FILE (KV can take a moment to propagate: re-check once, then roll back). From %s:\n  %s" % (WORKER, rb))
         sys.exit(1)
     print("  verified through the live /img route: the live value equals the file")
-    print("\nDONE. To roll back (from %s):\n  %s" % (WORKER, rb))
+    print("  To roll back (from %s):\n    %s" % (WORKER, rb))
+    return os.path.getsize(fpath)
 
 
 if __name__ == "__main__":
