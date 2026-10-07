@@ -27,7 +27,7 @@ const nameKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ")
 // v373 - districtName: the app district's own name (for the project area label); claims: optional {nameKey: [canonical developer ids]} of projects a developer's own web site lists (a CLAIM, never evidence).
 //   Every slot also carries `ce` (one evidence code per entry of `c`: V verified by the register, N name only, D developer claimed, U unverified) and `bx` (one evidence record per
 //   entry of `b`): {p register project number, di register developer_id, dn registered developer name, m match basis, e label, a area shown, as area source, h homes}. Additive only.
-export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nameDev, trace, regDev, districtName, claims, dldAreas) {
+export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nameDev, trace, regDev, districtName, claims, dldAreas, keep) {
   const B = (U && U.buildings_by_id) || {}, devs = {}, names = {};
   const slot = (dev) => {
     const k = dev ? canonicalOf(dev) : "_";
@@ -47,7 +47,7 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nam
     // linked to the DLD project "DANA TOWER") mean the link itself is doubtful, so the register stays silent rather than override on a guess
     let regd = null, how = "exact", areaEv = null; if (regDev) { const found = [], hows = []; for (const nm of bnames) { if (!nm) continue; const rx = regDev[nameKey(nm)] || null, r = rx || regDev[looseKeyOf(nm)] || null; if (r) { found.push(r); hows.push(rx ? "exact" : "loose"); } if (!areaEv) areaEv = regDev["@" + nameKey(nm)] || regDev["@" + looseKeyOf(nm)] || null; } if (found.length && found.every((r) => r.c === found[0].c)) { regd = found[0]; how = hows.indexOf("exact") >= 0 ? "exact" : "loose"; } }
     let D = decide({ names: bnames, cand: cand || "", candDisplay: cand ? (displayOf(canonicalOf(cand)) || cand) : "", nameOnly: !!cand && (route !== "card_field"), regd });
-    if (displacedByRegister({ D, cand: cand || "", regd, how })) D = { dev: "", q: "", why: "register names another company (" + regd.d + "); the name link to " + D.dev + " is dropped" };   // v373b
+    if (displacedByRegister({ D, cand: cand || "", regd, how, names: bnames, slug, keep })) D = { dev: "", q: "", why: "register names another company (" + regd.d + "); the name link to " + D.dev + " is dropped" };   // v373b
     const dev = D.dev || null, q = D.q;
     devOfCard[id] = dev;
     if (nameDev && dev) for (const nm of [c.name, c.dld && c.dld.project, c.dld_sales && c.dld_sales.project]) if (nm) nameDev[nameKey(nm)] = canonicalOf(dev) || "_";   // v322
@@ -117,7 +117,7 @@ function attachEvidence(areas, evidence) {
     }
   }
 }
-export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs, register, evidence, projdevOut, traceOut, regdev, claims }) {
+export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs, register, evidence, projdevOut, traceOut, regdev, claims, keep }) {
   const projDev = {};
   // the Ejari projects index: every project Dubai-wide with its developer (KV img_ejari_projects_index)
   if (ejariProjects && ejariProjects.index) for (const k of Object.keys(ejariProjects.index)) { const p = ejariProjects.index[k]; if (p.name_en && p.developer) projDev[nameKey(p.name_en)] = p.developer; }
@@ -138,7 +138,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     if ((!U || !U.buildings_by_id) && evidence && evidence.areas && evidence.areas[g.slug]) U = { buildings_by_id: {} };   // v322: a district with register sales but no card file still gets its evidence
     if (!U || !U.buildings_by_id) continue;
     const nameDev = {};
-    const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev, traceOut, regdev && regdev[g.slug], g.name, claims, register && register[g.slug] && register[g.slug].areas);
+    const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev, traceOut, regdev && regdev[g.slug], g.name, claims, register && register[g.slug] && register[g.slug].areas, keep);
     if (projdevOut) projdevOut.slugs[g.slug] = nameDev;
     if (!Object.keys(devs).length && !(evidence && evidence.areas && evidence.areas[g.slug])) continue;
     areas[g.slug] = { name: g.name, corridor: g.corridor, bbox: g.bbox, centre: g.centre, devs };
@@ -184,7 +184,7 @@ if (isMain) {
   const rd = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
   const prices = rd(a.prices);
   const projdevOut = a["projdev-out"] ? { slugs: {}, global: {} } : null;
-  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean), register: a.register ? rd(a.register) : null, evidence: a.evidence ? rd(a.evidence) : null, regdev: a.regdev ? rd(a.regdev) : null, claims: a.claims ? rd(a.claims) : null, projdevOut });
+  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean), register: a.register ? rd(a.register) : null, evidence: a.evidence ? rd(a.evidence) : null, regdev: a.regdev ? rd(a.regdev) : null, claims: a.claims ? rd(a.claims) : null, keep: (() => { const f = a.keep || fileURLToPath(new URL("./attribution_keep.json", import.meta.url)); return fs.existsSync(f) ? rd(f).keep || [] : []; })(), projdevOut });
   if (projdevOut) fs.writeFileSync(a["projdev-out"], JSON.stringify(projdevOut));
   fs.writeFileSync(a.out, JSON.stringify(idx));
   console.log("areas", Object.keys(idx.areas).length, "developers", Object.keys(idx.devs).length, "bounds", idx.cuts.bounds, "bytes", fs.statSync(a.out).size);

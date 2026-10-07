@@ -1,0 +1,9 @@
+{
+  "_why": "v373c: human-reviewed exceptions to the displacement rule. A project listed here STAYS under the brand (labelled NAME_ONLY, outside the numbers, in the Not-confirmed group) even though its register company has a web page of its own. Keyed by district slug and project name. Entries below were named by Kendall's coordinator on 7 Oct 2026 after the dry run; each needs his confirmation of the brand link. Never add a project here to make a gate pass: the register stays the authority.",
+  "keep": [
+    { "dev": "select-group", "slug": "dubaimarina", "name": "botanica", "register": "GLOBAL GROUP INTERNATIONAL LIMITED (global.hk)" },
+    { "dev": "emaar", "slug": "dubaimaritimecity", "name": "ocean point", "register": "MINA RASHID PROPERTIES L.L.C (dpworld.com)" },
+    { "dev": "emaar", "slug": "siliconoasis", "name": "palace tower t2", "register": "TAMEER HOLDING INVESTMENT (tameer.net)" },
+    { "dev": "emaar", "slug": "jumeirahvillagecircle", "name": "may residence", "register": "MAY REAL ESTATE DEVELOPMENT (may.sa)" }
+  ]
+}

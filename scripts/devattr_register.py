@@ -96,6 +96,32 @@ MASTER_LIKE = {"nakheel", "meydan", "dubai-properties", "dubai-hills-estate"}   
 CUR = set(X.BY_ID)                                                                    # curated brands (src/devcross.js ids)
 
 
+def _keep_list():
+    import json as _json
+    try: return _json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "attribution_keep.json"), encoding="utf-8")).get("keep", [])
+    except Exception: return []
+KEEP = _keep_list()
+
+
+def _brand_in_name(pname, brand):
+    """the brand's display words appear in a row in the project name (src/devattr.js brandInName)"""
+    import re as _re
+    t = [w for w in _re.sub(r"[^a-z0-9]+", " ", str(pname or "").lower()).split() if w]
+    b = [w for w in _re.sub(r"[^a-z0-9]+", " ", str((X.BY_ID.get(brand) or {}).get("display") or brand.replace("-", " ")).lower()).split() if w]
+    return bool(b) and any(t[i:i + len(b)] == b for i in range(len(t) - len(b) + 1))
+
+
+def displaced(rd, nm, slug, pname):
+    """mirror of src/devattr.js displacedByRegister for a register row reached through the sale's own project_number: a different developer identity, not a name link"""
+    import re as _re
+    key = " ".join(_re.sub(r"[^a-z0-9]+", " ", str(pname or "").lower()).split())
+    for k in KEEP:
+        if k.get("dev") == nm and (not k.get("slug") or k.get("slug") == slug) and (key == k["name"] or key.startswith(k["name"] + " ")): return False
+    if rd.get("spv_of"): return True
+    if not (rd.get("webpage") or "").strip(): return False
+    return not _brand_in_name(pname, nm)
+
+
 def pick(RD, PD, slug, pname, pnum, nk_=None, legacy=False):
     """the developer of one SALE and how sure we are. q 'v' verified by the register (project_number -> developer_id), 'i' inferred from a project name, '' none.
     PD = the index builder own name map {slugs: {slug: {nameKey: canonical}}, global: {nameKey: canonical}}.
@@ -112,7 +138,8 @@ def pick(RD, PD, slug, pname, pnum, nk_=None, legacy=False):
         if c in CUR: return c, "v"
         if nm and nm in CUR:
             if nm in (rd.get("spv_of") or ()): return nm, "v"                      # v373: the register company is an SPV of that brand: verified
-            return "_", ""        # v373b: the register names a DIFFERENT company and only a name links the brand: dropped from the brand (src/devattr.js displacedByRegister)
+            if displaced(rd, nm, slug, pname): return "_", ""      # v373b/c: the register company is a different developer identity: dropped from the brand (src/devattr.js displacedByRegister)
+            return nm, "i"        # an unlinked shell / project company with no web page, a name that carries the brand, or a reviewed exception: stays, NAME_ONLY
         return c, "v"
     return (nm, "i") if nm else ("_", "")
 
@@ -219,7 +246,7 @@ def regdev_map(con, areas_of, RD=None, ni=None, sales_areas=None):
                 rd = RD.get(pn) if pn is not None else None
                 if rd:
                     m[key] = {"c": rd["canon"], "d": rd["name_en"], "p": pn, "s": round(share, 2), "lo": rd["land_owner"],
-                              "di": rd["developer_id"], "sp": rd.get("spv_of") or []}      # v373: the register developer_id, and the brands this company is an SPV of
+                              "di": rd["developer_id"], "sp": rd.get("spv_of") or [], "w": rd.get("webpage") or ""}      # v373: the register developer_id, and the brands this company is an SPV of
                     m.setdefault("~" + nkey(nm), m[key])        # the looser key (Park Ridge Tower C finds PARK RIDGE)
                 # v373 - the project's OWN area: the sales rows' area (AREA_EN) and the register master community, for every name, with or without a register developer row
                 ak = "@" + key
