@@ -109,7 +109,7 @@ console.log("C - the page");
   const g = P.nsHtml("imtiaz");
   ok(/<details class="card nconf nosales" id=nosales>/.test(g) && !/<details[^>]*\bopen\b/.test(g), "the group is a collapsed details element");
   const nImt = (fx.d.imtiaz.wadialsafa5.length + fx.d.imtiaz.jumeirahvillagecircle.length);
-  ok(text(g).startsWith("Launched, no registered sales yet " + nImt + " projects, outside the numbers"), "titled 'Launched, no registered sales yet' with the count", text(g).slice(0, 120));
+  ok(text(g).startsWith("Registered, no unit sales yet " + nImt + " projects, outside the numbers"), "titled 'Registered, no unit sales yet' with the count", text(g).slice(0, 120));
   ok((g.match(/class="pjc /g) || []).length === nImt, "one card per project of THAT developer (" + nImt + ")");
   ok(/The Archive by Imtiaz/.test(g) && /KORE by Imtiaz/.test(g) && /No registered sales yet/.test(g) && /Pending, planned end 2027-05-16|PENDING, planned end/i.test(text(g)), "cards: names, 'No registered sales yet', status and planned end", text(g));
   ok(/Not on the project register/.test(text(g)) && /No registered unit sales yet/.test(text(g)), "KORE's card says 'Not on the project register' and 'No registered unit sales yet'");

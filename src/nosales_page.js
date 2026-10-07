@@ -1,6 +1,6 @@
 // v392 - "LAUNCHED, NO REGISTERED SALES YET" on the Developers-by-area page (the data is src/nosales.js + KV img_devmap_nosales).
 // The developer index builds a project card only from a project with settled sales, so a launched project with none (The Archive by Imtiaz, KORE by Imtiaz and about 770 others) had no card at all.
-// In each developer's profile this module adds ONE collapsed group after the area cards: "Launched, no registered sales yet (N)". Each card opens the same Project details panel as every
+// In each developer's profile this module adds ONE collapsed group after the area cards: "Registered, no unit sales yet (N)". Each card opens the same Project details panel as every
 // other card (register facts, developer, area and position; the plot or community position and the Investor PDF button where they exist). When an area card is selected the group is
 // filtered to that area. These projects are NEVER counted: not in a total, a price band, the scale word or an area count (the group sits outside every number, like "Not confirmed by the register").
 // Absent file = the page exactly as v390: every hook in src/devmap_page.js is typeof NOSALES !== "undefined" and every answer is empty without data.
@@ -19,7 +19,7 @@ var NOSALES=(function(){
   function evOf(e){return {p:e.p!=null?e.p:(e.key||null),e:e.e,dn:e.off?(e.br||""):(e.de||""),a:e.a||"",as:e.as||"register_master",st:e.st||null,pc:e.pc==null?null:e.pc,pe:e.pe||null,u:e.u||null,ns:1,off:e.off?1:0,br:e.br||"",notes:e.notes||null,id:e.id||null}}
   function line(e,w){var s=[];if(e.off)s.push("Not on the project register");else{if(e.st)s.push(w(e.st));if(e.pe)s.push("planned end "+e.pe)}return s.join(", ")}
   function html(k,area,api){var l=list(k,area,api.areaNames?api.areaNames(area):[]);if(!l.length)return "";
-    var h='<details class="card nconf nosales" id=nosales><summary><b>Launched, no registered sales yet</b> <span class=note>'+l.length+' project'+(l.length===1?'':'s')+', outside the numbers</span></summary>'
+    var h='<details class="card nconf nosales" id=nosales><summary><b>Registered, no unit sales yet</b> <span class=note>'+l.length+' project'+(l.length===1?'':'s')+', outside the numbers</span></summary>'
       +'<p class=note style="margin:6px 0">These projects are launched (on the Land Department register, or for KORE on its building register) but have no registered unit sales yet. They are not in the totals, the scale word, the price bands or the area counts on this page.'+(area?' Showing the selected area only.':'')+'</p><div class=pjg>';
     l.forEach(function(x){var e=x.e,ev=evOf(e),ln=line(e,api.words),
       extra='<span class=note style="display:block;margin:0">'+api.esc(e.a||"")+'</span>'+(ln?'<span class=note style="display:block;margin:2px 0 0">'+api.esc(ln)+'</span>':'')+'<span class=note style="display:block;margin:2px 0 0"><b>No registered '+(e.off?'unit ':'')+'sales yet</b></span>';
