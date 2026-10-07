@@ -12,7 +12,7 @@
 param([string]$Cards = "C:\Users\kwils\AppData\Local\Temp\claude\C--Users-kwils-Downloads\cfd69a2f-a784-4bee-87d0-17cb12cabffb\scratchpad\cov_cards",
       [string]$Shares = "C:\Users\kwils\AppData\Local\Temp\claude\C--Users-kwils-Downloads\cfd69a2f-a784-4bee-87d0-17cb12cabffb\scratchpad\shares.json",
       [string]$Slugs = "majan,madinatalmataar,jabalalifirst,alkhairanfirst,alhebiahfifth,dubaiinvestmentparkfirst,dubaiinvestmentparksecond,alyelayiss1,alyelayiss2,alyufrah1,wadialsafa4,wadialsafa5,palmdeira",
-      [string]$Work = "", [switch]$DryRun)
+      [string]$Work = "", [switch]$DryRun, [switch]$SkipGate)
 $Here = if (Test-Path "$PSScriptRoot\build_devmap_index.mjs") { $PSScriptRoot } else { "C:\Dev\_attr373\scripts" }
 . "$Here\_kv_common.ps1"
 $dub = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), "Arabian Standard Time")
@@ -64,6 +64,15 @@ if ($LASTEXITCODE -ne 0) { Stop-Here "the attribution guard failed on the NEW in
 $n = [int](& node -e "console.log(Object.keys(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).areas).length)" $out)
 $nd = [int](& node -e "console.log(Object.keys(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).devs).length)" $out)
 if ($n -lt 40) { Stop-Here "the new index holds only $n areas: a failed build is not published" }
+# v397g HARD STOP: the completeness gate (scripts\gate_guard.py) runs with the new file substituted for its layer and must pass before anything is written; -SkipGate publishes UNGATED and says so loudly
+$gg = Join-Path $PSScriptRoot "gate_guard.py"
+if ($SkipGate) { $skipMsg = "!!! COMPLETENESS GATE SKIPPED (-SkipGate): THIS PUBLISH IS UNGATED. Nothing has checked that it keeps every fixture and surface. !!!"; Write-Host $skipMsg -ForegroundColor Red; [Console]::Error.WriteLine($skipMsg) }
+elseif (-not (Test-Path $gg)) { Stop-Here "scripts\gate_guard.py is missing: refusing to publish without the completeness gate (-SkipGate overrides it, loudly)" }
+else {
+  $ggArgs = @("--layer", "index", "--file", "$out"); if ($DryRun) { $ggArgs += "--dry-run" }
+  & python $gg @ggArgs
+  if ($LASTEXITCODE -ne 0) { if ($DryRun) { Write-Host "DRY RUN: the completeness gate WOULD BLOCK this publish (table above)." -ForegroundColor Yellow } else { Stop-Here "the COMPLETENESS GATE blocked the publish (table above): nothing was written. -SkipGate overrides it, loudly." } }
+}
 if ($DryRun) { Write-Host "DRY RUN: nothing written to the live store. New index: $out ($n areas, $nd developers, $([math]::Round((Get-Item $out).Length/1KB)) KB; the live one is $([math]::Round((Get-Item "$Work\devmap_index.backup.json").Length/1KB)) KB)"; exit 0 }
 Write-Host "5/5 putting"
 Put-Kv "img_devmap_index" $out

@@ -6,7 +6,7 @@
 # IMPORTANT: the daily chain's own rent step (build_rent_index.py --push) rebuilds the 2-month index and would overwrite this the next time it runs; switch that step to
 # scripts\build_rent_index_12m.py (and merge_rent_index_live.mjs) before relying on it.
 param([string]$Index = "C:\Users\kwils\AppData\Local\Temp\claude\C--Users-kwils-Downloads\cfd69a2f-a784-4bee-87d0-17cb12cabffb\scratchpad\cov\out\img_rent_index.12m.json",
-      [switch]$Rebuild, [string]$AsOf = "", [string]$Work = "", [switch]$DryRun)
+      [switch]$Rebuild, [string]$AsOf = "", [string]$Work = "", [switch]$DryRun, [switch]$SkipGate)
 . "$PSScriptRoot\_kv_common.ps1"
 Test-QuietWindow
 if (-not $Work) { $Work = Join-Path $env:TEMP ("rent12m_publish_" + (Get-Date -Format "yyyyMMdd_HHmmss")) }
@@ -27,6 +27,15 @@ $final = "$Work\img_rent_index.final.json"
 if ($LASTEXITCODE -ne 0) { Stop-Here "the merge stopped (message above); nothing was written" }
 & python "$PSScriptRoot\rent_index_diff.py" $liveF $final
 $n = [int](& node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).items.length)" $final)
+# v397g HARD STOP: the completeness gate (scripts\gate_guard.py) runs with the new file substituted for its layer and must pass before anything is written; -SkipGate publishes UNGATED and says so loudly
+$gg = Join-Path $PSScriptRoot "gate_guard.py"
+if ($SkipGate) { $skipMsg = "!!! COMPLETENESS GATE SKIPPED (-SkipGate): THIS PUBLISH IS UNGATED. Nothing has checked that it keeps every fixture and surface. !!!"; Write-Host $skipMsg -ForegroundColor Red; [Console]::Error.WriteLine($skipMsg) }
+elseif (-not (Test-Path $gg)) { Stop-Here "scripts\gate_guard.py is missing: refusing to publish without the completeness gate (-SkipGate overrides it, loudly)" }
+else {
+  $ggArgs = @("--layer", "rent_index", "--file", "$final"); if ($DryRun) { $ggArgs += "--dry-run" }
+  & python $gg @ggArgs
+  if ($LASTEXITCODE -ne 0) { if ($DryRun) { Write-Host "DRY RUN: the completeness gate WOULD BLOCK this publish (table above)." -ForegroundColor Yellow } else { Stop-Here "the COMPLETENESS GATE blocked the publish (table above): nothing was written. -SkipGate overrides it, loudly." } }
+}
 if ($DryRun) { Write-Host "DRY RUN: nothing written. Final file: $final"; exit 0 }
 Write-Host "4/4 putting"
 Put-Kv "img_rent_index" $final

@@ -13,10 +13,16 @@ SURFACES (a project is "on" a surface when the live data of that surface holds i
   S6  Brief + search     the Brief's candidate lists: KV map_prices, buy_extra, rent_index
   S7  investor facts     KV investor_tiers_index (one record per register project)
   S8  unit-mix card      a priced, non-placeholder card in unitmix_<district>
+LAYERS (v397g): the v397 data sits in KV keys that are not published yet, and the gate must run both before and after the publish. Each layer is OPTIONAL: absent = skipped and reported as "layer not published".
+  nosales    img_devmap_nosales            -> S1/S3 developer-page cards          notconf   img_devmap_notconf        -> S1/S3 cards
+  announced  img_devmap_announced          -> S3 cards (developer-claimed, never counted as register coverage; only a fixture may use them)
+  search_extra img_search_extra (+ parts img_search_extra_<d>, named by the index key's "parts")  -> S2s (sx flag 1) and S2p (features, sx flag 2)
+  search_extra_announced img_search_extra_announced -> S2s items (same rule as announced)
+  community_positions_p img_community_positions_p ("p:<register project number>")  -> S4 community-centre rung
 CAUSE CODES for a miss: 1 filtered by a sales requirement; 2 not on the project-register extract we hold (date lag); 3 no developer resolved;
   4 no footprint / name mismatch; 5 area not matched to a community; 6 dropped by a rule (attribution displacement, size or evidence limit); 7 never built into that surface; 8 other.
 """
-import gzip, json, os, re, sys, time, unicodedata, urllib.request
+import gzip, json, os, re, sys, time, unicodedata, urllib.error, urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 BASE = "https://azimuth-2.digitalchemy.workers.dev/img/"
@@ -78,6 +84,24 @@ class NameIndex:
 
 
 # ------------------------------------------------------------------ the live store, read-only, through /img
+OWNER_ENV = r"C:\Dev\azimuth-listener-naj\.env"
+_OWNER = []
+
+
+def owner_key():
+    """READ_KEY from the listener's .env, read lazily and ONLY when a /img route answers 401. Never printed, never logged, never put in an error message."""
+    if not _OWNER:
+        k = ""
+        try:
+            for ln in open(OWNER_ENV, encoding="utf-8-sig"):
+                if ln.strip().startswith("READ_KEY"):
+                    k = ln.split("=", 1)[1].strip().strip("'\"")
+        except Exception:
+            k = ""
+        _OWNER.append(k)
+    return _OWNER[0]
+
+
 def kv_get(name, cache=None, max_age=900, retries=3):
     p = os.path.join(cache, name + ".json") if cache else None
     if p and os.path.exists(p) and time.time() - os.path.getmtime(p) < max_age:
@@ -85,7 +109,13 @@ def kv_get(name, cache=None, max_age=900, retries=3):
     last = None
     for k in range(retries):
         try:
-            b = urllib.request.urlopen(urllib.request.Request(BASE + name, headers=UA), timeout=120).read()
+            url = BASE + name
+            try:
+                b = urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=120).read()
+            except urllib.error.HTTPError as e401:
+                if e401.code != 401 or not owner_key():
+                    raise
+                b = urllib.request.urlopen(urllib.request.Request(url + "?key=" + urllib.parse.quote(owner_key()), headers=UA), timeout=120).read()
             if b[:2] == b"\x1f\x8b":
                 b = gzip.decompress(b)
             if p:
@@ -113,7 +143,78 @@ def load_live(cache=None, max_age=900, fast=False, workers=8):
             for n, v in zip(names, ex.map(lambda n: kv_get(n, cache, max_age), names)):
                 kv[n] = v
     kv["_fast"] = bool(fast)
+    kv["_layer_src"] = {}
+    for nm, key in LAYER_KEYS.items():
+        kv["_layer_src"][nm] = ("live", kv_get(key, cache, max_age))
+    se = kv["_layer_src"]["search_extra"][1]
+    if isinstance(se, dict) and se.get("parts"):                  # v397b: the index key names the district parts; a part that is not there leaves the layer partial (reported)
+        miss = []
+        sx = list(se.get("sx") or [])
+        for d in sorted(se["parts"]):
+            pj = kv_get("search_extra_" + d, cache, max_age) if re.match(r"^[a-z0-9]+$", d) else None
+            if pj and isinstance(pj.get("sx"), list):
+                sx += pj["sx"]
+            else:
+                miss.append(d)
+        se = dict(se, sx=sx)
+        se["_missing_parts"] = miss
+        kv["_layer_src"]["search_extra"] = ("live", se)
     return kv
+
+
+LAYER_KEYS = {"nosales": "devmap_nosales", "notconf": "devmap_notconf", "announced": "devmap_announced", "search_extra": "search_extra",
+              "search_extra_announced": "search_extra_announced", "community_positions_p": "community_positions_p"}
+LAYER_KV = {"nosales": "img_devmap_nosales", "notconf": "img_devmap_notconf", "announced": "img_devmap_announced", "search_extra": "img_search_extra",
+            "search_extra_announced": "img_search_extra_announced", "community_positions_p": "img_community_positions_p"}
+
+
+def dev_layer_entries(j, lst):
+    """Flatten a developer-page layer into [{p, n, dev, d, lst, e, bk, ann}]. Shapes: {meta, d:{dev:{district:[entry]}}} (the real files), {"projects": [...]}, a list, or {"<project number>": {...}}."""
+    out = []
+    if not j:
+        return out
+    if isinstance(j, dict) and isinstance(j.get("d"), dict):
+        for dev, ds in j["d"].items():
+            for dist, items in (ds or {}).items():
+                for e in items or []:
+                    if isinstance(e, dict):
+                        out.append({"p": e.get("p"), "n": e.get("n"), "dev": dev, "d": dist, "lst": lst, "e": e.get("e", ""), "bk": e.get("bk", ""), "ann": lst == "announced"})
+        return out
+    items = j.get("projects", j) if isinstance(j, dict) else j
+    if isinstance(items, dict):
+        items = [dict(v, p=k) if isinstance(v, dict) else {"p": k} for k, v in items.items()]
+    for e in items or []:
+        if isinstance(e, dict):
+            out.append({"p": e.get("p", e.get("project_number")), "n": e.get("n", e.get("name")), "dev": e.get("dev", lst), "d": e.get("d", ""), "lst": lst, "e": e.get("e", "REGISTER_VERIFIED"),
+                        "bk": e.get("bk", ""), "ann": lst == "announced"})
+    return out
+
+
+def layer_state(kv):
+    """-> {layer: {"state": "live"|"local file"|"not published"|"partial", "n": entries}} for the report."""
+    out = {}
+    for nm in LAYER_KEYS:
+        src, obj = (kv.get("_layer_src") or {}).get(nm, ("live", None))
+        if obj is None:
+            out[nm] = {"state": "not published" if src == "live" else "no file", "n": 0}
+            continue
+        if nm in ("nosales", "notconf", "announced"):
+            n = len(dev_layer_entries(obj, nm))
+        elif nm == "search_extra":
+            n = len(obj.get("features") or []) + len(obj.get("sx") or [])
+        elif nm == "search_extra_announced":
+            n = len(obj.get("items") or [])
+        else:
+            n = len(obj.get("p") or {})
+        st = "live" if src == "live" else "local file"
+        if nm == "search_extra" and obj.get("_missing_parts"):
+            st = "partial (parts missing: %s)" % ",".join(obj["_missing_parts"][:5])
+        out[nm] = {"state": st, "n": n}
+    # v397b: the live img_search_extra of v392 holds plot features only; the search-only "sx" entries (Burj Azizi, Trump Tower...) are a separate step, so the fixtures that need them depend on this pseudo-layer
+    sx = ((kv.get("_layer_src") or {}).get("search_extra") or ("", None))[1]
+    nsx = len((sx or {}).get("sx") or [])
+    out["search_extra_sx"] = {"state": out["search_extra"]["state"] if nsx else "not published", "n": nsx}
+    return out
 
 
 def local_bindings(repo=r"C:\Dev\naj-market-pulse"):
@@ -128,7 +229,8 @@ def local_bindings(repo=r"C:\Dev\naj-market-pulse"):
 def build_surfaces(kv):
     S = {"cardP": {}, "cards": NameIndex(), "inv_pn": set(), "inv_names": NameIndex(), "search": NameIndex(), "plots_names": NameIndex(), "plots_parcels": set(),
          "plots_pid": set(), "pos_parcels": set(), "cpos_pn": set(), "cpos_names": [], "brief": NameIndex(), "blocks": NameIndex(), "um": NameIndex(), "um_prop": set(), "um_prop_any": set(),
-         "devs": {}, "fast": kv.get("_fast")}
+         "devs": {}, "fast": kv.get("_fast"), "search_ann": NameIndex(), "layers": layer_state(kv)}
+    LS = kv.get("_layer_src") or {}
     dm = kv["devmap_index"]
     for slug, A in dm["areas"].items():
         for dk, d in A["devs"].items():
@@ -141,14 +243,15 @@ def build_surfaces(kv):
                     if e.get("p") not in (None, ""):
                         S["cardP"].setdefault(str(e["p"]), []).append(rec)
                     S["cards"].add(x[2], rec)
-    # the "registered, no sales yet" group (v392 nosales.json) once it is published or built: a list of {p, n} (or {project_number, name}); passed with --nosales
-    for it in kv.get("_nosales") or []:
-        p = it.get("p", it.get("project_number")); nm = it.get("n", it.get("name", ""))
-        rec = {"area": it.get("d", ""), "dev": it.get("dev", "nosales"), "lst": "nosales", "name": nm, "e": "REGISTER_VERIFIED", "bk": it.get("bk", ""), "p": p, "n": 0}
-        if p not in (None, ""):
-            S["cardP"].setdefault(str(p), []).append(rec)
-        if nm:
-            S["cards"].add(nm, rec)
+    # v392/v397a/v397d developer-page layers, once published or built: the "registered, no sales yet" group, the "not confirmed by the register" group, and the developer-announced group
+    for lname in ("nosales", "notconf", "announced"):
+        for it in dev_layer_entries((LS.get(lname) or ("", None))[1], lname):
+            p, nm = it["p"], it["n"] or ""
+            rec = {"area": it["d"], "dev": it["dev"], "lst": lname, "name": nm, "e": it["e"], "bk": it["bk"], "p": p, "n": 0, "ann": it["ann"]}
+            if p not in (None, ""):
+                S["cardP"].setdefault(str(p), []).append(rec)
+            if nm:
+                S["cards"].add(nm, rec)
     for it in (kv["investor_tiers_index"] or {}).get("projects", []):
         if it.get("project_number") not in (None, ""):
             S["inv_pn"].add(str(it["project_number"]))
@@ -164,6 +267,22 @@ def build_surfaces(kv):
             S["plots_parcels"].add(str(int(float(pr["parcel"]))))
         if pr.get("pid"):
             S["plots_pid"].add(str(pr["pid"]))
+    se = (LS.get("search_extra") or ("", None))[1] or {}           # v397b: features (plot hits) and sx (compact entries; s bit 1 = Find list, bit 2 = map search)
+    for f in se.get("features") or []:
+        pr = f.get("properties", {})
+        S["plots_names"].add(pr.get("name"), pr)
+        if pr.get("parcel"):
+            S["plots_parcels"].add(str(int(float(pr["parcel"]))))
+        if pr.get("pid"):
+            S["plots_pid"].add(str(pr["pid"]))
+    for x in se.get("sx") or []:
+        fl = int(x.get("s") or 3)
+        if fl & 1:
+            S["search"].add(x.get("n"), {"t": "development", "d": x.get("d"), "i": None})
+        if fl & 2:
+            S["plots_names"].add(x.get("n"), {"name": x.get("n"), "pn": x.get("pn")})
+    for it in ((LS.get("search_extra_announced") or ("", None))[1] or {}).get("items") or []:
+        S["search_ann"].add(it.get("n"), {"t": it.get("t"), "ann": 1})
     for v in ((kv["plot_positions"] or {}).get("p") or {}).values():
         for q in v.get("parcels") or []:
             S["pos_parcels"].add(str(q))
@@ -171,6 +290,10 @@ def build_surfaces(kv):
     for v in (cp.get("p") or {}).values():
         if v.get("pn") not in (None, ""):
             S["cpos_pn"].add(str(v["pn"]))
+    for k in (((LS.get("community_positions_p") or ("", None))[1] or {}).get("p") or {}):     # v397c: "p:<register project number>"
+        m = re.match(r"^p:(\d+)$", str(k))
+        if m:
+            S["cpos_pn"].add(m.group(1))
     S["cpos_names"] = [nk_full(v.get("n")) for v in (cp.get("c") or {}).values()]
     for it in (kv["map_prices"] or {}).get("items", []) + ((kv["buy_extra"] or {}).get("items") or []) + ((kv["rent_index"] or {}).get("items") or []):
         S["brief"].add(it.get("n"), {"d": it.get("d"), "i": it.get("i")})
@@ -205,7 +328,11 @@ def project_flags(r, S, reg_bound):
     in_lake = str(r.get("source", "")).startswith("register_extract")
     F, HOW, CAUSE = {}, {}, {}
 
+    ann_ok = bool(r.get("_ann"))                     # only a named fixture may be satisfied by a developer-announced card (an announced project is in no register)
+
     def okp(rec):                                    # a card with a different register project number is a different project
+        if rec.get("ann") and not ann_ok:
+            return False
         return rec.get("p") in (None, "") or str(rec.get("p")) == pn
 
     # S3
@@ -227,6 +354,8 @@ def project_flags(r, S, reg_bound):
     F["S5"], HOW["S5"] = (1, "bound") if bound else (0, "")
     # S2
     k, hit = S["search"].find(names)
+    if not hit and ann_ok:
+        k, hit = S["search_ann"].find(names)
     F["S2s"], HOW["S2s"] = (1, k) if hit else (0, "")
     k, hit = S["plots_names"].find(names)
     byparcel = any(q in S["plots_parcels"] for q in parcels)
@@ -324,14 +453,24 @@ FIXTURES = [
     {"id": "covegrand", "name": "Cove Grand Residence by Imtiaz", "pn": "3774", "names": ["Cove Grand Residence by Imtiaz"], "must": ["S3", "S2s", "S7"], "dev": "imtiaz", "not_dev": []},
     {"id": "uppercrest", "name": "Upper Crest (DAMAC)", "pn": "300", "names": ["Upper Crest", "UPPER CREST"], "must": ["S3", "S2s", "S7", "S2p"], "dev": "damac", "not_dev": []},
     {"id": "vento", "name": "Vento Tower", "pn": "2776", "names": ["Vento Tower", "VENTO TOWER"], "must": ["S3", "S2s", "S7", "S2p"], "dev": "anax-developments", "not_dev": ["beyond"]},
+    # v397g: the v397 layers. "layers" = KV layers the fixture depends on; while one is not published (and no local file is supplied) the fixture is SKIPPED and reported, never failed (--require-layers makes a skip a failure).
+    {"id": "burjazizi", "name": "Burj Azizi (search)", "pn": "3257", "names": ["BURJ AZIZI", "Burj Azizi"], "must": ["S2s", "S2p"], "dev": None, "not_dev": [], "layers": ["search_extra_sx"]},
+    {"id": "trumptower", "name": "Trump Tower (search)", "pn": "3691", "names": ["Trump Tower"], "must": ["S2s", "S2p"], "dev": None, "not_dev": [], "layers": ["search_extra_sx"]},
+    {"id": "tamaniarts", "name": "Tamani Arts Offices (not confirmed)", "pn": "22", "names": ["Tamani Arts Offices"], "must": ["S3"], "dev": "_", "not_dev": [], "layers": ["notconf"]},
+    {"id": "sobhasanctuary", "name": "Sobha Sanctuary (announced)", "pn": None, "names": ["Sobha Sanctuary"], "must": ["S3", "S2s"], "dev": "sobha", "not_dev": [], "ann": True, "layers": ["announced", "search_extra_announced"]},
+    {"id": "cposp100", "name": "Elegant Tower (community position p:100)", "pn": "100", "names": ["ELEGANT TOWER"], "must": ["S4"], "dev": None, "not_dev": [], "layers": ["community_positions_p"]},
 ]
 
 
-def check_fixtures(S, kv, fixtures=None):
+def check_fixtures(S, kv, fixtures=None, require_layers=False):
     res = []
     for fx in (fixtures or FIXTURES):
         pn = fx.get("pn"); names = fx["names"]
-        row = {"project_number": pn or "", "name": fx["name"], "name_alt": "|".join(names[1:]), "parcels": "", "reg_bound_props": "", "sales_all": 1, "source": "register_extract_fixture", "area": "", "master": ""}
+        absent = [l for l in fx.get("layers", []) if (S.get("layers") or {}).get(l, {}).get("state") in ("not published", "no file")]
+        if absent and not require_layers:
+            res.append({"id": fx["id"], "name": fx["name"], "ok": True, "skip": True, "missing": [], "devs": [], "why": ["layer not published: " + ",".join(absent)], "how": {}})
+            continue
+        row = {"_ann": bool(fx.get("ann")), "project_number": pn or "", "name": names[0], "name_alt": "|".join(names[1:]), "parcels": "", "reg_bound_props": "", "sales_all": 1, "source": "register_extract_fixture", "area": "", "master": ""}
         # the fixture is found by its register project number where it has one; a project with no number (KORE) by name only
         f = project_flags(row, S, {})
         got = {}
@@ -340,7 +479,7 @@ def check_fixtures(S, kv, fixtures=None):
         # developer-page placement, read from the cards that carry its project number (or exact name when it has none)
         recs = list(S["cardP"].get(pn, [])) if pn else []
         if not recs:
-            k, hit = S["cards"].find(names, lambda p: p.get("p") in (None, "") or str(p.get("p")) == (pn or ""))
+            k, hit = S["cards"].find(names, lambda p: (fx.get("ann") or not p.get("ann")) and (p.get("p") in (None, "") or str(p.get("p")) == (pn or "")))
             recs = hit if k == "exact" else []
         devs = sorted({x["dev"] for x in recs})
         dev_ok = True; why = []
@@ -353,5 +492,5 @@ def check_fixtures(S, kv, fixtures=None):
             if bad:
                 dev_ok = False; why.append("card sits under forbidden developer " + ",".join(bad))
         miss = [sf for sf, ok in got.items() if not ok]
-        res.append({"id": fx["id"], "name": fx["name"], "ok": (not miss) and dev_ok, "missing": miss, "devs": devs, "why": why, "how": f["HOW"]})
+        res.append({"id": fx["id"], "name": fx["name"], "ok": (not miss) and dev_ok, "skip": False, "missing": miss, "devs": devs, "why": why, "how": f["HOW"]})
     return res

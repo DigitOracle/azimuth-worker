@@ -8,7 +8,7 @@
 # Rules: never touches a protected key (data\protected_keys.json in naj-market-pulse, plus img_investor_tiers_facts, the v376 single key that keeps Chelsea live, and img_devmap_index);
 # refuses 04:00-06:15 Dubai (the morning chain window); stops at the first failure; reads every key back and compares it with what was written; prints the roll-back line for each key.
 # The v379 worker reads the index and the shards and falls back to the single key, so the order of deploy and publish does not matter; publishing before the deploy changes nothing visible.
-param([Parameter(Mandatory = $true)][string]$Folder, [switch]$Apply, [switch]$Replace, [string]$Work = "", [string]$Protected = "C:\Dev\naj-market-pulse\data\protected_keys.json")
+param([Parameter(Mandatory = $true)][string]$Folder, [switch]$Apply, [switch]$Replace, [switch]$SkipGate, [string]$Work = "", [string]$Protected = "C:\Dev\naj-market-pulse\data\protected_keys.json")
 $DryRun = -not $Apply
 $Here = if (Test-Path "$PSScriptRoot\_kv_common.ps1") { $PSScriptRoot } else { "C:\Dev\azimuth-worker-dewa\scripts" }
 . "$Here\_kv_common.ps1"
@@ -52,6 +52,15 @@ Write-Host ("  would create {0} keys, would replace {1} existing keys" -f ($targ
 if ($exist.Count -gt 0 -and -not $Replace) {
   Write-Host ("  already live: " + (($exist | Select-Object -First 8 | ForEach-Object { $_.Key }) -join ", ") + $(if ($exist.Count -gt 8) { ", ..." }))
   if (-not $DryRun) { Stop-Here "$($exist.Count) target keys already exist and -Replace was not given: nothing was written. Re-run with -Replace to replace them (each live value is backed up first)." }
+}
+# v397g HARD STOP: the completeness gate (scripts\gate_guard.py) runs with the new file substituted for its layer and must pass before anything is written; -SkipGate publishes UNGATED and says so loudly
+$gg = Join-Path $PSScriptRoot "gate_guard.py"
+if ($SkipGate) { $skipMsg = "!!! COMPLETENESS GATE SKIPPED (-SkipGate): THIS PUBLISH IS UNGATED. Nothing has checked that it keeps every fixture and surface. !!!"; Write-Host $skipMsg -ForegroundColor Red; [Console]::Error.WriteLine($skipMsg) }
+elseif (-not (Test-Path $gg)) { Stop-Here "scripts\gate_guard.py is missing: refusing to publish without the completeness gate (-SkipGate overrides it, loudly)" }
+else {
+  $ggArgs = @("--layer", "investor_tiers_index", "--file", "$Folder\index.json"); if ($DryRun) { $ggArgs += "--dry-run" }
+  & python $gg @ggArgs
+  if ($LASTEXITCODE -ne 0) { if ($DryRun) { Write-Host "DRY RUN: the completeness gate WOULD BLOCK this publish (table above)." -ForegroundColor Yellow } else { Stop-Here "the COMPLETENESS GATE blocked the publish (table above): nothing was written. -SkipGate overrides it, loudly." } }
 }
 if ($DryRun) { Write-Host "DRY RUN: nothing written to the live store. Add -Apply to publish."; exit 0 }
 
