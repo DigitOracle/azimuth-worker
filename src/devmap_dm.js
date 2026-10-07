@@ -181,7 +181,7 @@ function dataLine(p){if(!p||p.brandTier<0)return "";var i,o=[0,1,2,3].sort(funct
 // DRILL-DOWN: the projects (buildings) of one developer sitting in one tier, grouped by area (areaSlug limits it to one area)
 function drillProjects(index,k,t,areaSlug,cfg){var bounds=boundsOf(index,cfg),groups=[],s,i;
   for(s in (index&&index.areas)||{}){if(areaSlug&&s!==areaSlug)continue;var a=index.areas[s],d=a.devs&&a.devs[k];if(!d||!d.b||!nOf(d.c||[]))continue;   // v326 - an area where the developer has no sales in the window is not counted by devProfile, so it is not listed either
-    var ps=[],tot=0;for(i=0;i<d.b.length;i++){if(tierOf(d.b[i][1],bounds)===t){ps.push({name:d.b[i][2]||null,ppsm:d.b[i][1],n:d.b[i][0]});tot+=d.b[i][0]}}
+    var ps=[],tot=0;for(i=0;i<d.b.length;i++){if(tierOf(d.b[i][1],bounds)===t){var pq={name:d.b[i][2]||null,ppsm:d.b[i][1],n:d.b[i][0]};if(d.bx&&d.bx.length===d.b.length&&d.bx[i])pq.ev=d.bx[i];ps.push(pq);tot+=d.b[i][0]}}   // v373 - ev: where the attribution came from (absent in an older index)
     if(ps.length){ps.sort(function(x,y){return y.n-x.n});groups.push({slug:s,name:a.name,projects:ps,n:tot,ppsm:round(wmedian(ps.map(function(p){return [p.ppsm,p.n]})))})}}
   groups.sort(function(x,y){return y.n-x.n});return groups}
 // PRICE POSITION: every developer with 3+ settled sales, ranked by its Dubai-wide median price per sq m (the register's last 12 months of sales)
@@ -255,9 +255,45 @@ function resolveSaved(index,ids){var out=[],seen={},al=(index&&index.alias)||{},
 var AREA_ALIAS={althanyahfifth:"jltnorth"},AREA_NAMES={jltnorth:"Jumeirah Lakes Towers"};
 function resolveArea(slug){var s=String(slug||"").toLowerCase().replace(/[^a-z0-9]/g,"");return AREA_ALIAS[s]||s}
 function mergeAreas(index){if(!index||!index.areas)return index;Object.keys(AREA_ALIAS).forEach(function(a){var t=AREA_ALIAS[a];if(index.areas[a]){if(index.areas[t]){delete index.areas[a]}else{index.areas[t]=index.areas[a];delete index.areas[a]}}});Object.keys(AREA_NAMES).forEach(function(t){if(index.areas[t])index.areas[t].name=AREA_NAMES[t]});return index}
+// v373 - ATTRIBUTION EVIDENCE (Kendall, 7 Oct 2026: the Land Department register is the authority; a developer's own web site is a claim; every card says where its attribution came from).
+// An index built from v373 carries, per developer per area, bx (one evidence record per project of b), ce (one label code per cell of c), and b12x / c12e for the 12-month window
+// (labels REGISTER_VERIFIED / NAME_ONLY / DEVELOPER_CLAIMED / UNVERIFIED, codes V N D U). attrSplit keeps ONLY REGISTER_VERIFIED projects and cells in c, b, c12, b12 (so every total, scale word,
+// price band and 'where it sells' count is on confirmed projects), moves the rest to index.nconf (shown apart, outside the numbers) and rebuilds index.devs and index.scale.
+// An index without these keys is left exactly as it is.
+function sourceLine(ev,devName){if(!ev||!ev.e)return "";
+  if(ev.e==="REGISTER_VERIFIED")return "Registered developer per DLD register: "+(ev.dn||devName||"");
+  if(ev.e==="DEVELOPER_CLAIMED")return ev.dn?"Developer says (website); the register names another developer":"Developer says (website); the register has no record of it";
+  if(ev.e==="NAME_ONLY")return "Matched by name only, not confirmed by the register";
+  return "Not confirmed"}
+function attrSplit(index){if(!index||!index.areas||index.attr&&index.attr.split)return null;
+  var has=false,s,k,d;for(s in index.areas){for(k in index.areas[s].devs||{}){d=index.areas[s].devs[k];if(d&&(d.bx||d.b12x)){has=true;break}}if(has)break}
+  if(!has)return null;
+  var nconf={},hidden=0,kept=0;
+  var WIN=[["c","ce","b","bx","all"],["c12","c12e","b12","b12x","l12"]];
+  for(s in index.areas){var a=index.areas[s],dels=[];
+    for(k in a.devs||{}){d=a.devs[k];if(k==="_")continue;
+      WIN.forEach(function(w){var c=d[w[0]],ce=d[w[1]],b=d[w[2]],bx=d[w[3]],i;
+        if(Array.isArray(c)&&Array.isArray(ce)&&ce.length===c.length){var nc=[],ne=[];for(i=0;i<c.length;i++)if(ce[i]==="V"){nc.push(c[i]);ne.push("V")}d[w[0]]=nc;d[w[1]]=ne}
+        if(Array.isArray(b)&&Array.isArray(bx)&&bx.length===b.length){var nb=[],nx=[];
+          for(i=0;i<b.length;i++){if(bx[i]&&bx[i].e==="REGISTER_VERIFIED"){nb.push(b[i]);nx.push(bx[i]);kept++}
+            else{hidden++;var o=nconf[k]=nconf[k]||{all:[],l12:[]};o[w[4]].push({slug:s,area:(bx[i]&&bx[i].a)||a.name||s,name:b[i][2]||null,n:b[i][0],ppsm:b[i][1],ev:bx[i]||null})}}
+          d[w[2]]=nb;d[w[3]]=nx;
+          if(w[4]==="all"){var hs=0,ok=nx.length>0;for(i=0;i<nx.length;i++){if(typeof nx[i].h!=="number"){ok=false;break}hs+=nx[i].h}if(ok||(nx.length===0&&b.length>0))d.h=hs}}});
+      if(!(d.c||[]).length&&!(d.c12||[]).length&&!(d.r||[]).length)dels.push(k)}
+    dels.forEach(function(k){delete a.devs[k]})}
+  // the developer list and the scale cut-offs follow the confirmed projects
+  var old=index.devs||{},dl={};
+  for(s in index.areas)for(k in index.areas[s].devs){if(k==="_")continue;d=index.areas[s].devs[k];
+    var e=dl[k]||(dl[k]={name:(old[k]&&old[k].name)||d.n,areas:0,n:0,profile:{projects:0,homes:0}});
+    e.areas++;e.profile.projects+=(d.b||[]).length;e.profile.homes+=d.h||0;(d.c.length?d.c:(d.c12||[])).forEach(function(c){e.n+=c[0]})}
+  index.devs=dl;index.scale=scaleCuts({devs:dl});index.nconf=nconf;
+  index.attr=index.attr||{};index.attr.split=true;
+  return {hidden:hidden,kept:kept,developers:Object.keys(dl).length}}
+// the projects of developer k that the register does NOT confirm, for one window ("all" | "l12"): [{slug,area,name,n,ppsm,ev}], biggest first. Empty when the index carries no evidence.
+function attrUnconfirmed(index,k,win){var o=index&&index.nconf&&index.nconf[k];if(!o)return [];var l=(o[win==="l12"?"l12":"all"]||[]).slice();l.sort(function(x,y){return y.n-x.n});return l}
 // percentile bounds from a pool of [n,ppsm,...] cells (used by the index builder)
 function percentileBounds(cells,percentiles){var p=pooled(cells,1),ps=percentiles||TIER_CFG.percentiles;return ps.map(function(q){return round(wquant(p,q/100))})}
-return {AREA_ALIAS:AREA_ALIAS,resolveArea:resolveArea,mergeAreas:mergeAreas,KNOWN_DEVELOPERS:KNOWN_DEVELOPERS,isKnown:isKnown,SCALE_MIN_SALES:SCALE_MIN_SALES,POSITION_WORDS:POSITION_WORDS,PRIME_AREAS:PRIME_AREAS,QUALITY_NOTES:QUALITY_NOTES,bandLine:bandLine,devFactors:devFactors,suggestedPosition:suggestedPosition,talkingPoint:talkingPoint,BRAND_PERCEPTION:BRAND_PERCEPTION,hasProjects:hasProjects,dataLine:dataLine,drillProjects:drillProjects,priceRanking:priceRanking,pricePosition:pricePosition,TIER_WORDS:TIER_WORDS,SCALE_PCT:SCALE_PCT,projCount:projCount,scaleCuts:scaleCuts,scaleWord:scaleWord,scaleSay:scaleSay,devProfile:devProfile,profileSentence:profileSentence,brandLabel:brandLabel,SQFT:SQFT,EVIDENCE_MIN:EVIDENCE_MIN,TIER_IDS:TIER_IDS,TIER_NAMES:TIER_NAMES,TIER_CFG:TIER_CFG,wquant:wquant,wmedian:wmedian,tierOf:tierOf,bandSay:bandSay,devKey:devKey,tierPrices:tierPrices,tierShare:tierShare,TYPICAL_SQFT:TYPICAL_SQFT,devStats:devStats,areaStats:areaStats,shortlistFilter:shortlistFilter,budgetFit:budgetFit,developerView:developerView,compareAreas:compareAreas,rentStats:rentStats,rentFit:rentFit,whereMine:whereMine,clientMeeting:clientMeeting,clientMeetingRent:clientMeetingRent,resolveSaved:resolveSaved,percentileBounds:percentileBounds,boundsOf:boundsOf,sqftOf:sqftOf};
+return {AREA_ALIAS:AREA_ALIAS,resolveArea:resolveArea,mergeAreas:mergeAreas,KNOWN_DEVELOPERS:KNOWN_DEVELOPERS,isKnown:isKnown,SCALE_MIN_SALES:SCALE_MIN_SALES,POSITION_WORDS:POSITION_WORDS,PRIME_AREAS:PRIME_AREAS,QUALITY_NOTES:QUALITY_NOTES,bandLine:bandLine,devFactors:devFactors,suggestedPosition:suggestedPosition,talkingPoint:talkingPoint,BRAND_PERCEPTION:BRAND_PERCEPTION,hasProjects:hasProjects,dataLine:dataLine,drillProjects:drillProjects,priceRanking:priceRanking,pricePosition:pricePosition,TIER_WORDS:TIER_WORDS,SCALE_PCT:SCALE_PCT,projCount:projCount,scaleCuts:scaleCuts,scaleWord:scaleWord,scaleSay:scaleSay,devProfile:devProfile,profileSentence:profileSentence,brandLabel:brandLabel,SQFT:SQFT,EVIDENCE_MIN:EVIDENCE_MIN,TIER_IDS:TIER_IDS,TIER_NAMES:TIER_NAMES,TIER_CFG:TIER_CFG,wquant:wquant,wmedian:wmedian,tierOf:tierOf,bandSay:bandSay,devKey:devKey,tierPrices:tierPrices,tierShare:tierShare,TYPICAL_SQFT:TYPICAL_SQFT,devStats:devStats,areaStats:areaStats,shortlistFilter:shortlistFilter,budgetFit:budgetFit,developerView:developerView,compareAreas:compareAreas,rentStats:rentStats,rentFit:rentFit,whereMine:whereMine,clientMeeting:clientMeeting,clientMeetingRent:clientMeetingRent,resolveSaved:resolveSaved,sourceLine:sourceLine,attrSplit:attrSplit,attrUnconfirmed:attrUnconfirmed,percentileBounds:percentileBounds,boundsOf:boundsOf,sqftOf:sqftOf};
 })();
 
 export { DM };

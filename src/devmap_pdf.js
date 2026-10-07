@@ -18,7 +18,7 @@
 // emoji, no pictures (no photographs, satellite or renders), icons only (thin-line, inline, src/devmap_icons.js); no initials; a developer is
 // never rated: price bands describe homes, and a developer is shown by the band most of its sales fall in.
 import { DM } from "./devmap_dm.js";
-import { COMMUNITY_LABELS, labelledName } from "./community_labels.js";
+import { COMMUNITY_LABELS, labelledName, singleCommunity } from "./community_labels.js";
 import { kvJson } from "./brief.js";
 import { DEFAULT_SHORTLIST, shortlistName } from "./devmap_page.js";
 import { PHOSPHOR_LIGHT } from "./devmap_icons.js";
@@ -162,6 +162,7 @@ export function budgetSay(p) {
 export async function loadData(env, p, opts) {
   const IDX0 = await kvJson(env, "devmap_index");
   DM.mergeAreas(IDX0);                               // v346 - Jumeirah Lakes Towers is one area; the old slug resolves to it
+  DM.attrSplit(IDX0);                                // v373 - only projects the register confirms are in a PDF's numbers (an index without evidence is left as it is)
   p.area = DM.resolveArea(p.area);
   if (!IDX0 || !IDX0.areas) return { status: 503, body: { ok: false, reason: "the developers index (KV img_devmap_index) is not on file yet" } };
   if (!p.area || !IDX0.areas[p.area]) return { status: 404, body: { ok: false, reason: "area not in the developers index", area: p.area } };
@@ -180,7 +181,7 @@ export async function loadData(env, p, opts) {
   C.today = BRIEF_KIT.todayLong(opts && opts.now);
   C.fell = p.win === "l12" && !hasEv(IDX0.areas[p.area]) && !!IDX0.ev;
   C.winText = C.fell ? windowText(IDX0, "all") + " (this area has no record by year, so the last 12 months cannot be shown)" : windowText(IDX0, p.win);
-  C.names = { title: labelOf(p.area, area.name), plain: String(area.name || p.area).replace(/\bJLT\b/g, "Jumeirah Lakes Towers"), label: COMMUNITY_LABELS[p.area] || null };
+  C.names = { title: labelOf(p.area, area.name), plain: String(area.name || p.area).replace(/\bJLT\b/g, "Jumeirah Lakes Towers"), label: singleCommunity(p.area) };   // v373 - a district that holds several communities shows only its Land Department name
   C.logo = (await BRIEF_KIT.kvDataUrl(env, HEADER_JPG_KEY, opts && opts.origin)) || (await BRIEF_KIT.kvDataUrl(env, HEADER_IMG_KEY, opts && opts.origin));
   C.geo = await kvJson(env, "district_polygons");
   C.bq = budgetQuery(p);

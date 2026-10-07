@@ -142,13 +142,13 @@ console.log("H - districts that had polygons but were missing from the district 
   const r = m.districts.find((d) => d.slug === "rasalkhor");
   ok(m.districts.length === 2 && m.added.join() === "rasalkhor", "a district already in the list is not added twice; one without an outline is skipped; Ras Al Khor is added", JSON.stringify(m.added));
   ok(r && r.name === "Sobha One / Ras Al Khor" && JSON.stringify(r.bbox) === JSON.stringify([55.3, 25.14, 55.34, 25.19]) && Math.abs(r.centre[0] - 55.32) < 1e-9, "its box and centre are worked out from the outline, name from the polygon file", JSON.stringify(r));
-  ok(labelledName("rasalkhor", "x") === "Sobha One (Ras Al Khor Industrial First)" && labelledName("bukadra", "x") === "Sobha Hartland II (Bukadra)", "community labels: Sobha One and Sobha Hartland II");
+  ok(labelledName("rasalkhor", "x") === "x" && labelledName("bukadra", "x") === "x", "community labels (v373): Sobha One and Sobha Hartland II are mixed districts (92% and 82% of the sales), so the district shows its Land Department name only");
   const { COMMUNITY_LABELS } = await import("../src/community_labels.js");
   ok(/wildlife sanctuary/.test(COMMUNITY_LABELS.rasalkhor.why) && /82%/.test(COMMUNITY_LABELS.bukadra.why) && communitiesOf("bukadra").length === 1, "each new label carries its reason (the share of register sales that backs it)");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dm322nocards_"));
   const ev = { meta: { l12_to: "2026-08-31" }, areas: { rasalkhor: { dld: ["Ras Al Khor Industrial First"], shared: false, ev: { all: [10, 20000, 0, 0, 10, 20000, 10, 20000, 0, 0, 50, 70, 120], l12: [4, 21000, 0, 0, 4, 21000, 4, 21000, 0, 0, 50, 70, 120], y: [], first: "2024-03-19", last: "2026-08-27" }, devs: { sobha: { c12: [[4, 21000, 1.4e6, 1]], ev: { all: [10, 20000, 0, 0, 10, 20000, 10, 20000, 0, 0, 50, 70, 120], l12: [4, 21000, 0, 0, 4, 21000, 4, 21000, 0, 0, 50, 70, 120] } } } } } };
   const idx = buildIndex({ umDir: dir, prices: { items: [] }, rent: { items: [] }, geo: m, ejariProjects: null, outAsOf: "x", shares: null, offplanDir: null, offplanSlugs: [], register: null, evidence: ev });
-  ok(idx.areas.rasalkhor && idx.areas.rasalkhor.label === "Sobha One (Ras Al Khor Industrial First)" && idx.areas.rasalkhor.devs.sobha.c12.length === 1, "a district with register sales but no card file is built from the evidence alone, with its label");
+  ok(idx.areas.rasalkhor && idx.areas.rasalkhor.label === undefined && idx.areas.rasalkhor.devs.sobha.c12.length === 1, "a district with register sales but no card file is built from the evidence alone (v373: no borrowed community label)");
   const idx0 = buildIndex({ umDir: dir, prices: { items: [] }, rent: { items: [] }, geo: m, ejariProjects: null, outAsOf: "x", shares: null, offplanDir: null, offplanSlugs: [], register: null });
   ok(!idx0.areas.rasalkhor, "without evidence and without cards the district is still left out (old behaviour)");
 }

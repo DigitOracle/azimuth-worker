@@ -39,7 +39,7 @@ import devattr_register as R                 # v325 - the register developer of 
 RD = R.register_devs(con)
 CUR = R.CUR                                  # curated brands (src/devcross.js ids)
 rows = con.execute("""select transaction_id, any_value(instance_date), any_value(actual_worth), any_value(procedure_area), any_value(reg_type_en), any_value(property_type_en),
-  any_value(area_name_en), any_value(project_name_en), any_value(rooms_en), any_value(project_number)
+  any_value(area_name_en), any_value(project_name_en), any_value(rooms_en), any_value(project_number), any_value(coalesce(master_project_en,''))
  from g_dld__transactions where trans_group_en='Sales'
   and procedure_name_en in ('Sell','Sell - Pre registration','Delayed Sell','Sell Development','Sale On Payment Plan')
   and property_usage_en='Residential' and property_type_en in ('Unit','Villa') and coalesce(property_sub_type_en,'Flat') in ('Flat','Villa','Hotel Apartment','Stacked Townhouses')
@@ -56,11 +56,13 @@ def pick(slug, pname, pnum):      # v325 - the REGISTER first (project_number ->
     return R.pick(RD, PD, slug, pname, pnum, nk)
 S = {}   # slug -> list of sale tuples
 NAMES = {}   # canonical id -> register company name, for developers the crosswalk does not know as a brand
-for tid, d, w, ar, rt, pt, an, pn, rooms, pnum in rows:
+for tid, d, w, ar, rt, pt, an, pn, rooms, pnum, ms in rows:
     slug, sh = area_slug[an]
     dev, q = pick(slug, pn, pnum)
     if q == "v" and dev not in CUR and pnum is not None and int(pnum) in RD: NAMES[dev] = RD[int(pnum)]["name_en"]
-    S.setdefault(slug, []).append((d, float(w), float(ar), str(rt or "").startswith("Off"), pt == "Villa", dev, pn or "", bedof(rooms), sh, q))
+    lab, _basis = R.sale_label(RD, pnum, dev, q)      # v373 - the evidence label of this sale's developer
+    S.setdefault(slug, []).append((d, float(w), float(ar), str(rt or "").startswith("Off"), pt == "Villa", dev, pn or "", bedof(rooms), sh, q,
+                                   None if pnum is None else int(pnum), an, ms or "", lab))
 def med(v): return float(np.median(v)) if len(v) >= 3 else None
 def sqm_to(x): return None if x is None else int(round(x))
 def W(sub):      # sub: list of sale tuples -> one summary
@@ -85,6 +87,20 @@ def cells(sub):  # building x bedroom cells like the unit-mix cards: [n, ppsm, a
         ma = float(np.median([s[1] for s in x])); ms = float(np.median([s[2] for s in x]))
         out.append([len(x), int(round(ma / ms)), int(round(ma)), bed])
     return sorted(out, key=lambda c: -c[0])
+def cell_labels(sub):  # v373 - one evidence label per cell of cells(sub), in the same order: V only when every sale in the cell is verified
+    g = {}; byname = {}
+    for s in sub:
+        g.setdefault((s[6], s[7]), []).append(s); byname.setdefault(s[6], []).append(s[13])
+    ordered = sorted(g.items(), key=lambda kv: -len(kv[1]))          # cells() sorts by -len with a stable sort over the same insertion order
+    return [R.worst(byname[k[0]]) for k, x in ordered]               # a cell takes the label of its PROJECT (every sale of that name in the window), the same label b12x carries
+def project_evidence(px):  # v373 - the evidence record of one project (a building with sales in the window): its register project number, register developer, label, own area
+    pns = [s[10] for s in px if s[10] is not None]
+    p = max(set(pns), key=pns.count) if pns else None
+    rd = RD.get(p) if p is not None else None
+    ars = [s[11] for s in px if s[11]]; mss = [s[12] for s in px if s[12]]
+    lab = R.worst([s[13] for s in px])
+    return {"p": p, "di": rd["developer_id"] if rd else None, "dn": rd["name_en"] if rd else "", "m": ("project_id" if rd else ("exact_name" if lab != "UNVERIFIED" else "none")), "e": lab,
+            "ar": max(set(ars), key=ars.count) if ars else "", "ms": max(set(mss), key=mss.count) if mss else ""}
 def block(sub, l12, deep=True):
     o = {"all": W(sub), "l12": W(l12)}
     if deep: o["y"] = years(sub)
@@ -102,6 +118,9 @@ for slug, sub in S.items():
     for s in sub: byd.setdefault(s[5], []).append(s)
     for dk, x in byd.items():
         x12 = [s for s in x if s[0] >= l12_from]
+        xa, x12a = x, x12                                              # v373: every sale of this developer slot (cells c12 / b12 carry ALL of it, with an evidence label per cell and project)
+        x = [s for s in x if s[13] == "REGISTER_VERIFIED"]             # v373: the drawer behind the numbers (years, bands, size, top projects) is built on register-verified sales only
+        x12 = [s for s in x12 if s[13] == "REGISTER_VERIFIED"]
         e = block(x, x12, len(x) >= 50)
         pj = {}
         for s in x: pj.setdefault(s[6], []).append(s)
@@ -112,11 +131,12 @@ for slug, sub in S.items():
             top.append([pn, len(px), sqm_to(med([s[1] / s[2] for s in px])), len(p12), sqm_to(med([s[1] / s[2] for s in p12])), sum(1 for s in p12 if s[3])])
         if top and len(x) >= 50: e["top"] = top
         pj12 = {}
-        for s in x12: pj12.setdefault(s[6], []).append(s)
+        for s in x12a: pj12.setdefault(s[6], []).append(s)
         b12 = [[len(px), sqm_to(med([s[1] / s[2] for s in px])), str(pn)] for pn, px in pj12.items() if len(px) >= 3 and str(pn).strip()]   # v323: a project = a building with 3 or more sales in the window
-        A["devs"][dk] = {"c12": cells(x12), "b12": b12}
+        A["devs"][dk] = {"c12": cells(x12a), "b12": b12, "c12e": [R.LABEL_CODE[l] for l in cell_labels(x12a)],
+                         "b12x": [project_evidence(px) for pn, px in pj12.items() if len(px) >= 3 and str(pn).strip()]}   # v373: evidence, parallel to c12 / b12
         if dk != "_":
-            A["devs"][dk]["q12"] = [sum(1 for s in x12 if s[9] == "v"), sum(1 for s in x12 if s[9] != "v")]      # v325: last-12-month sales [verified by the register, inferred from a name]
+            A["devs"][dk]["q12"] = [sum(1 for s in x12a if s[13] == "REGISTER_VERIFIED"), sum(1 for s in x12a if s[13] != "REGISTER_VERIFIED")]      # v325: last-12-month sales [verified by the register, inferred from a name]
             if dk in NAMES: A.setdefault("names", {})[dk] = NAMES[dk]
         if len(x) >= a.min_dev: A["devs"][dk]["ev"] = e       # a developer with fewer sales has no drawer: the page says so
     out["areas"][slug] = A

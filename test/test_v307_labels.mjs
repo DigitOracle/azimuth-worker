@@ -14,7 +14,7 @@ ok(labelledName("alhebiahfifth", "Al Hebiah 5") === "DAMAC Lagoons (Al Hebiah Fi
 ok(labelledName("alyelayiss1", "x") === "DAMAC Islands (Al Yelayiss 1)", "Al Yelayiss 1 -> DAMAC Islands");
 ok(labelledName("madinathind4", "x") === "DAMAC Hills 2 (Madinat Hind 4)", "Madinat Hind 4 -> DAMAC Hills 2");
 ok(labelledName("alyufrah1", "x") === "The Valley (Al Yufrah 1)" && !/sobha/i.test(JSON.stringify(COMMUNITY_LABELS.alyufrah1)), "Al Yufrah 1 -> The Valley only (Sobha Sanctuary is not in the research)");
-ok(labelledName("madinatalmataar", "x") === "Dubai South / Emaar South / Expo Living (Madinat Al Mataar)", "several communities are listed whole");
+ok(labelledName("madinatalmataar", "Dubai South") === "Dubai South" && labelledName("wadialsafa5", "Wadi Al Safa 5") === "Wadi Al Safa 5" && communitiesOf("madinatalmataar").length === 3, "v373: a district with several communities shows only its Land Department name (the list stays on file)");
 ok(communitiesOf("zaabeelsecond")[0] === "d3" && communitiesOf("wadialsafa5")[0] === "Arabian Ranches III", "d3 and Arabian Ranches III");
 ok(labelledName("jltsouth", "Jumeirah Islands") === "Jumeirah Islands" && labelledName("burjkhalifa", "Downtown Dubai") === "Downtown Dubai", "unlabelled districts keep their name");
 ok(communitySlugOfArea("AL HEBIAH FIFTH") === "alhebiahfifth" && communitySlugOfArea("Al Hebiah Fifth") === "alhebiahfifth" && communitySlugOfArea("MADINAT HIND 4") === "madinathind4", "upper-case DLD areas are case-folded before the join");

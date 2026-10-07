@@ -64,3 +64,51 @@ export function decide({ names, cand, candDisplay, nameOnly, regd }) {
   }
   return { dev: cand, q: "i", why: nameOnly ? "project name match, register silent" : "card developer field, register silent" };
 }
+
+// v373 - ATTRIBUTION EVIDENCE (Kendall, 7 Oct 2026: "a developer's own website is a CLAIM, not evidence; the DLD register is the authority; every card must say where its
+// attribution came from"). For ONE building, said after decide(): WHO the register names, HOW the building was tied to that register row, and a LABEL the page can trust.
+//   REGISTER_VERIFIED  the register's developer of the building's project_number IS the developer shown, or is a project company (SPV) of that brand: its register
+//                      `webpage` names the brand's site, or developer_dna lists it (regd.sp = the brand ids the register company is an SPV of, resolved in Python)
+//   NAME_ONLY          a name (Ejari list, price list, "by <brand>") put the building under this developer and the register is silent, names a land owner, names ANOTHER
+//                      company that is not this brand's SPV, or the tie to the register row is only a loose name
+//   DEVELOPER_CLAIMED  the developer's own sheet or website lists it and the register has no row
+//   UNVERIFIED         nothing behind it
+// match basis m: "project_id" (the register row was reached through the sales rows' project_number, one project number for the name) | "exact_name" | "partial_name" |
+//   "website_only" | "none".   regd = {c, d, p, s, lo, di, sp, loose}; how = "exact" | "loose" (which key found the register row).
+export const EVIDENCE_LABELS = ["REGISTER_VERIFIED", "NAME_ONLY", "DEVELOPER_CLAIMED", "UNVERIFIED"];
+export const LABEL_CODE = { REGISTER_VERIFIED: "V", NAME_ONLY: "N", DEVELOPER_CLAIMED: "D", UNVERIFIED: "U" };
+export function evidenceOf({ D, cand, route, regd, how, claimed, basisText }) {
+  const dev = D && D.dev ? D.dev : "";
+  const reg = regd && regd.s >= 0.6 && regd.c ? regd : null;
+  const out = { p: reg && reg.p != null ? reg.p : null, di: reg && reg.di != null ? reg.di : null, dn: reg ? String(reg.d || "") : "", m: "none", e: "UNVERIFIED", w: D ? D.why : "" };
+  const nameRoute = /^(ejari_name|price_index)/.test(route || "");
+  const partial = !!(D && /brand in the project name/.test(D.why || ""));
+  if (reg) {
+    const regBasis = how === "loose" ? "partial_name" : (reg.s >= 0.99 ? "project_id" : "exact_name");
+    const agrees = D && D.q === "v";
+    const cc = cand ? canonicalOf(cand) : "";
+    const spv = !!(cc && Array.isArray(reg.sp) && reg.sp.indexOf(cc) >= 0);
+    if (agrees || spv) {
+      out.m = regBasis; out.e = regBasis === "partial_name" ? "NAME_ONLY" : "REGISTER_VERIFIED";
+      if (spv && !agrees) out.w = "register project company is an SPV of " + cc;
+    } else { out.m = partial ? "partial_name" : "exact_name"; out.e = "NAME_ONLY"; }   // the register names another company (or a land owner) for the project: the name put it here
+    return out;
+  }
+  // no register row for this building
+  const pn = String(basisText || "").match(/project_number\s+(\d+)/i);
+  if (/^card_register/.test(route || "") && dev && pn) { out.p = Number(pn[1]); out.m = "project_id"; out.e = "REGISTER_VERIFIED"; out.dn = dev; out.w = "register-built card, project_number " + pn[1]; return out; }
+  if (!dev) return out;
+  const cc = canonicalOf(dev);
+  if (route === "card_field" || (claimed && cc && claimed.has && claimed.has(cc))) { out.m = "website_only"; out.e = "DEVELOPER_CLAIMED"; return out; }
+  if (nameRoute || /^card_register/.test(route || "")) { out.m = partial ? "partial_name" : "exact_name"; out.e = "NAME_ONLY"; return out; }
+  return out;
+}
+
+// the source line a project card prints (plain words, no acronyms): where the attribution came from
+export function sourceLine(ev, devName) {
+  if (!ev || !ev.e) return "";
+  if (ev.e === "REGISTER_VERIFIED") return "Registered developer per DLD register: " + (ev.dn || devName || "");
+  if (ev.e === "DEVELOPER_CLAIMED") return ev.dn ? "Developer says (website); the register names another developer" : "Developer says (website); the register has no record of it";
+  if (ev.e === "NAME_ONLY") return "Matched by name only, not confirmed by the register";
+  return "Not confirmed";
+}

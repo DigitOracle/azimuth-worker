@@ -13,8 +13,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEVMAP_CORE_JS } from "../src/devmap_core.js";
-import { labelledName, communitiesOf } from "../src/community_labels.js";   // v307
-import { decide, isGenericName, looseKeyOf } from "../src/devattr.js";   // v325 - the attribution rules: the register first, a bare common word is not evidence
+import { labelledName, communitiesOf, projectAreaLabel } from "../src/community_labels.js";   // v307; v373 projectAreaLabel: a project is labelled by its own area
+import { decide, isGenericName, looseKeyOf, evidenceOf, LABEL_CODE, EVIDENCE_LABELS } from "../src/devattr.js";   // v325 - the attribution rules: the register first, a bare common word is not evidence
 import { canonicalOf, displayOf, aliasesOf, isCurated } from "../src/devcross.js";   // developer CROSSWALK (4 Oct 2026): one id per developer, however the sources spell it
 export const DM = new Function(DEVMAP_CORE_JS + "; return DM;")();
 
@@ -24,12 +24,15 @@ const titleCase = (s) => { s = s.replace(LEGAL, "").replace(/\s+/g, " ").trim();
 const nameKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 // one district's unit-mix cards -> cells per developer. projDev: {nameKey(project): developer}, priceDev: {"d:i": developer}
-export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nameDev, trace, regDev) {
+// v373 - districtName: the app district's own name (for the project area label); claims: optional {nameKey: [canonical developer ids]} of projects a developer's own web site lists (a CLAIM, never evidence).
+//   Every slot also carries `ce` (one evidence code per entry of `c`: V verified by the register, N name only, D developer claimed, U unverified) and `bx` (one evidence record per
+//   entry of `b`): {p register project number, di register developer_id, dn registered developer name, m match basis, e label, a area shown, as area source, h homes}. Additive only.
+export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nameDev, trace, regDev, districtName, claims, dldAreas) {
   const B = (U && U.buildings_by_id) || {}, devs = {}, names = {};
   const slot = (dev) => {
     const k = dev ? canonicalOf(dev) : "_";
     const kk = k || "_";
-    if (!devs[kk]) devs[kk] = { n: kk === "_" ? "Developer not recorded" : "", h: 0, c: [], r: [], b: [] };
+    if (!devs[kk]) devs[kk] = { n: kk === "_" ? "Developer not recorded" : "", h: 0, c: [], r: [], b: [], ce: [], bx: [] };
     if (kk !== "_") { names[kk] = names[kk] || {}; names[kk][dev] = (names[kk][dev] || 0) + 1; }
     return devs[kk];
   };
@@ -42,7 +45,7 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nam
     const bnames = [c.dld && c.dld.project, c.name, c.dld_sales && c.dld_sales.project];
     // the register's answer for this building: every name the card carries is looked up; two names that lead to DIFFERENT register developers (a footprint named "The Portman"
     // linked to the DLD project "DANA TOWER") mean the link itself is doubtful, so the register stays silent rather than override on a guess
-    let regd = null; if (regDev) { const found = []; for (const nm of bnames) { if (!nm) continue; const r = regDev[nameKey(nm)] || regDev[looseKeyOf(nm)] || null; if (r) found.push(r); } if (found.length && found.every((r) => r.c === found[0].c)) regd = found[0]; }
+    let regd = null, how = "exact", areaEv = null; if (regDev) { const found = [], hows = []; for (const nm of bnames) { if (!nm) continue; const rx = regDev[nameKey(nm)] || null, r = rx || regDev[looseKeyOf(nm)] || null; if (r) { found.push(r); hows.push(rx ? "exact" : "loose"); } if (!areaEv) areaEv = regDev["@" + nameKey(nm)] || regDev["@" + looseKeyOf(nm)] || null; } if (found.length && found.every((r) => r.c === found[0].c)) { regd = found[0]; how = hows.indexOf("exact") >= 0 ? "exact" : "loose"; } }
     const D = decide({ names: bnames, cand: cand || "", candDisplay: cand ? (displayOf(canonicalOf(cand)) || cand) : "", nameOnly: !!cand && (route !== "card_field"), regd });
     const dev = D.dev || null, q = D.q;
     devOfCard[id] = dev;
@@ -50,15 +53,20 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nam
     const sold = (c.dld_sales && c.dld_sales.sold_by_type) || {};
     const soldOf = (t) => { for (const k of Object.keys(sold)) if (k.toLowerCase() === String(t).toLowerCase()) return sold[k]; return 0; };
     let added = false; const mine = [];
+    // v373 - the evidence behind this building's developer and the area it is shown under
+    const ev = evidenceOf({ D, cand: cand || "", route, regd, how, claimed: claims ? new Set(bnames.filter(Boolean).flatMap((nm) => claims[nameKey(nm)] || [])) : null, basisText: c.developer_basis });
+    const own = projectAreaLabel({ slug, districtName: districtName || slug, salesArea: areaEv && areaEv.ar, masterCommunity: (areaEv && areaEv.ms) || (regd && regd.ms), dldAreas });
+    const code = LABEL_CODE[ev.e];
     for (const r of c.rows || []) {
       if (!r.median_aed || !r.median_sqm) continue;                 // an estimate (est_aed) is never a sale price
       const n = soldOf(r.type), bed = bedOf(r.type);
       if (!n || bed == null) continue;
-      slot(dev).c.push([n, Math.round(r.median_aed / r.median_sqm), Math.round(r.median_aed), bed]); added = true; mine.push([n, Math.round(r.median_aed / r.median_sqm)]);
+      slot(dev).c.push([n, Math.round(r.median_aed / r.median_sqm), Math.round(r.median_aed), bed]); added = true; mine.push([n, Math.round(r.median_aed / r.median_sqm)]); slot(dev).ce.push(code);
     }
-    if (added && dev) { const sq = slot(dev); (sq.q = sq.q || [0, 0])[q === "v" ? 0 : 1] += mine.reduce((a, x) => a + x[0], 0); }   // v325 - sales by confidence: [verified by the register, inferred from a name]
-    if (added && trace) trace.push({ slug, id, name: String(c.name || ""), project: String((c.dld_sales && c.dld_sales.project) || (c.dld && c.dld.project) || ""), dev: dev || null, q, why: D.why, cand: cand || null, route, n: mine.reduce((a, x) => a + x[0], 0), aed: (c.rows || []).reduce((a, r) => a + ((r.median_aed && r.median_sqm && soldOf(r.type) && bedOf(r.type) != null) ? soldOf(r.type) * r.median_aed : 0), 0) });
+    if (added && dev) { const sq = slot(dev); (sq.q = sq.q || [0, 0])[ev.e === "REGISTER_VERIFIED" ? 0 : 1] += mine.reduce((a, x) => a + x[0], 0); }   // v325 - sales by confidence: [verified by the register, inferred from a name]
+    if (added && trace) trace.push({ slug, id, name: String(c.name || ""), project: String((c.dld_sales && c.dld_sales.project) || (c.dld && c.dld.project) || ""), dev: dev || null, q, why: D.why, cand: cand || null, route, evidence: ev.e, basis: ev.m, area: own.label, area_source: own.source, n: mine.reduce((a, x) => a + x[0], 0), aed: (c.rows || []).reduce((a, r) => a + ((r.median_aed && r.median_sqm && soldOf(r.type) && bedOf(r.type) != null) ? soldOf(r.type) * r.median_aed : 0), 0) });
     if (added) slot(dev).b.push([mine.reduce((a, x) => a + x[0], 0), Math.round(DM.wmedian(mine.map((x) => [x[1], x[0]]))), String(c.name || (c.dld && c.dld.project) || "")]);   // v321 - one project (building) = its sales and its median price per sq m
+    if (added) slot(dev).bx.push({ p: ev.p, di: ev.di, dn: ev.dn, m: ev.m, e: ev.e, a: own.label, as: own.source, h: Number(c.registered_homes || (c.dld && c.dld.units_registered) || c.total_units || 0) });   // v373 - parallel to b
     if (added && dev) slot(dev).h += Number(c.registered_homes || (c.dld && c.dld.units_registered) || c.total_units || 0);
   }
   for (const it of rentItems || []) {                                // Ejari contracts, community-level labelled on the page
@@ -102,10 +110,13 @@ function attachEvidence(areas, evidence) {
       d.c12 = E.devs[dk].c12;
       if (E.devs[dk].q12) d.q12 = E.devs[dk].q12;   // v325 - last-12-month sales [verified by the register, inferred from a name]
       if (E.devs[dk].b12) d.b12 = E.devs[dk].b12;   // v323 - projects with 3 or more sales in the last 12 months, so a profile can follow the window
+      // v373 - evidence for the window: b12x is parallel to b12 (the evidence builder gives p, di, dn, m, e and the project's raw sales area `ar` / master `ms`; the area LABEL is made here, by the one rule in community_labels.js); c12e is parallel to c12
+      if (E.devs[dk].b12x) d.b12x = E.devs[dk].b12x.map((x) => { const o = projectAreaLabel({ slug: s, districtName: A.name, salesArea: x.ar, masterCommunity: x.ms, dldAreas: E.dld }); return { p: x.p == null ? null : x.p, di: x.di == null ? null : x.di, dn: x.dn || "", m: x.m || "none", e: x.e || "UNVERIFIED", a: o.label, as: o.source }; });
+      if (E.devs[dk].c12e) d.c12e = E.devs[dk].c12e;
     }
   }
 }
-export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs, register, evidence, projdevOut, traceOut, regdev }) {
+export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs, register, evidence, projdevOut, traceOut, regdev, claims }) {
   const projDev = {};
   // the Ejari projects index: every project Dubai-wide with its developer (KV img_ejari_projects_index)
   if (ejariProjects && ejariProjects.index) for (const k of Object.keys(ejariProjects.index)) { const p = ejariProjects.index[k]; if (p.name_en && p.developer) projDev[nameKey(p.name_en)] = p.developer; }
@@ -126,14 +137,14 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     if ((!U || !U.buildings_by_id) && evidence && evidence.areas && evidence.areas[g.slug]) U = { buildings_by_id: {} };   // v322: a district with register sales but no card file still gets its evidence
     if (!U || !U.buildings_by_id) continue;
     const nameDev = {};
-    const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev, traceOut, regdev && regdev[g.slug]);
+    const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev, traceOut, regdev && regdev[g.slug], g.name, claims, register && register[g.slug] && register[g.slug].areas);
     if (projdevOut) projdevOut.slugs[g.slug] = nameDev;
     if (!Object.keys(devs).length && !(evidence && evidence.areas && evidence.areas[g.slug])) continue;
     areas[g.slug] = { name: g.name, corridor: g.corridor, bbox: g.bbox, centre: g.centre, devs };
     if (op && op.added) areas[g.slug].offplan = { projects: op.added, sales: op.sales, share_pct: op.offplan_share, note: "Includes off-plan sales built from the Land Department register by project (" + op.added + " projects, " + op.sales + " sales). Off-plan prices are contract values agreed with the developer, not resale prices. Where the developer is not recorded the register names only the land owner." };
     if (op && op.added && !(op.offplan_share > 0)) areas[g.slug].offplan.note = "Includes sales built from the Land Department register by project (" + op.added + " projects, " + op.sales + " sales) that the building records did not hold. Where the developer is not recorded it is shown as not recorded.";
     if (register && register[g.slug]) { const r = register[g.slug]; if (r.sales_all_time != null && !r.shared) { areas[g.slug].register_sales_all_time = r.sales_all_time; areas[g.slug].register_sales_12m = r.sales_12m; } }
-    if (communitiesOf(g.slug).length) { areas[g.slug].label = labelledName(g.slug, g.name); areas[g.slug].community = communitiesOf(g.slug); }   // v307 - community label next to the DLD name
+    if (communitiesOf(g.slug).length && labelledName(g.slug, g.name) !== g.name) { areas[g.slug].label = labelledName(g.slug, g.name); areas[g.slug].community = communitiesOf(g.slug); }   // v307 - community label next to the DLD name; v373 - only a district that IS one community, never a combined or borrowed label
     for (const k of Object.keys(devs)) all.push(...devs[k].c);
   }
   if (projdevOut) for (const k of Object.keys(projDev)) { const c = canonicalOf(projDev[k]); if (c && !isGenericName(k)) projdevOut.global[k] = c; }   // v325: a bare common-word name ("symphony", "park central") never carries a developer Dubai-wide
@@ -150,6 +161,9 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
   // alias: DM.devKey(any spelling the page may be given) -> canonical id, for curated developers only (the page cannot import devcross.js)
   const alias = {};
   for (const k of Object.keys(devList)) if (isCurated(k)) for (const nm of [displayOf(k)].concat(aliasesOf(k))) { const dk = DM.devKey(nm); if (dk && dk !== k && !alias[dk]) alias[dk] = k; }
+  // v373 - a count of the evidence labels over every project under a named developer, written into the index so the page and the quality gate can say what share is confirmed
+  const lc = { REGISTER_VERIFIED: 0, NAME_ONLY: 0, DEVELOPER_CLAIMED: 0, UNVERIFIED: 0 };
+  for (const s of Object.keys(areas)) for (const k of Object.keys(areas[s].devs)) { if (k === "_") continue; for (const x of areas[s].devs[k].bx || []) lc[x.e] = (lc[x.e] || 0) + 1; }
   return {
     as_of: outAsOf || null, generated: new Date().toISOString().slice(0, 10),
     source: "Dubai Land Department sales register (settled sales, unit-mix cards) and Ejari tenancy contracts; developers from the register and the developers' own sheets",
@@ -157,6 +171,9 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     devs: devList, alias, areas,
     scale: DM.scaleCuts({ devs: devList }),   // v321 - the project-count cut-offs behind Boutique / Mid-size / Large-scale, written into the data
     ...(evidence && evidence.meta ? { ev: evidence.meta } : {}),   // v322
+    attr: { version: 373, labels: EVIDENCE_LABELS, projects: lc,
+      layout: "per developer per area: bx[i] = evidence of b[i] {p register project number, di register developer_id, dn registered developer name, m match basis (project_id | exact_name | partial_name | website_only | none), e label (REGISTER_VERIFIED | NAME_ONLY | DEVELOPER_CLAIMED | UNVERIFIED), a area shown, as area source (sales_area | register_master | district), h homes}; ce[i] = label code of c[i] (V N D U); the evidence builder adds the same for the 12-month lists",
+      rule: "The Land Department register is the authority. A developer's own web site is a claim. Totals, scale, price bands and 'where it sells' count REGISTER_VERIFIED projects only." },   // v373
   };
 }
 
@@ -166,7 +183,7 @@ if (isMain) {
   const rd = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
   const prices = rd(a.prices);
   const projdevOut = a["projdev-out"] ? { slugs: {}, global: {} } : null;
-  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean), register: a.register ? rd(a.register) : null, evidence: a.evidence ? rd(a.evidence) : null, regdev: a.regdev ? rd(a.regdev) : null, projdevOut });
+  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean), register: a.register ? rd(a.register) : null, evidence: a.evidence ? rd(a.evidence) : null, regdev: a.regdev ? rd(a.regdev) : null, claims: a.claims ? rd(a.claims) : null, projdevOut });
   if (projdevOut) fs.writeFileSync(a["projdev-out"], JSON.stringify(projdevOut));
   fs.writeFileSync(a.out, JSON.stringify(idx));
   console.log("areas", Object.keys(idx.areas).length, "developers", Object.keys(idx.devs).length, "bounds", idx.cuts.bounds, "bytes", fs.statSync(a.out).size);

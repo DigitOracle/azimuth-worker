@@ -30,9 +30,37 @@ export const communitySlugOfArea = (area) => BY_FOLD[foldArea(area)] || null;   
 // the community names for a district slug, or [] when none is on file
 export const communitiesOf = (slug) => (COMMUNITY_LABELS[slug] ? COMMUNITY_LABELS[slug].labels.slice() : []);
 
-// "DAMAC Lagoons (Al Hebiah Fifth)"; several communities are joined with " / ". An unlabelled district keeps the name it came with.
+// v373 - ATTRIBUTION AUDIT (Kendall, 7 Oct 2026): a district heading may carry ONE community, and only where that community is the whole district
+// (flag `single`). A district that holds several communities, or one community with other projects beside it (Bukadra: 82% Sobha Hartland II, the rest
+// Meydan Horizon), shows only its Land Department name: "an area with no entry shows its own name". A PROJECT is never labelled by a neighbour:
+// projectAreaLabel() below gives it its own sales area or register master community.
+const SINGLE = new Set(["alhebiahfifth", "alyelayiss1", "madinathind4", "alyufrah1", "palmdeira", "alkhairanfirst", "majan"]);
+
+// "DAMAC Lagoons (Al Hebiah Fifth)" for a single-community district; every other district keeps the name it came with (never "A / B (DLD)").
 export function labelledName(slug, name) {
   const e = COMMUNITY_LABELS[slug];
-  if (!e) return name;
-  return e.labels.join(" / ") + " (" + e.dld + ")";
+  if (!e || !SINGLE.has(slug) || e.labels.length !== 1) return name;
+  return e.labels[0] + " (" + e.dld + ")";
+}
+
+// the table entry of a district that IS one community (for the area PDF's "Market name" line), else null
+export const singleCommunity = (slug) => (COMMUNITY_LABELS[slug] && SINGLE.has(slug) && COMMUNITY_LABELS[slug].labels.length === 1 ? COMMUNITY_LABELS[slug] : null);
+
+// The sales register spells an area as the community the market knows ("HORIZON"), not always as a name a client would say. Only the exceptions are listed;
+// every other value is shown as the register spells it, in capitals-and-small-letters.
+export const AREA_DISPLAY = { horizon: "Meydan Horizon", jlt: "Jumeirah Lakes Towers" };
+const titleArea = (s) => { s = String(s || "").replace(/\s+/g, " ").trim(); return /[a-z]/.test(s) && /[A-Z]/.test(s) ? s : s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()); };
+export const areaDisplay = (raw) => { const k = foldArea(raw); return !k ? "" : (AREA_DISPLAY[k] || titleArea(raw)); };
+
+// The area label of ONE PROJECT: the community its own sales rows are registered in (AREA_EN of the sales register, e.g. HORIZON), else its register master
+// community (master_project_en), else the district's label. A value that is only the district's own Land Department name (the register's land area, e.g. Bukadra,
+// Jabal Ali First) is not a community: it never beats a real community, and when nothing better exists the project shows the district's label (a single community)
+// or the DLD name. returns {label, source}: source is "sales_area" | "register_master" | "district". dldAreas: the DLD land-area names of the district.
+export function projectAreaLabel({ slug, districtName, salesArea, masterCommunity, dldAreas }) {
+  const dist = labelledName(slug, districtName);
+  const own = new Set([foldArea(districtName), COMMUNITY_LABELS[slug] ? foldArea(COMMUNITY_LABELS[slug].dld) : ""].concat((dldAreas || []).map(foldArea)).filter(Boolean));
+  const community = (a) => { const f = foldArea(a); return f && !own.has(f); };
+  if (salesArea && community(salesArea)) return { label: areaDisplay(salesArea), source: "sales_area" };
+  if (masterCommunity && community(masterCommunity)) return { label: areaDisplay(masterCommunity), source: "register_master" };
+  return { label: dist, source: "district" };
 }

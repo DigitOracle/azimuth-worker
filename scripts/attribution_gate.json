@@ -1,0 +1,5 @@
+{
+  "_why": "v373 quality gate for the Developers-by-area index (Kendall, 7 Oct 2026). The share is over every project listed under a named developer in the all-years lists. Start: the 22% the attribution audit found (21.7% not register-verified). Lower it as exceptions are cleared, never raise it to make a build pass.",
+  "max_not_verified_share": 0.22,
+  "require_fixtures": true
+}
