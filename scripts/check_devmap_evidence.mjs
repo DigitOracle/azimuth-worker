@@ -10,7 +10,7 @@ if (nA < 35) bad.push("only " + nA + " areas in the final index (the live one ha
 if (nA < Object.keys(live.areas).length - 1) bad.push("the final index has fewer areas (" + nA + ") than the live one (" + Object.keys(live.areas).length + ")");
 const withEv = Object.keys(fin.areas).filter((s) => fin.areas[s].ev && Array.isArray(fin.areas[s].ev.all) && fin.areas[s].ev.all[0] > 0);
 if (withEv.length < 30) bad.push("the evidence is on only " + withEv.length + " areas (need 30)");
-if (size > 1.5 * 1024 * 1024) bad.push("the file is " + Math.round(size / 1024) + " KB (limit 1,536 KB)");
+if (size > 2.0 * 1024 * 1024) bad.push("the file is " + Math.round(size / 1024) + " KB (limit 2,048 KB)");   // v378 - was 1.5 MB; the v373 evidence keys (bx, ce, b12x, c12e) add about 0.7 MB to the 0.97 MB live index, and the /img route serves it gzipped
 // the old numbers are untouched
 let cellsChecked = 0;
 for (const s of Object.keys(first.areas)) {
