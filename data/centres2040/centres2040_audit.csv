@@ -1,0 +1,224 @@
+comm_num,name,centre,centre_name,display_tier,distance_tier,evidence,registered_homes,sea_coast_500m,waterfront_250m,second_centre,second_km,note,drawn,in_data
+101,Nakhlat Deira,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,9198,Y,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+111,Al Corniche,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,Y,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+112,Al Ras,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,Y,,,named in official text,Y,Y
+113,Al Daghaya,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,Y,,,named in official text,Y,Y
+114,Al Buteen,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,Y,,,named in official text,Y,Y
+115,Al Sabkha,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,Y,,,named in official text,Y,Y
+116,Ayal Nasir,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+117,Al Murar,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,,,,named in official text,Y,Y
+118,Naif,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,Y,,,named in official text,Y,Y
+119,Al Rigga,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,Y,,,named in official text,Y,Y
+121,Corniche Deira,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,Y,,,named in official text,Y,Y
+122,Al Baraha,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+123,Al Muteena,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+124,Al Muraqqabat,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,,,,named in official text,Y,Y
+125,Riggat Al Buteen,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,Y,,,named in official text,Y,Y
+126,Abu Hail,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+127,Hor Al Anz,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+128,Al Khabaisi,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+129,Port Saeed,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,Y,,,named in official text,Y,Y
+131,Al Hamriya Port,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,Y,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+132,Al Wuheida,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+133,Hor Al Anz East,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 1.5 km (our judgement),Y,Y
+134,Al Mamzar,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,Y,,,,nearest centre core by polygon distance 1.0 km (our judgement),Y,Y
+213,Nadd Shamma,1,Deira and Bur Dubai,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 4.0 km (our judgement),Y,Y
+214,Al Garhoud,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+215,Umm Ramool,1,Deira and Bur Dubai,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 1.5 km (our judgement),Y,Y
+216,Al Rashidiya,1,Deira and Bur Dubai,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 3.7 km (our judgement),Y,Y
+221,Dubai International Airport,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+226,Al Twar First,1,Deira and Bur Dubai,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 1.8 km (our judgement),Y,Y
+227,Al Twar Second,1,Deira and Bur Dubai,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 3.7 km (our judgement),Y,Y
+228,Al Twar Third,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 4.8 km away (> 4 km cut-off),,Y
+231,Al Nahda First,1,Deira and Bur Dubai,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 2.7 km (our judgement),Y,Y
+232,Al Qusais,1,Deira and Bur Dubai,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 2.9 km (our judgement),Y,Y
+233,Al Twar Fifth,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 4.2 km away (> 4 km cut-off),,Y
+234,Al Twar Fourth,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 5.3 km away (> 4 km cut-off),,Y
+241,Al Nahda Second,1,Deira and Bur Dubai,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 4.0 km (our judgement),Y,Y
+242,Al Qusais Industrial First,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 4.7 km away (> 4 km cut-off),,Y
+243,Al Qusais Industrial Second,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 5.1 km away (> 4 km cut-off),,Y
+244,Muhaisanah Third,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 6.1 km away (> 4 km cut-off),,Y
+245,Muhaisanah Fourth,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 6.4 km away (> 4 km cut-off),,Y
+246,Al Qusais Industrial Third,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 5.0 km away (> 4 km cut-off),,Y
+247,Al Qusais Industrial Fourth,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 6.7 km away (> 4 km cut-off),,Y
+248,Al Qusais Industrial Fifth,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 7.1 km away (> 4 km cut-off),,Y
+251,Mirdif,,,o,o,UNASSIGNED,1594,,,,,nearest core Deira and Bur Dubai is 6.4 km away (> 4 km cut-off),,Y
+252,Mushraif,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 7.7 km away (> 4 km cut-off),,Y
+261,Muhaisnah First,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 6.4 km away (> 4 km cut-off),,Y
+262,Al Mizhar First,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 8.5 km away (> 4 km cut-off),,Y
+263,Al Mizhar Second,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 11.1 km away (> 4 km cut-off),,Y
+264,Muhaisanah Second,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 6.7 km away (> 4 km cut-off),,Y
+265,Al Mizhar Fourth,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 9.1 km away (> 4 km cut-off),,Y
+266,Al Mizhar Third,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 11.8 km away (> 4 km cut-off),,Y
+267,Muhaisanah Fifth,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 8.8 km away (> 4 km cut-off),,Y
+268,Oud Al Muteena,,,o,o,UNASSIGNED,0,,,,,nearest core Deira and Bur Dubai is 10.4 km away (> 4 km cut-off),,Y
+271,Wadi Alamardi,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 8.5 km away (> 4 km cut-off),,Y
+281,Al Khwaneej First,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 11.8 km away (> 4 km cut-off),,Y
+282,Al Khwaneej Second,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 13.5 km away (> 4 km cut-off),,Y
+283,Aleyas,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 13.6 km away (> 4 km cut-off),,Y
+284,Al Ttay,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 16.8 km away (> 4 km cut-off),,Y
+302,Jumeira Bay,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,0,Y,,,,nearest centre core by polygon distance 2.6 km (our judgement),Y,Y
+303,World Islands,,,o,o,UNASSIGNED,1716,Y,,,,nearest core Downtown Dubai and Business Bay is 6.1 km away (> 4 km cut-off),Y,Y
+304,Jumeira Island 2,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,280,Y,,,,nearest centre core by polygon distance 2.9 km (our judgement),Y,Y
+311,Al Shindagha,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,Y,,,,named in official text,Y,Y
+312,Al Souq Al Kabeer,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,Y,,,,named in official text,Y,Y
+313,Al Hamriya,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,Y,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+314,Umm Hurair First,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,Y,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+315,Umm Hurair Second,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,215,,Y,,,nearest centre core by polygon distance 0.2 km (our judgement),Y,Y
+316,Al Raffa,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,Y,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+317,Mankhool,1,Deira and Bur Dubai,c,c,OFFICIAL_NAMED,0,,,,,named in official text,Y,Y
+318,Al Karama,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,2,1.2,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+319,Oud Metha,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,2,1.6,nearest centre core by polygon distance 0.9 km (our judgement),Y,Y
+321,Madinat Dubai Al Melaheyah,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,14856,Y,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+322,Al Hudaiba,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,2,0.9,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+323,Al Jafiliya,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,,2,0.0,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+324,Al Kifaf,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,3284,,,1,0.0,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+325,Zaa'Beel First,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,2219,,,1,0.9,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+326,Al Jadaf,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,9683,,Y,2,1.7,nearest centre core by polygon distance 0.3 km (our judgement),Y,Y
+332,Jumeira First,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,1824,Y,,1,1.5,nearest centre core by polygon distance 1.3 km (our judgement),Y,Y
+333,Al Bada',2,Downtown and Business Bay,a,a,DERIVED_NEAREST,0,,,1,1.3,nearest centre core by polygon distance 0.7 km (our judgement),Y,Y
+334,Al Satwa,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,3060,,,1,1.3,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+335,Trade Center First,2,Downtown and Business Bay,c,c,DERIVED_NEAREST,2557,,,,,Sheikh Zayed Road/DIFC corridor beside Downtown (Phase II text names Downtown/Sheikh Zayed Road); our reading,Y,Y
+336,Trade Center Second,2,Downtown and Business Bay,c,c,DERIVED_NEAREST,754,,,,,Sheikh Zayed Road/DIFC corridor beside Downtown (Phase II text names Downtown/Sheikh Zayed Road); our reading,Y,Y
+337,Zaa'Beel Second,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,3378,,Y,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+342,Jumeira Second,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,459,Y,,,,nearest centre core by polygon distance 1.2 km (our judgement),Y,Y
+343,Al Wasl,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,7950,,Y,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+345,Burj Khalifa,2,Downtown and Business Bay,c,c,OFFICIAL_NAMED,23860,,Y,,,named in official text,Y,Y
+346,Business Bay,2,Downtown and Business Bay,c,c,OFFICIAL_NAMED,64372,,Y,,,named in official text,Y,Y
+347,Al Merkadh,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,26788,,Y,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+352,Jumeira Third,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,0,Y,,,,nearest centre core by polygon distance 1.2 km (our judgement),Y,Y
+353,Al Safa First,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+354,Al Qouz First,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+355,Ghadeer Al Tair,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+356,Umm Suqeim First,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,0,Y,,,,nearest centre core by polygon distance 2.5 km (our judgement),Y,Y
+357,Al Safa Second,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 2.3 km (our judgement),Y,Y
+358,Al Qouz Third,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 1.5 km (our judgement),Y,Y
+359,Al Qouz Fourth,2,Downtown and Business Bay,a,a,DERIVED_NEAREST,1879,,,,,nearest centre core by polygon distance 1.2 km (our judgement),Y,Y
+362,Umm Suqeim Second,,,o,o,UNASSIGNED,0,Y,,,,nearest core Downtown Dubai and Business Bay is 4.4 km away (> 4 km cut-off),Y,Y
+363,Al Manara,,,o,o,UNASSIGNED,0,,,,,nearest core Downtown Dubai and Business Bay is 4.3 km away (> 4 km cut-off),,Y
+364,Al Qouz Industrial First,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 3.0 km (our judgement),Y,Y
+365,Al Qouz Industrial Second,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 2.7 km (our judgement),Y,Y
+366,Umm Suqeim Third,,,o,o,UNASSIGNED,2931,Y,,,,nearest core Dubai Marina and JBR is 5.4 km away (> 4 km cut-off),Y,Y
+367,Umm Al Sheif,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Marina and JBR is 5.7 km away (> 4 km cut-off),,Y
+368,Al Qouz Industrial Third,,,o,o,UNASSIGNED,0,,,,,nearest core Downtown Dubai and Business Bay is 5.5 km away (> 4 km cut-off),,Y
+369,Al Qouz Industrial Fourth,,,o,o,UNASSIGNED,0,,,,,nearest core Downtown Dubai and Business Bay is 5.5 km away (> 4 km cut-off),,Y
+372,Al Safouh First,3,Dubai Marina and JBR,p,p,DERIVED_NEAREST,901,Y,,,,nearest centre core by polygon distance 2.4 km (our judgement),Y,Y
+373,Al Barsha First,3,Dubai Marina and JBR,p,p,DERIVED_NEAREST,577,,,,,nearest centre core by polygon distance 2.9 km (our judgement),Y,Y
+375,Al Barsha Third,3,Dubai Marina and JBR,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 2.9 km (our judgement),Y,Y
+376,Al Barsha Second,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Marina and JBR is 4.7 km away (> 4 km cut-off),,Y
+381,Nakhlat Jumeira,3,Dubai Marina and JBR,a,a,DERIVED_NEAREST,12403,Y,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+382,Al Safouh Second,3,Dubai Marina and JBR,a,a,DERIVED_NEAREST,1243,Y,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+383,Al Thanyah First,3,Dubai Marina and JBR,p,p,DERIVED_NEAREST,3729,,,,,nearest centre core by polygon distance 1.9 km (our judgement),Y,Y
+384,Al Thanyah Second,3,Dubai Marina and JBR,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 1.6 km (our judgement),Y,Y
+388,Al Thanyah Third,3,Dubai Marina and JBR,a,a,DERIVED_NEAREST,2870,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+392,Marsa Dubai,3,Dubai Marina and JBR,c,c,OFFICIAL_NAMED,38074,Y,,,,named in official text,Y,Y
+393,Al Thanyah Fifth,3,Dubai Marina and JBR,c,c,OFFICIAL_NAMED,35320,,Y,,,named in official text,Y,Y
+394,Al Thanyah Fourth,3,Dubai Marina and JBR,a,a,DERIVED_NEAREST,4881,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+412,Al Kheeran,1,Deira and Bur Dubai,a,a,DERIVED_NEAREST,0,,Y,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+413,Ras Al Khor,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,0,,Y,1,2.6,nearest centre core by polygon distance 1.7 km (our judgement),Y,Y
+415,Al Kheeran First,1,Deira and Bur Dubai,p,p,DERIVED_NEAREST,18481,,Y,,,nearest centre core by polygon distance 2.7 km (our judgement),Y,Y
+416,Nadd Al Hamar,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 4.0 km (our judgement),Y,Y
+421,Al Warqa'A First,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 4.0 km (our judgement),Y,Y
+422,Al Warqa'A Second,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 5.6 km away (> 4 km cut-off),,Y
+423,Al Warqa'A Third,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 4.2 km away (> 4 km cut-off),,Y
+424,Al Warqa'A Fourth,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 4.7 km away (> 4 km cut-off),,Y
+425,Al Warqa'A Fifth,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 5.5 km away (> 4 km cut-off),,Y
+431,Al Athbah,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 6.8 km away (> 4 km cut-off),,Y
+501,Nakhlat Jabal Ali,,,o,o,UNASSIGNED,0,Y,,,,nearest core Dubai Marina and JBR is 11.0 km away (> 4 km cut-off),Y,Y
+502,Al Wajeha Al Bahriah,,,x,x,UNASSIGNED,0,,,,,"offshore / marine DM polygon (mostly open sea, no land stock); not grouped",,Y
+511,Hessyan First,,,o,o,UNASSIGNED,448,Y,,,,nearest core Expo 2020 Centre is 4.9 km away (> 4 km cut-off),Y,Y
+512,Hessyan Second,,,o,o,UNASSIGNED,0,Y,,,,nearest core Expo 2020 Centre is 7.1 km away (> 4 km cut-off),Y,Y
+513,Saih Shuaib 1,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,0,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+516,Jabal Ali Industrial Third,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,0,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+518,Jabal Ali Industrial Second,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,3865,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+521,Madinat Al Mataar,4,Expo 2020 Centre,c,c,OFFICIAL_NAMED,44141,,,,,named in official text,Y,Y
+531,Saih Shuaib 2,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,1900,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+532,Saih Shuaib 3,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,0,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+533,Saih Shuaib 4,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,0,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+591,Jabal Ali First,3,Dubai Marina and JBR,a,a,DERIVED_NEAREST,25925,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+592,Jabal Ali Second,,,x,x,UNASSIGNED,0,,,,,"offshore / marine DM polygon (mostly open sea, no land stock); not grouped",,Y
+593,Jabal Ali Third,,,x,x,UNASSIGNED,0,,,,,"offshore / marine DM polygon (mostly open sea, no land stock); not grouped",,Y
+594,Mena Jabal Ali,,,x,x,UNASSIGNED,0,,,,,"offshore / marine DM polygon (mostly open sea, no land stock); not grouped",,Y
+597,Dubai Investment Park Second,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,9777,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+598,Dubai Investment Park First,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,5485,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+599,Jabal Ali Industrial First,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,0,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+611,Bu Kadra,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,10572,,Y,,,nearest centre core by polygon distance 2.3 km (our judgement),Y,Y
+612,Ras Al Khor Industrial First,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,4003,,,,,nearest centre core by polygon distance 3.6 km (our judgement),Y,Y
+613,Ras Al Khor Industrial Second,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 3.1 km (our judgement),Y,Y
+614,Ras Al Khor Industrial Third,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 1.8 km (our judgement),Y,Y
+615,Nadd Al Shiba Second,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,0,,,2,3.6,nearest centre core by polygon distance 2.4 km (our judgement),Y,Y
+616,Nadd Al Shiba Third,5,Dubai Silicon Oasis Centre,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+617,Nadd Al Shiba Fourth,5,Dubai Silicon Oasis Centre,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+618,Nadd Al Shiba First,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,4755,,,5,2.3,nearest centre core by polygon distance 2.0 km (our judgement),Y,Y
+621,Warsan First,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,8369,,,,,nearest centre core by polygon distance 1.5 km (our judgement),Y,Y
+622,Warsan Second,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 2.0 km (our judgement),Y,Y
+624,Warsan Fourth,5,Dubai Silicon Oasis Centre,a,a,DERIVED_NEAREST,3713,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+626,Nadd Hessa,5,Dubai Silicon Oasis Centre,c,c,OFFICIAL_NAMED,14956,,,,,named in official text,Y,Y
+631,Hadaeq Sheikh Mohammed Bin Rashid,2,Downtown and Business Bay,p,p,DERIVED_NEAREST,23193,,,,,nearest centre core by polygon distance 2.4 km (our judgement),Y,Y
+643,Wadi Al Safa 2,5,Dubai Silicon Oasis Centre,a,a,DERIVED_NEAREST,9166,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+645,Wadi Al Safa 3,5,Dubai Silicon Oasis Centre,a,a,DERIVED_NEAREST,16066,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+646,Wadi Al Safa 4,,,o,o,UNASSIGNED,15104,,,,,nearest core Dubai Silicon Oasis Centre is 4.2 km away (> 4 km cut-off),,Y
+648,Wadi Al Safa 5,5,Dubai Silicon Oasis Centre,a,a,DERIVED_NEAREST,35283,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+664,Wadi Al Safa 6,,,o,o,UNASSIGNED,171,,,,,nearest core Dubai Marina and JBR is 7.6 km away (> 4 km cut-off),,Y
+665,Wadi Al Safa 7,,,o,o,UNASSIGNED,7205,,,,,nearest core Dubai Marina and JBR is 8.5 km away (> 4 km cut-off),,Y
+671,Al Barsha South First,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Marina and JBR is 4.8 km away (> 4 km cut-off),,Y
+672,Al Barsha South Second,,,o,o,UNASSIGNED,11210,,,,,nearest core Dubai Marina and JBR is 5.1 km away (> 4 km cut-off),,Y
+673,Al Barsha South Third,,,o,o,UNASSIGNED,20988,,,,,nearest core Dubai Marina and JBR is 5.0 km away (> 4 km cut-off),,Y
+674,Al Hebiah First,,,o,o,UNASSIGNED,10573,,,,,nearest core Dubai Marina and JBR is 5.0 km away (> 4 km cut-off),,Y
+675,Al Hebiah Second,,,o,o,UNASSIGNED,5042,,,,,nearest core Dubai Marina and JBR is 5.7 km away (> 4 km cut-off),,Y
+676,Al Hebiah Third,,,o,o,UNASSIGNED,9023,,,,,nearest core Expo 2020 Centre is 6.4 km away (> 4 km cut-off),,Y
+677,Al Hebiah Sixth,,,o,o,UNASSIGNED,2524,,,,,nearest core Expo 2020 Centre is 6.0 km away (> 4 km cut-off),,Y
+681,Al Barsha South Fourth,3,Dubai Marina and JBR,p,p,DERIVED_NEAREST,70553,,,,,nearest centre core by polygon distance 2.3 km (our judgement),Y,Y
+682,Al Hebiah Fourth,3,Dubai Marina and JBR,p,p,DERIVED_NEAREST,23074,,,,,nearest centre core by polygon distance 2.4 km (our judgement),Y,Y
+683,Al Hebiah Fifth,,,o,o,UNASSIGNED,16352,,,,,nearest core Expo 2020 Centre is 4.5 km away (> 4 km cut-off),,Y
+684,Al Barsha South Fifth,3,Dubai Marina and JBR,a,a,DERIVED_NEAREST,17133,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+685,Me'Aisem First,3,Dubai Marina and JBR,a,a,DERIVED_NEAREST,15652,,,,,nearest centre core by polygon distance 0.2 km (our judgement),Y,Y
+686,Me'Aisem Second,4,Expo 2020 Centre,p,p,DERIVED_NEAREST,0,,,3,3.7,nearest centre core by polygon distance 2.8 km (our judgement),Y,Y
+711,Al Awir First,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 9.8 km away (> 4 km cut-off),,Y
+721,Al Awir Second,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 11.2 km away (> 4 km cut-off),,Y
+724,Enkhali,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 12.2 km away (> 4 km cut-off),,Y
+727,Al Wohoosh,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 19.6 km away (> 4 km cut-off),,Y
+731,Lehbab First,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 16.8 km away (> 4 km cut-off),,Y
+735,Al Meryal,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 22.4 km away (> 4 km cut-off),,Y
+736,Nazwah,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 24.0 km away (> 4 km cut-off),,Y
+811,Warsan Third,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 2.9 km (our judgement),Y,Y
+812,Al Rowaiyah First,5,Dubai Silicon Oasis Centre,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+813,Al Rowaiyah Second,5,Dubai Silicon Oasis Centre,a,a,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 0.0 km (our judgement),Y,Y
+814,Al Rowaiyah Third,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 2.2 km (our judgement),Y,Y
+821,Mereiyeel,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 7.3 km away (> 4 km cut-off),,Y
+824,Umm Al Daman,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 3.7 km (our judgement),Y,Y
+826,Le Hemaira,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 9.2 km away (> 4 km cut-off),,Y
+831,Lehbab Second,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 11.9 km away (> 4 km cut-off),,Y
+835,Umm Al Mo'Meneen,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 14.0 km away (> 4 km cut-off),,Y
+841,Margham,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 19.3 km away (> 4 km cut-off),,Y
+845,Al Maha,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 28.3 km away (> 4 km cut-off),,Y
+847,Umm Eselay,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 30.5 km away (> 4 km cut-off),,Y
+851,Remah,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 36.8 km away (> 4 km cut-off),,Y
+857,Margab,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 36.0 km away (> 4 km cut-off),,Y
+861,Yaraah,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 41.7 km away (> 4 km cut-off),,Y
+911,Madinat Hind 1,5,Dubai Silicon Oasis Centre,p,p,DERIVED_NEAREST,0,,,,,nearest centre core by polygon distance 2.2 km (our judgement),Y,Y
+912,Madinat Hind 2,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 4.3 km away (> 4 km cut-off),,Y
+913,Madinat Hind 3,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 5.7 km away (> 4 km cut-off),,Y
+914,Madinat Hind 4,,,o,o,UNASSIGNED,4025,,,,,nearest core Dubai Silicon Oasis Centre is 5.8 km away (> 4 km cut-off),,Y
+915,Al Yufrah 1,,,o,o,UNASSIGNED,8109,,,,,nearest core Dubai Silicon Oasis Centre is 10.4 km away (> 4 km cut-off),,Y
+917,Al Marmoom,,,o,o,UNASSIGNED,0,,,,,nearest core Dubai Silicon Oasis Centre is 13.5 km away (> 4 km cut-off),,Y
+919,Al Yufrah 2,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 13.1 km away (> 4 km cut-off),,Y
+921,Al Yalayis 1,,,o,o,UNASSIGNED,3669,,,,,nearest core Expo 2020 Centre is 8.6 km away (> 4 km cut-off),,Y
+922,Al Yalayis 2,,,o,o,UNASSIGNED,14721,,,,,nearest core Expo 2020 Centre is 5.8 km away (> 4 km cut-off),,Y
+923,Al Yalayis 3,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 9.6 km away (> 4 km cut-off),,Y
+924,Al Yalayis 4,,,o,o,UNASSIGNED,627,,,,,nearest core Expo 2020 Centre is 5.8 km away (> 4 km cut-off),,Y
+925,Al Yalayis 5,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,0,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+931,Al Lesaily,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 14.3 km away (> 4 km cut-off),,Y
+941,Grayteesah,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 23.4 km away (> 4 km cut-off),,Y
+945,Al Fagaa,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 31.6 km away (> 4 km cut-off),,Y
+951,Saih Al Salam,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 11.0 km away (> 4 km cut-off),,Y
+956,Al Hathmah,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 20.6 km away (> 4 km cut-off),,Y
+961,Madinat Latifa,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,0,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+967,Ghadeer Barashy,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 9.1 km away (> 4 km cut-off),,Y
+971,Saih Al Dahal,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 16.5 km away (> 4 km cut-off),,Y
+975,Al O'Shoosh,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 21.6 km away (> 4 km cut-off),,Y
+978,Saih Shua'Alah,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 29.0 km away (> 4 km cut-off),,Y
+981,Mugatrah,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,0,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+987,Al Layan 1,4,Expo 2020 Centre,p,a,DERIVED_NEAREST,0,,,,,"distance rule says adjacent; shown as peripheral because it is industrial and investment land beside the Expo and Dubai South polygon, not Expo (rule 2)",Y,Y
+988,Al Layan 2,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 5.5 km away (> 4 km cut-off),,Y
+991,Hefair,,,o,o,UNASSIGNED,0,,,,,nearest core Expo 2020 Centre is 12.0 km away (> 4 km cut-off),,Y
