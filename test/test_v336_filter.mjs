@@ -17,7 +17,7 @@ ok(js.includes("<details class=evd") && js.includes("caret-down"), "positioning 
 ok(js.includes("lg.id=\"maplg\"") && js.includes("function mapLegend"), "legend overlay on the map");
 ok(js.includes("dlink evc peer"), "peers are cards that open the profile");
 ok(js.includes("class=dvg") && js.includes("class=pjg") && js.includes("dir=auto"), "developer and project lists are card grids; names use dir=auto");
-ok(js.includes("function pjCard") && js.includes("/img/blocks_") && js.includes("No map position yet") && js.includes("pj-fill"), "project cards place on the map from the district footprints; unplaced say so");
+ok(js.includes("function pjCard") && js.includes("/img/blocks_") && js.includes("Project details") && js.includes("pj-fill"), "project cards place on the map from the district footprints; unplaced say so");
 ok(js.includes("function rowGo") && js.includes('addEventListener("click",rowGo)') && !js.includes("r.onclick=go"), "price-by-area rows use one delegated click handler per panel");
 ok(js.includes("if(!dvp||!dvt||!dvo||!cs||!co)return") && js.includes("function safeWire") && js.includes("function dedupeIds"), "a profile open cannot throw in wireDetail; duplicate ids are renamed in the hidden copy");
 ok(!js.includes("'Mostly '") && !/Mostly [^<]{0,12}band/.test(js), "no developer tag says Mostly + band any more");

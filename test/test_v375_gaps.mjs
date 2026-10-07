@@ -192,9 +192,11 @@ const oldHtml = old.devmapHtml("k", { NAJ_NAV_CSS: "", NAJ_FONTS: "", najNav: ()
 const oldJs = oldHtml.slice(oldHtml.indexOf("<script>", oldHtml.indexOf("maplibre-gl.js")) + 8, oldHtml.lastIndexOf("</script>"));
 const Pold = harness(oldJs, mkIdx(), { evOpen: false, prof: null, drill: null, parea: null, sel: "a", unit: "sqft", win: "all" }, false);
 const Pnew = harness(js, mkIdx(), { evOpen: false, prof: null, drill: null, parea: null, sel: "a", unit: "sqft", win: "all" }, true);
-for (const k of ["x", "y", "w", "z"]) ok(Pold.profileHtml(k) === Pnew.profileHtml(k), "developer " + k + ": the profile with no delay file is identical, character for character, to v373's");
+// v385: a card with no map position is now a 'Project details' button instead of a div; that one change is normalised away so every other character is still compared
+const v385 = (h) => String(h).replace(/<button type=button class="pjc noloc"[^>]*>([^]*?)<\/button>/g, '<div class="pjc noloc">$1</div>').replace(/<span class="tagl pd">[^]*?<\/span>/g, "");
+for (const k of ["x", "y", "w", "z"]) ok(v385(Pold.profileHtml(k)) === v385(Pnew.profileHtml(k)),"developer " + k + ": the profile with no delay file is identical, character for character, to v373's");
 const Pnull = harness(js, mkIdx(), { evOpen: false, prof: null, drill: null, parea: null, sel: "a", unit: "sqft", win: "all", delay: {} }, true);
-ok(Pnull.profileHtml("x") === Pold.profileHtml("x"), "an empty delay file ({}) changes nothing either");
+ok(v385(Pnull.profileHtml("x")) === v385(Pold.profileHtml("x")),"an empty delay file ({}) changes nothing either");
 ok(js.includes('api("delay").catch(function(){return null})') && js.includes("S.delay=r[3]&&r[3].by?r[3]:null"), "the page asks for the delay file and a failure to load it leaves the page as it was");
 // the route serves the file, or {} when it is not on file
 const mkR = (store) => ({ MEETINGS: { async get(k) { return store[k] == null ? null : JSON.stringify(store[k]); } } });
