@@ -175,7 +175,7 @@ function projectsOf(rows, names) {
 // null when this place has no sales file and neither has Dubai: the caller then draws the v395 page.
 export async function salesAnswer(raw, st, A, names) {
   if (!A || A.notFound || !A.from) return null;
-  let rows = null, asOf = "", first = "", devExtra = null, missing = "";
+  let rows = null, asOf = "", first = "", devExtra = null, missing = "", devAll = null, dub0 = null;
   const sub = { kind: A.kind, name: A.name };
   if (A.kind === "building" || A.kind === "district") {
     const slug = A.district || "";
@@ -216,9 +216,11 @@ export async function salesAnswer(raw, st, A, names) {
     devExtra = { unmapped, districts: top.length, word, brandRows };
     if (files.length) first = files.reduce((m, f) => (!m || f.first < m ? f.first : m), "");
   } else if (A.kind === "dubai") {
-    const dd = salesDoc(await raw(SALES_KV.dubai), "per_area");
+    dub0 = await raw(SALES_KV.dubai);
+    const dd = salesDoc(dub0, "per_area");
     if (!dd) return null;
     rows = dd.rows; asOf = dd.asOf; first = dd.first;
+    devAll = devDoc(dub0);
   } else return null;
 
   const w = salesWindow(st, A, asOf);
@@ -244,6 +246,10 @@ export async function salesAnswer(raw, st, A, names) {
       S.cmp = { n: p, base, pct: base > 0 ? Math.round(((count.n - base) / base) * 100) : null, days: w.prev.days, avg: !!w.prev.avg, from: w.prev.from, to: w.prev.to };
     }
   } else S.cmp = null;
+  if (devAll) {   // the share of the window's sales that have a developer recorded, from the per_developer rows (all areas)
+    const rec = devAll.filter((r) => r.date >= w.from && r.date <= w.to).reduce((t, r) => t + r.n, 0);
+    S.devShare = S.allN > 0 ? Math.min(1, rec / S.allN) : null;
+  }
   if (devExtra) {
     const br = devExtra.brandRows.filter(keepSale(stE, w.from, w.to));
     S.dev = { unmapped: devExtra.unmapped, districts: devExtra.districts };
@@ -331,6 +337,7 @@ function alsoLine(S) {
 }
 function attrLine(S, kind) {
   if (!S || S.missing || !S.count.n) return "";
+  if (S.devShare != null && kind === "dubai") return '<div class=dk id=ejattr>Developer recorded for ' + esc(pctSay(S.devShare)) + " of these sales; not recorded for " + esc(pctSay(1 - S.devShare)) + ".</div>";
   const a = S.count.attr, t = a.RV + a.NAME + a.NONE;
   if (!t) return "";
   const p = (v) => pctSay(v / t);
@@ -440,9 +447,17 @@ function rankBothHtml(rentals, sales, R, limit) {
 }
 function whereBothHtml(A, S, R) {
   const g = new Map();
-  const add = (k, name, district, f, v) => { const x = g.get(k) || { k, name, district, r: 0, s: 0 }; x[f] += v; g.set(k, x); };
-  for (const x of (A.where || [])) add(x.district || "area:" + x.name, x.name, x.district, "r", x.n);
-  for (const x of (S.areas || [])) add(x.district || "area:" + (x.area || "").toLowerCase(), x.name, x.district, "s", x.n);
+  // v399: the live all-Dubai rentals rows carry an AREA and no district, the sales rows both: join on any key they share (district slug, area name, place name)
+  const idx = new Map(), N = (v) => norm(v);
+  const add = (keys, name, district, f, v) => {
+    keys = keys.filter(Boolean);
+    let x = null; for (const k of keys) if (idx.has(k)) { x = idx.get(k); break; }
+    if (!x) { x = { k: keys[0], name, district, r: 0, s: 0 }; g.set(x.k, x); }
+    if (!x.district && district) x.district = district;
+    x[f] += v; for (const k of keys) idx.set(k, x);
+  };
+  for (const x of (A.where || [])) add([x.district ? "d:" + x.district : "", "n:" + N(x.name)], x.name, x.district, "r", x.n);
+  for (const x of (S.areas || [])) add([x.district ? "d:" + x.district : "", "n:" + N(x.area), "n:" + N(x.name)], x.name, x.district, "s", x.n);
   const list = [...g.values()].filter((x) => x.r || x.s).sort((a, b) => (b.r + b.s) - (a.r + a.s) || a.name.localeCompare(b.name)).slice(0, R.top || 10);
   if (!list.length) return "";
   return '<div class=hd2>WHERE THE ACTIVITY IS<small>by district</small></div><table class=two id=ejwhere2><tr><th>DISTRICT</th><th>RENTALS</th><th class=s>SALES</th></tr>'
