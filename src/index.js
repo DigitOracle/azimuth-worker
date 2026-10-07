@@ -14,6 +14,7 @@ import { startBody, START_CSS } from "./start_page.js";   // v278.1 - START rede
 import { ejariRoutes } from "./ejari_page.js";   // v279 CONTRACTS SIGNED (Ejari) - /contracts and /contracts_api; all logic in src/ejari_page.js (its START card is drawn by src/start_page.js)
 import { devmapPdfRoute } from "./devmap_pdf.js";   // v324 - the two Developers-by-area PDFs (snapshot, detailed)
 import { devmapRoutes } from "./devmap_page.js";   // v301 DEVELOPERS BY AREA
+import { mergePlots, SEARCH_EXTRA_KV } from "./nosales.js";   // v392 - no-sales projects with a plot position join the map search
 import { supplyRoutes, pollerRoutes } from "./supply_page.js";   // v279 ADVERTISED SUPPLY - owner only: /supply*, and /pf_queue + /pf_status for the laptop poller; all logic in src/supply_page.js
 import { findItem as briefFindItem } from "./brief_docs.js";   // v277 - the building page's dossier button goes to /brief_pdf: this says whether the rent index knows the building
 import { sheetRoutes } from "./sheets.js";   // v157 - the client fact sheet: receive, preview, send as a document
@@ -3264,6 +3265,9 @@ async function appFetch(request, env, ctx) {
         if (_lk === "app" && !clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _cc = _lk ? "private, no-store" : "public, max-age=3600";   // v279 - keyed data is never cached by a shared cache
         // ---- end v279 ----
+        if (nm === "plots") {   // v392 - the map search list: img_search_extra (launched projects with no registered sales, plot positions) is added when present; absent or nothing new = img_plots untouched
+          try { const _xtra = await env.MEETINGS.get(SEARCH_EXTRA_KV); if (_xtra) { const _pt = await env.MEETINGS.get("img_plots"); const _mg = _pt ? mergePlots(_pt, _xtra) : null; if (_mg) return new Response(_mg, { headers: { "Content-Type": "application/json", "Cache-Control": _cc } }); } } catch (e) {}
+        }
         const buf = await env.MEETINGS.get("img_" + nm, "arrayBuffer");
         if (!buf) return new Response("not found", { status: 404 });
         const ct = (await env.MEETINGS.get("img_ct_" + nm)) || "image/png";
@@ -8188,7 +8192,7 @@ const MAP_CHROME_JS = ''
   + 'function searchAll(q){q=qnorm(q);if(q.length<2)return [];var toks=q.split(" ").filter(Boolean);var hit=function(t){t=qnorm(t);return toks.every(function(w){return t.indexOf(w)>=0})};var out=[];'
   + '  (D&&D.districts||[]).forEach(function(d){if(hit(d.name)||hit(d.slug))out.push({t:"district",n:d.name,s:d.corridor,rank:0,go:function(){goDistrict(d.slug)}})});'
   + '  ((SUBS&&SUBS.features)||[]).forEach(function(f){var p=f.properties;if(hit(p.name))out.push({t:"sub-community",n:tc(p.name),s:dName(p.district)+(p.plots?" \u00b7 "+p.plots+" plots":""),rank:1,go:function(){goDistrict(p.district);setTimeout(function(){openPlace({properties:p,geometry:f.geometry},"sub")},650)}})});'
-  + '  ((PLOTS&&PLOTS.features)||[]).forEach(function(f){var p=f.properties;if(hit(p.name)||(p.plot&&/^[0-9]/.test(q)&&String(p.plot).toLowerCase().replace(/[^a-z0-9]/g,"").indexOf(q.replace(/ /g,""))===0)||("plot "+p.plot).indexOf(q)===0)out.push({t:"plot "+p.plot,n:tc(p.name)||("Plot "+p.plot),s:dName(p.district),rank:2,go:function(){goDistrict(p.district);setTimeout(function(){openPlace({properties:p,geometry:f.geometry},"plot")},650)}})});'
+  + '  ((PLOTS&&PLOTS.features)||[]).forEach(function(f){var p=f.properties;if(hit(p.name)||(p.plot&&/^[0-9]/.test(q)&&String(p.plot).toLowerCase().replace(/[^a-z0-9]/g,"").indexOf(q.replace(/ /g,""))===0)||("plot "+p.plot).indexOf(q)===0)out.push({t:p.nb?"plot position, not a building":"plot "+p.plot,n:tc(p.name)||("Plot "+p.plot),s:dName(p.district),rank:2,go:function(){goDistrict(p.district);setTimeout(function(){openPlace({properties:p,geometry:f.geometry},"plot")},650)}})});'
   + '  var devs={};PR.forEach(function(it){if(it.dev)devs[it.dev]=(devs[it.dev]||0)+1});Object.keys(devs).forEach(function(dv){if(hit(dv)||hit(devName(dv)))out.push({t:"developer",n:devName(dv),s:devs[dv]+" priced developments",rank:0,go:function(){var m=PR.filter(function(it){return it.dev===dv}).map(function(it){var ks=Object.keys(it.b);var k=ks[0];return {it:it,b:+k,v:it.b[k]}}).sort(function(a,b){return a.v-b.v});listHomes(m);if(map.getSource("homes"))map.getSource("homes").setData({type:"FeatureCollection",features:m.map(function(x){return {type:"Feature",geometry:{type:"Point",coordinates:[x.it.lon,x.it.lat]},properties:{p:x.it.p,lab:x.it.n}}})})}})});'
   + '  PR.forEach(function(it){if(hit(it.n)&&!((SUBS&&SUBS.features)||[]).some(function(f){return qnorm(f.properties.name)===qnorm(it.n)}))out.push({t:"development",n:it.n,s:dName(it.d)+(it.dev?" \u00b7 "+it.dev:"")+" \u00b7 from "+fmtAed(Math.min.apply(null,Object.keys(it.b).map(function(k){return it.b[k]}))),rank:1,go:function(){openHome(it)}})});'
   + '  VIDS.forEach(function(v){if(hit(v.name)||hit(v.title))out.push({t:"video tour",n:v.name,s:v.master||"",rank:0,go:function(){if(v.district)goDistrict(v.district);setTimeout(function(){openVideo(v)},650)}})});'
