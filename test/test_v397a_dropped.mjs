@@ -21,10 +21,11 @@ console.log("A - the built shard: the dropped fixtures");
   for (const [p, n, k, s, r] of fx) {
     const x = find(p);
     ok(x && x.e.n === n && x.k === k && x.s === s && x.e.r === r, n + " (project " + p + ") is under " + k + " / " + s + " as " + r, JSON.stringify(x));
-    ok(x && x.e.e === "NAME_ONLY" && x.e.de, n + ": label NAME_ONLY and the registered company shown", JSON.stringify(x && x.e));
+    const want = p === 1870 ? "NAME_ONLY" : "REGISTER_VERIFIED";
+    ok(x && x.e.e === want && x.e.de && (want === "NAME_ONLY" ? x.e.br : !x.e.br), n + ": label " + want + " (the register's developer " + (want === "NAME_ONLY" ? "differs from the brand named" : "agrees") + ") and the registered company shown", JSON.stringify(x && x.e));
   }
   ok(all.every((x) => !("sales" in x.e) && !("ppsm" in x.e) && !("n" in x.e && typeof x.e.n !== "string")), "no entry carries a sales or price field");
-  ok(all.every((x) => x.e.e === "NAME_ONLY"), "every entry is labelled NAME_ONLY");
+  ok(all.every((x) => x.e.e === "REGISTER_VERIFIED" || x.e.e === "NAME_ONLY") && all.some((x) => x.e.e === "NAME_ONLY") && all.every((x) => x.e.e !== "REGISTER_VERIFIED" || !x.e.br), "labels are REGISTER_VERIFIED (register agrees) or NAME_ONLY (differs or unknown); a verified entry names no other brand");
   ok(all.length === FILE.meta.count && all.length >= 99, "the file holds " + all.length + " entries and says so");
   ok(fs.statSync(new URL("../data/notconf/notconf.json", import.meta.url)).size < 300 * 1024, "under 300 KB (a shard, the index is untouched)");
   ok(!EMOJI.test(JSON.stringify(FILE)), "no emoji in the data");
@@ -83,14 +84,14 @@ console.log("D - the page");
   ok(/Address Harbour Point/.test(text(g)) && /Register names: THE LAGOONS PHASE ONE/.test(text(g)) && /Matched by name only, not confirmed by the register/.test(text(g)), "Emaar's group holds Address Harbour Point with the NAME_ONLY line and the registered company", text(g).slice(0, 300));
   const ag = P.NOTCONF.areaHtml("businessbay", api);
   ok(/<details class="card nconf nconfarea" id=nconfarea>/.test(ag) && !/<details[^>]*\bopen\b/.test(ag) && /Projects whose developer is not recorded here/.test(text(ag)), "the area card group is collapsed and titled 'Projects whose developer is not recorded here'");
-  ok(/Tamani Arts Offices/.test(text(ag)) && /Register names: THE DEVELOPER PROPERTIES/.test(text(ag)) && /outside the numbers/.test(text(ag)), "Tamani Arts Offices is in the Business Bay area group with its registered company");
+  ok(/Tamani Arts Offices/.test(text(ag)) && /Registered developer per the Land Department register: THE DEVELOPER PROPERTIES/.test(text(ag)) && /Not in the totals: its registered sales are offices, shops or hotel units/.test(text(ag)) && !/Matched by name only/.test(text(ag).slice(text(ag).indexOf("Tamani"), text(ag).indexOf("Tamani") + 200)) && /outside the numbers/.test(text(ag)), "Tamani Arts Offices is in the Business Bay area group with its registered company");
   ok(P.NOTCONF.areaHtml("wadialsafa5", api).includes("Sondos Sage") && P.NOTCONF.areaHtml("nowhere", api) === "", "another area shows its own entries; an area with none shows nothing");
   S.parea = "businessbay"; ok(!/Address Harbour Point/.test(P.ncHtml("emaar")), "an area card selected: the brand group is filtered to that area"); S.parea = null;
   const dk = (h, n) => { const m = h.match(new RegExp("data-pd=\"([^\"]+)\"[^>]*aria-label=\"[^\"]*" + n)); return m && m[1]; };
   const tk = dk(ag, "Tamani");
   ok(tk, "each card is a button that opens Project details");
   P.pdOpen(tk, mkEl("f")); const t = text(els.pjdet.innerHTML);
-  ok(/Register project number 22/.test(t) && /Why it is outside the numbers/.test(t) && /offices, shops or hotel rooms/.test(t) && /Not counted on this page/.test(t) && /NAME_ONLY/.test(t), "Tamani panel: register number, reason, 'Not counted', label NAME_ONLY", t.slice(0, 500));
+  ok(/Register project number 22/.test(t) && /Why it is outside the numbers/.test(t) && /Not in the totals: its registered sales are offices, shops or hotel units/.test(t) && /Not counted on this page/.test(t) && /REGISTER_VERIFIED/.test(t), "Tamani panel: register number, reason, 'Not counted', label REGISTER_VERIFIED", t.slice(0, 500));
   ok(!EMOJI.test(g) && !EMOJI.test(ag) && !EMOJI.test(els.pjdet.innerHTML), "no emoji in the rendered groups or panel");
 }
 console.log("\n" + pass + " passed, " + fail + " failed");

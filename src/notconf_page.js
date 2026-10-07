@@ -14,21 +14,22 @@ var NOTCONF=(function(){
     no_sales:"Priced from the units register; there is no registered sale to count.",
     other_name:"The register names this project differently from the building outline its sales are filed on, so the register name found nothing on this page.",
     same_name:"Another register project with exactly this name is shown on this page; this one has no card of its own."};
+  var WHYV={non_residential_sales:"Not in the totals: its registered sales are offices, shops or hotel units.",no_sales_by_type:"Not in the totals: its registered sales have no bedroom count.",no_size:"Not in the totals: its sales have no size.",no_sales:"Not in the totals: there is no registered sale to count."};
   var REASONS=Object.keys(WHY);
   function load(d){D=null;N=0;if(!d||typeof d!=="object"||!d.d||typeof d.d!=="object")return 0;var o={};
     Object.keys(d.d).forEach(function(k){var ds=d.d[k];if(!ds||typeof ds!=="object")return;Object.keys(ds).forEach(function(s){var l=Array.isArray(ds[s])?ds[s]:[],t=ALIAS[s]||s;
       l.forEach(function(e){if(!e||typeof e.n!=="string"||!e.n||REASONS.indexOf(e.r)<0)return;((o[k]=o[k]||{})[t]=o[k][t]||[]).push(e);N++})})});D=N?o:null;return N}
   function count(){return N}
-  function why(e){return WHY[e&&e.r]||""}
+  function why(e){return (e&&e.e==="REGISTER_VERIFIED"&&WHYV[e.r])||WHY[e&&e.r]||""}
   // the entries of developer k (an id, or "_" for the area-level group); area = the selected area (slug) or null
   function list(k,area){var out=[];if(!D||!D[k])return out;Object.keys(D[k]).forEach(function(s){if(area&&s!==area)return;D[k][s].forEach(function(e){out.push({slug:s,e:e})})});return out}
   function items(k,area){return k==="_"?[]:list(k,area)}
-  function evOf(e){return {p:e.p!=null?e.p:null,e:"NAME_ONLY",dn:e.de||e.br||"",a:e.a||"",as:e.as||"district",st:e.st||null,pc:e.pc==null?null:e.pc,pe:e.pe||null,u:e.u||null,h:e.h||null,mix:e.mix||null,pl:e.pl==null?null:e.pl,nc:1,r:e.r,al:e.al||""}}
+  function evOf(e){return {p:e.p!=null?e.p:null,e:e.e==="REGISTER_VERIFIED"?"REGISTER_VERIFIED":"NAME_ONLY",dn:e.de||e.br||"",a:e.a||"",as:e.as||"district",st:e.st||null,pc:e.pc==null?null:e.pc,pe:e.pe||null,u:e.u||null,h:e.h||null,mix:e.mix||null,pl:e.pl==null?null:e.pl,nc:1,r:e.r,al:e.al||""}}
   function line(e){return e.al?"Listed on this page as "+e.al:""}
   function cardOf(x,api){var e=x.e,ev=evOf(e),ln=line(e),st=e.st?api.words?api.words(e.st):String(e.st).toLowerCase():"",
     extra='<span class=note style="display:block;margin:0">'+api.esc(e.a||"")+'</span>'
-      +'<span class="note srcl" style="display:block;margin:2px 0 0;font-size:10.5px">Matched by name only, not confirmed by the register</span>'
-      +(e.de?'<span class="note srcl" style="display:block;margin:2px 0 0;font-size:10.5px">Register names: '+api.esc(e.de)+'</span>':'')
+      +'<span class="note srcl" style="display:block;margin:2px 0 0;font-size:10.5px">'+(e.e==="REGISTER_VERIFIED"?'Registered developer per the Land Department register: '+api.esc(e.de||""):'Matched by name only, not confirmed by the register')+'</span>'
+      +(e.de&&e.e!=="REGISTER_VERIFIED"?'<span class="note srcl" style="display:block;margin:2px 0 0;font-size:10.5px">Register names: '+api.esc(e.de)+'</span>':'')
       +(ln?'<span class=note style="display:block;margin:2px 0 0">'+api.esc(ln)+'</span>':'')
       +'<span class=note style="display:block;margin:2px 0 0">'+api.esc(why(e))+'</span>';
     return api.pjCard(x.slug,e.n,null,null,extra,"Project name not recorded",ev)}

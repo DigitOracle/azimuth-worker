@@ -215,6 +215,10 @@ def shape(dropped, idx, nosales, regfacts):
         for q in RF_KEYS:
             if pf and pf.get(q) not in (None, ""):
                 e[q] = pf[q]
+        regdk = next((r["regdk"] for r in use if r.get("regdk")), "")
+        if reg_co and (not e.get("br") or (regdk and regdk == dk)):
+            e["e"] = "REGISTER_VERIFIED"                             # the register's developer agrees with the brand (or no other developer was named): accurate label; still outside every number
+            e.pop("br", None)
         place = dk if (dk and dk in prof) else "_"
         d.setdefault(place, {}).setdefault(slug, []).append(e)
         counters[reason] += 1
