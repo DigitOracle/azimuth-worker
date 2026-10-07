@@ -39,7 +39,27 @@ export function bindKey(c, id, slug, binds) {
   if (rb && c.dld && c.dld.property_id != null && String(rb.property_id) === String(c.dld.property_id)) return String(id);
   return "";
 }
-export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nameDev, trace, regDev, districtName, claims, dldAreas, keep, binds) {
+// v397a - DROPPED BY A RULE. A building card that carries a price (a row with median_aed) but gave NO cell, so it was never a project card: nothing in the index mentions it.
+//   reasons (the first that applies): "no_size" = a priced row with sales but no median size; "non_residential_sales" = its sales are of offices, shops, hotel rooms or a type with no bedroom count
+//   (Tamani Arts Offices), the page prices homes by bedrooms; "no_sales_by_type" = the sales register holds sales for the project but none under a type the card prices (the card prices 1-4 bedroom
+//   flats, the sales are filed as Unit, NA or another type); "no_sales" = no registered sale at all. The record is for a group that sits OUTSIDE every number (scripts/build_notconf.py).
+export function droppedReasonOf(c, soldOf, bedOf) {
+  const priced = (c.rows || []).filter((r) => r.median_aed);
+  if (!priced.length) return "";
+  const sold = (c.dld_sales && c.dld_sales.sold_by_type) || {}, total = Number((c.dld_sales && c.dld_sales.sold_total) || 0) || Object.keys(sold).reduce((a, k) => a + (Number(sold[k]) || 0), 0);
+  if (priced.some((r) => !r.median_sqm && soldOf(r.type) && bedOf(r.type) != null)) return "no_size";
+  if (priced.some((r) => soldOf(r.type) && bedOf(r.type) == null)) return "non_residential_sales";
+  if (total > 0) return "no_sales_by_type";
+  return "no_sales";
+}
+function droppedRecord({ c, id, slug, D, q, ev, own, regd, cand, route, soldOf, bnames }) {
+  const reason = droppedReasonOf(c, soldOf, bedOf); if (!reason) return null;
+  const sold = (c.dld_sales && c.dld_sales.sold_by_type) || {};
+  const total = Number((c.dld_sales && c.dld_sales.sold_total) || 0) || Object.keys(sold).reduce((a, k) => a + (Number(sold[k]) || 0), 0);
+  return { slug, id: String(id), name: String(c.name || (c.dld && c.dld.project) || (c.dld_sales && c.dld_sales.project) || ""), names: bnames.filter(Boolean).map(String), reason, dev: D.dev || "", dk: D.dev ? (canonicalOf(D.dev) || "_") : "", q: D.q, why: D.why, cand: cand || "", route,
+    p: ev.p, di: ev.di, dn: ev.dn, regc: regd && regd.c ? regd.c : "", e: ev.e, a: own.label, as: own.source, sold: total, homes: Number(c.registered_homes || (c.dld && c.dld.units_registered) || c.total_units || 0), status: c.status || null };
+}
+export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nameDev, trace, regDev, districtName, claims, dldAreas, keep, binds, dropped) {
   const B = (U && U.buildings_by_id) || {}, devs = {}, names = {};
   const slot = (dev) => {
     const k = dev ? canonicalOf(dev) : "_";
@@ -82,6 +102,7 @@ export function buildArea(U, slug, projDev, priceDev, rentItems, rentDevByP, nam
     if (added) slot(dev).bx.push({ p: ev.p, di: ev.di, dn: ev.dn, m: ev.m, e: ev.e, a: own.label, as: own.source, h: Number(c.registered_homes || (c.dld && c.dld.units_registered) || c.total_units || 0) });   // v373 - parallel to b
     if (added) { const bk = bindKey(c, id, slug, binds); if (bk) slot(dev).bx[slot(dev).bx.length - 1].bk = bk; }   // v390 - the building key (footprint index), only for a register-bound footprint
     if (added && dev) slot(dev).h += Number(c.registered_homes || (c.dld && c.dld.units_registered) || c.total_units || 0);
+    if (!added && dropped) { const dr = droppedRecord({ c, id, slug, D, q, ev, own, regd, cand, route, soldOf, bnames }); if (dr) dropped.push(dr); } if (added && dropped) { const shown = String(c.name || (c.dld && c.dld.project) || ""), alts = [c.dld && c.dld.project, c.dld_sales && c.dld_sales.project].filter((x) => x && nameKey(x) !== nameKey(shown)); if (alts.length) dropped.push({ kind: "alias", slug, id: String(id), name: shown, cp: ev.p, names: alts.map(String), dev: D.dev || "", dk: D.dev ? (canonicalOf(D.dev) || "_") : "", q: D.q, e: ev.e, a: own.label, as: own.source, homes: Number(c.registered_homes || (c.dld && c.dld.units_registered) || c.total_units || 0), sold: Object.values((c.dld_sales && c.dld_sales.sold_by_type) || {}).reduce((s2, x) => s2 + (Number(x) || 0), 0) }); }   // v397a - a priced card no cell was made for: kept for the Not-confirmed group (never counted)
   }
   for (const it of rentItems || []) {                                // Ejari contracts, community-level labelled on the page
     const dev = (it.i != null && devOfCard[it.i]) || rentDevByP[it.p] || null;
@@ -150,7 +171,7 @@ export function attachRegFacts(areas, rf) {
     for (const q of RF_KEYS) if (f[q] != null && f[q] !== "" && !(q in x)) x[q] = f[q];
   }
 }
-export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs, register, evidence, projdevOut, traceOut, regdev, claims, keep, regfacts, binds }) {
+export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProjects, outAsOf, shares, offplanDir, offplanSlugs, register, evidence, projdevOut, traceOut, regdev, claims, keep, regfacts, binds, droppedOut }) {
   const projDev = {};
   // the Ejari projects index: every project Dubai-wide with its developer (KV img_ejari_projects_index)
   if (ejariProjects && ejariProjects.index) for (const k of Object.keys(ejariProjects.index)) { const p = ejariProjects.index[k]; if (p.name_en && p.developer) projDev[nameKey(p.name_en)] = p.developer; }
@@ -171,7 +192,7 @@ export function buildIndex({ umDir, prices, rent, geo, projectsCsv, ejariProject
     if ((!U || !U.buildings_by_id) && evidence && evidence.areas && evidence.areas[g.slug]) U = { buildings_by_id: {} };   // v322: a district with register sales but no card file still gets its evidence
     if (!U || !U.buildings_by_id) continue;
     const nameDev = {};
-    const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev, traceOut, regdev && regdev[g.slug], g.name, claims, register && register[g.slug] && register[g.slug].areas, keep, binds || null);
+    const devs = buildArea(U, g.slug, projDev, priceDev, (rent.items || []).filter((i) => i.d === g.slug), rentDevByP, nameDev, traceOut, regdev && regdev[g.slug], g.name, claims, register && register[g.slug] && register[g.slug].areas, keep, binds || null, droppedOut || null);
     if (projdevOut) projdevOut.slugs[g.slug] = nameDev;
     if (!Object.keys(devs).length && !(evidence && evidence.areas && evidence.areas[g.slug])) continue;
     areas[g.slug] = { name: headingName(g.slug, g.name), corridor: g.corridor, bbox: g.bbox, centre: g.centre, devs };
@@ -230,7 +251,9 @@ if (isMain) {
   const rd = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
   const prices = rd(a.prices);
   const projdevOut = a["projdev-out"] ? { slugs: {}, global: {} } : null;
-  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean), register: a.register ? rd(a.register) : null, evidence: a.evidence ? rd(a.evidence) : null, regfacts: a.regfacts ? rd(a.regfacts) : null, binds: a.regbind || a.txbind ? { reg: a.regbind ? rd(a.regbind) : null, tx: a.txbind ? rd(a.txbind) : null } : null, regdev: a.regdev ? rd(a.regdev) : null, claims: a.claims ? rd(a.claims) : null, keep: (() => { const f = a.keep || fileURLToPath(new URL("./attribution_keep.json", import.meta.url)); return fs.existsSync(f) ? rd(f).keep || [] : []; })(), projdevOut });
+  const droppedOut = a["dropped-out"] ? [] : null;
+  const idx = buildIndex({ umDir: a.um, prices, rent: rd(a.rent), geo: rd(a.geo), ejariProjects: a.ejari ? rd(a.ejari) : null, projectsCsv: a.projects ? fs.readFileSync(a.projects, "utf8") : null, outAsOf: String(prices.generated || "").slice(0, 10), shares: a.shares ? rd(a.shares) : null, offplanDir: a.offplan || null, offplanSlugs: String(a["offplan-slugs"] || "").split(",").filter(Boolean), register: a.register ? rd(a.register) : null, evidence: a.evidence ? rd(a.evidence) : null, regfacts: a.regfacts ? rd(a.regfacts) : null, binds: a.regbind || a.txbind ? { reg: a.regbind ? rd(a.regbind) : null, tx: a.txbind ? rd(a.txbind) : null } : null, droppedOut, regdev: a.regdev ? rd(a.regdev) : null, claims: a.claims ? rd(a.claims) : null, keep: (() => { const f = a.keep || fileURLToPath(new URL("./attribution_keep.json", import.meta.url)); return fs.existsSync(f) ? rd(f).keep || [] : []; })(), projdevOut });
+  if (a["dropped-out"]) fs.writeFileSync(a["dropped-out"], JSON.stringify(droppedOut));
   if (projdevOut) fs.writeFileSync(a["projdev-out"], JSON.stringify(projdevOut));
   fs.writeFileSync(a.out, JSON.stringify(idx));
   console.log("areas", Object.keys(idx.areas).length, "developers", Object.keys(idx.devs).length, "bounds", idx.cuts.bounds, "bytes", fs.statSync(a.out).size);
