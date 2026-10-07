@@ -2,8 +2,9 @@
 //   GET /developers_pdf?kind=investor_selector&project=<id>&key=...&format=html     the selector (investor type -> tier -> segment cards -> Generate)
 //   GET /developers_pdf?kind=investor_tiers&project=<id>&type=<preset>&tier=<summary|standard|full>&segs=a,b,c&client=<name>&key=...      the PDF
 //        &format=html shows the document; &format=audit returns the audit record as JSON (the sidecar). The audit record is also in the document's meta tags and the X-Investor-Audit header.
-// The facts for a project are read from KV key "investor_tiers_facts" (read only here; nothing in this file writes KV).
+// The facts for a project are read from the district shard img_investor_tiers_facts_<district> found through img_investor_tiers_index (v379), falling back to the v376 single key img_investor_tiers_facts (read only here; nothing in this file writes KV).
 import { kvJson } from "./brief.js";
+import { loadFactsSharded } from "./investor_facts.js";
 import { BRIEF_KIT, esc } from "./brief_docs.js";
 import { icon, EXTRA_CSS, pack } from "./devmap_pdf.js";
 import { buildPlan, SEGMENTS, PRESETS, TIERS, CORE_IDS, LABEL_TEXT, CANNOT_TELL, THRESHOLDS, ORDER_FLAGS, RULE_CARDS, validRuleCard, validAssignmentCard, dateLong, fmt, aed, bedsWord, lintText } from "./investor_tiers.js";
@@ -40,6 +41,14 @@ const partYear = (f) => { const a = String(f.as_of.sales || ""); return /-12-31$
 
 function unitRegister(f) {
   const U = f.unit_register; if (!U) return {};
+  if (U.single) {   // v379 - one registered project (the register units of this project only)
+    const a = U.single, pc = (n, t) => Math.round(n / t * 100) + "%", cell = (n) => fmt(n) + " (" + pc(n, a.units) + ")";
+    const kinds = [["Studios", a.studio], ["1 bedroom", a.b1], ["2 bedrooms", a.b2], ["3 bedrooms", a.b3], ["4 or more bedrooms", a.b4plus], ["Other (shops, offices, rooms)", a.other]].filter((k) => k[1] > 0);
+    const left = U.left_for_sale.replace(/^not known: /, "not known, because ");
+    return { regStory: " Unit register: " + a.name + " has " + fmt(a.units) + " registered units" + (kinds.length ? ": " + kinds.map((k) => fmt(k[1]) + " " + k[0].toLowerCase() + " (" + pc(k[1], a.units) + ")").join(", ") : "") + ". Units left for sale: " + left + ".",
+      regTable: table(["Project (Dubai Land Department unit register)", "Units"].concat(kinds.map((k) => k[0])), [[a.name + (a.project_number ? " (project " + a.project_number + ")" : " (not on the project register)"), fmt(a.units)].concat(kinds.map((k) => cell(k[1])))]),
+      regFlags: ["Units left for sale: " + U.left_for_sale + "."].concat(U.unreconciled ? [U.unreconciled] : []), regSource: U.source };
+  }
   const pc = (n, t) => Math.round(n / t * 100) + "%", one = (x) => [x.name + " (project " + x.project_number + ")", fmt(x.units), fmt(x.b1) + " (" + pc(x.b1, x.units) + ")", fmt(x.b2) + " (" + pc(x.b2, x.units) + ")", fmt(x.b3) + " (" + pc(x.b3, x.units) + ")", fmt(x.studio)];
   const a = U.phase1, b = U.phase2, t = { name: "Both projects", project_number: a.project_number + " and " + b.project_number, units: a.units + b.units, b1: a.b1 + b.b1, b2: a.b2 + b.b2, b3: a.b3 + b.b3, studio: 0 };
   const sentence = " Unit register: " + a.name + " has " + fmt(a.units) + " registered units, " + fmt(a.b1) + " one-bedroom (" + pc(a.b1, a.units) + "), " + fmt(a.b2) + " two-bedroom (" + pc(a.b2, a.units) + "), " + fmt(a.b3) + " three-bedroom (" + pc(a.b3, a.units) + "); " + b.name + " has " + fmt(b.units) + " units: " + fmt(b.b1) + ", " + fmt(b.b2) + " and " + fmt(b.b3) + "; no studios are registered. Units left for sale: " + U.left_for_sale.replace(/^not known: /, "not known, because ") + ".";
@@ -69,7 +78,7 @@ export function segmentContent(id, f, th) {
     case "yield_rent": {
       const r = f.rents;
       return { story: "Registered rent contracts for this project: " + fmt(r.project_contracts) + (r.yield_rate != null ? ". They point to a gross yield near " + (Math.round(r.yield_rate * 1000) / 10).toFixed(1) + "%, before service charges, fees and empty months." : "."),
-        figs: [hero("Rent contracts behind it", fmt(r.project_contracts), "this project &middot; to " + dateLong(f.as_of.sales)), hero("Gross yield", r.yield_rate != null ? (Math.round(r.yield_rate * 1000) / 10).toFixed(1) + "%" : "&ndash;", "gross, before fees and empty months")],
+        figs: [hero("Rent contracts behind it", fmt(r.project_contracts), "this project &middot; to " + dateLong(f.as_of.sales))].concat(r.yield_rate != null ? [hero("Gross yield", (Math.round(r.yield_rate * 1000) / 10).toFixed(1) + "%", "gross, before fees and empty months")] : []),
         method: "Gross yield is a year's registered rent as a share of the registered price of the same size of home. It needs " + th.yield_min_contracts + " or more rent contracts for this project. It describes past contracts only." };
     }
     case "area_story": {
@@ -90,10 +99,10 @@ export function segmentContent(id, f, th) {
         method: "Each figure is the median price per sq ft of the homes sold that year. A year needs " + th.period_min_sales + " or more sales to be shown. A star marks a part year." };
     }
     case "developer_detail": {
-      const D = f.developer, e = f.delivery.entity, b = f.delivery.brand_family;
-      return { story: D.legal_entity + " was registered on " + dateLong(D.registered) + " and holds " + fmt(e.projects) + " registered projects, none handed over. The " + D.brand + " name across other registered companies: " + fmt(b.registered_finished) + " of " + fmt(b.past_planned_end) + " projects past their planned end are registered as handed over (matched by company name).",
-        figs: [hero("Registered company", fmt(e.projects) + " projects", "none handed over &middot; register"), hero(D.brand + " name, all companies", fmt(b.registered_finished) + " of " + fmt(b.past_planned_end), "handed over, past planned end &middot; by name")],
-        method: "The first figure is from the project register by developer id. The second joins every registered company whose name starts with " + D.brand + "; that is a name rule, not a register link, and the register records status, not early or late." };
+      const D = f.developer, e = f.delivery.entity, b = f.delivery.brand_family, fin = (e.by_status || {}).FINISHED || 0;
+      return { story: D.legal_entity + (D.registered ? " was registered on " + dateLong(D.registered) + " and holds " : " holds ") + fmt(e.projects) + " registered projects, " + (fin === 0 ? "none handed over" : fmt(fin) + " handed over") + "." + (b ? " The " + D.brand + " name across other registered companies: " + fmt(b.registered_finished) + " of " + fmt(b.past_planned_end) + " projects past their planned end are registered as handed over (matched by company name)." : ""),
+        figs: [hero("Registered company", fmt(e.projects) + " projects", (fin === 0 ? "none handed over" : fmt(fin) + " handed over") + " &middot; register")].concat(b ? [hero(D.brand + " name, all companies", fmt(b.registered_finished) + " of " + fmt(b.past_planned_end), "handed over, past planned end &middot; by name")] : []),
+        method: "The first figure is from the project register by developer id." + (b ? " The second joins every registered company whose name starts with " + D.brand + "; that is a name rule, not a register link, and the register records status, not early or late." : " The register records status, not early or late.") };
     }
     case "amenities": return { story: "What the developer says is included (not on the register): " + f.amenities.join("; ") + ".", figs: [], method: "Developer says. Nothing here is confirmed by the Dubai Land Department register." };
     case "demand_momentum": {
@@ -102,21 +111,22 @@ export function segmentContent(id, f, th) {
     }
     case "delivery_progress": {
       const S = f.status;
-      return { story: "Register status: " + S.text.toLowerCase() + ", " + Math.round(S.percent) + "% complete. Planned end " + dateLong(S.planned_end) + ". " + fmt(S.units) + " homes in " + fmt(S.buildings) + " buildings" + (S.zoning ? "; planning authority " + S.zoning : "") + ".",
-        figs: [hero("Status", esc(S.text), Math.round(S.percent) + "% complete"), hero("Planned end", dateLong(S.planned_end), "register date, not a promise")], method: "Source: " + S.source + ", data to " + dateLong(f.as_of.register) + ". The register records status and dates; it does not say whether a project is early or late." };
+      return { story: "Register status: " + S.text.toLowerCase() + (S.percent != null ? ", " + Math.round(S.percent) + "% complete" : ", percent complete not recorded") + ". Planned end " + dateLong(S.planned_end) + ". " + (S.units > 0 ? fmt(S.units) + " homes" + (S.buildings > 0 ? " in " + fmt(S.buildings) + " buildings" : "") : "Homes: the register holds no count") + (S.zoning ? "; planning authority " + S.zoning : "") + ".",
+        figs: [hero("Status", esc(S.text), S.percent != null ? Math.round(S.percent) + "% complete" : "percent complete not recorded"), hero("Planned end", dateLong(S.planned_end), "register date, not a promise")], method: "Source: " + S.source + ", data to " + dateLong(f.as_of.register) + ". The register records status and dates; it does not say whether a project is early or late." };
     }
     case "unit_mix_prices": {
-      const b = X.by_beds, tot = b.reduce((q, r) => q + r.n, 0);
-      return { story: "Registered off-plan sales by size: " + b.map((r) => fmt(r.n) + " " + bedsWord(r.beds) + " (median " + aed(r.median_price) + ")").join("; ") + ".",
+      const b = X.by_beds || [], tot = b.reduce((q, r) => q + r.n, 0);
+      if (!b.length) return { story: "No registered sale gives a home size yet, so no price by size can be shown.", figs: [], method: "The unit register counts the homes registered in the project, not the homes still for sale.", ...unitRegister(f) };
+      return { story: "Registered " + (X.all_off_plan ? "off-plan " : "") + "sales by size: " + b.map((r) => fmt(r.n) + " " + bedsWord(r.beds) + " (median " + aed(r.median_price) + ")").join("; ") + ".",
         figs: b.map((r) => hero(bedsWord(r.beds), aed(r.median_price), fmt(r.n) + " sales &middot; " + Math.round(r.n / tot * 100) + "%")),
         table: table(["Home", "Sales", "Typical size, sq ft", "Median price, AED", "Median AED per sq ft"], b.map((r) => [bedsWord(r.beds), fmt(r.n), fmt(r.sqft), fmt(r.median_price), fmt(r.psf)])),
         method: "Registered sales to " + dateLong(f.as_of.sales) + ". These are the homes sold so far, not the full list of homes in the project; a developer's price list must be asked for.", ...unitRegister(f) };
     }
     case "buyer_protections": {
       const S = f.status, D = f.developer;
-      return { story: "The project is on the Dubai Land Department register as project " + f.project.project_number + ", status " + S.text.toLowerCase() + ". Escrow bank named on the register: " + (S.escrow ? S.escrow.replace(/\s*\(PUBLIC JOINT STOCK COMPANY\)/i, "") : "none named") + ". Registered developer: " + D.legal_entity + " (" + LABEL_TEXT[D.evidence] + ").",
+      return { story: "The project is on the Dubai Land Department register as project " + f.project.project_number + ", status " + S.text.toLowerCase() + ". Escrow bank named on the register: " + (S.escrow ? S.escrow.replace(/\s*\(PUBLIC JOINT STOCK COMPANY\)/i, "").replace(/\.$/, "") : "none named") + ". Registered developer: " + D.legal_entity + " (" + LABEL_TEXT[D.evidence] + ").",
         figs: [hero("Register project number", fmt(f.project.project_number), esc(S.source)), hero("Escrow bank", esc(S.escrow ? S.escrow.replace(/\s*\(PUBLIC JOINT STOCK COMPANY\)/i, "") : "none named"), "named on the register"), hero("Registered developer", esc(D.legal_entity), LABEL_TEXT[D.evidence])],
-        table: table(["Check", "What the register shows"], [["Project registered", "Project " + f.project.project_number + ", status " + S.text.toLowerCase() + ", " + Math.round(S.percent) + "% complete"], ["Escrow bank", S.escrow ? S.escrow.replace(/\s*\(PUBLIC JOINT STOCK COMPANY\)/i, "") : "none named"], ["Registered developer", D.legal_entity + " (" + (D.evidence) + ")"], ["Developer brochure compared with the register", f.amenities ? "see Amenities" : "no brochure on file, so no comparison can be made"]]),
+        table: table(["Check", "What the register shows"], [["Project registered", "Project " + f.project.project_number + ", status " + S.text.toLowerCase() + (S.percent != null ? ", " + Math.round(S.percent) + "% complete" : ", percent complete not recorded")], ["Escrow bank", S.escrow ? S.escrow.replace(/\s*\(PUBLIC JOINT STOCK COMPANY\)/i, "") : "none named"], ["Registered developer", D.legal_entity + " (" + (D.evidence) + ")"], ["Developer brochure compared with the register", f.amenities ? "see Amenities" : "no brochure on file, so no comparison can be made"]]),
         method: "The register names the escrow bank; it does not show what the escrow account holds or how payments are released. Read the sales contract for that." };
     }
     case "residency_rule": {
@@ -136,8 +146,8 @@ export function segmentContent(id, f, th) {
     case "resale_activity": {
       const R = f.resales, d = R.district_window;
       const strong = R.separable && R.resale_l12 >= th.strong_sales_min_l12;
-      return { story: "Registered sale rows for this project: " + fmt(R.project_rows) + ", all recorded as 'Sell - Pre registration'; rows under a resale procedure: " + fmt(R.project_resale_procedure_rows) + ". " + (R.separable ? "" : "The register does not separate a first sale from a resale: " + R.reason + ". No resale count is known. ") + "In the district in the 12 months to " + dateLong(d.to) + ": " + fmt(d.pre_registration) + " off-plan sale rows and " + fmt(d.existing_property_sell) + " sales of completed homes." + (strong ? " Registered resales are above the " + th.strong_sales_min_l12 + " this report needs before it calls resale strong." : ""),
-        figs: [hero("Rows, this project", fmt(R.project_rows), "off-plan sale rows to " + dateLong(f.as_of.sales)), hero("Rows under a resale procedure", fmt(R.project_resale_procedure_rows), "this project")],
+      return { story: "Registered sale rows for this project: " + fmt(R.project_rows + R.project_resale_procedure_rows) + (R.project_resale_procedure_rows === 0 ? ", all recorded as 'Sell - Pre registration'; rows under a resale procedure: 0. " : ", of which " + fmt(R.project_rows) + " under 'Sell - Pre registration' (the off-plan procedure) and " + fmt(R.project_resale_procedure_rows) + " under another sale procedure, which does not say who the seller was. ") + (R.separable ? "" : "The register does not separate a first sale from a resale: " + R.reason + ". No resale count is known. ") + "In the district in the 12 months to " + dateLong(d.to) + ": " + fmt(d.pre_registration) + " off-plan sale rows and " + fmt(d.existing_property_sell) + " sales of completed homes." + (strong ? " Registered resales are above the " + th.strong_sales_min_l12 + " this report needs before it calls resale strong." : ""),
+        figs: [hero("Rows, this project", fmt(R.project_rows), "off-plan sale rows to " + dateLong(f.as_of.sales)), hero(R.project_resale_procedure_rows === 0 ? "Rows under a resale procedure" : "Rows, other sale procedures", fmt(R.project_resale_procedure_rows), "this project")],
         chart: bars(R.project_by_month, 678, 150, (r) => r.n, (r) => r.month.slice(5) + "/" + r.month.slice(2, 4), () => "rows", null),
         method: "Sale rows per month for this project from the Dubai Land Department sales register (units only). Month labels are month and year." };
     }
@@ -202,7 +212,7 @@ function lastPage(plan, f) {
   const kn = '<div class="ivc core"><div class="ivch">' + icon("info", 17, TEAL) + '<span class="serif">What this report cannot tell you</span><span class="chip">Always included</span></div><div class="ivkg">' +
     CANNOT_TELL.map((k) => '<div class="ivk"><div><b>' + esc(k[0]) + "</b><p>" + esc(k[1]) + "</p></div></div>").join("") + "</div></div>";
   const cov = '<div class="ivcov"><b>' + esc(plan.coverage.split(". Not covered:")[0]) + ".</b> " + esc("Not covered:" + plan.coverage.split(". Not covered:")[1]) + "</div>";
-  const aud = '<div class="ivc"><div class="ivlab"><b>Record of this version.</b> Investor type: ' + esc(plan.type || "none chosen") + ". Tier: " + esc(TIER_TITLE[plan.tier]) + ". Sales data to " + esc(dateLong(f.as_of.sales)) + "; project register to " + esc(dateLong(f.as_of.register)) + ". Built " + esc(dateLong(f.as_of.built)) + ". The full record, with every check result, is kept with this file." +
+  const aud = '<div class="ivc"><div class="ivlab"><b>Record of this version.</b> Investor type: ' + esc(plan.type || "none chosen") + ". Tier: " + esc(TIER_TITLE[plan.tier]) + ". Sales data to " + esc(dateLong(f.as_of.sales)) + (f.as_of.register ? "; project register to " + esc(dateLong(f.as_of.register)) : "; no project register record") + ". Built " + esc(dateLong(f.as_of.built)) + ". The full record, with every check result, is kept with this file." +
     " This report describes past registered facts only. It is not investment, financial, legal or tax advice, not an offer and not a forecast.</div></div>";
   return { sub: "Last page", alone: true, h: 800, html: kn + cov + aud };
 }
@@ -260,8 +270,7 @@ export function selectorHtml(facts, base, key) {
 
 // ---------------------------------------------------------------------------------------------------------- the route builders (called from src/devmap_pdf.js)
 export async function loadFacts(env, project) {
-  const all = await kvJson(env, "investor_tiers_facts");
-  return all && all.projects ? all.projects[project] || null : null;
+  return loadFactsSharded((name) => kvJson(env, name), project);
 }
 export async function buildInvestorTiersPdf(env, p, opts) {
   const q = p.inv || {};

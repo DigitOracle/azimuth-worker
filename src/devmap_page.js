@@ -14,6 +14,7 @@
 import { DEVMAP_CORE_JS } from "./devmap_core.js";
 import { COMMUNITY_LABELS, labelledName } from "./community_labels.js";   // v307 - community name next to the Land Department name
 import { kvJson } from "./brief.js";
+import { INDEX_KEY, LEGACY_KEY, compactIndex } from "./investor_facts.js";   // v379 - the investor-PDF facts index (district shards)
 
 import { PHOSPHOR_LIGHT } from "./devmap_icons.js";
 export const DEVMAP_PATHS = ["/developers_map", "/developers_map_api"];
@@ -62,10 +63,9 @@ export async function devmapRoutes(request, env, url, deps) {
     const dl = await kvJson(env, "devmap_delay");
     return J(dl && dl.by ? dl : {});
   }
-  if (what === "inv") {                                                    // v376 - which projects have an investor-PDF facts record (KV img_investor_tiers_facts); names only, absent = no investor buttons
-    const iv = await kvJson(env, "investor_tiers_facts");
-    const ps = iv && iv.projects ? Object.keys(iv.projects).map(id => { const f = iv.projects[id] || {}, pr = f.project || {}; return { id, name: pr.name || id, brand: pr.brand_name || pr.name || id }; }) : [];
-    return J({ projects: ps });
+  if (what === "inv") {                                                    // v376/v379 - which projects have an investor-PDF facts record: the index KV img_investor_tiers_index as compact arrays [id, name, brand, register project number], plus any project only in the v376 single key; names only, absent = no investor buttons
+    const [ix, iv] = await Promise.all([kvJson(env, INDEX_KEY), kvJson(env, LEGACY_KEY)]);
+    return J(compactIndex(ix, iv));
   }
   if (what === "shortlist") {
     const name = await shortlistName(key);
@@ -160,7 +160,7 @@ a.peer{color:var(--ink);text-decoration:none}a.peer b{color:var(--gold)}
 .evl{color:var(--gold);font-size:12px}.evbox h3{margin:2px 0 4px;font-size:13px}.evbox svg text{fill:var(--ink);font-size:10px;font-family:inherit}.evbox svg .ax{fill:var(--muted)}
 .evbox .cl{background:var(--raise);border-left:3px solid var(--gold);padding:5px 8px;margin:8px 0;font-size:12px;border-radius:0 6px 6px 0}.evbox .why{margin:6px 0;font-size:12px}
 .golink{display:inline-block;padding:8px 2px;color:var(--gold);font-weight:600;text-decoration:underline;text-decoration-color:rgba(197,165,106,.55);text-underline-offset:3px;cursor:pointer}
-.pdfrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.pdfbtn{display:inline-flex;align-items:center;min-height:38px;padding:0 14px;border:1px solid var(--gold);border-radius:6px;color:var(--gold);text-decoration:none;font-size:12.5px;font-weight:600}.pdfbtn:hover{background:var(--raise)}.pdfic{width:15px;height:15px;margin-right:7px;flex:none}
+.pdfrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.pjw{min-width:0;display:flex;flex-direction:column;gap:4px}.pjinv{min-height:30px;padding:0 10px;font-size:11.5px;justify-content:center}.pdfbtn{display:inline-flex;align-items:center;min-height:38px;padding:0 14px;border:1px solid var(--gold);border-radius:6px;color:var(--gold);text-decoration:none;font-size:12.5px;font-weight:600}.pdfbtn:hover{background:var(--raise)}.pdfic{width:15px;height:15px;margin-right:7px;flex:none}
 .wnote{color:var(--muted);font-size:11.5px;margin:6px 0 0}
 #grab{display:none}.dwrap{display:none}
 @media(max-width:1100px){#detail{display:none}#map{right:0}#side .dwrap{display:block}}
@@ -288,7 +288,8 @@ function bbox(feats){var b=[181,91,-181,-91];function w(c){if(typeof c[0]==="num
 // one project card: tappable only when a footprint of that name is on file; "No map position yet" when the district file is loaded and holds none
 // v373 - where this project's developer came from, in plain words, under the card. No evidence in the index (an older one): no line, the card reads as before.
 function srcLine(ev,devName){var t=ev&&DM.sourceLine?DM.sourceLine(ev,devName):"";return t?'<span class="note srcl" style="display:block;margin:2px 0 0;font-size:10.5px">'+esc(t)+'</span>':''}
-function pjCard(slug,name,ppsm,n,extra,nameDef){
+function pjCard(slug,name,ppsm,n,extra,nameDef,ev){var c=pjCard0(slug,name,ppsm,n,extra,nameDef),l=typeof invCardLink==="function"?invCardLink(name,ev):"";return l?'<div class=pjw>'+c+l+'</div>':c}
+function pjCard0(slug,name,ppsm,n,extra,nameDef){
   var inner=icoSvg("buildings","evi")+'<b class=big dir=auto'+(name?' title="'+esc(name)+'"':'')+'>'+(name?esc(clipName(name)):nameDef)+'</b>'+(ppsm?'AED '+fmt(pu(ppsm))+' '+pul():'')+(n!=null?'<span style="display:block">'+fmt(n)+' sale'+(n===1?'':'s')+'</span>':'')+(extra||'');
   if(name)pjInfo(slug,name,ppsm,n);
   var hit=name&&locate(slug,name);
@@ -319,7 +320,7 @@ function drillHtml(){var dr=S.drill;if(!dr)return '';var nm=(IDX.devs[dr.k]||{})
   var h='<div class=box style="margin-bottom:12px"><p class=label>'+esc(nm)+': projects in the '+DM.TIER_WORDS[dr.t].toLowerCase()+(dr.ar&&IDX.areas[dr.ar]?', in '+esc(IDX.areas[dr.ar].name):', by location')+'</p>';
   if(!g.length)h+='<p class=note style="margin:0">'+(DM.hasProjects(ixOf(S.win))?'No project sits in this price band here.':'The project list is not in the data yet; it arrives with the next data update.')+'</p>';
   else{h+='<p class=note style="margin:0">'+np+' project'+(np===1?'':'s')+' in '+g.length+' place'+(g.length===1?'':'s')+'. Shaded on the map.'+(function(){var all=0;for(var tt=0;tt<4;tt++)DM.drillProjects(ixOf(S.win),dr.k,tt,dr.ar).forEach(function(x){all+=x.projects.length});return all>np?' '+np+' of its '+all+' project'+(all===1?'':'s')+(dr.ar?' here':'')+' are in this price band; the others sit in other bands.':''})()+'</p>';
-    g.forEach(function(x){h+='<div style="margin-top:8px"><b dir=auto>'+esc(x.name)+'</b> <span class=note>AED '+fmt(pu(x.ppsm))+' '+pul()+' · '+fmt(x.n)+' sales</span>'+'<div class=pjg>'+x.projects.map(function(p){return pjCard(x.slug,p.name,p.ppsm,p.n,srcLine(p.ev,(IDX.devs[dr.k]||{}).name),'name not in the data yet')}).join("")+'</div></div>'})}
+    g.forEach(function(x){h+='<div style="margin-top:8px"><b dir=auto>'+esc(x.name)+'</b> <span class=note>AED '+fmt(pu(x.ppsm))+' '+pul()+' · '+fmt(x.n)+' sales</span>'+'<div class=pjg>'+x.projects.map(function(p){return pjCard(x.slug,p.name,p.ppsm,p.n,srcLine(p.ev,(IDX.devs[dr.k]||{}).name),'name not in the data yet',p.ev)}).join("")+'</div></div>'})}
   return h+'<button type=button class=btn id=dclear style="margin-top:10px">Clear and show the whole map</button><p class=note>A project is a building with settled sales on record, placed by its median price per sq m. '+esc(winTxt())+' Dubai Land Department settled sales register, to '+esc(IDX.as_of||"")+'.</p></div>'}
 function bandKey(bounds){return '<div class=sh style="border-left-color:var(--line)"><p class=label style="margin:0 0 4px">Price bands (per '+(S.unit==="sqft"?'sq ft':'sq m')+')</p>'+[0,1,2,3].map(function(i){return '<p><i style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:'+TC[i]+'"></i><b>'+DM.TIER_NAMES[i]+'</b>: '+esc(DM.bandLine(i,bounds,S.unit))+'</p>'}).join("")+'<small>Price bands are cut from all Dubai settled sales so that each holds about a quarter of the money spent; they describe homes, not developers.</small></div>'}
 function icoSvg(n,c){return '<svg class="'+c+'" viewBox="0 0 256 256" fill=currentColor aria-hidden=true>'+(EVI[n]||[]).map(function(d){return '<path d="'+d+'"/>'}).join("")+'</svg>'}
@@ -364,7 +365,7 @@ function lockProjs(p,k){var out=[];p.priced.concat(p.thin).forEach(function(a){i
 function areaPanelHtml(p,k){var a=null;if(S.parea)p.priced.concat(p.thin).forEach(function(x){if(x.slug===S.parea)a=x});if(S.parea&&!a)S.parea=null;
   var ps=lockProjs(p,k),h='<div class=box id=aprojs style="margin-top:10px"><p class=label>'+esc(p.name)+': projects in '+(a?esc(a.name):'all its areas')+', '+(S.band!=null?DM.TIER_WORDS[S.band].toLowerCase():'all price bands')+', '+(S.win==="l12"&&IDX.ev?'last 12 months':'all years')+'</p>';
   if(!ps.length)h+='<p class=note style="margin:0">'+(DM.hasProjects(ixOf(S.win))?'No project with settled sales is recorded for this choice.':'The project list is not in the data yet; it arrives with the next data update.')+'</p>';
-  else h+='<p class=note style="margin:0">'+ps.length+' project'+(ps.length===1?'':'s')+', biggest first. Tap one to see it on the map.</p><div class=pjg>'+ps.map(function(q){return pjCard(q.slug,q.name,q.ppsm,q.n,'<span class=note style="display:block;margin:0">'+esc(q.ev&&q.ev.a?q.ev.a:q.area)+'</span><span class=note style="display:block;margin:0">'+DM.TIER_WORDS[q.t]+'</span>'+srcLine(q.ev,p.name),'name not in the data yet')}).join("")+'</div>';
+  else h+='<p class=note style="margin:0">'+ps.length+' project'+(ps.length===1?'':'s')+', biggest first. Tap one to see it on the map.</p><div class=pjg>'+ps.map(function(q){return pjCard(q.slug,q.name,q.ppsm,q.n,'<span class=note style="display:block;margin:0">'+esc(q.ev&&q.ev.a?q.ev.a:q.area)+'</span><span class=note style="display:block;margin:0">'+DM.TIER_WORDS[q.t]+'</span>'+srcLine(q.ev,p.name),'name not in the data yet',q.ev)}).join("")+'</div>';
   return h+'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'+(a?'<button type=button class=btn id=aopen data-slug="'+esc(a.slug)+'" data-k="'+esc(k)+'">Open '+esc(a.name)+' on the map</button><button type=button class=btn id=aclose>Show all areas</button>':'')+(S.band!=null?'<button type=button class=btn id=bclear>Show all price bands</button>':'')+'</div></div>'}
 function lockChips(){var el=$("lockchips");if(!el)return;var on=S.prof&&S.screen===1;document.body.classList.toggle("locked",!!on);if(!on){el.innerHTML="";return}
   var nm=(IDX.devs[S.prof]||{}).name||DEFAULT_NAMES[S.prof]||S.prof,ar=S.parea&&IDX.areas[S.parea]?IDX.areas[S.parea].name:null,x=function(id,lab){return '<button type=button id='+id+' aria-label="'+esc(lab)+'">'+icoSvg('x','evi')+'</button>'};
@@ -378,7 +379,7 @@ function areaCardsHtml(p,k){var all=p.priced.map(function(a){return {a:a,priced:
 function ncHtml(k){var win=S.win==="l12"&&IDX.ev?"l12":"all",l=DM.attrUnconfirmed?DM.attrUnconfirmed(IDX,k,win):[];if(!l.length)return '';
   var nm=(IDX.devs[k]||{}).name||DEFAULT_NAMES[k]||k;
   return '<details class="card nconf" id=nconf><summary><b>Not confirmed by the register</b> <span class=note>'+l.length+' project'+(l.length===1?'':'s')+', outside the numbers</span></summary><p class=note style="margin:6px 0">These projects are listed under '+esc(nm)+' by a project name or by the developer&rsquo;s own site, but the Land Department register does not confirm it. They are not in the totals, the scale word, the price bands or the area counts on this page.</p><div class=pjg>'+l.map(function(q){var ev=q.ev;
-    return pjCard(q.slug,q.name,q.ppsm,q.n,'<span class=note style="display:block;margin:0">'+esc(ev&&ev.a?ev.a:q.area)+'</span>'+srcLine(ev,nm)+(ev&&ev.dn&&ev.e!=="REGISTER_VERIFIED"?'<span class="note srcl" style="display:block;margin:2px 0 0;font-size:10.5px">Register names: '+esc(ev.dn)+'</span>':''),'name not in the data yet')}).join("")+'</div></details>'}
+    return pjCard(q.slug,q.name,q.ppsm,q.n,'<span class=note style="display:block;margin:0">'+esc(ev&&ev.a?ev.a:q.area)+'</span>'+srcLine(ev,nm)+(ev&&ev.dn&&ev.e!=="REGISTER_VERIFIED"?'<span class="note srcl" style="display:block;margin:2px 0 0;font-size:10.5px">Register names: '+esc(ev.dn)+'</span>':''),'name not in the data yet',ev)}).join("")+'</div></details>'}
 // v375 - DELIVERY RECORD card (derived from the Land Department project register; the file is KV img_devmap_delay, absent = no card)
 function delayStat(k){return S.delay&&DM.delayRecord?DM.delayRecord(S.delay,IDX,k):null}
 function delayRow(k){return delayStat(k)?"Shown in the Delivery record card on this page.":""}
@@ -569,8 +570,14 @@ function areaHtml(slug){
 function pdfUrl(kind,slug,devs,bud){var u='/developers_pdf?kind='+kind+'&area='+encodeURIComponent(slug)+'&window='+(S.win==='l12'&&IDX.ev?'12m':'all')+'&mode='+S.mode+'&developers='+encodeURIComponent(devs.join(','));if(bud){var b=S.bud;if(b.min!=null)u+='&min='+b.min;if(b.max!=null)u+='&max='+b.max;if(b.beds!=null)u+='&beds='+b.beds;if(S.mode==='buy')u+='&basis='+b.mode}return u+'&key='+encodeURIComponent(KEY)}
 function investorUrl(slug,k){return '/developers_pdf?kind=investor&area='+encodeURIComponent(slug)+'&developer='+encodeURIComponent(k)+'&window='+(S.win==='l12'&&IDX.ev?'12m':'all')+'&key='+encodeURIComponent(KEY)}
 function pdfRow(slug,devs,bud,inv){if(!slug)return '';return '<div class=pdfrow><a class=pdfbtn target=_blank rel=noopener href="'+esc(pdfUrl('snapshot',slug,devs,bud))+'">Download PDF: snapshot</a><a class=pdfbtn target=_blank rel=noopener href="'+esc(pdfUrl('detailed',slug,devs,bud))+'">Download PDF: detailed</a>'+(inv?'<a class=pdfbtn target=_blank rel=noopener href="'+esc(investorUrl(slug,inv))+'">'+icoSvg('chart-bar','pdfic')+'Investor PDF</a>':'')+'</div>'}
-// v376 - one 'Investor PDF: <project>' button per project of this developer that has an investor-PDF facts record (exact project-name match; the selector page shows the register project number so a wrong match would be visible)
-function invProjRow(k){if(!S.inv||!S.inv.length)return '';var seen={},h='';Object.keys(IDX.areas).forEach(function(sl){var d=IDX.areas[sl].devs&&IDX.areas[sl].devs[k];if(!d)return;(d.b||[]).concat(d.b12||[]).forEach(function(x){var kk=pkey(x[2]);S.inv.forEach(function(q){if(pkey(q.brand)===kk&&!seen[q.id]){seen[q.id]=1;h+='<a class=pdfbtn target=_blank rel=noopener href="'+esc('/developers_pdf?kind=investor_selector&project='+encodeURIComponent(q.id)+'&format=html&key='+encodeURIComponent(KEY))+'">'+icoSvg('chart-bar','pdfic')+'Investor PDF: '+esc(q.name)+'</a>'}})})});return h?'<div class=pdfrow>'+h+'</div>':''}
+// v376/v379 - one 'Investor PDF: <project>' button per project of this developer that has an investor-PDF facts record. Matching: the register project number from the v373 evidence (bx[i].p) when there is one - and a number that is not in the index never falls back to a name;
+// with no number, the exact normalised name, and only when that name is one project in the index. The button opens the selector page on the same page key; it shows the register project number, so a wrong match would be visible. The index arrives as compact arrays (what=inv).
+function invFromApi(j){var out=[];if(j&&j.rows)j.rows.forEach(function(x){out.push({id:x[0],name:x[1],brand:x[2]||x[1],pn:x[3]||0})});if(j&&j.projects)j.projects.forEach(function(x){out.push({id:x.id,name:x.name,brand:x.brand||x.name,pn:x.pn||0})});return out.length?out:null}
+function invIndex(){var pn={},nm={};(S.inv||[]).forEach(function(q){if(q.pn)pn[q.pn]=q;var ks=[pkey(q.name),pkey(q.brand)];ks.forEach(function(k,i){if(k&&ks.indexOf(k)===i){(nm[k]=nm[k]||[]).push(q)}})});S.invPn=pn;S.invName=nm}
+function invFind(name,ev){if(!S.inv||!S.invPn)return null;var p=ev&&ev.p!=null?Number(ev.p):0;if(p)return S.invPn[p]||null;var l=S.invName[pkey(name)];return l&&l.length===1?l[0]:null}
+function invHref(id){return '/developers_pdf?kind=investor_selector&project='+encodeURIComponent(id)+'&format=html&key='+encodeURIComponent(KEY)}
+function invCardLink(name,ev){var q=name?invFind(name,ev):null;return q?'<a class="pdfbtn pjinv" target=_blank rel=noopener href="'+esc(invHref(q.id))+'">'+icoSvg('chart-bar','pdfic')+'Investor PDF</a>':''}
+function invProjRow(k){if(!S.inv||!S.inv.length)return '';var seen={},h='';Object.keys(IDX.areas).forEach(function(sl){var d=IDX.areas[sl].devs&&IDX.areas[sl].devs[k];if(!d)return;[[d.b,d.bx],[d.b12,d.b12x]].forEach(function(w){(w[0]||[]).forEach(function(x,i){var q=invFind(x[2],w[1]&&w[1][i]);if(q&&!seen[q.id]){seen[q.id]=1;h+='<a class=pdfbtn target=_blank rel=noopener href="'+esc(invHref(q.id))+'">'+icoSvg('chart-bar','pdfic')+'Investor PDF: '+esc(q.name)+'</a>'}})})});return h?'<div class=pdfrow>'+h+'</div>':''}
 function pdfRowProf(k,p){var sl=S.sel&&IDX.areas[S.sel]?S.sel:null;if(!sl&&p.priced.length)sl=p.priced.slice().sort(function(a,b){return b.n-a.n})[0].slug;return pdfRow(sl,[k],S.screen===3,k)+invProjRow(k)}
 function src(){return '<div class=src>Sources: Dubai Land Department sales register, '+esc(IDX.as_of||"")+(S.mode==="rent"?'; registered rental contracts (the Dubai rent register, community level, 3 or more contracts)':'')+'.<div class=foot>__FOOT__</div></div>'}
 function dvHtml(st,name){var tg=S.dv.tier!=null?{tier:S.dv.tier}:(S.dv.ppsm!=null?{ppsm:S.dv.ppsm}:null);if(!tg)return '';var v=DM.developerView(st,tg);if(!v.ok)return '<p class=note>'+esc(v.why)+'</p>';
@@ -632,7 +639,7 @@ function startMap(){
     map.on("click","a-fill",function(e){if(pjHit(e).length)return;select(e.features[0].properties.slug,false)})})}
 // ---- start ----
 Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null})]).then(function(r){
-  IDX=r[0];GEO=r[1];S.delay=r[3]&&r[3].by?r[3]:null;S.inv=r[4]&&r[4].projects&&r[4].projects.length?r[4].projects:null;DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
+  IDX=r[0];GEO=r[1];S.delay=r[3]&&r[3].by?r[3]:null;S.inv=invFromApi(r[4]);invIndex();DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
   if(IDX&&IDX.ev)S.win="l12";   // v322 - prices a realtor quotes today: the last 12 months, unless the index carries no evidence yet
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l;IDX.areas[s].name=IDX.areas[s].name.replace(/\bJLT\b/g,"Jumeirah Lakes Towers")});   // v321 - an area is never shown as an initial
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
