@@ -107,6 +107,7 @@ def main():
     ap.add_argument("--replace", "-Replace", action="store_true", help="replace an existing value (it is backed up first)")
     ap.add_argument("--file", default=DEFAULT_FILE)
     ap.add_argument("--work", default="")
+    ap.add_argument("--skip-gate", "-SkipGate", action="store_true", help="publish UNGATED (the completeness gate is a hard stop; this prints a loud warning)")
     a = ap.parse_args()
     if a.apply:
         quiet_window()
@@ -115,6 +116,8 @@ def main():
     print("Work folder: " + work)
     print("1/3 validating " + a.file)
     validate(a.file)
+    import gate_guard   # v397g HARD STOP: scripts/gate_guard.py runs the completeness gate with this file substituted; a block exits 1 before anything is written (a missing guard is an ImportError = no publish)
+    gate_guard.enforce("community_positions_p", a.file, apply=a.apply, skip=a.skip_gate)
     print("2/3 reading the live key through the /img route (read-only)")
     live = live_read()
     backup = os.path.join(work, "community_positions_p.backup.json")

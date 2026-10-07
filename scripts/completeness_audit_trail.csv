@@ -1,0 +1,42 @@
+﻿run_utc,mode,check,subject,value,threshold,status,detail
+2026-10-07T14:48:12Z,gate,fixture,KORE by Imtiaz,,,FAIL,no card on the developer page; missing on S3
+2026-10-07T14:48:12Z,gate,fixture,The Archive by Imtiaz,,,FAIL,no card on the developer page; missing on S3
+2026-10-07T14:48:12Z,gate,fixture,Chelsea Residences by DAMAC,damac,,PASS,
+2026-10-07T14:48:12Z,gate,fixture,Chelsea Residences 2 by DAMAC,damac,,PASS,
+2026-10-07T14:48:12Z,gate,fixture,Harbour Lights,damac,,PASS,
+2026-10-07T14:48:12Z,gate,fixture,Coral Reef,damac,,PASS,
+2026-10-07T14:48:12Z,gate,fixture,Cove Grand Residence by Imtiaz,imtiaz,,PASS,
+2026-10-07T14:48:12Z,gate,fixture,Upper Crest (DAMAC),damac,,PASS,
+2026-10-07T14:48:12Z,gate,fixture,Vento Tower,"_,anax-developments",,PASS,
+2026-10-07T14:48:12Z,gate,coverage,S1,62.43,61.43,PASS,map footprint
+2026-10-07T14:48:12Z,gate,coverage,S2p,35.00,34.0,PASS,Najma plots layer
+2026-10-07T14:48:12Z,gate,coverage,S2s,76.47,75.47,PASS,search list
+2026-10-07T14:48:12Z,gate,coverage,S3,68.12,67.12,PASS,developer page card
+2026-10-07T14:48:12Z,gate,coverage,S4,75.80,74.8,PASS,position (any level)
+2026-10-07T14:48:12Z,gate,coverage,S5,60.07,59.07,PASS,building page
+2026-10-07T14:48:12Z,gate,coverage,S6,68.72,67.72,PASS,Brief + search
+2026-10-07T14:48:12Z,gate,coverage,S7,91.92,90.92,PASS,investor facts
+2026-10-07T14:48:12Z,gate,coverage,S8,56.47,55.47,PASS,unit-mix card
+2026-10-07T14:48:12Z,gate,unfindable,unfindable_strict,286,286,PASS,entities no surface shows
+2026-10-07T14:48:12Z,gate,unfindable,unfindable_client,565,565,PASS,entities no surface shows
+2026-10-07T14:48:27Z,self-test,negative-control,corrupted copy,6,2,PASS,"gate failures on the corrupted data: 6 (fixtures named: 2, coverage/baseline: 2); on the clean data: 2"
+2026-10-07T14:48:27Z,self-test,fixture,KORE by Imtiaz,,,FAIL,no card on the developer page; missing on S3
+2026-10-07T14:48:27Z,self-test,fixture,The Archive by Imtiaz,,,FAIL,no card on the developer page; missing on S3
+2026-10-07T14:48:27Z,self-test,fixture,Chelsea Residences by DAMAC,damac,,PASS,
+2026-10-07T14:48:27Z,self-test,fixture,Chelsea Residences 2 by DAMAC,damac,,PASS,
+2026-10-07T14:48:27Z,self-test,fixture,Harbour Lights,damac,,PASS,
+2026-10-07T14:48:27Z,self-test,fixture,Coral Reef,damac,,PASS,
+2026-10-07T14:48:27Z,self-test,fixture,Cove Grand Residence by Imtiaz,,,FAIL,no card on the developer page; missing on S3
+2026-10-07T14:48:27Z,self-test,fixture,Upper Crest (DAMAC),,,FAIL,"no card on the developer page; missing on S3,S2s"
+2026-10-07T14:48:27Z,self-test,fixture,Vento Tower,"_,anax-developments",,PASS,
+2026-10-07T14:48:27Z,self-test,coverage,S1,62.43,61.43,PASS,map footprint
+2026-10-07T14:48:27Z,self-test,coverage,S2p,35.00,34.0,PASS,Najma plots layer
+2026-10-07T14:48:27Z,self-test,coverage,S2s,76.44,75.47,PASS,search list
+2026-10-07T14:48:27Z,self-test,coverage,S3,63.37,67.12,FAIL,developer page card
+2026-10-07T14:48:27Z,self-test,coverage,S4,75.80,74.8,PASS,position (any level)
+2026-10-07T14:48:27Z,self-test,coverage,S5,60.01,59.07,PASS,building page
+2026-10-07T14:48:27Z,self-test,coverage,S6,68.72,67.72,PASS,Brief + search
+2026-10-07T14:48:27Z,self-test,coverage,S7,91.92,90.92,PASS,investor facts
+2026-10-07T14:48:27Z,self-test,coverage,S8,56.47,55.47,PASS,unit-mix card
+2026-10-07T14:48:27Z,self-test,unfindable,unfindable_strict,286,286,PASS,entities no surface shows
+2026-10-07T14:48:27Z,self-test,unfindable,unfindable_client,566,565,FAIL,entities no surface shows

@@ -136,6 +136,7 @@ def main():
     ap.add_argument("--replace", "-Replace", action="store_true", help="replace an existing value (it is backed up first)")
     ap.add_argument("--file", default="")
     ap.add_argument("--work", default="")
+    ap.add_argument("--skip-gate", "-SkipGate", action="store_true", help="publish UNGATED (the completeness gate is a hard stop; this prints a loud warning)")
     a = ap.parse_args()
     K = KINDS[a.what]
     key, fpath = K["key"], a.file or K["file"]
@@ -148,6 +149,8 @@ def main():
     print("Work folder: " + work)
     print("1/3 validating " + fpath)
     validate(a.what, fpath)
+    import gate_guard   # v397g HARD STOP: scripts/gate_guard.py runs the completeness gate with this file substituted; a block exits 1 before anything is written (a missing guard is an ImportError = no publish)
+    gate_guard.enforce({"nosales": "nosales", "search": "search_extra"}[a.what], fpath, apply=a.apply, skip=a.skip_gate)
     its = items_of(a.what, fpath)
     if len(its) > 1:
         print("  split file: %d KV keys, parts first, the main key last: %s" % (len(its), ", ".join(k for k, _ in its[:3]) + " ... " + its[-1][0]))

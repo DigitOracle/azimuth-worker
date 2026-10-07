@@ -5,13 +5,14 @@
 # It runs scripts\publish_devmap_offplan.ps1, which: reads the live inputs (read only), builds the index with scripts\build_devmap_index.mjs, refuses to publish
 # a build with fewer than 35 areas, saves the live index as devmap_index.backup.json in the work folder BEFORE writing, puts img_devmap_index and reads it back.
 # This wrapper then reads the live index again and checks the new fields are there. It stops at the first failure and prints the real error.
-param([switch]$DryRun)
+param([switch]$DryRun, [switch]$SkipGate)
 $ErrorActionPreference = "Stop"
 $Work = Join-Path $env:TEMP ("devmap_profile_v321_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
 New-Item -ItemType Directory -Force $Work | Out-Null
 Write-Host "Work folder (the backup of the live index will be here): $Work"
 $inner = Join-Path $PSScriptRoot "publish_devmap_offplan.ps1"
-if ($DryRun) { & powershell -NoProfile -File $inner -Work $Work -DryRun } else { & powershell -NoProfile -File $inner -Work $Work }
+$ia = @("-NoProfile", "-File", $inner, "-Work", $Work); if ($DryRun) { $ia += "-DryRun" }; if ($SkipGate) { $ia += "-SkipGate" }   # v397g: the inner publisher runs the completeness gate (gate_guard.py); -SkipGate is passed through
+& powershell @ia
 if ($LASTEXITCODE -ne 0) { Write-Host "STOPPED: the publish script failed (message above). Nothing more was done."; exit 1 }
 if ($DryRun) {
   $new = Join-Path $Work "devmap_index.new.json"

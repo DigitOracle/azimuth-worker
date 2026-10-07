@@ -7,7 +7,7 @@
 # Run AFTER publish_cov_cards.ps1 is NOT required: the index reads the cards file you give it, not KV. Deploy the v314 worker for the panel wording.
 param([string]$Cards = "C:\Users\kwils\AppData\Local\Temp\claude\C--Users-kwils-Downloads\cfd69a2f-a784-4bee-87d0-17cb12cabffb\scratchpad\cov_cards",
       [string]$Shares = "C:\Users\kwils\AppData\Local\Temp\claude\C--Users-kwils-Downloads\cfd69a2f-a784-4bee-87d0-17cb12cabffb\scratchpad\shares.json",
-      [string]$Slugs = "majan,madinatalmataar,jabalalifirst,alkhairanfirst,alhebiahfifth,dubaiinvestmentparkfirst,dubaiinvestmentparksecond,alyelayiss1,alyelayiss2,alyufrah1,wadialsafa4,wadialsafa5,palmdeira", [string]$Work = "", [switch]$DryRun)
+      [string]$Slugs = "majan,madinatalmataar,jabalalifirst,alkhairanfirst,alhebiahfifth,dubaiinvestmentparkfirst,dubaiinvestmentparksecond,alyelayiss1,alyelayiss2,alyufrah1,wadialsafa4,wadialsafa5,palmdeira", [string]$Work = "", [switch]$DryRun, [switch]$SkipGate)
 . "$PSScriptRoot\_kv_common.ps1"
 Test-QuietWindow
 if (-not $Work) { $Work = Join-Path $env:TEMP ("devmap_publish_" + (Get-Date -Format "yyyyMMdd_HHmmss")) }
@@ -30,6 +30,15 @@ Write-Host "3/4 before / after"
 & node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync(process.argv[1],'utf8')),b=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));const sl=process.argv[3].split(',');const n=(x,s)=>{const A=x.areas[s];if(!A)return 'no area';let t=0,k=0,u=0;for(const d in A.devs){const q=A.devs[d].c.reduce((p,c)=>p+c[0],0);t+=q;if(d==='_')u=q;else k++}return t+' sales, '+k+' developers, '+u+' with the developer not recorded'};console.log('areas: '+Object.keys(a.areas).length+' -> '+Object.keys(b.areas).length+' | developers: '+Object.keys(a.devs).length+' -> '+Object.keys(b.devs).length);for(const s of sl)console.log('  '+s+': '+n(a,s)+'  =>  '+n(b,s))" "$Work\devmap_index.backup.json" $out $Slugs
 $n = [int](& node -e "console.log(Object.keys(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).areas).length)" $out)
 if ($n -lt 35) { Stop-Here "the new index holds only $n areas (live had about 39): a failed build is not published" }
+# v397g HARD STOP: the completeness gate (scripts\gate_guard.py) runs with the new file substituted for its layer and must pass before anything is written; -SkipGate publishes UNGATED and says so loudly
+$gg = Join-Path $PSScriptRoot "gate_guard.py"
+if ($SkipGate) { $skipMsg = "!!! COMPLETENESS GATE SKIPPED (-SkipGate): THIS PUBLISH IS UNGATED. Nothing has checked that it keeps every fixture and surface. !!!"; Write-Host $skipMsg -ForegroundColor Red; [Console]::Error.WriteLine($skipMsg) }
+elseif (-not (Test-Path $gg)) { Stop-Here "scripts\gate_guard.py is missing: refusing to publish without the completeness gate (-SkipGate overrides it, loudly)" }
+else {
+  $ggArgs = @("--layer", "index", "--file", "$out"); if ($DryRun) { $ggArgs += "--dry-run" }
+  & python $gg @ggArgs
+  if ($LASTEXITCODE -ne 0) { if ($DryRun) { Write-Host "DRY RUN: the completeness gate WOULD BLOCK this publish (table above)." -ForegroundColor Yellow } else { Stop-Here "the COMPLETENESS GATE blocked the publish (table above): nothing was written. -SkipGate overrides it, loudly." } }
+}
 if ($DryRun) { Write-Host "DRY RUN: nothing written. New index: $out"; exit 0 }
 Write-Host "4/4 putting"
 Put-Kv "img_devmap_index" $out
