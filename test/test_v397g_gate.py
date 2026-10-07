@@ -145,6 +145,7 @@ class Wiring(unittest.TestCase):
     EXEMPT = {
         "publish_centres2040.py": "img_centres2040 is not read by any gate surface (the centres layer of the 2040 map)",
         "publish_devmap_delivery.ps1": "img_devmap_delivery feeds the investor PDF only; no gate surface reads it",
+        "publish_sales_filed.py": "img_sales_filed_* feeds only the Contracts signed page (v396); no gate surface reads it, and it has its own validation, backup and read-back",
     }
 
     WRAPPERS = {"publish_devmap_profile_v321.ps1": "publish_devmap_offplan.ps1"}      # a wrapper that runs another publisher: it must pass -SkipGate through, and the inner one is wired
