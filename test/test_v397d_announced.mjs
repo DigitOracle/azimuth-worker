@@ -55,8 +55,14 @@ console.log("B - the server: clean, search merge");
   const step1 = mergePlots(plots, ex1), step2 = mergePlots(step1 || plots, JSON.stringify(SRCH));
   ok(step1 && JSON.parse(step1).features.length > 1 && step2 === null, "img_search_extra merges, then the announced key adds nothing to plots (it holds no features) and returns null");
   const idxjs = rd("../src/index.js");
-  ok(/for \(const _xk of \[SEARCH_EXTRA_KV, SEARCH_EXTRA_ANNOUNCED_KV\]\)/.test(idxjs) && /mergePlots\(_pt, _xtra\); if \(_m1\) \{ _pt = _m1; _mg = _m1; \}/.test(idxjs), "the worker plots route merges BOTH img_search_extra and img_search_extra_announced");
-  ok(/nm === "search_index"/.test(idxjs) && /mergeSearchItems\(_si, _ax\)/.test(idxjs) && /if\(r\.ann\)w\.push\("announced by the developer, not yet registered"\)/.test(idxjs), "the search_index route merges the announced items and the Find row says so");
+  ok(/nm === "plots" \|\| nm === "search_index"/.test(idxjs) && /readSearchExtra\(env\.MEETINGS\)/.test(idxjs) && /mergeSearchIndex\(_pt, _xtra\)/.test(idxjs) && /get\(SEARCH_EXTRA_ANNOUNCED_KV\)/.test(idxjs) && /mergeSearchItems\(_pt, _ax\)/.test(idxjs), "the worker merges BOTH img_search_extra (v397b parts and sx) and img_search_extra_announced, in that order, for plots and search_index");
+  ok(/if\(r\.ann\)w\.push\(r\.od\?[\s\S]*?r\.lw\?"listed by the developer, no register entry found":"announced by the developer, not yet registered"\)/.test(idxjs), "the Find row says 'announced ... not yet registered' or, for a listed project, 'listed by the developer, no register entry found'");
+  ok(SRCH.items.filter((i) => i.lw === 1).length === FILE.meta.listed_wording && FILE.meta.listed_wording > 0, "the search items carry the same listed flag as the data (" + FILE.meta.listed_wording + ")");
+  const lwItem = SRCH.items.find((i) => i.lw === 1), mg2 = JSON.parse(mergeSearchItems(JSON.stringify({ items: [] }), JSON.stringify({ items: [lwItem] })));
+  ok(mg2.items[0].lw === 1 && mg2.items[0].ann === 1, "the merge keeps the listed flag");
+  const lwAll = all.filter((x) => x.e.lw);
+  ok(lwAll.length === FILE.meta.listed_wording && lwAll.every((x) => /\b(20\d\d)\b/.test(x.e.ho || "") && Number((x.e.ho.match(/\b(20\d\d)\b/) || [])[1]) <= 2025 || /\b(hotel|resort|mall|staff accommodation)\b/i.test(x.e.n)), "listed wording only for handover 2025 or earlier, or a hotel / resort / mall / staff-accommodation name");
+  ok(all.filter((x) => !x.e.lw).every((x) => !/\b(hotel|resort|mall|staff accommodation)\b/i.test(x.e.n) && !(x.e.ho && Number((String(x.e.ho).match(/\b(20\d\d)\b/) || [])[1]) <= 2025)), "every other entry keeps the 'announced, not yet registered' wording");
 }
 
 console.log("C - the page");
@@ -100,14 +106,69 @@ console.log("C - the page");
   S.parea = "alkhairanfirst"; const g2 = P.anHtml("emaar");
   ok((g2.match(/class="pjc /g) || []).length === inCh.length && /\(\d+\)/.test(text(g2)), "an area card selected: filtered to that area (" + inCh.length + " of " + emaar.length + "); projects with no stated area are left out");
   S.parea = null;
-  const m = g.match(/<button[^>]*data-pd="([^"]+)"[^>]*aria-label="Project details for ([^"]+)"/); ok(m, "each card is a button that opens Project details");
+  const plain = emaar.find((x) => !x.e.lw && !x.e.pm && !x.e.od).e.n.replace(/&/g, "&amp;");
+  const m = g.match(new RegExp('<button[^>]*data-pd="([^"]+)"[^>]*aria-label="Project details for ' + plain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + '"')); ok(m, "each card is a button that opens Project details");
   P.pdOpen(m[1], mkEl("f")); const t = text(els.pjdet.innerHTML);
   ok(/Announced by the developer, not yet registered/.test(t) && /DEVELOPER_CLAIMED/.test(t) && /developer says it is by/i.test(t), "panel: the developer-says label and the DEVELOPER_CLAIMED tag");
   ok(/Not on any register we hold/.test(t) && !/Register project number [0-9]/.test(t) && !/PN[0-9]/.test(t), "panel: 'not on any register we hold', never a project number");
   ok(/Source: The developer's own web page \(emaar\.com\), page date 2026-09-07/.test(t), "panel: the source line with the page date", t);
   ok(/Not counted/.test(t) && !EMOJI.test(els.pjdet.innerHTML) && !EMOJI.test(g), "panel: not counted; no emoji");
+  // listed wording: a completed / non-residential entry says so on its card and in its panel, and is still outside the numbers
+  const lwDev = all.find((x) => x.e.lw && !x.e.pm && !x.e.od), nlw = all.filter((x) => x.dev === lwDev.dev);
+  const lwFx = { meta: { built: "x", count: 2 }, d: { [lwDev.dev]: { _: [lwDev.e, Object.assign({}, nlw.find((x) => !x.e.lw && !x.e.pm && !x.e.od).e)] } } };
+  P.ANNOUNCED.load(cleanAnnounced(JSON.parse(JSON.stringify(lwFx))));
+  const gl = P.anHtml(lwDev.dev);
+  ok(/Listed, no register entry found, not on any register we hold/.test(text(gl)) && /Announced, not on any register we hold/.test(text(gl)), "mixed group: the listed card and the announced card each carry their own wording");
+  ok(text(gl).startsWith("Announced by the developer, not yet registered (2)"), "mixed group keeps the main title");
+  const lwName = lwDev.e.n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const m3 = gl.match(new RegExp('data-pd="([^"]+)"[^>]*aria-label="Project details for ' + lwName.replace(/&/g, "&amp;")));
+  ok(m3, "the listed card is a button");
+  if (m3) { P.pdOpen(m3[1], mkEl("f")); const t3 = text(els.pjdet.innerHTML); ok(/^Listed by the developer, no register entry found/.test(t3.replace(/^.*?Project details\s*/, "")) || /Listed by the developer, no register entry found/.test(t3), "listed panel: 'Listed by the developer, no register entry found'"); ok(/DEVELOPER_CLAIMED/.test(t3) && !/Register project number [0-9]/.test(t3) && /Not counted/.test(t3), "listed panel: still DEVELOPER_CLAIMED, no project number, not counted"); }
+  P.ANNOUNCED.load(cleanAnnounced(JSON.parse(JSON.stringify({ meta: { built: "x", count: 1 }, d: { [lwDev.dev]: { _: [lwDev.e] } } }))));
+  ok(text(P.anHtml(lwDev.dev)).startsWith("Listed by the developer, no register entry found (1)"), "a group of listed projects only takes the listed title");
+  P.ANNOUNCED.load(cleanAnnounced(JSON.parse(JSON.stringify(FILE))));
   const pn = Object.values(P.PDET).every((d) => d.ev && d.ev.p === null && d.ev.e === "DEVELOPER_CLAIMED");
   ok(pn, "every card record is DEVELOPER_CLAIMED with no project number");
+}
+console.log("D - the accounting: every candidate in exactly one bucket");
+{
+  const parse = (t) => t.replace(/^﻿/, "").trim().split("\n").slice(1).map((l) => { const m = l.match(/^(c\d+),([^,]*),(".*?"|[^,]*),(.*),(matched|shown-outside-Dubai|shown-possible-match|shown|skipped-duplicate|skipped-malformed),(.*)$/); return m ? { id: m[1], bucket: m[5] } : null; });
+  const rows = parse(rd("../data/announced/announced_accounting.csv"));
+  ok(rows.every(Boolean), "every accounting row parses");
+  const ids = new Set(rows.map((r) => r.id));
+  ok(rows.length === FILE.meta.candidates && ids.size === rows.length && FILE.meta.candidates === 673, "673 candidates, each listed once in announced_accounting.csv (" + rows.length + ", " + ids.size + " distinct)");
+  const cnt = {}; for (const r of rows) cnt[r.bucket] = (cnt[r.bucket] || 0) + 1;
+  const sum = Object.values(cnt).reduce((a, b) => a + b, 0);
+  ok(sum === 673 && Object.keys(cnt).every((k) => ["matched", "shown", "shown-outside-Dubai", "shown-possible-match", "skipped-duplicate", "skipped-malformed"].includes(k)), "the six buckets sum to 673 and there is no other bucket", JSON.stringify(cnt));
+  const srt = (o) => JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]]));
+  ok(srt(cnt) === srt(FILE.meta.buckets), "the file's own bucket counts equal the accounting file", JSON.stringify([cnt, FILE.meta.buckets]));
+  ok(cnt.matched === MATCHED.length, "matched bucket equals announced_matched.csv (" + MATCHED.length + ")");
+  ok(cnt.shown + cnt["shown-outside-Dubai"] + cnt["shown-possible-match"] === all.length, "every shown bucket is in the announced file and nothing else is (" + all.length + ")");
+  ok(all.filter((x) => x.e.od).length === cnt["shown-outside-Dubai"] && all.filter((x) => x.e.pm).length === cnt["shown-possible-match"], "outside-Dubai entries carry od, possible-match entries carry pm");
+  ok(all.filter((x) => x.e.od).every((x) => x.ds === "_" && !x.e.a), "outside-Dubai entries have no district and no area");
+  ok(all.filter((x) => x.e.pm).every((x) => x.e.pm.n && /^(PN\d+|[A-Za-z0-9_-]+)$/.test(x.e.pm.k)), "possible-match entries name the register project and its number");
+  const sk = rd("../data/announced/announced_skipped.csv").trim().split("\n").length - 1;
+  ok(sk === cnt["skipped-duplicate"] + cnt["skipped-malformed"], "announced_skipped.csv lists every skipped candidate with its reason (" + sk + ")");
+  // pages for outside-Dubai and possible-match entries (labels and panels)
+  const odE = all.find((x) => x.e.od), pmE = all.find((x) => x.e.pm);
+  const lab = { od: "Announced by the developer, outside Dubai: " + odE.e.od, pm: "Listed by the developer; the register holds a project with this name but we could not confirm it is the same one" };
+  const html = devmapHtml("k", { NAJ_NAV_CSS: "", NAJ_FONTS: "", najNav: () => "" });
+  const js = html.slice(html.indexOf("<script>", html.indexOf("maplibre-gl.js")) + 8, html.lastIndexOf("</script>"));
+  const A = new Function(ANNOUNCED_JS + "; return ANNOUNCED;")();
+  A.load(cleanAnnounced({ meta: { built: "x" }, d: { x: { _: [odE.e, pmE.e] } } }));
+  const cards = []; const api = { esc: (s) => String(s), pjCard: (slug, n, a, b, extra) => { cards.push(n + " :: " + extra); return "<button>" + n + "</button>"; }, areaNames: () => [], BLK: {} };
+  const grp = A.html("x", null, api);
+  ok(/Announced by the developer, not yet registered \(2\)/.test(grp.replace(/<[^>]*>/g, "")), "a mixed group keeps the main title");
+  ok(cards.some((c) => c.includes("Announced, outside Dubai: " + odE.e.od)) && cards.some((c) => c.includes("Listed, the register holds a project with this name")), "the cards carry the outside-Dubai place and the register-holds-a-project wording");
+  const pr = (ic, l, v, s, t) => "[" + l + ": " + v + " | " + s + " | " + t + "]", ps = (ic, t, r) => "<sec>" + t + r + "</sec>";
+  const dOd = A.detail({ ev: { ann: odE.e } }, { pdRow: pr, pdSec: ps, esc: (s) => String(s), icoSvg: () => "" }), dPm = A.detail({ ev: { ann: pmE.e } }, { pdRow: pr, pdSec: ps, esc: (s) => String(s), icoSvg: () => "" });
+  ok(dOd.includes(lab.od) && /Outside Dubai: /.test(dOd) && /no district, no map position/.test(dOd) && /DEVELOPER_CLAIMED/.test(dOd), "outside-Dubai panel: 'Announced by the developer, outside Dubai: <place>', no district, no map position");
+  ok(dPm.includes(lab.pm) && dPm.includes(pmE.e.pm.n) && dPm.includes(pmE.e.pm.k) && /We could not confirm it is the same one/.test(dPm) && !/Not on any register we hold/.test(dPm), "possible-match panel: the agreed wording, the register project name and number as a plain line, no 'not on any register'");
+  const odS = SRCH.items.filter((i) => i.od === 1).length, pmS = SRCH.items.filter((i) => i.pm === 1).length;
+  ok(odS === cnt["shown-outside-Dubai"] && pmS === cnt["shown-possible-match"], "the search items carry the od and pm flags");
+  const idxjs = rd("../src/index.js");
+  ok(/r\.od\?"announced by the developer, outside Dubai":r\.pm\?"listed by the developer; the register holds a project with this name"/.test(idxjs), "the Find row wording covers outside-Dubai and possible-match items");
+  ok(!EMOJI.test(grp + dOd + dPm) && !EMOJI.test(rd("../data/announced/announced_accounting.csv")), "no emoji");
 }
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

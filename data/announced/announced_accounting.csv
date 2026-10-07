@@ -1,0 +1,674 @@
+﻿candidate,source,developer,project,bucket,detail
+c001,developer web page,OMNIYAT,"LANA, Dorchester Collection",shown,
+c002,developer web page,OMNIYAT,The Opus,shown-possible-match,"same developer, same core name as register project PN1177 THE OPUS BY OMNIYAT"
+c003,developer web page,OMNIYAT,The Alba,shown,
+c004,developer web page,OMNIYAT,ANWA,shown-possible-match,"same developer, same core name as register project PN1636 THE ANWA BY OMNIYAT"
+c005,developer web page,OMNIYAT,ANWA ARIA,shown,
+c006,developer web page,OMNIYAT,AVA,shown-possible-match,"same developer, same core name as register project PN2382 AVA AT PALM JUMEIRAH BY OMNIYAT"
+c007,developer web page,OMNIYAT,One at Palm Jumeirah,shown-possible-match,"same exact name on the register (PN1631 ONE AT PALM JUMEIRAH), developer not confirmed"
+c008,developer web page,OMNIYAT,ORLA,shown-possible-match,"same developer, same core name as register project PN2455 ORLA BY OMNIYAT"
+c009,developer web page,OMNIYAT,ORLA Infinity,shown-possible-match,"same developer, same core name as register project PN2664 ORLA Infinity by OMNIYAT"
+c010,developer web page,OMNIYAT,THE STERLING,shown,
+c011,developer web page,OMNIYAT,The Alba,skipped-duplicate,duplicate of another announcement by the same developer (kept: The Alba)
+c012,developer web page,OMNIYAT,VELA,shown-possible-match,"same developer, same core name as register project PN2653 VELA by OMNIYAT"
+c013,developer web page,OMNIYAT,VELA VIENTO,shown-possible-match,"same developer, same core name as register project PN2885 Vela Viento by Omniyat"
+c014,developer web page,H&H,Aman DUBAI hotel & residences,shown,
+c015,developer web page,H&H,BACCARAT HOTEL & RESIDENCES,shown,
+c016,developer web page,H&H,CITY TOWER,shown,
+c017,developer web page,H&H,DUBAI HARBOUR RESIDENCES,shown,
+c018,developer web page,H&H,Eden Hills,shown-possible-match,"same exact name on the register (PN3311 Eden Hills), developer not confirmed"
+c019,developer web page,H&H,"EDEN HOUSE, Al SATWA",shown,
+c020,developer web page,H&H,Eden House Dubai Hills,shown-possible-match,"same exact name on the register (PN3269 Eden House Dubai Hills), developer not confirmed"
+c021,developer web page,H&H,Eden House The Canal,shown-possible-match,"same exact name on the register (PN2836 Eden House The Canal), developer not confirmed"
+c022,developer web page,H&H,Eden House The PARK,shown-possible-match,"same exact name on the register (PN3382 Eden House The Park), developer not confirmed"
+c023,developer web page,H&H,Eden House Za'abeel,shown,
+c024,developer web page,H&H,Four Seasons Hotel Dubai At Difc,shown,
+c025,developer web page,H&H,Four Seasons Private Residences Dubai At Difc,shown,
+c026,developer web page,H&H,Four Seasons Private Residences Dubai at Jumeirah,skipped-duplicate,duplicate of another announcement by the same developer (kept: Four Seasons Private Residences Dubai At Difc)
+c027,developer web page,H&H,Four Seasons Resort Dubai At Jumeirah Beach,shown,
+c028,developer web page,H&H,FOUR SEASONS Staff Accommodation at Jebel Ali,shown,
+c029,developer web page,H&H,Galleria Mall Al Barsha,shown,
+c030,developer web page,H&H,Galleia Mall Al Wasl,shown,
+c031,developer web page,H&H,Galleria Vilaa Al Wasl,shown,
+c032,developer web page,H&H,JANU DUBAI HOTEL & RESIDENCES,shown,
+c033,developer web page,H&H,JUMEIRAH AL NASEEM MADINAT JUMEIRAH PHASE 4,skipped-malformed,"malformed name or page slug, not a project name"
+c034,developer web page,Meraas,City Walk Crestlane,shown-possible-match,"same developer, same core name as register project PN3530 City Walk Crestlane 2"
+c035,developer web page,Meraas,The Edit at d3,matched,M1 exact name + same developer -> PN4177
+c036,developer web page,Meraas,Nad Al Sheba Gardens Villas,shown,
+c037,developer web page,Meraas,Madinat Jumeirah Living Nourelle,shown,
+c038,developer web page,Meraas,Solaya,shown-possible-match,"same developer, same core name as register project PN4089 Solaya (1,2,3)"
+c039,developer web page,Meraas,Jumeirah Residences Emirates Towers,shown-possible-match,"same exact name on the register (PN3820 Jumeirah Residences Emirates Towers), developer not confirmed"
+c040,developer web page,Meraas,Atelis at d3,shown-possible-match,"same exact name on the register (PN3750 Atelis at d3), developer not confirmed"
+c041,developer web page,Meraas,Jumeirah Asora Bay,matched,M1 exact name + same developer -> PN3445
+c042,developer web page,Meraas,The Acres Villas,shown,
+c043,developer web page,Meraas,The Acres Estate,shown,
+c044,developer web page,Meraas,Verve City Walk,matched,M1 exact name + same developer -> PN3152
+c045,developer web page,Meraas,Madinat Jumeirah Living Riwa,shown,
+c046,developer web page,Meraas,City Walk Northline,shown-possible-match,"same developer, same core name as register project PN2972 City Walk Northline 2"
+c047,developer web page,Meraas,Madinat Jumeirah Living Elara,shown,
+c048,developer web page,Meraas,Design Quarter at d3,shown,
+c049,developer web page,Meraas,Madinat Jumeirah Living Jomana,shown,
+c050,developer web page,Meraas,Bluewaters Bay,matched,M1 exact name + same developer -> PN2530
+c051,developer web page,Meraas,Bulgari Lighthouse Dubai,shown-possible-match,"same exact name on the register (PN2507 Bulgari Lighthouse Dubai), developer not confirmed"
+c052,developer web page,Meraas,Madinat Jumeirah Living Residences,shown,
+c053,developer web page,Meraas,City Walk Central Park,shown,
+c054,developer web page,Meraas,Bulgari Ocean Mansions,matched,M1 exact name + same developer -> PN2331
+c055,developer web page,Meraas,Marsa Al Arab Residences,shown,
+c056,developer web page,Meraas,Marsa Al Arab Villas,shown-possible-match,"same exact name on the register (PN2161 Marsa Al Arab Villas), developer not confirmed"
+c057,developer web page,Meraas,Sur La Mer,matched,M1 exact name + same developer -> PN2167
+c058,developer web page,Meraas,Bluewaters Residences,matched,M1 exact name + same developer -> PN1795
+c059,developer web page,Meraas,Bulgari Marina Lofts Dubai,shown,
+c060,developer web page,Meraas,Nikki Beach Residences Dubai,shown,
+c061,developer web page,Meraas,City Walk Residences,shown,
+c062,developer web page,Meraas,Nad Al Sheba Gardens Villa Plots,shown,
+c063,developer web page,Meraas,Villa Amalfi,shown-possible-match,"same exact name on the register (PN2114 Villa Amalfi), developer not confirmed"
+c064,developer web page,Meraas,La Mer Maisons,shown,
+c065,developer web page,Meraas,Bulgari Resorts & Residences Dubai,shown,
+c066,developer web page,Meraas,Port de La Mer,shown,
+c067,developer web page,Select Group,15 Northside,matched,M1 exact name + same developer -> PN2214
+c068,developer web page,Select Group,Artistry One Residences,matched,M1 exact name + same developer -> PN4259
+c069,developer web page,Select Group,Artistry Two Residences,matched,M1 exact name + same developer -> PN4261
+c070,developer web page,Select Group,Bay Central,shown,
+c071,developer web page,Select Group,Botanica,shown-possible-match,"same exact name on the register (PN297 BOTANICA), developer not confirmed"
+c072,developer web page,Select Group,Jumeirah Living Business Bay,matched,M1 exact name + same developer -> PN2436
+c073,developer web page,Select Group,Jumeirah Living Marina Gate,matched,M1 exact name + same developer -> PN1743
+c074,developer web page,Select Group,Mushrif Village,shown,
+c075,developer web page,Select Group,Nautica,shown,
+c076,developer web page,Select Group,No.9,matched,M1 exact name + same developer -> PN1394
+c077,developer web page,Select Group,Pacific,shown,
+c078,developer web page,Select Group,"Peninsula Five, The Signature Collection",shown,
+c079,developer web page,Select Group,"Peninsula Four, The Plaza",shown,
+c080,developer web page,Select Group,Peninsula One,matched,M1 exact name + same developer -> PN2284
+c081,developer web page,Select Group,Peninsula Three,matched,M1 exact name + same developer -> PN2372
+c082,developer web page,Select Group,Peninsula Two,matched,M1 exact name + same developer -> PN2318
+c083,developer web page,Select Group,Residence 110,shown,
+c084,developer web page,Select Group,Six Senses Residences Dubai Marina,matched,M1 exact name + same developer -> PN3006
+c085,developer web page,Select Group,"Six Senses Residences The Palm, Dubai",shown-possible-match,"same exact name on the register (PN2350 Six Senses Residences The Palm, Dubai), developer not confirmed"
+c086,developer web page,Select Group,Studio One,matched,M1 exact name + same developer -> PN1776
+c087,developer web page,Select Group,The EDGE,matched,M1 exact name + same developer -> PN2611
+c088,developer web page,Select Group,The Point,matched,M1 exact name + same developer -> PN260
+c089,developer web page,Select Group,The Residences at Marina Gate I,shown,
+c090,developer web page,Select Group,The Residences at Marina Gate II,skipped-duplicate,duplicate of another announcement by the same developer (kept: The Residences at Marina Gate I)
+c091,developer web page,Select Group,The Royal Oceanic,shown,
+c092,developer web page,Select Group,The Torch,shown,
+c093,developer web page,Select Group,Velocity Tower,shown-outside-Dubai,outside Dubai: the developer's page says 'sheffield'
+c094,developer web page,Select Group,West Avenue,matched,M1 exact name + same developer -> PN913
+c095,developer web page,Select Group,Yacht Bay,shown,
+c096,developer web page,Ellington,Belgravia Heights II,matched,M1 exact name + same developer -> PN2064
+c097,developer web page,Ellington,Eaton Square,shown-possible-match,"same exact name on the register (PN4301 EATON SQUARE), developer not confirmed"
+c098,developer web page,Ellington,Arbor View,matched,M1 exact name + same developer -> PN2814
+c099,developer web page,Ellington,Art Bay,shown,
+c100,developer web page,Ellington,Belgravia II,shown-possible-match,"same developer, same core name as register project PN1820 Belgravia 2"
+c101,developer web page,Ellington,Belgravia III,matched,M1 exact name + same developer -> PN1922
+c102,developer web page,Ellington,Belgravia Gardens,matched,M1 exact name + same developer -> PN3512
+c103,developer web page,Ellington,Belgravia Heights I,matched,M1 exact name + same developer -> PN2011
+c104,developer web page,Ellington,Belgravia,matched,M1 exact name + same developer -> PN1713
+c105,developer web page,Ellington,Belgravia Square,shown-possible-match,"same exact name on the register (PN2100 BELGRAVIA SQUARE), developer not confirmed"
+c106,developer web page,Ellington,Belmont Residences,matched,M1 exact name + same developer -> PN2639
+c107,developer web page,Ellington,Belmore Residences,matched,M1 exact name + same developer -> PN4033
+c108,developer web page,Ellington,Berkeley Place,matched,M1 exact name + same developer -> PN2417
+c109,developer web page,Ellington,Cala Del Mar,shown,
+c110,developer web page,Ellington,Claydon House,shown-possible-match,"same developer, same core name as register project PN3098 CLAYDON HOUSE BY ELLINGTON"
+c111,developer web page,Ellington,Costa Mare,shown-outside-Dubai,outside Dubai: the developer's page says 'ras al khaimah'
+c112,developer web page,Ellington,DT1,matched,M1 exact name + same developer -> PN1797
+c113,developer web page,Ellington,Eaton Place,matched,M1 exact name + same developer -> PN1871
+c114,developer web page,Ellington,Ellington Beach House,matched,M1 exact name + same developer -> PN2437
+c115,developer web page,Ellington,Ellington House II,shown-possible-match,"same exact name on the register (PN2464 ELLINGTON HOUSE II), developer not confirmed"
+c116,developer web page,Ellington,Ellington House III,shown-possible-match,"same exact name on the register (PN2581 ELLINGTON HOUSE III), developer not confirmed"
+c117,developer web page,Ellington,Ellington House IV,shown-possible-match,"same exact name on the register (PN2790 ELLINGTON HOUSE IV), developer not confirmed"
+c118,developer web page,Ellington,Ellington House,shown-possible-match,"same exact name on the register (PN2439 ELLINGTON HOUSE), developer not confirmed"
+c119,developer web page,Ellington,Ellington Sands,shown,
+c120,developer web page,Ellington,Ellington Views I,shown-outside-Dubai,outside Dubai: the developer's page says 'al hamra'
+c121,developer web page,Ellington,Ellington Views II,shown-outside-Dubai,outside Dubai: the developer's page says 'al hamra'
+c122,developer web page,Ellington,Ellington Villa Collection - Emirates Hills,shown,
+c123,developer web page,Ellington,Ellington Villa Collection - La Mer,shown,
+c124,developer web page,Ellington,Ellington Villa Collection - Palm Jumeirah,shown,
+c125,developer web page,Ellington,Eltiera Heights,shown-possible-match,"same exact name on the register (PN3852 ELTIERA HEIGHTS), developer not confirmed"
+c126,developer web page,Ellington,Eltiera Views,matched,M1 exact name + same developer -> PN4116
+c127,developer web page,Ellington,Everly Place,shown-possible-match,"same exact name on the register (PN4499 EVERLY PLACE), developer not confirmed"
+c128,developer web page,Ellington,Hamilton House,shown-possible-match,"same exact name on the register (PN2538 HAMILTON HOUSE), developer not confirmed"
+c129,developer web page,Ellington,Harrington House,matched,M1 exact name + same developer -> PN2277
+c130,developer web page,Ellington,Hillmont Residences,shown-possible-match,"same developer, same core name as register project PN3081 HILLMONT RESIDENCES BY ELLINGTON"
+c131,developer web page,Ellington,Kensington Waters,matched,M1 exact name + same developer -> PN2300
+c132,developer web page,Ellington,Mercer House,shown-possible-match,"same exact name on the register (PN2990 MERCER HOUSE), developer not confirmed"
+c133,developer web page,Ellington,Oakley Square Residences,matched,M1 exact name + same developer -> PN2304
+c134,developer web page,Ellington,Ocean House,shown-possible-match,"same exact name on the register (PN2691 OCEAN HOUSE), developer not confirmed"
+c135,developer web page,Ellington,One River Point,matched,M1 exact name + same developer -> PN2929
+c136,developer web page,Ellington,Playa Del Sol,shown-outside-Dubai,outside Dubai: the developer's page says 'ras al khaimah'
+c137,developer web page,Ellington,Porto Playa,shown-outside-Dubai,outside Dubai: the developer's page says 'ras al khaimah'
+c138,developer web page,Ellington,Portside Square,matched,M1 exact name + same developer -> PN4213
+c139,developer web page,Ellington,Riverton House,matched,M1 exact name + same developer -> PN4036
+c140,developer web page,Ellington,Rosemont Residences,shown-possible-match,"same exact name on the register (PN2993 ROSEMONT RESIDENCES), developer not confirmed"
+c141,developer web page,Ellington,Somerset Mews,matched,M1 exact name + same developer -> PN1981
+c142,developer web page,Ellington,Soto Grande,shown-outside-Dubai,outside Dubai: the developer's page says 'al hamra'
+c143,developer web page,Ellington,The Crestmark,matched,M1 exact name + same developer -> PN2832
+c144,developer web page,Ellington,The Highbury,shown-possible-match,"same exact name on the register (PN2641 THE HIGHBURY), developer not confirmed"
+c145,developer web page,Ellington,The Highgrove,matched,M1 exact name + same developer -> PN4037
+c146,developer web page,Ellington,The Hillgate,matched,M1 exact name + same developer -> PN3594
+c147,developer web page,Ellington,The Meriva Collection,shown-possible-match,"same exact name on the register (PN4346 THE MERIVA COLLECTION), developer not confirmed"
+c148,developer web page,Ellington,The Portman,matched,M1 exact name + same developer -> PN2537
+c149,developer web page,Ellington,The Quayside,matched,M1 exact name + same developer -> PN2815
+c150,developer web page,Ellington,The Sanctuary,shown,
+c151,developer web page,Ellington,The Sloane by Belgravia Heights,shown,
+c152,developer web page,Ellington,The Watercrest,shown-possible-match,"same developer, same core name as register project PN3444 THE WATERCREST BY ELLINGTON"
+c153,developer web page,Ellington,UH By Ellington,shown,
+c154,developer web page,Ellington,Wilton Park Residences,matched,M1 exact name + same developer -> PN2158
+c155,developer web page,Ellington,Wilton Terraces,matched,M1 exact name + same developer -> PN1970
+c156,developer web page,Ellington,Windsor House,matched,M1 exact name + same developer -> PN4035
+c157,developer web page,Ellington,Windsor House II,matched,M1 exact name + same developer -> PN4300
+c158,developer web page,Arada,Aljada,shown,
+c159,developer web page,Arada,Anantara Sharjah Residences,shown-outside-Dubai,outside Dubai: the developer's page says 'sharjah'
+c160,developer web page,Arada,Armani Beach Residences,shown,
+c161,developer web page,Arada,Central Business District (Aljada),shown,
+c162,developer web page,Arada,Inaura Downtown,shown,
+c163,developer web page,Arada,Jouri Hills,matched,M1 exact name + same developer -> PN2506
+c164,developer web page,Arada,Masaar,shown,
+c165,developer web page,Arada,Nasma 2,shown,
+c166,developer web page,Arada,W Residences at Dubai Harbour,shown-possible-match,"same exact name on the register (PN3317 W Residences at Dubai Harbour), developer not confirmed"
+c167,developer web page,Palma,Infinity / Cayan Tower,shown,
+c168,developer web page,Palma,La Residencia Del Mar,shown,
+c169,developer web page,Palma,Olivara Residences & Park,shown,
+c170,developer web page,Palma,Serenia District,shown,
+c171,developer web page,Palma,Serenia Living,matched,M1 exact name + same developer -> PN2420
+c172,developer web page,Palma,The Royal Sky Mansion at Serenia Living,shown,
+c173,developer web page,Palma,Serenia Residences The Palm,matched,M1 exact name + same developer -> PN1641
+c174,developer web page,Palma,Silverene Towers,shown,
+c175,developer web page,Palma,West Residence at Serenia District,shown,
+c176,developer web page,Fakhruddin,Hatimi Residences at Dubai Islands,shown-possible-match,"same developer, same core name as register project PN2981 HATIMI RESIDENCES BY FAKHRUDDIN"
+c177,developer web page,Fakhruddin,Maimoon Gardens at JVC Dubai,shown-possible-match,"same developer, same core name as register project PN2412 Maimoon Gardens"
+c178,developer web page,Fakhruddin,Tréppan Living PRIVE,matched,M1 exact name + same developer -> PN4345
+c179,developer web page,Fakhruddin,Treppan Serenique Dubai Islands,shown,
+c180,developer web page,Fakhruddin,Tréppan Tower Residences at JVT by Fakhruddin Properties,shown,
+c181,developer web page,BEYOND,Aria by Beyond,matched,M1 exact name + same developer -> PN2726
+c182,developer web page,BEYOND,Saria by Beyond,shown,
+c183,developer web page,BEYOND,Orise by Beyond,shown,
+c184,developer web page,BEYOND,Sensia by Beyond,shown,
+c185,developer web page,BEYOND,The Mural by Beyond,shown,
+c186,developer web page,BEYOND,Soulever by Beyond,matched,M1 exact name + same developer -> PN4084
+c187,developer web page,BEYOND,31 Above,shown-possible-match,"same developer, same core name as register project PN4183 31 Above By Beyond"
+c188,developer web page,BEYOND,Talea (Forest) by Beyond,shown,
+c189,developer web page,BEYOND,Kanyon by Beyond,matched,M1 exact name + same developer -> PN4050
+c190,developer web page,BEYOND,HADO by Beyond,matched,M1 exact name + same developer -> PN4210
+c191,developer web page,BEYOND,The Sterling by Beyond,shown,
+c192,developer web page,BEYOND,The Pad by Beyond,shown,
+c193,developer web page,BEYOND,Passo by Beyond,matched,M1 exact name + same developer -> PN3886
+c194,developer web page,BEYOND,Le Chateau by Beyond,shown-outside-Dubai,outside Dubai: the developer's page says 'marjan'
+c195,developer web page,BEYOND,Arancia Yards by Beyond,matched,M1 exact name + same developer -> PN4480
+c196,developer web page,Imtiaz,Beach Walk 4 by Imtiaz,shown,
+c197,developer web page,Imtiaz,Beach Walk Grand 2 by Imtiaz,matched,M1 exact name + same developer -> PN3724
+c198,developer web page,Imtiaz,Beach Walk Grand by Imtiaz,matched,M1 exact name + same developer -> PN3367
+c199,developer web page,Imtiaz,Beach Walk III by Imtiaz,shown,
+c200,developer web page,Imtiaz,Beach Walk Residence by Imtiaz,shown,
+c201,developer web page,Imtiaz,Beach Walk Residence II by Imtiaz,shown,
+c202,developer web page,Imtiaz,Cotier House 2 by Imtiaz,matched,M1 exact name + same developer -> PN3671
+c203,developer web page,Imtiaz,Cotier House by Imtiaz,shown-possible-match,"same developer, same core name as register project PN3394 COTIER HOUSE 1 BY IMTIAZ"
+c204,developer web page,Imtiaz,Cove Boulevard by Imtiaz,matched,M1 exact name + same developer -> PN3675
+c205,developer web page,Imtiaz,Cove by Imtiaz,shown,
+c206,developer web page,Imtiaz,Cove Edition 2 by Imtiaz,shown,
+c207,developer web page,Imtiaz,Cove Edition 4 by Imtiaz,shown,
+c208,developer web page,Imtiaz,Cove Edition 5 by Imtiaz,shown,
+c209,developer web page,Imtiaz,Cove Edition 6 by Imtiaz,shown,
+c210,developer web page,Imtiaz,Cove Edition I by Imtiaz,shown,
+c211,developer web page,Imtiaz,Cove Edition III by Imtiaz,shown,
+c212,developer web page,Imtiaz,Cove Grand by Imtiaz,shown,
+c213,developer web page,Imtiaz,ENRE Residence by Imtiaz,matched,M1 exact name + same developer -> PN4336
+c214,developer web page,Imtiaz,Hyde Walk by Imtiaz,shown,
+c215,developer web page,Imtiaz,Le Blanc by Imtiaz,shown,
+c216,developer web page,Imtiaz,Luxor by Imtiaz,shown,
+c217,developer web page,Imtiaz,Pearl House 4 by Imtiaz,shown-possible-match,"same developer, same core name as register project PN4129 PEARL HOUSE IV BY IMTIAZ"
+c218,developer web page,Imtiaz,Pearl House by Imtiaz,shown-possible-match,"same developer, same core name as register project PN3196 Pearl House III by Imtiaz"
+c219,developer web page,Imtiaz,Pearl House II by Imtiaz,matched,M1 exact name + same developer -> PN2777
+c220,developer web page,Imtiaz,Pearl House III by Imtiaz,matched,M1 exact name + same developer -> PN3196
+c221,developer web page,Imtiaz,Raw District by Imtiaz (Sheikh Zayed Road),shown-possible-match,"same developer, same core name as register project PN4498 RAW DISTRICT BY IMTIAZ CR"
+c222,developer web page,Imtiaz,Raw District II by Imtiaz (Sheikh Zayed Road),shown-possible-match,"same developer, same core name as register project PN4526 RAW DISTRICT 2 BY IMTIAZ"
+c223,developer web page,Imtiaz,Sea Cliff by Imtiaz,matched,M1 exact name + same developer -> PN4306
+c224,developer web page,Imtiaz,Sunset Bay 2 by Imtiaz,shown,
+c225,developer web page,Imtiaz,Sunset Bay 3 by Imtiaz,shown,
+c226,developer web page,Imtiaz,Sunset Bay 4 by Imtiaz,shown,
+c227,developer web page,Imtiaz,Sunset Bay 5 by Imtiaz,shown,
+c228,developer web page,Imtiaz,Sunset Bay by Imtiaz,shown,
+c229,developer web page,Imtiaz,Sunset Bay Grand by Imtiaz,matched,M1 exact name + same developer -> PN3868
+c230,developer web page,Imtiaz,The Archive by Imtiaz,matched,M1 exact name + same developer -> PN3781
+c231,developer web page,Imtiaz,The Symphony by Imtiaz,shown,
+c232,developer web page,Imtiaz,Westwood by Imtiaz,matched,M1 exact name + same developer -> PN2431
+c233,developer web page,Imtiaz,Westwood Grande by Imtiaz,matched,M1 exact name + same developer -> PN2520
+c234,developer web page,Imtiaz,Westwood Grande II by Imtiaz,matched,M1 exact name + same developer -> PN2645
+c235,developer web page,Imtiaz,Wynwood by Imtiaz,shown,
+c236,developer web page,Imtiaz,Wynwood Horizon by Imtiaz,matched,M1 exact name + same developer -> PN4133
+c237,developer web page,Emaar,17 Icon Bay,matched,M1 exact name + same developer -> PN1921
+c238,developer web page,Emaar,52 42,matched,M1 exact name + same developer -> PN1747
+c239,developer web page,Emaar,Acacia,shown,
+c240,developer web page,Emaar,Act One Act Two,matched,M1 exact name + same developer -> PN1773
+c241,developer web page,Emaar,Address Grand Downtown Dubai,shown,
+c242,developer web page,Emaar,Address Harbour Point,shown-possible-match,"same exact name on the register (PN1870 ADDRESS HARBOUR POINT), developer not confirmed"
+c243,developer web page,Emaar,Address Marjan,shown-outside-Dubai,outside Dubai: the developer's page says 'marjan'
+c244,developer web page,Emaar,Address Residences At Dubai Creek Harbour,shown,
+c245,developer web page,Emaar,Address Residences At Dubai Hills Estate,skipped-duplicate,duplicate of another announcement by the same developer (kept: Address Residences At Dubai Creek Harbour)
+c246,developer web page,Emaar,Address Residences Dubai Opera,shown,
+c247,developer web page,Emaar,Address Residences The Bay,shown,
+c248,developer web page,Emaar,Address Residences Zabeel,shown-possible-match,"same exact name on the register (PN2957 Address Residences Zabeel), developer not confirmed"
+c249,developer web page,Emaar,Address Villas Hillcrest,shown,
+c250,developer web page,Emaar,Address Villas Tierra,shown,
+c251,developer web page,Emaar,Aeon,shown-possible-match,"same exact name on the register (PN2882 Aeon), developer not confirmed"
+c252,developer web page,Emaar,Alana,shown,
+c253,developer web page,Emaar,Albero At Dubai Creek Harbour,shown,
+c254,developer web page,Emaar,Altan At Dubai Creek Harbour,shown,
+c255,developer web page,Emaar,Altus At Dubai Creek Harbour,shown,
+c256,developer web page,Emaar,Anya,shown,
+c257,developer web page,Emaar,Anya 2,shown,
+c258,developer web page,Emaar,Arlo At Dubai Creek Harbour,shown,
+c259,developer web page,Emaar,Aseel,matched,M1 exact name + same developer -> PN1519
+c260,developer web page,Emaar,Aurea At Rashid Yachts And Marina,shown,
+c261,developer web page,Emaar,Avarra By Palace At Business Bay,shown-possible-match,"same developer, same core name as register project PN4227 Avarra by Palace"
+c262,developer web page,Emaar,Avelia At The Valley,shown,
+c263,developer web page,Emaar,Avena 2 At The Valley,shown,
+c264,developer web page,Emaar,Avena At The Valley,shown,
+c265,developer web page,Emaar,Avonlea,shown-possible-match,"same exact name on the register (PN2838 Avonlea), developer not confirmed"
+c266,developer web page,Emaar,Bayline,shown-possible-match,"same exact name on the register (PN2813 Bayline), developer not confirmed"
+c267,developer web page,Emaar,Baystar By Vida At Rashid Yachts Marina,shown,
+c268,developer web page,Emaar,Bayview By Address Resorts,shown-possible-match,"same developer, same core name as register project PN2646 BAYVIEW"
+c269,developer web page,Emaar,Beach Isle,matched,M1 exact name + same developer -> PN2207
+c270,developer web page,Emaar,Beach Mansion,matched,M1 exact name + same developer -> PN2286
+c271,developer web page,Emaar,Beach Vista,matched,M1 exact name + same developer -> PN2015
+c272,developer web page,Emaar,Beachgate By Address,matched,M1 exact name + same developer -> PN2430
+c273,developer web page,Emaar,Bliss,shown,
+c274,developer web page,Emaar,Bliss 2,shown,
+c275,developer web page,Emaar,Blvd Crescent,matched,M1 exact name + same developer -> PN1494
+c276,developer web page,Emaar,Boulevard Heights,shown,
+c277,developer web page,Emaar,Boulevard Point,matched,M1 exact name + same developer -> PN1405
+c278,developer web page,Emaar,Burj Crown,matched,M1 exact name + same developer -> PN2201
+c279,developer web page,Emaar,Caya,shown,
+c280,developer web page,Emaar,Caya 2,shown,
+c281,developer web page,Emaar,Cedar,shown,
+c282,developer web page,Emaar,Chevalia Estate 2 At Grand Polo Club And Resort,shown,
+c283,developer web page,Emaar,Chevalia Estate At Grand Polo,shown,
+c284,developer web page,Emaar,Chevalia Fields At Grand Polo,shown,
+c285,developer web page,Emaar,Clearpoint,shown-possible-match,"same exact name on the register (PN2743 Clearpoint), developer not confirmed"
+c286,developer web page,Emaar,Club Drive,shown-possible-match,"same exact name on the register (PN2769 Club Drive), developer not confirmed"
+c287,developer web page,Emaar,Club Place At Dubai Hills Estate,shown,
+c288,developer web page,Emaar,Collective 2,shown,
+c289,developer web page,Emaar,Creek Bay At Dubai Creek Harbour,shown,
+c290,developer web page,Emaar,Creek Crescent,matched,M1 exact name + same developer -> PN2188
+c291,developer web page,Emaar,Creek Edge,matched,M1 exact name + same developer -> PN2083
+c292,developer web page,Emaar,Creek Gate,matched,M1 exact name + same developer -> PN1813
+c293,developer web page,Emaar,Creek Haven At Dubai Creek Harbour,shown,
+c294,developer web page,Emaar,Creek Horizon,matched,M1 exact name + same developer -> PN1772
+c295,developer web page,Emaar,Creek Palace,shown-possible-match,"same exact name on the register (PN2191 Creek Palace), developer not confirmed"
+c296,developer web page,Emaar,Creek Rise,matched,M1 exact name + same developer -> PN1850
+c297,developer web page,Emaar,Creek Waters,shown-possible-match,"same exact name on the register (PN2614 Creek Waters), developer not confirmed"
+c298,developer web page,Emaar,Creek Waters 2,shown-possible-match,"same exact name on the register (PN2634 Creek Waters 2), developer not confirmed"
+c299,developer web page,Emaar,Creekside 18,matched,M1 exact name + same developer -> PN1663
+c300,developer web page,Emaar,Downtown Views Ii,matched,M1 exact name + same developer -> PN1849
+c301,developer web page,Emaar,Dubai Creek Residences,shown-possible-match,"same developer, same core name as register project PN1597 THE DUBAI CREEK RESIDENCES"
+c302,developer web page,Emaar,Dubai Hills Vista,shown,
+c303,developer web page,Emaar,Eden,shown,
+c304,developer web page,Emaar,Elea At The Valley,shown,
+c305,developer web page,Emaar,Elie Saab At Arabian Ranches Iii,shown,
+c306,developer web page,Emaar,Elora,shown,
+c307,developer web page,Emaar,Elva At The Valley,shown,
+c308,developer web page,Emaar,Elvira,matched,M1 exact name + same developer -> PN2536
+c309,developer web page,Emaar,Emerald Hills,shown,
+c310,developer web page,Emaar,Equestra At Grand Polo Club And Resort,shown,
+c311,developer web page,Emaar,Equiterra 2 At Grand Polo Club And Resort,shown,
+c312,developer web page,Emaar,Equiterra At Grand Polo Club And Resort,shown,
+c313,developer web page,Emaar,Expo Golf Villas 6,shown,
+c314,developer web page,Emaar,Expo Golf Villas Phase Iii,shown,
+c315,developer web page,Emaar,Expo Golf Villas Phase Iv,skipped-duplicate,duplicate of another announcement by the same developer (kept: Expo Golf Villas Phase Iii)
+c316,developer web page,Emaar,Expo Golf Villas Phase V,skipped-duplicate,duplicate of another announcement by the same developer (kept: Expo Golf Villas Phase Iii)
+c317,developer web page,Emaar,Fairway Villas,matched,M1 exact name + same developer -> PN2519
+c318,developer web page,Emaar,Fairway Villas 2,matched,M1 exact name + same developer -> PN2604
+c319,developer web page,Emaar,Fairway Villas 3,matched,M1 exact name + same developer -> PN2963
+c320,developer web page,Emaar,Farm Gardens 2,shown,
+c321,developer web page,Emaar,Farm Grove At The Valley,shown,
+c322,developer web page,Emaar,Fior 1 At Rashid Yachts And Marina,shown,
+c323,developer web page,Emaar,Forte,matched,M1 exact name + same developer -> PN1660
+c324,developer web page,Emaar,Golf Acres At Emaar South,shown-possible-match,"same developer, same core name as register project PN3426 Golf Acres"
+c325,developer web page,Emaar,Golf Dale At Emaar South,shown-possible-match,"same developer, same core name as register project PN3427 Golf Dale"
+c326,developer web page,Emaar,Golf Edge At Emaar South,shown-possible-match,"same developer, same core name as register project PN3385 Golf Edge"
+c327,developer web page,Emaar,Golf Fields At Emaar South,shown-possible-match,"same developer, same core name as register project PN4415 Golf Fields"
+c328,developer web page,Emaar,Golf Grand,matched,M1 exact name + same developer -> PN2599
+c329,developer web page,Emaar,Golf Hills 2 At Emaar South,shown-possible-match,"same developer, same core name as register project PN4119 Golf Hills 2"
+c330,developer web page,Emaar,Golf Hills At Emaar South,shown-possible-match,"same developer, same core name as register project PN4117 Golf Hills"
+c331,developer web page,Emaar,Golf Hillside At Dubai Hills Estate,shown,
+c332,developer web page,Emaar,Golf Lane At Emaar South,shown-possible-match,"same developer, same core name as register project PN3111 Golf Lane"
+c333,developer web page,Emaar,Golf Links,matched,M1 exact name + same developer -> PN1900
+c334,developer web page,Emaar,Golf Meadow At Emaar South,shown-possible-match,"same developer, same core name as register project PN3579 Golf Meadow"
+c335,developer web page,Emaar,Golf Place,shown-possible-match,"same exact name on the register (PN2016 Golf Place), developer not confirmed"
+c336,developer web page,Emaar,Golf Place Ii,shown,
+c337,developer web page,Emaar,Golf Place Terraces,shown,
+c338,developer web page,Emaar,Golf Point At Emaar South,shown-possible-match,"same developer, same core name as register project PN3215 Golf Point"
+c339,developer web page,Emaar,Golf Trails At Emaar South,shown,
+c340,developer web page,Emaar,Golf Vale At Emaar South,shown-possible-match,"same developer, same core name as register project PN4416 Golf Vale"
+c341,developer web page,Emaar,Golf Verge At Emaar South,shown-possible-match,"same developer, same core name as register project PN3578 Golf Verge"
+c342,developer web page,Emaar,Golf Views,matched,M1 exact name + same developer -> PN1862
+c343,developer web page,Emaar,Grand Bleu Tower,shown,
+c344,developer web page,Emaar,Grande Signature Residences,shown,
+c345,developer web page,Emaar,Green Square,shown,
+c346,developer web page,Emaar,Greencrest At Dubai Hills Estate,shown,
+c347,developer web page,Emaar,Greenridge At Emaar South,shown-possible-match,"same developer, same core name as register project PN3283 Greenridge"
+c348,developer web page,Emaar,Greenside Residence,shown-possible-match,"same exact name on the register (PN2705 Greenside Residence), developer not confirmed"
+c349,developer web page,Emaar,Greenspoint At Emaar South,shown-possible-match,"same developer, same core name as register project PN3514 Greenspoint"
+c350,developer web page,Emaar,Greenville At Emaar South,shown-possible-match,"same developer, same core name as register project PN3316 Greenville"
+c351,developer web page,Emaar,Greenway 2 At Emaar South,shown-possible-match,"same developer, same core name as register project PN3121 Greenway 2"
+c352,developer web page,Emaar,Greenway At Emaar South,shown-possible-match,"same developer, same core name as register project PN3032 Greenway"
+c353,developer web page,Emaar,Grove,shown-possible-match,"same exact name on the register (PN2850 Grove), developer not confirmed"
+c354,developer web page,Emaar,Grove Ridge At Emaar South,shown-possible-match,"same developer, same core name as register project PN4200 Grove Ridge"
+c355,developer web page,Emaar,Harbour Gate,matched,M1 exact name + same developer -> PN1818
+c356,developer web page,Emaar,Harbour Views,matched,M1 exact name + same developer -> PN1710
+c357,developer web page,Emaar,Hills Park,matched,M1 exact name + same developer -> PN2428
+c358,developer web page,Emaar,Hillsedge At Dubai Hills Estate,shown,
+c359,developer web page,Emaar,Il Primo,matched,M1 exact name + same developer -> PN1757
+c360,developer web page,Emaar,Joy Arabian Ranches 3,shown,
+c361,developer web page,Emaar,June,shown,
+c362,developer web page,Emaar,Kaia At The Valley,shown,
+c363,developer web page,Emaar,Lavita At The Oasis,shown,
+c364,developer web page,Emaar,Lillia,shown,
+c365,developer web page,Emaar,Lotus,shown,
+c366,developer web page,Emaar,Lyvia By Palace At Dubai Creek Harbour,shown,
+c367,developer web page,Emaar,Mangrove At Dubai Creek Harbour,shown,
+c368,developer web page,Emaar,Maple,shown-possible-match,"same exact name on the register (PN1645 MAPLE), developer not confirmed"
+c369,developer web page,Emaar,Mareva 2 At The Oasis,shown,
+c370,developer web page,Emaar,Mareva At The Oasis,shown,
+c371,developer web page,Emaar,Marina Cove At Dubai Marina,shown-possible-match,"same developer, same core name as register project PN3328 Marina Cove"
+c372,developer web page,Emaar,Marina Place 1 At Rashid Yachts Marina,shown,
+c373,developer web page,Emaar,Marina Place 2 At Rashid Yachts Marina,shown,
+c374,developer web page,Emaar,Marina Shores,matched,M1 exact name + same developer -> PN2425
+c375,developer web page,Emaar,Marina Views At Rashid Yachts Marina,shown,
+c376,developer web page,Emaar,Marina Vista,matched,M1 exact name + same developer -> PN2094
+c377,developer web page,Emaar,May,shown,
+c378,developer web page,Emaar,Mirage At The Oasis,shown,
+c379,developer web page,Emaar,Montiva By Vida At Dubai Creek Harbour,shown,
+c380,developer web page,Emaar,Montura 2 At Grand Polo,shown,
+c381,developer web page,Emaar,Montura 3 At Grand Polo,shown,
+c382,developer web page,Emaar,Montura At Grand Polo,shown,
+c383,developer web page,Emaar,Mulberry,shown,
+c384,developer web page,Emaar,Nara,shown,
+c385,developer web page,Emaar,Nima,shown,
+c386,developer web page,Emaar,Ocean Cove At Rashid Yachts Marina,shown,
+c387,developer web page,Emaar,Ocean Point,shown-possible-match,"same exact name on the register (PN2975 Ocean Point), developer not confirmed"
+c388,developer web page,Emaar,Ocean Star At Rashid Yachts Marina,shown,
+c389,developer web page,Emaar,Opera Grand,matched,M1 exact name + same developer -> PN1507
+c390,developer web page,Emaar,Orania At The Valley,shown,
+c391,developer web page,Emaar,Orchid,shown,
+c392,developer web page,Emaar,Oria At Dubai Creek Harbour,shown,
+c393,developer web page,Emaar,Ovelle At The Valley,shown,
+c394,developer web page,Emaar,Palace Residences,shown,
+c395,developer web page,Emaar,Palace Residences At Dubai Hills Estate,skipped-duplicate,duplicate of another announcement by the same developer (kept: Palace Residences)
+c396,developer web page,Emaar,Palace Residences Creek Blue,shown-possible-match,"same exact name on the register (PN3147 Palace Residences Creek Blue), developer not confirmed"
+c397,developer web page,Emaar,Palace Residences Hillside At Dubai Hills Estate,shown,
+c398,developer web page,Emaar,Palace Residences North,matched,M1 exact name + same developer -> PN2562
+c399,developer web page,Emaar,Palace Villas Ostra At The Oasis,shown,
+c400,developer web page,Emaar,Palm Hills,shown-possible-match,"same exact name on the register (PN2263 Palm Hills), developer not confirmed"
+c401,developer web page,Emaar,Palmiera,shown,
+c402,developer web page,Emaar,Palmiera 2 At The Oasis,shown,
+c403,developer web page,Emaar,Palmiera 3 At The Oasis,shown,
+c404,developer web page,Emaar,Park Field,shown-possible-match,"same exact name on the register (PN2404 Park Field), developer not confirmed"
+c405,developer web page,Emaar,Park Gate,shown-possible-match,"same exact name on the register (PN2846 Park Gate), developer not confirmed"
+c406,developer web page,Emaar,Park Gate 2 At Dubai Hills Estate,shown,
+c407,developer web page,Emaar,Park Heights I,matched,M1 exact name + same developer -> PN1876
+c408,developer web page,Emaar,Park Horizon,shown-possible-match,"same exact name on the register (PN2483 Park Horizon), developer not confirmed"
+c409,developer web page,Emaar,Park Horizon V2,shown,
+c410,developer web page,Emaar,Park Lane,matched,M1 exact name + same developer -> PN2775
+c411,developer web page,Emaar,Park Point,matched,M1 exact name + same developer -> PN1812
+c412,developer web page,Emaar,Park Ridge,matched,M1 exact name + same developer -> PN1937
+c413,developer web page,Emaar,Parkland At Dubai Hills Estate,shown,
+c414,developer web page,Emaar,Parkside Hills,shown-possible-match,"same exact name on the register (PN2741 Parkside Hills), developer not confirmed"
+c415,developer web page,Emaar,Parkside Views Residence,shown,
+c416,developer web page,Emaar,Parkwood At Dubai Hills Estate,shown,
+c417,developer web page,Emaar,Pier Point At Rashid Yachts Marina,shown,
+c418,developer web page,Emaar,Porto View At Rashid Yachts Marina,shown,
+c419,developer web page,Emaar,Raya,shown,
+c420,developer web page,Emaar,Rivana,shown,
+c421,developer web page,Emaar,Rivera At The Valley Phase 2,shown,
+c422,developer web page,Emaar,Rosehill Dubai Hills Estate,shown,
+c423,developer web page,Emaar,Rosewater,shown,
+c424,developer web page,Emaar,Rove City Walk,shown-possible-match,"same exact name on the register (PN2113 Rove City Walk), developer not confirmed"
+c425,developer web page,Emaar,Ruba,shown,
+c426,developer web page,Emaar,Salva At The Heights Country Club And Wellness,shown,
+c427,developer web page,Emaar,Savanna,shown,
+c428,developer web page,Emaar,Seagate,shown-possible-match,"same exact name on the register (PN2163 Seagate), developer not confirmed"
+c429,developer web page,Emaar,Seascape,shown-possible-match,"same exact name on the register (PN2513 Seascape), developer not confirmed"
+c430,developer web page,Emaar,Selvara 3 At Grand Polo Club And Resort,shown,
+c431,developer web page,Emaar,Selvara 4 At Grand Polo Club And Resort,shown,
+c432,developer web page,Emaar,Selvara At Grand Polo Club And Resort,shown,
+c433,developer web page,Emaar,Sera 1 At Rashid Yachts Marinasera 1 At Rashid Yachts And Marina,skipped-malformed,"malformed name or page slug, not a project name"
+c434,developer web page,Emaar,Sera 2 At Rashid Yachts And Marina,shown,
+c435,developer web page,Emaar,Serro 2 At The Heights Country Club And Wellness,shown,
+c436,developer web page,Emaar,Serro At The Heights Country Club And Wellness,shown,
+c437,developer web page,Emaar,Sidra,shown-possible-match,"same exact name on the register (PN1727 SIDRA), developer not confirmed"
+c438,developer web page,Emaar,Silva Dubai Creek Harbour,shown,
+c439,developer web page,Emaar,South Beach,shown,
+c440,developer web page,Emaar,Spring,shown,
+c441,developer web page,Emaar,Srresidencesdubai,skipped-malformed,"malformed name or page slug, not a project name"
+c442,developer web page,Emaar,Sun Arabian Ranches 3,shown,
+c443,developer web page,Emaar,Sunridge,shown-possible-match,"same exact name on the register (PN2678 Sunridge), developer not confirmed"
+c444,developer web page,Emaar,Sunrise Bay,matched,M1 exact name + same developer -> PN2025
+c445,developer web page,Emaar,Surf,shown,
+c446,developer web page,Emaar,Talia,shown,
+c447,developer web page,Emaar,Terra Gardens At Expo Living,shown-possible-match,"same developer, same core name as register project PN4160 Terra Gardens"
+c448,developer web page,Emaar,Terra Heights At Expo Living,shown-possible-match,"same developer, same core name as register project PN3381 Terra Heights"
+c449,developer web page,Emaar,Terra Woods At Expo Living,shown-possible-match,"same developer, same core name as register project PN4367 Terra Woods"
+c450,developer web page,Emaar,The Bristol Luxury Hotels Resorts At Emaar Beachfront,shown,
+c451,developer web page,Emaar,The Cove,matched,M1 exact name + same developer -> PN1826
+c452,developer web page,Emaar,The Farm Gardens,shown,
+c453,developer web page,Emaar,The Residence Burj Khalifa,matched,M1 exact name + same developer -> PN2443
+c454,developer web page,Emaar,Urbana,matched,M1 exact name + same developer -> PN1808
+c455,developer web page,Emaar,Urbana Iii,matched,M1 exact name + same developer -> PN1880
+c456,developer web page,Emaar,Valia At Dubai Creek Harbour,shown,
+c457,developer web page,Emaar,Valo At Dubai Creek Harbour,shown,
+c458,developer web page,Emaar,Velora 2 At The Valley Phase 2,shown,
+c459,developer web page,Emaar,Velora At The Valley,shown,
+c460,developer web page,Emaar,Venera At The Valley,shown,
+c461,developer web page,Emaar,Vida Dubai Mall,matched,M1 exact name + same developer -> PN1898
+c462,developer web page,Emaar,Vida Residences,shown,
+c463,developer web page,Emaar,Vida Residences Club Point At Dubai Hills Estate,shown,
+c464,developer web page,Emaar,Vida Residences Creek Beach,shown,
+c465,developer web page,Emaar,Vida Residences Dubai Marina,matched,M1 exact name + same developer -> PN1831
+c466,developer web page,Emaar,Vida Residences Hillside,shown-possible-match,"same exact name on the register (PN3534 Vida Residences Hillside), developer not confirmed"
+c467,developer web page,Emaar,Vindera At The Valley,shown,
+c468,developer web page,Emaar,Vista Ridge At Emaar South,shown-possible-match,"same developer, same core name as register project PN4201 Vista Ridge"
+c469,developer web page,Sobha,Sobha Hartland,skipped-malformed,"the name of a community or area, not a project"
+c470,developer web page,Sobha,Sobha Hartland II,shown,
+c471,developer web page,Sobha,Sobha One,matched,M1 exact name + same developer -> PN2948
+c472,developer web page,Sobha,Sobha One,matched,M1 exact name + same developer -> PN2948
+c473,developer web page,Sobha,Sobha Central,matched,M1 exact name + same developer -> PN4328
+c474,developer web page,Sobha,Sobha Central,matched,M1 exact name + same developer -> PN4328
+c475,developer web page,Sobha,Sobha SeaHaven,shown,
+c476,developer web page,Sobha,Sobha SeaHaven,skipped-duplicate,duplicate of another announcement by the same developer (kept: Sobha SeaHaven)
+c477,developer web page,Sobha,Sobha Solis,shown-possible-match,"same exact name on the register (PN3334 Sobha Solis), developer not confirmed"
+c478,developer web page,Sobha,Sobha Solis,skipped-duplicate,duplicate of another announcement by the same developer (kept: Sobha Solis)
+c479,developer web page,Sobha,Sobha Orbis,shown-possible-match,"same exact name on the register (PN3070 Sobha Orbis), developer not confirmed"
+c480,developer web page,Sobha,Sobha Orbis,skipped-duplicate,duplicate of another announcement by the same developer (kept: Sobha Orbis)
+c481,developer web page,Sobha,Sobha Reserve,matched,M1 exact name + same developer -> PN2826
+c482,developer web page,Sobha,Sobha Reserve,matched,M1 exact name + same developer -> PN2826
+c483,developer web page,Sobha,Sobha Siniya Island,shown-outside-Dubai,outside Dubai: the developer's page says 'siniya'
+c484,developer web page,Sobha,Skyscape,matched,M1 exact name + same developer -> PN3160
+c485,developer web page,Sobha,Sobha Elwood,shown,
+c486,developer web page,Sobha,Sobha Elwood,skipped-duplicate,duplicate of another announcement by the same developer (kept: Sobha Elwood)
+c487,developer web page,Sobha,Sobha Verde,shown,
+c488,developer web page,Sobha,Verde by Sobha,matched,M1 exact name + same developer -> PN2583
+c489,developer web page,Sobha,The Crest,shown,
+c490,developer web page,Sobha,Panoramic View Apartments Creek Vistas,shown,
+c491,developer web page,Sobha,310 Riverside Crescent,matched,M1 exact name + same developer -> PN3067
+c492,developer web page,Sobha,330 Riverside Crescent,matched,M1 exact name + same developer -> PN2788
+c493,developer web page,Sobha,340 Riverside Crescent,matched,M1 exact name + same developer -> PN3082
+c494,developer web page,Sobha,350 Riverside Crescent,matched,M1 exact name + same developer -> PN3083
+c495,developer web page,Sobha,The Element at Sobha One,matched,M1 exact name + same developer -> PN3540
+c496,developer web page,Sobha,320 Riverside Crescent,matched,M1 exact name + same developer -> PN3088
+c497,developer web page,Sobha,360 Riverside Crescent,matched,M1 exact name + same developer -> PN3079
+c498,developer web page,Sobha,Riverside Crescent,shown,
+c499,developer web page,Sobha,The Mirage,shown,
+c500,developer web page,Sobha,The Pinnacle,shown,
+c501,developer web page,Sobha,The Eden,shown,
+c502,developer web page,Sobha,The S,shown,
+c503,developer web page,Sobha,The S,skipped-duplicate,duplicate of another announcement by the same developer (kept: The S)
+c504,developer web page,Sobha,Golf Ridges at Sobha One,shown,
+c505,developer web page,Sobha,SeaHaven Sky Edition,shown,
+c506,developer web page,Sobha,Sobha Estates,matched,M1 exact name + same developer -> PN2793
+c507,developer web page,Sobha,Skyvue,matched,M1 exact name + same developer -> PN3435
+c508,developer web page,Sobha,Sobha Sanctuary,shown,
+c509,developer web page,Sobha,Sobha City (Abu Dhabi),shown-outside-Dubai,outside Dubai: the developer's page says 'abu dhabi'
+c510,developer web page,Sobha,Sobha Aquamont,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c511,developer web page,Sobha,UAQ Downtown,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c512,developer web page,Sobha,Aquamarine,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c513,developer web page,Sobha,Bayfront,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c514,developer web page,Sobha,Bayside,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c515,developer web page,Sobha,Canalside,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c516,developer web page,Sobha,Capeside,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c517,developer web page,Sobha,Coastline,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c518,developer web page,Sobha,Coral Villas,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c519,developer web page,Sobha,Coraline,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c520,developer web page,Sobha,Creek Vistas Grande,shown,
+c521,developer web page,Sobha,Creek Vistas Heights,shown,
+c522,developer web page,Sobha,Creek Vistas Reserve,shown,
+c523,developer web page,Sobha,Crest Grande,shown,
+c524,developer web page,Sobha,Delphine,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c525,developer web page,Sobha,Florine,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c526,developer web page,Sobha,Forest Villas,shown,
+c527,developer web page,Sobha,Gardenia Villas,shown,
+c528,developer web page,Sobha,One Park Avenue,shown,
+c529,developer web page,Sobha,Palm Grove Villas,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c530,developer web page,Sobha,Pearlside,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c531,developer web page,Sobha,Pierside,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c532,developer web page,Sobha,Pristine,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c533,developer web page,Sobha,River Cove Residences,shown-outside-Dubai,outside Dubai: the developer's page says 'abu dhabi'
+c534,developer web page,Sobha,Selene,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c535,developer web page,Sobha,Siniya Marina Residences - Sobha Siniya Island,skipped-malformed,"malformed name or page slug, not a project name"
+c536,developer web page,Sobha,Skyscape Altius,shown,
+c537,developer web page,Sobha,Skyscape Aura,shown,
+c538,developer web page,Sobha,Skyscape Avenue,shown,
+c539,developer web page,Sobha,Skyvue Altier,shown,
+c540,developer web page,Sobha,SkyVue Solair,shown,
+c541,developer web page,Sobha,Skyvue Spectra,shown,
+c542,developer web page,Sobha,Skyvue Stellar,shown,
+c543,developer web page,Sobha,Sobha City The Orchard,shown-outside-Dubai,outside Dubai: the developer's page says 'abu dhabi'
+c544,developer web page,Sobha,The Terraces at Sobha City - Active Living Villas Abu Dhabi,shown-outside-Dubai,outside Dubai: the developer's page says 'abu dhabi'
+c545,developer web page,Sobha,Sobha Hartland Greens,shown-possible-match,"same developer, same core name as register project PN1581 SOBHA HARTLAND GREENS- PHASE I"
+c546,developer web page,Sobha,Sobha Hartland Townhouses,shown,
+c547,developer web page,Sobha,Sobha Sanctuary The Brooks,shown,
+c548,developer web page,Sobha,Sobha Sanctuary The Greens,shown,
+c549,developer web page,Sobha,Sobha Sanctuary The Grove,shown,
+c550,developer web page,Sobha,Sobha Sanctuary The Willows,shown,
+c551,developer web page,Sobha,The Woods (Sobha Sanctuary),shown,
+c552,developer web page,Sobha,Sobha Siniya Island Beach Residences,shown-outside-Dubai,outside Dubai: the developer's page says 'siniya'
+c553,developer web page,Sobha,Sobha Siniya Island Island Villas,shown-outside-Dubai,outside Dubai: the developer's page says 'siniya'
+c554,developer web page,Sobha,Starline,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c555,developer web page,Sobha,The Horizon,shown,
+c556,developer web page,Sobha,The Serene,shown-possible-match,"same exact name on the register (PN4020 THE SERENE), developer not confirmed"
+c557,developer web page,Sobha,The Tranquil,shown,
+c558,developer web page,Sobha,The Woods Abode,shown,
+c559,developer web page,Sobha,The Woods Retreat,shown,
+c560,developer web page,Sobha,Waves,shown,
+c561,developer web page,Sobha,Waves Grande,shown,
+c562,developer web page,Sobha,Waves Opulence,shown,
+c563,developer web page,Sobha,Yachtside,shown-outside-Dubai,outside Dubai: the developer's page says 'uaq'
+c564,developer web page,Iman,10 Oxford by Iman,matched,M1 exact name + same developer -> PN2837
+c565,developer web page,Iman,113 Residences,matched,M1 exact name + same developer -> PN4503
+c566,developer web page,Iman,15 Cascade,matched,M1 exact name + same developer -> PN3528
+c567,developer web page,Iman,Gardens 2,shown-possible-match,"same exact name on the register (PN2938 GARDENS 2), developer not confirmed"
+c568,developer web page,Iman,One Park Central,shown-possible-match,"same developer, same core name as register project PN2969 ONE PARK CENTRAL BY IMAN"
+c569,developer web page,Iman,One Park Square,shown-possible-match,"same developer, same core name as register project PN3366 ONE PARK SQUARE BY IMAN"
+c570,developer web page,Iman,One Sky Park,shown-possible-match,"same developer, same core name as register project PN3179 ONE SKY PARK BY IMAN"
+c571,developer web page,Iman,Oxford 212,matched,M1 exact name + same developer -> PN2321
+c572,developer web page,Iman,Oxford Boulevard,matched,M1 exact name + same developer -> PN2204
+c573,developer web page,Iman,Oxford Cove by Iman,shown-possible-match,"same developer, same core name as register project PN4330 OXFORD COVE"
+c574,developer web page,Iman,Oxford Gardens,matched,M1 exact name + same developer -> PN2703
+c575,developer web page,Iman,Oxford Residence,matched,M1 exact name + same developer -> PN1881
+c576,developer web page,Iman,Oxford Residence 2,matched,M1 exact name + same developer -> PN2080
+c577,developer web page,Iman,Oxford Terraces,matched,M1 exact name + same developer -> PN2393
+c578,developer web page,Iman,Oxford Terraces 2,matched,M1 exact name + same developer -> PN2600
+c579,developer web page,Iman,Oxford Villa,shown,
+c580,developer web page,Iman,SIERRA by Iman,matched,M1 exact name + same developer -> PN3835
+c581,developer web page,Iman,The Grove By Iman,matched,M1 exact name + same developer -> PN2512
+c582,developer web page,Prestige One,Berkeley Square North,shown,
+c583,developer web page,Prestige One,Berkeley Square South,shown,
+c584,developer web page,Prestige One,Coastal Haven by Prestige Harbour,shown,
+c585,developer web page,Prestige One,FAUCHON Résidences,shown,
+c586,developer web page,Prestige One,Golf Residences,shown-possible-match,"same developer, same core name as register project PN3131 GOLF RESIDENCES BY PRESTIGE ONE"
+c587,developer web page,Prestige One,Hilton Residences Dubai Maritime City,shown,
+c588,developer web page,Prestige One,Luxe Villa,shown,
+c589,developer web page,Prestige One,Luxury Canal Residences,shown-possible-match,"same exact name on the register (PN3568 LUXURY CANAL RESIDENCES), developer not confirmed"
+c590,developer web page,Prestige One,Parkway,shown-possible-match,"same developer, same core name as register project PN3272 PARKWAY BY PRESTIGE ONE"
+c591,developer web page,Prestige One,Sanctuary Hive,shown,
+c592,developer web page,Prestige One,Sanctuary Residences,shown,
+c593,developer web page,Prestige One,Seaside,shown-possible-match,"same developer, same core name as register project PN3119 Seaside by Prestige One"
+c594,developer web page,Prestige One,The Boulevard,shown-possible-match,"same developer, same core name as register project PN3428 THE BOULEVARD BY PRESTIGE ONE"
+c595,developer web page,Prestige One,The One,shown-possible-match,"same exact name on the register (PN1666 THE ONE), developer not confirmed"
+c596,developer web page,Prestige One,The Residence,shown-possible-match,"same exact name on the register (PN473 THE RESIDENCE), developer not confirmed"
+c597,developer web page,Prestige One,Vista,shown-possible-match,"same developer, same core name as register project PN2661 Vista by Prestige One"
+c598,developer web page,Prestige One,The Waterway,shown-possible-match,"same developer, same core name as register project PN3198 The Waterway by Prestige One"
+c599,availability sheet,Arada,Akala Hotels And Residences,matched,M1 exact name + same developer -> PN3745
+c600,availability sheet,Arada,Anantara Sharjah Residences,skipped-duplicate,duplicate of another announcement by the same developer (kept: Anantara Sharjah Residences)
+c601,availability sheet,Beyond,Arancia Yards 2 By Beyond,matched,M1 exact name + same developer -> PN4529
+c602,availability sheet,Select,Artistry One Residences,matched,M1 exact name + same developer -> PN4259
+c603,availability sheet,Select,Artistry Two Residences,matched,M1 exact name + same developer -> PN4261
+c604,availability sheet,Binghatti,Binghatti Amberhall,matched,M2 the source's own binding to a register name -> PN3552
+c605,availability sheet,Binghatti,Binghatti Aquarise,matched,M1 exact name + same developer -> PN3585
+c606,availability sheet,Binghatti,Binghatti Circle,matched,M2 the source's own binding to a register name -> PN3819
+c607,availability sheet,Binghatti,Binghatti Cullinan,matched,M2 the source's own binding to a register name -> PN4247
+c608,availability sheet,Binghatti,Binghatti Elite,matched,M2 the source's own binding to a register name -> PN3341
+c609,availability sheet,Binghatti,Binghatti Etherea,matched,M1 exact name + same developer -> PN4303
+c610,availability sheet,Binghatti,Binghatti Flare 01,matched,M2 the source's own binding to a register name -> PN4006
+c611,availability sheet,Binghatti,Binghatti Flare 02,matched,M2 the source's own binding to a register name -> PN4008
+c612,availability sheet,Binghatti,Binghatti Ghost,matched,M2 the source's own binding to a register name -> PN3192
+c613,availability sheet,Binghatti,Binghatti Grove,matched,M1 exact name + same developer -> PN3314
+c614,availability sheet,Binghatti,Binghatti Haven,matched,M2 the source's own binding to a register name -> PN3442
+c615,availability sheet,Binghatti,Binghatti Hillcrest,matched,M2 the source's own binding to a register name -> PN4105
+c616,availability sheet,Binghatti,Binghatti Hillside,matched,M2 the source's own binding to a register name -> PN3481
+c617,availability sheet,Binghatti,Binghatti Ivory,matched,M1 exact name + same developer -> PN3264
+c618,availability sheet,Binghatti,Binghatti Luxuria,matched,M1 exact name + same developer -> PN4299
+c619,availability sheet,Binghatti,Binghatti Moonlight,matched,M1 exact name + same developer -> PN3722
+c620,availability sheet,Binghatti,Binghatti Phantom,matched,M1 exact name + same developer -> PN2958
+c621,availability sheet,Binghatti,Binghatti Pinnacle,matched,M1 exact name + same developer -> PN3256
+c622,availability sheet,Binghatti,Binghatti Royale,matched,M2 the source's own binding to a register name -> PN2961
+c623,availability sheet,Binghatti,Binghatti Ruby,matched,M2 the source's own binding to a register name -> PN3529
+c624,availability sheet,Binghatti,Binghatti Skyflame 1,matched,M1 exact name + same developer -> PN4393
+c625,availability sheet,Binghatti,Binghatti Skyflame 2,matched,M1 exact name + same developer -> PN4399
+c626,availability sheet,Binghatti,Binghatti Skyterraces,matched,M1 exact name + same developer -> PN4327
+c627,availability sheet,Binghatti,Binghatti Spectre,matched,M1 exact name + same developer -> PN4370
+c628,availability sheet,Binghatti,Binghatti Starlight,matched,M2 the source's own binding to a register name -> PN3195
+c629,availability sheet,Binghatti,Binghatti Twilight,matched,M1 exact name + same developer -> PN3397
+c630,availability sheet,Arada,Central Business District,shown,
+c631,availability sheet,Imtiaz,Cove Boulevard By Imtiaz,matched,M1 exact name + same developer -> PN3675
+c632,availability sheet,Imtiaz,Cove Edition Residence 2 By Imtiaz,matched,M1 exact name + same developer -> PN3286
+c633,availability sheet,Beyond,Hado Tower A,matched,M2 the source's own binding to a register name -> PN4210
+c634,availability sheet,Beyond,Hado Tower B,matched,M2 the source's own binding to a register name -> PN4210
+c635,availability sheet,Beyond,Hado Tower C,matched,M2 the source's own binding to a register name -> PN4210
+c636,availability sheet,Fakhruddin,Hatimi Residences,matched,M2 the source's own binding to a register name -> PN2981
+c637,availability sheet,Imtiaz,Imtiaz,skipped-malformed,"the developer's own name (a sheet total or a page title), not a project"
+c638,availability sheet,Imtiaz,Imtiaz Symphony Tower,matched,M1 exact name + same developer -> PN4193
+c639,availability sheet,Arada,Inaura Hotels & Residences,matched,M2 the source's own binding to a register name -> PN4226
+c640,availability sheet,Arada,Jenna,shown,
+c641,availability sheet,Beyond,Kanyon,matched,M2 the source's own binding to a register name -> PN4050
+c642,availability sheet,Arada,Lareen / Dana,shown,
+c643,availability sheet,Arada,Laura,shown,
+c644,availability sheet,Arada,Layan,shown,
+c645,availability sheet,Beyond,Le Chateau,skipped-duplicate,duplicate of another announcement by the same developer (kept: Le Chateau by Beyond)
+c646,availability sheet,Fakhruddin,Maimoon Gardens,matched,M1 exact name + same developer -> PN2412
+c647,availability sheet,Binghatti,Maybach 6,shown,
+c648,availability sheet,Binghatti,Maybach Ultimate Luxury,matched,M1 exact name + same developer -> PN4320
+c649,availability sheet,Arada,Melia / Narenj / Coral / Anber,shown,
+c650,availability sheet,Arada,Naseej District,shown,
+c651,availability sheet,Arada,Nesba,shown,
+c652,availability sheet,Binghatti,One By Binghatti,matched,M1 exact name + same developer -> PN3107
+c653,availability sheet,Beyond,Passo Avita,shown,
+c654,availability sheet,Beyond,Passo Bella,shown,
+c655,availability sheet,Binghatti,Project Maybach,matched,M1 exact name + same developer -> PN4319
+c656,availability sheet,Arada,Safa,shown,
+c657,availability sheet,Prestige One,Sanctuary,matched,M2 the source's own binding to a register name -> PN4332
+c658,availability sheet,Arada,Saro,shown,
+c659,availability sheet,Imtiaz,Seacliff by Imtiaz,matched,M1 exact name + same developer -> PN4306
+c660,availability sheet,Arada,Sedra,shown,
+c661,availability sheet,Beyond,Soulever,matched,M2 the source's own binding to a register name -> PN4084
+c662,availability sheet,Beyond,Soulever Tower B,matched,M2 the source's own binding to a register name -> PN4084
+c663,availability sheet,Imtiaz,Sunset Bay Grand BY Imtiaz,matched,M1 exact name + same developer -> PN3868
+c664,availability sheet,Beyond,Talea,matched,M2 the source's own binding to a register name -> PN3869
+c665,availability sheet,Imtiaz,The Archive,matched,M2 the source's own binding to a register name -> PN3781
+c666,availability sheet,Arada,The Gate,shown,
+c667,availability sheet,Fakhruddin,Treppan Serenique Residences,matched,M1 exact name + same developer -> PN3718
+c668,availability sheet,Fakhruddin,Treppan Tower,matched,M1 exact name + same developer -> PN3348
+c669,availability sheet,Fakhruddin,Treppan Vision,matched,M2 the source's own binding to a register name -> PN4539
+c670,availability sheet,Binghatti,Vision Iconic,matched,M1 exact name + same developer -> PN4544
+c671,availability sheet,Arada,W Residences At Dubai Harbour,matched,M2 the source's own binding to a register name -> PN3317
+c672,availability sheet,Imtiaz,Wynwood by Imtiaz,matched,M2 the source's own binding to a register name -> PN3784
+c673,availability sheet,Imtiaz,Wynwood Horizon by Imtiaz,matched,M1 exact name + same developer -> PN4133

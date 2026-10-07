@@ -21,6 +21,8 @@ import { PLOTPOS_JS, PLOTPOS_CSS } from "./plotpos_page.js";   // v386 - plot-ce
 import { PLOTPOS_KV_NAME, cleanPlotPos } from "./plotpos.js";
 import { COMMPOS_JS, COMMPOS_CSS } from "./commpos_page.js";   // v387 - community-centre fallback, the last rung of the ladder (all new logic lives in the two commpos files)
 import { COMMPOS_KV_NAME, cleanCommPos } from "./commpos.js";
+import { COMMPOSP_JS } from "./commpos_p_page.js";   // v397c - community centre by register project number (all new logic lives in commpos_p.js and commpos_p_page.js)
+import { COMMPOSP_KV_NAME, cleanCommPosP } from "./commpos_p.js";
 import { NOSALES_JS } from "./nosales_page.js";   // v392 - launched projects with no registered sales yet (all new logic lives in the two nosales files)
 import { NOSALES_KV_NAME, cleanNosales, addNosalesPlots } from "./nosales.js";
 import { ANNOUNCED_JS } from "./announced_page.js";   // v397d - projects the developer announces that are in no register (all new logic lives in the two announced files)
@@ -88,6 +90,9 @@ export async function devmapRoutes(request, env, url, deps) {
   if (what === "commpos") {                                                // v387 - community-centre positions (scripts/build_community_positions.py, KV img_community_positions); absent or malformed = {} and the page changes nothing
     const cp = cleanCommPos(await kvJson(env, COMMPOS_KV_NAME));
     return J(cp || {});
+  }
+  if (what === "commposp") {                                               // v397c - community-centre positions by register project number (scripts/build_community_positions_p.py, KV img_community_positions_p); absent or malformed = {} and the page is v395
+    return J(cleanCommPosP(await kvJson(env, COMMPOSP_KV_NAME)) || {});
   }
   if (what === "nosales") {                                                // v392 - launched projects with no registered sales yet (scripts/build_nosales.py, KV img_devmap_nosales); absent or malformed = {} and the page is exactly v390
     const ns = cleanNosales(await kvJson(env, NOSALES_KV_NAME));
@@ -745,8 +750,8 @@ function startMap(){
     map.on("mouseleave","a-fill",function(){map.getCanvas().style.cursor="";pop.remove()});
     map.on("click","a-fill",function(e){if(pjHit(e).length||(typeof CF!=="undefined"&&CF&&CF.fillMode()))return;select(e.features[0].properties.slug,false)})})}
 // ---- start ----
-Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null}),api("centres").catch(function(){return null}),api("plotpos").catch(function(){return null}),api("commpos").catch(function(){return null}),api("nosales").catch(function(){return null}),api("announced").catch(function(){return null})]).then(function(r){
-  IDX=r[0];GEO=r[1];if(CF)CF.load(r[5]);if(typeof PLOTPOS!=="undefined")PLOTPOS.load(r[6]);if(typeof COMMPOS!=="undefined")COMMPOS.load(r[7]);if(typeof NOSALES!=="undefined")NOSALES.load(r[8]);if(typeof ANNOUNCED!=="undefined")ANNOUNCED.load(r[9]);S.delay=r[3]&&r[3].by?r[3]:null;S.inv=invFromApi(r[4]);invIndex();DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
+Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null}),api("centres").catch(function(){return null}),api("plotpos").catch(function(){return null}),api("commpos").catch(function(){return null}),api("nosales").catch(function(){return null}),api("commposp").catch(function(){return null}),api("announced").catch(function(){return null})]).then(function(r){
+  IDX=r[0];GEO=r[1];if(CF)CF.load(r[5]);if(typeof PLOTPOS!=="undefined")PLOTPOS.load(r[6]);if(typeof COMMPOS!=="undefined")COMMPOS.load(r[7]);if(typeof NOSALES!=="undefined")NOSALES.load(r[8]);if(typeof COMMPOSP!=="undefined")COMMPOSP.load(r[9]);if(typeof ANNOUNCED!=="undefined")ANNOUNCED.load(r[10]);S.delay=r[3]&&r[3].by?r[3]:null;S.inv=invFromApi(r[4]);invIndex();DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
   if(IDX&&IDX.ev)S.win="l12";   // v322 - prices a realtor quotes today: the last 12 months, unless the index carries no evidence yet
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l;IDX.areas[s].name=IDX.areas[s].name.replace(/\bJLT\b/g,"Jumeirah Lakes Towers")});   // v321 - an area is never shown as an initial
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
@@ -764,7 +769,7 @@ Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(functio
 
 export function devmapHtml(key, deps) {
   const nav = deps && deps.NAJ_FONTS ? deps.NAJ_FONTS : "";
-  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + PLOTPOS_JS + COMMPOS_JS + NOSALES_JS + ANNOUNCED_JS + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
+  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + PLOTPOS_JS + COMMPOSP_JS + COMMPOS_JS + NOSALES_JS + ANNOUNCED_JS + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - developers by area</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0e1413">' + nav
     + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + CENTRES_CSS + PLOTPOS_CSS + COMMPOS_CSS + '</style></head><body>'
     + '<div id=map role=region aria-label="Map of Dubai areas: developers and prices"></div>'

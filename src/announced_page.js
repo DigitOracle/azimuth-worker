@@ -8,7 +8,11 @@
 // The page script gets this module ahead of its own script (ANNOUNCED_JS defines the global ANNOUNCED). String.raw, no substitutions and no backticks; checked with node --check by test/test_v397d_announced.mjs.
 export const ANNOUNCED_JS = String.raw`
 var ANNOUNCED=(function(){
-  var D=null,N=0,META=null,LABEL="Announced by the developer, not yet registered";
+  var D=null,N=0,META=null,LABEL="Announced by the developer, not yet registered",LABEL2="Listed by the developer, no register entry found";
+  var LABEL_PM="Listed by the developer; the register holds a project with this name but we could not confirm it is the same one";
+  // one label per project, in this order: outside Dubai, a register project of the same name (possible match), completed or non-residential, the plain announcement
+  function labelOf(e){return !e?LABEL:e.od?"Announced by the developer, outside Dubai: "+e.od:e.pm?LABEL_PM:e.lw?LABEL2:LABEL}
+  function short(e){return e.od?"Announced, outside Dubai: "+e.od:e.pm?"Listed, the register holds a project with this name":e.lw?"Listed, no register entry found, not on any register we hold":"Announced, not on any register we hold"}
   function nk(s){return String(s==null?"":s).toLowerCase().replace(/[^a-z0-9]+/g,"")}
   function e2(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
   function load(d){D=null;N=0;META=null;if(!d||typeof d!=="object"||!d.d||typeof d.d!=="object")return 0;
@@ -29,22 +33,24 @@ var ANNOUNCED=(function(){
   function line(e){var s=[];if(e.u)s.push(e.u+" units stated");else if(e.us)s.push(e.us+" units on the developer's sheet");if(e.ho)s.push("handover "+e.ho);return s.join(", ")}
   function html(k,area,api){var l=list(k,area,api.areaNames?api.areaNames(area):[]);if(!l.length)return "";
     if(api.BLK&&!api.BLK[slugOf(k)])api.BLK[slugOf(k)]={state:"none",feats:[]};
-    var h='<details class="card nconf announced" id=announced><summary><b>'+LABEL+' ('+l.length+')</b> <span class=note>outside the numbers</span></summary>'
+    var h='<details class="card nconf announced" id=announced><summary><b>'+(l.every(function(x){return labelOf(x.e)===labelOf(l[0].e)&&!l[0].e.od})?labelOf(l[0].e):LABEL)+' ('+l.length+')</b> <span class=note>outside the numbers</span></summary>'
       +'<p class=note style="margin:6px 0">These projects are announced by the developer on its own web site or availability sheet. They are not on any register we hold, so there is no project number, no registered sales and no price here. They are not in the totals, the scale word, the price bands or the area counts on this page.'+(area?' Showing the selected area only; a project whose area the developer does not state is shown when no area is selected.':'')+'</p><div class=pjg>';
     l.forEach(function(x){var e=x.e,ev=evOf(e),ln=line(e),
-      extra='<span class=note style="display:block;margin:0">'+api.esc(e.a||"Area not stated by the developer")+'</span>'+(ln?'<span class=note style="display:block;margin:2px 0 0">'+api.esc(ln)+'</span>':'')+'<span class=note style="display:block;margin:2px 0 0"><b>Announced, not on any register we hold</b>'+(e.f?' ('+api.esc(e.f)+')':'')+'</span>';
+      extra='<span class=note style="display:block;margin:0">'+api.esc(e.a||"Area not stated by the developer")+'</span>'+(ln?'<span class=note style="display:block;margin:2px 0 0">'+api.esc(ln)+'</span>':'')+'<span class=note style="display:block;margin:2px 0 0"><b>'+api.esc(short(e))+'</b>'+(e.f?' ('+api.esc(e.f)+')':'')+'</span>';
       h+=api.pjCard(slugOf(k),e.n,null,null,extra,"Project name not recorded",ev)});
     return h+'</div></details>'}
   // the whole Project details body for an announced project (called from pjDetailHtml with the card's record d); api = {pdRow,pdSec,esc,icoSvg}
   function detail(d,api){var e=d&&d.ev&&d.ev.ann;if(!e)return "";var pr=api.pdRow,ps=api.pdSec,es=api.esc,T="DEVELOPER_CLAIMED",src=srcLine(e),u=safeUrl(e.url),
-      h='<div class=pdet><div class=pdhead><span class=pdk>'+es(LABEL)+(e.f?' &middot; developer page of '+es(e.f):'')+'</span></div>';
+      h='<div class=pdet><div class=pdhead><span class=pdk>'+es(labelOf(e))+(e.f?' &middot; developer page of '+es(e.f):'')+'</span></div>';
     var f=pr("buildings","Project",es(e.n),src,T)+pr("wallet","Developer says it is by",es(e.dn||"Not recorded"),src,e.dn?T:"NOT_AVAILABLE");
     if(e.u)f+=pr("ruler","Units stated",es(String(e.u)),src,T);
     else if(e.us)f+=pr("ruler","Units on the developer's availability sheet",es(String(e.us)),src+" (stock on the sheet, not the size of the project)",T);
     if(e.ho)f+=pr("chart-bar","Handover as stated",es(e.ho),src,T);
     h+=ps("stack","What the developer says",f);
-    h+=ps("map-pin","Area",pr("map-pin","Area as the developer says",e.a?es(e.a):"Not stated by the developer",src,e.a?T:"NOT_AVAILABLE"));
-    h+=ps("chart-bar","Register status",pr("chart-bar","On a register","Not on any register we hold","Dubai Land Department project register extract of 15 Jun 2026 and the delta of 1 Sep 2026 (the newest we hold)"+(META&&META.built?", checked "+META.built:""),"DATA")
+    h+=ps("map-pin","Area",e.od?pr("map-pin","Outside Dubai",es(e.od)+" (the place the developer gives; no district, no map position)",src,T):pr("map-pin","Area as the developer says",e.a?es(e.a):"Not stated by the developer",src,e.a?T:"NOT_AVAILABLE"));
+    if(e.pm)h+=ps("chart-bar","Register status",pr("chart-bar","Register project with this name",'<span dir=auto>'+es(e.pm.n)+'</span> (register project '+es(e.pm.k)+')',"Dubai Land Department project register extract of 15 Jun 2026 and the delta of 1 Sep 2026 (the newest we hold)","NAME_ONLY")
+      +pr("stack","Same project?","We could not confirm it is the same one: the register company is not provably this developer's, or the name differs only in a phase number or place","Matching rule: exact name and same developer; a name alone is never enough","NOT_AVAILABLE"));
+    else h+=ps("chart-bar","Register status",pr("chart-bar","On a register","Not on any register we hold","Dubai Land Department project register extract of 15 Jun 2026 and the delta of 1 Sep 2026 (the newest we hold)"+(META&&META.built?", checked "+META.built:""),"DATA")
       +pr("stack","Register project number","None: it has not been matched to a register project","Matching rule: exact name and same developer, or the register project number; a name alone is never enough","NOT_AVAILABLE"));
     h+=ps("chart-donut","Sales and price",pr("chart-donut","Sales and price","Not counted: no registered sales, outside every total, price band and scale","Dubai Land Department sales register (unit sales, land excluded)","NOT_AVAILABLE"));
     h+=ps("star","Source",pr("star","Where this comes from",(u?'<a href="'+es(u)+'" target=_blank rel=noopener>'+es(host(u))+'</a>':es(src)),src+" (fetched "+(e.f||"date not recorded")+")","DEVELOPER_CLAIMED"));

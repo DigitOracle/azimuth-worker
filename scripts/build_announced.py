@@ -326,9 +326,26 @@ def main():
     matched, held, skipped, collide, shown = [], [], [], [], []
     taken = {}
     stats = collections.Counter()
-    for c in cands:
+    acct = []   # the accounting: every candidate in exactly one bucket
+
+    def add_shown(c, bucket, core_key):
+        """a candidate that is shown, unless the same developer already announces the same core name (then it is a duplicate, listed with its reason)."""
+        dk = (c["slug"] or "~" + nk(c["dn"]), core_key)
+        if dk in taken:
+            c["bucket"], c["detail"] = "skipped-duplicate", "duplicate of another announcement by the same developer (kept: %s)" % taken[dk]
+            skipped.append((c["name"], c["dn"], c["detail"], c["t"]))
+            return
+        taken[dk] = c["name"]
+        c["bucket"] = bucket
+        shown.append(c)
+
+    for ci, c in enumerate(cands):
+        c["cid"] = "c%03d" % (ci + 1)
+        c["bucket"], c["detail"], c["slug"], c["dev_display"] = None, "", None, c["dn"]
         name, devn = c["name"], c["dn"]
         if not name:
+            c["bucket"], c["detail"] = "skipped-malformed", "no project name"
+            skipped.append(("(no name)", devn, c["detail"], c["t"]))
             continue
         slug = resolve_dev(devn)
         dna_key = next((d for d in dna if nk(d) == nk(devn) or dna_alias.get(nk(devn)) == d), None)
@@ -340,12 +357,17 @@ def main():
         if not f_name or (len(f_name) >= 16 and " " not in name) or re.search(r"\b(.{6,})\b.*\b\1\b", fold(name).lower()) and len(name) > 40:
             reason = "malformed name or page slug, not a project name"
         elif mo:
-            reason = "outside Dubai (the product holds Dubai districts only); the developer's page says '%s'" % mo.group(1).lower()
+            pl = c["loc_raw"] if c["loc_raw"] and mo.group(1).lower() in c["loc_raw"].lower() and len(c["loc_raw"]) <= 40 else mo.group(1).title()
+            c["od"] = pl
+            add_shown(c, "shown-outside-Dubai", core(name) or f_name)
+            c["detail"] = c["detail"] or "outside Dubai: the developer's page says '%s'" % mo.group(1).lower()
+            continue
         elif f_name in masters or f_name in area_names or f_name in comm_names or f_name in place:
             reason = "the name of a community or area, not a project"
         elif f_name == nk(devn) or f_name == nk(dev_display):
             reason = "the developer's own name (a sheet total or a page title), not a project"
         if reason:
+            c["bucket"], c["detail"] = "skipped-malformed", reason
             skipped.append((name, devn, reason, c["t"]))
             continue
         # M1 / M2
@@ -363,13 +385,18 @@ def main():
                 hit, rule = h3, "M2 register project number carried by the source"
         if hit:
             r = hit[0]
+            c["bucket"], c["detail"] = "matched", rule + " -> " + ("PN" + str(r["project_number"]) if r["project_number"] else r["key"])
             matched.append((name, devn, rule, "PN" + str(r["project_number"]) if r["project_number"] else r["key"], r["name"], c["t"]))
             continue
         # the same exact name is on the register but the register company is not provably this developer's: NOT a match (a bare name is never enough), and NOT shown as 'not registered' either,
         # because the register does hold a project of that very name. Held and listed for Kendall (announced_name_collisions.csv).
         other = [r for r in reg_full.get(f_name, [])]
         if other:
-            collide.append((name, devn, "PN" + str(other[0]["project_number"]) if other[0]["project_number"] else other[0]["key"], other[0]["name"], other[0].get("developer_register", "")))
+            kk = "PN" + str(other[0]["project_number"]) if other[0]["project_number"] else other[0]["key"]
+            collide.append((name, devn, kk, other[0]["name"], other[0].get("developer_register", "")))
+            c["pm"] = {"n": other[0]["name"], "k": kk}
+            add_shown(c, "shown-possible-match", core(name) or f_name)
+            c["detail"] = c["detail"] or "same exact name on the register (%s %s), developer not confirmed" % (kk, other[0]["name"])
             continue
         # HELD: same developer, same core name (or same base after dropping a trailing phase number)
         cc = core(name)
@@ -380,14 +407,13 @@ def main():
                     ch = [r for r in rows if same_dev(r, slug, dev_display, dna_key, name)]
                     break
         if ch:
-            held.append((name, devn, "PN" + str(ch[0]["project_number"]) if ch[0]["project_number"] else ch[0]["key"], ch[0]["name"], c["t"]))
+            kk = "PN" + str(ch[0]["project_number"]) if ch[0]["project_number"] else ch[0]["key"]
+            held.append((name, devn, kk, ch[0]["name"], c["t"]))
+            c["pm"] = {"n": ch[0]["name"], "k": kk}
+            add_shown(c, "shown-possible-match", cc or f_name)
+            c["detail"] = c["detail"] or "same developer, same core name as register project %s %s" % (kk, ch[0]["name"])
             continue
-        dk = (slug or "~" + nk(devn), cc or f_name)
-        if dk in taken:
-            skipped.append((name, devn, "duplicate of another announcement by the same developer (kept: %s)" % taken[dk], c["t"]))
-            continue
-        taken[dk] = name
-        shown.append(c)
+        add_shown(c, "shown", cc or f_name)
 
     # ---------------------------------------------------------------- build the file
     d = collections.defaultdict(lambda: collections.defaultdict(list))
@@ -399,7 +425,10 @@ def main():
         if units_of(c["u"]) and ucount[(c["slug"], units_of(c["u"]))] >= 3:
             c["u"] = None
             dropped_units += 1
-        c["a"], dist = locate(c["name"], c["loc_raw"], c["loc_title"])
+        if c.get("od"):
+            c["a"], dist = "", None      # outside Dubai: no district, no map position; the label carries the place the developer gives
+        else:
+            c["a"], dist = locate(c["name"], c["loc_raw"], c["loc_title"])
         if dist:
             n_dist += 1
         e = {"id": "ann-%s-%s" % (c["slug"] or nk(c["dn"]), nk(c["name"]))[:90], "n": c["name"], "e": "DEVELOPER_CLAIMED", "dn": c["dev_display"] if c["slug"] else c["dn"], "t": c["t"]}
@@ -417,6 +446,10 @@ def main():
             e["url"] = c["url"]
         if c["f"]:
             e["f"] = c["f"]
+        if c.get("od"):
+            e["od"] = c["od"]
+        if c.get("pm"):
+            e["pm"] = c["pm"]
         # lw = 'listed, no register entry found' wording: a handover year of 2025 or earlier (already built, so 'not yet registered' would be wrong), or a hotel, mall or staff-accommodation type by name
         my = re.search(r"\b(20\d\d)\b", str(c["ho"] or ""))
         if (my and int(my.group(1)) <= 2025) or re.search(r"\b(hotel|resort|mall|staff accommodation)\b", c["name"], re.I):
@@ -431,7 +464,7 @@ def main():
     with_profile = sum(len(l) for dev, ds in out.items() if not dev.startswith("~") for l in ds.values())
     by_dev = collections.Counter({dev: sum(len(l) for l in ds.values()) for dev, ds in out.items()})
     meta = {"built": a.built, "count": total, "label": LABEL, "rule": "DEVELOPER_CLAIMED only; matched/held/skipped as described in scripts/build_announced.py", "register": "Land Department project register extract 15 Jun 2026 + delta 1 Sep 2026 + sales/building-register-only projects (3,915 rows)",
-            "candidates": len(cands), "matched": len(matched), "held_possible_register_match": len(held), "held_same_name_developer_unconfirmed": len(collide), "skipped": len(skipped), "shown": total, "with_profile": with_profile, "without_profile": total - with_profile,
+            "candidates": len(cands), "buckets": dict(sorted(collections.Counter(c["bucket"] for c in cands).items())), "matched": len(matched), "shown": total, "with_profile": with_profile, "without_profile": total - with_profile,
             "in_a_district": n_dist, "area_text_only": total - n_dist, "units_dropped_page_level_figure": dropped_units, "label_listed": "Listed by the developer, no register entry found", "listed_wording": sum(1 for ds in out.values() for l in ds.values() for e in l if e.get("lw")), "index_generated": IX.get("generated"), "index_as_of": IX.get("as_of"),
             "no_profile": sorted(dev[1:] for dev in out if dev.startswith("~"))}
     res = {"meta": meta, "d": out}
@@ -448,6 +481,13 @@ def main():
     wcsv("announced_held.csv", ["project", "developer", "register_key_possible", "register_name_possible", "source"], held)
     wcsv("announced_skipped.csv", ["project", "developer", "reason", "source"], skipped)
     wcsv("announced_name_collisions.csv", ["project", "developer", "register_key_same_name", "register_name", "register_developer"], collide)
+    assert all(c["bucket"] for c in cands), "a candidate has no bucket"
+    # the accounting: every candidate in exactly one bucket (matched / shown / shown-outside-Dubai / shown-possible-match / skipped-duplicate / skipped-malformed)
+    with open(os.path.join(os.path.dirname(a.out), "announced_accounting.csv"), "w", encoding="utf-8-sig", newline="") as fh:
+        w = csv.writer(fh, lineterminator="\n")
+        w.writerow(["candidate", "source", "developer", "project", "bucket", "detail"])
+        for c in cands:
+            w.writerow([c["cid"], "availability sheet" if c["t"] == "s" else "developer web page", c["dn"], c["name"], c["bucket"], c["detail"]])
 
     # ---------------------------------------------------------------- search entries (the Find page; no position is ever invented, so no plot feature)
     items = []
@@ -455,8 +495,9 @@ def main():
         for dist in sorted(out[dev]):
             for e in out[dev][dist]:
                 it = {"n": e["n"], "t": "development", "ann": 1}
-                if e.get("lw"):
-                    it["lw"] = 1
+                for fl in ("lw", "od", "pm"):
+                    if e.get(fl):
+                        it[fl] = 1
                 if not dev.startswith("~"):
                     it["dev"] = dev
                 if e.get("a"):
@@ -470,7 +511,7 @@ def main():
     with open(a.search_out, "w", encoding="utf-8", newline="\n") as fh:
         json.dump(sres, fh, ensure_ascii=False, separators=(",", ":"))
 
-    print(json.dumps({"candidates": len(cands), "from_dna_portfolios": dna_total, "portfolio_files_only": file_only, "sheets": len(sheets), "matched": len(matched), "held": len(held), "skipped": len(skipped),
+    print(json.dumps({"candidates": len(cands), "from_dna_portfolios": dna_total, "portfolio_files_only": file_only, "sheets": len(sheets), "buckets": meta["buckets"], "matched": len(matched), "skipped": len(skipped),
                       "skipped_by_reason": collections.Counter(s[2].split(" (")[0] for s in skipped), "name_collisions": len(collide), "shown": total, "with_profile": with_profile, "in_a_district": n_dist,
                       "top15": by_dev.most_common(15), "no_profile": meta["no_profile"], "bytes": os.path.getsize(a.out), "search_bytes": os.path.getsize(a.search_out)}, indent=1, default=str))
 

@@ -21,6 +21,8 @@ export function cleanAnnounced(d) {
       for (const e of list) {
         if (!e || typeof e !== "object" || typeof e.n !== "string" || !e.n || e.e !== "DEVELOPER_CLAIMED") continue;
         for (const k of ["p", "pp", "key", "pn", "sales", "ppsm", "n_sales", "price"]) delete e[k];
+        if (e.pm && !(typeof e.pm === "object" && typeof e.pm.n === "string" && typeof e.pm.k === "string")) delete e.pm;   // v397d - the register project of the same name (a possible match), shown as a plain line
+        if (e.od != null && typeof e.od !== "string") delete e.od;                                                        // v397d - outside Dubai: the place the developer gives
         ok.push(e);
       }
       if (ok.length) { (out[dev] = out[dev] || {})[dist] = ok; n += ok.length; }
@@ -44,7 +46,7 @@ export function mergeSearchItems(indexText, extraText) {
     const k = nk(it.n) + "|" + (it.dev || "");
     if (have.has(k)) continue;
     have.add(k);
-    add.push({ n: it.n, t: "development", ann: 1, dev: it.dev || undefined, a: typeof it.a === "string" ? it.a : undefined, units: typeof it.units === "number" ? it.units : undefined });
+    add.push({ n: it.n, t: "development", ann: 1, lw: it.lw === 1 ? 1 : undefined, od: it.od === 1 ? 1 : undefined, pm: it.pm === 1 ? 1 : undefined, dev: it.dev || undefined, a: typeof it.a === "string" ? it.a : undefined, units: typeof it.units === "number" ? it.units : undefined });
   }
   if (!add.length) return null;
   return JSON.stringify(Object.assign({}, ix, { n: (ix.n || ix.items.length) + add.length, items: ix.items.concat(add) }));
