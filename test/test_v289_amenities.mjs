@@ -95,28 +95,25 @@ const Q = "mode=rent&beds=2,3&type=any&max=240000&areas=" + D + "&musts=pets,com
 const j = await brief(Q);
 const by = {}; for (const r of j.results || []) by[r.name] = r;
 const rich = by["DAMAC HILLS -  RICHMOND"];
-ok(!!rich && crit(rich, "pets").v === true && crit(rich, "pets").level === "community"
-  && crit(rich, "pets").src.startsWith("Pet-friendly community (DAMAC Hills, with dedicated pet parks) - a community fact, per DAMAC's own DAMAC Hills page (2026-09-18): “With dedicated pet parks, DAMAC Hills is a haven for pet owners”")   // v310: with no position it also says it is the community's
-  && crit(rich, "pets").unplaced === true,
-  "A1 gzipped file read: pets answered yes, a community fact, with DAMAC's page and the quote", JSON.stringify(rich && crit(rich, "pets")));
-ok(rich && /Community pools \(DAMAC Hills/.test(crit(rich, "community_pool").src) && /a community fact, per DAMAC's own DAMAC Hills page/.test(crit(rich, "community_pool").src)
-  && crit(rich, "gym").v === true && crit(rich, "parking").v === true && crit(rich, "parking").level === "building" && /a building fact, per the Land Department buildings register \(2026-09-25\)/.test(crit(rich, "parking").src),
-  "A1b community pool and gym are community facts; villa parking is a building fact from the buildings register", JSON.stringify(rich && rich.criteria));
-ok(rich && /9 parks, 2 playgrounds, 1 dog park/.test(crit(rich, "pets").detail || ""), "A1c the dog-walking facts ride along as detail");
-ok(rich && crit(rich, "private_pool").v === null && /^Not known/.test(crit(rich, "private_pool").src), "A1d private pool: nothing says, so still NOT KNOWN");
+ok(!!rich && crit(rich, "gym").v === true && crit(rich, "gym").level === "community"
+  && crit(rich, "gym").src.startsWith("Community gyms (DAMAC Hills) - a community fact, per DAMAC's own DAMAC Hills page (2026-09-18)"),
+  "A1 gzipped file read: gym answered yes, a community fact, with DAMAC's page", JSON.stringify(rich && crit(rich, "gym")));
+ok(rich && crit(rich, "parking").v === true && crit(rich, "parking").level === "building" && /a building fact, per the Land Department buildings register \(2026-09-25\)/.test(crit(rich, "parking").src),
+  "A1b villa parking is a building fact from the buildings register", JSON.stringify(rich && rich.criteria));
+ok(rich && !(rich.criteria || []).some((c) => ["pets", "community_pool", "private_pool", "modern", "long_term"].includes(c.k)), "A1c v374: pets, community pool, private pool, modern and long-term are not answered at all (pulled)");
 const carson = by["DAMAC HILLS - CARSON"];
-ok(carson && crit(carson, "community_pool").v === true && /3 swimming pools \(a building fact\)$/.test(crit(carson, "community_pool").src) && crit(carson, "community_pool").level === "building",
-  "A2 an answer the unit-mix record already gave stands, and says it is a building fact", JSON.stringify(carson && crit(carson, "community_pool")));
-ok(carson && crit(carson, "pets").v === true && crit(carson, "pets").level === "community", "A3 matched by our key (damachills:1003)");
+ok(carson && crit(carson, "parking").v === true && crit(carson, "parking").level === "building",
+  "A2 an answer the unit-mix record already gave (400 car parks) stands, and says it is a building fact", JSON.stringify(carson && crit(carson, "parking")));
+ok(carson && crit(carson, "gym").v === true && crit(carson, "gym").level === "community", "A3 matched by our key (damachills:1003)");
 const twin = by["DAMAC HILLS - TWIN"];
-ok(twin && crit(twin, "pets").v === null, "A3b a name two homes in the file share answers neither", JSON.stringify(twin && crit(twin, "pets")));
+ok(twin && crit(twin, "gym").v === null, "A3b a name two homes in the file share answers neither", JSON.stringify(twin && crit(twin, "gym")));
 const orchid = by["DAMAC HILLS - ORCHID"];
 ok(orchid && crit(orchid, "gym").v === true && crit(orchid, "gym").level === "building", "A3c matched by the exact name when the key is not in the file (Orchid: a gymnasium unit)");
 ok(Object.keys(by).length === 5, "A4a not known never leaves a home out: all five listed with four musts", Object.keys(by).join(" | "));
 const jb = await brief("mode=rent&beds=2&type=apartment&max=240000&areas=" + D + "&musts=balcony&limit=20");
 ok(!(jb.results || []).some((r) => r.name === "DAMAC HILLS - CARSON") && (jb.results || []).some((r) => r.name === "DAMAC HILLS - ORCHID") && ((await briefO("mode=rent&beds=2&type=apartment&max=240000&areas=" + D + "&musts=balcony&limit=20")).notes || []).some((n) => /1 building left out because a source says a must-have is missing/.test(n)),
   "A4b a file NO is definite: balcony a must leaves Carson out (units register: no balcony area on its flats); not-known Orchid stays", JSON.stringify((jb.results || []).map((r) => r.name)));
-ok(rich && /pet-friendly \(dog walks, play areas\): yes \(a community fact, per DAMAC's own DAMAC Hills page\)/.test(rich.why) && /parking: yes \(a building fact, per the Land Department buildings register\)/.test(rich.why),
+ok(rich && /gym: yes \(a community fact, per DAMAC's own DAMAC Hills page\)/.test(rich.why) && /parking: yes \(a building fact, per the Land Department buildings register\)/.test(rich.why) && !/pet-friendly|pool/i.test(rich.why),
   "A5 the reasons name the level and the source of each must met", rich && rich.why);
 ok(((await briefO(Q)).notes || []).some((n) => /amenity facts file for DAMAC Hills/.test(n) && /building fact/.test(n) && /community fact/.test(n)), "A5b the notes say where the facts come from and what the levels mean");
 
@@ -125,16 +122,16 @@ const pq = parseQuery(new URL("https://x/brief_pdf?kind=onesheet&keys=dld:damach
 const C = await loadContext(env, pq, { need: { avail: false } });
 const rr = C.recs.find((r) => r.key === "dld:damachillsrichmond"), rc = C.recs.find((r) => r.key === "damachills:1003");
 const rows = rr ? criteriaRows(rr, pq) : [];
-ok(rows.length === 5 && rows.find((x) => x[0].startsWith("pet")) && rows.find((x) => x[0].startsWith("pet"))[2].src === crit(rich, "pets").src
-  && rows.find((x) => x[0] === "parking")[2].src === crit(rich, "parking").src && rows.find((x) => x[0] === "community pool")[2].v === true,
+ok(rows.length === 2 && rows.find((x) => x[0] === "gym")[2].src === crit(rich, "gym").src
+  && rows.find((x) => x[0] === "parking")[2].src === crit(rich, "parking").src && !rows.some((x) => /pet|pool/.test(x[0])),
   "A6 the PDF rows give the same answers and the same source words as the list", JSON.stringify(rows.map((x) => [x[0], x[2].v, x[2].src])));
-ok(rc && rc.crit.pets.v === true && rc.crit.community_pool.level === "building", "A6b the PDF reaches a bound building by its key too");
+ok(rc && rc.crit.gym.v === true && rc.crit.parking.level === "building", "A6b the PDF reaches a bound building by its key too");
 // the one-sheet card (Kendall's screenshot, 2 Oct: "Amenities to follow" and "community pool: not known · pet-friendly: not known")
 const sheet = oneSheetHtml(C, pq);
 const card1 = sheet.split('class="bcard"')[1] || "";
-ok(!/Amenities to follow/.test(card1) && /Community \(DAMAC Hills\): community pool, pet-friendly, gym &middot; This building: parking/.test(card1)
-  && /&#10003; pet-friendly/.test(card1) && /&#10003; community pool/.test(card1) && !/pet-friendly[^&<]*: not known/.test(card1) && !/community pool: not known/.test(card1),
-  "A6c the one-sheet card: no 'Amenities to follow', no 'not known' for pool or pets - the facts by level", card1.replace(/<img[^>]*>/g, "").slice(0, 1500));
+ok(!/Amenities to follow/.test(card1) && /Community \(DAMAC Hills\): gym &middot; This building: parking/.test(card1)
+  && /&#10003; gym/.test(card1) && !/pet-friendly|community pool|private pool/i.test(card1),
+  "A6c the one-sheet card: no 'Amenities to follow'; the facts by level for gym and parking only (no pets, no pools)", card1.replace(/<img[^>]*>/g, "").slice(0, 1500));
 ok(/No metro nearby \(DAMAC Hills\) - a community fact, per DAMAC Properties - DAMAC Hills Area Guide/.test(card1) && !/Metro distance to follow/.test(card1),
   "A6d a villa cluster with no map position: the card gives the file's metro fact, not 'Metro distance to follow'");
 
@@ -142,11 +139,11 @@ ok(/No metro nearby \(DAMAC Hills\) - a community fact, per DAMAC Properties - D
 store.delete("img_amenities_" + D);
 const j0 = await brief(Q);
 const r0 = (j0.results || []).find((r) => r.name === "DAMAC HILLS -  RICHMOND");
-ok(r0 && crit(r0, "pets").v === null && crit(r0, "community_pool").v === null && crit(r0, "gym").v === null && !(j0.notes || []).some((n) => /amenity facts file/.test(n)),
-  "A7 NEGATIVE CONTROL: with img_amenities_damachills removed, pets, community pool and gym go back to NOT KNOWN", JSON.stringify(r0 && r0.criteria));
+ok(r0 && crit(r0, "gym").v === null && !(j0.notes || []).some((n) => /amenity facts file/.test(n)),
+  "A7 NEGATIVE CONTROL: with img_amenities_damachills removed, gym goes back to NOT KNOWN", JSON.stringify(r0 && r0.criteria));
 store.set("img_amenities_" + D, JSON.stringify(AMF));                            // plain JSON works too
 const jp = await brief(Q);
-ok(((jp.results || []).find((r) => r.name === "DAMAC HILLS -  RICHMOND") || {}).criteria?.find((c) => c.k === "pets")?.v === true, "A7b the same file stored as plain JSON is read");
+ok(((jp.results || []).find((r) => r.name === "DAMAC HILLS -  RICHMOND") || {}).criteria?.find((c) => c.k === "gym")?.v === true, "A7b the same file stored as plain JSON is read");
 
 // unit: amenSrc wording and the OSM attribution
 ok(amenSrc({ say: "Community pool (X): 1 pool mapped", level: "community", source_name: "OpenStreetMap", as_of: "2026-10-02", src: "osm" }) === "Community pool (X): 1 pool mapped - a community fact, per OpenStreetMap (2026-10-02). © OpenStreetMap contributors",
@@ -159,14 +156,14 @@ if (fs.existsSync(realA) && fs.existsSync(realRI)) {
   store.set("img_rent_index", fs.readFileSync(realRI, "utf8"));
   const um = path.join(NAJ, "board", "unitmix_damachills.json"); if (fs.existsSync(um)) store.set("img_unitmix_damachills", fs.readFileSync(um, "utf8"));
   store.set("img_amenities_damachills", gz(JSON.parse(fs.readFileSync(realA, "utf8"))));
-  const k = await brief("mode=rent&beds=1,2,3&type=any&max=400000&areas=damachills&musts=pets,community_pool,gym,parking&nice=private_pool&limit=50");
+  const k = await brief("mode=rent&beds=1,2,3&type=any&max=400000&areas=damachills&musts=gym,parking&nice=private_pool&limit=50");
   const R = k.results || [];
   console.log("  REAL DAMAC Hills: " + R.length + " results of " + k.total_matched + " matched");
   const ans = (kk) => R.filter((r) => crit(r, kk) && crit(r, kk).v != null).length;
-  ok(R.length >= 10 && ["pets", "community_pool", "gym", "parking"].every((kk) => ans(kk) === R.length),
-    "A8 REAL: every DAMAC Hills result answers pets, community pool, gym and parking (" + ["pets", "community_pool", "gym", "parking"].map((kk) => kk + " " + ans(kk) + "/" + R.length).join(", ") + ")",
-    JSON.stringify(R.filter((r) => ["pets", "community_pool", "gym", "parking"].some((kk) => crit(r, kk).v == null)).map((r) => r.name + ": " + r.criteria.map((c) => c.k + "=" + c.v).join(","))));
-  ok(R.every((r) => ["pets", "community_pool", "gym", "parking"].every((kk) => / - a (building|community|cluster) fact, per /.test(crit(r, kk).src) || /\(a building fact\)$/.test(crit(r, kk).src))),
+  ok(R.length >= 10 && ["gym", "parking"].every((kk) => ans(kk) === R.length),
+    "A8 REAL: every DAMAC Hills result answers gym and parking (" + ["gym", "parking"].map((kk) => kk + " " + ans(kk) + "/" + R.length).join(", ") + ")",
+    JSON.stringify(R.filter((r) => ["gym", "parking"].some((kk) => crit(r, kk).v == null)).map((r) => r.name + ": " + r.criteria.map((c) => c.k + "=" + c.v).join(","))));
+  ok(R.every((r) => ["gym", "parking"].every((kk) => / - a (building|community|cluster) fact, per /.test(crit(r, kk).src) || /\(a building fact\)$/.test(crit(r, kk).src))),
     "A8b REAL: every answer says its level and its source");
   ok(R.every((r) => !/propertyfinder|bayut|dubizzle/i.test(JSON.stringify(r.criteria))), "A8c REAL: no listing portal anywhere in the answers");
 } else console.log("  (A8 skipped: no " + realA + ")");

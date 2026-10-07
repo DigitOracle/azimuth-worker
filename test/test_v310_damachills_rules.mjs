@@ -149,15 +149,16 @@ ok((B.results || []).length === 4 && by["DAMAC HILLS -  TOPANGA"] && by["DAMAC H
 
 const top = by["DAMAC HILLS -  TOPANGA"], ric = by["DAMAC HILLS -  RICHMOND"], sil = by["DAMAC HILLS - SILVER SPRINGS"], k15 = by["Villa K015B, Land 740, DAMAC Hills - Piccadilly Green"];
 // R1 on the list: Richmond's homes are 40 m from Malibu Bay (a yes, with the distance); Topanga's are 1 km+ from it (the community's)
-ok(crit(ric, "community_pool").v === true && crit(ric, "community_pool").level === "near" && /Malibu Bay, about \d+ m from this home/.test(crit(ric, "community_pool").src), "R1 list: Richmond (homes 40 m from the pool) - community pool yes, close by, named", JSON.stringify(crit(ric, "community_pool")));
-ok(crit(top, "community_pool").v === null && crit(top, "community_pool").community_fact && crit(top, "community_pool").community_fact.m > 500 && crit(top, "pets").v === null && crit(top, "pets").community_fact.name === "Central Bark", "R1 list: Topanga (1 km from the pool, 400 m from nothing) - pool and dog park are the community's, not yes", JSON.stringify([crit(top, "community_pool"), crit(top, "pets")]));
+// v374: community pool, pets and modern are not offered, so the list carries no such row (the R1/R3 rules themselves are proven at unit level above)
+ok(!crit(ric, "community_pool") && !crit(ric, "pets") && !crit(ric, "modern") && !crit(top, "community_pool") && !crit(top, "pets"), "R1/R3 list: no community pool, pets or modern criterion on any home (pulled)", JSON.stringify(ric.criteria));
+// (Topanga: pool and dog park are no longer rows at all - see above)
 // R2 on the list: the address-like 'gym' 25 m from Topanga's homes is not counted; the real gym is 600 m off
 ok(crit(top, "gym").v === null && crit(top, "gym").community_fact && crit(top, "gym").community_fact.name === "Damac Hills - Gym" && !/307/.test(JSON.stringify(crit(top, "gym"))), "R2 list: the address-like 'Damac 307 Rochester' is never Topanga's gym", JSON.stringify(crit(top, "gym")));
-ok(crit(sil, "community_pool").v === true && crit(sil, "community_pool").level !== "near" && crit(sil, "community_pool").community_fact === undefined || crit(sil, "community_pool").v === null, "R1 list: Silver Springs is measured from its own homes", JSON.stringify(crit(sil, "community_pool")));
+// (Silver Springs: no pool row - pulled)
 // metro: a villa community placed by its mapped homes gets the straight-line answer - no station within 1 km is a real "no" (the RTA list is the whole network)
 ok(crit(top, "metro").v === false && crit(ric, "metro").v === false && crit(sil, "metro").v === false && crit(k15, "metro").v === null, "list: a villa community with mapped homes answers metro 'no' (8 km); an option with no position of its own stays unanswered", JSON.stringify([crit(top, "metro"), crit(k15, "metro")]));
 // R3 on the list
-ok(crit(top, "modern").v === false && /completed 2017/.test(crit(top, "modern").src) && /Dubai Municipality/.test(crit(top, "modern").src) && crit(ric, "modern").v === true, "R3 list: Topanga 2017 is not newer, Richmond 2024 is - villa communities answer from the Dubai Municipality year", JSON.stringify([crit(top, "modern"), crit(ric, "modern")]));
+// (modern row pulled; the Dubai Municipality year rule R3 is proven at unit level)
 // R4 on the list
 ok(ric.evidence.few === true && ric.evidence.say === "based on only 4 lettings" && top.evidence.few === false && top.evidence.say === "13 recent lettings (5 new)", "R4 list: four lettings says 'based on only 4 lettings'; thirteen says '13 recent lettings (5 new)'", JSON.stringify([ric.evidence.say, top.evidence.say]));
 // R5 on the list
@@ -184,15 +185,14 @@ for (const [k, label] of [["dld:damachillstopanga", "Topanga"], ["dld:damachills
 }
 {
   const t = strip((await doc("dossier", "dld:damachillstopanga")).h), r = strip((await doc("dossier", "dld:damachillsrichmond")).h), s = strip((await doc("dossier", "dld:damachillssilversprings")).h), c = strip((await doc("dossier", "dld:damachillspiccadillygreenk015b")).h);
-  ok(/In the wider community: community pool \(nearest about [\d.]+ (km|m) away\)/.test(t) && !/&#10003; Community pool/.test(t) && !/\u2713 Community pool/.test(t), "R1 Topanga's dossier: the pool is 'in the wider community', with how far - not ticked as the home's own", (t.match(/AMENITIES.{0,300}/) || [])[0]);
-  ok(/Community pool \(close by\) about \d+ m/.test(r.replace(/\s+/g, " ")) && /in the community.{0,40}Central Bark|Pet-friendly/.test(r), "R1 Richmond's dossier: 'Community pool (close by) about 50 m'", (r.match(/AMENITIES.{0,300}/) || [])[0]);
+  ok(!/community pool|Pet-friendly|Newer build/i.test(t) && !/Community pool \(close by\)|Pet-friendly/i.test(r.replace(/\s+/g, " ")), "R1 v374: neither dossier carries a community pool, pet or newer-build line (pulled)", (t.match(/AMENITIES.{0,300}/) || [])[0]);
   ok(!/Damac 307/.test(t) && !/307 Rochester/.test(t + r), "R2 no dossier names the address-like 'gym'");
   ok(/based on only 4 lettings/.test(r) && !/MIDDLE HALF/.test(r.replace(/\s+/g, " ")) && /AED 183,000/.test(r) && !/AED 183,120/.test(r), "R4 Richmond's dossier: 'based on only 4 lettings', AED 183,000, no middle half", r.slice(r.indexOf("TYPICAL"), r.indexOf("TYPICAL") + 300));
   ok(/MIDDLE HALF/.test(t) && /13 \(5 new\)/.test(t) && /13 recent lettings \(5 new\)/.test(t), "R4 Topanga's dossier: the middle half and '13 (5 new)' stay", t.slice(t.indexOf("TYPICAL"), t.indexOf("TYPICAL") + 300));
   ok(!/sq ft/.test(s.slice(0, s.indexOf("Layouts") > 0 ? s.indexOf("Layouts") : 4000).replace(/\s+/g, " ").match(/TYPICAL SIZE[^A-Z]*/) || [""]) && !/680|7,3\d\d sq ft/.test(s), "R5 Silver Springs' dossier: no 680 m2 (7,319 sq ft) anywhere", (s.match(/[\d,]+ sq ft/g) || []).join(" "));
   ok(/lettings that started between 18 Jul 2026 and 16 Sep 2026/.test(t) && !/rents-secret-file-name/.test(t + r + s + c), "R6 dossiers: the window with its dates (contract starts); no file name on a client document", (t.match(/Rents:[^.]*/) || [])[0]);
   ok(/from the whole of DAMAC Hills - Piccadilly Green \(not this home alone\)/.test(c) && /community's rent evidence, not this home's own/.test(c), "R7 K015B's dossier: the evidence is the community's, said twice", (c.match(/whole of[^)]*\)/) || [])[0]);
-  ok(/completed 2017|Newer build/.test(t) && !/not known/i.test(t), "R3 Topanga's dossier shows its newer-build answer from the Dubai Municipality year", (t.match(/Newer build[^·]{0,60}/) || [])[0]);
+  ok(!/not known/i.test(t) && !/Newer build/.test(t), "R3 v374: Topanga's dossier shows no newer-build line and no 'not known'");
 }
 {
   const o = await doc("onesheet", "dld:damachillstopanga,dld:damachillsrichmond,dld:damachillssilversprings,dld:damachillspiccadillygreenk015b");

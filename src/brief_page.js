@@ -80,12 +80,10 @@ const CORRIDOR_SAY = { "Meydan & MBR": "Meydan & Mohammed Bin Rashid City" };
 // v282: the client's criteria (Contract A's list, src/brief.js), each asked three ways: must / nice to have / don't care
 export const BRIEF_WANTS = BRIEF_CRITERIA;
 // v287 (Kendall, 1 Oct 2026: "add icons or emojis"): one emoji per must-have, on the page only (the PDF and API keep plain words)
-const WANT_ICON = { private_pool: "🏊", community_pool: "🌊", pets: "🐕", modern: "✨", long_term: "🗓️", metro: "🚇", schools: "🏫", gym: "🏋️", parking: "🅿️", balcony: "🌇" };
+const WANT_ICON = { metro: "🚇", schools: "🏫", gym: "🏋️", parking: "🅿️", balcony: "🌇" };   // v374: the five we can answer; the pulled ones have no chip
 const WANT_KEYS = BRIEF_WANTS.map((m) => m[0]);
-const WANT_ALIAS = { pool: "community_pool", new: "modern" };   // a v277 link's chips
 const BEDS = ["studio", "1", "2", "3"];
 const TYPES = ["apartment", "townhouse", "villa", "any"];
-const FURN = ["furnished", "unfurnished", "either"];
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 // JSON for an inline <script>: nothing in the data can close the tag or break the line
@@ -107,13 +105,12 @@ export function briefQuery(sp) {
   let min = num(g("min")), max = num(g("max")), stretch = num(g("stretch"));
   if (min && max && min > max) { const t = min; min = max; max = t; }
   if (!max || stretch <= max) stretch = 0;
-  const furnished = FURN.includes(g("furnished")) ? g("furnished") : "either";
   const areas = list(g("areas").toLowerCase()).filter((s) => /^[a-z0-9]{2,40}$/.test(s)).slice(0, 44);
-  const wants = (k) => list(g(k)).map((m) => WANT_ALIAS[m] || m).filter((m) => WANT_KEYS.includes(m));
+  const wants = (k) => list(g(k)).filter((m) => WANT_KEYS.includes(m));   // v374: an old link's pulled chips (pool, pets, modern...) fall away here
   const musts = [...new Set(wants("musts"))], nice = [...new Set(wants("nice"))].filter((m) => !musts.includes(m));
   let limit = parseInt(g("limit"), 10); limit = isFinite(limit) ? Math.max(1, Math.min(50, limit)) : 10;
   const pick = list(g("pick")).filter((k) => k.length <= 160).slice(0, 50);
-  return { mode, modeSet, beds, bedsSet: !!g("beds"), types, min, max, stretch, furnished, areas, compare: g("compare") !== "0", musts, nice, limit, pick, run: g("run") === "1" };
+  return { mode, modeSet, beds, bedsSet: !!g("beds"), types, min, max, stretch, areas, compare: g("compare") !== "0", musts, nice, limit, pick, run: g("run") === "1" };
 }
 
 async function briefDistricts(env) {
@@ -238,17 +235,15 @@ function briefFormHtml(districts) {
       + '<div class=str><span>stretch up to</span><input class=in id=fstr inputmode=decimal autocomplete=off placeholder="optional, e.g. 300k" aria-label="stretch up to"></div>'
       + '<div class=hint id=fbudh>Type it the way you say it: 65k, 1.2m or 65000. The stretch is the most they would pay for the right home.</div>'
       + '<button type=button class=go id=fnextb>NEXT →</button><div class=msg id=fmsg role=alert></div>')
-    + step(4, "furn", '<div class=q>Furnished?</div>' + seg("ffurn", [["furnished", "Furnished", "🛋️"], ["unfurnished", "Unfurnished", "📦"], ["either", "Either", "🤝"]], "big")
-      + '<div class=hint>The rent register does not record furnishing, so every home shows it as not known; the leasing team confirms it.</div>')
-    + step(5, "where", '<div class=q>Where?</div><div class=lb>DISTRICTS <b id=fdsel>Anywhere in Dubai</b></div>'
+    + step(4, "where", '<div class=q>Where?</div><div class=lb>DISTRICTS <b id=fdsel>Anywhere in Dubai</b></div>'
       + '<div class=chips><button type=button class="chip on" id=fany>Anywhere in Dubai</button></div>'
       + '<input class=in id=fdq type=search autocomplete=off placeholder="find a district: JVC, Marina, Arabian Ranches…" style="margin-top:8px" aria-label="find a district">'
       + '<div class=dl id=fdl>' + groups + '<div class=hint id=fdnone hidden>No district by that name. Clear the search to see them all.</div></div>'
       + '<button type=button class="sw on" id=fcmp aria-pressed=true hidden><i></i><span>Compare these areas side by side</span></button>'
       + '<button type=button class=go id=fnextw>NEXT →</button>')
-    + step(6, "musts", '<div class=q>What <em>matters</em> to them?</div><div class=lb>OPTIONAL <b id=fmustv></b></div><div id=fwant>'
+    + step(5, "musts", '<div class=q>What <em>matters</em> to them?</div><div class=lb>OPTIONAL <b id=fmustv></b></div><div id=fwant>'
       + BRIEF_WANTS.map((m) => "<div class=wr data-k=" + m[0] + "><div class=wl>" + (WANT_ICON[m[0]] ? "<span class=ic aria-hidden=true>" + WANT_ICON[m[0]] + "</span>" : "") + esc(m[1]) + "</div><div class=w3><button type=button data-l=must><span class=ic aria-hidden=true>⭐</span>Must</button><button type=button data-l=nice><span class=ic aria-hidden=true>👍</span>Nice to have</button><button type=button data-l=no>Don’t care</button></div></div>").join("") + "</div>"
-      + '<div class=hint>A home is left out only where a record says no. Where nothing is known, it stays in, marked “not known”.</div>'
+      + '<div class=hint>A home is left out only where a record says no.</div>'
       + '<button type=button class=go id=fgo>SHOW ME THE HOMES →</button><button type=button class="go soft" id=fskip>Skip — nothing in particular</button><div class=msg id=fmsg2 role=alert></div>')
     + "</div>"
     + '<div class=sum id=bsum hidden><span id=bsumt></span><button type=button id=bedit>CHANGE</button></div>';
@@ -312,8 +307,8 @@ var MN={};(B.wants||[]).forEach(function(m){MN[m[0]]=m[1]});
 var PRE={rent:[[0,50000,"up to 50k"],[50000,70000,"50k – 70k"],[70000,100000,"70k – 100k"],[100000,150000,"100k – 150k"],[150000,250000,"150k – 250k"],[250000,0,"250k and up"]],
  buy:[[0,1000000,"under 1M"],[1000000,1500000,"1M – 1.5M"],[1500000,2500000,"1.5M – 2.5M"],[2500000,5000000,"2.5M – 5M"],[5000000,0,"5M and up"]]};
 var VERD={within:"in budget",stretch:"stretch",a_little_above:"a little over budget",above:"over budget",below:"under budget"};
-var STEPS=["mode","beds","budget","furn","where","musts"],NSTEP=STEPS.length;
-var ST={mode:"rent",beds:["1"],types:["any"],min:0,max:0,stretch:0,furnished:"either",areas:[],compare:true,musts:[],nice:[],limit:10};
+var STEPS=["mode","beds","budget","where","musts"],NSTEP=STEPS.length;
+var ST={mode:"rent",beds:["1"],types:["any"],min:0,max:0,stretch:0,areas:[],compare:true,musts:[],nice:[],limit:10};
 var BDEF=!(B.q&&B.q.bedsSet);   // the "1 bedroom" a fresh page starts on is replaced by the first tap, not added to
 var STEP=1,LAST=null,RES=null,SEL={},PICK=null,SEQ=0,JN=0,RUNNING=0,QUEUE=[],JOBS={},TAB=null;
 var PDF_WAIT={dossier:100000,compare:120000,onesheet:100000,pack:170000};
@@ -332,11 +327,11 @@ function budText(st){var t;if(st.min&&st.max)t=fmtAed(st.min)+" to "+short(st.ma
 function perYear(st){return st.mode==="rent"?" a year":""}
 function areasText(st){if(!st.areas.length)return "anywhere in Dubai";var n=st.areas.map(function(s){return DN[s]||s});return n.length>3?n.slice(0,3).join(", ")+" and "+(n.length-3)+" more":n.join(", ")}
 function cmpOn(st){return !!st.compare&&st.areas.length>=2&&st.areas.length<=3}
-function summary(st){return (st.mode==="rent"?"To rent":"To buy")+": "+bedsWord(st.beds)+typesWord(st.types)+", "+budText(st)+perYear(st)+(st.furnished==="either"?"":", "+st.furnished)+", "+areasText(st)+(cmpOn(st)?" side by side":"")
+function summary(st){return (st.mode==="rent"?"To rent":"To buy")+": "+bedsWord(st.beds)+typesWord(st.types)+", "+budText(st)+perYear(st)+", "+areasText(st)+(cmpOn(st)?" side by side":"")
   +(st.musts.length?", must: "+st.musts.map(function(m){return MN[m]||m}).join(", "):"")+(st.nice.length?", nice to have: "+st.nice.map(function(m){return MN[m]||m}).join(", "):"")}
 function qs(st,key){var p=[];if(key!=null)p.push("key="+encodeURIComponent(key));p.push("mode="+st.mode,"beds="+st.beds.join(","),"min="+(st.min||0));if(st.max)p.push("max="+st.max);if(st.stretch&&st.max)p.push("stretch="+st.stretch);
-  p.push("areas="+st.areas.map(encodeURIComponent).join(","),"type="+st.types.join(","),"furnished="+st.furnished,"musts="+st.musts.join(","),"nice="+st.nice.join(","));if(cmpOn(st))p.push("compare=1");p.push("limit="+st.limit);return p.join("&")}
-function clone(st){return {mode:st.mode,beds:st.beds.slice(),types:st.types.slice(),min:st.min,max:st.max,stretch:st.stretch,furnished:st.furnished,areas:st.areas.slice(),compare:st.compare,musts:st.musts.slice(),nice:st.nice.slice(),limit:st.limit}}
+  p.push("areas="+st.areas.map(encodeURIComponent).join(","),"type="+st.types.join(","),"musts="+st.musts.join(","),"nice="+st.nice.join(","));if(cmpOn(st))p.push("compare=1");p.push("limit="+st.limit);return p.join("&")}
+function clone(st){return {mode:st.mode,beds:st.beds.slice(),types:st.types.slice(),min:st.min,max:st.max,stretch:st.stretch,areas:st.areas.slice(),compare:st.compare,musts:st.musts.slice(),nice:st.nice.slice(),limit:st.limit}}
 function day(d){var M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];d=String(d||"");return d.length>=10?(+d.slice(8,10))+" "+M[+d.slice(5,7)-1]+" "+d.slice(0,4):d}
 
 // ---- the steps: one question per screen ----
@@ -351,7 +346,7 @@ function showStep(n){STEP=Math.max(1,Math.min(NSTEP,n));each(STEPS,function(s,i)
   $("bform").hidden=false;$("bsum").hidden=true;$("bsub").hidden=false;
   try{window.scrollTo(0,0)}catch(e){}}
 function wantOf(k){return has(ST.musts,k)?"must":(has(ST.nice,k)?"nice":"no")}
-function draw(){segOn("fmode",[ST.mode]);segOn("fbeds",ST.beds);segOn("ftype",ST.types);segOn("ffurn",[ST.furnished]);
+function draw(){segOn("fmode",[ST.mode]);segOn("fbeds",ST.beds);segOn("ftype",ST.types);
   $("ftypev").textContent=has(ST.types,"any")?"Any":ST.types.join(", ");
   $("fbudl").textContent=ST.mode==="rent"?"RENT A YEAR (AED)":"PRICE (AED)";
   $("fbudq").innerHTML=ST.mode==="rent"?"What <em>rent</em> a year?":"What <em>price</em>?";
@@ -374,7 +369,7 @@ function readBudget(){var a=parseAed($("fmin").value),b=parseAed($("fmax").value
   return ""}
 function msg(t){$("fmsg").textContent=t||"";$("fmsg2").textContent="";$("fmsgb").textContent=""}
 function applyQ(q){if(!q)return;ST.mode=q.mode||"rent";ST.beds=(q.beds&&q.beds.length?q.beds:["1"]).slice();ST.types=(q.types&&q.types.length?q.types:["any"]).slice();ST.min=q.min||0;ST.max=q.max||0;ST.stretch=q.stretch||0;
-  ST.furnished=q.furnished||"either";ST.areas=(q.areas||[]).filter(function(s){return !!DN[s]});ST.compare=q.compare!==false;ST.musts=(q.musts||[]).slice();ST.nice=(q.nice||[]).slice();ST.limit=q.limit||10;
+  ST.areas=(q.areas||[]).filter(function(s){return !!DN[s]});ST.compare=q.compare!==false;ST.musts=(q.musts||[]).slice();ST.nice=(q.nice||[]).slice();ST.limit=q.limit||10;
   $("fmin").value=short(ST.min);$("fmax").value=short(ST.max);$("fstr").value=short(ST.stretch);PICK=q.pick&&q.pick.length?q.pick:null}
 // the brief, folded to one line above the list, with CHANGE to reopen the steps
 function fold(){$("bform").hidden=true;$("bsub").hidden=true;$("bsum").hidden=false;$("bsumt").textContent=summary(LAST||ST)}
@@ -409,18 +404,16 @@ function facts(r){var e=r.evidence||{},sale=e.basis==="dld_sales",p=[];
   if(e.home==="villa")p.push("villa or townhouse");if(e.beds_basis==="size_3plus")p.push("3 or more bedrooms, read from the size");
   if(e.sqm)p.push("about "+Math.round(e.sqm)+" m²");if(e.latest)p.push("latest "+day(e.latest));
   return p.length?"<div class=r4>"+esc(p.join(" · "))+"</div>":""}
-function mark(v){return v===true?"<span class=\"mk y\">✓</span>":(v===false?"<span class=\"mk n\">✗</span>":"<span class=\"mk u\">not known</span>")}
+function mark(v){return v===true?"<span class=\"mk y\">✓</span>":(v===false?"<span class=\"mk n\">✗</span>":"")}
 // v282: the client's criteria, each with its answer and, folded underneath, where the answer comes from
 function crits(r,st){var cs=r.criteria;
   if(!cs){var m=r.musts||{},keys=Object.keys(m).filter(function(k){return m[k]===true}).slice(0,4);if(!keys.length)return "";
     return "<div class=mu>"+keys.map(function(k){return "<span class=y>✓ "+esc(k)+"</span>"}).join("")+"</div>"}
+  cs=cs.filter(function(c){return c.v===true||c.v===false||(c.v==null&&c.community_fact)});   // v374: a criterion no source answers is not shown at all
   if(!cs.length)return "";
-  var lab=function(c){return c.k==="furnished"?c.label:(MN[c.k]||c.label||c.k)};
-  return "<div class=mu>"+cs.map(function(c){var w=lab(c)+(c.level==="must"?" (must)":"");return c.v===true?"<span class=y>✓ "+esc(w)+"</span>":(c.v===false?"<span class=n>✗ "+esc(w)+"</span>":"<span class=u>"+esc(w)+(c.community_fact?": the community's own - "+esc(c.community_fact.say):": not known")+"</span>")}).join("")+"</div>"
+  var lab=function(c){return MN[c.k]||c.label||c.k};
+  return "<div class=mu>"+cs.map(function(c){var w=lab(c)+(c.level==="must"?" (must)":"");return c.v===true?"<span class=y>✓ "+esc(w)+"</span>":(c.v===false?"<span class=n>✗ "+esc(w)+"</span>":"<span class=u>"+esc(w)+": the community's own - "+esc(c.community_fact.say)+"</span>")}).join("")+"</div>"
     +"<details class=cs><summary>where these answers come from</summary>"+cs.map(function(c){return "<div>"+esc(lab(c))+" — "+esc(c.src||"")+(c.detail?" "+esc(c.detail)+".":"")+"</div>"}).join("")+"</details>"}
-// OWNER ONLY: the API sends furnished_hint to the owner key alone; a client page never receives it
-function fhint(r){var h=r.furnished_hint;if(!h)return "";
-  return "<div class=fh><b>OWNER ONLY · NEVER SENT TO A CLIENT</b>"+(h.none?"Furnished, from listing-site adverts: "+esc(h.none)+".":esc(h.furnished+" of "+h.of+" live adverts marked furnished"+(h.as_of?" ("+day(h.as_of)+")":"")+". Adverts, not homes free."))+"</div>"}
 // DEVELOPER AVAILABILITY - only what the developer's own sheet says, named and dated; nothing where there is no sheet
 function bedsCount(b,n){var one=n===1;var w=b==="studio"||b===0?(one?"studio":"studios"):(+b>=3?(one?"home of 3 or more bedrooms":"homes of 3 or more bedrooms"):(+b===1?(one?"one-bedroom":"one-bedrooms"):(one?"two-bedroom":"two-bedrooms")));return n+" "+w}
 function avail(r,st){var a=r.developer_availability;if(!a||!a.count)return "";var e=r.evidence||{};var n=bedsCount(e.beds!=null?e.beds:st.beds[0],a.count);
@@ -431,17 +424,16 @@ function rowHtml(r,i,st){var on=!!SEL[r.key],dn=r.district_name||DN[r.district]|
   var g=gaps(r),why=(r.why?r.why:"")+(g.length?(r.why?" · ":"")+g.join(" · "):"");
   return "<div class=\"row"+(on?"":" off")+"\" id=row"+i+"><label class=pk><input type=checkbox data-ix="+i+(on?" checked":"")+" aria-label=\"choose "+esc(r.name)+"\"></label><div class=rb>"
     +"<div class=r1><span class=rk>"+esc(r.rank!=null?r.rank:i+1)+"</span><span class=nm>"+esc(r.name)+"</span>"+(VERD[r.verdict]?"<span class=\"vd v-"+esc(r.verdict)+"\">"+esc(VERD[r.verdict])+"</span>":"")+"</div>"
-    +"<div class=r2>"+esc(dn+al)+"</div>"+money(r,st)+facts(r)+crits(r,st)+fhint(r)+avail(r,st)
+    +"<div class=r2>"+esc(dn+al)+"</div>"+money(r,st)+facts(r)+crits(r,st)+avail(r,st)
     +((why||link)?"<div class=r5>"+esc(why)+link+"</div>":"")+"</div></div>"}
-// v282: the comparison block - one column per area (stacked on a phone), every cell answered or "not known", with its source
-function cell(c){if(!c)return "<span class=\"mk u\">not known</span>";return mark(c.v)+" "+esc(c.say||"")+(c.src?"<small>"+esc(c.src)+"</small>":"")}
-function compHtml(cmp){var n=cmp.length,rowsC=[["matches","HOMES THAT MATCH"],["rent","TYPICAL RENT, LAST 60 DAYS"],["types","HOME TYPES"],["pools","POOLS"],["parks","PARKS AND DOG-FRIENDLY SPACES"],["schools","SCHOOLS NEARBY"],["newest","NEWEST COMPLETION"]];
+// v282: the comparison block - one column per area (stacked on a phone), a cell only where a source answers it, with its source
+function cell(c){if(!c||(c.v!==true&&c.v!==false))return "";return mark(c.v)+" "+esc(c.say||"")+(c.src?"<small>"+esc(c.src)+"</small>":"")}
+function compHtml(cmp){var n=cmp.length,rowsC=[["matches","HOMES THAT MATCH"],["rent","TYPICAL RENT, LAST 60 DAYS"],["types","HOME TYPES"],["schools","SCHOOLS NEARBY"]];
   return "<div class=cmp id=bcmp><div class=lb>SIDE BY SIDE <b>"+esc(cmp.map(function(a){return a.name}).join(" · "))+"</b></div>"+rowsC.map(function(rc){
     return "<div class=cr><div class=ct>"+rc[1]+"</div><div class=cg style=\"grid-template-columns:repeat("+n+",minmax(0,1fr))\">"+cmp.map(function(a){var c=a[rc[0]],h;
-      if(rc[0]==="types")h=["apartment","townhouse","villa"].map(function(k){return "<div>"+esc(k==="villa"?"villa or townhouse":k)+": "+cell(c&&c[k])+"</div>"}).join("");
-      else if(rc[0]==="pools")h=["private","community"].map(function(k){return "<div>"+k+": "+cell(c&&c[k])+"</div>"}).join("");
+      if(rc[0]==="types")h=["apartment","townhouse","villa"].map(function(k){var x=cell(c&&c[k]);return x?"<div>"+esc(k==="villa"?"villa or townhouse":k)+": "+x+"</div>":""}).join("");
       else h=cell(c);
-      return "<div class=cc><b>"+esc(a.name)+"</b>"+h+"</div>"}).join("")+"</div></div>"}).join("")+"</div>"}
+      return "<div class=cc><b>"+esc(a.name)+"</b>"+(h||"—")+"</div>"}).join("")+"</div></div>"}).join("")+"</div>"}
 function moreHtml(tot,n){if(tot<=n)return "";var a=[];if(n<20&&tot>10)a.push("<a id=more20>Show 20</a>");if(n<50&&tot>20)a.push("<a id=more50>Show 50</a>");return a.length?"<div class=more>the best "+n+" of "+tot+" · "+a.join(" · ")+"</div>":""}
 function floorLine(st){return st.min?"<div class=nt>Showing "+esc(fmtAed(st.min))+" and above</div>":""}
 function drawRes(){var st=LAST,rs=RES.results||[],tot=RES.total_matched!=null?RES.total_matched:rs.length,cmp=RES.comparison;
@@ -471,7 +463,7 @@ function counts(){var n=chosen().length;var c=$("bcount");if(c)c.textContent=n+"
 function omsg(t){$("omsg").textContent=t||""}
 function need(n){omsg(n>1?"Tick at least "+n+" buildings in the list first.":"Tick at least one building in the list first.");return false}
 function pdfUrl(kind,keys){var st=LAST;return "/brief_pdf?key="+encodeURIComponent(KEY)+"&kind="+kind+"&keys="+keys.map(encodeURIComponent).join(",")+"&mode="+st.mode+"&beds="+st.beds.join(",")+"&min="+(st.min||0)+(st.max?"&max="+st.max:"")
-  +(st.stretch&&st.max?"&stretch="+st.stretch:"")+"&type="+st.types.join(",")+"&furnished="+st.furnished+(st.musts.length?"&musts="+st.musts.join(","):"")+(st.nice.length?"&nice="+st.nice.join(","):"")
+  +(st.stretch&&st.max?"&stretch="+st.stretch:"")+"&type="+st.types.join(",")+(st.musts.length?"&musts="+st.musts.join(","):"")+(st.nice.length?"&nice="+st.nice.join(","):"")
   +(st.areas.length?"&areas="+st.areas.join(","):"")+(cmpOn(st)?"&compare=1":"")}
 function fileName(kind,keys){var r=byKey(keys[0]),n=String((r&&r.name)||"list").replace(/[^A-Za-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40);
   return "Najma-"+(kind==="dossier"?n:(kind==="pack"?"full-pack":"compare-"+keys.length))+".pdf"}
@@ -532,8 +524,7 @@ segWire("fbeds",function(v){if(BDEF){ST.beds=[v];BDEF=false}else toggleIn(ST.bed
 segWire("ftype",function(v){if(v==="any")ST.types=["any"];else{ST.types=ST.types.filter(function(t){return t!=="any"});toggleIn(ST.types,v);if(!ST.types.length||ST.types.length===3)ST.types=["any"]}});
 $("fnextbd").onclick=function(){if(!ST.beds.length){$("fmsgb").textContent="Tap at least one bedroom count.";return}msg("");showStep(3)};
 $("fnextb").onclick=function(){var e=readBudget();if(e){msg(e);return}msg("");draw();showStep(4)};
-segWire("ffurn",function(v){ST.furnished=v;showStep(5)});
-$("fnextw").onclick=function(){showStep(6)};
+$("fnextw").onclick=function(){showStep(5)};
 $("fback").onclick=function(){if(STEP>1)showStep(STEP-1);else if(RES){fold()}};
 $("bedit").onclick=function(){showStep(1)};
 each($("fdl").querySelectorAll("button"),function(b){b.onclick=function(){toggleIn(ST.areas,b.getAttribute("data-s"));draw()}});

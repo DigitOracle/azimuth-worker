@@ -277,14 +277,14 @@ ok(brochureKvName("name_a_very_long_building_name_that_overflows_forty") === "br
 // ---- v282 (Kendall, 1 Oct 2026): the client's criteria on the documents, and the areas side by side ------------------------------
 {
   store.set("img_pf_supply_testdistrict", JSON.stringify({ as_of: "2026-10-01", rows: [{ key: "testdistrict:10", dld_project: "Alpha Tower", beds_band: "1", listings_live: 9, furnished_live: 4 }] }));
-  const BQ = "&musts=pets&nice=private_pool,community_pool&furnished=furnished&type=apartment";
+  // v374: the old link still names pets, private pool, community pool and furnished: they are dropped; parking and gym are answered
+  const BQ = "&musts=pets,parking&nice=private_pool,community_pool,gym&furnished=furnished&type=apartment";
   let d = await pdf("kind=dossier&keys=testdistrict:10&beds=1,2" + BQ);
   ok(d.r.status === 200 && pages(d.html) === 3, "a dossier with the client's criteria is still exactly 3 pages", pages(d.html));
   ok(d.html.includes("HOW IT MEETS THE BRIEF") && d.html.includes("WHERE THE ANSWER COMES FROM"), "page 2 says how the building meets the brief, with where each answer comes from");
-  ok(/community pool <span[^>]*>\(nice to have\)<\/span><\/td><td[^>]*><b[^>]*>&#10003; yes<\/b>/.test(d.html) && d.html.includes("the developer&#x27;s own project page"), "community pool: yes, from the developer's own page", (d.html.match(/community pool.{0,400}/) || [""])[0]);
-  ok(!/pet-friendly \(dog walks, play areas\) <span/.test(d.html) && d.html.includes("Kids&#x27; play area"), "v302 pet-friendly: not answered, so the row is left out (never a 'not known'), with the play area on the developer's page as a fact");
-  ok(!/private pool <span/.test(d.html), "v302 private pool: no answer, row left out, never a no");
-  ok(!/furnished <span/.test(d.html) && !d.html.includes("does not record whether a home is furnished") && d.html.includes("Your realtor will verify these details with you."), "v302 furnished: no answer, row left out, the realtor line instead");
+  ok(/gym <span[^>]*>\(nice to have\)<\/span><\/td><td[^>]*><b[^>]*>&#10003; yes<\/b>/.test(d.html) && d.html.includes("the developer&#x27;s own project page"), "gym: yes, from the developer's own page", (d.html.match(/gym.{0,400}/) || [""])[0]);
+  ok(!/pet-friendly[^<]* <span|private pool <span|community pool <span|newer or modern|long-term stay/.test(d.html), "v374 pet-friendly, private pool, community pool, newer or modern and long-term: no criteria row on the document");
+  ok(!/furnished <span/.test(d.html) && !d.html.includes("does not record whether a home is furnished") && !/Pet-friendly|Private pool|Newer build/.test(d.html), "v374 furnished: no row, no 'not known'; the building's amenities card carries no pet / private pool / newer-build line");
   ok(!/advert|listings_live|furnished_live|OWNER ONLY|4 of 9/i.test(d.html), "no listing-site (portal) furnishing figure on a client document, though the advertised-supply data carries one");
   printed = []; await call("/brief_pdf?kind=dossier&keys=testdistrict:10&beds=1" + BQ + Q + "&key=" + READ);
   ok(printed[0] && !/advert|furnished_live|OWNER ONLY|4 of 9/i.test(printed[0]), "not even when the OWNER key asks for the PDF: a document is always a client document");
@@ -293,13 +293,14 @@ ok(brochureKvName("name_a_very_long_building_name_that_overflows_forty") === "br
   ok(!d.html.includes("HOW IT MEETS THE BRIEF"), "no criteria asked: no criteria box (the approved layout is unchanged)");
   // the one-sheet cards carry one line of marks
   d = await pdf("kind=compare&keys=testdistrict:10,dld:betaheights" + BQ);
-  ok(d.html.includes('class="critline"') && /&#10003; community pool/.test(d.html) && !/not known/.test(d.html), "v302 each one-sheet card carries a line of yes marks only, no 'not known'");
+  ok(d.html.includes('class="critline"') && /&#10003; gym/.test(d.html) && !/not known/.test(d.html) && !/community pool|pet-friendly/i.test(d.html.slice(d.html.indexOf("critline"), d.html.indexOf("critline") + 300)), "v302 each one-sheet card carries a line of yes marks only, no 'not known'");
   ok(!d.html.includes("The areas side by side") && pages(d.html) === 2, "no compare=1: no comparison page (cards + map, as before)");
   // the areas side by side: Compare and Full pack open with it when 2 or 3 areas were compared
   d = await pdf("kind=compare&keys=testdistrict:10,dld:betaheights&areas=testdistrict,nolayer&compare=1" + BQ);
   ok(d.r.status === 200 && pages(d.html) === 3 && d.html.indexOf("The areas side by side") > -1 && d.html.indexOf("The areas side by side") < d.html.indexOf('class="bcard"'), "Compare with compare=1 and two areas opens with the comparison page (3 pages)", pages(d.html));
   const cp = d.html.slice(d.html.indexOf("The areas side by side"), d.html.indexOf('class="bcard"'));
-  for (const row of ["Homes that match", "Home types", "Pools", "Schools nearby"]) ok(cp.includes(row), "the comparison page has the row “" + row + "”");
+  for (const row of ["Homes that match", "Home types", "Schools nearby"]) ok(cp.includes(row), "the comparison page has the row “" + row + "”");
+  for (const row of ["Pools", "Parks and dog-friendly spaces", "Newest completion"]) ok(!cp.includes(row), "v374 the comparison page no longer has the row “" + row + "”");
   ok(cp.includes(">Test District</th>") && cp.includes(">No Layer Town</th>"), "one column per area");
   ok(/&#10003; yes<\/b> 1 school/.test(cp) && !/not known/.test(cp) && !cp.includes("Newest completion") && cp.includes("KHDA"), "v302 each cell is yes / no with its words and its source; a row with no answers is left out", cp.slice(0, 300));
   ok(!/advert|furnished_live|OWNER ONLY/i.test(cp), "and no listing-site data");

@@ -393,7 +393,7 @@ export const AMENITY_CARDS_JS = String.raw`
 (function(){
 var CACHE={},SEQ=0;
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
-var MUSTS={pets:1,community_pool:1,gym:1,schools:1,metro:1};
+var MUSTS={gym:1,schools:1,metro:1};   // v374: the page only asks for cards of the must-haves it still offers; the route itself is unchanged (pictures per place)
 function areasOf(st,res){var a=(st.areas||[]).slice(0,3);if(a.length)return a;var out=[];((res&&res.results)||[]).forEach(function(r){if(r.district&&out.indexOf(r.district)<0&&out.length<3)out.push(r.district)});return out}
 function cardHtml(c,key){var p=c.picture,img="";
   if(p&&p.id)img="<figure><img alt=\""+esc(p.of||c.title)+"\" loading=lazy src=\"/amenity_photo?key="+encodeURIComponent(key)+"&d="+encodeURIComponent(p.d)+"&id="+encodeURIComponent(p.id)+"\"><figcaption>"+esc(p.credit)+"</figcaption></figure>";

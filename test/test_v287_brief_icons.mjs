@@ -20,10 +20,11 @@ const call = (p, init) => worker.fetch(new Request(ORIGIN + p, init), env, { wai
 
 console.log("I - the Brief's emojis");
 const html = await (await call("/brief?key=" + READ)).text();
-for (const [v, e] of [["rent", "🔑"], ["buy", "🏠"], ["studio", "🛋️"], ["townhouse", "🏘️"], ["villa", "🏡"], ["furnished", "🛋️"]])
+for (const [v, e] of [["rent", "🔑"], ["buy", "🏠"], ["studio", "🛋️"], ["townhouse", "🏘️"], ["villa", "🏡"]])
   ok(new RegExp("data-v=" + v + "><span class=ic aria-hidden=true>" + e + "</span>").test(html), "the " + v + " button carries " + e);
-for (const [k, e] of [["private_pool", "🏊"], ["community_pool", "🌊"], ["pets", "🐕"], ["metro", "🚇"], ["schools", "🏫"], ["gym", "🏋️"]])
+for (const [k, e] of [["metro", "🚇"], ["schools", "🏫"], ["gym", "🏋️"], ["parking", "🅿️"], ["balcony", "🌇"]])
   ok(html.includes("data-k=" + k + "><div class=wl><span class=ic aria-hidden=true>" + e + "</span>"), "the " + k + " row carries " + e);
+for (const k of ["furnished", "private_pool", "community_pool", "pets", "modern", "long_term"]) ok(!html.includes("data-k=" + k) && !html.includes("data-v=" + k), "v374 the " + k + " question is gone from the Brief");
 ok(html.includes("data-l=must><span class=ic aria-hidden=true>⭐</span>Must</button>"), "Must carries a star");
 ok(html.includes("data-l=nice><span class=ic aria-hidden=true>👍</span>Nice to have</button>"), "Nice to have carries a thumbs-up");
 ok(html.includes(".ic{margin-right:6px"), "the icon has its spacing rule");

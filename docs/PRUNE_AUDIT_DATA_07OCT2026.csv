@@ -1,0 +1,51 @@
+district,homes,criterion,yes,no,unknown,pct_known,of_known_from_land_dept_register
+Jumeirah Village Circle,264,private_pool,0,0,264,0,0
+Jumeirah Village Circle,264,community_pool,192,3,69,74,174
+Jumeirah Village Circle,264,pets,264,0,0,100,0
+Jumeirah Village Circle,264,gym,20,0,244,8,0
+Jumeirah Village Circle,264,parking,217,0,47,82,209
+Jumeirah Village Circle,264,balcony,218,0,46,83,218
+Jumeirah Village Circle,264,metro,0,0,264,0,0
+Jumeirah Village Circle,264,schools,264,0,0,100,0
+Jumeirah Village Circle,264,modern,0,0,264,0,0
+Jumeirah Village Circle,264,long_term,0,0,264,0,0
+Dubai Marina,183,private_pool,0,0,183,0,0
+Dubai Marina,183,community_pool,67,2,114,38,63
+Dubai Marina,183,pets,183,0,0,100,0
+Dubai Marina,183,gym,7,0,176,4,3
+Dubai Marina,183,parking,71,0,112,39,68
+Dubai Marina,183,balcony,94,1,88,52,95
+Dubai Marina,183,metro,10,0,173,5,0
+Dubai Marina,183,schools,0,0,183,0,0
+Dubai Marina,183,modern,0,9,174,5,0
+Dubai Marina,183,long_term,0,0,183,0,0
+Business Bay,134,private_pool,0,0,134,0,0
+Business Bay,134,community_pool,86,4,44,67,75
+Business Bay,134,pets,134,0,0,100,0
+Business Bay,134,gym,30,0,104,22,7
+Business Bay,134,parking,111,0,23,83,100
+Business Bay,134,balcony,104,4,26,81,108
+Business Bay,134,metro,134,0,0,100,0
+Business Bay,134,schools,0,0,134,0,0
+Business Bay,134,modern,0,0,134,0,0
+Business Bay,134,long_term,0,0,134,0,0
+Jabal Ali First,118,private_pool,1,0,117,1,0
+Jabal Ali First,118,community_pool,58,2,58,51,53
+Jabal Ali First,118,pets,0,0,118,0,0
+Jabal Ali First,118,gym,7,0,111,6,0
+Jabal Ali First,118,parking,74,0,44,63,74
+Jabal Ali First,118,balcony,54,0,64,46,54
+Jabal Ali First,118,metro,0,0,118,0,0
+Jabal Ali First,118,schools,0,0,118,0,0
+Jabal Ali First,118,modern,0,0,118,0,0
+Jabal Ali First,118,long_term,0,0,118,0,0
+Burj Khalifa (Downtown),103,private_pool,0,0,103,0,0
+Burj Khalifa (Downtown),103,community_pool,45,1,57,45,46
+Burj Khalifa (Downtown),103,pets,103,0,0,100,0
+Burj Khalifa (Downtown),103,gym,1,0,102,1,1
+Burj Khalifa (Downtown),103,parking,49,0,54,48,47
+Burj Khalifa (Downtown),103,balcony,57,0,46,55,57
+Burj Khalifa (Downtown),103,metro,103,0,0,100,0
+Burj Khalifa (Downtown),103,schools,103,0,0,100,0
+Burj Khalifa (Downtown),103,modern,13,10,80,22,0
+Burj Khalifa (Downtown),103,long_term,0,0,103,0,0

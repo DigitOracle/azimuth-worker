@@ -201,32 +201,32 @@ GOOGLE_MODE = "ok";
 // ---- 8. the PDFs ----------------------------------------------------------------------------------------------------------------------
 const PQ = "&mode=rent&beds=1&min=60000&max=70000&areas=damachills";
 const doc = async (qs, e) => { const r = await call("/brief_pdf?" + qs + PQ + "&format=html&key=" + CLIENT, e); return { r, html: await r.text() }; };
-let D = await doc("kind=compare&keys=damachills:10,damachills:11&musts=pets,gym");
-ok(D.r.status === 200 && /Around the community/.test(D.html), "Compare with pets and gym carries 'Around the community'", D.r.status + " " + D.html.slice(0, 300));
-ok(/Dog parks in DAMAC Hills/.test(D.html) && /Gyms in DAMAC Hills/.test(D.html) && /Parks in DAMAC Hills/.test(D.html), "the PDF has the dog-park, park and gym cards");
-ok((D.html.match(/class="acard"/g) || []).length === 3, "three cards in the PDF", (D.html.match(/class="acard"/g) || []).length);
+let D = await doc("kind=compare&keys=damachills:10,damachills:11&musts=pets,gym,schools");   // v374: pets is dropped from the Brief; gym and schools still open cards
+ok(D.r.status === 200 && /Around the community/.test(D.html), "Compare with gym and schools carries 'Around the community'", D.r.status + " " + D.html.slice(0, 300));
+ok(!/Dog parks in DAMAC Hills/.test(D.html) && /Gyms in DAMAC Hills/.test(D.html) && /Schools in (and near )?DAMAC Hills/.test(D.html), "v374: the PDF has the gym and schools cards, and no dog-park card (pets is not offered)");
+ok((D.html.match(/class="acard"/g) || []).length === 2, "two cards in the PDF", (D.html.match(/class="acard"/g) || []).length);
 ok(/data:image\/jpeg;base64,/.test(D.html.slice(D.html.indexOf("Around the community"))), "the picture is embedded in the document (fetched server-side), not linked");
-ok(/Photo: Test Author One · Google Maps/.test(D.html), "the PDF credits the photo's author");
+ok(/Photo: [A-Za-z ]+ · Google Maps/.test(D.html), "the PDF credits the photo's author");
 ok(!hasKey(D.html) && !GAPI.test(D.html), "the Google key and address are nowhere in the PDF's HTML");
 ok(/7 in the whole district &middot; Google Maps/.test(D.html), "the PDF shows Google's live count with Google Maps beside it");
 ok(D.html.indexOf("Around the community") > D.html.lastIndexOf("Akoya One"), "Compare: the page comes after the sheet");
 // through the real PDF path (the stub browser records what it prints)
 printed = [];
-r = await call("/brief_pdf?kind=compare&keys=damachills:10,damachills:11&musts=pets" + PQ + "&key=" + CLIENT);
+r = await call("/brief_pdf?kind=compare&keys=damachills:10,damachills:11&musts=gym" + PQ + "&key=" + CLIENT);
 ok(r.status === 200 && /Around the community/.test(printed[0] || "") && !hasKey(printed[0] || ""), "the rendered PDF route prints the page, without the key", r.status);
-D = await doc("kind=pack&keys=damachills:10&musts=community_pool");
+D = await doc("kind=pack&keys=damachills:10&musts=gym");
 const ia = D.html.indexOf("Around the community"), ix = D.html.indexOf("Appendix");
 ok(D.r.status === 200 && ia > 0 && ix > ia, "Full pack: 'Around the community' sits before the appendix", ia + " / " + ix);
-D = await doc("kind=dossier&keys=damachills:10&musts=pets");
+D = await doc("kind=dossier&keys=damachills:10&musts=gym");
 ok(D.r.status === 200 && !/Around the community/.test(D.html), "an individual dossier carries no amenity page");
 D = await doc("kind=compare&keys=damachills:10,damachills:11&musts=parking");
 ok(D.r.status === 200 && !/Around the community/.test(D.html), "Compare with only a home must-have (parking) carries none");
-D = await doc("kind=compare&keys=damachills:10,damachills:11&nice=pets");
-ok(D.r.status === 200 && !/Around the community/.test(D.html), "Compare with pets only as a nice-to-have carries none");
-D = await doc("kind=compare&keys=damachills:10,damachills:11&musts=pets", envNoKey);
+D = await doc("kind=compare&keys=damachills:10,damachills:11&nice=gym");
+ok(D.r.status === 200 && !/Around the community/.test(D.html), "Compare with gym only as a nice-to-have carries none");
+D = await doc("kind=compare&keys=damachills:10,damachills:11&musts=gym", envNoKey);
 ok(D.r.status === 200 && /Around the community/.test(D.html) && !/data:image\/jpeg/.test(D.html.slice(D.html.indexOf("Around the community"))), "no secret: the PDF still has the cards, with no picture");
 GOOGLE_MODE = "hang"; t0 = Date.now();
-D = await doc("kind=compare&keys=damachills:10,damachills:11&musts=pets,gym,community_pool");
+D = await doc("kind=compare&keys=damachills:10,damachills:11&musts=gym,schools");
 ok(D.r.status === 200 && /Around the community/.test(D.html) && Date.now() - t0 < 7000, "Google hanging: the PDF builds in time (pictures in parallel, " + (Date.now() - t0) + " ms), cards without pictures");
 GOOGLE_MODE = "ok";
 
@@ -255,13 +255,13 @@ let asked = [];
 const sandbox = { window: {}, document: fdoc, encodeURIComponent,
   fetch: async (u) => { asked.push(u); const rr = await call(u.replace(/^\/amenity_cards\?/, "/amenity_cards?")); return rr; } };
 vm.createContext(sandbox); vm.runInContext(AMENITY_CARDS_JS, sandbox);
-sandbox.window.__amenCards({ areas: ["damachills"], musts: ["pets", "parking"] }, { results: [] }, CLIENT);
+sandbox.window.__amenCards({ areas: ["damachills"], musts: ["gym", "parking"] }, { results: [] }, CLIENT);
 await new Promise((res) => setTimeout(res, 300));
 const box = bres.children[0];
 ok(box && box.id === "bamen" && bres.children[1].className === "sa", "the cards box goes above the homes list (before the choose-all row)", bres.children.map((c) => c.id || c.className).join(","));
-ok(asked.length === 1 && /^\/amenity_cards\?key=client_key_in_links_12345&areas=damachills&musts=pets$/.test(asked[0]), "it asks /amenity_cards with the Brief's key and only the place must-haves", asked[0]);
-ok(box && /Dog parks in DAMAC Hills/.test(box.innerHTML) && /AROUND THE COMMUNITY/.test(box.innerHTML), "it draws the cards", box && box.innerHTML.slice(0, 200));
-ok(box && /src="\/amenity_photo\?key=client_key_in_links_12345&d=damachills&id=osm%3Away%2F1"/.test(box.innerHTML) && !GAPI.test(box.innerHTML), "each picture points at /amenity_photo with the Brief's key, never at Google", box && (box.innerHTML.match(/src="[^"]+"/) || [""])[0]);
+ok(asked.length === 1 && /^\/amenity_cards\?key=client_key_in_links_12345&areas=damachills&musts=gym$/.test(asked[0]), "it asks /amenity_cards with the Brief's key and only the place must-haves", asked[0]);
+ok(box && /Gyms in DAMAC Hills/.test(box.innerHTML) && /AROUND THE COMMUNITY/.test(box.innerHTML), "it draws the cards", box && box.innerHTML.slice(0, 200));
+ok(box && /src="\/amenity_photo\?key=client_key_in_links_12345&d=damachills&id=[a-z]+%3A[a-z0-9%]+"/.test(box.innerHTML) && !GAPI.test(box.innerHTML), "each picture points at /amenity_photo with the Brief's key, never at Google", box && (box.innerHTML.match(/src="[^"]+"/) || [""])[0]);
 // with no areas, it uses the districts of the results
 const f2 = fakeDom(); asked = [];
 const sb2 = { window: {}, document: f2.doc, encodeURIComponent, fetch: async (u) => { asked.push(u); return call(u); } };
