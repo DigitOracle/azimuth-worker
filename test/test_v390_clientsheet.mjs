@@ -79,9 +79,9 @@ console.log("B - the Client sheet button reads the building key");
   const pb = open(mk("Built Tower", withBk("77"), 22000, 7)), b = btns(bar(pb));
   ok(b.length === 3 && b[1].label === "Client" && !b[1].off && b[1].tag === "a", "with a building key the Client sheet button is a real link");
   const href = (b[1].attrs.match(/href="([^"]+)"/) || [])[1].replace(/&amp;/g, "&");
-  ok(href === "/brief_pdf?kind=dossier&keys=dist%3A77&beds=all&mode=rent&key=k", "the URL is the Brief dossier for <district>:<footprint index>", href);
+  ok(href === "/doc_client?keys=dist%3A77&beds=all&mode=rent&key=k", "v407: the URL is the client options page for <district>:<footprint index> (its default Generate link is the one-click dossier, test_v407)", href);
   const u = new URL("https://x" + href);
-  ok(u.searchParams.get("keys") === "dist:77" && u.searchParams.get("kind") === "dossier" && u.searchParams.get("beds") === "all" && u.searchParams.get("mode") === "rent", "the parsed query: kind=dossier, keys=dist:77, beds=all, mode=rent");
+  ok(u.searchParams.get("keys") === "dist:77" && u.searchParams.get("beds") === "all" && u.searchParams.get("mode") === "rent", "the parsed query: keys=dist:77, beds=all, mode=rent");
   const bn = btns(bar(open(mk("Built Tower", withBk(null), 22000, 7)))), why = (bn[1].attrs.match(/data-why="([^"]*)"/) || [])[1];
   ok(bn[1].off && bn[1].tag === "button" && !/href=/.test(bn[1].attrs) && why === REASON, "no key: the button is disabled with the exact reason", why);
   ok(/title="A client sheet needs a building with rent history; this project has no building on the map yet\."/.test(bn[1].attrs), "the reason is also the title");
@@ -112,11 +112,11 @@ console.log("C - the dossier route resolves for a key of that shape (real worker
   const call = (p) => worker.fetch(new Request(env.PUBLIC_ORIGIN + p), env, { waitUntil() {} });
   // the URLs the page builds for a rent-index building (10) and a register-only building (13), with the client key of the stub
   const urlFor = (bk) => { const h = btns(bar(open(P.pjCard("dist", "Built Tower " + bk, 22000, 7, "", "x", withBk(bk))))), a = h[1].attrs.match(/href="([^"]+)"/); return a ? a[1].replace(/&amp;/g, "&") : ""; };
-  const mkReq = (href, slug) => href.replace("keys=dist%3A", "keys=" + slug + "%3A").replace("key=k", "key=client_key_in_links_12345") + "&format=html";
+  const mkReq = (href, slug) => href.replace("/doc_client?", "/brief_pdf?kind=dossier&").replace("keys=dist%3A", "keys=" + slug + "%3A").replace("key=k", "key=client_key_in_links_12345") + "&format=html";
   for (const [bk, nm] of [["10", "Alpha Tower (in the rent index)"], ["13", "Register Only House (unit-mix register only)"]]) {
     printed = []; const href = urlFor(bk), r = await call(mkReq(href, "testdistrict"));
     const html2 = await r.text();
-    ok(href.startsWith("/brief_pdf?kind=dossier&keys=dist%3A" + bk) && r.status === 200 && new RegExp(nm.split(" (")[0].replace(/ /g, "\\s")).test(html2), "key <slug>:" + bk + " resolves: 200 and the dossier names " + nm.split(" (")[0], r.status + " " + html2.slice(0, 160));
+    ok(href.startsWith("/doc_client?keys=dist%3A" + bk) && r.status === 200 && new RegExp(nm.split(" (")[0].replace(/ /g, "\\s")).test(html2), "key <slug>:" + bk + " resolves: 200 and the dossier names " + nm.split(" (")[0], r.status + " " + html2.slice(0, 160));
   }
   { const r = await call(mkReq(urlFor("99"), "testdistrict")); ok(r.status === 404, "a footprint index that holds no building is a clean 404, never a wrong building"); }
 }

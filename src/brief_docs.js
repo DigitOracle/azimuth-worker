@@ -222,6 +222,8 @@ export function parseQuery(url) {
     areas,
     num: Math.max(0, parseInt(sp.get("num") || "0", 10) || 0), of: Math.max(0, parseInt(sp.get("of") || "0", 10) || 0),
     format: String(sp.get("format") || "pdf").toLowerCase(),
+    hide: [...new Set(String(sp.get("hide") || "").toLowerCase().split(",").map((s) => s.trim()).filter((s) => ["amen", "photos", "layouts"].includes(s)))],   // v407 - the options page: sections of a dossier left out; none = today's document
+    client: String(sp.get("client") || "").replace(/[<>&"\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60),   // v407 - the "prepared for" line; none = today's document
   };
 }
 
@@ -679,7 +681,7 @@ function thumb(rec, w, h, C) {
 
 function dossierSub(rec, q, i, of) {
   const B = BEDS[q.beds];
-  return (i && of ? "OPTION " + i + " OF " + of : "OPTION") + " &middot; " + B.upper + " &middot; " + esc(rec.dist).toUpperCase() + (rec.buy ? " &middot; PURCHASE" : "");
+  return (i && of ? "OPTION " + i + " OF " + of : "OPTION") + " &middot; " + B.upper + " &middot; " + esc(rec.dist).toUpperCase() + (rec.buy ? " &middot; PURCHASE" : "") + (q.client ? " &middot; PREPARED FOR " + esc(q.client).toUpperCase() : "");
 }
 
 function whereLines(C, rec) {
@@ -753,7 +755,7 @@ function dossierPage1(C, rec, q, sub) {
     '<div class="card" style="padding:10px;"><div class="lbl" style="font-size:9.5px;">NEARBY</div>' + (lines(nearbyLines(C, rec)) || row(REALTOR_VERIFIES, MUTED)) + "</div></div>";
   const title = '<div style="display:flex;flex-direction:column;gap:4px;"><div class="serif" style="font-size:33px;color:' + NAVY + ';line-height:1;">' + esc(rec.name) +
     '</div><div style="font-size:13px;color:' + MUTED + ';">' + esc(strap(rec)) + "</div></div>";
-  return page(C, sub, hero + title + factHtml + rent + cards, "");   // page 1 carries no sources in the approved layout; they are on page 3
+  return page(C, sub, hero + title + factHtml + rent + ((q.hide || []).includes("amen") ? "" : cards), "");   // page 1 carries no sources in the approved layout; they are on page 3
 }
 function buildingSource(rec) {
   const bits = [];
@@ -916,12 +918,12 @@ function dossierPage3(C, rec, q, sub) {
     '<div style="font-size:9.5px;color:' + MUTED + ';">' + esc(String(p.caption || "").split(" (")[0].split(" - ").pop()) + "</div>" +
     '<div style="font-size:8px;color:#8C887C;">' + "The developer&rsquo;s page" + "</div></div>").join("") + "</div>"
     : '<div style="font-size:11px;color:' + MUTED + ";border:1px dashed #DED9D0;padding:8px 10px;\">The developer's page publishes no pictures of the pool, gym or lobby and no floor plans. Ask the leasing team or listing broker for photographs of the actual flat.</div>";
-  return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + photos + layoutsBlock(rec, q),
+  return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + ((q.hide || []).includes("photos") ? "" : photos) + ((q.hide || []).includes("layouts") ? "" : layoutsBlock(rec, q)),
     smallPrint([rentSource(C, q, rec), buildingSource(rec), rec.un ? "Layouts: Dubai Land Department units register, flat by flat." : "", nearbySource(), pictureSource(rec)]));
 }
 export function dossierHtml(C, rec, q, i, of) {
   const sub = dossierSub(rec, q, i, of);
-  return dossierPage1(C, rec, q, sub) + dossierPage2(C, rec, q, sub, rec.buy ? { html: buySalesTable(rec, q), small: [buySource(C, q, rec)] } : null) + (rec.buy ? buyPages(C, rec, q, sub) : dossierPage3(C, rec, q, sub));
+  return dossierPage1(C, rec, q, sub) + dossierPage2(C, rec, q, sub, rec.buy ? { html: buySalesTable(rec, q), small: [buySource(C, q, rec)] } : null) + (rec.buy ? buyPages(C, rec, q, sub) : ((q.hide || []).includes("photos") && (q.hide || []).includes("layouts") ? "" : dossierPage3(C, rec, q, sub)));
 }
 
 // ------------------------------------------------------------------------------------------------ the one-sheet (A4 landscape)
@@ -1533,7 +1535,7 @@ function buySalesTable(rec, q) {
 // v307 - page 2 carries the map and the sales table; a third page exists only when there are photographs or flat-by-flat layouts to put on it
 function buyPages(C, rec, q, sub) {
   const B = BEDS[q.beds], G = rec.un && rec.un.floors ? groupLayouts(rec, B) : null;
-  const needP3 = (rec.photos && rec.photos.length) || (G && G.top.length);
+  const hd = q.hide || [], needP3 = ((rec.photos && rec.photos.length) && !hd.includes("photos")) || ((G && G.top.length) && !hd.includes("layouts"));
   return needP3 ? buyPage3(C, rec, q, sub) : "";
 }
 function buyPage3(C, rec, q, sub) {
@@ -1546,7 +1548,7 @@ function buyPage3(C, rec, q, sub) {
   const B = BEDS[q.beds];
   const G = rec.un && rec.un.floors ? groupLayouts(rec, B) : null;
   const lay = G && G.top.length ? layoutsBlock(rec, q) : "";
-  return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + photos + lay,
+  return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + ((q.hide || []).includes("photos") ? "" : photos) + ((q.hide || []).includes("layouts") ? "" : lay),
     smallPrint([buySource(C, q, rec), buildingSource(rec), rec.un ? "Layouts: Dubai Land Department units register, flat by flat." : "", nearbySource(), pictureSource(rec)]));
 }
 function buySource(C, q, rec) {
