@@ -20,6 +20,7 @@
 import { DM } from "./devmap_dm.js";
 import { COMMUNITY_LABELS, labelledName, singleCommunity } from "./community_labels.js";
 import { kvJson } from "./brief.js";
+import { allClaims, launchFrom, receivedLong } from "./dev_claims.js";   // v414 - the Broker sheet's note on a developer's register-confirmed and developer-says projects
 import { DEFAULT_SHORTLIST, shortlistName } from "./devmap_page.js";
 import { PHOSPHOR_LIGHT } from "./devmap_icons.js";
 import { BRIEF_KIT, esc, FOOTER_TEXT, WHATSAPP_NUMBER, HEADER_IMG_KEY, HEADER_JPG_KEY } from "./brief_docs.js";
@@ -433,6 +434,22 @@ function incompleteNote(C) {
   return '<div class="note2">' + icon("info", 16, TEAL) + "<div><b>This view is not complete yet.</b> " + esc(t) + "</div></div>";
 }
 
+// v414 - a chosen developer that has a project of its own announced material (developer says) and not on the register: one note says plainly which of its projects are register-confirmed here (in the figures) and which are developer says (outside every figure).
+// Only the register's own project list for the area and the developer's launch record are used; nothing internal. Empty (and the page byte-identical) when no chosen developer has such a record.
+export function devSaysBlock(C) {
+  const out = [], A = C.area || {}, nkk = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  for (const cl of allClaims()) {
+    const nb = nkk(cl.project && cl.project.brand); if (!nb) continue;
+    const ks = Object.keys(A.devs || {}).filter((k) => k !== "_" && C.mine && C.mine[k] && (nkk(k) === nb || nkk(A.devs[k].n) === nb || (nb.length >= 4 && nkk(A.devs[k].n).startsWith(nb))));
+    if (!ks.length) continue;
+    const reg = []; for (const k of ks) for (const b of A.devs[k].b || []) if (b[2] && b[0] > 0 && !reg.includes(b[2])) reg.push(b[2]);
+    const l = launchFrom(cl);
+    out.push('<div class="note2">' + icon("info", 16, TEAL) + "<div><b>" + esc(cl.project.brand) + ": register-confirmed projects and developer-says projects.</b> " +
+      "Register-confirmed here, and in the figures above: " + (reg.length ? plural(reg.length, "project") + " (" + esc(reg.slice(0, 6).join(", ")) + (reg.length > 6 ? " and more" : "") + ")" : "none") + ". " +
+      "Developer says, not on the project register, and outside every figure: " + esc(cl.project.name) + (l ? ", launch price from AED " + fmt(l.aed) + " (developer says; " + esc(cl.source.name) + ", received " + esc(receivedLong(cl)) + ")" : "") + ". No sale of it is on the register.</div></div>");
+  }
+  return out.join("");
+}
 function snapshotBody(C) {
   const st = C.st, lab = C.names.label;
   const head = '<div class="ttl"><div>' + '<div class="lbl" style="margin-bottom:3px;text-transform:uppercase">Developers by area</div><h1 class="serif">' + esc(C.names.title) + "</h1>" +
@@ -443,7 +460,7 @@ function snapshotBody(C) {
     '<div class="tile"><div class="tk">Sales loaded</div><div class="tv">' + fmt(st.n) + '</div><div class="tu">' + (C.registerTotal && st.n <= C.registerTotal ? "of " + fmt(C.registerTotal) + " in the register" : "settled sales") + "</div></div></div>";
   const cap = 2;
   const grid = '<div class="bgrid">' + [0, 1, 2, 3].map((t) => bandCard(C, t, cap)).join("") + "</div>";
-  return head + tiles + incompleteNote(C) + grid + budgetLineHtml(C) + snapshotFigure(C);
+  return head + tiles + incompleteNote(C) + grid + budgetLineHtml(C) + devSaysBlock(C) + snapshotFigure(C);
 }
 
 // ------------------------------------------------------------------------------------------------ the detailed pages

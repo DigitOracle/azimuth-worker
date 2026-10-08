@@ -8,6 +8,7 @@ import { optionsHtml } from "./doc_options_page.js";
 import { esc, loadContext, parseQuery, buyOf, BEDS } from "./brief_docs.js";
 import { icon, parseParams, loadData, dateLong } from "./devmap_pdf.js";
 import { DM } from "./devmap_dm.js";
+import { claimsFor, permissionOnFile, PICTURES_WITHHELD } from "./dev_claims.js";   // v414
 
 const PREP = "the reader of this sheet";
 const MID = "·";
@@ -81,6 +82,34 @@ export function clientConfig(f, o) {
       { title: "Legal footer", small: "Curated by Najjuko " + MID + " Dubai Decoded, WhatsApp +971 56 548 4397, and the line that availability and price are confirmed with the developer or the listing broker." }] };
 }
 
+// v414 - the CLIENT sheet of a project that is not on the register (keys=dev:<slug>): what the developer's record and the unit register support. Pictures only with the developer's written permission on file.
+export function devClientConfig(c, o) {
+  const on = permissionOnFile(c), hasPlans = !!(c.payment_plans && c.payment_plans.plans && c.payment_plans.plans.length), key = "dev:" + c.key;
+  const sec = [];
+  sec.push({ id: "mode", title: "Rent or buy", type: "single", options: [
+    { id: "rent", title: "Rent", small: "What homes here let for a year, from registered contracts.", icon: "wallet", off: true, why: ["This project has no registered rent contracts: it is a new launch. The sheet is a purchase sheet."], set: { mode: "rent" } },
+    { id: "buy", title: "Buy", small: "The developer's own launch prices (developer says), beside the unit register's homes.", icon: "chart-bar", set: { mode: "buy" }, def: true }] });
+  sec.push({ id: "inc", title: "What the sheet includes", type: "multi", param: "hide", mode: "omit", options: [
+    { id: "amen", title: "Amenities (developer says)", small: "The developer's list by level, with its source and the date received.", icon: "map-pin", val: "amen", def: true },
+    { id: "photos", title: "Developer's renders", small: "The developer's own renders, each labelled as the developer's render.", icon: "map-trifold", val: "photos", def: on, off: !on, why: on ? [] : [PICTURES_WITHHELD] },
+    { id: "layouts", title: "Homes in the unit register", small: "Home types, counts and size ranges, from the Land Department unit register.", icon: "stack", val: "layouts", def: true }] });
+  sec.push({ id: "later", title: "Offered when the evidence supports it", help: "These are shown so you can see why they are not available today.", type: "multi", param: "extra", mode: "include", options: [
+    { id: "plan", title: "Payment plans (developer says)", small: "Both plans, as the developer prints them.", icon: "wallet", val: "plan", def: hasPlans, off: true, why: [hasPlans ? "The sheet always carries the developer's payment plans, as printed, with the asterisk note." : "The developer's record holds no payment plan."] },
+    { id: "walk", title: "Walking times", small: "Only where a person has checked the walk on site.", icon: "map-pin", val: "walk", off: true, why: ["No walking time has been checked by a person for this project."] },
+    { id: "ar", title: "Arabic", small: "The sheet in Arabic.", icon: "chat-circle-text", val: "ar", off: true, why: ["The client sheet is in English only."] }] });
+  sec.push({ id: "prep", title: "Prepared for", type: "text", fields: [{ param: "client", title: "Name on the sheet", small: "Shown under the title. If left empty it reads: " + PREP + ".", ph: PREP, max: 60, always: PREP }] });
+  return {
+    title: "Client sheet: choose the version", sub: esc(c.project.name) + ". A project that is not on the project register: its facts are the developer's (developer says) and the unit register's. Chosen before the sheet is made.",
+    sections: sec, base: "/brief_pdf", fixed: [["kind", "dossier"], ["keys", key], ["mode", "buy"], ["beds", "all"]], key: (o && o.key) || "", go: "Make the client sheet", stop: false,
+    coverNote: "The sheet lists its sources at the foot of its pages.", icons: ["wallet", "chart-bar", "buildings", "ruler", "map-pin", "map-trifold", "stack", "calculator", "chart-donut", "chat-circle-text", "info"],
+    core: [
+      { title: "Registered facts", small: "The homes, their types and size ranges, as the Land Department unit register gives them, with its date." },
+      { title: "Developer says, labelled", small: "Launch prices, payment plans, handover and amenities as the developer prints them, with the source and the date received. Not registered sales, not asking prices from us." },
+      { title: "Pictures, labelled", small: on ? "The developer's renders, each marked as the developer's render. Never a satellite image, never a picture with people." : PICTURES_WITHHELD },
+      { title: "Prepared for", small: "The line that names who the sheet is for." },
+      { title: "Legal footer", small: "Curated by Najjuko " + MID + " Dubai Decoded, WhatsApp +971 56 548 4397, and the line that availability and price are confirmed with the developer or the listing broker." }] };
+}
+
 // ---------------------------------------------------------------------------------------------------------- BROKER: what the area and its developers support
 export function brokerConfig(C, o) {
   const area = C.area, slug = C.slug, ix = C.ix, hasEvA = !!(C.IDX0.areas[slug] && C.IDX0.areas[slug].ev && C.IDX0.areas[slug].ev.all);
@@ -142,6 +171,7 @@ export async function docOptionsRoute(request, env, url, deps) {
   if (url.pathname === "/doc_client") {
     const k = cleanKey(String(url.searchParams.get("keys") || "").split(",")[0]);
     if (!k) return J({ ok: false, reason: "keys= is required (one building)" }, 400);
+    if (/^dev:/.test(k)) { const c = claimsFor(k.slice(4)); if (!c) return J({ ok: false, reason: "no developer-says record for this project", key: k }, 404); return new Response(optionsHtml(devClientConfig(c, { key }), icon), { headers: HDR }); }   // v414
     const f = await clientFacts(env, k, url.origin);
     if (!f) return J({ ok: false, reason: "this building is in neither the rent index nor the unit-mix register", key: k }, 404);
     return new Response(optionsHtml(clientConfig(f, { key, mode: url.searchParams.get("mode"), beds: url.searchParams.get("beds") }), icon), { headers: HDR });

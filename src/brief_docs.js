@@ -228,6 +228,7 @@ export function parseQuery(url) {
 }
 
 // ------------------------------------------------------------------------------------------------ data
+import { buildDevDossier } from "./devsays_dossier.js";   // v414 - circular, used only at call time
 import { loadThread, threadView, aboutHtml, renderSuffixOfKey, communitySuffix, ABOUT_PRINT_CSS } from "./thread.js";   // v364 - the digital thread behind our own renders, and the community picture slot
 async function kvJson(env, name) { try { const t = await env.MEETINGS.get("img_" + name); return t ? JSON.parse(typeof t === "string" ? t : new TextDecoder().decode(t)) : null; } catch (e) { return null; } }
 // A picture for the document. With an origin (the live route) it is a link to the Worker's own public /img/ route, so a ten-building
@@ -1655,6 +1656,7 @@ export async function buildDocument(env, q, opts) {
       return { key: k, url: base ? u.pathname + u.search : "/brief_pdf" + u.search };
     }) } };
   }
+  if (q.kind === "dossier" && /^dev:/i.test(q.keys[0] || "")) return buildDevDossier(env, q, opts);   // v414 - keys=dev:<slug>: a project that is not on the register, built from the developer's own launch record and the unit register (src/devsays_dossier.js); every other key takes the path below, unchanged
   const dossierish = q.kind === "dossier" || q.kind === "pack";
   const C = await loadContext(env, q, { now: opts && opts.now, origin: opts && opts.origin, need: { units: dossierish, photos: dossierish, map: true }, deferLive: true });
   if (C.error) return { status: 503, body: { ok: false, reason: C.error } };
@@ -1750,3 +1752,5 @@ export async function briefDocsRoute(request, env, url, deps) {
 // ------------------------------------------------------------------------------------------------ v324: the kit the Developers-by-area PDFs reuse (src/devmap_pdf.js)
 // The same browser launcher, header picture, footer, fonts/CSS and map colours and projection as the Brief documents: one house look, one place to change it.
 export const BRIEF_KIT = { renderPdf, footer, logo, kvDataUrl, todayLong, CSS, MAPC, KY, KH, PT, NAVY, GOLD, MUTED, CURATOR, WA_SVG, smallPrint };
+// v414 - the page parts the Client sheet built from a developer-says record (src/devsays_dossier.js) reuses: the same header, table, picture fitting and document shell as the Brief dossier
+export const PAGE_KIT = { header, tbl, fitImg, kvPic, HEAD, img };

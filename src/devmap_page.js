@@ -27,6 +27,7 @@ import { NOSALES_JS } from "./nosales_page.js";   // v392 - launched projects wi
 import { NOSALES_KV_NAME, cleanNosales, addNosalesPlots } from "./nosales.js";
 import { NOTCONF_JS } from "./notconf_page.js";   // v397a - projects a rule kept off the developer cards, kept visible in the Not-confirmed group (all new logic lives in the two notconf files)
 import { NOTCONF_KV_NAME, cleanNotconf } from "./notconf.js";
+import { DEVSAYS_JS, devsaysApi } from "./dev_claims.js";   // v414 - the developer's own launch material for projects not on the register: panel headline and the Client and Broker buttons
 import { ANNOUNCED_JS } from "./announced_page.js";   // v397d - projects the developer announces that are in no register (all new logic lives in the two announced files)
 import { ANNOUNCED_KV_NAME, cleanAnnounced } from "./announced.js";
 import { DEVSEARCH_JS, DEVSEARCH_CSS, DEVSEARCH_BTN } from "./devsearch_page.js";   // v403 - the Search button in the page header (all new logic lives in devsearch_page.js)
@@ -107,7 +108,8 @@ export async function devmapRoutes(request, env, url, deps) {
     const nc = cleanNotconf(await kvJson(env, NOTCONF_KV_NAME));
     return J(nc || {});
   }
-  if (what === "regcards") {                                               // v401 - register-built cards (scripts/build_regcards.py, KV img_devmap_regcards); absent or malformed = {} and the page is exactly v399
+  if (what === "devsays") return J(devsaysApi());                          // v414 - the developer-says launch facts (built into the Worker from data/developer_claims; no KV)
+  if (what === "regcards") {                                             // v401 - register-built cards (scripts/build_regcards.py, KV img_devmap_regcards); absent or malformed = {} and the page is exactly v399
     const rc = cleanRegcards(await kvJson(env, REGCARDS_KV_NAME));
     return J(rc || {});
   }
@@ -386,13 +388,27 @@ function pdDevKey(d){var A=IDX&&IDX.areas&&IDX.areas[d.slug],ds=A&&A.devs;if(!ds
 // the three documents of a project card: Investor (the tiered selector; only with a facts record), Client (the Brief dossier; only where the project is tied to a building in the rent index, ev.bk) and Broker (the developer snapshot for this developer in this area).
 // v390 - the building key the Brief uses, '<district slug>:<footprint index>': the index carries only the footprint index (ev.bk, register-bound footprints only), the district is the project's own slug. A whole key (v389 shape) is accepted too; anything that is not that shape gives "" (never invented).
 function pdBldKey(d,e){var b=String(d&&d.bk!=null&&d.bk!==""?d.bk:(e&&e.bk!=null?e.bk:"")).toLowerCase();if(!b)return "";if(b.indexOf(":")<0)b=(d&&d.slug?String(d.slug).toLowerCase():"")+":"+b;return /^[a-z0-9]+:\d{1,7}$/.test(b)?b:""}
-function docRow(d,ctx){var e=d.ev||{},q=d.name&&typeof invFind==="function"?invFind(d.name,e):null,bk=pdBldKey(d,e),dv=pdDevKey(d);
-  return pdBar([pdBtn("chart-bar","Investor",q?invHref(q.id):"","No investor facts record for this project yet."),
-    pdBtn("buildings","Client",bk?'/doc_client?keys='+encodeURIComponent(bk)+'&beds=all&mode=rent&key='+encodeURIComponent(KEY):"","A client sheet needs a building with rent history; this project has no building on the map yet."),
-    pdBtn("stack","Broker",dv&&d.slug&&typeof pdfUrl==="function"?pdfUrl("snapshot",d.slug,[dv],false).replace("/developers_pdf?","/doc_broker?"):"","This project's developer is not matched on the map in this area, so there is no broker sheet.")],ctx==="card"?"pdcard":"")}
+// v414 - the availability of the three documents in ONE function (docAvail): a register-verified project is answered exactly as before; a project with developer-says facts (KORE by Imtiaz) or a developer the area knows gets its buttons too. Every greyed button keeps a plain reason.
+function pdNk(s){return String(s==null?"":s).toLowerCase().replace(/[^a-z0-9]+/g,"")}
+// the developer of a card that has no building-list match: its brand (developer says) or registered name, matched to the developer keys of the area the broker sheet would cover. One exact match, else one prefix match; two means no match.
+function pdDevResolve(d,e,x){var br=x?x.b:(e.ann?(e.dn||""):(e.br||e.dn||"")),sl=e.ann?(e.dsl||""):d.slug,A=sl&&IDX&&IDX.areas&&IDX.areas[sl],ds=A&&A.devs,nb=pdNk(br),ex=[],pre=[];if(!ds||(!nb&&!(e.ann&&e.dk)))return null;
+  if(e.ann&&e.dk&&ds[e.dk])return {slug:sl,k:e.dk};
+  Object.keys(ds).forEach(function(k){if(k==="_")return;var nn=pdNk(ds[k].n||k);if(pdNk(k)===nb||nn===nb)ex.push(k);else if(nb.length>=4&&nn.length>=4&&(nn.indexOf(nb)===0||nb.indexOf(nn)===0))pre.push(k)});
+  var f=ex.length===1?ex[0]:(!ex.length&&pre.length===1?pre[0]:"");return f?{slug:sl,k:f}:null}
+function docAvail(d){var e=d.ev||{},q=d.name&&typeof invFind==="function"?invFind(d.name,e):null,bk=pdBldKey(d,e),dv=pdDevKey(d),x=typeof DEVSAYS!=="undefined"?DEVSAYS.find(d):null,r={};
+  r.inv={href:q?invHref(q.id):(x&&x.i?invHref(x.i):""),why:"No investor facts record for this project yet."};
+  r.cli={href:bk?'/doc_client?keys='+encodeURIComponent(bk)+'&beds=all&mode=rent&key='+encodeURIComponent(KEY):(x?DEVSAYS.clientHref(x,KEY):""),why:e.ann?"A client sheet needs the developer's launch material (prices, payment plans, pictures) or register unit facts; none is held for this announced project.":"A client sheet needs a building with rent history; this project has no building on the map yet."};
+  var bu=dv&&d.slug?{slug:d.slug,k:dv}:pdDevResolve(d,e,x);
+  r.bro={href:bu&&typeof pdfUrl==="function"?pdfUrl("snapshot",bu.slug,[bu.k],false).replace("/developers_pdf?","/doc_broker?"):"",why:(x||e.ann||e.off||e.ns)?"This project's developer is not matched on the register.":"This project's developer is not matched on the map in this area, so there is no broker sheet."};
+  return r}
+function docRow(d,ctx){var a=docAvail(d);
+  return pdBar([pdBtn("chart-bar","Investor",a.inv.href,a.inv.why),
+    pdBtn("buildings","Client",a.cli.href,a.cli.why),
+    pdBtn("stack","Broker",a.bro.href,a.bro.why)],ctx==="card"?"pdcard":"")}
 function pjDetailHtml(dk,located){var d=PDET[dk];if(!d)return "";var e=d.ev||{},reg=e.e==="REGISTER_VERIFIED",tg=e.e||"DATA",REGSRC="Dubai Land Department project register",h='<div class=pdet>',why=!located?String(pdWhy(d)):"";pdTapInit();ACCN="pda"+pdHash(dk)+(located?"s":"p");ACCI=0;
   if(e.an&&typeof ANNOUNCED!=="undefined"){var ah=ANNOUNCED.detail(d,{pdRow:pdRow,pdSec:pdSec,esc:esc,icoSvg:icoSvg});return ah.slice(-6)==="</div>"?ah.slice(0,-6)+docRow(d,"panel")+'</div>':ah}   // v397d - an announced project: the developer-says panel, never a project number
-  h+='<div class=pdhead><span class=pdk>'+(d.ppsm?'AED '+fmt(pu(d.ppsm))+' '+pul():'No price per area recorded')+(pdBandTier(d.ppsm)>=0?' &middot; '+esc(DM.TIER_NAMES[pdBandTier(d.ppsm)]):'')+(d.n!=null?' &middot; '+fmt(d.n)+' sale'+(d.n===1?'':'s'):'')+'</span>'+(why?'<span class="note pdwy">'+icoSvg("map-pin","evi")+esc(why.split(". ")[0].replace(/[.]+$/,"")+".")+'</span>':'')+'</div>';
+  var dsh=!d.ppsm&&typeof DEVSAYS!=="undefined"?DEVSAYS.head(d):null;   // v414 - the developer's launch price (developer says), and that it is not a sale, instead of 'No price per area recorded'
+  h+='<div class=pdhead><span class=pdk>'+(d.ppsm?'AED '+fmt(pu(d.ppsm))+' '+pul():dsh?esc(dsh.l1):'No price per area recorded')+(pdBandTier(d.ppsm)>=0?' &middot; '+esc(DM.TIER_NAMES[pdBandTier(d.ppsm)]):'')+(d.n!=null?' &middot; '+fmt(d.n)+' sale'+(d.n===1?'':'s'):'')+'</span>'+(dsh&&dsh.l2?'<span class="note pdwy pdns">'+esc(dsh.l2)+'</span>':'')+(why?'<span class="note pdwy">'+icoSvg("map-pin","evi")+esc(why.split(". ")[0].replace(/[.]+$/,"")+".")+'</span>':'')+'</div>';
   var f=pdRow("buildings","Project",esc(d.name||d.nameDef),d.name&&reg?REGSRC:"Dubai Land Department settled sales register, project name as sold",d.name?(reg?"REGISTER_VERIFIED":"DATA"):"NOT_AVAILABLE");
   if(e.p!=null&&e.p!==""&&!e.off)f+=pdRow("stack","Register project number",esc(String(e.p)),REGSRC,tg);
   var st=[];if(e.st)st.push(pdWords(e.st));if(e.pc!=null&&e.pc!=="")st.push(esc(String(e.pc))+"% complete");if(e.pe)st.push("planned end "+esc(String(e.pe)));
@@ -768,8 +784,8 @@ function startMap(){
     map.on("mouseleave","a-fill",function(){map.getCanvas().style.cursor="";pop.remove()});
     map.on("click","a-fill",function(e){if(pjHit(e).length||(typeof CF!=="undefined"&&CF&&CF.fillMode()))return;select(e.features[0].properties.slug,false)})})}
 // ---- start ----
-Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null}),api("centres").catch(function(){return null}),api("plotpos").catch(function(){return null}),api("commpos").catch(function(){return null}),api("nosales").catch(function(){return null}),api("commposp").catch(function(){return null}),api("notconf").catch(function(){return null}),api("announced").catch(function(){return null}),api("regcards").catch(function(){return null})]).then(function(r){
-  IDX=r[0];GEO=r[1];if(CF)CF.load(r[5]);if(typeof PLOTPOS!=="undefined")PLOTPOS.load(r[6]);if(typeof COMMPOS!=="undefined")COMMPOS.load(r[7]);if(typeof NOSALES!=="undefined")NOSALES.load(r[8]);if(typeof COMMPOSP!=="undefined")COMMPOSP.load(r[9]);if(typeof NOTCONF!=="undefined")NOTCONF.load(r[10]);if(typeof ANNOUNCED!=="undefined")ANNOUNCED.load(r[11]);if(typeof REGCARDS!=="undefined")REGCARDS.load(r[12]);S.delay=r[3]&&r[3].by?r[3]:null;S.inv=invFromApi(r[4]);invIndex();DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
+Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null}),api("centres").catch(function(){return null}),api("plotpos").catch(function(){return null}),api("commpos").catch(function(){return null}),api("nosales").catch(function(){return null}),api("commposp").catch(function(){return null}),api("notconf").catch(function(){return null}),api("announced").catch(function(){return null}),api("regcards").catch(function(){return null}),api("devsays").catch(function(){return null})]).then(function(r){
+  IDX=r[0];GEO=r[1];if(CF)CF.load(r[5]);if(typeof PLOTPOS!=="undefined")PLOTPOS.load(r[6]);if(typeof COMMPOS!=="undefined")COMMPOS.load(r[7]);if(typeof NOSALES!=="undefined")NOSALES.load(r[8]);if(typeof COMMPOSP!=="undefined")COMMPOSP.load(r[9]);if(typeof NOTCONF!=="undefined")NOTCONF.load(r[10]);if(typeof ANNOUNCED!=="undefined")ANNOUNCED.load(r[11]);if(typeof REGCARDS!=="undefined")REGCARDS.load(r[12]);if(typeof DEVSAYS!=="undefined")DEVSAYS.load(r[13]);S.delay=r[3]&&r[3].by?r[3]:null;S.inv=invFromApi(r[4]);invIndex();DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
   if(IDX&&IDX.ev)S.win="l12";   // v322 - prices a realtor quotes today: the last 12 months, unless the index carries no evidence yet
   if(IDX&&IDX.areas)Object.keys(IDX.areas).forEach(function(s){var l=IDX.areas[s].label||CL[s];if(l)IDX.areas[s].name=l;IDX.areas[s].name=IDX.areas[s].name.replace(/\bJLT\b/g,"Jumeirah Lakes Towers")});   // v321 - an area is never shown as an initial
   if(!IDX||!IDX.areas){$("sidebody").innerHTML='<p class=note>The developers data is not on file yet.</p>';return}
@@ -788,7 +804,7 @@ Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(functio
 
 export function devmapHtml(key, deps) {
   const nav = deps && deps.NAJ_FONTS ? deps.NAJ_FONTS : "";
-  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + PLOTPOS_JS + COMMPOSP_JS + COMMPOS_JS + NOSALES_JS + NOTCONF_JS + REGCARDS_JS + ANNOUNCED_JS + DEVSEARCH_JS + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
+  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + PLOTPOS_JS + COMMPOSP_JS + COMMPOS_JS + NOSALES_JS + NOTCONF_JS + REGCARDS_JS + ANNOUNCED_JS + DEVSAYS_JS + DEVSEARCH_JS +PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - developers by area</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0e1413">' + nav
     + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + CENTRES_CSS + PLOTPOS_CSS + COMMPOS_CSS + DEVSEARCH_CSS + '</style></head><body>'
     + '<div id=map role=region aria-label="Map of Dubai areas: developers and prices"></div>'
