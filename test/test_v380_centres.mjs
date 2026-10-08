@@ -64,7 +64,7 @@ ok(px.every((n) => n <= 375), "no fixed width over 375 px in the new styles", px
 ok(/#fbar\{position:absolute;left:8px;top:8px;[^}]*max-width:calc\(100% - 64px\)/.test(CENTRES_CSS), "the bar is upper-left, 8 px in, and leaves room for the map's own buttons");
 ok(/#fbar\{[^}]*flex-wrap:wrap/.test(CENTRES_CSS) && /\.fmenu\{[^}]*min-width:min\(300px,calc\(100vw - 80px\)\)/.test(CENTRES_CSS), "chips wrap; a menu is at most 300 px and never wider than the screen minus 80 px (375 px safe)");
 ok(/body #bsnap,body\.locked #bsnap\{top:var\(--fbh,56px\)!important\}/.test(CENTRES_CSS), "the building snapshot card sits below the bar (it measures itself), so nothing overlaps on a phone");
-ok(/@media\(max-width:360px\)\{.*\.cg2\{grid-template-columns:1fr\}/.test(CENTRES_CSS) && /#cenlg\{bottom:calc\(46vh \+ 10px\)/.test(CENTRES_CSS), "very narrow phones: one card across; the legend rises above the bottom sheet");
+ok(/@media\(max-width:360px\)\{.*\.cg2\{grid-template-columns:1fr\}/.test(CENTRES_CSS) && !/cenlg/.test(CENTRES_CSS), "very narrow phones: one card across; the v406 legend box has no styles left");
 ok(html.includes("CENTRES2040.make({S:S") && html.includes('api("centres")') && html.includes("CF.addLayers(map,font)"), "the page wires the module, asks for what=centres and adds the map layers");
 const lum = (h) => { const v = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((x) => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
 const cr = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
@@ -213,7 +213,7 @@ ok(S.coast && CF.fillMode(), "Coastal on at the opening keeps the five centres a
 ok(m.paint["c-sea"]["line-opacity"] === 0.95 && m.paint["c-seafill"]["fill-opacity"] === 0.22 && m.paint["c-wf"]["line-opacity"] === 0.75, "sea-coast areas are outlined, the inland waterfront gets its dotted second badge");
 ok(CF.ok("marsadubai") && !CF.ok("businessbay") && !CF.ok("albarshasouthfourth"), "the lists keep sea-coast areas only (Business Bay is waterfront, not sea coast)");
 ok(/aria-checked="true"/.test(B.el("fbmain").innerHTML) && /\+ waterfront badge/.test(B.el("fbmain").innerHTML), "the chip is a switch, on, with the waterfront badge");
-ok(/Sea coast within 500 m \(Najma.s own layer, not part of the plan\)/.test(CF.legendHtml()) && /id=coastsw/.test(B.el("sidebody").innerHTML) && /aria-checked="true"/.test(B.el("sidebody").innerHTML), "the legend names it as Najma's own layer; the switch in the side panel is on");
+ok(CF.legendHtml === undefined && /id=coastsw[\s\S]*?<p class=note id=coastnote[^>]*>Sea coast within 500 m \(Najma.s own layer, not part of the plan\)<\/p>/.test(B.el("sidebody").innerHTML) && /id=coastsw/.test(B.el("sidebody").innerHTML) && /aria-checked="true"/.test(B.el("sidebody").innerHTML), "v406: no map legend box; the 'own layer, not part of the plan' note sits under the Sea coast switch, which is on");
 CF.act("cen", 3);
 ok(CF.ok("marsadubai") && !CF.ok("albarshasouthfourth"), "a centre and Coastal together: both must hold");
 dm.select("businessbay");
@@ -285,8 +285,8 @@ ok(S.sel === null && CF.fillMode(), "x on the area chip clears it");
 CF.act("win", "all");
 ok(S.win === "all", "the Window chip changes the window");
 ok(/function select\(slug,fly,fk\)\{if\(S\.prof\)\{if\(!fset\(S\.prof\)\[slug\]\)return;if\(fly\)S\.parea=slug;fk=S\.prof\}/.test(js), "the v371 select() text is untouched");
-ok(!EMOJI.test(strip(B.el("sidebody").innerHTML + B.el("fbmain").innerHTML + CF.legendHtml() + CF.areaLine("marsadubai"))), "no emoji anywhere in what the module draws");
-const txt = strip(CF.cardsHtml() + CF.areaLine("alsatwa") + CF.legendHtml() + B.el("fbmain").innerHTML);
+ok(!EMOJI.test(strip(B.el("sidebody").innerHTML + B.el("fbmain").innerHTML + CF.areaLine("marsadubai"))), "no emoji anywhere in what the module draws");
+const txt = strip(CF.cardsHtml() + CF.areaLine("alsatwa") + B.el("fbmain").innerHTML);
 const caps = [...new Set(txt.match(/\b[A-Z]{2,6}\b/g) || [])].filter((w) => !["JBR", "DERIVED", "AED", "UAE"].includes(w));
 ok(caps.length === 0, "no unexplained acronyms (only JBR, spelled out; DERIVED; AED; UAE in the source line)", caps.join());
 ok(!/\b(DM|DLD|KV|ppsm)\b/.test(txt), "no shorthand");

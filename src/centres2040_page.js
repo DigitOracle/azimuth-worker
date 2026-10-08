@@ -62,11 +62,8 @@ export const CENTRES_CSS = String.raw`
 .csw .swk::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#f5efe2}
 .csw[aria-checked="true"] .swk{background:#4aa6c4}.csw[aria-checked="true"] .swk::after{left:16px}
 .cenline{border-left:3px solid var(--gold)}
-#cenlg{position:absolute;right:8px;bottom:26px;z-index:3;max-width:min(300px,calc(100% - 70px));background:rgba(14,20,19,.94);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--ink)}
-#cenlg b{display:block;font-size:11.5px;margin-bottom:3px}#cenlg p{margin:2px 0}#cenlg .k{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
-#cenlg .src{border:0;margin:4px 0 0;padding:0;color:var(--muted);font-size:10.5px}
 body #bsnap,body.locked #bsnap{top:var(--fbh,56px)!important}
-@media(max-width:760px){#side.max{height:min(88vh,calc(100vh - var(--fbh,56px) - 4px))}#cenlg{bottom:calc(46vh + 10px);right:8px;left:8px;max-width:none;padding:5px 8px}#cenlg b,#cenlg .src{display:none}#cenlg p{display:inline-block;margin:1px 10px 1px 0}}
+@media(max-width:760px){#side.max{height:min(88vh,calc(100vh - var(--fbh,56px) - 4px))}}
 @media(max-width:560px){#fbar{gap:5px}#fbar .fchip{min-height:34px;padding:3px 7px;font-size:11.5px;gap:4px}#fbar .fchip .fl{display:none}#fbar .fchip.fsw .fl{display:inline}#fbar .fchip b{max-width:112px}#fbar .fwf{display:none}#fbar .fx{min-width:28px}}
 @media(max-width:360px){#fbar .fchip b{max-width:96px}.cg2{grid-template-columns:1fr}}
 `;
@@ -125,7 +122,7 @@ function stock(u,s){return '<span class=cstock>'+fm(u)+' registered homes, '+s+'
 function centreCard(e){return '<button type=button class=ccard data-cen="'+e.id+'" aria-label="Show '+X(e.name)+' on the map"><span class=cnum style="background:'+e.colour+'">'+e.id+'</span><span class=cbody><b dir=auto>'+X(e.name)+'</b><span class=cst>'+X(e.status)+' centre</span><span class=crole>'+X(e.role)+'</span>'+stock(e.units,e.share)+(ABBR[e.id]?'<span class=note style="display:block;margin:2px 0 0">'+ABBR[e.id]+'</span>':'')+'</span></button>'}
 function seaStats(){var n=0,u=0,wn=0,wu=0;D.comms.forEach(function(r){if(r.sea){n++;u+=r.u}else if(r.wf){wn++;wu+=r.u}});return{n:n,u:u,s:Math.round(1000*u/D.total_units)/10,wn:wn,wu:wu,ws:Math.round(1000*wu/D.total_units)/10}}
 CF.seaStats=function(){return D?seaStats():null};
-function coastCard(){var s=seaStats();return '<div class="card coastcard"><p class=label>Sixth layer: coastal (Najma’s own addition, not part of the plan)</p><button type=button class=csw id=coastsw data-coast=1 role=switch aria-checked="'+(S.coast?'true':'false')+'"><i class=swk></i><span>Sea coast within 500 m</span></button><p class=note>'+s.n+' areas, '+fm(s.u)+' registered homes ('+s.s+'% of Dubai) <span class="tag cder">DERIVED</span>. The second badge is inland waterfront (creek, canal or marina basin within 250 m): '+s.wn+' more areas, '+fm(s.wu)+' homes ('+s.ws+'%). Palm Jumeirah, Dubai Islands, World Islands and Maritime City count as sea coast; lakes and lagoons do not.</p></div>'}
+function coastCard(){var s=seaStats();return '<div class="card coastcard"><p class=label>Sixth layer: coastal (Najma’s own addition, not part of the plan)</p><button type=button class=csw id=coastsw data-coast=1 role=switch aria-checked="'+(S.coast?'true':'false')+'"><i class=swk></i><span>Sea coast within 500 m</span></button>'+(S.coast?'<p class=note id=coastnote style="margin:4px 0 0">Sea coast within 500 m (Najma’s own layer, not part of the plan)</p>':'')+'<p class=note>'+s.n+' areas, '+fm(s.u)+' registered homes ('+s.s+'% of Dubai) <span class="tag cder">DERIVED</span>. The second badge is inland waterfront (creek, canal or marina basin within 250 m): '+s.wn+' more areas, '+fm(s.wu)+' homes ('+s.ws+'%). Palm Jumeirah, Dubai Islands, World Islands and Maritime City count as sea coast; lakes and lagoons do not.</p></div>'}
 function tierWord(r){return TW[r.t]||"Outside the five centres"}
 function areaCards(list,max){var ix=c.ixOf(S.win);var rows=list.map(function(s){var a=ix.areas[s],st=c.stats(s),r=areaRec(s);return {s:s,name:(c.idx().areas[s]||a||{}).name||s,n:st&&st.enough?st.n:0,st:st,r:r}});rows.sort(function(a,b){return b.n-a.n||a.name.localeCompare(b.name)});var more=rows.length>max&&!S.cenAll;
   var shown=more?rows.slice(0,max):rows;
@@ -193,7 +190,6 @@ function lockAreas(){var p=c.DM.devProfile(c.ixOf(S.win),S.prof);return (p.price
 function ensureBar(){var host=c.$("map");if(!host)return null;var b=c.$("fbar");
   if(!b){b=document.createElement("div");b.id="fbar";b.innerHTML="<div id=fbmain></div>";b.addEventListener("click",onBar);b.addEventListener("keydown",function(e){if(e.key==="Escape"&&S.fmenu){S.fmenu=null;drawBar()}else if((e.key==="Enter"||e.key===" ")&&e.target&&e.target.closest&&e.target.closest("#lockchips .chip")){e.preventDefault();onBar(e)}});host.appendChild(b)}
   var lk=c.$("lockchips");if(lk&&lk.parentNode!==b)b.appendChild(lk);
-  if(D&&!c.$("cenlg")){var g=document.createElement("div");g.id="cenlg";g.style.display="none";host.appendChild(g)}
   return b}
 function drawBar(){var m=c.$("fbmain");if(!m)return;m.innerHTML=barHtml()+menuHtml();
   var lk=c.$("lockchips");if(lk&&lk.querySelectorAll){[].forEach.call(lk.querySelectorAll(".chip"),function(ch,i){ch.setAttribute("data-f",["dev","area","band","win"][i]||"");ch.setAttribute("role","button");ch.setAttribute("tabindex","0")})}
@@ -242,10 +238,7 @@ CF.bind=function(map,lib){if(!D||!map||!map.on)return;var pop=new lib.Popup({clo
   map.on("mousemove","c-fill",function(e){if(!fillMode()){return}var p=e.features&&e.features[0]&&e.features[0].properties;if(!p||!p.c){pop.remove();return}map.getCanvas().style.cursor="pointer";pop.setLngLat(e.lngLat).setHTML("<b>"+X(p.nm)+"</b><br>Centre "+p.c+": "+X(CBY[p.c].name)+"<br>"+X(TW[p.t]||""))  .addTo(map)});
   map.on("mouseleave","c-fill",function(){pop.remove()});
   map.on("click","c-fill",function(e){if(!fillMode())return;var p=e.features&&e.features[0]&&e.features[0].properties;if(p&&p.c)pick(Number(p.c))})};
-function legendHtml(){var co=S.coast;return '<b>The five centres (our grouping)</b><p><i class=k style="background:#9aa9a5"></i>Solid colour: core and adjacent areas</p><p><i class=k style="background:#9aa9a5;opacity:.4"></i>Light tint: peripheral in our grouping</p>'+(co?'<p><i class=k style="border:2px dashed #7fd4ff"></i>Sea coast within 500 m (Najma’s own layer, not part of the plan)</p>':'')+'<p class=src>'+X(NOTE)+'. Source: '+X(SRC)+'.</p>'}
-CF.legendHtml=legendHtml;
-function drawLegend(){var g=c.$("cenlg");if(!g)return;var on=D&&CF.noBands();g.style.display=on?"":"none";if(on)g.innerHTML=legendHtml()}
-CF.refresh=function(){ensureBar();drawBar();if(!D)return;var m=c.map();if(m&&m.getSource&&m.getSource("cen")){m.getSource("cen").setData(cenFeatures());m.getSource("cenol").setData(olFeatures());applyMode(m)}drawLegend()};
+CF.refresh=function(){ensureBar();drawBar();if(!D)return;var m=c.map();if(m&&m.getSource&&m.getSource("cen")){m.getSource("cen").setData(cenFeatures());m.getSource("cenol").setData(olFeatures());applyMode(m)}};
 CF.mount=ensureBar;
 c.ico=ico;
 return CF}
