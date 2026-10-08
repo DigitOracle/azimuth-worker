@@ -92,5 +92,12 @@
       { "to": "Dubai Design District", "min": 20 }, { "to": "Business Bay", "min": 20 }, { "to": "DXB Airport", "min": 20 }
     ]
   },
-  "not_used": "lifestyle photographs (a person is shown) and the renders are not used anywhere in the report"
+  "not_used": "lifestyle photographs (a person is shown) and the renders are not used anywhere in the investor report",
+  "render_permission": { "status": "pending", "note": "written permission copy not yet on file; Kendall states the developer gave it", "set_by": null, "date": null },
+  "renders": [
+    { "n": 1, "file": "kore/render_1_elevation.jpg", "kv": "dev_render_kore_1", "what": "building elevation", "caption": "Developer's render, KORE launch brochure received 6 October 2026", "exterior": true, "source_page": "WhatsApp Image 2026-10-06 at 12.04.36 PM.jpeg" },
+    { "n": 2, "file": "kore/render_2_aerial.jpg", "kv": "dev_render_kore_2", "what": "aerial view", "caption": "Developer's render, KORE launch brochure received 6 October 2026", "exterior": true, "source_page": "WhatsApp Image 2026-10-06 at 12.04.39 PM.jpeg" },
+    { "n": 3, "file": "kore/render_3_interior.jpg", "kv": "dev_render_kore_3", "what": "interiors, studio living room and bedroom", "caption": "Developer's render, KORE launch brochure received 6 October 2026", "exterior": false, "source_page": "WhatsApp Image 2026-10-06 at 12.04.38 PM (2).jpeg" }
+  ],
+  "renders_not_stored": ["WhatsApp Image 2026-10-06 at 12.04.38 PM.jpeg (pool, swimmers)", "WhatsApp Image 2026-10-06 at 12.04.38 PM (3).jpeg (a woman is shown on the living-room wall screen)"]
 }

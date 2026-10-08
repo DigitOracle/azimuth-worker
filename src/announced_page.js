@@ -35,7 +35,8 @@ var ANNOUNCED=(function(){
     if(api.BLK&&!api.BLK[slugOf(k)])api.BLK[slugOf(k)]={state:"none",feats:[]};
     var h='<details class="card nconf announced" id=announced><summary><b>'+(l.every(function(x){return labelOf(x.e)===labelOf(l[0].e)&&!l[0].e.od})?labelOf(l[0].e):LABEL)+' ('+l.length+')</b> <span class=note>outside the numbers</span></summary>'
       +'<p class=note style="margin:6px 0">These projects are announced by the developer on its own web site or availability sheet. They are not on any register we hold, so there is no project number, no registered sales and no price here. They are not in the totals, the scale word, the price bands or the area counts on this page.'+(area?' Showing the selected area only; a project whose area the developer does not state is shown when no area is selected.':'')+'</p><div class=pjg>';
-    l.forEach(function(x){var e=x.e,ev=evOf(e),ln=line(e),
+    l.forEach(function(x){var e=x.e,ev=evOf(e),ln=line(e),dk0=(ev.dk=k,ev.dsl=x.slug==="_"?"":x.slug),   // v414 - the developer key and the district the entry sits under, so the Broker button can find the developer in that area
+
       extra='<span class=note style="display:block;margin:0">'+api.esc(e.a||"Area not stated by the developer")+'</span>'+(ln?'<span class=note style="display:block;margin:2px 0 0">'+api.esc(ln)+'</span>':'')+'<span class=note style="display:block;margin:2px 0 0"><b>'+api.esc(short(e))+'</b>'+(e.f?' ('+api.esc(e.f)+')':'')+'</span>';
       h+=api.pjCard(slugOf(k),e.n,null,null,extra,"Project name not recorded",ev)});
     return h+'</div></details>'}
