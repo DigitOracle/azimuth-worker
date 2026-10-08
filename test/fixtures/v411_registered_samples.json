@@ -1,0 +1,2383 @@
+{
+ "_about": "v411: register-verified records exactly as the v410 builder wrote them (taken from a baseline build of 8 Oct 2026), with the locked-core lines the v410 code printed for them. The v411 code must print the same lines and the rebuilt records must be byte-identical.",
+ "records": {
+  "pearl-house-ii-by-imtiaz-2777": {
+   "schema": 1,
+   "project": {
+    "id": "pearl-house-ii-by-imtiaz-2777",
+    "name": "Pearl House II",
+    "brand_name": "Pearl House II by Imtiaz",
+    "area": "Jumeirah Village Circle",
+    "area_source": "register_master",
+    "register_area": "Al Barsha South Fourth",
+    "master_project": "Jumeirah Village Circle",
+    "project_number": 2777
+   },
+   "as_of": {
+    "sales": "2026-09-17",
+    "register": "2026-06-15",
+    "rents": null,
+    "built": "2026-10-08"
+   },
+   "window": {
+    "from": "2025-09-18",
+    "to": "2026-09-17"
+   },
+   "developer": {
+    "brand": "Imtiaz",
+    "legal_entity": "IMTIAZ REAL ESTATE INVESTMENT & DEVELOPMENT L.L.C",
+    "evidence": "REGISTER_VERIFIED",
+    "basis": "project number 2777 on the project register names developer id 29075838",
+    "registered": "2016-04-05",
+    "licence_number": "718965",
+    "licence_authority": "DED",
+    "licence_expires": "2026-10-14",
+    "brand_line": "Brand name: Imtiaz (matched to the registered company by its name, a name rule; the register records no brands).",
+    "master_label_not_developer": "The register's developer column on the project row shows the master developer, JUMEIRAH VILLAGE L.L.C, not the developer; this report uses the developer id, which names IMTIAZ REAL ESTATE INVESTMENT & DEVELOPMENT L.L.C"
+   },
+   "delivery": {
+    "entity": {
+     "projects": 19,
+     "by_status": {
+      "ACTIVE": 13,
+      "FINISHED": 5,
+      "NOT_STARTED": 1
+     },
+     "source": "Dubai Land Department project register, by developer id"
+    },
+    "brand_family": {
+     "matched_by": "company name starts with IMTIAZ (a name rule, not the register)",
+     "past_planned_end": 8,
+     "registered_finished": 3
+    },
+    "record": {
+     "n": 3,
+     "late": 0,
+     "months": [],
+     "source": "Dubai Land Department project register, finished projects with both dates, delivery record built 2026-10-07"
+    }
+   },
+   "status": {
+    "code": "ACTIVE",
+    "text": "Under construction",
+    "percent": 88.37,
+    "start": "2023-08-29",
+    "planned_end": null,
+    "completion": null,
+    "units": 202,
+    "buildings": 1,
+    "escrow": "FIRST ABU DHABI BANK P.J.S.C.",
+    "zoning": "Trakhees",
+    "source": "Dubai Land Department project register"
+   },
+   "sales": {
+    "all_time": 296,
+    "first": "2023-11-02",
+    "last": "2026-08-26",
+    "l12": 47,
+    "l12_median_price": 960000,
+    "l12_median_psf": 1683,
+    "median_price": 834376,
+    "by_year": [
+     {
+      "year": 2023,
+      "n": 85,
+      "psf": 1295
+     },
+     {
+      "year": 2024,
+      "n": 128,
+      "psf": 1211
+     },
+     {
+      "year": 2025,
+      "n": 55,
+      "psf": 1563
+     },
+     {
+      "year": 2026,
+      "n": 28,
+      "psf": 1591
+     }
+    ],
+    "by_beds": [
+     {
+      "beds": "Studio",
+      "n": 112,
+      "sqft": 412,
+      "median_price": 597855,
+      "psf": 1441
+     },
+     {
+      "beds": "1 B/R",
+      "n": 178,
+      "sqft": 779,
+      "median_price": 936341,
+      "psf": 1207
+     }
+    ],
+    "land_registrations_excluded": 3,
+    "all_off_plan": false,
+    "source": "Dubai Land Department sales register (unit sales, land excluded) to 2026-09-17"
+   },
+   "price_plan": {
+    "payment_plan": {
+     "text": "20% on booking, 40% in instalments before handover, 40% on handover",
+     "milestones": [
+      {
+       "label": "On booking",
+       "pct": 20,
+       "before_handover": true
+      },
+      {
+       "label": "Instalments before handover",
+       "pct": 40,
+       "before_handover": true
+      },
+      {
+       "label": "On handover",
+       "pct": 40,
+       "before_handover": false
+      }
+     ],
+     "evidence": "DEVELOPER_CLAIMED",
+     "as_of": "2026-09-02",
+     "source": {
+      "file": "data/dev_meta/imtiaz_portfolio.json",
+      "url": "https://imtiaz.ae/property/pearl-house-ii-by-imtiaz",
+      "quote": "The payment plan is structured as 20% on booking, followed by 40% in installments, and the remaining 40% on completion."
+     },
+     "linked_by": "exact project name, and the register company is the same brand (company-name rule)"
+    },
+    "fees": [
+     {
+      "label": "Dubai Land Department registration fee",
+      "rate": 0.04,
+      "source": "published fixed fee on a sale"
+     }
+    ],
+    "fees_unknown": "agent commission, trustee and registration charges, and service charges are not held for this project"
+   },
+   "market": {
+    "area_by_year": [
+     {
+      "year": 2015,
+      "n": 1703,
+      "psf": 927
+     },
+     {
+      "year": 2016,
+      "n": 1648,
+      "psf": 893
+     },
+     {
+      "year": 2017,
+      "n": 2701,
+      "psf": 951
+     },
+     {
+      "year": 2018,
+      "n": 1828,
+      "psf": 949
+     },
+     {
+      "year": 2019,
+      "n": 1398,
+      "psf": 922
+     },
+     {
+      "year": 2020,
+      "n": 1986,
+      "psf": 913
+     },
+     {
+      "year": 2021,
+      "n": 3410,
+      "psf": 836
+     },
+     {
+      "year": 2022,
+      "n": 5646,
+      "psf": 940
+     },
+     {
+      "year": 2023,
+      "n": 13682,
+      "psf": 1153
+     },
+     {
+      "year": 2024,
+      "n": 16879,
+      "psf": 1294
+     },
+     {
+      "year": 2025,
+      "n": 18301,
+      "psf": 1474
+     },
+     {
+      "year": 2026,
+      "n": 7383,
+      "psf": 1465
+     }
+    ],
+    "dubai_by_year": [
+     {
+      "year": 2020,
+      "n": 23980,
+      "psf": 1065
+     },
+     {
+      "year": 2021,
+      "n": 40685,
+      "psf": 1139
+     },
+     {
+      "year": 2022,
+      "n": 69586,
+      "psf": 1494
+     },
+     {
+      "year": 2023,
+      "n": 102038,
+      "psf": 1496
+     },
+     {
+      "year": 2024,
+      "n": 144014,
+      "psf": 1621
+     },
+     {
+      "year": 2025,
+      "n": 175411,
+      "psf": 1728
+     },
+     {
+      "year": 2026,
+      "n": 100619,
+      "psf": 1733
+     }
+    ]
+   },
+   "neighbourhood": [
+    {
+     "label": "Nearest metro",
+     "value": "Dubai Internet City",
+     "source": "Dubai Land Department sales register, as recorded on this project's sales"
+    },
+    {
+     "label": "Nearest mall",
+     "value": "Mall of the Emirates",
+     "source": "Dubai Land Department sales register, as recorded on this project's sales"
+    },
+    {
+     "label": "Nearest landmark",
+     "value": "Sports City Swimming Academy",
+     "source": "Dubai Land Department sales register, as recorded on this project's sales"
+    }
+   ],
+   "city": {
+    "l12_sales": 158242,
+    "l12_psf": 1742,
+    "offplan_share": 0.742,
+    "area_l12_sales": 12980,
+    "area_l12_psf": 1501
+   },
+   "supply": {
+    "NOT_STARTED": {
+     "projects": 34,
+     "homes": 9936
+    },
+    "ACTIVE": {
+     "projects": 109,
+     "homes": 25399
+    }
+   },
+   "unit_register": {
+    "source": "Dubai Land Department unit register, project number 2777, joined by register project id (units to 2026-09-18)",
+    "single": {
+     "name": "Pearl House II",
+     "project_number": 2777,
+     "units": 202,
+     "studio": 73,
+     "b1": 125,
+     "b2": 0,
+     "b3": 0,
+     "b4plus": 0,
+     "other": 4
+    },
+    "left_for_sale": "not known: the register does not record which homes are still for sale"
+   },
+   "resales": {
+    "separable": false,
+    "reason": "the register records every off-plan sale under one procedure, 'Sell - Pre registration', and later sales under 'Sell'; neither procedure says whether the seller is the developer or an earlier owner, so a first sale cannot be told apart from a resale",
+    "project_rows": 255,
+    "project_resale_procedure_rows": 41,
+    "project_by_month": [
+     {
+      "month": "2023-11",
+      "n": 51
+     },
+     {
+      "month": "2023-12",
+      "n": 34
+     },
+     {
+      "month": "2024-01",
+      "n": 38
+     },
+     {
+      "month": "2024-02",
+      "n": 27
+     },
+     {
+      "month": "2024-03",
+      "n": 38
+     },
+     {
+      "month": "2024-04",
+      "n": 5
+     },
+     {
+      "month": "2024-05",
+      "n": 1
+     },
+     {
+      "month": "2024-06",
+      "n": 1
+     },
+     {
+      "month": "2024-07",
+      "n": 11
+     },
+     {
+      "month": "2024-09",
+      "n": 1
+     },
+     {
+      "month": "2024-11",
+      "n": 2
+     },
+     {
+      "month": "2024-12",
+      "n": 4
+     },
+     {
+      "month": "2025-01",
+      "n": 2
+     },
+     {
+      "month": "2025-02",
+      "n": 2
+     },
+     {
+      "month": "2025-03",
+      "n": 3
+     },
+     {
+      "month": "2025-04",
+      "n": 8
+     },
+     {
+      "month": "2025-05",
+      "n": 8
+     },
+     {
+      "month": "2025-06",
+      "n": 5
+     },
+     {
+      "month": "2025-07",
+      "n": 3
+     },
+     {
+      "month": "2025-08",
+      "n": 2
+     },
+     {
+      "month": "2025-09",
+      "n": 5
+     },
+     {
+      "month": "2025-10",
+      "n": 4
+     },
+     {
+      "month": "2025-11",
+      "n": 1
+     },
+     {
+      "month": "2025-12",
+      "n": 12
+     },
+     {
+      "month": "2026-01",
+      "n": 6
+     },
+     {
+      "month": "2026-02",
+      "n": 6
+     },
+     {
+      "month": "2026-03",
+      "n": 4
+     },
+     {
+      "month": "2026-04",
+      "n": 1
+     },
+     {
+      "month": "2026-05",
+      "n": 2
+     },
+     {
+      "month": "2026-06",
+      "n": 2
+     },
+     {
+      "month": "2026-07",
+      "n": 4
+     },
+     {
+      "month": "2026-08",
+      "n": 3
+     }
+    ],
+    "district_window": {
+     "from": "2025-09-18",
+     "to": "2026-09-17",
+     "pre_registration": 8337,
+     "existing_property_sell": 4553
+    }
+   },
+   "amenities": null,
+   "amenities_reason": "no developer web page or brochure for this project is on file, or none that can be tied to this registered project by its exact name and brand"
+  },
+  "registered-project-1478-1478": {
+   "schema": 1,
+   "project": {
+    "id": "registered-project-1478-1478",
+    "name": "Registered project 1478",
+    "brand_name": "Registered project 1478",
+    "area": "Dubai Science Park",
+    "area_source": "register_master",
+    "register_area": "Al Barshaa South Second",
+    "master_project": "Dubai Science Park",
+    "project_number": 1478
+   },
+   "as_of": {
+    "sales": "2026-09-17",
+    "register": "2026-06-15",
+    "rents": null,
+    "built": "2026-10-08"
+   },
+   "window": {
+    "from": "2025-09-18",
+    "to": "2026-09-17"
+   },
+   "developer": {
+    "brand": "Deyaar",
+    "legal_entity": "DEYAAR DEVELOPMENT (P.J.S.C)",
+    "evidence": "REGISTER_VERIFIED",
+    "basis": "project number 1478 on the project register names developer id 15",
+    "registered": "2007-08-21",
+    "licence_number": "530360",
+    "licence_authority": "DED",
+    "licence_expires": "2027-11-13",
+    "brand_line": "Brand name: Deyaar (matched to the registered company by its name, a name rule; the register records no brands).",
+    "master_label_not_developer": "The register's developer column on the project row shows the master developer, TECOM INVESTMENTS FZ-LLC, not the developer; this report uses the developer id, which names DEYAAR DEVELOPMENT (P.J.S.C)"
+   },
+   "delivery": {
+    "entity": {
+     "projects": 38,
+     "by_status": {
+      "ACTIVE": 6,
+      "FINISHED": 25,
+      "NOT_STARTED": 5,
+      "PENDING": 2
+     },
+     "source": "Dubai Land Department project register, by developer id"
+    },
+    "brand_family": {
+     "matched_by": "company name starts with DEYAAR (a name rule, not the register)",
+     "past_planned_end": 28,
+     "registered_finished": 24
+    },
+    "record": {
+     "n": 24,
+     "late": 1,
+     "months": [
+      8.64,
+      8.64
+     ],
+     "source": "Dubai Land Department project register, finished projects with both dates, delivery record built 2026-10-07"
+    }
+   },
+   "status": {
+    "code": "FINISHED",
+    "text": "Handed over",
+    "percent": null,
+    "start": null,
+    "planned_end": null,
+    "completion": null,
+    "units": 0,
+    "buildings": 0,
+    "escrow": null,
+    "zoning": "Dubai Development Authority (DDA)",
+    "source": "Dubai Land Department project register"
+   },
+   "sales": {
+    "all_time": 0,
+    "first": null,
+    "last": null,
+    "l12": 0,
+    "l12_median_price": null,
+    "l12_median_psf": null,
+    "median_price": null,
+    "by_year": [],
+    "by_beds": [],
+    "land_registrations_excluded": 0,
+    "all_off_plan": false,
+    "source": "Dubai Land Department sales register (unit sales, land excluded) to 2026-09-17"
+   },
+   "price_plan": {
+    "payment_plan": null,
+    "fees": [],
+    "fees_unknown": "agent commission, trustee and registration charges, and service charges are not held for this project",
+    "payment_plan_reason": "no developer sheet or offer for this project is on file, so the plan cannot be stated; ask the developer"
+   },
+   "market": {
+    "area_by_year": [
+     {
+      "year": 2015,
+      "n": 46,
+      "psf": 1167
+     },
+     {
+      "year": 2016,
+      "n": 14,
+      "psf": 1146
+     },
+     {
+      "year": 2017,
+      "n": 49,
+      "psf": 1174
+     },
+     {
+      "year": 2018,
+      "n": 10,
+      "psf": 1193
+     },
+     {
+      "year": 2019,
+      "n": 239,
+      "psf": 1147
+     },
+     {
+      "year": 2020,
+      "n": 135,
+      "psf": 1148
+     },
+     {
+      "year": 2021,
+      "n": 90,
+      "psf": 1102
+     },
+     {
+      "year": 2022,
+      "n": 99,
+      "psf": 854
+     },
+     {
+      "year": 2023,
+      "n": 856,
+      "psf": 1175
+     },
+     {
+      "year": 2024,
+      "n": 2636,
+      "psf": 1485
+     },
+     {
+      "year": 2025,
+      "n": 5460,
+      "psf": 1663
+     },
+     {
+      "year": 2026,
+      "n": 1040,
+      "psf": 1743
+     }
+    ],
+    "dubai_by_year": [
+     {
+      "year": 2020,
+      "n": 23980,
+      "psf": 1065
+     },
+     {
+      "year": 2021,
+      "n": 40685,
+      "psf": 1139
+     },
+     {
+      "year": 2022,
+      "n": 69586,
+      "psf": 1494
+     },
+     {
+      "year": 2023,
+      "n": 102038,
+      "psf": 1496
+     },
+     {
+      "year": 2024,
+      "n": 144014,
+      "psf": 1621
+     },
+     {
+      "year": 2025,
+      "n": 175411,
+      "psf": 1728
+     },
+     {
+      "year": 2026,
+      "n": 100619,
+      "psf": 1733
+     }
+    ]
+   },
+   "city": {
+    "l12_sales": 158242,
+    "l12_psf": 1742,
+    "offplan_share": 0.742,
+    "area_l12_sales": 3564,
+    "area_l12_psf": 1759
+   },
+   "supply": {
+    "NOT_STARTED": {
+     "projects": 4,
+     "homes": 2742
+    },
+    "ACTIVE": {
+     "projects": 6,
+     "homes": 6114
+    }
+   },
+   "amenities": null,
+   "amenities_reason": "no developer web page or brochure for this project is on file, or none that can be tied to this registered project by its exact name and brand"
+  },
+  "montrose-1537": {
+   "schema": 1,
+   "project": {
+    "id": "montrose-1537",
+    "name": "Montrose",
+    "brand_name": "Montrose",
+    "area": "Dubai Science Park",
+    "area_source": "register_master",
+    "register_area": "Al Barshaa South Second",
+    "master_project": "Dubai Science Park",
+    "project_number": 1537
+   },
+   "as_of": {
+    "sales": "2026-09-17",
+    "register": "2026-06-15",
+    "rents": null,
+    "built": "2026-10-08"
+   },
+   "window": {
+    "from": "2025-09-18",
+    "to": "2026-09-17"
+   },
+   "developer": {
+    "brand": "Deyaar",
+    "legal_entity": "DEYAAR DEVELOPMENT (P.J.S.C)",
+    "evidence": "REGISTER_VERIFIED",
+    "basis": "project number 1537 on the project register names developer id 15",
+    "registered": "2007-08-21",
+    "licence_number": "530360",
+    "licence_authority": "DED",
+    "licence_expires": "2027-11-13",
+    "brand_line": "Brand name: Deyaar (matched to the registered company by its name, a name rule; the register records no brands).",
+    "master_label_not_developer": "The register's developer column on the project row shows the master developer, TECOM INVESTMENTS FZ-LLC, not the developer; this report uses the developer id, which names DEYAAR DEVELOPMENT (P.J.S.C)"
+   },
+   "delivery": {
+    "entity": {
+     "projects": 38,
+     "by_status": {
+      "ACTIVE": 6,
+      "FINISHED": 25,
+      "NOT_STARTED": 5,
+      "PENDING": 2
+     },
+     "source": "Dubai Land Department project register, by developer id"
+    },
+    "brand_family": {
+     "matched_by": "company name starts with DEYAAR (a name rule, not the register)",
+     "past_planned_end": 28,
+     "registered_finished": 24
+    },
+    "record": {
+     "n": 24,
+     "late": 1,
+     "months": [
+      8.64,
+      8.64
+     ],
+     "source": "Dubai Land Department project register, finished projects with both dates, delivery record built 2026-10-07"
+    }
+   },
+   "status": {
+    "code": "FINISHED",
+    "text": "Handed over",
+    "percent": 100,
+    "start": "2014-07-01",
+    "planned_end": "2018-04-08",
+    "completion": "2018-04-08",
+    "units": 302,
+    "buildings": 2,
+    "escrow": null,
+    "zoning": "Dubai Development Authority (DDA)",
+    "source": "Dubai Land Department project register"
+   },
+   "sales": {
+    "all_time": 441,
+    "first": "2014-09-15",
+    "last": "2026-06-22",
+    "l12": 20,
+    "l12_median_price": 912500,
+    "l12_median_psf": 1183,
+    "median_price": 947403,
+    "by_year": [
+     {
+      "year": 2014,
+      "n": 146,
+      "psf": 1181
+     },
+     {
+      "year": 2015,
+      "n": 46,
+      "psf": 1167
+     },
+     {
+      "year": 2016,
+      "n": 11,
+      "psf": 1156
+     },
+     {
+      "year": 2017,
+      "n": 49,
+      "psf": 1174
+     },
+     {
+      "year": 2018,
+      "n": 10,
+      "psf": 1193
+     },
+     {
+      "year": 2019,
+      "n": 12,
+      "psf": 1209
+     },
+     {
+      "year": 2020,
+      "n": 3,
+      "psf": 588
+     },
+     {
+      "year": 2021,
+      "n": 9,
+      "psf": 739
+     },
+     {
+      "year": 2022,
+      "n": 16,
+      "psf": 728
+     },
+     {
+      "year": 2023,
+      "n": 56,
+      "psf": 867
+     },
+     {
+      "year": 2024,
+      "n": 43,
+      "psf": 1017
+     },
+     {
+      "year": 2025,
+      "n": 25,
+      "psf": 1144
+     },
+     {
+      "year": 2026,
+      "n": 15,
+      "psf": 1196
+     }
+    ],
+    "by_beds": [
+     {
+      "beds": "1 B/R",
+      "n": 221,
+      "sqft": 764,
+      "median_price": 886580,
+      "psf": 1161
+     },
+     {
+      "beds": "2 B/R",
+      "n": 212,
+      "sqft": 1131,
+      "median_price": 1295438.5,
+      "psf": 1142
+     },
+     {
+      "beds": "3 B/R",
+      "n": 8,
+      "sqft": 1892,
+      "median_price": 2179413.5,
+      "psf": 1121
+     }
+    ],
+    "land_registrations_excluded": 0,
+    "all_off_plan": false,
+    "source": "Dubai Land Department sales register (unit sales, land excluded) to 2026-09-17"
+   },
+   "price_plan": {
+    "payment_plan": null,
+    "fees": [
+     {
+      "label": "Dubai Land Department registration fee",
+      "rate": 0.04,
+      "source": "published fixed fee on a sale"
+     }
+    ],
+    "fees_unknown": "agent commission, trustee and registration charges, and service charges are not held for this project",
+    "payment_plan_reason": "no developer sheet or offer for this project is on file, so the plan cannot be stated; ask the developer"
+   },
+   "market": {
+    "area_by_year": [
+     {
+      "year": 2015,
+      "n": 46,
+      "psf": 1167
+     },
+     {
+      "year": 2016,
+      "n": 14,
+      "psf": 1146
+     },
+     {
+      "year": 2017,
+      "n": 49,
+      "psf": 1174
+     },
+     {
+      "year": 2018,
+      "n": 10,
+      "psf": 1193
+     },
+     {
+      "year": 2019,
+      "n": 239,
+      "psf": 1147
+     },
+     {
+      "year": 2020,
+      "n": 135,
+      "psf": 1148
+     },
+     {
+      "year": 2021,
+      "n": 90,
+      "psf": 1102
+     },
+     {
+      "year": 2022,
+      "n": 99,
+      "psf": 854
+     },
+     {
+      "year": 2023,
+      "n": 856,
+      "psf": 1175
+     },
+     {
+      "year": 2024,
+      "n": 2636,
+      "psf": 1485
+     },
+     {
+      "year": 2025,
+      "n": 5460,
+      "psf": 1663
+     },
+     {
+      "year": 2026,
+      "n": 1040,
+      "psf": 1743
+     }
+    ],
+    "dubai_by_year": [
+     {
+      "year": 2020,
+      "n": 23980,
+      "psf": 1065
+     },
+     {
+      "year": 2021,
+      "n": 40685,
+      "psf": 1139
+     },
+     {
+      "year": 2022,
+      "n": 69586,
+      "psf": 1494
+     },
+     {
+      "year": 2023,
+      "n": 102038,
+      "psf": 1496
+     },
+     {
+      "year": 2024,
+      "n": 144014,
+      "psf": 1621
+     },
+     {
+      "year": 2025,
+      "n": 175411,
+      "psf": 1728
+     },
+     {
+      "year": 2026,
+      "n": 100619,
+      "psf": 1733
+     }
+    ]
+   },
+   "neighbourhood": [
+    {
+     "label": "Nearest metro",
+     "value": "First Abu Dhabi Bank Metro Station",
+     "source": "Dubai Land Department sales register, as recorded on this project's sales"
+    },
+    {
+     "label": "Nearest mall",
+     "value": "Mall of the Emirates",
+     "source": "Dubai Land Department sales register, as recorded on this project's sales"
+    },
+    {
+     "label": "Nearest landmark",
+     "value": "Motor City",
+     "source": "Dubai Land Department sales register, as recorded on this project's sales"
+    }
+   ],
+   "city": {
+    "l12_sales": 158242,
+    "l12_psf": 1742,
+    "offplan_share": 0.742,
+    "area_l12_sales": 3564,
+    "area_l12_psf": 1759
+   },
+   "supply": {
+    "NOT_STARTED": {
+     "projects": 4,
+     "homes": 2742
+    },
+    "ACTIVE": {
+     "projects": 6,
+     "homes": 6114
+    }
+   },
+   "unit_register": {
+    "source": "Dubai Land Department unit register, project number 1537, joined by register project id (units to 2026-09-18)",
+    "single": {
+     "name": "Montrose",
+     "project_number": 1537,
+     "units": 302,
+     "studio": 0,
+     "b1": 146,
+     "b2": 144,
+     "b3": 7,
+     "b4plus": 0,
+     "other": 5
+    },
+    "left_for_sale": "not known: the register does not record which homes are still for sale"
+   },
+   "resales": {
+    "separable": false,
+    "reason": "the register records every off-plan sale under one procedure, 'Sell - Pre registration', and later sales under 'Sell'; neither procedure says whether the seller is the developer or an earlier owner, so a first sale cannot be told apart from a resale",
+    "project_rows": 253,
+    "project_resale_procedure_rows": 188,
+    "project_by_month": [
+     {
+      "month": "2014-09",
+      "n": 15
+     },
+     {
+      "month": "2014-10",
+      "n": 35
+     },
+     {
+      "month": "2014-11",
+      "n": 54
+     },
+     {
+      "month": "2014-12",
+      "n": 42
+     },
+     {
+      "month": "2015-01",
+      "n": 21
+     },
+     {
+      "month": "2015-03",
+      "n": 2
+     },
+     {
+      "month": "2015-08",
+      "n": 8
+     },
+     {
+      "month": "2015-09",
+      "n": 7
+     },
+     {
+      "month": "2015-10",
+      "n": 6
+     },
+     {
+      "month": "2015-11",
+      "n": 1
+     },
+     {
+      "month": "2015-12",
+      "n": 1
+     },
+     {
+      "month": "2016-02",
+      "n": 1
+     },
+     {
+      "month": "2016-05",
+      "n": 1
+     },
+     {
+      "month": "2016-10",
+      "n": 1
+     },
+     {
+      "month": "2016-11",
+      "n": 5
+     },
+     {
+      "month": "2016-12",
+      "n": 3
+     },
+     {
+      "month": "2017-01",
+      "n": 2
+     },
+     {
+      "month": "2017-02",
+      "n": 9
+     },
+     {
+      "month": "2017-03",
+      "n": 10
+     },
+     {
+      "month": "2017-04",
+      "n": 4
+     },
+     {
+      "month": "2017-05",
+      "n": 2
+     },
+     {
+      "month": "2017-08",
+      "n": 7
+     },
+     {
+      "month": "2017-09",
+      "n": 7
+     },
+     {
+      "month": "2017-10",
+      "n": 2
+     },
+     {
+      "month": "2017-11",
+      "n": 3
+     },
+     {
+      "month": "2017-12",
+      "n": 3
+     },
+     {
+      "month": "2018-06",
+      "n": 1
+     },
+     {
+      "month": "2018-07",
+      "n": 3
+     },
+     {
+      "month": "2018-08",
+      "n": 2
+     },
+     {
+      "month": "2018-09",
+      "n": 1
+     },
+     {
+      "month": "2018-11",
+      "n": 1
+     },
+     {
+      "month": "2018-12",
+      "n": 2
+     },
+     {
+      "month": "2019-01",
+      "n": 1
+     },
+     {
+      "month": "2019-02",
+      "n": 2
+     },
+     {
+      "month": "2019-04",
+      "n": 2
+     },
+     {
+      "month": "2019-05",
+      "n": 1
+     },
+     {
+      "month": "2019-07",
+      "n": 2
+     },
+     {
+      "month": "2019-08",
+      "n": 1
+     },
+     {
+      "month": "2019-10",
+      "n": 1
+     },
+     {
+      "month": "2019-12",
+      "n": 2
+     },
+     {
+      "month": "2020-03",
+      "n": 1
+     },
+     {
+      "month": "2020-08",
+      "n": 1
+     },
+     {
+      "month": "2020-12",
+      "n": 1
+     },
+     {
+      "month": "2021-03",
+      "n": 3
+     },
+     {
+      "month": "2021-04",
+      "n": 1
+     },
+     {
+      "month": "2021-05",
+      "n": 1
+     },
+     {
+      "month": "2021-07",
+      "n": 1
+     },
+     {
+      "month": "2021-08",
+      "n": 1
+     },
+     {
+      "month": "2021-11",
+      "n": 2
+     },
+     {
+      "month": "2022-01",
+      "n": 1
+     },
+     {
+      "month": "2022-02",
+      "n": 3
+     },
+     {
+      "month": "2022-03",
+      "n": 1
+     },
+     {
+      "month": "2022-05",
+      "n": 1
+     },
+     {
+      "month": "2022-06",
+      "n": 2
+     },
+     {
+      "month": "2022-07",
+      "n": 1
+     },
+     {
+      "month": "2022-09",
+      "n": 3
+     },
+     {
+      "month": "2022-10",
+      "n": 1
+     },
+     {
+      "month": "2022-11",
+      "n": 1
+     },
+     {
+      "month": "2022-12",
+      "n": 2
+     },
+     {
+      "month": "2023-01",
+      "n": 1
+     },
+     {
+      "month": "2023-04",
+      "n": 4
+     },
+     {
+      "month": "2023-05",
+      "n": 5
+     },
+     {
+      "month": "2023-06",
+      "n": 6
+     },
+     {
+      "month": "2023-07",
+      "n": 3
+     },
+     {
+      "month": "2023-08",
+      "n": 4
+     },
+     {
+      "month": "2023-09",
+      "n": 6
+     },
+     {
+      "month": "2023-10",
+      "n": 5
+     },
+     {
+      "month": "2023-11",
+      "n": 16
+     },
+     {
+      "month": "2023-12",
+      "n": 6
+     },
+     {
+      "month": "2024-01",
+      "n": 5
+     },
+     {
+      "month": "2024-02",
+      "n": 3
+     },
+     {
+      "month": "2024-03",
+      "n": 5
+     },
+     {
+      "month": "2024-04",
+      "n": 1
+     },
+     {
+      "month": "2024-05",
+      "n": 3
+     },
+     {
+      "month": "2024-06",
+      "n": 6
+     },
+     {
+      "month": "2024-07",
+      "n": 5
+     },
+     {
+      "month": "2024-08",
+      "n": 8
+     },
+     {
+      "month": "2024-09",
+      "n": 2
+     },
+     {
+      "month": "2024-11",
+      "n": 2
+     },
+     {
+      "month": "2024-12",
+      "n": 3
+     },
+     {
+      "month": "2025-01",
+      "n": 1
+     },
+     {
+      "month": "2025-02",
+      "n": 1
+     },
+     {
+      "month": "2025-03",
+      "n": 4
+     },
+     {
+      "month": "2025-04",
+      "n": 2
+     },
+     {
+      "month": "2025-05",
+      "n": 2
+     },
+     {
+      "month": "2025-06",
+      "n": 1
+     },
+     {
+      "month": "2025-07",
+      "n": 3
+     },
+     {
+      "month": "2025-08",
+      "n": 4
+     },
+     {
+      "month": "2025-09",
+      "n": 2
+     },
+     {
+      "month": "2025-10",
+      "n": 1
+     },
+     {
+      "month": "2025-11",
+      "n": 2
+     },
+     {
+      "month": "2025-12",
+      "n": 2
+     },
+     {
+      "month": "2026-01",
+      "n": 2
+     },
+     {
+      "month": "2026-02",
+      "n": 2
+     },
+     {
+      "month": "2026-03",
+      "n": 1
+     },
+     {
+      "month": "2026-04",
+      "n": 2
+     },
+     {
+      "month": "2026-05",
+      "n": 4
+     },
+     {
+      "month": "2026-06",
+      "n": 4
+     }
+    ],
+    "district_window": {
+     "from": "2025-09-18",
+     "to": "2026-09-17",
+     "pre_registration": 3384,
+     "existing_property_sell": 171
+    }
+   },
+   "amenities": null,
+   "amenities_reason": "no developer web page or brochure for this project is on file, or none that can be tied to this registered project by its exact name and brand"
+  },
+  "oxford-gardens-2703": {
+   "schema": 1,
+   "project": {
+    "id": "oxford-gardens-2703",
+    "name": "Oxford Gardens",
+    "brand_name": "Oxford Gardens",
+    "area": "Arjan",
+    "area_source": "register_master",
+    "register_area": "Al Barshaa South Third",
+    "master_project": "Arjan",
+    "project_number": 2703
+   },
+   "as_of": {
+    "sales": "2026-09-17",
+    "register": "2026-06-15",
+    "rents": null,
+    "built": "2026-10-08"
+   },
+   "window": {
+    "from": "2025-09-18",
+    "to": "2026-09-17"
+   },
+   "developer": {
+    "brand": "Iman",
+    "legal_entity": "IMAN DEVELOPERS L.L.C",
+    "evidence": "REGISTER_VERIFIED",
+    "basis": "project number 2703 on the project register names developer id 52592417",
+    "registered": "2017-03-08",
+    "licence_number": "768225",
+    "licence_authority": "DED",
+    "licence_expires": "2026-10-16",
+    "brand_line": "Brand name: Iman (matched to the registered company by its name, a name rule; the register records no brands).",
+    "master_label_not_developer": "The register's developer column on the project row shows the master developer, LIWAN (L.L.C), not the developer; this report uses the developer id, which names IMAN DEVELOPERS L.L.C"
+   },
+   "delivery": {
+    "entity": {
+     "projects": 15,
+     "by_status": {
+      "ACTIVE": 4,
+      "FINISHED": 8,
+      "NOT_STARTED": 2,
+      "PENDING": 1
+     },
+     "source": "Dubai Land Department project register, by developer id"
+    },
+    "brand_family": {
+     "matched_by": "company name starts with IMAN (a name rule, not the register)",
+     "past_planned_end": 9,
+     "registered_finished": 8
+    },
+    "record": {
+     "n": 8,
+     "late": 1,
+     "months": [
+      5.85,
+      5.85
+     ],
+     "source": "Dubai Land Department project register, finished projects with both dates, delivery record built 2026-10-07"
+    }
+   },
+   "status": {
+    "code": "FINISHED",
+    "text": "Handed over",
+    "percent": 100,
+    "start": "2023-07-11",
+    "planned_end": "2025-03-30",
+    "completion": "2025-09-24",
+    "units": 240,
+    "buildings": 1,
+    "escrow": "EMIRATES NBD BANK  (P.J.S.C)",
+    "zoning": "Dubai Development Authority (DDA)",
+    "source": "Dubai Land Department project register"
+   },
+   "sales": {
+    "all_time": 380,
+    "first": "2023-10-27",
+    "last": "2026-09-11",
+    "l12": 70,
+    "l12_median_price": 832500,
+    "l12_median_psf": 1803,
+    "median_price": 779348,
+    "by_year": [
+     {
+      "year": 2023,
+      "n": 53,
+      "psf": 1140
+     },
+     {
+      "year": 2024,
+      "n": 217,
+      "psf": 1331
+     },
+     {
+      "year": 2025,
+      "n": 81,
+      "psf": 1680
+     },
+     {
+      "year": 2026,
+      "n": 29,
+      "psf": 1801
+     }
+    ],
+    "by_beds": [
+     {
+      "beds": "Studio",
+      "n": 211,
+      "sqft": 412,
+      "median_price": 562950,
+      "psf": 1356
+     },
+     {
+      "beds": "1 B/R",
+      "n": 120,
+      "sqft": 763,
+      "median_price": 874220,
+      "psf": 1128
+     },
+     {
+      "beds": "2 B/R",
+      "n": 41,
+      "sqft": 1351,
+      "median_price": 1452970,
+      "psf": 1079
+     },
+     {
+      "beds": "4 B/R",
+      "n": 1,
+      "sqft": 2406,
+      "median_price": 2025000,
+      "psf": 842
+     }
+    ],
+    "land_registrations_excluded": 0,
+    "all_off_plan": false,
+    "source": "Dubai Land Department sales register (unit sales, land excluded) to 2026-09-17"
+   },
+   "price_plan": {
+    "payment_plan": null,
+    "fees": [
+     {
+      "label": "Dubai Land Department registration fee",
+      "rate": 0.04,
+      "source": "published fixed fee on a sale"
+     }
+    ],
+    "fees_unknown": "agent commission, trustee and registration charges, and service charges are not held for this project",
+    "payment_plan_reason": "no developer sheet or offer for this project is on file, so the plan cannot be stated; ask the developer"
+   },
+   "market": {
+    "area_by_year": [
+     {
+      "year": 2015,
+      "n": 573,
+      "psf": 1001
+     },
+     {
+      "year": 2016,
+      "n": 376,
+      "psf": 1087
+     },
+     {
+      "year": 2017,
+      "n": 1109,
+      "psf": 1092
+     },
+     {
+      "year": 2018,
+      "n": 618,
+      "psf": 1108
+     },
+     {
+      "year": 2019,
+      "n": 551,
+      "psf": 973
+     },
+     {
+      "year": 2020,
+      "n": 856,
+      "psf": 926
+     },
+     {
+      "year": 2021,
+      "n": 950,
+      "psf": 862
+     },
+     {
+      "year": 2022,
+      "n": 2655,
+      "psf": 1115
+     },
+     {
+      "year": 2023,
+      "n": 4547,
+      "psf": 1216
+     },
+     {
+      "year": 2024,
+      "n": 4809,
+      "psf": 1321
+     },
+     {
+      "year": 2025,
+      "n": 3902,
+      "psf": 1421
+     },
+     {
+      "year": 2026,
+      "n": 2510,
+      "psf": 1592
+     }
+    ],
+    "dubai_by_year": [
+     {
+      "year": 2020,
+      "n": 23980,
+      "psf": 1065
+     },
+     {
+      "year": 2021,
+      "n": 40685,
+      "psf": 1139
+     },
+     {
+      "year": 2022,
+      "n": 69586,
+      "psf": 1494
+     },
+     {
+      "year": 2023,
+      "n": 102038,
+      "psf": 1496
+     },
+     {
+      "year": 2024,
+      "n": 144014,
+      "psf": 1621
+     },
+     {
+      "year": 2025,
+      "n": 175411,
+      "psf": 1728
+     },
+     {
+      "year": 2026,
+      "n": 100619,
+      "psf": 1733
+     }
+    ]
+   },
+   "neighbourhood": [
+    {
+     "label": "Nearest metro",
+     "value": "First Abu Dhabi Bank Metro Station",
+     "source": "Dubai Land Department sales register, as recorded on this project's sales"
+    },
+    {
+     "label": "Nearest mall",
+     "value": "Mall of the Emirates",
+     "source": "Dubai Land Department sales register, as recorded on this project's sales"
+    },
+    {
+     "label": "Nearest landmark",
+     "value": "Motor City",
+     "source": "Dubai Land Department sales register, as recorded on this project's sales"
+    }
+   ],
+   "city": {
+    "l12_sales": 158242,
+    "l12_psf": 1742,
+    "offplan_share": 0.742,
+    "area_l12_sales": 3985,
+    "area_l12_psf": 1559
+   },
+   "supply": {
+    "ACTIVE": {
+     "projects": 32,
+     "homes": 10507
+    },
+    "NOT_STARTED": {
+     "projects": 4,
+     "homes": 1503
+    }
+   },
+   "unit_register": {
+    "source": "Dubai Land Department unit register, project number 2703, joined by register project id (units to 2026-09-18)",
+    "single": {
+     "name": "Oxford Gardens",
+     "project_number": 2703,
+     "units": 240,
+     "studio": 129,
+     "b1": 76,
+     "b2": 27,
+     "b3": 0,
+     "b4plus": 1,
+     "other": 7
+    },
+    "left_for_sale": "not known: the register does not record which homes are still for sale"
+   },
+   "resales": {
+    "separable": false,
+    "reason": "the register records every off-plan sale under one procedure, 'Sell - Pre registration', and later sales under 'Sell'; neither procedure says whether the seller is the developer or an earlier owner, so a first sale cannot be told apart from a resale",
+    "project_rows": 312,
+    "project_resale_procedure_rows": 68,
+    "project_by_month": [
+     {
+      "month": "2023-10",
+      "n": 1
+     },
+     {
+      "month": "2023-11",
+      "n": 34
+     },
+     {
+      "month": "2023-12",
+      "n": 18
+     },
+     {
+      "month": "2024-01",
+      "n": 6
+     },
+     {
+      "month": "2024-02",
+      "n": 15
+     },
+     {
+      "month": "2024-03",
+      "n": 78
+     },
+     {
+      "month": "2024-04",
+      "n": 34
+     },
+     {
+      "month": "2024-05",
+      "n": 40
+     },
+     {
+      "month": "2024-06",
+      "n": 6
+     },
+     {
+      "month": "2024-07",
+      "n": 10
+     },
+     {
+      "month": "2024-08",
+      "n": 6
+     },
+     {
+      "month": "2024-09",
+      "n": 4
+     },
+     {
+      "month": "2024-10",
+      "n": 5
+     },
+     {
+      "month": "2024-11",
+      "n": 9
+     },
+     {
+      "month": "2024-12",
+      "n": 4
+     },
+     {
+      "month": "2025-01",
+      "n": 5
+     },
+     {
+      "month": "2025-02",
+      "n": 2
+     },
+     {
+      "month": "2025-03",
+      "n": 2
+     },
+     {
+      "month": "2025-04",
+      "n": 4
+     },
+     {
+      "month": "2025-05",
+      "n": 10
+     },
+     {
+      "month": "2025-06",
+      "n": 5
+     },
+     {
+      "month": "2025-07",
+      "n": 3
+     },
+     {
+      "month": "2025-08",
+      "n": 5
+     },
+     {
+      "month": "2025-09",
+      "n": 6
+     },
+     {
+      "month": "2025-10",
+      "n": 11
+     },
+     {
+      "month": "2025-11",
+      "n": 13
+     },
+     {
+      "month": "2025-12",
+      "n": 15
+     },
+     {
+      "month": "2026-01",
+      "n": 8
+     },
+     {
+      "month": "2026-02",
+      "n": 6
+     },
+     {
+      "month": "2026-03",
+      "n": 2
+     },
+     {
+      "month": "2026-04",
+      "n": 2
+     },
+     {
+      "month": "2026-05",
+      "n": 2
+     },
+     {
+      "month": "2026-06",
+      "n": 3
+     },
+     {
+      "month": "2026-07",
+      "n": 1
+     },
+     {
+      "month": "2026-08",
+      "n": 3
+     },
+     {
+      "month": "2026-09",
+      "n": 2
+     }
+    ],
+    "district_window": {
+     "from": "2025-09-18",
+     "to": "2026-09-17",
+     "pre_registration": 2534,
+     "existing_property_sell": 1426
+    }
+   },
+   "amenities": [
+    "pool",
+    "gym",
+    "kids' zone",
+    "BBQ",
+    "cinema",
+    "spa",
+    "sauna",
+    "yoga",
+    "EV charging",
+    "padel",
+    "jogging track",
+    "tennis"
+   ],
+   "amenities_source": "the developer's own web site https://www.imandevelopers.com, page https://www.imandevelopers.com/iman-properties/oxford-gardens, fetched 2026-09-03 (data/dev_meta/iman_portfolio.json); linked to the register project by exact project name, and the register company is the same brand (company-name rule)"
+  },
+  "registered-project-2828-2828": {
+   "schema": 1,
+   "project": {
+    "id": "registered-project-2828-2828",
+    "name": "Registered project 2828",
+    "brand_name": "Registered project 2828",
+    "area": "Dubai Sports City",
+    "area_source": "register_master",
+    "register_area": "Al Hebiah Fourth",
+    "master_project": "Dubai Sports City",
+    "project_number": 2828
+   },
+   "as_of": {
+    "sales": "2026-09-17",
+    "register": "2026-06-15",
+    "rents": null,
+    "built": "2026-10-08"
+   },
+   "window": {
+    "from": "2025-09-18",
+    "to": "2026-09-17"
+   },
+   "developer": {
+    "brand": null,
+    "legal_entity": null,
+    "evidence": "UNVERIFIED",
+    "reason": "On the project register, the project row names no developer id, so the company behind this project cannot be named from the register"
+   },
+   "delivery": null,
+   "status": {
+    "code": "PENDING",
+    "text": "Pending",
+    "percent": 0,
+    "start": "2024-03-01",
+    "planned_end": null,
+    "completion": null,
+    "units": 0,
+    "buildings": 0,
+    "escrow": "DUBAI ISLAMIC BANK (PUBLIC JOINT STOCK COMPANY)",
+    "zoning": "Dubai Development Authority (DDA)",
+    "source": "Dubai Land Department project register"
+   },
+   "sales": {
+    "all_time": 0,
+    "first": null,
+    "last": null,
+    "l12": 0,
+    "l12_median_price": null,
+    "l12_median_psf": null,
+    "median_price": null,
+    "by_year": [],
+    "by_beds": [],
+    "land_registrations_excluded": 0,
+    "all_off_plan": false,
+    "source": "Dubai Land Department sales register (unit sales, land excluded) to 2026-09-17"
+   },
+   "price_plan": {
+    "payment_plan": null,
+    "fees": [],
+    "fees_unknown": "agent commission, trustee and registration charges, and service charges are not held for this project",
+    "payment_plan_reason": "no developer sheet or offer for this project is on file, so the plan cannot be stated; ask the developer"
+   },
+   "delivery_reason": "no registered company is named for this project",
+   "market": {
+    "area_by_year": [
+     {
+      "year": 2015,
+      "n": 2591,
+      "psf": 969
+     },
+     {
+      "year": 2016,
+      "n": 1797,
+      "psf": 968
+     },
+     {
+      "year": 2017,
+      "n": 1350,
+      "psf": 954
+     },
+     {
+      "year": 2018,
+      "n": 1032,
+      "psf": 909
+     },
+     {
+      "year": 2019,
+      "n": 768,
+      "psf": 710
+     },
+     {
+      "year": 2020,
+      "n": 687,
+      "psf": 564
+     },
+     {
+      "year": 2021,
+      "n": 1071,
+      "psf": 585
+     },
+     {
+      "year": 2022,
+      "n": 998,
+      "psf": 611
+     },
+     {
+      "year": 2023,
+      "n": 1777,
+      "psf": 722
+     },
+     {
+      "year": 2024,
+      "n": 3603,
+      "psf": 1194
+     },
+     {
+      "year": 2025,
+      "n": 3591,
+      "psf": 1277
+     },
+     {
+      "year": 2026,
+      "n": 1920,
+      "psf": 1324
+     }
+    ],
+    "dubai_by_year": [
+     {
+      "year": 2020,
+      "n": 23980,
+      "psf": 1065
+     },
+     {
+      "year": 2021,
+      "n": 40685,
+      "psf": 1139
+     },
+     {
+      "year": 2022,
+      "n": 69586,
+      "psf": 1494
+     },
+     {
+      "year": 2023,
+      "n": 102038,
+      "psf": 1496
+     },
+     {
+      "year": 2024,
+      "n": 144014,
+      "psf": 1621
+     },
+     {
+      "year": 2025,
+      "n": 175411,
+      "psf": 1728
+     },
+     {
+      "year": 2026,
+      "n": 100619,
+      "psf": 1733
+     }
+    ]
+   },
+   "city": {
+    "l12_sales": 158242,
+    "l12_psf": 1742,
+    "offplan_share": 0.742,
+    "area_l12_sales": 3360,
+    "area_l12_psf": 1340
+   },
+   "supply": {
+    "ACTIVE": {
+     "projects": 25,
+     "homes": 6673
+    },
+    "NOT_STARTED": {
+     "projects": 4,
+     "homes": 1218
+    }
+   },
+   "amenities": null,
+   "amenities_reason": "no developer web page or brochure for this project is on file, or none that can be tied to this registered project by its exact name and brand"
+  }
+ },
+ "golden": {
+  "pearl-house-ii-by-imtiaz-2777": [
+   {
+    "id": "developer",
+    "title": "Who is the registered developer",
+    "icon": "buildings",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Registered developer: IMTIAZ REAL ESTATE INVESTMENT & DEVELOPMENT L.L.C (confirmed by the Dubai Land Department register; project number 2777 on the project register names developer id 29075838).",
+     "Brand name: Imtiaz (matched to the registered company by its name, a name rule; the register records no brands).",
+     "Registered with the Dubai Land Department on 5 April 2016; licence 718965 (DED), expires 14 October 2026.",
+     "The register's developer column on the project row shows the master developer, JUMEIRAH VILLAGE L.L.C, not the developer; this report uses the developer id, which names IMTIAZ REAL ESTATE INVESTMENT & DEVELOPMENT L.L.C."
+    ]
+   },
+   {
+    "id": "delivery",
+    "title": "The developer's delivery record",
+    "icon": "stack",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "This registered company (register): 19 projects (13 under construction, 5 handed over, 1 not started).",
+     "The Imtiaz name across all its registered companies (company name starts with IMTIAZ (a name rule, not the register)): of 8 projects past their planned end date, 3 are registered as handed over. The register records status, not whether a project was early or late.",
+     "Handover record on the register: of 3 finished projects of this registered company that have both a planned end date and a completion date, 0 were completed after the planned end date. A developer can revise the planned end date on the register, so this is history, not a forecast (Dubai Land Department project register, finished projects with both dates, delivery record built 2026-10-07)."
+    ]
+   },
+   {
+    "id": "status",
+    "title": "Status and handover date",
+    "icon": "ruler",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Status: Under construction, 88% complete. Construction start on the register: 29 August 2023.",
+     "Handover date: the register holds no planned end date.",
+     "Source: Dubai Land Department project register, data to 15 June 2026. 202 homes in 1 building; escrow bank FIRST ABU DHABI BANK P.J.S.C."
+    ]
+   },
+   {
+    "id": "sales",
+    "title": "Sales so far",
+    "icon": "chart-donut",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Registered sales so far: 296, from 2 November 2023 to 26 August 2026. In the last 12 months (18 September 2025 to 17 September 2026): 47.",
+     "Source: Dubai Land Department sales register to 17 September 2026. Homes registered in the project: 202; a home sold twice counts twice. 3 land registrations excluded."
+    ]
+   },
+   {
+    "id": "price_plan",
+    "title": "Price, payment plan and fees",
+    "icon": "wallet",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Price (registered): median AED 834,376 across all sales; AED 960,000 in the last 12 months; AED 1,683 per sq ft in the last 12 months. These are prices agreed in sales, not today's asking prices.",
+     "Payment plan (developer says): 20% on booking, 40% in instalments before handover, 40% on handover.",
+     "Fees we can source: Dubai Land Department registration fee, 4% of the price (published fixed fee on a sale), about AED 33,375 at the median price. Not held: agent commission, trustee and registration charges, and service charges are not held for this project."
+    ]
+   }
+  ],
+  "registered-project-1478-1478": [
+   {
+    "id": "developer",
+    "title": "Who is the registered developer",
+    "icon": "buildings",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Registered developer: DEYAAR DEVELOPMENT (P.J.S.C) (confirmed by the Dubai Land Department register; project number 1478 on the project register names developer id 15).",
+     "Brand name: Deyaar (matched to the registered company by its name, a name rule; the register records no brands).",
+     "Registered with the Dubai Land Department on 21 August 2007; licence 530360 (DED), expires 13 November 2027.",
+     "The register's developer column on the project row shows the master developer, TECOM INVESTMENTS FZ-LLC, not the developer; this report uses the developer id, which names DEYAAR DEVELOPMENT (P.J.S.C)."
+    ]
+   },
+   {
+    "id": "delivery",
+    "title": "The developer's delivery record",
+    "icon": "stack",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "This registered company (register): 38 projects (6 under construction, 25 handed over, 5 not started, 2 pending).",
+     "The Deyaar name across all its registered companies (company name starts with DEYAAR (a name rule, not the register)): of 28 projects past their planned end date, 24 are registered as handed over. The register records status, not whether a project was early or late.",
+     "Handover record on the register: of 24 finished projects of this registered company that have both a planned end date and a completion date, 1 was completed after the planned end date (by 8.6 months). A developer can revise the planned end date on the register, so this is history, not a forecast (Dubai Land Department project register, finished projects with both dates, delivery record built 2026-10-07)."
+    ]
+   },
+   {
+    "id": "status",
+    "title": "Status and handover date",
+    "icon": "ruler",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Status: Handed over. Construction start: the register holds no date.",
+     "Handover date: the register holds no planned end date.",
+     "Source: Dubai Land Department project register, data to 15 June 2026. Homes: the register holds no count."
+    ]
+   },
+   {
+    "id": "sales",
+    "title": "Sales so far",
+    "icon": "chart-donut",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Registered sales: none. No sale of any home in this project is on the Dubai Land Department register to 17 September 2026.",
+     "In the last 12 months (18 September 2025 to 17 September 2026): 0 registered sales.",
+     "Source: Dubai Land Department sales register to 17 September 2026. Homes registered in the project: none recorded on the project register."
+    ]
+   },
+   {
+    "id": "price_plan",
+    "title": "Price, payment plan and fees",
+    "icon": "wallet",
+    "known": false,
+    "label": "UNVERIFIED",
+    "lines": [
+     "Price: no registered sale to take a price from. Any price must come from the developer.",
+     "Payment plan (developer says): not on file, because no developer sheet or offer for this project is on file, so the plan cannot be stated; ask the developer.",
+     "Fees we can source: none for this project. Not held: agent commission, trustee and registration charges, and service charges are not held for this project."
+    ]
+   }
+  ],
+  "montrose-1537": [
+   {
+    "id": "developer",
+    "title": "Who is the registered developer",
+    "icon": "buildings",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Registered developer: DEYAAR DEVELOPMENT (P.J.S.C) (confirmed by the Dubai Land Department register; project number 1537 on the project register names developer id 15).",
+     "Brand name: Deyaar (matched to the registered company by its name, a name rule; the register records no brands).",
+     "Registered with the Dubai Land Department on 21 August 2007; licence 530360 (DED), expires 13 November 2027.",
+     "The register's developer column on the project row shows the master developer, TECOM INVESTMENTS FZ-LLC, not the developer; this report uses the developer id, which names DEYAAR DEVELOPMENT (P.J.S.C)."
+    ]
+   },
+   {
+    "id": "delivery",
+    "title": "The developer's delivery record",
+    "icon": "stack",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "This registered company (register): 38 projects (6 under construction, 25 handed over, 5 not started, 2 pending).",
+     "The Deyaar name across all its registered companies (company name starts with DEYAAR (a name rule, not the register)): of 28 projects past their planned end date, 24 are registered as handed over. The register records status, not whether a project was early or late.",
+     "Handover record on the register: of 24 finished projects of this registered company that have both a planned end date and a completion date, 1 was completed after the planned end date (by 8.6 months). A developer can revise the planned end date on the register, so this is history, not a forecast (Dubai Land Department project register, finished projects with both dates, delivery record built 2026-10-07)."
+    ]
+   },
+   {
+    "id": "status",
+    "title": "Status and handover date",
+    "icon": "ruler",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Status: Handed over, 100% complete. Construction start on the register: 1 July 2014.",
+     "Handover date on the register: planned end 8 April 2018, completed 8 April 2018.",
+     "Source: Dubai Land Department project register, data to 15 June 2026. 302 homes in 2 buildings."
+    ]
+   },
+   {
+    "id": "sales",
+    "title": "Sales so far",
+    "icon": "chart-donut",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Registered sales so far: 441, from 15 September 2014 to 22 June 2026. In the last 12 months (18 September 2025 to 17 September 2026): 20.",
+     "Source: Dubai Land Department sales register to 17 September 2026. Homes registered in the project: 302; a home sold twice counts twice."
+    ]
+   },
+   {
+    "id": "price_plan",
+    "title": "Price, payment plan and fees",
+    "icon": "wallet",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Price (registered): median AED 947,403 across all sales; AED 912,500 in the last 12 months; AED 1,183 per sq ft in the last 12 months. These are prices agreed in sales, not today's asking prices.",
+     "Payment plan (developer says): not on file, because no developer sheet or offer for this project is on file, so the plan cannot be stated; ask the developer.",
+     "Fees we can source: Dubai Land Department registration fee, 4% of the price (published fixed fee on a sale), about AED 37,896 at the median price. Not held: agent commission, trustee and registration charges, and service charges are not held for this project."
+    ]
+   }
+  ],
+  "oxford-gardens-2703": [
+   {
+    "id": "developer",
+    "title": "Who is the registered developer",
+    "icon": "buildings",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Registered developer: IMAN DEVELOPERS L.L.C (confirmed by the Dubai Land Department register; project number 2703 on the project register names developer id 52592417).",
+     "Brand name: Iman (matched to the registered company by its name, a name rule; the register records no brands).",
+     "Registered with the Dubai Land Department on 8 March 2017; licence 768225 (DED), expires 16 October 2026.",
+     "The register's developer column on the project row shows the master developer, LIWAN (L.L.C), not the developer; this report uses the developer id, which names IMAN DEVELOPERS L.L.C."
+    ]
+   },
+   {
+    "id": "delivery",
+    "title": "The developer's delivery record",
+    "icon": "stack",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "This registered company (register): 15 projects (4 under construction, 8 handed over, 2 not started, 1 pending).",
+     "The Iman name across all its registered companies (company name starts with IMAN (a name rule, not the register)): of 9 projects past their planned end date, 8 are registered as handed over. The register records status, not whether a project was early or late.",
+     "Handover record on the register: of 8 finished projects of this registered company that have both a planned end date and a completion date, 1 was completed after the planned end date (by 5.8 months). A developer can revise the planned end date on the register, so this is history, not a forecast (Dubai Land Department project register, finished projects with both dates, delivery record built 2026-10-07)."
+    ]
+   },
+   {
+    "id": "status",
+    "title": "Status and handover date",
+    "icon": "ruler",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Status: Handed over, 100% complete. Construction start on the register: 11 July 2023.",
+     "Handover date on the register: planned end 30 March 2025, completed 24 September 2025.",
+     "Source: Dubai Land Department project register, data to 15 June 2026. 240 homes in 1 building; escrow bank EMIRATES NBD BANK  (P.J.S.C)."
+    ]
+   },
+   {
+    "id": "sales",
+    "title": "Sales so far",
+    "icon": "chart-donut",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Registered sales so far: 380, from 27 October 2023 to 11 September 2026. In the last 12 months (18 September 2025 to 17 September 2026): 70.",
+     "Source: Dubai Land Department sales register to 17 September 2026. Homes registered in the project: 240; a home sold twice counts twice."
+    ]
+   },
+   {
+    "id": "price_plan",
+    "title": "Price, payment plan and fees",
+    "icon": "wallet",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Price (registered): median AED 779,348 across all sales; AED 832,500 in the last 12 months; AED 1,803 per sq ft in the last 12 months. These are prices agreed in sales, not today's asking prices.",
+     "Payment plan (developer says): not on file, because no developer sheet or offer for this project is on file, so the plan cannot be stated; ask the developer.",
+     "Fees we can source: Dubai Land Department registration fee, 4% of the price (published fixed fee on a sale), about AED 31,174 at the median price. Not held: agent commission, trustee and registration charges, and service charges are not held for this project."
+    ]
+   }
+  ],
+  "registered-project-2828-2828": [
+   {
+    "id": "developer",
+    "title": "Who is the registered developer",
+    "icon": "buildings",
+    "known": false,
+    "label": "UNVERIFIED",
+    "lines": [
+     "Registered developer: not on the register yet. On the project register, the project row names no developer id, so the company behind this project cannot be named from the register."
+    ]
+   },
+   {
+    "id": "delivery",
+    "title": "The developer's delivery record",
+    "icon": "stack",
+    "known": false,
+    "label": "UNVERIFIED",
+    "lines": [
+     "Delivery record: not available, because no registered company is named for this project."
+    ]
+   },
+   {
+    "id": "status",
+    "title": "Status and handover date",
+    "icon": "ruler",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Status: Pending, 0% complete. Construction start on the register: 1 March 2024.",
+     "Handover date: the register holds no planned end date.",
+     "Source: Dubai Land Department project register, data to 15 June 2026. Homes: the register holds no count; escrow bank DUBAI ISLAMIC BANK."
+    ]
+   },
+   {
+    "id": "sales",
+    "title": "Sales so far",
+    "icon": "chart-donut",
+    "known": true,
+    "label": "REGISTER_VERIFIED",
+    "lines": [
+     "Registered sales: none. No sale of any home in this project is on the Dubai Land Department register to 17 September 2026.",
+     "In the last 12 months (18 September 2025 to 17 September 2026): 0 registered sales.",
+     "Source: Dubai Land Department sales register to 17 September 2026. Homes registered in the project: none recorded on the project register."
+    ]
+   },
+   {
+    "id": "price_plan",
+    "title": "Price, payment plan and fees",
+    "icon": "wallet",
+    "known": false,
+    "label": "UNVERIFIED",
+    "lines": [
+     "Price: no registered sale to take a price from. Any price must come from the developer.",
+     "Payment plan (developer says): not on file, because no developer sheet or offer for this project is on file, so the plan cannot be stated; ask the developer.",
+     "Fees we can source: none for this project. Not held: agent commission, trustee and registration charges, and service charges are not held for this project."
+    ]
+   }
+  ]
+ }
+}

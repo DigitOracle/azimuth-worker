@@ -1,0 +1,402 @@
+{
+ "schema": 1,
+ "project": {
+  "id": "kore-by-imtiaz-offregister",
+  "name": "KORE by Imtiaz",
+  "brand_name": "KORE by Imtiaz",
+  "area": "Dubai Land Residence Complex",
+  "area_source": "register_master",
+  "register_area": "Wadi Al Safa 5",
+  "master_project": "Dubai Land Residence Complex",
+  "project_number": null,
+  "off_register": true,
+  "off_register_note": "KORE is not on the Dubai Land Department project register: it has a building and unit register entry (project id 962479984) and no project register row, so no register project number exists"
+ },
+ "as_of": {
+  "sales": "2026-09-17",
+  "register": null,
+  "rents": null,
+  "built": "2026-10-08"
+ },
+ "window": {
+  "from": "2025-09-18",
+  "to": "2026-09-17"
+ },
+ "developer": {
+  "brand": "Imtiaz",
+  "legal_entity": null,
+  "evidence": "DEVELOPER_CLAIMED",
+  "reason": "The developer's own material names Imtiaz as the brand (developer says); the project register has no record of KORE, so the company behind it is not named by the register",
+  "brand_source": {
+   "text": "KORE launch brochure (the developer's own brochure, received from the owner)",
+   "as_of": "2026-10-06"
+  }
+ },
+ "delivery": null,
+ "delivery_reason": "the project is not on the project register and no registered company is named for it",
+ "status": null,
+ "status_reason": "KORE is not on the project register, so no registered status, percent complete or planned end date can be given",
+ "handover_claim": "Q4 2028",
+ "sales": {
+  "all_time": 0,
+  "first": null,
+  "last": null,
+  "l12": 0,
+  "l12_median_price": null,
+  "l12_median_psf": null,
+  "median_price": null,
+  "by_year": [],
+  "by_beds": [],
+  "land_registrations_excluded": 0,
+  "all_off_plan": false,
+  "source": "Dubai Land Department sales register (unit sales, land excluded) to 2026-09-17; no sale row names KORE and the project is not on the project register"
+ },
+ "price_plan": {
+  "payment_plan": {
+   "text": "the developer states 2 plans, each as a schedule. Option 1 (the 50/50 plan): 20% on booking; 5% on 15 February 2027*; 5% on 15 June 2027*; 5% on 15 October 2027*; 5% on 15 February 2028*; 5% on 15 April 2028*; 5% on 15 September 2028*; 50% on completion (Q4 2028*). Option 2 (the 60/40 post-handover plan): 20% on booking; 5% on 15 February 2027*; 10% on 15 June 2027*; 5% on 15 October 2027*; 10% on 15 February 2028*; 5% on 15 April 2028*; 5% on completion (Q4 2028); 40% after handover, quarterly over 3 years (printed 3.33% quarterly). Source: KORE launch brochure, received 6 October 2026. Dates marked * are indicative: the brochure does not say what the asterisk means here. No cash amount is worked out from either plan",
+   "milestones": [],
+   "schedule": [
+    {
+     "label": "50/50 Payment Plan",
+     "steps": [
+      {
+       "label": "On booking",
+       "pct": 20,
+       "when": null,
+       "marked": false
+      },
+      {
+       "label": "2nd instalment",
+       "pct": 5,
+       "when": "15 February 2027",
+       "marked": true
+      },
+      {
+       "label": "3rd instalment",
+       "pct": 5,
+       "when": "15 June 2027",
+       "marked": true
+      },
+      {
+       "label": "4th instalment",
+       "pct": 5,
+       "when": "15 October 2027",
+       "marked": true
+      },
+      {
+       "label": "5th instalment",
+       "pct": 5,
+       "when": "15 February 2028",
+       "marked": true
+      },
+      {
+       "label": "6th instalment",
+       "pct": 5,
+       "when": "15 April 2028",
+       "marked": true
+      },
+      {
+       "label": "7th instalment",
+       "pct": 5,
+       "when": "15 September 2028",
+       "marked": true
+      },
+      {
+       "label": "On completion",
+       "pct": 50,
+       "when": "Q4 2028",
+       "marked": true
+      }
+     ],
+     "total_pct": 100
+    },
+    {
+     "label": "60/40 Post Handover Payment Plan",
+     "steps": [
+      {
+       "label": "On booking",
+       "pct": 20,
+       "when": null,
+       "marked": false
+      },
+      {
+       "label": "2nd instalment",
+       "pct": 5,
+       "when": "15 February 2027",
+       "marked": true
+      },
+      {
+       "label": "3rd instalment",
+       "pct": 10,
+       "when": "15 June 2027",
+       "marked": true
+      },
+      {
+       "label": "4th instalment",
+       "pct": 5,
+       "when": "15 October 2027",
+       "marked": true
+      },
+      {
+       "label": "5th instalment",
+       "pct": 10,
+       "when": "15 February 2028",
+       "marked": true
+      },
+      {
+       "label": "6th instalment",
+       "pct": 5,
+       "when": "15 April 2028",
+       "marked": true
+      },
+      {
+       "label": "On completion",
+       "pct": 5,
+       "when": "Q4 2028",
+       "marked": false
+      },
+      {
+       "label": "After handover, quarterly over 3 years (printed 3.33% quarterly)",
+       "pct": 40,
+       "when": null,
+       "marked": false
+      }
+     ],
+     "total_pct": 100
+    }
+   ],
+   "indicative_dates": true,
+   "evidence": "DEVELOPER_CLAIMED",
+   "as_of": "2026-10-06",
+   "source": {
+    "file": "data/developer_claims/kore_launch_brochure.json (brochure image WhatsApp Image 2026-10-06 at 12.04.38 PM (3).jpeg)",
+    "url": null,
+    "quote": "1st 20% On Booking; 2nd 5% 15/02/2027*; 3rd 5% 15/06/2027*; 4th 5% 15/10/2027*; 5th 5% 15/02/2028*; 6th 5% 15/04/2028*; 7th 5% 15/09/2028*; On Completion 50% Q4, 2028* | 1st 20% On Booking; 2nd 5% 15/02/2027*; 3rd 10% 15/06/2027*; 4th 5% 15/10/2027*; 5th 10% 15/02/2028*; 6th 5% 15/04/2028*; On Completion 5% Q4, 2028; Post Handover 40% (3.33% Quarterly) In 3 Years"
+   }
+  },
+  "fees": [],
+  "fees_unknown": "agent commission, trustee and registration charges, and service charges are not held for this project"
+ },
+ "amenities": [
+  "Roof, outdoor: adults' leisure pool, sunset deck, wellness pool, rooftop kids' pool, outdoor shower area",
+  "Level 1, outdoor: shallow water feature, garden co-working pods, interactive sensory garden, conversation pit, family lounge and lawn, harvest table with pavilion, edible garden, climate comfort garden, outdoor gym, playground, social padel court, sports lounge",
+  "Ground level, indoor: Raw Theory, The Hike",
+  "Roof level, indoor: Raw Theory clubhouse",
+  "Also listed on the brochure's pillars page, not on its amenity list by level: red light therapy, sauna, sleep. The brochure does not say who provides these or whether any is included in the price"
+ ],
+ "unit_register": {
+  "source": "Dubai Land Department unit register, project id 962479984 (units to 2026-09-18)",
+  "as_of": "2026-09-18",
+  "single": {
+   "name": "KORE by Imtiaz",
+   "project_number": null,
+   "units": 351,
+   "studio": 248,
+   "b1": 90,
+   "b2": 13,
+   "b3": 0,
+   "b4plus": 0,
+   "other": 0
+  },
+  "sizes": [
+   {
+    "beds": "Studio",
+    "n": 248,
+    "min_sqft": 406,
+    "max_sqft": 623
+   },
+   {
+    "beds": "1 B/R",
+    "n": 90,
+    "min_sqft": 676,
+    "max_sqft": 1130
+   },
+   {
+    "beds": "2 B/R",
+    "n": 13,
+    "min_sqft": 1409,
+    "max_sqft": 1663
+   }
+  ],
+  "left_for_sale": "not known: the register does not record which homes are still for sale"
+ },
+ "developer_says": {
+  "source": {
+   "name": "KORE launch brochure",
+   "received": "2026-10-06",
+   "as_of": "2026-10-06",
+   "files": {
+    "prices": "WhatsApp Image 2026-10-06 at 12.04.38 PM (2).jpeg",
+    "payment_plans_and_completion": "WhatsApp Image 2026-10-06 at 12.04.38 PM (3).jpeg",
+    "pillars": "WhatsApp Image 2026-10-06 at 12.04.37 PM (1).jpeg",
+    "amenities": "WhatsApp Image 2026-10-06 at 12.04.37 PM (2).jpeg",
+    "location_map": "WhatsApp Image 2026-10-06 at 12.04.39 PM (1).jpeg",
+    "also_read": [
+     "WhatsApp Image 2026-10-06 at 12.04.36 PM.jpeg",
+     "WhatsApp Image 2026-10-06 at 12.04.37 PM.jpeg",
+     "WhatsApp Image 2026-10-06 at 12.04.38 PM.jpeg",
+     "WhatsApp Image 2026-10-06 at 12.04.38 PM (1).jpeg",
+     "WhatsApp Image 2026-10-06 at 12.04.39 PM.jpeg"
+    ]
+   }
+  },
+  "handover_note": "The brochure prints the completion date with an asterisk and does not say what it means here, so the date is indicative.",
+  "price_from": [
+   {
+    "type": "Studio",
+    "size_sqft": 406,
+    "from_aed": 679000,
+    "printed": "679K"
+   },
+   {
+    "type": "1 B/R",
+    "size_sqft": 669,
+    "from_aed": 1100000,
+    "printed": "1.1 M"
+   },
+   {
+    "type": "2 B/R",
+    "size_sqft": 1406,
+    "from_aed": 1550000,
+    "printed": "1.55 M"
+   }
+  ],
+  "concept": "A holistic wellness residence"
+ },
+ "amenities_source": "KORE launch brochure, received 6 October 2026 (the developer's own material; developer says)",
+ "delivery_brand": {
+  "brand": "Imtiaz",
+  "companies": 8,
+  "companies_named": 12,
+  "projects": 35,
+  "by_status": {
+   "ACTIVE": 20,
+   "FINISHED": 5,
+   "NOT_STARTED": 8,
+   "PENDING": 2
+  },
+  "past_planned_end": 8,
+  "registered_finished": 3,
+  "matched_by": "a company-name rule (registered company names that begin with the brand name; the register records no brands)",
+  "source": "Dubai Land Department project register and developers register, by registered company id",
+  "as_of": "2026-06-15"
+ },
+ "market": {
+  "area_by_year": [
+   {
+    "year": 2015,
+    "n": 367,
+    "psf": 700
+   },
+   {
+    "year": 2016,
+    "n": 365,
+    "psf": 725
+   },
+   {
+    "year": 2017,
+    "n": 164,
+    "psf": 722
+   },
+   {
+    "year": 2018,
+    "n": 211,
+    "psf": 820
+   },
+   {
+    "year": 2019,
+    "n": 109,
+    "psf": 610
+   },
+   {
+    "year": 2020,
+    "n": 420,
+    "psf": 850
+   },
+   {
+    "year": 2021,
+    "n": 382,
+    "psf": 662
+   },
+   {
+    "year": 2022,
+    "n": 729,
+    "psf": 723
+   },
+   {
+    "year": 2023,
+    "n": 2000,
+    "psf": 846
+   },
+   {
+    "year": 2024,
+    "n": 5005,
+    "psf": 1194
+   },
+   {
+    "year": 2025,
+    "n": 8817,
+    "psf": 1368
+   },
+   {
+    "year": 2026,
+    "n": 5096,
+    "psf": 1450
+   }
+  ],
+  "dubai_by_year": [
+   {
+    "year": 2020,
+    "n": 23980,
+    "psf": 1065
+   },
+   {
+    "year": 2021,
+    "n": 40685,
+    "psf": 1139
+   },
+   {
+    "year": 2022,
+    "n": 69586,
+    "psf": 1494
+   },
+   {
+    "year": 2023,
+    "n": 102038,
+    "psf": 1496
+   },
+   {
+    "year": 2024,
+    "n": 144014,
+    "psf": 1621
+   },
+   {
+    "year": 2025,
+    "n": 175411,
+    "psf": 1728
+   },
+   {
+    "year": 2026,
+    "n": 100619,
+    "psf": 1733
+   }
+  ]
+ },
+ "city": {
+  "l12_sales": 158242,
+  "l12_psf": 1742,
+  "offplan_share": 0.742,
+  "area_l12_sales": 8258,
+  "area_l12_psf": 1459
+ },
+ "supply": {
+  "ACTIVE": {
+   "projects": 43,
+   "homes": 7858
+  },
+  "NOT_STARTED": {
+   "projects": 32,
+   "homes": 9337
+  }
+ }
+}

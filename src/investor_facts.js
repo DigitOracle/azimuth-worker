@@ -86,6 +86,19 @@ export function validateFacts(f) {
       if (!str(pl.text)) e.push("payment_plan.text missing");
       if (pl.evidence !== "DEVELOPER_CLAIMED") e.push("payment_plan.evidence must be DEVELOPER_CLAIMED");
       if (!pl.source || !str(pl.source.file) || !str(pl.source.quote)) e.push("payment_plan.source (file and the developer's own words) missing");
+      if (pl.schedule != null) {   // v411: a schedule the developer states step by step (percent, and a date where it prints one); every percent must be a figure in the developer's own words and the steps must add up to the stated total
+        if (!Array.isArray(pl.schedule) || !pl.schedule.length) e.push("payment_plan.schedule must be a non-empty list of plans");
+        else {
+          const qs = new Set(numsIn(pl.source && pl.source.quote));
+          for (const sp of pl.schedule) {
+            if (!str(sp.label) || !Array.isArray(sp.steps) || !sp.steps.length || !isNum(sp.total_pct)) { e.push("a schedule plan needs label, steps and total_pct"); continue; }
+            for (const st of sp.steps) if (!str(st.label) || !isNum(st.pct) || !qs.has(st.pct)) e.push("schedule '" + sp.label + "' step '" + (st && st.label) + "' shows a percent that is not a figure in the developer's own words");
+            const sum = sp.steps.reduce((a, st) => a + (isNum(st.pct) ? st.pct : 0), 0);
+            if (Math.abs(sum - sp.total_pct) > 0.0001) e.push("schedule '" + sp.label + "' steps add up to " + sum + ", not the stated " + sp.total_pct);
+            if (sp.total_pct > 100.0001) e.push("schedule '" + sp.label + "' adds up to more than 100%");
+          }
+        }
+      }
       const ms = Array.isArray(pl.milestones) ? pl.milestones : null;
       if (!ms) e.push("payment_plan.milestones must be a list (empty when the developer gives options)");
       else if (ms.length) {
@@ -105,6 +118,37 @@ export function validateFacts(f) {
   else {
     if (!DL.entity || !Number.isInteger(DL.entity.projects) || !DL.entity.by_status) e.push("delivery.entity needs projects and by_status");
     if (DL.record) { if (!(DL.record.n >= 3)) e.push("a handover record needs 3 or more projects"); if (!str(DL.record.source)) e.push("delivery.record.source missing"); }
+  }
+  // v411: the brand's delivery record where the brand maps to registered companies (never the project's own record), the developer's own launch material, the brand source
+  const DB = f.delivery_brand;
+  if (DB != null) {
+    if (!str(DB.brand) || !Number.isInteger(DB.projects) || !Number.isInteger(DB.companies) || DB.companies < 1 || !DB.by_status) e.push("delivery_brand needs brand, projects, companies and by_status");
+    else if (Object.values(DB.by_status).reduce((a, n) => a + (Number.isInteger(n) ? n : NaN), 0) !== DB.projects) e.push("delivery_brand.by_status does not add up to delivery_brand.projects");
+    if (!str(DB.matched_by) || !str(DB.source) || !DATE.test(String(DB.as_of || ""))) e.push("delivery_brand needs matched_by, source and as_of");
+    if (f.delivery != null) e.push("a project with a registered delivery record does not also carry a brand-level one");
+    if (!P.off_register) e.push("delivery_brand is only for a project that is not on the project register");
+  }
+  if (D && D.brand_source != null && (!str(D.brand_source.text) || !DATE.test(String(D.brand_source.as_of || "")))) e.push("developer.brand_source needs text and as_of");
+  const DS = f.developer_says;
+  if (DS != null) {
+    if (!P.off_register) e.push("developer_says is only for a project that is not on the project register");
+    if (!DS.source || !str(DS.source.name) || !DATE.test(String(DS.source.as_of || "")) || (DS.source.received != null && !DATE.test(String(DS.source.received)))) e.push("developer_says.source needs name and as_of (and received, if given, as a date)");
+    if (DS.source && /propertyfinder|bayut|dubizzle|property finder|zoopla|rightmove/i.test(JSON.stringify(DS.source))) e.push("developer_says.source names a portal; a portal is never a source for a client document");
+    if (DS.price_from != null) {
+      if (!Array.isArray(DS.price_from) || !DS.price_from.length) e.push("developer_says.price_from must be a non-empty list or null");
+      else for (const r of DS.price_from) {
+        const m = /^\s*(\d+(?:\.\d+)?)\s*([KkMm])?\s*$/.exec(String(r && r.printed || ""));
+        if (!r || !str(r.type) || !isNum(r.from_aed) || !m) { e.push("a launch price needs type, from_aed and the printed figure"); continue; }
+        const v = Math.round(Number(m[1]) * (/k/i.test(m[2] || "") ? 1e3 : /m/i.test(m[2] || "") ? 1e6 : 1));
+        if (v !== r.from_aed) e.push("launch price " + r.type + ": " + r.from_aed + " is not the printed figure " + r.printed);
+        if (r.size_sqft != null && !(isNum(r.size_sqft) && r.size_sqft > 0)) e.push("launch price " + r.type + ": size_sqft must be a positive number");
+      }
+    }
+    if (DS.units_stated != null && !(Number.isInteger(DS.units_stated) && DS.units_stated > 0)) e.push("developer_says.units_stated must be a count");
+  }
+  if (f.unit_register && f.unit_register.sizes != null) {
+    if (!Array.isArray(f.unit_register.sizes)) e.push("unit_register.sizes must be a list");
+    else for (const z of f.unit_register.sizes) if (!str(z.beds) || !Number.isInteger(z.n) || !isNum(z.min_sqft) || !isNum(z.max_sqft) || z.min_sqft > z.max_sqft) e.push("unit_register.sizes: each row needs beds, n, min_sqft <= max_sqft");
   }
   // rents only where contracts exist, with the count and how they were linked
   if (f.rents != null && f.rents.project_contracts > 0 && !str(f.rents.basis)) e.push("rents.project_contracts > 0 needs rents.basis (how the contracts were linked)");

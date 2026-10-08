@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "_about": "v411 - the DEVELOPER'S OWN launch material for a project that is not on the Land Department project register. Every value is DEVELOPER_CLAIMED: transcribed as printed, never corrected, never from a portal. scripts/build_investor_facts.py reads every file in this folder and attaches it, as developer says with date and source line, to the project whose register project id (building and unit register) or name it names. A figure is kept here only if it can be read on the named page.",
+  "key": "kore",
+  "project": {
+    "name": "KORE by Imtiaz",
+    "brand": "Imtiaz",
+    "register_project_id": 962479984,
+    "facts_id": "kore-by-imtiaz-offregister"
+  },
+  "source": {
+    "name": "KORE launch brochure",
+    "kind": "the developer's own brochure, received from the owner on WhatsApp",
+    "received": "2026-10-06",
+    "date_rule": "the received date is used; no print date is printed on the pages",
+    "files": {
+      "prices": "WhatsApp Image 2026-10-06 at 12.04.38 PM (2).jpeg",
+      "payment_plans_and_completion": "WhatsApp Image 2026-10-06 at 12.04.38 PM (3).jpeg",
+      "pillars": "WhatsApp Image 2026-10-06 at 12.04.37 PM (1).jpeg",
+      "amenities": "WhatsApp Image 2026-10-06 at 12.04.37 PM (2).jpeg",
+      "location_map": "WhatsApp Image 2026-10-06 at 12.04.39 PM (1).jpeg",
+      "also_read": ["WhatsApp Image 2026-10-06 at 12.04.36 PM.jpeg", "WhatsApp Image 2026-10-06 at 12.04.37 PM.jpeg", "WhatsApp Image 2026-10-06 at 12.04.38 PM.jpeg", "WhatsApp Image 2026-10-06 at 12.04.38 PM (1).jpeg", "WhatsApp Image 2026-10-06 at 12.04.39 PM.jpeg"]
+    },
+    "folder": "C:\\Users\\kwils\\Downloads",
+    "cross_reference": "docs/kore/KORE_PRODUCT_DATA_SHEET.json in C:\\Dev\\naj-market-pulse (commercial.ladder_developer, commercial.payment_plans, amenity.amenities_by_level, location.drive_times_claimed), transcribed there on 6 Oct 2026 from the same brochure"
+  },
+  "handover": { "text": "Q4 2028", "printed": "On completion: Q4, 2028*", "page": "payment_plans_and_completion" },
+  "price_from": {
+    "page": "prices",
+    "rows": [
+      { "type": "Studio", "printed_size": "From: 406 sq.ft.", "size_sqft": 406, "printed_price": "Starting: 679K", "from_aed": 679000 },
+      { "type": "1 B/R", "printed_size": "From: 669 sq.ft.", "size_sqft": 669, "printed_price": "Starting: 1.1 M", "from_aed": 1100000 },
+      { "type": "2 B/R", "printed_size": "From: 1,406 sq.ft.", "size_sqft": 1406, "printed_price": "Starting: 1.55 M", "from_aed": 1550000 }
+    ]
+  },
+  "payment_plans": {
+    "page": "payment_plans_and_completion",
+    "marker_note": "dates marked * in the brochure; the brochure does not say what the asterisk means here, so the dates are treated as indicative",
+    "plans": [
+      {
+        "label": "50/50 Payment Plan",
+        "quote": "1st 20% On Booking; 2nd 5% 15/02/2027*; 3rd 5% 15/06/2027*; 4th 5% 15/10/2027*; 5th 5% 15/02/2028*; 6th 5% 15/04/2028*; 7th 5% 15/09/2028*; On Completion 50% Q4, 2028*",
+        "steps": [
+          { "label": "On booking", "pct": 20, "when": null, "marked": false },
+          { "label": "2nd instalment", "pct": 5, "when": "15 February 2027", "marked": true },
+          { "label": "3rd instalment", "pct": 5, "when": "15 June 2027", "marked": true },
+          { "label": "4th instalment", "pct": 5, "when": "15 October 2027", "marked": true },
+          { "label": "5th instalment", "pct": 5, "when": "15 February 2028", "marked": true },
+          { "label": "6th instalment", "pct": 5, "when": "15 April 2028", "marked": true },
+          { "label": "7th instalment", "pct": 5, "when": "15 September 2028", "marked": true },
+          { "label": "On completion", "pct": 50, "when": "Q4 2028", "marked": true }
+        ],
+        "total_pct": 100
+      },
+      {
+        "label": "60/40 Post Handover Payment Plan",
+        "quote": "1st 20% On Booking; 2nd 5% 15/02/2027*; 3rd 10% 15/06/2027*; 4th 5% 15/10/2027*; 5th 10% 15/02/2028*; 6th 5% 15/04/2028*; On Completion 5% Q4, 2028; Post Handover 40% (3.33% Quarterly) In 3 Years",
+        "steps": [
+          { "label": "On booking", "pct": 20, "when": null, "marked": false },
+          { "label": "2nd instalment", "pct": 5, "when": "15 February 2027", "marked": true },
+          { "label": "3rd instalment", "pct": 10, "when": "15 June 2027", "marked": true },
+          { "label": "4th instalment", "pct": 5, "when": "15 October 2027", "marked": true },
+          { "label": "5th instalment", "pct": 10, "when": "15 February 2028", "marked": true },
+          { "label": "6th instalment", "pct": 5, "when": "15 April 2028", "marked": true },
+          { "label": "On completion", "pct": 5, "when": "Q4 2028", "marked": false },
+          { "label": "After handover, quarterly over 3 years (printed 3.33% quarterly)", "pct": 40, "when": null, "marked": false, "after_handover": true }
+        ],
+        "total_pct": 100
+      }
+    ]
+  },
+  "amenities": {
+    "page": "amenities",
+    "by_level": [
+      { "where": "Roof, outdoor", "items": ["adults' leisure pool", "sunset deck", "wellness pool", "rooftop kids' pool", "outdoor shower area"] },
+      { "where": "Level 1, outdoor", "items": ["shallow water feature", "garden co-working pods", "interactive sensory garden", "conversation pit", "family lounge and lawn", "harvest table with pavilion", "edible garden", "climate comfort garden", "outdoor gym", "playground", "social padel court", "sports lounge"] },
+      { "where": "Ground level, indoor", "items": ["Raw Theory", "The Hike"] },
+      { "where": "Roof level, indoor", "items": ["Raw Theory clubhouse"] }
+    ],
+    "pillars_page": "pillars",
+    "pillars_also_listed": ["red light therapy", "sauna", "sleep"],
+    "pillars_note": "the pillars page lists red light therapy, sauna and sleep under Recover; the amenity list by level does not list them; the brochure does not say who provides them or whether any is included in the price"
+  },
+  "concept": { "text": "A holistic wellness residence", "pillars": ["Train", "Nourish", "Recover"], "page": "pillars" },
+  "drive_times": {
+    "page": "location_map",
+    "note": "printed under the heading '15-minute loop'; the mode of travel is not stated; never to be read as a walking time",
+    "rows": [
+      { "to": "Al Habtoor Polo Resort", "min": 10 }, { "to": "Meydan Cycling Track", "min": 15 }, { "to": "Wellfit Meydan", "min": 15 }, { "to": "Meydan Golf", "min": 15 },
+      { "to": "Meydan Racecourse", "min": 15 }, { "to": "Hamdan Sports Complex", "min": 15 }, { "to": "Nad Al Sheba Cycling Park", "min": 20 }, { "to": "Ras Al Khor Wildlife Sanctuary", "min": 15 },
+      { "to": "Meydan Canal and Boardwalk", "min": 15 }, { "to": "Meydan Central Park", "min": 15 }, { "to": "Dubai Creek Harbour", "min": 20 }, { "to": "Downtown Dubai", "min": 20 },
+      { "to": "Dubai Design District", "min": 20 }, { "to": "Business Bay", "min": 20 }, { "to": "DXB Airport", "min": 20 }
+    ]
+  },
+  "not_used": "lifestyle photographs (a person is shown) and the renders are not used anywhere in the report"
+}

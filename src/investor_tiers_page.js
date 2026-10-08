@@ -8,7 +8,7 @@ import { loadFactsSharded } from "./investor_facts.js";
 import { BRIEF_KIT, esc } from "./brief_docs.js";
 import { optFrame } from "./doc_options_page.js";   // v407 - the shared options-page shell
 import { icon, EXTRA_CSS, pack } from "./devmap_pdf.js";
-import { buildPlan, SEGMENTS, PRESETS, TIERS, CORE_IDS, LABEL_TEXT, CANNOT_TELL, THRESHOLDS, ORDER_FLAGS, RULE_CARDS, validRuleCard, validAssignmentCard, dateLong, fmt, aed, bedsWord, lintText } from "./investor_tiers.js";
+import { buildPlan, SEGMENTS, PRESETS, TIERS, CORE_IDS, LABEL_TEXT, CANNOT_TELL, THRESHOLDS, ORDER_FLAGS, RULE_CARDS, validRuleCard, validAssignmentCard, CANNOT_TELL_DEVELOPER, dateLong, fmt, aed, bedsWord, lintText } from "./investor_tiers.js";
 
 const { NAVY, MUTED } = BRIEF_KIT;
 const TEAL = "#0A4F4A", GOLD = "#C5A56A", INK = "#22262B", HAIR = "#E6E1D8";
@@ -105,7 +105,7 @@ export function segmentContent(id, f, th) {
         figs: [hero("Registered company", fmt(e.projects) + " projects", (fin === 0 ? "none handed over" : fmt(fin) + " handed over") + " &middot; register")].concat(b ? [hero(D.brand + " name, all companies", fmt(b.registered_finished) + " of " + fmt(b.past_planned_end), "handed over, past planned end &middot; by name")] : []),
         method: "The first figure is from the project register by developer id." + (b ? " The second joins every registered company whose name starts with " + D.brand + "; that is a name rule, not a register link, and the register records status, not early or late." : " The register records status, not early or late.") };
     }
-    case "amenities": return { story: "What the developer says is included (not on the register): " + f.amenities.join("; ") + ".", figs: [], method: "Developer says. Nothing here is confirmed by the Dubai Land Department register." };
+    case "amenities": return { story: (f.project && f.project.off_register ? "What the developer lists (not on the register; the developer's material does not say here which of these are included in the price): " : "What the developer says is included (not on the register): ") + f.amenities.join("; ") + (f.project && f.project.off_register && f.amenities_source ? ". Source (developer says): " + f.amenities_source : "") + ".", figs: [], method: "Developer says. Nothing here is confirmed by the Dubai Land Department register." };
     case "demand_momentum": {
       return { story: "Registered sales in the last 12 months: " + fmt(X.l12) + ", above the " + th.strong_sales_min_l12 + " this report needs before it describes sales as strong. In all: " + fmt(X.all_time) + " since " + dateLong(X.first) + ".",
         figs: [hero("Sales, 12 months", fmt(X.l12), dateLong(f.window.from) + " to " + dateLong(f.window.to)), hero("Sales so far", fmt(X.all_time), "since " + dateLong(X.first))], method: "Registered sales only; a home sold twice counts twice." };
@@ -211,7 +211,7 @@ function segBlocks(row, f, tier0) {
 }
 function lastPage(plan, f) {
   const kn = '<div class="ivc core"><div class="ivch">' + icon("info", 17, TEAL) + '<span class="serif">What this report cannot tell you</span><span class="chip">Always included</span></div><div class="ivkg">' +
-    CANNOT_TELL.map((k) => '<div class="ivk"><div><b>' + esc(k[0]) + "</b><p>" + esc(k[1]) + "</p></div></div>").join("") + "</div></div>";
+    CANNOT_TELL.concat(f.developer_says ? CANNOT_TELL_DEVELOPER : []).map((k) => '<div class="ivk"><div><b>' + esc(k[0]) + "</b><p>" + esc(k[1]) + "</p></div></div>").join("") + "</div></div>";
   const cov = '<div class="ivcov"><b>' + esc(plan.coverage.split(". Not covered:")[0]) + ".</b> " + esc("Not covered:" + plan.coverage.split(". Not covered:")[1]) + "</div>";
   const aud = '<div class="ivc"><div class="ivlab"><b>Record of this version.</b> Investor type: ' + esc(plan.type || "none chosen") + ". Tier: " + esc(TIER_TITLE[plan.tier]) + ". Sales data to " + esc(dateLong(f.as_of.sales)) + (f.as_of.register ? "; project register to " + esc(dateLong(f.as_of.register)) : "; no project register record") + ". Built " + esc(dateLong(f.as_of.built)) + ". The full record, with every check result, is kept with this file." +
     " This report describes past registered facts only. It is not investment, financial, legal or tax advice, not an offer and not a forecast.</div></div>";

@@ -163,7 +163,13 @@ const winText = (f) => dateLong(f.window.from) + " to " + dateLong(f.window.to);
 export function buildCore(f) {
   const items = [], D = f.developer, S = f.status, X = f.sales, P = f.price_plan, DL = f.delivery;
   // 1 developer
-  if (!D || !D.legal_entity) items.push({ id: "developer", title: "Who is the registered developer", icon: "buildings", known: false, label: "UNVERIFIED", lines: ["Registered developer: not on the register yet" + (D && D.reason ? ". " + D.reason : ", so the company behind the brand cannot be named from the register") + "."] });
+  if (!D || !D.legal_entity) {
+    // v411: a brand the developer's own material names is shown as developer says, with its source and date; the registered company stays unnamed (the register is the authority)
+    const claimed = !!(D && D.brand && D.evidence === "DEVELOPER_CLAIMED" && D.brand_source && D.brand_source.text && D.brand_source.as_of);
+    const dl = ["Registered developer: not on the register yet" + (D && D.reason ? ". " + D.reason : ", so the company behind the brand cannot be named from the register") + "."];
+    if (claimed) dl.push("Brand name (developer says): " + D.brand + ". Source: " + D.brand_source.text + ", " + dateLong(D.brand_source.as_of) + ". The brand is the developer's own statement; the register does not link it to any company.");
+    items.push({ id: "developer", title: "Who is the registered developer", icon: "buildings", known: claimed, label: claimed ? "DEVELOPER_CLAIMED" : "UNVERIFIED", lines: dl });
+  }
   else {
     const lab = D.evidence || "UNVERIFIED";
     const lines = [(D.brand && !D.brand_line ? "Brand: " + D.brand + ". " : "") + "Registered developer: " + D.legal_entity + " (" + LABEL_TEXT[lab] + (D.basis ? "; " + D.basis : "") + ")."];
@@ -173,7 +179,18 @@ export function buildCore(f) {
     items.push({ id: "developer", title: "Who is the registered developer", icon: "buildings", known: true, label: lab, lines });
   }
   // 2 delivery record
-  if (!DL) items.push({ id: "delivery", title: "The developer's delivery record", icon: "stack", known: false, label: "UNVERIFIED", lines: ["Delivery record: not available" + ", because " + (f.delivery_reason || "the project register holds no projects for this developer") + "."] });
+  if (!DL) {
+    const dl = ["Delivery record: not available" + ", because " + (f.delivery_reason || "the project register holds no projects for this developer") + "."];
+    const B = f.delivery_brand;
+    if (B) {   // v411: the brand's record where the brand maps to registered companies; clearly the brand's, never the project's
+      const st = B.by_status || {}, order = ["FINISHED", "ACTIVE", "NOT_STARTED"].filter((k) => st[k] != null).concat(Object.keys(st).filter((k) => !["FINISHED", "ACTIVE", "NOT_STARTED"].includes(k)).sort());
+      const parts = order.map((k) => st[k] + " " + ({ NOT_STARTED: "not started", ACTIVE: "under construction", FINISHED: "handed over", PENDING: "pending" }[k] || k.toLowerCase())).join(", ");
+      dl.push(B.brand + " group, as registered: " + plural(B.projects, "project") + " across " + plural(B.companies, "registered company", "registered companies") + (B.companies_named > B.companies ? " (" + fmt(B.companies_named) + " registered companies carry the name; " + fmt(B.companies_named - B.companies) + " hold no project on the register)" : "") + " (" + parts + "). The companies are tied to the " + B.brand + " name by " + B.matched_by + ". This is the brand's record, not confirmed as the record of the company behind " + (f.project && f.project.name ? f.project.name : "this project") + ".");
+      if (B.past_planned_end > 0) dl.push("Of " + plural(B.past_planned_end, "project") + " of the group past their planned end date, " + fmt(B.registered_finished) + " are registered as handed over. The register records status, not whether a project was early or late.");
+      dl.push("Source: " + B.source + ", data to " + dateLong(B.as_of) + ".");
+    }
+    items.push({ id: "delivery", title: "The developer's delivery record", icon: "stack", known: !!B, label: B ? "NAME_ONLY" : "UNVERIFIED", lines: dl });
+  }
   else {
     const e = DL.entity, st = e.by_status || {}, fin = st.FINISHED || 0, parts = Object.keys(st).map((k) => st[k] + " " + ({ NOT_STARTED: "not started", ACTIVE: "under construction", FINISHED: "handed over" }[k] || k.toLowerCase())).join(", ");
     const lines = ["This registered company (register): " + plural(e.projects, "project") + " (" + parts + ")" + (fin === 0 ? "; it has handed over none yet" : "") + "."];
@@ -182,7 +199,18 @@ export function buildCore(f) {
     items.push({ id: "delivery", title: "The developer's delivery record", icon: "stack", known: true, label: "REGISTER_VERIFIED", lines });
   }
   // 3 status and handover
-  if (!S) items.push({ id: "status", title: "Status and handover date", icon: "ruler", known: false, label: "UNVERIFIED", lines: ["Status and handover date: not on the project register yet, so no registered status or date can be given." + (f.handover_claim ? " The developer says handover is " + f.handover_claim + " (developer says; the register has no record of it)." : "")] });
+  if (!S) {
+    const hs = f.developer_says, UR = f.unit_register && f.unit_register.single && f.unit_register.single.units > 0 ? f.unit_register : null;
+    const sl = ["Status and handover date: not on the project register yet, so no registered status or date can be given." + (f.handover_claim ? " The developer says handover is " + f.handover_claim + " (developer says; the register has no record of it)." : "")];
+    if (hs && hs.source && f.handover_claim) sl.push("Handover source (developer says): " + hs.source.name + (hs.source.received ? ", received " + dateLong(hs.source.received) : "") + (hs.source.url ? ", " + hs.source.url : "") + (hs.source.as_of && !hs.source.received ? ", page of " + dateLong(hs.source.as_of) : "") + "." + (hs.handover_note ? " " + hs.handover_note : ""));
+    if (hs && hs.units_stated && !UR) sl.push("Homes (developer says): " + fmt(hs.units_stated) + ". The register holds no unit record for this project.");
+    if (hs && UR) {
+      const u = UR.single, mp = [[u.studio, "studio", "studios"], [u.b1, "one-bedroom", "one-bedroom"], [u.b2, "two-bedroom", "two-bedroom"], [u.b3, "three-bedroom", "three-bedroom"], [u.b4plus, "four-bedroom or larger", "four-bedroom or larger"]].filter((x) => x[0] > 0).map((x) => fmt(x[0]) + " " + (x[0] === 1 ? x[1] : x[2])).join(", ");
+      sl.push("Homes in the unit register: " + fmt(u.units) + (mp ? " (" + mp + ")" : "") + ". Source: Dubai Land Department building and unit registers" + (UR.as_of ? ", loaded " + dateLong(UR.as_of) : "") + ". These are registered homes, not sales: registered sales of them are none to " + dateLong(f.as_of.sales) + ".");
+    }
+    const known = !!(hs && (f.handover_claim || UR));
+    items.push({ id: "status", title: "Status and handover date", icon: "ruler", known, label: known ? (f.handover_claim ? "DEVELOPER_CLAIMED" : "REGISTER_VERIFIED") : "UNVERIFIED", lines: sl });
+  }
   else items.push({ id: "status", title: "Status and handover date", icon: "ruler", known: true, label: "REGISTER_VERIFIED", lines: [
     "Status: " + S.text + (S.percent != null ? ", " + Math.round(S.percent) + "% complete." : ".") + (S.start ? " Construction start on the register: " + dateLong(S.start) + "." : " Construction start: the register holds no date."),
     S.planned_end ? "Handover date on the register: planned end " + dateLong(S.planned_end) + (S.completion ? ", completed " + dateLong(S.completion) : (S.code === "FINISHED" ? ", the register holds no completion date" : ", not completed")) + "." : "Handover date: the register holds no planned end date.",
@@ -202,12 +230,19 @@ export function buildCore(f) {
   const pl = [];
   if (X && X.all_time) pl.push("Price (registered" + (X.all_off_plan ? ", off-plan" : "") + "): median " + aed(X.median_price) + " across all sales; " + (X.l12 > 0 ? aed(X.l12_median_price) + " in the last 12 months; " + aed(X.l12_median_psf) + " per sq ft in the last 12 months" : "no sale registered in the last 12 months") + ". These are prices agreed in sales, not today's asking prices.");
   else pl.push("Price: no registered sale to take a price from. Any price must come from the developer.");
+  const hsp = f.developer_says && f.developer_says.price_from && f.developer_says.price_from.length ? f.developer_says : null;
+  if (hsp && !(X && X.all_time)) {   // v411: the developer's own launch prices, with date and source line, never as a registered price
+    const sr = hsp.source;
+    pl.push("Launch prices (developer says; " + sr.name + (sr.received ? ", received " + dateLong(sr.received) : sr.as_of ? ", " + dateLong(sr.as_of) : "") + "; no registered sale yet): " + hsp.price_from.map((r) => bedsWord(r.type) + (r.size_sqft ? " from " + fmt(r.size_sqft) + " sq ft" : "") + ", starting " + aed(r.from_aed) + " (printed " + r.printed + ")").join("; ") + ". These are the developer's starting prices, not registered sales and not today's price; confirm them with the developer.");
+    const rs = f.unit_register && f.unit_register.sizes;
+    if (rs && rs.length) pl.push("Register comparison (Dubai Land Department unit register" + (f.unit_register.as_of ? ", loaded " + dateLong(f.unit_register.as_of) : "") + "): home sizes recorded are " + rs.map((z) => bedsWord(z.beds) + " " + fmt(z.min_sqft) + " to " + fmt(z.max_sqft) + " sq ft (" + fmt(z.n) + (z.n === 1 ? " home" : " homes") + ")").join("; ") + ". The register records sizes, not prices.");
+  }
   if (P && P.payment_plan) pl.push("Payment plan (developer says): " + (typeof P.payment_plan === "object" ? P.payment_plan.text : P.payment_plan) + ".");
   else pl.push("Payment plan (developer says): not on file, because " + (P && P.payment_plan_reason ? P.payment_plan_reason : "no developer source is held") + ".");
   const fee = P && P.fees && P.fees[0];
   if (fee && X && X.all_time) pl.push("Fees we can source: " + fee.label + ", " + Math.round(fee.rate * 100) + "% of the price (" + fee.source + "), about " + aed(X.median_price * fee.rate) + " at the median price. " + (P.fees_unknown ? "Not held: " + P.fees_unknown + "." : ""));
   else pl.push("Fees we can source: none for this project" + (P && P.fees_unknown ? ". Not held: " + P.fees_unknown : "") + ".");
-  items.push({ id: "price_plan", title: "Price, payment plan and fees", icon: "wallet", known: !!(X && X.all_time), label: X && X.all_time ? "REGISTER_VERIFIED" : "UNVERIFIED", lines: pl });
+  items.push({ id: "price_plan", title: "Price, payment plan and fees", icon: "wallet", known: !!(X && X.all_time) || !!hsp, label: X && X.all_time ? "REGISTER_VERIFIED" : hsp ? "DEVELOPER_CLAIMED" : "UNVERIFIED", lines: pl });
   return items;
 }
 
@@ -223,6 +258,9 @@ export const CANNOT_TELL = [
   ["Today's price and availability of a home", "Both must be confirmed with the developer."],
   ["Why registered numbers moved", "History appears here only as dated registered numbers. This report gives no reason for any rise or fall."],
 ];
+
+// v411: added to the last page only when the facts carry developer material for a project that is not on the register (so the report of a registered project reads exactly as before)
+export const CANNOT_TELL_DEVELOPER = [["Figures the developer states", "Anything marked developer says, such as a launch price, a payment plan, a handover date or a list of amenities, comes from the developer's own material. It is not a Land Department register fact, and it has not been checked against a contract or a registered sale."]];
 
 // ---------------------------------------------------------------------------------------------------------- the plan
 export function presetFor(id) { return PRESET_BY_ID[id] || null; }

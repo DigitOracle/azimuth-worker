@@ -1,0 +1,122 @@
+{
+ "schema": 1,
+ "project": {
+  "id": "ann-prestige-one-berkeleysquarenorth",
+  "name": "Berkeley Square North",
+  "brand_name": "Berkeley Square North",
+  "area": "Jumeirah Village Circle (JVC)",
+  "area_source": "developer_says",
+  "register_area": "Area not stated",
+  "master_project": null,
+  "project_number": null,
+  "off_register": true,
+  "off_register_note": "Berkeley Square North is not on the Dubai Land Department project, sales or unit registers we hold: it is known only from the developer's own material, so no register project number exists"
+ },
+ "as_of": {
+  "sales": "2026-09-17",
+  "register": null,
+  "rents": null,
+  "built": "2026-10-08"
+ },
+ "window": {
+  "from": "2025-09-18",
+  "to": "2026-09-17"
+ },
+ "developer": {
+  "brand": "Prestige One",
+  "legal_entity": null,
+  "evidence": "DEVELOPER_CLAIMED",
+  "reason": "The developer's own material names Prestige One as the brand (developer says); the project register has no record of Berkeley Square North, so the company behind it is not named by the register",
+  "brand_source": {
+   "text": "the developer's own web page https://prestigeone.ae/projects/berkeley-square-north",
+   "as_of": "2026-09-09"
+  }
+ },
+ "delivery": null,
+ "delivery_reason": "the project is not on the project register and no registered company is named for it",
+ "status": null,
+ "status_reason": "Berkeley Square North is not on the project register, so no registered status, percent complete or planned end date can be given",
+ "handover_claim": "Q1 2028",
+ "sales": {
+  "all_time": 0,
+  "first": null,
+  "last": null,
+  "l12": 0,
+  "l12_median_price": null,
+  "l12_median_psf": null,
+  "median_price": null,
+  "by_year": [],
+  "by_beds": [],
+  "land_registrations_excluded": 0,
+  "all_off_plan": false,
+  "source": "Dubai Land Department sales register (unit sales, land excluded) to 2026-09-17; no sale row names Berkeley Square North and the project is not on the project register"
+ },
+ "price_plan": {
+  "payment_plan": {
+   "text": "55% before handover, 10% on handover, 35% after handover",
+   "milestones": [
+    {
+     "label": "Before handover (total)",
+     "pct": 55,
+     "before_handover": true
+    },
+    {
+     "label": "On handover",
+     "pct": 10,
+     "before_handover": false
+    },
+    {
+     "label": "After handover",
+     "pct": 35,
+     "before_handover": false
+    }
+   ],
+   "evidence": "DEVELOPER_CLAIMED",
+   "as_of": "2026-09-09",
+   "source": {
+    "file": "data/dev_meta/prestigeone_portfolio.json",
+    "url": "https://prestigeone.ae/projects/berkeley-square-north",
+    "quote": "The post-handover payment plan comprises 55% before handover, 10% upon handover and 35% after handover."
+   }
+  },
+  "fees": [],
+  "fees_unknown": "agent commission, trustee and registration charges, and service charges are not held for this project"
+ },
+ "developer_says": {
+  "source": {
+   "name": "the developer's own web page",
+   "as_of": "2026-09-09",
+   "url": "https://prestigeone.ae/projects/berkeley-square-north"
+  },
+  "units_stated": 241
+ },
+ "amenities": [
+  "Berkeley Square North",
+  "Made for Everyday Life.",
+  "Homes for Every Lifestyle",
+  "Space to Unwind",
+  "Space to Connect",
+  "More to Do",
+  "Everything at your doorstep",
+  "Mall of the Emirates",
+  "Palm Jumeirah",
+  "Dubai Marina",
+  "Downtown Dubai",
+  "Burj Khalifa and Dubai Mall"
+ ],
+ "amenities_source": "the developer's own web site prestigeone.ae project pages (public), pulled 2026-09-09T11:02:13, page https://prestigeone.ae/projects/berkeley-square-north, fetched 2026-09-09 (data/dev_meta/prestigeone_portfolio.json) (developer says)",
+ "delivery_brand": {
+  "brand": "Prestige One",
+  "companies": 2,
+  "companies_named": 2,
+  "projects": 3,
+  "by_status": {
+   "ACTIVE": 3
+  },
+  "past_planned_end": 2,
+  "registered_finished": 0,
+  "matched_by": "a company-name rule (registered company names that begin with the brand name; the register records no brands)",
+  "source": "Dubai Land Department project register and developers register, by registered company id",
+  "as_of": "2026-06-15"
+ }
+}

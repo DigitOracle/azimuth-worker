@@ -321,6 +321,7 @@ def main():
             link_how[("plan", pn)] = how
             report["plan_links"].append([key, pn, how])
     amen_by_pn = {}
+    amen_dev = {}
     PORT = {"arada": "Arada", "beyond": "Beyond", "ellington": "Ellington", "emaar": "Emaar", "fakhruddin": "Fakhruddin", "hh": "H&H", "iman": "Iman", "imtiaz": "Imtiaz", "meraas": "Meraas",
             "omniyat": "Omniyat", "palma": "Palma", "prestigeone": "Prestige One", "select": "Select Group", "sobha": "Sobha"}
     for f in sorted(glob.glob(os.path.join(a.naj, "data", "dev_meta", "*_portfolio.json"))):
@@ -337,6 +338,8 @@ def main():
             pn, how = link_by_name([p["name"]], canon)
             if pn is None:
                 report["amenity_unlinked"] += 1
+                amen_dev.setdefault((canon, norm(p["name"])), {"list": am, "source": "the developer's own web site " + str(d.get("source") or "") + ", page " + str(p.get("url") or "") + ", fetched " + str(d.get("fetched") or "")[:10] + " (data/dev_meta/" + os.path.basename(f) + ")",
+                                                               "as_of": str(d.get("fetched") or "")[:10]})      # v411: kept for a project that is not on the register but whose developer page lists amenities
                 continue
             if pn in amen_by_pn:
                 continue
@@ -559,6 +562,84 @@ def main():
             f["amenities_reason"] = "no developer web page or brochure for this project is on file, or none that can be tied to this registered project by its exact name and brand"
         return f
 
+    # ------------------------------------------------------------------------------------------------ v411: developer material for projects that are not on the project register
+    MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+    def date_long(x):
+        m = re.match(r"(\d{4})-(\d{2})-(\d{2})", str(x or ""))
+        return (str(int(m.group(3))) + " " + MONTHS_EN[int(m.group(2)) - 1] + " " + m.group(1)) if m else ""
+
+    CLAIMS = {}
+    for cf in sorted(glob.glob(os.path.join(ROOT, "data", "developer_claims", "*.json"))):
+        c = json.load(open(cf, encoding="utf-8"))
+        CLAIMS[c["key"]] = c
+
+    def brand_group(canon):
+        """the brand's record, by REGISTER COMPANY ID: every registered company whose name the crosswalk's company-name rule gives to this brand, with its projects from the project register.
+        It is the brand's record, never the project's: the register names no company for a project that is not on it."""
+        if canon not in X.BY_ID:
+            return None
+        ids = sorted(int(k) for k, d in devs.items() if d["name_en"] and X.canonical_of(d["name_en"])[0] == canon)
+        if not ids:
+            return None
+        rr = rows(f"""select cast(developer_id as bigint) d, project_status s, count(*) n, sum(case when project_end_date < DATE '{tx_max}' then 1 else 0 end) pe,
+            sum(case when project_end_date < DATE '{tx_max}' and project_status='FINISHED' then 1 else 0 end) pf from g_dld__projects where cast(developer_id as bigint) in ({",".join(str(i) for i in ids)}) group by 1,2""")
+        if not rr:
+            return None
+        st, comp, pe, pf = collections.Counter(), set(), 0, 0
+        for x in rr:
+            st[x["s"]] += x["n"]
+            comp.add(int(x["d"]))
+            pe += int(x["pe"] or 0)
+            pf += int(x["pf"] or 0)
+        return {"brand": X.BY_ID[canon]["display"], "companies": len(comp), "companies_named": len(ids), "projects": sum(st.values()), "by_status": dict(sorted(st.items())), "past_planned_end": pe, "registered_finished": pf,
+                "matched_by": "a company-name rule (registered company names that begin with the brand name; the register records no brands)",
+                "source": "Dubai Land Department project register and developers register, by registered company id", "as_of": iso(reg_asof)}
+
+    def claims_plan(kc):
+        """the developer's own step-by-step schedule, as stated: percent per step and the date it prints. Dates it marks with an asterisk are indicative; no cash amount is derived."""
+        pcs = kc["payment_plans"]
+        sched, parts, quotes = [], [], []
+        for i, p in enumerate(pcs["plans"]):
+            ph = []
+            for s in p["steps"]:
+                lab = s["label"][0].lower() + s["label"][1:]
+                star = "*" if s.get("marked") else ""
+                if s.get("when") and lab.startswith("on completion"):
+                    ph.append(("%g" % s["pct"]) + "% on completion (" + s["when"] + star + ")")
+                elif s.get("when"):
+                    ph.append(("%g" % s["pct"]) + "% on " + s["when"] + star)
+                else:
+                    ph.append(("%g" % s["pct"]) + "% " + lab)
+            parts.append("Option " + str(i + 1) + " (the " + p["label"].replace(" Payment Plan", " plan").replace("Post Handover", "post-handover") + "): " + "; ".join(ph))
+            quotes.append(p["quote"])
+            sched.append({"label": p["label"], "steps": [{"label": s["label"], "pct": s["pct"], "when": s.get("when"), "marked": bool(s.get("marked"))} for s in p["steps"]], "total_pct": p["total_pct"]})
+        src = kc["source"]
+        text = "the developer states " + str(len(parts)) + " plans, each as a schedule. " + ". ".join(parts) + \
+            ". Source: " + src["name"] + ", received " + date_long(src["received"]) + ". Dates marked * are indicative: the brochure does not say what the asterisk means here. No cash amount is worked out from either plan"
+        return {"text": text, "milestones": [], "schedule": sched, "indicative_dates": True, "evidence": "DEVELOPER_CLAIMED", "as_of": src["received"],
+                "source": {"file": "data/developer_claims/" + kc["key"] + "_launch_brochure.json (brochure image " + src["files"]["payment_plans_and_completion"] + ")", "url": None, "quote": " | ".join(quotes)}}, None, None
+
+    def claims_amenities(kc):
+        am = kc["amenities"]
+        out = [x["where"] + ": " + ", ".join(x["items"]) for x in am["by_level"]]
+        if am.get("pillars_also_listed"):
+            out.append("Also listed on the brochure's pillars page, not on its amenity list by level: " + ", ".join(am["pillars_also_listed"]) + ". The brochure does not say who provides these or whether any is included in the price")
+        return out, kc["source"]["name"] + ", received " + date_long(kc["source"]["received"]) + " (the developer's own material; developer says)"
+
+    def kore_developer_says(kc, sizes):
+        src = kc["source"]
+        rows_ = []
+        for r in kc["price_from"]["rows"]:
+            rows_.append({"type": r["type"], "size_sqft": r["size_sqft"], "from_aed": r["from_aed"], "printed": re.sub(r"^\s*Starting:\s*", "", r["printed_price"])})
+        return {"source": {"name": src["name"], "received": src["received"], "as_of": src["received"], "files": src["files"]},
+                "handover_note": "The brochure prints the completion date with an asterisk and does not say what it means here, so the date is indicative.",
+                "price_from": rows_, "concept": kc["concept"]["text"]}
+
+    # names the index already holds: an announced project whose name reads the same as a registered one is NOT added (the button would no longer find the registered one by name)
+    def pkey_py(n):
+        return re.sub(r"[^a-z0-9\u0600-\u06ff]+", "", re.sub(r"\s+by\s+.*$", "", str(n or "").lower()))
+
     shards = collections.defaultdict(dict)
     index = []
     for r in projs:
@@ -585,7 +666,19 @@ def main():
                 karea = collections.Counter({x["ar"]: x["n"] for x in ku}).most_common(1)[0][0]
                 claims = ks["sections"]["commercial"]
                 handover = claims.get("handover_stated", {}).get("value")
-                planb, preason, plabel = plan_block([("imtiaz|kore", kore_plan)] if kore_plan else [])
+                kc = CLAIMS.get("kore")
+                planb, preason, plabel = claims_plan(kc) if kc and kc.get("payment_plans") else plan_block([("imtiaz|kore", kore_plan)] if kore_plan else [])
+                if kc and kc.get("handover"):
+                    handover = kc["handover"]["text"]
+                szr = collections.OrderedDict()
+                for x in rows(f"select rooms_en r, count(*) n, min(actual_area) lo, max(actual_area) hi from g_dld__units where cast(project_id as bigint)={kid} and property_type_en='Unit' and actual_area>0 group by 1"):
+                    lab = beds_label(x["r"])
+                    if lab:
+                        z = szr.setdefault(lab, {"beds": lab, "n": 0, "lo": None, "hi": None})
+                        z["n"] += x["n"]
+                        z["lo"] = float(x["lo"]) if z["lo"] is None else min(z["lo"], float(x["lo"]))
+                        z["hi"] = float(x["hi"]) if z["hi"] is None else max(z["hi"], float(x["hi"]))
+                sizes = [{"beds": z["beds"], "n": z["n"], "min_sqft": int(round(z["lo"] * SQFT)), "max_sqft": int(round(z["hi"] * SQFT))} for z in sorted(szr.values(), key=lambda z: (0 if z["beds"] == "Studio" else int(z["beds"][0])))]
                 kz = {"all_time": 0, "first": None, "last": None, "l12": 0, "l12_median_price": None, "l12_median_psf": None, "median_price": None, "by_year": [], "by_beds": [], "land_registrations_excluded": 0,
                       "all_off_plan": False, "source": "Dubai Land Department sales register (unit sales, land excluded) to " + str(tx_max) + "; no sale row names KORE and the project is not on the project register"}
                 if kn != 0:
@@ -595,13 +688,21 @@ def main():
                       "project": {"id": "kore-by-imtiaz-offregister", "name": "KORE by Imtiaz", "brand_name": "KORE by Imtiaz", "area": area_display("Dubai Land Residence Complex"), "area_source": "register_master", "register_area": karea, "master_project": "Dubai Land Residence Complex", "project_number": None,
                                   "off_register": True, "off_register_note": "KORE is not on the Dubai Land Department project register: it has a building and unit register entry (project id " + str(kid) + ") and no project register row, so no register project number exists"},
                       "as_of": {"sales": iso(tx_max), "register": None, "rents": None, "built": a.built}, "window": {"from": iso(l12_from), "to": iso(tx_max)},
-                      "developer": {"brand": "Imtiaz", "legal_entity": None, "evidence": "DEVELOPER_CLAIMED", "reason": "The developer's own material names Imtiaz as the brand (developer says); the project register has no record of KORE, so the company behind it is not named by the register"},
+                      "developer": dict({"brand": "Imtiaz", "legal_entity": None, "evidence": "DEVELOPER_CLAIMED", "reason": "The developer's own material names Imtiaz as the brand (developer says); the project register has no record of KORE, so the company behind it is not named by the register"},
+                                        **({"brand_source": {"text": kc["source"]["name"] + " (the developer's own brochure, received from the owner)", "as_of": kc["source"]["received"]}} if kc else {})),
                       "delivery": None, "delivery_reason": "the project is not on the project register and no registered company is named for it",
                       "status": None, "status_reason": "KORE is not on the project register, so no registered status, percent complete or planned end date can be given", "handover_claim": handover,
                       "sales": kz, "price_plan": {"payment_plan": planb, "fees": [], "fees_unknown": FEES_UNKNOWN}, "amenities": None,
                       "amenities_reason": "no developer amenities list for KORE is held in a form that can be quoted here",
-                      "unit_register": {"source": "Dubai Land Department unit register, project id " + str(kid) + " (units to " + iso(units_asof) + ")", "single": dict({"name": "KORE by Imtiaz", "project_number": None}, **mix),
-                                        "left_for_sale": "not known: the register does not record which homes are still for sale"}}
+                      "unit_register": {"source": "Dubai Land Department unit register, project id " + str(kid) + " (units to " + iso(units_asof) + ")", "as_of": iso(units_asof), "single": dict({"name": "KORE by Imtiaz", "project_number": None}, **mix),
+                                        "sizes": sizes, "left_for_sale": "not known: the register does not record which homes are still for sale"}}
+                if kc:
+                    kf["developer_says"] = kore_developer_says(kc, sizes)
+                    kf["amenities"], kf["amenities_source"] = claims_amenities(kc)
+                    kf.pop("amenities_reason", None)
+                bg = brand_group("imtiaz")
+                if bg:
+                    kf["delivery_brand"] = bg
                 if planb is None:
                     kf["price_plan"]["payment_plan_reason"] = preason
                     if plabel:
@@ -618,6 +719,126 @@ def main():
                 counters["off_register"] += 1
                 if kz is None:
                     counters["kore_sales_rows_found"] = kn
+
+    # ------------------------------------------------------------------------------------------------ v411: every other project the developer announces that is in NO register
+    # The developer's own material (announced.json from the developers' own web pages and availability sheets; the dev_meta portfolios; the dated payment-plan files) gives facts the register cannot.
+    # Each such project gets a record whose developer, handover, homes, amenities and plan are DEVELOPER_CLAIMED with their date and source line, whose sales are the register's own zero (checked: no sale
+    # row and no unit-register row carries its name), and whose delivery record is the BRAND's, by registered company id, never the project's. A portal is never a source. A project that is on the
+    # register, or whose name reads the same as a registered one, is not added: the register record stays exactly as it was.
+    import hashlib
+    dev_report = {"announced_entries": 0, "added": 0, "skipped": collections.Counter(), "with_handover": 0, "with_units": 0, "with_amenities": 0, "with_plan": 0, "with_brand_delivery": 0, "top20": []}
+    ann_path = os.path.join(ROOT, "data", "announced", "announced.json")
+    if os.path.exists(ann_path):
+        ann = json.load(open(ann_path, encoding="utf-8"))
+        reg_keys = {pkey_py(x["name"]) for x in index} | {pkey_py(x["brand_name"]) for x in index}
+        tx_names = {norm(r["n"]) for r in rows("select distinct project_name_en n from g_dld__transactions where project_name_en is not null")}
+        un_names = {norm(r["n"]) for r in rows("select distinct project_name_en n from g_dld__units where project_name_en is not null")}
+        dist_name = {district_slug(r["area"]): r["area"] for r in projs if r["area"]}
+        plan_by_name = {}
+        for key, v in sorted(pp["projects"].items()):
+            cn = X.canonical_of(v["developer"])[0]
+            for nmx in [v["project"]] + list(v.get("aliases") or []):
+                plan_by_name.setdefault((cn, norm(nmx)), (key, v))
+        bg_cache = {}
+        seen_keys, used_ids = set(), {x["id"] for x in index}
+        flat = []
+        for dev, groups in sorted(ann["d"].items()):
+            for dslug, lst in sorted(groups.items()):
+                for e in lst:
+                    flat.append((dev, dslug, e))
+        flat.sort(key=lambda t: (0 if t[2].get("t") == "p" else 1, t[0], t[2]["n"]))        # a web page before an availability sheet when both name the project
+        for dev, dslug, e in flat:
+            dev_report["announced_entries"] += 1
+            nm = clean(e.get("n"))
+            sk = dev_report["skipped"]
+            if not nm:
+                sk["no name"] += 1
+                continue
+            if e.get("od"):
+                sk["outside Dubai"] += 1
+                continue
+            if e.get("pm"):
+                sk["possible register match (held, findable as the register project)"] += 1
+                continue
+            if norm(nm) in name_to_pns or norm(nm) in tx_names or norm(nm) in un_names:
+                sk["name is on the project, sales or unit register"] += 1
+                continue
+            pk = pkey_py(nm)
+            if not pk or pk in reg_keys:
+                sk["name reads like a registered project (the button would no longer find it by name)"] += 1
+                continue
+            if pk in seen_keys:
+                sk["same name already added"] += 1
+                continue
+            seen_keys.add(pk)
+            dn = clean(e.get("dn")) or dev
+            cn = X.canonical_of(dn)[0]
+            cn = cn if cn in X.BY_ID else None
+            rid = str(e["id"])
+            if len(rid) > 60 or not re.fullmatch(r"[a-z0-9_-]{1,60}", rid):
+                rid = (re.sub(r"[^a-z0-9_-]+", "-", rid.lower())[:50].strip("-") or "announced") + "-" + hashlib.sha1(str(e["id"]).encode()).hexdigest()[:8]
+            if rid in used_ids:
+                sk["duplicate id"] += 1
+                continue
+            used_ids.add(rid)
+            reg_area = dist_name.get(dslug) if dslug != "_" else None
+            register_area = reg_area or "Area not stated"
+            page = e.get("t") == "p"
+            src_name = "the developer's own web page" if page else "the developer's own availability sheet"
+            src_text = src_name + (" " + e["url"] if e.get("url") else "")
+            asof = str(e["f"])[:10]
+            ds = {"source": dict({"name": src_name, "as_of": asof}, **({"url": e["url"]} if e.get("url") else {}))}
+            ho = clean(e.get("ho"))
+            if isinstance(e.get("u"), int) and e["u"] > 0:
+                ds["units_stated"] = int(e["u"])
+            plb, plr, pll = None, "no developer sheet or offer for this project is on file, so the plan cannot be stated; ask the developer", None
+            ph = plan_by_name.get((cn, norm(nm))) if cn else None
+            if ph:
+                plb, plr, pll = plan_block([ph])
+            am = amen_dev.get((cn, norm(nm))) if cn else None
+            if cn not in bg_cache:
+                bg_cache[cn] = brand_group(cn) if cn else None
+            bgx = bg_cache[cn]
+            kz = {"all_time": 0, "first": None, "last": None, "l12": 0, "l12_median_price": None, "l12_median_psf": None, "median_price": None, "by_year": [], "by_beds": [], "land_registrations_excluded": 0, "all_off_plan": False,
+                  "source": "Dubai Land Department sales register (unit sales, land excluded) to " + str(tx_max) + "; no sale row names " + nm + " and the project is not on the project register"}
+            f = {"schema": 1,
+                 "project": {"id": rid, "name": nm, "brand_name": nm, "area": area_display(e["a"]) if e.get("a") else (area_display(reg_area) if reg_area else "Dubai, district not stated by the developer"), "area_source": "developer_says",
+                             "register_area": register_area, "master_project": None, "project_number": None, "off_register": True,
+                             "off_register_note": nm + " is not on the Dubai Land Department project, sales or unit registers we hold: it is known only from the developer's own material, so no register project number exists"},
+                 "as_of": {"sales": iso(tx_max), "register": None, "rents": None, "built": a.built}, "window": {"from": iso(l12_from), "to": iso(tx_max)},
+                 "developer": {"brand": dn, "legal_entity": None, "evidence": "DEVELOPER_CLAIMED",
+                               "reason": "The developer's own material names " + dn + " as the brand (developer says); the project register has no record of " + nm + ", so the company behind it is not named by the register",
+                               "brand_source": {"text": src_text, "as_of": asof}},
+                 "delivery": None, "delivery_reason": "the project is not on the project register and no registered company is named for it",
+                 "status": None, "status_reason": nm + " is not on the project register, so no registered status, percent complete or planned end date can be given", "handover_claim": ho,
+                 "sales": kz, "price_plan": {"payment_plan": plb, "fees": [], "fees_unknown": FEES_UNKNOWN}, "developer_says": ds}
+            if plb is None:
+                f["price_plan"]["payment_plan_reason"] = plr
+                if pll:
+                    f["price_plan"]["payment_plan_label"] = pll
+            if am:
+                f["amenities"], f["amenities_source"] = am["list"], am["source"] + " (developer says)"
+            else:
+                f["amenities"], f["amenities_reason"] = None, "no developer amenities list for " + nm + " is held in a form that can be quoted here"
+            if bgx:
+                f["delivery_brand"] = bgx
+            shards[district_slug(register_area)][rid] = f
+            index.append({"id": rid, "name": nm, "brand_name": nm, "district": district_slug(register_area), "project_number": None})
+            records.append(f)
+            dev_report["added"] += 1
+            got = [k for k, ok in (("handover", bool(ho)), ("homes stated", "units_stated" in ds), ("amenities", bool(am)), ("payment plan", bool(plb)), ("brand delivery record", bool(bgx))) if ok]
+            dev_report["with_handover"] += bool(ho)
+            dev_report["with_units"] += "units_stated" in ds
+            dev_report["with_amenities"] += bool(am)
+            dev_report["with_plan"] += bool(plb)
+            dev_report["with_brand_delivery"] += bool(bgx)
+            dev_report["top20"].append({"id": rid, "name": nm, "brand": dn, "fields": got, "n": len(got), "source": src_text, "as_of": asof})
+        dev_report["top20"].sort(key=lambda x: (-x["n"], x["brand"], x["name"]))
+        dev_report["gain_any_field"] = sum(1 for x in dev_report["top20"] if x["n"] > 0)
+        dev_report["top20"] = dev_report["top20"][:20]
+        dev_report["skipped"] = dict(dev_report["skipped"])
+        counters["announced_added"] = dev_report["added"]
+    report["developer_material"] = dev_report
 
     # ------------------------------------------------------------------------------------------------ write
     os.makedirs(a.out_dir, exist_ok=True)

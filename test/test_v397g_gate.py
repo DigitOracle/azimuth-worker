@@ -148,7 +148,7 @@ class Wiring(unittest.TestCase):
         "publish_sales_filed.py": "img_sales_filed_* feeds only the Contracts signed page (v396); no gate surface reads it, and it has its own validation, backup and read-back",
     }
 
-    WRAPPERS = {"publish_devmap_profile_v321.ps1": "publish_devmap_offplan.ps1"}      # a wrapper that runs another publisher: it must pass -SkipGate through, and the inner one is wired
+    WRAPPERS = {"publish_devmap_profile_v321.ps1": "publish_devmap_offplan.ps1", "publish_investor_facts_v411.ps1": "publish_investor_facts.ps1"}      # a wrapper that runs another publisher: it must pass -SkipGate through, and the inner one is wired
 
     def test_every_kv_publisher_is_wired_or_exempt(self):
         names = sorted(f for f in os.listdir(SCRIPTS) if f.startswith("publish_") and f.endswith((".py", ".ps1")))
