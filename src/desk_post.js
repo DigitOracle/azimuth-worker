@@ -439,7 +439,7 @@ async function insightsText(env) {
   const M = await kvJ(env, "desk_ig_media", {}), A = await kvJ(env, "desk_ig_account", null);
   const L = ["Desk Instagram" + (A ? ": " + A.followers + " followers (read " + A.at.slice(0, 10) + ")" : "")];
   if (!posted.length) L.push("No posts from the desk yet.");
-  for (const p of posted) { const m = (M[p.media_id] || {}).m; L.push("- " + p.id + " " + dayKey(p.posted_at) + " " + p.type + ": " + (m ? "reach " + (m.reach ?? "n/a") + ", likes " + (m.likes ?? "n/a") + ", saves " + (m.saved ?? "n/a") : "numbers not read yet (every 3 hours)") + (p.permalink ? " " + p.permalink : "")); }
+  for (const p of posted) { const m = (M[p.media_id] || {}).m; L.push("- " + p.id + " " + dayKey(p.posted_at) + " " + p.type + ": " + (m ? "reach " + (m.reach ?? "n/a") + ", likes " + (m.likes ?? "n/a") + ", saves " + (m.saved ?? "n/a") + (m.views != null ? ", views " + m.views : "") + (m.shares != null ? ", shares " + m.shares : "") + (m.follows != null ? ", new followers " + m.follows : "") + (m.profile_visits != null ? ", profile visits " + m.profile_visits : "") : "numbers not read yet (every 3 hours)") + (p.permalink ? " " + p.permalink : "")); }
   return L.join("\n");
 }
 
@@ -718,10 +718,12 @@ export async function publishOne(env, deps, p, now) {
   p.containers = p.containers || {};
   const save = async () => { await putPlan(env, p); };
   let res;
+  // v425 - Meta's own "AI info" label (is_ai_generated) whenever the caption carries "Illustration.", and each slide's alt text (alt_text, images only)
+  const altTexts = p.slides.map((s) => String(s.alt || "")), aiGenerated = !!p.ai;
   if (p.type === "carousel" && urls.length > 1) {
-    res = await deskIgPublishCarousel(env, { now, approved: p.approved === true, imageUrls: urls, caption: p.caption, state: p.containers, sleep: sleepOf(deps), onProgress: async (s) => { Object.assign(p.containers, s); await save(); } });
+    res = await deskIgPublishCarousel(env, { now, approved: p.approved === true, imageUrls: urls, altTexts, aiGenerated, caption: p.caption, state: p.containers, sleep: sleepOf(deps), onProgress: async (s) => { Object.assign(p.containers, s); await save(); } });
   } else {
-    res = await deskIgPublish(env, { now, approved: p.approved === true, imageUrl: urls[0], caption: p.caption, container: p.containers.single, sleep: sleepOf(deps), onContainer: async (id) => { p.containers.single = id; await save(); } });
+    res = await deskIgPublish(env, { now, approved: p.approved === true, imageUrl: urls[0], altText: altTexts[0], aiGenerated, caption: p.caption, container: p.containers.single, sleep: sleepOf(deps), onContainer: async (id) => { p.containers.single = id; await save(); } });
     if (res.container) p.containers.single = res.container;
   }
   if (!res.ok) { return hold(env, deps, p, res.err || "Instagram refused the post"); }

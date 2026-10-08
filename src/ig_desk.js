@@ -149,8 +149,8 @@ export async function deskIgPublish(env, opts) {
   const sleep = opts.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
   const form = { "Content-Type": "application/x-www-form-urlencoded" };
   try {
-    const cr = opts.container ? { id: opts.container } : await (await fetch(GRAPH + "/v21.0/" + a.user_id + "/media", { method: "POST", headers: form,
-      body: new URLSearchParams({ image_url: opts.imageUrl, caption: String(opts.caption || ""), access_token: a.token }) })).json();
+    const cr = opts.container ? { id: opts.container } : await postMedia(a.user_id,
+      mediaExtras({ image_url: opts.imageUrl, caption: String(opts.caption || ""), access_token: a.token }, opts.altText, opts.aiGenerated), form);
     if (cr && cr.id && !opts.container && opts.onContainer) { try { await opts.onContainer(String(cr.id)); } catch (e) {} }   // v413 - remembered the moment it exists, so a retry never makes a second one
     if (!cr || !cr.id) return { ok: false, err: "container refused: " + String((cr && cr.error && cr.error.message) || "no id").slice(0, 120) };
     let status = "IN_PROGRESS";
@@ -172,6 +172,25 @@ export async function deskIgPermalink(env, mediaId) {
   const a = await deskIgRecord(env); if (!a || !a.token || !mediaId) return "";
   const r = await igGet("/v21.0/" + mediaId, a.token, { fields: "permalink" });
   return r && r.permalink ? String(r.permalink) : "";
+}
+// v425 - alt_text (images only, up to 1000 characters; Meta changelog 24 Mar 2025) and is_ai_generated (Meta's "AI info" label;
+// changelog 22 Jun 2026; on a carousel it belongs on the parent container only). Absent when empty, so an old plan publishes as before.
+// postMedia: POST /{user}/media; if Meta refuses a container that carried alt_text or is_ai_generated, it is tried ONCE more without
+// them, so these extras can never be the reason a post is held (the label then rests on the caption's "Illustration.").
+async function postMedia(userId, params, form) {
+  const go = async (p) => await (await fetch(GRAPH + "/v21.0/" + userId + "/media", { method: "POST", headers: form, body: new URLSearchParams(p) })).json();
+  const r = await go(params);
+  if ((r && r.id) || !(params.alt_text || params.is_ai_generated)) return r;
+  const plain = Object.assign({}, params); delete plain.alt_text; delete plain.is_ai_generated;
+  const r2 = await go(plain);
+  if (r2 && r2.id) r2.extras_dropped = String((r && r.error && r.error.message) || "refused").slice(0, 120);
+  return r2;
+}
+export function mediaExtras(params, altText, aiGenerated) {
+  const alt = String(altText || "").replace(/\s+/g, " ").trim().slice(0, 1000);
+  if (alt) params.alt_text = alt;
+  if (aiGenerated) params.is_ai_generated = "true";
+  return params;
 }
 async function pollContainer(id, token, sleep) {
   let status = "IN_PROGRESS";
@@ -200,15 +219,13 @@ export async function deskIgPublishCarousel(env, opts) {
   const note = async () => { if (opts.onProgress) { try { await opts.onProgress({ children: st.children.slice(), parent: st.parent }); } catch (e) {} } };
   try {
     for (let i = st.children.length; i < urls.length; i++) {
-      const c = await (await fetch(GRAPH + "/v21.0/" + a.user_id + "/media", { method: "POST", headers: form,
-        body: new URLSearchParams({ image_url: urls[i], is_carousel_item: "true", access_token: a.token }) })).json();
+      const c = await postMedia(a.user_id, mediaExtras({ image_url: urls[i], is_carousel_item: "true", access_token: a.token }, (opts.altTexts || [])[i], false), form);
       if (!c || !c.id) return { ok: false, err: "picture " + (i + 1) + " refused: " + String((c && c.error && c.error.message) || "no id").slice(0, 120) };
       st.children.push(String(c.id)); await note();
     }
     for (const id of st.children) { const s1 = await pollContainer(id, a.token, sleep); if (s1 !== "FINISHED") return { ok: false, err: "picture container status " + s1 }; }
     if (!st.parent) {
-      const pr = await (await fetch(GRAPH + "/v21.0/" + a.user_id + "/media", { method: "POST", headers: form,
-        body: new URLSearchParams({ media_type: "CAROUSEL", children: st.children.join(","), caption: String(opts.caption || ""), access_token: a.token }) })).json();
+      const pr = await postMedia(a.user_id, mediaExtras({ media_type: "CAROUSEL", children: st.children.join(","), caption: String(opts.caption || ""), access_token: a.token }, "", opts.aiGenerated), form);   // the AI label goes on the carousel container only
       if (!pr || !pr.id) return { ok: false, err: "carousel container refused: " + String((pr && pr.error && pr.error.message) || "no id").slice(0, 120) };
       st.parent = String(pr.id); await note();
     }
@@ -229,7 +246,9 @@ export async function deskIgPull(env, now, mediaIds) {
   const me = await igGet("/me", a.token, { fields: "user_id,username,followers_count,media_count" });
   if (!me.err) out.account = { followers: me.followers_count, media_count: me.media_count };
   for (const id of (mediaIds || []).slice(0, 25)) {
-    const r = await igGet("/v21.0/" + id + "/insights", a.token, { metric: "reach,likes,saved" });
+    // v425 - the growth measures Meta now offers (views replaced impressions, Apr 2025); falls back to the v413 three if refused
+    let r = await igGet("/v21.0/" + id + "/insights", a.token, { metric: "reach,likes,saved,views,shares,follows,profile_visits,total_interactions" });
+    if (r.err) r = await igGet("/v21.0/" + id + "/insights", a.token, { metric: "reach,likes,saved" });
     if (r.err) continue;
     const m = {}; for (const d of (r.data || [])) { const v = insVal(d); if (v !== null) m[d.name] = v; }
     out.media[id] = m;
