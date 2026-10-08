@@ -104,5 +104,7 @@ export function optionsHtml(cfg, icon) {
   let n = 0;
   const body = cfg.sections.map((s) => "<h2>" + (++n) + ". " + esc(s.title) + "</h2>" + (s.help ? "<div class=sm>" + esc(s.help) + "</div>" : "") + "<div class=grid id=sec_" + s.id + "></div>").join("") +
     '<h2>Always included, in every version</h2><div class=grid id=core></div><a class=go id=go href="#">' + esc(cfg.go) + "</a><p class=sm id=covers></p>";
-  return optFrame({ title: esc(cfg.title), sub: cfg.sub, body, extraCss: OPT_CSS_EXTRA, script: "var D=" + json + ",I=" + icons + ";(" + optRuntime.toString() + ")();" });
+  return optFrame({ title: esc(cfg.title), sub: cfg.sub, body, extraCss: OPT_CSS_EXTRA, script: "var __name=function(f){return f};var D=" + json + ",I=" + icons + ";(" + optRuntime.toString() + ")();" });
+  // 8 Oct 2026: wrangler's build adds __name(fn, "fn") calls inside optRuntime (keep_names). The browser has no __name, so the
+  // script stopped on its third line and the Client and Broker pages showed headings with no cards. The tests ran the unbundled source and passed.
 }
