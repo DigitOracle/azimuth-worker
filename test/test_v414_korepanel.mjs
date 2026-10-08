@@ -25,12 +25,17 @@ const text = (h) => h.replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&
 
 console.log("A - the claims file, its generated copy and the permission field");
 ok(fs.readFileSync(path.join(ROOT, "src/dev_claims_data.js"), "utf8").replace(/\r\n/g, "\n") === generate(), "src/dev_claims_data.js is exactly what data/developer_claims/*.json gives (run node scripts/gen_dev_claims_js.mjs)");
-ok(CLAIMS.render_permission && CLAIMS.render_permission.status === "pending" && CLAIMS.render_permission.set_by === null && CLAIMS.render_permission.date === null && /not yet on file/.test(CLAIMS.render_permission.note), "render_permission is pending with the owner's note");
-ok(!permissionOnFile(claimsFor("kore")), "the permission gate reads 'pending' as not on file");
-ok(CLAIMS.renders.length === 3 && CLAIMS.renders.every((r) => /^Developer's render, KORE launch brochure received 6 October 2026$/.test(r.caption) && fs.existsSync(path.join(ROOT, "data/developer_claims", r.file))), "three stored renders, each with the required caption");
-ok(!CLAIMS.renders.some((r) => /pool|swim/i.test(r.what) || r.source_page === "WhatsApp Image 2026-10-06 at 12.04.38 PM.jpeg" || /\(3\)/.test(r.source_page)), "neither the pool page (swimmers) nor the page with a woman on the screen is registered as a render");
-ok(CLAIMS.renders_not_stored.some((s) => /swimmers/.test(s)) && CLAIMS.renders_not_stored.some((s) => /woman/.test(s)), "the two pages with people are listed as not stored");
-for (const r of CLAIMS.renders) { const b = fs.readFileSync(path.join(ROOT, "data/developer_claims", r.file)); ok(b[0] === 0xff && b[1] === 0xd8 && b.length < 700 * 1024, r.file + " is a JPEG under 700 KB"); }
+ok(CLAIMS.render_permission && CLAIMS.render_permission.status === "on_file" && CLAIMS.render_permission.set_by === "Kendall Wilson (stated in chat)" && CLAIMS.render_permission.date === "2026-10-08" && /Imtiaz approves/.test(CLAIMS.render_permission.note), "v417: render_permission is on_file (stated by Kendall Wilson in chat, 8 October 2026)");
+ok(permissionOnFile(claimsFor("kore")), "the permission gate reads 'on_file' as on file");
+{
+  const pend = JSON.parse(JSON.stringify(CLAIMS)); pend.render_permission = { status: "pending", note: "x", set_by: null, date: null };
+  ok(!permissionOnFile(pend) && !permissionOnFile({}) && !permissionOnFile(null), "negative: the gate reads a pending copy (and an empty record) as not on file");
+}
+const CAP_R = /^Developer's render, KORE launch brochure received 6 October 2026$/, CAP_P = /^Developer's brochure page, KORE launch brochure received 6 October 2026$/;
+ok(CLAIMS.renders.length === 10 && CLAIMS.renders.every((r) => (CAP_R.test(r.caption) || CAP_P.test(r.caption)) && fs.existsSync(path.join(ROOT, "data/developer_claims", r.file))), "v417: ten stored pictures (elevation, aerial, pool, sun path, interior, living, experiences, pillars, partner page, loop map), each with the required caption");
+ok(CLAIMS.renders.some((r) => /pool/.test(r.what)) && CLAIMS.renders.some((r) => /payment plan/.test(r.what)) && CLAIMS.renders.filter((r) => r.exterior).length === 2, "the pool page and the living-room page are registered now; two exterior pictures (elevation, aerial)");
+ok(Array.isArray(CLAIMS.renders_not_stored) && CLAIMS.renders_not_stored.length === 0 && /lifted on Kendall Wilson's instruction on 8 October 2026/.test(CLAIMS.renders_note), "the earlier exclusion is lifted and the note says so");
+for (const r of CLAIMS.renders) { const b = fs.readFileSync(path.join(ROOT, "data/developer_claims", r.file)); ok(b[0] === 0xff && b[1] === 0xd8 && b.length < 450 * 1024, r.file + " is a JPEG under 450 KB"); }
 
 console.log("B - the panel: headline and the three buttons (page script on a fixture)");
 const mkHarness = (devmapHtmlFn, withDevsays) => {
@@ -141,7 +146,7 @@ const q = (extra) => parseQuery(new URL("https://x/brief_pdf?kind=dossier&keys=d
 const FORBID_VENDOR = /openai|chatgpt|gemini|anthropic|claude|perplexity|deepseek|copilot|propertyfinder|property finder|bayut|dubizzle/i;
 const FORBID_INTERNAL = /plot sale|mortgage|dewa|land sale|first-year|first year pricing|DLRC|1BR comparison|brand group/i;
 const doc = await buildDocument(mkEnv(), q("&client=Test%20Client"), { origin: "https://w.example" });
-ok(doc.status === 200 && doc.pages === 2, "the sheet is built (two pages)", JSON.stringify(doc.body || {}).slice(0, 200));
+ok(doc.status === 200 && doc.pages === 4, "v417: on_file, nothing published yet: the sheet is built (four pages, each picture a caption and 'Picture not yet published')", JSON.stringify(doc.body || {}).slice(0, 200));
 const H = doc.html || "", T = text(H);
 ok(/<div[^>]*>KORE by Imtiaz<\/div>/.test(H) && /PREPARED FOR TEST CLIENT/.test(H), "title and the prepared-for line");
 ok(/351 homes/.test(T) && /Studios\s*248\s*406 - 623 sq ft/.test(T) && /1 bedroom\s*90\s*676 - 1,130 sq ft/.test(T) && /2 bedrooms\s*13\s*1,409 - 1,663 sq ft/.test(T), "unit mix 248 / 90 / 13 with the register's size ranges");
@@ -152,8 +157,21 @@ ok(/Amenities/.test(T) && /adults' leisure pool/.test(T) && /social padel court/
 ok(/Curated by Najjuko . Dubai Decoded/.test(T) && /\+971 56 548 4397/.test(T) && /must be confirmed with the developer's sales team or the listing broker/.test(T) && /where marked developer says, the developer's own starting prices/.test(T), "the legal footer and WhatsApp line of the client sheet, with the developer-says price wording");
 ok(/Not on the project register: no unit of this project has sold on the register/.test(T) && /none to 2026-09-17/.test(T), "registered sales: none, said plainly");
 ok(/Source: KORE launch brochure, received 6 October 2026/.test(T) && /Dubai Land Department unit register, project id 962479984/.test(T), "sources with the received date and the unit register id");
-ok(T.includes(PICTURES_WITHHELD), "PENDING permission: the sheet says 'Pictures withheld until the developer's written permission is on file.'");
-ok(!/<img /.test(H.replace(/<img class="najhead"[^>]*>/g, "")), "PENDING permission: no picture of any kind is on the sheet (no render, so no people)");
+ok(!T.includes(PICTURES_WITHHELD) && (T.match(/Picture not yet published/g) || []).length === 10, "on_file: no 'withheld' line; ten 'Picture not yet published' lines while the keys are not in the store");
+ok(!/<img /.test(H.replace(/<img class="najhead"[^>]*>/g, "")), "on_file, nothing published: no <img> on the sheet (a missing key never fails the PDF)");
+{
+  const c = DEV_CLAIMS.kore, was = c.render_permission.status;
+  try {
+    c.render_permission.status = "pending";   // the pending state: a flipped copy of the record
+    const dp = await buildDocument(mkEnv(), q("&client=Test%20Client"), { origin: "https://w.example" }), HP = dp.html, TP = text(HP);
+    ok(dp.status === 200 && dp.pages === 2 && TP.includes(PICTURES_WITHHELD), "negative (pending): two pages and the sheet says 'Pictures withheld until the developer's written permission is on file.'");
+    ok(!/<img /.test(HP.replace(/<img class="najhead"[^>]*>/g, "")) && !/Picture not yet published|brochure page/.test(TP), "negative (pending): no picture and no picture block of any kind on the sheet");
+    const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 3, 232, 6, 64, 3, 1, 34, 0, 2, 17, 1, 3, 17, 1, 0xff, 0xd9]);
+    const extra = {}; for (const r of CLAIMS.renders) { extra["img_" + r.kv] = jpg.buffer; extra["img_ct_" + r.kv] = "image/jpeg"; }
+    const dq = await buildDocument(mkEnv(extra), q(), { origin: "https://w.example" });
+    ok(!/<img [^>]*dev_render_/.test(dq.html), "negative (pending): even with every key published, no developer picture is drawn");
+  } finally { c.render_permission.status = was; }
+}
 ok(!FORBID_VENDOR.test(T) && !FORBID_VENDOR.test(H.replace(/<style>[\s\S]*?<\/style>/, "")), "no third-party AI vendor or portal name anywhere");
 ok(!FORBID_INTERNAL.test(T), "no internal item (plot sale, mortgage, DEWA, land sale, first-year pricing, comparisons, brand group) on the client sheet", (T.match(FORBID_INTERNAL) || [""])[0]);
 {
@@ -177,14 +195,15 @@ console.log("E - with the permission ON FILE (a stand-in flip) the renders appea
 {
   const c = DEV_CLAIMS.kore, was = c.render_permission.status;
   try {
-    c.render_permission.status = "on_file";
+    c.render_permission.status = "on_file";   // already on file in v417: kept as an explicit stand-in
     const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 3, 232, 6, 64, 3, 1, 34, 0, 2, 17, 1, 3, 17, 1, 0xff, 0xd9]);
     const extra = {}; for (const r of CLAIMS.renders) { extra["img_" + r.kv] = jpg.buffer; extra["img_ct_" + r.kv] = "image/jpeg"; }
     const d = await buildDocument(mkEnv(extra), q(), { origin: "https://w.example" }), HH = d.html, TT = text(HH);
     const imgs = [...HH.matchAll(/<img [^>]*src="([^"]+)"/g)].map((m) => m[1]).filter((s) => /dev_render_/.test(s));
     ok(d.status === 200 && !TT.includes(PICTURES_WITHHELD), "on_file: the withheld line is gone");
-    ok(imgs.length >= 3 && imgs.every((s) => /\/img\/dev_render_kore_[123]$/.test(s)), "on_file: the three stored renders are used (and no other picture)", imgs.join());
-    ok((TT.match(/Developer's render, KORE launch brochure received 6 October 2026/g) || []).length >= 3, "on_file: every render carries the 'Developer's render' label");
+    ok(imgs.length === 10 && imgs.every((s) => /\/img\/dev_render_kore_\d+$/.test(s)) && new Set(imgs).size === 10, "v417 on_file: all ten stored pictures are used, once each (and no other picture)", imgs.join());
+    ok((TT.match(/Developer's render, KORE launch brochure received 6 October 2026/g) || []).length === 3 && (TT.match(/Developer's brochure page, KORE launch brochure received 6 October 2026/g) || []).length === 3 && (TT.match(/Developer's brochure page: /g) || []).length === 4, "on_file: three renders carry 'Developer\'s render', the three strip pages 'Developer\'s brochure page', the four reference thumbnails 'Developer\'s brochure page: <what>'");
+    ok(d.pages === 4 && !/Picture not yet published/.test(TT), "on_file with the keys published: four pages, no fallback line");
     const opt = await docOptionsRoute({ method: "GET" }, mkEnv(), new URL("https://x/doc_client?keys=dev:kore&key=k"), { keyOk: () => true });
     ok(opt.status === 200 && !/Pictures withheld/.test(await opt.text()), "on_file: the options page offers the renders");
   } finally { c.render_permission.status = was; }
@@ -195,7 +214,12 @@ console.log("F - the options page for the Client button (/doc_client?keys=dev:ko
   const r = await docOptionsRoute({ method: "GET" }, mkEnv(), new URL("https://x/doc_client?keys=dev:kore&key=k"), { keyOk: () => true });
   const h = await r.text(), t = text(h);
   ok(r.status === 200 && /Client sheet: choose the version/.test(t) && /KORE by Imtiaz/.test(t), "the page opens and names the project");
-  ok(t.includes(PICTURES_WITHHELD) && /Developer's renders/.test(t), "while pending, the page says exactly why the renders are not offered");
+  ok(!t.includes(PICTURES_WITHHELD) && /Developer's pictures/.test(t) && !/never a picture with people/.test(t), "on_file: the page offers the developer's pictures and does not say they are withheld");
+  {
+    const c = DEV_CLAIMS.kore, was = c.render_permission.status;
+    try { c.render_permission.status = "pending"; const rp = await docOptionsRoute({ method: "GET" }, mkEnv(), new URL("https://x/doc_client?keys=dev:kore&key=k"), { keyOk: () => true }); const tp = text(await rp.text());
+      ok(tp.includes(PICTURES_WITHHELD) && /Developer's pictures/.test(tp), "negative (pending): the page says exactly why the pictures are not offered"); } finally { c.render_permission.status = was; }
+  }
   ok(/"fixed":\[\["kind","dossier"\],\["keys","dev:kore"\]/.test(h) || /dev:kore/.test(h), "Generate opens /brief_pdf?kind=dossier&keys=dev:kore");
   ok(/Not on the project register|developer says/i.test(t) && /Curated by Najjuko/.test(t), "the page lists what the sheet contains and its legal footer");
   const nf = await docOptionsRoute({ method: "GET" }, mkEnv(), new URL("https://x/doc_client?keys=dev:nosuch&key=k"), { keyOk: () => true });
@@ -214,13 +238,17 @@ console.log("G - the Broker sheet: confirmed and developer-says, labelled");
   ok(devSaysBlock({ area: C.area, mine: { x: true } }) === "" && devSaysBlock({ area: C.area, mine: {} }) === "", "a developer with no such record: the broker page is unchanged (empty block)");
 }
 
-console.log("H - the render publisher refuses while the permission is pending");
+console.log("H - the render publisher: refuses on a pending COPY of the record; passes its checks on the real record");
 {
-  const r = spawnSync("python", [path.join(ROOT, "scripts/publish_dev_renders.py"), "--slug", "kore"], { encoding: "utf8" });
+  const tmpd = fs.mkdtempSync(path.join(os.tmpdir(), "v417_claims_"));
+  const pend = JSON.parse(JSON.stringify(CLAIMS)); pend.render_permission = { status: "pending", note: "x", set_by: null, date: null };
+  fs.writeFileSync(path.join(tmpd, "kore_launch_brochure.json"), JSON.stringify(pend));
+  const r = spawnSync("python", [path.join(ROOT, "scripts/publish_dev_renders.py"), "--slug", "kore", "--claims-dir", tmpd], { encoding: "utf8" });
   const out = (r.stdout || "") + (r.stderr || "");
-  ok(r.status === 1 && /render_permission\.status is 'pending', not 'on_file'/.test(out) && /Nothing was read or written/.test(out), "publish_dev_renders.py exits 1 with the reason (dry run included)", out.slice(0, 300));
-  const r2 = spawnSync("python", [path.join(ROOT, "scripts/publish_dev_renders.py"), "--slug", "kore", "--apply"], { encoding: "utf8" });
-  ok(r2.status === 1 && /not 'on_file'/.test((r2.stdout || "") + (r2.stderr || "")), "--apply is refused the same way");
+  ok(r.status === 1 && /render_permission\.status is 'pending', not 'on_file'/.test(out) && /Nothing was read or written/.test(out) && !/validating the files/.test(out), "negative (pending copy): publish_dev_renders.py exits 1 with the reason (dry run included)", out.slice(0, 300));
+  const r2 = spawnSync("python", [path.join(ROOT, "scripts/publish_dev_renders.py"), "--slug", "kore", "--apply", "--claims-dir", tmpd], { encoding: "utf8" });
+  ok(r2.status === 1 && /not 'on_file'/.test((r2.stdout || "") + (r2.stderr || "")), "negative (pending copy): --apply is refused the same way");
+  fs.rmSync(tmpd, { recursive: true, force: true });
   const src = fs.readFileSync(path.join(ROOT, "scripts/publish_dev_renders.py"), "utf8");
   ok(src.indexOf("check_permission(c)") < src.indexOf("validate(c)") && /gate_guard\.enforce/.test(src) && /subprocess\.run\(\[npx/.test(src) && /time\.time\(\) \+ 70/.test(src) && /"--apply", action="store_true"/.test(src), "permission check first, gate guard, argument-list put, 70 s read-back, dry run by default");
 }

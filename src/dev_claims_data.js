@@ -306,45 +306,126 @@ export const DEV_CLAIMS = {
     }
    ]
   },
-  "not_used": "lifestyle photographs (a person is shown) and the renders are not used anywhere in the investor report",
+  "not_used": "the developer's own pictures are used on the client sheet and the investor report (permission on file, 8 October 2026); every picture is labelled as the developer's; no satellite image, no picture made by us, no portal picture. Figures on the price and payment-plan pages stay developer says wherever they appear",
   "render_permission": {
-   "status": "pending",
-   "note": "written permission copy not yet on file; Kendall states the developer gave it",
-   "set_by": null,
-   "date": null
+   "status": "on_file",
+   "note": "Imtiaz approves the use of its renders: stated by Kendall Wilson in chat on 8 October 2026; the written copy is to follow and will be filed here",
+   "set_by": "Kendall Wilson (stated in chat)",
+   "date": "2026-10-08"
   },
   "renders": [
    {
     "n": 1,
-    "file": "kore/render_1_elevation.jpg",
+    "file": "kore/page_01_elevation.jpg",
     "kv": "dev_render_kore_1",
-    "what": "building elevation",
+    "what": "building elevation, a holistic wellness residence",
     "caption": "Developer's render, KORE launch brochure received 6 October 2026",
     "exterior": true,
+    "kind": "render",
+    "group": "hero",
     "source_page": "WhatsApp Image 2026-10-06 at 12.04.36 PM.jpeg"
    },
    {
     "n": 2,
-    "file": "kore/render_2_aerial.jpg",
+    "file": "kore/page_02_aerial.jpg",
     "kv": "dev_render_kore_2",
     "what": "aerial view",
     "caption": "Developer's render, KORE launch brochure received 6 October 2026",
     "exterior": true,
+    "kind": "render",
+    "group": "hero",
     "source_page": "WhatsApp Image 2026-10-06 at 12.04.39 PM.jpeg"
    },
    {
     "n": 3,
-    "file": "kore/render_3_interior.jpg",
+    "file": "kore/page_03_rooftop_pool.jpg",
     "kv": "dev_render_kore_3",
-    "what": "interiors, studio living room and bedroom",
+    "what": "rooftop pool with the skyline, people swimming",
     "caption": "Developer's render, KORE launch brochure received 6 October 2026",
     "exterior": false,
+    "kind": "render",
+    "group": "strip",
+    "source_page": "WhatsApp Image 2026-10-06 at 12.04.38 PM.jpeg"
+   },
+   {
+    "n": 4,
+    "file": "kore/page_04_sun_path.jpg",
+    "kv": "dev_render_kore_4",
+    "what": "sun-path diagram on the building",
+    "caption": "Developer's brochure page, KORE launch brochure received 6 October 2026",
+    "exterior": false,
+    "kind": "page",
+    "group": "strip",
+    "source_page": "WhatsApp Image 2026-10-06 at 12.04.38 PM (1).jpeg"
+   },
+   {
+    "n": 5,
+    "file": "kore/page_05_studio_interior.jpg",
+    "kv": "dev_render_kore_5",
+    "what": "studio and bedroom interior, with the unit price table",
+    "caption": "Developer's brochure page, KORE launch brochure received 6 October 2026",
+    "exterior": false,
+    "kind": "page",
+    "group": "strip",
     "source_page": "WhatsApp Image 2026-10-06 at 12.04.38 PM (2).jpeg"
+   },
+   {
+    "n": 6,
+    "file": "kore/page_06_living_payment_plans.jpg",
+    "kv": "dev_render_kore_6",
+    "what": "kitchen and living interior, with the two payment plan tables",
+    "caption": "Developer's brochure page, KORE launch brochure received 6 October 2026",
+    "exterior": false,
+    "kind": "page",
+    "group": "ref",
+    "source_page": "WhatsApp Image 2026-10-06 at 12.04.38 PM (3).jpeg"
+   },
+   {
+    "n": 7,
+    "file": "kore/page_07_experiences_padel.jpg",
+    "kv": "dev_render_kore_7",
+    "what": "experiences: amenities list and the padel court",
+    "caption": "Developer's brochure page, KORE launch brochure received 6 October 2026",
+    "exterior": false,
+    "kind": "page",
+    "group": "strip",
+    "source_page": "WhatsApp Image 2026-10-06 at 12.04.37 PM (2).jpeg"
+   },
+   {
+    "n": 8,
+    "file": "kore/page_08_pillars.jpg",
+    "kv": "dev_render_kore_8",
+    "what": "the pillars page: Train, Nourish, Recover",
+    "caption": "Developer's brochure page, KORE launch brochure received 6 October 2026",
+    "exterior": false,
+    "kind": "page",
+    "group": "ref",
+    "source_page": "WhatsApp Image 2026-10-06 at 12.04.37 PM (1).jpeg"
+   },
+   {
+    "n": 9,
+    "file": "kore/page_09_raw_theory.jpg",
+    "kv": "dev_render_kore_9",
+    "what": "the partner fit-out page, Powered by Raw Theory",
+    "caption": "Developer's brochure page, KORE launch brochure received 6 October 2026",
+    "exterior": false,
+    "kind": "page",
+    "group": "ref",
+    "source_page": "WhatsApp Image 2026-10-06 at 12.04.37 PM.jpeg"
+   },
+   {
+    "n": 10,
+    "file": "kore/page_10_loop_map.jpg",
+    "kv": "dev_render_kore_10",
+    "what": "the 15-minute loop map page",
+    "caption": "Developer's brochure page, KORE launch brochure received 6 October 2026",
+    "exterior": false,
+    "kind": "page",
+    "group": "ref",
+    "source_page": "WhatsApp Image 2026-10-06 at 12.04.39 PM (1).jpeg"
    }
   ],
-  "renders_not_stored": [
-   "WhatsApp Image 2026-10-06 at 12.04.38 PM.jpeg (pool, swimmers)",
-   "WhatsApp Image 2026-10-06 at 12.04.38 PM (3).jpeg (a woman is shown on the living-room wall screen)"
-  ]
+  "renders_not_stored": [],
+  "renders_note": "The earlier exclusion of the pool page (swimmers) and of the living-room page (a woman on the wall screen) was lifted on Kendall Wilson's instruction on 8 October 2026: Imtiaz approves the use of all its renders and brochure pages, including those that show people; all are now stored (page_01 to page_10), downscaled to a 1600 px long edge."
  }
 };

@@ -91,7 +91,7 @@ export function devClientConfig(c, o) {
     { id: "buy", title: "Buy", small: "The developer's own launch prices (developer says), beside the unit register's homes.", icon: "chart-bar", set: { mode: "buy" }, def: true }] });
   sec.push({ id: "inc", title: "What the sheet includes", type: "multi", param: "hide", mode: "omit", options: [
     { id: "amen", title: "Amenities (developer says)", small: "The developer's list by level, with its source and the date received.", icon: "map-pin", val: "amen", def: true },
-    { id: "photos", title: "Developer's renders", small: "The developer's own renders, each labelled as the developer's render.", icon: "map-trifold", val: "photos", def: on, off: !on, why: on ? [] : [PICTURES_WITHHELD] },
+    { id: "photos", title: "Developer's pictures", small: "The developer's own renders and brochure pages, each labelled as the developer's.", icon: "map-trifold", val: "photos", def: on, off: !on, why: on ? [] : [PICTURES_WITHHELD] },
     { id: "layouts", title: "Homes in the unit register", small: "Home types, counts and size ranges, from the Land Department unit register.", icon: "stack", val: "layouts", def: true }] });
   sec.push({ id: "later", title: "Offered when the evidence supports it", help: "These are shown so you can see why they are not available today.", type: "multi", param: "extra", mode: "include", options: [
     { id: "plan", title: "Payment plans (developer says)", small: "Both plans, as the developer prints them.", icon: "wallet", val: "plan", def: hasPlans, off: true, why: [hasPlans ? "The sheet always carries the developer's payment plans, as printed, with the asterisk note." : "The developer's record holds no payment plan."] },
@@ -105,7 +105,7 @@ export function devClientConfig(c, o) {
     core: [
       { title: "Registered facts", small: "The homes, their types and size ranges, as the Land Department unit register gives them, with its date." },
       { title: "Developer says, labelled", small: "Launch prices, payment plans, handover and amenities as the developer prints them, with the source and the date received. Not registered sales, not asking prices from us." },
-      { title: "Pictures, labelled", small: on ? "The developer's renders, each marked as the developer's render. Never a satellite image, never a picture with people." : PICTURES_WITHHELD },
+      { title: "Pictures, labelled", small: on ? "The developer's renders and brochure pages, each marked as the developer's. Never a satellite image, never a picture made by us." : PICTURES_WITHHELD },
       { title: "Prepared for", small: "The line that names who the sheet is for." },
       { title: "Legal footer", small: "Curated by Najjuko " + MID + " Dubai Decoded, WhatsApp +971 56 548 4397, and the line that availability and price are confirmed with the developer or the listing broker." }] };
 }

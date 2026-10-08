@@ -1,4 +1,4 @@
-"""v414 - PUBLISH a developer's renders (data/developer_claims/<slug>/render_*.jpg -> KV img_dev_render_<slug>_<n> and img_ct_dev_render_<slug>_<n>). KENDALL APPROVES, THEN KENDALL RUNS THIS. Claude has NOT run it.
+"""v414/v417 - PUBLISH ALL of a developer's registered pictures (data/developer_claims/<slug>/page_*.jpg, every entry of the claims file's "renders" list -> KV img_dev_render_<slug>_<n> and img_ct_dev_render_<slug>_<n>; KORE: 10 pictures, n = 1..10). KENDALL APPROVES, THEN KENDALL RUNS THIS. Claude has NOT run it.
 Dry run is the DEFAULT: it checks the permission, validates the files, runs the completeness gate guard, reads each live key through the worker's own /img route (read-only) and prints what it would do.
 
   python scripts/publish_dev_renders.py --slug kore                 dry run
@@ -11,7 +11,7 @@ The Client sheet (/brief_pdf?kind=dossier&keys=dev:<slug>) shows pictures only w
 
 Order (stops at the first failure):
   0  permission on file, else STOP;  with --apply, refuses 04:00-06:15 Dubai time and while Najma_Daily_Refresh / Najma_Avail_Sweep is Running
-  1  validates the files (JPEG, long edge <= 1600 px, size, no person-page names from renders_not_stored)
+  1  validates the files (JPEG, long edge <= 1600 px, each under 450 KB, the key is exactly dev_render_<slug>_<n>, n unique; v417: the earlier exclusion of pages with people was lifted by Kendall Wilson on 8 Oct 2026)
   2  the completeness gate guard (scripts/gate_guard.py, no layer: proves the live gate state is unchanged)
   3  reads each live key through GET <worker>/img/<name> (404 = no value); a value and no --replace: STOP; with --replace it is backed up first
   4  --apply: puts the image and its content type (argument LISTS, no shell), then reads each back through the live /img route, waiting up to 70 s
@@ -26,7 +26,7 @@ LIVE = "https://azimuth-2.digitalchemy.workers.dev"
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-LIMIT = 700 * 1024
+LIMIT = 450 * 1024
 
 
 def stop(msg):
@@ -34,8 +34,8 @@ def stop(msg):
     sys.exit(1)
 
 
-def load_claims(slug):
-    for p in sorted(glob.glob(os.path.join(REPO, "data", "developer_claims", "*.json"))):
+def load_claims(slug, folder=None):
+    for p in sorted(glob.glob(os.path.join(folder or os.path.join(REPO, "data", "developer_claims"), "*.json"))):
         j = json.load(open(p, encoding="utf8"))
         if j.get("key") == slug:
             return j
@@ -74,8 +74,12 @@ def jpeg_size(b):
 
 
 def validate(c):
-    items = []
+    items, seen = [], set()
     for r in c.get("renders") or []:
+        want = "dev_render_%s_%s" % (c.get("key"), r.get("n"))
+        if r.get("kv") != want or want in seen:
+            stop("%s: kv must be exactly %s and unique (got %s)" % (r.get("file"), want, r.get("kv")))
+        seen.add(want)
         p = os.path.join(REPO, "data", "developer_claims", r["file"])
         if not os.path.exists(p):
             stop("the file is not there: " + p)
@@ -90,9 +94,10 @@ def validate(c):
         if not r.get("kv", "").startswith("dev_render_"):
             stop("%s: kv name must start with dev_render_" % r["file"])
         items.append((r["kv"], p, b))
-        print("  ok: %s %s %d bytes" % (r["file"], sz, len(b)))
+        print("  ok: %s %s %d bytes -> img_%s" % (r["file"], sz, len(b), r["kv"]))
     if not items:
         stop("the claims file lists no renders")
+    print("  %d pictures, %d KB in all" % (len(items), sum(len(b) for _, _, b in items) // 1024))
     return items
 
 
@@ -116,8 +121,9 @@ def main():
     ap.add_argument("--replace", action="store_true")
     ap.add_argument("--work", default="")
     ap.add_argument("--skip-gate", action="store_true")
+    ap.add_argument("--claims-dir", default="")   # testing hook: read the claims file from another folder (the permission gate is applied to that file)
     a = ap.parse_args()
-    c = load_claims(a.slug)
+    c = load_claims(a.slug, a.claims_dir or None)
     print("0/4 picture permission")
     rp = check_permission(c)
     print("  on file (set by %s, %s)" % (rp.get("set_by"), rp.get("date")))
@@ -136,13 +142,18 @@ def main():
         raw = live_get(name)
         if raw is not None:
             if not a.replace:
-                stop("img_%s already holds a value. Nothing was written. Use --replace (the old value is backed up first)." % name)
+                if a.apply:
+                    stop("img_%s already holds a value. Nothing was written. Use --replace (the old value is backed up first)." % name)
+                print("  img_%s: LIVE HOLDS A VALUE (%d bytes%s); --apply would stop here, --apply --replace would back it up and replace it" % (name, len(raw), ", identical to the file" if raw == b else ", differs from the file"))
+                continue
             bk = os.path.join(work, name + ".backup.jpg")
             open(bk, "wb").write(raw)
             rb.append("npx wrangler kv key put img_%s --path \"%s\" --env %s --namespace-id %s" % (name, bk, ENVN, NS))
         else:
             rb.append("npx wrangler kv key delete img_%s --env %s --namespace-id %s" % (name, ENVN, NS))
             rb.append("npx wrangler kv key delete img_ct_%s --env %s --namespace-id %s" % (name, ENVN, NS))
+        if raw is None:
+            print("  img_%s: not published yet" % name)
         plan.append((name, p, b))
     if not a.apply:
         print("\nDRY RUN: nothing written. It would put %d images (and their content types)." % len(plan))

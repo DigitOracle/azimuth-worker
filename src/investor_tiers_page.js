@@ -8,6 +8,8 @@ import { loadFactsSharded } from "./investor_facts.js";
 import { BRIEF_KIT, esc } from "./brief_docs.js";
 import { optFrame } from "./doc_options_page.js";   // v407 - the shared options-page shell
 import { icon, EXTRA_CSS, pack } from "./devmap_pdf.js";
+import { allClaims } from "./dev_claims.js";   // v417
+import { loadDevPics, picGroup, picGrid, REF_NOTE } from "./dev_pics.js";   // v417 - the developer's own pictures, only for a project with a developer-says record and the permission on file
 import { buildPlan, SEGMENTS, PRESETS, TIERS, CORE_IDS, LABEL_TEXT, CANNOT_TELL, THRESHOLDS, ORDER_FLAGS, RULE_CARDS, validRuleCard, validAssignmentCard, CANNOT_TELL_DEVELOPER, dateLong, fmt, aed, bedsWord, lintText } from "./investor_tiers.js";
 
 const { NAVY, MUTED } = BRIEF_KIT;
@@ -220,10 +222,21 @@ function lastPage(plan, f) {
 const head = (title, meta, body) => '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>' + esc(title) + "</title>" + meta +
   '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400&display=swap" rel="stylesheet"><style>' + BRIEF_KIT.CSS + EXTRA_CSS + CSS + "</style></head><body>" + body + "</body></html>";
 
+// v417 - the developer's pictures: a compact block for a project that has developer renders on file (hero elevation and aerial, the strip, then the reference pages). Nothing is added for any other project.
+function devPicBlocks(dp, c) {
+  const hero = picGroup(dp, "hero"), strip = picGroup(dp, "strip"), refs = picGroup(dp, "ref"), out = [];
+  const wrap = (title, inner, hh) => ({ sub: "Report", h: hh, html: '<div class="ivc"><div class="ivch">' + icon("info", 17, TEAL) + '<span class="serif">' + esc(title) + '</span><span class="chip">Developer says</span></div>' + inner + "</div>" });
+  const src = '<div class="ivlab">Source: ' + esc(c.source.name) + ", the developer's own material, received " + esc(String(c.source.received || "")) + ". Shown with the developer's permission. They are the developer's illustrations, not photographs of the finished building.</div>";
+  if (hero.length) out.push(wrap("Developer's pictures", picGrid(hero, Math.min(2, hero.length), 334, 186, { fs: 8.5 }) + src, 300));
+  if (strip.length) out.push(wrap("Developer's pictures: the building and its amenities", picGrid(strip, 4, 163, 112, { withWhat: true, fs: 8 }), 232));
+  if (refs.length) out.push(wrap("Developer's brochure pages", picGrid(refs, 4, 163, 112, { ref: true, fs: 8 }) + '<div class="ivlab">' + esc(REF_NOTE) + "</div>", 230));
+  return out;
+}
 export function buildTiersHtml(facts, plan, opts) {
   const o = opts || {}, C = { logo: o.logo || null, today: o.today || dateLong(facts.as_of.built) };
   const title = '<div class="ivtitle"><div class="lbl" style="margin-bottom:3px;text-transform:uppercase">Investor report</div><h1 class="serif">' + esc(facts.project.name) + " in " + esc(facts.project.area) + '</h1><div class="ivprep">Prepared for ' + (o.client ? "<b>" + esc(o.client) + "</b>" : "the reader of this report") + '</div><div class="ivbadges"><span class="ivbadge">' + esc(TIER_TITLE[plan.tier]) + "</span>" + (plan.draft ? '<span class="ivbadge" style="border-color:#B5651D;color:#7a3f00">Draft, awaiting official check</span>' : "") + (plan.type ? '<span class="ivbadge">' + esc((PRESETS.find((p) => p.id === plan.type) || {}).title || plan.type) + "</span>" : "") + "</div></div>";
   const blocks = [{ sub: "Report", h: 96 + (plan.draft ? 52 : 0), html: title + (plan.draft ? '<div class="ivnote" style="margin-top:8px"><b>Draft, awaiting official check before client use.</b> ' + esc(plan.draft) + "</div>" : "") }];
+  if (o.devPics && o.devPics.length && o.devClaims) for (const b of devPicBlocks(o.devPics, o.devClaims)) blocks.push(b);   // v417
   for (const it of plan.core) blocks.push(coreBlock(it));
   for (const r of plan.included) blocks.push(segBlocks(r, facts, plan.tier));
   if (plan.stats && plan.stats.length) blocks.push({ sub: "Report", h: 50 + plan.stats.reduce((q, t) => q + estLines(t.figure, 100) * 14 + 24, 0), html: '<div class="ivc"><div class="ivch">' + icon("chart-bar", 17, TEAL) + '<span class="serif">Published figures, with their sources</span></div>' + plan.stats.map((t) => '<p class="ivp">' + esc(t.figure) + '<br><span class="ivlab">Source: ' + esc(t.source) + ". Date: " + esc(t.date) + ". Basis: " + esc(t.basis) + ".</span></p>").join("") + "</div>" });
@@ -275,7 +288,14 @@ export async function buildInvestorTiersPdf(env, p, opts) {
   if (!facts) return { status: 404, body: { ok: false, reason: "no facts record for this project yet", project: q.project } };
   if (p.kind === "investor_selector") return { status: 200, html: selectorHtml(facts, "/developers_pdf", p.key), pages: 1, fname: "selector.html", htmlOnly: true };
   const plan = buildPlan({ facts, type: q.type, tier: q.tier, segments: q.segs, flags: q.flags, lang: q.lang });
-  const doc = buildTiersHtml(facts, plan, { client: p.client });
+  // v417 - only a project with a developer-says record whose picture permission is on file gets the developer's pictures; every other report is built exactly as before
+  let devOpts = {};
+  if (facts.developer_says && facts.project) {
+    const dc = allClaims().find((x) => x.project && x.project.facts_id === facts.project.id);
+    const dp = dc ? await loadDevPics(env, dc, opts && opts.origin) : [];
+    if (dp.length) devOpts = { devPics: dp, devClaims: dc };
+  }
+  const doc = buildTiersHtml(facts, plan, Object.assign({ client: p.client }, devOpts));
   if (doc.lint.length) return { status: 500, body: { ok: false, reason: "the report text failed its own checks: " + doc.lint.join("; ") } };
   return { status: 200, html: doc.html, pages: doc.pages, fname: "Investor_" + facts.project.id + "_" + plan.tier + ".pdf", audit: plan.audit };
 }
