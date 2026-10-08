@@ -29,6 +29,7 @@ import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief
 import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_ejari.js";
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
 import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitMorning, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
+import { isDeskState as igDeskIsState, deskIgLink, deskIgCallback, deskIgStatus, deskIgDeauth, deskIgRefresh } from "./ig_desk.js";   // v404 - the desk's own Instagram connection (ig_auth_desk), separate from Najjuko's
 import { deskHandle, isDeskEvent, deskWindowOpen, deskOn } from "./desk.js";   // v388 - KENDALL DESK step 1: a second WhatsApp number that answers only the owner (all logic in src/desk.js)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -4765,6 +4766,7 @@ export default {
         try { await gcGuideTick(env); } catch (e) {}   // v150.1 - one follow-up if her Calendar link sits unused for twenty minutes
         try { await liveNewsTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v270 - live city news, a few feeds every 5 minutes, 24/7 (LIVE_NEWS="on")
         try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
+        try { if (env.IG_APP_ID) { const _it2 = new Date(event.scheduledTime || Date.now()); if (_it2.getUTCMinutes() === 17 && _it2.getUTCHours() % 3 === 0) await deskIgRefresh(env); } } catch (e) {}   // v404 - the desk token 60-day refresh, same slot, no-op without a desk record
       })());
       return;
     }
@@ -12262,6 +12264,13 @@ async function igRoute(env, url, request) {
     let sr = ""; try { const f = await request.formData(); sr = String(f.get("signed_request") || ""); } catch (e) {}
     const data = await igSigned(env, sr);
     if (!data) return new Response("bad signed request", { status: 400 });
+    const _deskGone = await deskIgDeauth(env, data);   // v404 - the desk user withdrew: clear ig_auth_desk and nothing of Najjuko's
+    if (_deskGone) {
+      if (p === "/ig/deauth") return new Response("ok");
+      const _dc = rid() + rid();
+      await env.MEETINGS.put("ig_deleted_" + _dc, JSON.stringify({ at: new Date().toISOString() }), { expirationTtl: 365 * 86400 });
+      return json({ url: pubOrigin(env, "") + "/ig/deletion?code=" + _dc, confirmation_code: _dc });
+    }
     for (const k of ["ig_auth", "ig_media", "ig_account", "ig_followers", "ig_status"].concat(p === "/ig/delete" ? ["ig_log"] : [])) { try { await env.MEETINGS.delete(k); } catch (e) {} }
     if (p === "/ig/deauth") { await igNote(env, "disconnected from Instagram's side"); return new Response("ok"); }
     const code = rid() + rid();
@@ -12279,6 +12288,7 @@ async function igRoute(env, url, request) {
   }
   if (p === "/ig/callback") {
     if (url.searchParams.get("error")) return page("Nothing was connected", "You can close this page.");
+    if (igDeskIsState(url.searchParams.get("state"))) { const _d = await deskIgCallback(env, url.searchParams.get("state"), String(url.searchParams.get("code") || ""), igRedirect(env)); return page(_d.title, _d.msg, _d.status); }   // v404 - a desk state: its own record, never ig_auth
     const t = String(url.searchParams.get("state") || "").replace(/[^a-z0-9]/gi, "").slice(0, 40);
     const code = String(url.searchParams.get("code") || "").replace(/#_$/, "");
     if (!t || !code || !(await env.MEETINGS.get("ig_state_" + t))) return page(EXPIRED[0], EXPIRED[1], 410);
@@ -12337,6 +12347,8 @@ async function igRoute(env, url, request) {
     return rec ? page("Deleted", "Everything Azimuth held from your Instagram was deleted on " + String(rec.at).slice(0, 10) + ".") : page("Not found", "There is no deletion request with that code.", 404);
   }
   if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+  if (p === "/ig_link" && url.searchParams.get("acct") === "desk") { const _l = await deskIgLink(env, igRedirect(env)); return json(_l, _l.error ? 503 : 200); }   // v404
+  if (p === "/ig_status" && url.searchParams.get("acct") === "desk") return json(Object.assign(await deskIgStatus(env), { app_id: env.IG_APP_ID, secret_set: !!env.IG_APP_SECRET, redirect_uri: igRedirect(env) }));   // v404
   if (p === "/ig_link") {
     const t = rid() + rid() + rid();
     await env.MEETINGS.put("ig_state_" + t, JSON.stringify({ at: new Date().toISOString() }), { expirationTtl: 7 * 86400 });

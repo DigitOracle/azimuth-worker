@@ -2,6 +2,7 @@
 // ONE person (WA_DESK_OWNER, Kendall) and nobody else. Off by default: with WA_DESK_PHONE_ID empty nothing here runs.
 // A desk event is never handed to the ordinary handlers, and a stranger on the desk number is never answered and
 // never reaches Najjuko's flows. Replies go out from the desk number (the from-phone-id override on waSend).
+import { deskIgStatusText } from "./ig_desk.js";   // v404
 export const DESK_VERSION = "v388";
 const DIG = (s) => String(s == null ? "" : s).replace(/[^0-9]/g, "");
 export const DESK_FIRST = "Desk is live. This number is for you only (Dr. Kendall Wilson). Commands: /desk_status.";
@@ -51,6 +52,7 @@ export async function deskHandle(env, body, deps) {
   let reply;
   if (first) reply = DESK_FIRST;
   else if (/^\/desk_status\b/i.test(text)) reply = await deskStatusText(env);
+  else if (/^\/desk_ig\b/i.test(text)) reply = await deskIgStatusText(env);   // v404
   else reply = DESK_OTHER;
   try { await deps.waSend(env, owner, reply, DIG(env.WA_DESK_PHONE_ID)); } catch (e) {}
   return true;
