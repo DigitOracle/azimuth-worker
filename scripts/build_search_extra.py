@@ -108,6 +108,19 @@ def v392_features(a, ns, pp, plots):
     return [{"type": f["type"], "geometry": f["geometry"], "properties": {k: v for k, v in f["properties"].items() if v is not None or k == "i"}} for f in feats]
 
 
+def kore_position(feats):
+    """v416: KORE's feature carries its CONFIRMED plot position (the developer-claims location record: plot centre of parcel 648-8592, Dubai Municipality outline) and the honest label,
+    so map search flies to the plot. The Google Maps listing is corroboration only (kept in the claims record), never the source of the position."""
+    loc = json.load(open(os.path.join(ROOT, "data", "developer_claims", "kore_launch_brochure.json"), encoding="utf-8")).get("location")
+    if not loc:
+        return feats
+    for f in feats:
+        if f["properties"].get("plot") == loc["plot"]:
+            f["geometry"] = {"type": "Point", "coordinates": list(loc["plot_centroid"])}
+            f["properties"].update({"pos": "plot", "pos_label": loc["label"]})
+    return feats
+
+
 def dev_en(naj):
     """register project number -> developer English name (the project register files, newest wins)."""
     out = {}
@@ -135,7 +148,7 @@ def main():
     ns = json.load(open(a.nosales, encoding="utf-8"))["d"]
     pp = json.load(open(os.path.join(ROOT, "data", "plot_positions", "plot_positions.json"), encoding="utf-8"))["p"]
     plots = json.load(open(os.path.join(a.naj, "data", "board", "plots.json"), encoding="utf-8"))["features"]
-    feats = v392_features(a, ns, pp, plots)
+    feats = kore_position(v392_features(a, ns, pp, plots))
     res = {"meta": {"built": "2026-10-07", "count": len(feats), "rule": "additive: merged into /img/plots (features) and the search lists (sx) by the worker; a plot id or name already in a list is skipped"}, "features": feats}
     parts = {}
     if not a.no_sx:

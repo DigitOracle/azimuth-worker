@@ -636,6 +636,18 @@ def main():
                 "handover_note": "The brochure prints the completion date with an asterisk and does not say what it means here, so the date is indicative.",
                 "price_from": rows_, "concept": kc["concept"]["text"]}
 
+    def kore_location(kc):
+        """v416: where KORE is, as the PLOT (Dubai Municipality outline), never the building. The Google Maps listing is corroboration only and carries no phone number."""
+        l = kc.get("location")
+        if not l:
+            return None
+        co = l.get("corroboration") or {}
+        return {"text": "Location: " + l["master"] + ", " + l["area_name"] + "; plot " + l["plot"] + " (" + format(l["area_sqm"], ",.2f") + " m2). The position is the plot, not the building. Corroborated by the developer's listing on Google Maps.",
+                "plot": l["plot"], "parcel": l["parcel"], "area_sqm": l["area_sqm"], "district": l["district"], "area_name": l["area_name"], "master": l["master"],
+                "plot_centre": l["plot_centroid"], "position_is": "plot, not the building", "evidence": "DERIVED",
+                "source": l["source"], "as_of": kc["source"]["received"],
+                "corroboration": {"source": co.get("source"), "plus_code": co.get("plus_code"), "distance_to_plot_centre_m": co.get("distance_to_plot_centroid_m"), "note": co.get("note")}}
+
     # names the index already holds: an announced project whose name reads the same as a registered one is NOT added (the button would no longer find the registered one by name)
     def pkey_py(n):
         return re.sub(r"[^a-z0-9\u0600-\u06ff]+", "", re.sub(r"\s+by\s+.*$", "", str(n or "").lower()))
@@ -698,6 +710,8 @@ def main():
                                         "sizes": sizes, "left_for_sale": "not known: the register does not record which homes are still for sale"}}
                 if kc:
                     kf["developer_says"] = kore_developer_says(kc, sizes)
+                    if kore_location(kc):
+                        kf["location"] = kore_location(kc)
                     kf["amenities"], kf["amenities_source"] = claims_amenities(kc)
                     kf.pop("amenities_reason", None)
                 bg = brand_group("imtiaz")

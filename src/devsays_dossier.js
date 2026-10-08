@@ -8,7 +8,7 @@
 import { BRIEF_KIT, PAGE_KIT, esc, HEADER_IMG_KEY, HEADER_JPG_KEY } from "./brief_docs.js";
 import { kvJson } from "./brief.js";
 import { loadFactsSharded } from "./investor_facts.js";
-import { claimsFor, permissionOnFile, PICTURES_WITHHELD, launchFrom, money, receivedLong } from "./dev_claims.js";
+import { claimsFor, permissionOnFile, PICTURES_WITHHELD, launchFrom, money, receivedLong, positionOf, locationLine } from "./dev_claims.js";
 
 const DEV = "developer says";
 const NOT_ASKING = "Starting prices are the developer's own, not registered sales and not asking prices from us.";
@@ -45,6 +45,20 @@ function planTables(c) {
     PAGE_KIT.tbl([["left", "INSTALMENT"], ["right", "PAYMENT"], ["right", "WHEN"]], p.steps.map((s) => [esc(s.label), s.pct + "%", s.when ? esc(s.when) + (s.marked ? "*" : "") : "on booking"])) + "</div>";
   return '<div style="display:flex;flex-direction:column;gap:6px;">' + sec("Payment plans " + tag(DEV)) + '<div style="display:flex;gap:14px;">' + plans.map(one).join("") + "</div>" +
     note("Dates marked * are indicative: the brochure does not say what the asterisk means here. No cash amount is worked out. Source: " + esc(c.source.name) + ", received " + esc(receivedLong(c)) + ".") + "</div>";
+}
+// v416 - where the project is: the plot (Dubai Municipality outline), said as a plot and not as the building. No map picture is drawn (no satellite imagery on a client document).
+function locationBlock(c) {
+  const l = positionOf(c);
+  if (!l) return "";
+  return '<div style="font-size:11.5px;color:' + BRIEF_KIT.NAVY + ';line-height:1.4;">' + esc(locationLine(l)) + "</div>";
+}
+// v416 - the developer's own "15-minute loop" travel times, as transcribed (developer says; the mode of travel is not stated, so they are never walking times)
+function travelBlock(c) {
+  const rows = (c.drive_times && c.drive_times.rows) || [];
+  if (!rows.length) return "";
+  return '<div style="display:flex;flex-direction:column;gap:6px;">' + sec("Travel times (developer says; mode not stated)") + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px 14px;font-size:10.5px;color:' + BRIEF_KIT.NAVY + ';">' +
+    rows.map((r) => "<div>" + esc(r.to) + " &mdash; " + esc(String(r.min)) + " min</div>").join("") + "</div>" +
+    note("From the 15-minute loop on the developer's location map. The brochure does not say how you travel, so these are not walking times. Source: " + esc(c.source.name) + ", received " + esc(receivedLong(c)) + ".") + "</div>";
 }
 function amenityBlock(c) {
   const by = (c.amenities && c.amenities.by_level) || [];
@@ -83,14 +97,14 @@ export async function buildDevDossier(env, q, opts) {
   const factHtml = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;">' + facts4.map(([k, v]) => '<div style="display:flex;flex-direction:column;gap:3px;">' + lbl(k) + '<div style="font-size:13px;">' + v + "</div></div>").join("") + "</div>";
   const title = '<div style="display:flex;flex-direction:column;gap:4px;"><div class="serif" style="font-size:33px;color:' + BRIEF_KIT.NAVY + ';line-height:1;">' + esc(c.project.name) + '</div><div style="font-size:13px;color:' + BRIEF_KIT.MUTED + ';">' +
     (L ? "Launch price from AED " + money(L.aed) + " (developer says). " : "") + "Not on the project register: no unit of this project has sold on the register.</div></div>";
-  const p1 = page(hero + title + factHtml + (hide.includes("layouts") ? "" : unitTable(UR)) + priceTable(c), "");
+  const p1 = page(hero + title + factHtml + locationBlock(c) + (hide.includes("layouts") ? "" : unitTable(UR)) + priceTable(c), "");
   const gallery = pics.length && !hide.includes("photos") ? '<div style="display:flex;flex-direction:column;gap:6px;">' + sec("Developer's renders") + '<div style="display:grid;grid-template-columns:repeat(' + Math.min(3, pics.length) + ',minmax(0,1fr));gap:8px;">' +
     pics.map((x) => "<div>" + PAGE_KIT.fitImg(x.p.p || x.p, 222, 150, x.r.what, 0.5) + '<div style="font-size:9px;color:' + BRIEF_KIT.MUTED + ';">' + esc(x.r.caption) + "</div></div>").join("") + "</div></div>" : "";
   const hs = '<div style="font-size:11.5px;color:' + BRIEF_KIT.NAVY + ';line-height:1.4;">Handover: ' + esc(c.handover.text) + "* " + tag(DEV) + ". The brochure prints the date with an asterisk and does not say what it means here, so the date is indicative.</div>";
   const small = BRIEF_KIT.smallPrint([
     UR ? "Homes, mix and sizes: " + esc(UR.source) + "." : "", "Prices, payment plans, handover and amenities: " + esc(c.source.name) + " (the developer's own material, " + esc(c.source.kind || "") + "), received " + esc(receivedLong(c)) + "; developer says, not registered facts.",
     pics.length ? "Pictures: the developer's renders (illustrations), shown with the developer's written permission." : (picNote ? esc(picNote) : "")]);
-  const p2 = page(planTables(c) + hs + (hide.includes("amen") ? "" : amenityBlock(c)) + gallery, small);
+  const p2 = page(planTables(c) + hs + (hide.includes("amen") ? "" : amenityBlock(c)) + travelBlock(c) + gallery, small);
   const fname = c.project.name.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") + "_Client_sheet.pdf";
   return { status: 200, html: PAGE_KIT.HEAD(c.project.name + " - client sheet", p1 + p2), pages: C.pages, fname, C };
 }

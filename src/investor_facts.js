@@ -146,6 +146,14 @@ export function validateFacts(f) {
     }
     if (DS.units_stated != null && !(Number.isInteger(DS.units_stated) && DS.units_stated > 0)) e.push("developer_says.units_stated must be a count");
   }
+  const LC = f.location;   // v416 - where the project is: the plot, never the building (KORE by Imtiaz)
+  if (LC != null) {
+    if (!P.off_register) e.push("location is only for a project that is not on the project register");
+    if (!str(LC.text) || !/the plot, not the building/.test(LC.text)) e.push("location.text must say the position is the plot, not the building");
+    if (!Array.isArray(LC.plot_centre) || LC.plot_centre.length !== 2 || !(LC.plot_centre[0] >= 54.5 && LC.plot_centre[0] <= 56.6 && LC.plot_centre[1] >= 24 && LC.plot_centre[1] <= 25.6)) e.push("location.plot_centre must be a longitude and latitude inside Dubai");
+    if (!str(LC.source) || !LC.corroboration || !str(LC.corroboration.source)) e.push("location needs its source and the source of the corroboration");
+    if (/\b(?:04|\+?971)[\s-]?\d[\d\s-]{6,}\b/.test(JSON.stringify(LC))) e.push("location must not carry a telephone number");
+  }
   if (f.unit_register && f.unit_register.sizes != null) {
     if (!Array.isArray(f.unit_register.sizes)) e.push("unit_register.sizes must be a list");
     else for (const z of f.unit_register.sizes) if (!str(z.beds) || !Number.isInteger(z.n) || !isNum(z.min_sqft) || !isNum(z.max_sqft) || z.min_sqft > z.max_sqft) e.push("unit_register.sizes: each row needs beds, n, min_sqft <= max_sqft");
