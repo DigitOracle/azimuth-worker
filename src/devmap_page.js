@@ -29,6 +29,7 @@ import { NOTCONF_JS } from "./notconf_page.js";   // v397a - projects a rule kep
 import { NOTCONF_KV_NAME, cleanNotconf } from "./notconf.js";
 import { ANNOUNCED_JS } from "./announced_page.js";   // v397d - projects the developer announces that are in no register (all new logic lives in the two announced files)
 import { ANNOUNCED_KV_NAME, cleanAnnounced } from "./announced.js";
+import { DEVSEARCH_JS, DEVSEARCH_CSS, DEVSEARCH_BTN } from "./devsearch_page.js";   // v403 - the Search button in the page header (all new logic lives in devsearch_page.js)
 
 import { PHOSPHOR_LIGHT } from "./devmap_icons.js";
 export const DEVMAP_PATHS = ["/developers_map", "/developers_map_api"];
@@ -768,6 +769,7 @@ Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(functio
   var pa=DM.resolveArea(new URLSearchParams(location.search).get("area"));if(pa&&IDX.areas[pa])S.sel=pa;var pdr=new URLSearchParams(location.search).get("evidence");if(pdr&&S.sel)S.drawer=pdr;var pw=new URLSearchParams(location.search).get("window");if(pw==="all"||pw==="l12")S.win=pw;   // v314 - a link can open one area (also used by scripts/devmap_preview.mjs); v322 - and the evidence drawer and the window
   var pq=new URLSearchParams(location.search);if(pq.get("prof"))S.prof=pq.get("prof");var dq=pq.get("drill");if(dq){var q2=dq.split(":");S.drill={k:q2[0],t:Number(q2[1]),ar:q2[2]||null}}if(pq.get("meet")){S.screen=3;S.mode=pq.get("meet")==="rent"?"rent":"buy";S.bud.mode=S.mode==="buy"?"sqft":"total"}   // v321 - a link can open a profile, a drill-down or the client meeting (used by scripts/devmap_preview.mjs and the tests)
   if(CF)CF.afterOpen(pq);renderAll();if(S.sel||S.prof)setTimeout(panelTop,0);if(S.drill)setDrill(S.drill);if(pq.get("sheet")==="max")setSheet(true);
+  if(typeof DEVSEARCH!=="undefined")DEVSEARCH.init({idx:function(){return IDX},tags:DEV_TAGS,raw:{nosales:r[8],notconf:r[10],announced:r[11]},mods:{NOSALES:typeof NOSALES!=="undefined"?NOSALES:null,NOTCONF:typeof NOTCONF!=="undefined"?NOTCONF:null,ANNOUNCED:typeof ANNOUNCED!=="undefined"?ANNOUNCED:null},fetch:function(u,o){return fetch(u,o)},map:function(){return map},panel:function(){return $("pjdet")},collapse:function(){setSheet(false)},select:function(s){select(s,true)},pick:function(k){if(!S.mine[k]){S.mine[k]=true;S.isDefault=false;saveMine()}S.screen=1;S.q="";S.onlyMine=null;if(S.prof&&S.prof!==k)leaveProf();renderAll();openProf(k)},openCard:function(sl,nm,pp,n,ev){pjCard(sl,nm,pp,n,"","Project name not recorded",ev);pdOpen(pjCard0.dk,$("dsbtn"))}});   // v403 - the Search button: one init, every handler is the page's own (src/devsearch_page.js)
   if(window.maplibregl)startMap();else $("map").innerHTML='<p class=note style="padding:16px">The map could not load. The lists still work.</p>';
 }).catch(function(){$("sidebody").innerHTML='<p class=note>The developers data did not load.</p>'});
 })();
@@ -775,11 +777,11 @@ Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(functio
 
 export function devmapHtml(key, deps) {
   const nav = deps && deps.NAJ_FONTS ? deps.NAJ_FONTS : "";
-  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + PLOTPOS_JS + COMMPOSP_JS + COMMPOS_JS + NOSALES_JS + NOTCONF_JS + ANNOUNCED_JS + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
+  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + PLOTPOS_JS + COMMPOSP_JS + COMMPOS_JS + NOSALES_JS + NOTCONF_JS + ANNOUNCED_JS + DEVSEARCH_JS + PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - developers by area</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0e1413">' + nav
-    + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + CENTRES_CSS + PLOTPOS_CSS + COMMPOS_CSS + '</style></head><body>'
+    + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + CENTRES_CSS + PLOTPOS_CSS + COMMPOS_CSS + DEVSEARCH_CSS + '</style></head><body>'
     + '<div id=map role=region aria-label="Map of Dubai areas: developers and prices"></div>'
-    + '<aside id=side><button id=grab aria-expanded=false>Tap to expand</button><h1>Developers by area</h1><div class=sub id=source>Loading...</div>'
+    + '<aside id=side><button id=grab aria-expanded=false>Tap to expand</button><div class=dstr><h1>Developers by area</h1>' + DEVSEARCH_BTN + '</div><div class=sub id=source>Loading...</div>'
     + '<div id=sidebody></div><div class="card dwrap" id=detail2 style="display:none"></div></aside><aside id=detail></aside>'
     + '<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script><script>' + js + '</script></body></html>';
 }
