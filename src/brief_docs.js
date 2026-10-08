@@ -173,10 +173,10 @@ function header(C, sub) {
     '<div style="display:flex;flex-direction:column;gap:4px;"><div class="lbl">' + sub + '</div>' +
     '<div style="font-size:12px;color:' + MUTED + ';">' + C.today + "</div></div>" + logo(C, 112) + "</div>";
 }
-function footer(small, buy) {
+function footer(small, buy, devSays) {
   return '<div style="padding:8px 46px 16px 46px;display:flex;flex-direction:column;gap:6px;">' + (small || "") +
     '<div style="font-size:10.5px;color:' + MUTED + ';line-height:1.35;">' + (buy ? "Availability, the price and the actual home must be confirmed with the developer's sales team or the listing broker. " +
-    "Prices shown are sales recorded at the Land Department, not asking prices or an offer." : "Availability, the rent and the actual flat must be " +
+    (devSays ? "Prices shown are either sales recorded at the Land Department or, where marked developer says, the developer's own starting prices; neither is an asking price from us." : "Prices shown are sales recorded at the Land Department, not asking prices or an offer.") : "Availability, the rent and the actual flat must be " +
     "confirmed with the building's leasing team or the listing broker. Rents shown are rents already agreed, " +
     "not asking prices or an offer.") + "</div>" +
     '<div style="height:1px;background:#DED9D0;margin-top:2px;"></div>' +

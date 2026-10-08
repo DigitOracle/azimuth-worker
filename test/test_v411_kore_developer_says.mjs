@@ -70,6 +70,11 @@ ok(CANNOT_TELL_DEVELOPER.some((x) => /Figures the developer states/.test(x[0]) &
 const regHtml = buildTiersHtml(Object.values(REGS.records)[0], plan(Object.values(REGS.records)[0]), {});
 ok(!/Figures the developer states/.test(regHtml.text), "the report of a registered project does not get the extra line (it reads as before)");
 ok(["Who is the registered developer", "The developer's delivery record", "Status and handover date", "Sales so far", "Price, payment plan and fees", "What this report cannot tell you"].every((t) => html.text.includes(t)), "the locked core is all there");
+const NEWFOOT = "Prices shown are either sales recorded at the Land Department or, where marked developer says, the developer's own starting prices; neither is an asking price from us.", OLDFOOT = "Prices shown are sales recorded at the Land Department, not asking prices or an offer.";
+ok(html.text.includes(NEWFOOT) && !html.text.includes(OLDFOOT), "KORE footer shows the developer-says price sentence on every page");
+ok(regHtml.text.replace(/&#x27;/g, "'").includes(OLDFOOT) && !regHtml.text.includes("neither is an asking price from us"), "a registered sample keeps the old footer sentence");
+const annHtml = buildTiersHtml(ANN, plan(ANN), {});
+ok(annHtml.text.replace(/&#x27;/g, "'").includes(NEWFOOT), "the announced-project sample also gets the new footer sentence");
 const am = plan(KORE).included.find((r) => r.id === "amenities");
 ok(!!am && KORE.amenities.some((a) => /Roof, outdoor: adults' leisure pool, sunset deck, wellness pool, rooftop kids' pool, outdoor shower area/.test(a)) && KORE.amenities.some((a) => /social padel court/.test(a)) && KORE.amenities.some((a) => /not on its amenity list by level.*does not say who provides these or whether any is included in the price/.test(a)), "the amenities segment is filled from the developer's list, the extra services only as listed, with no claim of inclusion");
 ok(/developer says|Developer says/.test(html.text) && /the developer's material does not say here which of these are included in the price/.test(html.text), "the amenities page says developer says and makes no inclusion claim");
