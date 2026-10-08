@@ -72,5 +72,18 @@ ok(JSON.parse(r.t).registered === true && store.get("wa_desk_pin") === "482915" 
 // 9 methods, other number untouched
 r = await go("GET", "/wa_desk_register?key=" + READ); ok(r.s === 405, "GET on register is 405");
 ok(reqs.every(q => !q.u.includes(MAIN)), "main number never addressed");
+// 10 wrangler.toml: azimuth2 vars carry both desk values and nothing else changed vs the previous commit
+{
+  const fs = await import("node:fs"), cp = await import("node:child_process");
+  const now = fs.readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+  const sect = (t) => { const i = t.indexOf("[env.azimuth2.vars]"); return t.slice(i, t.indexOf("\n[", i + 5)); };
+  ok(/^WA_DESK_PHONE_ID = "1370146096179819"/m.test(sect(now)) && /^WA_DESK_OWNER = "971562276093"/m.test(sect(now)), "wrangler.toml azimuth2 vars carry WA_DESK_PHONE_ID and WA_DESK_OWNER");
+  let prev = ""; try { prev = cp.execSync("git show cardbtns-v408:wrangler.toml", { cwd: new URL("..", import.meta.url), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); } catch (e) {}
+  if (prev) {
+    const keys = (t) => new Map(t.split(/\r?\n/).filter(l => /^[A-Za-z_][A-Za-z0-9_]* *=/.test(l)).map(l => [l.split("=")[0].trim(), l]));
+    const a = keys(prev), b = keys(now), added = [...b.keys()].filter(k => !a.has(k)), changed = [...a.keys()].filter(k => b.get(k) !== a.get(k));
+    ok(added.sort().join() === "WA_DESK_OWNER,WA_DESK_PHONE_ID" && changed.length === 0, "no other var added or changed vs cardbtns-v408", added.join() + "|" + changed.join());
+  } else ok(true, "previous toml unavailable (skipped diff)");
+}
 console.error = ce; console.warn = cw;
 cl(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
