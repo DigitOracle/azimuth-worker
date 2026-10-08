@@ -1,5 +1,6 @@
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
+import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
 import { templateRoutes, feedTemplateFlag } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
@@ -4734,6 +4735,7 @@ async function appFetch(request, env, ctx) {
 export default {
   async fetch(request, env, ctx) {   // v153 - question notes: their routes first, then the question button on private app pages
     const url = new URL(request.url);
+    { const _wd = await deskRegRoutes(request, env, url, { graph: WA_GRAPH }); if (_wd) return _wd; }   // v409
     { const _wt = await templateRoutes(request, env, url, { graph: WA_GRAPH }); if (_wt) return _wt; }   // v329 - /wa_template_create, /wa_template_status, /wa_template_use (owner key; POST writes; dry-run by default)
     if (url.pathname.indexOf("/questions/") === 0) return questionsRoute(request, env, url);
     // ---- THE BRIEF part C (brief_docs.js) ---- /brief_pdf and /brief_blocks. Placed ahead of appFetch's client gate on purpose: the module
