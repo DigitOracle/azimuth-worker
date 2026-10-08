@@ -177,8 +177,8 @@ export async function refImport(env, ids, tag, apply, now) {
 }
 async function refList(env) { const out = []; for (const n of await kvJ(env, "desk_ref_index", [])) { const m = await kvJ(env, "desk_ref_" + n, null); if (m && m.approved === true) out.push(m); } return out; }
 // 2-3 references for a scene, the best-matching tag first, then different tags so the face is seen from more than one angle
-export async function pickRefs(env, idea) {
-  const all = await refList(env); const want = /\b(site|construction|building|tower|crane)\b/i.test(idea) ? "site" : /\b(speak|talk|keynote|conference|event|podcast|stage)\b/i.test(idea) ? "speaking" : /\b(formal|award|suit|ceremony)\b/i.test(idea) ? "formal" : "headshot";
+export async function pickRefs(env, idea, hint) {
+  const all = await refList(env); const want = hint === "site" || hint === "speaking" ? hint : /\b(site|construction|building|tower|crane)\b/i.test(idea) ? "site" : /\b(speak|talk|keynote|conference|event|podcast|stage)\b/i.test(idea) ? "speaking" : /\b(formal|award|suit|ceremony)\b/i.test(idea) ? "formal" : "headshot";
   const order = [want, "three-quarter", "headshot", "casual", "full-length", "formal", "site", "speaking"]; const out = [];
   for (const t of order) { const m = all.find((x) => x.tag === t && !out.includes(x)); if (m) out.push(m); if (out.length >= 3) break; }
   for (const m of all) { if (out.length >= 3) break; if (!out.includes(m)) out.push(m); }
@@ -186,6 +186,29 @@ export async function pickRefs(env, idea) {
   return { bufs, count: all.length };
 }
 const withKendall = (idea) => /\bwith\s+kendall\b/i.test(String(idea || ""));
+// v426 - the feed's picture and background choices (Kendall 8 Oct: "like Naj's feed: ideas, then a choice of picture and background")
+export const PICTURE_CHOICES = [
+  { id: "site", label: "You on site" },
+  { id: "speaking", label: "You speaking or teaching" },
+  { id: "scene", label: "A scene, no person" },
+  { id: "slides", label: "Infographic slides (carousel)" },
+];
+export const BACKGROUND_CHOICES = [
+  { id: "site", label: "Construction site" },
+  { id: "office", label: "Office or boardroom" },
+  { id: "skyline", label: "Dubai skyline" },
+  { id: "studio", label: "Plain studio" },
+];
+const POSE = {
+  site: "He is on a construction site visit, wearing a white hard hat and a hi-vis vest, looking at the work or at a tablet. ",
+  speaking: "He is speaking or teaching, mid-sentence, gesturing with one hand, as at a talk or a workshop. ",
+};
+const BACKGROUND = {
+  site: "Setting: an active Dubai construction site, tower cranes and a concrete frame behind, daylight. ",
+  office: "Setting: a calm modern Dubai office or boardroom, a large window, a table. ",
+  skyline: "Setting: the Dubai skyline at golden hour, seen from a high terrace. ",
+  studio: "Setting: a plain, warm studio backdrop in cream, nothing else. ",
+};
 const REF_CHECKLIST = "Aim for 8 to 12: front-facing neutral, three-quarter left and right, full-length, speaking or gesturing, on site, formal and casual, good light, only you in frame, no children or other people, no logos.";
 const slugs = (idea) => { const w = String(idea || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((x) => x.length > 2); const out = []; for (let n = 3; n >= 1; n--) for (let i = 0; i + n <= w.length; i++) out.push(w.slice(i, i + n).join("-")); return out; };
 async function renderFor(env, idea) {
@@ -207,14 +230,16 @@ async function buildImages(env, deps, p, onlyIdx) {
     const infographic = p.type === "carousel";
     let refs = null;
     const hookWithHim = infographic && i === 0 && p.lane === "abbot";      // v421: the Abbot hook slide shows him when 3+ references are held
-    const personLane = hookWithHim || (!infographic && (p.lane === "abbot" || (p.lane === "alchemy" && withKendall(p.idea))));
+    // v426 feed choices: "site"/"speaking" always put him in the picture (either lane); "scene" never does; no choice = the v421 lane rule
+    const personLane = p.picture === "scene" ? false : (p.picture === "site" || p.picture === "speaking") && !infographic ? true
+      : hookWithHim || (!infographic && (p.lane === "abbot" || (p.lane === "alchemy" && withKendall(p.idea))));
     if (personLane) {
-      const r = await pickRefs(env, p.idea);
+      const r = await pickRefs(env, p.idea, p.picture);
       if (r.count >= REF_MIN && r.bufs.length >= 2) refs = r.bufs.slice(0, 3);
       else notes.push((hookWithHim ? "Slide 1 is a text graphic without you" : "No person in the picture") + ": I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ". Send photos with the caption ref: <tag>.");
     }
     const last = i === n - 1;
-    const prompt = infographic ? slidePrompt(s, i, n, last, !!refs) : STYLE + (refs ? "Place the man shown in the reference photos into this scene, recognisably himself: same face, same build, same apparent age, no alteration of body or age. Only him in the scene, no other identifiable real people, no medical or financial endorsement, no logos or text. " : NO_PERSON) + "Subject: " + String(p.idea).replace(/\d+/g, "").slice(0, 300) + (s.regen ? " Variation " + s.regen + ": a different composition and background." : "");
+    const prompt = infographic ? slidePrompt(s, i, n, last, !!refs) : STYLE + (refs ? "Place the man shown in the reference photos into this scene, recognisably himself: same face, same build, same apparent age, no alteration of body or age. Only him in the scene, no other identifiable real people, no medical or financial endorsement, no logos or text. " + (refs && POSE[p.picture] ? POSE[p.picture] : "") : NO_PERSON) + (BACKGROUND[p.background] || "") + "Subject: " + String(p.idea).replace(/\d+/g, "").slice(0, 300) + (s.regen ? " Variation " + s.regen + ": a different composition" + (p.background ? ", same setting." : " and background.") : "");
     let tries = infographic ? 3 : 1, g = null, ok = !infographic, checked = false;
     for (let t = 0; t < tries; t++) {
       g = await genImage(env, deps, prompt, refs);
@@ -395,7 +420,7 @@ async function newPlan(env, deps, idea, lane, imgs, extra) {
   const now = nowOf(deps);
   const mine = !!(extra && extra.use_my_photos) && !!(imgs && imgs.length);      // v421: sent photos only by his explicit word
   if (!mine) imgs = [];
-  const type = (imgs.length > 1) || /\b(carousel|slides|steps|decoded|guide|series|explainer|checklist)\b/i.test(idea) ? "carousel" : "image";
+  const type = extra && extra.forceType ? extra.forceType : (imgs.length > 1) || /\b(carousel|slides|steps|decoded|guide|series|explainer|checklist)\b/i.test(idea) ? "carousel" : "image";   // v426: a feed choice fixes the format
   const p = Object.assign({ id: "p" + rid(), status: "draft", idea: stripEmoji(idea).trim(), type, lane: lane || "", caption: "", slides: imgs.map((k) => ({ img_key: k, src: "sent", alt: "" })), slot: null, created: now, expires_at: now + EXPIRY_MS, history: [], rounds: 0, music: { mode: "none" }, approved: false }, extra || {}, { use_my_photos: mine });
   if (p.type === "carousel" && p.slides.length) p.slides = p.slides.slice(0, 10);
   hist(p, "created", p.idea, now); await putPlan(env, p);
@@ -422,6 +447,50 @@ export async function ideasText(env, deps) {
   const out = pick.map((i) => { const o = Object.assign({}, i); if (o.factKind) { const f = facts.find((x) => x.kind === o.factKind || x.block === "dldSales"); if (f) { o.text = o.text + " (" + f.says + ")"; o.fact = f.id; o.needs = ""; } } return o; });
   await kvPut(env, "desk_ideas", out, 14 * 86400);
   return "Five ideas for the week:\n" + out.map((o, i) => (i + 1) + ". [" + o.lane + "] " + o.text + (o.needs ? " (needs source: " + o.needs + ")" : "")).join("\n") + "\nReply /post 1 to /post 5 to draft one, or /post abbot: <your idea>.";
+}
+// ---------- v426 the feed: 10 ideas, then a picture choice and a background choice, then the usual draft -> preview -> approve ----------
+const FEED_TTL = 3 * 3600;
+const FEED_SYS = "You suggest Instagram post ideas for two lanes of one Dubai built-environment brand. " + LANE_VOICE.abbot + " " + LANE_VOICE.alchemy +
+  " Plain text, no emoji, no hashtags. Never name any AI model, AI company or AI tool. Never put a number in an idea unless it appears in the FACTS list. Each idea is ONE line, at most 18 words, specific and useful to people who build, own or manage buildings. Reply with JSON only: {\"ideas\":[{\"lane\":\"abbot\",\"text\":\"...\"}]}. Exactly 10 ideas: 6 abbot, 4 alchemy, abbot first.";
+export async function feedText(env, deps) {
+  const now = nowOf(deps), facts = await loadFacts(env);
+  let out = [];
+  try {
+    const user = "TODAY: " + dayKey(now) + "\nFACTS:\n" + (facts.map((f) => f.id + " | " + f.figure + " | " + f.says).join("\n") || "(none: no figures)") + "\nRecent ideas to avoid repeating:\n" + (await kvJ(env, "desk_ideas", [])).map((i) => i.text).join("\n");
+    const j = parseJ(await deps.llm(env, FEED_SYS, user, 900));
+    const pool = new Set(facts.flatMap(factNorm));
+    for (const it of ((j && j.ideas) || [])) {
+      const lane = it && it.lane === "alchemy" ? "alchemy" : "abbot", text = scrubPublic(String((it && it.text) || ""), lane).slice(0, 160);
+      if (!text || numsIn(text).some((x) => !pool.has(x) && !idNums(text).includes(x))) continue;      // an idea carrying an unsourced figure is dropped
+      out.push({ lane, text, needs: "" });
+    }
+  } catch (e) {}
+  if (out.length < 10) { const wk = Math.floor(now / (7 * 86400000)); for (let k = 0; out.length < 10 && k < IDEAS.length; k++) { const i = IDEAS[(wk + k) % IDEAS.length]; if (!out.some((o) => o.text === i.text)) out.push(Object.assign({}, i)); } }
+  out = out.slice(0, 10);
+  await kvPut(env, "desk_ideas", out, 14 * 86400);
+  await env.MEETINGS.put("desk_feed_open", String(now), { expirationTtl: FEED_TTL }); await env.MEETINGS.delete("desk_feed_pick");
+  return "Your feed, " + dayKey(now) + ":\n" + out.map((o, i) => (i + 1) + ". [" + o.lane + "] " + o.text + (o.needs ? " (needs source: " + o.needs + ")" : "")).join("\n") + "\nReply with a number (1 to 10) to make one. Nothing is posted without your Approve.";
+}
+const menu = (title, list) => title + "\n" + list.map((c, i) => (i + 1) + ". " + c.label).join("\n") + "\nReply 1 to " + list.length + ".";
+// a bare number while a feed or a choice is open; returns true when it was taken here
+async function feedReply(env, deps, n) {
+  const pick = await kvJ(env, "desk_feed_pick", null);
+  if (pick && pick.step === "picture") {
+    const c = PICTURE_CHOICES[n - 1]; if (!c) { await deps.send(env, menu("Pick a picture:", PICTURE_CHOICES)); return true; }
+    if (c.id === "slides") { await env.MEETINGS.delete("desk_feed_pick"); await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "carousel", picture: "slides", from_feed: pick.n, allowNums: pick.allow || undefined }); return true; }
+    await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "background", picture: c.id }), FEED_TTL);
+    await deps.send(env, menu(c.label + ". Now the background:", BACKGROUND_CHOICES)); return true;
+  }
+  if (pick && pick.step === "background") {
+    const b = BACKGROUND_CHOICES[n - 1]; if (!b) { await deps.send(env, menu("Pick a background:", BACKGROUND_CHOICES)); return true; }
+    await env.MEETINGS.delete("desk_feed_pick");
+    await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "image", picture: pick.picture, background: b.id, from_feed: pick.n, allowNums: pick.allow || undefined }); return true;
+  }
+  if (!(await env.MEETINGS.get("desk_feed_open"))) return false;
+  const L = await kvJ(env, "desk_ideas", []), it = L[n - 1];
+  if (!it) { await deps.send(env, "No idea " + n + " in today's feed. Reply 1 to " + L.length + ", or send feed for a new list."); return true; }
+  await kvPut(env, "desk_feed_pick", { step: "picture", n, idea: it.text, lane: it.lane, allow: it.allow || null }, FEED_TTL);
+  await deps.send(env, menu("Idea " + n + ": " + it.text + "\nPick a picture:", PICTURE_CHOICES)); return true;
 }
 async function queueText(env, deps) {
   const now = nowOf(deps), ps = (await allPlans(env)).filter((p) => ["draft", "editing", "approving", "scheduled", "held", "publishing"].includes(p.status));
@@ -609,7 +678,7 @@ async function startFromText(env, deps, rest, imgsIn, fromPhoto) {
   let idea = String(rest || "").trim(), lane = "";
   const lm = idea.match(/^(abbot|alchemy)\b\s*[:\-]?\s*(.*)$/is); if (lm) { lane = lm[1].toLowerCase(); idea = lm[2].trim(); }
   if (/^cancel\b/i.test(idea) || /^retry\b/i.test(idea)) return false;
-  const nm = idea.match(/^(\d)$/);
+  const nm = idea.match(/^(\d{1,2})$/);      // v426: the feed lists 10
   let extra = {};
   if (nm) { const L = await kvJ(env, "desk_ideas", []); const it = L[Number(nm[1]) - 1]; if (!it) { await deps.send(env, "No idea " + nm[1] + ". Send /ideas first."); return true; } idea = it.text; lane = lane || it.lane; if (it.allow) extra.allowNums = it.allow; }
   if (!idea && !(imgsIn && imgsIn.length)) { await deps.send(env, "Send /post followed by your idea, for example /post abbot: why a handover needs one owner."); return true; }
@@ -635,6 +704,8 @@ export async function deskPostRoute(env, msg, text, deps) {
   if (/^\/cost\b/i.test(t)) { await deps.send(env, await costText(env, now)); return true; }
   if (/^\/insights\b/i.test(t)) { await deps.send(env, await insightsText(env)); return true; }
   if (/^\/ideas\b/i.test(t)) { await deps.send(env, await ideasText(env, deps)); return true; }
+  if (/^\/?feed$/i.test(t)) { await deps.send(env, await feedText(env, deps)); return true; }   // v426
+  if ((m = t.match(/^(\d{1,2})$/)) && !(await env.MEETINGS.get("desk_post_editing"))) { if (await feedReply(env, deps, Number(m[1]))) return true; }
   if ((m = t.match(/^\/ref\s+tag\s+(\d+)\s+([\w-]+)/i))) {   // v421
     const n = Number(m[1]), tag = m[2].toLowerCase(), r = await kvJ(env, "desk_ref_" + n, null);
     if (!r) { await deps.send(env, "No reference " + n + "."); return true; }
