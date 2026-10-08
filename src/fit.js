@@ -1148,9 +1148,11 @@ export async function fitQuote(env, u, tier, day) {
   return "\"" + pick.q[0] + "\"" + (pick.q[1] ? " - " + pick.q[1] : "");
 }
 const sandTitle = (cfg, when) => (cfg.tone === "kind" ? (when === "today" ? "Today, one thing" : "Tomorrow, one thing") : (when === "today" ? "TODAY'S LINE IN THE SAND" : "TOMORROW'S LINE IN THE SAND"));
-// 05:00 - 05:30: open the day. Honest about yesterday, one commitment for today. Same window rules as the 21:00 message.
+// 05:00 - 12:00: open the day. Honest about yesterday, one commitment for today. Same window rules as the 21:00 message.
+// 8 Oct 2026: was 05:00-05:30. Her window was shut at 05:01 and she wrote at 06:26, so Day 4 never went out. The window check runs
+// before the once-a-day flag, so a shut window never uses up the day; the first tick after she writes sends it, once.
 export async function fitMorning(env, deps, nowMs) {
-  const hm = gstHM(nowMs); if (hm < "05:00" || hm >= "05:30") return false;
+  const hm = gstHM(nowMs); if (hm < "05:00" || hm >= "12:00") return false;
   if (!env.WA_ALLOWED) return false;
   const mine = String(env.WA_ALLOWED).replace(/\D/g, ""); let sent = false;
   for (const user of fitUsers(env)) {
