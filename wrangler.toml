@@ -102,6 +102,9 @@ WA_ALLOWED = "971565484397"
 # v409 - the desk number's WhatsApp phone number ID (not a secret) and the owner number (the only number the desk answers). src/desk.js activates only when both exist and only answers WA_DESK_OWNER; routing to the desk still needs the router rule WA_ROUTE_PHONE_<id> (not deployed).
 WA_DESK_PHONE_ID = "1370146096179819"
 WA_DESK_OWNER = "971562276093"
+# v413 - desk posting caps: posts a day, and the monthly picture budget in USD (the spend counter is an estimate, see docs/DESK_POSTING_PHASE1.md)
+IG_DAILY_CAP = "3"
+IMG_MONTHLY_CAP_USD = "20"
 # v328 - MOMO, the food and exercise log (src/fit.js). Who it keeps a log for: id:WhatsApp number:name shown on the page (the id keys the log, so the name can change freely). Her number files under najjuko; kendall logs on the /fit page
 # (his own WhatsApp number reaches the other instance). Without this line the code runs as ONE person on WA_ALLOWED, so a deploy must not lose it (test_v328_fit checks it).
 FIT_USERS = "kendall:971562276093:Dr. Doli,najjuko:971565484397:Black Coffee"

@@ -3,10 +3,11 @@
 // A desk event is never handed to the ordinary handlers, and a stranger on the desk number is never answered and
 // never reaches Najjuko's flows. Replies go out from the desk number (the from-phone-id override on waSend).
 import { deskIgStatusText } from "./ig_desk.js";   // v404
+import { deskPostRoute } from "./desk_post.js";   // v413 - the posting loop
 export const DESK_VERSION = "v388";
 const DIG = (s) => String(s == null ? "" : s).replace(/[^0-9]/g, "");
-export const DESK_FIRST = "Desk is live. This number is for you only (Dr. Kendall Wilson). Commands: /desk_status.";
-export const DESK_OTHER = "Received. The desk only has /desk_status so far.";
+export const DESK_FIRST = "Desk is live. This number is for you only (Dr. Kendall Wilson). Commands: /post, /ideas, /queue, /insights, /cost, /pause, /resume, /ref, /desk_status.";
+export const DESK_OTHER = "Received. Commands: /post, /ideas, /queue, /insights, /cost, /pause, /resume, /ref, /desk_status.";
 
 export function deskOn(env) { return !!DIG(env.WA_DESK_PHONE_ID); }
 
@@ -49,6 +50,7 @@ export async function deskHandle(env, body, deps) {
   let first = false;
   try { first = !(await env.MEETINGS.get("wa_desk_seen")); await env.MEETINGS.put("wa_desk_last_in", new Date().toISOString(), { expirationTtl: 3 * 86400 }); if (first) await env.MEETINGS.put("wa_desk_seen", "1"); } catch (e) {}
   const text = msg.type === "text" && msg.text ? String(msg.text.body || "").trim() : "";
+  if (!first && deps.post) { let done = false; try { done = await deskPostRoute(env, msg, text, deps.post); } catch (e) { try { await deps.waSend(env, owner, "That did not work (" + String((e && e.message) || e).slice(0, 80) + "). Nothing was posted.", DIG(env.WA_DESK_PHONE_ID)); } catch (e2) {} done = true; } if (done) return true; }   // v413
   let reply;
   if (first) reply = DESK_FIRST;
   else if (/^\/desk_status\b/i.test(text)) reply = await deskStatusText(env);

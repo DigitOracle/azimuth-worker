@@ -32,6 +32,7 @@ import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
 import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitMorning, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
 import { isDeskState as igDeskIsState, deskIgLink, deskIgCallback, deskIgStatus, deskIgDeauth, deskIgRefresh } from "./ig_desk.js";   // v404 - the desk's own Instagram connection (ig_auth_desk), separate from Najjuko's
+import { deskPostTick, deskPostPull } from "./desk_post.js";   // v413 - the desk posting loop
 import { deskHandle, isDeskEvent, deskWindowOpen, deskOn } from "./desk.js";   // v388 - KENDALL DESK step 1: a second WhatsApp number that answers only the owner (all logic in src/desk.js)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -1063,8 +1064,8 @@ async function ringWhatsApp(env, text) {
     return { ok: !!(r && r.ok), status: r && r.status, to: env.RING_WA_TO };
   } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
 }
-async function waSendButtons(env, to, body, buttons) {
-  return waPost(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: body }, action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) } } }, "buttons");
+async function waSendButtons(env, to, body, buttons, fromPhoneId) {
+  return waPost(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: body }, action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) } } }, "buttons", fromPhoneId);   // v413 - optional fromPhoneId (the desk)
 }
 // v45 — send an image by public link (the heat map etc.); caption optional
 // v118 - a video message: WhatsApp fetches the link itself, and /video/<key> already answers range requests
@@ -1096,8 +1097,8 @@ function filmMatch(items, q, district) {   // the cluster whose name or member s
   return best || items.find((v) => v.scope === "district30" && (!district || v.district === district)) || null;
 }
 const filmOut = (v) => ({ key: v.key, src: v.src || "/video/" + v.key, poster: v.poster || "/video/" + v.key + "?poster=1", name: v.name || "", cluster: v.cluster == null ? null : v.cluster });
-async function waSendImage(env, to, link, caption) {
-  return waPost(env, { messaging_product: "whatsapp", to, type: "image", image: { link, caption: caption || undefined } }, "image");
+async function waSendImage(env, to, link, caption, fromPhoneId) {
+  return waPost(env, { messaging_product: "whatsapp", to, type: "image", image: { link, caption: caption || undefined } }, "image", fromPhoneId);
 }
 // v37.2 — interactive LIST (up to 10 rows; row title <=24 chars, description <=72)
 async function waSendList(env, to, body, buttonLabel, rows) {
@@ -3733,7 +3734,7 @@ async function appFetch(request, env, ctx) {
         if (!_viaForward && env.WA_FORWARD_TOKEN && !env.WA_APP_SECRET) return new Response("forward token required", { status: 401 });   // receiver-only instance (no Meta secret): forwarding is the ONLY door
         if (!_viaForward && !(await waVerifySig(env, raw, request.headers.get("X-Hub-Signature-256")))) return new Response("bad sig", { status: 401 });
         let body; try { body = JSON.parse(raw); } catch (e) { return new Response("ok"); }
-        if (isDeskEvent(env, body)) { await deskHandle(env, body, { waSend }); return new Response("ok"); }   // v388 - the desk number: consumed here BEFORE the shape probe and the router, never handed to the ordinary handlers, never routed on, no stranger digits stored
+        if (isDeskEvent(env, body)) { await deskHandle(env, body, { waSend, post: deskPostDeps(env) }); return new Response("ok"); }   // v388 - the desk number: consumed here BEFORE the shape probe and the router, never handed to the ordinary handlers, never routed on, no stranger digits stored
         try {                                                          // v20 shape probe — no message content stored
           const _v = body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
           const _m = _v && _v.messages && _v.messages[0];
@@ -4787,6 +4788,8 @@ export default {
         try { await gcGuideTick(env); } catch (e) {}   // v150.1 - one follow-up if her Calendar link sits unused for twenty minutes
         try { await liveNewsTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v270 - live city news, a few feeds every 5 minutes, 24/7 (LIVE_NEWS="on")
         try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
+        try { await deskPostTick(env, deskPostDeps(env)); } catch (e) {}   // v413 - the desk posting loop: expire old drafts, publish the due approved post (never when paused)
+        try { if (env.IG_APP_ID) { const _i3 = new Date(event.scheduledTime || Date.now()); if (_i3.getUTCMinutes() === 17 && _i3.getUTCHours() % 3 === 0) await deskPostPull(env, event.scheduledTime || Date.now()); } } catch (e) {}   // v413 - the desk account numbers, same 3-hour slot
         try { if (env.IG_APP_ID) { const _it2 = new Date(event.scheduledTime || Date.now()); if (_it2.getUTCMinutes() === 17 && _it2.getUTCHours() % 3 === 0) await deskIgRefresh(env); } } catch (e) {}   // v404 - the desk token 60-day refresh, same slot, no-op without a desk record
       })());
       return;
@@ -5427,6 +5430,16 @@ function igUserId(a) { return a && (a.user_id || a.userId || ""); }
 function igExpiry(a) { return (a && (a.expires_at || a.expiresAt)) || 0; }
 // A token granted before v158 has no publishing permission, and Meta refuses the call. Say that here rather than after the failure.
 function igCanPost(a) { return !!(a && a.token && String(a.perms || "").indexOf("content_publish") >= 0); }
+// v413 - what the desk posting loop may do, all through the existing helpers; every send goes from the desk number to the owner only.
+function deskPostDeps(env) {
+  const pid = String(env.WA_DESK_PHONE_ID || "").replace(/[^0-9]/g, ""), owner = String(env.WA_DESK_OWNER || "").replace(/[^0-9]/g, "");
+  return {
+    send: (e, t) => waSend(e, owner, t, pid), buttons: (e, b, btns) => waSendButtons(e, owner, b, btns, pid), image: (e, link, cap) => waSendImage(e, owner, link, cap, pid),
+    llm: (e, sys, user, mx) => claudeText(e, sys, user, CLAUDE_SMART, mx),
+    vision: async (e, bytes, mime, q) => { if (!e.ANTHROPIC_API_KEY) return null; try { const r = await claudeFetch(e, CLAUDE_FAST, 900, "You transcribe text from images. Reply with the text only.", [{ type: "image", source: { type: "base64", media_type: mime || "image/jpeg", data: b64of(bytes) } }, { type: "text", text: q }], null); if (!r || !r.ok) return null; const j = await r.json(); return (j.content || []).filter(b => b && b.type === "text").map(b => b.text).join(" "); } catch (x) { return null; } },
+    fetchMedia: waFetchMedia, origin: (e) => pubOrigin(e, ""), now: () => Date.now(), sleep: (ms) => new Promise(r => setTimeout(r, ms)),
+  };
+}
 async function publishInstagram(env, to, imageUrl, captionIn, pend) {
   let auth = null; try { auth = JSON.parse((await env.MEETINGS.get("ig_auth")) || "null"); } catch (e) {}
   if (!env.IG_APP_ID) { await waSend(env, to, "🔌 Instagram posting isn't switched on yet — the app link-up on DigitAlchemy's side is in progress."); return false; }

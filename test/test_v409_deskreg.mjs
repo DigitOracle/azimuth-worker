@@ -82,7 +82,7 @@ ok(reqs.every(q => !q.u.includes(MAIN)), "main number never addressed");
   if (prev) {
     const keys = (t) => new Map(t.split(/\r?\n/).filter(l => /^[A-Za-z_][A-Za-z0-9_]* *=/.test(l)).map(l => [l.split("=")[0].trim(), l]));
     const a = keys(prev), b = keys(now), added = [...b.keys()].filter(k => !a.has(k)), changed = [...a.keys()].filter(k => b.get(k) !== a.get(k));
-    ok(added.sort().join() === "FEED_DEADLINE_GST,WA_DESK_OWNER,WA_DESK_PHONE_ID" && changed.length === 0, "no other var added or changed vs cardbtns-v408", added.join() + "|" + changed.join());
+    ok(added.sort().join() === "FEED_DEADLINE_GST,IG_DAILY_CAP,IMG_MONTHLY_CAP_USD,WA_DESK_OWNER,WA_DESK_PHONE_ID" && changed.length === 0, "no other var added or changed vs cardbtns-v408", added.join() + "|" + changed.join());
   } else ok(true, "previous toml unavailable (skipped diff)");
 }
 console.error = ce; console.warn = cw;

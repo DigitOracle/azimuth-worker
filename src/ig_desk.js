@@ -100,9 +100,9 @@ export function deskIgCanPost(a) { return !!(a && a.token && String(a.perms || "
 const ymd = (ms) => { try { return new Date(ms).toISOString().slice(0, 10); } catch (e) { return ""; } };
 
 // Status without the token.
-export async function deskIgStatus(env) {
+export async function deskIgStatus(env, nowMs) {
   const a = await deskIgRecord(env);
-  const expired = !!(a && a.expires_at && Date.now() > a.expires_at);
+  const expired = !!(a && a.expires_at && (nowMs || Date.now()) > a.expires_at);
   return { acct: "desk", connected: !!(a && a.token) && !expired, username: a ? a.username : null, account_type: a ? a.account_type : null,
     permissions: a ? a.perms : null, can_post: deskIgCanPost(a) && !expired, token_expires: a && a.expires_at ? new Date(a.expires_at).toISOString() : null,
     linked_at: a ? a.linked_at : null, expired };
@@ -143,7 +143,7 @@ export async function deskIgPublish(env, opts) {
   if (opts.approved !== true) return { ok: false, err: "not approved" };
   const a = await deskIgRecord(env);
   if (!a || !a.token) return { ok: false, err: "desk Instagram not connected" };
-  if (a.expires_at && Date.now() > a.expires_at) return { ok: false, err: "desk token expired" };
+  if (a.expires_at && (opts.now || Date.now()) > a.expires_at) return { ok: false, err: "desk token expired" };
   if (!deskIgCanPost(a)) return { ok: false, err: "desk connection lacks content_publish" };
   if (!a.user_id || !/^https:\/\//.test(String(opts.imageUrl || ""))) return { ok: false, err: "missing account or https image url" };
   const sleep = opts.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
@@ -151,6 +151,7 @@ export async function deskIgPublish(env, opts) {
   try {
     const cr = opts.container ? { id: opts.container } : await (await fetch(GRAPH + "/v21.0/" + a.user_id + "/media", { method: "POST", headers: form,
       body: new URLSearchParams({ image_url: opts.imageUrl, caption: String(opts.caption || ""), access_token: a.token }) })).json();
+    if (cr && cr.id && !opts.container && opts.onContainer) { try { await opts.onContainer(String(cr.id)); } catch (e) {} }   // v413 - remembered the moment it exists, so a retry never makes a second one
     if (!cr || !cr.id) return { ok: false, err: "container refused: " + String((cr && cr.error && cr.error.message) || "no id").slice(0, 120) };
     let status = "IN_PROGRESS";
     for (let i = 0; i < 6 && status === "IN_PROGRESS"; i++) {
@@ -161,7 +162,77 @@ export async function deskIgPublish(env, opts) {
     if (status !== "FINISHED") return { ok: false, container: String(cr.id), err: "container status " + status };
     const pj = await (await fetch(GRAPH + "/v21.0/" + a.user_id + "/media_publish", { method: "POST", headers: form,
       body: new URLSearchParams({ creation_id: cr.id, access_token: a.token }) })).json();
-    if (pj && pj.id) return { ok: true, id: String(pj.id), container: String(cr.id) };
+    if (pj && pj.id) return { ok: true, id: String(pj.id), container: String(cr.id), permalink: await deskIgPermalink(env, String(pj.id)) };
     return { ok: false, container: String(cr.id), err: "publish refused: " + String((pj && pj.error && pj.error.message) || "no id").slice(0, 120) };
   } catch (e) { return { ok: false, err: "network error; check the feed before retrying" }; }
+}
+
+// v413 - the permalink of a published media id (GET /{media-id}?fields=permalink); "" when it cannot be read.
+export async function deskIgPermalink(env, mediaId) {
+  const a = await deskIgRecord(env); if (!a || !a.token || !mediaId) return "";
+  const r = await igGet("/v21.0/" + mediaId, a.token, { fields: "permalink" });
+  return r && r.permalink ? String(r.permalink) : "";
+}
+async function pollContainer(id, token, sleep) {
+  let status = "IN_PROGRESS";
+  for (let i = 0; i < 6 && status === "IN_PROGRESS"; i++) {
+    await sleep(2000);
+    const sj = await (await fetch(GRAPH + "/v21.0/" + id + "?fields=status_code&access_token=" + encodeURIComponent(token))).json();
+    status = (sj && sj.status_code) || "FINISHED";
+  }
+  return status;
+}
+// v413 - CAROUSEL (2 to 10 pictures), Meta's documented flow: a child container per picture (is_carousel_item), then a parent container
+// (media_type=CAROUSEL, children=ids, caption), then media_publish. opts.state ({children, parent}) carries ids from an earlier try, so a
+// retry never makes a second set and never publishes twice; opts.onProgress(state) is called as each id appears. approved:true is required.
+export async function deskIgPublishCarousel(env, opts) {
+  opts = opts || {};
+  if (opts.approved !== true) return { ok: false, err: "not approved" };
+  const a = await deskIgRecord(env);
+  if (!a || !a.token) return { ok: false, err: "desk Instagram not connected" };
+  if (a.expires_at && (opts.now || Date.now()) > a.expires_at) return { ok: false, err: "desk token expired" };
+  if (!deskIgCanPost(a)) return { ok: false, err: "desk connection lacks content_publish" };
+  const urls = opts.imageUrls || [];
+  if (!a.user_id || urls.length < 2 || urls.length > 10 || urls.some((u) => !/^https:\/\//.test(String(u)))) return { ok: false, err: "a carousel needs 2 to 10 https pictures" };
+  const sleep = opts.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const form = { "Content-Type": "application/x-www-form-urlencoded" };
+  const st = opts.state || {}; st.children = Array.isArray(st.children) ? st.children : [];
+  const note = async () => { if (opts.onProgress) { try { await opts.onProgress({ children: st.children.slice(), parent: st.parent }); } catch (e) {} } };
+  try {
+    for (let i = st.children.length; i < urls.length; i++) {
+      const c = await (await fetch(GRAPH + "/v21.0/" + a.user_id + "/media", { method: "POST", headers: form,
+        body: new URLSearchParams({ image_url: urls[i], is_carousel_item: "true", access_token: a.token }) })).json();
+      if (!c || !c.id) return { ok: false, err: "picture " + (i + 1) + " refused: " + String((c && c.error && c.error.message) || "no id").slice(0, 120) };
+      st.children.push(String(c.id)); await note();
+    }
+    for (const id of st.children) { const s1 = await pollContainer(id, a.token, sleep); if (s1 !== "FINISHED") return { ok: false, err: "picture container status " + s1 }; }
+    if (!st.parent) {
+      const pr = await (await fetch(GRAPH + "/v21.0/" + a.user_id + "/media", { method: "POST", headers: form,
+        body: new URLSearchParams({ media_type: "CAROUSEL", children: st.children.join(","), caption: String(opts.caption || ""), access_token: a.token }) })).json();
+      if (!pr || !pr.id) return { ok: false, err: "carousel container refused: " + String((pr && pr.error && pr.error.message) || "no id").slice(0, 120) };
+      st.parent = String(pr.id); await note();
+    }
+    const s2 = await pollContainer(st.parent, a.token, sleep);
+    if (s2 !== "FINISHED") return { ok: false, err: "carousel container status " + s2 };
+    const pj = await (await fetch(GRAPH + "/v21.0/" + a.user_id + "/media_publish", { method: "POST", headers: form,
+      body: new URLSearchParams({ creation_id: st.parent, access_token: a.token }) })).json();
+    if (pj && pj.id) return { ok: true, id: String(pj.id), permalink: await deskIgPermalink(env, String(pj.id)) };
+    return { ok: false, err: "publish refused: " + String((pj && pj.error && pj.error.message) || "no id").slice(0, 120) };
+  } catch (e) { return { ok: false, err: "network error; check the feed before retrying" }; }
+}
+
+// v413 - the desk account's own numbers (desk token): followers, and reach / likes / saves for the media ids the desk posted.
+const insVal = (d) => (d && d.values && d.values[0] && typeof d.values[0].value === "number" ? d.values[0].value : d && d.total_value && typeof d.total_value.value === "number" ? d.total_value.value : null);
+export async function deskIgPull(env, now, mediaIds) {
+  const a = await deskIgRecord(env); const out = { media: {} };
+  if (!a || !a.token || (a.expires_at && (now || Date.now()) > a.expires_at)) return Object.assign(out, { err: "not connected" });
+  const me = await igGet("/me", a.token, { fields: "user_id,username,followers_count,media_count" });
+  if (!me.err) out.account = { followers: me.followers_count, media_count: me.media_count };
+  for (const id of (mediaIds || []).slice(0, 25)) {
+    const r = await igGet("/v21.0/" + id + "/insights", a.token, { metric: "reach,likes,saved" });
+    if (r.err) continue;
+    const m = {}; for (const d of (r.data || [])) { const v = insVal(d); if (v !== null) m[d.name] = v; }
+    out.media[id] = m;
+  }
+  return out;
 }
