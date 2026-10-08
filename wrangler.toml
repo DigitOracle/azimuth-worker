@@ -112,6 +112,8 @@ LOG_NUDGE_LANG = "en_US"   # the language the template was created with
 # v289 - moved to 05:00 (Kendall, 2 Oct 2026: "move Najj feed from 6am to 5am"). THE ONE PLACE the feed hour is set: the code reads it
 # through feedHourGst(), and the cron below must start at (this hour - 4) UTC or the feed never gets a tick (test_v289_feed_hour checks both).
 FEED_HOUR_GST = "5"
+# v412 - the feed waits for today's data (mkt_latest stamped with today's Dubai date) and gives up waiting at this hour (Dubai), then generates from the latest data and says so.
+FEED_DEADLINE_GST = "8"
 # v140 - her meeting ring: the shared dialler handset, her own CALLNAJ marker, no meeting title on the handset.
 # RING_WA_TO = "971585446093"   # rings off (Kendall, 15 Sep 2026): the dialler handset's open microphone relayed room noise
 RING_TEMPLATE = "daily_meeting_reminder"

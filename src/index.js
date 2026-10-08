@@ -4506,7 +4506,7 @@ async function appFetch(request, env, ctx) {
             return new Response("ok");
           }
           // v83.1 - a second post in the same day: she asks for a fresh set and gets ten NEW angles, not the morning's list again.
-          if (/^(more|again|fresh|fresh set|new angles?|another set|next set|round two|second round|run it again|new run)$/i.test(text)) {
+          if (/^(more|again|fresh|fresh set|new angles?|another set|next set|round two|second round|run it again|new run|feed again|refresh(?: the)? feed)$/i.test(text)) {
             if (await env.MEETINGS.get("mkt_feed_inflight")) {                 // v127 - she sent it twice 23 s apart; one build at a time
               await waSend(env, from, "Still building the last set - give it a moment.");
               return new Response("ok");
@@ -4602,6 +4602,22 @@ async function appFetch(request, env, ctx) {
             return new Response("ok");
           }
           if (/^(?:feed|daily|today(?:'s)?\s+(?:feed|angles|posts?))\s*\??$/i.test(text)) {
+            // v412 (8 Oct: she sent 'Feed' twice and got TEN angles - the held set flushed AND a second set was built). One set a day unless she asks again.
+            {
+              const _today = gstDateStr(gstNow()); let _sr = null, _pend = null;
+              try { _sr = JSON.parse((await env.MEETINGS.get("mkt_feed_sent")) || "null"); } catch (e) {}
+              try { _pend = JSON.parse((await env.MEETINGS.get("mkt_feed_pending")) || "null"); } catch (e) {}
+              const _held = (await env.MEETINGS.get("mktfeed_" + _today)) === "held";
+              const _sentToday = _sr && _sr.date === _today && Date.now() - (_sr.at || 0) <= 3600000;
+              if (_sentToday && _sr.via === "flush" && Date.now() - _sr.at < 180000) return new Response("ok");   // her own message just opened the window: the held set is going out, that is the answer
+              if (_pend && Date.now() - (_pend.at || 0) <= FEED_HOLD_MAX_MS) return new Response("ok");        // held set still being flushed by the line above
+              if (!_sentToday && _held && !_pend) return new Response("ok");                                    // flush in flight
+              if (_sentToday) {
+                await waSend(env, from, "Today's list is above - tap a number below, or say *feed again* for a fresh set.");
+                if (Array.isArray(_sr.rows) && _sr.rows.length) { try { await waSendList(env, from, "Today's pick:", "Choose an angle", _sr.rows); } catch (e) {} }
+                return new Response("ok");
+              }
+            }
             // v283 (Naj, 1 Oct: "why only 3?"): the feed has been five angles since 19 Sep; the old "three" wording and the
             // second, duplicate "building" line are gone - one message, the right number.
             await waSend(env, from, "☀️ Building this morning's list — about a minute…");   // v295 - the count is not known until it is built; the header of the list says the real number
@@ -4767,6 +4783,7 @@ export default {
         try { await fitReminders(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v351 - the daily "write in my book" reminder, inside the 24-hour window only   // v328 - the 21:00 GST FIT verdict; once a day, only while the 24-hour window is open
         try { await picResume(env, "", 90000); } catch (e) {}
         try { await deliveryWatch(env); } catch (e) {}   // v186 - accepted then failed is not sent
+        try { await feedEarlyNudge(env, event.scheduledTime || Date.now()); } catch (e) {}   // v412 - 04:00-04:30: the template, if her window will be shut by the feed
         try { await gcGuideTick(env); } catch (e) {}   // v150.1 - one follow-up if her Calendar link sits unused for twenty minutes
         try { await liveNewsTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v270 - live city news, a few feeds every 5 minutes, 24/7 (LIVE_NEWS="on")
         try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
@@ -6223,6 +6240,11 @@ const CAMPAIGN_SCHEMA = { type: "object", additionalProperties: false, propertie
 // v289 - azimuth-2 moved to 05:00 (Kendall, 2 Oct 2026). FEED_HOUR_GST in wrangler.toml is the only place the hour is set;
 // its cron now starts at 01:00 UTC. Never write the hour as a literal anywhere else - read it through this function.
 function feedHourGst(env) { const h = parseInt(env.FEED_HOUR_GST || "7", 10); return h >= 0 && h <= 23 ? h : 7; }
+// v412 - THE FRESH-DATA GATE (Kendall, 8 Oct 2026). The 04:00 laptop refresh now takes 1-2.5 hours, so the 05:00 feed ran on
+// yesterday's register. The feed waits for mkt_latest to be stamped with today's Dubai date, re-checking every tick, until
+// FEED_DEADLINE_GST (default 8 = 08:00 Dubai); after that it generates from the latest data and says so in the QA line.
+function feedDeadlineGst(env) { const f = feedHourGst(env); const h = parseInt(env.FEED_DEADLINE_GST || "8", 10); return h > f && h <= 23 ? h : Math.min(23, Math.max(f + 1, 8)); }
+function dubaiDateOf(iso) { const t = Date.parse(iso || ""); return isNaN(t) ? "" : gstDateStr(new Date(t + OFFSET_MIN * 60000)); }
 // v178 - THE DUBAI 2040 URBAN MASTER PLAN is the spine of her morning (Kendall, 18 Sep 2026: "my trajectory in terms of
 // delivering information is always around the Dubai 2040 master plan"). OFFICIAL figures only, each with the page it was read
 // from - she quotes these to clients, so nothing here is remembered, paraphrased or rounded. status: "target" is a 2040 aim,
@@ -6290,15 +6312,32 @@ async function igEvidence(env) {
 async function dailyFeedTick(env, force, dry) {
   if ((env.MARKET_BRIEF || "") !== "on") return;
   const n = gstNow();
-  if (!force && n.getUTCHours() !== feedHourGst(env)) return;                      // v140 - FEED_HOUR_GST (default 7); that hour's :00 and :30 ticks are both eligible
   const fk = "mktfeed_" + gstDateStr(n);
   let attempts = 0;
-  if (!force) {                                                                    // v56 — marker records SUCCESS, not attempt: a failed
-    const fv = await env.MEETINGS.get(fk);                                         // generation no longer silently eats the whole morning
-    if (fv === "done") return;
-    attempts = parseInt(fv, 10) || 0;
-    if (attempts >= 2) return;
+  let staleNote = "";                                                              // v412 - set when the feed goes out after the deadline on yesterday's (or older) data
+  if (!force) {
+    const h = n.getUTCHours(), fh = feedHourGst(env), dh = feedDeadlineGst(env);
+    const deferred = !!(await env.MEETINGS.get("mktfeeddef_" + gstDateStr(n)));    // set the first time today's data was awaited; it outlives the status key, so a failed first generation can still retry up to the deadline
+    // v140 - FEED_HOUR_GST (default 7); that hour's :00 and :30 ticks are both eligible. v412 - later ticks (up to the deadline hour) only while a deferral is on record for today.
+    if (n.getUTCHours() !== feedHourGst(env) && !(deferred && h > fh && h <= dh)) return;
+    const fv = await env.MEETINGS.get(fk);                                         // v56 - marker records SUCCESS, not attempt: a failed
+    if (fv === "done" || fv === "held") return;                                    // generation no longer silently eats the whole morning; v412 - a held set waits for her reply, it is not rebuilt every tick
+    const attempts0 = parseInt(fv, 10) || 0;
+    if (attempts0 >= 2) return;
+    // v412 - the fresh-data gate runs BEFORE the attempt is consumed. No data at all keeps the old path (it records the attempt, then stops).
+    let _g = null; try { const _r0 = await env.MEETINGS.get("mkt_latest"); if (_r0) _g = String(JSON.parse(_r0).generatedAt || ""); } catch (e) { _g = null; }
+    if (_g !== null && dubaiDateOf(_g) !== gstDateStr(n)) {
+      const pastDeadline = n.getUTCHours() * 60 + n.getUTCMinutes() >= dh * 60;
+      if (!pastDeadline) {
+        try { await env.MEETINGS.put("mktfeeddef_" + gstDateStr(n), "1", { expirationTtl: 2 * 86400 }); } catch (e) {}
+        try { await env.MEETINGS.put("mkt_feed_status", JSON.stringify({ state: "deferred", date: gstDateStr(n), at: gstNowIso(), why: "deferred: waiting for today's data", dataFrom: dubaiDateOf(_g) || "unknown", deadline: String(dh).padStart(2, "0") + ":00" }), { expirationTtl: 3 * 86400 }); } catch (e) {}
+        return;
+      }
+      staleNote = "data from " + (dubaiDateOf(_g) || "an unknown date") + ": refresh not finished";
+    }
+    attempts = attempts0;
     await env.MEETINGS.put(fk, String(attempts + 1), { expirationTtl: 2 * 86400 });
+    try { await env.MEETINGS.put("mkt_feed_status", JSON.stringify({ state: "generating", date: gstDateStr(n), at: gstNowIso(), attempt: attempts + 1, note: staleNote || "today's data" }), { expirationTtl: 3 * 86400 }); } catch (e) {}
   }
   const raw = await env.MEETINGS.get("mkt_latest");
   if (!raw) return;
@@ -6439,6 +6478,7 @@ async function dailyFeedTick(env, force, dry) {
   }
   const qa = await feedQA(env, angles, sys, data, famh);                                        // v88 - redundancy audit + one repair pass
   qa.ledger = ledger && ledger.note ? { note: ledger.note, all: ledger.all, fresh: ledger.fresh.length, menu: ledger.menu.length, byAll: ledger.byAll, byFresh: ledger.byFresh, usedSample: ledger.used.slice(0, 40) } : { error: ledger && ledger.error };   // v284
+  if (staleNote) qa.note += " | " + staleNote;   // v412 - the deadline passed before the refresh finished; say so
   qa.note += " | " + (ledger && ledger.note ? ledger.note : "ledger NOT used (" + ((ledger && ledger.error) || "?") + ") - the raw blocks went to the generator");
   // v184 - no early "send nothing" here any more: feedFill below tops the set up to five after every check has run
   // v76 — CAMPAIGN TRACK: while a campaign pack is live (Emaar District Ambassador, The Valley, closes 15 Sep 2026) the morning
@@ -6575,6 +6615,7 @@ async function dailyFeedTick(env, force, dry) {
     try { await gcTellOwner(env, "Naj's morning was REFUSED by WhatsApp (" + ((_sent && _sent.status) || "?") + "). She has not received it, and nothing was recorded against her history."); } catch (e) {}
     return;
   }
+  try { await env.MEETINGS.put("mkt_feed_sent", JSON.stringify({ at: Date.now(), date: gstDateStr(gstNow()), via: force ? "force" : "tick", bodyTxt, rows: _rows }), { expirationTtl: 2 * 86400 }); } catch (e) {}   // v412 - what 'Feed' answers from
   await _famWrite();
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", _rows);
   // v281 - EJARI · WHAT MOVED: the card goes straight after the morning list and its picker, only on a morning that passed the gate
@@ -6889,15 +6930,38 @@ async function feedHold(env, bodyTxt, rows, angles) {
   try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), why: "held: her 24-hour window is shut", nudge: n }), { expirationTtl: 7 * 86400 }); } catch (e) {}
   return n;
 }
+// v412 - THE EARLY WINDOW NUDGE (Kendall, 8 Oct 2026). Her 24-hour window shuts 23 h after she last wrote; on 8 Oct it was shut at
+// 05:02 and the morning was held until she wrote at 06:26. One hour before the feed (04:00-04:30 Dubai, the minute tick), if she
+// last wrote more than 20 hours ago the window will not survive the feed (which can now wait until the deadline), so she gets the
+// approved najma_feed_ready template and can reply first. Once a day (mktnudge_<date> is written BEFORE the send, so a failure is
+// never retried in a loop). Goes to env.WA_ALLOWED only; Kendall is not messaged.
+async function feedEarlyNudge(env, nowMs) {
+  if ((env.MARKET_BRIEF || "") !== "on" || !env.WA_ALLOWED) return { skipped: "off" };
+  const g = new Date((nowMs || Date.now()) + OFFSET_MIN * 60000);
+  const start = Math.max(0, feedHourGst(env) - 1);
+  if (g.getUTCHours() !== start || g.getUTCMinutes() >= 30) return { skipped: "not the hour" };
+  const key = "mktnudge_" + gstDateStr(g);
+  if (await env.MEETINGS.get(key)) return { skipped: "already today" };
+  let lastIn = null; try { lastIn = await env.MEETINGS.get("wa_owner_last_in"); } catch (e) {}
+  const age = lastIn ? (nowMs || Date.now()) - Date.parse(lastIn) : Infinity;
+  if (!(age > 20 * 3600 * 1000)) { try { await env.MEETINGS.put(key, "open", { expirationTtl: 2 * 86400 }); } catch (e) {} return { skipped: "window open" }; }
+  try { await env.MEETINGS.put(key, "sending", { expirationTtl: 2 * 86400 }); } catch (e) {}
+  const r = await feedNudge(env, "Your morning list is on its way", "Reply with anything here and I'll send it over the moment it is ready.");
+  try { await env.MEETINGS.put(key, r && r.ok ? "sent" : "failed", { expirationTtl: 2 * 86400 }); } catch (e) {}
+  if (!(r && r.ok)) { try { await env.MEETINGS.put("mkt_feed_err", JSON.stringify({ at: gstNowIso(), why: "early nudge failed: her window is nearly shut and the template did not go", nudge: r }), { expirationTtl: 7 * 86400 }); } catch (e) {} }
+  return { sent: !!(r && r.ok), nudge: r };
+}
 // Her next message reopens the window: send the held morning at once, then queue its cards.
 async function feedFlush(env) {
   let p = null; try { p = JSON.parse((await env.MEETINGS.get("mkt_feed_pending")) || "null"); } catch (e) {}
   if (!p || !p.bodyTxt) return { flushed: false };
   await env.MEETINGS.delete("mkt_feed_pending");
   if (Date.now() - (p.at || 0) > FEED_HOLD_MAX_MS) {
+    try { await env.MEETINGS.delete("mktfeed_" + gstDateStr(gstNow())); } catch (e) {}   // v412 - nothing is held any more, so 'Feed' may build one
     try { await gcTellOwner(env, "Naj replied, but the morning I was holding for her was too old to send (" + String(p.at_gst || "").slice(0, 16) + "). She gets the next one as usual."); } catch (e) {}
     return { flushed: false, why: "stale" };
   }
+  try { await env.MEETINGS.put("mkt_feed_sent", JSON.stringify({ at: Date.now(), date: gstDateStr(gstNow()), via: "flush", bodyTxt: p.bodyTxt, rows: p.rows || [] }), { expirationTtl: 2 * 86400 }); await env.MEETINGS.put("mktfeed_" + gstDateStr(gstNow()), "done", { expirationTtl: 2 * 86400 }); } catch (e) {}   // v412 - flushed counts as the day's set
   const r1 = await waSend(env, env.WA_ALLOWED, p.bodyTxt);
   if (r1 && r1.ok && Array.isArray(p.famRows) && p.famRows.length) {   // v187 - now she has it, it counts as said
     try { const famh = JSON.parse((await env.MEETINGS.get("mkt_feed_famhist")) || "[]"); const today = gstDateStr(new Date());
