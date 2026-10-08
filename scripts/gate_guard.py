@@ -24,7 +24,7 @@ sys.path.insert(0, HERE)
 import completeness_core as C
 import check_completeness as K
 
-LAYER_FILES = {"nosales", "notconf", "announced", "search_extra", "search_extra_announced", "community_positions_p"}
+LAYER_FILES = {"nosales", "notconf", "regcards", "announced", "search_extra", "search_extra_announced", "community_positions_p"}
 KV_LAYERS = {"index": "devmap_index", "plots": "plots", "plot_positions": "plot_positions", "community_positions": "community_positions",
              "investor_tiers_index": "investor_tiers_index", "map_prices": "map_prices", "buy_extra": "buy_extra", "rent_index": "rent_index", "search_index": "search_index"}
 KNOWN = sorted(LAYER_FILES | set(KV_LAYERS))
