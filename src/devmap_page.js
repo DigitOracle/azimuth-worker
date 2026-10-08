@@ -356,11 +356,14 @@ function pjCard0(slug,name,ppsm,n,extra,nameDef,ev){
   var b=BLK[slug];if(!b&&name&&!(ev&&ev.rc&&IDX&&IDX.areas&&!IDX.areas[slug]))ensureBlocks(slug,function(){if(S.sel===slug||S.drill||S.parea)renderDetail();updatePj()});
   var pt=typeof PLOTPOS!=="undefined"?PLOTPOS.cardTag(ev,icoSvg):"";   // v386 - a plot position: "Show on the map" (the marker is a plot ring, never a building)
   if(pt)return '<button type=button class="pjc noloc plot" data-pd="'+esc(dk)+'" aria-label="Show the plot of '+esc(name||PDET[dk].nameDef)+' on the map">'+inner+pt+'</button>';
+  var dsp=typeof DEVSAYS!=="undefined"&&name?DEVSAYS.cardTag({name:name,ev:ev},icoSvg):"";   // v416 - the confirmed plot position of a developer-says project (KORE): the plot centre and its outline, never the building
+  if(dsp)return '<button type=button class="pjc noloc plot" data-pd="'+esc(dk)+'" aria-label="Show the plot of '+esc(name)+' on the map, not the building">'+inner+dsp+'</button>';
   var cm=typeof COMMPOS!=="undefined"?COMMPOS.cardTag(slug,name,ev,icoSvg):"";   // v387 - last rung: the centre of the card's own community (a dashed ring, never the building)
   if(cm)return '<button type=button class="pjc noloc comm" data-pd="'+esc(dk)+'" aria-label="Show the community of '+esc(name||PDET[dk].nameDef)+' on the map, not the building">'+inner+cm+'</button>';
   return '<button type=button class="pjc noloc" data-pd="'+esc(dk)+'" aria-label="Project details for '+esc(name||PDET[dk].nameDef)+'">'+inner.replace('class="evi"','class="evi mu"')+'<span class="tagl pd">'+icoSvg("caret-down","chev")+'Project details</span></button>'}
 // why a project has no map position, by cause (the three meanings are fixed). Register status and parcel facts are read from the evidence record (ev.st, ev.pl) when the index carries them; with neither, the line makes no claim about a building.
-function pdWhy(d){var w=pdWhy0(d),pl=typeof PLOTPOS!=="undefined"?PLOTPOS.why(d.ev):"",cm=!pl&&typeof COMMPOS!=="undefined"?COMMPOS.why(d):"";return pl?w+" "+pl+".":cm?w+" "+cm:w}   // v387 - a community-centre line (ladder rung 3) says it is not the building   // v386 - the plot position label is added when there is one
+function pdWhy(d){var w=pdWhy0(d),pl=typeof PLOTPOS!=="undefined"?PLOTPOS.why(d.ev):"",dsw=!pl&&typeof DEVSAYS!=="undefined"?DEVSAYS.why(d):"",cm=!pl&&!dsw&&typeof COMMPOS!=="undefined"?COMMPOS.why(d):"";
+  if(dsw)return w==="No building outline of this name is on our map yet."?dsw:w+" "+dsw;return pl?w+" "+pl+".":cm?w+" "+cm:w}   // v416 - a plot position (DEVSAYS.why) replaces the 'no outline' line, any register reason stays   // v387 - a community-centre line (ladder rung 3) says it is not the building   // v386 - the plot position label is added when there is one
 function pdWhy0(d){var e=d.ev||{},st=String(e.st||"").toUpperCase();
   if(e.pl===0||e.pl===false)return "The register has no land parcel for this project.";
   if(st==="NOT_STARTED"||st==="PENDING")return "Not built yet, so there is no building to show on the map. The register holds its land parcel.";
@@ -368,7 +371,8 @@ function pdWhy0(d){var e=d.ev||{},st=String(e.st||"").toUpperCase();
   return "No building outline of this name is on our map yet."}
 // v386: a plot-centre position (centre of the registered plot, DERIVED, with its label and the register link) is returned here as two more rows when the file has one; nothing is drawn or invented otherwise.
 function pjPlotHook(d){return typeof PLOTPOS!=="undefined"?PLOTPOS.rows(d.ev,pdRow):""}
-function pjCommHook(d){return typeof COMMPOS!=="undefined"?COMMPOS.rows(d,pdRow):""}   // v387 - the community-centre rows (ladder rung 3): empty without data or when a plot centre exists
+function pjDevHook(d){return typeof DEVSAYS!=="undefined"?DEVSAYS.rows(d,pdRow):""}   // v416 - the plot rows of a developer-says project (confirmed plot position, never the building)
+function pjCommHook(d){return typeof COMMPOS!=="undefined"&&!(typeof DEVSAYS!=="undefined"&&DEVSAYS.has(d))?COMMPOS.rows(d,pdRow):""}   // v387 - the community-centre rows (ladder rung 3): empty without data or when a plot centre exists
 function pdRow(ic,lab,val,src,tag){return '<div class=pdr>'+icoSvg(ic,"evi")+'<div><span class=pdl>'+lab+'</span> <b dir=auto>'+val+'</b><span class="note pds">Source: '+esc(src)+' <span class=tag>'+esc(tag)+'</span></span></div></div>'}
 function pdWords(s){s=String(s||"").replace(/_/g," ").toLowerCase();return s.charAt(0).toUpperCase()+s.slice(1)}
 // v389 (Kendall, 7 Oct 2026): the project details are an ACCORDION - a short header always visible, then four sections, all closed until tapped - and the documents are THREE SMALL BUTTONS at the bottom.
@@ -424,7 +428,7 @@ function pjDetailHtml(dk,located){var d=PDET[dk];if(!d)return "";var e=d.ev||{},
   h+=pdSec("chart-donut","Sales",e.rc&&typeof REGCARDS!=="undefined"?REGCARDS.salesRow(e,pdRow):e.nc&&typeof NOTCONF!=="undefined"?NOTCONF.salesRow(e,pdRow):e.ns&&typeof NOSALES!=="undefined"?NOSALES.salesRow(e,pdRow):d.n!=null?pdRow("chart-donut","Sales in the window",fmt(d.n)+" sale"+(d.n===1?"":"s")+(d.ppsm?"; median AED "+fmt(pu(d.ppsm))+" "+pul():""),"Dubai Land Department settled sales register, "+(d.win==="l12"&&IDX&&IDX.ev?"last 12 months":"all years"),"DATA"):pdRow("chart-donut","Sales in the window","Not recorded","Dubai Land Department settled sales register","NOT_AVAILABLE"));
   var ar=e.a||(IDX&&IDX.areas&&IDX.areas[d.slug]?IDX.areas[d.slug].name:""),a="";
   if(ar)a+=pdRow("map-pin","Area",esc(ar),e.as||"Dubai Land Department sales area of the project","DATA");
-  if(!located){a+=pdRow("map-pin","Map position",esc(pdWhy(d)),"Dubai Land Department project and land registers, and our building outlines","DERIVED");a+=pjPlotHook(d)+pjCommHook(d)}
+  if(!located){a+=pdRow("map-pin","Map position",esc(pdWhy(d)),"Dubai Land Department project and land registers, and our building outlines","DERIVED");a+=pjPlotHook(d)+pjDevHook(d)+pjCommHook(d)}
   h+=pdSec("map-pin","Area and position",a||pdRow("map-pin","Area","Not recorded","Dubai Land Department sales area of the project","NOT_AVAILABLE"));
   return h+docRow(d,"panel")+'</div>'}
 function pdClose(){var el=$("pjdet"),f=PDFROM;PDOPEN=null;PDFROM=null;if(el)el.style.display="none";if(f&&f.focus){try{f.focus()}catch(x){}}}
@@ -432,6 +436,7 @@ function pdOpen(dk,from){var d=PDET[dk];if(!d)return false;var el=$("pjdet");
   if(!el){el=document.createElement("div");el.id="pjdet";el.setAttribute("role","dialog");el.setAttribute("aria-label","Project details");document.body.appendChild(el)}
   pdTapInit();if(!PDKEY&&document.addEventListener){PDKEY=1;document.addEventListener("keydown",function(ev){if(ev.key==="Escape"&&PDOPEN)pdClose()})}
   PDOPEN=dk;PDFROM=from||null;el.innerHTML='<div class=pdh><b dir=auto>'+esc(d.name||d.nameDef)+'</b><button type=button id=pdx aria-label="Close project details">'+icoSvg("x","evi")+'</button></div>'+pjDetailHtml(dk,false);el.style.display="block";if(typeof PLOTPOS!=="undefined")PLOTPOS.open({map:map,ev:d.ev,el:el,wide:innerWidth,collapse:function(){setSheet(false)}});if(typeof COMMPOS!=="undefined")COMMPOS.open({map:map,slug:d.slug,name:d.name,ev:d.ev,el:el,wide:innerWidth,collapse:function(){setSheet(false)}});
+  if(typeof DEVSAYS!=="undefined"&&DEVSAYS.open({map:map,d:d,el:el,wide:innerWidth,collapse:function(){setSheet(false)}})&&typeof COMMPOS!=="undefined")COMMPOS.clear(map);   // v416 - the plot position (a better rung than the community centre)
   var x=$("pdx");if(x){x.onclick=pdClose;if(x.focus)x.focus()}return true}
 function pjFeatures(pts){var out=[];if(!S.sel)return out;var sel=S.pj&&S.pj.slug===S.sel?S.pj.key:null;
   Object.keys(PJ).forEach(function(k){if(k.indexOf(S.sel+"|")!==0)return;var info=PJ[k];if(!info)return;var fs=locate(S.sel,info.name);if(!fs)return;var pr={key:k,name:info.name,ppsm:info.ppsm,n:info.n,color:info.color,band:info.band,approx:info.approx,sel:sel===k?1:0};
@@ -766,7 +771,7 @@ function startMap(){
     map.addLayer({id:"a-fill",type:"fill",source:"areas",paint:{"fill-color":["match",["get","v"],0,"#6f7a78",1,"#2f8a7f",2,"#3987e5",3,"#c98500","#c5a56a"],"fill-opacity":["case",["==",["get","dim"],1],0.04,["==",["get","v"],0],0.12,0.55]}},fs);
     map.addLayer({id:"a-line",type:"line",source:"areas",paint:{"line-color":["case",["==",["get","dim"],1],"rgba(197,165,106,0.1)",["get","sel"],"#c5a56a","rgba(197,165,106,0.45)"],"line-width":["case",["get","sel"],2.6,0.8]}},fs);
     map.addLayer({id:"a-label",type:"symbol",source:"areas",layout:{"text-field":["get","label"],"text-font":font,"text-size":11.5,"text-max-width":9},paint:{"text-color":"#f5efe2","text-halo-color":"#0b0f0f","text-halo-width":1.4}});
-    if(typeof CF!=="undefined"&&CF){CF.addLayers(map,font);CF.bind(map,maplibregl);CF.refresh()}if(typeof PLOTPOS!=="undefined")PLOTPOS.addLayers(map,font);if(typeof COMMPOS!=="undefined")COMMPOS.addLayers(map,font);
+    if(typeof CF!=="undefined"&&CF){CF.addLayers(map,font);CF.bind(map,maplibregl);CF.refresh()}if(typeof PLOTPOS!=="undefined")PLOTPOS.addLayers(map,font);if(typeof COMMPOS!=="undefined")COMMPOS.addLayers(map,font);if(typeof DEVSAYS!=="undefined")DEVSAYS.addLayers(map,font);
     map.addSource("pjctx",{type:"geojson",data:{type:"FeatureCollection",features:[]}});map.addSource("pj",{type:"geojson",data:{type:"FeatureCollection",features:[]}});map.addSource("pjpt",{type:"geojson",data:{type:"FeatureCollection",features:[]}});
     map.addLayer({id:"pj-ctx",type:"fill",source:"pjctx",paint:{"fill-color":"#9aa7a4","fill-opacity":0.3}},"a-label");
     map.addLayer({id:"pj-ctxl",type:"line",source:"pjctx",paint:{"line-color":"#c9d2d0","line-width":0.6,"line-opacity":0.5}},"a-label");

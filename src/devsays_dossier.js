@@ -9,7 +9,7 @@
 import { BRIEF_KIT, PAGE_KIT, esc, HEADER_IMG_KEY, HEADER_JPG_KEY } from "./brief_docs.js";
 import { kvJson } from "./brief.js";
 import { loadFactsSharded } from "./investor_facts.js";
-import { claimsFor, permissionOnFile, PICTURES_WITHHELD, launchFrom, money, receivedLong } from "./dev_claims.js";
+import { claimsFor, permissionOnFile, PICTURES_WITHHELD, launchFrom, money, receivedLong, positionOf, locationLine } from "./dev_claims.js";
 import { loadDevPics, picGroup, picFigure, picGrid, REF_NOTE } from "./dev_pics.js";   // v417
 
 const DEV = "developer says";
@@ -48,6 +48,20 @@ function planTables(c) {
   return '<div style="display:flex;flex-direction:column;gap:6px;">' + sec("Payment plans " + tag(DEV)) + '<div style="display:flex;gap:14px;">' + plans.map(one).join("") + "</div>" +
     note("Dates marked * are indicative: the brochure does not say what the asterisk means here. No cash amount is worked out. Source: " + esc(c.source.name) + ", received " + esc(receivedLong(c)) + ".") + "</div>";
 }
+// v416 - where the project is: the plot (Dubai Municipality outline), said as a plot and not as the building. No map picture is drawn (no satellite imagery on a client document).
+function locationBlock(c) {
+  const l = positionOf(c);
+  if (!l) return "";
+  return '<div style="font-size:11.5px;color:' + BRIEF_KIT.NAVY + ';line-height:1.4;">' + esc(locationLine(l)) + "</div>";
+}
+// v416 - the developer's own "15-minute loop" travel times, as transcribed (developer says; the mode of travel is not stated, so they are never walking times)
+function travelBlock(c) {
+  const rows = (c.drive_times && c.drive_times.rows) || [];
+  if (!rows.length) return "";
+  return '<div style="display:flex;flex-direction:column;gap:6px;">' + sec("Travel times (developer says; mode not stated)") + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px 14px;font-size:10.5px;color:' + BRIEF_KIT.NAVY + ';">' +
+    rows.map((r) => "<div>" + esc(r.to) + " &mdash; " + esc(String(r.min)) + " min</div>").join("") + "</div>" +
+    note("From the 15-minute loop on the developer's location map. The brochure does not say how you travel, so these are not walking times. Source: " + esc(c.source.name) + ", received " + esc(receivedLong(c)) + ".") + "</div>";
+}
 function amenityBlock(c) {
   const by = (c.amenities && c.amenities.by_level) || [];
   if (!by.length) return "";
@@ -82,12 +96,12 @@ export async function buildDevDossier(env, q, opts) {
   const factHtml = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;">' + facts4.map(([k, v]) => '<div style="display:flex;flex-direction:column;gap:3px;">' + lbl(k) + '<div style="font-size:13px;">' + v + "</div></div>").join("") + "</div>";
   const title = '<div style="display:flex;flex-direction:column;gap:4px;"><div class="serif" style="font-size:33px;color:' + BRIEF_KIT.NAVY + ';line-height:1;">' + esc(c.project.name) + '</div><div style="font-size:13px;color:' + BRIEF_KIT.MUTED + ';">' +
     (L ? "Launch price from AED " + money(L.aed) + " (developer says). " : "") + "Not on the project register: no unit of this project has sold on the register.</div></div>";
-  const p1 = page(hero + title + factHtml + (hide.includes("layouts") ? "" : unitTable(UR)) + priceTable(c), "");
+  const p1 = page(hero + title + factHtml + locationBlock(c) + (hide.includes("layouts") ? "" : unitTable(UR)) + priceTable(c), "");
   const hs = '<div style="font-size:11.5px;color:' + BRIEF_KIT.NAVY + ';line-height:1.4;">Handover: ' + esc(c.handover.text) + "* " + tag(DEV) + ". The brochure prints the date with an asterisk and does not say what it means here, so the date is indicative.</div>";
   const small = BRIEF_KIT.smallPrint([
     UR ? "Homes, mix and sizes: " + esc(UR.source) + "." : "", "Prices, payment plans, handover and amenities: " + esc(c.source.name) + " (the developer's own material, " + esc(c.source.kind || "") + "), received " + esc(receivedLong(c)) + "; developer says, not registered facts.",
     pics.length ? "Pictures: the developer's own renders and brochure pages, shown with the developer's permission. They are the developer's illustrations, not photographs of the finished building." : (picNote ? esc(picNote) : "")]);
-  const p2 = page(planTables(c) + hs + (hide.includes("amen") ? "" : amenityBlock(c)), pics.length && (strip.length || refs.length) ? "" : small);
+  const p2 = page(planTables(c) + hs + (hide.includes("amen") ? "" : amenityBlock(c)) + travelBlock(c), pics.length && (strip.length || refs.length) ? "" : small);
   let p3 = "", p4 = "";
   if (strip.length) p3 = page('<div style="display:flex;flex-direction:column;gap:6px;">' + sec("The developer's pictures") + note("The developer's own renders and brochure pages, each labelled. Figures on a brochure page are developer says.") + "</div>" + picGrid(strip, 2, 346, 238, { withWhat: true, fs: 9.5, gap: 10 }), refs.length ? "" : small);
   if (refs.length) p4 = page('<div style="display:flex;flex-direction:column;gap:6px;">' + sec("The developer's brochure pages") + note("Reference copies of the brochure pages that are mostly text or tables. " + esc(REF_NOTE) + " Source: " + esc(c.source.name) + ", received " + esc(receivedLong(c)) + ".") + "</div>" + picGrid(refs, 4, 165, 117, { ref: true, fs: 8.5 }), small);

@@ -425,6 +425,75 @@ export const DEV_CLAIMS = {
     "source_page": "WhatsApp Image 2026-10-06 at 12.04.39 PM (1).jpeg"
    }
   ],
+  "location": {
+   "schema": 1,
+   "position_rung": "plot_centre",
+   "label": "Plot position, not the building: parcel 648-8592",
+   "plot_centroid": [
+    55.3779511,
+    25.088598
+   ],
+   "parcel": "6488592",
+   "plot": "648-8592",
+   "area_sqm": 3843.86,
+   "district": "wadialsafa5",
+   "area_name": "Wadi Al Safa 5",
+   "master": "Dubai Land Residence Complex",
+   "land_number": "5472",
+   "building_pid": "1427169749",
+   "register_project_id": 962479984,
+   "homes": 351,
+   "ring": [
+    [
+     55.3783658,
+     25.0885608
+    ],
+    [
+     55.378325,
+     25.08865
+    ],
+    [
+     55.37829,
+     25.0887416
+    ],
+    [
+     55.3782609,
+     25.0888353
+    ],
+    [
+     55.3782378,
+     25.0889306
+    ],
+    [
+     55.377463,
+     25.0886947
+    ],
+    [
+     55.3778622,
+     25.0882171
+    ],
+    [
+     55.3783658,
+     25.0885608
+    ]
+   ],
+   "ring_note": "Dubai Municipality plot outline (Makani plot outline for parcel 6488592, retrieved 6 October 2026). It is the plot, not the building.",
+   "source": "Dubai Municipality plot outline (Makani), parcel 6488592; building and unit register project 962479984",
+   "corroboration": {
+    "source": "Google Maps listing for Kore by IMTIAZ, seen 8 October 2026",
+    "plus_code": "39QH+F5",
+    "plus_code_full": "7HQQ39QH+F5",
+    "decoded": [
+     55.377938,
+     25.088687
+    ],
+    "distance_to_plot_centroid_m": 10,
+    "distance_to_plot_centroid_m_exact": 10,
+    "note": "third-party listing; used as corroboration only, never as the source of the position; agrees within about 10 m"
+   },
+   "neighbours": [],
+   "neighbours_note": "The listing places the pin near Cove by Imtiaz and Cove Edition 2 by Imtiaz; their plot positions are not in our data yet, so none is shown."
+  },
   "renders_not_stored": [],
   "renders_note": "The earlier exclusion of the pool page (swimmers) and of the living-room page (a woman on the wall screen) was lifted on Kendall Wilson's instruction on 8 October 2026: Imtiaz approves the use of all its renders and brochure pages, including those that show people; all are now stored (page_01 to page_10), downscaled to a 1600 px long edge."
  }

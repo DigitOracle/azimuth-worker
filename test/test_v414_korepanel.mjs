@@ -84,7 +84,7 @@ const koreCard = card(P, "KORE by Imtiaz", EV.kore, null, null), korePanel = pan
   ok(/Launch price from AED 679,000 \(developer says\)/.test(head), "KORE panel headline: 'Launch price from AED 679,000 (developer says)'", head);
   ok(!/No price per area recorded/.test(korePanel), "the old 'No price per area recorded' is gone for KORE");
   ok(/Not a registered sale: no unit of this project has sold on the register/.test(head), "the small second line says it is not a registered sale (nothing has sold)", head);
-  ok(/No building outline of this name is on our map yet\./.test(korePanel), "the 'no building outline' line is kept (the building is still not on the map)");
+  ok(/Plot position \(parcel 648-8592\); the building outline is not on our map yet\./.test(korePanel), "v416: the 'no building outline' line becomes 'Plot position (parcel 648-8592); the building outline is not on our map yet.' (the building is still not on the map)");
   const b = btns(bar(korePanel));
   ok(b.map((x) => x.label + ":" + (x.off ? "off" : "on")).join() === "Investor:on,Client:on,Broker:on", "Investor | Client | Broker are all enabled for KORE", b.map((x) => x.label + ":" + x.off).join());
   ok(/investor_selector&amp;project=kore-by-imtiaz-offregister/.test(b[0].attrs), "Investor opens the investor selector for the KORE facts record");
