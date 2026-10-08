@@ -126,7 +126,7 @@ export function parseParams(url) {
   const devs = sp.get("developers") == null ? null : String(sp.get("developers")).split(",").map((s) => s.toLowerCase().replace(/[^a-z0-9 -]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60)).filter(Boolean).slice(0, MAX_DEVELOPERS);
   const developer = String(sp.get("developer") || "").toLowerCase().replace(/[^a-z0-9 -]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
   const client = String(sp.get("client") || "").replace(/[<>&"\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
-  return { kind, mode, win, basis, developer, client, area: String(sp.get("area") || "").toLowerCase().replace(/[^a-z0-9]/g, ""), devs, bud: parseBudget(sp), inv: parseInvestorParams(sp), format: String(sp.get("format") || "pdf").toLowerCase(), key: sp.get("key") || "" };
+  return { kind, mode, win, basis, developer, client, area: String(sp.get("area") || "").toLowerCase().replace(/[^a-z0-9]/g, ""), devs, bud: parseBudget(sp), inv: parseInvestorParams(sp), contact: sp.get("contact") === "1", format: String(sp.get("format") || "pdf").toLowerCase(), key: sp.get("key") || "" };
 }
 
 // ------------------------------------------------------------------------------------------------ what the document is built from
@@ -751,8 +751,8 @@ const head = (title, body) => '<!doctype html><html lang="en"><head><meta charse
   '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400&display=swap" rel="stylesheet"><style>' + BRIEF_KIT.CSS + EXTRA_CSS + "</style></head><body>" + body + "</body></html>";
 
 function pageHtml(C, pg, i, total) {
-  const hdr = '<div style="height:96px;display:flex;align-items:center;justify-content:space-between;padding:0 46px;background:#FFFFFF;border-bottom:1px solid #E6E1D8;flex-shrink:0;"><div style="display:flex;flex-direction:column;gap:4px;max-width:560px;"><div class="lbl" style="text-transform:uppercase">' + esc(C.names.title) + " &middot; " + pg.sub + '</div><div style="font-size:10.5px;color:' + MUTED + ';line-height:1.35;">' + C.today + " &middot; " + esc(C.winText) + "</div></div>" + BRIEF_KIT.logo(C, 70) + "</div>";
-  const small = BRIEF_KIT.smallPrint(["Sources: Dubai Land Department sales register, " + esc(dateLong(C.IDX0.as_of)) + ". " + esc(C.winText) + ". Price bands describe homes, not developers.", PERMIT_REMINDER + " &middot; Page " + (i + 1) + " of " + total]);
+  const hdr = '<div style="height:96px;display:flex;align-items:center;justify-content:space-between;padding:0 46px;background:#FFFFFF;border-bottom:1px solid #E6E1D8;flex-shrink:0;"><div style="display:flex;flex-direction:column;gap:4px;max-width:560px;"><div class="lbl" style="text-transform:uppercase">' + esc(C.names.title) + " &middot; " + pg.sub + '</div><div style="font-size:10.5px;color:' + MUTED + ';line-height:1.35;">' + C.today + " &middot; " + esc(C.winText) + (C.p.client ? " &middot; Prepared for " + esc(C.p.client) : "") + "</div></div>" + BRIEF_KIT.logo(C, 70) + "</div>";
+  const small = BRIEF_KIT.smallPrint(["Sources: Dubai Land Department sales register, " + esc(dateLong(C.IDX0.as_of)) + ". " + esc(C.winText) + ". Price bands describe homes, not developers.", PERMIT_REMINDER + " &middot; Page " + (i + 1) + " of " + total, C.p.contact ? '<span style="font-size:10.5px;color:#22262B;">Broker contact, to fill in: name ______________ &nbsp; mobile ______________ &nbsp; email ______________</span>' : ""]);
   return '<div class="sheet page dm-body">' + hdr + '<div class="dmb" style="flex:1;display:flex;flex-direction:column;padding:14px 46px 0 46px;gap:12px;overflow:hidden;">' + pg.html + "</div>" + BRIEF_KIT.footer(small, C.buy) + "</div>";
 }
 

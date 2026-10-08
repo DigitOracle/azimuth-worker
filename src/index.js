@@ -12,6 +12,7 @@ import { briefRoutes, briefStartCard, BRIEF_START_CSS } from "./brief_page.js";
 import { loadThread, threadView, communityPics, communityBlockHtml, districtSlugOfArea, renderSuffixOfKey, aboutHtml } from "./thread.js";   // v364 - thread reader + community picture slot
 import { startBody, START_CSS } from "./start_page.js";   // v278.1 - START redesign: the Brief, Contracts signed, Advertised supply (owner only)   // THE BRIEF (part B, 30 Sep 2026; v277 two-button 00 card) - the /brief screens and the 00 way in on /start
 import { ejariRoutes } from "./ejari_page.js";   // v279 CONTRACTS SIGNED (Ejari) - /contracts and /contracts_api; all logic in src/ejari_page.js (its START card is drawn by src/start_page.js)
+import { docOptionsRoute } from "./doc_options_docs.js";   // v407 - /doc_client and /doc_broker: choose the options before the Client or Broker PDF is made
 import { devmapPdfRoute } from "./devmap_pdf.js";   // v324 - the two Developers-by-area PDFs (snapshot, detailed)
 import { devmapRoutes } from "./devmap_page.js";   // v301 DEVELOPERS BY AREA
 import { mergePlots, mergeSearchIndex, readSearchExtra } from "./nosales.js";   // v392 - no-sales projects with a plot position join the map search
@@ -4742,6 +4743,7 @@ export default {
     // ---- end THE BRIEF part C ----
     // ---- v324 - /developers_pdf (src/devmap_pdf.js): the Developers-by-area snapshot and detailed PDFs. Same key rule as /brief_pdf (client key or owner key), GET only. ----
     if (url.pathname === "/developers_pdf") return devmapPdfRoute(request, env, url, { keyOk: (e, u) => keyTier(e, u) !== "" });
+    if (url.pathname === "/doc_client" || url.pathname === "/doc_broker") return docOptionsRoute(request, env, url, { keyOk: (e, u) => keyTier(e, u) !== "" });   // v407
     // ---- v291 CHECKLIST (src/checklist.js) - /checklist and /checklist/*: the OWNER key only (401 for a client key or none), checked in the
     // module (header X-Owner-Key; the page alone also takes ?key= once). Ahead of appFetch so no question button or client gate touches it.
     if (url.pathname === "/checklist" || url.pathname.indexOf("/checklist/") === 0) { const _ck = await checklistRoutes(request, env, url, { keyTier }); if (_ck) return _ck; }
@@ -12434,7 +12436,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
+const CLIENT_PATHS = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf", "/doc_client", "/doc_broker"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/", "/render/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own
