@@ -162,9 +162,9 @@ def load_live(cache=None, max_age=900, fast=False, workers=8):
     return kv
 
 
-LAYER_KEYS = {"nosales": "devmap_nosales", "notconf": "devmap_notconf", "announced": "devmap_announced", "search_extra": "search_extra",
+LAYER_KEYS = {"nosales": "devmap_nosales", "notconf": "devmap_notconf", "regcards": "devmap_regcards", "announced": "devmap_announced", "search_extra": "search_extra",
               "search_extra_announced": "search_extra_announced", "community_positions_p": "community_positions_p"}
-LAYER_KV = {"nosales": "img_devmap_nosales", "notconf": "img_devmap_notconf", "announced": "img_devmap_announced", "search_extra": "img_search_extra",
+LAYER_KV = {"nosales": "img_devmap_nosales", "notconf": "img_devmap_notconf", "regcards": "img_devmap_regcards", "announced": "img_devmap_announced", "search_extra": "img_search_extra",
             "search_extra_announced": "img_search_extra_announced", "community_positions_p": "img_community_positions_p"}
 
 
@@ -198,7 +198,7 @@ def layer_state(kv):
         if obj is None:
             out[nm] = {"state": "not published" if src == "live" else "no file", "n": 0}
             continue
-        if nm in ("nosales", "notconf", "announced"):
+        if nm in ("nosales", "notconf", "regcards", "announced"):
             n = len(dev_layer_entries(obj, nm))
         elif nm == "search_extra":
             n = len(obj.get("features") or []) + len(obj.get("sx") or [])
@@ -244,7 +244,7 @@ def build_surfaces(kv):
                         S["cardP"].setdefault(str(e["p"]), []).append(rec)
                     S["cards"].add(x[2], rec)
     # v392/v397a/v397d developer-page layers, once published or built: the "registered, no sales yet" group, the "not confirmed by the register" group, and the developer-announced group
-    for lname in ("nosales", "notconf", "announced"):
+    for lname in ("nosales", "notconf", "regcards", "announced"):
         for it in dev_layer_entries((LS.get(lname) or ("", None))[1], lname):
             p, nm = it["p"], it["n"] or ""
             rec = {"area": it["d"], "dev": it["dev"], "lst": lname, "name": nm, "e": it["e"], "bk": it["bk"], "p": p, "n": 0, "ann": it["ann"]}
@@ -459,6 +459,9 @@ FIXTURES = [
     {"id": "tamaniarts", "name": "Tamani Arts Offices (not confirmed)", "pn": "22", "names": ["Tamani Arts Offices"], "must": ["S3"], "dev": "_", "not_dev": [], "layers": ["notconf"]},
     {"id": "sobhasanctuary", "name": "Sobha Sanctuary (announced)", "pn": None, "names": ["Sobha Sanctuary"], "must": ["S3", "S2s"], "dev": "sobha", "not_dev": [], "ann": True, "layers": ["announced", "search_extra_announced"]},
     {"id": "cposp100", "name": "Elegant Tower (community position p:100)", "pn": "100", "names": ["ELEGANT TOWER"], "must": ["S4"], "dev": None, "not_dev": [], "layers": ["community_positions_p"]},
+    # v401: register-built cards (KV img_devmap_regcards). Both are in the audit list MISSING_S3.csv; skipped while the layer is not published, a failure with --require-layers.
+    {"id": "regjbc4", "name": "Jumeirah Business Centre 4 (register-built card)", "pn": "504", "names": ["Jumeirah Business Centre 4"], "must": ["S3"], "dev": "al-fajer-properties", "not_dev": [], "layers": ["regcards"]},
+    {"id": "reglx", "name": "The LX (register-built card, area outside the 42)", "pn": "3772", "names": ["The LX"], "must": ["S3"], "dev": "_", "not_dev": [], "layers": ["regcards"]},
 ]
 
 

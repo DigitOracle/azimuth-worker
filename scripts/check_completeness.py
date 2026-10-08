@@ -58,6 +58,8 @@ def apply_overrides(kv, a):
         src["nosales"] = ("local", _jload(g("nosales")))
     if g("notconf"):
         src["notconf"] = ("local", _jload(g("notconf")))
+    if g("regcards"):
+        src["regcards"] = ("local", _jload(g("regcards")))
     if g("announced"):
         src["announced"] = ("local", _jload(g("announced")))
     d = g("search_extra_dir")
@@ -224,7 +226,7 @@ def build_parser():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=DEF_CONFIG); ap.add_argument("--universe", default=DEF_UNIVERSE); ap.add_argument("--audit-csv", default=DEF_AUDIT)
     ap.add_argument("--cache", default=os.path.join(tempfile.gettempdir(), "completeness_cache")); ap.add_argument("--max-age", type=int, default=900)
-    ap.add_argument("--index"); ap.add_argument("--nosales"); ap.add_argument("--notconf"); ap.add_argument("--announced"); ap.add_argument("--search-extra-dir"); ap.add_argument("--announced-search")
+    ap.add_argument("--index"); ap.add_argument("--nosales"); ap.add_argument("--notconf"); ap.add_argument("--regcards"); ap.add_argument("--announced"); ap.add_argument("--search-extra-dir"); ap.add_argument("--announced-search")
     ap.add_argument("--community-positions-p"); ap.add_argument("--plots"); ap.add_argument("--plot-positions"); ap.add_argument("--community-positions")
     ap.add_argument("--fast", action="store_true"); ap.add_argument("--baseline-update", action="store_true"); ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--require-layers", action="store_true"); ap.add_argument("--rebuild-universe", action="store_true"); ap.add_argument("--quiet", action="store_true")
