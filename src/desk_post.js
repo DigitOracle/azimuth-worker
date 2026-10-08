@@ -6,7 +6,10 @@
 // Docs: docs/DESK_POSTING_PHASE1.md
 import { deskIgStatus, deskIgPublish, deskIgPublishCarousel, deskIgPermalink, deskIgPull } from "./ig_desk.js";
 
-export const DP_VERSION = "v413";
+export const DP_VERSION = "v421";
+// v421 (8 Oct): carousel slides are ALWAYS generated graphics from the house prompt; sent photos only on "use my photos" or a photo
+// captioned post:; uncaptioned photos wait in a private inbox and get ONE question per burst; the preview sends every picture; no
+// Approve without pictures; the publish tick refuses raw-photo carousels; /post regen <id>; /ref tag; owner import route.
 const DIG = (s) => String(s == null ? "" : s).replace(/[^0-9]/g, "");
 export const BRAND = { teal: "#0A4F4A", gold: "#C5A56A", cream: "#FBF7EC" };
 export const LEGAL_LINE = "© 2026 DigitAlchemy® Tech Limited · ADGM No. 35004 · All rights reserved · contact@digitalabbot.io";
@@ -119,10 +122,12 @@ export async function genImage(env, deps, prompt, refs) {
 const STYLE = "Calm architectural illustration, teal (" + BRAND.teal + ") and gold (" + BRAND.gold + ") palette on a warm cream (" + BRAND.cream + ") ground, generous space, soft light, no text, no letters, no logos, no watermark. ";
 const NO_PERSON = "No people, no faces, no hands, no portraits. ";
 // One locked prompt per infographic slide, built from the slide spec and nothing else. The image model draws it; this code draws nothing.
-export function slidePrompt(s, i, n, last) {
+export const LIKENESS = "Include the man shown in the reference photos, recognisably himself: same face, same build, same apparent age, no alteration of body or age. Only him in the picture, no other identifiable real people, no medical or financial endorsement, no logos. ";
+// v421: withPerson = the Abbot hook slide composed with Kendall's approved references (images/edits); the text is still rendered by the model.
+export function slidePrompt(s, i, n, last, withPerson) {
   const L = [
     "ONE square 1:1 infographic slide, clean uncluttered editorial, generous white space, large type, ONE idea only.",
-    "Background: solid soft cream " + BRAND.cream + ". Deep teal " + BRAND.teal + " for headings and body, gold " + BRAND.gold + " for thin rules and accents only. Thin-line icon style. No photographs of people, no faces, no emoji.",
+    "Background: solid soft cream " + BRAND.cream + ". Deep teal " + BRAND.teal + " for headings and body, gold " + BRAND.gold + " for thin rules and accents only. Thin-line icon style. " + (withPerson ? LIKENESS + "He takes one side of the slide, the text the other; the text stays fully legible. No emoji." : "No photographs of people, no faces, no emoji."),
     "Render EXACTLY this text, spelled exactly as written, nothing added, nothing removed, nothing translated:",
     'TITLE: "' + s.title + '"',
   ];
@@ -138,8 +143,38 @@ export function textMatches(expected, got) {
   const want = normWords(expected), have = new Set(normWords(got)); if (!want.length) return true;
   return want.filter((w) => have.has(w)).length / want.length >= 0.9;
 }
-export const REF_TAGS = ["headshot", "three-quarter", "full-length", "speaking", "site", "formal", "casual"];
+export const REF_TAGS = ["headshot", "three-quarter", "full-length", "speaking", "site", "formal", "casual", "general"];
 export const REF_MIN = 3;
+// v421: one place that saves a reference photo (caption ref:, the inbox "Reference photo" button, the owner import route)
+async function addRef(env, bytes, tag, source, now, extra) {
+  const ix = await kvJ(env, "desk_ref_index", []); const n = (ix.length ? Math.max(...ix) : 0) + 1;
+  await env.MEETINGS.put("desk_refimg_" + n, bytes);
+  await kvPut(env, "desk_ref_" + n, Object.assign({ n, tag, key: "desk_refimg_" + n, added: new Date(now).toISOString(), approved: true, source }, extra || {}));
+  ix.push(n); await kvPut(env, "desk_ref_index", ix);
+  return { n, total: ix.length };
+}
+export const markRefRequest = (env, now) => env.MEETINGS.put("desk_ref_request_at", String(now || Date.now()), { expirationTtl: 2 * 86400 });
+const refRequestRecent = async (env, now) => { const v = Number(await env.MEETINGS.get("desk_ref_request_at")); return v > 0 && now - v < 86400000; };
+// v421 migration: copy stored igm_<id> pictures into the reference set. Dry run unless apply. Skips ids already imported.
+export async function refImport(env, ids, tag, apply, now) {
+  now = now || Date.now(); tag = String(tag || "general").toLowerCase();
+  if (!REF_TAGS.includes(tag)) return { ok: false, why: "tag must be one of " + REF_TAGS.join(", ") };
+  if (!Array.isArray(ids) || !ids.length || ids.length > 60) return { ok: false, why: "ids must be a list of 1 to 60 igm_ media ids" };
+  const done = new Set(); for (const n of await kvJ(env, "desk_ref_index", [])) { const m = await kvJ(env, "desk_ref_" + n, null); if (m && m.from_media) done.add(m.from_media); }
+  const rows = [];
+  for (const raw of ids) {
+    const id = String(raw || "").replace(/^igm_/, "");
+    if (!/^[a-z0-9]{6,40}$/.test(id)) { rows.push({ id, result: "bad id" }); continue; }
+    if (done.has(id)) { rows.push({ id, result: "already imported" }); continue; }
+    const b = await env.MEETINGS.get("igm_" + id, "arrayBuffer");
+    if (!b || !b.byteLength) { rows.push({ id, result: "not found" }); continue; }
+    if (!isJpeg(b)) { rows.push({ id, result: "not a JPEG" }); continue; }
+    if (!apply) { rows.push({ id, result: "would import", bytes: b.byteLength }); continue; }
+    const r = await addRef(env, b, tag, "owner upload 8 Oct, imported", now, { from_media: id }); done.add(id);
+    rows.push({ id, result: "imported", n: r.n });
+  }
+  return { ok: true, dry: !apply, tag, rows, imported: rows.filter((r) => r.result === "imported").length, would: rows.filter((r) => r.result === "would import").length };
+}
 async function refList(env) { const out = []; for (const n of await kvJ(env, "desk_ref_index", [])) { const m = await kvJ(env, "desk_ref_" + n, null); if (m && m.approved === true) out.push(m); } return out; }
 // 2-3 references for a scene, the best-matching tag first, then different tags so the face is seen from more than one angle
 export async function pickRefs(env, idea) {
@@ -165,19 +200,21 @@ async function buildImages(env, deps, p, onlyIdx) {
     if (onlyIdx != null && i !== onlyIdx) continue;
     const s = p.slides[i];
     if (s.img_key && onlyIdx == null) continue;
-    if (s.src === "sent" && s.img_key) continue;
+    if (s.src === "sent" && s.img_key && p.use_my_photos) continue;
+    if (s.src === "sent") { delete s.img_key; delete s.src; }      // v421: a sent photo is a slide ONLY when he said "use my photos"
     delete s.flag;
     if (p.type === "image" && i === 0 && !s.regen) { const rn = await renderFor(env, p.idea); if (rn) { s.img_key = await storeImage(env, rn.bytes, "image/jpeg"); s.src = "render"; s.alt = "Our own render, " + rn.slug.replace(/-/g, " "); continue; } }
     const infographic = p.type === "carousel";
     let refs = null;
-    const personLane = !infographic && (p.lane === "abbot" || (p.lane === "alchemy" && withKendall(p.idea)));
+    const hookWithHim = infographic && i === 0 && p.lane === "abbot";      // v421: the Abbot hook slide shows him when 3+ references are held
+    const personLane = hookWithHim || (!infographic && (p.lane === "abbot" || (p.lane === "alchemy" && withKendall(p.idea))));
     if (personLane) {
       const r = await pickRefs(env, p.idea);
-      if (r.count >= REF_MIN && r.bufs.length >= 2) refs = r.bufs;
-      else notes.push("No person in the picture: I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ". Send photos with the caption ref: <tag>.");
+      if (r.count >= REF_MIN && r.bufs.length >= 2) refs = r.bufs.slice(0, 3);
+      else notes.push((hookWithHim ? "Slide 1 is a text graphic without you" : "No person in the picture") + ": I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ". Send photos with the caption ref: <tag>.");
     }
     const last = i === n - 1;
-    const prompt = infographic ? slidePrompt(s, i, n, last) : STYLE + (refs ? "Place the man shown in the reference photos into this scene, recognisably himself: same face, same build, same apparent age, no alteration of body or age. Only him in the scene, no other identifiable real people, no medical or financial endorsement, no logos or text. " : NO_PERSON) + "Subject: " + String(p.idea).replace(/\d+/g, "").slice(0, 300) + (s.regen ? " Variation " + s.regen + ": a different composition and background." : "");
+    const prompt = infographic ? slidePrompt(s, i, n, last, !!refs) : STYLE + (refs ? "Place the man shown in the reference photos into this scene, recognisably himself: same face, same build, same apparent age, no alteration of body or age. Only him in the scene, no other identifiable real people, no medical or financial endorsement, no logos or text. " : NO_PERSON) + "Subject: " + String(p.idea).replace(/\d+/g, "").slice(0, 300) + (s.regen ? " Variation " + s.regen + ": a different composition and background." : "");
     let tries = infographic ? 3 : 1, g = null, ok = !infographic, checked = false;
     for (let t = 0; t < tries; t++) {
       g = await genImage(env, deps, prompt, refs);
@@ -189,7 +226,7 @@ async function buildImages(env, deps, p, onlyIdx) {
       checked = true; ok = textMatches(expectedText(s, last), seen);
       if (ok) break;
     }
-    if (g.err) { if (g.cap) return { cap: true, notes }; return { err: g.err, notes }; }
+    if (g.err) { if (g.cap) return { cap: true, err: "the monthly picture budget is used up", notes }; return { err: g.err, notes }; }
     s.img_key = await storeImage(env, g.bytes, "image/jpeg"); s.src = refs ? "ai-person" : "ai"; s.regen = s.regen || 0;
     if (infographic && checked && !ok) s.flag = "text check failed, please look";
     else if (infographic && !checked) s.flag = "text not checked";
@@ -282,7 +319,7 @@ function finishSlides(p, parsed, keepImgs) {
   let sl = parsed.slides.slice(0, MAX_SLIDES - 1);
   if (!sl.length) sl = [{ title: String(p.idea).replace(/\d+/g, "").slice(0, 70) || "Today", body: "", source: "" }];
   sl.push(cta);
-  p.slides = sl.map((s, i) => Object.assign({}, s, keepImgs && keepImgs[i] && keepImgs[i].src === "sent" ? { img_key: keepImgs[i].img_key, src: "sent" } : {}));
+  p.slides = sl.map((s, i) => Object.assign({}, s, p.use_my_photos && keepImgs && keepImgs[i] && keepImgs[i].src === "sent" ? { img_key: keepImgs[i].img_key, src: "sent" } : {}));
 }
 
 // ---------- preview ----------
@@ -299,12 +336,23 @@ function cardText(p) {
   L.push("Music: " + ((p.music && p.music.mode) || "none") + ".");
   return stripEmoji(L.join("\n"));
 }
+export const picturesMissing = (p) => !p.slides || !p.slides.length || p.slides.some((s) => !s.img_key);
+// v421: the preview SENDS THE PICTURES: slide 1 with the card as its caption (card as a text right after when it is too long for a
+// WhatsApp caption), then every other slide in order, then the buttons. No pictures = the first line says so and there is no Approve.
 async function sendPreview(env, deps, p) {
-  const origin = deps.origin(env);
-  const s0 = p.slides[0];
-  if (s0 && s0.img_key) { try { await deps.image(env, origin + "/ig_media/" + s0.img_key, "Draft " + p.id + (p.type === "carousel" ? ", slide 1 of " + p.slides.length : "") + (p.ai ? " (illustration)" : "")); } catch (e) {} }
-  await deps.send(env, cardText(p));
-  await deps.buttons(env, "Draft " + p.id + ": approve, edit or skip?", [{ id: "dp:" + p.id + ":ok", title: "Approve" }, { id: "dp:" + p.id + ":edit", title: "Edit" }, { id: "dp:" + p.id + ":skip", title: "Skip" }]);
+  const origin = deps.origin(env), n = p.slides.length, missing = picturesMissing(p);
+  let card = cardText(p);
+  if (missing) card = "No pictures yet: " + (p.nopic_reason || "a picture is missing") + ". Approve comes back once every slide has its picture (/post regen " + p.id + ").\n\n" + card;
+  let cardSent = false, k = 0;
+  for (let i = 0; i < n && k < MAX_SLIDES; i++) {
+    const s = p.slides[i]; if (!s.img_key) continue; k++;
+    const label = "Draft " + p.id + (n > 1 ? ", slide " + (i + 1) + " of " + n : "") + (s.src === "ai" || s.src === "ai-person" ? " (illustration)" : "");
+    const capT = !cardSent && card.length <= 1000 ? card : label;
+    try { await deps.image(env, origin + "/ig_media/" + s.img_key, capT); if (capT === card) cardSent = true; } catch (e) {}
+  }
+  if (!cardSent) await deps.send(env, card);
+  const btns = missing ? [{ id: "dp:" + p.id + ":edit", title: "Edit" }, { id: "dp:" + p.id + ":skip", title: "Skip" }] : [{ id: "dp:" + p.id + ":ok", title: "Approve" }, { id: "dp:" + p.id + ":edit", title: "Edit" }, { id: "dp:" + p.id + ":skip", title: "Skip" }];
+  await deps.buttons(env, "Draft " + p.id + (missing ? ": no pictures yet, edit or skip?" : ": approve, edit or skip?"), btns);
 }
 
 // ---------- the draft step ----------
@@ -326,10 +374,15 @@ async function buildImagesFor(env, deps, p, j, facts, keep) {
   if (p.type === "image") p.slides[0].alt = scrubPublic(p.idea, p.lane).slice(0, 100);
   const r = await buildImages(env, deps, p);
   p.notes = r.notes || [];
-  if (r.cap) { p.status = "held"; p.held_reason = "the monthly picture budget is used up"; hist(p, "cap", "image budget reached", now); await putPlan(env, p); await deps.send(env, "Draft " + p.id + " is held: the monthly picture budget (USD " + capUsd(env).toFixed(2) + ") is reached, so I did not make a picture. " + (await costText(env, now)) + " Send your own picture, or raise IMG_MONTHLY_CAP_USD."); return p; }
-  if (r.err) { p.status = "held"; p.held_reason = r.err; hist(p, "image", r.err, now); await putPlan(env, p); await deps.send(env, "Draft " + p.id + " is held: " + r.err + ". Nothing was posted. Send your own picture, or /post cancel " + p.id + "."); return p; }
   a = assemble(p, j, facts);      // again, now that p.ai is known, so the caption carries "Illustration."
   Object.assign(p, { caption: a.caption, evidence: a.evidence, dropped: a.dropped, tags: a.tags });
+  // v421: a failed picture no longer ends silently: the plan is held, and the preview (no Approve button) says why in its first line
+  if (r.cap || r.err) {
+    p.status = "held"; p.held_reason = r.cap ? "the monthly picture budget is used up" : r.err; p.approved = false;
+    p.nopic_reason = r.cap ? "the monthly picture budget (USD " + capUsd(env).toFixed(2) + ") is reached. " + (await costText(env, now)) + " Raise IMG_MONTHLY_CAP_USD, then /post regen " + p.id : r.err;
+    hist(p, r.cap ? "cap" : "image", p.held_reason, now); await putPlan(env, p); await sendPreview(env, deps, p); return p;
+  }
+  delete p.nopic_reason;
   if (!p.caption) { p.notes.push("I could not build a caption that passes the evidence checks. Tap Edit and tell me what to say."); }
   if (!j) p.notes.push("The writing step did not answer, so there is no caption yet. Tap Edit and tell me what to say.");
   p.status = "draft"; p.facts_used = facts.length;
@@ -340,8 +393,10 @@ async function buildImagesFor(env, deps, p, j, facts, keep) {
 const LANE_Q = (id) => [{ id: "dp:" + id + ":laneA", title: "Abbot" }, { id: "dp:" + id + ":laneL", title: "Alchemy" }];
 async function newPlan(env, deps, idea, lane, imgs, extra) {
   const now = nowOf(deps);
-  const type = (imgs && imgs.length > 1) || /\b(carousel|slides|steps|decoded|guide|series|explainer|checklist)\b/i.test(idea) ? "carousel" : "image";
-  const p = Object.assign({ id: "p" + rid(), status: "draft", idea: stripEmoji(idea).trim(), type, lane: lane || "", caption: "", slides: (imgs || []).map((k) => ({ img_key: k, src: "sent", alt: "" })), slot: null, created: now, expires_at: now + EXPIRY_MS, history: [], rounds: 0, music: { mode: "none" }, approved: false }, extra || {});
+  const mine = !!(extra && extra.use_my_photos) && !!(imgs && imgs.length);      // v421: sent photos only by his explicit word
+  if (!mine) imgs = [];
+  const type = (imgs.length > 1) || /\b(carousel|slides|steps|decoded|guide|series|explainer|checklist)\b/i.test(idea) ? "carousel" : "image";
+  const p = Object.assign({ id: "p" + rid(), status: "draft", idea: stripEmoji(idea).trim(), type, lane: lane || "", caption: "", slides: imgs.map((k) => ({ img_key: k, src: "sent", alt: "" })), slot: null, created: now, expires_at: now + EXPIRY_MS, history: [], rounds: 0, music: { mode: "none" }, approved: false }, extra || {}, { use_my_photos: mine });
   if (p.type === "carousel" && p.slides.length) p.slides = p.slides.slice(0, 10);
   hist(p, "created", p.idea, now); await putPlan(env, p);
   if (!p.lane) { await deps.buttons(env, "Is this post for the Abbot (my own voice, explainers and stories) or for Alchemy (the company, proof and outcomes)?", LANE_Q(p.id)); return p; }
@@ -430,7 +485,8 @@ async function applyEdit(env, deps, p, text) {
 // ---------- buttons ----------
 async function approve(env, deps, p) {
   if (!p.caption) { await deps.send(env, "Draft " + p.id + " has no caption yet. Tap Edit and tell me what to say."); return; }
-  if (!p.slides.length || p.slides.some((s) => !s.img_key)) { await deps.send(env, "Draft " + p.id + " is missing a picture. Send one, or tap Edit and ask for another background."); return; }
+  if (picturesMissing(p)) { await deps.send(env, "Draft " + p.id + " has no pictures yet, so it cannot be approved. Send /post regen " + p.id + " to make them."); return; }
+  const g = publishGuard(p); if (g) { await deps.send(env, "Draft " + p.id + " cannot be approved: " + g + ". Send /post regen " + p.id + "."); return; }
   p.approved = true; p.approved_at = nowOf(deps); p.status = "approving"; p.expires_at = nowOf(deps) + 14 * 86400000;
   hist(p, "approved", "owner tapped Approve", nowOf(deps));
   await putPlan(env, p); await env.MEETINGS.delete("desk_post_editing");
@@ -447,6 +503,7 @@ async function schedule(env, deps, p, mode) {
   await deps.send(env, note + (slot <= now ? "Scheduled " + p.id + " to post within a minute." : "Scheduled " + p.id + " for " + fmtSlot(slot) + ".") + (await env.MEETINGS.get("desk_post_pause") ? " Posting is paused right now (/resume)." : ""));
 }
 async function handleButton(env, deps, id) {
+  const im = String(id).match(/^dp:inbox:(ref|use|ignore)$/); if (im) return inboxButton(env, deps, im[1], nowOf(deps));
   if (id === "dp:ref:keep") { await deps.send(env, "Kept."); return true; }
   if (id === "dp:ref:purge") { const ix = await kvJ(env, "desk_ref_index", []); for (const n of ix) { await env.MEETINGS.delete("desk_ref_" + n); await env.MEETINGS.delete("desk_refimg_" + n); } await env.MEETINGS.delete("desk_ref_index"); await deps.send(env, "All " + ix.length + " reference photos deleted."); return true; }
   const m = String(id).match(/^dp:([a-z0-9]+):(ok|edit|skip|now|slot|laneA|laneL)$/);
@@ -477,13 +534,11 @@ async function handleImage(env, deps, msg) {
   if (t.err) { await deps.send(env, t.err); return true; }
   const rm = cap.match(/^(?:\/ref\s+add|ref)\s*[: ]\s*([\w-]*)/i) || (/^\/ref\s+add\s*$/i.test(cap) ? ["", ""] : null);
   if (rm) {
+    await markRefRequest(env, now);
     const tag = String(rm[1] || "").toLowerCase();
     if (!REF_TAGS.includes(tag)) { await deps.send(env, "Which kind of photo is it? Send it again with the caption ref: <tag>, where tag is one of " + REF_TAGS.join(", ") + "."); return true; }
-    const ix = await kvJ(env, "desk_ref_index", []); const n = (ix.length ? Math.max(...ix) : 0) + 1;
-    await env.MEETINGS.put("desk_refimg_" + n, t.bytes);
-    await kvPut(env, "desk_ref_" + n, { n, tag, key: "desk_refimg_" + n, added: new Date(now).toISOString(), approved: true, source: "owner upload" });
-    ix.push(n); await kvPut(env, "desk_ref_index", ix);
-    await deps.send(env, "Reference saved: " + tag + " (" + ix.length + " total). " + REF_CHECKLIST);
+    const r = await addRef(env, t.bytes, tag, "owner upload", now);
+    await deps.send(env, "Reference saved: " + tag + " (" + r.total + " total). " + REF_CHECKLIST);
     return true;
   }
   const eid = await env.MEETINGS.get("desk_post_editing"); const ep = eid && await getPlan(env, eid);
@@ -494,15 +549,63 @@ async function handleImage(env, deps, msg) {
     ep.rounds = (ep.rounds || 0) + 1; hist(ep, "edit", "swap image " + (i + 1) + " (sent)", now); await putPlan(env, ep); await sendPreview(env, deps, ep); return true;
   }
   const pm = cap.match(/^(?:\/post\b|post\b)\s*[:\-]?\s*(.*)$/is);
-  t.key = await storeImage(env, t.bytes, "image/jpeg");
-  const pend = await kvJ(env, "desk_post_pendimg", []); pend.push(t.key);
-  if (pm) { await env.MEETINGS.delete("desk_post_pendimg"); return startFromText(env, deps, pm[1] || "Post this picture", pend.slice(-10)); }
-  await kvPut(env, "desk_post_pendimg", pend.slice(-10), 3600);
-  await deps.send(env, "Got picture " + Math.min(pend.length, 10) + ". Send more (up to 10 for a carousel), then /post <idea> or post: <idea>.");
+  if (pm) {
+    // v421: a photo captioned post: <idea> is a single-image post of THAT photo; earlier photos join only when he says "use my photos"
+    t.key = await storeImage(env, t.bytes, "image/jpeg");
+    const rest = pm[1] || "Post this picture";
+    const pend = MY_PHOTOS.test(rest) ? (await pendingMine(env, true)) : [];
+    return startFromText(env, deps, rest, pend.concat([t.key]).slice(-MAX_SLIDES), true);
+  }
+  // v421: an uncaptioned photo is NEVER silently a slide. It waits privately in the inbox; the minute tick asks ONE question per burst.
+  const ib = await kvJ(env, "desk_post_inbox", { items: [] });
+  const ik = "desk_inbox_img_" + rid() + rid() + rid();
+  await env.MEETINGS.put(ik, t.bytes, { expirationTtl: 86400 });
+  ib.items.push({ k: ik, at: now }); ib.items = ib.items.slice(-40); ib.first_at = ib.first_at || now; ib.last_at = now; ib.asked = false;
+  await kvPut(env, "desk_post_inbox", ib, 86400);
+  return true;
+}
+// "use my photos" / "with my photos": the only words that turn sent photos into post pictures
+export const MY_PHOTOS = /\b(use|with)\s+my\s+(own\s+)?(photos?|pictures?|pics?|images?)\b/i;
+// photos he chose with "Use in a post", plus (when he says use my photos) whatever waits in the inbox; copied to the public media route only now
+async function pendingMine(env, withInbox) {
+  const keys = await kvJ(env, "desk_post_pendimg", []); await env.MEETINGS.delete("desk_post_pendimg");
+  const ib = await kvJ(env, "desk_post_inbox", null);
+  if (withInbox && ib && ib.items && ib.items.length) { for (const it of ib.items) { const b = await env.MEETINGS.get(it.k, "arrayBuffer"); if (b && b.byteLength) keys.push(await storeImage(env, b, "image/jpeg")); await env.MEETINGS.delete(it.k); } await env.MEETINGS.delete("desk_post_inbox"); }
+  return keys.slice(-MAX_SLIDES);
+}
+export const INBOX_QUIET_MS = 45000, INBOX_BURST_MS = 120000;
+// called from the minute tick: once a burst has been quiet for 45 s, ONE question covering every photo in it
+export async function inboxAsk(env, deps, now) {
+  const ib = await kvJ(env, "desk_post_inbox", null);
+  if (!ib || !ib.items || !ib.items.length || ib.asked || now - (ib.last_at || 0) < INBOX_QUIET_MS) return false;
+  const n = ib.items.length, refFirst = await refRequestRecent(env, now);
+  const these = n === 1 ? "this photo" : "these " + n + " photos";
+  const ref = { id: "dp:inbox:ref", title: "Reference photo" }, use = { id: "dp:inbox:use", title: "Use in a post" }, ign = { id: "dp:inbox:ignore", title: "Ignore" };
+  const q = refFirst ? "Save " + these + " as reference photos?" : "You sent " + these + " without a caption. What are they for?";
+  await deps.buttons(env, q + " Reference photos are saved with the tag general (change one later with /ref tag <n> <tag>). Nothing is posted from here.", refFirst ? [ref, use, ign] : [use, ref, ign]);
+  ib.asked = true; ib.asked_at = now; await kvPut(env, "desk_post_inbox", ib, 86400);
+  return true;
+}
+async function inboxButton(env, deps, act, now) {
+  const ib = await kvJ(env, "desk_post_inbox", null);
+  if (!ib || !ib.items || !ib.items.length) { await deps.send(env, "Those photos are no longer waiting. Send them again."); return true; }
+  if (act === "ignore") { for (const it of ib.items) await env.MEETINGS.delete(it.k); await env.MEETINGS.delete("desk_post_inbox"); await deps.send(env, "Ignored " + ib.items.length + " photo(s). Nothing was kept."); return true; }
+  if (act === "ref") {
+    await markRefRequest(env, now); let saved = 0, total = 0, first = 0;
+    for (const it of ib.items) { const b = await env.MEETINGS.get(it.k, "arrayBuffer"); if (b && b.byteLength) { const r = await addRef(env, b, "general", "owner upload", now); saved++; total = r.total; first = first || r.n; } await env.MEETINGS.delete(it.k); }
+    await env.MEETINGS.delete("desk_post_inbox");
+    await deps.send(env, "Saved " + saved + " reference photo(s) with the tag general (numbers " + first + " to " + (first + saved - 1) + ", " + total + " in all). Tag one with /ref tag <n> <tag> (" + REF_TAGS.join(", ") + "). They are never posted as they are.");
+    return true;
+  }
+  // use: move to the post queue; the next /post uses them, and says so
+  const keys = await kvJ(env, "desk_post_pendimg", []);
+  for (const it of ib.items) { const b = await env.MEETINGS.get(it.k, "arrayBuffer"); if (b && b.byteLength) keys.push(await storeImage(env, b, "image/jpeg")); await env.MEETINGS.delete(it.k); }
+  await env.MEETINGS.delete("desk_post_inbox"); await kvPut(env, "desk_post_pendimg", keys.slice(-MAX_SLIDES), 3600);
+  await deps.send(env, keys.slice(-MAX_SLIDES).length + " photo(s) ready for your next post (one hour). Send /post <idea> and they will be its pictures.");
   return true;
 }
 const p0 = (n) => Math.max(1, n);
-async function startFromText(env, deps, rest, imgsIn) {
+async function startFromText(env, deps, rest, imgsIn, fromPhoto) {
   let idea = String(rest || "").trim(), lane = "";
   const lm = idea.match(/^(abbot|alchemy)\b\s*[:\-]?\s*(.*)$/is); if (lm) { lane = lm[1].toLowerCase(); idea = lm[2].trim(); }
   if (/^cancel\b/i.test(idea) || /^retry\b/i.test(idea)) return false;
@@ -511,7 +614,11 @@ async function startFromText(env, deps, rest, imgsIn) {
   if (nm) { const L = await kvJ(env, "desk_ideas", []); const it = L[Number(nm[1]) - 1]; if (!it) { await deps.send(env, "No idea " + nm[1] + ". Send /ideas first."); return true; } idea = it.text; lane = lane || it.lane; if (it.allow) extra.allowNums = it.allow; }
   if (!idea && !(imgsIn && imgsIn.length)) { await deps.send(env, "Send /post followed by your idea, for example /post abbot: why a handover needs one owner."); return true; }
   if (/\b(reel|reels|video)\b/i.test(idea)) { await deps.send(env, "Reels come in phase 2. For now I can do a single picture or a carousel of up to " + MAX_SLIDES + " slides."); return true; }
-  let imgs = imgsIn; if (!imgs) { imgs = await kvJ(env, "desk_post_pendimg", []); await env.MEETINGS.delete("desk_post_pendimg"); }
+  // v421: photos become post pictures only (a) when he says use/with my photos, (b) a photo captioned post:, or (c) photos he put in the
+  // post queue himself with the "Use in a post" button. Uncaptioned photos waiting in the inbox are never taken silently.
+  let imgs = imgsIn;
+  if (!imgs) { const chosen = await kvJ(env, "desk_post_pendimg", []); imgs = (MY_PHOTOS.test(idea) || chosen.length) ? await pendingMine(env, MY_PHOTOS.test(idea)) : []; }
+  extra.use_my_photos = !!(imgs && imgs.length) && (fromPhoto || !imgsIn);
   await newPlan(env, deps, idea, lane, imgs, extra); return true;
 }
 
@@ -528,8 +635,15 @@ export async function deskPostRoute(env, msg, text, deps) {
   if (/^\/cost\b/i.test(t)) { await deps.send(env, await costText(env, now)); return true; }
   if (/^\/insights\b/i.test(t)) { await deps.send(env, await insightsText(env)); return true; }
   if (/^\/ideas\b/i.test(t)) { await deps.send(env, await ideasText(env, deps)); return true; }
+  if ((m = t.match(/^\/ref\s+tag\s+(\d+)\s+([\w-]+)/i))) {   // v421
+    const n = Number(m[1]), tag = m[2].toLowerCase(), r = await kvJ(env, "desk_ref_" + n, null);
+    if (!r) { await deps.send(env, "No reference " + n + "."); return true; }
+    if (!REF_TAGS.includes(tag)) { await deps.send(env, "Tag must be one of " + REF_TAGS.join(", ") + "."); return true; }
+    r.tag = tag; await kvPut(env, "desk_ref_" + n, r); await deps.send(env, "Reference " + n + " is now tagged " + tag + "."); return true;
+  }
   if ((m = t.match(/^\/ref\b\s*(\w*)\s*(\d*)/i))) {
     const ix = await kvJ(env, "desk_ref_index", []);
+    if (/^add$/i.test(m[1])) await markRefRequest(env, now);
     if (/^list$/i.test(m[1]) || !m[1]) {
       const by = {}; for (const m2 of await refList(env)) by[m2.tag] = (by[m2.tag] || 0) + 1;
       await deps.send(env, ix.length ? ix.length + " approved reference photo(s): " + Object.keys(by).map((k) => k + " " + by[k]).join(", ") + ". " + (ix.length < REF_MIN ? "I need at least " + REF_MIN + " before any picture shows you. " : "") + "Used only in the Abbot lane (and Alchemy when the idea says with Kendall)." : "No reference photos yet. Send a photo with the caption ref: <tag> (" + REF_TAGS.join(", ") + "). " + REF_CHECKLIST + " Until then no post shows a person.");
@@ -541,6 +655,7 @@ export async function deskPostRoute(env, msg, text, deps) {
     return false;
   }
   if ((m = t.match(/^\/post\s+cancel\s+([a-z0-9]+)/i))) { const p = await getPlan(env, m[1]); if (!p) { await deps.send(env, "No draft " + m[1] + "."); return true; } if (p.status === "posted") { await deps.send(env, "Already posted; I cannot take it down from here."); return true; } p.status = "cancelled"; hist(p, "cancelled", "", now); await putPlan(env, p); await deps.send(env, "Cancelled " + p.id + ". Nothing will be posted."); return true; }
+  if ((m = t.match(/^\/post\s+regen\s+([a-z0-9]+)/i))) { const p = await getPlan(env, m[1]); if (!p) { await deps.send(env, "No draft " + m[1] + "."); return true; } await regenPlan(env, deps, p); return true; }   // v421
   if ((m = t.match(/^\/post\s+retry\s+([a-z0-9]+)/i))) {
     const p = await getPlan(env, m[1]);
     if (!p || p.status !== "held" || p.approved !== true) { await deps.send(env, "Only a held, approved draft can be retried."); return true; }
@@ -557,6 +672,28 @@ export async function deskPostRoute(env, msg, text, deps) {
 }
 
 // ---------- publishing ----------
+// v421: refuses a plan whose slides lack pictures, and a carousel built from raw sent photos unless he said "use my photos"
+export function publishGuard(p) {
+  if (picturesMissing(p)) return "a slide has no picture";
+  if (p.type === "carousel" && !p.use_my_photos && p.slides.some((s) => s.src === "sent")) return "its slides are raw photos you sent, not made slides";
+  return "";
+}
+// v421: /post regen <id> - every slide picture made again from the slide specs (sent photos kept only when use_my_photos), back to draft,
+// approval cleared, a NEW preview with the pictures
+async function regenPlan(env, deps, p) {
+  const now = nowOf(deps);
+  if (["posted", "publishing", "cancelled"].includes(p.status)) { await deps.send(env, "Draft " + p.id + " is " + p.status + "; nothing to rebuild."); return; }
+  p.approved = false; delete p.approved_at; p.status = "draft"; p.slot = null; delete p.held_reason; delete p.nopic_reason; p.containers = {};
+  p.expires_at = now + EXPIRY_MS;
+  for (const s of p.slides) { if (s.src === "sent" && p.use_my_photos) continue; delete s.img_key; delete s.src; delete s.flag; }
+  hist(p, "regen", "all slide pictures rebuilt; approval cleared", now);
+  await deps.send(env, "Rebuilding the pictures for " + p.id + " (" + p.slides.length + " slide" + (p.slides.length > 1 ? "s" : "") + "). It needs your approval again.");
+  const r = await buildImages(env, deps, p);
+  p.notes = r.notes || [];
+  if (r.cap || r.err) { p.status = "held"; p.held_reason = r.err; p.nopic_reason = r.cap ? "the monthly picture budget (USD " + capUsd(env).toFixed(2) + ") is reached. " + (await costText(env, now)) : r.err; }
+  if (p.ai && p.caption && !/\bIllustration\./.test(p.caption)) p.caption = p.caption.replace(/(\n\n#[^\n]*)?$/, (m) => "\n\nIllustration." + m);
+  await putPlan(env, p); await env.MEETINGS.delete("desk_post_editing"); await sendPreview(env, deps, p);
+}
 async function hold(env, deps, p, why) {
   const now = nowOf(deps);
   p.status = "held"; p.held_reason = String(why).slice(0, 160); hist(p, "held", why, now); await putPlan(env, p);
@@ -567,6 +704,7 @@ export async function publishOne(env, deps, p, now) {
   if (!st.connected) return hold(env, deps, p, st.expired ? "the desk Instagram token has expired and needs a fresh link" : "the desk Instagram is not connected");
   if (!st.can_post) return hold(env, deps, p, "the desk Instagram connection does not allow posting (content_publish is missing)");
   if (p.approved !== true) return hold(env, deps, p, "this draft was never approved");
+  const guard = publishGuard(p); if (guard) return hold(env, deps, p, guard + " (send /post regen " + p.id + " for proper pictures)");   // v421
   if (p.media_id) { p.status = "posted"; await putPlan(env, p); return; }
   if ((await postedToday(env, now)) >= dayCap(env)) {
     const plans = await allPlans(env); p.slot = nextSlot(now, plans.filter((x) => x.id !== p.id), dayCap(env)); hist(p, "cap", "moved to " + fmtSlot(p.slot), now); await putPlan(env, p);
@@ -597,6 +735,7 @@ export async function publishOne(env, deps, p, now) {
 export async function deskPostTick(env, deps) {
   if (!DIG(env.WA_DESK_PHONE_ID) || !DIG(env.WA_DESK_OWNER)) return { skipped: "desk off" };
   const now = nowOf(deps); const plans = await allPlans(env); const out = { expired: 0, published: 0 };
+  try { out.asked = await inboxAsk(env, deps, now); } catch (e) {}   // v421: one question per burst of uncaptioned photos
   const exp = plans.filter((p) => ["draft", "editing", "approving"].includes(p.status) && p.expires_at && now > p.expires_at);
   for (const p of exp) { p.status = "expired"; hist(p, "expired", "3 days without approval", now); await putPlan(env, p); out.expired++; }
   if (exp.length) { await env.MEETINGS.delete("desk_post_editing"); await deps.send(env, "Expired after 3 days unapproved: " + exp.map((p) => p.id).join(", ") + "."); }

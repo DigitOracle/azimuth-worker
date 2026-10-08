@@ -32,7 +32,7 @@ import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
 import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitMorning, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
 import { isDeskState as igDeskIsState, deskIgLink, deskIgCallback, deskIgStatus, deskIgDeauth, deskIgRefresh } from "./ig_desk.js";   // v404 - the desk's own Instagram connection (ig_auth_desk), separate from Najjuko's
-import { deskPostTick, deskPostPull } from "./desk_post.js";   // v413 - the desk posting loop
+import { deskPostTick, deskPostPull, refImport, markRefRequest } from "./desk_post.js";   // v413 - the desk posting loop
 import { deskHandle, isDeskEvent, deskWindowOpen, deskOn } from "./desk.js";   // v388 - KENDALL DESK step 1: a second WhatsApp number that answers only the owner (all logic in src/desk.js)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -2288,6 +2288,12 @@ async function appFetch(request, env, ctx) {
       const _sr = await waSend(env, env.WA_ALLOWED, _st);
       return new Response(JSON.stringify({ ok: !!(_sr && _sr.ok), chars: _st.length }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
     }
+    if (url.pathname === "/desk_ref_import" && request.method === "POST") {   // v421 - owner key; body {ids:[igm_ media ids], tag}; copies each stored picture into desk_refimg_<n> + desk_ref_<n> (approved, source "owner upload 8 Oct, imported"); DRY unless apply=1
+      if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      let _ib = {}; try { _ib = await request.json(); } catch (e) { return new Response("json body required", { status: 400 }); }
+      const _ir = await refImport(env, _ib && _ib.ids, (_ib && _ib.tag) || "general", url.searchParams.get("apply") === "1", Date.now());
+      return new Response(JSON.stringify(_ir, null, 2), { status: _ir.ok ? 200 : 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
     if (url.pathname === "/desk_say" && request.method === "POST") {   // v388 - owner key; ONE plain text to env.WA_DESK_OWNER from the desk number, dry unless dry=0; refuses when the owner's desk window (wa_desk_last_in within 23 h) is closed; recipient fixed, same pattern as /najj_say
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       let _db = {}; try { _db = await request.json(); } catch (e) { return new Response("json body required", { status: 400 }); }
@@ -2299,6 +2305,7 @@ async function appFetch(request, env, ctx) {
       if (!deskOn(env) || !_dto || !env.WHATSAPP_TOKEN) return new Response(JSON.stringify({ ok: false, why: "unconfigured" }), { status: 500, headers: { "Content-Type": "application/json" } });
       if (!_dw) return new Response(JSON.stringify({ ok: false, why: "window closed, nothing sent" }), { status: 409, headers: { "Content-Type": "application/json" } });
       const _dr = await waSend(env, _dto, _dt, String(env.WA_DESK_PHONE_ID).replace(/[^0-9]/g, ""));
+      if (_dr && _dr.ok && _db.ref_request === true) { try { await markRefRequest(env, Date.now()); } catch (e) {} }   // v421 - this message asked for reference photos: the next uncaptioned-photo question offers "Reference photo" first
       return new Response(JSON.stringify({ ok: !!(_dr && _dr.ok), chars: _dt.length }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
     }
     if (url.pathname === "/intake_status") {   // v370 - events=1 returns the engagement list instead

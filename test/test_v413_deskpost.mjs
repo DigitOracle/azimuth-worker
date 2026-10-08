@@ -71,7 +71,7 @@ let env = baseEnv(); let mid = 0;
 const say = async (text) => { out.length = 0; await deskPostRoute(env, { type: "text", from: OWNER, id: "m" + ++mid }, text, deps); return [...out]; };
 const tap = async (id) => { out.length = 0; await deskPostRoute(env, { type: "interactive", from: OWNER, id: "m" + ++mid, interactive: { button_reply: { id } } }, "", deps); return [...out]; };
 const photo = async (caption, id) => { out.length = 0; const r = await deskPostRoute(env, { type: "image", from: OWNER, id: "m" + ++mid, image: { id: id || "jpg", caption } }, "", deps); return [...out]; };
-const texts = (a) => a.filter((x) => x.t !== "image").map((x) => x.text).join("\n");
+const texts = (a) => a.map((x) => x.text).join("\n");   // v421: the card can ride as the caption of slide 1
 const reset = () => { store.clear(); calls.length = 0; out.length = 0; igFail = null; genFail = false; visionMode = "good"; visionCalls = 0; llmMode = "normal"; publishId = "M1"; T = Date.UTC(2026, 9, 8, 6, 0, 0); env = baseEnv();
   store.set("mkt_latest", JSON.stringify({ facts: FACTS }));
   store.set("ig_auth_desk", JSON.stringify({ user_id: "9001", username: "digitalabbotuae", token: "TOKEN", perms: "instagram_business_basic,instagram_business_content_publish", expires_at: T + 50 * 86400000 })); };
@@ -301,8 +301,8 @@ reset();
   ok(p && p.slides[0].src === "sent" && calls.filter((c) => c.host === "api.openai.com").length === 0, "an image Kendall sent is used first: no picture is generated");
   ok(!/Illustration\./.test(p.caption), "an unedited uploaded photo is posted as is, with no Illustration label");
   r = await photo("hello", "png"); ok(/needs a JPEG/.test(texts(r)), "a non-JPEG is refused with a plain reason");
-  reset(); await photo("", "jpg"); await photo("", "jpg"); r = await say("post alchemy: two pictures"); p = await planOf();
-  ok(p.type === "carousel" && p.slides.length >= 2 && p.slides[0].src === "sent", "several pictures sent first become a carousel");
+  reset(); await photo("", "jpg"); await photo("", "jpg"); r = await say("post alchemy: two pictures, use my photos"); p = await planOf();
+  ok(p.type === "carousel" && p.slides.length >= 2 && p.slides[0].src === "sent" && p.use_my_photos === true, "several pictures sent first become a carousel when he says use my photos (v421)");
   reset(); store.set("img_render_dubai-marina", JPEG); await say("post alchemy: dubai marina update"); p = await planOf();
   ok(p.slides[0].src === "render" && calls.filter((c) => c.host === "api.openai.com").length === 0 && !/Illustration\./.test(p.caption), "an own render is used when the idea names a project that has one");
 }
@@ -337,7 +337,7 @@ reset();
   r = await say("/ref remove 1"); ok(/Removed reference 1/.test(texts(r)) && !store.has("desk_ref_1") && !store.has("desk_refimg_1"), "/ref remove <n>");
   r = await say("/ref purge"); const b = r.find((x) => x.t === "buttons"); ok(b && b.buttons.map((x) => x.id).join() === "dp:ref:purge,dp:ref:keep", "/ref purge asks for a confirm button");
   await tap("dp:ref:keep"); ok(store.has("desk_ref_2"), "keep: nothing deleted");
-  r = await tap("dp:ref:purge"); ok(![...store.keys()].some((k) => k.startsWith("desk_ref")) && store.has("img_style_me"), "purge deletes all desk references and touches nothing of Najjuko's");
+  r = await tap("dp:ref:purge"); ok(![...store.keys()].some((k) => k.startsWith("desk_ref") && k !== "desk_ref_request_at") && store.has("img_style_me"), "purge deletes all desk references and touches nothing of Najjuko's");
 }
 // ============ 17. music stub, secrets, emoji, no vendor in all messages
 reset();
