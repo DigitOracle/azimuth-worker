@@ -10,13 +10,14 @@ class N { constructor(t, c, x) { this.tag = t; this.className = c || ""; this.ki
 const nodes = { gs: new N("div"), gp: new N("div") };
 const ctx = { $: (id) => nodes[id], el: (t, c, x) => new N(t, c, x), fm: (m) => m + " min", dlab: (d) => d, document: { createElementNS: (ns, t) => new N(t) } };
 vm.createContext(ctx);
-vm.runInContext(rx + pick("spark") + pick("gymDraw"), ctx);
+vm.runInContext("var ACC={};" + rx + pick("acc") + pick("spark") + pick("gymDraw"), ctx);
 const j = { today: "2026-10-09", groups: ["legs", "back"], entries: [
   { k: "ex", x: "Leg Press 3×12 @ 60 kg", m: 9 }, { k: "ex", x: "Lat Pulldown 4×10 @ 45 kg", m: 12 }, { k: "ex", x: "Run - 20 min", m: 20 }, { k: "food", x: "Bottle of water" }],
   machines: [{ name: "Leg Press", best: 60, d: "2026-10-09", s: [["2026-10-01", 50, 36], ["2026-10-05", 55, 36], ["2026-10-09", 60, 36]] }, { name: "Seated Row", best: 40, d: "2026-10-02", s: [["2026-10-02", 40, 30]] }] };
 ctx.gymDraw(j);
 const card = nodes.gs.textContent, prog = nodes.gp.textContent;
-ok(/GYM SESSION/.test(card) && /2 machines/.test(card), "the session card counts the two machines, not the run", card.slice(0, 200));
+ok(/Gym session/.test(card) && /2 machines/.test(card), "the session card counts the two machines, not the run", card.slice(0, 200));
+ok(nodes.gs.kids[0].tag === "details" && !nodes.gs.kids[0].open, "v438: the session card folds away, closed by default");
 ok(/7 sets/.test(card.replace(/\s+/g, " ")) || (/\b7\b/.test(card) && /sets/.test(card)), "sets add up to 7");
 ok(/3,960 kg/.test(card), "weight moved = 3x12x60 + 4x10x45 = 3,960 kg", card);
 ok(/legs/.test(card) && /back/.test(card), "the body parts trained today are shown");
