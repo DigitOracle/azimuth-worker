@@ -25,7 +25,7 @@ import { DEFAULT_SHORTLIST, shortlistName } from "./devmap_page.js";
 import { PHOSPHOR_LIGHT } from "./devmap_icons.js";
 import { BRIEF_KIT, esc, FOOTER_TEXT, WHATSAPP_NUMBER, HEADER_IMG_KEY, HEADER_JPG_KEY } from "./brief_docs.js";
 import { buildInvestorTiersPdf, parseInvestorParams } from "./investor_tiers_page.js";   // v376 - kind=investor_tiers and kind=investor_selector (new files; circular import, used only at call time)
-import { buildBuildingPdf, buildingParams } from "./broker_building.js";   // v449 -  (circular import, used only at call time)
+import { buildBuildingPdf, buildingParams } from "./broker_building.js";   // v450 -  (circular import, used only at call time)
 import { buildInvestorPdf } from "./devmap_investor.js";   // v339 - kind=investor (one developer in one area); circular import, used only at call time
 
 const { NAVY, GOLD, MUTED, MAPC, KY, KH, PT } = BRIEF_KIT;
@@ -128,7 +128,7 @@ export function parseParams(url) {
   const devs = sp.get("developers") == null ? null : String(sp.get("developers")).split(",").map((s) => s.toLowerCase().replace(/[^a-z0-9 -]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60)).filter(Boolean).slice(0, MAX_DEVELOPERS);
   const developer = String(sp.get("developer") || "").toLowerCase().replace(/[^a-z0-9 -]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
   const client = String(sp.get("client") || "").replace(/[<>&"\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
-  return { kind, mode, win, basis, developer, client, area: String(sp.get("area") || "").toLowerCase().replace(/[^a-z0-9]/g, ""), devs, bud: parseBudget(sp), inv: parseInvestorParams(sp), contact: sp.get("contact") === "1", format: String(sp.get("format") || "pdf").toLowerCase(), key: sp.get("key") || "", bld: buildingParams(sp) };   // v449 -  the one-building sheet (kind=building)
+  return { kind, mode, win, basis, developer, client, area: String(sp.get("area") || "").toLowerCase().replace(/[^a-z0-9]/g, ""), devs, bud: parseBudget(sp), inv: parseInvestorParams(sp), contact: sp.get("contact") === "1", format: String(sp.get("format") || "pdf").toLowerCase(), key: sp.get("key") || "", bld: buildingParams(sp) };   // v450 -  the one-building sheet (kind=building)
 }
 
 // ------------------------------------------------------------------------------------------------ what the document is built from
@@ -791,7 +791,7 @@ export function pack(blocks) {
 export async function buildAreaPdf(env, p, opts) {
   if (p.kind === "investor") return buildInvestorPdf(env, p, opts);
   if (p.kind === "investor_tiers" || p.kind === "investor_selector") return buildInvestorTiersPdf(env, p, opts);   // v376
-  if (p.kind === "building") return buildBuildingPdf(env, p, opts);   // v449 -  (src/broker_building.js)
+  if (p.kind === "building") return buildBuildingPdf(env, p, opts);   // v450 -  (src/broker_building.js)
   if (!["snapshot", "detailed"].includes(p.kind)) return { status: 400, body: { ok: false, reason: "kind must be snapshot, detailed, building or investor" } };
   if (p.mode !== "buy" && p.mode !== "rent") return { status: 400, body: { ok: false, reason: "mode must be buy or rent" } };
   const L = await loadData(env, p, opts);
@@ -826,7 +826,7 @@ export async function devmapPdfRoute(request, env, url, deps) {
   if (request.method !== "GET" && request.method !== "HEAD") return new Response("method not allowed", { status: 405 });
   if (!deps || !deps.keyOk || !deps.keyOk(env, url)) return new Response("unauthorized", { status: 401 });
   const p = parseParams(url);
-  const doc = await buildAreaPdf(env, p, { origin: p.format === "html" ? url.origin : String(env.PUBLIC_ORIGIN || url.origin).replace(/\/+$/, ""), owner: !!(deps.owner && deps.owner(env, url)) });   // v449 -  adverts on the building web page only
+  const doc = await buildAreaPdf(env, p, { origin: p.format === "html" ? url.origin : String(env.PUBLIC_ORIGIN || url.origin).replace(/\/+$/, ""), owner: !!(deps.owner && deps.owner(env, url)) });   // v450 -  adverts on the building web page only
   if (doc.status !== 200) return J(doc.body, doc.status);
   const hdr = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer", "X-Brief-Pages": String(doc.pages) };
   if (doc.audit && p.format === "audit") return J(doc.audit);   // v376 - the audit record as JSON (the sidecar)

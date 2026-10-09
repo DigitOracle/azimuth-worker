@@ -214,7 +214,7 @@ console.log("F - page rules");
   ok(/\.card\{[^}]*min-width:0/.test(css), "cards can shrink (no horizontal page scroll)");
   ok(optFrame({ title: "T", sub: "s", body: "b", script: "x" }).includes("<main><h1>T</h1><div class=sm>s</div>b</main><script>x</script>"), "the shared frame is title, subtitle, body, script");
   const dp = fs.readFileSync(new URL("../src/devmap_page.js", import.meta.url), "utf8");
-  ok(dp.includes("'/doc_client?keys='") && dp.includes('.replace("/developers_pdf?","/doc_broker?")') && !dp.includes("'/brief_pdf?kind=dossier&keys='"), "the Client and Broker buttons open the options pages");
+  ok(dp.includes("'/doc_client?keys='") && dp.includes('.replace("/developers_pdf?","/doc_broker?")') && dp.includes("'/doc_broker?kind=building&area='") && !dp.includes("'/brief_pdf?kind=dossier&keys='"), "the Client and Broker buttons open the options pages");
   ok(dp.includes("invHref(q.id)") && dp.includes("function invHref(id){return '/developers_pdf?kind=investor_selector"), "the Investor button is unchanged");
   const ix = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
   ok(/"\/doc_client", "\/doc_broker"\]/.test(ix) && /pathname === "\/doc_client" \|\| url\.pathname === "\/doc_broker"/.test(ix), "both routes are in the Worker and open to a client key");

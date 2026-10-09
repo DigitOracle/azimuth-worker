@@ -1,5 +1,5 @@
-// v449 - the ONE-BUILDING broker sheet (Kendall 9 Oct 2026: "when I click here and get the report I get the whole district not the individual building").
-// Offline: hand-made fixtures in a stubbed store; nothing live is read or written.   node test/test_v449_building_sheet.mjs
+// v450 - the ONE-BUILDING broker sheet (Kendall 9 Oct 2026: "when I click here and get the report I get the whole district not the individual building").
+// Offline: hand-made fixtures in a stubbed store; nothing live is read or written.   node test/test_v450_building_sheet.mjs
 import fs from "node:fs";
 import { pickBuilding, salesFigures, rentFigures, windowOf, buildingConfig, loadBuilding, buildingHtml, recKey, RECENT_MAX } from "../src/broker_building.js";
 import { parseParams } from "../src/devmap_pdf.js";
@@ -99,7 +99,7 @@ const P = (q) => parseParams(new URL("https://x/developers_pdf?kind=building&are
   ok(B.tier >= 0 && B.areaPsm > 0, "placed in a price band against the area's typical");
   const page = buildingHtml(B, B.C.p).html, t = textOf(page);
   ok(/Advertised now \(Property Finder\)/.test(page) && /3 flats/.test(t) && /never added to it/.test(t), "owner, web page: the adverts by bedroom (flats, adverts, price range), never added to availability");
-  ok(/class="smap" data-lat="25\.05\d+" data-lon="55\.15\d+"/.test(page) && /maplibre-gl@4\.7\.1/.test(page) && /dark-matter-gl-style/.test(page) && /"#C5A56A"/.test(page) && /fill-extrusion/.test(page) && !/raster/.test(page), "web page: the live 3D street map (MapLibre 4.7.1, CARTO dark matter vector, the building in gold), no raster tiles");
+  ok(/class="smap" data-lat="25\.05\d+" data-lon="55\.15\d+"/.test(page) && /maplibre-gl@4\.7\.1/.test(page) && /data-fp='\{"c":\[\[55\.15/.test(page) && !/"distance"/.test(page) && /dark-matter-gl-style/.test(page) && /"#C5A56A"/.test(page) && /fill-extrusion/.test(page) && !/raster/.test(page), "web page: the live 3D street map (MapLibre 4.7.1, CARTO dark matter vector, the building in gold), no raster tiles");
   ok(/Sales in this building/.test(t) && /Recent sales, newest first/.test(t) && /Total value/.test(t) && /left out/.test(t) && /Where it sits in the area/.test(t), "every section is there");
   ok(/No rent contract is registered for this building: it is sold off-plan and not yet handed over/.test(t), "no rents: one honest line");
   ok(!EMOJI.test(page) && /<svg/.test(page), "icons, no emojis");

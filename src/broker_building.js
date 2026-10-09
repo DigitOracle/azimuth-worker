@@ -1,4 +1,4 @@
-// v449 - THE ONE-BUILDING BROKER SHEET (Kendall, 9 Oct 2026: "when I click here and get the report I get the whole district not the individual building").
+// v450 - THE ONE-BUILDING BROKER SHEET (Kendall, 9 Oct 2026: "when I click here and get the report I get the whole district not the individual building").
 //   GET /doc_broker?kind=building&area=<district slug>&project=<Land Department project number>&name=<register name>[&bk=<footprint index>][&window=12m|all]&key=...
 //        -> the options page (src/doc_options_page.js shell); Generate opens
 //   GET /developers_pdf?kind=building&area=..&project=..&name=..&bk=..&window=12m|all[&client=..][&contact=1][&format=html]&key=...
@@ -135,15 +135,20 @@ export async function loadBuilding(env, p, opts) {
   // the footprint: only the register-bound index the map handed us
   const layer = b.bk != null ? await readOr(env, "brief_fp_" + slug) : null;
   const fp = layer && Array.isArray(layer.b) ? layer.b.find((x) => x[0] === b.bk) : null;
-  let ll = null;
-  if (fp && Array.isArray(layer.ll)) { let sx = 0, sy = 0, k = 0; const f = fp[2]; for (let i = 0; i + 1 < f.length; i += 2) { sx += f[i]; sy += f[i + 1]; k++; } ll = k ? llOfXy(layer, sx / k, sy / k) : null; }
+  let ll = null, ring = null;
+  if (fp && Array.isArray(layer.ll)) {
+    let sx = 0, sy = 0, k = 0; const f = fp[2], r = [];
+    for (let i = 0; i + 1 < f.length; i += 2) { sx += f[i]; sy += f[i + 1]; k++; const q = llOfXy(layer, f[i], f[i + 1]); if (q) r.push([Math.round(q[1] * 1e6) / 1e6, Math.round(q[0] * 1e6) / 1e6]); }
+    ll = k ? llOfXy(layer, sx / k, sy / k) : null;
+    if (r.length >= 3) { if (r[0][0] !== r[r.length - 1][0] || r[0][1] !== r[r.length - 1][1]) r.push(r[0]); ring = { c: r, h: Number(fp[1]) || 12 }; }   // [lon, lat], closed, with the footprint's height
+  }
   // OWNER ONLY, web page only: the adverts (never added to developer availability, never in the PDF)
   let adv = null;
   if (opts && opts.owner && p.format === "html" && b.bk != null) { try { adv = advertisedForKey(advertisedDoc(await readOr(env, "pf_supply_" + slug)), slug + ":" + b.bk); } catch (e) { adv = null; } }
   const st = C.st, tier = S.psm != null && st.enough && st.bounds ? DM.tierOf(S.psm, st.bounds) : -1;
   const B = { C, slug, rec, name: rec.project || b.name, projectNo: rec.projectNo || b.project, dev: devRow.dev || "", area: C.names.plain, subArea: rec.area || "",
     status: S.lastStage === "offplan" ? "Off-plan" : S.lastStage === "ready" ? "Ready" : "", asOf: sd.asOf, first: sd.first, w, S, R, rentAsOf: ed ? ed.asOf : "", rentFirst: ed ? ed.first : "",
-    layer: fp ? layer : null, bk: fp ? b.bk : null, ll, adv, owner: !!(opts && opts.owner), tier, areaPsm: st.enough ? st.median : null };
+    layer: fp ? layer : null, bk: fp ? b.bk : null, ll, ring, adv, owner: !!(opts && opts.owner), tier, areaPsm: st.enough ? st.median : null };
   return { status: 200, B };
 }
 function llOfXy(layer, x, y) {   // the footprint layer's affine (the Brief's llOfXy, src/brief_docs.js) -> [lat, lon]
@@ -213,13 +218,14 @@ function mapBlock(B, live) {
   const gold = new Map([[B.bk, { fill: GOLDI, wall: "#A98A4F", edge: "#7A6230", n: 0 }]]);
   const pic = obliqueMap(B.layer, gold, { w: 700, h: 300, frame: "hi", label: B.name + " in gold among its neighbours" });
   const g = B.ll ? '<a class="smg" href="https://www.google.com/maps/search/?api=1&query=' + B.ll[0].toFixed(6) + "," + B.ll[1].toFixed(6) + '">Open in Google Maps</a>' : "";
-  const liveMap = live && B.ll ? '<div class="smap" data-lat="' + B.ll[0].toFixed(6) + '" data-lon="' + B.ll[1].toFixed(6) + '" role="img" aria-label="' + esc(B.name) + ' on the street map, in gold"><div class="smc"></div></div>' : "";
+  const liveMap = live && B.ll ? '<div class="smap" data-lat="' + B.ll[0].toFixed(6) + '" data-lon="' + B.ll[1].toFixed(6) + '"' + (B.ring ? " data-fp='" + JSON.stringify(B.ring) + "'" : "") + ' role="img" aria-label="' + esc(B.name) + ' on the street map, in gold"><div class="smc"></div></div>' : "";
   return { h: 380, html: secHead("map-pin", "On the map", "The digital footprint: buildings raised to their height, this one in gold. Building outlines and streets from OpenStreetMap contributors.") +
     (liveMap || '<div class="mapbox">' + pic + "</div>") + g };
 }
 
 // the live street map of the web page: the supply page's approach (MapLibre 4.7.1 from unpkg, CARTO dark-matter vector style, fill-extrusion
-// on the vector "building" layer, the building within 30 m in gold). No raster tiles (CARTO's raster tiles need an API key).
+// on the vector "building" layer). The building in gold is OUR register-bound footprint (img_brief_fp_<district>, the same outline the PDF draws), raised
+// on its own layer - not a distance rule over the vector tiles, which lit tile scraps on the supply page (v449 there). No raster tiles (CARTO's need an API key).
 export const LIVE_MAP_CSS = ".smap{position:relative;height:340px;border:1px solid " + HAIR + ";border-radius:8px;overflow:hidden;background:#0E1918}.smc{position:absolute;inset:0}.smg{display:inline-block;margin-top:6px;font-size:11px;color:" + TEAL + "}" +
   "@media(max-width:640px){.sheet{width:auto!important;height:auto!important;min-height:0!important}.dmb{padding:12px 16px 0!important}.tiles,.bgrid{grid-template-columns:1fr 1fr!important}.two{flex-direction:column}.frs .fr{grid-template-columns:1fr!important;gap:2px}.ttl{flex-direction:column}table.tb{font-size:11px}}";
 export const LIVE_MAP_JS = String.raw`(function(){var el=document.querySelector(".smap[data-lat]");if(!el)return;var ll=[Number(el.getAttribute("data-lon")),Number(el.getAttribute("data-lat"))];
@@ -227,9 +233,11 @@ var c=document.createElement("link");c.rel="stylesheet";c.href="https://unpkg.co
 var s=document.createElement("script");s.src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";s.onload=function(){var ml=window.maplibregl;
 var m=new ml.Map({container:el.querySelector(".smc"),style:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",center:ll,zoom:15,attributionControl:{compact:true},cooperativeGestures:true});
 m.on("load",function(){try{var st=m.getStyle(),src=Object.keys(st.sources).find(function(k){return st.sources[k].type==="vector"});if(!src)return;
-var near=["<=",["distance",{type:"Point",coordinates:ll}],30];
-m.addLayer({id:"dfp",type:"fill-extrusion",source:src,"source-layer":"building",minzoom:13,paint:{"fill-extrusion-color":["case",near,"#C5A56A","#3d5a53"],"fill-extrusion-height":["coalesce",["get","render_height"],["get","height"],12],"fill-extrusion-base":["coalesce",["get","render_min_height"],0],"fill-extrusion-opacity":0.9}});
-m.easeTo({pitch:55,bearing:-20,zoom:15.5,duration:900})}catch(x){}})};document.head.appendChild(s)})();`;
+m.addLayer({id:"dfp",type:"fill-extrusion",source:src,"source-layer":"building",minzoom:13,paint:{"fill-extrusion-color":"#3d5a53","fill-extrusion-height":["coalesce",["get","render_height"],["get","height"],12],"fill-extrusion-base":["coalesce",["get","render_min_height"],0],"fill-extrusion-opacity":0.9}});
+var fp=null;try{fp=JSON.parse(el.getAttribute("data-fp")||"null")}catch(x){}
+if(fp&&fp.c){m.addSource("gold",{type:"geojson",data:{type:"Feature",geometry:{type:"Polygon",coordinates:[fp.c]},properties:{}}});
+m.addLayer({id:"gold",type:"fill-extrusion",source:"gold",paint:{"fill-extrusion-color":"#C5A56A","fill-extrusion-height":fp.h+1,"fill-extrusion-base":0,"fill-extrusion-opacity":1}})}
+m.easeTo({pitch:50,bearing:-20,zoom:15.5,duration:900})}catch(x){}})};document.head.appendChild(s)})();`;
 
 // ------------------------------------------------------------------------------------------------ the document
 function pageHtml(B, pg, i, total, p) {
