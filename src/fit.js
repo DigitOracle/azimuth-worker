@@ -887,6 +887,26 @@ export async function machineVision(env, deps, buf, mime) {
 }
 export const liftKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 export const liftMinutes = (sets, reps) => Math.max(2, Math.round(sets * (1 + reps * 0.05 + 1.5)));   // a set's work plus its rest, roughly
+// v435 - variety (Kendall, 9 Oct: "it should scold you... you should be moving to all different parts of your body"). Every lift is filed
+// under body groups by day; a machine that works a group trained yesterday gets a firm line, plus the groups left alone longest.
+export const BODY_GROUPS = [["legs", /leg|quad|hamstring|glute|calf|calves|squat|lunge|hip|adductor|abductor/], ["chest", /chest|pec|bench|fly|flye|push.?up/],
+  ["back", /back|lat|row|pull.?down|pull.?up|deadlift|trap|rhomboid/], ["shoulders", /shoulder|delt|overhead|military|lateral raise/],
+  ["arms", /arm|bicep|tricep|curl|forearm|dip/], ["core", /core|ab\b|abs|abdominal|oblique|plank|crunch/], ["cardio", /cardio|treadmill|bike|cycle|elliptical|rower|rowing machine|stair|run/]];
+export function muscleGroups(text) { const t = String(text || "").toLowerCase(); return BODY_GROUPS.filter((g) => g[1].test(t)).map((g) => g[0]); }
+const dayDiff = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
+export function liftNudge(log, groups, today) {
+  const lifting = (groups || []).filter((g) => g !== "cardio");
+  const last = {}; (log || []).forEach((r) => (r.g || []).forEach((g) => { if (!last[g] || r.d > last[g]) last[g] = r.d; }));
+  const hit = lifting.filter((g) => last[g] && dayDiff(last[g], today) === 1);
+  const streak = lifting.filter((g) => [1, 2].every((k) => (log || []).some((r) => dayDiff(r.d, today) === k && (r.g || []).includes(g))));
+  const rest = BODY_GROUPS.map((g) => g[0]).filter((g) => g !== "cardio" && !lifting.includes(g)).map((g) => [g, last[g] ? dayDiff(last[g], today) : 99]).filter((x) => x[1] >= 3).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const go = rest.length ? " Today, work " + rest.map((x) => x[0] + (x[1] >= 99 ? " (not yet this challenge)" : " (" + x[1] + " days ago)")).join(", ") + " instead." : "";
+  if (streak.length) return { level: "stop", text: "Three days running on " + streak.join(" and ") + ". Stop - those muscles grow while they rest, not while you hammer them." + go };
+  if (hit.length) return { level: "warn", text: "You worked " + hit.join(" and ") + " yesterday. Give them 48 hours." + go };
+  if (rest.length && lifting.length) return { level: "tip", text: "Good choice." + (rest[0][1] >= 5 ? " Next, don't forget " + rest[0][0] + " - " + (rest[0][1] >= 99 ? "not trained yet this challenge." : rest[0][1] + " days since you trained it.") : "") };
+  return null;
+}
+async function liftLog(env, u) { try { return JSON.parse((await env.MEETINGS.get("fitliftlog_" + u)) || "[]") || []; } catch (e) { return []; } }
 async function liftHist(env, u) { try { return JSON.parse((await env.MEETINGS.get("fitlift_" + u)) || "{}") || {}; } catch (e) { return {}; } }
 // A caption such as "lunch" claims the photo outright. Returns true when handled.
 export async function fitPhotoCaptioned(env, from, mediaId, cap, deps) {
@@ -1376,7 +1396,8 @@ export async function fitRoutes(request, env, url, h) {
     let g = null; try { g = await machineVision(env, h, buf, mime); } catch (e) {}
     if (!g || !g.machine) return J({ ok: true, machine: "" });
     const hist = await liftHist(env, cfg.u);
-    return J({ ok: true, machine: clip(g.machine, 40), muscles: clip(g.muscles || "", 60), last: hist[liftKey(g.machine)] || null });
+    const groups = muscleGroups(g.machine + " " + (g.muscles || ""));
+    return J({ ok: true, machine: clip(g.machine, 40), muscles: clip(g.muscles || "", 60), last: hist[liftKey(g.machine)] || null, nudge: liftNudge(await liftLog(env, cfg.u), groups, today) });
   }
   if (url.searchParams.get("op") === "photo") {   // read once, drop: nothing about the image is stored
     const buf = await request.arrayBuffer();
@@ -1415,6 +1436,12 @@ export async function fitRoutes(request, env, url, h) {
     const pb = !!(prev && kg > (prev.best || 0));
     hist[k] = { name, sets, reps, kg, d, best: Math.max(kg, (prev && prev.best) || 0) };
     await env.MEETINGS.put("fitlift_" + cfg.u, JSON.stringify(hist));
+    const groups = muscleGroups(name + " " + String(b.muscles || ""));
+    if (groups.length) {   // v435: the day-by-day record of which body groups were trained, 60 days kept
+      const log = (await liftLog(env, cfg.u)).filter((r) => dayDiff(r.d, today) <= 60);
+      const row = log.find((r) => r.d === d); if (row) row.g = [...new Set(row.g.concat(groups))]; else log.push({ d, g: groups });
+      await env.MEETINGS.put("fitliftlog_" + cfg.u, JSON.stringify(log));
+    }
     return J({ ok: true, entry: e, pb, prev });
   }
   if (op === "water") {   // v432: one tap on the bottle in the header = one bottle of water; never "outside the eating window"
@@ -1463,6 +1490,7 @@ const FIT_CSS = ".fw{max-width:640px;margin:0 auto;padding:18px 16px calc(96px +
   ".chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.chips button.on{border-color:#C5A56A;color:#F2EFE6}.chips button{border:1px solid #2E4540;background:#0C1413;color:#CFD8D3;border-radius:99px;padding:7px 12px;font:inherit;font-size:.78rem;cursor:pointer}" +
   ".set label{display:block;font-size:.72rem;color:#8FA39B;margin:10px 0 4px;font-family:'IBM Plex Mono',monospace}.set input,.set select{width:100%;box-sizing:border-box}.wr{display:flex;gap:6px;margin-top:6px}.wr input{flex:1}.note{color:#8FA39B;font-size:.72rem;margin-top:10px;line-height:1.5}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#16241f;border:1px solid #C5A56A;color:#F2EFE6;border-radius:12px;padding:10px 14px;font-size:.84rem;max-width:88%;display:none;z-index:50}" +
   ".lift{border:1px solid #C5A56A;border-radius:12px;padding:12px;margin-top:10px;background:#0C1413}.lh b{font-family:Fraunces,Georgia,serif;font-size:1.05rem;color:#F2EFE6}.lh small{color:#8FA39B;font-size:.75rem}" +
+  ".lnz{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:.84rem;line-height:1.45}.lnz.stop{background:#3a1717;border:1px solid #E06B5F;color:#F6D3CE}.lnz.warn{background:#33270f;border:1px solid #E0A458;color:#F3E2C4}.lnz.tip{background:#13261f;border:1px solid #5FBF8A;color:#D2EBDD}" +
   ".lr{display:flex;align-items:center;gap:8px;margin-top:10px}.lr span{flex:1;font-size:.85rem;color:#CFD8D3}.lr button{width:44px;height:44px;border-radius:10px;border:1px solid #2E4540;background:#16241f;color:#F2EFE6;font-size:1.3rem;cursor:pointer}.lr input{width:72px;text-align:center;background:#0C1413;border:1px solid #2E4540;color:#F2EFE6;border-radius:10px;padding:10px 4px;font:inherit;font-size:1rem}" +
   ".rt{position:sticky;bottom:calc(76px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:8px;margin-top:10px;padding:10px 12px;border-radius:12px;background:#16241f;border:1px solid #C5A56A;z-index:20}.rt span{color:#8FA39B;font-size:.8rem}.rt b{flex:1;font-family:'IBM Plex Mono',monospace;font-size:1.3rem;color:#F2EFE6}";
 
@@ -1481,7 +1509,7 @@ function fitPageHtml(o) {
     '<div class="fc"><div class="ph" data-img="exercise"><b>EXERCISE</b></div><div id="ex"></div>' +
     '<div class="chips" id="chips"></div><div class="add"><input class="g" id="et" placeholder="Activity" maxlength="40"><input id="en" type="number" inputmode="decimal" min="0" step="any" placeholder="min" style="width:84px"><select id="eu"><option value="m">min</option><option value="h">hours</option><option value="s">steps</option></select><button class="btn" id="ea">Add</button></div>' +
     '<div class="add"><label class="btn s" for="mph" style="display:inline-flex;align-items:center"><span id="mphi"></span>&nbsp;Gym machine photo</label><input id="mph" type="file" accept="image/*" capture="environment" hidden></div>' +
-    '<div id="lift" class="lift" style="display:none"><div class="lh"><b id="lmn"></b><small id="lmm"></small></div><div class="note" id="llast"></div>' +
+    '<div id="lift" class="lift" style="display:none"><div class="lh"><b id="lmn"></b><small id="lmm"></small></div><div class="note" id="llast"></div><div id="lnz" class="lnz" style="display:none"></div>' +
     '<div class="lr"><span>Sets</span><button data-f="ls" data-d="-1">&minus;</button><input id="ls" type="number" inputmode="numeric" value="3"><button data-f="ls" data-d="1">+</button></div>' +
     '<div class="lr"><span>Reps</span><button data-f="lp" data-d="-1">&minus;</button><input id="lp" type="number" inputmode="numeric" value="12"><button data-f="lp" data-d="1">+</button></div>' +
     '<div class="lr"><span>Weight kg</span><button data-f="lk" data-d="-2.5">&minus;</button><input id="lk" type="number" inputmode="decimal" step="0.5" value="0"><button data-f="lk" data-d="2.5">+</button></div>' +

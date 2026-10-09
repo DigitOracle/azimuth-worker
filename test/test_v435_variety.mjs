@@ -1,0 +1,21 @@
+// v435 - Momo variety: training the same muscles day after day is called out, and the neglected ones are named.   node test/test_v435_variety.mjs
+import { muscleGroups, liftNudge } from "../src/fit.js";
+let pass = 0, fail = 0;
+const ok = (c, m, d) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m + (d ? "\n         " + d : "")); } };
+const T = "2026-10-09";
+ok(muscleGroups("Leg Press legs and glutes").join() === "legs", "leg press is legs", muscleGroups("Leg Press legs and glutes"));
+ok(muscleGroups("Lat Pulldown back and biceps").sort().join() === "arms,back", "lat pulldown is back and arms");
+ok(muscleGroups("Treadmill").join() === "cardio", "a treadmill is cardio");
+let n = liftNudge([{ d: "2026-10-08", g: ["legs"] }], ["legs"], T);
+ok(n && n.level === "warn" && /legs yesterday/.test(n.text) && /chest|back|shoulders|arms|core/.test(n.text), "legs yesterday and legs again: warned, and told what to do instead", n && n.text);
+n = liftNudge([{ d: "2026-10-07", g: ["legs"] }, { d: "2026-10-08", g: ["legs"] }], ["legs"], T);
+ok(n && n.level === "stop" && /Three days running on legs/.test(n.text), "three days running: told to stop", n && n.text);
+n = liftNudge([{ d: "2026-10-08", g: ["legs"] }], ["chest"], T);
+ok(!n || n.level === "tip", "a different body part after legs is fine", n && n.text);
+n = liftNudge([{ d: "2026-10-01", g: ["back"] }, { d: "2026-10-08", g: ["legs"] }], ["chest"], T);
+ok(n && n.level === "tip" && /back|shoulders|arms|core/.test(n.text), "a good choice still points at the most neglected part", n && n.text);
+n = liftNudge([{ d: "2026-10-08", g: ["cardio"] }], ["cardio"], T);
+ok(!n || n.level !== "warn", "cardio two days running is not scolded");
+n = liftNudge([{ d: "2026-10-09", g: ["legs"] }], ["legs"], T);
+ok(!n || n.level === "tip", "a second leg machine the same day is not scolded");
+console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
