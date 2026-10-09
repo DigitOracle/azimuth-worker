@@ -23,6 +23,7 @@ import { COVERAGE_MIN, coverageOf, pctSay } from "./coverage_guard.js";
 
 export const SALES_KV = { district: (d) => "img_sales_filed_" + d, dubai: "img_sales_filed_dubai" };
 export const VIEWS = ["rentals", "sales", "both"];
+export const VALUE_CAP = 500e6;          // v440: single deals above this are left out of the total value
 export const MIN_PRICED = 5;            // a median is printed from five priced sales, never from fewer
 const BANDS = ["studio", "1", "2", "3", "3+", "office", "shop", "other"];
 const BAND_SAY = { studio: "Studio", "1": "1 bedroom", "2": "2 bedrooms", "3": "3 bedrooms", "3+": "4 bedrooms or more", office: "Office", shop: "Shop", other: "Other or not stated" };
@@ -66,7 +67,10 @@ export function salesRow(raw, fields) {
     key, devNo: str(o.developer_number), dev: str(o.developer), attr: str(o.attribution),
     stage: o.stage === "offplan" || o.stage === "ready" ? o.stage : "", band: BAND_IN[str(bandRaw).toLowerCase()] || "other", bandKnown: present(bandRaw),
     sub: str(o.sub_type) || null, n: Math.max(0, num(o.sales) || 0), pn: prices ? prices.length : (num(o.price_n) || 0),
-    prices, psm, med: num(o.price_median), psmMed: num(o.psm_median)
+    prices, psm, med: num(o.price_median), psmMed: num(o.psm_median),
+    // v440 - total value: the sum of the priced sales (from the single prices where the file carries them, else the row's own sum); a deal over
+    // AED 500M (a whole tower, a land bank) is left out so one transaction cannot swamp the total. null = this file carries no value.
+    val: prices ? prices.reduce((s, p) => s + (p <= VALUE_CAP ? p : 0), 0) : num(o.price_sum), big: prices ? prices.filter((p) => p > VALUE_CAP).length : 0
   };
 }
 export function salesDoc(doc, part) {
@@ -138,6 +142,13 @@ function stats(rows, arrF, medF) {
   }
   return { n: arr.length + pairsN, median: null, q1: null, q3: null };
 }
+// v440 - the total value of the sales in the window: the same rows as the count, so it moves with every date range, filter and area.
+// null when a priced row carries no value (a file built before v440): never a partial total shown as if it were whole.
+export function valueOf(rows) {
+  let v = 0, big = 0;
+  for (const r of rows) { if (r.pn > 0 && r.val == null) return null; v += r.val || 0; big += r.big || 0; }
+  return { sum: v, big };
+}
 export function salesCount(rows) {
   const t = { n: 0, off: 0, rdy: 0 }, days = {}, bandRows = {}, stageRows = { offplan: [], ready: [] };
   const sales = rows.filter((r) => r.kind === "sale");
@@ -148,9 +159,9 @@ export function salesCount(rows) {
     (r.stage === "offplan" ? stageRows.offplan : stageRows.ready).push(r);
   }
   const sum = (a) => a.reduce((s, r) => s + r.n, 0);
-  t.bands = BANDS.filter((b) => bandRows[b]).map((b) => ({ band: b, label: BAND_SAY[b], n: sum(bandRows[b]), price: stats(bandRows[b], "prices", "med"), psm: stats(bandRows[b], "psm", "psmMed") }));
-  t.stages = ["offplan", "ready"].filter((k) => stageRows[k].length).map((k) => ({ stage: k, label: STAGE_SAY[k], n: sum(stageRows[k]), price: stats(stageRows[k], "prices", "med"), psm: stats(stageRows[k], "psm", "psmMed") }));
-  t.price = stats(sales, "prices", "med"); t.psm = stats(sales, "psm", "psmMed");
+  t.bands = BANDS.filter((b) => bandRows[b]).map((b) => ({ band: b, label: BAND_SAY[b], n: sum(bandRows[b]), price: stats(bandRows[b], "prices", "med"), psm: stats(bandRows[b], "psm", "psmMed"), value: valueOf(bandRows[b]) }));
+  t.stages = ["offplan", "ready"].filter((k) => stageRows[k].length).map((k) => ({ stage: k, label: STAGE_SAY[k], n: sum(stageRows[k]), price: stats(stageRows[k], "prices", "med"), psm: stats(stageRows[k], "psm", "psmMed"), value: valueOf(stageRows[k]) }));
+  t.price = stats(sales, "prices", "med"); t.psm = stats(sales, "psm", "psmMed"); t.value = valueOf(sales);
   t.days = days;
   t.mort = sum(rows.filter((r) => r.kind === "mortgage")); t.land = sum(rows.filter((r) => r.kind === "land"));
   const at = { RV: 0, NAME: 0, NONE: 0 };
@@ -310,7 +321,7 @@ function lagNote(S) {
 function salesPart(S) {
   const zeroHid = S.n === 0 && S.allN > 0;
   return zeroHid ? "<b>0</b> sales match this filter (<b>" + fmt(S.allN) + "</b> " + (S.allN === 1 ? "was" : "were") + " registered with the Land Department)"
-    : "<b>" + fmt(S.n) + "</b> " + unitS(S.n) + " registered with the Land Department";
+    : "<b>" + fmt(S.n) + "</b> " + unitS(S.n) + (S.count && S.count.value && S.count.value.sum > 0 ? " worth <b>" + esc(aedBig(S.count.value.sum)) + "</b>" : "") + " registered with the Land Department";   // v440
 }
 function rentalsPart(A) {
   if (A.noRentals) return "no rentals on record with Ejari";
@@ -378,10 +389,12 @@ export function twoStripHtml(A, S, mode) {
 // the sales tables: by off-plan and ready, by bedrooms (guarded), with the median price and the median price per sq m where five or more were priced
 function priceCell(p) { return p && p.median != null ? esc(aed(p.median)) + (p.approx ? "*" : "") : "—"; }
 function psmCell(p) { return p && p.median != null ? esc(aedSqm(p.median)) + (p.approx ? "*" : "") : "—"; }
+export const aedBig = (v) => v == null ? "—" : v >= 1e9 ? "AED " + (v / 1e9).toFixed(v >= 1e11 ? 0 : 1) + "bn" : v >= 1e6 ? "AED " + Math.round(v / 1e6) + "M" : "AED " + Math.round(v / 1e3) + "k";
 function salesTable(rows, head, withMed) {
   if (!rows.length) return "";
-  return '<table class=two><tr><th>' + head + '</th><th class=s>SALES</th>' + (withMed ? '<th>TYPICAL PRICE</th><th>PER SQ M</th>' : "") + "</tr>"
-    + rows.map((b) => "<tr><td>" + esc(b.label) + "</td><td class=s><b>" + fmt(b.n) + "</b></td>" + (withMed ? "<td>" + priceCell(b.price) + "</td><td>" + psmCell(b.psm) + "</td>" : "") + "</tr>").join("") + "</table>";
+  const withVal = withMed && rows.every((b) => b.value);   // v440: the column appears only when every row has a whole total
+  return '<table class=two><tr><th>' + head + '</th><th class=s>SALES</th>' + (withVal ? '<th>TOTAL VALUE</th>' : "") + (withMed ? '<th>TYPICAL PRICE</th><th>PER SQ M</th>' : "") + "</tr>"
+    + rows.map((b) => "<tr><td>" + esc(b.label) + "</td><td class=s><b>" + fmt(b.n) + "</b></td>" + (withVal ? "<td><b>" + esc(aedBig(b.value.sum)) + "</b></td>" : "") + (withMed ? "<td>" + priceCell(b.price) + "</td><td>" + psmCell(b.psm) + "</td>" : "") + "</tr>").join("") + "</table>";
 }
 export function salesTablesHtml(S, st) {
   if (!S || S.missing) return "";
@@ -390,6 +403,9 @@ export function salesTablesHtml(S, st) {
   h += salesTable(S.count.stages, "OFF-PLAN OR READY", true);
   if (S.beds.ok) h += salesTable(S.count.bands, "BEDROOMS", true);
   else h += '<div class=dk id=ejsbedsnote>Bedrooms are recorded for only ' + esc(pctSay(S.beds.share)) + " of these sales, so they are not split by bedrooms.</div>";
+  const tv = S.count.value;
+  if (tv) h += '<div class=dk id=ejsvalue>Total value: the sum of the registered prices of these sales, over the same dates as the count, so it rises and falls with the sales. ' +
+    (tv.big ? fmt(tv.big) + " deal" + (tv.big === 1 ? "" : "s") + " over AED 500M each (a whole building or a land bank) " + (tv.big === 1 ? "is" : "are") + " left out so one transaction cannot swamp it." : "Single deals over AED 500M (a whole building or a land bank) are left out so one transaction cannot swamp it.") + "</div>";
   const any = S.count.price.median != null || S.count.psm.median != null;
   h += '<div class=dk>' + (any ? "Typical price: the middle sale" + (S.count.price.q1 != null ? ", with the middle half from " + esc(aed(S.count.price.q1)) + " to " + esc(aed(S.count.price.q3)) : "") + ". Shown only where five or more sales were priced." + (S.count.price.approx ? " * the middle of the daily middles, as the all-Dubai record carries no single prices." : "") : "Fewer than five sales were priced here, so no typical price is shown.") + "</div>";
   return h;

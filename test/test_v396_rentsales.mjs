@@ -95,7 +95,7 @@ const S1 = stores(true);
 {
   const h = await page(S1, "kind=district&id=dmc&range=week");
   const t = hl(h);
-  ok(/^Dubai Maritime City: \d+ rentals filed with Ejari and \d+ sales registered with the Land Department between 1 Oct and 7 Oct 2026\.$/.test(t), "one sentence with both numbers", t);
+  ok(/^Dubai Maritime City: \d+ rentals filed with Ejari and \d+ sales worth AED \d+M registered with the Land Department between 1 Oct and 7 Oct 2026\.$/.test(t), "one sentence with both numbers", t);
   ok(/id=ejview/.test(h) && /data-v=rentals/.test(h) && /data-v=sales/.test(h) && /data-v=both class=on|class=on data-v=both/.test(h), "the Rentals | Sales | Both switch is there and Both is the default");
   ok(/Rentals: (Up|Down|Level|none)/.test(text(h)) && /Sales: (Up|Down|Level|none|no comparison)/.test(text(h)), "a comparison line for each side");
   ok(/<i class=cn><\/i>/.test(h) && /<i class=cs><\/i>/.test(h) && /fill="#C5A56A"/.test(h) && /fill="#6FA8DC"/.test(h), "two-colour daily chart and legend");
@@ -109,6 +109,11 @@ const S1 = stores(true);
   ok(S.n === 6 * 4 + 6 * 1 + 0 || S.n > 0, "sales counted", S.n);
   ok(S.count.off === 18 && S.count.rdy === 6 && S.n === 24, "land and mortgage are not in the 24 sales (18 off-plan, 6 ready)", S.n + " " + S.count.off + "/" + S.count.rdy);
   ok(S.count.price.median != null && S.count.psm.median != null, "median price and price per sq m where five or more were priced");
+  // v440 - total value follows the same window as the count
+  ok(S.count.value && S.count.value.sum > 0 && S.count.stages.every((x) => x.value && x.value.sum > 0) && Math.abs(S.count.stages.reduce((a, x) => a + x.value.sum, 0) - S.count.value.sum) < 1, "v440: total value, split off-plan / ready, adds up", JSON.stringify(S.count.value));
+  ok(/TOTAL VALUE/.test(h) && /id=ejsvalue/.test(h), "v440: the Total value column and its note");
+  const Sw = await salesAnswer(async (k) => (S1.has(k) ? JSON.parse(S1.get(k)) : null), ejariQuery(new URLSearchParams("kind=district&id=dmc&range=day")), await ejariAnswer(mkEnv(S1), ejariQuery(new URLSearchParams("kind=district&id=dmc&range=day"))), {});
+  ok(Sw.count.value && Sw.count.value.sum < S.count.value.sum, "v440: a shorter window has a smaller total value (it moves with the dates)", Sw.count.value && Sw.count.value.sum + " < " + S.count.value.sum);
   const hs = await page(S1, "kind=district&id=dmc&range=week&view=sales");
   ok(!/rentals filed with Ejari/.test(hs) && /sales registered with the Land Department/.test(hs) && !/class=hd>BY PROPERTY TYPE/.test(hs), "Sales view: no rentals content", hl(hs));
   const hr = await page(S1, "kind=district&id=dmc&range=week&view=rentals");
@@ -117,7 +122,7 @@ const S1 = stores(true);
   const hc = await page(S1, "kind=district&id=dmc&range=custom&from=2026-09-25&to=2026-10-07");
   ok(/rentals filed with Ejari and \d+ sales/.test(hl(hc)) && /between 25 Sep and 7 Oct 2026/.test(hl(hc)), "custom span keeps working", hl(hc));
   const hd = await page(S1, "kind=district&id=dmc&range=day");
-  ok(/sales registered with the Land Department on 7 Oct 2026/.test(hl(hd)) && /counted on 6 Oct 2026 \(the latest registered day\)/.test(text(hd)), "Day: the sales slide to their latest day and say so", hl(hd) + " | " + (text(hd).match(/Sales are registered[^.]*\./) || [])[0]);
+  ok(/sales worth AED \d+M registered with the Land Department on 7 Oct 2026/.test(hl(hd)) && /counted on 6 Oct 2026 \(the latest registered day\)/.test(text(hd)), "Day: the sales slide to their latest day and say so", hl(hd) + " | " + (text(hd).match(/Sales are registered[^.]*\./) || [])[0]);
   const hs0 = await page(S1, "kind=district&id=dmc&range=week&basis=start");
   ok(/rentals signed through Ejari, by contract start date,/.test(hl(hs0)) || /rentals/.test(hl(hs0)), "start basis still words the rentals side", hl(hs0));
 }
@@ -127,7 +132,7 @@ console.log("C. developer search (a brand of two companies) and a building with 
 {
   const h = await page(S1, "q=acme&range=week");
   const t = hl(h);
-  ok(/^Acme \(all 2 registered companies\): \d+ rentals filed with Ejari and \d+ sales registered/.test(t), "the brand word alone answers for every company together", t);
+  ok(/^Acme \(all 2 registered companies\): \d+ rentals filed with Ejari and \d+ sales worth AED \d+M registered/.test(t), "the brand word alone answers for every company together", t);
   ok(/id=ejweeks/.test(h) && /id=ejareas/.test(h) && /BY BUILDING/.test(h), "per week, by area and the building list");
   ok(/<div class=rc2><div>\d+<small>rentals<\/small><\/div><div>\d+<small>sales<\/small><\/div>/.test(h), "the project ranking shows both columns, rentals and sales");
   const one = await page(S1, "kind=developer&id=55&range=week");
@@ -151,7 +156,7 @@ console.log("D. no false zero");
   const rows = []; for (let i = 0; i < 7; i++) rows.push(srow(addD(SALES_ASOF, -i), 5, { beds: null }));
   S2.set("img_sales_filed_dmc", JSON.stringify({ as_of: SALES_ASOF, basis: "registered", source: "stub", district: "dmc", rows }));
   const hb = await page(S2, "kind=district&id=dmc&range=week&view=sales&beds=1");
-  ok(/sales registered/.test(hl(hb)) && !/match this filter/.test(hb) && /data-off=1/.test(hb) && /Bedrooms are recorded for only 0% of these sales/.test(text(hb)), "no bedroom on any sale: chips off, remembered chip ignored, count stays 35", hl(hb));
+  ok(/sales (worth AED \d+M )?registered/.test(hl(hb)) && !/match this filter/.test(hb) && /data-off=1/.test(hb) && /Bedrooms are recorded for only 0% of these sales/.test(text(hb)), "no bedroom on any sale: chips off, remembered chip ignored, count stays 35", hl(hb));
   const he = await page(S1, "kind=district&id=dmc&range=custom&from=2025-01-01&to=2025-01-07");
   ok(true, "an empty window renders");
 }

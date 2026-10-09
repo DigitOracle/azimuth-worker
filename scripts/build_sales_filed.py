@@ -53,7 +53,8 @@ REPO = os.path.abspath(os.path.join(HERE, ".."))
 FIELDS = ["date", "district", "area", "dld_project", "project_name_ar", "dld_project_number", "key", "developer_number", "developer",
           "attribution", "kind", "stage", "beds", "sub_type", "usage", "sales", "price_n", "price_median", "price_q1", "price_q3",
           "psm_median", "psm_q1", "psm_q3", "prices", "psm", "master_project"]
-AREA_FIELDS = ["date", "area", "district", "kind", "stage", "beds", "sub_type", "sales", "price_n", "price_median", "psm_median"]
+AREA_FIELDS = ["date", "area", "district", "kind", "stage", "beds", "sub_type", "sales", "price_n", "price_median", "psm_median", "price_sum"]
+VALUE_CAP = 500_000_000   # v440: a single deal above this (whole towers, land banks: up to AED 3.1B) is left out of the total value
 SALE_PROCS = {"Sale": "ready", "Sell - Pre registration": "offplan"}
 LAND_PROCS = {"Sale", "Delayed Sell", "Sell Development", "Adding Land By Sell", "Sell - Pre registration", "Sale On Payment Plan"}
 MORT_SKIP = re.compile(r"modif|transfer", re.I)
@@ -414,7 +415,8 @@ def main():
     per_area = []
     for k, v in sorted(pa.items(), key=srt):
         pr, pm = sorted(pa_p[k]), sorted(pa_m[k])
-        per_area.append(list(k) + [v, len(pr), round(pct(pr, .5)) if len(pr) >= MIN_N else None, round(pct(pm, .5)) if len(pm) >= MIN_N else None])
+        per_area.append(list(k) + [v, len(pr), round(pct(pr, .5)) if len(pr) >= MIN_N else None, round(pct(pm, .5)) if len(pm) >= MIN_N else None,
+                                   sum(x for x in pr if x <= VALUE_CAP) if pr else None])   # v440: the total value of the priced sales
     per_dev = [list(k) + [v] for k, v in sorted(pdv.items(), key=srt)]
     pd_fields = ["date", "area", "district", "developer_number", "developer", "stage", "sales"]
     # the projects that have a registered sale, plot sale or mortgage in the window: the page's search offers them even when Ejari knows nothing
