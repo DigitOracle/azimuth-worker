@@ -52,10 +52,13 @@ ok(/No building in Dubai Marina/.test(t), "an empty result uses the Brief's own 
 // 5. sending the form: refuses politely until the Flow is set up, then sends it
 sent.length = 0; posts.length = 0;
 await sendBriefFlow(env, "971500000000", deps);
-ok(posts.length === 0 && /not set up yet/.test(sent[0].t), "before setup it says so and sends nothing");
-store.set(FLOW_KEY, "555"); sent.length = 0;
+ok(posts.length === 1 && posts[0].interactive.action.parameters.mode === "draft" && posts[0].interactive.action.parameters.flow_id === "1390776043225593", "v433: before publication the held draft opens in test mode");
+store.set("wa_flow_brief_draft", "777"); posts.length = 0;
 await sendBriefFlow(env, "971500000000", deps);
-ok(posts.length === 1 && posts[0].interactive.action.parameters.flow_id === "555" && /^brief:/.test(posts[0].interactive.action.parameters.flow_token), "after setup the form is sent with the stored id");
+ok(posts[0].interactive.action.parameters.flow_id === "777" && posts[0].interactive.action.parameters.mode === "draft", "v433: a stored draft id is preferred");
+store.set(FLOW_KEY, "555"); sent.length = 0; posts.length = 0;
+await sendBriefFlow(env, "971500000000", deps);
+ok(posts.length === 1 && posts[0].interactive.action.parameters.flow_id === "555" && !posts[0].interactive.action.parameters.mode && /^brief:/.test(posts[0].interactive.action.parameters.flow_token), "after publication the form is sent with the stored id, not in test mode");
 
 // 6. a reply that is not ours is left alone
 ok((await flowReply(env, "x", { interactive: { nfm_reply: { response_json: JSON.stringify({ flow_token: "other:1" }) } } }, deps)) === false, "another form's answers are not taken");

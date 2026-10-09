@@ -11,7 +11,7 @@
 //   lab qr           a QR code that opens the desk with a message already typed                                  (feature 7)
 //   lab profile      the desk's WhatsApp business profile as WhatsApp holds it                                   (feature 8)
 // Everything goes to WA_DESK_OWNER from WA_DESK_PHONE_ID; nothing here can address anyone else.
-import { sendBriefFlow, flowReply, briefFlowJson, FLOW_KEY, FLOW_NAME } from "./wa_flows.js";
+import { sendBriefFlow, flowReply, briefFlowJson, FLOW_KEY, FLOW_NAME, FLOW_DRAFT_KEY } from "./wa_flows.js";
 
 export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\n" +
   "brief: the client brief as a form\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
@@ -138,6 +138,7 @@ export async function deskLabRoute(env, msg, text, deps) {
     if (ve.length) { await send("The form is saved as a draft (id " + id + ") but Meta found problems, so it is not published:\n- " + errList(ve) + "\nTell me and I will fix them."); return true; }
     const pub = await j_(G + "/" + id + "/publish", { method: "POST" });
     if (!pub || !pub.success) {
+      await env.MEETINGS.put(FLOW_DRAFT_KEY, id);   // v433: brief opens this draft in test mode until Meta publishes it
       const st = await j_(G + "/" + id + "?fields=status,validation_errors,health_status");
       await send("Meta did not publish the form (draft " + id + ")." + meta(pub) + (st && st.validation_errors && st.validation_errors.length ? "\nProblems:\n- " + errList(st.validation_errors) : "") + (st && st.health_status ? "\nHealth: " + JSON.stringify(st.health_status).slice(0, 300) : "") + (st && st.status ? "\nStatus: " + st.status : ""));
       return true;

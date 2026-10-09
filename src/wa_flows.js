@@ -8,6 +8,8 @@
 import { briefSearch, BRIEF_CRITERIA } from "./brief.js";
 
 export const FLOW_KEY = "wa_flow_brief_id";
+export const FLOW_DRAFT_KEY = "wa_flow_brief_draft";
+const BRIEF_DRAFT_ID = "1390776043225593";   // najma_client_brief_v1, created 9 Oct, held in draft by Meta
 export const FLOW_NAME = "najma_client_brief_v1";
 // The areas offered on the form: the app's own districts (KV img_districts_geo, 41 on 9 Oct 2026). A CheckboxGroup takes at most 20 options,
 // so the list is split in two groups of up to 20. Slugs are what briefSearch reads (areas=slug,slug).
@@ -54,12 +56,14 @@ export function briefFlowJson() {
 }
 
 // The interactive message that opens the form (inside the 24-hour window, which is always open when she has just typed "brief").
-export function flowMessage(to, flowId, token) {
-  return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "flow",
+export function flowMessage(to, flowId, token, draft) {
+  const m = { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "flow",
     header: { type: "text", text: "Client brief" },
     body: { text: "Fill in the client's brief and I'll bring back the homes that match, from the registers." },
     footer: { text: "Najma" },
     action: { name: "flow", parameters: { flow_message_version: "3", flow_token: token, flow_id: String(flowId), flow_cta: "Start the brief", flow_action: "navigate", flow_action_payload: { screen: "HOME" } } } } };
+  if (draft) m.interactive.action.parameters.mode = "draft";   // v433: an unpublished form opens in test mode on the business's own numbers
+  return m;
 }
 
 // The form's answers -> the Brief's own query string. Anything outside the Brief's vocabulary is dropped rather than guessed.
@@ -114,10 +118,13 @@ export async function flowReply(env, from, msg, deps) {
 
 // Sends the form; returns false when no Flow id is stored yet (the owner has not run /wa_flow_setup?apply=1).
 export async function sendBriefFlow(env, to, deps) {
-  const id = await env.MEETINGS.get(FLOW_KEY);
+  // v433 (9 Oct): Meta's "Blocked by Integrity" keeps the form in draft while support reviews it. Until it is published, the desk opens
+  // the draft in test mode. Desk only: sendBriefFlow is called from the desk lab, never for Naj.
+  let id = await env.MEETINGS.get(FLOW_KEY), draft = false;
+  if (!id) { id = (await env.MEETINGS.get(FLOW_DRAFT_KEY)) || BRIEF_DRAFT_ID; draft = true; }
   if (!id) { await deps.send(env, to, "The brief form is not set up yet. Send: lab setup brief <WhatsApp Business Account id>, then the same with go at the end."); return true; }
   const token = "brief:" + Date.now().toString(36);
-  const r = await deps.post(env, flowMessage(to, id, token), "flow");
+  const r = await deps.post(env, flowMessage(to, id, token, draft), "flow");
   if (r && r.error) await deps.send(env, to, "WhatsApp did not open the form (" + String(r.error.message || "error").slice(0, 120) + "). Send brief again in a minute.");
   return true;
 }
