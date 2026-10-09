@@ -586,13 +586,15 @@ var S=window.__SU||{},KQ="key="+encodeURIComponent(S.key||""),LS="najma_supply_p
     var s=document.createElement("script");s.src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";s.onload=function(){ok(window.maplibregl)};s.onerror=no;document.head.appendChild(s)});return lib}
   var io=new IntersectionObserver(function(es){es.forEach(function(e){if(!e.isIntersecting)return;io.unobserve(e.target);var el=e.target,ll=[Number(el.getAttribute("data-lon")),Number(el.getAttribute("data-lat"))];
     load().then(function(ml){var m=new ml.Map({container:el.querySelector(".smc"),style:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",center:ll,zoom:14,attributionControl:{compact:true},cooperativeGestures:true});
-      var pin=document.createElement("div");pin.className="smpin";new ml.Marker({element:pin}).setLngLat(ll).addTo(m);
+      // v447 (Kendall: "i do not need the dot if the building is a different color"): the ring only when the footprint cannot be drawn
+      var pinned=false,pinIt=function(){if(pinned)return;pinned=true;var pin=document.createElement("div");pin.className="smpin";new ml.Marker({element:pin}).setLngLat(ll).addTo(m)};
+      m.on("error",pinIt);
       m.on("load",function(){var a=el.querySelector(".maplibregl-ctrl-attrib");if(a)a.classList.remove("maplibregl-compact-show");
         // v446 (Kendall: "but in a block format as well"): the digital footprint - every building raised to its height, the advertised one in gold
         try{var src=Object.keys(m.getStyle().sources).find(function(k){return m.getStyle().sources[k].type==="vector"});
           if(src){var h=["coalesce",["get","render_height"],["get","height"],12],near=["<=",["distance",{type:"Point",coordinates:ll}],30];
             m.addLayer({id:"dfp",type:"fill-extrusion",source:src,"source-layer":"building",minzoom:13,paint:{"fill-extrusion-color":["case",near,"#C5A56A","#3d5a53"],"fill-extrusion-height":h,"fill-extrusion-base":["coalesce",["get","render_min_height"],0],"fill-extrusion-opacity":0.9}});
-            m.easeTo({pitch:55,bearing:-20,zoom:15,duration:900})}}catch(x){}})}).catch(function(){})})},{rootMargin:"200px"});
+            m.easeTo({pitch:55,bearing:-20,zoom:15,duration:900})}else pinIt()}catch(x){pinIt()}})}).catch(function(){})})},{rootMargin:"200px"});
   for(var i=0;i<maps.length;i++)io.observe(maps[i])})();
 var SAY={building:"Fetching this building: up to about 5 minutes.",district:"Fetching the whole district: this takes a while (about 35 minutes). We’ll keep it here.",
   queued:"Waiting for the crawl that is already running; this one is next. We’ll keep it here.",
