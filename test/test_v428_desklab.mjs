@@ -53,6 +53,17 @@ ok(images[0] && images[0].link === "https://scontent/qr.png" && /wa\.me\/message
 ok(fetches.some((f) => /\/1370146096179819\/message_qrdls\?prefilled_message=Send%20me%20the%20digital%20footprint%20demo&generate_qr_image=PNG/.test(f.u) && f.method === "POST"), "the QR is made for the desk number with the message pre-typed");
 await say("lab profile");
 ok(/About: DigitAlchemy desk/.test(texts[0]) && /Websites: https:\/\/digitalabbot\.io/.test(texts[0]), "lab profile reads the business profile");
+// v430 - form setup from the desk: dry run, then go
+await say("lab setup brief 1588773749592854");
+ok(/Dry run/.test(texts[0]) && !store.has("wa_flow_brief_id"), "setup without go is a dry run and creates nothing");
+const f0 = globalThis.fetch; let flowPost = null;
+globalThis.fetch = async (u, init) => { if (/\/1588773749592854\/flows$/.test(String(u))) { flowPost = init.body; return new Response(JSON.stringify({ id: "777", validation_errors: [] })); } return f0(u, init); };
+await say("lab setup brief 1588773749592854 go");
+ok(store.get("wa_flow_brief_id") === "777" && flowPost && flowPost.get("publish") === "true" && /Form created and stored \(id 777\)/.test(texts[0]), "setup with go creates, publishes and stores the form", texts[0]);
+globalThis.fetch = async (u, init) => /\/flows$/.test(String(u)) ? new Response(JSON.stringify({ error: { message: "Invalid parameter", error_data: { details: "screen WHERE" } } }), { status: 400 }) : f0(u, init);
+store.delete("wa_flow_brief_id"); await say("lab setup brief 1588773749592854 go");
+ok(!store.has("wa_flow_brief_id") && /Meta said: Invalid parameter/.test(texts[0]) && /screen WHERE/.test(texts[0]), "a refusal is reported with Meta's details and nothing is stored", texts[0]);
+globalThis.fetch = f0;
 await say("lab nonsense");
 ok(/Unknown lab command/.test(texts[0]), "an unknown lab command shows the menu");
 

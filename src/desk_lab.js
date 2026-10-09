@@ -11,7 +11,7 @@
 //   lab qr           a QR code that opens the desk with a message already typed                                  (feature 7)
 //   lab profile      the desk's WhatsApp business profile as WhatsApp holds it                                   (feature 8)
 // Everything goes to WA_DESK_OWNER from WA_DESK_PHONE_ID; nothing here can address anyone else.
-import { sendBriefFlow, flowReply } from "./wa_flows.js";
+import { sendBriefFlow, flowReply, briefFlowJson, FLOW_KEY, FLOW_NAME } from "./wa_flows.js";
 
 export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\n" +
   "brief: the client brief as a form\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
@@ -105,6 +105,22 @@ export async function deskLabRoute(env, msg, text, deps) {
     if (!j || j.error || !j.qr_image_url) { await send("The QR code was refused." + meta(j)); return true; }
     await env.MEETINGS.put("desk_lab_qr", JSON.stringify({ code: j.code, link: j.deep_link_url, at: new Date().toISOString() }), { expirationTtl: 90 * 86400 });
     await deps.image(env, j.qr_image_url, "Desk lab: scan this and WhatsApp opens this chat with \"Send me the digital footprint demo\" already typed. Link: " + j.deep_link_url);
+    return true;
+  }
+  // v430 - register the brief form with Meta from the desk (the owner is the authority here; no key in a link). "lab setup brief <waba>" is a
+  // dry run that shows what will be created; "lab setup brief <waba> go" creates and publishes it and stores its id.
+  if (/^setup brief\b/.test(sub)) {
+    const m = sub.match(/^setup brief\s+(\d{8,20})(\s+go)?$/);
+    if (!m) { await send("Send: lab setup brief <WhatsApp Business Account id>  (add go at the end to create it)."); return true; }
+    const json = briefFlowJson();
+    if (!m[2]) { await send("Dry run. I will create the form \"" + FLOW_NAME + "\" (2 screens, " + json.screens[0].layout.children.length + " + " + json.screens[1].layout.children.length + " parts) on account " + m[1] + " and publish it. Nothing has been created. Send: lab setup brief " + m[1] + " go"); return true; }
+    const fd = new FormData();
+    fd.append("name", FLOW_NAME); fd.append("categories", JSON.stringify(["LEAD_GENERATION"])); fd.append("flow_json", JSON.stringify(json)); fd.append("publish", "true");
+    let j = null; try { j = await (await fetch(deps.graph + "/" + m[1] + "/flows", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN }, body: fd })).json(); } catch (e) {}
+    if (!j || !j.id) { await send("Meta did not create the form." + meta(j) + (j && j.error && j.error.error_data ? " Details: " + JSON.stringify(j.error.error_data).slice(0, 400) : "")); return true; }
+    await env.MEETINGS.put(FLOW_KEY, String(j.id));
+    const ve = (j.validation_errors || []).map((v) => v.message || JSON.stringify(v)).slice(0, 5);
+    await send("Form created and stored (id " + j.id + ")." + (ve.length ? " Meta noted: " + ve.join("; ") : " Meta reported no problems.") + " Send brief to try it.");
     return true;
   }
   if (sub === "profile") {
