@@ -114,6 +114,18 @@ export function rentFigures(rows, w) {
 
 // ------------------------------------------------------------------------------------------------ loading
 async function readOr(env, name) { try { return await kvJson(env, name); } catch (e) { return null; } }
+// v451 - the register-bound footprint as a map ring, for other pages (the advert card's map). layer = img_brief_fp_<district> (read once by the
+// caller); bk = the footprint index carried in the register key "<district>:<bk>". Returns { c: [[lon,lat]...closed], h, ll: [lat,lon] } or null.
+export function footprintRing(layer, bk) {
+  const fp = layer && Array.isArray(layer.b) && Array.isArray(layer.ll) ? layer.b.find((x) => x[0] === bk) : null;
+  if (!fp) return null;
+  let sx = 0, sy = 0, k = 0; const f = fp[2], r = [];
+  for (let i = 0; i + 1 < f.length; i += 2) { sx += f[i]; sy += f[i + 1]; k++; const q = llOfXy(layer, f[i], f[i + 1]); if (q) r.push([Math.round(q[1] * 1e6) / 1e6, Math.round(q[0] * 1e6) / 1e6]); }
+  if (r.length < 3) return null;
+  if (r[0][0] !== r[r.length - 1][0] || r[0][1] !== r[r.length - 1][1]) r.push(r[0]);
+  return { c: r, h: Number(fp[1]) || 12, ll: k ? llOfXy(layer, sx / k, sy / k) : null };
+}
+export async function footprintLayer(env, slug) { return readOr(env, "brief_fp_" + slug); }
 export async function loadBuilding(env, p, opts) {
   const b = p.bld || { project: "", name: "", bk: null };
   if (!b.project && !b.name) return { status: 400, body: { ok: false, reason: "project= (the Land Department project number) or name= is required" } };

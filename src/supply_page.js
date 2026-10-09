@@ -29,7 +29,8 @@
 // while, we'll keep it here", remembers the request in this browser and picks the polling back up when the page is reopened.
 // The button is never dead: every state ends on a sentence, and the failures offer "Request again".
 import { BRIEF_DISTRICTS } from "./brief_page.js";
-import { advertisedDoc, advertisedFor, advertisedHtml, permitLink, ADV_CSS, IC_PERMIT } from "./advertised.js";   // v444 ADVERTISED NOW (Property Finder): flats, adverts, gone - beside developer availability, never added
+import { advertisedDoc, advertisedFor, advertisedHtml, permitLink, ADV_CSS, IC_PERMIT } from "./advertised.js";
+import { footprintRing, footprintLayer } from "./broker_building.js";   // v451: the gold building is our register-bound footprint   // v444 ADVERTISED NOW (Property Finder): flats, adverts, gone - beside developer availability, never added
 
 export const SUPPLY_LABEL = "Advertised supply \u00b7 live rental adverts from listing sites, not vacancy";
 export const SUPPLY_KV = { file: (d) => "img_pf_supply_" + d, prefix: "img_pf_supply_", req: (id) => "pf_req_" + id, take: (id) => "pf_take_" + id, done: (id) => "pf_done_" + id, queue: "pf_queue" };
@@ -368,7 +369,7 @@ export function advertsHtml(b) {
   // v446 (Kendall 9 Oct: "where is the map?"): one real street map per building, where it sits in the district
   const pos = {}; let best = null;
   for (const k of bands) for (const a of ads[k]) if (a.lat != null && a.lon != null) { const p = a.lat.toFixed(4) + "," + a.lon.toFixed(4); pos[p] = (pos[p] || 0) + 1; if (!best || pos[p] > pos[best]) best = p; }
-  const map = best ? streetMap(Number(best.split(",")[0]), Number(best.split(",")[1]), b.name) : "";
+  const map = b.fp && b.fp.ll ? streetMap(b.fp.ll[0], b.fp.ll[1], b.name, b.fp) : best ? streetMap(Number(best.split(",")[0]), Number(best.split(",")[1]), b.name) : "";
   return '<div class=adw>' + map + bands.map((k) => '<details class=adg><summary>' + IC_CHEV + "<span>" + esc(BAND_SAY[k] || k) + "</span><b>" + fmt(live(k)) + "</b>"
     + (live(k) > ads[k].length ? "<small>cheapest " + ads[k].length + " shown</small>" : "") + "</summary>"
     + ads[k].map((a) => advertCard(a, b.frame, ads[k], { building: b.name, band: BAND_SAY[k] || k })).join("") + "</details>").join("")
@@ -377,10 +378,10 @@ export function advertsHtml(b) {
 // The building's street map: the same free vector map as the developers map (CARTO dark matter, MapLibre 4.7.1), drawn by SUPPLY_JS
 // only when the card scrolls into view, so a 40-building page loads no map until one is looked at. (CARTO's raster tiles now
 // answer "API KEY REQUIRED", 9 Oct 2026, so they are not used.) The Google Maps link works with or without the map.
-export function streetMap(lat, lon, name) {
+export function streetMap(lat, lon, name, fp) {
   if (!(Math.abs(lat) <= 85 && Math.abs(lon) <= 180)) return "";
   const g = "https://www.google.com/maps/search/?api=1&query=" + lat.toFixed(6) + "," + lon.toFixed(6);
-  return '<div class=smap data-lat="' + lat.toFixed(6) + '" data-lon="' + lon.toFixed(6) + '" role=img aria-label="' + esc((name || "The building") + " on the map") + '"><div class=smc></div>'
+  return '<div class=smap data-lat="' + lat.toFixed(6) + '" data-lon="' + lon.toFixed(6) + '"' + (fp && fp.c ? " data-fp='" + esc(JSON.stringify({ c: fp.c, h: fp.h })) + "'" : "") + ' role=img aria-label="' + esc((name || "The building") + " on the map") + '"><div class=smc></div>'
     + '<a class=smg href="' + g + '" target=_blank rel="noopener noreferrer">' + IC_PIN + "Open in Google Maps</a></div>";
 }
 function buildingCard(b, key) {
@@ -462,6 +463,9 @@ export async function supplyRoutes(request, env, url, h) {
     { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   if (/^[a-z0-9]{2,40}$/.test(d)) {
     const D = await withUnbound(env, await loadDistrict(env, d, names)), src = sourceLine(D);
+    // v451 (Kendall: "nothing is gold, no building highlighted?"): Property Finder's point can sit on the road (Address Opera Tower 1 lands
+    // on Dubai Mall's ring road), so the gold is OUR footprint for the building's register key "<district>:<index>", never a guess from the point
+    if (D) { try { const lay = await footprintLayer(env, d), rx = new RegExp("^" + d + ":(\\d+)$"); if (lay) for (const x of D.buildings) { const m = rx.exec(String(x.key || "")); if (m) x.fp = footprintRing(lay, Number(m[1])); } } catch (e) {} }
     if (!D) return page({ none: "No adverts fetched for " + (nm[d] || d) + " yet.", fetchDistrict: nm[d] ? d : "" });
     if (b) { const one = D.buildings.find((x) => x.id === b || x.key === b); return one ? page({ view: "building", b: one, fetched: one.crawled, src }) : page({ none: "No adverts for that building in the last crawl.", fetched: D.crawled, src }); }
     return page({ view: "district", d: D, fetched: D.crawled, src });
@@ -596,7 +600,10 @@ var S=window.__SU||{},KQ="key="+encodeURIComponent(S.key||""),LS="najma_supply_p
             m.addLayer({id:"dfp",type:"fill-extrusion",source:src,"source-layer":"building",minzoom:13,paint:{"fill-extrusion-color":"#3d5a53","fill-extrusion-height":h,"fill-extrusion-base":["coalesce",["get","render_min_height"],0],"fill-extrusion-opacity":0.9}});
             // v449 (Kendall: "they are all green?"): the 'distance' expression lit scraps at the tile edges, not the building. Once drawn,
             // take the footprint(s) under the advert's point (else the nearest within ~25 px) and raise THAT building in gold on its own layer.
-            m.once("idle",function(){try{var p=m.project(ll),hit=m.queryRenderedFeatures([[p.x-2,p.y-2],[p.x+2,p.y+2]],{layers:["dfp"]});
+            var ofp=null;try{ofp=JSON.parse(el.getAttribute("data-fp")||"null")}catch(x){}
+            if(ofp&&ofp.c){m.addSource("gold",{type:"geojson",data:{type:"Feature",geometry:{type:"Polygon",coordinates:[ofp.c]},properties:{}}});   // v451: our own footprint
+              m.addLayer({id:"gold",type:"fill-extrusion",source:"gold",paint:{"fill-extrusion-color":"#C5A56A","fill-extrusion-height":(Number(ofp.h)||12)+1,"fill-extrusion-base":0,"fill-extrusion-opacity":1}})}
+            else m.once("idle",function(){try{var p=m.project(ll),hit=m.queryRenderedFeatures([[p.x-2,p.y-2],[p.x+2,p.y+2]],{layers:["dfp"]});
               // gold ONLY for one plain footprint exactly under the point; a new tower missing from the open map data, or a footprint
               // stored as many pieces, gets the ring instead - never a neighbour painted as if it were the building
               if(hit.length!==1||hit[0].geometry.type!=="Polygon")return pinIt();
