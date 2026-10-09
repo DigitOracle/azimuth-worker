@@ -42,6 +42,7 @@
 //   - Arabian Ranches is offered through its Land Department areas (EXTRA_AREAS in src/brief.js), not as an app district
 //   - the search and each PDF retry ONCE on a timeout or a dropped connection, saying "Still working..." while they do
 import { BRIEF_CRITERIA, EXTRA_AREAS } from "./brief.js";
+import { ADV_CSS } from "./advertised.js";   // v444 - the owner-only "Advertised now (Property Finder)" accordion on a row
 import { labelledName } from "./community_labels.js";   // v307 - community name next to the Land Department name
 import { AMENITY_CARDS_CSS, AMENITY_CARDS_JS } from "./amenity_cards.js";   // v290 AMENITY CARDS - the cards above the homes list
 // The app's districts: slug, name, corridor. Snapshot of img_districts_geo (naj-market-pulse data/board/districts_geo.json,
@@ -267,7 +268,7 @@ export function briefPageHtml(o) {
   const boot = { key, shareKey: o.shareKey || "", rk, q: o.q, districts: o.districts.map((d) => ({ s: d.s, n: d.n })), wants: BRIEF_WANTS };
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>The brief — Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413"><meta name=robots content=noindex>' + (o.fonts || "")
-    + "<style>" + BRIEF_CSS + BRIEF_CSS2 + AMENITY_CARDS_CSS + (o.navCss || "") + "</style></head><body>"
+    + "<style>" + BRIEF_CSS + BRIEF_CSS2 + AMENITY_CARDS_CSS + ADV_CSS + (o.navCss || "") + "</style></head><body>"
     + '<a class=bk href="/start?key=' + esc(encodeURIComponent(key)) + (rk ? "&amp;rk=" + esc(encodeURIComponent(rk)) : "") + '">‹ START</a>'
     + '<div class=h>The <em>brief</em></div>'
     + '<div class=s id=bsub>One question at a time. You get the homes that fit, ranked by what homes there actually let or sell for, then choose what to send.</div>'
@@ -424,7 +425,7 @@ function rowHtml(r,i,st){var on=!!SEL[r.key],dn=r.district_name||DN[r.district]|
   var g=gaps(r),why=(r.why?r.why:"")+(g.length?(r.why?" · ":"")+g.join(" · "):"");
   return "<div class=\"row"+(on?"":" off")+"\" id=row"+i+"><label class=pk><input type=checkbox data-ix="+i+(on?" checked":"")+" aria-label=\"choose "+esc(r.name)+"\"></label><div class=rb>"
     +"<div class=r1><span class=rk>"+esc(r.rank!=null?r.rank:i+1)+"</span><span class=nm>"+esc(r.name)+"</span>"+(VERD[r.verdict]?"<span class=\"vd v-"+esc(r.verdict)+"\">"+esc(VERD[r.verdict])+"</span>":"")+"</div>"
-    +"<div class=r2>"+esc(dn+al)+"</div>"+money(r,st)+facts(r)+crits(r,st)+avail(r,st)
+    +"<div class=r2>"+esc(dn+al)+"</div>"+money(r,st)+facts(r)+crits(r,st)+avail(r,st)+(typeof r.advertised_html==="string"?r.advertised_html:"")
     +((why||link)?"<div class=r5>"+esc(why)+link+"</div>":"")+"</div></div>"}
 // v282: the comparison block - one column per area (stacked on a phone), a cell only where a source answers it, with its source
 function cell(c){if(!c||(c.v!==true&&c.v!==false))return "";return mark(c.v)+" "+esc(c.say||"")+(c.src?"<small>"+esc(c.src)+"</small>":"")}

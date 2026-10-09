@@ -29,6 +29,7 @@
 // while, we'll keep it here", remembers the request in this browser and picks the polling back up when the page is reopened.
 // The button is never dead: every state ends on a sentence, and the failures offer "Request again".
 import { BRIEF_DISTRICTS } from "./brief_page.js";
+import { advertisedDoc, advertisedFor, advertisedHtml, permitLink, ADV_CSS, IC_PERMIT } from "./advertised.js";   // v444 ADVERTISED NOW (Property Finder): flats, adverts, gone - beside developer availability, never added
 
 export const SUPPLY_LABEL = "Advertised supply \u00b7 live rental adverts from listing sites, not vacancy";
 export const SUPPLY_KV = { file: (d) => "img_pf_supply_" + d, prefix: "img_pf_supply_", req: (id) => "pf_req_" + id, take: (id) => "pf_take_" + id, done: (id) => "pf_done_" + id, queue: "pf_queue" };
@@ -98,7 +99,7 @@ export function supplyDoc(doc) {
   if (!doc || !Array.isArray(doc.rows)) return null;
   return { asOf: str(doc.as_of), measure: str(doc.measure), rows: doc.rows.map(supplyRow).filter(Boolean),
     coverage: supplyCoverage(doc.coverage), homeTypes: supplyHomeTypes(doc.home_types),
-    sourceSay: str(doc.source_say), sites: num(doc.sites) > 0 ? num(doc.sites) : 0, srcs: supplySources(doc.sources), adverts: supplyAdverts(doc.adverts) };
+    sourceSay: str(doc.source_say), sites: num(doc.sites) > 0 ? num(doc.sites) : 0, srcs: supplySources(doc.sources), adverts: supplyAdverts(doc.adverts), advertised: advertisedDoc(doc) };
 }
 // v414 - the individual adverts behind each count (pf_listings.py `adverts`, 9 Oct 2026): {slug: {band: [{id, p, sq, t, f, d, lat, lon, u}]}}.
 // Additive: an old file has none and the card shows the counts table only. u is kept only when it is an https page on propertyfinder.ae.
@@ -115,7 +116,9 @@ export function supplyAdverts(a) {
         id: str(x.id), price: num(x.p), sqft: num(x.sq), type: str(x.t), furnished: str(x.f), listed: str(x.d),
         lat: num(x.lat), lon: num(x.lon), url: typeof x.u === "string" && PF_HOST.test(x.u) ? x.u : "",
         // v442 - the listing broker (Kendall 9 Oct 2026): only a well-formed UAE number becomes a button
-        agent: str(x.an).slice(0, 80), agency: str(x.ag).slice(0, 80), phone: UAE_TEL.test(str(x.ph)) ? str(x.ph) : "", wa: UAE_TEL.test(str(x.wa)) ? str(x.wa) : "" }));
+        agent: str(x.an).slice(0, 80), agency: str(x.ag).slice(0, 80), phone: UAE_TEL.test(str(x.ph)) ? str(x.ph) : "", wa: UAE_TEL.test(str(x.wa)) ? str(x.wa) : "",
+        // v444 - the advert's own DLD permit check (https dubailand.gov.ae only) and its distinct-flat number in the building
+        permit: permitLink(x.ck), flat: num(x.fl) }));
       if (xs.length) (out[slug] || (out[slug] = {}))[band] = xs;
     }
   }
@@ -249,7 +252,7 @@ async function loadDistrict(env, slug, names) {
   if (!doc) return null;
   const bs = supplyBuildings(doc.rows, slug, names);
   const frame = attachAdverts(bs, doc.adverts || {});
-  for (const b of bs) b.frame = frame;
+  for (const b of bs) { b.frame = frame; b.advertised = advertisedFor(doc.advertised, b.slugs, Object.fromEntries(b.bandRows.map((r) => [r.band, { live: r.live, days: r.days }]))); }
   const crawled = bs.reduce((m, b) => (b.crawled > m ? b.crawled : m), "") || doc.asOf;
   return { slug, asOf: doc.asOf, crawled, buildings: bs, coverage: doc.coverage, homeTypes: doc.homeTypes, sourceSay: doc.sourceSay, sites: doc.sites, srcs: doc.srcs };
 }
@@ -352,6 +355,7 @@ function advertCard(a, frame, all, ctx) {
   return '<div class=ad>' + miniMap(a, frame, all) + '<div class=adb><div class=apr>' + esc(a.price == null ? "—" : "AED " + fmt(a.price)) + "<small> a year</small></div>"
     + (facts.length ? '<div class=af>' + esc(facts.join(" · ")) + "</div>" : "") + where
     + (a.url ? '<a class=ao href="' + esc(a.url) + '" target=_blank rel="noopener noreferrer">' + IC_LINK + "Open on Property Finder</a>" : '<div class=af>No link stored for this advert yet</div>')
+    + (a.permit ? '<a class=ck href="' + esc(a.permit) + '" target=_blank rel="noopener noreferrer">' + IC_PERMIT + "Check permit</a>" : "")
     + brokerHtml(a, ctx) + "</div></div>";
 }
 export function advertsHtml(b) {
@@ -370,6 +374,7 @@ function buildingCard(b, key) {
     + '<div class=sb>' + esc([b.matched && b.project && b.project !== b.name ? b.project : "", b.district].filter(Boolean).join(" \u00b7 ")) + "</div>"
     + '<div class=hl><b>' + fmt(b.live) + "</b> " + (b.live === 1 ? "advert" : "adverts") + (siteN ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + "</div>"
     + sitesHtml(b)
+    + advertisedHtml(b.advertised)
     + (b.bandRows.length ? '<table><tr><th>HOME</th><th>LIVE ADVERTS</th><th>MEDIAN ASKING RENT</th><th>MEDIAN DAYS LISTED</th><th>DELISTED SINCE LAST CRAWL</th></tr>'
       + b.bandRows.map((r) => "<tr><td>" + esc(r.label) + "</td><td><b>" + fmt(r.live) + "</b></td><td>" + esc(aed(r.price)) + "</td><td>" + (r.days == null ? "\u2014" : fmt(r.days)) + "</td><td>" + fmt(r.delisted) + "</td></tr>").join("") + "</table>" : "")
     + advertsHtml(b)
@@ -395,7 +400,7 @@ export function supplyPageHtml(o) {
     + (o.fetchDistrict ? '<div class=card><button type=button class=rf data-district="' + esc(o.fetchDistrict) + '" data-slug="">Fetch the adverts for ' + esc(nm[o.fetchDistrict] || o.fetchDistrict) + ' now</button><div class=rs role=status></div></div>' : "");
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>Advertised supply \u2014 Najma</title><meta name=robots content=noindex><meta name=theme-color content="#0C1413">' + (o.fonts || "")
-    + "<style>" + SU_CSS + (o.navCss || "") + "</style></head><body>"
+    + "<style>" + SU_CSS + ADV_CSS + (o.navCss || "") + "</style></head><body>"
     + '<a class=bk href="/start?key=' + esc(encodeURIComponent(key)) + '">\u2039 START</a>'
     + '<div class=h>Advertised <em>supply</em></div><div class=lab id=sulabel>' + esc(SUPPLY_LABEL) + (o.fetched ? " \u00b7 fetched " + esc(dubaiTime(o.fetched)) : "") + "</div>"
     + (o.src ? '<div class=s id=susource>Source: ' + esc(o.src) + "</div>" : "")

@@ -24,6 +24,7 @@
 import { liveCtx, fillLive, LIVE_CRITS } from "./live_answers.js";   // v291 - gym, community pool and dog park asked of Google live where all else is not known
 
 import { applyNearRule, completionFromFacts, evidenceSay, windowOf, sizeSane, nearestPlace, NEAR_FACT_M } from "./brief_rules.js";   // v310 - the DAMAC Hills rules
+import { advertisedDoc, advertisedForKey, advertisedHtml } from "./advertised.js";   // v444 - "Advertised now (Property Finder)" beside developer availability, OWNER ONLY, never added to it
 import { foldArea, communitySlugOfArea } from "./community_labels.js";   // v314 - the DLD area -> district map the community labels use
 import { applyBrokerFacts, brokerFor, applyAnchorOverrides } from "./checklist_data.js";   // v291 CHECKLIST - Najjuko's on-site facts: below every register, above "not known"
 // v374 (Kendall, 7 Oct 2026): only what a register can say, or a picture can show, is offered. PULLED from every question, chip, filter and
@@ -988,6 +989,9 @@ export async function briefSearch(env, sp, opts) {
   await Promise.all([fillLive(LV, chosen.filter((c) => !c.areaFigure).map(liveItem), asked, { cluster: true }),
     null]);                                                                     // v374: the owner's advertised-supply (furnished) read is gone with the furnished question
   if (LV.used) notes.push("Gym, community pool and dog park: where no register, broker fact or amenity file answers, Google Maps was asked live when this list was made (Places, not kept): a gym, a community or residence pool, or a dog park inside the home's own sub-community (its mapped homes, plus 150 m) answers yes as a cluster fact; else one inside the community's boundary answers yes as a community fact, with how far it is. Google finding none is never a no: it stays not known.");
+  // v444 - OWNER ONLY: each shown building's advertised-now figure (img_pf_supply_<district>.advertised); a client key never reads it
+  const ADV = {};
+  if (owner) await Promise.all([...new Set(chosen.map((c) => c.d).filter(Boolean))].map(async (d) => { try { ADV[d] = advertisedDoc(await rd("pf_supply_" + d)); } catch (e) { ADV[d] = null; } }));
   const rankIn = {};
   const results = chosen.map((c) => {
     const g = q.compare ? c.d : "_"; rankIn[g] = (rankIn[g] || 0) + 1;
@@ -1010,6 +1014,10 @@ export async function briefSearch(env, sp, opts) {
       if (e.withheld) r.estimated_left_withheld = e.withheld; else { r.estimated_left = e; r.estimate_as_of = e.as_at; }
     }
     if (c.avail) r.developer_availability = c.avail;                           // v277 - the developer's own sheet; the ONLY availability the screen shows
+    if (owner && c.d && c.i != null && !c.syn) {                               // v444 - a SEPARATE signal, never summed with developer_availability
+      const adv = advertisedForKey(ADV[c.d], c.d + ":" + c.i);
+      if (adv) { r.advertised_now = { flats: adv.flats, adverts: adv.adverts, as_of: adv.asOf }; r.advertised_html = advertisedHtml(adv); }
+    }
     return r;
   });
   if (results.some((r) => r.developer_availability)) notes.push("developer_availability is what the developer's own availability sheet, posted to the broker group, lists for this building on the sheet's date (count of this bedroom type, and the unit rows where the sheet holds them). It is the developer's claim, not register data, and it is never combined with estimated_left.");
