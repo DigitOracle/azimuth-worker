@@ -592,9 +592,17 @@ var S=window.__SU||{},KQ="key="+encodeURIComponent(S.key||""),LS="najma_supply_p
       m.on("load",function(){var a=el.querySelector(".maplibregl-ctrl-attrib");if(a)a.classList.remove("maplibregl-compact-show");
         // v446 (Kendall: "but in a block format as well"): the digital footprint - every building raised to its height, the advertised one in gold
         try{var src=Object.keys(m.getStyle().sources).find(function(k){return m.getStyle().sources[k].type==="vector"});
-          if(src){var h=["coalesce",["get","render_height"],["get","height"],12],near=["<=",["distance",{type:"Point",coordinates:ll}],30];
-            m.addLayer({id:"dfp",type:"fill-extrusion",source:src,"source-layer":"building",minzoom:13,paint:{"fill-extrusion-color":["case",near,"#C5A56A","#3d5a53"],"fill-extrusion-height":h,"fill-extrusion-base":["coalesce",["get","render_min_height"],0],"fill-extrusion-opacity":0.9}});
-            m.easeTo({pitch:55,bearing:-20,zoom:15,duration:900})}else pinIt()}catch(x){pinIt()}})}).catch(function(){})})},{rootMargin:"200px"});
+          if(src){var h=["coalesce",["get","render_height"],["get","height"],12];
+            m.addLayer({id:"dfp",type:"fill-extrusion",source:src,"source-layer":"building",minzoom:13,paint:{"fill-extrusion-color":"#3d5a53","fill-extrusion-height":h,"fill-extrusion-base":["coalesce",["get","render_min_height"],0],"fill-extrusion-opacity":0.9}});
+            // v449 (Kendall: "they are all green?"): the 'distance' expression lit scraps at the tile edges, not the building. Once drawn,
+            // take the footprint(s) under the advert's point (else the nearest within ~25 px) and raise THAT building in gold on its own layer.
+            m.once("idle",function(){try{var p=m.project(ll),hit=m.queryRenderedFeatures([[p.x-2,p.y-2],[p.x+2,p.y+2]],{layers:["dfp"]});
+              // gold ONLY for one plain footprint exactly under the point; a new tower missing from the open map data, or a footprint
+              // stored as many pieces, gets the ring instead - never a neighbour painted as if it were the building
+              if(hit.length!==1||hit[0].geometry.type!=="Polygon")return pinIt();
+              m.addSource("gold",{type:"geojson",data:{type:"FeatureCollection",features:hit.map(function(f){return {type:"Feature",geometry:f.geometry,properties:f.properties}})}});
+              m.addLayer({id:"gold",type:"fill-extrusion",source:"gold",paint:{"fill-extrusion-color":"#C5A56A","fill-extrusion-height":["+",h,0.5],"fill-extrusion-base":["coalesce",["get","render_min_height"],0],"fill-extrusion-opacity":1}})}catch(x){pinIt()}});
+            m.jumpTo({zoom:15.3});m.once("idle",function(){m.easeTo({pitch:50,bearing:-20,duration:900})})}else pinIt()}catch(x){pinIt()}})}).catch(function(){})})},{rootMargin:"200px"});
   for(var i=0;i<maps.length;i++)io.observe(maps[i])})();
 var SAY={building:"Fetching this building: up to about 5 minutes.",district:"Fetching the whole district: this takes a while (about 35 minutes). We’ll keep it here.",
   queued:"Waiting for the crawl that is already running; this one is next. We’ll keep it here.",
