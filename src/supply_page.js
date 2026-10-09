@@ -103,6 +103,7 @@ export function supplyDoc(doc) {
 // v414 - the individual adverts behind each count (pf_listings.py `adverts`, 9 Oct 2026): {slug: {band: [{id, p, sq, t, f, d, lat, lon, u}]}}.
 // Additive: an old file has none and the card shows the counts table only. u is kept only when it is an https page on propertyfinder.ae.
 const PF_HOST = /^https:\/\/www\.propertyfinder\.ae\/[^\s"'<>]*$/;
+const UAE_TEL = /^\+971\d{8,9}$/;
 export function supplyAdverts(a) {
   const out = {};
   if (!a || typeof a !== "object") return out;
@@ -112,7 +113,9 @@ export function supplyAdverts(a) {
       const l = Array.isArray(bs[band]) ? bs[band] : [];
       const xs = l.filter((x) => x && typeof x === "object").map((x) => ({
         id: str(x.id), price: num(x.p), sqft: num(x.sq), type: str(x.t), furnished: str(x.f), listed: str(x.d),
-        lat: num(x.lat), lon: num(x.lon), url: typeof x.u === "string" && PF_HOST.test(x.u) ? x.u : "" }));
+        lat: num(x.lat), lon: num(x.lon), url: typeof x.u === "string" && PF_HOST.test(x.u) ? x.u : "",
+        // v442 - the listing broker (Kendall 9 Oct 2026): only a well-formed UAE number becomes a button
+        agent: str(x.an).slice(0, 80), agency: str(x.ag).slice(0, 80), phone: UAE_TEL.test(str(x.ph)) ? str(x.ph) : "", wa: UAE_TEL.test(str(x.wa)) ? str(x.wa) : "" }));
       if (xs.length) (out[slug] || (out[slug] = {}))[band] = xs;
     }
   }
@@ -306,7 +309,8 @@ const SU_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans
   + '.ad{display:flex;gap:10px;align-items:flex-start;border-top:1px solid #1B2E2A;padding:9px 11px}.mm{flex:0 0 auto}.adb{min-width:0;flex:1 1 auto}'
   + '.apr{font-family:Fraunces,Georgia,serif;font-size:1.02rem;color:#F0E4C8}.apr small{font-family:inherit;font-size:.68rem;color:#8FA39B}.af{font-size:.72rem;color:#8FA39B;line-height:1.4;margin:2px 0 0}'
   + '.ap{display:flex;align-items:center;gap:4px;font-family:"IBM Plex Mono",monospace;font-size:.6rem;color:#6F837D;margin:3px 0 0}'
-  + '.ao{display:inline-flex;align-items:center;gap:6px;min-height:34px;margin:6px 0 0;padding:4px 11px;border:1px solid #5A4A2C;border-radius:999px;font-size:.76rem;text-decoration:none;color:#E3C88F}';
+  + '.ao{display:inline-flex;align-items:center;gap:6px;min-height:34px;margin:6px 0 0;padding:4px 11px;border:1px solid #5A4A2C;border-radius:999px;font-size:.76rem;text-decoration:none;color:#E3C88F}'
+  + '.abk{display:flex;gap:6px;flex-wrap:wrap}.abk .ao{border-color:#2F6B55;color:#BFE5D2}';
 
 function sitesHtml(b) {
   const sites = Object.keys(b.sources).sort((x, y) => b.sources[y] - b.sources[x]);
@@ -329,13 +333,26 @@ export function miniMap(a, frame, others) {
     + '<path d="M0 ' + H / 2 + "H" + W + "M" + W / 2 + " 0V" + H + '" stroke="#16251F" stroke-width="1"/>' + dots
     + '<path transform="translate(' + x + " " + y + ')" d="M0 0c-3.2-3.6-5-6-5-8.4a5 5 0 0 1 10 0C5-6 3.2-3.6 0 0z" fill="#C5A56A"/><circle cx="' + x + '" cy="' + (y - 8.4) + '" r="1.7" fill="#0E1918"/></svg>';
 }
-function advertCard(a, frame, all) {
+const IC_TEL = '<svg viewBox="0 0 24 24" width=14 height=14 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>';
+const IC_WA = '<svg viewBox="0 0 24 24" width=14 height=14 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true><path d="M3.5 20.5l1.3-4.2A8.5 8.5 0 1 1 8 19.4z"/><path d="M9 9.5c.3 1.8 2.2 4 4.5 4.6l1.2-1.1 1.6.8c-.2 1-1 1.7-2 1.7-3.1-.2-6.4-3.4-6.6-6.5 0-1 .7-1.8 1.7-2l.8 1.6z"/></svg>';
+// v442 - the listing broker (Kendall 9 Oct 2026: "connect them with the broker quickly without having to go back and forth"):
+// tap to call, or WhatsApp with a line that names the advert, so the broker knows which one at once
+export function brokerHtml(a, ctx) {
+  if (!a.phone && !a.wa) return "";
+  const who = [a.agent, a.agency].filter(Boolean).join(" · ");
+  const msg = "Hello" + (a.agent ? " " + a.agent.split(" ")[0] : "") + ", I'm interested in your Property Finder advert: " + [ctx && ctx.band, ctx && ctx.building ? "in " + ctx.building : ""].filter(Boolean).join(" ")
+    + (a.price != null ? ", AED " + fmt(a.price) + " a year" : "") + ". Is it still available?" + (a.url ? " " + a.url : "");
+  return (who ? '<div class=af>Listed by ' + esc(who) + "</div>" : "") + '<div class=abk>'
+    + (a.phone ? '<a class=ao href="tel:' + esc(a.phone) + '">' + IC_TEL + "Call</a>" : "")
+    + (a.wa ? '<a class=ao href="https://wa.me/' + esc(a.wa.replace(/\D/g, "")) + "?text=" + esc(encodeURIComponent(msg)) + '" target=_blank rel="noopener noreferrer">' + IC_WA + "WhatsApp</a>" : "") + "</div>";
+}
+function advertCard(a, frame, all, ctx) {
   const facts = [a.sqft ? fmt(a.sqft) + " sq ft" : "", a.type, a.furnished && a.furnished !== "NO" ? (a.furnished === "YES" ? "furnished" : a.furnished.toLowerCase()) : "", a.listed ? "listed " + a.listed : ""].filter(Boolean);
   const where = a.lat != null && a.lon != null ? '<div class=ap>' + IC_PIN + a.lat.toFixed(5) + ", " + a.lon.toFixed(5) + "</div>" : "";
   return '<div class=ad>' + miniMap(a, frame, all) + '<div class=adb><div class=apr>' + esc(a.price == null ? "—" : "AED " + fmt(a.price)) + "<small> a year</small></div>"
     + (facts.length ? '<div class=af>' + esc(facts.join(" · ")) + "</div>" : "") + where
     + (a.url ? '<a class=ao href="' + esc(a.url) + '" target=_blank rel="noopener noreferrer">' + IC_LINK + "Open on Property Finder</a>" : '<div class=af>No link stored for this advert yet</div>')
-    + "</div></div>";
+    + brokerHtml(a, ctx) + "</div></div>";
 }
 export function advertsHtml(b) {
   const ads = b.ads || {}, bands = BANDS.filter((k) => ads[k] && ads[k].length).concat(Object.keys(ads).filter((k) => !BANDS.includes(k) && ads[k].length));
@@ -343,7 +360,7 @@ export function advertsHtml(b) {
   const live = (k) => (b.bands && b.bands[k] && b.bands[k].live) || ads[k].length;
   return '<div class=adw>' + bands.map((k) => '<details class=adg><summary>' + IC_CHEV + "<span>" + esc(BAND_SAY[k] || k) + "</span><b>" + fmt(live(k)) + "</b>"
     + (live(k) > ads[k].length ? "<small>cheapest " + ads[k].length + " shown</small>" : "") + "</summary>"
-    + ads[k].map((a) => advertCard(a, b.frame, ads[k])).join("") + "</details>").join("")
+    + ads[k].map((a) => advertCard(a, b.frame, ads[k], { building: b.name, band: BAND_SAY[k] || k })).join("") + "</details>").join("")
     + '<div class=dk>Each advert opens on Property Finder, where its pictures and the agent’s contact button are. The small map places the advert within the district.</div></div>';
 }
 function buildingCard(b, key) {
