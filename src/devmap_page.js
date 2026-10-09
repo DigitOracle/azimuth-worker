@@ -412,8 +412,13 @@ function pdDevResolve(d,e,x){var br=x?x.b:(e.ann?(e.dn||""):(e.br||e.dn||"")),sl
 function docAvail(d){var e=d.ev||{},q=d.name&&typeof invFind==="function"?invFind(d.name,e):null,bk=pdBldKey(d,e),dv=pdDevKey(d),x=typeof DEVSAYS!=="undefined"?DEVSAYS.find(d):null,r={};
   r.inv={href:q?invHref(q.id):(x&&x.i?invHref(x.i):""),why:"No investor facts record for this project yet."};
   r.cli={href:bk?'/doc_client?keys='+encodeURIComponent(bk)+'&beds=all&mode=rent&key='+encodeURIComponent(KEY):(x?DEVSAYS.clientHref(x,KEY):""),why:e.ann?"A client sheet needs the developer's launch material (prices, payment plans, pictures) or register unit facts; none is held for this announced project.":"A client sheet needs a building with rent history; this project has no building on the map yet."};
-  var bu=dv&&d.slug?{slug:d.slug,k:dv}:pdDevResolve(d,e,x);
-  r.bro={href:bu&&typeof pdfUrl==="function"?pdfUrl("snapshot",bu.slug,[bu.k],false).replace("/developers_pdf?","/doc_broker?"):"",why:(x||e.ann||e.off||e.ns)?"This project's developer is not matched on the register.":"This project's developer is not matched on the map in this area, so there is no broker sheet."};
+  // v449 (Kendall 9 Oct: "I get the whole district not the individual building") - Broker on a project is the ONE-BUILDING sheet (src/broker_building.js), by the project's
+  // Land Department number (ev.p) with its register name as a cross-check and the register-bound footprint (ev.bk). The area sheet stays on the area's Snapshot / Detailed buttons.
+  // A project with no registered sale (announced, or developer-says only, like KORE) keeps the area sheet for its developer, as before: there is no building record to print.
+  var pno=e.p!=null&&e.p!==""?String(e.p).replace(/[^0-9]/g,""):"",bki=bk?bk.split(":")[1]:"",one=!e.ann&&!e.ns&&!x&&d.slug&&d.name&&(pno||d.n>0);
+  var bu=one?null:(dv&&d.slug?{slug:d.slug,k:dv}:pdDevResolve(d,e,x));
+  r.bro={href:one?'/doc_broker?kind=building&area='+encodeURIComponent(d.slug)+(pno?'&project='+pno:'')+'&name='+encodeURIComponent(d.name)+(bki?'&bk='+bki:'')+'&window='+(S.win==='l12'&&IDX.ev?'12m':'all')+'&key='+encodeURIComponent(KEY):(bu&&typeof pdfUrl==="function"?pdfUrl("snapshot",bu.slug,[bu.k],false).replace("/developers_pdf?","/doc_broker?"):""),
+    why:(x||e.ann||e.off||e.ns)?"This project's developer is not matched on the register.":"This project's developer is not matched on the map in this area, so there is no broker sheet."};
   return r}
 function docRow(d,ctx){var a=docAvail(d);
   return pdBar([pdBtn("chart-bar","Investor",a.inv.href,a.inv.why),

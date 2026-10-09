@@ -127,9 +127,13 @@ console.log("C - register-verified projects are byte-identical to v412 (panel, c
     const { devmapHtml: oldHtml } = await import("../src/_v414_old_devmap_page.mjs");
     const PO = mkHarness(oldHtml, false);
     for (const [k, ev, pp, n] of [["Built Tower", EV.built, 22000, 7], ["Bare Tower", EV.bare, 20000, 6], [null, null, 18000, 4]]) {
+      // v449: a registered project's Broker button now opens the ONE-BUILDING sheet (Kendall 9 Oct), so that one link is set aside; everything else stays byte-identical
+      // (a registered project with a project number whose developer the old panel could not match - Bare Tower - gains the button: greyed before, a link now)
+      const nb = (h) => h.replace(/<(a|button)\b[^>]*class="pdfbtn pdsm[^>]*>(?:(?!<\/?(?:a|button)\b)[\s\S])*?Broker<\/(?:a|button)>/g, "BROKER");
       const a = card(P, k, ev, pp, n), b = card(PO, k, ev, pp, n);
-      ok(a === b, "card byte-identical to v412: " + (k || "no name"));
-      ok(panelOf(P, a) === panelOf(PO, b), "panel byte-identical to v412: " + (k || "no name"));
+      ok(nb(a) === nb(b), "card byte-identical to v412 (Broker link aside): " + (k || "no name"));
+      ok(nb(panelOf(P, a)) === nb(panelOf(PO, b)), "panel byte-identical to v412 (Broker link aside): " + (k || "no name"));
+      if (k === "Built Tower") ok(/href="\/doc_broker\?kind=building&amp;area=[^"]*&amp;project=777&amp;name=Built%20Tower&amp;bk=77&amp;window=\w+&amp;key=k"/.test(panelOf(P, a)), "v449: Built Tower's Broker opens the building sheet by project number 777, name and footprint 77", (panelOf(P, a).match(/href="\/doc_broker[^"]*"/) || [""])[0]);
     }
   } finally { try { fs.unlinkSync(tmp); } catch (e) {} }
 }

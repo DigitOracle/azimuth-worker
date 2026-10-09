@@ -4770,8 +4770,8 @@ export default {
     if (url.pathname === "/brief_pdf" || url.pathname === "/brief_blocks") return briefDocsRoute(request, env, url, { keyOk: (e, u) => keyTier(e, u) !== "" });
     // ---- end THE BRIEF part C ----
     // ---- v324 - /developers_pdf (src/devmap_pdf.js): the Developers-by-area snapshot and detailed PDFs. Same key rule as /brief_pdf (client key or owner key), GET only. ----
-    if (url.pathname === "/developers_pdf") return devmapPdfRoute(request, env, url, { keyOk: (e, u) => keyTier(e, u) !== "" });
-    if (url.pathname === "/doc_client" || url.pathname === "/doc_broker") return docOptionsRoute(request, env, url, { keyOk: (e, u) => keyTier(e, u) !== "" });   // v407
+    if (url.pathname === "/developers_pdf") return devmapPdfRoute(request, env, url, { keyOk: (e, u) => keyTier(e, u) !== "", owner: (e, u) => keyTier(e, u) === "admin" });   // v449 -  advert figures on the building web page (owner key only)
+    if (url.pathname === "/doc_client" || url.pathname === "/doc_broker") return docOptionsRoute(request, env, url, { keyOk: (e, u) => keyTier(e, u) !== "", owner: (e, u) => keyTier(e, u) === "admin" });   // v407
     // ---- v291 CHECKLIST (src/checklist.js) - /checklist and /checklist/*: the OWNER key only (401 for a client key or none), checked in the
     // module (header X-Owner-Key; the page alone also takes ?key= once). Ahead of appFetch so no question button or client gate touches it.
     if (url.pathname === "/checklist" || url.pathname.indexOf("/checklist/") === 0) { const _ck = await checklistRoutes(request, env, url, { keyTier }); if (_ck) return _ck; }

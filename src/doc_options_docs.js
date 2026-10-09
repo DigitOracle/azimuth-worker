@@ -9,6 +9,7 @@ import { esc, loadContext, parseQuery, buyOf, BEDS } from "./brief_docs.js";
 import { icon, parseParams, loadData, dateLong } from "./devmap_pdf.js";
 import { DM } from "./devmap_dm.js";
 import { claimsFor, permissionOnFile, PICTURES_WITHHELD } from "./dev_claims.js";   // v414
+import { loadBuilding, buildingConfig } from "./broker_building.js";   // v449 - kind=building: one building's broker sheet
 
 const PREP = "the reader of this sheet";
 const MID = "·";
@@ -177,6 +178,11 @@ export async function docOptionsRoute(request, env, url, deps) {
     return new Response(optionsHtml(clientConfig(f, { key, mode: url.searchParams.get("mode"), beds: url.searchParams.get("beds") }), icon), { headers: HDR });
   }
   const p = parseParams(url);
+  if (p.kind === "building") {   // v449 - the one-building broker sheet (src/broker_building.js); the area sheet below is unchanged
+    const LB = await loadBuilding(env, p, { origin: url.origin, owner: !!(deps.owner && deps.owner(env, url)) });
+    if (LB.status !== 200) return J(LB.body, LB.status);
+    return new Response(optionsHtml(buildingConfig(LB.B, { key }), icon), { headers: HDR });
+  }
   const L = await loadData(env, p, { origin: url.origin });
   if (L.status !== 200) return J(L.body, L.status);
   return new Response(optionsHtml(brokerConfig(L.C, { key, kind: p.kind }), icon), { headers: HDR });
