@@ -274,9 +274,19 @@ function ixOf(win){
   IXC.l12=o;return o}
 function winTxt(){var M=IDX&&IDX.ev;if(S.win==="l12"&&M)return 'Sales settled '+dsay(M.l12_from)+' to '+dsay(M.l12_to)+' (the last 12 months).';return M?'Every settled sale since '+dsay(M.since)+' (all years).':'Every settled sale on record (all years).'}
 function stats(slug,win){win=win||S.win;if(win==="l12"&&!IDX.ev)win="all";var key=win+":"+slug;if(!STATS[key]){var ix=ixOf(win),a=ix.areas[slug];STATS[key]=a?DM.areaStats(a,ix):null}return STATS[key]}
+// v439 (Kendall 9 Oct: "why are some areas solid and others have this scattered thing?") - a project drawn from its plots is a
+// MultiPolygon of many small pieces: it read as confetti and carried one label per piece. Four or more pieces are drawn as ONE
+// outline around them all (the convex hull), so it fills solid like a district and is labelled once. Districts are untouched.
+var HULLS={};
+function hullOf(g){var p=[];g.coordinates.forEach(function(poly){(poly[0]||[]).forEach(function(c){p.push([c[0],c[1]])})});
+  p.sort(function(a,b){return a[0]-b[0]||a[1]-b[1]});var cr=function(o,a,b){return (a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0])},lo=[],up=[],i;
+  for(i=0;i<p.length;i++){while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p[i])<=0)lo.pop();lo.push(p[i])}
+  for(i=p.length-1;i>=0;i--){while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p[i])<=0)up.pop();up.push(p[i])}
+  up.pop();lo.pop();var r=lo.concat(up);if(r.length<3)return g;r.push(r[0]);return {type:"Polygon",coordinates:[r]}}
+function oneShape(s,g){if(!g||g.type!=="MultiPolygon"||g.coordinates.length<4)return g;return HULLS[s]||(HULLS[s]=hullOf(g))}
 function features(){
   var sh=shading(),feats=[];
-  if(GEO&&GEO.features&&GEO.features.length){GEO.features.forEach(function(f){var s=f.properties.slug;if(!IDX.areas[s])return;feats.push({type:"Feature",geometry:f.geometry,properties:{slug:s,label:IDX.areas[s].name,v:sh[s]||0,sel:S.sel===s,dim:dimOf(s)}})})}
+  if(GEO&&GEO.features&&GEO.features.length){GEO.features.forEach(function(f){var s=f.properties.slug;if(!IDX.areas[s])return;feats.push({type:"Feature",geometry:oneShape(s,f.geometry),properties:{slug:s,label:IDX.areas[s].name,v:sh[s]||0,sel:S.sel===s,dim:dimOf(s)}})})}
   Object.keys(IDX.areas).forEach(function(s){if(GEO&&GEO.features&&GEO.features.some(function(f){return f.properties.slug===s}))return;var b=IDX.areas[s].bbox;if(!b)return;feats.push({type:"Feature",geometry:{type:"Polygon",coordinates:[[[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]],[b[0],b[1]]]]},properties:{slug:s,label:IDX.areas[s].name,v:sh[s]||0,sel:S.sel===s,dim:dimOf(s)}})});
   return {type:"FeatureCollection",features:feats}}
 // what the shading means: screen 1 = the area's typical tier; WHERE / CLIENT = how many of my developers are there (or fit)
