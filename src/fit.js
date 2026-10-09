@@ -878,6 +878,16 @@ export async function fitVision(env, deps, buf, mime, cap) {
   const g = deps.claudeJSON ? await deps.claudeJSON(env, sys, content, MEAL_SCHEMA, deps.CLAUDE_FAST, 200) : null;
   return g && g.meal ? clip(g.meal, 140) : "";
 }
+// v434 - gym machines. A photo names the machine; sets x reps x kg are logged as exercise; the last time and the best weight are kept per machine.
+const MACHINE_SCHEMA = { type: "object", additionalProperties: false, properties: { machine: { type: ["string", "null"] }, muscles: { type: ["string", "null"] } }, required: ["machine", "muscles"] };
+export async function machineVision(env, deps, buf, mime) {
+  const sys = "You read a photo taken at a gym. If it shows a piece of gym equipment (a weight machine, cable station, rack, bench, dumbbells, treadmill and so on), set machine to its common gym name in 2 to 4 words, Title Case (for example Leg Press, Lat Pulldown, Seated Row, Chest Press, Smith Machine, Dumbbells), and muscles to the main muscles it works in a few words (for example legs and glutes). If it shows no gym equipment, set both to null. Read any label or brand plate on the machine. Do not guess beyond what is visible.";
+  const content = [{ type: "image", source: { type: "base64", media_type: mime || "image/jpeg", data: deps.b64of(buf) } }, { type: "text", text: "What machine is this?" }];
+  return deps.claudeJSON ? await deps.claudeJSON(env, sys, content, MACHINE_SCHEMA, deps.CLAUDE_FAST, 120) : null;
+}
+export const liftKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+export const liftMinutes = (sets, reps) => Math.max(2, Math.round(sets * (1 + reps * 0.05 + 1.5)));   // a set's work plus its rest, roughly
+async function liftHist(env, u) { try { return JSON.parse((await env.MEETINGS.get("fitlift_" + u)) || "{}") || {}; } catch (e) { return {}; } }
 // A caption such as "lunch" claims the photo outright. Returns true when handled.
 export async function fitPhotoCaptioned(env, from, mediaId, cap, deps) {
   if (!fitCaptionIsFood(cap)) return false;
@@ -1358,6 +1368,16 @@ export async function fitRoutes(request, env, url, h) {
   // With more than one person on this instance a write must NAME whose log it is. Without this a page that never asked "who is this?" (the default is the
   // first person) saved a second person's plan onto the first person's, and said "saved". An unknown name is refused too, never quietly mapped to the first.
   if (us.length > 1 && url.searchParams.get("op") !== "photo" && !us.includes(url.searchParams.get("u"))) return J({ ok: false, why: "say whose log this is (u=" + us.join("|") + ")" }, 400);
+  if (url.searchParams.get("op") === "machine") {   // v434: a photo of a gym machine -> its name, the muscles, and what was done on it last time
+    const buf = await request.arrayBuffer();
+    if (!buf.byteLength || buf.byteLength > 4 * 1024 * 1024) return J({ ok: false, why: "photo must be under 4 MB" }, 413);
+    const mime = (request.headers.get("content-type") || "image/jpeg").split(";")[0];
+    if (!/^image\/(jpeg|png|webp|gif)$/.test(mime)) return J({ ok: false, why: "not an image" }, 415);
+    let g = null; try { g = await machineVision(env, h, buf, mime); } catch (e) {}
+    if (!g || !g.machine) return J({ ok: true, machine: "" });
+    const hist = await liftHist(env, cfg.u);
+    return J({ ok: true, machine: clip(g.machine, 40), muscles: clip(g.muscles || "", 60), last: hist[liftKey(g.machine)] || null });
+  }
   if (url.searchParams.get("op") === "photo") {   // read once, drop: nothing about the image is stored
     const buf = await request.arrayBuffer();
     if (!buf.byteLength || buf.byteLength > 4 * 1024 * 1024) return J({ ok: false, why: "photo must be under 4 MB" }, 413);
@@ -1382,6 +1402,20 @@ export async function fitRoutes(request, env, url, h) {
     let o = false; if (kind === "food" && d === today) o = windowFor(cfg, t).out;
     const e = await fitAdd(env, { u: cfg.u, k: kind, x: kind === "ex" ? (n ? "Steps" : exCanon(x)) : x, m, n, t, d, o, s: "web", est: kind === "food" ? await proteinFor(env, h, x) : undefined });
     return J({ ok: true, entry: e });
+  }
+  if (op === "lift") {   // v434: sets x reps (x kg) on a machine -> an exercise entry with estimated minutes, and the machine's history
+    const name = clip(String(b.machine || "").trim(), 40), sets = Math.round(Number(b.sets) || 0), reps = Math.round(Number(b.reps) || 0), kg = Math.round((Number(b.kg) || 0) * 2) / 2;
+    if (!name || sets < 1 || sets > 20 || reps < 1 || reps > 100 || kg < 0 || kg > 500) return J({ ok: false, why: "give the machine, sets and reps" }, 400);
+    let d = DATE_RX.test(String(b.d || "")) ? b.d : today; if (d > today) d = today;
+    await ensureStarted(env, cfg, d);
+    const t = d === today ? now : Date.parse(d + "T12:00:00Z") - GST_MS;
+    const x = name + " " + sets + "×" + reps + (kg ? " @ " + kg + " kg" : "");
+    const e = await fitAdd(env, { u: cfg.u, k: "ex", x, m: liftMinutes(sets, reps), n: 0, t, d, o: false, s: "web" });
+    const hist = await liftHist(env, cfg.u), k = liftKey(name), prev = hist[k] || null;
+    const pb = !!(prev && kg > (prev.best || 0));
+    hist[k] = { name, sets, reps, kg, d, best: Math.max(kg, (prev && prev.best) || 0) };
+    await env.MEETINGS.put("fitlift_" + cfg.u, JSON.stringify(hist));
+    return J({ ok: true, entry: e, pb, prev });
   }
   if (op === "water") {   // v432: one tap on the bottle in the header = one bottle of water; never "outside the eating window"
     let d = DATE_RX.test(String(b.d || "")) ? b.d : today; if (d > today) d = today;
@@ -1427,7 +1461,10 @@ const FIT_CSS = ".fw{max-width:640px;margin:0 auto;padding:18px 16px calc(96px +
   ".fc .add+.row{margin-top:12px}.brand{background:#FCF9F4;border-radius:16px;text-align:center;padding:14px 10px 10px;margin:0 0 12px}.brand .logo{display:block;width:min(172px,50%);height:auto;margin:0 auto}.brand .fsub{margin:8px 0 0;color:#4A5C55}.ph:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(12,20,19,.04) 28%,rgba(12,20,19,.80))}.ph{position:relative;height:92px;margin:-14px -14px 12px;border-radius:14px 14px 0 0;background:#16241f center/cover no-repeat;overflow:hidden}.ph b{position:absolute;left:14px;bottom:8px;z-index:1;font-family:'IBM Plex Mono',monospace;font-size:.7rem;letter-spacing:.12em;color:#C5A56A;font-weight:500}.cred{text-align:center;color:#6E847B;font-size:.66rem;margin:6px 0 0}.empty{color:#8FA39B;font-size:.8rem;padding:6px 0}.add{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.add input,.add select,.add textarea,.set input,.set select{background:#0C1413;border:1px solid #2E4540;color:#F2EFE6;border-radius:10px;padding:9px 10px;font:inherit;font-size:.88rem;min-width:0}.add textarea{flex:1 1 100%;min-height:44px;resize:vertical}.add input.g{flex:1}" +
   ".btn{background:#C5A56A;color:#0C1413;border:0;border-radius:10px;padding:9px 14px;font:inherit;font-weight:600;font-size:.85rem;cursor:pointer;min-height:40px}a.btn{display:inline-flex;align-items:center;text-decoration:none}.nowho .fc:not(#who),.nowho .dn,.nowho .strip,.nowho #usr{display:none}.set label.chk{display:flex;gap:8px;align-items:flex-start;font-size:.78rem;color:#CFD8D3;margin-top:14px;font-family:inherit}.set .chk input{width:auto;flex:none;margin:3px 0 0}.btn.s{background:#0E1918;color:#CFD8D3;border:1px solid #2E4540;font-weight:500}" +
   ".chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.chips button.on{border-color:#C5A56A;color:#F2EFE6}.chips button{border:1px solid #2E4540;background:#0C1413;color:#CFD8D3;border-radius:99px;padding:7px 12px;font:inherit;font-size:.78rem;cursor:pointer}" +
-  ".set label{display:block;font-size:.72rem;color:#8FA39B;margin:10px 0 4px;font-family:'IBM Plex Mono',monospace}.set input,.set select{width:100%;box-sizing:border-box}.wr{display:flex;gap:6px;margin-top:6px}.wr input{flex:1}.note{color:#8FA39B;font-size:.72rem;margin-top:10px;line-height:1.5}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#16241f;border:1px solid #C5A56A;color:#F2EFE6;border-radius:12px;padding:10px 14px;font-size:.84rem;max-width:88%;display:none;z-index:50}";
+  ".set label{display:block;font-size:.72rem;color:#8FA39B;margin:10px 0 4px;font-family:'IBM Plex Mono',monospace}.set input,.set select{width:100%;box-sizing:border-box}.wr{display:flex;gap:6px;margin-top:6px}.wr input{flex:1}.note{color:#8FA39B;font-size:.72rem;margin-top:10px;line-height:1.5}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#16241f;border:1px solid #C5A56A;color:#F2EFE6;border-radius:12px;padding:10px 14px;font-size:.84rem;max-width:88%;display:none;z-index:50}" +
+  ".lift{border:1px solid #C5A56A;border-radius:12px;padding:12px;margin-top:10px;background:#0C1413}.lh b{font-family:Fraunces,Georgia,serif;font-size:1.05rem;color:#F2EFE6}.lh small{color:#8FA39B;font-size:.75rem}" +
+  ".lr{display:flex;align-items:center;gap:8px;margin-top:10px}.lr span{flex:1;font-size:.85rem;color:#CFD8D3}.lr button{width:44px;height:44px;border-radius:10px;border:1px solid #2E4540;background:#16241f;color:#F2EFE6;font-size:1.3rem;cursor:pointer}.lr input{width:72px;text-align:center;background:#0C1413;border:1px solid #2E4540;color:#F2EFE6;border-radius:10px;padding:10px 4px;font:inherit;font-size:1rem}" +
+  ".rt{position:sticky;bottom:calc(76px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:8px;margin-top:10px;padding:10px 12px;border-radius:12px;background:#16241f;border:1px solid #C5A56A;z-index:20}.rt span{color:#8FA39B;font-size:.8rem}.rt b{flex:1;font-family:'IBM Plex Mono',monospace;font-size:1.3rem;color:#F2EFE6}";
 
 function fitPageHtml(o) {
   const keyJs = JSON.stringify(o.key || "").replace(/</g, "\\u003c"), keyQ = encodeURIComponent(o.key || "");
@@ -1442,7 +1479,15 @@ function fitPageHtml(o) {
     '<div class="add"><textarea id="ft" placeholder="What did you eat or drink?" maxlength="140"></textarea><label class="btn s" for="ph" style="display:inline-flex;align-items:center"><span id="phi"></span>&nbsp;Photo</label><input id="ph" type="file" accept="image/*" hidden><button class="btn" id="fa">Add food</button></div>' +
     '<div class="note">A photo is read once and thrown away. Only the description is kept.</div></div>' +
     '<div class="fc"><div class="ph" data-img="exercise"><b>EXERCISE</b></div><div id="ex"></div>' +
-    '<div class="chips" id="chips"></div><div class="add"><input class="g" id="et" placeholder="Activity" maxlength="40"><input id="en" type="number" inputmode="decimal" min="0" step="any" placeholder="min" style="width:84px"><select id="eu"><option value="m">min</option><option value="h">hours</option><option value="s">steps</option></select><button class="btn" id="ea">Add</button></div></div>' +
+    '<div class="chips" id="chips"></div><div class="add"><input class="g" id="et" placeholder="Activity" maxlength="40"><input id="en" type="number" inputmode="decimal" min="0" step="any" placeholder="min" style="width:84px"><select id="eu"><option value="m">min</option><option value="h">hours</option><option value="s">steps</option></select><button class="btn" id="ea">Add</button></div>' +
+    '<div class="add"><label class="btn s" for="mph" style="display:inline-flex;align-items:center"><span id="mphi"></span>&nbsp;Gym machine photo</label><input id="mph" type="file" accept="image/*" capture="environment" hidden></div>' +
+    '<div id="lift" class="lift" style="display:none"><div class="lh"><b id="lmn"></b><small id="lmm"></small></div><div class="note" id="llast"></div>' +
+    '<div class="lr"><span>Sets</span><button data-f="ls" data-d="-1">&minus;</button><input id="ls" type="number" inputmode="numeric" value="3"><button data-f="ls" data-d="1">+</button></div>' +
+    '<div class="lr"><span>Reps</span><button data-f="lp" data-d="-1">&minus;</button><input id="lp" type="number" inputmode="numeric" value="12"><button data-f="lp" data-d="1">+</button></div>' +
+    '<div class="lr"><span>Weight kg</span><button data-f="lk" data-d="-2.5">&minus;</button><input id="lk" type="number" inputmode="decimal" step="0.5" value="0"><button data-f="lk" data-d="2.5">+</button></div>' +
+    '<div class="add"><button class="btn" id="lgo">Log it</button><button class="btn s" id="lno">Cancel</button></div></div>' +
+    '<div id="rt" class="rt" style="display:none"><span>Rest</span><b id="rtt">1:30</b><button class="btn s" id="rt60">60s</button><button class="btn s" id="rt90">90s</button><button class="btn s" id="rtx">Stop</button></div>' +
+    '<div class="note">A machine photo is read once and thrown away. Only the machine name is kept.</div></div>' +
     '<details class="fc" id="hist"><summary style="cursor:pointer;color:#C5A56A;font-family:\'IBM Plex Mono\',monospace;font-size:.7rem;letter-spacing:.12em">PROGRESS &middot; DAY BY DAY, WEEK BY WEEK</summary><div class="ph" data-img="walk" style="margin:12px 0 10px;border-radius:12px;height:104px;background-position:center 76%"><b>EVERY STEP COUNTS</b></div><div class="add" id="mf"><select id="mw"><option value="weight">Weight (kg)</option><option value="waist">Waist (cm)</option></select><input id="mv" type="number" step="0.1" inputmode="decimal" placeholder="e.g. 82.5" style="width:110px"><button class="btn s" id="mb">Log it</button></div><div class="chips" id="hv"></div><div id="hb"></div></details>' +
     '<details class="fc set" id="set"><summary style="cursor:pointer;color:#C5A56A;font-family:\'IBM Plex Mono\',monospace;font-size:.7rem;letter-spacing:.12em">THE PLAN</summary><div class="note" id="plw" style="margin:10px 0 0"></div>' +
     '<label>END GOAL</label><input id="s_goal" maxlength="200" placeholder="What is this 30 days for?"><label>CHALLENGE STARTS</label><input id="s_start" type="date"><label>CHALLENGE LENGTH (DAYS)</label><input id="s_days" type="number" min="1" max="365">' +
