@@ -114,13 +114,36 @@ export async function deskLabRoute(env, msg, text, deps) {
     if (!m) { await send("Send: lab setup brief <WhatsApp Business Account id>  (add go at the end to create it)."); return true; }
     const json = briefFlowJson();
     if (!m[2]) { await send("Dry run. I will create the form \"" + FLOW_NAME + "\" (2 screens, " + json.screens[0].layout.children.length + " + " + json.screens[1].layout.children.length + " parts) on account " + m[1] + " and publish it. Nothing has been created. Send: lab setup brief " + m[1] + " go"); return true; }
-    const fd = new FormData();
-    fd.append("name", FLOW_NAME); fd.append("categories", JSON.stringify(["LEAD_GENERATION"])); fd.append("flow_json", JSON.stringify(json)); fd.append("publish", "true");
-    let j = null; try { j = await (await fetch(deps.graph + "/" + m[1] + "/flows", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN }, body: fd })).json(); } catch (e) {}
-    if (!j || !j.id) { await send("Meta did not create the form." + meta(j) + (j && j.error && j.error.error_data ? " Details: " + JSON.stringify(j.error.error_data).slice(0, 400) : "")); return true; }
-    await env.MEETINGS.put(FLOW_KEY, String(j.id));
-    const ve = (j.validation_errors || []).map((v) => v.message || JSON.stringify(v)).slice(0, 5);
-    await send("Form created and stored (id " + j.id + ")." + (ve.length ? " Meta noted: " + ve.join("; ") : " Meta reported no problems.") + " Send brief to try it.");
+    // v431 (9 Oct: "Publishing attempt failed", no reason given): create OR reuse the draft, upload the JSON, read Meta's itemised
+    // validation errors, and publish only when there are none. Every refusal is reported with Meta's own detail.
+    const H = { Authorization: "Bearer " + env.WHATSAPP_TOKEN }, G = deps.graph;
+    const j_ = async (u, init) => { try { return await (await fetch(u, Object.assign({ headers: H }, init || {}))).json(); } catch (e) { return { error: { message: "Meta did not answer" } }; } };
+    const errList = (v) => (v || []).slice(0, 8).map((x) => (x.error_type ? x.error_type + ": " : "") + (x.message || JSON.stringify(x)) + (x.pointers && x.pointers[0] ? " (" + [x.pointers[0].path || "", x.pointers[0].line_start ? "line " + x.pointers[0].line_start : ""].filter(Boolean).join(", ") + ")" : "")).join("\n- ");
+    const list = await j_(G + "/" + m[1] + "/flows?fields=id,name,status");
+    const prior = list && Array.isArray(list.data) ? list.data.find((f) => f.name === FLOW_NAME) : null;
+    let id = prior ? String(prior.id) : "";
+    if (prior && prior.status === "PUBLISHED") { await env.MEETINGS.put(FLOW_KEY, id); await send("The form is already published (id " + id + "). Stored. Send brief to try it."); return true; }
+    let ve = [];
+    if (!id) {
+      const fd = new FormData(); fd.append("name", FLOW_NAME); fd.append("categories", JSON.stringify(["LEAD_GENERATION"])); fd.append("flow_json", JSON.stringify(json));
+      const c = await j_(G + "/" + m[1] + "/flows", { method: "POST", body: fd });
+      if (!c || !c.id) { await send("Meta did not create the form." + meta(c) + (c && c.error && c.error.error_data ? " Details: " + JSON.stringify(c.error.error_data).slice(0, 400) : "")); return true; }
+      id = String(c.id); ve = c.validation_errors || [];
+    } else {
+      const fd = new FormData(); fd.append("file", new Blob([JSON.stringify(json)], { type: "application/json" }), "flow.json"); fd.append("name", "flow.json"); fd.append("asset_type", "FLOW_JSON");
+      const u = await j_(G + "/" + id + "/assets", { method: "POST", body: fd });
+      if (u && u.error) { await send("Meta refused the updated form (draft " + id + ")." + meta(u)); return true; }
+      ve = (u && u.validation_errors) || [];
+    }
+    if (ve.length) { await send("The form is saved as a draft (id " + id + ") but Meta found problems, so it is not published:\n- " + errList(ve) + "\nTell me and I will fix them."); return true; }
+    const pub = await j_(G + "/" + id + "/publish", { method: "POST" });
+    if (!pub || !pub.success) {
+      const st = await j_(G + "/" + id + "?fields=status,validation_errors,health_status");
+      await send("Meta did not publish the form (draft " + id + ")." + meta(pub) + (st && st.validation_errors && st.validation_errors.length ? "\nProblems:\n- " + errList(st.validation_errors) : "") + (st && st.health_status ? "\nHealth: " + JSON.stringify(st.health_status).slice(0, 300) : "") + (st && st.status ? "\nStatus: " + st.status : ""));
+      return true;
+    }
+    await env.MEETINGS.put(FLOW_KEY, id);
+    await send("Form published and stored (id " + id + "). Send brief to try it.");
     return true;
   }
   if (sub === "profile") {

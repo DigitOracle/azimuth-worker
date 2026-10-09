@@ -56,13 +56,31 @@ ok(/About: DigitAlchemy desk/.test(texts[0]) && /Websites: https:\/\/digitalabbo
 // v430 - form setup from the desk: dry run, then go
 await say("lab setup brief 1588773749592854");
 ok(/Dry run/.test(texts[0]) && !store.has("wa_flow_brief_id"), "setup without go is a dry run and creates nothing");
-const f0 = globalThis.fetch; let flowPost = null;
-globalThis.fetch = async (u, init) => { if (/\/1588773749592854\/flows$/.test(String(u))) { flowPost = init.body; return new Response(JSON.stringify({ id: "777", validation_errors: [] })); } return f0(u, init); };
+const f0 = globalThis.fetch;
+// a fake Meta: flows list, create, assets upload, publish, status
+const meta = { flows: [], published: new Set(), createErrs: [], publishOk: true, calls: [] };
+globalThis.fetch = async (u, init) => { const s = String(u), mth = (init && init.method) || "GET"; meta.calls.push(mth + " " + s.replace("https://graph.facebook.com/v21.0", ""));
+  if (/\/1588773749592854\/flows\?fields=/.test(s)) return new Response(JSON.stringify({ data: meta.flows }));
+  if (/\/1588773749592854\/flows$/.test(s) && mth === "POST") { const f = { id: "777", name: init.body.get("name"), status: "DRAFT" }; meta.flows.push(f); return new Response(JSON.stringify({ id: "777", validation_errors: meta.createErrs })); }
+  if (/\/777\/assets$/.test(s)) return new Response(JSON.stringify({ success: true, validation_errors: [] }));
+  if (/\/777\/publish$/.test(s)) { if (meta.publishOk) { meta.flows[0].status = "PUBLISHED"; return new Response(JSON.stringify({ success: true })); } return new Response(JSON.stringify({ error: { message: "Publishing attempt failed" } }), { status: 400 }); }
+  if (/\/777\?fields=/.test(s)) return new Response(JSON.stringify({ status: "DRAFT", validation_errors: [{ error_type: "INVALID_PROPERTY_VALUE", message: "label is too long", pointers: [{ path: "screens[1].layout.children[2].label", line_start: 40 }] }] }));
+  return f0(u, init); };
+// 1. Meta finds problems on create: saved as draft, problems listed, not published, nothing stored
+meta.createErrs = [{ error_type: "INVALID_PROPERTY_VALUE", message: "label is too long", pointers: [{ path: "screens[0].layout.children[1].label" }] }];
 await say("lab setup brief 1588773749592854 go");
-ok(store.get("wa_flow_brief_id") === "777" && flowPost && flowPost.get("publish") === "true" && /Form created and stored \(id 777\)/.test(texts[0]), "setup with go creates, publishes and stores the form", texts[0]);
-globalThis.fetch = async (u, init) => /\/flows$/.test(String(u)) ? new Response(JSON.stringify({ error: { message: "Invalid parameter", error_data: { details: "screen WHERE" } } }), { status: 400 }) : f0(u, init);
+ok(!store.has("wa_flow_brief_id") && /saved as a draft \(id 777\) but Meta found problems/.test(texts[0]) && /label is too long \(screens\[0\]/.test(texts[0]) && !meta.calls.some((c) => /publish$/.test(c)), "create with problems: draft kept, problems listed with where they are, not published", texts[0]);
+// 2. the next try reuses the draft (no second create), uploads the fixed JSON, publishes, stores
+meta.createErrs = []; meta.calls.length = 0;
+await say("lab setup brief 1588773749592854 go");
+ok(store.get("wa_flow_brief_id") === "777" && meta.calls.some((c) => /^POST \/777\/assets$/.test(c)) && !meta.calls.some((c) => /^POST \/1588773749592854\/flows$/.test(c)) && /Form published and stored \(id 777\)/.test(texts[0]), "the retry reuses the draft, uploads, publishes and stores", meta.calls.join(" | "));
+// 3. already published: just stored
 store.delete("wa_flow_brief_id"); await say("lab setup brief 1588773749592854 go");
-ok(!store.has("wa_flow_brief_id") && /Meta said: Invalid parameter/.test(texts[0]) && /screen WHERE/.test(texts[0]), "a refusal is reported with Meta's details and nothing is stored", texts[0]);
+ok(store.get("wa_flow_brief_id") === "777" && /already published/.test(texts[0]), "an already published form is simply stored");
+// 4. publish refused: the detailed problems are fetched and reported
+meta.flows = []; meta.publishOk = false; store.delete("wa_flow_brief_id");
+await say("lab setup brief 1588773749592854 go");
+ok(!store.has("wa_flow_brief_id") && /did not publish the form \(draft 777\)\. Meta said: Publishing attempt failed/.test(texts[0]) && /label is too long \(screens\[1\]\.layout\.children\[2\]\.label, line 40\)/.test(texts[0]) && /Status: DRAFT/.test(texts[0]), "a refused publish reports Meta's itemised problems", texts[0]);
 globalThis.fetch = f0;
 await say("lab nonsense");
 ok(/Unknown lab command/.test(texts[0]), "an unknown lab command shows the menu");

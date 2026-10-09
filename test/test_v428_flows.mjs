@@ -15,6 +15,10 @@ ok(j.screens.length === 2 && j.screens[1].terminal === true && !j.data_api_versi
 const groups = j.screens.flatMap((s) => s.layout.children).filter((c) => c.type === "CheckboxGroup" || c.type === "RadioButtonsGroup");
 ok(groups.every((g) => g["data-source"].length >= 1 && g["data-source"].length <= 20), "every choice group has 1 to 20 options (Meta's limit)", groups.map((g) => g.name + ":" + g["data-source"].length).join(" "));
 ok(groups.every((g) => g["data-source"].every((o) => o.title.length <= 30 && o.id)), "every option has an id and a title of at most 30 characters");
+// v431 - Meta's length limits (the 9 Oct "Publishing attempt failed"): TextInput label 20, choice-group label 30, helper text 80
+const kids = j.screens.flatMap((s) => s.layout.children);
+const tooLong = kids.filter((c) => (c.type === "TextInput" && c.label.length > 20) || ((c.type === "CheckboxGroup" || c.type === "RadioButtonsGroup") && c.label.length > 30) || (c["helper-text"] && c["helper-text"].length > 80) || (c.type === "Footer" && c.label.length > 35));
+ok(!tooLong.length, "every label is within Meta's limits", tooLong.map((c) => c.name + ":" + c.label).join(", "));
 const names = j.screens.flatMap((s) => s.layout.children).map((c) => c.name).filter(Boolean);
 ok(new Set(names).size === names.length, "field names are unique");
 ok(FLOW_AREAS.length >= 30 && FLOW_AREAS.length <= 40, "the area list fits two groups of 20", FLOW_AREAS.length);

@@ -31,9 +31,9 @@ export function briefFlowJson() {
       { id: "HOME", title: "Client brief", data: {},
         layout: { type: "SingleColumnLayout", children: [
           { type: "TextSubheading", text: "Who is it for, and what home?" },
-          { type: "TextInput", name: "client", label: "Client name (optional)", "input-type": "text", required: false },
+          { type: "TextInput", name: "client", label: "Client name", "helper-text": "Optional", "input-type": "text", required: false },
           { type: "RadioButtonsGroup", name: "mode", label: "Rent or buy", required: true, "data-source": [opt("rent", "Rent"), opt("buy", "Buy")] },
-          { type: "CheckboxGroup", name: "beds", label: "Bedrooms (one or more)", required: true, "data-source": [opt("studio", "Studio"), opt("1", "1 bedroom"), opt("2", "2 bedrooms"), opt("3", "3 bedrooms or more")] },
+          { type: "CheckboxGroup", name: "beds", label: "Bedrooms", description: "Tick one or more", required: true, "data-source": [opt("studio", "Studio"), opt("1", "1 bedroom"), opt("2", "2 bedrooms"), opt("3", "3 bedrooms or more")] },
           { type: "RadioButtonsGroup", name: "type", label: "Home type", required: true, "data-source": [opt("any", "Any"), opt("apartment", "Apartment"), opt("townhouse", "Townhouse"), opt("villa", "Villa")] },
           { type: "Footer", label: "Next", "on-click-action": { name: "navigate", next: { type: "screen", name: "WHERE" },
             payload: { client: "${form.client}", mode: "${form.mode}", beds: "${form.beds}", type: "${form.type}" } } },
@@ -41,11 +41,11 @@ export function briefFlowJson() {
       { id: "WHERE", title: "Where and budget", terminal: true,
         data: { client: { type: "string", __example__: "" }, mode: { type: "string", __example__: "rent" }, beds: { type: "array", items: { type: "string" }, __example__: ["1"] }, type: { type: "string", __example__: "any" } },
         layout: { type: "SingleColumnLayout", children: [
-          { type: "CheckboxGroup", name: "areas1", label: "Areas (optional)", required: false, "data-source": a1 },
+          { type: "CheckboxGroup", name: "areas1", label: "Areas", description: "Optional", required: false, "data-source": a1 },
           { type: "CheckboxGroup", name: "areas2", label: "More areas", required: false, "data-source": a2 },
-          { type: "TextInput", name: "max", label: "Budget up to, AED (yearly rent or price)", "input-type": "number", required: false },
-          { type: "TextInput", name: "min", label: "Budget from, AED (optional)", "input-type": "number", required: false },
-          { type: "CheckboxGroup", name: "musts", label: "Must-haves (optional)", required: false, "data-source": BRIEF_CRITERIA.map(([k, l]) => opt(k, l.charAt(0).toUpperCase() + l.slice(1))) },
+          { type: "TextInput", name: "max", label: "Budget up to (AED)", "helper-text": "Yearly rent, or the price to buy", "input-type": "number", required: false },
+          { type: "TextInput", name: "min", label: "Budget from (AED)", "helper-text": "Optional", "input-type": "number", required: false },
+          { type: "CheckboxGroup", name: "musts", label: "Must-haves", description: "Optional", required: false, "data-source": BRIEF_CRITERIA.map(([k, l]) => opt(k, l.charAt(0).toUpperCase() + l.slice(1))) },
           { type: "Footer", label: "Find homes", "on-click-action": { name: "complete",
             payload: { client: "${data.client}", mode: "${data.mode}", beds: "${data.beds}", type: "${data.type}", areas1: "${form.areas1}", areas2: "${form.areas2}", max: "${form.max}", min: "${form.min}", musts: "${form.musts}" } } },
         ] } },
@@ -115,7 +115,7 @@ export async function flowReply(env, from, msg, deps) {
 // Sends the form; returns false when no Flow id is stored yet (the owner has not run /wa_flow_setup?apply=1).
 export async function sendBriefFlow(env, to, deps) {
   const id = await env.MEETINGS.get(FLOW_KEY);
-  if (!id) { await deps.send(env, to, "The brief form is not set up yet. (Owner: open /wa_flow_setup once to create it on WhatsApp.)"); return true; }
+  if (!id) { await deps.send(env, to, "The brief form is not set up yet. Send: lab setup brief <WhatsApp Business Account id>, then the same with go at the end."); return true; }
   const token = "brief:" + Date.now().toString(36);
   const r = await deps.post(env, flowMessage(to, id, token), "flow");
   if (r && r.error) await deps.send(env, to, "WhatsApp did not open the form (" + String(r.error.message || "error").slice(0, 120) + "). Send brief again in a minute.");
