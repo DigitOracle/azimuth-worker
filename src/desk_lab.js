@@ -109,6 +109,10 @@ export async function deskLabRoute(env, msg, text, deps) {
   }
   // v430 - register the brief form with Meta from the desk (the owner is the authority here; no key in a link). "lab setup brief <waba>" is a
   // dry run that shows what will be created; "lab setup brief <waba> go" creates and publishes it and stores its id.
+  // v443 (9 Oct: the reply was cut at 300 characters, right at the APP entity) - one line per entity, the blocked ones with Meta's own errors
+  const healthSay = (hs) => [].concat(hs.entities || []).map((e) => "- " + (e.entity_type || "?") + " " + (e.id || "") + ": " + (e.can_send_message || "?")
+    + (e.errors && e.errors.length ? " - " + e.errors.map((x) => [x.error_code, x.error_description, x.possible_solution].filter(Boolean).join(": ")).join("; ") : "")
+    + (e.additional_info && e.additional_info.length ? " (" + [].concat(e.additional_info).join("; ") + ")" : "")).join("\n").slice(0, 1500) || JSON.stringify(hs).slice(0, 1500);
   if (/^setup brief\b/.test(sub)) {
     const m = sub.match(/^setup brief\s+(\d{8,20})(\s+go)?$/);
     if (!m) { await send("Send: lab setup brief <WhatsApp Business Account id>  (add go at the end to create it)."); return true; }
@@ -140,7 +144,7 @@ export async function deskLabRoute(env, msg, text, deps) {
     if (!pub || !pub.success) {
       await env.MEETINGS.put(FLOW_DRAFT_KEY, id);   // v433: brief opens this draft in test mode until Meta publishes it
       const st = await j_(G + "/" + id + "?fields=status,validation_errors,health_status");
-      await send("Meta did not publish the form (draft " + id + ")." + meta(pub) + (st && st.validation_errors && st.validation_errors.length ? "\nProblems:\n- " + errList(st.validation_errors) : "") + (st && st.health_status ? "\nHealth: " + JSON.stringify(st.health_status).slice(0, 300) : "") + (st && st.status ? "\nStatus: " + st.status : ""));
+      await send("Meta did not publish the form (draft " + id + ")." + meta(pub) + (st && st.validation_errors && st.validation_errors.length ? "\nProblems:\n- " + errList(st.validation_errors) : "") + (st && st.health_status ? "\nHealth:\n" + healthSay(st.health_status) : "") + (st && st.status ? "\nStatus: " + st.status : ""));
       return true;
     }
     await env.MEETINGS.put(FLOW_KEY, id);
