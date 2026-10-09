@@ -1382,7 +1382,8 @@ export async function fitRoutes(request, env, url, h) {
     let d = url.searchParams.get("d") || today; if (!DATE_RX.test(d) || d > today) d = today;
     let sum = await fitSummary(env, d, cfg, today);
     if (await fitBackfillProtein(env, h, sum.entries, 8)) sum = await fitSummary(env, d, cfg, today);   // opening a day estimates its meals that have no estimate yet
-    return J({ ok: true, u: cfg.u, users: us, names, share: await fitShareOn(env, cfg.u), partners: await fitPartners(env, cfg, today), rest: sum.rest, paused: sum.paused, today, d, cfg, entries: sum.entries, stats: sum.stats, strip: sum.strip, week: sum.week, challenge: sum.challenge });
+    return J({ ok: true, u: cfg.u, users: us, names, share: await fitShareOn(env, cfg.u), partners: await fitPartners(env, cfg, today), rest: sum.rest, paused: sum.paused, today, d, cfg, entries: sum.entries, stats: sum.stats, strip: sum.strip, week: sum.week, challenge: sum.challenge,
+      machines: Object.values(await liftHist(env, cfg.u)), groups: ((await liftLog(env, cfg.u)).find((r) => r.d === d) || {}).g || [] });   // v436 session card + progress
   }
   if (request.method !== "POST") return J({ ok: false, why: "method" }, 405);
   // With more than one person on this instance a write must NAME whose log it is. Without this a page that never asked "who is this?" (the default is the
@@ -1434,7 +1435,9 @@ export async function fitRoutes(request, env, url, h) {
     const e = await fitAdd(env, { u: cfg.u, k: "ex", x, m: liftMinutes(sets, reps), n: 0, t, d, o: false, s: "web" });
     const hist = await liftHist(env, cfg.u), k = liftKey(name), prev = hist[k] || null;
     const pb = !!(prev && kg > (prev.best || 0));
-    hist[k] = { name, sets, reps, kg, d, best: Math.max(kg, (prev && prev.best) || 0) };
+    // v436: s = the machine's series for the progress chart, one point per day (that day's heaviest), 40 kept
+    const ser = ((prev && prev.s) || []).filter((p) => p[0] !== d); ser.push([d, Math.max(kg, ((prev && prev.s) || []).filter((p) => p[0] === d).reduce((a, p) => Math.max(a, p[1]), 0)), sets * reps]);
+    hist[k] = { name, sets, reps, kg, d, best: Math.max(kg, (prev && prev.best) || 0), s: ser.slice(-40) };
     await env.MEETINGS.put("fitlift_" + cfg.u, JSON.stringify(hist));
     const groups = muscleGroups(name + " " + String(b.muscles || ""));
     if (groups.length) {   // v435: the day-by-day record of which body groups were trained, 60 days kept
@@ -1490,6 +1493,10 @@ const FIT_CSS = ".fw{max-width:640px;margin:0 auto;padding:18px 16px calc(96px +
   ".chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.chips button.on{border-color:#C5A56A;color:#F2EFE6}.chips button{border:1px solid #2E4540;background:#0C1413;color:#CFD8D3;border-radius:99px;padding:7px 12px;font:inherit;font-size:.78rem;cursor:pointer}" +
   ".set label{display:block;font-size:.72rem;color:#8FA39B;margin:10px 0 4px;font-family:'IBM Plex Mono',monospace}.set input,.set select{width:100%;box-sizing:border-box}.wr{display:flex;gap:6px;margin-top:6px}.wr input{flex:1}.note{color:#8FA39B;font-size:.72rem;margin-top:10px;line-height:1.5}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#16241f;border:1px solid #C5A56A;color:#F2EFE6;border-radius:12px;padding:10px 14px;font-size:.84rem;max-width:88%;display:none;z-index:50}" +
   ".lift{border:1px solid #C5A56A;border-radius:12px;padding:12px;margin-top:10px;background:#0C1413}.lh b{font-family:Fraunces,Georgia,serif;font-size:1.05rem;color:#F2EFE6}.lh small{color:#8FA39B;font-size:.75rem}" +
+  ".gsc{border:1px solid #2E4540;border-radius:12px;padding:12px;margin:0 0 10px;background:#0C1413}.gsh{display:flex;justify-content:space-between;align-items:center}.gsh b{font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.12em;color:#C5A56A;font-weight:500}.gsh span{font-size:.75rem;color:#8FA39B}" +
+  ".gst{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.gst div{background:#16241f;border-radius:10px;padding:8px;text-align:center}.gst b{display:block;font-size:1.05rem;color:#F2EFE6}.gst small{font-size:.68rem;color:#8FA39B}" +
+  ".gch{border:1px solid #5FBF8A;color:#D2EBDD;border-radius:99px;padding:3px 10px;font-size:.72rem}.gsr{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid #1b2a26;font-size:.84rem;color:#CFD8D3;margin-top:6px}.gsr b{color:#F2EFE6;font-weight:600;white-space:nowrap}" +
+  ".gpd{margin-top:12px}.gpd summary{cursor:pointer;color:#C5A56A;font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.12em}.gpr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid #1b2a26}.gpr:first-of-type{border-top:0}.gpt{min-width:0}.gpt b{display:block;font-size:.88rem;color:#F2EFE6}.gpt small{font-size:.7rem;color:#8FA39B}.gpr svg{flex:none}" +
   ".lnz{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:.84rem;line-height:1.45}.lnz.stop{background:#3a1717;border:1px solid #E06B5F;color:#F6D3CE}.lnz.warn{background:#33270f;border:1px solid #E0A458;color:#F3E2C4}.lnz.tip{background:#13261f;border:1px solid #5FBF8A;color:#D2EBDD}" +
   ".lr{display:flex;align-items:center;gap:8px;margin-top:10px}.lr span{flex:1;font-size:.85rem;color:#CFD8D3}.lr button{width:44px;height:44px;border-radius:10px;border:1px solid #2E4540;background:#16241f;color:#F2EFE6;font-size:1.3rem;cursor:pointer}.lr input{width:72px;text-align:center;background:#0C1413;border:1px solid #2E4540;color:#F2EFE6;border-radius:10px;padding:10px 4px;font:inherit;font-size:1rem}" +
   ".rt{position:sticky;bottom:calc(76px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:8px;margin-top:10px;padding:10px 12px;border-radius:12px;background:#16241f;border:1px solid #C5A56A;z-index:20}.rt span{color:#8FA39B;font-size:.8rem}.rt b{flex:1;font-family:'IBM Plex Mono',monospace;font-size:1.3rem;color:#F2EFE6}";
@@ -1506,7 +1513,7 @@ function fitPageHtml(o) {
     '<div class="fc"><div class="ph" data-img="food"><b>WHAT I ATE</b></div><div class="pc" id="prot" style="display:none"></div><div id="food"></div><div class="note" id="win"></div>' +
     '<div class="add"><textarea id="ft" placeholder="What did you eat or drink?" maxlength="140"></textarea><label class="btn s" for="ph" style="display:inline-flex;align-items:center"><span id="phi"></span>&nbsp;Photo</label><input id="ph" type="file" accept="image/*" hidden><button class="btn" id="fa">Add food</button></div>' +
     '<div class="note">A photo is read once and thrown away. Only the description is kept.</div></div>' +
-    '<div class="fc"><div class="ph" data-img="exercise"><b>EXERCISE</b></div><div id="ex"></div>' +
+    '<div class="fc"><div class="ph" data-img="exercise"><b>EXERCISE</b></div><div id="gs"></div><div id="ex"></div>' +
     '<div class="chips" id="chips"></div><div class="add"><input class="g" id="et" placeholder="Activity" maxlength="40"><input id="en" type="number" inputmode="decimal" min="0" step="any" placeholder="min" style="width:84px"><select id="eu"><option value="m">min</option><option value="h">hours</option><option value="s">steps</option></select><button class="btn" id="ea">Add</button></div>' +
     '<div class="add"><label class="btn s" for="mph" style="display:inline-flex;align-items:center"><span id="mphi"></span>&nbsp;Gym machine photo</label><input id="mph" type="file" accept="image/*" capture="environment" hidden></div>' +
     '<div id="lift" class="lift" style="display:none"><div class="lh"><b id="lmn"></b><small id="lmm"></small></div><div class="note" id="llast"></div><div id="lnz" class="lnz" style="display:none"></div>' +
@@ -1515,7 +1522,7 @@ function fitPageHtml(o) {
     '<div class="lr"><span>Weight kg</span><button data-f="lk" data-d="-2.5">&minus;</button><input id="lk" type="number" inputmode="decimal" step="0.5" value="0"><button data-f="lk" data-d="2.5">+</button></div>' +
     '<div class="add"><button class="btn" id="lgo">Log it</button><button class="btn s" id="lno">Cancel</button></div></div>' +
     '<div id="rt" class="rt" style="display:none"><span>Rest</span><b id="rtt">1:30</b><button class="btn s" id="rt60">60s</button><button class="btn s" id="rt90">90s</button><button class="btn s" id="rtx">Stop</button></div>' +
-    '<div class="note">A machine photo is read once and thrown away. Only the machine name is kept.</div></div>' +
+    '<div class="note">A machine photo is read once and thrown away. Only the machine name is kept.</div><div id="gp"></div></div>' +
     '<details class="fc" id="hist"><summary style="cursor:pointer;color:#C5A56A;font-family:\'IBM Plex Mono\',monospace;font-size:.7rem;letter-spacing:.12em">PROGRESS &middot; DAY BY DAY, WEEK BY WEEK</summary><div class="ph" data-img="walk" style="margin:12px 0 10px;border-radius:12px;height:104px;background-position:center 76%"><b>EVERY STEP COUNTS</b></div><div class="add" id="mf"><select id="mw"><option value="weight">Weight (kg)</option><option value="waist">Waist (cm)</option></select><input id="mv" type="number" step="0.1" inputmode="decimal" placeholder="e.g. 82.5" style="width:110px"><button class="btn s" id="mb">Log it</button></div><div class="chips" id="hv"></div><div id="hb"></div></details>' +
     '<details class="fc set" id="set"><summary style="cursor:pointer;color:#C5A56A;font-family:\'IBM Plex Mono\',monospace;font-size:.7rem;letter-spacing:.12em">THE PLAN</summary><div class="note" id="plw" style="margin:10px 0 0"></div>' +
     '<label>END GOAL</label><input id="s_goal" maxlength="200" placeholder="What is this 30 days for?"><label>CHALLENGE STARTS</label><input id="s_start" type="date"><label>CHALLENGE LENGTH (DAYS)</label><input id="s_days" type="number" min="1" max="365">' +

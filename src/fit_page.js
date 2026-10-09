@@ -97,7 +97,20 @@ function draw(){var j=S.data,c=j.cfg,st=j.stats,ch=j.challenge;$('sub').textCont
   var f=$('food');f.textContent='';var fe=j.entries.filter(function(e){return e.k==='food'});if(!fe.length)f.appendChild(el('div','empty','Nothing logged yet.'));fe.forEach(function(e){f.appendChild(mealCard(e,c,false))});$('wbn').textContent=fe.filter(function(e){return e.x==='Bottle of water'}).length;
   $('win').textContent=c.windows.length?'Eating windows: '+c.windows.map(function(w){return w.n+' '+w.a+' to '+w.b}).join('  -  '):'';
   var x=$('ex');x.textContent='';var xe=j.entries.filter(function(e){return e.k==='ex'});if(!xe.length)x.appendChild(el('div','empty','Nothing logged yet.'));xe.forEach(function(e){x.appendChild(exCard(e))});
-  fillSet(c)}
+  gymDraw(j);fillSet(c)}
+// v436 - the gym session card (today's machines, sets, weight moved, body parts) and progress per machine (a small chart each)
+var LIFT_RX=/^(.+) (\d+)×(\d+)(?: @ ([\d.]+) kg)?$/;
+function spark(s){var W=120,H=34,v=s.map(function(p){return p[1]}),lo=Math.min.apply(null,v),hi=Math.max.apply(null,v),r=hi-lo||1;var pts=s.map(function(p,i){return(s.length<2?W/2:i*(W-6)/(s.length-1)+3).toFixed(1)+','+(H-4-(p[1]-lo)/r*(H-8)).toFixed(1)}).join(' ');var NS='http://www.w3.org/2000/svg',g=document.createElementNS(NS,'svg');g.setAttribute('viewBox','0 0 '+W+' '+H);g.setAttribute('width',W);g.setAttribute('height',H);var pl=document.createElementNS(NS,'polyline');pl.setAttribute('points',pts);pl.setAttribute('fill','none');pl.setAttribute('stroke','#C5A56A');pl.setAttribute('stroke-width','2');pl.setAttribute('stroke-linejoin','round');g.appendChild(pl);var l=pts.split(' ').pop().split(','),c=document.createElementNS(NS,'circle');c.setAttribute('cx',l[0]);c.setAttribute('cy',l[1]);c.setAttribute('r','3');c.setAttribute('fill','#F2EFE6');g.appendChild(c);return g}
+function gymDraw(j){var gs=$('gs'),gp=$('gp');gs.textContent='';gp.textContent='';
+  var L=j.entries.filter(function(e){return e.k==='ex'&&LIFT_RX.test(e.x)}).map(function(e){var m=e.x.match(LIFT_RX);return{n:m[1],s:+m[2],r:+m[3],kg:+(m[4]||0),m:e.m||0}});
+  if(L.length){var c=el('div','gsc'),h=el('div','gsh');h.appendChild(el('b',null,'GYM SESSION'));h.appendChild(el('span',null,L.length+' machine'+(L.length>1?'s':'')));c.appendChild(h);
+    var sets=0,vol=0,min=0;L.forEach(function(x){sets+=x.s;vol+=x.s*x.r*x.kg;min+=x.m});
+    var st=el('div','gst');[[sets,'sets'],[Math.round(vol).toLocaleString()+' kg','moved'],[fm(min),'time']].forEach(function(p){var b=el('div');b.appendChild(el('b',null,String(p[0])));b.appendChild(el('small',null,p[1]));st.appendChild(b)});c.appendChild(st);
+    if(j.groups&&j.groups.length){var gg=el('div','chips');gg.style.marginTop='8px';j.groups.forEach(function(g){gg.appendChild(el('span','gch',g))});c.appendChild(gg)}
+    L.forEach(function(x){var r=el('div','gsr');r.appendChild(el('span',null,x.n));r.appendChild(el('b',null,x.s+' × '+x.r+(x.kg?' @ '+x.kg+' kg':'')));c.appendChild(r)});gs.appendChild(c)}
+  var M=(j.machines||[]).filter(function(m){return m.s&&m.s.length}).sort(function(a,b){return a.d<b.d?1:-1});
+  if(M.length){var d=el('details','gpd'),sm=el('summary',null,'MY MACHINES · PROGRESS');d.appendChild(sm);
+    M.forEach(function(m){var r=el('div','gpr'),t=el('div','gpt');t.appendChild(el('b',null,m.name));var f=m.s[0][1],l=m.s[m.s.length-1][1],dd=l-f;t.appendChild(el('small',null,(m.s.length>1?(dd>0?'+'+dd+' kg since '+dlab(m.s[0][0],j.today):dd<0?dd+' kg since '+dlab(m.s[0][0],j.today):'steady at '+l+' kg'):'first time: '+l+' kg')+'  -  best '+(m.best||l)+' kg'));r.appendChild(t);r.appendChild(spark(m.s));d.appendChild(r)});gp.appendChild(d)}}
 
 $('wbtl').onclick=function(){var n=$('wbn');n.textContent=(parseInt(n.textContent,10)||0)+1;api('POST',{op:'water',d:S.d}).then(function(r){if(!r.ok){say(r.why||'Could not save');load(S.d);return}say('Bottle of water logged');load(S.d)})};
 $('prev').onclick=function(){load(addD(S.d,-1))};$('next').onclick=function(){if(S.d>=S.data.today)return;load(addD(S.d,1))};
