@@ -33,7 +33,8 @@ const base = { as_of: "2026-10-01", rows: [
   ok(!h.includes("javascript:") && !h.includes("evil.example"), "non-Property-Finder or unsafe links dropped");
   ok(h.includes("No link stored for this advert yet"), "advert without url says so");
   ok(h.indexOf("AED 88,000") >= 0 && h.indexOf("AED 88,000") < h.indexOf("AED 95,000"), "cheapest first");
-  ok((h.match(/<svg class=mm/g) || []).length === 3, "a mini map for every advert with a position");
+  // v446: one real street map per building (Property Finder gives one position per building), not a blank frame on every advert
+  ok((h.match(/class=smap/g) || []).length === 1 && /class=smap data-lat="\d+\.\d+" data-lon="\d+\.\d+"/.test(h) && !/rastertiles/.test(h) && /google\.com\/maps\/search/.test(h) && !/<svg class=mm/.test(h), "one street map for the building, with tiles and a Google Maps link");
   ok(!/[\u{1F300}-\u{1FAFF}☀-➿]/u.test(h), "no emoji characters");
   // v442 (Kendall 9 Oct 2026): the broker's name, agency, phone and WhatsApp ARE carried now; never an email or an id
   ok(!/email|agent_id|broker_id|user_id/i.test(JSON.stringify(supplyAdverts(doc.adverts))), "no broker email or ids carried (name, agency, phone and WhatsApp only)");

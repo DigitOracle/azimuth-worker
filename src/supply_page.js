@@ -311,6 +311,9 @@ const SU_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans
   + '.adg summary::-webkit-details-marker{display:none}.adg summary b{color:#C5A56A;margin-left:auto}.adg summary small{color:#6F837D;font-size:.66rem}.chv{color:#8FA39B;transition:transform .15s}.adg[open] .chv{transform:rotate(90deg)}'
   + '.ad{display:flex;gap:10px;align-items:flex-start;border-top:1px solid #1B2E2A;padding:9px 11px}.mm{flex:0 0 auto}.adb{min-width:0;flex:1 1 auto}'
   + '.apr{font-family:Fraunces,Georgia,serif;font-size:1.02rem;color:#F0E4C8}.apr small{font-family:inherit;font-size:.68rem;color:#8FA39B}.af{font-size:.72rem;color:#8FA39B;line-height:1.4;margin:2px 0 0}'
+  + '.smap{position:relative;height:230px;overflow:hidden;border-radius:12px;border:1px solid #24352F;margin:0 0 8px;background:#1b2a26}.smc{position:absolute!important;top:0;left:0;width:100%;height:100%}'   // MapLibre's .maplibregl-map sets position:relative, which collapsed an inset-only box to 0 px
+  + '.smpin{width:34px;height:34px;border-radius:50%;border:2px solid #F0E4C8;box-shadow:0 0 0 2px rgba(14,25,24,.6)}'
+  + '.smg{position:absolute;z-index:2;right:8px;top:8px;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:rgba(14,25,24,.88);color:#E3C88F;font-size:.72rem;text-decoration:none;border:1px solid #5A4A2C}'
   + '.ap{display:flex;align-items:center;gap:4px;font-family:"IBM Plex Mono",monospace;font-size:.6rem;color:#6F837D;margin:3px 0 0}'
   + '.ao{display:inline-flex;align-items:center;gap:6px;min-height:34px;margin:6px 0 0;padding:4px 11px;border:1px solid #5A4A2C;border-radius:999px;font-size:.76rem;text-decoration:none;color:#E3C88F}'
   + '.abk{display:flex;gap:6px;flex-wrap:wrap}.abk .ao{border-color:#2F6B55;color:#BFE5D2}';
@@ -351,8 +354,8 @@ export function brokerHtml(a, ctx) {
 }
 function advertCard(a, frame, all, ctx) {
   const facts = [a.sqft ? fmt(a.sqft) + " sq ft" : "", a.type, a.furnished && a.furnished !== "NO" ? (a.furnished === "YES" ? "furnished" : a.furnished.toLowerCase()) : "", a.listed ? "listed " + a.listed : ""].filter(Boolean);
-  const where = a.lat != null && a.lon != null ? '<div class=ap>' + IC_PIN + a.lat.toFixed(5) + ", " + a.lon.toFixed(5) + "</div>" : "";
-  return '<div class=ad>' + miniMap(a, frame, all) + '<div class=adb><div class=apr>' + esc(a.price == null ? "—" : "AED " + fmt(a.price)) + "<small> a year</small></div>"
+  const where = "";   // v446: the position is the building's own (one per building on Property Finder), shown once on the street map above
+  return '<div class=ad><div class=adb><div class=apr>' + esc(a.price == null ? "—" : "AED " + fmt(a.price)) + "<small> a year</small></div>"
     + (facts.length ? '<div class=af>' + esc(facts.join(" · ")) + "</div>" : "") + where
     + (a.url ? '<a class=ao href="' + esc(a.url) + '" target=_blank rel="noopener noreferrer">' + IC_LINK + "Open on Property Finder</a>" : '<div class=af>No link stored for this advert yet</div>')
     + (a.permit ? '<a class=ck href="' + esc(a.permit) + '" target=_blank rel="noopener noreferrer">' + IC_PERMIT + "Check permit</a>" : "")
@@ -362,10 +365,23 @@ export function advertsHtml(b) {
   const ads = b.ads || {}, bands = BANDS.filter((k) => ads[k] && ads[k].length).concat(Object.keys(ads).filter((k) => !BANDS.includes(k) && ads[k].length));
   if (!bands.length) return "";
   const live = (k) => (b.bands && b.bands[k] && b.bands[k].live) || ads[k].length;
-  return '<div class=adw>' + bands.map((k) => '<details class=adg><summary>' + IC_CHEV + "<span>" + esc(BAND_SAY[k] || k) + "</span><b>" + fmt(live(k)) + "</b>"
+  // v446 (Kendall 9 Oct: "where is the map?"): one real street map per building, where it sits in the district
+  const pos = {}; let best = null;
+  for (const k of bands) for (const a of ads[k]) if (a.lat != null && a.lon != null) { const p = a.lat.toFixed(4) + "," + a.lon.toFixed(4); pos[p] = (pos[p] || 0) + 1; if (!best || pos[p] > pos[best]) best = p; }
+  const map = best ? streetMap(Number(best.split(",")[0]), Number(best.split(",")[1]), b.name) : "";
+  return '<div class=adw>' + map + bands.map((k) => '<details class=adg><summary>' + IC_CHEV + "<span>" + esc(BAND_SAY[k] || k) + "</span><b>" + fmt(live(k)) + "</b>"
     + (live(k) > ads[k].length ? "<small>cheapest " + ads[k].length + " shown</small>" : "") + "</summary>"
     + ads[k].map((a) => advertCard(a, b.frame, ads[k], { building: b.name, band: BAND_SAY[k] || k })).join("") + "</details>").join("")
-    + '<div class=dk>Each advert opens on Property Finder, where its pictures and the agent’s contact button are. The small map places the advert within the district.</div></div>';
+    + '<div class=dk>Each advert opens on Property Finder, where its pictures and the agent’s contact button are. The map shows where the building sits; Property Finder gives one position per building.</div></div>';
+}
+// The building's street map: the same free vector map as the developers map (CARTO dark matter, MapLibre 4.7.1), drawn by SUPPLY_JS
+// only when the card scrolls into view, so a 40-building page loads no map until one is looked at. (CARTO's raster tiles now
+// answer "API KEY REQUIRED", 9 Oct 2026, so they are not used.) The Google Maps link works with or without the map.
+export function streetMap(lat, lon, name) {
+  if (!(Math.abs(lat) <= 85 && Math.abs(lon) <= 180)) return "";
+  const g = "https://www.google.com/maps/search/?api=1&query=" + lat.toFixed(6) + "," + lon.toFixed(6);
+  return '<div class=smap data-lat="' + lat.toFixed(6) + '" data-lon="' + lon.toFixed(6) + '" role=img aria-label="' + esc((name || "The building") + " on the map") + '"><div class=smc></div>'
+    + '<a class=smg href="' + g + '" target=_blank rel="noopener noreferrer">' + IC_PIN + "Open in Google Maps</a></div>";
 }
 function buildingCard(b, key) {
   const siteN = b.siteCount || Object.keys(b.urls).length;
@@ -564,6 +580,20 @@ export async function pollerRoutes(request, env, url, h) {
 export const SUPPLY_JS = String.raw`
 (function(){
 var S=window.__SU||{},KQ="key="+encodeURIComponent(S.key||""),LS="najma_supply_pending";
+// v446 - building street maps: MapLibre is fetched once, the first time a map scrolls into view; each map is drawn once
+(function(){var maps=document.querySelectorAll(".smap[data-lat]");if(!maps.length||!("IntersectionObserver" in window))return;var lib=null;
+  function load(){if(lib)return lib;lib=new Promise(function(ok,no){var c=document.createElement("link");c.rel="stylesheet";c.href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css";document.head.appendChild(c);
+    var s=document.createElement("script");s.src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";s.onload=function(){ok(window.maplibregl)};s.onerror=no;document.head.appendChild(s)});return lib}
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(!e.isIntersecting)return;io.unobserve(e.target);var el=e.target,ll=[Number(el.getAttribute("data-lon")),Number(el.getAttribute("data-lat"))];
+    load().then(function(ml){var m=new ml.Map({container:el.querySelector(".smc"),style:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",center:ll,zoom:14,attributionControl:{compact:true},cooperativeGestures:true});
+      var pin=document.createElement("div");pin.className="smpin";new ml.Marker({element:pin}).setLngLat(ll).addTo(m);
+      m.on("load",function(){var a=el.querySelector(".maplibregl-ctrl-attrib");if(a)a.classList.remove("maplibregl-compact-show");
+        // v446 (Kendall: "but in a block format as well"): the digital footprint - every building raised to its height, the advertised one in gold
+        try{var src=Object.keys(m.getStyle().sources).find(function(k){return m.getStyle().sources[k].type==="vector"});
+          if(src){var h=["coalesce",["get","render_height"],["get","height"],12],near=["<=",["distance",{type:"Point",coordinates:ll}],30];
+            m.addLayer({id:"dfp",type:"fill-extrusion",source:src,"source-layer":"building",minzoom:13,paint:{"fill-extrusion-color":["case",near,"#C5A56A","#3d5a53"],"fill-extrusion-height":h,"fill-extrusion-base":["coalesce",["get","render_min_height"],0],"fill-extrusion-opacity":0.9}});
+            m.easeTo({pitch:55,bearing:-20,zoom:15,duration:900})}}catch(x){}})}).catch(function(){})})},{rootMargin:"200px"});
+  for(var i=0;i<maps.length;i++)io.observe(maps[i])})();
 var SAY={building:"Fetching this building: up to about 5 minutes.",district:"Fetching the whole district: this takes a while (about 35 minutes). We’ll keep it here.",
   queued:"Waiting for the crawl that is already running; this one is next. We’ll keep it here.",
   deferred:"Available after the morning refresh: the daily run is using the data right now.",
