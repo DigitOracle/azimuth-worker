@@ -30,7 +30,8 @@
 // The button is never dead: every state ends on a sentence, and the failures offer "Request again".
 import { BRIEF_DISTRICTS } from "./brief_page.js";
 import { advertisedDoc, advertisedFor, advertisedHtml, permitLink, ADV_CSS, IC_PERMIT } from "./advertised.js";
-import { footprintRing, footprintLayer } from "./broker_building.js";   // v451: the gold building is our register-bound footprint   // v444 ADVERTISED NOW (Property Finder): flats, adverts, gone - beside developer availability, never added
+import { footprintRing, footprintLayer, positionsDoc } from "./broker_building.js";
+import { positionOf, placement } from "./building_position.js";   // v452: the multi-source position check   // v451: the gold building is our register-bound footprint   // v444 ADVERTISED NOW (Property Finder): flats, adverts, gone - beside developer availability, never added
 
 export const SUPPLY_LABEL = "Advertised supply \u00b7 live rental adverts from listing sites, not vacancy";
 export const SUPPLY_KV = { file: (d) => "img_pf_supply_" + d, prefix: "img_pf_supply_", req: (id) => "pf_req_" + id, take: (id) => "pf_take_" + id, done: (id) => "pf_done_" + id, queue: "pf_queue" };
@@ -312,7 +313,7 @@ const SU_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans
   + '.adg summary::-webkit-details-marker{display:none}.adg summary b{color:#C5A56A;margin-left:auto}.adg summary small{color:#6F837D;font-size:.66rem}.chv{color:#8FA39B;transition:transform .15s}.adg[open] .chv{transform:rotate(90deg)}'
   + '.ad{display:flex;gap:10px;align-items:flex-start;border-top:1px solid #1B2E2A;padding:9px 11px}.mm{flex:0 0 auto}.adb{min-width:0;flex:1 1 auto}'
   + '.apr{font-family:Fraunces,Georgia,serif;font-size:1.02rem;color:#F0E4C8}.apr small{font-family:inherit;font-size:.68rem;color:#8FA39B}.af{font-size:.72rem;color:#8FA39B;line-height:1.4;margin:2px 0 0}'
-  + '.smap{position:relative;height:230px;overflow:hidden;border-radius:12px;border:1px solid #24352F;margin:0 0 8px;background:#1b2a26}.smc{position:absolute!important;top:0;left:0;width:100%;height:100%}'   // MapLibre's .maplibregl-map sets position:relative, which collapsed an inset-only box to 0 px
+  + '.smap{position:relative;height:230px;overflow:hidden;border-radius:12px;border:1px solid #24352F;margin:0 0 8px;background:#1b2a26}.smc{position:absolute!important;top:0;left:0;width:100%;height:100%}.spl{font-size:11px;line-height:1.4;color:#8FA39C;margin:-2px 0 10px}'   // MapLibre's .maplibregl-map sets position:relative, which collapsed an inset-only box to 0 px
   + '.smpin{width:34px;height:34px;border-radius:50%;border:2px solid #F0E4C8;box-shadow:0 0 0 2px rgba(14,25,24,.6)}'
   + '.smg{position:absolute;z-index:2;right:8px;top:8px;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:rgba(14,25,24,.88);color:#E3C88F;font-size:.72rem;text-decoration:none;border:1px solid #5A4A2C}'
   + '.ap{display:flex;align-items:center;gap:4px;font-family:"IBM Plex Mono",monospace;font-size:.6rem;color:#6F837D;margin:3px 0 0}'
@@ -369,7 +370,7 @@ export function advertsHtml(b) {
   // v446 (Kendall 9 Oct: "where is the map?"): one real street map per building, where it sits in the district
   const pos = {}; let best = null;
   for (const k of bands) for (const a of ads[k]) if (a.lat != null && a.lon != null) { const p = a.lat.toFixed(4) + "," + a.lon.toFixed(4); pos[p] = (pos[p] || 0) + 1; if (!best || pos[p] > pos[best]) best = p; }
-  const map = b.fp && b.fp.ll ? streetMap(b.fp.ll[0], b.fp.ll[1], b.name, b.fp) : best ? streetMap(Number(best.split(",")[0]), Number(best.split(",")[1]), b.name) : "";
+  const map = b.pos ? streetMap(b.pos.ll[0], b.pos.ll[1], b.name, b.fp, b.pos.line) : b.fp && b.fp.ll ? streetMap(b.fp.ll[0], b.fp.ll[1], b.name, b.fp) : best ? streetMap(Number(best.split(",")[0]), Number(best.split(",")[1]), b.name) : "";
   return '<div class=adw>' + map + bands.map((k) => '<details class=adg><summary>' + IC_CHEV + "<span>" + esc(BAND_SAY[k] || k) + "</span><b>" + fmt(live(k)) + "</b>"
     + (live(k) > ads[k].length ? "<small>cheapest " + ads[k].length + " shown</small>" : "") + "</summary>"
     + ads[k].map((a) => advertCard(a, b.frame, ads[k], { building: b.name, band: BAND_SAY[k] || k })).join("") + "</details>").join("")
@@ -378,11 +379,12 @@ export function advertsHtml(b) {
 // The building's street map: the same free vector map as the developers map (CARTO dark matter, MapLibre 4.7.1), drawn by SUPPLY_JS
 // only when the card scrolls into view, so a 40-building page loads no map until one is looked at. (CARTO's raster tiles now
 // answer "API KEY REQUIRED", 9 Oct 2026, so they are not used.) The Google Maps link works with or without the map.
-export function streetMap(lat, lon, name, fp) {
+export function streetMap(lat, lon, name, fp, line) {
   if (!(Math.abs(lat) <= 85 && Math.abs(lon) <= 180)) return "";
   const g = "https://www.google.com/maps/search/?api=1&query=" + lat.toFixed(6) + "," + lon.toFixed(6);
   return '<div class=smap data-lat="' + lat.toFixed(6) + '" data-lon="' + lon.toFixed(6) + '"' + (fp && fp.c ? " data-fp='" + esc(JSON.stringify({ c: fp.c, h: fp.h })) + "'" : "") + ' role=img aria-label="' + esc((name || "The building") + " on the map") + '"><div class=smc></div>'
-    + '<a class=smg href="' + g + '" target=_blank rel="noopener noreferrer">' + IC_PIN + "Open in Google Maps</a></div>";
+    + '<a class=smg href="' + g + '" target=_blank rel="noopener noreferrer">' + IC_PIN + "Open in Google Maps</a></div>"
+    + (line ? "<div class=spl>" + esc(line) + "</div>" : "");   // v452: one quiet line under the map - which sources agree on the position
 }
 function buildingCard(b, key) {
   const siteN = b.siteCount || Object.keys(b.urls).length;
@@ -465,7 +467,10 @@ export async function supplyRoutes(request, env, url, h) {
     const D = await withUnbound(env, await loadDistrict(env, d, names)), src = sourceLine(D);
     // v451 (Kendall: "nothing is gold, no building highlighted?"): Property Finder's point can sit on the road (Address Opera Tower 1 lands
     // on Dubai Mall's ring road), so the gold is OUR footprint for the building's register key "<district>:<index>", never a guess from the point
-    if (D) { try { const lay = await footprintLayer(env, d), rx = new RegExp("^" + d + ":(\\d+)$"); if (lay) for (const x of D.buildings) { const m = rx.exec(String(x.key || "")); if (m) x.fp = footprintRing(lay, Number(m[1])); } } catch (e) {} }
+    // v452 - the position check (img_bldg_pos_<district>): centre on the point the sources agree on; gold = the footprint the check names
+    if (D) { try { const lay = await footprintLayer(env, d), pos = await positionsDoc(env, d), rx = new RegExp("^" + d + ":(\\d+)$");
+      for (const x of D.buildings) { const m = rx.exec(String(x.key || "")); if (!m) continue; const pl = placement(positionOf(pos, x.key), Number(m[1]));
+        if (pl) x.pos = pl; if (lay) x.fp = footprintRing(lay, pl ? pl.bk : Number(m[1])); } } catch (e) {} }
     if (!D) return page({ none: "No adverts fetched for " + (nm[d] || d) + " yet.", fetchDistrict: nm[d] ? d : "" });
     if (b) { const one = D.buildings.find((x) => x.id === b || x.key === b); return one ? page({ view: "building", b: one, fetched: one.crawled, src }) : page({ none: "No adverts for that building in the last crawl.", fetched: D.crawled, src }); }
     return page({ view: "district", d: D, fetched: D.crawled, src });

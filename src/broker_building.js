@@ -21,6 +21,7 @@ import { icon, secHead, loadData, dateLong, obliqueMap, pack, head, PERMIT_REMIN
 import { salesDoc, valueOf, VALUE_CAP, MIN_PRICED } from "./sales_view.js";
 import { ejariDoc } from "./ejari_page.js";
 import { advertisedDoc, advertisedForKey, ADV_LABEL, ADV_NOTE } from "./advertised.js";
+import { positionOf, placement } from "./building_position.js";   // v452: img_bldg_pos_<district>, the multi-source position check
 
 const { NAVY, MUTED } = BRIEF_KIT;
 const TEAL = "#0A4F4A", GOLDI = "#C5A56A", HAIR = "#E6E1D8";
@@ -126,6 +127,7 @@ export function footprintRing(layer, bk) {
   return { c: r, h: Number(fp[1]) || 12, ll: k ? llOfXy(layer, sx / k, sy / k) : null };
 }
 export async function footprintLayer(env, slug) { return readOr(env, "brief_fp_" + slug); }
+export async function positionsDoc(env, slug) { return readOr(env, "bldg_pos_" + slug); }   // v452: img_bldg_pos_<district>, null when not published
 export async function loadBuilding(env, p, opts) {
   const b = p.bld || { project: "", name: "", bk: null };
   if (!b.project && !b.name) return { status: 400, body: { ok: false, reason: "project= (the Land Department project number) or name= is required" } };
@@ -146,21 +148,20 @@ export async function loadBuilding(env, p, opts) {
   const R = ed ? rentFigures(er, { from: w.from < ed.first ? ed.first : w.from, to: ed.asOf }) : null;
   // the footprint: only the register-bound index the map handed us
   const layer = b.bk != null ? await readOr(env, "brief_fp_" + slug) : null;
-  const fp = layer && Array.isArray(layer.b) ? layer.b.find((x) => x[0] === b.bk) : null;
+  // v452 - the position check: the consensus point of every source joined by id; the gold footprint is the one it names
+  const pl = b.bk != null ? placement(positionOf(await readOr(env, "bldg_pos_" + slug), slug + ":" + b.bk), b.bk) : null;
+  const gk = pl ? pl.bk : b.bk;
+  const fp = layer && Array.isArray(layer.b) ? layer.b.find((x) => x[0] === gk) : null;
   let ll = null, ring = null;
-  if (fp && Array.isArray(layer.ll)) {
-    let sx = 0, sy = 0, k = 0; const f = fp[2], r = [];
-    for (let i = 0; i + 1 < f.length; i += 2) { sx += f[i]; sy += f[i + 1]; k++; const q = llOfXy(layer, f[i], f[i + 1]); if (q) r.push([Math.round(q[1] * 1e6) / 1e6, Math.round(q[0] * 1e6) / 1e6]); }
-    ll = k ? llOfXy(layer, sx / k, sy / k) : null;
-    if (r.length >= 3) { if (r[0][0] !== r[r.length - 1][0] || r[0][1] !== r[r.length - 1][1]) r.push(r[0]); ring = { c: r, h: Number(fp[1]) || 12 }; }   // [lon, lat], closed, with the footprint's height
-  }
+  if (fp && Array.isArray(layer.ll)) { const fr = footprintRing(layer, gk); if (fr) { ring = { c: fr.c, h: fr.h }; ll = fr.ll; } }
+  if (pl) ll = pl.ll;
   // OWNER ONLY, web page only: the adverts (never added to developer availability, never in the PDF)
   let adv = null;
   if (opts && opts.owner && p.format === "html" && b.bk != null) { try { adv = advertisedForKey(advertisedDoc(await readOr(env, "pf_supply_" + slug)), slug + ":" + b.bk); } catch (e) { adv = null; } }
   const st = C.st, tier = S.psm != null && st.enough && st.bounds ? DM.tierOf(S.psm, st.bounds) : -1;
   const B = { C, slug, rec, name: rec.project || b.name, projectNo: rec.projectNo || b.project, dev: devRow.dev || "", area: C.names.plain, subArea: rec.area || "",
     status: S.lastStage === "offplan" ? "Off-plan" : S.lastStage === "ready" ? "Ready" : "", asOf: sd.asOf, first: sd.first, w, S, R, rentAsOf: ed ? ed.asOf : "", rentFirst: ed ? ed.first : "",
-    layer: fp ? layer : null, bk: fp ? b.bk : null, ll, ring, adv, owner: !!(opts && opts.owner), tier, areaPsm: st.enough ? st.median : null };
+    layer: fp ? layer : null, bk: fp ? gk : null, ll, ring, adv, posLine: pl && fp ? pl.line : "", posLineNoPf: pl && fp ? pl.lineNoPf : "", owner: !!(opts && opts.owner), tier, areaPsm: st.enough ? st.median : null };
   return { status: 200, B };
 }
 function llOfXy(layer, x, y) {   // the footprint layer's affine (the Brief's llOfXy, src/brief_docs.js) -> [lat, lon]
@@ -229,10 +230,11 @@ function mapBlock(B, live) {
   if (!B.layer) return { h: 80, html: secHead("map-pin", "On the map", "") + '<div class="note2">' + icon("info", 18, TEAL) + "<div>This project is not tied to a building outline on the map yet, so no map is drawn.</div></div>" };
   const gold = new Map([[B.bk, { fill: GOLDI, wall: "#A98A4F", edge: "#7A6230", n: 0 }]]);
   const pic = obliqueMap(B.layer, gold, { w: 700, h: 300, frame: "hi", label: B.name + " in gold among its neighbours" });
+  const pline = live && B.owner ? B.posLine : B.posLineNoPf;   // Property Finder is named on the owner's web page only, never in the PDF
   const g = B.ll ? '<a class="smg" href="https://www.google.com/maps/search/?api=1&query=' + B.ll[0].toFixed(6) + "," + B.ll[1].toFixed(6) + '">Open in Google Maps</a>' : "";
   const liveMap = live && B.ll ? '<div class="smap" data-lat="' + B.ll[0].toFixed(6) + '" data-lon="' + B.ll[1].toFixed(6) + '"' + (B.ring ? " data-fp='" + JSON.stringify(B.ring) + "'" : "") + ' role="img" aria-label="' + esc(B.name) + ' on the street map, in gold"><div class="smc"></div></div>' : "";
   return { h: 380, html: secHead("map-pin", "On the map", "The digital footprint: buildings raised to their height, this one in gold. Building outlines and streets from OpenStreetMap contributors.") +
-    (liveMap || '<div class="mapbox">' + pic + "</div>") + g };
+    (liveMap || '<div class="mapbox">' + pic + "</div>") + g + (pline ? '<div class="mnote">' + esc(pline) + "</div>" : "") };
 }
 
 // the live street map of the web page: the supply page's approach (MapLibre 4.7.1 from unpkg, CARTO dark-matter vector style, fill-extrusion
