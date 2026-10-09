@@ -98,7 +98,39 @@ export function supplyDoc(doc) {
   if (!doc || !Array.isArray(doc.rows)) return null;
   return { asOf: str(doc.as_of), measure: str(doc.measure), rows: doc.rows.map(supplyRow).filter(Boolean),
     coverage: supplyCoverage(doc.coverage), homeTypes: supplyHomeTypes(doc.home_types),
-    sourceSay: str(doc.source_say), sites: num(doc.sites) > 0 ? num(doc.sites) : 0, srcs: supplySources(doc.sources) };
+    sourceSay: str(doc.source_say), sites: num(doc.sites) > 0 ? num(doc.sites) : 0, srcs: supplySources(doc.sources), adverts: supplyAdverts(doc.adverts) };
+}
+// v414 - the individual adverts behind each count (pf_listings.py `adverts`, 9 Oct 2026): {slug: {band: [{id, p, sq, t, f, d, lat, lon, u}]}}.
+// Additive: an old file has none and the card shows the counts table only. u is kept only when it is an https page on propertyfinder.ae.
+const PF_HOST = /^https:\/\/www\.propertyfinder\.ae\/[^\s"'<>]*$/;
+export function supplyAdverts(a) {
+  const out = {};
+  if (!a || typeof a !== "object") return out;
+  for (const slug of Object.keys(a)) {
+    const bs = a[slug]; if (!bs || typeof bs !== "object") continue;
+    for (const band of Object.keys(bs)) {
+      const l = Array.isArray(bs[band]) ? bs[band] : [];
+      const xs = l.filter((x) => x && typeof x === "object").map((x) => ({
+        id: str(x.id), price: num(x.p), sqft: num(x.sq), type: str(x.t), furnished: str(x.f), listed: str(x.d),
+        lat: num(x.lat), lon: num(x.lon), url: typeof x.u === "string" && PF_HOST.test(x.u) ? x.u : "" }));
+      if (xs.length) (out[slug] || (out[slug] = {}))[band] = xs;
+    }
+  }
+  return out;
+}
+// attach each building's adverts by band (a building can group several site slugs) and the district frame for the mini map
+export function attachAdverts(buildings, adverts) {
+  let s = 90, w = 180, n = -90, e = -180;
+  for (const b of buildings) {
+    const ads = {};
+    for (const slug of b.slugs || (b.slug ? [b.slug] : [])) {
+      const bs = adverts[slug]; if (!bs) continue;
+      for (const band in bs) (ads[band] || (ads[band] = [])).push(...bs[band]);
+    }
+    for (const band in ads) { ads[band].sort((x, y) => (x.price == null) - (y.price == null) || (x.price || 0) - (y.price || 0)); for (const x of ads[band]) if (x.lat != null && x.lon != null) { s = Math.min(s, x.lat); n = Math.max(n, x.lat); w = Math.min(w, x.lon); e = Math.max(e, x.lon); } }
+    b.ads = ads;
+  }
+  return n >= s ? { s, w, n, e } : null;
 }
 // v313 - where the data come from. The crawler's `sources` [{site, url, what, fetched, method}] and `source_say` are additive: an old
 // file has neither, and then the line says what we can know (Property Finder, the crawl time) and never a number of sites.
@@ -171,7 +203,8 @@ export function supplyBuildings(rows, district, names) {
     const k = r.key || (r.siteName ? "site:" + r.siteName.toLowerCase() : (r.slug ? "slug:" + r.slug : ""));
     if (!k) continue;
     const b = g.get(k) || { id: k, matched: !!r.key, key: r.key, slug: r.slug, name: (r.key && names && names.get(r.key)) || r.project || r.siteName || r.slug, siteName: r.siteName, project: r.project,
-      district, live: 0, sources: {}, urls: {}, bands: {}, crawled: "", delisted: 0 };
+      district, live: 0, sources: {}, urls: {}, bands: {}, crawled: "", delisted: 0, slugs: [] };
+    if (r.slug && !b.slugs.includes(r.slug)) b.slugs.push(r.slug);
     b.live += r.live || 0; b.delisted += r.delisted || 0;
     for (const s in r.sources) b.sources[s] = (b.sources[s] || 0) + r.sources[s];
     for (const s in r.urls) if (!b.urls[s]) b.urls[s] = r.urls[s];
@@ -212,6 +245,8 @@ async function loadDistrict(env, slug, names) {
   const doc = supplyDoc(await readJson(env, SUPPLY_KV.file(slug)));
   if (!doc) return null;
   const bs = supplyBuildings(doc.rows, slug, names);
+  const frame = attachAdverts(bs, doc.adverts || {});
+  for (const b of bs) b.frame = frame;
   const crawled = bs.reduce((m, b) => (b.crawled > m ? b.crawled : m), "") || doc.asOf;
   return { slug, asOf: doc.asOf, crawled, buildings: bs, coverage: doc.coverage, homeTypes: doc.homeTypes, sourceSay: doc.sourceSay, sites: doc.sites, srcs: doc.srcs };
 }
@@ -265,12 +300,51 @@ const SU_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans
   + '.rs{font-size:.76rem;color:#E8D6AE;line-height:1.45;margin:6px 0 0}.rs:empty{display:none}'
   + '.hd{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.11em;color:#8FA39B;margin:16px 0 6px}'
   + '.pick a{display:block;padding:10px 12px;border:1px solid #2E4540;border-radius:10px;margin:0 0 6px;text-decoration:none;color:#E8E4D8}.pick small{display:block;color:#8FA39B;font-size:.7rem}'
-  + '.nt{color:#8FA39B;font-size:.8rem;line-height:1.5;margin:6px 0 10px}';
+  + '.nt{color:#8FA39B;font-size:.8rem;line-height:1.5;margin:6px 0 10px}'
+  + '.adw{margin:10px 0 0}.adg{border:1px solid #24352F;border-radius:10px;margin:0 0 6px;background:#0E1918}.adg summary{list-style:none;display:flex;align-items:center;gap:7px;min-height:42px;padding:6px 11px;cursor:pointer;font-size:.84rem}'
+  + '.adg summary::-webkit-details-marker{display:none}.adg summary b{color:#C5A56A;margin-left:auto}.adg summary small{color:#6F837D;font-size:.66rem}.chv{color:#8FA39B;transition:transform .15s}.adg[open] .chv{transform:rotate(90deg)}'
+  + '.ad{display:flex;gap:10px;align-items:flex-start;border-top:1px solid #1B2E2A;padding:9px 11px}.mm{flex:0 0 auto}.adb{min-width:0;flex:1 1 auto}'
+  + '.apr{font-family:Fraunces,Georgia,serif;font-size:1.02rem;color:#F0E4C8}.apr small{font-family:inherit;font-size:.68rem;color:#8FA39B}.af{font-size:.72rem;color:#8FA39B;line-height:1.4;margin:2px 0 0}'
+  + '.ap{display:flex;align-items:center;gap:4px;font-family:"IBM Plex Mono",monospace;font-size:.6rem;color:#6F837D;margin:3px 0 0}'
+  + '.ao{display:inline-flex;align-items:center;gap:6px;min-height:34px;margin:6px 0 0;padding:4px 11px;border:1px solid #5A4A2C;border-radius:999px;font-size:.76rem;text-decoration:none;color:#E3C88F}';
 
 function sitesHtml(b) {
   const sites = Object.keys(b.sources).sort((x, y) => b.sources[y] - b.sources[x]);
   if (!sites.length) return "";
   return '<div class=st>' + sites.map((s) => { const u = b.urls[s]; const inner = esc(siteSay(s)) + " <b>" + fmt(b.sources[s]) + "</b>"; return u ? '<a href="' + esc(u) + '" target=_blank rel="noopener noreferrer">' + inner + " \u2197</a>" : "<span>" + inner + "</span>"; }).join("") + "</div>";
+}
+// v414 - drill-down by bedroom: one closed <details> per band (no script), each advert a small card with a link to the advert on
+// Property Finder (pictures and the broker's own contact button live there) and a mini map: the advert's position in the frame of
+// all adverts of the district. Small inline SVG icons, never emojis.
+const IC_LINK = '<svg viewBox="0 0 24 24" width=14 height=14 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';
+const IC_PIN = '<svg viewBox="0 0 24 24" width=13 height=13 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg>';
+const IC_CHEV = '<svg class=chv viewBox="0 0 24 24" width=14 height=14 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true><path d="M9 6l6 6-6 6"/></svg>';
+export function miniMap(a, frame, others) {
+  if (a.lat == null || a.lon == null || !frame) return "";
+  const W = 64, H = 64, pad = 6, dx = frame.e - frame.w || 1e-4, dy = frame.n - frame.s || 1e-4, k = Math.min((W - 2 * pad) / dx, (H - 2 * pad) / (dy * 1.1));
+  const px = (lon) => (pad + (lon - frame.w) * k + ((W - 2 * pad) - dx * k) / 2).toFixed(1), py = (lat) => (H - pad - (lat - frame.s) * k * 1.1 - ((H - 2 * pad) - dy * k * 1.1) / 2).toFixed(1);
+  const dots = "";   // the other adverts' dots were tried and made a 30-building page ~300 KB per building; the frame alone is enough
+  const x = px(a.lon), y = py(a.lat);
+  return '<svg class=mm viewBox="0 0 ' + W + " " + H + '" width=' + W + " height=" + H + ' role=img aria-label="Where this advert sits in the district (' + a.lat.toFixed(5) + ", " + a.lon.toFixed(5) + ')"><rect x=".5" y=".5" width="' + (W - 1) + '" height="' + (H - 1) + '" rx="8" fill="#0E1918" stroke="#24352F"/>'
+    + '<path d="M0 ' + H / 2 + "H" + W + "M" + W / 2 + " 0V" + H + '" stroke="#16251F" stroke-width="1"/>' + dots
+    + '<path transform="translate(' + x + " " + y + ')" d="M0 0c-3.2-3.6-5-6-5-8.4a5 5 0 0 1 10 0C5-6 3.2-3.6 0 0z" fill="#C5A56A"/><circle cx="' + x + '" cy="' + (y - 8.4) + '" r="1.7" fill="#0E1918"/></svg>';
+}
+function advertCard(a, frame, all) {
+  const facts = [a.sqft ? fmt(a.sqft) + " sq ft" : "", a.type, a.furnished && a.furnished !== "NO" ? (a.furnished === "YES" ? "furnished" : a.furnished.toLowerCase()) : "", a.listed ? "listed " + a.listed : ""].filter(Boolean);
+  const where = a.lat != null && a.lon != null ? '<div class=ap>' + IC_PIN + a.lat.toFixed(5) + ", " + a.lon.toFixed(5) + "</div>" : "";
+  return '<div class=ad>' + miniMap(a, frame, all) + '<div class=adb><div class=apr>' + esc(a.price == null ? "—" : "AED " + fmt(a.price)) + "<small> a year</small></div>"
+    + (facts.length ? '<div class=af>' + esc(facts.join(" · ")) + "</div>" : "") + where
+    + (a.url ? '<a class=ao href="' + esc(a.url) + '" target=_blank rel="noopener noreferrer">' + IC_LINK + "Open on Property Finder</a>" : '<div class=af>No link stored for this advert yet</div>')
+    + "</div></div>";
+}
+export function advertsHtml(b) {
+  const ads = b.ads || {}, bands = BANDS.filter((k) => ads[k] && ads[k].length).concat(Object.keys(ads).filter((k) => !BANDS.includes(k) && ads[k].length));
+  if (!bands.length) return "";
+  const live = (k) => (b.bands && b.bands[k] && b.bands[k].live) || ads[k].length;
+  return '<div class=adw>' + bands.map((k) => '<details class=adg><summary>' + IC_CHEV + "<span>" + esc(BAND_SAY[k] || k) + "</span><b>" + fmt(live(k)) + "</b>"
+    + (live(k) > ads[k].length ? "<small>cheapest " + ads[k].length + " shown</small>" : "") + "</summary>"
+    + ads[k].map((a) => advertCard(a, b.frame, ads[k])).join("") + "</details>").join("")
+    + '<div class=dk>Each advert opens on Property Finder, where its pictures and the agent’s contact button are. The small map places the advert within the district.</div></div>';
 }
 function buildingCard(b, key) {
   const siteN = b.siteCount || Object.keys(b.urls).length;
@@ -281,6 +355,7 @@ function buildingCard(b, key) {
     + sitesHtml(b)
     + (b.bandRows.length ? '<table><tr><th>HOME</th><th>LIVE ADVERTS</th><th>MEDIAN ASKING RENT</th><th>MEDIAN DAYS LISTED</th><th>DELISTED SINCE LAST CRAWL</th></tr>'
       + b.bandRows.map((r) => "<tr><td>" + esc(r.label) + "</td><td><b>" + fmt(r.live) + "</b></td><td>" + esc(aed(r.price)) + "</td><td>" + (r.days == null ? "\u2014" : fmt(r.days)) + "</td><td>" + fmt(r.delisted) + "</td></tr>").join("") + "</table>" : "")
+    + advertsHtml(b)
     + '<div class=dk>Delisted since last crawl is a rough sign of letting, nothing more. Last crawled ' + esc(dubaiTime(b.crawled) || "\u2014") + " (Dubai time).</div>"
     + '<button type=button class=rf data-district="' + esc(b.district) + '" data-slug="' + esc(b.slug || "") + '">' + (b.slug ? "Refresh now" : "Refresh the district") + '</button><div class=rs role=status></div></div>';
 }
