@@ -94,11 +94,12 @@ function draw(){var j=S.data,c=j.cfg,st=j.stats,ch=j.challenge;$('sub').textCont
   $('dl').textContent=dlab(S.d,j.today);$('next').disabled=S.d>=j.today;$('next').style.opacity=S.d>=j.today?.3:1;
   var sp=$('strip');sp.textContent='';j.strip.forEach(function(x){var b=el('button',x.d===S.d?'on':'');var wd=new Date(x.d+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'narrow',timeZone:'UTC'});b.appendChild(el('span',null,wd+' '+x.d.slice(8)));var dot=el('span','dot');dot.appendChild(stat(x,j.today));b.appendChild(dot);b.appendChild(el('span',null,fm(x.ex)));b.onclick=function(){load(x.d)};sp.appendChild(b)});
   prot(j);
-  var f=$('food');f.textContent='';var fe=j.entries.filter(function(e){return e.k==='food'});if(!fe.length)f.appendChild(el('div','empty','Nothing logged yet.'));fe.forEach(function(e){f.appendChild(mealCard(e,c,false))});
+  var f=$('food');f.textContent='';var fe=j.entries.filter(function(e){return e.k==='food'});if(!fe.length)f.appendChild(el('div','empty','Nothing logged yet.'));fe.forEach(function(e){f.appendChild(mealCard(e,c,false))});$('wbn').textContent=fe.filter(function(e){return e.x==='Bottle of water'}).length;
   $('win').textContent=c.windows.length?'Eating windows: '+c.windows.map(function(w){return w.n+' '+w.a+' to '+w.b}).join('  -  '):'';
   var x=$('ex');x.textContent='';var xe=j.entries.filter(function(e){return e.k==='ex'});if(!xe.length)x.appendChild(el('div','empty','Nothing logged yet.'));xe.forEach(function(e){x.appendChild(exCard(e))});
   fillSet(c)}
 
+$('wbtl').onclick=function(){var n=$('wbn');n.textContent=(parseInt(n.textContent,10)||0)+1;api('POST',{op:'water',d:S.d}).then(function(r){if(!r.ok){say(r.why||'Could not save');load(S.d);return}say('Bottle of water logged');load(S.d)})};
 $('prev').onclick=function(){load(addD(S.d,-1))};$('next').onclick=function(){if(S.d>=S.data.today)return;load(addD(S.d,1))};
 $('fa').onclick=function(){var t=$('ft').value.trim();if(!t){say('Say what it was');return}api('POST',{op:'add',kind:'food',text:t,d:S.d}).then(function(r){if(!r.ok){say(r.why||'Could not save');return}$('ft').value='';var e=r.entry;load(S.d);if(e.o)say('Logged - but outside your eating windows')})};
 $('ea').onclick=function(){var t=$('et').value.trim(),n=parseFloat($('en').value),u=$('eu').value;if(u==='s'){t=t||'Steps'}if(!t||!(n>0)){say('Give the exercise and a number');return}var b={op:'add',kind:'ex',text:t,d:S.d};if(u==='s')b.steps=Math.round(n);else b.minutes=Math.round(u==='h'?n*60:n);api('POST',b).then(function(r){if(!r.ok){say(r.why||'Could not save');return}$('et').value='';$('en').value='';load(S.d)})};

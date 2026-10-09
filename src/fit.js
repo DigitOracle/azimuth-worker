@@ -188,7 +188,8 @@ const PROTEIN_GROUPS = [   // within a group the largest match counts; the group
   ["starch", [[/\b(pizza)\b/i, 18], [/\b(oats?|oatmeal|porridge|granola|muesli|cereal|bread|toast|bagel|croissant|pita|wrap|roti|paratha|naan|sandwich|pastry|cake|cookies?|muffin)\b/i, 6], [/\b(rice|pasta|spaghetti|noodles?|biryani|couscous|quinoa|potato|fries|chips)\b/i, 5]]],
   ["plants", [[/\b(salad|vegetables?|veggies|soup|fruit|apple|banana|berries|strawberr\w*|grapes?|dates?|avocado)\b/i, 2]]]
 ];
-const PROTEIN_ZERO = /\b(water|sparkling|soda water|tea|karak|black coffee|americano|espresso|coffee|juice|lemonade|soda|cola|coke|pepsi|sprite|fanta|energy drink|beverage|sweets?|candy|gum)\b/i;
+const WATER_X = "Bottle of water";
+const PROTEIN_ZERO =/\b(water|sparkling|soda water|tea|karak|black coffee|americano|espresso|coffee|juice|lemonade|soda|cola|coke|pepsi|sprite|fanta|energy drink|beverage|sweets?|candy|gum)\b/i;
 export function tableProtein(text) {
   const t = String(text || ""); if (!t.trim()) return null;
   let g = 0, hit = false;
@@ -1382,6 +1383,12 @@ export async function fitRoutes(request, env, url, h) {
     const e = await fitAdd(env, { u: cfg.u, k: kind, x: kind === "ex" ? (n ? "Steps" : exCanon(x)) : x, m, n, t, d, o, s: "web", est: kind === "food" ? await proteinFor(env, h, x) : undefined });
     return J({ ok: true, entry: e });
   }
+  if (op === "water") {   // v432: one tap on the bottle in the header = one bottle of water; never "outside the eating window"
+    let d = DATE_RX.test(String(b.d || "")) ? b.d : today; if (d > today) d = today;
+    await ensureStarted(env, cfg, d);
+    const t = d === today ? now : Date.parse(d + "T12:00:00Z") - GST_MS;
+    return J({ ok: true, entry: await fitAdd(env, { u: cfg.u, k: "food", x: WATER_X, m: 0, n: 0, t, d, o: false, s: "web", est: await proteinFor(env, h, WATER_X) }) });
+  }
   if (op === "del") return J({ ok: await fitDelete(env, b.id, cfg.u) });
   if (op === "edit") {
     const patch = {}; if (typeof b.text === "string") patch.x = b.text; if (b.minutes != null) patch.m = b.minutes; if (b.steps != null) patch.n = b.steps; if (b.value != null) patch.v = b.value;
@@ -1428,7 +1435,7 @@ function fitPageHtml(o) {
     '<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0C1413;color:#E6E9E4;font-family:"IBM Plex Sans",system-ui,sans-serif}' + FIT_CSS + FIT_CSS2 + (o.navCss || "") + '</style></head><body><div class="fw">' +
     '<div class="brand"><img class="logo" src="/fit_img/logo.jpg?key=' + keyQ + '" alt="Momo"><div class="fsub" id="sub">&nbsp;</div></div><div class="chips" id="usr" style="margin:0 0 4px"></div>' +
     '<div class="fc" id="who" style="display:none"><h2>WHO IS THIS?</h2><div class="chips" id="whob"></div><div class="note">Pick your name once. This phone remembers it, and everything you log or save here goes under that name.</div></div>' +
-    '<div class="seg"><button class="sw on" id="vb_m">Log</button><button class="sw" id="vb_j">Journal</button><button class="fbb" id="fbopen">Show my feedback</button></div><div id="vm">' +
+    '<div class="seg"><button class="sw on" id="vb_m">Log</button><button class="sw" id="vb_j">Journal</button><button class="fbb" id="fbopen">Show my feedback</button><button class="fbb wtb" id="wbtl" aria-label="Log a bottle of water"><svg width="14" height="22" viewBox="0 0 14 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="4.5" y="1" width="5" height="3" rx="1"/><path d="M4.5 4 3 7.5V19a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V7.5L9.5 4z"/><path d="M3 12h8" opacity=".6"/></svg><span id="wbn">0</span></button></div><div id="vm">' +
     '<div class="fc" id="ch"></div>' +
     '<div class="dn"><button id="prev" aria-label="Previous day">&#8249;</button><span id="dl"></span><button id="next" aria-label="Next day">&#8250;</button></div><div class="strip" id="strip"></div>' +
     '<div class="fc"><div class="ph" data-img="food"><b>WHAT I ATE</b></div><div class="pc" id="prot" style="display:none"></div><div id="food"></div><div class="note" id="win"></div>' +
