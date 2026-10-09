@@ -73,6 +73,7 @@ export function fitCleanCfg(inp, base) {
   if ("bookTime" in c) out.bookTime = HM_RX.test(String(c.bookTime)) ? String(c.bookTime) : b.bookTime;
   if ("journalRemind" in c) out.journalRemind = c.journalRemind === true || c.journalRemind === "true" || c.journalRemind === 1;
   if ("proteinTarget" in c) out.proteinTarget = intIn(c.proteinTarget, 0, 400, b.proteinTarget);
+  if ("waterTarget" in c) out.waterTarget = intIn(c.waterTarget, 0, 20, 8);   // v437: bottles a day; 0 = no target
   if ("windows" in c && Array.isArray(c.windows)) {
     out.windows = c.windows.slice(0, 6).map((w) => ({ n: clip(w && w.n, 20), a: String((w && w.a) || ""), b: String((w && w.b) || "") }))
       .filter((w) => w.n && HM_RX.test(w.a) && HM_RX.test(w.b) && w.a < w.b);
@@ -906,6 +907,19 @@ export function liftNudge(log, groups, today) {
   if (rest.length && lifting.length) return { level: "tip", text: "Good choice." + (rest[0][1] >= 5 ? " Next, don't forget " + rest[0][0] + " - " + (rest[0][1] >= 99 ? "not trained yet this challenge." : rest[0][1] + " days since you trained it.") : "") };
   return null;
 }
+// v437 - voice log: one spoken line from the page's mic -> up to 4 things to log (a machine lift, an exercise, a meal, water).
+const SAY_SCHEMA = { type: "object", additionalProperties: false, required: ["items"], properties: { items: { type: "array", items: { type: "object", additionalProperties: false,
+  required: ["kind", "name", "sets", "reps", "kg", "minutes", "steps", "bottles", "muscles"], properties: {
+    kind: { type: "string", enum: ["lift", "exercise", "food", "water", "none"] }, name: { type: ["string", "null"] }, sets: { type: ["number", "null"] }, reps: { type: ["number", "null"] },
+    kg: { type: ["number", "null"] }, minutes: { type: ["number", "null"] }, steps: { type: ["number", "null"] }, bottles: { type: ["number", "null"] }, muscles: { type: ["string", "null"] } } } } } };
+export async function sayParse(env, deps, text) {
+  const sys = "You turn one spoken line from someone logging their day at the gym or at a meal into items to log. Spoken numbers count: 'three twelves at sixty' is 3 sets of 12 reps at 60 kg; 'three sets of ten' is 3 x 10. " +
+    "kind lift = a gym machine or weights with sets and reps (name = the machine or exercise in Title Case, e.g. Leg Press, Bench Press; muscles = main muscles in a few words; kg null when no weight said). " +
+    "kind exercise = timed or counted activity (name e.g. Run, Walk, Swimming, Spin class; minutes, or steps). kind food = something eaten or drunk other than plain water (name = a plain description). " +
+    "kind water = plain water (bottles = how many, 1 when not said). kind none = nothing to log. Never invent numbers that were not said; leave them null. Unused fields null.";
+  const g = deps.claudeJSON ? await deps.claudeJSON(env, sys, [{ type: "text", text: String(text || "").slice(0, 300) }], SAY_SCHEMA, deps.CLAUDE_FAST, 400) : null;
+  return ((g && g.items) || []).filter((i) => i && i.kind && i.kind !== "none").slice(0, 4);
+}
 async function liftLog(env, u) { try { return JSON.parse((await env.MEETINGS.get("fitliftlog_" + u)) || "[]") || []; } catch (e) { return []; } }
 async function liftHist(env, u) { try { return JSON.parse((await env.MEETINGS.get("fitlift_" + u)) || "{}") || {}; } catch (e) { return {}; } }
 // A caption such as "lunch" claims the photo outright. Returns true when handled.
@@ -1425,9 +1439,34 @@ export async function fitRoutes(request, env, url, h) {
     const e = await fitAdd(env, { u: cfg.u, k: kind, x: kind === "ex" ? (n ? "Steps" : exCanon(x)) : x, m, n, t, d, o, s: "web", est: kind === "food" ? await proteinFor(env, h, x) : undefined });
     return J({ ok: true, entry: e });
   }
+  if (op === "say") {   // v437: the voice log - one spoken line, parsed, then each item logged through the same doors as the buttons
+    const said = clip(String(b.text || "").trim(), 300);
+    if (!said) return J({ ok: false, why: "I did not catch anything" }, 400);
+    let items = []; try { items = await sayParse(env, h, said); } catch (e) {}
+    if (!items.length) return J({ ok: true, done: [], why: "Nothing to log in: \"" + said + "\"" });
+    const done = [];
+    for (const it of items) {
+      let r = null;
+      if (it.kind === "lift" && it.name && it.sets && it.reps) r = await liftOrWater("lift", { machine: it.name, sets: it.sets, reps: it.reps, kg: it.kg || 0, muscles: it.muscles || "", d: b.d });
+      else if (it.kind === "water") { const nb = Math.max(1, Math.min(6, Math.round(it.bottles || 1))); for (let i = 0; i < nb; i++) r = await liftOrWater("water", { d: b.d }); if (r) r.say = nb + " bottle" + (nb > 1 ? "s" : "") + " of water"; }
+      else if (it.kind === "exercise" && it.name && (it.minutes || it.steps)) {
+        let d = DATE_RX.test(String(b.d || "")) ? b.d : today; if (d > today) d = today; await ensureStarted(env, cfg, d);
+        const n = Math.round(it.steps || 0), m = n ? 0 : Math.round(it.minutes || 0);
+        if ((n > 0 && n <= 200000) || (m > 0 && m <= 1440)) r = { ok: true, entry: await fitAdd(env, { u: cfg.u, k: "ex", x: n ? "Steps" : exCanon(clip(it.name, 140)), m, n, t: d === today ? now : Date.parse(d + "T12:00:00Z") - GST_MS, d, o: false, s: "voice" }) };
+      } else if (it.kind === "food" && it.name) {
+        let d = DATE_RX.test(String(b.d || "")) ? b.d : today; if (d > today) d = today; await ensureStarted(env, cfg, d);
+        const t = d === today ? now : Date.parse(d + "T12:00:00Z") - GST_MS, x = clip(it.name, 140);
+        r = { ok: true, entry: await fitAdd(env, { u: cfg.u, k: "food", x, m: 0, n: 0, t, d, o: d === today ? windowFor(cfg, t).out : false, s: "voice", est: await proteinFor(env, h, x) }) };
+      }
+      if (r && r.ok) done.push(r.say || (r.entry && r.entry.x) || it.name);
+    }
+    return J({ ok: true, done, heard: said });
+  }
+  if (op === "lift" || op === "water") return J(await liftOrWater(op, b));
+  async function liftOrWater(op, b) {
   if (op === "lift") {   // v434: sets x reps (x kg) on a machine -> an exercise entry with estimated minutes, and the machine's history
     const name = clip(String(b.machine || "").trim(), 40), sets = Math.round(Number(b.sets) || 0), reps = Math.round(Number(b.reps) || 0), kg = Math.round((Number(b.kg) || 0) * 2) / 2;
-    if (!name || sets < 1 || sets > 20 || reps < 1 || reps > 100 || kg < 0 || kg > 500) return J({ ok: false, why: "give the machine, sets and reps" }, 400);
+    if (!name || sets < 1 || sets > 20 || reps < 1 || reps > 100 || kg < 0 || kg > 500) return { ok: false, why: "give the machine, sets and reps" };
     let d = DATE_RX.test(String(b.d || "")) ? b.d : today; if (d > today) d = today;
     await ensureStarted(env, cfg, d);
     const t = d === today ? now : Date.parse(d + "T12:00:00Z") - GST_MS;
@@ -1445,13 +1484,15 @@ export async function fitRoutes(request, env, url, h) {
       const row = log.find((r) => r.d === d); if (row) row.g = [...new Set(row.g.concat(groups))]; else log.push({ d, g: groups });
       await env.MEETINGS.put("fitliftlog_" + cfg.u, JSON.stringify(log));
     }
-    return J({ ok: true, entry: e, pb, prev });
+    return { ok: true, entry: e, pb, prev };
   }
   if (op === "water") {   // v432: one tap on the bottle in the header = one bottle of water; never "outside the eating window"
     let d = DATE_RX.test(String(b.d || "")) ? b.d : today; if (d > today) d = today;
     await ensureStarted(env, cfg, d);
     const t = d === today ? now : Date.parse(d + "T12:00:00Z") - GST_MS;
-    return J({ ok: true, entry: await fitAdd(env, { u: cfg.u, k: "food", x: WATER_X, m: 0, n: 0, t, d, o: false, s: "web", est: await proteinFor(env, h, WATER_X) }) });
+    return { ok: true, entry: await fitAdd(env, { u: cfg.u, k: "food", x: WATER_X, m: 0, n: 0, t, d, o: false, s: "web", est: await proteinFor(env, h, WATER_X) }) };
+  }
+  return { ok: false, why: "unknown op" };
   }
   if (op === "del") return J({ ok: await fitDelete(env, b.id, cfg.u) });
   if (op === "edit") {
@@ -1493,10 +1534,12 @@ const FIT_CSS = ".fw{max-width:640px;margin:0 auto;padding:18px 16px calc(96px +
   ".chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.chips button.on{border-color:#C5A56A;color:#F2EFE6}.chips button{border:1px solid #2E4540;background:#0C1413;color:#CFD8D3;border-radius:99px;padding:7px 12px;font:inherit;font-size:.78rem;cursor:pointer}" +
   ".set label{display:block;font-size:.72rem;color:#8FA39B;margin:10px 0 4px;font-family:'IBM Plex Mono',monospace}.set input,.set select{width:100%;box-sizing:border-box}.wr{display:flex;gap:6px;margin-top:6px}.wr input{flex:1}.note{color:#8FA39B;font-size:.72rem;margin-top:10px;line-height:1.5}.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#16241f;border:1px solid #C5A56A;color:#F2EFE6;border-radius:12px;padding:10px 14px;font-size:.84rem;max-width:88%;display:none;z-index:50}" +
   ".lift{border:1px solid #C5A56A;border-radius:12px;padding:12px;margin-top:10px;background:#0C1413}.lh b{font-family:Fraunces,Georgia,serif;font-size:1.05rem;color:#F2EFE6}.lh small{color:#8FA39B;font-size:.75rem}" +
+  ".acc{margin:4px 0}.acc>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid #2E4540;border-radius:12px;background:#0C1413;color:#F2EFE6;font-size:.86rem}.acc>summary::-webkit-details-marker{display:none}.acc>summary:after{content:'\\25BE';color:#C5A56A;transition:transform .2s}.acc[open]>summary:after{transform:rotate(180deg)}.acc[open]>summary{margin-bottom:8px}" +
+  ".wrow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid #24352F;border-radius:12px;margin-top:8px;font-size:.84rem;color:#CFD8D3}" +
   ".gsc{border:1px solid #2E4540;border-radius:12px;padding:12px;margin:0 0 10px;background:#0C1413}.gsh{display:flex;justify-content:space-between;align-items:center}.gsh b{font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.12em;color:#C5A56A;font-weight:500}.gsh span{font-size:.75rem;color:#8FA39B}" +
   ".gst{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.gst div{background:#16241f;border-radius:10px;padding:8px;text-align:center}.gst b{display:block;font-size:1.05rem;color:#F2EFE6}.gst small{font-size:.68rem;color:#8FA39B}" +
   ".gch{border:1px solid #5FBF8A;color:#D2EBDD;border-radius:99px;padding:3px 10px;font-size:.72rem}.gsr{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid #1b2a26;font-size:.84rem;color:#CFD8D3;margin-top:6px}.gsr b{color:#F2EFE6;font-weight:600;white-space:nowrap}" +
-  ".gpd{margin-top:12px}.gpd summary{cursor:pointer;color:#C5A56A;font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.12em}.gpr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid #1b2a26}.gpr:first-of-type{border-top:0}.gpt{min-width:0}.gpt b{display:block;font-size:.88rem;color:#F2EFE6}.gpt small{font-size:.7rem;color:#8FA39B}.gpr svg{flex:none}" +
+  ".gpd{margin-top:12px}.gpd summary{cursor:pointer;color:#C5A56A;font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.12em}.gpr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid #1b2a26}.gpr:first-of-type{border-top:0}.gmt{min-width:0}.gmt b{display:block;font-size:.88rem;color:#F2EFE6}.gmt small{font-size:.7rem;color:#8FA39B}.gpr svg{flex:none}" +
   ".lnz{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:.84rem;line-height:1.45}.lnz.stop{background:#3a1717;border:1px solid #E06B5F;color:#F6D3CE}.lnz.warn{background:#33270f;border:1px solid #E0A458;color:#F3E2C4}.lnz.tip{background:#13261f;border:1px solid #5FBF8A;color:#D2EBDD}" +
   ".lr{display:flex;align-items:center;gap:8px;margin-top:10px}.lr span{flex:1;font-size:.85rem;color:#CFD8D3}.lr button{width:44px;height:44px;border-radius:10px;border:1px solid #2E4540;background:#16241f;color:#F2EFE6;font-size:1.3rem;cursor:pointer}.lr input{width:72px;text-align:center;background:#0C1413;border:1px solid #2E4540;color:#F2EFE6;border-radius:10px;padding:10px 4px;font:inherit;font-size:1rem}" +
   ".rt{position:sticky;bottom:calc(76px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:8px;margin-top:10px;padding:10px 12px;border-radius:12px;background:#16241f;border:1px solid #C5A56A;z-index:20}.rt span{color:#8FA39B;font-size:.8rem}.rt b{flex:1;font-family:'IBM Plex Mono',monospace;font-size:1.3rem;color:#F2EFE6}";
@@ -1507,7 +1550,7 @@ function fitPageHtml(o) {
     '<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0C1413;color:#E6E9E4;font-family:"IBM Plex Sans",system-ui,sans-serif}' + FIT_CSS + FIT_CSS2 + (o.navCss || "") + '</style></head><body><div class="fw">' +
     '<div class="brand"><img class="logo" src="/fit_img/logo.jpg?key=' + keyQ + '" alt="Momo"><div class="fsub" id="sub">&nbsp;</div></div><div class="chips" id="usr" style="margin:0 0 4px"></div>' +
     '<div class="fc" id="who" style="display:none"><h2>WHO IS THIS?</h2><div class="chips" id="whob"></div><div class="note">Pick your name once. This phone remembers it, and everything you log or save here goes under that name.</div></div>' +
-    '<div class="seg"><button class="sw on" id="vb_m">Log</button><button class="sw" id="vb_j">Journal</button><button class="fbb" id="fbopen">Show my feedback</button><button class="fbb wtb" id="wbtl" aria-label="Log a bottle of water"><svg width="14" height="22" viewBox="0 0 14 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="4.5" y="1" width="5" height="3" rx="1"/><path d="M4.5 4 3 7.5V19a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V7.5L9.5 4z"/><path d="M3 12h8" opacity=".6"/></svg><span id="wbn">0</span></button></div><div id="vm">' +
+    '<div class="seg"><button class="sw on" id="vb_m">Log</button><button class="sw" id="vb_j">Journal</button><button class="fbb" id="fbopen">Show my feedback</button><button class="fbb wtb" id="wbtl" aria-label="Log a bottle of water"><svg width="14" height="22" viewBox="0 0 14 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="4.5" y="1" width="5" height="3" rx="1"/><path d="M4.5 4 3 7.5V19a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V7.5L9.5 4z"/><path d="M3 12h8" opacity=".6"/></svg><span id="wbn">0</span></button><button class="fbb" id="vmic" aria-label="Say what you did"><svg width="14" height="20" viewBox="0 0 14 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="1" width="6" height="11" rx="3"/><path d="M1.5 9.5a5.5 5.5 0 0 0 11 0M7 15v4"/></svg>Say it</button></div><div id="vm">' +
     '<div class="fc" id="ch"></div>' +
     '<div class="dn"><button id="prev" aria-label="Previous day">&#8249;</button><span id="dl"></span><button id="next" aria-label="Next day">&#8250;</button></div><div class="strip" id="strip"></div>' +
     '<div class="fc"><div class="ph" data-img="food"><b>WHAT I ATE</b></div><div class="pc" id="prot" style="display:none"></div><div id="food"></div><div class="note" id="win"></div>' +
@@ -1529,6 +1572,7 @@ function fitPageHtml(o) {
     '<label>WEEKLY TARGET (HOURS) - CARRIES OVER UNTIL YOU SET IT ON A SUNDAY</label><input id="s_week" type="number" min="0" step="0.5"><label>DAILY FLOOR: WORKOUT MINUTES</label><input id="s_min" type="number" min="5">' +
     '<label>DAILY FLOOR: OR THIS MANY STEPS (0 = OFF)</label><input id="s_steps" type="number" min="0"><label>FEEDBACK TONE</label><select id="s_tone"><option value="kind">Kind</option><option value="firm">Firm</option><option value="brutal">Brutal</option></select>' +
     '<label>PROTEIN GUIDE (GRAMS A DAY, OPTIONAL, 0 = NONE) - A ROUGH GUIDE YOU SET FOR YOURSELF, NOT NUTRITION ADVICE</label><input id="s_protein" type="number" min="0" max="400" step="5">' +
+    '<label>WATER TARGET (BOTTLES A DAY, 0 = NONE)</label><input id="s_water" type="number" min="0" max="20" step="1">' +
     '<label class="chk"><input type="checkbox" id="s_bookon"><span>Remind me to write in my book every day (WhatsApp, only while your 24-hour window is open)</span></label><label>BOOK REMINDER TIME (DUBAI)</label><input id="s_booktime" type="time"><label class="chk"><input type="checkbox" id="s_jrem"><span>Also remind me to add a line to my journal in the app</span></label><label>EATING WINDOWS (NAME, FROM, TO)</label><div id="s_win"></div>' +
     '<div class="note" id="dirt" style="display:none;color:#E0A458">You have unsaved changes - tap "Save the plan" below.</div><label class="chk" id="shl"><input type="checkbox" id="s_share"><span>Share my week and streak with the other person (counts only, never what I ate). It shows only when we both switch it on.</span></label><div class="add"><a class="btn s" id="csv" href="#">Download my log (CSV)</a></div><div class="add"><button class="btn" id="save">Save the plan</button><button class="btn s" id="ext">Extend +30 days</button></div></details>' +
     '</div><div id="vj" style="display:none"><div class="fc" id="bk"></div><div class="fc" id="jr"><h2>JOURNAL</h2><div id="jb"></div></div></div>' +
