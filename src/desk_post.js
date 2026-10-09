@@ -94,19 +94,20 @@ async function storeImage(env, bytes, ct) {
 }
 const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer;
 // One generated picture (JPEG asked for directly, so no conversion is needed). Refuses at the monthly cap. refs = approved reference photos.
-export async function genImage(env, deps, prompt, refs) {
+export async function genImage(env, deps, prompt, refs, size) {   // v429 - size: "1024x1024" (Instagram) or "1536x1024" (widescreen, LinkedIn)
+  size = size === "1536x1024" ? "1536x1024" : "1024x1024";
   const now = nowOf(deps), unit = IMG_COST_EST[imgQuality(env)], c = await costState(env, now);
   if (!env.OPENAI_API_KEY) return { err: "no image key set" };
   if (c.est_usd + unit > capUsd(env) + 1e-9) return { err: "cap", cap: true };
   let r;
   try {
     if (refs && refs.length) {
-      const fd = new FormData(); fd.append("model", env.SCENE_MODEL || "gpt-image-1"); fd.append("prompt", prompt.slice(0, 3500)); fd.append("size", "1024x1024"); fd.append("quality", imgQuality(env)); fd.append("output_format", "jpeg");
+      const fd = new FormData(); fd.append("model", env.SCENE_MODEL || "gpt-image-1"); fd.append("prompt", prompt.slice(0, 3500)); fd.append("size", size); fd.append("quality", imgQuality(env)); fd.append("output_format", "jpeg");
       refs.forEach((b, i) => fd.append("image[]", new Blob([b], { type: "image/jpeg" }), "ref" + i + ".jpg"));
       r = await fetch(OPENAI + "/edits", { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY }, body: fd });
     } else {
       r = await fetch(OPENAI + "/generations", { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: env.SCENE_MODEL || "gpt-image-1", prompt: prompt.slice(0, 3500), size: "1024x1024", quality: imgQuality(env), output_format: "jpeg", n: 1 }) });
+        body: JSON.stringify({ model: env.SCENE_MODEL || "gpt-image-1", prompt: prompt.slice(0, 3500), size, quality: imgQuality(env), output_format: "jpeg", n: 1 }) });
     }
   } catch (e) { return { err: "the picture service did not answer" }; }
   if (!r.ok) return { err: "the picture service refused (" + r.status + ")" };
@@ -198,6 +199,7 @@ export const BACKGROUND_CHOICES = [
   { id: "office", label: "Office or boardroom" },
   { id: "skyline", label: "Dubai skyline" },
   { id: "studio", label: "Plain studio" },
+  { id: "terrace", label: "Calm terrace at sunrise" },   // v429 - the Friday Reflection's setting; any post may use it
 ];
 const POSE = {
   site: "He is on a construction site visit, wearing a white hard hat and a hi-vis vest, looking at the work or at a tablet. ",
@@ -208,6 +210,7 @@ const BACKGROUND = {
   office: "Setting: a calm modern Dubai office or boardroom, a large window, a table. ",
   skyline: "Setting: the Dubai skyline at golden hour, seen from a high terrace. ",
   studio: "Setting: a plain, warm studio backdrop in cream, nothing else. ",
+  terrace: "Setting: a quiet terrace at sunrise, soft warm light, a coffee cup on a small table, the city calm and hazy in the distance. Relaxed, reflective mood. ",
 };
 const REF_CHECKLIST = "Aim for 8 to 12: front-facing neutral, three-quarter left and right, full-length, speaking or gesturing, on site, formal and casual, good light, only you in frame, no children or other people, no logos.";
 const slugs = (idea) => { const w = String(idea || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((x) => x.length > 2); const out = []; for (let n = 3; n >= 1; n--) for (let i = 0; i + n <= w.length; i++) out.push(w.slice(i, i + n).join("-")); return out; };
@@ -252,7 +255,7 @@ async function buildImages(env, deps, p, onlyIdx) {
       if (ok) break;
     }
     if (g.err) { if (g.cap) return { cap: true, err: "the monthly picture budget is used up", notes }; return { err: g.err, notes }; }
-    s.img_key = await storeImage(env, g.bytes, "image/jpeg"); s.src = refs ? "ai-person" : "ai"; s.regen = s.regen || 0;
+    s.img_key = await storeImage(env, g.bytes, "image/jpeg"); s.src = refs ? "ai-person" : "ai"; s.regen = s.regen || 0; if (!infographic) s.prompt = prompt.slice(0, 3500);   // v429 - kept for /post wide
     if (infographic && checked && !ok) s.flag = "text check failed, please look";
     else if (infographic && !checked) s.flag = "text not checked";
     p.ai = true;
@@ -328,7 +331,7 @@ export function assemble(p, j, facts, extraAllow) {
   return { caption: cap, evidence, dropped, flags, slides, tags };
 }
 async function llmDraft(env, deps, p, facts, instruction) {
-  const sys = SYS_COMMON + " " + (LANE_VOICE[p.lane] || LANE_VOICE.abbot) + (p.type === "carousel" ? " Also give 'slides': slide 1 is the hook, then 3 to 6 body slides each carrying ONE fact or step (title up to 8 words, body up to 20 words), and a last slide 'What to do next / follow' . Never more than " + MAX_SLIDES + " slides." : "");
+  const sys = SYS_COMMON + " " + (LANE_VOICE[p.lane] || LANE_VOICE.abbot) + (p.kind === "friday" ? " THIS POST IS THE FRIDAY REFLECTION: personal and about LIFE, not only work (health, family, kindness, courage, rest). Warm first person, no figures, no selling. The hook says it is Friday; the lines ask the three questions (what am I proud of this week, what made this week special, who do I want to be next week); the last line invites people to answer in the comments." : "") + (p.type === "carousel" ? " Also give 'slides': slide 1 is the hook, then 3 to 6 body slides each carrying ONE fact or step (title up to 8 words, body up to 20 words), and a last slide 'What to do next / follow' . Never more than " + MAX_SLIDES + " slides." : "");
   const fl = facts.map((f) => f.id + " | " + f.figure + " | " + f.says + " | " + srcLabel(f)).join("\n") || "(no facts available: write without any figure)";
   const user = "IDEA: " + p.idea + "\nFACTS:\n" + fl + (instruction ? "\nCURRENT CAPTION:\n" + (p.caption || "") + "\nCHANGE REQUESTED: " + instruction : "");
   let t = ""; try { t = await deps.llm(env, sys, user, 1100); } catch (e) {}
@@ -450,6 +453,9 @@ export async function ideasText(env, deps) {
 }
 // ---------- v426 the feed: 10 ideas, then a picture choice and a background choice, then the usual draft -> preview -> approve ----------
 const FEED_TTL = 3 * 3600;
+// v429 (Kendall 9 Oct): a weekly LIFE reflection, not only work. Three questions, his one moment, a calm picture of him.
+export const FRIDAY_IDEA = { lane: "abbot", kind: "friday", needs: "",
+  text: "Friday Reflection, about life and not only work: what am I proud of this week, what made this week special, and who do I want to be next week" };
 const FEED_SYS = "You suggest Instagram post ideas for two lanes of one Dubai built-environment brand. " + LANE_VOICE.abbot + " " + LANE_VOICE.alchemy +
   " Plain text, no emoji, no hashtags. Never name any AI model, AI company or AI tool. Never put a number in an idea unless it appears in the FACTS list. Each idea is ONE line, at most 18 words, specific and useful to people who build, own or manage buildings. Reply with JSON only: {\"ideas\":[{\"lane\":\"abbot\",\"text\":\"...\"}]}. Exactly 10 ideas: 6 abbot, 4 alchemy, abbot first.";
 export async function feedText(env, deps) {
@@ -466,6 +472,7 @@ export async function feedText(env, deps) {
     }
   } catch (e) {}
   if (out.length < 10) { const wk = Math.floor(now / (7 * 86400000)); for (let k = 0; out.length < 10 && k < IDEAS.length; k++) { const i = IDEAS[(wk + k) % IDEAS.length]; if (!out.some((o) => o.text === i.text)) out.push(Object.assign({}, i)); } }
+  if (dub(now).getUTCDay() === 5) out.unshift(Object.assign({}, FRIDAY_IDEA));      // v429 - Fridays (Dubai): the Friday Reflection is idea 1
   out = out.slice(0, 10);
   await kvPut(env, "desk_ideas", out, 14 * 86400);
   await env.MEETINGS.put("desk_feed_open", String(now), { expirationTtl: FEED_TTL }); await env.MEETINGS.delete("desk_feed_pick");
@@ -477,19 +484,19 @@ async function feedReply(env, deps, n) {
   const pick = await kvJ(env, "desk_feed_pick", null);
   if (pick && pick.step === "picture") {
     const c = PICTURE_CHOICES[n - 1]; if (!c) { await deps.send(env, menu("Pick a picture:", PICTURE_CHOICES)); return true; }
-    if (c.id === "slides") { await env.MEETINGS.delete("desk_feed_pick"); await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "carousel", picture: "slides", from_feed: pick.n, allowNums: pick.allow || undefined }); return true; }
+    if (c.id === "slides") { await env.MEETINGS.delete("desk_feed_pick"); await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "carousel", picture: "slides", from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined }); return true; }
     await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "background", picture: c.id }), FEED_TTL);
     await deps.send(env, menu(c.label + ". Now the background:", BACKGROUND_CHOICES)); return true;
   }
   if (pick && pick.step === "background") {
     const b = BACKGROUND_CHOICES[n - 1]; if (!b) { await deps.send(env, menu("Pick a background:", BACKGROUND_CHOICES)); return true; }
     await env.MEETINGS.delete("desk_feed_pick");
-    await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "image", picture: pick.picture, background: b.id, from_feed: pick.n, allowNums: pick.allow || undefined }); return true;
+    await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "image", picture: pick.picture, background: b.id, from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined }); return true;
   }
   if (!(await env.MEETINGS.get("desk_feed_open"))) return false;
   const L = await kvJ(env, "desk_ideas", []), it = L[n - 1];
   if (!it) { await deps.send(env, "No idea " + n + " in today's feed. Reply 1 to " + L.length + ", or send feed for a new list."); return true; }
-  await kvPut(env, "desk_feed_pick", { step: "picture", n, idea: it.text, lane: it.lane, allow: it.allow || null }, FEED_TTL);
+  await kvPut(env, "desk_feed_pick", { step: "picture", n, idea: it.text, lane: it.lane, allow: it.allow || null, kind: it.kind || null }, FEED_TTL);
   await deps.send(env, menu("Idea " + n + ": " + it.text + "\nPick a picture:", PICTURE_CHOICES)); return true;
 }
 async function queueText(env, deps) {
@@ -726,6 +733,7 @@ export async function deskPostRoute(env, msg, text, deps) {
     return false;
   }
   if ((m = t.match(/^\/post\s+cancel\s+([a-z0-9]+)/i))) { const p = await getPlan(env, m[1]); if (!p) { await deps.send(env, "No draft " + m[1] + "."); return true; } if (p.status === "posted") { await deps.send(env, "Already posted; I cannot take it down from here."); return true; } p.status = "cancelled"; hist(p, "cancelled", "", now); await putPlan(env, p); await deps.send(env, "Cancelled " + p.id + ". Nothing will be posted."); return true; }
+  if ((m = t.match(/^\/post\s+wide\s+([a-z0-9]+)/i))) { const p = await getPlan(env, m[1]); if (!p) { await deps.send(env, "No draft " + m[1] + "."); return true; } await widePicture(env, deps, p); return true; }   // v429
   if ((m = t.match(/^\/post\s+regen\s+([a-z0-9]+)/i))) { const p = await getPlan(env, m[1]); if (!p) { await deps.send(env, "No draft " + m[1] + "."); return true; } await regenPlan(env, deps, p); return true; }   // v421
   if ((m = t.match(/^\/post\s+retry\s+([a-z0-9]+)/i))) {
     const p = await getPlan(env, m[1]);
@@ -740,6 +748,27 @@ export async function deskPostRoute(env, msg, text, deps) {
   const eid = await env.MEETINGS.get("desk_post_editing");
   if (eid) { const p = await getPlan(env, eid); if (p && p.status === "editing") { await applyEdit(env, deps, p, t); return true; } }
   return false;
+}
+
+// v429 - a widescreen version of a draft's picture, for LinkedIn: same scene, 1536x1024, sent to the desk only and never posted to Instagram
+async function widePicture(env, deps, p) {
+  const s = p.slides && p.slides[0];
+  const generated = s && (s.src === "ai" || s.src === "ai-person") && p.type !== "carousel";
+  if (!generated) { await deps.send(env, "Draft " + p.id + " has no generated picture I can redo wide" + (s && s.src === "sent" ? " (it is your own photo)" : p.type === "carousel" ? " (a carousel is made of text slides)" : "") + "."); return; }
+  const person = s.src === "ai-person";
+  // a draft made before v429 kept no description: rebuild it the way buildImages writes it
+  const base = s.prompt || (STYLE + (person ? "Place the man shown in the reference photos into this scene, recognisably himself: same face, same build, same apparent age, no alteration of body or age. Only him in the scene, no other identifiable real people, no medical or financial endorsement, no logos or text. " + (POSE[p.picture] || "") : NO_PERSON) + (BACKGROUND[p.background] || "") + "Subject: " + String(p.idea).replace(/\d+/g, "").slice(0, 300));
+  // the ORIGINAL square picture leads the references, so the wide one is the same scene extended, not a new scene
+  const refs = [];
+  const orig = s.img_key ? await env.MEETINGS.get("igm_" + s.img_key, "arrayBuffer") : null;
+  if (orig && orig.byteLength) refs.push(orig);
+  if (person) { const r = await pickRefs(env, p.idea, p.picture); if (r.count >= REF_MIN) refs.push(...r.bufs.slice(0, 2)); }
+  await deps.send(env, "Making a widescreen version of " + p.id + "...");
+  const g = await genImage(env, deps, base + " WIDESCREEN: recreate the FIRST reference image as a wide 3:2 landscape picture. Keep everything in it the same: the same person, face, clothes, pose and expression, the same room, light, colours and view. Only extend the scene naturally to the left and right, with the person in the centre third. No blur, no borders, no text.", refs.length ? refs : null, "1536x1024");
+  if (g.err) { await deps.send(env, "Could not make the widescreen picture: " + (g.cap ? "the monthly picture budget is used up" : g.err) + "."); return; }
+  const key = await storeImage(env, g.bytes, "image/jpeg");
+  p.wide_key = key; hist(p, "wide", "widescreen made", nowOf(deps)); await putPlan(env, p);
+  await deps.image(env, deps.origin(env) + "/ig_media/" + key, "Widescreen version of " + p.id + " (1536 x 1024), for LinkedIn. Illustration. Not posted anywhere; save it from here.");
 }
 
 // ---------- publishing ----------

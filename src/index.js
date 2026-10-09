@@ -1,6 +1,7 @@
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
+import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
 import { templateRoutes, feedTemplateFlag } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
@@ -2415,7 +2416,8 @@ async function appFetch(request, env, ctx) {
         if (url.searchParams.get("hub.verify_token") === env.WA_VERIFY_TOKEN) return new Response(url.searchParams.get("hub.challenge") || "", { status: 200 });
         return new Response("forbidden", { status: 403 });
       }
-      if (url.pathname.indexOf("/ig/") === 0 || url.pathname.indexOf("/ig_") === 0) return igRoute(env, url, request);   // v149 - Instagram insights (404 unless IG_APP_ID)
+      if (url.pathname === "/wa_flow_setup") return flowSetupRoute(env, url, { graph: WA_GRAPH });   // v428 - owner only: create + publish the client-brief Flow
+      if (url.pathname.indexOf("/ig/") === 0 || (url.pathname.indexOf("/ig_") === 0 && url.pathname.indexOf("/ig_media/") !== 0)) return igRoute(env, url, request);   // v149 - Instagram insights (404 unless IG_APP_ID); v427 - NOT /ig_media/: that is the public picture route below, which WhatsApp and Instagram fetch with no key. The /ig_ prefix swallowed it and every desk preview picture came back 401 (8 Oct)
       if (url.pathname.indexOf("/gcal/") === 0) return gcalRoute(env, url);   // v150 - Google Calendar consent and status for Meet bookings (404 unless GMEET)
       if (url.pathname === "/residents" || url.pathname === "/residents/data") return residentsRoute(env, url);   // v239 - PUBLIC: no key of any kind. What protects it is the flooring in the data (500+ accounts, 5% minimum, banded, no counts), not the audience
       if (url.pathname === "/setbg") {
@@ -3741,7 +3743,7 @@ async function appFetch(request, env, ctx) {
         if (!_viaForward && env.WA_FORWARD_TOKEN && !env.WA_APP_SECRET) return new Response("forward token required", { status: 401 });   // receiver-only instance (no Meta secret): forwarding is the ONLY door
         if (!_viaForward && !(await waVerifySig(env, raw, request.headers.get("X-Hub-Signature-256")))) return new Response("bad sig", { status: 401 });
         let body; try { body = JSON.parse(raw); } catch (e) { return new Response("ok"); }
-        if (isDeskEvent(env, body)) { await deskHandle(env, body, { waSend, post: deskPostDeps(env) }); return new Response("ok"); }   // v388 - the desk number: consumed here BEFORE the shape probe and the router, never handed to the ordinary handlers, never routed on, no stranger digits stored
+        if (isDeskEvent(env, body)) { await deskHandle(env, body, { waSend, post: deskPostDeps(env), lab: deskLabDeps(env) }); return new Response("ok"); }   // v388 - the desk number: consumed here BEFORE the shape probe and the router, never handed to the ordinary handlers, never routed on, no stranger digits stored
         try {                                                          // v20 shape probe — no message content stored
           const _v = body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
           const _m = _v && _v.messages && _v.messages[0];
@@ -5446,6 +5448,16 @@ function deskPostDeps(env) {
     vision: async (e, bytes, mime, q) => { if (!e.ANTHROPIC_API_KEY) return null; try { const r = await claudeFetch(e, CLAUDE_FAST, 900, "You transcribe text from images. Reply with the text only.", [{ type: "image", source: { type: "base64", media_type: mime || "image/jpeg", data: b64of(bytes) } }, { type: "text", text: q }], null); if (!r || !r.ok) return null; const j = await r.json(); return (j.content || []).filter(b => b && b.type === "text").map(b => b.text).join(" "); } catch (x) { return null; } },
     fetchMedia: waFetchMedia, origin: (e) => pubOrigin(e, ""), now: () => Date.now(), sleep: (ms) => new Promise(r => setTimeout(r, ms)),
   };
+}
+// v428 - the desk lab's sends: everything to WA_DESK_OWNER from WA_DESK_PHONE_ID. raw() returns Meta's own JSON (with .error when refused),
+// so a refused message type is reported to the desk word for word.
+function deskLabDeps(env) {
+  const pid = String(env.WA_DESK_PHONE_ID || "").replace(/[^0-9]/g, ""), owner = String(env.WA_DESK_OWNER || "").replace(/[^0-9]/g, "");
+  return { owner, pid, graph: WA_GRAPH,
+    raw: async (e, payload, kind) => { try { const r = await fetch(WA_GRAPH + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + e.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); let j = {}; try { j = await r.json(); } catch (x) {} if (!r.ok && !j.error) j.error = { message: "HTTP " + r.status }; if (j.error) await noteErr(e, "desk-lab:" + kind, String(j.error.message || "").slice(0, 160)); return j; } catch (x) { return { error: { message: "WhatsApp did not answer" } }; } },
+    send: (e, t) => waSend(e, owner, t, pid), image: (e, link, cap) => waSendImage(e, owner, link, cap, pid),
+    origin: (e) => pubOrigin(e, ""), sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    briefLink: (e, sp) => { const k = clientLinkKey(e); return pubOrigin(e, "") + "/brief?" + sp.toString() + (k ? "&key=" + encodeURIComponent(k) : ""); } };
 }
 async function publishInstagram(env, to, imageUrl, captionIn, pend) {
   let auth = null; try { auth = JSON.parse((await env.MEETINGS.get("ig_auth")) || "null"); } catch (e) {}
@@ -12546,7 +12558,8 @@ const clientPathOk = (p) => CLIENT_PATHS.includes(p) || KEYLESS_PATHS.includes(p
 // azimuth-2 today, so this was latent rather than live - but "it happens to be configured" is not a guarantee,
 // and this codebase fails closed everywhere else. With no client key the link now carries no key and does not
 // open, which is a visible failure the owner will report, instead of a silent one nobody sees.
-const clientLinkKey = (env) => { const c = clientKeysOf(env); return c.length ? c[0] : ""; };   // app links Azimuth hands the owner to forward; NEVER the owner's own key
+const clientLinkKey = (env) => { const c = clientKeysOf(env); return c.length ? c[0] : ""; };
+   // app links Azimuth hands the owner to forward; NEVER the owner's own key
 const OWNER_LINK_RE = /<a\b[^>]*\bhref="\/(?:board|studio|trends|fit)\b[^"]*"[^>]*>[\s\S]*?<\/a>/g;   // v328 - /fit is health data: never on a client link
 function clientResp(env, url, body, init) {   // a page opened with a client key loses its owner-only links (BOARD, the studio); those routes refuse the key anyway
   return new Response(typeof body === "string" && keyTier(env, url) === "client" ? body.replace(OWNER_LINK_RE, "") : body, init);

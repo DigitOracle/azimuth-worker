@@ -4,6 +4,7 @@
 // never reaches Najjuko's flows. Replies go out from the desk number (the from-phone-id override on waSend).
 import { deskIgStatusText } from "./ig_desk.js";   // v404
 import { deskPostRoute } from "./desk_post.js";   // v413 - the posting loop
+import { deskLabRoute } from "./desk_lab.js";   // v428 - the desk lab
 export const DESK_VERSION = "v388";
 const DIG = (s) => String(s == null ? "" : s).replace(/[^0-9]/g, "");
 export const DESK_FIRST = "Desk is live. This number is for you only (Dr. Kendall Wilson). Commands: /post, /ideas, /queue, /insights, /cost, /pause, /resume, /ref, /desk_status.";
@@ -50,6 +51,7 @@ export async function deskHandle(env, body, deps) {
   let first = false;
   try { first = !(await env.MEETINGS.get("wa_desk_seen")); await env.MEETINGS.put("wa_desk_last_in", new Date().toISOString(), { expirationTtl: 3 * 86400 }); if (first) await env.MEETINGS.put("wa_desk_seen", "1"); } catch (e) {}
   const text = msg.type === "text" && msg.text ? String(msg.text.body || "").trim() : "";
+  if (!first && deps.lab) { let done = false; try { done = await deskLabRoute(env, msg, text, deps.lab); } catch (e) { try { await deps.waSend(env, owner, "The lab step failed (" + String((e && e.message) || e).slice(0, 80) + ").", DIG(env.WA_DESK_PHONE_ID)); } catch (e2) {} done = true; } if (done) return true; }   // v428 - the desk lab: new WhatsApp features, tried here first
   if (!first && deps.post) { let done = false; try { done = await deskPostRoute(env, msg, text, deps.post); } catch (e) { try { await deps.waSend(env, owner, "That did not work (" + String((e && e.message) || e).slice(0, 80) + "). Nothing was posted.", DIG(env.WA_DESK_PHONE_ID)); } catch (e2) {} done = true; } if (done) return true; }   // v413
   let reply;
   if (first) reply = DESK_FIRST;
