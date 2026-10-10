@@ -40,7 +40,7 @@ reelResults = [{ ok: true, id: "M9", container: "C1", permalink: "https://instag
 texts.length = 0; await deskReelTick(env, lab);
 ok(reelCalls.at(-1).container === "C1" && /Posted to Instagram\. https:\/\/instagram\.com\/p\/X/.test(texts.join("")), "the tick continues the SAME upload and reports the link", texts.join("|"));
 const before = reelCalls.length; await deskReelTick(env, lab); await tap("dr:ok");
-ok(reelCalls.length === before && /already posted/.test(texts.join("")), "never posts twice");
+ok(reelCalls.length === before && /Already on Instagram/.test(texts.join("")), "never posts twice");
 await say("reel https://x.dev/video/site_clarity_75", STRANGER);
 ok(!raws.length, "a stranger gets nothing");
 

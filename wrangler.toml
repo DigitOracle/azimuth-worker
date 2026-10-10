@@ -151,6 +151,8 @@ SCENE_MODEL = "gpt-image-2.5-sunburst"
 CARD_LEDGER = "on"
 # v149 - Instagram insights on her account (Kendall, 14 Sep 2026): the Instagram app ID of the "Azimuth Insights" Meta app (public; the secret is IG_APP_SECRET).
 IG_APP_ID = "3591427797679606"
+# v464 - LinkedIn app "DigitAlchemy Desk" (id 266599695): public Client ID; the secret is LI_CLIENT_SECRET (put by Kendall 10 Oct 2026).
+LI_CLIENT_ID = "78warjmklg5ig2"
 # v150 - Google Meet (Kendall, 14 Sep 2026). "consent" opens only /gcal/start, /gcal/callback and /gcal/status so she can connect
 # Google Calendar (calendar.events, its own token; Drive untouched). "on" also turns on "meet <when> with <emails>" -> card -> Book it. Remove to switch off.
 GMEET = "on"   # 16 Sep 2026, Kendall: Naj tests calendar scheduling in parallel. LIVE on azimuth-2 version 616893ad, deployed from a clean worktree at 33e4682 (this tree was mid-v154). Do not revert this line when committing v154.

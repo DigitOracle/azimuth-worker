@@ -15,7 +15,7 @@ import { sendBriefFlow, flowReply, briefFlowJson, FLOW_KEY, FLOW_NAME, FLOW_DRAF
 import { briefChatRoute } from "./brief_chat.js";   // v455 - the client brief as a chat (lists, buttons, typed answers)
 import { momoTemplateDef } from "./fit.js";   // v453 - the Momo day template the desk submits
 
-export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\nmenu: tap-to-choose list for your videos (Reel, Status, broadcast)\n" +
+export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\nmenu: tap-to-choose list for your videos (Reel, Status, broadcast)\nlinkedin: connect LinkedIn (one tap) so videos can post there too\n" +
   "brief: the client brief, asked in the chat\nbrief form: the client brief as a form (test only)\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
   "lab typing: read ticks and typing\nlab qr: a QR code that opens this chat with a message typed\nlab profile: this number's business profile\n" +
   "lab setup momo template <account id>: submit the Momo day message to Meta\nlab meta admins: who runs the business on Meta (names, login emails, roles)\nstatus <mp4 link>: a video sent here ready to forward to your Status\nreel <mp4 link> [: caption]: post a video to Instagram as a Reel, after you tap Post it\nOr just send a video here (as a video or a document, up to 25 MB) with the caption reel: <caption>, status: <caption> or broadcast";
@@ -159,14 +159,44 @@ export async function deskLabRoute(env, msg, text, deps) {
   }
   const br = msg.type === "interactive" && msg.interactive && msg.interactive.button_reply && String(msg.interactive.button_reply.id || "");
   if (br === "dr:no") { await env.MEETINGS.delete("desk_reel_pending"); await send("Cancelled. Nothing was posted."); return true; }
-  if (br === "dr:ok") {
+  // v464 - Post it asks WHERE when LinkedIn is connected: Instagram / LinkedIn / Both. Without LinkedIn it goes to Instagram as before.
+  if (br === "dr:ok" || br === "dr:ig" || br === "dr:li" || br === "dr:both") {
     let p = null; try { p = JSON.parse((await env.MEETINGS.get("desk_reel_pending")) || "null"); } catch (e) {}
-    if (!p) { await send("No reel is waiting (it may already be posted or cancelled)."); return true; }
-    if (p.posted) { await send("That reel is already posted: " + (p.permalink || p.id)); return true; }
-    if (!deps.reel) { await send("Reel posting is not wired on this worker."); return true; }
-    p.approved = true;
-    await send("Uploading to Instagram. Video processing takes a minute or two; I post it the moment it is ready.");
-    await reelStep(env, p, deps, 3);
+    if (!p) { await send("No video is waiting (it may already be posted or cancelled)."); return true; }
+    const liOn = deps.liConnected ? await deps.liConnected(env) : false;
+    if (br === "dr:ok" && liOn) {
+      await deps.raw(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: "Post where?" },
+        action: { buttons: [{ type: "reply", reply: { id: "dr:ig", title: "Instagram" } }, { type: "reply", reply: { id: "dr:li", title: "LinkedIn" } }, { type: "reply", reply: { id: "dr:both", title: "Both" } }] } } }, "post-where");
+      return true;
+    }
+    const toIg = br === "dr:ok" || br === "dr:ig" || br === "dr:both", toLi = br === "dr:li" || br === "dr:both";
+    if (toLi) {
+      let q = null; try { q = JSON.parse((await env.MEETINGS.get("desk_li_pending")) || "null"); } catch (e) {}
+      const key = String(p.url).split("/").pop();
+      if (q && q.posted && q.key === key && q.caption === p.caption) await send("Already on LinkedIn: " + (q.url || q.id));
+      else {
+        const keep = q && q.key === key && q.video ? q.video : undefined;   // the same video already uploaded: never upload twice
+        await env.MEETINGS.put("desk_li_pending", JSON.stringify({ key, caption: p.caption, approved: true, video: keep, at: Date.now() }), { expirationTtl: 3 * 86400 });
+        await send("Uploading to LinkedIn. It processes the video first; I post it the moment it is ready.");
+        if (deps.liStep) await deps.liStep(env);
+      }
+    }
+    if (toIg) {
+      if (p.posted) { await send("Already on Instagram: " + (p.permalink || p.id)); return true; }
+      if (!deps.reel) { await send("Reel posting is not wired on this worker."); return true; }
+      p.approved = true;
+      await send("Uploading to Instagram. Video processing takes a minute or two; I post it the moment it is ready.");
+      await reelStep(env, p, deps, 3);
+    }
+    return true;
+  }
+  // v464 - "linkedin": the one-tap sign-in link (and the status of the connection)
+  if (/^\/?linkedin$/i.test(t)) {
+    if (!deps.liLink) { await send("LinkedIn is not wired on this worker."); return true; }
+    const r = await deps.liLink(env);
+    if (r.err) { await send("Cannot make the link: " + r.err); return true; }
+    const res = await deps.raw(env, ctaPayload(to, (r.connected ? "LinkedIn is connected" + (r.until ? " until " + r.until : "") + ". Tap to renew the sign-in." : "Connect LinkedIn so the desk can post your videos there (your personal profile).") + " The link works for 15 minutes.", "Sign in", r.link, "LinkedIn"), "li-link");
+    if (res && res.error) await send("Sign-in link: " + r.link);
     return true;
   }
   if (/^\/?status$/i.test(t)) { await send("Send: status <link to the .mp4> (optionally : a note). I send the clip back here ready to forward to your Status."); return true; }

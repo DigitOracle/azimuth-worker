@@ -2,7 +2,8 @@ import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCa
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
 import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - the client brief as a chat; Naj only when switched on
-import { deskReelTick } from "./desk_lab.js";   // v460 - an approved Instagram reel finishes on the minute tick
+import { deskReelTick } from "./desk_lab.js";
+import { liRoute, liRecord, liConnected, liStartLink, liStep, liReminder } from "./li_desk.js";   // v464 - LinkedIn from the desk   // v460 - an approved Instagram reel finishes on the minute tick
 import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
 import { templateRoutes, feedTemplateFlag } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
@@ -2421,6 +2422,7 @@ async function appFetch(request, env, ctx) {
         return new Response("forbidden", { status: 403 });
       }
       if (url.pathname === "/wa_flow_setup") return flowSetupRoute(env, url, { graph: WA_GRAPH });   // v428 - owner only: create + publish the client-brief Flow
+      if (url.pathname.indexOf("/li/") === 0) { const _lr = await liRoute(env, url, { notify: (e, t) => deskLabDeps(e).send(e, t) }); if (_lr) return _lr; }   // v464 - LinkedIn sign-in for the desk
       if (url.pathname.indexOf("/ig/") === 0 || (url.pathname.indexOf("/ig_") === 0 && url.pathname.indexOf("/ig_media/") !== 0)) return igRoute(env, url, request);   // v149 - Instagram insights (404 unless IG_APP_ID); v427 - NOT /ig_media/: that is the public picture route below, which WhatsApp and Instagram fetch with no key. The /ig_ prefix swallowed it and every desk preview picture came back 401 (8 Oct)
       if (url.pathname.indexOf("/gcal/") === 0) return gcalRoute(env, url);   // v150 - Google Calendar consent and status for Meet bookings (404 unless GMEET)
       if (url.pathname === "/residents" || url.pathname === "/residents/data") return residentsRoute(env, url);   // v239 - PUBLIC: no key of any kind. What protects it is the flooring in the data (500+ accounts, 5% minimum, banded, no counts), not the audience
@@ -4806,6 +4808,8 @@ export default {
         try { await liveNewsTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v270 - live city news, a few feeds every 5 minutes, 24/7 (LIVE_NEWS="on")
         try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
         try { await deskReelTick(env, deskLabDeps(env)); } catch (e) {}   // v460 - an approved Instagram reel still processing
+        try { await deskLabDeps(env).liStep(env); } catch (e) {}   // v464 - an approved LinkedIn video still processing
+        try { const _ld = deskLabDeps(env); await liReminder(env, { send: (e2, t) => _ld.send(e2, t) }, event.scheduledTime || Date.now()); } catch (e) {}   // v464 - the 60-day LinkedIn sign-in reminder
         try { await deskPostTick(env, deskPostDeps(env)); } catch (e) {}   // v413 - the desk posting loop: expire old drafts, publish the due approved post (never when paused)
         try { if (env.IG_APP_ID) { const _i3 = new Date(event.scheduledTime || Date.now()); if (_i3.getUTCMinutes() === 17 && _i3.getUTCHours() % 3 === 0) await deskPostPull(env, event.scheduledTime || Date.now()); } } catch (e) {}   // v413 - the desk account numbers, same 3-hour slot
         try { if (env.IG_APP_ID) { const _it2 = new Date(event.scheduledTime || Date.now()); if (_it2.getUTCMinutes() === 17 && _it2.getUTCHours() % 3 === 0) await deskIgRefresh(env); } } catch (e) {}   // v404 - the desk token 60-day refresh, same slot, no-op without a desk record
@@ -5471,6 +5475,10 @@ function deskLabDeps(env) {
     mediaInfo: async (e, id) => { try { return await (await fetch(WA_GRAPH + "/" + id, { headers: { Authorization: "Bearer " + e.WHATSAPP_TOKEN } })).json(); } catch (x) { return {}; } },
     fetchMedia: (e, id) => waFetchMedia(e, id),
     llm: (e, sys, user, mx) => claudeText(e, sys, user, CLAUDE_SMART, mx),   // v462 - "Write it for me" captions
+    // v464 - LinkedIn
+    liConnected: async (e) => liConnected(await liRecord(e)),
+    liLink: async (e) => { const a = await liRecord(e), r = await liStartLink(e, pubOrigin(e, "")); return Object.assign(r, { connected: liConnected(a), until: a && a.expires_at ? new Date(a.expires_at).toISOString().slice(0, 10) : "" }); },
+    liStep: (e) => liStep(e, { send: (e2, t) => waSend(e2, owner, t, pid) }),
     briefLink: (e, sp) => { const k = clientLinkKey(e); return pubOrigin(e, "") + "/brief?" + sp.toString() + (k ? "&key=" + encodeURIComponent(k) : ""); } };
 }
 async function publishInstagram(env, to, imageUrl, captionIn, pend) {
