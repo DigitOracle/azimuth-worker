@@ -17,6 +17,15 @@ export const WA_TEMPLATES = {
     name: "najma_log_day", language: "en_US", category: "UTILITY",
     body: "Black Coffee, a quick note: what did you eat and how did you move today? Reply here with a line or a photo, for example food: chicken salad, or gym: 40 min. Curated by Papi",
   },
+  // v457 (Kendall 10 Oct): Meta moved the two above to MARKETING. Plain, account-style wording with a date so they read as UTILITY.
+  najma_feed_update: {
+    name: "najma_feed_update", language: "en_US", category: "UTILITY",
+    body: "Your daily market update for {{1}} is ready. Reply to this message to receive it.", example: ["10 Oct"],
+  },
+  najma_log_reminder: {
+    name: "najma_log_reminder", language: "en_US", category: "UTILITY",
+    body: "Reminder: your Momo log for {{1}} has no entries yet. Reply with what you ate or how you moved, for example food: chicken salad, or gym: 40 min.", example: ["10 Oct"],
+  },
 };
 export const DEFAULT_FEED_TEMPLATE = "azimuth_daily";
 export const FEED_TEMPLATE_KV = "feed_template";
@@ -25,7 +34,7 @@ export const LOG_NUDGE_TEMPLATE = "najma_log_day";   // for the log worker's use
 // The exact payload Meta receives. Body only: no header, no footer, no buttons, no variables (so no examples).
 export function buildCreatePayload(name) {
   const t = WA_TEMPLATES[name]; if (!t) return null;
-  return { name: t.name, language: t.language, category: t.category, components: [{ type: "BODY", text: t.body }] };
+  return { name: t.name, language: t.language, category: t.category, components: [Object.assign({ type: "BODY", text: t.body }, t.example ? { example: { body_text: [t.example] } } : {})] };
 }
 
 // Meta's list response -> one small, secret-free object.
