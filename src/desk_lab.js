@@ -18,7 +18,7 @@ import { momoTemplateDef } from "./fit.js";   // v453 - the Momo day template th
 export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\n" +
   "brief: the client brief, asked in the chat\nbrief form: the client brief as a form (test only)\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
   "lab typing: read ticks and typing\nlab qr: a QR code that opens this chat with a message typed\nlab profile: this number's business profile\n" +
-  "lab setup momo template <account id>: submit the Momo day message to Meta\nlab meta admins: who runs the business on Meta (names, login emails, roles)";
+  "lab setup momo template <account id>: submit the Momo day message to Meta\nlab meta admins: who runs the business on Meta (names, login emails, roles)\nstatus <mp4 link>: a video sent here ready to forward to your Status";
 
 const meta = (r) => (r && r.error ? " Meta said: " + String(r.error.message || r.error.error_user_msg || JSON.stringify(r.error)).slice(0, 300) : "");
 
@@ -44,7 +44,13 @@ export function carouselPayload(to, body, cards) {
       header: { type: "image", image: { link: c.image } }, body: { text: String(c.text).slice(0, 160) },
       action: { name: "cta_url", parameters: { display_text: String(c.label).slice(0, 20), url: c.url } } })) } } };
 }
-export const typingPayload = (messageId) => ({ messaging_product: "whatsapp", status: "read", message_id: messageId, typing_indicator: { type: "text" } });
+// v458 (Kendall 10 Oct: "add it to the desk") - WhatsApp's business API cannot post a Status, so the desk sends the finished clip
+// to Kendall with the steps, and posting it is one forward from his phone.
+export const STATUS_CAPTION = "Ready for your Status. Open this video, tap Forward, choose My status. (Status splits clips over 60 seconds, so use the 60-second cut.)";
+export function statusVideoPayload(to, link, note) {
+  return { messaging_product: "whatsapp", to, type: "video", video: { link, caption: (note ? String(note).slice(0, 300) + "\n\n" : "") + STATUS_CAPTION } };
+}
+export const typingPayload =(messageId) => ({ messaging_product: "whatsapp", status: "read", message_id: messageId, typing_indicator: { type: "text" } });
 
 // deps: { owner, pid, raw(env,payload,kind) -> {error?}, send(env,text), image(env,link,cap), graph, origin(env), briefLink(env,sp), sleep(ms) }
 export async function deskLabRoute(env, msg, text, deps) {
@@ -66,6 +72,14 @@ export async function deskLabRoute(env, msg, text, deps) {
   if (msg.type === "interactive" && msg.interactive && msg.interactive.list_reply && /^lab:/.test(String(msg.interactive.list_reply.id || ""))) {
     await send("You picked: " + msg.interactive.list_reply.title + " (id " + msg.interactive.list_reply.id + "). The list menu works."); return true;
   }
+  // v458 - status <https link to an mp4> [: note]  -> the clip, ready to forward to Status
+  const sm = t.match(/^\/?status\s+(https:\/\/\S+)(?:\s*:?\s*([\s\S]*))?$/i);
+  if (sm) {
+    const r = await deps.raw(env, statusVideoPayload(to, sm[1], (sm[2] || "").trim()), "status-video");
+    if (r && r.error) await send("Could not send the clip." + meta(r) + " The link must be a public https link straight to an .mp4 under 16 MB.");
+    return true;
+  }
+  if (/^\/?status$/i.test(t)) { await send("Send: status <link to the .mp4> (optionally : a note). I send the clip back here ready to forward to your Status."); return true; }
   if (!/^lab\b/i.test(t)) return false;
   const sub = t.replace(/^lab\b\s*/i, "").toLowerCase();
   const origin = deps.origin(env);
