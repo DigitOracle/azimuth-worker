@@ -3,7 +3,7 @@ import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - ques
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
 import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - the client brief as a chat; Naj only when switched on
 import { deskReelTick } from "./desk_lab.js";
-import { liRoute, liRecord, liConnected, liStartLink, liStep, liReminder } from "./li_desk.js";   // v464 - LinkedIn from the desk   // v460 - an approved Instagram reel finishes on the minute tick
+import { liRoute, liRecord, liConnected, liStartLink, liStep, liReminder, liPostImages } from "./li_desk.js";   // v464 - LinkedIn from the desk   // v460 - an approved Instagram reel finishes on the minute tick
 import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
 import { templateRoutes, feedTemplateFlag, templateWatchTick } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
@@ -5461,6 +5461,7 @@ function deskPostDeps(env) {
     llm: (e, sys, user, mx) => claudeText(e, sys, user, CLAUDE_SMART, mx),
     vision: async (e, bytes, mime, q) => { if (!e.ANTHROPIC_API_KEY) return null; try { const r = await claudeFetch(e, CLAUDE_FAST, 900, "You transcribe text from images. Reply with the text only.", [{ type: "image", source: { type: "base64", media_type: mime || "image/jpeg", data: b64of(bytes) } }, { type: "text", text: q }], null); if (!r || !r.ok) return null; const j = await r.json(); return (j.content || []).filter(b => b && b.type === "text").map(b => b.text).join(" "); } catch (x) { return null; } },
     fetchMedia: waFetchMedia, origin: (e) => pubOrigin(e, ""), now: () => Date.now(), sleep: (ms) => new Promise(r => setTimeout(r, ms)),
+    liConnected: async (e) => liConnected(await liRecord(e)), liPostImages: (e, imgs, cap) => liPostImages(e, imgs, cap),   // v466 - regular posts to LinkedIn
   };
 }
 // v428 - the desk lab's sends: everything to WA_DESK_OWNER from WA_DESK_PHONE_ID. raw() returns Meta's own JSON (with .error when refused),

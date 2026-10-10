@@ -97,6 +97,38 @@ export async function liPostVideo(a, video, caption, deps) {
   return { ok: false, err: "post refused: " + String(j.message || ("HTTP " + (r && r.status))).slice(0, 160) };
 }
 
+// v466 - pictures for a regular post: Images API initializeUpload -> PUT the bytes -> urn:li:image; then one post with a single image or
+// a multiImage (2 to 20). Images are usable almost at once; a post refused because one is still processing is retried once after 3 s.
+export async function liUploadImage(a, bytes, deps) {
+  const f = (deps && deps.fetch) || fetch;
+  const init = await (await f(LI_API + "/rest/images?action=initializeUpload", { method: "POST", headers: H(a.token, true),
+    body: JSON.stringify({ initializeUploadRequest: { owner: "urn:li:person:" + a.sub } }) })).json().catch(() => ({}));
+  const v = init && init.value;
+  if (!v || !v.uploadUrl || !v.image) return { err: "picture upload refused: " + String((init && (init.message || init.code)) || "no answer").slice(0, 160) };
+  const r = await f(v.uploadUrl, { method: "PUT", headers: { Authorization: "Bearer " + a.token, "Content-Type": "application/octet-stream" }, body: bytes });
+  if (!r || !(r.ok || r.status === 201)) return { err: "a picture was refused (HTTP " + (r && r.status) + ")" };
+  return { image: v.image };
+}
+export async function liPostImages(env, imgs, caption, deps) {
+  const f = (deps && deps.fetch) || fetch, wait = (deps && deps.sleep) || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const a = await liRecord(env);
+  if (!liConnected(a)) return { ok: false, err: "LinkedIn is not connected (send linkedin)" };
+  const ids = [];
+  for (const im of imgs.slice(0, 20)) { const u = await liUploadImage(a, im.bytes, deps); if (u.err) return { ok: false, err: u.err }; ids.push({ id: u.image, altText: String(im.alt || "").slice(0, 300) }); }
+  const content = ids.length > 1 ? { multiImage: { images: ids } } : ids.length ? { media: { id: ids[0].id, altText: ids[0].altText } } : undefined;
+  const body = { author: "urn:li:person:" + a.sub, commentary: liEscapeKeepTags(caption).slice(0, 2900), visibility: "PUBLIC",
+    distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] }, lifecycleState: "PUBLISHED", isReshareDisabledByAuthor: false };
+  if (content) body.content = content;
+  for (let i = 0; i < 2; i++) {
+    const r = await f(LI_API + "/rest/posts", { method: "POST", headers: H(a.token, true), body: JSON.stringify(body) });
+    if (r && r.status === 201) { const id = r.headers.get("x-restli-id") || ""; return { ok: true, id, url: id ? "https://www.linkedin.com/feed/update/" + id + "/" : "" }; }
+    let j = {}; try { j = await r.json(); } catch (e) {}
+    if (i === 0 && /process|not.*available|waiting/i.test(String(j.message || ""))) { await wait(3000); continue; }
+    return { ok: false, err: "post refused: " + String(j.message || ("HTTP " + (r && r.status))).slice(0, 160) };
+  }
+  return { ok: false, err: "post refused: pictures still processing" };
+}
+
 // one step of an approved LinkedIn video post (state in KV desk_li_pending): upload once, wait for AVAILABLE, post once.
 // deps: { send(env,text), fetch? }. "Still processing" is silent; done and refused are told once.
 export async function liStep(env, deps) {

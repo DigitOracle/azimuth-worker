@@ -594,7 +594,10 @@ async function handleButton(env, deps, id) {
   const im = String(id).match(/^dp:inbox:(ref|use|ignore)$/); if (im) return inboxButton(env, deps, im[1], nowOf(deps));
   if (id === "dp:ref:keep") { await deps.send(env, "Kept."); return true; }
   if (id === "dp:ref:purge") { const ix = await kvJ(env, "desk_ref_index", []); for (const n of ix) { await env.MEETINGS.delete("desk_ref_" + n); await env.MEETINGS.delete("desk_refimg_" + n); } await env.MEETINGS.delete("desk_ref_index"); await deps.send(env, "All " + ix.length + " reference photos deleted."); return true; }
-  const m = String(id).match(/^dp:([a-z0-9]+):(ok|edit|skip|now|slot|laneA|laneL)$/);
+  // v466 - "post" alone: what kind of post, by tapping
+  if (id === "dp:start:ideas") return deskPostRoute(env, { type: "text" }, "/ideas", deps);
+  if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
+  const m = String(id).match(/^dp:([a-z0-9]+):(ok|edit|skip|now|slot|laneA|laneL|wig|wli|wboth)$/);
   if (!m) return false;
   const p = await getPlan(env, m[1]);
   if (!p) { await deps.send(env, "That draft has expired."); return true; }
@@ -603,7 +606,16 @@ async function handleButton(env, deps, id) {
   if (act === "laneA" || act === "laneL") { p.lane = act === "laneA" ? "abbot" : "alchemy"; await putPlan(env, p); await deps.send(env, "Drafting " + p.id + " (" + p.type + ", " + p.lane + ")..."); await draftPlan(env, deps, p); return true; }
   if (act === "skip") { if (p.status === "scheduled") { await deps.send(env, "Draft " + p.id + " is scheduled; use /post cancel " + p.id + "."); return true; } p.status = "skipped"; hist(p, "skipped", "", now); await putPlan(env, p); await env.MEETINGS.delete("desk_post_editing"); await deps.send(env, "Skipped " + p.id + ". Nothing was posted."); return true; }
   if (act === "edit") { p.status = "editing"; await putPlan(env, p); await kvPut(env, "desk_post_editing", p.id, 3 * 86400); await deps.send(env, "Tell me what to change on " + p.id + ": shorter, punchier, more formal, add <fact>, remove <x>, swap image <n>, another background, or Arabic version. (" + (MAX_ROUNDS - (p.rounds || 0)) + " rounds left.)"); return true; }
-  if (act === "ok") { if (p.status !== "draft" && p.status !== "editing") { await deps.send(env, "Draft " + p.id + " is " + p.status + "."); return true; } await approve(env, deps, p); return true; }
+  if (act === "ok" || act === "wig" || act === "wli" || act === "wboth") {
+    if (p.status !== "draft" && p.status !== "editing") { await deps.send(env, "Draft " + p.id + " is " + p.status + "."); return true; }
+    // v466 - with LinkedIn connected, Approve first asks where the post goes
+    if (act === "ok" && deps.liConnected && await deps.liConnected(env)) {
+      await deps.buttons(env, "Post " + p.id + " where?", [{ id: "dp:" + p.id + ":wig", title: "Instagram" }, { id: "dp:" + p.id + ":wli", title: "LinkedIn" }, { id: "dp:" + p.id + ":wboth", title: "Both" }]);
+      return true;
+    }
+    p.targets = act === "wli" ? ["li"] : act === "wboth" ? ["ig", "li"] : ["ig"]; await putPlan(env, p);
+    await approve(env, deps, p); return true;
+  }
   if (act === "now" || act === "slot") { if (p.status !== "approving" || p.approved !== true) { await deps.send(env, "Draft " + p.id + " is not approved yet."); return true; } await schedule(env, deps, p, act); return true; }
   return true;
 }
@@ -755,6 +767,12 @@ export async function deskPostRoute(env, msg, text, deps) {
     p.status = "scheduled"; p.slot = now; hist(p, "retry", "owner asked", now); await putPlan(env, p);
     await publishOne(env, deps, p, now); return true;
   }
+  // v466 - "post" (or /post) on its own: three buttons, no typing needed to start
+  if (/^\/?post$/i.test(t)) {
+    await deps.buttons(env, "New post. Pick a voice and type the idea, or tap Give me ideas. (To use your own photo, send it with the caption post: <idea>.)", [{ id: "dp:start:ideas", title: "Give me ideas" }, { id: "dp:start:abbot", title: "Digital Abbot" }, { id: "dp:start:alchemy", title: "DigitAlchemy" }]);
+    return true;
+  }
+  if (!/^\//.test(t)) { const w = await env.MEETINGS.get("desk_post_wait"); if (w) { await env.MEETINGS.delete("desk_post_wait"); return startFromText(env, deps, w + ": " + t); } }
   if ((m = t.match(/^\/post(?:\s+([\s\S]*))?$/i))) return startFromText(env, deps, m[1] || "");
   if ((m = t.match(/^post\s*(abbot|alchemy)?\s*:\s*([\s\S]+)$/i))) return startFromText(env, deps, (m[1] ? m[1] + ": " : "") + m[2]);
   const eid = await env.MEETINGS.get("desk_post_editing");
@@ -811,7 +829,26 @@ async function hold(env, deps, p, why) {
   p.status = "held"; p.held_reason = String(why).slice(0, 160); hist(p, "held", why, now); await putPlan(env, p);
   await deps.send(env, "Draft " + p.id + " was not posted: " + p.held_reason + ". Nothing was retried. When ready, send /post retry " + p.id + ". Check the Instagram feed first if the message said so.");
 }
+// v466 - the LinkedIn half of a post (pictures from igm_<key>, the same caption). Reported on its own; never holds the Instagram half.
+async function publishLinkedIn(env, deps, p, now) {
+  if (p.li_id) return true;
+  if (!deps.liPostImages) { await deps.send(env, "LinkedIn is not wired for posts on this worker; " + p.id + " was not posted there."); return false; }
+  const imgs = [];
+  for (const s of p.slides) { const b = s.img_key ? await env.MEETINGS.get("igm_" + s.img_key, "arrayBuffer") : null; if (!b) { await deps.send(env, "LinkedIn: a picture of " + p.id + " is no longer stored; not posted there."); return false; } imgs.push({ bytes: b, alt: s.alt || "" }); }
+  const r = await deps.liPostImages(env, imgs, p.caption);
+  if (!r.ok) { hist(p, "li-held", r.err, now); await putPlan(env, p); await deps.send(env, "LinkedIn: " + p.id + " was not posted (" + r.err + ")."); return false; }
+  p.li_id = r.id; p.li_url = r.url; hist(p, "li-posted", r.id, now); await putPlan(env, p);
+  await deps.send(env, "Posted " + p.id + " to LinkedIn" + (r.url ? ": " + r.url : "") + ".");
+  return true;
+}
 export async function publishOne(env, deps, p, now) {
+  const targets = Array.isArray(p.targets) && p.targets.length ? p.targets : ["ig"];
+  if (!targets.includes("ig")) {   // v466 - LinkedIn only
+    if (p.approved !== true) return hold(env, deps, p, "this draft was never approved");
+    const g = publishGuard(p); if (g) return hold(env, deps, p, g + " (send /post regen " + p.id + " for proper pictures)");
+    const ok2 = await publishLinkedIn(env, deps, p, now);
+    p.status = ok2 ? "posted" : "held"; if (!ok2) p.held_reason = "LinkedIn refused it"; p.posted_at = ok2 ? now : p.posted_at; await putPlan(env, p); return;
+  }
   const st = await deskIgStatus(env, now);
   if (!st.connected) return hold(env, deps, p, st.expired ? "the desk Instagram token has expired and needs a fresh link" : "the desk Instagram is not connected");
   if (!st.can_post) return hold(env, deps, p, "the desk Instagram connection does not allow posting (content_publish is missing)");
@@ -844,6 +881,7 @@ export async function publishOne(env, deps, p, now) {
   await env.MEETINGS.put("desk_posts_day_" + dayKey(now), String((await postedToday(env, now)) + 1), { expirationTtl: 3 * 86400 });
   const M = await kvJ(env, "desk_ig_media", {}); M[p.media_id] = { plan: p.id, at: new Date(now).toISOString(), permalink: p.permalink }; await kvPut(env, "desk_ig_media", M);
   await deps.send(env, "Posted " + p.id + (p.permalink ? ": " + p.permalink : "") + ".");
+  if (targets.includes("li")) await publishLinkedIn(env, deps, p, now);   // v466
 }
 // The minute tick. Expires old drafts, publishes at most one due plan, never when paused.
 export async function deskPostTick(env, deps) {

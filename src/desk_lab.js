@@ -129,7 +129,7 @@ export async function deskLabRoute(env, msg, text, deps) {
     if (!c) { await send("I could not write one just now. Tap I'll type it, or try Write it for me again."); return true; }
     return videoAction(env, deps, to, what, link, key, bytes, c);
   }
-  if (msg.type === "text" && t && !/^(\/|lab\b|reel\b|status\b|menu\b|brief\b)/i.test(t)) {
+  if (msg.type === "text" && t && !/^(\/|lab\b|reel\b|status\b|menu\b|brief\b|post\b|linkedin\b)/i.test(t)) {
     let w = null; try { w = JSON.parse((await env.MEETINGS.get("desk_cap_wait")) || "null"); } catch (e) {}
     if (w) { await env.MEETINGS.delete("desk_cap_wait"); return videoAction(env, deps, to, w.what, origin0(deps, env) + "/video/" + w.key, w.key, await videoBytes(env, w.key), t); }
   }
