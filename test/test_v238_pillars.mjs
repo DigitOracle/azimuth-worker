@@ -1,13 +1,13 @@
-// v238 — THE FOUR PILLARS (Kendall, 22 Sep 2026).
+﻿// v238 â€” THE FOUR PILLARS (Kendall, 22 Sep 2026).
 //
 // Broker training says a buyer asks four things: where is it, who built it, can they finish it, what does
-// it cost. Three the Land Department registers answer; the fourth — "can the developer fund itself" — they
+// it cost. Three the Land Department registers answer; the fourth â€” "can the developer fund itself" â€” they
 // do not, because there are no balance sheets in them. These checks exist mostly to stop that honesty
 // eroding, and to stop a missing value ever being drawn as a zero.
 //
 // A NOTE ON WHY GREPPING THE HTML IS FAIR HERE, because it is NOT fair a few hundred lines away. The About
 // card is assembled in the browser inside a script string, so every branch's label sits in every page as
-// source and a string search passes whatever you feed it — a sibling session found "The one sale on
+// source and a string search passes whatever you feed it â€” a sibling session found "The one sale on
 // record" and "What the two sales fetched" both present on a building with 167 sales. The pillars card is
 // built in the WORKER and handed down as a finished string, so what the page carries is the output and
 // only the output. That is the whole reason it was built server-side, and these assertions depend on it.
@@ -64,9 +64,9 @@ const env = { MEETINGS: KV, READ_KEY: READ, INGEST_TOKEN: "ING" };
 const r = await worker.fetch(new Request("https://x/building/" + SLUG + "/" + ID + "?key=" + READ), env, { waitUntil() {} });
 const html = await r.text();
 
-ok(r.status === 200 && html.includes("The pillars"), "the card reaches the building page through the real route");
-ok(html.includes("TRACK RECORD") && html.includes("DELIVERY RECORD") && html.includes("LOCATION"),
-  "all three building spokes are named");
+ok(r.status === 200 && html.includes("Can you trust this developer?"), "the card reaches the building page through the real route");
+ok(html.includes("Will it be finished?") && html.includes("Will it be on time?") && html.includes("Is the area ready?") && !html.includes("class=spdr"),
+  "v479: the three questions replace the radar");
 
 // 1. the fourth pillar is reported as unanswerable, not proxied
 ok(html.includes("no balance sheets") && !/\bFINANCIAL STRENGTH\b/i.test(html),
@@ -194,7 +194,7 @@ const GROUP = { name: "DAMAC", entities: 18, licensed: "2002-01-01", years: 24,
 const gCard = developerPillarsCard(GROUP);
 ok(/18 register entities/.test(gCard) && /146 projects between them/.test(gCard),
   "the card says how many entities it counted and their combined projects");
-ok(/93 of 97 due projects delivered/.test(gCard), "and the delivery figure is the group's, not one entity's");
+ok(/93 of 97 buildings handed over/.test(gCard), "and the delivery figure is the group's, not one entity's");
 
 // the guard on the grouping itself: an incomplete link set must not quietly understate
 const SHORT = Object.assign({}, GROUP, { name: "Sobha", entities: 4, registerShortOf: 95,
@@ -272,7 +272,7 @@ ok(landownerOnly.name === "UNION PROPERTIES"
 console.log("\n" + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
 
-// v238.6 — THE CHART'S OWN CSS MUST REACH THE PAGE.
+// v238.6 â€” THE CHART'S OWN CSS MUST REACH THE PAGE.
 // Kendall saw a solid BLACK TRIANGLE in a frame of the episode. The rings carried class=spgrid and the page carried no
 // .spgrid rule at all, so an SVG polygon fell back to its default fill: black, on a near-black card. The cause was one
 // wrong interpolation - CSS is a template literal and the insertion was written as `' + PILLAR_CSS + '`, which is string

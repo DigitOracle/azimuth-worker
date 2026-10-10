@@ -1,0 +1,22 @@
+// v479 - the developer radar becomes three traffic lights: finished? on time? area ready? Thresholds as approved 11 Oct 2026.
+import { finishedLight, onTimeLight, areaLight, verdictLine, pillarsCard, developerPillarsCard } from "../src/pillars.js";
+let pass = 0, fail = 0;
+const ok = (c, m, d) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m + (d ? "\n         " + String(d).slice(0, 400) : "")); } };
+const DAMAC = { name: "DAMAC STAR PROPERTIES (L L C)", projects: { total: 12, due: 12, delivered: 12, cancelled: 0, dated: 12, on_time: 11, late: 1 }, on_time_pct: 92, track: 90, delivery: 100 };
+const f = finishedLight(DAMAC), t = onTimeLight(DAMAC);
+ok(f.tone === "green" && f.say === "Yes, every time" && f.fact === "12 of 12 buildings handed over. None cancelled.", "finished: green, every time", JSON.stringify(f));
+ok(t.tone === "green" && t.say === "Almost always" && /11 of 12 finished by their due date\. One was late\./.test(t.fact), "on time: green, one late", JSON.stringify(t));
+ok(finishedLight({ projects: { due: 10, delivered: 8 } }).tone === "amber" && finishedLight({ projects: { due: 10, delivered: 6 } }).tone === "red", "finished: 80% amber, 60% red");
+ok(finishedLight({ projects: { due: 10, delivered: 10, cancelled: 1 } }).tone === "red", "any cancellation is red");
+ok(finishedLight({ projects: { total: 18, due: 0 } }).tone === "grey" && /None of its 18/.test(finishedLight({ projects: { total: 18, due: 0 } }).fact), "nothing due: grey, never red");
+ok(onTimeLight({ on_time_pct: 60, projects: { dated: 5, on_time: 3 } }).tone === "amber" && onTimeLight({ on_time_pct: 40, projects: { dated: 5, on_time: 2 } }).tone === "red", "on time: 60% amber, 40% red");
+const a = areaLight({ railM: 3200, railKind: "Metro", schools: 26, health: 563, rank: 90, district: "Business Bay" });
+ok(a.tone === "amber" && a.fact === "Metro is 3.2 km away. 26 schools and 563 clinics in Business Bay.", "3.2 km but a well-served district: amber (the mock-up)", JSON.stringify(a));
+ok(areaLight({ railM: 3200, rank: 50 }).tone === "red" && areaLight({ railM: 600, rank: 10 }).tone === "amber" && areaLight({ railM: 600 }).tone === "green", "metro rules, district folds in one step");
+ok(areaLight(null).tone === "grey", "no rail distance: grey");
+ok(verdictLine([f, t, a]) === "Builds what it promises, on time. Getting around still needs a car some of the time.", "the verdict line", verdictLine([f, t, a]));
+const html = pillarsCard({ axes: [{ key: "location", label: "LOCATION", value: 25, railM: 3200, railKind: "Metro", schools: 26, health: 563, rank: 90, district: "Business Bay" }, { key: "track", label: "TRACK RECORD", value: 90, read: "Licensed 2005 · 12 projects" }, { key: "delivery", label: "DELIVERY RECORD", value: 100 }], dev: DAMAC, subtitle: "DAMAC STAR PROPERTIES (L L C)", price: { why: "x" } });
+ok(/Can you trust this developer\?/.test(html) && (html.match(/class=tl>/g) || []).length === 3 && !/spdr|\/100/.test(html) && !/[\u{1F300}-\u{1FAFF}]/u.test(html), "building card: three lights, no radar, no scores, no emoji");
+const dcard = developerPillarsCard(DAMAC);
+ok((dcard.match(/class=tl>/g) || []).length === 2 && !/Is the area ready/.test(dcard), "developer page: two lights (a developer has no location)");
+console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

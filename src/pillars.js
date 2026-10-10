@@ -66,7 +66,7 @@ export function locationAxis(D, pill, areaLabel) {
   const read = esc(rail.kind) + " " + (rail.m >= 1000 ? (rail.m / 1000).toFixed(1) + " km" : rail.m + " m")
     + " · " + schools + " schools, " + health + " clinics within " + km + " km"
     + (rank == null ? " (district not ranked)" : "");
-  return { key: "location", label: "LOCATION", value, read,
+  return { key: "location", label: "LOCATION", value, read, railM: rail.m, railKind: rail.kind, schools, health, rank, district: String(areaLabel || D.district || "").trim() || null,
     note: "The rail distance is this building's. The schools and clinics are its district's, so every tower in the district shares them." };
 }
 
@@ -229,8 +229,82 @@ export function spiderSvg(axes) {
   return s + "</svg>";
 }
 
+
+// ── v479 THE TRAFFIC LIGHTS (Kendall, 11 Oct 2026: the radar "doesn't make sense to a person ... how much do we trust
+// the developer"). Approved mock-up: three plain questions, one colour each, the fact underneath, a one-line verdict.
+// Same register figures as the radar, read as answers. Thresholds (approved with the mock-up):
+//   Will it be finished?  delivered / due: green >= 90% and none cancelled, amber 70-89%, red < 70% or any cancelled.
+//   Will it be on time?   on_time / dated: green >= 80%, amber 50-79%, red < 50%.
+//   Is the area ready?    nearest metro/tram: green <= 1 km, amber 1-3 km, red > 3 km; the district's schools and
+//                         clinics rank folds in one step (top quarter lifts, bottom quarter lowers).
+// Grey "Too early to say" is never red and never zero: nothing due yet is not a bad record.
+const LIGHT = { green: { c: "#639922", w: "Safe" }, amber: { c: "#EF9F27", w: "Check" }, red: { c: "#E24B4A", w: "Be careful" }, grey: { c: "#9a9890", w: "Too early to say" } };
+const ICON = {   // inline outline icons (no emoji in client documents)
+  check: '<path d="M5 12l5 5L20 7"/>',
+  clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  pin: '<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>',
+};
+const pct = (a, b) => (b ? Math.round(100 * a / b) : null);
+export function finishedLight(dev) {
+  const p = (dev && dev.projects) || {};
+  if (!dev || !p.due) return { q: "Will it be finished?", tone: "grey", say: "Too early to say",
+    fact: dev && p.total ? "None of its " + p.total + " registered projects has reached its due date yet." : "The register holds no handover record for this developer yet." };
+  const v = pct(p.delivered || 0, p.due), cx = p.cancelled || 0;
+  const tone = cx > 0 || v < 70 ? "red" : v >= 90 ? "green" : "amber";
+  const say = tone === "green" ? (v === 100 ? "Yes, every time" : "Yes, nearly always") : tone === "amber" ? "Usually" : cx > 0 && v >= 70 ? "Some projects were cancelled" : "Often not";
+  return { q: "Will it be finished?", tone, say, value: v,
+    fact: p.delivered + " of " + p.due + " buildings handed over." + (cx ? " " + cx + " cancelled." : " None cancelled.") };
+}
+export function onTimeLight(dev) {
+  const p = (dev && dev.projects) || {};
+  if (!dev || !p.dated) return { q: "Will it be on time?", tone: "grey", say: "Too early to say", fact: "No finished building with a due date to measure yet." };
+  const v = dev.on_time_pct != null ? dev.on_time_pct : pct(p.on_time || 0, p.dated);
+  const tone = v >= 80 ? "green" : v >= 50 ? "amber" : "red";
+  const late = p.late || (p.dated - (p.on_time || 0));
+  return { q: "Will it be on time?", tone, value: v, say: tone === "green" ? (v === 100 ? "Yes, every time" : "Almost always") : tone === "amber" ? "Often late" : "Usually late",
+    fact: (p.on_time || 0) + " of " + p.dated + " finished by their due date." + (late > 0 ? " " + (late === 1 ? "One was" : late + " were") + " late." : "") };
+}
+export function areaLight(loc) {
+  if (!loc || loc.railM == null) return { q: "Is the area ready?", tone: "grey", say: "Not known yet", fact: "No metro or tram distance is held for this building." };
+  const order = ["red", "amber", "green"];
+  let i = loc.railM <= 1000 ? 2 : loc.railM <= 3000 ? 1 : 0;
+  if (loc.rank != null && loc.rank >= 75) i = Math.min(2, i + 1);
+  else if (loc.rank != null && loc.rank < 25) i = Math.max(0, i - 1);
+  const tone = order[i], km = loc.railM >= 1000 ? (loc.railM / 1000).toFixed(1) + " km" : loc.railM + " m";
+  return { q: "Is the area ready?", tone, say: tone === "green" ? "Yes" : tone === "amber" ? "Partly" : "Not yet",
+    fact: (loc.railKind || "Metro") + " is " + km + " away. " + (loc.schools || 0) + " schools and " + (loc.health || 0) + " clinics" + (loc.district ? " in " + loc.district : " nearby") + "." };
+}
+export function verdictLine(L) {
+  const by = Object.fromEntries(L.map((x) => [x.q, x.tone]));
+  const f = by["Will it be finished?"], t = by["Will it be on time?"], a = by["Is the area ready?"];
+  let s;
+  if (f === "grey") s = "A newer developer: nothing handed over yet to judge them by.";
+  else if (f === "green" && t === "green") s = "Builds what it promises, on time.";
+  else if (f === "green") s = "Finishes what it starts, but handovers have slipped.";
+  else if (f === "amber") s = "Usually delivers. Ask about the handover date in writing.";
+  else s = "Delivery record needs a careful look before you commit.";
+  if (a === "green") s += " The area is ready now.";
+  else if (a === "amber") s += " Getting around still needs a car some of the time.";
+  else if (a === "red") s += " Getting around still needs a car.";
+  return s;
+}
+export function trafficLights(L) {
+  const card = (x) => {
+    const k = LIGHT[x.tone], ic = x.q.indexOf("on time") > 0 ? ICON.clock : x.q.indexOf("area") > 0 ? ICON.pin : ICON.check;
+    return '<div class=tl><span class=tldot style="background:' + k.c + '"><svg viewBox="0 0 24 24" aria-hidden=true>' + ic + "</svg></span>"
+      + "<div><b>" + esc(x.q) + '</b><em class="t-' + x.tone + '">' + esc(x.say) + "</em><span>" + esc(x.fact) + "</span></div></div>";
+  };
+  return '<div class=tls>' + L.map(card).join("") + "</div>"
+    + '<div class=tlverdict>&ldquo;' + esc(verdictLine(L)) + '&rdquo;</div>'
+    + '<div class=tlkey>' + ["green", "amber", "red", "grey"].map((t) => '<span><i style="background:' + LIGHT[t].c + '"></i>' + LIGHT[t].w + "</span>").join("") + "</div>";
+}
 export const PILLAR_CSS =
-  '.pill{margin:12px 0;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:rgba(197,165,106,.05)}'
+  '.tls{display:grid;gap:8px;margin:8px 0 4px}.tl{display:flex;gap:11px;align-items:flex-start;padding:10px 11px;border:1px solid var(--line);border-radius:12px}'
+  + '.tldot{flex:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center}.tldot svg{width:17px;height:17px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}'
+  + '.tl b{display:block;font:600 .86rem/1.3 Fraunces,Georgia,serif;color:var(--text)}.tl em{display:block;font-style:normal;font:600 .72rem/1.4 "IBM Plex Sans",system-ui,sans-serif;margin-top:1px}'
+  + '.t-green{color:#7fb33a}.t-amber{color:#EF9F27}.t-red{color:#E24B4A}.t-grey{color:var(--mut)}.tl span{display:block;font:400 .7rem/1.45 "IBM Plex Sans",system-ui,sans-serif;color:var(--mut);margin-top:2px}'
+  + '.tlverdict{font:italic 400 .86rem/1.45 Fraunces,Georgia,serif;color:var(--text);margin:10px 0 6px}.tlkey{display:flex;flex-wrap:wrap;gap:10px;font:400 .6rem/1.4 "IBM Plex Mono",monospace;color:var(--mut)}.tlkey i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}'
+  +   '.pill{margin:12px 0;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:rgba(197,165,106,.05)}'
   + '.pill>b{display:block;font:600 .8rem/1.2 Fraunces,Georgia,serif;color:var(--gold);letter-spacing:.02em}'
   + '.pill>b span{display:block;font:400 .6rem/1.4 "IBM Plex Mono",monospace;color:var(--mut);letter-spacing:.04em;margin-top:3px}'
   + '.spdr{display:block;width:100%;max-width:280px;margin:6px auto 2px;height:auto}'
@@ -284,6 +358,19 @@ export function pillarsCard(o) {
       + 'there is nothing to chart. It appears here as soon as any of the three does.</div></div>';
   }
   const shown = PRICE_ON_POLYGON && o.priceAxis ? axes.concat([o.priceAxis]) : axes;
+  // v479 - the traffic lights replace the radar and the 0-100 rows. A developer page has no location, so two lights.
+  const loc = axes.find((a) => a.key === "location");
+  const L = [finishedLight(o.dev), onTimeLight(o.dev)].concat(loc ? [areaLight(loc)] : []);
+  const trk = axes.find((a) => a.key === "track");
+  if (o.lights !== false) {
+    const notes2 = shown.filter((a) => a.note && a.key !== "location").map((a) => esc(a.note)).join(" ");
+    return '<div class=pill><b>Can you trust this developer?<span>' + esc(o.subtitle || "") + (trk && trk.read ? " · " + esc(trk.read) : "") + "</span></b>"
+      + (o.note ? '<div class=pnote style="margin:0 0 6px">' + esc(o.note) + "</div>" : "")
+      + trafficLights(L)
+      + (PRICE_ON_POLYGON ? "" : priceBlock(o.price))
+      + (notes2 ? '<div class=pnote>' + notes2 + "</div>" : "")
+      + '<div class=pnote>' + esc(o.sourceLine || "") + "</div></div>";
+  }
   const rows = shown.map((a) =>
     '<div class="prow' + (a.value == null ? " miss" : "") + '"><i>' + esc(a.label) + "</i><s>"
     + (a.value == null ? "<em>not held — " + esc(a.why || "") + "</em>"
@@ -407,7 +494,7 @@ export function developerPillarsCard(dev, sourceLine) {
       + "emirate and this register covers Dubai only, so the two are measuring different things."
     : "";
   return pillarsCard({
-    axes: developerCardAxes(dev),
+    axes: developerCardAxes(dev), dev,
     price: { why: "price is a building's figure, not a developer's — open any of its buildings for that" },
     subtitle: bits.join(" · ") || "register record",
     note: short,
