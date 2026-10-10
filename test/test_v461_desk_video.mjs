@@ -36,9 +36,9 @@ ok(raws[0] && raws[0].interactive && raws[0].interactive.action.buttons.map((b) 
 await tap("dv:broadcast:desk_3");
 ok(JSON.parse(store.get("desk_broadcast_video")).key === "desk_3" && /Nothing is sent to anyone/.test(texts.join("")), "Save for broadcast remembers it and sends nothing");
 await tap("dv:status:desk_3");
-ok(raws[0] && raws[0].video.link === "https://w.dev/video/desk_3", "Status button sends the clip back");
+ok(raws[0] && raws[0].interactive && raws[0].interactive.action.buttons.map((b) => b.reply.id).join(",") === "dc:ai:status:desk_3,dc:last:status:desk_3,dc:type:status:desk_3", "Status button offers Write it / Same as last / I'll type it", JSON.stringify(raws[0]).slice(0, 300));
 await tap("dv:reel:desk_3");
-ok(/reel https:\/\/w\.dev\/video\/desk_3 : <your caption>/.test(texts.join("")), "Reel button asks for the caption");
+ok(raws[0] && raws[0].interactive && raws[0].interactive.action.buttons[0].reply.id === "dc:ai:reel:desk_3", "Reel button asks for the caption with buttons");
 
 await go({ type: "document", document: { id: "DOC1", mime_type: "video/mp4", filename: "Avatar Video_540p.mp4", caption: "status" } });
 ok(raws[0] && raws[0].video && raws[0].video.link === "https://w.dev/video/desk_4", "a video sent as a DOCUMENT works too");

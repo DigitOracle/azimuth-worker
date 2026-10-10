@@ -5470,6 +5470,7 @@ function deskLabDeps(env) {
     // v461 - a video he sends to the desk: Meta's size first (never download what cannot be kept), then the bytes
     mediaInfo: async (e, id) => { try { return await (await fetch(WA_GRAPH + "/" + id, { headers: { Authorization: "Bearer " + e.WHATSAPP_TOKEN } })).json(); } catch (x) { return {}; } },
     fetchMedia: (e, id) => waFetchMedia(e, id),
+    llm: (e, sys, user, mx) => claudeText(e, sys, user, CLAUDE_SMART, mx),   // v462 - "Write it for me" captions
     briefLink: (e, sp) => { const k = clientLinkKey(e); return pubOrigin(e, "") + "/brief?" + sp.toString() + (k ? "&key=" + encodeURIComponent(k) : ""); } };
 }
 async function publishInstagram(env, to, imageUrl, captionIn, pend) {

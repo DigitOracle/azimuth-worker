@@ -15,7 +15,7 @@ import { sendBriefFlow, flowReply, briefFlowJson, FLOW_KEY, FLOW_NAME, FLOW_DRAF
 import { briefChatRoute } from "./brief_chat.js";   // v455 - the client brief as a chat (lists, buttons, typed answers)
 import { momoTemplateDef } from "./fit.js";   // v453 - the Momo day template the desk submits
 
-export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\n" +
+export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\nmenu: tap-to-choose list for your videos (Reel, Status, broadcast)\n" +
   "brief: the client brief, asked in the chat\nbrief form: the client brief as a form (test only)\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
   "lab typing: read ticks and typing\nlab qr: a QR code that opens this chat with a message typed\nlab profile: this number's business profile\n" +
   "lab setup momo template <account id>: submit the Momo day message to Meta\nlab meta admins: who runs the business on Meta (names, login emails, roles)\nstatus <mp4 link>: a video sent here ready to forward to your Status\nreel <mp4 link> [: caption]: post a video to Instagram as a Reel, after you tap Post it\nOr just send a video here (as a video or a document, up to 25 MB) with the caption reel: <caption>, status: <caption> or broadcast";
@@ -111,12 +111,39 @@ export async function deskLabRoute(env, msg, text, deps) {
       action: { buttons: [{ type: "reply", reply: { id: "dv:reel:" + key, title: "Instagram Reel" } }, { type: "reply", reply: { id: "dv:status:" + key, title: "Status" } }, { type: "reply", reply: { id: "dv:broadcast:" + key, title: "Save for broadcast" } }] } } }, "video-ask");
     return true;
   }
-  const dv = msg.type === "interactive" && msg.interactive && msg.interactive.button_reply && String(msg.interactive.button_reply.id || "").match(/^dv:(reel|status|broadcast):(desk_\d+)$/);
+  // v462 (Kendall 10 Oct: "make those captions buttons ... it's hard to type all that in") - every choice is a tap: a button or a menu row
+  const tapId = msg.type === "interactive" && msg.interactive && String((msg.interactive.button_reply && msg.interactive.button_reply.id) || (msg.interactive.list_reply && msg.interactive.list_reply.id) || "");
+  const dv = tapId && tapId.match(/^dv:(reel|status|broadcast):((?:desk_\d+)|(?:[a-z0-9_]+))$/);
   if (dv) {
+    const bytes = await videoBytes(env, dv[2]);
+    if (dv[1] === "broadcast") return videoAction(env, deps, to, "broadcast", origin0(deps, env) + "/video/" + dv[2], dv[2], bytes, "");
+    await captionChoices(env, deps, to, dv[1], dv[2]); return true;
+  }
+  const dc = tapId && tapId.match(/^dc:(ai|last|type|none|again):(reel|status):([a-z0-9_]+)$/);
+  if (dc) {
+    const [, how, what, key] = dc, link = origin0(deps, env) + "/video/" + key, bytes = await videoBytes(env, key);
+    if (how === "type") { await env.MEETINGS.put("desk_cap_wait", JSON.stringify({ what, key }), { expirationTtl: 3600 }); await send("Type the " + (what === "reel" ? "Instagram" : "Status") + " caption as your next message."); return true; }
+    if (how === "none") return videoAction(env, deps, to, what, link, key, bytes, "");
+    if (how === "last") { const c = await env.MEETINGS.get("desk_last_cap_" + what); return videoAction(env, deps, to, what, link, key, bytes, c || ""); }
+    const c = await draftCaption(env, deps, what);
+    if (!c) { await send("I could not write one just now. Tap I'll type it, or try Write it for me again."); return true; }
+    return videoAction(env, deps, to, what, link, key, bytes, c);
+  }
+  if (msg.type === "text" && t && !/^(\/|lab\b|reel\b|status\b|menu\b|brief\b)/i.test(t)) {
+    let w = null; try { w = JSON.parse((await env.MEETINGS.get("desk_cap_wait")) || "null"); } catch (e) {}
+    if (w) { await env.MEETINGS.delete("desk_cap_wait"); return videoAction(env, deps, to, w.what, origin0(deps, env) + "/video/" + w.key, w.key, await videoBytes(env, w.key), t); }
+  }
+  // v462 - "menu": everything the desk does with videos, as a list to tap
+  if (/^\/?menu$/i.test(t)) {
     let last = null; try { last = JSON.parse((await env.MEETINGS.get("desk_vid_last")) || "null"); } catch (e) {}
-    const bytes = last && last.key === dv[2] ? last.bytes : 0;
-    if (dv[1] === "reel") { await send("Send the Instagram caption as: reel " + origin0(deps, env) + "/video/" + dv[2] + " : <your caption>"); return true; }
-    return videoAction(env, deps, to, dv[1], origin0(deps, env) + "/video/" + dv[2], dv[2], bytes, "");
+    const k = (last && last.key) || "site_clarity_75";
+    await deps.raw(env, listPayload(to, "Latest video: " + k + ". Pick what to do. To use a new video, just send it here (no caption needed).", "Open menu", [
+      { id: "dv:reel:" + k, title: "Post to Instagram", description: "As a Reel, after you tap Post it" },
+      { id: "dv:status:" + k, title: "Send for my Status", description: "Comes back here ready to forward" },
+      { id: "dv:broadcast:" + k, title: "Save for broadcast", description: "Nothing is sent until you approve" },
+      { id: "dv:reel:site_clarity_75", title: "Site clarity: Reel", description: "The GoCanvas video" },
+      { id: "dv:status:site_clarity_75", title: "Site clarity: Status", description: "The GoCanvas video" }], "Desk menu"), "menu");
+    return true;
   }
   // v460 - reel <https mp4 link> [: caption] -> the clip and caption come back with Post / Cancel; nothing goes to Instagram until Post
   const rm = t.match(/^\/?reel\s+(https:\/\/\S+)(?:\s*:\s*([\s\S]+))?$/i);
@@ -300,13 +327,35 @@ export function deskVideoOf(msg) {
   if (d && d.id && (/^video\//i.test(String(d.mime_type || "")) || /\.(mp4|mov|m4v)$/i.test(String(d.filename || "")))) return { id: d.id, caption: String(d.caption || "") };
   return null;
 }
+// v462 - caption choices as buttons. "Same as last" only when there is a last one; Status may go with no caption.
+async function videoBytes(env, key) {
+  let last = null; try { last = JSON.parse((await env.MEETINGS.get("desk_vid_last")) || "null"); } catch (e) {}
+  return last && last.key === key ? last.bytes : 0;
+}
+async function captionChoices(env, deps, to, what, key) {
+  const known = what === "reel" ? REEL_CAPTIONS[key] : STATUS_PUBLIC[key];
+  if (known) return videoAction(env, deps, to, what, deps.origin(env) + "/video/" + key, key, await videoBytes(env, key), known);
+  const last = await env.MEETINGS.get("desk_last_cap_" + what);
+  const b = [{ id: "dc:ai:" + what + ":" + key, title: "Write it for me" }];
+  if (last) b.push({ id: "dc:last:" + what + ":" + key, title: "Same as last" });
+  b.push(what === "status" && !last ? { id: "dc:none:status:" + key, title: "No caption" } : { id: "dc:type:" + what + ":" + key, title: "I'll type it" });
+  await deps.raw(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button",
+    body: { text: (what === "reel" ? "Instagram caption" : "Status caption") + " for " + key + "?" + (last ? "\n\nLast one: " + last.slice(0, 300) : "") }, action: { buttons: b.map((x) => ({ type: "reply", reply: x })) } } }, "caption-ask");
+}
+async function draftCaption(env, deps, what) {
+  if (!deps.llm) return "";
+  const sys = "You write captions for DigitAlchemy, a Dubai construction-technology company (digital inspections with partner GoCanvas, drawings and models, site progress, the property market in one live view; tagline: Complexity into clarity). Audience: contractors, developers, consultants. Plain, confident, no hype, no emojis, never name any AI tool or model. Reply with the caption only.";
+  const ask = what === "reel" ? "An Instagram Reel caption: two or three short sentences, the tagline, then 5 to 7 hashtags including #GoCanvas and #DigitAlchemy." : "A WhatsApp Status caption: one or two short sentences, under 200 characters, ending with Complexity into clarity.";
+  try { const c = String((await deps.llm(env, sys, ask, 400)) || "").trim().replace(/^["']|["']$/g, ""); return c.slice(0, what === "reel" ? 2000 : 300); } catch (e) { return ""; }
+}
 async function videoAction(env, deps, to, what, link, key, bytes, text) {
   const send = (s) => deps.send(env, s);
+  if (text && what !== "broadcast") { try { await env.MEETINGS.put("desk_last_cap_" + what, text); } catch (e) {} }
   if (what === "reel") {
     const caption = text || REEL_CAPTIONS[key] || "";
-    if (!caption) { await send("Saved as " + key + ". Send the Instagram caption as: reel " + link + " : <your caption>"); return true; }
+    if (!caption) { await captionChoices(env, deps, to, "reel", key); return true; }
     await env.MEETINGS.put("desk_reel_pending", JSON.stringify({ url: link, caption, at: Date.now() }), { expirationTtl: 2 * 86400 });
-    await deps.raw(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: "Reel for Instagram (@digitalabbotuae), caption:\n\n" + caption.slice(0, 900) }, action: { buttons: [{ type: "reply", reply: { id: "dr:ok", title: "Post it" } }, { type: "reply", reply: { id: "dr:no", title: "Cancel" } }] } } }, "reel-buttons");
+    await deps.raw(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: "Reel for Instagram (@digitalabbotuae), caption:\n\n" + caption.slice(0, 900) }, action: { buttons: [{ type: "reply", reply: { id: "dr:ok", title: "Post it" } }, { type: "reply", reply: { id: "dc:ai:reel:" + key, title: "Rewrite caption" } }, { type: "reply", reply: { id: "dr:no", title: "Cancel" } }] } } }, "reel-buttons");
     return true;
   }
   if (what === "status") {
