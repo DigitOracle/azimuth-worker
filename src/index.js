@@ -2,6 +2,7 @@ import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCa
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
 import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - the client brief as a chat; Naj only when switched on
+import { deskReelTick } from "./desk_lab.js";   // v460 - an approved Instagram reel finishes on the minute tick
 import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
 import { templateRoutes, feedTemplateFlag } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
@@ -33,7 +34,7 @@ import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief
 import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_ejari.js";
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
 import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitMorning, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
-import { isDeskState as igDeskIsState, deskIgLink, deskIgCallback, deskIgStatus, deskIgDeauth, deskIgRefresh } from "./ig_desk.js";   // v404 - the desk's own Instagram connection (ig_auth_desk), separate from Najjuko's
+import { isDeskState as igDeskIsState, deskIgLink, deskIgCallback, deskIgStatus, deskIgDeauth, deskIgRefresh, deskIgPublishReel } from "./ig_desk.js";   // v404 - the desk's own Instagram connection (ig_auth_desk), separate from Najjuko's
 import { deskPostTick, deskPostPull, refImport, markRefRequest } from "./desk_post.js";   // v413 - the desk posting loop
 import { deskHandle, isDeskEvent, deskWindowOpen, deskOn } from "./desk.js";   // v388 - KENDALL DESK step 1: a second WhatsApp number that answers only the owner (all logic in src/desk.js)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
@@ -4804,6 +4805,7 @@ export default {
         try { await gcGuideTick(env); } catch (e) {}   // v150.1 - one follow-up if her Calendar link sits unused for twenty minutes
         try { await liveNewsTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v270 - live city news, a few feeds every 5 minutes, 24/7 (LIVE_NEWS="on")
         try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
+        try { await deskReelTick(env, deskLabDeps(env)); } catch (e) {}   // v460 - an approved Instagram reel still processing
         try { await deskPostTick(env, deskPostDeps(env)); } catch (e) {}   // v413 - the desk posting loop: expire old drafts, publish the due approved post (never when paused)
         try { if (env.IG_APP_ID) { const _i3 = new Date(event.scheduledTime || Date.now()); if (_i3.getUTCMinutes() === 17 && _i3.getUTCHours() % 3 === 0) await deskPostPull(env, event.scheduledTime || Date.now()); } } catch (e) {}   // v413 - the desk account numbers, same 3-hour slot
         try { if (env.IG_APP_ID) { const _it2 = new Date(event.scheduledTime || Date.now()); if (_it2.getUTCMinutes() === 17 && _it2.getUTCHours() % 3 === 0) await deskIgRefresh(env); } } catch (e) {}   // v404 - the desk token 60-day refresh, same slot, no-op without a desk record
@@ -5464,6 +5466,7 @@ function deskLabDeps(env) {
     raw: async (e, payload, kind) => { try { const r = await fetch(WA_GRAPH + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + e.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); let j = {}; try { j = await r.json(); } catch (x) {} if (!r.ok && !j.error) j.error = { message: "HTTP " + r.status }; if (j.error) await noteErr(e, "desk-lab:" + kind, String(j.error.message || "").slice(0, 160)); return j; } catch (x) { return { error: { message: "WhatsApp did not answer" } }; } },
     send: (e, t) => waSend(e, owner, t, pid), image: (e, link, cap) => waSendImage(e, owner, link, cap, pid),
     origin: (e) => pubOrigin(e, ""), sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    reel: (e, o) => deskIgPublishReel(e, o),   // v460
     briefLink: (e, sp) => { const k = clientLinkKey(e); return pubOrigin(e, "") + "/brief?" + sp.toString() + (k ? "&key=" + encodeURIComponent(k) : ""); } };
 }
 async function publishInstagram(env, to, imageUrl, captionIn, pend) {

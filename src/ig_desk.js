@@ -238,6 +238,41 @@ export async function deskIgPublishCarousel(env, opts) {
   } catch (e) { return { ok: false, err: "network error; check the feed before retrying" }; }
 }
 
+// v460 - a REEL (Kendall 10 Oct: the site-clarity video "posted to insta as well"). Meta's video flow: container with media_type=REELS and
+// video_url, poll status_code until FINISHED (video processing takes a minute or two, so the poll is longer), then media_publish.
+// opts.container resumes an earlier container so a retry never uploads twice. approved:true is required.
+export async function deskIgPublishReel(env, opts) {
+  opts = opts || {};
+  if (opts.approved !== true) return { ok: false, err: "not approved" };
+  const a = await deskIgRecord(env);
+  if (!a || !a.token) return { ok: false, err: "desk Instagram not connected" };
+  if (a.expires_at && (opts.now || Date.now()) > a.expires_at) return { ok: false, err: "desk token expired" };
+  if (!deskIgCanPost(a)) return { ok: false, err: "desk connection lacks content_publish" };
+  if (!a.user_id || !/^https:\/\//.test(String(opts.videoUrl || ""))) return { ok: false, err: "a reel needs an https video link" };
+  const sleep = opts.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const form = { "Content-Type": "application/x-www-form-urlencoded" };
+  try {
+    let id = opts.container;
+    if (!id) {
+      const cr = await postMedia(a.user_id, { media_type: "REELS", video_url: opts.videoUrl, caption: String(opts.caption || ""), share_to_feed: "true", access_token: a.token }, form);
+      if (!cr || !cr.id) return { ok: false, err: "reel container refused: " + String((cr && cr.error && cr.error.message) || "no id").slice(0, 160) };
+      id = String(cr.id); if (opts.onContainer) { try { await opts.onContainer(id); } catch (e) {} }
+    }
+    let status = "IN_PROGRESS";
+    for (let i = 0; i < (opts.polls || 60) && status === "IN_PROGRESS"; i++) {
+      await sleep(4000);
+      const sj = await (await fetch(GRAPH + "/v21.0/" + id + "?fields=status_code,status&access_token=" + encodeURIComponent(a.token))).json();
+      status = (sj && sj.status_code) || "IN_PROGRESS";
+      if (status === "ERROR") return { ok: false, container: id, err: "Instagram could not process the video: " + String(sj.status || "").slice(0, 160) };
+    }
+    if (status !== "FINISHED") return { ok: false, container: id, err: "still processing (" + status + "); retry continues the same upload" };
+    const pj = await (await fetch(GRAPH + "/v21.0/" + a.user_id + "/media_publish", { method: "POST", headers: form,
+      body: new URLSearchParams({ creation_id: id, access_token: a.token }) })).json();
+    if (pj && pj.id) return { ok: true, id: String(pj.id), container: id, permalink: await deskIgPermalink(env, String(pj.id)) };
+    return { ok: false, container: id, err: "publish refused: " + String((pj && pj.error && pj.error.message) || "no id").slice(0, 160) };
+  } catch (e) { return { ok: false, err: "network error; check the feed before retrying" }; }
+}
+
 // v413 - the desk account's own numbers (desk token): followers, and reach / likes / saves for the media ids the desk posted.
 const insVal = (d) => (d && d.values && d.values[0] && typeof d.values[0].value === "number" ? d.values[0].value : d && d.total_value && typeof d.total_value.value === "number" ? d.total_value.value : null);
 export async function deskIgPull(env, now, mediaIds) {

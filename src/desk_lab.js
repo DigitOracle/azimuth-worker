@@ -18,7 +18,7 @@ import { momoTemplateDef } from "./fit.js";   // v453 - the Momo day template th
 export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\n" +
   "brief: the client brief, asked in the chat\nbrief form: the client brief as a form (test only)\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
   "lab typing: read ticks and typing\nlab qr: a QR code that opens this chat with a message typed\nlab profile: this number's business profile\n" +
-  "lab setup momo template <account id>: submit the Momo day message to Meta\nlab meta admins: who runs the business on Meta (names, login emails, roles)\nstatus <mp4 link>: a video sent here ready to forward to your Status";
+  "lab setup momo template <account id>: submit the Momo day message to Meta\nlab meta admins: who runs the business on Meta (names, login emails, roles)\nstatus <mp4 link>: a video sent here ready to forward to your Status\nreel <mp4 link> [: caption]: post a video to Instagram as a Reel, after you tap Post it";
 
 const meta = (r) => (r && r.error ? " Meta said: " + String(r.error.message || r.error.error_user_msg || JSON.stringify(r.error)).slice(0, 300) : "");
 
@@ -46,9 +46,17 @@ export function carouselPayload(to, body, cards) {
 }
 // v458 (Kendall 10 Oct: "add it to the desk") - WhatsApp's business API cannot post a Status, so the desk sends the finished clip
 // to Kendall with the steps, and posting it is one forward from his phone.
-export const STATUS_CAPTION = "Ready for your Status. Open this video, tap Forward, choose My status. (Status splits clips over 60 seconds, so use the 60-second cut.)";
+// v460 (10 Oct: a forwarded video KEEPS its caption, so the steps showed on his public Status) - the clip carries only the PUBLIC caption;
+// the steps go as a separate text that is never forwarded.
+export const STATUS_CAPTION = "Ready for your Status: open the video above, tap Forward, choose My status. Its caption is what viewers see. (Status splits clips over 60 seconds.)";
+export const STATUS_PUBLIC = { site_clarity_75: "On site, the costly problems are the ones nobody sees in time. DigitAlchemy, with our partner GoCanvas. Complexity into clarity." };
+// v460 - captions Kendall approved for a hosted clip, used when "reel <link>" has no caption of its own
+export const REEL_CAPTIONS = {
+  site_clarity_75: "On site, the costly problems are the ones nobody sees in time.\n\nTogether with our partner GoCanvas, DigitAlchemy brings drawings, digital inspections, progress and the market into one live view, so the site team, the commercial team and the client work from the same facts, on the same day.\n\nComplexity into clarity.\n\n#construction #digitalinspections #GoCanvas #DigitAlchemy #Dubai #constructiontech #BIM",
+};
 export function statusVideoPayload(to, link, note) {
-  return { messaging_product: "whatsapp", to, type: "video", video: { link, caption: (note ? String(note).slice(0, 300) + "\n\n" : "") + STATUS_CAPTION } };
+  const pub = (note ? String(note).slice(0, 300) : "") || STATUS_PUBLIC[String(link).split("/").pop()] || "";
+  return { messaging_product: "whatsapp", to, type: "video", video: pub ? { link, caption: pub } : { link } };
 }
 export const typingPayload =(messageId) => ({ messaging_product: "whatsapp", status: "read", message_id: messageId, typing_indicator: { type: "text" } });
 
@@ -77,6 +85,29 @@ export async function deskLabRoute(env, msg, text, deps) {
   if (sm) {
     const r = await deps.raw(env, statusVideoPayload(to, sm[1], (sm[2] || "").trim()), "status-video");
     if (r && r.error) await send("Could not send the clip." + meta(r) + " The link must be a public https link straight to an .mp4 under 16 MB.");
+    else await send(STATUS_CAPTION);
+    return true;
+  }
+  // v460 - reel <https mp4 link> [: caption] -> the clip and caption come back with Post / Cancel; nothing goes to Instagram until Post
+  const rm = t.match(/^\/?reel\s+(https:\/\/\S+)(?:\s*:\s*([\s\S]+))?$/i);
+  if (rm) {
+    const caption = (rm[2] || "").trim() || REEL_CAPTIONS[rm[1].split("/").pop()] || "";
+    if (!caption) { await send("Add the caption after a colon: reel <link> : <caption>."); return true; }
+    await env.MEETINGS.put("desk_reel_pending", JSON.stringify({ url: rm[1], caption, at: Date.now() }), { expirationTtl: 2 * 86400 });
+    await deps.raw(env, { messaging_product: "whatsapp", to, type: "video", video: { link: rm[1], caption: "Reel for Instagram (@digitalabbotuae). Caption:\n\n" + caption.slice(0, 900) } }, "reel-preview");
+    await deps.raw(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: "Post this reel to Instagram?" }, action: { buttons: [{ type: "reply", reply: { id: "dr:ok", title: "Post it" } }, { type: "reply", reply: { id: "dr:no", title: "Cancel" } }] } } }, "reel-buttons");
+    return true;
+  }
+  const br = msg.type === "interactive" && msg.interactive && msg.interactive.button_reply && String(msg.interactive.button_reply.id || "");
+  if (br === "dr:no") { await env.MEETINGS.delete("desk_reel_pending"); await send("Cancelled. Nothing was posted."); return true; }
+  if (br === "dr:ok") {
+    let p = null; try { p = JSON.parse((await env.MEETINGS.get("desk_reel_pending")) || "null"); } catch (e) {}
+    if (!p) { await send("No reel is waiting (it may already be posted or cancelled)."); return true; }
+    if (p.posted) { await send("That reel is already posted: " + (p.permalink || p.id)); return true; }
+    if (!deps.reel) { await send("Reel posting is not wired on this worker."); return true; }
+    p.approved = true;
+    await send("Uploading to Instagram. Video processing takes a minute or two; I post it the moment it is ready.");
+    await reelStep(env, p, deps, 3);
     return true;
   }
   if (/^\/?status$/i.test(t)) { await send("Send: status <link to the .mp4> (optionally : a note). I send the clip back here ready to forward to your Status."); return true; }
@@ -226,6 +257,24 @@ export async function deskLabRoute(env, msg, text, deps) {
     return true;
   }
   await send("Unknown lab command.\n" + LAB_HELP); return true;
+}
+
+// v460 - one step of an approved reel: start or continue the upload, publish when Instagram has finished processing. A webhook only waits
+// a few polls; the minute tick (deskReelTick) carries on. "Still processing" is silent; posted and refused are told to the desk once.
+async function reelStep(env, p, deps, polls) {
+  const save = (ttl) => env.MEETINGS.put("desk_reel_pending", JSON.stringify(p), { expirationTtl: ttl || 2 * 86400 });
+  const r = await deps.reel(env, { approved: true, videoUrl: p.url, caption: p.caption, container: p.container, polls,
+    onContainer: async (id) => { p.container = id; await save(); } });
+  if (r.container) p.container = r.container;
+  if (r.ok) { p.posted = true; p.id = r.id; p.permalink = r.permalink; await save(7 * 86400); await deps.send(env, "Posted to Instagram." + (r.permalink ? " " + r.permalink : "")); return; }
+  if (/still processing/.test(r.err || "")) { p.tries = (p.tries || 0) + 1; if (p.tries > 20) { p.approved = false; await deps.send(env, "Instagram is still processing after 20 minutes. Not posted; tap Post it to try again."); } await save(); return; }
+  p.approved = false; if (!/could not process|container refused/.test(r.err || "")) {} else p.container = undefined;
+  await save(); await deps.send(env, "Not posted: " + r.err + ". Tap Post it to try again.");
+}
+export async function deskReelTick(env, deps) {
+  let p = null; try { p = JSON.parse((await env.MEETINGS.get("desk_reel_pending")) || "null"); } catch (e) {}
+  if (!p || p.posted || !p.approved || !deps.reel) return;
+  await reelStep(env, p, deps, 2);
 }
 
 // up to 3 recent desk pictures (the desk's own generated post pictures), as public /ig_media links
