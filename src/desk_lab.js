@@ -12,10 +12,11 @@
 //   lab profile      the desk's WhatsApp business profile as WhatsApp holds it                                   (feature 8)
 // Everything goes to WA_DESK_OWNER from WA_DESK_PHONE_ID; nothing here can address anyone else.
 import { sendBriefFlow, flowReply, briefFlowJson, FLOW_KEY, FLOW_NAME, FLOW_DRAFT_KEY } from "./wa_flows.js";
+import { briefChatRoute } from "./brief_chat.js";   // v455 - the client brief as a chat (lists, buttons, typed answers)
 import { momoTemplateDef } from "./fit.js";   // v453 - the Momo day template the desk submits
 
 export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\n" +
-  "brief: the client brief as a form\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
+  "brief: the client brief, asked in the chat\nbrief form: the client brief as a form (test only)\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
   "lab typing: read ticks and typing\nlab qr: a QR code that opens this chat with a message typed\nlab profile: this number's business profile\n" +
   "lab setup momo template <account id>: submit the Momo day message to Meta";
 
@@ -50,7 +51,9 @@ export async function deskLabRoute(env, msg, text, deps) {
   const t = String(text || "").trim(), to = deps.owner;
   const send = (s) => deps.send(env, s);
   // feature 1 - the form and its answers
-  if (/^\/?brief$/i.test(t)) { await sendBriefFlow(env, to, { send: (e, _to, s) => deps.send(e, s), post: (e, p, k) => deps.raw(e, p, k) }); return true; }
+  // v455 - "brief" is now the chat brief (lists, buttons, typed answers); the form stays reachable as "brief form" (desk-only test)
+  if (/^\/?brief\s+form$/i.test(t)) { await sendBriefFlow(env, to, { send: (e, _to, s) => deps.send(e, s), post: (e, p, k) => deps.raw(e, p, k) }); return true; }
+  if (await briefChatRoute(env, to, msg, { raw: deps.raw, send: (e, s) => deps.send(e, s), briefLink: deps.briefLink, search: deps.briefSearch })) return true;
   if (msg.type === "interactive" && msg.interactive && msg.interactive.nfm_reply) return flowReply(env, to, msg, { send: (e, _to, s) => deps.send(e, s), briefLink: deps.briefLink });
   // feature 5 - the location he shared back
   if (msg.type === "location" && msg.location && await env.MEETINGS.get("desk_lab_loc")) {

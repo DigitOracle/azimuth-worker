@@ -1,6 +1,7 @@
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
+import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - the client brief as a chat; Naj only when switched on
 import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
 import { templateRoutes, feedTemplateFlag } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
@@ -3807,6 +3808,10 @@ async function appFetch(request, env, ctx) {
           if (_sm) { await sendReqShow(env, from, _sm[1].toUpperCase()); return new Response("ok"); }
           const _sb = msg.type === "interactive" && msg.interactive && msg.interactive.button_reply && String(msg.interactive.button_reply.id || "");
           if (_sb && /^sr:(ok|no):[A-Z0-9]{6}$/.test(_sb)) { await sendReqResolve(env, from, _sb.slice(6), _sb.indexOf("sr:ok:") === 0); return new Response("ok"); }
+        }
+        if (await briefChatNajOn(env)) {   // v455 - the chat brief for Naj: OFF unless BRIEF_CHAT_NAJ=1 or KV brief_chat_naj=on (desk-tested first)
+          try { if (await briefChatRoute(env, from, msg, { raw: (e, p, k) => waPost(e, p, k), send: (e, t) => waSend(e, from, t),
+            briefLink: (e, sp) => { const k = clientLinkKey(e); return pubOrigin(e, "") + "/brief?" + sp.toString() + (k ? "&key=" + encodeURIComponent(k) : ""); } })) return new Response("ok"); } catch (e) {}
         }
         if (msg.type === "interactive" && msg.interactive && (msg.interactive.button_reply || msg.interactive.list_reply)) {
           const bid = (msg.interactive.button_reply && msg.interactive.button_reply.id) || (msg.interactive.list_reply && msg.interactive.list_reply.id) || "";
