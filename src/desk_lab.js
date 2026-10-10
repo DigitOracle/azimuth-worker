@@ -157,7 +157,7 @@ export async function deskLabRoute(env, msg, text, deps) {
     await deps.raw(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: "Post this reel to Instagram?" }, action: { buttons: [{ type: "reply", reply: { id: "dr:ok", title: "Post it" } }, { type: "reply", reply: { id: "dr:no", title: "Cancel" } }] } } }, "reel-buttons");
     return true;
   }
-  const br = msg.type === "interactive" && msg.interactive && msg.interactive.button_reply && String(msg.interactive.button_reply.id || "");
+  const br = tapId || "";   // v469: list rows count as taps too
   if (br === "dr:no") { await env.MEETINGS.delete("desk_reel_pending"); await send("Cancelled. Nothing was posted."); return true; }
   // v464 - Post it asks WHERE when LinkedIn is connected: Instagram / LinkedIn / Both. Without LinkedIn it goes to Instagram as before.
   if (br === "dr:ok" || br === "dr:ig" || br === "dr:li" || br === "dr:both") {

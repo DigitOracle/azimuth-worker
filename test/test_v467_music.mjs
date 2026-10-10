@@ -70,4 +70,8 @@ const src = readFileSync(new URL("../src/desk_post.js", import.meta.url), "utf8"
 const mot = src.slice(src.indexOf("const MOT_IDEAS = ["), src.indexOf("].map((text) => ({ lane: \"abbot\", kind: \"motivation\""));
 ok(!/\b(site|project|client|building|construction|handover|team|work)\b/i.test(mot), "the fallback motivational ideas never mention work", mot);
 ok(/purely motivational ideas about LIFE/.test(src) && /ABOUT LIFE ONLY/.test(src) && /Do NOT mention work/.test(src), "the idea and caption instructions say life, not work");
+// v469 - a mood picked from the LIST (list_reply) must work like a button
+const plan9 = Object.assign({}, plan, { id: "pm9" }); store.set("postplan_pm9", JSON.stringify(plan9)); renderResult = { bytes: new Uint8Array(5000).buffer }; const before9 = jobs.length;
+await go({ type: "interactive", interactive: { type: "list_reply", list_reply: { id: "dp:pm9:m_calm", title: "Calm" } } });
+ok(jobs.length === before9 + 1 && store.has("vid_post_pm9"), "a mood tapped in the list makes the video (the 10 Oct bug)");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

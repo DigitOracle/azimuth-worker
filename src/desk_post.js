@@ -805,7 +805,7 @@ async function startFromText(env, deps, rest, imgsIn, fromPhoto) {
 // ---------- the router: returns true when the message was handled here ----------
 export async function deskPostRoute(env, msg, text, deps) {
   const now = nowOf(deps);
-  if (msg.type === "interactive") { const id = msg.interactive && msg.interactive.button_reply && msg.interactive.button_reply.id; return id && /^dp:/.test(id) ? handleButton(env, deps, id) : false; }
+  if (msg.type === "interactive") { const it = msg.interactive || {}; const id = (it.button_reply && it.button_reply.id) || (it.list_reply && it.list_reply.id); return id && /^dp:/.test(id) ? handleButton(env, deps, id) : false; }   // v469: a list row counts as a tap (a mood picked from the list was ignored, 10 Oct)
   if (msg.type === "image" && msg.image && msg.image.id) return handleImage(env, deps, msg);
   // v467 - a track for the music library: an audio file (or audio document) captioned music: <mood> <title>
   const au = (msg.type === "audio" && msg.audio) || (msg.type === "document" && msg.document && /^audio\//i.test(String(msg.document.mime_type || "")) && msg.document);
