@@ -371,6 +371,7 @@ export function buildingPageHtml(D, key, rk) {
     // v481.1 - helpers the view calls must travel WITH it: the view is shipped as source text, so a module-level function it
     // names is undefined in the browser (v480 broke the About card on every building with DEWA rows for this reason).
     "const DEWA_CSS=" + JSON.stringify(DEWA_CSS) + ";" + String(dewaVisual) + ";" +
+    "(()=>{const st=document.createElement('style');st.textContent=" + JSON.stringify(BP_TILES_CSS) + ";document.head.appendChild(st)})();" + String(bpTiles) + ";" +
     "(" + String(view) + ")(THREE,GLTFLoader,OrbitControls,RoomEnvironment,MeshoptDecoder,D,KEY,COL);" +
     "</script></body></html>";
   return head + body + tail;
@@ -1232,6 +1233,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     // v273 - the Send buttons live in THIS card (dossierBlock above), but only the floor card ever wired them, so here they were
     // anchors with no href and no handler: WhatsApp, Email, Copy link and QR code did nothing (Kendall, 30 Sep 2026).
     wireDossier();
+    try { bpTiles($("card"), D, N); } catch (e) {}   // v483 - fold the sections into tap tiles; on any failure the card stays as it was
   };
   function stackLines() {
     const out = [], seen = [];
@@ -1330,3 +1332,104 @@ const DEWA_CSS = ".dw-tiles{display:grid;grid-template-columns:repeat(3,minmax(0
   + ".dw-key{display:flex;justify-content:center;gap:14px;font-size:.74rem;margin-top:6px}.dw-key i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.dw-kh{background:#C5A56A}.dw-kc{background:#1D9E75}"
   + ".dw-src{display:flex;align-items:center;gap:6px;font-size:.7rem;opacity:.75;margin:4px 0}.dw-src svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}"
   + ".dw-more summary{cursor:pointer;font-size:.72rem;opacity:.8;margin:4px 0}";
+
+
+// v483 - THE ABOUT CARD AS TAP TILES (Kendall, 11 Oct 2026, approved mock-up: "make all of these more pop-up modules instead
+// of having to scroll all the way down"). The card is still built exactly as before - every row, every source note - and then
+// re-arranged in the browser: each section (an <h3> and what follows it, or the developer card) becomes a tile showing one
+// headline figure, and tapping the tile opens that section as a pop-up sheet. Nothing is removed, only folded. Shipped with the
+// view as source text (see the tail in buildingPageHtml), so it may use nothing from this module but its own arguments.
+export function bpTiles(card, D, nFloors) {
+  const fm = (n) => Number(n || 0).toLocaleString("en-US");
+  const kids = Array.from(card.children), secs = [];
+  let cur = null;
+  for (const el of kids) {
+    if (el.tagName === "H3") { cur = { title: el.textContent, nodes: [el] }; secs.push(cur); }
+    else if (el.classList && el.classList.contains("pill")) { cur = null; secs.push({ title: "trust", nodes: [el] }); }
+    else if (cur) cur.nodes.push(el);
+  }
+  if (secs.length < 2) return;
+  const P = {
+    trust: '<path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
+    build: '<path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-4h6v4M8 8h1M15 8h1M8 12h1M15 12h1"/>',
+    tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="7.5" r="1.3"/>',
+    key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/>',
+    users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3 3 0 0 1 0 6M18 14c2 .8 3 3 3 6"/>',
+    bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+    school: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/>',
+    layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+    pin: '<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>',
+    eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
+    map: '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/>',
+    crane: '<path d="M6 21V4h2v17M4 21h8M8 5h12M18 5v4"/><path d="M18 9v2"/>',
+    file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
+    cash: '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>',
+  };
+  const svg = (k) => '<svg viewBox="0 0 24 24" aria-hidden=true>' + (P[k] || P.file) + "</svg>";
+  const s = D.sales || {};
+  const head = (t) => {
+    const T = t.toLowerCase();
+    if (t === "trust") {
+      const dots = Array.from(card.querySelectorAll(".pill .tldot")).map((d) => '<i style="background:' + d.style.background + '"></i>').join("");
+      return ["trust", dots ? '<span class=bp-dots>' + dots + "</span>" : "?", "developer"];
+    }
+    if (T.startsWith("construction")) return ["crane", D.project && D.project.pct != null ? D.project.pct + "%" : "-", "built"];
+    if (T === "the building") { const c = (D.facts || []).find((f) => /complet/i.test(f[0])); return ["build", c ? String(c[1]).slice(0, 4) : (D.facts || []).length, c ? "completed" : "facts"]; }
+    if (T === "the stack") return ["layers", nFloors, "levels"];
+    if (T.startsWith("sold, from")) return ["tag", fm(s.total), "units sold"];
+    if (T.startsWith("what it sees")) { const o = D.openFrom || []; return ["eye", o.filter((x) => x != null).length + "/" + o.length, "open sides"]; }
+    if (T.startsWith("who lives")) return ["users", "People", "who lives here"];
+    if (T.startsWith("what has sold")) return ["tag", D.sold && D.sold.psf ? fm(D.sold.psf) : fm(D.sold && D.sold.n), D.sold && D.sold.psf ? "AED / sq ft" : "sales"];
+    if (T.startsWith("when it filled")) { const oc = D.occupancy || {}; return ["bolt", fm(oc.connections), "move-ins"]; }
+    if (T.startsWith("what it lets")) {
+      const r = D.rent && D.rent.by_type ? Object.values(D.rent.by_type).sort((a, b) => (b.n || 0) - (a.n || 0))[0] : null;
+      const lv = r && r.aed ? (r.aed < 60000 ? 1 : r.aed < 120000 ? 2 : 3) : 0;
+      return ["key", '<span class=bp-aed><b>' + "AED ".repeat(lv).trim() + "</b>" + (lv < 3 ? " " + "AED ".repeat(3 - lv).trim() : "") + "</span>", "rent level"];
+    }
+    if (T.startsWith("schools")) return ["school", (D.schools || []).length, "schools"];
+    if (T.startsWith("the plans")) return ["file", D.plans && D.plans.plans ? D.plans.plans.length : "", "plans"];
+    if (T.startsWith("the plot")) return ["map", D.land && D.land.freehold === true ? "Freehold" : D.land && D.land.freehold === false ? "Leasehold" : "Plot", "the plot"];
+    if (T.startsWith("around it")) { const n = (D.transit || []).slice().sort((a, b) => a.m - b.m)[0]; return ["pin", n ? (n.m < 1000 ? n.m + " m" : (n.m / 1000).toFixed(1) + " km") : "Nearby", n ? "to " + String(n.kind || "transit").toLowerCase() : "around it"]; }
+    if (/cash|handover/.test(T)) return ["cash", "Cash", "to handover"];
+    return ["file", "", t.split("·")[0].trim().toLowerCase()];
+  };
+  // a picture for the two sections that are only lists of numbers
+  const bars = (rows) => {
+    const mx = Math.max(1, ...rows.map((r) => r[1]));
+    return '<div class=bp-bars>' + rows.map((r) => '<div><span>' + r[0] + '</span><i style="width:' + Math.max(4, Math.round(100 * r[1] / mx)) + '%"></i><em>' + r[2] + "</em></div>").join("") + "</div>";
+  };
+  const grid = document.createElement("div"); grid.className = "bp-tiles";
+  secs[0].nodes[0].parentNode.insertBefore(grid, secs[0].nodes[0]);
+  for (const sec of secs) {
+    const h = head(sec.title), T = sec.title.toLowerCase();
+    const det = document.createElement("details"); det.className = "bp-pop";
+    det.innerHTML = '<summary class=bp-tile>' + svg(h[0]) + '<span class=bp-big>' + h[1] + '</span><span class=bp-lab>' + h[2] + '</span></summary><div class=bp-sheet><div class=bp-card><span class=bp-x aria-label=Close>&times;</span></div></div>';
+    const body = det.querySelector(".bp-card");
+    if (T.startsWith("what has sold") && D.sold && (D.sold.recent || []).length) {
+      body.insertAdjacentHTML("beforeend", "<h3>" + sec.title + "</h3>" + bars(D.sold.recent.filter((x) => x.price).slice(0, 6).map((x) => [String(x.rooms || "").replace(/B\/R/i, "bed"), x.price, "AED " + Math.round(x.price / 1000) + "k"])));
+      sec.nodes[0].remove(); sec.nodes = sec.nodes.slice(1);
+    } else if (T.startsWith("what it lets") && D.rent && D.rent.by_type) {
+      body.insertAdjacentHTML("beforeend", "<h3>" + sec.title + "</h3>" + bars(Object.keys(D.rent.by_type).filter((k) => D.rent.by_type[k].aed).map((k) => [k, D.rent.by_type[k].aed, "AED " + Math.round(D.rent.by_type[k].aed / 1000) + "k / yr"])));
+      sec.nodes[0].remove(); sec.nodes = sec.nodes.slice(1);
+    }
+    for (const n of sec.nodes) body.appendChild(n);
+    // the DEWA pictures sit inside this sheet already open, not as a second layer of tiles
+    body.querySelectorAll(".dw-pop").forEach((d) => { d.open = true; });
+    det.querySelector(".bp-x").onclick = (ev) => { ev.preventDefault(); det.open = false; };
+    det.addEventListener("toggle", () => { if (det.open) grid.querySelectorAll(".bp-pop[open]").forEach((o) => { if (o !== det) o.open = false; }); });
+    grid.appendChild(det);
+  }
+}
+export const BP_TILES_CSS = ".bp-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0}"
+  + ".bp-tile{list-style:none;cursor:pointer;border:1px solid var(--line);border-radius:12px;padding:10px 4px 9px;display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center;min-height:82px;justify-content:center}"
+  + ".bp-tile::-webkit-details-marker{display:none}.bp-tile svg{width:20px;height:20px;fill:none;stroke:var(--gold);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}"
+  + ".bp-big{font:600 1.02rem/1.15 Fraunces,Georgia,serif;color:var(--text)}.bp-lab{font-size:.58rem;color:var(--mut);letter-spacing:.03em}"
+  + ".bp-pop[open]>.bp-tile{border-color:var(--gold);background:rgba(197,165,106,.08)}"
+  + ".bp-dots{display:flex;gap:4px;justify-content:center}.bp-dots i{width:11px;height:11px;border-radius:50%;display:inline-block}"
+  + ".bp-aed{font:600 .7rem/1 'IBM Plex Mono',monospace;color:var(--mut);opacity:.6}.bp-aed b{color:var(--gold);opacity:1;font-weight:600}"
+  + ".bp-sheet{position:fixed;left:0;right:0;bottom:0;top:0;z-index:50;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;padding:10px}"
+  + ".bp-card{position:relative;background:var(--panel,#131f1d);border:1px solid var(--gold);border-radius:16px;padding:14px 15px 16px;width:100%;max-width:440px;max-height:80vh;overflow:auto;box-sizing:border-box}"
+  + ".bp-card h3{margin-top:2px}.bp-x{position:sticky;float:right;top:0;cursor:pointer;font-size:1.3rem;color:var(--mut);line-height:1;padding:0 2px 6px 8px}"
+  + ".bp-bars{display:grid;gap:6px;margin:6px 0 10px}.bp-bars div{display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:7px;font-size:.72rem}"
+  + ".bp-bars i{display:block;height:10px;border-radius:3px;background:var(--gold)}.bp-bars em{font-style:normal;color:var(--mut);font-size:.68rem}"
+  + ".bp-card .dw-tile{display:none}.bp-card .dw-tiles{display:grid;grid-template-columns:1fr;gap:10px}.bp-card .dw-sheet{position:static;background:none;padding:0}.bp-card .dw-sheet .dw-card{border-color:var(--line)}.bp-card .dw-close{display:none}";
