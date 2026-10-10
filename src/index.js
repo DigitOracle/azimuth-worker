@@ -967,10 +967,12 @@ async function waSend(env, to, body, fromPhoneId) {
 }
 // v135 - a TEMPLATE send. Needed for the ring handset, which never replies and therefore has no
 // open 24-hour window. `params` fill {{1}}, {{2}}... in the template body, in order.
-async function waSendTemplate(env, to, name, lang, params) {
-  const comps = (params && params.length)
+async function waSendTemplate(env, to, name, lang, params, qrPayloads) {
+  let comps = (params && params.length)
     ? [{ type: "body", parameters: params.map(p => ({ type: "text", text: String(p == null ? "" : p).slice(0, 900) })) }]
     : undefined;
+  // v453 - optional quick-reply payloads, one per template button in order (the tap comes back as type "button" with this payload)
+  if (qrPayloads && qrPayloads.length) comps = (comps || []).concat(qrPayloads.map((p, i) => ({ type: "button", sub_type: "quick_reply", index: String(i), parameters: [{ type: "payload", payload: String(p).slice(0, 128) }] })));
   return waPost(env, {
     messaging_product: "whatsapp", to, type: "template",
     template: { name, language: { code: lang || "en_US" }, components: comps }

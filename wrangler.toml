@@ -111,6 +111,12 @@ FIT_USERS = "kendall:971562276093:Dr. Doli,najjuko:971565484397:Black Coffee"
 # v328 - the nudge that reaches her when her 24-hour window is shut: najma_log_day, no variables. OFF until Meta approves it; then remove the #.
 LOG_NUDGE_TEMPLATE = "najma_log_day"   # Meta: ACTIVE (Marketing, English US) as of 6 Oct 2026; no variables; sent at most once a day, only with the window closed and nothing logged
 LOG_NUDGE_LANG = "en_US"   # the language the template was created with
+# v453 - Momo for a forwarded guest (Kendall) whose 24-hour window is shut: momo_day_check (UTILITY, "en", {{1}} name, {{2}} the day in one line, quick reply
+# "Log today"), at most once a day, sharing the nudge flag. OFF until Meta approves it: submit from the desk with "lab setup momo template 1588773749592854 go", then remove the #.
+# FIT_DAY_TEMPLATE = "momo_day_check"
+FIT_DAY_LANG = "en"
+# v453 - the public number Momo answers on (Digital Abbot, phone id 1178276628713333): the page's "Send to Momo on WhatsApp" link opens it with "momo" typed
+FIT_WA_NUMBER = "971585876093"
 # v140 - Najjuko asked for her feed at 06:00 (13 Sep 2026); the trend radar follows the same hour.
 # v289 - moved to 05:00 (Kendall, 2 Oct 2026: "move Najj feed from 6am to 5am"). THE ONE PLACE the feed hour is set: the code reads it
 # through feedHourGst(), and the cron below must start at (this hour - 4) UTC or the feed never gets a tick (test_v289_feed_hour checks both).

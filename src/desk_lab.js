@@ -12,10 +12,12 @@
 //   lab profile      the desk's WhatsApp business profile as WhatsApp holds it                                   (feature 8)
 // Everything goes to WA_DESK_OWNER from WA_DESK_PHONE_ID; nothing here can address anyone else.
 import { sendBriefFlow, flowReply, briefFlowJson, FLOW_KEY, FLOW_NAME, FLOW_DRAFT_KEY } from "./wa_flows.js";
+import { momoTemplateDef } from "./fit.js";   // v453 - the Momo day template the desk submits
 
 export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\n" +
   "brief: the client brief as a form\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
-  "lab typing: read ticks and typing\nlab qr: a QR code that opens this chat with a message typed\nlab profile: this number's business profile";
+  "lab typing: read ticks and typing\nlab qr: a QR code that opens this chat with a message typed\nlab profile: this number's business profile\n" +
+  "lab setup momo template <account id>: submit the Momo day message to Meta";
 
 const meta = (r) => (r && r.error ? " Meta said: " + String(r.error.message || r.error.error_user_msg || JSON.stringify(r.error)).slice(0, 300) : "");
 
@@ -149,6 +151,29 @@ export async function deskLabRoute(env, msg, text, deps) {
     }
     await env.MEETINGS.put(FLOW_KEY, id);
     await send("Form published and stored (id " + id + "). Send brief to try it.");
+    return true;
+  }
+  // v453 - submit the Momo day template (momo_day_check) to Meta from the desk. "lab setup momo template <waba>" is a dry run that shows exactly what will be
+  // submitted; "... go" POSTs it to /<waba>/message_templates and reports Meta's answer verbatim. When it already exists, its current status is read back.
+  if (/^setup momo template\b/.test(sub)) {
+    const m = sub.match(/^setup momo template\s+(\d{8,20})(\s+go)?$/);
+    if (!m) { await send("Send: lab setup momo template <WhatsApp Business Account id>  (add go at the end to submit it)."); return true; }
+    const def = momoTemplateDef(), body = def.components[0], btn = def.components[1].buttons[0];
+    if (!m[2]) {
+      await send("Dry run. I will submit this template to Meta on account " + m[1] + ":\nName: " + def.name + "\nCategory: " + def.category + "\nLanguage: " + def.language +
+        "\nBody: " + body.text + "\nExample: {{1}} = " + body.example.body_text[0][0] + ", {{2}} = " + body.example.body_text[0][1] + "\nButton (quick reply): " + btn.text +
+        "\nNothing has been submitted. Send: lab setup momo template " + m[1] + " go");
+      return true;
+    }
+    const H = { Authorization: "Bearer " + env.WHATSAPP_TOKEN }, G = deps.graph;
+    let r = null;
+    try { r = await (await fetch(G + "/" + m[1] + "/message_templates", { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, H), body: JSON.stringify(def) })).json(); } catch (e) { r = { error: { message: "Meta did not answer" } }; }
+    if (r && r.id) { await send("Meta took the template " + def.name + " (id " + r.id + "). Status: " + (r.status || "?") + ". Category: " + (r.category || "?") + ". Once it says APPROVED, it can be switched on."); return true; }
+    const e = (r && r.error) || {}, verb = [e.message, e.error_user_title, e.error_user_msg].filter(Boolean).join(" | ") || JSON.stringify(r).slice(0, 400);
+    let st = null;
+    try { st = await (await fetch(G + "/" + m[1] + "/message_templates?name=" + encodeURIComponent(def.name) + "&fields=name,status,category,language,rejected_reason", { headers: H })).json(); } catch (e2) {}
+    const have = st && Array.isArray(st.data) ? st.data.filter((x) => x.name === def.name) : [];
+    await send("Meta did not take the template. Meta said: " + verb.slice(0, 600) + (have.length ? "\nAlready on the account: " + have.map((x) => x.name + " (" + (x.language || "?") + "): " + (x.status || "?") + (x.category ? ", " + x.category : "") + (x.rejected_reason && x.rejected_reason !== "NONE" ? ", rejected: " + x.rejected_reason : "")).join("; ") : ""));
     return true;
   }
   if (sub === "profile") {

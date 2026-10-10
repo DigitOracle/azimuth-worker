@@ -958,6 +958,13 @@ export async function fitGuest(env, from, msg, deps) {
     await env.MEETINGS.put("fitc_in_" + person.id, new Date().toISOString(), { expirationTtl: 3 * 86400 });
     return fitButton(env, from, bid, deps);
   }
+  // v453 - the "Log today" quick reply of the momo_day_check template arrives as type "button" (a template button, not an interactive one)
+  if (msg.type === "button" && msg.button) {
+    const bid = String(msg.button.payload || "");
+    if (bid.indexOf("fit:") !== 0) return false;
+    await env.MEETINGS.put("fitc_in_" + person.id, new Date().toISOString(), { expirationTtl: 3 * 86400 });
+    return fitButton(env, from, bid, deps);
+  }
   if (msg.type === "text" && msg.text) text = String(msg.text.body || "").trim();
   else if (msg.type === "audio" && msg.audio && msg.audio.id && deps.waTranscribe) { try { text = await deps.waTranscribe(env, msg.audio.id); } catch (e) {} if (!text) { await reply(env, deps, from, "I could not read that voice note - try text."); return true; } }
   else if (msg.type === "image" && msg.image && msg.image.id) {
@@ -970,7 +977,54 @@ export async function fitGuest(env, from, msg, deps) {
   if (!text) return false;
   await env.MEETINGS.put("fitc_in_" + person.id, new Date().toISOString(), { expirationTtl: 3 * 86400 });
   if (!(await fitWhatsAppText(env, from, text, deps, { voice: msg.type === "audio" }))) await reply(env, deps, from, rule);
+  try { await fitDeliverPending(env, deps, person.id); } catch (e) {}   // v453 - a message held back while the window was shut follows now
   return true;
+}
+
+// ---- v453: a guest whose 24-hour window is shut (Kendall, 9-10 Oct 2026: he logs on the page, so the window closed and neither the 21:00 verdict nor the
+// 05:00 opener went out). The approved momo_day_check template (FIT_DAY_TEMPLATE, by name, so it fits any person) goes out ONCE a day instead, sharing the
+// fitc_nudge_<user>_<day> flag with the owner's nudge so there are never two. Its "Log today" button (payload fit:open) reopens the window, and the held
+// message (fitc_pend_<user>) then follows in full.
+// what the desk submits to Meta (lab setup momo template <account> go). Meta refuses a body that starts or ends with a variable, and promotional wording in UTILITY.
+export const MOMO_TEMPLATE_NAME = "momo_day_check";
+export function momoTemplateDef() {
+  return { name: MOMO_TEMPLATE_NAME, language: "en", category: "UTILITY", components: [
+    { type: "BODY", text: "Hello {{1}}, your Momo day: {{2}}. Tap Log today for the full check-in.", example: { body_text: [["Dr. Doli", "2 meals and 40 min of exercise logged today"]] } },
+    { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Log today" }] }] };
+}
+export function fitWaLink(env) { const n = String((env && env.FIT_WA_NUMBER) || "").replace(/\D/g, ""); return n ? "https://wa.me/" + n + "?text=momo" : ""; }
+// the page asks: is this person a forwarded guest, and how long is left of their window? The link is given only when it is shut or has under 3 hours left.
+export async function fitWindow(env, u, nowMs) {
+  const id = pickUser(env, u), user = fitUsers(env).find((x) => x.id === id), mine = String(env.WA_ALLOWED || "").replace(/\D/g, "");
+  if (!user || !user.wa || user.wa === mine) return { guest: false, open: null, hoursLeft: null, link: "" };
+  let t = null; try { t = await env.MEETINGS.get("fitc_in_" + id); } catch (e) {}
+  const age = t ? (nowMs || Date.now()) - Date.parse(t) : Infinity, left = isFinite(age) ? Math.max(0, 23 - age / 3600000) : 0, open = left > 0;
+  return { guest: true, open, hoursLeft: Math.round(left * 10) / 10, link: !open || left < 3 ? fitWaLink(env) : "" };
+}
+// the one-line day fact for the template's second variable (no line breaks: Meta refuses them in a variable)
+export function fitDayFact(sum, when) {
+  const meals = (sum.entries || []).filter((e) => e.k === "food").length, ex = (sum.stats && sum.stats.ex) || 0;
+  if (sum.rest) return when === "today" ? "a rest day today" : "yesterday was a rest day";
+  if (!meals && !ex) return when === "today" ? "nothing logged yet today" : "nothing logged yesterday";
+  const bits = []; if (meals) bits.push(meals + (meals === 1 ? " meal" : " meals")); if (ex) bits.push(ex + " min of exercise");
+  return bits.join(" and ") + " logged " + when;
+}
+async function guestNudge(env, deps, nowMs, u, to, kind, sum, when) {
+  if (!env.FIT_DAY_TEMPLATE || !deps.waSendTemplate || !to) return false;
+  const today = gstDate(nowMs);
+  if (!(await flagOnce(env, "fitc_nudge_" + u + "_" + today))) return false;
+  const user = fitUsers(env).find((x) => x.id === u) || { id: u }, name = String(user.name || niceName(user) || u).replace(/\s+/g, " ").trim();
+  try { await env.MEETINGS.put("fitc_pend_" + u, JSON.stringify({ kind, ms: nowMs }), { expirationTtl: 2 * 86400 }); } catch (e) {}
+  try { await deps.waSendTemplate(env, to, env.FIT_DAY_TEMPLATE, env.FIT_DAY_LANG || "en", [name, fitDayFact(sum, when)], ["fit:open"]); } catch (e) {}
+  return true;
+}
+// after the window reopens: send the message the template stood in for (the verdict or the opener of the day it was due), once
+export async function fitDeliverPending(env, deps, u) {
+  let p = null; try { p = JSON.parse((await env.MEETINGS.get("fitc_pend_" + u)) || "null"); } catch (e) {}
+  if (!p || !p.kind) return false;
+  await env.MEETINGS.delete("fitc_pend_" + u);
+  const user = fitUsers(env).find((x) => x.id === u); if (!user || !user.wa) return false;
+  return p.kind === "evening" ? eveningFor(env, deps, p.ms, u, user.wa, true) : morningFor(env, deps, p.ms, u, user.wa, true);
 }
 
 // ---- journal ---------------------------------------------------------------------------------------------------------------
@@ -1125,6 +1179,11 @@ export async function fitButton(env, from, bid, deps) {
   }
   if (bid.indexOf("fit:booked:") === 0) { const u = fitUserFor(env, from), cfg = await fitCfg(env, u), today = gstDate(Date.now()); await bookMark(env, u, today, true); const info = await bookInfo(env, cfg, today); await reply(env, deps, from, bookedSay(cfg, info.streak)); return true; }
   if (bid.indexOf("fit:jundo:") === 0) { const u = fitUserFor(env, from), id = bid.slice(10).split(":").pop(); await reply(env, deps, from, (await jDel(env, u, id)) ? "Removed from your journal." : "Already removed."); return true; }
+  if (bid === "fit:open") {   // v453 - "Log today" on the momo_day_check template: the window is open again (the caller noted it), so the held message follows
+    const u = fitUserFor(env, from);
+    if (!(await fitDeliverPending(env, deps, u))) await reply(env, deps, from, "Momo is open again: your check-ins will come here. Log with \"food: ...\" or \"gym 40 min\", or on the page.");
+    return true;
+  }
   if (bid === "fit:extend") { const cfg = await fitCfg(env, fitUserFor(env, from)); cfg.days = Math.min(365, cfg.days + 30); await fitSaveCfg(env, cfg); await reply(env, deps, from, "➕ Challenge extended to " + cfg.days + " days. Keep going."); return true; }
   return false;
 }
@@ -1140,6 +1199,7 @@ export async function fitEvening(env, deps, nowMs) {
     // Anyone else reads their verdict on the page.
     if (user.wa === mine) { if (await eveningFor(env, deps, nowMs, user.id, user.wa)) sent = true; }
     else if (user.wa && await recentIn(env, user.id)) { if (await eveningFor(env, deps, nowMs, user.id, user.wa, true)) sent = true; }
+    else if (user.wa) { if (await eveningFor(env, deps, nowMs, user.id, user.wa, false, true)) sent = true; }   // v453 - a guest with a shut window: the template, once a day
   }
   return sent;
 }
@@ -1203,13 +1263,20 @@ export async function fitMorning(env, deps, nowMs) {
   for (const user of fitUsers(env)) {
     if (user.wa === mine) { if (await morningFor(env, deps, nowMs, user.id, user.wa)) sent = true; }
     else if (user.wa && await recentIn(env, user.id)) { if (await morningFor(env, deps, nowMs, user.id, user.wa, true)) sent = true; }
+    else if (user.wa) { if (await morningFor(env, deps, nowMs, user.id, user.wa, false, true)) sent = true; }   // v453 - a guest with a shut window: the template, once a day
   }
   return sent;
 }
-async function morningFor(env, deps, nowMs, u, to, guestWindowOpen) {
+async function morningFor(env, deps, nowMs, u, to, guestWindowOpen, guestShut) {
   const cfg = await fitCfg(env, u); if (!cfg.start) return false;
   const today = gstDate(nowMs); if (today < cfg.start) return false;
   const end = addDays(cfg.start, cfg.days - 1); if (today > end) return false;
+  if (guestShut) {   // v453 - not on a booked rest day, and not once the opener has gone out today
+    if (await env.MEETINGS.get("fitc_msent_" + u + "_" + today)) return false;
+    const sumT0 = await fitSummary(env, today, cfg, today); if (sumT0.rest) return false;
+    const yday = addDays(today, -1);
+    return guestNudge(env, deps, nowMs, u, to, "morning", yday < cfg.start ? sumT0 : await fitSummary(env, yday, cfg, yday), yday < cfg.start ? "today" : "yesterday");
+  }
   let open = !!guestWindowOpen; if (!guestWindowOpen) { try { open = deps.ownerWindowOpen ? await deps.ownerWindowOpen(env) : false; } catch (e) {} }
   if (!open) {
     // closed window: at most ONE approved nudge a day (shared with the 21:00 one, so never two), only when nothing was logged yesterday or today, and only to the
@@ -1239,10 +1306,14 @@ async function morningFor(env, deps, nowMs, u, to, guestWindowOpen) {
   await reply(env, deps, to || env.WA_ALLOWED, L.join("\n"));
   return true;
 }
-async function eveningFor(env, deps, nowMs, u, to, guestWindowOpen) {
+async function eveningFor(env, deps, nowMs, u, to, guestWindowOpen, guestShut) {
   const cfg = await fitCfg(env, u); if (!cfg.start) return false;
   const today = gstDate(nowMs); if (today < cfg.start) return false;
   const end = addDays(cfg.start, cfg.days - 1); if (today > end) return false;
+  if (guestShut) {   // v453 - the verdict waits; the template says the day in one line and its button brings the verdict
+    if (await env.MEETINGS.get("fitc_sent_" + u + "_" + today)) return false;
+    return guestNudge(env, deps, nowMs, u, to, "evening", await fitSummary(env, today, cfg, today), "today");
+  }
   // the window check comes BEFORE the once-a-day flag: a closed window must not use up the day's verdict (the next cron tick tries again)
   let open = !!guestWindowOpen; if (!guestWindowOpen) { try { open = deps.ownerWindowOpen ? await deps.ownerWindowOpen(env) : false; } catch (e) {} }
   if (!open) {
@@ -1397,7 +1468,8 @@ export async function fitRoutes(request, env, url, h) {
     let sum = await fitSummary(env, d, cfg, today);
     if (await fitBackfillProtein(env, h, sum.entries, 8)) sum = await fitSummary(env, d, cfg, today);   // opening a day estimates its meals that have no estimate yet
     return J({ ok: true, u: cfg.u, users: us, names, share: await fitShareOn(env, cfg.u), partners: await fitPartners(env, cfg, today), rest: sum.rest, paused: sum.paused, today, d, cfg, entries: sum.entries, stats: sum.stats, strip: sum.strip, week: sum.week, challenge: sum.challenge,
-      machines: Object.values(await liftHist(env, cfg.u)), groups: ((await liftLog(env, cfg.u)).find((r) => r.d === d) || {}).g || [] });   // v436 session card + progress
+      machines: Object.values(await liftHist(env, cfg.u)), groups: ((await liftLog(env, cfg.u)).find((r) => r.d === d) || {}).g || [],   // v436 session card + progress
+      window: await fitWindow(env, cfg.u, now) });   // v453 - a guest's WhatsApp window: the page shows "Send to Momo on WhatsApp" when it is shut or nearly shut
   }
   if (request.method !== "POST") return J({ ok: false, why: "method" }, 405);
   // With more than one person on this instance a write must NAME whose log it is. Without this a page that never asked "who is this?" (the default is the
@@ -1550,7 +1622,7 @@ function fitPageHtml(o) {
     '<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0C1413;color:#E6E9E4;font-family:"IBM Plex Sans",system-ui,sans-serif}' + FIT_CSS + FIT_CSS2 + (o.navCss || "") + '</style></head><body><div class="fw">' +
     '<div class="brand"><img class="logo" src="/fit_img/logo.jpg?key=' + keyQ + '" alt="Momo"><div class="fsub" id="sub">&nbsp;</div></div><div class="chips" id="usr" style="margin:0 0 4px"></div>' +
     '<div class="fc" id="who" style="display:none"><h2>WHO IS THIS?</h2><div class="chips" id="whob"></div><div class="note">Pick your name once. This phone remembers it, and everything you log or save here goes under that name.</div></div>' +
-    '<div class="seg"><button class="sw on" id="vb_m">Log</button><button class="sw" id="vb_j">Journal</button><button class="fbb" id="fbopen">Show my feedback</button><button class="fbb wtb" id="wbtl" aria-label="Log a bottle of water"><svg width="14" height="22" viewBox="0 0 14 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="4.5" y="1" width="5" height="3" rx="1"/><path d="M4.5 4 3 7.5V19a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V7.5L9.5 4z"/><path d="M3 12h8" opacity=".6"/></svg><span id="wbn">0</span></button><button class="fbb" id="vmic" aria-label="Say what you did"><svg width="14" height="20" viewBox="0 0 14 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="1" width="6" height="11" rx="3"/><path d="M1.5 9.5a5.5 5.5 0 0 0 11 0M7 15v4"/></svg>Say it</button></div><div id="vm">' +
+    '<div class="seg"><button class="sw on" id="vb_m">Log</button><button class="sw" id="vb_j">Journal</button><button class="fbb" id="fbopen">Show my feedback</button><button class="fbb wtb" id="wbtl" aria-label="Log a bottle of water"><svg width="14" height="22" viewBox="0 0 14 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="4.5" y="1" width="5" height="3" rx="1"/><path d="M4.5 4 3 7.5V19a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V7.5L9.5 4z"/><path d="M3 12h8" opacity=".6"/></svg><span id="wbn">0</span></button><button class="fbb" id="vmic" aria-label="Say what you did"><svg width="14" height="20" viewBox="0 0 14 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="4" y="1" width="6" height="11" rx="3"/><path d="M1.5 9.5a5.5 5.5 0 0 0 11 0M7 15v4"/></svg>Say it</button><a class="fbb" id="wawin" hidden target="_blank" rel="noopener noreferrer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 20.5l1.3-4.1A8.5 8.5 0 1 1 8 19.6z"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.6-2-1-1 .9c-1-.4-2.4-1.8-2.8-2.8l.9-1-1-2z"/></svg>Send to Momo on WhatsApp</a></div><div id="vm">' +
     '<div class="fc" id="ch"></div>' +
     '<div class="dn"><button id="prev" aria-label="Previous day">&#8249;</button><span id="dl"></span><button id="next" aria-label="Next day">&#8250;</button></div><div class="strip" id="strip"></div>' +
     '<div class="fc"><div class="ph" data-img="food"><b>WHAT I ATE</b></div><div class="pc" id="prot" style="display:none"></div><div id="food"></div><div class="note" id="win"></div>' +
