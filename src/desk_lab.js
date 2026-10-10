@@ -11,6 +11,7 @@
 //   lab qr           a QR code that opens the desk with a message already typed                                  (feature 7)
 //   lab profile      the desk's WhatsApp business profile as WhatsApp holds it                                   (feature 8)
 // Everything goes to WA_DESK_OWNER from WA_DESK_PHONE_ID; nothing here can address anyone else.
+import { ytRecord, ytConnected, ytStartLink, ytUpload } from "./yt_desk.js";   // v477 - YouTube
 import { sendBriefFlow, flowReply, briefFlowJson, FLOW_KEY, FLOW_NAME, FLOW_DRAFT_KEY } from "./wa_flows.js";
 import { briefChatRoute } from "./brief_chat.js";   // v455 - the client brief as a chat (lists, buttons, typed answers)
 import { momoTemplateDef } from "./fit.js";   // v453 - the Momo day template the desk submits
@@ -160,16 +161,35 @@ export async function deskLabRoute(env, msg, text, deps) {
   const br = tapId || "";   // v469: list rows count as taps too
   if (br === "dr:no") { await env.MEETINGS.delete("desk_reel_pending"); await send("Cancelled. Nothing was posted."); return true; }
   // v464 - Post it asks WHERE when LinkedIn is connected: Instagram / LinkedIn / Both. Without LinkedIn it goes to Instagram as before.
-  if (br === "dr:ok" || br === "dr:ig" || br === "dr:li" || br === "dr:both") {
+  if (br === "dr:ok" || br === "dr:ig" || br === "dr:li" || br === "dr:both" || br === "dr:yt" || br === "dr:all") {
     let p = null; try { p = JSON.parse((await env.MEETINGS.get("desk_reel_pending")) || "null"); } catch (e) {}
     if (!p) { await send("No video is waiting (it may already be posted or cancelled)."); return true; }
     const liOn = deps.liConnected ? await deps.liConnected(env) : false;
+    const ytOn = ytConnected(await ytRecord(env));   // v477
+    if (br === "dr:ok" && ytOn) {
+      const rows = [{ id: "dr:ig", title: "Instagram" }].concat(liOn ? [{ id: "dr:li", title: "LinkedIn" }] : [], [{ id: "dr:yt", title: "YouTube" }], liOn ? [{ id: "dr:both", title: "Instagram + LinkedIn" }] : [], [{ id: "dr:all", title: liOn ? "All three" : "Instagram + YouTube" }]);
+      await deps.raw(env, listPayload(to, "Post where?", "Choose", rows, "Post where"), "post-where"); return true;
+    }
     if (br === "dr:ok" && liOn) {
       await deps.raw(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: "Post where?" },
         action: { buttons: [{ type: "reply", reply: { id: "dr:ig", title: "Instagram" } }, { type: "reply", reply: { id: "dr:li", title: "LinkedIn" } }, { type: "reply", reply: { id: "dr:both", title: "Both" } }] } } }, "post-where");
       return true;
     }
-    const toIg = br === "dr:ok" || br === "dr:ig" || br === "dr:both", toLi = br === "dr:li" || br === "dr:both";
+    const toIg = br === "dr:ok" || br === "dr:ig" || br === "dr:both" || br === "dr:all", toLi = br === "dr:li" || br === "dr:both" || (br === "dr:all" && liOn), toYt = br === "dr:yt" || br === "dr:all";
+    if (toYt) {   // v477 - YouTube: straight upload of the stored video
+      const key = String(p.url).split("/").pop();
+      if (p.yt_url) await send("Already on YouTube: " + p.yt_url);
+      else {
+        const bytes = await env.MEETINGS.get("vid_" + key, "arrayBuffer");
+        if (!bytes) await send("YouTube: I could not find the stored video " + key + ".");
+        else {
+          await send("Uploading to YouTube...");
+          const r = await ytUpload(env, bytes, p.caption, { short: /^clip_/.test(key) || !!p.short }, deps);
+          if (r.err) await send("YouTube: " + r.err + ". Nothing was posted there.");
+          else { p.yt_url = r.url; await env.MEETINGS.put("desk_reel_pending", JSON.stringify(p), { expirationTtl: 2 * 86400 }); await send("On YouTube: " + r.url + (r.privacy === "private" ? "\nIt is PRIVATE for now (Google keeps uploads private until our app passes its review). Open it in YouTube Studio and set it to Public." : "")); }
+        }
+      }
+    }
     if (toLi) {
       let q = null; try { q = JSON.parse((await env.MEETINGS.get("desk_li_pending")) || "null"); } catch (e) {}
       const key = String(p.url).split("/").pop();
@@ -188,6 +208,14 @@ export async function deskLabRoute(env, msg, text, deps) {
       await send("Uploading to Instagram. Video processing takes a minute or two; I post it the moment it is ready.");
       await reelStep(env, p, deps, 3);
     }
+    return true;
+  }
+  // v477 - "youtube": the one-tap Google sign-in for the channel
+  if (/^\/?youtube$/i.test(t)) {
+    const r = await ytStartLink(env, deps.origin(env));
+    if (r.err) { await send("Cannot make the link: " + r.err); return true; }
+    const res = await deps.raw(env, ctaPayload(to, (r.connected ? "YouTube is connected (" + (r.channel || "channel") + "). Tap to sign in again." : "Connect the Digital Abbot YouTube channel so the desk can upload your videos. Sign in with the Google account that owns the channel.") + " The link works for 15 minutes.", "Sign in", r.link, "YouTube"), "yt-link");
+    if (res && res.error) await send("Sign-in link: " + r.link);
     return true;
   }
   // v464 - "linkedin": the one-tap sign-in link (and the status of the connection)

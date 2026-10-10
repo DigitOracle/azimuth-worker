@@ -2430,7 +2430,8 @@ async function appFetch(request, env, ctx) {
       }
       if (url.pathname === "/wa_flow_setup") return flowSetupRoute(env, url, { graph: WA_GRAPH });   // v428 - owner only: create + publish the client-brief Flow
       if (url.pathname.indexOf("/music/") === 0) { const _mr = await musicRoute(env, url); if (_mr) return _mr; }   // v467 - library tracks for the video service
-      if (url.pathname.indexOf("/li/") === 0) { const _lr = await liRoute(env, url, { notify: (e, t) => deskLabDeps(e).send(e, t) }); if (_lr) return _lr; }   // v464 - LinkedIn sign-in for the desk
+      if (url.pathname.indexOf("/yt/") === 0) { const { ytRoute } = await import("./yt_desk.js"); const _yr = await ytRoute(env, url, { notify: (e, t) => deskLabDeps(e).send(e, t) }); if (_yr) return _yr; }   // v477 - YouTube sign-in for the desk
+    if (url.pathname.indexOf("/li/") === 0) { const _lr = await liRoute(env, url, { notify: (e, t) => deskLabDeps(e).send(e, t) }); if (_lr) return _lr; }   // v464 - LinkedIn sign-in for the desk
       if (url.pathname.indexOf("/ig/") === 0 || (url.pathname.indexOf("/ig_") === 0 && url.pathname.indexOf("/ig_media/") !== 0)) return igRoute(env, url, request);   // v149 - Instagram insights (404 unless IG_APP_ID); v427 - NOT /ig_media/: that is the public picture route below, which WhatsApp and Instagram fetch with no key. The /ig_ prefix swallowed it and every desk preview picture came back 401 (8 Oct)
       if (url.pathname.indexOf("/gcal/") === 0) return gcalRoute(env, url);   // v150 - Google Calendar consent and status for Meet bookings (404 unless GMEET)
       if (url.pathname === "/residents" || url.pathname === "/residents/data") return residentsRoute(env, url);   // v239 - PUBLIC: no key of any kind. What protects it is the flooring in the data (500+ accounts, 5% minimum, banded, no counts), not the audience
