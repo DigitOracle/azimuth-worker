@@ -1185,6 +1185,8 @@ function momoLooksLikeMomo(msg) {
   if (msg.type === "text") return momoLooksLikeText(msg.text && msg.text.body);
   if (msg.type === "image") return /^\s*(?:\u{1F37D}|food\b|meal\b|ate\b|eating\b|breakfast\b|lunch\b|dinner\b|snack\b|brunch\b|supper\b|momo\b)/iu.test(String((msg.image && msg.image.caption) || ""));
   if (msg.type === "interactive") { const r = msg.interactive && msg.interactive.button_reply, id = String((r && r.id) || ""); return id.indexOf("fit:") === 0; }
+  // v453f (10 Oct): a TEMPLATE quick reply (momo_day_check "Log today", payload fit:open) arrives as type "button", not "interactive"
+  if (msg.type === "button") return String((msg.button && msg.button.payload) || "").indexOf("fit:") === 0;
   return false;
 }
 async function waTranscribe(env, mediaId) {
