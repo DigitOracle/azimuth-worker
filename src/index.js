@@ -3,6 +3,7 @@ import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - ques
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
 import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - the client brief as a chat; Naj only when switched on
 import { deskReelTick } from "./desk_lab.js";
+import { musicRoute, renderVideo } from "./music.js";   // v467 - music for posts (library route + the da-video service)
 import { liRoute, liRecord, liConnected, liStartLink, liStep, liReminder, liPostImages } from "./li_desk.js";   // v464 - LinkedIn from the desk   // v460 - an approved Instagram reel finishes on the minute tick
 import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
 import { templateRoutes, feedTemplateFlag, templateWatchTick } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
@@ -2422,6 +2423,7 @@ async function appFetch(request, env, ctx) {
         return new Response("forbidden", { status: 403 });
       }
       if (url.pathname === "/wa_flow_setup") return flowSetupRoute(env, url, { graph: WA_GRAPH });   // v428 - owner only: create + publish the client-brief Flow
+      if (url.pathname.indexOf("/music/") === 0) { const _mr = await musicRoute(env, url); if (_mr) return _mr; }   // v467 - library tracks for the video service
       if (url.pathname.indexOf("/li/") === 0) { const _lr = await liRoute(env, url, { notify: (e, t) => deskLabDeps(e).send(e, t) }); if (_lr) return _lr; }   // v464 - LinkedIn sign-in for the desk
       if (url.pathname.indexOf("/ig/") === 0 || (url.pathname.indexOf("/ig_") === 0 && url.pathname.indexOf("/ig_media/") !== 0)) return igRoute(env, url, request);   // v149 - Instagram insights (404 unless IG_APP_ID); v427 - NOT /ig_media/: that is the public picture route below, which WhatsApp and Instagram fetch with no key. The /ig_ prefix swallowed it and every desk preview picture came back 401 (8 Oct)
       if (url.pathname.indexOf("/gcal/") === 0) return gcalRoute(env, url);   // v150 - Google Calendar consent and status for Meet bookings (404 unless GMEET)
@@ -5462,6 +5464,8 @@ function deskPostDeps(env) {
     vision: async (e, bytes, mime, q) => { if (!e.ANTHROPIC_API_KEY) return null; try { const r = await claudeFetch(e, CLAUDE_FAST, 900, "You transcribe text from images. Reply with the text only.", [{ type: "image", source: { type: "base64", media_type: mime || "image/jpeg", data: b64of(bytes) } }, { type: "text", text: q }], null); if (!r || !r.ok) return null; const j = await r.json(); return (j.content || []).filter(b => b && b.type === "text").map(b => b.text).join(" "); } catch (x) { return null; } },
     fetchMedia: waFetchMedia, origin: (e) => pubOrigin(e, ""), now: () => Date.now(), sleep: (ms) => new Promise(r => setTimeout(r, ms)),
     liConnected: async (e) => liConnected(await liRecord(e)), liPostImages: (e, imgs, cap) => liPostImages(e, imgs, cap),   // v466 - regular posts to LinkedIn
+    render: (e, job) => renderVideo(e, job), video: (e, link, cap) => waPost(e, { messaging_product: "whatsapp", to: owner, type: "video", video: { link, caption: cap || undefined } }, "video", pid),   // v467
+    list: (e, body, button, rows) => waPost(e, { messaging_product: "whatsapp", to: owner, type: "interactive", interactive: { type: "list", body: { text: String(body).slice(0, 1024) }, action: { button: String(button).slice(0, 20), sections: [{ title: "Choose one", rows: rows.slice(0, 10).map((x) => ({ id: x.id, title: String(x.title).slice(0, 24), description: x.description ? String(x.description).slice(0, 72) : undefined })) }] } } }, "list", pid),
   };
 }
 // v428 - the desk lab's sends: everything to WA_DESK_OWNER from WA_DESK_PHONE_ID. raw() returns Meta's own JSON (with .error when refused),

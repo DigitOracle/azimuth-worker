@@ -5,6 +5,7 @@
 // All side effects arrive through `deps` (send, buttons, image, llm, vision, fetchMedia, origin, now, sleep) so this file is testable offline.
 // Docs: docs/DESK_POSTING_PHASE1.md
 import { deskIgStatus, deskIgPublish, deskIgPublishCarousel, deskIgPermalink, deskIgPull } from "./ig_desk.js";
+import { MOODS, musicIndex, libraryText, pickTrack, addTrack, moodOf } from "./music.js";   // v467 - music for posts
 
 export const DP_VERSION = "v421";
 // v421 (8 Oct): carousel slides are ALWAYS generated graphics from the house prompt; sent photos only on "use my photos" or a photo
@@ -331,7 +332,7 @@ export function assemble(p, j, facts, extraAllow) {
   return { caption: cap, evidence, dropped, flags, slides, tags };
 }
 async function llmDraft(env, deps, p, facts, instruction) {
-  const sys = SYS_COMMON + " " + (LANE_VOICE[p.lane] || LANE_VOICE.abbot) + (p.kind === "motivation" ? " THIS POST IS MOTIVATIONAL (Kendall 10 Oct: 3 Abbot + 3 Alchemy + 4 motivational in each feed): about drive, discipline, courage, resilience, purpose or growth in work AND life, in Kendall's own first-person voice; one strong opening line, short lines, one honest example from experience, no figures, no selling, no product; end with a question or a call to act today." : "") + (p.kind === "friday" ? " THIS POST IS THE FRIDAY REFLECTION: personal and about LIFE, not only work (health, family, kindness, courage, rest). Warm first person, no figures, no selling. The hook says it is Friday; the lines ask the three questions (what am I proud of this week, what made this week special, who do I want to be next week); the last line invites people to answer in the comments." : "") + (p.type === "carousel" ? " Also give 'slides': slide 1 is the hook, then 3 to 6 body slides each carrying ONE fact or step (title up to 8 words, body up to 20 words), and a last slide 'What to do next / follow' . Never more than " + MAX_SLIDES + " slides." : "");
+  const sys = SYS_COMMON + " " + (LANE_VOICE[p.lane] || LANE_VOICE.abbot) + (p.kind === "motivation" ? " THIS POST IS MOTIVATIONAL, ABOUT LIFE ONLY (Kendall 10 Oct: either motivational or about work, never both): discipline, courage, resilience, gratitude, health, family, kindness, rest, purpose or growth, in Kendall's own warm first-person voice, like the Friday Reflection. Do NOT mention work, careers, construction, sites, projects, buildings, clients, teams, technology, DigitAlchemy or any product, and ignore any instruction above about the built environment for this post. One strong opening line, short lines, one honest personal example, no figures, no selling; end with a question or a call to act today. Hashtags about life and motivation only." : "") + (p.kind === "friday" ? " THIS POST IS THE FRIDAY REFLECTION: personal and about LIFE, not only work (health, family, kindness, courage, rest). Warm first person, no figures, no selling. The hook says it is Friday; the lines ask the three questions (what am I proud of this week, what made this week special, who do I want to be next week); the last line invites people to answer in the comments." : "") + (p.type === "carousel" ? " Also give 'slides': slide 1 is the hook, then 3 to 6 body slides each carrying ONE fact or step (title up to 8 words, body up to 20 words), and a last slide 'What to do next / follow' . Never more than " + MAX_SLIDES + " slides." : "");
   const fl = facts.map((f) => f.id + " | " + f.figure + " | " + f.says + " | " + srcLabel(f)).join("\n") || "(no facts available: write without any figure)";
   const user = "IDEA: " + p.idea + "\nFACTS:\n" + fl + (instruction ? "\nCURRENT CAPTION:\n" + (p.caption || "") + "\nCHANGE REQUESTED: " + instruction : "");
   let t = ""; try { t = await deps.llm(env, sys, user, 1100); } catch (e) {}
@@ -444,13 +445,17 @@ const IDEAS = [
   { lane: "alchemy", text: "Hub71 member: what that means for the data we hold and how we govern it", needs: "" },
 ];
 // v454 - the motivational four, used when the generated list falls short (Kendall 10 Oct: 3 + 3 + 4 motivational)
+// v467 (Kendall 10 Oct: "the motivational quotes seem to still be like talking about work ... It should be motivational, like the Friday
+// motivational. So it's either motivational or it has to do with work") - motivational means LIFE: no work, sites, projects, clients or buildings.
 const MOT_IDEAS = [
-  "Discipline beats motivation: the habit that carried me on the days I did not feel like it",
-  "The project that went wrong taught me more than every one that went right",
-  "Courage on site is saying I don't know yet, and then finding out",
-  "Rest is part of the work: what I learned the year I stopped pretending otherwise",
-  "Start before you feel ready: nobody on a site ever felt ready",
-  "Your standards are what you do when nobody is checking",
+  "Discipline beats motivation: the small habit that carries you on the days you do not feel like it",
+  "The hardest season of my life taught me more than all the easy ones",
+  "Courage is saying I don't know yet, and then going to find out",
+  "Rest is not a reward you earn later: what changed when I stopped treating it like one",
+  "Start before you feel ready; nobody ever feels ready",
+  "Who you are is what you do when nobody is watching",
+  "Gratitude is a muscle: three things I notice every morning",
+  "Be kind to the version of you that is still learning",
 ].map((text) => ({ lane: "abbot", kind: "motivation", text, needs: "" }));
 export async function ideasText(env, deps) {
   const now = nowOf(deps), facts = await loadFacts(env), wk = Math.floor(now / (7 * 86400000));
@@ -466,7 +471,7 @@ const FEED_TTL = 3 * 3600;
 export const FRIDAY_IDEA = { lane: "abbot", kind: "friday", needs: "",
   text: "Friday Reflection, about life and not only work: what am I proud of this week, what made this week special, and who do I want to be next week" };
 const FEED_SYS = "You suggest Instagram post ideas for two lanes of one Dubai built-environment brand. " + LANE_VOICE.abbot + " " + LANE_VOICE.alchemy +
-  " Plain text, no emoji, no hashtags. Never name any AI model, AI company or AI tool. Never put a number in an idea unless it appears in the FACTS list. Each idea is ONE line, at most 18 words, specific and useful to people who build, own or manage buildings. Reply with JSON only: {\"ideas\":[{\"lane\":\"abbot\",\"text\":\"...\"}]}. Exactly 10 ideas: 3 abbot, 3 alchemy, then 4 with lane \"motivation\" - motivational ideas about drive, discipline, courage, resilience, purpose and growth in work AND life, in the Abbot's own voice, not about the product.";   // v454 (Kendall 10 Oct): 3 + 3 + 4 motivational
+  " Plain text, no emoji, no hashtags. Never name any AI model, AI company or AI tool. Never put a number in an idea unless it appears in the FACTS list. Each idea is ONE line, at most 18 words, specific and useful to people who build, own or manage buildings. Reply with JSON only: {\"ideas\":[{\"lane\":\"abbot\",\"text\":\"...\"}]}. Exactly 10 ideas: 3 abbot, 3 alchemy, then 4 with lane \"motivation\" - purely motivational ideas about LIFE (discipline, courage, resilience, gratitude, health, family, kindness, rest, purpose, growth), in the Abbot's own voice, like a Friday Reflection: NOT about work, careers, construction, sites, projects, buildings, clients, teams or the product. A post is either motivational or about work, never both.";   // v454 (Kendall 10 Oct): 3 + 3 + 4 motivational
 export async function feedText(env, deps) {
   const now = nowOf(deps), facts = await loadFacts(env);
   let out = [];
@@ -597,6 +602,8 @@ async function handleButton(env, deps, id) {
   // v466 - "post" alone: what kind of post, by tapping
   if (id === "dp:start:ideas") return deskPostRoute(env, { type: "text" }, "/ideas", deps);
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
+  const mm = String(id).match(/^dp:([a-z0-9]+):(music|nomusic|muse|mtry|mno|m_(calm|corporate|upbeat|cinematic|inspiring))$/);   // v467 - music
+  if (mm) { const pm = await getPlan(env, mm[1]); if (!pm) { await deps.send(env, "That draft has expired."); return true; } return musicStep(env, deps, pm, mm[2], mm[3]); }
   const m = String(id).match(/^dp:([a-z0-9]+):(ok|edit|skip|now|slot|laneA|laneL|wig|wli|wboth)$/);
   if (!m) return false;
   const p = await getPlan(env, m[1]);
@@ -608,6 +615,11 @@ async function handleButton(env, deps, id) {
   if (act === "edit") { p.status = "editing"; await putPlan(env, p); await kvPut(env, "desk_post_editing", p.id, 3 * 86400); await deps.send(env, "Tell me what to change on " + p.id + ": shorter, punchier, more formal, add <fact>, remove <x>, swap image <n>, another background, or Arabic version. (" + (MAX_ROUNDS - (p.rounds || 0)) + " rounds left.)"); return true; }
   if (act === "ok" || act === "wig" || act === "wli" || act === "wboth") {
     if (p.status !== "draft" && p.status !== "editing") { await deps.send(env, "Draft " + p.id + " is " + p.status + "."); return true; }
+    // v467 - Approve first offers music (when the video service is connected)
+    if (act === "ok" && deps.render && !p.music_asked) {
+      await deps.buttons(env, "Post " + p.id + " as it is, or add music? (With music it goes out as a short video.)", [{ id: "dp:" + p.id + ":nomusic", title: "Post as is" }, { id: "dp:" + p.id + ":music", title: "Add music" }]);
+      return true;
+    }
     // v466 - with LinkedIn connected, Approve first asks where the post goes
     if (act === "ok" && deps.liConnected && await deps.liConnected(env)) {
       await deps.buttons(env, "Post " + p.id + " where?", [{ id: "dp:" + p.id + ":wig", title: "Instagram" }, { id: "dp:" + p.id + ":wli", title: "LinkedIn" }, { id: "dp:" + p.id + ":wboth", title: "Both" }]);
@@ -617,6 +629,43 @@ async function handleButton(env, deps, id) {
     await approve(env, deps, p); return true;
   }
   if (act === "now" || act === "slot") { if (p.status !== "approving" || p.approved !== true) { await deps.send(env, "Draft " + p.id + " is not approved yet."); return true; } await schedule(env, deps, p, act); return true; }
+  return true;
+}
+
+// ---------- v467 music: Approve -> Post as is / Add music -> mood -> preview video -> Use it / Another track / No music ----------
+// "Use it" hands the video to the desk's video flow (Post it -> Instagram / LinkedIn / Both); the picture plan is then closed as "as-video".
+async function musicStep(env, deps, p, act, mood) {
+  if (!["draft", "editing"].includes(p.status)) { await deps.send(env, "Draft " + p.id + " is " + p.status + "."); return true; }
+  const origin = deps.origin(env);
+  if (act === "nomusic" || act === "mno") { p.music_asked = true; p.music = { mode: "none" }; await putPlan(env, p); return handleButton(env, deps, "dp:" + p.id + ":ok"); }
+  const ix = await musicIndex(env);
+  if (act === "music") {
+    const have = MOODS.filter((m) => (ix[m] || []).length);
+    if (!have.length) { await deps.send(env, libraryText(ix)); return true; }
+    if (have.length <= 3 || !deps.list) await deps.buttons(env, "Which mood?", have.slice(0, 3).map((m) => ({ id: "dp:" + p.id + ":m_" + m, title: m.charAt(0).toUpperCase() + m.slice(1) })));
+    else await deps.list(env, "Which mood for " + p.id + "?", "Pick a mood", have.map((m) => ({ id: "dp:" + p.id + ":m_" + m, title: m.charAt(0).toUpperCase() + m.slice(1), description: ix[m].length + " track" + (ix[m].length > 1 ? "s" : "") })));
+    return true;
+  }
+  if (act === "muse") {
+    if (!p.video_key) { await deps.send(env, "No music video is ready for " + p.id + "."); return true; }
+    await env.MEETINGS.put("desk_reel_pending", JSON.stringify({ url: origin + "/video/" + p.video_key, caption: p.caption, at: Date.now() }), { expirationTtl: 2 * 86400 });
+    p.status = "as-video"; hist(p, "as-video", p.video_key, nowOf(deps)); await putPlan(env, p);
+    await deps.buttons(env, "Post " + p.id + " as a video with music?", [{ id: "dr:ok", title: "Post it" }, { id: "dc:ai:reel:" + p.video_key, title: "Rewrite caption" }, { id: "dr:no", title: "Cancel" }]);
+    return true;
+  }
+  const md = act === "mtry" ? p.music_mood : mood;
+  const track = pickTrack(ix, md, p.music_last);
+  if (!track) { await deps.send(env, "No " + md + " tracks in the library. " + libraryText(ix)); return true; }
+  const imgs = (p.slides || []).filter((s) => s.img_key).map((s) => origin + "/ig_media/" + s.img_key);
+  if (!imgs.length) { await deps.send(env, "Draft " + p.id + " has no pictures to make a video from."); return true; }
+  await deps.send(env, "Making the video with " + track.title + " (" + md + "). About half a minute...");
+  const r = await deps.render(env, { images: imgs, audio: origin + "/music/" + track.key, seconds: imgs.length === 1 ? 12 : 4, width: 1080, height: 1920 });
+  if (r.err) { await deps.send(env, "Could not make the video: " + r.err + ". Tap Post as is, or try again."); return true; }
+  const key = "post_" + p.id;
+  await env.MEETINGS.put("vid_" + key, r.bytes, { expirationTtl: 60 * 86400 });
+  p.video_key = key; p.music_last = track.key; p.music_mood = md; p.music = { mode: "bed", track: track.title, mood: md }; hist(p, "music", track.title, nowOf(deps)); await putPlan(env, p);
+  if (deps.video) await deps.video(env, origin + "/video/" + key, "Draft " + p.id + " with music: " + track.title + " (" + md + ").");
+  await deps.buttons(env, "Use this version?", [{ id: "dp:" + p.id + ":muse", title: "Use it" }, { id: "dp:" + p.id + ":mtry", title: "Another track" }, { id: "dp:" + p.id + ":mno", title: "No music" }]);
   return true;
 }
 
@@ -727,7 +776,20 @@ export async function deskPostRoute(env, msg, text, deps) {
   const now = nowOf(deps);
   if (msg.type === "interactive") { const id = msg.interactive && msg.interactive.button_reply && msg.interactive.button_reply.id; return id && /^dp:/.test(id) ? handleButton(env, deps, id) : false; }
   if (msg.type === "image" && msg.image && msg.image.id) return handleImage(env, deps, msg);
+  // v467 - a track for the music library: an audio file (or audio document) captioned music: <mood> <title>
+  const au = (msg.type === "audio" && msg.audio) || (msg.type === "document" && msg.document && /^audio\//i.test(String(msg.document.mime_type || "")) && msg.document);
+  if (au && au.id) {
+    const cap = String(au.caption || (msg.document && msg.document.caption) || "").trim();
+    const cm = cap.match(/^music\s*:?\s*(.*)$/i);
+    if (!cm) { await deps.send(env, "To add this to the music library, send it again with the caption music: <mood> <title>. Moods: " + MOODS.join(", ") + ". Royalty-free tracks only."); return true; }
+    const mood = moodOf(cm[1]); if (!mood) { await deps.send(env, "Say the mood in the caption: music: <mood> <title>. Moods: " + MOODS.join(", ") + "."); return true; }
+    let got = null; try { got = await deps.fetchMedia(env, au.id); } catch (e) {}
+    if (!got || !got.bytes) { await deps.send(env, "I could not download that audio. Send it again."); return true; }
+    const r = await addTrack(env, got.bytes, mood, cm[1].replace(new RegExp("\\b" + mood + "\\b", "i"), "").trim() || (msg.document && msg.document.filename) || "", "sent by Kendall");
+    await deps.send(env, r.err ? "Not added: " + r.err + "." : "Added to " + mood + " (" + r.count + " track" + (r.count > 1 ? "s" : "") + " in that mood)."); return true;
+  }
   const t = String(text || "").trim(); if (!t) return false;
+  if (/^\/?music$/i.test(t)) { await deps.send(env, libraryText(await musicIndex(env))); return true; }   // v467
   let m;
   if (/^\/pause\b/i.test(t)) { await env.MEETINGS.put("desk_post_pause", "1"); await env.MEETINGS.delete("desk_post_pause_told"); await deps.send(env, "Paused. Nothing will be published until you send /resume. Drafts and approvals still work."); return true; }
   if (/^\/resume\b/i.test(t)) { await env.MEETINGS.delete("desk_post_pause"); await env.MEETINGS.delete("desk_post_pause_told"); await deps.send(env, "Resumed. Scheduled posts go out at their slot."); return true; }

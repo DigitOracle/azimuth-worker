@@ -92,6 +92,10 @@ ai = { binding = "AI" }
 
 browser = { binding = "BROWSER" }   # v105 - Browser Rendering binding: cards render in the Worker, no API token needed
 compatibility_flags = ["nodejs_compat"]   # v105 - @cloudflare/puppeteer needs the node built-ins
+# v467 - the da-video Worker (ffmpeg in a Cloudflare Container, C:\Dev\da-video): post pictures + music -> MP4. No public route; only this binding.
+services = [
+  { binding = "VIDEO_SVC", service = "da-video" }
+]
 
 [env.azimuth2.vars]
 ADD_TO = ""
