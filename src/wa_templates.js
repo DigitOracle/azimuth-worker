@@ -26,15 +26,41 @@ export const WA_TEMPLATES = {
     name: "najma_log_reminder", language: "en_US", category: "UTILITY",
     body: "Reminder: your Momo log for {{1}} has no entries yet. Reply with what you ate or how you moved, for example food: chicken salad, or gym: 40 min.", example: ["10 Oct"],
   },
+  // v459 (Kendall 10 Oct: "yes submit the template, DigitAlchemy number") - the site-clarity video broadcast. MARKETING, video header
+  // (the sample is the hosted clip vid_site_clarity_75, uploaded to Meta at submit time), first name as {{1}}, two quick replies and a link.
+  digitalchemy_site_clarity: {
+    name: "digitalchemy_site_clarity", language: "en", category: "MARKETING", header_video_key: "site_clarity_75",
+    body: "Hi {{1}}, a short one from DigitAlchemy.\n\nOn site, the costly problems are the ones nobody sees in time. Together with our partner GoCanvas, we bring drawings, digital inspections, progress and the market into one live view, so your team and your client work from the same facts on the same day.\n\n75 seconds on how it works. If it's relevant to a project you're on, reply here and we'll set up a short call.",
+    example: ["Ahmed"], footer: "DigitAlchemy® · Complexity into clarity",
+    buttons: [{ type: "QUICK_REPLY", text: "Book a call" }, { type: "QUICK_REPLY", text: "Not for me" }, { type: "URL", text: "Visit DigitAlchemy", url: "https://digitalabbot.io" }],
+  },
 };
 export const DEFAULT_FEED_TEMPLATE = "azimuth_daily";
 export const FEED_TEMPLATE_KV = "feed_template";
 export const LOG_NUDGE_TEMPLATE = "najma_log_day";   // for the log worker's use; there is deliberately no send path here
 
 // The exact payload Meta receives. Body only: no header, no footer, no buttons, no variables (so no examples).
-export function buildCreatePayload(name) {
+export function buildCreatePayload(name, headerHandle) {
   const t = WA_TEMPLATES[name]; if (!t) return null;
-  return { name: t.name, language: t.language, category: t.category, components: [Object.assign({ type: "BODY", text: t.body }, t.example ? { example: { body_text: [t.example] } } : {})] };
+  const c = [];
+  if (t.header_video_key) c.push({ type: "HEADER", format: "VIDEO", example: { header_handle: [headerHandle || "<uploaded at submit>"] } });
+  c.push(Object.assign({ type: "BODY", text: t.body }, t.example ? { example: { body_text: [t.example] } } : {}));
+  if (t.footer) c.push({ type: "FOOTER", text: t.footer });
+  if (t.buttons) c.push({ type: "BUTTONS", buttons: t.buttons });
+  return { name: t.name, language: t.language, category: t.category, components: c };
+}
+
+// v459 - Meta's resumable upload: the sample video for a VIDEO header becomes a handle ("4::...") the template refers to.
+export async function uploadHeaderSample(env, graph, bytes, fileName, deps) {
+  const f = (deps && deps.fetch) || fetch;
+  const H = { Authorization: "Bearer " + env.WHATSAPP_TOKEN };
+  const app = await (await f(`${graph}/app`, { headers: H })).json().catch(() => ({}));
+  if (!app || !app.id) return { error: "could not read the app id: " + String((app && app.error && app.error.message) || "no answer").slice(0, 200) };
+  const s = await (await f(`${graph}/${app.id}/uploads?file_name=${encodeURIComponent(fileName)}&file_length=${bytes.byteLength}&file_type=video/mp4`, { method: "POST", headers: H })).json().catch(() => ({}));
+  if (!s || !s.id) return { error: "upload session refused: " + String((s && s.error && s.error.message) || "no answer").slice(0, 200) };
+  const u = await (await f(`${graph}/${s.id}`, { method: "POST", headers: { Authorization: "OAuth " + env.WHATSAPP_TOKEN, file_offset: "0" }, body: bytes })).json().catch(() => ({}));
+  if (!u || !u.h) return { error: "upload refused: " + String((u && u.error && u.error.message) || "no answer").slice(0, 200) };
+  return { handle: u.h };
 }
 
 // Meta's list response -> one small, secret-free object.
@@ -77,10 +103,18 @@ export async function templateRoutes(request, env, url, deps) {
   if (q.get("confirm") !== "yes") return J({ ok: false, error: "confirm=yes is required" }, 400);
 
   if (p === "/wa_template_create") {
-    const payload = buildCreatePayload(name);
+    let payload = buildCreatePayload(name);
     if (q.get("dry") !== "0") return J({ dry: true, would_post: `${graph}/${waba || "<waba>"}/message_templates`, payload, note: "nothing was sent; add dry=0 to submit" });
     if (!waba) return J({ ok: false, error: "need waba (business account id) or env.WABA_ID" }, 400);
     if (!env.WHATSAPP_TOKEN) return J({ ok: false, error: "no WHATSAPP_TOKEN configured" }, 500);
+    const tdef = WA_TEMPLATES[name];
+    if (tdef.header_video_key) {
+      const bytes = await env.MEETINGS.get("vid_" + tdef.header_video_key, "arrayBuffer");
+      if (!bytes) return J({ ok: false, error: "the sample video vid_" + tdef.header_video_key + " is not stored" }, 400);
+      const up = await uploadHeaderSample(env, graph, bytes, tdef.header_video_key + ".mp4", deps);
+      if (up.error) return J({ ok: false, error: up.error }, 502);
+      payload = buildCreatePayload(name, up.handle);
+    }
     try {
       const r = await fetch(`${graph}/${encodeURIComponent(waba)}/message_templates`, {
         method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
