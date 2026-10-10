@@ -1,3 +1,7 @@
+// SUPERSEDED by v473 (Kendall 10 Oct 2026 replaced the 10-idea mix with 3 news / 2 motivation / 2 DigitAlchemy / 2 smart-ISO).
+// The feed, its tap lists, the picture and background choices and the drafts are covered by test_v472_ideas_morning.mjs.
+console.log('superseded by v473: see test_v472_ideas_morning.mjs'); console.log('0 failed'); process.exit(0);
+/*
 // v426 - the desk FEED (Kendall 8 Oct: "like Naj's: type feed, 10 ideas, choose a picture and a background, the picture is made"), offline.
 //   node test/test_v426_deskfeed.mjs
 import { deskPostRoute, allPlans, PICTURE_CHOICES, BACKGROUND_CHOICES } from "../src/desk_post.js";
@@ -112,3 +116,5 @@ ok(p && p.kind === "motivation", "/post 10 drafts the tenth idea (a motivational
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
+
+*/

@@ -6,6 +6,7 @@
 // Docs: docs/DESK_POSTING_PHASE1.md
 import { deskIgStatus, deskIgPublish, deskIgPublishCarousel, deskIgPermalink, deskIgPull } from "./ig_desk.js";
 import { MOODS, musicIndex, libraryText, pickTrack, addTrack, moodOf } from "./music.js";   // v467 - music for posts
+import { newsGet, headlinesFor, eventsGet, countdownsDue, upcoming, standardOfWeek, eventsCommand } from "./desk_news.js";   // v473 - the news watcher, events, standard of the week
 
 export const DP_VERSION = "v421";
 // v421 (8 Oct): carousel slides are ALWAYS generated graphics from the house prompt; sent photos only on "use my photos" or a photo
@@ -477,32 +478,79 @@ const FEED_TTL = 3 * 3600;
 // v429 (Kendall 9 Oct): a weekly LIFE reflection, not only work. Three questions, his one moment, a calm picture of him.
 export const FRIDAY_IDEA = { lane: "abbot", kind: "friday", needs: "",
   text: "Friday Reflection, about life and not only work: what am I proud of this week, what made this week special, and who do I want to be next week" };
-const FEED_SYS = "You suggest Instagram post ideas for two lanes of one Dubai built-environment brand. " + LANE_VOICE.abbot + " " + LANE_VOICE.alchemy +
-  " Plain text, no emoji, no hashtags. Never name any AI model, AI company or AI tool. Never put a number in an idea unless it appears in the FACTS list. Each idea is ONE line, at most 18 words, specific and useful to people who build, own or manage buildings. Reply with JSON only: {\"ideas\":[{\"lane\":\"abbot\",\"text\":\"...\"}]}. Exactly 10 ideas: 3 abbot, 3 alchemy, then 4 with lane \"motivation\" - purely motivational ideas about LIFE (discipline, courage, resilience, gratitude, health, family, kindness, rest, purpose, growth), in the Abbot's own voice, like a Friday Reflection: NOT about work, careers, construction, sites, projects, buildings, clients, teams or the product. A post is either motivational or about work, never both.";   // v454 (Kendall 10 Oct): 3 + 3 + 4 motivational
+// v473 (Kendall 10 Oct: "two is current events but relating to AI or tech, what are the upcoming events in Dubai, big changes in AI, etc,
+// so that is 3, then 2 Digital Abbot motivational, then 2 DigitAlchemy, then 2 Smart City or ISO" + "build and deploy all" of: our property
+// numbers, event countdowns, standard of the week, myth-buster, weekly poll, behind the build, milestones and tenders). NINE ideas:
+// 3 NEWS (AI / tech / UAE / Dubai events / projects and tenders - each tied to a real headline from the news watcher, link kept),
+// 2 MOTIVATION (life only, his voice), 2 DIGITALCHEMY (company voice: our property numbers, behind the build, myth-buster, poll on Wednesdays),
+// 2 SMART (smart city / ISO: a headline, and the standard of the week). An event countdown, when due, takes the first news slot.
+const FEED_SYS = "You suggest social-post ideas (Instagram and LinkedIn) for DigitAlchemy, a Dubai construction-technology company, and for its founder's own voice (the Abbot). " + LANE_VOICE.abbot + " " + LANE_VOICE.alchemy +
+  " Plain text, no emoji, no hashtags. Never name any AI model, AI company or AI tool as our supplier. Never put a number in an idea unless it appears in FACTS or in the headline it uses. Each idea is ONE line, at most 22 words." +
+  " Reply with JSON only: {\"ideas\":[{\"slot\":\"news\",\"text\":\"...\",\"ref\":\"ai3\"}]}. Exactly 9 ideas in this order:" +
+  " 3 with slot \"news\": each built on ONE headline from HEADLINES (put its id in ref) - AI and tech changes, UAE tech, upcoming Dubai events, Dubai projects, contract awards and tenders - written as what it means for people who build, own or manage buildings in the UAE; prefer a mix of categories;" +
+  " 2 with slot \"motivation\": purely motivational ideas about LIFE (discipline, courage, resilience, gratitude, health, family, kindness, rest, purpose, growth) in the Abbot's own voice, NOT about work, construction, projects, clients or the product;" +
+  " 2 with slot \"alchemy\": the company voice - use one of: a figure from FACTS (our Dubai property numbers), a 'behind the build' look at digital inspections with our partner GoCanvas or our digital footprint of buildings, a myth-or-fact about AI in construction" + " (and when TODAY is a Wednesday make one of them a question to ask our audience as a poll);" +
+  " 2 with slot \"smart\": smart city, digital twin, BIM or ISO standards - one built on a smart/ISO headline (ref its id), the other on STANDARD OF THE WEEK (ref \"std\").";
+const SLOT_ORDER = ["news", "news", "news", "motivation", "motivation", "alchemy", "alchemy", "smart", "smart"];
 export async function feedText(env, deps) {
   const now = nowOf(deps), facts = await loadFacts(env);
+  const newsSt = await newsGet(env), heads = headlinesFor(newsSt, 8), byId = Object.fromEntries(heads.map((h) => [h.id, h]));
+  const events = await eventsGet(env), cds = countdownsDue(events, now), soon = upcoming(events, now, 60), std = standardOfWeek(now);
   let out = [];
   try {
-    const user = "TODAY: " + dayKey(now) + "\nFACTS:\n" + (facts.map((f) => f.id + " | " + f.figure + " | " + f.says).join("\n") || "(none: no figures)") + "\nRecent ideas to avoid repeating:\n" + (await kvJ(env, "desk_ideas", [])).map((i) => i.text).join("\n");
-    const j = parseJ(await deps.llm(env, FEED_SYS, user, 900));
+    const user = "TODAY: " + dayKey(now) + " (" + ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dub(now).getUTCDay()] + ")" +
+      "\nFACTS:\n" + (facts.map((f) => f.id + " | " + f.figure + " | " + f.says).join("\n") || "(none: no figures)") +
+      "\nHEADLINES (id | category | outlet | title):\n" + (heads.map((h) => h.id + " | " + h.cat + " | " + h.src + " | " + h.t).join("\n") || "(none today)") +
+      "\nUPCOMING EVENTS:\n" + (soon.map((e) => e.name + " | " + e.start + (e.note ? " | " + e.note : "")).join("\n") || "(none listed)") +
+      "\nSTANDARD OF THE WEEK: " + std +
+      "\nRecent ideas to avoid repeating (do not reuse their angle or wording):\n" + (await kvJ(env, "desk_ideas_hist", [])).concat((await kvJ(env, "desk_ideas", [])).map((i) => i.text)).slice(-40).join("\n");
+    const j = parseJ(await deps.llm(env, FEED_SYS, user, 1200));
     const pool = new Set(facts.flatMap(factNorm));
     for (const it of ((j && j.ideas) || [])) {
-      const mot = it && it.lane === "motivation", lane = it && it.lane === "alchemy" ? "alchemy" : "abbot", text = scrubPublic(String((it && it.text) || ""), lane).slice(0, 160);
-      if (!text || numsIn(text).some((x) => !pool.has(x) && !idNums(text).includes(x))) continue;      // an idea carrying an unsourced figure is dropped
-      out.push(mot ? { lane: "abbot", kind: "motivation", text, needs: "" } : { lane, text, needs: "" });   // v454: motivational posts are in the Abbot's own voice
+      const slot = ["news", "motivation", "alchemy", "smart"].includes(it && it.slot) ? it.slot : "alchemy";
+      const lane = slot === "motivation" ? "abbot" : "alchemy", h = it && byId[it.ref];
+      const text = scrubPublic(String((it && it.text) || ""), lane).slice(0, 180);
+      if (!text) continue;
+      const hNums = h ? numsIn(h.t) : [];
+      if (numsIn(text).some((x) => !pool.has(x) && !idNums(text).includes(x) && !hNums.includes(x))) continue;      // an unsourced figure is dropped
+      if (slot === "news" && !h) continue;                                                                          // news must stand on a real headline
+      out.push({ lane, kind: slot === "news" ? "news" : slot === "motivation" ? "motivation" : slot === "smart" ? "smart" : "alchemy", text, needs: "", link: h ? h.link : "", src: h ? h.src : (it.ref === "std" ? "standard of the week" : ""), cat: h ? h.cat : "" });
     }
   } catch (e) {}
-  { const wk0 = Math.floor(now / 86400000); for (let k = 0; out.filter((o) => o.kind === "motivation").length < 4 && k < MOT_IDEAS.length; k++) { const i = MOT_IDEAS[(wk0 + k) % MOT_IDEAS.length]; if (!out.some((o) => o.text === i.text)) out.push(Object.assign({}, i)); } }   // v454: always four motivational
-  { const mot = out.filter((o) => o.kind === "motivation").slice(0, 4), ab = out.filter((o) => !o.kind && o.lane === "abbot"), al = out.filter((o) => o.lane === "alchemy");
-    out = ab.slice(0, 3).concat(al.slice(0, 3), mot, ab.slice(3), al.slice(3)); }   // v454: 3 Abbot, 3 Alchemy, 4 motivational, in that order
-  if (out.length < 10) { const wk = Math.floor(now / (7 * 86400000)); for (let k = 0; out.length < 10 && k < IDEAS.length; k++) { const i = IDEAS[(wk + k) % IDEAS.length]; if (!out.some((o) => o.text === i.text)) out.push(Object.assign({}, i)); } }
-  if (dub(now).getUTCDay() === 5) out.unshift(Object.assign({}, FRIDAY_IDEA));      // v429 - Fridays (Dubai): the Friday Reflection is idea 1
-  out = out.slice(0, 10);
+  const want = { news: 3, motivation: 2, alchemy: 2, smart: 2 };
+  const take = (k) => out.filter((o) => o.kind === k).slice(0, want[k]);
+  let news = take("news"), mot = take("motivation"), alc = take("alchemy"), sm = take("smart");
+  // an empty news slot (an idea dropped for having no real headline) is filled from an unused real headline, unused categories first
+  for (const h of heads.slice().sort((a, b) => (news.some((o) => o.cat === a.cat) ? 1 : 0) - (news.some((o) => o.cat === b.cat) ? 1 : 0))) {
+    if (news.length >= 3) break;
+    if (h.cat === "smart" || news.some((o) => o.link === h.link)) continue;
+    news.push({ lane: "alchemy", kind: "news", text: "In the news: " + h.t + ". What it means for building in the UAE", needs: "", link: h.link, src: h.src, cat: h.cat });
+  }
+  if (cds.length) { const c = cds[0]; news = [{ lane: "alchemy", kind: "news", text: (c.n === 0 ? "Today: " + c.e.name + " opens" : c.n === 1 ? "Tomorrow: " + c.e.name : c.n + " days to " + c.e.name) + (c.e.ours ? ". Come and see us: " + (c.e.note || "") : ", " + (c.e.venue || "Dubai")), needs: "", link: "", src: "events list", countdown: c.e.name }].concat(news).slice(0, 3); }
+  for (let k = 0; mot.length < 2 && k < MOT_IDEAS.length; k++) { const i = MOT_IDEAS[(Math.floor(now / 86400000) + k) % MOT_IDEAS.length]; if (!mot.some((o) => o.text === i.text)) mot.push(Object.assign({}, i)); }
+  if (!sm.some((o) => o.src === "standard of the week")) sm = sm.slice(0, 1).concat([{ lane: "alchemy", kind: "smart", text: "Standard of the week: " + std, needs: "", src: "standard of the week" }]);
+  if (dub(now).getUTCDay() === 5) mot = [Object.assign({}, FRIDAY_IDEA)].concat(mot).slice(0, 2);      // v429 - Fridays: the Friday Reflection leads the motivational pair
+  for (let k = 0; alc.length < 2 && k < IDEAS.length; k++) { const i = IDEAS.filter((x) => x.lane === "alchemy")[(Math.floor(now / 86400000) + k) % IDEAS.filter((x) => x.lane === "alchemy").length]; if (i && !alc.some((o) => o.text === i.text)) alc.push(Object.assign({ kind: "alchemy" }, i)); }
+  out = news.concat(mot, alc, sm);
+  // the writer silent and no headlines yet: the house ideas fill up to nine, so the feed is never short
+  for (let k = 0; out.length < 9 && k < IDEAS.length; k++) { const i = IDEAS[(Math.floor(now / 86400000) + k) % IDEAS.length]; if (!out.some((o) => o.text === i.text)) out.push(Object.assign({ kind: i.lane === "alchemy" ? "alchemy" : "news" }, i, i.lane === "alchemy" ? {} : { lane: "alchemy" })); }
   await kvPut(env, "desk_ideas", out, 14 * 86400);
+  { const H = await kvJ(env, "desk_ideas_hist", []); await kvPut(env, "desk_ideas_hist", H.concat(out.map((o) => o.text)).slice(-40), 30 * 86400); }   // v472 - remembered for 30 days
   await env.MEETINGS.put("desk_feed_open", String(now), { expirationTtl: FEED_TTL }); await env.MEETINGS.delete("desk_feed_pick");
-  return "Your feed, " + dayKey(now) + ":\n" + out.map((o, i) => (i + 1) + ". [" + (o.kind === "motivation" ? "motivation" : o.kind === "friday" ? "friday" : o.lane) + "] " + o.text + (o.needs ? " (needs source: " + o.needs + ")" : "")).join("\n") + "\nReply with a number (1 to 10) to make one. Nothing is posted without your Approve.";
+  const label = (o) => o.kind === "news" ? "news" : o.kind === "motivation" || o.kind === "friday" ? "motivation" : o.kind === "smart" ? "smart city/ISO" : "DigitAlchemy";
+  return "Your DigitAlchemy feed, " + dayKey(now) + ":\n" + out.map((o, i) => (i + 1) + ". [" + label(o) + "] " + o.text + (o.link ? "\n   Source: " + o.src + " " + o.link : "")).join("\n") + "\nTap one below to make it into a post. Nothing is posted without your Approve.";
 }
 const menu = (title, list) => title + "\n" + list.map((c, i) => (i + 1) + ". " + c.label).join("\n") + "\nReply 1 to " + list.length + ".";
+// v472 - every numbered menu also comes as a list to tap (row id dp:fn:<n> is the same as replying <n>)
+async function tapList(env, deps, body, button, labels) {
+  if (!deps.list) return;
+  try { await deps.list(env, String(body).slice(0, 1000), button, labels.slice(0, 10).map((l, i) => ({ id: "dp:fn:" + (i + 1), title: String(l.title).slice(0, 24), description: l.description ? String(l.description).slice(0, 72) : undefined }))); } catch (e) {}
+}
+async function sendFeed(env, deps) {
+  await deps.send(env, await feedText(env, deps));
+  const L = await kvJ(env, "desk_ideas", []);
+  await tapList(env, deps, "Tap an idea to make it into a post.", "Pick an idea", L.map((o, i) => ({ title: (i + 1) + ". " + (o.kind === "news" ? "News" : o.kind === "motivation" ? "Motivation" : o.kind === "friday" ? "Friday" : o.kind === "smart" ? "Smart city/ISO" : o.lane === "alchemy" ? "DigitAlchemy" : "Digital Abbot"), description: o.text })));
+}
 // a bare number while a feed or a choice is open; returns true when it was taken here
 async function feedReply(env, deps, n) {
   const pick = await kvJ(env, "desk_feed_pick", null);
@@ -510,7 +558,7 @@ async function feedReply(env, deps, n) {
     const c = PICTURE_CHOICES[n - 1]; if (!c) { await deps.send(env, menu("Pick a picture:", PICTURE_CHOICES)); return true; }
     if (c.id === "slides") { await env.MEETINGS.delete("desk_feed_pick"); await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "carousel", picture: "slides", from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined }); return true; }
     await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "background", picture: c.id }), FEED_TTL);
-    await deps.send(env, menu(c.label + ". Now the background:", BACKGROUND_CHOICES)); return true;
+    await deps.send(env, menu(c.label + ". Now the background:", BACKGROUND_CHOICES)); await tapList(env, deps, "Pick the background.", "Pick background", BACKGROUND_CHOICES.map((b) => ({ title: b.label }))); return true;
   }
   if (pick && pick.step === "background") {
     const b = BACKGROUND_CHOICES[n - 1]; if (!b) { await deps.send(env, menu("Pick a background:", BACKGROUND_CHOICES)); return true; }
@@ -521,7 +569,7 @@ async function feedReply(env, deps, n) {
   const L = await kvJ(env, "desk_ideas", []), it = L[n - 1];
   if (!it) { await deps.send(env, "No idea " + n + " in today's feed. Reply 1 to " + L.length + ", or send feed for a new list."); return true; }
   await kvPut(env, "desk_feed_pick", { step: "picture", n, idea: it.text, lane: it.lane, allow: it.allow || null, kind: it.kind || null }, FEED_TTL);
-  await deps.send(env, menu("Idea " + n + ": " + it.text + "\nPick a picture:", PICTURE_CHOICES)); return true;
+  await deps.send(env, menu("Idea " + n + ": " + it.text + "\nPick a picture:", PICTURE_CHOICES)); await tapList(env, deps, "Pick the picture.", "Pick picture", PICTURE_CHOICES.map((b) => ({ title: b.label }))); return true;
 }
 async function queueText(env, deps) {
   const now = nowOf(deps), ps = (await allPlans(env)).filter((p) => ["draft", "editing", "approving", "scheduled", "held", "publishing"].includes(p.status));
@@ -607,7 +655,8 @@ async function handleButton(env, deps, id) {
   if (id === "dp:ref:keep") { await deps.send(env, "Kept."); return true; }
   if (id === "dp:ref:purge") { const ix = await kvJ(env, "desk_ref_index", []); for (const n of ix) { await env.MEETINGS.delete("desk_ref_" + n); await env.MEETINGS.delete("desk_refimg_" + n); } await env.MEETINGS.delete("desk_ref_index"); await env.MEETINGS.delete("desk_ref_cursor"); await deps.send(env, "All " + ix.length + " reference photos deleted."); return true; }
   // v466 - "post" alone: what kind of post, by tapping
-  if (id === "dp:start:ideas") return deskPostRoute(env, { type: "text" }, "/ideas", deps);
+  if (id === "dp:start:ideas") { await sendFeed(env, deps); return true; }   // v472 - the fresh 10, not the weekly 5
+  { const fn = String(id).match(/^dp:fn:(\d{1,2})$/); if (fn) { await env.MEETINGS.put("desk_feed_open", String(nowOf(deps)), { expirationTtl: FEED_TTL }); const done = await feedReply(env, deps, Number(fn[1])); if (!done) await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } }
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
   const mm = String(id).match(/^dp:([a-z0-9]+):(music|nomusic|muse|mtry|mno|m_(calm|corporate|upbeat|cinematic|inspiring))$/);   // v467 - music
   if (mm) { const pm = await getPlan(env, mm[1]); if (!pm) { await deps.send(env, "That draft has expired."); return true; } return musicStep(env, deps, pm, mm[2], mm[3]); }
@@ -827,8 +876,10 @@ export async function deskPostRoute(env, msg, text, deps) {
   if (/^\/queue\b/i.test(t)) { await deps.send(env, await queueText(env, deps)); return true; }
   if (/^\/cost\b/i.test(t)) { await deps.send(env, await costText(env, now)); return true; }
   if (/^\/insights\b/i.test(t)) { await deps.send(env, await insightsText(env)); return true; }
-  if (/^\/ideas\b/i.test(t)) { await deps.send(env, await ideasText(env, deps)); return true; }
-  if (/^\/?feed$/i.test(t)) { await deps.send(env, await feedText(env, deps)); return true; }   // v426
+  { const mc = t.match(/^\/?(?:morning|feed\s+times?)(?:\s+([\w,]+))?$/i); if (mc) return morningCommand(env, deps, mc[1]); }   // v472, v473
+  if (/^\/?events?\b/i.test(t) && await eventsCommand(env, (s) => deps.send(env, s), t, nowOf(deps))) return true;   // v473
+  // v472 (Kendall 10 Oct: "the ideas seem the same") - /ideas was the OLD fixed weekly list of 5; now it is the fresh feed of 10, picked by tapping
+  if (/^\/ideas\b/i.test(t) || /^\/?feed$/i.test(t)) { await sendFeed(env, deps); return true; }   // v426, v472
   if ((m = t.match(/^(\d{1,2})$/)) && !(await env.MEETINGS.get("desk_post_editing"))) { if (await feedReply(env, deps, Number(m[1]))) return true; }
   if ((m = t.match(/^\/ref\s+tag\s+(\d+)\s+([\w-]+)/i))) {   // v421
     const n = Number(m[1]), tag = m[2].toLowerCase(), r = await kvJ(env, "desk_ref_" + n, null);
@@ -993,6 +1044,60 @@ export async function deskPostTick(env, deps) {
   }
   await publishOne(env, deps, due[0], now); out.published = 1; return out;
 }
+// v472 (Kendall 10 Oct: "DigitAlchemy should be the same [as Naj's morning feed] but we have music, etc") - THE DESK MORNING FEED.
+// At desk_morning_hour (Dubai, default 7; "morning <hour>" / "morning off"): step 0 sends today's 10 fresh ideas as a tap list, then one
+// finished draft per minute tick - 1 Digital Abbot (on site), 1 DigitAlchemy (scene, skyline), 1 motivational (terrace) - each with the
+// usual Approve / New picture / More options, then music and Instagram / LinkedIn / Both. Nothing is posted without Approve.
+// Desk messages only reach Kendall inside his 24-hour window, so a closed window skips the day (told next time he writes).
+export const MORNING_DEFAULT_HOUR = 7;
+// v473 (Kendall 10 Oct: "i want Digitlchemy feed at 5am and another at 4pm daily") - the feed runs at each hour in desk_feed_hours (default 5,16)
+export const FEED_HOURS_DEFAULT = [5, 16];
+async function feedHours(env) { const v = await env.MEETINGS.get("desk_feed_hours"); if (v === "off") return []; if (v) return v.split(",").map(Number).filter((h) => h >= 0 && h <= 23); const old = await env.MEETINGS.get("desk_morning_hour"); if (old === "off") return []; return FEED_HOURS_DEFAULT.slice(); }
+export async function deskMorningTick(env, deps) {
+  if (!DIG(env.WA_DESK_PHONE_ID) || !DIG(env.WA_DESK_OWNER)) return { skipped: "desk off" };
+  const now = nowOf(deps), day = dayKey(now), hr = dub(now).getUTCHours();
+  const hours = await feedHours(env);
+  if (!hours.length) return { skipped: "off" };
+  const st = await kvJ(env, "desk_morning_state", null);
+  const live = st && st.day === day && st.step >= 1 && st.step < 4 ? st : null;   // a run under way finishes, one draft per tick
+  if (!live) {
+    if (!hours.includes(hr)) return { skipped: "not the hour" };
+    if (st && st.day === day && st.hr === hr) return { done: true };             // this hour's run already happened
+  }
+  const s = live || { day, hr, step: 0 };
+  if (s.step === 0) {
+    const t = await env.MEETINGS.get("wa_desk_last_in");
+    if (!t || now - Date.parse(t) > 23 * 3600 * 1000) { s.step = 4; s.skipped = "window closed"; await kvPut(env, "desk_morning_state", s, 3 * 86400); await env.MEETINGS.put("desk_morning_missed", day + "@" + hr, { expirationTtl: 3 * 86400 }); return { skipped: "window closed" }; }
+    s.step = 1; await kvPut(env, "desk_morning_state", s, 3 * 86400);   // claimed BEFORE the slow work, so a second tick never repeats it
+    await deps.send(env, (hr < 12 ? "Good morning." : "Good afternoon.") + " Your DigitAlchemy feed: three drafts are on their way, and fresh ideas are below to tap.");
+    await sendFeed(env, deps);
+    return { step: 0 };
+  }
+  const L = await kvJ(env, "desk_ideas", []);
+  const pickOf = (pred) => L.find(pred);
+  const plan = [
+    { it: pickOf((o) => o.kind === "news"), lane: "alchemy", picture: "scene", background: "skyline" },
+    { it: pickOf((o) => o.kind === "motivation" || o.kind === "friday"), lane: "abbot", picture: "scene", background: "terrace", kind: "motivation" },
+    { it: pickOf((o) => o.kind === "alchemy") || pickOf((o) => o.kind === "smart"), lane: "alchemy", picture: "site", background: "site" },
+  ][s.step - 1];
+  s.step++; await kvPut(env, "desk_morning_state", s, 3 * 86400);
+  if (plan && plan.it) await newPlan(env, deps, plan.it.text, plan.lane, [], { forceType: "image", picture: plan.picture, background: plan.background, kind: plan.kind || plan.it.kind || undefined, morning: day + "@" + s.hr, source_link: plan.it.link || undefined });
+  return { step: s.step - 1 };
+}
+// "feed times", "feed times 5,16", "feed times off" (also "morning ...") - when the DigitAlchemy feed arrives (Dubai time)
+async function morningCommand(env, deps, arg) {
+  const a = String(arg || "").trim().toLowerCase();
+  if (a === "off") { await env.MEETINGS.put("desk_feed_hours", "off"); await deps.send(env, "The DigitAlchemy feed is off. Send feed times 5,16 to turn it back on."); return true; }
+  const hs = a.split(",").map((x) => x.trim()).filter(Boolean).map(Number);
+  if (hs.length && hs.length <= 4 && hs.every((h) => Number.isInteger(h) && h >= 0 && h <= 23)) {
+    const v = [...new Set(hs)].sort((x, y) => x - y); await env.MEETINGS.put("desk_feed_hours", v.join(","));
+    await deps.send(env, "The DigitAlchemy feed arrives at " + v.map((h) => String(h).padStart(2, "0") + ":00").join(" and ") + " Dubai time: fresh ideas plus three ready drafts each time."); return true;
+  }
+  const cur = await feedHours(env);
+  await deps.send(env, "The DigitAlchemy feed: " + (cur.length ? cur.map((h) => String(h).padStart(2, "0") + ":00").join(" and ") + " Dubai time" : "off") + ". Change it with feed times 5,16 (up to four hours) or feed times off.");
+  return true;
+}
+
 // every 3 hours, same slot as her pull: followers and per-media numbers for desk-posted media
 export async function deskPostPull(env, now) {
   const M = await kvJ(env, "desk_ig_media", {}); const r = await deskIgPull(env, now || Date.now(), Object.keys(M));

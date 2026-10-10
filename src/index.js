@@ -3,7 +3,8 @@ import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - ques
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
 import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - the client brief as a chat; Naj only when switched on
 import { deskReelTick } from "./desk_lab.js";
-import { musicRoute, renderVideo } from "./music.js";   // v467 - music for posts (library route + the da-video service)
+import { musicRoute, renderVideo } from "./music.js";
+import { newsTick as deskNewsTick } from "./desk_news.js";   // v473 - the desk news watcher (AI, UAE tech, Dubai events, smart city / ISO, projects)   // v467 - music for posts (library route + the da-video service)
 import { liRoute, liRecord, liConnected, liStartLink, liStep, liReminder, liPostImages } from "./li_desk.js";   // v464 - LinkedIn from the desk   // v460 - an approved Instagram reel finishes on the minute tick
 import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
 import { templateRoutes, feedTemplateFlag, templateWatchTick } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
@@ -37,7 +38,7 @@ import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
 import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitMorning, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
 import { isDeskState as igDeskIsState, deskIgLink, deskIgCallback, deskIgStatus, deskIgDeauth, deskIgRefresh, deskIgPublishReel } from "./ig_desk.js";   // v404 - the desk's own Instagram connection (ig_auth_desk), separate from Najjuko's
-import { deskPostTick, deskPostPull, refImport, markRefRequest } from "./desk_post.js";   // v413 - the desk posting loop
+import { deskPostTick, deskMorningTick, deskPostPull, refImport, markRefRequest } from "./desk_post.js";   // v413 - the desk posting loop
 import { deskHandle, isDeskEvent, deskWindowOpen, deskOn } from "./desk.js";   // v388 - KENDALL DESK step 1: a second WhatsApp number that answers only the owner (all logic in src/desk.js)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -4817,6 +4818,8 @@ export default {
         try { const _tw = new Date(event.scheduledTime || Date.now()); if (_tw.getUTCMinutes() % 30 === 7) { const _ld = deskLabDeps(env); await templateWatchTick(env, WA_GRAPH, (e2, t) => _ld.send(e2, t)); } } catch (e) {}   // v465 - Meta template status watch, every 30 minutes, told to the desk
         try { await deskLabDeps(env).liStep(env); } catch (e) {}   // v464 - an approved LinkedIn video still processing
         try { const _ld = deskLabDeps(env); await liReminder(env, { send: (e2, t) => _ld.send(e2, t) }, event.scheduledTime || Date.now()); } catch (e) {}   // v464 - the 60-day LinkedIn sign-in reminder
+        try { const _nw = new Date(event.scheduledTime || Date.now()); if (_nw.getUTCMinutes() % 10 === 3) await deskNewsTick(env, {}); } catch (e) {}   // v473 - about 6 sources every 10 minutes, each refreshed every 3 hours
+        try { await deskMorningTick(env, deskPostDeps(env)); } catch (e) {}   // v472 - the desk morning feed: ideas + three ready drafts at desk_morning_hour
         try { await deskPostTick(env, deskPostDeps(env)); } catch (e) {}   // v413 - the desk posting loop: expire old drafts, publish the due approved post (never when paused)
         try { if (env.IG_APP_ID) { const _i3 = new Date(event.scheduledTime || Date.now()); if (_i3.getUTCMinutes() === 17 && _i3.getUTCHours() % 3 === 0) await deskPostPull(env, event.scheduledTime || Date.now()); } } catch (e) {}   // v413 - the desk account numbers, same 3-hour slot
         try { if (env.IG_APP_ID) { const _it2 = new Date(event.scheduledTime || Date.now()); if (_it2.getUTCMinutes() === 17 && _it2.getUTCHours() % 3 === 0) await deskIgRefresh(env); } } catch (e) {}   // v404 - the desk token 60-day refresh, same slot, no-op without a desk record

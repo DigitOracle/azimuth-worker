@@ -5,7 +5,7 @@
 import { deskIgStatusText } from "./ig_desk.js";   // v404
 import { deskPostRoute } from "./desk_post.js";   // v413 - the posting loop
 import { deskLabRoute } from "./desk_lab.js";   // v428 - the desk lab
-export const DESK_VERSION = "v471";   // 10 Oct: was left at v388 for 65 releases; bump with every desk-facing release
+export const DESK_VERSION = "v473";   // 10 Oct: was left at v388 for 65 releases; bump with every desk-facing release
 const DIG = (s) => String(s == null ? "" : s).replace(/[^0-9]/g, "");
 export const DESK_FIRST = "Desk is live. This number is for you only (Dr. Kendall Wilson). Commands: /post, /ideas, /queue, /insights, /cost, /pause, /resume, /ref, /desk_status.";
 export const DESK_OTHER = "Received. Commands: /post, /ideas, /queue, /insights, /cost, /pause, /resume, /ref, /desk_status.";
