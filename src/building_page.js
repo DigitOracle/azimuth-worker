@@ -1345,7 +1345,8 @@ export function bpTiles(card, D, nFloors) {
   let cur = null;
   for (const el of kids) {
     if (el.tagName === "H3") { cur = { title: el.textContent, nodes: [el] }; secs.push(cur); }
-    else if (el.classList && el.classList.contains("pill")) { cur = null; secs.push({ title: "trust", nodes: [el] }); }
+    // v485 - ONLY the developer card: the grade badge under the name is also class "pill" and became a second developer tile
+    else if (el.tagName === "DIV" && el.classList.contains("pill") && el.querySelector(".tls,.spdr,.prow")) { cur = null; secs.push({ title: "trust", nodes: [el] }); }
     else if (cur) cur.nodes.push(el);
   }
   if (secs.length < 2) return;
@@ -1479,4 +1480,5 @@ export const BP_TILES_CSS = ".bp-tiles{display:grid;grid-template-columns:repeat
   + ".bp-fact>div{min-width:0}.bp-fl{display:block;font-size:.6rem;color:var(--mut);letter-spacing:.03em;line-height:1.3}.bp-fl small,.bp-fv small{display:block;font-size:.62rem;color:var(--mut)}"
   + ".bp-fv{display:block;font:600 .86rem/1.3 Fraunces,Georgia,serif;color:var(--text);margin-top:2px;overflow-wrap:anywhere}.bp-fv a{color:var(--gold)}"
   + ".bp-notes{margin-top:8px}.bp-notes summary{cursor:pointer;font-size:.66rem;color:var(--mut)}.bp-notes .src{margin-top:6px}"
+  + ".bp-card .pill{border:0;padding:0;margin:0;background:none;border-radius:0;text-transform:none;letter-spacing:normal;display:block;font-size:1rem}"
   + ".bp-card .dw-tile{display:none}.bp-card .dw-tiles{display:grid;grid-template-columns:1fr;gap:10px}.bp-card .dw-sheet{position:static;background:none;padding:0}.bp-card .dw-sheet .dw-card{border-color:var(--line)}.bp-card .dw-close{display:none}";
