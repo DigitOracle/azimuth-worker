@@ -331,7 +331,7 @@ export function assemble(p, j, facts, extraAllow) {
   return { caption: cap, evidence, dropped, flags, slides, tags };
 }
 async function llmDraft(env, deps, p, facts, instruction) {
-  const sys = SYS_COMMON + " " + (LANE_VOICE[p.lane] || LANE_VOICE.abbot) + (p.kind === "friday" ? " THIS POST IS THE FRIDAY REFLECTION: personal and about LIFE, not only work (health, family, kindness, courage, rest). Warm first person, no figures, no selling. The hook says it is Friday; the lines ask the three questions (what am I proud of this week, what made this week special, who do I want to be next week); the last line invites people to answer in the comments." : "") + (p.type === "carousel" ? " Also give 'slides': slide 1 is the hook, then 3 to 6 body slides each carrying ONE fact or step (title up to 8 words, body up to 20 words), and a last slide 'What to do next / follow' . Never more than " + MAX_SLIDES + " slides." : "");
+  const sys = SYS_COMMON + " " + (LANE_VOICE[p.lane] || LANE_VOICE.abbot) + (p.kind === "motivation" ? " THIS POST IS MOTIVATIONAL (Kendall 10 Oct: 3 Abbot + 3 Alchemy + 4 motivational in each feed): about drive, discipline, courage, resilience, purpose or growth in work AND life, in Kendall's own first-person voice; one strong opening line, short lines, one honest example from experience, no figures, no selling, no product; end with a question or a call to act today." : "") + (p.kind === "friday" ? " THIS POST IS THE FRIDAY REFLECTION: personal and about LIFE, not only work (health, family, kindness, courage, rest). Warm first person, no figures, no selling. The hook says it is Friday; the lines ask the three questions (what am I proud of this week, what made this week special, who do I want to be next week); the last line invites people to answer in the comments." : "") + (p.type === "carousel" ? " Also give 'slides': slide 1 is the hook, then 3 to 6 body slides each carrying ONE fact or step (title up to 8 words, body up to 20 words), and a last slide 'What to do next / follow' . Never more than " + MAX_SLIDES + " slides." : "");
   const fl = facts.map((f) => f.id + " | " + f.figure + " | " + f.says + " | " + srcLabel(f)).join("\n") || "(no facts available: write without any figure)";
   const user = "IDEA: " + p.idea + "\nFACTS:\n" + fl + (instruction ? "\nCURRENT CAPTION:\n" + (p.caption || "") + "\nCHANGE REQUESTED: " + instruction : "");
   let t = ""; try { t = await deps.llm(env, sys, user, 1100); } catch (e) {}
@@ -443,6 +443,15 @@ const IDEAS = [
   { lane: "alchemy", text: "Training with CIOB and LUBM: what a site manager learns in the first week", needs: "the next course date" },
   { lane: "alchemy", text: "Hub71 member: what that means for the data we hold and how we govern it", needs: "" },
 ];
+// v454 - the motivational four, used when the generated list falls short (Kendall 10 Oct: 3 + 3 + 4 motivational)
+const MOT_IDEAS = [
+  "Discipline beats motivation: the habit that carried me on the days I did not feel like it",
+  "The project that went wrong taught me more than every one that went right",
+  "Courage on site is saying I don't know yet, and then finding out",
+  "Rest is part of the work: what I learned the year I stopped pretending otherwise",
+  "Start before you feel ready: nobody on a site ever felt ready",
+  "Your standards are what you do when nobody is checking",
+].map((text) => ({ lane: "abbot", kind: "motivation", text, needs: "" }));
 export async function ideasText(env, deps) {
   const now = nowOf(deps), facts = await loadFacts(env), wk = Math.floor(now / (7 * 86400000));
   const pick = []; const ab = IDEAS.filter((i) => i.lane === "abbot"), al = IDEAS.filter((i) => i.lane === "alchemy");
@@ -457,7 +466,7 @@ const FEED_TTL = 3 * 3600;
 export const FRIDAY_IDEA = { lane: "abbot", kind: "friday", needs: "",
   text: "Friday Reflection, about life and not only work: what am I proud of this week, what made this week special, and who do I want to be next week" };
 const FEED_SYS = "You suggest Instagram post ideas for two lanes of one Dubai built-environment brand. " + LANE_VOICE.abbot + " " + LANE_VOICE.alchemy +
-  " Plain text, no emoji, no hashtags. Never name any AI model, AI company or AI tool. Never put a number in an idea unless it appears in the FACTS list. Each idea is ONE line, at most 18 words, specific and useful to people who build, own or manage buildings. Reply with JSON only: {\"ideas\":[{\"lane\":\"abbot\",\"text\":\"...\"}]}. Exactly 10 ideas: 6 abbot, 4 alchemy, abbot first.";
+  " Plain text, no emoji, no hashtags. Never name any AI model, AI company or AI tool. Never put a number in an idea unless it appears in the FACTS list. Each idea is ONE line, at most 18 words, specific and useful to people who build, own or manage buildings. Reply with JSON only: {\"ideas\":[{\"lane\":\"abbot\",\"text\":\"...\"}]}. Exactly 10 ideas: 3 abbot, 3 alchemy, then 4 with lane \"motivation\" - motivational ideas about drive, discipline, courage, resilience, purpose and growth in work AND life, in the Abbot's own voice, not about the product.";   // v454 (Kendall 10 Oct): 3 + 3 + 4 motivational
 export async function feedText(env, deps) {
   const now = nowOf(deps), facts = await loadFacts(env);
   let out = [];
@@ -466,17 +475,20 @@ export async function feedText(env, deps) {
     const j = parseJ(await deps.llm(env, FEED_SYS, user, 900));
     const pool = new Set(facts.flatMap(factNorm));
     for (const it of ((j && j.ideas) || [])) {
-      const lane = it && it.lane === "alchemy" ? "alchemy" : "abbot", text = scrubPublic(String((it && it.text) || ""), lane).slice(0, 160);
+      const mot = it && it.lane === "motivation", lane = it && it.lane === "alchemy" ? "alchemy" : "abbot", text = scrubPublic(String((it && it.text) || ""), lane).slice(0, 160);
       if (!text || numsIn(text).some((x) => !pool.has(x) && !idNums(text).includes(x))) continue;      // an idea carrying an unsourced figure is dropped
-      out.push({ lane, text, needs: "" });
+      out.push(mot ? { lane: "abbot", kind: "motivation", text, needs: "" } : { lane, text, needs: "" });   // v454: motivational posts are in the Abbot's own voice
     }
   } catch (e) {}
+  { const wk0 = Math.floor(now / 86400000); for (let k = 0; out.filter((o) => o.kind === "motivation").length < 4 && k < MOT_IDEAS.length; k++) { const i = MOT_IDEAS[(wk0 + k) % MOT_IDEAS.length]; if (!out.some((o) => o.text === i.text)) out.push(Object.assign({}, i)); } }   // v454: always four motivational
+  { const mot = out.filter((o) => o.kind === "motivation").slice(0, 4), ab = out.filter((o) => !o.kind && o.lane === "abbot"), al = out.filter((o) => o.lane === "alchemy");
+    out = ab.slice(0, 3).concat(al.slice(0, 3), mot, ab.slice(3), al.slice(3)); }   // v454: 3 Abbot, 3 Alchemy, 4 motivational, in that order
   if (out.length < 10) { const wk = Math.floor(now / (7 * 86400000)); for (let k = 0; out.length < 10 && k < IDEAS.length; k++) { const i = IDEAS[(wk + k) % IDEAS.length]; if (!out.some((o) => o.text === i.text)) out.push(Object.assign({}, i)); } }
   if (dub(now).getUTCDay() === 5) out.unshift(Object.assign({}, FRIDAY_IDEA));      // v429 - Fridays (Dubai): the Friday Reflection is idea 1
   out = out.slice(0, 10);
   await kvPut(env, "desk_ideas", out, 14 * 86400);
   await env.MEETINGS.put("desk_feed_open", String(now), { expirationTtl: FEED_TTL }); await env.MEETINGS.delete("desk_feed_pick");
-  return "Your feed, " + dayKey(now) + ":\n" + out.map((o, i) => (i + 1) + ". [" + o.lane + "] " + o.text + (o.needs ? " (needs source: " + o.needs + ")" : "")).join("\n") + "\nReply with a number (1 to 10) to make one. Nothing is posted without your Approve.";
+  return "Your feed, " + dayKey(now) + ":\n" + out.map((o, i) => (i + 1) + ". [" + (o.kind === "motivation" ? "motivation" : o.kind === "friday" ? "friday" : o.lane) + "] " + o.text + (o.needs ? " (needs source: " + o.needs + ")" : "")).join("\n") + "\nReply with a number (1 to 10) to make one. Nothing is posted without your Approve.";
 }
 const menu = (title, list) => title + "\n" + list.map((c, i) => (i + 1) + ". " + c.label).join("\n") + "\nReply 1 to " + list.length + ".";
 // a bare number while a feed or a choice is open; returns true when it was taken here
@@ -687,7 +699,7 @@ async function startFromText(env, deps, rest, imgsIn, fromPhoto) {
   if (/^cancel\b/i.test(idea) || /^retry\b/i.test(idea)) return false;
   const nm = idea.match(/^(\d{1,2})$/);      // v426: the feed lists 10
   let extra = {};
-  if (nm) { const L = await kvJ(env, "desk_ideas", []); const it = L[Number(nm[1]) - 1]; if (!it) { await deps.send(env, "No idea " + nm[1] + ". Send /ideas first."); return true; } idea = it.text; lane = lane || it.lane; if (it.allow) extra.allowNums = it.allow; }
+  if (nm) { const L = await kvJ(env, "desk_ideas", []); const it = L[Number(nm[1]) - 1]; if (!it) { await deps.send(env, "No idea " + nm[1] + ". Send /ideas first."); return true; } idea = it.text; lane = lane || it.lane; if (it.allow) extra.allowNums = it.allow; if (it.kind) extra.kind = it.kind; }   // v454: /post N keeps a motivational or Friday idea's kind
   if (!idea && !(imgsIn && imgsIn.length)) { await deps.send(env, "Send /post followed by your idea, for example /post abbot: why a handover needs one owner."); return true; }
   if (/\b(reel|reels|video)\b/i.test(idea)) { await deps.send(env, "Reels come in phase 2. For now I can do a single picture or a carousel of up to " + MAX_SLIDES + " slides."); return true; }
   // v421: photos become post pictures only (a) when he says use/with my photos, (b) a photo captioned post:, or (c) photos he put in the

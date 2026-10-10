@@ -45,7 +45,7 @@ const lastPlan = async () => (await allPlans(env)).sort((a, b) => b.created - a.
 // 1. on a Friday the Friday Reflection is idea 1, and the list still has 10
 await reset(4);
 let r = await say("feed");
-ok(/\n1\. \[abbot\] Friday Reflection, about life/.test(r) && /\n10\./.test(r) && !/\n11\./.test(r), "Friday: idea 1 is the Friday Reflection, still 10 ideas", r);
+ok(/\n1\. \[friday\] Friday Reflection, about life/.test(r) && /\n10\./.test(r) && !/\n11\./.test(r), "Friday: idea 1 is the Friday Reflection, still 10 ideas", r);
 // 2. picking it, you speaking, terrace: the caption writer is told it is about life, the picture is on a terrace with him in it
 let sysSeen = ""; const llm0 = deps.llm; deps.llm = async (env, sys, user, mx) => { if (!/suggest Instagram post ideas/.test(sys)) sysSeen = sys; return llm0(env, sys, user, mx); };
 await say("1"); r = await say("2");

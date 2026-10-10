@@ -45,8 +45,9 @@ const lastPlan = async () => (await allPlans(env)).sort((a, b) => b.created - a.
 // 1. feed gives ten numbered ideas, six Abbot then four Alchemy
 await reset(4);
 let r = await say("feed");
-ok(/^Your feed/.test(r) && /\n10\. \[alchemy\]/.test(r) && !/\n11\./.test(r), "feed lists exactly 10 numbered ideas", r);
-ok((r.match(/\[abbot\]/g) || []).length === 6 && (r.match(/\[alchemy\]/g) || []).length === 4, "six Abbot, four Alchemy");
+ok(/^Your feed/.test(r) && /\n10\. \[motivation\]/.test(r) && !/\n11\./.test(r), "feed lists exactly 10 numbered ideas", r);
+// v454 (Kendall 10 Oct): 3 Abbot, 3 Alchemy, 4 motivational, in that order
+ok((r.match(/\[abbot\]/g) || []).length === 3 && (r.match(/\[alchemy\]/g) || []).length === 3 && (r.match(/\[motivation\]/g) || []).length === 4 && /\n4\. \[alchemy\]/.test(r) && /\n7\. \[motivation\]/.test(r), "three Abbot, three Alchemy, four motivational", r);
 ok(/Reply with a number \(1 to 10\)/.test(r) && /Nothing is posted without your Approve/.test(r), "it says how to pick and that nothing posts without Approve");
 ok((await say("Feed")).startsWith("Your feed") && (await say("/feed")).startsWith("Your feed"), "Feed and /feed work too");
 
@@ -68,7 +69,7 @@ ok(p.status === "draft" && p.approved === false, "it stops at the draft: nothing
 ok(!store.has("desk_feed_pick"), "the choice is closed once the draft is made");
 
 // 4. a scene with no person, in the Alchemy lane: never his likeness
-await say("feed"); await say("8"); await say("3"); await say("2");
+await say("feed"); await say("4"); await say("3"); await say("2");
 p = await lastPlan(); const g2 = gens[gens.length - 1];
 ok(p.picture === "scene" && p.background === "office" && p.lane === "alchemy", "Alchemy idea, scene, office");
 ok(g2 && !g2.edit && /No people/.test(g2.prompt) && /office or boardroom/.test(g2.prompt), "a scene is generated with no person and the office setting", g2 && g2.prompt);
@@ -79,7 +80,7 @@ p = await lastPlan();
 ok(p.type === "carousel" && p.picture === "slides", "slides make a carousel with no background question");
 
 // 6. speaking in the Alchemy lane still shows him (the choice wins over the lane rule)
-await say("feed"); await say("7"); await say("2"); await say("4");
+await say("feed"); await say("6"); await say("2"); await say("4");
 p = await lastPlan(); const g3 = gens[gens.length - 1];
 ok(p.picture === "speaking" && g3.edit && /speaking or teaching/.test(g3.prompt) && /studio/.test(g3.prompt), "speaking in the studio uses his references even in the Alchemy lane", g3.prompt);
 
@@ -107,7 +108,7 @@ ok(/\n10\./.test(r), "if the writer does not answer, the 10 house ideas are used
 // 11. /post 10 works with a ten-item list
 await reset(4); await say("feed"); r = await say("/post 10");
 p = await lastPlan();
-ok(p && /12,345 sales/.test(p.idea), "/post 10 drafts the tenth idea", p && p.idea);
+ok(p && p.kind === "motivation", "/post 10 drafts the tenth idea (a motivational one)", p && JSON.stringify({ idea: p.idea, kind: p.kind }));
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
