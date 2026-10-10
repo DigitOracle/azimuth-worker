@@ -5467,6 +5467,9 @@ function deskLabDeps(env) {
     send: (e, t) => waSend(e, owner, t, pid), image: (e, link, cap) => waSendImage(e, owner, link, cap, pid),
     origin: (e) => pubOrigin(e, ""), sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     reel: (e, o) => deskIgPublishReel(e, o),   // v460
+    // v461 - a video he sends to the desk: Meta's size first (never download what cannot be kept), then the bytes
+    mediaInfo: async (e, id) => { try { return await (await fetch(WA_GRAPH + "/" + id, { headers: { Authorization: "Bearer " + e.WHATSAPP_TOKEN } })).json(); } catch (x) { return {}; } },
+    fetchMedia: (e, id) => waFetchMedia(e, id),
     briefLink: (e, sp) => { const k = clientLinkKey(e); return pubOrigin(e, "") + "/brief?" + sp.toString() + (k ? "&key=" + encodeURIComponent(k) : ""); } };
 }
 async function publishInstagram(env, to, imageUrl, captionIn, pend) {

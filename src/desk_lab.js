@@ -18,7 +18,7 @@ import { momoTemplateDef } from "./fit.js";   // v453 - the Momo day template th
 export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\n" +
   "brief: the client brief, asked in the chat\nbrief form: the client brief as a form (test only)\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
   "lab typing: read ticks and typing\nlab qr: a QR code that opens this chat with a message typed\nlab profile: this number's business profile\n" +
-  "lab setup momo template <account id>: submit the Momo day message to Meta\nlab meta admins: who runs the business on Meta (names, login emails, roles)\nstatus <mp4 link>: a video sent here ready to forward to your Status\nreel <mp4 link> [: caption]: post a video to Instagram as a Reel, after you tap Post it";
+  "lab setup momo template <account id>: submit the Momo day message to Meta\nlab meta admins: who runs the business on Meta (names, login emails, roles)\nstatus <mp4 link>: a video sent here ready to forward to your Status\nreel <mp4 link> [: caption]: post a video to Instagram as a Reel, after you tap Post it\nOr just send a video here (as a video or a document, up to 25 MB) with the caption reel: <caption>, status: <caption> or broadcast";
 
 const meta = (r) => (r && r.error ? " Meta said: " + String(r.error.message || r.error.error_user_msg || JSON.stringify(r.error)).slice(0, 300) : "");
 
@@ -87,6 +87,36 @@ export async function deskLabRoute(env, msg, text, deps) {
     if (r && r.error) await send("Could not send the clip." + meta(r) + " The link must be a public https link straight to an .mp4 under 16 MB.");
     else await send(STATUS_CAPTION);
     return true;
+  }
+  // v461 (Kendall 10 Oct: "when I'm only in the DigitAlchemy WhatsApp, on my mobile") - a VIDEO sent to the desk, as a video or as a
+  // document. Caption "reel: ..." / "status: ..." / "broadcast" acts at once; no caption asks with buttons. Stored as vid_desk_<n> and served at
+  // /video/desk_<n>, so it then runs through the same reel and status steps as a link. The worker cannot compress: over 25 MB is refused.
+  const vm = deskVideoOf(msg);
+  if (vm) {
+    const info = deps.mediaInfo ? await deps.mediaInfo(env, vm.id) : {};
+    const size = Number(info && info.file_size) || 0;
+    if (size > VIDEO_KEEP_MAX) { await send("That video is " + mb(size) + " MB; I can keep up to 25 MB. In HeyGen download it at 540p (an 80-second clip is then about 10-15 MB) and send it again."); return true; }
+    let got = null; try { got = await deps.fetchMedia(env, vm.id); } catch (e) {}
+    if (!got || !got.bytes || !got.bytes.byteLength) { await send("I could not download that video from WhatsApp. Send it again."); return true; }
+    if (got.bytes.byteLength > VIDEO_KEEP_MAX) { await send("That video is " + mb(got.bytes.byteLength) + " MB; I can keep up to 25 MB. Download it at 540p and send it again."); return true; }
+    const n = Number((await env.MEETINGS.get("desk_vid_seq")) || 0) + 1;
+    await env.MEETINGS.put("desk_vid_seq", String(n));
+    const key = "desk_" + n, bytes = got.bytes.byteLength;
+    await env.MEETINGS.put("vid_" + key, got.bytes, { expirationTtl: 60 * 86400 });
+    await env.MEETINGS.put("desk_vid_last", JSON.stringify({ key, bytes, at: Date.now() }), { expirationTtl: 60 * 86400 });
+    const link = origin0(deps, env) + "/video/" + key;
+    const cap = vm.caption, cm = cap.match(/^\s*(reel|status|broadcast)\b\s*:?\s*([\s\S]*)$/i);
+    if (cm) return videoAction(env, deps, to, cm[1].toLowerCase(), link, key, bytes, cm[2].trim());
+    await deps.raw(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: "Got your video (" + mb(bytes) + " MB, saved as " + key + "). What should I do with it?" },
+      action: { buttons: [{ type: "reply", reply: { id: "dv:reel:" + key, title: "Instagram Reel" } }, { type: "reply", reply: { id: "dv:status:" + key, title: "Status" } }, { type: "reply", reply: { id: "dv:broadcast:" + key, title: "Save for broadcast" } }] } } }, "video-ask");
+    return true;
+  }
+  const dv = msg.type === "interactive" && msg.interactive && msg.interactive.button_reply && String(msg.interactive.button_reply.id || "").match(/^dv:(reel|status|broadcast):(desk_\d+)$/);
+  if (dv) {
+    let last = null; try { last = JSON.parse((await env.MEETINGS.get("desk_vid_last")) || "null"); } catch (e) {}
+    const bytes = last && last.key === dv[2] ? last.bytes : 0;
+    if (dv[1] === "reel") { await send("Send the Instagram caption as: reel " + origin0(deps, env) + "/video/" + dv[2] + " : <your caption>"); return true; }
+    return videoAction(env, deps, to, dv[1], origin0(deps, env) + "/video/" + dv[2], dv[2], bytes, "");
   }
   // v460 - reel <https mp4 link> [: caption] -> the clip and caption come back with Post / Cancel; nothing goes to Instagram until Post
   const rm = t.match(/^\/?reel\s+(https:\/\/\S+)(?:\s*:\s*([\s\S]+))?$/i);
@@ -257,6 +287,38 @@ export async function deskLabRoute(env, msg, text, deps) {
     return true;
   }
   await send("Unknown lab command.\n" + LAB_HELP); return true;
+}
+
+// v461 - a video sent to the desk
+export const VIDEO_KEEP_MAX = 25 * 1024 * 1024, WA_VIDEO_MAX = 16 * 1024 * 1024;
+const mb = (b) => (b / 1048576).toFixed(1);
+const origin0 = (deps, env) => (deps.origin ? deps.origin(env) : "");
+export function deskVideoOf(msg) {
+  if (!msg) return null;
+  if (msg.type === "video" && msg.video && msg.video.id) return { id: msg.video.id, caption: String(msg.video.caption || "") };
+  const d = msg.type === "document" && msg.document;
+  if (d && d.id && (/^video\//i.test(String(d.mime_type || "")) || /\.(mp4|mov|m4v)$/i.test(String(d.filename || "")))) return { id: d.id, caption: String(d.caption || "") };
+  return null;
+}
+async function videoAction(env, deps, to, what, link, key, bytes, text) {
+  const send = (s) => deps.send(env, s);
+  if (what === "reel") {
+    const caption = text || REEL_CAPTIONS[key] || "";
+    if (!caption) { await send("Saved as " + key + ". Send the Instagram caption as: reel " + link + " : <your caption>"); return true; }
+    await env.MEETINGS.put("desk_reel_pending", JSON.stringify({ url: link, caption, at: Date.now() }), { expirationTtl: 2 * 86400 });
+    await deps.raw(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: "Reel for Instagram (@digitalabbotuae), caption:\n\n" + caption.slice(0, 900) }, action: { buttons: [{ type: "reply", reply: { id: "dr:ok", title: "Post it" } }, { type: "reply", reply: { id: "dr:no", title: "Cancel" } }] } } }, "reel-buttons");
+    return true;
+  }
+  if (what === "status") {
+    if (bytes > WA_VIDEO_MAX) { await send("Saved, but it is " + mb(bytes) + " MB and WhatsApp sends videos only up to 16 MB, so I cannot send it back for Status. Download it at 540p and send it again. (It can still go to Instagram: reel " + link + " : <caption>)"); return true; }
+    const r = await deps.raw(env, statusVideoPayload(to, link, text), "status-video");
+    if (r && r.error) await send("Could not send the clip." + meta(r)); else await send(STATUS_CAPTION);
+    return true;
+  }
+  // broadcast: remembered as the campaign video; nothing is sent to anyone from here
+  await env.MEETINGS.put("desk_broadcast_video", JSON.stringify({ key, link, bytes, at: Date.now() }));
+  await send("Saved as the broadcast video (" + key + (bytes ? ", " + mb(bytes) + " MB" : "") + ")." + (bytes > WA_VIDEO_MAX ? " Note: it is over WhatsApp's 16 MB, so it must be re-sent at 540p before it can go out." : "") + " Nothing is sent to anyone until you approve the list.");
+  return true;
 }
 
 // v460 - one step of an approved reel: start or continue the upload, publish when Instagram has finished processing. A webhook only waits
