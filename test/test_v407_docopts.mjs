@@ -128,7 +128,7 @@ console.log("C - the new dossier switches leave today's document unchanged");
 {
   const build = async (qs) => { __resetKvMemo(); return buildDocument(env, parseQuery(new URL("https://x/brief_pdf?" + qs)), { origin: "" }); };
   const base = await build("kind=dossier&keys=testdistrict:10&beds=all&mode=rent");
-  ok(base.status === 200 && /AMENITIES/.test(base.html) && !/PREPARED FOR/.test(base.html), "today's link: amenities card present, no prepared-for line", base.status);
+  ok(base.status === 200 && /AMENITIES|>Amenities</.test(base.html) && !/PREPARED FOR/.test(base.html), "today's link: amenities card present, no prepared-for line", base.status);
   const noA = await build("kind=dossier&keys=testdistrict:10&beds=all&mode=rent&hide=amen&client=" + encodeURIComponent("A. Buyer"));
   ok(noA.status === 200 && !/>AMENITIES</.test(noA.html) && /PREPARED FOR A\. BUYER/.test(noA.html), "hide=amen drops the amenities cards; client= adds the prepared-for line");
   ok(/Curated by Najjuko/.test(noA.html) && /\+971 56 548 4397/.test(noA.html), "the footer and the WhatsApp number stay");

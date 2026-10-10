@@ -40,6 +40,7 @@
 // building's name must agree with the record; straight-line distances only, no walking or driving times; rents are what homes let
 // for, never availability; the "left" figure is always "an estimate, not a count".
 import puppeteer from "@cloudflare/puppeteer";
+import { PK, pkIcon, pkFig, pkGrid, pkTile, pkBars, pkBox } from "./pdf_kit.js";   // v486 - the shared PDF look (icons, figure cards, bars)
 import { withAmenityPages, loadSpots } from "./amenity_cards.js";
 export const REALTOR_VERIFIES = "Your realtor will verify these details with you.";   // v302 - the ONE line a client document uses where a fact is missing; gaps live only in owner places (API notes, diagnostics)
 import { liveCtx, fillLive } from "./live_answers.js";   // v291 - live Google answers for gym, community pool and dog park (never stored)   // v290 AMENITY CARDS - the "Around the community" page in Compare and Full pack
@@ -717,16 +718,29 @@ function dossierPage1(C, rec, q, sub) {
   const hero = rec.ownPic ? ownFigure(rec.ownPic, 702, 300, rec.name) : rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38) : rec.svPic ? svFigure(rec.svPic, 702, 300, rec.name) : rec.renderPic ? renderFigure(rec, 702, 300) : bvHero ? bvHero.html
     : '<div style="width:702px;height:120px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:13px;color:' + MUTED + ";\">Najma</div>";
   const F = facts(rec);
-  const factHtml = F.length ? '<div style="display:grid;grid-template-columns:' + (F.length === 4 ? "0.9fr 0.9fr 1.4fr 0.8fr" : "repeat(" + F.length + ",minmax(0,1fr))") + ';gap:12px;">' +
+  // v486 - figure cards with icons in place of the label/value row (approved Atria mock-up, 11 Oct 2026)
+  const nbF = rec.um && rec.um.dld && rec.um.dld.buildings > 1 ? rec.um.dld.buildings : 0;
+  const mF = (rec.pos || rec.cpos) ? nearestMetro(C, rec.pos || rec.cpos) : null;
+  const figs = [
+    rec.um && rec.um.floors ? pkFig("tower", String(rec.um.floors), "floors", nbF ? "one of " + nbF + " buildings" : "") : "",
+    rec.um && rec.um.total_units ? pkFig("home", money(rec.um.total_units), "homes", nbF ? "in " + nbF + " buildings" : "") : "",
+    rec.br && rec.br.completed ? pkFig("calendar", esc(String(rec.br.completed).slice(0, 4)), "completed") : "",
+    mF && kmTxt(mF.d, rec.exact) ? pkFig("train", kmTxt(mF.d, rec.exact), "to metro", esc(mF.n)) : "",
+  ].filter(Boolean);
+  const devF = F.find((f) => f[0] === "DEVELOPER");
+  const factHtml0 = figs.length ? pkGrid(figs, figs.length) : "";
+  const factHtmlOld = F.length ? '<div style="display:grid;grid-template-columns:' + (F.length === 4 ? "0.9fr 0.9fr 1.4fr 0.8fr" : "repeat(" + F.length + ",minmax(0,1fr))") + ';gap:12px;">' +
     F.map(([k, v]) => '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:10px;">' + k + '</div><div style="font-size:13px;">' + esc(v) + "</div></div>").join("") + "</div>" : "";
+  const factHtml = figs.length ? factHtml0 : factHtmlOld;
   const stat = (v, l) => '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">' + l + '</div><div style="font-size:15px;font-weight:500;color:' + NAVY + ';white-space:nowrap;">' + v + "</div></div>";
   const rentLbl = "TYPICAL " + (q.beds === "studio" ? "STUDIO" : q.beds === "3" ? "3+ BED" : q.beds + "-BED") + " RENT A YEAR";
   const bands = Object.keys(rec.sts || {});
   // v277 - every home type: one row per type the register has lettings for, no budget line (a budget is for one type)
-  const rent = rec.buy ? buyBox(C, rec, q) : B.all ? (bands.length ? '<div style="border:1px solid #E6E1D8;background:#FFFFFF;padding:9px 14px 6px 14px;display:flex;flex-direction:column;gap:5px;">' +
-      '<div class="lbl" style="font-size:9.5px;">TYPICAL RENT A YEAR, BY TYPE</div>' +
-      tbl([["left", "TYPE"], ["right", "TYPICAL RENT"], ["right", "MIDDLE HALF, AED"], ["right", "RECENT LETTINGS"], ["right", "TYPICAL SIZE"]],
-        bands.map((b) => { const s = rec.sts[b]; return [esc(bandLabel(b)), "AED " + money(s.m), money(s.q1) + " &ndash; " + money(s.q3), String(s.n), sqftBit(s) || "&mdash;"]; })) + "</div>"
+  const kAED = (n) => "AED " + (n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : Math.round(n / 1000) + "k");
+  const rent = rec.buy ? buyBox(C, rec, q) : B.all ? (bands.length ? pkBox("key", "Typical rent a year",
+      pkBars(bands.map((b) => { const s = rec.sts[b]; return [esc(bandLabel(b)), s.m, "<b>" + kAED(s.m) + "</b>" + (sqftBit(s) ? " &middot; " + sqftBit(s) : "")]; }), { labelW: 82, rightW: 150 }),
+      bands.reduce((a, b) => a + (rec.sts[b].n || 0), 0) + " recent lettings. Middle half of rents: " +
+        bands.map((b) => { const s = rec.sts[b]; return esc(bandLabel(b)) + " AED " + money(s.q1) + "&ndash;" + money(s.q3) + " (" + s.n + ")"; }).join(" &middot; ") + ".")
     : "")
     : st ? (() => {   // v310 R4/R5: under five lettings the rent is rounded to AED 500, there is no middle half, and the box says "based on only N lettings"; no impossible size
       const sh = shownRent(st), stats = (sh.few ? [stat("based on only " + st.n + " lettings", "HOW MANY")] : [stat("AED " + money(st.q1) + " &ndash; " + money(st.q3), "MIDDLE HALF"), stat(lettingsTxt(st), "RECENT LETTINGS")])
@@ -750,12 +764,28 @@ function dossierPage1(C, rec, q, sub) {
   const amen = ((rec.br && rec.br.amenities) || []).map((a) => row("&#8226; " + esc(a), NAVY)).join("") + critRows.join("") ||
     row(REALTOR_VERIFIES, MUTED);
   const lines = (xs) => xs.map((x) => '<div style="font-size:11.5px;color:' + NAVY + ';line-height:1.35;">' + x + "</div>").join("");
-  const cards = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;">' +
+  // v486 - icon tiles: where it is (metro + the three reference places), nearby (nearest school, clinic, gym), amenities as ticks
+  const posT = rec.pos || rec.cpos, refIcon = { "Dubai Marina": "sea", "Media City": "media", "Downtown": "city" };
+  const tiles = [];
+  if (posT) {
+    if (mF && kmTxt(mF.d, rec.exact) && !figs.some((f) => f.includes("to metro"))) tiles.push(pkTile("train", "Metro", kmTxt(mF.d, rec.exact), esc(mF.n)));   // once only: the figure row already has it
+    const scT = nearest(C, posT, "school", 40).filter((x) => ratingOf(x.i.x)).slice(0, 3), clT = nearest(C, posT, "clinic", 8).filter((x) => !isPharmacy(x.i)).slice(0, 3), gyT = nearestGyms(C, rec, posT, 4);
+    if (scT.length && kmTxt(scT[0].d, rec.exact)) tiles.push(pkTile("school", "Schools", kmTxt(scT[0].d, rec.exact), "nearest of " + scT.length + " rated"));
+    if (clT.length && kmTxt(clT[0].d, rec.exact)) tiles.push(pkTile("clinic", "Clinics", kmTxt(clT[0].d, rec.exact), "nearest of " + clT.length));
+    if (gyT.length && kmTxt(gyT[0].d, rec.exact)) tiles.push(pkTile("gym", "Gyms", kmTxt(gyT[0].d, rec.exact), gyT.length + " nearby"));
+    for (const [n, la, lo] of REF) { const t = kmTxt(km(posT, [la, lo])); if (t) tiles.push(pkTile(refIcon[n] || "pin", esc(n.replace(/^Dubai /, "")), t)); }
+  }
+  const amYes = AM_ROWS.filter(([k]) => rec.crit && rec.crit[k] && rec.crit[k].v === true).map(([k, lab]) => lab), devAm = (rec.br && rec.br.amenities) || [];
+  tiles.push(pkTile("check", "Amenities", "", amYes.length || devAm.length ? [...new Map(devAm.concat(amYes).map((x) => [String(x).toLowerCase().trim(), x])).values()].slice(0, 8).map(esc).join(" &middot; ") : REALTOR_VERIFIES));   // as before: never a missing box
+  const namesLine = (lines(nearbyLines(C, rec)) ? nearbyLines(C, rec).join(" &middot; ") : "") + (posT ? (nearbyLines(C, rec).length ? " &middot; " : "") + "All straight-line distances" + (rec.exact ? "" : ", from an approximate position") : "");
+  const cardsNew = tiles.length >= 3 ? pkGrid(tiles, 3) + (namesLine ? '<div style="font-size:9.5px;color:' + PK.muted + ';line-height:1.4;">' + namesLine + "</div>" : "") : "";
+  const cardsOld = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;">' +
     '<div class="card" style="padding:10px;"><div class="lbl" style="font-size:9.5px;">AMENITIES</div>' + amen + "</div>" +
     '<div class="card" style="padding:10px;"><div class="lbl" style="font-size:9.5px;">WHERE IT IS</div>' + (lines(whereLines(C, rec)) || row(REALTOR_VERIFIES, MUTED)) + "</div>" +
     '<div class="card" style="padding:10px;"><div class="lbl" style="font-size:9.5px;">NEARBY</div>' + (lines(nearbyLines(C, rec)) || row(REALTOR_VERIFIES, MUTED)) + "</div></div>";
+  const cards = cardsNew || cardsOld;
   const title = '<div style="display:flex;flex-direction:column;gap:4px;"><div class="serif" style="font-size:33px;color:' + NAVY + ';line-height:1;">' + esc(rec.name) +
-    '</div><div style="font-size:13px;color:' + MUTED + ';">' + esc(strap(rec)) + "</div></div>";
+    '</div><div style="font-size:13px;color:' + MUTED + ';">' + esc(strap(rec)) + (figs.length && devF ? " &middot; by " + esc(devF[1]) : "") + "</div></div>";
   return page(C, sub, hero + title + factHtml + rent + ((q.hide || []).includes("amen") ? "" : cards), "");   // page 1 carries no sources in the approved layout; they are on page 3
 }
 function buildingSource(rec) {

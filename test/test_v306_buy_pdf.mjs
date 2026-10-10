@@ -56,7 +56,7 @@ ok(buyFig({ rows: [{ type: "2 bedroom", est_aed: 2e6, median_sqm: 100 }], dld_sa
 ok(buyFig({ rows: [{ type: "2 bedroom", median_aed: 2e6, median_sqm: 100 }], dld_sales: { sold_by_type: {} } }, "2 bedroom") === null, "B6 no sale count on the card: no figure");
 ok(wquant([[1, 1], [2, 1], [3, 1], [4, 1]], 0.25) === 1 && wquant([[1, 1], [2, 1], [3, 1], [4, 1]], 0.5) === 2 && wquant([[10, 5], [20, 1]], 0.5) === 10, "B7 the sale-weighted quantile is devmap_core's");
 ok(/AED 1,298 &ndash; 2,907|AED [\d,]+ - [\d,]+/.test(text(dmar.html).replace(/&ndash;/g, "-")) && /Emaar's \d+ buildings in Dubai Marina/i.test(t), "B8 the middle half is across the developer's buildings in the community, and says so", t.match(/ACROSS[^.]*\./i));
-ok(/DEVELOPER Emaar/.test(t) && /DEVELOPER DAMAC/.test(text(ddam.html)), "B9 the developer is shown by its devcross canonical name (Emaar, DAMAC - the DAMAC card has no developer field; its name gives it)");
+ok(/DEVELOPER Emaar|by Emaar/.test(t) && /DEVELOPER DAMAC|by DAMAC/.test(text(ddam.html)),  "B9 the developer is shown by its devcross canonical name (Emaar, DAMAC - the DAMAC card has no developer field; its name gives it)");
 // tier floors parity with src/devmap_core.js
 const core = fs.readFileSync(new URL("../src/devmap_core.js", import.meta.url), "utf8");
 const bounds = /TIER_CFG=\{bounds:\[(\d+),(\d+),(\d+)\]/.exec(core).slice(1).map(Number);
@@ -100,7 +100,7 @@ store.set("img_rent_index", JSON.stringify({ as_of: "2026-09-30", items: [
 const rentOne = async (key, extra) => { __resetKvMemo(); return buildDocument(env, parseQuery(new URL("https://x/brief_pdf?kind=dossier&mode=rent&beds=1&keys=" + key + (extra || ""))), { origin: "" }); };
 const re = await rentOne("dubaimarina:10");
 ok(re.status === 200 && !/No (one-bedroom )?lettings|in the latest pull|none let recently/i.test(text(re.html)), "E1 a rent dossier with no lettings: no 'No lettings in the latest pull' (the row is omitted)", text(re.html).match(/No[^.]*lettings[^.]*/));
-ok(/Nearest metro: Test, on site/.test(text(re.html)) && !/0\.0 km/.test(text(re.html)), "E2 a metro within 50 m of an exactly placed building reads 'on site', never '0.0 km'", text(re.html).match(/Nearest metro[^.]*/));
+ok(/Nearest metro: Test, on site|on site\s*to metro\s*Test/.test(text(re.html)) && !/0\.0 km/.test(text(re.html)),  "E2 a metro within 50 m of an exactly placed building reads 'on site', never '0.0 km'", text(re.html).match(/Nearest metro[^.]*/));
 const re2 = await rentOne("dld:emptytwo");
 ok(re2.status === 200 && !/Nearest metro/.test(text(re2.html)) && !/0\.0 km/.test(text(re2.html)), "E3 an approximately placed building: the under-50 m distance is omitted", text(re2.html).match(/WHERE IT IS[^.]*/));
 

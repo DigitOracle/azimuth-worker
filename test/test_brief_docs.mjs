@@ -144,7 +144,7 @@ ok(html.includes("OPTION 4 OF 10 &middot; ONE BEDROOM &middot; TEST DISTRICT"), 
 // ---- 3. page 1 figures ----------------------------------------------------------------------------------------------------------
 ok(html.includes("AED 65,000</div>") && html.includes("AED 60,000 &ndash; 70,500") && html.includes(">16 (16 new)</div>"), "typical rent, middle half and lettings come from the rent index (v285: the count says how many were new, as the list does)");
 ok(html.includes("What AED 65,000 gets you here.</b> AED 65,000 a year is right at the typical rent here: at least half of the 16 one-bedroom flats"), "the budget line is worded from the quartiles, not invented counts");
-ok(html.includes("Nearest metro: Test, 1.0 km") && /Dubai Marina: \d+\.\d km/.test(html) && html.includes("All straight-line distances"), "distances are straight lines from the building's position");
+ok(/1\.0 km<\/div><div[^>]*>to metro<\/div><div[^>]*>Test</.test(html) && /Marina<\/div><div[^>]*>\d+\.\d km</.test(html) && html.includes("All straight-line distances"),  "distances are straight lines from the building's position");
 ok(html.includes("Test International School (Very good,") && html.includes("Test Family Clinic (") && !html.includes("Rough Point Clinic"), "nearby: KHDA rating kept, capitals softened, an approximate-position clinic left out");
 ok(!TIME_RX.test(html.replace(/<svg[\s\S]*?<\/svg>/g, "")), "no walking or driving times anywhere");
 ok(!html.includes(">COMPLETED<"), "the brochure has no 'completed': no COMPLETED line (never invented)");
@@ -153,7 +153,7 @@ ok(html.includes(">RECENT LETTINGS</div>"), "the lettings count is labelled RECE
   const k = "img_" + brochureKvName("testdistrict_10"), orig = store.get(k);
   store.set(k, JSON.stringify(Object.assign(JSON.parse(orig), { completed: "2021" })));
   const h2 = (await pdf("kind=dossier&keys=testdistrict:10")).html;
-  ok(/>COMPLETED<\/div><div[^>]*>2021<\/div>/.test(h2), "with brochure.json 'completed': 2021, the COMPLETED line reads 2021");
+  ok(/>2021<\/div><div[^>]*>completed</.test(h2),  "with brochure.json 'completed': 2021, the COMPLETED line reads 2021");
   store.set(k, orig);
 }
 
@@ -169,7 +169,7 @@ ok(/developer&rsquo;s statement on that date, not register data/.test(a1) && /Av
 ok(!abox(html) && !ESTIMATE_RX.test(html) && !/availability to follow|Availability: to follow/i.test(html), "a building no developer sheet names: no availability box, no estimate box, no placeholder - nothing");
 ({ html } = await pdf("kind=dossier&keys=testdistrict:11"));
 ok(!abox(html) && !ESTIMATE_RX.test(html), "a multi-building record, no sheet: nothing either");
-ok(html.includes("45 floors (one of 3 buildings)") && html.includes("944 homes in 3 buildings") && !html.includes("Delta Court B"), "a tower record of a multi-building project: floors and homes say so, and its own name ('... B') is never printed");
+ok(/>45<\/div><div[^>]*>floors<\/div><div[^>]*>one of 3 buildings</.test(html) && /homes<\/div><div[^>]*>in 3 buildings</.test(html) && !html.includes("Delta Court B"),  "a tower record of a multi-building project: floors and homes say so, and its own name ('... B') is never printed");
 // never mixed: a stubbed register estimate for Alpha (the parity test proves the API still returns it) does not reach the page
 J("beds_left_testdistrict", { as_of: "2026-09-30", source: "stub", rows: [{ key: "testdistrict:10", name: "Alpha Tower", beds: "1", T: 178, R: 37 }] });
 ({ html } = await pdf("kind=dossier&keys=testdistrict:10"));
@@ -179,8 +179,9 @@ store.delete("img_beds_left_testdistrict");
 let all;
 ({ r, html: all } = await pdf("kind=dossier&keys=testdistrict:10&beds=all"));
 ok(r.status === 200 && pages(all) === 3 && /filename="Alpha_Tower_All\.pdf"/.test(r.headers.get("Content-Disposition") || ""), "beds=all: a 3-page dossier named ..._All.pdf", r.headers.get("Content-Disposition"));
+if (process.env.DOSSIER_PREVIEW) (await import("node:fs")).writeFileSync(process.env.DOSSIER_PREVIEW, all);
 ok(all.includes("OPTION &middot; ALL HOME TYPES &middot; TEST DISTRICT"), "the header says ALL HOME TYPES");
-ok(all.includes("TYPICAL RENT A YEAR, BY TYPE") && />1 bedroom<\/td><td[^>]*>AED 65,000<\/td>/.test(all) && !all.includes("What AED 65,000 gets you here"), "page 1 gives the typical rent per type as a table, with no single-type budget line");
+ok(all.includes("Typical rent a year") && /<span>1 bedroom<\/span>[\s\S]{0,260}<b>AED 65k<\/b>/.test(all) && /1 bedroom AED [\d,]+&ndash;[\d,]+/.test(all) && !all.includes("What AED 65,000 gets you here"), "page 1 gives the typical rent per type as bars (v486), middle half in the foot, with no single-type budget line");
 ok(all.includes("The layouts, every type") && /<th[^>]*>TYPE<\/th><th[^>]*>LAYOUT<\/th>/.test(all) && (all.match(/>1 bedroom<\/td><td[^>]*>Layout [AB]<\/td>/g) || []).length === 2 && /2 other layouts/.test(all) && /Alpha Tower has 7 flats\./.test(all),
   "page 3 lists the layouts of every type with a TYPE column: the two shared one-bedroom layouts, and the single studio and two-bedroom flats as '2 other layouts' (7 flats in all)");
 ok(abox(all).includes("Available now, per Alpha Developments&rsquo;s sheet of 20 September 2026: 3 homes.") && abox(all).includes("A-0801") && !abox(all).includes("A-OF1"), "page 2's availability counts every home on the sheet (3: the office is not a home)");
