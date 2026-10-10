@@ -3,6 +3,8 @@ import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - ques
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
 import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - the client brief as a chat; Naj only when switched on
 import { deskReelTick } from "./desk_lab.js";
+import { clipTick } from "./heygen.js";   // v476
+import { clipDeps } from "./desk_post.js";
 import { musicRoute, renderVideo } from "./music.js";
 import { newsTick as deskNewsTick } from "./desk_news.js";   // v473 - the desk news watcher (AI, UAE tech, Dubai events, smart city / ISO, projects)   // v467 - music for posts (library route + the da-video service)
 import { liRoute, liRecord, liConnected, liStartLink, liStep, liReminder, liPostImages } from "./li_desk.js";   // v464 - LinkedIn from the desk   // v460 - an approved Instagram reel finishes on the minute tick
@@ -4814,7 +4816,8 @@ export default {
         try { await gcGuideTick(env); } catch (e) {}   // v150.1 - one follow-up if her Calendar link sits unused for twenty minutes
         try { await liveNewsTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v270 - live city news, a few feeds every 5 minutes, 24/7 (LIVE_NEWS="on")
         try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
-        try { await deskReelTick(env, deskLabDeps(env)); } catch (e) {}   // v460 - an approved Instagram reel still processing
+        try { await clipTick(env, clipDeps(deskPostDeps(env))); } catch (e) {}   // v476 - a HeyGen video in progress
+    try { await deskReelTick(env, deskLabDeps(env)); } catch (e) {}   // v460 - an approved Instagram reel still processing
         try { const _tw = new Date(event.scheduledTime || Date.now()); if (_tw.getUTCMinutes() % 30 === 7) { const _ld = deskLabDeps(env); await templateWatchTick(env, WA_GRAPH, (e2, t) => _ld.send(e2, t)); } } catch (e) {}   // v465 - Meta template status watch, every 30 minutes, told to the desk
         try { await deskLabDeps(env).liStep(env); } catch (e) {}   // v464 - an approved LinkedIn video still processing
         try { const _ld = deskLabDeps(env); await liReminder(env, { send: (e2, t) => _ld.send(e2, t) }, event.scheduledTime || Date.now()); } catch (e) {}   // v464 - the 60-day LinkedIn sign-in reminder

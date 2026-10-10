@@ -6,6 +6,7 @@
 // Docs: docs/DESK_POSTING_PHASE1.md
 import { deskIgStatus, deskIgPublish, deskIgPublishCarousel, deskIgPermalink, deskIgPull } from "./ig_desk.js";
 import { MOODS, musicIndex, libraryText, pickTrack, addTrack, moodOf } from "./music.js";   // v467 - music for posts
+import { clipStart, clipButton, clipText } from "./heygen.js";   // v476 - short HeyGen (Seedance) videos of Kendall
 import { newsGet, headlinesFor, eventsGet, countdownsDue, upcoming, standardOfWeek, eventsCommand } from "./desk_news.js";   // v473 - the news watcher, events, standard of the week
 
 export const DP_VERSION = "v421";
@@ -201,6 +202,7 @@ export const PICTURE_CHOICES = [
   { id: "speaking", label: "You speaking or teaching" },
   { id: "scene", label: "A scene, no person" },
   { id: "slides", label: "Infographic slides (carousel)" },
+  { id: "video", label: "A short video of you" },   // v476 - HeyGen Cinematic, Polo_Trained
 ];
 export const BACKGROUND_CHOICES = [
   { id: "site", label: "Construction site" },
@@ -587,10 +589,15 @@ async function showPreview(env, deps, pick) {
   await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "preview" }), FEED_TTL);
   await deps.buttons(env, scenePreview(pick), [{ id: "dp:scene:make", title: "Make it" }, { id: "dp:scene:change", title: "Change it" }, { id: "dp:scene:cancel", title: "Cancel" }]);
 }
+// v476 - what heygen.js needs from the desk: the same picture maker and store the posts use
+export function clipDeps(deps) {
+  return Object.assign({}, deps, { genImage: (env, prompt, size) => genImage(env, deps, prompt, null, size), storeImage: (env, bytes) => storeImage(env, bytes, "image/jpeg") });
+}
 async function feedReply(env, deps, n) {
   const pick = await kvJ(env, "desk_feed_pick", null);
   if (pick && pick.step === "picture") {
     const c = PICTURE_CHOICES[n - 1]; if (!c) { await deps.send(env, menu("Pick a picture:", PICTURE_CHOICES)); return true; }
+    if (c.id === "video") { await env.MEETINGS.delete("desk_feed_pick"); await clipStart(env, clipDeps(deps), pick.idea, pick.kind, pick.lane); return true; }
     if (c.id === "slides") { await env.MEETINGS.delete("desk_feed_pick"); await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "carousel", picture: "slides", from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined }); return true; }
     await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "background", picture: c.id }), FEED_TTL);
     await deps.send(env, menu(c.label + ". Now the background:", BG_LIST)); await tapList(env, deps, "Pick the background, or Type my own.", "Pick background", BG_LIST.map((b) => ({ title: b.label }))); return true;
@@ -921,7 +928,7 @@ async function startFromText(env, deps, rest, imgsIn, fromPhoto) {
 // ---------- the router: returns true when the message was handled here ----------
 export async function deskPostRoute(env, msg, text, deps) {
   const now = nowOf(deps);
-  if (msg.type === "interactive") { const it = msg.interactive || {}; const id = (it.button_reply && it.button_reply.id) || (it.list_reply && it.list_reply.id); return id && /^dp:/.test(id) ? handleButton(env, deps, id) : false; }   // v469: a list row counts as a tap (a mood picked from the list was ignored, 10 Oct)
+  if (msg.type === "interactive") { const it = msg.interactive || {}; const id = (it.button_reply && it.button_reply.id) || (it.list_reply && it.list_reply.id); if (id && /^dc2:/.test(id)) return clipButton(env, clipDeps(deps), id); return id && /^dp:/.test(id) ? handleButton(env, deps, id) : false; }   // v469: a list row counts as a tap (a mood picked from the list was ignored, 10 Oct)
   if (msg.type === "image" && msg.image && msg.image.id) return handleImage(env, deps, msg);
   // v467 - a track for the music library: an audio file (or audio document) captioned music: <mood> <title>
   const au = (msg.type === "audio" && msg.audio) || (msg.type === "document" && msg.document && /^audio\//i.test(String(msg.document.mime_type || "")) && msg.document);
@@ -936,6 +943,7 @@ export async function deskPostRoute(env, msg, text, deps) {
     await deps.send(env, r.err ? "Not added: " + r.err + "." : "Added to " + mood + " (" + r.count + " track" + (r.count > 1 ? "s" : "") + " in that mood)."); return true;
   }
   const t = String(text || "").trim(); if (!t) return false;
+  if (!/^\//.test(t) && await clipText(env, clipDeps(deps), t)) return true;   // v476 - a typed change to the video prompt
   if (!/^\//.test(t) && await sceneText(env, deps, t)) return true;   // v475 - "Type my own" background / "Change it" line
   if (/^\/?music$/i.test(t)) { await deps.send(env, libraryText(await musicIndex(env))); return true; }   // v467
   let m;
