@@ -1255,6 +1255,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
 export function dewaVisual(o, dist) {
   const f = (n) => Number(n || 0).toLocaleString("en-US");
   const e = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const pop = (label, face, body) => '<details class=dw-pop><summary class=dw-tile><span class=dw-tl>' + label + "</span>" + face + '</summary><div class=dw-sheet><div class=dw-card>' + body + '<div class=dw-close>Tap the tile again to close</div></div></div></details>';
   // the years: the full series if present, else the per-year fields the cut has always carried
   const by = {};
   if (o.by_year && typeof o.by_year === "object") for (const [y, n] of Object.entries(o.by_year)) { if (/^\d{4}$/.test(y)) by[y] = n; }
@@ -1270,8 +1271,9 @@ export function dewaVisual(o, dist) {
     const trend = d == null ? "" : '<div class="dw-tr ' + (d > 5 ? "up" : d < -5 ? "down" : "flat") + '">'
       + (d > 5 ? "Up" : d < -5 ? "Down" : "Level") + " from " + f(b) + " in " + prev + (d ? " (" + (d > 0 ? "+" : "") + d + "%)" : "") + "</div>";
     const read = d == null ? "" : d > 5 ? "Lively: people are still moving in or changing tenants." : d < -5 ? "Quieter than last year: fewer move-ins and tenant changes." : "Steady: about as many move-ins as last year.";
-    busy = '<div class=dw-card><b>Is the building busy?</b><div class=dw-big>' + f(a) + "<span>new connections in " + cur + "</span></div>" + trend
-      + '<div class=dw-note>' + read + (o.last ? " Last connection " + e(o.last) + "." : "") + "</div></div>";
+    busy = pop("Busy?", '<span class=dw-tn>' + f(a) + '</span><span class="dw-ts ' + (d == null ? "" : d > 5 ? "up" : d < -5 ? "down" : "") + '">' + (d == null ? "in " + cur : (d > 0 ? "+" : "") + d + "%") + "</span>",
+      '<b>Is the building busy?</b><div class=dw-big>' + f(a) + "<span>new connections in " + cur + "</span></div>" + trend
+      + '<div class=dw-note>' + read + (o.last ? " Last connection " + e(o.last) + "." : "") + "</div>");
   }
   // A: the timeline
   let tl = "";
@@ -1282,33 +1284,42 @@ export function dewaVisual(o, dist) {
     years.forEach((y, i) => {
       const n = by[y], small = typeof n !== "number";
       const h = small ? 4 : Math.max(3, Math.round((H - 26) * n / max));
-      bars += '<rect x="' + x.toFixed(1) + '" y="' + (H - 14 - h) + '" width="' + bw.toFixed(1) + '" height="' + h + '" rx="2" class="' + (i >= years.length - 2 ? "dw-bar hi" : "dw-bar") + '"><title>' + y + ": " + (small ? "fewer than 5" : f(n)) + "</title></rect>";
+      bars += '<rect x="' + x.toFixed(1) + '" y="' + (H - 14 - h) + '" width="' + bw.toFixed(1) + '" height="' + h + '" rx="2" class="' + (i >= years.length - 2 ? "dw-bar hi" : "dw-bar") + '"><title>' + y + (y >= thisYear ? " (so far; the DEWA file is part-year)" : "") + ": " + (small ? "fewer than 5" : f(n)) + "</title></rect>";
       if (!small && (i >= years.length - 2 || years.length <= 4)) bars += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 18 - h) + '" class=dw-v>' + f(n) + "</text>";
       if (i === 0 || i === years.length - 1 || years.length <= 6) bars += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 2) + '" class=dw-y>' + y + "</text>";
       x += bw + gap;
     });
-    tl = '<div class=dw-card><b>When people moved in</b><svg class=dw-svg viewBox="0 0 ' + Math.ceil(x) + " " + H + '" role=img aria-label="DEWA connections per year">' + bars + "</svg>"
+    const spark = years.map((y, i) => { const n = typeof by[y] === "number" ? by[y] : 0, hh = Math.max(2, Math.round(22 * n / max)); return '<rect x="' + (i * 6) + '" y="' + (24 - hh) + '" width="4" height="' + hh + '" rx="1" class="dw-bar' + (i >= years.length - 2 ? " hi" : "") + '"/>'; }).join("");
+    tl = pop("Moved in", '<svg class=dw-spark viewBox="0 0 ' + (years.length * 6) + ' 24" aria-hidden=true>' + spark + '</svg><span class=dw-ts>since ' + e(String(o.first || years[0]).slice(0, 4)) + "</span>",
+      '<b>When people moved in</b><svg class=dw-svg viewBox="0 0 ' + Math.ceil(x) + " " + H + '" role=img aria-label="DEWA connections per year">' + bars + "</svg>"
       + '<div class=dw-note>' + f(o.connections) + " connections" + (o.first ? " since " + e(o.first) : "") + "."
-      + (years.length && !o.by_year ? " Earlier years are not split out yet." : "") + "</div></div>";
+      + (years.length && !o.by_year ? " Earlier years are not split out yet." : "") + "</div>");
   }
   // C: the mix
   let mix = "";
   const r = Number(o.residential || 0), c = Number(o.commercial || 0);
   if (r + c > 0) {
     const C = 2 * Math.PI * 40, cl = C * c / (r + c);
-    mix = '<div class=dw-card><b>What\'s in the building</b><svg class=dw-donut viewBox="0 0 110 110" role=img aria-label="' + r + " home and " + c + ' commercial connections">'
+    mix = pop("Homes / shops", '<svg class=dw-mini viewBox="0 0 110 110" aria-hidden=true><circle cx=55 cy=55 r=40 class=dw-home /><circle cx=55 cy=55 r=40 class=dw-com stroke-dasharray="' + cl.toFixed(1) + " " + (C - cl).toFixed(1) + '" transform="rotate(-90 55 55)"/></svg><span class=dw-ts>' + f(r) + " / " + f(c) + "</span>",
+      '<b>What\'s in the building</b><svg class=dw-donut viewBox="0 0 110 110" role=img aria-label="' + r + " home and " + c + ' commercial connections">'
       + '<circle cx=55 cy=55 r=40 class=dw-home /><circle cx=55 cy=55 r=40 class=dw-com stroke-dasharray="' + cl.toFixed(1) + " " + (C - cl).toFixed(1) + '" transform="rotate(-90 55 55)"/>'
       + '<text x=55 y=55 class=dw-dn>' + f(r + c) + '</text><text x=55 y=70 class=dw-dl>connections</text></svg>'
       + '<div class=dw-key><span><i class=dw-kh></i>Homes ' + f(r) + '</span><span><i class=dw-kc></i>Shops / offices ' + f(c) + "</span></div>"
-      + '<div class=dw-note>The mix of connections, not how full the building is.</div></div>';
+      + '<div class=dw-note>The mix of connections, not how full the building is.</div>');
   }
   const src = "DEWA meter connections for this building, matched to it by its own entrance. <b>A connection is not a home:</b> one home let three times is three connections, so this cannot be divided by the number of homes to give an occupancy rate. It is the only thing any register says about a building being lived in rather than sold or let. Months only."
     + (dist && dist.withheld ? " Smaller buildings in this district - " + f(dist.withheld) + " of them - are withheld entirely: below " + e(dist.floor) + " connections the figure stops being a statistic and becomes a household." : "");
-  return "<style>" + DEWA_CSS + "</style><h3>When it filled up</h3><div class=dw-grid>" + busy + tl + mix + "</div>"
+  return "<style>" + DEWA_CSS + "</style><h3>When it filled up</h3><div class=dw-tiles>" + busy + tl + mix + "</div>"
     + '<div class=dw-src><svg viewBox="0 0 24 24" aria-hidden=true><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg>Source: DEWA meter connections</div>'
     + '<details class=dw-more><summary>What these numbers mean</summary><div class=src>' + src + "</div></details>";
 }
-const DEWA_CSS = ".dw-grid{display:grid;gap:10px;margin:6px 0}.dw-card{border:1px solid var(--line,#2c3a35);border-radius:12px;padding:11px 12px}"
+const DEWA_CSS = ".dw-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:6px 0}"
+  + ".dw-tile{list-style:none;cursor:pointer;border:1px solid var(--line,#2c3a35);border-radius:12px;padding:9px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;min-height:84px;justify-content:center;text-align:center}.dw-tile::-webkit-details-marker{display:none}"
+  + ".dw-tl{font-size:.62rem;opacity:.7;letter-spacing:.04em}.dw-tn{font-size:1.35rem;font-weight:600;line-height:1}.dw-ts{font-size:.66rem;opacity:.8}.dw-ts.up{color:#7fb33a;opacity:1}.dw-ts.down{color:#E24B4A;opacity:1}"
+  + ".dw-spark{width:100%;max-width:80px;height:26px}.dw-mini{width:40px;height:40px}.dw-mini .dw-home,.dw-mini .dw-com{stroke-width:18}"
+  + ".dw-pop[open]>.dw-tile{border-color:#C5A56A}.dw-sheet{position:fixed;left:0;right:0;bottom:0;z-index:60;padding:12px;background:rgba(0,0,0,.55)}"
+  + ".dw-sheet .dw-card{background:var(--bg,#141c19);max-width:460px;margin:0 auto;border-color:#C5A56A}.dw-close{font-size:.66rem;opacity:.6;text-align:center;margin-top:10px}"
+  + ".dw-grid{display:grid;gap:10px;margin:6px 0}.dw-card{border:1px solid var(--line,#2c3a35);border-radius:12px;padding:11px 12px}"
   + ".dw-card>b{display:block;font-weight:600;margin-bottom:6px}.dw-big{font-size:1.8rem;font-weight:600;line-height:1.1}.dw-big span{display:block;font-size:.72rem;font-weight:400;opacity:.75;margin-top:2px}"
   + ".dw-tr{font-size:.78rem;margin-top:6px}.dw-tr.up{color:#7fb33a}.dw-tr.down{color:#E24B4A}.dw-tr.flat{opacity:.8}.dw-note{font-size:.72rem;opacity:.75;margin-top:6px;line-height:1.45}"
   + ".dw-svg{display:block;width:100%;height:auto;max-height:130px}.dw-bar{fill:#6f6d66}.dw-bar.hi{fill:#C5A56A}.dw-v{font-size:9px;fill:currentColor;text-anchor:middle}.dw-y{font-size:8.5px;fill:currentColor;opacity:.7;text-anchor:middle}"
