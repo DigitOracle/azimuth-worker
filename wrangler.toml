@@ -35,6 +35,9 @@ MS_TENANT_ID = "0d6748c6-97d7-44f0-b920-7a9db8925d4f"
 WA_ALLOWED = "971562276093"
 WA_PHONE_ID = "1178276628713333"
 WA_ROUTE_971565484397 = "AZIMUTH_2"
+# v388r - the DESK number (DigitAlchemy, +971 58 544 6093): all its traffic goes to azimuth-2. Was set only on the live version and was lost
+# when v453f deployed from this file (10 Oct 06:13); the desk heard nothing from 06:10 to 07:20. It lives here now so a deploy keeps it.
+WA_ROUTE_PHONE_1370146096179819 = "AZIMUTH_2"
 # v334 - MOMO: his own food/exercise messages (momo ..., food: ..., gym 40 min, 12000 steps, a photo captioned lunch, a Momo Undo button) are forwarded to azimuth-2, where the log lives.
 # The value is the service-binding name. Remove the line to switch it off. Anything else he writes is handled here exactly as before.
 MOMO_FORWARD = "AZIMUTH_2"
