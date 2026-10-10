@@ -1364,6 +1364,47 @@ export function bpTiles(card, D, nFloors) {
     crane: '<path d="M6 21V4h2v17M4 21h8M8 5h12M18 5v4"/><path d="M18 9v2"/>',
     file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
     cash: '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>',
+    car: '<path d="M5 16l1.5-5h11L19 16"/><rect x="3" y="16" width="18" height="3" rx="1"/><circle cx="7" cy="19.5" r="1"/><circle cx="17" cy="19.5" r="1"/>',
+    lift: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 9l3-3 3 3M9 15l3 3 3-3"/>',
+    cal: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+    train: '<rect x="6" y="3" width="12" height="13" rx="3"/><path d="M6 11h12M9 20l-2 2M15 20l2 2M9 16v3M15 16v3"/>',
+    bus: '<rect x="5" y="4" width="14" height="13" rx="2"/><path d="M5 11h14M8 20v-3M16 20v-3"/>',
+    health: '<path d="M12 21s-8-5-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 6-8 11-8 11z"/><path d="M12 9v5M9.5 11.5h5"/>',
+    shop: '<path d="M4 9l1.5-5h13L20 9"/><path d="M4 9h16v11H4zM10 20v-5h4v5"/>',
+    compass: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
+    dot: '<circle cx="12" cy="12" r="3"/>',
+  };
+  // v484 - every fact in a pop-up gets an icon picked from its own label (Kendall: "all of these pop-ups ... should have icons")
+  const iconFor = (t) => { t = String(t || "").toLowerCase();
+    const M = [[/park/, "car"], [/lift|elevator/, "lift"], [/floor|stack|level|storey|height/, "layers"], [/unit|home|residential|flat|bed|studio/, "build"],
+      [/complet|due|date|first|last|since|year|month/, "cal"], [/metro|tram|rail|station/, "train"], [/bus/, "bus"], [/school|khda/, "school"],
+      [/clinic|health|hospital|dha/, "health"], [/retail|shop|podium|commercial|mall|gym/, "shop"], [/locat|makani|entrance|address/, "pin"],
+      [/plot|land|zoned|parcel|registry|named/, "map"], [/tenure|freehold|leasehold|rent|let|contract|key/, "key"], [/sale|sold|price|median|aed|per sq|off-plan/, "tag"],
+      [/escrow|permit|licen/, "trust"], [/percent|construct|status|project/, "crane"], [/north|south|east|west|open|view|sees/, "compass"],
+      [/meter|connect|dewa/, "bolt"], [/used for|use/, "build"], [/people|nation|resid/, "users"]];
+    for (const [r, k] of M) if (r.test(t)) return k; return "dot"; };
+  // rows -> 2-up icon cards; .src notes -> one "Source and notes" fold at the bottom
+  const cardify = (body) => {
+    const rows = Array.from(body.querySelectorAll(":scope > .row"));
+    if (rows.length) {
+      const g = document.createElement("div"); g.className = "bp-facts"; rows[0].parentNode.insertBefore(g, rows[0]);
+      for (const r of rows) {
+        const sp = r.querySelectorAll(":scope > span"); let lab = "", val = "";
+        const a = sp[0], b = sp[1];
+        if (a && b && !b.textContent.trim() && a.querySelector("small")) {   // "<small>label</small><br>value"
+          const sm = a.querySelector("small"); lab = sm.textContent; sm.remove(); val = a.innerHTML.replace(/^\s*<br>\s*/, "");
+        } else { lab = a ? a.innerHTML : ""; val = b ? b.innerHTML : ""; }
+        const plain = (lab + " " + val).replace(/<[^>]+>/g, " ");
+        const c = document.createElement("div"); c.className = "bp-fact" + (plain.length > 46 ? " wide" : "");
+        c.innerHTML = svg(iconFor(lab.replace(/<[^>]+>/g, " ") + " " + (plain.length < 30 ? plain : ""))) + '<div><span class=bp-fl>' + lab + '</span><span class=bp-fv>' + val + "</span></div>";
+        g.appendChild(c); r.remove();
+      }
+    }
+    const notes = Array.from(body.querySelectorAll(":scope > .src"));
+    if (notes.length) {
+      const d = document.createElement("details"); d.className = "bp-notes"; d.innerHTML = "<summary>Source and notes</summary>";
+      body.appendChild(d); for (const n of notes) d.appendChild(n);
+    }
   };
   const svg = (k) => '<svg viewBox="0 0 24 24" aria-hidden=true>' + (P[k] || P.file) + "</svg>";
   const s = D.sales || {};
@@ -1413,6 +1454,7 @@ export function bpTiles(card, D, nFloors) {
       sec.nodes[0].remove(); sec.nodes = sec.nodes.slice(1);
     }
     for (const n of sec.nodes) body.appendChild(n);
+    if (sec.title !== "trust") { try { cardify(body); } catch (e) {} }
     // the DEWA pictures sit inside this sheet already open, not as a second layer of tiles
     body.querySelectorAll(".dw-pop").forEach((d) => { d.open = true; });
     det.querySelector(".bp-x").onclick = (ev) => { ev.preventDefault(); det.open = false; };
@@ -1432,4 +1474,9 @@ export const BP_TILES_CSS = ".bp-tiles{display:grid;grid-template-columns:repeat
   + ".bp-card h3{margin-top:2px}.bp-x{position:sticky;float:right;top:0;cursor:pointer;font-size:1.3rem;color:var(--mut);line-height:1;padding:0 2px 6px 8px}"
   + ".bp-bars{display:grid;gap:6px;margin:6px 0 10px}.bp-bars div{display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:7px;font-size:.72rem}"
   + ".bp-bars i{display:block;height:10px;border-radius:3px;background:var(--gold)}.bp-bars em{font-style:normal;color:var(--mut);font-size:.68rem}"
+  + ".bp-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}.bp-fact{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;padding:9px 10px;min-width:0}"
+  + ".bp-fact.wide{grid-column:1/-1}.bp-fact svg{flex:none;width:20px;height:20px;margin-top:1px;fill:none;stroke:var(--gold);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}"
+  + ".bp-fact>div{min-width:0}.bp-fl{display:block;font-size:.6rem;color:var(--mut);letter-spacing:.03em;line-height:1.3}.bp-fl small,.bp-fv small{display:block;font-size:.62rem;color:var(--mut)}"
+  + ".bp-fv{display:block;font:600 .86rem/1.3 Fraunces,Georgia,serif;color:var(--text);margin-top:2px;overflow-wrap:anywhere}.bp-fv a{color:var(--gold)}"
+  + ".bp-notes{margin-top:8px}.bp-notes summary{cursor:pointer;font-size:.66rem;color:var(--mut)}.bp-notes .src{margin-top:6px}"
   + ".bp-card .dw-tile{display:none}.bp-card .dw-tiles{display:grid;grid-template-columns:1fr;gap:10px}.bp-card .dw-sheet{position:static;background:none;padding:0}.bp-card .dw-sheet .dw-card{border-color:var(--line)}.bp-card .dw-close{display:none}";
