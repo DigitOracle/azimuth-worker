@@ -587,7 +587,8 @@ export function scenePreview(pick) {
 }
 async function showPreview(env, deps, pick) {
   await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "preview" }), FEED_TTL);
-  await deps.buttons(env, scenePreview(pick), [{ id: "dp:scene:make", title: "Make it" }, { id: "dp:scene:change", title: "Change it" }, { id: "dp:scene:cancel", title: "Cancel" }]);
+  const sh = String(pick.shape || "square").replace(/[^a-z]/g, "");
+  await deps.buttons(env, scenePreview(pick), [{ id: "dp:scene:make:" + sh, title: "Make it" }, { id: "dp:scene:change:" + sh, title: "Change it" }, { id: "dp:scene:cancel", title: "Cancel" }]);
 }
 // v476 - what heygen.js needs from the desk: the same picture maker and store the posts use
 export function clipDeps(deps) {
@@ -624,8 +625,11 @@ async function feedReply(env, deps, n) {
   await deps.send(env, menu("Idea " + n + ": " + it.text + "\nPick a picture:", PICTURE_CHOICES)); await tapList(env, deps, "Pick the picture.", "Pick picture", PICTURE_CHOICES.map((b) => ({ title: b.label }))); return true;
 }
 // v475 - the preview's buttons, and the one typed line for "Type my own" background or "Change it"
-async function sceneButton(env, deps, act) {
-  const pick = await kvJ(env, "desk_feed_pick", null);
+async function sceneButton(env, deps, act, idShape) {
+  let pick = await kvJ(env, "desk_feed_pick", null);
+  // v478 (11 Oct: Make it said "expired" while the pick sat at preview) - a read a few seconds after the write can be one step behind:
+  // a pick still at the shape step, with the shape carried in the button id, is the same choice.
+  if (pick && pick.step === "shape" && idShape) pick = Object.assign(pick, { step: "preview", shape: pick.shape || idShape });
   if (!pick || pick.step !== "preview") { await deps.send(env, "That picture choice has expired. Tap Give me ideas to start again."); return true; }
   if (act === "cancel") { await env.MEETINGS.delete("desk_feed_pick"); await deps.send(env, "Cancelled. Nothing was made."); return true; }
   if (act === "change") { await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "change_text" }), FEED_TTL); await deps.send(env, "Tell me the change in your next message, for example: put the Burj Khalifa behind me, or make me smile."); return true; }
@@ -636,6 +640,7 @@ async function sceneButton(env, deps, act) {
 async function sceneText(env, deps, t) {
   const pick = await kvJ(env, "desk_feed_pick", null);
   if (!pick || (pick.step !== "bg_text" && pick.step !== "change_text")) return false;
+  if (/^(feed|feed now|ideas|post|menu|status|reel|music|linkedin|youtube|events|cancel|help|queue)$/i.test(String(t).trim())) return false;   // v478 - "Behind: feed"
   if (pick.step === "bg_text") {
     pick.bg_text = String(t).slice(0, 300); await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "time" }), FEED_TTL);
     await deps.send(env, menu("Background: " + pick.bg_text + ". What time of day?", TIME_CHOICES)); await tapList(env, deps, "Pick the time of day.", "Pick time", TIME_CHOICES.map((x) => ({ title: x.label }))); return true;
@@ -727,7 +732,7 @@ async function handleButton(env, deps, id) {
   if (id === "dp:ref:keep") { await deps.send(env, "Kept."); return true; }
   if (id === "dp:ref:purge") { const ix = await kvJ(env, "desk_ref_index", []); for (const n of ix) { await env.MEETINGS.delete("desk_ref_" + n); await env.MEETINGS.delete("desk_refimg_" + n); } await env.MEETINGS.delete("desk_ref_index"); await env.MEETINGS.delete("desk_ref_cursor"); await deps.send(env, "All " + ix.length + " reference photos deleted."); return true; }
   // v466 - "post" alone: what kind of post, by tapping
-  { const sb = String(id).match(/^dp:scene:(make|change|cancel)$/); if (sb) return sceneButton(env, deps, sb[1]); }   // v475
+  { const sb = String(id).match(/^dp:scene:(make|change|cancel)(?::([a-z]+))?$/); if (sb) return sceneButton(env, deps, sb[1], sb[2]); }   // v475
   if (id === "dp:start:ideas") { await sendFeed(env, deps); return true; }   // v472 - the fresh 10, not the weekly 5
   { const fn = String(id).match(/^dp:fn:(\d{1,2})$/); if (fn) { await env.MEETINGS.put("desk_feed_open", String(nowOf(deps)), { expirationTtl: FEED_TTL }); const done = await feedReply(env, deps, Number(fn[1])); if (!done) await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } }
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
