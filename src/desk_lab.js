@@ -18,7 +18,7 @@ import { momoTemplateDef } from "./fit.js";   // v453 - the Momo day template th
 export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\n" +
   "brief: the client brief, asked in the chat\nbrief form: the client brief as a form (test only)\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
   "lab typing: read ticks and typing\nlab qr: a QR code that opens this chat with a message typed\nlab profile: this number's business profile\n" +
-  "lab setup momo template <account id>: submit the Momo day message to Meta";
+  "lab setup momo template <account id>: submit the Momo day message to Meta\nlab meta admins: who runs the business on Meta (names, login emails, roles)";
 
 const meta = (r) => (r && r.error ? " Meta said: " + String(r.error.message || r.error.error_user_msg || JSON.stringify(r.error)).slice(0, 300) : "");
 
@@ -177,6 +177,30 @@ export async function deskLabRoute(env, msg, text, deps) {
     try { st = await (await fetch(G + "/" + m[1] + "/message_templates?name=" + encodeURIComponent(def.name) + "&fields=name,status,category,language,rejected_reason", { headers: H })).json(); } catch (e2) {}
     const have = st && Array.isArray(st.data) ? st.data.filter((x) => x.name === def.name) : [];
     await send("Meta did not take the template. Meta said: " + verb.slice(0, 600) + (have.length ? "\nAlready on the account: " + have.map((x) => x.name + " (" + (x.language || "?") + "): " + (x.status || "?") + (x.category ? ", " + x.category : "") + (x.rejected_reason && x.rejected_reason !== "NONE" ? ", rejected: " + x.rejected_reason : "")).join("; ") : ""));
+    return true;
+  }
+  // v456 (Kendall 10 Oct: logged out of Facebook, cannot find which login runs the business) - ask Meta, with the token the worker
+  // already holds, who the PEOPLE on the business portfolio are (name, email, role) and which business owns the WhatsApp account.
+  // Owner-only (the desk), read-only, the token is never shown. A missing permission comes back as Meta's own words.
+  if (/^meta admins\b/.test(sub)) {
+    const BIZ = "1730729287953659", WABA = "1588773749592854";
+    const H = { Authorization: "Bearer " + env.WHATSAPP_TOKEN }, G = deps.graph;
+    const get = async (u) => { try { return await (await fetch(G + u, { headers: H })).json(); } catch (e) { return { error: { message: "Meta did not answer" } }; } };
+    const L = ["Who runs the business on Meta (portfolio " + BIZ + "):"];
+    const users = await get("/" + BIZ + "/business_users?fields=name,email,role,first_name,last_name&limit=50");
+    if (users && Array.isArray(users.data)) {
+      if (!users.data.length) L.push("No people listed.");
+      users.data.forEach((u, i) => L.push((i + 1) + ". " + (u.name || [u.first_name, u.last_name].filter(Boolean).join(" ") || "(no name)") + " - " + (u.email || "no email shown") + " - " + (u.role || "role not shown")));
+    } else L.push("People: not readable." + meta(users));
+    const sys = await get("/" + BIZ + "/system_users?fields=name,role&limit=20");
+    if (sys && Array.isArray(sys.data) && sys.data.length) L.push("System users (the app's own logins, not people): " + sys.data.map((u) => (u.name || "?") + " (" + (u.role || "?") + ")").join(", "));
+    const waba = await get("/" + WABA + "?fields=name,owner_business_info");
+    if (waba && !waba.error) L.push("WhatsApp account " + WABA + ": " + (waba.name || "") + "; owned by " + ((waba.owner_business_info && (waba.owner_business_info.name + " (" + waba.owner_business_info.id + ")")) || "not shown"));
+    else L.push("WhatsApp account: not readable." + meta(waba));
+    const assigned = await get("/" + WABA + "/assigned_users?business=" + BIZ + "&fields=name,tasks");
+    if (assigned && Array.isArray(assigned.data) && assigned.data.length) L.push("People assigned to the WhatsApp account: " + assigned.data.map((u) => u.name + (u.tasks ? " [" + u.tasks.join(", ") + "]" : "")).join("; "));
+    L.push("Log in at facebook.com/login/identify with the email of an ADMIN above.");
+    await send(L.join("\n"));
     return true;
   }
   if (sub === "profile") {
