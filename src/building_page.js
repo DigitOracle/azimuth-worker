@@ -368,6 +368,9 @@ export function buildingPageHtml(D, key, rk) {
     // the worker is bundled with esbuild's keepNames, which wraps every function in __name(); the browser has no such helper, so
     // the page carries a no-op of its own before the view function's own source runs
     "const __name=(f)=>f;" +
+    // v481.1 - helpers the view calls must travel WITH it: the view is shipped as source text, so a module-level function it
+    // names is undefined in the browser (v480 broke the About card on every building with DEWA rows for this reason).
+    "const DEWA_CSS=" + JSON.stringify(DEWA_CSS) + ";" + String(dewaVisual) + ";" +
     "(" + String(view) + ")(THREE,GLTFLoader,OrbitControls,RoomEnvironment,MeshoptDecoder,D,KEY,COL);" +
     "</script></body></html>";
   return head + body + tail;
