@@ -1182,18 +1182,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
         ". The transaction register carries no building id, only a name, so these are that name's sales rather than provably this building outline's. Settled prices, not asking." +
         (D.sold.psf ? saleBandNote(D.sold.n) : "") +
         "</div>" : "") +
-      (D.occupancy ? "<h3>When it filled up</h3>" +
-        '<div class=row><span>Meters connected</span><span>' + fmt(D.occupancy.connections) + "</span></div>" +
-        (D.occupancy.first ? '<div class=row><span>First connection</span><span>' + esc(D.occupancy.first) + "</span></div>" : "") +
-        (D.occupancy.last ? '<div class=row><span>Most recent</span><span>' + esc(D.occupancy.last) + "</span></div>" : "") +
-        (D.occupancy.y2025 ? '<div class=row><span>In 2025</span><span>' + fmt(D.occupancy.y2025) +
-          (D.occupancy.y2024 ? " &middot; " + fmt(D.occupancy.y2024) + " in 2024" : "") + "</span></div>" : "") +
-        (D.occupancy.residential ? '<div class=row><span>Homes / commercial</span><span>' + fmt(D.occupancy.residential) +
-          " / " + fmt(D.occupancy.commercial || 0) + "</span></div>" : "") +
-        '<div class=src>DEWA meter connections for this building, matched to it by its own entrance. <b>A connection is not a home:</b> one home let three times is three connections, so this cannot be divided by the number of homes to give an occupancy rate. It is the only thing any register says about a building being lived in rather than sold or let. Months only.' +
-        (D.districtOccupancy && D.districtOccupancy.withheld ? " Smaller buildings in this district - " + fmt(D.districtOccupancy.withheld) +
-          " of them - are withheld entirely: below " + esc(D.districtOccupancy.floor) + " connections the figure stops being a statistic and becomes a household." : "") +
-        "</div>" : "") +
+      (D.occupancy ? dewaVisual(D.occupancy, D.districtOccupancy) : "") +
       (D.rent ? "<h3>What it lets for</h3>" +
         '<div class=src style="margin:0 0 6px">Ejari registers a letting against the SCHEME, not the tower: these are ' +
         fmt(D.rent.n) + " contracts registered against " + esc(D.rent.scheme) + " since 2024, the scheme this building belongs to." +
@@ -1255,3 +1244,75 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
     ", from the Dubai Municipality floor register and the Land Department units register. Model: CityEngine massing over ArcGIS building outlines, cut into floors — not a survey of the building.";
   hideLabel(); count(); drawSold(null);
 }
+
+
+// v480 - THE DEWA SECTION AS A PICTURE (Kendall, 11 Oct 2026, approved A + B + C). Same figures as the rows it replaces:
+//   B  "Is the building busy?"  this year's connections against last year's, with a plain reading;
+//   A  "When people moved in"   connections per year (move_ins_by_year when the cut carries it, else the years held);
+//   C  "What's in the building" homes against shops/offices - the MIX of connections, never an occupancy rate.
+// No DEWA logo (a government mark on our card reads as endorsement): a bolt icon and "Source: DEWA meter connections".
+// The "a connection is not a home" sentence stays, in the fold-out, word for word.
+export function dewaVisual(o, dist) {
+  const f = (n) => Number(n || 0).toLocaleString("en-US");
+  const e = (x) => String(x == null ? "" : x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // the years: the full series if present, else the per-year fields the cut has always carried
+  const by = {};
+  if (o.by_year && typeof o.by_year === "object") for (const [y, n] of Object.entries(o.by_year)) { if (/^\d{4}$/.test(y)) by[y] = n; }
+  else for (const y of ["2024", "2025", "2026"]) if (o["y" + y] != null) by[y] = o["y" + y];
+  const years = Object.keys(by).sort();
+  // B: the latest COMPLETE year against the one before (a part-year 2026 is not compared with a whole 2025)
+  const thisYear = String(new Date().getUTCFullYear());
+  const full = years.filter((y) => y < thisYear && typeof by[y] === "number");
+  const cur = full[full.length - 1], prev = full[full.length - 2];
+  let busy = "";
+  if (cur && by[cur] != null) {
+    const a = by[cur], b = prev ? by[prev] : null, d = b ? Math.round(100 * (a - b) / b) : null;
+    const trend = d == null ? "" : '<div class="dw-tr ' + (d > 5 ? "up" : d < -5 ? "down" : "flat") + '">'
+      + (d > 5 ? "Up" : d < -5 ? "Down" : "Level") + " from " + f(b) + " in " + prev + (d ? " (" + (d > 0 ? "+" : "") + d + "%)" : "") + "</div>";
+    const read = d == null ? "" : d > 5 ? "Lively: people are still moving in or changing tenants." : d < -5 ? "Quieter than last year: fewer move-ins and tenant changes." : "Steady: about as many move-ins as last year.";
+    busy = '<div class=dw-card><b>Is the building busy?</b><div class=dw-big>' + f(a) + "<span>new connections in " + cur + "</span></div>" + trend
+      + '<div class=dw-note>' + read + (o.last ? " Last connection " + e(o.last) + "." : "") + "</div></div>";
+  }
+  // A: the timeline
+  let tl = "";
+  if (years.length) {
+    const max = Math.max(1, ...years.map((y) => (typeof by[y] === "number" ? by[y] : 0)));
+    const W = 300, H = 110, gap = 4, bw = Math.max(6, Math.min(26, (W - gap * (years.length - 1)) / years.length));
+    let x = 0, bars = "";
+    years.forEach((y, i) => {
+      const n = by[y], small = typeof n !== "number";
+      const h = small ? 4 : Math.max(3, Math.round((H - 26) * n / max));
+      bars += '<rect x="' + x.toFixed(1) + '" y="' + (H - 14 - h) + '" width="' + bw.toFixed(1) + '" height="' + h + '" rx="2" class="' + (i >= years.length - 2 ? "dw-bar hi" : "dw-bar") + '"><title>' + y + ": " + (small ? "fewer than 5" : f(n)) + "</title></rect>";
+      if (!small && (i >= years.length - 2 || years.length <= 4)) bars += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 18 - h) + '" class=dw-v>' + f(n) + "</text>";
+      if (i === 0 || i === years.length - 1 || years.length <= 6) bars += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 2) + '" class=dw-y>' + y + "</text>";
+      x += bw + gap;
+    });
+    tl = '<div class=dw-card><b>When people moved in</b><svg class=dw-svg viewBox="0 0 ' + Math.ceil(x) + " " + H + '" role=img aria-label="DEWA connections per year">' + bars + "</svg>"
+      + '<div class=dw-note>' + f(o.connections) + " connections" + (o.first ? " since " + e(o.first) : "") + "."
+      + (years.length && !o.by_year ? " Earlier years are not split out yet." : "") + "</div></div>";
+  }
+  // C: the mix
+  let mix = "";
+  const r = Number(o.residential || 0), c = Number(o.commercial || 0);
+  if (r + c > 0) {
+    const C = 2 * Math.PI * 40, cl = C * c / (r + c);
+    mix = '<div class=dw-card><b>What\'s in the building</b><svg class=dw-donut viewBox="0 0 110 110" role=img aria-label="' + r + " home and " + c + ' commercial connections">'
+      + '<circle cx=55 cy=55 r=40 class=dw-home /><circle cx=55 cy=55 r=40 class=dw-com stroke-dasharray="' + cl.toFixed(1) + " " + (C - cl).toFixed(1) + '" transform="rotate(-90 55 55)"/>'
+      + '<text x=55 y=55 class=dw-dn>' + f(r + c) + '</text><text x=55 y=70 class=dw-dl>connections</text></svg>'
+      + '<div class=dw-key><span><i class=dw-kh></i>Homes ' + f(r) + '</span><span><i class=dw-kc></i>Shops / offices ' + f(c) + "</span></div>"
+      + '<div class=dw-note>The mix of connections, not how full the building is.</div></div>';
+  }
+  const src = "DEWA meter connections for this building, matched to it by its own entrance. <b>A connection is not a home:</b> one home let three times is three connections, so this cannot be divided by the number of homes to give an occupancy rate. It is the only thing any register says about a building being lived in rather than sold or let. Months only."
+    + (dist && dist.withheld ? " Smaller buildings in this district - " + f(dist.withheld) + " of them - are withheld entirely: below " + e(dist.floor) + " connections the figure stops being a statistic and becomes a household." : "");
+  return "<style>" + DEWA_CSS + "</style><h3>When it filled up</h3><div class=dw-grid>" + busy + tl + mix + "</div>"
+    + '<div class=dw-src><svg viewBox="0 0 24 24" aria-hidden=true><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg>Source: DEWA meter connections</div>'
+    + '<details class=dw-more><summary>What these numbers mean</summary><div class=src>' + src + "</div></details>";
+}
+const DEWA_CSS = ".dw-grid{display:grid;gap:10px;margin:6px 0}.dw-card{border:1px solid var(--line,#2c3a35);border-radius:12px;padding:11px 12px}"
+  + ".dw-card>b{display:block;font-weight:600;margin-bottom:6px}.dw-big{font-size:1.8rem;font-weight:600;line-height:1.1}.dw-big span{display:block;font-size:.72rem;font-weight:400;opacity:.75;margin-top:2px}"
+  + ".dw-tr{font-size:.78rem;margin-top:6px}.dw-tr.up{color:#7fb33a}.dw-tr.down{color:#E24B4A}.dw-tr.flat{opacity:.8}.dw-note{font-size:.72rem;opacity:.75;margin-top:6px;line-height:1.45}"
+  + ".dw-svg{display:block;width:100%;height:auto;max-height:130px}.dw-bar{fill:#6f6d66}.dw-bar.hi{fill:#C5A56A}.dw-v{font-size:9px;fill:currentColor;text-anchor:middle}.dw-y{font-size:8.5px;fill:currentColor;opacity:.7;text-anchor:middle}"
+  + ".dw-donut{display:block;width:120px;margin:0 auto}.dw-home,.dw-com{fill:none;stroke-width:14}.dw-home{stroke:#C5A56A}.dw-com{stroke:#1D9E75}.dw-dn{font-size:17px;font-weight:600;fill:currentColor;text-anchor:middle}.dw-dl{font-size:8.5px;fill:currentColor;opacity:.7;text-anchor:middle}"
+  + ".dw-key{display:flex;justify-content:center;gap:14px;font-size:.74rem;margin-top:6px}.dw-key i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.dw-kh{background:#C5A56A}.dw-kc{background:#1D9E75}"
+  + ".dw-src{display:flex;align-items:center;gap:6px;font-size:.7rem;opacity:.75;margin:4px 0}.dw-src svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}"
+  + ".dw-more summary{cursor:pointer;font-size:.72rem;opacity:.8;margin:4px 0}";
