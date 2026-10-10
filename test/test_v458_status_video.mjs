@@ -38,5 +38,5 @@ await say("status http://example.com/a.mp4");
 ok(!raws.length, "plain http links are not sent");
 await say("lab");
 ok(/status <mp4 link>/.test(texts.join("\n")), "it is on the lab menu");
-ok(DESK_VERSION === "v469", "desk version bumped", DESK_VERSION);
+ok(DESK_VERSION === "v470", "desk version bumped", DESK_VERSION);
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

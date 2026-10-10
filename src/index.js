@@ -897,13 +897,15 @@ async function noteSent(env, kind) {
 // v132 - the outbox. Accepted is not delivered and delivered is not read; each send is recorded
 // against the message id Meta returns, and the receipts below move it along. Without this, "she has
 // it" is an inference from a queue acknowledgement, which is how a whole morning went wrong twice.
-async function noteOutbound(env, kind, msgId, note) {
+// v470 (10 Oct: the desk filled 58 of the 60 rows, pushing Naj's feed receipts out within hours) - desk sends keep their own list.
+async function noteOutbound(env, kind, msgId, note, box) {
   if (!msgId) return;
+  const BOX = box || "wa_outbox";
   try {
-    const q = JSON.parse((await env.MEETINGS.get("wa_outbox")) || "[]");
+    const q = JSON.parse((await env.MEETINGS.get(BOX)) || "[]");
     q.unshift({ id: String(msgId), kind: String(kind || ""), note: String(note || "").slice(0, 90),
                 state: "accepted", sent_at: new Date().toISOString(), delivered_at: null, read_at: null, error: null });
-    await env.MEETINGS.put("wa_outbox", JSON.stringify(q.slice(0, 60)), { expirationTtl: 14 * 86400 });
+    await env.MEETINGS.put(BOX, JSON.stringify(q.slice(0, 60)), { expirationTtl: 14 * 86400 });
   } catch (e) {}
 }
 // A receipt from Meta: sent -> delivered -> read, or failed with a reason. Never moves backwards,
@@ -914,8 +916,9 @@ async function noteReceipt(env, st) {
     const id = String((st && st.id) || ""); if (!id) return;
     const state = String((st && st.status) || "").toLowerCase();
     const when = st && st.timestamp ? new Date(Number(st.timestamp) * 1000).toISOString() : new Date().toISOString();
-    const q = JSON.parse((await env.MEETINGS.get("wa_outbox")) || "[]");
-    const row = q.find(r => r.id === id);
+    let BOX = "wa_outbox", q = JSON.parse((await env.MEETINGS.get(BOX)) || "[]");
+    let row = q.find(r => r.id === id);
+    if (!row) { BOX = "wa_outbox_desk"; q = JSON.parse((await env.MEETINGS.get(BOX)) || "[]"); row = q.find(r => r.id === id); }   // v470 - the desk's own list
     if (!row) return;                       // v133 - a receipt for a message this instance did not send
     if ((_RANK[state] || 0) >= (_RANK[row.state] || 0)) row.state = state || row.state;
     if (state === "delivered" && !row.delivered_at) row.delivered_at = when;
@@ -924,7 +927,7 @@ async function noteReceipt(env, st) {
       const e = (st.errors && st.errors[0]) || {};
       row.error = String(e.title || e.message || e.code || "failed").slice(0, 140);
     }
-    await env.MEETINGS.put("wa_outbox", JSON.stringify(q.slice(0, 60)), { expirationTtl: 14 * 86400 });
+    await env.MEETINGS.put(BOX, JSON.stringify(q.slice(0, 60)), { expirationTtl: 14 * 86400 });
   } catch (e) {}
 }
 // Send and CHECK. Previously the fetch result was discarded, so a Meta rejection was silent —
@@ -949,7 +952,7 @@ async function waPost(env, payload, kind, fromPhoneId) {   // v388 - optional fr
         const id = j && j.messages && j.messages[0] && j.messages[0].id;
         const cap = (payload && ((payload.text && payload.text.body) || (payload.image && payload.image.caption) ||
                      (payload.interactive && payload.interactive.body && payload.interactive.body.text) || "")) || "";
-        await noteOutbound(env, kind, id, /^s*(?:Your journal|Saved to your journal)/i.test(cap) ? "(journal reply)" : cap);   // private journal text is never copied into the outbox log
+        await noteOutbound(env, kind, id, /^s*(?:Your journal|Saved to your journal)/i.test(cap) ? "(journal reply)" : cap, fromPhoneId && String(fromPhoneId).replace(/[^0-9]/g, "") === String(env.WA_DESK_PHONE_ID || "").replace(/[^0-9]/g, "") ? "wa_outbox_desk" : "wa_outbox");   // private journal text is never copied into the outbox log
       } catch (e) {}
     }
     return r;
@@ -3751,7 +3754,8 @@ async function appFetch(request, env, ctx) {
         if (!_viaForward && env.WA_FORWARD_TOKEN && !env.WA_APP_SECRET) return new Response("forward token required", { status: 401 });   // receiver-only instance (no Meta secret): forwarding is the ONLY door
         if (!_viaForward && !(await waVerifySig(env, raw, request.headers.get("X-Hub-Signature-256")))) return new Response("bad sig", { status: 401 });
         let body; try { body = JSON.parse(raw); } catch (e) { return new Response("ok"); }
-        if (isDeskEvent(env, body)) { await deskHandle(env, body, { waSend, post: deskPostDeps(env), lab: deskLabDeps(env) }); return new Response("ok"); }   // v388 - the desk number: consumed here BEFORE the shape probe and the router, never handed to the ordinary handlers, never routed on, no stranger digits stored
+        if (isDeskEvent(env, body)) { try { const _dv = body.entry[0].changes[0].value; for (const _s of ((_dv && _dv.statuses) || [])) await noteReceipt(env, _s); } catch (e) {}   // v470 - desk receipts were dropped, so every desk send stayed "accepted"
+          await deskHandle(env, body, { waSend, post: deskPostDeps(env), lab: deskLabDeps(env) }); return new Response("ok"); }   // v388 - the desk number: consumed here BEFORE the shape probe and the router, never handed to the ordinary handlers, never routed on, no stranger digits stored
         try {                                                          // v20 shape probe — no message content stored
           const _v = body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
           const _m = _v && _v.messages && _v.messages[0];
