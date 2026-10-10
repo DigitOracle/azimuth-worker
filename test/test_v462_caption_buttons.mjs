@@ -22,6 +22,10 @@ const tap = (id) => go({ type: "interactive", interactive: { type: "button_reply
 const ids = (r) => r && r.interactive && r.interactive.action.buttons ? r.interactive.action.buttons.map((b) => b.reply.id).join(",") : "";
 store.set("wa_desk_seen", "1");
 
+await say("menu");
+const r0 = raws[0] && raws[0].interactive.action.sections[0].rows.map((r) => r.id);
+ok(r0 && r0.length === 3 && new Set(r0).size === r0.length, "menu with no desk video yet: no duplicate rows (Meta refuses duplicates)", JSON.stringify(r0));
+
 await go({ type: "video", video: { id: "V1" } });
 await tap("dv:reel:desk_1");
 ok(ids(raws[0]) === "dc:ai:reel:desk_1,dc:type:reel:desk_1", "first time: Write it for me / I'll type it (no 'Same as last' yet)", ids(raws[0]));

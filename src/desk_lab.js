@@ -137,12 +137,14 @@ export async function deskLabRoute(env, msg, text, deps) {
   if (/^\/?menu$/i.test(t)) {
     let last = null; try { last = JSON.parse((await env.MEETINGS.get("desk_vid_last")) || "null"); } catch (e) {}
     const k = (last && last.key) || "site_clarity_75";
-    await deps.raw(env, listPayload(to, "Latest video: " + k + ". Pick what to do. To use a new video, just send it here (no caption needed).", "Open menu", [
+    // row ids must be unique (Meta refuses the whole list otherwise, #131009): the site-clarity rows only when the latest video is another one
+    const rows = [
       { id: "dv:reel:" + k, title: "Post to Instagram", description: "As a Reel, after you tap Post it" },
       { id: "dv:status:" + k, title: "Send for my Status", description: "Comes back here ready to forward" },
-      { id: "dv:broadcast:" + k, title: "Save for broadcast", description: "Nothing is sent until you approve" },
-      { id: "dv:reel:site_clarity_75", title: "Site clarity: Reel", description: "The GoCanvas video" },
-      { id: "dv:status:site_clarity_75", title: "Site clarity: Status", description: "The GoCanvas video" }], "Desk menu"), "menu");
+      { id: "dv:broadcast:" + k, title: "Save for broadcast", description: "Nothing is sent until you approve" }];
+    if (k !== "site_clarity_75") rows.push({ id: "dv:reel:site_clarity_75", title: "Site clarity: Reel", description: "The GoCanvas video" }, { id: "dv:status:site_clarity_75", title: "Site clarity: Status", description: "The GoCanvas video" });
+    const r = await deps.raw(env, listPayload(to, "Latest video: " + k + ". Pick what to do. To use a new video, just send it here (no caption needed).", "Open menu", rows, "Desk menu"), "menu");
+    if (r && r.error) await send("The menu was refused." + meta(r));
     return true;
   }
   // v460 - reel <https mp4 link> [: caption] -> the clip and caption come back with Post / Cancel; nothing goes to Instagram until Post
