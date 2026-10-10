@@ -47,10 +47,11 @@ await reset(4);
 let r = await say("feed");
 ok(/\n\d\. \[motivation\] Friday Reflection, about life/.test(r) && /\n9\./.test(r) && !/\n10\./.test(r), "Friday: the Friday Reflection leads the motivational pair, nine ideas (v473)", r);
 // 2. picking it, you speaking, terrace: the caption writer is told it is about life, the picture is on a terrace with him in it
-let sysSeen = ""; const llm0 = deps.llm; deps.llm = async (env, sys, user, mx) => { if (!/suggest Instagram post ideas/.test(sys)) sysSeen = sys; return llm0(env, sys, user, mx); };
-await say("1"); r = await say("2");
+let sysSeen = ""; const llm0 = deps.llm; deps.llm = async (env, sys, user, mx) => { if (!/suggest (Instagram|social-post) ideas/.test(sys)) sysSeen = sys; return llm0(env, sys, user, mx); };
+{ const fi = (r.match(/\n(\d)\. \[motivation\] Friday Reflection/) || [])[1]; await say(fi); } r = await say("2");   // v473: pick the Friday Reflection wherever it sits
 ok(BACKGROUND_CHOICES.length === 5 && /5\. Calm terrace at sunrise/.test(r), "a fifth background: calm terrace at sunrise", r);
-await say("5");
+await say("5"); await say("1"); await say("1");   // v475: then the time of day and the shape
+await deskPostRoute(env, { type: "interactive", interactive: { button_reply: { id: "dp:scene:make" } } }, "", deps);   // v475: Make it
 let p = await lastPlan(); const g = gens[gens.length - 1];
 ok(p.kind === "friday" && p.picture === "speaking" && p.background === "terrace", "the draft is marked as the Friday Reflection, speaking, terrace");
 ok(/FRIDAY REFLECTION/.test(sysSeen) && /about LIFE/.test(sysSeen), "the caption writer is told it is about life, not only work");

@@ -97,7 +97,7 @@ async function storeImage(env, bytes, ct) {
 const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer;
 // One generated picture (JPEG asked for directly, so no conversion is needed). Refuses at the monthly cap. refs = approved reference photos.
 export async function genImage(env, deps, prompt, refs, size) {   // v429 - size: "1024x1024" (Instagram) or "1536x1024" (widescreen, LinkedIn)
-  size = size === "1536x1024" ? "1536x1024" : "1024x1024";
+  size = size === "1536x1024" || size === "1024x1536" ? size : "1024x1024";   // v475 - portrait 1024x1536 too
   const now = nowOf(deps), unit = IMG_COST_EST[imgQuality(env)], c = await costState(env, now);
   if (!env.OPENAI_API_KEY) return { err: "no image key set" };
   if (c.est_usd + unit > capUsd(env) + 1e-9) return { err: "cap", cap: true };
@@ -220,6 +220,25 @@ const BACKGROUND = {
   studio: "Setting: a plain, warm studio backdrop in cream, nothing else. ",
   terrace: "Setting: a quiet terrace at sunrise, soft warm light, a coffee cup on a small table, the city calm and hazy in the distance. Relaxed, reflective mood. ",
 };
+// v475 (Kendall 10 Oct: "you can create your own background ... the picture of me also gets put in ... needs to be fixed within DigitAlchemy as
+// well") - the desk now follows Naj's scene ritual: a background (or his own words), the time of day, then "Here's the picture I'll make" with
+// Make it / Change it before anything is spent. Light lines follow Naj's SCENE_TIMES; the shape is square, landscape 16:9 or portrait 9:16.
+export const TIME_CHOICES = [
+  { id: "em", label: "Early morning", light: "Early morning, just after sunrise: soft clear light from a low sun, long gentle shadows, a pale fresh sky." },
+  { id: "md", label: "Midday", light: "Midday: bright sun high in a clear blue sky, crisp short shadows, clean vivid colour." },
+  { id: "la", label: "Late afternoon", light: "Late afternoon, an hour before sunset: warm golden sun low in the sky, long soft shadows, a gentle warm haze." },
+  { id: "ss", label: "Sunset", light: "Sunset: the sun just above the horizon, a warm golden glow and soft haze across the whole scene." },
+  { id: "nt", label: "Night", light: "Night: a deep blue sky, warm street lamps and lit windows, soft pools of light." },
+];
+export const SHAPES = { square: { label: "Square", size: "1024x1024" }, landscape: { label: "Landscape 16:9", size: "1536x1024" }, portrait: { label: "Portrait 9:16", size: "1024x1536" } };
+export function bgLine(p) { return p.background === "custom" && p.bg_text ? "Setting: " + String(p.bg_text).slice(0, 300) + ". " : (BACKGROUND[p.background] || ""); }
+export function sceneExtras(p) {
+  const t = TIME_CHOICES.find((x) => x.id === p.tod), out = [];
+  if (t) out.push(t.light + " The same light on him (if he is in it) as on the scene.");
+  const ch = (p.changes || []).map((x) => String(x || "").trim()).filter(Boolean);
+  if (ch.length) { out.push("Where a change below conflicts with anything above, follow the change."); for (const x of ch) out.push("Change: " + x.replace(/[.!?]?$/, ".")); }
+  return out.length ? " " + out.join(" ") : "";
+}
 const REF_CHECKLIST = "Aim for 8 to 12: front-facing neutral, three-quarter left and right, full-length, speaking or gesturing, on site, formal and casual, good light, only you in frame, no children or other people, no logos.";
 const slugs = (idea) => { const w = String(idea || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((x) => x.length > 2); const out = []; for (let n = 3; n >= 1; n--) for (let i = 0; i + n <= w.length; i++) out.push(w.slice(i, i + n).join("-")); return out; };
 async function renderFor(env, idea) {
@@ -250,10 +269,10 @@ async function buildImages(env, deps, p, onlyIdx) {
       else notes.push((hookWithHim ? "Slide 1 is a text graphic without you" : "No person in the picture") + ": I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ". Send photos with the caption ref: <tag>.");
     }
     const last = i === n - 1;
-    const prompt = infographic ? slidePrompt(s, i, n, last, !!refs) : STYLE + (refs ? "Place the man shown in the reference photos into this scene, recognisably himself: same face, same build, same apparent age, no alteration of body or age. Only him in the scene, no other identifiable real people, no medical or financial endorsement, no logos or text. " + (refs && POSE[p.picture] ? POSE[p.picture] : "") : NO_PERSON) + (BACKGROUND[p.background] || "") + "Subject: " + String(p.idea).replace(/\d+/g, "").slice(0, 300) + (s.regen ? " Variation " + s.regen + ": a different composition" + (p.background ? ", same setting." : " and background.") : "");
+    const prompt = infographic ? slidePrompt(s, i, n, last, !!refs) : STYLE + (refs ? "Place the man shown in the reference photos into this scene, recognisably himself: same face, same build, same apparent age, no alteration of body or age. Only him in the scene, no other identifiable real people, no medical or financial endorsement, no logos or text. " + (refs && POSE[p.picture] ? POSE[p.picture] : "") : NO_PERSON) + bgLine(p) + "Subject: " + String(p.idea).replace(/\d+/g, "").slice(0, 300) + (s.regen ? " Variation " + s.regen + ": a different composition" + (p.background ? ", same setting." : " and background.") : "") + (infographic ? "" : sceneExtras(p));   // v475
     let tries = infographic ? 3 : 1, g = null, ok = !infographic, checked = false;
     for (let t = 0; t < tries; t++) {
-      g = await genImage(env, deps, prompt, refs);
+      g = await genImage(env, deps, prompt, refs, infographic ? undefined : (SHAPES[p.shape] || SHAPES.square).size);   // v475 - the chosen shape
       if (g.err) break;
       if (!infographic) break;
       if (!deps.vision) { checked = false; ok = true; break; }
@@ -552,24 +571,70 @@ async function sendFeed(env, deps) {
   await tapList(env, deps, "Tap an idea to make it into a post.", "Pick an idea", L.map((o, i) => ({ title: (i + 1) + ". " + (o.kind === "news" ? "News" : o.kind === "motivation" ? "Motivation" : o.kind === "friday" ? "Friday" : o.kind === "smart" ? "Smart city/ISO" : o.lane === "alchemy" ? "DigitAlchemy" : "Digital Abbot"), description: o.text })));
 }
 // a bare number while a feed or a choice is open; returns true when it was taken here
+// v475 - picture -> background (5 settings or "Type my own") -> time of day -> shape -> "Here's the picture I'll make" with Make it /
+// Change it / Cancel. Nothing is generated until Make it, as on Naj's scene pictures. A carousel (slides) skips straight to drafting.
+const BG_LIST = BACKGROUND_CHOICES.concat([{ id: "custom", label: "Type my own" }]);
+const SHAPE_LIST = [{ id: "square", label: "Square (Instagram)" }, { id: "landscape", label: "Landscape 16:9 (LinkedIn)" }, { id: "portrait", label: "Portrait 9:16 (Reels, Status)" }];
+export function scenePreview(pick) {
+  const pic = PICTURE_CHOICES.find((x) => x.id === pick.picture), bg = pick.background === "custom" ? pick.bg_text : (BACKGROUND_CHOICES.find((x) => x.id === pick.background) || {}).label;
+  const tm = TIME_CHOICES.find((x) => x.id === pick.tod), sh = SHAPE_LIST.find((x) => x.id === pick.shape);
+  const who = pick.picture === "scene" ? "A scene, no person in it." : pick.picture === "speaking" ? "You, speaking or teaching, your face from your reference photos." : "You on site in a hard hat and hi-vis, your face from your reference photos.";
+  let s = "Here's the picture I'll make:\n\n" + who + " Behind: " + (bg || "a Dubai setting") + ". " + (tm ? tm.label : "Natural daylight") + ". " + (sh ? sh.label : "Square") + ".\nIdea: " + pick.idea;
+  for (const c of (pick.changes || [])) s += "\nYour change: " + c;
+  return s.slice(0, 1000);
+}
+async function showPreview(env, deps, pick) {
+  await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "preview" }), FEED_TTL);
+  await deps.buttons(env, scenePreview(pick), [{ id: "dp:scene:make", title: "Make it" }, { id: "dp:scene:change", title: "Change it" }, { id: "dp:scene:cancel", title: "Cancel" }]);
+}
 async function feedReply(env, deps, n) {
   const pick = await kvJ(env, "desk_feed_pick", null);
   if (pick && pick.step === "picture") {
     const c = PICTURE_CHOICES[n - 1]; if (!c) { await deps.send(env, menu("Pick a picture:", PICTURE_CHOICES)); return true; }
     if (c.id === "slides") { await env.MEETINGS.delete("desk_feed_pick"); await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "carousel", picture: "slides", from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined }); return true; }
     await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "background", picture: c.id }), FEED_TTL);
-    await deps.send(env, menu(c.label + ". Now the background:", BACKGROUND_CHOICES)); await tapList(env, deps, "Pick the background.", "Pick background", BACKGROUND_CHOICES.map((b) => ({ title: b.label }))); return true;
+    await deps.send(env, menu(c.label + ". Now the background:", BG_LIST)); await tapList(env, deps, "Pick the background, or Type my own.", "Pick background", BG_LIST.map((b) => ({ title: b.label }))); return true;
   }
   if (pick && pick.step === "background") {
-    const b = BACKGROUND_CHOICES[n - 1]; if (!b) { await deps.send(env, menu("Pick a background:", BACKGROUND_CHOICES)); return true; }
-    await env.MEETINGS.delete("desk_feed_pick");
-    await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "image", picture: pick.picture, background: b.id, from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined }); return true;
+    const b = BG_LIST[n - 1]; if (!b) { await deps.send(env, menu("Pick a background:", BG_LIST)); return true; }
+    if (b.id === "custom") { await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "bg_text", background: "custom" }), FEED_TTL); await deps.send(env, "Describe the background in your next message, for example: the Dubai Creek at dusk with abras on the water."); return true; }
+    await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "time", background: b.id }), FEED_TTL);
+    await deps.send(env, menu("What time of day?", TIME_CHOICES)); await tapList(env, deps, "Pick the time of day.", "Pick time", TIME_CHOICES.map((x) => ({ title: x.label }))); return true;
+  }
+  if (pick && pick.step === "time") {
+    const t = TIME_CHOICES[n - 1]; if (!t) { await deps.send(env, menu("What time of day?", TIME_CHOICES)); return true; }
+    await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "shape", tod: t.id }), FEED_TTL);
+    await deps.send(env, menu("Which shape?", SHAPE_LIST)); await tapList(env, deps, "Pick the shape.", "Pick shape", SHAPE_LIST.map((x) => ({ title: x.label }))); return true;
+  }
+  if (pick && pick.step === "shape") {
+    const sh = SHAPE_LIST[n - 1]; if (!sh) { await deps.send(env, menu("Which shape?", SHAPE_LIST)); return true; }
+    await showPreview(env, deps, Object.assign(pick, { shape: sh.id })); return true;
   }
   if (!(await env.MEETINGS.get("desk_feed_open"))) return false;
   const L = await kvJ(env, "desk_ideas", []), it = L[n - 1];
   if (!it) { await deps.send(env, "No idea " + n + " in today's feed. Reply 1 to " + L.length + ", or send feed for a new list."); return true; }
   await kvPut(env, "desk_feed_pick", { step: "picture", n, idea: it.text, lane: it.lane, allow: it.allow || null, kind: it.kind || null }, FEED_TTL);
   await deps.send(env, menu("Idea " + n + ": " + it.text + "\nPick a picture:", PICTURE_CHOICES)); await tapList(env, deps, "Pick the picture.", "Pick picture", PICTURE_CHOICES.map((b) => ({ title: b.label }))); return true;
+}
+// v475 - the preview's buttons, and the one typed line for "Type my own" background or "Change it"
+async function sceneButton(env, deps, act) {
+  const pick = await kvJ(env, "desk_feed_pick", null);
+  if (!pick || pick.step !== "preview") { await deps.send(env, "That picture choice has expired. Tap Give me ideas to start again."); return true; }
+  if (act === "cancel") { await env.MEETINGS.delete("desk_feed_pick"); await deps.send(env, "Cancelled. Nothing was made."); return true; }
+  if (act === "change") { await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "change_text" }), FEED_TTL); await deps.send(env, "Tell me the change in your next message, for example: put the Burj Khalifa behind me, or make me smile."); return true; }
+  await env.MEETINGS.delete("desk_feed_pick");
+  await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "image", picture: pick.picture, background: pick.background, bg_text: pick.bg_text || undefined, tod: pick.tod, shape: pick.shape, changes: pick.changes || [], from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined });
+  return true;
+}
+async function sceneText(env, deps, t) {
+  const pick = await kvJ(env, "desk_feed_pick", null);
+  if (!pick || (pick.step !== "bg_text" && pick.step !== "change_text")) return false;
+  if (pick.step === "bg_text") {
+    pick.bg_text = String(t).slice(0, 300); await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "time" }), FEED_TTL);
+    await deps.send(env, menu("Background: " + pick.bg_text + ". What time of day?", TIME_CHOICES)); await tapList(env, deps, "Pick the time of day.", "Pick time", TIME_CHOICES.map((x) => ({ title: x.label }))); return true;
+  }
+  pick.changes = (pick.changes || []).concat([String(t).slice(0, 300)]).slice(-5);
+  await showPreview(env, deps, pick); return true;
 }
 async function queueText(env, deps) {
   const now = nowOf(deps), ps = (await allPlans(env)).filter((p) => ["draft", "editing", "approving", "scheduled", "held", "publishing"].includes(p.status));
@@ -655,6 +720,7 @@ async function handleButton(env, deps, id) {
   if (id === "dp:ref:keep") { await deps.send(env, "Kept."); return true; }
   if (id === "dp:ref:purge") { const ix = await kvJ(env, "desk_ref_index", []); for (const n of ix) { await env.MEETINGS.delete("desk_ref_" + n); await env.MEETINGS.delete("desk_refimg_" + n); } await env.MEETINGS.delete("desk_ref_index"); await env.MEETINGS.delete("desk_ref_cursor"); await deps.send(env, "All " + ix.length + " reference photos deleted."); return true; }
   // v466 - "post" alone: what kind of post, by tapping
+  { const sb = String(id).match(/^dp:scene:(make|change|cancel)$/); if (sb) return sceneButton(env, deps, sb[1]); }   // v475
   if (id === "dp:start:ideas") { await sendFeed(env, deps); return true; }   // v472 - the fresh 10, not the weekly 5
   { const fn = String(id).match(/^dp:fn:(\d{1,2})$/); if (fn) { await env.MEETINGS.put("desk_feed_open", String(nowOf(deps)), { expirationTtl: FEED_TTL }); const done = await feedReply(env, deps, Number(fn[1])); if (!done) await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } }
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
@@ -739,7 +805,8 @@ async function musicStep(env, deps, p, act, mood) {
   const imgs = (p.slides || []).filter((s) => s.img_key).map((s) => origin + "/ig_media/" + s.img_key);
   if (!imgs.length) { await deps.send(env, "Draft " + p.id + " has no pictures to make a video from."); return true; }
   await deps.send(env, "Making the video with " + track.title + " (" + md + "). About half a minute...");
-  const r = await deps.render(env, { images: imgs, audio: origin + "/music/" + track.key, seconds: imgs.length === 1 ? 12 : 4, width: 1080, height: 1920 });
+  const dim = p.shape === "landscape" ? [1920, 1080] : p.shape === "square" ? [1080, 1080] : [1080, 1920];   // v475 - the video follows the chosen shape
+  const r = await deps.render(env, { images: imgs, audio: origin + "/music/" + track.key, seconds: imgs.length === 1 ? 12 : 4, width: dim[0], height: dim[1] });
   if (r.err) { await deps.send(env, "Could not make the video: " + r.err + ". Tap Post as is, or try again."); return true; }
   const key = "post_" + p.id;
   await env.MEETINGS.put("vid_" + key, r.bytes, { expirationTtl: 60 * 86400 });
@@ -869,6 +936,7 @@ export async function deskPostRoute(env, msg, text, deps) {
     await deps.send(env, r.err ? "Not added: " + r.err + "." : "Added to " + mood + " (" + r.count + " track" + (r.count > 1 ? "s" : "") + " in that mood)."); return true;
   }
   const t = String(text || "").trim(); if (!t) return false;
+  if (!/^\//.test(t) && await sceneText(env, deps, t)) return true;   // v475 - "Type my own" background / "Change it" line
   if (/^\/?music$/i.test(t)) { await deps.send(env, libraryText(await musicIndex(env))); return true; }   // v467
   let m;
   if (/^\/pause\b/i.test(t)) { await env.MEETINGS.put("desk_post_pause", "1"); await env.MEETINGS.delete("desk_post_pause_told"); await deps.send(env, "Paused. Nothing will be published until you send /resume. Drafts and approvals still work."); return true; }
