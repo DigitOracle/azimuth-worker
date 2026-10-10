@@ -5,7 +5,7 @@ import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - th
 import { deskReelTick } from "./desk_lab.js";
 import { liRoute, liRecord, liConnected, liStartLink, liStep, liReminder } from "./li_desk.js";   // v464 - LinkedIn from the desk   // v460 - an approved Instagram reel finishes on the minute tick
 import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
-import { templateRoutes, feedTemplateFlag } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
+import { templateRoutes, feedTemplateFlag, templateWatchTick } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { buildingData, buildingPageHtml } from "./building_page.js";   // v187 - the building page: the Symphony viewer for every register-bound building
@@ -4808,6 +4808,7 @@ export default {
         try { await liveNewsTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v270 - live city news, a few feeds every 5 minutes, 24/7 (LIVE_NEWS="on")
         try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
         try { await deskReelTick(env, deskLabDeps(env)); } catch (e) {}   // v460 - an approved Instagram reel still processing
+        try { const _tw = new Date(event.scheduledTime || Date.now()); if (_tw.getUTCMinutes() % 30 === 7) { const _ld = deskLabDeps(env); await templateWatchTick(env, WA_GRAPH, (e2, t) => _ld.send(e2, t)); } } catch (e) {}   // v465 - Meta template status watch, every 30 minutes, told to the desk
         try { await deskLabDeps(env).liStep(env); } catch (e) {}   // v464 - an approved LinkedIn video still processing
         try { const _ld = deskLabDeps(env); await liReminder(env, { send: (e2, t) => _ld.send(e2, t) }, event.scheduledTime || Date.now()); } catch (e) {}   // v464 - the 60-day LinkedIn sign-in reminder
         try { await deskPostTick(env, deskPostDeps(env)); } catch (e) {}   // v413 - the desk posting loop: expire old drafts, publish the due approved post (never when paused)

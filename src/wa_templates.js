@@ -131,6 +131,30 @@ export async function templateRoutes(request, env, url, deps) {
   return J({ ok: true, feed_template: name });
 }
 
+// v465 (Kendall 10 Oct: "set that up") - every 30 minutes, Meta's status and category of the templates under watch; any change is
+// told to the desk once. A template that reaches APPROVED or REJECTED leaves the watch. KV tpl_watch = {name: "STATUS|CATEGORY"}.
+export const TPL_WATCH_DEFAULT = ["digitalchemy_site_clarity", "najma_feed_update", "najma_log_reminder", "momo_day_check"];
+export async function templateWatchTick(env, graph, send, waba) {
+  let w = null; try { w = JSON.parse((await env.MEETINGS.get("tpl_watch")) || "null"); } catch (e) {}
+  if (!w) w = Object.fromEntries(TPL_WATCH_DEFAULT.map((n) => [n, ""]));
+  const names = Object.keys(w); if (!names.length) return;
+  const id = waba || env.WABA_ID || "1588773749592854";
+  if (!env.WHATSAPP_TOKEN) return;
+  let j = null;
+  try { j = await (await fetch(`${graph}/${id}/message_templates?fields=name,status,category,rejected_reason&limit=200`, { headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN } })).json(); } catch (e) { return; }
+  if (!j || !Array.isArray(j.data)) return;
+  const lines = [];
+  for (const n of names) {
+    const s = parseStatus(j, n); if (!s.found) continue;
+    const now = s.status + "|" + (s.category || "");
+    if (w[n] && w[n] !== now) lines.push(n + ": " + s.status + (s.category ? " (" + s.category + ")" : "") + (s.rejected_reason ? ", reason: " + s.rejected_reason : ""));
+    w[n] = now;
+    if (s.status === "APPROVED" || s.status === "REJECTED") delete w[n];
+  }
+  await env.MEETINGS.put("tpl_watch", JSON.stringify(w));
+  if (lines.length) await send(env, "Template update from Meta:\n" + lines.join("\n"));
+}
+
 // Which template the feed's out-of-window nudge uses: the KV flag if it names a known template, else azimuth_daily.
 export async function feedTemplateFlag(env) {
   try { const v = await env.MEETINGS.get(FEED_TEMPLATE_KV); if (v === "najma_feed_ready") return v; } catch (e) {}
