@@ -83,4 +83,13 @@ r = await deskMorningTick(env, deps); ok(r.skipped === "window closed" && !texts
 await say("feed times 6,15"); ok(store.get("desk_feed_hours") === "6,15" && /06:00 and 15:00/.test(texts.join("")), "feed times 6,15 changes the hours");
 await say("feed times off"); ok(store.get("desk_feed_hours") === "off", "feed times off");
 await say("feed times 5,16"); ok(store.get("desk_feed_hours") === "5,16", "back to 05:00 and 16:00");
+// v474 - "feed now": ideas at once, then the three drafts on the next ticks, never doubled
+store.delete("desk_morning_state"); clock = Date.UTC(2026, 9, 14, 15, 10); store.set("wa_desk_last_in", new Date(clock - 60000).toISOString());   // 19:10 Dubai, not a feed hour
+await say("feed now");
+ok(/Fresh DigitAlchemy feed/.test(texts.join("")) && lists[0] && lists[0].length === 9, "feed now: the ideas straight away");
+for (let i = 0; i < 3; i++) { clock += 60000; await deskMorningTick(env, deps); }
+const fn = [...store.keys()].filter((k) => k.startsWith("postplan_")).map((k) => JSON.parse(store.get(k))).filter((p) => p.morning === "2026-10-14@19");
+ok(fn.length === 3, "then the three drafts, outside the scheduled hours", fn.length);
+await say("feed now"); ok(lists[0] && lists[0].length === 9, "feed now again after it finished gives a fresh one");
+await say("feed now"); ok(/already on its way/.test(texts.join("")), "but not while one is still arriving");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

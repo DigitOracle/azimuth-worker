@@ -876,6 +876,16 @@ export async function deskPostRoute(env, msg, text, deps) {
   if (/^\/queue\b/i.test(t)) { await deps.send(env, await queueText(env, deps)); return true; }
   if (/^\/cost\b/i.test(t)) { await deps.send(env, await costText(env, now)); return true; }
   if (/^\/insights\b/i.test(t)) { await deps.send(env, await insightsText(env)); return true; }
+  // v474 (Kendall 10 Oct: "if I want to do one now") - "feed now": the full 05:00/16:00 package on demand - the nine ideas now, then the
+  // three drafts on the next minute ticks (the same path the scheduled run takes). A run already under way is not doubled.
+  if (/^\/?feed\s+now$/i.test(t)) {
+    const now = nowOf(deps), day = dayKey(now), st = await kvJ(env, "desk_morning_state", null);
+    if (st && st.day === day && st.step >= 1 && st.step < 4) { await deps.send(env, "A feed is already on its way; its drafts are still arriving."); return true; }
+    await kvPut(env, "desk_morning_state", { day, hr: dub(now).getUTCHours(), step: 1, forced: true }, 3 * 86400);
+    await deps.send(env, "Fresh DigitAlchemy feed: three drafts are on their way (about a minute each), and the ideas are below to tap.");
+    await sendFeed(env, deps);
+    return true;
+  }
   { const mc = t.match(/^\/?(?:morning|feed\s+times?)(?:\s+([\w,]+))?$/i); if (mc) return morningCommand(env, deps, mc[1]); }   // v472, v473
   if (/^\/?events?\b/i.test(t) && await eventsCommand(env, (s) => deps.send(env, s), t, nowOf(deps))) return true;   // v473
   // v472 (Kendall 10 Oct: "the ideas seem the same") - /ideas was the OLD fixed weekly list of 5; now it is the fresh feed of 10, picked by tapping
