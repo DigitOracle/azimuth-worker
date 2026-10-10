@@ -181,9 +181,15 @@ async function refList(env) { const out = []; for (const n of await kvJ(env, "de
 // 2-3 references for a scene, the best-matching tag first, then different tags so the face is seen from more than one angle
 export async function pickRefs(env, idea, hint) {
   const all = await refList(env); const want = hint === "site" || hint === "speaking" ? hint : /\b(site|construction|building|tower|crane)\b/i.test(idea) ? "site" : /\b(speak|talk|keynote|conference|event|podcast|stage)\b/i.test(idea) ? "speaking" : /\b(formal|award|suit|ceremony)\b/i.test(idea) ? "formal" : "headshot";
+  // v468 (Kendall 10 Oct: "you keep using the same exact picture ... the picture isn't rotating") - all 27 references were tagged
+  // "general", so the old pick (the FIRST photo of each tag, then the first of the rest) returned the same three every time. Now a
+  // cursor walks the whole set: a matching tag still goes first, but each call starts where the last one stopped.
+  let cur = 0; try { cur = Number(await env.MEETINGS.get("desk_ref_cursor")) || 0; } catch (e) {}
+  const rot = all.length ? all.slice(cur % all.length).concat(all.slice(0, cur % all.length)) : [];
   const order = [want, "three-quarter", "headshot", "casual", "full-length", "formal", "site", "speaking"]; const out = [];
-  for (const t of order) { const m = all.find((x) => x.tag === t && !out.includes(x)); if (m) out.push(m); if (out.length >= 3) break; }
-  for (const m of all) { if (out.length >= 3) break; if (!out.includes(m)) out.push(m); }
+  for (const t of order) { const m = rot.find((x) => x.tag === t && !out.includes(x)); if (m) out.push(m); if (out.length >= 3) break; }
+  for (const m of rot) { if (out.length >= 3) break; if (!out.includes(m)) out.push(m); }
+  try { if (all.length) await env.MEETINGS.put("desk_ref_cursor", String((cur + 3) % all.length)); } catch (e) {}
   const bufs = []; for (const m of out) { const b = await env.MEETINGS.get(m.key, "arrayBuffer"); if (b && b.byteLength) bufs.push(b); }
   return { bufs, count: all.length };
 }
@@ -380,7 +386,8 @@ async function sendPreview(env, deps, p) {
     try { await deps.image(env, origin + "/ig_media/" + s.img_key, capT); if (capT === card) cardSent = true; } catch (e) {}
   }
   if (!cardSent) await deps.send(env, card);
-  const btns = missing ? [{ id: "dp:" + p.id + ":edit", title: "Edit" }, { id: "dp:" + p.id + ":skip", title: "Skip" }] : [{ id: "dp:" + p.id + ":ok", title: "Approve" }, { id: "dp:" + p.id + ":edit", title: "Edit" }, { id: "dp:" + p.id + ":skip", title: "Skip" }];
+  // v468 (Kendall 10 Oct: "there should be buttons") - New picture is one tap; the other changes sit under More options
+  const btns = missing ? [{ id: "dp:" + p.id + ":newpic", title: "Make pictures" }, { id: "dp:" + p.id + ":more", title: "More options" }] : [{ id: "dp:" + p.id + ":ok", title: "Approve" }, { id: "dp:" + p.id + ":newpic", title: "New picture" }, { id: "dp:" + p.id + ":more", title: "More options" }];
   await deps.buttons(env, "Draft " + p.id + (missing ? ": no pictures yet, edit or skip?" : ": approve, edit or skip?"), btns);
 }
 
@@ -598,12 +605,36 @@ async function schedule(env, deps, p, mode) {
 async function handleButton(env, deps, id) {
   const im = String(id).match(/^dp:inbox:(ref|use|ignore)$/); if (im) return inboxButton(env, deps, im[1], nowOf(deps));
   if (id === "dp:ref:keep") { await deps.send(env, "Kept."); return true; }
-  if (id === "dp:ref:purge") { const ix = await kvJ(env, "desk_ref_index", []); for (const n of ix) { await env.MEETINGS.delete("desk_ref_" + n); await env.MEETINGS.delete("desk_refimg_" + n); } await env.MEETINGS.delete("desk_ref_index"); await deps.send(env, "All " + ix.length + " reference photos deleted."); return true; }
+  if (id === "dp:ref:purge") { const ix = await kvJ(env, "desk_ref_index", []); for (const n of ix) { await env.MEETINGS.delete("desk_ref_" + n); await env.MEETINGS.delete("desk_refimg_" + n); } await env.MEETINGS.delete("desk_ref_index"); await env.MEETINGS.delete("desk_ref_cursor"); await deps.send(env, "All " + ix.length + " reference photos deleted."); return true; }
   // v466 - "post" alone: what kind of post, by tapping
   if (id === "dp:start:ideas") return deskPostRoute(env, { type: "text" }, "/ideas", deps);
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
   const mm = String(id).match(/^dp:([a-z0-9]+):(music|nomusic|muse|mtry|mno|m_(calm|corporate|upbeat|cinematic|inspiring))$/);   // v467 - music
   if (mm) { const pm = await getPlan(env, mm[1]); if (!pm) { await deps.send(env, "That draft has expired."); return true; } return musicStep(env, deps, pm, mm[2], mm[3]); }
+  // v468 - the change buttons: New picture, and More options (a list: rewrite, shorter, punchier, more formal, other background, Arabic, type a change, skip)
+  const xm = String(id).match(/^dp:([a-z0-9]+):(newpic|more|e_short|e_punch|e_formal|e_bg|e_rewrite|e_arabic)$/);
+  if (xm) {
+    const px = await getPlan(env, xm[1]); if (!px) { await deps.send(env, "That draft has expired."); return true; }
+    if (!["draft", "editing"].includes(px.status)) { await deps.send(env, "Draft " + px.id + " is " + px.status + "."); return true; }
+    const a = xm[2];
+    if (a === "more") {
+      const rows = [{ id: "dp:" + px.id + ":e_rewrite", title: "Rewrite the caption", description: "A fresh version, same idea" },
+        { id: "dp:" + px.id + ":e_short", title: "Shorter" }, { id: "dp:" + px.id + ":e_punch", title: "Punchier" }, { id: "dp:" + px.id + ":e_formal", title: "More formal" },
+        { id: "dp:" + px.id + ":e_bg", title: "Another background", description: "Same idea, a different setting" }, { id: "dp:" + px.id + ":e_arabic", title: "Arabic version" },
+        { id: "dp:" + px.id + ":edit", title: "Type my own change", description: "Your next message is the change" }, { id: "dp:" + px.id + ":skip", title: "Skip this post", description: "Nothing is posted" }];
+      if (deps.list) await deps.list(env, "What should change on " + px.id + "?", "Choose a change", rows);
+      else await deps.buttons(env, "What should change?", [{ id: "dp:" + px.id + ":e_rewrite", title: "Rewrite caption" }, { id: "dp:" + px.id + ":edit", title: "Type a change" }, { id: "dp:" + px.id + ":skip", title: "Skip" }]);
+      return true;
+    }
+    px.status = "editing"; await putPlan(env, px);
+    if (a === "newpic") {
+      if (!(px.slides || []).some((s) => s.img_key)) { await deps.send(env, "Making the pictures for " + px.id + "..."); await regenPlan(env, deps, px); return true; }
+      await deps.send(env, "Making a new picture for " + px.id + "..."); await applyEdit(env, deps, px, "swap image 1"); return true;
+    }
+    if (a === "e_bg") { const ids = BACKGROUND_CHOICES.map((b) => b.id); px.background = ids[(ids.indexOf(px.background) + 1) % ids.length]; await putPlan(env, px); await deps.send(env, "New setting: " + BACKGROUND_CHOICES.find((b) => b.id === px.background).label + ". Making the picture..."); await applyEdit(env, deps, px, "another background"); return true; }
+    const say = { e_short: "shorter", e_punch: "punchier", e_formal: "more formal", e_bg: "another background", e_rewrite: "rewrite the caption completely in a fresh way, same idea and facts", e_arabic: "arabic version" }[a];
+    await deps.send(env, "Working on it..."); await applyEdit(env, deps, px, say); return true;
+  }
   const m = String(id).match(/^dp:([a-z0-9]+):(ok|edit|skip|now|slot|laneA|laneL|wig|wli|wboth)$/);
   if (!m) return false;
   const p = await getPlan(env, m[1]);

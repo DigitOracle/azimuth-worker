@@ -135,11 +135,11 @@ reset();
   ok(kinds.slice(0, 4).join() === "image,image,image,image" && kinds[kinds.length - 1] === "buttons", "preview: 4 slide images first, buttons last", kinds.join());
   const imgs = r.filter((x) => x.t === "image");
   ok(imgs.every((x, i) => x.link.endsWith(p.slides[i].img_key)) && /Caption, exactly as it will go up/.test(imgs[0].text + texts(r)), "slides in order, the card goes with slide 1");
-  ok(r.find((x) => x.t === "buttons").buttons.map((b) => b.title).join() === "Approve,Edit,Skip", "pictures present: Approve offered");
+  ok(r.find((x) => x.t === "buttons").buttons.map((b) => b.title).join() === "Approve,New picture,More options", "pictures present: Approve offered");
   reset(); genFail = true; const r2 = await say("/post alchemy: handover decoded (carousel)"); const p2 = await planOf();
   const first = r2.find((x) => x.t !== "text" || !/^Drafting/.test(x.text));
   ok(/^No pictures yet: /.test(first.text), "image failure: first line 'No pictures yet: <reason>'", first.text.slice(0, 120));
-  ok(r2.find((x) => x.t === "buttons").buttons.map((b) => b.title).join() === "Edit,Skip", "no Approve without pictures");
+  ok(r2.find((x) => x.t === "buttons").buttons.map((b) => b.title).join() === "Make pictures,More options", "no Approve without pictures");
   const a = await tap("dp:" + p2.id + ":ok"); ok((await getPlan(env, p2.id)).approved !== true, "a forced Approve tap is refused", texts(a));
   reset(); env.IMG_MONTHLY_CAP_USD = "0.01"; const r3 = await say("/post alchemy: handover decoded (carousel)");
   ok(/^No pictures yet: the monthly picture budget/.test(r3.find((x) => x.t !== "text" || !/^Drafting/.test(x.text)).text) && !r3.find((x) => x.t === "buttons").buttons.some((b) => b.title === "Approve"), "budget cap: says so first, no Approve");
@@ -152,7 +152,7 @@ reset();
   calls.length = 0; const r = await say("/post regen " + p.id); p = await getPlan(env, p.id);
   ok(gen().length === 4 && p.slides.every((s, i) => s.img_key && s.img_key !== oldKeys[i]), "regen: every slide picture made again");
   ok(p.approved === false && p.status === "draft", "regen: approval cleared, back to draft");
-  ok(r.filter((x) => x.t === "image").length === 4 && r[r.length - 1].buttons.map((b) => b.title).join() === "Approve,Edit,Skip", "regen: a NEW preview with the pictures and the buttons");
+  ok(r.filter((x) => x.t === "image").length === 4 && r[r.length - 1].buttons.map((b) => b.title).join() === "Approve,New picture,More options", "regen: a NEW preview with the pictures and the buttons");
 }
 // ============ 6. publish guard + the plovqyt-shaped plan
 reset();

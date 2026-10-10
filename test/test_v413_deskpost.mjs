@@ -110,7 +110,7 @@ reset();
   ok(/developer says: developer price list/.test(p.caption + card), "developer-claimed fact is labelled developer says");
   const tags = (p.caption.match(/#\w+/g) || []); ok(tags.length >= 3 && tags.length <= 5, "3 to 5 hashtags");
   ok(/Illustration\./.test(p.caption), "AI picture: the caption carries the word Illustration");
-  const bt = r.find((x) => x.t === "buttons"); ok(bt && bt.buttons.length === 3 && bt.buttons.map((b) => b.title).join() === "Approve,Edit,Skip", "preview ends with three buttons Approve | Edit | Skip");
+  const bt = r.find((x) => x.t === "buttons"); ok(bt && bt.buttons.length === 3 && bt.buttons.map((b) => b.title).join() === "Approve,New picture,More options", "preview ends with three buttons Approve | New picture | More options (v468)");
   const im = r.find((x) => x.t === "image"); ok(im && /\/ig_media\//.test(im.link), "preview sends the picture through the ig_media route");
   ok(calls.filter((c) => c.host === "api.openai.com").length === 1 && /No people/.test(calls.find((c) => c.host === "api.openai.com").prompt) && /0A4F4A/i.test(calls.find((c) => c.host === "api.openai.com").prompt), "AI picture: house palette prompt, no person by default (no references held)");
   ok(/No person in the picture: I hold 0 approved reference/.test(card), "Abbot lane without 3 references: falls back to no person and says so");
