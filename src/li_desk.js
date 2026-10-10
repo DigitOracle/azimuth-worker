@@ -42,9 +42,13 @@ export async function liRoute(env, url, deps) {
   if (!s || !(await env.MEETINGS.get("li_state_" + s))) return page("Link expired", "Ask the desk for a new one: send linkedin.", false);
   await env.MEETINGS.delete("li_state_" + s);
   if (!env.LI_CLIENT_SECRET) return page("Not connected", "The LinkedIn secret is not set on the worker.", false);
+  // v471 (10 Oct: "Client authentication failed" twice) - a secret pasted into PowerShell's hidden prompt can carry a line break or spaces:
+  // trim both ids. On failure the page shows only the secret's LENGTH and whether trimming changed it, never a character of it.
+  const rawSecret = String(env.LI_CLIENT_SECRET), secret = rawSecret.trim(), cid = String(env.LI_CLIENT_ID || "").trim();
   const tr = await (await f("https://www.linkedin.com/oauth/v2/accessToken", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectOf(url.origin), client_id: env.LI_CLIENT_ID, client_secret: env.LI_CLIENT_SECRET }).toString() })).json().catch(() => ({}));
-  if (!tr || !tr.access_token) return page("Not connected", "LinkedIn refused the sign-in: " + String((tr && (tr.error_description || tr.error)) || "no token").slice(0, 200), false);
+    body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectOf(url.origin), client_id: cid, client_secret: secret }).toString() })).json().catch(() => ({}));
+  if (!tr || !tr.access_token) return page("Not connected", "LinkedIn refused the sign-in: " + String((tr && (tr.error_description || tr.error)) || "no token").slice(0, 200) +
+    "<br><br><small>Check: app Client ID " + cid + "; stored secret is " + secret.length + " characters" + (secret.length !== rawSecret.length ? " (stray spaces or a line break were removed)" : "") + ". A LinkedIn client secret is usually 16 characters and starts with WPL_AP1. on newer apps.</small>", false);
   const me = await (await f(LI_API + "/v2/userinfo", { headers: { Authorization: "Bearer " + tr.access_token } })).json().catch(() => ({}));
   if (!me || !me.sub) return page("Not connected", "Signed in, but LinkedIn did not say who you are.", false);
   const rec = { token: tr.access_token, sub: me.sub, name: me.name || "", expires_at: Date.now() + (Number(tr.expires_in) || 5184000) * 1000, scope: tr.scope || SCOPES, at: Date.now() };
