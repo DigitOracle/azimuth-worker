@@ -891,7 +891,7 @@ function dossierPage2(C, rec, q, sub, more) {   // v307 - more: a purchase puts 
     ". Simple models, heights to scale, seen from the south.</div>" + map +
     // v500 - what's close, as the crow flies: under the map when the page has the room (no criteria box and no sales table below it)
     // v501 (Kendall 11 Oct: "move the map to page 3") - on page 3 when there is one; here only when there is no page 3 and room
-    (!rec._nearOn3 && !cb && !more && !(rec.avail && rec.avail.count) && rec.pos ? pkNearMap(rec.pos, (C.amen && C.amen.items) || [], { size: 200 }) : "") +
+    (!rec._nearOn3 && !cb && !more && !(rec.avail && rec.avail.count) && rec.pos ? pkNearMap(rec.pos, (C.amen && C.amen.items) || [], { size: 220, layer: (C.district[rec.d] || {}).layer }) : "") +
     cb + availBlock(rec, q) + (more ? more.html : "");
   return page(C, sub, body, smallPrint([
     svg ? "Map: building outlines and streets &copy; OpenStreetMap contributors; building position from the app's district digital footprint" + (mark.approx ? " (this one approximate, from a public map listing)" : "") +
@@ -956,7 +956,7 @@ function dossierPage3(C, rec, q, sub) {
     '<div style="font-size:9.5px;color:' + MUTED + ';">' + esc(String(p.caption || "").split(" (")[0].split(" - ").pop()) + "</div>" +
     '<div style="font-size:8px;color:#8C887C;">' + "The developer&rsquo;s page" + "</div></div>").join("") + "</div>"
     : '<div style="font-size:11px;color:' + MUTED + ";border:1px dashed #DED9D0;padding:8px 10px;\">The developer's page publishes no pictures of the pool, gym or lobby and no floor plans. Ask the leasing team or listing broker for photographs of the actual flat.</div>";
-  const near = rec.pos ? pkNearMap(rec.pos, (C.amen && C.amen.items) || [], { size: 190 }) : "";   // v501 - what's close, page 3
+  const near = rec.pos ? pkNearMap(rec.pos, (C.amen && C.amen.items) || [], { size: 220, layer: (C.district[rec.d] || {}).layer }) : "";   // v501 - what's close, page 3
   return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + near + ((q.hide || []).includes("photos") ? "" : photos) + ((q.hide || []).includes("layouts") ? "" : layoutsBlock(rec, q)),
     smallPrint([rentSource(C, q, rec), buildingSource(rec), rec.un ? "Layouts: Dubai Land Department units register, flat by flat." : "", nearbySource(), pictureSource(rec)]));
 }

@@ -108,10 +108,24 @@ export function pkNearMap(pos, items, opts) {
   const P = pkNearest(pos, items, 1500);
   if (!P.length) return "";
   const S = (opts && opts.size) || 210, C = S / 2, R = (S * 0.44) / 1000;
+  // v504 (Kendall 11 Oct: "we have access to all the maps in the world ... why do we have this just as a blank cream background?") -
+  // the district's own streets and building outlines (OpenStreetMap, the dossier map's layer) drawn under the rings, north up.
+  let base = "", L = opts && opts.layer, uid = "nm" + Math.round(Math.abs(pos[0] * 1e6 + pos[1] * 1e3)) % 100000;
+  if (L && Array.isArray(L.ll) && L.ll.length === 6) {
+    const [a, b, c, d, e, f] = L.ll, xy = (la, lo) => [a * la + b * lo + c, d * la + e * lo + f];
+    const [X0, Y0] = xy(pos[0], pos[1]), upm = Math.hypot(a, d) / 111320, k = R / upm, ny = d >= 0 ? -1 : 1;   // north up on the page
+    const scr = (X, Y) => [C + (X - X0) * k, C + (Y - Y0) * k * ny], lim = (S / 2 + 20) / k;
+    const near = (pts) => pts.some(([x, y]) => Math.abs(x - X0) < lim && Math.abs(y - Y0) < lim);
+    const pairs = (fl) => { const r = []; for (let i = 0; i + 1 < fl.length; i += 2) r.push([fl[i], fl[i + 1]]); return r; };
+    const path = (pts, close) => pts.map((p, i) => { const q = scr(p[0], p[1]); return (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1); }).join("") + (close ? "Z" : "");
+    for (const [, , fl] of L.b || []) { const r = pairs(fl); if (r.length > 2 && near(r)) base += '<path d="' + path(r, true) + '" fill="#E3DDD0" stroke="#D3CCBC" stroke-width="0.5"/>'; }
+    for (const [cl, fl] of L.s || []) { const r = pairs(fl); if (r.length > 1 && near(r)) base += '<path d="' + path(r, false) + '" fill="none" stroke="#FFFFFF" stroke-width="' + (cl >= 6 ? 3.2 : cl >= 4 ? 2.2 : 1.3) + '" stroke-linecap="round" stroke-linejoin="round"/>'; }
+  }
   let svg = '<svg width="' + S + '" height="' + S + '" viewBox="0 0 ' + S + " " + S + '" xmlns="http://www.w3.org/2000/svg" style="display:block;flex:none;">' +
-    '<rect width="' + S + '" height="' + S + '" rx="12" fill="#F4F1EA"/>' +
+    '<defs><clipPath id="' + uid + '"><rect width="' + S + '" height="' + S + '" rx="12"/></clipPath></defs>' +
+    '<rect width="' + S + '" height="' + S + '" rx="12" fill="#EEEAE1"/><g clip-path="url(#' + uid + ')">' + base + "</g>" +
     '<circle cx="' + C + '" cy="' + C + '" r="' + (1000 * R).toFixed(1) + '" fill="none" stroke="' + PK.gold + '" stroke-width="1.1" stroke-dasharray="4 4"/>' +
-    '<circle cx="' + C + '" cy="' + C + '" r="' + (500 * R).toFixed(1) + '" fill="rgba(197,165,106,0.12)" stroke="' + PK.gold + '" stroke-width="1.1"/>' +
+    '<circle cx="' + C + '" cy="' + C + '" r="' + (500 * R).toFixed(1) + '" fill="rgba(197,165,106,0.14)" stroke="' + PK.gold + '" stroke-width="1.4"/>' +
     '<text x="' + C + '" y="' + (C - 500 * R + 10).toFixed(1) + '" font-size="8.5" fill="#8A6A35" text-anchor="middle">500 m</text>' +
     '<text x="' + C + '" y="' + (C - 1000 * R + 10).toFixed(1) + '" font-size="8.5" fill="#8A6A35" text-anchor="middle">1 km</text>' +
     '<text x="' + (S - 8) + '" y="14" font-size="9.5" fill="#626B78" text-anchor="end">N &#8593;</text>';
@@ -123,7 +137,8 @@ export function pkNearMap(pos, items, opts) {
   const rows = P.map((q, k) => '<div style="display:flex;align-items:center;gap:7px;font-size:11px;color:' + PK.ink + ';line-height:1.2;">' +
     '<svg width="20" height="20" viewBox="0 0 20 20" style="flex:none;display:block;">' + pkBadge(q.icon, q.col, 10, 10, 9) + "</svg>" +
     '<span style="flex:1;"><b>' + q.label + "</b> &middot; " + pkEsc(pkCase(q.name)) + '</span><span style="font-weight:600;white-space:nowrap;">' + (q.m < 1000 ? q.m + " m" : (q.m / 1000).toFixed(1) + " km") + "</span></div>").join("");
-  return '<div style="display:flex;flex-direction:column;gap:8px;"><div style="display:flex;align-items:baseline;gap:10px;"><div class="serif" style="font-size:19px;color:' + PK.teal + ';">What&rsquo;s close, as the crow flies</div>' +
-    '<div style="font-size:10px;color:' + PK.muted + ';">straight-line distances, not walking times &middot; rings at 500 m and 1 km</div></div>' +
+  // v504 (Kendall: "a lay person doesn't know what as the crow flies means") - plain words
+  return '<div style="display:flex;flex-direction:column;gap:8px;"><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><div class="serif" style="font-size:19px;color:' + PK.teal + ';">What&rsquo;s nearby</div>' +
+    '<div style="font-size:10px;color:' + PK.muted + ';">distance from the building, measured directly on the map (the walk may be a little longer) &middot; circles at 500 m and 1 km</div></div>' +
     '<div style="display:flex;gap:16px;align-items:center;">' + svg + '<div style="flex:1;display:flex;flex-direction:column;gap:5px;">' + rows + "</div></div></div>";
 }
