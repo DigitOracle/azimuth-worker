@@ -1159,11 +1159,15 @@ export async function deskMorningTick(env, deps) {
   if (s.step === 0) {
     const t = await env.MEETINGS.get("wa_desk_last_in");
     if (!t || now - Date.parse(t) > 23 * 3600 * 1000) { s.step = 4; s.skipped = "window closed"; await kvPut(env, "desk_morning_state", s, 3 * 86400); await env.MEETINGS.put("desk_morning_missed", day + "@" + hr, { expirationTtl: 3 * 86400 }); return { skipped: "window closed" }; }
-    s.step = 1; await kvPut(env, "desk_morning_state", s, 3 * 86400);   // claimed BEFORE the slow work, so a second tick never repeats it
-    await deps.send(env, (hr < 12 ? "Good morning." : "Good afternoon.") + " Your DigitAlchemy feed: three drafts are on their way, and fresh ideas are below to tap.");
+    // v488 (Kendall, 11 Oct 2026: it "drafted it ... then drafted another image ... before I even picked") - the feed is the IDEAS
+    // only. Nothing is drafted and no picture is made until he taps an idea. Marked done (step 4) at once.
+    s.step = 4; await kvPut(env, "desk_morning_state", s, 3 * 86400);   // claimed BEFORE the slow work, so a second tick never repeats it
+    await deps.send(env, (hr < 12 ? "Good morning." : "Good afternoon.") + " Your DigitAlchemy feed: fresh ideas are below. Tap one to make a post; nothing is drafted until you do.");
     await sendFeed(env, deps);
     return { step: 0 };
   }
+  // v488 - a run left half-way by the old three-drafts version (step 1-3) simply stops: no more drafts
+  if (s.step < 4) { s.step = 4; s.stopped = "v488 ideas only"; await kvPut(env, "desk_morning_state", s, 3 * 86400); return { done: true }; }
   const L = await kvJ(env, "desk_ideas", []);
   const pickOf = (pred) => L.find(pred);
   const plan = [
@@ -1182,7 +1186,7 @@ async function morningCommand(env, deps, arg) {
   const hs = a.split(",").map((x) => x.trim()).filter(Boolean).map(Number);
   if (hs.length && hs.length <= 4 && hs.every((h) => Number.isInteger(h) && h >= 0 && h <= 23)) {
     const v = [...new Set(hs)].sort((x, y) => x - y); await env.MEETINGS.put("desk_feed_hours", v.join(","));
-    await deps.send(env, "The DigitAlchemy feed arrives at " + v.map((h) => String(h).padStart(2, "0") + ":00").join(" and ") + " Dubai time: fresh ideas plus three ready drafts each time."); return true;
+    await deps.send(env, "The DigitAlchemy feed arrives at " + v.map((h) => String(h).padStart(2, "0") + ":00").join(" and ") + " Dubai time: fresh ideas each time; tap one to make a post."); return true;
   }
   const cur = await feedHours(env);
   await deps.send(env, "The DigitAlchemy feed: " + (cur.length ? cur.map((h) => String(h).padStart(2, "0") + ":00").join(" and ") + " Dubai time" : "off") + ". Change it with feed times 5,16 (up to four hours) or feed times off.");

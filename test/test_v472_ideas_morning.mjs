@@ -70,14 +70,14 @@ clock = Date.UTC(2026, 9, 12, 1, 1); texts.length = 0; lists.length = 0; r = awa
 ok(/Good morning/.test(texts.join("")) && lists[0] && lists[0].length === 9, "05:00: good morning and the nine ideas to tap");
 for (let i = 0; i < 3; i++) { clock += 60000; await deskMorningTick(env, deps); }
 const am = [...store.keys()].filter((k) => k.startsWith("postplan_")).map((k) => JSON.parse(store.get(k))).filter((p) => p.morning === "2026-10-12@5");
-ok(am.length === 3 && am.some((p) => p.background === "skyline") && am.some((p) => p.kind === "motivation" && p.background === "terrace") && am.some((p) => p.picture === "site"), "three drafts: a news one, a motivational one, a DigitAlchemy one", JSON.stringify(am.map((p) => [p.lane, p.kind, p.background])));
+ok(am.length === 0 && !/drafts are on their way/.test(texts.join("")), "v488: no drafts - ideas only until he taps one", am.length);
 ok(am.every((p) => p.approved !== true), "nothing approved or posted on its own");
 clock += 60000; texts.length = 0; r = await deskMorningTick(env, deps); ok(r.done || r.skipped, "05:00 runs once");
 clock = Date.UTC(2026, 9, 12, 12, 0); texts.length = 0; lists.length = 0; store.set("wa_desk_last_in", new Date(clock - 3600000).toISOString()); r = await deskMorningTick(env, deps);   // 16:00 Dubai
 ok(/Good afternoon/.test(texts.join("")) && lists[0] && lists[0].length === 9, "16:00: the afternoon feed");
 for (let i = 0; i < 3; i++) { clock += 60000; await deskMorningTick(env, deps); }
 const pm = [...store.keys()].filter((k) => k.startsWith("postplan_")).map((k) => JSON.parse(store.get(k))).filter((p) => p.morning === "2026-10-12@16");
-ok(pm.length === 3, "and its three drafts", pm.length);
+ok(pm.length === 0, "v488: and no drafts in the afternoon either", pm.length);
 store.delete("desk_morning_state"); clock = Date.UTC(2026, 9, 13, 1, 0); store.set("wa_desk_last_in", new Date(clock - 30 * 3600000).toISOString()); texts.length = 0;
 r = await deskMorningTick(env, deps); ok(r.skipped === "window closed" && !texts.length, "24-hour window closed: skipped quietly");
 await say("feed times 6,15"); ok(store.get("desk_feed_hours") === "6,15" && /06:00 and 15:00/.test(texts.join("")), "feed times 6,15 changes the hours");
@@ -89,7 +89,7 @@ await say("feed now");
 ok(/Fresh DigitAlchemy feed/.test(texts.join("")) && lists[0] && lists[0].length === 9, "feed now: the ideas straight away");
 for (let i = 0; i < 3; i++) { clock += 60000; await deskMorningTick(env, deps); }
 const fn = [...store.keys()].filter((k) => k.startsWith("postplan_")).map((k) => JSON.parse(store.get(k))).filter((p) => p.morning === "2026-10-14@19");
-ok(fn.length === 3, "then the three drafts, outside the scheduled hours", fn.length);
+ok(fn.length === 0, "v488: feed now sends ideas only, no drafts", fn.length);
 await say("feed now"); ok(lists[0] && lists[0].length === 9, "feed now again after it finished gives a fresh one");
 await say("feed now"); ok(/already on its way/.test(texts.join("")), "but not while one is still arriving");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
