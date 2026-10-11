@@ -987,6 +987,12 @@ export async function fitGuest(env, from, msg, deps) {
 // message (fitc_pend_<user>) then follows in full.
 // what the desk submits to Meta (lab setup momo template <account> go). Meta refuses a body that starts or ends with a variable, and promotional wording in UTILITY.
 export const MOMO_TEMPLATE_NAME = "momo_day_check";
+// v489 - najma_log_reminder ("Reminder: your Momo log for {{1}} has no entries yet ...") takes the day as "11 Oct"; templates without a variable get none
+export function logNudgeParams(env, day) {
+  if (!/log_reminder/.test(String(env.LOG_NUDGE_TEMPLATE || ""))) return [];
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(day || "")); if (!m) return [];
+  return [+m[3] + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m[2] - 1]];
+}
 export function momoTemplateDef() {
   return { name: MOMO_TEMPLATE_NAME, language: "en", category: "UTILITY", components: [
     { type: "BODY", text: "Hello {{1}}, your Momo day: {{2}}. Tap Log today for the full check-in.", example: { body_text: [["Dr. Doli", "2 meals and 40 min of exercise logged today"]] } },
@@ -1284,7 +1290,7 @@ async function morningFor(env, deps, nowMs, u, to, guestWindowOpen, guestShut) {
     if (!guestWindowOpen && env.LOG_NUDGE_TEMPLATE && deps.waSendTemplate) {
       const yday = addDays(today, -1), logged = (await fitRange(env, yday, today, u)).some((e) => e.k === "food" || e.k === "ex");
       if (!logged && await flagOnce(env, "fitc_nudge_" + u + "_" + today)) {
-        try { await deps.waSendTemplate(env, to || env.WA_ALLOWED, env.LOG_NUDGE_TEMPLATE, env.LOG_NUDGE_LANG || "en_US", []); } catch (e) {}
+        try { await deps.waSendTemplate(env, to || env.WA_ALLOWED, env.LOG_NUDGE_TEMPLATE, env.LOG_NUDGE_LANG || "en_US", logNudgeParams(env, today)); } catch (e) {}
         return true;
       }
     }
@@ -1322,7 +1328,7 @@ async function eveningFor(env, deps, nowMs, u, to, guestWindowOpen, guestShut) {
     if (env.LOG_NUDGE_TEMPLATE && deps.waSendTemplate) {
       const first = await fitSummary(env, today, cfg, today);
       if (!first.entries.length && await flagOnce(env, "fitc_nudge_" + u + "_" + today)) {
-        try { await deps.waSendTemplate(env, to || env.WA_ALLOWED, env.LOG_NUDGE_TEMPLATE, env.LOG_NUDGE_LANG || "en_US", []); } catch (e) {}
+        try { await deps.waSendTemplate(env, to || env.WA_ALLOWED, env.LOG_NUDGE_TEMPLATE, env.LOG_NUDGE_LANG || "en_US", logNudgeParams(env, today)); } catch (e) {}
         return true;
       }
     }

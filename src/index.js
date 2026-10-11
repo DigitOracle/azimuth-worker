@@ -6980,6 +6980,11 @@ async function nsTextTry(env, from, text) {
   return true;
 }
 async function feedNudge(env, head, body) {
+  // v489 (Kendall 11 Oct: "switch to the new templates") - najma_feed_update is ACTIVE as UTILITY; its one variable is the date
+  if (env.WA_ALLOWED && env.FEED_UPDATE_TEMPLATE) {
+    const g = new Date(Date.now() + OFFSET_MIN * 60000), dd = g.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][g.getUTCMonth()];
+    try { const r = await waSendTemplate(env, env.WA_ALLOWED, env.FEED_UPDATE_TEMPLATE, env.FEED_UPDATE_LANG || "en_US", [dd]); if (r && r.ok) return { ok: true, status: r.status, template: env.FEED_UPDATE_TEMPLATE }; } catch (e) {}
+  }
   if (env.WA_ALLOWED && (await feedTemplateFlag(env)) === "najma_feed_ready") {   // v329 - the new plain template: no variables, so no params; used only once /wa_template_use saw it APPROVED
     try { const r = await waSendTemplate(env, env.WA_ALLOWED, "najma_feed_ready", "en_US", []); return { ok: !!(r && r.ok), status: r && r.status, template: "najma_feed_ready" }; }
     catch (e) { return { ok: false, why: String((e && e.message) || e).slice(0, 120) }; }
