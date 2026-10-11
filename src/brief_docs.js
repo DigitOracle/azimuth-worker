@@ -192,10 +192,11 @@ function page(C, sub, body, small) {
     'gap:12px;overflow:hidden;">' + body + "</div>" + footer(small, C.buy) + "</div>";
 }
 function tbl(head, rows) {
-  const th = head.map(([al, t]) => '<th style="text-align:' + al + ';font-size:8.8px;font-weight:600;letter-spacing:.6px;color:#FBFAF7;padding:6px 5px;">' + t + "</th>").join("");
-  const tr = rows.map((r, k) => '<tr style="' + (k % 2 === 0 ? "background:#F1EEE8;" : "") + '">' + r.map((v, j) =>
-    '<td style="text-align:' + head[j][0] + ';padding:4px 5px;font-size:10.8px;border-bottom:1px solid #E6E1D8;vertical-align:middle;line-height:1.28;">' + v + "</td>").join("") + "</tr>").join("");
-  return '<table><thead><tr style="background:' + NAVY + ';">' + th + "</tr></thead><tbody>" + tr + "</tbody></table>";
+  // v487 - the shared look: a light gold-on-cream header in a rounded frame instead of the dark navy band
+  const th = head.map(([al, t]) => '<th style="text-align:' + al + ';font-size:8.6px;font-weight:600;letter-spacing:.6px;color:' + PK.gold + ';padding:7px 7px;border-bottom:1px solid ' + PK.line + ';">' + t + "</th>").join("");
+  const tr = rows.map((r, k) => '<tr style="' + (k % 2 === 1 ? "background:#FBF9F4;" : "") + '">' + r.map((v, j) =>
+    '<td style="text-align:' + head[j][0] + ';padding:5px 7px;font-size:10.8px;border-bottom:1px solid #EFEAE0;vertical-align:middle;line-height:1.28;' + (j === 0 ? "font-weight:600;color:" + PK.teal + ";" : "") + '">' + v + "</td>").join("") + "</tr>").join("");
+  return '<div style="border:1px solid ' + PK.line + ';border-radius:12px;overflow:hidden;background:#FFFFFF;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#F7F3EA;">' + th + "</tr></thead><tbody>" + tr + "</tbody></table></div>";
 }
 const img = (src, style, alt) => '<img src="' + src + '" alt="' + esc(alt || "") + '" style="' + style + '">';
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; } };
@@ -1012,8 +1013,8 @@ function oneSheetCards(C, q) {
         (st.n < FEW_LETTINGS ? "" : '<div style="font-size:10px;color:' + INK + ';">Middle half AED ' + money(st.q1) + "&ndash;" + money(st.q3) + "</div>") +
         '<div style="font-size:10px;color:' + INK + ';">' + (st.n < FEW_LETTINGS ? esc(evidenceSay(st, rec.it.ev_scope)) : lettingsTxt(st) + (rec.it.ev_scope ? " recent lettings in " + esc(rec.it.ev_scope) + " (the community&rsquo;s, not this home&rsquo;s)" : " recent lettings")) + (st.s ? " &middot; about " + sqftBit(st) : "") + "</div>"
         : perType) +
-      '<div style="font-size:9.8px;color:' + MUTED + ';line-height:1.25;">' + amen + "</div>" +
-      '<div style="font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + metro + "</div>" + criteriaLine(rec, q) +
+      (amen ? '<div style="display:flex;gap:5px;align-items:flex-start;font-size:9.8px;color:' + MUTED + ';line-height:1.25;">' + pkIcon("check", 12) + "<span>" + amen + "</span></div>" : "") +   // v487 icons
+      (metro ? '<div style="display:flex;gap:5px;align-items:flex-start;font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + pkIcon("train", 12) + "<span>" + metro + "</span></div>" : "") + criteriaLine(rec, q) +
       "</div></div>";
   }).join("");
   const cols = Math.min(5, Math.max(3, C.recs.length));
@@ -1539,7 +1540,9 @@ const budgetAsked = (q) => !!(q.min || q.max);
 function buyBox(C, rec, q) {
   const b = rec.buy, f = b.best;
   const stat = (v, l) => '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">' + l + '</div><div style="font-size:15px;font-weight:500;color:' + NAVY + ';white-space:nowrap;">' + v + "</div></div>";
-  const box = '<div style="display:grid;grid-template-columns:1.3fr 1.2fr 0.8fr 0.9fr;gap:12px;align-items:end;border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;">' +
+  const box = pkGrid([pkFig("tag", "AED " + (f.aed >= 1e6 ? (f.aed / 1e6).toFixed(2) + "M" : Math.round(f.aed / 1000) + "k"), "typical " + (f.label === "studio" ? "studio" : f.label.split(" ")[0] + "-bed") + " price"),
+    pkFig("chart", "AED " + money(f.psf), "per sq ft"), pkFig("users", String(f.n), "sales recorded"), pkFig("home", money(f.sqft), "sq ft, typical size")], 4);
+  const boxOld = '<div style="display:grid;grid-template-columns:1.3fr 1.2fr 0.8fr 0.9fr;gap:12px;align-items:end;border:1px solid #E6E1D8;background:#FFFFFF;padding:11px 14px;">' +
     '<div style="display:flex;flex-direction:column;gap:3px;"><div class="lbl" style="font-size:9.5px;">TYPICAL ' + (f.label === "studio" ? "STUDIO" : f.label.split(" ")[0] + "-BED") + ' SALE PRICE</div><div class="serif" style="font-size:29px;color:' + GOLD + ';line-height:1;white-space:nowrap;">AED ' + money(f.aed) + "</div></div>" +
     stat("AED " + money(f.psf) + " per sq ft", "PRICE PER SQ FT") + stat(String(f.n), "SALES RECORDED") + stat(money(f.sqft) + " sq ft", "TYPICAL SIZE") + "</div>";
   const sh = C.dmIdx && C.dmIdx.cuts && C.dmIdx.cuts.shares;
@@ -1561,7 +1564,7 @@ function buySalesTable(rec, q) {
   const rows = figs.map((f) => [esc(typeOfC(f.label === "studio" ? "studio" : f.label.split(" ")[0])), money(f.aed), money(f.psf), String(f.n), money(f.sqft) + " sq ft"].concat(fit ? [fitChip(f.verdict, 9.5)] : []));
   const span = rec.buy.first && rec.buy.last ? " Sales recorded " + monthYear(rec.buy.first) + " to " + monthYear(rec.buy.last) + "." : "";
   return '<div style="display:flex;flex-direction:column;gap:6px;"><div class="serif" style="font-size:20px;color:' + NAVY + ';">What homes here sold for</div>' +
-    '<div style="font-size:11.5px;color:' + MUTED + ';line-height:1.42;">Sales recorded at the Land Department for ' + esc(rec.name) + ', by home type: the typical price, the typical size and the price per sq ft (the typical price divided by the typical size). Sizes include the balcony.' + span + "</div>" + tbl(head, rows) + "</div>";
+    '<div style="font-size:11.5px;color:' + MUTED + ';line-height:1.42;">Sales recorded at the Land Department for ' + esc(rec.name) + ', by home type: the typical price, the typical size and the price per sq ft (the typical price divided by the typical size). Sizes include the balcony.' + span + "</div>" + pkBars(figs.map((f) => [esc(typeOfC(f.label === "studio" ? "studio" : f.label.split(" ")[0])), f.aed, "<b>AED " + money(f.aed) + "</b> &middot; " + money(f.psf) + "/sq ft"]), { labelW: 92, rightW: 170 }) + tbl(head, rows) + "</div>";
 }
 // v307 - page 2 carries the map and the sales table; a third page exists only when there are photographs or flat-by-flat layouts to put on it
 function buyPages(C, rec, q, sub) {
@@ -1617,8 +1620,8 @@ function buyOneSheetCards(C, q) {
       '<div style="font-size:10px;color:' + INK + ';">AED ' + money(f.psf) + " per sq ft &middot; " + f.n + " sales recorded</div>" +
       '<div style="font-size:10px;color:' + INK + ';">about ' + money(f.sqft) + " sq ft &middot; " + TIER_NAME[f.tier] + " tier</div>" +
       (budgetAsked(q) ? "<div>" + fitChip(f.verdict, 9.5) + "</div>" : "") +
-      '<div style="font-size:9.8px;color:' + MUTED + ';line-height:1.25;">' + amen + "</div>" +
-      '<div style="font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + metro + "</div>" + criteriaLine(rec, q) +
+      (amen ? '<div style="display:flex;gap:5px;align-items:flex-start;font-size:9.8px;color:' + MUTED + ';line-height:1.25;">' + pkIcon("check", 12) + "<span>" + amen + "</span></div>" : "") +   // v487 icons
+      (metro ? '<div style="display:flex;gap:5px;align-items:flex-start;font-size:9.8px;color:' + NAVY + ';line-height:1.25;">' + pkIcon("train", 12) + "<span>" + metro + "</span></div>" : "") + criteriaLine(rec, q) +
       "</div></div>";
   }).join("");
   const cols = Math.min(5, Math.max(3, C.recs.length));
