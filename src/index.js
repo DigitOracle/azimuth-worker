@@ -8818,12 +8818,17 @@ const amEsc=(s)=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt
 function amBuild(){const AM=window.__AM;if(!AM||AMSEG.dataset.built)return;AMSEG.dataset.built="1";
   Object.keys(AMEN).forEach(k=>{const n=(AM.counts||{})[k]||0;if(!n)return;const b=document.createElement("button");b.type="button";b.dataset.k=k;b.innerHTML=ICON[k]+amEsc(AMEN[k][0])+"<i>"+n.toLocaleString("en")+"</i>";b.onclick=()=>{AMON[k]=!AMON[k];b.classList.toggle("on",!!AMON[k]);amRecalc()};AMSEG.appendChild(b)});
   const c=document.createElement("button");c.type="button";c.className="clr";c.textContent="clear";c.onclick=()=>{Object.keys(AMON).forEach(k=>{AMON[k]=false});AMSEG.querySelectorAll("button").forEach(x=>x.classList.remove("on"));amRecalc()};AMSEG.appendChild(c)}
-function amRecalc(){const AM=window.__AM;const ks=Object.keys(AMON).filter(k=>AMON[k]);AMPTS=[];
-  ((AM&&AM.items)||[]).forEach(i=>{if(!AMON[i.k]||i.lon==null||i.lat==null)return;const p=llx(i.lon,i.lat);AMPTS.push({i,v:new THREE.Vector3(p[0],6,p[1]),sx:-1,sy:-1})});
-  AMRES.textContent=ks.length?ks.map(k=>AMEN[k][0]).join(", ")+" \u00b7 "+AMPTS.length.toLocaleString("en"):"none"}
+let AMDIST=-1;const AMSC=document.createElement("button");AMSC.type="button";AMSC.className="clr";AMSC.hidden=true;AMSC.onclick=()=>{AMDIST=-1;amRecalc()};
+function amRecalc(){const AM=window.__AM;const ks=Object.keys(AMON).filter(k=>AMON[k]);AMPTS=[];const dslug=AMDIST>=0&&D.districts[AMDIST]?D.districts[AMDIST].slug:null;
+  ((AM&&AM.items)||[]).forEach(i=>{if(!AMON[i.k]||i.lon==null||i.lat==null)return;if(dslug&&i.d!==dslug)return;const p=llx(i.lon,i.lat);AMPTS.push({i,v:new THREE.Vector3(p[0],6,p[1]),sx:-1,sy:-1})});
+  const where=dslug?" in "+D.districts[AMDIST].name:" across Dubai";AMRES.textContent=ks.length?ks.map(k=>AMEN[k][0]).join(", ")+" \u00b7 "+AMPTS.length.toLocaleString("en")+where:"none";
+  AMSC.textContent="all Dubai";AMSC.hidden=!(dslug&&ks.length);if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC)}
+const _flyTo0=flyTo;flyTo=function(ix,go){AMDIST=ix;_flyTo0(ix,go);amRecalc()};   // v511 - a chosen district scopes the places (Kendall: "if I say Business Bay, I should only get the petrol stations within Business Bay")
+const AMIMG={};function amImg(k){if(AMIMG[k])return AMIMG[k];const col=AMEN[k][2];const svg=ICON[k].replace("<svg ","<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' fill='none' stroke='"+col+"' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round' ");const im=new Image();im.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);AMIMG[k]=im;return im}
 function amDraw(){actx.clearRect(0,0,amc.width,amc.height);if(!AMPTS.length)return;const W=innerWidth,H=innerHeight,r=devicePixelRatio||1;const far=cam.position.distanceTo(ctl.target);const sz=far>22000?2:far>9000?2.8:4;
   for(const p of AMPTS){const q=p.v.clone().project(cam);if(q.z>1||q.x<-1.02||q.x>1.02||q.y<-1.02||q.y>1.02){p.sx=-1;continue}p.sx=(q.x+1)/2*W;p.sy=(1-q.y)/2*H;const col=AMEN[p.i.k][2];
-    actx.beginPath();actx.arc(p.sx*r,p.sy*r,sz*r,0,6.2832);actx.fillStyle=p.i.ap?"rgba(12,20,19,.8)":col;actx.fill();actx.lineWidth=1.1*r;actx.strokeStyle=col;actx.stroke()}}
+    const R=sz*2.4*r,cx=p.sx*r,cy=p.sy*r;actx.beginPath();actx.arc(cx,cy,R,0,6.2832);actx.fillStyle="rgba(19,31,29,.92)";actx.fill();actx.lineWidth=1.2*r;actx.strokeStyle=col;actx.setLineDash(p.i.ap?[3*r,2.5*r]:[]);actx.stroke();actx.setLineDash([]);
+    const im=amImg(p.i.k);if(im.complete&&im.naturalWidth){const s=R*1.25;actx.drawImage(im,cx-s/2,cy-s/2,s,s)}}}
 (function amLoop(){requestAnimationFrame(amLoop);amDraw()})();
 canvas.addEventListener("pointerup",ev=>{if(!AMPTS.length)return;const rct=canvas.getBoundingClientRect();const x=ev.clientX-rct.left,y=ev.clientY-rct.top;let best=null,bd=18*18;
   for(const p of AMPTS){if(p.sx<0)continue;const dx=p.sx-x,dy=p.sy-y,d=dx*dx+dy*dy;if(d<bd){bd=d;best=p}}if(!best)return;ev.stopImmediatePropagation();const i=best.i;const dn=window.__dName?window.__dName(i.d||""):(i.d||"");
