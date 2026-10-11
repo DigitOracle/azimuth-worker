@@ -61,8 +61,10 @@ if (!plots) {
 } else {
   const P = plots.features.map((f) => f.properties);
   const n = P.length;
+  const PLOT_ONLY = new Set(["648-8592"]);   // v416: KORE by Imtiaz - plot outline, no building footprint yet
   const withI = P.filter((p) => p.i != null).length;
-  ok(withI === n, `every plot carries a footprint index (${withI}/${n})`);
+  const unbound = P.filter((p) => p.i == null);
+  ok(unbound.every((p) => PLOT_ONLY.has(p.plot)), `every plot carries a footprint index, except the known plot-only entries (${withI}/${n}; unbound: ${unbound.map((p) => p.plot).join(", ") || "none"})`);
 
   const cache = {};
   const umx = (slug) => {
@@ -71,7 +73,7 @@ if (!plots) {
   };
   const resolved = P.filter((p) => p.i != null && umx(p.district)[String(p.i)]).length;
   console.log(`  ${n} plot features, ${resolved} resolve by index`);
-  ok(resolved === n, `every plot resolves by index to a unit-mix record (${resolved}/${n})`);
+  ok(resolved === withI, `every indexed plot resolves by index to a unit-mix record (${resolved}/${withI})`);
 
   // The guard must be reachable: the data has to actually mark the multi-building cases.
   const multi = P.filter((p) => (p.bldgs || 0) > 1).length;

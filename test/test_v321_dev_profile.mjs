@@ -100,7 +100,7 @@ const mkPage = (script) => {
   const s4 = cut("var STATS={},IXC={};", "function features()") + cut("var MON=", "function barsSvg(");   // v323 - the window helpers the profile now reads
   const S = { prof: null, drill: null, sel: "bb", unit: "sqft", win: "all" };
   const TC = ["#c5a56a", "#2f8a7f", "#3987e5", "#8a9a96"];
-  const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", s0 + s1 + s4 + s2 + s3 + "; return {drillHtml:drillHtml,setDrill:setDrill,dimOf:dimOf,donut:donut,profileHtml:profileHtml,pickNote:pickNote,brandLine:brandLine,prof:prof};");
+  const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", "var EVI={},KEY=\"\",innerWidth=390,innerHeight=800;" + s0 + s1 + s4 + cut("function clipName", "function devHead(") + s2 + s3 + "; return {drillHtml:drillHtml,setDrill:setDrill,dimOf:dimOf,donut:donut,profileHtml:profileHtml,pickNote:pickNote,brandLine:brandLine,prof:prof};");
   return { S, ...fn(DM, IDX, S, TC, { mered: "Mered" }, () => {}, () => {}, () => {}) };
 };
 const P = mkPage(js);
@@ -110,8 +110,9 @@ ok(!/brand/.test(card.slice(0, card.indexOf("Market view"))) && /Developer profi
 ok(/Projects by price band:/.test(card) && /Top band 7 · Middle band 3 \(of 10 projects\)/.test(text), "mix by projects: a doughnut and spelled-out counts");
 ok(/By number of sales Top band \d+% · Upper band \d+% · Middle band \d+% · Entry band \d+%/.test(text) && /By value Top band \d+% · Upper band \d+% · Middle band \d+% · Entry band \d+%/.test(text), "mix bars use spelled-out names", text);
 ok(/10 projects · 3 areas/.test(text) && !/homes/.test(text.slice(text.indexOf("Scale"), text.indexOf("Price by area"))) && /Boutique|Mid-size|Large-scale/.test(text) && /Boutique: up to 3 projects/.test(text), "scale: projects, homes, areas, the scale word and its cut-offs shown on the page", text);
-const rows = [...card.matchAll(/<tr><td>([^<]*)<\/td><td class=r>AED ([\d,]+)<\/td>/g)].map((m) => [m[1], Number(m[2].replace(/,/g, ""))]);
-ok(rows.length === 3 && rows[0][0] === "Downtown" && rows[2][0] === "Business Bay" && rows[0][1] > rows[1][1] && rows[1][1] > rows[2][1], "the price-by-area table reads highest first (Downtown, Palm Jumeirah, Business Bay)", JSON.stringify(rows));
+// v336: each area row became a tappable map filter (<tr class=prow data-slug=... role=button>), so the row no longer opens with a bare <tr>
+const rows = [...card.matchAll(/<tr class=prow[^>]*data-slug="([a-z]+)"[^>]*><td>([^<]*)<\/td><td class=r>AED ([\d,]+)<\/td>/g)].map((m) => [m[2], Number(m[3].replace(/,/g, "")), m[1]]);
+ok(rows.length === 3 && rows[0][0] === "Downtown" && rows[2][0] === "Business Bay" && rows[0][1] > rows[1][1] && rows[1][1] > rows[2][1] && rows.map((r) => r[2]).join() === "downtown,palm,bb", "the price-by-area table reads highest first (Downtown, Palm Jumeirah, Business Bay), each row a map filter since v336", JSON.stringify(rows));
 ok(/Price band here/.test(card) && /<td>Middle band<\/td>/.test(card), "the table says the price band in each area (Middle band in Business Bay)");
 ok(/Source: Dubai Land Department settled sales to 2026-10-03\. Price bands are cut from all Dubai settled sales so that each holds about a quarter of the money spent; they describe homes, not developers\./.test(text), "source line: Dubai Land Department settled sales to <date>; tiers are price bands, not a view of any developer");
 ok(/Back to Business Bay/.test(card), "a Back button returns to the area");
@@ -138,7 +139,9 @@ ok(dr.length === 2 && dr[0].name === "Downtown" && dr[0].projects.length === 4 &
 ok(DM.drillProjects(IDX, "omni", 2, "bb").length === 1 && DM.drillProjects(IDX, "omni", 2, "bb")[0].projects.length === 3 && DM.drillProjects(IDX, "omni", 1).length === 0, "limited to one area it lists that area only; an empty tier lists nothing");
 P.S.unit = "sqft"; P.setDrill({ k: "omni", ar: null, t: 0 });
 const dh = P.drillHtml(), dt = dh.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
-ok(/Omniyat: projects in the top band, by location/.test(dt) && /7 projects in 2 places/.test(dt) && /Downtown AED 4,831 per sq ft/.test(dt) && /Omniyat 1 · AED 4,831 per sq ft · 20 sales/.test(dt) && /id=dclear/.test(dh), "the drill list: area names, project names, price per sq ft, sales, and a Clear button", dt.slice(0, 400));
+// v379 (pjCard0) turned each drill line into a project card button (<button class="pjc ...">name, price, sales, "Project details"); v398 added the Investor/Client/Broker row beside it. The area heading and the Clear button are unchanged.
+const pjCards = dh.match(/<button type=button class="pjc [^"]*"/g) || [];
+ok(/Omniyat: projects in the top band, by location/.test(dt) && /7 projects in 2 places/.test(dt) && /Downtown AED 4,831 per sq ft · 80 sales/.test(dt) && pjCards.length === 7 && /Omniyat 1 AED 4,831 per sq ft 20 sales Project details/.test(dt) && /<button type=button class=btn id=dclear[^>]*>Clear and show the whole map<\/button>/.test(dh), "the drill list: area names, one project card per project (name, price per sq ft, sales; v379/v398 cards replaced the plain lines), and a Clear button", dt.slice(0, 400));
 ok(P.dimOf("bb") === 1 && P.dimOf("downtown") === 0 && P.dimOf("palm") === 0, "map: areas outside the tapped segment are dimmed, the ones inside are not");
 P.setDrill(null);
 ok(P.dimOf("bb") === 0, "Clear returns the whole map");
@@ -218,7 +221,8 @@ ok(!/(\d|,)\s*homes\b/.test(evt), "still no homes figure as a headline");
   const areas = [{ slug: "jvc", name: "Jumeirah Village Circle", devs: names.map((n, i) => ({ k: "x" + i, name: n, rent: rents[i], rpsf: 80 + i, n: 1113 + i })) }, { slug: "palm", name: "Palm Jumeirah", devs: names.slice(0, 4).map((n, i) => ({ k: "y" + i, name: n, rent: 150000 + i * 20000, rpsf: 160, n: 40 + i })) }];
   const h = mk.locCards(areas, (d) => ({ v: d.rent, big: "AED " + d.rent.toLocaleString("en-US") + " a year", small: "AED " + d.rpsf + " per sq ft", ev: d.n.toLocaleString("en-US") + " registered rental contracts" }));
   const cardsN = (h.match(/class=lc /g) || []).length, devN = (h.match(/class=dc>/g) || []).length;
-  ok(cardsN === 2 && devN === 9 && /<b>Jumeirah Village Circle<\/b><span class=badge[^>]*>5</.test(h) && /<b>Palm Jumeirah<\/b><span class=badge[^>]*>4</.test(h), "rental view: one card per location with a count badge (five in Jumeirah Village Circle, four in Palm Jumeirah), one small card per developer");
+  // v382: the location heading is wrapped in a <span> (room for a sub-line naming each project's own area) before the count badge
+  ok(cardsN === 2 && devN === 9 && /<div class=lh><span><b>Jumeirah Village Circle<\/b>[^]*?<\/span><span class=badge[^>]*>5<\/span>/.test(h) && /<div class=lh><span><b>Palm Jumeirah<\/b>[^]*?<\/span><span class=badge[^>]*>4<\/span>/.test(h), "rental view: one card per location with a count badge (five in Jumeirah Village Circle, four in Palm Jumeirah; v382 heading span), one small card per developer");
   ok(/class=dcb>AED 54,000 a year</.test(h) && /class=dcs>AED 80 per sq ft</.test(h) && /class=dce>1,113 registered rental contracts</.test(h) && !/a year[^<]*a year/.test(h), "each developer card: big yearly figure, per sq ft underneath, the evidence line; no repeated 'a year'");
   const pos = [...h.matchAll(/<i style="left:(\d+)%">/g)].map((m) => Number(m[1]));
   ok(pos.includes(0) && pos.includes(100) && pos.length === 9, "the thin bar places each developer between the cheapest (0) and the dearest (100) of your developers in that location", pos.join());

@@ -99,19 +99,19 @@ if (!plots) {
 } else {
   const cache = {};
   const umx = (s) => (cache[s] ??= (rd("unitmix_" + s + ".json") || {}).buildings_by_id || {});
-  let pub = 0, refused = 0, unnamed = 0;
+  let pub = 0, refused = 0, unnamed = 0, unbound = 0;   // v416: KORE by Imtiaz (648-8592) is a plot outline with i:null - no footprint to corroborate
   const examples = [];
   for (const f of plots.features) {
     const p = f.properties;
     const r = umx(p.district)[String(p.i)];
-    if (!r) continue;
+    if (!r) { if (p.i == null) unbound++; continue; }
     if (!r.name) { unnamed++; pub++; continue; }
     if (corrob(p.name, r.name)) pub++;
     else { refused++; if (examples.length < 4) examples.push(`${p.name} -> ${r.name}`); }
   }
   const n = plots.features.length;
-  console.log(`  ${n} plots: ${pub} published (${unnamed} of them unnamed, unchecked), ${refused} refused`);
-  ok(pub + refused === n, "every plot is either published or refused, none silently dropped");
+  console.log(`  ${n} plots: ${pub} published (${unnamed} of them unnamed, unchecked), ${refused} refused, ${unbound} plot-only (no footprint)`);
+  ok(pub + refused + unbound === n && unbound <= 1, "every plot is either published, refused, or a known plot-only entry with no footprint (" + unbound + "), none silently dropped");
   ok(refused > 0, `the gate actually bites (${refused} refusals)`, examples.join("; "));
   ok(pub > 1147, `still ahead of the pre-v228 name-only baseline of 1,147 (${pub})`);
   // The arena must not be among the published, by name, in the real data.
