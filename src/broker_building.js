@@ -14,6 +14,7 @@
 // price and price per sq m), img_ejari_filed_<district> (registered rent contracts), img_devmap_index (the area's typical price and the
 // price bands, through loadData in src/devmap_pdf.js), img_brief_fp_<district> (the digital footprint), and - OWNER KEY ONLY, web page
 // only, never in the PDF - img_pf_supply_<district>.advertised (Property Finder adverts; src/advertised.js).
+import { pkTile, pkGrid, pkBars } from "./pdf_kit.js";   // v494 - the shared PDF look
 import { DM } from "./devmap_dm.js";
 import { kvJson } from "./brief.js";
 import { BRIEF_KIT, esc } from "./brief_docs.js";
@@ -176,7 +177,8 @@ function headerBlock(B) {
   const facts = [["Area", esc(B.area) + (B.subArea && B.subArea.toLowerCase() !== B.area.toLowerCase() ? " (" + esc(B.subArea) + ")" : "")], ["Developer", B.dev ? esc(B.dev) + '<span class="cn"> as the register gives it</span>' : "Not recorded on the register"],
     ["Status", B.status ? B.status + '<span class="cn"> (the latest registered sale is ' + (B.status === "Off-plan" ? "an off-plan registration" : "a completed home") + ")</span>" : "Not known"], ["Project number", "#" + esc(B.projectNo)]];
   return { h: 150, html: '<div class="ttl"><div><h1 class="serif">' + esc(B.name) + '</h1><div class="tsub">One building, from the Dubai Land Department sales register. ' + esc(B.w.say) + ".</div></div></div>" +
-    '<div class="frs">' + facts.map((f) => "<div class=fr><b>" + f[0] + "</b><span>" + f[1] + "</span></div>").join("") + "</div>" };
+    // v494 - the four facts as icon tiles (the shared PDF look), wording unchanged
+    pkGrid(facts.map((f, k) => pkTile(["pin", "builder", "calendar", "tag"][k], f[0], "", f[1])), 4) };
 }
 function salesBlock(B) {
   const S = B.S, v = S.value;
@@ -185,16 +187,20 @@ function salesBlock(B) {
     '<div class="tile"><div class="tk">Typical price per sq ft</div><div class="tv">' + (S.psf != null ? aed(S.psf) : "Not shown") + '</div><div class="tu">' + (S.psf != null ? "the middle sale" : "fewer than " + MIN_PRICED + " priced sales") + "</div></div>" +
     '<div class="tile"><div class="tk">Total value</div><div class="tv">' + (v ? aedBig(v.sum) : "Not shown") + '</div><div class="tu">' + (v ? (v.big ? plural(v.big, "deal") + " over AED " + fmt(VALUE_CAP / 1e6) + "M left out" : "sum of the sale prices") : "this file carries no prices") + "</div></div></div>";
   const rowsH = S.bands.map((b) => "<tr><td>" + esc(b.label) + '</td><td class="r">' + fmt(b.n) + '</td><td class="r">' + (b.price != null ? aed(b.price) : "&ndash;") + '</td><td class="r">' + (b.psf != null ? aed(b.psf) : "&ndash;") + "</td></tr>").join("");
-  const tbl = S.bands.length ? '<table class="tb"><tr><th>HOME</th><th class="r">SALES</th><th class="r">TYPICAL PRICE</th><th class="r">PER SQ FT</th></tr>' + rowsH + "</table>" +
+  // v494 - gold bars of the typical price per home type above the table
+  const barsH = pkBars(S.bands.filter((b) => b.price != null).map((b) => [esc(b.label), b.price, "<b>" + aed(b.price) + "</b>" + (b.psf != null ? " &middot; " + aed(b.psf) + "/sq ft" : "")]), { labelW: 90, rightW: 210 });
+  const tbl = S.bands.length ? (barsH ? '<div style="margin:8px 0">' + barsH + "</div>" : "") + '<table class="tb"><tr><th>HOME</th><th class="r">SALES</th><th class="r">TYPICAL PRICE</th><th class="r">PER SQ FT</th></tr>' + rowsH + "</table>" +
     '<div class="mnote">A typical (middle) price is shown only where ' + MIN_PRICED + " or more priced sales stand behind it; a dash means fewer.</div>" : '<div class="note2">' + icon("info", 18, TEAL) + "<div>No sale of this building was registered in this window.</div></div>";
-  return { h: 120 + 26 * S.bands.length + 40, keep: false, html: secHead("chart-bar", "Sales in this building", esc(B.w.say) + ".") + tiles + tbl };
+  return { h: 120 + 26 * S.bands.length + 40 + 22 * S.bands.filter((b) => b.price != null).length, keep: false, html: secHead("chart-bar", "Sales in this building", esc(B.w.say) + ".") + tiles + tbl };
 }
 function recentBlock(B) {
   const S = B.S;
   if (!S.recent.length) return null;
   const rows = S.recent.map((r) => "<tr><td>" + esc(dateLong(r.date)) + "</td><td>" + esc(BAND_SAY[r.band] || r.band) + (r.stage === "offplan" ? '<span class="cn"> off-plan</span>' : "") + '</td><td class="r">' + (r.sqft ? fmt(r.sqft) + " sq ft" : "&ndash;") + '</td><td class="r">' + (r.price != null ? aed(r.price) : "not recorded") + "</td></tr>").join("");
   return { h: 70 + 21 * S.recent.length, html: secHead("stack", "Recent sales, newest first", (S.recentAll > S.recent.length ? "The latest " + S.recent.length + " of " + fmt(S.recentAll) + ". " : "") + "A size is shown where the day's record holds one sale, so the price and the size belong together.") +
-    '<table class="tb"><tr><th>DATE</th><th>HOME</th><th class="r">SIZE</th><th class="r">PRICE</th></tr>' + rows + "</table>" };
+    // v494 - the recent sales as gold bars (price), the date, home and size on each row; a sale with no recorded price keeps a plain line
+    (pkBars(S.recent.filter((r) => r.price != null).map((r) => [esc(dateLong(r.date)).replace(/ \d{4}$/, ""), r.price, "<b>" + aed(r.price) + "</b> &middot; " + esc(BAND_SAY[r.band] || r.band) + (r.sqft ? ", " + fmt(r.sqft) + " sq ft" : "") + (r.stage === "offplan" ? ", off-plan" : "")]), { labelW: 70, rightW: 260 }) || ('<table class="tb"><tr><th>DATE</th><th>HOME</th><th class="r">SIZE</th><th class="r">PRICE</th></tr>' + rows + "</table>")) +
+    (S.recent.some((r) => r.price == null) ? '<div class="mnote">' + S.recent.filter((r) => r.price == null).length + " of these sales carry no recorded price and are not drawn.</div>" : "") };
 }
 function rentBlock(B) {
   const R = B.R;
