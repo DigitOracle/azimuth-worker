@@ -3,6 +3,7 @@
 //   GET /developers_pdf?kind=investor_tiers&project=<id>&type=<preset>&tier=<summary|standard|full>&segs=a,b,c&client=<name>&key=...      the PDF
 //        &format=html shows the document; &format=audit returns the audit record as JSON (the sidecar). The audit record is also in the document's meta tags and the X-Investor-Audit header.
 // The facts for a project are read from the district shard img_investor_tiers_facts_<district> found through img_investor_tiers_index (v379), falling back to the v376 single key img_investor_tiers_facts (read only here; nothing in this file writes KV).
+import { pkFig, pkGrid } from "./pdf_kit.js";   // v490 - the shared PDF look
 import { kvJson } from "./brief.js";
 import { loadFactsSharded } from "./investor_facts.js";
 import { BRIEF_KIT, esc } from "./brief_docs.js";
@@ -232,10 +233,25 @@ function devPicBlocks(dp, c) {
   if (refs.length) out.push(wrap("Developer's brochure pages", picGrid(refs, 4, 163, 112, { ref: true, fs: 8 }) + '<div class="ivlab">' + esc(REF_NOTE) + "</div>", 230));
   return out;
 }
+// v490 (Kendall 11 Oct: "get away from as many words as possible and get into lots of icons") - the headline figures as icon cards
+// under the title: every figure is one the report already states further down, from the same facts record; none is new
+export function ivFigures(f) {
+  const st = f.status || {}, sa = f.sales || {}, bf = (f.delivery && f.delivery.brand_family) || null, k = (n) => Math.round(n).toLocaleString("en-US");
+  const yr = (d) => (d ? String(d).slice(0, 4) : "");
+  return [
+    st.percent != null ? pkFig("builder", st.percent + "%", "built", esc(st.text || "")) : "",
+    st.completion ? pkFig("calendar", yr(st.completion), "completed") : st.planned_end ? pkFig("calendar", yr(st.planned_end), "handover due", "the register's date") : "",
+    bf && bf.past_planned_end ? pkFig("shield", k(bf.registered_finished) + " of " + k(bf.past_planned_end), "past projects finished", "the developer's") : "",
+    st.units ? pkFig("home", k(st.units), "homes") : "",
+    sa.l12 != null ? pkFig("users", k(sa.l12), "sales, 12 months") : "",
+    sa.l12_median_psf ? pkFig("tag", "AED " + k(sa.l12_median_psf), "per sq ft, typical") : "",
+  ].filter(Boolean);
+}
 export function buildTiersHtml(facts, plan, opts) {
   const o = opts || {}, C = { logo: o.logo || null, today: o.today || dateLong(facts.as_of.built) };
   const title = '<div class="ivtitle"><div class="lbl" style="margin-bottom:3px;text-transform:uppercase">Investor report</div><h1 class="serif">' + esc(facts.project.name) + " in " + esc(facts.project.area) + '</h1><div class="ivprep">Prepared for ' + (o.client ? "<b>" + esc(o.client) + "</b>" : "the reader of this report") + '</div>' + (facts.location && facts.location.text ? '<div class="ivprep" style="margin-top:3px">' + esc(facts.location.text) + "</div>" : "") + '<div class="ivbadges"><span class="ivbadge">' + esc(TIER_TITLE[plan.tier]) + "</span>" + (plan.draft ? '<span class="ivbadge" style="border-color:#B5651D;color:#7a3f00">Draft, awaiting official check</span>' : "") + (plan.type ? '<span class="ivbadge">' + esc((PRESETS.find((p) => p.id === plan.type) || {}).title || plan.type) + "</span>" : "") + "</div></div>";
-  const blocks = [{ sub: "Report", h: 96 + (facts.location && facts.location.text ? 34 : 0) + (plan.draft ? 52 : 0), html: title + (plan.draft ? '<div class="ivnote" style="margin-top:8px"><b>Draft, awaiting official check before client use.</b> ' + esc(plan.draft) + "</div>" : "") }];
+  const figs = o.figures === false ? [] : ivFigures(facts), figHtml = figs.length ? '<div style="margin-top:10px">' + pkGrid(figs, Math.min(figs.length, figs.length > 4 ? 3 : figs.length)) + "</div>" : "";
+  const blocks = [{ sub: "Report", h: 96 + (facts.location && facts.location.text ? 34 : 0) + (plan.draft ? 52 : 0) + (figs.length ? (figs.length > 4 ? 2 : 1) * 104 : 0), html: title + figHtml + (plan.draft ? '<div class="ivnote" style="margin-top:8px"><b>Draft, awaiting official check before client use.</b> ' + esc(plan.draft) + "</div>" : "") }];
   if (o.devPics && o.devPics.length && o.devClaims) for (const b of devPicBlocks(o.devPics, o.devClaims)) blocks.push(b);   // v417
   for (const it of plan.core) blocks.push(coreBlock(it));
   for (const r of plan.included) blocks.push(segBlocks(r, facts, plan.tier));
@@ -295,7 +311,7 @@ export async function buildInvestorTiersPdf(env, p, opts) {
     const dp = dc ? await loadDevPics(env, dc, opts && opts.origin) : [];
     if (dp.length) devOpts = { devPics: dp, devClaims: dc };
   }
-  const doc = buildTiersHtml(facts, plan, Object.assign({ client: p.client }, devOpts));
+  const doc = buildTiersHtml(facts, plan, Object.assign({ client: p.client, figures: opts && opts.figures }, devOpts));
   if (doc.lint.length) return { status: 500, body: { ok: false, reason: "the report text failed its own checks: " + doc.lint.join("; ") } };
   return { status: 200, html: doc.html, pages: doc.pages, fname: "Investor_" + facts.project.id + "_" + plan.tier + ".pdf", audit: plan.audit };
 }

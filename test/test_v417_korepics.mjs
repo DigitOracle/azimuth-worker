@@ -108,10 +108,10 @@ console.log("E - every other report is byte-identical to v415");
     fs.writeFileSync(tmp, execFileSync("git", ["-C", ROOT, "show", "3217206:src/investor_tiers_page.js"], { maxBuffer: 1 << 26 }).toString("utf8"));
     const OLD = await import("../src/_v417_old_inv.mjs");
     for (const tier of ["summary", "standard", "full"]) {
-      const a = await buildInvestorTiersPdf(mkEnv(true), inv(regRec.project.id, tier), {}), b = await OLD.buildInvestorTiersPdf(mkEnv(true), inv(regRec.project.id, tier), {});
+      const a = await buildInvestorTiersPdf(mkEnv(true), inv(regRec.project.id, tier), { figures: false }),   /* v490: the icon figure row is the one deliberate addition; everything else must still match */ b = await OLD.buildInvestorTiersPdf(mkEnv(true), inv(regRec.project.id, tier), {});
       ok(a.status === 200 && a.html === b.html && sha(a.html) === sha(b.html), "registered sample, " + tier + ": the report is byte-identical to v415 even with the pictures published (" + sha(a.html) + ")");
     }
-    const pa = await withPending(() => buildInvestorTiersPdf(mkEnv(true), inv("kore-by-imtiaz-offregister"), {})), pb = await OLD.buildInvestorTiersPdf(mkEnv(true), inv("kore-by-imtiaz-offregister"), {});
+    const pa = await withPending(() => buildInvestorTiersPdf(mkEnv(true), inv("kore-by-imtiaz-offregister"), { figures: false })), pb = await OLD.buildInvestorTiersPdf(mkEnv(true), inv("kore-by-imtiaz-offregister"), {});
     ok(pa.html === pb.html && imgSrcs(pa.html).length === 0, "negative: with the permission flipped to pending the KORE report is byte-identical to v415 (no pictures)");
   } finally { try { fs.unlinkSync(tmp); } catch (e) {} }
 }
