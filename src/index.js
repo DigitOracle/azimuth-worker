@@ -8776,7 +8776,7 @@ const CITY_STACK_CSS = ''
   + '#tip{right:auto;left:14px;top:auto;bottom:118px}'   // the stack owns the top right now
   + '#leg{max-width:calc(100vw - 28px);line-height:1.9}'
   + '@media(max-width:640px){.hp:not(.on){width:auto}.hp:not(.on) .hh b{display:none}.hstack{top:8px;right:8px}#sb{width:calc(100vw - 150px)}#tip{bottom:150px}#panel{left:10px;right:10px;width:auto;bottom:74px}}';
-const CITY_COLOUR_HTML = '<div id=colp class="hp colp"><div class=hh id=colh><span>colour by</span><b id=colres>district</b><i>▾</i></div><div class=hbody><div class="seg cseg" id=cseg><button type=button class=on data-c="">district</button><button type=button data-c=height>height</button><button type=button data-c=dev>developer</button></div><div class=cnote>Filling up, residents vs businesses and move-ins vs Dubai are on the district twins that model buildings one by one: Dubai Marina, JLT, JVC, Business Bay, Downtown.</div></div></div>';
+const CITY_COLOUR_HTML = '<div id=colp class="hp colp"><div class=hh id=colh><span>colour by</span><b id=colres>none</b><i>▾</i></div><div class=hbody><div class=cnote>Colour only where it means something: a height band, a developer, or a kind of place chosen under PLACES.</div><div class="seg cseg" id=cseg><button type=button class=on data-c="">none</button><button type=button data-c=height>height</button><button type=button data-c=dev>developer</button></div><div class=cnote>Filling up, residents vs businesses and move-ins vs Dubai are on the district twins that model buildings one by one: Dubai Marina, JLT, JVC, Business Bay, Downtown.</div></div></div>';
 const CITY_CHROME_JS = `
 window.__stackOpen=function(p){if(innerWidth<=640)document.querySelectorAll(".hstack .hp.on").forEach(function(x){if(x!==p)x.classList.remove("on")})};
 var map=null,STYLE_READY=false;   // the residents panel draws through the scene here, never a map
@@ -8803,7 +8803,7 @@ ${HOMES_WIRE_JS}
   Promise.all([j("/img/map_prices"+V),j("/img/amenities"+V),j("/img/districts_geo"+V)]).then(function(r){PR=(r[0]&&r[0].items)||[];AM=r[1];window.__AM=AM;window.__dName=dName;((r[2]&&r[2].districts)||[]).forEach(function(d){DN[d.slug]=d.name});if(window.__cityPlacesReady)window.__cityPlacesReady();var lc=document.getElementById("hlivec");if(lc)lc.textContent=PR.filter(function(i){return i.left}).length+" live";if(HB.on)drawHomes()})})();
 (function(){var p=document.getElementById("colp");if(!p)return;
   document.getElementById("colh").onclick=function(){var open=!p.classList.contains("on");if(open)window.__stackOpen(p);p.classList.toggle("on",open)};
-  p.querySelectorAll("#cseg button").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-c");p.querySelectorAll("#cseg button").forEach(function(x){x.classList.toggle("on",x===b)});document.getElementById("colres").textContent=v==="height"?"height":(v==="dev"?"developer":"district");window.__cityColourLast=v;if(window.__cityColour)window.__cityColour(v)}})})();
+  p.querySelectorAll("#cseg button").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-c");p.querySelectorAll("#cseg button").forEach(function(x){x.classList.toggle("on",x===b)});document.getElementById("colres").textContent=v==="height"?"height":(v==="dev"?"developer":"none");window.__cityColourLast=v;if(window.__cityColour)window.__cityColour(v)}})})();
 `;
 // ===== v508 CITY PLACES: the map's amenity filters on the all-Dubai twin, as ONE drop-down (Kendall 11 Oct 2026) =====
 const CITY_PLACES_HTML = '<div id=amp class="hp amp"><div class=hh id=amh><span>places</span><b id=amres>none</b><i>\u25BE</i></div><div class=hbody><div class="seg cseg amseg" id=amseg></div><div class=cnote id=amnote>Choose a district, then a kind: its buildings stay as blocks in the kind\'s colour and the rest of that district steps aside. A place with no building of its own keeps a badge; a dashed badge is an approximate position. Tap a badge for its name.</div></div></div>';
@@ -8871,7 +8871,8 @@ let CMODE3="",HOMESET3=null,HOMEN3=0;
 function paintCity(){
   const arr=mesh.instanceColor.array,c=new THREE.Color(),dim=new THREE.Color(0x1f2826),gold=new THREE.Color(0xC5A56A),hc=HCOL.map(h=>new THREE.Color(h));
   const counts=[0,0,0,0],devCount={};
-  for(let i=0;i<n;i++){let r=ORIGCOL[3*i],g=ORIGCOL[3*i+1],b=ORIGCOL[3*i+2];
+  const stone=new THREE.Color(0xC9D4CD);   // v515 - one colour for every building unless a mode gives colour a meaning
+  for(let i=0;i<n;i++){let r=stone.r,g=stone.g,b=stone.b;
     if(CMODE3==="height"){const hm=hh[i];let k=HBANDS.length-1;for(let q=0;q<HBANDS.length;q++){if(hm<HBANDS[q][1]){k=q;break}}counts[k]++;r=hc[k].r;g=hc[k].g;b=hc[k].b}
     else if(CMODE3==="dev"){const dk=(D.devs||[])[dvA[i]]||"";if(dk&&CDEV[dk]!=null){devCount[dk]=(devCount[dk]||0)+1;c.setHex(CDEV[dk]);r=c.r;g=c.g;b=c.b}else{r=dim.r;g=dim.g;b=dim.b}}
     if(HOMESET3){if(!HOMESET3.has(i)){r=dim.r;g=dim.g;b=dim.b}else if(!CMODE3){r=gold.r;g=gold.g;b=gold.b}}
@@ -8880,7 +8881,7 @@ function paintCity(){
   if(!legEl)return;
   let txt=CMODE3==="height"?"height "+HBANDS.map((x,k)=>'<i style="background:'+HCOL[k]+'"></i>'+x[2]+" ("+counts[k].toLocaleString("en")+")").join(" ")
     :CMODE3==="dev"?"developer "+Object.keys(devCount).sort((a,b)=>devCount[b]-devCount[a]).slice(0,9).map(k=>'<i style="background:#'+CDEV[k].toString(16).padStart(6,"0")+'"></i>'+CDEVN[k]+" ("+devCount[k].toLocaleString("en")+")").join(" ")+' <i style="background:#1f2826"></i>other buildings'
-    :LEG0;
+    :'<i style="background:#C9D4CD"></i>buildings <i style="background:#3E8A7E"></i>sea <i style="background:#8FC7B9"></i>creek, canal, lakes';   // v515
   if(HOMESET3)txt+=' <i style="background:#C5A56A"></i>'+HOMEN3.toLocaleString("en")+" buildings with homes in your budget";
   legEl.innerHTML=txt}
 let homeT3=null;
@@ -8893,7 +8894,7 @@ function flyPoint(x,z,r){const from={p:cam.position.clone(),t:ctl.target.clone()
 window.__cityFly=(lon,lat,r)=>{const p=llx(lon,lat);flyPoint(p[0],p[1],r||1600)};
 window.__cityStack={utm40,llx,nearestInst,get homes(){return HOMEN3},get mode(){return CMODE3}};
 if(window.__homesLast!==undefined)window.__onHomes(window.__homesLast);
-if(window.__cityColourLast)window.__cityColour(window.__cityColourLast);
+if(window.__cityColourLast)window.__cityColour(window.__cityColourLast);else paintCity();   // v515 - paint the neutral colour at load, not the district hues
 // ===== v152.5 CITY STACK - end =====
 `;
 const RES_CITY_JS = `
@@ -10294,7 +10295,7 @@ function renderCity(key, rk) {
     + '<div id=ld>loading the city</div><canvas id=c></canvas><div id=lbl></div>'
     + '<div id=hd><h1>Najma <b>\u0646\u062c\u0645\u0629</b> \u2014 the twin \u00b7 all Dubai</h1><p>loading</p></div>'
     + '<div id=sb><input id=q type=search placeholder="search a district or corridor\u2026" autocomplete=off spellcheck=false><div id=sr></div><select id=sel><option value="">jump to a district\u2026</option></select></div><div id=tip></div>'
-    + '<div id=leg>massing by district <i style="background:#C5A56A"></i>towers lighter <i style="background:#3E8A7E"></i>sea <i style="background:#8FC7B9"></i>creek, canal, lakes</div>'
+    + '<div id=leg><i style="background:#C9D4CD"></i>buildings <i style="background:#3E8A7E"></i>sea <i style="background:#8FC7B9"></i>creek, canal, lakes</div>'   // v515 - the legend names only what is on screen
     + '<div class=hstack id=hstack>' + HOMES_PANEL_HTML + (rk ? RES_PANEL_HTML : '') + CITY_COLOUR_HTML + CITY_PLACES_HTML + '</div><div id=panel></div>'   // v152.5 - the same stack as MAP and the district twins
     + '<script>' + CITY_BLOCKS_JS + '<\/script>'   // v278 - the city of blocks keeps you until you zoom right in (twin_blocks.js); sits before the chrome so chrome + module stay adjacent
     + '<script>(function(){var KEY=' + JSON.stringify(key || "") + ';' + CITY_CHROME_JS + (rk ? 'var RK=' + JSON.stringify(rk) + ';' + RES_PANEL_JS : '') + '})();<\/script>'
