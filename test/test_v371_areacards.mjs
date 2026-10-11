@@ -117,7 +117,7 @@ S.prof = null; S.band = null; S.parea = null;
 P.openProf("y"); ok(S.prof === "y", "with no developer locked a developer can be opened");
 S.prof = null;
 const jsrc = fs.readFileSync(new URL("../src/devmap_page.js", import.meta.url), "utf8");
-ok(/function leaveProf\(\)\{S\.prof=null/.test(jsrc) && /if\(pb\)pb\.onclick=leaveProf/.test(jsrc) && /b\.onclick=leaveProf/.test(jsrc), "the chip's x (and the Close button) are the only code that clears the developer");
+ok(/function leaveProf\(\)\{(devPfMap\(\[\]\);)?S\.prof=null/.test(jsrc) && /if\(pb\)pb\.onclick=leaveProf/.test(jsrc) && /b\.onclick=leaveProf/.test(jsrc), "the chip's x (and the Close button) are the only code that clears the developer");
 ok(/function select\(slug,fly,fk\)\{if\(S\.prof\)\{if\(!fset\(S\.prof\)\[slug\]\)return;if\(fly\)S\.parea=slug;fk=S\.prof\}/.test(jsrc) && /S\.prof=lk\|\|null/.test(jsrc), "a map click or project tap while locked keeps the developer; a map click sets the area chip, in an area where X does not sell it does nothing");
 ok(/if\(S\.prof\)\{S\.band=S\.band===tr\?null:tr;renderDetail\(\);refreshMap\(\);return\}setDrill/.test(jsrc), "the doughnut and the band legend filter inside the lock (the doughnut no longer opens a list across other areas)");
 ok(/if\(S\.drill&&!S\.prof\)h=drillHtml\(\)\+h/.test(jsrc), "the separate drill-down list is not stacked on a locked developer's page");

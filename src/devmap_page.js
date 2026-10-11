@@ -137,6 +137,9 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":
 export const DEVMAP_FOOTER = "Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397";
 
 const CSS = String.raw`
+
+/* v525 - by developer: the listings building cards */
+.devpfg{display:flex;flex-direction:column;gap:6px}.pfbtn.pfdv{margin:0;font-weight:400}.pfbtn.pfdv span{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}.pfbtn.pfdv span b{font-weight:600}.pfbtn.pfdv small{color:#8FA39B;font-size:.72rem}
 /* v521 - Available on Property Finder: the prominent button on the project card and its pop-up */
 .pfbtn{display:flex;align-items:center;gap:8px;width:100%;margin:8px 0 6px;padding:10px 12px;border:1px solid var(--gold,#C5A56A);border-radius:12px;background:rgba(197,165,106,.14);color:inherit;font:inherit;font-weight:600;cursor:pointer;text-align:left}
 .pfbtn svg{width:20px;height:20px;flex:none}.pfbtn span{flex:1}.pfbtn .pfc{margin-left:auto;color:var(--gold,#C5A56A);font-weight:700;white-space:nowrap}.pfbtn.pfnone{border-color:rgba(197,165,106,.35);background:transparent}.pfbtn.pfnone .pfc{color:#8FA39B;font-weight:500}
@@ -457,6 +460,32 @@ function pjDetailHtml(dk,located){var d=PDET[dk];if(!d)return "";var e=d.ev||{},
   h+=pdSec("map-pin","Area and position",a||pdRow("map-pin","Area","Not recorded","Dubai Land Department sales area of the project","NOT_AVAILABLE"));
   return h+docRow(d,"panel")+'</div>'}
 
+
+// v525 BY DEVELOPER (Kendall 11 Oct 2026: "by that developer, everything that they have available in every area ... map it by developer"): every
+// building of the developer (the sales index, all years, all its areas) joined to the city-wide Property Finder index (/city_bldg), as cards
+// grouped by area - each opens the same pop-up - and as gold points on the map (tap one for the pop-up).
+var CBI=null;
+function cbIdx(){if(!CBI)CBI=fetch('/city_bldg?key='+encodeURIComponent(KEY)).then(function(r){return r.ok?r.json():null}).catch(function(){return null});return CBI}
+function devPfMap(hits){if(typeof map==="undefined"||!map||!map.getSource)return;var fc={type:"FeatureCollection",features:(hits||[]).map(function(h){return {type:"Feature",geometry:{type:"Point",coordinates:[h.it.lon,h.it.lat]},properties:{k:h.it.k,n:h.it.n,f:h.it.f}}})};
+  try{if(map.getSource("devpf"))map.getSource("devpf").setData(fc);else if(map.isStyleLoaded&&map.isStyleLoaded()){map.addSource("devpf",{type:"geojson",data:fc});map.addLayer({id:"devpf",type:"circle",source:"devpf",paint:{"circle-radius":["interpolate",["linear"],["get","f"],1,5,120,15],"circle-color":"#C5A56A","circle-opacity":0.92,"circle-stroke-color":"#0C1413","circle-stroke-width":1.5}});
+    map.on("click","devpf",function(e){var f=e.features&&e.features[0];if(f)pfOpen(f.properties.k,f.properties.n)});map.on("mouseenter","devpf",function(){map.getCanvas().style.cursor="pointer"});map.on("mouseleave","devpf",function(){map.getCanvas().style.cursor=""})}}catch(x){}}
+function devPfFit(hits){if(typeof map==="undefined"||!map||!map.fitBounds||!hits.length)return;var x0=180,x1=-180,y0=90,y1=-90;hits.forEach(function(h){x0=Math.min(x0,h.it.lon);x1=Math.max(x1,h.it.lon);y0=Math.min(y0,h.it.lat);y1=Math.max(y1,h.it.lat)});try{map.fitBounds([[x0,y0],[x1,y1]],{padding:60,maxZoom:15,duration:900})}catch(x){}if(innerWidth<=760&&typeof setSheet==="function")setSheet(false)}
+var BEDW={studio:"studio","1":"1 bed","2":"2 bed","3+":"3+ bed"};
+function devPfFill(k){if(typeof document==="undefined"||typeof $!=="function")return;var el=$('devpf');if(!el||el.getAttribute('data-k')!==k)return;
+  var ix=ixOf('all'),pp=DM.devProfile(ix,k),areas=(pp.priced||[]).concat(pp.thin||[]),want=[];
+  areas.forEach(function(a){for(var t=0;t<4;t++)DM.drillProjects(ix,k,t,a.slug).forEach(function(g){g.projects.forEach(function(q){want.push({slug:a.slug,area:a.name,name:q.name,key:pdBldKey({slug:a.slug},q.ev||{})})})})});
+  cbIdx().then(function(j){if(!el.isConnected||el.getAttribute('data-k')!==k)return;
+    if(!j||!j.items){el.innerHTML='';return}
+    var by={},byN={};j.items.forEach(function(it){if(it.k)by[it.k]=it;if(it.d&&it.n)byN[it.d+'|'+pdNk(it.n)]=it});
+    var hits=[],seen={};want.forEach(function(w){var it=(w.key&&by[w.key])||byN[w.slug+'|'+pdNk(w.name)];if(!it||!it.f||seen[it.k])return;seen[it.k]=1;hits.push({w:w,it:it})});
+    if(S.prof!==k)return;
+    if(!hits.length){el.innerHTML='<div class=card><p class=label>Available on Property Finder</p><p class=note style="margin:0">No Property Finder rental listings for its buildings today.</p></div>';devPfMap([]);return}
+    var flats=hits.reduce(function(s,h){return s+h.it.f},0),grp={},order=[];hits.sort(function(a,b){return b.it.f-a.it.f}).forEach(function(h){if(!grp[h.w.area]){grp[h.w.area]=[];order.push(h.w.area)}grp[h.w.area].push(h)});
+    var h='<div class=card><p class=label>Available on Property Finder</p><div class=big style="font-size:20px">'+fmt(flats)+' flat'+(flats===1?'':'s')+' &middot; '+hits.length+' building'+(hits.length===1?'':'s')+' &middot; '+order.length+' area'+(order.length===1?'':'s')+'</div><p class=note style="margin:4px 0 8px">Rental listings in every area it builds in. Tap a building for its listings by bedroom.</p><button type=button class=btn id=devpffit>Show them on the map</button>';
+    order.forEach(function(a){h+='<p class=label style="margin:12px 0 6px">'+esc(a)+'</p><div class=devpfg>'+grp[a].map(function(x){var b=x.it.b||{},ln=["studio","1","2","3+"].filter(function(z){return b[z]}).map(function(z){return b[z]+' '+BEDW[z]}).join(' &middot; ');
+      return '<button type=button class="pfbtn pfdv" data-done=1 data-pfk="'+esc(x.it.k)+'" data-pfn="'+esc(x.it.n)+'"><span><b>'+esc(x.it.n)+'</b><small>'+ln+'</small></span><b class=pfc>'+fmt(x.it.f)+'</b></button>'}).join('')+'</div>'});
+    h+='<p class=note style="margin:8px 0 0">'+esc(freshSay(j.as_of))+'</p></div>';el.innerHTML=h;var fb=$('devpffit');if(fb)fb.onclick=function(){devPfFit(hits)};devPfMap(hits)})}
+function freshSay(a){var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(a||""));if(!m)return '';var M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];var t=new Date(Date.now()+4*3600e3).toISOString().slice(0,10),d=Math.round((Date.parse(t)-Date.parse(m[1]+'-'+m[2]+'-'+m[3]))/864e5);return 'Updated '+(+m[3])+' '+M[+m[2]-1]+' '+m[1]+' &middot; '+(d<=0?'today':d===1?'1 day ago':d+' days ago')}
 // v521 AVAILABLE ON PROPERTY FINDER (Kendall 11 Oct 2026): the building's listings, as a pop-up, from the project card. Listings, never vacancy.
 var PFC={},PFN={};   // v522 - the project name rides along for the 'dld:<name>' fallback
 function pfGet(k){if(!PFC[k])PFC[k]=fetch('/adv_bldg?k='+encodeURIComponent(k)+'&n='+encodeURIComponent(PFN[k]||'')+'&key='+encodeURIComponent(KEY)).then(function(r){return r.ok?r.json():null}).catch(function(){return null});return PFC[k]}
@@ -554,7 +583,7 @@ function lockChips(){var el=$("lockchips");if(!el)return;var on=S.prof&&S.screen
   var nm=(IDX.devs[S.prof]||{}).name||DEFAULT_NAMES[S.prof]||S.prof,ar=S.parea&&IDX.areas[S.parea]?IDX.areas[S.parea].name:null,x=function(id,lab){return '<button type=button id='+id+' aria-label="'+esc(lab)+'">'+icoSvg('x','evi')+'</button>'};
   el.innerHTML='<span class=chip>'+icoSvg('buildings','evi')+'<b dir=auto>'+esc(nm)+'</b>'+x('chipdev','Leave '+nm)+'</span><span class=chip>'+icoSvg('map-pin','evi')+'<b dir=auto>'+(ar?esc(ar):'All areas')+'</b>'+(ar?x('chiparea','Show all areas'):'')+'</span><span class=chip>'+icoSvg('chart-bar','evi')+'<b>'+(S.band!=null?DM.TIER_WORDS[S.band]:'All price bands')+'</b>'+(S.band!=null?x('chipband','Show all price bands'):'')+'</span><span class=chip>'+icoSvg('stack','evi')+'<b>'+(S.win==="l12"&&IDX.ev?'Last 12 months':'All years')+'</b></span>';
   var b=$("chipdev");if(b)b.onclick=leaveProf;b=$("chiparea");if(b)b.onclick=function(){S.parea=null;renderDetail();refreshMap()};b=$("chipband");if(b)b.onclick=function(){S.band=null;renderDetail();refreshMap()}}
-function leaveProf(){S.prof=null;S.parea=null;S.band=null;S.pj=null;renderDetail();refreshMap()}
+function leaveProf(){devPfMap([]);S.prof=null;S.parea=null;S.band=null;S.pj=null;renderDetail();refreshMap()}
 function areaCardsHtml(p,k){var all=p.priced.map(function(a){return {a:a,priced:1}}).concat(p.thin.map(function(a){return {a:a,priced:0}}));if(!all.length)return '';var hp=DM.hasProjects(ixOf(S.win));
   return '<div class=card id=acards><p class=label>Where it sells: tap an area for its projects</p><div class=acg>'+all.map(function(x){var a=x.a,np=hp?areaProjs(k,a.slug).length:null,on=S.parea===a.slug;
     // v448 (Kendall 9 Oct: "this card should carry the cards as well, for that specific area"): the area's own documents under each card,
@@ -589,6 +618,7 @@ function profileHtml(k){
   var h='<p class=label>Developer profile</p><h2>'+esc(p.name)+'</h2><button type=button class=btn id=pback style="margin-top:8px">'+back+'</button>';
   if(!p.areas)return h+nsHtml(k)+anHtml(k)+rcHtml(k)+(typeof pdfRowProf==="function"?pdfRowProf(k,p):"")+'<p class=note>'+esc(p.name)+': no sales on the map yet.</p>'+profSrc();
   h+=wsegProf();
+  h+='<div id=devpf data-k="'+esc(k)+'"></div>';setTimeout(function(){devPfFill(k)},0);   // v525 - everything it has listed to rent, every area (see the v525 block)
   h+='<div class=seg style="margin-top:10px" id=useg><button data-u=sqft>per sq ft</button><button data-u=sqm>per sq m</button></div>';
   h+=(typeof CF!=="undefined"&&CF?CF.profNote():"")+areaCardsHtml(p,k);h+=ncHtml(k);h+=nsHtml(k);h+=anHtml(k);h+=rcHtml(k);h+=(typeof pdfRowProf==="function"?pdfRowProf(k,p):"");h+='<div class=card>'+(p.market>=0?'<span class=tag style="background:'+TC[p.market]+'">'+DM.brandLabel(p.market)+' (market view)</span>':'')+'<p style="margin:10px 0 0"><b>Market view:</b> '+(p.market>=0?DM.brandLabel(p.market)+', as the market names it.':'not set yet.')+'</p><p style="margin:4px 0 0"><b>Where its projects sit on price:</b> '+esc(DM.dataLine(p))+'.</p><p class=note style="margin:4px 0 0">The market view is how people name the brand, and is set by a person. Price alone does not say whether a developer is luxury: design, quality, who it is built for and how few homes it builds in each place all matter, so no class is given from price. The evidence below shows each factor as a number.</p><p style="margin:10px 0 0">'+esc(DM.profileSentence(p,S.unit))+'</p>'+pricePosHtml(k)+'</div>'+bandKey(DM.boundsOf(IDX))+evidenceHtml(k)+delayHtml(k)+talkHtml(k);
   h+='<div class=card><p class=label>Its projects by price band</p>';

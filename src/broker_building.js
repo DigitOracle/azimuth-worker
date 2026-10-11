@@ -111,7 +111,7 @@ export function rentFigures(rows, w) {
   const keep = rows.filter((r) => r.date >= w.from && r.date <= w.to), by = {};
   for (const r of keep) { const x = by[r.band] || (by[r.band] = { n: 0, pairs: [] }); x.n += r.n; if (r.med != null && r.n > 0) x.pairs.push([r.med, r.n]); }
   const wmed = (pairs) => { const p = pairs.slice().sort((a, b) => a[0] - b[0]), t = p.reduce((s, x) => s + x[1], 0); if (t < MIN_PRICED) return null; let c = 0; for (const x of p) { c += x[1]; if (c >= t / 2) return Math.round(x[0]); } return null; };
-  const bands = BANDS.filter((b) => by[b]).map((b) => ({ band: b, label: BAND_SAY[b], n: by[b].n, priced: by[b].pairs.reduce((s, x) => s + x[1], 0), rent: wmed(by[b].pairs) }));
+  const bands = BANDS.filter((b) => by[b]).map((b) => ({ band: b, label: b === "3+" && !by["3"] ? "3 bedrooms or more" : BAND_SAY[b], n: by[b].n, priced: by[b].pairs.reduce((s, x) => s + x[1], 0), rent: wmed(by[b].pairs) }));
   return { n: bands.reduce((s, b) => s + b.n, 0), bands };
 }
 
