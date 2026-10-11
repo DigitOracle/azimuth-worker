@@ -8806,7 +8806,7 @@ ${HOMES_WIRE_JS}
   p.querySelectorAll("#cseg button").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-c");p.querySelectorAll("#cseg button").forEach(function(x){x.classList.toggle("on",x===b)});document.getElementById("colres").textContent=v==="height"?"height":(v==="dev"?"developer":"district");window.__cityColourLast=v;if(window.__cityColour)window.__cityColour(v)}})})();
 `;
 // ===== v508 CITY PLACES: the map's amenity filters on the all-Dubai twin, as ONE drop-down (Kendall 11 Oct 2026) =====
-const CITY_PLACES_HTML = '<div id=amp class="hp amp"><div class=hh id=amh><span>places</span><b id=amres>none</b><i>\u25BE</i></div><div class=hbody><div class="seg cseg amseg" id=amseg></div><div class=cnote id=amnote>Pins from the registers the map uses; a hollow pin is an approximate position. Tap a pin for its name.</div></div></div>';
+const CITY_PLACES_HTML = '<div id=amp class="hp amp"><div class=hh id=amh><span>places</span><b id=amres>none</b><i>\u25BE</i></div><div class=hbody><div class="seg cseg amseg" id=amseg></div><div class=cnote id=amnote>Choose a district, then a kind: its buildings stay as blocks in the kind\'s colour and the rest of that district steps aside. A place with no building of its own keeps a badge; a dashed badge is an approximate position. Tap a badge for its name.</div></div></div>';
 const CITY_PLACES_CSS = '#amc{position:fixed;inset:0;pointer-events:none;z-index:2}.amseg button svg{width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;margin-right:5px}.amseg button i{font-style:normal;color:var(--mut);margin-left:5px}.amseg button.clr{margin-left:auto}';
 const CITY_PLACES_JS = `
 ` + AMEN_JS + `
@@ -8822,11 +8822,20 @@ let AMDIST=-1;const AMSC=document.createElement("button");AMSC.type="button";AMS
 function amRecalc(){const AM=window.__AM;const ks=Object.keys(AMON).filter(k=>AMON[k]);AMPTS=[];const dslug=AMDIST>=0&&D.districts[AMDIST]?D.districts[AMDIST].slug:null;
   ((AM&&AM.items)||[]).forEach(i=>{if(!AMON[i.k]||i.lon==null||i.lat==null)return;if(dslug&&i.d!==dslug)return;const p=llx(i.lon,i.lat);AMPTS.push({i,v:new THREE.Vector3(p[0],6,p[1]),sx:-1,sy:-1})});
   const where=dslug?" in "+D.districts[AMDIST].name:" across Dubai";AMRES.textContent=ks.length?ks.map(k=>AMEN[k][0]).join(", ")+" \u00b7 "+AMPTS.length.toLocaleString("en")+where:"none";
-  AMSC.textContent="all Dubai";AMSC.hidden=!(dslug&&ks.length);if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC)}
+  AMSC.textContent="all Dubai";AMSC.hidden=!(dslug&&ks.length);if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC);amBlocks(ks)}
+const AMMAT0=mesh.instanceMatrix.array.slice(0);let AMHID=[],AMKEEP=new Map();
+function amBlocks(ks){const M=mesh.instanceMatrix.array;for(const i of AMHID){for(let k=0;k<16;k++)M[16*i+k]=AMMAT0[16*i+k]}AMHID=[];AMKEEP=new Map();
+  if(AMDIST>=0&&ks.length){for(const p of AMPTS){const q=llx(p.i.lon,p.i.lat);const j=nearestInst(q[0],q[1],AMDIST,90);p.blk=j>=0;if(j>=0&&!AMKEEP.has(j))AMKEEP.set(j,p.i.k)}
+    for(let i=0;i<n;i++){if(di[i]===AMDIST&&!AMKEEP.has(i)){AMHID.push(i);for(let k=0;k<16;k++)M[16*i+k]=0}}
+    const nb=AMPTS.filter(p=>p.blk).length;if(nb)AMRES.textContent+=" \u00b7 "+nb+" as blocks"}
+  else for(const p of AMPTS)p.blk=false;
+  mesh.instanceMatrix.needsUpdate=true;paintCity()}
+function amPaint(){if(!AMKEEP.size)return;const arr=mesh.instanceColor.array,c=new THREE.Color();AMKEEP.forEach((k,i)=>{c.set(AMEN[k][2]);arr[3*i]=c.r;arr[3*i+1]=c.g;arr[3*i+2]=c.b});mesh.instanceColor.needsUpdate=true}
+const _paint0=paintCity;paintCity=function(){_paint0();amPaint()};   // v512 - the kept blocks wear the kind's colour whatever COLOUR BY says
 const _flyTo0=flyTo;flyTo=function(ix,go){AMDIST=ix;_flyTo0(ix,go);amRecalc()};   // v511 - a chosen district scopes the places (Kendall: "if I say Business Bay, I should only get the petrol stations within Business Bay")
 const AMIMG={};function amImg(k){if(AMIMG[k])return AMIMG[k];const col=AMEN[k][2];const svg=ICON[k].replace("<svg ","<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' fill='none' stroke='"+col+"' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round' ");const im=new Image();im.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);AMIMG[k]=im;return im}
 function amDraw(){actx.clearRect(0,0,amc.width,amc.height);if(!AMPTS.length)return;const W=innerWidth,H=innerHeight,r=devicePixelRatio||1;const far=cam.position.distanceTo(ctl.target);const sz=far>22000?2:far>9000?2.8:4;
-  for(const p of AMPTS){const q=p.v.clone().project(cam);if(q.z>1||q.x<-1.02||q.x>1.02||q.y<-1.02||q.y>1.02){p.sx=-1;continue}p.sx=(q.x+1)/2*W;p.sy=(1-q.y)/2*H;const col=AMEN[p.i.k][2];
+  for(const p of AMPTS){if(p.blk){p.sx=-1;continue}const q=p.v.clone().project(cam);if(q.z>1||q.x<-1.02||q.x>1.02||q.y<-1.02||q.y>1.02){p.sx=-1;continue}p.sx=(q.x+1)/2*W;p.sy=(1-q.y)/2*H;const col=AMEN[p.i.k][2];
     const R=sz*2.4*r,cx=p.sx*r,cy=p.sy*r;actx.beginPath();actx.arc(cx,cy,R,0,6.2832);actx.fillStyle="rgba(19,31,29,.92)";actx.fill();actx.lineWidth=1.2*r;actx.strokeStyle=col;actx.setLineDash(p.i.ap?[3*r,2.5*r]:[]);actx.stroke();actx.setLineDash([]);
     const im=amImg(p.i.k);if(im.complete&&im.naturalWidth){const s=R*1.25;actx.drawImage(im,cx-s/2,cy-s/2,s,s)}}}
 (function amLoop(){requestAnimationFrame(amLoop);amDraw()})();
