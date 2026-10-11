@@ -5,7 +5,7 @@ import fs from "node:fs";
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log("FAIL", m); } };
 const src = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-ok(/\+ '#hp,#stkp,#stkbtn\{display:none!important\}'/.test(src), "STACK_CSS hides the map budget panel, the twin stack panel and its button");
+ok(/\+ '#hp,#stkp,#stkbtn(,#[a-z]+)*\{display:none!important\}'/.test(src), "STACK_CSS hides the map budget panel, the twin stack panel and its button (v517 added COLOUR BY to the same rule)");
 ok(/STKON=false;\s*\/\/ v510/.test(src), "the stack filter starts OFF (no gold floor filter running behind a hidden panel)");
 ok(/btn\.className="stkb";btn\.id="stkbtn";btn\.textContent="HOMES";btn\.hidden=true;/.test(src), "the HOMES launcher is hidden at creation");
 ok(!/STKON=true;p\.classList\.add\("on"\);/.test(src), "the open-from-the-start line is gone");
