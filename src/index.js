@@ -41,7 +41,7 @@ import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
 import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitMorning, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
 import { isDeskState as igDeskIsState, deskIgLink, deskIgCallback, deskIgStatus, deskIgDeauth, deskIgRefresh, deskIgPublishReel } from "./ig_desk.js";   // v404 - the desk's own Instagram connection (ig_auth_desk), separate from Najjuko's
-import { deskPostTick, deskMorningTick, deskPostPull, refImport, markRefRequest } from "./desk_post.js";   // v413 - the desk posting loop
+import { deskPostTick, deskMorningTick, deskPostPull, refImport, markRefRequest, genImage as deskGenImage } from "./desk_post.js";   // v413 - the desk posting loop
 import { deskHandle, isDeskEvent, deskWindowOpen, deskOn } from "./desk.js";   // v388 - KENDALL DESK step 1: a second WhatsApp number that answers only the owner (all logic in src/desk.js)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -4789,6 +4789,17 @@ export default {
     if (url.pathname.indexOf("/questions/") === 0) return questionsRoute(request, env, url);
     // ---- THE BRIEF part C (brief_docs.js) ---- /brief_pdf and /brief_blocks. Placed ahead of appFetch's client gate on purpose: the module
     // checks the key itself (READ_KEY or a client key), so the integrator need not touch CLIENT_PATHS for it.
+    // v507 (Kendall 11 Oct: "we have access to the image API ... if we don't have a picture we should be able to create one") - ONE picture on
+    // demand for a document builder: owner key only, the desk's own generator (same model, same monthly cap, no reference photos),
+    // JPEG back. The prompt and size are the caller's; the caller labels the result an illustration.
+    if (url.pathname === "/gen_image") {
+      if (keyTier(env, url) !== "admin") return new Response("unauthorized", { status: 401 });
+      const prompt = String(url.searchParams.get("prompt") || "").slice(0, 3500), size = String(url.searchParams.get("size") || "1536x1024");
+      if (prompt.length < 20) return new Response("prompt too short", { status: 400 });
+      const g = await deskGenImage(env, { now: () => Date.now() }, prompt, null, size);
+      if (!g || !g.bytes) return new Response(JSON.stringify({ error: (g && g.err) || "no picture", cap: !!(g && g.cap) }), { status: 502, headers: { "Content-Type": "application/json" } });
+      return new Response(g.bytes, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } });
+    }
     if (url.pathname === "/brief_pdf" || url.pathname === "/brief_blocks") return briefDocsRoute(request, env, url, { keyOk: (e, u) => keyTier(e, u) !== "" });
     // ---- end THE BRIEF part C ----
     // ---- v324 - /developers_pdf (src/devmap_pdf.js): the Developers-by-area snapshot and detailed PDFs. Same key rule as /brief_pdf (client key or owner key), GET only. ----
