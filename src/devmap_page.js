@@ -139,7 +139,7 @@ export const DEVMAP_FOOTER = "Curated by Najjuko · Dubai Decoded · WhatsApp +9
 const CSS = String.raw`
 /* v521 - Available on Property Finder: the prominent button on the project card and its pop-up */
 .pfbtn{display:flex;align-items:center;gap:8px;width:100%;margin:8px 0 6px;padding:10px 12px;border:1px solid var(--gold,#C5A56A);border-radius:12px;background:rgba(197,165,106,.14);color:inherit;font:inherit;font-weight:600;cursor:pointer;text-align:left}
-.pfbtn .pfc{margin-left:auto;color:var(--gold,#C5A56A);font-weight:700;white-space:nowrap}.pfbtn.pfnone{border-color:rgba(197,165,106,.35);background:transparent}.pfbtn.pfnone .pfc{color:#8FA39B;font-weight:500}
+.pfbtn svg{width:20px;height:20px;flex:none}.pfbtn span{flex:1}.pfbtn .pfc{margin-left:auto;color:var(--gold,#C5A56A);font-weight:700;white-space:nowrap}.pfbtn.pfnone{border-color:rgba(197,165,106,.35);background:transparent}.pfbtn.pfnone .pfc{color:#8FA39B;font-weight:500}
 #pfpop{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;background:rgba(6,10,9,.6);padding:16px}
 #pfpop .pfw{position:relative;width:min(460px,100%);max-height:86vh;overflow:auto;background:#0F1A18;color:#E9E3D6;border:1px solid rgba(197,165,106,.55);border-radius:16px;padding:16px 16px 12px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 #pfpop .pfx{position:absolute;right:10px;top:6px;background:none;border:0;color:#8FA39B;font-size:1.5rem;cursor:pointer}

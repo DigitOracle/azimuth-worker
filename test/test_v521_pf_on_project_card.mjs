@@ -49,5 +49,6 @@ ok(/color:0x56635E,transparent:true,opacity:\.35/.test(src), "ghosts: darker and
 ok(/c\.set\(AMEN\[k\]\[2\]\)\.lerp\(w,\.2\)/.test(src), "chosen blocks: the kind's colour, lifted");
 ok(/for\(const p of AMPTS\)\{const q=p\.v\.clone\(\)\.project\(cam\);/.test(src), "a place shown as a block keeps its badge");
 
+ok(/\.pfbtn svg\{width:20px;height:20px;flex:none\}/.test(dm), "v521.1: the button icon is sized (it rendered page-wide and squeezed the label)");
 console.log(`v521 Property Finder on the project card: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
