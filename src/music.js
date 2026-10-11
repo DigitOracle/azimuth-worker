@@ -46,6 +46,16 @@ export async function musicRoute(env, url) {
 }
 
 // ask the video service for the MP4; returns {bytes} or {err}
+// v493 - words on a still picture, placed by the video service with a real font (never drawn by the image model)
+export async function overlayImage(env, job) {
+  if (!env.VIDEO_SVC) return { err: "the video service is not connected" };
+  try {
+    const r = await env.VIDEO_SVC.fetch("https://da-video/overlay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(job) });
+    if (!r.ok) { let j = {}; try { j = await r.json(); } catch (e) {} return { err: "the video service said: " + String(j.error || ("HTTP " + r.status)).slice(0, 200) }; }
+    const bytes = await r.arrayBuffer();
+    return bytes.byteLength > 1000 ? { bytes } : { err: "the picture came back empty" };
+  } catch (e) { return { err: "the video service did not answer" }; }
+}
 export async function renderVideo(env, job) {
   if (!env.VIDEO_SVC) return { err: "the video service is not connected" };
   try {

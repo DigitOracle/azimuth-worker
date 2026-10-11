@@ -39,6 +39,8 @@ store.set("postplan_pm1", JSON.stringify(plan));
 await tap("dp:pm1:ok");
 ok(ids() === "dp:pm1:nomusic,dp:pm1:music", "Approve offers Post as is / Add music", ids());
 await tap("dp:pm1:music");
+ok(ids() === "dp:pm1:vc_none,dp:pm1:vc_bottom,dp:pm1:vc_scroll", "v493: captions are asked first (none, bottom, scrolling)", ids());
+await tap("dp:pm1:vc_none");
 ok(ids() === "dp:pm1:m_calm", "only moods that have tracks are offered", ids());
 await tap("dp:pm1:m_calm");
 const p1 = JSON.parse(store.get("postplan_pm1"));

@@ -32,6 +32,8 @@ await tap("dp:fn:4");                       // Sunset
 ok(lists[0] && lists[0].length === 3 && /Landscape 16:9/.test(lists[0][1].title), "then the shape: square, landscape, portrait");
 const before = imgCalls.length;
 await tap("dp:fn:2");                       // Landscape
+ok(lists[0] && lists[0].map((r) => r.title).join(",") === "No words,Headline on picture,Caption strip at bottom", "v493: then words on the picture", JSON.stringify(lists[0]));
+await tap("dp:fn:2");                       // Headline on the picture
 const pv = btns[0];
 ok(pv && /Here's the picture I'll make/.test(pv.b) && /Dubai Creek at dusk/.test(pv.b) && /Sunset/.test(pv.b) && /Landscape 16:9/.test(pv.b), "Here's the picture I'll make, in plain words", pv && pv.b);
 ok(pv && /^dp:scene:make:[a-z0-9]{10,},dp:scene:change:[a-z0-9]{10,},dp:scene:cancel:[a-z0-9]{10,}$/.test(pv.x.map((b) => b.id).join(",")), "Make it / Change it / Cancel, each carrying the preview's own snapshot id (v490)", pv && pv.x.map((b) => b.id).join(","));
@@ -47,7 +49,7 @@ const call = imgCalls[imgCalls.length - 1];
 ok(call && /Setting: the Dubai Creek at dusk/.test(call.prompt) && /Sunset: the sun just above the horizon/.test(call.prompt) && /Change: put the Burj Khalifa behind me\./.test(call.prompt) && /reference photos/.test(call.prompt), "Make it: his own background, the light, his change and his face go into the picture", call && call.prompt);
 ok(call && call.size === "1536x1024", "in the shape he chose (landscape)", call && call.size);
 // cancel
-await say("/ideas"); await tap("dp:fn:6"); await tap("dp:fn:3"); await tap("dp:fn:2"); await tap("dp:fn:1"); await tap("dp:fn:3");
+await say("/ideas"); await tap("dp:fn:6"); await tap("dp:fn:3"); await tap("dp:fn:2"); await tap("dp:fn:1"); await tap("dp:fn:3"); await tap("dp:fn:1");
 const n0 = imgCalls.length; await btn("dp:scene:cancel");
 ok(/Cancelled\. Nothing was made\./.test(texts.join("")) && imgCalls.length === n0, "Cancel makes nothing");
 // helpers

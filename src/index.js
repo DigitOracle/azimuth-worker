@@ -5,7 +5,7 @@ import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - th
 import { deskReelTick } from "./desk_lab.js";
 import { clipTick } from "./heygen.js";   // v476
 import { clipDeps } from "./desk_post.js";
-import { musicRoute, renderVideo } from "./music.js";
+import { musicRoute, renderVideo, overlayImage } from "./music.js";
 import { newsTick as deskNewsTick } from "./desk_news.js";   // v473 - the desk news watcher (AI, UAE tech, Dubai events, smart city / ISO, projects)   // v467 - music for posts (library route + the da-video service)
 import { liRoute, liRecord, liConnected, liStartLink, liStep, liReminder, liPostImages } from "./li_desk.js";   // v464 - LinkedIn from the desk   // v460 - an approved Instagram reel finishes on the minute tick
 import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
@@ -5476,7 +5476,7 @@ function deskPostDeps(env) {
     vision: async (e, bytes, mime, q) => { if (!e.ANTHROPIC_API_KEY) return null; try { const r = await claudeFetch(e, CLAUDE_FAST, 900, "You transcribe text from images. Reply with the text only.", [{ type: "image", source: { type: "base64", media_type: mime || "image/jpeg", data: b64of(bytes) } }, { type: "text", text: q }], null); if (!r || !r.ok) return null; const j = await r.json(); return (j.content || []).filter(b => b && b.type === "text").map(b => b.text).join(" "); } catch (x) { return null; } },
     fetchMedia: waFetchMedia, origin: (e) => pubOrigin(e, ""), now: () => Date.now(), sleep: (ms) => new Promise(r => setTimeout(r, ms)),
     liConnected: async (e) => liConnected(await liRecord(e)), liPostImages: (e, imgs, cap) => liPostImages(e, imgs, cap),   // v466 - regular posts to LinkedIn
-    render: (e, job) => renderVideo(e, job), video: (e, link, cap) => waPost(e, { messaging_product: "whatsapp", to: owner, type: "video", video: { link, caption: cap || undefined } }, "video", pid),   // v467
+    render: (e, job) => renderVideo(e, job), overlay: (e, job) => overlayImage(e, job), video: (e, link, cap) => waPost(e, { messaging_product: "whatsapp", to: owner, type: "video", video: { link, caption: cap || undefined } }, "video", pid),   // v467
     list: (e, body, button, rows) => waPost(e, { messaging_product: "whatsapp", to: owner, type: "interactive", interactive: { type: "list", body: { text: String(body).slice(0, 1024) }, action: { button: String(button).slice(0, 20), sections: [{ title: "Choose one", rows: rows.slice(0, 10).map((x) => ({ id: x.id, title: String(x.title).slice(0, 24), description: x.description ? String(x.description).slice(0, 72) : undefined })) }] } } }, "list", pid),
   };
 }

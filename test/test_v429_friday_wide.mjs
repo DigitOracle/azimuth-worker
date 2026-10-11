@@ -50,7 +50,7 @@ ok(/\n\d\. \[motivation\] Friday Reflection, about life/.test(r) && /\n9\./.test
 let sysSeen = ""; const llm0 = deps.llm; deps.llm = async (env, sys, user, mx) => { if (!/suggest (Instagram|social-post) ideas/.test(sys)) sysSeen = sys; return llm0(env, sys, user, mx); };
 { const fi = (r.match(/\n(\d)\. \[motivation\] Friday Reflection/) || [])[1]; await say(fi); } r = await say("2");   // v473: pick the Friday Reflection wherever it sits
 ok(BACKGROUND_CHOICES.length === 5 && /5\. Calm terrace at sunrise/.test(r), "a fifth background: calm terrace at sunrise", r);
-await say("5"); await say("1"); await say("1");   // v475: then the time of day and the shape
+await say("5"); await say("1"); await say("1"); await say("1");   // v475: then the time of day and the shape; v493: and no words
 await deskPostRoute(env, { type: "interactive", interactive: { button_reply: { id: "dp:scene:make" } } }, "", deps);   // v475: Make it
 let p = await lastPlan(); const g = gens[gens.length - 1];
 ok(p.kind === "friday" && p.picture === "speaking" && p.background === "terrace", "the draft is marked as the Friday Reflection, speaking, terrace");

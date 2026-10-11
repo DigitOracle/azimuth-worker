@@ -284,7 +284,15 @@ async function buildImages(env, deps, p, onlyIdx) {
       if (ok) break;
     }
     if (g.err) { if (g.cap) return { cap: true, err: "the monthly picture budget is used up", notes }; return { err: g.err, notes }; }
-    s.img_key = await storeImage(env, g.bytes, "image/jpeg"); s.src = refs ? "ai-person" : "ai"; s.regen = s.regen || 0; if (!infographic) s.prompt = prompt.slice(0, 3500);   // v429 - kept for /post wide
+    s.img_key = await storeImage(env, g.bytes, "image/jpeg");
+    // v493 - "Headline on picture" / "Caption strip": the finished picture goes to the video service, which places the words exactly
+    if (!infographic && (p.words === "headline" || p.words === "strip") && deps.overlay && p.overlay_text) {
+      const sz = String((SHAPES[p.shape] || SHAPES.square).size).split("x").map(Number);
+      const ov = await deps.overlay(env, { image: deps.origin(env) + "/ig_media/" + s.img_key, text: p.overlay_text, mode: p.words, width: sz[0], height: sz[1] });
+      if (ov.bytes) { s.plain_key = s.img_key; s.img_key = await storeImage(env, ov.bytes, "image/jpeg"); }
+      else notes.push("The words could not be put on the picture (" + ov.err + "); it is shown without them.");
+    }
+    s.src = refs ? "ai-person" : "ai"; s.regen = s.regen || 0; if (!infographic) s.prompt = prompt.slice(0, 3500);   // v429 - kept for /post wide
     if (infographic && checked && !ok) s.flag = "text check failed, please look";
     else if (infographic && !checked) s.flag = "text not checked";
     p.ai = true;
@@ -430,6 +438,7 @@ async function buildImagesFor(env, deps, p, j, facts, keep) {
   let a = assemble(p, j, facts);
   if (p.type === "carousel") finishSlides(p, a, keep); else p.slides = (keep && keep.length ? keep : [{}]).slice(0, 1).map((s) => ({ alt: s.alt || p.idea.slice(0, 100), img_key: s.img_key, src: s.src }));
   if (p.type === "image") p.slides[0].alt = scrubPublic(p.idea, p.lane).slice(0, 100);
+  p.overlay_text = overlayTextOf(a.caption, p.idea);   // v493 - the words placed on the picture: the caption's first line
   const r = await buildImages(env, deps, p);
   p.notes = r.notes || [];
   a = assemble(p, j, facts);      // again, now that p.ai is known, so the caption carries "Illustration."
@@ -577,11 +586,14 @@ async function sendFeed(env, deps) {
 // Change it / Cancel. Nothing is generated until Make it, as on Naj's scene pictures. A carousel (slides) skips straight to drafting.
 const BG_LIST = BACKGROUND_CHOICES.concat([{ id: "custom", label: "Type my own" }]);
 const SHAPE_LIST = [{ id: "square", label: "Square (Instagram)" }, { id: "landscape", label: "Landscape 16:9 (LinkedIn)" }, { id: "portrait", label: "Portrait 9:16 (Reels, Status)" }];
+// v493 (Kendall 11 Oct: "how can I pick when the captions come on the screen") - words on the picture, placed exactly by the video service
+export const WORDS_LIST = [{ id: "none", label: "No words" }, { id: "headline", label: "Headline on picture" }, { id: "strip", label: "Caption strip at bottom" }];
 export function scenePreview(pick) {
   const pic = PICTURE_CHOICES.find((x) => x.id === pick.picture), bg = pick.background === "custom" ? pick.bg_text : (BACKGROUND_CHOICES.find((x) => x.id === pick.background) || {}).label;
   const tm = TIME_CHOICES.find((x) => x.id === pick.tod), sh = SHAPE_LIST.find((x) => x.id === pick.shape);
   const who = pick.picture === "scene" ? "A scene, no person in it." : pick.picture === "speaking" ? "You, speaking or teaching, your face from your reference photos." : "You on site in a hard hat and hi-vis, your face from your reference photos.";
-  let s = "Here's the picture I'll make:\n\n" + who + " Behind: " + (bg || "a Dubai setting") + ". " + (tm ? tm.label : "Natural daylight") + ". " + (sh ? sh.label : "Square") + ".\nIdea: " + pick.idea;
+  const wd = WORDS_LIST.find((x) => x.id === pick.words);
+  let s = "Here's the picture I'll make:\n\n" + who + " Behind: " + (bg || "a Dubai setting") + ". " + (tm ? tm.label : "Natural daylight") + ". " + (sh ? sh.label : "Square") + "." + (wd && wd.id !== "none" ? " Words: " + wd.label.toLowerCase() + " (the post's headline)." : "") + "\nIdea: " + pick.idea;
   for (const c of (pick.changes || [])) s += "\nYour change: " + c;
   return s.slice(0, 1000);
 }
@@ -619,7 +631,12 @@ async function feedReply(env, deps, n) {
   }
   if (pick && pick.step === "shape") {
     const sh = SHAPE_LIST[n - 1]; if (!sh) { await deps.send(env, menu("Which shape?", SHAPE_LIST)); return true; }
-    await showPreview(env, deps, Object.assign(pick, { shape: sh.id })); return true;
+    await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "words", shape: sh.id }), FEED_TTL);   // v493
+    await deps.send(env, menu("Words on the picture?", WORDS_LIST)); await tapList(env, deps, "Words on the picture?", "Pick words", WORDS_LIST.map((x) => ({ title: x.label }))); return true;
+  }
+  if (pick && pick.step === "words") {
+    const w = WORDS_LIST[n - 1]; if (!w) { await deps.send(env, menu("Words on the picture?", WORDS_LIST)); return true; }
+    await showPreview(env, deps, Object.assign(pick, { words: w.id })); return true;
   }
   if (!(await env.MEETINGS.get("desk_feed_open"))) return false;
   const L = await kvJ(env, "desk_ideas", []), it = L[n - 1];
@@ -639,7 +656,7 @@ async function sceneButton(env, deps, act, idShape) {
   if (act === "cancel") { await env.MEETINGS.delete("desk_feed_pick"); await deps.send(env, "Cancelled. Nothing was made."); return true; }
   if (act === "change") { await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "change_text" }), FEED_TTL); await deps.send(env, "Tell me the change in your next message, for example: put the Burj Khalifa behind me, or make me smile."); return true; }
   await env.MEETINGS.delete("desk_feed_pick");
-  await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "image", picture: pick.picture, background: pick.background, bg_text: pick.bg_text || undefined, tod: pick.tod, shape: pick.shape, changes: pick.changes || [], from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined });
+  await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "image", picture: pick.picture, background: pick.background, bg_text: pick.bg_text || undefined, tod: pick.tod, shape: pick.shape, words: pick.words || "none", changes: pick.changes || [], from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined });
   return true;
 }
 async function sceneText(env, deps, t) {
@@ -741,7 +758,7 @@ async function handleButton(env, deps, id) {
   if (id === "dp:start:ideas") { await sendFeed(env, deps); return true; }   // v472 - the fresh 10, not the weekly 5
   { const fn = String(id).match(/^dp:fn:(\d{1,2})$/); if (fn) { await env.MEETINGS.put("desk_feed_open", String(nowOf(deps)), { expirationTtl: FEED_TTL }); const done = await feedReply(env, deps, Number(fn[1])); if (!done) await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } }
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
-  const mm = String(id).match(/^dp:([a-z0-9]+):(music|nomusic|muse|mtry|mno|m_(calm|corporate|upbeat|cinematic|inspiring))$/);   // v467 - music
+  const mm = String(id).match(/^dp:([a-z0-9]+):(music|nomusic|muse|mtry|mno|vc_none|vc_bottom|vc_scroll|m_(calm|corporate|upbeat|cinematic|inspiring))$/);   // v467 - music; v493 vc_ captions
   if (mm) { const pm = await getPlan(env, mm[1]); if (!pm) { await deps.send(env, "That draft has expired."); return true; } return musicStep(env, deps, pm, mm[2], mm[3]); }
   // v468 - the change buttons: New picture, and More options (a list: rewrite, shorter, punchier, more formal, other background, Arabic, type a change, skip)
   const xm = String(id).match(/^dp:([a-z0-9]+):(newpic|more|e_short|e_punch|e_formal|e_bg|e_rewrite|e_arabic)$/);
@@ -767,6 +784,7 @@ async function handleButton(env, deps, id) {
     const say = { e_short: "shorter", e_punch: "punchier", e_formal: "more formal", e_bg: "another background", e_rewrite: "rewrite the caption completely in a fresh way, same idea and facts", e_arabic: "arabic version" }[a];
     await deps.send(env, "Working on it..."); await applyEdit(env, deps, px, say); return true;
   }
+  { const sm = String(id).match(/^dp:([a-z0-9]+):status$/); if (sm) { const ps = await getPlan(env, sm[1]); if (!ps) { await deps.send(env, "That post is no longer stored."); return true; } await statusSend(env, deps, ps); return true; } }   // v493
   const m = String(id).match(/^dp:([a-z0-9]+):(ok|edit|skip|now|slot|laneA|laneL|wig|wli|wboth)$/);
   if (!m) return false;
   const p = await getPlan(env, m[1]);
@@ -802,6 +820,11 @@ async function musicStep(env, deps, p, act, mood) {
   const origin = deps.origin(env);
   if (act === "nomusic" || act === "mno") { p.music_asked = true; p.music = { mode: "none" }; await putPlan(env, p); return handleButton(env, deps, "dp:" + p.id + ":ok"); }
   const ix = await musicIndex(env);
+  if (/^vc_/.test(act)) { p.vcap = act.slice(3); await putPlan(env, p); act = "music"; }   // v493 - the caption choice, then the mood
+  if (act === "music" && p.vcap == null) {
+    await deps.buttons(env, "Captions on the video?", [{ id: "dp:" + p.id + ":vc_none", title: "No captions" }, { id: "dp:" + p.id + ":vc_bottom", title: "At the bottom" }, { id: "dp:" + p.id + ":vc_scroll", title: "Scrolling" }]);
+    return true;
+  }
   if (act === "music") {
     const have = MOODS.filter((m) => (ix[m] || []).length);
     if (!have.length) { await deps.send(env, libraryText(ix)); return true; }
@@ -823,7 +846,10 @@ async function musicStep(env, deps, p, act, mood) {
   if (!imgs.length) { await deps.send(env, "Draft " + p.id + " has no pictures to make a video from."); return true; }
   await deps.send(env, "Making the video with " + track.title + " (" + md + "). About half a minute...");
   const dim = p.shape === "landscape" ? [1920, 1080] : p.shape === "square" ? [1080, 1080] : [1080, 1920];   // v475 - the video follows the chosen shape
-  const r = await deps.render(env, { images: imgs, audio: origin + "/music/" + track.key, seconds: imgs.length === 1 ? 12 : 4, width: dim[0], height: dim[1] });
+  // v493 - captions: the plain pictures (no words baked in) when captions are chosen, and the headline as the caption text
+  const capText = p.overlay_text || overlayTextOf(p.caption, p.idea), withCaps = p.vcap === "bottom" || p.vcap === "scroll";
+  const imgsV = withCaps ? (p.slides || []).filter((s) => s.img_key).map((s) => origin + "/ig_media/" + (s.plain_key || s.img_key)) : imgs;
+  const r = await deps.render(env, { images: imgsV, audio: origin + "/music/" + track.key, seconds: imgs.length === 1 ? 12 : 4, width: dim[0], height: dim[1], captions: withCaps ? { mode: p.vcap, text: capText } : undefined });
   if (r.err) { await deps.send(env, "Could not make the video: " + r.err + ". Tap Post as is, or try again."); return true; }
   const key = "post_" + p.id;
   await env.MEETINGS.put("vid_" + key, r.bytes, { expirationTtl: 60 * 86400 });
@@ -1122,6 +1148,21 @@ export async function publishOne(env, deps, p, now) {
   const M = await kvJ(env, "desk_ig_media", {}); M[p.media_id] = { plan: p.id, at: new Date(now).toISOString(), permalink: p.permalink }; await kvPut(env, "desk_ig_media", M);
   await deps.send(env, "Posted " + p.id + (p.permalink ? ": " + p.permalink : "") + ".");
   if (targets.includes("li")) await publishLinkedIn(env, deps, p, now);   // v466
+  await statusOffer(env, deps, p);   // v493
+}
+// v493 (Kendall 11 Oct: "I should be able to also post it to my WhatsApp update") - WhatsApp has no way for an app to post to Status, so
+// the desk sends the picture (or the video) clean, with no caption, ready to forward to My status in two taps.
+async function statusOffer(env, deps, p) { try { await deps.buttons(env, "Also on your WhatsApp Status?", [{ id: "dp:" + p.id + ":status", title: "For my Status" }]); } catch (e) {} }
+async function statusSend(env, deps, p) {
+  const o = deps.origin(env);
+  if (p.video_key && deps.video) await deps.video(env, o + "/video/" + p.video_key, "");
+  else for (const s of (p.slides || []).filter((x) => x.img_key).slice(0, 4)) await deps.image(env, o + "/ig_media/" + s.img_key, "");
+  await deps.send(env, "Press and hold the " + (p.video_key ? "video" : "picture") + " above, tap Forward, then My status.");
+}
+export function overlayTextOf(caption, idea) {
+  const first = String(caption || "").split(/\n/).map((x) => x.trim()).find((x) => x && !/^illustration\.?$/i.test(x) && !/^#/.test(x)) || String(idea || "");
+  const t = first.replace(/#\w+/g, "").replace(/\s+/g, " ").trim();
+  return t.length > 120 ? t.slice(0, 117).replace(/\s+\S*$/, "") + "..." : t;
 }
 // The minute tick. Expires old drafts, publishes at most one due plan, never when paused.
 export async function deskPostTick(env, deps) {
