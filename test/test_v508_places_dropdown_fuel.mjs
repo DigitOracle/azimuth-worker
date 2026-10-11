@@ -20,7 +20,7 @@ ok(/\.top\.closed \.amp2\{display:none\}/.test(src), "the drop-down hides with t
 
 // 3. the all-Dubai twin: the same drop-down in the stack, pins on a canvas overlay, tap for the name
 ok(/const CITY_PLACES_HTML = '<div id=amp class="hp amp">/.test(src), "city PLACES panel html");
-ok(/CITY_COLOUR_HTML \+ CITY_PLACES_HTML \+ '<\/div><div id=panel><\/div>'/.test(src), "city PLACES panel sits in the stack after COLOUR BY");
+ok(/CITY_COLOUR_HTML \+ CITY_PLACES_HTML \+ CITY_ADV_HTML \+ '<\/div><div id=panel><\/div>'/.test(src), "city PLACES panel sits in the stack after COLOUR BY");
 ok(/CITY_STACK_MODULE_JS,\s*\/\/ v152\.5[^\n]*\n\s*CITY_PLACES_JS,/.test(src), "city PLACES js ships with the module");
 ok(/CITY_STACK_CSS \+ CITY_PLACES_CSS/.test(src), "city PLACES css ships");
 ok(/window\.__AM=AM;window\.__dName=dName;/.test(src), "the chrome exposes the amenity register to the module");

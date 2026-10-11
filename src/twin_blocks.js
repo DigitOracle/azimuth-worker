@@ -280,7 +280,7 @@ function go(i){if(NAV||i<0)return;NAV=true;var d=O.D.districts[i],cam=camNow();
 window.__cityArrive=function(slug){if(!O)return;var i=ix(slug);if(i<0)return;O.labels.forEach(function(l,k){l.e.classList.toggle("on",k===i)});
   if(O.tipFor){O.tip.style.display="block";O.tip.innerHTML=O.tipFor(i)}};
 window.__cityBlocksMount=function(o){O=o;
-  o.ctl.addEventListener("change",function(){if(NAV)return;var d=o.cam.position.distanceTo(o.ctl.target);if(d<=HAND)go(near())})};
+  o.ctl.addEventListener("change",function(){if(NAV)return;var d=o.cam.position.distanceTo(o.ctl.target);if(d<=HAND)go(window.__cityFocus>=0?window.__cityFocus:near())})};   // v519 - the district chosen wins over the nearest centre
 window.__cityBlocks={go:go,camNow:camNow};
 })();
 `;

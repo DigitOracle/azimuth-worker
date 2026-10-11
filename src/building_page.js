@@ -352,10 +352,10 @@ export function buildingPageHtml(D, key, rk) {
       // ==== v279 CONTRACTS SIGNED (Ejari): 7 / 30 days, by bedroom, New vs Renewed, "see all" -> /contracts. All in src/ejari_page.js ====
       ejariBuildingPanel(D.slug, D.id, key, rk) +
       // ==== end CONTRACTS SIGNED ====
-      (D.register.length ? '<div class=grp>Sales on record <u id=soldtag></u></div><div id=sold></div>' +
+      (D.register.length ? '<div hidden><div class=grp>Sales on record <u id=soldtag></u></div><div id=sold></div>' +   // v519 - hidden (Kendall 11 Oct: "not value added"); the script still fills it
         '<div class=src><b>This is the transaction history, not what is for sale.</b> The Dubai Land Department ' +
         'register records completed sales, by type and not by unit number. It does not hold listings, so neither ' +
-        'this building page nor anyone reading it can tell from here whether a particular home is available.</div>' : "") +
+        'this building page nor anyone reading it can tell from here whether a particular home is available.</div></div>' : "") +
       '</div>' +   // #pbody - everything above folds away, the header bar stays
     "</div>" +
     "<div id=card></div>" +

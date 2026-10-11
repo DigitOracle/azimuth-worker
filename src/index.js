@@ -14,6 +14,7 @@ import { templateRoutes, feedTemplateFlag, templateWatchTick, daTemplateSubmitTi
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { buildingData, buildingPageHtml } from "./building_page.js";
+import { cityBldgRoute } from "./city_bldg.js";   // v519 - the all-Dubai twin's building index (names + Property Finder adverts)
 import { advertisedDoc, advertisedForKey, advertisedHtml } from "./advertised.js";   // v518 - Property Finder adverts on the building page   // v187 - the building page: the Symphony viewer for every register-bound building
 import { findRecord as cashFindRecord, cashCardHtml } from "./cash_card.js";   // v375 - cash needed up to handover (an off-plan project with a stated plan and a developer list price)
 import { pillarsCard, buildingPillars, developerPillarsCard, normName as pillarName, PILLAR_CSS } from "./pillars.js";   // v238 - the four pillars, built in the Worker for the building page and /dev
@@ -4804,6 +4805,7 @@ export default {
     // v507 (Kendall 11 Oct: "we have access to the image API ... if we don't have a picture we should be able to create one") - ONE picture on
     // demand for a document builder: owner key only, the desk's own generator (same model, same monthly cap, no reference photos),
     // JPEG back. The prompt and size are the caller's; the caller labels the result an illustration.
+    if (url.pathname === "/city_bldg") return cityBldgRoute(env, url, { clientOk, tier: keyTier, method: request.method });   // v519
     if (url.pathname === "/gen_image") {
       if (keyTier(env, url) !== "admin") return new Response("unauthorized", { status: 401 });
       const prompt = String(url.searchParams.get("prompt") || "").slice(0, 3500), size = String(url.searchParams.get("size") || "1536x1024");
@@ -8819,7 +8821,8 @@ ${HOMES_WIRE_JS}
 `;
 // ===== v508 CITY PLACES: the map's amenity filters on the all-Dubai twin, as ONE drop-down (Kendall 11 Oct 2026) =====
 const CITY_PLACES_HTML = '<div id=amp class="hp amp"><div class=hh id=amh><span>places</span><b id=amres>none</b><i>\u25BE</i></div><div class=hbody><div class="seg cseg amseg" id=amseg></div><div class=cnote id=amnote>Choose a district, then a kind: its buildings stay as blocks in the kind\'s colour and the rest of that district steps aside. A place with no building of its own keeps a badge; a dashed badge is an approximate position. Tap a badge for its name.</div></div></div>';
-const CITY_PLACES_CSS = '#amc{position:fixed;inset:0;pointer-events:none;z-index:2}.amseg button svg{width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;margin-right:5px}.amseg button i{font-style:normal;color:var(--mut);margin-left:5px}.amseg button.clr{margin-left:auto}.amseg button.none{opacity:.45}.amseg button .amarr{display:none;float:right;font-style:normal;color:var(--mut);padding:0 2px 0 8px}.amseg button.has .amarr{display:inline}.amlist{display:none;margin:-2px 0 6px 12px;border-left:1px solid var(--line);padding-left:9px}.amlist.open{display:block}.amrow{font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.74rem;color:var(--text);padding:5px 0;border-top:1px solid rgba(36,53,47,.6);cursor:pointer}.amrow small{display:block;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace}#amall{position:fixed;left:14px;top:156px;z-index:41;font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);background:rgba(19,31,29,.94);border:1px solid rgba(197,165,106,.6);border-radius:99px;padding:7px 12px;cursor:pointer}@media(max-width:640px){#amall{top:150px}}';
+const CITY_ADV_HTML = '<div id=avp class="hp avp"><div class=hh id=avh><span>advertised now</span><b id=avres>off</b><i>\u25BE</i></div><div class=hbody><div class="seg cseg amseg"><button type=button id=avon>show only buildings with adverts</button></div><div class="seg avbeds" id=avbeds><button type=button data-b=studio>studio</button><button type=button data-b=1>1 bed</button><button type=button data-b=2>2 bed</button><button type=button data-b=3+>3+ bed</button></div><div id=avlist></div><div class=cnote>Property Finder rental adverts, matched to the Land Department\'s buildings. Adverts are not vacancy: one flat can carry several adverts. The buildings with adverts stay standing in gold; tap one in the list to go to it.</div></div></div>';   // v519
+const CITY_PLACES_CSS = '.avbeds{margin-top:6px}.avbeds button{flex:1}#avlist{margin-top:6px;max-height:38vh;overflow:auto}#avon.on{color:#0C1413;background:var(--gold);border-color:var(--gold)}' + '#amc{position:fixed;inset:0;pointer-events:none;z-index:2}.amseg button svg{width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;margin-right:5px}.amseg button i{font-style:normal;color:var(--mut);margin-left:5px}.amseg button.clr{margin-left:auto}.amseg button.none{opacity:.45}.amseg button .amarr{display:none;float:right;font-style:normal;color:var(--mut);padding:0 2px 0 8px}.amseg button.has .amarr{display:inline}.amlist{display:none;margin:-2px 0 6px 12px;border-left:1px solid var(--line);padding-left:9px}.amlist.open{display:block}.amrow{font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.74rem;color:var(--text);padding:5px 0;border-top:1px solid rgba(36,53,47,.6);cursor:pointer}.amrow small{display:block;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace}#amall{position:fixed;left:14px;top:156px;z-index:41;font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);background:rgba(19,31,29,.94);border:1px solid rgba(197,165,106,.6);border-radius:99px;padding:7px 12px;cursor:pointer}@media(max-width:640px){#amall{top:150px}}';
 const CITY_PLACES_JS = `
 ` + AMEN_JS + `
 const ICON=` + JSON.stringify(MAP_ICONS) + `;
@@ -8832,9 +8835,9 @@ function amBuild(){const AM=window.__AM;if(!AM||AMSEG.dataset.built)return;AMSEG
     const L=document.createElement("div");L.className="amlist";L.dataset.k=k;const ar=document.createElement("em");ar.className="amarr";ar.textContent="\u25BE";ar.onclick=(e)=>{e.stopPropagation();L.classList.toggle("open")};b.appendChild(ar);AMSEG.appendChild(b);AMSEG.appendChild(L)});
   const c=document.createElement("button");c.type="button";c.className="clr";c.textContent="clear";c.onclick=()=>{Object.keys(AMON).forEach(k=>{AMON[k]=false});AMSEG.querySelectorAll("button").forEach(x=>x.classList.remove("on"));amRecalc()};AMSEG.appendChild(c);amRecalc()}   // v514 - counts for the district already chosen
 let AMDIST=-1;const AMSC=document.createElement("button");AMSC.type="button";AMSC.className="clr";AMSC.hidden=true;AMSC.onclick=()=>{AMDIST=-1;amRecalc()};
-const AMALL=document.createElement("button");AMALL.type="button";AMALL.id="amall";AMALL.textContent="\u2190 all Dubai";AMALL.hidden=true;AMALL.onclick=()=>{AMDIST=-1;const s=document.getElementById("sel");if(s)s.value="";amRecalc()};document.body.appendChild(AMALL);   // v516
+const AMALL=document.createElement("button");AMALL.type="button";AMALL.id="amall";AMALL.textContent="\u2190 all Dubai";AMALL.hidden=true;AMALL.onclick=()=>{AMDIST=-1;HILITE=-1;const s=document.getElementById("sel");if(s)s.value="";amRecalc()};document.body.appendChild(AMALL);   // v516
 (function(){const s=document.getElementById("sel");if(s)s.addEventListener("change",()=>{if(!s.value){AMDIST=-1;amRecalc()}})})();   // v516 - the blank option is "all Dubai" too
-function amRecalc(){const AM=window.__AM;const ks=Object.keys(AMON).filter(k=>AMON[k]);AMPTS=[];const dslug=AMDIST>=0&&D.districts[AMDIST]?D.districts[AMDIST].slug:null;
+function amRecalc(){window.__cityFocus=AMDIST;const AM=window.__AM;const ks=Object.keys(AMON).filter(k=>AMON[k]);AMPTS=[];const dslug=AMDIST>=0&&D.districts[AMDIST]?D.districts[AMDIST].slug:null;
   const cnt={};((AM&&AM.items)||[]).forEach(i=>{if(!dslug||i.d===dslug)cnt[i.k]=(cnt[i.k]||0)+1});AMSEG.querySelectorAll("button[data-k]").forEach(b=>{const n=cnt[b.dataset.k]||0;const el=b.querySelector("i");if(el)el.textContent=n.toLocaleString("en");b.classList.toggle("none",!n);b.classList.toggle("has",!!(AMON[b.dataset.k]&&dslug&&n))});
   AMSEG.querySelectorAll(".amlist").forEach(L=>{const k=L.dataset.k;if(!(AMON[k]&&dslug)){L.innerHTML="";L.classList.remove("open");return}
     const rows=((AM&&AM.items)||[]).filter(i=>i.k===k&&i.d===dslug).sort((a,b)=>String(a.n).localeCompare(String(b.n)));
@@ -8845,15 +8848,20 @@ function amRecalc(){const AM=window.__AM;const ks=Object.keys(AMON).filter(k=>AM
   AMSC.textContent="all Dubai";AMSC.hidden=!dslug;if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC);amBlocks(ks)}
 const AMMAT0=mesh.instanceMatrix.array.slice(0);let AMHID=[],AMKEEP=new Map();
 function amBlocks(ks){const M=mesh.instanceMatrix.array;for(const i of AMHID){for(let k=0;k<16;k++)M[16*i+k]=AMMAT0[16*i+k]}AMHID=[];AMKEEP=new Map();
+  ADVKEEP=new Map();if(ADV.on&&CB)for(const it of CB.items){if(it.inst==null||it.inst<0)continue;if(AMDIST>=0&&di[it.inst]!==AMDIST)continue;const v=advFlats(it);if(v>0)ADVKEEP.set(it.inst,v)}   // v519
+  const hide=(i)=>{AMHID.push(i);for(let k=0;k<16;k++)M[16*i+k]=0};
   if(AMDIST>=0){if(ks.length){for(const p of AMPTS){const q=llx(p.i.lon,p.i.lat);const j=nearestInst(q[0],q[1],AMDIST,90);p.blk=j>=0;if(j>=0&&!AMKEEP.has(j))AMKEEP.set(j,p.i.k)}}else for(const p of AMPTS)p.blk=false;
-    for(let i=0;i<n;i++){if(di[i]!==AMDIST||(ks.length&&!AMKEEP.has(i))){AMHID.push(i);for(let k=0;k<16;k++)M[16*i+k]=0}}   // v516 - the chosen district alone; within it, the chosen kinds alone
+    for(let i=0;i<n;i++){if(i===HILITE)continue;if(di[i]!==AMDIST||((ks.length||ADV.on)&&!AMKEEP.has(i)&&!ADVKEEP.has(i)))hide(i)}   // v516 - the chosen district alone; within it, the chosen kinds alone; v519 + the advertised buildings, + the building searched for
     const nb=AMPTS.filter(p=>p.blk).length;if(nb)AMRES.textContent+=" \u00b7 "+nb+" as blocks"}
-  else for(const p of AMPTS)p.blk=false;
-  AMALL.hidden=AMDIST<0;
+  else{for(const p of AMPTS)p.blk=false;if(ADV.on)for(let i=0;i<n;i++){if(i!==HILITE&&!ADVKEEP.has(i))hide(i)}}   // v519 - across Dubai, only the advertised buildings stand
+  AMALL.hidden=AMDIST<0;advPanel();
   mesh.instanceMatrix.needsUpdate=true;paintCity()}
-function amPaint(){if(!AMKEEP.size)return;const arr=mesh.instanceColor.array,c=new THREE.Color();AMKEEP.forEach((k,i)=>{c.set(AMEN[k][2]);arr[3*i]=c.r;arr[3*i+1]=c.g;arr[3*i+2]=c.b});mesh.instanceColor.needsUpdate=true}
+function amPaint(){if(!AMKEEP.size&&!ADVKEEP.size&&HILITE<0)return;const arr=mesh.instanceColor.array,c=new THREE.Color();
+  c.set(0xC5A56A);ADVKEEP.forEach((v,i)=>{arr[3*i]=c.r;arr[3*i+1]=c.g;arr[3*i+2]=c.b});   // v519 - advertised now: gold
+  AMKEEP.forEach((k,i)=>{c.set(AMEN[k][2]);arr[3*i]=c.r;arr[3*i+1]=c.g;arr[3*i+2]=c.b});
+  if(HILITE>=0){c.set(0xF6E3A8);arr[3*HILITE]=c.r;arr[3*HILITE+1]=c.g;arr[3*HILITE+2]=c.b}mesh.instanceColor.needsUpdate=true}
 const _paint0=paintCity;paintCity=function(){_paint0();amPaint()};   // v512 - the kept blocks wear the kind's colour whatever COLOUR BY says
-const _flyTo0=flyTo;flyTo=function(ix,go){AMDIST=ix;_flyTo0(ix,go);amRecalc()};   // v511 - a chosen district scopes the places (Kendall: "if I say Business Bay, I should only get the petrol stations within Business Bay")
+const _flyTo0=flyTo;flyTo=function(ix,go){if(ix!==AMDIST)HILITE=-1;AMDIST=ix;_flyTo0(ix,go);amRecalc()};   // v511 - a chosen district scopes the places (Kendall: "if I say Business Bay, I should only get the petrol stations within Business Bay")
 const AMIMG={};function amImg(k){if(AMIMG[k])return AMIMG[k];const col=AMEN[k][2];const svg=ICON[k].replace("<svg ","<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' fill='none' stroke='"+col+"' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round' ");const im=new Image();im.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);AMIMG[k]=im;return im}
 function amDraw(){actx.clearRect(0,0,amc.width,amc.height);if(!AMPTS.length)return;const W=innerWidth,H=innerHeight,r=devicePixelRatio||1;const far=cam.position.distanceTo(ctl.target);const sz=far>22000?2:far>9000?2.8:4;
   for(const p of AMPTS){if(p.blk){p.sx=-1;continue}const q=p.v.clone().project(cam);if(q.z>1||q.x<-1.02||q.x>1.02||q.y<-1.02||q.y>1.02){p.sx=-1;continue}p.sx=(q.x+1)/2*W;p.sy=(1-q.y)/2*H;const col=AMEN[p.i.k][2];
@@ -8865,6 +8873,40 @@ canvas.addEventListener("pointerup",ev=>{if(!AMPTS.length)return;const rct=canva
   tip.style.display="block";tip.innerHTML="<b>"+amEsc(i.n)+"</b><s>"+amEsc(AMEN[i.k][0])+(i.x?" \u00b7 "+amEsc(i.x):"")+(i.d?" \u00b7 "+amEsc(dn):"")+(i.ap?" \u00b7 position approximate":"")+"</s>";ctl.autoRotate=false},true);
 document.getElementById("amh").onclick=()=>{const open=!AMP.classList.contains("on");if(open){window.__stackOpen(AMP);amBuild()}AMP.classList.toggle("on",open)};
 window.__cityPlacesReady=()=>{if(AMP.classList.contains("on"))amBuild()};
+
+// ===== v519 CITY BUILDINGS: #2 a building found by name, #6 only the buildings Property Finder advertises now (Kendall 11 Oct 2026) =====
+let CB=null,CBP=null,HILITE=-1,ADVKEEP=new Map();const ADV={on:false,beds:new Set()};
+function cbLoad(){if(CB)return Promise.resolve(CB);if(CBP)return CBP;CBP=fetch("/city_bldg?key="+encodeURIComponent(KEY)).then(r=>r.ok?r.json():null).catch(()=>null).then(j=>{CB=j&&j.items?j:{items:[]};
+  for(const it of CB.items){const q=llx(it.lon,it.lat);const dIx=SLUGIX[it.d]!=null?SLUGIX[it.d]:-1;let i=dIx>=0?nearestInst(q[0],q[1],dIx,60):-1;if(i<0)i=nearestInst(q[0],q[1],-1,45);it.inst=i;it.dIx=i>=0?di[i]:dIx;it.nn=norm(it.n)}return CB});return CBP}
+function advFlats(it){if(!it.f)return 0;if(!ADV.beds.size)return it.f;let s=0;ADV.beds.forEach(b=>{s+=(it.b&&it.b[b])||0});return s}
+const BEDSAY={studio:"studio","1":"1 bed","2":"2 bed","3+":"3+ bed"};
+function bedLine(it){return ["studio","1","2","3+"].filter(b=>it.b&&it.b[b]).map(b=>it.b[b]+" "+BEDSAY[b]).join(" \u00b7 ")}
+function bTip(it){const dn=it.dIx>=0&&D.districts[it.dIx]?D.districts[it.dIx].name:(window.__dName?window.__dName(it.d):it.d);const bk=String(it.k||"").split(":")[1];
+  tip.style.display="block";tip.innerHTML="<b>"+amEsc(it.n)+"</b><s>"+amEsc(dn)+(it.f?" \u00b7 "+it.f+" flat"+(it.f===1?"":"s")+" advertised now":"")+"</s>"+(it.f?"<s>"+amEsc(bedLine(it))+"</s>":"")+(bk?'<a href="/building/'+encodeURIComponent(it.d)+'/'+encodeURIComponent(bk)+'?key='+encodeURIComponent(KEY)+(window.__RKQ||'')+'">open the building \u2192</a>':"")}
+function pickBuilding(it){sr.style.display="none";q.value=it.n;q.blur();HILITE=it.inst;if(it.dIx>=0){AMDIST=it.dIx;const s=document.getElementById("sel");if(s)s.value=String(it.dIx)}amRecalc();if(window.__cityFly)window.__cityFly(it.lon,it.lat,900);ctl.autoRotate=false;bTip(it)}
+// the search box: districts as before, then buildings by name
+q.onfocus=()=>{cbLoad()};
+q.oninput=()=>{const v=norm(q.value);if(!v){sr.style.display="none";return}const toks=v.split(" ");
+  const dl=D.districts.map((d,ix)=>({ix,s:toks.reduce((a,t)=>a+((norm(d.name)+" "+norm(d.corridor)+" "+d.slug).indexOf(t)>=0?1:0),0)})).filter(x=>x.s===toks.length).map(x=>x.ix).slice(0,4);
+  const go=()=>{const bl=(CB?CB.items:[]).filter(it=>it.inst!=null&&it.inst>=0&&toks.every(t=>it.nn.indexOf(t)>=0)).sort((a,b)=>(b.f||0)-(a.f||0)||a.n.length-b.n.length).slice(0,8);
+    sr.innerHTML=dl.map((ix,k)=>'<div data-ix="'+ix+'"'+(k===0?' class=on':'')+'><b>'+D.districts[ix].name+'</b><s>district \u00b7 '+D.districts[ix].buildings.toLocaleString("en")+' buildings</s></div>').join("")
+      +bl.map((it,k)=>'<div data-b="'+k+'"'+(!dl.length&&k===0?' class=on':'')+'><b>'+amEsc(it.n)+'</b><s>'+amEsc(it.dIx>=0&&D.districts[it.dIx]?D.districts[it.dIx].name:it.d)+(it.f?' \u00b7 '+it.f+' advertised':'')+'</s></div>').join("");
+    sr.style.display=(dl.length||bl.length)?"block":"none";
+    sr.querySelectorAll("div[data-ix]").forEach(el=>{el.onclick=()=>{sr.style.display="none";q.value=D.districts[+el.dataset.ix].name;flyTo(+el.dataset.ix,true)}});
+    sr.querySelectorAll("div[data-b]").forEach(el=>{el.onclick=()=>pickBuilding(bl[+el.dataset.b])})};
+  if(CB)go();else cbLoad().then(go)};
+// ADVERTISED NOW panel
+const AVP=document.getElementById("avp"),AVRES=document.getElementById("avres"),AVLIST=document.getElementById("avlist");
+document.getElementById("avh").onclick=()=>{const open=!AVP.classList.contains("on");if(open)window.__stackOpen(AVP);AVP.classList.toggle("on",open)};
+document.getElementById("avon").onclick=(e)=>{ADV.on=!ADV.on;e.currentTarget.classList.toggle("on",ADV.on);e.currentTarget.textContent=ADV.on?"showing buildings with adverts":"show only buildings with adverts";if(ADV.on)cbLoad().then(()=>amRecalc());else amRecalc()};
+document.querySelectorAll("#avbeds button").forEach(b=>{b.onclick=()=>{const k=b.dataset.b;ADV.beds.has(k)?ADV.beds.delete(k):ADV.beds.add(k);b.classList.toggle("on",ADV.beds.has(k));if(ADV.on)amRecalc()}});
+function advPanel(){if(!ADV.on){AVRES.textContent="off";AVLIST.innerHTML="";return}
+  const rows=(CB?CB.items:[]).filter(it=>it.inst!=null&&it.inst>=0&&advFlats(it)>0&&(AMDIST<0||di[it.inst]===AMDIST)).sort((a,b)=>advFlats(b)-advFlats(a));
+  const fl=rows.reduce((s,it)=>s+advFlats(it),0);const where=AMDIST>=0&&D.districts[AMDIST]?" in "+D.districts[AMDIST].name:" across Dubai";
+  AVRES.textContent=rows.length+" buildings \u00b7 "+fl.toLocaleString("en")+" flats"+where;
+  AVLIST.innerHTML=rows.slice(0,40).map((it,ix)=>'<div class=amrow data-ix="'+ix+'">'+amEsc(it.n)+'<small>'+advFlats(it)+' flat'+(advFlats(it)===1?'':'s')+' \u00b7 '+amEsc(bedLine(it))+'</small></div>').join("")+(rows.length>40?'<div class=cnote>'+(rows.length-40)+' more: pick a district to narrow the list.</div>':"");
+  AVLIST.querySelectorAll(".amrow").forEach(r=>{r.onclick=()=>pickBuilding(rows[+r.dataset.ix])})}
+// ===== v519 CITY BUILDINGS - end =====
 // ===== v508 CITY PLACES - end =====
 `;
 const CITY_STACK_MODULE_JS = `
@@ -8911,7 +8953,7 @@ window.__onHomes=(m)=>{window.__homesLast=m;clearTimeout(homeT3);homeT3=setTimeo
   paintCity()},160)};   // the sliders fire on every step: paint once they settle
 window.__cityColour=(mode)=>{CMODE3=mode||"";paintCity()};
 function flyPoint(x,z,r){const from={p:cam.position.clone(),t:ctl.target.clone()};const to={p:new THREE.Vector3(x+r*0.7,Math.max(r*0.8,900),z+r),t:new THREE.Vector3(x,0,z)};ctl.autoRotate=false;anim={from,to,t0:performance.now(),ms:1400,go:null}}
-window.__cityFly=(lon,lat,r)=>{const p=llx(lon,lat);flyPoint(p[0],p[1],r||1600)};
+window.__cityFly=(lon,lat,r)=>{const p=llx(lon,lat);flyPoint(p[0],p[1],Math.max(r||1600,1400))};   // v519 - never inside the 1.7 km handover (1400 -> ~2 km from the place)
 window.__cityStack={utm40,llx,nearestInst,get homes(){return HOMEN3},get mode(){return CMODE3}};
 if(window.__homesLast!==undefined)window.__onHomes(window.__homesLast);
 if(window.__cityColourLast)window.__cityColour(window.__cityColourLast);else paintCity();   // v515 - paint the neutral colour at load, not the district hues
@@ -10316,7 +10358,7 @@ function renderCity(key, rk) {
     + '<div id=hd><h1>Najma <b>\u0646\u062c\u0645\u0629</b> \u2014 the twin \u00b7 all Dubai</h1><p>loading</p></div>'
     + '<div id=sb><input id=q type=search placeholder="search a district or corridor\u2026" autocomplete=off spellcheck=false><div id=sr></div><select id=sel><option value="">jump to a district\u2026</option></select></div><div id=tip></div>'
     + '<div id=leg><i style="background:#C9D4CD"></i>buildings <i style="background:#3E8A7E"></i>sea <i style="background:#8FC7B9"></i>creek, canal, lakes</div>'   // v515 - the legend names only what is on screen
-    + '<div class=hstack id=hstack>' + HOMES_PANEL_HTML + (rk ? RES_PANEL_HTML : '') + CITY_COLOUR_HTML + CITY_PLACES_HTML + '</div><div id=panel></div>'   // v152.5 - the same stack as MAP and the district twins
+    + '<div class=hstack id=hstack>' + HOMES_PANEL_HTML + (rk ? RES_PANEL_HTML : '') + CITY_COLOUR_HTML + CITY_PLACES_HTML + CITY_ADV_HTML + '</div><div id=panel></div>'   // v152.5 - the same stack as MAP and the district twins
     + '<script>' + CITY_BLOCKS_JS + '<\/script>'   // v278 - the city of blocks keeps you until you zoom right in (twin_blocks.js); sits before the chrome so chrome + module stay adjacent
     + '<script>(function(){var KEY=' + JSON.stringify(key || "") + ';' + CITY_CHROME_JS + (rk ? 'var RK=' + JSON.stringify(rk) + ';' + RES_PANEL_JS : '') + '})();<\/script>'
     + '<script type="module">' + js + '</script>' + najNav(key, "twin", rk) + '</body></html>';
@@ -12662,7 +12704,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf", "/doc_client", "/doc_broker"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
+const CLIENT_PATHS = ["/city_bldg", "/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf", "/doc_client", "/doc_broker"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/", "/render/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own

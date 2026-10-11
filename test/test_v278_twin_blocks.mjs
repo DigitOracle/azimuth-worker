@@ -65,7 +65,7 @@ ok(!/if\(go\)location\.href="\/skyline\/"\+go/.test(SRC), "renderCity's tick no 
 ok(/if\(go\)\{if\(window\.__cityArrive\)window\.__cityArrive\(go\);ctl\.autoRotate=true\}/.test(SRC), "a search fly arrives and stays: it lights the district and keeps turning (window.__cityArrive)");
 ok(/function tipFor\(ix\)/.test(SRC) && /tip\.innerHTML=tipFor\(ix\)/.test(SRC) && /window\.__cityBlocksMount\(\{D,cam,ctl,labels,tip,tipFor,KEY\}\)/.test(SRC), "the city tip (with its explicit 'open the twin' link) is shared with the arrival, and the city mounts the hand-over");
 ok(CITY_BLOCKS_JS.includes("window.__cityArrive=function(slug)") && CITY_BLOCKS_JS.includes('O.tip.innerHTML=O.tipFor(i)'), "__cityArrive shows the district's tip - the link is the explicit way in");
-ok(/o\.ctl\.addEventListener\("change"/.test(CITY_BLOCKS_JS) && /if\(d<=HAND\)go\(near\(\)\)/.test(CITY_BLOCKS_JS) && /tbCamToQuery\(cam\)/.test(CITY_BLOCKS_JS), "zooming right in on the city hands over to the district twin with the camera");
+ok(/o\.ctl\.addEventListener\("change"/.test(CITY_BLOCKS_JS) && /if\(d<=HAND\)go\(window\.__cityFocus>=0\?window\.__cityFocus:near\(\)\)/.test(CITY_BLOCKS_JS) && /tbCamToQuery\(cam\)/.test(CITY_BLOCKS_JS), "zooming right in on the city hands over to the district twin with the camera");
 ok((SRC.match(/flyTo\([^()]*,true\)/g) || []).length >= 2, "the search and the district picker still fly (flyTo(...,true)) - only the jump at the end went");
 
 // ---- 2. /map serves the blocks layer -----------------------------------------------------------------------------------------
