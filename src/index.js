@@ -8807,7 +8807,7 @@ ${HOMES_WIRE_JS}
 `;
 // ===== v508 CITY PLACES: the map's amenity filters on the all-Dubai twin, as ONE drop-down (Kendall 11 Oct 2026) =====
 const CITY_PLACES_HTML = '<div id=amp class="hp amp"><div class=hh id=amh><span>places</span><b id=amres>none</b><i>\u25BE</i></div><div class=hbody><div class="seg cseg amseg" id=amseg></div><div class=cnote id=amnote>Choose a district, then a kind: its buildings stay as blocks in the kind\'s colour and the rest of that district steps aside. A place with no building of its own keeps a badge; a dashed badge is an approximate position. Tap a badge for its name.</div></div></div>';
-const CITY_PLACES_CSS = '#amc{position:fixed;inset:0;pointer-events:none;z-index:2}.amseg button svg{width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;margin-right:5px}.amseg button i{font-style:normal;color:var(--mut);margin-left:5px}.amseg button.clr{margin-left:auto}';
+const CITY_PLACES_CSS = '#amc{position:fixed;inset:0;pointer-events:none;z-index:2}.amseg button svg{width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;margin-right:5px}.amseg button i{font-style:normal;color:var(--mut);margin-left:5px}.amseg button.clr{margin-left:auto}.amseg button.none{opacity:.45}';
 const CITY_PLACES_JS = `
 ` + AMEN_JS + `
 const ICON=` + JSON.stringify(MAP_ICONS) + `;
@@ -8820,6 +8820,7 @@ function amBuild(){const AM=window.__AM;if(!AM||AMSEG.dataset.built)return;AMSEG
   const c=document.createElement("button");c.type="button";c.className="clr";c.textContent="clear";c.onclick=()=>{Object.keys(AMON).forEach(k=>{AMON[k]=false});AMSEG.querySelectorAll("button").forEach(x=>x.classList.remove("on"));amRecalc()};AMSEG.appendChild(c)}
 let AMDIST=-1;const AMSC=document.createElement("button");AMSC.type="button";AMSC.className="clr";AMSC.hidden=true;AMSC.onclick=()=>{AMDIST=-1;amRecalc()};
 function amRecalc(){const AM=window.__AM;const ks=Object.keys(AMON).filter(k=>AMON[k]);AMPTS=[];const dslug=AMDIST>=0&&D.districts[AMDIST]?D.districts[AMDIST].slug:null;
+  const cnt={};((AM&&AM.items)||[]).forEach(i=>{if(!dslug||i.d===dslug)cnt[i.k]=(cnt[i.k]||0)+1});AMSEG.querySelectorAll("button[data-k]").forEach(b=>{const n=cnt[b.dataset.k]||0;const el=b.querySelector("i");if(el)el.textContent=n.toLocaleString("en")+(dslug?"":"");b.classList.toggle("none",!n)});
   ((AM&&AM.items)||[]).forEach(i=>{if(!AMON[i.k]||i.lon==null||i.lat==null)return;if(dslug&&i.d!==dslug)return;const p=llx(i.lon,i.lat);AMPTS.push({i,v:new THREE.Vector3(p[0],6,p[1]),sx:-1,sy:-1})});
   const where=dslug?" in "+D.districts[AMDIST].name:" across Dubai";AMRES.textContent=ks.length?ks.map(k=>AMEN[k][0]).join(", ")+" \u00b7 "+AMPTS.length.toLocaleString("en")+where:"none";
   AMSC.textContent="all Dubai";AMSC.hidden=!(dslug&&ks.length);if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC);amBlocks(ks)}
