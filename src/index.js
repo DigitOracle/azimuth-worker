@@ -13,7 +13,8 @@ import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owne
 import { templateRoutes, feedTemplateFlag, templateWatchTick, daTemplateSubmitTick } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
-import { buildingData, buildingPageHtml } from "./building_page.js";   // v187 - the building page: the Symphony viewer for every register-bound building
+import { buildingData, buildingPageHtml } from "./building_page.js";
+import { advertisedDoc, advertisedForKey, advertisedHtml } from "./advertised.js";   // v518 - Property Finder adverts on the building page   // v187 - the building page: the Symphony viewer for every register-bound building
 import { findRecord as cashFindRecord, cashCardHtml } from "./cash_card.js";   // v375 - cash needed up to handover (an off-plan project with a stated plan and a developer list price)
 import { pillarsCard, buildingPillars, developerPillarsCard, normName as pillarName, PILLAR_CSS } from "./pillars.js";   // v238 - the four pillars, built in the Worker for the building page and /dev
 import { worldCardsHtml } from "./world_cards.js";   // v154.5 - the same ten cities as cards at /world
@@ -3517,6 +3518,17 @@ async function appFetch(request, env, ctx) {
           if (_rs && await env.MEETINGS.get("img_ct_render_" + _rs)) {
             const _rv = threadView(await loadThread(env, _rs));
             _bd.renderPic = { url: "/render/" + _rs, caption: _rv ? _rv.caption : "Illustration &middot; Najma render", about: _rv ? aboutHtml(_rv, { dark: true }) : "" };
+          }
+        } catch (e) {}
+        // v518 - what Property Finder advertises now leads the building panel (Kendall 11 Oct 2026; PF is allowed on client surfaces since
+        // that day). No district file = nothing shown; a district file without this building = say so plainly rather than show a blank.
+        _bd.plain = true;
+        try {
+          const _adoc = advertisedDoc(await briefKvJson(env, "pf_supply_" + _bs));
+          if (_adoc) {
+            const _a = advertisedForKey(_adoc, _bs + ":" + _bi);
+            _bd.advHtml = _a ? advertisedHtml(_a).replace("<details class=avd>", "<details class=avd open>")
+              : '<div class=avd style="padding:9px 11px;font-size:12.5px;color:#B9B2A3">No Property Finder adverts for this building' + (_adoc.asOf ? " on " + _adoc.asOf : " today") + '.</div>';
           }
         } catch (e) {}
         return clientResp(env, url, buildingPageHtml(_bd, url.searchParams.get("key") || "", residentsKeyOf(env, url)),

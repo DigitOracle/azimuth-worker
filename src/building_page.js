@@ -11,7 +11,8 @@
 // Unit positions belong to level A (a Revit model or a developer stacking plan) and are not invented here.
 
 import { PILLAR_CSS } from "./pillars.js";
-import { ejariBuildingPanel } from "./ejari_page.js";   // v279 - the "Contracts signed" panel (one marked block in the FILTERS panel)
+import { ejariBuildingPanel } from "./ejari_page.js";
+import { ADV_CSS } from "./advertised.js";   // v518 - the advertised-now cards' look, shared with the Brief and the supply page   // v279 - the "Contracts signed" panel (one marked block in the FILTERS panel)
 
 export const BP_COL = {                     // Najma's own scheme, the same colours the twin's floors use
   studio: "#B9A6C9", "1": "#C5A56A", "2": "#7FA8C9", "3": "#8FC7B9", "4": "#D9A441",
@@ -309,11 +310,15 @@ export function buildingPageHtml(D, key, rk) {
     '<a class=bk href="' + back + '">← the twin</a>' +
     '<div id=about class=glass>About the building</div>' +
     '<div id=tab>⌃</div>' +
-    '<div id=reopen>FILTERS</div>' +
+    '<div id=reopen>AVAILABLE NOW</div>' +   // v518
     '<div id=panel class=glass>' +
-      '<div id=phead><h1>FILTERS</h1><span id=panelfold title="Fold">\u2304</span>' +
+      '<div id=phead><h1>AVAILABLE NOW</h1><span id=panelfold title="Fold">\u2304</span>' +
       '<span id=panelx title="Close">\u00d7</span></div>' +
       '<div id=pbody>' +
+      // v518 - Property Finder's adverts for this building lead the panel; the register's floor filters below are kept in the page (the
+      // script still wires them) but hidden, and the tower is painted plain because their colour bands had no legend left
+      (D.advHtml ? '<style>' + ADV_CSS + '</style>' + D.advHtml : "") +
+      '<div id=bpfilt hidden>' +
       "<div id=count></div>" +
       '<div id=types>' + chips.map((c) => tb(c[0], c[1], BP_COL[c[0]], "t")).join("") + "</div>" +
       (uses.length ? '<div class=grp>Also in the tower</div><div id=others>' + uses.map((c) => tb(c[0], c[1], BP_COL[c[0]], "u")).join("") + "</div>" : "") +
@@ -324,7 +329,7 @@ export function buildingPageHtml(D, key, rk) {
       '<div class=grp>Homes on the floor <u id=vkhi></u></div><div class=range><div class=track></div><input id=khi type=range></div>' +
       (D.open ? '<div class=grp>Open view <u>sees over the roofs</u></div><div id=dirs>' +
         ["N", "NE", "E", "SE", "S", "SW", "W", "NW"].map((x, k) => '<button class="tb dir off" data-d="' + k + '">' + x + "</button>").join("") + "</div>" : "") +
-      '<button id=hide>Hide All</button>' +
+      '<button id=hide>Hide All</button></div>' +   // v518 - end of the hidden register filters
       (D.floors.length ? '<div class=grp>Floors <u>' + D.floors.length + ' levels</u></div><select id=fpick class=fsel2><option value="">choose a floor…</option>' +
         D.floors.map((g, k) => '<option value="' + k + '">' + esc(g.n != null ? "Floor " + g.n : (g.l === "G" ? "Ground floor" : g.l)) +
           (g.k ? " · " + g.k + " homes" : " · " + esc({ homes: "homes", office: "offices", retail: "retail", hotel: "hotel", services: "services and parking" }[g.u] || g.u)) +
@@ -608,7 +613,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
   function paint() {
     if (!MESH.length) return;
     clearBands();
-    if (!D.fits) {     // the model is far shorter than the register's building: the footprint is a podium, or its height is one
+    if (!D.fits || D.plain) {     // v518 D.plain: no bedroom bands without their legend. Else: the model is far shorter than the register's building: the footprint is a podium, or its height is one
       for (const m of MESH) { if (m.userData.bpMask != null) { m.layers.mask = m.userData.bpMask; m.userData.bpMask = null; } }
       count();
       return;
