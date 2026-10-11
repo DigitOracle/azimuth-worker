@@ -8071,7 +8071,7 @@ const MAP_ICONS = {"school": "<svg viewBox='0 0 24 24'><path d='M2 9l10-4 10 4-1
 // v508 - the amenity kinds, ONE table for the map and the city twin: label, glyph, colour. fuel = petrol stations (OpenStreetMap, approximate).
 const AMEN_JS = 'var AMEN={school:["schools","\u{1F393}","#8FC7B9"],hospital:["hospitals","\u{1F3E5}","#E08A8A"],clinic:["clinics","⚕","#E8B49A"],pharmacy:["pharmacies","\u{1F48A}","#A8C4A2"],metro:["metro","\u{1F687}","#9FB8E8"],mall:["malls","\u{1F6CD}","#D98F5A"],supermarket:["supermarkets","\u{1F6D2}","#C9B37E"],park:["parks","\u{1F333}","#8FD3A0"],beach:["beach","\u{1F30A}","#7FC7D9"],ev:["EV charging","\u{1F50C}","#C9A0E8"],fuel:["petrol stations","\u26FD","#E8C25A"]};';
 const STACK_CSS = ''
-  + '#hp{display:none!important}'   // v509 - HOMES panel withdrawn (Kendall 11 Oct 2026); Property Finder answers availability
+  + '#hp,#stkp,#stkbtn{display:none!important}'   // v509 - HOMES panel withdrawn (Kendall 11 Oct 2026); Property Finder answers availability
   + '.hstack{position:fixed;top:10px;right:10px;z-index:8;width:min(330px,72vw);display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:none}.hstack>*{pointer-events:auto}'   // v152.2 - HOMES, then RESIDENTS (private), then COLOUR BY (twin): one column, an open panel pushes the next down
   + '.hp{position:relative;width:100%;background:rgba(19,31,29,.97);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.35)}'
   + '.hh{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}.hh b{color:var(--text);font-weight:500;letter-spacing:.03em;text-transform:none;font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hh i{font-style:normal;color:var(--mut);transition:transform .2s}.hp.on .hh i{transform:rotate(180deg)}'
@@ -11312,7 +11312,7 @@ function stkUI(){
     ".ftyp i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}.fbas{font-size:.62rem;color:rgba(143,163,155,.9);line-height:1.4;margin-top:6px}"+
     "@media(max-width:640px){#stkp{left:10px;right:10px;width:auto;top:auto;bottom:74px;max-height:44vh}}";
   document.head.appendChild(st);
-  const tog=document.getElementById("filters")||document.body;const btn=document.createElement("button");btn.className="stkb on";btn.id="stkbtn";btn.textContent="HOMES";tog.appendChild(btn);
+  const tog=document.getElementById("filters")||document.body;const btn=document.createElement("button");btn.className="stkb";btn.id="stkbtn";btn.textContent="HOMES";btn.hidden=true;tog.appendChild(btn);   // v510 - withdrawn, kept inert
   const p=document.createElement("div");p.id="stkp";
   p.innerHTML='<h4>Homes<u class=stkx id=stkx title=close>✕</u></h4><div id=stkc></div><div class=stg>Bedrooms</div><div id=stkt></div><div class=stg>Also in the towers</div><div id=stku></div>'+
     '<div class=stg>Budget <u id=svahi></u></div><div class=srg><i></i><input id=salo type=range min=0 max=100 value=0><input id=sahi type=range min=0 max=100 value=100></div><div class=svl><span id=svalo></span><span>and up to</span></div>'+
@@ -11371,7 +11371,7 @@ function stkUI(){
   btn.onclick=()=>{STKON=!STKON;btn.classList.toggle("on",STKON);p.classList.toggle("on",STKON&&!SELPROJ);stkApply()};
   const stkx=document.getElementById("stkx");
   if(stkx)stkx.onclick=(e)=>{e.stopPropagation();STKON=false;btn.classList.remove("on");p.classList.remove("on")};
-  STKON=true;p.classList.add("on");                                   // the filter IS the twin's homes control now: open from the start
+  STKON=false;                                                        // v510 - HOMES withdrawn (Kendall 11 Oct 2026: "useless ... we have Property Finder"); the stack filter stays off and the panel + button are hidden by CSS
   // v274 - Buy / Rent on the twin's homes panel. The rent logic is the MAP chrome's (window.__rentMount, HOMES_RENT_JS); here is only
   // what Rent does to the floor stack: it steps aside (STKON off) so the buildings the rent index matches light gold, and Buy brings it back.
   if(window.__rentMount)window.__rentMount({host:p,px:"sr",list:true,first:document.getElementById("stkc"),before:document.getElementById("stkc"),
