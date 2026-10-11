@@ -36,7 +36,7 @@ console.log("A - the Investor selector and the investor PDFs are byte-for-byte w
   const BASE = new Function("clone", src.slice(a, b).replace("const BASE =", "return"))((o) => JSON.parse(JSON.stringify(o)));
   const h = (s) => crypto.createHash("sha256").update(s).digest("hex").slice(0, 16);
   const parts = [selectorHtml(BASE, "/developers_pdf", "KEY123"), selectorHtml(BASE, "/developers_pdf", "")];
-  for (const type of [null, "income"]) for (const tier of ["summary", "standard", "full"]) parts.push(buildTiersHtml(BASE, T.buildPlan({ facts: BASE, type, tier, segments: [] }), { client: "Test Client" }).html);
+  for (const type of [null, "income"]) for (const tier of ["summary", "standard", "full"]) parts.push(buildTiersHtml(BASE, T.buildPlan({ facts: BASE, type, tier, segments: [] }), { client: "Test Client", figures: false }).html);   // v491: the icon figure row is the one deliberate addition
   // fingerprints taken from release rel-v405 (before the shell was split out)
   const want = "af8e5df3bc86435d a260b7ced76c7a16 b80599bb3b895b2b 85948ec2ae03caaa 4cff9a42693e9f2d c54f6c732a842d07 644d11fa6f8a6c6d 48425d96869dfff7".split(" ");
   ok(parts.map(h).join(" ") === want.join(" "), "selector page (with and without key) and six investor reports hash the same as before", parts.map(h).join(" "));

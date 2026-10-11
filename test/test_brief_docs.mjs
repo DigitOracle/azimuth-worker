@@ -167,7 +167,7 @@ ok(a1.includes("A-1203") && a1.includes("A-1403") && a1.includes("1,250,000") &&
 ok(/developer&rsquo;s statement on that date, not register data/.test(a1) && /Availability: Alpha Developments's own availability sheet of 2026-09-20/.test(html), "it says whose statement it is, and the small print names the sheet");
 ({ html } = await pdf("kind=dossier&keys=nolayer:5"));
 ok(!abox(html) && !ESTIMATE_RX.test(html) && !/availability to follow|Availability: to follow/i.test(html), "a building no developer sheet names: no availability box, no estimate box, no placeholder - nothing");
-({ html } = await pdf("kind=dossier&keys=testdistrict:11"));
+({ html } = await pdf("kind=dossier&keys=testdistrict:11")); if (process.env.DOSSIER_PREVIEW2) (await import("node:fs")).writeFileSync(process.env.DOSSIER_PREVIEW2, html);
 ok(!abox(html) && !ESTIMATE_RX.test(html), "a multi-building record, no sheet: nothing either");
 ok(/>45<\/div><div[^>]*>floors<\/div><div[^>]*>one of 3 buildings</.test(html) && /homes<\/div><div[^>]*>in 3 buildings</.test(html) && !html.includes("Delta Court B"),  "a tower record of a multi-building project: floors and homes say so, and its own name ('... B') is never printed");
 // never mixed: a stubbed register estimate for Alpha (the parity test proves the API still returns it) does not reach the page
@@ -216,7 +216,7 @@ ok(!html.includes("bph_alpha_pool2") && !html.includes("bph_alpha_gym_not_stored
 ok(!html.includes("alphadev.example") && html.includes("Pictures and amenities: the developer's own project page"), "each picture is credited, and the small print names the developer's page");
 ({ html } = await pdf("kind=dossier&keys=testdistrict:12"));
 ok(!html.includes("bph_portal") && !html.includes("listing portal") && !html.includes("Photos to follow") && /<div class="blocksview" data-kind="blocks" style="width:702px;height:300px;/.test(html), "a brochure from a listing portal is refused whole (v285: page 1 shows its Blocks view instead of an empty box)");
-({ html } = await pdf("kind=dossier&keys=testdistrict:11"));
+({ html } = await pdf("kind=dossier&keys=testdistrict:11")); if (process.env.DOSSIER_PREVIEW2) (await import("node:fs")).writeFileSync(process.env.DOSSIER_PREVIEW2, html);
 ok(!html.includes("bph_wrong") && !html.includes("Sauna") && !html.includes("Somewhere Else Entirely"), "a brochure naming another building is refused (the name must agree with the record)");
 ({ html } = await pdf("kind=dossier&keys=dld:beta-heights"));
 ok(html.includes(">Beta Heights</div>") && html.includes("also filed as &ldquo;Gamma Views&rdquo;"), "a dld: key resolves by name; the brochure found by name agrees; the other filing name is said");

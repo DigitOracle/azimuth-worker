@@ -40,7 +40,7 @@
 // building's name must agree with the record; straight-line distances only, no walking or driving times; rents are what homes let
 // for, never availability; the "left" figure is always "an estimate, not a count".
 import puppeteer from "@cloudflare/puppeteer";
-import { PK, pkIcon, pkFig, pkGrid, pkTile, pkBars, pkBox } from "./pdf_kit.js";   // v486 - the shared PDF look (icons, figure cards, bars)
+import { PK, pkIcon, pkFig, pkGrid, pkTile, pkBars, pkBox, pkNearMap } from "./pdf_kit.js";   // v486 - the shared PDF look (icons, figure cards, bars)
 import { withAmenityPages, loadSpots } from "./amenity_cards.js";
 export const REALTOR_VERIFIES = "Your realtor will verify these details with you.";   // v302 - the ONE line a client document uses where a fact is missing; gaps live only in owner places (API notes, diagnostics)
 import { liveCtx, fillLive } from "./live_answers.js";   // v291 - live Google answers for gym, community pool and dog park (never stored)   // v290 AMENITY CARDS - the "Around the community" page in Compare and Full pack
@@ -886,7 +886,10 @@ function dossierPage2(C, rec, q, sub, more) {   // v307 - more: a purchase puts 
   const mw = cb ? (rec.avail && rec.avail.count ? 470 : 560) : 700;
   const map = svg ? '<div style="width:' + (mw + 2) + 'px;border:1px solid #E6E1D8;line-height:0;">' + svg.replace("<svg ", '<svg style="width:' + mw + 'px;height:auto;display:block;" ') + "</div>" : MAP_TO_FOLLOW(cb ? 300 : 468);
   const body = '<div class="serif" style="font-size:24px;color:' + NAVY + ';">Where it is</div><div class="sub">' + (mark.area ? "The community&rsquo;s homes in gold (an approximate area), among the other buildings of " : "The building in gold on its own plot, among the other buildings of ") + esc(rec.dist) +
-    ". Simple models, heights to scale, seen from the south.</div>" + map + cb + availBlock(rec, q) + (more ? more.html : "");
+    ". Simple models, heights to scale, seen from the south.</div>" + map +
+    // v500 - what's close, as the crow flies: under the map when the page has the room (no criteria box and no sales table below it)
+    (!cb && !more && !(rec.avail && rec.avail.count) && rec.pos ? pkNearMap(rec.pos, (C.amen && C.amen.items) || [], { size: 200 }) : "") +
+    cb + availBlock(rec, q) + (more ? more.html : "");
   return page(C, sub, body, smallPrint([
     svg ? "Map: building outlines and streets &copy; OpenStreetMap contributors; building position from the app's district digital footprint" + (mark.approx ? " (this one approximate, from a public map listing)" : "") +
       (mark.area ? " - here the homes the district model places in the Land Department sub-community of this name, an approximate area, not a surveyed boundary" : "") + "." : "",

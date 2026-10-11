@@ -70,3 +70,51 @@ export function pkBox(icon, title, inner, foot) {
     + '<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:' + PK.teal + ';">' + pkIcon(icon, 18) + title + "</div>"
     + inner + (foot ? '<div style="font-size:9.5px;color:' + PK.muted + ';line-height:1.35;">' + foot + "</div>" : "") + "</div>";
 }
+
+// v500 (Kendall 11 Oct: "it should have the map ... as the crow flies ... what the closest things were within half a kilometer, one
+// kilometer ... you still need this map on every .pdf") - WHAT'S CLOSE: the building at the centre, rings at 500 m and 1 km, the nearest
+// place of each kind plotted where it is, and a numbered list with the straight-line distance. items: [{k, n, lat, lon}] (the brief's
+// amenity file). A rough point (both coordinates on a 0.01 grid) is never drawn: it would put a place hundreds of metres off.
+export const PK_NEAR_KINDS = [["metro", "Metro", "#0A4F4A"], ["school", "School", "#B8862B"], ["hospital", "Hospital", "#9B3D3D"], ["clinic", "Clinic", "#9B3D3D"],
+  ["supermarket", "Supermarket", "#3D6B9B"], ["mall", "Mall", "#3D6B9B"], ["park", "Park", "#4F7A3A"], ["beach", "Beach", "#2E7FA0"]];
+const pkRough = (i) => [i.lat, i.lon].every((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-9);
+const pkEsc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+export function pkNearest(pos, items, maxM) {
+  if (!pos || !isFinite(pos[0]) || !isFinite(pos[1])) return [];
+  const [lat, lon] = pos, out = [], lim = maxM || 1500;
+  for (const [k, label, col] of PK_NEAR_KINDS) {
+    const c = [];
+    for (const i of items || []) {
+      if (i.k !== k || !isFinite(i.lat) || !isFinite(i.lon) || i.ap || pkRough(i)) continue;
+      if (k === "clinic" && /pharmac|chemist/i.test(String(i.n || "") + " " + String(i.x || ""))) continue;
+      const dy = (i.lat - lat) * 111320, dx = (i.lon - lon) * 111320 * Math.cos(lat * Math.PI / 180), d = Math.hypot(dx, dy);
+      if (d <= lim) c.push({ d, dx, dy, i });
+    }
+    c.sort((a, b) => a.d - b.d);
+    for (const x of c.slice(0, k === "school" || k === "supermarket" ? 2 : 1)) out.push({ label, col, name: String(x.i.n || "").replace(/\s*[-,]?\s*\b(L\.?L\.?C\.?|FZ-?LLC|FZE)\s*$/i, "").slice(0, 44), m: Math.round(x.d / 10) * 10, dx: x.dx, dy: x.dy });
+  }
+  return out.sort((a, b) => a.m - b.m).slice(0, 8);
+}
+export function pkNearMap(pos, items, opts) {
+  const P = pkNearest(pos, items, 1500);
+  if (!P.length) return "";
+  const S = (opts && opts.size) || 210, C = S / 2, R = (S * 0.44) / 1000;
+  let svg = '<svg width="' + S + '" height="' + S + '" viewBox="0 0 ' + S + " " + S + '" xmlns="http://www.w3.org/2000/svg" style="display:block;flex:none;">' +
+    '<rect width="' + S + '" height="' + S + '" rx="12" fill="#F4F1EA"/>' +
+    '<circle cx="' + C + '" cy="' + C + '" r="' + (1000 * R).toFixed(1) + '" fill="none" stroke="' + PK.gold + '" stroke-width="1.1" stroke-dasharray="4 4"/>' +
+    '<circle cx="' + C + '" cy="' + C + '" r="' + (500 * R).toFixed(1) + '" fill="rgba(197,165,106,0.12)" stroke="' + PK.gold + '" stroke-width="1.1"/>' +
+    '<text x="' + C + '" y="' + (C - 500 * R + 10).toFixed(1) + '" font-size="8.5" fill="#8A6A35" text-anchor="middle">500 m</text>' +
+    '<text x="' + C + '" y="' + (C - 1000 * R + 10).toFixed(1) + '" font-size="8.5" fill="#8A6A35" text-anchor="middle">1 km</text>' +
+    '<text x="' + (S - 8) + '" y="14" font-size="9.5" fill="#626B78" text-anchor="end">N &#8593;</text>';
+  P.forEach((q, k) => {
+    const x = Math.max(9, Math.min(S - 9, C + q.dx * R)), y = Math.max(9, Math.min(S - 9, C - q.dy * R));
+    svg += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="7.5" fill="' + q.col + '" stroke="#FFFFFF" stroke-width="1.3"/><text x="' + x.toFixed(1) + '" y="' + (y + 3).toFixed(1) + '" font-size="8.5" font-weight="700" fill="#FFFFFF" text-anchor="middle">' + (k + 1) + "</text>";
+  });
+  svg += '<rect x="' + (C - 7) + '" y="' + (C - 7) + '" width="14" height="14" rx="3" fill="#A8814A" stroke="#FFFFFF" stroke-width="2"/></svg>';
+  const rows = P.map((q, k) => '<div style="display:flex;align-items:center;gap:7px;font-size:11px;color:' + PK.ink + ';line-height:1.2;">' +
+    '<span style="flex:none;width:17px;height:17px;border-radius:9px;background:' + q.col + ';color:#FFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">' + (k + 1) + "</span>" +
+    '<span style="flex:1;"><b>' + q.label + "</b> &middot; " + pkEsc(q.name) + '</span><span style="font-weight:600;white-space:nowrap;">' + (q.m < 1000 ? q.m + " m" : (q.m / 1000).toFixed(1) + " km") + "</span></div>").join("");
+  return '<div style="display:flex;flex-direction:column;gap:8px;"><div style="display:flex;align-items:baseline;gap:10px;"><div class="serif" style="font-size:19px;color:' + PK.teal + ';">What&rsquo;s close, as the crow flies</div>' +
+    '<div style="font-size:10px;color:' + PK.muted + ';">straight-line distances, not walking times &middot; rings at 500 m and 1 km</div></div>' +
+    '<div style="display:flex;gap:16px;align-items:center;">' + svg + '<div style="flex:1;display:flex;flex-direction:column;gap:5px;">' + rows + "</div></div></div>";
+}
