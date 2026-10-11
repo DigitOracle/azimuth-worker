@@ -587,8 +587,11 @@ export function scenePreview(pick) {
 }
 async function showPreview(env, deps, pick) {
   await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "preview" }), FEED_TTL);
-  const sh = String(pick.shape || "square").replace(/[^a-z]/g, "");
-  await deps.buttons(env, scenePreview(pick), [{ id: "dp:scene:make:" + sh, title: "Make it" }, { id: "dp:scene:change:" + sh, title: "Change it" }, { id: "dp:scene:cancel", title: "Cancel" }]);
+  // v490 (11 Oct, "expired" again at 06:09) - KV reads of a key written seconds ago can come back stale at the edge. The preview is
+  // also written under a BRAND-NEW key, never read before anywhere, so the tap reads it fresh; its id rides in the button.
+  const sid = rid() + rid();
+  await kvPut(env, "desk_scene_" + sid, Object.assign({}, pick, { step: "preview" }), FEED_TTL);
+  await deps.buttons(env, scenePreview(pick), [{ id: "dp:scene:make:" + sid, title: "Make it" }, { id: "dp:scene:change:" + sid, title: "Change it" }, { id: "dp:scene:cancel:" + sid, title: "Cancel" }]);
 }
 // v476 - what heygen.js needs from the desk: the same picture maker and store the posts use
 export function clipDeps(deps) {
@@ -626,7 +629,9 @@ async function feedReply(env, deps, n) {
 }
 // v475 - the preview's buttons, and the one typed line for "Type my own" background or "Change it"
 async function sceneButton(env, deps, act, idShape) {
-  let pick = await kvJ(env, "desk_feed_pick", null);
+  // v490 - the snapshot written with this preview (fresh key), else the shared pick as before
+  const snap = idShape && idShape.length >= 10 ? await kvJ(env, "desk_scene_" + idShape, null) : null;
+  let pick = snap || await kvJ(env, "desk_feed_pick", null);
   // v478 (11 Oct: Make it said "expired" while the pick sat at preview) - a read a few seconds after the write can be one step behind:
   // a pick still at the shape step, with the shape carried in the button id, is the same choice.
   if (pick && pick.step === "shape" && idShape) pick = Object.assign(pick, { step: "preview", shape: pick.shape || idShape });
@@ -732,7 +737,7 @@ async function handleButton(env, deps, id) {
   if (id === "dp:ref:keep") { await deps.send(env, "Kept."); return true; }
   if (id === "dp:ref:purge") { const ix = await kvJ(env, "desk_ref_index", []); for (const n of ix) { await env.MEETINGS.delete("desk_ref_" + n); await env.MEETINGS.delete("desk_refimg_" + n); } await env.MEETINGS.delete("desk_ref_index"); await env.MEETINGS.delete("desk_ref_cursor"); await deps.send(env, "All " + ix.length + " reference photos deleted."); return true; }
   // v466 - "post" alone: what kind of post, by tapping
-  { const sb = String(id).match(/^dp:scene:(make|change|cancel)(?::([a-z]+))?$/); if (sb) return sceneButton(env, deps, sb[1], sb[2]); }   // v475
+  { const sb = String(id).match(/^dp:scene:(make|change|cancel)(?::([a-z0-9]+))?$/); if (sb) return sceneButton(env, deps, sb[1], sb[2]); }   // v475
   if (id === "dp:start:ideas") { await sendFeed(env, deps); return true; }   // v472 - the fresh 10, not the weekly 5
   { const fn = String(id).match(/^dp:fn:(\d{1,2})$/); if (fn) { await env.MEETINGS.put("desk_feed_open", String(nowOf(deps)), { expirationTtl: FEED_TTL }); const done = await feedReply(env, deps, Number(fn[1])); if (!done) await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } }
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }

@@ -1,4 +1,4 @@
-﻿// v475 - the desk follows Naj's scene ritual: picture -> background (or Type my own) -> time of day -> shape -> "Here's the picture I'll
+// v475 - the desk follows Naj's scene ritual: picture -> background (or Type my own) -> time of day -> shape -> "Here's the picture I'll
 // make" with Make it / Change it / Cancel; nothing is generated before Make it; the prompt carries the own background, the light, the
 // changes and the shape. Offline.
 import { deskPostRoute, bgLine, sceneExtras, scenePreview } from "../src/desk_post.js";
@@ -34,13 +34,15 @@ const before = imgCalls.length;
 await tap("dp:fn:2");                       // Landscape
 const pv = btns[0];
 ok(pv && /Here's the picture I'll make/.test(pv.b) && /Dubai Creek at dusk/.test(pv.b) && /Sunset/.test(pv.b) && /Landscape 16:9/.test(pv.b), "Here's the picture I'll make, in plain words", pv && pv.b);
-ok(pv && pv.x.map((b) => b.id).join(",") === "dp:scene:make:landscape,dp:scene:change:landscape,dp:scene:cancel", "Make it / Change it / Cancel");
+ok(pv && /^dp:scene:make:[a-z0-9]{10,},dp:scene:change:[a-z0-9]{10,},dp:scene:cancel:[a-z0-9]{10,}$/.test(pv.x.map((b) => b.id).join(",")), "Make it / Change it / Cancel, each carrying the preview's own snapshot id (v490)", pv && pv.x.map((b) => b.id).join(","));
+// v490: a STALE shared pick (one step behind) must not matter: the snapshot key decides
+store.set("desk_feed_pick", JSON.stringify(Object.assign(JSON.parse(store.get("desk_feed_pick")), { step: "time" })));
 ok(imgCalls.length === before, "nothing is generated before Make it");
-await btn("dp:scene:change:landscape");
+await btn(pv.x[1].id);
 ok(/Tell me the change/.test(texts.join("")), "Change it asks for the change");
 await say("put the Burj Khalifa behind me");
 ok(btns[0] && /Your change: put the Burj Khalifa behind me/.test(btns[0].b), "the preview comes back with the change");
-await btn("dp:scene:make:landscape");
+await btn(btns[0].x[0].id);
 const call = imgCalls[imgCalls.length - 1];
 ok(call && /Setting: the Dubai Creek at dusk/.test(call.prompt) && /Sunset: the sun just above the horizon/.test(call.prompt) && /Change: put the Burj Khalifa behind me\./.test(call.prompt) && /reference photos/.test(call.prompt), "Make it: his own background, the light, his change and his face go into the picture", call && call.prompt);
 ok(call && call.size === "1536x1024", "in the shape he chose (landscape)", call && call.size);
