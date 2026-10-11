@@ -74,6 +74,22 @@ export function mergeIndex(plotList, advLists) {
   return items;
 }
 
+// v520 - the register's word on each building, for the twin's pop-up card: status, % built, due / completed date, floors
+export function stackFacts(items, stacks) {
+  for (const it of items) {
+    if (!it.k) continue;
+    const [d, bk] = String(it.k).split(":"); const st = stacks[d];
+    const b = st && st.buildings_by_id ? st.buildings_by_id[bk] : null;
+    if (!b) continue;
+    const p = b.project || {};
+    if (p.status) it.s = String(p.status).toUpperCase();
+    if (typeof p.pct === "number") it.p = Math.round(p.pct);
+    if (p.end) it.e = String(p.end).slice(0, 7);
+    if (Array.isArray(b.floors) && b.floors.length) it.fl = b.floors.length;
+  }
+  return items;
+}
+
 export async function buildCityIndex(env, districts) {
   const plots = await read(env, "plots");
   const adv = [];
@@ -86,6 +102,9 @@ export async function buildCityIndex(env, districts) {
     if (doc.as_of && doc.as_of > asOf) asOf = doc.as_of;
   }
   const items = mergeIndex(plotItems(plots), adv);
+  const ds = [...new Set(items.map((x) => x.d).filter((s) => /^[a-z0-9]+$/.test(String(s || ""))))];
+  const stacks = {};
+  for (const d of ds) { const st = await read(env, "stack_" + d); if (st) stacks[d] = { buildings_by_id: st.buildings_by_id || {} }; stackFacts(items.filter((x) => x.d === d), stacks); delete stacks[d]; }   // one district at a time: a stack is ~1 MB
   return { v: 1, built: new Date().toISOString(), as_of: asOf, advertised: items.filter((x) => x.f).length, items };
 }
 

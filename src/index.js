@@ -8820,9 +8820,9 @@ ${HOMES_WIRE_JS}
   p.querySelectorAll("#cseg button").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-c");p.querySelectorAll("#cseg button").forEach(function(x){x.classList.toggle("on",x===b)});document.getElementById("colres").textContent=v==="height"?"height":(v==="dev"?"developer":"none");window.__cityColourLast=v;if(window.__cityColour)window.__cityColour(v)}})})();
 `;
 // ===== v508 CITY PLACES: the map's amenity filters on the all-Dubai twin, as ONE drop-down (Kendall 11 Oct 2026) =====
-const CITY_PLACES_HTML = '<div id=amp class="hp amp"><div class=hh id=amh><span>places</span><b id=amres>none</b><i>\u25BE</i></div><div class=hbody><div class="seg cseg amseg" id=amseg></div><div class=cnote id=amnote>Choose a district, then a kind: its buildings stay as blocks in the kind\'s colour and the rest of that district steps aside. A place with no building of its own keeps a badge; a dashed badge is an approximate position. Tap a badge for its name.</div></div></div>';
+const CITY_PLACES_HTML = '<div id=amp class="hp amp"><div class=hh id=amh><span>places</span><b id=amres>none</b><i>\u25BE</i></div><div class=hbody><div class="seg cseg amseg" id=amseg></div><div class=cnote id=amnote>Choose a district, then a kind: its buildings stand in the kind\'s colour, the rest of the district goes see-through, and the view moves to show them. A place with no building of its own keeps a badge; a dashed badge is an approximate position. Tap a badge for its name.</div></div></div>';
 const CITY_ADV_HTML = '<div id=avp class="hp avp"><div class=hh id=avh><span>advertised now</span><b id=avres>off</b><i>\u25BE</i></div><div class=hbody><div class="seg cseg amseg"><button type=button id=avon>show only buildings with adverts</button></div><div class="seg avbeds" id=avbeds><button type=button data-b=studio>studio</button><button type=button data-b=1>1 bed</button><button type=button data-b=2>2 bed</button><button type=button data-b=3+>3+ bed</button></div><div id=avlist></div><div class=cnote>Property Finder rental adverts, matched to the Land Department\'s buildings. Adverts are not vacancy: one flat can carry several adverts. The buildings with adverts stay standing in gold; tap one in the list to go to it.</div></div></div>';   // v519
-const CITY_PLACES_CSS = '.avbeds{margin-top:6px}.avbeds button{flex:1}#avlist{margin-top:6px;max-height:38vh;overflow:auto}#avon.on{color:#0C1413;background:var(--gold);border-color:var(--gold)}' + '#amc{position:fixed;inset:0;pointer-events:none;z-index:2}.amseg button svg{width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;margin-right:5px}.amseg button i{font-style:normal;color:var(--mut);margin-left:5px}.amseg button.clr{margin-left:auto}.amseg button.none{opacity:.45}.amseg button .amarr{display:none;float:right;font-style:normal;color:var(--mut);padding:0 2px 0 8px}.amseg button.has .amarr{display:inline}.amlist{display:none;margin:-2px 0 6px 12px;border-left:1px solid var(--line);padding-left:9px}.amlist.open{display:block}.amrow{font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.74rem;color:var(--text);padding:5px 0;border-top:1px solid rgba(36,53,47,.6);cursor:pointer}.amrow small{display:block;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace}#amall{position:fixed;left:14px;top:156px;z-index:41;font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);background:rgba(19,31,29,.94);border:1px solid rgba(197,165,106,.6);border-radius:99px;padding:7px 12px;cursor:pointer}@media(max-width:640px){#amall{top:150px}}';
+const CITY_PLACES_CSS = '#bcard{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(6,10,9,.55);padding:16px}#bcard.on{display:flex}.bcw{position:relative;width:min(380px,100%);background:rgba(19,31,29,.98);border:1px solid rgba(197,165,106,.55);border-radius:16px;padding:16px 18px;box-shadow:0 12px 40px rgba(0,0,0,.5)}.bcx{position:absolute;right:12px;top:8px;color:var(--mut,#8FA39B);cursor:pointer;font-size:1.3rem;text-decoration:none}.bct{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.25rem;color:#C5A56A;padding-right:24px;line-height:1.2}.bcs{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:#8FA39B;margin-top:3px}.bcl{margin-top:10px;font-size:.82rem;color:#E8E4D8}.bca{margin-top:10px;border:1px solid #24352F;border-radius:12px;padding:9px 11px}.bca b{font-family:Fraunces,Georgia,serif;font-size:1.6rem;color:#E8E4D8;margin-right:6px}.bca span{font-size:.78rem;color:#B9B2A3}.bca small{display:block;font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:#8FA39B;margin-top:3px}.bcn{margin-top:10px;font-size:.78rem;color:#B9B2A3}.bcbtn{display:flex;gap:8px;margin-top:12px}.bcbtn a{flex:1;text-align:center;border:1px solid #C5A56A;border-radius:99px;padding:8px 6px;color:#C5A56A;text-decoration:none;font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.05em;text-transform:uppercase}.bcbtn a:last-child{background:#C5A56A;color:#0C1413}.bcsrc{margin-top:10px;font-size:.6rem;color:#8FA39B;line-height:1.4}' + '.avbeds{margin-top:6px}.avbeds button{flex:1}#avlist{margin-top:6px;max-height:38vh;overflow:auto}#avon.on{color:#0C1413;background:var(--gold);border-color:var(--gold)}' + '#amc{position:fixed;inset:0;pointer-events:none;z-index:2}.amseg button svg{width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;margin-right:5px}.amseg button i{font-style:normal;color:var(--mut);margin-left:5px}.amseg button.clr{margin-left:auto}.amseg button.none{opacity:.45}.amseg button .amarr{display:none;float:right;font-style:normal;color:var(--mut);padding:0 2px 0 8px}.amseg button.has .amarr{display:inline}.amlist{display:none;margin:-2px 0 6px 12px;border-left:1px solid var(--line);padding-left:9px}.amlist.open{display:block}.amrow{font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.74rem;color:var(--text);padding:5px 0;border-top:1px solid rgba(36,53,47,.6);cursor:pointer}.amrow small{display:block;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace}#amall{position:fixed;left:14px;top:156px;z-index:41;font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);background:rgba(19,31,29,.94);border:1px solid rgba(197,165,106,.6);border-radius:99px;padding:7px 12px;cursor:pointer}@media(max-width:640px){#amall{top:150px}}';
 const CITY_PLACES_JS = `
 ` + AMEN_JS + `
 const ICON=` + JSON.stringify(MAP_ICONS) + `;
@@ -8831,7 +8831,7 @@ const amc=document.createElement("canvas");amc.id="amc";document.body.appendChil
 function amSize(){const r=devicePixelRatio||1;amc.width=innerWidth*r;amc.height=innerHeight*r;amc.style.width=innerWidth+"px";amc.style.height=innerHeight+"px"}amSize();addEventListener("resize",amSize);
 const amEsc=(s)=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]);
 function amBuild(){const AM=window.__AM;if(!AM||AMSEG.dataset.built)return;AMSEG.dataset.built="1";
-  Object.keys(AMEN).forEach(k=>{const n=(AM.counts||{})[k]||0;if(!n)return;const b=document.createElement("button");b.type="button";b.dataset.k=k;b.innerHTML=ICON[k]+amEsc(AMEN[k][0])+"<i>"+n.toLocaleString("en")+"</i>";b.onclick=()=>{AMON[k]=!AMON[k];b.classList.toggle("on",!!AMON[k]);amRecalc()};
+  Object.keys(AMEN).forEach(k=>{const n=(AM.counts||{})[k]||0;if(!n)return;const b=document.createElement("button");b.type="button";b.dataset.k=k;b.innerHTML=ICON[k]+amEsc(AMEN[k][0])+"<i>"+n.toLocaleString("en")+"</i>";b.onclick=()=>{AMON[k]=!AMON[k];b.classList.toggle("on",!!AMON[k]);AMFRAME=!!AMON[k];amRecalc()};
     const L=document.createElement("div");L.className="amlist";L.dataset.k=k;const ar=document.createElement("em");ar.className="amarr";ar.textContent="\u25BE";ar.onclick=(e)=>{e.stopPropagation();L.classList.toggle("open")};b.appendChild(ar);AMSEG.appendChild(b);AMSEG.appendChild(L)});
   const c=document.createElement("button");c.type="button";c.className="clr";c.textContent="clear";c.onclick=()=>{Object.keys(AMON).forEach(k=>{AMON[k]=false});AMSEG.querySelectorAll("button").forEach(x=>x.classList.remove("on"));amRecalc()};AMSEG.appendChild(c);amRecalc()}   // v514 - counts for the district already chosen
 let AMDIST=-1;const AMSC=document.createElement("button");AMSC.type="button";AMSC.className="clr";AMSC.hidden=true;AMSC.onclick=()=>{AMDIST=-1;amRecalc()};
@@ -8847,6 +8847,8 @@ function amRecalc(){window.__cityFocus=AMDIST;const AM=window.__AM;const ks=Obje
   const where=dslug?" in "+D.districts[AMDIST].name:" across Dubai";AMRES.textContent=ks.length?ks.map(k=>AMEN[k][0]).join(", ")+" \u00b7 "+AMPTS.length.toLocaleString("en")+where:"none";
   AMSC.textContent="all Dubai";AMSC.hidden=!dslug;if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC);amBlocks(ks)}
 const AMMAT0=mesh.instanceMatrix.array.slice(0);let AMHID=[],AMKEEP=new Map();
+const GHOST=new THREE.InstancedMesh(mesh.geometry,new THREE.MeshStandardMaterial({color:0xC9D4CD,transparent:true,opacity:.5,depthWrite:false,roughness:.85}),n);GHOST.count=0;GHOST.frustumCulled=false;scene.add(GHOST);   // v520 - ghosts, not gaps
+let AMFRAME=false;   // v520 - set by a choice the reader makes (a kind, the advertised filter, a bedroom); the next recompute frames what is chosen
 function amBlocks(ks){const M=mesh.instanceMatrix.array;for(const i of AMHID){for(let k=0;k<16;k++)M[16*i+k]=AMMAT0[16*i+k]}AMHID=[];AMKEEP=new Map();
   ADVKEEP=new Map();if(ADV.on&&CB)for(const it of CB.items){if(it.inst==null||it.inst<0)continue;if(AMDIST>=0&&di[it.inst]!==AMDIST)continue;const v=advFlats(it);if(v>0)ADVKEEP.set(it.inst,v)}   // v519
   const hide=(i)=>{AMHID.push(i);for(let k=0;k<16;k++)M[16*i+k]=0};
@@ -8855,7 +8857,12 @@ function amBlocks(ks){const M=mesh.instanceMatrix.array;for(const i of AMHID){fo
     const nb=AMPTS.filter(p=>p.blk).length;if(nb)AMRES.textContent+=" \u00b7 "+nb+" as blocks"}
   else{for(const p of AMPTS)p.blk=false;if(ADV.on)for(let i=0;i<n;i++){if(i!==HILITE&&!ADVKEEP.has(i))hide(i)}}   // v519 - across Dubai, only the advertised buildings stand
   AMALL.hidden=AMDIST<0;advPanel();
+  {let j=0;const G=GHOST.instanceMatrix.array;if(AMDIST>=0&&(ks.length||ADV.on))for(const i of AMHID){if(di[i]!==AMDIST)continue;for(let k=0;k<16;k++)G[16*j+k]=AMMAT0[16*i+k];j++}GHOST.count=j;GHOST.instanceMatrix.needsUpdate=true}   // v520 - the chosen district's other buildings stay, see-through
+  if(AMFRAME){AMFRAME=false;amFrame()}
   mesh.instanceMatrix.needsUpdate=true;paintCity()}
+function amFrame(){let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9,c=0;const add=(x,z)=>{x0=Math.min(x0,x);x1=Math.max(x1,x);z0=Math.min(z0,z);z1=Math.max(z1,z);c++};
+  AMKEEP.forEach((k,i)=>add(xz[2*i]*U,xz[2*i+1]*U));ADVKEEP.forEach((v,i)=>add(xz[2*i]*U,xz[2*i+1]*U));for(const p of AMPTS)if(!p.blk)add(p.v.x,p.v.z);
+  if(!c)return;const ext=Math.max(x1-x0,z1-z0);flyPoint((x0+x1)/2,(z0+z1)/2,Math.max(1400,ext*0.9+500))}   // v520 - never inside the 1.7 km handover
 function amPaint(){if(!AMKEEP.size&&!ADVKEEP.size&&HILITE<0)return;const arr=mesh.instanceColor.array,c=new THREE.Color();
   c.set(0xC5A56A);ADVKEEP.forEach((v,i)=>{arr[3*i]=c.r;arr[3*i+1]=c.g;arr[3*i+2]=c.b});   // v519 - advertised now: gold
   AMKEEP.forEach((k,i)=>{c.set(AMEN[k][2]);arr[3*i]=c.r;arr[3*i+1]=c.g;arr[3*i+2]=c.b});
@@ -8881,7 +8888,7 @@ function cbLoad(){if(CB)return Promise.resolve(CB);if(CBP)return CBP;CBP=fetch("
 function advFlats(it){if(!it.f)return 0;if(!ADV.beds.size)return it.f;let s=0;ADV.beds.forEach(b=>{s+=(it.b&&it.b[b])||0});return s}
 const BEDSAY={studio:"studio","1":"1 bed","2":"2 bed","3+":"3+ bed"};
 function bedLine(it){return ["studio","1","2","3+"].filter(b=>it.b&&it.b[b]).map(b=>it.b[b]+" "+BEDSAY[b]).join(" \u00b7 ")}
-function bTip(it){const dn=it.dIx>=0&&D.districts[it.dIx]?D.districts[it.dIx].name:(window.__dName?window.__dName(it.d):it.d);const bk=String(it.k||"").split(":")[1];
+let bTip=function(it){const dn=it.dIx>=0&&D.districts[it.dIx]?D.districts[it.dIx].name:(window.__dName?window.__dName(it.d):it.d);const bk=String(it.k||"").split(":")[1];
   tip.style.display="block";tip.innerHTML="<b>"+amEsc(it.n)+"</b><s>"+amEsc(dn)+(it.f?" \u00b7 "+it.f+" flat"+(it.f===1?"":"s")+" advertised now":"")+"</s>"+(it.f?"<s>"+amEsc(bedLine(it))+"</s>":"")+(bk?'<a href="/building/'+encodeURIComponent(it.d)+'/'+encodeURIComponent(bk)+'?key='+encodeURIComponent(KEY)+(window.__RKQ||'')+'">open the building \u2192</a>':"")}
 function pickBuilding(it){sr.style.display="none";q.value=it.n;q.blur();HILITE=it.inst;if(it.dIx>=0){AMDIST=it.dIx;const s=document.getElementById("sel");if(s)s.value=String(it.dIx)}amRecalc();if(window.__cityFly)window.__cityFly(it.lon,it.lat,900);ctl.autoRotate=false;bTip(it)}
 // the search box: districts as before, then buildings by name
@@ -8898,8 +8905,8 @@ q.oninput=()=>{const v=norm(q.value);if(!v){sr.style.display="none";return}const
 // ADVERTISED NOW panel
 const AVP=document.getElementById("avp"),AVRES=document.getElementById("avres"),AVLIST=document.getElementById("avlist");
 document.getElementById("avh").onclick=()=>{const open=!AVP.classList.contains("on");if(open)window.__stackOpen(AVP);AVP.classList.toggle("on",open)};
-document.getElementById("avon").onclick=(e)=>{ADV.on=!ADV.on;e.currentTarget.classList.toggle("on",ADV.on);e.currentTarget.textContent=ADV.on?"showing buildings with adverts":"show only buildings with adverts";if(ADV.on)cbLoad().then(()=>amRecalc());else amRecalc()};
-document.querySelectorAll("#avbeds button").forEach(b=>{b.onclick=()=>{const k=b.dataset.b;ADV.beds.has(k)?ADV.beds.delete(k):ADV.beds.add(k);b.classList.toggle("on",ADV.beds.has(k));if(ADV.on)amRecalc()}});
+document.getElementById("avon").onclick=(e)=>{ADV.on=!ADV.on;e.currentTarget.classList.toggle("on",ADV.on);e.currentTarget.textContent=ADV.on?"showing buildings with adverts":"show only buildings with adverts";if(ADV.on)cbLoad().then(()=>{AMFRAME=true;amRecalc()});else amRecalc()};
+document.querySelectorAll("#avbeds button").forEach(b=>{b.onclick=()=>{const k=b.dataset.b;ADV.beds.has(k)?ADV.beds.delete(k):ADV.beds.add(k);b.classList.toggle("on",ADV.beds.has(k));if(ADV.on){AMFRAME=true;amRecalc()}}});
 function advPanel(){if(!ADV.on){AVRES.textContent="off";AVLIST.innerHTML="";return}
   const rows=(CB?CB.items:[]).filter(it=>it.inst!=null&&it.inst>=0&&advFlats(it)>0&&(AMDIST<0||di[it.inst]===AMDIST)).sort((a,b)=>advFlats(b)-advFlats(a));
   const fl=rows.reduce((s,it)=>s+advFlats(it),0);const where=AMDIST>=0&&D.districts[AMDIST]?" in "+D.districts[AMDIST].name:" across Dubai";
@@ -8907,6 +8914,37 @@ function advPanel(){if(!ADV.on){AVRES.textContent="off";AVLIST.innerHTML="";retu
   AVLIST.innerHTML=rows.slice(0,40).map((it,ix)=>'<div class=amrow data-ix="'+ix+'">'+amEsc(it.n)+'<small>'+advFlats(it)+' flat'+(advFlats(it)===1?'':'s')+' \u00b7 '+amEsc(bedLine(it))+'</small></div>').join("")+(rows.length>40?'<div class=cnote>'+(rows.length-40)+' more: pick a district to narrow the list.</div>':"");
   AVLIST.querySelectorAll(".amrow").forEach(r=>{r.onclick=()=>pickBuilding(rows[+r.dataset.ix])})}
 // ===== v519 CITY BUILDINGS - end =====
+
+// ===== v520 THE BUILDING CARD: tap a building in a chosen district (or pick one in search / the advertised list) -> one clean pop-up =====
+const MON=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function ym(e){if(!e)return "";const y=e.slice(0,4),m=+e.slice(5,7);return (MON[m]?MON[m]+" ":"")+y}
+function statusLine(it){const s=it.s||"",e=it.e||"";const past=e&&e<new Date().toISOString().slice(0,7);
+  if(s==="FINISHED")return e?"Completed "+ym(e):"Completed";
+  if(s==="ACTIVE")return "Under construction"+(it.p!=null?" \u00b7 "+it.p+"% built":"")+(e?" \u00b7 "+(past?"was due ":"due ")+ym(e):"");
+  if(s==="NOT_STARTED"||s==="PENDING")return "Not yet built"+(e?" \u00b7 due "+ym(e):"");
+  return ""}
+let INSTIT=null;function instItem(i){if(!CB)return null;if(!INSTIT){INSTIT=new Map();for(const it of CB.items)if(it.inst!=null&&it.inst>=0){const o=INSTIT.get(it.inst);if(!o||(it.f||0)>(o.f||0))INSTIT.set(it.inst,it)}}return INSTIT.get(i)||null}
+const BC=document.createElement("div");BC.id="bcard";BC.innerHTML='<div class=bcw role=dialog aria-modal=true><u class=bcx title=close>\u00d7</u><div id=bcb></div></div>';document.body.appendChild(BC);
+BC.onclick=(e)=>{if(e.target===BC||e.target.classList.contains("bcx"))BC.classList.remove("on")};
+document.addEventListener("keydown",(e)=>{if(e.key==="Escape")BC.classList.remove("on")});
+function bCard(it,inst){tip.style.display="none";const box=document.getElementById("bcb");
+  const dIx=it?it.dIx:(inst>=0?di[inst]:-1);const dn=dIx>=0&&D.districts[dIx]?D.districts[dIx].name:"";
+  if(!it){box.innerHTML='<div class=bct>A building in '+amEsc(dn)+'</div><div class=bcs>about '+Math.round(Math.max(hh[inst]||0,8))+' m tall</div><div class=bcn>No register record we hold names this building.</div>';BC.classList.add("on");return}
+  const bk=String(it.k||"").split(":")[1],q2='?key='+encodeURIComponent(KEY)+(window.__RKQ||'');const sl=statusLine(it);
+  box.innerHTML='<div class=bct>'+amEsc(it.n)+'</div><div class=bcs>'+amEsc(dn)+(it.fl?' \u00b7 '+it.fl+' floors':'')+'</div>'
+    +(sl?'<div class=bcl>'+amEsc(sl)+'</div>':'')
+    +(it.f?'<div class=bca><b>'+it.f+'</b><span>flat'+(it.f===1?'':'s')+' advertised to rent now</span><small>'+amEsc(bedLine(it))+'</small></div>':'<div class=bcn>No Property Finder adverts for this building today.</div>')
+    +(bk?'<div class=bcbtn><a target=_blank rel=noopener href="/brief_pdf?kind=dossier&keys='+encodeURIComponent(it.k)+'&mode=rent&beds=all&key='+encodeURIComponent(KEY)+(window.__RKQ||'')+'">Fact sheet \u00b7 PDF</a><a href="/building/'+encodeURIComponent(it.d)+'/'+encodeURIComponent(bk)+q2+'">The building \u2192</a></div>':'')
+    +(it.f?'<div class=bcsrc>Adverts: Property Finder, matched to the Land Department&rsquo;s buildings; adverts are not vacancy. Status: Land Department project register.</div>':'<div class=bcsrc>Status: Land Department project register.</div>');
+  BC.classList.add("on")}
+bTip=function(it){bCard(it,it.inst)};   // search picks and the advertised list open the same card
+function hitInst(ev){const rct=canvas.getBoundingClientRect();m2.x=((ev.clientX-rct.left)/rct.width)*2-1;m2.y=-((ev.clientY-rct.top)/rct.height)*2+1;ray.setFromCamera(m2,cam);const h=ray.intersectObject(mesh,false)[0];return h?h.instanceId:-1}
+let bDown=0;canvas.addEventListener("pointerdown",()=>{bDown=Date.now()},true);
+canvas.addEventListener("pointerup",(ev)=>{if(AMDIST<0||Date.now()-bDown>260)return;const i=hitInst(ev);if(i<0||di[i]!==AMDIST)return;ev.stopImmediatePropagation();
+  const go=()=>{let it=instItem(i);if(!it&&CB){const x=xz[2*i]*U,z=xz[2*i+1]*U;let bd=50*50;for(const c of CB.items){if(c.inst==null||c.inst<0||di[c.inst]!==AMDIST)continue;const dx=xz[2*c.inst]*U-x,dz=xz[2*c.inst+1]*U-z,dd=dx*dx+dz*dz;if(dd<bd){bd=dd;it=c}}}bCard(it,i)};
+  if(CB)go();else cbLoad().then(go)},true);
+// ===== v520 THE BUILDING CARD - end =====
+
 // ===== v508 CITY PLACES - end =====
 `;
 const CITY_STACK_MODULE_JS = `
