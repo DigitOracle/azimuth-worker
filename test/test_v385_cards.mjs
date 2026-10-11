@@ -28,7 +28,7 @@ const body = "var $=function(id){return document.getElementById(id)};var KEY=\"k
   + cut("var BLK={}", "var PULSE=0") + cut("function showSnap(p,pin)", "function focusProject") + cut("function tipHtml", "function drillHtml")
   + cut("function invFromApi", "function pdfRowProf")
   + "; return {BLK:BLK,PJ:PJ,PDET:PDET,pjCard:pjCard,pjFeatures:pjFeatures,showSnap:showSnap,pdOpen:pdOpen,pdClose:pdClose,pdWhy:pdWhy,invIndex:invIndex,pjDetailHtml:pjDetailHtml,locate:locate};";
-const mkEl = (id) => ({ id, innerHTML: "", style: {}, className: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, focus() { this.focused = true; } });
+const mkEl = (id) => ({ id, innerHTML: "", style: {}, className: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, focus() { this.focused = true; }, querySelector() { return null; } });   // v424 gave a pinned card its own close button (el.querySelector)
 const els = {}, keys = [];
 const doc = { getElementById: (i) => els[i] || null, createElement: () => mkEl(""), body: { appendChild: (e) => { els[e.id] = e; } }, addEventListener: (t, f) => keys.push(f) };
 const S = { evOpen: false, sel: "dist", unit: "sqft", win: "all", inv: null };

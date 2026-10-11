@@ -373,7 +373,7 @@ eq(parsed.map((u) => u.id), ["kendall", "najjuko"], "it parses to kendall and na
 eq(parsed.map((u) => u.name), ["Dr. Doli", "Black Coffee"], "the page names are Dr. Doli and Black Coffee");
 ok(parsed[1].wa === /^WA_ALLOWED = "(\d+)"/m.exec(az2)[1], "najjuko's number is the one this instance talks to (WA_ALLOWED)");
 ok(parsed[0].wa === /^WA_ALLOWED = "(\d+)"/m.exec(toml)[1] && parsed[0].wa !== parsed[1].wa, "kendall's number is the default instance's, and the two differ");
-ok(/^\s*LOG_NUDGE_TEMPLATE\s*=\s*"najma_log_day"/m.test(toml) && /^\s*LOG_NUDGE_LANG\s*=\s*"en_US"/m.test(toml.split("[env.azimuth2.vars]")[1] || ""), "the nudge template is ON in the azimuth2 config now that Meta shows it ACTIVE (no variables, en_US)");
+ok(/^\s*LOG_NUDGE_TEMPLATE\s*=\s*"najma_log_reminder"/m.test(toml) && /^\s*LOG_NUDGE_LANG\s*=\s*"en_US"/m.test(toml.split("[env.azimuth2.vars]")[1] || ""), "the nudge template is ON in the azimuth2 config: najma_log_reminder (v489, ACTIVE as Utility, {{1}} = the day, en_US)");
 ok(!/^\s*LOG_NUDGE_TEMPLATE\s*=/m.test(toml.split("[env.azimuth2]")[0]), "and it is not set on the older instance");
 ok(/MOMO/.test(fs.readFileSync(new URL("../README.md", import.meta.url), "utf8")) && /disappears for her by design/.test(fs.readFileSync(new URL("../README.md", import.meta.url), "utf8")), "the README says MOMO disappears for her if a client key is turned on");
 // the template branch
@@ -1161,7 +1161,7 @@ ok(nine && !BADW.test(nine.b), "and nothing in it is about his body");
 // 5 AM
 const M5 = async (iso, d2) => { sentBr.length = 0; const r = await fit.fitMorning(env, d2 || depsBr, T(iso)); return { r, sent: sentBr.slice() }; };
 let m5 = await M5("2026-10-09T00:30:00Z"); eq([m5.r, m5.sent.length], [false, 0], "04:30 Dubai: nothing yet");
-m5 = await M5("2026-10-09T01:40:00Z"); eq([m5.r, m5.sent.length], [false, 0], "05:40 Dubai: too late for the opener");
+m5 = await M5("2026-10-09T08:40:00Z"); eq([m5.r, m5.sent.length], [false, 0], "12:40 Dubai: too late for the opener (window is 05:00-12:00 since v422)");
 m5 = await M5("2026-10-09T01:05:00Z");
 const msg5 = (m5.sent.find((x) => x.to === KEN) || {}).b || "";
 ok(m5.r && /^\*LET'S GET IT - DAY 9 OF 30\*\n\*[^*\n]+\*\n\n/.test(msg5) && /Yesterday: 0 meals/.test(msg5) && /Daily minimum was missed/.test(msg5) && /TODAY'S LINE IN THE SAND\*\nMove 30 minutes before 12:00/.test(msg5) && /\n"[^"]+"/.test(msg5), "05:05 Dubai, his window open: opener with day, honest about yesterday, the numbers, today's line in the sand and a quote (" + msg5.slice(0, 90).replace(/\n/g, " / ") + ")");

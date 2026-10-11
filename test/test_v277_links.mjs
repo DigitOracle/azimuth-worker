@@ -71,7 +71,7 @@ ok(D.dossier && D.dossier.key === SLUG + ":" + ID && !("slug" in D.dossier), "th
 ok(/<a id=dossbtn target=_blank rel=noopener href="\/brief_pdf\?kind=dossier&amp;keys=businessbay%3A6&amp;mode=rent&amp;beds=all&amp;key=owner_read_key_abcdefghijklmnop">The dossier · PDF<\/a>/.test(b.html),
   "the panel's dossier button is /brief_pdf?kind=dossier&keys=businessbay:6&mode=rent&beds=all with the page's key", (/<a id=dossbtn[^>]*>/.exec(b.html) || [""])[0]);
 ok(!/<a[^>]*href="[^"]*\/sheet\//.test(b.html) && !b.html.includes("/sheet/\" + ") && !b.html.includes('"/sheet/"'), "no button or link on the page uses /sheet/ (the route stays for old links only)");
-const view = /const __name=\(f\)=>f;\(([\s\S]*)\)\(THREE,GLTFLoader/.exec(b.html);
+const view = /const __name=\(f\)=>f;[\s\S]*?;\((function view[\s\S]*)\)\(THREE,GLTFLoader/.exec(b.html);   // v482: dewaVisual + bpTiles travel between __name and the view
 ok(view && parses("(" + view[1] + ")", ".mjs"), "the page's view function still parses");
 ok(view && /location\.origin \+ "\/brief_pdf\?kind=dossier&keys=" \+ encodeURIComponent\(D\.dossier\.key \|\| \(D\.slug \+ ":" \+ D\.id\)\) \+ "&mode=rent&beds=" \+ bedsChoice\(\)/.test(view[1]) &&
   /const k = share \? \(D\.shareKey \|\| ""\) : KEY;/.test(view[1]) && !/\/sheet\//.test(view[1]),

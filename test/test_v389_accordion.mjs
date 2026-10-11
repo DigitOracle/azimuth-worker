@@ -28,7 +28,7 @@ const body = "var $=function(id){return document.getElementById(id)};var KEY=\"k
   + cut("var BLK={}", "var PULSE=0") + cut("function showSnap(p,pin)", "function focusProject") + cut("function tipHtml", "function drillHtml")
   + cut("function pdfUrl", "function pdfRowProf")
   + "; return {pdfRow:pdfRow,pdAccToggle:pdAccToggle,pdBtnTap:pdBtnTap,pdTap:pdTap,pdBtn:pdBtn,pdDevKey:pdDevKey,BLK:BLK,PJ:PJ,PDET:PDET,pjCard:pjCard,pjFeatures:pjFeatures,showSnap:showSnap,pdOpen:pdOpen,pdClose:pdClose,pdWhy:pdWhy,invIndex:invIndex,pjDetailHtml:pjDetailHtml,locate:locate};";
-const mkEl = (id) => ({ id, innerHTML: "", style: {}, className: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, focus() { this.focused = true; } });
+const mkEl = (id) => ({ id, innerHTML: "", style: {}, className: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, focus() { this.focused = true; }, querySelector() { return null; } });   // v424 gave a pinned card its own close button (el.querySelector)
 const els = {}, keys = [];
 const doc = { getElementById: (i) => els[i] || null, createElement: () => mkEl(""), body: { appendChild: (e) => { els[e.id] = e; } }, addEventListener: (t, f) => keys.push(f) };
 const S = { evOpen: false, sel: "dist", unit: "sqft", win: "all", inv: null, mode: "buy", bud: {}, screen: 1 };
@@ -88,7 +88,7 @@ const btns = (b) => [...b.matchAll(/<(a|button) (?:type=button )?class="pdfbtn p
 const bt = btns(bb);
 ok(bt.length === 3 && bt.map((b) => b.label).join("|") === "Investor|Client|Broker", "three buttons at the bottom, in one row: Investor, Client, Broker");
 ok(/<div class="pdfrow pdsmrow">/.test(bb) && /\.pdsmrow\{[^}]*margin-top:8px/.test(css) && /\.pdfrow\{display:flex;flex-wrap:wrap/.test(css), "one wrapping row");
-ok(bt.every((b) => !b.off) && /href="\/developers_pdf\?kind=investor_selector&amp;project=INV-BUILT/.test(bt[0].attrs) && /href="\/doc_client\?keys=dist%3A77&amp;beds=all&amp;mode=rent&amp;key=k"/.test(bt[1].attrs) && /href="\/doc_broker\?kind=snapshot&amp;area=dist&amp;/.test(bt[2].attrs) && /developers=x&amp;key=k"/.test(bt[2].attrs), "a project with a facts record, a building key and a mapped developer: all three are real links (investor selector, Brief dossier, developer snapshot for this area)");
+ok(bt.every((b) => !b.off) && /href="\/developers_pdf\?kind=investor_selector&amp;project=INV-BUILT/.test(bt[0].attrs) && /href="\/doc_client\?keys=dist%3A77&amp;beds=all&amp;mode=rent&amp;key=k"/.test(bt[1].attrs) && /href="\/doc_broker\?kind=building&amp;area=dist&amp;project=777&amp;name=Built%20Tower&amp;bk=77&amp;/.test(bt[2].attrs) && /key=k"/.test(bt[2].attrs), "a project with a facts record, a building key and a mapped developer: all three are real links (investor selector, Brief dossier, developer snapshot for this area)");
 ok(bt.every((b) => /<svg class="pdfic"/.test(bb)) && /\.pdsm\{min-height:36px/.test(css), "icons from the existing set and a 36 px height");
 const bnt = btns(bn);
 ok(bnt.length === 3 && bnt.map((b) => b.off).join() === "true,true,true", "a project with no facts record, no building key and no mapped developer: all three are disabled, none hidden");

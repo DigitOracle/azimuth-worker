@@ -16,7 +16,7 @@ const s0 = cut("function esc(t)", "function api("), s1 = cut("function fmt(n)", 
 const s4 = cut("var STATS={},IXC={};", "function features()") + cut("var MON=", "function barsSvg(");
 const s3 = cut("var DRILLSET=null", "function devTier(k)");
 const S = { prof: null, drill: null, sel: "a", unit: "sqft", win: "all" };
-const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", s0 + s1 + s4 + cut("function bar(arr", "function devRow(") + s3 + "; return {ixOf:ixOf,profileHtml:profileHtml,drillHtml:drillHtml,setDrill:setDrill,prof:prof,pickNote:pickNote};");
+const fn = new Function("DM", "IDX", "S", "TC", "DEFAULT_NAMES", "setSheet", "renderDetail", "refreshMap", "var EVI={},KEY=\"\",innerWidth=390,innerHeight=800;" + s0 + s1 + s4 + cut("function clipName", "function devHead(") + cut("function bar(arr", "function devRow(") + s3 + "; return {ixOf:ixOf,profileHtml:profileHtml,drillHtml:drillHtml,setDrill:setDrill,prof:prof,pickNote:pickNote};");
 const P = fn(DM, IDX, S, ["a", "b", "c", "d"], {}, () => {}, () => {}, () => {});
 const text = (h) => h.replace(/<title>[^<]*<\/title>/g, "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
 

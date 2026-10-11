@@ -146,7 +146,7 @@ r = await call("/building/" + SLUG + "/" + (pages[0] || 0) + "?key=" + CLIENT);
 ok(r.status !== 401, "and the client key that opened /blocks opens that building route");
 
 // ---- index.js carries only the marked dispatch --------------------------------------------------------------------------------
-const SRC = fs.readFileSync(path.join(HERE, "..", "src", "index.js"), "utf8");
+const SRC = fs.readFileSync(path.join(HERE, "..", "src", "index.js"), "utf8").replace(/\r\n/g, "\n");   // index.js is CRLF on disk since v476
 ok(/import \{ blocksRoute \} from "\.\/blocks_page\.js";/.test(SRC) && /\/\/ ---- BLOCKS[^\n]*\n\s*\{ const _blk = await blocksRoute\(request, env, url, \{ clientOk, clientResp \}\); if \(_blk\) return _blk; \}\n\s*\/\/ ---- \/BLOCKS/.test(SRC),
   "src/index.js: one import and one marked dispatch");
 

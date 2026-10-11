@@ -56,7 +56,7 @@ const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B55}\u{FE0F}\u{2
 
 console.log("the Worker-side logic is the page's logic, not a copy");
 {
-  const g = fs.readFileSync(new URL("../src/devmap_dm.js", import.meta.url), "utf8");
+  const g = fs.readFileSync(new URL("../src/devmap_dm.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");   // template literals are LF; the checkout is CRLF
   ok(g.includes(DEVMAP_CORE_JS.trim()), "src/devmap_dm.js carries exactly the text of src/devmap_core.js (run node scripts/gen_devmap_dm.mjs after editing the core)");
 }
 
@@ -77,7 +77,7 @@ console.log("snapshot content");
 {
   const h = docs["snapshot:testvillagecircle:12m"].html;
   for (const t of ["Median price", "Middle half of sales", "Sales loaded", "Top band", "Upper band", "Middle band", "Entry band", "Studio", "3 bedrooms", "of sales here", "of the money"]) ok(h.includes(t), "snapshot has '" + t + "'");
-  ok(h.includes('class="loc"') && (h.match(/<svg class="loc"/g) || []).length === 1 && /The area in blocks|not in the data yet/.test(h), "v337: the locator is vector in the header and the 3D blocks picture (or its quiet card) sits at the foot");
+  ok(h.includes('class="loc"') && (h.match(/<svg class="loc"/g) || []).length === 1 && /The area&rsquo;s digital footprint|not in the data yet/.test(h), "v337: the locator is vector in the header and the 3D blocks picture (or its quiet card) sits at the foot");
   ok(/Client budget: 1 bedroom, AED 1,200,000 to AED 1,800,000/.test(h), "a client budget gives one line on who fits");
   { // v358 - the 12-month headline is the register's own median (area.ev.l12 = 1,600 per sq m = AED 149 per sq ft), the same figure the investor sheet prints
     const tile = (html) => (html.match(/Median price<\/div><div class="tv">([^<]*)</) || [])[1];
@@ -116,7 +116,8 @@ console.log("rules for every document");
 for (const [k, d] of Object.entries(docs)) {
   const h = d.html, t = text(h), pages = (h.match(/class="sheet page/g) || []).length;
   ok(!EMOJI.test(h), k + ": no emoji characters");
-  ok(!/\b(JVC|JLT|DLD|DM|KHDA|RTA|PSF|BR)\b/.test(t) && !(t.match(/\b[A-Z]{2,6}\b/g) || []).filter((w) => !["AED", "A", "I"].includes(w)).length, k + ": no initials or unexplained abbreviations");
+    // KORE is a brand name as the developer spells it (dev_claims_data.js), not initials - allowed by the no-abbreviations rule
+  ok(!/\b(JVC|JLT|DLD|DM|KHDA|RTA|PSF|BR)\b/.test(t) && !(t.match(/\b[A-Z]{2,6}\b/g) || []).filter((w) => !["AED", "A", "I", "KORE"].includes(w)).length, k + ": no initials or unexplained abbreviations");
   ok(!/not known|unknown|n\/a|undefined|NaN|\bnull\b/i.test(t), k + ": a missing fact is left out, never printed as 'not known'");
   ok((h.match(/<svg class="ic"/g) || []).length >= (/Not enough sales/.test(h) ? 1 : 3) && (h.match(/class="icw"/g) || []).length === (h.match(/class="sec"/g) || []).length, k + ": icons are inline and each section heading has one");
   ok((h.match(/Curated by Najjuko &middot; Dubai Decoded/g) || []).length === pages && (h.match(/\+971 56 548 4397/g) || []).length === pages, k + ": the Brief footer is on every page");
@@ -177,7 +178,7 @@ console.log("the page: buttons and the gold link");
   const js = devmapHtml("k", {});
   ok(js.includes("'Snapshot'") && js.includes("'Detailed'") && js.includes("/developers_pdf"), "the page has both download buttons (v389: the small row, Snapshot and Detailed, v398 short labels)");
   ok(/pdfRow\(slug,mineList\(\),S\.screen===3\)/.test(js) && /pdfRowProf\(k,p\)/.test(js) && /pdfRow\(a\.slug,mineList\(\),true\)/.test(js), "buttons sit on the area panel, the developer profile and the client meeting results (which pass the budget)");
-  ok((js.match(/id=showall class=golink/g) || []).length === 2 && /\.golink\{[^}]*padding:8px[^}]*var\(--gold\)/.test(js), "'Show all developers here' uses the gold link style with a clear tap target");
+  ok((js.match(/id=showall class=golink/g) || []).length === 1 && /\.golink\{[^}]*padding:8px[^}]*var\(--gold\)/.test(js), "'Show all developers here' uses the gold link style with a clear tap target");
   const script = js.split("<script>")[1].split("</script>")[0];
   let parses = true; try { new Function(script); } catch (e) { parses = false; }
   ok(parses, "the page script still parses");

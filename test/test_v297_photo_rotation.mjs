@@ -5,7 +5,7 @@
 //   C  chooser: tiles for every photo, 9 rows + "More photos", More shows the rest
 // NEGATIVE CONTROL: P fails against v294 (function absent); C fails (3 buttons, no list).
 import { readFileSync } from "node:fs";
-const src = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+const src = readFileSync(new URL("../src/index.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");   // index.js is CRLF on disk since v476
 let pass = 0, fail = 0;
 const ok = (c, m, d) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m + (d ? "\n         " + String(d).slice(0, 300) : "")); } };
 

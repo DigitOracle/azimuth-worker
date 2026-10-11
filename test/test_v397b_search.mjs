@@ -96,7 +96,7 @@ console.log("B - the worker merge (additive, never replaces or reorders)");
 }
 
 // ---- the real searchAll / openRegProject source from the worker ----
-const idx = fs.readFileSync(U("../src/index.js"), "latin1");
+const idx = fs.readFileSync(U("../src/index.js"), "latin1").replace(/\r\n/g, "\n");   // index.js is CRLF on disk since v476
 const cut = (a, b) => idx.slice(idx.indexOf(a), idx.indexOf(b)).split("\n").map((l) => l.replace(/^\s*\+ '/, "").replace(/'$/, "").replace(/\\'/g, "'").replace(/\\\\/g, "\\").replace(/\\u00b7/g, "-")).join("\n");
 const tc = (t) => String(t || "");
 const opened = [];

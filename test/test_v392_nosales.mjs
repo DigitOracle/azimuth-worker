@@ -57,7 +57,7 @@ console.log("B - the server: clean, plot injection, search merge");
   ok(mergePlots(plots, null) === null && mergePlots(null, JSON.stringify(EXTRA)) === null && mergePlots(plots, JSON.stringify({ features: [] })) === null, "no extra file, no plots file or nothing new: null (the caller serves img_plots untouched)");
   ok(EXTRA.features.some((f) => f.properties.plot === "648-8592") && EXTRA.features.some((f) => f.properties.plot === "648-8534"), "the extra file holds KORE (648-8592) and The Archive (648-8534)");
   // the map search function, run on the merged list with the real searchAll source
-  const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "latin1");
+  const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "latin1").replace(/\r\n/g, "\n");   // index.js is CRLF on disk since v476
   const a = idx.indexOf("function qnorm(t)"), b = idx.indexOf("function goDistrict");
   const src = idx.slice(a, b).split("\n").map((l) => l.replace(/^\s*\+ '/, "").replace(/'$/, "").replace(/\\'/g, "'").replace(/\\\\/g, "\\").replace(/\\u00b7/g, "-")).join("\n");
   const run = new Function("D", "SUBS", "PLOTS", "PR", "VIDS", "AM", "AMEN", "tc", "dName", "goDistrict", "openPlace", "devName", "listHomes", "map", "fmtAed", "openHome", "openVideo", "openAmenity", "ON", "drawAm", src + "; return searchAll;");

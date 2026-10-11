@@ -38,7 +38,7 @@ function runPage({ saved, savedAt, cache } = {}, htmlSrc) {
   const html = htmlSrc || devmapHtml("k", {});
   const code = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)].filter((m) => !/\bsrc=/.test(m[1])).map((m) => m[2])[0];
   const els = {}, posts = [];
-  const mkEl = (id) => ({ id, innerHTML: "", textContent: "", value: "", style: {}, classList: { toggle() {}, add() {}, remove() {} }, setAttribute() {}, getAttribute() { return null; }, querySelectorAll: () => [], querySelector: () => mkEl("sub"), addEventListener() {}, focus() {}, setSelectionRange() {}, selectionStart: 0 });
+  const mkEl = (id) => ({ id, innerHTML: "", textContent: "", value: "", style: {}, classList: { toggle() {}, add() {}, remove() {} }, setAttribute() {}, getAttribute() { return null; }, querySelectorAll: () => [], querySelector: () => mkEl("sub"), addEventListener() {}, focus() {}, setSelectionRange() {}, selectionStart: 0, appendChild() {} });   // v371 lock chips appendChild
   const side = () => (els.sidebody ? els.sidebody.innerHTML : "");
   const document = {
     getElementById(id) { if (!els[id]) els[id] = mkEl(id); if (id === "reset") { const has = /id=reset/.test(side()); return has ? els[id] : els[id]; } return els[id]; },
@@ -59,7 +59,7 @@ function runPage({ saved, savedAt, cache } = {}, htmlSrc) {
     return { ok: true, json: async () => body };
   };
   const ctx = { document, location: { search: "?key=k" }, localStorage: { getItem: (k) => store[k] || null, setItem: (k, v) => { store[k] = v; } }, fetch, window: {}, innerWidth: 1200, console, setTimeout, clearTimeout, URLSearchParams, JSON, Math, Object, Array, Promise, String, Number, isFinite, encodeURIComponent, Date, parseInt, parseFloat, RegExp };
-  ctx.window = ctx;
+  ctx.window = ctx; ctx.getComputedStyle = () => ({ display: "none" });   // v347 dedupeIds reads computed style
   vm.createContext(ctx);
   vm.runInContext(code, ctx);
   const tick = () => new Promise((r) => setTimeout(r, 20));

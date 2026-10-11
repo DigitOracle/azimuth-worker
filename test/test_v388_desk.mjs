@@ -35,7 +35,7 @@ ok(!store.has("wa_owner_last_in"), "the ordinary owner window is untouched by a 
 // /desk_status and anything else
 out = []; await hook(envOn, DESK, KEND, "/desk_status");
 const st = out[0] && out[0].body.text.body;
-ok(out.length === 1 && out[0].url.includes("/" + DESK + "/") && /Window: open/.test(st) && /Desk number configured: yes/.test(st) && /Dubai/.test(st) && /Version: v388/.test(st), "/desk_status: Dubai time, window open, configured yes, version", st);
+ok(out.length === 1 && out[0].url.includes("/" + DESK + "/") && /Window: open/.test(st) && /Desk number configured: yes/.test(st) && /Dubai/.test(st) && /Version: v\d+/.test(st), "/desk_status: Dubai time, window open, configured yes, version (DESK_VERSION is bumped per desk release since v475)", st);
 out = []; await hook(envOn, DESK, KEND, "what is the weather");
 ok(out.length === 1 && out[0].body.text.body === "Received. Commands: /post, /ideas, /queue, /insights, /cost, /pause, /resume, /ref, /desk_status.", "anything else gets the Received line");
 // stranger and Najjuko: no reply, counter + last 4, nothing to ordinary handlers
