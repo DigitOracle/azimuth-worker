@@ -10,7 +10,7 @@ ok(/actx\.drawImage\(im,cx-s\/2,cy-s\/2,s,s\)/.test(src), "the icon is drawn ins
 ok(/const where=dslug\?" in "\+D\.districts\[AMDIST\]\.name:" across Dubai"/.test(src), "the header says the count is in the chosen district, else across Dubai");
 ok(/if\(dslug&&i\.d!==dslug\)return;/.test(src), "a chosen district scopes the pins to that district");
 ok(/const _flyTo0=flyTo;flyTo=function\(ix,go\)\{AMDIST=ix;_flyTo0\(ix,go\);amRecalc\(\)\}/.test(src), "tap, search and jump-to all set the scope (they all go through flyTo)");
-ok(/AMSC\.textContent="all Dubai";AMSC\.hidden=!\(dslug&&ks\.length\)/.test(src), "an 'all Dubai' button appears only while scoped");
+ok(/AMSC\.textContent="all Dubai";AMSC\.hidden=!dslug;/.test(src), "an 'all Dubai' control appears whenever a district is in focus (v516: with or without kinds)");
 ok(!/actx\.fillStyle=p\.i\.ap\?"rgba\(12,20,19,\.8\)":col;/.test(src), "the plain dot is gone");
 console.log(`v511 city pin icons: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
