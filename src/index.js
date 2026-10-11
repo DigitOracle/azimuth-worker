@@ -8807,7 +8807,7 @@ ${HOMES_WIRE_JS}
 `;
 // ===== v508 CITY PLACES: the map's amenity filters on the all-Dubai twin, as ONE drop-down (Kendall 11 Oct 2026) =====
 const CITY_PLACES_HTML = '<div id=amp class="hp amp"><div class=hh id=amh><span>places</span><b id=amres>none</b><i>\u25BE</i></div><div class=hbody><div class="seg cseg amseg" id=amseg></div><div class=cnote id=amnote>Choose a district, then a kind: its buildings stay as blocks in the kind\'s colour and the rest of that district steps aside. A place with no building of its own keeps a badge; a dashed badge is an approximate position. Tap a badge for its name.</div></div></div>';
-const CITY_PLACES_CSS = '#amc{position:fixed;inset:0;pointer-events:none;z-index:2}.amseg button svg{width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;margin-right:5px}.amseg button i{font-style:normal;color:var(--mut);margin-left:5px}.amseg button.clr{margin-left:auto}.amseg button.none{opacity:.45}';
+const CITY_PLACES_CSS = '#amc{position:fixed;inset:0;pointer-events:none;z-index:2}.amseg button svg{width:12px;height:12px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;margin-right:5px}.amseg button i{font-style:normal;color:var(--mut);margin-left:5px}.amseg button.clr{margin-left:auto}.amseg button.none{opacity:.45}.amseg button .amarr{display:none;float:right;font-style:normal;color:var(--mut);padding:0 2px 0 8px}.amseg button.has .amarr{display:inline}.amlist{display:none;margin:-2px 0 6px 12px;border-left:1px solid var(--line);padding-left:9px}.amlist.open{display:block}.amrow{font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.74rem;color:var(--text);padding:5px 0;border-top:1px solid rgba(36,53,47,.6);cursor:pointer}.amrow small{display:block;color:var(--mut);font-size:.6rem;font-family:"IBM Plex Mono",monospace}#amall{position:fixed;left:14px;bottom:calc(112px + env(safe-area-inset-bottom));z-index:41;font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);background:rgba(19,31,29,.94);border:1px solid rgba(197,165,106,.6);border-radius:99px;padding:7px 12px;cursor:pointer}@media(max-width:640px){#amall{bottom:calc(150px + env(safe-area-inset-bottom))}}';
 const CITY_PLACES_JS = `
 ` + AMEN_JS + `
 const ICON=` + JSON.stringify(MAP_ICONS) + `;
@@ -8816,20 +8816,28 @@ const amc=document.createElement("canvas");amc.id="amc";document.body.appendChil
 function amSize(){const r=devicePixelRatio||1;amc.width=innerWidth*r;amc.height=innerHeight*r;amc.style.width=innerWidth+"px";amc.style.height=innerHeight+"px"}amSize();addEventListener("resize",amSize);
 const amEsc=(s)=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]);
 function amBuild(){const AM=window.__AM;if(!AM||AMSEG.dataset.built)return;AMSEG.dataset.built="1";
-  Object.keys(AMEN).forEach(k=>{const n=(AM.counts||{})[k]||0;if(!n)return;const b=document.createElement("button");b.type="button";b.dataset.k=k;b.innerHTML=ICON[k]+amEsc(AMEN[k][0])+"<i>"+n.toLocaleString("en")+"</i>";b.onclick=()=>{AMON[k]=!AMON[k];b.classList.toggle("on",!!AMON[k]);amRecalc()};AMSEG.appendChild(b)});
+  Object.keys(AMEN).forEach(k=>{const n=(AM.counts||{})[k]||0;if(!n)return;const b=document.createElement("button");b.type="button";b.dataset.k=k;b.innerHTML=ICON[k]+amEsc(AMEN[k][0])+"<i>"+n.toLocaleString("en")+"</i>";b.onclick=()=>{AMON[k]=!AMON[k];b.classList.toggle("on",!!AMON[k]);amRecalc()};
+    const L=document.createElement("div");L.className="amlist";L.dataset.k=k;const ar=document.createElement("em");ar.className="amarr";ar.textContent="\u25BE";ar.onclick=(e)=>{e.stopPropagation();L.classList.toggle("open")};b.appendChild(ar);AMSEG.appendChild(b);AMSEG.appendChild(L)});
   const c=document.createElement("button");c.type="button";c.className="clr";c.textContent="clear";c.onclick=()=>{Object.keys(AMON).forEach(k=>{AMON[k]=false});AMSEG.querySelectorAll("button").forEach(x=>x.classList.remove("on"));amRecalc()};AMSEG.appendChild(c);amRecalc()}   // v514 - counts for the district already chosen
 let AMDIST=-1;const AMSC=document.createElement("button");AMSC.type="button";AMSC.className="clr";AMSC.hidden=true;AMSC.onclick=()=>{AMDIST=-1;amRecalc()};
+const AMALL=document.createElement("button");AMALL.type="button";AMALL.id="amall";AMALL.textContent="\u2190 all Dubai";AMALL.hidden=true;AMALL.onclick=()=>{AMDIST=-1;const s=document.getElementById("sel");if(s)s.value="";amRecalc()};document.body.appendChild(AMALL);   // v516
+(function(){const s=document.getElementById("sel");if(s)s.addEventListener("change",()=>{if(!s.value){AMDIST=-1;amRecalc()}})})();   // v516 - the blank option is "all Dubai" too
 function amRecalc(){const AM=window.__AM;const ks=Object.keys(AMON).filter(k=>AMON[k]);AMPTS=[];const dslug=AMDIST>=0&&D.districts[AMDIST]?D.districts[AMDIST].slug:null;
-  const cnt={};((AM&&AM.items)||[]).forEach(i=>{if(!dslug||i.d===dslug)cnt[i.k]=(cnt[i.k]||0)+1});AMSEG.querySelectorAll("button[data-k]").forEach(b=>{const n=cnt[b.dataset.k]||0;const el=b.querySelector("i");if(el)el.textContent=n.toLocaleString("en")+(dslug?"":"");b.classList.toggle("none",!n)});
+  const cnt={};((AM&&AM.items)||[]).forEach(i=>{if(!dslug||i.d===dslug)cnt[i.k]=(cnt[i.k]||0)+1});AMSEG.querySelectorAll("button[data-k]").forEach(b=>{const n=cnt[b.dataset.k]||0;const el=b.querySelector("i");if(el)el.textContent=n.toLocaleString("en");b.classList.toggle("none",!n);b.classList.toggle("has",!!(AMON[b.dataset.k]&&dslug&&n))});
+  AMSEG.querySelectorAll(".amlist").forEach(L=>{const k=L.dataset.k;if(!(AMON[k]&&dslug)){L.innerHTML="";L.classList.remove("open");return}
+    const rows=((AM&&AM.items)||[]).filter(i=>i.k===k&&i.d===dslug).sort((a,b)=>String(a.n).localeCompare(String(b.n)));
+    L.innerHTML=rows.map((i,ix)=>'<div class=amrow data-ix="'+ix+'">'+amEsc(i.n)+(i.x?'<small>'+amEsc(i.x)+'</small>':"")+(i.ap?'<small>position approximate</small>':"")+'</div>').join("");
+    L.querySelectorAll(".amrow").forEach(r=>{r.onclick=()=>{const i=rows[+r.dataset.ix];if(window.__cityFly)window.__cityFly(i.lon,i.lat,700);tip.style.display="block";tip.innerHTML="<b>"+amEsc(i.n)+"</b><s>"+amEsc(AMEN[k][0])+(i.x?" \u00b7 "+amEsc(i.x):"")+"</s>"}})});
   ((AM&&AM.items)||[]).forEach(i=>{if(!AMON[i.k]||i.lon==null||i.lat==null)return;if(dslug&&i.d!==dslug)return;const p=llx(i.lon,i.lat);AMPTS.push({i,v:new THREE.Vector3(p[0],6,p[1]),sx:-1,sy:-1})});
   const where=dslug?" in "+D.districts[AMDIST].name:" across Dubai";AMRES.textContent=ks.length?ks.map(k=>AMEN[k][0]).join(", ")+" \u00b7 "+AMPTS.length.toLocaleString("en")+where:"none";
-  AMSC.textContent="all Dubai";AMSC.hidden=!(dslug&&ks.length);if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC);amBlocks(ks)}
+  AMSC.textContent="all Dubai";AMSC.hidden=!dslug;if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC);amBlocks(ks)}
 const AMMAT0=mesh.instanceMatrix.array.slice(0);let AMHID=[],AMKEEP=new Map();
 function amBlocks(ks){const M=mesh.instanceMatrix.array;for(const i of AMHID){for(let k=0;k<16;k++)M[16*i+k]=AMMAT0[16*i+k]}AMHID=[];AMKEEP=new Map();
-  if(AMDIST>=0&&ks.length){for(const p of AMPTS){const q=llx(p.i.lon,p.i.lat);const j=nearestInst(q[0],q[1],AMDIST,90);p.blk=j>=0;if(j>=0&&!AMKEEP.has(j))AMKEEP.set(j,p.i.k)}
-    for(let i=0;i<n;i++){if(di[i]===AMDIST&&!AMKEEP.has(i)){AMHID.push(i);for(let k=0;k<16;k++)M[16*i+k]=0}}
+  if(AMDIST>=0){if(ks.length){for(const p of AMPTS){const q=llx(p.i.lon,p.i.lat);const j=nearestInst(q[0],q[1],AMDIST,90);p.blk=j>=0;if(j>=0&&!AMKEEP.has(j))AMKEEP.set(j,p.i.k)}}else for(const p of AMPTS)p.blk=false;
+    for(let i=0;i<n;i++){if(di[i]!==AMDIST||(ks.length&&!AMKEEP.has(i))){AMHID.push(i);for(let k=0;k<16;k++)M[16*i+k]=0}}   // v516 - the chosen district alone; within it, the chosen kinds alone
     const nb=AMPTS.filter(p=>p.blk).length;if(nb)AMRES.textContent+=" \u00b7 "+nb+" as blocks"}
   else for(const p of AMPTS)p.blk=false;
+  AMALL.hidden=AMDIST<0;
   mesh.instanceMatrix.needsUpdate=true;paintCity()}
 function amPaint(){if(!AMKEEP.size)return;const arr=mesh.instanceColor.array,c=new THREE.Color();AMKEEP.forEach((k,i)=>{c.set(AMEN[k][2]);arr[3*i]=c.r;arr[3*i+1]=c.g;arr[3*i+2]=c.b});mesh.instanceColor.needsUpdate=true}
 const _paint0=paintCity;paintCity=function(){_paint0();amPaint()};   // v512 - the kept blocks wear the kind's colour whatever COLOUR BY says

@@ -22,7 +22,7 @@ const classicOf = (html) => (html.match(/<script>\(function\(\)\{([\s\S]*?)\}\)\
 // 1. what the two city pages carry
 let r = await call("/skyline?all=1&key=" + READ);
 const client = await r.text();
-ok(r.status === 200 && /<div class=hstack id=hstack><div id=hp class=hp>[\s\S]*?<div id=colp class="hp colp">/.test(client) && !client.includes("id=rp") && client.includes("<b id=colres>district</b>"), "client city: HOMES and COLOUR BY in the stack, no RESIDENTS");
+ok(r.status === 200 && /<div class=hstack id=hstack><div id=hp class=hp>[\s\S]*?<div id=colp class="hp colp">/.test(client) && !client.includes("id=rp") && client.includes("<b id=colres>none</b>"), "client city: HOMES and COLOUR BY in the stack, no RESIDENTS (v515: COLOUR BY defaults to none)");
 ok(!client.includes("window.__resTwin=") && !client.includes("var RK=") && !client.includes("/residents") && !client.includes(RES) && client.includes("window.__cityTwin=true"), "client city: nothing private in the page");
 ok(parses(moduleOf(client), ".mjs") && parses("(function(){" + classicOf(client) + "})();", ".js") && classicOf(client).includes("function homeMatches()") && classicOf(client).includes('hh.onclick=function(){var open=!hp.classList.contains("on")'), "client city: both scripts parse, and the HOMES matching and wiring are the map's own");
 r = await call("/skyline?all=1&key=" + READ + "&rk=" + RES);
@@ -67,7 +67,9 @@ ok(is(0, blue[1]) && is(1, blue[0]) && is(2, blue[3]) && is(3, blue[2]) && /unde
 win.__cityColour("dev");
 ok(is(0, new Color(0xC5A56A)) && is(1, dim) && leg.innerHTML.includes("Emaar (1)"), "developer: a developer's buildings take its colour, the rest recede");
 win.__cityColour("");
-ok(Array.from(C.mesh.instanceColor.array).every((v, i) => Math.abs(v - orig[i]) < 1e-6) && leg.innerHTML === "MASSING BY DISTRICT", "back to district: every building exactly as it was, the original key");
+// v515: no colour without a meaning - with no mode every building is the one stone colour, and the key names buildings / sea / water
+const stone = new Color(0xC9D4CD);
+ok(is(0, stone) && is(1, stone) && is(2, stone) && is(3, stone) && leg.innerHTML.includes("buildings") && leg.innerHTML.includes("sea") && !leg.innerHTML.includes("MASSING BY DISTRICT"), "back to none: every building the same stone colour, the key names only what is on screen (v515)");
 win.__cityFly(originHome.lon, originHome.lat);
 const homeXZ = win.__cityStack.llx(originHome.lon, originHome.lat);
 ok(C.anim && C.anim.go === null && Math.abs(C.anim.to.t.x - homeXZ[0]) < 1e-6 && Math.abs(C.anim.to.t.z - homeXZ[1]) < 1e-6, "a listed home flies the camera to it without leaving the city page");
