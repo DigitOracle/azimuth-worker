@@ -4,6 +4,7 @@ import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_des
 import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - the client brief as a chat; Naj only when switched on
 import { deskReelTick } from "./desk_lab.js";
 import { clipTick } from "./heygen.js";   // v476
+import { talkTick } from "./talkvideo.js";   // v506 - branded video from his own talking-head clip
 import { clipDeps } from "./desk_post.js";
 import { musicRoute, renderVideo, overlayImage } from "./music.js";
 import { newsTick as deskNewsTick } from "./desk_news.js";   // v473 - the desk news watcher (AI, UAE tech, Dubai events, smart city / ISO, projects)   // v467 - music for posts (library route + the da-video service)
@@ -2368,7 +2369,8 @@ async function appFetch(request, env, ctx) {
         const _pb = await env.MEETINGS.get("vidposter_" + _vk, "arrayBuffer");
         return _pb ? new Response(_pb, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } }) : new Response("no poster", { status: 404 });
       }
-      const _vb = await env.MEETINGS.get("vid_" + _vk, "arrayBuffer");
+      let _vb = await env.MEETINGS.get("vid_" + _vk, "arrayBuffer");
+      if (!_vb && env.MEDIA) { try { const _ro = await env.MEDIA.get("vid_" + _vk); if (_ro) _vb = await _ro.arrayBuffer(); } catch (e) {} }   // v506 - clips over 25 MB live in R2 when MEDIA is bound
       if (!_vb) return new Response("no video", { status: 404 });
       const _total = _vb.byteLength; const _rg = /bytes=(\d*)-(\d*)/.exec(request.headers.get("Range") || "");
       const _vh = { "Content-Type": "video/mp4", "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=86400" };
@@ -4818,6 +4820,7 @@ export default {
         try { await liveNewsTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v270 - live city news, a few feeds every 5 minutes, 24/7 (LIVE_NEWS="on")
         try { const _it = new Date(event.scheduledTime || Date.now()); if (env.IG_APP_ID && _it.getUTCMinutes() === 17 && _it.getUTCHours() % 3 === 0) await igPull(env, {}); } catch (e) {}   // v149 - her Instagram numbers every three hours
         try { await clipTick(env, clipDeps(deskPostDeps(env))); } catch (e) {}   // v476 - a HeyGen video in progress
+        try { await talkTick(env, clipDeps(deskPostDeps(env))); } catch (e) {}   // v506 - a branded video in progress (one step per minute)
     try { await deskReelTick(env, deskLabDeps(env)); } catch (e) {}
     try { const _ld2 = deskLabDeps(env); await daTemplateSubmitTick(env, WA_GRAPH, (e2, t) => _ld2.send(e2, t)); } catch (e) {}   // v492 - one-off: the six DigitAlchemy templates   // v460 - an approved Instagram reel still processing
         try { const _tw = new Date(event.scheduledTime || Date.now()); if (_tw.getUTCMinutes() % 30 === 7) { const _ld = deskLabDeps(env); await templateWatchTick(env, WA_GRAPH, (e2, t) => _ld.send(e2, t)); } } catch (e) {}   // v465 - Meta template status watch, every 30 minutes, told to the desk

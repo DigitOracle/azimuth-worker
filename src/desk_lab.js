@@ -14,7 +14,8 @@
 import { ytRecord, ytConnected, ytStartLink, ytUpload } from "./yt_desk.js";   // v477 - YouTube
 import { sendBriefFlow, flowReply, briefFlowJson, FLOW_KEY, FLOW_NAME, FLOW_DRAFT_KEY } from "./wa_flows.js";
 import { briefChatRoute } from "./brief_chat.js";   // v455 - the client brief as a chat (lists, buttons, typed answers)
-import { momoTemplateDef } from "./fit.js";   // v453 - the Momo day template the desk submits
+import { momoTemplateDef } from "./fit.js";
+import { talkRoute, offerPayload } from "./talkvideo.js";   // v506 - his own talking-head video -> a branded video   // v453 - the Momo day template the desk submits
 
 export const LAB_HELP = "Desk lab: every new WhatsApp feature, tried here first.\nmenu: tap-to-choose list for your videos (Reel, Status, broadcast)\nlinkedin: connect LinkedIn (one tap) so videos can post there too\n" +
   "brief: the client brief, asked in the chat\nbrief form: the client brief as a form (test only)\nlab carousel: swipeable cards\nlab list: a list menu\nlab link: a link button\nlab location: share your location\n" +
@@ -92,10 +93,13 @@ export async function deskLabRoute(env, msg, text, deps) {
   // v461 (Kendall 10 Oct: "when I'm only in the DigitAlchemy WhatsApp, on my mobile") - a VIDEO sent to the desk, as a video or as a
   // document. Caption "reel: ..." / "status: ..." / "broadcast" acts at once; no caption asks with buttons. Stored as vid_desk_<n> and served at
   // /video/desk_<n>, so it then runs through the same reel and status steps as a link. The worker cannot compress: over 25 MB is refused.
+  // v506 - the branded-video taps (tv:...) and the typed name card
+  if (await talkRoute(env, msg, t, deps)) return true;
   const vm = deskVideoOf(msg);
   if (vm) {
     const info = deps.mediaInfo ? await deps.mediaInfo(env, vm.id) : {};
     const size = Number(info && info.file_size) || 0;
+    if (size > VIDEO_KEEP_MAX && env.MEDIA) return keepBig(env, deps, to, vm, size);   // v506
     if (size > VIDEO_KEEP_MAX) { await send("That video is " + mb(size) + " MB; I can keep up to 25 MB. In HeyGen download it at 540p (an 80-second clip is then about 10-15 MB) and send it again."); return true; }
     let got = null; try { got = await deps.fetchMedia(env, vm.id); } catch (e) {}
     if (!got || !got.bytes || !got.bytes.byteLength) { await send("I could not download that video from WhatsApp. Send it again."); return true; }
@@ -110,6 +114,7 @@ export async function deskLabRoute(env, msg, text, deps) {
     if (cm) return videoAction(env, deps, to, cm[1].toLowerCase(), link, key, bytes, cm[2].trim());
     await deps.raw(env, { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: "Got your video (" + mb(bytes) + " MB, saved as " + key + "). What should I do with it?" },
       action: { buttons: [{ type: "reply", reply: { id: "dv:reel:" + key, title: "Instagram Reel" } }, { type: "reply", reply: { id: "dv:status:" + key, title: "Status" } }, { type: "reply", reply: { id: "dv:broadcast:" + key, title: "Save for broadcast" } }] } } }, "video-ask");
+    await deps.raw(env, offerPayload(to, key), "tv-offer");   // v506 - a 4th choice, in its own message (3 buttons max)
     return true;
   }
   // v462 (Kendall 10 Oct: "make those captions buttons ... it's hard to type all that in") - every choice is a tap: a button or a menu row
@@ -388,6 +393,18 @@ export function deskVideoOf(msg) {
   return null;
 }
 // v462 - caption choices as buttons. "Same as last" only when there is a last one; Status may go with no caption.
+// v506 - a clip over 25 MB with an R2 bucket bound as MEDIA: kept there (served by /video/<key> too) and offered for a branded video only
+async function keepBig(env, deps, to, vm, size) {
+  let got = null; try { got = await deps.fetchMedia(env, vm.id); } catch (e) {}
+  if (!got || !got.bytes || !got.bytes.byteLength) { await deps.send(env, "I could not download that video from WhatsApp. Send it again."); return true; }
+  const n = Number((await env.MEETINGS.get("desk_vid_seq")) || 0) + 1;
+  await env.MEETINGS.put("desk_vid_seq", String(n));
+  const key = "desk_" + n;
+  await env.MEDIA.put("vid_" + key, got.bytes, { httpMetadata: { contentType: "video/mp4" } });
+  await deps.send(env, "Got your video (" + mb(got.bytes.byteLength) + " MB, saved as " + key + "). It is too big to post as it is, but I can make a branded video from it.");
+  await deps.raw(env, offerPayload(to, key), "tv-offer");
+  return true;
+}
 async function videoBytes(env, key) {
   let last = null; try { last = JSON.parse((await env.MEETINGS.get("desk_vid_last")) || "null"); } catch (e) {}
   return last && last.key === key ? last.bytes : 0;
