@@ -203,6 +203,7 @@ export const PICTURE_CHOICES = [
   { id: "scene", label: "A scene, no person" },
   { id: "slides", label: "Infographic slides (carousel)" },
   { id: "video", label: "A short video of you" },   // v476 - HeyGen Cinematic, Polo_Trained
+  { id: "poster", label: "Poster: you + 3 points" },   // v495 - Kendall's "Scaling Railways" layout
 ];
 export const BACKGROUND_CHOICES = [
   { id: "site", label: "Construction site" },
@@ -248,6 +249,57 @@ async function renderFor(env, idea) {
   return null;
 }
 
+// v495 (Kendall 11 Oct, "Scaling Railways, Scaling Records.png": "it is my expectation of a post") - THE POSTER. The words are written
+// first (kicker, two-part headline, subhead, three icon cards, a two-line close, his byline) under the caption rules (no invented numbers,
+// no AI names), then ONE portrait picture is made in his reference layout from his approved reference photos, and the text on it is read
+// back and compared with the words: up to 3 tries; still wrong -> flagged for him, never silently posted.
+export const POSTER_ICONS = ["rising bar chart", "database cylinder", "document with a gear", "shield with a tick", "connected network nodes", "building", "train", "people", "clock", "map pin", "checklist", "lightbulb"];
+export const POSTER_BYLINE = "Dr. Kendall Wilson \u00b7 Digital Abbot";
+const POSTER_SYS = "You write the words for ONE portrait social-media poster for Dr. Kendall Wilson (Digital Abbot), a Dubai built-environment and digital-delivery leader. " +
+  "Plain English, confident, no emoji, no hashtags. Never name any AI model, company or tool. Never write a number that is not in the idea. " +
+  "Reply with JSON only: {\"kicker\":\"2-4 words in capitals, e.g. INFRASTRUCTURE + DIGITAL DELIVERY\",\"h1\":\"headline line 1, 2-4 words\",\"h2\":\"headline line 2, 2-4 words, the turn\"," +
+  "\"sub\":\"one sentence, at most 18 words, tying it to the news or the idea\",\"cards\":[{\"title\":\"2 words, capitals\",\"text\":\"at most 14 words\",\"icon\":\"one of: " + POSTER_ICONS.join(", ") + "\"},{...},{...}]," +
+  "\"close1\":\"closing line 1, at most 5 words\",\"close2\":\"closing line 2, at most 6 words\"}. Exactly three cards.";
+export function posterWords(c) { return [c.kicker, c.h1, c.h2, c.sub].concat((c.cards || []).flatMap((k) => [k.title, k.text])).concat([c.close1, c.close2, POSTER_BYLINE]).filter(Boolean).join(" "); }
+export function posterPrompt(c, p, withHim) {
+  const card = (k, i) => "card " + (i + 1) + ": icon '" + (POSTER_ICONS.includes(k.icon) ? k.icon : "document with a gear") + "', title '" + k.title + "', text '" + k.text + "'";
+  return "A premium portrait 9:16 social-media poster, polished editorial design, warm golden-hour light, colours deep navy #0B2340, rich gold #B8862B, dark teal #0A3D3A and warm ivory. Layout, top to bottom: " +
+    "(1) a small, widely spaced uppercase kicker in dark grey: '" + c.kicker + "', with a thin gold rule running to its right; " +
+    "(2) a large elegant serif headline in two lines: line one '" + c.h1 + "' in deep navy, line two '" + c.h2 + "' in rich gold; " +
+    "(3) one subhead sentence in dark grey sans-serif: '" + c.sub + "'; " +
+    "(4) on the right half, three stacked rounded dark-teal cards with thin gold borders, each with a gold circular line icon on its left, a gold uppercase title and two short lines of white text - " + (c.cards || []).slice(0, 3).map(card).join("; ") + "; " +
+    (withHim ? "(5) on the left half, the man shown in the reference photos, full length, standing and presenting with one hand, recognisably himself: same face, same build, same apparent age, no alteration of body or age; only him, smartly dressed; " : "(5) on the left half, a calm architectural scene, no people; ") +
+    "(6) behind everything, " + (bgLine(p) || "a modern Dubai setting with the skyline in soft haze. ") + "matching the idea: " + String(p.idea).replace(/\d+/g, "").slice(0, 160) + "; " +
+    "(7) at the bottom, a dark navy band with a two-line closing line in gold serif: '" + c.close1 + "' / '" + c.close2 + "', and under it, small widely spaced white text: '" + POSTER_BYLINE + "'. " +
+    "Spell every word exactly as given above. No other text anywhere, no logos, no watermarks, no brand names.";
+}
+async function posterSlide(env, deps, p, s, notes) {
+  let c = null;
+  try { const t = await deps.llm(env, POSTER_SYS, "IDEA: " + p.idea + (p.lane ? "\nVOICE: " + p.lane : ""), 900); const m = String(t || "").match(/\{[\s\S]*\}/); c = m ? JSON.parse(m[0]) : null; } catch (e) {}
+  if (!c || !c.h1 || !Array.isArray(c.cards) || c.cards.length < 3) return { err: "the poster words could not be written" };
+  const nums = (x) => (String(x).match(/\d+/g) || []), allowed = new Set(nums(p.idea));
+  if (nums(posterWords(c)).some((n) => !allowed.has(n))) return { err: "the poster words carried a number that is not in the idea" };
+  c.cards = c.cards.slice(0, 3);
+  const r = await pickRefs(env, p.idea, "speaking"), refs = r.count >= REF_MIN && r.bufs.length >= 2 ? r.bufs.slice(0, 3) : null;
+  if (!refs) notes.push("The poster has no person: I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ".");
+  const prompt = posterPrompt(c, p, !!refs), want = posterWords(c);
+  let g = null, ok = false, checked = false;
+  for (let t = 0; t < 3; t++) {
+    g = await genImage(env, deps, prompt, refs, "1024x1536");
+    if (g.err) break;
+    if (!deps.vision) { ok = true; break; }
+    let seen = null; try { seen = await deps.vision(env, g.bytes, "image/jpeg", "Transcribe all the text visible in this image, exactly as written, nothing else."); } catch (e) {}
+    if (seen == null) { ok = true; break; }
+    checked = true; ok = textMatches(want, seen);
+    if (ok) break;
+  }
+  if (g.err) return g.cap ? { cap: true, err: "the monthly picture budget is used up" } : { err: g.err };
+  s.img_key = await storeImage(env, g.bytes, "image/jpeg"); s.src = refs ? "ai-person" : "ai"; s.poster = c; s.prompt = prompt.slice(0, 3500);
+  s.alt = (c.h1 + " " + c.h2 + ". " + c.sub).slice(0, 100);
+  if (checked && !ok) s.flag = "the poster's spelling did not match after 3 tries, please read it before approving";
+  p.ai = true; p.shape = "portrait";
+  return null;
+}
 // Fills p.slides[i].img_key for every slide. Order: a picture Kendall sent > our own render (slide 1, idea names a project) > generated.
 async function buildImages(env, deps, p, onlyIdx) {
   const notes = []; const n = p.slides.length;
@@ -258,6 +310,7 @@ async function buildImages(env, deps, p, onlyIdx) {
     if (s.src === "sent" && s.img_key && p.use_my_photos) continue;
     if (s.src === "sent") { delete s.img_key; delete s.src; }      // v421: a sent photo is a slide ONLY when he said "use my photos"
     delete s.flag;
+    if (p.picture === "poster" && p.type === "image" && i === 0) { const pr = await posterSlide(env, deps, p, s, notes); if (pr) return Object.assign(pr, { notes }); continue; }   // v495
     if (p.type === "image" && i === 0 && !s.regen) { const rn = await renderFor(env, p.idea); if (rn) { s.img_key = await storeImage(env, rn.bytes, "image/jpeg"); s.src = "render"; s.alt = "Our own render, " + rn.slug.replace(/-/g, " "); continue; } }
     const infographic = p.type === "carousel";
     let refs = null;
@@ -591,7 +644,8 @@ export const WORDS_LIST = [{ id: "none", label: "No words" }, { id: "headline", 
 export function scenePreview(pick) {
   const pic = PICTURE_CHOICES.find((x) => x.id === pick.picture), bg = pick.background === "custom" ? pick.bg_text : (BACKGROUND_CHOICES.find((x) => x.id === pick.background) || {}).label;
   const tm = TIME_CHOICES.find((x) => x.id === pick.tod), sh = SHAPE_LIST.find((x) => x.id === pick.shape);
-  const who = pick.picture === "scene" ? "A scene, no person in it." : pick.picture === "speaking" ? "You, speaking or teaching, your face from your reference photos." : "You on site in a hard hat and hi-vis, your face from your reference photos.";
+  const who = pick.picture === "poster" ? "A poster in your Scaling Railways layout: kicker, two-part headline, subhead, three icon cards and a closing line, with you full length (from your reference photos). Portrait 9:16. The words are written for you and checked on the picture."
+    : pick.picture === "scene" ? "A scene, no person in it." : pick.picture === "speaking" ? "You, speaking or teaching, your face from your reference photos." : "You on site in a hard hat and hi-vis, your face from your reference photos.";
   const wd = WORDS_LIST.find((x) => x.id === pick.words);
   let s = "Here's the picture I'll make:\n\n" + who + " Behind: " + (bg || "a Dubai setting") + ". " + (tm ? tm.label : "Natural daylight") + ". " + (sh ? sh.label : "Square") + "." + (wd && wd.id !== "none" ? " Words: " + wd.label.toLowerCase() + " (the post's headline)." : "") + "\nIdea: " + pick.idea;
   for (const c of (pick.changes || [])) s += "\nYour change: " + c;
@@ -626,6 +680,7 @@ async function feedReply(env, deps, n) {
   }
   if (pick && pick.step === "time") {
     const t = TIME_CHOICES[n - 1]; if (!t) { await deps.send(env, menu("What time of day?", TIME_CHOICES)); return true; }
+    if (pick.picture === "poster") { await showPreview(env, deps, Object.assign(pick, { tod: t.id, shape: "portrait", words: "none" })); return true; }   // v495
     await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "shape", tod: t.id }), FEED_TTL);
     await deps.send(env, menu("Which shape?", SHAPE_LIST)); await tapList(env, deps, "Pick the shape.", "Pick shape", SHAPE_LIST.map((x) => ({ title: x.label }))); return true;
   }
