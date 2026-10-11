@@ -112,13 +112,13 @@ export function pkNearMap(pos, items, opts) {
   // the district's own streets and building outlines (OpenStreetMap, the dossier map's layer) drawn under the rings, north up.
   let base = "", L = opts && opts.layer, uid = "nm" + Math.round(Math.abs(pos[0] * 1e6 + pos[1] * 1e3)) % 100000;
   if (L && Array.isArray(L.ll) && L.ll.length === 6) {
-    const [a, b, c, d, e, f] = L.ll, xy = (la, lo) => [a * la + b * lo + c, d * la + e * lo + f];
-    const [X0, Y0] = xy(pos[0], pos[1]), upm = Math.hypot(a, d) / 111320, k = R / upm, ny = d >= 0 ? -1 : 1;   // north up on the page
+    const [a, b, c, d, e, f] = L.ll, xy = (la, lo) => [a * lo + b * la + c, d * lo + e * la + f];   // the layer's affine is (lon, lat) -> metres (see llOfXy)
+    const [X0, Y0] = xy(pos[0], pos[1]), upm = Math.hypot(b, e) / 111320, k = R / upm, ny = e >= 0 ? -1 : 1;   // north up on the page
     const scr = (X, Y) => [C + (X - X0) * k, C + (Y - Y0) * k * ny], lim = (S / 2 + 20) / k;
     const near = (pts) => pts.some(([x, y]) => Math.abs(x - X0) < lim && Math.abs(y - Y0) < lim);
     const pairs = (fl) => { const r = []; for (let i = 0; i + 1 < fl.length; i += 2) r.push([fl[i], fl[i + 1]]); return r; };
     const path = (pts, close) => pts.map((p, i) => { const q = scr(p[0], p[1]); return (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1); }).join("") + (close ? "Z" : "");
-    for (const [, , fl] of L.b || []) { const r = pairs(fl); if (r.length > 2 && near(r)) base += '<path d="' + path(r, true) + '" fill="#E3DDD0" stroke="#D3CCBC" stroke-width="0.5"/>'; }
+    for (const [, , fl] of L.b || []) { const r = pairs(fl); if (r.length > 2 && near(r)) base += '<path d="' + path(r, true) + '" fill="#D8D0BF" stroke="#C4BAA4" stroke-width="0.6"/>'; }
     for (const [cl, fl] of L.s || []) { const r = pairs(fl); if (r.length > 1 && near(r)) base += '<path d="' + path(r, false) + '" fill="none" stroke="#FFFFFF" stroke-width="' + (cl >= 6 ? 3.2 : cl >= 4 ? 2.2 : 1.3) + '" stroke-linecap="round" stroke-linejoin="round"/>'; }
   }
   let svg = '<svg width="' + S + '" height="' + S + '" viewBox="0 0 ' + S + " " + S + '" xmlns="http://www.w3.org/2000/svg" style="display:block;flex:none;">' +
