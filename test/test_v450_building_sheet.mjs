@@ -98,7 +98,7 @@ const P = (q) => parseParams(new URL("https://x/developers_pdf?kind=building&are
   ok(B.name === "Creek Heights" && B.dev === "SOBHA L.L.C" && B.status === "Off-plan" && B.area === "Test Heartland" && B.projectNo === "2717", "header facts from the record: name, developer as the register gives it, off-plan, area");
   ok(B.tier >= 0 && B.areaPsm > 0, "placed in a price band against the area's typical");
   const page = buildingHtml(B, B.C.p).html, t = textOf(page);
-  ok(/Advertised now \(Property Finder\)/.test(page) && /3 flats/.test(t) && /never added to it/.test(t), "owner, web page: the adverts by bedroom (flats, adverts, price range), never added to availability");
+  ok(/Available on Property Finder/.test(page) && /3 flats/.test(t) && /Updated \d+ \w+ \d{4} · /.test(t), "v524: the web page carries the Property Finder cards by bedroom, with one freshness line");
   ok(/class="smap" data-lat="25\.05\d+" data-lon="55\.15\d+"/.test(page) && /maplibre-gl@4\.7\.1/.test(page) && /data-fp='\{"c":\[\[55\.15/.test(page) && !/"distance"/.test(page) && /dark-matter-gl-style/.test(page) && /"#C5A56A"/.test(page) && /fill-extrusion/.test(page) && !/raster/.test(page), "web page: the live 3D street map (MapLibre 4.7.1, CARTO dark matter vector, the building in gold), no raster tiles");
   ok(/Sales in this building/.test(t) && /Recent sales, newest first/.test(t) && /Total value/.test(t) && /left out/.test(t) && /Where it sits in the area/.test(t), "every section is there");
   ok(/No rent contract is registered for this building: it is sold off-plan and not yet handed over/.test(t), "no rents: one honest line");
@@ -109,7 +109,7 @@ const P = (q) => parseParams(new URL("https://x/developers_pdf?kind=building&are
   __resetKvMemo();
   const Lp = await loadBuilding(env, P("window=12m"), { owner: true });
   const pdf = buildingHtml(Lp.B, Lp.B.C.p).html;
-  ok(!/Advertised now/.test(pdf) && !/Property Finder/.test(pdf) && !/maplibre/.test(pdf) && /<svg[^>]*aria-label="Creek Heights in gold/.test(pdf), "PDF: no adverts even for the owner; the map is the static digital-footprint drawing with the building in gold");
+  ok(/Available on Property Finder/.test(pdf) && !/maplibre/.test(pdf) && /<svg[^>]*aria-label="Creek Heights in gold/.test(pdf), "v524 (Kendall 11 Oct 2026: Property Finder in the broker PDF): the PDF carries the cards; the map is the static digital-footprint drawing with the building in gold");
   __resetKvMemo();
   const Lc = await loadBuilding(env, P("window=12m&format=html"), { owner: false });
   ok(!/Advertised now/.test(buildingHtml(Lc.B, Lc.B.C.p).html), "client key, web page: no advert figure at all");
@@ -131,13 +131,13 @@ console.log("D - the routes: /doc_broker?kind=building (choices) and /developers
   ok(!/Adverts \(owner only\)/.test(h1), "client: the options never mention adverts");
   __resetKvMemo();
   const h2 = await (await call("/doc_broker?" + q + "&key=owner_key_abcdefgh")).text();
-  ok(/Adverts \(owner only\) appear here, never in the PDF/.test(h2), "owner: the web-page card says adverts appear there, never in the PDF");
+  ok(!/owner only/.test(h2), "v524: the options card no longer says adverts are owner-only (they are in every format now)");
   __resetKvMemo();
   const r3 = await call("/developers_pdf?" + q + "&format=html&key=client_key_123456"), h3 = await r3.text();
   ok(r3.status === 200 && /Sales in this building/.test(h3) && !/Advertised now/.test(h3), "client key: the web page renders, with no adverts");
   __resetKvMemo();
   const h4 = await (await call("/developers_pdf?" + q + "&format=html&key=owner_key_abcdefgh")).text();
-  ok(/Advertised now/.test(h4), "owner key: the web page carries the adverts");
+  ok(/Available on Property Finder/.test(h4), "v524: the web page carries the Property Finder cards");
   __resetKvMemo();
   const r5 = await call("/developers_pdf?" + q + "&key=owner_key_abcdefgh");
   ok(r5.status === 503, "PDF without a Browser Rendering binding: the usual 503 (the route is the same as the area sheet's)");

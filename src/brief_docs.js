@@ -40,7 +40,8 @@
 // building's name must agree with the record; straight-line distances only, no walking or driving times; rents are what homes let
 // for, never availability; the "left" figure is always "an estimate, not a count".
 import puppeteer from "@cloudflare/puppeteer";
-import { PK, pkIcon, pkFig, pkGrid, pkTile, pkBars, pkBox, pkNearMap } from "./pdf_kit.js";   // v486 - the shared PDF look (icons, figure cards, bars)
+import { PK, pkIcon, pkFig, pkGrid, pkTile, pkBars, pkBox, pkNearMap } from "./pdf_kit.js";
+import { advertisedDoc, advertisedLookup, advertisedRows, freshLine } from "./advertised.js";   // v524 - Property Finder in the client dossier   // v486 - the shared PDF look (icons, figure cards, bars)
 import { withAmenityPages, loadSpots } from "./amenity_cards.js";
 export const REALTOR_VERIFIES = "Your realtor will verify these details with you.";   // v302 - the ONE line a client document uses where a fact is missing; gaps live only in owner places (API notes, diagnostics)
 import { liveCtx, fillLive } from "./live_answers.js";   // v291 - live Google answers for gym, community pool and dog park (never stored)   // v290 AMENITY CARDS - the "Around the community" page in Compare and Full pack
@@ -473,6 +474,8 @@ export async function loadContext(env, q, opts) {
       if (op) { rec.ownPic = Object.assign(op, { own: true, at: own.at || null }); rec.cardPic = rec.heroPic = rec.ownPic; rec.hero = op.src; }
     }
     rec.picSource = rec.cardPic || rec.heroPic ? "photo" : blocksKind(rec, D && D.layer);
+    // v524 - what Property Finder lists for this building now (rent), for the dossier's cards; a district not crawled = nothing shown
+    if (q.kind === "dossier" && !C.buy) { try { if (!(rec.d in (C.pf || (C.pf = {})))) C.pf[rec.d] = advertisedDoc(await kvJson(env, "pf_supply_" + rec.d)); rec.adv = advertisedLookup(C.pf[rec.d], rec.key, rec.name); } catch (e) { rec.adv = null; } }
     C.recs.push(rec);
   }
   // v290 - a community with no position of its own gets the centre of its attributed homes, for straight-line distances (metro)
@@ -886,20 +889,28 @@ function dossierPage2(C, rec, q, sub, more) {   // v307 - more: a purchase puts 
   const mark = markOf(rec, D.layer);
   const svg = D.layer && mark.placed ? briefMapSvg(D.layer, [mark], { single: true, district: rec.dist, districtSlug: rec.d }) : "";
   const cb = criteriaBlock(rec, q);                    // v282 - how it meets the client's brief; the map shrinks to make room
-  const mw = cb ? (rec.avail && rec.avail.count ? 470 : 560) : 700;
+  const mw = cb ? (rec.avail && rec.avail.count ? 470 : 560) : (rec.adv ? 520 : 700);   // v524 - the map gives room to the Property Finder cards
   const map = svg ? '<div style="width:' + (mw + 2) + 'px;border:1px solid #E6E1D8;line-height:0;">' + svg.replace("<svg ", '<svg style="width:' + mw + 'px;height:auto;display:block;" ') + "</div>" : MAP_TO_FOLLOW(cb ? 300 : 468);
   const body = '<div class="serif" style="font-size:24px;color:' + NAVY + ';">Where it is</div><div class="sub">' + (mark.area ? "The community&rsquo;s homes in gold (an approximate area), among the other buildings of " : "The building in gold on its own plot, among the other buildings of ") + esc(rec.dist) +
     ". Simple models, heights to scale, seen from the south.</div>" + map +
     // v500 - what's close, as the crow flies: under the map when the page has the room (no criteria box and no sales table below it)
     // v501 (Kendall 11 Oct: "move the map to page 3") - on page 3 when there is one; here only when there is no page 3 and room
     (!rec._nearOn3 && !cb && !more && !(rec.avail && rec.avail.count) && rec.pos ? pkNearMap(rec.pos, (C.amen && C.amen.items) || [], { size: 220, layer: (C.district[rec.d] || {}).layer }) : "") +
-    cb + availBlock(rec, q) + (more ? more.html : "");
+    cb + availBlock(rec, q) + pfBlock(rec) + (more ? more.html : "");
   return page(C, sub, body, smallPrint([
     svg ? "Map: building outlines and streets &copy; OpenStreetMap contributors; building position from the app's district digital footprint" + (mark.approx ? " (this one approximate, from a public map listing)" : "") +
       (mark.area ? " - here the homes the district model places in the Land Department sub-community of this name, an approximate area, not a surveyed boundary" : "") + "." : "",
     rec.avail && rec.avail.count ? "Availability: " + esc(rec.avail.developer) + "'s own availability sheet of " + esc(rec.avail.as_of || "") + ", as posted to the broker group; the developer's statement, not a register." : ""].concat(more ? more.small : [])));
 }
 
+// v524 (Kendall 11 Oct 2026) - Property Finder rental listings, cards per bedroom type, one freshness line
+function pfBlock(rec) {
+  const rows = advertisedRows(rec.adv);
+  if (!rows.length) return "";
+  const tiles = rows.map((r) => pkTile("home", esc(r.label), r.typical ? r.typical + '<span style="font-size:11px;font-weight:400;color:' + PK.muted + ';"> a year' + (r.typicalIsMedian ? ", typical" : "") + "</span>" : "&mdash;",
+    [r.flats != null ? r.flats + (r.flats === 1 ? " flat" : " flats") : r.adverts + " adverts", r.mid, r.days != null ? r.days + " days listed" : "", r.chk ? r.chk + " priced far from the rest" : ""].filter(Boolean).join(" &middot; ")));
+  return '<div style="margin-top:10px;">' + pkBox("key", "Available on Property Finder", pkGrid(tiles, Math.min(4, tiles.length)), esc(freshLine(rec.adv.asOf)) + " &middot; rental listings") + "</div>";
+}
 function groupLayouts(rec, B) {
   const flats = [];
   for (const [fl, us] of Object.entries(rec.un.floors)) for (const u of us) if (B.uc(String(u.c)) && u.sqft) flats.push({ fl: +fl, sqft: u.sqft, bal: u.bal || 0, c: String(u.c) });

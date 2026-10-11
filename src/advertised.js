@@ -106,6 +106,21 @@ function bandCardSummary(k, x, counted) {
     + (x.fdays != null ? '<div class=avf>' + IC_CLOCK + fmt(x.fdays) + " days listed (median per flat)</div>" : "")
     + '<div class=avf>' + IC_UP + pl(x.fnew != null ? x.fnew : x.newWk, "new flat", "new flats") + " · " + IC_DOWN + pl(x.goneWk, "advert", "adverts") + " gone this week</div></div>";
 }
+// v524 - one building's listings, found by its register key, else by the project-name key the crawler sometimes files under (Peninsula Five)
+export function advertisedLookup(A, key, name) {
+  if (!A) return null;
+  const nm = String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return (key ? advertisedForKey(A, key) : null) || (nm ? advertisedForKey(A, "dld:" + nm) : null);
+}
+// v524 - the summary figures as plain rows, for the PDFs: [{band, label, flats, adverts, typical, mid, days, chk}]
+export function advertisedRows(a) {
+  if (!a) return [];
+  const ks = BANDS.filter((k) => a.bands[k]).concat(Object.keys(a.bands).filter((k) => !BANDS.includes(k) && k !== "unknown"));
+  return ks.map((k) => { const x = a.bands[k];
+    const typical = x.fmed != null ? "AED " + kAed(x.fmed) : x.pmin != null ? "AED " + kAed(x.pmin) + (x.pmax !== x.pmin ? "–" + kAed(x.pmax) : "") : "";
+    const mid = x.fmed != null && x.f25 != null && x.f75 != null && x.f25 !== x.f75 ? "middle half " + kAed(x.f25) + "–" + kAed(x.f75) : "";
+    return { band: k, label: BAND_SAY[k] || k, flats: a.counted ? x.flats : null, adverts: x.adverts, typical, typicalIsMedian: x.fmed != null, mid, days: x.fdays != null ? x.fdays : x.days, chk: x.fchk || 0 }; });
+}
 // "Updated 10 Oct 2026 · 1 day ago" - the age is counted in Dubai days
 export function freshLine(asOf, now) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(asOf || ""));

@@ -21,7 +21,7 @@ import { BRIEF_KIT, esc } from "./brief_docs.js";
 import { icon, secHead, loadData, dateLong, obliqueMap, pack, head, PERMIT_REMINDER } from "./devmap_pdf.js";
 import { salesDoc, valueOf, VALUE_CAP, MIN_PRICED } from "./sales_view.js";
 import { ejariDoc, ejariRow } from "./ejari_page.js";   // v523 - ejariRow reads the window rollup rows
-import { advertisedDoc, advertisedForKey, ADV_LABEL, ADV_NOTE } from "./advertised.js";
+import { advertisedDoc, advertisedForKey, advertisedLookup, advertisedRows, freshLine, ADV_LABEL, ADV_NOTE } from "./advertised.js";
 import { positionOf, placement } from "./building_position.js";   // v452: img_bldg_pos_<district>, the multi-source position check
 
 const { NAVY, MUTED } = BRIEF_KIT;
@@ -160,9 +160,9 @@ export async function loadBuilding(env, p, opts) {
   let ll = null, ring = null;
   if (fp && Array.isArray(layer.ll)) { const fr = footprintRing(layer, gk); if (fr) { ring = { c: fr.c, h: fr.h }; ll = fr.ll; } }
   if (pl) ll = pl.ll;
-  // OWNER ONLY, web page only: the adverts (never added to developer availability, never in the PDF)
+  // v524 (Kendall 11 Oct 2026: Property Finder in the broker brief too, "all of the PDFs") - every key, the PDF and the web page; never added to developer availability
   let adv = null;
-  if (opts && opts.owner && p.format === "html" && b.bk != null) { try { adv = advertisedForKey(advertisedDoc(await readOr(env, "pf_supply_" + slug)), slug + ":" + b.bk); } catch (e) { adv = null; } }
+  try { adv = advertisedLookup(advertisedDoc(await readOr(env, "pf_supply_" + slug)), b.bk != null ? slug + ":" + b.bk : null, rec.project || b.name); } catch (e) { adv = null; }
   const st = C.st, tier = S.psm != null && st.enough && st.bounds ? DM.tierOf(S.psm, st.bounds) : -1;
   const B = { C, slug, rec, name: rec.project || b.name, projectNo: rec.projectNo || b.project, dev: devRow.dev || "", area: C.names.plain, subArea: rec.area || "",
     status: S.lastStage === "offplan" ? "Off-plan" : S.lastStage === "ready" ? "Ready" : "", asOf: sd.asOf, first: sd.first, w, S, R, rentAsOf: ed ? ed.asOf : "", rentFirst: ed ? ed.first : "",
@@ -235,12 +235,13 @@ function positionBlock(B) {
   return { h: 140, html: secHead("chart-donut", "Where it sits in the area", "Its price per sq ft against the area's typical, and its price band.") + body };
 }
 function advertBlock(B) {
-  if (!B.owner || !B.adv) return null;   // owner key, web page only; never in the PDF
-  const a = B.adv, ks = ["studio", "1", "2", "3+"].filter((k) => a.bands[k]).concat(Object.keys(a.bands).filter((k) => !["studio", "1", "2", "3+"].includes(k)));
-  const kA = (n) => (n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : Math.round(n / 1e3) + "k");
-  const cards = '<div class="bgrid">' + ks.map((k) => { const x = a.bands[k], pr = x.pmin == null ? "" : x.pmin === x.pmax ? "AED " + kA(x.pmin) : "AED " + kA(x.pmin) + " to " + kA(x.pmax);
-    return card(esc(ADV_SAY[k] || k), a.counted ? plural(x.flats, "flat") : plural(x.adverts, "advert"), (a.counted ? plural(x.adverts, "advert") + (pr ? ", " : "") : "") + (pr ? pr + " a year" : "")); }).join("") + "</div>";
-  return { h: 90 + 70 * Math.ceil(ks.length / 2), html: secHead("map-trifold", ADV_LABEL, "Owner only. " + esc(ADV_NOTE) + " Shown beside the developer's availability, never added to it." + (a.asOf ? " As of " + esc(dateLong(a.asOf) || a.asOf) + "." : "")) + cards };
+  if (!B.adv) return null;
+  const rows = advertisedRows(B.adv);
+  if (!rows.length) return null;
+  // v524 - one card per bedroom type: flats listed, typical asking rent, the middle half; the section says only how fresh it is
+  const cards = '<div class="bgrid">' + rows.map((r) => card(esc(r.label), r.flats != null ? plural(r.flats, "flat") : plural(r.adverts, "advert"),
+    [r.typical ? r.typical + " a year" + (r.typicalIsMedian ? " typical" : "") : "", r.mid, r.days != null ? r.days + " days listed" : ""].filter(Boolean).join(", "))).join("") + "</div>";
+  return { h: 90 + 70 * Math.ceil(rows.length / 2), html: secHead("map-trifold", "Available on Property Finder", esc(freshLine(B.adv.asOf)) + ". Rental listings.") + cards };
 }
 function mapBlock(B, live) {
   if (!B.layer) return { h: 80, html: secHead("map-pin", "On the map", "") + '<div class="note2">' + icon("info", 18, TEAL) + "<div>This project is not tied to a building outline on the map yet, so no map is drawn.</div></div>" };
@@ -304,7 +305,7 @@ export function buildingConfig(B, o) {
     { id: "all", title: "All years", small: "Every sale in the record since " + dateLong(B.first) + ".", icon: "chart-donut", set: { window: "all" }, def: win0 === "all" }] });
   sec.push({ id: "fmt", title: "Format", type: "single", options: [
     { id: "pdf", title: "PDF", small: "To send or print. The map is a drawing of the digital footprint.", icon: "stack", set: {}, def: true },
-    { id: "html", title: "Web page", small: "To open on a phone. The map is a live 3D street map." + (B.owner ? " Adverts (owner only) appear here, never in the PDF." : ""), icon: "map-trifold", set: { format: "html" } }] });
+    { id: "html", title: "Web page", small: "To open on a phone. The map is a live 3D street map.", icon: "map-trifold", set: { format: "html" } }] });
   sec.push({ id: "add", title: "Add to the sheet", type: "multi", param: "contact", mode: "include", options: [
     { id: "contact", title: "Broker contact block", small: "Blank lines for your name, mobile and email, to fill in by hand.", icon: "chat-circle-text", val: "1", def: false }] });
   sec.push({ id: "prep", title: "Prepared for", type: "text", fields: [{ param: "client", title: "Name on the sheet", small: "Shown in the header. If left empty it reads: " + PREP + ".", ph: PREP, max: 60, always: PREP }] });
