@@ -458,21 +458,21 @@ function pjDetailHtml(dk,located){var d=PDET[dk];if(!d)return "";var e=d.ev||{},
   return h+docRow(d,"panel")+'</div>'}
 
 // v521 AVAILABLE ON PROPERTY FINDER (Kendall 11 Oct 2026): the building's listings, as a pop-up, from the project card. Listings, never vacancy.
-var PFC={};
-function pfGet(k){if(!PFC[k])PFC[k]=fetch('/adv_bldg?k='+encodeURIComponent(k)+'&key='+encodeURIComponent(KEY)).then(function(r){return r.ok?r.json():null}).catch(function(){return null});return PFC[k]}
+var PFC={},PFN={};   // v522 - the project name rides along for the 'dld:<name>' fallback
+function pfGet(k){if(!PFC[k])PFC[k]=fetch('/adv_bldg?k='+encodeURIComponent(k)+'&n='+encodeURIComponent(PFN[k]||'')+'&key='+encodeURIComponent(KEY)).then(function(r){return r.ok?r.json():null}).catch(function(){return null});return PFC[k]}
 function pfInit(){if(pfInit.d||typeof document==="undefined"||!document.addEventListener)return;pfInit.d=1;
   document.addEventListener('click',function(ev){var b=ev.target&&ev.target.closest?ev.target.closest('.pfbtn'):null;if(!b)return;ev.preventDefault();ev.stopPropagation();pfOpen(b.getAttribute('data-pfk'),b.getAttribute('data-pfn'))},true)}
-function pfFill(){if(typeof document==="undefined"||!document.querySelectorAll)return;pfInit();var bs=document.querySelectorAll('.pfbtn[data-pfk]');for(var i=0;i<bs.length;i++){(function(b){if(b.getAttribute('data-done'))return;b.setAttribute('data-done','1');pfGet(b.getAttribute('data-pfk')).then(function(j){var n=b.querySelector('.pfc');if(!n)return;
+function pfFill(){if(typeof document==="undefined"||!document.querySelectorAll)return;pfInit();var bs=document.querySelectorAll('.pfbtn[data-pfk]');for(var i=0;i<bs.length;i++){(function(b){if(b.getAttribute('data-done'))return;PFN[b.getAttribute('data-pfk')]=b.getAttribute('data-pfn')||'';b.setAttribute('data-done','1');pfGet(b.getAttribute('data-pfk')).then(function(j){var n=b.querySelector('.pfc');if(!n)return;
   if(!j||!j.covered){n.textContent='not covered yet';b.classList.add('pfnone')}else if(!j.flats&&!j.adverts){n.textContent='none listed';b.classList.add('pfnone')}else n.textContent=(j.flats?fmt(j.flats)+' flat'+(j.flats===1?'':'s'):fmt(j.adverts)+' listings')})})(bs[i])}}
 function pfClose(){var m=$('pfpop');if(m)m.style.display='none'}
 function pfOpen(k,name){var m=$('pfpop');
   if(!m){m=document.createElement('div');m.id='pfpop';m.innerHTML='<div class=pfw role=dialog aria-modal=true aria-label="Available on Property Finder"><button type=button class=pfx aria-label="Close">&times;</button><div id=pfb></div></div>';document.body.appendChild(m);
     m.addEventListener('click',function(e){if(e.target===m||(e.target.className&&String(e.target.className).indexOf('pfx')>=0))pfClose()});document.addEventListener('keydown',function(e){if(e.key==='Escape')pfClose()})}
   var b=$('pfb');b.innerHTML='<div class=pft>Available on Property Finder</div><div class=pfs>'+esc(name||'')+'</div><p class=pfn2>Loading the listings&hellip;</p>';m.style.display='flex';
-  pfGet(k).then(function(j){var head='<div class=pft>Available on Property Finder</div><div class=pfs>'+esc(name||'')+(j&&j.as_of?' &middot; listings on '+esc(j.as_of):'')+'</div>';
+  pfGet(k).then(function(j){var head='<div class=pft>Available on Property Finder</div><div class=pfs>'+esc(name||'')+(j&&j.as_of?' &middot; rental listings':'')+'</div>';
     if(!j){b.innerHTML=head+'<p class=pfn2>The listings could not be loaded just now.</p>';return}
     if(!j.covered){b.innerHTML=head+'<p class=pfn2>Property Finder listings are not read for this area yet.</p>';return}
-    b.innerHTML=head+(j.html||'<p class=pfn2>No Property Finder listings for this building today.</p>')+'<p class=pfn2>Property Finder rental listings, matched to the Land Department&rsquo;s buildings. A listing is not an empty flat: one flat can carry several brokers&rsquo; adverts. Rent only; sale listings are not read yet.</p>'})}
+    b.innerHTML=head+(j.html||'<p class=pfn2>No Property Finder listings for this building today.</p>')})}   // v522 (Kendall: 'a bit wordy ... how fresh is the data, that is all we need'): the card ends on its freshness line
 function pdClose(){var el=$("pjdet"),f=PDFROM;PDOPEN=null;PDFROM=null;if(el)el.style.display="none";if(f&&f.focus){try{f.focus()}catch(x){}}}
 function pdOpen(dk,from){var d=PDET[dk];if(!d)return false;var el=$("pjdet");
   if(!el){el=document.createElement("div");el.id="pjdet";el.setAttribute("role","dialog");el.setAttribute("aria-label","Project details");document.body.appendChild(el)}

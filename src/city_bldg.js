@@ -117,9 +117,10 @@ export async function advBldgRoute(env, url, deps) {
   const k = String(url.searchParams.get("k") || "");
   if (!/^[a-z0-9]+:\d+$/.test(k)) return J({ ok: false, reason: "k=<district>:<id> is required" }, 400);
   const doc = await read(env, "pf_supply_" + k.split(":")[0]);
-  const A = advertisedDoc(doc), a = A ? advertisedForKey(A, k) : null;
+  const A = advertisedDoc(doc), nm = String(url.searchParams.get("n") || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const a = A ? (advertisedForKey(A, k) || (nm ? advertisedForKey(A, "dld:" + nm) : null)) : null;   // v522 - the project-key fallback
   return J({ ok: true, k, as_of: (A && A.asOf) || (doc && doc.as_of) || "", covered: !!A, flats: a ? a.flats || 0 : 0, adverts: a ? a.adverts || 0 : 0,
-    html: a ? "<style>" + ADV_CSS + "</style>" + advertisedHtml(a).replace("<details class=avd>", "<details class=avd open>") : "" });
+    html: a ? "<style>" + ADV_CSS + "</style>" + advertisedHtml(a, { summary: true }).replace("<details class=avd>", "<details class=avd open>") : "" });
 }
 
 // GET /city_bldg?key=  (READ_KEY or a client key; Property Finder figures are allowed on client surfaces since 11 Oct 2026).

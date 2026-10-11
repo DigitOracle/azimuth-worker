@@ -35,7 +35,7 @@ ok(/var pfk=pdBldKey\(d,e\);if\(pfk\)h\+='<button type=button class=pfbtn data-p
 ok(dm.indexOf("var pfk=pdBldKey(d,e)") < dm.indexOf('h+=pdSec("stack","Register facts",f);'), "it comes first, above Register facts");
 ok(/<span>Available on Property Finder<\/span><b class=pfc>&hellip;<\/b><\/button>';setTimeout\(pfFill,0\);/.test(dm), "the count fills in when the card opens");
 ok(/function pfOpen\(k,name\)\{/.test(dm) && /m\.id='pfpop'/.test(dm) && /#pfpop\{position:fixed;inset:0;z-index:2000;/.test(dm), "a pop-up, over everything");
-ok(/A listing is not an empty flat/.test(dm) && /Rent only; sale listings are not read yet\./.test(dm) && !/\bvacant\b/i.test(dm.slice(dm.indexOf("// v521 AVAILABLE ON PROPERTY FINDER"), dm.indexOf("function pdClose(){"))), "says listings, not vacancy; rent only");
+ok(/v522 \(Kendall: .a bit wordy/.test(dm) && !/\bvacant\b/i.test(dm.slice(dm.indexOf("// v521 AVAILABLE ON PROPERTY FINDER"), dm.indexOf("function pdClose(){"))), "v522: the pop-up ends on the card's freshness line (the explanation paragraph went, Kendall: too wordy); never vacant");
 ok(/function pfInit\(\)\{if\(pfInit\.d\|\|typeof document==="undefined"/.test(dm) && /if\(e\.key==='Escape'\)pfClose\(\)/.test(dm) && /if\(e\.target===m\|\|/.test(dm), "closes with the cross, a tap outside, or Escape");
 const PF = dm.slice(dm.indexOf("// v521 AVAILABLE ON PROPERTY FINDER"), dm.indexOf("function pdClose(){"));
 ok(!/\\/.test(PF), "no backslashes in the shipped page script");

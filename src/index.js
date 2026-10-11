@@ -3527,8 +3527,9 @@ async function appFetch(request, env, ctx) {
         try {
           const _adoc = advertisedDoc(await briefKvJson(env, "pf_supply_" + _bs));
           if (_adoc) {
-            const _a = advertisedForKey(_adoc, _bs + ":" + _bi);
-            _bd.advHtml = _a ? advertisedHtml(_a).replace("<details class=avd>", "<details class=avd open>")
+            const _nm = String((_bd.project && _bd.project.name) || _bd.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const _a = advertisedForKey(_adoc, _bs + ":" + _bi) || (_nm ? advertisedForKey(_adoc, "dld:" + _nm) : null);   // v522 - project-key fallback (Peninsula Five)
+            _bd.advHtml = _a ? advertisedHtml(_a, { summary: true }).replace("<details class=avd>", "<details class=avd open>")   // v522 - the summary card
               : '<div class=avd style="padding:9px 11px;font-size:12.5px;color:#B9B2A3">No Property Finder adverts for this building' + (_adoc.asOf ? " on " + _adoc.asOf : " today") + '.</div>';
           }
         } catch (e) {}
@@ -8907,7 +8908,9 @@ q.oninput=()=>{const v=norm(q.value);if(!v){sr.style.display="none";return}const
 const AVP=document.getElementById("avp"),AVRES=document.getElementById("avres"),AVLIST=document.getElementById("avlist");
 document.getElementById("avh").onclick=()=>{const open=!AVP.classList.contains("on");if(open)window.__stackOpen(AVP);AVP.classList.toggle("on",open)};
 document.getElementById("avon").onclick=(e)=>{ADV.on=!ADV.on;e.currentTarget.classList.toggle("on",ADV.on);e.currentTarget.textContent=ADV.on?"showing buildings with adverts":"show only buildings with adverts";if(ADV.on)cbLoad().then(()=>{AMFRAME=true;amRecalc()});else amRecalc()};
-document.querySelectorAll("#avbeds button").forEach(b=>{b.onclick=()=>{const k=b.dataset.b;ADV.beds.has(k)?ADV.beds.delete(k):ADV.beds.add(k);b.classList.toggle("on",ADV.beds.has(k));if(ADV.on){AMFRAME=true;amRecalc()}}});
+document.querySelectorAll("#avbeds button").forEach(b=>{b.onclick=()=>{const k=b.dataset.b;ADV.beds.has(k)?ADV.beds.delete(k):ADV.beds.add(k);b.classList.toggle("on",ADV.beds.has(k));
+  if(!ADV.on&&ADV.beds.size){ADV.on=true;const t=document.getElementById("avon");t.classList.add("on");t.textContent="showing buildings with adverts"}   // v522 - a bedroom choice switches the filter on
+  if(ADV.on)cbLoad().then(()=>{AMFRAME=true;amRecalc()})}});
 function advPanel(){if(!ADV.on){AVRES.textContent="off";AVLIST.innerHTML="";return}
   const rows=(CB?CB.items:[]).filter(it=>it.inst!=null&&it.inst>=0&&advFlats(it)>0&&(AMDIST<0||di[it.inst]===AMDIST)).sort((a,b)=>advFlats(b)-advFlats(a));
   const fl=rows.reduce((s,it)=>s+advFlats(it),0);const where=AMDIST>=0&&D.districts[AMDIST]?" in "+D.districts[AMDIST].name:" across Dubai";

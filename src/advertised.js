@@ -36,7 +36,9 @@ export function permitLink(u) {
 
 function band(x) {
   if (!x || typeof x !== "object") return null;
-  return { flats: num(x.flats), adverts: num(x.adverts) || 0, pmin: num(x.pmin), pmax: num(x.pmax), days: num(x.med_days), newWk: num(x.new_wk) || 0, goneWk: num(x.gone_wk) || 0 };
+  return { flats: num(x.flats), adverts: num(x.adverts) || 0, pmin: num(x.pmin), pmax: num(x.pmax), days: num(x.med_days), newWk: num(x.new_wk) || 0, goneWk: num(x.gone_wk) || 0,
+    // v522 - the per-flat figures (absent in files built before 11 Oct 2026; the summary then falls back to the advert-level ones, labelled)
+    fmed: num(x.f_pmed), f25: num(x.f_p25), f75: num(x.f_p75), fchk: num(x.f_chk) || 0, fdays: num(x.f_days), fnew: num(x.f_new_wk) };
 }
 // doc.advertised -> {asOf, buildings: {slug: {key, bands}}} or null (an older file)
 export function advertisedDoc(doc) {
@@ -57,7 +59,9 @@ export function advertisedFor(A, slugs, oldBands) {
   if (A) for (const s of slugs || []) {
     const b = A.buildings[s]; if (!b) continue;
     for (const k in b.bands) {
-      const x = b.bands[k], o = out.bands[k] || (out.bands[k] = { flats: 0, adverts: 0, pmin: null, pmax: null, days: null, newWk: 0, goneWk: 0 });
+      const x = b.bands[k], o = out.bands[k] || (out.bands[k] = { flats: 0, adverts: 0, pmin: null, pmax: null, days: null, newWk: 0, goneWk: 0, fchk: 0 });
+      if (o.fmed === undefined || (x.flats || 0) > (o._fl || 0)) { o.fmed = x.fmed; o.f25 = x.f25; o.f75 = x.f75; o.fdays = x.fdays; o._fl = x.flats || 0; }   // v522: the biggest slug's per-flat figures
+      o.fchk = (o.fchk || 0) + (x.fchk || 0); if (x.fnew != null) o.fnew = (o.fnew || 0) + x.fnew;
       o.flats += x.flats || 0; o.adverts += x.adverts; o.newWk += x.newWk; o.goneWk += x.goneWk;
       if (x.pmin != null) o.pmin = o.pmin == null ? x.pmin : Math.min(o.pmin, x.pmin);
       if (x.pmax != null) o.pmax = o.pmax == null ? x.pmax : Math.max(o.pmax, x.pmax);
@@ -88,15 +92,41 @@ function bandCard(k, x, counted) {
     + (x.days != null ? '<div class=avf>' + IC_CLOCK + fmt(x.days) + " days listed (median)</div>" : "")
     + (counted ? '<div class=avf>' + IC_UP + fmt(x.newWk) + " new · " + IC_DOWN + fmt(x.goneWk) + " gone this week</div>" : "") + "</div>";
 }
+// v522 SUMMARY card (Kendall 11 Oct 2026), for the short places only (building page, Developers map pop-up, twin card): typical asking rent
+// (median over FLATS) and the middle half of the flats instead of cheapest-to-dearest advert; days listed per flat; new flats; adverts gone.
+// The Start menu's "What's advertised where" keeps every listing and does NOT pass summary.
+function bandCardSummary(k, x, counted) {
+  if (x.fmed == null) return bandCard(k, x, counted);       // a file built before the per-flat figures: the old card, unchanged
+  const mid = x.f25 != null && x.f75 != null && x.f25 !== x.f75 ? "middle half AED " + kAed(x.f25) + "–" + kAed(x.f75) : "";
+  return '<div class=avc><div class=avk>' + IC_HOME + esc(BAND_SAY[k] || k) + "</div>"
+    + '<div class=avn><b>' + (counted ? fmt(x.flats) : "—") + "</b><small>" + (counted ? (x.flats === 1 ? "flat" : "flats") : "flats not counted yet") + " · " + pl(x.adverts, "advert", "adverts") + "</small></div>"
+    + '<div class=avf>' + IC_TAG + "AED " + esc(kAed(x.fmed)) + "<small> typical a year</small></div>"
+    + (mid ? '<div class=avf><small>' + esc(mid) + "</small></div>" : "")
+    + (x.fchk ? '<div class=avf><small>' + pl(x.fchk, "flat", "flats") + " priced far from the rest: check the advert</small></div>" : "")
+    + (x.fdays != null ? '<div class=avf>' + IC_CLOCK + fmt(x.fdays) + " days listed (median per flat)</div>" : "")
+    + '<div class=avf>' + IC_UP + pl(x.fnew != null ? x.fnew : x.newWk, "new flat", "new flats") + " · " + IC_DOWN + pl(x.goneWk, "advert", "adverts") + " gone this week</div></div>";
+}
+// "Updated 10 Oct 2026 · 1 day ago" - the age is counted in Dubai days
+export function freshLine(asOf, now) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(asOf || ""));
+  if (!m) return "Update date not recorded";
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const t = now instanceof Date ? now : new Date();
+  const today = new Date(t.getTime() + 4 * 3600e3).toISOString().slice(0, 10);
+  const days = Math.round((Date.parse(today) - Date.parse(m[1] + "-" + m[2] + "-" + m[3])) / 864e5);
+  const ago = days <= 0 ? "today" : days === 1 ? "1 day ago" : days + " days ago";
+  return "Updated " + (+m[3]) + " " + MON[+m[2] - 1] + " " + m[1] + " · " + ago;
+}
 // a closed-by-default accordion; cards (2 up, 1 up under 360 px), never a plain list
-export function advertisedHtml(a) {
+export function advertisedHtml(a, opts) {
+  const summary = !!(opts && opts.summary);
   if (!a) return "";
   const ks = BANDS.filter((k) => a.bands[k]).concat(Object.keys(a.bands).filter((k) => !BANDS.includes(k)));
   const head = a.counted ? pl(a.flats, "flat", "flats") + " · " + pl(a.adverts, "advert", "adverts") : pl(a.adverts, "advert", "adverts");
   return '<details class=avd><summary>' + IC_ADV + "<span>" + esc(ADV_LABEL) + "</span><b>" + esc(head) + "</b></summary>"
-    + '<div class=avg>' + ks.map((k) => bandCard(k, a.bands[k], a.counted)).join("") + "</div>"
-    + '<div class=avt>' + esc(ADV_NOTE) + " Shown beside the developer’s availability, never added to it." + (a.counted ? " An advert missing from two crawls running counts as gone (withdrawn or let)." : "")
-    + (a.asOf ? " As of " + esc(a.asOf) + "." : "") + "</div></details>";
+    + '<div class=avg>' + ks.map((k) => (summary ? bandCardSummary : bandCard)(k, a.bands[k], a.counted)).join("") + "</div>"
+    + (summary ? '<div class=avt>' + esc(freshLine(a.asOf)) + "</div></details>" : '<div class=avt>' + esc(ADV_NOTE) + " Shown beside the developer’s availability, never added to it." + (a.counted ? " An advert missing from two crawls running counts as gone (withdrawn or let)." : "")
+    + (a.asOf ? " As of " + esc(a.asOf) + "." : "") + "</div></details>");
 }
 export const ADV_CSS = ".avd{margin-top:8px;border:1px solid #24352F;border-radius:12px;background:#0E1918}"
   + ".avd>summary{display:flex;align-items:center;gap:7px;padding:9px 11px;cursor:pointer;list-style:none;font-size:13px;color:#E9E3D6}"
