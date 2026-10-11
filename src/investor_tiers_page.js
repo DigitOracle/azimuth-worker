@@ -6,7 +6,8 @@
 import { pkFig, pkGrid } from "./pdf_kit.js";   // v490 - the shared PDF look
 import { kvJson } from "./brief.js";
 import { loadFactsSharded } from "./investor_facts.js";
-import { BRIEF_KIT, esc } from "./brief_docs.js";
+import { BRIEF_KIT, esc, HEADER_JPG_KEY, HEADER_IMG_KEY } from "./brief_docs.js";
+import { BRAND_MARK_JPG } from "./brand_mark.js";   // v523
 import { optFrame } from "./doc_options_page.js";   // v407 - the shared options-page shell
 import { icon, EXTRA_CSS, pack } from "./devmap_pdf.js";
 import { allClaims } from "./dev_claims.js";   // v417
@@ -311,7 +312,9 @@ export async function buildInvestorTiersPdf(env, p, opts) {
     const dp = dc ? await loadDevPics(env, dc, opts && opts.origin) : [];
     if (dp.length) devOpts = { devPics: dp, devClaims: dc };
   }
-  const doc = buildTiersHtml(facts, plan, Object.assign({ client: p.client, figures: opts && opts.figures }, devOpts));
+  // v523 - the Najma mark in the header, as every other document has it (Kendall 11 Oct 2026: "this is not the correct logo")
+  const logo = (await BRIEF_KIT.kvDataUrl(env, HEADER_JPG_KEY, opts && opts.origin)) || (await BRIEF_KIT.kvDataUrl(env, HEADER_IMG_KEY, opts && opts.origin)) || BRAND_MARK_JPG;
+  const doc = buildTiersHtml(facts, plan, Object.assign({ client: p.client, figures: opts && opts.figures, logo }, devOpts));
   if (doc.lint.length) return { status: 500, body: { ok: false, reason: "the report text failed its own checks: " + doc.lint.join("; ") } };
   return { status: 200, html: doc.html, pages: doc.pages, fname: "Investor_" + facts.project.id + "_" + plan.tier + ".pdf", audit: plan.audit };
 }

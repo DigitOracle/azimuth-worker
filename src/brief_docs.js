@@ -62,6 +62,7 @@ import { amenIndex, amenFor, briefSearch, criteriaOf, mustsOf, rentStat, verdict
 // wording) for the building page's dossier button, and a key the rent index does not know but the unit-mix register does builds
 // from the register alone (a building page exists for every such building, and its dossier must too).
 
+import { BRAND_MARK_JPG } from "./brand_mark.js";   // v523 - the built-in copy of the mark, the header's fallback
 export const FOOTER_TEXT = "Curated by Najjuko &middot; Dubai Decoded";
 export const WHATSAPP_NUMBER = "+971 56 548 4397";
 export const HEADER_IMG_KEY = "brand_najjuko_n";
@@ -165,8 +166,8 @@ const WA_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" aria-label="What
 const CURATOR = FOOTER_TEXT + " " + WA_SVG + " " + WHATSAPP_NUMBER;
 
 function logo(C, h) {
-  return C.logo ? '<img class="najhead" src="' + C.logo + '" alt="Najma" style="height:' + h + 'px;width:auto;display:block;">'
-    : '<div class="serif" style="font-size:' + Math.round(h * 0.4) + 'px;color:' + GOLD + ';">Najma</div>';   // header picture not yet published
+  // v523 (Kendall 11 Oct 2026: "every single one ... should have this logo"): the stored picture, else the built-in copy - never the word
+  return '<img class="najhead" src="' + (C.logo || BRAND_MARK_JPG) + '" alt="Najma" style="height:' + h + 'px;width:auto;display:block;">';
 }
 function header(C, sub) {
   return '<div style="height:122px;display:flex;align-items:center;justify-content:space-between;padding:0 46px;' +

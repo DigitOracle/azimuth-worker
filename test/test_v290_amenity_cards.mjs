@@ -224,7 +224,7 @@ ok(D.r.status === 200 && !/Around the community/.test(D.html), "Compare with onl
 D = await doc("kind=compare&keys=damachills:10,damachills:11&nice=gym");
 ok(D.r.status === 200 && !/Around the community/.test(D.html), "Compare with gym only as a nice-to-have carries none");
 D = await doc("kind=compare&keys=damachills:10,damachills:11&musts=gym", envNoKey);
-ok(D.r.status === 200 && /Around the community/.test(D.html) && !/data:image\/jpeg/.test(D.html.slice(D.html.indexOf("Around the community"))), "no secret: the PDF still has the cards, with no picture");
+ok(D.r.status === 200 && /Around the community/.test(D.html) && !/data:image\/jpeg/.test(D.html.replace(/<img class="najhead"[^>]*>/g, "").slice(D.html.replace(/<img class="najhead"[^>]*>/g, "").indexOf("Around the community"))), "no secret: the PDF still has the cards, with no picture (the header mark aside, v523)");
 GOOGLE_MODE = "hang"; t0 = Date.now();
 D = await doc("kind=compare&keys=damachills:10,damachills:11&musts=gym,schools");
 ok(D.r.status === 200 && /Around the community/.test(D.html) && Date.now() - t0 < 7000, "Google hanging: the PDF builds in time (pictures in parallel, " + (Date.now() - t0) + " ms), cards without pictures");

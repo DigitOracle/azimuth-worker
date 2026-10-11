@@ -20,7 +20,7 @@ import { kvJson } from "./brief.js";
 import { BRIEF_KIT, esc } from "./brief_docs.js";
 import { icon, secHead, loadData, dateLong, obliqueMap, pack, head, PERMIT_REMINDER } from "./devmap_pdf.js";
 import { salesDoc, valueOf, VALUE_CAP, MIN_PRICED } from "./sales_view.js";
-import { ejariDoc } from "./ejari_page.js";
+import { ejariDoc, ejariRow } from "./ejari_page.js";   // v523 - ejariRow reads the window rollup rows
 import { advertisedDoc, advertisedForKey, ADV_LABEL, ADV_NOTE } from "./advertised.js";
 import { positionOf, placement } from "./building_position.js";   // v452: img_bldg_pos_<district>, the multi-source position check
 
@@ -105,12 +105,13 @@ export function salesFigures(rows, w) {
     value: valueOf(sales), recent: recent.slice(0, RECENT_MAX), recentAll: recent.length, lastStage: last ? last.stage : "" };
 }
 
-// rent contracts: contracts and the typical yearly rent by bedrooms (each day's median weighted by its contracts; printed from 5 contracts)
+// rent contracts: contracts and the typical yearly rent by bedrooms. v523: from the file's window ROLLUP (every contract of the project and band
+// pooled; a median from 5 contracts with a rent) when it has one; else each day's median weighted by its contracts, as before.
 export function rentFigures(rows, w) {
   const keep = rows.filter((r) => r.date >= w.from && r.date <= w.to), by = {};
   for (const r of keep) { const x = by[r.band] || (by[r.band] = { n: 0, pairs: [] }); x.n += r.n; if (r.med != null && r.n > 0) x.pairs.push([r.med, r.n]); }
   const wmed = (pairs) => { const p = pairs.slice().sort((a, b) => a[0] - b[0]), t = p.reduce((s, x) => s + x[1], 0); if (t < MIN_PRICED) return null; let c = 0; for (const x of p) { c += x[1]; if (c >= t / 2) return Math.round(x[0]); } return null; };
-  const bands = BANDS.filter((b) => by[b]).map((b) => ({ band: b, label: BAND_SAY[b], n: by[b].n, rent: wmed(by[b].pairs) }));
+  const bands = BANDS.filter((b) => by[b]).map((b) => ({ band: b, label: BAND_SAY[b], n: by[b].n, priced: by[b].pairs.reduce((s, x) => s + x[1], 0), rent: wmed(by[b].pairs) }));
   return { n: bands.reduce((s, b) => s + b.n, 0), bands };
 }
 
@@ -144,9 +145,12 @@ export async function loadBuilding(env, p, opts) {
   const devRow = rows.slice().reverse().find((r) => r.dev) || rec;
   const w = windowOf(p.win, sd.asOf, sd.first);
   const S = salesFigures(rows, w);
-  const ed = ejariDoc(await readOr(env, "ejari_filed_" + slug));
+  const edRaw = await readOr(env, "ejari_filed_" + slug), ed = ejariDoc(edRaw);
   const er = ed ? pickBuilding(ed.rows, { project: rec.projectNo || b.project, name: "" }).rows : [];
-  const R = ed ? rentFigures(er, { from: w.from < ed.first ? ed.first : w.from, to: ed.asOf }) : null;
+  // v523 - the window rollup (Kendall 11 Oct 2026: "these sections should not be blank. There is enough information to fill them in")
+  const wk = /12/.test(String(p.win || "")) ? "12m" : "all";
+  const ru = ed && edRaw && Array.isArray(edRaw.rollup) ? pickBuilding(edRaw.rollup.filter((r) => r && r.window === wk).map((r) => ejariRow(r)).filter(Boolean), { project: rec.projectNo || b.project, name: "" }).rows : [];
+  const R = ed ? (ru.length ? Object.assign(rentFigures(ru, { from: "0000-00-00", to: "9999-99-99" }), { pooled: true }) : rentFigures(er, { from: w.from < ed.first ? ed.first : w.from, to: ed.asOf })) : null;
   // the footprint: only the register-bound index the map handed us
   const layer = b.bk != null ? await readOr(env, "brief_fp_" + slug) : null;
   // v452 - the position check: the consensus point of every source joined by id; the gold footprint is the one it names
@@ -202,13 +206,19 @@ function recentBlock(B) {
     (pkBars(S.recent.filter((r) => r.price != null).map((r) => [esc(dateLong(r.date)).replace(/ \d{4}$/, ""), r.price, "<b>" + aed(r.price) + "</b> &middot; " + esc(BAND_SAY[r.band] || r.band) + (r.sqft ? ", " + fmt(r.sqft) + " sq ft" : "") + (r.stage === "offplan" ? ", off-plan" : "")]), { labelW: 70, rightW: 260 }) || ('<table class="tb"><tr><th>DATE</th><th>HOME</th><th class="r">SIZE</th><th class="r">PRICE</th></tr>' + rows + "</table>")) +
     (S.recent.some((r) => r.price == null) ? '<div class="mnote">' + S.recent.filter((r) => r.price == null).length + " of these sales carry no recorded price and are not drawn.</div>" : "") };
 }
+// v523 - the reason under a card says what is true: never "fewer than 5" under a count of 13
+function rentWhy(b, R) {
+  if (b.rent != null) return R.pooled || b.priced >= b.n ? "" : ", typical rent from " + plural(b.priced, "contract") + " with a daily figure";
+  if (b.n < MIN_PRICED) return ", fewer than " + MIN_PRICED + " to set a typical rent";
+  return R.pooled ? ", fewer than " + MIN_PRICED + " of them record a rent" : ", too few days with 3 or more contracts to set a typical rent";
+}
 function rentBlock(B) {
   const R = B.R;
   if (!R || !R.n) {
     const why = B.status === "Off-plan" ? "No rent contract is registered for this building: it is sold off-plan and not yet handed over." : "No rent contract is registered for this building in this window.";
     return { h: 90, html: secHead("wallet", "Rents", "Registered rent contracts (Ejari).") + '<div class="note2">' + icon("info", 18, TEAL) + "<div>" + why + "</div></div>" };
   }
-  const cards = '<div class="bgrid">' + R.bands.map((b) => card(esc(b.label), b.rent != null ? aed(b.rent) + '<span class="cn"> a year</span>' : "&ndash;", plural(b.n, "contract") + (b.rent == null ? ", fewer than " + MIN_PRICED + " to set a typical rent" : ""))).join("") + "</div>";
+  const cards = '<div class="bgrid">' + R.bands.map((b) => card(esc(b.label), b.rent != null ? aed(b.rent) + '<span class="cn"> a year</span>' : "&ndash;", plural(b.n, "contract") + rentWhy(b, R))).join("") + "</div>";
   return { h: 80 + 70 * Math.ceil(R.bands.length / 2), html: secHead("wallet", "Rents", "Registered rent contracts (Ejari), " + esc(dateLong(B.w.from < B.rentFirst ? B.rentFirst : B.w.from)) + " to " + esc(dateLong(B.rentAsOf)) + ". Rents already agreed, not asking rents.") + cards };
 }
 function positionBlock(B) {

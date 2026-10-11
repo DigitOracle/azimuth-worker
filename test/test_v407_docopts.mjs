@@ -39,6 +39,7 @@ console.log("A - the Investor selector and the investor PDFs are byte-for-byte w
   for (const type of [null, "income"]) for (const tier of ["summary", "standard", "full"]) parts.push(buildTiersHtml(BASE, T.buildPlan({ facts: BASE, type, tier, segments: [] }), { client: "Test Client", figures: false }).html);   // v491: the icon figure row is the one deliberate addition
   // fingerprints taken from release rel-v405 (before the shell was split out)
   const want = "af8e5df3bc86435d a260b7ced76c7a16 b80599bb3b895b2b 85948ec2ae03caaa 4cff9a42693e9f2d c54f6c732a842d07 644d11fa6f8a6c6d 48425d96869dfff7".split(" ");
+  for (let i = 2; i < parts.length; i++) parts[i] = parts[i].replace(/<img class="najhead"[^>]*>/g, '<div class="serif" style="font-size:28px;color:#A8814A;">Najma</div>');   // the old header word, so the hash proves nothing ELSE changed   // v523: the investor report's header mark (it printed the word "Najma") is the one deliberate change
   ok(parts.map(h).join(" ") === want.join(" "), "selector page (with and without key) and six investor reports hash the same as before", parts.map(h).join(" "));
 }
 

@@ -258,7 +258,7 @@ ok(writes.length === 0, "rendering writes nothing to KV");
 // ---- 9. the header picture missing: a wordmark, never a broken image ---------------------------------------------------------------
 const hdr = store.get("img_ct_brand_najjuko_n"); store.delete("img_ct_brand_najjuko_n");
 ({ html } = await pdf("kind=dossier&keys=testdistrict:10"));
-ok(!html.includes("brand_najjuko_n") && html.includes('color:#A8814A;">Najma</div>'), "no header picture stored -> a Najma wordmark, not a broken image");
+ok(!html.includes("brand_najjuko_n") && /<img class="najhead" src="data:image\/jpeg;base64,\/9j\//.test(html) && !html.includes('color:#A8814A;">Najma</div>'), "no header picture stored -> the built-in copy of the mark (v523: never the word, never a broken image)");
 store.set("img_ct_brand_najjuko_n", hdr);
 
 // ---- 10. the blocks view is the same component -----------------------------------------------------------------------------------

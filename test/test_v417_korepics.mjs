@@ -72,7 +72,7 @@ ok(/Curated by Najjuko . Dubai Decoded/.test(ST) && /\+971 56 548 4397/.test(ST)
   const hide = await buildDocument(mkEnv(true), sheetQ("&hide=photos"), { origin: "https://w.example" });
   ok(hide.pages === 2 && imgSrcs(hide.html).length === 0, "hide=photos leaves every picture out (two pages)");
   const inl = await buildDocument(mkEnv(true), sheetQ(), {});
-  ok(imgSrcs(inl.html).length === 0 && (inl.html.match(/src="data:image\/jpeg;base64,/g) || []).length === 10, "with no origin the pictures are inlined (ten data URIs)");
+  ok(imgSrcs(inl.html).length === 0 && (inl.html.replace(/<img class="najhead"[^>]*>/g, "").match(/src="data:image\/jpeg;base64,/g) || []).length === 10, "with no origin the pictures are inlined (ten data URIs, the v523 header mark aside)");
 }
 
 console.log("C - a missing key falls back to the caption line, never a failed PDF");

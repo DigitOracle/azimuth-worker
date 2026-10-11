@@ -101,7 +101,8 @@ export function supplyDoc(doc) {
   if (!doc || !Array.isArray(doc.rows)) return null;
   return { asOf: str(doc.as_of), measure: str(doc.measure), rows: doc.rows.map(supplyRow).filter(Boolean),
     coverage: supplyCoverage(doc.coverage), homeTypes: supplyHomeTypes(doc.home_types),
-    sourceSay: str(doc.source_say), sites: num(doc.sites) > 0 ? num(doc.sites) : 0, srcs: supplySources(doc.sources), adverts: supplyAdverts(doc.adverts), advertised: advertisedDoc(doc) };
+    sourceSay: str(doc.source_say), sites: num(doc.sites) > 0 ? num(doc.sites) : 0, srcs: supplySources(doc.sources), adverts: supplyAdverts(doc.adverts), advertised: advertisedDoc(doc),
+    typesBy: doc.home_types_by_building && typeof doc.home_types_by_building === "object" && !Array.isArray(doc.home_types_by_building) ? doc.home_types_by_building : {} };   // v523
 }
 // v414 - the individual adverts behind each count (pf_listings.py `adverts`, 9 Oct 2026): {slug: {band: [{id, p, sq, t, f, d, lat, lon, u}]}}.
 // Additive: an old file has none and the card shows the counts table only. u is kept only when it is an https page on propertyfinder.ae.
@@ -195,7 +196,7 @@ export function coverageHtml(cv) {
 }
 export function homeTypesHtml(hs) {
   if (!hs || !hs.length) return "";
-  return '<div class=st id=suhome>' + hs.map((h) => "<span>" + esc(homeSay(h.type)) + " <b>" + fmt(h.n) + "</b></span>").join("") + "</div>";
+  return '<div class=st id=suhome>' + hs.map((h) => '<button type=button class=htp data-ht="' + esc(h.type) + '" aria-pressed=false>' + esc(homeSay(h.type)) + " <b>" + fmt(h.n) + "</b></button>").join("") + "</div><div class=dk id=suhsay hidden></div>";
 }
 // the median of per-band medians, weighted by adverts
 function wmed(pairs) {
@@ -254,6 +255,7 @@ async function loadDistrict(env, slug, names) {
   if (!doc) return null;
   const bs = supplyBuildings(doc.rows, slug, names);
   const frame = attachAdverts(bs, doc.adverts || {});
+  for (const b of bs) { b.types = [...new Set([].concat(...b.slugs.map((s) => Object.keys((doc.typesBy || {})[s] || {}).filter((t) => num(doc.typesBy[s][t]) > 0))))]; }   // v523 - which home types this building's adverts are
   for (const b of bs) { b.frame = frame; b.advertised = advertisedFor(doc.advertised, b.slugs, Object.fromEntries(b.bandRows.map((r) => [r.band, { live: r.live, days: r.days }]))); }
   const crawled = bs.reduce((m, b) => (b.crawled > m ? b.crawled : m), "") || doc.asOf;
   return { slug, asOf: doc.asOf, crawled, buildings: bs, coverage: doc.coverage, homeTypes: doc.homeTypes, sourceSay: doc.sourceSay, sites: doc.sites, srcs: doc.srcs };
@@ -300,7 +302,7 @@ const SU_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans
   + '.kt{font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.11em;color:#8FA39B}.nm{font-family:Fraunces,Georgia,serif;font-size:1.2rem;font-weight:600;color:#F0E4C8;line-height:1.2;margin:3px 0 2px}'
   + '.sb{color:#8FA39B;font-size:.76rem;line-height:1.45}.tg{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.54rem;letter-spacing:.05em;color:#E0A080;border:1px solid #6A4A3A;border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:2px}'
   + '.hl{font-size:.95rem;margin:9px 0 4px}.hl b{font-family:Fraunces,Georgia,serif;font-size:1.6rem;color:#C5A56A;font-weight:600}'
-  + '.st{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.st a,.st span{display:inline-flex;align-items:center;gap:5px;min-height:30px;border:1px solid #2E4540;border-radius:999px;padding:3px 10px;font-size:.74rem;color:#C8D3CE;text-decoration:none}.st b{color:#C5A56A}'
+  + '.st{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.htp{font:inherit;background:transparent;cursor:pointer}.htp.on{border-color:#C5A56A!important;background:rgba(197,165,106,.16)!important;color:#E9E3D6!important}.card.htx{display:none}.st a,.st span,.st .htp{display:inline-flex;align-items:center;gap:5px;min-height:30px;border:1px solid #2E4540;border-radius:999px;padding:3px 10px;font-size:.74rem;color:#C8D3CE;text-decoration:none}.st b{color:#C5A56A}'
   + 'table{width:100%;border-collapse:collapse;margin:10px 0 0;font-size:.78rem}th{text-align:right;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.06em;color:#6F837D;font-weight:500;padding:0 0 5px 4px}th:first-child,td:first-child{text-align:left;padding-left:0}'
   + 'td{text-align:right;padding:7px 0 7px 5px;border-top:1px solid #1B2E2A;color:#C8D3CE}td b{color:#F0E4C8}'
   + '.dk{font-size:.72rem;color:#8FA39B;line-height:1.45;margin:6px 0 0}'
@@ -386,9 +388,9 @@ export function streetMap(lat, lon, name, fp, line) {
     + '<a class=smg href="' + g + '" target=_blank rel="noopener noreferrer">' + IC_PIN + "Open in Google Maps</a></div>"
     + (line ? "<div class=spl>" + esc(line) + "</div>" : "");   // v452: one quiet line under the map - which sources agree on the position
 }
-function buildingCard(b, key) {
+function buildingCard(b, key, more) {
   const siteN = b.siteCount || Object.keys(b.urls).length;
-  return '<div class=card data-b="' + esc(b.id) + '"><div class=kt>' + (b.matched ? "BUILDING" : "LISTING SITE NAME") + '</div><div class=nm>' + esc(b.name)
+  return '<div class="card' + (more ? " htx htmore" : "") + '" data-b="' + esc(b.id) + '" data-types="' + esc((b.types || []).join("|")) + '"><div class=kt>' + (b.matched ? "BUILDING" : "LISTING SITE NAME") + '</div><div class=nm>' + esc(b.name)
     + (b.matched ? "" : '<span class=tg>not matched to the register</span>') + "</div>"
     + '<div class=sb>' + esc([b.matched && b.project && b.project !== b.name ? b.project : "", b.district].filter(Boolean).join(" \u00b7 ")) + "</div>"
     + '<div class=hl><b>' + fmt(b.live) + "</b> " + (b.live === 1 ? "advert" : "adverts") + (siteN ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + "</div>"
@@ -411,7 +413,7 @@ export function supplyPageHtml(o) {
       + homeTypesHtml(D.homeTypes) + coverageHtml(D.coverage)
       + '<div class=dk>Fetched ' + esc(dubaiTime(D.crawled) || "\u2014") + " (Dubai time).</div>"
       + '<button type=button class=rf data-district="' + esc(D.slug) + '" data-slug="">Refresh the district</button><div class=rs role=status></div></div>'
-      + '<div class=hd>BUILDINGS, MOST ADVERTISED FIRST</div>' + D.buildings.slice(0, 30).map((b) => buildingCard(b, key)).join("") + unboundHtml(D.unbound);
+      + '<div class=hd>BUILDINGS, MOST ADVERTISED FIRST</div>' + D.buildings.map((b, i) => buildingCard(b, key, i >= 30)).join("") + unboundHtml(D.unbound);   // v523 - all of them; past 30 hidden until a filter needs them
   } else if (o.view === "building" && o.b) main = buildingCard(o.b, key);
   else if (o.matches) main = o.matches.length ? '<div class=hd>WHICH ONE?</div><div class=pick id=supick>' + o.matches.map((m) => '<a href="/supply?' + (m.kind === "district" ? "d=" + encodeURIComponent(m.id) : "b=" + encodeURIComponent(m.id) + "&d=" + encodeURIComponent(m.d)) + "&key=" + esc(encodeURIComponent(key)) + '">' + esc(m.name) + "<small>" + esc(m.sub) + "</small></a>").join("") + "</div>"
     : '<div class=nt id=sunone>No building or district by that name in the advert record.</div>';
@@ -589,6 +591,13 @@ export async function pollerRoutes(request, env, url, h) {
 export const SUPPLY_JS = String.raw`
 (function(){
 var S=window.__SU||{},KQ="key="+encodeURIComponent(S.key||""),LS="najma_supply_pending";
+// v523 - the home-type pills filter the buildings (Kendall 11 Oct 2026). Several may be on; none on = the 30 most advertised, as before.
+(function(){if(typeof document==="undefined"||!document.querySelectorAll||!document.getElementById)return;var ps=document.querySelectorAll(".htp[data-ht]");if(!ps||!ps.length||!ps.forEach)return;var say=document.getElementById("suhsay");
+  function apply(){var on=[];ps.forEach(function(p){if(p.classList.contains("on"))on.push(p.getAttribute("data-ht"))});var n=0,names=[];
+    document.querySelectorAll(".card[data-types]").forEach(function(c){var ts=(c.getAttribute("data-types")||"").split("|"),hit=!on.length?!c.classList.contains("htmore"):on.some(function(t){return ts.indexOf(t)>=0});c.classList.toggle("htx",!hit);if(hit&&on.length)n++});
+    ps.forEach(function(p){if(p.classList.contains("on"))names.push(p.firstChild.textContent.trim())});
+    if(say){if(on.length){say.hidden=false;say.innerHTML=n+(n===1?" building":" buildings")+" with "+names.join(" or ")+' &middot; <a href="#" id=suhall>show all</a>';var a=document.getElementById("suhall");if(a)a.onclick=function(e){e.preventDefault();ps.forEach(function(p){p.classList.remove("on");p.setAttribute("aria-pressed","false")});apply()}}else{say.hidden=true;say.innerHTML=""}}}
+  ps.forEach(function(p){p.onclick=function(){var v=!p.classList.contains("on");p.classList.toggle("on",v);p.setAttribute("aria-pressed",v?"true":"false");apply()}})})();
 // v446 - building street maps: MapLibre is fetched once, the first time a map scrolls into view; each map is drawn once
 (function(){var maps=document.querySelectorAll(".smap[data-lat]");if(!maps.length||!("IntersectionObserver" in window))return;var lib=null;
   function load(){if(lib)return lib;lib=new Promise(function(ok,no){var c=document.createElement("link");c.rel="stylesheet";c.href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css";document.head.appendChild(c);
