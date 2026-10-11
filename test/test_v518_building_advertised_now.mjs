@@ -12,7 +12,7 @@ const ix = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 ok(/<h1>AVAILABLE NOW<\/h1>/.test(bp) && /<div id=reopen>AVAILABLE NOW<\/div>/.test(bp), "the panel and its reopen pill are titled AVAILABLE NOW");
 ok(/\(D\.advHtml \? '<style>' \+ ADV_CSS \+ '<\/style>' \+ D\.advHtml : ""\) \+\s*'<div id=bpfilt hidden>' \+\s*"<div id=count><\/div>"/.test(bp), "the adverts lead the panel; the register filters sit in a hidden block right after");
 ok(/'<button id=hide>Hide All<\/button><\/div>'/.test(bp), "the hidden block ends after Hide All, so floors, plans, dossier, lets, contracts and sales stay visible");
-ok(/if \(!D\.fits \|\| D\.plain\) \{/.test(bp), "a plain building takes the no-bands path");
+ok(/if \(D\.plain\) return \[0xD9DDD8, 1, 0\.12\];/.test(bp) && /if \(!D\.fits\) \{/.test(bp), "v526: a plain building is one neutral colour but keeps its floor bands (the tap targets)");
 ok(/_bd\.plain = true;/.test(ix), "the route asks for the plain tower");
 ok(/advertisedForKey\(_adoc, _bs \+ ":" \+ _bi\)/.test(ix) && /briefKvJson\(env, "pf_supply_" \+ _bs\)/.test(ix), "the route reads the district's advert file and picks this building by its register key");
 ok(/No Property Finder adverts for this building/.test(ix), "a district file without this building says so plainly");

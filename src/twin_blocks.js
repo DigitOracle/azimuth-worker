@@ -141,7 +141,7 @@ function load(s){ST[s]={state:"loading",bbox:slugBox(s)};
 function tapCard(s,p,f){var g=(GEO[s]||{})[p.i]||{geom:f.geometry,n:p.n,h:p.h,hs:""},TC=window.__tapcards,DK=window.__tcPanel;if(!TC||!DK)return;
   var blk={n:g.n,h:g.h,hs:g.hs,a:g.a},my=TAP,c=centroid(g.geom);
   var twin=function(){go(s,p.i!=null?"&b="+encodeURIComponent(p.i):"",c)};
-  var paint=function(m,page){DK.show(TC.html(m,{page:page?"/building/"+encodeURIComponent(s)+"/"+p.i+keyQ():"",extra:'<div class=tcb><button type=button class=tctw>Open the twin here</button></div>'}));
+  var paint=function(m,page){DK.show(TC.html(m,{page:page?"/building/"+encodeURIComponent(s)+"/"+p.i+keyQ():"",extra:'<div class=tcb><button type=button class=tctw>Open the district here</button></div>'}));
     var b=DK.el().querySelector(".tctw");if(b)b.onclick=twin;window.__lastTapcard=m};
   paint(TC.plain(blk),false);
   TC.card(s,p.i,g.geom,blk,typeof KEY!=="undefined"?KEY:"").then(function(m){if(my!==TAP||m.kind==="fallback"){window.__lastTapcard=m;return}paint(m,m.page)}).catch(function(){})}

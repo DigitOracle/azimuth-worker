@@ -472,12 +472,13 @@ function devPfMap(hits){if(typeof map==="undefined"||!map||!map.getSource)return
 function devPfFit(hits){if(typeof map==="undefined"||!map||!map.fitBounds||!hits.length)return;var x0=180,x1=-180,y0=90,y1=-90;hits.forEach(function(h){x0=Math.min(x0,h.it.lon);x1=Math.max(x1,h.it.lon);y0=Math.min(y0,h.it.lat);y1=Math.max(y1,h.it.lat)});try{map.fitBounds([[x0,y0],[x1,y1]],{padding:60,maxZoom:15,duration:900})}catch(x){}if(innerWidth<=760&&typeof setSheet==="function")setSheet(false)}
 var BEDW={studio:"studio","1":"1 bed","2":"2 bed","3+":"3+ bed"};
 function devPfFill(k){if(typeof document==="undefined"||typeof $!=="function")return;var el=$('devpf');if(!el||el.getAttribute('data-k')!==k)return;
+  if(!el.innerHTML)el.innerHTML='<div class=card><p class=label>Available on Property Finder</p><p class=note style="margin:0">Loading the listings&hellip;</p></div>';   // v526
   var ix=ixOf('all'),pp=DM.devProfile(ix,k),areas=(pp.priced||[]).concat(pp.thin||[]),want=[];
   areas.forEach(function(a){for(var t=0;t<4;t++)DM.drillProjects(ix,k,t,a.slug).forEach(function(g){g.projects.forEach(function(q){want.push({slug:a.slug,area:a.name,name:q.name,key:pdBldKey({slug:a.slug},q.ev||{})})})})});
   cbIdx().then(function(j){if(!el.isConnected||el.getAttribute('data-k')!==k)return;
     if(!j||!j.items){el.innerHTML='';return}
     var by={},byN={};j.items.forEach(function(it){if(it.k)by[it.k]=it;if(it.d&&it.n)byN[it.d+'|'+pdNk(it.n)]=it});
-    var hits=[],seen={};want.forEach(function(w){var it=(w.key&&by[w.key])||byN[w.slug+'|'+pdNk(w.name)];if(!it||!it.f||seen[it.k])return;seen[it.k]=1;hits.push({w:w,it:it})});
+    var hits=[],seen={};want.forEach(function(w){var base=String(w.name||'').replace(/\s*-\s*\d+$/,'').replace(/,.*$/,''),it=(w.key&&by[w.key]&&by[w.key].f?by[w.key]:null)||byN[w.slug+'|'+pdNk(w.name)]||byN[w.slug+'|'+pdNk(base)];if(!it||!it.f||seen[it.k])return;seen[it.k]=1;hits.push({w:w,it:it})});
     if(S.prof!==k)return;
     if(!hits.length){el.innerHTML='<div class=card><p class=label>Available on Property Finder</p><p class=note style="margin:0">No Property Finder rental listings for its buildings today.</p></div>';devPfMap([]);return}
     var flats=hits.reduce(function(s,h){return s+h.it.f},0),grp={},order=[];hits.sort(function(a,b){return b.it.f-a.it.f}).forEach(function(h){if(!grp[h.w.area]){grp[h.w.area]=[];order.push(h.w.area)}grp[h.w.area].push(h)});
@@ -492,7 +493,7 @@ function pfGet(k){if(!PFC[k])PFC[k]=fetch('/adv_bldg?k='+encodeURIComponent(k)+'
 function pfInit(){if(pfInit.d||typeof document==="undefined"||!document.addEventListener)return;pfInit.d=1;
   document.addEventListener('click',function(ev){var b=ev.target&&ev.target.closest?ev.target.closest('.pfbtn'):null;if(!b)return;ev.preventDefault();ev.stopPropagation();pfOpen(b.getAttribute('data-pfk'),b.getAttribute('data-pfn'))},true)}
 function pfFill(){if(typeof document==="undefined"||!document.querySelectorAll)return;pfInit();var bs=document.querySelectorAll('.pfbtn[data-pfk]');for(var i=0;i<bs.length;i++){(function(b){if(b.getAttribute('data-done'))return;PFN[b.getAttribute('data-pfk')]=b.getAttribute('data-pfn')||'';b.setAttribute('data-done','1');pfGet(b.getAttribute('data-pfk')).then(function(j){var n=b.querySelector('.pfc');if(!n)return;
-  if(!j||!j.covered){n.textContent='not covered yet';b.classList.add('pfnone')}else if(!j.flats&&!j.adverts){n.textContent='none listed';b.classList.add('pfnone')}else n.textContent=(j.flats?fmt(j.flats)+' flat'+(j.flats===1?'':'s'):fmt(j.adverts)+' listings')})})(bs[i])}}
+  if(!j||!j.covered||(!j.flats&&!j.adverts)){b.remove()}else n.textContent=(j.flats?fmt(j.flats)+' flat'+(j.flats===1?'':'s'):fmt(j.adverts)+' listings')})})(bs[i])}}
 function pfClose(){var m=$('pfpop');if(m)m.style.display='none'}
 function pfOpen(k,name){var m=$('pfpop');
   if(!m){m=document.createElement('div');m.id='pfpop';m.innerHTML='<div class=pfw role=dialog aria-modal=true aria-label="Available on Property Finder"><button type=button class=pfx aria-label="Close">&times;</button><div id=pfb></div></div>';document.body.appendChild(m);

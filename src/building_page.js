@@ -307,7 +307,7 @@ export function buildingPageHtml(D, key, rk) {
     // whichever building is open, its name and its developer sit across the top (Kendall, 20 Sep)
     '<div id=title><b>' + esc(D.name) + "</b><span>" + esc([D.developer || (D.registeredAs ? "registered as " + D.registeredAs : ""), D.district]
       .filter(Boolean).join(" · ")) + "</span></div>" +
-    '<a class=bk href="' + back + '">← the twin</a>' +
+    '<a class=bk href="' + back + '">← the district</a>' +   // v526 - never "the twin" in what a reader sees
     '<div id=about class=glass>About the building</div>' +
     '<div id=tab>⌃</div>' +
     '<div id=reopen>AVAILABLE NOW</div>' +   // v518
@@ -548,6 +548,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
   };
   const colourOf = (f, j) => {
     if (j === state.sel) return [0xF4D58D, 1, 0.85];
+    if (D.plain) return [0xD9DDD8, 1, 0.12];   // v526 - plain: one neutral colour, but still bands, so every floor stays tappable
     const m = match(f, j);
     if (m) return [parseInt(String(COL[m.c] || COL.other).slice(1), 16), 1, 0.3];
     return isHome(f) ? [0x4a524e, 1, 0.02] : [0x2f3a38, 1, 0];
@@ -613,7 +614,7 @@ function view(THREE, GLTFLoader, OrbitControls, RoomEnvironment, MeshoptDecoder,
   function paint() {
     if (!MESH.length) return;
     clearBands();
-    if (!D.fits || D.plain) {     // v518 D.plain: no bedroom bands without their legend. Else: the model is far shorter than the register's building: the footprint is a podium, or its height is one
+    if (!D.fits) {     // v526: D.plain now paints neutral bands (colourOf) instead of none - the bands are the tap targets. The model is far shorter than the register's building: the footprint is a podium, or its height is one
       for (const m of MESH) { if (m.userData.bpMask != null) { m.layers.mask = m.userData.bpMask; m.userData.bpMask = null; } }
       count();
       return;

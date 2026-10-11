@@ -255,7 +255,7 @@ async function loadDistrict(env, slug, names) {
   if (!doc) return null;
   const bs = supplyBuildings(doc.rows, slug, names);
   const frame = attachAdverts(bs, doc.adverts || {});
-  for (const b of bs) { b.types = [...new Set([].concat(...b.slugs.map((s) => Object.keys((doc.typesBy || {})[s] || {}).filter((t) => num(doc.typesBy[s][t]) > 0))))]; }   // v523 - which home types this building's adverts are
+  for (const b of bs) { b.tc = {}; for (const s of b.slugs) for (const t of Object.keys((doc.typesBy || {})[s] || {})) { const n = num(doc.typesBy[s][t]); if (n > 0) b.tc[t] = (b.tc[t] || 0) + n; } b.types = Object.keys(b.tc); }   // v526 - per type, with counts   // v523 - which home types this building's adverts are
   for (const b of bs) { b.frame = frame; b.advertised = advertisedFor(doc.advertised, b.slugs, Object.fromEntries(b.bandRows.map((r) => [r.band, { live: r.live, days: r.days }]))); }
   const crawled = bs.reduce((m, b) => (b.crawled > m ? b.crawled : m), "") || doc.asOf;
   return { slug, asOf: doc.asOf, crawled, buildings: bs, coverage: doc.coverage, homeTypes: doc.homeTypes, sourceSay: doc.sourceSay, sites: doc.sites, srcs: doc.srcs };
@@ -302,7 +302,7 @@ const SU_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans
   + '.kt{font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.11em;color:#8FA39B}.nm{font-family:Fraunces,Georgia,serif;font-size:1.2rem;font-weight:600;color:#F0E4C8;line-height:1.2;margin:3px 0 2px}'
   + '.sb{color:#8FA39B;font-size:.76rem;line-height:1.45}.tg{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.54rem;letter-spacing:.05em;color:#E0A080;border:1px solid #6A4A3A;border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:2px}'
   + '.hl{font-size:.95rem;margin:9px 0 4px}.hl b{font-family:Fraunces,Georgia,serif;font-size:1.6rem;color:#C5A56A;font-weight:600}'
-  + '.st{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.htp{font:inherit;background:transparent;cursor:pointer}.htp.on{border-color:#C5A56A!important;background:rgba(197,165,106,.16)!important;color:#E9E3D6!important}.card.htx{display:none}.st a,.st span,.st .htp{display:inline-flex;align-items:center;gap:5px;min-height:30px;border:1px solid #2E4540;border-radius:999px;padding:3px 10px;font-size:.74rem;color:#C8D3CE;text-decoration:none}.st b{color:#C5A56A}'
+  + '.st{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.htp{font:inherit;background:transparent;cursor:pointer}.htn{margin:2px 0 6px;font-size:.86rem;color:#E9E3D6}.htn b{color:#C5A56A;font-size:1.05rem}.htp.on{border-color:#C5A56A!important;background:rgba(197,165,106,.16)!important;color:#E9E3D6!important}.card.htx{display:none}.st a,.st span,.st .htp{display:inline-flex;align-items:center;gap:5px;min-height:30px;border:1px solid #2E4540;border-radius:999px;padding:3px 10px;font-size:.74rem;color:#C8D3CE;text-decoration:none}.st b{color:#C5A56A}'
   + 'table{width:100%;border-collapse:collapse;margin:10px 0 0;font-size:.78rem}th{text-align:right;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.06em;color:#6F837D;font-weight:500;padding:0 0 5px 4px}th:first-child,td:first-child{text-align:left;padding-left:0}'
   + 'td{text-align:right;padding:7px 0 7px 5px;border-top:1px solid #1B2E2A;color:#C8D3CE}td b{color:#F0E4C8}'
   + '.dk{font-size:.72rem;color:#8FA39B;line-height:1.45;margin:6px 0 0}'
@@ -390,10 +390,10 @@ export function streetMap(lat, lon, name, fp, line) {
 }
 function buildingCard(b, key, more) {
   const siteN = b.siteCount || Object.keys(b.urls).length;
-  return '<div class="card' + (more ? " htx htmore" : "") + '" data-b="' + esc(b.id) + '" data-types="' + esc((b.types || []).join("|")) + '"><div class=kt>' + (b.matched ? "BUILDING" : "LISTING SITE NAME") + '</div><div class=nm>' + esc(b.name)
+  return '<div class="card' + (more ? " htx htmore" : "") + '" data-b="' + esc(b.id) + '" data-types="' + esc((b.types || []).join("|")) + '" data-tc="' + esc(Object.keys(b.tc || {}).map((t) => t + ":" + b.tc[t]).join("|")) + '"><div class=kt>' + (b.matched ? "BUILDING" : "LISTING SITE NAME") + '</div><div class=nm>' + esc(b.name)
     + (b.matched ? "" : '<span class=tg>not matched to the register</span>') + "</div>"
     + '<div class=sb>' + esc([b.matched && b.project && b.project !== b.name ? b.project : "", b.district].filter(Boolean).join(" \u00b7 ")) + "</div>"
-    + '<div class=hl><b>' + fmt(b.live) + "</b> " + (b.live === 1 ? "advert" : "adverts") + (siteN ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + "</div>"
+    + '<div class=hl><b>' + fmt(b.live) + "</b> " + (b.live === 1 ? "advert" : "adverts") + (siteN ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + "</div><div class=htn hidden></div>"
     + sitesHtml(b)
     + advertisedHtml(b.advertised)
     + (b.bandRows.length ? '<table><tr><th>HOME</th><th>LIVE ADVERTS</th><th>MEDIAN ASKING RENT</th><th>MEDIAN DAYS LISTED</th><th>DELISTED SINCE LAST CRAWL</th></tr>'
@@ -413,7 +413,8 @@ export function supplyPageHtml(o) {
       + homeTypesHtml(D.homeTypes) + coverageHtml(D.coverage)
       + '<div class=dk>Fetched ' + esc(dubaiTime(D.crawled) || "\u2014") + " (Dubai time).</div>"
       + '<button type=button class=rf data-district="' + esc(D.slug) + '" data-slug="">Refresh the district</button><div class=rs role=status></div></div>'
-      + '<div class=hd>BUILDINGS, MOST ADVERTISED FIRST</div>' + D.buildings.map((b, i) => buildingCard(b, key, i >= 30)).join("") + unboundHtml(D.unbound);   // v523 - all of them; past 30 hidden until a filter needs them
+      + '<div class=hd>BUILDINGS, MOST ADVERTISED FIRST</div>' + D.buildings.map((b, i) => buildingCard(b, key, i >= 30)).join("")
+      + (D.buildings.length > 30 ? '<button type=button class=rf id=suall>Show all ' + D.buildings.length + " buildings (the 30 most advertised are shown)</button>" : "") + unboundHtml(D.unbound);   // v526   // v523 - all of them; past 30 hidden until a filter needs them
   } else if (o.view === "building" && o.b) main = buildingCard(o.b, key);
   else if (o.matches) main = o.matches.length ? '<div class=hd>WHICH ONE?</div><div class=pick id=supick>' + o.matches.map((m) => '<a href="/supply?' + (m.kind === "district" ? "d=" + encodeURIComponent(m.id) : "b=" + encodeURIComponent(m.id) + "&d=" + encodeURIComponent(m.d)) + "&key=" + esc(encodeURIComponent(key)) + '">' + esc(m.name) + "<small>" + esc(m.sub) + "</small></a>").join("") + "</div>"
     : '<div class=nt id=sunone>No building or district by that name in the advert record.</div>';
@@ -594,9 +595,11 @@ var S=window.__SU||{},KQ="key="+encodeURIComponent(S.key||""),LS="najma_supply_p
 // v523 - the home-type pills filter the buildings (Kendall 11 Oct 2026). Several may be on; none on = the 30 most advertised, as before.
 (function(){if(typeof document==="undefined"||!document.querySelectorAll||!document.getElementById)return;var ps=document.querySelectorAll(".htp[data-ht]");if(!ps||!ps.length||!ps.forEach)return;var say=document.getElementById("suhsay");
   function apply(){var on=[];ps.forEach(function(p){if(p.classList.contains("on"))on.push(p.getAttribute("data-ht"))});var n=0,names=[];
-    document.querySelectorAll(".card[data-types]").forEach(function(c){var ts=(c.getAttribute("data-types")||"").split("|"),hit=!on.length?!c.classList.contains("htmore"):on.some(function(t){return ts.indexOf(t)>=0});c.classList.toggle("htx",!hit);if(hit&&on.length)n++});
+    document.querySelectorAll(".card[data-types]").forEach(function(c){var ts=(c.getAttribute("data-types")||"").split("|"),hit=!on.length?!c.classList.contains("htmore"):on.some(function(t){return ts.indexOf(t)>=0});c.classList.toggle("htx",!hit);if(hit&&on.length)n++;
+      var tn=c.querySelector?c.querySelector(".htn"):null;if(tn){if(on.length&&hit){var tc={},k2=0;(c.getAttribute("data-tc")||"").split("|").forEach(function(x){var i=x.lastIndexOf(":");if(i>0)tc[x.slice(0,i)]=+x.slice(i+1)});on.forEach(function(t){k2+=tc[t]||0});tn.hidden=false;tn.innerHTML="<b>"+k2+"</b> of its adverts "+(k2===1?"is ":"are ")+on.map(function(t){var p=document.querySelector('.htp[data-ht="'+t+'"]');return p?p.firstChild.textContent.trim():t}).join(" or ")}else{tn.hidden=true;tn.innerHTML=""}}});   // v526
     ps.forEach(function(p){if(p.classList.contains("on"))names.push(p.firstChild.textContent.trim())});
     if(say){if(on.length){say.hidden=false;say.innerHTML=n+(n===1?" building":" buildings")+" with "+names.join(" or ")+' &middot; <a href="#" id=suhall>show all</a>';var a=document.getElementById("suhall");if(a)a.onclick=function(e){e.preventDefault();ps.forEach(function(p){p.classList.remove("on");p.setAttribute("aria-pressed","false")});apply()}}else{say.hidden=true;say.innerHTML=""}}}
+  var sa=document.getElementById("suall");if(sa)sa.onclick=function(){document.querySelectorAll(".card.htmore").forEach(function(c){c.classList.remove("htmore");c.classList.remove("htx")});sa.remove()};   // v526 - every building
   ps.forEach(function(p){p.onclick=function(){var v=!p.classList.contains("on");p.classList.toggle("on",v);p.setAttribute("aria-pressed",v?"true":"false");apply()}})})();
 // v446 - building street maps: MapLibre is fetched once, the first time a map scrolls into view; each map is drawn once
 (function(){var maps=document.querySelectorAll(".smap[data-lat]");if(!maps.length||!("IntersectionObserver" in window))return;var lib=null;
