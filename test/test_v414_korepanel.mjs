@@ -129,7 +129,7 @@ console.log("C - register-verified projects are byte-identical to v412 (panel, c
     for (const [k, ev, pp, n] of [["Built Tower", EV.built, 22000, 7], ["Bare Tower", EV.bare, 20000, 6], [null, null, 18000, 4]]) {
       // v450: a registered project's Broker button now opens the ONE-BUILDING sheet (Kendall 9 Oct), so that one link is set aside; everything else stays byte-identical
       // (a registered project with a project number whose developer the old panel could not match - Bare Tower - gains the button: greyed before, a link now)
-      const nb = (h) => h.replace(/<(a|button)\b[^>]*class="pdfbtn pdsm[^>]*>(?:(?!<\/?(?:a|button)\b)[\s\S])*?Broker<\/(?:a|button)>/g, "BROKER");
+      const nb = (h) => h.replace(/<button type=button class=pfbtn [^>]*>[\s\S]*?<\/button>/g, "").replace(/<(a|button)\b[^>]*class="pdfbtn pdsm[^>]*>(?:(?!<\/?(?:a|button)\b)[\s\S])*?Broker<\/(?:a|button)>/g, "BROKER");   // v521: Property Finder button aside too
       const a = card(P, k, ev, pp, n), b = card(PO, k, ev, pp, n);
       ok(nb(a) === nb(b), "card byte-identical to v412 (Broker link aside): " + (k || "no name"));
       ok(nb(panelOf(P, a)) === nb(panelOf(PO, b)), "panel byte-identical to v412 (Broker link aside): " + (k || "no name"));

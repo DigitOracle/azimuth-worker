@@ -137,6 +137,15 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":
 export const DEVMAP_FOOTER = "Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397";
 
 const CSS = String.raw`
+/* v521 - Available on Property Finder: the prominent button on the project card and its pop-up */
+.pfbtn{display:flex;align-items:center;gap:8px;width:100%;margin:8px 0 6px;padding:10px 12px;border:1px solid var(--gold,#C5A56A);border-radius:12px;background:rgba(197,165,106,.14);color:inherit;font:inherit;font-weight:600;cursor:pointer;text-align:left}
+.pfbtn .pfc{margin-left:auto;color:var(--gold,#C5A56A);font-weight:700;white-space:nowrap}.pfbtn.pfnone{border-color:rgba(197,165,106,.35);background:transparent}.pfbtn.pfnone .pfc{color:#8FA39B;font-weight:500}
+#pfpop{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;background:rgba(6,10,9,.6);padding:16px}
+#pfpop .pfw{position:relative;width:min(460px,100%);max-height:86vh;overflow:auto;background:#0F1A18;color:#E9E3D6;border:1px solid rgba(197,165,106,.55);border-radius:16px;padding:16px 16px 12px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+#pfpop .pfx{position:absolute;right:10px;top:6px;background:none;border:0;color:#8FA39B;font-size:1.5rem;cursor:pointer}
+#pfpop .pft{font-family:Fraunces,Georgia,serif;font-size:1.2rem;font-weight:600;color:#C5A56A;padding-right:26px}#pfpop .pfs{font-size:.78rem;color:#B9B2A3;margin:2px 0 8px}
+#pfpop .pfn2{font-size:.74rem;color:#8FA39B;line-height:1.45;margin:8px 2px 0}
+
 :root{--ground:#0e1413;--panel:#151d1c;--raise:#1b2524;--ink:#e8eeec;--muted:#9aa9a5;--line:#26312f;--teal:#2f8a7f;--gold:#c5a56a}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--ground);color:var(--ink);font:14px/1.45 "IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif}
@@ -428,6 +437,7 @@ function pjDetailHtml(dk,located){var d=PDET[dk];if(!d)return "";var e=d.ev||{},
   if(e.an&&typeof ANNOUNCED!=="undefined"){var ah=ANNOUNCED.detail(d,{pdRow:pdRow,pdSec:pdSec,esc:esc,icoSvg:icoSvg});return ah.slice(-6)==="</div>"?ah.slice(0,-6)+docRow(d,"panel")+'</div>':ah}   // v397d - an announced project: the developer-says panel, never a project number
   var dsh=!d.ppsm&&typeof DEVSAYS!=="undefined"?DEVSAYS.head(d):null;   // v414 - the developer's launch price (developer says), and that it is not a sale, instead of 'No price per area recorded'
   h+='<div class=pdhead><span class=pdk>'+(d.ppsm?'AED '+fmt(pu(d.ppsm))+' '+pul():dsh?esc(dsh.l1):'No price per area recorded')+(pdBandTier(d.ppsm)>=0?' &middot; '+esc(DM.TIER_NAMES[pdBandTier(d.ppsm)]):'')+(d.n!=null?' &middot; '+fmt(d.n)+' sale'+(d.n===1?'':'s'):'')+'</span>'+(dsh&&dsh.l2?'<span class="note pdwy pdns">'+esc(dsh.l2)+'</span>':'')+(why?'<span class="note pdwy">'+icoSvg("map-pin","evi")+esc(why.split(". ")[0].replace(/[.]+$/,"")+".")+'</span>':'')+'</div>';
+  var pfk=pdBldKey(d,e);if(pfk)h+='<button type=button class=pfbtn data-pfk="'+esc(pfk)+'" data-pfn="'+esc(d.name||d.nameDef||'')+'">'+icoSvg("buildings","evi")+'<span>Available on Property Finder</span><b class=pfc>&hellip;</b></button>';setTimeout(pfFill,0);   // v521 - first, above the drop-downs
   var f=pdRow("buildings","Project",esc(d.name||d.nameDef),d.name&&reg?REGSRC:"Dubai Land Department settled sales register, project name as sold",d.name?(reg?"REGISTER_VERIFIED":"DATA"):"NOT_AVAILABLE");
   if(e.p!=null&&e.p!==""&&!e.off)f+=pdRow("stack","Register project number",esc(String(e.p)),REGSRC,tg);
   var st=[];if(e.st)st.push(pdWords(e.st));if(e.pc!=null&&e.pc!=="")st.push(esc(String(e.pc))+"% complete");if(e.pe)st.push("planned end "+esc(String(e.pe)));
@@ -446,6 +456,23 @@ function pjDetailHtml(dk,located){var d=PDET[dk];if(!d)return "";var e=d.ev||{},
   if(!located){a+=pdRow("map-pin","Map position",esc(pdWhy(d)),"Dubai Land Department project and land registers, and our building outlines","DERIVED");a+=pjPlotHook(d)+pjDevHook(d)+pjCommHook(d)}
   h+=pdSec("map-pin","Area and position",a||pdRow("map-pin","Area","Not recorded","Dubai Land Department sales area of the project","NOT_AVAILABLE"));
   return h+docRow(d,"panel")+'</div>'}
+
+// v521 AVAILABLE ON PROPERTY FINDER (Kendall 11 Oct 2026): the building's listings, as a pop-up, from the project card. Listings, never vacancy.
+var PFC={};
+function pfGet(k){if(!PFC[k])PFC[k]=fetch('/adv_bldg?k='+encodeURIComponent(k)+'&key='+encodeURIComponent(KEY)).then(function(r){return r.ok?r.json():null}).catch(function(){return null});return PFC[k]}
+function pfInit(){if(pfInit.d||typeof document==="undefined"||!document.addEventListener)return;pfInit.d=1;
+  document.addEventListener('click',function(ev){var b=ev.target&&ev.target.closest?ev.target.closest('.pfbtn'):null;if(!b)return;ev.preventDefault();ev.stopPropagation();pfOpen(b.getAttribute('data-pfk'),b.getAttribute('data-pfn'))},true)}
+function pfFill(){if(typeof document==="undefined"||!document.querySelectorAll)return;pfInit();var bs=document.querySelectorAll('.pfbtn[data-pfk]');for(var i=0;i<bs.length;i++){(function(b){if(b.getAttribute('data-done'))return;b.setAttribute('data-done','1');pfGet(b.getAttribute('data-pfk')).then(function(j){var n=b.querySelector('.pfc');if(!n)return;
+  if(!j||!j.covered){n.textContent='not covered yet';b.classList.add('pfnone')}else if(!j.flats&&!j.adverts){n.textContent='none listed';b.classList.add('pfnone')}else n.textContent=(j.flats?fmt(j.flats)+' flat'+(j.flats===1?'':'s'):fmt(j.adverts)+' listings')})})(bs[i])}}
+function pfClose(){var m=$('pfpop');if(m)m.style.display='none'}
+function pfOpen(k,name){var m=$('pfpop');
+  if(!m){m=document.createElement('div');m.id='pfpop';m.innerHTML='<div class=pfw role=dialog aria-modal=true aria-label="Available on Property Finder"><button type=button class=pfx aria-label="Close">&times;</button><div id=pfb></div></div>';document.body.appendChild(m);
+    m.addEventListener('click',function(e){if(e.target===m||(e.target.className&&String(e.target.className).indexOf('pfx')>=0))pfClose()});document.addEventListener('keydown',function(e){if(e.key==='Escape')pfClose()})}
+  var b=$('pfb');b.innerHTML='<div class=pft>Available on Property Finder</div><div class=pfs>'+esc(name||'')+'</div><p class=pfn2>Loading the listings&hellip;</p>';m.style.display='flex';
+  pfGet(k).then(function(j){var head='<div class=pft>Available on Property Finder</div><div class=pfs>'+esc(name||'')+(j&&j.as_of?' &middot; listings on '+esc(j.as_of):'')+'</div>';
+    if(!j){b.innerHTML=head+'<p class=pfn2>The listings could not be loaded just now.</p>';return}
+    if(!j.covered){b.innerHTML=head+'<p class=pfn2>Property Finder listings are not read for this area yet.</p>';return}
+    b.innerHTML=head+(j.html||'<p class=pfn2>No Property Finder listings for this building today.</p>')+'<p class=pfn2>Property Finder rental listings, matched to the Land Department&rsquo;s buildings. A listing is not an empty flat: one flat can carry several brokers&rsquo; adverts. Rent only; sale listings are not read yet.</p>'})}
 function pdClose(){var el=$("pjdet"),f=PDFROM;PDOPEN=null;PDFROM=null;if(el)el.style.display="none";if(f&&f.focus){try{f.focus()}catch(x){}}}
 function pdOpen(dk,from){var d=PDET[dk];if(!d)return false;var el=$("pjdet");
   if(!el){el=document.createElement("div");el.id="pjdet";el.setAttribute("role","dialog");el.setAttribute("aria-label","Project details");document.body.appendChild(el)}

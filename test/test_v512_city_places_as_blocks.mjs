@@ -11,7 +11,7 @@ ok(/const j=nearestInst\(q\[0\],q\[1\],AMDIST,90\);p\.blk=j>=0;/.test(src), "eac
 ok(/if\(di\[i\]!==AMDIST\|\|\(\(ks\.length\|\|ADV\.on\)&&!AMKEEP\.has\(i\)&&!ADVKEEP\.has\(i\)\)\)hide\(i\)/.test(src), "v516: the chosen district stands alone (other districts hidden), and within it only the chosen kinds' blocks stay");
 ok(/if\(AMDIST>=0\)\{if\(ks\.length\)\{/.test(src) && /else for\(const p of AMPTS\)p\.blk=false;/.test(src), "no district = nothing hidden; a district with no kinds shows the whole district (v516)");
 ok(/const _paint0=paintCity;paintCity=function\(\)\{_paint0\(\);amPaint\(\)\}/.test(src), "kept blocks wear the kind's colour whatever COLOUR BY says");
-ok(/for\(const p of AMPTS\)\{if\(p\.blk\)\{p\.sx=-1;continue\}/.test(src), "a place shown as a block draws no badge");
+ok(/for\(const p of AMPTS\)\{const q=p\.v\.clone\(\)\.project\(cam\);/.test(src), "v521: a place shown as a block keeps its badge too (chosen places must be findable)");
 ok(/\+" as blocks"/.test(src), "the header says how many are shown as blocks");
 console.log(`v512 city places as blocks: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

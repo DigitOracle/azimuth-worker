@@ -14,7 +14,7 @@ import { templateRoutes, feedTemplateFlag, templateWatchTick, daTemplateSubmitTi
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { buildingData, buildingPageHtml } from "./building_page.js";
-import { cityBldgRoute } from "./city_bldg.js";   // v519 - the all-Dubai twin's building index (names + Property Finder adverts)
+import { cityBldgRoute, advBldgRoute } from "./city_bldg.js";   // v519 - the all-Dubai twin's building index (names + Property Finder adverts)
 import { advertisedDoc, advertisedForKey, advertisedHtml } from "./advertised.js";   // v518 - Property Finder adverts on the building page   // v187 - the building page: the Symphony viewer for every register-bound building
 import { findRecord as cashFindRecord, cashCardHtml } from "./cash_card.js";   // v375 - cash needed up to handover (an off-plan project with a stated plan and a developer list price)
 import { pillarsCard, buildingPillars, developerPillarsCard, normName as pillarName, PILLAR_CSS } from "./pillars.js";   // v238 - the four pillars, built in the Worker for the building page and /dev
@@ -4805,6 +4805,7 @@ export default {
     // v507 (Kendall 11 Oct: "we have access to the image API ... if we don't have a picture we should be able to create one") - ONE picture on
     // demand for a document builder: owner key only, the desk's own generator (same model, same monthly cap, no reference photos),
     // JPEG back. The prompt and size are the caller's; the caller labels the result an illustration.
+    if (url.pathname === "/adv_bldg") return advBldgRoute(env, url, { tier: keyTier, method: request.method });   // v521 - one building's Property Finder card
     if (url.pathname === "/city_bldg") return cityBldgRoute(env, url, { clientOk, tier: keyTier, method: request.method });   // v519
     if (url.pathname === "/gen_image") {
       if (keyTier(env, url) !== "admin") return new Response("unauthorized", { status: 401 });
@@ -8847,7 +8848,7 @@ function amRecalc(){window.__cityFocus=AMDIST;const AM=window.__AM;const ks=Obje
   const where=dslug?" in "+D.districts[AMDIST].name:" across Dubai";AMRES.textContent=ks.length?ks.map(k=>AMEN[k][0]).join(", ")+" \u00b7 "+AMPTS.length.toLocaleString("en")+where:"none";
   AMSC.textContent="all Dubai";AMSC.hidden=!dslug;if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC);amBlocks(ks)}
 const AMMAT0=mesh.instanceMatrix.array.slice(0);let AMHID=[],AMKEEP=new Map();
-const GHOST=new THREE.InstancedMesh(mesh.geometry,new THREE.MeshStandardMaterial({color:0xC9D4CD,transparent:true,opacity:.5,depthWrite:false,roughness:.85}),n);GHOST.count=0;GHOST.frustumCulled=false;scene.add(GHOST);   // v520 - ghosts, not gaps
+const GHOST=new THREE.InstancedMesh(mesh.geometry,new THREE.MeshStandardMaterial({color:0x56635E,transparent:true,opacity:.35,depthWrite:false,roughness:.9}),n);GHOST.count=0;GHOST.frustumCulled=false;scene.add(GHOST);   // v520 - ghosts, not gaps
 let AMFRAME=false;   // v520 - set by a choice the reader makes (a kind, the advertised filter, a bedroom); the next recompute frames what is chosen
 function amBlocks(ks){const M=mesh.instanceMatrix.array;for(const i of AMHID){for(let k=0;k<16;k++)M[16*i+k]=AMMAT0[16*i+k]}AMHID=[];AMKEEP=new Map();
   ADVKEEP=new Map();if(ADV.on&&CB)for(const it of CB.items){if(it.inst==null||it.inst<0)continue;if(AMDIST>=0&&di[it.inst]!==AMDIST)continue;const v=advFlats(it);if(v>0)ADVKEEP.set(it.inst,v)}   // v519
@@ -8865,13 +8866,13 @@ function amFrame(){let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9,c=0;const add=(x,z)=>{x0=Ma
   if(!c)return;const ext=Math.max(x1-x0,z1-z0);flyPoint((x0+x1)/2,(z0+z1)/2,Math.max(1400,ext*0.9+500))}   // v520 - never inside the 1.7 km handover
 function amPaint(){if(!AMKEEP.size&&!ADVKEEP.size&&HILITE<0)return;const arr=mesh.instanceColor.array,c=new THREE.Color();
   c.set(0xC5A56A);ADVKEEP.forEach((v,i)=>{arr[3*i]=c.r;arr[3*i+1]=c.g;arr[3*i+2]=c.b});   // v519 - advertised now: gold
-  AMKEEP.forEach((k,i)=>{c.set(AMEN[k][2]);arr[3*i]=c.r;arr[3*i+1]=c.g;arr[3*i+2]=c.b});
+  const w=new THREE.Color(0xFFFFFF);AMKEEP.forEach((k,i)=>{c.set(AMEN[k][2]).lerp(w,.2);arr[3*i]=c.r;arr[3*i+1]=c.g;arr[3*i+2]=c.b});   // v521 - lifted, to stand out against the ghosts
   if(HILITE>=0){c.set(0xF6E3A8);arr[3*HILITE]=c.r;arr[3*HILITE+1]=c.g;arr[3*HILITE+2]=c.b}mesh.instanceColor.needsUpdate=true}
 const _paint0=paintCity;paintCity=function(){_paint0();amPaint()};   // v512 - the kept blocks wear the kind's colour whatever COLOUR BY says
 const _flyTo0=flyTo;flyTo=function(ix,go){if(ix!==AMDIST)HILITE=-1;AMDIST=ix;_flyTo0(ix,go);amRecalc()};   // v511 - a chosen district scopes the places (Kendall: "if I say Business Bay, I should only get the petrol stations within Business Bay")
 const AMIMG={};function amImg(k){if(AMIMG[k])return AMIMG[k];const col=AMEN[k][2];const svg=ICON[k].replace("<svg ","<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' fill='none' stroke='"+col+"' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round' ");const im=new Image();im.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);AMIMG[k]=im;return im}
 function amDraw(){actx.clearRect(0,0,amc.width,amc.height);if(!AMPTS.length)return;const W=innerWidth,H=innerHeight,r=devicePixelRatio||1;const far=cam.position.distanceTo(ctl.target);const sz=far>22000?2:far>9000?2.8:4;
-  for(const p of AMPTS){if(p.blk){p.sx=-1;continue}const q=p.v.clone().project(cam);if(q.z>1||q.x<-1.02||q.x>1.02||q.y<-1.02||q.y>1.02){p.sx=-1;continue}p.sx=(q.x+1)/2*W;p.sy=(1-q.y)/2*H;const col=AMEN[p.i.k][2];
+  for(const p of AMPTS){const q=p.v.clone().project(cam);   // v521 - a place shown as a block keeps its badge too, so it can be found from any distanceif(q.z>1||q.x<-1.02||q.x>1.02||q.y<-1.02||q.y>1.02){p.sx=-1;continue}p.sx=(q.x+1)/2*W;p.sy=(1-q.y)/2*H;const col=AMEN[p.i.k][2];
     const R=sz*2.4*r,cx=p.sx*r,cy=p.sy*r;actx.beginPath();actx.arc(cx,cy,R,0,6.2832);actx.fillStyle="rgba(19,31,29,.92)";actx.fill();actx.lineWidth=1.2*r;actx.strokeStyle=col;actx.setLineDash(p.i.ap?[3*r,2.5*r]:[]);actx.stroke();actx.setLineDash([]);
     const im=amImg(p.i.k);if(im.complete&&im.naturalWidth){const s=R*1.25;actx.drawImage(im,cx-s/2,cy-s/2,s,s)}}}
 (function amLoop(){requestAnimationFrame(amLoop);amDraw()})();
@@ -12742,7 +12743,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/city_bldg", "/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf", "/doc_client", "/doc_broker"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
+const CLIENT_PATHS = ["/adv_bldg", "/city_bldg", "/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf", "/doc_client", "/doc_broker"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/", "/render/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own

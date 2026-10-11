@@ -155,7 +155,13 @@ ok(sc.length === 1 && parses(sc[0]), "the page script parses (node --check)");
 ok(sc[0].includes("var DM=(function(){") && sc[0].indexOf("var DM=") < sc[0].indexOf("function sideHtml"), "the page runs the SAME core text the tests ran");
 ok(html.includes(DEVMAP_FOOTER) || sc[0].includes("Curated by Najjuko \\u00b7 Dubai Decoded") || sc[0].includes("Curated by Najjuko · Dubai Decoded"), "footer: Curated by Najjuko · Dubai Decoded + WhatsApp +971 56 548 4397", DEVMAP_FOOTER);
 ok(/\+971 56 548 4397/.test(sc[0]) && !/58 |\+971 ?58/.test(DEVMAP_FOOTER), "the WhatsApp number is the canonical 56 line");
-ok(!/bayut|propertyfinder|property finder|dubizzle|zoopla/i.test(html), "no listing portal is named anywhere on the page");
+// v521 (Kendall 11 Oct 2026): "Available on Property Finder" on the project card, by name. Allowed ONLY inside that block; every other mention still fails.
+const _pfA = html.indexOf("// v521 AVAILABLE ON PROPERTY FINDER"), _pfB = html.indexOf("function pdClose(){"), _pfC = html.indexOf("/* v521 - Available on Property Finder");
+let _rest = _pfA >= 0 && _pfB > _pfA ? html.slice(0, _pfA) + html.slice(_pfB) : html;
+if (_pfC >= 0) { const _c2 = _rest.indexOf("/* v521 - Available on Property Finder"); const _c3 = _rest.indexOf("#pfpop .pfn2{", _c2); _rest = _rest.slice(0, _c2) + _rest.slice(_rest.indexOf("}", _c3) + 1); }
+_rest = _rest.replace(/<span>Available on Property Finder<\/span>/g, "");
+ok(!/bayut|propertyfinder|property finder|dubizzle|zoopla/i.test(_rest), "no listing portal is named on the page outside the v521 Property Finder item");
+ok(!/bayut|dubizzle|zoopla/i.test(html), "and no other portal is named anywhere");
 ok(!/\b(claude|chatgpt|gpt-?\d|openai|gemini|anthropic)\b/i.test(html), "no LLM is named on the page");
 ok(/Dubai Land Department sales register, /.test(sc[0]), "the sources line names the Dubai Land Department sales register with its as-of date");
 ok(/Top band/.test(sc[0]) && /Entry band/.test(sc[0]) && !/STANDARD|ULTRA-LUXURY/.test(sc[0]), "the page uses Top / Upper / Middle / Entry band");

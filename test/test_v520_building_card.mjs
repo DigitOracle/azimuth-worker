@@ -35,7 +35,7 @@ ok(/#bcard\{position:fixed;inset:0;z-index:60;/.test(src), "the pop-up sits over
 
 ok(!/\\'/.test(card), "no backslash-apostrophe inside the template literal either (it reached the browser as a bare quote and broke the page)");
 // framing and ghosts (Kendall 11 Oct: Meydan One supermarkets out of view; "it shouldn't disappear ... forty or fifty percent transparent")
-ok(/const GHOST=new THREE\.InstancedMesh\(mesh\.geometry,new THREE\.MeshStandardMaterial\(\{color:0xC9D4CD,transparent:true,opacity:\.5,depthWrite:false/.test(src), "a see-through copy holds the district's other buildings");
+ok(/const GHOST=new THREE\.InstancedMesh\(mesh\.geometry,new THREE\.MeshStandardMaterial\(\{color:0x56635E,transparent:true,opacity:\.35,depthWrite:false/.test(src), "a see-through copy holds the district's other buildings");
 ok(/if\(AMDIST>=0&&\(ks\.length\|\|ADV\.on\)\)for\(const i of AMHID\)\{if\(di\[i\]!==AMDIST\)continue;/.test(src), "only the chosen district's buildings are ghosted; other districts stay gone");
 ok(/function amFrame\(\)\{/.test(src) && /flyPoint\(\(x0\+x1\)\/2,\(z0\+z1\)\/2,Math\.max\(1400,ext\*0\.9\+500\)\)/.test(src), "what is chosen is framed, never inside the handover distance");
 ok(/AMFRAME=!!AMON\[k\];amRecalc\(\)/.test(src) && /cbLoad\(\)\.then\(\(\)=>\{AMFRAME=true;amRecalc\(\)\}\)/.test(src) && /if\(AMFRAME\)\{AMFRAME=false;amFrame\(\)\}/.test(src), "turning on a kind or the advertised filter moves the view; other recomputes leave the camera alone");

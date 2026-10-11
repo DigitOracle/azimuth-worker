@@ -115,7 +115,7 @@ console.log("B2 - no other project's card or panel changes (byte-identical to th
     const { DEVSAYS_JS: oldDJS } = await import("../src/_v416_old_dev_claims.mjs");
     const PO = mkHarness(oldHtml, oldDJS);
     // v449/v450 changed the Broker button (snapshot -> one-building /doc_broker anchor, plus the disabled pdoff variant); strip it before comparing
-    const noBroker = (h) => String(h).replace(/<(a|button)[^>]*class="pdfbtn pdsm( pdoff)?"[^>]*>(?:(?!<\/\1>)[\s\S])*?Broker<\/\1>/g, "");
+    const noBroker = (h) => String(h).replace(/<button type=button class=pfbtn [^>]*>[\s\S]*?<\/button>/g, "").replace(/<(a|button)[^>]*class="pdfbtn pdsm( pdoff)?"[^>]*>(?:(?!<\/\1>)[\s\S])*?Broker<\/\1>/g, "");   // v521: Property Finder button aside too
     for (const [k, ev, pp, n, lab] of [["Built Tower", EV.built, 22000, 7, "register-verified"], ["Bare Tower", EV.bare, 20000, 6, "register-verified, not started"], ["Some Tower", EV.nothing, null, null, "register-verified, nothing known"], ["Active Tower", EV.stated, null, null, "register-verified, status"],
       ["Other Launch", EV.other, null, null, "developer-says, another developer"], ["Announced Tower", EV.ann, null, null, "announced"], [null, null, 18000, 4, "no name"]]) {
       const a = card(P, k, ev, pp, n), b = card(PO, k, ev, pp, n);

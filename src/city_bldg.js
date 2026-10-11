@@ -7,7 +7,7 @@
 // Built at most every six hours (KV city_bldg_idx) because it reads 33 advert files and their footprint layers; a phone downloads
 // one file of a few hundred KB instead of 33 MB.
 import { kvJson } from "./brief.js";
-import { advertisedDoc } from "./advertised.js";
+import { advertisedDoc, advertisedForKey, advertisedHtml, ADV_CSS } from "./advertised.js";
 import { footprintRing } from "./broker_building.js";
 
 export const CITY_BLDG_KEY = "city_bldg_idx";
@@ -106,6 +106,20 @@ export async function buildCityIndex(env, districts) {
   const stacks = {};
   for (const d of ds) { const st = await read(env, "stack_" + d); if (st) stacks[d] = { buildings_by_id: st.buildings_by_id || {} }; stackFacts(items.filter((x) => x.d === d), stacks); delete stacks[d]; }   // one district at a time: a stack is ~1 MB
   return { v: 1, built: new Date().toISOString(), as_of: asOf, advertised: items.filter((x) => x.f).length, items };
+}
+
+// v521 GET /adv_bldg?k=<district>:<id>&key= - ONE building's Property Finder listings card, for the Developers map's project card (Kendall 11 Oct
+// 2026: "Available on Property Finder" at the top, as a pop-up). Read-only for every key; listings, never vacancy; rent only so far.
+export async function advBldgRoute(env, url, deps) {
+  const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "private, max-age=600" } });
+  if ((deps.method || "GET") !== "GET") return new Response("unauthorised", { status: 401 });
+  if (!deps.tier(env, url)) return new Response("unauthorised", { status: 401 });
+  const k = String(url.searchParams.get("k") || "");
+  if (!/^[a-z0-9]+:\d+$/.test(k)) return J({ ok: false, reason: "k=<district>:<id> is required" }, 400);
+  const doc = await read(env, "pf_supply_" + k.split(":")[0]);
+  const A = advertisedDoc(doc), a = A ? advertisedForKey(A, k) : null;
+  return J({ ok: true, k, as_of: (A && A.asOf) || (doc && doc.as_of) || "", covered: !!A, flats: a ? a.flats || 0 : 0, adverts: a ? a.adverts || 0 : 0,
+    html: a ? "<style>" + ADV_CSS + "</style>" + advertisedHtml(a).replace("<details class=avd>", "<details class=avd open>") : "" });
 }
 
 // GET /city_bldg?key=  (READ_KEY or a client key; Property Finder figures are allowed on client surfaces since 11 Oct 2026).

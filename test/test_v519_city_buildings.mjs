@@ -44,7 +44,7 @@ ok(r.status === 200 && j.advertised === 2 && j.as_of === "2026-10-10" && j.items
 
 // 3. the twin wiring
 const src = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-ok(/const CLIENT_PATHS = \["\/city_bldg",/.test(src) && /if \(url\.pathname === "\/city_bldg"\) return cityBldgRoute\(env, url, \{ clientOk, tier: keyTier, method: request\.method \}\);/.test(src), "route mounted, client keys allowed, method and key tier passed");
+ok(/if \(url\.pathname === "\/city_bldg"\) return cityBldgRoute\(env, url, \{ clientOk, tier: keyTier, method: request\.method \}\);/.test(src) && /const CLIENT_PATHS = \[("\/adv_bldg", )?"\/city_bldg",/.test(src), "route mounted, client keys allowed, method and key tier passed");
 ok(/CITY_PLACES_HTML \+ CITY_ADV_HTML \+ '<\/div><div id=panel><\/div>'/.test(src), "the ADVERTISED NOW panel sits in the city stack after PLACES");
 ok(/q\.oninput=\(\)=>\{const v=norm\(q\.value\);/.test(src) && /function pickBuilding\(it\)\{/.test(src), "the search box finds buildings as well as districts");
 ok(/pickBuilding\(it\)\{sr\.style\.display="none";q\.value=it\.n;q\.blur\(\);HILITE=it\.inst;if\(it\.dIx>=0\)\{AMDIST=it\.dIx;/.test(src), "picking a building focuses its district and lights it");
