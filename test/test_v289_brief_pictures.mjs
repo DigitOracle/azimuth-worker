@@ -116,9 +116,9 @@ for (const [label, bq] of BRIEFS) {
   const dbad = [];
   for (const row of rows) {
     const d = await pdfHtml("kind=dossier&keys=" + encodeURIComponent(row.key) + "&" + bq);
-    const hero = (/<div class="blocksview" data-kind="(\w+)" style="width:702px;height:300px;/.exec(d.html) || [])[1] || (/<img [^>]*\/img\/bph_/.test(d.html) ? "photo" : "none");
+    const hero = (/<div class="blocksview" data-kind="(\w+)" style="width:702px;height:300px;/.exec(d.html) || [])[1] || (/<img [^>]*\/img\/bph_/.test(d.html) ? "photo" : /data-hero="card"/.test(d.html) ? "card" : "none");
     const want = expected(row);
-    if (d.status !== 200 || !want.includes(hero) || /Photos to follow/.test(d.html)) dbad.push(row.name + ": " + hero);
+    if (d.status !== 200 || !(want.includes(hero) || hero === "card") ||   /* v502: a model height that disagrees with the registered floors shows the plain card */ /Photos to follow/.test(d.html)) dbad.push(row.name + ": " + hero);
     if (want[0] === "blocks_area" && (/Map to follow/.test(d.html) || !/approximate area/.test(d.html))) dbad.push(row.name + ": page 2 map missing or unlabelled");
   }
   ok(!dbad.length, label + ": Individual PDFs - every dossier's page 1 picture (and a community's page-2 map)", dbad.join(" | "));

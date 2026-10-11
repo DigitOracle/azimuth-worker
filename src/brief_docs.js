@@ -715,9 +715,11 @@ function nearestGyms(C, rec, pos, n) {
 
 function dossierPage1(C, rec, q, sub) {
   const B = BEDS[q.beds], st = rec.st;
-  const bvHero = (rec.heroPic || rec.renderPic) ? null : blocksThumb(rec, (C.district[rec.d] || {}).layer, 702, 300, { district: rec.dist, fs: 9.5 });   // v285
+  const bvHero = (rec.heroPic || rec.renderPic) ? null : blocksThumb(rec, (C.district[rec.d] || {}).layer, 702, 300, { district: rec.dist, fs: 9.5, floors: rec.um && rec.um.floors });   // v285; v502 floors check
   const hero = rec.ownPic ? ownFigure(rec.ownPic, 702, 300, rec.name) : rec.heroPic ? fitImg(rec.heroPic, 702, 300, rec.name, 0.38) : rec.svPic ? svFigure(rec.svPic, 702, 300, rec.name) : rec.renderPic ? renderFigure(rec, 702, 300) : bvHero ? bvHero.html
-    : '<div style="width:702px;height:120px;background:#E9E5DD;display:flex;align-items:center;justify-content:center;font-size:13px;color:' + MUTED + ";\">Najma</div>";
+    : '<div data-hero="card" style="width:702px;height:120px;background:' + PK.teal + ';border-radius:12px;display:flex;align-items:center;justify-content:center;gap:14px;color:#FFFFFF;">' + pkIcon("tower", 40, PK.gold) +   // v502 - a clean card, never a wrong picture
+      '<div style="display:flex;flex-direction:column;gap:3px;"><div class="serif" style="font-size:24px;line-height:1;">' + esc(rec.name) + '</div><div style="font-size:12px;color:' + PK.gold + ';">' +
+      [rec.um && rec.um.floors ? rec.um.floors + " floors" : "", rec.um && rec.um.total_units ? money(rec.um.total_units) + " homes" : "", esc(rec.dist)].filter(Boolean).join(" &middot; ") + "</div></div></div>";
   const F = facts(rec);
   // v486 - figure cards with icons in place of the label/value row (approved Atria mock-up, 11 Oct 2026)
   const nbF = rec.um && rec.um.dld && rec.um.dld.buildings > 1 ? rec.um.dld.buildings : 0;
@@ -888,7 +890,8 @@ function dossierPage2(C, rec, q, sub, more) {   // v307 - more: a purchase puts 
   const body = '<div class="serif" style="font-size:24px;color:' + NAVY + ';">Where it is</div><div class="sub">' + (mark.area ? "The community&rsquo;s homes in gold (an approximate area), among the other buildings of " : "The building in gold on its own plot, among the other buildings of ") + esc(rec.dist) +
     ". Simple models, heights to scale, seen from the south.</div>" + map +
     // v500 - what's close, as the crow flies: under the map when the page has the room (no criteria box and no sales table below it)
-    (!cb && !more && !(rec.avail && rec.avail.count) && rec.pos ? pkNearMap(rec.pos, (C.amen && C.amen.items) || [], { size: 200 }) : "") +
+    // v501 (Kendall 11 Oct: "move the map to page 3") - on page 3 when there is one; here only when there is no page 3 and room
+    (!rec._nearOn3 && !cb && !more && !(rec.avail && rec.avail.count) && rec.pos ? pkNearMap(rec.pos, (C.amen && C.amen.items) || [], { size: 200 }) : "") +
     cb + availBlock(rec, q) + (more ? more.html : "");
   return page(C, sub, body, smallPrint([
     svg ? "Map: building outlines and streets &copy; OpenStreetMap contributors; building position from the app's district digital footprint" + (mark.approx ? " (this one approximate, from a public map listing)" : "") +
@@ -953,11 +956,13 @@ function dossierPage3(C, rec, q, sub) {
     '<div style="font-size:9.5px;color:' + MUTED + ';">' + esc(String(p.caption || "").split(" (")[0].split(" - ").pop()) + "</div>" +
     '<div style="font-size:8px;color:#8C887C;">' + "The developer&rsquo;s page" + "</div></div>").join("") + "</div>"
     : '<div style="font-size:11px;color:' + MUTED + ";border:1px dashed #DED9D0;padding:8px 10px;\">The developer's page publishes no pictures of the pool, gym or lobby and no floor plans. Ask the leasing team or listing broker for photographs of the actual flat.</div>";
-  return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + ((q.hide || []).includes("photos") ? "" : photos) + ((q.hide || []).includes("layouts") ? "" : layoutsBlock(rec, q)),
+  const near = rec.pos ? pkNearMap(rec.pos, (C.amen && C.amen.items) || [], { size: 190 }) : "";   // v501 - what's close, page 3
+  return page(C, sub, '<div class="serif" style="font-size:24px;color:' + NAVY + ';">' + esc(rec.name) + "</div>" + near + ((q.hide || []).includes("photos") ? "" : photos) + ((q.hide || []).includes("layouts") ? "" : layoutsBlock(rec, q)),
     smallPrint([rentSource(C, q, rec), buildingSource(rec), rec.un ? "Layouts: Dubai Land Department units register, flat by flat." : "", nearbySource(), pictureSource(rec)]));
 }
 export function dossierHtml(C, rec, q, i, of) {
   const sub = dossierSub(rec, q, i, of);
+  rec._nearOn3 = !rec.buy && !((q.hide || []).includes("photos") && (q.hide || []).includes("layouts"));   // v501 - page 3 exists, so the map goes there
   return dossierPage1(C, rec, q, sub) + dossierPage2(C, rec, q, sub, rec.buy ? { html: buySalesTable(rec, q), small: [buySource(C, q, rec)] } : null) + (rec.buy ? buyPages(C, rec, q, sub) : ((q.hide || []).includes("photos") && (q.hide || []).includes("layouts") ? "" : dossierPage3(C, rec, q, sub)));
 }
 
@@ -1226,6 +1231,9 @@ export function blocksThumb(rec, layer, w, h, o) {
   const hiIds = new Set(kind === "blocks" || kind === "blocks_area" ? mark.ids : []);
   let tgt = layer.b.filter((b) => hiIds.has(b[0])).map(([, hh, f]) => ({ r: pairs(f), h: hh, kind: kind === "blocks_area" ? "area" : "hi" }));
   if (kind === "blocks_approx") { const [cx, cy] = mark.xy, s = mark.side / 2; tgt = [{ r: [[cx - s, cy - s], [cx + s, cy - s], [cx + s, cy + s], [cx - s, cy + s], [cx - s, cy - s]], h: mark.h, kind: "approx" }]; }
+  // v502 (Kendall 11 Oct, The Atria: "this does not look like 35 floors?") - the model held its outline at podium height. A picture whose
+  // height disagrees with the registered floors by more than 40% is not drawn: the caller shows a plain card instead of a wrong building.
+  if (o && o.floors && tgt.length && kind === "blocks") { const mh = Math.max(...tgt.map((t) => t.h || 0)); if (mh < o.floors * 3.3 * 0.6) return null; }
   // the frame, in the view's own units (metres across; metres up the picture after the 50-degree tilt)
   let gx0 = Infinity, gx1 = -Infinity, gy0 = Infinity, gy1 = -Infinity, v0 = Infinity, v1 = -Infinity;
   const src = tgt.length ? tgt : layer.b.map(([, hh, f]) => ({ r: pairs(f), h: 0 }));

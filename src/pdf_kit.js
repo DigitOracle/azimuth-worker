@@ -29,6 +29,10 @@ const P = {
   shield: '<path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
   bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
   dot: '<circle cx="12" cy="12" r="3"/>',
+  cart: '<path d="M3 4h2l2.4 10.2a1.5 1.5 0 0 0 1.5 1.2h7.9a1.5 1.5 0 0 0 1.5-1.1L20 8H6.2"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/>',
+  bag: '<path d="M5.6 7.8h12.8l-1.1 12.4H6.7L5.6 7.8z"/><path d="M9.2 7.8V6.2a2.8 2.8 0 0 1 5.6 0v1.6"/>',
+  tree: '<path d="M12 3l-6 8h3.5l-4 6h13l-4-6H18z"/><path d="M12 17v4"/>',
+  cross: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/>',
 };
 export const PK_ICON_NAMES = Object.keys(P);
 export function pkIcon(name, size, color) {
@@ -75,14 +79,19 @@ export function pkBox(icon, title, inner, foot) {
 // kilometer ... you still need this map on every .pdf") - WHAT'S CLOSE: the building at the centre, rings at 500 m and 1 km, the nearest
 // place of each kind plotted where it is, and a numbered list with the straight-line distance. items: [{k, n, lat, lon}] (the brief's
 // amenity file). A rough point (both coordinates on a 0.01 grid) is never drawn: it would put a place hundreds of metres off.
-export const PK_NEAR_KINDS = [["metro", "Metro", "#0A4F4A"], ["school", "School", "#B8862B"], ["hospital", "Hospital", "#9B3D3D"], ["clinic", "Clinic", "#9B3D3D"],
-  ["supermarket", "Supermarket", "#3D6B9B"], ["mall", "Mall", "#3D6B9B"], ["park", "Park", "#4F7A3A"], ["beach", "Beach", "#2E7FA0"]];
+// v503 (Kendall 11 Oct: "prefer icons instead of colored dots") - each kind has its own line icon, white on its colour
+export const PK_NEAR_KINDS = [["metro", "Metro", "#0A4F4A", "train"], ["school", "School", "#B8862B", "school"], ["hospital", "Hospital", "#9B3D3D", "cross"], ["clinic", "Clinic", "#9B3D3D", "clinic"],
+  ["supermarket", "Supermarket", "#3D6B9B", "cart"], ["mall", "Mall", "#3D6B9B", "bag"], ["park", "Park", "#4F7A3A", "tree"], ["beach", "Beach", "#2E7FA0", "sea"]];
+// a register name in capitals reads as shouting: "EDEN DERMA CLINIC" -> "Eden Derma Clinic" (mixed-case names are left alone)
+const pkCase = (n) => (/[a-z]/.test(n) ? n : n.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase()).replace(/\b(Llc|Fzc|Fze|Dmcc)\b/g, (m) => m.toUpperCase()));
+const pkBadge = (icon, col, x, y, r) => '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + r + '" fill="' + col + '" stroke="#FFFFFF" stroke-width="1.3"/>' +
+  '<g transform="translate(' + (x - r * 0.62).toFixed(2) + " " + (y - r * 0.62).toFixed(2) + ") scale(" + (r * 1.24 / 24).toFixed(3) + ')" fill="none" stroke="#FFFFFF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">' + (P[icon] || P.dot) + "</g>";
 const pkRough = (i) => [i.lat, i.lon].every((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-9);
 const pkEsc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 export function pkNearest(pos, items, maxM) {
   if (!pos || !isFinite(pos[0]) || !isFinite(pos[1])) return [];
   const [lat, lon] = pos, out = [], lim = maxM || 1500;
-  for (const [k, label, col] of PK_NEAR_KINDS) {
+  for (const [k, label, col, icon] of PK_NEAR_KINDS) {
     const c = [];
     for (const i of items || []) {
       if (i.k !== k || !isFinite(i.lat) || !isFinite(i.lon) || i.ap || pkRough(i)) continue;
@@ -91,7 +100,7 @@ export function pkNearest(pos, items, maxM) {
       if (d <= lim) c.push({ d, dx, dy, i });
     }
     c.sort((a, b) => a.d - b.d);
-    for (const x of c.slice(0, k === "school" || k === "supermarket" ? 2 : 1)) out.push({ label, col, name: String(x.i.n || "").replace(/\s*[-,]?\s*\b(L\.?L\.?C\.?|FZ-?LLC|FZE)\s*$/i, "").slice(0, 44), m: Math.round(x.d / 10) * 10, dx: x.dx, dy: x.dy });
+    for (const x of c.slice(0, k === "school" || k === "supermarket" ? 2 : 1)) out.push({ label, col, icon, name: String(x.i.n || "").replace(/\s*[-,]?\s*\b(L\.?L\.?C\.?|FZ-?LLC|FZE)\s*$/i, "").slice(0, 44), m: Math.round(x.d / 10) * 10, dx: x.dx, dy: x.dy });
   }
   return out.sort((a, b) => a.m - b.m).slice(0, 8);
 }
@@ -108,12 +117,12 @@ export function pkNearMap(pos, items, opts) {
     '<text x="' + (S - 8) + '" y="14" font-size="9.5" fill="#626B78" text-anchor="end">N &#8593;</text>';
   P.forEach((q, k) => {
     const x = Math.max(9, Math.min(S - 9, C + q.dx * R)), y = Math.max(9, Math.min(S - 9, C - q.dy * R));
-    svg += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="7.5" fill="' + q.col + '" stroke="#FFFFFF" stroke-width="1.3"/><text x="' + x.toFixed(1) + '" y="' + (y + 3).toFixed(1) + '" font-size="8.5" font-weight="700" fill="#FFFFFF" text-anchor="middle">' + (k + 1) + "</text>";
+    svg += pkBadge(q.icon, q.col, x, y, 9);
   });
   svg += '<rect x="' + (C - 7) + '" y="' + (C - 7) + '" width="14" height="14" rx="3" fill="#A8814A" stroke="#FFFFFF" stroke-width="2"/></svg>';
   const rows = P.map((q, k) => '<div style="display:flex;align-items:center;gap:7px;font-size:11px;color:' + PK.ink + ';line-height:1.2;">' +
-    '<span style="flex:none;width:17px;height:17px;border-radius:9px;background:' + q.col + ';color:#FFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">' + (k + 1) + "</span>" +
-    '<span style="flex:1;"><b>' + q.label + "</b> &middot; " + pkEsc(q.name) + '</span><span style="font-weight:600;white-space:nowrap;">' + (q.m < 1000 ? q.m + " m" : (q.m / 1000).toFixed(1) + " km") + "</span></div>").join("");
+    '<svg width="20" height="20" viewBox="0 0 20 20" style="flex:none;display:block;">' + pkBadge(q.icon, q.col, 10, 10, 9) + "</svg>" +
+    '<span style="flex:1;"><b>' + q.label + "</b> &middot; " + pkEsc(pkCase(q.name)) + '</span><span style="font-weight:600;white-space:nowrap;">' + (q.m < 1000 ? q.m + " m" : (q.m / 1000).toFixed(1) + " km") + "</span></div>").join("");
   return '<div style="display:flex;flex-direction:column;gap:8px;"><div style="display:flex;align-items:baseline;gap:10px;"><div class="serif" style="font-size:19px;color:' + PK.teal + ';">What&rsquo;s close, as the crow flies</div>' +
     '<div style="font-size:10px;color:' + PK.muted + ';">straight-line distances, not walking times &middot; rings at 500 m and 1 km</div></div>' +
     '<div style="display:flex;gap:16px;align-items:center;">' + svg + '<div style="flex:1;display:flex;flex-direction:column;gap:5px;">' + rows + "</div></div></div>";
