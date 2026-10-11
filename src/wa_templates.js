@@ -34,7 +34,44 @@ export const WA_TEMPLATES = {
     example: ["Ahmed"], footer: "DigitAlchemy® · Complexity into clarity",
     buttons: [{ type: "QUICK_REPLY", text: "Book a call" }, { type: "QUICK_REPLY", text: "Not for me" }, { type: "URL", text: "Visit DigitAlchemy", url: "https://digitalabbot.io" }],
   },
+  // v492 (Kendall 11 Oct: "submit all, use the logo card") - the six DigitAlchemy outreach templates, wording approved in chat that day
+  digitalchemy_big5_invite: {
+    name: "digitalchemy_big5_invite", language: "en", category: "MARKETING", header_image_key: "tplhdr_da_logo_card",
+    body: "Hi {{1}}, DigitAlchemy will be at Big 5 Global, 23–26 November, Hall 4, stand H4 SC 10. We're showing how drawings, site inspections and progress come together in one live view with our partner GoCanvas. Would you like a 20-minute slot with our team?",
+    example: ["Ahmed"], footer: "DigitAlchemy® · Complexity into clarity",
+    buttons: [{ type: "QUICK_REPLY", text: "Book a meeting" }, { type: "QUICK_REPLY", text: "Not this time" }, { type: "URL", text: "digitalabbot.io", url: "https://digitalabbot.io" }],
+  },
+  digitalchemy_new_video: {
+    name: "digitalchemy_new_video", language: "en", category: "MARKETING", header_video_key: "site_clarity_75",
+    body: "Hi {{1}}, a new short piece from DigitAlchemy: {{2}}. It takes under a minute. If it's useful for a project you're on, reply here and we'll follow up.",
+    example: ["Ahmed", "how one live view keeps site and office on the same facts"], footer: "DigitAlchemy® · Complexity into clarity",
+    buttons: [{ type: "QUICK_REPLY", text: "Tell me more" }, { type: "QUICK_REPLY", text: "Not for me" }],
+  },
+  digitalchemy_meeting_followup: {
+    name: "digitalchemy_meeting_followup", language: "en", category: "UTILITY",
+    body: "Hi {{1}}, thank you for your time on {{2}}. As agreed, the next step is: {{3}}. Reply here with any questions. DigitAlchemy Tech Limited, contact@digitalabbot.io",
+    example: ["Ahmed", "14 October", "we send the site inspection pilot plan by Thursday"],
+  },
+  digitalchemy_meeting_confirm: {
+    name: "digitalchemy_meeting_confirm", language: "en", category: "UTILITY",
+    body: "Your call with DigitAlchemy is confirmed for {{1}} at {{2}} Dubai time. Reply here if you need to change it.",
+    example: ["Tuesday 14 October", "11:00"],
+    buttons: [{ type: "QUICK_REPLY", text: "Confirm" }, { type: "QUICK_REPLY", text: "Reschedule" }],
+  },
+  digitalchemy_monthly_insight: {
+    name: "digitalchemy_monthly_insight", language: "en", category: "MARKETING",
+    body: "Hi {{1}}, this month's DigitAlchemy insight: {{2}}. One idea a month on Smart Cities, ISO standards and digital construction.",
+    example: ["Ahmed", "ISO 19650 asks for one shared information model from day one, not at handover"], footer: "DigitAlchemy® · Complexity into clarity",
+    buttons: [{ type: "URL", text: "Read more", url: "https://digitalabbot.io" }, { type: "QUICK_REPLY", text: "Unsubscribe" }],
+  },
+  digitalchemy_event_countdown: {
+    name: "digitalchemy_event_countdown", language: "en", category: "MARKETING",
+    body: "Hi {{1}}, {{2}} starts in {{3}} days. The DigitAlchemy team will be there. Would you like to meet?",
+    example: ["Ahmed", "GITEX Global", "14"], footer: "DigitAlchemy® · Complexity into clarity",
+    buttons: [{ type: "QUICK_REPLY", text: "Yes, let's meet" }, { type: "QUICK_REPLY", text: "Not this time" }],
+  },
 };
+export const DA_OUTREACH_TEMPLATES = ["digitalchemy_big5_invite", "digitalchemy_new_video", "digitalchemy_meeting_followup", "digitalchemy_meeting_confirm", "digitalchemy_monthly_insight", "digitalchemy_event_countdown"];
 export const DEFAULT_FEED_TEMPLATE = "azimuth_daily";
 export const FEED_TEMPLATE_KV = "feed_template";
 export const LOG_NUDGE_TEMPLATE = "najma_log_day";   // for the log worker's use; there is deliberately no send path here
@@ -44,6 +81,7 @@ export function buildCreatePayload(name, headerHandle) {
   const t = WA_TEMPLATES[name]; if (!t) return null;
   const c = [];
   if (t.header_video_key) c.push({ type: "HEADER", format: "VIDEO", example: { header_handle: [headerHandle || "<uploaded at submit>"] } });
+  if (t.header_image_key) c.push({ type: "HEADER", format: "IMAGE", example: { header_handle: [headerHandle || "<uploaded at submit>"] } });   // v492
   c.push(Object.assign({ type: "BODY", text: t.body }, t.example ? { example: { body_text: [t.example] } } : {}));
   if (t.footer) c.push({ type: "FOOTER", text: t.footer });
   if (t.buttons) c.push({ type: "BUTTONS", buttons: t.buttons });
@@ -51,12 +89,12 @@ export function buildCreatePayload(name, headerHandle) {
 }
 
 // v459 - Meta's resumable upload: the sample video for a VIDEO header becomes a handle ("4::...") the template refers to.
-export async function uploadHeaderSample(env, graph, bytes, fileName, deps) {
+export async function uploadHeaderSample(env, graph, bytes, fileName, deps, fileType) {
   const f = (deps && deps.fetch) || fetch;
   const H = { Authorization: "Bearer " + env.WHATSAPP_TOKEN };
   const app = await (await f(`${graph}/app`, { headers: H })).json().catch(() => ({}));
   if (!app || !app.id) return { error: "could not read the app id: " + String((app && app.error && app.error.message) || "no answer").slice(0, 200) };
-  const s = await (await f(`${graph}/${app.id}/uploads?file_name=${encodeURIComponent(fileName)}&file_length=${bytes.byteLength}&file_type=video/mp4`, { method: "POST", headers: H })).json().catch(() => ({}));
+  const s = await (await f(`${graph}/${app.id}/uploads?file_name=${encodeURIComponent(fileName)}&file_length=${bytes.byteLength}&file_type=${encodeURIComponent(fileType || "video/mp4")}`, { method: "POST", headers: H })).json().catch(() => ({}));
   if (!s || !s.id) return { error: "upload session refused: " + String((s && s.error && s.error.message) || "no answer").slice(0, 200) };
   const u = await (await f(`${graph}/${s.id}`, { method: "POST", headers: { Authorization: "OAuth " + env.WHATSAPP_TOKEN, file_offset: "0" }, body: bytes })).json().catch(() => ({}));
   if (!u || !u.h) return { error: "upload refused: " + String((u && u.error && u.error.message) || "no answer").slice(0, 200) };
@@ -131,6 +169,37 @@ export async function templateRoutes(request, env, url, deps) {
   return J({ ok: true, feed_template: name });
 }
 
+// v492 - submit the DigitAlchemy outreach set once, from the minute tick, when KV da_tpl_submit = "go" (set by the operator after Kendall's
+// "submit all"). The flag is deleted BEFORE anything is sent, so it never repeats. Each template: header sample uploaded (image or video),
+// then POST /<waba>/message_templates; Meta's own answer per template goes to the desk; the names join the status watch.
+export async function daTemplateSubmitTick(env, graph, send, waba) {
+  let flag = null; try { flag = await env.MEETINGS.get("da_tpl_submit"); } catch (e) {}
+  if (flag !== "go") return { skipped: true };
+  await env.MEETINGS.delete("da_tpl_submit");
+  const id = waba || env.WABA_ID || "1588773749592854";
+  if (!env.WHATSAPP_TOKEN) { await send(env, "Templates not submitted: no WhatsApp token on the worker."); return { ok: false }; }
+  const out = [];
+  for (const name of DA_OUTREACH_TEMPLATES) {
+    const t = WA_TEMPLATES[name];
+    let handle = null;
+    try {
+      if (t.header_video_key || t.header_image_key) {
+        const key = t.header_video_key ? "vid_" + t.header_video_key : t.header_image_key;
+        const bytes = await env.MEETINGS.get(key, "arrayBuffer");
+        if (!bytes) { out.push(name + ": NOT sent (the header sample " + key + " is missing)"); continue; }
+        const up = await uploadHeaderSample(env, graph, bytes, t.header_video_key ? t.header_video_key + ".mp4" : "logo_card.jpg", null, t.header_video_key ? "video/mp4" : "image/jpeg");
+        if (up.error) { out.push(name + ": NOT sent (" + up.error + ")"); continue; }
+        handle = up.handle;
+      }
+      const r = await fetch(`${graph}/${encodeURIComponent(id)}/message_templates`, { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(buildCreatePayload(name, handle)) });
+      const j = await r.json().catch(() => ({}));
+      out.push(name + ": " + (r.ok ? "submitted, " + (j.status || "PENDING") + (j.category ? " (" + j.category + ")" : "") : "refused - " + String((j.error && (j.error.error_user_msg || j.error.message)) || r.status).slice(0, 200)));
+    } catch (e) { out.push(name + ": NOT sent (" + String(e && e.message || e).slice(0, 100) + ")"); }
+  }
+  try { const w = JSON.parse((await env.MEETINGS.get("tpl_watch")) || "{}") || {}; for (const n of DA_OUTREACH_TEMPLATES) if (!w[n]) w[n] = "SUBMITTED|?"; await env.MEETINGS.put("tpl_watch", JSON.stringify(w)); } catch (e) {}
+  await send(env, "DigitAlchemy templates sent to Meta for review:\n" + out.join("\n") + "\nI will tell you here as each one is approved.");
+  return { ok: true, out };
+}
 // v465 (Kendall 10 Oct: "set that up") - every 30 minutes, Meta's status and category of the templates under watch; any change is
 // told to the desk once. A template that reaches APPROVED or REJECTED leaves the watch. KV tpl_watch = {name: "STATUS|CATEGORY"}.
 export const TPL_WATCH_DEFAULT = ["digitalchemy_site_clarity", "najma_feed_update", "najma_log_reminder", "momo_day_check"];
