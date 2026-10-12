@@ -14,7 +14,7 @@ const base = { as_of: "2026-10-01", rows: [
 {
   const d = supplyDoc(base), bs = supplyBuildings(d.rows, "businessbay", null);
   attachAdverts(bs, d.adverts);
-  ok(advertsHtml(bs[0]) === "", "old file without adverts renders no drill-down");
+  ok(!/<details/.test(advertsHtml(bs[0])), "old file without adverts renders no drill-down (v533: only the plain bedroom rows that replaced the static table)");
 }
 // new file
 {

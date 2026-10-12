@@ -332,7 +332,7 @@ const SU_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans
   + '.pick a{display:block;padding:10px 12px;border:1px solid #2E4540;border-radius:10px;margin:0 0 6px;text-decoration:none;color:#E8E4D8}.pick small{display:block;color:#8FA39B;font-size:.7rem}'
   + '.nt{color:#8FA39B;font-size:.8rem;line-height:1.5;margin:6px 0 10px}'
   + '.adw{margin:10px 0 0}.adg{border:1px solid #24352F;border-radius:10px;margin:0 0 6px;background:#0E1918}.adg summary{list-style:none;display:flex;align-items:center;gap:7px;min-height:42px;padding:6px 11px;cursor:pointer;font-size:.84rem}'
-  + '.adg summary::-webkit-details-marker{display:none}.adg summary b{color:#C5A56A;margin-left:auto}.adg summary small{color:#6F837D;font-size:.66rem}.chv{color:#8FA39B;transition:transform .15s}.adg[open] .chv{transform:rotate(90deg)}'
+  + '.adg summary::-webkit-details-marker{display:none}.adg summary b{color:#C5A56A;margin-left:auto}.adg summary small{color:#6F837D;font-size:.66rem}.adg summary{flex-wrap:wrap}.adx{display:flex;flex-wrap:wrap;align-items:center;gap:7px;min-height:42px;padding:6px 11px 6px 33px;font-size:.84rem}.adx b{color:#C5A56A;margin-left:auto}.adx small{color:#6F837D;font-size:.66rem}.adx .adm{flex-basis:100%;margin-top:-4px;font-size:.72rem;color:#8FA39B}.adg summary .adm{flex-basis:100%;padding-left:22px;margin-top:-4px;font-size:.72rem;color:#8FA39B}.chv{color:#8FA39B;transition:transform .15s}.adg[open] .chv{transform:rotate(90deg)}'
   + '.ad{display:flex;gap:10px;align-items:flex-start;border-top:1px solid #1B2E2A;padding:9px 11px}.mm{flex:0 0 auto}.adb{min-width:0;flex:1 1 auto}'
   + '.apr{font-family:Fraunces,Georgia,serif;font-size:1.02rem;color:#F0E4C8}.apr small{font-family:inherit;font-size:.68rem;color:#8FA39B}.af{font-size:.72rem;color:#8FA39B;line-height:1.4;margin:2px 0 0}'
   + '.smap{position:relative;height:230px;overflow:hidden;border-radius:12px;border:1px solid #24352F;margin:0 0 8px;background:#1b2a26}.smc{position:absolute!important;top:0;left:0;width:100%;height:100%}.spl{font-size:11px;line-height:1.4;color:#8FA39C;margin:-2px 0 10px}'   // MapLibre's .maplibregl-map sets position:relative, which collapsed an inset-only box to 0 px
@@ -464,17 +464,26 @@ export function listingSheetHtml(a, b, k, D, X, now) {
     + '<script>document.querySelectorAll(".qr").forEach(function(e){try{var q=qrcode(0,"M");q.addData(e.getAttribute("data-u"));q.make();e.innerHTML=q.createSvgTag({cellSize:3,margin:0,scalable:true})}catch(x){}})</script></body></html>';
 }
 function dLong(s) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || "")); if (!m) return String(s || ""); const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return +m[3] + " " + M[+m[2] - 1] + " " + m[1]; }
+// v533 - the drop-down heading carries what the removed table said: the median asking rent and the median days listed
+function medSay(b, k) {
+  const r = (b.bandRows || []).find((x) => x.band === k);
+  if (!r || (r.price == null && r.days == null)) return "";
+  return '<small class=adm>' + [r.price != null ? "median " + esc(aed(r.price)) : "", r.days != null ? fmt(r.days) + " days listed" : ""].filter(Boolean).join(" \u00b7 ") + "</small>";
+}
 export function advertsHtml(b) {
   const ads = b.ads || {}, bands = BANDS.filter((k) => ads[k] && ads[k].length).concat(Object.keys(ads).filter((k) => !BANDS.includes(k) && ads[k].length));
-  if (!bands.length) return "";
+  // v533 - a bedroom type with adverts but no stored listing still shows its row (count, median rent, days listed): the table it replaced always did
+  const bare = (b.bandRows || []).filter((r) => r.live && !bands.includes(r.band));
+  const bareHtml = bare.map((r) => '<div class="adg adb0"><div class=adx><span>' + esc(r.label) + "</span><b>" + fmt(r.live) + "</b><small>no listing stored</small>" + medSay(b, r.band) + "</div></div>").join("");
+  if (!bands.length) return bare.length ? '<div class=adw>' + bareHtml + "</div>" : "";
   const live = (k) => (b.bands && b.bands[k] && b.bands[k].live) || ads[k].length;
   // v446 (Kendall 9 Oct: "where is the map?"): one real street map per building, where it sits in the district
   const pos = {}; let best = null;
   for (const k of bands) for (const a of ads[k]) if (a.lat != null && a.lon != null) { const p = a.lat.toFixed(4) + "," + a.lon.toFixed(4); pos[p] = (pos[p] || 0) + 1; if (!best || pos[p] > pos[best]) best = p; }
   const map = b.pos ? streetMap(b.pos.ll[0], b.pos.ll[1], b.name, b.fp, b.pos.line) : b.fp && b.fp.ll ? streetMap(b.fp.ll[0], b.fp.ll[1], b.name, b.fp) : best ? streetMap(Number(best.split(",")[0]), Number(best.split(",")[1]), b.name) : "";
   return '<div class=adw>' + map + bands.map((k) => '<details class=adg><summary>' + IC_CHEV + "<span>" + esc(BAND_SAY[k] || k) + "</span><b>" + fmt(live(k)) + "</b>"
-    + (live(k) > ads[k].length ? "<small>cheapest " + ads[k].length + " shown</small>" : "") + "</summary>"
-    + ads[k].map((a, i) => advertCard(a, b.frame, ads[k], { building: b.name, band: BAND_SAY[k] || k, d: b.district, id: b.id, k, i })).join("") + "</details>").join("")
+    + (live(k) > ads[k].length ? "<small>cheapest " + ads[k].length + " shown</small>" : "") + medSay(b, k) + "</summary>"
+    + ads[k].map((a, i) => advertCard(a, b.frame, ads[k], { building: b.name, band: BAND_SAY[k] || k, d: b.district, id: b.id, k, i })).join("") + "</details>").join("") + bareHtml
     + '<div class=dk>Each advert opens on Property Finder, where its pictures and the agent’s contact button are. The map shows where the building sits; Property Finder gives one position per building.</div></div>';
 }
 // The building's street map: the same free vector map as the developers map (CARTO dark matter, MapLibre 4.7.1), drawn by SUPPLY_JS
@@ -495,10 +504,9 @@ function buildingCard(b, key, more) {
     + '<div class=hl><b>' + fmt(b.live) + "</b> " + (b.live === 1 ? "advert" : "adverts") + (siteN ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + "</div><div class=htn hidden></div>" + (b.pmin != null ? '<div class=pmn>from <b>AED ' + fmt(b.pmin) + "</b> a year</div>" : "")
     + sitesHtml(b)
     + advertisedHtml(b.advertised)
-    + (b.bandRows.length ? '<table><tr><th>HOME</th><th>LIVE ADVERTS</th><th>MEDIAN ASKING RENT</th><th>MEDIAN DAYS LISTED</th><th>DELISTED SINCE LAST CRAWL</th></tr>'
-      + b.bandRows.map((r) => "<tr><td>" + esc(r.label) + "</td><td><b>" + fmt(r.live) + "</b></td><td>" + esc(aed(r.price)) + "</td><td>" + (r.days == null ? "\u2014" : fmt(r.days)) + "</td><td>" + fmt(r.delisted) + "</td></tr>").join("") + "</table>" : "")
+    // v533 - the static bedroom table is gone (Kendall 12 Oct 2026: "we only need the dropdown"); its median rent and days listed moved into each drop-down's heading
     + advertsHtml(b)
-    + '<div class=dk>Delisted since last crawl is a rough sign of letting, nothing more. Last crawled ' + esc(dubaiTime(b.crawled) || "\u2014") + " (Dubai time).</div>"
+    + '<div class=dk>Last crawled ' + esc(dubaiTime(b.crawled) || "\u2014") + " (Dubai time).</div>"
     + '<button type=button class=rf data-district="' + esc(b.district) + '" data-slug="' + esc(b.slug || "") + '">' + (b.slug ? "Refresh now" : "Refresh the district") + '</button><div class=rs role=status></div></div>';
 }
 export function supplyPageHtml(o) {

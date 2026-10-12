@@ -303,7 +303,7 @@ var week;
   const r = await page("/supply?d=jumeirahvillagecircle&" + K(READ));
   ok(r.status === 200 && /id=sulabel>Advertised supply · live rental adverts from listing sites, not vacancy · fetched 1 Oct, 09:40/.test(r.html), "U3 the owner's page, labelled, with the fetch time (Dubai)");
   ok(/<b>42<\/b> adverts across 3 sites/.test(r.html) && /Property Finder <b>35<\/b> ↗/.test(r.html) && /Bayut <b>24<\/b>/.test(r.html) && /Dubizzle <b>6<\/b>/.test(r.html), "U4 per building: N adverts across M sites, with each site's count and link");
-  ok(/MEDIAN ASKING RENT/.test(r.html) && /MEDIAN DAYS LISTED/.test(r.html) && /DELISTED SINCE LAST CRAWL/.test(r.html) && /rough sign of letting/.test(r.html), "U5 by bedroom: live adverts, median asking rent, median days listed, delisted since last crawl (a rough sign of letting)");
+  ok(/class=adm>median AED [0-9]/.test(r.html) && /days listed<\/small>/.test(r.html) && !/MEDIAN ASKING RENT/.test(r.html), "U5 by bedroom: live adverts, median asking rent and median days listed - v533: in each bedroom row, the static table withdrawn (Kendall 12 Oct)");
   ok(/LISTING SITE NAME<\/div><div class=nm>JVC Skyline Tower<span class=tg>not matched to the register<\/span>/.test(r.html) && /Newsite <b>2<\/b>/.test(r.html), "U6 an unmatched building appears under the site's own name only; a site added later shows with no code change");
   ok(supplyRow({ listings_live: null, sources: { a: 3, b: 5 } }).live === 5, "U7 no de-duplicated total: the biggest site, never the sum");
   for (const s of scripts(r.html)) ok(parses(s), "P15 /supply inline script parses (" + s.length + " chars)");
