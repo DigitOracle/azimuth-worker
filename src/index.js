@@ -43,7 +43,7 @@ import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
 import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitMorning, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
 import { isDeskState as igDeskIsState, deskIgLink, deskIgCallback, deskIgStatus, deskIgDeauth, deskIgRefresh, deskIgPublishReel } from "./ig_desk.js";   // v404 - the desk's own Instagram connection (ig_auth_desk), separate from Najjuko's
-import { deskPostTick, deskMorningTick, deskPostPull, refImport, markRefRequest, genImage as deskGenImage } from "./desk_post.js";   // v413 - the desk posting loop
+import { deskPostTick, deskMorningTick, deskPostPull, refImport, markRefRequest, genImage as deskGenImage, posterTest } from "./desk_post.js";   // v413 - the desk posting loop
 import { deskHandle, isDeskEvent, deskWindowOpen, deskOn } from "./desk.js";   // v388 - KENDALL DESK step 1: a second WhatsApp number that answers only the owner (all logic in src/desk.js)
 import puppeteer from "@cloudflare/puppeteer";   // v105 - Browser Rendering binding (env.BROWSER); self-disables when the binding is absent
 // meeting-capture — meetings (add/cancel via Outlook) + EMAIL ACTION-ITEM engine + reminders cron + /board visual page.
@@ -2309,6 +2309,12 @@ async function appFetch(request, env, ctx) {
       let _ib = {}; try { _ib = await request.json(); } catch (e) { return new Response("json body required", { status: 400 }); }
       const _ir = await refImport(env, _ib && _ib.ids, (_ib && _ib.tag) || "general", url.searchParams.get("apply") === "1", Date.now());
       return new Response(JSON.stringify(_ir, null, 2), { status: _ir.ok ? 200 : 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
+    if (url.pathname === "/desk_poster_test" && request.method === "GET") {   // v538 - owner key; ONE poster in ?layout= for ?idea=, returned as the picture; nothing posted or sent
+      if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      const _pt = await posterTest(env, deskPostDeps(env), url.searchParams.get("idea") || "", url.searchParams.get("layout") || "");
+      if (_pt.err) return new Response(JSON.stringify(_pt), { status: 502, headers: { "Content-Type": "application/json" } });
+      return new Response(_pt.bytes, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "no-store", "X-Layout": String(_pt.layout || ""), "X-Flag": encodeURIComponent(_pt.flag || "") } });
     }
     if (url.pathname === "/desk_say" && request.method === "POST") {   // v388 - owner key; ONE plain text to env.WA_DESK_OWNER from the desk number, dry unless dry=0; refuses when the owner's desk window (wa_desk_last_in within 23 h) is closed; recipient fixed, same pattern as /najj_say
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });

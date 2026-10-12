@@ -339,7 +339,7 @@ async function posterSlide(env, deps, p, s, notes) {
   const r = await pickRefs(env, p.idea, "speaking"), refs = r.count >= REF_MIN && r.bufs.length >= 2 ? r.bufs.slice(0, 1) : null;   // v537: ONE reference, as on Najjuko's scenes
   if (!refs) notes.push("The poster has no person: I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ".");
   const prompt = layoutPrompt(L, c, p, !!refs), want = layoutWords(L, c);
-  try { await env.MEETINGS.put("desk_last_layout", L); } catch (e) {}
+  if (!p.test) { try { await env.MEETINGS.put("desk_last_layout", L); } catch (e) {} }   // a test poster does not move the rotation
   s.layout = L;
   let g = null, ok = false, checked = false;
   for (let t = 0; t < 3; t++) {
@@ -357,6 +357,14 @@ async function posterSlide(env, deps, p, s, notes) {
   if (checked && !ok) s.flag = "the poster's spelling did not match after 3 tries, please read it before approving";
   p.ai = true; p.shape = "portrait";
   return null;
+}
+// v538 - one test poster in a chosen layout, for Kendall to judge the layouts (owner route /desk_poster_test). Nothing is posted or sent.
+export async function posterTest(env, deps, idea, layout) {
+  const p = { idea: String(idea || "").slice(0, 400), layout, picture: "poster", type: "image", lane: "abbot", test: true }, s = {}, notes = [];
+  const err = await posterSlide(env, deps, p, s, notes);
+  if (err) return { err: err.err || "failed", notes };
+  const bytes = await env.MEETINGS.get("igm_" + s.img_key, "arrayBuffer");
+  return { bytes, layout: s.layout, flag: s.flag || "", words: s.poster, notes };
 }
 // Fills p.slides[i].img_key for every slide. Order: a picture Kendall sent > our own render (slide 1, idea names a project) > generated.
 async function buildImages(env, deps, p, onlyIdx) {
