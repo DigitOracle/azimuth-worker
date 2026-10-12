@@ -25,6 +25,7 @@ const tap = (id) => go({ type: "interactive", interactive: { list_reply: { id } 
 const btn = (id) => go({ type: "interactive", interactive: { button_reply: { id } } });
 const plans = () => [...store.keys()].filter((k) => k.startsWith("postplan_")).map((k) => JSON.parse(store.get(k)));
 
+let layoutRows = null;
 async function makePoster() {
   await go({ type: "text", text: { body: "/ideas" } }, "/ideas");
   await tap(lists[0][5].id);
@@ -33,9 +34,14 @@ async function makePoster() {
   await tap(lists[0][2].id);      // Dubai skyline
   await tap(lists[0][2].id);      // Late afternoon -> his photos (v548), then the preview (no shape, no words step)
   if (lists[0] && /^dp:r:/.test(lists[0][0].id)) await tap(lists[0][0].id);
+  // v552 - a poster asks for its layout: "Any (desk picks)" first, then nine named layouts
+  layoutRows = lists[0];
+  if (lists[0] && /^dp:l:/.test(lists[0][0].id)) await tap(lists[0][0].id);
   return btns[0];
 }
 const pv = await makePoster();
+ok(layoutRows && layoutRows.length === 10 && layoutRows[0].title === "Any (desk picks)" && layoutRows.some((r) => r.title === "Big figure") && layoutRows.every((r) => /^dp:l:[a-z0-9]{10,}:\d+$/.test(r.id)), "v552: the layout list - Any, then nine named layouts, each row carrying the choice", JSON.stringify(layoutRows));
+ok(pv && /Layout: the desk picks one/.test(pv.b), "v552: the preview says the layout", pv && pv.b);
 ok(pv && /its layout matched to the idea and never the same as the last one/.test(pv.b) && /Portrait/.test(pv.b), "the preview describes the poster, portrait, with no shape or words step", pv && pv.b);
 const before = calls.length; await btn(pv.x[0].id); await (await import("../src/desk_post.js")).deskJobTick(env, deps);   // v548 - the minute tick
 const c = calls[calls.length - 1], p = plans().filter((x) => x.picture === "poster").pop();

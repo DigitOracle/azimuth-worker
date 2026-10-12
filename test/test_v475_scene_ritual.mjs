@@ -25,7 +25,7 @@ await say("/ideas");
 const ideaRows = lists[0] || [];
 ok(ideaRows.length >= 6 && ideaRows.every((r) => /^dp:i:[a-z0-9]{10,}:\d+$/.test(r.id)), "the idea list: each row carries the feed's own snapshot and its number", JSON.stringify(ideaRows.slice(0, 2)));
 await tap(ideaRows[5].id);
-ok(lists[0] && lists[0].map((r) => r.title).join(",") === "You on site,You speaking or teaching,A scene, no person,Poster (layout varies),Infographic slides (caro,A short video of you", "the picture choices, as one list (no typed menu)", JSON.stringify(lists[0] && lists[0].map((r) => r.title)));
+ok(lists[0] && lists[0].map((r) => r.title).join(",") === "You on site,You speaking or teaching,A scene, no person,Poster with words,Infographic slides (caro,A short video of you", "the picture choices, as one list (no typed menu)", JSON.stringify(lists[0] && lists[0].map((r) => r.title)));
 ok(texts.length === 0, "no numbered text menu beside the list", texts.join(" | "));
 await tap(row("You on site"));
 ok(lists[0] && lists[0].length === 5 && lists[0][4].title === "Calm terrace at sunrise" && /^dp:b:[a-z0-9]+:6:1:\d$/.test(lists[0][0].id), "then the background: five settings, each row carrying idea and picture", JSON.stringify(lists[0]));
@@ -38,6 +38,7 @@ ok(lists[0] && lists[0].length === 5 && /^dp:r:[a-z0-9]{10,}:3$/.test(lists[0][2
 await tap(lists[0][2].id);   // photo 3 = reference #3
 const pv = btns[0];
 ok(pv && /Your face from: photo 3/.test(pv.b), "the preview says which photo", pv && pv.b);
+ok(pv && /Want words on it\? Tap Change it/.test(pv.b), "v552: a photo with no words says how to add them", pv && pv.b);
 ok(pv && /Here's the picture I'll make/.test(pv.b) && /Dubai skyline/.test(pv.b) && /Sunset/.test(pv.b) && /Portrait/.test(pv.b), "Here's the picture I'll make, in plain words (portrait: he is in it)", pv && pv.b);
 ok(pv && /^dp:scene:make:[a-z0-9]{10,},dp:scene:change:[a-z0-9]{10,},dp:scene:cancel:[a-z0-9]{10,}$/.test(pv.x.map((b) => b.id).join(",")), "Make it / Change it / Cancel, each carrying the preview's own snapshot id", pv && pv.x.map((b) => b.id).join(","));
 ok(!store.has("desk_feed_pick"), "no shared 'choice so far' key is written any more");

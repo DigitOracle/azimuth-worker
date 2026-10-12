@@ -234,7 +234,7 @@ export const PICTURE_CHOICES = [
   { id: "scene", label: "A scene, no person" },
   { id: "slides", label: "Infographic slides (carousel)" },
   { id: "video", label: "A short video of you" },   // v476 - HeyGen Cinematic, Polo_Trained
-  { id: "poster", label: "Poster (layout varies)" },   // v495 - Kendall's "Scaling Railways" layout
+  { id: "poster", label: "Poster with words" },   // v552 (Kendall 12 Oct: "it never gave the option for the different layouts ... I wanted words on the screen")   // v495 - Kendall's "Scaling Railways" layout
 ];
 export const BACKGROUND_CHOICES = [
   { id: "site", label: "Construction site" },
@@ -777,8 +777,21 @@ async function flowTap(env, deps, id) {
   await releaseEditing(env, await env.MEETINGS.get("desk_post_editing"));   // v548 - a new idea ends any change waiting on an old draft
   await env.MEETINGS.delete("desk_post_wait");   // v549 - and any "type the idea" waiting from a Digital Abbot / DigitAlchemy tap
   if (pic.id !== "scene" && await offerRefs(env, deps, pick)) return true;   // v548 - he chooses the photo of himself, as Najjuko does
-  await showPreview(env, deps, pick);
+  await nextOrPreview(env, deps, pick);
   return true;
+}
+// v552 - a poster asks for its layout (the desk's pick, or one of nine named ones); everything else goes to the preview
+export const LAYOUT_PICK = [["", "Any (desk picks)"], ["bleed", "Full-bleed photo"], ["bignum", "Big figure"], ["quote", "Quote"], ["timeline", "Timeline"], ["cover", "Magazine cover"], ["split", "Before and after"], ["question", "Big question"], ["lowerthird", "News site shot"], ["checklist", "Checklist"]];
+async function nextOrPreview(env, deps, pick) {
+  if (pick.picture !== "poster" || pick.layout !== undefined) return showPreview(env, deps, pick);
+  const tok = rid() + rid(); await kvPut(env, "desk_lp_" + tok, pick, FEED_TTL);
+  await tapList(env, deps, "Which layout for the poster?", "Pick layout", LAYOUT_PICK.map((l, i) => ({ id: "dp:l:" + tok + ":" + i, title: l[1] })));
+}
+async function layoutTap(env, deps, id) {
+  const m = String(id).match(/^dp:l:([a-z0-9]{4,40}):(\d{1,2})$/); if (!m) return false;
+  const pick = await kvJ(env, "desk_lp_" + m[1], null), L = LAYOUT_PICK[Number(m[2])];
+  if (!pick || !L) { await deps.send(env, "That layout choice has expired. Send feed for a new one."); return true; }
+  pick.layout = L[0]; await showPreview(env, deps, pick); return true;
 }
 // v548 (audit stage: "the person picks the reference photo") - his usable references (one person, glasses, clear face; else every approved
 // one) as numbered pictures, then a list to tap one; the choice so far rides under a fresh token. "Any" lets the desk choose.
@@ -799,7 +812,7 @@ async function refTap(env, deps, id) {
   const pick = await kvJ(env, "desk_rp_" + m[1], null);
   if (!pick) { await deps.send(env, "That photo choice has expired. Send feed for a new one."); return true; }
   const n = Number(m[2]); if (n) { pick.ref = n; const R = await usableRefs(env); pick.ref_no = R.findIndex((r) => r.n === n) + 1 || null; }
-  await showPreview(env, deps, pick); return true;
+  await nextOrPreview(env, deps, pick); return true;
 }
 // a list from before v547 (dp:fn / dp:fi / dp:fp): it cannot be trusted to know its step any more
 const OLD_LIST = "That list is from before today's update. Send feed for a new one.";
@@ -817,6 +830,8 @@ export function scenePreview(pick) {
   const wd = WORDS_LIST.find((x) => x.id === pick.words);
   let s = "Here's the picture I'll make:\n\n" + who + " Behind: " + (bg || "a Dubai setting") + ". " + (tm ? tm.label : "Natural daylight") + ". " + (sh ? sh.label : "Square") + "." + (wd && wd.id !== "none" ? " Words: " + wd.label.toLowerCase() + " (the post's headline)." : "") + "\nIdea: " + pick.idea;
   if (pick.ref && pick.picture !== "scene") s += "\nYour face from: photo " + (pick.ref_no || "#" + pick.ref) + " (the one you chose).";
+  if (pick.picture === "poster") { const L = LAYOUT_PICK.find((x) => x[0] === (pick.layout || "")); s += "\nLayout: " + (L && L[0] ? L[1].toLowerCase() : "the desk picks one to suit the idea") + "."; }
+  else if ((pick.words || "none") === "none") s += "\nWant words on it? Tap Change it and say: add the headline on the picture. Or choose Poster with words.";
   for (const c of (pick.changes || [])) s += "\nYour change: " + c;
   return s.slice(0, 1000);
 }
@@ -840,7 +855,7 @@ async function sceneButton(env, deps, act, sid) {
   if (act === "change") { await kvPut(env, "desk_sx", sid, FEED_TTL); await deps.send(env, "Tell me the change in your next message, for example: put the Burj Khalifa behind me, use the Dubai Creek at dusk, add the headline on the picture, or make me smile."); return true; }
   // v548 (audit stage: "generate on a minute-tick job, as picjob_ does") - Make it answers at once; the next minute tick makes the picture
   if (await env.MEETINGS.get("deskjob_" + sid)) { await deps.send(env, "That picture is already being made."); return true; }
-  await kvPut(env, "deskjob_" + sid, { idea: pick.idea, lane: pick.lane, opts: { forceType: "image", picture: pick.picture, background: pick.background, bg_text: pick.bg_text || undefined, tod: pick.tod, shape: pick.shape, words: pick.words || "none", changes: pick.changes || [], from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined, ref: pick.ref || undefined }, at: nowOf(deps) }, 6 * 3600);
+  await kvPut(env, "deskjob_" + sid, { idea: pick.idea, lane: pick.lane, opts: { forceType: "image", picture: pick.picture, background: pick.background, bg_text: pick.bg_text || undefined, tod: pick.tod, shape: pick.shape, words: pick.words || "none", changes: pick.changes || [], from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined, ref: pick.ref || undefined, layout: pick.layout || undefined }, at: nowOf(deps) }, 6 * 3600);
   await deps.send(env, "Making it now. The draft arrives in about a minute.");
   return true;
 }
@@ -952,6 +967,7 @@ async function handleButton(env, deps, id) {
   if (id === "dp:start:ideas") { await sendFeed(env, deps); return true; }   // v472 - the fresh 10, not the weekly 5
   if (/^dp:(i|p|b|t):/.test(String(id))) return flowTap(env, deps, id);   // v547
   if (/^dp:r:/.test(String(id))) return refTap(env, deps, id);   // v548 - his chosen photo
+  if (/^dp:l:/.test(String(id))) return layoutTap(env, deps, id);   // v552 - the poster's layout
   if (/^dp:(fn|fi|fp):/.test(String(id))) { await deps.send(env, OLD_LIST); return true; }   // v547 - lists from before the rewrite
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 1200); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
   const mm = String(id).match(/^dp:([a-z0-9]+):(music|nomusic|muse|mtry|mno|vc_none|vc_bottom|vc_scroll|m_(calm|corporate|upbeat|cinematic|inspiring))$/);   // v467 - music; v493 vc_ captions
