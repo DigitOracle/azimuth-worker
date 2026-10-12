@@ -13,6 +13,6 @@ ok(/AMSC\.hidden=!dslug;/.test(src), "the panel's 'all Dubai' control shows when
 ok(/ar\.className="amarr";ar\.textContent="\\u25BE";ar\.onclick=\(e\)=>\{e\.stopPropagation\(\);L\.classList\.toggle\("open"\)\}/.test(src), "accordion: an arrow on the kind opens its list without toggling the kind");
 ok(/b\.classList\.toggle\("has",!!\(AMON\[b\.dataset\.k\]&&dslug&&n\)\)/.test(src), "the arrow shows only for a kind that is on, in a district, with places");
 ok(/const rows=\(\(AM&&AM\.items\)\|\|\[\]\)\.filter\(i=>i\.k===k&&i\.d===dslug\)\.sort/.test(src), "the list is that kind's places in that district, by name");
-ok(/r\.onclick=\(\)=>\{const i=rows\[\+r\.dataset\.ix\];if\(window\.__cityFly\)window\.__cityFly\(i\.lon,i\.lat,700\);/.test(src), "tapping a row flies to the place");
+ok(/r\.onclick=\(\)=>\{const i=rows\[\+r\.dataset\.ix\];(amTagSet\(i\);)?if\(window\.__cityFly\)window\.__cityFly\(i\.lon,i\.lat,700\);/.test(src), "tapping a row flies to the place (v541: and sets its name tag)");
 console.log(`v516 district focus: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

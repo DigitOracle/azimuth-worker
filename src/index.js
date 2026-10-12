@@ -8859,7 +8859,7 @@ function amRecalc(){window.__cityFocus=AMDIST;const AM=window.__AM;const ks=Obje
   AMSEG.querySelectorAll(".amlist").forEach(L=>{const k=L.dataset.k;if(!(AMON[k]&&dslug)){L.innerHTML="";L.classList.remove("open");return}
     const rows=((AM&&AM.items)||[]).filter(i=>i.k===k&&i.d===dslug).sort((a,b)=>String(a.n).localeCompare(String(b.n)));
     L.innerHTML=rows.map((i,ix)=>'<div class=amrow data-ix="'+ix+'">'+amEsc(i.n)+(i.x?'<small>'+amEsc(i.x)+'</small>':"")+(i.ap?'<small>position approximate</small>':"")+'</div>').join("");
-    L.querySelectorAll(".amrow").forEach(r=>{r.onclick=()=>{const i=rows[+r.dataset.ix];if(window.__cityFly)window.__cityFly(i.lon,i.lat,700);tip.style.display="block";tip.innerHTML="<b>"+amEsc(i.n)+"</b><s>"+amEsc(AMEN[k][0])+(i.x?" \u00b7 "+amEsc(i.x):"")+"</s>"}})});
+    L.querySelectorAll(".amrow").forEach(r=>{r.onclick=()=>{const i=rows[+r.dataset.ix];amTagSet(i);if(window.__cityFly)window.__cityFly(i.lon,i.lat,700);tip.style.display="block";tip.innerHTML="<b>"+amEsc(i.n)+"</b><s>"+amEsc(AMEN[k][0])+(i.x?" \u00b7 "+amEsc(i.x):"")+"</s>"}})});
   ((AM&&AM.items)||[]).forEach(i=>{if(!AMON[i.k]||i.lon==null||i.lat==null)return;if(dslug&&i.d!==dslug)return;const p=llx(i.lon,i.lat);AMPTS.push({i,v:new THREE.Vector3(p[0],6,p[1]),sx:-1,sy:-1})});
   const where=dslug?" in "+D.districts[AMDIST].name:" across Dubai";AMRES.textContent=ks.length?ks.map(k=>AMEN[k][0]).join(", ")+" \u00b7 "+AMPTS.length.toLocaleString("en")+where:"none";
   AMSC.textContent="all Dubai";AMSC.hidden=!dslug;if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC);amBlocks(ks)}
@@ -8889,13 +8889,26 @@ const _paint0=paintCity;paintCity=function(){_paint0();amPaint()};   // v512 - t
 const _flyTo0=flyTo;flyTo=function(ix,go){if(ix!==AMDIST)HILITE=-1;AMDIST=ix;_flyTo0(ix,go);amRecalc()};   // v511 - a chosen district scopes the places (Kendall: "if I say Business Bay, I should only get the petrol stations within Business Bay")
 const AMIMG={};function amImg(k){if(AMIMG[k])return AMIMG[k];const col=AMEN[k][2];const svg=ICON[k].replace("<svg ","<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' fill='none' stroke='"+col+"' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round' ");const im=new Image();im.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);AMIMG[k]=im;return im}
 function amDraw(){actx.clearRect(0,0,amc.width,amc.height);if(!AMPTS.length)return;const W=innerWidth,H=innerHeight,r=devicePixelRatio||1;const far=cam.position.distanceTo(ctl.target);const sz=far>22000?2:far>9000?2.8:4;
-  for(const p of AMPTS){const q=p.v.clone().project(cam);   // v521 - a place shown as a block keeps its badge too, so it can be found from any distanceif(q.z>1||q.x<-1.02||q.x>1.02||q.y<-1.02||q.y>1.02){p.sx=-1;continue}p.sx=(q.x+1)/2*W;p.sy=(1-q.y)/2*H;const col=AMEN[p.i.k][2];
+  // v521 - a place shown as a block keeps its badge too, so it can be found from any distance (v541: this note had swallowed the line below)
+  for(const p of AMPTS){const q=p.v.clone().project(cam);if(q.z>1||q.x<-1.02||q.x>1.02||q.y<-1.02||q.y>1.02){p.sx=-1;continue}p.sx=(q.x+1)/2*W;p.sy=(1-q.y)/2*H;const col=AMEN[p.i.k][2];
     const R=sz*2.4*r,cx=p.sx*r,cy=p.sy*r;actx.beginPath();actx.arc(cx,cy,R,0,6.2832);actx.fillStyle="rgba(19,31,29,.92)";actx.fill();actx.lineWidth=1.2*r;actx.strokeStyle=col;actx.setLineDash(p.i.ap?[3*r,2.5*r]:[]);actx.stroke();actx.setLineDash([]);
-    const im=amImg(p.i.k);if(im.complete&&im.naturalWidth){const s=R*1.25;actx.drawImage(im,cx-s/2,cy-s/2,s,s)}}}
+    const im=amImg(p.i.k);if(im.complete&&im.naturalWidth){const s=R*1.25;actx.drawImage(im,cx-s/2,cy-s/2,s,s)}}
+  amTagDraw(W,H,r)}
+// v541 - the chosen place's name ON the map: anchored to its point, a short leader line, the name in gold and the kind in small capitals.
+// It stays while the panel is folded; it goes when its kind is switched off or another place is chosen.
+let AMTAG=null;function amTagSet(i){AMTAG=i||null}
+function amTagDraw(W,H,r){const i=AMTAG;if(!i||!AMON[i.k]||i.lon==null)return;const q0=llx(i.lon,i.lat);const q=new THREE.Vector3(q0[0],6,q0[1]).project(cam);if(q.z>1||q.x<-1.05||q.x>1.05||q.y<-1.05||q.y>1.05)return;
+  const x=(q.x+1)/2*W*r,y=(1-q.y)/2*H*r,L=34*r;const k1=String(i.n||""),k2=(String(AMEN[i.k][0]||"")+(i.x?" \u00b7 "+i.x:"")+(i.ap?" \u00b7 position approximate":"")).toUpperCase();
+  actx.font="600 "+(13*r)+"px 'IBM Plex Sans',sans-serif";const w1=actx.measureText(k1).width;actx.font="500 "+(9.5*r)+"px 'IBM Plex Sans',sans-serif";const w2=actx.measureText(k2).width;
+  const bw=Math.max(w1,w2)+18*r,bh=38*r,bx=Math.min(Math.max(x-bw/2,4*r),W*r-bw-4*r),by=y-L-bh;
+  actx.strokeStyle="#C5A56A";actx.lineWidth=1.2*r;actx.beginPath();actx.moveTo(x,y-6*r);actx.lineTo(x,by+bh);actx.stroke();
+  actx.fillStyle="rgba(14,25,24,.94)";actx.beginPath();if(actx.roundRect)actx.roundRect(bx,by,bw,bh,6*r);else actx.rect(bx,by,bw,bh);actx.fill();actx.stroke();
+  actx.fillStyle="#E8D29A";actx.font="600 "+(13*r)+"px 'IBM Plex Sans',sans-serif";actx.textBaseline="alphabetic";actx.fillText(k1,bx+9*r,by+17*r);
+  actx.fillStyle="#C5A56A";actx.font="500 "+(9.5*r)+"px 'IBM Plex Sans',sans-serif";actx.fillText(k2,bx+9*r,by+31*r)}
 (function amLoop(){requestAnimationFrame(amLoop);amDraw()})();
 canvas.addEventListener("pointerup",ev=>{if(!AMPTS.length)return;const rct=canvas.getBoundingClientRect();const x=ev.clientX-rct.left,y=ev.clientY-rct.top;let best=null,bd=18*18;
   for(const p of AMPTS){if(p.sx<0)continue;const dx=p.sx-x,dy=p.sy-y,d=dx*dx+dy*dy;if(d<bd){bd=d;best=p}}if(!best)return;ev.stopImmediatePropagation();const i=best.i;const dn=window.__dName?window.__dName(i.d||""):(i.d||"");
-  tip.style.display="block";tip.innerHTML="<b>"+amEsc(i.n)+"</b><s>"+amEsc(AMEN[i.k][0])+(i.x?" \u00b7 "+amEsc(i.x):"")+(i.d?" \u00b7 "+amEsc(dn):"")+(i.ap?" \u00b7 position approximate":"")+"</s>";ctl.autoRotate=false},true);
+  amTagSet(i);tip.style.display="block";tip.innerHTML="<b>"+amEsc(i.n)+"</b><s>"+amEsc(AMEN[i.k][0])+(i.x?" \u00b7 "+amEsc(i.x):"")+(i.d?" \u00b7 "+amEsc(dn):"")+(i.ap?" \u00b7 position approximate":"")+"</s>";ctl.autoRotate=false},true);
 document.getElementById("amh").onclick=()=>{const open=!AMP.classList.contains("on");if(open){window.__stackOpen(AMP);amBuild()}AMP.classList.toggle("on",open)};
 window.__cityPlacesReady=()=>{if(AMP.classList.contains("on"))amBuild()};
 
