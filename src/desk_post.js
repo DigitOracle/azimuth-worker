@@ -731,14 +731,18 @@ export async function feedText(env, deps) {
 }
 const menu = (title, list) => title + "\n" + list.map((c, i) => (i + 1) + ". " + c.label).join("\n") + "\nReply 1 to " + list.length + ".";
 // v472 - every numbered menu also comes as a list to tap (row id dp:fn:<n> is the same as replying <n>)
-async function tapList(env, deps, body, button, labels) {
+// v546 (Kendall 12 Oct: "this thing still isn't working at all" - "You speaking or teaching" came back as Idea 2) - a step's list carries
+// its OWN fresh copy of the choice so far (desk_fp_<sid>, a key never read before, so never stale at the edge); the idea list says it is
+// the idea list. A tap then never depends on reading back desk_feed_pick written seconds earlier.
+async function savePick(env, pick) { const sid = rid() + rid(); await kvPut(env, "desk_feed_pick", pick, FEED_TTL); await kvPut(env, "desk_fp_" + sid, pick, FEED_TTL); return sid; }
+async function tapList(env, deps, body, button, labels, sid) {
   if (!deps.list) return;
-  try { await deps.list(env, String(body).slice(0, 1000), button, labels.slice(0, 10).map((l, i) => ({ id: "dp:fn:" + (i + 1), title: String(l.title).slice(0, 24), description: l.description ? String(l.description).slice(0, 72) : undefined }))); } catch (e) {}
+  try { await deps.list(env, String(body).slice(0, 1000), button, labels.slice(0, 10).map((l, i) => ({ id: (sid === "idea" ? "dp:fi:" : sid ? "dp:fp:" + sid + ":" : "dp:fn:") + (i + 1), title: String(l.title).slice(0, 24), description: l.description ? String(l.description).slice(0, 72) : undefined }))); } catch (e) {}
 }
 async function sendFeed(env, deps) {
   await deps.send(env, await feedText(env, deps));
   const L = await kvJ(env, "desk_ideas", []);
-  await tapList(env, deps, "Tap an idea to make it into a post.", "Pick an idea", L.map((o, i) => ({ title: (i + 1) + ". " + (o.kind === "news" ? "News" : o.kind === "motivation" ? "Motivation" : o.kind === "friday" ? "Friday" : o.kind === "smart" ? "Smart city/ISO" : o.lane === "alchemy" ? "DigitAlchemy" : "Digital Abbot"), description: o.text })));
+  await tapList(env, deps, "Tap an idea to make it into a post.", "Pick an idea", L.map((o, i) => ({ title: (i + 1) + ". " + (o.kind === "news" ? "News" : o.kind === "motivation" ? "Motivation" : o.kind === "friday" ? "Friday" : o.kind === "smart" ? "Smart city/ISO" : o.lane === "alchemy" ? "DigitAlchemy" : "Digital Abbot"), description: o.text })), "idea");
 }
 // a bare number while a feed or a choice is open; returns true when it was taken here
 // v475 - picture -> background (5 settings or "Type my own") -> time of day -> shape -> "Here's the picture I'll make" with Make it /
@@ -769,31 +773,31 @@ async function showPreview(env, deps, pick) {
 export function clipDeps(deps) {
   return Object.assign({}, deps, { genImage: (env, prompt, size) => genImage(env, deps, prompt, null, size), storeImage: (env, bytes) => storeImage(env, bytes, "image/jpeg") });
 }
-async function feedReply(env, deps, n) {
-  const pick = await kvJ(env, "desk_feed_pick", null);
+async function feedReply(env, deps, n, given) {
+  const pick = given === "idea" ? null : (given || await kvJ(env, "desk_feed_pick", null)); let _sid = null;
   if (pick && pick.step === "picture") {
     const c = PICTURE_CHOICES[n - 1]; if (!c) { await deps.send(env, menu("Pick a picture:", PICTURE_CHOICES)); return true; }
     if (c.id === "video") { await env.MEETINGS.delete("desk_feed_pick"); await clipStart(env, clipDeps(deps), pick.idea, pick.kind, pick.lane); return true; }
     if (c.id === "slides") { await env.MEETINGS.delete("desk_feed_pick"); await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "carousel", picture: "slides", from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined }); return true; }
-    await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "background", picture: c.id }), FEED_TTL);
-    await deps.send(env, menu(c.label + ". Now the background:", BG_LIST)); await tapList(env, deps, "Pick the background, or Type my own.", "Pick background", BG_LIST.map((b) => ({ title: b.label }))); return true;
+    _sid = await savePick(env, Object.assign(pick, { step: "background", picture: c.id }));
+    await deps.send(env, menu(c.label + ". Now the background:", BG_LIST)); await tapList(env, deps, "Pick the background, or Type my own.", "Pick background", BG_LIST.map((b) => ({ title: b.label })), _sid); return true;
   }
   if (pick && pick.step === "background") {
     const b = BG_LIST[n - 1]; if (!b) { await deps.send(env, menu("Pick a background:", BG_LIST)); return true; }
     if (b.id === "custom") { await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "bg_text", background: "custom" }), FEED_TTL); await deps.send(env, "Describe the background in your next message, for example: the Dubai Creek at dusk with abras on the water."); return true; }
-    await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "time", background: b.id }), FEED_TTL);
-    await deps.send(env, menu("What time of day?", TIME_CHOICES)); await tapList(env, deps, "Pick the time of day.", "Pick time", TIME_CHOICES.map((x) => ({ title: x.label }))); return true;
+    _sid = await savePick(env, Object.assign(pick, { step: "time", background: b.id }));
+    await deps.send(env, menu("What time of day?", TIME_CHOICES)); await tapList(env, deps, "Pick the time of day.", "Pick time", TIME_CHOICES.map((x) => ({ title: x.label })), _sid); return true;
   }
   if (pick && pick.step === "time") {
     const t = TIME_CHOICES[n - 1]; if (!t) { await deps.send(env, menu("What time of day?", TIME_CHOICES)); return true; }
     if (pick.picture === "poster") { await showPreview(env, deps, Object.assign(pick, { tod: t.id, shape: "portrait", words: "none" })); return true; }   // v495
-    await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "shape", tod: t.id }), FEED_TTL);
-    await deps.send(env, menu("Which shape?", SHAPE_LIST)); await tapList(env, deps, "Pick the shape.", "Pick shape", SHAPE_LIST.map((x) => ({ title: x.label }))); return true;
+    _sid = await savePick(env, Object.assign(pick, { step: "shape", tod: t.id }));
+    await deps.send(env, menu("Which shape?", SHAPE_LIST)); await tapList(env, deps, "Pick the shape.", "Pick shape", SHAPE_LIST.map((x) => ({ title: x.label })), _sid); return true;
   }
   if (pick && pick.step === "shape") {
     const sh = SHAPE_LIST[n - 1]; if (!sh) { await deps.send(env, menu("Which shape?", SHAPE_LIST)); return true; }
-    await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "words", shape: sh.id }), FEED_TTL);   // v493
-    await deps.send(env, menu("Words on the picture?", WORDS_LIST)); await tapList(env, deps, "Words on the picture?", "Pick words", WORDS_LIST.map((x) => ({ title: x.label }))); return true;
+    _sid = await savePick(env, Object.assign(pick, { step: "words", shape: sh.id }));   // v493
+    await deps.send(env, menu("Words on the picture?", WORDS_LIST)); await tapList(env, deps, "Words on the picture?", "Pick words", WORDS_LIST.map((x) => ({ title: x.label })), _sid); return true;
   }
   if (pick && pick.step === "words") {
     const w = WORDS_LIST[n - 1]; if (!w) { await deps.send(env, menu("Words on the picture?", WORDS_LIST)); return true; }
@@ -802,8 +806,8 @@ async function feedReply(env, deps, n) {
   if (!(await env.MEETINGS.get("desk_feed_open"))) return false;
   const L = await kvJ(env, "desk_ideas", []), it = L[n - 1];
   if (!it) { await deps.send(env, "No idea " + n + " in today's feed. Reply 1 to " + L.length + ", or send feed for a new list."); return true; }
-  await kvPut(env, "desk_feed_pick", { step: "picture", n, idea: it.text, lane: it.lane, allow: it.allow || null, kind: it.kind || null }, FEED_TTL);
-  await deps.send(env, menu("Idea " + n + ": " + it.text + "\nPick a picture:", PICTURE_CHOICES)); await tapList(env, deps, "Pick the picture.", "Pick picture", PICTURE_CHOICES.map((b) => ({ title: b.label }))); return true;
+  _sid = await savePick(env, { step: "picture", n, idea: it.text, lane: it.lane, allow: it.allow || null, kind: it.kind || null });
+  await deps.send(env, menu("Idea " + n + ": " + it.text + "\nPick a picture:", PICTURE_CHOICES)); await tapList(env, deps, "Pick the picture.", "Pick picture", PICTURE_CHOICES.map((b) => ({ title: b.label })), _sid); return true;
 }
 // v475 - the preview's buttons, and the one typed line for "Type my own" background or "Change it"
 async function sceneButton(env, deps, act, idShape) {
@@ -917,6 +921,8 @@ async function handleButton(env, deps, id) {
   // v466 - "post" alone: what kind of post, by tapping
   { const sb = String(id).match(/^dp:scene:(make|change|cancel)(?::([a-z0-9]+))?$/); if (sb) return sceneButton(env, deps, sb[1], sb[2]); }   // v475
   if (id === "dp:start:ideas") { await sendFeed(env, deps); return true; }   // v472 - the fresh 10, not the weekly 5
+  { const fp = String(id).match(/^dp:fp:([a-z0-9]{4,40}):(\d{1,2})$/); if (fp) { const pk = await kvJ(env, "desk_fp_" + fp[1], null); if (!pk) { await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } await feedReply(env, deps, Number(fp[2]), pk); return true; } }   // v546
+  { const fi = String(id).match(/^dp:fi:(\d{1,2})$/); if (fi) { await env.MEETINGS.put("desk_feed_open", String(nowOf(deps)), { expirationTtl: FEED_TTL }); await env.MEETINGS.delete("desk_feed_pick"); const done = await feedReply(env, deps, Number(fi[1]), "idea"); if (!done) await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } }   // v546 - the idea list
   { const fn = String(id).match(/^dp:fn:(\d{1,2})$/); if (fn) { await env.MEETINGS.put("desk_feed_open", String(nowOf(deps)), { expirationTtl: FEED_TTL }); const done = await feedReply(env, deps, Number(fn[1])); if (!done) await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } }
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
   const mm = String(id).match(/^dp:([a-z0-9]+):(music|nomusic|muse|mtry|mno|vc_none|vc_bottom|vc_scroll|m_(calm|corporate|upbeat|cinematic|inspiring))$/);   // v467 - music; v493 vc_ captions
