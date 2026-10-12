@@ -37,5 +37,8 @@ ok((await askRoute(new Request("https://w/ask/ok"), {}, new URL("https://w/ask/o
   const env3 = { MEETINGS: { put: async () => {} }, ASK_ENGINE_URL: "https://e", ASK_SECRET: "s" };
   const j3 = await (await askRoute(new Request("https://w/ask", { method: "POST", body: JSON.stringify({ question: "x" }) }), env3, new URL("https://w/ask?key=k"), { keyTier: () => "admin" })).json();
   ok(n === 2 && j3.status === "not_held" && j3.answer_md === "plain", "v558: retries once, then passes the engine's not_held answer through", j3); }
+// v559 - brief answers: headline, cards, note, follow-up chips; the trace and the full report collapsed; a trace detail that is not a sentence is never shown
+ok(/askhl/.test(ASK_FILE_JS) && /askcards/.test(ASK_FILE_JS) && /details_md/.test(ASK_FILE_JS) && /askfu/.test(ASK_FILE_JS), "v559: headline, cards, full report toggle and follow-up chips");
+ok(/typeof x\.detail==="string"/.test(ASK_FILE_JS) && /<details class=asksrc><summary>What I checked/.test(ASK_FILE_JS), "v559: What I checked is collapsed and never shows [object Object]");
 console.log(`v555 ask najma: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
