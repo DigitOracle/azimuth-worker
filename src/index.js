@@ -1,3 +1,4 @@
+import { askBoxHtml, askRoute, askFloatHtml } from "./ask_najma.js";   // v555, v556
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
@@ -2310,6 +2311,7 @@ async function appFetch(request, env, ctx) {
       const _ir = await refImport(env, _ib && _ib.ids, (_ib && _ib.tag) || "general", url.searchParams.get("apply") === "1", Date.now());
       return new Response(JSON.stringify(_ir, null, 2), { status: _ir.ok ? 200 : 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
     }
+    { const _ak = await askRoute(request, env, url, { keyTier }); if (_ak) return _ak; }   // v555 - Ask Najma (stub engine, owner only)
     if (url.pathname === "/desk_ref_set" && request.method === "GET") {   // v549 - owner key; ?n=<ref>&approved=0|1 - takes a reference photo out of use (or back), the photo itself is kept
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       const _sn = Number(url.searchParams.get("n")) || 0; let _sm = null; try { _sm = JSON.parse(await env.MEETINGS.get("desk_ref_" + _sn) || "null"); } catch (e) {}
@@ -4966,7 +4968,8 @@ const najNav = (key, active, rk) => {   // v208 (Kendall, 21 Sep 2026) - rk ride
   // CHARTS left the bar: it is the postable card sheet for the feed, not somewhere a client is walked into.
   const items = [["start", "/start", "star", "START"], ["find", "/find", "search", "FIND"], ["pulse", "/market", "trend", "PULSE"], ["map", "/map", "pin", "MAP"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["fit", "/fit", "fit", "MOMO"], ["more", "/more", "grid", "MORE"]];   // v328 - MOMO (the food and exercise log, src/fit.js), owner only: clientResp strips this tab from a client link (OWNER_LINK_RE)   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
   return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + (rk ? '&rk=' + encodeURIComponent(rk) : '') + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>'
-    + (rk && i[0] === "map" ? '<a' + (active === "residents" ? ' class=on' : '') + ' href="/residents?rk=' + encodeURIComponent(rk) + '">' + najIcon("people") + '<span>RESIDENTS</span></a>' : '')).join('') + '</nav>';   // v152.3 - a private page has one tap to the full residents view (Kendall, 15 Sep)
+    + (rk && i[0] === "map" ? '<a' + (active === "residents" ? ' class=on' : '') + ' href="/residents?rk=' + encodeURIComponent(rk) + '">' + najIcon("people") + '<span>RESIDENTS</span></a>' : '')).join('') + '</nav>'
+    + askFloatHtml(key);   // v556 - the floating Ask on every page with the tab bar (shown only to a link that may ask)   // v152.3 - a private page has one tap to the full residents view (Kendall, 15 Sep)
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5106,7 +5109,8 @@ function najStartHtml(key, rk, isOwner) {
     // v277.1 (Kendall, 1 Oct 2026): "the only thing I wanted was the way to search ... the rest of these need to go away, they are noise."
     // START is the Brief alone; the five angles (NAJ_ANGLES) and the cheat sheet (NAJ_CHEAT) are no longer drawn. The Ejari
     // contract search card joins here when that feature ships - no card before its page exists (no dead control).
-    + startBody(key, rk, !!isOwner)   // v278.1 - the approved design (src/start_page.js)
+    // v556 (Kendall 12 Oct: "I want it here") - Ask Najma sits in the header, under "Two taps to the right buildings ...", above THE BRIEF
+    + (isOwner ? startBody(key, rk, true).replace("<div class=tag>THE BRIEF", '<div id=askhero>' + askBoxHtml(key, "analyst") + "</div><div class=tag>THE BRIEF") : startBody(key, rk, false))   // v278.1 - the approved design (src/start_page.js)
     + '<div class=nt>Every figure in here is register-grounded \u2014 DLD, Ejari and the project register. If a number is not in the register it is not on the screen.</div>'
     + najNav(key, "start", rk) + '</body></html>';
 }
