@@ -268,7 +268,8 @@ const POSTER_SYS = "You write the words for ONE portrait social-media poster for
   "\"sub\":\"one sentence, at most 18 words, tying it to the news or the idea\",\"cards\":[{\"title\":\"2 words, capitals\",\"text\":\"at most 14 words\",\"icon\":\"one of: " + POSTER_ICONS.join(", ") + "\"},{...},{...}]," +
   "\"close1\":\"closing line 1, at most 5 words\",\"close2\":\"closing line 2, at most 6 words\"," +
   "\"big\":\"ONE figure copied exactly from the idea with its unit (e.g. 40%, AED 2bn, 12 km), or empty if the idea has none\",\"big_label\":\"what the figure is, at most 8 words\"," +
-  "\"quote\":\"one line in his own voice, at most 18 words, no quotation marks\",\"steps\":[\"3 or 4 steps, at most 4 words each\"]}. Exactly three cards.";
+  "\"quote\":\"one line in his own voice, at most 18 words, no quotation marks\",\"steps\":[\"3 or 4 steps, at most 4 words each\"],\"before\":\"the old way, at most 5 words\",\"after\":\"the new way, at most 5 words\",\"question\":\"one sharp question, at most 10 words, ending with ?\"," +
+  "\"ticks\":[\"3 short checks, at most 5 words each\"],\"callout\":\"a label for one feature in the scene, at most 4 words\"}. Exactly three cards.";
 export function posterWords(c) { return [c.kicker, c.h1, c.h2, c.sub].concat((c.cards || []).flatMap((k) => [k.title, k.text])).concat([c.close1, c.close2, POSTER_BYLINE]).filter(Boolean).join(" "); }
 export function posterPrompt(c, p, withHim) {
   const card = (k, i) => "card " + (i + 1) + ": icon '" + (POSTER_ICONS.includes(k.icon) ? k.icon : "document with a gear") + "', title '" + k.title + "', text '" + k.text + "'";
@@ -286,16 +287,19 @@ export function posterPrompt(c, p, withHim) {
 // rotated (never the last one twice running) and matched to the idea: a figure in the idea -> one big number; steps/phases -> a timeline;
 // otherwise full-bleed photo, quote card, magazine cover or the original cards. Research note (12 Oct): simple, readable-in-two-seconds
 // pictures beat busy infographics; posts that look designed by a machine do worse - so the photo-led layouts come first.
-export const POSTER_LAYOUTS = ["bleed", "bignum", "quote", "timeline", "cover", "cards"];
-export const LAYOUT_SAY = { bleed: "a full-bleed photograph with only the headline", bignum: "one big figure", quote: "a quote card with you in it", timeline: "a timeline of steps", cover: "a magazine cover", cards: "the three-card poster" };
+export const POSTER_LAYOUTS = ["bleed", "bignum", "quote", "timeline", "cover", "cards", "split", "question", "lowerthird", "checklist", "callout", "typeportrait"];   // v540: six more (Kendall 12 Oct: "keep all six, but I want more")
+export const LAYOUT_SAY = { bleed: "a full-bleed photograph with only the headline", bignum: "one big figure", quote: "a quote card with you in it", timeline: "a timeline of steps", cover: "a magazine cover", cards: "the three-card poster", split: "before and after", question: "one big question", lowerthird: "a news-style site shot", checklist: "a checklist over a photo", callout: "an annotated photo", typeportrait: "bold type with your portrait" };
 export function chooseLayout(idea, last, forced, c) {
   if (forced && POSTER_LAYOUTS.includes(forced)) return forced;
   const s = String(idea || "").toLowerCase(), want = [];
   if (c && c.big && /\d/.test(c.big)) want.push("bignum");
   if (/\b(phase|phases|step|steps|stage|stages|roadmap|timeline|journey|milestone|sequence)\b/.test(s) && c && Array.isArray(c.steps) && c.steps.length >= 3) want.push("timeline");
+  if (/\b(before|after|instead|versus|vs|old way|new way|from .+ to)\b/.test(s) && c && c.before && c.after) want.push("split");
+  if (/\?|\b(why|what if|how do|who)\b/.test(s) && c && c.question) want.push("question");
+  if (/\b(site|construction|crane|handover|works|contractor)\b/.test(s)) want.push("lowerthird");
   const pool = want.filter((x) => x !== last);
   if (pool.length) return pool[0];
-  const rest = ["bleed", "quote", "cover", "bleed", "cards"].filter((x) => x !== last);
+  const rest = ["bleed", "quote", "cover", "bleed", "cards", "checklist", "callout", "typeportrait", "question"].filter((x) => x !== last && (x !== "question" || (c && c.question)) && (x !== "checklist" || (c && Array.isArray(c.ticks) && c.ticks.length >= 3)) && (x !== "callout" || (c && c.callout)));
   let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return rest[h % rest.length];
 }
@@ -306,6 +310,12 @@ export function layoutWords(L, c) {
   if (L === "quote") return [c.quote, POSTER_BYLINE].filter(Boolean).join(" ");
   if (L === "timeline") return [c.kicker, c.h1, c.h2].concat((c.steps || []).slice(0, 4)).concat([POSTER_BYLINE]).filter(Boolean).join(" ");
   if (L === "cover") return [c.kicker, c.h1, c.h2, c.sub, POSTER_BYLINE].filter(Boolean).join(" ");
+  if (L === "split") return ["BEFORE", c.before, "AFTER", c.after, c.h1, c.h2, POSTER_BYLINE].filter(Boolean).join(" ");
+  if (L === "question") return [c.question, POSTER_BYLINE].filter(Boolean).join(" ");
+  if (L === "lowerthird") return [c.kicker, c.h1 + " " + c.h2, POSTER_BYLINE].filter(Boolean).join(" ");
+  if (L === "checklist") return [c.h1, c.h2].concat((c.ticks || []).slice(0, 3)).concat([POSTER_BYLINE]).filter(Boolean).join(" ");
+  if (L === "callout") return [c.callout, c.h1, c.h2, POSTER_BYLINE].filter(Boolean).join(" ");
+  if (L === "typeportrait") return [c.kicker, c.h1, c.h2, c.sub, POSTER_BYLINE].filter(Boolean).join(" ");
   return posterWords(c);
 }
 export function layoutPrompt(L, c, p, withHim) {
@@ -323,6 +333,16 @@ export function layoutPrompt(L, c, p, withHim) {
   if (L === "timeline") return base + "Warm ivory background. At the top, a small uppercase kicker in dark grey: '" + c.kicker + "', then a two-line serif headline: '" + c.h1 + "' in navy / '" + c.h2 + "' in gold. " +
     "Across the middle, ONE thin gold line running left to right with " + (c.steps || []).slice(0, 4).length + " gold dots on it, and under each dot a short navy label, in order: " + (c.steps || []).slice(0, 4).map((x, i) => (i + 1) + " '" + x + "'").join(", ") + ". " +
     (him ? "Below the line, " + him + ", full length, walking along it. " : "Below the line, a photograph of " + scene + ". ") + "At the bottom, small widely spaced navy text: '" + POSTER_BYLINE + "'." + tail;
+  if (L === "split") return base + "The frame is split vertically down the middle by a thin gold line. LEFT half: a muted, desaturated, slightly cluttered version of " + scene + ", with a small uppercase label 'BEFORE' and under it in white: '" + c.before + "'. RIGHT half: the same place clean, bright and orderly, " + (him ? "with " + him + " standing in it, " : "") + "a small uppercase gold label 'AFTER' and under it in white: '" + c.after + "'. " +
+    "Across the top, a two-line serif headline in white on a dark band: '" + c.h1 + "' / '" + c.h2 + "'. At the bottom, small widely spaced white text: '" + POSTER_BYLINE + "'." + tail;
+  if (L === "question") return base + "A full-bleed photograph of " + scene + ", softly blurred and darkened. " + (him ? "In the lower right, " + him + ", head and shoulders, looking thoughtfully up at the question. " : "") +
+    "Filling the upper half, ONE very large question in elegant warm-white serif type: '" + c.question + "' - the question mark in gold. At the bottom, small widely spaced white text: '" + POSTER_BYLINE + "'." + tail;
+  if (L === "lowerthird") return base + "A candid, documentary full-bleed photograph on a real Dubai construction site: " + scene + ". " + (him ? him.replace("smartly dressed", "wearing a white hard hat and a hi-vis vest over a shirt") + ", mid-conversation, looking off camera, not posing. " : "Workers far in the background, not identifiable. ") +
+    "Only text: a broadcast-style lower-third strip across the bottom fifth - a short gold tab with '" + c.kicker + "', then a deep navy bar with white sans-serif '" + c.h1 + " " + c.h2 + "', and under it small white text '" + POSTER_BYLINE + "'." + tail;
+  if (L === "checklist") return base + "A full-bleed photograph of " + scene + (him ? " with " + him + " on the right third" : "") + ". A dark gradient on the left half for legibility. On it: a two-line serif headline in white: '" + c.h1 + "' / '" + c.h2 + "', and below it three lines, each starting with a gold tick mark: " + (c.ticks || []).slice(0, 3).map((x) => "'" + x + "'").join(", ") + ". At the bottom, small widely spaced white text: '" + POSTER_BYLINE + "'." + tail.replace("no icons, ", "no icons other than the three ticks, ");
+  if (L === "callout") return base + "A full-bleed, slightly elevated photograph of " + scene + (him ? ", with " + him + " in the foreground on one side, gesturing towards it" : "") + ". ONE thin white annotation line with a small white circle at its end points at a clear feature in the scene, labelled in small white uppercase: '" + c.callout + "'. Across the top, a two-line serif headline in white: '" + c.h1 + "' / '" + c.h2 + "'. At the bottom, small widely spaced white text: '" + POSTER_BYLINE + "'." + tail;
+  if (L === "typeportrait") return "A bold typographic portrait social-media poster on a solid deep navy #0B2340 background. " + (him ? "In the top half, a large circular portrait photograph of " + him + ", head and shoulders, with a thin gold ring around the circle. " : "") +
+    "Below, a small gold uppercase kicker '" + c.kicker + "', a very large white serif headline in two lines: '" + c.h1 + "' / '" + c.h2 + "' (the second line in rich gold #B8862B), one sentence in light grey: '" + c.sub + "', and at the bottom small widely spaced white text: '" + POSTER_BYLINE + "'." + tail;
   return base + "A MAGAZINE COVER. The top 60% is a full-bleed photograph: " + scene + (him ? ", with " + him + " looking into the camera" : "") + ". The bottom 40% is a solid deep navy panel. On it: a small gold uppercase kicker '" + c.kicker + "', a large serif headline in two lines, white '" + c.h1 + "' / gold '" + c.h2 + "', one sentence in light grey: '" + c.sub + "', and at the very bottom, small widely spaced white text: '" + POSTER_BYLINE + "'." + tail;
 }
 async function posterSlide(env, deps, p, s, notes) {
@@ -335,7 +355,7 @@ async function posterSlide(env, deps, p, s, notes) {
   let last = null; try { last = await env.MEETINGS.get("desk_last_layout"); } catch (e) {}
   if (c.big && !nums(c.big).every((n) => allowed.has(n))) c.big = "";
   let L = chooseLayout(p.idea, last, p.layout, c);
-  if ((L === "bignum" && !c.big) || (L === "quote" && !c.quote) || (L === "timeline" && !(Array.isArray(c.steps) && c.steps.length >= 3))) L = last === "bleed" ? "cover" : "bleed";   // the words for that layout are missing
+  if ((L === "bignum" && !c.big) || (L === "quote" && !c.quote) || (L === "timeline" && !(Array.isArray(c.steps) && c.steps.length >= 3)) || (L === "split" && !(c.before && c.after)) || (L === "question" && !c.question) || (L === "checklist" && !(Array.isArray(c.ticks) && c.ticks.length >= 3)) || (L === "callout" && !c.callout)) L = last === "bleed" ? "cover" : "bleed";   // the words for that layout are missing
   const r = await pickRefs(env, p.idea, "speaking"), refs = r.count >= REF_MIN && r.bufs.length >= 2 ? r.bufs.slice(0, 1) : null;   // v537: ONE reference, as on Najjuko's scenes
   if (!refs) notes.push("The poster has no person: I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ".");
   const prompt = layoutPrompt(L, c, p, !!refs), want = layoutWords(L, c);
@@ -710,7 +730,7 @@ export const WORDS_LIST = [{ id: "none", label: "No words" }, { id: "headline", 
 export function scenePreview(pick) {
   const pic = PICTURE_CHOICES.find((x) => x.id === pick.picture), bg = pick.background === "custom" ? pick.bg_text : (BACKGROUND_CHOICES.find((x) => x.id === pick.background) || {}).label;
   const tm = TIME_CHOICES.find((x) => x.id === pick.tod), sh = SHAPE_LIST.find((x) => x.id === pick.shape);
-  const who = pick.picture === "poster" ? "A poster, its layout matched to the idea and never the same as the last one: a full-bleed photograph, one big figure, a quote card, a timeline, a magazine cover or the three-card poster. You in it (from your reference photos). Portrait. The words are written for you and checked on the picture."
+  const who = pick.picture === "poster" ? "A poster, its layout matched to the idea and never the same as the last one: one of twelve layouts (full-bleed photo, big figure, quote, timeline, magazine cover, three cards, before and after, big question, news-style site shot, checklist, annotated photo, bold type with your portrait). You in it (from your reference photos). Portrait. The words are written for you and checked on the picture."
     : pick.picture === "scene" ? "A scene, no person in it." : pick.picture === "speaking" ? "You, speaking or teaching, your face from your reference photos." : "You on site in a hard hat and hi-vis, your face from your reference photos.";
   const wd = WORDS_LIST.find((x) => x.id === pick.words);
   let s = "Here's the picture I'll make:\n\n" + who + " Behind: " + (bg || "a Dubai setting") + ". " + (tm ? tm.label : "Natural daylight") + ". " + (sh ? sh.label : "Square") + "." + (wd && wd.id !== "none" ? " Words: " + wd.label.toLowerCase() + " (the post's headline)." : "") + "\nIdea: " + pick.idea;
