@@ -1,6 +1,6 @@
-// v475 - the desk follows Naj's scene ritual: picture -> background (or Type my own) -> time of day -> shape -> "Here's the picture I'll
-// make" with Make it / Change it / Cancel; nothing is generated before Make it; the prompt carries the own background, the light, the
-// changes and the shape. Offline.
+// v475 -> v547 - the desk follows Najjuko's scene ritual (Kendall 12 Oct 2026: "rewrite everything according to Azimuth"): idea -> picture ->
+// background -> time of day -> "Here's the picture I'll make" with Make it / Change it / Cancel. Every list row carries the whole choice
+// in its own id; nothing a tap needs is read back from a shared key; nothing is generated before Make it. Offline.
 import { deskPostRoute, bgLine, sceneExtras, scenePreview } from "../src/desk_post.js";
 
 let pass = 0, fail = 0;
@@ -9,7 +9,7 @@ const store = new Map();
 const KV = { async get(k, t) { return store.has(k) ? store.get(k) : null; }, async put(k, v) { store.set(k, v); }, async delete(k) { store.delete(k); }, async list({ prefix } = {}) { return { keys: [...store.keys()].filter((k) => !prefix || k.startsWith(prefix)).map((name) => ({ name })) }; } };
 const env = { MEETINGS: KV, WA_DESK_PHONE_ID: "1", WA_DESK_OWNER: "2", OPENAI_API_KEY: "K" };
 const imgCalls = [];
-globalThis.fetch = async (u, init) => { if (/images\/(edits|generations)/.test(String(u))) { const body = init.body; imgCalls.push(typeof body === "string" ? JSON.parse(body) : { prompt: body.get("prompt"), size: body.get("size") }); const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]); return new Response(JSON.stringify({ data: [{ b64_json: btoa(String.fromCharCode(...jpg)) }] })); } return new Response("{}"); };
+globalThis.fetch = async (u, init) => { if (/images\/(edits|generations)/.test(String(u))) { const body = init.body; imgCalls.push(typeof body === "string" ? JSON.parse(body) : { prompt: body.get("prompt"), size: body.get("size"), n: body.getAll("image[]").length }); const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]); return new Response(JSON.stringify({ data: [{ b64_json: btoa(String.fromCharCode(...jpg)) }] })); } return new Response("{}"); };
 for (let i = 1; i <= 4; i++) { store.set("desk_ref_" + i, JSON.stringify({ n: i, key: "desk_refimg_" + i, tag: "general", approved: true })); store.set("desk_refimg_" + i, new Uint8Array([0xff, 0xd8, i]).buffer); }
 store.set("desk_ref_index", JSON.stringify([1, 2, 3, 4]));
 const texts = [], lists = [], btns = [];
@@ -19,26 +19,24 @@ const go = async (m, t) => { texts.length = 0; lists.length = 0; btns.length = 0
 const tap = (id) => go({ type: "interactive", interactive: { list_reply: { id } } });
 const btn = (id) => go({ type: "interactive", interactive: { button_reply: { id } } });
 const say = (t) => go({ type: "text", text: { body: t } }, t);
+const row = (title) => { const L = lists[lists.length - 1] || []; const r = L.find((x) => x.title === title || x.title.indexOf(title) >= 0); return r && r.id; };
 
 await say("/ideas");
-await tap("dp:fn:6");                       // a DigitAlchemy idea
-await tap("dp:fn:1");                       // You on site
-ok(lists[0] && lists[0].length === 6 && lists[0][5].title === "Type my own", "the backgrounds end with Type my own", JSON.stringify(lists[0]));
-await tap("dp:fn:6");                       // Type my own
-ok(/Describe the background/.test(texts.join("")), "Type my own asks for one line");
-await say("the Dubai Creek at dusk with abras on the water");
+const ideaRows = lists[0] || [];
+ok(ideaRows.length >= 6 && ideaRows.every((r) => /^dp:i:[a-z0-9]{10,}:\d+$/.test(r.id)), "the idea list: each row carries the feed's own snapshot and its number", JSON.stringify(ideaRows.slice(0, 2)));
+await tap(ideaRows[5].id);
+ok(lists[0] && lists[0].map((r) => r.title).join(",") === "You on site,You speaking or teaching,A scene, no person,Poster (layout varies),Infographic slides (caro,A short video of you", "the picture choices, as one list (no typed menu)", JSON.stringify(lists[0] && lists[0].map((r) => r.title)));
+ok(texts.length === 0, "no numbered text menu beside the list", texts.join(" | "));
+await tap(row("You on site"));
+ok(lists[0] && lists[0].length === 5 && lists[0][4].title === "Calm terrace at sunrise" && /^dp:b:[a-z0-9]+:6:1:\d$/.test(lists[0][0].id), "then the background: five settings, each row carrying idea and picture", JSON.stringify(lists[0]));
+await tap(row("Dubai skyline"));
 ok(lists[0] && lists[0].map((r) => r.title).join(",") === "Early morning,Midday,Late afternoon,Sunset,Night", "then the time of day", JSON.stringify(lists[0]));
-await tap("dp:fn:4");                       // Sunset
-ok(lists[0] && lists[0].length === 3 && /Landscape 16:9/.test(lists[0][1].title), "then the shape: square, landscape, portrait");
 const before = imgCalls.length;
-await tap("dp:fn:2");                       // Landscape
-ok(lists[0] && lists[0].map((r) => r.title).join(",") === "No words,Headline on picture,Caption strip at bottom", "v493: then words on the picture", JSON.stringify(lists[0]));
-await tap("dp:fn:2");                       // Headline on the picture
+await tap(row("Sunset"));
 const pv = btns[0];
-ok(pv && /Here's the picture I'll make/.test(pv.b) && /Dubai Creek at dusk/.test(pv.b) && /Sunset/.test(pv.b) && /Landscape 16:9/.test(pv.b), "Here's the picture I'll make, in plain words", pv && pv.b);
-ok(pv && /^dp:scene:make:[a-z0-9]{10,},dp:scene:change:[a-z0-9]{10,},dp:scene:cancel:[a-z0-9]{10,}$/.test(pv.x.map((b) => b.id).join(",")), "Make it / Change it / Cancel, each carrying the preview's own snapshot id (v490)", pv && pv.x.map((b) => b.id).join(","));
-// v490: a STALE shared pick (one step behind) must not matter: the snapshot key decides
-store.set("desk_feed_pick", JSON.stringify(Object.assign(JSON.parse(store.get("desk_feed_pick")), { step: "time" })));
+ok(pv && /Here's the picture I'll make/.test(pv.b) && /Dubai skyline/.test(pv.b) && /Sunset/.test(pv.b) && /Portrait/.test(pv.b), "Here's the picture I'll make, in plain words (portrait: he is in it)", pv && pv.b);
+ok(pv && /^dp:scene:make:[a-z0-9]{10,},dp:scene:change:[a-z0-9]{10,},dp:scene:cancel:[a-z0-9]{10,}$/.test(pv.x.map((b) => b.id).join(",")), "Make it / Change it / Cancel, each carrying the preview's own snapshot id", pv && pv.x.map((b) => b.id).join(","));
+ok(!store.has("desk_feed_pick"), "no shared 'choice so far' key is written any more");
 ok(imgCalls.length === before, "nothing is generated before Make it");
 await btn(pv.x[1].id);
 ok(/Tell me the change/.test(texts.join("")), "Change it asks for the change");
@@ -46,12 +44,21 @@ await say("put the Burj Khalifa behind me");
 ok(btns[0] && /Your change: put the Burj Khalifa behind me/.test(btns[0].b), "the preview comes back with the change");
 await btn(btns[0].x[0].id);
 const call = imgCalls[imgCalls.length - 1];
-ok(call && /Setting: the Dubai Creek at dusk/.test(call.prompt) && /Sunset: the sun just above the horizon/.test(call.prompt) && /Change: put the Burj Khalifa behind me\./.test(call.prompt) && /reference photos/.test(call.prompt), "Make it: his own background, the light, his change and his face go into the picture", call && call.prompt);
-ok(call && call.size === "1536x1024", "in the shape he chose (landscape)", call && call.size);
+ok(call && /A realistic photograph/.test(call.prompt) && !/illustration/i.test(call.prompt) && /Dubai skyline/.test(call.prompt) && /Sunset: the sun just above the horizon/.test(call.prompt) && /Change: put the Burj Khalifa behind me\./.test(call.prompt) && /glasses exactly as in the photo/.test(call.prompt), "Make it: a photograph (not the old illustration style) with his setting, light, change and face", call && call.prompt);
+ok(call && call.size === "1024x1536" && call.n === 1, "portrait, from ONE reference photo", JSON.stringify({ size: call && call.size, n: call && call.n }));
+// a scene is square and has no person
+await say("/ideas"); await tap((lists[0] || [])[5].id); await tap(row("A scene, no person")); await tap(row("Plain studio")); await tap(row("Midday"));
+ok(btns[0] && /Square/.test(btns[0].b) && /A scene, no person/.test(btns[0].b), "a scene is square, no person");
 // cancel
-await say("/ideas"); await tap("dp:fn:6"); await tap("dp:fn:3"); await tap("dp:fn:2"); await tap("dp:fn:1"); await tap("dp:fn:3"); await tap("dp:fn:1");
-const n0 = imgCalls.length; await btn("dp:scene:cancel");
+const n0 = imgCalls.length; await btn(btns[0].x[2].id);
 ok(/Cancelled\. Nothing was made\./.test(texts.join("")) && imgCalls.length === n0, "Cancel makes nothing");
+// typed numbers and lists from before the rewrite never land on a step
+await say("2");
+ok(/Tap the list above/.test(texts.join("")) && btns.length === 0 && lists.length === 0, "a typed number points to the list, it picks nothing");
+await tap("dp:fn:2");
+ok(/from before today's update/.test(texts.join("")), "an old list row says so instead of guessing");
+await tap("dp:i:nosuchfeedtoken:3");
+ok(/expired/.test(texts.join("")), "a list whose feed is gone says it has expired");
 // helpers
 ok(bgLine({ background: "custom", bg_text: "a souk" }) === "Setting: a souk. " && /terrace/.test(bgLine({ background: "terrace" })), "background line: own words or the chosen setting");
 ok(sceneExtras({}) === "" && /Night: a deep blue sky/.test(sceneExtras({ tod: "nt" })), "no extras unless chosen");

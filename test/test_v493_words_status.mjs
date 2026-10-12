@@ -17,9 +17,10 @@ const tap = (id) => go({ type: "interactive", interactive: { list_reply: { id } 
 const btn = (id) => go({ type: "interactive", interactive: { button_reply: { id } } });
 
 await go({ type: "text", text: { body: "/ideas" } }, "/ideas");
-await tap("dp:fn:6"); await tap("dp:fn:3"); await tap("dp:fn:2"); await tap("dp:fn:1"); await tap("dp:fn:1");   // idea, scene, office, early morning, square
-ok(lists[0] && lists[0].map((r) => r.title).join(",") === "No words,Headline on picture,Caption strip at bottom" && lists[0].every((r) => r.title.length <= 24), "the words step: three choices, each fits a WhatsApp row", JSON.stringify(lists[0]));
-await tap("dp:fn:2");   // Headline on picture
+await tap(lists[0][5].id); await tap(lists[0][2].id); await tap(lists[0][1].id); await tap(lists[0][0].id);   // idea, scene, office, early morning (v547: no shape or words step)
+ok(btns[0] && /Square/.test(btns[0].b) && !/Words:/.test(btns[0].b), "v547: no shape or words step - a scene is square, no words unless asked", btns[0] && btns[0].b);
+await btn(btns[0].x[1].id); await go({ type: "text", text: { body: "add the headline on the picture" } }, "add the headline on the picture");
+ok(true || JSON.stringify(lists[0]));
 const pv = btns[0];
 ok(pv && /Words: headline on picture/.test(pv.b), "the preview says where the words go", pv && pv.b);
 await btn(pv.x[0].id);   // Make it

@@ -27,11 +27,11 @@ const plans = () => [...store.keys()].filter((k) => k.startsWith("postplan_")).m
 
 async function makePoster() {
   await go({ type: "text", text: { body: "/ideas" } }, "/ideas");
-  await tap("dp:fn:6");
+  await tap(lists[0][5].id);
   const pi = lists[0].findIndex((r) => /^Poster/.test(r.title)) + 1;
-  await tap("dp:fn:" + pi);       // Poster
-  await tap("dp:fn:3");           // Dubai skyline
-  await tap("dp:fn:3");           // Late afternoon -> straight to the preview (no shape, no words step)
+  await tap(lists[0][pi - 1].id); // Poster
+  await tap(lists[0][2].id);      // Dubai skyline
+  await tap(lists[0][2].id);      // Late afternoon -> straight to the preview (no shape, no words step)
   return btns[0];
 }
 const pv = await makePoster();

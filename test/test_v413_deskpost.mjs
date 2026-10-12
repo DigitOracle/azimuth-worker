@@ -112,7 +112,7 @@ reset();
   ok(/Illustration\./.test(p.caption), "AI picture: the caption carries the word Illustration");
   const bt = r.find((x) => x.t === "buttons"); ok(bt && bt.buttons.length === 3 && bt.buttons.map((b) => b.title).join() === "Approve,New picture,More options", "preview ends with three buttons Approve | New picture | More options (v468)");
   const im = r.find((x) => x.t === "image"); ok(im && /\/ig_media\//.test(im.link), "preview sends the picture through the ig_media route");
-  ok(calls.filter((c) => c.host === "api.openai.com").length === 1 && /No people/.test(calls.find((c) => c.host === "api.openai.com").prompt) && /0A4F4A/i.test(calls.find((c) => c.host === "api.openai.com").prompt), "AI picture: house palette prompt, no person by default (no references held)");
+  ok(calls.filter((c) => c.host === "api.openai.com").length === 1 && /No people/.test(calls.find((c) => c.host === "api.openai.com").prompt) && /A realistic photograph/.test(calls.find((c) => c.host === "api.openai.com").prompt) && !/0A4F4A/i.test(calls.find((c) => c.host === "api.openai.com").prompt), "AI picture: a photograph (v547: the teal-and-gold illustration style is for slides only), no person by default (no references held)");
   ok(/No person in the picture: I hold 0 approved reference/.test(card), "Abbot lane without 3 references: falls back to no person and says so");
   ok(!EMOJI.test(card + p.caption), "no emoji in the card or the caption");
 }
@@ -330,7 +330,7 @@ reset();
   await say("post abbot: two refs only"); ok(!calls.some((c) => c.edit), "fewer than 3 references: no person picture, Najjuko's references untouched");
   await photo("ref: site"); calls.length = 0;
   await say("post abbot: on site at the tower"); const ec = calls.find((c) => c.edit);
-  ok(ec && ec.nImages === 1 && /recognisably himself/.test(ec.prompt) && /no other identifiable real people/.test(ec.prompt) && /no medical or financial/.test(ec.prompt), "3 references: the edits endpoint with ONE reference (v537, as on Najjuko's scenes) and the likeness rules", JSON.stringify(ec));
+  ok(ec && ec.nImages === 1 && /glasses exactly as in the photo/.test(ec.prompt) && /no other identifiable real people/.test(ec.prompt) && /no medical or financial/.test(ec.prompt), "3 references: the edits endpoint with ONE reference (v537, as on Najjuko's scenes) and the likeness rules", JSON.stringify(ec));
   ok(/Illustration\./.test((await planOf((p) => p.idea === "on site at the tower")).caption), "an AI-composed scene is labelled Illustration");
   calls.length = 0; await say("post alchemy: general update"); ok(!calls.some((c) => c.edit), "Alchemy lane: no person by default");
   calls.length = 0; await say("post alchemy: with Kendall at the launch"); ok(!calls.some((c) => c.edit) === false, "Alchemy lane uses the references only when the idea says with Kendall");

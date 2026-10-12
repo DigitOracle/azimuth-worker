@@ -132,6 +132,9 @@ export async function genImage(env, deps, prompt, refs, size) {   // v429 - size
 }
 const STYLE = "Calm architectural illustration, teal (" + BRAND.teal + ") and gold (" + BRAND.gold + ") palette on a warm cream (" + BRAND.cream + ") ground, generous space, soft light, no text, no letters, no logos, no watermark. ";
 const NO_PERSON = "No people, no faces, no hands, no portraits. ";
+// v547 - pictures of him or a scene are PHOTOGRAPHS, briefed the way Najjuko's scenes are; STYLE (the teal-and-gold illustration) stays
+// for carousel slides only - it was the reason every picture looked the same
+const PHOTO = "A realistic photograph, eye-level camera, natural light, true-to-life colour, gentle background blur, no text, no letters, no signs, no logos, no watermark. ";
 // One locked prompt per infographic slide, built from the slide spec and nothing else. The image model draws it; this code draws nothing.
 export const LIKENESS = "Include the man shown in the reference photos, recognisably himself: same face, same build, same apparent age, no alteration of body or age. Only him in the picture, no other identifiable real people, no medical or financial endorsement, no logos. ";
 // v421: withPerson = the Abbot hook slide composed with Kendall's approved references (images/edits); the text is still rendered by the model.
@@ -417,7 +420,8 @@ async function buildImages(env, deps, p, onlyIdx) {
     if (s.src === "sent") { delete s.img_key; delete s.src; }      // v421: a sent photo is a slide ONLY when he said "use my photos"
     delete s.flag;
     if (p.picture === "poster" && p.type === "image" && i === 0) { const pr = await posterSlide(env, deps, p, s, notes); if (pr) return Object.assign(pr, { notes }); continue; }   // v495
-    if (p.type === "image" && i === 0 && !s.regen) { const rn = await renderFor(env, p.idea); if (rn) { s.img_key = await storeImage(env, rn.bytes, "image/jpeg"); s.src = "render"; s.alt = "Our own render, " + rn.slug.replace(/-/g, " "); continue; } }
+    // v547: a stored render never replaces a feed picture he chose
+    if (p.type === "image" && i === 0 && !s.regen && !p.from_feed) { const rn = await renderFor(env, p.idea); if (rn) { s.img_key = await storeImage(env, rn.bytes, "image/jpeg"); s.src = "render"; s.alt = "Our own render, " + rn.slug.replace(/-/g, " "); continue; } }
     const infographic = p.type === "carousel";
     let refs = null;
     const hookWithHim = infographic && i === 0 && p.lane === "abbot";      // v421: the Abbot hook slide shows him when 3+ references are held
@@ -430,7 +434,7 @@ async function buildImages(env, deps, p, onlyIdx) {
       else notes.push((hookWithHim ? "Slide 1 is a text graphic without you" : "No person in the picture") + ": I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ". Send photos with the caption ref: <tag>.");
     }
     const last = i === n - 1;
-    const prompt = infographic ? slidePrompt(s, i, n, last, !!refs) : STYLE + (refs ? "Place the man shown in the reference photos into this scene, recognisably himself: same face, same build, same apparent age, no alteration of body or age. Only him in the scene, no other identifiable real people, no medical or financial endorsement, no logos or text. " + (refs && POSE[p.picture] ? POSE[p.picture] : "") : NO_PERSON) + bgLine(p) + "Subject: " + String(p.idea).replace(/\d+/g, "").slice(0, 300) + (s.regen ? " Variation " + s.regen + ": a different composition" + (p.background ? ", same setting." : " and background.") : "") + (infographic ? "" : sceneExtras(p));   // v475
+    const prompt = infographic ? slidePrompt(s, i, n, last, !!refs) : PHOTO + (refs ? "A realistic photograph of the man in the reference photo. Keep his face, hair, skin tone, build, apparent age and glasses exactly as in the photo. He belongs in the scene: natural scale, feet on the ground with a soft shadow beneath him, the light on him matching the scene. Only him, no other identifiable real people, no medical or financial endorsement. " + (refs && POSE[p.picture] ? POSE[p.picture] : "") : NO_PERSON) + bgLine(p) + "Subject: " + String(p.idea).replace(/\d+/g, "").slice(0, 300) + (s.regen ? " Variation " + s.regen + ": a different composition" + (p.background ? ", same setting." : " and background.") : "") + (infographic ? "" : sceneExtras(p));   // v475
     let tries = infographic ? 3 : 1, g = null, ok = !infographic, checked = false;
     for (let t = 0; t < tries; t++) {
       g = await genImage(env, deps, prompt, refs, infographic ? undefined : (SHAPES[p.shape] || SHAPES.square).size);   // v475 - the chosen shape
@@ -725,26 +729,51 @@ export async function feedText(env, deps) {
   for (let k = 0; out.length < 9 && k < IDEAS.length; k++) { const i = IDEAS[(Math.floor(now / 86400000) + k) % IDEAS.length]; if (!out.some((o) => o.text === i.text)) out.push(Object.assign({ kind: i.lane === "alchemy" ? "alchemy" : "news" }, i, i.lane === "alchemy" ? {} : { lane: "alchemy" })); }
   await kvPut(env, "desk_ideas", out, 14 * 86400);
   { const H = await kvJ(env, "desk_ideas_hist", []); await kvPut(env, "desk_ideas_hist", H.concat(out.map((o) => o.text)).slice(-40), 30 * 86400); }   // v472 - remembered for 30 days
-  await env.MEETINGS.put("desk_feed_open", String(now), { expirationTtl: FEED_TTL }); await env.MEETINGS.delete("desk_feed_pick");
+  await env.MEETINGS.put("desk_feed_open", String(now), { expirationTtl: FEED_TTL });
   const label = (o) => o.kind === "news" ? "news" : o.kind === "motivation" || o.kind === "friday" ? "motivation" : o.kind === "smart" ? "smart city/ISO" : "DigitAlchemy";
   return "Your DigitAlchemy feed, " + dayKey(now) + ":\n" + out.map((o, i) => (i + 1) + ". [" + label(o) + "] " + o.text + (o.link ? "\n   Source: " + o.src + " " + o.link : "")).join("\n") + "\nTap one below to make it into a post. Nothing is posted without your Approve.";
 }
 const menu = (title, list) => title + "\n" + list.map((c, i) => (i + 1) + ". " + c.label).join("\n") + "\nReply 1 to " + list.length + ".";
-// v472 - every numbered menu also comes as a list to tap (row id dp:fn:<n> is the same as replying <n>)
-// v546 (Kendall 12 Oct: "this thing still isn't working at all" - "You speaking or teaching" came back as Idea 2) - a step's list carries
-// its OWN fresh copy of the choice so far (desk_fp_<sid>, a key never read before, so never stale at the edge); the idea list says it is
-// the idea list. A tap then never depends on reading back desk_feed_pick written seconds earlier.
-async function savePick(env, pick) { const sid = rid() + rid(); await kvPut(env, "desk_feed_pick", pick, FEED_TTL); await kvPut(env, "desk_fp_" + sid, pick, FEED_TTL); return sid; }
-async function tapList(env, deps, body, button, labels, sid) {
+// v547 (Kendall 12 Oct: "do a full audit and rewrite everything according to Azimuth") - the desk now works the way Najjuko's scene
+// pictures do: EVERY list row carries the whole choice so far in its own id, and the ideas are a snapshot under a token written once when
+// the feed is sent (desk_feed_<fid>). Nothing a tap needs is read back from a key written seconds earlier, so a tap can never land on the
+// wrong step. Steps: idea -> picture -> background -> time of day -> "Here's the picture I'll make". Shape follows the picture (a scene is
+// square, anything with him in it portrait; /post wide makes a landscape copy); words on the picture start as none (add them as a change).
+async function tapList(env, deps, body, button, rows) {
   if (!deps.list) return;
-  try { await deps.list(env, String(body).slice(0, 1000), button, labels.slice(0, 10).map((l, i) => ({ id: (sid === "idea" ? "dp:fi:" : sid ? "dp:fp:" + sid + ":" : "dp:fn:") + (i + 1), title: String(l.title).slice(0, 24), description: l.description ? String(l.description).slice(0, 72) : undefined }))); } catch (e) {}
+  try { await deps.list(env, String(body).slice(0, 1000), button, rows.slice(0, 10).map((r) => ({ id: r.id, title: String(r.title).slice(0, 24), description: r.description ? String(r.description).slice(0, 72) : undefined }))); } catch (e) {}
 }
+const ideaKind = (o) => o.kind === "news" ? "News" : o.kind === "motivation" ? "Motivation" : o.kind === "friday" ? "Friday" : o.kind === "smart" ? "Smart city/ISO" : o.lane === "alchemy" ? "DigitAlchemy" : "Digital Abbot";
 async function sendFeed(env, deps) {
   await deps.send(env, await feedText(env, deps));
-  const L = await kvJ(env, "desk_ideas", []);
-  await tapList(env, deps, "Tap an idea to make it into a post.", "Pick an idea", L.map((o, i) => ({ title: (i + 1) + ". " + (o.kind === "news" ? "News" : o.kind === "motivation" ? "Motivation" : o.kind === "friday" ? "Friday" : o.kind === "smart" ? "Smart city/ISO" : o.lane === "alchemy" ? "DigitAlchemy" : "Digital Abbot"), description: o.text })), "idea");
+  const L = await kvJ(env, "desk_ideas", []), fid = rid() + rid();
+  await kvPut(env, "desk_feed_" + fid, L, FEED_TTL);
+  await tapList(env, deps, "Tap an idea to make it into a post.", "Pick an idea", L.map((o, i) => ({ id: "dp:i:" + fid + ":" + (i + 1), title: (i + 1) + ". " + ideaKind(o), description: o.text })));
 }
-// a bare number while a feed or a choice is open; returns true when it was taken here
+export const FLOW_PICTURES = ["site", "speaking", "scene", "poster", "slides", "video"];
+// a tap on any step of the feed flow: dp:i:<fid>:<n>, dp:p:<fid>:<n>:<pic>, dp:b:<fid>:<n>:<pic>:<bg>, dp:t:<fid>:<n>:<pic>:<bg>:<tod>
+async function flowTap(env, deps, id) {
+  const m = String(id).match(/^dp:(i|p|b|t):([a-z0-9]{4,40}):(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?(?::(\d{1,2}))?$/);
+  if (!m) return false;
+  const L = await kvJ(env, "desk_feed_" + m[2], null), n = Number(m[3]), it = L && L[n - 1];
+  if (!it) { await deps.send(env, "That list has expired. Send feed for a new one."); return true; }
+  const base = "dp:%:" + m[2] + ":" + n, pics = FLOW_PICTURES.map((k) => PICTURE_CHOICES.find((c) => c.id === k)).filter(Boolean);
+  if (m[1] === "i") { await tapList(env, deps, "Idea " + n + ": " + it.text + "\n\nPick the picture.", "Pick picture", pics.map((c, i) => ({ id: base.replace("%", "p") + ":" + (i + 1), title: c.label }))); return true; }
+  const pic = pics[Number(m[4]) - 1]; if (!pic) { await deps.send(env, "That choice is not on the list. Send feed for a new one."); return true; }
+  const from = { from_feed: n, allowNums: it.allow || undefined, kind: it.kind || undefined };
+  if (m[1] === "p") {
+    if (pic.id === "video") { await clipStart(env, clipDeps(deps), it.text, it.kind, it.lane); return true; }
+    if (pic.id === "slides") { await newPlan(env, deps, it.text, it.lane, [], Object.assign({ forceType: "carousel", picture: "slides" }, from)); return true; }
+    await tapList(env, deps, pic.label + ". Pick the background.", "Pick background", BACKGROUND_CHOICES.map((b, i) => ({ id: base.replace("%", "b") + ":" + m[4] + ":" + (i + 1), title: b.label }))); return true;
+  }
+  const bg = BACKGROUND_CHOICES[Number(m[5]) - 1]; if (!bg) { await deps.send(env, "That background is not on the list. Send feed for a new one."); return true; }
+  if (m[1] === "b") { await tapList(env, deps, bg.label + ". What time of day?", "Pick time", TIME_CHOICES.map((x, i) => ({ id: base.replace("%", "t") + ":" + m[4] + ":" + m[5] + ":" + (i + 1), title: x.label }))); return true; }
+  const tod = TIME_CHOICES[Number(m[6]) - 1]; if (!tod) { await deps.send(env, "That time is not on the list. Send feed for a new one."); return true; }
+  await showPreview(env, deps, { step: "preview", n, idea: it.text, lane: it.lane, allow: it.allow || null, kind: it.kind || null, picture: pic.id, background: bg.id, tod: tod.id, shape: pic.id === "scene" ? "square" : "portrait", words: "none" });
+  return true;
+}
+// a list from before v547 (dp:fn / dp:fi / dp:fp): it cannot be trusted to know its step any more
+const OLD_LIST = "That list is from before today's update. Send feed for a new one.";
 // v475 - picture -> background (5 settings or "Type my own") -> time of day -> shape -> "Here's the picture I'll make" with Make it /
 // Change it / Cancel. Nothing is generated until Make it, as on Naj's scene pictures. A carousel (slides) skips straight to drafting.
 const BG_LIST = BACKGROUND_CHOICES.concat([{ id: "custom", label: "Type my own" }]);
@@ -762,7 +791,7 @@ export function scenePreview(pick) {
   return s.slice(0, 1000);
 }
 async function showPreview(env, deps, pick) {
-  await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "preview" }), FEED_TTL);
+  pick.step = "preview";
   // v490 (11 Oct, "expired" again at 06:09) - KV reads of a key written seconds ago can come back stale at the edge. The preview is
   // also written under a BRAND-NEW key, never read before anywhere, so the tap reads it fresh; its id rides in the button.
   const sid = rid() + rid();
@@ -773,66 +802,24 @@ async function showPreview(env, deps, pick) {
 export function clipDeps(deps) {
   return Object.assign({}, deps, { genImage: (env, prompt, size) => genImage(env, deps, prompt, null, size), storeImage: (env, bytes) => storeImage(env, bytes, "image/jpeg") });
 }
-async function feedReply(env, deps, n, given) {
-  const pick = given === "idea" ? null : (given || await kvJ(env, "desk_feed_pick", null)); let _sid = null;
-  if (pick && pick.step === "picture") {
-    const c = PICTURE_CHOICES[n - 1]; if (!c) { await deps.send(env, menu("Pick a picture:", PICTURE_CHOICES)); return true; }
-    if (c.id === "video") { await env.MEETINGS.delete("desk_feed_pick"); await clipStart(env, clipDeps(deps), pick.idea, pick.kind, pick.lane); return true; }
-    if (c.id === "slides") { await env.MEETINGS.delete("desk_feed_pick"); await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "carousel", picture: "slides", from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined }); return true; }
-    _sid = await savePick(env, Object.assign(pick, { step: "background", picture: c.id }));
-    await deps.send(env, menu(c.label + ". Now the background:", BG_LIST)); await tapList(env, deps, "Pick the background, or Type my own.", "Pick background", BG_LIST.map((b) => ({ title: b.label })), _sid); return true;
-  }
-  if (pick && pick.step === "background") {
-    const b = BG_LIST[n - 1]; if (!b) { await deps.send(env, menu("Pick a background:", BG_LIST)); return true; }
-    if (b.id === "custom") { await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "bg_text", background: "custom" }), FEED_TTL); await deps.send(env, "Describe the background in your next message, for example: the Dubai Creek at dusk with abras on the water."); return true; }
-    _sid = await savePick(env, Object.assign(pick, { step: "time", background: b.id }));
-    await deps.send(env, menu("What time of day?", TIME_CHOICES)); await tapList(env, deps, "Pick the time of day.", "Pick time", TIME_CHOICES.map((x) => ({ title: x.label })), _sid); return true;
-  }
-  if (pick && pick.step === "time") {
-    const t = TIME_CHOICES[n - 1]; if (!t) { await deps.send(env, menu("What time of day?", TIME_CHOICES)); return true; }
-    if (pick.picture === "poster") { await showPreview(env, deps, Object.assign(pick, { tod: t.id, shape: "portrait", words: "none" })); return true; }   // v495
-    _sid = await savePick(env, Object.assign(pick, { step: "shape", tod: t.id }));
-    await deps.send(env, menu("Which shape?", SHAPE_LIST)); await tapList(env, deps, "Pick the shape.", "Pick shape", SHAPE_LIST.map((x) => ({ title: x.label })), _sid); return true;
-  }
-  if (pick && pick.step === "shape") {
-    const sh = SHAPE_LIST[n - 1]; if (!sh) { await deps.send(env, menu("Which shape?", SHAPE_LIST)); return true; }
-    _sid = await savePick(env, Object.assign(pick, { step: "words", shape: sh.id }));   // v493
-    await deps.send(env, menu("Words on the picture?", WORDS_LIST)); await tapList(env, deps, "Words on the picture?", "Pick words", WORDS_LIST.map((x) => ({ title: x.label })), _sid); return true;
-  }
-  if (pick && pick.step === "words") {
-    const w = WORDS_LIST[n - 1]; if (!w) { await deps.send(env, menu("Words on the picture?", WORDS_LIST)); return true; }
-    await showPreview(env, deps, Object.assign(pick, { words: w.id })); return true;
-  }
-  if (!(await env.MEETINGS.get("desk_feed_open"))) return false;
-  const L = await kvJ(env, "desk_ideas", []), it = L[n - 1];
-  if (!it) { await deps.send(env, "No idea " + n + " in today's feed. Reply 1 to " + L.length + ", or send feed for a new list."); return true; }
-  _sid = await savePick(env, { step: "picture", n, idea: it.text, lane: it.lane, allow: it.allow || null, kind: it.kind || null });
-  await deps.send(env, menu("Idea " + n + ": " + it.text + "\nPick a picture:", PICTURE_CHOICES)); await tapList(env, deps, "Pick the picture.", "Pick picture", PICTURE_CHOICES.map((b) => ({ title: b.label })), _sid); return true;
-}
 // v475 - the preview's buttons, and the one typed line for "Type my own" background or "Change it"
-async function sceneButton(env, deps, act, idShape) {
-  // v490 - the snapshot written with this preview (fresh key), else the shared pick as before
-  const snap = idShape && idShape.length >= 10 ? await kvJ(env, "desk_scene_" + idShape, null) : null;
-  let pick = snap || await kvJ(env, "desk_feed_pick", null);
-  // v478 (11 Oct: Make it said "expired" while the pick sat at preview) - a read a few seconds after the write can be one step behind:
-  // a pick still at the shape step, with the shape carried in the button id, is the same choice.
-  if (pick && pick.step === "shape" && idShape) pick = Object.assign(pick, { step: "preview", shape: pick.shape || idShape });
-  if (!pick || pick.step !== "preview") { await deps.send(env, "That picture choice has expired. Tap Give me ideas to start again."); return true; }
-  if (act === "cancel") { await env.MEETINGS.delete("desk_feed_pick"); await deps.send(env, "Cancelled. Nothing was made."); return true; }
-  if (act === "change") { await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "change_text" }), FEED_TTL); await deps.send(env, "Tell me the change in your next message, for example: put the Burj Khalifa behind me, or make me smile."); return true; }
-  await env.MEETINGS.delete("desk_feed_pick");
+async function sceneButton(env, deps, act, sid) {
+  const pick = sid && sid.length >= 10 ? await kvJ(env, "desk_scene_" + sid, null) : null;   // v547 - the preview's own snapshot, never a shared key
+  if (!pick) { await deps.send(env, "That picture choice has expired. Send feed to start again."); return true; }
+  if (act === "cancel") { await deps.send(env, "Cancelled. Nothing was made."); return true; }
+  if (act === "change") { await kvPut(env, "desk_sx", sid, FEED_TTL); await deps.send(env, "Tell me the change in your next message, for example: put the Burj Khalifa behind me, use the Dubai Creek at dusk, add the headline on the picture, or make me smile."); return true; }
   await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "image", picture: pick.picture, background: pick.background, bg_text: pick.bg_text || undefined, tod: pick.tod, shape: pick.shape, words: pick.words || "none", changes: pick.changes || [], from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined });
   return true;
 }
+// "Change it": his next line is added to that preview's choices and a new preview is shown (as on Najjuko's scenes, scedit_)
 async function sceneText(env, deps, t) {
-  const pick = await kvJ(env, "desk_feed_pick", null);
-  if (!pick || (pick.step !== "bg_text" && pick.step !== "change_text")) return false;
-  if (/^(feed|feed now|ideas|post|menu|status|reel|music|linkedin|youtube|events|cancel|help|queue)$/i.test(String(t).trim())) return false;   // v478 - "Behind: feed"
-  if (pick.step === "bg_text") {
-    pick.bg_text = String(t).slice(0, 300); await kvPut(env, "desk_feed_pick", Object.assign(pick, { step: "time" }), FEED_TTL);
-    await deps.send(env, menu("Background: " + pick.bg_text + ". What time of day?", TIME_CHOICES)); await tapList(env, deps, "Pick the time of day.", "Pick time", TIME_CHOICES.map((x) => ({ title: x.label }))); return true;
-  }
-  pick.changes = (pick.changes || []).concat([String(t).slice(0, 300)]).slice(-5);
+  const sid = await env.MEETINGS.get("desk_sx"); if (!sid) return false;
+  if (/^(feed|feed now|ideas|post|menu|status|reel|music|linkedin|youtube|events|cancel|help|queue)$/i.test(String(t).trim())) return false;   // v478
+  const pick = await kvJ(env, "desk_scene_" + sid, null); await env.MEETINGS.delete("desk_sx");
+  if (!pick) return false;
+  const line = String(t).slice(0, 300);
+  if (/\b(headline|words?|title)\b.*\b(on|onto)\b.*\bpicture\b/i.test(line)) pick.words = "headline";
+  pick.changes = (pick.changes || []).concat([line]).slice(-5);
   await showPreview(env, deps, pick); return true;
 }
 async function queueText(env, deps) {
@@ -921,9 +908,8 @@ async function handleButton(env, deps, id) {
   // v466 - "post" alone: what kind of post, by tapping
   { const sb = String(id).match(/^dp:scene:(make|change|cancel)(?::([a-z0-9]+))?$/); if (sb) return sceneButton(env, deps, sb[1], sb[2]); }   // v475
   if (id === "dp:start:ideas") { await sendFeed(env, deps); return true; }   // v472 - the fresh 10, not the weekly 5
-  { const fp = String(id).match(/^dp:fp:([a-z0-9]{4,40}):(\d{1,2})$/); if (fp) { const pk = await kvJ(env, "desk_fp_" + fp[1], null); if (!pk) { await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } await feedReply(env, deps, Number(fp[2]), pk); return true; } }   // v546
-  { const fi = String(id).match(/^dp:fi:(\d{1,2})$/); if (fi) { await env.MEETINGS.put("desk_feed_open", String(nowOf(deps)), { expirationTtl: FEED_TTL }); await env.MEETINGS.delete("desk_feed_pick"); const done = await feedReply(env, deps, Number(fi[1]), "idea"); if (!done) await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } }   // v546 - the idea list
-  { const fn = String(id).match(/^dp:fn:(\d{1,2})$/); if (fn) { await env.MEETINGS.put("desk_feed_open", String(nowOf(deps)), { expirationTtl: FEED_TTL }); const done = await feedReply(env, deps, Number(fn[1])); if (!done) await deps.send(env, "That list has expired. Tap Give me ideas for a new one."); return true; } }
+  if (/^dp:(i|p|b|t):/.test(String(id))) return flowTap(env, deps, id);   // v547
+  if (/^dp:(fn|fi|fp):/.test(String(id))) { await deps.send(env, OLD_LIST); return true; }   // v547 - lists from before the rewrite
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
   const mm = String(id).match(/^dp:([a-z0-9]+):(music|nomusic|muse|mtry|mno|vc_none|vc_bottom|vc_scroll|m_(calm|corporate|upbeat|cinematic|inspiring))$/);   // v467 - music; v493 vc_ captions
   if (mm) { const pm = await getPlan(env, mm[1]); if (!pm) { await deps.send(env, "That draft has expired."); return true; } return musicStep(env, deps, pm, mm[2], mm[3]); }
@@ -1161,7 +1147,7 @@ export async function deskPostRoute(env, msg, text, deps) {
     const now = nowOf(deps), day = dayKey(now), st = await kvJ(env, "desk_morning_state", null);
     if (st && st.day === day && st.step >= 1 && st.step < 4) { await deps.send(env, "A feed is already on its way; its drafts are still arriving."); return true; }
     await kvPut(env, "desk_morning_state", { day, hr: dub(now).getUTCHours(), step: 1, forced: true }, 3 * 86400);
-    await deps.send(env, "Fresh DigitAlchemy feed: three drafts are on their way (about a minute each), and the ideas are below to tap.");
+    await deps.send(env, "Fresh DigitAlchemy feed: the ideas are below. Tap one to make it into a post.");
     await sendFeed(env, deps);
     return true;
   }
@@ -1172,13 +1158,8 @@ export async function deskPostRoute(env, msg, text, deps) {
   // v539 (Kendall 12 Oct: "when I picked, it took me straight to this picture") - a bare number while a feed choice is open belongs to the feed,
   // even when an older draft is waiting for an edit: the number used to become an "edit" of that draft and remade its picture. The older
   // draft is released back to "waiting for approval", unchanged.
-  if ((m = t.match(/^(\d{1,2})$/))) {
-    const _eid = await env.MEETINGS.get("desk_post_editing"), _pick = await env.MEETINGS.get("desk_feed_pick");
-    if (!_eid || _pick) {
-      if (_eid && _pick) await releaseEditing(env, _eid);
-      if (await feedReply(env, deps, Number(m[1]))) return true;
-    }
-  }
+  // v547 - a typed number no longer picks anything (it used to land on a stale step or edit an old draft): the lists carry every choice
+  if ((m = t.match(/^(\d{1,2})$/))) { await deps.send(env, "Tap the list above to choose. If it has gone, send feed for a new one."); return true; }
   if ((m = t.match(/^\/ref\s+tag\s+(\d+)\s+([\w-]+)/i))) {   // v421
     const n = Number(m[1]), tag = m[2].toLowerCase(), r = await kvJ(env, "desk_ref_" + n, null);
     if (!r) { await deps.send(env, "No reference " + n + "."); return true; }

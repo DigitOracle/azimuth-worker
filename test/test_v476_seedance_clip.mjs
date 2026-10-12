@@ -29,10 +29,10 @@ const tap = (id) => go({ type: "interactive", interactive: { list_reply: { id } 
 const btn = (id) => go({ type: "interactive", interactive: { button_reply: { id } } });
 
 await go({ type: "text", text: { body: "/ideas" } }, "/ideas");
-await tap("dp:fn:6");
+await tap(lists[0][5].id);
 ok(lists[0] && lists[0].some((r) => r.title === "A short video of you"), "the picture choices offer a short video", JSON.stringify(lists[0]));
 const vi = lists[0].findIndex((r) => r.title === "A short video of you") + 1;
-await tap("dp:fn:" + vi);
+await tap(lists[0][vi - 1].id);
 ok(btns[0] && btns[0].x.map((b) => b.id).join(",") === "dc2:shape:portrait,dc2:shape:landscape,dc2:cancel", "then the shape", btns[0] && JSON.stringify(btns[0]));
 await btn("dc2:shape:portrait");
 ok(btns[0] && btns[0].x.map((b) => b.title).join(",") === "8 seconds,15 seconds,Cancel", "then the length: 8 or 15 seconds");

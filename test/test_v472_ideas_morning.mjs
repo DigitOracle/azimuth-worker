@@ -49,8 +49,8 @@ ok(L.filter((o) => o.kind === "news" && !o.countdown).every((o) => /^https:\/\//
 ok(L.some((o) => o.kind === "smart" && /standard of the week/i.test(o.src + o.text)), "the standard of the week is one of the smart slots");
 ok(/HEADLINES/.test(prompts.at(-1).user) && /UPCOMING EVENTS:[\s\S]*Big 5 Global \| 2026-11-23/.test(prompts.at(-1).user) && /STANDARD OF THE WEEK: /.test(prompts.at(-1).user), "the writer gets headlines, upcoming events and the standard of the week");
 ok(lists[0] && lists[0].length === 9 && /News/.test(lists[0][0].title) && lists[0].every((r) => r.title.length <= 24), "the nine come as a tap list with category labels");
-await tap("dp:fn:4");
-ok(/Idea 4:/.test(texts.join("")), "tapping an idea picks it");
+await tap(lists[0][3].id);
+ok(lists[0] && lists[0].length >= 5 && lists[0].every((r) => /^dp:p:[a-z0-9]+:4:\d$/.test(r.id)), "tapping an idea opens its picture choices (v547: each row carries the idea)", JSON.stringify(lists[0]));
 
 // ---- events and countdowns
 ok(EVENTS_SEED.some((e) => e.name === "Big 5 Global" && e.start === "2026-11-23" && e.ours) && EVENTS_SEED.some((e) => e.name === "GITEX Global" && e.start === "2026-12-07"), "Big 5 Global (ours) and GITEX are listed with their organisers' dates");
