@@ -47,7 +47,7 @@ const cards = { tower: card("Tower One", 35000, 10, EV.tower), notyet: card("Not
 const all = Object.values(cards).join("");
 ok(!/<div class="pjc/.test(all), "no card is a plain div (a dead end)");
 ok(Object.values(cards).every((h) => /^(<div class=pjw>)?<button type=button class="pjc (loc|noloc)"/.test(h)), "all seven cards, with and without a position and with no name, start with a button");
-ok(/class="pjc loc" data-pj="dist\|towerone"/.test(cards.tower) && /Show on the map/.test(cards.tower) && !/Project details/.test(cards.tower), "a card with a position still reads 'Show on the map' (unchanged)");
+ok(/class="pjc loc" data-pj="dist\|towerone"/.test(cards.tower) && !/Show on the map<\/span>/.test(cards.tower) && !/Project details/.test(cards.tower), "a card with a position zooms the map when tapped; v528: its 'Show on the map' footer gave way to the 'Available to rent now' strip (Kendall 12 Oct)");
 ok(["notyet", "built", "noparcel", "unknown", "anon", "claimed"].every((k) => /class="pjc noloc" data-pd="[^"]+"/.test(cards[k]) && /Project details/.test(cards[k]) && !/No map position yet/.test(cards[k])), "a card with no position carries 'Project details', not the dead 'No map position yet'");
 ok(["notyet", "built"].every((k) => /aria-label="Project details for /.test(cards[k])) && /aria-label="Show Tower One on the map"/.test(cards.tower), "each button has an accessible name (keyboard focusable: a real button, no tabindex tricks)");
 ok(/<svg class="chev"/.test(cards.notyet) && /<svg class="evi mu"/.test(cards.notyet), "no-position card keeps the muted icon and shows a chevron from the existing icon set");

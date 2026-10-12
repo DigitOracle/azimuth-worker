@@ -120,9 +120,18 @@ export async function advBldgRoute(env, url, deps) {
   const A = advertisedDoc(doc), nm = String(url.searchParams.get("n") || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const a = A ? (advertisedForKey(A, k) || (nm ? advertisedForKey(A, "dld:" + nm) : null)) : null;   // v522 - the project-key fallback
   return J({ ok: true, k, as_of: (A && A.asOf) || (doc && doc.as_of) || "", covered: !!A, flats: a ? a.flats || 0 : 0, adverts: a ? a.adverts || 0 : 0,
-    html: a ? "<style>" + ADV_CSS + "</style>" + advertisedHtml(a, { summary: true }).replace("<details class=avd>", "<details class=avd open>") : "" });
+    html: a ? "<style>" + ADV_CSS + "</style>" + advertisedHtml(a, { summary: true, links: cheapestLinks(doc, A, k, nm) }).replace("<details class=avd>", "<details class=avd open>") : "" });
 }
 
+// v528 - per bedroom band, the link of the cheapest live advert of this building (the crawler keeps them cheapest first); only propertyfinder.ae pages
+function cheapestLinks(doc, A, k, nm) {
+  const out = {}, slugs = Object.keys((A && A.buildings) || {}).filter((s) => A.buildings[s].key === k || (nm && A.buildings[s].key === "dld:" + nm));
+  for (const s of slugs) for (const [band, list] of Object.entries(((doc && doc.adverts) || {})[s] || {})) {
+    const b = band === "0" ? "studio" : band, x = (Array.isArray(list) ? list : []).find((a) => a && typeof a.u === "string" && /^https:\/\/www\.propertyfinder\.ae\/[^\s"'<>]*$/.test(a.u));
+    if (x && !out[b]) out[b] = x.u;
+  }
+  return out;
+}
 // GET /city_bldg?key=  (READ_KEY or a client key; Property Finder figures are allowed on client surfaces since 11 Oct 2026).
 // GET only. A client key READS the cached index and never writes (test_v156: a client key never writes); without a cache it gets the
 // index built in memory. Only the owner key saves the cache, and only it may ask for a rebuild (fresh=1).

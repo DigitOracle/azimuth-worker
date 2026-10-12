@@ -141,7 +141,7 @@ ok(/<script>/.test(html), "page loads");
 { let okParse = true; try { new Function(js.replace(/^[\s\S]*?/, "")); } catch (e) { okParse = false; console.log(String(e)); } ok(okParse, "the whole page script parses"); }
 ok(!/\$\{|`/.test(js.slice(js.indexOf("function pdSec"), js.indexOf("function pjFeatures"))), "the new code has no backtick or substitution (the page script is a String.raw block)");
 // old behaviour: position cards and the three rungs
-ok(/class="pjc loc" data-pj="dist\|towerone"/.test(mk("Tower One", EV.tower, 35000, 10)) && /Show on the map/.test(mk("Tower One", EV.tower, 35000, 10)), "a card with a footprint still reads 'Show on the map'");
+ok(/class="pjc loc" data-pj="dist\|towerone"/.test(mk("Tower One", EV.tower, 35000, 10)) && !/Show on the map<\/span>/.test(mk("Tower One", EV.tower, 35000, 10)), "a card with a footprint is still the located card; v528: no 'Show on the map' footer (the tap zooms there)");
 ok(/data-pd="[^"]+"/.test(cardNotyet) && /Project details/.test(cardNotyet), "a card with no position still opens the project details");
 ok(/function docRow/.test(js) && !/function invCardLink/.test(js) && !/Investor PDF/.test(js.replace(/\/\/[^\n]*/g, "")), "v398: the project cards use the shared docRow (no lone Investor PDF link function)");
 console.log("\n" + pass + " passed, " + fail + " failed");

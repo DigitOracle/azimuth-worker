@@ -35,7 +35,7 @@ const ix = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 const cb = fs.readFileSync(new URL("../src/city_bldg.js", import.meta.url), "utf8");
 const sp = fs.readFileSync(new URL("../src/supply_page.js", import.meta.url), "utf8");
 ok(/advertisedHtml\(_a, \{ summary: true \}\)/.test(ix), "the building page asks for the summary");
-ok(/advertisedHtml\(a, \{ summary: true \}\)/.test(cb), "the Developers map pop-up (/adv_bldg) asks for the summary");
+ok(/advertisedHtml\(a, \{ summary: true(, links: cheapestLinks\(doc, A, k, nm\))? \}\)/.test(cb), "the Developers map pop-up (/adv_bldg) asks for the summary (v528: with the cheapest listing's link per bedroom type)");
 ok(/advertisedHtml\(b\.advertised\)/.test(sp) && !/summary: true/.test(sp), "the Start menu's 'What's advertised where' does not: every listing, unchanged");
 
 console.log(`v522 Property Finder per-flat figures: ${pass} passed, ${fail} failed`);

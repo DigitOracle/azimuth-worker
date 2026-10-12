@@ -142,7 +142,7 @@ const CSS = String.raw`
 .devpfg{display:flex;flex-direction:column;gap:6px}.pfbtn.pfdv{margin:0;font-weight:400}.pfbtn.pfdv span{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}.pfbtn.pfdv span b{font-weight:600}.pfbtn.pfdv small{color:#8FA39B;font-size:.72rem}
 /* v521 - Available to rent now: the prominent button on the project card and its pop-up */
 .pfbtn{display:flex;align-items:center;gap:8px;width:100%;margin:8px 0 6px;padding:10px 12px;border:1px solid var(--gold,#C5A56A);border-radius:12px;background:rgba(197,165,106,.14);color:inherit;font:inherit;font-weight:600;cursor:pointer;text-align:left}
-.pfbtn svg{width:20px;height:20px;flex:none}.pfbtn span{flex:1}.pfbtn .pfc{margin-left:auto;color:var(--gold,#C5A56A);font-weight:700;white-space:nowrap}.pfbtn.pfnone{border-color:rgba(197,165,106,.35);background:transparent}.pfbtn.pfnone .pfc{color:#8FA39B;font-weight:500}
+.pfbtn svg{width:20px;height:20px;flex:none}.pfbtn span{flex:1}.pfbtn.pfstrip{margin:8px 0 0;padding:5px 9px;min-height:0;font-size:.76rem;border-radius:8px;width:auto}.pfbtn.pfstrip span{flex:1}.pfbtn .pfc{margin-left:auto;color:var(--gold,#C5A56A);font-weight:700;white-space:nowrap}.pfbtn.pfnone{border-color:rgba(197,165,106,.35);background:transparent}.pfbtn.pfnone .pfc{color:#8FA39B;font-weight:500}
 #pfpop{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;background:rgba(6,10,9,.6);padding:16px}
 #pfpop .pfw{position:relative;width:min(460px,100%);max-height:86vh;overflow:auto;background:#0F1A18;color:#E9E3D6;border:1px solid rgba(197,165,106,.55);border-radius:16px;padding:16px 16px 12px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 #pfpop .pfx{position:absolute;right:10px;top:6px;background:none;border:0;color:#8FA39B;font-size:1.5rem;cursor:pointer}
@@ -308,7 +308,8 @@ function shading(){var o={},s;
   return DM.whereMine(ixOf(S.win),S.mine)}
 function legendHtml(){
   return '<p class=note>Shading: the more of '+(S.screen===3?'your developers fit the budget':'your developers are active')+' in an area, the stronger the colour. Grey: none.</p>'}
-function mapLegend(){var el=$("maplg");if(!el)return;if(S.screen!==1||(typeof CF!=="undefined"&&CF&&CF.hideBands())){el.style.display="none";return}el.style.display="";
+function mapLegend(){var el=$("maplg");if(!el)return;el.style.display="none";return;   // v528 (Kendall 12 Oct: "this is confusing, get rid of it") - the price-band legend is withdrawn
+  if(S.screen!==1||(typeof CF!=="undefined"&&CF&&CF.hideBands())){el.style.display="none";return}el.style.display="";
   var bd=DM.TIER_CFG.bounds||(IDX.cuts&&IDX.cuts.bounds),op=S.lgOpen==null?innerWidth>760:S.lgOpen;el.className=op?"":"min";
   el.innerHTML='<button type=button class=lgh id=lgt aria-expanded='+(op?'true':'false')+' aria-label="Price bands legend">'+icoSvg('caret-down','chev')+'<span class=t>Price bands (tap one to filter)</span></button><div class=lgrow>'+[0,1,2,3].map(function(i){return '<button type=button class=lgb data-b='+i+' aria-pressed='+(S.band===i?'true':'false')+' aria-label="'+DM.TIER_NAMES[i]+'"><span class=sw style="display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:7px;flex:none;background:'+TC[i]+'"></span><span class=t><b>'+DM.TIER_NAMES[i]+'</b>'+(bd?'<small>'+esc(DM.bandLine(i,bd,S.unit))+'</small>':'')+'</span></button>'}).join("")+'</div>'+(op&&S.band!=null?'<button type=button class=btn id=bandall style="margin:4px">Show all price bands</button>':'');
   $("lgt").onclick=function(){S.lgOpen=!op;mapLegend()};
@@ -369,12 +370,14 @@ function pjCard(slug,name,ppsm,n,extra,nameDef,ev){var c=pjCard0(slug,name,ppsm,
 // a card with NO footprint is a button too: it opens the PROJECT DETAIL panel, the same component (pjDetailHtml) the snapshot uses. Only what we can source, each line with its source and evidence label. No position is ever invented.
 var PDET={},PDN=0,PDOPEN=null,PDFROM=null,PDKEY=0;
 function pdKey(slug,name,ev){return slug+"|"+(name?pkey(name):"~"+(++PDN))+(ev&&ev.p!=null&&ev.p!==""?"|"+ev.p:"")}
+// v528 - the thin "Available to rent now" strip at the foot of a project card; filled with the count, removed when nothing is listed
+function pfStrip(slug,name,ev){var k=pdBldKey({slug:slug},ev||{});if(!k)return '';setTimeout(pfFill,0);return '<span class="pfbtn pfstrip" role=button tabindex=0 data-pfk="'+esc(k)+'" data-pfn="'+esc(name||'')+'"><span>Available to rent now</span><b class=pfc>&hellip;</b></span>'}
 function pjCard0(slug,name,ppsm,n,extra,nameDef,ev){
   var inner=icoSvg("buildings","evi")+'<b class=big dir=auto'+(name?' title="'+esc(name)+'"':'')+'>'+(name?esc(clipName(name)):nameDef)+'</b>'+(ppsm?'AED '+fmt(pu(ppsm))+' '+pul():'')+(n!=null?'<span style="display:block">'+fmt(n)+' sale'+(n===1?'':'s')+'</span>':'')+(extra||''),
     dk=pdKey(slug,name,ev);pjCard0.dk=dk;PDET[dk]={slug:slug,name:name||null,nameDef:nameDef||"Project name not recorded",ppsm:ppsm,n:n,ev:ev||null,win:S.win};
   if(name)pjInfo(slug,name,ppsm,n);
   var hit=name&&locate(slug,name);
-  if(hit){PJ[slug+"|"+pkey(name)].dk=dk;return '<button type=button class="pjc loc" data-pj="'+esc(slug+"|"+pkey(name))+'" data-dk="'+esc(dk)+'" aria-label="Show '+esc(name)+' on the map">'+inner+'<span class="tagl go">'+icoSvg("map-pin","")+'Show on the map</span></button>'}
+  if(hit){PJ[slug+"|"+pkey(name)].dk=dk;return '<button type=button class="pjc loc" data-pj="'+esc(slug+"|"+pkey(name))+'" data-dk="'+esc(dk)+'" aria-label="Show '+esc(name)+' on the map">'+inner+pfStrip(slug,name,ev)+'</button>'}
   var b=BLK[slug];if(!b&&name&&!(ev&&ev.rc&&IDX&&IDX.areas&&!IDX.areas[slug]))ensureBlocks(slug,function(){if(S.sel===slug||S.drill||S.parea)renderDetail();updatePj()});
   var pt=typeof PLOTPOS!=="undefined"?PLOTPOS.cardTag(ev,icoSvg):"";   // v386 - a plot position: "Show on the map" (the marker is a plot ring, never a building)
   if(pt)return '<button type=button class="pjc noloc plot" data-pd="'+esc(dk)+'" aria-label="Show the plot of '+esc(name||PDET[dk].nameDef)+' on the map">'+inner+pt+'</button>';

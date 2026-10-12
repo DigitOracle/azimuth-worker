@@ -95,7 +95,7 @@ function bandCard(k, x, counted) {
 // v522 SUMMARY card (Kendall 11 Oct 2026), for the short places only (building page, Developers map pop-up, twin card): typical asking rent
 // (median over FLATS) and the middle half of the flats instead of cheapest-to-dearest advert; days listed per flat; new flats; adverts gone.
 // The Start menu's "What's advertised where" keeps every listing and does NOT pass summary.
-function bandCardSummary(k, x, counted) {
+function bandCardSummary(k, x, counted, link) {
   if (x.fmed == null) return bandCard(k, x, counted);       // a file built before the per-flat figures: the old card, unchanged
   const mid = x.f25 != null && x.f75 != null && x.f25 !== x.f75 ? "middle half AED " + kAed(x.f25) + "–" + kAed(x.f75) : "";
   return '<div class=avc><div class=avk>' + IC_HOME + esc(BAND_SAY[k] || k) + "</div>"
@@ -104,7 +104,8 @@ function bandCardSummary(k, x, counted) {
     + (mid ? '<div class=avf><small>' + esc(mid) + "</small></div>" : "")
     + (x.fchk ? '<div class=avf><small>' + pl(x.fchk, "flat", "flats") + " priced far from the rest: check the advert</small></div>" : "")
     + (x.fdays != null ? '<div class=avf>' + IC_CLOCK + fmt(x.fdays) + " days listed (median per flat)</div>" : "")
-    + '<div class=avf>' + IC_UP + pl(x.fnew != null ? x.fnew : x.newWk, "new flat", "new flats") + " · " + IC_DOWN + pl(x.goneWk, "advert", "adverts") + " gone this week</div></div>";
+    + '<div class=avf>' + IC_UP + pl(x.fnew != null ? x.fnew : x.newWk, "new flat", "new flats") + " · " + IC_DOWN + pl(x.goneWk, "advert", "adverts") + " gone this week</div>"
+    + (link ? '<a class=avl href="' + esc(link) + '" target=_blank rel="noopener noreferrer">See the cheapest listing &#8599;</a>' : "") + "</div>";   // v528
 }
 // v524 - one building's listings, found by its register key, else by the project-name key the crawler sometimes files under (Peninsula Five)
 export function advertisedLookup(A, key, name) {
@@ -139,7 +140,7 @@ export function advertisedHtml(a, opts) {
   const ks = BANDS.filter((k) => a.bands[k]).concat(Object.keys(a.bands).filter((k) => !BANDS.includes(k)));
   const head = a.counted ? pl(a.flats, "flat", "flats") + " · " + pl(a.adverts, "advert", "adverts") : pl(a.adverts, "advert", "adverts");
   return '<details class=avd><summary>' + IC_ADV + "<span>" + esc(summary ? "Available to rent now" : ADV_LABEL) + "</span><b>" + esc(head) + "</b></summary>"   // v527 - the summary names no portal
-    + '<div class=avg>' + ks.map((k) => (summary ? bandCardSummary : bandCard)(k, a.bands[k], a.counted)).join("") + "</div>"
+    + '<div class=avg>' + ks.map((k) => (summary ? bandCardSummary(k, a.bands[k], a.counted, opts && opts.links ? opts.links[k] : null) : bandCard(k, a.bands[k], a.counted))).join("") + "</div>"
     + (summary ? '<div class=avt>' + esc(freshLine(a.asOf)) + "</div></details>" : '<div class=avt>' + esc(ADV_NOTE) + " Shown beside the developer’s availability, never added to it." + (a.counted ? " An advert missing from two crawls running counts as gone (withdrawn or let)." : "")
     + (a.asOf ? " As of " + esc(a.asOf) + "." : "") + "</div></details>");
 }
@@ -151,5 +152,5 @@ export const ADV_CSS = ".avd{margin-top:8px;border:1px solid #24352F;border-radi
   + ".avc{border:1px solid #24352F;border-radius:10px;padding:8px;min-width:0}.avk{display:flex;gap:5px;align-items:center;font-size:12px;color:#B9B2A3}"
   + ".avn b{font-size:20px;color:#E9E3D6;margin-right:4px}.avn small{font-size:11px;color:#8FA39B}"
   + ".avf{display:flex;gap:4px;align-items:center;flex-wrap:wrap;font-size:11.5px;color:#B9B2A3;margin-top:3px}.avf svg{width:12px;height:12px}"
-  + ".avt{font-size:11px;color:#8FA39B;padding:0 11px 10px}"
+  + ".avt{font-size:11px;color:#8FA39B;padding:0 11px 10px}.avl{display:inline-block;margin-top:6px;font-size:11.5px;color:#C5A56A;text-decoration:none;border-bottom:1px solid rgba(197,165,106,.5)}"
   + ".ck{display:inline-flex;gap:4px;align-items:center;font-size:12px;color:#7FA8C9;margin-top:4px}";
