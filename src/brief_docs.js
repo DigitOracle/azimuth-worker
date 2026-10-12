@@ -909,7 +909,7 @@ function pfBlock(rec) {
   if (!rows.length) return "";
   const tiles = rows.map((r) => pkTile("home", esc(r.label), r.typical ? r.typical + '<span style="font-size:11px;font-weight:400;color:' + PK.muted + ';"> a year' + (r.typicalIsMedian ? ", typical" : "") + "</span>" : "&mdash;",
     [r.flats != null ? r.flats + (r.flats === 1 ? " flat" : " flats") : r.adverts + " adverts", r.mid, r.days != null ? r.days + " days listed" : "", r.chk ? r.chk + " priced far from the rest" : ""].filter(Boolean).join(" &middot; ")));
-  return '<div style="margin-top:10px;">' + pkBox("key", "Available on Property Finder", pkGrid(tiles, Math.min(4, tiles.length)), esc(freshLine(rec.adv.asOf)) + " &middot; rental listings") + "</div>";
+  return '<div style="margin-top:10px;">' + pkBox("key", "Available to rent now", pkGrid(tiles, Math.min(4, tiles.length)), esc(freshLine(rec.adv.asOf)) + " &middot; rental listings") + "</div>";
 }
 function groupLayouts(rec, B) {
   const flats = [];

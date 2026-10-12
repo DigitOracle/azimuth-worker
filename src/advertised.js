@@ -138,7 +138,7 @@ export function advertisedHtml(a, opts) {
   if (!a) return "";
   const ks = BANDS.filter((k) => a.bands[k]).concat(Object.keys(a.bands).filter((k) => !BANDS.includes(k)));
   const head = a.counted ? pl(a.flats, "flat", "flats") + " · " + pl(a.adverts, "advert", "adverts") : pl(a.adverts, "advert", "adverts");
-  return '<details class=avd><summary>' + IC_ADV + "<span>" + esc(ADV_LABEL) + "</span><b>" + esc(head) + "</b></summary>"
+  return '<details class=avd><summary>' + IC_ADV + "<span>" + esc(summary ? "Available to rent now" : ADV_LABEL) + "</span><b>" + esc(head) + "</b></summary>"   // v527 - the summary names no portal
     + '<div class=avg>' + ks.map((k) => (summary ? bandCardSummary : bandCard)(k, a.bands[k], a.counted)).join("") + "</div>"
     + (summary ? '<div class=avt>' + esc(freshLine(a.asOf)) + "</div></details>" : '<div class=avt>' + esc(ADV_NOTE) + " Shown beside the developer’s availability, never added to it." + (a.counted ? " An advert missing from two crawls running counts as gone (withdrawn or let)." : "")
     + (a.asOf ? " As of " + esc(a.asOf) + "." : "") + "</div></details>");

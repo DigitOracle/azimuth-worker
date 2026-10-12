@@ -73,7 +73,7 @@ console.log("D - panel context unchanged: inline buttons, no tile rules");
   const pb = bar(panelH);
   ok(/<div class=pdbar>/.test(pb) && !/pdcard/.test(pb), "panel row has no pdcard class");
   ok(btns(pb).map((b) => b.label).join("|") === "Investor|Client|Broker", "panel row: Investor|Client|Broker");
-  ok(/\.pdsmrow \.pdsm\{flex:1 1 0;min-width:0;justify-content:center;padding:0 6px;font-size:12\.5px;white-space:nowrap\}\.pdsmrow \.pdfic\{width:14px;height:14px;margin-right:5px\}/.test(css), "the shared docRow CSS (v407 territory) is byte-identical");
+  ok(/\.pdsmrow \.pdsm\{flex:1 1 0;min-width:0;justify-content:center;padding:0 6px;font-size:12\.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\}\.acw \.pdsmrow \.pdsm\{flex-direction:column;gap:2px;min-height:46px;padding:4px 2px;font-size:11px\}\.acw \.pdsmrow \.pdfic\{margin-right:0\}\.pdsmrow \.pdfic\{width:14px;height:14px;margin-right:5px\}/.test(css), "the shared docRow CSS: v407 as before, plus v527 (no overflow; in a narrow area card the icon sits above the label - Kendall 12 Oct: 'fix the overlap')");
   ok(!/flex-direction:column/.test(rule(".pdsmrow .pdsm")), "no column layout outside the card context");
 }
 console.log(fail ? "\nFAILED " + fail + " / " + (pass + fail) : "\nall " + pass + " passed");

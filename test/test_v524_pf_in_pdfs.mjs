@@ -17,11 +17,11 @@ ok(advertisedRows(advertisedLookup(A, "businessbay:1", "Nowhere Tower")).length 
 
 const bd = fs.readFileSync(new URL("../src/brief_docs.js", import.meta.url), "utf8");
 ok(/if \(q\.kind === "dossier" && !C\.buy\) \{ try \{ if \(!\(rec\.d in \(C\.pf \|\| \(C\.pf = \{\}\)\)\)\) C\.pf\[rec\.d\] = advertisedDoc\(await kvJson\(env, "pf_supply_" \+ rec\.d\)\); rec\.adv = advertisedLookup\(C\.pf\[rec\.d\], rec\.key, rec\.name\);/.test(bd), "the client dossier (rent) loads the district's listings once and finds the building");
-ok(/cb \+ availBlock\(rec, q\) \+ pfBlock\(rec\) \+ \(more \? more\.html : ""\)/.test(bd) && /pkBox\("key", "Available on Property Finder", pkGrid\(tiles, Math\.min\(4, tiles\.length\)\), esc\(freshLine\(rec\.adv\.asOf\)\)/.test(bd), "page 2: an 'Available on Property Finder' box of cards, one freshness line");
+ok(/cb \+ availBlock\(rec, q\) \+ pfBlock\(rec\) \+ \(more \? more\.html : ""\)/.test(bd) && /pkBox\("key", "Available to rent now", pkGrid\(tiles, Math\.min\(4, tiles\.length\)\), esc\(freshLine\(rec\.adv\.asOf\)\)/.test(bd), "page 2: an 'Available to rent now' box of cards, one freshness line");
 ok(/: \(rec\.adv \? 520 : 700\);/.test(bd), "the map gives the cards room");
 const bb = fs.readFileSync(new URL("../src/broker_building.js", import.meta.url), "utf8");
 ok(/try \{ adv = advertisedLookup\(advertisedDoc\(await readOr\(env, "pf_supply_" \+ slug\)\)/.test(bb) && !/opts\.owner && p\.format === "html" && b\.bk != null\) \{ try \{ adv/.test(bb), "the broker sheet loads the listings for every key and format (no longer owner-only, web-only)");
-ok(/secHead\("map-trifold", "Available on Property Finder", esc\(freshLine\(B\.adv\.asOf\)\)/.test(bb) && !/if \(!B\.owner \|\| !B\.adv\) return null;/.test(bb), "the broker sheet's section: cards, one freshness line, in the PDF too");
+ok(/secHead\("map-trifold", "Available to rent now", esc\(freshLine\(B\.adv\.asOf\)\)/.test(bb) && !/if \(!B\.owner \|\| !B\.adv\) return null;/.test(bb), "the broker sheet's section: cards, one freshness line, in the PDF too");
 
 console.log(`v524 Property Finder in the PDFs: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

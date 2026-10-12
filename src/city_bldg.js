@@ -109,7 +109,7 @@ export async function buildCityIndex(env, districts) {
 }
 
 // v521 GET /adv_bldg?k=<district>:<id>&key= - ONE building's Property Finder listings card, for the Developers map's project card (Kendall 11 Oct
-// 2026: "Available on Property Finder" at the top, as a pop-up). Read-only for every key; listings, never vacancy; rent only so far.
+// 2026: "Available to rent now" at the top, as a pop-up). Read-only for every key; listings, never vacancy; rent only so far.
 export async function advBldgRoute(env, url, deps) {
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": o && o.covered && (o.flats || o.adverts) ? "private, max-age=600" : "no-store" } });   // v523
   if ((deps.method || "GET") !== "GET") return new Response("unauthorised", { status: 401 });

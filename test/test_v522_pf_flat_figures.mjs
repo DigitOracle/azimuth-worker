@@ -19,7 +19,7 @@ ok(/AED 75k–145k/.test(full) && /16 days listed \(median\)/.test(full) && /35 
 
 // an older file (no per-flat figures): the summary falls back to the old card, unchanged
 const old = advertisedForKey(advertisedDoc({ advertised: { as_of: "2026-10-09", buildings: { p4: { key: "businessbay:647", bands: { studio: { flats: 3, adverts: 5, pmin: 1, pmax: 2, med_days: 4, new_wk: 0, gone_wk: 0 } } } } } }), "businessbay:647");
-const _cards = (h) => h.slice(0, h.indexOf("<div class=avt>"));
+const _cards = (h) => h.slice(h.indexOf("</summary>"), h.indexOf("<div class=avt>"));   // v527: the summary heading reads "Available to rent now"; compare the band cards
 ok(_cards(advertisedHtml(old, { summary: true })) === _cards(advertisedHtml(old)), "an older file: the summary shows the old band cards (only the footer is the freshness line)");
 
 // freshness: the summary ends on one line, how fresh the data is (Kendall: "a bit wordy ... how fresh is the data, that is all we need")

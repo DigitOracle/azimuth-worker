@@ -241,7 +241,7 @@ function advertBlock(B) {
   // v524 - one card per bedroom type: flats listed, typical asking rent, the middle half; the section says only how fresh it is
   const cards = '<div class="bgrid">' + rows.map((r) => card(esc(r.label), r.flats != null ? plural(r.flats, "flat") : plural(r.adverts, "advert"),
     [r.typical ? r.typical + " a year" + (r.typicalIsMedian ? " typical" : "") : "", r.mid, r.days != null ? r.days + " days listed" : ""].filter(Boolean).join(", "))).join("") + "</div>";
-  return { h: 90 + 70 * Math.ceil(rows.length / 2), html: secHead("map-trifold", "Available on Property Finder", esc(freshLine(B.adv.asOf)) + ". Rental listings.") + cards };
+  return { h: 90 + 70 * Math.ceil(rows.length / 2), html: secHead("map-trifold", "Available to rent now", esc(freshLine(B.adv.asOf)) + ". Rental listings.") + cards };
 }
 function mapBlock(B, live) {
   if (!B.layer) return { h: 80, html: secHead("map-pin", "On the map", "") + '<div class="note2">' + icon("info", 18, TEAL) + "<div>This project is not tied to a building outline on the map yet, so no map is drawn.</div></div>" };
