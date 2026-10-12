@@ -1,0 +1,20 @@
+// v534 - listing brokers (name, agency, call, WhatsApp, the advert and permit links) only for an insider key (Kendall, Najjuko);
+// every other key sees "Agent on file". The one-listing PDF never carries the advert link. (Kendall 12 Oct 2026)
+import fs from "node:fs";
+import { advertsHtml, maskBrokers, listingSheetHtml } from "../src/supply_page.js";
+let pass = 0, fail = 0;
+const ok = (c, m, x) => { if (c) pass++; else { fail++; console.log("FAIL", m, x === undefined ? "" : String(x).slice(0, 300)); } };
+const a = { price: 38000, sqft: 339, type: "Apartment", listed: "2026-06-11", url: "https://www.propertyfinder.ae/en/plp/rent/x.html", permit: "https://trakheesi.dubailand.gov.ae/x", agent: "Waheed Rehman", agency: "Keller Williams", phone: "+971500000001", wa: "+971500000001" };
+const h = advertsHtml({ name: "Tower", district: "jumeirahvillagecircle", id: "jvc:1", ads: { studio: [a] }, bands: { studio: { live: 1 } }, bandRows: [] });
+ok(/Waheed Rehman/.test(h) && /tel:/.test(h) && /propertyfinder\.ae/.test(h), "the insider page keeps the broker");
+const m = maskBrokers(h);
+ok(!/Waheed|Keller|tel:|wa\.me|propertyfinder\.ae|trakheesi|\+97150/.test(m), "every other key: no name, agency, number, advert or permit link", m.match(/Waheed|Keller|tel:|wa\.me|propertyfinder|trakheesi/));
+ok(/Agent on file/.test(m) && /AED 38,000/.test(m) && /class="ao lpdf"/.test(m), "the card keeps the rent, the facts and the PDF button");
+const pdf = listingSheetHtml(a, { name: "Tower" }, "studio", { slug: "jumeirahvillagecircle", asOf: "2026-10-11" });
+ok(!/propertyfinder\.ae|Waheed|Keller/.test(pdf) && /available on request/.test(pdf), "the PDF never links to the advert");
+const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+ok(/function isInsider\(env, url\)/.test(idx) && /String\(env\.INSIDER_KEY \|\| ""\)/.test(idx) && /insider: isInsider\(env, url\) \}\);/.test(idx), "INSIDER_KEY decides; the supply route is told");
+const sp = fs.readFileSync(new URL("../src/supply_page.js", import.meta.url), "utf8");
+ok(/\(h\.insider \? \(x\) => x : maskBrokers\)\(supplyPageHtml/.test(sp), "the page is masked unless the key is an insider key");
+console.log(`v534 broker mask: ${pass} passed, ${fail} failed`);
+if (fail) process.exit(1);

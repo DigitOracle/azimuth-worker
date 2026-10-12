@@ -381,9 +381,9 @@ function advertCard(a, frame, all, ctx) {
   const where = "";   // v446: the position is the building's own (one per building on Property Finder), shown once on the street map above
   return '<div class=ad><div class=adb><div class=apr>' + esc(a.price == null ? "—" : "AED " + fmt(a.price)) + "<small> a year</small></div>"
     + (facts.length ? '<div class=af>' + esc(facts.join(" · ")) + "</div>" : "") + where
-    + (a.url ? '<a class=ao href="' + esc(a.url) + '" target=_blank rel="noopener noreferrer">' + IC_LINK + "Open on Property Finder</a>" : '<div class=af>No link stored for this advert yet</div>')
+    + "<!--brk-->" + (a.url ? '<a class=ao href="' + esc(a.url) + '" target=_blank rel="noopener noreferrer">' + IC_LINK + "Open on Property Finder</a>" : '<div class=af>No link stored for this advert yet</div>')
     + (a.permit ? '<a class=ck href="' + esc(a.permit) + '" target=_blank rel="noopener noreferrer">' + IC_PERMIT + "Check permit</a>" : "")
-    + brokerHtml(a, ctx) + pdfBtn(ctx) + "</div></div>";
+    + brokerHtml(a, ctx) + "<!--/brk-->" + pdfBtn(ctx) + "</div></div>";
 }
 // v531 - Kendall 12 Oct 2026 (option A): a PDF of this one listing, next to Call and WhatsApp. The key is added by the page script.
 const IC_PDF = '<svg viewBox="0 0 24 24" width=14 height=14 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>';
@@ -439,8 +439,7 @@ export function listingSheetHtml(a, b, k, D, X, now) {
       + (cmpSay ? '<div style="margin-top:8px;font-weight:600;color:#0A4F4A">This flat is ' + esc(cmpSay) + ".</div>" : "") : '<div class=ds>No other ' + esc(bed.toLowerCase()) + " flats are listed in this building now to compare with.</div>") + "</div></div>"
     + "<div>" + h2("Where it is") + '<div class=top><div class=fs style="grid-template-columns:1fr">' + fact("Area", dn + ", Dubai") + (ll ? fact("Map position", ll[0].toFixed(5) + ", " + ll[1].toFixed(5)) : "")
     + (X.facts || []).filter((f) => f[2] !== "building").map((f) => fact(f[0], f[1])).join("") + '</div><div class=qrw>' + qr("q1", gmap) + "<p><b>Scan for the map.</b><br>Opens Google Maps at the building, for directions and the street view.</p></div></div></div>"
-    + (a.url ? '<div class=nt>The original advert, with its photographs: <a href="' + esc(a.url) + '">' + esc(a.url.length > 90 ? a.url.slice(0, 90) + "\u2026" : a.url) + "</a></div>" : "")
-;
+    + '<div class=nt>Photographs of this flat are available on request: send us the reference.</div>';   // v534 - no link to the advert (it names the listing broker)
   const p1 = '<div class=pg>' + head("A flat to rent in Dubai") + '<div class=bd>' + in1 + "</div>" + foot(1) + "</div>";
   const others = (X.others || []).filter((o) => o !== a && o.price).slice(0, 5);
   const in2 = '<div class=top><div>' + h2("To arrange a viewing")
@@ -469,6 +468,12 @@ function medSay(b, k) {
   const r = (b.bandRows || []).find((x) => x.band === k);
   if (!r || (r.price == null && r.days == null)) return "";
   return '<small class=adm>' + [r.price != null ? "median " + esc(aed(r.price)) : "", r.days != null ? fmt(r.days) + " days listed" : ""].filter(Boolean).join(" \u00b7 ") + "</small>";
+}
+// v534 - Kendall 12 Oct 2026: broker names, numbers and the links that lead to the broker are for Kendall and Najjuko only (we reach the
+// brokers; the end user deals through us). Every other key sees "Agent on file". The markers are added by advertCard above.
+export function maskBrokers(html) {
+  return String(html).replace(/<!--brk-->[\s\S]*?<!--\/brk-->/g, '<div class=af>Agent on file</div>')
+    .replace(/Each advert opens on Property Finder, where its pictures and the agent\u2019s contact button are\. /g, "");
 }
 export function advertsHtml(b) {
   const ads = b.ads || {}, bands = BANDS.filter((k) => ads[k] && ads[k].length).concat(Object.keys(ads).filter((k) => !BANDS.includes(k) && ads[k].length));
@@ -594,7 +599,7 @@ export async function supplyRoutes(request, env, url, h) {
   if (p !== "/supply" || request.method !== "GET") return notFound();
   const names = await appNames(env), nm = districtNames(), q = (url.searchParams.get("q") || "").slice(0, 80);
   const d = (url.searchParams.get("d") || "").toLowerCase(), b = (url.searchParams.get("b") || "").slice(0, 160);
-  const page = (o) => new Response(supplyPageHtml(Object.assign({ key, q, nav: h.najNav(key, "start", ""), navCss: h.NAJ_NAV_CSS, fonts: h.NAJ_FONTS }, o)),
+  const page = (o) => new Response((h.insider ? (x) => x : maskBrokers)(supplyPageHtml(Object.assign({ key, q, nav: h.najNav(key, "start", ""), navCss: h.NAJ_NAV_CSS, fonts: h.NAJ_FONTS }, o))),
     { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   if (/^[a-z0-9]{2,40}$/.test(d)) {
     const D = await withUnbound(env, await loadDistrict(env, d, names)), src = sourceLine(D);

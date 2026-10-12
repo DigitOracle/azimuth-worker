@@ -2092,7 +2092,7 @@ async function appFetch(request, env, ctx) {
     const url = new URL(request.url); const CHAT = env.TELEGRAM_CHAT_ID;
     // ---- v279 ADVERTISED SUPPLY (owner only, Kendall 1 Oct 2026): /supply, /supply/summary, /supply/request, /supply/status. All in src/supply_page.js.
     // ABOVE the client gate on purpose: it answers 404 (not 401) to a client key, to no key and to anything but the owner key, before any storage.
-    if (url.pathname === "/supply" || url.pathname.indexOf("/supply/") === 0) { const _su = await supplyRoutes(request, env, url, { keyTier, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_su) return _su; }
+    if (url.pathname === "/supply" || url.pathname.indexOf("/supply/") === 0) { const _su = await supplyRoutes(request, env, url, { keyTier, najNav, NAJ_NAV_CSS, NAJ_FONTS, insider: isInsider(env, url) }); if (_su) return _su; }
     // ---- end ADVERTISED SUPPLY ----
     // ---- v328 FIT (owner only): /fit and /fit_api. ABOVE the client gate on purpose, like /supply: a client key, no key or a wrong key gets 404 before any storage is touched. All in src/fit.js.
     if (url.pathname === "/fit" || url.pathname === "/fit_api" || url.pathname === "/fit_steps" || url.pathname.indexOf("/fit_img/") === 0) { const _ft = await fitRoutes(request, env, url, fitDeps()); if (_ft) return _ft; }
@@ -12757,10 +12757,16 @@ function clientKeysOf(env) {
   const read = String(env.READ_KEY || ""), res = String(env.RESIDENTS_KEY || "");
   return String(env.CLIENT_KEY || "").split(",").map((k) => k.trim()).filter((k) => k.length >= 12 && !(read && ctEq(k, read)) && !(res && ctEq(k, res)));
 }
+// v534 - INSIDER_KEY (secret, comma-separated, one per person): the only keys that see Property Finder broker names, numbers and advert links
+function isInsider(env, url) {
+  const k = url.searchParams.get("key") || "";
+  return !!k && String(env.INSIDER_KEY || "").split(",").map((x) => x.trim()).filter((x) => x.length >= 20).some((x) => ctEq(k, x));
+}
 function keyTier(env, url) {   // "admin" for READ_KEY, "client" for a client key, "" for anything else
   const k = url.searchParams.get("key") || "";
   if (!k) return "";
   if (env.READ_KEY && ctEq(k, String(env.READ_KEY))) return "admin";
+  if (isInsider(env, url)) return "admin";   // v534 - an insider key (Kendall, Najjuko) is an owner key that also sees the listing brokers
   return clientKeysOf(env).some((c) => ctEq(k, c)) ? "client" : "";
 }
 const clientOk = (env, url) => keyTier(env, url) !== "";   // the check on the app pages: READ_KEY or a client key
