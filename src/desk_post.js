@@ -193,13 +193,14 @@ export async function refClassify(env, deps, redo) {
     const m = await kvJ(env, "desk_ref_" + n, null); if (!m || m.approved !== true) continue;
     if (m.look && !redo) { rows.push({ n, look: m.look, cached: true }); continue; }
     const b = await env.MEETINGS.get(m.key, "arrayBuffer"); if (!b || !b.byteLength) { rows.push({ n, err: "no picture" }); continue; }
-    let a = null; try { a = await deps.vision(env, b, "image/jpeg", "Look at the man in this photo. Reply with exactly two words separated by a space: first GLASSES or NOGLASSES (is he wearing glasses), then CLEAR or UNCLEAR (is his face clearly visible, front or three-quarter, large enough to recognise, not hidden by a hard hat brim, sunglasses or a hand)."); } catch (e) {}
+    let a = null; try { a = await deps.vision(env, b, "image/jpeg", "Look at this photo. Reply with exactly three words separated by spaces: first ONE or MANY (ONE only if it is a real photograph with exactly one person as the clear subject; MANY if there are several people, a crowd, a panel, or it is a screenshot, poster, graphic or collage), then GLASSES or NOGLASSES (is that person wearing glasses), then CLEAR or UNCLEAR (is the face clearly visible, front or three-quarter, large enough to recognise, not hidden by a hat brim, sunglasses or a hand)."); } catch (e) {}
     const s = String(a || "").toUpperCase();
-    if (!/GLASSES/.test(s)) { rows.push({ n, err: "no answer" }); continue; }
-    m.look = { glasses: /\bGLASSES\b/.test(s) && !/NOGLASSES/.test(s), face: /\bCLEAR\b/.test(s) && !/UNCLEAR/.test(s), at: Date.now() };
+    if (!/GLASSES/.test(s) || !/\b(ONE|MANY)\b/.test(s)) { rows.push({ n, err: "no answer" }); continue; }
+    // v544 - a crowd, a panel, a screenshot or a poster is never a likeness reference (#4, #9, #16, #19 on 12 Oct drew strangers)
+    m.look = { one: /\bONE\b/.test(s) && !/\bMANY\b/.test(s), glasses: /\bGLASSES\b/.test(s) && !/NOGLASSES/.test(s), face: /\bCLEAR\b/.test(s) && !/UNCLEAR/.test(s), at: Date.now() };
     await kvPut(env, "desk_ref_" + n, m); rows.push({ n, tag: m.tag, look: m.look });
   }
-  return { refs: rows.length, glasses_and_clear: rows.filter((r) => r.look && r.look.glasses && r.look.face).length, rows };
+  return { refs: rows.length, glasses_and_clear: rows.filter((r) => r.look && r.look.one && r.look.glasses && r.look.face).length, rows };
 }
 async function refList(env) { const out = []; for (const n of await kvJ(env, "desk_ref_index", [])) { const m = await kvJ(env, "desk_ref_" + n, null); if (m && m.approved === true) out.push(m); } return out; }
 // 2-3 references for a scene, the best-matching tag first, then different tags so the face is seen from more than one angle
@@ -215,7 +216,7 @@ export async function pickRefs(env, idea, hint) {
   for (const m of rot) { if (out.length >= 3) break; if (!out.includes(m)) out.push(m); }
   // v542 (Kendall 12 Oct: "fix the portrait likeness, use a glasses reference") - pictures now use ONE reference, the first: it is a photo
   // with his glasses on and his face clear, found by refClassify; the rotation still walks those, so the poses vary
-  const good = rot.filter((x) => x.look && x.look.glasses === true && x.look.face === true);
+  const good = rot.filter((x) => x.look && x.look.one === true && x.look.glasses === true && x.look.face === true);
   if (good.length) { const g = good.find((x) => x.tag === want) || good[0]; const ix = out.indexOf(g); if (ix > 0) out.splice(ix, 1); if (ix !== 0) out.unshift(g); out.length = Math.min(out.length, 3); }
   try { if (all.length) await env.MEETINGS.put("desk_ref_cursor", String((cur + 3) % all.length)); } catch (e) {}
   const bufs = []; for (const m of out) { const b = await env.MEETINGS.get(m.key, "arrayBuffer"); if (b && b.byteLength) bufs.push(b); }
