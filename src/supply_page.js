@@ -29,7 +29,10 @@
 // while, we'll keep it here", remembers the request in this browser and picks the polling back up when the page is reopened.
 // The button is never dead: every state ends on a sentence, and the failures offer "Request again".
 import { BRIEF_DISTRICTS } from "./brief_page.js";
-import { advertisedDoc, advertisedFor, advertisedHtml, permitLink, ADV_CSS, IC_PERMIT } from "./advertised.js";
+import { BRIEF_KIT, WHATSAPP_NUMBER } from "./brief_docs.js";
+import { parseParams } from "./devmap_pdf.js";
+import { listingBuildingDoc } from "./broker_building.js";   // v531 - the one-listing PDF
+import { advertisedDoc, advertisedFor, advertisedHtml, advertisedRows, permitLink, ADV_CSS, IC_PERMIT, freshLine } from "./advertised.js";
 import { footprintRing, footprintLayer, positionsDoc } from "./broker_building.js";
 import { positionOf, placement } from "./building_position.js";   // v452: the multi-source position check   // v451: the gold building is our register-bound footprint   // v444 ADVERTISED NOW (Property Finder): flats, adverts, gone - beside developer availability, never added
 
@@ -263,6 +266,18 @@ async function loadDistrict(env, slug, names) {
   const crawled = bs.reduce((m, b) => (b.crawled > m ? b.crawled : m), "") || doc.asOf;
   return { slug, asOf: doc.asOf, crawled, buildings: bs, coverage: doc.coverage, homeTypes: doc.homeTypes, sourceSay: doc.sourceSay, sites: doc.sites, srcs: doc.srcs };
 }
+// v530 - the area broker PDF's "Available to rent now" page (Kendall 12 Oct 2026: a broker for Business Bay wants to know which buildings have flats):
+// every building in the district with flats listed now, most flats first, with the typical asking rent per bedroom type
+export async function districtAdvertised(env, slug) {
+  if (!/^[a-z0-9]{2,40}$/.test(String(slug || ""))) return null;
+  let D = null; try { D = await loadDistrict(env, slug, await appNames(env)); } catch (e) { return null; }
+  if (!D) return null;
+  const rows = D.buildings.filter((b) => b.advertised && (b.advertised.flats || b.advertised.adverts))
+    .map((b) => ({ name: b.name, matched: b.matched, flats: b.advertised.flats, adverts: b.advertised.adverts, bands: advertisedRows(b.advertised) }))
+    .sort((a, b) => (b.flats || 0) - (a.flats || 0) || b.adverts - a.adverts || String(a.name).localeCompare(String(b.name)));
+  const asOf = (D.buildings.find((b) => b.advertised && b.advertised.asOf) || {}).advertised;
+  return { asOf: (asOf && asOf.asOf) || D.asOf || "", rows };
+}
 async function withUnbound(env, D) { if (D) D.unbound = unboundDoc(await readJson(env, "img_pf_unbound_" + D.slug)); return D; }
 // one summary for the START card: the latest crawl and the adverts on record
 export async function supplySummary(env) {
@@ -366,8 +381,87 @@ function advertCard(a, frame, all, ctx) {
     + (facts.length ? '<div class=af>' + esc(facts.join(" · ")) + "</div>" : "") + where
     + (a.url ? '<a class=ao href="' + esc(a.url) + '" target=_blank rel="noopener noreferrer">' + IC_LINK + "Open on Property Finder</a>" : '<div class=af>No link stored for this advert yet</div>')
     + (a.permit ? '<a class=ck href="' + esc(a.permit) + '" target=_blank rel="noopener noreferrer">' + IC_PERMIT + "Check permit</a>" : "")
-    + brokerHtml(a, ctx) + "</div></div>";
+    + brokerHtml(a, ctx) + pdfBtn(ctx) + "</div></div>";
 }
+// v531 - Kendall 12 Oct 2026 (option A): a PDF of this one listing, next to Call and WhatsApp. The key is added by the page script.
+const IC_PDF = '<svg viewBox="0 0 24 24" width=14 height=14 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>';
+function pdfBtn(ctx) {
+  if (!ctx || !ctx.d || !ctx.id || ctx.k == null || ctx.i == null) return "";
+  return '<div class=abk><a class="ao lpdf" href="/supply/listing_pdf?d=' + encodeURIComponent(ctx.d) + "&b=" + encodeURIComponent(ctx.id) + "&k=" + encodeURIComponent(ctx.k) + "&i=" + ctx.i + '" target=_blank rel="noopener">' + IC_PDF + "PDF</a></div>";
+}
+// v531 - the one-listing sheet, two A4 pages, written for someone who has never been to Dubai (Kendall 12 Oct 2026: "if you received this in
+// London, would you have enough information to go and view?"). Page 1: the flat, its rent against the building, where it is. Page 2: how to view,
+// the move-in money, the building, the other flats listed there now. The listing broker's name and number are left off: the client comes to us.
+// X (all optional): {typical:{flats,fmed,f25,f75}, others:[advert], bandsNow:[{label,flats,typical}], ll:[lat,lon], facts:[[label,value,source]], ref}
+export const MOVE_IN = { depUnf: 0.05, depFurn: 0.10, agency: 0.05, vat: 0.05, ejari: 220, dewa: 2000 };   // usual Dubai practice; every line says confirm
+export function moveInCosts(rent, furnished, cheques) {
+  if (!(rent > 0)) return null;
+  const n = cheques || 4, first = Math.round(rent / n), dep = Math.round(rent * (furnished ? MOVE_IN.depFurn : MOVE_IN.depUnf)), ag = Math.round(rent * MOVE_IN.agency), vat = Math.round(ag * MOVE_IN.vat);
+  const rows = [["First rent cheque (1 of " + n + ")", first], ["Security deposit (" + (furnished ? "10" : "5") + "% of the year's rent, refundable)", dep], ["Agency fee (5% of the year's rent)", ag], ["Value added tax on the agency fee (5%)", vat], ["Tenancy registration (Ejari)", MOVE_IN.ejari], ["Electricity and water connection deposit (refundable)", MOVE_IN.dewa]];
+  return { rows, total: rows.reduce((s, r) => s + r[1], 0) };
+}
+export function listingSheetHtml(a, b, k, D, X, now) {
+  X = X || {};
+  const bed = BAND_SAY[k] || k, dn = districtNames()[D.slug] || D.slug, furn = a.furnished === "YES" || a.furnished === "PARTLY";
+  const sqm = a.sqft ? Math.round(a.sqft * 0.092903) : null;
+  const daysOn = a.listed && /^\d{4}-\d{2}-\d{2}/.test(a.listed) ? Math.max(0, Math.round(((now ? now.getTime() : Date.now()) - Date.parse(a.listed.slice(0, 10))) / 864e5)) : null;
+  const ref = X.ref || ("NJ-" + (D.slug.slice(0, 3) + "-" + String(b.id || "").replace(/\D/g, "").slice(-4) + "-" + k + "-" + (a.price ? Math.round(a.price / 1000) : "0")).toUpperCase());
+  const ll = X.ll || (a.lat != null && a.lon != null ? [a.lat, a.lon] : null);
+  const gmap = ll ? "https://www.google.com/maps/search/?api=1&query=" + ll[0].toFixed(5) + "," + ll[1].toFixed(5) : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(b.name + ", " + dn + ", Dubai");
+  const waText = "Hello Najjuko, I'd like to view " + bed.toLowerCase() + " in " + b.name + ", " + dn + (a.price ? " at AED " + fmt(a.price) + " a year" : "") + ". Reference " + ref + ".";
+  const wa = "https://wa.me/" + String(WHATSAPP_NUMBER || "+971565484397").replace(/\D/g, "") + "?text=" + encodeURIComponent(waText);
+  const T = X.typical, cmp = T && T.fmed && a.price ? Math.round((a.price / T.fmed - 1) * 100) : null;
+  const cmpSay = cmp == null ? "" : Math.abs(cmp) < 3 ? "about the typical rent" : Math.abs(cmp) + "% " + (cmp < 0 ? "below" : "above") + " the typical rent";
+  const mi = moveInCosts(a.price, furn, 4);
+  const fact = (l, v) => v ? '<div class=f><span>' + esc(l) + "</span><b>" + esc(v) + "</b></div>" : "";
+  const h2 = (s) => '<div class=h2>' + esc(s) + "</div>";
+  const qr = (id, url) => '<div class=qr id="' + id + '" data-u="' + esc(url) + '"></div>';
+  const head = (sub) => '<div class=hd><div><div class=lb>' + esc(sub) + '</div><div class=sm>' + esc(freshLine(D.asOf, now)) + " &middot; Reference " + esc(ref) + "</div></div>" + BRIEF_KIT.logo({}, 56) + "</div>";
+  const foot = (n) => '<div class=ft><span>Curated by Najjuko &middot; Dubai Decoded</span><span>WhatsApp ' + esc(WHATSAPP_NUMBER || "+971 56 548 4397") + " &middot; Page " + n + " of 2</span></div>";
+  const css = '@page{size:A4;margin:0}body{margin:0;font-family:"IBM Plex Sans",Arial,sans-serif;color:#22262B;font-size:12.5px}.pg{width:210mm;height:296mm;display:flex;flex-direction:column;page-break-after:always;overflow:hidden}'
+    + '.hd{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-bottom:1px solid #E6E1D8}.lb{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:#7A7F86}.sm{font-size:11px;color:#7A7F86;margin-top:3px}'
+    + '.bd{flex:1;padding:22px 40px 0;display:flex;flex-direction:column;gap:16px}.nm{font-family:Newsreader,Georgia,serif;font-size:30px;color:#0A4F4A;line-height:1.1}.ds{color:#7A7F86}'
+    + '.top{display:grid;grid-template-columns:1.25fr 1fr;gap:26px}.pr{font-family:Newsreader,Georgia,serif;font-size:38px;line-height:1}.pr small{font-size:15px;color:#7A7F86}.pm{color:#7A7F86;margin-top:4px}'
+    + '.h2{font-size:10.5px;letter-spacing:1.3px;text-transform:uppercase;color:#0A4F4A;font-weight:600;border-bottom:2px solid #C5A56A;padding-bottom:4px;margin-bottom:4px}'
+    + '.fs{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}.f{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #EEE9E0}.f span{color:#7A7F86}.f b{font-weight:500;text-align:right}'
+    + '.box{background:#F6F3EC;border:1px solid #E6E1D8;padding:12px 14px}.big{font-family:Newsreader,Georgia,serif;font-size:22px;color:#0A4F4A}.qr{width:92px;height:92px}.qr svg{width:92px;height:92px}.qrw{display:flex;gap:12px;align-items:center}.qrw p{margin:0;font-size:11.5px;color:#3d4249}'
+    + '.st{display:grid;grid-template-columns:28px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid #EEE9E0}.st i{font-style:normal;width:22px;height:22px;border-radius:50%;background:#0A4F4A;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px}'
+    + 'table{width:100%;border-collapse:collapse}td,th{padding:5px 4px;border-bottom:1px solid #EEE9E0;text-align:left}th{font-size:10px;color:#7A7F86;font-weight:600;letter-spacing:.5px}.r{text-align:right}.tot td{font-weight:600;border-top:2px solid #C5A56A}'
+    + '.nt{font-size:10.5px;color:#7A7F86;line-height:1.45}.ft{padding:12px 40px 18px;border-top:1px solid #E6E1D8;font-size:11px;display:flex;justify-content:space-between}a{color:#0A4F4A}';
+  const in1 = '<div><div class=lb>' + esc(bed) + " &middot; " + esc(a.type || "Apartment") + '</div><div class=nm>' + esc(b.name) + '</div><div class=ds>' + esc(dn) + ", Dubai, United Arab Emirates</div></div>"
+    + '<div class=top><div><div class=pr>' + (a.price == null ? "Rent on request" : "AED " + fmt(a.price) + "<small> a year</small>") + "</div>"
+    + '<div class=pm>' + (a.price ? "About AED " + fmt(Math.round(a.price / 12)) + " a month, usually paid in 1 to 4 cheques a year" : "") + "</div>"
+    + '<div style="margin-top:14px">' + h2("The flat") + '<div class=fs>' + fact("Bedrooms", bed) + fact("Bathrooms", a.baths ? String(a.baths) : "") + fact("Size", a.sqft ? fmt(a.sqft) + " sq ft (" + sqm + " m\u00B2)" : "") + fact("Furnished", a.furnished ? (a.furnished === "YES" ? "Yes" : a.furnished === "NO" ? "No" : "Partly") : "")
+    + fact("Listed", a.listed ? dLong(a.listed) + (daysOn != null ? " (" + daysOn + " days ago)" : "") : "") + fact("Permit", a.permit ? "Land Department permit on the advert" : "") + "</div></div></div>"
+    + '<div class=box>' + h2("Is the rent fair?") + (T && T.fmed ? '<div class=big>AED ' + fmt(T.fmed) + '</div><div class=ds>typical ' + esc(bed.toLowerCase()) + " in this building, from " + fmt(T.flats) + (T.flats === 1 ? " flat" : " flats") + " listed now" + (T.f25 && T.f75 ? "; the middle half AED " + fmt(T.f25) + " to " + fmt(T.f75) : "") + "</div>"
+      + (cmpSay ? '<div style="margin-top:8px;font-weight:600;color:#0A4F4A">This flat is ' + esc(cmpSay) + ".</div>" : "") : '<div class=ds>No other ' + esc(bed.toLowerCase()) + " flats are listed in this building now to compare with.</div>") + "</div></div>"
+    + "<div>" + h2("Where it is") + '<div class=top><div class=fs style="grid-template-columns:1fr">' + fact("Area", dn + ", Dubai") + (ll ? fact("Map position", ll[0].toFixed(5) + ", " + ll[1].toFixed(5)) : "")
+    + (X.facts || []).filter((f) => f[2] !== "building").map((f) => fact(f[0], f[1])).join("") + '</div><div class=qrw>' + qr("q1", gmap) + "<p><b>Scan for the map.</b><br>Opens Google Maps at the building, for directions and the street view.</p></div></div></div>"
+    + (a.url ? '<div class=nt>The original advert, with its photographs: <a href="' + esc(a.url) + '">' + esc(a.url.length > 90 ? a.url.slice(0, 90) + "\u2026" : a.url) + "</a></div>" : "")
+;
+  const p1 = '<div class=pg>' + head("A flat to rent in Dubai") + '<div class=bd>' + in1 + "</div>" + foot(1) + "</div>";
+  const others = (X.others || []).filter((o) => o !== a && o.price).slice(0, 5);
+  const in2 = '<div class=top><div>' + h2("To arrange a viewing")
+    + '<div class=st><i>1</i><div><b>Send us a WhatsApp</b> with the reference <b>' + esc(ref) + "</b>. Scanning the code opens the message already written.</div></div>"
+    + '<div class=st><i>2</i><div><b>We check it is still available</b> with the listing broker, usually the same day, and confirm the rent and the move-in date.</div></div>'
+    + '<div class=st><i>3</i><div><b>View in person or by live video call.</b> From abroad, a video viewing lets you see the flat, the view and the building before you travel.</div></div>'
+    + '<div class=st><i>4</i><div><b>To reserve it</b> you will usually need a passport copy, a United Arab Emirates residence visa and Emirates identity card (or the application), and the deposit cheque.</div></div></div>'
+    + '<div class=box><div class=qrw>' + qr("q2", wa) + "<p><b>Scan to message Najjuko on WhatsApp</b><br>" + esc(WHATSAPP_NUMBER || "+971 56 548 4397") + "<br>Reference " + esc(ref) + "</p></div></div></div>"
+    + (mi ? "<div>" + h2("Money to move in (usual in Dubai, to confirm)") + "<table>" + mi.rows.map((r) => "<tr><td>" + esc(r[0]) + '</td><td class=r>AED ' + fmt(r[1]) + "</td></tr>").join("") + '<tr class=tot><td>About, on signing</td><td class=r>AED ' + fmt(mi.total) + "</td></tr></table>"
+      + '<div class=nt>The remaining rent is usually paid by post-dated cheques. The deposit, fee and number of cheques are agreed with the landlord; the figures above are the common practice, not a quote.</div></div>' : "")
+    + ((X.facts || []).some((f) => f[2] === "building") ? "<div>" + h2("The building") + '<div class=fs>' + X.facts.filter((f) => f[2] === "building").map((f) => fact(f[0], f[1])).join("") + "</div></div>" : "")
+    + (others.length || (X.bandsNow || []).length ? "<div>" + h2("Also listed in " + b.name + " now") + "<table><tr><th>Bedrooms</th><th class=r>Flats listed</th><th class=r>Typical rent a year</th></tr>" + (X.bandsNow || []).map((r) => "<tr><td>" + esc(r.label) + '</td><td class=r>' + fmt(r.flats) + '</td><td class=r>' + esc(r.typical || "") + "</td></tr>").join("") + "</table>"
+      + (others.length ? '<div class=nt style="margin-top:6px">Other ' + esc(bed.toLowerCase()) + " flats here: " + others.map((o) => "AED " + fmt(o.price) + (o.sqft ? " (" + fmt(o.sqft) + " sq ft)" : "")).join(", ") + ". Ask us for any of them.</div>" : "") + "</div>" : "")
+    + '<div class=nt>The rent is the asking rent in the advert, not an agreed rent or an offer. Availability, the rent and the flat itself must be confirmed before a viewing. Listings are checked every day; this sheet shows the day it was made.</div>'
+;
+  const p2 = '<div class=pg>' + head("How to view and move in") + '<div class=bd>' + in2 + "</div>" + foot(2) + "</div>";
+  // v531 - inside the building PDF template (Kendall: "we have a template, you need the logo"): the bodies and the CSS scoped to .lsx
+  if (X.parts) return { css: css.replace(/@page\{[^}]*\}|body\{[^}]*\}/g, "").replace(/(^|\})([^{}]+)\{/g, (m, e, sel) => e + sel.split(",").map((s) => ".lsx " + s.trim()).join(",") + "{"), in1, in2, ref };
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>' + esc(b.name) + " - " + esc(bed) + '</title><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400&display=swap" rel="stylesheet"><style>' + css + "</style>"
+    + '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script></head><body>' + p1 + p2
+    + '<script>document.querySelectorAll(".qr").forEach(function(e){try{var q=qrcode(0,"M");q.addData(e.getAttribute("data-u"));q.make();e.innerHTML=q.createSvgTag({cellSize:3,margin:0,scalable:true})}catch(x){}})</script></body></html>';
+}
+function dLong(s) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || "")); if (!m) return String(s || ""); const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return +m[3] + " " + M[+m[2] - 1] + " " + m[1]; }
 export function advertsHtml(b) {
   const ads = b.ads || {}, bands = BANDS.filter((k) => ads[k] && ads[k].length).concat(Object.keys(ads).filter((k) => !BANDS.includes(k) && ads[k].length));
   if (!bands.length) return "";
@@ -378,7 +472,7 @@ export function advertsHtml(b) {
   const map = b.pos ? streetMap(b.pos.ll[0], b.pos.ll[1], b.name, b.fp, b.pos.line) : b.fp && b.fp.ll ? streetMap(b.fp.ll[0], b.fp.ll[1], b.name, b.fp) : best ? streetMap(Number(best.split(",")[0]), Number(best.split(",")[1]), b.name) : "";
   return '<div class=adw>' + map + bands.map((k) => '<details class=adg><summary>' + IC_CHEV + "<span>" + esc(BAND_SAY[k] || k) + "</span><b>" + fmt(live(k)) + "</b>"
     + (live(k) > ads[k].length ? "<small>cheapest " + ads[k].length + " shown</small>" : "") + "</summary>"
-    + ads[k].map((a) => advertCard(a, b.frame, ads[k], { building: b.name, band: BAND_SAY[k] || k })).join("") + "</details>").join("")
+    + ads[k].map((a, i) => advertCard(a, b.frame, ads[k], { building: b.name, band: BAND_SAY[k] || k, d: b.district, id: b.id, k, i })).join("") + "</details>").join("")
     + '<div class=dk>Each advert opens on Property Finder, where its pictures and the agent’s contact button are. The map shows where the building sits; Property Finder gives one position per building.</div></div>';
 }
 // The building's street map: the same free vector map as the developers map (CARTO dark matter, MapLibre 4.7.1), drawn by SUPPLY_JS
@@ -466,6 +560,27 @@ export async function supplyRoutes(request, env, url, h) {
     return json({ ok: true, id, district, building_slug: rec.building_slug, requested_at: rec.requested_at, queued_behind: running ? { district: running.req.district, building_slug: running.req.building_slug || null } : null });
   }
   if (p === "/supply/status" && request.method === "GET") return json(await supplyStatus(env, url.searchParams.get("id") || ""));
+  if (p === "/supply/listing_pdf" && request.method === "GET") {   // v531
+    const d = (url.searchParams.get("d") || "").toLowerCase(), id = (url.searchParams.get("b") || "").slice(0, 200), k = (url.searchParams.get("k") || "").slice(0, 12), i = parseInt(url.searchParams.get("i") || "", 10);
+    if (!/^[a-z0-9]{2,40}$/.test(d) || !id || !(i >= 0)) return notFound();
+    const D = await loadDistrict(env, d, await appNames(env)), b = D && D.buildings.find((x) => x.id === id), a = b && b.ads && b.ads[k] && b.ads[k][i];
+    if (!a) return new Response("That listing is no longer on file. Reload the page.", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    const bb = b.advertised && b.advertised.bands && b.advertised.bands[k];
+    const X = { typical: bb && bb.fmed ? { flats: bb.flats, fmed: bb.fmed, f25: bb.f25, f75: bb.f75 } : null, others: b.ads[k],
+      bandsNow: advertisedRows(b.advertised).map((r) => ({ label: r.label, flats: r.flats != null ? r.flats : r.adverts, typical: r.typical })), ll: b.pos && b.pos.ll ? b.pos.ll : (b.fp && b.fp.ll ? b.fp.ll : null) };
+    let html = null;
+    try {   // the template: the flat's two pages, then the building sheet (logo, header, footer, sales, rents, map)
+      const bk = /:(\d+)$/.exec(String(b.key || "")), q = new URL("https://x/?kind=building&mode=rent&area=" + encodeURIComponent(d) + "&name=" + encodeURIComponent(b.project || b.name) + (bk ? "&bk=" + bk[1] : ""));
+      const r = await listingBuildingDoc(env, parseParams(q), { owner: true }, listingSheetHtml(a, b, k, D, Object.assign({ parts: true }, X)), url.searchParams.get("format") === "html");
+      if (r) html = r;
+    } catch (e) { html = null; }
+    if (!html) html = listingSheetHtml(a, b, k, D, X);   // no sales record for this building: the sheet on its own, with the logo
+    const hdr = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer" };
+    if (url.searchParams.get("format") === "html" || !env.BROWSER) return new Response(html, { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) });
+    let pdf; try { pdf = await BRIEF_KIT.renderPdf(env, html); } catch (e) { return new Response(html, { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8" }, hdr) }); }
+    const fn = (b.name + "_" + (BAND_SAY[k] || k) + "_AED_" + (a.price || "")).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") + ".pdf";
+    return new Response(pdf, { headers: Object.assign({ "Content-Type": "application/pdf", "Content-Disposition": 'inline; filename="' + fn + '"' }, hdr) });
+  }
   if (p !== "/supply" || request.method !== "GET") return notFound();
   const names = await appNames(env), nm = districtNames(), q = (url.searchParams.get("q") || "").slice(0, 80);
   const d = (url.searchParams.get("d") || "").toLowerCase(), b = (url.searchParams.get("b") || "").slice(0, 160);
@@ -597,6 +712,7 @@ export async function pollerRoutes(request, env, url, h) {
 export const SUPPLY_JS = String.raw`
 (function(){
 var S=window.__SU||{},KQ="key="+encodeURIComponent(S.key||""),LS="najma_supply_pending";
+(function(){if(typeof document==="undefined"||!document.addEventListener||typeof location==="undefined")return;document.addEventListener("click",function(e){var t=e.target&&e.target.closest?e.target.closest("a.lpdf"):null;if(!t)return;var k=new URLSearchParams(location.search).get("key");if(k&&t.href.indexOf("&key=")<0)t.href=t.href+"&key="+encodeURIComponent(k)},true)})();
 // v523 - the home-type pills filter the buildings (Kendall 11 Oct 2026). Several may be on; none on = the 30 most advertised, as before.
 (function(){if(typeof document==="undefined"||!document.querySelectorAll||!document.getElementById)return;var ps=document.querySelectorAll(".htp[data-ht]");if(!ps||!ps.length||!ps.forEach)return;var say=document.getElementById("suhsay");
   var STEPS=` + JSON.stringify(BUDGET_STEPS) + String.raw`,br=document.getElementById("subudr"),bv=document.getElementById("subudv"),hl=document.getElementById("suhl"),hl0=hl?hl.innerHTML:"";

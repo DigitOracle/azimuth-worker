@@ -287,6 +287,18 @@ export function buildingHtml(B, p) {
   if (live) html = html.replace("</style>", LIVE_MAP_CSS + "</style>").replace("<head>", '<head><meta name="viewport" content="width=device-width,initial-scale=1">').replace("</body>", "<script>" + LIVE_MAP_JS + "</script></body>");
   return { html, pages: pages.length };
 }
+// v531 - the one-listing PDF in this template: the flat (two pages) first, then this building sheet. null when the building has no sales record.
+export async function listingBuildingDoc(env, p, opts, L, live) {
+  const R = await loadBuilding(env, p, opts);
+  if (R.status !== 200 || !L) return null;
+  const B = R.B, pp = Object.assign({}, p, { format: live ? "html" : "pdf" });
+  const blocks = [{ sub: "The flat", html: '<div class=lsx>' + L.in1 + "</div>", h: 800, alone: true }, { sub: "How to view and move in", html: '<div class=lsx>' + L.in2 + "</div>", h: 800, alone: true }]
+    .concat([headerBlock(B), salesBlock(B), positionBlock(B), recentBlock(B), rentBlock(B), mapBlock(B, live)].filter(Boolean).map((b) => Object.assign({ sub: "Building sheet" }, b)));
+  const pages = pack(blocks);
+  const body = pages.map((pg, i) => pageHtml(B, pg, i, pages.length, pp)).join("");
+  return head("Flat to rent - " + B.name + " - " + L.ref, body).replace("</style>", L.css + "</style>")
+    .replace("</body>", '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script><script>document.querySelectorAll(".qr").forEach(function(e){try{var q=qrcode(0,"M");q.addData(e.getAttribute("data-u"));q.make();e.innerHTML=q.createSvgTag({cellSize:3,margin:0,scalable:true})}catch(x){}})</script></body>');
+}
 export async function buildBuildingPdf(env, p, opts) {
   const L = await loadBuilding(env, p, opts);
   if (L.status !== 200) return L;

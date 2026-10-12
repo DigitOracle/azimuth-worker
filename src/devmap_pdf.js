@@ -26,6 +26,8 @@ import { PHOSPHOR_LIGHT } from "./devmap_icons.js";
 import { BRIEF_KIT, esc, FOOTER_TEXT, WHATSAPP_NUMBER, HEADER_IMG_KEY, HEADER_JPG_KEY } from "./brief_docs.js";
 import { buildInvestorTiersPdf, parseInvestorParams } from "./investor_tiers_page.js";   // v376 - kind=investor_tiers and kind=investor_selector (new files; circular import, used only at call time)
 import { buildBuildingPdf, buildingParams } from "./broker_building.js";   // v450 -  (circular import, used only at call time)
+import { districtAdvertised } from "./supply_page.js";   // v530
+import { freshLine } from "./advertised.js";
 import { buildInvestorPdf } from "./devmap_investor.js";   // v339 - kind=investor (one developer in one area); circular import, used only at call time
 
 const { NAVY, GOLD, MUTED, MAPC, KY, KH, PT } = BRIEF_KIT;
@@ -774,6 +776,21 @@ function pageHtml(C, pg, i, total) {
   return '<div class="sheet page dm-body">' + hdr + '<div class="dmb" style="flex:1;display:flex;flex-direction:column;padding:14px 46px 0 46px;gap:12px;overflow:hidden;">' + pg.html + "</div>" + BRIEF_KIT.footer(small, C.buy) + "</div>";
 }
 
+// v530 - "Available to rent now": the buildings in this area with flats listed now (Kendall 12 Oct 2026). No listings, no page.
+export const AVAIL_MAX = 26;
+export function availablePage(C, A) {
+  if (!A || !A.rows || !A.rows.length) return null;
+  const COLS = [["studio", "Studio"], ["1", "1 bedroom"], ["2", "2 bedrooms"], ["3+", "3 bedrooms or more"]];
+  const cell = (r, k) => { const x = r.bands.find((b) => b.band === k); return x ? (x.flats != null ? x.flats : x.adverts) + (x.typical ? '<br><span style="color:' + MUTED + '">' + esc(x.typical) + "</span>" : "") : '<span style="color:' + MUTED + '">&ndash;</span>'; };
+  const shown = A.rows.slice(0, AVAIL_MAX), more = A.rows.length - shown.length;
+  const tot = A.rows.reduce((s, r) => s + (r.flats || 0), 0);
+  const body = '<div class=otlh>Available to rent now</div>'
+    + '<div class=mnote>' + (tot ? tot.toLocaleString("en-US") + " flats" : "Flats") + " listed in " + A.rows.length + (A.rows.length === 1 ? " building" : " buildings") + " in " + esc(C.names.plain) + ", most first. Each cell: flats listed, then the typical asking rent a year. " + esc(freshLine(A.asOf)) + ".</div>"
+    + '<table class=tb><tr><th>Building</th>' + COLS.map((c) => '<th class=r>' + c[1] + "</th>").join("") + '<th class=r>Flats</th></tr>'
+    + shown.map((r) => "<tr><td>" + esc(r.name) + '</td>' + COLS.map((c) => '<td class=r>' + cell(r, c[0]) + "</td>").join("") + '<td class=r><b>' + (r.flats != null ? r.flats : r.adverts) + "</b></td></tr>").join("") + "</table>"
+    + (more > 0 ? '<div class=mnote>And ' + more + (more === 1 ? " more building" : " more buildings") + " with fewer flats listed.</div>" : "");
+  return { sub: "Available to rent now", html: body };
+}
 // the page-packer: blocks carry an estimated height (px); a page holds PAGE_H of them
 export const PAGE_H = 830;
 export const PDF_PAGE_TARGET = 12;
@@ -799,6 +816,7 @@ export async function buildAreaPdf(env, p, opts) {
   const C = L.C, pages = [];
   const M = await loadMapData(env, C); C.M = M;
   pages.push({ sub: p.kind === "snapshot" ? "Snapshot" : "Snapshot", html: snapshotBody(C), alone: true });
+  try { const av = availablePage(C, await districtAdvertised(env, C.slug)); if (av) pages.push(av); } catch (e) { /* no listings file: no page */ }   // v530
   if (p.kind === "detailed" && C.st.enough) {
     const chosen = C.st.tiers.flatMap((t) => t.devs).filter((d) => C.mine[d.k]).sort((a, b) => b.n - a.n);
     const blocks = bandSections(C);
