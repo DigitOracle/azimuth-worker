@@ -8877,7 +8877,8 @@ function amRecalc(){window.__cityFocus=AMDIST;const AM=window.__AM;const ks=Obje
   const cnt={};((AM&&AM.items)||[]).forEach(i=>{if(!dslug||i.d===dslug)cnt[i.k]=(cnt[i.k]||0)+1});AMSEG.querySelectorAll("button[data-k]").forEach(b=>{const n=cnt[b.dataset.k]||0;const el=b.querySelector("i");if(el)el.textContent=n.toLocaleString("en");b.classList.toggle("none",!n);b.classList.toggle("has",!!(AMON[b.dataset.k]&&dslug&&n))});
   AMSEG.querySelectorAll(".amlist").forEach(L=>{const k=L.dataset.k;if(!(AMON[k]&&dslug)){L.innerHTML="";L.classList.remove("open");return}
     const rows=((AM&&AM.items)||[]).filter(i=>i.k===k&&i.d===dslug).sort((a,b)=>String(a.n).localeCompare(String(b.n)));
-    L.innerHTML=rows.map((i,ix)=>'<div class=amrow data-ix="'+ix+'">'+amEsc(i.n)+(i.x?'<small>'+amEsc(i.x)+'</small>':"")+(i.ap?'<small>position approximate</small>':"")+'</div>').join("");
+    if((k==="ev"||k==="fuel")&&!AMCB&&typeof cbLoad==="function"){AMCB=true;cbLoad().then(()=>amRecalc())}
+    L.innerHTML=rows.map((i,ix)=>{const lb=amLabel(i);return'<div class=amrow data-ix="'+ix+'">'+amEsc(lb.n)+(lb.x?'<small>'+amEsc(lb.x)+'</small>':"")+(i.ap?'<small>position approximate</small>':"")+'</div>'}).join("");
     L.querySelectorAll(".amrow").forEach(r=>{r.onclick=()=>{const i=rows[+r.dataset.ix];amTagSet(i);if(window.__cityFly)window.__cityFly(i.lon,i.lat,700);tip.style.display="block";tip.innerHTML="<b>"+amEsc(i.n)+"</b><s>"+amEsc(AMEN[k][0])+(i.x?" \u00b7 "+amEsc(i.x):"")+"</s>"}})});
   ((AM&&AM.items)||[]).forEach(i=>{if(!AMON[i.k]||i.lon==null||i.lat==null)return;if(dslug&&i.d!==dslug)return;const p=llx(i.lon,i.lat);AMPTS.push({i,v:new THREE.Vector3(p[0],6,p[1]),sx:-1,sy:-1})});
   const where=dslug?" in "+D.districts[AMDIST].name:" across Dubai";AMRES.textContent=ks.length?ks.map(k=>AMEN[k][0]).join(", ")+" \u00b7 "+AMPTS.length.toLocaleString("en")+where:"none";
@@ -8924,8 +8925,18 @@ function amDraw(){const W=innerWidth,H=innerHeight,r=devicePixelRatio||1;const c
 // v541 - the chosen place's name ON the map: anchored to its point, a short leader line, the name in gold and the kind in small capitals.
 // It stays while the panel is folded; it goes when its kind is switched off or another place is chosen.
 let AMTAG=null;function amTagSet(i){AMTAG=i||null}
+// v550 (Kendall 12 Oct, film session) - an EV or petrol station is named by the building it stands on (our register name, footprint within
+// 25 m), else by DEWA's label without its area prefix ("J.ALI-"); the connector code ("62196-2") never shows. Rows and tag agree.
+let AMCB=false;
+function amClean(s){return String(s||"").replace(/^[A-Z][A-Z.]{1,9}\s*-\s*/,"").trim()}
+function amExtra(i){return String(i.x||"").split(/\s*\u00b7\s*/).filter(p=>p&&!/^\d{4,6}(-\d+)?$/.test(p.trim())&&!/^(type|iec|ccs|chademo)\b/i.test(p.trim())).join(" \u00b7 ")}
+function amLabel(i){if(i.k!=="ev"&&i.k!=="fuel")return{n:i.n,x:i.x||""};
+  let bn=null;if(typeof CB!=="undefined"&&CB&&CB.items&&i.lon!=null){const q=llx(i.lon,i.lat);const j=nearestInst(q[0],q[1],-1,25);const it=j>=0?instItem(j):null;if(it&&it.n)bn=it.n}
+  const own=amClean(i.n),x=amExtra(i);
+  if(bn)return{n:bn,x:[x,(own&&own.toLowerCase()!==String(bn).toLowerCase()&&String(bn).toLowerCase().indexOf(own.toLowerCase())<0&&own.toLowerCase().indexOf(String(bn).toLowerCase())<0)?own:""].filter(Boolean).join(" \u00b7 ")};
+  return{n:own||i.n,x}}
 function amTagDraw(W,H,r){const i=AMTAG;if(!i||!AMON[i.k]||i.lon==null)return;const q0=llx(i.lon,i.lat);const q=new THREE.Vector3(q0[0],6,q0[1]).project(cam);if(q.z>1||q.x<-1.05||q.x>1.05||q.y<-1.05||q.y>1.05)return;
-  const x=(q.x+1)/2*W*r,y=(1-q.y)/2*H*r,L=34*r;const k1=String(i.n||""),k2=(String(AMEN[i.k][0]||"")+(i.x?" \u00b7 "+i.x:"")+(i.ap?" \u00b7 position approximate":"")).toUpperCase();
+  const x=(q.x+1)/2*W*r,y=(1-q.y)/2*H*r,L=34*r;const lb=amLabel(i),k1=String(lb.n||""),k2=(String(AMEN[i.k][0]||"")+(lb.x?" \u00b7 "+lb.x:"")+(i.ap?" \u00b7 position approximate":"")).toUpperCase();
   actx.font="600 "+(13*r)+"px 'IBM Plex Sans',sans-serif";const w1=actx.measureText(k1).width;actx.font="500 "+(9.5*r)+"px 'IBM Plex Sans',sans-serif";const w2=actx.measureText(k2).width;
   const bw=Math.max(w1,w2)+18*r,bh=38*r,bx=Math.min(Math.max(x-bw/2,4*r),W*r-bw-4*r),by=y-L-bh;
   actx.strokeStyle="#C5A56A";actx.lineWidth=1.2*r;actx.beginPath();actx.moveTo(x,y-6*r);actx.lineTo(x,by+bh);actx.stroke();
