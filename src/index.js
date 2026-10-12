@@ -3175,7 +3175,9 @@ async function appFetch(request, env, ctx) {
       }
       if (url.pathname === "/note") {                          // v89.2 — send a plain note to her (operator-approved text only; keyed)
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
-        const _t = (url.searchParams.get("text") || "").slice(0, 2000); if (!_t) return new Response("no text", { status: 400 });
+        let _t = (url.searchParams.get("text") || "").slice(0, 2000);
+        if (!_t && request.method === "POST") { try { _t = String((await request.json()).text || "").slice(0, 2000); } catch (e) {} }   // v535 - text in the body, so a link with a key never lands in a request log
+        if (!_t) return new Response("no text", { status: 400 });
         try { await waSend(env, env.WA_ALLOWED, _t + UPDATE_SIGNOFF); } catch (e) { return new Response("send failed", { status: 502 }); }
         return new Response("sent");
       }
