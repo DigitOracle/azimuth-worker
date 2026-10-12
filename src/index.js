@@ -8899,7 +8899,15 @@ function amPaint(){if(!AMKEEP.size&&!ADVKEEP.size&&HILITE<0)return;const arr=mes
 const _paint0=paintCity;paintCity=function(){_paint0();amPaint()};   // v512 - the kept blocks wear the kind's colour whatever COLOUR BY says
 const _flyTo0=flyTo;flyTo=function(ix,go){if(ix!==AMDIST)HILITE=-1;AMDIST=ix;_flyTo0(ix,go);amRecalc()};   // v511 - a chosen district scopes the places (Kendall: "if I say Business Bay, I should only get the petrol stations within Business Bay")
 const AMIMG={};function amImg(k){if(AMIMG[k])return AMIMG[k];const col=AMEN[k][2];const svg=ICON[k].replace("<svg ","<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' fill='none' stroke='"+col+"' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round' ");const im=new Image();im.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);AMIMG[k]=im;return im}
-function amDraw(){actx.clearRect(0,0,amc.width,amc.height);if(!AMPTS.length)return;const W=innerWidth,H=innerHeight,r=devicePixelRatio||1;const far=cam.position.distanceTo(ctl.target);const sz=far>22000?2:far>9000?2.8:4;
+// v545 (film session, 12 Oct: v541 dropped the phone layout to 1.5 frames a second) - redraw only when the view, the places or the tag
+// changed; across all Dubai with more than 600 places on, no badges (the blocks carry the colour), so a frame costs nothing when still
+let AMSIG="";
+function amDraw(){const W=innerWidth,H=innerHeight,r=devicePixelRatio||1;const cp=cam.position,ct=ctl.target;
+  const sig=Math.round(cp.x)+","+Math.round(cp.y)+","+Math.round(cp.z)+","+Math.round(ct.x)+","+Math.round(ct.z)+","+AMPTS.length+","+(AMTAG?AMTAG.n:"")+","+W+"x"+H+","+AMDIST+","+Object.values(AMIMG).filter(i=>i.complete).length;
+  if(sig===AMSIG)return;AMSIG=sig;
+  actx.clearRect(0,0,amc.width,amc.height);if(!AMPTS.length&&!AMTAG)return;
+  if(AMDIST<0&&AMPTS.length>600){for(const p of AMPTS)p.sx=-1;amTagDraw(W,H,r);return}
+  const far=cam.position.distanceTo(ctl.target);const sz=far>22000?2:far>9000?2.8:4;
   // v521 - a place shown as a block keeps its badge too, so it can be found from any distance (v541: this note had swallowed the line below)
   for(const p of AMPTS){const q=p.v.clone().project(cam);if(q.z>1||q.x<-1.02||q.x>1.02||q.y<-1.02||q.y>1.02){p.sx=-1;continue}p.sx=(q.x+1)/2*W;p.sy=(1-q.y)/2*H;const col=AMEN[p.i.k][2];
     const R=sz*2.4*r,cx=p.sx*r,cy=p.sy*r;actx.beginPath();actx.arc(cx,cy,R,0,6.2832);actx.fillStyle="rgba(19,31,29,.92)";actx.fill();actx.lineWidth=1.2*r;actx.strokeStyle=col;actx.setLineDash(p.i.ap?[3*r,2.5*r]:[]);actx.stroke();actx.setLineDash([]);
