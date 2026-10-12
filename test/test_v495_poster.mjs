@@ -31,24 +31,25 @@ async function makePoster() {
   const pi = lists[0].findIndex((r) => /^Poster/.test(r.title)) + 1;
   await tap(lists[0][pi - 1].id); // Poster
   await tap(lists[0][2].id);      // Dubai skyline
-  await tap(lists[0][2].id);      // Late afternoon -> straight to the preview (no shape, no words step)
+  await tap(lists[0][2].id);      // Late afternoon -> his photos (v548), then the preview (no shape, no words step)
+  if (lists[0] && /^dp:r:/.test(lists[0][0].id)) await tap(lists[0][0].id);
   return btns[0];
 }
 const pv = await makePoster();
 ok(pv && /its layout matched to the idea and never the same as the last one/.test(pv.b) && /Portrait/.test(pv.b), "the preview describes the poster, portrait, with no shape or words step", pv && pv.b);
-const before = calls.length; await btn(pv.x[0].id);
+const before = calls.length; await btn(pv.x[0].id); await (await import("../src/desk_post.js")).deskJobTick(env, deps);   // v548 - the minute tick
 const c = calls[calls.length - 1], p = plans().filter((x) => x.picture === "poster").pop();
 ok(calls.length === before + 1 && c.size === "1024x1536" && c.refs === 1, "Make it: one portrait picture, made with ONE of his reference photos (v537)", JSON.stringify({ n: calls.length - before, size: c.size, refs: c.refs }));
 ok(c.prompt.includes("When fares scale,") && c.prompt.includes(POSTER_BYLINE) && /Spell every word exactly/.test(c.prompt), "the prompt carries the headline and byline in whichever of the six layouts (v537)", c.prompt.slice(0, 400));
 ok(p.slides[0].poster && p.slides[0].poster.h1 === "When fares scale," && !p.slides[0].flag && p.shape === "portrait", "the words are kept with the slide; the read-back matched, so no flag");
 // a read-back that never matches: three tries, then flagged
 visionSays = ["garbled", "garbled again", "still garbled"]; calls.length = 0;
-const pv2 = await makePoster(); await btn(pv2.x[0].id);
+const pv2 = await makePoster(); await btn(pv2.x[0].id); await (await import("../src/desk_post.js")).deskJobTick(env, deps);
 const p2 = plans().filter((x) => x.picture === "poster").pop();
 ok(calls.length === 3 && /spelling did not match/.test(p2.slides[0].flag || ""), "spelling wrong three times: three tries, then flagged for him", JSON.stringify({ tries: calls.length, flag: p2.slides[0].flag }));
 // a number not in the idea: refused, nothing generated
 copyOut = Object.assign({}, COPY, { sub: "Fares rose 40 percent this year." }); calls.length = 0; visionSays = [];
-const pv3 = await makePoster(); await btn(pv3.x[0].id);
+const pv3 = await makePoster(); await btn(pv3.x[0].id); await (await import("../src/desk_post.js")).deskJobTick(env, deps);
 ok(calls.length === 0 && /number that is not in the idea/.test(texts.join(" ") + JSON.stringify(plans().map((x) => x.held_reason || x.nopic_reason || ""))), "an invented number in the poster words: refused before any picture is made", texts.join(" | "));
 ok(posterPrompt(COPY, { idea: "x" }, false).includes("no people"), "with too few reference photos: the poster has no person");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

@@ -24,6 +24,7 @@ ok(true || JSON.stringify(lists[0]));
 const pv = btns[0];
 ok(pv && /Words: headline on picture/.test(pv.b), "the preview says where the words go", pv && pv.b);
 await btn(pv.x[0].id);   // Make it
+await (await import("../src/desk_post.js")).deskJobTick(env, deps);   // v548 - the minute tick makes it
 const plan = [...store.keys()].filter((k) => k.startsWith("postplan_")).map((k) => JSON.parse(store.get(k)))[0];
 ok(overlays.length === 1 && overlays[0].mode === "headline" && overlays[0].text === "Rest is part of the work." && /^https:\/\/w\.dev\/ig_media\//.test(overlays[0].image), "Make it: the finished picture goes to the video service with the caption's first line", JSON.stringify(overlays[0]));
 ok(plan && plan.slides[0].plain_key && plan.slides[0].img_key !== plan.slides[0].plain_key, "the post uses the worded picture and keeps the plain one", plan && JSON.stringify(plan.slides[0]));

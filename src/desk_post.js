@@ -205,6 +205,7 @@ export async function refClassify(env, deps, redo) {
   }
   return { refs: rows.length, glasses_and_clear: rows.filter((r) => r.look && r.look.one && r.look.glasses && r.look.face).length, rows };
 }
+async function refBuf(env, n) { const m = await kvJ(env, "desk_ref_" + Number(n), null); if (!m || m.approved !== true || !m.key) return null; const b = await env.MEETINGS.get(m.key, "arrayBuffer"); return b && b.byteLength ? b : null; }
 async function refList(env) { const out = []; for (const n of await kvJ(env, "desk_ref_index", [])) { const m = await kvJ(env, "desk_ref_" + n, null); if (m && m.approved === true) out.push(m); } return out; }
 // 2-3 references for a scene, the best-matching tag first, then different tags so the face is seen from more than one angle
 export async function pickRefs(env, idea, hint) {
@@ -379,7 +380,8 @@ async function posterSlide(env, deps, p, s, notes) {
   if (c.big && !nums(c.big).every((n) => allowed.has(n))) c.big = "";
   let L = chooseLayout(p.idea, last, p.layout, c);
   if ((L === "bignum" && !c.big) || (L === "quote" && !c.quote) || (L === "timeline" && !(Array.isArray(c.steps) && c.steps.length >= 3)) || (L === "split" && !(c.before && c.after)) || (L === "question" && !c.question) || (L === "checklist" && !(Array.isArray(c.ticks) && c.ticks.length >= 3)) || (L === "callout" && !c.callout)) L = last === "bleed" ? "cover" : "bleed";   // the words for that layout are missing
-  const r = await pickRefs(env, p.idea, "speaking"), refs = r.count >= REF_MIN && r.bufs.length >= 2 ? r.bufs.slice(0, 1) : null;   // v537: ONE reference, as on Najjuko's scenes
+  const chosenRef = p.ref ? await refBuf(env, p.ref) : null;   // v548 - the photo he chose
+  const r = chosenRef ? { count: REF_MIN, bufs: [chosenRef, chosenRef] } : await pickRefs(env, p.idea, "speaking"), refs = r.count >= REF_MIN && r.bufs.length >= 2 ? r.bufs.slice(0, 1) : null;   // v537: ONE reference, as on Najjuko's scenes
   if (!refs) notes.push("The poster has no person: I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ".");
   const prompt = layoutPrompt(L, c, p, !!refs), want = layoutWords(L, c);
   if (!p.test) { try { await env.MEETINGS.put("desk_last_layout", L); } catch (e) {} }   // a test poster does not move the rotation
@@ -428,7 +430,9 @@ async function buildImages(env, deps, p, onlyIdx) {
     // v426 feed choices: "site"/"speaking" always put him in the picture (either lane); "scene" never does; no choice = the v421 lane rule
     const personLane = p.picture === "scene" ? false : (p.picture === "site" || p.picture === "speaking") && !infographic ? true
       : hookWithHim || (!infographic && (p.lane === "abbot" || (p.lane === "alchemy" && withKendall(p.idea))));
-    if (personLane) {
+    const chosen = personLane && p.ref ? await refBuf(env, p.ref) : null;   // v548 - the photo he chose
+    if (chosen) refs = [chosen];
+    else if (personLane) {
       const r = await pickRefs(env, p.idea, p.picture);
       if (r.count >= REF_MIN && r.bufs.length >= 2) refs = r.bufs.slice(0, 1);   // v537: ONE reference keeps the face; several blend into a stranger
       else notes.push((hookWithHim ? "Slide 1 is a text graphic without you" : "No person in the picture") + ": I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ". Send photos with the caption ref: <tag>.");
@@ -769,8 +773,32 @@ async function flowTap(env, deps, id) {
   const bg = BACKGROUND_CHOICES[Number(m[5]) - 1]; if (!bg) { await deps.send(env, "That background is not on the list. Send feed for a new one."); return true; }
   if (m[1] === "b") { await tapList(env, deps, bg.label + ". What time of day?", "Pick time", TIME_CHOICES.map((x, i) => ({ id: base.replace("%", "t") + ":" + m[4] + ":" + m[5] + ":" + (i + 1), title: x.label }))); return true; }
   const tod = TIME_CHOICES[Number(m[6]) - 1]; if (!tod) { await deps.send(env, "That time is not on the list. Send feed for a new one."); return true; }
-  await showPreview(env, deps, { step: "preview", n, idea: it.text, lane: it.lane, allow: it.allow || null, kind: it.kind || null, picture: pic.id, background: bg.id, tod: tod.id, shape: pic.id === "scene" ? "square" : "portrait", words: "none" });
+  const pick = { step: "preview", n, idea: it.text, lane: it.lane, allow: it.allow || null, kind: it.kind || null, picture: pic.id, background: bg.id, tod: tod.id, shape: pic.id === "scene" ? "square" : "portrait", words: "none" };
+  await releaseEditing(env, await env.MEETINGS.get("desk_post_editing"));   // v548 - a new idea ends any change waiting on an old draft
+  if (pic.id !== "scene" && await offerRefs(env, deps, pick)) return true;   // v548 - he chooses the photo of himself, as Najjuko does
+  await showPreview(env, deps, pick);
   return true;
+}
+// v548 (audit stage: "the person picks the reference photo") - his usable references (one person, glasses, clear face; else every approved
+// one) as numbered pictures, then a list to tap one; the choice so far rides under a fresh token. "Any" lets the desk choose.
+export async function usableRefs(env) {
+  const all = await refList(env), good = all.filter((x) => x.look && x.look.one === true && x.look.glasses === true && x.look.face === true);
+  return (good.length ? good : all).slice(0, 6);
+}
+async function offerRefs(env, deps, pick) {
+  const R = await usableRefs(env); if (R.length < 2 || !deps.image) return false;
+  const tok = rid() + rid(); await kvPut(env, "desk_rp_" + tok, pick, FEED_TTL);
+  const origin = deps.origin ? deps.origin(env) : "";
+  for (let i = 0; i < R.length; i++) { const b = await env.MEETINGS.get(R[i].key, "arrayBuffer"); if (!b) continue; const k = await storeImage(env, b, "image/jpeg"); try { await deps.image(env, origin + "/ig_media/" + k, "Photo " + (i + 1)); } catch (e) {} }
+  await tapList(env, deps, "Which photo of you should the picture start from?", "Pick photo", R.map((r, i) => ({ id: "dp:r:" + tok + ":" + r.n, title: "Photo " + (i + 1) })).concat([{ id: "dp:r:" + tok + ":0", title: "Any (you choose)" }]));
+  return true;
+}
+async function refTap(env, deps, id) {
+  const m = String(id).match(/^dp:r:([a-z0-9]{4,40}):(\d{1,4})$/); if (!m) return false;
+  const pick = await kvJ(env, "desk_rp_" + m[1], null);
+  if (!pick) { await deps.send(env, "That photo choice has expired. Send feed for a new one."); return true; }
+  const n = Number(m[2]); if (n) { pick.ref = n; const R = await usableRefs(env); pick.ref_no = R.findIndex((r) => r.n === n) + 1 || null; }
+  await showPreview(env, deps, pick); return true;
 }
 // a list from before v547 (dp:fn / dp:fi / dp:fp): it cannot be trusted to know its step any more
 const OLD_LIST = "That list is from before today's update. Send feed for a new one.";
@@ -787,6 +815,7 @@ export function scenePreview(pick) {
     : pick.picture === "scene" ? "A scene, no person in it." : pick.picture === "speaking" ? "You, speaking or teaching, your face from your reference photos." : "You on site in a hard hat and hi-vis, your face from your reference photos.";
   const wd = WORDS_LIST.find((x) => x.id === pick.words);
   let s = "Here's the picture I'll make:\n\n" + who + " Behind: " + (bg || "a Dubai setting") + ". " + (tm ? tm.label : "Natural daylight") + ". " + (sh ? sh.label : "Square") + "." + (wd && wd.id !== "none" ? " Words: " + wd.label.toLowerCase() + " (the post's headline)." : "") + "\nIdea: " + pick.idea;
+  if (pick.ref && pick.picture !== "scene") s += "\nYour face from: photo " + (pick.ref_no || "#" + pick.ref) + " (the one you chose).";
   for (const c of (pick.changes || [])) s += "\nYour change: " + c;
   return s.slice(0, 1000);
 }
@@ -808,8 +837,20 @@ async function sceneButton(env, deps, act, sid) {
   if (!pick) { await deps.send(env, "That picture choice has expired. Send feed to start again."); return true; }
   if (act === "cancel") { await deps.send(env, "Cancelled. Nothing was made."); return true; }
   if (act === "change") { await kvPut(env, "desk_sx", sid, FEED_TTL); await deps.send(env, "Tell me the change in your next message, for example: put the Burj Khalifa behind me, use the Dubai Creek at dusk, add the headline on the picture, or make me smile."); return true; }
-  await newPlan(env, deps, pick.idea, pick.lane, [], { forceType: "image", picture: pick.picture, background: pick.background, bg_text: pick.bg_text || undefined, tod: pick.tod, shape: pick.shape, words: pick.words || "none", changes: pick.changes || [], from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined });
+  // v548 (audit stage: "generate on a minute-tick job, as picjob_ does") - Make it answers at once; the next minute tick makes the picture
+  if (await env.MEETINGS.get("deskjob_" + sid)) { await deps.send(env, "That picture is already being made."); return true; }
+  await kvPut(env, "deskjob_" + sid, { idea: pick.idea, lane: pick.lane, opts: { forceType: "image", picture: pick.picture, background: pick.background, bg_text: pick.bg_text || undefined, tod: pick.tod, shape: pick.shape, words: pick.words || "none", changes: pick.changes || [], from_feed: pick.n, allowNums: pick.allow || undefined, kind: pick.kind || undefined, ref: pick.ref || undefined }, at: nowOf(deps) }, 6 * 3600);
+  await deps.send(env, "Making it now. The draft arrives in about a minute.");
   return true;
+}
+// the minute tick: one waiting picture job at a time (the oldest); a job is taken before it runs, so it is never made twice
+export async function deskJobTick(env, deps) {
+  let keys = []; try { keys = ((await env.MEETINGS.list({ prefix: "deskjob_" })).keys || []).map((k) => k.name); } catch (e) { return { jobs: 0 }; }
+  for (const k of keys) {
+    const j = await kvJ(env, k, null); await env.MEETINGS.delete(k); if (!j || !j.idea) continue;
+    await newPlan(env, deps, j.idea, j.lane, [], j.opts || {}); return { jobs: 1, done: k };
+  }
+  return { jobs: 0 };
 }
 // "Change it": his next line is added to that preview's choices and a new preview is shown (as on Najjuko's scenes, scedit_)
 async function sceneText(env, deps, t) {
@@ -909,6 +950,7 @@ async function handleButton(env, deps, id) {
   { const sb = String(id).match(/^dp:scene:(make|change|cancel)(?::([a-z0-9]+))?$/); if (sb) return sceneButton(env, deps, sb[1], sb[2]); }   // v475
   if (id === "dp:start:ideas") { await sendFeed(env, deps); return true; }   // v472 - the fresh 10, not the weekly 5
   if (/^dp:(i|p|b|t):/.test(String(id))) return flowTap(env, deps, id);   // v547
+  if (/^dp:r:/.test(String(id))) return refTap(env, deps, id);   // v548 - his chosen photo
   if (/^dp:(fn|fi|fp):/.test(String(id))) { await deps.send(env, OLD_LIST); return true; }   // v547 - lists from before the rewrite
   if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
   const mm = String(id).match(/^dp:([a-z0-9]+):(music|nomusic|muse|mtry|mno|vc_none|vc_bottom|vc_scroll|m_(calm|corporate|upbeat|cinematic|inspiring))$/);   // v467 - music; v493 vc_ captions
@@ -946,7 +988,7 @@ async function handleButton(env, deps, id) {
   if (["posted", "cancelled", "skipped", "expired", "scheduled", "publishing"].includes(p.status) && act !== "skip") { await deps.send(env, "Draft " + p.id + " is already " + p.status + "."); return true; }
   if (act === "laneA" || act === "laneL") { p.lane = act === "laneA" ? "abbot" : "alchemy"; await putPlan(env, p); await deps.send(env, "Drafting " + p.id + " (" + p.type + ", " + p.lane + ")..."); await draftPlan(env, deps, p); return true; }
   if (act === "skip") { if (p.status === "scheduled") { await deps.send(env, "Draft " + p.id + " is scheduled; use /post cancel " + p.id + "."); return true; } p.status = "skipped"; hist(p, "skipped", "", now); await putPlan(env, p); await env.MEETINGS.delete("desk_post_editing"); await deps.send(env, "Skipped " + p.id + ". Nothing was posted."); return true; }
-  if (act === "edit") { p.status = "editing"; await putPlan(env, p); await kvPut(env, "desk_post_editing", p.id, 3 * 86400); await deps.send(env, "Tell me what to change on " + p.id + ": shorter, punchier, more formal, add <fact>, remove <x>, swap image <n>, another background, or Arabic version. (" + (MAX_ROUNDS - (p.rounds || 0)) + " rounds left.)"); return true; }
+  if (act === "edit") { p.status = "editing"; await putPlan(env, p); await kvPut(env, "desk_post_editing", p.id, 1200);   /* v548: 20 minutes, not 3 days */ await deps.send(env, "Tell me what to change on " + p.id + ": shorter, punchier, more formal, add <fact>, remove <x>, swap image <n>, another background, or Arabic version. (" + (MAX_ROUNDS - (p.rounds || 0)) + " rounds left.)"); return true; }
   if (act === "ok" || act === "wig" || act === "wli" || act === "wboth") {
     if (p.status !== "draft" && p.status !== "editing") { await deps.send(env, "Draft " + p.id + " is " + p.status + "."); return true; }
     // v467 - Approve first offers music (when the video service is connected)
@@ -1328,6 +1370,7 @@ export function overlayTextOf(caption, idea) {
 // The minute tick. Expires old drafts, publishes at most one due plan, never when paused.
 export async function deskPostTick(env, deps) {
   if (!DIG(env.WA_DESK_PHONE_ID) || !DIG(env.WA_DESK_OWNER)) return { skipped: "desk off" };
+  try { await deskJobTick(env, deps); } catch (e) {}   // v548 - the pictures he asked for come first
   const now = nowOf(deps); const plans = await allPlans(env); const out = { expired: 0, published: 0 };
   try { out.asked = await inboxAsk(env, deps, now); } catch (e) {}   // v421: one question per burst of uncaptioned photos
   const exp = plans.filter((p) => ["draft", "editing", "approving"].includes(p.status) && p.expires_at && now > p.expires_at);

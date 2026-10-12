@@ -1,7 +1,7 @@
 // v475 -> v547 - the desk follows Najjuko's scene ritual (Kendall 12 Oct 2026: "rewrite everything according to Azimuth"): idea -> picture ->
 // background -> time of day -> "Here's the picture I'll make" with Make it / Change it / Cancel. Every list row carries the whole choice
 // in its own id; nothing a tap needs is read back from a shared key; nothing is generated before Make it. Offline.
-import { deskPostRoute, bgLine, sceneExtras, scenePreview } from "../src/desk_post.js";
+import { deskPostRoute, deskJobTick, bgLine, sceneExtras, scenePreview } from "../src/desk_post.js";
 
 let pass = 0, fail = 0;
 const ok = (c, m, d) => { if (c) { pass++; console.log("  ok - " + m); } else { fail++; console.log("  FAIL - " + m + (d ? "\n         " + String(d).slice(0, 500) : "")); } };
@@ -33,7 +33,11 @@ await tap(row("Dubai skyline"));
 ok(lists[0] && lists[0].map((r) => r.title).join(",") === "Early morning,Midday,Late afternoon,Sunset,Night", "then the time of day", JSON.stringify(lists[0]));
 const before = imgCalls.length;
 await tap(row("Sunset"));
+// v548 - he is in the picture: his photos come as numbered pictures, then a list to choose one
+ok(lists[0] && lists[0].length === 5 && /^dp:r:[a-z0-9]{10,}:3$/.test(lists[0][2].id) && lists[0][4].title === "Any (you choose)", "then his photos to choose from (four photos and Any)", JSON.stringify(lists[0]));
+await tap(lists[0][2].id);   // photo 3 = reference #3
 const pv = btns[0];
+ok(pv && /Your face from: photo 3/.test(pv.b), "the preview says which photo", pv && pv.b);
 ok(pv && /Here's the picture I'll make/.test(pv.b) && /Dubai skyline/.test(pv.b) && /Sunset/.test(pv.b) && /Portrait/.test(pv.b), "Here's the picture I'll make, in plain words (portrait: he is in it)", pv && pv.b);
 ok(pv && /^dp:scene:make:[a-z0-9]{10,},dp:scene:change:[a-z0-9]{10,},dp:scene:cancel:[a-z0-9]{10,}$/.test(pv.x.map((b) => b.id).join(",")), "Make it / Change it / Cancel, each carrying the preview's own snapshot id", pv && pv.x.map((b) => b.id).join(","));
 ok(!store.has("desk_feed_pick"), "no shared 'choice so far' key is written any more");
@@ -42,7 +46,11 @@ await btn(pv.x[1].id);
 ok(/Tell me the change/.test(texts.join("")), "Change it asks for the change");
 await say("put the Burj Khalifa behind me");
 ok(btns[0] && /Your change: put the Burj Khalifa behind me/.test(btns[0].b), "the preview comes back with the change");
+const nMake = imgCalls.length;
 await btn(btns[0].x[0].id);
+ok(/Making it now/.test(texts.join("")) && imgCalls.length === nMake, "Make it answers at once; nothing is made inside the tap (v548)", texts.join(" | "));
+await deskJobTick(env, deps);
+ok(![...store.keys()].some((k) => k.startsWith("deskjob_")), "the minute tick takes the job and makes it");
 const call = imgCalls[imgCalls.length - 1];
 ok(call && /A realistic photograph/.test(call.prompt) && !/illustration/i.test(call.prompt) && /Dubai skyline/.test(call.prompt) && /Sunset: the sun just above the horizon/.test(call.prompt) && /Change: put the Burj Khalifa behind me\./.test(call.prompt) && /glasses exactly as in the photo/.test(call.prompt), "Make it: a photograph (not the old illustration style) with his setting, light, change and face", call && call.prompt);
 ok(call && call.size === "1024x1536" && call.n === 1, "portrait, from ONE reference photo", JSON.stringify({ size: call && call.size, n: call && call.n }));

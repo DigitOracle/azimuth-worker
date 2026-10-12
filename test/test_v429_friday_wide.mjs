@@ -5,7 +5,7 @@ import { deskPostRoute, allPlans, PICTURE_CHOICES, BACKGROUND_CHOICES } from "..
 const OWNER = "971562276093";
 const store = new Map();
 const KV = { async get(k, t) { const v = store.has(k) ? store.get(k) : null; if (v == null) return null; if (t === "arrayBuffer") return v instanceof ArrayBuffer ? v : new TextEncoder().encode(String(v)).buffer; return v instanceof ArrayBuffer ? new TextDecoder().decode(v) : v; },
-  async put(k, v) { store.set(k, v); }, async delete(k) { store.delete(k); }, async list() { return { keys: [] }; } };
+  async put(k, v) { store.set(k, v); }, async delete(k) { store.delete(k); }, async list({ prefix } = {}) { return { keys: [...store.keys()].filter((k) => !prefix || k.startsWith(prefix)).map((name) => ({ name })) }; } };   // v548 - the minute tick lists its jobs
 let T = Date.UTC(2026, 9, 9, 2, 0, 0);   // Fri 9 Oct 2026 06:00 Dubai
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]).buffer, JB64 = btoa(String.fromCharCode(...new Uint8Array(JPEG)));
 const gens = [];
@@ -54,8 +54,9 @@ const tapR = async (id) => { out.length = 0; await deskPostRoute(env, { type: "i
 { const fi = Number((r.match(/\n(\d)\. \[motivation\] Friday Reflection/) || [])[1]); await tapR(rowsOf.call ? (await (async () => { out.length = 0; await deskPostRoute(env, { type: "text", from: OWNER, id: "m" + ++mid }, "feed", deps); return rowsOf()[fi - 1].id; })()) : ""); }
 await tapR(rowsOf().find((x) => /speaking/.test(x.title)).id);   // v547: you speaking, tapped
 ok(BACKGROUND_CHOICES.length === 5 && rowsOf().length === 5 && rowsOf()[4].title === "Calm terrace at sunrise", "a fifth background: calm terrace at sunrise", JSON.stringify(rowsOf()));
-await tapR(rowsOf()[4].id); await tapR(rowsOf()[0].id);   // terrace, early morning -> the preview
-{ const pvb = out.filter((x) => x.t === "buttons").pop(); await deskPostRoute(env, { type: "interactive", interactive: { button_reply: { id: pvb.buttons[0].id } } }, "", deps); }   // Make it
+await tapR(rowsOf()[4].id); await tapR(rowsOf()[0].id);   // terrace, early morning
+if (rowsOf().length && /^dp:r:/.test(rowsOf()[0].id)) await tapR(rowsOf()[0].id);   // v548 - his photo, then the preview
+{ const pvb = out.filter((x) => x.t === "buttons").pop(); await deskPostRoute(env, { type: "interactive", interactive: { button_reply: { id: pvb.buttons[0].id } } }, "", deps); await (await import("../src/desk_post.js")).deskJobTick(env, deps); }   // Make it, then the minute tick (v548)
 let p = await lastPlan(); const g = gens[gens.length - 1];
 ok(p.kind === "friday" && p.picture === "speaking" && p.background === "terrace", "the draft is marked as the Friday Reflection, speaking, terrace");
 ok(/FRIDAY REFLECTION/.test(sysSeen) && /about LIFE/.test(sysSeen), "the caption writer is told it is about life, not only work");
