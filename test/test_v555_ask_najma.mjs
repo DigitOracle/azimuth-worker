@@ -24,5 +24,13 @@ const { askFloatHtml } = await import("../src/ask_najma.js"); const fl = askFloa
 ok(/class=askfab/.test(fl) && /left:14px;bottom:calc\(74px/.test(fl) && /fetch\("\/ask\/ok\?key="/.test(ASK_FILE_JS) && !/<script>/.test(fl), "v556: the floating Ask, bottom-left above the tab bar, shown only when /ask/ok allows");
 ok(/\+ askFloatHtml\(key\);/.test(idx), "v556: every page with the tab bar carries it");
 ok((await askRoute(new Request("https://w/ask/ok"), {}, new URL("https://w/ask/ok?key=k"), { keyTier: () => "client" })).status === 404, "v556: a client link is told no, so the button stays hidden");
+// v557 - the real engine when set; offline message when it does not answer
+{ const calls = []; globalThis.fetch = async (u, init) => { calls.push({ u, h: init.headers }); return new Response(JSON.stringify({ status: "answer", answer_md: "live" })); };
+  const env2 = { MEETINGS: { put: async () => {} }, ASK_ENGINE_URL: "https://ask.example.io/", ASK_SECRET: "s3" };
+  const j = await (await askRoute(new Request("https://w/ask", { method: "POST", body: JSON.stringify({ question: "x" }) }), env2, new URL("https://w/ask?key=k"), { keyTier: () => "admin" })).json();
+  ok(j.answer_md === "live" && calls[0].u === "https://ask.example.io/ask" && calls[0].h["X-Ask-Secret"] === "s3", "v557: forwards to the engine with the shared secret", calls);
+  globalThis.fetch = async () => { throw new Error("down"); };
+  const j2 = await (await askRoute(new Request("https://w/ask", { method: "POST", body: JSON.stringify({ question: "x" }) }), env2, new URL("https://w/ask?key=k"), { keyTier: () => "admin" })).json();
+  ok(j2.status === "error" && /offline/.test(j2.answer_md) && !/24 floors/.test(j2.answer_md), "v557: engine down - says offline, never the stub figures", j2); }
 console.log(`v555 ask najma: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

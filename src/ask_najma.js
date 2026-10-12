@@ -5,7 +5,7 @@
 //   POST /ask {question, mode: "client"|"analyst", session_id, clarification?: {mention, choice}}
 //     -> {status: "answer"|"clarify"|"not_held"|"error", answer_md?, facts?: [{id, value, unit, table, as_of, n_rows, sql_hash}],
 //         clarify?: {mention, options: [{label, key}]}, report_url?, disclosures: [string], as_of: {table: date}, cost_ms}
-//     + trace: [{step, detail, ok}] - v555 (Kendall 12 Oct: "transparent ... it says, I'm checking A, B and C"): what the engine checked, in order
+//     + trace: [{step, detail, ok}] (engine step names: understood, resolved, scoped, queried, checked, written - shown in plain words) - v555 (Kendall 12 Oct: "transparent ... it says, I'm checking A, B and C"): what the engine checked, in order
 //   POST /ask/feedback {session_id, question_id, rating: 1|-1, note?}
 
 const svg = (d, s) => '<svg viewBox="0 0 24 24" width="' + (s || 16) + '" height="' + (s || 16) + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
@@ -17,7 +17,7 @@ export const ASK_ICONS = {
   spark: svg('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'),
 };
 
-const ASK_CSS = '.ask{margin:4px 0 16px}.askf{display:flex;gap:8px;align-items:center;border:1px solid #C5A56A;border-radius:14px;padding:6px 6px 6px 12px;background:#0E1918}'
+const ASK_CSS = '.ask{margin:4px 0 16px;position:relative;z-index:3}.askf{position:relative;z-index:3;display:flex;gap:8px;align-items:center;border:1px solid #C5A56A;border-radius:14px;padding:6px 6px 6px 12px;background:#0E1918}'
   + '.askf input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:#E8E4D8;font-size:15px;font-family:inherit;padding:8px 0}.askf input::placeholder{color:#8FA39B}'
   + '.askb{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;border:0;background:#C5A56A;color:#0E1918;cursor:pointer}.askb:disabled{opacity:.5}'
   + '.asksm{font-size:11px;color:#8FA39B;margin:5px 2px 0}.askp{margin-top:10px}.askc{border:1px solid #24352F;border-radius:12px;padding:12px;margin-top:10px;background:#0E1918;color:#E8E4D8;font-size:14px;line-height:1.5}'
@@ -37,7 +37,7 @@ const ASK_JS = '(function(){if(typeof document==="undefined"||!document.querySel
   + 'function ask(qq,clar){var c=card(),t=steps(c,qq);b.disabled=true;'
   + 'fetch("/ask?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:qq,mode:MODE,session_id:SID,clarification:clar||undefined})})'
   + '.then(function(r){return r.json()}).then(function(j){clearInterval(t);b.disabled=false;show(c,qq,j)}).catch(function(){clearInterval(t);b.disabled=false;c.innerHTML="<div class=askq>"+esc(qq)+"</div><div class=askerr>Najma could not answer just now. Try again in a moment.</div>"})}'
-  + 'function show(c,qq,j){var h="<div class=askq>"+esc(qq)+"</div>";if(j.trace&&j.trace.length)h+="<div class=asktr><b>What I checked</b>"+j.trace.map(function(x){return"<div"+(x.ok===false?" class=no":"")+"><i>"+(x.ok===false?"✕":"✓")+"</i>"+esc(x.step)+(x.detail?" — "+esc(x.detail):"")+"</div>"}).join("")+"</div>";'
+  + 'function show(c,qq,j){var h="<div class=askq>"+esc(qq)+"</div>";if(j.trace&&j.trace.length)h+="<div class=asktr><b>What I checked</b>"+j.trace.map(function(x){var L={understood:"Understood the question",resolved:"Found the name",scoped:"Chose the sources",queried:"Ran the query",checked:"Cross-checked",written:"Wrote the answer"};return"<div"+(x.ok===false?" class=no":"")+"><i>"+(x.ok===false?"✕":"✓")+"</i>"+esc(L[x.step]||x.step)+(x.detail?" — "+esc(x.detail):"")+"</div>"}).join("")+"</div>";'
   + 'if(j.status==="clarify"&&j.clarify){h+="<div>"+esc(j.answer_md||"Which one did you mean?")+"</div>"+(j.clarify.options||[]).map(function(o,i){return"<button type=button class=askch data-i="+i+">"+esc(o.label)+"</button>"}).join("");c.innerHTML=h;'
   + 'c.querySelectorAll(".askch").forEach(function(x){x.onclick=function(){var o=j.clarify.options[+x.getAttribute("data-i")];ask(qq,{mention:j.clarify.mention,choice:o.key})}});return}'
   + 'if(j.status==="error"){c.innerHTML=h+"<div class=askerr>"+esc(j.answer_md||"Najma could not answer that.")+"</div>";return}'
@@ -86,6 +86,9 @@ export async function askRoute(request, env, url, deps) {
   if (request.method !== "POST") return J({ status: "error", answer_md: "POST only" }, 405);
   if (deps.keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
   let body = {}; try { body = await request.json(); } catch (e) { return J({ status: "error", answer_md: "Send JSON." }, 400); }
+  if (url.pathname === "/ask/feedback" && env.ASK_ENGINE_URL && env.ASK_SECRET) {   // v557
+    try { await fetch(String(env.ASK_ENGINE_URL).replace(/\/+$/, "") + "/ask/feedback", { method: "POST", headers: { "Content-Type": "application/json", "X-Ask-Secret": String(env.ASK_SECRET) }, body: JSON.stringify(body) }); } catch (e) {}
+  }
   if (url.pathname === "/ask/feedback") {
     const r = Number(body.rating); if (r !== 1 && r !== -1) return J({ ok: false }, 400);
     try { await env.MEETINGS.put("ask_fb_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), JSON.stringify({ session_id: String(body.session_id || "").slice(0, 40), question_id: String(body.question_id || "").slice(0, 40), rating: r, note: String(body.note || "").slice(0, 500), at: new Date().toISOString() }), { expirationTtl: 90 * 86400 }); } catch (e) {}
@@ -93,6 +96,18 @@ export async function askRoute(request, env, url, deps) {
   }
   const q = String(body.question || "").trim();
   if (!q || q.length > 400) return J({ status: "error", answer_md: "Ask a question of up to 400 characters.", disclosures: [], as_of: {}, cost_ms: 0 }, 400);
+  // v557 - the real engine (data session, FastAPI on the office machine, reached through a named tunnel) once ASK_ENGINE_URL and the
+  // ASK_SECRET secret are set; the stub until then. Offline or slow: an honest message, never the stub's canned figures.
+  if (env.ASK_ENGINE_URL && env.ASK_SECRET) {
+    const base = String(env.ASK_ENGINE_URL).replace(/\/+$/, "");
+    try {
+      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 25000);
+      const r = await fetch(base + url.pathname, { method: "POST", headers: { "Content-Type": "application/json", "X-Ask-Secret": String(env.ASK_SECRET) }, body: JSON.stringify(body), signal: ctl.signal });
+      clearTimeout(tm);
+      if (r.ok) return new Response(await r.text(), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    } catch (e) {}
+    return J({ status: "error", answer_md: "Najma's question engine is offline right now (it runs on the office machine). Try again shortly.", disclosures: [], as_of: {}, cost_ms: 0 });
+  }
   return J(askStub(body));
 }
 
