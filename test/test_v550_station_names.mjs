@@ -20,5 +20,6 @@ ok(l3.n === "Marina Arcade Tower" && /Station 4/.test(l3.x), "a DEWA label that 
 ok(named.amLabel({ k: "hotel", n: "J.ALI-Something", x: "5 star" }).n === "J.ALI-Something", "other kinds are untouched");
 ok(named.amExtra({ x: "DEWA · Type 2 · 3 bays · 62196" }) === "DEWA · 3 bays", "connector types and codes are dropped");
 ok(/const lb=amLabel\(i\),k1=String\(lb\.n/.test(src) && /const lb=amLabel\(i\);return'<div class=amrow/.test(src), "the tag and the panel rows both use the rule");
+ok((src.match(/const lb=amLabel\(i\);tip\.style\.display="block";tip\.innerHTML="<b>"\+amEsc\(lb\.n\)/g) || []).length === 2, "v551: both tips (row tap and map tap) use the same name and second line as the tag");
 console.log(`v550 station names: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

@@ -8879,7 +8879,7 @@ function amRecalc(){window.__cityFocus=AMDIST;const AM=window.__AM;const ks=Obje
     const rows=((AM&&AM.items)||[]).filter(i=>i.k===k&&i.d===dslug).sort((a,b)=>String(a.n).localeCompare(String(b.n)));
     if((k==="ev"||k==="fuel")&&!AMCB&&typeof cbLoad==="function"){AMCB=true;cbLoad().then(()=>amRecalc())}
     L.innerHTML=rows.map((i,ix)=>{const lb=amLabel(i);return'<div class=amrow data-ix="'+ix+'">'+amEsc(lb.n)+(lb.x?'<small>'+amEsc(lb.x)+'</small>':"")+(i.ap?'<small>position approximate</small>':"")+'</div>'}).join("");
-    L.querySelectorAll(".amrow").forEach(r=>{r.onclick=()=>{const i=rows[+r.dataset.ix];amTagSet(i);if(window.__cityFly)window.__cityFly(i.lon,i.lat,700);tip.style.display="block";tip.innerHTML="<b>"+amEsc(i.n)+"</b><s>"+amEsc(AMEN[k][0])+(i.x?" \u00b7 "+amEsc(i.x):"")+"</s>"}})});
+    L.querySelectorAll(".amrow").forEach(r=>{r.onclick=()=>{const i=rows[+r.dataset.ix];amTagSet(i);if(window.__cityFly)window.__cityFly(i.lon,i.lat,700);const lb=amLabel(i);tip.style.display="block";tip.innerHTML="<b>"+amEsc(lb.n)+"</b><s>"+amEsc(AMEN[k][0])+(lb.x?" \u00b7 "+amEsc(lb.x):"")+"</s>"}})});   // v551 - the tip follows the tag's naming rule
   ((AM&&AM.items)||[]).forEach(i=>{if(!AMON[i.k]||i.lon==null||i.lat==null)return;if(dslug&&i.d!==dslug)return;const p=llx(i.lon,i.lat);AMPTS.push({i,v:new THREE.Vector3(p[0],6,p[1]),sx:-1,sy:-1})});
   const where=dslug?" in "+D.districts[AMDIST].name:" across Dubai";AMRES.textContent=ks.length?ks.map(k=>AMEN[k][0]).join(", ")+" \u00b7 "+AMPTS.length.toLocaleString("en")+where:"none";
   AMSC.textContent="all Dubai";AMSC.hidden=!dslug;if(!AMSC.parentNode&&AMSEG.lastChild)AMSEG.appendChild(AMSC);amBlocks(ks)}
@@ -8946,7 +8946,7 @@ function amTagDraw(W,H,r){const i=AMTAG;if(!i||!AMON[i.k]||i.lon==null)return;co
 (function amLoop(){requestAnimationFrame(amLoop);amDraw()})();
 canvas.addEventListener("pointerup",ev=>{if(!AMPTS.length)return;const rct=canvas.getBoundingClientRect();const x=ev.clientX-rct.left,y=ev.clientY-rct.top;let best=null,bd=18*18;
   for(const p of AMPTS){if(p.sx<0)continue;const dx=p.sx-x,dy=p.sy-y,d=dx*dx+dy*dy;if(d<bd){bd=d;best=p}}if(!best)return;ev.stopImmediatePropagation();const i=best.i;const dn=window.__dName?window.__dName(i.d||""):(i.d||"");
-  amTagSet(i);tip.style.display="block";tip.innerHTML="<b>"+amEsc(i.n)+"</b><s>"+amEsc(AMEN[i.k][0])+(i.x?" \u00b7 "+amEsc(i.x):"")+(i.d?" \u00b7 "+amEsc(dn):"")+(i.ap?" \u00b7 position approximate":"")+"</s>";ctl.autoRotate=false},true);
+  amTagSet(i);const lb=amLabel(i);tip.style.display="block";tip.innerHTML="<b>"+amEsc(lb.n)+"</b><s>"+amEsc(AMEN[i.k][0])+(lb.x?" \u00b7 "+amEsc(lb.x):"")+(i.d?" \u00b7 "+amEsc(dn):"")+(i.ap?" \u00b7 position approximate":"")+"</s>";ctl.autoRotate=false},true);
 document.getElementById("amh").onclick=()=>{const open=!AMP.classList.contains("on");if(open){window.__stackOpen(AMP);amBuild()}AMP.classList.toggle("on",open)};
 window.__cityPlacesReady=()=>{if(AMP.classList.contains("on"))amBuild()};
 

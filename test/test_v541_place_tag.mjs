@@ -1,4 +1,4 @@
-﻿// v541 - the places layer of the twins: (1) the marker loop's projection line had been swallowed by a trailing comment since v521
+// v541 - the places layer of the twins: (1) the marker loop's projection line had been swallowed by a trailing comment since v521
 // (badges never drew, tapping a place on the map did nothing); (2) the chosen place gets a name tag on the map (Kendall 12 Oct, film take 16).
 import fs from "node:fs";
 let pass = 0, fail = 0;
@@ -13,7 +13,7 @@ ok(/p\.sx=\(q\.x\+1\)\/2\*W;p\.sy=\(1-q\.y\)\/2\*H;const col=AMEN\[p\.i\.k\]\[2\
 ok(/function amTagDraw\(W,H,r\)/.test(js) && /amTagDraw\(W,H,r\)\}/.test(js), "the tag is drawn every frame after the badges");
 ok(/if\(!i\|\|!AMON\[i\.k\]\|\|i\.lon==null\)return;/.test(js), "the tag goes when its kind is switched off");
 ok(/position approximate/.test(js.slice(js.indexOf("function amTagDraw"))) && /toUpperCase\(\)/.test(js.slice(js.indexOf("function amTagDraw"))), "second line: the kind in capitals, plus position approximate when flagged");
-ok(/r\.onclick=\(\)=>\{const i=rows\[\+r\.dataset\.ix\];amTagSet\(i\);/.test(js) && /amTagSet\(i\);tip\.style\.display="block"/.test(js), "a tapped row and a tapped badge both set the tag");
+ok(/r\.onclick=\(\)=>\{const i=rows\[\+r\.dataset\.ix\];amTagSet\(i\);/.test(js) && /amTagSet\(i\);(const lb=amLabel\(i\);)?tip\.style\.display="block"/.test(js), "a tapped row and a tapped badge both set the tag");
 ok(!/amTagSet\(null\)/.test(js.slice(js.indexOf('document.getElementById("amh").onclick'), js.indexOf('document.getElementById("amh").onclick') + 300)), "folding the panel keeps the tag");
 // the whole script parses
 try { new Function(js.replace(/\$\{[^}]*\}/g, "0")); pass++; } catch (e) { fail++; console.log("FAIL the places script does not parse:", e.message); }
