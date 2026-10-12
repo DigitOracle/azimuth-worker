@@ -3178,6 +3178,12 @@ async function appFetch(request, env, ctx) {
         let _t = (url.searchParams.get("text") || "").slice(0, 2000);
         if (!_t && request.method === "POST") { try { _t = String((await request.json()).text || "").slice(0, 2000); } catch (e) {} }   // v535 - text in the body, so a link with a key never lands in a request log
         if (!_t) return new Response("no text", { status: 400 });
+        // v536 - {INSIDER_LINK}: the app writes the recipient's own insider link (INSIDER_KEY entry ins_najjuko_...) so the key never travels in a request
+        if (_t.indexOf("{INSIDER_LINK}") >= 0) {
+          const _ik = String(env.INSIDER_KEY || "").split(",").map((x) => x.trim()).find((x) => x.indexOf("ins_najjuko_") === 0);
+          if (!_ik) return new Response("no insider key for her", { status: 409 });
+          _t = _t.replace("{INSIDER_LINK}", String(env.PUBLIC_ORIGIN || url.origin).replace(/\/+$/, "") + "/start?key=" + _ik);
+        }
         try { await waSend(env, env.WA_ALLOWED, _t + UPDATE_SIGNOFF); } catch (e) { return new Response("send failed", { status: 502 }); }
         return new Response("sent");
       }
