@@ -138,6 +138,8 @@ export function attachAdverts(buildings, adverts) {
     }
     for (const band in ads) { ads[band].sort((x, y) => (x.price == null) - (y.price == null) || (x.price || 0) - (y.price || 0)); for (const x of ads[band]) if (x.lat != null && x.lon != null) { s = Math.min(s, x.lat); n = Math.max(n, x.lat); w = Math.min(w, x.lon); e = Math.max(e, x.lon); } }
     b.ads = ads;
+    let pm = null; for (const band in ads) for (const x of ads[band]) if (x.price != null && x.price > 0 && (pm == null || x.price < pm)) pm = x.price;
+    b.pmin = pm;   // v529 - for the budget slider
   }
   return n >= s ? { s, w, n, e } : null;
 }
@@ -194,6 +196,7 @@ export function coverageHtml(cv) {
   return '<div class=dk id=sucov>Covers <b>' + fmt(cv.bound) + "</b> of " + fmt(cv.total) + " registered projects in this district (Dubai Land Department register)"
     + (cv.siteTotal ? " · " + fmt(cv.captured) + " of the " + fmt(cv.siteTotal) + " adverts the listing site shows for " + esc(cv.community || "the community") : "") + ".</div>";
 }
+export const BUDGET_STEPS = [40000, 50000, 60000, 70000, 80000, 90000, 100000, 120000, 150000, 180000, 200000, 250000, 300000, 400000, 500000, 750000, 1000000, null];   // v529 - null = any
 export function homeTypesHtml(hs) {
   if (!hs || !hs.length) return "";
   return '<div class=st id=suhome>' + hs.map((h) => '<button type=button class=htp data-ht="' + esc(h.type) + '" aria-pressed=false>' + esc(homeSay(h.type)) + " <b>" + fmt(h.n) + "</b></button>").join("") + "</div><div class=dk id=suhsay hidden></div>";
@@ -302,7 +305,7 @@ const SU_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans
   + '.kt{font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.11em;color:#8FA39B}.nm{font-family:Fraunces,Georgia,serif;font-size:1.2rem;font-weight:600;color:#F0E4C8;line-height:1.2;margin:3px 0 2px}'
   + '.sb{color:#8FA39B;font-size:.76rem;line-height:1.45}.tg{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.54rem;letter-spacing:.05em;color:#E0A080;border:1px solid #6A4A3A;border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:2px}'
   + '.hl{font-size:.95rem;margin:9px 0 4px}.hl b{font-family:Fraunces,Georgia,serif;font-size:1.6rem;color:#C5A56A;font-weight:600}'
-  + '.st{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.htp{font:inherit;background:transparent;cursor:pointer}.htn{margin:2px 0 6px;font-size:.86rem;color:#E9E3D6}.htn b{color:#C5A56A;font-size:1.05rem}.htp.on{border-color:#C5A56A!important;background:rgba(197,165,106,.16)!important;color:#E9E3D6!important}.card.htx{display:none}.st a,.st span,.st .htp{display:inline-flex;align-items:center;gap:5px;min-height:30px;border:1px solid #2E4540;border-radius:999px;padding:3px 10px;font-size:.74rem;color:#C8D3CE;text-decoration:none}.st b{color:#C5A56A}'
+  + '.st{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px}.htp{font:inherit;background:transparent;cursor:pointer}.htn{margin:2px 0 6px;font-size:.86rem;color:#E9E3D6}.htn b{color:#C5A56A;font-size:1.05rem}.pmn{font-size:.82rem;color:#B9B2A3;margin:0 0 6px}.pmn b{color:#E9E3D6}.bud{margin:10px 0 4px}.budl{display:flex;justify-content:space-between;font-size:.8rem;color:#B9B2A3}.budl b{color:#C5A56A}.bud input{width:100%;accent-color:#C5A56A}.hlsub{display:block;font-size:.78rem;color:#8FA39B;font-weight:400}.htp.on{border-color:#C5A56A!important;background:rgba(197,165,106,.16)!important;color:#E9E3D6!important}.card.htx{display:none}.st a,.st span,.st .htp{display:inline-flex;align-items:center;gap:5px;min-height:30px;border:1px solid #2E4540;border-radius:999px;padding:3px 10px;font-size:.74rem;color:#C8D3CE;text-decoration:none}.st b{color:#C5A56A}'
   + 'table{width:100%;border-collapse:collapse;margin:10px 0 0;font-size:.78rem}th{text-align:right;font-family:"IBM Plex Mono",monospace;font-size:.5rem;letter-spacing:.06em;color:#6F837D;font-weight:500;padding:0 0 5px 4px}th:first-child,td:first-child{text-align:left;padding-left:0}'
   + 'td{text-align:right;padding:7px 0 7px 5px;border-top:1px solid #1B2E2A;color:#C8D3CE}td b{color:#F0E4C8}'
   + '.dk{font-size:.72rem;color:#8FA39B;line-height:1.45;margin:6px 0 0}'
@@ -390,10 +393,10 @@ export function streetMap(lat, lon, name, fp, line) {
 }
 function buildingCard(b, key, more) {
   const siteN = b.siteCount || Object.keys(b.urls).length;
-  return '<div class="card' + (more ? " htx htmore" : "") + '" data-b="' + esc(b.id) + '" data-types="' + esc((b.types || []).join("|")) + '" data-tc="' + esc(Object.keys(b.tc || {}).map((t) => t + ":" + b.tc[t]).join("|")) + '"><div class=kt>' + (b.matched ? "BUILDING" : "LISTING SITE NAME") + '</div><div class=nm>' + esc(b.name)
+  return '<div class="card' + (more ? " htx htmore" : "") + '" data-b="' + esc(b.id) + '" data-types="' + esc((b.types || []).join("|")) + '" data-tc="' + esc(Object.keys(b.tc || {}).map((t) => t + ":" + b.tc[t]).join("|")) + '" data-pmin="' + (b.pmin != null ? Math.round(b.pmin) : "") + '"><div class=kt>' + (b.matched ? "BUILDING" : "LISTING SITE NAME") + '</div><div class=nm>' + esc(b.name)
     + (b.matched ? "" : '<span class=tg>not matched to the register</span>') + "</div>"
     + '<div class=sb>' + esc([b.matched && b.project && b.project !== b.name ? b.project : "", b.district].filter(Boolean).join(" \u00b7 ")) + "</div>"
-    + '<div class=hl><b>' + fmt(b.live) + "</b> " + (b.live === 1 ? "advert" : "adverts") + (siteN ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + "</div><div class=htn hidden></div>"
+    + '<div class=hl><b>' + fmt(b.live) + "</b> " + (b.live === 1 ? "advert" : "adverts") + (siteN ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + "</div><div class=htn hidden></div>" + (b.pmin != null ? '<div class=pmn>from <b>AED ' + fmt(b.pmin) + "</b> a year</div>" : "")
     + sitesHtml(b)
     + advertisedHtml(b.advertised)
     + (b.bandRows.length ? '<table><tr><th>HOME</th><th>LIVE ADVERTS</th><th>MEDIAN ASKING RENT</th><th>MEDIAN DAYS LISTED</th><th>DELISTED SINCE LAST CRAWL</th></tr>'
@@ -409,8 +412,10 @@ export function supplyPageHtml(o) {
     const D = o.d, live = D.buildings.reduce((s, b) => s + b.live, 0), sites = new Set(); D.buildings.forEach((b) => Object.keys(b.sources).forEach((s) => sites.add(s)));
     const siteN = Math.max(sites.size, D.sites || 0);
     main = '<div class=card data-district="' + esc(D.slug) + '"><div class=kt>DISTRICT</div><div class=nm>' + esc(nm[D.slug] || D.slug) + "</div>"
-      + '<div class=hl><b>' + fmt(live) + "</b> " + (live === 1 ? "advert" : "adverts") + (siteN > 0 ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + ", in " + D.buildings.length + (D.buildings.length === 1 ? " building" : " buildings") + "</div>"
-      + homeTypesHtml(D.homeTypes) + coverageHtml(D.coverage)
+      + '<div class=hl id=suhl><b>' + fmt(live) + "</b> " + (live === 1 ? "advert" : "adverts") + (siteN > 0 ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + ", in " + D.buildings.length + (D.buildings.length === 1 ? " building" : " buildings") + "</div>"
+      + homeTypesHtml(D.homeTypes)
+      + '<div class=bud id=subud><div class=budl><span>Budget a year</span><b id=subudv>any</b></div><input type=range id=subudr min=0 max=' + (BUDGET_STEPS.length - 1) + " value=" + (BUDGET_STEPS.length - 1) + ' aria-label="Budget a year"></div>'   // v529
+      + coverageHtml(D.coverage)
       + '<div class=dk>Fetched ' + esc(dubaiTime(D.crawled) || "\u2014") + " (Dubai time).</div>"
       + '<button type=button class=rf data-district="' + esc(D.slug) + '" data-slug="">Refresh the district</button><div class=rs role=status></div></div>'
       + '<div class=hd>BUILDINGS, MOST ADVERTISED FIRST</div>' + D.buildings.map((b, i) => buildingCard(b, key, i >= 30)).join("")
@@ -594,11 +599,16 @@ export const SUPPLY_JS = String.raw`
 var S=window.__SU||{},KQ="key="+encodeURIComponent(S.key||""),LS="najma_supply_pending";
 // v523 - the home-type pills filter the buildings (Kendall 11 Oct 2026). Several may be on; none on = the 30 most advertised, as before.
 (function(){if(typeof document==="undefined"||!document.querySelectorAll||!document.getElementById)return;var ps=document.querySelectorAll(".htp[data-ht]");if(!ps||!ps.length||!ps.forEach)return;var say=document.getElementById("suhsay");
+  var STEPS=` + JSON.stringify(BUDGET_STEPS) + String.raw`,br=document.getElementById("subudr"),bv=document.getElementById("subudv"),hl=document.getElementById("suhl"),hl0=hl?hl.innerHTML:"";
+  function bud(){return br?STEPS[+br.value]:null}
+  if(br)br.oninput=function(){var v=bud();if(bv)bv.textContent=v==null?"any":"up to AED "+v.toLocaleString("en-US");apply()};
   function apply(){var on=[];ps.forEach(function(p){if(p.classList.contains("on"))on.push(p.getAttribute("data-ht"))});var n=0,names=[];
-    document.querySelectorAll(".card[data-types]").forEach(function(c){var ts=(c.getAttribute("data-types")||"").split("|"),hit=!on.length?!c.classList.contains("htmore"):on.some(function(t){return ts.indexOf(t)>=0});c.classList.toggle("htx",!hit);if(hit&&on.length)n++;
+    document.querySelectorAll(".card[data-types]").forEach(function(c){var ts=(c.getAttribute("data-types")||"").split("|"),bmax=bud(),pm=+(c.getAttribute("data-pmin")||0),okB=bmax==null||(pm>0&&pm<=bmax),hit=(!on.length&&bmax==null)?!c.classList.contains("htmore"):((!on.length||on.some(function(t){return ts.indexOf(t)>=0}))&&okB);c.classList.toggle("htx",!hit);if(hit&&(on.length||bmax!=null))n++;
       var tn=c.querySelector?c.querySelector(".htn"):null;if(tn){if(on.length&&hit){var tc={},k2=0;(c.getAttribute("data-tc")||"").split("|").forEach(function(x){var i=x.lastIndexOf(":");if(i>0)tc[x.slice(0,i)]=+x.slice(i+1)});on.forEach(function(t){k2+=tc[t]||0});tn.hidden=false;tn.innerHTML="<b>"+k2+"</b> of its adverts "+(k2===1?"is ":"are ")+on.map(function(t){var p=document.querySelector('.htp[data-ht="'+t+'"]');return p?p.firstChild.textContent.trim():t}).join(" or ")}else{tn.hidden=true;tn.innerHTML=""}}});   // v526
     ps.forEach(function(p){if(p.classList.contains("on"))names.push(p.firstChild.textContent.trim())});
-    if(say){if(on.length){say.hidden=false;say.innerHTML=n+(n===1?" building":" buildings")+" with "+names.join(" or ")+' &middot; <a href="#" id=suhall>show all</a>';var a=document.getElementById("suhall");if(a)a.onclick=function(e){e.preventDefault();ps.forEach(function(p){p.classList.remove("on");p.setAttribute("aria-pressed","false")});apply()}}else{say.hidden=true;say.innerHTML=""}}}
+    var bm=bud(),tot=0;ps.forEach(function(p){if(p.classList.contains("on")){var bb=p.querySelector?p.querySelector("b"):null;tot+=bb?+bb.textContent.replace(/[^0-9]/g,""):0}});
+    if(hl){if(on.length||bm!=null){hl.innerHTML=(on.length?"<b>"+tot.toLocaleString("en-US")+"</b> "+names.join(" or ")+" adverts &middot; ":"")+"<b>"+n+"</b> "+(n===1?"building":"buildings")+(bm!=null?" with a listing up to AED "+bm.toLocaleString("en-US")+" a year":"")+'<span class=hlsub>'+hl0.replace(/<[^>]+>/g,"")+" in all</span>"}else hl.innerHTML=hl0}
+    if(say){if(on.length||bm!=null){say.hidden=false;say.innerHTML=n+(n===1?" building":" buildings")+(on.length?" with "+names.join(" or "):"")+(bm!=null?" within budget":"")+' &middot; <a href="#" id=suhall>show all</a>';var a=document.getElementById("suhall");if(a)a.onclick=function(e){e.preventDefault();ps.forEach(function(p){p.classList.remove("on");p.setAttribute("aria-pressed","false")});if(br){br.value=STEPS.length-1;if(bv)bv.textContent="any"}apply()}}else{say.hidden=true;say.innerHTML=""}}}
   var sa=document.getElementById("suall");if(sa)sa.onclick=function(){document.querySelectorAll(".card.htmore").forEach(function(c){c.classList.remove("htmore");c.classList.remove("htx")});sa.remove()};   // v526 - every building
   ps.forEach(function(p){p.onclick=function(){var v=!p.classList.contains("on");p.classList.toggle("on",v);p.setAttribute("aria-pressed",v?"true":"false");apply()}})})();
 // v446 - building street maps: MapLibre is fetched once, the first time a map scrolls into view; each map is drawn once

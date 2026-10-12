@@ -12,7 +12,7 @@ const h = supplyPageHtml({ view: "district", d: D, key: "k" });
 ok((h.match(/class="card[^"]*" data-b=/g) || []).length === 34, "every building is in the page (not only the first 30)");
 ok((h.match(/class="card htx htmore"/g) || []).length === 4, "past the first 30 they wait, hidden, for a filter");
 ok(/data-b="k32" data-types="Apartment\|Penthouse"/.test(h), "each card says which home types its adverts are");
-ok(/v523 - the home-type pills filter the buildings/.test(SUPPLY_JS) && /hit=!on\.length\?!c\.classList\.contains\("htmore"\):on\.some/.test(SUPPLY_JS), "the filter: none on = the 30 as before; on = any building with one of the chosen types");
+ok(/v523 - the home-type pills filter the buildings/.test(SUPPLY_JS) && /hit=\(!on\.length&&bmax==null\)\?!c\.classList\.contains\("htmore"\):\(\(!on\.length\|\|on\.some/.test(SUPPLY_JS), "the filter: none on = the 30 as before; on = any building with one of the chosen types");
 ok(/show all<\/a>/.test(SUPPLY_JS), "a 'show all' clears it");
 
 // the filter, run on a stand-in page
