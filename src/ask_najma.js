@@ -100,12 +100,18 @@ export async function askRoute(request, env, url, deps) {
   // ASK_SECRET secret are set; the stub until then. Offline or slow: an honest message, never the stub's canned figures.
   if (env.ASK_ENGINE_URL && env.ASK_SECRET) {
     const base = String(env.ASK_ENGINE_URL).replace(/\/+$/, "");
-    try {
-      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 25000);
-      const r = await fetch(base + url.pathname, { method: "POST", headers: { "Content-Type": "application/json", "X-Ask-Secret": String(env.ASK_SECRET) }, body: JSON.stringify(body), signal: ctl.signal });
-      clearTimeout(tm);
-      if (r.ok) return new Response(await r.text(), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
-    } catch (e) {}
+    // v558 - one retry after 2 s (an engine restart refuses connections for a few seconds); nothing is cached between requests
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt) await new Promise((res) => setTimeout(res, 2000));
+      try {
+        const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 25000);
+        const r = await fetch(base + url.pathname, { method: "POST", headers: { "Content-Type": "application/json", "X-Ask-Secret": String(env.ASK_SECRET) }, body: JSON.stringify(body), signal: ctl.signal });
+        clearTimeout(tm);
+        const t = await r.text();
+        if (r.ok || (r.status < 500 && /"status"/.test(t))) return new Response(t, { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+        console.log("ask engine", r.status, t.slice(0, 200));
+      } catch (e) { console.log("ask engine fetch", String(e).slice(0, 200)); }
+    }
     return J({ status: "error", answer_md: "Najma's question engine is offline right now (it runs on the office machine). Try again shortly.", disclosures: [], as_of: {}, cost_ms: 0 });
   }
   return J(askStub(body));

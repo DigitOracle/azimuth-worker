@@ -32,5 +32,10 @@ ok((await askRoute(new Request("https://w/ask/ok"), {}, new URL("https://w/ask/o
   globalThis.fetch = async () => { throw new Error("down"); };
   const j2 = await (await askRoute(new Request("https://w/ask", { method: "POST", body: JSON.stringify({ question: "x" }) }), env2, new URL("https://w/ask?key=k"), { keyTier: () => "admin" })).json();
   ok(j2.status === "error" && /offline/.test(j2.answer_md) && !/24 floors/.test(j2.answer_md), "v557: engine down - says offline, never the stub figures", j2); }
+// v558 - one retry after a refused connection (engine restart); a not_held answer passes through as an answer
+{ let n = 0; globalThis.fetch = async () => { if (++n === 1) throw new Error("refused"); return new Response(JSON.stringify({ status: "not_held", reason_code: "no_template", answer_md: "plain" })); };
+  const env3 = { MEETINGS: { put: async () => {} }, ASK_ENGINE_URL: "https://e", ASK_SECRET: "s" };
+  const j3 = await (await askRoute(new Request("https://w/ask", { method: "POST", body: JSON.stringify({ question: "x" }) }), env3, new URL("https://w/ask?key=k"), { keyTier: () => "admin" })).json();
+  ok(n === 2 && j3.status === "not_held" && j3.answer_md === "plain", "v558: retries once, then passes the engine's not_held answer through", j3); }
 console.log(`v555 ask najma: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
