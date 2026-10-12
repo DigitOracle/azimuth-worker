@@ -210,7 +210,7 @@ export const PICTURE_CHOICES = [
   { id: "scene", label: "A scene, no person" },
   { id: "slides", label: "Infographic slides (carousel)" },
   { id: "video", label: "A short video of you" },   // v476 - HeyGen Cinematic, Polo_Trained
-  { id: "poster", label: "Poster: you + 3 points" },   // v495 - Kendall's "Scaling Railways" layout
+  { id: "poster", label: "Poster (layout varies)" },   // v495 - Kendall's "Scaling Railways" layout
 ];
 export const BACKGROUND_CHOICES = [
   { id: "site", label: "Construction site" },
@@ -1123,7 +1123,16 @@ export async function deskPostRoute(env, msg, text, deps) {
   if (/^\/?events?\b/i.test(t) && await eventsCommand(env, (s) => deps.send(env, s), t, nowOf(deps))) return true;   // v473
   // v472 (Kendall 10 Oct: "the ideas seem the same") - /ideas was the OLD fixed weekly list of 5; now it is the fresh feed of 10, picked by tapping
   if (/^\/ideas\b/i.test(t) || /^\/?feed$/i.test(t)) { await sendFeed(env, deps); return true; }   // v426, v472
-  if ((m = t.match(/^(\d{1,2})$/)) && !(await env.MEETINGS.get("desk_post_editing"))) { if (await feedReply(env, deps, Number(m[1]))) return true; }
+  // v539 (Kendall 12 Oct: "when I picked, it took me straight to this picture") - a bare number while a feed choice is open belongs to the feed,
+  // even when an older draft is waiting for an edit: the number used to become an "edit" of that draft and remade its picture. The older
+  // draft is released back to "waiting for approval", unchanged.
+  if ((m = t.match(/^(\d{1,2})$/))) {
+    const _eid = await env.MEETINGS.get("desk_post_editing"), _pick = await env.MEETINGS.get("desk_feed_pick");
+    if (!_eid || _pick) {
+      if (_eid && _pick) await releaseEditing(env, _eid);
+      if (await feedReply(env, deps, Number(m[1]))) return true;
+    }
+  }
   if ((m = t.match(/^\/ref\s+tag\s+(\d+)\s+([\w-]+)/i))) {   // v421
     const n = Number(m[1]), tag = m[2].toLowerCase(), r = await kvJ(env, "desk_ref_" + n, null);
     if (!r) { await deps.send(env, "No reference " + n + "."); return true; }
@@ -1167,6 +1176,10 @@ export async function deskPostRoute(env, msg, text, deps) {
   return false;
 }
 
+async function releaseEditing(env, eid) {
+  try { const p = await getPlan(env, eid); if (p && p.status === "editing") { p.status = "draft"; await putPlan(env, p); } } catch (e) {}
+  await env.MEETINGS.delete("desk_post_editing");
+}
 // v429 - a widescreen version of a draft's picture, for LinkedIn: same scene, 1536x1024, sent to the desk only and never posted to Instagram
 async function widePicture(env, deps, p) {
   const s = p.slides && p.slides[0];
