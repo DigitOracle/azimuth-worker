@@ -35,11 +35,11 @@ async function makePoster() {
   return btns[0];
 }
 const pv = await makePoster();
-ok(pv && /A poster in your Scaling Railways layout/.test(pv.b) && /Portrait 9:16/.test(pv.b), "the preview describes the poster, portrait, with no shape or words step", pv && pv.b);
+ok(pv && /its layout matched to the idea and never the same as the last one/.test(pv.b) && /Portrait/.test(pv.b), "the preview describes the poster, portrait, with no shape or words step", pv && pv.b);
 const before = calls.length; await btn(pv.x[0].id);
 const c = calls[calls.length - 1], p = plans().filter((x) => x.picture === "poster").pop();
-ok(calls.length === before + 1 && c.size === "1024x1536" && c.refs >= 2, "Make it: one portrait picture, made with his reference photos", JSON.stringify({ n: calls.length - before, size: c.size, refs: c.refs }));
-ok(c.prompt.includes("'When fares scale,' in deep navy") && c.prompt.includes("'records must scale too.' in rich gold") && c.prompt.includes("title 'BETTER RECORDS'") && c.prompt.includes(POSTER_BYLINE) && /Spell every word exactly/.test(c.prompt), "the prompt carries his layout: navy/gold headline, three cards, closing band, byline", c.prompt.slice(0, 400));
+ok(calls.length === before + 1 && c.size === "1024x1536" && c.refs === 1, "Make it: one portrait picture, made with ONE of his reference photos (v537)", JSON.stringify({ n: calls.length - before, size: c.size, refs: c.refs }));
+ok(c.prompt.includes("When fares scale,") && c.prompt.includes(POSTER_BYLINE) && /Spell every word exactly/.test(c.prompt), "the prompt carries the headline and byline in whichever of the six layouts (v537)", c.prompt.slice(0, 400));
 ok(p.slides[0].poster && p.slides[0].poster.h1 === "When fares scale," && !p.slides[0].flag && p.shape === "portrait", "the words are kept with the slide; the read-back matched, so no flag");
 // a read-back that never matches: three tries, then flagged
 visionSays = ["garbled", "garbled again", "still garbled"]; calls.length = 0;

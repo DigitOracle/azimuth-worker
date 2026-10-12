@@ -55,7 +55,7 @@ await deskPostRoute(env, { type: "interactive", interactive: { button_reply: { i
 let p = await lastPlan(); const g = gens[gens.length - 1];
 ok(p.kind === "friday" && p.picture === "speaking" && p.background === "terrace", "the draft is marked as the Friday Reflection, speaking, terrace");
 ok(/FRIDAY REFLECTION/.test(sysSeen) && /about LIFE/.test(sysSeen), "the caption writer is told it is about life, not only work");
-ok(g.edit && g.refs >= 2 && /quiet terrace at sunrise/.test(g.prompt), "the picture shows him, on the terrace", g.prompt);
+ok(g.edit && g.refs === 1 && /quiet terrace at sunrise/.test(g.prompt), "the picture shows him, on the terrace", g.prompt);
 ok(p.slides[0].prompt && /terrace/.test(p.slides[0].prompt), "the picture's description is kept for a wide version");
 // 3. /post wide makes a 1536x1024 version of the same scene, with his references, sent only to the desk
 const before = gens.length; out.length = 0;

@@ -99,18 +99,25 @@ const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buf
 // One generated picture (JPEG asked for directly, so no conversion is needed). Refuses at the monthly cap. refs = approved reference photos.
 export async function genImage(env, deps, prompt, refs, size) {   // v429 - size: "1024x1024" (Instagram) or "1536x1024" (widescreen, LinkedIn)
   size = size === "1536x1024" || size === "1024x1536" ? size : "1024x1024";   // v475 - portrait 1024x1536 too
-  const now = nowOf(deps), unit = IMG_COST_EST[imgQuality(env)], c = await costState(env, now);
+  // v537 (Kendall 12 Oct: "it needs to present me ... what Najjuko's does works almost perfectly") - her recipe whenever he is in the picture:
+  // ONE reference photo (several blend into a stranger), input_fidelity high (keeps the face), high quality; retried without fidelity if refused
+  const person = !!(refs && refs.length);
+  const q = person ? "high" : imgQuality(env);
+  const now = nowOf(deps), unit = IMG_COST_EST[q], c = await costState(env, now);
   if (!env.OPENAI_API_KEY) return { err: "no image key set" };
   if (c.est_usd + unit > capUsd(env) + 1e-9) return { err: "cap", cap: true };
   let r;
   try {
     if (refs && refs.length) {
-      const fd = new FormData(); fd.append("model", env.SCENE_MODEL || "gpt-image-1"); fd.append("prompt", prompt.slice(0, 3500)); fd.append("size", size); fd.append("quality", imgQuality(env)); fd.append("output_format", "jpeg");
-      refs.forEach((b, i) => fd.append("image[]", new Blob([b], { type: "image/jpeg" }), "ref" + i + ".jpg"));
-      r = await fetch(OPENAI + "/edits", { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY }, body: fd });
+      const call = (fid) => { const fd = new FormData(); fd.append("model", env.SCENE_MODEL || "gpt-image-1"); fd.append("prompt", prompt.slice(0, 3500)); fd.append("size", size); fd.append("quality", q); fd.append("output_format", "jpeg");
+        if (fid) fd.append("input_fidelity", "high");
+        refs.forEach((b, i) => fd.append("image[]", new Blob([b], { type: "image/jpeg" }), "ref" + i + ".jpg"));
+        return fetch(OPENAI + "/edits", { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY }, body: fd }); };
+      r = await call(true);
+      if (r.status === 400) r = await call(false);
     } else {
       r = await fetch(OPENAI + "/generations", { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: env.SCENE_MODEL || "gpt-image-1", prompt: prompt.slice(0, 3500), size, quality: imgQuality(env), output_format: "jpeg", n: 1 }) });
+        body: JSON.stringify({ model: env.SCENE_MODEL || "gpt-image-1", prompt: prompt.slice(0, 3500), size, quality: q, output_format: "jpeg", n: 1 }) });
     }
   } catch (e) { return { err: "the picture service did not answer" }; }
   if (!r.ok) return { err: "the picture service refused (" + r.status + ")" };
@@ -259,7 +266,9 @@ const POSTER_SYS = "You write the words for ONE portrait social-media poster for
   "Plain English, confident, no emoji, no hashtags. Never name any AI model, company or tool. Never write a number that is not in the idea. " +
   "Reply with JSON only: {\"kicker\":\"2-4 words in capitals, e.g. INFRASTRUCTURE + DIGITAL DELIVERY\",\"h1\":\"headline line 1, 2-4 words\",\"h2\":\"headline line 2, 2-4 words, the turn\"," +
   "\"sub\":\"one sentence, at most 18 words, tying it to the news or the idea\",\"cards\":[{\"title\":\"2 words, capitals\",\"text\":\"at most 14 words\",\"icon\":\"one of: " + POSTER_ICONS.join(", ") + "\"},{...},{...}]," +
-  "\"close1\":\"closing line 1, at most 5 words\",\"close2\":\"closing line 2, at most 6 words\"}. Exactly three cards.";
+  "\"close1\":\"closing line 1, at most 5 words\",\"close2\":\"closing line 2, at most 6 words\"," +
+  "\"big\":\"ONE figure copied exactly from the idea with its unit (e.g. 40%, AED 2bn, 12 km), or empty if the idea has none\",\"big_label\":\"what the figure is, at most 8 words\"," +
+  "\"quote\":\"one line in his own voice, at most 18 words, no quotation marks\",\"steps\":[\"3 or 4 steps, at most 4 words each\"]}. Exactly three cards.";
 export function posterWords(c) { return [c.kicker, c.h1, c.h2, c.sub].concat((c.cards || []).flatMap((k) => [k.title, k.text])).concat([c.close1, c.close2, POSTER_BYLINE]).filter(Boolean).join(" "); }
 export function posterPrompt(c, p, withHim) {
   const card = (k, i) => "card " + (i + 1) + ": icon '" + (POSTER_ICONS.includes(k.icon) ? k.icon : "document with a gear") + "', title '" + k.title + "', text '" + k.text + "'";
@@ -273,6 +282,49 @@ export function posterPrompt(c, p, withHim) {
     "(7) at the bottom, a dark navy band with a two-line closing line in gold serif: '" + c.close1 + "' / '" + c.close2 + "', and under it, small widely spaced white text: '" + POSTER_BYLINE + "'. " +
     "Spell every word exactly as given above. No other text anywhere, no logos, no watermarks, no brand names.";
 }
+// v537 (Kendall 12 Oct: "every picture looks exactly the same ... the same three cards"; "full bleeding is always very good") - SIX layouts,
+// rotated (never the last one twice running) and matched to the idea: a figure in the idea -> one big number; steps/phases -> a timeline;
+// otherwise full-bleed photo, quote card, magazine cover or the original cards. Research note (12 Oct): simple, readable-in-two-seconds
+// pictures beat busy infographics; posts that look designed by a machine do worse - so the photo-led layouts come first.
+export const POSTER_LAYOUTS = ["bleed", "bignum", "quote", "timeline", "cover", "cards"];
+export const LAYOUT_SAY = { bleed: "a full-bleed photograph with only the headline", bignum: "one big figure", quote: "a quote card with you in it", timeline: "a timeline of steps", cover: "a magazine cover", cards: "the three-card poster" };
+export function chooseLayout(idea, last, forced, c) {
+  if (forced && POSTER_LAYOUTS.includes(forced)) return forced;
+  const s = String(idea || "").toLowerCase(), want = [];
+  if (c && c.big && /\d/.test(c.big)) want.push("bignum");
+  if (/\b(phase|phases|step|steps|stage|stages|roadmap|timeline|journey|milestone|sequence)\b/.test(s) && c && Array.isArray(c.steps) && c.steps.length >= 3) want.push("timeline");
+  const pool = want.filter((x) => x !== last);
+  if (pool.length) return pool[0];
+  const rest = ["bleed", "quote", "cover", "bleed", "cards"].filter((x) => x !== last);
+  let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return rest[h % rest.length];
+}
+export function layoutWords(L, c) {
+  const close = [c.close1, c.close2, POSTER_BYLINE];
+  if (L === "bleed") return [c.h1, c.h2, POSTER_BYLINE].filter(Boolean).join(" ");
+  if (L === "bignum") return [c.big, c.big_label, c.h1, c.h2, POSTER_BYLINE].filter(Boolean).join(" ");
+  if (L === "quote") return [c.quote, POSTER_BYLINE].filter(Boolean).join(" ");
+  if (L === "timeline") return [c.kicker, c.h1, c.h2].concat((c.steps || []).slice(0, 4)).concat([POSTER_BYLINE]).filter(Boolean).join(" ");
+  if (L === "cover") return [c.kicker, c.h1, c.h2, c.sub, POSTER_BYLINE].filter(Boolean).join(" ");
+  return posterWords(c);
+}
+export function layoutPrompt(L, c, p, withHim) {
+  if (L === "cards") return posterPrompt(c, p, withHim);
+  const him = withHim ? "the man in the reference photo - keep his face, hair, skin tone, build, apparent age and glasses exactly as in the photo; smartly dressed; natural scale, feet on the ground with a soft shadow beneath him, the light on him matching the scene; only him" : null;
+  const scene = (bgLine(p) || "a modern Dubai setting ") + "matching the idea: " + String(p.idea).replace(/\d+/g, "").slice(0, 160);
+  const base = "A realistic photograph for a portrait social-media post, eye-level camera, gentle background blur, natural light, colours true to life; deep navy #0B2340 and rich gold #B8862B appear only in the type. ";
+  const tail = " Spell every word exactly as given. No other text anywhere, no logos, no watermarks, no brand names, no icons, no cards, no boxes.";
+  if (L === "bleed") return base + "FULL-BLEED: the photograph fills the whole frame edge to edge, no borders, no panels. The scene: " + scene + ". " + (him ? "In the scene, " + him + ", natural and candid, not posing for the camera, placed on the left or right third. " : "No people. ") +
+    "Only text: across the top third, on a soft dark gradient for legibility, a large elegant serif headline in two lines in warm white: '" + c.h1 + "' / '" + c.h2 + "'; at the bottom edge, small widely spaced white text: '" + POSTER_BYLINE + "'." + tail;
+  if (L === "bignum") return base + "A bold typographic poster on a deep navy background with a subtle, darkened photograph of " + scene + " behind it. Dominating the centre, ONE huge figure in rich gold, taking a third of the height: '" + c.big + "'. Under it, in warm white sans-serif: '" + c.big_label + "'. " +
+    "Above, a two-line serif headline in white: '" + c.h1 + "' / '" + c.h2 + "'. " + (him ? "In the lower third, " + him + ", from the waist up, looking at the figure. " : "") + "At the bottom, small widely spaced white text: '" + POSTER_BYLINE + "'." + tail;
+  if (L === "quote") return base + (him ? "A close, warm portrait of " + him + ", head and shoulders, filling the right two thirds of the frame, " : "A calm photograph of " + scene + " filling the frame, ") + "background softly out of focus: " + scene + ". " +
+    "On the left third, a large gold opening quotation mark, then in elegant serif warm white type: '" + c.quote + "'. Under it, small widely spaced gold text: '" + POSTER_BYLINE + "'." + tail;
+  if (L === "timeline") return base + "Warm ivory background. At the top, a small uppercase kicker in dark grey: '" + c.kicker + "', then a two-line serif headline: '" + c.h1 + "' in navy / '" + c.h2 + "' in gold. " +
+    "Across the middle, ONE thin gold line running left to right with " + (c.steps || []).slice(0, 4).length + " gold dots on it, and under each dot a short navy label, in order: " + (c.steps || []).slice(0, 4).map((x, i) => (i + 1) + " '" + x + "'").join(", ") + ". " +
+    (him ? "Below the line, " + him + ", full length, walking along it. " : "Below the line, a photograph of " + scene + ". ") + "At the bottom, small widely spaced navy text: '" + POSTER_BYLINE + "'." + tail;
+  return base + "A MAGAZINE COVER. The top 60% is a full-bleed photograph: " + scene + (him ? ", with " + him + " looking into the camera" : "") + ". The bottom 40% is a solid deep navy panel. On it: a small gold uppercase kicker '" + c.kicker + "', a large serif headline in two lines, white '" + c.h1 + "' / gold '" + c.h2 + "', one sentence in light grey: '" + c.sub + "', and at the very bottom, small widely spaced white text: '" + POSTER_BYLINE + "'." + tail;
+}
 async function posterSlide(env, deps, p, s, notes) {
   let c = null;
   try { const t = await deps.llm(env, POSTER_SYS, "IDEA: " + p.idea + (p.lane ? "\nVOICE: " + p.lane : ""), 900); const m = String(t || "").match(/\{[\s\S]*\}/); c = m ? JSON.parse(m[0]) : null; } catch (e) {}
@@ -280,9 +332,15 @@ async function posterSlide(env, deps, p, s, notes) {
   const nums = (x) => (String(x).match(/\d+/g) || []), allowed = new Set(nums(p.idea));
   if (nums(posterWords(c)).some((n) => !allowed.has(n))) return { err: "the poster words carried a number that is not in the idea" };
   c.cards = c.cards.slice(0, 3);
-  const r = await pickRefs(env, p.idea, "speaking"), refs = r.count >= REF_MIN && r.bufs.length >= 2 ? r.bufs.slice(0, 3) : null;
+  let last = null; try { last = await env.MEETINGS.get("desk_last_layout"); } catch (e) {}
+  if (c.big && !nums(c.big).every((n) => allowed.has(n))) c.big = "";
+  let L = chooseLayout(p.idea, last, p.layout, c);
+  if ((L === "bignum" && !c.big) || (L === "quote" && !c.quote) || (L === "timeline" && !(Array.isArray(c.steps) && c.steps.length >= 3))) L = last === "bleed" ? "cover" : "bleed";   // the words for that layout are missing
+  const r = await pickRefs(env, p.idea, "speaking"), refs = r.count >= REF_MIN && r.bufs.length >= 2 ? r.bufs.slice(0, 1) : null;   // v537: ONE reference, as on Najjuko's scenes
   if (!refs) notes.push("The poster has no person: I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ".");
-  const prompt = posterPrompt(c, p, !!refs), want = posterWords(c);
+  const prompt = layoutPrompt(L, c, p, !!refs), want = layoutWords(L, c);
+  try { await env.MEETINGS.put("desk_last_layout", L); } catch (e) {}
+  s.layout = L;
   let g = null, ok = false, checked = false;
   for (let t = 0; t < 3; t++) {
     g = await genImage(env, deps, prompt, refs, "1024x1536");
@@ -320,7 +378,7 @@ async function buildImages(env, deps, p, onlyIdx) {
       : hookWithHim || (!infographic && (p.lane === "abbot" || (p.lane === "alchemy" && withKendall(p.idea))));
     if (personLane) {
       const r = await pickRefs(env, p.idea, p.picture);
-      if (r.count >= REF_MIN && r.bufs.length >= 2) refs = r.bufs.slice(0, 3);
+      if (r.count >= REF_MIN && r.bufs.length >= 2) refs = r.bufs.slice(0, 1);   // v537: ONE reference keeps the face; several blend into a stranger
       else notes.push((hookWithHim ? "Slide 1 is a text graphic without you" : "No person in the picture") + ": I hold " + r.count + " approved reference photo(s) and need at least " + REF_MIN + ". Send photos with the caption ref: <tag>.");
     }
     const last = i === n - 1;
@@ -644,7 +702,7 @@ export const WORDS_LIST = [{ id: "none", label: "No words" }, { id: "headline", 
 export function scenePreview(pick) {
   const pic = PICTURE_CHOICES.find((x) => x.id === pick.picture), bg = pick.background === "custom" ? pick.bg_text : (BACKGROUND_CHOICES.find((x) => x.id === pick.background) || {}).label;
   const tm = TIME_CHOICES.find((x) => x.id === pick.tod), sh = SHAPE_LIST.find((x) => x.id === pick.shape);
-  const who = pick.picture === "poster" ? "A poster in your Scaling Railways layout: kicker, two-part headline, subhead, three icon cards and a closing line, with you full length (from your reference photos). Portrait 9:16. The words are written for you and checked on the picture."
+  const who = pick.picture === "poster" ? "A poster, its layout matched to the idea and never the same as the last one: a full-bleed photograph, one big figure, a quote card, a timeline, a magazine cover or the three-card poster. You in it (from your reference photos). Portrait. The words are written for you and checked on the picture."
     : pick.picture === "scene" ? "A scene, no person in it." : pick.picture === "speaking" ? "You, speaking or teaching, your face from your reference photos." : "You on site in a hard hat and hi-vis, your face from your reference photos.";
   const wd = WORDS_LIST.find((x) => x.id === pick.words);
   let s = "Here's the picture I'll make:\n\n" + who + " Behind: " + (bg || "a Dubai setting") + ". " + (tm ? tm.label : "Natural daylight") + ". " + (sh ? sh.label : "Square") + "." + (wd && wd.id !== "none" ? " Words: " + wd.label.toLowerCase() + " (the post's headline)." : "") + "\nIdea: " + pick.idea;

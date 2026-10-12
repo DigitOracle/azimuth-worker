@@ -74,7 +74,7 @@ reset();
   await addRefs(3); calls.length = 0;
   await say("/post abbot: handover decoded (carousel)"); const p = await planOf((x) => /handover/.test(x.idea));
   const g = gen();
-  ok(g[0].edit && g[0].nImages >= 2 && g[0].nImages <= 3 && g[0].prompt.includes(LIKENESS) && /TITLE: "Hook slide"/.test(g[0].prompt), "Abbot + 3 refs: slide 1 through edits with 2-3 refs, likeness rules, hook text rendered", JSON.stringify(g[0]).slice(0, 300));
+  ok(g[0].edit && g[0].nImages === 1 && g[0].prompt.includes(LIKENESS) && /TITLE: "Hook slide"/.test(g[0].prompt), "Abbot + 3 refs: slide 1 through edits with 2-3 refs, likeness rules, hook text rendered", JSON.stringify(g[0]).slice(0, 300));
   ok(g.slice(1).every((c) => !c.edit && /No photographs of people/.test(c.prompt)), "the other slides are text graphics without a person");
   ok(p.slides[0].src === "ai-person" && /Illustration\./.test(p.caption), "slide 1 marked as an illustration with his reference; caption says Illustration");
   reset(); await addRefs(2); calls.length = 0; await say("/post abbot: handover decoded (carousel)");
