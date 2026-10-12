@@ -91,5 +91,5 @@ for (let i = 0; i < 3; i++) { clock += 60000; await deskMorningTick(env, deps); 
 const fn = [...store.keys()].filter((k) => k.startsWith("postplan_")).map((k) => JSON.parse(store.get(k))).filter((p) => p.morning === "2026-10-14@19");
 ok(fn.length === 0, "v488: feed now sends ideas only, no drafts", fn.length);
 await say("feed now"); ok(lists[0] && lists[0].length === 9, "feed now again after it finished gives a fresh one");
-await say("feed now"); ok(/already on its way/.test(texts.join("")), "but not while one is still arriving");
+await say("feed now"); ok(lists[0] && lists[0].length === 9 && !/already on its way/.test(texts.join("")), "v549: feed now is ideas only, so a second one simply sends a fresh list");
 console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

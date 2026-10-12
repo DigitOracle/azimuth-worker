@@ -2310,6 +2310,14 @@ async function appFetch(request, env, ctx) {
       const _ir = await refImport(env, _ib && _ib.ids, (_ib && _ib.tag) || "general", url.searchParams.get("apply") === "1", Date.now());
       return new Response(JSON.stringify(_ir, null, 2), { status: _ir.ok ? 200 : 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
     }
+    if (url.pathname === "/desk_ref_set" && request.method === "GET") {   // v549 - owner key; ?n=<ref>&approved=0|1 - takes a reference photo out of use (or back), the photo itself is kept
+      if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      const _sn = Number(url.searchParams.get("n")) || 0; let _sm = null; try { _sm = JSON.parse(await env.MEETINGS.get("desk_ref_" + _sn) || "null"); } catch (e) {}
+      if (!_sm) return new Response("not found", { status: 404 });
+      _sm.approved = url.searchParams.get("approved") === "1"; _sm.unapproved_at = _sm.approved ? undefined : new Date().toISOString();
+      await env.MEETINGS.put("desk_ref_" + _sn, JSON.stringify(_sm));
+      return new Response(JSON.stringify({ n: _sn, approved: _sm.approved }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
     if (url.pathname === "/desk_ref_img" && request.method === "GET") {   // v543 - owner key; one approved reference photo by number, for checking which photos the pictures start from
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       let _rm = null; try { _rm = JSON.parse(await env.MEETINGS.get("desk_ref_" + String(Number(url.searchParams.get("n")) || 0)) || "null"); } catch (e) {}

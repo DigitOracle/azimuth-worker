@@ -66,13 +66,13 @@ ok(p.slides[0].prompt && /terrace/.test(p.slides[0].prompt), "the picture's desc
 const before = gens.length; out.length = 0;
 await say("/post wide " + p.id);
 const w = gens[gens.length - 1];
-ok(gens.length === before + 1 && w.edit && w.refs === 3 && /WIDESCREEN: recreate the FIRST reference/.test(w.prompt) && /quiet terrace/.test(w.prompt), "a widescreen picture is made from the original picture plus 2 of his references", w && (w.refs + " " + w.prompt));
+ok(gens.length === before + 1 && w.edit && w.refs === 2 && /WIDESCREEN: recreate the FIRST reference/.test(w.prompt) && /quiet terrace/.test(w.prompt), "a widescreen picture is made from the original picture plus ONE photo of him (v549: the one he chose, else one)", w && (w.refs + " " + w.prompt));
 p = await lastPlan();
 ok(p.wide_key && p.status === "draft" && p.approved === false, "the wide picture is kept on the draft; nothing is approved or posted");
 // a draft from before v429 (no stored description) still works: the description is rebuilt
 const old = await lastPlan(); delete old.slides[0].prompt; const { putPlan } = await import("../src/desk_post.js"); await putPlan(env, old);
 await say("/post wide " + old.id); const w2 = gens[gens.length - 1];
-ok(w2.refs === 3 && /quiet terrace at sunrise/.test(w2.prompt) && /speaking or teaching/.test(w2.prompt), "an older draft gets its description rebuilt from its choices", w2.prompt);
+ok(w2.refs === 2 && /quiet terrace at sunrise/.test(w2.prompt) && /speaking or teaching/.test(w2.prompt), "an older draft gets its description rebuilt from its choices", w2.prompt);
 r = await say("/post wide nope");
 ok(/No draft nope/.test(r), "an unknown draft is refused");
 // 4. not Friday: no Friday idea

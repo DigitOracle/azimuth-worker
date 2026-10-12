@@ -775,6 +775,7 @@ async function flowTap(env, deps, id) {
   const tod = TIME_CHOICES[Number(m[6]) - 1]; if (!tod) { await deps.send(env, "That time is not on the list. Send feed for a new one."); return true; }
   const pick = { step: "preview", n, idea: it.text, lane: it.lane, allow: it.allow || null, kind: it.kind || null, picture: pic.id, background: bg.id, tod: tod.id, shape: pic.id === "scene" ? "square" : "portrait", words: "none" };
   await releaseEditing(env, await env.MEETINGS.get("desk_post_editing"));   // v548 - a new idea ends any change waiting on an old draft
+  await env.MEETINGS.delete("desk_post_wait");   // v549 - and any "type the idea" waiting from a Digital Abbot / DigitAlchemy tap
   if (pic.id !== "scene" && await offerRefs(env, deps, pick)) return true;   // v548 - he chooses the photo of himself, as Najjuko does
   await showPreview(env, deps, pick);
   return true;
@@ -952,7 +953,7 @@ async function handleButton(env, deps, id) {
   if (/^dp:(i|p|b|t):/.test(String(id))) return flowTap(env, deps, id);   // v547
   if (/^dp:r:/.test(String(id))) return refTap(env, deps, id);   // v548 - his chosen photo
   if (/^dp:(fn|fi|fp):/.test(String(id))) { await deps.send(env, OLD_LIST); return true; }   // v547 - lists from before the rewrite
-  if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 3600); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
+  if (id === "dp:start:abbot" || id === "dp:start:alchemy") { const lane = id.slice(9); await kvPut(env, "desk_post_wait", lane, 1200); await deps.send(env, "Type the idea in one line (your next message), for example: why a handover needs one owner. Or send a photo with it as the caption."); return true; }
   const mm = String(id).match(/^dp:([a-z0-9]+):(music|nomusic|muse|mtry|mno|vc_none|vc_bottom|vc_scroll|m_(calm|corporate|upbeat|cinematic|inspiring))$/);   // v467 - music; v493 vc_ captions
   if (mm) { const pm = await getPlan(env, mm[1]); if (!pm) { await deps.send(env, "That draft has expired."); return true; } return musicStep(env, deps, pm, mm[2], mm[3]); }
   // v468 - the change buttons: New picture, and More options (a list: rewrite, shorter, punchier, more formal, other background, Arabic, type a change, skip)
@@ -1186,9 +1187,7 @@ export async function deskPostRoute(env, msg, text, deps) {
   // v474 (Kendall 10 Oct: "if I want to do one now") - "feed now": the full 05:00/16:00 package on demand - the nine ideas now, then the
   // three drafts on the next minute ticks (the same path the scheduled run takes). A run already under way is not doubled.
   if (/^\/?feed\s+now$/i.test(t)) {
-    const now = nowOf(deps), day = dayKey(now), st = await kvJ(env, "desk_morning_state", null);
-    if (st && st.day === day && st.step >= 1 && st.step < 4) { await deps.send(env, "A feed is already on its way; its drafts are still arriving."); return true; }
-    await kvPut(env, "desk_morning_state", { day, hr: dub(now).getUTCHours(), step: 1, forced: true }, 3 * 86400);
+    // v549 - the feed is ideas only (v488); nothing else is started here
     await deps.send(env, "Fresh DigitAlchemy feed: the ideas are below. Tap one to make it into a post.");
     await sendFeed(env, deps);
     return true;
@@ -1261,7 +1260,7 @@ async function widePicture(env, deps, p) {
   const refs = [];
   const orig = s.img_key ? await env.MEETINGS.get("igm_" + s.img_key, "arrayBuffer") : null;
   if (orig && orig.byteLength) refs.push(orig);
-  if (person) { const r = await pickRefs(env, p.idea, p.picture); if (r.count >= REF_MIN) refs.push(...r.bufs.slice(0, 2)); }
+  if (person) { const ch = p.ref ? await refBuf(env, p.ref) : null; if (ch) refs.push(ch); else { const r = await pickRefs(env, p.idea, p.picture); if (r.count >= REF_MIN) refs.push(...r.bufs.slice(0, 1)); } }   // v549 - the photo he chose; else one, as everywhere
   await deps.send(env, "Making a widescreen version of " + p.id + "...");
   const g = await genImage(env, deps, base + " WIDESCREEN: recreate the FIRST reference image as a wide 3:2 landscape picture. Keep everything in it the same: the same person, face, clothes, pose and expression, the same room, light, colours and view. Only extend the scene naturally to the left and right, with the person in the centre third. No blur, no borders, no text.", refs.length ? refs : null, "1536x1024");
   if (g.err) { await deps.send(env, "Could not make the widescreen picture: " + (g.cap ? "the monthly picture budget is used up" : g.err) + "."); return; }
@@ -1417,17 +1416,8 @@ export async function deskMorningTick(env, deps) {
     return { step: 0 };
   }
   // v488 - a run left half-way by the old three-drafts version (step 1-3) simply stops: no more drafts
-  if (s.step < 4) { s.step = 4; s.stopped = "v488 ideas only"; await kvPut(env, "desk_morning_state", s, 3 * 86400); return { done: true }; }
-  const L = await kvJ(env, "desk_ideas", []);
-  const pickOf = (pred) => L.find(pred);
-  const plan = [
-    { it: pickOf((o) => o.kind === "news"), lane: "alchemy", picture: "scene", background: "skyline" },
-    { it: pickOf((o) => o.kind === "motivation" || o.kind === "friday"), lane: "abbot", picture: "scene", background: "terrace", kind: "motivation" },
-    { it: pickOf((o) => o.kind === "alchemy") || pickOf((o) => o.kind === "smart"), lane: "alchemy", picture: "site", background: "site" },
-  ][s.step - 1];
-  s.step++; await kvPut(env, "desk_morning_state", s, 3 * 86400);
-  if (plan && plan.it) await newPlan(env, deps, plan.it.text, plan.lane, [], { forceType: "image", picture: plan.picture, background: plan.background, kind: plan.kind || plan.it.kind || undefined, morning: day + "@" + s.hr, source_link: plan.it.link || undefined });
-  return { step: s.step - 1 };
+  // v488 - a run left half-way by the old three-drafts version (step 1-3) simply stops; v549: the three-drafts code itself is removed
+  s.step = 4; s.stopped = "v488 ideas only"; await kvPut(env, "desk_morning_state", s, 3 * 86400); return { done: true };
 }
 // "feed times", "feed times 5,16", "feed times off" (also "morning ...") - when the DigitAlchemy feed arrives (Dubai time)
 async function morningCommand(env, deps, arg) {
