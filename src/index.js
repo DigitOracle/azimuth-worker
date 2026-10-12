@@ -8928,12 +8928,12 @@ let AMTAG=null;function amTagSet(i){AMTAG=i||null}
 // v550 (Kendall 12 Oct, film session) - an EV or petrol station is named by the building it stands on (our register name, footprint within
 // 25 m), else by DEWA's label without its area prefix ("J.ALI-"); the connector code ("62196-2") never shows. Rows and tag agree.
 let AMCB=false;
-function amClean(s){return String(s||"").replace(/^[A-Z][A-Z.]{1,9}\s*-\s*/,"").trim()}
-function amExtra(i){return String(i.x||"").split(/\s*\u00b7\s*/).filter(p=>p&&!/^\d{4,6}(-\d+)?$/.test(p.trim())&&!/^(type|iec|ccs|chademo)\b/i.test(p.trim())).join(" \u00b7 ")}
+function amClean(s){return String(s||"").replace(/^[A-Z][A-Z.]{1,9}\\s*-\\s*/,"").trim()}
+function amExtra(i){return String(i.x||"").split(/\\s*\\u00b7\\s*/).filter(p=>p&&!/^\\d{4,6}(-\\d+)?$/.test(p.trim())&&!/^(type|iec|ccs|chademo)\\b/i.test(p.trim())).join(" \\u00b7 ")}
 function amLabel(i){if(i.k!=="ev"&&i.k!=="fuel")return{n:i.n,x:i.x||""};
   let bn=null;if(typeof CB!=="undefined"&&CB&&CB.items&&i.lon!=null){const q=llx(i.lon,i.lat);const j=nearestInst(q[0],q[1],-1,25);const it=j>=0?instItem(j):null;if(it&&it.n)bn=it.n}
   const own=amClean(i.n),x=amExtra(i);
-  if(bn)return{n:bn,x:[x,(own&&own.toLowerCase()!==String(bn).toLowerCase()&&String(bn).toLowerCase().indexOf(own.toLowerCase())<0&&own.toLowerCase().indexOf(String(bn).toLowerCase())<0)?own:""].filter(Boolean).join(" \u00b7 ")};
+  if(bn)return{n:bn,x:[x,(own&&own.toLowerCase()!==String(bn).toLowerCase()&&String(bn).toLowerCase().indexOf(own.toLowerCase())<0&&own.toLowerCase().indexOf(String(bn).toLowerCase())<0)?own:""].filter(Boolean).join(" \\u00b7 ")};
   return{n:own||i.n,x}}
 function amTagDraw(W,H,r){const i=AMTAG;if(!i||!AMON[i.k]||i.lon==null)return;const q0=llx(i.lon,i.lat);const q=new THREE.Vector3(q0[0],6,q0[1]).project(cam);if(q.z>1||q.x<-1.05||q.x>1.05||q.y<-1.05||q.y>1.05)return;
   const x=(q.x+1)/2*W*r,y=(1-q.y)/2*H*r,L=34*r;const lb=amLabel(i),k1=String(lb.n||""),k2=(String(AMEN[i.k][0]||"")+(lb.x?" \u00b7 "+lb.x:"")+(i.ap?" \u00b7 position approximate":"")).toUpperCase();

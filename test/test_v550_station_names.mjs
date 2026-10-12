@@ -5,7 +5,8 @@ let pass = 0, fail = 0;
 const ok = (c, m, x) => { if (c) pass++; else { fail++; console.log("FAIL", m, x === undefined ? "" : JSON.stringify(x)); } };
 const src = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const a = src.indexOf("let AMCB=false;"), b = src.indexOf("\nfunction amTagDraw", a);
-let js = src.slice(a, b).replace(/\\\\/g, "\\");
+// the script exactly as the browser receives it: the source is a template literal, so cook it (single backslashes vanish there)
+let js = new Function("return `" + src.slice(a, b) + "`")();
 // stand-ins for the page: one named footprint at the station, none elsewhere
 const f = new Function("llx", "nearestInst", "instItem", "CB", js + "\nreturn { amClean, amExtra, amLabel };");
 const named = f((lon, lat) => [lon, lat], (x) => (x === 55.14 ? 7 : -1), (j) => (j === 7 ? { n: "Marina Arcade Tower" } : null), { items: [1] });
