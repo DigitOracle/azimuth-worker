@@ -41,8 +41,8 @@ async function makePoster() {
 }
 const pv = await makePoster();
 ok(layoutRows && layoutRows.length === 10 && layoutRows[0].title === "Any (desk picks)" && layoutRows.some((r) => r.title === "Big figure") && layoutRows.every((r) => /^dp:l:[a-z0-9]{10,}:\d+$/.test(r.id)), "v552: the layout list - Any, then nine named layouts, each row carrying the choice", JSON.stringify(layoutRows));
-ok(pv && /Layout: the desk picks one/.test(pv.b), "v552: the preview says the layout", pv && pv.b);
-ok(pv && /its layout matched to the idea and never the same as the last one/.test(pv.b) && /Portrait/.test(pv.b), "the preview describes the poster, portrait, with no shape or words step", pv && pv.b);
+ok(pv && /A poster, the layout chosen to suit the idea, with you in it/.test(pv.b) && !/twelve layouts/.test(pv.b), "v553: the preview says the layout in one line", pv && pv.b);
+ok(pv && /A poster/.test(pv.b) && /Portrait/.test(pv.b), "the preview describes the poster, portrait, with no shape or words step", pv && pv.b);
 const before = calls.length; await btn(pv.x[0].id); await (await import("../src/desk_post.js")).deskJobTick(env, deps);   // v548 - the minute tick
 const c = calls[calls.length - 1], p = plans().filter((x) => x.picture === "poster").pop();
 ok(calls.length === before + 1 && c.size === "1024x1536" && c.refs === 1, "Make it: one portrait picture, made with ONE of his reference photos (v537)", JSON.stringify({ n: calls.length - before, size: c.size, refs: c.refs }));

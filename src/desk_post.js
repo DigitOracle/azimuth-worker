@@ -825,12 +825,14 @@ export const WORDS_LIST = [{ id: "none", label: "No words" }, { id: "headline", 
 export function scenePreview(pick) {
   const pic = PICTURE_CHOICES.find((x) => x.id === pick.picture), bg = pick.background === "custom" ? pick.bg_text : (BACKGROUND_CHOICES.find((x) => x.id === pick.background) || {}).label;
   const tm = TIME_CHOICES.find((x) => x.id === pick.tod), sh = SHAPE_LIST.find((x) => x.id === pick.shape);
-  const who = pick.picture === "poster" ? "A poster, its layout matched to the idea and never the same as the last one: one of twelve layouts (full-bleed photo, big figure, quote, timeline, magazine cover, three cards, before and after, big question, news-style site shot, checklist, annotated photo, bold type with your portrait). You in it (from your reference photos). Portrait. The words are written for you and checked on the picture."
+  // v553 - the poster line names the chosen layout instead of listing all twelve (Kendall's 12:16 preview said both)
+  const LP = pick.picture === "poster" ? LAYOUT_PICK.find((x) => x[0] === (pick.layout || "")) : null;
+  const who = pick.picture === "poster" ? (LP && LP[0] ? "A poster in the " + LP[1].toLowerCase() + " layout" : "A poster, the layout chosen to suit the idea") + ", with you in it. The words are written for you and checked on the picture."
     : pick.picture === "scene" ? "A scene, no person in it." : pick.picture === "speaking" ? "You, speaking or teaching, your face from your reference photos." : "You on site in a hard hat and hi-vis, your face from your reference photos.";
   const wd = WORDS_LIST.find((x) => x.id === pick.words);
   let s = "Here's the picture I'll make:\n\n" + who + " Behind: " + (bg || "a Dubai setting") + ". " + (tm ? tm.label : "Natural daylight") + ". " + (sh ? sh.label : "Square") + "." + (wd && wd.id !== "none" ? " Words: " + wd.label.toLowerCase() + " (the post's headline)." : "") + "\nIdea: " + pick.idea;
   if (pick.ref && pick.picture !== "scene") s += "\nYour face from: photo " + (pick.ref_no || "#" + pick.ref) + " (the one you chose).";
-  if (pick.picture === "poster") { const L = LAYOUT_PICK.find((x) => x[0] === (pick.layout || "")); s += "\nLayout: " + (L && L[0] ? L[1].toLowerCase() : "the desk picks one to suit the idea") + "."; }
+  if (pick.picture === "poster") {}
   else if ((pick.words || "none") === "none") s += "\nWant words on it? Tap Change it and say: add the headline on the picture. Or choose Poster with words.";
   for (const c of (pick.changes || [])) s += "\nYour change: " + c;
   return s.slice(0, 1000);
