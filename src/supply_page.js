@@ -143,6 +143,8 @@ export function attachAdverts(buildings, adverts) {
     b.ads = ads;
     let pm = null; for (const band in ads) for (const x of ads[band]) if (x.price != null && x.price > 0 && (pm == null || x.price < pm)) pm = x.price;
     b.pmin = pm;   // v529 - for the budget slider
+    const pt = {}; for (const band in ads) for (const x of ads[band]) if (x.type && x.price > 0 && (pt[x.type] == null || x.price < pt[x.type])) pt[x.type] = x.price;
+    b.pmint = pt;   // v532 - the cheapest asking rent per home type, so the card follows the type filter (Kendall 12 Oct: "there is still a mismatch")
   }
   return n >= s ? { s, w, n, e } : null;
 }
@@ -487,7 +489,7 @@ export function streetMap(lat, lon, name, fp, line) {
 }
 function buildingCard(b, key, more) {
   const siteN = b.siteCount || Object.keys(b.urls).length;
-  return '<div class="card' + (more ? " htx htmore" : "") + '" data-b="' + esc(b.id) + '" data-types="' + esc((b.types || []).join("|")) + '" data-tc="' + esc(Object.keys(b.tc || {}).map((t) => t + ":" + b.tc[t]).join("|")) + '" data-pmin="' + (b.pmin != null ? Math.round(b.pmin) : "") + '"><div class=kt>' + (b.matched ? "BUILDING" : "LISTING SITE NAME") + '</div><div class=nm>' + esc(b.name)
+  return '<div class="card' + (more ? " htx htmore" : "") + '" data-b="' + esc(b.id) + '" data-types="' + esc((b.types || []).join("|")) + '" data-tc="' + esc(Object.keys(b.tc || {}).map((t) => t + ":" + b.tc[t]).join("|")) + '" data-pmin="' + (b.pmin != null ? Math.round(b.pmin) : "") + '" data-pmt="' + esc(Object.keys(b.pmint || {}).map((t) => t + ":" + Math.round(b.pmint[t])).join("|")) + '"><div class=kt>' + (b.matched ? "BUILDING" : "LISTING SITE NAME") + '</div><div class=nm>' + esc(b.name)
     + (b.matched ? "" : '<span class=tg>not matched to the register</span>') + "</div>"
     + '<div class=sb>' + esc([b.matched && b.project && b.project !== b.name ? b.project : "", b.district].filter(Boolean).join(" \u00b7 ")) + "</div>"
     + '<div class=hl><b>' + fmt(b.live) + "</b> " + (b.live === 1 ? "advert" : "adverts") + (siteN ? " across " + siteN + (siteN === 1 ? " site" : " sites") : "") + "</div><div class=htn hidden></div>" + (b.pmin != null ? '<div class=pmn>from <b>AED ' + fmt(b.pmin) + "</b> a year</div>" : "")
@@ -718,9 +720,12 @@ var S=window.__SU||{},KQ="key="+encodeURIComponent(S.key||""),LS="najma_supply_p
   var STEPS=` + JSON.stringify(BUDGET_STEPS) + String.raw`,br=document.getElementById("subudr"),bv=document.getElementById("subudv"),hl=document.getElementById("suhl"),hl0=hl?hl.innerHTML:"";
   function bud(){return br?STEPS[+br.value]:null}
   if(br)br.oninput=function(){var v=bud();if(bv)bv.textContent=v==null?"any":"up to AED "+v.toLocaleString("en-US");apply()};
+  function tmin(c,on){var m=0;(c.getAttribute("data-pmt")||"").split("|").forEach(function(x){var i=x.lastIndexOf(":");if(i>0&&on.indexOf(x.slice(0,i))>=0){var v=+x.slice(i+1);if(v>0&&(!m||v<m))m=v}});return m}
+  function fmtA(v){return Math.round(v).toLocaleString("en-US")}
   function apply(){var on=[];ps.forEach(function(p){if(p.classList.contains("on"))on.push(p.getAttribute("data-ht"))});var n=0,names=[];
-    document.querySelectorAll(".card[data-types]").forEach(function(c){var ts=(c.getAttribute("data-types")||"").split("|"),bmax=bud(),pm=+(c.getAttribute("data-pmin")||0),okB=bmax==null||(pm>0&&pm<=bmax),hit=(!on.length&&bmax==null)?!c.classList.contains("htmore"):((!on.length||on.some(function(t){return ts.indexOf(t)>=0}))&&okB);c.classList.toggle("htx",!hit);if(hit&&(on.length||bmax!=null))n++;
-      var tn=c.querySelector?c.querySelector(".htn"):null;if(tn){if(on.length&&hit){var tc={},k2=0;(c.getAttribute("data-tc")||"").split("|").forEach(function(x){var i=x.lastIndexOf(":");if(i>0)tc[x.slice(0,i)]=+x.slice(i+1)});on.forEach(function(t){k2+=tc[t]||0});tn.hidden=false;tn.innerHTML="<b>"+k2+"</b> of its adverts "+(k2===1?"is ":"are ")+on.map(function(t){var p=document.querySelector('.htp[data-ht="'+t+'"]');return p?p.firstChild.textContent.trim():t}).join(" or ")}else{tn.hidden=true;tn.innerHTML=""}}});   // v526
+    document.querySelectorAll(".card[data-types]").forEach(function(c){var ts=(c.getAttribute("data-types")||"").split("|"),bmax=bud(),pm=on.length?tmin(c,on):+(c.getAttribute("data-pmin")||0),okB=bmax==null||(pm>0&&pm<=bmax),hit=(!on.length&&bmax==null)?!c.classList.contains("htmore"):((!on.length||on.some(function(t){return ts.indexOf(t)>=0}))&&okB);c.classList.toggle("htx",!hit);if(hit&&(on.length||bmax!=null))n++;
+      var tn=c.querySelector?c.querySelector(".htn"):null;if(tn){if(on.length&&hit){var tc={},k2=0;(c.getAttribute("data-tc")||"").split("|").forEach(function(x){var i=x.lastIndexOf(":");if(i>0)tc[x.slice(0,i)]=+x.slice(i+1)});on.forEach(function(t){k2+=tc[t]||0});var nm2=on.map(function(t){var p=document.querySelector('.htp[data-ht="'+t+'"]');return p?p.firstChild.textContent.trim():t}).join(" or ");var hl2=c.querySelector(".hl");if(hl2){if(hl2.getAttribute("data-h0")==null)hl2.setAttribute("data-h0",hl2.innerHTML);hl2.innerHTML="<b>"+k2+"</b> "+nm2+" "+(k2===1?"advert":"adverts")+'<span class=hlsub>'+hl2.getAttribute("data-h0").replace(/<[^>]+>/g,"")+" in all</span>"}tn.hidden=true;tn.innerHTML="";
+        var pe=c.querySelector(".pmn"),tm=tmin(c,on);if(pe){if(pe.getAttribute("data-p0")==null)pe.setAttribute("data-p0",pe.innerHTML);if(tm){pe.hidden=false;pe.innerHTML="from <b>AED "+fmtA(tm)+"</b> a year for "+nm2}else{pe.hidden=true}}}else{tn.hidden=true;tn.innerHTML="";var hl3=c.querySelector(".hl");if(hl3&&hl3.getAttribute("data-h0")!=null)hl3.innerHTML=hl3.getAttribute("data-h0");var pe3=c.querySelector(".pmn");if(pe3&&pe3.getAttribute("data-p0")!=null){pe3.innerHTML=pe3.getAttribute("data-p0");pe3.hidden=false}}}});   // v526
     ps.forEach(function(p){if(p.classList.contains("on"))names.push(p.firstChild.textContent.trim())});
     var bm=bud(),tot=0;ps.forEach(function(p){if(p.classList.contains("on")){var bb=p.querySelector?p.querySelector("b"):null;tot+=bb?+bb.textContent.replace(/[^0-9]/g,""):0}});
     if(hl){if(on.length||bm!=null){hl.innerHTML=(on.length?"<b>"+tot.toLocaleString("en-US")+"</b> "+names.join(" or ")+" adverts &middot; ":"")+"<b>"+n+"</b> "+(n===1?"building":"buildings")+(bm!=null?" with a listing up to AED "+bm.toLocaleString("en-US")+" a year":"")+'<span class=hlsub>'+hl0.replace(/<[^>]+>/g,"")+" in all</span>"}else hl.innerHTML=hl0}
