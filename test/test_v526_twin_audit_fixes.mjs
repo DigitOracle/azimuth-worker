@@ -13,6 +13,6 @@ ok(/#hd\{max-width:calc\(100vw - 160px\)\}#hd h1\{font-size:17px/.test(ix) && /#
 ok(/if\(d\.slug==="goldensymphony"\)e\.style\.display="none";/.test(ix) && /if\(D\.districts\[ix\]\.slug==="goldensymphony"\)return;/.test(ix), "the pilot slug is neither labelled nor offered as a district");
 ok(/Loading the listings&hellip;/.test(dm) && /replace\(\/\\s\*-\\s\*\\d\+\$\/,''\)/.test(dm), "by developer: a loading line; a register name numbered '- 3' matches its listing's name");
 const sp = fs.readFileSync(new URL("../src/supply_page.js", import.meta.url), "utf8");
-ok(/data-tc="' \+ esc\(Object\.keys\(b\.tc/.test(sp) && /<div class=htn hidden><\/div>/.test(sp) && /tn\.innerHTML="<b>"\+k2\+"<\/b> of its adverts "/.test(sp), "with a pill on, each card says how many of ITS adverts are that type");
+ok(/data-tc="' \+ esc\(Object\.keys\(b\.tc/.test(sp) && /<div class=htn hidden><\/div>/.test(sp) && /hl2\.innerHTML="<b>"\+k2\+"<\/b> "\+nm2/.test(sp), "with a pill on, each card counts ITS adverts of that type (v532: in the big number, the total underneath)");
 console.log(`v526 twin audit fixes: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
