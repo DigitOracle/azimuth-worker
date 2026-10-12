@@ -2310,6 +2310,13 @@ async function appFetch(request, env, ctx) {
       const _ir = await refImport(env, _ib && _ib.ids, (_ib && _ib.tag) || "general", url.searchParams.get("apply") === "1", Date.now());
       return new Response(JSON.stringify(_ir, null, 2), { status: _ir.ok ? 200 : 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
     }
+    if (url.pathname === "/desk_ref_img" && request.method === "GET") {   // v543 - owner key; one approved reference photo by number, for checking which photos the pictures start from
+      if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      let _rm = null; try { _rm = JSON.parse(await env.MEETINGS.get("desk_ref_" + String(Number(url.searchParams.get("n")) || 0)) || "null"); } catch (e) {}
+      const _rb = _rm && _rm.key ? await env.MEETINGS.get(_rm.key, "arrayBuffer") : null;
+      if (!_rb) return new Response("not found", { status: 404 });
+      return new Response(_rb, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "no-store", "X-Look": JSON.stringify(_rm.look || null) } });
+    }
     if (url.pathname === "/desk_ref_classify" && request.method === "GET") {   // v542 - owner key; looks at each reference photo once (glasses, face clear); redo=1 looks again
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       return new Response(JSON.stringify(await refClassify(env, deskPostDeps(env), url.searchParams.get("redo") === "1"), null, 1), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
