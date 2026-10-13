@@ -10,11 +10,11 @@ const band = { flats: 28, adverts: 102, pmin: 75000, pmax: 145000, med_days: 16,
 const doc = { advertised: { as_of: "2026-10-10", buildings: { p4: { key: "businessbay:647", bands: { studio: band } } } } };
 const a = advertisedForKey(advertisedDoc(doc), "businessbay:647");
 const sum = advertisedHtml(a, { summary: true }), full = advertisedHtml(a);
-ok(/AED 90k<small> typical a year/.test(sum) && /middle half AED 84k–105k/.test(sum), "summary: typical rent and the middle half of the flats", sum);
+ok(/AED 90k<small> a year/.test(sum) && !/middle half/.test(sum), "v561 summary: typical rent only, no middle half", sum);
 ok(!/75k–145k/.test(sum), "summary: never the cheapest-to-dearest advert range");
-ok(/1 flat priced far from the rest: check the advert/.test(sum), "summary: the flat priced far from the rest is flagged, not used as the range");
-ok(/30 days listed \(median per flat\)/.test(sum) && !/16 days/.test(sum), "summary: days listed per flat");
-ok(/6 new flats/.test(sum) && /17 adverts<\/?\w*>? ?gone this week|17 adverts gone this week/.test(sum.replace(/<svg[\s\S]*?<\/svg>/g, "")), "summary: new FLATS and adverts gone, each labelled", sum.replace(/<svg[\s\S]*?<\/svg>/g, ""));
+ok(!/priced far from the rest/.test(sum), "v561 summary: no outlier line on the short card");
+ok(/30 days listed</.test(sum.replace(/<svg[\s\S]*?<\/svg>/g, "")) && !/16 days/.test(sum), "v561 summary: days listed per flat, short wording");
+ok(!/gone this week/.test(sum) && !/adverts<\/small>/.test(sum), "v561 summary: no new/gone line and no advert count on the bedroom cards");
 ok(/AED 75k–145k/.test(full) && /16 days listed \(median\)/.test(full) && /35 new/.test(full), "without the option the card is exactly as before (the Start menu page)");
 
 // an older file (no per-flat figures): the summary falls back to the old card, unchanged

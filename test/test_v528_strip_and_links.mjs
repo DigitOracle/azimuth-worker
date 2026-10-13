@@ -11,7 +11,7 @@ ok(/if\(!j\|\|!j\.covered\|\|\(!j\.flats&&!j\.adverts\)\)\{b\.remove\(\)\}else/.
 const doc = { advertised: { as_of: "2026-10-11", buildings: { s: { key: "businessbay:1", bands: { studio: { flats: 3, adverts: 5, f_pmed: 90000, f_p25: 85000, f_p75: 95000, f_days: 10 } } } } } };
 const a = advertisedForKey(advertisedDoc(doc), "businessbay:1");
 const h = advertisedHtml(a, { summary: true, links: { studio: "https://www.propertyfinder.ae/en/plp/rent/x.html" } });
-ok(/<a class=avl href="https:\/\/www\.propertyfinder\.ae\/en\/plp\/rent\/x\.html" target=_blank rel="noopener noreferrer">See the cheapest listing &#8599;<\/a>/.test(h), "the bedroom card links to its cheapest listing");
+ok(/<a class=avl href="https:\/\/www\.propertyfinder\.ae\/en\/plp\/rent\/x\.html" target=_blank rel="noopener noreferrer">Cheapest &#8599;<\/a>/.test(h), "the bedroom card links to its cheapest listing");
 ok(!/class=avl/.test(advertisedHtml(a, { summary: true })), "no link on file, no link drawn");
 const cb = fs.readFileSync(new URL("../src/city_bldg.js", import.meta.url), "utf8");
 ok(/\/\^https:\\\/\\\/www\\\.propertyfinder\\\.ae\\\/\[\^\\s"'<>\]\*\$\/\.test\(a\.u\)/.test(cb), "only propertyfinder.ae pages become links");

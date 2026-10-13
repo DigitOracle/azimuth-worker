@@ -98,14 +98,13 @@ function bandCard(k, x, counted) {
 function bandCardSummary(k, x, counted, link) {
   if (x.fmed == null) return bandCard(k, x, counted);       // a file built before the per-flat figures: the old card, unchanged
   const mid = x.f25 != null && x.f75 != null && x.f25 !== x.f75 ? "middle half AED " + kAed(x.f25) + "–" + kAed(x.f75) : "";
+  // v561 (Kendall 13 Oct: "too much text") - four lines only: band, flats, typical rent, days listed; the rest is in the building page
+  void mid;
   return '<div class=avc><div class=avk>' + IC_HOME + esc(BAND_SAY[k] || k) + "</div>"
-    + '<div class=avn><b>' + (counted ? fmt(x.flats) : "—") + "</b><small>" + (counted ? (x.flats === 1 ? "flat" : "flats") : "flats not counted yet") + " · " + pl(x.adverts, "advert", "adverts") + "</small></div>"
-    + '<div class=avf>' + IC_TAG + "AED " + esc(kAed(x.fmed)) + "<small> typical a year</small></div>"
-    + (mid ? '<div class=avf><small>' + esc(mid) + "</small></div>" : "")
-    + (x.fchk ? '<div class=avf><small>' + pl(x.fchk, "flat", "flats") + " priced far from the rest: check the advert</small></div>" : "")
-    + (x.fdays != null ? '<div class=avf>' + IC_CLOCK + fmt(x.fdays) + " days listed (median per flat)</div>" : "")
-    + '<div class=avf>' + IC_UP + pl(x.fnew != null ? x.fnew : x.newWk, "new flat", "new flats") + " · " + IC_DOWN + pl(x.goneWk, "advert", "adverts") + " gone this week</div>"
-    + (link ? '<a class=avl href="' + esc(link) + '" target=_blank rel="noopener noreferrer">See the cheapest listing &#8599;</a>' : "") + "</div>";   // v528
+    + '<div class=avn><b>' + (counted ? fmt(x.flats) : "—") + "</b><small>" + (counted ? (x.flats === 1 ? "flat" : "flats") : "flats not counted yet") + "</small></div>"
+    + '<div class=avf>' + IC_TAG + "AED " + esc(kAed(x.fmed)) + "<small> a year</small></div>"
+    + (x.fdays != null ? '<div class=avf>' + IC_CLOCK + fmt(x.fdays) + " days listed</div>" : "")
+    + (link ? '<a class=avl href="' + esc(link) + '" target=_blank rel="noopener noreferrer">Cheapest &#8599;</a>' : "") + "</div>";   // v528
 }
 // v524 - one building's listings, found by its register key, else by the project-name key the crawler sometimes files under (Peninsula Five)
 export function advertisedLookup(A, key, name) {
