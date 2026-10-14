@@ -89,6 +89,23 @@ const wkb = await (await req("/momo/work/plan/week?from=2026-11-16")).text();
 ok(/BLOG POSTS DUE/.test(wkb) && /Big 5 Global/.test(wkb) && /16 Nov/.test(wkb), "the week of 16 Nov lists the blog post for Big 5 (23 Nov), due 16 Nov", wkb.match(/BLOG POSTS DUE[\s\S]{0,300}/)?.[0]?.replace(/<[^>]+>/g, " "));
 const wkn = await (await req("/momo/work/plan/week?from=2026-10-12")).text();
 ok(!/BLOG POSTS DUE/.test(wkn), "a week with no blog due carries no blog section");
+// v596: what we do with an item (suggested, then decided), and partners inside Industry related
+const v6 = await (await req("/momo/work/plan/api")).json();
+ok(v6.activities.map((x) => x[0]).join() === "social,workshop,team,attend", "the four things we can do with an item");
+const nat6 = v6.items.find((i) => i.id === "k_national_2026"), big6 = v6.items.find((i) => i.id === "m_big5_2026");
+ok(nat6.suggest.join() === "social,team" && big6.suggest.join() === "attend,social" && (nat6.activity || []).length === 0, "National Day suggests a post and a team event; Big 5 suggests attending and a post; nothing is decided for her");
+const dec = await (await req("/momo/work/plan/api", { action: "item_save", item: { ...nat6, activity: ["team", "bogus", "social"] } })).json();
+ok(dec.item.activity.join() === "team,social" && !("suggest" in dec.item), "her decision is kept (unknown values dropped) and suggestions are not stored");
+const pt = await (await req("/momo/work/plan/api", { action: "item_save", item: { title: "Mortgage partner workshop", start: "2026-11-18", pillar: "market", sub: "partner", source: "bayut.com" } })).json();
+ok(pt.item.sub === "partner" && pt.item.source === "https://bayut.com/", "a partner (mortgage broker, portal) is an industry item flagged as a partner", pt.item);
+const pg2 = (await (await req("/momo/work/plan/api")).json()).items.find((i) => i.id === pt.item.id);
+ok(pg2.suggest.join() === "workshop,social", "a partner suggests a workshop and a post");
+const pgh = await (await req("/momo/work/plan")).text();
+ok(/psub/.test(pgh) && /Partners/.test(pgh) && /What we do with it/.test(pgh), "the Plan page has the partner filter and the what-we-do row");
+let okjs2 = false; try { new Function(pgh.match(/<script>([\s\S]*)<\/script>/)[1]); okjs2 = true; } catch (e) { console.log(String(e)); }
+ok(okjs2, "the Plan page script still parses");
+const wkx = await (await req("/momo/work/plan/week?from=2026-11-30")).text();
+ok(/What we do/.test(wkx) && /Social post|Team event/.test(wkx), "the weekly PDF says what we do with each item");
 const own = await req("/momo/work/plan/api", null, false);
 ok(own.status === 404, "anyone but Najjuko gets nothing");
 const own2 = await req("/momo/work/plan", null, false);

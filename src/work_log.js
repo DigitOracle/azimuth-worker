@@ -422,6 +422,17 @@ export async function workRoute(request, env, url, deps) {
       return J({ ok: true, doc: rec });
     }
     // v583 VET (Kendall 14 Oct: "if she mentions she's meeting with a particular vendor, you perform your due diligence") - the engine's /vet, same secret
+    // v597 (Kendall 14 Oct: "the data thread wired into Momo Work"): an AREA card for any place an entry names. The engine's /area answers from lk_area_thread (a sentence per topic, with its
+    // sources and as_of; expired Google rows are never returned; ambiguous names return candidates and pick none). Google-derived sentences must show the attribution line.
+    if (b.action === "area") {
+      if (!env.ASK_ENGINE_URL || !env.ASK_SECRET) return J({ status: "error", error: "not_connected" });
+      const payload = b.list ? { list: true } : { name: String(b.name || "").trim().slice(0, 120) };
+      if (!b.list && payload.name.replace(/[^a-z]/gi, "").length < 2) return J({ error: "Give the place name." }, 400);
+      try {
+        const r = await fetch(String(env.ASK_ENGINE_URL).replace(/\/+$/, "") + "/area", { method: "POST", headers: { "Content-Type": "application/json", "X-Ask-Secret": String(env.ASK_SECRET) }, body: JSON.stringify(payload) });
+        return J(await r.json());
+      } catch (e) { return J({ status: "error", error: "busy" }); }
+    }
     if (b.action === "vet") {
       const name = String(b.name || "").trim().slice(0, 120), hint = String(b.hint || "").slice(0, 120);
       if (name.replace(/[^a-z]/gi, "").length < 3) return J({ error: "Give the company name." }, 400);
@@ -813,6 +824,23 @@ function opt(v,nm,on,ic){return '<div class="opt'+(on?' on':'')+'" data-v="'+esc
 function kpiOf(id){return D.kpis.filter(function(k){return k.id===id})[0]}
 function brokerLabel(id){var r="";(D.broker_tasks||[]).forEach(function(g){g.items.forEach(function(i){if(i[0]===id)r=i[1]})});return r}
 function brokerSummary(){var t=PREV.broker_tasks||[];return t.length?brokerLabel(t[0])+(t.length>1?" +"+(t.length-1):""):"What kind of broker work?"}
+function areaSheet(){
+ var start=(PREV.prep&&(PREV.prep.area||PREV.prep.project))||"";
+ sheet("About the area",'<input id=ar_n class=sin value="'+esc(start)+'" placeholder="A district or community: JVC, Business Bay, Damac Hills..." style="width:100%;margin-bottom:8px"><button type=button class=gold id=ar_go style="width:100%">Look it up</button><div id=ar_out style="margin-top:10px"></div>',function(s){
+  var out=s.querySelector("#ar_out"),inp=s.querySelector("#ar_n");
+  var draw=function(j){
+   if(!j||j.error||j.status==="error"){out.innerHTML='<div class=line>I could not reach the area data just now. Try again in a minute.</div>';return}
+   if(j.status==="ambiguous"){out.innerHTML='<div class=line>Which one?</div>'+(j.candidates||[]).map(function(c,k){return '<div class=fr data-c="'+k+'"><b>'+esc(c.name||c)+'</b><span>'+esc(c.level||"")+'</span><i>&#8250;</i></div>'}).join("");
+    out.querySelectorAll("[data-c]").forEach(function(e){e.onclick=function(){var c=j.candidates[+e.getAttribute("data-c")];inp.value=c.name||c;go()}});return}
+   if(j.status!=="ok"){out.innerHTML='<div class=line>'+(j.status==="stale"?"The figures for this place have expired and are being refreshed.":"I do not hold this place. The area data covers 37 Dubai districts and their communities and buildings.")+'</div>';return}
+   var m=j.matched||{},h='<h4 style="margin:0 0 6px;color:#0A4F4A">'+esc(m.name||"")+(m.district_name&&m.level!=="district"?' <small style="color:#5F6B66">in '+esc(m.district_name)+'</small>':'')+'</h4>';
+   (j.items||[]).forEach(function(i){h+='<div class=ent style="margin:6px 0"><div class=m>'+esc(i.label||i.topic)+'</div><div class=line style="margin:2px 0">'+esc(i.summary)+'</div><div class=line style="margin:2px 0;font-size:.74rem;color:#5F6B66">'+esc((i.sources||[]).join(" · "))+(i.as_of?' · as of '+esc(i.as_of):'')+'</div></div>'});
+   if(!(j.items||[]).length)h+='<div class=line>Nothing recorded for this place yet.</div>';
+   if(j.communities&&j.communities.length)h+='<div class=line style="margin-top:8px">Communities here: '+j.communities.slice(0,8).map(function(c){return esc(c.name)}).join(", ")+(j.communities.length>8?" and "+(j.communities.length-8)+" more":"")+'</div>';
+   h+='<div class=line style="margin-top:8px;font-size:.72rem;color:#5F6B66">'+esc(j.attribution||"Includes Google Maps Platform data. Google ratings and counts are shown as of the date given and are refreshed every 30 days.")+'</div>';
+   out.innerHTML=h};
+  var go=function(){var n=inp.value.trim();if(!n)return;out.innerHTML='<div class=line>Looking up...</div>';api({action:"area",name:n}).then(draw).catch(function(){draw(null)})};
+  s.querySelector("#ar_go").onclick=go;if(start)go()})}
 function outOf(r){return (D.out_roles||[]).filter(function(x){return x[0]===r})[0]}
 function clocked(e){var m=function(s){var x=/^(\d{1,2}):(\d{2})$/.exec(s||"");return x?(+x[1])*60+(+x[2]):null},a=m(e.start),b=m(e.end);if(a==null||b==null)return null;var d=b-a;if(d<0)d+=1440;return d>0&&d<=960?Math.round(d/6)/10:null}
 function fieldRow(ic,main,sub,id){return '<div class=fr id='+id+'>'+(ICON[ic]||'')+'<b>'+esc(main)+'</b><span>'+esc(sub)+'</span><i>&#8250;</i></div>'}
@@ -830,6 +858,7 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
  +fieldRow("time",PREV.start&&PREV.end?PREV.start+" – "+PREV.end:(PREV.time_of_day&&PREV.time_of_day!=="Unspecified"?PREV.time_of_day:"Start and end time"),PREV.start&&PREV.end?(clocked(PREV)+" h"+(PREV.time_of_day&&PREV.time_of_day!=="Unspecified"?" · "+PREV.time_of_day.toLowerCase():"")):"tap to clock it","frt")
  +fieldRow("party",PREV.where&&PREV.where!=="Unspecified"?PREV.where:"Where were you?",PREV.where&&PREV.where!=="Unspecified"?"where":"office, home, on site","frl")
  +fieldRow("people",PREV.people.length?PREV.people.map(function(n){return n.replace(/\s*\(.*\)$/,"").split(" ")[0]}).join(", "):(PREV.alone?"By yourself":"Who was there?"),PREV.people.length?"with":(PREV.alone?"":"tap to add"),"frp")
+ +fieldRow("where",(PREV.prep&&(PREV.prep.area||PREV.prep.project))||"About the area","tap to look up","fra")
  +fieldRow("type",PREV.type,PREV.effort||"","fry")
  +((PREV.external||[]).length?(PREV.external).map(function(o){return o.confirmed?'<div class=fr data-px="'+esc(o.name)+'">'+(ICON.party||'')+'<b>'+esc(o.name)+'</b><span>'+(o.known?"outside party · known · tap to change":"outside party · tap to change")+'</span><i>&#8250;</i></div>':
    '<div class=fr style="flex-wrap:wrap;cursor:default;border-color:#C5A56A"><div style="flex:1 1 100%;font-size:.85rem">You wrote <b>'+esc(o.name)+'</b>. '+(o.notfound?'I could not find it online; it will be logged as written.':'Is this the right one?')+'</div>'
@@ -847,6 +876,7 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
  $("wprev").innerHTML=h;
  $("ps").onchange=function(){PREV.summary=this.value};
  $("sw").onclick=function(){PREV.in_scope=true;PREV.out_role="";PREV.broker=false;preview(PREV)};$("so").onclick=function(){PREV.in_scope=false;PREV.broker=false;PREV.kpis=[];preview(PREV)};
+ if($("fra"))$("fra").onclick=areaSheet;
  if($("frb"))$("frb").onclick=function(){PREV.broker_tasks=PREV.broker_tasks||[];sheet("What kind of broker work?",(D.broker_tasks||[]).map(function(g,gi){var n=g.items.filter(function(i){return PREV.broker_tasks.indexOf(i[0])>=0}).length;return '<details class=bg'+(n?' open':'')+'><summary>'+esc(g.group)+(n?' <b>'+n+'</b>':'')+'</summary>'+g.items.map(function(i){return opt(i[0],i[1],PREV.broker_tasks.indexOf(i[0])>=0)}).join("")+'</details>'}).join(""),function(s){s.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){var v=o.getAttribute("data-v"),i=PREV.broker_tasks.indexOf(v);if(i>=0)PREV.broker_tasks.splice(i,1);else PREV.broker_tasks.push(v);o.classList.toggle("on");var chk=o.querySelector("span");if(i>=0){if(chk)chk.remove()}else{o.insertAdjacentHTML("beforeend",'<span style="margin-left:auto;color:#0A4F4A">&#10003;</span>')}var d=o.closest("details"),c=d.querySelectorAll(".opt.on").length,sm=d.querySelector("summary");sm.innerHTML=sm.firstChild.textContent+(c?' <b>'+c+'</b>':'')}})})};
  if($("bro"))$("bro").onclick=function(){PREV.broker=!PREV.broker;if(PREV.broker){PREV.kpis=[];PREV.in_scope=true;PREV.out_role=""}else{PREV.broker_tasks=[]}if(QUEUE.length)QUEUE[QI]=PREV;preview(PREV)};
  $("wprev").querySelectorAll("[data-k]").forEach(function(b){b.onclick=function(){PREV.broker=false;var v=+b.getAttribute("data-k"),i=PREV.kpis.indexOf(v);if(i>=0)PREV.kpis.splice(i,1);else PREV.kpis.unshift(v);preview(PREV)}});
