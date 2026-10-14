@@ -76,6 +76,20 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(b.find((d) => d.dept === "Leadership").tasks[0].name === "Monday Weekly Huddle", "a person touched in the entry also puts the task on their department");
   const rep = reportHtml([{ ...es[0], title: "x", type: "Update", summary: "s", scope: [], deliverables: [], next: [] }], "2026-10-06", "2026-10-06", t);
   ok(/With Sally Zehil, Sousan Khatibzadeh/.test(rep), "the report's task table says who the task is with"); }
+// v569 - Prepare me: the briefing questions, the engine call, the page
+{ const { prepQuestions, prepBrief } = await import("../src/work_log.js");
+  const q = prepQuestions({ developer: "Imtiaz Developments", project: "Kore", area: "Arjan" });
+  ok(q.length === 14 && q[0][1] === "Tell me about Kore" && q.some((x) => /Gross yield for a 1 bed in Arjan/.test(x[1])) && q.some((x) => /How many developers in Arjan/.test(x[1])) && q.some((x) => /Imtiaz Developments registered/.test(x[1])), "the briefing asks about the project, the area (prices, rents, yield, trend, comparisons, supply, schools) and the developer");
+  const calls = []; globalThis.fetch = async (u, init) => { calls.push(JSON.parse(init.body).question); return new Response(JSON.stringify({ status: "answer", headline: "H", cards: [{ label: "L", value: "V" }], note: "n", as_of: { t: "2026-10-12" } })); };
+  const s = await prepBrief({ ASK_ENGINE_URL: "https://e", ASK_SECRET: "s" }, { area: "Arjan" });
+  ok(s.length === 11 && calls.length === 11 && s[0].headline === "H" && s[0].as_of === "2026-10-12", "each section carries the engine's headline, cards and as-of date");
+  const pr = await (await req("/momo/work/api", true, { action: "parse", text: "MTI open house on Saturday, need to prepare", date: "2026-10-14" })).json();
+  ok(pr.entry.prep && pr.entry.prep.needed && pr.entry.prep.developer === "Imtiaz Developments" && pr.entry.prep.event === "open house", "an open house with Imtiaz (MTI) is flagged for preparation, even without the model", pr.entry.prep);
+  const pg = await (await req("/momo/work/prep?dev=Imtiaz%20Developments&event=open%20house", true)).text();
+  ok(/Build my briefing/.test(pg) && /value="Imtiaz Developments"/.test(pg) && /<h1>open house<\/h1>/.test(pg), "the Prepare me page opens prefilled");
+  const pj = await (await req("/momo/work/prep.js", true)).text();
+  try { new Function(pj); pass++; } catch (e) { fail++; console.log("FAIL the prepare page script does not parse", e.message); }
+  ok((await req("/momo/work/prep", false)).status === 404, "the briefing page is hers only"); }
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

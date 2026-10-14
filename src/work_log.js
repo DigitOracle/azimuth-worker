@@ -57,6 +57,7 @@ export const EFFORT = [["Under 1 hour", 0.5], ["1-2 hours", 1.5], ["Half a day",
 const SCHEMA = { type: "object", additionalProperties: false, required: ["title", "type", "summary", "people", "kpis", "scope", "works", "deliverables", "evidence", "next", "questions"], properties: {
   works: { type: "array", items: { type: "string" } }, questions: { type: "array", items: { type: "string" } },
   effort: { type: "string", enum: EFFORT.map((x) => x[0]) },
+  prep: { type: "object", additionalProperties: false, required: ["needed", "developer", "project", "area", "event"], properties: { needed: { type: "boolean" }, developer: { type: "string" }, project: { type: "string" }, area: { type: "string" }, event: { type: "string" } } },
   progress: { type: "array", items: { type: "object", additionalProperties: false, required: ["work", "status", "percent", "owners"], properties: { work: { type: "string" }, status: { type: "string", enum: STATUS }, percent: { type: "integer" }, owners: { type: "array", items: { type: "string" } } } } },
   title: { type: "string" }, type: { type: "string", enum: TYPES }, summary: { type: "string" },
   people: { type: "array", items: { type: "string" } }, kpis: { type: "array", items: { type: "integer" } },
@@ -76,6 +77,8 @@ function sysPrompt() {
     + "\nworks may also include a NEW task in a few words when the entry is about something not on the list (e.g. 'Rebrand of the office reception'). "
     + "progress: one item per task in works: status (" + STATUS.join(", ") + ") and percent complete as she describes it (started or kicked off about 10, drafted or halfway about 50, sent for approval about 80, finished or delivered 100); "
     + "if the entry gives a percentage, use it; owners: the people who hold or share the task (assigned to, doing it, in collaboration with), from the people list, Najjuko herself not included. effort: a rough time for the whole entry (" + EFFORT.map((x) => x[0]).join(", ") + "), judged from what was done; a meeting plus preparing a deck is about half a day."
+    + "\nprep: needed = true when the entry involves a client-facing event or deal with a developer, project or area (an open house, a launch, a viewing, a client meeting about a project); "
+    + "developer, project and area as named in the entry (empty string if not named; Imtiaz = Imtiaz Developments, MTI = Imtiaz), event in a few words. Otherwise needed = false with empty strings."
     + "\nRules: use only what the entry says; never invent people, figures or outcomes. title: under 8 words. summary: one or two plain sentences in the third person (\"Najjuko ...\"). "
     + "people: everyone she dealt with. kpis: only the areas the activity genuinely advances, usually one or two. deliverables: things she produced (e.g. a PowerPoint). "
     + "evidence: what this adds to her day-75 review evidence, in the review's own words (e.g. 'Strategy and plan shared with leadership'). next: follow-ups the entry mentions. "
@@ -93,7 +96,9 @@ function fallback(text) {
   if (/huddle|team|staff|internal|meeting/.test(t)) { kp.add(1); sc.add("p4"); }
   const people = PEOPLE.filter((p) => p[0].split(/[ ()]+/).some((w) => w.length > 2 && t.indexOf(w.toLowerCase()) >= 0)).map((p) => p[0]);
   const works = WORKS.filter((w) => w.toLowerCase().split(/[ ():,]+/).some((x) => x.length > 5 && t.indexOf(x) >= 0));
+  const pm = /(open house|launch|viewing|site visit|roadshow)/.exec(t), dv = /\b(imtiaz|mti|emaar|damac|sobha|nakheel|meraas|binghatti|danube|ellington|aldar|azizi|samana|omniyat|select)\b/.exec(t);
   return { title: text.split(/[.\n]/)[0].slice(0, 60), type: /meeting|huddle|call/.test(t) ? "Meeting" : "Update", summary: text.slice(0, 300), people, kpis: [...kp], scope: [...sc], works, deliverables: [], evidence: [], next: [], questions: [], check: true,
+    prep: pm || dv ? { needed: true, developer: dv ? (/imtiaz|mti/.test(dv[1]) ? "Imtiaz Developments" : dv[1].replace(/^./, (c) => c.toUpperCase())) : "", project: "", area: "", event: pm ? pm[1] : "" } : null,
     effort: /all day|full day/.test(t) ? "Full day" : /meeting|huddle|deck|powerpoint/.test(t) ? "Half a day" : "1-2 hours",
     progress: works.map((w) => ({ work: w, status: /finish|done|deliver|complet|sent/.test(t) ? "Done" : /start|kick|began|initiat/.test(t) ? "Started" : "In progress", percent: /finish|done|deliver|complet|sent/.test(t) ? 100 : /start|kick|began|initiat/.test(t) ? 10 : 50, owners: people })) };
 }
@@ -105,6 +110,7 @@ function clean(x) {
     people: arr(x.people).filter((p) => names.has(p)), kpis: [...new Set((x.kpis || []).map(Number).filter((n) => n >= 1 && n <= 5))],
     scope: [...new Set(arr(x.scope).filter((s) => ids.has(s)))], works: [...new Set(arr(x.works).map((w) => w.slice(0, 80).trim()).filter(Boolean))].slice(0, 6),
     effort: EFFORT.some((e) => e[0] === x.effort) ? x.effort : "1-2 hours",
+    prep: x.prep && x.prep.needed ? { needed: true, developer: String(x.prep.developer || "").slice(0, 80), project: String(x.prep.project || "").slice(0, 80), area: String(x.prep.area || "").slice(0, 80), event: String(x.prep.event || "").slice(0, 80) } : null,
     progress: (Array.isArray(x.progress) ? x.progress : []).map((p) => ({ work: String(p.work || "").slice(0, 80).trim(), status: STATUS.includes(p.status) ? p.status : "In progress", percent: Math.max(0, Math.min(100, Math.round(Number(p.percent) || 0))), owners: (Array.isArray(p.owners) ? p.owners : []).map(String).filter((n) => names.has(n)).slice(0, 12) })).filter((p) => p.work).slice(0, 6), questions: arr(x.questions, 3), answers: arr(x.answers, 3), deliverables: arr(x.deliverables, 8), evidence: arr(x.evidence, 8), next: arr(x.next, 8), check: !!x.check };
 }
 const dubaiToday = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
@@ -150,6 +156,47 @@ export function deptBoard(tasks, today) {
 export function hoursByKpi(es) {
   return KPIS.map((k) => ({ id: k.id, name: k.name, hours: Math.round(es.filter((e) => (e.kpis || []).includes(k.id)).reduce((s, e) => s + (EFFORT.find((x) => x[0] === e.effort) || EFFORT[1])[1] / Math.max(1, (e.kpis || []).length), 0) * 10) / 10 }));
 }
+// v569 PREPARE ME (Kendall 14 Oct: "MTI's open house ... understand the project itself, all its USPs, the sizes, the typology, why that location,
+// what is beneficial to the investor or the end user, three or four comparisons within the area ... a plan B ... create content at the location").
+// Every figure comes from Najma's records through the question engine (the same one Ask Najma uses), each with its own as-of line.
+export function prepQuestions(f) {
+  const P = f.project, A = f.area, V = f.developer, Q = [];
+  if (P) Q.push(["The project", "Tell me about " + P]);
+  if (A) {
+    Q.push(["Prices in the area", "Average price per square foot in " + A]);
+    Q.push(["One-bedroom prices", "Average price of a 1 bedroom in " + A]);
+    Q.push(["Two-bedroom prices", "Average price of a 2 bedroom in " + A]);
+    Q.push(["Rents", "Rent for a 2 bedroom in " + A]);
+    Q.push(["Rental yield (investor)", "Gross yield for a 1 bed in " + A]);
+    Q.push(["Price trend", "Have prices gone up in " + A + " this year?"]);
+    Q.push(["Developers in the area (comparisons and plan B)", "How many developers in " + A]);
+    Q.push(["Buildings selling most", "Which buildings in " + A + " sell the most?"]);
+    Q.push(["Supply coming", "Which projects complete in 2027 in " + A]);
+    Q.push(["Schools nearby", "How many schools are in " + A]);
+    Q.push(["Adverts for rent now", "How many flats are for rent in " + A]);
+  }
+  if (V) { Q.push(["The developer's record", "How many projects has " + V + " registered?"]); Q.push(["Off-plan sales by the developer", "Off-plan projects by " + V]); }
+  return Q;
+}
+async function askEngine(env, q) {
+  if (!env.ASK_ENGINE_URL || !env.ASK_SECRET) return { status: "error", headline: "The question engine is not connected." };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 25000);
+      const r = await fetch(String(env.ASK_ENGINE_URL).replace(/\/+$/, "") + "/ask", { method: "POST", headers: { "Content-Type": "application/json", "X-Ask-Secret": String(env.ASK_SECRET) }, body: JSON.stringify({ question: q, mode: "analyst", session_id: "prep" }), signal: ctl.signal });
+      clearTimeout(tm);
+      if (r.ok) return await r.json();
+    } catch (e) {}
+    await new Promise((s) => setTimeout(s, 1500));
+  }
+  return { status: "error", headline: "No answer just now." };
+}
+export async function prepBrief(env, f) {
+  const Q = prepQuestions(f);
+  const ans = await Promise.all(Q.map((x) => askEngine(env, x[1])));
+  return Q.map((x, i) => { const a = ans[i] || {}; const ao = a.as_of && typeof a.as_of === "object" ? Object.values(a.as_of).sort().pop() : "";
+    return { title: x[0], question: x[1], status: a.status || "error", headline: a.headline || String(a.answer_md || "").split("\n").find((l) => l.trim() && !/^[#*_]/.test(l.trim())) || "", cards: Array.isArray(a.cards) ? a.cards.slice(0, 5) : [], note: a.note || "", as_of: ao }; });
+}
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const fmtD = (d) => { const M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]; const p = String(d).split("-"); return (+p[2]) + " " + M[+p[1] - 1] + " " + p[0]; };
 const dayName = (d) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date(d + "T00:00:00Z").getUTCDay()];
@@ -163,6 +210,7 @@ export async function workRoute(request, env, url, deps) {
     if (p !== "/momo/work") return new Response("not found", { status: 404 });
     return new Response(deps.page(key, rk, '<a class=back href="/momo?key=' + encodeURIComponent(key) + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty><p>Najjuko\'s work log is private to her link.</p></div>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
+  if (p === "/momo/work/prep.js") return new Response(PREP_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work.js") return new Response(WORK_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work/api") {
     if (request.method === "GET") {
@@ -187,6 +235,11 @@ export async function workRoute(request, env, url, deps) {
       await env.MEETINGS.put(PFX + date + "_" + id, JSON.stringify(rec));
       return J({ ok: true, entry: rec });
     }
+    if (b.action === "prep") {
+      const f = { developer: String(b.developer || "").slice(0, 80).trim(), project: String(b.project || "").slice(0, 80).trim(), area: String(b.area || "").slice(0, 80).trim() };
+      if (!f.developer && !f.project && !f.area) return J({ error: "Name the project, the area or the developer." }, 400);
+      return J({ sections: await prepBrief(env, f), fields: f });
+    }
     if (b.action === "delete") { await env.MEETINGS.delete(PFX + okDate(b.date) + "_" + String(b.id || "").replace(/[^a-z0-9]/g, "")); return J({ ok: true }); }
     return J({ error: "Unknown action." }, 400);
   }
@@ -194,7 +247,11 @@ export async function workRoute(request, env, url, deps) {
     const from = okDate(url.searchParams.get("from") || weekOf(dubaiToday())[0]), to = okDate(url.searchParams.get("to") || weekOf(from)[1]);
     return new Response(reportHtml(await listEntries(env, from, to), from, to, tasksOf(await listEntries(env, PHASES[0].from, to))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
-  if (p === "/momo/work") return new Response(deps.page(key, rk, WORK_BODY.replace("__KEY__", esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  if (p === "/momo/work/prep") {
+    const v = (n) => esc(url.searchParams.get(n) || "");
+    return new Response(deps.page(key, rk, PREP_BODY.replace("__DEV__", v("dev")).replace("__PRJ__", v("project")).replace("__AREA__", v("area")).replace("__EVT__", v("event") || "Client briefing").replace(/__KEY__/g, esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  }
+  if (p === "/momo/work") return new Response(deps.page(key, rk, WORK_BODY.replace(/__KEY__/g, esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   return new Response("not found", { status: 404 });
 }
 
@@ -242,6 +299,7 @@ const WORK_BODY = '<div class=tag>MOMO · WORK</div><h1>My work log</h1>'
   + '<form id=wf class=box><label>What did you do? <button type=button id=wmic class=mic aria-label="Speak instead of typing"><svg viewBox="0 0 24 24" width=18 height=18 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Speak</span></button></label><textarea id=wt rows=4 placeholder="e.g. Monday huddle: built the PowerPoint, ran the meeting with Ali and the team, laid out the week."></textarea>'
   + '<div class=row><input id=wd type=date><input id=wl type=url placeholder="Link to a file (optional)"></div><button type=submit id=wb class=gold>File it</button></form>'
   + '<div id=wprev></div><a id=wday class=gold style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>Today\'s summary</a>'
+  + '<a href="/momo/work/prep?key=__KEY__" class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:8px">Prepare me for a client, project or open house</a>'
   + '<div class=sec>MY TASKS</div><div id=wtasks></div>'
   + '<div class=sec>BY DEPARTMENT · OPEN TASKS, LONGEST QUIET FIRST</div><div id=wdept></div>'
   + '<div class=sec>FOCUS AREAS · THIS WEEK / SINCE 2 OCT</div><div id=wtally class=tally></div>'
@@ -250,6 +308,26 @@ const WORK_BODY = '<div class=tag>MOMO · WORK</div><h1>My work log</h1>'
   + '<a id=wrep class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>This week\'s report</a>'
   + '<script src="/momo/work.js?key=__KEY__"></script>';
 
+const PREP_BODY = '<a class=back href="/momo/work?key=__KEY__">&#8592; Work</a><div class=tag>MOMO · PREPARE ME</div><h1>__EVT__</h1>'
+  + '<form id=pf class=box><label>What are you preparing for?</label><input id=fd placeholder="Developer (e.g. Imtiaz Developments)" value="__DEV__">'
+  + '<input id=fp placeholder="Project (e.g. the open house project)" value="__PRJ__" style="margin-top:8px"><input id=fa placeholder="Area or community (e.g. JVC, Dubai Hills)" value="__AREA__" style="margin-top:8px">'
+  + '<button type=submit id=fb class=gold style="margin-top:10px">Build my briefing</button><div style="color:#8FA39B;font-size:.78rem;margin-top:6px">Every figure is from Najma\'s records, with its date. Selling points that are not in the records stay for you to add.</div></form>'
+  + '<div id=pout></div><script src="/momo/work/prep.js?key=__KEY__"></script>';
+const PREP_JS = String.raw`(function(){var KEY=decodeURIComponent((document.currentScript.src.split("key=")[1]||"").split("&")[0]);var $=function(i){return document.getElementById(i)};
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
+$("pf").onsubmit=function(ev){ev.preventDefault();var f={developer:$("fd").value.trim(),project:$("fp").value.trim(),area:$("fa").value.trim()};if(!f.developer&&!f.project&&!f.area)return;
+ $("fb").disabled=true;$("fb").textContent="Gathering the figures (about half a minute)…";$("pout").innerHTML="";
+ fetch("/momo/work/api?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.assign({action:"prep"},f))}).then(function(r){return r.json()}).then(function(j){$("fb").disabled=false;$("fb").textContent="Build my briefing";
+  if(j.error){alert(j.error);return}
+  var h=j.sections.map(function(s){var ok=s.status==="answer";return '<div class=ent'+(ok?'':' style="opacity:.6"')+'><div class=m style="color:#C5A56A;text-transform:uppercase;letter-spacing:.08em;font-size:.7rem">'+esc(s.title)+'</div><h3 style="margin-top:4px">'+esc(s.headline||"Not covered yet")+'</h3>'
+   +(s.cards.length?'<div class=tally style="margin-top:8px">'+s.cards.map(function(c){return '<div class=tl><span style="margin:0">'+esc(c.label)+'</span><b style="font-size:1.05rem">'+esc(c.value)+'</b>'+(c.sub?'<span>'+esc(c.sub)+'</span>':'')+'</div>'}).join("")+'</div>':'')
+   +'<div class=m style="margin-top:6px">'+(s.note?esc(s.note)+' · ':'')+(s.as_of?'As of '+esc(s.as_of):'')+'</div></div>'}).join("");
+  var dev=j.sections.filter(function(s){return /Developers in the area/.test(s.title)})[0];
+  h+='<div class=sec>PLAN B</div><div class=ent><p>If the open house does not land with the client, the strongest alternatives in the same area are the other developers there'+(dev&&dev.cards.length?': '+esc(dev.cards.map(function(c){return c.value}).join(", ")):'')+'. Compare them on price per square foot, completion and rent above, and on the buildings that sell most.</p></div>';
+  h+='<div class=sec>CONTENT ON SITE</div><div class=ent><p>1. A 30-second walk-through: the view, the finishes, one figure from this briefing (the area price or the yield).<br>2. "Three things investors ask about '+esc(f.area||f.project||f.developer)+'": price, rent, what is being built next.<br>3. For clients not at the venue: a short voice note or video answering their own question, with the figure and its date.</p></div>';
+  h+='<button type=button class=ghost style="width:100%;margin-top:12px" onclick="print()">Save as PDF</button><div class=m style="margin-top:8px;color:#8FA39B;font-size:.75rem">Research use only: figures from Najma\'s records; selling points from the developer\'s own sheets, never from portals.</div>';
+  $("pout").innerHTML=h}).catch(function(){$("fb").disabled=false;$("fb").textContent="Build my briefing";alert("Could not build it just now. Try again.")})};
+if($("fd").value||$("fp").value||$("fa").value){}})();`;
 export const WORK_CSS = '.wk{color:#8FA39B;font-size:.85rem;margin:-12px 0 16px}.box{border:1px solid #24352F;border-radius:16px;padding:14px;background:#0E1918}.box label{display:block;color:#C5A56A;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}'
   + 'textarea,input{width:100%;box-sizing:border-box;background:#0C1413;border:1px solid #24352F;border-radius:10px;color:#E8E4D8;font:inherit;padding:10px}.row{display:grid;grid-template-columns:150px 1fr;gap:8px;margin:8px 0}'
   + '.gold{background:#C5A56A;color:#0C1413;border:0;border-radius:12px;padding:12px;font:600 .95rem inherit;width:100%;cursor:pointer}.ghost{background:transparent;border:1px solid #24352F;color:#B9B2A3;border-radius:10px;padding:9px;cursor:pointer;font:inherit}'
@@ -283,6 +361,7 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
  $("wlist").innerHTML=D.entries.length?D.entries.map(function(e,i){return '<div class=ent><h3>'+esc(e.title)+'</h3><div class=m>'+esc(fd(e.date))+' · '+esc(e.type)+(e.people.length?' · '+esc(e.people.join(", ")):'')+'</div><p>'+esc(e.summary)+'</p>'
   +'<div class=chips>'+e.kpis.map(function(k){var x=D.kpis.filter(function(y){return y.id===k})[0];return '<span class="chip on">'+esc(x?x.name:k)+'</span>'}).join("")+'</div>'
   +(e.deliverables.length?'<div class=m style="margin-top:6px">Produced: '+esc(e.deliverables.join("; "))+'</div>':'')+(e.link?'<div class=m><a style="color:#C5A56A" href="'+esc(e.link)+'" target=_blank rel=noopener>Open the file</a></div>':'')
+  +(e.prep&&e.prep.needed?'<a class=mic style="text-decoration:none;margin:8px 0 2px" href="/momo/work/prep?key='+encodeURIComponent(KEY)+'&dev='+encodeURIComponent(e.prep.developer||"")+'&project='+encodeURIComponent(e.prep.project||"")+'&area='+encodeURIComponent(e.prep.area||"")+'&event='+encodeURIComponent(e.prep.event||e.title)+'">Prepare me &#8594;</a><br>':'')
   +'<button class=del data-e='+i+'>Edit</button> &middot; <button class=del data-d='+i+'>Delete</button></div>'}).join(""):'<p style="color:#8FA39B">Nothing logged this week yet.</p>';
  $("wlist").querySelectorAll("[data-d]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-d")];if(!confirm("Delete \""+e.title+"\"?"))return;api({action:"delete",id:e.id,date:e.date}).then(function(){load(WEEK)})}});
  $("wlist").querySelectorAll("[data-e]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-e")];EDIT=e;$("wt").value=e.text;$("wd").value=e.date;$("wl").value=e.link||"";preview(e);scrollTo(0,0)}});
