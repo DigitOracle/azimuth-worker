@@ -287,6 +287,14 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(/\/momo\/work\/vet\?key=/.test(el) && /Vet '\+esc\(o\.name\.split/.test(el), "an entry with an outside party shows a Vet link");
   ok((await req("/momo/work/vet?name=x", false)).status === 404, "the vet page is hers only");
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); delete globalThis.__v; }
+// v584 - the hours tile carries the split: so many as Strategic Lead, so many as a broker
+{ const E = (date, kp, out, start, end) => req("/momo/work/api", true, { action: "save", entry: { title: "x", type: "Meeting", summary: "s", people: [], kpis: kp ? [kp] : [], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: !out, out_role: out || "", effort: "1-2 hours", progress: [], time_of_day: "Morning", start, end, where: "Office" }, text: "t", date });
+  await E("2026-10-14", 1, "", "09:00", "12:00"); await E("2026-10-14", 0, "Sales", "13:00", "16:00");
+  const dr = await (await req("/momo/work/report?days=2026-10-14", true)).text();
+  ok(/<div class=tile><b>6<\/b><span>hours clocked<\/span><div class=split>/.test(dr) && /3 h as Strategic Lead/.test(dr) && /3 h as a broker/.test(dr), "6 hours on the tile reads: 3 h as Strategic Lead, 3 h as a broker", dr.match(/<div class=tile><b>6<\/b>[\s\S]{0,400}/)?.[0]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
+  const js13 = await (await req("/momo/work.js", true)).text();
+  ok(/k\.hours\+' h '\+\(k\.name==="Strategic Lead"\?"as Strategic Lead":k\.name==="Broker"\?"as a broker"/.test(js13), "the week view's meter says it the same way");
+  for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
