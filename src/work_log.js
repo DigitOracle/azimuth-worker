@@ -344,6 +344,14 @@ export async function workRoute(request, env, url, deps) {
     const from = okDate(url.searchParams.get("from") || weekOf(dubaiToday())[0]), to = okDate(url.searchParams.get("to") || weekOf(from)[1]);
     return new Response(reportHtml(await listEntries(env, from, to), from, to, tasksOf(await listEntries(env, PHASES[0].from, to))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
+  // v573 DEBRIEF (Kendall 14 Oct: "Ali ... wants a debrief of what happened because he wasn't there ... immediately create a PDF ... very quick").
+  // One entry, one page, in FN's brand: what, when, who, outcome, next steps. Short on purpose.
+  if (p === "/momo/work/debrief") {
+    const id = String(url.searchParams.get("id") || "").replace(/[^a-z0-9]/g, ""), date = okDate(url.searchParams.get("date"));
+    let e = null; try { e = JSON.parse(await env.MEETINGS.get(PFX + date + "_" + id)); } catch (x) {}
+    if (!e) return new Response("not found", { status: 404 });
+    return new Response(debriefHtml(e), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  }
   if (p === "/momo/work/prep") {
     const v = (n) => esc(url.searchParams.get(n) || "");
     return new Response(deps.page(key, rk, PREP_BODY.replace("__DEV__", v("dev")).replace("__PRJ__", v("project")).replace("__AREA__", v("area")).replace("__EVT__", v("event") || "Client briefing").replace(/__KEY__/g, esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
@@ -352,6 +360,25 @@ export async function workRoute(request, env, url, deps) {
   return new Response("not found", { status: 404 });
 }
 
+export function debriefHtml(e) {
+  const FOOT = "<b>CONFIDENTIAL · FN Realty internal use only.</b> Not to be copied, distributed, modified, reissued or shared outside FN Realty without prior written approval from FN Realty management. © 2026 FN Realty. All rights reserved.";
+  const row = (k, v) => v ? '<tr><td>' + k + '</td><td>' + v + '</td></tr>' : '';
+  const who = (e.people || []).concat((e.external || []).map((o) => o.name)).map(esc).join(", ");
+  const tasks = (e.progress || []).map((t) => esc(t.work) + ' — ' + esc(t.status) + ', ' + t.percent + '%').join('<br>');
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Debrief: ' + esc(e.title) + '</title>'
+    + '<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap"><style>'
+    + '@page{size:A4;margin:18mm 18mm 22mm}body{margin:0;background:#F9F1EF;color:#202020;font-family:Inter,sans-serif;font-size:11pt;line-height:1.55}.pg{max-width:720px;margin:0 auto;background:#fff;padding:28px 34px 36px}'
+    + 'header{background:#1F2B44;color:#C9A97A;margin:-28px -34px 20px;padding:20px 34px}header h1{font-family:Anton,sans-serif;font-weight:400;font-size:22pt;letter-spacing:.02em;margin:0}header p{margin:4px 0 0;color:#EFE5D7;font-size:10pt}'
+    + 'h2{font-family:Anton,sans-serif;font-weight:400;color:#1F2B44;font-size:15pt;letter-spacing:.02em;margin:0 0 10px}table{width:100%;border-collapse:collapse;margin:8px 0 14px}td{padding:6px 8px;border-bottom:1px solid #E9EAEC;vertical-align:top}td:first-child{font-weight:600;color:#1F2B44;width:26%}'
+    + '.sum{font-size:12pt;margin:0 0 12px}ul{margin:0 0 0 18px;padding:0}footer{margin-top:22px;border-top:1px solid #E9EAEC;padding-top:8px;font-size:7.5pt;color:#626B7C}.pf{position:fixed;bottom:6mm;left:18mm;right:18mm;font-size:7pt;color:#626B7C;display:none}'
+    + '.btn{position:fixed;right:16px;bottom:16px;background:#1F2B44;color:#C9A97A;border:0;border-radius:99px;padding:10px 18px;font:600 10pt Inter,sans-serif;cursor:pointer}@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 16px}.btn{display:none}.pf{display:block}footer{display:none}}</style></head><body><div class=pg>'
+    + '<header><h1>DEBRIEF</h1><p>Serah Najjuko Ganyana · Strategic Lead – Marketing, PR &amp; Business Development</p></header>'
+    + '<h2>' + esc(e.title) + '</h2><p class=sum>' + esc(e.summary) + '</p>'
+    + '<table>' + row('When', esc(dayName(e.date)) + ' ' + esc(fmtD(e.date)) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ', ' + esc(e.time_of_day.toLowerCase()) : '')) + row('Type', esc(e.type)) + row('Who', who || (e.alone ? 'Najjuko alone' : ''))
+    + row('Role', e.in_scope === false ? 'Outside her role' + (e.out_role ? ' (' + esc(e.out_role) + ')' : '') : 'Within her role') + row('Progress', tasks) + row('Produced', (e.deliverables || []).map(esc).join('; ')) + (e.link ? row('File', '<a href="' + esc(e.link) + '">' + esc(e.link) + '</a>') : '') + '</table>'
+    + ((e.next || []).length ? '<h2 style="font-size:12pt">NEXT STEPS</h2><ul>' + e.next.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>' : '')
+    + '<footer>' + FOOT + '</footer></div><div class=pf>' + FOOT + '</div><button class=btn onclick="print()">Save as PDF</button></body></html>';
+}
 // the weekly report: FN Realty's brand (navy #1F2B44, gold #C9A97A, Anton + Inter), internal confidentiality footer on every page
 export function reportHtml(es, from, to, allTasks) {
   const byK = KPIS.map((k) => ({ k, es: es.filter((e) => e.kpis.includes(k.id)) }));
@@ -440,6 +467,7 @@ export const WORK_CSS = '.wk{color:#8FA39B;font-size:.85rem;margin:-12px 0 16px}
   + '.dp summary b{color:#F3EFE4}.dp summary small{color:#8FA39B;font-size:.76rem}.dp .n{color:#C5A56A;font-family:Fraunces,serif;font-size:1.3rem}.dpt{border-top:1px solid #1B2A26;padding:9px 14px}.dpt b{color:#E8E4D8;font-weight:600;font-size:.9rem}.dpt .m{color:#8FA39B;font-size:.76rem;margin-top:2px}.chase{color:#E3A08F}'
   + '.who{width:100%;margin-top:6px;background:#0C1413;border:1px solid #24352F;border-radius:10px;color:#E8E4D8;padding:8px;font:inherit}'
   + '.pdp{border:1px solid #24352F;border-radius:10px;margin:4px 0;background:#0C1413}.pdp summary{list-style:none;cursor:pointer;padding:8px 10px;color:#C5A56A;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase}.pdp summary::-webkit-details-marker{display:none}.pdp summary small{color:#8FA39B;letter-spacing:0;text-transform:none}.pdp summary:before{content:"+ ";color:#8FA39B}.pdp[open] summary:before{content:"\\2212 "}.pdp .chips{padding:0 10px 10px}'
+  + '.more{border-top:1px solid #24352F;margin-top:14px;padding-top:4px}.more summary{list-style:none;cursor:pointer;color:#8FA39B;font-size:.8rem;padding:8px 0;display:flex;align-items:center;gap:6px}.more summary::-webkit-details-marker{display:none}.more summary svg{color:#C5A56A}'
   + '.pg{border-top:1px solid #24352F;padding-top:8px;margin-top:8px}.pg input[type=range]{padding:0;accent-color:#C5A56A}.addw{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px}';
 
 // v571 - a little flair, kept quiet on a phone: one small line icon per section label and per key pill (our icon set, never emoji)
@@ -475,7 +503,7 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
   +'<div class=chips>'+e.kpis.map(function(k){var x=D.kpis.filter(function(y){return y.id===k})[0];return '<span class="chip on">'+esc(x?x.name:k)+'</span>'}).join("")+'</div>'
   +(e.deliverables.length?'<div class=m style="margin-top:6px">Produced: '+esc(e.deliverables.join("; "))+'</div>':'')+(e.link?'<div class=m><a style="color:#C5A56A" href="'+esc(e.link)+'" target=_blank rel=noopener>Open the file</a></div>':'')
   +(e.prep&&e.prep.needed?'<a class=mic style="text-decoration:none;margin:8px 0 2px" href="/momo/work/prep?key='+encodeURIComponent(KEY)+'&dev='+encodeURIComponent(e.prep.developer||"")+'&project='+encodeURIComponent(e.prep.project||"")+'&area='+encodeURIComponent(e.prep.area||"")+'&event='+encodeURIComponent(e.prep.event||e.title)+'">Prepare me &#8594;</a><br>':'')
-  +'<button class=del data-e='+i+'>Edit</button> &middot; <button class=del data-d='+i+'>Delete</button></div>'}).join(""):'<p style="color:#8FA39B">Nothing logged this week yet.</p>';
+  +'<a class=del style="text-decoration:none" href="/momo/work/debrief?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(e.id)+'&date='+e.date+'" target=_blank>Debrief</a> &middot; <button class=del data-e='+i+'>Edit</button> &middot; <button class=del data-d='+i+'>Delete</button></div>'}).join(""):'<p style="color:#8FA39B">Nothing logged this week yet.</p>';
  $("wlist").querySelectorAll("[data-d]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-d")];if(!confirm("Delete \""+e.title+"\"?"))return;api({action:"delete",id:e.id,date:e.date}).then(function(){load(WEEK)})}});
  $("wlist").querySelectorAll("[data-e]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-e")];EDIT=e;$("wt").value=e.text;$("wd").value=e.date;$("wl").value=e.link||"";preview(e);scrollTo(0,0)}});
  $("wtasks").innerHTML=(D.tasks||[]).length?D.tasks.map(function(t){return '<div class="tk'+(t.status==="Done"?' done':'')+'"><b>'+esc(t.name)+'</b> <span style="color:#C5A56A;float:right">'+t.percent+'%</span><div class=pb><i style="width:'+t.percent+'%"></i></div>'
@@ -487,19 +515,24 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
  var to=new Date(Date.parse(D.from)+6*864e5).toISOString().slice(0,10);$("wrep").href="/momo/work/report?key="+encodeURIComponent(KEY)+"&from="+D.from+"&to="+to}
 function chips(list,on,attr){return list.map(function(x){var id=x.id!=null?x.id:x,nm=x.name||x,ic=(attr==="t"||attr==="tod")&&ICON[id]?ICON[id]+' ':'';return '<button type=button class="chip'+(on.indexOf(id)>=0?' on':'')+'" data-'+attr+'="'+esc(id)+'">'+ic+esc(nm)+'</button>'}).join("")}
 function lab(k,t){return '<div class=lab>'+(ICON[k]||'')+' '+t+'</div>'}
+// v573 (Kendall 14 Oct: "move away from the pills and put dropdowns") - one native picker per single-choice field; chips stay only where she picks several
+function sel(id,list,cur){return '<select class=who id='+id+' style="margin-top:0">'+list.map(function(x){var v=x.id!=null?x.id:(Array.isArray(x)?x[0]:x),nm=x.name||(Array.isArray(x)?x[0]:x);return '<option value="'+esc(v)+'"'+(String(v)===String(cur)?' selected':'')+'>'+esc(nm)+'</option>'}).join("")+'</select>'}
 function confirmLine(e){var ks=e.kpis.map(function(k){var x=D.kpis.filter(function(y){return y.id===k})[0];return x?x.name:k});
  var ts=(e.works||[]).map(function(w){var old=(D.tasks||[]).filter(function(t){return t.name===w})[0];var p=(e.progress||[]).filter(function(x){return x.work===w})[0];return '<b>'+esc(w)+'</b> '+(old?'(existing task, '+old.percent+'% before'+(p?', now '+p.percent+'%':'')+')':'(new task'+(p?', '+p.percent+'%':'')+')')});
  return '<div style="background:#15231F;border-radius:12px;padding:12px;margin-bottom:10px"><div style="color:#C5A56A;font-weight:600;margin-bottom:6px">Here\'s how I\'ll log this. Is it right?</div><div style="color:#E8E4D8;font-size:.9rem;line-height:1.5">'
-  +(ts.length?'Task: '+ts.join('; ')+'. ':'<span class=warn>No task linked: pick one below or add a new one. </span>')
-  +(ks.length?'Counts towards: '+esc(ks.join(', '))+'. ':'<span class=warn>No focus area: pick at least one below. </span>')
+  // v572 (Najjuko 14 Oct, live: a sales workshop as an agent fits no contract area and no task - that is the right answer, not a warning)
+  +(e.in_scope===false
+    ?'<span class=warn>Outside your role'+(e.out_role?': '+esc(e.out_role):'')+'</span>'+(orl(e.out_role)?' <span style="color:#8FA39B">('+esc(orl(e.out_role))+')</span>':'')+'. No focus area or task applies. '
+    :(ks.length?'Counts towards: '+esc(ks.join(', '))+'. ':'<span class=warn>No focus area yet: tap one below. </span>')+(ts.length?'Task: '+ts.join('; ')+'. ':''))
   +(e.people.length?'With: '+esc(e.people.join(', '))+'.':(e.alone?'By yourself.':'No people named.'))+'</div>'
-  +'<div style="color:#B9B2A3;font-size:.82rem;margin-top:6px">'+esc(e.time_of_day&&e.time_of_day!=="Unspecified"?e.time_of_day:"Time not stated")+' · '+esc(deptsOf(e).join(", ")||"No department")+' · '+(e.in_scope===false?'<span class=warn>Outside your role'+(e.out_role?': '+esc(e.out_role):'')+'</span>':'Within your role')+'</div>'
+  +'<div style="color:#B9B2A3;font-size:.82rem;margin-top:6px">'+esc(e.time_of_day&&e.time_of_day!=="Unspecified"?e.time_of_day:"Time not stated")+' · '+esc(deptsOf(e).join(", ")||"No department")+'</div>'
   +(e.external||[]).map(function(o){return '<div style="margin-top:8px;padding:8px 10px;border:1px solid '+(o.confirmed?'#24352F':'#C5A56A')+';border-radius:10px"><div style="color:#C5A56A;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase">Outside party'+(o.known?' · known':'')+'</div>'
    +(o.confirmed?'<b>'+esc(o.name)+'</b>'+(o.kind?' <span style="color:#8FA39B">· '+esc(o.kind)+'</span>':'')+(o.what?'<div class=m>'+esc(o.what)+'</div>':''):
      o.notfound?'<b>'+esc(o.name)+'</b><div class=m>I could not find this organisation online. It will be logged as you wrote it.</div>':
      '<div class=m>You wrote <b style="color:#E8E4D8">'+esc(o.name)+'</b>. Is this the right one?</div><b>'+esc(o.suggested)+'</b>'+(o.kind?' <span style="color:#8FA39B">· '+esc(o.kind)+'</span>':'')+(o.what?'<div class=m>'+esc(o.what)+(o.where?' ('+esc(o.where)+')':'')+'</div>':'')+(o.site?'<div class=m><a style="color:#C5A56A" href="'+esc(o.site)+'" target=_blank rel=noopener>'+esc(o.site.replace(/^https?:\/\//,""))+'</a></div>':'')
      +'<div class=acts style="margin-top:6px"><button type=button class=ghost data-pn="'+esc(o.name)+'">No, keep as I wrote it</button><button type=button class=gold data-py="'+esc(o.name)+'">Yes, that\'s it</button></div>')+'</div>'}).join("")
   +'<div style="color:#8FA39B;font-size:.78rem;margin-top:6px">Nothing is saved until you press Save. Change anything below first.</div></div>'}
+function orl(r){var x=(D.out_roles||[]).filter(function(y){return y[0]===r})[0];return x?x[1].replace(/\s*\(.*$/,""):""}
 function deptsOf(e){var ds=[];(e.people||[]).forEach(function(n){var g=(D.org||[]).filter(function(x){return x.people.indexOf(n)>=0})[0];if(g&&ds.indexOf(g.dept)<0)ds.push(g.dept)});if((e.external||[]).length&&ds.indexOf("External")<0)ds.push("External");return ds}
 function wireParties(e){$("wprev").querySelectorAll("[data-py]").forEach(function(b){b.onclick=function(){var o=(PREV.external||[]).filter(function(x){return x.name===b.getAttribute("data-py")})[0];if(!o)return;b.disabled=true;b.textContent="Remembering…";
   api({action:"party_confirm",name:o.suggested||o.name,typed:o.name,kind:o.kind,what:o.what,where:o.where,site:o.site}).then(function(j){if(j.ok){o.name=j.party.name;o.confirmed=true;o.known=true;if(QUEUE.length)QUEUE[QI]=PREV;preview(PREV)}else{b.disabled=false;b.textContent="Yes, that's it"}})}});
@@ -508,37 +541,37 @@ var QUEUE=[],QI=0;   // v570 - a whole day comes back as several activities; she
 function queueHead(){return QUEUE.length>1?'<div style="color:#C5A56A;font-family:\'IBM Plex Mono\',monospace;font-size:.72rem;letter-spacing:.12em;margin-bottom:8px">ACTIVITY '+(QI+1)+' OF '+QUEUE.length+'</div>':''}
 function nextInQueue(){QI++;if(QI<QUEUE.length){preview(QUEUE[QI]);scrollTo(0,0)}else{QUEUE=[];QI=0;$("wprev").innerHTML="";$("wt").value="";$("wl").value=""}}
 function preview(e){PREV=JSON.parse(JSON.stringify(e));var h='<div class=prev>'+queueHead()+confirmLine(e)+(e.check?'<div class=warn>Filed by keyword only: please check the areas and people.</div>':'')
- +lab("title","Title")+'<input id=pt value="'+esc(e.title)+'"><div class=lab>Summary</div><textarea id=ps rows=3>'+esc(e.summary)+'</textarea>'
- +lab("type","Type")+'<div class=chips>'+chips(D.types,[e.type],"t")+'</div>'
- +lab("kpi","Focus areas (her review)")+'<div class=chips>'+chips(D.kpis,e.kpis,"k")+'</div>'
+ // v572 (Najjuko 14 Oct: "you're getting too deep ... simplify") - four rows she always sees: What, When, With, Role. Focus area only when within
+ // her role. Everything else under one closed More.
+ +lab("title","What")+'<input id=pt value="'+esc(e.title)+'"><textarea id=ps rows=2 style="margin-top:6px">'+esc(e.summary)+'</textarea>'
+ +'<div class=row style="grid-template-columns:1fr 1fr;margin-top:6px">'+sel("st",D.types,e.type)+sel("stod",D.times||[],e.time_of_day||"Unspecified")+'</div>'
+ +lab("people","With")+(e.people.length?'<div class=chips style="margin-bottom:6px">'+chips(e.people,e.people,"p")+'</div>':'')
+ +(D.people_tree||[]).map(function(g,gi){var rest=g.people.filter(function(p){return e.people.indexOf(p)<0});if(!rest.length)return '';return '<details class=pdp'+(gi===0&&!e.people.length?' open':'')+'><summary>'+esc(g.dept)+' <small>'+rest.length+'</small></summary><div class=chips>'+chips(rest,[],"p")+'</div></details>'}).join("")
+ +lab("role","Role")+sel("ssc",[{id:"1",name:"Within my role"},{id:"0",name:"Outside my role"}],e.in_scope===false?"0":"1")
+ +'<div id=pout style="display:'+(e.in_scope===false?'block':'none')+';margin-top:6px">'+sel("sor",(D.out_roles||[]).map(function(r){return {id:r[0],name:r[0]}}),e.out_role||"Other")+'<div id=porn class=m style="margin-top:4px">'+esc(((D.out_roles||[]).filter(function(r){return r[0]===e.out_role})[0]||[])[1]||"")+'</div></div>'
+ +'<div id=pkpi style="display:'+(e.in_scope===false?'none':'block')+'">'+lab("kpi","Counts towards")+'<div class=chips>'+chips(D.kpis,e.kpis,"k")+'</div></div>'
+ +'<details class=more><summary>'+(ICON.out||'')+' More (part of the role, how long, task progress, questions)</summary>'
  +lab("scope","Part of the role")+'<div class=chips>'+chips(D.scope,e.scope,"s")+'</div>'
- +lab("time","Time of day")+'<div class=chips>'+chips(D.times||[],[e.time_of_day||"Unspecified"],"tod")+'</div>'
- +lab("scope","Scope of work")+'<div class=chips><button type=button class="chip'+(e.in_scope!==false?' on':'')+'" data-sc=1>Within my role</button><button type=button class="chip'+(e.in_scope===false?' on':'')+'" data-sc=0>Outside my role</button></div>'
- +'<div id=pout style="display:'+(e.in_scope===false?'block':'none')+'"><div class=lab>Which role was it really?</div><div class=chips>'+(D.out_roles||[]).map(function(r){return '<button type=button class="chip'+(e.out_role===r[0]?' on':'')+'" data-or="'+esc(r[0])+'" title="'+esc(r[1])+'">'+esc(r[0])+'</button>'}).join("")+'</div><div id=porn class=m style="margin-top:4px">'+esc(((D.out_roles||[]).filter(function(r){return r[0]===e.out_role})[0]||[])[1]||"")+'</div></div>'
- +lab("effort","About how long")+'<div class=chips>'+chips(D.effort,[e.effort],"f")+'</div>'
+ +lab("effort","About how long")+sel("sef",D.effort,e.effort)
  +lab("task","Campaign or task")+'<div class=chips>'+chips((e.works||[]).filter(function(w){return D.works.indexOf(w)<0}).concat(D.works),e.works||[],"w")+'</div>'
  +'<div class=addw><input id=pnw placeholder="Add a new task"><button type=button class=ghost id=pnb>Add</button></div><div id=pprog></div>'
- +lab("people","People")+''+(e.people.length?'<div class=chips style="margin-bottom:6px">'+chips(e.people,e.people,"p")+'</div>':'')
- +(D.people_tree||[]).map(function(g,gi){var rest=g.people.filter(function(p){return e.people.indexOf(p)<0});if(!rest.length)return '';return '<details class=pdp'+(gi===0?' open':'')+'><summary>'+esc(g.dept)+' <small>'+rest.length+'</small></summary><div class=chips>'+chips(rest,[],"p")+'</div></details>'}).join("")
  +((e.questions||[]).length?lab("ask","A few questions so nothing is missed")+''+e.questions.map(function(q,i){return '<div class=m style="color:#D8D2C4;margin:6px 0 4px">'+esc(q)+'</div><input class=pq data-q='+i+' placeholder="Your answer (optional)">'}).join("")+'<button type=button class=ghost id=pa style="width:100%;margin-top:6px">Answer and refile</button>':'')
  +(e.deliverables.length?lab("task","Produced")+'<div class=m style="color:#D8D2C4">'+esc(e.deliverables.join("; "))+'</div>':'')
  +(e.next.length?lab("out","Next steps")+'<div class=m style="color:#D8D2C4">'+esc(e.next.join("; "))+'</div>':'')
+ +'</details>'
  +'<div class=acts><button type=button class=ghost id=pc>'+(QUEUE.length>1?'Skip this one':'Cancel')+'</button><button type=button class=gold id=pv>'+(QUEUE.length>1&&QI<QUEUE.length-1?'Save and next':'Save')+'</button></div></div>';
  $("wprev").innerHTML=h;
- $("wprev").querySelectorAll("[data-t]").forEach(function(b){b.onclick=function(){PREV.type=b.getAttribute("data-t");$("wprev").querySelectorAll("[data-t]").forEach(function(x){x.classList.toggle("on",x===b)})}});
+ $("st").onchange=function(){PREV.type=this.value};$("stod").onchange=function(){PREV.time_of_day=this.value};$("sef").onchange=function(){PREV.effort=this.value};
+ $("ssc").onchange=function(){PREV.in_scope=this.value==="1";if(PREV.in_scope)PREV.out_role="";else if(!PREV.out_role)PREV.out_role=$("sor").value||"Other";$("pout").style.display=PREV.in_scope?"none":"block";$("pkpi").style.display=PREV.in_scope?"block":"none"};
+ $("sor").onchange=function(){PREV.out_role=this.value;var r=(D.out_roles||[]).filter(function(x){return x[0]===PREV.out_role})[0];$("porn").textContent=r?r[1]:""};
  function tog(attr,arr,num){$("wprev").querySelectorAll("[data-"+attr+"]").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-"+attr);if(num)v=+v;var i=PREV[arr].indexOf(v);if(i>=0)PREV[arr].splice(i,1);else PREV[arr].push(v);b.classList.toggle("on")}})}
  PREV.works=PREV.works||[];PREV.progress=PREV.progress||[];tog("k","kpis",1);tog("s","scope",0);tog("p","people",0);
- $("wprev").querySelectorAll("[data-f]").forEach(function(b){b.onclick=function(){PREV.effort=b.getAttribute("data-f");$("wprev").querySelectorAll("[data-f]").forEach(function(x){x.classList.toggle("on",x===b)})}});
- $("wprev").querySelectorAll("[data-tod]").forEach(function(b){b.onclick=function(){PREV.time_of_day=b.getAttribute("data-tod");$("wprev").querySelectorAll("[data-tod]").forEach(function(x){x.classList.toggle("on",x===b)})}});
- $("wprev").querySelectorAll("[data-sc]").forEach(function(b){b.onclick=function(){PREV.in_scope=b.getAttribute("data-sc")==="1";if(PREV.in_scope)PREV.out_role="";else if(!PREV.out_role)PREV.out_role="Other";$("wprev").querySelectorAll("[data-sc]").forEach(function(x){x.classList.toggle("on",x===b)});$("pout").style.display=PREV.in_scope?"none":"block";$("wprev").querySelectorAll("[data-or]").forEach(function(x){x.classList.toggle("on",x.getAttribute("data-or")===PREV.out_role)})}});
- $("wprev").querySelectorAll("[data-or]").forEach(function(b){b.onclick=function(){PREV.out_role=b.getAttribute("data-or");$("wprev").querySelectorAll("[data-or]").forEach(function(x){x.classList.toggle("on",x===b)});$("porn").textContent=b.getAttribute("title")}});
  wireParties(e);
  function prog(){PREV.progress=PREV.works.map(function(w){var p=PREV.progress.filter(function(x){return x.work===w})[0];if(p)return p;var old=(D.tasks||[]).filter(function(t){return t.name===w})[0];return {work:w,status:old&&old.percent>0?"In progress":"Started",percent:old?old.percent:10,owners:old&&old.owners.length?old.owners.slice():PREV.people.slice()}});
-  var opts='<option value="">+ Who is responsible or helping?</option>'+(D.org||[]).map(function(g){return '<optgroup label="'+esc(g.dept)+'">'+g.people.map(function(n){return '<option>'+esc(n)+'</option>'}).join("")+'</optgroup>'}).join("");
   $("pprog").innerHTML=PREV.progress.map(function(p,i){return '<div class=pg><div class=m style="color:#E8E4D8">'+esc(p.work)+' <b id=pp'+i+' style="color:#C5A56A;float:right">'+p.percent+'%</b></div><input type=range min=0 max=100 step=5 value='+p.percent+' data-pc='+i+'><div class=chips>'+D.status.map(function(s){return '<button type=button class="chip'+(s===p.status?' on':'')+'" data-st="'+i+'|'+esc(s)+'">'+esc(s)+'</button>'}).join("")+'</div>'
-   +'<div class=chips>'+(p.owners||[]).map(function(n,j){return '<button type=button class="chip on" data-ow="'+i+'|'+j+'">'+esc(n)+' &#215;</button>'}).join("")+'</div><select class=who data-os='+i+'>'+opts+'</select></div>'}).join("");
-  $("pprog").querySelectorAll("[data-ow]").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-ow").split("|");PREV.progress[+v[0]].owners.splice(+v[1],1);prog()}});
-  $("pprog").querySelectorAll("[data-os]").forEach(function(s){s.onchange=function(){var i=+s.getAttribute("data-os"),o=PREV.progress[i].owners=PREV.progress[i].owners||[];if(s.value&&o.indexOf(s.value)<0)o.push(s.value);if(s.value&&PREV.people.indexOf(s.value)<0)PREV.people.push(s.value);prog()}});
+   +'</div>'}).join("");
+  // v572 (Najjuko: "you still put all of the people ... too much noise") - no second people list: the people under With are the people on the task
+  PREV.progress.forEach(function(p){p.owners=PREV.people.filter(function(n){return n!=="All sales agents"})});
   $("pprog").querySelectorAll("[data-pc]").forEach(function(r){r.oninput=function(){var i=+r.getAttribute("data-pc");PREV.progress[i].percent=+r.value;$("pp"+i).textContent=r.value+"%";if(+r.value===100){PREV.progress[i].status="Done"}}});
   $("pprog").querySelectorAll("[data-st]").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-st").split("|"),i=+v[0];PREV.progress[i].status=v[1];if(v[1]==="Done"){PREV.progress[i].percent=100}prog()}})}
  prog();

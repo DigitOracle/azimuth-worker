@@ -127,7 +127,7 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(e2.external[0].known === true && e2.external[0].confirmed === true && e2.external[0].name === "Al Jalila Foundation", "next time the name is recognised without asking or searching", e2.external[0]);
   ok(![...store.keys()].some((k) => k.startsWith("work_naj_party_") && !k.includes("al-jalila")), "nothing else was remembered");
   const js3 = await (await req("/momo/work.js", true)).text();
-  ok(/Is this the right one\?/.test(js3) && /Outside your role/.test(js3) && /Which role was it really\?/.test(js3) && /\["Morning","Midday","Afternoon","Evening","Unspecified"\]/.test(JSON.stringify((await (await req("/momo/work/api?week=2026-10-14", true)).json()).times)) && /class=pdp/.test(js3) && /\$\("wreset"\)\.onclick/.test(js3) && /var ICON=/.test(js3) && /lab\("people","People"\)/.test(js3), "the page asks 'is this the right one', offers the five times of day, the outside-role picker, people by department, Start over, and icons on the labels");
+  ok(/Is this the right one\?/.test(js3) && /Outside your role/.test(js3) && /sel\("sor"/.test(js3) && /\["Morning","Midday","Afternoon","Evening","Unspecified"\]/.test(JSON.stringify((await (await req("/momo/work/api?week=2026-10-14", true)).json()).times)) && /class=pdp/.test(js3) && /\$\("wreset"\)\.onclick/.test(js3) && /var ICON=/.test(js3) && /lab\("people","With"\)/.test(js3), "the page asks 'is this the right one', offers the five times of day, the outside-role picker, people by department, Start over, and icons on the labels");
   const page = await (await req("/momo/work", true)).text();
   ok(/id=wreset/.test(page) && /Start over/.test(page) && /id=wmic/.test(page), "the entry box has Start over and Speak");
   delete env.ANTHROPIC_API_KEY;
@@ -137,6 +137,24 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(api0.out_roles.length === 7 && api0.out_roles[0][0] === "Sales agent" && /clause 5\.3/.test(api0.out_roles[0][1]) && api0.people_tree[0].dept === "Leadership" && api0.people_tree[0].people.includes("Ali Kalhor") && api0.people_tree[0].people.includes("Faez Noorzad") && api0.people_tree.some((g) => g.dept === "Sales" && g.people.includes("Sally Zehil")), "outside roles carry their contract line; the people tree puts Ali and Faez on top, then departments");
   try { new Function(js3); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v571", e.message); }
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_party_")) store.delete(k); }
+// v572 - simpler check box: outside-role work needs no focus area or task; the rest folds under More
+{ const js4 = await (await req("/momo/work.js", true)).text();
+  ok(/No focus area or task applies\./.test(js4) && !/No task linked: pick one below/.test(js4), "outside-role work is not told to pick a task or focus area");
+  ok(/<details class=more><summary>/.test(js4) && /More \(part of the role, how long, task progress, questions\)/.test(js4), "the less-used rows fold under one More toggle");
+  const order = ["lab(\"title\",\"What\")", "sel(\"stod\"", "lab(\"people\",\"With\")", "lab(\"role\",\"Role\")", "<details class=more>"].map((s) => js4.indexOf(s));
+  ok(order.every((i) => i >= 0) && order.every((v, i) => i === 0 || v > order[i - 1]), "the first card is What, When, With, Role, then More", order);
+  try { new Function(js4); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v572", e.message); } }
+// v573 - dropdowns for single-choice fields; a one-page Debrief per entry
+{ const js5 = await (await req("/momo/work.js", true)).text();
+  ok(/sel\("st",D\.types/.test(js5) && /sel\("stod"/.test(js5) && /sel\("ssc"/.test(js5) && /sel\("sor"/.test(js5) && /sel\("sef"/.test(js5) && !/data-tod=/.test(js5) && !/\[data-sc\]/.test(js5), "type, time, role, which-role and how-long are dropdowns, no leftover pill handlers");
+  ok(!/Who is responsible or helping/.test(js5) && /p\.owners=PREV\.people\.filter/.test(js5), "no second people list: the task's people are the With people");
+  try { new Function(js5); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v573", e.message); }
+  const sv2 = await (await req("/momo/work/api", true, { action: "save", entry: { title: "Sales elevation workshop", type: "Meeting", summary: "Najjuko attended the sales elevation workshop as an agent.", people: ["Ruzanna Avanyan (Rose)"], kpis: [], scope: [], works: [], deliverables: [], evidence: [], next: ["Share the notes with Ali"], questions: [], time_of_day: "Morning", in_scope: false, out_role: "Sales agent", effort: "1-2 hours", progress: [] }, text: "t", date: "2026-10-14" })).json();
+  const db = await req("/momo/work/debrief?id=" + sv2.entry.id + "&date=2026-10-14", true), dh = await db.text();
+  ok(db.status === 200 && /<h1>DEBRIEF<\/h1>/.test(dh) && /Sales elevation workshop/.test(dh) && /Outside her role \(Sales agent\)/.test(dh) && /Share the notes with Ali/.test(dh) && /Wednesday 14 Oct 2026, morning/.test(dh) && /CONFIDENTIAL · FN Realty/.test(dh), "the debrief is one short page: what, when, who, role, next steps, FN footer");
+  ok(!/Claude|Anthropic|GPT/i.test(dh), "the debrief never names an AI vendor");
+  ok((await req("/momo/work/debrief?id=" + sv2.entry.id + "&date=2026-10-14", false)).status === 404, "only her link can open a debrief");
+  await req("/momo/work/api", true, { action: "delete", id: sv2.entry.id, date: "2026-10-14" }); }
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
