@@ -109,6 +109,34 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   const js2 = await (await req("/momo/work.js", true)).text();
   ok(/ACTIVITY '\+\(QI\+1\)\+' OF '\+QUEUE\.length/.test(js2) && /Save and next/.test(js2), "the page walks her through the activities one at a time");
   try { new Function(js2); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v570", e.message); } }
+// v571 - time of day, alone, in/outside scope, outside parties looked up once and remembered after she confirms
+{ const { TIMES } = await import("../src/work_log.js");
+  ok(TIMES.length === 5 && /time_of_day: from the entry/.test(lastSys) && /external: companies, organisations or outside people NOT on the FN staff/.test(lastSys), "the filing instructions ask for time of day, alone, scope and outside parties");
+  const fb3 = await (await req("/momo/work/api", true, { action: "parse", text: "In the morning I drafted the content calendar by myself. After lunch covered reception for an hour, not my job.", date: "2026-10-14" })).json();
+  ok(fb3.entries.length === 2 && fb3.entries[0].time_of_day === "Morning" && fb3.entries[0].alone === true && fb3.entries[0].in_scope === true && fb3.entries[1].time_of_day === "Afternoon" && fb3.entries[1].in_scope === false, "keyword path reads morning/afternoon, alone, and outside scope", fb3.entries.map((e) => [e.time_of_day, e.alone, e.in_scope]));
+  // an outside party: first time it is looked up (web search stubbed), she confirms, then it is known next time
+  globalThis.fetch = async (u, init) => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ found: true, name: "Al Jalila Foundation", kind: "charity", what: "Dubai healthcare charity.", where: "Dubai", site: "https://www.aljalilafoundation.ae", confidence: "high" }) }] }), { status: 200 });
+  env.ANTHROPIC_API_KEY = "test";
+  const model = () => ({ entries: [{ title: "Site visit", type: "Event", summary: "s", people: [], kpis: [5], scope: ["b4"], works: ["Breast Cancer Awareness (October)"], deliverables: [], evidence: [], next: [], questions: [], effort: "Half a day", progress: [], prep: { needed: false, developer: "", project: "", area: "", event: "" }, time_of_day: "Afternoon", alone: false, in_scope: true, external: [{ name: "Al Jalila", kind: "charity", person: "" }] }] });
+  const e1 = (await (await req("/momo/work/api", true, { action: "parse", text: "Visited Al Jalila about the pink walk", date: "2026-10-14" }, model)).json()).entries[0];
+  ok(e1.external[0].suggested === "Al Jalila Foundation" && e1.external[0].confirmed === false && /healthcare charity/.test(e1.external[0].what), "a new outside party is looked up and offered for her to confirm", e1.external[0]);
+  const c = await (await req("/momo/work/api", true, { action: "party_confirm", name: "Al Jalila Foundation", typed: "Al Jalila", kind: "charity", what: "Dubai healthcare charity.", where: "Dubai", site: "https://www.aljalilafoundation.ae" })).json();
+  ok(c.ok && store.has("work_naj_party_al-jalila-foundation") && c.party.aliases.includes("Al Jalila"), "confirming remembers the organisation with the name she typed as an alias");
+  globalThis.fetch = async () => { throw new Error("no web search should run for a known party"); };
+  const e2 = (await (await req("/momo/work/api", true, { action: "parse", text: "Follow-up call with Al Jalila", date: "2026-10-15" }, model)).json()).entries[0];
+  ok(e2.external[0].known === true && e2.external[0].confirmed === true && e2.external[0].name === "Al Jalila Foundation", "next time the name is recognised without asking or searching", e2.external[0]);
+  ok(![...store.keys()].some((k) => k.startsWith("work_naj_party_") && !k.includes("al-jalila")), "nothing else was remembered");
+  const js3 = await (await req("/momo/work.js", true)).text();
+  ok(/Is this the right one\?/.test(js3) && /Outside your role/.test(js3) && /Which role was it really\?/.test(js3) && /\["Morning","Midday","Afternoon","Evening","Unspecified"\]/.test(JSON.stringify((await (await req("/momo/work/api?week=2026-10-14", true)).json()).times)) && /class=pdp/.test(js3) && /\$\("wreset"\)\.onclick/.test(js3) && /var ICON=/.test(js3) && /lab\("people","People"\)/.test(js3), "the page asks 'is this the right one', offers the five times of day, the outside-role picker, people by department, Start over, and icons on the labels");
+  const page = await (await req("/momo/work", true)).text();
+  ok(/id=wreset/.test(page) && /Start over/.test(page) && /id=wmic/.test(page), "the entry box has Start over and Speak");
+  delete env.ANTHROPIC_API_KEY;
+  const o1 = await (await req("/momo/work/api", true, { action: "parse", text: "Sat in the sales meeting as an agent and showed a unit to my client", date: "2026-10-14" })).json();
+  ok(o1.entries.length === 1 && o1.entries[0].in_scope === false && o1.entries[0].out_role === "Sales agent", "work done as a sales agent is logged as outside her role, Sales agent", o1.entries[0]);
+  const api0 = await (await req("/momo/work/api?week=2026-10-14", true)).json();
+  ok(api0.out_roles.length === 7 && api0.out_roles[0][0] === "Sales agent" && /clause 5\.3/.test(api0.out_roles[0][1]) && api0.people_tree[0].dept === "Leadership" && api0.people_tree[0].people.includes("Ali Kalhor") && api0.people_tree[0].people.includes("Faez Noorzad") && api0.people_tree.some((g) => g.dept === "Sales" && g.people.includes("Sally Zehil")), "outside roles carry their contract line; the people tree puts Ali and Faez on top, then departments");
+  try { new Function(js3); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v571", e.message); }
+  for (const k of [...store.keys()]) if (k.startsWith("work_naj_party_")) store.delete(k); }
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

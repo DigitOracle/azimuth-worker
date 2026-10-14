@@ -54,7 +54,22 @@ const TYPES = ["Meeting", "Deliverable", "Update", "Organising", "Outreach", "Ev
 export const STATUS = ["Started", "In progress", "Waiting on others", "Done"];
 export const EFFORT = [["Under 1 hour", 0.5], ["1-2 hours", 1.5], ["Half a day", 4], ["Full day", 8]];
 
-const SCHEMA = { type: "object", additionalProperties: false, required: ["title", "type", "summary", "people", "kpis", "scope", "works", "deliverables", "evidence", "next", "questions"], properties: {
+// v571 (Kendall 14 Oct: "time of day, the department it affects, who I did this with or by myself, within or outside scope, third parties off-site")
+export const TIMES = ["Morning", "Midday", "Afternoon", "Evening", "Unspecified"];
+// v571 (Kendall 14 Oct: "if it's outside of role ... sales, HR ... map this back to the contract ... she will be using these for negotiating").
+// Outside-role work is logged with WHICH role it was and the contract line it sits against, so the log is evidence at the review.
+export const OUT_ROLES = [
+  ["Sales agent", "Selling or showing property as a broker (clause 5.3: her own leads 70/30; Company leads 50/50)"],
+  ["Execution Team (hands-on)", "Filming, editing, design, publishing, comments and DMs (clause 2.3: hands-on work belongs to the Execution Team; clause 3.1: Company provides it)"],
+  ["HR, Admin & Compliance", "Reception, admin, permits, visas (Schedule 4: Admin & compliance, not the Strategic Lead)"],
+  ["Finance", "Invoices, payments, collections (no finance duty in Schedule 1)"],
+  ["Leadership / management decisions", "Deciding, negotiating or contracting for the Company (Schedule 4: Company management is accountable)"],
+  ["Own ventures", "Her own brands and the Najma feed (clauses 12.2 and 12.4: hers, separate from FN)"],
+  ["Other", "Anything else outside the eleven parts of Schedule 1"],
+];
+const SCHEMA = { type: "object", additionalProperties: false, required: ["title", "type", "summary", "people", "kpis", "scope", "works", "deliverables", "evidence", "next", "questions", "time_of_day", "alone", "in_scope", "external"], properties: {
+  time_of_day: { type: "string", enum: TIMES }, alone: { type: "boolean" }, in_scope: { type: "boolean" }, out_role: { type: "string" },
+  external: { type: "array", items: { type: "object", additionalProperties: false, required: ["name", "kind", "person"], properties: { name: { type: "string" }, kind: { type: "string" }, person: { type: "string" } } } },
   works: { type: "array", items: { type: "string" } }, questions: { type: "array", items: { type: "string" } },
   effort: { type: "string", enum: EFFORT.map((x) => x[0]) },
   prep: { type: "object", additionalProperties: false, required: ["needed", "developer", "project", "area", "event"], properties: { needed: { type: "boolean" }, developer: { type: "string" }, project: { type: "string" }, area: { type: "string" }, event: { type: "string" } } },
@@ -83,6 +98,10 @@ function sysPrompt() {
     + "if the entry gives a percentage, use it; owners: the people who hold or share the task (assigned to, doing it, in collaboration with), from the people list, Najjuko herself not included. effort: a rough time for the whole entry (" + EFFORT.map((x) => x[0]).join(", ") + "), judged from what was done; a meeting plus preparing a deck is about half a day."
     + "\nprep: needed = true when the entry involves a client-facing event or deal with a developer, project or area (an open house, a launch, a viewing, a client meeting about a project); "
     + "developer, project and area as named in the entry (empty string if not named; Imtiaz = Imtiaz Developments, MTI = Imtiaz), event in a few words. Otherwise needed = false with empty strings."
+    + "\ntime_of_day: from the entry's own words or a stated clock time (morning, before lunch, at 3pm, after work ...); Unspecified if none. "
+    + "alone: true when she did it by herself with no staff or third party involved. in_scope: true when the activity sits inside the eleven parts of her role; false when it is outside them. "
+    + "out_role: when in_scope is false, which role she was really doing, exactly one of: " + OUT_ROLES.map((r) => r[0]).join(" | ") + " (attending or running a sales meeting, showing a unit, chasing a client's deal = Sales agent; filming or designing herself = Execution Team (hands-on); reception or paperwork = HR, Admin & Compliance). Empty string when in scope. "
+    + "external: companies, organisations or outside people NOT on the FN staff list that she dealt with (a charity, a developer's office, a venue, a journalist, a supplier): name as written, kind in two or three words (charity, developer, venue, media, supplier, client), person if one is named, else empty string. A team member of FN is never external."
     + "\nRules: use only what the entry says; never invent people, figures or outcomes. title: under 8 words. summary: one or two plain sentences in the third person (\"Najjuko ...\"). "
     + "people: everyone she dealt with. kpis: only the areas the activity genuinely advances, usually one or two. deliverables: things she produced (e.g. a PowerPoint). "
     + "evidence: what this adds to her day-75 review evidence, in the review's own words (e.g. 'Strategy and plan shared with leadership'). next: follow-ups the entry mentions. "
@@ -91,7 +110,7 @@ function sysPrompt() {
 
 // v570 - without the model, split the day on line breaks, bullets, numbering and "then / after that / also"
 export function splitDay(text) {
-  const parts = String(text).replace(/\r/g, "").split(/\n+|(?:^|\s)[-•*]\s+|(?:^|\n)\s*\d+[.)]\s+|;\s+|\.\s+(?=(?:then|after that|also|next|later|afterwards|in the afternoon|in the morning|in the evening)\b)/i)
+  const parts = String(text).replace(/\r/g, "").split(/\n+|(?:^|\s)[-•*]\s+|(?:^|\n)\s*\d+[.)]\s+|;\s+|\.\s+(?=(?:then|after that|also|next|later|afterwards|in the afternoon|in the morning|in the evening|after lunch|before lunch|at lunch|at midday|this morning|this afternoon|tonight|at \d)\b)/i)
     .map((s) => s.trim().replace(/^[-•*\d.)\s]+/, "")).filter((s) => s.length > 3);
   return parts.length ? parts : [String(text).trim()];
 }
@@ -116,7 +135,11 @@ function fallback(text) {
   if (allHands && people.indexOf("All sales agents") < 0) people.push("All sales agents");
   const pct = /(\d{1,3})\s*%/.exec(t), done = /\b(finished|done|delivered|completed|sent it|sent the|signed off)\b/.test(t), started = /\b(started|kicked off|began|initiated|kick-off)\b/.test(t), half = /half ?(done|way|complete)|halfway/.test(t);
   const p0 = pct ? Math.min(100, +pct[1]) : done ? 100 : half ? 50 : started ? 10 : 50;
+  const tod = /\b(afternoon|after lunch|[1-5]\s*pm|1[3-7]:\d\d)\b/.test(t) ? "Afternoon" : /\b(evening|tonight|after work|[6-9]\s*pm|1[89]:\d\d|2[0-2]:\d\d)\b/.test(t) ? "Evening" : /\b(morning|breakfast|first thing|before lunch|\d{1,2}\s*am|0?[6-9]:\d\d|1[01]:\d\d)\b/.test(t) ? "Morning" : /\b(lunch|midday|noon|12\s*pm|12:\d\d)\b/.test(t) ? "Midday" : "Unspecified";
+  const outside = /\b(my own|personal|reception|errand|outside (my )?scope|not my job|her recode|najjuko edit|be by her|as an agent|showed? (a|the) unit|viewing with (a|the|my) client|sales meeting)\b/.test(t);
+  const outRole = !outside ? "" : /reception|paperwork|visa|permit/.test(t) ? "HR, Admin & Compliance" : /as an agent|showed? (a|the) unit|viewing with|sales meeting|client'?s deal/.test(t) ? "Sales agent" : /her recode|najjuko edit|be by her|my own brand/.test(t) ? "Own ventures" : /filmed|edited|designed it myself|posted it myself/.test(t) ? "Execution Team (hands-on)" : "Other";
   return { title: text.split(/[.\n]/)[0].slice(0, 60), type: /meeting|huddle|call/.test(t) ? "Meeting" : "Update", summary: text.slice(0, 300), people, kpis: [...kp], scope: [...sc], works, deliverables: [], evidence: [], next: [], questions: [], check: true,
+    time_of_day: tod, alone: people.length === 0 && !/\bwith\b/.test(t), in_scope: !outside, out_role: outRole, external: [],
     prep: pm || dv ? { needed: true, developer: dv ? (/imtiaz|mti/.test(dv[1]) ? "Imtiaz Developments" : dv[1].replace(/^./, (c) => c.toUpperCase())) : "", project: "", area: "", event: pm ? pm[1] : "" } : null,
     effort: /all day|full day/.test(t) ? "Full day" : /meeting|huddle|deck|powerpoint/.test(t) ? "Half a day" : "1-2 hours",
     progress: works.map((w) => ({ work: w, status: p0 >= 100 ? "Done" : started && !half && !pct ? "Started" : "In progress", percent: p0, owners: people.filter((n) => n !== "All sales agents") })) };
@@ -129,6 +152,9 @@ function clean(x) {
     people: arr(x.people).filter((p) => names.has(p)), kpis: [...new Set((x.kpis || []).map(Number).filter((n) => n >= 1 && n <= 5))],
     scope: [...new Set(arr(x.scope).filter((s) => ids.has(s)))], works: [...new Set(arr(x.works).map((w) => w.slice(0, 80).trim()).filter(Boolean))].slice(0, 6),
     effort: EFFORT.some((e) => e[0] === x.effort) ? x.effort : "1-2 hours",
+    time_of_day: TIMES.includes(x.time_of_day) ? x.time_of_day : "Unspecified", alone: !!x.alone, in_scope: x.in_scope !== false,
+    out_role: x.in_scope === false ? (OUT_ROLES.some((r) => r[0] === x.out_role) ? x.out_role : "Other") : "",
+    external: (Array.isArray(x.external) ? x.external : []).map((o) => ({ name: String(o.name || "").slice(0, 100).trim(), kind: String(o.kind || "").slice(0, 40), person: String(o.person || "").slice(0, 80), confirmed: !!o.confirmed, note: String(o.note || "").slice(0, 300) })).filter((o) => o.name).slice(0, 6),
     prep: x.prep && x.prep.needed ? { needed: true, developer: String(x.prep.developer || "").slice(0, 80), project: String(x.prep.project || "").slice(0, 80), area: String(x.prep.area || "").slice(0, 80), event: String(x.prep.event || "").slice(0, 80) } : null,
     progress: (Array.isArray(x.progress) ? x.progress : []).map((p) => ({ work: String(p.work || "").slice(0, 80).trim(), status: STATUS.includes(p.status) ? p.status : "In progress", percent: Math.max(0, Math.min(100, Math.round(Number(p.percent) || 0))), owners: (Array.isArray(p.owners) ? p.owners : []).map(String).filter((n) => names.has(n)).slice(0, 12) })).filter((p) => p.work).slice(0, 6), questions: arr(x.questions, 3), answers: arr(x.answers, 3), deliverables: arr(x.deliverables, 8), evidence: arr(x.evidence, 8), next: arr(x.next, 8), check: !!x.check };
 }
@@ -136,6 +162,36 @@ const dubaiToday = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0
 const okDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || "")) ? String(d) : dubaiToday();
 function weekOf(d) { const t = new Date(d + "T00:00:00Z"); const dow = (t.getUTCDay() + 6) % 7; const m = new Date(t.getTime() - dow * 864e5); return [m.toISOString().slice(0, 10), new Date(m.getTime() + 6 * 864e5).toISOString().slice(0, 10)]; }
 const PFX = "work_naj_";
+// v571 - third parties she deals with off-site (a charity, a venue, a developer's office). Looked up on the web once, confirmed by her, then
+// remembered under work_naj_party_<slug> so the next entry recognises the name without asking. Nothing is remembered until she confirms.
+const PPFX = "work_naj_party_";
+const slug = (s) => String(s || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+async function knownParties(env) {
+  const out = []; let cursor;
+  do { const r = await env.MEETINGS.list({ prefix: PPFX, cursor }); cursor = r.list_complete ? null : r.cursor; for (const k of r.keys) out.push(k.name); } while (cursor);
+  return (await Promise.all(out.map((n) => env.MEETINGS.get(n).then((v) => { try { return JSON.parse(v); } catch (e) { return null; } })))).filter(Boolean);
+}
+const LOOKUP_SCHEMA = { type: "object", additionalProperties: false, required: ["found", "name", "kind", "what", "where", "site", "confidence"], properties: {
+  found: { type: "boolean" }, name: { type: "string" }, kind: { type: "string" }, what: { type: "string" }, where: { type: "string" }, site: { type: "string" }, confidence: { type: "string", enum: ["high", "medium", "low"] } } };
+// the Claude API's own web search: one call, the model searches and returns a short card. Returns null when no key or nothing found.
+async function lookupParty(env, name, hint) {
+  if (!env.ANTHROPIC_API_KEY) return null;
+  const body = { model: "claude-sonnet-5", max_tokens: 1200, thinking: { type: "disabled" }, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3, user_location: { type: "approximate", country: "AE", city: "Dubai", timezone: "Asia/Dubai" } }],
+    system: "Identify an organisation that a Dubai real-estate advisory's marketing lead dealt with. Search the web, prefer the UAE entity. Answer ONLY as JSON matching this shape, no prose: " + JSON.stringify(LOOKUP_SCHEMA.properties)
+      + ". name = official name; kind = two or three words (charity, developer, hotel venue, media, supplier, government); what = one plain sentence; where = city or area; site = official website or empty string; found = false with empty strings if nothing credible. Never invent.",
+    messages: [{ role: "user", content: "Organisation as she wrote it: " + name + (hint ? " (" + hint + ")" : "") }] };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) { if (r.status >= 500 || r.status === 429 || r.status === 403) { await new Promise((s) => setTimeout(s, 700)); continue; } return null; }
+      const j = await r.json(); const txt = (j.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+      const m = /\{[\s\S]*\}/.exec(txt); if (!m) return null;
+      const o = JSON.parse(m[0]); if (!o.found) return null;
+      return { name: String(o.name || name).slice(0, 100), kind: String(o.kind || "").slice(0, 40), what: String(o.what || "").slice(0, 300), where: String(o.where || "").slice(0, 80), site: /^https?:\/\//.test(String(o.site || "")) ? String(o.site).slice(0, 200) : "", confidence: o.confidence || "medium" };
+    } catch (e) {}
+  }
+  return null;
+}
 
 async function listEntries(env, from, to) {
   const out = []; let cursor;
@@ -237,7 +293,9 @@ export async function workRoute(request, env, url, deps) {
       const [f, t] = weekOf(okDate(url.searchParams.get("week")));
       const week = await listEntries(env, f, t), all = await listEntries(env, PHASES[0].from, TERM_END);
       const tally = KPIS.map((k) => ({ id: k.id, name: k.name, week: week.filter((e) => e.kpis.includes(k.id)).length, term: all.filter((e) => e.kpis.includes(k.id)).length }));
-      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, tasks: tasksOf(all), depts: deptBoard(tasksOf(all), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES });
+      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, tasks: tasksOf(all), depts: deptBoard(tasksOf(all), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES,
+        // v571 - the people picker in hierarchy: Ali and Faez (and Sultan) on their own at the top, then each department's people
+        people_tree: [{ dept: "Leadership", people: PEOPLE.filter((x) => deptOf(x[0]) === "Leadership").map((x) => x[0]) }].concat(DEPTS.filter((d) => d !== "Leadership").map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) }))) });
     }
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
     if (b.action === "parse") {
@@ -246,8 +304,26 @@ export async function workRoute(request, env, url, deps) {
       let x = null;
       try { x = await deps.claudeJSON(env, sysPrompt(), "Date: " + okDate(b.date) + " (" + dayName(okDate(b.date)) + ")\nWhat she wrote:\n" + text, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
       const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map(clean) : splitDay(text).map((s) => clean(fallback(s)));
+      // v571 - third parties: a name she has confirmed before is recognised at once; a new one is looked up on the web and shown for her to confirm
+      const known = await knownParties(env), seen = {};
+      for (const e of list) for (const o of e.external) {
+        const k = known.find((p) => slug(p.name) === slug(o.name) || (p.aliases || []).some((a) => slug(a) === slug(o.name)));
+        if (k) { Object.assign(o, { name: k.name, kind: k.kind || o.kind, what: k.what || "", where: k.where || "", site: k.site || "", confirmed: true, known: true }); continue; }
+        const key = slug(o.name); if (!seen[key]) seen[key] = lookupParty(env, o.name, o.kind);
+        const f = await seen[key]; if (f) Object.assign(o, { suggested: f.name, kind: f.kind || o.kind, what: f.what, where: f.where, site: f.site, confidence: f.confidence, confirmed: false });
+        else Object.assign(o, { suggested: "", what: "", confirmed: false, notfound: true });
+      }
       return J({ entries: list.slice(0, 20), entry: list[0] });
     }
+    if (b.action === "party_confirm") {   // she says "yes, that's the company": remember it, with the name she typed as an alias
+      const name = String(b.name || "").slice(0, 100).trim(), typed = String(b.typed || "").slice(0, 100).trim(); if (!name) return J({ error: "No name." }, 400);
+      const key = PPFX + slug(name); let rec = null; try { rec = JSON.parse(await env.MEETINGS.get(key)); } catch (e) {}
+      rec = Object.assign(rec || { name, aliases: [], first_seen: dubaiToday() }, { kind: String(b.kind || "").slice(0, 40), what: String(b.what || "").slice(0, 300), where: String(b.where || "").slice(0, 80), site: /^https?:\/\//.test(String(b.site || "")) ? String(b.site).slice(0, 200) : "", last_seen: dubaiToday() });
+      if (typed && slug(typed) !== slug(name) && !(rec.aliases || []).some((a) => slug(a) === slug(typed))) rec.aliases = (rec.aliases || []).concat(typed).slice(0, 10);
+      await env.MEETINGS.put(key, JSON.stringify(rec));
+      return J({ ok: true, party: rec });
+    }
+    if (b.action === "parties") return J({ parties: await knownParties(env) });
     if (b.action === "save") {
       const e = clean(b.entry || {}); const date = okDate(b.date), text = String(b.text || "").slice(0, 4000), link = /^https?:\/\//.test(String(b.link || "")) ? String(b.link).slice(0, 500) : "";
       const id = String(b.id || "").replace(/[^a-z0-9]/g, "").slice(0, 16) || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
@@ -318,7 +394,7 @@ export function reportHtml(es, from, to, allTasks) {
 const WORK_BODY = '<div class=tag>MOMO · WORK</div><h1>My work log</h1>'
   + '<div class=wk id=wkhead></div>'
   + '<form id=wf class=box><label>What did you do? <button type=button id=wmic class=mic aria-label="Speak instead of typing"><svg viewBox="0 0 24 24" width=18 height=18 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Speak</span></button></label><textarea id=wt rows=4 placeholder="e.g. Monday huddle: built the PowerPoint, ran the meeting with Ali and the team, laid out the week."></textarea>'
-  + '<div class=row><input id=wd type=date><input id=wl type=url placeholder="Link to a file (optional)"></div><button type=submit id=wb class=gold>File it</button></form>'
+  + '<div class=row><input id=wd type=date><input id=wl type=url placeholder="Link to a file (optional)"></div><div class=row2><button type=button id=wreset class=ghost>Start over</button><button type=submit id=wb class=gold>File it</button></div></form>'
   + '<div id=wprev></div><a id=wday class=gold style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>Today\'s summary</a>'
   + '<a href="/momo/work/prep?key=__KEY__" class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:8px">Prepare me for a client, project or open house</a>'
   + '<div class=sec>MY TASKS</div><div id=wtasks></div>'
@@ -363,9 +439,25 @@ export const WORK_CSS = '.wk{color:#8FA39B;font-size:.85rem;margin:-12px 0 16px}
   + '.dp{border:1px solid #24352F;border-radius:12px;margin:6px 0;background:#0E1918;overflow:hidden}.dp summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;gap:8px;align-items:center}.dp summary::-webkit-details-marker{display:none}'
   + '.dp summary b{color:#F3EFE4}.dp summary small{color:#8FA39B;font-size:.76rem}.dp .n{color:#C5A56A;font-family:Fraunces,serif;font-size:1.3rem}.dpt{border-top:1px solid #1B2A26;padding:9px 14px}.dpt b{color:#E8E4D8;font-weight:600;font-size:.9rem}.dpt .m{color:#8FA39B;font-size:.76rem;margin-top:2px}.chase{color:#E3A08F}'
   + '.who{width:100%;margin-top:6px;background:#0C1413;border:1px solid #24352F;border-radius:10px;color:#E8E4D8;padding:8px;font:inherit}'
+  + '.pdp{border:1px solid #24352F;border-radius:10px;margin:4px 0;background:#0C1413}.pdp summary{list-style:none;cursor:pointer;padding:8px 10px;color:#C5A56A;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase}.pdp summary::-webkit-details-marker{display:none}.pdp summary small{color:#8FA39B;letter-spacing:0;text-transform:none}.pdp summary:before{content:"+ ";color:#8FA39B}.pdp[open] summary:before{content:"\\2212 "}.pdp .chips{padding:0 10px 10px}'
   + '.pg{border-top:1px solid #24352F;padding-top:8px;margin-top:8px}.pg input[type=range]{padding:0;accent-color:#C5A56A}.addw{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px}';
 
-const WORK_JS = String.raw`(function(){
+// v571 - a little flair, kept quiet on a phone: one small line icon per section label and per key pill (our icon set, never emoji)
+const WI = (d) => '<svg viewBox="0 0 24 24" width=14 height=14 fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + d + '</svg>';
+export const WORK_ICONS = {
+  title: WI('<path d="M4 7h16M4 12h10M4 17h7"/>'), type: WI('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/>'), kpi: WI('<path d="M12 3l2.6 5.4 6 .8-4.3 4.2 1 6-5.3-2.8L6.7 19.4l1-6L3.4 9.2l6-.8z"/>'),
+  scope: WI('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>'), role: WI('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'),
+  time: WI('<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>'), effort: WI('<path d="M6 3h12M6 21h12M8 3c0 5 8 5 8 10s-8 5-8 8M16 3c0 5-8 5-8 10s8 5 8 8"/>'),
+  task: WI('<path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="16" rx="2"/>'), people: WI('<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 11a3 3 0 1 0 0-6M21 20a6 6 0 0 0-5-5.9"/>'),
+  party: WI('<path d="M3 21V8l7-4 7 4v13M10 21v-6h4v6M3 21h18"/>'), ask: WI('<circle cx="12" cy="12" r="8"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/>'),
+  out: WI('<path d="M14 3h7v7M21 3l-9 9M18 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/>'),
+  Meeting: WI('<circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M2 20a6 6 0 0 1 12 0M10 20a6 6 0 0 1 12 0"/>'), Deliverable: WI('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+  Update: WI('<path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6"/>'), Organising: WI('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'), Outreach: WI('<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>'),
+  Event: WI('<path d="M12 3l2 4 4 .5-3 3 .8 4.5L12 13l-3.8 2 .8-4.5-3-3L10 7z"/><path d="M5 21h14"/>'), Other: WI('<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>'),
+  Morning: WI('<path d="M12 3v2M4.2 6.2l1.4 1.4M3 13h2M19 13h2M18.4 6.2L17 7.6M6 17a6 6 0 0 1 12 0M3 21h18"/>'), Midday: WI('<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'),
+  Afternoon: WI('<circle cx="12" cy="12" r="4"/><path d="M12 2v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 7l2.1-2.1M4 20h16"/>'), Evening: WI('<path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/>'), Unspecified: WI('<circle cx="12" cy="12" r="8"/><path d="M8 12h8"/>'),
+};
+const WORK_JS = String.raw`var ICON=` + JSON.stringify(WORK_ICONS) + String.raw`;(function(){
 var KEY=(document.currentScript.src.split("key=")[1]||"").split("&")[0];KEY=decodeURIComponent(KEY);
 var $=function(i){return document.getElementById(i)};var D=null,WEEK=null,PREV=null,EDIT=null;
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
@@ -379,7 +471,7 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
  if(!$("wd").value)$("wd").value=D.today;
  $("wtally").innerHTML=D.tally.map(function(t){return '<div class=tl><b>'+t.week+'</b> <i>/ '+t.term+'</i><span>'+esc(t.id+". "+t.name)+'</span></div>'}).join("");
  $("wlisth").textContent="WEEK OF "+fd(D.from).toUpperCase()+" · "+D.entries.length+" ENTR"+(D.entries.length===1?"Y":"IES");
- $("wlist").innerHTML=D.entries.length?D.entries.map(function(e,i){return '<div class=ent><h3>'+esc(e.title)+'</h3><div class=m>'+esc(fd(e.date))+' · '+esc(e.type)+(e.people.length?' · '+esc(e.people.join(", ")):'')+'</div><p>'+esc(e.summary)+'</p>'
+ $("wlist").innerHTML=D.entries.length?D.entries.map(function(e,i){return '<div class=ent><h3>'+esc(e.title)+'</h3><div class=m>'+esc(fd(e.date))+(e.time_of_day&&e.time_of_day!=="Unspecified"?' '+esc(e.time_of_day.toLowerCase()):'')+' · '+esc(e.type)+(e.people.length?' · '+esc(e.people.join(", ")):(e.alone?' · by yourself':''))+((e.external||[]).length?' · '+esc(e.external.map(function(o){return o.name}).join(", ")):'')+(e.in_scope===false?' · <span class=warn>outside role'+(e.out_role?' ('+esc(e.out_role)+')':'')+'</span>':'')+'</div><p>'+esc(e.summary)+'</p>'
   +'<div class=chips>'+e.kpis.map(function(k){var x=D.kpis.filter(function(y){return y.id===k})[0];return '<span class="chip on">'+esc(x?x.name:k)+'</span>'}).join("")+'</div>'
   +(e.deliverables.length?'<div class=m style="margin-top:6px">Produced: '+esc(e.deliverables.join("; "))+'</div>':'')+(e.link?'<div class=m><a style="color:#C5A56A" href="'+esc(e.link)+'" target=_blank rel=noopener>Open the file</a></div>':'')
   +(e.prep&&e.prep.needed?'<a class=mic style="text-decoration:none;margin:8px 0 2px" href="/momo/work/prep?key='+encodeURIComponent(KEY)+'&dev='+encodeURIComponent(e.prep.developer||"")+'&project='+encodeURIComponent(e.prep.project||"")+'&area='+encodeURIComponent(e.prep.area||"")+'&event='+encodeURIComponent(e.prep.event||e.title)+'">Prepare me &#8594;</a><br>':'')
@@ -393,34 +485,54 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
   +d.tasks.map(function(t){return '<div class=dpt><b>'+esc(t.name)+'</b> <span style="color:#C5A56A;float:right">'+t.percent+'%</span><div class=m>'+esc(t.status)+' · with '+esc(t.who.join(", "))+'</div><div class="m'+(t.quiet>=5?' chase':'')+'">'+(t.quiet<=0?'Moved today':'Last moved '+esc(fd(t.last))+' · '+t.quiet+' day'+(t.quiet===1?'':'s')+' quiet'+(t.quiet>=5?' · chase':''))+'</div></div>'}).join("")+'</details>'}).join("");
  $("wday").href="/momo/work/report?key="+encodeURIComponent(KEY)+"&from="+D.today+"&to="+D.today;
  var to=new Date(Date.parse(D.from)+6*864e5).toISOString().slice(0,10);$("wrep").href="/momo/work/report?key="+encodeURIComponent(KEY)+"&from="+D.from+"&to="+to}
-function chips(list,on,attr){return list.map(function(x){var id=x.id!=null?x.id:x,nm=x.name||x;return '<button type=button class="chip'+(on.indexOf(id)>=0?' on':'')+'" data-'+attr+'="'+esc(id)+'">'+esc(nm)+'</button>'}).join("")}
+function chips(list,on,attr){return list.map(function(x){var id=x.id!=null?x.id:x,nm=x.name||x,ic=(attr==="t"||attr==="tod")&&ICON[id]?ICON[id]+' ':'';return '<button type=button class="chip'+(on.indexOf(id)>=0?' on':'')+'" data-'+attr+'="'+esc(id)+'">'+ic+esc(nm)+'</button>'}).join("")}
+function lab(k,t){return '<div class=lab>'+(ICON[k]||'')+' '+t+'</div>'}
 function confirmLine(e){var ks=e.kpis.map(function(k){var x=D.kpis.filter(function(y){return y.id===k})[0];return x?x.name:k});
  var ts=(e.works||[]).map(function(w){var old=(D.tasks||[]).filter(function(t){return t.name===w})[0];var p=(e.progress||[]).filter(function(x){return x.work===w})[0];return '<b>'+esc(w)+'</b> '+(old?'(existing task, '+old.percent+'% before'+(p?', now '+p.percent+'%':'')+')':'(new task'+(p?', '+p.percent+'%':'')+')')});
  return '<div style="background:#15231F;border-radius:12px;padding:12px;margin-bottom:10px"><div style="color:#C5A56A;font-weight:600;margin-bottom:6px">Here\'s how I\'ll log this. Is it right?</div><div style="color:#E8E4D8;font-size:.9rem;line-height:1.5">'
   +(ts.length?'Task: '+ts.join('; ')+'. ':'<span class=warn>No task linked: pick one below or add a new one. </span>')
   +(ks.length?'Counts towards: '+esc(ks.join(', '))+'. ':'<span class=warn>No focus area: pick at least one below. </span>')
-  +(e.people.length?'With: '+esc(e.people.join(', '))+'.':'No people named.')+'</div><div style="color:#8FA39B;font-size:.78rem;margin-top:6px">Nothing is saved until you press Save. Change anything below first.</div></div>'}
+  +(e.people.length?'With: '+esc(e.people.join(', '))+'.':(e.alone?'By yourself.':'No people named.'))+'</div>'
+  +'<div style="color:#B9B2A3;font-size:.82rem;margin-top:6px">'+esc(e.time_of_day&&e.time_of_day!=="Unspecified"?e.time_of_day:"Time not stated")+' · '+esc(deptsOf(e).join(", ")||"No department")+' · '+(e.in_scope===false?'<span class=warn>Outside your role'+(e.out_role?': '+esc(e.out_role):'')+'</span>':'Within your role')+'</div>'
+  +(e.external||[]).map(function(o){return '<div style="margin-top:8px;padding:8px 10px;border:1px solid '+(o.confirmed?'#24352F':'#C5A56A')+';border-radius:10px"><div style="color:#C5A56A;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase">Outside party'+(o.known?' · known':'')+'</div>'
+   +(o.confirmed?'<b>'+esc(o.name)+'</b>'+(o.kind?' <span style="color:#8FA39B">· '+esc(o.kind)+'</span>':'')+(o.what?'<div class=m>'+esc(o.what)+'</div>':''):
+     o.notfound?'<b>'+esc(o.name)+'</b><div class=m>I could not find this organisation online. It will be logged as you wrote it.</div>':
+     '<div class=m>You wrote <b style="color:#E8E4D8">'+esc(o.name)+'</b>. Is this the right one?</div><b>'+esc(o.suggested)+'</b>'+(o.kind?' <span style="color:#8FA39B">· '+esc(o.kind)+'</span>':'')+(o.what?'<div class=m>'+esc(o.what)+(o.where?' ('+esc(o.where)+')':'')+'</div>':'')+(o.site?'<div class=m><a style="color:#C5A56A" href="'+esc(o.site)+'" target=_blank rel=noopener>'+esc(o.site.replace(/^https?:\/\//,""))+'</a></div>':'')
+     +'<div class=acts style="margin-top:6px"><button type=button class=ghost data-pn="'+esc(o.name)+'">No, keep as I wrote it</button><button type=button class=gold data-py="'+esc(o.name)+'">Yes, that\'s it</button></div>')+'</div>'}).join("")
+  +'<div style="color:#8FA39B;font-size:.78rem;margin-top:6px">Nothing is saved until you press Save. Change anything below first.</div></div>'}
+function deptsOf(e){var ds=[];(e.people||[]).forEach(function(n){var g=(D.org||[]).filter(function(x){return x.people.indexOf(n)>=0})[0];if(g&&ds.indexOf(g.dept)<0)ds.push(g.dept)});if((e.external||[]).length&&ds.indexOf("External")<0)ds.push("External");return ds}
+function wireParties(e){$("wprev").querySelectorAll("[data-py]").forEach(function(b){b.onclick=function(){var o=(PREV.external||[]).filter(function(x){return x.name===b.getAttribute("data-py")})[0];if(!o)return;b.disabled=true;b.textContent="Remembering…";
+  api({action:"party_confirm",name:o.suggested||o.name,typed:o.name,kind:o.kind,what:o.what,where:o.where,site:o.site}).then(function(j){if(j.ok){o.name=j.party.name;o.confirmed=true;o.known=true;if(QUEUE.length)QUEUE[QI]=PREV;preview(PREV)}else{b.disabled=false;b.textContent="Yes, that's it"}})}});
+ $("wprev").querySelectorAll("[data-pn]").forEach(function(b){b.onclick=function(){var o=(PREV.external||[]).filter(function(x){return x.name===b.getAttribute("data-pn")})[0];if(!o)return;o.suggested="";o.what="";o.site="";o.confirmed=true;if(QUEUE.length)QUEUE[QI]=PREV;preview(PREV)}})}
 var QUEUE=[],QI=0;   // v570 - a whole day comes back as several activities; she confirms and saves them one at a time
 function queueHead(){return QUEUE.length>1?'<div style="color:#C5A56A;font-family:\'IBM Plex Mono\',monospace;font-size:.72rem;letter-spacing:.12em;margin-bottom:8px">ACTIVITY '+(QI+1)+' OF '+QUEUE.length+'</div>':''}
 function nextInQueue(){QI++;if(QI<QUEUE.length){preview(QUEUE[QI]);scrollTo(0,0)}else{QUEUE=[];QI=0;$("wprev").innerHTML="";$("wt").value="";$("wl").value=""}}
 function preview(e){PREV=JSON.parse(JSON.stringify(e));var h='<div class=prev>'+queueHead()+confirmLine(e)+(e.check?'<div class=warn>Filed by keyword only: please check the areas and people.</div>':'')
- +'<div class=lab>Title</div><input id=pt value="'+esc(e.title)+'"><div class=lab>Summary</div><textarea id=ps rows=3>'+esc(e.summary)+'</textarea>'
- +'<div class=lab>Type</div><div class=chips>'+chips(D.types,[e.type],"t")+'</div>'
- +'<div class=lab>Focus areas (her review)</div><div class=chips>'+chips(D.kpis,e.kpis,"k")+'</div>'
- +'<div class=lab>Part of the role</div><div class=chips>'+chips(D.scope,e.scope,"s")+'</div>'
- +'<div class=lab>About how long</div><div class=chips>'+chips(D.effort,[e.effort],"f")+'</div>'
- +'<div class=lab>Campaign or task</div><div class=chips>'+chips((e.works||[]).filter(function(w){return D.works.indexOf(w)<0}).concat(D.works),e.works||[],"w")+'</div>'
+ +lab("title","Title")+'<input id=pt value="'+esc(e.title)+'"><div class=lab>Summary</div><textarea id=ps rows=3>'+esc(e.summary)+'</textarea>'
+ +lab("type","Type")+'<div class=chips>'+chips(D.types,[e.type],"t")+'</div>'
+ +lab("kpi","Focus areas (her review)")+'<div class=chips>'+chips(D.kpis,e.kpis,"k")+'</div>'
+ +lab("scope","Part of the role")+'<div class=chips>'+chips(D.scope,e.scope,"s")+'</div>'
+ +lab("time","Time of day")+'<div class=chips>'+chips(D.times||[],[e.time_of_day||"Unspecified"],"tod")+'</div>'
+ +lab("scope","Scope of work")+'<div class=chips><button type=button class="chip'+(e.in_scope!==false?' on':'')+'" data-sc=1>Within my role</button><button type=button class="chip'+(e.in_scope===false?' on':'')+'" data-sc=0>Outside my role</button></div>'
+ +'<div id=pout style="display:'+(e.in_scope===false?'block':'none')+'"><div class=lab>Which role was it really?</div><div class=chips>'+(D.out_roles||[]).map(function(r){return '<button type=button class="chip'+(e.out_role===r[0]?' on':'')+'" data-or="'+esc(r[0])+'" title="'+esc(r[1])+'">'+esc(r[0])+'</button>'}).join("")+'</div><div id=porn class=m style="margin-top:4px">'+esc(((D.out_roles||[]).filter(function(r){return r[0]===e.out_role})[0]||[])[1]||"")+'</div></div>'
+ +lab("effort","About how long")+'<div class=chips>'+chips(D.effort,[e.effort],"f")+'</div>'
+ +lab("task","Campaign or task")+'<div class=chips>'+chips((e.works||[]).filter(function(w){return D.works.indexOf(w)<0}).concat(D.works),e.works||[],"w")+'</div>'
  +'<div class=addw><input id=pnw placeholder="Add a new task"><button type=button class=ghost id=pnb>Add</button></div><div id=pprog></div>'
- +'<div class=lab>People</div><div class=chips>'+chips(e.people.concat(D.people.filter(function(p){return e.people.indexOf(p)<0})),e.people,"p")+'</div>'
- +((e.questions||[]).length?'<div class=lab>A few questions so nothing is missed</div>'+e.questions.map(function(q,i){return '<div class=m style="color:#D8D2C4;margin:6px 0 4px">'+esc(q)+'</div><input class=pq data-q='+i+' placeholder="Your answer (optional)">'}).join("")+'<button type=button class=ghost id=pa style="width:100%;margin-top:6px">Answer and refile</button>':'')
- +(e.deliverables.length?'<div class=lab>Produced</div><div class=m style="color:#D8D2C4">'+esc(e.deliverables.join("; "))+'</div>':'')
- +(e.next.length?'<div class=lab>Next steps</div><div class=m style="color:#D8D2C4">'+esc(e.next.join("; "))+'</div>':'')
+ +lab("people","People")+''+(e.people.length?'<div class=chips style="margin-bottom:6px">'+chips(e.people,e.people,"p")+'</div>':'')
+ +(D.people_tree||[]).map(function(g,gi){var rest=g.people.filter(function(p){return e.people.indexOf(p)<0});if(!rest.length)return '';return '<details class=pdp'+(gi===0?' open':'')+'><summary>'+esc(g.dept)+' <small>'+rest.length+'</small></summary><div class=chips>'+chips(rest,[],"p")+'</div></details>'}).join("")
+ +((e.questions||[]).length?lab("ask","A few questions so nothing is missed")+''+e.questions.map(function(q,i){return '<div class=m style="color:#D8D2C4;margin:6px 0 4px">'+esc(q)+'</div><input class=pq data-q='+i+' placeholder="Your answer (optional)">'}).join("")+'<button type=button class=ghost id=pa style="width:100%;margin-top:6px">Answer and refile</button>':'')
+ +(e.deliverables.length?lab("task","Produced")+'<div class=m style="color:#D8D2C4">'+esc(e.deliverables.join("; "))+'</div>':'')
+ +(e.next.length?lab("out","Next steps")+'<div class=m style="color:#D8D2C4">'+esc(e.next.join("; "))+'</div>':'')
  +'<div class=acts><button type=button class=ghost id=pc>'+(QUEUE.length>1?'Skip this one':'Cancel')+'</button><button type=button class=gold id=pv>'+(QUEUE.length>1&&QI<QUEUE.length-1?'Save and next':'Save')+'</button></div></div>';
  $("wprev").innerHTML=h;
  $("wprev").querySelectorAll("[data-t]").forEach(function(b){b.onclick=function(){PREV.type=b.getAttribute("data-t");$("wprev").querySelectorAll("[data-t]").forEach(function(x){x.classList.toggle("on",x===b)})}});
  function tog(attr,arr,num){$("wprev").querySelectorAll("[data-"+attr+"]").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-"+attr);if(num)v=+v;var i=PREV[arr].indexOf(v);if(i>=0)PREV[arr].splice(i,1);else PREV[arr].push(v);b.classList.toggle("on")}})}
  PREV.works=PREV.works||[];PREV.progress=PREV.progress||[];tog("k","kpis",1);tog("s","scope",0);tog("p","people",0);
  $("wprev").querySelectorAll("[data-f]").forEach(function(b){b.onclick=function(){PREV.effort=b.getAttribute("data-f");$("wprev").querySelectorAll("[data-f]").forEach(function(x){x.classList.toggle("on",x===b)})}});
+ $("wprev").querySelectorAll("[data-tod]").forEach(function(b){b.onclick=function(){PREV.time_of_day=b.getAttribute("data-tod");$("wprev").querySelectorAll("[data-tod]").forEach(function(x){x.classList.toggle("on",x===b)})}});
+ $("wprev").querySelectorAll("[data-sc]").forEach(function(b){b.onclick=function(){PREV.in_scope=b.getAttribute("data-sc")==="1";if(PREV.in_scope)PREV.out_role="";else if(!PREV.out_role)PREV.out_role="Other";$("wprev").querySelectorAll("[data-sc]").forEach(function(x){x.classList.toggle("on",x===b)});$("pout").style.display=PREV.in_scope?"none":"block";$("wprev").querySelectorAll("[data-or]").forEach(function(x){x.classList.toggle("on",x.getAttribute("data-or")===PREV.out_role)})}});
+ $("wprev").querySelectorAll("[data-or]").forEach(function(b){b.onclick=function(){PREV.out_role=b.getAttribute("data-or");$("wprev").querySelectorAll("[data-or]").forEach(function(x){x.classList.toggle("on",x===b)});$("porn").textContent=b.getAttribute("title")}});
+ wireParties(e);
  function prog(){PREV.progress=PREV.works.map(function(w){var p=PREV.progress.filter(function(x){return x.work===w})[0];if(p)return p;var old=(D.tasks||[]).filter(function(t){return t.name===w})[0];return {work:w,status:old&&old.percent>0?"In progress":"Started",percent:old?old.percent:10,owners:old&&old.owners.length?old.owners.slice():PREV.people.slice()}});
   var opts='<option value="">+ Who is responsible or helping?</option>'+(D.org||[]).map(function(g){return '<optgroup label="'+esc(g.dept)+'">'+g.people.map(function(n){return '<option>'+esc(n)+'</option>'}).join("")+'</optgroup>'}).join("");
   $("pprog").innerHTML=PREV.progress.map(function(p,i){return '<div class=pg><div class=m style="color:#E8E4D8">'+esc(p.work)+' <b id=pp'+i+' style="color:#C5A56A;float:right">'+p.percent+'%</b></div><input type=range min=0 max=100 step=5 value='+p.percent+' data-pc='+i+'><div class=chips>'+D.status.map(function(s){return '<button type=button class="chip'+(s===p.status?' on':'')+'" data-st="'+i+'|'+esc(s)+'">'+esc(s)+'</button>'}).join("")+'</div>'
@@ -454,5 +566,7 @@ $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(
   r.onend=function(){if(on){try{r.start()}catch(e){stop()}}};r.onerror=function(e){if(e.error==="not-allowed"){alert("Allow the microphone for this page to speak your entry.")}stop()};
   try{r.start();on=true;b.classList.add("rec");b.querySelector("span").textContent="Stop"}catch(e){stop()}};
  $("wf").addEventListener("submit",stop,true)})();
+// v571 - Start over: clears the box and anything being checked; saved entries are untouched
+$("wreset").onclick=function(){if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;QUEUE=[];QI=0;EDIT=null;PREV=null;$("wprev").innerHTML="";$("wt").value="";$("wl").value="";$("wd").value=D?D.today:"";$("wt").focus()};
 $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1)};
 load()})();`;
