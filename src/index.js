@@ -11197,10 +11197,19 @@ function applyProj(name){
   // interest close to the footprint, which is a lead, not a fact.
   const GRADE={VERIFIED:["✓ verified","#8FC7B9"],MATCHED:["✓ survey","#8FC7B9"],STRUCTURALLY_IDENTIFIED:["◧ site plan","#C5A56A"],INFERRED:["◌ nearby","#D9A441"]};
   const gk=idn&&idn.identity_grade&&GRADE[idn.identity_grade];
-  const chip=gk?'<span class=gchip style="color:'+gk[1]+';border-color:'+gk[1]+'44">'+gk[0]+(idn.name_source?' · '+esc(idn.name_source):'')+'</span>':'';
+  const chip0=gk?'<span class=gchip style="color:'+gk[1]+';border-color:'+gk[1]+'44">'+gk[0]+(idn.name_source?' · '+esc(idn.name_source):'')+'</span>':'';
   // four each, one line apiece: the card must never scroll (Kendall). A long tenant name is trimmed rather than wrapped.
   const chipify=(a,n)=>a.slice(0,n).map(t=>'<i>'+esc(t.length>26?t.slice(0,25)+'…':t)+'</i>').join('')+(a.length>n?'<em>+'+(a.length-n)+'</em>':'');
   const umxHtml=(a0&&UMX)?unitMixHtml(UMX[String(a0.i)]||null,false):"";   // v93 - the second card: unit mix
+  const gb=a0&&GBLD?GBLD[String(a0.i)]:null;
+  const _TH={management:"management",parking:"parking",noise:"noise",cooling:"cooling",maintenance:"maintenance",security:"security",cleanliness:"cleanliness",handover:"handover",facilities:"facilities"};
+  const _thl=(o)=>Object.keys(o||{}).sort((x,y)=>o[y]-o[x]).slice(0,3).map(k=>_TH[k]||k).join(", ");
+  const gchipR=gb&&gb.rating?'<span class=gchip style="color:#C5A56A;border-color:#C5A56A44">★ '+Number(gb.rating).toFixed(1)+' · '+esc(gb.count)+'</span>':'';
+  const chip=chip0+gchipR;
+  const resHtml=gb&&gb.rating?'<div class=tenants style="display:block"><b>What residents say</b> <span style="color:var(--mut)">on Google: '+Number(gb.rating).toFixed(1)+' from '+esc(gb.count)+' reviews</span>'
+    +(_thl(gb.praise)?'<div style="margin-top:4px">Praised for <i>'+esc(_thl(gb.praise))+'</i></div>':'')+(_thl(gb.complaint)?'<div>Complaints about <i>'+esc(_thl(gb.complaint))+'</i></div>':'')
+    +((gb.reviews||[]).length?'<details style="margin-top:6px"><summary style="cursor:pointer;color:#C5A56A">Read the '+gb.reviews.length+' latest reviews</summary>'+gb.reviews.map(r=>'<div style="margin:6px 0;font-size:.82em"><b>'+'★'.repeat(Math.max(0,Math.min(5,r.stars||0)))+'</b> <span style="color:var(--mut)">'+esc(r.date||"")+'</span>'+(r.text?'<div>'+esc(r.text)+'</div>':'')+'</div>').join("")+'</details>':'')
+    +'<div style="margin-top:6px;font-size:.72em;color:var(--mut)">Google reviews, as of '+esc(gb.as_of||"")+'. Five most recent only; themes are our own reading.'+(gb.url?' <a href="'+esc(gb.url)+'" target=_blank rel=noopener style="color:#C5A56A">Google Maps</a>':'')+'</div></div>':'';
   const tstrip=ten.length?'<div class=tenants><b>Inside</b>'+chipify(ten,4)+'</div>':'';
   const astrip=amen.length?'<div class=tenants><b>On site</b>'+chipify(amen,4)+'</div>':'';
   const _isSub=!!(a0&&!a0.name&&a0.cluster&&a0.cluster===name);
@@ -11210,7 +11219,7 @@ function applyProj(name){
     '<div class=modeb><i id=mob title="snapshot or deeper dive">\u25CE</i><button class="mb on" data-m=snap>Snapshot</button><button class=mb data-m=deep>Deeper dive</button></div>'+
     '<div class=pa id=unrealrow style="display:none;margin:6px 0 2px"><a class="act unreal" id=unrealbtn data-i="'+(a0?a0.i:"")+'" style="border-color:var(--gold);color:var(--gold);font-weight:600">UnReal</a></div>'+
     '<div class=snap>'+(rows.length?'<div class=tg>'+rows.map(tile).join("")+'</div>':'<div class=pr><span>facts</span><span>no register facts on file yet</span></div>')+'</div>'+
-    '<div class=deep>'+_vidHtml+tstrip+astrip+umxHtml+acts+'</div>'+
+    '<div class=deep>'+_vidHtml+tstrip+astrip+resHtml+umxHtml+acts+'</div>'+
     '<div class=pn>developer site · availability sheet · DLD Open Data 2026 · identity resolved across every source we hold, graded on the chip; tenants are recorded against the building, never as its name; envelope is building outline × storeys, an upper bound; blockers within this district only</div>';
   pp.classList.add("on");document.getElementById("ppx").onclick=()=>{document.getElementById("projsel").value="";applyProj("")};
   pp.classList.remove("deep");pp.scrollTop=0;                                                     // v94: a phone opens on the snapshot
@@ -11239,6 +11248,8 @@ let BF=null;fetch("/img/bldgfacts_${slugName}").then(r=>r.ok?r.json():null).then
 // v84 - IDENTITY (resolve_identity.py -> apply_identity.py -> KV identity_<slug>): what we actually KNOW about this building
 // and how well we know it. The grade is shown plainly, because a name from an authoritative register and a name lifted from
 // a nearby shopfront are not the same claim and the card should never pretend they are.
+// v589 - WHAT RESIDENTS SAY (Kendall 14 Oct): the Google reviews of this building, filed nightly by push_building_reviews.py from lk_google_buildings; five latest reviews, a rating and our own praise/complaint themes
+let GBLD=null;fetch("/img/gbld_${slugName}").then(r=>r.ok?r.json():null).then(j=>{GBLD=j&&j.by_index||null}).catch(()=>{});
 let IDN=null;fetch("/img/identity_${slugName}").then(r=>r.ok?r.json():null).then(j=>{IDN=j&&j.by_index||null}).catch(()=>{});
 // v153 - the building open on this twin, for a question note: its name, plot number when the identity file has one, sub-community, developer
 (window.__qnParts=window.__qnParts||[]).push(()=>{const c={district:"${slugName}"};
