@@ -591,14 +591,19 @@ $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(
  api({action:"parse",text:t,date:$("wd").value}).then(function(j){$("wb").disabled=false;$("wb").textContent="File it";if(j.error){alert(j.error);return}
   QUEUE=(j.entries&&j.entries.length?j.entries:[j.entry]).map(function(e){e.src=e.summary;return e});QI=0;if(QUEUE.length===1)QUEUE[0].src=t;preview(QUEUE[0])}).catch(function(){$("wb").disabled=false;$("wb").textContent="File it";alert("Could not file it just now. Try again.")})};
 // v567 - speak instead of typing: the browser's own speech-to-text (Safari and Chrome); where it is missing, the keyboard's microphone still works
-(function(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition,b=$("wmic"),r=null,on=false,base="";
+// v574 (Kendall 14 Oct: "once it starts, how does it stop? If you click on it, it should stop") - the second tap is decisive: on=false FIRST so the
+// auto-restart cannot race it, then abort (not stop, which waits for the engine). Also stops on File it, Start over, and after 45 s of silence.
+(function(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition,b=$("wmic"),r=null,on=false,base="",quiet=null;
  if(!SR){b.onclick=function(){alert("Tap the text box, then use the microphone on your keyboard to speak.");$("wt").focus()};return}
- function stop(){on=false;b.classList.remove("rec");b.querySelector("span").textContent="Speak";try{r&&r.stop()}catch(e){}}
- b.onclick=function(){if(on){stop();return}r=new SR();r.lang="en-GB";r.continuous=true;r.interimResults=true;base=$("wt").value.trim();base=base?base+" ":"";
-  r.onresult=function(ev){var fin="",tmp="";for(var i=0;i<ev.results.length;i++){if(ev.results[i].isFinal)fin+=ev.results[i][0].transcript;else tmp+=ev.results[i][0].transcript}$("wt").value=base+fin+tmp};
-  r.onend=function(){if(on){try{r.start()}catch(e){stop()}}};r.onerror=function(e){if(e.error==="not-allowed"){alert("Allow the microphone for this page to speak your entry.")}stop()};
-  try{r.start();on=true;b.classList.add("rec");b.querySelector("span").textContent="Stop"}catch(e){stop()}};
- $("wf").addEventListener("submit",stop,true)})();
+ function stop(){on=false;clearTimeout(quiet);b.classList.remove("rec");b.querySelector("span").textContent="Speak";var x=r;r=null;if(x){x.onend=null;x.onresult=null;try{x.abort()}catch(e){try{x.stop()}catch(e2){}}}}
+ function armQuiet(){clearTimeout(quiet);quiet=setTimeout(stop,45000)}
+ function start(){var x=new SR();x.lang="en-GB";x.continuous=true;x.interimResults=true;base=$("wt").value.trim();base=base?base+" ":"";
+  x.onresult=function(ev){var fin="",tmp="";for(var i=0;i<ev.results.length;i++){if(ev.results[i].isFinal)fin+=ev.results[i][0].transcript;else tmp+=ev.results[i][0].transcript}$("wt").value=base+fin+tmp;armQuiet()};
+  x.onend=function(){if(on&&r===x){base=$("wt").value.trim();base=base?base+" ":"";try{start()}catch(e){stop()}}};
+  x.onerror=function(e){if(e.error==="not-allowed"){alert("Allow the microphone for this page to speak your entry.");stop()}else if(e.error==="no-speech"){/* engine timed out: onend restarts */}else{stop()}};
+  r=x;try{x.start()}catch(e){stop();return}on=true;b.classList.add("rec");b.querySelector("span").textContent="Stop";armQuiet()}
+ b.onclick=function(){if(on){stop()}else{start()}};
+ $("wf").addEventListener("submit",stop,true);var rs=$("wreset");if(rs)rs.addEventListener("click",stop,true)})();
 // v571 - Start over: clears the box and anything being checked; saved entries are untouched
 $("wreset").onclick=function(){if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;QUEUE=[];QI=0;EDIT=null;PREV=null;$("wprev").innerHTML="";$("wt").value="";$("wl").value="";$("wd").value=D?D.today:"";$("wt").focus()};
 $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1)};

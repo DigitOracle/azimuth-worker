@@ -155,6 +155,11 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(!/Claude|Anthropic|GPT/i.test(dh), "the debrief never names an AI vendor");
   ok((await req("/momo/work/debrief?id=" + sv2.entry.id + "&date=2026-10-14", false)).status === 404, "only her link can open a debrief");
   await req("/momo/work/api", true, { action: "delete", id: sv2.entry.id, date: "2026-10-14" }); }
+// v574 - the mic's second tap stops for certain
+{ const js6 = await (await req("/momo/work.js", true)).text();
+  ok(/b\.onclick=function\(\)\{if\(on\)\{stop\(\)\}else\{start\(\)\}\}/.test(js6) && /function stop\(\)\{on=false;/.test(js6) && /x\.abort\(\)/.test(js6) && /setTimeout\(stop,45000\)/.test(js6), "tap toggles; stop sets on=false first and aborts; 45 s of silence stops");
+  ok(/if\(on&&r===x\)/.test(js6), "the auto-restart only fires for the live recogniser, so a stopped one cannot come back");
+  try { new Function(js6); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v574", e.message); } }
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
