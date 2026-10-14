@@ -347,8 +347,10 @@ export async function workRoute(request, env, url, deps) {
     return J({ error: "Unknown action." }, 400);
   }
   if (p === "/momo/work/report") {
-    const from = okDate(url.searchParams.get("from") || weekOf(dubaiToday())[0]), to = okDate(url.searchParams.get("to") || weekOf(from)[1]);
-    return new Response(reportHtml(await listEntries(env, from, to), from, to, tasksOf(await listEntries(env, PHASES[0].from, to))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    // v577 - ?days=2026-10-13,2026-10-14 picks exact days (Mon and Tue); otherwise from/to
+    const picked = String(url.searchParams.get("days") || "").split(",").map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    const from = picked.length ? picked[0] : okDate(url.searchParams.get("from") || weekOf(dubaiToday())[0]), to = picked.length ? picked[picked.length - 1] : okDate(url.searchParams.get("to") || weekOf(from)[1]);
+    return new Response(reportHtml(await listEntries(env, from, to), from, to, tasksOf(await listEntries(env, PHASES[0].from, to)), picked), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   // v573 DEBRIEF (Kendall 14 Oct: "Ali ... wants a debrief of what happened because he wasn't there ... immediately create a PDF ... very quick").
   // One entry, one page, in FN's brand: what, when, who, outcome, next steps. Short on purpose.
@@ -386,45 +388,80 @@ export function debriefHtml(e) {
     + '<footer>' + FOOT + '</footer></div><div class=pf>' + FOOT + '</div><button class=btn onclick="print()">Save as PDF</button></body></html>';
 }
 // the weekly report: FN Realty's brand (navy #1F2B44, gold #C9A97A, Anton + Inter), internal confidentiality footer on every page
-export function reportHtml(es, from, to, allTasks) {
-  const byK = KPIS.map((k) => ({ k, es: es.filter((e) => e.kpis.includes(k.id)) }));
-  const daily = from === to, hk = hoursByKpi(es), totH = Math.round(hk.reduce((s, x) => s + x.hours, 0) * 10) / 10;
-  const tk = (allTasks || tasksOf(es)).filter((t) => t.last >= from && t.first <= to);
-  const bar = (p) => '<span style="display:inline-block;width:70px;height:7px;background:#E9EAEC;border-radius:4px;vertical-align:middle"><span style="display:block;width:' + p + '%;height:7px;background:#C9A97A;border-radius:4px"></span></span> ' + p + '%';
-  const people = {}; es.forEach((e) => e.people.forEach((n) => { (people[n] = people[n] || []).push(e.title); }));
-  const dels = es.flatMap((e) => e.deliverables.map((d) => ({ d, e })));
-  const next = es.flatMap((e) => e.next);
-  const sc = SCOPE.map((s) => ({ s, n: es.filter((e) => e.scope.includes(s.id)).length })).filter((x) => x.n);
+// v577 (Kendall 14 Oct: "senior management ... fifteen seconds maximum ... donut charts, line charts ... not text heavy") - THE 15-SECOND REPORT.
+// Four headline numbers, a donut of where the time went (emphasis: in-role teal, outside-role warm, validated palette), activities per day,
+// the tasks moved with progress bars, the outside-role line; then one line per activity grouped by day. Inline SVG so the PDF is crisp.
+// Palettes validated with the dataviz skill's checker on #FFFFFF: emphasis #15948A / #D9782E (all pass); teal ordinal ramp
+// #6FBFB4 #52ADA1 #3A968A #287C71 #15665C (all pass). Grey #B9B2A3 is the de-emphasis token, not a series.
+const RAMP = ["#6FBFB4", "#52ADA1", "#3A968A", "#287C71", "#15665C"], TEAL = "#15948A", WARM = "#D9782E", GREY = "#B9B2A3";
+function donut(parts, total, label) {   // parts: [{v, color, name}] - a ring with a hero number in the middle; 2px surface gaps between segments
+  const R = 54, r = 36, C = 2 * Math.PI * R; let acc = 0; const segs = [];
+  parts.filter((p) => p.v > 0).forEach((p) => { const f = p.v / Math.max(total, 1), len = Math.max(0, C * f - 2); segs.push('<circle r="' + R + '" cx="70" cy="70" fill="none" stroke="' + p.color + '" stroke-width="' + (R - r) + '" stroke-dasharray="' + len + ' ' + (C - len) + '" stroke-dashoffset="' + (-acc * C) + '" transform="rotate(-90 70 70)"/>'); acc += f; });
+  return '<svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="' + esc(label) + '">' + (segs.length ? segs.join("") : '<circle r="' + R + '" cx="70" cy="70" fill="none" stroke="#EFE9DE" stroke-width="' + (R - r) + '"/>')
+    + '<text x="70" y="66" text-anchor="middle" font-family="Inter,sans-serif" font-size="26" font-weight="600" fill="#1C2321">' + esc(total) + '</text><text x="70" y="84" text-anchor="middle" font-family="Inter,sans-serif" font-size="9" fill="#626B7C">' + esc(label) + '</text></svg>';
+}
+function dayBars(days) {   // days: [{d, n, out}] - thin columns, rounded ends, in-role teal with outside-role warm stacked on top, 2px gap
+  const W = 320, H = 110, pad = 18, max = Math.max(1, ...days.map((x) => x.n)), bw = Math.min(34, (W - pad * 2) / days.length - 8);
+  return '<svg viewBox="0 0 ' + W + ' ' + (H + 22) + '" width="100%" style="max-width:' + W + 'px" role="img" aria-label="Activities per day">'
+    + '<line x1="' + pad + '" y1="' + H + '" x2="' + (W - pad) + '" y2="' + H + '" stroke="#E9EAEC"/>'
+    + days.map((x, i) => { const cx = pad + (i + 0.5) * ((W - pad * 2) / days.length), inn = x.n - x.out, hi = (inn / max) * (H - 14), ho = (x.out / max) * (H - 14);
+      return (inn > 0 ? '<rect x="' + (cx - bw / 2) + '" y="' + (H - hi) + '" width="' + bw + '" height="' + hi + '" rx="4" fill="' + TEAL + '"/>' : '')
+        + (x.out > 0 ? '<rect x="' + (cx - bw / 2) + '" y="' + (H - hi - ho - (inn > 0 ? 2 : 0)) + '" width="' + bw + '" height="' + ho + '" rx="4" fill="' + WARM + '"/>' : '')
+        + (x.n > 0 ? '<text x="' + cx + '" y="' + (H - hi - ho - 6) + '" text-anchor="middle" font-family="Inter,sans-serif" font-size="10" font-weight="600" fill="#1C2321">' + x.n + '</text>' : '')
+        + '<text x="' + cx + '" y="' + (H + 15) + '" text-anchor="middle" font-family="Inter,sans-serif" font-size="9.5" fill="#626B7C">' + esc(x.d) + '</text>'; }).join("") + '</svg>';
+}
+export function reportHtml(es, from, to, allTasks, pickedDays) {
+  const days = pickedDays && pickedDays.length ? pickedDays : (() => { const o = []; for (let d = new Date(from + "T00:00:00Z"); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) o.push(d.toISOString().slice(0, 10)); return o; })();
+  es = es.filter((e) => days.includes(e.date));
+  const daily = days.length === 1, hk = hoursByKpi(es), totH = Math.round(hk.reduce((s, x) => s + x.hours, 0) * 10) / 10;
+  const tk = (allTasks || tasksOf(es)).filter((t) => days.some((d) => t.last >= d && t.first <= d) || es.some((e) => (e.works || []).includes(t.name)));
+  const inRole = es.filter((e) => e.in_scope !== false), outRole = es.filter((e) => e.in_scope === false);
+  const byD = {}; outRole.forEach((e) => { const d = e.out_role || "Other"; byD[d] = (byD[d] || 0) + 1; });
+  const people = new Set(); es.forEach((e) => (e.people || []).forEach((n) => n !== "All sales agents" && people.add(n)));
+  const parts = KPIS.map((k, i) => ({ name: k.name, v: inRole.filter((e) => (e.kpis || [])[0] === k.id).length, color: RAMP[i] })).concat([{ name: "Outside role", v: outRole.length, color: WARM }]);
+  const perDay = days.map((d) => ({ d: dayName(d).slice(0, 3) + (days.length > 7 ? " " + (+d.slice(8)) : ""), n: es.filter((e) => e.date === d).length, out: es.filter((e) => e.date === d && e.in_scope === false).length }));
+  const moved = tk.filter((t) => t.status !== "Done").length + tk.filter((t) => t.status === "Done").length;
   const FOOT = "<b>CONFIDENTIAL · FN Realty internal use only.</b> Not to be copied, distributed, modified, reissued or shared outside FN Realty without prior written approval from FN Realty management. © 2026 FN Realty. All rights reserved.";
-  const li = (a) => a.length ? "<ul>" + a.map((x) => "<li>" + x + "</li>").join("") + "</ul>" : "<p class=none>None this week.</p>";
-  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (from === to ? 'Daily' : 'Weekly') + ' activity report</title>'
+  const span = daily ? esc(dayName(days[0])) + ' ' + esc(fmtD(days[0])) : (days.length === 7 && weekOf(days[0])[0] === days[0] ? 'Week of ' + esc(fmtD(days[0])) : days.map((d) => dayName(d).slice(0, 3)).join(", ") + ' · ' + esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[days.length - 1])));
+  const tile = (n, l) => '<div class=tile><b>' + n + '</b><span>' + l + '</span></div>';
+  const pbar = (p, c) => '<div class=pb><i style="width:' + p + '%;background:' + c + '"></i></div>';
+  const byDay = days.map((d) => ({ d, es: es.filter((e) => e.date === d) })).filter((x) => x.es.length);
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (daily ? 'Daily' : 'Activity') + ' report</title>'
     + '<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap"><style>'
-    + '@page{size:A4;margin:16mm 16mm 22mm}body{margin:0;background:#F9F1EF;color:#202020;font-family:Inter,sans-serif;font-size:10.5pt;line-height:1.5}.pg{max-width:780px;margin:0 auto;background:#fff;padding:28px 34px 40px}'
-    + 'header{background:#1F2B44;color:#C9A97A;margin:-28px -34px 22px;padding:22px 34px}header h1{font-family:Anton,sans-serif;font-weight:400;font-size:26pt;letter-spacing:.02em;margin:0}header p{margin:4px 0 0;color:#EFE5D7;font-size:10pt}'
-    + 'h2{font-family:Anton,sans-serif;font-weight:400;color:#1F2B44;font-size:14pt;letter-spacing:.03em;margin:22px 0 8px;border-bottom:2px solid #C9A97A;padding-bottom:3px}'
-    + '.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.tile{background:#FAF6F2;border:1px solid #EFE5D7;border-radius:8px;padding:9px 8px;text-align:center}.tile b{display:block;font-family:Anton,sans-serif;font-weight:400;font-size:20pt;color:#1F2B44}.tile span{font-size:8pt;color:#626B7C}'
-    + '.e{border-left:3px solid #C9A97A;padding:4px 0 4px 12px;margin:8px 0}.e .m{font-size:8.5pt;color:#626B7C}.e b{color:#1F2B44}ul{margin:4px 0 0 18px;padding:0}.none{color:#626B7C;font-style:italic;margin:4px 0}'
-    + 'table{width:100%;border-collapse:collapse}td{padding:5px 6px;border-bottom:1px solid #E9EAEC;vertical-align:top}td:first-child{font-weight:600;color:#1F2B44;width:34%}'
-    + 'footer{margin-top:26px;border-top:1px solid #E9EAEC;padding-top:8px;font-size:7.5pt;color:#626B7C}.pf{position:fixed;bottom:6mm;left:16mm;right:16mm;font-size:7pt;color:#626B7C;display:none}'
-    + '.btn{position:fixed;right:16px;bottom:16px;background:#1F2B44;color:#C9A97A;border:0;border-radius:99px;padding:10px 18px;font:600 10pt Inter,sans-serif;cursor:pointer}'
-    + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 18px}.btn{display:none}.pf{display:block}footer{display:none}}</style></head><body><div class=pg>'
-    + '<header><h1>' + (daily ? 'DAILY' : 'WEEKLY') + ' ACTIVITY REPORT</h1><p>Serah Najjuko Ganyana · Strategic Lead – Marketing, PR &amp; Business Development · ' + (daily ? esc(dayName(from)) + ' ' + esc(fmtD(from)) : esc(fmtD(from)) + ' to ' + esc(fmtD(to))) + '</p></header>'
-    + '<p>' + es.length + ' logged ' + (es.length === 1 ? 'activity' : 'activities') + (daily ? ' this day' : ' this week') + ', about ' + totH + ' hours of work, mapped to the five focus areas of the Review Framework (Schedule 2) and the scope of the role (Schedule 1).</p>'
-    + '<div class=tiles>' + byK.map((x, i) => '<div class=tile><b>' + x.es.length + '</b><span>' + esc(x.k.name) + '<br>about ' + hk[i].hours + ' h</span></div>').join("") + '</div>'
-    + '<h2>TASK PROGRESS</h2>' + (tk.length ? '<table><tr><td style="color:#626B7C;font-weight:500">Task</td><td style="color:#626B7C">Status</td><td style="color:#626B7C">Complete</td><td style="color:#626B7C">Started</td><td style="color:#626B7C">Days worked</td><td style="color:#626B7C">Time</td></tr>'
-      + tk.map((t) => '<tr><td>' + esc(t.name) + (t.owners && t.owners.length ? '<div style="font-weight:400;color:#626B7C;font-size:8.5pt">With ' + esc(t.owners.join(", ")) + '</div>' : '') + '</td><td>' + esc(t.status) + '</td><td style="white-space:nowrap">' + bar(t.percent) + '</td><td style="white-space:nowrap">' + esc(fmtD(t.first)) + '</td><td>' + t.days + '</td><td style="white-space:nowrap">about ' + t.hours + ' h</td></tr>').join("") + '</table>'
-      + '<p style="font-size:8pt;color:#626B7C">Complete is the percentage logged with the latest entry for the task. Time is a rough estimate from each entry (under 1 hour, 1-2 hours, half a day or a full day).</p>' : '<p class=none>No tasks logged.</p>')
-    + '<h2>BY FOCUS AREA</h2>' + byK.map((x) => '<h3 style="color:#1F2B44;margin:14px 0 2px;font-size:11pt">' + x.k.id + '. ' + esc(x.k.name) + '</h3><div class=m style="font-size:8.5pt;color:#626B7C">Evidence sought: ' + esc(x.k.ev) + '</div>'
-      + (x.es.length ? x.es.map((e) => '<div class=e><b>' + esc(e.title) + '</b> <span class=m>· ' + esc(dayName(e.date)) + ' ' + esc(fmtD(e.date)) + ' · ' + esc(e.type) + '</span><div>' + esc(e.summary) + '</div></div>').join("") : '<p class=none>Nothing logged against this area this week.</p>')).join("")
-    + '<h2>DELIVERABLES</h2>' + li(dels.map((x) => esc(x.d) + ' <span style="color:#626B7C">(' + esc(fmtD(x.e.date)) + ')</span>'))
-    + '<h2>CAMPAIGNS AND TASKS</h2>' + (() => { const w = {}; es.forEach((e) => (e.works || []).forEach((n) => { (w[n] = w[n] || []).push(e.title); })); return Object.keys(w).length ? '<table>' + Object.keys(w).map((n) => '<tr><td>' + esc(n) + '</td><td>' + w[n].map(esc).join('; ') + '</td></tr>').join("") + '</table>' : '<p class=none>None recorded.</p>'; })()
-    + '<h2>PEOPLE AND TOUCHPOINTS</h2>' + (Object.keys(people).length ? '<table>' + Object.keys(people).sort().map((n) => '<tr><td>' + esc(n) + '</td><td>' + people[n].map(esc).join('; ') + '</td></tr>').join("") + '</table>' : '<p class=none>None recorded.</p>')
-    + '<h2>SCOPE OF THE ROLE COVERED</h2>' + (sc.length ? '<table>' + sc.map((x) => '<tr><td>' + esc(x.s.area) + '</td><td>' + esc(x.s.name) + ' (' + x.n + ')</td></tr>').join("") + '</table>' : '<p class=none>None recorded.</p>')
-    + '<h2>NEXT STEPS</h2>' + li(next.map(esc))
-    + '<footer>' + FOOT + '</footer></div><div class=pf>' + FOOT + '</div><button class=btn onclick="print()">Save as PDF</button></body></html>';
+    + '@page{size:A4;margin:14mm 14mm 20mm}body{margin:0;background:#F9F1EF;color:#1C2321;font-family:Inter,sans-serif;font-size:10.5pt;line-height:1.45}.pg{max-width:780px;margin:0 auto;background:#fff;padding:24px 30px 36px}'
+    + 'header{background:#1F2B44;color:#C9A97A;margin:-24px -30px 18px;padding:18px 30px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px}header h1{font-family:Anton,sans-serif;font-weight:400;font-size:22pt;letter-spacing:.02em;margin:0}header p{margin:4px 0 0;color:#EFE5D7;font-size:9.5pt}header .who{text-align:right;font-size:9pt;color:#EFE5D7}'
+    + 'h2{font-family:Anton,sans-serif;font-weight:400;color:#1F2B44;font-size:12pt;letter-spacing:.04em;margin:18px 0 8px}'
+    + '.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.tile{background:#FAF6F2;border:1px solid #EFE5D7;border-radius:10px;padding:10px 8px;text-align:center}.tile b{display:block;font-size:26pt;font-weight:600;color:#1F2B44;line-height:1.1}.tile span{font-size:8pt;color:#626B7C}'
+    + '.two{display:grid;grid-template-columns:150px 1fr;gap:18px;align-items:center;margin-top:12px}.leg{font-size:9pt;color:#3B4441}.leg div{display:flex;align-items:center;gap:8px;margin:4px 0}.leg i{display:inline-block;width:12px;height:12px;border-radius:3px}.leg b{margin-left:auto;color:#1C2321}'
+    + '.tk{display:grid;grid-template-columns:1fr 150px 48px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #EFE9DE;font-size:9.5pt}.tk b{font-weight:600}.tk small{display:block;color:#626B7C;font-size:8pt;font-weight:400}.pb{height:8px;background:#EFE9DE;border-radius:4px;overflow:hidden}.pb i{display:block;height:8px;border-radius:4px}.pct{text-align:right;font-weight:600;color:#1C2321}'
+    + '.out{margin-top:14px;padding:10px 12px;border-radius:10px;background:#FBF1EA;border-left:4px solid ' + WARM + ';font-size:9.5pt}.out b{color:#1C2321}'
+    + '.glance{width:100%;border-collapse:collapse;margin-top:10px;font-size:9pt}.glance th{text-align:left;font-weight:600;color:#626B7C;font-size:8pt;letter-spacing:.06em;text-transform:uppercase;padding:4px 6px;border-bottom:1px solid #E9EAEC}.glance td{padding:6px;border-bottom:1px solid #EFE9DE;vertical-align:top}.glance td:first-child{white-space:nowrap;width:52px}.glance .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.glance .empty td{color:#9AA0B5}.glance .og{display:inline-block;background:#FBF1EA;color:#9A4E1E;border-radius:99px;padding:1px 8px;font-weight:600}'
+    + '.day{margin-top:12px}.day h3{font-size:9pt;color:#8A6F3E;letter-spacing:.08em;text-transform:uppercase;margin:10px 0 4px;font-weight:600}.li{display:flex;gap:8px;font-size:9.5pt;padding:3px 0}.li i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none}.li span{color:#626B7C}'
+    + 'footer{margin-top:22px;border-top:1px solid #E9EAEC;padding-top:8px;font-size:7.5pt;color:#626B7C}.pf{position:fixed;bottom:6mm;left:14mm;right:14mm;font-size:7pt;color:#626B7C;display:none}'
+    + '.btns{position:fixed;right:14px;bottom:14px;display:flex;gap:8px}.btn{background:#1F2B44;color:#C9A97A;border:0;border-radius:99px;padding:10px 16px;font:600 10pt Inter,sans-serif;cursor:pointer}'
+    + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 14px}.btns{display:none}.pf{display:block}footer{display:none}}</style></head><body><div class=pg>'
+    + '<header><div><h1>' + (daily ? 'DAILY REPORT' : 'ACTIVITY REPORT') + '</h1><p>' + span + '</p></div><div class=who>Serah Najjuko Ganyana<br>Strategic Lead – Marketing, PR &amp; BD</div></header>'
+    + '<div class=tiles>' + tile(es.length, 'activities') + tile(totH, 'hours, about') + tile(people.size, 'people met') + tile(tk.length, 'tasks moved') + '</div>'
+    + '<div class=two>' + donut(parts, es.length, 'activities') + '<div class=leg>' + parts.filter((p) => p.v).map((p) => '<div><i style="background:' + p.color + '"></i>' + esc(p.name) + '<b>' + p.v + '</b></div>').join("") + (es.length ? '' : '<div>Nothing logged for these days.</div>') + '</div></div>'
+    // v577.1 (the Excel idiom she reads: a Mon-Fri day-at-a-glance grid, one row per day: what, hours, with whom, outside-role flagged)
+    + (days.length > 1 ? '<h2>WEEK AT A GLANCE</h2>' + dayBars(perDay)
+      + '<table class=glance><tr><th>Day</th><th>Activities</th><th>Hours</th><th>With</th><th>Outside role</th></tr>' + days.map((d) => { const de = es.filter((e) => e.date === d), h = Math.round(de.reduce((s, e) => s + (EFFORT.find((x) => x[0] === e.effort) || EFFORT[1])[1], 0) * 10) / 10, who = [...new Set(de.flatMap((e) => (e.people || []).filter((n) => n !== "All sales agents").map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0])))], o = de.filter((e) => e.in_scope === false).length;
+        return '<tr' + (de.length ? '' : ' class=empty') + '><td><b>' + esc(dayName(d).slice(0, 3)) + '</b> ' + (+d.slice(8)) + '</td><td>' + (de.length ? de.map((e) => esc(e.title)).join('; ') : '<span>—</span>') + '</td><td class=num>' + (de.length ? h : '') + '</td><td>' + esc(who.slice(0, 4).join(', ')) + (who.length > 4 ? ' +' + (who.length - 4) : '') + '</td><td class=num>' + (o ? '<span class=og>' + o + '</span>' : '') + '</td></tr>'; }).join("") + '</table>' : '')
+    + (tk.length ? '<h2>TASKS</h2>' + tk.slice(0, 8).map((t) => '<div class=tk><div><b>' + esc(t.name) + '</b><small>' + esc(t.status) + ' · ' + t.days + ' day' + (t.days === 1 ? '' : 's') + (t.owners && t.owners.length ? ' · with ' + esc(t.owners.slice(0, 3).join(", ")) : '') + '</small></div>' + pbar(t.percent, t.status === "Done" ? RAMP[4] : TEAL) + '<div class=pct>' + t.percent + '%</div></div>').join("") : '')
+    + (outRole.length ? '<div class=out><b>Outside her role: ' + outRole.length + '</b> · ' + esc(Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => d + ' ' + byD[d]).join(", ")) + ' · work done for other departments, recorded against Schedule 1 of her contract.</div>' : '')
+    + (byDay.length ? '<div class=day>' + byDay.map((x) => '<h3>' + esc(dayName(x.d)) + ' ' + esc(fmtD(x.d)) + '</h3>' + x.es.map((e) => '<div class=li><i style="background:' + (e.in_scope === false ? WARM : TEAL) + '"></i><div>' + esc(e.title) + ' <span>· ' + esc(e.type) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ' · ' + esc(e.time_of_day.toLowerCase()) : '') + ((e.people || []).length ? ' · ' + esc(e.people.map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0]).slice(0, 3).join(", ")) : '') + '</span></div></div>').join("")).join("") + '</div>' : '')
+    + '<footer>' + FOOT + '</footer></div><div class=pf>' + FOOT + '</div>'
+    + '<div class=btns><button class=btn onclick="if(navigator.share){navigator.share({title:document.title,url:location.href}).catch(function(){})}else{print()}">Share</button><button class=btn onclick="print()">Save as PDF</button></div></body></html>';
 }
 
-const WORK_BODY = '<div class=tag>MOMO · WORK</div><h1>My work log</h1>'
+// v577 (Kendall 14 Oct: "at the very top of the hierarchy it's what did you do? And then something else that says report") - two tabs, that is the whole first screen
+const WORK_BODY = '<div class=tag>MOMO · WORK</div>'
+  + '<div class=seg id=wtabs style="margin:8px 0 14px"><button type=button id=tlog class=on>What did you do?</button><button type=button id=trep>Report</button></div>'
+  + '<div id=vrep style="display:none"><h1 style="font-size:1.35rem">Make a report</h1><div class=seg style="grid-template-columns:1fr 1fr 1fr"><button type=button class="on" data-rp=today>Today</button><button type=button data-rp=week>This week</button><button type=button data-rp=pick>Pick days</button></div>'
+  + '<div id=rpick style="display:none"><div class=line>Tap the days to include</div><div class=grid id=rdays style="grid-template-columns:repeat(7,1fr);gap:6px"></div></div>'
+  + '<div class=line id=rsum style="margin:10px 2px"></div><a id=rgo class=gold style="display:block;text-align:center;text-decoration:none" target=_blank>Make report</a>'
+  + '<div class=line style="margin-top:10px">Opens as a page with charts: Share sends it by email or WhatsApp; Save as PDF keeps a copy. Senior-management length: one page.</div></div>'
+  + '<div id=vlog><h1>My work log</h1>'
   + '<div class=wk id=wkhead></div>'
   + '<form id=wf class=box><label>What did you do? <button type=button id=wmic class=mic aria-label="Speak instead of typing"><svg viewBox="0 0 24 24" width=18 height=18 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Speak</span></button></label><textarea id=wt rows=4 placeholder="e.g. Monday huddle: built the PowerPoint, ran the meeting with Ali and the team, laid out the week."></textarea>'
   + '<div class=row><input id=wd type=date><input id=wl type=url placeholder="Link to a file (optional)"></div><div class=row2><button type=button id=wreset class=ghost>Start over</button><button type=submit id=wb class=gold>File it</button></div></form>'
@@ -436,7 +473,7 @@ const WORK_BODY = '<div class=tag>MOMO · WORK</div><h1>My work log</h1>'
   + '<div class=sec id=wlisth>THIS WEEK</div><div id=wlist></div>'
   + '<div class=row2><button type=button id=wprevw class=ghost>&#8592; Previous week</button><button type=button id=wnextw class=ghost>Next week &#8594;</button></div>'
   + '<a id=wrep class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>This week\'s report</a>'
-  + '<script src="/momo/work.js?key=__KEY__"></script>';
+  + '</div><script src="/momo/work.js?key=__KEY__"></script>';
 
 const PREP_BODY = '<a class=back href="/momo/work?key=__KEY__">&#8592; Work</a><div class=tag>MOMO · PREPARE ME</div><h1>__EVT__</h1>'
   + '<form id=pf class=box><label>What are you preparing for?</label><input id=fd placeholder="Developer (e.g. Imtiaz Developments)" value="__DEV__">'
@@ -626,6 +663,18 @@ $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(
   r=x;try{x.start()}catch(e){stop();return}on=true;b.classList.add("rec");b.querySelector("span").textContent="Stop";armQuiet()}
  b.onclick=function(){if(on){stop()}else{start()}};
  $("wf").addEventListener("submit",stop,true);var rs=$("wreset");if(rs)rs.addEventListener("click",stop,true)})();
+// v577 - the two tabs (What did you do? / Report) and the Report tab: Today, This week, or tap the days; one button makes the page
+(function(){var mode="today",picked={};function show(rep){$("vlog").style.display=rep?"none":"block";$("vrep").style.display=rep?"block":"none";$("tlog").classList.toggle("on",!rep);$("trep").classList.toggle("on",rep);if(rep)rdraw()}
+ $("tlog").onclick=function(){show(false)};$("trep").onclick=function(){show(true)};
+ function wk(){var d=D?D.today:new Date(Date.now()+4*3600e3).toISOString().slice(0,10),t=new Date(d+"T00:00:00Z"),dow=(t.getUTCDay()+6)%7,m=new Date(t.getTime()-dow*864e5),o=[];for(var i=0;i<7;i++){o.push(new Date(m.getTime()+i*864e5).toISOString().slice(0,10))}return o}
+ function rdraw(){var days=wk(),today=D?D.today:days[0],sel=mode==="today"?[today]:mode==="week"?days:days.filter(function(d){return picked[d]});
+  $("rpick").style.display=mode==="pick"?"block":"none";
+  if(mode==="pick")$("rdays").innerHTML=days.map(function(d){return '<button type=button data-rd="'+d+'"'+(picked[d]?' class=on':'')+' style="padding:10px 4px;justify-content:center"><span style="font-size:.7rem;color:#8A6F3E">'+DN[new Date(d+"T00:00:00Z").getUTCDay()]+'</span><b>'+(+d.slice(8))+'</b></button>'}).join("");
+  $("rdays").querySelectorAll("[data-rd]").forEach(function(b){b.onclick=function(){var d=b.getAttribute("data-rd");picked[d]=!picked[d];rdraw()}});
+  $("rsum").textContent=sel.length?(sel.length===1?fd(sel[0]):sel.length+" days: "+sel.map(function(d){return DN[new Date(d+"T00:00:00Z").getUTCDay()]}).join(", ")):"Tap at least one day";
+  $("rgo").style.opacity=sel.length?"1":".5";$("rgo").href=sel.length?"/momo/work/report?key="+encodeURIComponent(KEY)+"&days="+sel.join(","):"javascript:void(0)"}
+ $("vrep").querySelectorAll("[data-rp]").forEach(function(b){b.onclick=function(){mode=b.getAttribute("data-rp");$("vrep").querySelectorAll("[data-rp]").forEach(function(x){x.classList.toggle("on",x===b)});rdraw()}});
+ window.__rdraw=rdraw})();
 // v571 - Start over: clears the box and anything being checked; saved entries are untouched
 $("wreset").onclick=function(){if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;QUEUE=[];QI=0;EDIT=null;PREV=null;$("wprev").innerHTML="";$("wt").value="";$("wl").value="";$("wd").value=D?D.today:"";$("wt").focus()};
 $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1)};
