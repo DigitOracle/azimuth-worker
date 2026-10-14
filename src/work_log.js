@@ -772,7 +772,19 @@ var $=function(i){return document.getElementById(i)};var D=null,WEEK=null,PREV=n
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
 var M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],DN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 function fd(d){var p=d.split("-");return DN[new Date(d+"T00:00:00Z").getUTCDay()]+" "+(+p[2])+" "+M[+p[1]-1]}
-function api(o){return fetch("/momo/work/api?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)}).then(function(r){return r.json()})}
+function api(o){return fetch("/momo/work/api?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)}).then(function(r){return r.json().then(function(j){if(!r.ok&&!j.error)j.error="The server answered "+r.status;return j},function(){return {error:"The server sent something unexpected (status "+r.status+")."}})})}
+// v599 (Kendall 14 Oct, with Najjuko: "she entered something at 12 and wasn't sure it was saved"): a saved entry now says so, in words, at the top of the screen; a save that did not happen says that instead
+// and keeps what she wrote; and an entry being checked survives leaving the app (a draft kept on the phone until it is saved or discarded)
+function toast(msg,bad){var old=document.getElementById("wtoast");if(old)old.remove();var t=document.createElement("div");t.id="wtoast";t.setAttribute("role","status");t.textContent=msg;
+ t.style.cssText="position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top));z-index:90;padding:14px 16px;border-radius:14px;font:600 .95rem 'IBM Plex Sans',sans-serif;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.25);text-align:center;background:"+(bad?"#B04A3A":"#0A4F4A");
+ document.body.appendChild(t);setTimeout(function(){if(t.parentNode)t.remove()},bad?9000:4500)}
+function saveDraft(){try{if(PREV)localStorage.setItem("momo_work_draft",JSON.stringify({q:QUEUE,qi:QI,prev:PREV,date:$("wd")?$("wd").value:"",at:Date.now()}))}catch(e){}}
+function clearDraft(){try{localStorage.removeItem("momo_work_draft")}catch(e){}}
+function resumeDraft(){var d=null;try{d=JSON.parse(localStorage.getItem("momo_work_draft")||"null")}catch(e){}if(!d||!d.prev||Date.now()-d.at>864e5||PREV)return;
+ var when=new Date(d.at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+ $("wprev").innerHTML='<div class=prev><div class=line style="margin:0 0 8px"><b>You have an entry that was not saved</b> (from '+esc(when)+'): '+esc(d.prev.title||"untitled")+'.</div><div class=acts><button type=button class=ghost id=dd>Discard</button><button type=button class=gold id=dc>Continue it</button></div></div>';
+ $("dd").onclick=function(){clearDraft();$("wprev").innerHTML=""};
+ $("dc").onclick=function(){QUEUE=d.q&&d.q.length?d.q:[d.prev];QI=Math.min(d.qi||0,QUEUE.length-1);if(d.date&&$("wd"))$("wd").value=d.date;preview(QUEUE[QI]||d.prev);scrollTo(0,0)}}
 function load(w){fetch("/momo/work/api?key="+encodeURIComponent(KEY)+(w?"&week="+w:"")).then(function(r){return r.json()}).then(function(j){D=j;WEEK=j.from;draw()})}
 function shift(n){var t=new Date(WEEK+"T00:00:00Z");t.setUTCDate(t.getUTCDate()+7*n);load(t.toISOString().slice(0,10))}
 function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today))/864e5);
@@ -844,7 +856,7 @@ function areaSheet(){
 function outOf(r){return (D.out_roles||[]).filter(function(x){return x[0]===r})[0]}
 function clocked(e){var m=function(s){var x=/^(\d{1,2}):(\d{2})$/.exec(s||"");return x?(+x[1])*60+(+x[2]):null},a=m(e.start),b=m(e.end);if(a==null||b==null)return null;var d=b-a;if(d<0)d+=1440;return d>0&&d<=960?Math.round(d/6)/10:null}
 function fieldRow(ic,main,sub,id){return '<div class=fr id='+id+'>'+(ICON[ic]||'')+'<b>'+esc(main)+'</b><span>'+esc(sub)+'</span><i>&#8250;</i></div>'}
-function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[];PREV.progress=PREV.progress||[];PREV.kpis=PREV.kpis||[];PREV.people=PREV.people||[];
+function preview(e){PREV=JSON.parse(JSON.stringify(e));saveDraft();PREV.works=PREV.works||[];PREV.progress=PREV.progress||[];PREV.kpis=PREV.kpis||[];PREV.people=PREV.people||[];
  var within=PREV.in_scope!==false,k0=kpiOf(PREV.kpis[0]),orr=outOf(PREV.out_role),sc0=D.scope.filter(function(s){return s.id===(PREV.scope||[])[0]})[0];
  var h='<div class=prev>'+queueHead()+(PREV.check?'<div class=warn style="margin-bottom:8px">Filed by keyword only: check it before saving.</div>':'')
  +'<h1 style="font-size:1.35rem;margin:0 0 6px">'+esc(PREV.title)+'</h1><textarea id=ps rows=2>'+esc(PREV.summary)+'</textarea>'
@@ -906,15 +918,17 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
  if($("pa"))$("pa").onclick=function(){var qa=[];$("wprev").querySelectorAll(".pq").forEach(function(i){if(i.value.trim())qa.push("Q: "+e.questions[+i.getAttribute("data-q")]+"\nA: "+i.value.trim())});
   if(!qa.length)return;var one=(e.summary||$("wt").value).trim()+"\n\n"+qa.join("\n");$("pa").disabled=true;$("pa").textContent="Refiling…";
   api({action:"parse",text:one,date:$("wd").value}).then(function(j){if(j.entry){j.entry.src=one;if(QUEUE.length)QUEUE[QI]=j.entry;preview(j.entry)}})};
- $("pc").onclick=function(){EDIT=null;if(QUEUE.length>1)nextInQueue();else{QUEUE=[];QI=0;$("wprev").innerHTML=""}};
+ $("pc").onclick=function(){clearDraft();EDIT=null;if(QUEUE.length>1)nextInQueue();else{QUEUE=[];QI=0;$("wprev").innerHTML=""}};
  $("pv").onclick=function(){PREV.summary=$("ps").value;if(PREV.in_scope!==false&&!PREV.broker&&!PREV.kpis.length){alert("Tap which part of your role this counts towards, or mark it outside your role.");return}if(PREV.in_scope===false&&!PREV.out_role){alert("Tap whose job it was.");return}$("pv").disabled=true;
-  api({action:"save",entry:PREV,text:PREV.src||$("wt").value,date:$("wd").value,link:$("wl").value,id:EDIT&&EDIT.id,oldDate:EDIT&&EDIT.date,created:EDIT&&EDIT.created}).then(function(j){if(!j.ok){alert(j.error||"Could not save");$("pv").disabled=false;return}
+  api({action:"save",entry:PREV,text:PREV.src||$("wt").value,date:$("wd").value,link:$("wl").value,id:EDIT&&EDIT.id,oldDate:EDIT&&EDIT.date,created:EDIT&&EDIT.created}).then(function(j){if(!j.ok){toast("Not saved: "+(j.error||"something went wrong")+". What you wrote is still here; tap the tick again.",true);$("pv").disabled=false;return}
+   var _dn=new Date(j.entry.date+"T00:00:00Z"),_lab=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][_dn.getUTCDay()]+" "+_dn.getUTCDate()+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][_dn.getUTCMonth()];
+   toast("\u2713 Saved: "+(j.entry.title||"your entry")+" is filed under "+_lab+".");if(!(QUEUE.length>1&&QI<QUEUE.length-1))clearDraft();
    // v583 - the first save from an uploaded document teaches its DNA, so the same kind of file is recognised next time
    if(UPL&&PREV.src_file===UPL.name){api({action:"doc_dna",name:UPL.name,title:PREV.works&&PREV.works[0]||PREV.title,kind:PREV.type,summary:PREV.summary,head:UPL.head}).catch(function(){});UPL=null}
    EDIT=null;if(QUEUE.length>1){var moreToCome=QI<QUEUE.length-1}else{QUEUE=[];QI=0}
    if(QUEUE.length>1)nextInQueue();else{$("wprev").innerHTML="";$("wt").value="";$("wl").value=""}
    var t=new Date(j.entry.date+"T00:00:00Z"),dow=(t.getUTCDay()+6)%7;var wk=new Date(t.getTime()-dow*864e5).toISOString().slice(0,10);
-   if(wk===D.from){D.entries=[j.entry].concat(D.entries.filter(function(x){return x.id!==j.entry.id}));D.tally.forEach(function(x){x.week=D.entries.filter(function(e){return e.kpis.indexOf(x.id)>=0}).length});draw();setTimeout(function(){load(WEEK)},1500)}else load(wk)})}}
+   if(wk===D.from){D.entries=[j.entry].concat(D.entries.filter(function(x){return x.id!==j.entry.id}));D.tally.forEach(function(x){x.week=D.entries.filter(function(e){return e.kpis.indexOf(x.id)>=0}).length});draw();setTimeout(function(){load(WEEK)},1500)}else load(wk);setTimeout(function(){var l=$("wlist");if(l&&l.scrollIntoView)l.scrollIntoView({behavior:"smooth",block:"start"})},400)}).catch(function(){$("pv").disabled=false;toast("Not saved: no connection. What you wrote is still here; tap the tick again.",true)})}}
 $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(!t)return;$("wb").disabled=true;$("wb").textContent="Filing…";
  api({action:"parse",text:t,date:$("wd").value}).then(function(j){$("wb").disabled=false;$("wb").textContent="File it";if(j.error){alert(j.error);return}
   QUEUE=(j.entries&&j.entries.length?j.entries:[j.entry]).map(function(e){e.src=e.summary;return e});QI=0;if(QUEUE.length===1)QUEUE[0].src=t;preview(QUEUE[0])}).catch(function(){$("wb").disabled=false;$("wb").textContent="File it";alert("Could not file it just now. Try again.")})};
@@ -957,6 +971,6 @@ $("wfile").onchange=function(){var f=this.files&&this.files[0];if(!f)return;if(f
    preview(QUEUE[0]);scrollTo(0,0)}).catch(function(){lab.textContent="Upload a file";$("wfile").value="";alert("Could not read that file just now.")})};rd.readAsDataURL(f)};
 var UPL=null;
 // v571 - Start over: clears the box and anything being checked; saved entries are untouched
-$("wreset").onclick=function(){if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;QUEUE=[];QI=0;EDIT=null;PREV=null;UPL=null;$("wprev").innerHTML="";$("wt").value="";$("wl").value="";$("wd").value=D?D.today:"";$("wt").focus()};
+$("wreset").onclick=function(){clearDraft();if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;QUEUE=[];QI=0;EDIT=null;PREV=null;UPL=null;$("wprev").innerHTML="";$("wt").value="";$("wl").value="";$("wd").value=D?D.today:"";$("wt").focus()};
 $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1)};
-load()})();`;
+load();resumeDraft()})();`;
