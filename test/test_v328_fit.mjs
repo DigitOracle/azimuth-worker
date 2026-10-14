@@ -100,12 +100,12 @@ for (const [label, k] of [["no key", ""], ["a wrong key", "wrong_key_value_00000
   ok(writes.length === 0 && fitKeys().length === 0, label + ": nothing written");
 }
 const start = await (await call(K("/start"))).text(), startC = await (await call(K("/start", CLIENT))).text();
-ok(/href="\/fit\?key=/.test(start), "the owner's bottom bar has the FIT tab");
+ok(/href="\/momo\?key=/.test(start), "the owner's bottom bar has the MOMO tab (v563: it opens Work and Play)");
 ok(!/href="\/fit\b/.test(startC), "a client link has no FIT tab");
 
 console.log("the page and the log");
 const page = await call(K("/fit")); const html = await page.text();
-ok(page.status === 200 && /<title>Momo<\/title>/.test(html) && /class=nnav/.test(html) && /class=on href="\/fit\?key=/.test(html), "/fit renders with the bottom bar and FIT highlighted");
+ok(page.status === 200 && /<title>Momo<\/title>/.test(html) && /class=nnav/.test(html) && /class=on href="\/momo\?key=/.test(html), "/fit renders with the bottom bar and MOMO highlighted (v563: the tab opens Work and Play)");
 ok(!/\$\{|undefined/.test(html.replace(/<script>[\s\S]*?<\/script>/, "")), "no template leftovers in the page");
 let r = await jget("/fit_api");
 eq([r.status, r.j.entries.length, r.j.challenge], [200, 0, null], "empty: no entries, challenge not started");

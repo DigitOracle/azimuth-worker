@@ -3371,6 +3371,10 @@ async function appFetch(request, env, ctx) {
         const _mrk = residentsKeyOf(env, url);
         return clientResp(env, url, najMoreHtml(url.searchParams.get("key") || "", _mrk, keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
+      if (url.pathname === "/momo" || url.pathname === "/momo/work") {   // v563 (Kendall 14 Oct 2026) - MOMO opens on Work and Play; Play is today's Momo (/fit), Work is new and empty for now
+        if (!clientOk(env, url) || keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
+        return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", url.pathname === "/momo/work"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+      }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _ml = await env.MEETINGS.get("mkt_latest");
@@ -4966,11 +4970,28 @@ const najNav = (key, active, rk) => {   // v208 (Kendall, 21 Sep 2026) - rk ride
   // demo a thought from the client's question to the answer because he could not tell which room held it.
   // Six now. START is the front door (the five angles), MORE is every other room in plain English.
   // CHARTS left the bar: it is the postable card sheet for the feed, not somewhere a client is walked into.
-  const items = [["start", "/start", "star", "START"], ["find", "/find", "search", "FIND"], ["pulse", "/market", "trend", "PULSE"], ["map", "/map", "pin", "MAP"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["fit", "/fit", "fit", "MOMO"], ["more", "/more", "grid", "MORE"]];   // v328 - MOMO (the food and exercise log, src/fit.js), owner only: clientResp strips this tab from a client link (OWNER_LINK_RE)   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
+  const items = [["start", "/start", "star", "START"], ["find", "/find", "search", "FIND"], ["pulse", "/market", "trend", "PULSE"], ["map", "/map", "pin", "MAP"], ["twin", "/skyline?all=1", "cube", "TWIN"], ["fit", "/momo", "fit", "MOMO"], ["more", "/more", "grid", "MORE"]];   // v328 - MOMO (the food and exercise log, src/fit.js), owner only: clientResp strips this tab from a client link (OWNER_LINK_RE)   // v86 - world clock, one tap from anywhere   // v87 - floor plans one tap from anywhere (Kendall, 5 Sep)   // v79 - the digital twin is one tap from anywhere   // v73.2 - HOMES = developer cover (2 x 5) is the entry to the property lane
   return '<nav class=nnav>' + items.map(i => '<a' + (active === i[0] ? ' class=on' : '') + ' href="' + i[1] + (i[1].indexOf('?') >= 0 ? '&key=' : '?key=') + k + (rk ? '&rk=' + encodeURIComponent(rk) : '') + '">' + najIcon(i[2]) + '<span>' + i[3] + '</span></a>'
     + (rk && i[0] === "map" ? '<a' + (active === "residents" ? ' class=on' : '') + ' href="/residents?rk=' + encodeURIComponent(rk) + '">' + najIcon("people") + '<span>RESIDENTS</span></a>' : '')).join('') + '</nav>'
     + askFloatHtml(key);   // v556 - the floating Ask on every page with the tab bar (shown only to a link that may ask)   // v152.3 - a private page has one tap to the full residents view (Kendall, 15 Sep)
 };
+
+// v563 (Kendall 14 Oct 2026: "When I click on [Momo], I'm going to want work and play. Play is everything that exists now. Work, we
+// are going to build out.") - the MOMO tab's front door: two cards. Play opens today's Momo unchanged; Work is an empty room for now.
+function momoHtml(key, rk, work) {
+  const k = encodeURIComponent(key), q = "?key=" + k + (rk ? "&rk=" + encodeURIComponent(rk) : "");
+  const ic = (d) => '<svg viewBox="0 0 24 24" width=30 height=30 fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + d + "</svg>";
+  const WORK = ic('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>');
+  const PLAY = ic('<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>');
+  const body = work
+    ? '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty>' + WORK + '<p>Nothing here yet.</p></div>'
+    : '<div class=tag>MOMO</div><h1>Work or play?</h1><div class=pick><a class=card href="/momo/work' + q + '">' + WORK + '<b>Work</b></a><a class=card href="/fit' + q + '">' + PLAY + '<b>Play</b></a></div>';
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#0C1413"><title>Momo</title>' + NAJ_FONTS
+    + '<style>body{margin:0;background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans",sans-serif;padding:28px 16px 110px}.w{max-width:560px;margin:0 auto}.tag{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.14em;color:#C5A56A}'
+    + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:2rem;margin:6px 0 22px}.pick{display:grid;grid-template-columns:1fr 1fr;gap:12px}.card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;aspect-ratio:1;border:1px solid #C5A56A;border-radius:18px;background:#0E1918;color:#C5A56A;text-decoration:none;-webkit-tap-highlight-color:transparent}'
+    + '.card b{font-family:Fraunces,serif;font-weight:600;font-size:1.35rem;color:#E8E4D8}.card:active{background:#15231F}.back{color:#8FA39B;text-decoration:none;font-size:.85rem}.empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:48px 0;border:1px dashed #24352F;border-radius:18px;color:#8FA39B}.empty p{margin:0}'
+    + NAJ_NAV_CSS + '</style></head><body><div class=w>' + body + '</div>' + najNav(key, "fit", rk) + '</body></html>';
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // v235 (Kendall, 22 Sep 2026) — START: five ways in.
@@ -12852,7 +12873,7 @@ const clientPathOk = (p) => CLIENT_PATHS.includes(p) || KEYLESS_PATHS.includes(p
 // open, which is a visible failure the owner will report, instead of a silent one nobody sees.
 const clientLinkKey = (env) => { const c = clientKeysOf(env); return c.length ? c[0] : ""; };
    // app links Azimuth hands the owner to forward; NEVER the owner's own key
-const OWNER_LINK_RE = /<a\b[^>]*\bhref="\/(?:board|studio|trends|fit)\b[^"]*"[^>]*>[\s\S]*?<\/a>/g;   // v328 - /fit is health data: never on a client link
+const OWNER_LINK_RE = /<a\b[^>]*\bhref="\/(?:board|studio|trends|fit|momo)\b[^"]*"[^>]*>[\s\S]*?<\/a>/g;   // v328 - /fit is health data: never on a client link
 function clientResp(env, url, body, init) {   // a page opened with a client key loses its owner-only links (BOARD, the studio); those routes refuse the key anyway
   return new Response(typeof body === "string" && keyTier(env, url) === "client" ? body.replace(OWNER_LINK_RE, "") : body, init);
 }
