@@ -239,7 +239,7 @@ export function reportHtml(es, from, to, allTasks) {
 
 const WORK_BODY = '<div class=tag>MOMO · WORK</div><h1>My work log</h1>'
   + '<div class=wk id=wkhead></div>'
-  + '<form id=wf class=box><label>What did you do?</label><textarea id=wt rows=4 placeholder="e.g. Monday huddle: built the PowerPoint, ran the meeting with Ali and the team, laid out the week."></textarea>'
+  + '<form id=wf class=box><label>What did you do? <button type=button id=wmic class=mic aria-label="Speak instead of typing"><svg viewBox="0 0 24 24" width=18 height=18 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Speak</span></button></label><textarea id=wt rows=4 placeholder="e.g. Monday huddle: built the PowerPoint, ran the meeting with Ali and the team, laid out the week."></textarea>'
   + '<div class=row><input id=wd type=date><input id=wl type=url placeholder="Link to a file (optional)"></div><button type=submit id=wb class=gold>File it</button></form>'
   + '<div id=wprev></div><a id=wday class=gold style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>Today\'s summary</a>'
   + '<div class=sec>MY TASKS</div><div id=wtasks></div>'
@@ -259,6 +259,8 @@ export const WORK_CSS = '.wk{color:#8FA39B;font-size:.85rem;margin:-12px 0 16px}
   + '.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.chip{border:1px solid #24352F;border-radius:99px;padding:4px 10px;font-size:.75rem;color:#B9B2A3;background:transparent;cursor:pointer}.chip.on{border-color:#C5A56A;color:#C5A56A;background:#15231F}'
   + '.prev{border:1px solid #C5A56A;border-radius:16px;padding:14px;margin-top:12px;background:#0E1918}.prev input{margin-bottom:8px}.lab{color:#8FA39B;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;margin:10px 0 4px}.warn{color:#E3A08F;font-size:.8rem}.acts{display:flex;gap:10px;margin-top:8px}.acts button{flex:1}.del{color:#8FA39B;background:none;border:0;font-size:.78rem;cursor:pointer;padding:0;margin-top:6px}'
   + '.tk{border:1px solid #24352F;border-radius:12px;padding:10px 12px;margin:6px 0;background:#0E1918}.tk b{color:#F3EFE4;font-weight:600}.tk .m{color:#8FA39B;font-size:.76rem;margin-top:3px}.pb{height:6px;background:#1B2A26;border-radius:4px;margin-top:7px;overflow:hidden}.pb i{display:block;height:6px;background:#C5A56A}.tk.done{opacity:.6}'
+  + '.box label{display:flex!important;justify-content:space-between;align-items:center}.mic{display:inline-flex;align-items:center;gap:6px;border:1px solid #C5A56A;border-radius:99px;background:transparent;color:#C5A56A;padding:6px 12px;font:600 .78rem inherit;letter-spacing:0;text-transform:none;cursor:pointer}'
+  + '.mic.rec{background:#C5A56A;color:#0C1413;animation:micp 1.2s ease-in-out infinite}@keyframes micp{50%{opacity:.6}}'
   + '.dp{border:1px solid #24352F;border-radius:12px;margin:6px 0;background:#0E1918;overflow:hidden}.dp summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;gap:8px;align-items:center}.dp summary::-webkit-details-marker{display:none}'
   + '.dp summary b{color:#F3EFE4}.dp summary small{color:#8FA39B;font-size:.76rem}.dp .n{color:#C5A56A;font-family:Fraunces,serif;font-size:1.3rem}.dpt{border-top:1px solid #1B2A26;padding:9px 14px}.dpt b{color:#E8E4D8;font-weight:600;font-size:.9rem}.dpt .m{color:#8FA39B;font-size:.76rem;margin-top:2px}.chase{color:#E3A08F}'
   + '.who{width:100%;margin-top:6px;background:#0C1413;border:1px solid #24352F;border-radius:10px;color:#E8E4D8;padding:8px;font:inherit}'
@@ -332,5 +334,14 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));var h='<div class=prev>'+
    if(wk===D.from){D.entries=[j.entry].concat(D.entries.filter(function(x){return x.id!==j.entry.id}));D.tally.forEach(function(x){x.week=D.entries.filter(function(e){return e.kpis.indexOf(x.id)>=0}).length});draw();setTimeout(function(){load(WEEK)},1500)}else load(wk)})}}
 $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(!t)return;$("wb").disabled=true;$("wb").textContent="Filing…";
  api({action:"parse",text:t,date:$("wd").value}).then(function(j){$("wb").disabled=false;$("wb").textContent="File it";if(j.error){alert(j.error);return}preview(j.entry)}).catch(function(){$("wb").disabled=false;$("wb").textContent="File it";alert("Could not file it just now. Try again.")})};
+// v567 - speak instead of typing: the browser's own speech-to-text (Safari and Chrome); where it is missing, the keyboard's microphone still works
+(function(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition,b=$("wmic"),r=null,on=false,base="";
+ if(!SR){b.onclick=function(){alert("Tap the text box, then use the microphone on your keyboard to speak.");$("wt").focus()};return}
+ function stop(){on=false;b.classList.remove("rec");b.querySelector("span").textContent="Speak";try{r&&r.stop()}catch(e){}}
+ b.onclick=function(){if(on){stop();return}r=new SR();r.lang="en-GB";r.continuous=true;r.interimResults=true;base=$("wt").value.trim();base=base?base+" ":"";
+  r.onresult=function(ev){var fin="",tmp="";for(var i=0;i<ev.results.length;i++){if(ev.results[i].isFinal)fin+=ev.results[i][0].transcript;else tmp+=ev.results[i][0].transcript}$("wt").value=base+fin+tmp};
+  r.onend=function(){if(on){try{r.start()}catch(e){stop()}}};r.onerror=function(e){if(e.error==="not-allowed"){alert("Allow the microphone for this page to speak your entry.")}stop()};
+  try{r.start();on=true;b.classList.add("rec");b.querySelector("span").textContent="Stop"}catch(e){stop()}};
+ $("wf").addEventListener("submit",stop,true)})();
 $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1)};
 load()})();`;
