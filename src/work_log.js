@@ -423,13 +423,14 @@ export function debriefHtml(e) {
     + 'header{background:#1F2B44;color:#C9A97A;margin:-28px -34px 20px;padding:20px 34px}header h1{font-family:Anton,sans-serif;font-weight:400;font-size:22pt;letter-spacing:.02em;margin:0}header p{margin:4px 0 0;color:#EFE5D7;font-size:10pt}'
     + 'h2{font-family:Anton,sans-serif;font-weight:400;color:#1F2B44;font-size:15pt;letter-spacing:.02em;margin:0 0 10px}table{width:100%;border-collapse:collapse;margin:8px 0 14px}td{padding:6px 8px;border-bottom:1px solid #E9EAEC;vertical-align:top}td:first-child{font-weight:600;color:#1F2B44;width:26%}'
     + '.sum{font-size:12pt;margin:0 0 12px}ul{margin:0 0 0 18px;padding:0}footer{margin-top:22px;border-top:1px solid #E9EAEC;padding-top:8px;font-size:7.5pt;color:#626B7C}.pf{position:fixed;bottom:6mm;left:18mm;right:18mm;font-size:7pt;color:#626B7C;display:none}'
-    + '.btn{position:fixed;right:16px;bottom:16px;background:#1F2B44;color:#C9A97A;border:0;border-radius:99px;padding:10px 18px;font:600 10pt Inter,sans-serif;cursor:pointer}@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 16px}.btn{display:none}.pf{display:block}footer{display:none}}</style></head><body><div class=pg>'
+    + '.btn{position:fixed;right:16px;bottom:16px;background:#1F2B44;color:#C9A97A;border:0;border-radius:99px;padding:10px 18px;font:600 10pt Inter,sans-serif;cursor:pointer}@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 16px}.btns{display:none}}</style></head><body><div class=pg>'
     + '<header><h1>DEBRIEF</h1><p>Serah Najjuko Ganyana · Strategic Lead – Marketing, PR &amp; Business Development</p></header>'
     + '<h2>' + esc(e.title) + '</h2><p class=sum>' + esc(e.summary) + '</p>'
     + '<table>' + row('When', esc(dayName(e.date)) + ' ' + esc(fmtD(e.date)) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ', ' + esc(e.time_of_day.toLowerCase()) : '')) + row('Type', esc(e.type)) + row('Who', who || (e.alone ? 'Najjuko alone' : ''))
     + row('Role', e.in_scope === false ? 'Outside her role' + (e.out_role ? ' (' + esc(e.out_role) + ')' : '') : 'Within her role') + row('Progress', tasks) + row('Produced', (e.deliverables || []).map(esc).join('; ')) + (e.link ? row('File', '<a href="' + esc(e.link) + '">' + esc(e.link) + '</a>') : '') + '</table>'
     + ((e.next || []).length ? '<h2 style="font-size:12pt">NEXT STEPS</h2><ul>' + e.next.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>' : '')
-    + '<footer>' + FOOT + '</footer></div><div class=pf>' + FOOT + '</div><button class=btn onclick="print()">Save as PDF</button></body></html>';
+    + '<div class=note style="margin-top:22px;padding-top:8px;border-top:1px solid #E9EAEC;font-size:7.8pt;color:#626B7C;line-height:1.45">Prepared by Serah Najjuko Ganyana for FN Realty. The method, templates and tools that produced this debrief are her own (employment contract, clause 12.2) and are not part of what is provided.</div>'
+    + '</div><div class=btns style="position:fixed;right:14px;bottom:14px;display:flex;gap:8px"><button class=btn id=bk>&#8592; Back</button><button class=btn onclick="print()">Share / Save as PDF</button></div><script>' + BACK_JS + '</script></body></html>';
 }
 // the weekly report: FN Realty's brand (navy #1F2B44, gold #C9A97A, Anton + Inter), internal confidentiality footer on every page
 // v577 (Kendall 14 Oct: "senior management ... fifteen seconds maximum ... donut charts, line charts ... not text heavy") - THE 15-SECOND REPORT.
@@ -438,6 +439,9 @@ export function debriefHtml(e) {
 // Palettes validated with the dataviz skill's checker on #FFFFFF: emphasis #15948A / #D9782E (all pass); teal ordinal ramp
 // #6FBFB4 #52ADA1 #3A968A #287C71 #15665C (all pass). Grey #B9B2A3 is the de-emphasis token, not a series.
 const RAMP = ["#6FBFB4", "#52ADA1", "#3A968A", "#287C71", "#15665C"], TEAL = "#15948A", WARM = "#D9782E", GREY = "#B9B2A3";
+// v582 - Back on a page opened from Momo: close the tab if the app opened it (window.close works on a script-opened tab), else history back,
+// else straight to her Work log
+const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.opener||history.length<=1){window.close()}if(history.length>1){history.back()}else{var k=new URLSearchParams(location.search).get("key")||"";location.href="/momo/work?key="+encodeURIComponent(k)}};';
 // v580 - FN's own marks, cut from the Company Template she sent (src/fn_logo.js): the navy monogram, the gold lattice band, FN navy/peach/gold
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 // soft language for the work-kind split (Kendall 14 Oct: "very soft language when you're differentiating these things")
@@ -499,6 +503,7 @@ export function reportHtml(es, from, to, allTasks, pickedDays) {
     + '.tk{display:grid;grid-template-columns:1fr 150px 48px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #EFE9DE;font-size:9.5pt}.tk b{font-weight:600}.tk small{display:block;color:#626B7C;font-size:8pt;font-weight:400}.pb{height:8px;background:#EFE9DE;border-radius:4px;overflow:hidden}.pb i{display:block;height:8px;border-radius:4px}.pct{text-align:right;font-weight:600;color:#1C2321}'
     + '.out{margin-top:14px;padding:10px 12px;border-radius:10px;background:#FBF1EA;border-left:4px solid ' + WARM + ';font-size:9.5pt}.out b{color:#1C2321}'
     + '.meter{margin-top:12px}.mh{display:flex;justify-content:space-between;align-items:baseline;font-size:9.5pt;color:#626B7C}.mh b{font-size:14pt;color:#1C2321}'
+    + '.note{margin-top:22px;padding-top:8px;border-top:1px solid #E9EAEC;font-size:7.8pt;color:#626B7C;line-height:1.45}'
     + '.glance{width:100%;border-collapse:collapse;margin-top:10px;font-size:9pt}.glance th{text-align:left;font-weight:600;color:#626B7C;font-size:8pt;letter-spacing:.06em;text-transform:uppercase;padding:4px 6px;border-bottom:1px solid #E9EAEC}.glance td{padding:6px;border-bottom:1px solid #EFE9DE;vertical-align:top}.glance td:first-child{white-space:nowrap;width:52px}.glance .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.glance .empty td{color:#9AA0B5}.glance .og{display:inline-block;background:#FBF1EA;color:#9A4E1E;border-radius:99px;padding:1px 8px;font-weight:600}'
     + '.day{margin-top:12px}.day h3{font-size:9pt;color:#8A6F3E;letter-spacing:.08em;text-transform:uppercase;margin:10px 0 4px;font-weight:600}.li{display:flex;gap:8px;font-size:9.5pt;padding:3px 0}.li i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none}.li span{color:#626B7C}'
     + '.btns{position:fixed;right:14px;bottom:14px;display:flex;gap:8px}.btn{background:' + FN_NAVY + ';color:' + FN_PEACH + ';border:0;border-radius:99px;padding:10px 16px;font:600 10pt Inter,sans-serif;cursor:pointer}.btn:disabled{opacity:.6}'
@@ -523,8 +528,14 @@ export function reportHtml(es, from, to, allTasks, pickedDays) {
     + '</div>'
     // v579 - the Azimuth link (her key rides in it) is never what gets shared. The page title is "FN Daily report 14 Oct 2026", so the browser's
     // print-to-PDF names the file that way; on the phone, Save as PDF opens the share sheet with the PDF itself (email, WhatsApp). One path, no link.
-    + '<div class=btns><button class=btn onclick="print()">Share / Save as PDF</button></div>'
-    + '<script>document.title=' + JSON.stringify((daily ? 'FN Daily report ' : monthly ? 'FN Monthly report ' : days.length === 7 ? 'FN Weekly report ' : 'FN Activity report ') + (daily ? fmtD(days[0]) : monthly ? MON[+days[0].slice(5, 7) - 1] + ' ' + days[0].slice(0, 4) : fmtD(days[0]) + ' to ' + fmtD(days[days.length - 1]))) + ';</script></body></html>';
+    // v582 (Najjuko 14 Oct: "even though the data is for FN's use only ... just because I provide them with a report does not mean they have rights
+    // to the platform I'm using to create this report" - contract clause 12.2: her frameworks, templates, AI tools and workflows stay hers).
+    + '<div class=note>Prepared by Serah Najjuko Ganyana for FN Realty. The figures are FN Realty\'s to use. The method, templates and tools that produced this report are her own (employment contract, clause 12.2) and are not part of what is provided.</div>'
+    // v582 (Kendall: "once she clicks on debrief, there's no way to exit back out of it") - Back on every report page: closes the tab it opened in,
+    // or steps back where it was opened in place.
+    + '<div class=btns><button class=btn id=bk>&#8592; Back</button><button class=btn onclick="print()">Share / Save as PDF</button></div>'
+    + '<script>document.title=' + JSON.stringify((daily ? 'FN Daily report ' : monthly ? 'FN Monthly report ' : days.length === 7 ? 'FN Weekly report ' : 'FN Activity report ') + (daily ? fmtD(days[0]) : monthly ? MON[+days[0].slice(5, 7) - 1] + ' ' + days[0].slice(0, 4) : fmtD(days[0]) + ' to ' + fmtD(days[days.length - 1]))) + ';'
+    + BACK_JS + '</script></body></html>';
 }
 
 // v577 (Kendall 14 Oct: "at the very top of the hierarchy it's what did you do? And then something else that says report") - two tabs, that is the whole first screen

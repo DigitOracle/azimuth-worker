@@ -153,7 +153,7 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   try { new Function(js5); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v573", e.message); }
   const sv2 = await (await req("/momo/work/api", true, { action: "save", entry: { title: "Sales elevation workshop", type: "Meeting", summary: "Najjuko attended the sales elevation workshop as an agent.", people: ["Ruzanna Avanyan (Rose)"], kpis: [], scope: [], works: [], deliverables: [], evidence: [], next: ["Share the notes with Ali"], questions: [], time_of_day: "Morning", in_scope: false, out_role: "Sales", effort: "1-2 hours", progress: [] }, text: "t", date: "2026-10-14" })).json();
   const db = await req("/momo/work/debrief?id=" + sv2.entry.id + "&date=2026-10-14", true), dh = await db.text();
-  ok(db.status === 200 && /<h1>DEBRIEF<\/h1>/.test(dh) && /Sales elevation workshop/.test(dh) && /Outside her role \(Sales\)/.test(dh) && /Share the notes with Ali/.test(dh) && /Wednesday 14 Oct 2026, morning/.test(dh) && /CONFIDENTIAL · FN Realty/.test(dh), "the debrief is one short page: what, when, who, role, next steps, FN footer");
+  ok(db.status === 200 && /<h1>DEBRIEF<\/h1>/.test(dh) && /Sales elevation workshop/.test(dh) && /Outside her role \(Sales\)/.test(dh) && /Share the notes with Ali/.test(dh) && /Wednesday 14 Oct 2026, morning/.test(dh) && /clause 12\.2/.test(dh), "the debrief is one short page: what, when, who, role, next steps, the clause 12.2 line");
   ok(!/Claude|Anthropic|GPT/i.test(dh), "the debrief never names an AI vendor");
   ok((await req("/momo/work/debrief?id=" + sv2.entry.id + "&date=2026-10-14", false)).status === 404, "only her link can open a debrief");
   await req("/momo/work/api", true, { action: "delete", id: sv2.entry.id, date: "2026-10-14" }); }
@@ -243,6 +243,15 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(/<em>Monthly<\/em> Report/.test(mr) && /October 2026 · to 14 Oct 2026/.test(mr) && /MONTH AT A GLANCE/.test(mr) && !/WEEK AT A GLANCE/.test(mr), "14 days of October is the monthly report with the month grid");
   ok(/<th>Week<\/th>/.test(mr) && /<th>Of 15 h<\/th>/.test(mr) && /<th>As a broker<\/th>/.test(mr) && /font-weight:600">met<\/span>/.test(mr) && /part week<\/td>/.test(mr), "one row per week: the week of 5 Oct met 15 h (16 h); 12-14 Oct is a part week, not judged", mr.match(/<table class=glance>[\s\S]{0,900}/)?.[0]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
   ok(/1 of 1 full weeks<\/b><span>at or above the 15 h weekly minimum/.test(mr) && /document\.title="FN Monthly report October 2026"/.test(mr), "the monthly meter counts only full weeks (one so far, met); the PDF is titled FN Monthly report October 2026");
+  for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
+// v582 - Back on every report and debrief page; the clause 12.2 line (her method and tools are hers, not part of what is provided)
+{ const E = () => req("/momo/work/api", true, { action: "save", entry: { title: "Huddle", type: "Meeting", summary: "s", people: [], kpis: [1], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: true, out_role: "", effort: "1-2 hours", progress: [], time_of_day: "Morning", start: "09:00", end: "10:00", where: "Office" }, text: "t", date: "2026-10-14" });
+  const sv = await (await E()).json();
+  const rp = await (await req("/momo/work/report?days=2026-10-14", true)).text(), db = await (await req("/momo/work/debrief?id=" + sv.entry.id + "&date=2026-10-14", true)).text();
+  for (const [n, h] of [["report", rp], ["debrief", db]]) {
+    ok(/<button class=btn id=bk>&#8592; Back<\/button>/.test(h) && /getElementById\("bk"\)\.onclick/.test(h) && /window\.close\(\)/.test(h) && /history\.back\(\)/.test(h) && /\/momo\/work\?key=/.test(h), "v582: the " + n + " has a Back button that closes the tab, steps back, or returns to Work");
+    ok(/clause 12\.2/.test(h) && /are her own/.test(h) && /not part of what is provided/.test(h) && !/CONFIDENTIAL/.test(h), "v582: the " + n + " carries the clause 12.2 line, no confidentiality footer"); }
+  ok(!/<footer>/.test(db) && !/class=pf/.test(db), "v582: the debrief's old footer is gone");
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
