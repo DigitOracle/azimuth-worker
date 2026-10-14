@@ -48,7 +48,7 @@ ok(![...store.keys()].some((k) => k.startsWith("work_naj_")), "delete removes it
 const js = await (await req("/momo/work.js", true)).text();
 try { new Function(js); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse", e.message); }
 const ix = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-ok(/isNajjuko\(env, url\)\) return Response\.redirect\(url\.origin \+ "\/momo\/work\?key="/.test(ix), "her MOMO tab opens straight on Work");
+ok(/isNajjuko\(env, url\) && !url\.searchParams\.has\("door"\)\) return Response\.redirect\(url\.origin \+ "\/momo\/work\?key="/.test(ix), "her MOMO tab opens straight on Work; /momo?door=1 shows the Work and Play door");
 ok(/x\.indexOf\("ins_najjuko_"\) === 0/.test(ix), "only her insider key counts as her");
 // v565 - task progress over days, rough time, daily summary
 { const { tasksOf, hoursByKpi } = await import("../src/work_log.js");

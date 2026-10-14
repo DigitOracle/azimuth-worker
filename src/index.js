@@ -3209,10 +3209,13 @@ async function appFetch(request, env, ctx) {
         if (!_t && request.method === "POST") { try { _t = String((await request.json()).text || "").slice(0, 2000); } catch (e) {} }   // v535 - text in the body, so a link with a key never lands in a request log
         if (!_t) return new Response("no text", { status: 400 });
         // v536 - {INSIDER_LINK}: the app writes the recipient's own insider link (INSIDER_KEY entry ins_najjuko_...) so the key never travels in a request
-        if (_t.indexOf("{INSIDER_LINK}") >= 0) {
+        // v591 - {INSIDER_LINK:/momo?door=1} writes her own link to that page (the default is /start): the same key, never in a request
+        const _il = _t.match(/\{INSIDER_LINK(?::(\/[^}\s]*))?\}/);
+        if (_il) {
           const _ik = String(env.INSIDER_KEY || "").split(",").map((x) => x.trim()).find((x) => x.indexOf("ins_najjuko_") === 0);
           if (!_ik) return new Response("no insider key for her", { status: 409 });
-          _t = _t.replace("{INSIDER_LINK}", String(env.PUBLIC_ORIGIN || url.origin).replace(/\/+$/, "") + "/start?key=" + _ik);
+          const _ip = _il[1] || "/start";
+          _t = _t.replace(_il[0], String(env.PUBLIC_ORIGIN || url.origin).replace(/\/+$/, "") + _ip + (_ip.indexOf("?") >= 0 ? "&" : "?") + "key=" + _ik);
         }
         try { await waSend(env, env.WA_ALLOWED, _t + UPDATE_SIGNOFF); } catch (e) { return new Response("send failed", { status: 502 }); }
         return new Response("sent");
@@ -3377,7 +3380,7 @@ async function appFetch(request, env, ctx) {
       if (url.pathname === "/momo" || url.pathname.startsWith("/momo/work")) {   // v563 (Kendall 14 Oct 2026) - MOMO opens on Work and Play; Play is today's Momo (/fit)
         if (!clientOk(env, url) || keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
         // v564 - Work is Najjuko's private FN Realty log (src/work_log.js); her MOMO tab opens straight on it (Play is Kendall's health log)
-        if (url.pathname === "/momo" && isNajjuko(env, url)) return Response.redirect(url.origin + "/momo/work?key=" + encodeURIComponent(url.searchParams.get("key") || ""), 302);
+        if (url.pathname === "/momo" && isNajjuko(env, url) && !url.searchParams.has("door")) return Response.redirect(url.origin + "/momo/work?key=" + encodeURIComponent(url.searchParams.get("key") || ""), 302);
         if (url.pathname.startsWith("/momo/work")) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
         return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
