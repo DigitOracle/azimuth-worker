@@ -72,6 +72,16 @@ export function clockedHours(e) {
 export function hoursOf(e) { const c = clockedHours(e); return c != null ? c : (EFFORT.find((x) => x[0] === e.effort) || EFFORT[1])[1]; }
 export const isClocked = (e) => clockedHours(e) != null;
 // the work-kind split for the first donut: her contract role vs broker work vs other departments
+// v588 (Kendall 14 Oct: "add the items a broker does in the day ... organise these into drill-downs, she does not want a million pills"): the Broker
+// button opens ONE row, "What kind of broker work?", whose sheet holds five collapsed groups; she opens a group and ticks what applies.
+export const BROKER_TASKS = [
+  { group: "Leads", items: [["lead_reply", "Replying to new leads"], ["lead_vet", "Vetting and qualifying leads"], ["cold_call", "Cold calling"], ["warm_follow", "Following up warm leads"], ["crm", "Updating the CRM"]] },
+  { group: "Conversations", items: [["wa", "WhatsApp with a client"], ["call", "Phone call with a client"], ["email", "Email to a client"], ["online", "Online meeting (video call)"], ["offline", "In-person meeting"]] },
+  { group: "Viewings", items: [["viewing", "Property viewing"], ["open_house", "Open house"], ["launch", "Developer launch or open house"], ["site_visit", "Site visit with a client"]] },
+  { group: "Deals", items: [["offer", "Offer and negotiation"], ["booking", "Reservation or booking form"], ["paperwork", "Contracts and paperwork"], ["handover", "Handover and after-sales"]] },
+  { group: "Listings and market", items: [["listing", "Preparing or posting a listing"], ["valuation", "Valuation or price comparison"], ["research", "Market and project research"], ["huddle", "Sales huddle or training"]] },
+];
+const BROKER_IDS = new Set(BROKER_TASKS.flatMap((g) => g.items.map((i) => i[0])));
 export function kindOf(e) { return e.broker ? "Broker" : e.in_scope !== false ? "Strategic Lead" : (e.out_role === "Sales" ? "Broker" : "Other departments"); }
 // v571 (Kendall 14 Oct: "if it's outside of role ... sales, HR ... map this back to the contract ... she will be using these for negotiating").
 // Outside-role work is logged with WHICH role it was and the contract line it sits against, so the log is evidence at the review.
@@ -88,7 +98,7 @@ export const OUT_ROLES = [
 ];
 const OUT_ALIAS = { "Sales agent": "Sales", "Execution Team (hands-on)": "Marketing (hands-on)", "Leadership / management decisions": "Leadership" };
 const SCHEMA = { type: "object", additionalProperties: false, required: ["title", "type", "summary", "people", "kpis", "scope", "works", "deliverables", "evidence", "next", "questions", "time_of_day", "alone", "in_scope", "external"], properties: {
-  time_of_day: { type: "string", enum: TIMES }, alone: { type: "boolean" }, in_scope: { type: "boolean" }, broker: { type: "boolean" }, out_role: { type: "string" },
+  time_of_day: { type: "string", enum: TIMES }, alone: { type: "boolean" }, in_scope: { type: "boolean" }, broker: { type: "boolean" }, broker_tasks: { type: "array", items: { type: "string" } }, out_role: { type: "string" },
   start: { type: "string" }, end: { type: "string" }, where: { type: "string", enum: WHERE },
   external: { type: "array", items: { type: "object", additionalProperties: false, required: ["name", "kind", "person"], properties: { name: { type: "string" }, kind: { type: "string" }, person: { type: "string" } } } },
   works: { type: "array", items: { type: "string" } }, questions: { type: "array", items: { type: "string" } },
@@ -123,7 +133,7 @@ function sysPrompt() {
     + "start and end: 24-hour HH:MM when the entry gives a time span ('from 4 till 6' in the morning = 04:00-06:00; '10 to 3' at an open house = 10:00-15:00; '8 until 9:30' = 08:00-09:30; 'after lunch for an hour' has no clock: empty strings). Never invent a clock time. "
     + "where: Office (FN's office, Prime Tower), Home (home, remote, 'from my apartment'), On site (a developer's office, an open house, a client's premises, a venue, 'at Imtiaz'), Other, or Unspecified. "
     + "alone: true when she did it by herself with no staff or third party involved. in_scope: true when the activity sits inside the eleven parts of her role; false when it is outside them. "
-    + "broker: true when the activity is BROKER work (leads, calls, showing a unit, viewings, open houses, client follow-up, a sales huddle): that is the second part of her role, so in_scope stays true. out_role: when in_scope is false, WHOSE JOB it really was, exactly one of: " + OUT_ROLES.map((r) => r[0]).join(" | ") + ". A sales meeting, a sales huddle, a deck or planner the sales director asked for, showing a unit, chasing a client's deal = Sales (even if it looked like marketing work); filming or designing herself = Marketing (hands-on); reception or paperwork = HR, Admin & Compliance. Empty string when in scope. "
+    + "broker: true when the activity is BROKER work (leads, calls, showing a unit, viewings, open houses, client follow-up, a sales huddle): that is the second part of her role, so in_scope stays true. broker_tasks: for broker work, the ids that apply, from: " + BROKER_TASKS.flatMap((g) => g.items.map((i) => i[0] + " = " + i[1])).join("; ") + ". out_role: when in_scope is false, WHOSE JOB it really was, exactly one of: " + OUT_ROLES.map((r) => r[0]).join(" | ") + ". A sales meeting, a sales huddle, a deck or planner the sales director asked for, showing a unit, chasing a client's deal = Sales (even if it looked like marketing work); filming or designing herself = Marketing (hands-on); reception or paperwork = HR, Admin & Compliance. Empty string when in scope. "
     + "external: companies, organisations or outside people NOT on the FN staff list that she dealt with (a charity, a developer's office, a venue, a journalist, a supplier): name as written, kind in two or three words (charity, developer, venue, media, supplier, client), person if one is named, else empty string. A team member of FN is never external."
     + "\nRules: use only what the entry says; never invent people, figures or outcomes. title: under 8 words. summary: one or two plain sentences in the third person (\"Najjuko ...\"). "
     + "people: everyone she dealt with. kpis: only the areas the activity genuinely advances, usually one or two. deliverables: things she produced (e.g. a PowerPoint). "
@@ -191,7 +201,7 @@ function clean(x) {
     people: arr(x.people).filter((p) => names.has(p)), kpis: [...new Set((x.kpis || []).map(Number).filter((n) => n >= 1 && n <= 5))],
     scope: [...new Set(arr(x.scope).filter((s) => ids.has(s)))], works: [...new Set(arr(x.works).map((w) => w.slice(0, 80).trim()).filter(Boolean))].slice(0, 6),
     effort: EFFORT.some((e) => e[0] === x.effort) ? x.effort : "1-2 hours",
-    time_of_day: TIMES.includes(x.time_of_day) ? x.time_of_day : "Unspecified", alone: !!x.alone, in_scope: x.in_scope !== false || !!x.broker, broker: !!x.broker,
+    time_of_day: TIMES.includes(x.time_of_day) ? x.time_of_day : "Unspecified", alone: !!x.alone, in_scope: x.in_scope !== false || !!x.broker, broker: !!x.broker, broker_tasks: (Array.isArray(x.broker_tasks) ? x.broker_tasks : []).map(String).filter((t) => BROKER_IDS.has(t)).slice(0, 10),
     start: toMin(x.start) != null ? x.start : "", end: toMin(x.end) != null ? x.end : "", where: WHERE.includes(x.where) ? x.where : "Unspecified",
     out_role: x.in_scope === false && !x.broker ? (OUT_ROLES.some((r) => r[0] === (OUT_ALIAS[x.out_role] || x.out_role)) ? (OUT_ALIAS[x.out_role] || x.out_role) : "Other") : "",
     external: (Array.isArray(x.external) ? x.external : []).map((o) => ({ name: String(o.name || "").slice(0, 100).trim(), kind: String(o.kind || "").slice(0, 40), person: String(o.person || "").slice(0, 80), confirmed: !!o.confirmed, note: String(o.note || "").slice(0, 300) })).filter((o) => o.name).slice(0, 6),
@@ -349,7 +359,7 @@ export async function workRoute(request, env, url, deps) {
       // v576 - outside-role work counted on its own, by whose job it was (the renewal evidence)
       const ow = week.filter((e) => e.in_scope === false), byD = {}; ow.forEach((e) => { const d = e.out_role || "Other"; byD[d] = (byD[d] || 0) + 1; });
       const outside = { week: ow.length, term: all.filter((e) => e.in_scope === false).length, by: Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => ({ dept: d, n: byD[d] })) };
-      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, outside, hoursweek: hoursPicture(week), where: WHERE, tasks: tasksOf(all), depts: deptBoard(tasksOf(all), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES,
+      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, outside, hoursweek: hoursPicture(week), where: WHERE, tasks: tasksOf(all), depts: deptBoard(tasksOf(all), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES, broker_tasks: BROKER_TASKS,
         // v571 - the people picker in hierarchy: Ali and Faez (and Sultan) on their own at the top, then each department's people
         people_tree: [{ dept: "Leadership", people: PEOPLE.filter((x) => deptOf(x[0]) === "Leadership").map((x) => x[0]) }].concat(DEPTS.filter((d) => d !== "Leadership").map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) }))) });
     }
@@ -530,7 +540,8 @@ export function roleGrid(es) {
   const r1 = (n) => Math.round(n * 10) / 10, H = (list) => r1(list.reduce((s, e) => s + hoursOf(e), 0));
   const SL = es.filter((e) => kindOf(e) === "Strategic Lead"), BR = es.filter((e) => kindOf(e) === "Broker"), OT = es.filter((e) => kindOf(e) === "Other departments");
   const areas = ["Marketing", "PR", "Business Development", "Unassigned"].map((a) => ({ name: a, es: SL.filter((e) => areaOf(e) === a), color: AREA_COL[a] || GREY })).filter((x) => x.es.length);
-  const kinds = {}; BR.forEach((e) => { const k = e.type || "Other"; (kinds[k] = kinds[k] || []).push(e); });
+  const grpOf = (e) => { const t = (e.broker_tasks || [])[0], g = BROKER_TASKS.find((x) => x.items.some((i) => i[0] === t)); return g ? g.group : "Not specified"; };
+  const kinds = {}; BR.forEach((e) => { const k = grpOf(e); (kinds[k] = kinds[k] || []).push(e); });
   const bparts = Object.keys(kinds).sort((a, b) => kinds[b].length - kinds[a].length).map((k, i) => ({ name: k, es: kinds[k], color: BROKER_RAMP[Math.min(i, 4)] }));
   const both = [{ name: "Strategic Lead", es: SL, color: TEAL }, { name: "Broker", es: BR, color: WARM }, { name: "Other departments", es: OT, color: GREY }].filter((x) => x.es.length);
   const cell = (parts, byH, centre, sub) => { const tot = byH ? r1(parts.reduce((s, p) => s + H(p.es), 0)) : parts.reduce((s, p) => s + p.es.length, 0);
@@ -714,6 +725,7 @@ export const WORK_CSS = '.wk{color:#5F6B66;font-size:.85rem;margin:-8px 0 14px}.
   + '.mic.rec{background:#C5A56A;color:#1C2321;animation:micp 1.2s ease-in-out infinite}@keyframes micp{50%{opacity:.6}}'
   + '.dp{border:1px solid #E3DDD1;border-radius:14px;margin:6px 0;background:#fff;overflow:hidden}.dp summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;gap:8px;align-items:center}.dp summary::-webkit-details-marker{display:none}'
   + '.dp summary b{color:#1C2321}.dp summary small{color:#5F6B66;font-size:.76rem}.dp .n{color:#0A4F4A;font-family:Fraunces,serif;font-size:1.3rem}.dpt{border-top:1px solid #EFE9DE;padding:9px 14px}.dpt b{color:#1C2321;font-weight:600;font-size:.9rem}.dpt .m{color:#5F6B66;font-size:.76rem;margin-top:2px}.chase{color:#B04A3A}'
+  + '.bg{border:1px solid #EFE9DE;border-radius:12px;margin:8px 0;padding:2px 10px}.bg summary{cursor:pointer;padding:10px 0;font-weight:600;color:#0A4F4A;list-style:none;display:flex;justify-content:space-between}.bg summary::-webkit-details-marker{display:none}.bg summary b{background:#0A4F4A;color:#fff;border-radius:99px;padding:0 8px;font-size:.78rem}'
   + '.more{text-align:center;margin-top:14px}.more summary{list-style:none;cursor:pointer;color:#8A6F3E;font-size:.85rem;padding:8px 0}.more summary::-webkit-details-marker{display:none}'
   + '.pg{border-top:1px solid #EFE9DE;padding-top:8px;margin-top:8px}.pg input[type=range]{padding:0;accent-color:#0A4F4A}.addw{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px}'
   // the approved screen: segments, grid, rows, sheet, tick
@@ -797,6 +809,8 @@ function sheet(title,html,onopen){var bg=document.createElement("div");bg.classN
  document.body.appendChild(bg);document.body.appendChild(s);SHEET=function(){bg.remove();s.remove();SHEET=null;preview(PREV)};bg.onclick=SHEET;s.querySelector(".done").onclick=SHEET;if(onopen)onopen(s)}
 function opt(v,nm,on,ic){return '<div class="opt'+(on?' on':'')+'" data-v="'+esc(v)+'">'+(ic||'')+esc(nm)+(on?'<span style="margin-left:auto;color:#0A4F4A">&#10003;</span>':'')+'</div>'}
 function kpiOf(id){return D.kpis.filter(function(k){return k.id===id})[0]}
+function brokerLabel(id){var r="";(D.broker_tasks||[]).forEach(function(g){g.items.forEach(function(i){if(i[0]===id)r=i[1]})});return r}
+function brokerSummary(){var t=PREV.broker_tasks||[];return t.length?brokerLabel(t[0])+(t.length>1?" +"+(t.length-1):""):"What kind of broker work?"}
 function outOf(r){return (D.out_roles||[]).filter(function(x){return x[0]===r})[0]}
 function clocked(e){var m=function(s){var x=/^(\d{1,2}):(\d{2})$/.exec(s||"");return x?(+x[1])*60+(+x[2]):null},a=m(e.start),b=m(e.end);if(a==null||b==null)return null;var d=b-a;if(d<0)d+=1440;return d>0&&d<=960?Math.round(d/6)/10:null}
 function fieldRow(ic,main,sub,id){return '<div class=fr id='+id+'>'+(ICON[ic]||'')+'<b>'+esc(main)+'</b><span>'+esc(sub)+'</span><i>&#8250;</i></div>'}
@@ -807,7 +821,7 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
  +'<div class=seg style="margin-top:12px"><button type=button id=sw'+(within?' class=on':'')+'>Within my role</button><button type=button id=so'+(within?'':' class=on')+'>Outside my role</button></div>'
  +(within
    ?'<div class=line>Which part of your role?</div><div class=grid>'+D.kpis.map(function(k){return '<button type=button data-k='+k.id+(PREV.kpis.indexOf(k.id)>=0?' class=on':'')+'>'+(ICON["kpi"+k.id]||ICON.kpi)+esc(k.name)+'</button>'}).join("")+'<button type=button id=bro class="'+(PREV.broker?'on ':'')+'brk">'+(ICON.broker||ICON.party)+'Broker</button></div>'
-    +(PREV.broker?'<div class=line>Broker role: leads, calls, viewings, open houses and client follow-up. Counted in your broker hours, apart from Marketing, PR and Business Development.</div>':'')
+    +(PREV.broker?fieldRow("task",brokerSummary(),(PREV.broker_tasks||[]).length?"tap to change":"leads, calls, viewings, deals","frb"):'')
     +(PREV.broker?'':k0?'<div class=line>'+(sc0?'Schedule 1: <b>'+esc(sc0.name)+'</b>. ':'')+'Evidence: '+esc(k0.ev)+'.</div>':'<div class=line class=warn style="color:#B04A3A">Tap one so it counts at your review.</div>')
    :fieldRow("party",PREV.out_role||"Whose job was it?",PREV.out_role?"whose job it was":"tap to choose","frw")
     +(orr?'<div class=line>'+esc(orr[1])+'.</div>':''))
@@ -831,7 +845,8 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
  $("wprev").innerHTML=h;
  $("ps").onchange=function(){PREV.summary=this.value};
  $("sw").onclick=function(){PREV.in_scope=true;PREV.out_role="";PREV.broker=false;preview(PREV)};$("so").onclick=function(){PREV.in_scope=false;PREV.broker=false;PREV.kpis=[];preview(PREV)};
- if($("bro"))$("bro").onclick=function(){PREV.broker=!PREV.broker;if(PREV.broker){PREV.kpis=[];PREV.in_scope=true;PREV.out_role=""}if(QUEUE.length)QUEUE[QI]=PREV;preview(PREV)};
+ if($("frb"))$("frb").onclick=function(){PREV.broker_tasks=PREV.broker_tasks||[];sheet("What kind of broker work?",(D.broker_tasks||[]).map(function(g,gi){var n=g.items.filter(function(i){return PREV.broker_tasks.indexOf(i[0])>=0}).length;return '<details class=bg'+(n?' open':'')+'><summary>'+esc(g.group)+(n?' <b>'+n+'</b>':'')+'</summary>'+g.items.map(function(i){return opt(i[0],i[1],PREV.broker_tasks.indexOf(i[0])>=0)}).join("")+'</details>'}).join(""),function(s){s.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){var v=o.getAttribute("data-v"),i=PREV.broker_tasks.indexOf(v);if(i>=0)PREV.broker_tasks.splice(i,1);else PREV.broker_tasks.push(v);o.classList.toggle("on");var chk=o.querySelector("span");if(i>=0){if(chk)chk.remove()}else{o.insertAdjacentHTML("beforeend",'<span style="margin-left:auto;color:#0A4F4A">&#10003;</span>')}var d=o.closest("details"),c=d.querySelectorAll(".opt.on").length,sm=d.querySelector("summary");sm.innerHTML=sm.firstChild.textContent+(c?' <b>'+c+'</b>':'')}})})};
+ if($("bro"))$("bro").onclick=function(){PREV.broker=!PREV.broker;if(PREV.broker){PREV.kpis=[];PREV.in_scope=true;PREV.out_role=""}else{PREV.broker_tasks=[]}if(QUEUE.length)QUEUE[QI]=PREV;preview(PREV)};
  $("wprev").querySelectorAll("[data-k]").forEach(function(b){b.onclick=function(){PREV.broker=false;var v=+b.getAttribute("data-k"),i=PREV.kpis.indexOf(v);if(i>=0)PREV.kpis.splice(i,1);else PREV.kpis.unshift(v);preview(PREV)}});
  if($("frw"))$("frw").onclick=function(){sheet("Whose job was it?",(D.out_roles||[]).map(function(r){return opt(r[0],r[0],PREV.out_role===r[0])}).join(""),function(s){s.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){PREV.out_role=o.getAttribute("data-v");SHEET()}})})};
  // v578 - clock it: start and end pickers first (the hours that count), the part-of-day words underneath

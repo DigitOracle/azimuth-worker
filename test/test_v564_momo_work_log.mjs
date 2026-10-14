@@ -183,6 +183,13 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(wk2.outside && wk2.outside.week === 2 && wk2.outside.term === 2 && wk2.outside.by[0].n === 1 && wk2.outside.by.map((x) => x.dept).sort().join() === "HR, Admin & Compliance,Sales", "outside-role work is counted on its own, by whose job it was", wk2.outside);
   const js8 = await (await req("/momo/work.js", true)).text();
   ok(/Outside your role this week: '\+D\.outside\.week/.test(js8) && /kept for your review/.test(js8), "the week view shows the running outside-role line");
+  // v588: the broker drill-down - five groups, ticked ids survive a save, unknown ids are dropped, and the role grid groups the Broker row by them
+  const bapi = await (await req("/momo/work/api?week=2026-10-14", true)).json();
+  ok(Array.isArray(bapi.broker_tasks) && bapi.broker_tasks.length === 5 && bapi.broker_tasks.map((g) => g.group).join() === "Leads,Conversations,Viewings,Deals,Listings and market", "v588: the Broker button opens five groups, not a wall of pills");
+  const bs = await (await req("/momo/work/api", true, { action: "save", entry: { title: "Vetted new leads", type: "Update", summary: "s", people: [], kpis: [], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: true, broker: true, broker_tasks: ["lead_vet", "wa", "nonsense"], effort: "1-2 hours", progress: [], time_of_day: "Morning", start: "09:00", end: "10:00" }, text: "t", date: "2026-10-14" })).json();
+  ok(bs.entry.broker === true && bs.entry.in_scope === true && bs.entry.broker_tasks.join() === "lead_vet,wa", "v588: ticked broker items are kept, unknown ids dropped; broker work stays inside the role");
+  const brr = await (await req("/momo/work/report?days=1&day=2026-10-14", true)).text();
+  ok(/THE TWO ROLES/.test(brr) && /Leads<b>/.test(brr), "v588: the Broker row of the role grid is split by the broker groups", brr.match(/THE TWO ROLES[\s\S]{0,300}/)?.[0]?.replace(/<[^>]+>/g, " "));
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
 // v577 - Log / Report tabs; the 15-second report: headline tiles, donut, per-day bars, week-at-a-glance grid, tasks, outside-role line; picked days
 { const page = await (await req("/momo/work", true)).text();
