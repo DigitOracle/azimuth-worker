@@ -56,6 +56,23 @@ export const EFFORT = [["Under 1 hour", 0.5], ["1-2 hours", 1.5], ["Half a day",
 
 // v571 (Kendall 14 Oct: "time of day, the department it affects, who I did this with or by myself, within or outside scope, third parties off-site")
 export const TIMES = ["Morning", "Midday", "Afternoon", "Evening", "Unspecified"];
+// v578 (Najjuko 14 Oct: "from four till six I was responding to my leads ... the 15 hours I need to clock 100% ... highlight the difference between
+// the PR/marketing/BD and the agent work ... in the office, at MTI's, at a site"). Hours are CLOCKED (start/end), never guessed; where is read
+// from the words ("in the office", "from home", "at Imtiaz") and the contract's 15 h/week minimum (clause 8.1) is tracked as a meter.
+export const WHERE = ["Office", "Home", "On site", "Other", "Unspecified"];
+export const MIN_HOURS = 15;
+const toMin = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || "")); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+export function clockedHours(e) {
+  const a = toMin(e.start), b = toMin(e.end);
+  if (a == null || b == null) return null;
+  let d = b - a; if (d < 0) d += 24 * 60;
+  return d > 0 && d <= 16 * 60 ? Math.round(d / 6) / 10 : null;
+}
+// hours of an entry: the clock when she gave one, else the effort bucket (marked estimated)
+export function hoursOf(e) { const c = clockedHours(e); return c != null ? c : (EFFORT.find((x) => x[0] === e.effort) || EFFORT[1])[1]; }
+export const isClocked = (e) => clockedHours(e) != null;
+// the work-kind split for the first donut: her contract role vs broker work vs other departments
+export function kindOf(e) { return e.in_scope !== false ? "Strategic Lead" : (e.out_role === "Sales" ? "Broker" : "Other departments"); }
 // v571 (Kendall 14 Oct: "if it's outside of role ... sales, HR ... map this back to the contract ... she will be using these for negotiating").
 // Outside-role work is logged with WHICH role it was and the contract line it sits against, so the log is evidence at the review.
 // v575 (Kendall 14 Oct: "scope of work should be at the top ... from there a set of responsibilities"): Role is the root. Outside her role, the
@@ -72,6 +89,7 @@ export const OUT_ROLES = [
 const OUT_ALIAS = { "Sales agent": "Sales", "Execution Team (hands-on)": "Marketing (hands-on)", "Leadership / management decisions": "Leadership" };
 const SCHEMA = { type: "object", additionalProperties: false, required: ["title", "type", "summary", "people", "kpis", "scope", "works", "deliverables", "evidence", "next", "questions", "time_of_day", "alone", "in_scope", "external"], properties: {
   time_of_day: { type: "string", enum: TIMES }, alone: { type: "boolean" }, in_scope: { type: "boolean" }, out_role: { type: "string" },
+  start: { type: "string" }, end: { type: "string" }, where: { type: "string", enum: WHERE },
   external: { type: "array", items: { type: "object", additionalProperties: false, required: ["name", "kind", "person"], properties: { name: { type: "string" }, kind: { type: "string" }, person: { type: "string" } } } },
   works: { type: "array", items: { type: "string" } }, questions: { type: "array", items: { type: "string" } },
   effort: { type: "string", enum: EFFORT.map((x) => x[0]) },
@@ -102,6 +120,8 @@ function sysPrompt() {
     + "\nprep: needed = true when the entry involves a client-facing event or deal with a developer, project or area (an open house, a launch, a viewing, a client meeting about a project); "
     + "developer, project and area as named in the entry (empty string if not named; Imtiaz = Imtiaz Developments, MTI = Imtiaz), event in a few words. Otherwise needed = false with empty strings."
     + "\ntime_of_day: from the entry's own words or a stated clock time (morning, before lunch, at 3pm, after work ...); Unspecified if none. "
+    + "start and end: 24-hour HH:MM when the entry gives a time span ('from 4 till 6' in the morning = 04:00-06:00; '10 to 3' at an open house = 10:00-15:00; '8 until 9:30' = 08:00-09:30; 'after lunch for an hour' has no clock: empty strings). Never invent a clock time. "
+    + "where: Office (FN's office, Prime Tower), Home (home, remote, 'from my apartment'), On site (a developer's office, an open house, a client's premises, a venue, 'at Imtiaz'), Other, or Unspecified. "
     + "alone: true when she did it by herself with no staff or third party involved. in_scope: true when the activity sits inside the eleven parts of her role; false when it is outside them. "
     + "out_role: when in_scope is false, WHOSE JOB it really was, exactly one of: " + OUT_ROLES.map((r) => r[0]).join(" | ") + ". A sales meeting, a sales huddle, a deck or planner the sales director asked for, showing a unit, chasing a client's deal = Sales (even if it looked like marketing work); filming or designing herself = Marketing (hands-on); reception or paperwork = HR, Admin & Compliance. Empty string when in scope. "
     + "external: companies, organisations or outside people NOT on the FN staff list that she dealt with (a charity, a developer's office, a venue, a journalist, a supplier): name as written, kind in two or three words (charity, developer, venue, media, supplier, client), person if one is named, else empty string. A team member of FN is never external."
@@ -116,6 +136,21 @@ export function splitDay(text) {
   const parts = String(text).replace(/\r/g, "").split(/\n+|(?:^|\s)[-•*]\s+|(?:^|\n)\s*\d+[.)]\s+|;\s+|\.\s+(?=(?:then|after that|also|next|later|afterwards|in the afternoon|in the morning|in the evening|after lunch|before lunch|at lunch|at midday|this morning|this afternoon|tonight|at \d)\b)/i)
     .map((s) => s.trim().replace(/^[-•*\d.)\s]+/, "")).filter((s) => s.length > 3);
   return parts.length ? parts : [String(text).trim()];
+}
+// v578 - "from 4 till 6", "10 to 3", "8 until 9:30", "4am-6am", "between 2 and 4pm": a clock span. Morning words put ambiguous hours before noon,
+// an open house / afternoon puts a small end after a larger start into the afternoon (10 to 3 = 10:00-15:00).
+export function spanOf(t) {
+  const m = /\b(?:from|between)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:till|til|until|to|-|–|and)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i.exec(t);
+  if (!m) return { start: "", end: "" };
+  let h1 = +m[1], h2 = +m[4]; const mm1 = m[2] || "00", mm2 = m[5] || "00", ap1 = (m[3] || "").toLowerCase(), ap2 = (m[6] || "").toLowerCase();
+  if (h1 > 24 || h2 > 24) return { start: "", end: "" };
+  const pm = (h, ap) => ap === "pm" && h < 12 ? h + 12 : ap === "am" && h === 12 ? 0 : h;
+  h1 = pm(h1, ap1 || (ap2 && h1 <= 12 && h1 < h2 ? ap2 : "")); h2 = pm(h2, ap2);
+  const eveningish = /\b(afternoon|evening|open house|after lunch|pm)\b/i.test(t), morningish = /\b(morning|woke|first thing|am)\b/i.test(t);
+  if (!ap1 && !ap2) { if (h2 < h1 && h2 + 12 > h1) h2 += 12; if (eveningish && !morningish && h1 < 12 && h1 + 12 <= 23 && h2 <= 12) { h1 += 12; if (h2 + 12 <= 24) h2 += 12; } else if (eveningish && !morningish && h1 >= 8 && h1 < 12 && h2 < h1) h2 += 12; }
+  if (h1 > 23 || h2 > 24) return { start: "", end: "" };
+  const f = (h, mi) => String(h % 24).padStart(2, "0") + ":" + mi;
+  return { start: f(h1, mm1), end: f(h2 === 24 ? 0 : h2, mm2) };
 }
 // keyword fallback when the writing model is unavailable: still files the entry, marked for her to check
 function fallback(text) {
@@ -143,6 +178,7 @@ function fallback(text) {
   const outRole = !outside ? "" : /reception|paperwork|visa|permit/.test(t) ? "HR, Admin & Compliance" : /as an agent|showed? (a|the) unit|viewing with|sales (meeting|huddle|workshop|team)|client'?s deal|sales director/.test(t) ? "Sales" : /her recode|najjuko edit|be by her|my own brand/.test(t) ? "Own ventures" : /filmed|edited|designed it myself|posted it myself/.test(t) ? "Marketing (hands-on)" : "Other";
   return { title: text.split(/[.\n]/)[0].slice(0, 60), type: /meeting|huddle|call/.test(t) ? "Meeting" : "Update", summary: text.slice(0, 300), people, kpis: [...kp], scope: [...sc], works, deliverables: [], evidence: [], next: [], questions: [], check: true,
     time_of_day: tod, alone: people.length === 0 && !/\bwith\b/.test(t), in_scope: !outside, out_role: outRole, external: [],
+    ...spanOf(t), where: /\b(in|at) the office\b|\bprime tower\b/.test(t) ? "Office" : /\bfrom home\b|\bat home\b|\bremote(ly)?\b|\bmy apartment\b|\bkendall'?s apartment\b/.test(t) ? "Home" : /\bopen house\b|\bon ?site\b|\bsite visit\b|\bat (imtiaz|mti|emaar|damac|sobha|nakheel|binghatti|danube|the (developer|client|venue))\b|\bshowroom\b|\bviewing\b/.test(t) ? "On site" : "Unspecified",
     prep: pm || dv ? { needed: true, developer: dv ? (/imtiaz|mti/.test(dv[1]) ? "Imtiaz Developments" : dv[1].replace(/^./, (c) => c.toUpperCase())) : "", project: "", area: "", event: pm ? pm[1] : "" } : null,
     effort: /all day|full day/.test(t) ? "Full day" : /meeting|huddle|deck|powerpoint/.test(t) ? "Half a day" : "1-2 hours",
     progress: works.map((w) => ({ work: w, status: p0 >= 100 ? "Done" : started && !half && !pct ? "Started" : "In progress", percent: p0, owners: people.filter((n) => n !== "All sales agents") })) };
@@ -156,6 +192,7 @@ function clean(x) {
     scope: [...new Set(arr(x.scope).filter((s) => ids.has(s)))], works: [...new Set(arr(x.works).map((w) => w.slice(0, 80).trim()).filter(Boolean))].slice(0, 6),
     effort: EFFORT.some((e) => e[0] === x.effort) ? x.effort : "1-2 hours",
     time_of_day: TIMES.includes(x.time_of_day) ? x.time_of_day : "Unspecified", alone: !!x.alone, in_scope: x.in_scope !== false,
+    start: toMin(x.start) != null ? x.start : "", end: toMin(x.end) != null ? x.end : "", where: WHERE.includes(x.where) ? x.where : "Unspecified",
     out_role: x.in_scope === false ? (OUT_ROLES.some((r) => r[0] === (OUT_ALIAS[x.out_role] || x.out_role)) ? (OUT_ALIAS[x.out_role] || x.out_role) : "Other") : "",
     external: (Array.isArray(x.external) ? x.external : []).map((o) => ({ name: String(o.name || "").slice(0, 100).trim(), kind: String(o.kind || "").slice(0, 40), person: String(o.person || "").slice(0, 80), confirmed: !!o.confirmed, note: String(o.note || "").slice(0, 300) })).filter((o) => o.name).slice(0, 6),
     prep: x.prep && x.prep.needed ? { needed: true, developer: String(x.prep.developer || "").slice(0, 80), project: String(x.prep.project || "").slice(0, 80), area: String(x.prep.area || "").slice(0, 80), event: String(x.prep.event || "").slice(0, 80) } : null,
@@ -210,7 +247,7 @@ async function listEntries(env, from, to) {
 export function tasksOf(es) {
   const T = {};
   [...es].sort((a, b) => (a.date + a.created < b.date + b.created ? -1 : 1)).forEach((e) => {
-    const hrs = (EFFORT.find((x) => x[0] === e.effort) || EFFORT[1])[1], ws = e.works || [];
+    const hrs = hoursOf(e), ws = e.works || [];
     ws.forEach((w) => {
       const t = T[w] = T[w] || { name: w, first: e.date, last: e.date, days: new Set(), hours: 0, status: "In progress", percent: 0, entries: 0, kpis: new Set(), owners: new Set(), touched: new Set() };
       const p = (e.progress || []).find((x) => x.work === w);
@@ -232,7 +269,14 @@ export function deptBoard(tasks, today) {
   });
 }
 export function hoursByKpi(es) {
-  return KPIS.map((k) => ({ id: k.id, name: k.name, hours: Math.round(es.filter((e) => (e.kpis || []).includes(k.id)).reduce((s, e) => s + (EFFORT.find((x) => x[0] === e.effort) || EFFORT[1])[1] / Math.max(1, (e.kpis || []).length), 0) * 10) / 10 }));
+  return KPIS.map((k) => ({ id: k.id, name: k.name, hours: Math.round(es.filter((e) => (e.kpis || []).includes(k.id)).reduce((s, e) => s + hoursOf(e) / Math.max(1, (e.kpis || []).length), 0) * 10) / 10 }));
+}
+// v578 - the hours picture for a set of entries: total, how much is clocked vs estimated, the 15 h meter, and the two splits (what kind of work; where)
+export function hoursPicture(es) {
+  const r1 = (n) => Math.round(n * 10) / 10, tot = r1(es.reduce((s, e) => s + hoursOf(e), 0)), clk = r1(es.filter(isClocked).reduce((s, e) => s + hoursOf(e), 0));
+  const kinds = ["Strategic Lead", "Broker", "Other departments"].map((k) => ({ name: k, hours: r1(es.filter((e) => kindOf(e) === k).reduce((s, e) => s + hoursOf(e), 0)) }));
+  const places = WHERE.map((w) => ({ name: w === "Unspecified" ? "Not stated" : w, hours: r1(es.filter((e) => (e.where || "Unspecified") === w).reduce((s, e) => s + hoursOf(e), 0)) }));
+  return { total: tot, clocked: clk, estimated: r1(tot - clk), min: MIN_HOURS, kinds, places };
 }
 // v569 PREPARE ME (Kendall 14 Oct: "MTI's open house ... understand the project itself, all its USPs, the sizes, the typology, why that location,
 // what is beneficial to the investor or the end user, three or four comparisons within the area ... a plan B ... create content at the location").
@@ -299,7 +343,7 @@ export async function workRoute(request, env, url, deps) {
       // v576 - outside-role work counted on its own, by whose job it was (the renewal evidence)
       const ow = week.filter((e) => e.in_scope === false), byD = {}; ow.forEach((e) => { const d = e.out_role || "Other"; byD[d] = (byD[d] || 0) + 1; });
       const outside = { week: ow.length, term: all.filter((e) => e.in_scope === false).length, by: Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => ({ dept: d, n: byD[d] })) };
-      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, outside, tasks: tasksOf(all), depts: deptBoard(tasksOf(all), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES,
+      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, outside, hoursweek: hoursPicture(week), where: WHERE, tasks: tasksOf(all), depts: deptBoard(tasksOf(all), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES,
         // v571 - the people picker in hierarchy: Ali and Faez (and Sultan) on their own at the top, then each department's people
         people_tree: [{ dept: "Leadership", people: PEOPLE.filter((x) => deptOf(x[0]) === "Leadership").map((x) => x[0]) }].concat(DEPTS.filter((d) => d !== "Leadership").map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) }))) });
     }
@@ -394,6 +438,10 @@ export function debriefHtml(e) {
 // Palettes validated with the dataviz skill's checker on #FFFFFF: emphasis #15948A / #D9782E (all pass); teal ordinal ramp
 // #6FBFB4 #52ADA1 #3A968A #287C71 #15665C (all pass). Grey #B9B2A3 is the de-emphasis token, not a series.
 const RAMP = ["#6FBFB4", "#52ADA1", "#3A968A", "#287C71", "#15665C"], TEAL = "#15948A", WARM = "#D9782E", GREY = "#B9B2A3";
+// v579 - the FN Realty logo as a data URL once she sends the file (set FN_LOGO_B64 in src/fn_logo.js); until then a styled FN wordmark
+let FN_LOGO = ""; try { FN_LOGO = (await import("./fn_logo.js")).FN_LOGO_B64 || ""; } catch (e) {}
+// soft language for the work-kind split (Kendall 14 Oct: "very soft language when you're differentiating these things")
+const KIND_SOFT = { "Strategic Lead": "As Strategic Lead", "Broker": "As a broker", "Other departments": "Supporting other departments" };
 function donut(parts, total, label) {   // parts: [{v, color, name}] - a ring with a hero number in the middle; 2px surface gaps between segments
   const R = 54, r = 36, C = 2 * Math.PI * R; let acc = 0; const segs = [];
   parts.filter((p) => p.v > 0).forEach((p) => { const f = p.v / Math.max(total, 1), len = Math.max(0, C * f - 2); segs.push('<circle r="' + R + '" cx="70" cy="70" fill="none" stroke="' + p.color + '" stroke-width="' + (R - r) + '" stroke-dasharray="' + len + ' ' + (C - len) + '" stroke-dashoffset="' + (-acc * C) + '" transform="rotate(-90 70 70)"/>'); acc += f; });
@@ -413,12 +461,15 @@ function dayBars(days) {   // days: [{d, n, out}] - thin columns, rounded ends, 
 export function reportHtml(es, from, to, allTasks, pickedDays) {
   const days = pickedDays && pickedDays.length ? pickedDays : (() => { const o = []; for (let d = new Date(from + "T00:00:00Z"); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) o.push(d.toISOString().slice(0, 10)); return o; })();
   es = es.filter((e) => days.includes(e.date));
-  const daily = days.length === 1, hk = hoursByKpi(es), totH = Math.round(hk.reduce((s, x) => s + x.hours, 0) * 10) / 10;
+  const daily = days.length === 1, hk = hoursByKpi(es), HP = hoursPicture(es), totH = HP.total;
+  // v578 - two donuts in HOURS: what kind of work (her role vs broker vs other departments) and where (office, home, on site)
+  const KIND_COL = { "Strategic Lead": TEAL, "Broker": WARM, "Other departments": GREY }, PLACE_COL = { Office: RAMP[4], Home: RAMP[2], "On site": RAMP[0], Other: GREY, "Not stated": "#E3DDD1" };
+  const kindParts = HP.kinds.map((k) => ({ name: KIND_SOFT[k.name] || k.name, v: k.hours, color: KIND_COL[k.name] })), placeParts = HP.places.map((p) => ({ name: p.name, v: p.hours, color: PLACE_COL[p.name] }));
   const tk = (allTasks || tasksOf(es)).filter((t) => days.some((d) => t.last >= d && t.first <= d) || es.some((e) => (e.works || []).includes(t.name)));
   const inRole = es.filter((e) => e.in_scope !== false), outRole = es.filter((e) => e.in_scope === false);
   const byD = {}; outRole.forEach((e) => { const d = e.out_role || "Other"; byD[d] = (byD[d] || 0) + 1; });
   const people = new Set(); es.forEach((e) => (e.people || []).forEach((n) => n !== "All sales agents" && people.add(n)));
-  const parts = KPIS.map((k, i) => ({ name: k.name, v: inRole.filter((e) => (e.kpis || [])[0] === k.id).length, color: RAMP[i] })).concat([{ name: "Outside role", v: outRole.length, color: WARM }]);
+  const parts = KPIS.map((k, i) => ({ name: k.name, v: inRole.filter((e) => (e.kpis || [])[0] === k.id).length, color: RAMP[i] })).concat([{ name: "Supporting the wider team", v: outRole.length, color: WARM }]);
   const perDay = days.map((d) => ({ d: dayName(d).slice(0, 3) + (days.length > 7 ? " " + (+d.slice(8)) : ""), n: es.filter((e) => e.date === d).length, out: es.filter((e) => e.date === d && e.in_scope === false).length }));
   const moved = tk.filter((t) => t.status !== "Done").length + tk.filter((t) => t.status === "Done").length;
   const FOOT = "<b>CONFIDENTIAL · FN Realty internal use only.</b> Not to be copied, distributed, modified, reissued or shared outside FN Realty without prior written approval from FN Realty management. © 2026 FN Realty. All rights reserved.";
@@ -428,30 +479,40 @@ export function reportHtml(es, from, to, allTasks, pickedDays) {
   const byDay = days.map((d) => ({ d, es: es.filter((e) => e.date === d) })).filter((x) => x.es.length);
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (daily ? 'Daily' : 'Activity') + ' report</title>'
     + '<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap"><style>'
-    + '@page{size:A4;margin:14mm 14mm 20mm}body{margin:0;background:#F9F1EF;color:#1C2321;font-family:Inter,sans-serif;font-size:10.5pt;line-height:1.45}.pg{max-width:780px;margin:0 auto;background:#fff;padding:24px 30px 36px}'
-    + 'header{background:#1F2B44;color:#C9A97A;margin:-24px -30px 18px;padding:18px 30px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px}header h1{font-family:Anton,sans-serif;font-weight:400;font-size:22pt;letter-spacing:.02em;margin:0}header p{margin:4px 0 0;color:#EFE5D7;font-size:9.5pt}header .who{text-align:right;font-size:9pt;color:#EFE5D7}'
+    // v579 (Najjuko 14 Oct, from her own PDF): the browser's print header stamped the Azimuth link (with her key) on every page - @page margin boxes are
+    // emptied so no URL, date or page number prints; the confidentiality footer is gone; the FN wordmark (the real logo file replaces it when she sends it).
+    + '@page{size:A4;margin:12mm 12mm 14mm}@page{@top-left{content:none}@top-center{content:none}@top-right{content:none}@bottom-left{content:none}@bottom-center{content:none}@bottom-right{content:none}}'
+    + 'body{margin:0;background:#F9F1EF;color:#1C2321;font-family:Inter,sans-serif;font-size:10.5pt;line-height:1.45}.pg{max-width:780px;margin:0 auto;background:#fff;padding:24px 30px 36px}'
+    + 'header{background:#1F2B44;color:#C9A97A;margin:-24px -30px 18px;padding:18px 30px;display:flex;justify-content:space-between;align-items:center;gap:12px}header h1{font-family:Anton,sans-serif;font-weight:400;font-size:22pt;letter-spacing:.02em;margin:0}header p{margin:4px 0 0;color:#EFE5D7;font-size:9.5pt}header .who{text-align:right;font-size:9pt;color:#EFE5D7}'
+    + '.fnmark{display:flex;align-items:center;gap:10px}.fnmark .mono{width:44px;height:44px;border:2px solid #C9A97A;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:Anton,sans-serif;font-size:19pt;color:#C9A97A;letter-spacing:.02em}.fnmark img{height:44px;width:auto}.fnmark .rt{font-family:Inter,sans-serif;font-weight:500;font-size:8pt;letter-spacing:.32em;color:#EFE5D7;text-transform:uppercase}'
     + 'h2{font-family:Anton,sans-serif;font-weight:400;color:#1F2B44;font-size:12pt;letter-spacing:.04em;margin:18px 0 8px}'
     + '.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.tile{background:#FAF6F2;border:1px solid #EFE5D7;border-radius:10px;padding:10px 8px;text-align:center}.tile b{display:block;font-size:26pt;font-weight:600;color:#1F2B44;line-height:1.1}.tile span{font-size:8pt;color:#626B7C}'
     + '.two{display:grid;grid-template-columns:150px 1fr;gap:18px;align-items:center;margin-top:12px}.leg{font-size:9pt;color:#3B4441}.leg div{display:flex;align-items:center;gap:8px;margin:4px 0}.leg i{display:inline-block;width:12px;height:12px;border-radius:3px}.leg b{margin-left:auto;color:#1C2321}'
     + '.tk{display:grid;grid-template-columns:1fr 150px 48px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #EFE9DE;font-size:9.5pt}.tk b{font-weight:600}.tk small{display:block;color:#626B7C;font-size:8pt;font-weight:400}.pb{height:8px;background:#EFE9DE;border-radius:4px;overflow:hidden}.pb i{display:block;height:8px;border-radius:4px}.pct{text-align:right;font-weight:600;color:#1C2321}'
     + '.out{margin-top:14px;padding:10px 12px;border-radius:10px;background:#FBF1EA;border-left:4px solid ' + WARM + ';font-size:9.5pt}.out b{color:#1C2321}'
+    + '.meter{margin-top:12px}.mh{display:flex;justify-content:space-between;align-items:baseline;font-size:9.5pt;color:#626B7C}.mh b{font-size:14pt;color:#1C2321}'
     + '.glance{width:100%;border-collapse:collapse;margin-top:10px;font-size:9pt}.glance th{text-align:left;font-weight:600;color:#626B7C;font-size:8pt;letter-spacing:.06em;text-transform:uppercase;padding:4px 6px;border-bottom:1px solid #E9EAEC}.glance td{padding:6px;border-bottom:1px solid #EFE9DE;vertical-align:top}.glance td:first-child{white-space:nowrap;width:52px}.glance .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.glance .empty td{color:#9AA0B5}.glance .og{display:inline-block;background:#FBF1EA;color:#9A4E1E;border-radius:99px;padding:1px 8px;font-weight:600}'
     + '.day{margin-top:12px}.day h3{font-size:9pt;color:#8A6F3E;letter-spacing:.08em;text-transform:uppercase;margin:10px 0 4px;font-weight:600}.li{display:flex;gap:8px;font-size:9.5pt;padding:3px 0}.li i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none}.li span{color:#626B7C}'
-    + 'footer{margin-top:22px;border-top:1px solid #E9EAEC;padding-top:8px;font-size:7.5pt;color:#626B7C}.pf{position:fixed;bottom:6mm;left:14mm;right:14mm;font-size:7pt;color:#626B7C;display:none}'
-    + '.btns{position:fixed;right:14px;bottom:14px;display:flex;gap:8px}.btn{background:#1F2B44;color:#C9A97A;border:0;border-radius:99px;padding:10px 16px;font:600 10pt Inter,sans-serif;cursor:pointer}'
-    + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 14px}.btns{display:none}.pf{display:block}footer{display:none}}</style></head><body><div class=pg>'
-    + '<header><div><h1>' + (daily ? 'DAILY REPORT' : 'ACTIVITY REPORT') + '</h1><p>' + span + '</p></div><div class=who>Serah Najjuko Ganyana<br>Strategic Lead – Marketing, PR &amp; BD</div></header>'
-    + '<div class=tiles>' + tile(es.length, 'activities') + tile(totH, 'hours, about') + tile(people.size, 'people met') + tile(tk.length, 'tasks moved') + '</div>'
-    + '<div class=two>' + donut(parts, es.length, 'activities') + '<div class=leg>' + parts.filter((p) => p.v).map((p) => '<div><i style="background:' + p.color + '"></i>' + esc(p.name) + '<b>' + p.v + '</b></div>').join("") + (es.length ? '' : '<div>Nothing logged for these days.</div>') + '</div></div>'
+    + '.btns{position:fixed;right:14px;bottom:14px;display:flex;gap:8px}.btn{background:#1F2B44;color:#C9A97A;border:0;border-radius:99px;padding:10px 16px;font:600 10pt Inter,sans-serif;cursor:pointer}.btn:disabled{opacity:.6}'
+    + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 14px}.btns{display:none}}</style></head><body><div class=pg>'
+    + '<header><div class=fnmark>' + (FN_LOGO ? '<img src="' + FN_LOGO + '" alt="FN Realty">' : '<div class=mono>FN</div><div class=rt>Realty</div>') + '</div><div style="flex:1;padding-left:18px"><h1>' + (daily ? 'FN DAILY REPORT' : days.length === 7 ? 'FN WEEKLY REPORT' : 'FN ACTIVITY REPORT') + '</h1><p>' + span + '</p></div><div class=who>Serah Najjuko Ganyana<br>Strategic Lead – Marketing, PR &amp; BD</div></header>'
+    + '<div class=tiles>' + tile(es.length, 'activities') + tile(totH, (HP.estimated ? HP.clocked + ' h clocked · ' + HP.estimated + ' h est.' : 'hours clocked')) + tile(people.size, 'people met') + tile(tk.length, 'tasks moved') + '</div>'
+    + (daily ? '' : '<div class=meter><div class=mh><b>' + totH + ' / ' + MIN_HOURS + ' h</b><span>' + (totH >= MIN_HOURS ? 'contract minimum met (clause 8.1)' : (Math.round((MIN_HOURS - totH) * 10) / 10) + ' h short of the 15 h minimum (clause 8.1)') + '</span></div><div class=pb style="height:10px"><i style="width:' + Math.min(100, Math.round(totH / MIN_HOURS * 100)) + '%;background:' + (totH >= MIN_HOURS ? TEAL : '#D9A441') + '"></i></div></div>')
+    + '<h2>WHERE THE HOURS WENT</h2><div class=two>' + donut(kindParts, totH, 'hours') + '<div class=leg>' + kindParts.filter((p) => p.v).map((p) => '<div><i style="background:' + p.color + '"></i>' + esc(p.name) + '<b>' + p.v + ' h</b></div>').join("") + (totH ? '<div style="color:#626B7C;font-size:8.5pt;margin-top:6px">Strategic Lead: marketing, PR and business development. Broker: leads, calls, viewings and open houses with clients. Supporting other departments: help given beyond the role.</div>' : '<div>Nothing logged for these days.</div>') + '</div></div>'
+    + (totH ? '<div class=two style="margin-top:8px">' + donut(placeParts, totH, 'hours') + '<div class=leg>' + placeParts.filter((p) => p.v).map((p) => '<div><i style="background:' + p.color + '"></i>' + esc(p.name) + '<b>' + p.v + ' h</b></div>').join("") + '<div style="color:#626B7C;font-size:8.5pt;margin-top:6px">Hybrid working (clause 8.1); work counts wherever it is done.</div></div></div>' : '')
+    + '<div class=two style="margin-top:10px">' + donut(parts, es.length, 'activities') + '<div class=leg>' + parts.filter((p) => p.v).map((p) => '<div><i style="background:' + p.color + '"></i>' + esc(p.name) + '<b>' + p.v + '</b></div>').join("") + '</div></div>'
     // v577.1 (the Excel idiom she reads: a Mon-Fri day-at-a-glance grid, one row per day: what, hours, with whom, outside-role flagged)
     + (days.length > 1 ? '<h2>WEEK AT A GLANCE</h2>' + dayBars(perDay)
-      + '<table class=glance><tr><th>Day</th><th>Activities</th><th>Hours</th><th>With</th><th>Outside role</th></tr>' + days.map((d) => { const de = es.filter((e) => e.date === d), h = Math.round(de.reduce((s, e) => s + (EFFORT.find((x) => x[0] === e.effort) || EFFORT[1])[1], 0) * 10) / 10, who = [...new Set(de.flatMap((e) => (e.people || []).filter((n) => n !== "All sales agents").map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0])))], o = de.filter((e) => e.in_scope === false).length;
-        return '<tr' + (de.length ? '' : ' class=empty') + '><td><b>' + esc(dayName(d).slice(0, 3)) + '</b> ' + (+d.slice(8)) + '</td><td>' + (de.length ? de.map((e) => esc(e.title)).join('; ') : '<span>—</span>') + '</td><td class=num>' + (de.length ? h : '') + '</td><td>' + esc(who.slice(0, 4).join(', ')) + (who.length > 4 ? ' +' + (who.length - 4) : '') + '</td><td class=num>' + (o ? '<span class=og>' + o + '</span>' : '') + '</td></tr>'; }).join("") + '</table>' : '')
+      + '<table class=glance><tr><th>Day</th><th>Activities</th><th>Hours</th><th>With</th><th>Outside role</th></tr>' + days.map((d) => { const de = es.filter((e) => e.date === d), h = Math.round(de.reduce((s, e) => s + hoursOf(e), 0) * 10) / 10, who = [...new Set(de.flatMap((e) => (e.people || []).filter((n) => n !== "All sales agents").map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0])))], o = de.filter((e) => e.in_scope === false).length;
+        return '<tr' + (de.length ? '' : ' class=empty') + '><td><b>' + esc(dayName(d).slice(0, 3)) + '</b> ' + (+d.slice(8)) + '</td><td>' + (de.length ? de.map((e) => esc(e.title) + (isClocked(e) ? ' <span>' + esc(e.start) + '–' + esc(e.end) + '</span>' : '')).join('; ') : '<span>—</span>') + '</td><td class=num>' + (de.length ? h : '') + '</td><td>' + esc(who.slice(0, 4).join(', ')) + (who.length > 4 ? ' +' + (who.length - 4) : '') + '</td><td class=num>' + (o ? '<span class=og>' + o + '</span>' : '') + '</td></tr>'; }).join("") + '</table>' : '')
     + (tk.length ? '<h2>TASKS</h2>' + tk.slice(0, 8).map((t) => '<div class=tk><div><b>' + esc(t.name) + '</b><small>' + esc(t.status) + ' · ' + t.days + ' day' + (t.days === 1 ? '' : 's') + (t.owners && t.owners.length ? ' · with ' + esc(t.owners.slice(0, 3).join(", ")) : '') + '</small></div>' + pbar(t.percent, t.status === "Done" ? RAMP[4] : TEAL) + '<div class=pct>' + t.percent + '%</div></div>').join("") : '')
-    + (outRole.length ? '<div class=out><b>Outside her role: ' + outRole.length + '</b> · ' + esc(Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => d + ' ' + byD[d]).join(", ")) + ' · work done for other departments, recorded against Schedule 1 of her contract.</div>' : '')
+    + (outRole.length ? '<div class=out><b>Going beyond the role: ' + outRole.length + (outRole.length === 1 ? ' activity' : ' activities') + '</b> · ' + esc(Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => (d === "Sales" ? "as a broker" : "for " + d) + ' ' + byD[d]).join(", ")) + ' · support given to the wider team, noted alongside the Strategic Lead work.</div>' : '')
     + (byDay.length ? '<div class=day>' + byDay.map((x) => '<h3>' + esc(dayName(x.d)) + ' ' + esc(fmtD(x.d)) + '</h3>' + x.es.map((e) => '<div class=li><i style="background:' + (e.in_scope === false ? WARM : TEAL) + '"></i><div>' + esc(e.title) + ' <span>· ' + esc(e.type) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ' · ' + esc(e.time_of_day.toLowerCase()) : '') + ((e.people || []).length ? ' · ' + esc(e.people.map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0]).slice(0, 3).join(", ")) : '') + '</span></div></div>').join("")).join("") + '</div>' : '')
-    + '<footer>' + FOOT + '</footer></div><div class=pf>' + FOOT + '</div>'
-    + '<div class=btns><button class=btn onclick="if(navigator.share){navigator.share({title:document.title,url:location.href}).catch(function(){})}else{print()}">Share</button><button class=btn onclick="print()">Save as PDF</button></div></body></html>';
+    + '</div>'
+    // v579 - the Azimuth link (her key rides in it) is never what gets shared. The page title is "FN Daily report 14 Oct 2026", so the browser's
+    // print-to-PDF names the file that way; on the phone, Save as PDF opens the share sheet with the PDF itself (email, WhatsApp). One path, no link.
+    + '<div class=btns><button class=btn onclick="print()">Share / Save as PDF</button></div>'
+    + '<script>document.title=' + JSON.stringify((daily ? 'FN Daily report ' : days.length === 7 ? 'FN Weekly report ' : 'FN Activity report ') + (daily ? fmtD(days[0]) : fmtD(days[0]) + ' to ' + fmtD(days[days.length - 1]))) + ';</script></body></html>';
 }
 
 // v577 (Kendall 14 Oct: "at the very top of the hierarchy it's what did you do? And then something else that says report") - two tabs, that is the whole first screen
@@ -550,6 +611,9 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
  $("wkhead").textContent=(D.phase?D.phase.name+" · ":"")+(days>=0?days+" days to the day-75 review (15 Dec)":"Review due date passed");
  if(!$("wd").value)$("wd").value=D.today;
  $("wtally").innerHTML=D.tally.map(function(t){return '<div class="tl'+(t.week?' on':'')+'">'+(ICON["kpi"+t.id]||ICON.kpi)+'<span>'+esc(t.name)+'</span><b>'+t.week+'</b></div>'}).join("")
+  // v578 - the 15-hour meter (clause 8.1): clocked hours first, green when met
+  +(D.hoursweek?'<div class=line style="grid-column:1/3;margin-top:8px"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:1rem">'+D.hoursweek.total+' / '+D.hoursweek.min+' h this week</b><span>'+(D.hoursweek.estimated?D.hoursweek.clocked+' h clocked, '+D.hoursweek.estimated+' h estimated':D.hoursweek.clocked+' h clocked')+'</span></div><div class=pb style="height:8px"><i style="width:'+Math.min(100,Math.round(D.hoursweek.total/D.hoursweek.min*100))+'%;background:'+(D.hoursweek.total>=D.hoursweek.min?'#15948A':'#D9A441')+'"></i></div>'
+   +'<div style="margin-top:4px">'+D.hoursweek.kinds.filter(function(k){return k.hours}).map(function(k){return k.name+' '+k.hours+' h'}).join(' · ')+'</div></div>':'')
   // v576 - the running outside-role tally, by department: what she brings to the renewal
   +(D.outside&&D.outside.week?'<div class=line style="grid-column:1/3;margin-top:6px"><b>Outside your role this week: '+D.outside.week+'</b> · '+esc(D.outside.by.map(function(x){return x.dept+" "+x.n}).join(", "))+' · since 2 Oct: '+D.outside.term+' · kept for your review</div>':'');
  $("wlisth").textContent="WEEK OF "+fd(D.from).toUpperCase()+" · "+D.entries.length+" ENTR"+(D.entries.length===1?"Y":"IES");
@@ -586,6 +650,7 @@ function sheet(title,html,onopen){var bg=document.createElement("div");bg.classN
 function opt(v,nm,on,ic){return '<div class="opt'+(on?' on':'')+'" data-v="'+esc(v)+'">'+(ic||'')+esc(nm)+(on?'<span style="margin-left:auto;color:#0A4F4A">&#10003;</span>':'')+'</div>'}
 function kpiOf(id){return D.kpis.filter(function(k){return k.id===id})[0]}
 function outOf(r){return (D.out_roles||[]).filter(function(x){return x[0]===r})[0]}
+function clocked(e){var m=function(s){var x=/^(\d{1,2}):(\d{2})$/.exec(s||"");return x?(+x[1])*60+(+x[2]):null},a=m(e.start),b=m(e.end);if(a==null||b==null)return null;var d=b-a;if(d<0)d+=1440;return d>0&&d<=960?Math.round(d/6)/10:null}
 function fieldRow(ic,main,sub,id){return '<div class=fr id='+id+'>'+(ICON[ic]||'')+'<b>'+esc(main)+'</b><span>'+esc(sub)+'</span><i>&#8250;</i></div>'}
 function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[];PREV.progress=PREV.progress||[];PREV.kpis=PREV.kpis||[];PREV.people=PREV.people||[];
  var within=PREV.in_scope!==false,k0=kpiOf(PREV.kpis[0]),orr=outOf(PREV.out_role),sc0=D.scope.filter(function(s){return s.id===(PREV.scope||[])[0]})[0];
@@ -597,7 +662,8 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
     +(k0?'<div class=line>'+(sc0?'Schedule 1: <b>'+esc(sc0.name)+'</b>. ':'')+'Evidence: '+esc(k0.ev)+'.</div>':'<div class=line class=warn style="color:#B04A3A">Tap one so it counts at your review.</div>')
    :fieldRow("party",PREV.out_role||"Whose job was it?",PREV.out_role?"whose job it was":"tap to choose","frw")
     +(orr?'<div class=line>'+esc(orr[1])+'.</div>':''))
- +fieldRow("time",PREV.time_of_day&&PREV.time_of_day!=="Unspecified"?PREV.time_of_day:"Time of day",PREV.time_of_day&&PREV.time_of_day!=="Unspecified"?"when":"not stated","frt")
+ +fieldRow("time",PREV.start&&PREV.end?PREV.start+" – "+PREV.end:(PREV.time_of_day&&PREV.time_of_day!=="Unspecified"?PREV.time_of_day:"Start and end time"),PREV.start&&PREV.end?(clocked(PREV)+" h"+(PREV.time_of_day&&PREV.time_of_day!=="Unspecified"?" · "+PREV.time_of_day.toLowerCase():"")):"tap to clock it","frt")
+ +fieldRow("party",PREV.where&&PREV.where!=="Unspecified"?PREV.where:"Where were you?",PREV.where&&PREV.where!=="Unspecified"?"where":"office, home, on site","frl")
  +fieldRow("people",PREV.people.length?PREV.people.map(function(n){return n.replace(/\s*\(.*\)$/,"").split(" ")[0]}).join(", "):(PREV.alone?"By yourself":"Who was there?"),PREV.people.length?"with":(PREV.alone?"":"tap to add"),"frp")
  +fieldRow("type",PREV.type,PREV.effort||"","fry")
  +((PREV.external||[]).length?(PREV.external).map(function(o){return o.confirmed?fieldRow("party",o.name,o.known?"outside party · known":"outside party","frx"):
@@ -618,7 +684,11 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
  $("sw").onclick=function(){PREV.in_scope=true;PREV.out_role="";preview(PREV)};$("so").onclick=function(){PREV.in_scope=false;PREV.kpis=[];preview(PREV)};
  $("wprev").querySelectorAll("[data-k]").forEach(function(b){b.onclick=function(){var v=+b.getAttribute("data-k"),i=PREV.kpis.indexOf(v);if(i>=0)PREV.kpis.splice(i,1);else PREV.kpis.unshift(v);preview(PREV)}});
  if($("frw"))$("frw").onclick=function(){sheet("Whose job was it?",(D.out_roles||[]).map(function(r){return opt(r[0],r[0],PREV.out_role===r[0])}).join(""),function(s){s.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){PREV.out_role=o.getAttribute("data-v");SHEET()}})})};
- $("frt").onclick=function(){sheet("When?",(D.times||[]).map(function(t){return opt(t,t==="Unspecified"?"Not stated":t,(PREV.time_of_day||"Unspecified")===t,ICON[t])}).join(""),function(s){s.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){PREV.time_of_day=o.getAttribute("data-v");SHEET()}})})};
+ // v578 - clock it: start and end pickers first (the hours that count), the part-of-day words underneath
+ $("frt").onclick=function(){sheet("When?",'<div class=grp>Clock it (the hours that count)</div><div class=row style="grid-template-columns:1fr 1fr;margin:0 0 8px"><input type=time id=pst value="'+esc(PREV.start||"")+'"><input type=time id=pen value="'+esc(PREV.end||"")+'"></div><div class=line id=phrs>'+(PREV.start&&PREV.end?clocked(PREV)+' hours':'Start and end, 24-hour')+'</div><div class=grp>Part of the day</div>'+(D.times||[]).map(function(t){return opt(t,t==="Unspecified"?"Not stated":t,(PREV.time_of_day||"Unspecified")===t,ICON[t])}).join(""),
+  function(s){var st=s.querySelector("#pst"),en=s.querySelector("#pen");function upd(){PREV.start=st.value||"";PREV.end=en.value||"";var h=clocked(PREV);s.querySelector("#phrs").textContent=h!=null?h+" hours":"Start and end, 24-hour";if(h!=null){var hh=+st.value.slice(0,2);PREV.time_of_day=hh<12?"Morning":hh<14?"Midday":hh<18?"Afternoon":"Evening"}}st.onchange=upd;en.onchange=upd;
+   s.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){PREV.time_of_day=o.getAttribute("data-v");SHEET()}})})};
+ $("frl").onclick=function(){sheet("Where were you?",(D.where||[]).map(function(w){return opt(w,w==="Unspecified"?"Not stated":w,(PREV.where||"Unspecified")===w)}).join("")+'<div class=line style="margin-top:8px">Work counts wherever it is done (clause 8.1, hybrid). This is only so the office days show.</div>',function(s){s.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){PREV.where=o.getAttribute("data-v");SHEET()}})})};
  $("frp").onclick=function(){sheet("Who was there?",'<div class=opt data-v="__alone"'+(PREV.alone&&!PREV.people.length?' class="opt on"':'')+'>By yourself</div>'+(D.people_tree||[]).map(function(g){return '<div class=grp>'+esc(g.dept)+'</div>'+g.people.map(function(n){return opt(n,n,PREV.people.indexOf(n)>=0)}).join("")}).join(""),
   function(s){s.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){var v=o.getAttribute("data-v");if(v==="__alone"){PREV.people=[];PREV.alone=true}else{var i=PREV.people.indexOf(v);if(i>=0)PREV.people.splice(i,1);else PREV.people.push(v);PREV.alone=false}o.classList.toggle("on");var c=o.querySelector("span");if(c)c.remove();else o.insertAdjacentHTML("beforeend",'<span style="margin-left:auto;color:#0A4F4A">&#10003;</span>')}})})};
  $("fry").onclick=function(){sheet("What kind, and how long?",'<div class=grp>Type</div>'+D.types.map(function(t){return opt("t:"+t,t,PREV.type===t,ICON[t])}).join("")+'<div class=grp>About how long</div>'+(D.effort||[]).map(function(x){return opt("e:"+x,x,PREV.effort===x)}).join(""),

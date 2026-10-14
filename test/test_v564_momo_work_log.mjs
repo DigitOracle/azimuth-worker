@@ -36,7 +36,7 @@ const wk = await (await req("/momo/work/api?week=2026-10-14", true)).json();
 ok(wk.from === "2026-10-12" && wk.to === "2026-10-18" && wk.entries.length === 1 && wk.tally[0].week === 1 && wk.tally[0].term === 1, "the week runs Monday to Sunday; the tally counts it under Marketing direction", wk.tally);
 // report
 const rep = await (await req("/momo/work/report?from=2026-10-12&to=2026-10-18", true)).text();
-ok(/ACTIVITY REPORT/.test(rep) && /Monday Weekly Huddle/.test(rep) && /CONFIDENTIAL · FN Realty internal use only/.test(rep) && /#1F2B44/.test(rep) && /viewBox="0 0 140 140"/.test(rep), "the weekly report (v577: the 15-second page): the task, the donut, FN brand and the confidentiality footer");
+ok(/FN WEEKLY REPORT/.test(rep) && /Monday Weekly Huddle/.test(rep) && /#1F2B44/.test(rep) && /viewBox="0 0 140 140"/.test(rep), "the weekly report (v577/v579: the 15-second page): FN title, the task, the donut, FN brand");
 ok(!/Claude|Anthropic|OpenAI|GPT/i.test(rep), "the report never names an AI vendor");
 // edit and delete
 const ed = await (await req("/momo/work/api", true, { action: "save", entry: { ...sv.entry, title: "Huddle 1" }, id: sv.entry.id, date: "2026-10-13", oldDate: "2026-10-12", created: sv.entry.created })).json();
@@ -60,7 +60,7 @@ ok(/x\.indexOf\("ins_najjuko_"\) === 0/.test(ix), "only her insider key counts a
   ok(t[0].name === "Monday Weekly Huddle", "open tasks list before finished ones");
   ok(hoursByKpi(es).find((x) => x.id === 2).hours === 9.5, "time by focus area");
   const rep = reportHtml(es.map((e) => ({ ...e, title: "x", type: "Update", summary: "s", people: [], scope: [], deliverables: [], next: [] })).slice(1, 2), "2026-10-14", "2026-10-14", t);
-  ok(/DAILY REPORT/.test(rep) && /<h2>TASKS<\/h2>/.test(rep) && /<b>8<\/b><span>hours, about/.test(rep), "a one-day report is the daily summary, with tasks and hours"); }
+  ok(/FN DAILY REPORT/.test(rep) && /<div class=tile><b>8<\/b>/.test(rep), "a one-day report is the FN daily report, with the hours tile"); }
 const pe = await (await req("/momo/work/api", true, { action: "parse", text: "Started planning the Halloween party, about half done with the concept", date: "2026-10-14" }, () => ({ entries: [{ title: "Halloween", type: "Organising", summary: "s", people: [], kpis: [5], scope: ["b4"], works: ["Halloween (31 Oct)", "  New office mural  "], deliverables: [], evidence: [], next: [], questions: [], effort: "Bogus", progress: [{ work: "Halloween (31 Oct)", status: "In progress", percent: 150 }] }] }))).json();
 ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours" && pe.entry.progress[0].percent === 100, "new tasks are kept, effort and percent are kept in range", pe.entry);
 // v566 - who holds each task, department cards, longest-quiet first
@@ -196,11 +196,39 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(/<div class=tile><b>3<\/b><span>activities/.test(wkr) && /<b>3<\/b><span>people met/.test(wkr), "headline tiles: 3 activities, 3 people met");
   ok(/<svg viewBox="0 0 140 140"/.test(wkr) && /stroke="#D9782E"/.test(wkr) && /stroke="#6FBFB4"/.test(wkr), "a donut with the validated emphasis colours (outside-role warm, area ramp)");
   ok(/aria-label="Activities per day"/.test(wkr) && /WEEK AT A GLANCE/.test(wkr) && /<table class=glance>/.test(wkr) && /<b>Mon<\/b> 12/.test(wkr) && /<b>Wed<\/b> 14/.test(wkr) && /<span class=og>1<\/span>/.test(wkr), "per-day bars and the Mon-Wed day-at-a-glance grid, with the outside-role day flagged");
-  ok(/Outside her role: 1<\/b> · Sales 1/.test(wkr), "the outside-role line names the department");
+  ok(/Going beyond the role: 1 activity<\/b> · as a broker 1/.test(wkr), "the beyond-the-role line names where the help went, softly");
   ok(/<h2>TASKS<\/h2>/.test(wkr) && /Monday Weekly Huddle/.test(wkr) && /60%/.test(wkr), "tasks moved, with progress bars");
-  ok(/CONFIDENTIAL · FN Realty/.test(wkr) && /navigator\.share/.test(wkr) && !/Claude|Anthropic|GPT/i.test(wkr), "FN footer, a Share button, no AI vendor named");
+  ok(!/CONFIDENTIAL/.test(wkr) && !/Outside her role/.test(wkr) && /Going beyond the role: 1 activity/.test(wkr) && /as a broker 1/.test(wkr) && /Supporting the wider team/.test(wkr), "v579: no confidentiality footer; soft language (going beyond the role, as a broker, supporting the wider team)");
+  ok(/@top-left\{content:none\}/.test(wkr) && /@bottom-center\{content:none\}/.test(wkr) && /document\.title="FN Activity report 12 Oct 2026 to 14 Oct 2026"/.test(wkr) && !/navigator\.share\(\{title:document\.title,url/.test(wkr) && !/Claude|Anthropic|GPT/i.test(wkr), "v579: the print header/footer (the Azimuth link) is suppressed, the file is titled FN ... report, the link is never shared, no AI vendor named");
+  ok(/<header><div class=fnmark>/.test(wkr) && /<div class=mono>FN<\/div><div class=rt>Realty<\/div>/.test(wkr) && /FN ACTIVITY REPORT/.test(wkr), "v579: the FN mark in the header (wordmark until the logo file arrives)");
   const dr = await (await req("/momo/work/report?days=2026-10-13", true)).text();
-  ok(/DAILY REPORT/.test(dr) && /Tuesday 13 Oct 2026/.test(dr) && !/WEEK AT A GLANCE/.test(dr) && /<b>2<\/b><span>activities/.test(dr), "a single day is the daily report: no week grid, 2 activities");
+  ok(/FN DAILY REPORT/.test(dr) && /Tuesday 13 Oct 2026/.test(dr) && !/WEEK AT A GLANCE/.test(dr) && /<b>2<\/b><span>activities/.test(dr), "a single day is the FN daily report: no week grid, 2 activities");
+  for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
+// v578 - clocked hours, where, the 15 h meter, two hours-donuts (kind of work; where)
+{ const { spanOf, clockedHours, hoursOf, hoursPicture, kindOf, WHERE } = await import("../src/work_log.js");
+  ok(spanOf("woke at four, from 4 till 6 I was responding to my leads").start === "04:00" && spanOf("from 4 till 6 I was responding to my leads in the morning").end === "06:00", "'from 4 till 6' in the morning = 04:00-06:00");
+  ok(spanOf("open house at Imtiaz 10 to 3").start === "10:00" && spanOf("open house at Imtiaz 10 to 3").end === "15:00", "'10 to 3' at an open house = 10:00-15:00");
+  ok(spanOf("sales workshop 8 until 9:30").start === "08:00" && spanOf("sales workshop 8 until 9:30").end === "09:30", "'8 until 9:30' = 08:00-09:30");
+  ok(spanOf("calls between 2 and 4pm").start === "14:00" && spanOf("calls between 2 and 4pm").end === "16:00", "'between 2 and 4pm' = 14:00-16:00");
+  ok(spanOf("after lunch for an hour").start === "", "no clock in the words = no clock invented");
+  ok(clockedHours({ start: "04:00", end: "06:00" }) === 2 && clockedHours({ start: "08:00", end: "09:30" }) === 1.5 && clockedHours({ start: "", end: "" }) === null, "clocked hours from start and end");
+  ok(hoursOf({ start: "10:00", end: "15:00", effort: "Under 1 hour" }) === 5 && hoursOf({ effort: "Half a day" }) === 4, "the clock wins over the effort bucket; the bucket is the fallback");
+  const fb = await (await req("/momo/work/api", true, { action: "parse", text: "Woke at four, from 4 till 6 I was responding to my leads from home as an agent", date: "2026-10-14" })).json();
+  ok(fb.entries[0].start === "04:00" && fb.entries[0].end === "06:00" && fb.entries[0].where === "Home" && fb.entries[0].in_scope === false && fb.entries[0].out_role === "Sales" && kindOf(fb.entries[0]) === "Broker", "keyword path: 4-6 at home as an agent = Broker, 2 h, Home", fb.entries[0]);
+  const fo = await (await req("/momo/work/api", true, { action: "parse", text: "Open house at Imtiaz 10 to 3 with my client", date: "2026-10-18" })).json();
+  ok(fo.entries[0].where === "On site" && fo.entries[0].start === "10:00" && fo.entries[0].end === "15:00", "open house at Imtiaz = On site, 10:00-15:00", fo.entries[0]);
+  ok(/start and end: 24-hour HH:MM/.test(lastSys) && /where: Office \(FN's office, Prime Tower\)/.test(lastSys) && WHERE.length === 5, "the filing instructions teach start/end and where");
+  const hp = hoursPicture([{ start: "04:00", end: "06:00", in_scope: false, out_role: "Sales", where: "Home" }, { start: "09:00", end: "13:00", in_scope: true, where: "Office" }, { effort: "Under 1 hour", in_scope: false, out_role: "HR, Admin & Compliance", where: "Office" }]);
+  ok(hp.total === 6.5 && hp.clocked === 6 && hp.estimated === 0.5 && hp.min === 15 && hp.kinds[0].hours === 4 && hp.kinds[1].hours === 2 && hp.kinds[2].hours === 0.5 && hp.places.find((p) => p.name === "Office").hours === 4.5, "the hours picture: total, clocked vs estimated, the 15 h minimum, kind and place splits", hp);
+  const E = (date, title, kp, out, start, end, where) => req("/momo/work/api", true, { action: "save", entry: { title, type: "Meeting", summary: "s", people: [], kpis: kp ? [kp] : [], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: !out, out_role: out || "", effort: "1-2 hours", progress: [], time_of_day: "Morning", start, end, where }, text: "t", date });
+  await E("2026-10-13", "Leads", 0, "Sales", "04:00", "06:00", "Home"); await E("2026-10-13", "Strategy", 1, "", "09:00", "13:00", "Office"); await E("2026-10-14", "Pink post", 2, "", "14:00", "16:00", "Office");
+  const wk3 = await (await req("/momo/work/api?week=2026-10-14", true)).json();
+  ok(wk3.hoursweek.total === 8 && wk3.hoursweek.clocked === 8 && wk3.hoursweek.kinds[0].hours === 6 && wk3.hoursweek.kinds[1].hours === 2, "the week carries the hours picture", wk3.hoursweek);
+  const js10 = await (await req("/momo/work.js", true)).text();
+  ok(/\+D\.hoursweek\.min\+' h this week<\/b>/.test(js10) && /Clock it \(the hours that count\)/.test(js10) && /type=time id=pst/.test(js10) && /sheet\("Where were you\?"/.test(js10), "the week view has the 15 h meter; the When sheet clocks start and end; a Where sheet");
+  try { new Function(js10); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v578", e.message); }
+  const rp = await (await req("/momo/work/report?days=2026-10-13,2026-10-14", true)).text();
+  ok(/WHERE THE HOURS WENT/.test(rp) && /As Strategic Lead<b>6 h<\/b>/.test(rp) && /As a broker<b>2 h<\/b>/.test(rp) && /Office<b>6 h<\/b>/.test(rp) && /Home<b>2 h<\/b>/.test(rp) && /8 \/ 15 h/.test(rp) && /7 h short of the 15 h minimum/.test(rp) && /hours clocked/.test(rp) && /04:00–06:00/.test(rp), "the report: two hours-donuts (kind, where; soft names), the 15 h meter, clocked spans in the grid", rp.match(/WHERE THE HOURS WENT[\s\S]{0,600}/)?.[0]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
