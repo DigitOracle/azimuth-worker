@@ -507,7 +507,7 @@ const MISTRAL_OCR_URL = "https://api.mistral.ai/v1/ocr";
 const isImageCt = (ct) => /image\/(png|jpe?g|webp|gif|bmp|tiff?)/.test(ct);
 const isPdfCt = (ct) => /pdf/.test(ct);
 const isOfficeCt = (ct) => /word|officedocument|ms-excel|spreadsheet|ms-powerpoint|presentation|text\/|csv|rtf/.test(ct);
-async function toMd(env, name, ct, b64) {
+export async function toMd(env, name, ct, b64) {
   try {
     const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     const res = await env.AI.toMarkdown([{ name: name || "attachment", blob: new Blob([bytes], { type: ct || "application/octet-stream" }) }]);
@@ -515,7 +515,7 @@ async function toMd(env, name, ct, b64) {
     return arr.map(d => (d && d.data) || "").join("\n").trim();
   } catch (e) { return ""; }
 }
-async function mistralOcr(env, name, ct, b64) {
+export async function mistralOcr(env, name, ct, b64) {
   if (!env.MISTRAL_API_KEY) return "";
   const doc = isImageCt(ct)
     ? { type: "image_url", image_url: "data:" + (ct || "image/png") + ";base64," + b64 }
@@ -2314,7 +2314,7 @@ async function appFetch(request, env, ctx) {
     }
     { const _ak = await askRoute(request, env, url, { keyTier }); if (_ak) return _ak; }   // v555 - Ask Najma (stub engine, owner only)
     // v564.1 - Momo Work's saves and filings are POSTs: answered here, before the POST guard further down refuses them
-    if (request.method === "POST" && url.pathname === "/momo/work/api") { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage }); if (_wr) return _wr; }
+    if (request.method === "POST" && url.pathname === "/momo/work/api") { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
     if (url.pathname === "/desk_ref_set" && request.method === "GET") {   // v549 - owner key; ?n=<ref>&approved=0|1 - takes a reference photo out of use (or back), the photo itself is kept
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       const _sn = Number(url.searchParams.get("n")) || 0; let _sm = null; try { _sm = JSON.parse(await env.MEETINGS.get("desk_ref_" + _sn) || "null"); } catch (e) {}
@@ -3378,7 +3378,7 @@ async function appFetch(request, env, ctx) {
         if (!clientOk(env, url) || keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
         // v564 - Work is Najjuko's private FN Realty log (src/work_log.js); her MOMO tab opens straight on it (Play is Kendall's health log)
         if (url.pathname === "/momo" && isNajjuko(env, url)) return Response.redirect(url.origin + "/momo/work?key=" + encodeURIComponent(url.searchParams.get("key") || ""), 302);
-        if (url.pathname.startsWith("/momo/work")) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage }); if (_wr) return _wr; }
+        if (url.pathname.startsWith("/momo/work")) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
         return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)

@@ -205,6 +205,12 @@ const PFX = "work_naj_";
 // v571 - third parties she deals with off-site (a charity, a venue, a developer's office). Looked up on the web once, confirmed by her, then
 // remembered under work_naj_party_<slug> so the next entry recognises the name without asking. Nothing is remembered until she confirms.
 const PPFX = "work_naj_party_";
+const STOP = new Set(["with", "from", "that", "this", "have", "will", "been", "were", "they", "their", "there", "what", "when", "which", "about", "agenda", "page", "date", "2026", "2025", "week", "team", "meeting", "report", "notes"]);
+async function knownDocs(env) {
+  const out = []; let cursor;
+  do { const r = await env.MEETINGS.list({ prefix: "work_naj_doc_", cursor }); cursor = r.list_complete ? null : r.cursor; for (const k of r.keys) out.push(k.name); } while (cursor);
+  return (await Promise.all(out.map((n) => env.MEETINGS.get(n).then((v) => { try { return JSON.parse(v); } catch (e) { return null; } })))).filter((d) => d && d.keys && d.keys.length);
+}
 const slug = (s) => String(s || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 async function knownParties(env) {
   const out = []; let cursor;
@@ -374,6 +380,52 @@ export async function workRoute(request, env, url, deps) {
       return J({ ok: true, party: rec });
     }
     if (b.action === "parties") return J({ parties: await knownParties(env) });
+    // v583 UPLOAD (Kendall 14 Oct: "upload an existing PDF ... extract activities, tasks ... the morning huddle PDF ... build out a DNA for that type of
+    // meeting"). The file's text is read in the Worker (Workers AI toMarkdown for PDF, Word, Excel, CSV; the OCR lane for scans), then filed through
+    // the SAME step as typed text, so a huddle deck comes back as activities and tasks. A recurring document is remembered by its shape (doc DNA).
+    if (b.action === "upload") {
+      const name = String(b.name || "file").slice(0, 120), ct = String(b.type || "").toLowerCase(), b64 = String(b.data || "");
+      if (!b64 || b64.length > 9_000_000) return J({ error: b64 ? "That file is too big (6 MB limit)." : "No file." }, 400);
+      let text = "";
+      try { text = deps.toMd ? await deps.toMd(env, name, ct, b64) : ""; } catch (e) {}
+      if (!text && /pdf|image/.test(ct) && deps.ocr) { try { text = await deps.ocr(env, name, ct, b64); } catch (e) {} }
+      if (!text) return J({ error: "I could not read any text in that file. A scan needs the OCR lane; a photo of a page works too." }, 422);
+      text = text.replace(/\s+\n/g, "\n").slice(0, 12000);
+      // doc DNA: has she uploaded this kind of document before? (matched on the title words of the first lines)
+      const dna = await knownDocs(env), head = text.split("\n").slice(0, 6).join(" ").toLowerCase(), hit = dna.find((d) => d.keys.filter((k) => head.includes(k)).length >= Math.max(2, Math.ceil(d.keys.length * 0.6)));
+      let x = null;
+      const prompt = "Date: " + okDate(b.date) + " (" + dayName(okDate(b.date)) + ")\nShe uploaded a document named \"" + name + "\"." + (hit ? " This is a recurring document she has filed before as \"" + hit.title + "\" (" + hit.kind + "); last time it was filed as: " + hit.summary + ". File it the same way unless the content differs." : "")
+        + "\nFile its contents as her work-log entries: what she did (prepared, presented, ran, agreed), who was there, every task or action it lists with its owner and status, decisions, next steps. A deck or agenda she produced is a Deliverable AND the meeting it was for is a Meeting.\nDocument text:\n" + text;
+      try { x = await deps.claudeJSON(env, sysPrompt(), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
+      const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map(clean) : splitDay(text.slice(0, 3000)).slice(0, 8).map((s) => clean(fallback(s)));
+      list.forEach((e) => { e.src_file = name; });
+      return J({ entries: list.slice(0, 20), entry: list[0], file: name, chars: text.length, recognised: hit ? hit.title : "", excerpt: text.slice(0, 400) });
+    }
+    if (b.action === "doc_dna") {   // on save of an uploaded file's entries: remember the document's shape, so next time it is recognised
+      const name = String(b.name || "").slice(0, 120), title = String(b.title || name).slice(0, 80), kind = String(b.kind || "document").slice(0, 40), summary = String(b.summary || "").slice(0, 400), head = String(b.head || "").toLowerCase();
+      if (!name) return J({ error: "No name." }, 400);
+      const keys = [...new Set((head + " " + title.toLowerCase()).match(/[a-z][a-z0-9&'-]{3,}/g) || [])].filter((w) => !STOP.has(w)).slice(0, 12);
+      const key = "work_naj_doc_" + slug(title); let rec = null; try { rec = JSON.parse(await env.MEETINGS.get(key)); } catch (e) {}
+      rec = Object.assign(rec || { title, first_seen: dubaiToday(), times: 0 }, { kind, summary, keys: keys.length ? keys : (rec && rec.keys) || [], last_file: name, last_seen: dubaiToday(), times: ((rec && rec.times) || 0) + 1 });
+      await env.MEETINGS.put(key, JSON.stringify(rec));
+      return J({ ok: true, doc: rec });
+    }
+    // v583 VET (Kendall 14 Oct: "if she mentions she's meeting with a particular vendor, you perform your due diligence") - the engine's /vet, same secret
+    if (b.action === "vet") {
+      const name = String(b.name || "").trim().slice(0, 120), hint = String(b.hint || "").slice(0, 120);
+      if (name.replace(/[^a-z]/gi, "").length < 3) return J({ error: "Give the company name." }, 400);
+      if (!env.ASK_ENGINE_URL || !env.ASK_SECRET) return J({ status: "error", error: "not_connected" });
+      const body = JSON.stringify({ name, hint, country: "AE", wait_s: 25 });
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          const r = await fetch(String(env.ASK_ENGINE_URL).replace(/\/+$/, "") + "/vet", { method: "POST", headers: { "Content-Type": "application/json", "X-Ask-Secret": String(env.ASK_SECRET) }, body });
+          const j = await r.json();
+          if (j.status === "pending") { await new Promise((s) => setTimeout(s, Math.min(10, j.retry_after_s || 10) * 1000)); continue; }
+          return J(j);
+        } catch (e) { await new Promise((s) => setTimeout(s, 1500)); }
+      }
+      return J({ status: "error", error: "busy" });
+    }
     if (b.action === "save") {
       const e = clean(b.entry || {}); const date = okDate(b.date), text = String(b.text || "").slice(0, 4000), link = /^https?:\/\//.test(String(b.link || "")) ? String(b.link).slice(0, 500) : "";
       const id = String(b.id || "").replace(/[^a-z0-9]/g, "").slice(0, 16) || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
@@ -404,6 +456,12 @@ export async function workRoute(request, env, url, deps) {
     if (!e) return new Response("not found", { status: 404 });
     return new Response(debriefHtml(e), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
+  // v583 - the vendor report page: one page in FN's frame from the engine's /vet answer
+  if (p === "/momo/work/vet") {
+    const name = String(url.searchParams.get("name") || "").slice(0, 120), hint = String(url.searchParams.get("hint") || "").slice(0, 120);
+    return new Response(deps.page(key, rk, VET_BODY.replace(/__KEY__/g, esc(key)).replace("__NAME__", esc(name)).replace("__HINT__", esc(hint))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  }
+  if (p === "/momo/work/vet.js") return new Response(VET_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work/prep") {
     const v = (n) => esc(url.searchParams.get(n) || "");
     return new Response(deps.page(key, rk, PREP_BODY.replace("__DEV__", v("dev")).replace("__PRJ__", v("project")).replace("__AREA__", v("area")).replace("__EVT__", v("event") || "Client briefing").replace(/__KEY__/g, esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
@@ -548,7 +606,7 @@ const WORK_BODY = '<div class=tag>MOMO · WORK</div>'
   + '<div id=vlog><h1>My work log</h1>'
   + '<div class=wk id=wkhead></div>'
   + '<form id=wf class=box><label>What did you do? <button type=button id=wmic class=mic aria-label="Speak instead of typing"><svg viewBox="0 0 24 24" width=18 height=18 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Speak</span></button></label><textarea id=wt rows=4 placeholder="e.g. Monday huddle: built the PowerPoint, ran the meeting with Ali and the team, laid out the week."></textarea>'
-  + '<div class=row><input id=wd type=date><input id=wl type=url placeholder="Link to a file (optional)"></div><div class=row2><button type=button id=wreset class=ghost>Start over</button><button type=submit id=wb class=gold>File it</button></div></form>'
+  + '<div class=row><input id=wd type=date><label class=ghost id=wupl style="text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg viewBox="0 0 24 24" width=16 height=16 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg><span>Upload a file</span><input id=wfile type=file accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,image/*" style="display:none"></label></div><div class=row2><button type=button id=wreset class=ghost>Start over</button><button type=submit id=wb class=gold>File it</button></div></form>'
   + '<div id=wprev></div><a id=wday class=gold style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>Today\'s summary</a>'
   + '<a href="/momo/work/prep?key=__KEY__" class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:8px">Prepare me for a client, project or open house</a>'
   + '<div class=sec>MY TASKS</div><div id=wtasks></div>'
@@ -559,7 +617,35 @@ const WORK_BODY = '<div class=tag>MOMO · WORK</div>'
   + '<a id=wrep class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>This week\'s report</a>'
   + '</div><script src="/momo/work.js?key=__KEY__"></script>';
 
-const PREP_BODY = '<a class=back href="/momo/work?key=__KEY__">&#8592; Work</a><div class=tag>MOMO · PREPARE ME</div><h1>__EVT__</h1>'
+// v583 - Vet this vendor: a name, a hint, one button; the answer drawn as FN-framed cards with every figure's source
+const VET_BODY = '<a class=back href="/momo/work?key=__KEY__">&#8592; Work</a><div class=tag>MOMO · VET A VENDOR</div><h1>Due diligence</h1>'
+  + '<form id=vf class=box><label>Who are you meeting?</label><input id=vn placeholder="Company name (e.g. Allsopp & Allsopp)" value="__NAME__"><input id=vh placeholder="What they do, or their licence number (optional)" value="__HINT__" style="margin-top:8px">'
+  + '<button type=submit id=vb class=gold style="margin-top:10px">Check them</button><div class=line style="margin-top:6px">Licence registers, advertising permits, their website, public social pages, reviews and news. Every figure with its source; nothing invented. About 20 seconds.</div></form>'
+  + '<div id=vout></div><script src="/momo/work/vet.js?key=__KEY__"></script>';
+const VET_JS = String.raw`(function(){var KEY=decodeURIComponent((document.currentScript.src.split("key=")[1]||"").split("&")[0]);var $=function(i){return document.getElementById(i)};
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
+function src(u){return u?' <a style="color:#8A6F3E;font-size:.72rem" href="'+esc(u)+'" target=_blank rel=noopener>source</a>':''}
+function card(l,v,s){return '<div class=tl style="display:block"><span style="color:#8A6F3E;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase">'+esc(l)+'</span><div style="font-weight:600;margin-top:2px">'+v+(s?src(s):'')+'</div></div>'}
+function run(){var n=$("vn").value.trim(),h=$("vh").value.trim();if(n.replace(/[^a-z]/gi,"").length<3)return;$("vb").disabled=true;$("vb").textContent="Checking the registers and the web…";$("vout").innerHTML="";
+ fetch("/momo/work/api?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"vet",name:n,hint:h})}).then(function(r){return r.json()}).then(function(j){$("vb").disabled=false;$("vb").textContent="Check them";
+  if(j.error&&!j.status){alert(j.error);return}
+  if(j.status==="not_found"){$("vout").innerHTML='<div class=ent><h3>Nothing found</h3><p>'+esc(j.verdict||"Nothing found for this name in the registers or on the web.")+'</p><div class=line>'+esc(j.disclaimer||"")+'</div></div>';return}
+  if(j.status!=="ok"){$("vout").innerHTML='<div class=ent><h3>Could not check just now</h3><p>'+esc(j.error||"The checker is busy. Try again in a minute.")+'</p></div>';return}
+  var L=j.licence||{},P=j.advertising_permits||{},S=j.social||{},R=j.reviews||{},conf={high:"#15948A",medium:"#D9A441",low:"#B04A3A"}[j.confidence]||"#8FA39B";
+  var h='<div class=ent style="border-left-color:'+conf+'"><div class=m style="color:'+conf+';font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:.72rem">Confidence: '+esc(j.confidence||"")+(j.cached?' · checked earlier this week':'')+'</div><h3 style="margin-top:4px">'+esc(j.legal_name||j.trade_name||n)+'</h3><p>'+esc(j.verdict||"")+'</p>'+((j.confidence_reasons||[]).length?'<div class=line>'+esc(j.confidence_reasons.join(" · "))+'</div>':'')+'</div>';
+  h+='<div class=tally>'+card("Licence",esc((L.authority||"")+(L.status?" · "+L.status:"")+(L.expiry_date?" · to "+L.expiry_date:"")),L.source)+card("Registered since",esc(j.registered_since||j.founded||"not stated"),j.legal_name_source)
+   +card("Advertising permits",esc(P.permits!=null?P.permits+" on record, "+(P.current||0)+" current":"none found"),P.source)+card("Website",j.website?'<a style="color:#0A4F4A" href="'+esc(j.website)+'" target=_blank rel=noopener>'+esc(j.website.replace(/^https?:\/\//,""))+'</a>':"not found",null)+'</div>';
+  var soc=["instagram","linkedin","facebook","tiktok"].filter(function(k){return S[k]&&(S[k].followers||S[k].url)}).map(function(k){var x=S[k];return card(k.charAt(0).toUpperCase()+k.slice(1),x.followers?esc(String(x.followers))+(x.followers_approx?" approx.":"")+" followers":(x.note?esc(x.note):"page found"),x.url)}).join("");
+  var rev=["google","trustpilot"].filter(function(k){return R[k]&&R[k].rating}).map(function(k){return card(k.charAt(0).toUpperCase()+k.slice(1),esc(R[k].rating+" of 5 ("+(R[k].count||0)+")"),R[k].source)}).join("");
+  if(soc||rev)h+='<div class=sec>FOOTPRINT</div><div class=tally>'+soc+rev+'</div>';
+  if((j.directors_or_owners||[]).length)h+='<div class=sec>PEOPLE</div>'+j.directors_or_owners.map(function(o){return '<div class=tk><b>'+esc(o.name)+'</b><div class=m>'+esc(o.role||"")+src(o.source)+'</div></div>'}).join("");
+  h+='<div class=sec>RED FLAGS</div>'+((j.red_flags||[]).length?j.red_flags.map(function(f){return '<div class=tk style="border-left:3px solid #B04A3A"><b>'+esc(f.flag)+'</b><div class=m>'+esc(f.quote||f.note||"")+src(f.evidence_url)+'</div></div>'}).join(""):'<div class=tk><b style="color:#15948A">None found</b><div class=m>in the sources checked</div></div>');
+  if((j.news||[]).length)h+='<div class=sec>IN THE NEWS</div>'+j.news.slice(0,5).map(function(x){return '<div class=tk><b>'+esc(x.title)+'</b><div class=m>'+esc(x.date||"")+src(x.url)+'</div></div>'}).join("");
+  h+='<details class=more><summary>What was checked ('+(j.checked||[]).length+')</summary>'+(j.checked||[]).map(function(c){return '<div class=line>'+esc(typeof c==="string"?c:JSON.stringify(c))+'</div>'}).join("")+'</details>';
+  h+='<div class=line style="margin-top:12px">'+esc(j.disclaimer||"")+(j.as_of?' As of '+esc(j.as_of)+'.':'')+'</div><button type=button class=ghost style="width:100%;margin-top:12px" onclick="print()">Save as PDF</button>';
+  $("vout").innerHTML=h}).catch(function(){$("vb").disabled=false;$("vb").textContent="Check them";alert("Could not check just now. Try again.")})}
+$("vf").onsubmit=function(e){e.preventDefault();run()};if($("vn").value.trim())run()})();`;
+const PREP_BODY ='<a class=back href="/momo/work?key=__KEY__">&#8592; Work</a><div class=tag>MOMO · PREPARE ME</div><h1>__EVT__</h1>'
   + '<form id=pf class=box><label>What are you preparing for?</label><input id=fd placeholder="Developer (e.g. Imtiaz Developments)" value="__DEV__">'
   + '<input id=fp placeholder="Project (e.g. the open house project)" value="__PRJ__" style="margin-top:8px"><input id=fa placeholder="Area or community (e.g. JVC, Dubai Hills)" value="__AREA__" style="margin-top:8px">'
   + '<button type=submit id=fb class=gold style="margin-top:10px">Build my briefing</button><div style="color:#8FA39B;font-size:.78rem;margin-top:6px">Every figure is from Najma\'s records, with its date. Selling points that are not in the records stay for you to add.</div></form>'
@@ -643,6 +729,7 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
  $("wlist").innerHTML=D.entries.length?D.entries.map(function(e,i){return '<div class=ent><h3>'+esc(e.title)+'</h3><div class=m>'+esc(fd(e.date))+(e.time_of_day&&e.time_of_day!=="Unspecified"?' '+esc(e.time_of_day.toLowerCase()):'')+' · '+esc(e.type)+(e.people.length?' · '+esc(e.people.join(", ")):(e.alone?' · by yourself':''))+((e.external||[]).length?' · '+esc(e.external.map(function(o){return o.name}).join(", ")):'')+(e.in_scope===false?' · <span class=warn>outside role'+(e.out_role?' ('+esc(e.out_role)+')':'')+'</span>':'')+'</div><p>'+esc(e.summary)+'</p>'
   +'<div class=chips>'+e.kpis.map(function(k){var x=D.kpis.filter(function(y){return y.id===k})[0];return '<span class="chip on">'+esc(x?x.name:k)+'</span>'}).join("")+'</div>'
   +(e.deliverables.length?'<div class=m style="margin-top:6px">Produced: '+esc(e.deliverables.join("; "))+'</div>':'')+(e.link?'<div class=m><a style="color:#C5A56A" href="'+esc(e.link)+'" target=_blank rel=noopener>Open the file</a></div>':'')
+  +((e.external||[]).length?e.external.slice(0,2).map(function(o){return '<a class=mic style="text-decoration:none;margin:8px 6px 2px 0" href="/momo/work/vet?key='+encodeURIComponent(KEY)+'&name='+encodeURIComponent(o.name)+'&hint='+encodeURIComponent(o.kind||"")+'">Vet '+esc(o.name.split(" ").slice(0,2).join(" "))+' &#8594;</a>'}).join("")+'<br>':'')
   +(e.prep&&e.prep.needed?'<a class=mic style="text-decoration:none;margin:8px 0 2px" href="/momo/work/prep?key='+encodeURIComponent(KEY)+'&dev='+encodeURIComponent(e.prep.developer||"")+'&project='+encodeURIComponent(e.prep.project||"")+'&area='+encodeURIComponent(e.prep.area||"")+'&event='+encodeURIComponent(e.prep.event||e.title)+'">Prepare me &#8594;</a><br>':'')
   +'<a class=del style="text-decoration:none" href="/momo/work/debrief?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(e.id)+'&date='+e.date+'" target=_blank>Debrief</a> &middot; <button class=del data-e='+i+'>Edit</button> &middot; <button class=del data-d='+i+'>Delete</button></div>'}).join(""):'<p style="color:#8FA39B">Nothing logged this week yet.</p>';
  $("wlist").querySelectorAll("[data-d]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-d")];if(!confirm("Delete \""+e.title+"\"?"))return;api({action:"delete",id:e.id,date:e.date}).then(function(){load(WEEK)})}});
@@ -735,6 +822,8 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
  $("pc").onclick=function(){EDIT=null;if(QUEUE.length>1)nextInQueue();else{QUEUE=[];QI=0;$("wprev").innerHTML=""}};
  $("pv").onclick=function(){PREV.summary=$("ps").value;if(PREV.in_scope!==false&&!PREV.kpis.length){alert("Tap which part of your role this counts towards, or mark it outside your role.");return}if(PREV.in_scope===false&&!PREV.out_role){alert("Tap whose job it was.");return}$("pv").disabled=true;
   api({action:"save",entry:PREV,text:PREV.src||$("wt").value,date:$("wd").value,link:$("wl").value,id:EDIT&&EDIT.id,oldDate:EDIT&&EDIT.date,created:EDIT&&EDIT.created}).then(function(j){if(!j.ok){alert(j.error||"Could not save");$("pv").disabled=false;return}
+   // v583 - the first save from an uploaded document teaches its DNA, so the same kind of file is recognised next time
+   if(UPL&&PREV.src_file===UPL.name){api({action:"doc_dna",name:UPL.name,title:PREV.works&&PREV.works[0]||PREV.title,kind:PREV.type,summary:PREV.summary,head:UPL.head}).catch(function(){});UPL=null}
    EDIT=null;if(QUEUE.length>1){var moreToCome=QI<QUEUE.length-1}else{QUEUE=[];QI=0}
    if(QUEUE.length>1)nextInQueue();else{$("wprev").innerHTML="";$("wt").value="";$("wl").value=""}
    var t=new Date(j.entry.date+"T00:00:00Z"),dow=(t.getUTCDay()+6)%7;var wk=new Date(t.getTime()-dow*864e5).toISOString().slice(0,10);
@@ -770,7 +859,16 @@ $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(
   $("rgo").style.opacity=sel.length?"1":".5";$("rgo").href=sel.length?"/momo/work/report?key="+encodeURIComponent(KEY)+"&days="+sel.join(","):"javascript:void(0)"}
  $("vrep").querySelectorAll("[data-rp]").forEach(function(b){b.onclick=function(){mode=b.getAttribute("data-rp");$("vrep").querySelectorAll("[data-rp]").forEach(function(x){x.classList.toggle("on",x===b)});rdraw()}});
  window.__rdraw=rdraw})();
+// v583 - Upload a file: PDF, Word, Excel, CSV, a photo of a page. Read in the app, filed through the same step; each activity confirmed in turn.
+$("wfile").onchange=function(){var f=this.files&&this.files[0];if(!f)return;if(f.size>6*1024*1024){alert("That file is over 6 MB. Export a smaller PDF or a page photo.");this.value="";return}
+ var lab=$("wupl").querySelector("span");lab.textContent="Reading "+f.name.slice(0,22)+"…";var rd=new FileReader();rd.onload=function(){var b64=String(rd.result).split(",")[1]||"";
+  api({action:"upload",name:f.name,type:f.type||"",data:b64,date:$("wd").value}).then(function(j){lab.textContent="Upload a file";$("wfile").value="";if(j.error){alert(j.error);return}
+   QUEUE=(j.entries||[]).map(function(e){e.src=(e.summary||"")+"\n\n[from "+f.name+"]";e.src_file=f.name;return e});QI=0;if(!QUEUE.length){alert("Nothing to file from that document.");return}
+   UPL={name:f.name,head:(j.excerpt||"").slice(0,300),recognised:j.recognised||""};
+   $("wt").value=(j.recognised?"Recognised as your "+j.recognised+". ":"")+j.entries.length+(j.entries.length===1?" activity":" activities")+" read from "+f.name+" ("+Math.round(j.chars/1000)+"k characters). Check each one.";
+   preview(QUEUE[0]);scrollTo(0,0)}).catch(function(){lab.textContent="Upload a file";$("wfile").value="";alert("Could not read that file just now.")})};rd.readAsDataURL(f)};
+var UPL=null;
 // v571 - Start over: clears the box and anything being checked; saved entries are untouched
-$("wreset").onclick=function(){if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;QUEUE=[];QI=0;EDIT=null;PREV=null;$("wprev").innerHTML="";$("wt").value="";$("wl").value="";$("wd").value=D?D.today:"";$("wt").focus()};
+$("wreset").onclick=function(){if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;QUEUE=[];QI=0;EDIT=null;PREV=null;UPL=null;$("wprev").innerHTML="";$("wt").value="";$("wl").value="";$("wd").value=D?D.today:"";$("wt").focus()};
 $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1)};
 load()})();`;

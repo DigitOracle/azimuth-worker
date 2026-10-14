@@ -7,9 +7,10 @@ const store = new Map();
 const KV = { get: async (k) => store.get(k) || null, put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); },
   list: async ({ prefix }) => ({ keys: [...store.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })), list_complete: true }) };
 const env = { MEETINGS: KV };
-let lastSys = "";
+let lastSys = "", lastUser = "";
+const lastSysUser = () => lastUser;
 const deps = (naj, model) => ({ isNaj: () => naj, model: "m", page: (k, rk, b) => "<page>" + b + "</page>",
-  claudeJSON: async (e, sys, user) => { lastSys = sys; return model ? model(user) : null; } });
+  claudeJSON: async (e, sys, user) => { lastSys = sys; lastUser = user; return model ? model(user) : null; } });
 const req = (path, naj, body, model) => workRoute(new Request("https://w" + path, body ? { method: "POST", body: JSON.stringify(body) } : {}), env, new URL("https://w" + path + (path.includes("?") ? "&" : "?") + "key=k"), deps(naj, model));
 // privacy
 const own = await (await req("/momo/work", false)).text();
@@ -253,6 +254,39 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
     ok(/clause 12\.2/.test(h) && /are her own/.test(h) && /not part of what is provided/.test(h) && !/CONFIDENTIAL/.test(h), "v582: the " + n + " carries the clause 12.2 line, no confidentiality footer"); }
   ok(!/<footer>/.test(db) && !/class=pf/.test(db), "v582: the debrief's old footer is gone");
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
+// v583 - upload a document (read in the Worker, filed through the same step, its DNA remembered) and vet a vendor (the engine's /vet)
+{ const page = await (await req("/momo/work", true)).text();
+  ok(/id=wfile type=file accept="\.pdf,\.doc,\.docx,\.xls,\.xlsx,\.csv/.test(page) && /Upload a file/.test(page) && !/Link to a file \(optional\)/.test(page), "the entry box has Upload a file (PDF, Word, Excel, CSV, photo); the old link field is gone");
+  const js12 = await (await req("/momo/work.js", true)).text();
+  ok(/\$\("wfile"\)\.onchange/.test(js12) && /action:"upload"/.test(js12) && /action:"doc_dna"/.test(js12) && /readAsDataURL/.test(js12), "the file is read on the phone, sent for reading, and its DNA is taught on the first save");
+  try { new Function(js12); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v583", e.message); }
+  const huddleText = "FN Realty Monday Huddle 13 October 2026\nAgenda\n1. Week in review - Ali\n2. Sales focus: Imtiaz launch - Rose and Ellie\n3. Breast Cancer Awareness post - Sousan to draft by Thursday\nActions: Vishant to deliver Halloween visuals by Friday; Najjuko to send key messages to Nousheen";
+  const depsU = { ...deps(true, () => ({ entries: [
+    { title: "Monday huddle deck", type: "Deliverable", summary: "Najjuko prepared the huddle deck.", people: ["Ali Kalhor"], kpis: [1], scope: ["p4"], works: ["Monday Weekly Huddle"], deliverables: ["Huddle deck"], evidence: [], next: [], questions: [], effort: "1-2 hours", progress: [], prep: { needed: false, developer: "", project: "", area: "", event: "" }, time_of_day: "Morning", alone: false, in_scope: true, out_role: "", external: [], start: "", end: "", where: "Office" },
+    { title: "Halloween visuals action", type: "Update", summary: "Vishant to deliver by Friday.", people: ["Vishant Singh"], kpis: [2], scope: ["m2"], works: ["Halloween (31 Oct)"], deliverables: [], evidence: [], next: ["Halloween visuals by Friday"], questions: [], effort: "Under 1 hour", progress: [{ work: "Halloween (31 Oct)", status: "In progress", percent: 40, owners: ["Vishant Singh"] }], prep: { needed: false, developer: "", project: "", area: "", event: "" }, time_of_day: "Unspecified", alone: false, in_scope: true, out_role: "", external: [], start: "", end: "", where: "Unspecified" } ] })), toMd: async (e, name, ct, b64) => Buffer.from(b64, "base64").toString("utf8"), ocr: async () => "" };
+  const up = await (await workRoute(new Request("https://w/momo/work/api", { method: "POST", body: JSON.stringify({ action: "upload", name: "Monday Huddle 13 Oct.pdf", type: "application/pdf", data: Buffer.from(huddleText).toString("base64"), date: "2026-10-13" }) }), env, new URL("https://w/momo/work/api?key=k"), depsU)).json();
+  ok(up.entries && up.entries.length === 2 && up.entries[0].src_file === "Monday Huddle 13 Oct.pdf" && up.entries[1].progress[0].owners[0] === "Vishant Singh" && up.chars > 100 && up.recognised === "", "a huddle PDF is read and filed as activities and tasks; not recognised the first time", up.entries && up.entries.map((e) => e.title));
+  ok(/She uploaded a document named "Monday Huddle 13 Oct\.pdf"/.test(lastSysUser()) , "the filing step is told it is an uploaded document");
+  const dna = await (await req("/momo/work/api", true, { action: "doc_dna", name: "Monday Huddle 13 Oct.pdf", title: "Monday Weekly Huddle", kind: "Deliverable", summary: "Najjuko prepared the huddle deck.", head: huddleText.slice(0, 300) })).json();
+  ok(dna.ok && dna.doc.keys.includes("huddle") && dna.doc.times === 1 && store.has("work_naj_doc_monday-weekly-huddle"), "the first save teaches the document's DNA", dna.doc);
+  const up2 = await (await workRoute(new Request("https://w/momo/work/api", { method: "POST", body: JSON.stringify({ action: "upload", name: "Monday Huddle 20 Oct.pdf", type: "application/pdf", data: Buffer.from(huddleText.replace("13 October", "20 October")).toString("base64"), date: "2026-10-20" }) }), env, new URL("https://w/momo/work/api?key=k"), depsU)).json();
+  ok(up2.recognised === "Monday Weekly Huddle" && /recurring document she has filed before as "Monday Weekly Huddle"/.test(lastSysUser()), "next Monday's huddle PDF is recognised and filed the same way", up2.recognised);
+  ok((await (await workRoute(new Request("https://w/momo/work/api", { method: "POST", body: JSON.stringify({ action: "upload", name: "scan.pdf", type: "application/pdf", data: Buffer.from("x").toString("base64"), date: "2026-10-13" }) }), env, new URL("https://w/momo/work/api?key=k"), { ...depsU, toMd: async () => "", ocr: async () => "" })).status) === 422, "a file with no readable text says so, never files nothing silently");
+  // vet
+  globalThis.fetch = async (u, init) => { const b = JSON.parse(init.body); return new Response(JSON.stringify(b.name === "Slow Co" && !globalThis.__v ? (globalThis.__v = 1, { status: "pending", retry_after_s: 0 }) : { status: "ok", verdict: "Active DED licence.", confidence: "high", legal_name: b.name.toUpperCase() + " L.L.C", licence: { authority: "DED", status: "active" }, red_flags: [], sources: ["https://x"], checked: [], disclaimer: "Desk research." })); };
+  const env3 = { MEETINGS: KV, ASK_ENGINE_URL: "https://e", ASK_SECRET: "s" };
+  const v1 = await (await workRoute(new Request("https://w/momo/work/api", { method: "POST", body: JSON.stringify({ action: "vet", name: "Slow Co", hint: "" }) }), env3, new URL("https://w/momo/work/api?key=k"), deps(true))).json();
+  ok(v1.status === "ok" && v1.legal_name === "SLOW CO L.L.C", "a pending answer is collected on the retry, never shown as a failure", v1);
+  ok((await (await workRoute(new Request("https://w/momo/work/api", { method: "POST", body: JSON.stringify({ action: "vet", name: "ab" }) }), env3, new URL("https://w/momo/work/api?key=k"), deps(true))).json()).error === "Give the company name.", "a name under 3 letters is refused before the engine is called");
+  const vp = await (await req("/momo/work/vet?name=Allsopp%20%26%20Allsopp&hint=brokerage", true)).text();
+  ok(/Due diligence/.test(vp) && /value="Allsopp &amp; Allsopp"/.test(vp) && /Check them/.test(vp), "the vet page opens with the name filled in");
+  const vjs = await (await req("/momo/work/vet.js", true)).text();
+  ok(/action:"vet"/.test(vjs) && /RED FLAGS/.test(vjs) && /What was checked/.test(vjs) && /j\.status==="not_found"/.test(vjs), "the vet page draws verdict, licence, permits, footprint, red flags and what was checked; not-found is its own answer");
+  try { new Function(vjs); pass++; } catch (e) { fail++; console.log("FAIL the vet page script does not parse", e.message); }
+  const el = await (await req("/momo/work.js", true)).text();
+  ok(/\/momo\/work\/vet\?key=/.test(el) && /Vet '\+esc\(o\.name\.split/.test(el), "an entry with an outside party shows a Vet link");
+  ok((await req("/momo/work/vet?name=x", false)).status === 404, "the vet page is hers only");
+  for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); delete globalThis.__v; }
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
