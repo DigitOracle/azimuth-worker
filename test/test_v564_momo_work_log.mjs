@@ -36,8 +36,8 @@ const wk = await (await req("/momo/work/api?week=2026-10-14", true)).json();
 ok(wk.from === "2026-10-12" && wk.to === "2026-10-18" && wk.entries.length === 1 && wk.tally[0].week === 1 && wk.tally[0].term === 1, "the week runs Monday to Sunday; the tally counts it under Marketing direction", wk.tally);
 // report
 const rep = await (await req("/momo/work/report?from=2026-10-12&to=2026-10-18", true)).text();
-ok(/FN WEEKLY REPORT/.test(rep) && /Monday Weekly Huddle/.test(rep) && /#1F2B44/.test(rep) && /viewBox="0 0 140 140"/.test(rep), "the weekly report (v577/v579: the 15-second page): FN title, the task, the donut, FN brand");
-ok(!/Claude|Anthropic|OpenAI|GPT/i.test(rep), "the report never names an AI vendor");
+ok(/<em>Weekly<\/em> Report/.test(rep) && /Monday Weekly Huddle/.test(rep) && /#2A3A68/.test(rep) && /viewBox="0 0 140 140"/.test(rep), "the weekly report (v577/v580: the 15-second page): FN title, the task, the donut, FN navy");
+ok(!/Claude|Anthropic|OpenAI|GPT/i.test(rep.replace(/data:image\/[^"']+/g, "")), "the report never names an AI vendor (image data excluded: base64 is random letters)");
 // edit and delete
 const ed = await (await req("/momo/work/api", true, { action: "save", entry: { ...sv.entry, title: "Huddle 1" }, id: sv.entry.id, date: "2026-10-13", oldDate: "2026-10-12", created: sv.entry.created })).json();
 ok(ed.ok && !store.has("work_naj_2026-10-12_" + sv.entry.id) && store.has("work_naj_2026-10-13_" + sv.entry.id), "editing the date moves the entry, never duplicates it");
@@ -60,7 +60,7 @@ ok(/x\.indexOf\("ins_najjuko_"\) === 0/.test(ix), "only her insider key counts a
   ok(t[0].name === "Monday Weekly Huddle", "open tasks list before finished ones");
   ok(hoursByKpi(es).find((x) => x.id === 2).hours === 9.5, "time by focus area");
   const rep = reportHtml(es.map((e) => ({ ...e, title: "x", type: "Update", summary: "s", people: [], scope: [], deliverables: [], next: [] })).slice(1, 2), "2026-10-14", "2026-10-14", t);
-  ok(/FN DAILY REPORT/.test(rep) && /<div class=tile><b>8<\/b>/.test(rep), "a one-day report is the FN daily report, with the hours tile"); }
+  ok(/<em>Daily<\/em> Report/.test(rep) && /<div class=tile><b>8<\/b>/.test(rep), "a one-day report is the FN daily report, with the hours tile"); }
 const pe = await (await req("/momo/work/api", true, { action: "parse", text: "Started planning the Halloween party, about half done with the concept", date: "2026-10-14" }, () => ({ entries: [{ title: "Halloween", type: "Organising", summary: "s", people: [], kpis: [5], scope: ["b4"], works: ["Halloween (31 Oct)", "  New office mural  "], deliverables: [], evidence: [], next: [], questions: [], effort: "Bogus", progress: [{ work: "Halloween (31 Oct)", status: "In progress", percent: 150 }] }] }))).json();
 ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours" && pe.entry.progress[0].percent === 100, "new tasks are kept, effort and percent are kept in range", pe.entry);
 // v566 - who holds each task, department cards, longest-quiet first
@@ -192,17 +192,17 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   const E = (date, title, kp, out, eff, people) => req("/momo/work/api", true, { action: "save", entry: { title, type: "Meeting", summary: "s", people: people || [], kpis: kp ? [kp] : [], scope: [], works: ["Monday Weekly Huddle"], deliverables: [], evidence: [], next: [], questions: [], in_scope: !out, out_role: out || "", effort: eff || "1-2 hours", progress: [{ work: "Monday Weekly Huddle", status: "In progress", percent: 60, owners: [] }], time_of_day: "Morning" }, text: "t", date });
   await E("2026-10-12", "Huddle", 1, "", "Half a day", ["Ali Kalhor"]); await E("2026-10-13", "Workshop", 0, "Sales", "1-2 hours", ["Ruzanna Avanyan (Rose)"]); await E("2026-10-13", "Pink post", 2, "", "Under 1 hour", ["Sousan Khatibzadeh"]);
   const wkr = await (await req("/momo/work/report?days=2026-10-12,2026-10-13,2026-10-14", true)).text();
-  ok(/ACTIVITY REPORT/.test(wkr) && /Mon, Tue, Wed/.test(wkr), "picked days: Mon, Tue, Wed named in the header");
+  ok(/<em>Activity<\/em> Report/.test(wkr) && /Mon, Tue, Wed/.test(wkr), "picked days: Mon, Tue, Wed named in the header");
   ok(/<div class=tile><b>3<\/b><span>activities/.test(wkr) && /<b>3<\/b><span>people met/.test(wkr), "headline tiles: 3 activities, 3 people met");
   ok(/<svg viewBox="0 0 140 140"/.test(wkr) && /stroke="#D9782E"/.test(wkr) && /stroke="#6FBFB4"/.test(wkr), "a donut with the validated emphasis colours (outside-role warm, area ramp)");
   ok(/aria-label="Activities per day"/.test(wkr) && /WEEK AT A GLANCE/.test(wkr) && /<table class=glance>/.test(wkr) && /<b>Mon<\/b> 12/.test(wkr) && /<b>Wed<\/b> 14/.test(wkr) && /<span class=og>1<\/span>/.test(wkr), "per-day bars and the Mon-Wed day-at-a-glance grid, with the outside-role day flagged");
   ok(/Going beyond the role: 1 activity<\/b> · as a broker 1/.test(wkr), "the beyond-the-role line names where the help went, softly");
   ok(/<h2>TASKS<\/h2>/.test(wkr) && /Monday Weekly Huddle/.test(wkr) && /60%/.test(wkr), "tasks moved, with progress bars");
   ok(!/CONFIDENTIAL/.test(wkr) && !/Outside her role/.test(wkr) && /Going beyond the role: 1 activity/.test(wkr) && /as a broker 1/.test(wkr) && /Supporting the wider team/.test(wkr), "v579: no confidentiality footer; soft language (going beyond the role, as a broker, supporting the wider team)");
-  ok(/@top-left\{content:none\}/.test(wkr) && /@bottom-center\{content:none\}/.test(wkr) && /document\.title="FN Activity report 12 Oct 2026 to 14 Oct 2026"/.test(wkr) && !/navigator\.share\(\{title:document\.title,url/.test(wkr) && !/Claude|Anthropic|GPT/i.test(wkr), "v579: the print header/footer (the Azimuth link) is suppressed, the file is titled FN ... report, the link is never shared, no AI vendor named");
-  ok(/<header><div class=fnmark>/.test(wkr) && /<div class=mono>FN<\/div><div class=rt>Realty<\/div>/.test(wkr) && /FN ACTIVITY REPORT/.test(wkr), "v579: the FN mark in the header (wordmark until the logo file arrives)");
+  ok(/@top-left\{content:none\}/.test(wkr) && /@bottom-center\{content:none\}/.test(wkr) && /document\.title="FN Activity report 12 Oct 2026 to 14 Oct 2026"/.test(wkr) && !/navigator\.share\(\{title:document\.title,url/.test(wkr) && !/Claude|Anthropic|GPT/i.test(wkr.replace(/data:image\/[^"']+/g, "")), "v579: the print header/footer (the Azimuth link) is suppressed, the file is titled FN ... report, the link is never shared, no AI vendor named");
+  ok(/<div class=fnmark><img src="data:image\/png;base64,/.test(wkr) && /<h1><em>Activity<\/em> Report<\/h1>/.test(wkr) && /<div class=latt><\/div>/.test(wkr) && /border:1px solid #C9A97A;border-radius:2px/.test(wkr) && /color:#2A3A68/.test(wkr) && !/background:#1F2B44;color:#C9A97A;margin:-24px/.test(wkr), "v580: FN's own monogram and lattice from the Company Template, inside-page frame (white, gold hairline, navy Anton title with peach lead word), no navy header bar");
   const dr = await (await req("/momo/work/report?days=2026-10-13", true)).text();
-  ok(/FN DAILY REPORT/.test(dr) && /Tuesday 13 Oct 2026/.test(dr) && !/WEEK AT A GLANCE/.test(dr) && /<b>2<\/b><span>activities/.test(dr), "a single day is the FN daily report: no week grid, 2 activities");
+  ok(/<em>Daily<\/em> Report/.test(dr) && /Tuesday 13 Oct 2026/.test(dr) && !/WEEK AT A GLANCE/.test(dr) && /<b>2<\/b><span>activities/.test(dr), "a single day is the FN daily report: no week grid, 2 activities");
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
 // v578 - clocked hours, where, the 15 h meter, two hours-donuts (kind of work; where)
 { const { spanOf, clockedHours, hoursOf, hoursPicture, kindOf, WHERE } = await import("../src/work_log.js");
