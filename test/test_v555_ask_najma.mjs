@@ -1,6 +1,7 @@
 // v555 - Ask Najma at the top of START: the box, its states (thinking, clarify, answer with sources and what was checked), the stub engine
 import fs from "node:fs";
-import { askBoxHtml, askStub, askRoute } from "../src/ask_najma.js";
+import { askBoxHtml, askStub, askRoute, ASK, ASK_OFF_TEXT } from "../src/ask_najma.js";
+ASK.on = true;   // v598: the switch is OFF in production; these checks exercise the code with it on
 let pass = 0, fail = 0;
 const ok = (c, m, x) => { if (c) pass++; else { fail++; console.log("FAIL", m, x === undefined ? "" : JSON.stringify(x).slice(0, 300)); } };
 const h = askBoxHtml("k1", "analyst");
@@ -40,5 +41,21 @@ ok((await askRoute(new Request("https://w/ask/ok"), {}, new URL("https://w/ask/o
 // v559 - brief answers: headline, cards, note, follow-up chips; the trace and the full report collapsed; a trace detail that is not a sentence is never shown
 ok(/askhl/.test(ASK_FILE_JS) && /askcards/.test(ASK_FILE_JS) && /details_md/.test(ASK_FILE_JS) && /askfu/.test(ASK_FILE_JS), "v559: headline, cards, full report toggle and follow-up chips");
 ok(/typeof x\.detail==="string"/.test(ASK_FILE_JS) && /<details class=asksrc><summary>What I checked/.test(ASK_FILE_JS), "v559: What I checked is collapsed and never shows [object Object]");
+// v598: with the switch OFF (production) nothing of Ask Najma is drawn or called
+ASK.on = false;
+const { askFloatHtml: floatOff } = await import("../src/ask_najma.js");
+ok(askBoxHtml("k", "analyst") === "" && floatOff("k") === "", "switched off: no box and no floating Ask button");
+let engineCalled = false; const rf = globalThis.fetch; globalThis.fetch = async () => { engineCalled = true; return { ok: true, text: async () => "{}" }; };
+const envOn = { MEETINGS: { put: async () => {} }, ASK_ENGINE_URL: "https://engine.test", ASK_SECRET: "x" };
+const offR = await askRoute(new Request("https://w/ask?key=k", { method: "POST", body: JSON.stringify({ question: "rents in marina" }) }), envOn, new URL("https://w/ask?key=k"), { keyTier: () => "admin" });
+const offJ = await offR.json();
+ok(offJ.status === "disabled" && offJ.answer_md === ASK_OFF_TEXT && !engineCalled, "switched off: /ask answers 'disabled' and never calls the engine", offJ);
+const offF = await askRoute(new Request("https://w/ask/feedback?key=k", { method: "POST", body: JSON.stringify({ rating: 1 }) }), envOn, new URL("https://w/ask/feedback?key=k"), { keyTier: () => "admin" });
+ok((await offF.json()).status === "disabled" && !engineCalled, "switched off: feedback goes nowhere");
+const offOk = await askRoute(new Request("https://w/ask/ok?key=k"), envOn, new URL("https://w/ask/ok?key=k"), { keyTier: () => "admin" });
+ok(offOk.status === 404, "switched off: the entry-point check says no, so the button never appears");
+const offJs = await (await askRoute(new Request("https://w/ask.js"), envOn, new URL("https://w/ask.js"), { keyTier: () => "admin" })).text();
+ok(!/askfab|fetch\(/.test(offJs), "switched off: the page script is empty");
+globalThis.fetch = rf;
 console.log(`v555 ask najma: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

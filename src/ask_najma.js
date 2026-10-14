@@ -57,7 +57,12 @@ const ASK_JS = '(function(){if(typeof document==="undefined"||!document.querySel
   + 'fetch("/ask/feedback?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SID,question_id:qid,rating:+x.getAttribute("data-r")})}).catch(function(){})}})}'
   + 'f.onsubmit=function(e){e.preventDefault();var v=q.value.trim();if(!v)return;q.value="";ask(v)}})})();';
 
+// v598 (Kendall 14 Oct 2026: Ask Najma is switched off for now - "yes hide it"): ONE switch. Off = no box, no floating Ask button, no /ask.js; /ask and /ask/feedback answer 'disabled' and nothing is sent to the engine.
+// The engine itself is off on its host (flag file ASK_DISABLED); nothing was deleted. To bring it back: set ASK.on = true here and redeploy, after ask_switch.sh on at the engine host.
+export const ASK = { on: false };
+export const ASK_OFF_TEXT = "Ask Najma is switched off for now.";
 export function askBoxHtml(key, mode) {
+  if (!ASK.on) return "";
   const ic = JSON.stringify({ up: ASK_ICONS.up, down: ASK_ICONS.down, doc: ASK_ICONS.doc, spark: ASK_ICONS.spark });
   const e = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
   return "<style>" + ASK_CSS + "</style>"
@@ -85,6 +90,12 @@ export function askStub(body) {
 
 // POST /ask and /ask/feedback. deps.keyTier(env, url) -> "admin" | "client" | "". While the engine is a stub only the owner may ask.
 export async function askRoute(request, env, url, deps) {
+  if (!ASK.on) {
+    if (url.pathname === "/ask.js") return new Response("/* Ask Najma is switched off */", { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
+    if (url.pathname === "/ask/ok") return new Response("no", { status: 404, headers: { "Cache-Control": "no-store" } });
+    if (url.pathname === "/ask" || url.pathname === "/ask/feedback") return new Response(JSON.stringify({ status: "disabled", answer_md: ASK_OFF_TEXT, disclosures: [], as_of: {}, cost_ms: 0 }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    return null;
+  }
   if (url.pathname === "/ask.js") return new Response(ASK_FILE_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "public, max-age=300" } });   // v556.1
   if (url.pathname === "/ask/ok") return new Response(deps.keyTier(env, url) === "admin" ? "ok" : "no", { status: deps.keyTier(env, url) === "admin" ? 200 : 404, headers: { "Cache-Control": "no-store" } });   // v556 - may this link ask?
   if (url.pathname !== "/ask" && url.pathname !== "/ask/feedback") return null;
@@ -130,6 +141,7 @@ const FLOAT_CSS = '.askfab{position:fixed;left:14px;bottom:calc(74px + env(safe-
   + '.askfab.on{display:inline-flex}.asksh{position:fixed;left:0;right:0;bottom:0;z-index:60;display:none;max-height:82vh;overflow:auto;background:#0C1413;border-top:1px solid #C5A56A;border-radius:18px 18px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom))}'
   + '.asksh.on{display:block}.askshh{display:flex;justify-content:space-between;align-items:center;color:#C5A56A;font:500 12px "IBM Plex Mono",monospace;letter-spacing:.08em;margin-bottom:10px}.askx{background:transparent;border:0;color:#8FA39B;font-size:22px;cursor:pointer}';
 export function askFloatHtml(key) {
+  if (!ASK.on) return "";
   const k = encodeURIComponent(key || "");
   return "<style>" + FLOAT_CSS + "</style>"
     + '<button type=button class=askfab aria-label="Ask Najma">' + ASK_ICONS.spark + "Ask</button>"
