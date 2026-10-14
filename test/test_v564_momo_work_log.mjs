@@ -230,6 +230,20 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   const rp = await (await req("/momo/work/report?days=2026-10-13,2026-10-14", true)).text();
   ok(/WHERE THE HOURS WENT/.test(rp) && /As Strategic Lead<b>6 h<\/b>/.test(rp) && /As a broker<b>2 h<\/b>/.test(rp) && /Office<b>6 h<\/b>/.test(rp) && /Home<b>2 h<\/b>/.test(rp) && /8 \/ 15 h/.test(rp) && /7 h short of the 15 h minimum/.test(rp) && /hours clocked/.test(rp) && /04:00–06:00/.test(rp), "the report: two hours-donuts (kind, where; soft names), the 15 h meter, clocked spans in the grid", rp.match(/WHERE THE HOURS WENT[\s\S]{0,600}/)?.[0]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
+// v581 - month at a glance: Month on the Report tab; the monthly report reads week by week with the 15 h line judged per full week
+{ const page = await (await req("/momo/work", true)).text();
+  ok(/data-rp=month[^>]*>Month</.test(page), "the Report tab offers Month");
+  const js11 = await (await req("/momo/work.js", true)).text();
+  ok(/function mo\(\)/.test(js11) && /mode==="month"\?mo\(\)/.test(js11) && /to date, "\+sel\.length\+" days/.test(js11), "Month = the calendar month to date");
+  try { new Function(js11); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v581", e.message); }
+  const E = (date, kp, out, start, end) => req("/momo/work/api", true, { action: "save", entry: { title: "x", type: "Meeting", summary: "s", people: [], kpis: kp ? [kp] : [], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: !out, out_role: out || "", effort: "1-2 hours", progress: [], time_of_day: "Morning", start, end, where: "Office" }, text: "t", date });
+  await E("2026-10-05", 1, "", "09:00", "17:00"); await E("2026-10-07", 1, "", "09:00", "17:00"); await E("2026-10-13", 0, "Sales", "04:00", "06:00"); await E("2026-10-14", 2, "", "09:00", "12:00");
+  const days = []; for (let i = 1; i <= 14; i++) days.push("2026-10-" + String(i).padStart(2, "0"));
+  const mr = await (await req("/momo/work/report?days=" + days.join(","), true)).text();
+  ok(/<em>Monthly<\/em> Report/.test(mr) && /October 2026 · to 14 Oct 2026/.test(mr) && /MONTH AT A GLANCE/.test(mr) && !/WEEK AT A GLANCE/.test(mr), "14 days of October is the monthly report with the month grid");
+  ok(/<th>Week<\/th>/.test(mr) && /<th>Of 15 h<\/th>/.test(mr) && /<th>As a broker<\/th>/.test(mr) && /font-weight:600">met<\/span>/.test(mr) && /part week<\/td>/.test(mr), "one row per week: the week of 5 Oct met 15 h (16 h); 12-14 Oct is a part week, not judged", mr.match(/<table class=glance>[\s\S]{0,900}/)?.[0]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
+  ok(/1 of 1 full weeks<\/b><span>at or above the 15 h weekly minimum/.test(mr) && /document\.title="FN Monthly report October 2026"/.test(mr), "the monthly meter counts only full weeks (one so far, met); the PDF is titled FN Monthly report October 2026");
+  for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
