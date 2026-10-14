@@ -349,6 +349,7 @@ export async function workRoute(request, env, url, deps) {
     if (p !== "/momo/work") return new Response("not found", { status: 404 });
     return new Response(deps.page(key, rk, '<a class=back href="/momo?key=' + encodeURIComponent(key) + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty><p>Najjuko\'s work log is private to her link.</p></div>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
+  if (p.startsWith("/momo/work/plan")) return planRoute(request, env, url, deps, { agents: PEOPLE.filter((x) => deptOf(x[0]) === "Sales").map((x) => x[0]) });   // v590 - the content plan
   if (p === "/momo/work/prep.js") return new Response(PREP_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work.js") return new Response(WORK_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work/api") {
@@ -511,6 +512,7 @@ const RAMP = ["#6FBFB4", "#52ADA1", "#3A968A", "#287C71", "#15665C"], TEAL = "#1
 // else straight to her Work log
 const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.opener||history.length<=1){window.close()}if(history.length>1){history.back()}else{var k=new URLSearchParams(location.search).get("key")||"";location.href="/momo/work?key="+encodeURIComponent(k)}};';
 // v580 - FN's own marks, cut from the Company Template she sent (src/fn_logo.js): the navy monogram, the gold lattice band, FN navy/peach/gold
+import { planRoute } from "./work_plan.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 // soft language for the work-kind split (Kendall 14 Oct: "very soft language when you're differentiating these things")
 const KIND_SOFT = { "Strategic Lead": "As Strategic Lead", "Broker": "As a broker", "Other departments": "Supporting other departments" };
@@ -643,7 +645,7 @@ export function reportHtml(es, from, to, allTasks, pickedDays) {
 
 // v577 (Kendall 14 Oct: "at the very top of the hierarchy it's what did you do? And then something else that says report") - two tabs, that is the whole first screen
 const WORK_BODY = '<div class=tag>MOMO · WORK</div>'
-  + '<div class=seg id=wtabs style="margin:8px 0 14px"><button type=button id=tlog class=on>What did you do?</button><button type=button id=trep>Report</button></div>'
+  + '<div class=seg id=wtabs style="margin:8px 0 14px;grid-template-columns:1fr 1fr 1fr"><button type=button id=tlog class=on>What did you do?</button><button type=button id=trep>Report</button><button type=button id=tplan>Plan</button></div>'
   + '<div id=vrep style="display:none"><h1 style="font-size:1.35rem">Make a report</h1><div class=seg style="grid-template-columns:1fr 1fr 1fr 1fr;gap:6px"><button type=button class="on" data-rp=today style="padding:12px 4px;font-size:.85rem">Today</button><button type=button data-rp=week style="padding:12px 4px;font-size:.85rem">Week</button><button type=button data-rp=month style="padding:12px 4px;font-size:.85rem">Month</button><button type=button data-rp=pick style="padding:12px 4px;font-size:.85rem">Pick days</button></div>'
   + '<div id=rpick style="display:none"><div class=line>Tap the days to include</div><div class=grid id=rdays style="grid-template-columns:repeat(7,1fr);gap:6px"></div></div>'
   + '<div class=line id=rsum style="margin:10px 2px"></div><a id=rgo class=gold style="display:block;text-align:center;text-decoration:none" target=_blank>Make report</a>'
@@ -902,6 +904,7 @@ $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(
  $("wf").addEventListener("submit",stop,true);var rs=$("wreset");if(rs)rs.addEventListener("click",stop,true)})();
 // v577 - the two tabs (What did you do? / Report) and the Report tab: Today, This week, or tap the days; one button makes the page
 (function(){var mode="today",picked={};function show(rep){$("vlog").style.display=rep?"none":"block";$("vrep").style.display=rep?"block":"none";$("tlog").classList.toggle("on",!rep);$("trep").classList.toggle("on",rep);if(rep)rdraw()}
+ $("tplan").onclick=function(){location.href="/momo/work/plan?key="+encodeURIComponent(KEY)};
  $("tlog").onclick=function(){show(false)};$("trep").onclick=function(){show(true)};
  function wk(){var d=D?D.today:new Date(Date.now()+4*3600e3).toISOString().slice(0,10),t=new Date(d+"T00:00:00Z"),dow=(t.getUTCDay()+6)%7,m=new Date(t.getTime()-dow*864e5),o=[];for(var i=0;i<7;i++){o.push(new Date(m.getTime()+i*864e5).toISOString().slice(0,10))}return o}
  // v581 - month at a glance: the calendar month to date (1st to today)
