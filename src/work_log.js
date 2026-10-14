@@ -63,10 +63,14 @@ const SCHEMA = { type: "object", additionalProperties: false, required: ["title"
   people: { type: "array", items: { type: "string" } }, kpis: { type: "array", items: { type: "integer" } },
   scope: { type: "array", items: { type: "string" } }, deliverables: { type: "array", items: { type: "string" } },
   evidence: { type: "array", items: { type: "string" } }, next: { type: "array", items: { type: "string" } } } };
+// v570 (Kendall 14 Oct: "she entered in a whole day at once ... multiple meetings, briefings, phone calls") - the model returns ONE ENTRY PER ACTIVITY
+const DAY_SCHEMA = { type: "object", additionalProperties: false, required: ["entries"], properties: { entries: { type: "array", items: SCHEMA } } };
 
 function sysPrompt() {
-  return "You file one work-log entry for Serah Najjuko Ganyana, Strategic Lead - Marketing, PR & Business Development at FN Realty (a Dubai off-plan real estate advisory). "
+  return "You file work-log entries for Serah Najjuko Ganyana, Strategic Lead - Marketing, PR & Business Development at FN Realty (a Dubai off-plan real estate advisory). "
     + "She reports to Ali Kalhor. Her role is strategic: she strategises, manages, delegates and reviews; hands-on work belongs to the Execution Team.\n"
+    + "She often types a WHOLE DAY in one go: several meetings, calls, briefings, posts, chases. SPLIT it: one entry per distinct activity (a meeting, a call, a deliverable, an event, a chase), "
+    + "in the order she wrote them. Two sentences about the same meeting are one entry; a meeting and then a call to someone else are two. A single activity gives a one-entry list. Never merge unrelated activities.\n"
     + "Her five review focus areas (kpis, use the numbers):\n" + KPIS.map((k) => k.id + ". " + k.name + ": " + k.good + ". Evidence: " + k.ev).join("\n")
     + "\nThe eleven parts of her role (scope, use the ids):\n" + SCOPE.map((s) => s.id + " = " + s.area + ": " + s.name).join("\n")
     + "\nPeople (use these exact names when the entry mentions them, including first names, nicknames or roles):\n" + PEOPLE.map((p) => p[0] + " - " + p[1]).join("\n")
@@ -85,6 +89,12 @@ function sysPrompt() {
     + "Spell out abbreviations. Plain English.";
 }
 
+// v570 - without the model, split the day on line breaks, bullets, numbering and "then / after that / also"
+export function splitDay(text) {
+  const parts = String(text).replace(/\r/g, "").split(/\n+|(?:^|\s)[-•*]\s+|(?:^|\n)\s*\d+[.)]\s+|;\s+|\.\s+(?=(?:then|after that|also|next|later|afterwards|in the afternoon|in the morning|in the evening)\b)/i)
+    .map((s) => s.trim().replace(/^[-•*\d.)\s]+/, "")).filter((s) => s.length > 3);
+  return parts.length ? parts : [String(text).trim()];
+}
 // keyword fallback when the writing model is unavailable: still files the entry, marked for her to check
 function fallback(text) {
   const t = text.toLowerCase(), kp = new Set(), sc = new Set();
@@ -94,13 +104,22 @@ function fallback(text) {
   if (/press|media|pr\b|journalist|pitch|interview|podcast|article/.test(t)) { kp.add(4); sc.add("p2"); }
   if (/partner|event|speak|developer|opportunit|referral|network|ai\b/.test(t)) { kp.add(5); sc.add("b2"); }
   if (/huddle|team|staff|internal|meeting/.test(t)) { kp.add(1); sc.add("p4"); }
-  const people = PEOPLE.filter((p) => p[0].split(/[ ()]+/).some((w) => w.length > 2 && t.indexOf(w.toLowerCase()) >= 0)).map((p) => p[0]);
+  const allHands = /huddle|all[- ]hands|whole team|the agents|sales floor/.test(t);
+  // v570.1 - whole words only ("Ali" must not match "Syed Ali Mudassir" or "Alfayadh"); the full name or a distinctive first name counts
+  const hasWord = (w) => new RegExp("(^|[^a-z])" + w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^a-z]|$)").test(t);
+  const firstNames = PEOPLE.map((p) => p[0].split(/[ (]/)[0].toLowerCase());
+  const people = PEOPLE.filter((p) => { const full = p[0].replace(/\s*\(.*\)$/, ""); const first = full.split(" ")[0]; const nick = /\((\w+)\)/.exec(p[0]);
+    if (hasWord(full)) return true; if (nick && hasWord(nick[1])) return true;
+    return first.length > 2 && firstNames.filter((f) => f === first.toLowerCase()).length === 1 && hasWord(first); }).map((p) => p[0]);
   const works = WORKS.filter((w) => w.toLowerCase().split(/[ ():,]+/).some((x) => x.length > 5 && t.indexOf(x) >= 0));
   const pm = /(open house|launch|viewing|site visit|roadshow)/.exec(t), dv = /\b(imtiaz|mti|emaar|damac|sobha|nakheel|meraas|binghatti|danube|ellington|aldar|azizi|samana|omniyat|select)\b/.exec(t);
+  if (allHands && people.indexOf("All sales agents") < 0) people.push("All sales agents");
+  const pct = /(\d{1,3})\s*%/.exec(t), done = /\b(finished|done|delivered|completed|sent it|sent the|signed off)\b/.test(t), started = /\b(started|kicked off|began|initiated|kick-off)\b/.test(t), half = /half ?(done|way|complete)|halfway/.test(t);
+  const p0 = pct ? Math.min(100, +pct[1]) : done ? 100 : half ? 50 : started ? 10 : 50;
   return { title: text.split(/[.\n]/)[0].slice(0, 60), type: /meeting|huddle|call/.test(t) ? "Meeting" : "Update", summary: text.slice(0, 300), people, kpis: [...kp], scope: [...sc], works, deliverables: [], evidence: [], next: [], questions: [], check: true,
     prep: pm || dv ? { needed: true, developer: dv ? (/imtiaz|mti/.test(dv[1]) ? "Imtiaz Developments" : dv[1].replace(/^./, (c) => c.toUpperCase())) : "", project: "", area: "", event: pm ? pm[1] : "" } : null,
     effort: /all day|full day/.test(t) ? "Full day" : /meeting|huddle|deck|powerpoint/.test(t) ? "Half a day" : "1-2 hours",
-    progress: works.map((w) => ({ work: w, status: /finish|done|deliver|complet|sent/.test(t) ? "Done" : /start|kick|began|initiat/.test(t) ? "Started" : "In progress", percent: /finish|done|deliver|complet|sent/.test(t) ? 100 : /start|kick|began|initiat/.test(t) ? 10 : 50, owners: people })) };
+    progress: works.map((w) => ({ work: w, status: p0 >= 100 ? "Done" : started && !half && !pct ? "Started" : "In progress", percent: p0, owners: people.filter((n) => n !== "All sales agents") })) };
 }
 
 function clean(x) {
@@ -225,8 +244,9 @@ export async function workRoute(request, env, url, deps) {
       const text = String(b.text || "").trim().slice(0, 4000);
       if (!text) return J({ error: "Write what happened first." }, 400);
       let x = null;
-      try { x = await deps.claudeJSON(env, sysPrompt(), "Date: " + okDate(b.date) + " (" + dayName(okDate(b.date)) + ")\nEntry:\n" + text, SCHEMA, deps.model, 1200); } catch (e) {}
-      return J({ entry: clean(x || fallback(text)) });
+      try { x = await deps.claudeJSON(env, sysPrompt(), "Date: " + okDate(b.date) + " (" + dayName(okDate(b.date)) + ")\nWhat she wrote:\n" + text, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
+      const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map(clean) : splitDay(text).map((s) => clean(fallback(s)));
+      return J({ entries: list.slice(0, 20), entry: list[0] });
     }
     if (b.action === "save") {
       const e = clean(b.entry || {}); const date = okDate(b.date), text = String(b.text || "").slice(0, 4000), link = /^https?:\/\//.test(String(b.link || "")) ? String(b.link).slice(0, 500) : "";
@@ -380,7 +400,10 @@ function confirmLine(e){var ks=e.kpis.map(function(k){var x=D.kpis.filter(functi
   +(ts.length?'Task: '+ts.join('; ')+'. ':'<span class=warn>No task linked: pick one below or add a new one. </span>')
   +(ks.length?'Counts towards: '+esc(ks.join(', '))+'. ':'<span class=warn>No focus area: pick at least one below. </span>')
   +(e.people.length?'With: '+esc(e.people.join(', '))+'.':'No people named.')+'</div><div style="color:#8FA39B;font-size:.78rem;margin-top:6px">Nothing is saved until you press Save. Change anything below first.</div></div>'}
-function preview(e){PREV=JSON.parse(JSON.stringify(e));var h='<div class=prev>'+confirmLine(e)+(e.check?'<div class=warn>Filed by keyword only: please check the areas and people.</div>':'')
+var QUEUE=[],QI=0;   // v570 - a whole day comes back as several activities; she confirms and saves them one at a time
+function queueHead(){return QUEUE.length>1?'<div style="color:#C5A56A;font-family:\'IBM Plex Mono\',monospace;font-size:.72rem;letter-spacing:.12em;margin-bottom:8px">ACTIVITY '+(QI+1)+' OF '+QUEUE.length+'</div>':''}
+function nextInQueue(){QI++;if(QI<QUEUE.length){preview(QUEUE[QI]);scrollTo(0,0)}else{QUEUE=[];QI=0;$("wprev").innerHTML="";$("wt").value="";$("wl").value=""}}
+function preview(e){PREV=JSON.parse(JSON.stringify(e));var h='<div class=prev>'+queueHead()+confirmLine(e)+(e.check?'<div class=warn>Filed by keyword only: please check the areas and people.</div>':'')
  +'<div class=lab>Title</div><input id=pt value="'+esc(e.title)+'"><div class=lab>Summary</div><textarea id=ps rows=3>'+esc(e.summary)+'</textarea>'
  +'<div class=lab>Type</div><div class=chips>'+chips(D.types,[e.type],"t")+'</div>'
  +'<div class=lab>Focus areas (her review)</div><div class=chips>'+chips(D.kpis,e.kpis,"k")+'</div>'
@@ -392,7 +415,7 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));var h='<div class=prev>'+
  +((e.questions||[]).length?'<div class=lab>A few questions so nothing is missed</div>'+e.questions.map(function(q,i){return '<div class=m style="color:#D8D2C4;margin:6px 0 4px">'+esc(q)+'</div><input class=pq data-q='+i+' placeholder="Your answer (optional)">'}).join("")+'<button type=button class=ghost id=pa style="width:100%;margin-top:6px">Answer and refile</button>':'')
  +(e.deliverables.length?'<div class=lab>Produced</div><div class=m style="color:#D8D2C4">'+esc(e.deliverables.join("; "))+'</div>':'')
  +(e.next.length?'<div class=lab>Next steps</div><div class=m style="color:#D8D2C4">'+esc(e.next.join("; "))+'</div>':'')
- +'<div class=acts><button type=button class=ghost id=pc>Cancel</button><button type=button class=gold id=pv>Save</button></div></div>';
+ +'<div class=acts><button type=button class=ghost id=pc>'+(QUEUE.length>1?'Skip this one':'Cancel')+'</button><button type=button class=gold id=pv>'+(QUEUE.length>1&&QI<QUEUE.length-1?'Save and next':'Save')+'</button></div></div>';
  $("wprev").innerHTML=h;
  $("wprev").querySelectorAll("[data-t]").forEach(function(b){b.onclick=function(){PREV.type=b.getAttribute("data-t");$("wprev").querySelectorAll("[data-t]").forEach(function(x){x.classList.toggle("on",x===b)})}});
  function tog(attr,arr,num){$("wprev").querySelectorAll("[data-"+attr+"]").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-"+attr);if(num)v=+v;var i=PREV[arr].indexOf(v);if(i>=0)PREV[arr].splice(i,1);else PREV[arr].push(v);b.classList.toggle("on")}})}
@@ -410,16 +433,18 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));var h='<div class=prev>'+
  $("wprev").querySelectorAll("[data-w]").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-w"),i=PREV.works.indexOf(v);if(i>=0)PREV.works.splice(i,1);else PREV.works.push(v);b.classList.toggle("on");prog()}});
  $("pnb").onclick=function(){var v=$("pnw").value.trim();if(!v||PREV.works.indexOf(v)>=0)return;PREV.works.push(v);$("pnw").value="";var c=document.createElement("button");c.type="button";c.className="chip on";c.textContent=v;c.onclick=function(){var i=PREV.works.indexOf(v);if(i>=0)PREV.works.splice(i,1);else PREV.works.push(v);c.classList.toggle("on");prog()};$("pnw").parentNode.previousSibling.appendChild(c);prog()};
  if($("pa"))$("pa").onclick=function(){var qa=[];$("wprev").querySelectorAll(".pq").forEach(function(i){if(i.value.trim())qa.push("Q: "+e.questions[+i.getAttribute("data-q")]+"\nA: "+i.value.trim())});
-  if(!qa.length)return;$("wt").value=$("wt").value.trim()+"\n\n"+qa.join("\n");$("pa").disabled=true;$("pa").textContent="Refiling…";
-  api({action:"parse",text:$("wt").value,date:$("wd").value}).then(function(j){if(j.entry)preview(j.entry)})};
- $("pc").onclick=function(){$("wprev").innerHTML="";EDIT=null};
+  if(!qa.length)return;var one=(e.summary||$("wt").value).trim()+"\n\n"+qa.join("\n");$("pa").disabled=true;$("pa").textContent="Refiling…";
+  api({action:"parse",text:one,date:$("wd").value}).then(function(j){if(j.entry){j.entry.src=one;if(QUEUE.length)QUEUE[QI]=j.entry;preview(j.entry)}})};
+ $("pc").onclick=function(){EDIT=null;if(QUEUE.length>1)nextInQueue();else{QUEUE=[];QI=0;$("wprev").innerHTML=""}};
  $("pv").onclick=function(){PREV.title=$("pt").value;PREV.summary=$("ps").value;$("pv").disabled=true;$("pv").textContent="Saving…";
-  api({action:"save",entry:PREV,text:$("wt").value,date:$("wd").value,link:$("wl").value,id:EDIT&&EDIT.id,oldDate:EDIT&&EDIT.date,created:EDIT&&EDIT.created}).then(function(j){if(!j.ok){alert(j.error||"Could not save");$("pv").disabled=false;$("pv").textContent="Save";return}
-   $("wprev").innerHTML="";$("wt").value="";$("wl").value="";EDIT=null;
+  api({action:"save",entry:PREV,text:PREV.src||$("wt").value,date:$("wd").value,link:$("wl").value,id:EDIT&&EDIT.id,oldDate:EDIT&&EDIT.date,created:EDIT&&EDIT.created}).then(function(j){if(!j.ok){alert(j.error||"Could not save");$("pv").disabled=false;$("pv").textContent="Save";return}
+   EDIT=null;if(QUEUE.length>1){var moreToCome=QI<QUEUE.length-1}else{QUEUE=[];QI=0}
+   if(QUEUE.length>1)nextInQueue();else{$("wprev").innerHTML="";$("wt").value="";$("wl").value=""}
    var t=new Date(j.entry.date+"T00:00:00Z"),dow=(t.getUTCDay()+6)%7;var wk=new Date(t.getTime()-dow*864e5).toISOString().slice(0,10);
    if(wk===D.from){D.entries=[j.entry].concat(D.entries.filter(function(x){return x.id!==j.entry.id}));D.tally.forEach(function(x){x.week=D.entries.filter(function(e){return e.kpis.indexOf(x.id)>=0}).length});draw();setTimeout(function(){load(WEEK)},1500)}else load(wk)})}}
 $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(!t)return;$("wb").disabled=true;$("wb").textContent="Filing…";
- api({action:"parse",text:t,date:$("wd").value}).then(function(j){$("wb").disabled=false;$("wb").textContent="File it";if(j.error){alert(j.error);return}preview(j.entry)}).catch(function(){$("wb").disabled=false;$("wb").textContent="File it";alert("Could not file it just now. Try again.")})};
+ api({action:"parse",text:t,date:$("wd").value}).then(function(j){$("wb").disabled=false;$("wb").textContent="File it";if(j.error){alert(j.error);return}
+  QUEUE=(j.entries&&j.entries.length?j.entries:[j.entry]).map(function(e){e.src=e.summary;return e});QI=0;if(QUEUE.length===1)QUEUE[0].src=t;preview(QUEUE[0])}).catch(function(){$("wb").disabled=false;$("wb").textContent="File it";alert("Could not file it just now. Try again.")})};
 // v567 - speak instead of typing: the browser's own speech-to-text (Safari and Chrome); where it is missing, the keyboard's microphone still works
 (function(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition,b=$("wmic"),r=null,on=false,base="";
  if(!SR){b.onclick=function(){alert("Tap the text box, then use the microphone on your keyboard to speak.");$("wt").focus()};return}
