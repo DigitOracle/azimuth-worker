@@ -178,12 +178,13 @@ export function prepQuestions(f) {
   if (V) { Q.push(["The developer's record", "How many projects has " + V + " registered?"]); Q.push(["Off-plan sales by the developer", "Off-plan projects by " + V]); }
   return Q;
 }
+// v569.1 - one engine session per question: a shared session made the engine carry one answer's context into the next
 async function askEngine(env, q) {
   if (!env.ASK_ENGINE_URL || !env.ASK_SECRET) return { status: "error", headline: "The question engine is not connected." };
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 25000);
-      const r = await fetch(String(env.ASK_ENGINE_URL).replace(/\/+$/, "") + "/ask", { method: "POST", headers: { "Content-Type": "application/json", "X-Ask-Secret": String(env.ASK_SECRET) }, body: JSON.stringify({ question: q, mode: "analyst", session_id: "prep" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) }),   // v569.1 - one session per question: a shared session made the engine carry one answer's context into the next signal: ctl.signal });
+      const r = await fetch(String(env.ASK_ENGINE_URL).replace(/\/+$/, "") + "/ask", { method: "POST", headers: { "Content-Type": "application/json", "X-Ask-Secret": String(env.ASK_SECRET) }, body: JSON.stringify({ question: q, mode: "analyst", session_id: "prep" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) }), signal: ctl.signal });
       clearTimeout(tm);
       if (r.ok) return await r.json();
     } catch (e) {}
