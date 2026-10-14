@@ -33,6 +33,10 @@ export const PEOPLE = [
   ...["Hussien Alfayadh", "Igwenagha Ogochukwu", "Mina Rahimi", "Charry Enriquez Poquita", "Sadaf Kazi", "Sunny Fernandes", "Amir Nadiri", "Syed Ali Mudassir", "Simran Singh", "Haidy Essam", "Khatija Musa Habib"].map((n) => [n, "Sales agent, Ellie's team", "sales"]),
   ["Zumer Balkan", "Role to confirm", "other"], ["Rouba Hochane", "Candidate, Property Management Coordinator", "external"], ["All sales agents", "The whole sales floor", "sales"],
 ];
+// v566 (Kendall 14 Oct: "a card per department ... check on the tasks that are relevant for that particular department ... run meetings ... chase people down")
+export const DEPTS = ["Leadership", "Marketing", "Sales", "HR, Admin & Compliance", "External"];
+const DEPT_OF = { manager: "Leadership", owner: "Leadership", team: "Marketing", dotted: "Marketing", sales: "Sales", peer: "Sales", admin: "HR, Admin & Compliance", external: "External", other: "External" };
+export const deptOf = (name) => { if (name === "Fatu") return "Sales"; const p = PEOPLE.find((x) => x[0] === name); return p ? DEPT_OF[p[2]] || "External" : "External"; };
 // FN Realty's campaigns and running tasks (task board, 14 Oct 2026), so an entry links to the work it belongs to
 export const WORKS = ["Employment agreement", "Org chart", "90-day plan", "Execution Team hiring (videographer, designer)", "Social content pillars and calendar",
   "Breast Cancer Awareness (October)", "Halloween (31 Oct)", "November 30/30", "December campaign (UAE National Day)", "Team building: bowling", "Quarterly top-agent appreciation",
@@ -53,7 +57,7 @@ export const EFFORT = [["Under 1 hour", 0.5], ["1-2 hours", 1.5], ["Half a day",
 const SCHEMA = { type: "object", additionalProperties: false, required: ["title", "type", "summary", "people", "kpis", "scope", "works", "deliverables", "evidence", "next", "questions"], properties: {
   works: { type: "array", items: { type: "string" } }, questions: { type: "array", items: { type: "string" } },
   effort: { type: "string", enum: EFFORT.map((x) => x[0]) },
-  progress: { type: "array", items: { type: "object", additionalProperties: false, required: ["work", "status", "percent"], properties: { work: { type: "string" }, status: { type: "string", enum: STATUS }, percent: { type: "integer" } } } },
+  progress: { type: "array", items: { type: "object", additionalProperties: false, required: ["work", "status", "percent", "owners"], properties: { work: { type: "string" }, status: { type: "string", enum: STATUS }, percent: { type: "integer" }, owners: { type: "array", items: { type: "string" } } } } },
   title: { type: "string" }, type: { type: "string", enum: TYPES }, summary: { type: "string" },
   people: { type: "array", items: { type: "string" } }, kpis: { type: "array", items: { type: "integer" } },
   scope: { type: "array", items: { type: "string" } }, deliverables: { type: "array", items: { type: "string" } },
@@ -71,7 +75,7 @@ function sysPrompt() {
     + "put up to three short, specific questions in questions; otherwise leave questions empty. Never ask about something the entry already answers."
     + "\nworks may also include a NEW task in a few words when the entry is about something not on the list (e.g. 'Rebrand of the office reception'). "
     + "progress: one item per task in works: status (" + STATUS.join(", ") + ") and percent complete as she describes it (started or kicked off about 10, drafted or halfway about 50, sent for approval about 80, finished or delivered 100); "
-    + "if the entry gives a percentage, use it. effort: a rough time for the whole entry (" + EFFORT.map((x) => x[0]).join(", ") + "), judged from what was done; a meeting plus preparing a deck is about half a day."
+    + "if the entry gives a percentage, use it; owners: the people who hold or share the task (assigned to, doing it, in collaboration with), from the people list, Najjuko herself not included. effort: a rough time for the whole entry (" + EFFORT.map((x) => x[0]).join(", ") + "), judged from what was done; a meeting plus preparing a deck is about half a day."
     + "\nRules: use only what the entry says; never invent people, figures or outcomes. title: under 8 words. summary: one or two plain sentences in the third person (\"Najjuko ...\"). "
     + "people: everyone she dealt with. kpis: only the areas the activity genuinely advances, usually one or two. deliverables: things she produced (e.g. a PowerPoint). "
     + "evidence: what this adds to her day-75 review evidence, in the review's own words (e.g. 'Strategy and plan shared with leadership'). next: follow-ups the entry mentions. "
@@ -91,7 +95,7 @@ function fallback(text) {
   const works = WORKS.filter((w) => w.toLowerCase().split(/[ ():,]+/).some((x) => x.length > 5 && t.indexOf(x) >= 0));
   return { title: text.split(/[.\n]/)[0].slice(0, 60), type: /meeting|huddle|call/.test(t) ? "Meeting" : "Update", summary: text.slice(0, 300), people, kpis: [...kp], scope: [...sc], works, deliverables: [], evidence: [], next: [], questions: [], check: true,
     effort: /all day|full day/.test(t) ? "Full day" : /meeting|huddle|deck|powerpoint/.test(t) ? "Half a day" : "1-2 hours",
-    progress: works.map((w) => ({ work: w, status: /finish|done|deliver|complet|sent/.test(t) ? "Done" : /start|kick|began|initiat/.test(t) ? "Started" : "In progress", percent: /finish|done|deliver|complet|sent/.test(t) ? 100 : /start|kick|began|initiat/.test(t) ? 10 : 50 })) };
+    progress: works.map((w) => ({ work: w, status: /finish|done|deliver|complet|sent/.test(t) ? "Done" : /start|kick|began|initiat/.test(t) ? "Started" : "In progress", percent: /finish|done|deliver|complet|sent/.test(t) ? 100 : /start|kick|began|initiat/.test(t) ? 10 : 50, owners: people })) };
 }
 
 function clean(x) {
@@ -101,7 +105,7 @@ function clean(x) {
     people: arr(x.people).filter((p) => names.has(p)), kpis: [...new Set((x.kpis || []).map(Number).filter((n) => n >= 1 && n <= 5))],
     scope: [...new Set(arr(x.scope).filter((s) => ids.has(s)))], works: [...new Set(arr(x.works).map((w) => w.slice(0, 80).trim()).filter(Boolean))].slice(0, 6),
     effort: EFFORT.some((e) => e[0] === x.effort) ? x.effort : "1-2 hours",
-    progress: (Array.isArray(x.progress) ? x.progress : []).map((p) => ({ work: String(p.work || "").slice(0, 80).trim(), status: STATUS.includes(p.status) ? p.status : "In progress", percent: Math.max(0, Math.min(100, Math.round(Number(p.percent) || 0))) })).filter((p) => p.work).slice(0, 6), questions: arr(x.questions, 3), answers: arr(x.answers, 3), deliverables: arr(x.deliverables, 8), evidence: arr(x.evidence, 8), next: arr(x.next, 8), check: !!x.check };
+    progress: (Array.isArray(x.progress) ? x.progress : []).map((p) => ({ work: String(p.work || "").slice(0, 80).trim(), status: STATUS.includes(p.status) ? p.status : "In progress", percent: Math.max(0, Math.min(100, Math.round(Number(p.percent) || 0))), owners: (Array.isArray(p.owners) ? p.owners : []).map(String).filter((n) => names.has(n)).slice(0, 12) })).filter((p) => p.work).slice(0, 6), questions: arr(x.questions, 3), answers: arr(x.answers, 3), deliverables: arr(x.deliverables, 8), evidence: arr(x.evidence, 8), next: arr(x.next, 8), check: !!x.check };
 }
 const dubaiToday = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
 const okDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || "")) ? String(d) : dubaiToday();
@@ -124,14 +128,24 @@ export function tasksOf(es) {
   [...es].sort((a, b) => (a.date + a.created < b.date + b.created ? -1 : 1)).forEach((e) => {
     const hrs = (EFFORT.find((x) => x[0] === e.effort) || EFFORT[1])[1], ws = e.works || [];
     ws.forEach((w) => {
-      const t = T[w] = T[w] || { name: w, first: e.date, last: e.date, days: new Set(), hours: 0, status: "In progress", percent: 0, entries: 0, kpis: new Set() };
+      const t = T[w] = T[w] || { name: w, first: e.date, last: e.date, days: new Set(), hours: 0, status: "In progress", percent: 0, entries: 0, kpis: new Set(), owners: new Set(), touched: new Set() };
       const p = (e.progress || []).find((x) => x.work === w);
-      t.last = e.date; t.days.add(e.date); t.hours += hrs / ws.length; t.entries++; (e.kpis || []).forEach((k) => t.kpis.add(k));
-      if (p) { t.status = p.status; t.percent = p.percent; }
+      t.last = e.date; t.days.add(e.date); t.hours += hrs / ws.length; t.entries++; (e.kpis || []).forEach((k) => t.kpis.add(k)); (e.people || []).forEach((n) => t.touched.add(n));
+      if (p) { t.status = p.status; t.percent = p.percent; (p.owners || []).forEach((n) => t.owners.add(n)); }
     });
   });
-  return Object.values(T).map((t) => ({ ...t, days: t.days.size, kpis: [...t.kpis], hours: Math.round(t.hours * 10) / 10 }))
+  return Object.values(T).map((t) => ({ ...t, days: t.days.size, kpis: [...t.kpis], owners: [...t.owners], touched: [...t.touched], hours: Math.round(t.hours * 10) / 10 }))
     .sort((a, b) => (a.status === "Done") - (b.status === "Done") || (a.last < b.last ? 1 : -1));
+}
+// v566 - one card per department: the open tasks its people hold or touched, who, how far along, how long since anything moved
+export function deptBoard(tasks, today) {
+  return DEPTS.map((d) => {
+    const ts = tasks.filter((t) => t.status !== "Done" && [...t.owners, ...t.touched].some((n) => deptOf(n) === d))
+      .map((t) => ({ name: t.name, percent: t.percent, status: t.status, last: t.last, quiet: Math.round((Date.parse(today) - Date.parse(t.last)) / 864e5),
+        who: [...new Set([...t.owners, ...t.touched])].filter((n) => deptOf(n) === d), owners: t.owners.filter((n) => deptOf(n) === d) }))
+      .sort((a, b) => b.quiet - a.quiet);
+    return { dept: d, open: ts.length, people: [...new Set(ts.flatMap((t) => t.who))], tasks: ts };
+  });
 }
 export function hoursByKpi(es) {
   return KPIS.map((k) => ({ id: k.id, name: k.name, hours: Math.round(es.filter((e) => (e.kpis || []).includes(k.id)).reduce((s, e) => s + (EFFORT.find((x) => x[0] === e.effort) || EFFORT[1])[1] / Math.max(1, (e.kpis || []).length), 0) * 10) / 10 }));
@@ -155,7 +169,7 @@ export async function workRoute(request, env, url, deps) {
       const [f, t] = weekOf(okDate(url.searchParams.get("week")));
       const week = await listEntries(env, f, t), all = await listEntries(env, PHASES[0].from, TERM_END);
       const tally = KPIS.map((k) => ({ id: k.id, name: k.name, week: week.filter((e) => e.kpis.includes(k.id)).length, term: all.filter((e) => e.kpis.includes(k.id)).length }));
-      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, tasks: tasksOf(all), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES });
+      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, tasks: tasksOf(all), depts: deptBoard(tasksOf(all), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES });
     }
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
     if (b.action === "parse") {
@@ -211,7 +225,7 @@ export function reportHtml(es, from, to, allTasks) {
     + '<p>' + es.length + ' logged ' + (es.length === 1 ? 'activity' : 'activities') + (daily ? ' this day' : ' this week') + ', about ' + totH + ' hours of work, mapped to the five focus areas of the Review Framework (Schedule 2) and the scope of the role (Schedule 1).</p>'
     + '<div class=tiles>' + byK.map((x, i) => '<div class=tile><b>' + x.es.length + '</b><span>' + esc(x.k.name) + '<br>about ' + hk[i].hours + ' h</span></div>').join("") + '</div>'
     + '<h2>TASK PROGRESS</h2>' + (tk.length ? '<table><tr><td style="color:#626B7C;font-weight:500">Task</td><td style="color:#626B7C">Status</td><td style="color:#626B7C">Complete</td><td style="color:#626B7C">Started</td><td style="color:#626B7C">Days worked</td><td style="color:#626B7C">Time</td></tr>'
-      + tk.map((t) => '<tr><td>' + esc(t.name) + '</td><td>' + esc(t.status) + '</td><td style="white-space:nowrap">' + bar(t.percent) + '</td><td style="white-space:nowrap">' + esc(fmtD(t.first)) + '</td><td>' + t.days + '</td><td style="white-space:nowrap">about ' + t.hours + ' h</td></tr>').join("") + '</table>'
+      + tk.map((t) => '<tr><td>' + esc(t.name) + (t.owners && t.owners.length ? '<div style="font-weight:400;color:#626B7C;font-size:8.5pt">With ' + esc(t.owners.join(", ")) + '</div>' : '') + '</td><td>' + esc(t.status) + '</td><td style="white-space:nowrap">' + bar(t.percent) + '</td><td style="white-space:nowrap">' + esc(fmtD(t.first)) + '</td><td>' + t.days + '</td><td style="white-space:nowrap">about ' + t.hours + ' h</td></tr>').join("") + '</table>'
       + '<p style="font-size:8pt;color:#626B7C">Complete is the percentage logged with the latest entry for the task. Time is a rough estimate from each entry (under 1 hour, 1-2 hours, half a day or a full day).</p>' : '<p class=none>No tasks logged.</p>')
     + '<h2>BY FOCUS AREA</h2>' + byK.map((x) => '<h3 style="color:#1F2B44;margin:14px 0 2px;font-size:11pt">' + x.k.id + '. ' + esc(x.k.name) + '</h3><div class=m style="font-size:8.5pt;color:#626B7C">Evidence sought: ' + esc(x.k.ev) + '</div>'
       + (x.es.length ? x.es.map((e) => '<div class=e><b>' + esc(e.title) + '</b> <span class=m>· ' + esc(dayName(e.date)) + ' ' + esc(fmtD(e.date)) + ' · ' + esc(e.type) + '</span><div>' + esc(e.summary) + '</div></div>').join("") : '<p class=none>Nothing logged against this area this week.</p>')).join("")
@@ -229,6 +243,7 @@ const WORK_BODY = '<div class=tag>MOMO · WORK</div><h1>My work log</h1>'
   + '<div class=row><input id=wd type=date><input id=wl type=url placeholder="Link to a file (optional)"></div><button type=submit id=wb class=gold>File it</button></form>'
   + '<div id=wprev></div><a id=wday class=gold style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>Today\'s summary</a>'
   + '<div class=sec>MY TASKS</div><div id=wtasks></div>'
+  + '<div class=sec>BY DEPARTMENT · OPEN TASKS, LONGEST QUIET FIRST</div><div id=wdept></div>'
   + '<div class=sec>FOCUS AREAS · THIS WEEK / SINCE 2 OCT</div><div id=wtally class=tally></div>'
   + '<div class=sec id=wlisth>THIS WEEK</div><div id=wlist></div>'
   + '<div class=row2><button type=button id=wprevw class=ghost>&#8592; Previous week</button><button type=button id=wnextw class=ghost>Next week &#8594;</button></div>'
@@ -244,6 +259,9 @@ export const WORK_CSS = '.wk{color:#8FA39B;font-size:.85rem;margin:-12px 0 16px}
   + '.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.chip{border:1px solid #24352F;border-radius:99px;padding:4px 10px;font-size:.75rem;color:#B9B2A3;background:transparent;cursor:pointer}.chip.on{border-color:#C5A56A;color:#C5A56A;background:#15231F}'
   + '.prev{border:1px solid #C5A56A;border-radius:16px;padding:14px;margin-top:12px;background:#0E1918}.prev input{margin-bottom:8px}.lab{color:#8FA39B;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;margin:10px 0 4px}.warn{color:#E3A08F;font-size:.8rem}.acts{display:flex;gap:10px;margin-top:8px}.acts button{flex:1}.del{color:#8FA39B;background:none;border:0;font-size:.78rem;cursor:pointer;padding:0;margin-top:6px}'
   + '.tk{border:1px solid #24352F;border-radius:12px;padding:10px 12px;margin:6px 0;background:#0E1918}.tk b{color:#F3EFE4;font-weight:600}.tk .m{color:#8FA39B;font-size:.76rem;margin-top:3px}.pb{height:6px;background:#1B2A26;border-radius:4px;margin-top:7px;overflow:hidden}.pb i{display:block;height:6px;background:#C5A56A}.tk.done{opacity:.6}'
+  + '.dp{border:1px solid #24352F;border-radius:12px;margin:6px 0;background:#0E1918;overflow:hidden}.dp summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;gap:8px;align-items:center}.dp summary::-webkit-details-marker{display:none}'
+  + '.dp summary b{color:#F3EFE4}.dp summary small{color:#8FA39B;font-size:.76rem}.dp .n{color:#C5A56A;font-family:Fraunces,serif;font-size:1.3rem}.dpt{border-top:1px solid #1B2A26;padding:9px 14px}.dpt b{color:#E8E4D8;font-weight:600;font-size:.9rem}.dpt .m{color:#8FA39B;font-size:.76rem;margin-top:2px}.chase{color:#E3A08F}'
+  + '.who{width:100%;margin-top:6px;background:#0C1413;border:1px solid #24352F;border-radius:10px;color:#E8E4D8;padding:8px;font:inherit}'
   + '.pg{border-top:1px solid #24352F;padding-top:8px;margin-top:8px}.pg input[type=range]{padding:0;accent-color:#C5A56A}.addw{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px}';
 
 const WORK_JS = String.raw`(function(){
@@ -267,7 +285,10 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
  $("wlist").querySelectorAll("[data-d]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-d")];if(!confirm("Delete \""+e.title+"\"?"))return;api({action:"delete",id:e.id,date:e.date}).then(function(){load(WEEK)})}});
  $("wlist").querySelectorAll("[data-e]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-e")];EDIT=e;$("wt").value=e.text;$("wd").value=e.date;$("wl").value=e.link||"";preview(e);scrollTo(0,0)}});
  $("wtasks").innerHTML=(D.tasks||[]).length?D.tasks.map(function(t){return '<div class="tk'+(t.status==="Done"?' done':'')+'"><b>'+esc(t.name)+'</b> <span style="color:#C5A56A;float:right">'+t.percent+'%</span><div class=pb><i style="width:'+t.percent+'%"></i></div>'
-  +'<div class=m>'+esc(t.status)+' · started '+esc(fd(t.first))+' · '+t.days+' day'+(t.days===1?'':'s')+' worked · about '+t.hours+' h'+(t.last!==t.first?' · last '+esc(fd(t.last)):'')+'</div></div>'}).join(""):'<p style="color:#8FA39B">Tasks appear here as you log work on them.</p>';
+  +'<div class=m>'+esc(t.status)+' · started '+esc(fd(t.first))+' · '+t.days+' day'+(t.days===1?'':'s')+' worked · about '+t.hours+' h'+(t.last!==t.first?' · last '+esc(fd(t.last)):'')+'</div>'
+  +(t.owners.length?'<div class=m>With: '+esc(t.owners.join(", "))+'</div>':'')+'</div>'}).join(""):'<p style="color:#8FA39B">Tasks appear here as you log work on them.</p>';
+ $("wdept").innerHTML=(D.depts||[]).map(function(d){return '<details class=dp><summary><span><b>'+esc(d.dept)+'</b><br><small>'+(d.people.length?esc(d.people.slice(0,4).join(", "))+(d.people.length>4?" +"+(d.people.length-4):""):"No open tasks")+'</small></span><span class=n>'+d.open+'</span></summary>'
+  +d.tasks.map(function(t){return '<div class=dpt><b>'+esc(t.name)+'</b> <span style="color:#C5A56A;float:right">'+t.percent+'%</span><div class=m>'+esc(t.status)+' · with '+esc(t.who.join(", "))+'</div><div class="m'+(t.quiet>=5?' chase':'')+'">'+(t.quiet<=0?'Moved today':'Last moved '+esc(fd(t.last))+' · '+t.quiet+' day'+(t.quiet===1?'':'s')+' quiet'+(t.quiet>=5?' · chase':''))+'</div></div>'}).join("")+'</details>'}).join("");
  $("wday").href="/momo/work/report?key="+encodeURIComponent(KEY)+"&from="+D.today+"&to="+D.today;
  var to=new Date(Date.parse(D.from)+6*864e5).toISOString().slice(0,10);$("wrep").href="/momo/work/report?key="+encodeURIComponent(KEY)+"&from="+D.from+"&to="+to}
 function chips(list,on,attr){return list.map(function(x){var id=x.id!=null?x.id:x,nm=x.name||x;return '<button type=button class="chip'+(on.indexOf(id)>=0?' on':'')+'" data-'+attr+'="'+esc(id)+'">'+esc(nm)+'</button>'}).join("")}
@@ -289,8 +310,12 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));var h='<div class=prev>'+
  function tog(attr,arr,num){$("wprev").querySelectorAll("[data-"+attr+"]").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-"+attr);if(num)v=+v;var i=PREV[arr].indexOf(v);if(i>=0)PREV[arr].splice(i,1);else PREV[arr].push(v);b.classList.toggle("on")}})}
  PREV.works=PREV.works||[];PREV.progress=PREV.progress||[];tog("k","kpis",1);tog("s","scope",0);tog("p","people",0);
  $("wprev").querySelectorAll("[data-f]").forEach(function(b){b.onclick=function(){PREV.effort=b.getAttribute("data-f");$("wprev").querySelectorAll("[data-f]").forEach(function(x){x.classList.toggle("on",x===b)})}});
- function prog(){PREV.progress=PREV.works.map(function(w){var p=PREV.progress.filter(function(x){return x.work===w})[0];if(p)return p;var old=(D.tasks||[]).filter(function(t){return t.name===w})[0];return {work:w,status:old&&old.percent>0?"In progress":"Started",percent:old?old.percent:10}});
-  $("pprog").innerHTML=PREV.progress.map(function(p,i){return '<div class=pg><div class=m style="color:#E8E4D8">'+esc(p.work)+' <b id=pp'+i+' style="color:#C5A56A;float:right">'+p.percent+'%</b></div><input type=range min=0 max=100 step=5 value='+p.percent+' data-pc='+i+'><div class=chips>'+D.status.map(function(s){return '<button type=button class="chip'+(s===p.status?' on':'')+'" data-st="'+i+'|'+esc(s)+'">'+esc(s)+'</button>'}).join("")+'</div></div>'}).join("");
+ function prog(){PREV.progress=PREV.works.map(function(w){var p=PREV.progress.filter(function(x){return x.work===w})[0];if(p)return p;var old=(D.tasks||[]).filter(function(t){return t.name===w})[0];return {work:w,status:old&&old.percent>0?"In progress":"Started",percent:old?old.percent:10,owners:old&&old.owners.length?old.owners.slice():PREV.people.slice()}});
+  var opts='<option value="">+ Who is responsible or helping?</option>'+(D.org||[]).map(function(g){return '<optgroup label="'+esc(g.dept)+'">'+g.people.map(function(n){return '<option>'+esc(n)+'</option>'}).join("")+'</optgroup>'}).join("");
+  $("pprog").innerHTML=PREV.progress.map(function(p,i){return '<div class=pg><div class=m style="color:#E8E4D8">'+esc(p.work)+' <b id=pp'+i+' style="color:#C5A56A;float:right">'+p.percent+'%</b></div><input type=range min=0 max=100 step=5 value='+p.percent+' data-pc='+i+'><div class=chips>'+D.status.map(function(s){return '<button type=button class="chip'+(s===p.status?' on':'')+'" data-st="'+i+'|'+esc(s)+'">'+esc(s)+'</button>'}).join("")+'</div>'
+   +'<div class=chips>'+(p.owners||[]).map(function(n,j){return '<button type=button class="chip on" data-ow="'+i+'|'+j+'">'+esc(n)+' &#215;</button>'}).join("")+'</div><select class=who data-os='+i+'>'+opts+'</select></div>'}).join("");
+  $("pprog").querySelectorAll("[data-ow]").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-ow").split("|");PREV.progress[+v[0]].owners.splice(+v[1],1);prog()}});
+  $("pprog").querySelectorAll("[data-os]").forEach(function(s){s.onchange=function(){var i=+s.getAttribute("data-os"),o=PREV.progress[i].owners=PREV.progress[i].owners||[];if(s.value&&o.indexOf(s.value)<0)o.push(s.value);if(s.value&&PREV.people.indexOf(s.value)<0)PREV.people.push(s.value);prog()}});
   $("pprog").querySelectorAll("[data-pc]").forEach(function(r){r.oninput=function(){var i=+r.getAttribute("data-pc");PREV.progress[i].percent=+r.value;$("pp"+i).textContent=r.value+"%";if(+r.value===100){PREV.progress[i].status="Done"}}});
   $("pprog").querySelectorAll("[data-st]").forEach(function(b){b.onclick=function(){var v=b.getAttribute("data-st").split("|"),i=+v[0];PREV.progress[i].status=v[1];if(v[1]==="Done"){PREV.progress[i].percent=100}prog()}})}
  prog();

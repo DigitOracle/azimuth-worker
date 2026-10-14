@@ -61,6 +61,21 @@ ok(/x\.indexOf\("ins_najjuko_"\) === 0/.test(ix), "only her insider key counts a
   ok(/DAILY ACTIVITY REPORT/.test(rep) && /TASK PROGRESS/.test(rep) && /about 8 hours/.test(rep) && /Started<\/td>|13 Oct 2026/.test(rep), "a one-day report is the daily summary, with task progress and hours"); }
 const pe = await (await req("/momo/work/api", true, { action: "parse", text: "Started planning the Halloween party, about half done with the concept", date: "2026-10-14" }, () => ({ title: "Halloween", type: "Organising", summary: "s", people: [], kpis: [5], scope: ["b4"], works: ["Halloween (31 Oct)", "  New office mural  "], deliverables: [], evidence: [], next: [], questions: [], effort: "Bogus", progress: [{ work: "Halloween (31 Oct)", status: "In progress", percent: 150 }] }))).json();
 ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours" && pe.entry.progress[0].percent === 100, "new tasks are kept, effort and percent are kept in range", pe.entry);
+// v566 - who holds each task, department cards, longest-quiet first
+{ const { tasksOf, deptBoard, deptOf } = await import("../src/work_log.js");
+  ok(deptOf("Sally Zehil") === "Sales" && deptOf("Sousan Khatibzadeh") === "Marketing" && deptOf("Ali Kalhor") === "Leadership" && deptOf("Savia Gomes") === "HR, Admin & Compliance" && deptOf("Fatu") === "Sales", "every person sits in a department");
+  const es = [
+    { date: "2026-10-06", created: "a", works: ["Breast Cancer Awareness (October)"], people: ["Sally Zehil"], progress: [{ work: "Breast Cancer Awareness (October)", status: "Started", percent: 10, owners: ["Sally Zehil", "Sousan Khatibzadeh"] }], effort: "1-2 hours", kpis: [2] },
+    { date: "2026-10-13", created: "b", works: ["Monday Weekly Huddle"], people: ["Ali Kalhor"], progress: [{ work: "Monday Weekly Huddle", status: "In progress", percent: 60, owners: [] }], effort: "Half a day", kpis: [1] },
+    { date: "2026-10-12", created: "c", works: ["Org chart"], people: ["Savia Gomes"], progress: [{ work: "Org chart", status: "Done", percent: 100, owners: ["Savia Gomes"] }], effort: "Half a day", kpis: [1] } ];
+  const t = tasksOf(es), b = deptBoard(t, "2026-10-14"), sales = b.find((d) => d.dept === "Sales"), mk = b.find((d) => d.dept === "Marketing"), hr = b.find((d) => d.dept === "HR, Admin & Compliance");
+  ok(t.find((x) => x.name === "Breast Cancer Awareness (October)").owners.join() === "Sally Zehil,Sousan Khatibzadeh", "a task remembers who holds it");
+  ok(sales.open === 1 && sales.tasks[0].who.join() === "Sally Zehil" && sales.tasks[0].quiet === 8, "Sales shows Sally's open task and how long it has been quiet", sales);
+  ok(mk.open === 1 && mk.people.join() === "Sousan Khatibzadeh", "Marketing shows the same task under Sousan");
+  ok(hr.open === 0, "a finished task leaves the department board");
+  ok(b.find((d) => d.dept === "Leadership").tasks[0].name === "Monday Weekly Huddle", "a person touched in the entry also puts the task on their department");
+  const rep = reportHtml([{ ...es[0], title: "x", type: "Update", summary: "s", scope: [], deliverables: [], next: [] }], "2026-10-06", "2026-10-06", t);
+  ok(/With Sally Zehil, Sousan Khatibzadeh/.test(rep), "the report's task table says who the task is with"); }
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
