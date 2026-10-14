@@ -4985,10 +4985,11 @@ const najNav = (key, active, rk) => {   // v208 (Kendall, 21 Sep 2026) - rk ride
 // v563 (Kendall 14 Oct 2026: "When I click on [Momo], I'm going to want work and play. Play is everything that exists now. Work, we
 // are going to build out.") - the MOMO tab's front door: two cards. Play opens today's Momo unchanged; Work is an empty room for now.
 // v564 - the shared Momo page shell (the Work log draws its own body inside it)
+// v576 (Kendall 14 Oct, approved mock-up): Momo WORK is light - cream #FAF7F1, ink #1C2321, teal and gold as accents only. Play stays dark.
 function momoPage(key, rk, body) {
-  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#0C1413"><title>Momo</title>' + NAJ_FONTS
-    + '<style>body{margin:0;background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans",sans-serif;padding:28px 16px 110px}.w{max-width:560px;margin:0 auto}.tag{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.14em;color:#C5A56A}'
-    + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:2rem;margin:6px 0 22px}.back{color:#8FA39B;text-decoration:none;font-size:.85rem}.empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:48px 0;border:1px dashed #24352F;border-radius:18px;color:#8FA39B}.empty p{margin:0}'
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FAF7F1"><title>Momo</title>' + NAJ_FONTS
+    + '<style>body{margin:0;background:#FAF7F1;color:#1C2321;font-family:"IBM Plex Sans",sans-serif;padding:22px 14px 120px}.w{max-width:560px;margin:0 auto}.tag{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.14em;color:#8A6F3E;font-weight:600}'
+    + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:1.7rem;margin:4px 0 14px;color:#0A4F4A}.back{color:#5F6B66;text-decoration:none;font-size:.85rem}.empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:48px 0;border:1px dashed #D8D1C4;border-radius:18px;color:#5F6B66}.empty p{margin:0}'
     + WORK_CSS + NAJ_NAV_CSS + '</style></head><body><div class=w>' + body + '</div>' + najNav(key, "fit", rk) + '</body></html>';
 }
 function momoHtml(key, rk, work) {
