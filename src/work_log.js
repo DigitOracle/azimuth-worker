@@ -349,7 +349,7 @@ export async function workRoute(request, env, url, deps) {
     if (p !== "/momo/work") return new Response("not found", { status: 404 });
     return new Response(deps.page(key, rk, '<a class=back href="/momo?key=' + encodeURIComponent(key) + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty><p>Najjuko\'s work log is private to her link.</p></div>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
-  if (p.startsWith("/momo/work/plan")) return planRoute(request, env, url, deps, { agents: PEOPLE.filter((x) => deptOf(x[0]) === "Sales").map((x) => x[0]) });   // v590 - the content plan
+  if (p.startsWith("/momo/work/plan")) return planRoute(request, env, url, deps, { agents: PEOPLE.filter((x) => deptOf(x[0]) === "Sales").map((x) => x[0]), team: PEOPLE.filter((x) => ["Marketing", "Leadership"].includes(deptOf(x[0]))).map((x) => [x[0], x[1]]) });   // v590 - the content plan
   if (p === "/momo/work/prep.js") return new Response(PREP_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work.js") return new Response(WORK_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work/api") {
