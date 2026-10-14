@@ -2313,6 +2313,8 @@ async function appFetch(request, env, ctx) {
       return new Response(JSON.stringify(_ir, null, 2), { status: _ir.ok ? 200 : 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
     }
     { const _ak = await askRoute(request, env, url, { keyTier }); if (_ak) return _ak; }   // v555 - Ask Najma (stub engine, owner only)
+    // v564.1 - Momo Work's saves and filings are POSTs: answered here, before the POST guard further down refuses them
+    if (request.method === "POST" && url.pathname === "/momo/work/api") { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage }); if (_wr) return _wr; }
     if (url.pathname === "/desk_ref_set" && request.method === "GET") {   // v549 - owner key; ?n=<ref>&approved=0|1 - takes a reference photo out of use (or back), the photo itself is kept
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       const _sn = Number(url.searchParams.get("n")) || 0; let _sm = null; try { _sm = JSON.parse(await env.MEETINGS.get("desk_ref_" + _sn) || "null"); } catch (e) {}

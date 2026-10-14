@@ -47,5 +47,7 @@ try { new Function(js); pass++; } catch (e) { fail++; console.log("FAIL the work
 const ix = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 ok(/isNajjuko\(env, url\)\) return Response\.redirect\(url\.origin \+ "\/momo\/work\?key="/.test(ix), "her MOMO tab opens straight on Work");
 ok(/x\.indexOf\("ins_najjuko_"\) === 0/.test(ix), "only her insider key counts as her");
+ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
+
