@@ -21,7 +21,7 @@ ok(KPIS.length === 5 && PEOPLE.some((p) => p[0] === "Sally Zehil") && PEOPLE.som
 // filing with the model
 const huddle = (u) => ({ title: "Monday huddle", type: "Meeting", summary: "Najjuko ran the huddle.", people: ["Ali Kalhor", "Sally Zehil", "Nobody Invented"], kpis: [1, 9], scope: ["p4", "zz"], works: ["Monday Weekly Huddle", "Made Up"], deliverables: ["Huddle PowerPoint"], evidence: ["Strategy and plan shared with leadership"], next: [], questions: ["Who presented the week's numbers?"] });
 const pr = await (await req("/momo/work/api", true, { action: "parse", text: "Monday huddle: built the PowerPoint with Sally, ran it with Ali.", date: "2026-10-12" }, huddle)).json();
-ok(pr.entry.people.join() === "Ali Kalhor,Sally Zehil" && pr.entry.kpis.join() === "1" && pr.entry.scope.join() === "p4" && pr.entry.works.join() === "Monday Weekly Huddle", "filing keeps only known people, areas, parts and campaigns (nothing invented)", pr.entry);
+ok(pr.entry.people.join() === "Ali Kalhor,Sally Zehil" && pr.entry.kpis.join() === "1" && pr.entry.scope.join() === "p4" && pr.entry.works[0] === "Monday Weekly Huddle", "filing keeps only known people, focus areas and parts of the role (v565: new task names are allowed)", pr.entry);
 ok(pr.entry.questions.length === 1, "follow-up questions come back for her to answer");
 ok(/capture EVERYTHING/.test(lastSys) && /Sally = Sally Zehil/.test(lastSys) && /Breast Cancer Awareness/.test(lastSys), "the filing instructions ask for every person and campaign");
 // fallback with no model
@@ -47,6 +47,20 @@ try { new Function(js); pass++; } catch (e) { fail++; console.log("FAIL the work
 const ix = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 ok(/isNajjuko\(env, url\)\) return Response\.redirect\(url\.origin \+ "\/momo\/work\?key="/.test(ix), "her MOMO tab opens straight on Work");
 ok(/x\.indexOf\("ins_najjuko_"\) === 0/.test(ix), "only her insider key counts as her");
+// v565 - task progress over days, rough time, daily summary
+{ const { tasksOf, hoursByKpi } = await import("../src/work_log.js");
+  const es = [
+    { date: "2026-10-13", created: "a", works: ["Breast Cancer Awareness (October)"], progress: [{ work: "Breast Cancer Awareness (October)", status: "Started", percent: 10 }], effort: "1-2 hours", kpis: [2] },
+    { date: "2026-10-14", created: "b", works: ["Breast Cancer Awareness (October)", "Monday Weekly Huddle"], progress: [{ work: "Breast Cancer Awareness (October)", status: "In progress", percent: 50 }], effort: "Full day", kpis: [2, 1] },
+    { date: "2026-10-16", created: "c", works: ["Breast Cancer Awareness (October)"], progress: [{ work: "Breast Cancer Awareness (October)", status: "Done", percent: 100 }], effort: "Half a day", kpis: [2] } ];
+  const t = tasksOf(es), bc = t.find((x) => x.name === "Breast Cancer Awareness (October)");
+  ok(bc.percent === 100 && bc.status === "Done" && bc.first === "2026-10-13" && bc.last === "2026-10-16" && bc.days === 3 && bc.hours === 9.5, "a task shows its latest percent, first day, days worked and rough hours (shared days split)", bc);
+  ok(t[0].name === "Monday Weekly Huddle", "open tasks list before finished ones");
+  ok(hoursByKpi(es).find((x) => x.id === 2).hours === 9.5, "time by focus area");
+  const rep = reportHtml(es.map((e) => ({ ...e, title: "x", type: "Update", summary: "s", people: [], scope: [], deliverables: [], next: [] })).slice(1, 2), "2026-10-14", "2026-10-14", t);
+  ok(/DAILY ACTIVITY REPORT/.test(rep) && /TASK PROGRESS/.test(rep) && /about 8 hours/.test(rep) && /Started<\/td>|13 Oct 2026/.test(rep), "a one-day report is the daily summary, with task progress and hours"); }
+const pe = await (await req("/momo/work/api", true, { action: "parse", text: "Started planning the Halloween party, about half done with the concept", date: "2026-10-14" }, () => ({ title: "Halloween", type: "Organising", summary: "s", people: [], kpis: [5], scope: ["b4"], works: ["Halloween (31 Oct)", "  New office mural  "], deliverables: [], evidence: [], next: [], questions: [], effort: "Bogus", progress: [{ work: "Halloween (31 Oct)", status: "In progress", percent: 150 }] }))).json();
+ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours" && pe.entry.progress[0].percent === 100, "new tasks are kept, effort and percent are kept in range", pe.entry);
 ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
