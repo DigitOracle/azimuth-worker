@@ -294,7 +294,13 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
  $("wday").href="/momo/work/report?key="+encodeURIComponent(KEY)+"&from="+D.today+"&to="+D.today;
  var to=new Date(Date.parse(D.from)+6*864e5).toISOString().slice(0,10);$("wrep").href="/momo/work/report?key="+encodeURIComponent(KEY)+"&from="+D.from+"&to="+to}
 function chips(list,on,attr){return list.map(function(x){var id=x.id!=null?x.id:x,nm=x.name||x;return '<button type=button class="chip'+(on.indexOf(id)>=0?' on':'')+'" data-'+attr+'="'+esc(id)+'">'+esc(nm)+'</button>'}).join("")}
-function preview(e){PREV=JSON.parse(JSON.stringify(e));var h='<div class=prev>'+(e.check?'<div class=warn>Filed by keyword only: please check the areas and people.</div>':'')
+function confirmLine(e){var ks=e.kpis.map(function(k){var x=D.kpis.filter(function(y){return y.id===k})[0];return x?x.name:k});
+ var ts=(e.works||[]).map(function(w){var old=(D.tasks||[]).filter(function(t){return t.name===w})[0];var p=(e.progress||[]).filter(function(x){return x.work===w})[0];return '<b>'+esc(w)+'</b> '+(old?'(existing task, '+old.percent+'% before'+(p?', now '+p.percent+'%':'')+')':'(new task'+(p?', '+p.percent+'%':'')+')')});
+ return '<div style="background:#15231F;border-radius:12px;padding:12px;margin-bottom:10px"><div style="color:#C5A56A;font-weight:600;margin-bottom:6px">Here\'s how I\'ll log this. Is it right?</div><div style="color:#E8E4D8;font-size:.9rem;line-height:1.5">'
+  +(ts.length?'Task: '+ts.join('; ')+'. ':'<span class=warn>No task linked: pick one below or add a new one. </span>')
+  +(ks.length?'Counts towards: '+esc(ks.join(', '))+'. ':'<span class=warn>No focus area: pick at least one below. </span>')
+  +(e.people.length?'With: '+esc(e.people.join(', '))+'.':'No people named.')+'</div><div style="color:#8FA39B;font-size:.78rem;margin-top:6px">Nothing is saved until you press Save. Change anything below first.</div></div>'}
+function preview(e){PREV=JSON.parse(JSON.stringify(e));var h='<div class=prev>'+confirmLine(e)+(e.check?'<div class=warn>Filed by keyword only: please check the areas and people.</div>':'')
  +'<div class=lab>Title</div><input id=pt value="'+esc(e.title)+'"><div class=lab>Summary</div><textarea id=ps rows=3>'+esc(e.summary)+'</textarea>'
  +'<div class=lab>Type</div><div class=chips>'+chips(D.types,[e.type],"t")+'</div>'
  +'<div class=lab>Focus areas (her review)</div><div class=chips>'+chips(D.kpis,e.kpis,"k")+'</div>'
