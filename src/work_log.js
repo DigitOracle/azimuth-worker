@@ -215,6 +215,7 @@ const PFX = "work_naj_";
 // v571 - third parties she deals with off-site (a charity, a venue, a developer's office). Looked up on the web once, confirmed by her, then
 // remembered under work_naj_party_<slug> so the next entry recognises the name without asking. Nothing is remembered until she confirms.
 const PPFX = "work_naj_party_";
+const TPFX = "work_naj_task_";   // v600 - a task's progress set directly (name, percent, status, updated); it wins over the entries until a newer entry moves the task
 const STOP = new Set(["with", "from", "that", "this", "have", "will", "been", "were", "they", "their", "there", "what", "when", "which", "about", "agenda", "page", "date", "2026", "2025", "week", "team", "meeting", "report", "notes"]);
 async function knownDocs(env) {
   const out = []; let cursor;
@@ -268,11 +269,23 @@ export function tasksOf(es) {
       const t = T[w] = T[w] || { name: w, first: e.date, last: e.date, days: new Set(), hours: 0, status: "In progress", percent: 0, entries: 0, kpis: new Set(), owners: new Set(), touched: new Set() };
       const p = (e.progress || []).find((x) => x.work === w);
       t.last = e.date; t.days.add(e.date); t.hours += hrs / ws.length; t.entries++; (e.kpis || []).forEach((k) => t.kpis.add(k)); (e.people || []).forEach((n) => t.touched.add(n));
-      if (p) { t.status = p.status; t.percent = p.percent; (p.owners || []).forEach((n) => t.owners.add(n)); }
+      t.lastc = e.created || ""; if (p) { t.status = p.status; t.percent = p.percent; (p.owners || []).forEach((n) => t.owners.add(n)); }
     });
   });
   return Object.values(T).map((t) => ({ ...t, days: t.days.size, kpis: [...t.kpis], owners: [...t.owners], touched: [...t.touched], hours: Math.round(t.hours * 10) / 10 }))
     .sort((a, b) => (a.status === "Done") - (b.status === "Done") || (a.last < b.last ? 1 : -1));
+}
+// v600 - a progress set by hand wins over the entries until an entry newer than it moves the task again
+export function applyOverrides(tasks, ovs) {
+  const m = {}; (ovs || []).forEach((o) => { if (o && o.name) m[o.name] = o; });
+  return tasks.map((t) => { const o = m[t.name]; if (!o || !(String(o.updated || "") > String(t.lastc || ""))) return t; const done = o.status === "Done" || o.percent >= 100;
+    return { ...t, percent: done ? 100 : o.percent, status: done ? "Done" : o.status, set_by_hand: true, last: String(o.updated).slice(0, 10) > t.last ? String(o.updated).slice(0, 10) : t.last }; })
+    .sort((a, b) => (a.status === "Done") - (b.status === "Done") || (a.last < b.last ? 1 : -1));
+}
+async function taskOverrides(env) {
+  const out = []; let cursor;
+  do { const r = await env.MEETINGS.list({ prefix: TPFX, cursor }); cursor = r.list_complete ? null : r.cursor; for (const k of r.keys) { try { out.push(JSON.parse(await env.MEETINGS.get(k.name))); } catch (e) {} } } while (cursor);
+  return out;
 }
 // v566 - one card per department: the open tasks its people hold or touched, who, how far along, how long since anything moved
 export function deptBoard(tasks, today) {
@@ -360,7 +373,7 @@ export async function workRoute(request, env, url, deps) {
       // v576 - outside-role work counted on its own, by whose job it was (the renewal evidence)
       const ow = week.filter((e) => e.in_scope === false), byD = {}; ow.forEach((e) => { const d = e.out_role || "Other"; byD[d] = (byD[d] || 0) + 1; });
       const outside = { week: ow.length, term: all.filter((e) => e.in_scope === false).length, by: Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => ({ dept: d, n: byD[d] })) };
-      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, outside, hoursweek: hoursPicture(week), where: WHERE, tasks: tasksOf(all), depts: deptBoard(tasksOf(all), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES, broker_tasks: BROKER_TASKS,
+      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, outside, hoursweek: hoursPicture(week), where: WHERE, tasks: applyOverrides(tasksOf(all), await taskOverrides(env)), depts: deptBoard(applyOverrides(tasksOf(all), await taskOverrides(env)), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES, broker_tasks: BROKER_TASKS,
         // v571 - the people picker in hierarchy: Ali and Faez (and Sultan) on their own at the top, then each department's people
         people_tree: [{ dept: "Leadership", people: PEOPLE.filter((x) => deptOf(x[0]) === "Leadership").map((x) => x[0]) }].concat(DEPTS.filter((d) => d !== "Leadership").map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) }))) });
     }
@@ -391,6 +404,12 @@ export async function workRoute(request, env, url, deps) {
       return J({ ok: true, party: rec });
     }
     if (b.action === "parties") return J({ parties: await knownParties(env) });
+    if (b.action === "task_progress") {
+      const name = String(b.name || "").trim().slice(0, 80); if (!name) return J({ error: "Which task?" }, 400);
+      const pct = Math.max(0, Math.min(100, Math.round(Number(b.percent) || 0))); let st = STATUS.includes(b.status) ? b.status : (pct >= 100 ? "Done" : "In progress"); if (st === "Done") st = "Done";
+      const rec = { name, percent: st === "Done" ? 100 : pct, status: st, updated: new Date().toISOString() };
+      await env.MEETINGS.put(TPFX + slug(name), JSON.stringify(rec)); return J({ ok: true, task: rec });
+    }
     // v583 UPLOAD (Kendall 14 Oct: "upload an existing PDF ... extract activities, tasks ... the morning huddle PDF ... build out a DNA for that type of
     // meeting"). The file's text is read in the Worker (Workers AI toMarkdown for PDF, Word, Excel, CSV; the OCR lane for scans), then filed through
     // the SAME step as typed text, so a huddle deck comes back as activities and tasks. A recurring document is remembered by its shape (doc DNA).
@@ -468,7 +487,7 @@ export async function workRoute(request, env, url, deps) {
     // v577 - ?days=2026-10-13,2026-10-14 picks exact days (Mon and Tue); otherwise from/to
     const picked = String(url.searchParams.get("days") || "").split(",").map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
     const from = picked.length ? picked[0] : okDate(url.searchParams.get("from") || weekOf(dubaiToday())[0]), to = picked.length ? picked[picked.length - 1] : okDate(url.searchParams.get("to") || weekOf(from)[1]);
-    return new Response(reportHtml(await listEntries(env, from, to), from, to, tasksOf(await listEntries(env, PHASES[0].from, to)), picked), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    return new Response(reportHtml(await listEntries(env, from, to), from, to, applyOverrides(tasksOf(await listEntries(env, PHASES[0].from, to)), await taskOverrides(env)), picked), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   // v573 DEBRIEF (Kendall 14 Oct: "Ali ... wants a debrief of what happened because he wasn't there ... immediately create a PDF ... very quick").
   // One entry, one page, in FN's brand: what, when, who, outcome, next steps. Short on purpose.
@@ -805,9 +824,10 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
   +'<a class=del style="text-decoration:none" href="/momo/work/debrief?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(e.id)+'&date='+e.date+'" target=_blank>Debrief</a> &middot; <button class=del data-e='+i+'>Edit</button> &middot; <button class=del data-d='+i+'>Delete</button></div>'}).join(""):'<p style="color:#8FA39B">Nothing logged this week yet.</p>';
  $("wlist").querySelectorAll("[data-d]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-d")];if(!confirm("Delete \""+e.title+"\"?"))return;api({action:"delete",id:e.id,date:e.date}).then(function(){load(WEEK)})}});
  $("wlist").querySelectorAll("[data-e]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-e")];EDIT=e;$("wt").value=e.text;$("wd").value=e.date;$("wl").value=e.link||"";preview(e);scrollTo(0,0)}});
- $("wtasks").innerHTML=(D.tasks||[]).length?D.tasks.map(function(t){return '<div class="tk'+(t.status==="Done"?' done':'')+'"><b>'+esc(t.name)+'</b> <span style="color:#C5A56A;float:right">'+t.percent+'%</span><div class=pb><i style="width:'+t.percent+'%"></i></div>'
+ $("wtasks").innerHTML=(D.tasks||[]).length?D.tasks.map(function(t,ti){return '<div class="tk'+(t.status==="Done"?' done':'')+'" data-tk='+ti+' style="cursor:pointer"><b>'+esc(t.name)+'</b> <span style="color:#C5A56A;float:right">'+t.percent+'% &#9998;</span><div class=pb><i style="width:'+t.percent+'%"></i></div>'
   +'<div class=m>'+esc(t.status)+' · started '+esc(fd(t.first))+' · '+t.days+' day'+(t.days===1?'':'s')+' worked · about '+t.hours+' h'+(t.last!==t.first?' · last '+esc(fd(t.last)):'')+'</div>'
   +(t.owners.length?'<div class=m>With: '+esc(t.owners.join(", "))+'</div>':'')+'</div>'}).join(""):'<p style="color:#8FA39B">Tasks appear here as you log work on them.</p>';
+ $("wtasks").querySelectorAll("[data-tk]").forEach(function(r){r.onclick=function(){taskSheet(D.tasks[+r.getAttribute("data-tk")])}});
  $("wdept").innerHTML=(D.depts||[]).map(function(d){return '<details class=dp><summary><span><b>'+esc(d.dept)+'</b><br><small>'+(d.people.length?esc(d.people.slice(0,4).join(", "))+(d.people.length>4?" +"+(d.people.length-4):""):"No open tasks")+'</small></span><span class=n>'+d.open+'</span></summary>'
   +d.tasks.map(function(t){return '<div class=dpt><b>'+esc(t.name)+'</b> <span style="color:#C5A56A;float:right">'+t.percent+'%</span><div class=m>'+esc(t.status)+' · with '+esc(t.who.join(", "))+'</div><div class="m'+(t.quiet>=5?' chase':'')+'">'+(t.quiet<=0?'Moved today':'Last moved '+esc(fd(t.last))+' · '+t.quiet+' day'+(t.quiet===1?'':'s')+' quiet'+(t.quiet>=5?' · chase':''))+'</div></div>'}).join("")+'</details>'}).join("");
  $("wday").href="/momo/work/report?key="+encodeURIComponent(KEY)+"&from="+D.today+"&to="+D.today;
@@ -836,6 +856,16 @@ function opt(v,nm,on,ic){return '<div class="opt'+(on?' on':'')+'" data-v="'+esc
 function kpiOf(id){return D.kpis.filter(function(k){return k.id===id})[0]}
 function brokerLabel(id){var r="";(D.broker_tasks||[]).forEach(function(g){g.items.forEach(function(i){if(i[0]===id)r=i[1]})});return r}
 function brokerSummary(){var t=PREV.broker_tasks||[];return t.length?brokerLabel(t[0])+(t.length>1?" +"+(t.length-1):""):"What kind of broker work?"}
+// v600 - set a task's progress directly (Najjuko 14 Oct: "the edit button on the task is not working, I can't change something to fix the progress"). Its own overlay: the log has no entry open behind it.
+function taskSheet(t){if(!t)return;var pct=t.percent,st=t.status,bg=document.createElement("div");bg.className="sheetbg";var s=document.createElement("div");s.className="sheet";
+ var close=function(){bg.remove();s.remove()};
+ var draw=function(){s.innerHTML='<h4>'+esc(t.name)+'</h4><div class=line style="color:#1C2321;font-weight:500">Progress <b id=tp_v style="color:#0A4F4A;float:right">'+pct+'%</b></div><input type=range min=0 max=100 step=5 value='+pct+' id=tp_r style="width:100%;margin:6px 0 10px"><div class=chips>'
+   +D.status.map(function(x){return '<button type=button class="chip'+(x===st?' on':'')+'" data-s="'+esc(x)+'">'+esc(x)+'</button>'}).join("")+'</div><div class=line style="margin-top:8px">Saved to the task straight away. Your next activity on it moves it again.</div><button type=button class="gold done" id=tp_ok style="margin-top:8px">Save progress</button>';
+  s.querySelector("#tp_r").oninput=function(){pct=+this.value;s.querySelector("#tp_v").textContent=pct+"%";if(pct>=100)st="Done";else if(st==="Done")st="In progress"};
+  s.querySelectorAll("[data-s]").forEach(function(b){b.onclick=function(){st=b.getAttribute("data-s");if(st==="Done")pct=100;draw()}});
+  s.querySelector("#tp_ok").onclick=function(){var b=this;b.disabled=true;b.textContent="Saving...";api({action:"task_progress",name:t.name,percent:pct,status:st}).then(function(j){if(!j.ok){b.disabled=false;b.textContent="Save progress";toast("Not saved: "+(j.error||"something went wrong")+". Tap Save progress again.",true);return}
+    close();toast("\u2713 Saved: "+t.name+" is at "+j.task.percent+"% ("+j.task.status+").");load(WEEK)}).catch(function(){b.disabled=false;b.textContent="Save progress";toast("Not saved: no connection. Tap Save progress again.",true)})}};
+ bg.onclick=close;draw();document.body.appendChild(bg);document.body.appendChild(s)}
 function areaSheet(){
  var start=(PREV.prep&&(PREV.prep.area||PREV.prep.project))||"";
  sheet("About the area",'<input id=ar_n class=sin value="'+esc(start)+'" placeholder="A district or community: JVC, Business Bay, Damac Hills..." style="width:100%;margin-bottom:8px"><button type=button class=gold id=ar_go style="width:100%">Look it up</button><div id=ar_out style="margin-top:10px"></div>',function(s){
@@ -875,10 +905,10 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));saveDraft();PREV.works=PR
  +((PREV.external||[]).length?(PREV.external).map(function(o){return o.confirmed?'<div class=fr data-px="'+esc(o.name)+'">'+(ICON.party||'')+'<b>'+esc(o.name)+'</b><span>'+(o.known?"outside party · known · tap to change":"outside party · tap to change")+'</span><i>&#8250;</i></div>':
    '<div class=fr style="flex-wrap:wrap;cursor:default;border-color:#C5A56A"><div style="flex:1 1 100%;font-size:.85rem">You wrote <b>'+esc(o.name)+'</b>. '+(o.notfound?'I could not find it online; it will be logged as written.':'Is this the right one?')+'</div>'
    +(o.notfound?'':'<div style="flex:1 1 100%"><b>'+esc(o.suggested)+'</b>'+(o.kind?' <span>· '+esc(o.kind)+'</span>':'')+(o.what?'<div class=line>'+esc(o.what)+'</div>':'')+'</div><div class=acts style="flex:1 1 100%"><button type=button class=ghost data-pr="'+esc(o.name)+'">Remove</button><button type=button class=ghost data-pn="'+esc(o.name)+'">No, keep mine</button><button type=button class=gold data-py="'+esc(o.name)+'">Yes</button></div>')+'</div>'}).join(""):'')
- +(PREV.works.length?fieldRow("task",PREV.works[0]+(PREV.works.length>1?" +"+(PREV.works.length-1):""),(PREV.progress[0]?PREV.progress[0].percent+"%":"task"),"frk"):'')
+ +(PREV.works.length?fieldRow("task",PREV.works[0]+(PREV.works.length>1?" +"+(PREV.works.length-1):""),"change task","frk"):'')
+ +'<div id=pprog></div>'
  +'<details class=more><summary>More &#9662;</summary>'
  +(!PREV.works.length?fieldRow("task","Link a campaign or task","optional","frk"):'')
- +'<div id=pprog></div>'
  +lab("scope","Part of the role (Schedule 1)")+'<div class=chips>'+chips(D.scope,PREV.scope||[],"s")+'</div>'
  +((PREV.questions||[]).length?lab("ask","A few questions so nothing is missed")+PREV.questions.map(function(q,i){return '<div class=line style="margin:6px 0 4px">'+esc(q)+'</div><input class=pq data-q='+i+' placeholder="Your answer (optional)">'}).join("")+'<button type=button class=ghost id=pa style="width:100%;margin-top:6px">Answer and refile</button>':'')
  +(PREV.deliverables.length?lab("task","Produced")+'<div class=line>'+esc(PREV.deliverables.join("; "))+'</div>':'')
