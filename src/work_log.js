@@ -72,7 +72,7 @@ export function clockedHours(e) {
 export function hoursOf(e) { const c = clockedHours(e); return c != null ? c : (EFFORT.find((x) => x[0] === e.effort) || EFFORT[1])[1]; }
 export const isClocked = (e) => clockedHours(e) != null;
 // the work-kind split for the first donut: her contract role vs broker work vs other departments
-export function kindOf(e) { return e.in_scope !== false ? "Strategic Lead" : (e.out_role === "Sales" ? "Broker" : "Other departments"); }
+export function kindOf(e) { return e.broker ? "Broker" : e.in_scope !== false ? "Strategic Lead" : (e.out_role === "Sales" ? "Broker" : "Other departments"); }
 // v571 (Kendall 14 Oct: "if it's outside of role ... sales, HR ... map this back to the contract ... she will be using these for negotiating").
 // Outside-role work is logged with WHICH role it was and the contract line it sits against, so the log is evidence at the review.
 // v575 (Kendall 14 Oct: "scope of work should be at the top ... from there a set of responsibilities"): Role is the root. Outside her role, the
@@ -88,7 +88,7 @@ export const OUT_ROLES = [
 ];
 const OUT_ALIAS = { "Sales agent": "Sales", "Execution Team (hands-on)": "Marketing (hands-on)", "Leadership / management decisions": "Leadership" };
 const SCHEMA = { type: "object", additionalProperties: false, required: ["title", "type", "summary", "people", "kpis", "scope", "works", "deliverables", "evidence", "next", "questions", "time_of_day", "alone", "in_scope", "external"], properties: {
-  time_of_day: { type: "string", enum: TIMES }, alone: { type: "boolean" }, in_scope: { type: "boolean" }, out_role: { type: "string" },
+  time_of_day: { type: "string", enum: TIMES }, alone: { type: "boolean" }, in_scope: { type: "boolean" }, broker: { type: "boolean" }, out_role: { type: "string" },
   start: { type: "string" }, end: { type: "string" }, where: { type: "string", enum: WHERE },
   external: { type: "array", items: { type: "object", additionalProperties: false, required: ["name", "kind", "person"], properties: { name: { type: "string" }, kind: { type: "string" }, person: { type: "string" } } } },
   works: { type: "array", items: { type: "string" } }, questions: { type: "array", items: { type: "string" } },
@@ -123,7 +123,7 @@ function sysPrompt() {
     + "start and end: 24-hour HH:MM when the entry gives a time span ('from 4 till 6' in the morning = 04:00-06:00; '10 to 3' at an open house = 10:00-15:00; '8 until 9:30' = 08:00-09:30; 'after lunch for an hour' has no clock: empty strings). Never invent a clock time. "
     + "where: Office (FN's office, Prime Tower), Home (home, remote, 'from my apartment'), On site (a developer's office, an open house, a client's premises, a venue, 'at Imtiaz'), Other, or Unspecified. "
     + "alone: true when she did it by herself with no staff or third party involved. in_scope: true when the activity sits inside the eleven parts of her role; false when it is outside them. "
-    + "out_role: when in_scope is false, WHOSE JOB it really was, exactly one of: " + OUT_ROLES.map((r) => r[0]).join(" | ") + ". A sales meeting, a sales huddle, a deck or planner the sales director asked for, showing a unit, chasing a client's deal = Sales (even if it looked like marketing work); filming or designing herself = Marketing (hands-on); reception or paperwork = HR, Admin & Compliance. Empty string when in scope. "
+    + "broker: true when the activity is BROKER work (leads, calls, showing a unit, viewings, open houses, client follow-up, a sales huddle): that is the second part of her role, so in_scope stays true. out_role: when in_scope is false, WHOSE JOB it really was, exactly one of: " + OUT_ROLES.map((r) => r[0]).join(" | ") + ". A sales meeting, a sales huddle, a deck or planner the sales director asked for, showing a unit, chasing a client's deal = Sales (even if it looked like marketing work); filming or designing herself = Marketing (hands-on); reception or paperwork = HR, Admin & Compliance. Empty string when in scope. "
     + "external: companies, organisations or outside people NOT on the FN staff list that she dealt with (a charity, a developer's office, a venue, a journalist, a supplier): name as written, kind in two or three words (charity, developer, venue, media, supplier, client), person if one is named, else empty string. A team member of FN is never external."
     + "\nRules: use only what the entry says; never invent people, figures or outcomes. title: under 8 words. summary: one or two plain sentences in the third person (\"Najjuko ...\"). "
     + "people: everyone she dealt with. kpis: only the areas the activity genuinely advances, usually one or two. deliverables: things she produced (e.g. a PowerPoint). "
@@ -191,9 +191,9 @@ function clean(x) {
     people: arr(x.people).filter((p) => names.has(p)), kpis: [...new Set((x.kpis || []).map(Number).filter((n) => n >= 1 && n <= 5))],
     scope: [...new Set(arr(x.scope).filter((s) => ids.has(s)))], works: [...new Set(arr(x.works).map((w) => w.slice(0, 80).trim()).filter(Boolean))].slice(0, 6),
     effort: EFFORT.some((e) => e[0] === x.effort) ? x.effort : "1-2 hours",
-    time_of_day: TIMES.includes(x.time_of_day) ? x.time_of_day : "Unspecified", alone: !!x.alone, in_scope: x.in_scope !== false,
+    time_of_day: TIMES.includes(x.time_of_day) ? x.time_of_day : "Unspecified", alone: !!x.alone, in_scope: x.in_scope !== false || !!x.broker, broker: !!x.broker,
     start: toMin(x.start) != null ? x.start : "", end: toMin(x.end) != null ? x.end : "", where: WHERE.includes(x.where) ? x.where : "Unspecified",
-    out_role: x.in_scope === false ? (OUT_ROLES.some((r) => r[0] === (OUT_ALIAS[x.out_role] || x.out_role)) ? (OUT_ALIAS[x.out_role] || x.out_role) : "Other") : "",
+    out_role: x.in_scope === false && !x.broker ? (OUT_ROLES.some((r) => r[0] === (OUT_ALIAS[x.out_role] || x.out_role)) ? (OUT_ALIAS[x.out_role] || x.out_role) : "Other") : "",
     external: (Array.isArray(x.external) ? x.external : []).map((o) => ({ name: String(o.name || "").slice(0, 100).trim(), kind: String(o.kind || "").slice(0, 40), person: String(o.person || "").slice(0, 80), confirmed: !!o.confirmed, note: String(o.note || "").slice(0, 300) })).filter((o) => o.name).slice(0, 6),
     prep: x.prep && x.prep.needed ? { needed: true, developer: String(x.prep.developer || "").slice(0, 80), project: String(x.prep.project || "").slice(0, 80), area: String(x.prep.area || "").slice(0, 80), event: String(x.prep.event || "").slice(0, 80) } : null,
     progress: (Array.isArray(x.progress) ? x.progress : []).map((p) => ({ work: String(p.work || "").slice(0, 80).trim(), status: STATUS.includes(p.status) ? p.status : "In progress", percent: Math.max(0, Math.min(100, Math.round(Number(p.percent) || 0))), owners: (Array.isArray(p.owners) ? p.owners : []).map(String).filter((n) => names.has(n)).slice(0, 12) })).filter((p) => p.work).slice(0, 6), questions: arr(x.questions, 3), answers: arr(x.answers, 3), deliverables: arr(x.deliverables, 8), evidence: arr(x.evidence, 8), next: arr(x.next, 8), check: !!x.check };
@@ -736,7 +736,7 @@ export const WORK_ICONS = {
   Meeting: WI('<circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M2 20a6 6 0 0 1 12 0M10 20a6 6 0 0 1 12 0"/>'), Deliverable: WI('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
   Update: WI('<path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6"/>'), Organising: WI('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'), Outreach: WI('<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>'),
   Event: WI('<path d="M12 3l2 4 4 .5-3 3 .8 4.5L12 13l-3.8 2 .8-4.5-3-3L10 7z"/><path d="M5 21h14"/>'), Other: WI('<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>'),
-  kpi1: WI('<path d="M4 7h16M4 12h10M4 17h7"/>'), kpi2: WI('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'), kpi3: WI('<path d="M3 17l6-6 4 4 8-8M14 7h7v7"/>'),
+  broker: WI('<path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-6h6v6"/>'), kpi1: WI('<path d="M4 7h16M4 12h10M4 17h7"/>'), kpi2: WI('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'), kpi3: WI('<path d="M3 17l6-6 4 4 8-8M14 7h7v7"/>'),
   kpi4: WI('<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>'), kpi5: WI('<circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/>'),
   Morning: WI('<path d="M12 3v2M4.2 6.2l1.4 1.4M3 13h2M19 13h2M18.4 6.2L17 7.6M6 17a6 6 0 0 1 12 0M3 21h18"/>'), Midday: WI('<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'),
   Afternoon: WI('<circle cx="12" cy="12" r="4"/><path d="M12 2v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 7l2.1-2.1M4 20h16"/>'), Evening: WI('<path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/>'), Unspecified: WI('<circle cx="12" cy="12" r="8"/><path d="M8 12h8"/>'),
@@ -806,8 +806,9 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
  +'<h1 style="font-size:1.35rem;margin:0 0 6px">'+esc(PREV.title)+'</h1><textarea id=ps rows=2>'+esc(PREV.summary)+'</textarea>'
  +'<div class=seg style="margin-top:12px"><button type=button id=sw'+(within?' class=on':'')+'>Within my role</button><button type=button id=so'+(within?'':' class=on')+'>Outside my role</button></div>'
  +(within
-   ?'<div class=line>Which part of your role?</div><div class=grid>'+D.kpis.map(function(k){return '<button type=button data-k='+k.id+(PREV.kpis.indexOf(k.id)>=0?' class=on':'')+'>'+(ICON["kpi"+k.id]||ICON.kpi)+esc(k.name)+'</button>'}).join("")+'</div>'
-    +(k0?'<div class=line>'+(sc0?'Schedule 1: <b>'+esc(sc0.name)+'</b>. ':'')+'Evidence: '+esc(k0.ev)+'.</div>':'<div class=line class=warn style="color:#B04A3A">Tap one so it counts at your review.</div>')
+   ?'<div class=line>Which part of your role?</div><div class=grid>'+D.kpis.map(function(k){return '<button type=button data-k='+k.id+(PREV.kpis.indexOf(k.id)>=0?' class=on':'')+'>'+(ICON["kpi"+k.id]||ICON.kpi)+esc(k.name)+'</button>'}).join("")+'<button type=button id=bro class="'+(PREV.broker?'on ':'')+'brk">'+(ICON.broker||ICON.party)+'Broker</button></div>'
+    +(PREV.broker?'<div class=line>Broker role: leads, calls, viewings, open houses and client follow-up. Counted in your broker hours, apart from Marketing, PR and Business Development.</div>':'')
+    +(PREV.broker?'':k0?'<div class=line>'+(sc0?'Schedule 1: <b>'+esc(sc0.name)+'</b>. ':'')+'Evidence: '+esc(k0.ev)+'.</div>':'<div class=line class=warn style="color:#B04A3A">Tap one so it counts at your review.</div>')
    :fieldRow("party",PREV.out_role||"Whose job was it?",PREV.out_role?"whose job it was":"tap to choose","frw")
     +(orr?'<div class=line>'+esc(orr[1])+'.</div>':''))
  +fieldRow("time",PREV.start&&PREV.end?PREV.start+" – "+PREV.end:(PREV.time_of_day&&PREV.time_of_day!=="Unspecified"?PREV.time_of_day:"Start and end time"),PREV.start&&PREV.end?(clocked(PREV)+" h"+(PREV.time_of_day&&PREV.time_of_day!=="Unspecified"?" · "+PREV.time_of_day.toLowerCase():"")):"tap to clock it","frt")
@@ -829,8 +830,9 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
  +'<button type=button class=tick id=pv aria-label="Save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg></button>';
  $("wprev").innerHTML=h;
  $("ps").onchange=function(){PREV.summary=this.value};
- $("sw").onclick=function(){PREV.in_scope=true;PREV.out_role="";preview(PREV)};$("so").onclick=function(){PREV.in_scope=false;PREV.kpis=[];preview(PREV)};
- $("wprev").querySelectorAll("[data-k]").forEach(function(b){b.onclick=function(){var v=+b.getAttribute("data-k"),i=PREV.kpis.indexOf(v);if(i>=0)PREV.kpis.splice(i,1);else PREV.kpis.unshift(v);preview(PREV)}});
+ $("sw").onclick=function(){PREV.in_scope=true;PREV.out_role="";PREV.broker=false;preview(PREV)};$("so").onclick=function(){PREV.in_scope=false;PREV.broker=false;PREV.kpis=[];preview(PREV)};
+ if($("bro"))$("bro").onclick=function(){PREV.broker=!PREV.broker;if(PREV.broker){PREV.kpis=[];PREV.in_scope=true;PREV.out_role=""}if(QUEUE.length)QUEUE[QI]=PREV;preview(PREV)};
+ $("wprev").querySelectorAll("[data-k]").forEach(function(b){b.onclick=function(){PREV.broker=false;var v=+b.getAttribute("data-k"),i=PREV.kpis.indexOf(v);if(i>=0)PREV.kpis.splice(i,1);else PREV.kpis.unshift(v);preview(PREV)}});
  if($("frw"))$("frw").onclick=function(){sheet("Whose job was it?",(D.out_roles||[]).map(function(r){return opt(r[0],r[0],PREV.out_role===r[0])}).join(""),function(s){s.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){PREV.out_role=o.getAttribute("data-v");SHEET()}})})};
  // v578 - clock it: start and end pickers first (the hours that count), the part-of-day words underneath
  $("frt").onclick=function(){sheet("When?",'<div class=grp>Clock it (the hours that count)</div><div class=row style="grid-template-columns:1fr 1fr;margin:0 0 8px"><input type=time id=pst value="'+esc(PREV.start||"")+'"><input type=time id=pen value="'+esc(PREV.end||"")+'"></div><div class=line id=phrs>'+(PREV.start&&PREV.end?clocked(PREV)+' hours':'Start and end, 24-hour')+'</div><div class=grp>Part of the day</div>'+(D.times||[]).map(function(t){return opt(t,t==="Unspecified"?"Not stated":t,(PREV.time_of_day||"Unspecified")===t,ICON[t])}).join(""),
@@ -858,7 +860,7 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));PREV.works=PREV.works||[]
   if(!qa.length)return;var one=(e.summary||$("wt").value).trim()+"\n\n"+qa.join("\n");$("pa").disabled=true;$("pa").textContent="Refiling…";
   api({action:"parse",text:one,date:$("wd").value}).then(function(j){if(j.entry){j.entry.src=one;if(QUEUE.length)QUEUE[QI]=j.entry;preview(j.entry)}})};
  $("pc").onclick=function(){EDIT=null;if(QUEUE.length>1)nextInQueue();else{QUEUE=[];QI=0;$("wprev").innerHTML=""}};
- $("pv").onclick=function(){PREV.summary=$("ps").value;if(PREV.in_scope!==false&&!PREV.kpis.length){alert("Tap which part of your role this counts towards, or mark it outside your role.");return}if(PREV.in_scope===false&&!PREV.out_role){alert("Tap whose job it was.");return}$("pv").disabled=true;
+ $("pv").onclick=function(){PREV.summary=$("ps").value;if(PREV.in_scope!==false&&!PREV.broker&&!PREV.kpis.length){alert("Tap which part of your role this counts towards, or mark it outside your role.");return}if(PREV.in_scope===false&&!PREV.out_role){alert("Tap whose job it was.");return}$("pv").disabled=true;
   api({action:"save",entry:PREV,text:PREV.src||$("wt").value,date:$("wd").value,link:$("wl").value,id:EDIT&&EDIT.id,oldDate:EDIT&&EDIT.date,created:EDIT&&EDIT.created}).then(function(j){if(!j.ok){alert(j.error||"Could not save");$("pv").disabled=false;return}
    // v583 - the first save from an uploaded document teaches its DNA, so the same kind of file is recognised next time
    if(UPL&&PREV.src_file===UPL.name){api({action:"doc_dna",name:UPL.name,title:PREV.works&&PREV.works[0]||PREV.title,kind:PREV.type,summary:PREV.summary,head:UPL.head}).catch(function(){});UPL=null}
