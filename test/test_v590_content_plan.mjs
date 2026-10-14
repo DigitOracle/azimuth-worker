@@ -28,8 +28,25 @@ ok(bad.status === 400, "an item without a title is refused");
 await req("/momo/work/plan/api", { action: "item_delete", id: s.item.id });
 ok(!(await (await req("/momo/work/plan/api")).json()).items.some((i) => i.id === s.item.id), "an item can be removed");
 
-const noW = await req("/momo/work/plan/api", { action: "trend_save", trend: { hook: "Day in the life", why: "", angle: "" } });
-ok(noW.status === 400, "a trend needs its hook, why it works and our angle");
+// v593: any link is a trend source; the platform is read from the link; the title is read from the page (mocked here, no network)
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (u) => { if (/blocked/.test(u)) throw new Error("blocked"); return { ok: true, headers: { get: () => "text/html; charset=utf-8" }, text: async () => '<html><head><meta property="og:title" content="Dubai rents: what changed &amp; why"><title>ignored</title></head></html>' }; };
+const empty = await req("/momo/work/plan/api", { action: "trend_save", trend: { hook: "", url: "" } });
+ok(empty.status === 400, "a trend with neither a link nor a name is refused");
+const links = [["https://www.instagram.com/reel/Cx123/", "Instagram"], ["https://vm.tiktok.com/ZM8abc/", "TikTok"], ["https://www.linkedin.com/posts/abc-123", "LinkedIn"], ["https://youtu.be/xyz", "YouTube"], ["https://x.com/user/status/1", "X"], ["https://www.thenational.ae/business/property/2026/10/12/rents/", "Article"], ["www.gulfnews.com/business/property/x", "Article"]];
+for (const [u, want] of links) {
+  const r1 = await (await req("/momo/work/plan/api", { action: "trend_save", trend: { url: u } })).json();
+  ok(r1.ok && r1.trend.platform === want && r1.trend.url.startsWith("https://") && r1.trend.status === "new", "a link alone saves and reads as " + want, r1.trend);
+}
+const art = await (await req("/momo/work/plan/api", { action: "trend_save", trend: { url: "https://www.thenational.ae/x" } })).json();
+ok(art.trend.hook === "Dubai rents: what changed & why", "the hook is read from the page's own title", art.trend.hook);
+const blk = await (await req("/momo/work/plan/api", { action: "trend_save", trend: { url: "https://www.instagram.com/reel/blocked/" } })).json();
+ok(blk.ok && /instagram\.com/.test(blk.trend.hook), "when the page cannot be read the host stands in for the title", blk.trend.hook);
+const junk = await req("/momo/work/plan/api", { action: "trend_save", trend: { url: "javascript:alert(1)", hook: "" } });
+ok(junk.status === 400, "a non-web link is refused");
+globalThis.fetch = realFetch;
+const noW = await req("/momo/work/plan/api", { action: "trend_save", trend: { hook: "Day in the life", status: "made", why: "", angle: "" } });
+ok(noW.status === 400, "a trend can enter the inbox with only a name, but cannot be marked made without why it works and our angle");
 const t = await (await req("/momo/work/plan/api", { action: "trend_save", trend: { platform: "TikTok", hook: "Three things I wish I knew before buying off-plan", why: "fast hook, list format", angle: "Najma: 471 launches selling, with dates", url: "https://example.com/p" } })).json();
 const ex = Date.parse(t.trend.expires_at) - Date.parse(t.trend.seen_at);
 ok(t.ok && t.trend.status === "new" && ex === 72 * 3600e3, "a trend lives exactly 72 hours", ex / 3600e3);

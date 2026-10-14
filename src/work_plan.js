@@ -13,7 +13,38 @@ export const OWNERS = ["Graphic designer", "Videographer", "Social media manager
 export const STATES = ["Planned", "In design", "In review", "Approved", "Scheduled", "Posted"];
 export const PILLARS = [["known", "Known calendar"], ["market", "Market calendar"], ["trend", "Trend"]];
 export const CERT = ["Fixed", "Announced", "Expected", "Researched"];
-export const PLATFORMS = ["Instagram", "TikTok", "YouTube", "LinkedIn", "X"];
+export const PLATFORMS = ["Instagram", "TikTok", "YouTube", "LinkedIn", "X", "Article", "Other"];
+// v593 (Kendall 14 Oct: "accept an Instagram or TikTok link or LinkedIn, or any type of link, even a news article"): any web link is a trend source.
+export function normaliseLink(v) {
+  let u = String(v || "").trim().split(/\s+/)[0];
+  if (!u) return "";
+  if (!/^https?:\/\//i.test(u)) { if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$|\?|#)/i.test(u)) u = "https://" + u; else return ""; }
+  try { const x = new URL(u); if (!/^https?:$/.test(x.protocol)) return ""; return x.toString().slice(0, 400); } catch (e) { return ""; }
+}
+export function detectPlatform(url) {
+  let h = ""; try { h = new URL(url).hostname.toLowerCase().replace(/^(www|m|mobile|vm|vt)\./, ""); } catch (e) { return ""; }
+  if (/(^|\.)instagram\.com$/.test(h) || h === "instagr.am") return "Instagram";
+  if (/(^|\.)tiktok\.com$/.test(h)) return "TikTok";
+  if (/(^|\.)linkedin\.com$/.test(h) || h === "lnkd.in") return "LinkedIn";
+  if (/(^|\.)youtube\.com$/.test(h) || h === "youtu.be") return "YouTube";
+  if (/(^|\.)(x|twitter)\.com$/.test(h) || h === "t.co") return "X";
+  return h ? "Article" : "";
+}
+const decodeEnt = (t) => String(t || "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).replace(/\s+/g, " ").trim();
+// the title the page gives itself (social sites often block this; then the host is used) - read at most 4 seconds, first 200 KB
+export async function linkTitle(url) {
+  try {
+    const ac = new AbortController(), t = setTimeout(() => ac.abort(), 4000);
+    const r = await fetch(url, { signal: ac.signal, redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (compatible; FNPlan/1.0)", Accept: "text/html" } });
+    clearTimeout(t);
+    if (!r.ok || !/html/i.test(r.headers.get("content-type") || "text/html")) return "";
+    const html = (await r.text()).slice(0, 200000);
+    const og = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+    const ti = og ? og[1] : (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1];
+    const out = decodeEnt(ti).slice(0, 160);
+    return /^(instagram|tiktok|linkedin|log in|login|sign in|just a moment|access denied)/i.test(out) ? "" : out;
+  } catch (e) { return ""; }
+}
 const TREND_HOURS = 72;
 const today = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
 const okD = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || "")) ? String(d) : "";
@@ -58,7 +89,7 @@ function cleanItem(x, id) {
 function cleanTrend(x, id, prev) {
   const now = Date.now();
   return {
-    id, platform: PLATFORMS.includes(x.platform) ? x.platform : "Instagram", url: /^https?:\/\//.test(String(x.url || "")) ? String(x.url).slice(0, 300) : "",
+    id, url: normaliseLink(x.url), platform: PLATFORMS.includes(x.platform) ? x.platform : (detectPlatform(normaliseLink(x.url)) || "Other"),
     hook: String(x.hook || "").slice(0, 160).trim(), why: String(x.why || "").slice(0, 300).trim(), angle: String(x.angle || "").slice(0, 300).trim(),
     agent: String(x.agent || "").slice(0, 80), status: ["new", "assigned", "made", "dropped"].includes(x.status) ? x.status : "new",
     seen_at: (prev && prev.seen_at) || new Date(now).toISOString(), expires_at: (prev && prev.expires_at) || new Date(now + TREND_HOURS * 3600e3).toISOString(),
@@ -197,7 +228,7 @@ function addItem(day){var n={title:"",start:day||today(),pillar:"market",certain
    if(n.pillar!=="known"&&!n.source&&!confirm("A market item should carry a source link. Save without one?"))return;api({action:"item_save",item:n}).then(SHEETALL)}})}
 function trendCard(t){var left=Math.round((Date.parse(t.expires_at)-Date.now())/3600e3),dead=t.status==="dropped"||t.status==="made"||left<=0;
  return '<div class=ent data-tid="'+esc(t.id)+'" style="cursor:pointer;'+(dead?'opacity:.55':'')+'"><h3>'+esc(t.hook||"(no hook yet)")+'</h3><div class=m>'+esc(t.platform)+' · '+(t.status==="made"?'made':t.status==="dropped"?'dropped':left<=0?'expired':left+' h left')+'</div>'
-  +(t.why?'<div class=line style="margin:2px 0">Why it works: '+esc(t.why)+'</div>':'')+(t.angle?'<div class=line style="margin:2px 0">Our angle: '+esc(t.angle)+'</div>':'')+(t.agent?'<div class=line style="margin:2px 0"><b>For '+esc(t.agent)+'</b></div>':'')+'</div>'}
+  +(t.why?'<div class=line style="margin:2px 0">Why it works: '+esc(t.why)+'</div>':'')+(t.angle?'<div class=line style="margin:2px 0">Our angle: '+esc(t.angle)+'</div>':'')+(!t.why||!t.angle?'<div class=line style="margin:2px 0;color:#B04A3A">Still to add: '+[!t.why?'why it works':'',!t.angle?'our angle':''].filter(Boolean).join(' and ')+'</div>':'')+(t.agent?'<div class=line style="margin:2px 0"><b>For '+esc(t.agent)+'</b></div>':'')+'</div>'}
 var MONTH=null,MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
 function ymOf(d){return d.slice(0,7)}
 function shiftMonth(ym,n){var y=+ym.slice(0,4),m=+ym.slice(5,7)-1+n;y+=Math.floor(m/12);m=((m%12)+12)%12;return y+"-"+String(m+1).padStart(2,"0")}
@@ -255,14 +286,26 @@ function drawTrends(){var L=D.trends.slice().sort(function(a,b){return a.expires
  $("pbody").innerHTML='<div class=line>Each trend lives 72 hours. One not made in time is dropped, not carried forward.</div>'+(live.length?live.map(trendCard).join(""):'<div class=empty><p>No live trends. Add what you saw today.</p></div>')+(dead.length?'<h2 style="font-size:.9rem;margin:16px 0 6px;color:#8A6F3E">Done or expired</h2>'+dead.map(trendCard).join(""):'');
  document.querySelectorAll("[data-tid]").forEach(function(e){e.onclick=function(){editTrend(e.getAttribute("data-tid"))}})}
 function editTrend(id){var t=D.trends.filter(function(x){return x.id===id})[0];if(!t)return;
- sheet(esc(t.hook||"Trend"),'<div class=fr id=t_agent><b>Give it to</b><span>'+esc(t.agent||"tap to choose")+'</span><i>&#8250;</i></div><div class=fr id=t_made><b>Mark as made</b><span></span><i>&#8250;</i></div><div class=fr id=t_drop><b>Drop it</b><span></span><i>&#8250;</i></div>'+(t.url?'<a class=ghost style="display:block;text-align:center;text-decoration:none;margin:8px 0" target=_blank rel=noopener href="'+esc(t.url)+'">Open the original</a>':''),function(s){
-  s.querySelector("#t_agent").onclick=function(){sheet("Give it to",opts(D.agents,t.agent),function(s2){s2.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){t.agent=o.getAttribute("data-v");t.status="assigned";api({action:"trend_save",trend:t}).then(SHEETALL)}})})};
-  s.querySelector("#t_made").onclick=function(){t.status="made";api({action:"trend_save",trend:t}).then(SHEETALL)};
-  s.querySelector("#t_drop").onclick=function(){t.status="dropped";api({action:"trend_save",trend:t}).then(SHEETALL)}})}
-function addTrend(){var n={platform:"Instagram",url:"",hook:"",why:"",angle:""};
- sheet("A trend you saw",'<div class=seg id=n_pl style="grid-template-columns:repeat(5,1fr);gap:4px">'+D.platforms.map(function(p){return '<button type=button data-v="'+p+'"'+(p===n.platform?' class=on':'')+' style="padding:10px 2px;font-size:.72rem">'+p+'</button>'}).join("")+'</div><input id=n_u class=sin placeholder="Link to the post" style="width:100%;margin:8px 0"><input id=n_h class=sin placeholder="The hook: what it says or shows first" style="width:100%;margin-bottom:8px"><textarea id=n_w rows=2 style="width:100%;margin-bottom:8px" placeholder="Why is it working? (required)"></textarea><textarea id=n_a rows=2 style="width:100%" placeholder="Our angle: which true FN or Najma fact fits? (required)"></textarea>',function(s){
-  s.querySelectorAll("#n_pl button").forEach(function(b){b.onclick=function(){n.platform=b.getAttribute("data-v");s.querySelectorAll("#n_pl button").forEach(function(x){x.classList.toggle("on",x===b)})}});
-  s.querySelector(".done").onclick=function(){n.url=s.querySelector("#n_u").value.trim();n.hook=s.querySelector("#n_h").value.trim();n.why=s.querySelector("#n_w").value.trim();n.angle=s.querySelector("#n_a").value.trim();if(!n.hook||!n.why||!n.angle){alert("A trend needs its hook, why it works and our angle.");return}api({action:"trend_save",trend:n}).then(SHEETALL)}})}
+ sheet(esc(t.hook||"Trend"),'<input id=t_h class=sin value="'+esc(t.hook)+'" placeholder="What is it?" style="width:100%;margin-bottom:6px"><textarea id=t_w rows=2 style="width:100%;margin-bottom:6px" placeholder="Why is it working?">'+esc(t.why)+'</textarea><textarea id=t_a rows=2 style="width:100%;margin-bottom:8px" placeholder="Our angle: which true fact fits?">'+esc(t.angle)+'</textarea>'+'<div class=fr id=t_agent><b>Give it to</b><span>'+esc(t.agent||"tap to choose")+'</span><i>&#8250;</i></div><div class=fr id=t_made><b>Mark as made</b><span></span><i>&#8250;</i></div><div class=fr id=t_drop><b>Drop it</b><span></span><i>&#8250;</i></div>'+(t.url?'<a class=ghost style="display:block;text-align:center;text-decoration:none;margin:8px 0" target=_blank rel=noopener href="'+esc(t.url)+'">Open the original</a>':''),function(s){
+  var keep=function(){t.hook=s.querySelector("#t_h").value.trim()||t.hook;t.why=s.querySelector("#t_w").value.trim();t.angle=s.querySelector("#t_a").value.trim()};
+  ["t_h","t_w","t_a"].forEach(function(k){s.querySelector("#"+k).onchange=function(){keep();api({action:"trend_save",trend:t})}});
+  s.querySelector("#t_agent").onclick=function(){keep();sheet("Give it to",opts(D.agents,t.agent),function(s2){s2.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){t.agent=o.getAttribute("data-v");t.status="assigned";api({action:"trend_save",trend:t}).then(SHEETALL)}})})};
+  s.querySelector("#t_made").onclick=function(){keep();if(!t.why||!t.angle){alert("Before it counts as made, say why it works and our angle.");return}t.status="made";api({action:"trend_save",trend:t}).then(function(j){if(j.error){alert(j.error);return}SHEETALL()})};
+  s.querySelector("#t_drop").onclick=function(){keep();t.status="dropped";api({action:"trend_save",trend:t}).then(SHEETALL)}})}
+var PLAT_SEL="Instagram";
+function detectPlat(u){var h="";try{h=new URL(/^https?:/i.test(u)?u:"https://"+u).hostname.toLowerCase().replace(/^(www|m|mobile|vm|vt)\./,"")}catch(e){return ""}
+ if(/instagram\.com$|^instagr\.am$/.test(h))return "Instagram";if(/tiktok\.com$/.test(h))return "TikTok";if(/linkedin\.com$|^lnkd\.in$/.test(h))return "LinkedIn";if(/youtube\.com$|^youtu\.be$/.test(h))return "YouTube";if(/(^|\.)(x|twitter)\.com$|^t\.co$/.test(h))return "X";return h.indexOf(".")>0?"Article":""}
+function addTrend(){var n={platform:"",url:"",hook:"",why:"",angle:""};
+ sheet("A trend you saw",'<input id=n_u class=sin inputmode=url autocapitalize=off placeholder="Paste the link: Instagram, TikTok, LinkedIn, an article..." style="width:100%;margin-bottom:6px"><div class=line id=n_det style="margin:2px 0 8px;color:#5F6B66">Any link works. I read the platform from it.</div>'
+  +'<div class=seg id=n_pl style="grid-template-columns:repeat(4,1fr);gap:4px">'+D.platforms.map(function(p){return '<button type=button data-v="'+p+'" style="padding:9px 2px;font-size:.72rem">'+p+'</button>'}).join("")+'</div>'
+  +'<input id=n_h class=sin placeholder="What is it? (optional: I read the title from the link)" style="width:100%;margin:8px 0"><textarea id=n_w rows=2 style="width:100%;margin-bottom:8px" placeholder="Why is it working? (add it now or later)"></textarea><textarea id=n_a rows=2 style="width:100%" placeholder="Our angle: which true FN or Najma fact fits? (now or later)"></textarea>',function(s){
+  var paint=function(){s.querySelectorAll("#n_pl button").forEach(function(x){x.classList.toggle("on",x.getAttribute("data-v")===n.platform)})},u=s.querySelector("#n_u");
+  var det=function(){var d=detectPlat(u.value.trim());if(d&&!n.manual){n.platform=d}s.querySelector("#n_det").textContent=d?"Looks like "+d+(n.manual&&n.platform!==d?" (you chose "+n.platform+")":""):"Any link works. I read the platform from it.";paint()};
+  u.oninput=det;u.onchange=det;
+  s.querySelectorAll("#n_pl button").forEach(function(b){b.onclick=function(){n.platform=b.getAttribute("data-v");n.manual=true;paint()}});paint();
+  s.querySelector(".done").onclick=function(){n.url=u.value.trim();n.hook=s.querySelector("#n_h").value.trim();n.why=s.querySelector("#n_w").value.trim();n.angle=s.querySelector("#n_a").value.trim();
+   if(!n.url&&!n.hook){alert("Paste a link, or say what the trend is.");return}var btn=this;btn.disabled=true;btn.textContent="Saving...";
+   api({action:"trend_save",trend:{platform:n.manual?n.platform:"",url:n.url,hook:n.hook,why:n.why,angle:n.angle}}).then(function(j){if(j.error){btn.disabled=false;btn.textContent="Done";alert(j.error);return}SHEETALL()})}})}
 function draw(){$("tcal").classList.toggle("on",VIEW==="cal");$("tmon").classList.toggle("on",VIEW==="mon");$("ttr").classList.toggle("on",VIEW==="tr");$("padd").textContent=VIEW==="tr"?"Add a trend":"Add to the plan";if(VIEW==="cal")drawCal();else if(VIEW==="mon")drawMonth();else drawTrends()}
 function load(){fetch("/momo/work/plan/api?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(j){D=j;draw()})}
 $("tcal").onclick=function(){VIEW="cal";draw()};$("tmon").onclick=function(){VIEW="mon";draw()};$("ttr").onclick=function(){VIEW="tr";draw()};$("padd").onclick=function(){if(VIEW==="tr")addTrend();else addItem()};$("pshare").onclick=shareSheet;
@@ -301,8 +344,12 @@ export async function planRoute(request, env, url, deps, ctx) {
     }
     if (b.action === "trend_save") {
       const id = rid((b.trend || {}).id); let prev = null; try { prev = JSON.parse(await env.MEETINGS.get(TRP + id)); } catch (e) {}
-      const t = cleanTrend(b.trend || {}, id, prev);
-      if (!t.hook || !t.why || !t.angle) return J({ error: "A trend needs its hook, why it works and our angle." }, 400);
+      const incoming = Object.assign({}, b.trend || {}); const nl = normaliseLink(incoming.url);
+      if (nl && !incoming.platform) incoming.platform = detectPlatform(nl);
+      const t = cleanTrend(incoming, id, prev);
+      if (!t.hook && t.url) t.hook = (await (ctx.title || linkTitle)(t.url)) || (new URL(t.url).hostname.replace(/^www\./, "") + new URL(t.url).pathname.replace(/\/$/, "").slice(0, 60));
+      if (!t.hook) return J({ error: "Paste a link, or say what the trend is." }, 400);
+      if (t.status === "made" && (!t.why || !t.angle)) return J({ error: "Before it counts as made, say why it works and our angle." }, 400);
       await env.MEETINGS.put(TRP + id, JSON.stringify(t)); return J({ ok: true, trend: t });
     }
     return J({ error: "Unknown action." }, 400);
