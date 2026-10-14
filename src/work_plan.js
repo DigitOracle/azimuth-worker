@@ -11,7 +11,10 @@ export const LEAD = { story: 3, post: 7, carousel: 14, reel: 21 };            //
 export const FORMATS = [["story", "Story"], ["post", "Post"], ["carousel", "Carousel"], ["reel", "Reel"]];
 export const OWNERS = ["Graphic designer", "Videographer", "Social media manager", "Agent"];
 export const STATES = ["Planned", "In design", "In review", "Approved", "Scheduled", "Posted"];
-export const PILLARS = [["known", "Known calendar"], ["market", "Market calendar"], ["trend", "Trend"]];
+// v595 (Kendall 14 Oct): the plan's items sit in categories she clicks into. COMMERCIAL = what every industry marks (Valentine's Day, breast cancer awareness, National Day);
+// INDUSTRY RELATED = real estate: links found on social media, Najma launches and updates, open houses and events; TREND = what the platforms reward now (the inbox).
+export const PILLARS = [["known", "Commercial"], ["market", "Industry related"], ["trend", "Trend"]];
+export const BLOG_LEAD_DAYS = 7;   // anything FN takes part in needs its blog post one week before, so FN is already talking about it
 export const CERT = ["Fixed", "Announced", "Expected", "Researched"];
 export const PLATFORMS = ["Instagram", "TikTok", "YouTube", "LinkedIn", "X", "Article", "Other"];
 // v593 (Kendall 14 Oct: "accept an Instagram or TikTok link or LinkedIn, or any type of link, even a news article"): any web link is a trend source.
@@ -83,7 +86,7 @@ function cleanItem(x, id) {
     id, title: String(x.title || "").slice(0, 120).trim(), start, end: end < start ? start : end,
     pillar: pick(x.pillar, PILLARS.map((p) => p[0]), "market"), certainty: pick(x.certainty, CERT, "Researched"),
     format: pick(x.format, FORMATS.map((f) => f[0]), "post"), owner: pick(x.owner, OWNERS, "Graphic designer"), agent: String(x.agent || "").slice(0, 80),
-    assignee: String(x.assignee || "").slice(0, 80), state: pick(x.state, STATES, "Planned"), note: String(x.note || "").slice(0, 300), source: /^https?:\/\//.test(String(x.source || "")) ? String(x.source).slice(0, 300) : "",
+    assignee: String(x.assignee || "").slice(0, 80), taking_part: !!x.taking_part, state: pick(x.state, STATES, "Planned"), note: String(x.note || "").slice(0, 300), source: normaliseLink(x.source),
   };
 }
 function cleanTrend(x, id, prev) {
@@ -126,6 +129,8 @@ function weekHtml(items, trends, mon) {
   const row = (i) => '<tr><td><b>' + esc(i.title) + '</b>' + (i.note ? '<small>' + esc(i.note) + '</small>' : '') + '</td><td>' + esc(fmt(i.start) + (i.end !== i.start ? ' – ' + fmt(i.end) : '')) + '</td><td>' + esc((FORMATS.find((f) => f[0] === i.format) || [0, i.format])[1]) + '</td><td>' + esc(i.owner) + (i.agent ? '<small>for ' + esc(i.agent) + '</small>' : '') + '</td><td>' + esc(i.state) + '</td></tr>';
   const tbl = (rows) => '<table><tr><th>What</th><th>Date</th><th>Format</th><th>Who makes it</th><th>Status</th></tr>' + rows.map(row).join("") + '</table>';
   const live = trends.filter((t) => t.status === "assigned" && trendLeft(t) > 0);
+  const blogs = items.filter((i) => i.taking_part && i.state !== "Posted" && addDays(i.start, -BLOG_LEAD_DAYS) <= sun && i.start >= mon).sort((a, b) => a.start.localeCompare(b.start));
+  const blogTbl = '<table><tr><th>We are taking part in</th><th>Goes out</th><th>Blog post due</th><th>Who</th></tr>' + blogs.map((i) => '<tr><td><b>' + esc(i.title) + '</b></td><td>' + esc(fmt(i.start)) + '</td><td>' + esc(fmt(addDays(i.start, -BLOG_LEAD_DAYS))) + (addDays(i.start, -BLOG_LEAD_DAYS) < mon ? ' <small>already due</small>' : '') + '</td><td>' + esc(i.assignee || i.owner) + '</td></tr>').join("") + '</table>';
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FN Weekly content plan ' + esc(fmt(mon)) + ' ' + mon.slice(0, 4) + '</title>'
     + '<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap"><style>@page{size:A4;margin:12mm}@page{@top-left{content:none}@top-center{content:none}@top-right{content:none}@bottom-left{content:none}@bottom-center{content:none}@bottom-right{content:none}}'
     + 'body{margin:0;background:#F4F2EE;color:#1C2321;font-family:Inter,sans-serif;font-size:10pt;line-height:1.45}.pg{max-width:780px;margin:0 auto;background:#fff;padding:26px 30px 30px;border:1px solid ' + FN_GOLD + ';position:relative}'
@@ -135,7 +140,7 @@ function weekHtml(items, trends, mon) {
     + '.note{margin-top:18px;padding-top:8px;border-top:1px solid #E9EAEC;font-size:7.8pt;color:#626B7C}.btns{position:fixed;right:14px;bottom:14px}.btn{background:' + FN_NAVY + ';color:' + FN_PEACH + ';border:0;border-radius:99px;padding:10px 16px;font:600 10pt Inter,sans-serif;cursor:pointer}@media print{body{background:#fff}.pg{border:0;padding:0}.btns{display:none}}</style></head><body><div class=pg><div class=latt></div>'
     + '<header><div><h1><em>Weekly</em> content plan</h1><p>' + esc(fmt(mon)) + ' – ' + esc(fmt(sun)) + ' ' + sun.slice(0, 4) + '</p></div><img src="' + FN_LOGO + '" alt="FN Realty"></header>'
     + '<h2>GOING OUT THIS WEEK</h2>' + (going.length ? tbl(going) : '<p>Nothing scheduled this week.</p>')
-    + (startNow.length ? '<h2>ARTWORK STARTS THIS WEEK</h2>' + tbl(startNow) : '') + (late.length ? '<h2>ALREADY LATE TO START: USE THE FAST LANE</h2>' + tbl(late) : '')
+    + (blogs.length ? '<h2>BLOG POSTS DUE (ONE WEEK BEFORE ANYTHING WE TAKE PART IN)</h2>' + blogTbl : '') + (startNow.length ? '<h2>ARTWORK STARTS THIS WEEK</h2>' + tbl(startNow) : '') + (late.length ? '<h2>ALREADY LATE TO START: USE THE FAST LANE</h2>' + tbl(late) : '')
     + (live.length ? '<h2>TRENDS TO MAKE (EACH EXPIRES 72 HOURS AFTER IT WAS SEEN)</h2><table><tr><th>Trend</th><th>Platform</th><th>For</th><th>Our angle</th></tr>' + live.map((t) => '<tr><td><b>' + esc(t.hook) + '</b><small>' + esc(t.why) + '</small></td><td>' + esc(t.platform) + '</td><td>' + esc(t.agent) + '</td><td>' + esc(t.angle) + '</td></tr>').join("") + '</table>' : '')
     + '<div class=note>Every number in a post comes from Najma with its date; reviews are summarised, never quoted; property advertisements carry the advertising permit number; the Managing Director approves sensitive items. Prepared by Serah Najjuko Ganyana for FN Realty. The method, templates and tools that produced this plan are her own (employment contract, clause 12.2) and are not part of what is provided.</div></div>'
     + '<div class=btns><button class=btn onclick="print()">Share / Save as PDF</button></div></body></html>';
@@ -170,14 +175,15 @@ function monthHtml(items, ym) {
     + '.note{margin-top:18px;padding-top:8px;border-top:1px solid #E9EAEC;font-size:7.8pt;color:#626B7C}.btns{position:fixed;right:14px;bottom:14px}.btn{background:' + FN_NAVY + ';color:' + FN_PEACH + ';border:0;border-radius:99px;padding:10px 16px;font:600 10pt Inter,sans-serif;cursor:pointer}@media print{body{background:#fff}.pg{border:0;padding:0}.btns{display:none}}</style></head><body><div class=pg><div class=latt></div>'
     + '<header><div><h1><em>Events</em> for ' + MN[mo - 1] + '</h1><p>What we are looking at, for your decision · ' + y + '</p></div><img src="' + FN_LOGO + '" alt="FN Realty"></header>'
     + '<h2>THE MONTH AT A GLANCE</h2>' + (long.length ? '<div class=run><b>Running through the month:</b> ' + long.map((i) => '<span>' + esc(i.title) + '</span>').join("") + '</div>' : '')
-    + '<table class=cal><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr><tr>' + cells + '</tr></table><div class=key><i style="background:#D9782E"></i>Industry event<i style="background:#15665C"></i>Cause, national or seasonal moment</div>'
-    + (mk.length ? '<h2>INDUSTRY EVENTS</h2>' + tbl(mk) : '') + (kn.length ? '<h2>MOMENTS AND CAUSES</h2>' + tbl(kn) : '') + (inM.length ? '' : '<p>Nothing in the plan for this month yet.</p>')
+    + '<table class=cal><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr><tr>' + cells + '</tr></table><div class=key><i style="background:#D9782E"></i>Industry related<i style="background:#15665C"></i>Commercial (cause, national or seasonal moment)</div>'
+    + (mk.length ? '<h2>INDUSTRY RELATED</h2>' + tbl(mk) : '') + (kn.length ? '<h2>COMMERCIAL</h2>' + tbl(kn) : '') + (inM.length ? '' : '<p>Nothing in the plan for this month yet.</p>')
     + '<div class=note>For a decision: tick one box per line. “Attend” means FN takes part and creates content from it; “Content only” means we cover it from the office without attending; “Skip” means we leave it. Dates marked Expected depend on a moon sighting or an official announcement and may move. Prepared by Serah Najjuko Ganyana for FN Realty. The method, templates and tools that produced this are her own (employment contract, clause 12.2) and are not part of what is provided.</div></div>'
     + '<div class=btns><button class=btn onclick="print()">Share / Save as PDF</button></div></body></html>';
 }
 
 const PLAN_JS = String.raw`
-var KEY=new URLSearchParams(location.search).get("key")||"",D=null,VIEW="cal",SHEET=null;
+var KEY=new URLSearchParams(location.search).get("key")||"",D=null,VIEW="cal",SHEET=null,CAT="all";
+function vis(i){return CAT==="all"||i.pillar===CAT}
 function $(i){return document.getElementById(i)}
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
 function api(o){return fetch("/momo/work/plan/api?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)}).then(function(r){return r.json()})}
@@ -199,30 +205,32 @@ function card(i){var as=artStart(i),t=today(),late=i.state==="Planned"&&as<t&&i.
  return '<div class=ent data-id="'+esc(i.id)+'" style="cursor:pointer"><h3>'+esc(i.title)+'</h3><div class=m>'+esc(span)+'</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0">'+chip(pil(i.pillar),PC[i.pillar]||"#15665C")+chip(i.certainty,i.certainty==="Expected"?"#B04A3A":"#626B78")+chip(fmtName(i.format),"#8A6F3E")+chip(i.state,i.state==="Posted"?"#15948A":"#626B78")+'</div>'
   +'<div class=line style="margin:2px 0">'+esc(i.owner)+(i.agent?' · for '+esc(i.agent):'')+'</div>'
   +(i.state==="Posted"?'':late?'<div class=line style="color:#B04A3A;margin:2px 0"><b>Artwork should have started '+esc(fd(as))+': use the fast lane.</b></div>':'<div class=line style="margin:2px 0">Artwork starts <b>'+esc(fd(as))+'</b></div>')
+  +(i.taking_part&&i.state!=="Posted"?'<div class=line style="margin:2px 0;color:#15665C"><b>Taking part · blog post due '+esc(fd(addDays(i.start,-D.blog_lead)))+'</b></div>':'')
   +(i.note?'<div class=line style="margin:2px 0;color:#626B78">'+esc(i.note)+'</div>':'')+'</div>'}
-function drawCal(){var t=today(),from=addDays(t,-3),to=addDays(t,60),L=D.items.filter(function(i){return i.end>=from&&i.start<=to&&i.state!=="Posted"||i.start>=from&&i.start<=to}),by={};
+function drawCal(){var t=today(),from=addDays(t,-3),to=addDays(t,60),L=D.items.filter(function(i){return vis(i)&&(i.end>=from&&i.start<=to&&i.state!=="Posted"||i.start>=from&&i.start<=to)}),by={};
  L.sort(function(a,b){return a.start<b.start?-1:1}).forEach(function(i){var w=monday(i.start<from?from:i.start);(by[w]=by[w]||[]).push(i)});
  var ks=Object.keys(by).sort(),h=ks.map(function(w){return '<h2 style="font-size:.95rem;margin:16px 0 6px;color:#8A6F3E">Week of '+esc(fd(w))+(w===monday(t)?' · this week':'')+'</h2>'+by[w].map(card).join("")}).join("");
- $("pbody").innerHTML=(h||'<div class=empty><p>Nothing in the next eight weeks.</p></div>')
+ $("pbody").innerHTML=(h||'<div class=empty><p>'+(CAT==="market"?'Nothing industry related yet. Add a link you found on social media, a launch, or an open house, and Najma updates will arrive here.':CAT==="known"?'Nothing commercial in the next eight weeks.':'Nothing in the next eight weeks.')+'</p></div>')
  +'<a class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:14px" target=_blank href="/momo/work/plan/week?key='+encodeURIComponent(KEY)+'&from='+monday(t)+'">This week\'s plan for the team (PDF)</a>';
  document.querySelectorAll("[data-id]").forEach(function(e){e.onclick=function(){editItem(e.getAttribute("data-id"))}})}
 function editItem(id){var i=D.items.filter(function(x){return x.id===id})[0];if(!i)return;
  var row=function(k,lab,val){return '<div class=fr id="e_'+k+'"><b>'+esc(lab)+'</b><span>'+esc(val||"tap to set")+'</span><i>&#8250;</i></div>'};
- sheet(esc(i.title),row("format","Format",fmtName(i.format))+row("owner","Who makes it",i.owner)+row("assignee","Assigned to",i.assignee)+row("agent","For which agent",i.agent)+row("state","Status",i.state)+(i.assignee&&numOf(i.assignee)?'<a class=ghost id=e_wa target=_blank rel=noopener style="display:block;text-align:center;text-decoration:none;margin:8px 0" href="'+esc(waLink(numOf(i.assignee),"Hi "+nameOf(i.assignee)+", "+i.title+" ("+fmtName(i.format)+"): artwork starts "+fd(artStart(i))+", it goes out "+fd(i.start)+". Can you confirm you have it?"))+'">Message '+esc(nameOf(i.assignee))+' on WhatsApp</a>':'')+'<textarea id=e_note rows=2 style="width:100%;margin:8px 0" placeholder="Note">'+esc(i.note)+'</textarea><button type=button class=ghost id=e_del style="width:100%;margin-bottom:8px">Remove from the plan</button>',function(s){
+ sheet(esc(i.title),row("format","Format",fmtName(i.format))+row("owner","Who makes it",i.owner)+row("taking","We are taking part",i.taking_part?"Yes · blog due "+fd(addDays(i.start,-D.blog_lead)):"No · tap if we are")+row("assignee","Assigned to",i.assignee)+row("agent","For which agent",i.agent)+row("state","Status",i.state)+(i.assignee&&numOf(i.assignee)?'<a class=ghost id=e_wa target=_blank rel=noopener style="display:block;text-align:center;text-decoration:none;margin:8px 0" href="'+esc(waLink(numOf(i.assignee),"Hi "+nameOf(i.assignee)+", "+i.title+" ("+fmtName(i.format)+"): artwork starts "+fd(artStart(i))+", it goes out "+fd(i.start)+". Can you confirm you have it?"))+'">Message '+esc(nameOf(i.assignee))+' on WhatsApp</a>':'')+'<textarea id=e_note rows=2 style="width:100%;margin:8px 0" placeholder="Note">'+esc(i.note)+'</textarea><button type=button class=ghost id=e_del style="width:100%;margin-bottom:8px">Remove from the plan</button>',function(s){
   var pickOne=function(k,lab,list){s.querySelector("#e_"+k).onclick=function(){sheet(lab,opts(list,i[k]),function(s2){s2.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){i[k]=o.getAttribute("data-v");api({action:"item_save",item:i}).then(SHEETALL)}})})}};
   s.querySelector("#e_format").onclick=function(){sheet("Format",opts(D.formats,i.format),function(s2){s2.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){i.format=o.getAttribute("data-v");api({action:"item_save",item:i}).then(SHEETALL)}})})};
   pickOne("owner","Who makes it",D.owners);pickOne("state","Status",D.states);
+  s.querySelector("#e_taking").onclick=function(){i.taking_part=!i.taking_part;api({action:"item_save",item:i}).then(SHEETALL)};
   s.querySelector("#e_assignee").onclick=function(){sheet("Assigned to",opts([""].concat((D.team||[]).map(function(x){return x.name})),i.assignee),function(s2){s2.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){i.assignee=o.getAttribute("data-v");api({action:"item_save",item:i}).then(SHEETALL)}})})};
   s.querySelector("#e_agent").onclick=function(){sheet("For which agent",opts([""].concat(D.agents),i.agent),function(s2){s2.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){i.agent=o.getAttribute("data-v");api({action:"item_save",item:i}).then(SHEETALL)}})})};
   s.querySelector("#e_note").onchange=function(){i.note=this.value;api({action:"item_save",item:i})};
   s.querySelector("#e_del").onclick=function(){if(confirm("Remove this from the plan?"))api({action:"item_delete",id:i.id}).then(SHEETALL)}})}
-function addItem(day){var n={title:"",start:day||today(),pillar:"market",certainty:"Researched",format:"post",owner:"Graphic designer",agent:"",source:"",note:""};
+function addItem(day){var n={title:"",start:day||today(),pillar:CAT==="known"?"known":"market",certainty:"Researched",format:"post",owner:"Graphic designer",agent:"",source:"",note:""};
  var draw=function(s){s.querySelector("#a_pil").innerHTML=D.pillars.map(function(p){return '<button type=button data-v="'+p[0]+'"'+(n.pillar===p[0]?' class=on':'')+'>'+esc(p[1])+'</button>'}).join("");
   s.querySelectorAll("#a_pil button").forEach(function(b){b.onclick=function(){n.pillar=b.getAttribute("data-v");draw(s)}});
   s.querySelector("#a_fmt").innerHTML=D.formats.map(function(f){return '<button type=button data-v="'+f[0]+'"'+(n.format===f[0]?' class=on':'')+'>'+esc(f[1])+'</button>'}).join("");
   s.querySelectorAll("#a_fmt button").forEach(function(b){b.onclick=function(){n.format=b.getAttribute("data-v");draw(s)}});
   s.querySelector("#a_art").textContent="Artwork starts "+fd(addDays(n.start,-(D.lead[n.format]||7)))};
- sheet("Add to the plan",'<input id=a_t class=sin placeholder="What is it? (a launch, an event, a cause)" style="width:100%;margin-bottom:8px"><div class=line>Date it goes out</div><input id=a_d type=date value="'+n.start+'" style="width:100%;margin-bottom:8px"><div class=line>Where it came from</div><div class=seg id=a_pil style="grid-template-columns:1fr 1fr 1fr"></div><div class=line>Format</div><div class=seg id=a_fmt style="grid-template-columns:repeat(4,1fr);gap:6px"></div><div class=line id=a_art style="margin:8px 0;font-weight:600"></div><input id=a_s class=sin placeholder="Source link (a launch needs one)" style="width:100%;margin-bottom:8px"><div class=line>You choose who makes it and which agent after saving.</div>',function(s){
+ sheet("Add to the plan",'<input id=a_t class=sin placeholder="What is it? (a launch, an event, a cause)" style="width:100%;margin-bottom:8px"><div class=line>Date it goes out</div><input id=a_d type=date value="'+n.start+'" style="width:100%;margin-bottom:8px"><div class=line>Where it came from</div><div class=seg id=a_pil style="grid-template-columns:1fr 1fr 1fr"></div><div class=line>Format</div><div class=seg id=a_fmt style="grid-template-columns:repeat(4,1fr);gap:6px"></div><div class=line id=a_art style="margin:8px 0;font-weight:600"></div><input id=a_s class=sin placeholder="Link: a social post, an article, a launch page (industry items need one)" style="width:100%;margin-bottom:8px"><div class=line>You choose who makes it and which agent after saving.</div>',function(s){
   draw(s);s.querySelector("#a_d").onchange=function(){n.start=this.value||today();draw(s)};
   s.querySelector(".done").onclick=function(){n.title=s.querySelector("#a_t").value.trim();n.source=s.querySelector("#a_s").value.trim();if(!n.title){alert("Say what it is first.");return}
    if(n.pillar!=="known"&&!n.source&&!confirm("A market item should carry a source link. Save without one?"))return;api({action:"item_save",item:n}).then(SHEETALL)}})}
@@ -232,10 +240,10 @@ function trendCard(t){var left=Math.round((Date.parse(t.expires_at)-Date.now())/
 var MONTH=null,MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
 function ymOf(d){return d.slice(0,7)}
 function shiftMonth(ym,n){var y=+ym.slice(0,4),m=+ym.slice(5,7)-1+n;y+=Math.floor(m/12);m=((m%12)+12)%12;return y+"-"+String(m+1).padStart(2,"0")}
-function itemsOn(ds){return D.items.filter(function(i){return i.pillar!=="trend"&&i.start<=ds&&i.end>=ds&&i.state!=="Posted"})}
+function itemsOn(ds){return D.items.filter(function(i){return vis(i)&&i.pillar!=="trend"&&i.start<=ds&&i.end>=ds&&i.state!=="Posted"})}
 function isLong(i){return (Date.parse(i.end)-Date.parse(i.start))/864e5>3}
 function drawMonth(){var ym=MONTH||ymOf(today()),y=+ym.slice(0,4),mo=+ym.slice(5,7),days=new Date(Date.UTC(y,mo,0)).getUTCDate(),lead=(new Date(ym+"-01T00:00:00Z").getUTCDay()+6)%7,t=today(),
- first=ym+"-01",last=ym+"-"+String(days).padStart(2,"0"),inM=D.items.filter(function(i){return i.pillar!=="trend"&&i.start<=last&&i.end>=first&&i.state!=="Posted"}),longs=inM.filter(isLong),
+ first=ym+"-01",last=ym+"-"+String(days).padStart(2,"0"),inM=D.items.filter(function(i){return vis(i)&&i.pillar!=="trend"&&i.start<=last&&i.end>=first&&i.state!=="Posted"}),longs=inM.filter(isLong),
  cells=[],wk=[],rows=[],i,d;
  for(i=0;i<lead;i++)cells.push(null);for(d=1;d<=days;d++)cells.push(ym+"-"+String(d).padStart(2,"0"));while(cells.length%7)cells.push(null);
  for(i=0;i<cells.length;i+=7)rows.push(cells.slice(i,i+7));
@@ -260,7 +268,7 @@ function waLink(num,text){return "https://wa.me/"+num+"?text="+encodeURIComponen
 function nameOf(n){return String(n||"").replace(/\s*\(.*\)$/,"").split(" ")[0]}
 function numOf(name){var r="";(D.team||[]).forEach(function(x){if(x.name===name)r=x.whatsapp});return r}
 function pollText(ym){var y=+ym.slice(0,4),mo=+ym.slice(5,7),days=new Date(Date.UTC(y,mo,0)).getUTCDate(),first=ym+"-01",last=ym+"-"+String(days).padStart(2,"0"),
- L=D.items.filter(function(i){return i.pillar!=="trend"&&i.start<=last&&i.end>=first&&i.state!=="Posted"}).sort(function(a,b){return a.start<b.start?-1:1});
+ L=D.items.filter(function(i){return vis(i)&&i.pillar!=="trend"&&i.start<=last&&i.end>=first&&i.state!=="Posted"}).sort(function(a,b){return a.start<b.start?-1:1});
  if(!L.length)return "";return "Team, here are the events and moments for "+MN[mo-1]+". Which ones should we take part in? Please reply with the numbers.\n\n"+L.map(function(i,k){return (k+1)+") "+fd(i.start)+(i.end!==i.start?" – "+fd(i.end):"")+" · "+i.title}).join("\n")+"\n\nWe will decide at the Monday huddle."}
 function shareSheet(){var ym=MONTH||ymOf(today()),mn=MN[+ym.slice(5,7)-1];
  var row=function(id,lab,sub){return '<div class=fr id="'+id+'"><b>'+esc(lab)+'</b><span>'+esc(sub)+'</span><i>&#8250;</i></div>'};
@@ -306,7 +314,10 @@ function addTrend(){var n={platform:"",url:"",hook:"",why:"",angle:""};
   s.querySelector(".done").onclick=function(){n.url=u.value.trim();n.hook=s.querySelector("#n_h").value.trim();n.why=s.querySelector("#n_w").value.trim();n.angle=s.querySelector("#n_a").value.trim();
    if(!n.url&&!n.hook){alert("Paste a link, or say what the trend is.");return}var btn=this;btn.disabled=true;btn.textContent="Saving...";
    api({action:"trend_save",trend:{platform:n.manual?n.platform:"",url:n.url,hook:n.hook,why:n.why,angle:n.angle}}).then(function(j){if(j.error){btn.disabled=false;btn.textContent="Done";alert(j.error);return}SHEETALL()})}})}
-function draw(){$("tcal").classList.toggle("on",VIEW==="cal");$("tmon").classList.toggle("on",VIEW==="mon");$("ttr").classList.toggle("on",VIEW==="tr");$("padd").textContent=VIEW==="tr"?"Add a trend":"Add to the plan";if(VIEW==="cal")drawCal();else if(VIEW==="mon")drawMonth();else drawTrends()}
+function drawCat(){var el=$("pcat");if(VIEW==="tr"){el.style.display="none";return}el.style.display="";var cnt=function(c){return D.items.filter(function(i){return i.pillar!=="trend"&&(c==="all"||i.pillar===c)&&i.state!=="Posted"}).length};
+ el.innerHTML=[["all","All"],["known","Commercial"],["market","Industry related"]].map(function(c){return '<button type=button data-c="'+c[0]+'"'+(CAT===c[0]?' class=on':'')+' style="padding:10px 4px;font-size:.8rem">'+c[1]+' <small style="opacity:.7">'+cnt(c[0])+'</small></button>'}).join("");
+ el.querySelectorAll("button").forEach(function(b){b.onclick=function(){CAT=b.getAttribute("data-c");draw()}})}
+function draw(){drawCat();$("tcal").classList.toggle("on",VIEW==="cal");$("tmon").classList.toggle("on",VIEW==="mon");$("ttr").classList.toggle("on",VIEW==="tr");$("padd").textContent=VIEW==="tr"?"Add a trend":"Add to the plan";if(VIEW==="cal")drawCal();else if(VIEW==="mon")drawMonth();else drawTrends()}
 function load(){fetch("/momo/work/plan/api?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(j){D=j;draw()})}
 $("tcal").onclick=function(){VIEW="cal";draw()};$("tmon").onclick=function(){VIEW="mon";draw()};$("ttr").onclick=function(){VIEW="tr";draw()};$("padd").onclick=function(){if(VIEW==="tr")addTrend();else addItem()};$("pshare").onclick=shareSheet;
 $("pback").href="/momo/work?key="+encodeURIComponent(KEY);load();
@@ -314,7 +325,7 @@ $("pback").href="/momo/work?key="+encodeURIComponent(KEY);load();
 
 const PLAN_BODY = '<a class=back id=pback href="#">&#8592; Work log</a><div class=tag>MOMO · WORK</div><h1>Content plan</h1>'
   + '<div class=seg style="margin:8px 0 12px;grid-template-columns:1fr 1fr 1fr"><button type=button id=tcal class=on>List</button><button type=button id=tmon>Month</button><button type=button id=ttr>Trends</button></div>'
-  + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><button type=button id=padd class=gold>Add to the plan</button><button type=button id=pshare class=ghost>Share</button></div><div id=pbody></div>';
+  + '<div class=seg id=pcat style="margin:0 0 10px;grid-template-columns:1fr 1fr 1fr;gap:6px"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><button type=button id=padd class=gold>Add to the plan</button><button type=button id=pshare class=ghost>Share</button></div><div id=pbody></div>';
 
 export async function planRoute(request, env, url, deps, ctx) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
@@ -332,7 +343,7 @@ export async function planRoute(request, env, url, deps, ctx) {
   }
   if (p === "/momo/work/plan/api") {
     await ensureSeed(env);
-    if (request.method === "GET") return J({ today: today(), items: await planItems(env), trends: await listPrefix(env, TRP), agents: ctx.agents, team: await teamList(env, ctx.team), formats: FORMATS, owners: OWNERS, states: STATES, pillars: PILLARS, certainty: CERT, platforms: PLATFORMS, lead: LEAD, trend_hours: TREND_HOURS });
+    if (request.method === "GET") return J({ today: today(), items: await planItems(env), trends: await listPrefix(env, TRP), agents: ctx.agents, team: await teamList(env, ctx.team), formats: FORMATS, owners: OWNERS, states: STATES, pillars: PILLARS, certainty: CERT, platforms: PLATFORMS, lead: LEAD, blog_lead: BLOG_LEAD_DAYS, trend_hours: TREND_HOURS });
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
     const rid = (v) => String(v || "").replace(/[^a-z0-9_]/gi, "").slice(0, 40) || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
     if (b.action === "item_save") { const it = cleanItem(b.item || {}, rid((b.item || {}).id)); if (!it.title) return J({ error: "A title is needed." }, 400); await env.MEETINGS.put(PLP + it.id, JSON.stringify(it)); return J({ ok: true, item: it }); }

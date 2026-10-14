@@ -77,6 +77,18 @@ ok(as2.item.assignee === "Sousan Khatibzadeh", "an item can be assigned to a tea
 const mp = await (await req("/momo/work/plan/month?month=2026-11")).text();
 ok(/Events<\/em> for November/.test(mp) && /Big 5 Global/.test(mp) && /Movember/.test(mp) && /<title>FN Events for November 2026<\/title>/.test(mp) && /Attend/.test(mp) && /Content only/.test(mp), "the month PDF for Ali lists November's events with a decision box each", mp.slice(0, 160));
 ok(!/key=/.test(mp) && !/\/momo\//.test(mp) && /clause 12\.2/.test(mp) && !/Claude|Anthropic|GPT/i.test(mp.replace(/data:image\/[^"']+/g, "")), "the month PDF carries no link into Momo Work and no key");
+// v595: categories (Commercial / Industry related / Trend) and the one-week blog rule
+const cat = await (await req("/momo/work/plan/api")).json();
+ok(cat.pillars.map((x) => x[1]).join() === "Commercial,Industry related,Trend" && cat.blog_lead === 7, "the categories are Commercial, Industry related and Trend; the blog lead is 7 days");
+ok(cat.items.find((i) => i.id === "m_big5_2026").pillar === "market" && cat.items.find((i) => i.id === "k_national_2026").pillar === "known", "Big 5 is industry related; National Day is commercial");
+const tp = await (await req("/momo/work/plan/api", { action: "item_save", item: { ...cat.items.find((i) => i.id === "m_big5_2026"), taking_part: true } })).json();
+ok(tp.item.taking_part === true && tp.item.source === "", "an item can be marked 'we are taking part'");
+const lnk = await (await req("/momo/work/plan/api", { action: "item_save", item: { title: "Launch seen on Instagram", start: "2026-11-24", pillar: "market", source: "www.instagram.com/p/abc/", taking_part: true } })).json();
+ok(lnk.item.source === "https://www.instagram.com/p/abc/", "an industry item accepts any link, even a bare address", lnk.item.source);
+const wkb = await (await req("/momo/work/plan/week?from=2026-11-16")).text();
+ok(/BLOG POSTS DUE/.test(wkb) && /Big 5 Global/.test(wkb) && /16 Nov/.test(wkb), "the week of 16 Nov lists the blog post for Big 5 (23 Nov), due 16 Nov", wkb.match(/BLOG POSTS DUE[\s\S]{0,300}/)?.[0]?.replace(/<[^>]+>/g, " "));
+const wkn = await (await req("/momo/work/plan/week?from=2026-10-12")).text();
+ok(!/BLOG POSTS DUE/.test(wkn), "a week with no blog due carries no blog section");
 const own = await req("/momo/work/plan/api", null, false);
 ok(own.status === 404, "anyone but Najjuko gets nothing");
 const own2 = await req("/momo/work/plan", null, false);
