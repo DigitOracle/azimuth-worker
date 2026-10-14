@@ -5,7 +5,7 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.log("FAIL", m); } }
 const ix = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 ok(/\["fit", "\/momo", "fit", "MOMO"\]/.test(ix), "the MOMO tab goes to /momo");
 ok(/\(\?:board\|studio\|trends\|fit\|momo\)/.test(ix), "a client link never shows the MOMO tab (/momo stripped like /fit)");
-ok(/url\.pathname === "\/momo" \|\| url\.pathname === "\/momo\/work"/.test(ix) && /keyTier\(env, url\) !== "admin"\) return new Response\("not found", \{ status: 404 \}\)/.test(ix), "/momo and /momo/work are owner only");
+ok(/url\.pathname === "\/momo" \|\| url\.pathname\.startsWith\("\/momo\/work"\)/.test(ix) && /keyTier\(env, url\) !== "admin"\) return new Response\("not found", \{ status: 404 \}\)/.test(ix), "/momo and /momo/work are owner only");
 const fn = ix.slice(ix.indexOf("function momoHtml("), ix.indexOf("// v235 (Kendall, 22 Sep 2026) — START: five ways in."));
 ok(/href="\/fit' \+ q \+ '"[^]*<b>Play<\/b>/.test(fn), "Play opens today's Momo (/fit)");
 ok(/href="\/momo\/work' \+ q \+ '"[^]*<b>Work<\/b>/.test(fn), "Work opens /momo/work");

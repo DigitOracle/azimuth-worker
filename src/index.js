@@ -1,4 +1,5 @@
 import { askBoxHtml, askRoute, askFloatHtml } from "./ask_najma.js";   // v555, v556
+import { workRoute, WORK_CSS } from "./work_log.js";   // v564 - Momo Work: Najjuko's FN Realty work log
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
@@ -3371,9 +3372,12 @@ async function appFetch(request, env, ctx) {
         const _mrk = residentsKeyOf(env, url);
         return clientResp(env, url, najMoreHtml(url.searchParams.get("key") || "", _mrk, keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
-      if (url.pathname === "/momo" || url.pathname === "/momo/work") {   // v563 (Kendall 14 Oct 2026) - MOMO opens on Work and Play; Play is today's Momo (/fit), Work is new and empty for now
+      if (url.pathname === "/momo" || url.pathname.startsWith("/momo/work")) {   // v563 (Kendall 14 Oct 2026) - MOMO opens on Work and Play; Play is today's Momo (/fit)
         if (!clientOk(env, url) || keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
-        return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", url.pathname === "/momo/work"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+        // v564 - Work is Najjuko's private FN Realty log (src/work_log.js); her MOMO tab opens straight on it (Play is Kendall's health log)
+        if (url.pathname === "/momo" && isNajjuko(env, url)) return Response.redirect(url.origin + "/momo/work?key=" + encodeURIComponent(url.searchParams.get("key") || ""), 302);
+        if (url.pathname.startsWith("/momo/work")) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage }); if (_wr) return _wr; }
+        return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
@@ -4978,6 +4982,13 @@ const najNav = (key, active, rk) => {   // v208 (Kendall, 21 Sep 2026) - rk ride
 
 // v563 (Kendall 14 Oct 2026: "When I click on [Momo], I'm going to want work and play. Play is everything that exists now. Work, we
 // are going to build out.") - the MOMO tab's front door: two cards. Play opens today's Momo unchanged; Work is an empty room for now.
+// v564 - the shared Momo page shell (the Work log draws its own body inside it)
+function momoPage(key, rk, body) {
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#0C1413"><title>Momo</title>' + NAJ_FONTS
+    + '<style>body{margin:0;background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans",sans-serif;padding:28px 16px 110px}.w{max-width:560px;margin:0 auto}.tag{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.14em;color:#C5A56A}'
+    + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:2rem;margin:6px 0 22px}.back{color:#8FA39B;text-decoration:none;font-size:.85rem}.empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:48px 0;border:1px dashed #24352F;border-radius:18px;color:#8FA39B}.empty p{margin:0}'
+    + WORK_CSS + NAJ_NAV_CSS + '</style></head><body><div class=w>' + body + '</div>' + najNav(key, "fit", rk) + '</body></html>';
+}
 function momoHtml(key, rk, work) {
   const k = encodeURIComponent(key), q = "?key=" + k + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const ic = (d) => '<svg viewBox="0 0 24 24" width=30 height=30 fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + d + "</svg>";
@@ -12851,6 +12862,11 @@ function clientKeysOf(env) {
   return String(env.CLIENT_KEY || "").split(",").map((k) => k.trim()).filter((k) => k.length >= 12 && !(read && ctEq(k, read)) && !(res && ctEq(k, res)));
 }
 // v534 - INSIDER_KEY (secret, comma-separated, one per person): the only keys that see Property Finder broker names, numbers and advert links
+// v564 - Najjuko's own insider key (INSIDER_KEY entry ins_najjuko_...): the only link that opens her Momo Work log
+function isNajjuko(env, url) {
+  const k = String(url.searchParams.get("key") || "");
+  return !!k && String(env.INSIDER_KEY || "").split(",").map((x) => x.trim()).filter((x) => x.indexOf("ins_najjuko_") === 0 && x.length >= 20).some((x) => ctEq(k, x));
+}
 function isInsider(env, url) {
   const k = url.searchParams.get("key") || "";
   return !!k && String(env.INSIDER_KEY || "").split(",").map((x) => x.trim()).filter((x) => x.length >= 20).some((x) => ctEq(k, x));
