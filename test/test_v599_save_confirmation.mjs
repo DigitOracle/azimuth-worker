@@ -7,7 +7,7 @@ const js = await (await m.workRoute(new Request("https://w/momo/work.js?key=K"),
 let parsed = false; try { new Function(js); parsed = true; } catch (e) { console.log(String(e)); }
 ok(parsed, "the screen script parses");
 ok(/function toast\(msg,bad\)/.test(js) && js.includes("\\u2713 Saved: ") && /is filed under /.test(js), "a saved entry is confirmed in words with the day it was filed under");
-ok(/\.catch\(function\(\)\{\$\("pv"\)\.disabled=false;toast\("Not saved: no connection/.test(js), "a failed save (no connection) re-enables the tick and says it did not save");
+ok(/\.catch\(function\(\)\{\$\("pv"\)\.disabled=false;\$\("pv"\)\.classList\.remove\("saving"\);toast\("Not saved: no connection/.test(js), "a failed save (no connection) re-enables the tick and says it did not save");
 ok(/toast\("Not saved: "\+\(j\.error/.test(js) && !/alert\(j\.error\|\|"Could not save"\)/.test(js), "a refused save says so in the same place instead of a pop-up");
 ok(/The server answered |The server sent something unexpected/.test(js), "a non-JSON or error answer becomes a readable message");
 ok(/momo_work_draft/.test(js) && /function resumeDraft/.test(js) && /load\(\);resumeDraft\(\)/.test(js) && /function preview\(e\)\{PREV=JSON\.parse\(JSON\.stringify\(e\)\);saveDraft\(\);/.test(js), "an entry being checked is kept as a draft and offered back when the app opens");
@@ -20,4 +20,8 @@ const h = f(localStorage, { title: "Pixxi leads" }, [{ title: "a" }, { title: "b
 h.saveDraft(); const d = JSON.parse(store.momo_work_draft);
 ok(d.prev.title === "Pixxi leads" && d.qi === 1 && d.q.length === 2 && d.date === "2026-10-14", "the draft keeps the entry, its place in the queue and the date", d);
 h.clearDraft(); ok(!store.momo_work_draft, "a saved or cancelled entry leaves no draft");
+const page = await (await m.workRoute(new Request("https://w/momo/work?key=K"), env, new URL("https://w/momo/work?key=K"), { isNaj: () => true, model: "m", page: (k, r, b) => b, claudeJSON: async () => null })).text();
+const css = String((await import("../src/work_log.js")).WORK_CSS || "");
+ok(/\.tick\.saving::before\{[^}]*animation:tickspin/.test(css) && /\.tick\.saving::after\{content:"Saving"/.test(css) && /\.tick\.saved::after\{content:"Saved"/.test(css), "v601: the tick shows a turning ring and the word Saving while the save is in flight, then Saved");
+ok(/\$\("pv"\)\.classList\.add\("saving"\)/.test(js) && (js.match(/classList\.remove\("saving"\)/g) || []).length >= 3, "the ring starts on tap and is cleared on success, refusal and network failure");
 console.log("v599 save confirmation: " + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
