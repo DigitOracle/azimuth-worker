@@ -138,6 +138,7 @@ function centreSummary(e){var core=e.core&&e.core.length?'<p class=note style="m
   return '<div class=card id=cencard><button type=button class=btn data-cback=1>'+c.ico("caret-down","evi")+' All of Dubai</button><div class=cenhd><span class=cnum style="background:'+e.colour+'">'+e.id+'</span><div><h2 dir=auto>'+X(e.name)+'</h2><span class=note>'+X(e.status)+' centre. '+X(e.role)+'</span></div></div>'
   +(ABBR[e.id]?'<p class=note style="margin:0 0 6px">'+ABBR[e.id]+'</p>':'')
   +'<div class=cg2><div class=cstat><b>'+fm(e.units)+'</b><small>registered homes, core and adjacent areas ('+e.share+'% of Dubai) <span class="tag cder">DERIVED</span></small></div><div class=cstat><b>'+fm(e.units_all)+'</b><small>with the '+e.nper+' peripheral areas in the lighter tint ('+e.share_all+'%) <span class="tag cder">DERIVED</span></small></div></div>'
+  +(typeof BEDMED!=="undefined"&&BEDMED?BEDMED.boxes("centre",String(e.id),S.win,"Centre "+e.id+": "+e.name,"bmside"):"")
   +core+caps+top
   +'<p class=note style="margin:6px 0 0">Only the core is in a district the plan names. Every other area here is placed by distance to the core (our grouping, DERIVED_NEAREST), never as official. '+X(NOTE)+'. Source: '+X(SRC)+'.</p>'
   +'<p class=label style="margin-top:14px">Areas in this centre: tap one</p>'+areaCards(al,12)
