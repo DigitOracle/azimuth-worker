@@ -16,6 +16,7 @@ import { COMMUNITY_LABELS, labelledName } from "./community_labels.js";   // v30
 import { kvJson } from "./brief.js";
 import { INDEX_KEY, LEGACY_KEY, compactIndex } from "./investor_facts.js";   // v379 - the investor-PDF facts index (district shards)
 import { PLACES_JS, PLACES_CSS, PLACES_KV_NAME, PLACEINFO_KV_NAME, cleanPlaces, cleanPlaceInfo } from "./devmap_places.js";   // v606 - the venue tiles and a neighbourhood block become cards that show their places on the map
+import { THEME_JS, THEME_CSS } from "./devmap_theme.js";   // v612 - light and dark interface
 import { PANELS_JS, PANELS_CSS, PANELS_HTML } from "./devmap_panels.js";   // v605 - the left sheet and the right panel each collapse (tab on the inner edge, kept per browser)
 import { VENUES_JS, VENUES_CSS, VENUES_KV_NAME, cleanVenues } from "./devmap_venues.js";   // v605 - what is inside each centre: restaurants, parks, gyms, schools, supermarkets, clinics and the 2027 pipeline
 import { BEDMED_JS, BEDMED_CSS, BEDMED_KV_NAME, ASKING_KV_NAME, cleanBedmed, cleanAsking } from "./devmap_bedmed.js";   // v604 - typical prices by bedroom (median sale price and rent, 1-3 bed flats) in the right panel
@@ -867,16 +868,18 @@ function setSheet(max){var s=$("side"),g=$("grab");s.classList.toggle("max",!!ma
 $("grab").onclick=function(){setSheet(!$("side").classList.contains("max"))};
 function startMap(){
   var lg=document.createElement("div");lg.id="maplg";$("map").appendChild(lg);var lkc=document.createElement("div");lkc.id="lockchips";$("map").appendChild(lkc);var bs=document.createElement("div");bs.id="bsnap";bs.setAttribute("role","tooltip");bs.setAttribute("aria-live","polite");bs.style.display="none";$("map").appendChild(bs);
-  map=new maplibregl.Map({container:"map",style:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",center:[55.2,25.08],zoom:9.6,attributionControl:{compact:true}});
+  map=new maplibregl.Map({container:"map",style:(typeof THEME!=="undefined"&&THEME?THEME.init():"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"),center:[55.2,25.08],zoom:9.6,attributionControl:{compact:true}});
   mapLegend();map.addControl(new maplibregl.NavigationControl({showCompass:false}),"top-right");
-  map.on("load",function(){
+  var BOUND=false;
+  function buildLayers(){                                   // v612 - sources and layers: on load, and again after every basemap change (MapLibre drops them all)
+
     var layers=map.getStyle().layers,fs=(layers.find(function(l){return l.type==="symbol"})||{}).id;
     var font=((layers.find(function(l){return l.type==="symbol"&&l.layout&&l.layout["text-font"]})||{}).layout||{})["text-font"]||["Open Sans Regular"];
     map.addSource("areas",{type:"geojson",data:features()});
     map.addLayer({id:"a-fill",type:"fill",source:"areas",paint:{"fill-color":["match",["get","v"],0,"#6f7a78",1,"#2f8a7f",2,"#3987e5",3,"#c98500","#c5a56a"],"fill-opacity":["case",["==",["get","dim"],1],0.04,["==",["get","v"],0],0.12,0.55]}},fs);
     map.addLayer({id:"a-line",type:"line",source:"areas",paint:{"line-color":["case",["==",["get","dim"],1],"rgba(197,165,106,0.1)",["get","sel"],"#c5a56a","rgba(197,165,106,0.45)"],"line-width":["case",["get","sel"],2.6,0.8]}},fs);
     map.addLayer({id:"a-label",type:"symbol",source:"areas",layout:{"text-field":["get","label"],"text-font":font,"text-size":11.5,"text-max-width":9},paint:{"text-color":"#f5efe2","text-halo-color":"#0b0f0f","text-halo-width":1.4}});
-    if(typeof CF!=="undefined"&&CF){CF.addLayers(map,font);CF.bind(map,maplibregl);CF.refresh()}if(typeof PLOTPOS!=="undefined")PLOTPOS.addLayers(map,font);if(typeof COMMPOS!=="undefined")COMMPOS.addLayers(map,font);if(typeof DEVSAYS!=="undefined")DEVSAYS.addLayers(map,font);if(typeof PLACES!=="undefined"&&PLACES)PLACES.addLayers(map,font);
+    if(typeof CF!=="undefined"&&CF){CF.addLayers(map,font);if(!BOUND)CF.bind(map,maplibregl);CF.refresh()}if(typeof PLOTPOS!=="undefined")PLOTPOS.addLayers(map,font);if(typeof COMMPOS!=="undefined")COMMPOS.addLayers(map,font);if(typeof DEVSAYS!=="undefined")DEVSAYS.addLayers(map,font);if(typeof PLACES!=="undefined"&&PLACES)PLACES.addLayers(map,font);
     map.addSource("pjctx",{type:"geojson",data:{type:"FeatureCollection",features:[]}});map.addSource("pj",{type:"geojson",data:{type:"FeatureCollection",features:[]}});map.addSource("pjpt",{type:"geojson",data:{type:"FeatureCollection",features:[]}});
     map.addLayer({id:"pj-ctx",type:"fill",source:"pjctx",paint:{"fill-color":"#9aa7a4","fill-opacity":0.3}},"a-label");
     map.addLayer({id:"pj-ctxl",type:"line",source:"pjctx",paint:{"line-color":"#c9d2d0","line-width":0.6,"line-opacity":0.5}},"a-label");
@@ -885,14 +888,20 @@ function startMap(){
     map.addLayer({id:"pj-sel",type:"line",source:"pj",filter:["==",["get","sel"],1],paint:{"line-color":"#ffffff","line-width":4}},"a-label");
     map.addLayer({id:"pj-hit",type:"circle",source:"pjpt",paint:{"circle-radius":20,"circle-color":"#c5a56a","circle-opacity":0.02}},"a-label");
     map.addLayer({id:"pj-ring",type:"circle",source:"pjpt",filter:["==",["get","sel"],1],paint:{"circle-radius":26,"circle-color":"#c5a56a","circle-opacity":0.12,"circle-stroke-color":"#c5a56a","circle-stroke-width":4,"circle-stroke-opacity":0.9}},"a-label");
+    updatePj();if(typeof PLACES!=="undefined"&&PLACES&&PLACES.redraw)PLACES.redraw();refreshMap();
+    if(!BOUND){BOUND=true;bindMap()}}
+  function bindMap(){                                      // v612 - the handlers, once
     var pjHit=function(e){return map.queryRenderedFeatures(e.point,{layers:["pj-hit","pj-fill"]})};
     map.on("mousemove",function(e){var h=pjHit(e);map.getCanvas().style.cursor=h.length?"pointer":"";if(h.length)showSnap(h[0].properties,false);else if(!SNAP)hideSnap()});
     map.on("click",function(e){var h=pjHit(e);if(h.length){e.originalEvent.stopPropagation();showSnap(h[0].properties,true)}else hideSnap()});
-    updatePj();
     var pop=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:12});
     map.on("mousemove","a-fill",function(e){if(pjHit(e).length||(typeof CF!=="undefined"&&CF&&CF.fillMode())){pop.remove();return}map.getCanvas().style.cursor="pointer";pop.setLngLat(e.lngLat).setHTML("<b>"+esc(e.features[0].properties.label)+"</b>").addTo(map)});
     map.on("mouseleave","a-fill",function(){map.getCanvas().style.cursor="";pop.remove()});
-    map.on("click","a-fill",function(e){if(pjHit(e).length||(typeof PLACES!=="undefined"&&PLACES&&PLACES.hit(e))||(typeof CF!=="undefined"&&CF&&CF.fillMode()))return;select(e.features[0].properties.slug,false)})})}
+    map.on("click","a-fill",function(e){if(pjHit(e).length||(typeof PLACES!=="undefined"&&PLACES&&PLACES.hit(e))||(typeof CF!=="undefined"&&CF&&CF.fillMode()))return;select(e.features[0].properties.slug,false)})
+  }
+  map.on("load",buildLayers);
+  if(typeof THEME!=="undefined"&&THEME)THEME.onStyle(function(u){map.setStyle(u);map.once("style.load",buildLayers)});
+}
 // ---- start ----
 Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(function(){return null}),api("inv").catch(function(){return null}),api("centres").catch(function(){return null}),api("plotpos").catch(function(){return null}),api("commpos").catch(function(){return null}),api("nosales").catch(function(){return null}),api("commposp").catch(function(){return null}),api("notconf").catch(function(){return null}),api("announced").catch(function(){return null}),api("regcards").catch(function(){return null}),api("devsays").catch(function(){return null}),api("bedmed").catch(function(){return null}),api("venues").catch(function(){return null}),api("places").catch(function(){return null}),api("asking").catch(function(){return null})]).then(function(r){
   IDX=r[0];GEO=r[1];if(CF)CF.load(r[5]);if(typeof PLOTPOS!=="undefined")PLOTPOS.load(r[6]);if(typeof COMMPOS!=="undefined")COMMPOS.load(r[7]);if(typeof NOSALES!=="undefined")NOSALES.load(r[8]);if(typeof COMMPOSP!=="undefined")COMMPOSP.load(r[9]);if(typeof NOTCONF!=="undefined")NOTCONF.load(r[10]);if(typeof ANNOUNCED!=="undefined")ANNOUNCED.load(r[11]);if(typeof REGCARDS!=="undefined")REGCARDS.load(r[12]);if(typeof DEVSAYS!=="undefined")DEVSAYS.load(r[13]);if(typeof BEDMED!=="undefined"&&BEDMED){BEDMED.load(r[14]);BEDMED.loadAsk(r[17])}if(typeof VENUES!=="undefined"&&VENUES)VENUES.load(r[15]);if(typeof PLACES!=="undefined"&&PLACES){PLACES.load(r[16]);PLACES.setInfoLoader(function(){return api("placeinfo")})}S.delay=r[3]&&r[3].by?r[3]:null;S.inv=invFromApi(r[4]);invIndex();DM.mergeAreas(IDX);DM.attrSplit(IDX);   // v373 - only projects the Land Department register confirms are in the numbers; the rest wait in IDX.nconf (an index without evidence is left as it is)
@@ -914,9 +923,9 @@ Promise.all([api("index"),api("geo"),api("shortlist"),api("delay").catch(functio
 
 export function devmapHtml(key, deps) {
   const nav = deps && deps.NAJ_FONTS ? deps.NAJ_FONTS : "";
-  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + BEDMED_JS + VENUES_JS + PLACES_JS + PANELS_JS + PLOTPOS_JS + COMMPOSP_JS + COMMPOS_JS + NOSALES_JS + NOTCONF_JS + REGCARDS_JS + ANNOUNCED_JS + DEVSAYS_JS + DEVSEARCH_JS +PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
+  const js = DEVMAP_CORE_JS + "var DEFAULT_SL=" + JSON.stringify(DEFAULT_SHORTLIST.map((d) => d.id)) + ",DEFAULT_NAMES=" + JSON.stringify(Object.fromEntries(DEFAULT_SHORTLIST.map((d) => [d.id, d.name]))) + ";var EVI="+JSON.stringify(Object.fromEntries(["wallet","chart-bar","buildings","ruler","map-pin","stack","star","caret-down","chart-donut","map-pin","x"].map((n)=>[n,PHOSPHOR_LIGHT[n]||[]])))+";var CL=" + JSON.stringify(Object.fromEntries(Object.keys(COMMUNITY_LABELS).map((s) => [s, labelledName(s)]))).replace(/</g, "\\u003c") + ";" + CENTRES_JS + BEDMED_JS + VENUES_JS + PLACES_JS + THEME_JS + PANELS_JS + PLOTPOS_JS + COMMPOSP_JS + COMMPOS_JS + NOSALES_JS + NOTCONF_JS + REGCARDS_JS + ANNOUNCED_JS + DEVSAYS_JS + DEVSEARCH_JS +PAGE_JS.replace(/__FOOT__/g, esc(DEVMAP_FOOTER));
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=referrer content=no-referrer><meta name=robots content="noindex,nofollow"><title>Najma - developers by area</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0e1413">' + nav
-    + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + CENTRES_CSS + BEDMED_CSS + VENUES_CSS + PLACES_CSS + PANELS_CSS + PLOTPOS_CSS + COMMPOS_CSS + DEVSEARCH_CSS + '</style></head><body>'
+    + '<link rel=stylesheet href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><style>' + CSS + CENTRES_CSS + BEDMED_CSS + VENUES_CSS + PLACES_CSS + PANELS_CSS + PLOTPOS_CSS + COMMPOS_CSS + DEVSEARCH_CSS + THEME_CSS + '</style></head><body>'
     + '<div id=map role=region aria-label="Map of Dubai areas: developers and prices"></div>'
     + '<aside id=side><button id=grab aria-expanded=false>Tap to expand</button><div class=dstr><h1>Developers by area</h1>' + DEVSEARCH_BTN + '</div><div class=sub id=source>Loading...</div>'
     + '<div id=sidebody></div><div class="card dwrap" id=detail2 style="display:none"></div></aside><aside id=detail></aside>' + PANELS_HTML

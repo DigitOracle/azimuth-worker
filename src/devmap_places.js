@@ -69,7 +69,7 @@ button.vnk[aria-pressed=true]{border-color:var(--gold);background:rgba(197,165,1
 
 export const PLACES_JS = String.raw`
 var PLACES=(function(){
-var D=null,CNT={},ACT=null,CH=null,MAP=null,POP=null,SH=null,SHADE=true,INFO=null,INFOP=null,LOADER=null,HOV=null,CUR=null;
+var D=null,CNT={},ACT=null,CH=null,MAP=null,POP=null,SH=null,SHADE=true,INFO=null,INFOP=null,LOADER=null,HOV=null,CUR=null,BOUNDM=false;
 var EMPTY={type:"FeatureCollection",features:[]};
 var ORDER=["parks","schools","supermarkets","clinics","pharmacies","hospitals","malls","metros","beaches","ev","fuel","restaurants","cafes","bars","gyms"];
 var COL={parks:"#5fb36b",schools:"#e0b04a",supermarkets:"#4fa3d9",clinics:"#e5736f",pharmacies:"#c58be0",hospitals:"#ff5d5d",malls:"#f0a050",metros:"#7fd1c8",beaches:"#6fc3f0",ev:"#b6e04a",fuel:"#a0a8a6",restaurants:"#ff9f6b",cafes:"#d9a77a",bars:"#c77dff",gyms:"#f4d35e"};
@@ -166,6 +166,7 @@ function clear(){
   ACT=null;unshade();chip(0);closePop();
   [].forEach.call(document.querySelectorAll(".vnk"),function(b){b.setAttribute("aria-pressed","false")})}
 function toggle(sc,k){if(ACT&&ACT.sc===sc&&ACT.k===k)clear();else show(sc,k)}
+function redraw(){if(ACT)show(ACT.sc,ACT.k,true)}
 function addLayers(m,font){
   MAP=m;
   try{
@@ -181,6 +182,7 @@ function addLayers(m,font){
     m.addLayer({id:"pl-halo",type:"circle",source:"plpts",paint:{"circle-radius":10,"circle-color":["get","c"],"circle-opacity":0.22}});
     m.addLayer({id:"pl-pts",type:"circle",source:"plpts",paint:{"circle-radius":5.5,"circle-color":["get","c"],"circle-stroke-color":"#0b0f0f","circle-stroke-width":1.3}});
     m.addLayer({id:"pl-lab",type:"symbol",source:"plpts",minzoom:14,layout:{"text-field":["get","n"],"text-font":font,"text-size":11,"text-offset":[0,1.1],"text-anchor":"top","text-max-width":9},paint:{"text-color":"#f5efe2","text-halo-color":"#0b0f0f","text-halo-width":1.3}});
+    if(BOUNDM)return;BOUNDM=true;                               // v612 - the handlers are bound once; layers are added again after every basemap change
     m.on("click","pl-pts",function(e){
       var f=e.features&&e.features[0];if(!f||typeof maplibregl==="undefined")return;
       var pr=f.properties,key=String(pr.k)+"|"+String(pr.i)+"|"+String(pr.n);CUR=key;
@@ -232,6 +234,6 @@ function popHtml(pr,it,loaded){
   return h}
 function hit(e){var m=mp();if(!m||!ACT||!e||!e.point)return false;try{return m.queryRenderedFeatures(e.point,{layers:["pl-pts"]}).length>0}catch(x){return false}}
 function init(){if(typeof document==="undefined"||typeof document.addEventListener!=="function")return;document.addEventListener("click",function(e){var b=e.target&&e.target.closest?e.target.closest(".vnk"):null;if(!b)return;e.preventDefault();toggle(b.getAttribute("data-sc"),b.getAttribute("data-k"))})}
-return {load:load,has:has,can:can,sweptNames:sweptNames,attrs:attrs,areaBlock:areaBlock,cityBlock:cityBlock,setShade:setShade,setInfoLoader:setInfoLoader,popHtml:popHtml,addLayers:addLayers,sync:sync,clear:clear,toggle:toggle,hit:hit,init:init,state:function(){return ACT?{sc:ACT.sc,k:ACT.k}:null},dbg:function(){var m=mp();return {map:!!MAP,mp:!!m,src:!!(m&&m.getSource("plpts")),shade:!!(m&&m.getLayer&&m.getLayer("pl-shade")),loader:!!LOADER,info:!!INFO}},px:function(lon,lat){var m=mp();try{return m&&m.project?m.project([lon,lat]):null}catch(e){return null}}}
+return {load:load,has:has,can:can,sweptNames:sweptNames,attrs:attrs,areaBlock:areaBlock,cityBlock:cityBlock,setShade:setShade,redraw:redraw,setInfoLoader:setInfoLoader,popHtml:popHtml,addLayers:addLayers,sync:sync,clear:clear,toggle:toggle,hit:hit,init:init,state:function(){return ACT?{sc:ACT.sc,k:ACT.k}:null},dbg:function(){var m=mp();return {map:!!MAP,mp:!!m,src:!!(m&&m.getSource("plpts")),shade:!!(m&&m.getLayer&&m.getLayer("pl-shade")),loader:!!LOADER,info:!!INFO}},px:function(lon,lat){var m=mp();try{return m&&m.project?m.project([lon,lat]):null}catch(e){return null}}}
 })();
 `;
