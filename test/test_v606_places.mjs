@@ -106,7 +106,7 @@ CV.V.load(FV); CV.P.load(FP);
 const vb = CV.V.block("2", "Centre 2: Downtown and Business Bay");
 ok(/<button type=button class="vnb vnk" data-k="parks" data-sc="c:2"/.test(vb) && /Show on map/.test(strip(vb)), "a centre tile with points is a button with its scope");
 ok(/<div class=vnb><small>Restaurants/.test(vb) && !/data-k="restaurants"/.test(vb), "a Google tile with no centre points stays a plain count, not a card");
-ok(/Tap a tile marked “Show on map”/.test(strip(vb)) && /Restaurants and gyms are mapped for Business Bay only so far/.test(strip(vb)), "the block says which tiles are cards and where restaurants and gyms are mapped");
+ok(/Tap a tile marked “Show on map”/.test(strip(vb)) && /Restaurants, cafes, bars and gyms are mapped so far in 1 neighbourhoods: open one of them/.test(strip(vb)), "the block says which tiles are cards and in how many neighbourhoods the Google kinds are mapped (counted from the data)", strip(vb).slice(-260));
 const CV2 = new Function("document", "map", VENUES_JS + "; return {V: VENUES};")(doc, undefined); CV2.V.load(FV);
 ok(!/vnk/.test(CV2.V.block("2", "x")) && !/Show on map/.test(strip(CV2.V.block("2", "x"))), "without the places data the venue block is exactly the v605 block (no cards, no hint)");
 
@@ -158,7 +158,7 @@ if (existsSync(RP) && existsSync(RV)) {
   ok(allPts.every((p) => p[0] > 54.7 && p[0] < 55.7 && p[1] > 24.6 && p[1] < 25.5), "every point is inside Dubai's bounding box (" + allPts.length + " points)");
   ok(allPts.every((p) => p[4] === -1 || (p[4] >= 0 && p[4] < real.areas.length)) && Object.values(real.alias).every((a) => real.areas.includes(a)), "every area index and every alias target exists");
   const bbIx = real.areas.indexOf("businessbay");
-  ok(bbIx >= 0 && ["restaurants", "cafes", "bars", "gyms"].every((k) => real.kinds[k].partial && real.kinds[k].pts.length > 0 && real.kinds[k].pts.length <= real.kinds[k].totals.businessbay + 5 && real.kinds[k].pts.every((p) => p[4] === bbIx && p[3] === 0)), "Business Bay's Google kinds are partial, carry Google's total, sit in that area and have no centre");
+  ok(bbIx >= 0 && ["restaurants", "cafes", "bars", "gyms"].every((k) => real.kinds[k].partial && real.kinds[k].pts.length > 0 && real.kinds[k].totals.businessbay > 0 && real.kinds[k].pts.every((p) => p[3] === 0 && p[4] >= 0 && real.kinds[k].totals[real.areas[p[4]]] > 0)), "the Google kinds are partial, carry Google's total for every swept neighbourhood, and each point sits in a swept neighbourhood with no centre");
   const bb2 = strip(W.P.areaBlock("businessbay", "Business Bay"));
   ok(/Parks\s+\d+\s+in our register/.test(bb2) && /Restaurants\s+\d+\s+mapped from Google\s+Google counts 593 here/.test(bb2) && /Gyms\s+\d+\s+mapped from Google\s+Google counts 34 here/.test(bb2), "the real Business Bay block shows register cards and the four partial Google cards", bb2.slice(0, 500));
   if (existsSync(RG)) {

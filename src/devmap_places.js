@@ -98,6 +98,7 @@ function areaBlock(slug,name){
   return '<div class="card vncard"><p class=label>Around here</p><p class=note style="margin:0"><b dir=auto>'+X(name)+'</b>: the places we hold inside this neighbourhood. Tap a card to see them on the map.</p>'
    +'<div class=vng style="margin-top:8px">'+ks.map(function(k){return ptile(sc,k,s)}).join("")+'</div>'
    +'<p class=note style="margin:8px 0 0">Our register is OpenStreetMap and Dubai Municipality entries, so a place that is missing is one we do not hold, not proof that it does not exist.'+(g?' Restaurants, cafes, bars and gyms come from a Google sweep that returns at most 20 places per search circle, so it holds part of what Google lists; each card says how much.':'')+'</p></div>'}
+function sweptNames(){if(!D)return [];var o={};Object.keys(D.kinds).forEach(function(k){var K=D.kinds[k];if(K.src==="google"&&K.totals)Object.keys(K.totals).forEach(function(s){o[s]=1})});return Object.keys(o)}
 function reg(k){return !!D&&!!D.kinds[k]&&D.kinds[k].src==="register"}
 function ctile(k){
   var K=D.kinds[k];
@@ -231,6 +232,6 @@ function popHtml(pr,it,loaded){
   return h}
 function hit(e){var m=mp();if(!m||!ACT||!e||!e.point)return false;try{return m.queryRenderedFeatures(e.point,{layers:["pl-pts"]}).length>0}catch(x){return false}}
 function init(){if(typeof document==="undefined"||typeof document.addEventListener!=="function")return;document.addEventListener("click",function(e){var b=e.target&&e.target.closest?e.target.closest(".vnk"):null;if(!b)return;e.preventDefault();toggle(b.getAttribute("data-sc"),b.getAttribute("data-k"))})}
-return {load:load,has:has,can:can,attrs:attrs,areaBlock:areaBlock,cityBlock:cityBlock,setShade:setShade,setInfoLoader:setInfoLoader,popHtml:popHtml,addLayers:addLayers,sync:sync,clear:clear,toggle:toggle,hit:hit,init:init,state:function(){return ACT?{sc:ACT.sc,k:ACT.k}:null},dbg:function(){var m=mp();return {map:!!MAP,mp:!!m,src:!!(m&&m.getSource("plpts")),shade:!!(m&&m.getLayer&&m.getLayer("pl-shade")),loader:!!LOADER,info:!!INFO}},px:function(lon,lat){var m=mp();try{return m&&m.project?m.project([lon,lat]):null}catch(e){return null}}}
+return {load:load,has:has,can:can,sweptNames:sweptNames,attrs:attrs,areaBlock:areaBlock,cityBlock:cityBlock,setShade:setShade,setInfoLoader:setInfoLoader,popHtml:popHtml,addLayers:addLayers,sync:sync,clear:clear,toggle:toggle,hit:hit,init:init,state:function(){return ACT?{sc:ACT.sc,k:ACT.k}:null},dbg:function(){var m=mp();return {map:!!MAP,mp:!!m,src:!!(m&&m.getSource("plpts")),shade:!!(m&&m.getLayer&&m.getLayer("pl-shade")),loader:!!LOADER,info:!!INFO}},px:function(lon,lat){var m=mp();try{return m&&m.project?m.project([lon,lat]):null}catch(e){return null}}}
 })();
 `;
