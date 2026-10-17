@@ -139,6 +139,7 @@ function centreSummary(e){var core=e.core&&e.core.length?'<p class=note style="m
   +(ABBR[e.id]?'<p class=note style="margin:0 0 6px">'+ABBR[e.id]+'</p>':'')
   +'<div class=cg2><div class=cstat><b>'+fm(e.units)+'</b><small>registered homes, core and adjacent areas ('+e.share+'% of Dubai) <span class="tag cder">DERIVED</span></small></div><div class=cstat><b>'+fm(e.units_all)+'</b><small>with the '+e.nper+' peripheral areas in the lighter tint ('+e.share_all+'%) <span class="tag cder">DERIVED</span></small></div></div>'
   +(typeof BEDMED!=="undefined"&&BEDMED?BEDMED.boxes("centre",String(e.id),S.win,"Centre "+e.id+": "+e.name,"bmside"):"")
+  +(typeof VENUES!=="undefined"&&VENUES?VENUES.block(String(e.id),"Centre "+e.id+": "+e.name,"vnside"):"")
   +core+caps+top
   +'<p class=note style="margin:6px 0 0">Only the core is in a district the plan names. Every other area here is placed by distance to the core (our grouping, DERIVED_NEAREST), never as official. '+X(NOTE)+'. Source: '+X(SRC)+'.</p>'
   +'<p class=label style="margin-top:14px">Areas in this centre: tap one</p>'+areaCards(al,12)
