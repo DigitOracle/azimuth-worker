@@ -1,5 +1,5 @@
 // v605 - COLLAPSIBLE PANELS on the Developers-by-area page (Kendall, 17 Oct 2026: "i need the left and the right to be collapsible"): a small tab on the inner edge of the left sheet and of the right
-// panel hides or shows it, and the map takes the room (map.resize() runs after each change). The choice is kept per browser in localStorage (devmap_panels), wrapped in try/catch because the
+// panel hides or shows it, and the map takes the room (a window resize event follows each change, which MapLibre answers by resizing; the page's own map variable is private to its script, so nothing here touches it). The choice is kept per browser in localStorage (devmap_panels), wrapped in try/catch because the
 // store can be missing or refuse writes. Nothing is stored on the server.
 // The collapse rules only apply where the panel is a side panel: the left sheet from 761 px (below that it is the bottom sheet with its own grab bar) and the right panel from 1101 px (below that it
 // is already hidden and the centre card carries its content), and the tabs are hidden below those widths, so a saved choice can never hide the only way in on a phone.
@@ -30,7 +30,7 @@ function lab(el,side,on){if(!el)return;var t=(on?"Show":"Hide")+" the "+side+" p
 function paint(){
   var b=document.body;b.classList.toggle("colL",!!st.L);b.classList.toggle("colR",!!st.R);
   lab(document.getElementById("tglL"),"left",!!st.L);lab(document.getElementById("tglR"),"right",!!st.R);
-  if(typeof map!=="undefined"&&map&&map.resize){try{map.resize()}catch(e){}}}
+  try{if(typeof window!=="undefined"&&window.dispatchEvent&&typeof Event==="function")window.dispatchEvent(new Event("resize"))}catch(e){}}
 function flip(side){st[side]=st[side]?0:1;save();paint()}
 function init(){
   read();var l=document.getElementById("tglL"),r=document.getElementById("tglR");

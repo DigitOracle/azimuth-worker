@@ -239,7 +239,7 @@ function applyMode(m){var f=fillMode(),co=!!S.coast;try{
 CF.bind=function(map,lib){if(!D||!map||!map.on)return;var pop=new lib.Popup({closeButton:false,closeOnClick:false,offset:12});
   map.on("mousemove","c-fill",function(e){if(!fillMode()){return}var p=e.features&&e.features[0]&&e.features[0].properties;if(!p||!p.c){pop.remove();return}map.getCanvas().style.cursor="pointer";pop.setLngLat(e.lngLat).setHTML("<b>"+X(p.nm)+"</b><br>Centre "+p.c+": "+X(CBY[p.c].name)+"<br>"+X(TW[p.t]||""))  .addTo(map)});
   map.on("mouseleave","c-fill",function(){pop.remove()});
-  map.on("click","c-fill",function(e){if(!fillMode())return;var p=e.features&&e.features[0]&&e.features[0].properties;if(p&&p.c)pick(Number(p.c))})};
+  map.on("click","c-fill",function(e){if(!fillMode()||(typeof PLACES!=="undefined"&&PLACES&&PLACES.hit(e)))return;var p=e.features&&e.features[0]&&e.features[0].properties;if(p&&p.c)pick(Number(p.c))})};
 CF.refresh=function(){ensureBar();drawBar();if(!D)return;var m=c.map();if(m&&m.getSource&&m.getSource("cen")){m.getSource("cen").setData(cenFeatures());m.getSource("cenol").setData(olFeatures());applyMode(m)}};
 CF.mount=ensureBar;
 c.ico=ico;

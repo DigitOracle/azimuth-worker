@@ -68,7 +68,7 @@ ok(r0.status === 200 && JSON.stringify(r0.body) === "{}", "the bedroom route bes
 
 console.log("D - the page");
 const html = devmapHtml("k", deps);
-ok(html.includes("var VENUES=(function(){") && html.includes('api("bedmed").catch(function(){return null}),api("venues").catch(function(){return null})])') && html.includes("VENUES.load(r[15])"), "the page carries the module, asks for what=venues as the sixteenth call and loads it");
+ok(html.includes("var VENUES=(function(){") && html.includes('api("bedmed").catch(function(){return null}),api("venues").catch(function(){return null})') && html.includes("VENUES.load(r[15])"), "the page carries the module, asks for what=venues as the sixteenth call and loads it");
 ok(html.includes('VENUES.block(String(e.id),"Centre "+e.id+": "+e.name)') && html.includes('VENUES.block(String(e.id),"Centre "+e.id+": "+e.name,"vnside")') && html.includes("function venHtml()"), "block under the right panel's bedroom boxes and a copy in the centre card");
 ok(/bedHtml\(\)\+venHtml\(\)\+/.test(html), "the right panel shows the block only on the branch with no area chosen");
 ok(html.includes(".vncard.vnside{display:none}") && html.includes("@media(max-width:1100px){.vncard.vnside{display:block}}"), "the left-sheet copy shows only where the right panel is hidden (1100 px)");

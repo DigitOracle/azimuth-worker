@@ -39,11 +39,13 @@ function dd(s){var p=String(s||"").split("-");return p.length===3?Number(p[2])+"
 function load(d){D=(d&&d.v===1&&d.centres&&typeof d.centres==="object")?d:null;return !!D}
 function has(){return !!D}
 function cen(key){var c=D&&D.centres[key];return c&&c.tiles&&c.tiles.length?c:null}
-function tile(t){
+function tile(t,sc){
   var src=t.src==="google"?"operating, Google":"in our register";
   var also=t.also&&t.also.length?'<span class=vnn>plus '+t.also.map(function(a){return fm(a[1])+" "+X(a[0])}).join(", ")+'</span>':'';
   var alt=t.alt?'<span class=vnn>Google lists '+fm(t.alt)+', a wider net</span>':'';
-  return '<div class=vnb><small>'+X(LAB[t.k]||t.k)+'</small><b>'+fm(t.n)+'</b><span class=vnn>'+src+'</span>'+also+alt+'</div>'}
+  var a=(typeof PLACES!=="undefined"&&PLACES&&PLACES.has())?PLACES.attrs(sc,t.k):"";
+  var inner='<small>'+X(LAB[t.k]||t.k)+'</small><b>'+fm(t.n)+'</b><span class=vnn>'+src+'</span>'+also+alt;
+  return a?'<button'+a+'>'+inner+'<span class=vnt>Show on map</span></button>':'<div class=vnb>'+inner+'</div>'}
 function pbox(label,x){
   if(!x||!x.p)return '<div class=vnb><small>'+label+'</small><b>0</b><span class=vnn>no projects</span></div>';
   return '<div class=vnb><small>'+label+'</small><b>'+fm(x.u)+'</b><span class=vnn>planned homes</span><span class=vnn>'+fm(x.p)+' project'+(x.p===1?'':'s')+'</span></div>'}
@@ -57,9 +59,9 @@ function block(key,name,extra){
   if(!D)return "";var c=cen(key);if(!c)return "";
   return '<div class="card vncard'+(extra?' '+extra:'')+'"><p class=label>Inside this centre</p>'
    +'<p class=note style="margin:0"><b dir=auto>'+X(name)+'</b>: the '+fm(c.communities||0)+' communities we group into it, about '+fm(c.km2||0)+' km².</p>'
-   +'<p class=vnh>Places and facilities</p><div class=vng>'+c.tiles.map(tile).join("")+'</div>'
+   +'<p class=vnh>Places and facilities</p><div class=vng>'+c.tiles.map(function(t){return tile(t,"c:"+key)}).join("")+'</div>'
    +pipe(c)
-   +'<p class=note style="margin:8px 0 0">Restaurants and gyms are Google places that are operating, each counted once inside the area, on '+X(dd(D.google_date))+'; cafes and bars are counted separately. Parks, schools, supermarkets and clinics are points in our own register (OpenStreetMap and Dubai Municipality). “Google lists” is Google’s count for the same type, a wider net that takes in small or loosely typed places. The communities are our grouping (core, adjacent and peripheral), not the plan’s boundaries. A register end date is not a handover, and the status is the Land Department’s own.</p></div>'}
+   +'<p class=note style="margin:8px 0 0">Restaurants and gyms are Google places that are operating, each counted once inside the area, on '+X(dd(D.google_date))+'; cafes and bars are counted separately. Parks, schools, supermarkets and clinics are points in our own register (OpenStreetMap and Dubai Municipality). “Google lists” is Google’s count for the same type, a wider net that takes in small or loosely typed places. The communities are our grouping (core, adjacent and peripheral), not the plan’s boundaries. A register end date is not a handover, and the status is the Land Department’s own.'+(typeof PLACES!=="undefined"&&PLACES&&PLACES.has()?' Tap a tile marked “Show on map” to see where those places are. Restaurants and gyms are mapped for Business Bay only so far: open that neighbourhood.':'')+'</p></div>'}
 return {load:load,has:has,block:block}
 })();
 `;
