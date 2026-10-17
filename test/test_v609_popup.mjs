@@ -125,7 +125,7 @@ if (existsSync(RP) && existsSync(RI)) {
   const withI = all.filter((p) => p[7] >= 0);
   ok(withI.every((p) => info.items[p[7]].r === p[5] && info.items[p[7]].rc === p[6]), "the rating and review count on each point equal its details record");
   ok(info.items.every((it) => (!it.mu || /^https?:\/\//.test(it.mu)) && (!it.ws || /^https?:\/\//.test(it.ws)) && (!it.h || it.h.length === 7)), "every link is http(s) and every hours record has seven days");
-  ok(["pharmacies", "ev", "fuel", "metros"].every((k) => real.kinds[k].pts.every((p) => p[7] === -1)), "pharmacies, EV charging, petrol and metro stations carry no Google details (we hold none)");
+  ok(["pharmacies", "ev", "fuel", "metros"].every((k) => real.kinds[k].pts.every((p) => p[7] === -1 || info.items[p[7]].src === "sweep")), "pharmacies, EV charging, petrol and metro stations have no Google match of their own; any details they carry come from a sweep place with the same name nearby");
   ok(real.kinds.restaurants.pts.every((p) => p[7] >= 0 && info.items[p[7]].src === "sweep"), "every Business Bay restaurant has its sweep record");
   const lo = info.items.filter((it) => it.src === "match" && it.lo).length, sure = info.items.filter((it) => it.src === "match" && !it.lo).length;
   ok(sure > 0 && lo > 0, "register matches split into sure (" + sure + ") and likely (" + lo + ")");
