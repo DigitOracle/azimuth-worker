@@ -126,7 +126,7 @@ ok(JSON.stringify(r0.body) === "{}", "the venues route beside it is untouched");
 
 console.log("E - the page");
 const html = devmapHtml("k", deps);
-ok(html.includes("var PLACES=(function(){") && html.includes('api("venues").catch(function(){return null}),api("places").catch(function(){return null})])') && html.includes("PLACES.load(r[16])"), "the page carries the module, asks for what=places as the seventeenth call and loads it");
+ok(html.includes("var PLACES=(function(){") && html.includes('api("venues").catch(function(){return null}),api("places").catch(function(){return null})') && html.includes("PLACES.load(r[16])"), "the page carries the module, asks for what=places as the seventeenth call and loads it");
 ok(html.includes("PLACES.addLayers(map,font)") && html.includes("PLACES.areaBlock(slug,area.name)") && html.includes("PLACES.init();"), "layers are added with the map, the neighbourhood block is in the area panel, taps are listened for");
 ok(html.includes('(typeof PLACES!=="undefined"&&PLACES&&PLACES.hit(e))||(typeof CF!==') && html.includes('if(!fillMode()||(typeof PLACES!=="undefined"&&PLACES&&PLACES.hit(e)))return;'), "a tap on a dot cannot select the area or the centre under it (both map click handlers)");
 ok(/function renderDetail\(\)\{if\(typeof PLACES!=="undefined"&&PLACES\)setTimeout\(PLACES\.sync,0\);/.test(html), "after every redraw of the right panel the pressed state and the points are brought in line");
