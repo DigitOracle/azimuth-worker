@@ -84,7 +84,7 @@ ok(!thr && nm.P.state() === null, "before the map exists nothing throws");
 const L = mkEnv(); L.P.load(FP);
 ok(L.cap.sources.plpts && L.cap.layers.join() === "pl-halo,pl-pts,pl-lab" && !!L.cap.on["click:pl-pts"] && !!L.cap.on["mouseenter:pl-pts"], "addLayers adds the source, three layers and the dot handlers");
 L.cap.on["click:pl-pts"]({ features: [{ properties: { n: "<b>Kitchen6</b>", k: "restaurants", r: 4.5 }, geometry: { coordinates: [55.26, 25.18] } }] });
-ok(L.cap.popups.length === 1 && L.cap.popups[0].h.includes("&lt;b&gt;Kitchen6&lt;/b&gt;") && /Restaurants, rated 4\.5/.test(strip(L.cap.popups[0].h)) && L.cap.popups[0].o.className === "plp", "a dot opens a popup with its name (escaped), kind and rating");
+ok(L.cap.popups.length === 1 && L.cap.popups[0].h.includes("&lt;b&gt;Kitchen6&lt;/b&gt;") && /Restaurants/.test(strip(L.cap.popups[0].h)) && /\u2605 4\.5/.test(strip(L.cap.popups[0].h)) && L.cap.popups[0].o.className === "plp", "a dot opens a popup with its name (escaped), kind and rating");
 L.cap.on["click:pl-pts"]({ features: [{ properties: { n: "", k: "parks", r: 0 }, geometry: { coordinates: [55.26, 25.18] } }] });
 ok(/Unnamed/.test(L.cap.popups[1].h) && !/rated/.test(L.cap.popups[1].h), "an unnamed register point says Unnamed and shows no rating");
 ok(L.cap.popups[0].removed === true && !L.cap.popups[1].removed, "opening a second popup closes the first");

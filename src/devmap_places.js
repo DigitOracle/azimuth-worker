@@ -13,7 +13,20 @@
 // chip turns the shading off and leaves the dots. All of Dubai now has its own block of cards ("Places across Dubai": the totals over the neighbourhoods) whose taps only shade, because dots for all of Dubai
 // would be thousands. Choosing a centre or a neighbourhood keeps the same kind on where the new view has a card for it. Google kinds are never shaded: only Business Bay is mapped, so a shade would mislead.
 // The shade is a fill layer over the page's own "areas" source (above its colours, under its outlines and names); the counts are a small point source at a label point inside each neighbourhood (acen), each on a dark badge ringed in the kind's colour so the number stays readable over the page's own names.
-// String.raw, no substitutions and no backticks (the rule src/devmap_page.js keeps); checked with node --check by test/test_v606_places.mjs and test/test_v607_shade.mjs.
+// v609 - THE RICHER POPUP (Kendall, 17 Oct 2026: "build the richer popup"): hovering a dot (where the device has a pointer) shows its name and rating; tapping a dot opens the name, "4.5 from
+// 1,203 reviews", the price level, today's hours, the address, Call / Website / Maps buttons, feature tags and the Google credit. The details are a second KV image (img_devmap_placeinfo, built by
+// the same script) that the page fetches ONCE on the first dot tap through a loader the page hands in (setInfoLoader), so the map data stays light; each point carries only its rating, review count
+// and an index into that image. Register places matched to Google (clinics, supermarkets, malls, hospitals, parks, schools, beaches, at 0.7 confidence or better) show Google's name where it differs
+// and say "likely match" under 0.8; kinds with no Google record (pharmacies, EV charging, petrol and metro stations) show the name and the kind, as before. Links are only ever https; a phone
+// becomes a tel: link of digits and plus only.
+// String.raw, no substitutions and no backticks (the rule src/devmap_page.js keeps); checked with node --check by test/test_v606_places.mjs, test/test_v607_shade.mjs and test/test_v609_popup.mjs.
+export const PLACEINFO_KV_NAME = "devmap_placeinfo";       // read through kvJson(env, "devmap_placeinfo") = KV key img_devmap_placeinfo
+
+export function cleanPlaceInfo(d) {
+  if (!d || typeof d !== "object" || d.v !== 1 || !Array.isArray(d.items)) return null;
+  return d;
+}
+
 export const PLACES_KV_NAME = "devmap_places";             // read through kvJson(env, "devmap_places") = KV key img_devmap_places
 
 export function cleanPlaces(d) {
@@ -42,12 +55,21 @@ button.vnk[aria-pressed=true]{border-color:var(--gold);background:rgba(197,165,1
 .plp .maplibregl-popup-content{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;line-height:1.35}
 .plp .maplibregl-popup-tip{border-top-color:var(--panel);border-bottom-color:var(--panel)}
 .plp .plsub{display:block;color:var(--muted);font-size:11px}
+.plp .plr{display:block;margin-top:3px;font-size:12px}.plp .plr b{color:var(--gold)}
+.plp .pll{display:block;margin-top:2px;color:var(--muted);font-size:11.5px}
+.plp .plbtn{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.plp .plbtn a{display:inline-block;padding:4px 9px;border:1px solid var(--line);border-radius:999px;color:var(--gold);font-size:11.5px;text-decoration:none;background:var(--raise)}
+.plp .plbtn a:hover{border-color:var(--gold)}
+.plp .pltg{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}.plp .pltg span{padding:2px 7px;border-radius:999px;background:var(--raise);color:var(--muted);font-size:10.5px}
+.plp .plcr{display:block;margin-top:6px;color:var(--muted);font-size:10px}
+#plhov{position:absolute;z-index:6;display:none;pointer-events:none;max-width:240px;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:rgba(14,20,19,.95);color:var(--ink);font-size:12px;line-height:1.3}
+#plhov small{display:block;color:var(--muted);font-size:10.5px}
 @media(max-width:760px){#plchip{bottom:calc(46vh + 12px)}}
 `;
 
 export const PLACES_JS = String.raw`
 var PLACES=(function(){
-var D=null,CNT={},ACT=null,CH=null,MAP=null,POP=null,SH=null,SHADE=true;
+var D=null,CNT={},ACT=null,CH=null,MAP=null,POP=null,SH=null,SHADE=true,INFO=null,INFOP=null,LOADER=null,HOV=null,CUR=null;
 var EMPTY={type:"FeatureCollection",features:[]};
 var ORDER=["parks","schools","supermarkets","clinics","pharmacies","hospitals","malls","metros","beaches","ev","fuel","restaurants","cafes","bars","gyms"];
 var COL={parks:"#5fb36b",schools:"#e0b04a",supermarkets:"#4fa3d9",clinics:"#e5736f",pharmacies:"#c58be0",hospitals:"#ff5d5d",malls:"#f0a050",metros:"#7fd1c8",beaches:"#6fc3f0",ev:"#b6e04a",fuel:"#a0a8a6",restaurants:"#ff9f6b",cafes:"#d9a77a",bars:"#c77dff",gyms:"#f4d35e"};
@@ -135,7 +157,7 @@ function fit(P){
 function show(sc,k,quiet){
   var m=mp();if(!D||!D.kinds[k]||!m)return;var src=m.getSource("plpts");if(!src)return;
   var P=pts(sc,k);closePop();
-  src.setData({type:"FeatureCollection",features:P.map(function(p){return {type:"Feature",geometry:{type:"Point",coordinates:[p[0],p[1]]},properties:{n:p[2]||"",c:COL[k]||"#9aa9a5",r:p[5]||0,k:k}}})});
+  src.setData({type:"FeatureCollection",features:P.map(function(p){return {type:"Feature",geometry:{type:"Point",coordinates:[p[0],p[1]]},properties:{n:p[2]||"",c:COL[k]||"#9aa9a5",r:p[5]||0,rc:p[6]||0,i:(p[7]==null?-1:p[7]),k:k}}})});
   ACT={sc:sc,k:k,np:P.length};shade(k);chip(P.length);if(!quiet)fit(P);sync();
   if(!quiet&&innerWidth<=760)lowerSheet()}
 function clear(){
@@ -160,13 +182,55 @@ function addLayers(m,font){
     m.addLayer({id:"pl-lab",type:"symbol",source:"plpts",minzoom:14,layout:{"text-field":["get","n"],"text-font":font,"text-size":11,"text-offset":[0,1.1],"text-anchor":"top","text-max-width":9},paint:{"text-color":"#f5efe2","text-halo-color":"#0b0f0f","text-halo-width":1.3}});
     m.on("click","pl-pts",function(e){
       var f=e.features&&e.features[0];if(!f||typeof maplibregl==="undefined")return;
-      var K=D&&D.kinds[f.properties.k];
-      closePop();POP=new maplibregl.Popup({closeButton:false,offset:10,maxWidth:"230px",className:"plp"}).setLngLat(f.geometry.coordinates).setHTML('<b dir=auto>'+X(f.properties.n||"Unnamed")+'</b><span class=plsub>'+X(K?K.label:"")+(f.properties.r?', rated '+X(f.properties.r):'')+'</span>').addTo(m)});
+      var pr=f.properties,key=String(pr.k)+"|"+String(pr.i)+"|"+String(pr.n);CUR=key;
+      closePop();hover(null);POP=new maplibregl.Popup({closeButton:false,offset:10,maxWidth:"290px",className:"plp"}).setLngLat(f.geometry.coordinates).setHTML(popHtml(pr,null,false)).addTo(m);
+      if(pr.i>=0){loadInfo().then(function(){if(CUR!==key||!POP)return;var it=INFO&&INFO.items&&INFO.items[pr.i];try{POP.setHTML(popHtml(pr,it||null,true))}catch(x){}})}});
+    m.on("mousemove","pl-pts",function(e){var f=e.features&&e.features[0];if(f)hover(f.properties,e.point)});
     m.on("mouseenter","pl-pts",function(){m.getCanvas().style.cursor="pointer"});
-    m.on("mouseleave","pl-pts",function(){m.getCanvas().style.cursor=""})
+    m.on("mouseleave","pl-pts",function(){m.getCanvas().style.cursor="";hover(null)})
   }catch(e){}}
+function canHover(){try{return typeof matchMedia==="function"&&matchMedia("(hover: hover)").matches}catch(e){return false}}
+function hover(pr,pt){
+  if(!HOV){var m=document.getElementById("map");if(!m)return;HOV=document.createElement("div");HOV.id="plhov";HOV.setAttribute("role","tooltip");m.appendChild(HOV)}
+  if(!pr||!canHover()){HOV.style.display="none";return}
+  var K=D&&D.kinds[pr.k];
+  HOV.innerHTML='<b dir=auto>'+X(pr.n||"Unnamed")+'</b><small>'+X(K?K.label:"")+(pr.r?' \u00b7 \u2605 '+r1(pr.r)+(pr.rc?' ('+fm(pr.rc)+')':''):'')+'</small>';
+  HOV.style.left=Math.round(pt.x+14)+"px";HOV.style.top=Math.round(pt.y+14)+"px";HOV.style.display="block"}
+function setInfoLoader(fn){LOADER=typeof fn==="function"?fn:null}
+function loadInfo(){
+  if(INFO)return Promise.resolve(INFO);
+  if(INFOP)return INFOP;
+  if(!LOADER)return Promise.resolve(null);
+  INFOP=Promise.resolve().then(function(){return LOADER()}).then(function(d){INFO=(d&&d.v===1&&Array.isArray(d.items))?d:{v:1,items:[]};return INFO}).catch(function(){INFO={v:1,items:[]};return INFO});
+  return INFOP}
+function r1(v){var n=Number(v);return isFinite(n)&&n>0?n.toFixed(1):""}
+function tel(p){var d=String(p||"").replace(/[^0-9+]/g,"");return d.length>=7?d:""}
+function todayLine(h){
+  if(!h||h.length!==7)return "";var d=new Date(Date.now()+4*3600*1000).getUTCDay();var i=(d+6)%7;var t=h[i];return t?("Today: "+t):""}
+function popHtml(pr,it,loaded){
+  var K=D&&D.kinds[pr.k],lab=K?K.label:"";
+  var h='<b dir=auto>'+X(pr.n||"Unnamed")+'</b>';
+  if(it&&it.n&&it.src==="match"&&it.n.toLowerCase()!==String(pr.n||"").toLowerCase())h+='<span class=plsub>Google: '+X(it.n)+(it.lo?' (likely match)':'')+'</span>';
+  else if(it&&it.lo)h+='<span class=plsub>Likely match</span>';
+  h+='<span class=plsub>'+X(lab)+'</span>';
+  var r=it?it.r:pr.r,rc=it?it.rc:pr.rc;
+  if(r)h+='<span class=plr><b>\u2605 '+r1(r)+'</b>'+(rc?' from '+fm(rc)+' review'+(rc===1?'':'s'):'')+(it&&it.pr?' \u00b7 '+X(it.pr):'')+'</span>';
+  else if(pr.i>=0&&loaded)h+='<span class=plr>No Google rating yet</span>';
+  else if(pr.i<0)h+='<span class=plr>No Google record for this place</span>';
+  if(pr.i>=0&&!loaded)h+='<span class=pll>Loading details\u2026</span>';
+  if(it){
+    var tl=todayLine(it.h);if(tl)h+='<span class=pll>'+X(tl)+'</span>';
+    if(it.st&&it.st!=="OPERATIONAL")h+='<span class=pll>'+X(it.st==="CLOSED_TEMPORARILY"?"Temporarily closed":it.st==="CLOSED_PERMANENTLY"?"Permanently closed":it.st)+'</span>';
+    if(it.ad)h+='<span class=pll dir=auto>'+X(it.ad)+'</span>';
+    var b="";var t=tel(it.ph);if(t)b+='<a href="tel:'+X(t)+'">Call</a>';
+    if(it.ws&&/^https?:\/\//.test(it.ws))b+='<a href="'+X(it.ws)+'" target=_blank rel="noopener noreferrer">Website</a>';
+    if(it.mu&&/^https:\/\//.test(it.mu))b+='<a href="'+X(it.mu)+'" target=_blank rel="noopener noreferrer">Open in Google Maps</a>';
+    if(b)h+='<span class=plbtn>'+b+'</span>';
+    if(it.fl&&it.fl.length)h+='<span class=pltg>'+it.fl.map(function(x){return '<span>'+X(x)+'</span>'}).join("")+'</span>';
+    h+='<span class=plcr>Rating, hours and contact from Google</span>'}
+  return h}
 function hit(e){var m=mp();if(!m||!ACT||!e||!e.point)return false;try{return m.queryRenderedFeatures(e.point,{layers:["pl-pts"]}).length>0}catch(x){return false}}
 function init(){if(typeof document==="undefined"||typeof document.addEventListener!=="function")return;document.addEventListener("click",function(e){var b=e.target&&e.target.closest?e.target.closest(".vnk"):null;if(!b)return;e.preventDefault();toggle(b.getAttribute("data-sc"),b.getAttribute("data-k"))})}
-return {load:load,has:has,can:can,attrs:attrs,areaBlock:areaBlock,cityBlock:cityBlock,setShade:setShade,addLayers:addLayers,sync:sync,clear:clear,toggle:toggle,hit:hit,init:init,state:function(){return ACT?{sc:ACT.sc,k:ACT.k}:null}}
+return {load:load,has:has,can:can,attrs:attrs,areaBlock:areaBlock,cityBlock:cityBlock,setShade:setShade,setInfoLoader:setInfoLoader,popHtml:popHtml,addLayers:addLayers,sync:sync,clear:clear,toggle:toggle,hit:hit,init:init,state:function(){return ACT?{sc:ACT.sc,k:ACT.k}:null},dbg:function(){var m=mp();return {map:!!MAP,mp:!!m,src:!!(m&&m.getSource("plpts")),shade:!!(m&&m.getLayer&&m.getLayer("pl-shade")),loader:!!LOADER,info:!!INFO}},px:function(lon,lat){var m=mp();try{return m&&m.project?m.project([lon,lat]):null}catch(e){return null}}}
 })();
 `;
