@@ -9,9 +9,9 @@ export const PANELS_HTML = '<button type=button id=tglL class=ptg aria-expanded=
   + '<button type=button id=tglR class=ptg aria-expanded=true aria-label="Hide the right panel" title="Hide the right panel">' + CHEV + '</button>';
 
 export const PANELS_CSS = String.raw`
-.ptg{position:fixed;top:50%;margin-top:-28px;width:20px;height:56px;padding:0;border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center}
-.ptg:hover,.ptg:focus-visible{color:var(--gold);border-color:var(--gold);outline:0}
-.ptg svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ptg{position:fixed;top:50%;margin-top:-40px;width:26px;height:80px;padding:0;border:1px solid rgba(197,165,106,.55);background:var(--raise);color:var(--gold);cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(14,20,19,.55)}
+.ptg:hover,.ptg:focus-visible{background:rgba(197,165,106,.2);border-color:var(--gold);outline:0}
+.ptg svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 #tglL{left:340px;border-left:0;border-radius:0 8px 8px 0}
 #tglR{right:400px;border-right:0;border-radius:8px 0 0 8px}
 #tglR svg{transform:scaleX(-1)}
