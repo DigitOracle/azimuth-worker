@@ -2798,7 +2798,7 @@ async function appFetch(request, env, ctx) {
         return new Response(_html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/board") {
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (url.searchParams.get("key") !== env.READ_KEY && !isInsider(env, url)) return new Response("unauthorized", { status: 401 });
         let meetings = [], actions = [];
         try { if (MB(env).length) { const tok = await msToken(env); for (const mb of MB(env)) { meetings = meetings.concat(await msList(env, tok, mb)); } } } catch (e) {}
         try { meetings = meetings.concat(await capturedMeetings(env)); } catch (e) {}
@@ -2833,7 +2833,7 @@ async function appFetch(request, env, ctx) {
           return new Response(png, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=300" } });
         } catch (e) { return new Response("render exception: " + String((e && e.message) || e), { status: 502 }); }
       }
-      if (url.pathname === "/done") { if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 }); const _id = url.searchParams.get("id"); if (_id) await env.MEETINGS.delete("act_" + _id); return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" } }); }
+      if (url.pathname === "/done") { if (url.searchParams.get("key") !== env.READ_KEY && !isInsider(env, url)) return new Response("unauthorized", { status: 401 }); const _id = url.searchParams.get("id"); if (_id) await env.MEETINGS.delete("act_" + _id); return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" } }); }
       if (url.pathname === "/backfill") { if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 }); const mins = parseInt(url.searchParams.get("mins") || "2880", 10) || 2880; let added = []; try { const tok = await msToken(env); const r = await scanEmails(env, tok, mins, 60, { silent: true, top: 90, mailboxes: ["radar@digitalabbot.io"] }); added = r.added || []; } catch (e) { return new Response("backfill error: " + (e && e.message ? e.message : String(e)), { status: 500 }); } if (added.length) { const lines = added.slice(0, 25).map((t, i) => `${i + 1}. ${esc(t)}`).join("\n"); await say(env, `📥 <b>Backlog ingested</b> — ${added.length} action item(s) added to your plate:\n${lines}${added.length > 25 ? "\n…and more" : ""}\n\nSay "action items" to work through them, or open your board.`, true); } else { await say(env, "📥 Backlog scan — no new action items found in that batch.", true); } return new Response("backfill done — actions added: " + added.length); }
       if (url.pathname === "/debugatt") {
         if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
