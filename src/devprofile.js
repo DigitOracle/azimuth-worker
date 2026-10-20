@@ -85,7 +85,7 @@ export function profilePageHtml(o) {
       main += '<a class=dpdl href="/developer_profile_pdf?id=' + esc(dev.id) + "&amp;" + kq(key) + '">Download PDF · ' + dev.pages + (dev.pages === 1 ? " page" : " pages") + '</a>';
       for (let n = 1; n <= dev.pages; n++) {
         const src = "/img/devprofile_" + dev.id + "_" + n + "?" + kq(key);
-        main += '<figure class=dpf style="margin:0 0 14px"><div class=dpn>' + n + " OF " + dev.pages + '</div><a href="' + esc(src) + '" target=_blank rel=noopener><img src="' + esc(src) + '" alt="' + esc(dev.name) + " developer profile, page " + n + " of " + dev.pages + '" loading=' + (n === 1 ? "eager" : "lazy") + '></a></figure>';
+        main += '<figure class=dpf style="margin:0 0 14px">' + (dev.pages > 1 ? '<div class=dpn>' + n + " OF " + dev.pages + '</div>' : "") + '<a href="' + esc(src) + '" target=_blank rel=noopener><img src="' + esc(src) + '" alt="' + esc(dev.name) + " developer profile" + (dev.pages > 1 ? ", page " + n + " of " + dev.pages : "") + '" loading=' + (n === 1 ? "eager" : "lazy") + '></a></figure>';
       }
       main += '<p class=dps>Dubai Land Department registers' + (asOf ? ", as of " + esc(asOf) : "") + '. Escrow shows the agent bank recorded for a live project, never a balance. Project figures are the register’s, brand groupings are reviewed by hand.</p>';
     } else main += '<div class=dpe>This profile is being prepared. It will appear here as three pages with a PDF to download.</div>';

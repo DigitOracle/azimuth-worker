@@ -84,7 +84,9 @@ store.set("img_devprofile_index", JSON.stringify({ as_of: "2026-10-20", develope
   { id: "emaar", name: "Emaar", pages: 3, updated: "2026-10-20", as_of: "2026-06-15" },
   { id: "sobha", name: "Sobha", pages: 2, updated: "2026-10-20" },
   { id: "damac", name: "DAMAC", pages: 0 },
+  { id: "azizi", name: "Azizi", pages: 1, updated: "2026-10-20" },
 ] }));
+store.set("img_devprofile_azizi_1", jpgBytes(1024, 1536));
 for (let n = 1; n <= 4; n++) store.set("img_devprofile_emaar_" + n, EM);
 for (let n = 1; n <= 2; n++) store.set("img_devprofile_sobha_" + n, pngBytes(1000, 1500));
 
@@ -105,6 +107,9 @@ ok(/as of 15 June 2026/.test(html) && /never a balance/.test(html), "the source 
 r = await call("/developer_profile?id=sobha&key=" + CLIENT);
 html = await r.text();
 ok(/1 OF 2/.test(html) && /2 OF 2/.test(html) && /2 pages/.test(html), "a two-page profile says 1 OF 2 and 2 OF 2");
+r = await call("/developer_profile?id=azizi&key=" + CLIENT);
+html = await r.text();
+ok(r.status === 200 && (html.match(/<img /g) || []).length === 1 && !/ OF \d/.test(html) && /Download PDF · 1 page</.test(html), "a one-picture profile: one picture, no '1 OF 1' label, 'Download PDF · 1 page'");
 r = await call("/developer_profile?id=damac&key=" + CLIENT);
 html = await r.text();
 ok(r.status === 200 && /being prepared/.test(html) && !/Download PDF/.test(html) && !/<img /.test(html), "a developer with no pictures: 'being prepared', no PDF button");
@@ -136,6 +141,8 @@ ok(/@page\{size:210mm 315\.00mm;margin:0\}/.test(sent), "the page is shaped like
 ok(/filename="Emaar_Developer_Profile_20OCT2026\.pdf"/.test(r.headers.get("Content-Disposition") || ""), "the file is named for the developer and the date", r.headers.get("Content-Disposition"));
 r = await call("/developer_profile_pdf?id=sobha&key=" + CLIENT, undefined, envB);
 ok(r.status === 200 && r.headers.get("X-Brief-Pages") === "2" && /data:image\/png;base64,/.test(sent), "a two-picture PNG profile makes a two-page PDF");
+r = await call("/developer_profile_pdf?id=azizi&key=" + CLIENT, undefined, envB);
+ok(r.status === 200 && r.headers.get("X-Brief-Pages") === "1" && (sent.match(/class=pg>/g) || []).length === 1, "a one-picture profile makes a one-page PDF");
 r = await call("/developer_profile_pdf?id=damac&key=" + CLIENT, undefined, envB);
 ok(r.status === 404 && (await r.json()).ok === false, "no pictures published: 404, never an empty PDF");
 r = await call("/developer_profile_pdf?key=" + CLIENT, undefined, envB);
