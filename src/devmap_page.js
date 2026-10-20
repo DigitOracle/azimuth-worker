@@ -14,6 +14,7 @@
 import { DEVMAP_CORE_JS } from "./devmap_core.js";
 import { COMMUNITY_LABELS, labelledName } from "./community_labels.js";   // v307 - community name next to the Land Department name
 import { kvJson } from "./brief.js";
+import { devprofileStartHalf } from "./devprofile.js";   // v614 - the lower half of the START card
 import { INDEX_KEY, LEGACY_KEY, compactIndex } from "./investor_facts.js";   // v379 - the investor-PDF facts index (district shards)
 import { PLACES_JS, PLACES_CSS, PLACES_KV_NAME, PLACEINFO_KV_NAME, cleanPlaces, cleanPlaceInfo } from "./devmap_places.js";   // v606 - the venue tiles and a neighbourhood block become cards that show their places on the map
 import { THEME_JS, THEME_CSS } from "./devmap_theme.js";   // v612 - light and dark interface
@@ -933,7 +934,9 @@ export function devmapHtml(key, deps) {
 }
 
 // the START card: one tap into the page (same look as the other START cards)
+// v614 (Kendall 20 Oct 2026): one box split in two - Developers by area on the top half (as it was), Developer profile on the bottom half (src/devprofile.js)
 export function devmapStartCard(key) {
-  return '<a class=ejin href="/developers_map?key=' + esc(encodeURIComponent(key || "")) + '" style="display:block;text-decoration:none;color:inherit">'
-    + '<div class="ejc suc"><div class=ejh><div class="ic suic">&#128205;</div><div><b>Developers by area</b><span>Tap an area: its developers by price band, and the price per sq ft</span></div></div></div></a>';
+  return '<div class="ejc suc dvsplit">'
+    + '<a class=dvh href="/developers_map?key=' + esc(encodeURIComponent(key || "")) + '"><div class=ejh><div class="ic suic">&#128205;</div><div><b>Developers by area</b><span>Tap an area: its developers by price band, and the price per sq ft</span></div></div></a>'
+    + devprofileStartHalf(key) + '</div>';
 }

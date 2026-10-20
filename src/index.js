@@ -29,6 +29,7 @@ import { ejariRoutes } from "./ejari_page.js";   // v279 CONTRACTS SIGNED (Ejari
 import { docOptionsRoute } from "./doc_options_docs.js";   // v407 - /doc_client and /doc_broker: choose the options before the Client or Broker PDF is made
 import { devmapPdfRoute } from "./devmap_pdf.js";   // v324 - the two Developers-by-area PDFs (snapshot, detailed)
 import { devmapRoutes } from "./devmap_page.js";   // v301 DEVELOPERS BY AREA
+import { devprofileRoutes } from "./devprofile.js";   // v614 DEVELOPER PROFILE - the three-page profile and its PDF
 import { mergePlots, mergeSearchIndex, readSearchExtra } from "./nosales.js";   // v392 - no-sales projects with a plot position join the map search
 import { mergeSearchItems, SEARCH_EXTRA_ANNOUNCED_KV } from "./announced.js";   // v397d - announced, not yet registered: Find-page items merge after img_search_extra, each only when present
 import { supplyRoutes, pollerRoutes } from "./supply_page.js";   // v279 ADVERTISED SUPPLY - owner only: /supply*, and /pf_queue + /pf_status for the laptop poller; all logic in src/supply_page.js
@@ -2120,6 +2121,8 @@ async function appFetch(request, env, ctx) {
     if (url.pathname === "/contracts" || url.pathname === "/contracts_api") { const _ej = await ejariRoutes(request, env, url, { clientOk, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_ej) return _ej; }
     // v301 - developers by area: Land Department register data only, so a client key opens it (both paths are in CLIENT_PATHS); devmapRoutes applies clientOk itself and 401s anything else.
     if (url.pathname === "/developers_map" || url.pathname === "/developers_map_api") { const _dm = await devmapRoutes(request, env, url, { clientOk, keyTier, clientResp, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_dm) return _dm; }
+    // v614 - developer profile: the same Land Department register data as the map, so a client key opens it (both paths are in CLIENT_PATHS); devprofileRoutes applies clientOk itself.
+    if (url.pathname === "/developer_profile" || url.pathname === "/developer_profile_pdf") { const _dp = await devprofileRoutes(request, env, url, { clientOk, clientResp, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_dp) return _dp; }
     // ---- end CONTRACTS SIGNED ----
     // ---- v279 ADVERTISED SUPPLY poller: GET /pf_queue, POST /pf_status for the office laptop. X-Azimuth-Ingest header only (src/supply_page.js). ----
     if (url.pathname === "/pf_queue" || url.pathname === "/pf_status") { const _pq = await pollerRoutes(request, env, url, { ctEq }); if (_pq) return _pq; }
@@ -3334,7 +3337,7 @@ async function appFetch(request, env, ctx) {
         // v279 (Kendall, 1 Oct 2026) - the new data is locked behind keys. ejari_* (img_ejari_*): the owner key or a client key, the
         // app pages' check; no key 401. pf_* (img_pf_supply_* and the like): the OWNER key only; a client key, or none, gets 404.
         // Everything else under /img/ stays keyless (the blocks, maps and brochure photos the pages and PDFs load). v279 ----
-        const _lk = nm.toLowerCase().indexOf("pf_") === 0 ? "owner" : (nm.toLowerCase().indexOf("ejari_") === 0 || nm.toLowerCase().indexOf("sales_filed_") === 0) ? "app" : "";
+        const _lk = nm.toLowerCase().indexOf("pf_") === 0 ? "owner" : (nm.toLowerCase().indexOf("ejari_") === 0 || nm.toLowerCase().indexOf("sales_filed_") === 0 || nm.toLowerCase().indexOf("devprofile_") === 0) ? "app" : "";
         if (_lk === "owner" && keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
         if (_lk === "app" && !clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _cc = _lk ? "private, no-store" : "public, max-age=3600";   // v279 - keyed data is never cached by a shared cache
@@ -12876,7 +12879,7 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
-const CLIENT_PATHS = ["/adv_bldg", "/city_bldg", "/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf", "/doc_client", "/doc_broker"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
+const CLIENT_PATHS = ["/adv_bldg", "/city_bldg", "/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf", "/developer_profile", "/developer_profile_pdf", "/doc_client", "/doc_broker"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/", "/render/"];   // v187 - a building page is a client page
 const KEYLESS_PATHS = ["/manifest.webmanifest", "/naj_icon.svg", "/privacy", "/verse", "/bg.jpg", "/residents", "/residents/data"];   // need no key; a client page may still send its own

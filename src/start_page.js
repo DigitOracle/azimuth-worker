@@ -6,6 +6,7 @@
 // v279: the two placeholders are replaced by the real cards (src/ejari_page.js ejariStartCard, src/supply_page.js supplyStartCard).
 import { ejariStartCard, EJARI_START_CSS } from "./ejari_page.js";     // v279 CONTRACTS SIGNED - the real card
 import { supplyStartCard, SUPPLY_START_CSS } from "./supply_page.js";   // v279 ADVERTISED SUPPLY - the real card, owner only
+import { DEVPROFILE_START_CSS } from "./devprofile.js";   // v614 - the split card
 import { devmapStartCard } from "./devmap_page.js";   // v301 DEVELOPERS BY AREA - the card
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -41,7 +42,7 @@ export function startBody(key, rk, isOwner) {
     + '<div class=tools>'
     + tile("CONTRACTS SIGNED · EJARI", ejariStartCard(key, rk))
     // v301 - developers by area (Land Department register only, so it opens on the normal client key)
-    + tile("DEVELOPERS BY AREA", devmapStartCard(key))
+    + tile("DEVELOPERS", devmapStartCard(key))   // v614 - the box holds two: Developers by area (top) and Developer profile (bottom)
     + (isOwner === true   // ADVERTISED SUPPLY: the owner key only - adverts data never reaches a client (standing rule); fails closed
       ? tile("ADVERTISED SUPPLY", supplyStartCard(key))
         // v445 (Kendall 9 Oct: "remove this"): the DAMAC Hills checklist tile is off START; /checklist itself still works by its link
@@ -80,4 +81,4 @@ export const START_CSS = '.big,.big *,.soon,.soon *,.panel,.tag{box-sizing:borde
   + '.soon.open{border-color:#C5A56A}'
   + '.panel{margin-top:8px;background:#0E1817;border:1px dashed #2C3B37;border-radius:14px;padding:12px 14px;font-size:.86rem;line-height:1.5;color:#C9D2CE}'
   + '@media (max-width:340px){.big{grid-template-columns:1fr}.btn{min-height:140px}}'
-  + EJARI_START_CSS + SUPPLY_START_CSS;   // v279 - the two cards' own rules
+  + EJARI_START_CSS + SUPPLY_START_CSS + DEVPROFILE_START_CSS;   // v279 - the two cards' own rules

@@ -196,7 +196,7 @@ ok(cleanShortlist(Array.from({ length: 200 }, (_, i) => "d" + i)).length === 60,
 // START: the card
 r = await call("/start?key=" + CLIENT);
 const sh = await r.text();
-ok(r.status === 200 && sh.includes("/developers_map?key=") && /DEVELOPERS BY AREA/.test(sh), "/start carries the DEVELOPERS BY AREA card");
+ok(r.status === 200 && sh.includes("/developers_map?key=") && /Developers by area/.test(sh), "/start carries the Developers by area card (the top half of the split DEVELOPERS box, v614)");
 
 // ---- 4. the real index, if built ------------------------------------------------------------------------------------------------
 const RP = process.env.DEVMAP_INDEX;
