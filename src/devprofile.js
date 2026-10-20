@@ -51,7 +51,7 @@ export function cleanIndex(raw) {
 const PROFILE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#C5A56A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/></svg>';
 export function devprofileStartHalf(key) {
   return '<a class="dvh dvp" href="/developer_profile?key=' + esc(encodeURIComponent(key || "")) + '">'
-    + '<div class=ejh><div class="ic suic">' + PROFILE_SVG + '</div><div><b>Developer profile</b><span>Projects, escrow and delivery record in three pages. PDF to download</span></div></div></a>';
+    + '<div class=ejh><div class="ic suic">' + PROFILE_SVG + '</div><div><b>Developer profile</b><span>Projects, escrow and delivery record. PDF to download</span></div></div></a>';
 }
 export const DEVPROFILE_START_CSS = '.dvsplit{padding:0!important;gap:0!important;overflow:hidden}.dvsplit .dvh{display:block;flex:1 1 0;padding:14px;color:inherit;text-decoration:none}'
   + '.dvsplit .dvp{border-top:1px solid #3A3222}';
@@ -88,9 +88,9 @@ export function profilePageHtml(o) {
         main += '<figure class=dpf style="margin:0 0 14px">' + (dev.pages > 1 ? '<div class=dpn>' + n + " OF " + dev.pages + '</div>' : "") + '<a href="' + esc(src) + '" target=_blank rel=noopener><img src="' + esc(src) + '" alt="' + esc(dev.name) + " developer profile" + (dev.pages > 1 ? ", page " + n + " of " + dev.pages : "") + '" loading=' + (n === 1 ? "eager" : "lazy") + '></a></figure>';
       }
       main += '<p class=dps>Dubai Land Department registers' + (asOf ? ", as of " + esc(asOf) : "") + '. Escrow shows the agent bank recorded for a live project, never a balance. Project figures are the register’s, brand groupings are reviewed by hand.</p>';
-    } else main += '<div class=dpe>This profile is being prepared. It will appear here as three pages with a PDF to download.</div>';
+    } else main += '<div class=dpe>This profile is being prepared. It will appear here with a PDF to download.</div>';
   } else if (idx && idx.developers.length) {
-    main = '<div class=dpk>DEVELOPERS</div><h1 class=dpt>Developer <em>profile</em></h1><p class=dpl>Pick a developer: three pages, and a PDF to take away.</p><div class=dpg>'
+    main = '<div class=dpk>DEVELOPERS</div><h1 class=dpt>Developer <em>profile</em></h1><p class=dpl>Pick a developer: its profile, and a PDF to take away.</p><div class=dpg>'
       + idx.developers.map((d) => '<a class="dpc ' + (d.pages ? "on" : "off") + '" href="/developer_profile?id=' + esc(d.id) + "&amp;" + kq(key) + '"><b>' + esc(d.name) + '</b><span>' + (d.pages ? d.pages + (d.pages === 1 ? " page" : " pages") + (d.updated ? " · " + esc(longDate(d.updated)) : "") : "In preparation") + '</span></a>').join("") + '</div>';
   } else {
     main = '<div class=dpk>DEVELOPERS</div><h1 class=dpt>Developer <em>profile</em></h1><div class=dpe>No developer profiles are published yet.</div>';
