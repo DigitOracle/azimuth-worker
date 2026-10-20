@@ -373,7 +373,7 @@ export async function workRoute(request, env, url, deps) {
       // v576 - outside-role work counted on its own, by whose job it was (the renewal evidence)
       const ow = week.filter((e) => e.in_scope === false), byD = {}; ow.forEach((e) => { const d = e.out_role || "Other"; byD[d] = (byD[d] || 0) + 1; });
       const outside = { week: ow.length, term: all.filter((e) => e.in_scope === false).length, by: Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => ({ dept: d, n: byD[d] })) };
-      return J({ from: f, to: t, today: dubaiToday(), entries: week, tally, outside, hoursweek: hoursPicture(week), where: WHERE, tasks: applyOverrides(tasksOf(all), await taskOverrides(env)), depts: deptBoard(applyOverrides(tasksOf(all), await taskOverrides(env)), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES, broker_tasks: BROKER_TASKS,
+      return J({ from: f, to: t, today: dubaiToday(), start: PHASES[0].from, entries: week, tally, outside, hoursweek: hoursPicture(week), where: WHERE, tasks: applyOverrides(tasksOf(all), await taskOverrides(env)), depts: deptBoard(applyOverrides(tasksOf(all), await taskOverrides(env)), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES, broker_tasks: BROKER_TASKS,
         // v571 - the people picker in hierarchy: Ali and Faez (and Sultan) on their own at the top, then each department's people
         people_tree: [{ dept: "Leadership", people: PEOPLE.filter((x) => deptOf(x[0]) === "Leadership").map((x) => x[0]) }].concat(DEPTS.filter((d) => d !== "Leadership").map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) }))) });
     }
@@ -485,8 +485,15 @@ export async function workRoute(request, env, url, deps) {
   }
   if (p === "/momo/work/report") {
     // v577 - ?days=2026-10-13,2026-10-14 picks exact days (Mon and Tue); otherwise from/to
-    const picked = String(url.searchParams.get("days") || "").split(",").map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
-    const from = picked.length ? picked[0] : okDate(url.searchParams.get("from") || weekOf(dubaiToday())[0]), to = picked.length ? picked[picked.length - 1] : okDate(url.searchParams.get("to") || weekOf(from)[1]);
+    // v615 (Kendall 20 Oct 2026: "the ability to check more than one month at a time") - from/to may span months, and ?all=1 is everything
+    // since the engagement began (2 Oct 2026) up to today. A span over more than one calendar month comes back as one summary of the whole
+    // period followed by one page per month, so a single Save as PDF holds the whole record.
+    const all = url.searchParams.get("all") === "1";
+    const picked = all ? [] : String(url.searchParams.get("days") || "").split(",").map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    let from = all ? PHASES[0].from : picked.length ? picked[0] : okDate(url.searchParams.get("from") || weekOf(dubaiToday())[0]);
+    let to = all ? dubaiToday() : picked.length ? picked[picked.length - 1] : okDate(url.searchParams.get("to") || weekOf(from)[1]);
+    if (to < from) { const x = from; from = to; to = x; }
+    if ((Date.parse(to) - Date.parse(from)) / 864e5 > 400) to = new Date(Date.parse(from) + 400 * 864e5).toISOString().slice(0, 10);   // a span is at most about 13 months
     return new Response(reportHtml(await listEntries(env, from, to), from, to, applyOverrides(tasksOf(await listEntries(env, PHASES[0].from, to)), await taskOverrides(env)), picked), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   // v573 DEBRIEF (Kendall 14 Oct: "Ali ... wants a debrief of what happened because he wasn't there ... immediately create a PDF ... very quick").
@@ -592,29 +599,47 @@ export function roleGrid(es) {
     + (sh >= MIN_HOURS ? 'The 15 h line for the Strategic Lead role was met' + (sh - MIN_HOURS >= 0.5 ? ' with ' + r1(sh - MIN_HOURS) + ' h to spare.' : '.') : 'The Strategic Lead role is ' + r1(MIN_HOURS - sh) + ' h short of the 15 h line (clause 8.1).');
   return '<h2>THE TWO ROLES</h2><table class=rg><tr><th></th><th class=ch>Activities</th><th class=ch>Time (hours)</th></tr>' + rows + '</table><div class=sum><b>IN SHORT</b>' + summary + '</div>';
 }
-export function reportHtml(es, from, to, allTasks, pickedDays) {
-  const days = pickedDays && pickedDays.length ? pickedDays : (() => { const o = []; for (let d = new Date(from + "T00:00:00Z"); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) o.push(d.toISOString().slice(0, 10)); return o; })();
-  es = es.filter((e) => days.includes(e.date));
-  const daily = days.length === 1, monthly = days.length > 7, hk = hoursByKpi(es), HP = hoursPicture(es), totH = HP.total;
+// v615 - the report is built in three pieces so a span of months can repeat the middle one once per month: reportSection (the tiles,
+// the 15 h meter, the two roles, the at-a-glance grid, the tasks, the days), reportDoc (the FN page around it) and reportHtml (which decides).
+const REPORT_MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+export function reportSection(es, days, allTasks, opt) {
+  opt = opt || {};
+  const daily = days.length === 1, monthly = days.length > 7, HP = hoursPicture(es), totH = HP.total;
   // v581 - a month reads week by week: one row per week in the at-a-glance grid, the 15 h line judged per week
   const weeks = []; if (monthly) { let cur = null; days.forEach((d) => { const w = weekOf(d)[0]; if (!cur || cur.w !== w) { cur = { w, days: [] }; weeks.push(cur); } cur.days.push(d); }); }
-  // v578 - two donuts in HOURS: what kind of work (her role vs broker vs other departments) and where (office, home, on site)
-  const KIND_COL = { "Strategic Lead": TEAL, "Broker": WARM, "Other departments": GREY }, PLACE_COL = { Office: RAMP[4], Home: RAMP[2], "On site": RAMP[0], Other: GREY, "Not stated": "#E3DDD1" };
-  const kindParts = HP.kinds.map((k) => ({ name: KIND_SOFT[k.name] || k.name, v: k.hours, color: KIND_COL[k.name] })), placeParts = HP.places.map((p) => ({ name: p.name, v: p.hours, color: PLACE_COL[p.name] }));
+  const KIND_COL = { "Strategic Lead": TEAL, "Broker": WARM, "Other departments": GREY };
   const tk = (allTasks || tasksOf(es)).filter((t) => days.some((d) => t.last >= d && t.first <= d) || es.some((e) => (e.works || []).includes(t.name)));
-  const inRole = es.filter((e) => e.in_scope !== false), outRole = es.filter((e) => e.in_scope === false);
+  const outRole = es.filter((e) => e.in_scope === false);
   const byD = {}; outRole.forEach((e) => { const d = e.out_role || "Other"; byD[d] = (byD[d] || 0) + 1; });
   const people = new Set(); es.forEach((e) => (e.people || []).forEach((n) => n !== "All sales agents" && people.add(n)));
-  const parts = KPIS.map((k, i) => ({ name: k.name, v: inRole.filter((e) => (e.kpis || [])[0] === k.id).length, color: RAMP[i] })).concat([{ name: "Supporting the wider team", v: outRole.length, color: WARM }]);
   const perDay = days.map((d) => ({ d: dayName(d).slice(0, 3) + (days.length > 7 ? " " + (+d.slice(8)) : ""), n: es.filter((e) => e.date === d).length, out: es.filter((e) => e.date === d && e.in_scope === false).length }));
-  const moved = tk.filter((t) => t.status !== "Done").length + tk.filter((t) => t.status === "Done").length;
-  const FOOT = "<b>CONFIDENTIAL · FN Realty internal use only.</b> Not to be copied, distributed, modified, reissued or shared outside FN Realty without prior written approval from FN Realty management. © 2026 FN Realty. All rights reserved.";
-  const MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const span = daily ? esc(dayName(days[0])) + ' ' + esc(fmtD(days[0])) : monthly ? MON[+days[0].slice(5, 7) - 1] + ' ' + days[0].slice(0, 4) + ' · to ' + esc(fmtD(days[days.length - 1])) : (days.length === 7 && weekOf(days[0])[0] === days[0] ? 'Week of ' + esc(fmtD(days[0])) : days.map((d) => dayName(d).slice(0, 3)).join(", ") + ' · ' + esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[days.length - 1])));
   const tile = (n, l) => '<div class=tile><b>' + n + '</b><span>' + l + '</span></div>';
   const pbar = (p, c) => '<div class=pb><i style="width:' + p + '%;background:' + c + '"></i></div>';
   const byDay = days.map((d) => ({ d, es: es.filter((e) => e.date === d) })).filter((x) => x.es.length);
-  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (daily ? 'Daily' : 'Activity') + ' report</title>'
+  // v584 (Najjuko 14 Oct: "out of the six, three is the actual role - marketing, PR and business development - and the other three is the broker
+  // role") - the split sits ON the hours tile, so the headline number is never read alone
+  const head = '<div class=tiles>' + tile(es.length, 'activities')
+    + '<div class=tile><b>' + totH + '</b><span>' + (HP.estimated ? 'hours · ' + HP.clocked + ' clocked, ' + HP.estimated + ' est.' : 'hours clocked') + '</span>'
+      + (totH ? '<div class=split>' + HP.kinds.filter((k) => k.hours).map((k) => '<span><i style="background:' + (KIND_COL[k.name] || GREY) + '"></i>' + k.hours + ' h ' + esc(k.name === "Strategic Lead" ? "as Strategic Lead" : k.name === "Broker" ? "as a broker" : "supporting others") + '</span>').join('') + '</div>' : '') + '</div>'
+    + tile(people.size, 'people met') + tile(tk.length, 'tasks moved') + '</div>'
+    + (daily ? '' : monthly ? (() => { const full = weeks.filter((w) => w.days.length === 7), met = full.filter((w) => hoursPicture(es.filter((e) => w.days.includes(e.date))).total >= MIN_HOURS).length; return '<div class=meter><div class=mh><b>' + met + ' of ' + full.length + ' full weeks</b><span>at or above the 15 h weekly minimum (clause 8.1)</span></div><div class=pb style="height:10px"><i style="width:' + (full.length ? Math.round(met / full.length * 100) : 0) + '%;background:' + (full.length && met === full.length ? TEAL : '#D9A441') + '"></i></div></div>'; })()
+      : '<div class=meter><div class=mh><b>' + totH + ' / ' + MIN_HOURS + ' h</b><span>' + (totH >= MIN_HOURS ? 'contract minimum met (clause 8.1)' : (Math.round((MIN_HOURS - totH) * 10) / 10) + ' h short of the 15 h minimum (clause 8.1)') + '</span></div><div class=pb style="height:10px"><i style="width:' + Math.min(100, Math.round(totH / MIN_HOURS * 100)) + '%;background:' + (totH >= MIN_HOURS ? TEAL : '#D9A441') + '"></i></div></div>')
+    + roleGrid(es);
+  if (opt.summaryOnly) return head;
+  return head
+    // v577.1 (the Excel idiom she reads: a Mon-Fri day-at-a-glance grid, one row per day: what, hours, with whom, outside-role flagged)
+    + (monthly ? '<h2>MONTH AT A GLANCE</h2>' + dayBars(perDay)
+      + '<table class=glance><tr><th>Week</th><th>Activities</th><th>Hours</th><th>Of 15 h</th><th>As Strategic Lead</th><th>As a broker</th><th>Supporting</th></tr>' + weeks.map((wkk) => { const we = es.filter((e) => wkk.days.includes(e.date)), wp = hoursPicture(we), k = (n) => (wp.kinds.find((x) => x.name === n) || {}).hours || 0;
+        return '<tr' + (we.length ? '' : ' class=empty') + '><td><b>' + esc(fmtD(wkk.days[0]).slice(0, 6)) + '</b>–' + esc(fmtD(wkk.days[wkk.days.length - 1]).slice(0, 6)) + '</td><td class=num>' + we.length + '</td><td class=num>' + wp.total + '</td><td class=num>' + (wp.total >= MIN_HOURS ? '<span style="color:#15948A;font-weight:600">met</span>' : (wkk.days.length < 7 ? 'part week' : (Math.round((MIN_HOURS - wp.total) * 10) / 10) + ' short')) + '</td><td class=num>' + k("Strategic Lead") + '</td><td class=num>' + k("Broker") + '</td><td class=num>' + k("Other departments") + '</td></tr>'; }).join("") + '</table>'
+    : days.length > 1 ? '<h2>WEEK AT A GLANCE</h2>' + dayBars(perDay)
+      + '<table class=glance><tr><th>Day</th><th>Activities</th><th>Hours</th><th>With</th><th>Outside role</th></tr>' + days.map((d) => { const de = es.filter((e) => e.date === d), h = Math.round(de.reduce((s, e) => s + hoursOf(e), 0) * 10) / 10, who = [...new Set(de.flatMap((e) => (e.people || []).filter((n) => n !== "All sales agents").map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0])))], o = de.filter((e) => e.in_scope === false).length;
+        return '<tr' + (de.length ? '' : ' class=empty') + '><td><b>' + esc(dayName(d).slice(0, 3)) + '</b> ' + (+d.slice(8)) + '</td><td>' + (de.length ? de.map((e) => esc(e.title) + (isClocked(e) ? ' <span>' + esc(e.start) + '–' + esc(e.end) + '</span>' : '')).join('; ') : '<span>—</span>') + '</td><td class=num>' + (de.length ? h : '') + '</td><td>' + esc(who.slice(0, 4).join(', ')) + (who.length > 4 ? ' +' + (who.length - 4) : '') + '</td><td class=num>' + (o ? '<span class=og>' + o + '</span>' : '') + '</td></tr>'; }).join("") + '</table>' : '')
+    + (tk.length ? '<h2>TASKS</h2>' + tk.slice(0, 8).map((t) => '<div class=tk><div><b>' + esc(t.name) + '</b><small>' + esc(t.status) + ' · ' + t.days + ' day' + (t.days === 1 ? '' : 's') + (t.owners && t.owners.length ? ' · with ' + esc(t.owners.slice(0, 3).join(", ")) : '') + '</small></div>' + pbar(t.percent, t.status === "Done" ? RAMP[4] : TEAL) + '<div class=pct>' + t.percent + '%</div></div>').join("") : '')
+    + (outRole.length ? '<div class=out><b>Going beyond the role: ' + outRole.length + (outRole.length === 1 ? ' activity' : ' activities') + '</b> · ' + esc(Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => (d === "Sales" ? "as a broker" : "for " + d) + ' ' + byD[d]).join(", ")) + ' · support given to the wider team, noted alongside the Strategic Lead work.</div>' : '')
+    + (byDay.length ? '<div class=day>' + byDay.map((x) => '<h3>' + esc(dayName(x.d)) + ' ' + esc(fmtD(x.d)) + '</h3>' + x.es.map((e) => '<div class=li><i style="background:' + (e.in_scope === false ? WARM : TEAL) + '"></i><div>' + esc(e.title) + ' <span>· ' + esc(e.type) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ' · ' + esc(e.time_of_day.toLowerCase()) : '') + ((e.people || []).length ? ' · ' + esc(e.people.map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0]).slice(0, 3).join(", ")) : '') + '</span></div></div>').join("")).join("") + '</div>' : '');
+}
+export function reportDoc(kindWord, span, body, docTitle) {
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (kindWord === 'Daily' ? 'Daily' : 'Activity') + ' report</title>'
     + '<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap"><style>'
     // v579 (Najjuko 14 Oct, from her own PDF): the browser's print header stamped the Azimuth link (with her key) on every page - @page margin boxes are
     // emptied so no URL, date or page number prints; the confidentiality footer is gone; the FN wordmark (the real logo file replaces it when she sends it).
@@ -639,27 +664,11 @@ export function reportHtml(es, from, to, allTasks, pickedDays) {
     + '.glance{width:100%;border-collapse:collapse;margin-top:10px;font-size:9pt}.glance th{text-align:left;font-weight:600;color:#626B7C;font-size:8pt;letter-spacing:.06em;text-transform:uppercase;padding:4px 6px;border-bottom:1px solid #E9EAEC}.glance td{padding:6px;border-bottom:1px solid #EFE9DE;vertical-align:top}.glance td:first-child{white-space:nowrap;width:52px}.glance .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.glance .empty td{color:#9AA0B5}.glance .og{display:inline-block;background:#FBF1EA;color:#9A4E1E;border-radius:99px;padding:1px 8px;font-weight:600}'
     + '.day{margin-top:12px}.day h3{font-size:9pt;color:#8A6F3E;letter-spacing:.08em;text-transform:uppercase;margin:10px 0 4px;font-weight:600}.li{display:flex;gap:8px;font-size:9.5pt;padding:3px 0}.li i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none}.li span{color:#626B7C}'
     + '.btns{position:fixed;right:14px;bottom:14px;display:flex;gap:8px}.btn{background:' + FN_NAVY + ';color:' + FN_PEACH + ';border:0;border-radius:99px;padding:10px 16px;font:600 10pt Inter,sans-serif;cursor:pointer}.btn:disabled{opacity:.6}'
-    + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 14px}.btns{display:none}}</style></head><body><div class=pg>'
-    + '<div class=latt></div><header><div><h1><em>' + (daily ? 'Daily' : monthly ? 'Monthly' : days.length === 7 ? 'Weekly' : 'Activity') + '</em> Report</h1><p>' + span + '</p></div><div class=who><div class=fnmark><img src="' + FN_LOGO + '" alt="FN Realty"></div><b>Serah Najjuko Ganyana</b>Strategic Lead – Marketing, PR &amp; Business Development</div></header>'
-    // v584 (Najjuko 14 Oct: "out of the six, three is the actual role - marketing, PR and business development - and the other three is the broker
-    // role") - the split sits ON the hours tile, so the headline number is never read alone
-    + '<div class=tiles>' + tile(es.length, 'activities')
-    + '<div class=tile><b>' + totH + '</b><span>' + (HP.estimated ? 'hours · ' + HP.clocked + ' clocked, ' + HP.estimated + ' est.' : 'hours clocked') + '</span>'
-      + (totH ? '<div class=split>' + HP.kinds.filter((k) => k.hours).map((k) => '<span><i style="background:' + (KIND_COL[k.name] || GREY) + '"></i>' + k.hours + ' h ' + esc(k.name === "Strategic Lead" ? "as Strategic Lead" : k.name === "Broker" ? "as a broker" : "supporting others") + '</span>').join('') + '</div>' : '') + '</div>'
-    + tile(people.size, 'people met') + tile(tk.length, 'tasks moved') + '</div>'
-    + (daily ? '' : monthly ? (() => { const full = weeks.filter((w) => w.days.length === 7), met = full.filter((w) => hoursPicture(es.filter((e) => w.days.includes(e.date))).total >= MIN_HOURS).length; return '<div class=meter><div class=mh><b>' + met + ' of ' + full.length + ' full weeks</b><span>at or above the 15 h weekly minimum (clause 8.1)</span></div><div class=pb style="height:10px"><i style="width:' + (full.length ? Math.round(met / full.length * 100) : 0) + '%;background:' + (full.length && met === full.length ? TEAL : '#D9A441') + '"></i></div></div>'; })()
-      : '<div class=meter><div class=mh><b>' + totH + ' / ' + MIN_HOURS + ' h</b><span>' + (totH >= MIN_HOURS ? 'contract minimum met (clause 8.1)' : (Math.round((MIN_HOURS - totH) * 10) / 10) + ' h short of the 15 h minimum (clause 8.1)') + '</span></div><div class=pb style="height:10px"><i style="width:' + Math.min(100, Math.round(totH / MIN_HOURS * 100)) + '%;background:' + (totH >= MIN_HOURS ? TEAL : '#D9A441') + '"></i></div></div>')
-    + roleGrid(es)
-    // v577.1 (the Excel idiom she reads: a Mon-Fri day-at-a-glance grid, one row per day: what, hours, with whom, outside-role flagged)
-    + (monthly ? '<h2>MONTH AT A GLANCE</h2>' + dayBars(perDay)
-      + '<table class=glance><tr><th>Week</th><th>Activities</th><th>Hours</th><th>Of 15 h</th><th>As Strategic Lead</th><th>As a broker</th><th>Supporting</th></tr>' + weeks.map((wkk) => { const we = es.filter((e) => wkk.days.includes(e.date)), wp = hoursPicture(we), k = (n) => (wp.kinds.find((x) => x.name === n) || {}).hours || 0;
-        return '<tr' + (we.length ? '' : ' class=empty') + '><td><b>' + esc(fmtD(wkk.days[0]).slice(0, 6)) + '</b>–' + esc(fmtD(wkk.days[wkk.days.length - 1]).slice(0, 6)) + '</td><td class=num>' + we.length + '</td><td class=num>' + wp.total + '</td><td class=num>' + (wp.total >= MIN_HOURS ? '<span style="color:#15948A;font-weight:600">met</span>' : (wkk.days.length < 7 ? 'part week' : (Math.round((MIN_HOURS - wp.total) * 10) / 10) + ' short')) + '</td><td class=num>' + k("Strategic Lead") + '</td><td class=num>' + k("Broker") + '</td><td class=num>' + k("Other departments") + '</td></tr>'; }).join("") + '</table>'
-    : days.length > 1 ? '<h2>WEEK AT A GLANCE</h2>' + dayBars(perDay)
-      + '<table class=glance><tr><th>Day</th><th>Activities</th><th>Hours</th><th>With</th><th>Outside role</th></tr>' + days.map((d) => { const de = es.filter((e) => e.date === d), h = Math.round(de.reduce((s, e) => s + hoursOf(e), 0) * 10) / 10, who = [...new Set(de.flatMap((e) => (e.people || []).filter((n) => n !== "All sales agents").map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0])))], o = de.filter((e) => e.in_scope === false).length;
-        return '<tr' + (de.length ? '' : ' class=empty') + '><td><b>' + esc(dayName(d).slice(0, 3)) + '</b> ' + (+d.slice(8)) + '</td><td>' + (de.length ? de.map((e) => esc(e.title) + (isClocked(e) ? ' <span>' + esc(e.start) + '–' + esc(e.end) + '</span>' : '')).join('; ') : '<span>—</span>') + '</td><td class=num>' + (de.length ? h : '') + '</td><td>' + esc(who.slice(0, 4).join(', ')) + (who.length > 4 ? ' +' + (who.length - 4) : '') + '</td><td class=num>' + (o ? '<span class=og>' + o + '</span>' : '') + '</td></tr>'; }).join("") + '</table>' : '')
-    + (tk.length ? '<h2>TASKS</h2>' + tk.slice(0, 8).map((t) => '<div class=tk><div><b>' + esc(t.name) + '</b><small>' + esc(t.status) + ' · ' + t.days + ' day' + (t.days === 1 ? '' : 's') + (t.owners && t.owners.length ? ' · with ' + esc(t.owners.slice(0, 3).join(", ")) : '') + '</small></div>' + pbar(t.percent, t.status === "Done" ? RAMP[4] : TEAL) + '<div class=pct>' + t.percent + '%</div></div>').join("") : '')
-    + (outRole.length ? '<div class=out><b>Going beyond the role: ' + outRole.length + (outRole.length === 1 ? ' activity' : ' activities') + '</b> · ' + esc(Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => (d === "Sales" ? "as a broker" : "for " + d) + ' ' + byD[d]).join(", ")) + ' · support given to the wider team, noted alongside the Strategic Lead work.</div>' : '')
-    + (byDay.length ? '<div class=day>' + byDay.map((x) => '<h3>' + esc(dayName(x.d)) + ' ' + esc(fmtD(x.d)) + '</h3>' + x.es.map((e) => '<div class=li><i style="background:' + (e.in_scope === false ? WARM : TEAL) + '"></i><div>' + esc(e.title) + ' <span>· ' + esc(e.type) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ' · ' + esc(e.time_of_day.toLowerCase()) : '') + ((e.people || []).length ? ' · ' + esc(e.people.map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0]).slice(0, 3).join(", ")) : '') + '</span></div></div>').join("")).join("") + '</div>' : '')
+    // v615 - a span of months: one section per month, each on its own printed page
+    + '.mth{break-before:page;page-break-before:always;margin-top:26px;padding-top:14px;border-top:1px solid ' + FN_GOLD + '}.mh2{font-size:15pt;margin:0 0 8px}'
+    + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 14px}.btns{display:none}.mth{border-top:0;margin-top:0;padding-top:0}}</style></head><body><div class=pg>'
+    + '<div class=latt></div><header><div><h1><em>' + kindWord + '</em> Report</h1><p>' + span + '</p></div><div class=who><div class=fnmark><img src="' + FN_LOGO + '" alt="FN Realty"></div><b>Serah Najjuko Ganyana</b>Strategic Lead – Marketing, PR &amp; Business Development</div></header>'
+    + body
     + '</div>'
     // v579 - the Azimuth link (her key rides in it) is never what gets shared. The page title is "FN Daily report 14 Oct 2026", so the browser's
     // print-to-PDF names the file that way; on the phone, Save as PDF opens the share sheet with the PDF itself (email, WhatsApp). One path, no link.
@@ -669,15 +678,34 @@ export function reportHtml(es, from, to, allTasks, pickedDays) {
     // v582 (Kendall: "once she clicks on debrief, there's no way to exit back out of it") - Back on every report page: closes the tab it opened in,
     // or steps back where it was opened in place.
     + '<div class=btns><button class=btn id=bk>&#8592; Back</button><button class=btn onclick="print()">Share / Save as PDF</button></div>'
-    + '<script>document.title=' + JSON.stringify((daily ? 'FN Daily report ' : monthly ? 'FN Monthly report ' : days.length === 7 ? 'FN Weekly report ' : 'FN Activity report ') + (daily ? fmtD(days[0]) : monthly ? MON[+days[0].slice(5, 7) - 1] + ' ' + days[0].slice(0, 4) : fmtD(days[0]) + ' to ' + fmtD(days[days.length - 1]))) + ';'
-    + BACK_JS + '</script></body></html>';
+    + '<script>document.title=' + JSON.stringify(docTitle) + ';' + BACK_JS + '</script></body></html>';
+}
+export function reportHtml(es, from, to, allTasks, pickedDays) {
+  const days = pickedDays && pickedDays.length ? pickedDays : (() => { const o = []; for (let d = new Date(from + "T00:00:00Z"); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) o.push(d.toISOString().slice(0, 10)); return o; })();
+  es = es.filter((e) => days.includes(e.date));
+  const daily = days.length === 1, monthly = days.length > 7;
+  const months = [...new Set(days.map((d) => d.slice(0, 7)))];
+  const lab = (ym) => REPORT_MON[+ym.slice(5, 7) - 1] + ' ' + ym.slice(0, 4);
+  // v615 - more than one calendar month: the whole period summarised once, then one page per month
+  if (months.length > 1) {
+    const span = esc(lab(months[0]) + ' to ' + lab(months[months.length - 1]) + ' · ' + fmtD(days[0]) + ' to ' + fmtD(days[days.length - 1]) + ' · one page per month');
+    const body = '<h2>THE WHOLE PERIOD · ' + months.length + ' MONTHS</h2>' + reportSection(es, days, allTasks, { summaryOnly: true })
+      + months.map((ym) => { const md = days.filter((d) => d.slice(0, 7) === ym), me = es.filter((e) => md.includes(e.date));
+        return '<section class=mth><h2 class=mh2>' + esc(lab(ym).toUpperCase()) + (me.length ? '' : ' · NOTHING LOGGED') + '</h2>' + reportSection(me, md, allTasks) + '</section>'; }).join("");
+    return reportDoc('Activity', span, body, 'FN Activity report ' + lab(months[0]) + ' to ' + lab(months[months.length - 1]));
+  }
+  const span = daily ? esc(dayName(days[0])) + ' ' + esc(fmtD(days[0])) : monthly ? lab(months[0]) + ' · to ' + esc(fmtD(days[days.length - 1])) : (days.length === 7 && weekOf(days[0])[0] === days[0] ? 'Week of ' + esc(fmtD(days[0])) : days.map((d) => dayName(d).slice(0, 3)).join(", ") + ' · ' + esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[days.length - 1])));
+  const kindWord = daily ? 'Daily' : monthly ? 'Monthly' : days.length === 7 ? 'Weekly' : 'Activity';
+  const title = (daily ? 'FN Daily report ' : monthly ? 'FN Monthly report ' : days.length === 7 ? 'FN Weekly report ' : 'FN Activity report ') + (daily ? fmtD(days[0]) : monthly ? lab(months[0]) : fmtD(days[0]) + ' to ' + fmtD(days[days.length - 1]));
+  return reportDoc(kindWord, span, reportSection(es, days, allTasks), title);
 }
 
 // v577 (Kendall 14 Oct: "at the very top of the hierarchy it's what did you do? And then something else that says report") - two tabs, that is the whole first screen
 const WORK_BODY = '<div class=tag>MOMO · WORK</div>'
   + '<div class=seg id=wtabs style="margin:8px 0 14px;grid-template-columns:1fr 1fr 1fr"><button type=button id=tlog class=on>What did you do?</button><button type=button id=trep>Report</button><button type=button id=tplan>Plan</button></div>'
-  + '<div id=vrep style="display:none"><h1 style="font-size:1.35rem">Make a report</h1><div class=seg style="grid-template-columns:1fr 1fr 1fr 1fr;gap:6px"><button type=button class="on" data-rp=today style="padding:12px 4px;font-size:.85rem">Today</button><button type=button data-rp=week style="padding:12px 4px;font-size:.85rem">Week</button><button type=button data-rp=month style="padding:12px 4px;font-size:.85rem">Month</button><button type=button data-rp=pick style="padding:12px 4px;font-size:.85rem">Pick days</button></div>'
+  + '<div id=vrep style="display:none"><h1 style="font-size:1.35rem">Make a report</h1><div class=seg style="grid-template-columns:1fr 1fr 1fr 1fr;gap:6px"><button type=button class="on" data-rp=today style="padding:12px 4px;font-size:.85rem">Today</button><button type=button data-rp=week style="padding:12px 4px;font-size:.85rem">Week</button><button type=button data-rp=month style="padding:12px 4px;font-size:.85rem">Months</button><button type=button data-rp=pick style="padding:12px 4px;font-size:.85rem">Pick days</button></div>'
   + '<div id=rpick style="display:none"><div class=line>Tap the days to include</div><div class=grid id=rdays style="grid-template-columns:repeat(7,1fr);gap:6px"></div></div>'
+  + '<div id=rmonths style="display:none"><div class=line>From</div><div class=grid id=rmfrom style="grid-template-columns:repeat(3,1fr);gap:6px"></div><div class=line style="margin-top:8px">To</div><div class=grid id=rmto style="grid-template-columns:repeat(3,1fr);gap:6px"></div><button type=button id=rall class=ghost style="width:100%;margin-top:10px">Everything since 2 Oct 2026</button></div>'
   + '<div class=line id=rsum style="margin:10px 2px"></div><a id=rgo class=gold style="display:block;text-align:center;text-decoration:none" target=_blank>Make report</a>'
   + '<div class=line style="margin-top:10px">Opens as a page with charts: Share sends it by email or WhatsApp; Save as PDF keeps a copy. Senior-management length: one page.</div></div>'
   + '<div id=vlog><h1>My work log</h1>'
@@ -977,18 +1005,29 @@ $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(
  b.onclick=function(){if(on){stop()}else{start()}};
  $("wf").addEventListener("submit",stop,true);var rs=$("wreset");if(rs)rs.addEventListener("click",stop,true)})();
 // v577 - the two tabs (What did you do? / Report) and the Report tab: Today, This week, or tap the days; one button makes the page
-(function(){var mode="today",picked={};function show(rep){$("vlog").style.display=rep?"none":"block";$("vrep").style.display=rep?"block":"none";$("tlog").classList.toggle("on",!rep);$("trep").classList.toggle("on",rep);if(rep)rdraw()}
+// v615 - Months: one month, from one month to another, or everything since the engagement began; a span of months comes back as one summary and one page per month
+(function(){var mode="today",picked={},MF=null,MT=null,ALL=false;function show(rep){$("vlog").style.display=rep?"none":"block";$("vrep").style.display=rep?"block":"none";$("tlog").classList.toggle("on",!rep);$("trep").classList.toggle("on",rep);if(rep)rdraw()}
  $("tplan").onclick=function(){location.href="/momo/work/plan?key="+encodeURIComponent(KEY)};
  $("tlog").onclick=function(){show(false)};$("trep").onclick=function(){show(true)};
- function wk(){var d=D?D.today:new Date(Date.now()+4*3600e3).toISOString().slice(0,10),t=new Date(d+"T00:00:00Z"),dow=(t.getUTCDay()+6)%7,m=new Date(t.getTime()-dow*864e5),o=[];for(var i=0;i<7;i++){o.push(new Date(m.getTime()+i*864e5).toISOString().slice(0,10))}return o}
- // v581 - month at a glance: the calendar month to date (1st to today)
- function mo(){var d=D?D.today:new Date(Date.now()+4*3600e3).toISOString().slice(0,10),o=[],y=d.slice(0,7);for(var i=1;i<=31;i++){var s=y+"-"+String(i).padStart(2,"0");if(s>d)break;if(new Date(s+"T00:00:00Z").toISOString().slice(0,10)===s)o.push(s)}return o}
- function rdraw(){var days=wk(),today=D?D.today:days[0],sel=mode==="today"?[today]:mode==="week"?days:mode==="month"?mo():days.filter(function(d){return picked[d]});
-  $("rpick").style.display=mode==="pick"?"block":"none";
+ function tdy(){return D?D.today:new Date(Date.now()+4*3600e3).toISOString().slice(0,10)}
+ function start(){return (D&&D.start)||"2026-10-02"}
+ function wk(){var d=tdy(),t=new Date(d+"T00:00:00Z"),dow=(t.getUTCDay()+6)%7,m=new Date(t.getTime()-dow*864e5),o=[];for(var i=0;i<7;i++){o.push(new Date(m.getTime()+i*864e5).toISOString().slice(0,10))}return o}
+ function nextYm(y){var yy=+y.slice(0,4),mm=+y.slice(5,7)+1;if(mm>12){mm=1;yy++}return yy+"-"+String(mm).padStart(2,"0")}
+ function months(){var s=start().slice(0,7),t=tdy().slice(0,7),o=[];while(s<=t&&o.length<24){o.push(s);s=nextYm(s)}return o}
+ function span(a,b){var o=[],d=new Date(a+"T00:00:00Z");while(o.length<420){var s=d.toISOString().slice(0,10);if(s>b)break;o.push(s);d.setUTCDate(d.getUTCDate()+1)}return o}
+ function lastOf(ym){return new Date(Date.UTC(+ym.slice(0,4),+ym.slice(5,7),0)).toISOString().slice(0,10)}
+ function ml(y){return M[+y.slice(5,7)-1]+" "+y.slice(0,4)}
+ // v581 - month at a glance: the calendar month to date (1st to today); v615 - or from one month to another, the last one to date, or everything
+ function mo(){var ms=months(),t=tdy();if(ALL)return span(start(),t);if(!MF||ms.indexOf(MF)<0)MF=ms[ms.length-1];if(!MT||ms.indexOf(MT)<0||MT<MF)MT=MF;var last=lastOf(MT);return span(MF+"-01",last>t?t:last)}
+ function chips(id,cur,set){var ms=months();$(id).innerHTML=ms.map(function(y){return '<button type=button data-ym="'+y+'"'+(y===cur&&!ALL?' class=on':'')+' style="padding:10px 4px;justify-content:center"><span style="font-size:.7rem;color:#8A6F3E">'+y.slice(0,4)+'</span><b>'+M[+y.slice(5,7)-1]+'</b></button>'}).join("");$(id).querySelectorAll("[data-ym]").forEach(function(b){b.onclick=function(){ALL=false;set(b.getAttribute("data-ym"));rdraw()}})}
+ function rdraw(){var days=wk(),today=tdy(),sel=mode==="today"?[today]:mode==="week"?days:mode==="month"?mo():days.filter(function(d){return picked[d]});
+  $("rpick").style.display=mode==="pick"?"block":"none";$("rmonths").style.display=mode==="month"?"block":"none";
   if(mode==="pick")$("rdays").innerHTML=days.map(function(d){return '<button type=button data-rd="'+d+'"'+(picked[d]?' class=on':'')+' style="padding:10px 4px;justify-content:center"><span style="font-size:.7rem;color:#8A6F3E">'+DN[new Date(d+"T00:00:00Z").getUTCDay()]+'</span><b>'+(+d.slice(8))+'</b></button>'}).join("");
   $("rdays").querySelectorAll("[data-rd]").forEach(function(b){b.onclick=function(){var d=b.getAttribute("data-rd");picked[d]=!picked[d];rdraw()}});
-  $("rsum").textContent=sel.length?(sel.length===1?fd(sel[0]):mode==="month"?M[+sel[0].slice(5,7)-1]+" to date, "+sel.length+" days":sel.length+" days: "+sel.map(function(d){return DN[new Date(d+"T00:00:00Z").getUTCDay()]}).join(", ")):"Tap at least one day";
-  $("rgo").style.opacity=sel.length?"1":".5";$("rgo").href=sel.length?"/momo/work/report?key="+encodeURIComponent(KEY)+"&days="+sel.join(","):"javascript:void(0)"}
+  if(mode==="month"){chips("rmfrom",MF,function(y){MF=y;if(MT<MF)MT=MF});chips("rmto",MT,function(y){MT=y;if(MT<MF)MF=MT});$("rall").className=ALL?"gold":"ghost";$("rall").textContent=(ALL?"✓ ":"")+"Everything since "+fd(start());$("rall").onclick=function(){ALL=!ALL;rdraw()}}
+  var many=sel.length>1&&sel[0].slice(0,7)!==sel[sel.length-1].slice(0,7),perMonth=many?", one page per month":"";
+  $("rsum").textContent=sel.length?(sel.length===1?fd(sel[0]):mode==="month"?(ALL?"Everything since "+fd(sel[0])+", "+sel.length+" days"+perMonth:MF===MT?ml(MF)+(sel[sel.length-1]===today?" to date":"")+", "+sel.length+" days":ml(MF)+" to "+ml(MT)+", "+sel.length+" days"+perMonth):sel.length+" days: "+sel.map(function(d){return DN[new Date(d+"T00:00:00Z").getUTCDay()]}).join(", ")):"Tap at least one day";
+  $("rgo").style.opacity=sel.length?"1":".5";$("rgo").href=sel.length?"/momo/work/report?key="+encodeURIComponent(KEY)+(mode==="month"?(ALL?"&all=1":"&from="+sel[0]+"&to="+sel[sel.length-1]):"&days="+sel.join(",")):"javascript:void(0)"}
  $("vrep").querySelectorAll("[data-rp]").forEach(function(b){b.onclick=function(){mode=b.getAttribute("data-rp");$("vrep").querySelectorAll("[data-rp]").forEach(function(x){x.classList.toggle("on",x===b)});rdraw()}});
  window.__rdraw=rdraw})();
 // v583 - Upload a file: PDF, Word, Excel, CSV, a photo of a page. Read in the app, filed through the same step; each activity confirmed in turn.

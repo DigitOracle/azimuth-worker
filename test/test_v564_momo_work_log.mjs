@@ -240,9 +240,9 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
 // v581 - month at a glance: Month on the Report tab; the monthly report reads week by week with the 15 h line judged per full week
 { const page = await (await req("/momo/work", true)).text();
-  ok(/data-rp=month[^>]*>Month</.test(page), "the Report tab offers Month");
+  ok(/data-rp=month[^>]*>Months</.test(page), "the Report tab offers Months (v615: one month, a span of months, or everything)");
   const js11 = await (await req("/momo/work.js", true)).text();
-  ok(/function mo\(\)/.test(js11) && /mode==="month"\?mo\(\)/.test(js11) && /to date, "\+sel\.length\+" days/.test(js11), "Month = the calendar month to date");
+  ok(/function mo\(\)/.test(js11) && /mode==="month"\?mo\(\)/.test(js11) && /" to date"/.test(js11) && /", "\+sel\.length\+" days/.test(js11), "Month = the calendar month to date (v615: the Months picker's default)");
   try { new Function(js11); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse after v581", e.message); }
   const E = (date, kp, out, start, end) => req("/momo/work/api", true, { action: "save", entry: { title: "x", type: "Meeting", summary: "s", people: [], kpis: kp ? [kp] : [], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: !out, out_role: out || "", effort: "1-2 hours", progress: [], time_of_day: "Morning", start, end, where: "Office" }, text: "t", date });
   await E("2026-10-05", 1, "", "09:00", "17:00"); await E("2026-10-07", 1, "", "09:00", "17:00"); await E("2026-10-13", 0, "Sales", "04:00", "06:00"); await E("2026-10-14", 2, "", "09:00", "12:00");

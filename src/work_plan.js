@@ -244,8 +244,11 @@ function weekHtml(items, trends, mon) {
     + '<div class=btns><button class=btn onclick="print()">Share / Save as PDF</button></div></body></html>';
 }
 
-function monthHtml(items, ym) {
-  const MN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], first = ym + "-01", y = +ym.slice(0, 4), mo = +ym.slice(5, 7);
+// v615 - the month page is built per month (monthSection) so the PDF for Ali can run from one month to another, one page per month
+const PLAN_MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const shiftYm = (ym, n) => { let y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + n; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + "-" + String(m + 1).padStart(2, "0"); };
+function monthSection(items, ym) {
+  const MN = PLAN_MON, first = ym + "-01", y = +ym.slice(0, 4), mo = +ym.slice(5, 7);
   const last = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10), fmt = (d) => { const p = d.split("-"); return (+p[2]) + " " + MN[+p[1] - 1].slice(0, 3); };
   const inM = items.filter((i) => i.pillar !== "trend" && !i.undated && i.start <= last && i.end >= first).sort((a, b) => a.start.localeCompare(b.start));
   const long = inM.filter((i) => (Date.parse(i.end) - Date.parse(i.start)) / 864e5 > 3), short = inM.filter((i) => long.indexOf(i) < 0);
@@ -260,7 +263,20 @@ function monthHtml(items, ym) {
   const row = (i, n) => '<tr><td class=n>' + n + '</td><td><b>' + esc(i.title) + '</b>' + (i.angle ? '<small><b>Our angle:</b> ' + esc(i.angle) + '</small>' : '') + (i.note ? '<small>' + esc(i.note) + '</small>' : '') + (i.mine ? '<small>Added by Najjuko</small>' : '') + '</td><td>' + esc(fmt(i.start) + (i.end !== i.start ? " – " + fmt(i.end) : "")) + '</td><td>' + esc(i.certainty) + '</td><td class=bx><span></span>Attend &nbsp; <span></span>Content only &nbsp; <span></span>Skip</td></tr>';
   let n = 0; const tbl = (list) => '<table class=ev><tr><th>#</th><th>Event or moment</th><th>Date</th><th>How certain</th><th>Decision</th></tr>' + list.map((i) => row(i, ++n)).join("") + '</table>';
   const mk = inM.filter((i) => i.pillar === "market"), kn = inM.filter((i) => i.pillar === "known");
-  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FN Events for ' + MN[mo - 1] + ' ' + y + '</title>'
+  return (long.length ? '<div class=run><b>Running through the month:</b> ' + long.map((i) => '<span>' + esc(i.title) + '</span>').join("") + '</div>' : '')
+    + '<table class=cal><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr><tr>' + cells + '</tr></table><div class=key><i style="background:#D9782E"></i>Industry related<i style="background:#15665C"></i>Commercial (cause, national or seasonal moment)</div>'
+    + (mk.length ? '<h2>INDUSTRY RELATED</h2>' + tbl(mk) : '') + (kn.length ? '<h2>COMMERCIAL</h2>' + tbl(kn) : '') + (inM.length ? '' : '<p>Nothing in the plan for this month yet.</p>');
+}
+function monthHtml(items, ymFrom, ymTo) {
+  const MN = PLAN_MON; ymTo = ymTo || ymFrom; if (ymTo < ymFrom) { const x = ymFrom; ymFrom = ymTo; ymTo = x; }
+  const list = []; for (let y = ymFrom; y <= ymTo && list.length < 24; y = shiftYm(y, 1)) list.push(y);
+  const lab = (ym) => MN[+ym.slice(5, 7) - 1], yr = (ym) => ym.slice(0, 4), multi = list.length > 1;
+  const title = multi ? 'FN Events ' + lab(ymFrom) + ' ' + yr(ymFrom) + ' to ' + lab(ymTo) + ' ' + yr(ymTo) : 'FN Events for ' + lab(ymFrom) + ' ' + yr(ymFrom);
+  const head = multi ? '<h1><em>Events</em> for ' + lab(ymFrom) + ' to ' + lab(ymTo) + '</h1><p>What we are looking at, for your decision · ' + lab(ymFrom).slice(0, 3) + ' ' + yr(ymFrom) + ' to ' + lab(ymTo).slice(0, 3) + ' ' + yr(ymTo) + ' · one page per month</p>'
+    : '<h1><em>Events</em> for ' + lab(ymFrom) + '</h1><p>What we are looking at, for your decision · ' + yr(ymFrom) + '</p>';
+  const body = multi ? list.map((ym, k) => '<section class="mth' + (k ? '' : ' first') + '"><h2 class=mn>' + lab(ym).toUpperCase() + ' ' + yr(ym) + '</h2>' + monthSection(items, ym) + '</section>').join("")
+    : '<h2>THE MONTH AT A GLANCE</h2>' + monthSection(items, ymFrom);
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title>'
     + '<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap"><style>@page{size:A4;margin:12mm}@page{@top-left{content:none}@top-center{content:none}@top-right{content:none}@bottom-left{content:none}@bottom-center{content:none}@bottom-right{content:none}}'
     + 'body{margin:0;background:#F4F2EE;color:#1C2321;font-family:Inter,sans-serif;font-size:10pt;line-height:1.45}.pg{max-width:780px;margin:0 auto;background:#fff;padding:26px 30px 30px;border:1px solid ' + FN_GOLD + '}'
     + '.latt{height:44px;margin:-26px -30px 16px;background:url("' + FN_LATTICE + '") center/auto 100% repeat-x;opacity:.85;border-bottom:1px solid ' + FN_GOLD + '}header{display:flex;justify-content:space-between;align-items:flex-start}'
@@ -270,11 +286,11 @@ function monthHtml(items, ym) {
     + '.run{margin:8px 0;font-size:9pt}.run span{display:inline-block;border:1px solid ' + FN_GOLD + ';border-radius:99px;padding:2px 10px;margin:2px 4px 2px 0}.key{font-size:8pt;color:#626B7C;margin-top:4px}.key i{display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 4px 0 10px}'
     + 'table.ev{width:100%;border-collapse:collapse;font-size:9pt}table.ev th{text-align:left;font-size:7.8pt;letter-spacing:.06em;text-transform:uppercase;color:#626B7C;padding:4px 6px;border-bottom:1px solid #E9EAEC}table.ev td{padding:7px 6px;border-bottom:1px solid #EFE9DE;vertical-align:top}td.n{width:22px;font-weight:600;color:' + FN_NAVY + '}td small{display:block;color:#626B7C;font-size:8pt}'
     + 'td.bx{white-space:nowrap;font-size:8.2pt}@media(max-width:600px){.pg{padding:16px 12px 80px}table.ev{font-size:8pt}td.bx{white-space:normal;line-height:1.9}}td.bx span{display:inline-block;width:10px;height:10px;border:1.3px solid ' + FN_NAVY + ';border-radius:2px;margin-right:4px;vertical-align:-1px}'
-    + '.note{margin-top:18px;padding-top:8px;border-top:1px solid #E9EAEC;font-size:7.8pt;color:#626B7C}.btns{position:fixed;right:14px;bottom:14px}.btn{background:' + FN_NAVY + ';color:' + FN_PEACH + ';border:0;border-radius:99px;padding:10px 16px;font:600 10pt Inter,sans-serif;cursor:pointer}@media print{body{background:#fff}.pg{border:0;padding:0}.btns{display:none}}</style></head><body><div class=pg><div class=latt></div>'
-    + '<header><div><h1><em>Events</em> for ' + MN[mo - 1] + '</h1><p>What we are looking at, for your decision · ' + y + '</p></div><img src="' + FN_LOGO + '" alt="FN Realty"></header>'
-    + '<h2>THE MONTH AT A GLANCE</h2>' + (long.length ? '<div class=run><b>Running through the month:</b> ' + long.map((i) => '<span>' + esc(i.title) + '</span>').join("") + '</div>' : '')
-    + '<table class=cal><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr><tr>' + cells + '</tr></table><div class=key><i style="background:#D9782E"></i>Industry related<i style="background:#15665C"></i>Commercial (cause, national or seasonal moment)</div>'
-    + (mk.length ? '<h2>INDUSTRY RELATED</h2>' + tbl(mk) : '') + (kn.length ? '<h2>COMMERCIAL</h2>' + tbl(kn) : '') + (inM.length ? '' : '<p>Nothing in the plan for this month yet.</p>')
+    // v615 - a span of months: one section per month, each on its own printed page
+    + '.mth{break-before:page;page-break-before:always;margin-top:22px;padding-top:14px;border-top:1px solid ' + FN_GOLD + '}.mth.first{break-before:auto;page-break-before:auto;margin-top:0;padding-top:0;border-top:0}h2.mn{font-size:15pt;margin:4px 0 6px}'
+    + '.note{margin-top:18px;padding-top:8px;border-top:1px solid #E9EAEC;font-size:7.8pt;color:#626B7C}.btns{position:fixed;right:14px;bottom:14px}.btn{background:' + FN_NAVY + ';color:' + FN_PEACH + ';border:0;border-radius:99px;padding:10px 16px;font:600 10pt Inter,sans-serif;cursor:pointer}@media print{body{background:#fff}.pg{border:0;padding:0}.btns{display:none}.mth{border-top:0;margin-top:0;padding-top:0}}</style></head><body><div class=pg><div class=latt></div>'
+    + '<header><div>' + head + '</div><img src="' + FN_LOGO + '" alt="FN Realty"></header>'
+    + body
     + '<div class=note>For a decision: tick one box per line. “Attend” means FN takes part and creates content from it; “Content only” means we cover it from the office without attending; “Skip” means we leave it. Dates marked Expected depend on a moon sighting or an official announcement and may move. Prepared by Serah Najjuko Ganyana for FN Realty. The method, templates and tools that produced this are her own (employment contract, clause 12.2) and are not part of what is provided.</div></div>'
     + '<div class=btns><button class=btn onclick="print()">Share / Save as PDF</button></div></body></html>';
 }
@@ -352,28 +368,46 @@ function ymOf(d){return d.slice(0,7)}
 function shiftMonth(ym,n){var y=+ym.slice(0,4),m=+ym.slice(5,7)-1+n;y+=Math.floor(m/12);m=((m%12)+12)%12;return y+"-"+String(m+1).padStart(2,"0")}
 function itemsOn(ds){return D.items.filter(function(i){return vis(i)&&!i.undated&&i.pillar!=="trend"&&i.start<=ds&&i.end>=ds&&i.state!=="Posted"})}
 function isLong(i){return (Date.parse(i.end)-Date.parse(i.start))/864e5>3}
-function drawMonth(){var ym=MONTH||ymOf(today()),y=+ym.slice(0,4),mo=+ym.slice(5,7),days=new Date(Date.UTC(y,mo,0)).getUTCDate(),lead=(new Date(ym+"-01T00:00:00Z").getUTCDay()+6)%7,t=today(),
+var MR=null;   // v615 - several months at once: {from:"2026-10",to:"2026-12"}; null means one month
+function monthList(a,b){var o=[],y=a;while(y<=b&&o.length<24){o.push(y);y=shiftMonth(y,1)}return o}
+function planMonths(){var ms=D.items.filter(function(i){return i.pillar!=="trend"&&!i.undated}).map(function(i){return i.start.slice(0,7)}).sort(),c=ymOf(today());return [ms.length&&ms[0]<c?ms[0]:c,ms.length&&ms[ms.length-1]>c?ms[ms.length-1]:c]}
+function monthGrid(ym){var y=+ym.slice(0,4),mo=+ym.slice(5,7),days=new Date(Date.UTC(y,mo,0)).getUTCDate(),lead=(new Date(ym+"-01T00:00:00Z").getUTCDay()+6)%7,t=today(),
  first=ym+"-01",last=ym+"-"+String(days).padStart(2,"0"),inM=D.items.filter(function(i){return vis(i)&&!i.undated&&i.pillar!=="trend"&&i.start<=last&&i.end>=first&&i.state!=="Posted"}),longs=inM.filter(isLong),
- cells=[],wk=[],rows=[],i,d;
+ cells=[],rows=[],i,d;
  for(i=0;i<lead;i++)cells.push(null);for(d=1;d<=days;d++)cells.push(ym+"-"+String(d).padStart(2,"0"));while(cells.length%7)cells.push(null);
  for(i=0;i<cells.length;i+=7)rows.push(cells.slice(i,i+7));
  var busiest=0,busyTxt="";
  var grid=rows.map(function(r){var cnt=0,tds=r.map(function(ds){if(!ds)return '<div class=mo style="min-height:46px"></div>';var hit=itemsOn(ds).filter(function(x){return !isLong(x)});cnt+=hit.length;
    return '<div class=mo data-day="'+ds+'" style="min-height:46px;border:1px solid '+(ds===t?'#0A4F4A':'#EFE9DE')+';border-radius:8px;padding:3px 4px;cursor:pointer;background:'+(ds===t?'#EEF5F3':'#fff')+'"><div style="font-size:.74rem;color:#5F6B66;font-weight:'+(ds===t?700:500)+'">'+(+ds.slice(8))+'</div><div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:2px">'+hit.slice(0,4).map(function(x){return '<i style="width:9px;height:9px;border-radius:50%;background:'+(PC[x.pillar]||"#15665C")+'"></i>'}).join("")+(hit.length>4?'<em style="font-size:.65rem;font-style:normal;color:#5F6B66">+'+(hit.length-4)+'</em>':'')+'</div></div>'}).join("");
    if(cnt>busiest){busiest=cnt;var f=r.filter(Boolean)[0];busyTxt="week of "+fd(f)}
-   return '<div style="display:grid;grid-template-columns:repeat(7,1fr) 28px;gap:3px;margin-bottom:3px;align-items:center">'+grid0(tds)+'<div style="text-align:center;font-size:.72rem;color:'+(cnt>=3?'#B04A3A':'#5F6B66')+';font-weight:600">'+(cnt||"")+'</div></div>'}).join("");
- function grid0(x){return x}
- $("pbody").innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin:2px 0 8px"><button type=button class=ghost id=mprev style="width:44px;padding:8px">&#8249;</button><b style="font-size:1.05rem;color:#0A4F4A">'+MN[mo-1]+' '+y+'</b><button type=button class=ghost id=mnext style="width:44px;padding:8px">&#8250;</button></div>'
-  +(longs.length?'<div class=line style="margin:2px 0 8px"><b>Running through the month:</b> '+longs.map(function(x){return esc(x.title)}).join(" · ")+'</div>':'')
-  +'<div style="display:grid;grid-template-columns:repeat(7,1fr) 28px;gap:3px;margin-bottom:4px;font-size:.68rem;color:#5F6B66;text-align:center"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span>#</span></div>'+grid
+   return '<div style="display:grid;grid-template-columns:repeat(7,1fr) 28px;gap:3px;margin-bottom:3px;align-items:center">'+tds+'<div style="text-align:center;font-size:.72rem;color:'+(cnt>=3?'#B04A3A':'#5F6B66')+';font-weight:600">'+(cnt||"")+'</div></div>'}).join("");
+ return {inM:inM,busiest:busiest,busyTxt:busyTxt,html:(longs.length?'<div class=line style="margin:2px 0 8px"><b>Running through the month:</b> '+longs.map(function(x){return esc(x.title)}).join(" · ")+'</div>':'')
+  +'<div style="display:grid;grid-template-columns:repeat(7,1fr) 28px;gap:3px;margin-bottom:4px;font-size:.68rem;color:#5F6B66;text-align:center"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span>#</span></div>'+grid}}
+function drawMonth(){var ym=MONTH||ymOf(today()),ms=MR?monthList(MR.from,MR.to):[ym],y=+ym.slice(0,4),mo=+ym.slice(5,7);
+ var head=MR?'<div style="display:flex;justify-content:space-between;align-items:center;margin:2px 0 8px"><b style="font-size:1.05rem;color:#0A4F4A">'+MN[+MR.from.slice(5,7)-1]+' '+MR.from.slice(0,4)+' to '+MN[+MR.to.slice(5,7)-1]+' '+MR.to.slice(0,4)+'</b><button type=button class=ghost id=mone style="padding:8px 12px">One month</button></div>'
+  :'<div style="display:flex;justify-content:space-between;align-items:center;margin:2px 0 8px"><button type=button class=ghost id=mprev style="width:44px;padding:8px">&#8249;</button><b style="font-size:1.05rem;color:#0A4F4A">'+MN[mo-1]+' '+y+'</b><button type=button class=ghost id=mnext style="width:44px;padding:8px">&#8250;</button></div>';
+ var total=0,busiest=0,busyTxt="",body=ms.map(function(m){var g=monthGrid(m);total+=g.inM.length;if(g.busiest>busiest){busiest=g.busiest;busyTxt=g.busyTxt}return (MR?'<h2 style="font-size:.95rem;margin:14px 0 6px;color:#8A6F3E">'+MN[+m.slice(5,7)-1]+' '+m.slice(0,4)+'</h2>':'')+g.html}).join("");
+ var pdf="/momo/work/plan/month?key="+encodeURIComponent(KEY)+(MR?"&from="+MR.from+"&to="+MR.to:"&month="+ym);
+ $("pbody").innerHTML=head+body
   +'<div class=line style="margin-top:8px"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#15665C;margin-right:4px"></i>Cause or national moment <i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#D9782E;margin:0 4px 0 10px"></i>Industry event <i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#6A4C93;margin:0 4px 0 10px"></i>Trend</div>'
-  +'<div class=line style="margin-top:6px">'+(inM.length?inM.length+' item'+(inM.length===1?'':'s')+' this month'+(busiest>=2?'; the busiest is the '+busyTxt+' with '+busiest:'')+'.':'Nothing planned this month.')+' The number at the end of each row is how many items fall in that week.</div>'
-  +'<a class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank href="/momo/work/plan/month?key='+encodeURIComponent(KEY)+'&month='+ym+'">The month as a PDF for Ali</a>';
- $("mprev").onclick=function(){MONTH=shiftMonth(ym,-1);drawMonth()};$("mnext").onclick=function(){MONTH=shiftMonth(ym,1);drawMonth()};
+  +'<div class=line style="margin-top:6px">'+(total?total+' item'+(total===1?'':'s')+(MR?' across these months':' this month')+(busiest>=2?'; the busiest is the '+busyTxt+' with '+busiest:'')+'.':(MR?'Nothing planned in these months.':'Nothing planned this month.'))+' The number at the end of each row is how many items fall in that week.</div>'
+  +'<a class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank href="'+pdf+'">'+(MR?'These months as one PDF for Ali':'The month as a PDF for Ali')+'</a>'
+  +'<button type=button class=ghost id=mrange style="width:100%;margin-top:8px">'+(MR?'Change the months':'Several months at once')+'</button>';
+ if(MR){$("mone").onclick=function(){MONTH=MR.from;MR=null;drawMonth()}}else{$("mprev").onclick=function(){MONTH=shiftMonth(ym,-1);drawMonth()};$("mnext").onclick=function(){MONTH=shiftMonth(ym,1);drawMonth()}}
+ $("mrange").onclick=rangeSheet;
  document.querySelectorAll("[data-day]").forEach(function(e){e.onclick=function(){var ds=e.getAttribute("data-day"),L=itemsOn(ds);
   sheet(esc(fd(ds)),(L.length?L.map(card).join(""):'<div class=line>Nothing on this day.</div>')+'<button type=button class=ghost id=dadd style="width:100%;margin-top:8px">Add something on this day</button>',function(s){
    s.querySelectorAll("[data-id]").forEach(function(c){c.onclick=function(){var id=c.getAttribute("data-id");closeTop();editItem(id)}});
    s.querySelector("#dadd").onclick=function(){closeTop();addItem(ds)}})}})}
+// v615 - pick a from month and a to month (or everything in the plan); Done shows them stacked and the PDF follows
+function rangeSheet(){var pm=planMonths(),ms=monthList(pm[0],pm[1]),cur=MONTH||ymOf(today()),f=MR?MR.from:cur,t=MR?MR.to:cur;
+ var chips=function(id,c){return '<div class=seg id="'+id+'" style="grid-template-columns:repeat(3,1fr);gap:4px">'+ms.map(function(y){return '<button type=button data-ym="'+y+'"'+(y===c?' class=on':'')+' style="padding:9px 2px;font-size:.78rem">'+MN[+y.slice(5,7)-1].slice(0,3)+' '+y.slice(0,4)+'</button>'}).join("")+'</div>'};
+ sheet("Several months at once",'<div class=line>From</div>'+chips("mr_f",f)+'<div class=line style="margin-top:8px">To</div>'+chips("mr_t",t)+'<button type=button class=ghost id=mr_all style="width:100%;margin-top:10px">Everything in the plan: '+MN[+pm[0].slice(5,7)-1].slice(0,3)+' '+pm[0].slice(0,4)+' to '+MN[+pm[1].slice(5,7)-1].slice(0,3)+' '+pm[1].slice(0,4)+'</button>',function(s){
+  var paint=function(){s.querySelectorAll("#mr_f button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-ym")===f)});s.querySelectorAll("#mr_t button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-ym")===t)})};
+  s.querySelectorAll("#mr_f button").forEach(function(b){b.onclick=function(){f=b.getAttribute("data-ym");if(t<f)t=f;paint()}});
+  s.querySelectorAll("#mr_t button").forEach(function(b){b.onclick=function(){t=b.getAttribute("data-ym");if(t<f)f=t;paint()}});
+  s.querySelector("#mr_all").onclick=function(){f=pm[0];t=pm[1];paint()};
+  s.querySelector(".done").onclick=function(){if(f===t){MR=null;MONTH=f}else{MR={from:f,to:t}}closeTop()}})}
 function waLink(num,text){return "https://wa.me/"+num+"?text="+encodeURIComponent(text)}
 function nameOf(n){return String(n||"").replace(/\s*\(.*\)$/,"").split(" ")[0]}
 function numOf(name){var r="";(D.team||[]).forEach(function(x){if(x.name===name)r=x.whatsapp});return r}
@@ -382,9 +416,11 @@ function pollText(ym){var y=+ym.slice(0,4),mo=+ym.slice(5,7),days=new Date(Date.
  if(!L.length)return "";return "Team, here are the events and moments for "+MN[mo-1]+". Which ones should we take part in? Please reply with the numbers.\n\n"+L.map(function(i,k){return (k+1)+") "+fd(i.start)+(i.end!==i.start?" – "+fd(i.end):"")+" · "+i.title}).join("\n")+"\n\nWe will decide at the Monday huddle."}
 function shareSheet(){var ym=MONTH||ymOf(today()),mn=MN[+ym.slice(5,7)-1];
  var row=function(id,lab,sub){return '<div class=fr id="'+id+'"><b>'+esc(lab)+'</b><span>'+esc(sub)+'</span><i>&#8250;</i></div>'};
- sheet("Share the plan",row("s_poll","Ask the team: "+mn+" events","a poll on WhatsApp")+row("s_pdf","The month as a PDF for Ali","for his decision")+row("s_week","This week's plan as a PDF","for the team")+row("s_team","Team WhatsApp numbers",(D.team||[]).filter(function(x){return x.whatsapp}).length+" of "+(D.team||[]).length+" saved")
+ var pdfLab=MR?MN[+MR.from.slice(5,7)-1].slice(0,3)+"–"+MN[+MR.to.slice(5,7)-1].slice(0,3)+" "+MR.to.slice(0,4)+" as one PDF":"The month as a PDF for Ali";
+ sheet("Share the plan",row("s_poll","Ask the team: "+mn+" events","a poll on WhatsApp")+row("s_pdf",pdfLab,"for his decision")+row("s_all","All months as one PDF","for Ali, a page per month")+row("s_week","This week's plan as a PDF","for the team")+row("s_team","Team WhatsApp numbers",(D.team||[]).filter(function(x){return x.whatsapp}).length+" of "+(D.team||[]).length+" saved")
   +'<div class=line style="margin-top:8px">WhatsApp opens on your phone with the message ready; you press send. Nothing goes out without you.</div>',function(s){
-  s.querySelector("#s_pdf").onclick=function(){window.open("/momo/work/plan/month?key="+encodeURIComponent(KEY)+"&month="+ym,"_blank")};
+  s.querySelector("#s_pdf").onclick=function(){window.open("/momo/work/plan/month?key="+encodeURIComponent(KEY)+(MR?"&from="+MR.from+"&to="+MR.to:"&month="+ym),"_blank")};
+  s.querySelector("#s_all").onclick=function(){window.open("/momo/work/plan/month?key="+encodeURIComponent(KEY)+"&all=1","_blank")};
   s.querySelector("#s_week").onclick=function(){window.open("/momo/work/plan/week?key="+encodeURIComponent(KEY)+"&from="+monday(today()),"_blank")};
   s.querySelector("#s_team").onclick=function(){teamSheet()};
   s.querySelector("#s_poll").onclick=function(){pollSheet(ym)}})}
@@ -497,8 +533,13 @@ export async function planRoute(request, env, url, deps, ctx) {
   }
   if (p === "/momo/work/plan/month") {
     await ensureSeed(env);
-    const ym = /^\d{4}-\d{2}$/.test(url.searchParams.get("month") || "") ? url.searchParams.get("month") : today().slice(0, 7);
-    return new Response(monthHtml(await planItems(env), ym), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    // v615 (Kendall 20 Oct 2026) - one month (?month=YYYY-MM), a span (?from=YYYY-MM&to=YYYY-MM) or everything in the plan (?all=1): one page per month, one Save as PDF
+    const ymOk = (v) => /^\d{4}-\d{2}$/.test(String(v || "")) ? String(v) : "";
+    const items = await planItems(env), cur = today().slice(0, 7);
+    let a = ymOk(url.searchParams.get("from")), b = ymOk(url.searchParams.get("to"));
+    if (url.searchParams.get("all") === "1") { const ms = items.filter((i) => i.pillar !== "trend" && !i.undated).map((i) => i.start.slice(0, 7)).sort(); a = ms.length && ms[0] < cur ? ms[0] : cur; b = ms.length && ms[ms.length - 1] > cur ? ms[ms.length - 1] : cur; }
+    if (!a && !b) a = b = ymOk(url.searchParams.get("month")) || cur; if (!a) a = b; if (!b) b = a; if (b < a) { const x = a; a = b; b = x; }
+    return new Response(monthHtml(items, a, b), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   if (p === "/momo/work/plan/api") {
     await ensureSeed(env);
