@@ -64,6 +64,93 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": 
 const mondayOf = (d) => { const t = new Date(d + "T00:00:00Z"), g = (t.getUTCDay() + 6) % 7; t.setUTCDate(t.getUTCDate() - g); return t.toISOString().slice(0, 10); };
 export const artworkStart = (it) => addDays(it.start, -(LEAD[it.format] || 7));
 
+// v613 (Kendall 20 Oct 2026: "she should be able to drop in a picture ... for example, Halloween, and then it would search Halloween and come up with that";
+// "it should check the web for context as well"; "you have access to Najma, MotherDuck and Google APIs"). I HAVE AN IDEA: a word, a line, a link or a picture goes in.
+// The plan reads it (the OCR lane for a picture, the page title for a link), looks in its own calendar first, then on the web (DuckDuckGo results and Bing News,
+// neither needs a key), in Google Places for venues in Dubai, and in Najma's area thread; the engine then says what it is, when it is, where it belongs and three
+// angles for a brokerage team. She picks an angle or writes her own. Nothing is saved until she taps Add. Without the engine the plan still answers with a plain match.
+const IDEA_SCHEMA = { type: "object", additionalProperties: false, required: ["name", "start", "end", "repeats", "pillar", "sub", "certainty", "known", "why", "angles"], properties: {
+  name: { type: "string" }, start: { type: "string" }, end: { type: "string" }, repeats: { type: "boolean" }, pillar: { type: "string", enum: PILLARS.map((p) => p[0]) }, sub: { type: "string", enum: ["", "partner"] },
+  certainty: { type: "string", enum: CERT }, known: { type: "string" }, why: { type: "string" },
+  angles: { type: "array", items: { type: "object", additionalProperties: false, required: ["title", "line", "format", "activity"], properties: { title: { type: "string" }, line: { type: "string" }, format: { type: "string", enum: FORMATS.map((f) => f[0]) }, activity: { type: "string", enum: ACTIVITIES.map((a) => a[0]) } } } } } };
+const stripTags = (h) => decodeEnt(String(h || "").replace(/<[^>]+>/g, " "));
+export function parseDDG(html) {   // the DuckDuckGo HTML results page, one block per result: its title and snippet
+  const out = [];
+  for (const blk of String(html || "").split(/class="result\s+results_links/).slice(1)) {
+    const t = (blk.match(/class="result__a"[^>]*>([\s\S]*?)<\/a>/) || [])[1], s = (blk.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/(?:a|div)>/) || [])[1];
+    if (t) out.push({ title: stripTags(t).slice(0, 120), snippet: stripTags(s || "").slice(0, 220) });
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+export function parseRss(xml) {   // Bing News RSS, the feed the radar already reads: title and date per item
+  const out = [];
+  for (const it of String(xml || "").split(/<item>/).slice(1)) {
+    const t = (it.match(/<title>([\s\S]*?)<\/title>/) || [])[1], d = (it.match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1];
+    if (t) out.push({ title: stripTags(t.replace(/<!\[CDATA\[|\]\]>/g, "")).slice(0, 140), date: String(d || "").slice(5, 16).trim() });
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+async function fetchText(url, opt) {
+  try {
+    const ac = new AbortController(), t = setTimeout(() => ac.abort(), 4500);
+    const r = await fetch(url, Object.assign({ signal: ac.signal, redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (compatible; FNPlan/1.0)", Accept: "text/html,application/xml,application/json" } }, opt || {}));
+    clearTimeout(t);
+    return r.ok ? (await r.text()).slice(0, 400000) : "";
+  } catch (e) { return ""; }
+}
+export async function ideaContext(env, q) {   // everything the plan can reach for context, all at once, each one allowed to fail quietly
+  const dubai = q + " Dubai";
+  const [ddg, rss, pl, ar] = await Promise.all([
+    fetchText("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(dubai + " " + today().slice(0, 4))),
+    fetchText("https://www.bing.com/news/search?q=" + encodeURIComponent(dubai) + "&format=rss"),
+    env.MAPS_KEY ? fetchText("https://places.googleapis.com/v1/places:searchText", { method: "POST", headers: { "Content-Type": "application/json", "X-Goog-Api-Key": env.MAPS_KEY, "X-Goog-FieldMask": "places.displayName,places.formattedAddress" }, body: JSON.stringify({ textQuery: dubai, maxResultCount: 4 }) }) : Promise.resolve(""),
+    env.ASK_ENGINE_URL && env.ASK_SECRET ? fetchText(String(env.ASK_ENGINE_URL).replace(/\/+$/, "") + "/area", { method: "POST", headers: { "Content-Type": "application/json", "X-Ask-Secret": String(env.ASK_SECRET) }, body: JSON.stringify({ name: q.slice(0, 120) }) }) : Promise.resolve(""),
+  ]);
+  let places = []; try { places = (JSON.parse(pl).places || []).map((p) => ({ name: String((p.displayName && p.displayName.text) || "").slice(0, 80), address: String(p.formattedAddress || "").slice(0, 120) })).filter((p) => p.name).slice(0, 4); } catch (e) {}
+  let area = null; try { const a = JSON.parse(ar); if (a && a.status !== "error" && !a.error) area = JSON.stringify(a).slice(0, 1200); } catch (e) {}
+  return { web: parseDDG(ddg), news: parseRss(rss), places, area };
+}
+const WORDS = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 3 && !/^(the|and|for|with|this|that|from|dubai|2026|2027)$/.test(w));
+export function plainMatch(q, items) {   // the calendar first, without the engine: an item whose title shares two words with the idea (one word is enough when the idea or the title has only one)
+  const qw = WORDS(q); if (!qw.length) return null;
+  let best = null, bestN = 0;
+  for (const it of items) { const tw = WORDS(it.title); if (!tw.length) continue; const n = qw.filter((w) => tw.includes(w)).length; if (n > bestN && n >= Math.min(2, qw.length, tw.length)) { best = it; bestN = n; } }
+  return best;
+}
+function ideaSys() {
+  return "You help Serah Najjuko Ganyana, Strategic Lead - Marketing, PR & Business Development at FN Realty, a Dubai off-plan real estate advisory, turn an idea into an item for the team's content plan. "
+    + "She gives a word, a line, a link's title, or the text read from a picture. Work out WHAT it is (pillar known = a commercial moment every industry marks, such as a festival, an awareness month or a national day; market = real estate: a launch, an industry event, an open house, a partner; trend = something the platforms reward right now), "
+    + "WHEN it is (ISO dates; a yearly moment gets its next occurrence on or after today; a thing with no date gets an empty start and end), and THREE angles FN could take: short, concrete and warm, for a brokerage team, each with its format (story, post, carousel, reel) and what we do (social, workshop, team, attend). "
+    + "If the calendar lines already hold this item, put that item's id in known, else leave known empty. The web, news, places and Najma lines are context only: never invent a date; if nothing confirms the date, set certainty to Researched and leave start empty. "
+    + "why is one plain sentence saying what it is. Keep every string short, in plain English, no figures in the angles.";
+}
+export async function ideaThink(env, deps, a) {   // a = { today, text, title, ocr, items, cx }
+  const q = [a.text, a.title, a.ocr].filter(Boolean).join(" ").slice(0, 700);
+  const lines = a.items.filter((i) => i.pillar !== "trend").slice(0, 80).map((i) => i.id + " | " + i.start + ".." + i.end + " | " + i.title).join("\n");
+  const prompt = "Today: " + a.today + "\nHer idea: " + JSON.stringify(a.text || "") + (a.title ? "\nThe link's title: " + JSON.stringify(a.title) : "") + (a.ocr ? "\nText read from her picture: " + JSON.stringify(a.ocr.slice(0, 600)) : "")
+    + "\n\nIn the plan already (id | dates | title):\n" + (lines || "(nothing)")
+    + "\n\nWeb results:\n" + (a.cx.web.map((w) => "- " + w.title + (w.snippet ? ": " + w.snippet : "")).join("\n") || "(none)")
+    + "\n\nNews:\n" + (a.cx.news.map((w) => "- " + w.title + (w.date ? " (" + w.date + ")" : "")).join("\n") || "(none)")
+    + "\n\nPlaces in Dubai:\n" + (a.cx.places.map((p) => "- " + p.name + (p.address ? ", " + p.address : "")).join("\n") || "(none)")
+    + "\n\nNajma area thread:\n" + (a.cx.area || "(no area named)");
+  let x = null;
+  try { x = deps.claudeJSON ? await deps.claudeJSON(env, ideaSys(), prompt, IDEA_SCHEMA, deps.model, 1500) : null; } catch (e) { x = null; }
+  const ids = new Set(a.items.map((i) => i.id)), pick = (v, list, d) => (list.includes(v) ? v : d);
+  if (!x || typeof x !== "object") {   // no engine: a plain match against the calendar, so she still gets an honest answer
+    const hit = plainMatch(q, a.items);
+    return { engine: false, name: (hit ? hit.title : (a.text || a.title || a.ocr.split(/[.\n]/)[0] || "Idea")).slice(0, 120), start: hit ? hit.start : "", end: hit ? hit.end : "", repeats: false, pillar: hit ? hit.pillar : "known", sub: hit ? hit.sub : "", certainty: hit ? hit.certainty : "Researched", known: hit ? hit.id : "", why: hit ? "It is already in the plan." : "I could not reach the engine, so this is what you gave me. Check the date.", angles: [] };
+  }
+  const start = okD(x.start), end = okD(x.end) || start;
+  return {
+    engine: true, name: String(x.name || a.text || "Idea").slice(0, 120).trim(), start, end: end && end < start ? start : end, repeats: !!x.repeats,
+    pillar: pick(x.pillar, PILLARS.map((p) => p[0]), "known"), sub: x.sub === "partner" ? "partner" : "", certainty: pick(x.certainty, CERT, "Researched"),
+    known: ids.has(String(x.known || "")) ? String(x.known) : "", why: String(x.why || "").slice(0, 240).trim(),
+    angles: (Array.isArray(x.angles) ? x.angles : []).slice(0, 3).map((g) => ({ title: String(g.title || "").slice(0, 80).trim(), line: String(g.line || "").slice(0, 200).trim(), format: pick(g.format, FORMATS.map((f) => f[0]), "post"), activity: pick(g.activity, ACTIVITIES.map((v) => v[0]), "social") })).filter((g) => g.title),
+  };
+}
+
 // The Known calendar for the quarter, from the verified master list (every date marked fixed / announced / expected; moon-sighting dates are 'Expected').
 // [id, start, end, title, pillar, certainty, format, owner, note]
 export const SEED = [
@@ -95,6 +182,8 @@ function cleanItem(x, id) {
     pillar: pick(x.pillar, PILLARS.map((p) => p[0]), "market"), certainty: pick(x.certainty, CERT, "Researched"),
     format: pick(x.format, FORMATS.map((f) => f[0]), "post"), owner: pick(x.owner, OWNERS, "Graphic designer"), agent: String(x.agent || "").slice(0, 80),
     assignee: String(x.assignee || "").slice(0, 80), taking_part: !!x.taking_part, sub: x.sub === "partner" ? "partner" : "", activity: (Array.isArray(x.activity) ? x.activity : []).filter((a) => ACTIVITIES.some((v) => v[0] === a)).slice(0, 4), state: pick(x.state, STATES, "Planned"), note: String(x.note || "").slice(0, 300), source: normaliseLink(x.source),
+    // v613 - her own angle on any item, whether she added it or the calendar did; mine = she added it (the team PDFs say so); undated = an idea on the shelf, not yet on a day
+    angle: String(x.angle || "").slice(0, 300).trim(), mine: !!x.mine, undated: !!x.undated,
   };
 }
 function cleanTrend(x, id, prev) {
@@ -130,11 +219,12 @@ export async function planItems(env) { return (await listPrefix(env, PLP)).map((
 const trendLeft = (t) => Math.round((Date.parse(t.expires_at) - Date.now()) / 3600e3);
 
 function weekHtml(items, trends, mon) {
+  items = items.filter((i) => !i.undated);   // v613 - an idea without a date is hers alone until she gives it one
   const sun = addDays(mon, 6), fmt = (d) => { const M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], p = d.split("-"); return (+p[2]) + " " + M[+p[1] - 1]; };
   const going = items.filter((i) => i.start <= sun && i.end >= mon && i.state !== "Posted").sort((a, b) => a.start.localeCompare(b.start));
   const startNow = items.filter((i) => { const a = artworkStart(i); return a >= mon && a <= sun && i.state === "Planned"; });
   const late = items.filter((i) => artworkStart(i) < mon && i.start > sun && i.state === "Planned");
-  const row = (i) => '<tr><td><b>' + esc(i.title) + '</b>' + (i.note ? '<small>' + esc(i.note) + '</small>' : '') + '</td><td>' + esc(fmt(i.start) + (i.end !== i.start ? ' – ' + fmt(i.end) : '')) + '</td><td>' + esc(((i.activity && i.activity.length ? i.activity : suggestFor(i)).map((a) => (ACTIVITIES.find((v) => v[0] === a) || [0, a])[1])).join(", ")) + '<small>' + esc((FORMATS.find((f) => f[0] === i.format) || [0, i.format])[1]) + '</small></td><td>' + esc(i.owner) + (i.agent ? '<small>for ' + esc(i.agent) + '</small>' : '') + '</td><td>' + esc(i.state) + '</td></tr>';
+  const row = (i) => '<tr><td><b>' + esc(i.title) + '</b>' + (i.angle ? '<small><b>Our angle:</b> ' + esc(i.angle) + '</small>' : '') + (i.note ? '<small>' + esc(i.note) + '</small>' : '') + (i.mine ? '<small>Added by Najjuko</small>' : '') + '</td><td>' + esc(fmt(i.start) + (i.end !== i.start ? ' – ' + fmt(i.end) : '')) + '</td><td>' + esc(((i.activity && i.activity.length ? i.activity : suggestFor(i)).map((a) => (ACTIVITIES.find((v) => v[0] === a) || [0, a])[1])).join(", ")) + '<small>' + esc((FORMATS.find((f) => f[0] === i.format) || [0, i.format])[1]) + '</small></td><td>' + esc(i.owner) + (i.agent ? '<small>for ' + esc(i.agent) + '</small>' : '') + '</td><td>' + esc(i.state) + '</td></tr>';
   const tbl = (rows) => '<table><tr><th>What</th><th>Date</th><th>What we do</th><th>Who makes it</th><th>Status</th></tr>' + rows.map(row).join("") + '</table>';
   const live = trends.filter((t) => t.status === "assigned" && trendLeft(t) > 0);
   const blogs = items.filter((i) => i.taking_part && i.state !== "Posted" && addDays(i.start, -BLOG_LEAD_DAYS) <= sun && i.start >= mon).sort((a, b) => a.start.localeCompare(b.start));
@@ -157,7 +247,7 @@ function weekHtml(items, trends, mon) {
 function monthHtml(items, ym) {
   const MN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], first = ym + "-01", y = +ym.slice(0, 4), mo = +ym.slice(5, 7);
   const last = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10), fmt = (d) => { const p = d.split("-"); return (+p[2]) + " " + MN[+p[1] - 1].slice(0, 3); };
-  const inM = items.filter((i) => i.pillar !== "trend" && i.start <= last && i.end >= first).sort((a, b) => a.start.localeCompare(b.start));
+  const inM = items.filter((i) => i.pillar !== "trend" && !i.undated && i.start <= last && i.end >= first).sort((a, b) => a.start.localeCompare(b.start));
   const long = inM.filter((i) => (Date.parse(i.end) - Date.parse(i.start)) / 864e5 > 3), short = inM.filter((i) => long.indexOf(i) < 0);
   const col = { known: "#15665C", market: "#D9782E" };
   const lead = (new Date(first + "T00:00:00Z").getUTCDay() + 6) % 7, days = new Date(Date.UTC(y, mo, 0)).getUTCDate();
@@ -167,7 +257,7 @@ function monthHtml(items, ym) {
     cells += "<td><b>" + d + "</b>" + hit.slice(0, 3).map((i) => '<i style="background:' + (col[i.pillar] || "#999") + '"></i>').join("") + (hit.length > 3 ? "<em>+" + (hit.length - 3) + "</em>" : "") + "</td>";
     if (((lead + d) % 7) === 0 && d < days) cells += "</tr><tr>";
   }
-  const row = (i, n) => '<tr><td class=n>' + n + '</td><td><b>' + esc(i.title) + '</b>' + (i.note ? '<small>' + esc(i.note) + '</small>' : '') + '</td><td>' + esc(fmt(i.start) + (i.end !== i.start ? " – " + fmt(i.end) : "")) + '</td><td>' + esc(i.certainty) + '</td><td class=bx><span></span>Attend &nbsp; <span></span>Content only &nbsp; <span></span>Skip</td></tr>';
+  const row = (i, n) => '<tr><td class=n>' + n + '</td><td><b>' + esc(i.title) + '</b>' + (i.angle ? '<small><b>Our angle:</b> ' + esc(i.angle) + '</small>' : '') + (i.note ? '<small>' + esc(i.note) + '</small>' : '') + (i.mine ? '<small>Added by Najjuko</small>' : '') + '</td><td>' + esc(fmt(i.start) + (i.end !== i.start ? " – " + fmt(i.end) : "")) + '</td><td>' + esc(i.certainty) + '</td><td class=bx><span></span>Attend &nbsp; <span></span>Content only &nbsp; <span></span>Skip</td></tr>';
   let n = 0; const tbl = (list) => '<table class=ev><tr><th>#</th><th>Event or moment</th><th>Date</th><th>How certain</th><th>Decision</th></tr>' + list.map((i) => row(i, ++n)).join("") + '</table>';
   const mk = inM.filter((i) => i.pillar === "market"), kn = inM.filter((i) => i.pillar === "known");
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FN Events for ' + MN[mo - 1] + ' ' + y + '</title>'
@@ -213,21 +303,24 @@ function chip(t,c){return '<span class=chp style="border-color:'+c+';color:'+c+'
 var PC={known:"#15665C",market:"#D9782E",trend:"#6A4C93"};
 function socialOf(i){var a=actOf(i).length?actOf(i):(i.suggest||[]);return a.indexOf("social")>=0||!a.length}
 function orgOf(i){var a=actOf(i).length?actOf(i):(i.suggest||[]);return a.indexOf("workshop")>=0||a.indexOf("team")>=0||a.indexOf("attend")>=0}
-function card(i){var as=artStart(i),t=today(),late=i.state==="Planned"&&as<t&&i.start>=t,span=fd(i.start)+(i.end!==i.start?" – "+fd(i.end):"");
- return '<div class=ent data-id="'+esc(i.id)+'" style="cursor:pointer"><h3>'+esc(i.title)+'</h3><div class=m>'+esc(span)+'</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0">'+chip(pil(i.pillar),PC[i.pillar]||"#15665C")+chip(i.certainty,i.certainty==="Expected"?"#B04A3A":"#626B78")+(i.sub==="partner"?chip("Partner","#6A4C93"):"")+actOf(i).map(function(a){return chip(actName(a),"#8A6F3E")}).join("")+(actOf(i).length?"":(i.suggest||[]).map(function(a){return '<span class=chp style="border:1px dashed #B9B2A3;color:#8A8F99">Suggested: '+esc(actName(a))+'</span>'}).join(""))+(socialOf(i)?chip(fmtName(i.format),"#8A6F3E"):"")+chip(i.state,i.state==="Posted"?"#15948A":"#626B78")+'</div>'
+function card(i){var as=artStart(i),t=today(),late=i.state==="Planned"&&as<t&&i.start>=t,span=i.undated?"No date yet":fd(i.start)+(i.end!==i.start?" – "+fd(i.end):"");
+ return '<div class=ent data-id="'+esc(i.id)+'" style="cursor:pointer"><h3>'+esc(i.title)+'</h3><div class=m>'+esc(span)+'</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0">'+chip(pil(i.pillar),PC[i.pillar]||"#15665C")+chip(i.certainty,i.certainty==="Expected"?"#B04A3A":"#626B78")+(i.sub==="partner"?chip("Partner","#6A4C93"):"")+actOf(i).map(function(a){return chip(actName(a),"#8A6F3E")}).join("")+(actOf(i).length?"":(i.suggest||[]).map(function(a){return '<span class=chp style="border:1px dashed #B9B2A3;color:#8A8F99">Suggested: '+esc(actName(a))+'</span>'}).join(""))+(socialOf(i)?chip(fmtName(i.format),"#8A6F3E"):"")+chip(i.state,i.state==="Posted"?"#15948A":"#626B78")+(i.mine?chip("Added by you","#2A3A68"):"")+'</div>'
   +'<div class=line style="margin:2px 0">'+esc(i.owner)+(i.agent?' · for '+esc(i.agent):'')+'</div>'
-  +(i.state==="Posted"?'':(socialOf(i)?(late?'<div class=line style="color:#B04A3A;margin:2px 0"><b>Artwork should have started '+esc(fd(as))+': use the fast lane.</b></div>':'<div class=line style="margin:2px 0">Artwork starts <b>'+esc(fd(as))+'</b></div>'):'')+(orgOf(i)?(addDays(i.start,-D.organise_lead)<t&&i.start>=t?'<div class=line style="color:#B04A3A;margin:2px 0"><b>Should have been organised by '+esc(fd(addDays(i.start,-D.organise_lead)))+'.</b></div>':'<div class=line style="margin:2px 0">Organise by <b>'+esc(fd(addDays(i.start,-D.organise_lead)))+'</b></div>'):''))
+  +(i.state==="Posted"||i.undated?'':(socialOf(i)?(late?'<div class=line style="color:#B04A3A;margin:2px 0"><b>Artwork should have started '+esc(fd(as))+': use the fast lane.</b></div>':'<div class=line style="margin:2px 0">Artwork starts <b>'+esc(fd(as))+'</b></div>'):'')+(orgOf(i)?(addDays(i.start,-D.organise_lead)<t&&i.start>=t?'<div class=line style="color:#B04A3A;margin:2px 0"><b>Should have been organised by '+esc(fd(addDays(i.start,-D.organise_lead)))+'.</b></div>':'<div class=line style="margin:2px 0">Organise by <b>'+esc(fd(addDays(i.start,-D.organise_lead)))+'</b></div>'):''))
   +(i.taking_part&&i.state!=="Posted"?'<div class=line style="margin:2px 0;color:#15665C"><b>Taking part · blog post due '+esc(fd(addDays(i.start,-D.blog_lead)))+'</b></div>':'')
-  +(i.note?'<div class=line style="margin:2px 0;color:#626B78">'+esc(i.note)+'</div>':'')+'</div>'}
-function drawCal(){var t=today(),from=addDays(t,-3),to=addDays(t,60),L=D.items.filter(function(i){return vis(i)&&(i.end>=from&&i.start<=to&&i.state!=="Posted"||i.start>=from&&i.start<=to)}),by={};
+  +(i.angle?'<div class=line style="margin:2px 0"><b>Our angle:</b> '+esc(i.angle)+'</div>':'')+(i.note?'<div class=line style="margin:2px 0;color:#626B78">'+esc(i.note)+'</div>':'')+'</div>'}
+function drawCal(){var t=today(),from=addDays(t,-3),to=addDays(t,60),L=D.items.filter(function(i){return vis(i)&&!i.undated&&(i.end>=from&&i.start<=to&&i.state!=="Posted"||i.start>=from&&i.start<=to)}),by={};
  L.sort(function(a,b){return a.start<b.start?-1:1}).forEach(function(i){var w=monday(i.start<from?from:i.start);(by[w]=by[w]||[]).push(i)});
- var ks=Object.keys(by).sort(),h=ks.map(function(w){return '<h2 style="font-size:.95rem;margin:16px 0 6px;color:#8A6F3E">Week of '+esc(fd(w))+(w===monday(t)?' · this week':'')+'</h2>'+by[w].map(card).join("")}).join("");
+ var ideas=D.items.filter(function(i){return vis(i)&&i.undated&&i.pillar!=="trend"&&i.state!=="Posted"}),shelf=ideas.length?'<h2 style="font-size:.95rem;margin:4px 0 6px;color:#2A3A68">Ideas waiting for a date</h2>'+ideas.map(card).join(""):"";   // v613
+ var ks=Object.keys(by).sort(),h=shelf+ks.map(function(w){return '<h2 style="font-size:.95rem;margin:16px 0 6px;color:#8A6F3E">Week of '+esc(fd(w))+(w===monday(t)?' · this week':'')+'</h2>'+by[w].map(card).join("")}).join("");
  $("pbody").innerHTML=(h||'<div class=empty><p>'+(CAT==="market"?(SUB==="partner"?'No partners yet. A partner is part of the industry that helps a deal close without being the deal: a mortgage broker, a property portal such as Property Finder or Bayut, a valuer, a conveyancer. Add one with the button above.':'Nothing industry related yet. Add a link you found on social media, a launch, or an open house, and Najma updates will arrive here.'):CAT==="known"?'Nothing commercial in the next eight weeks.':'Nothing in the next eight weeks.')+'</p></div>')
  +'<a class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:14px" target=_blank href="/momo/work/plan/week?key='+encodeURIComponent(KEY)+'&from='+monday(t)+'">This week\'s plan for the team (PDF)</a>';
  document.querySelectorAll("[data-id]").forEach(function(e){e.onclick=function(){editItem(e.getAttribute("data-id"))}})}
 function editItem(id){var i=D.items.filter(function(x){return x.id===id})[0];if(!i)return;
  var row=function(k,lab,val){return '<div class=fr id="e_'+k+'"><b>'+esc(lab)+'</b><span>'+esc(val||"tap to set")+'</span><i>&#8250;</i></div>'};
- sheet(esc(i.title),row("format","Format",fmtName(i.format))+row("owner","Who makes it",i.owner)+row("act","What we do with it",actOf(i).length?actOf(i).map(actName).join(" + "):"suggested: "+(i.suggest||[]).map(actName).join(" + "))+row("taking","We are taking part",i.taking_part?"Yes · blog due "+fd(addDays(i.start,-D.blog_lead)):"No · tap if we are")+row("assignee","Assigned to",i.assignee)+row("agent","For which agent",i.agent)+row("state","Status",i.state)+(i.assignee&&numOf(i.assignee)?'<a class=ghost id=e_wa target=_blank rel=noopener style="display:block;text-align:center;text-decoration:none;margin:8px 0" href="'+esc(waLink(numOf(i.assignee),"Hi "+nameOf(i.assignee)+", "+i.title+" ("+fmtName(i.format)+"): artwork starts "+fd(artStart(i))+", it goes out "+fd(i.start)+". Can you confirm you have it?"))+'">Message '+esc(nameOf(i.assignee))+' on WhatsApp</a>':'')+'<textarea id=e_note rows=2 style="width:100%;margin:8px 0" placeholder="Note">'+esc(i.note)+'</textarea><button type=button class=ghost id=e_del style="width:100%;margin-bottom:8px">Remove from the plan</button>',function(s){
+ sheet(esc(i.title),row("format","Format",fmtName(i.format))+row("owner","Who makes it",i.owner)+row("act","What we do with it",actOf(i).length?actOf(i).map(actName).join(" + "):"suggested: "+(i.suggest||[]).map(actName).join(" + "))+row("taking","We are taking part",i.taking_part?"Yes · blog due "+fd(addDays(i.start,-D.blog_lead)):"No · tap if we are")+row("assignee","Assigned to",i.assignee)+row("agent","For which agent",i.agent)+row("state","Status",i.state)+(i.assignee&&numOf(i.assignee)?'<a class=ghost id=e_wa target=_blank rel=noopener style="display:block;text-align:center;text-decoration:none;margin:8px 0" href="'+esc(waLink(numOf(i.assignee),"Hi "+nameOf(i.assignee)+", "+i.title+" ("+fmtName(i.format)+"): artwork starts "+fd(artStart(i))+", it goes out "+fd(i.start)+". Can you confirm you have it?"))+'">Message '+esc(nameOf(i.assignee))+' on WhatsApp</a>':'')+(i.undated?'<div class=line style="margin:8px 0 2px;color:#2A3A68"><b>No date yet.</b> Give it one and it moves onto the calendar.</div><input id=e_date type=date style="width:100%;margin:0 0 8px">':'')+'<textarea id=e_angle rows=2 style="width:100%;margin:8px 0 0" placeholder="Our angle">'+esc(i.angle||"")+'</textarea><textarea id=e_note rows=2 style="width:100%;margin:8px 0" placeholder="Note">'+esc(i.note)+'</textarea><button type=button class=ghost id=e_del style="width:100%;margin-bottom:8px">Remove from the plan</button>',function(s){
+  s.querySelector("#e_angle").onchange=function(){i.angle=this.value;api({action:"item_save",item:i})};   // v613
+  var ed=s.querySelector("#e_date");if(ed)ed.onchange=function(){if(!this.value)return;i.start=i.end=this.value;i.undated=false;api({action:"item_save",item:i}).then(SHEETALL)};
   var pickOne=function(k,lab,list){s.querySelector("#e_"+k).onclick=function(){sheet(lab,opts(list,i[k]),function(s2){s2.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){i[k]=o.getAttribute("data-v");api({action:"item_save",item:i}).then(SHEETALL)}})})}};
   s.querySelector("#e_format").onclick=function(){sheet("Format",opts(D.formats,i.format),function(s2){s2.querySelectorAll(".opt").forEach(function(o){o.onclick=function(){i.format=o.getAttribute("data-v");api({action:"item_save",item:i}).then(SHEETALL)}})})};
   pickOne("owner","Who makes it",D.owners);pickOne("state","Status",D.states);
@@ -257,10 +350,10 @@ function trendCard(t){var left=Math.round((Date.parse(t.expires_at)-Date.now())/
 var MONTH=null,MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
 function ymOf(d){return d.slice(0,7)}
 function shiftMonth(ym,n){var y=+ym.slice(0,4),m=+ym.slice(5,7)-1+n;y+=Math.floor(m/12);m=((m%12)+12)%12;return y+"-"+String(m+1).padStart(2,"0")}
-function itemsOn(ds){return D.items.filter(function(i){return vis(i)&&i.pillar!=="trend"&&i.start<=ds&&i.end>=ds&&i.state!=="Posted"})}
+function itemsOn(ds){return D.items.filter(function(i){return vis(i)&&!i.undated&&i.pillar!=="trend"&&i.start<=ds&&i.end>=ds&&i.state!=="Posted"})}
 function isLong(i){return (Date.parse(i.end)-Date.parse(i.start))/864e5>3}
 function drawMonth(){var ym=MONTH||ymOf(today()),y=+ym.slice(0,4),mo=+ym.slice(5,7),days=new Date(Date.UTC(y,mo,0)).getUTCDate(),lead=(new Date(ym+"-01T00:00:00Z").getUTCDay()+6)%7,t=today(),
- first=ym+"-01",last=ym+"-"+String(days).padStart(2,"0"),inM=D.items.filter(function(i){return vis(i)&&i.pillar!=="trend"&&i.start<=last&&i.end>=first&&i.state!=="Posted"}),longs=inM.filter(isLong),
+ first=ym+"-01",last=ym+"-"+String(days).padStart(2,"0"),inM=D.items.filter(function(i){return vis(i)&&!i.undated&&i.pillar!=="trend"&&i.start<=last&&i.end>=first&&i.state!=="Posted"}),longs=inM.filter(isLong),
  cells=[],wk=[],rows=[],i,d;
  for(i=0;i<lead;i++)cells.push(null);for(d=1;d<=days;d++)cells.push(ym+"-"+String(d).padStart(2,"0"));while(cells.length%7)cells.push(null);
  for(i=0;i<cells.length;i+=7)rows.push(cells.slice(i,i+7));
@@ -285,7 +378,7 @@ function waLink(num,text){return "https://wa.me/"+num+"?text="+encodeURIComponen
 function nameOf(n){return String(n||"").replace(/\s*\(.*\)$/,"").split(" ")[0]}
 function numOf(name){var r="";(D.team||[]).forEach(function(x){if(x.name===name)r=x.whatsapp});return r}
 function pollText(ym){var y=+ym.slice(0,4),mo=+ym.slice(5,7),days=new Date(Date.UTC(y,mo,0)).getUTCDate(),first=ym+"-01",last=ym+"-"+String(days).padStart(2,"0"),
- L=D.items.filter(function(i){return vis(i)&&i.pillar!=="trend"&&i.start<=last&&i.end>=first&&i.state!=="Posted"}).sort(function(a,b){return a.start<b.start?-1:1});
+ L=D.items.filter(function(i){return vis(i)&&!i.undated&&i.pillar!=="trend"&&i.start<=last&&i.end>=first&&i.state!=="Posted"}).sort(function(a,b){return a.start<b.start?-1:1});
  if(!L.length)return "";return "Team, here are the events and moments for "+MN[mo-1]+". Which ones should we take part in? Please reply with the numbers.\n\n"+L.map(function(i,k){return (k+1)+") "+fd(i.start)+(i.end!==i.start?" – "+fd(i.end):"")+" · "+i.title}).join("\n")+"\n\nWe will decide at the Monday huddle."}
 function shareSheet(){var ym=MONTH||ymOf(today()),mn=MN[+ym.slice(5,7)-1];
  var row=function(id,lab,sub){return '<div class=fr id="'+id+'"><b>'+esc(lab)+'</b><span>'+esc(sub)+'</span><i>&#8250;</i></div>'};
@@ -331,6 +424,52 @@ function addTrend(){var n={platform:"",url:"",hook:"",why:"",angle:""};
   s.querySelector(".done").onclick=function(){n.url=u.value.trim();n.hook=s.querySelector("#n_h").value.trim();n.why=s.querySelector("#n_w").value.trim();n.angle=s.querySelector("#n_a").value.trim();
    if(!n.url&&!n.hook){alert("Paste a link, or say what the trend is.");return}var btn=this;btn.disabled=true;btn.textContent="Saving...";
    api({action:"trend_save",trend:{platform:n.manual?n.platform:"",url:n.url,hook:n.hook,why:n.why,angle:n.angle}}).then(function(j){if(j.error){btn.disabled=false;btn.textContent="Done";alert(j.error);return}SHEETALL()})}})}
+// v613 - I HAVE AN IDEA: a word, a line, a link or a picture; the plan looks it up and comes back with the date, the category and three angles
+function ownerFor(f){return f==="reel"?"Videographer":"Graphic designer"}
+function ideaSheet(){var n={text:"",url:"",img:null};
+ sheet("I have an idea",'<div class=line>Say it, paste a link, or show me a picture. I look in the plan first, then on the web, in the news, in places around Dubai and in Najma, and bring back the date and a few angles.</div>'
+  +'<input id=i_t class=sin placeholder="Type it, or tap Speak" style="width:100%;margin:8px 0 6px">'
+  +'<div class=seg style="grid-template-columns:1fr 1fr;gap:6px"><button type=button id=i_mic>Speak</button><button type=button id=i_pic>Picture</button></div>'
+  +'<input id=i_f type=file accept="image/*" style="display:none"><div id=i_prev style="margin:6px 0"></div>'
+  +'<input id=i_u class=sin inputmode=url autocapitalize=off placeholder="Or paste a link" style="width:100%;margin:8px 0">'
+  +'<div class=line>For example: Halloween. Dubai Fitness Challenge. That reel I saw.</div><button type=button class=gold id=i_go style="width:100%;margin-top:10px">Find it</button>',function(s){
+  s.querySelector(".done").textContent="Cancel";
+  var mic=s.querySelector("#i_mic"),SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)mic.style.display="none";else mic.onclick=function(){try{var r=new SR();r.lang="en-AE";r.interimResults=false;mic.textContent="Listening...";r.onresult=function(e){var t=s.querySelector("#i_t");t.value=(t.value+" "+e.results[0][0].transcript).trim()};r.onend=function(){mic.textContent="Speak"};r.onerror=r.onend;r.start()}catch(e){mic.textContent="Speak"}};
+  s.querySelector("#i_pic").onclick=function(){s.querySelector("#i_f").click()};
+  s.querySelector("#i_f").onchange=function(){var f=this.files&&this.files[0];if(!f)return;if(f.size>6*1024*1024){alert("That picture is too big (6 MB limit).");return}var rd=new FileReader();rd.onload=function(){n.img={name:f.name,type:f.type||"image/jpeg",data:String(rd.result).split(",")[1]};s.querySelector("#i_prev").innerHTML='<img src="'+rd.result+'" style="width:100%;border-radius:12px;max-height:160px;object-fit:cover">'};rd.readAsDataURL(f)};
+  s.querySelector("#i_go").onclick=function(){n.text=s.querySelector("#i_t").value.trim();n.url=s.querySelector("#i_u").value.trim();if(!n.text&&!n.url&&!n.img){alert("Say what it is, paste a link, or drop a picture.");return}var b=this;b.disabled=true;b.textContent="Looking in the plan, on the web and in Najma...";
+   api({action:"idea_find",text:n.text,url:n.url,image:n.img}).then(function(j){if(j.error){b.disabled=false;b.textContent="Find it";alert(j.error);return}closeTop();foundSheet(j,n)}).catch(function(){b.disabled=false;b.textContent="Find it";alert("I could not reach the plan. Try again.")})}})}
+function foundSheet(j,n){var f=j.found||{},t=today(),ch=j.checked||{},pick=-1,when=f.start?"date":"none",date=f.start||t,pillar=f.pillar||"known",known=f.known?D.items.filter(function(x){return x.id===f.known})[0]:null,A=f.angles||[];
+ var html=(n.img?'<img src="data:'+n.img.type+';base64,'+n.img.data+'" style="width:100%;border-radius:12px;max-height:140px;object-fit:cover;margin-bottom:8px">':'')
+  +'<div class=ent style="border-left-color:#0A4F4A;background:#E6F0EE"><h3>'+esc(f.name)+'</h3><div class=line>'+esc(f.start?fd(f.start)+(f.end&&f.end!==f.start?" – "+fd(f.end):"")+(f.repeats?" · every year":""):"No fixed date")+'</div>'+(f.why?'<div class=line>'+esc(f.why)+'</div>':'')+'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+(known?chip("Already in the plan","#B04A3A"):chip("Not in the plan yet","#626B78"))+chip("Added by you","#2A3A68")+'</div></div>'
+  +'<div class=line style="margin:6px 0 4px">I checked the plan'+(ch.web?', the web':'')+(ch.news?', the news':'')+(ch.places?', places in Dubai':'')+(ch.najma?', Najma':'')+'.'+(j.read?' From the picture I read: '+esc(j.read.slice(0,120))+'.':'')+(f.engine===false?' The engine was busy, so this is a plain match. Check the date.':'')+'</div>'
+  +'<div class=line style="margin:8px 0 4px"><b>Where it belongs</b></div><div class=seg id=f_pil style="grid-template-columns:1fr 1fr 1fr;gap:6px"></div>'
+  +'<div class=line style="margin:10px 0 4px"><b>Our angle.</b> Tap one, or write your own</div><div id=f_ang>'+(A.length?A.map(function(g,k){return '<div class=ent data-k="'+k+'" style="cursor:pointer"><h3>'+esc(g.title)+'</h3><div class=line>'+esc(g.line)+' · '+esc(fmtName(g.format))+'</div></div>'}).join(""):'<div class=line>No angles came back. Write yours below.</div>')+'</div><input id=f_own class=sin placeholder="Or your own angle" style="width:100%;margin:4px 0 8px">'
+  +'<div class=line style="margin:8px 0 4px"><b>When</b></div><div class=seg id=f_when style="grid-template-columns:1fr 1fr 1fr;gap:6px"></div><input id=f_date type=date value="'+esc(date)+'" style="width:100%;margin:6px 0;display:none"><div class=line id=f_note style="margin:6px 0"></div>'
+  +'<button type=button class=gold id=f_add style="width:100%;margin-top:10px">'+(known?'Add this angle to it':'Add to the plan')+'</button>';
+ sheet("Found it",html,function(s){s.querySelector(".done").textContent="Cancel";
+  var fmtOf=function(){return pick>=0&&A[pick]?A[pick].format:"post"},actOfA=function(){return pick>=0&&A[pick]?A[pick].activity:"social"};
+  var paint=function(){s.querySelectorAll("#f_pil button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-v")===pillar)});
+   s.querySelectorAll("#f_ang [data-k]").forEach(function(c){var on=+c.getAttribute("data-k")===pick;c.style.borderLeftColor=on?"#0A4F4A":"#C5A56A";c.style.background=on?"#E6F0EE":"#fff"});
+   s.querySelectorAll("#f_when button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-v")===when)});s.querySelector("#f_date").style.display=when==="pick"?"":"none";
+   var d=when==="date"?f.start:when==="pick"?(s.querySelector("#f_date").value||t):"",lead=D.lead[fmtOf()]||7,note="";
+   if(pillar==="trend")note="A trend lives 72 hours in the inbox.";else if(!d)note="It waits on the Ideas shelf until you give it a date.";else{var days=Math.round((Date.parse(d)-Date.parse(t))/864e5);note=days<lead?"It is "+days+" day"+(days===1?"":"s")+" away and a "+fmtName(fmtOf()).toLowerCase()+" needs "+lead+". A story needs "+D.lead.story+": the plan suggests a story this time and the "+fmtName(fmtOf()).toLowerCase()+" next year.":"Artwork starts "+fd(addDays(d,-lead))+"."}
+   s.querySelector("#f_note").textContent=note};
+  s.querySelector("#f_pil").innerHTML=D.pillars.map(function(p){return '<button type=button data-v="'+p[0]+'">'+esc(p[1])+'</button>'}).join("");
+  s.querySelectorAll("#f_pil button").forEach(function(b){b.onclick=function(){pillar=b.getAttribute("data-v");paint()}});
+  s.querySelectorAll("#f_ang [data-k]").forEach(function(c){c.onclick=function(){var k=+c.getAttribute("data-k");pick=pick===k?-1:k;paint()}});
+  var W=(f.start?[["date",fd(f.start)]]:[]).concat([["pick","Pick a date"],["none","No date yet"]]);
+  s.querySelector("#f_when").innerHTML=W.map(function(w){return '<button type=button data-v="'+w[0]+'">'+esc(w[1])+'</button>'}).join("");
+  s.querySelectorAll("#f_when button").forEach(function(b){b.onclick=function(){when=b.getAttribute("data-v");paint()}});
+  s.querySelector("#f_date").onchange=paint;paint();
+  s.querySelector("#f_add").onclick=function(){var own=s.querySelector("#f_own").value.trim(),ang=own||(pick>=0&&A[pick]?A[pick].title+": "+A[pick].line:"");if(!ang){alert("Tap an angle, or write your own.");return}var b=this;b.disabled=true;b.textContent="Saving...";
+   var back=function(r){b.disabled=false;b.textContent="Add to the plan";alert(r.error)};
+   if(pillar==="trend"){api({action:"trend_save",trend:{url:n.url||"",hook:f.name,why:f.why||"",angle:ang}}).then(function(r){if(r.error)return back(r);SHEETALL()});return}
+   if(known){known.angle=ang;api({action:"item_save",item:known}).then(function(r){if(r.error)return back(r);SHEETALL()});return}
+   var d=when==="date"?f.start:when==="pick"?(s.querySelector("#f_date").value||t):t,e=when==="date"&&f.end?f.end:d,fm=fmtOf();
+   if(when!=="none"){var days=Math.round((Date.parse(d)-Date.parse(t))/864e5);if(days<(D.lead[fm]||7)&&days>=D.lead.story)fm="story"}   // too close for the chosen format: the story the note promised
+   api({action:"item_save",item:{title:f.name,start:d,end:e,pillar:pillar,sub:f.sub||"",certainty:f.certainty||"Researched",format:fm,owner:ownerFor(fm),activity:[actOfA()],note:f.why||"",angle:ang,mine:true,undated:when==="none",source:n.url||""}}).then(function(r){if(r.error)return back(r);SHEETALL()})}})}
 function drawCat(){var el=$("pcat");if(VIEW==="tr"){el.style.display="none";return}el.style.display="";var cnt=function(c){return D.items.filter(function(i){return i.pillar!=="trend"&&(c==="all"||i.pillar===c)&&i.state!=="Posted"}).length};
  el.innerHTML=[["all","All"],["known","Commercial"],["market","Industry related"]].map(function(c){return '<button type=button data-c="'+c[0]+'"'+(CAT===c[0]?' class=on':'')+' style="padding:10px 4px;font-size:.8rem">'+c[1]+' <small style="opacity:.7">'+cnt(c[0])+'</small></button>'}).join("");
  el.querySelectorAll("button").forEach(function(b){b.onclick=function(){CAT=b.getAttribute("data-c");draw()}})}
@@ -339,13 +478,13 @@ function drawSub(){var el=$("psub");if(!el)return;if(VIEW==="tr"||CAT!=="market"
  el.querySelectorAll("button").forEach(function(b){b.onclick=function(){SUB=b.getAttribute("data-s");draw()}})}
 function draw(){drawCat();drawSub();$("tcal").classList.toggle("on",VIEW==="cal");$("tmon").classList.toggle("on",VIEW==="mon");$("ttr").classList.toggle("on",VIEW==="tr");$("padd").textContent=VIEW==="tr"?"Add a trend":"Add to the plan";if(VIEW==="cal")drawCal();else if(VIEW==="mon")drawMonth();else drawTrends()}
 function load(){fetch("/momo/work/plan/api?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(j){D=j;draw()})}
-$("tcal").onclick=function(){VIEW="cal";draw()};$("tmon").onclick=function(){VIEW="mon";draw()};$("ttr").onclick=function(){VIEW="tr";draw()};$("padd").onclick=function(){if(VIEW==="tr")addTrend();else addItem()};$("pshare").onclick=shareSheet;
+$("tcal").onclick=function(){VIEW="cal";draw()};$("tmon").onclick=function(){VIEW="mon";draw()};$("ttr").onclick=function(){VIEW="tr";draw()};$("padd").onclick=function(){if(VIEW==="tr")addTrend();else addItem()};$("pshare").onclick=shareSheet;$("pidea").onclick=ideaSheet;
 $("pback").href="/momo/work?key="+encodeURIComponent(KEY);load();
 `;
 
 const PLAN_BODY = '<a class=back id=pback href="#">&#8592; Work log</a><div class=tag>MOMO · WORK</div><h1>Content plan</h1>'
   + '<div class=seg style="margin:8px 0 12px;grid-template-columns:1fr 1fr 1fr"><button type=button id=tcal class=on>List</button><button type=button id=tmon>Month</button><button type=button id=ttr>Trends</button></div>'
-  + '<div class=seg id=pcat style="margin:0 0 8px;grid-template-columns:1fr 1fr 1fr;gap:6px"></div><div class=seg id=psub style="margin:0 0 10px;grid-template-columns:1fr 1fr 1fr;gap:6px;display:none"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><button type=button id=padd class=gold>Add to the plan</button><button type=button id=pshare class=ghost>Share</button></div><div id=pbody></div>';
+  + '<div class=seg id=pcat style="margin:0 0 8px;grid-template-columns:1fr 1fr 1fr;gap:6px"></div><div class=seg id=psub style="margin:0 0 10px;grid-template-columns:1fr 1fr 1fr;gap:6px;display:none"></div><div style="display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;margin-bottom:10px"><button type=button id=pidea class=gold>I have an idea</button><button type=button id=padd class=ghost>Add to the plan</button><button type=button id=pshare class=ghost>Share</button></div><div id=pbody></div>';
 
 export async function planRoute(request, env, url, deps, ctx) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
@@ -372,6 +511,22 @@ export async function planRoute(request, env, url, deps, ctx) {
       const nm = (ctx.team.find((x) => x[0] === b.name) || [])[0]; if (!nm) return J({ error: "Unknown person." }, 400);
       const num = cleanNumber(b.whatsapp); if (b.whatsapp && !num) return J({ error: "Use the full number with the country code, for example 971 50 123 4567." }, 400);
       await env.MEETINGS.put(TMP + slugN(nm), JSON.stringify({ name: nm, whatsapp: num })); return J({ ok: true, name: nm, whatsapp: num });
+    }
+    if (b.action === "idea_find") {   // v613 - a word, a line, a link or a picture: what is it, when is it, where does it belong, and three angles
+      const text = String(b.text || "").slice(0, 600).trim(), nl = normaliseLink(b.url || "");
+      let title = "", ocr = "";
+      if (nl) { try { title = (await (ctx.title || linkTitle)(nl)) || ""; } catch (e) { title = ""; } }
+      const img = b.image && typeof b.image === "object" ? b.image : null;
+      if (img && img.data) {
+        const ct = String(img.type || "").toLowerCase(), b64 = String(img.data || "");
+        if (b64.length > 9_000_000) return J({ error: "That picture is too big (6 MB limit)." }, 400);
+        if (/image|pdf/.test(ct) && deps.ocr) { try { ocr = String((await deps.ocr(env, String(img.name || "picture"), ct, b64)) || "").replace(/\s+/g, " ").trim().slice(0, 1500); } catch (e) { ocr = ""; } }
+      }
+      const q = [text, title, ocr.slice(0, 200)].filter(Boolean).join(" ").trim();
+      if (!q) return J({ error: img ? "I could not read anything in that picture. Tell me in a word what it is." : "Say what the idea is, paste a link, or drop a picture." }, 422);
+      const items = await planItems(env), cx = await (ctx.context || ideaContext)(env, q.slice(0, 120));
+      const found = await ideaThink(env, deps, { today: today(), text, title, ocr, items, cx });
+      return J({ ok: true, query: q.slice(0, 120), found, checked: { calendar: items.length, web: cx.web.length, news: cx.news.length, places: cx.places.length, najma: !!cx.area }, read: ocr ? ocr.slice(0, 240) : "" });
     }
     if (b.action === "trend_save") {
       const id = rid((b.trend || {}).id); let prev = null; try { prev = JSON.parse(await env.MEETINGS.get(TRP + id)); } catch (e) {}
