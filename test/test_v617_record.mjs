@@ -81,4 +81,14 @@ L = await api({ action: "list" }); ok(L.recs[0].status === "filed", "recording m
   const uj = new URL("https://w/momo/work.js?key=K"); const js = await (await m.workRoute(new Request(uj), env, uj, deps)).text(); let parses = true; try { new Function(js); } catch (x) { parses = false; } ok(parses, "work script parses with the recorder inside it");
   for (const frag of ["audio/mp4", "audio/webm;codecs=opus", "navigator.wakeLock", "SEG_MS=300000", "beforeunload", "Tell the people in the room you are recording", "/momo/work/rec/chunk", "Stop and make my entry", "Make entry", "rec:PREV.src_rec"]) ok(js.includes(frag), "script has: " + frag);
   ok(!/\$\{/.test(js.slice(js.indexOf("v617 RECORD"))), "no template interpolation in the recorder script"); }
+// v618 - ids: the recorder's element ids must be unique on the page (v617 reused "rgo", the Report tab's link, so Start did nothing)
+{ const u = new URL("https://w/momo/work?key=K"); const pg = await (await m.workRoute(new Request(u), env, u, deps)).text();
+  const uj = new URL("https://w/momo/work.js?key=K"); const js = await (await m.workRoute(new Request(uj), env, uj, deps)).text();
+  const i0 = js.indexOf("// ---- v617 RECORD"), i1 = js.indexOf("load();resumeDraft()})();");
+  const rec = js.slice(i0, i1), rest = pg + js.slice(0, i0) + js.slice(i1);
+  const idsOf = (t) => new Set([...t.matchAll(/id=["']?([A-Za-z][\w-]*)/g)].map((x) => x[1]).concat([...t.matchAll(/\.id=["']([A-Za-z][\w-]*)["']/g)].map((x) => x[1])));
+  const mine = idsOf(rec), theirs = idsOf(rest), clash = [...mine].filter((x) => theirs.has(x));
+  ok(mine.size >= 10, "the recorder declares its ids", [...mine]); ok(clash.length === 0, "no recorder id is also used elsewhere on the page", clash);
+  ok(!/\$\("rgo"\)/.test(rec), "the recorder does not touch the Report tab's rgo");
+  ok(rec.includes("Recording started") && rec.includes("Recording stopped") && rec.includes("Starting"), "start and stop are confirmed on screen"); }
 console.log("v617 record: " + pass + " passed, " + fail + " failed"); if (fail) process.exit(1);
