@@ -488,6 +488,7 @@ async function recApi(request, env, J, deps) {
     await recPut(env, m);
     return J({ ok: true, entries: list.slice(0, 20), title: m.title, secs: m.secs, date, notes: !!notes });
   }
+  if (b.action === "log") { m.log = (m.log || []).concat((Array.isArray(b.ev) ? b.ev : []).slice(0, 80).map((x) => String(x).replace(/[^ -~]/g, "").slice(0, 120))).slice(-120); await recPut(env, m); return J({ ok: true }); }   // v620 - the page's own step trail (event names and sizes only), so a stuck recording can be traced
   if (b.action === "filed") { m.status = "filed"; await recPut(env, m); return J({ ok: true }); }
   return J({ error: "Unknown action." }, 400);
 }

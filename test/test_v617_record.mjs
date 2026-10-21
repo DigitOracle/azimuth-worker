@@ -91,4 +91,11 @@ L = await api({ action: "list" }); ok(L.recs[0].status === "filed", "recording m
   ok(mine.size >= 10, "the recorder declares its ids", [...mine]); ok(clash.length === 0, "no recorder id is also used elsewhere on the page", clash);
   ok(!/\$\("rgo"\)/.test(rec), "the recorder does not touch the Report tab's rgo");
   ok(rec.includes("Recording started") && rec.includes("Recording stopped") && rec.includes("Starting"), "start and stop are confirmed on screen"); }
+// v620 - pause is visible, stop reports progress, uploads time out and are traced; the page's step trail is stored (names and sizes only)
+{ const uj = new URL("https://w/momo/work.js?key=K"); const js = await (await m.workRoute(new Request(uj), env, uj, deps)).text(); const rec = js.slice(js.indexOf("// ---- v617 RECORD"));
+  for (const frag of ["id=rec_state", "Paused. Tap Resume", "Stopped. Saving", "AbortController", "Sending the last part", "Still working, keep this page open", "function dlog(", 'action:"log"', "upload part", "tries>=6"]) ok(rec.includes(frag), "v620 script has: " + frag);
+  const s5 = await api({ action: "start", title: "Trail" }); currentId = s5.id;
+  const lg = await api({ action: "log", id: currentId, ev: ["0s part 0 ended: 5000 bytes, 5s, type audio/mp4", "0s upload part 0 start (5000 bytes, try 1)", "bad charshere"] });
+  ok(lg.ok, "log action accepted", lg); const mm = JSON.parse(store.get("recw_" + currentId)); ok(mm.log.length === 3 && !/[ -]/.test(mm.log[2]), "trail stored, control characters stripped", mm.log);
+  ok((await api({ action: "log", id: "nonexistent", ev: ["x"] })).error, "log for an unknown recording is refused"); }
 console.log("v617 record: " + pass + " passed, " + fail + " failed"); if (fail) process.exit(1);
