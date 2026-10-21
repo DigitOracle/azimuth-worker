@@ -2317,7 +2317,7 @@ async function appFetch(request, env, ctx) {
     }
     { const _ak = await askRoute(request, env, url, { keyTier }); if (_ak) return _ak; }   // v555 - Ask Najma (stub engine, owner only)
     // v564.1 - Momo Work's saves and filings are POSTs: answered here, before the POST guard further down refuses them
-    if (request.method === "POST" && url.pathname === "/momo/work/api") { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
+    if (request.method === "POST" && MOMO_WORK_POSTS.has(url.pathname)) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
     if (url.pathname === "/desk_ref_set" && request.method === "GET") {   // v549 - owner key; ?n=<ref>&approved=0|1 - takes a reference photo out of use (or back), the photo itself is kept
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       const _sn = Number(url.searchParams.get("n")) || 0; let _sm = null; try { _sm = JSON.parse(await env.MEETINGS.get("desk_ref_" + _sn) || "null"); } catch (e) {}
@@ -12879,6 +12879,9 @@ function residentsKeyOf(env, url) {
 // v155 (DA-AUD-005, 15 Sep 2026) - two keys. READ_KEY opens everything and never goes into a link a client can be sent. CLIENT_KEY opens
 // only the app pages below: comma-separated, the first value goes into new links and the rest keep working, so the value already in
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
+// v619 (Kendall 21 Oct 2026: "the plan never saved", "Record: nothing happens after Starting") - the Momo Work POST addresses. Only /api was let through before the POST guard, so the content plan
+// (/plan/api) and the recorder (/rec/api, /rec/chunk) answered 401 on the live worker. Each is still gated by isNajjuko inside workRoute / planRoute.
+const MOMO_WORK_POSTS = new Set(["/momo/work/api", "/momo/work/plan/api", "/momo/work/rec/api", "/momo/work/rec/chunk"]);
 const CLIENT_PATHS = ["/adv_bldg", "/city_bldg", "/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf", "/developer_profile", "/developer_profile_pdf", "/doc_client", "/doc_broker"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/", "/render/"];   // v187 - a building page is a client page

@@ -10,7 +10,7 @@ export const REC_JS = String.raw`
 (function(){
 var SEG_MS=300000,MAXH=4;   // five-minute parts; one recording up to four hours
 var R=null,UPQ=[],UPBUSY=false,OV=null,TICK=null,LOCK=null,AC=null,AN=null,LISTED=[];
-function rapi(o){return fetch("/momo/work/rec/api?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)}).then(function(r){return r.json().then(function(j){if(!r.ok&&!j.error)j.error="The server answered "+r.status+".";return j})})}
+function rapi(o){return fetch("/momo/work/rec/api?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)}).then(function(r){return r.text().then(function(t){var j=null;try{j=JSON.parse(t)}catch(e){j=null}if(!j)j={error:r.status===401||r.status===404?"The server did not accept the recording request ("+r.status+"). Tell Kendall.":"The server answered "+r.status+" with something unreadable. Try again."};else if(!r.ok&&!j.error)j.error="The server answered "+r.status+".";return j})},function(){return {error:"No connection. Check the wifi and try again."}})}
 function fmt(s){s=Math.max(0,Math.round(s));var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return (h?h+":"+String(m).padStart(2,"0"):m)+":"+String(x).padStart(2,"0")}
 function mins(s){if(s<60)return "under a minute";s=Math.round(s/60);return s>=60?Math.floor(s/60)+" h "+(s%60)+" min":s+" min"}
 function pickMime(){var c=["audio/mp4","audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus"];if(!window.MediaRecorder)return "";for(var i=0;i<c.length;i++){try{if(MediaRecorder.isTypeSupported(c[i]))return c[i]}catch(e){}}return ""}
@@ -87,7 +87,7 @@ function makeEntries(id,btn,fin){if(btn){btn.disabled=true;btn.textContent="Read
   if(!QUEUE.length){fail("Nothing to file from that recording.");return}
   closeOv();$("wt").value="Recording read ("+mins(j.secs)+"): "+QUEUE.length+(QUEUE.length===1?" activity":" activities")+". Check each one. Notes and transcript: tap Record, then the recording in today's list.";
   preview(QUEUE[0]);scrollTo(0,0);toast("Meeting read. Check the entry below and save it.");loadList()}).catch(function(){if(btn){btn.disabled=false;btn.textContent="Make entry"}fail("Could not read it just now. Your recording is safe: try again from the list.")})}
-$("wrec").onclick=function(){loadList(function(){drawStart()});drawStart()};
+$("wrec").onclick=function(){drawStart();loadList(function(){drawList()})};   // v619: draw once; only the list refreshes, so a quick tap or a typed title is never wiped
 loadList();
 })();
 `;
