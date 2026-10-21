@@ -457,12 +457,12 @@ async function recApi(request, env, J, deps) {
     m.secs = Math.max(Math.round(Number(b.secs) || 0), segs.reduce((a, g) => a + (g.secs || 0), 0)); m.ended_hm = dubaiHM(); m.chars = text.length; m.parts = segs.length;
     if (m.status === "recording") m.status = "transcribed";
     await recPut(env, m);
-    if (text.length < 40) return J({ error: segs.length ? "I could not hear any speech in that recording. Check the microphone, or try again." : "No part of that recording reached the server. Check the connection and try again.", parts: segs.length }, 422);
+    if (text.length < 40) return J({ error: segs.length ? "I could not hear any speech in that recording. Check the microphone, or try again." : "No audio reached the server for that recording: the phone sent empty audio (a locked screen or another app can cut the microphone). Nothing can be read from it.", parts: segs.length }, 422);
     return J({ ok: true, parts: segs.length, chars: text.length, secs: m.secs, missing });
   }
   if (b.action === "entries") {
     const segs = await recSegs(env, id), transcript = recTranscriptText(segs, false);
-    if (transcript.length < 40) return J({ error: "There is no speech to read in that recording yet." }, 422);
+    if (transcript.length < 40) return J({ error: (segs.length ? "There is no speech to read in that recording yet." : "This recording has no audio: no part ever reached the server because the phone sent empty audio. Nothing can be read from it. Delete it from the list and record again with the screen on.") }, 422);
     if (!m.ended_hm) { m.ended_hm = dubaiHM(); m.secs = m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0); }
     const notes = m.notes && m.notes.summary ? m.notes : await recNotes(env, deps, m, recTranscriptText(segs, true));
     if (notes) m.notes = notes;

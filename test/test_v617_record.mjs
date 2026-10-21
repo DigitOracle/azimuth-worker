@@ -98,4 +98,10 @@ L = await api({ action: "list" }); ok(L.recs[0].status === "filed", "recording m
   const lg = await api({ action: "log", id: currentId, ev: ["0s part 0 ended: 5000 bytes, 5s, type audio/mp4", "0s upload part 0 start (5000 bytes, try 1)", "bad charshere"] });
   ok(lg.ok, "log action accepted", lg); const mm = JSON.parse(store.get("recw_" + currentId)); ok(mm.log.length === 3 && !/[ -]/.test(mm.log[2]), "trail stored, control characters stripped", mm.log);
   ok((await api({ action: "log", id: "nonexistent", ev: ["x"] })).error, "log for an unknown recording is refused"); }
+// v621 - a dead microphone must never be silent (Kendall 21 Oct: a 55-minute recording came back as twelve parts of 0 bytes and nothing warned her)
+{ const uj = new URL("https://w/momo/work.js?key=K"); const js = await (await m.workRoute(new Request(uj), env, uj, deps)).text(); const rec = js.slice(js.indexOf("// ---- v617 RECORD"));
+  for (const frag of ["function alarm(msg)", "id=rec_alert", "navigator.vibrate", "trk.onmute", "trk.onended", "Date.now()-R.lastSound>45000", "page hidden: banking the current part", "NOTHING WAS RECORDED", "came back EMPTY", "tk.readyState"]) ok(rec.includes(frag), "v621 script has: " + frag);
+  const s9 = await api({ action: "start", title: "Empty" }); currentId = s9.id; const f9 = await api({ action: "finish", id: currentId, secs: 600 });
+  ok(f9.error && /empty audio/.test(f9.error), "finish on a recording with no parts says the phone sent empty audio", f9);
+  const e9 = await api({ action: "entries", id: currentId }); ok(e9.error && /no audio/.test(e9.error) && /Delete it/.test(e9.error), "Make entry on an audio-less recording explains it and says what to do", e9); }
 console.log("v617 record: " + pass + " passed, " + fail + " failed"); if (fail) process.exit(1);
