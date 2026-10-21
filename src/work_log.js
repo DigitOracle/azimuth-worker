@@ -353,6 +353,156 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": 
 const fmtD = (d) => { const M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]; const p = String(d).split("-"); return (+p[2]) + " " + M[+p[1] - 1] + " " + p[0]; };
 const dayName = (d) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date(d + "T00:00:00Z").getUTCDay()];
 
+// ---- v617 RECORD: a meeting, briefing or interview recorded in the browser in five-minute parts, read on arrival, then turned into notes and a drafted entry -------------
+// Kendall, 21 Oct 2026. Audio is read by the speech engine as each part arrives and is NOT kept once read (only if the engine failed, for 48 hours, so it can be retried);
+// the transcript and the notes stay under her key until she deletes them. KV keys: recw_<id> (the recording), recs_<id>_<nnn> (a part's text), reca_<id>_<nnn> (audio awaiting a retry).
+const RECW = "recw_", RECS = "recs_", RECA = "reca_", STT_MODEL = "@cf/openai/whisper-large-v3-turbo", REC_MAX_PART = 8 * 1024 * 1024, REC_MAX_PER_DAY = 40;
+const dubaiHM = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(11, 16);
+const recId = (v) => String(v || "").replace(/[^a-z0-9]/gi, "").slice(0, 24);
+const recDateOf = (id) => id.slice(0, 4) + "-" + id.slice(4, 6) + "-" + id.slice(6, 8);
+const escH = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]));
+async function recGet(env, id) { try { return JSON.parse(await env.MEETINGS.get(RECW + id)); } catch (e) { return null; } }
+async function recPut(env, m) { await env.MEETINGS.put(RECW + m.id, JSON.stringify(m)); }
+function recB64(bytes) { let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
+async function recTranscribe(env, bytes) {
+  const out = await env.AI.run(STT_MODEL, { audio: recB64(bytes), language: "en", vad_filter: true });
+  return String(out && out.text || "").trim();
+}
+const segKey = (id, n) => RECS + id + "_" + String(n).padStart(3, "0");
+async function recSegs(env, id) {
+  const keys = []; let cursor;
+  do { const r = await env.MEETINGS.list({ prefix: RECS + id + "_", cursor }); cursor = r.list_complete ? null : r.cursor; for (const k of r.keys) keys.push(k.name); } while (cursor);
+  const vals = await Promise.all(keys.map((k) => env.MEETINGS.get(k).then((v) => { try { return JSON.parse(v); } catch (e) { return null; } })));
+  return vals.filter(Boolean).sort((a, b) => a.n - b.n);
+}
+const mmss = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(Math.round(s % 60)).padStart(2, "0");
+function recTranscriptText(segs, markers) {
+  let t = 0; return segs.map((g) => { const head = markers ? "[" + mmss(t) + "] " : ""; t += g.secs || 0; return g.text ? head + g.text : ""; }).filter(Boolean).join(markers ? "\n\n" : "\n");
+}
+async function recChunk(request, env, url, J) {
+  const id = recId(url.searchParams.get("id")), n = Math.max(0, Math.min(999, parseInt(url.searchParams.get("n"), 10) || 0)), secs = Math.max(0, Math.min(1800, parseInt(url.searchParams.get("secs"), 10) || 0));
+  const m = id ? await recGet(env, id) : null; if (!m) return J({ error: "No recording with that id." }, 404);
+  if (await env.MEETINGS.get(segKey(id, n))) return J({ ok: true, n, again: true });   // a retry of a part already read
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.length < 1000) return J({ error: "That part was empty." }, 400);
+  if (bytes.length > REC_MAX_PART) return J({ error: "That part is too big." }, 413);
+  let text = null;
+  try { text = await recTranscribe(env, bytes); } catch (e) { text = null; }
+  if (text == null) {   // the speech engine failed: keep the audio for 48 hours so Stop can retry it
+    await env.MEETINGS.put(RECA + id + "_" + String(n).padStart(3, "0"), bytes.buffer, { expirationTtl: 172800 });
+    await env.MEETINGS.put(segKey(id, n), JSON.stringify({ n, secs, text: "", pending: true }));
+    return J({ ok: true, n, pending: true });
+  }
+  await env.MEETINGS.put(segKey(id, n), JSON.stringify({ n, secs, text }));
+  return J({ ok: true, n, chars: text.length });
+}
+const REC_NOTES_SCHEMA = { type: "object", additionalProperties: false, required: ["summary", "decisions", "actions", "people", "topics"], properties: {
+  summary: { type: "string" }, decisions: { type: "array", items: { type: "string" } }, topics: { type: "array", items: { type: "string" } }, people: { type: "array", items: { type: "string" } },
+  actions: { type: "array", items: { type: "object", additionalProperties: false, required: ["what", "owner", "due"], properties: { what: { type: "string" }, owner: { type: "string" }, due: { type: "string" } } } } } };
+const REC_BLOCK_SCHEMA = { type: "object", additionalProperties: false, required: ["notes"], properties: { notes: { type: "string" } } };
+async function recNotes(env, deps, m, transcript) {
+  const names = PEOPLE.map((x) => x[0]).join(", ");
+  const sys = "You write meeting notes for Najjuko, the Strategic Lead at FN Realty (a Dubai real-estate brokerage), from an AUTOMATIC transcript of a meeting, briefing or interview she attended or ran. "
+    + "The speech engine mishears names and numbers: use a name only when the transcript clearly supports it, and prefer these team names when a spelling is close: " + names + ". "
+    + "Never invent anything: no people, figures, dates, decisions or tasks that the transcript does not contain. If something is unclear, leave it out. Plain, third-person, specific; no filler. "
+    + "summary: five to eight sentences on what the meeting was and what it decided. topics: the main subjects, a few words each. decisions: each decision taken. actions: each task or follow-up with its owner (a name, or 'Najjuko' when it is hers, or '' if unstated) and the due date or time as said ('' if none). people: everyone who clearly took part.";
+  let input = transcript;
+  if (transcript.length > 24000) {   // a long meeting: condense each part first, in parallel, then write the notes from the condensed parts
+    const paras = [], blocks = []; let cur = "";
+    for (const q of transcript.split(/\n+/)) { let t = q; while (t.length > 12000) { paras.push(t.slice(0, 12000)); t = t.slice(12000); } if (t) paras.push(t); }
+    for (const p of paras) { if (cur && cur.length + p.length > 14000) { blocks.push(cur); cur = ""; } cur += (cur ? "\n\n" : "") + p; }
+    if (cur) blocks.push(cur);
+    const sysB = "Condense this part of a long meeting transcript into dense notes of at most 1500 characters: who said what that matters, decisions, tasks with owners and dates, figures, names, open questions. Never invent; the speech engine mishears names, so mark an uncertain one with a question mark.";
+    const notes = await Promise.all(blocks.map(async (b, i) => { try { const x = await deps.claudeJSON(env, sysB, "Part " + (i + 1) + " of " + blocks.length + ":\n" + b, REC_BLOCK_SCHEMA, deps.model, 900); return x && x.notes ? String(x.notes) : b.slice(0, 1500); } catch (e) { return b.slice(0, 1500); } }));
+    input = notes.map((t, i) => "[Part " + (i + 1) + " of " + notes.length + "]\n" + t).join("\n\n");
+  }
+  let x = null;
+  try { x = await deps.claudeJSON(env, sys, "Meeting: " + (m.title || "untitled") + ", " + m.date + ", " + (m.started_hm || "") + (m.ended_hm ? " to " + m.ended_hm : "") + " (" + Math.round((m.secs || 0) / 60) + " minutes).\n\nTranscript" + (transcript.length > 24000 ? " (condensed)" : "") + ":\n" + input, REC_NOTES_SCHEMA, deps.model, 2500); } catch (e) { x = null; }
+  if (!x || typeof x !== "object") return null;
+  const arr = (a, k) => (Array.isArray(a) ? a : []).map((v) => String(v).slice(0, 300).trim()).filter(Boolean).slice(0, k);
+  return { summary: String(x.summary || "").slice(0, 1800).trim(), topics: arr(x.topics, 10), decisions: arr(x.decisions, 15), people: arr(x.people, 20),
+    actions: (Array.isArray(x.actions) ? x.actions : []).slice(0, 25).map((a) => ({ what: String(a.what || "").slice(0, 240).trim(), owner: String(a.owner || "").slice(0, 60).trim(), due: String(a.due || "").slice(0, 60).trim() })).filter((a) => a.what) };
+}
+async function recApi(request, env, J, deps) {
+  let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
+  if (b.action === "start") {
+    const today = dubaiToday(), compact = today.replace(/-/g, "");
+    const have = (await env.MEETINGS.list({ prefix: RECW + compact })).keys.length;
+    if (have >= REC_MAX_PER_DAY) return J({ error: "That is forty recordings today. Delete some you no longer need." }, 429);
+    const id = compact + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 5);
+    const m = { id, date: today, title: String(b.title || "").slice(0, 90).trim(), started_hm: dubaiHM(), started: new Date().toISOString(), status: "recording", secs: 0 };
+    await recPut(env, m); return J({ ok: true, id, date: today });
+  }
+  if (b.action === "list") {
+    const date = okDate(b.date), compact = date.replace(/-/g, ""), out = [];
+    for (const k of (await env.MEETINGS.list({ prefix: RECW + compact })).keys) { const m = await recGet(env, k.name.slice(RECW.length)); if (m) out.push(m); }
+    const recs = [];
+    for (const m of out.sort((a, c) => (a.started < c.started ? 1 : -1))) { const segs = await recSegs(env, m.id); recs.push({ id: m.id, title: m.title, started_hm: m.started_hm, status: m.status, secs: m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0), parts: segs.length }); }
+    return J({ ok: true, recs, date });
+  }
+  const id = recId(b.id), m = id ? await recGet(env, id) : null;
+  if (!m) return J({ error: "I cannot find that recording." }, 404);
+  if (b.action === "delete") {
+    for (const g of await recSegs(env, id)) { await env.MEETINGS.delete(segKey(id, g.n)); await env.MEETINGS.delete(RECA + id + "_" + String(g.n).padStart(3, "0")); }
+    await env.MEETINGS.delete(RECW + id); return J({ ok: true });
+  }
+  if (b.action === "finish") {
+    let segs = await recSegs(env, id);
+    for (const g of segs) if (g.pending) {   // retry the parts the speech engine could not read when they arrived
+      const key = RECA + id + "_" + String(g.n).padStart(3, "0");
+      try { const buf = await env.MEETINGS.get(key, "arrayBuffer"); if (buf) { const text = await recTranscribe(env, new Uint8Array(buf)); await env.MEETINGS.put(segKey(id, g.n), JSON.stringify({ n: g.n, secs: g.secs, text })); await env.MEETINGS.delete(key); } } catch (e) {}
+    }
+    segs = await recSegs(env, id);
+    const missing = segs.filter((g) => g.pending && !g.text).map((g) => g.n), text = recTranscriptText(segs, false);
+    m.secs = Math.max(Math.round(Number(b.secs) || 0), segs.reduce((a, g) => a + (g.secs || 0), 0)); m.ended_hm = dubaiHM(); m.chars = text.length; m.parts = segs.length;
+    if (m.status === "recording") m.status = "transcribed";
+    await recPut(env, m);
+    if (text.length < 40) return J({ error: segs.length ? "I could not hear any speech in that recording. Check the microphone, or try again." : "No part of that recording reached the server. Check the connection and try again.", parts: segs.length }, 422);
+    return J({ ok: true, parts: segs.length, chars: text.length, secs: m.secs, missing });
+  }
+  if (b.action === "entries") {
+    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, false);
+    if (transcript.length < 40) return J({ error: "There is no speech to read in that recording yet." }, 422);
+    if (!m.ended_hm) { m.ended_hm = dubaiHM(); m.secs = m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0); }
+    const notes = m.notes && m.notes.summary ? m.notes : await recNotes(env, deps, m, recTranscriptText(segs, true));
+    if (notes) m.notes = notes;
+    const date = m.date, mins = Math.max(1, Math.round((m.secs || 0) / 60));
+    const prompt = "Date: " + date + " (" + dayName(date) + ")\nShe recorded " + (m.title ? "\"" + m.title + "\"" : "a meeting") + ", " + (m.started_hm || "") + " to " + (m.ended_hm || "") + " (" + mins + " minutes), and the notes below were written from the recording.\n\n"
+      + (notes ? "Summary: " + notes.summary + "\nTopics: " + notes.topics.join("; ") + "\nDecisions: " + (notes.decisions.join("; ") || "none stated") + "\nTasks and follow-ups: " + (notes.actions.map((a) => a.what + (a.owner ? " (" + a.owner + ")" : "") + (a.due ? " by " + a.due : "")).join("; ") || "none stated") + "\nPeople present: " + (notes.people.join(", ") || "not stated")
+        : "Transcript (automatic, may mishear names):\n" + transcript.slice(0, 12000))
+      + "\n\nFile it as her work-log entry. ONE entry for the meeting itself (a briefing, interview or meeting she attended or ran is a Meeting). Add a separate entry only for something clearly separate that she herself did or was handed in it. "
+      + "Every task or follow-up goes in works/progress with its owner and status; decisions and next steps go in the summary, evidence and next. Use only what the notes say.";
+    let x = null; try { x = await deps.claudeJSON(env, sysPrompt(), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
+    let list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map(clean) : [clean(fallback((m.title || "Meeting") + ". " + (notes ? notes.summary : transcript.slice(0, 600))))];
+    list.forEach((e, i) => { if (i === 0 && m.secs >= 60 && !e.start && toMin(m.started_hm) != null && toMin(m.ended_hm) != null && toMin(m.ended_hm) > toMin(m.started_hm)) { e.start = m.started_hm; e.end = m.ended_hm; }
+      if (e.time_of_day === "Unspecified" && toMin(e.start || m.started_hm) != null) { const h = Math.floor(toMin(e.start || m.started_hm) / 60); e.time_of_day = h < 12 ? "Morning" : h < 14 ? "Midday" : h < 18 ? "Afternoon" : "Evening"; } });
+    const known = await knownParties(env), seen = {};
+    for (const e of list) for (const o of e.external) {
+      const k = known.find((p) => slug(p.name) === slug(o.name) || (p.aliases || []).some((a) => slug(a) === slug(o.name)));
+      if (k) { Object.assign(o, { name: k.name, kind: k.kind || o.kind, what: k.what || "", where: k.where || "", site: k.site || "", confirmed: true, known: true }); continue; }
+      const key = slug(o.name); if (!seen[key]) seen[key] = lookupParty(env, o.name, o.kind);
+      const f = await seen[key]; if (f) Object.assign(o, { suggested: f.name, kind: f.kind || o.kind, what: f.what, where: f.where, site: f.site, confidence: f.confidence, confirmed: false });
+      else Object.assign(o, { suggested: "", what: "", confirmed: false, notfound: true });
+    }
+    if (m.status !== "filed") m.status = "drafted";
+    await recPut(env, m);
+    return J({ ok: true, entries: list.slice(0, 20), title: m.title, secs: m.secs, date, notes: !!notes });
+  }
+  if (b.action === "filed") { m.status = "filed"; await recPut(env, m); return J({ ok: true }); }
+  return J({ error: "Unknown action." }, 400);
+}
+async function recView(env, url) {
+  const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null;
+  if (!m) return new Response("not found", { status: 404 });
+  const segs = await recSegs(env, id), tx = recTranscriptText(segs, true), n = m.notes;
+  const li = (a) => a.length ? "<ul>" + a.map((t) => "<li>" + escH(t) + "</li>").join("") + "</ul>" : "<p class=m>None stated.</p>";
+  const body = "<h1>" + escH(m.title || "Recording") + "</h1><p class=m>" + escH(m.date) + " · " + escH(m.started_hm || "") + (m.ended_hm ? " to " + escH(m.ended_hm) : "") + " · " + Math.round((m.secs || 0) / 60) + " minutes · " + segs.length + " parts</p>"
+    + (n ? "<h2>Summary</h2><p>" + escH(n.summary) + "</p><h2>Decisions</h2>" + li(n.decisions) + "<h2>Tasks and follow-ups</h2>" + li(n.actions.map((a) => a.what + (a.owner ? " (" + a.owner + ")" : "") + (a.due ? ", by " + a.due : ""))) + "<h2>People</h2><p>" + escH(n.people.join(", ") || "Not stated") + "</p>" : "<p class=m>Notes are written when you tap Make entry.</p>")
+    + "<h2>Transcript</h2><p class=m>Written automatically: names and numbers may be misheard.</p><div class=tx>" + escH(tx).replace(/\n\n/g, "<br><br>") + "</div>";
+  return new Response("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + escH(m.title || "Recording") + "</title><meta name=robots content=noindex><style>body{font:16px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#1C2321;background:#FAF7F1;margin:0;padding:24px 16px 80px}.w{max-width:720px;margin:0 auto}h1{color:#0A4F4A;margin:0 0 4px}h2{font-size:1rem;color:#8A6F3E;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.08em}.m{color:#626B78;font-size:.9rem}.tx{background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:16px;font-size:.95rem}@media print{body{background:#fff}}</style></head><body><div class=w>" + body + "</div></body></html>",
+    { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+}
+
 export async function workRoute(request, env, url, deps) {
   const p = url.pathname;
   if (!p.startsWith("/momo/work")) return null;
@@ -365,6 +515,9 @@ export async function workRoute(request, env, url, deps) {
   if (p.startsWith("/momo/work/plan")) return planRoute(request, env, url, deps, { agents: PEOPLE.filter((x) => deptOf(x[0]) === "Sales").map((x) => x[0]), team: PEOPLE.filter((x) => ["Marketing", "Leadership"].includes(deptOf(x[0]))).map((x) => [x[0], x[1]]) });   // v590 - the content plan
   if (p === "/momo/work/prep.js") return new Response(PREP_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work.js") return new Response(WORK_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
+  if (p === "/momo/work/rec/chunk" && request.method === "POST") return recChunk(request, env, url, J);        // v617 - one part of a recording
+  if (p === "/momo/work/rec/api" && request.method === "POST") return recApi(request, env, J, deps);
+  if (p === "/momo/work/rec/view") return recView(env, url);
   if (p === "/momo/work/api") {
     if (request.method === "GET") {
       const [f, t] = weekOf(okDate(url.searchParams.get("week")));
@@ -473,6 +626,7 @@ export async function workRoute(request, env, url, deps) {
       const rec = { id, date, text, link, ...e, check: false, created: b.created || new Date().toISOString(), updated: new Date().toISOString() };
       if (b.id && b.oldDate && b.oldDate !== date) await env.MEETINGS.delete(PFX + okDate(b.oldDate) + "_" + id);
       await env.MEETINGS.put(PFX + date + "_" + id, JSON.stringify(rec));
+      const rid = recId(b.rec); if (rid) { const rm = await recGet(env, rid); if (rm && rm.status !== "filed") { rm.status = "filed"; await recPut(env, rm); } }   // v617
       return J({ ok: true, entry: rec });
     }
     if (b.action === "prep") {
@@ -550,6 +704,7 @@ const RAMP = ["#6FBFB4", "#52ADA1", "#3A968A", "#287C71", "#15665C"], TEAL = "#1
 const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.opener||history.length<=1){window.close()}if(history.length>1){history.back()}else{var k=new URLSearchParams(location.search).get("key")||"";location.href="/momo/work?key="+encodeURIComponent(k)}};';
 // v580 - FN's own marks, cut from the Company Template she sent (src/fn_logo.js): the navy monogram, the gold lattice band, FN navy/peach/gold
 import { planRoute } from "./work_plan.js";
+import { REC_JS, REC_BTN } from "./work_rec_page.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 // soft language for the work-kind split (Kendall 14 Oct: "very soft language when you're differentiating these things")
 const KIND_SOFT = { "Strategic Lead": "As Strategic Lead", "Broker": "As a broker", "Other departments": "Supporting other departments" };
@@ -711,7 +866,7 @@ const WORK_BODY = '<div class=tag>MOMO · WORK</div>'
   + '<div id=vlog><h1>My work log</h1>'
   + '<div class=wk id=wkhead></div>'
   + '<form id=wf class=box><label>What did you do? <button type=button id=wmic class=mic aria-label="Speak instead of typing"><svg viewBox="0 0 24 24" width=18 height=18 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Speak</span></button></label><textarea id=wt rows=4 placeholder="e.g. Monday huddle: built the PowerPoint, ran the meeting with Ali and the team, laid out the week."></textarea>'
-  + '<div class=row><input id=wd type=date><label class=ghost id=wupl style="text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg viewBox="0 0 24 24" width=16 height=16 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg><span>Upload a file</span><input id=wfile type=file accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,image/*" style="display:none"></label></div><div class=row2><button type=button id=wreset class=ghost>Start over</button><button type=submit id=wb class=gold>File it</button></div></form>'
+  + '<div class=row><input id=wd type=date><label class=ghost id=wupl style="text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg viewBox="0 0 24 24" width=16 height=16 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg><span>Upload a file</span><input id=wfile type=file accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,image/*" style="display:none"></label></div>' + REC_BTN + '<div class=row2><button type=button id=wreset class=ghost>Start over</button><button type=submit id=wb class=gold>File it</button></div></form>'
   + '<div id=wprev></div><a id=wday class=gold style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>Today\'s summary</a>'
   + '<a href="/momo/work/prep?key=__KEY__" class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:8px">Prepare me for a client, project or open house</a>'
   + '<div class=sec>MY TASKS</div><div id=wtasks></div>'
@@ -978,7 +1133,7 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));saveDraft();PREV.works=PR
   api({action:"parse",text:one,date:$("wd").value}).then(function(j){if(j.entry){j.entry.src=one;if(QUEUE.length)QUEUE[QI]=j.entry;preview(j.entry)}})};
  $("pc").onclick=function(){clearDraft();EDIT=null;if(QUEUE.length>1)nextInQueue();else{QUEUE=[];QI=0;$("wprev").innerHTML=""}};
  $("pv").onclick=function(){PREV.summary=$("ps").value;if(PREV.in_scope!==false&&!PREV.broker&&!PREV.kpis.length){alert("Tap which part of your role this counts towards, or mark it outside your role.");return}if(PREV.in_scope===false&&!PREV.out_role){alert("Tap whose job it was.");return}$("pv").disabled=true;$("pv").classList.add("saving");
-  api({action:"save",entry:PREV,text:PREV.src||$("wt").value,date:$("wd").value,link:($("wl")?$("wl").value:""),id:EDIT&&EDIT.id,oldDate:EDIT&&EDIT.date,created:EDIT&&EDIT.created}).then(function(j){if(!j.ok){toast("Not saved: "+(j.error||"something went wrong")+". What you wrote is still here; tap the tick again.",true);$("pv").disabled=false;$("pv").classList.remove("saving");return}
+  api({action:"save",entry:PREV,text:PREV.src||$("wt").value,date:$("wd").value,link:($("wl")?$("wl").value:""),id:EDIT&&EDIT.id,oldDate:EDIT&&EDIT.date,created:EDIT&&EDIT.created,rec:PREV.src_rec||""}).then(function(j){if(!j.ok){toast("Not saved: "+(j.error||"something went wrong")+". What you wrote is still here; tap the tick again.",true);$("pv").disabled=false;$("pv").classList.remove("saving");return}
    var _dn=new Date(j.entry.date+"T00:00:00Z"),_lab=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][_dn.getUTCDay()]+" "+_dn.getUTCDate()+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][_dn.getUTCMonth()];
    toast("\u2713 Saved: "+(j.entry.title||"your entry")+" is filed under "+_lab+".");var _tk=$("pv");if(_tk){_tk.classList.remove("saving");_tk.classList.add("saved");setTimeout(function(){var t2=$("pv");if(t2)t2.classList.remove("saved")},1800)}if(!(QUEUE.length>1&&QI<QUEUE.length-1))clearDraft();
    // v583 - the first save from an uploaded document teaches its DNA, so the same kind of file is recognised next time
@@ -1042,4 +1197,4 @@ var UPL=null;
 // v571 - Start over: clears the box and anything being checked; saved entries are untouched
 $("wreset").onclick=function(){clearDraft();if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;QUEUE=[];QI=0;EDIT=null;PREV=null;UPL=null;$("wprev").innerHTML="";$("wt").value="";if($("wl"))$("wl").value="";$("wd").value=D?D.today:"";$("wt").focus()};
 $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1)};
-load();resumeDraft()})();`;
+` + REC_JS + String.raw`load();resumeDraft()})();`;
