@@ -1,4 +1,5 @@
 import { askBoxHtml, askRoute, askFloatHtml } from "./ask_najma.js";   // v555, v556
+import { feedPdfStore, FEED_PDF_RX } from "./feed_pdf.js";   // v622 - the day's feed as a PDF for the graphic designer
 import { workRoute, WORK_CSS } from "./work_log.js";   // v564 - Momo Work: Najjuko's FN Realty work log
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
@@ -1116,6 +1117,9 @@ function filmMatch(items, q, district) {   // the cluster whose name or member s
   return best || items.find((v) => v.scope === "district30" && (!district || v.district === district)) || null;
 }
 const filmOut = (v) => ({ key: v.key, src: v.src || "/video/" + v.key, poster: v.poster || "/video/" + v.key + "?poster=1", name: v.name || "", cluster: v.cluster == null ? null : v.cluster });
+async function waSendDocument(env, to, link, filename, caption, fromPhoneId) {   // v622
+  return waPost(env, { messaging_product: "whatsapp", to, type: "document", document: { link, filename, caption } }, "document", fromPhoneId);
+}
 async function waSendImage(env, to, link, caption, fromPhoneId) {
   return waPost(env, { messaging_product: "whatsapp", to, type: "image", image: { link, caption: caption || undefined } }, "image", fromPhoneId);
 }
@@ -4698,6 +4702,18 @@ async function appFetch(request, env, ctx) {
             await waSend(env, from, _q ? "🔎 *Feed QA* (" + _q.at.slice(0, 16) + ")\n" + _q.note + "\nfamilies: " + (_q.after || []).join(" · ") + (_q.repaired && _q.repaired.length ? "\nreplaced angles: " + _q.repaired.join(", ") : "") + ((_q.remaining || []).length ? "\nstill overlapping: " + _q.remaining.map(r => r.angle + " - " + r.why.join("; ")).join(" | ") : "") : "No audit stored yet - it runs with each morning's feed.");
             return new Response("ok");
           }
+          if (FEED_PDF_RX.test(text)) {   // v622 - today's list as a PDF she can forward to the designer
+            let _bc = null; try { _bc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+            const _ang = (_bc && Array.isArray(_bc.angles) ? _bc.angles : []).filter(a => a && a.hook && !a.campaign);
+            if (!_bc || Date.now() - (_bc.at || 0) > 36 * 3600000 || !_ang.length) { await waSend(env, from, "There is no list for today yet. Say *feed* and I will build it, then say *pdf*." + UPDATE_SIGNOFF); return new Response("ok"); }
+            await waSend(env, from, "Putting today's " + Math.min(_ang.length, 10) + " ideas into a PDF for your designer - about a minute.");
+            try {
+              const _ds = gstDateStr(gstNow()); const _st = await feedPdfStore(env, _ang, _ds);
+              const _fn = "Najma_Market_News_" + _ds + ".pdf";
+              await waSendDocument(env, from, new URL(request.url).origin + "/img/" + _st.name, _fn, "Black Coffee, here is today's market news for the designer: one card per idea, with format, lead time and picture direction." + UPDATE_SIGNOFF);
+            } catch (e) { await noteErr(env, "feed-pdf", String((e && e.message) || e).slice(0, 160)); await waSend(env, from, "The PDF did not build this time. Say *pdf* again in a minute." + UPDATE_SIGNOFF); }
+            return new Response("ok");
+          }
           if (/^(?:feed|daily|today(?:'s)?\s+(?:feed|angles|posts?))\s*\??$/i.test(text)) {
             // v412 (8 Oct: she sent 'Feed' twice and got TEN angles - the held set flushed AND a second set was built). One set a day unless she asks again.
             {
@@ -4710,7 +4726,7 @@ async function appFetch(request, env, ctx) {
               if (_pend && Date.now() - (_pend.at || 0) <= FEED_HOLD_MAX_MS) return new Response("ok");        // held set still being flushed by the line above
               if (!_sentToday && _held && !_pend) return new Response("ok");                                    // flush in flight
               if (_sentToday) {
-                await waSend(env, from, "Today's list is above - tap a number below, or say *feed again* for a fresh set.");
+                await waSend(env, from, "Today's list is above - tap a number below, say *pdf* to send it all to your designer, or say *feed again* for a fresh set.");
                 if (Array.isArray(_sr.rows) && _sr.rows.length) { try { await waSendList(env, from, "Today's pick:", "Choose an angle", _sr.rows); } catch (e) {} }
                 return new Response("ok");
               }
