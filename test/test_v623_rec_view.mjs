@@ -13,7 +13,7 @@ ok(/Back<\/a>/.test(h) && h.includes("/momo/work?key=K"), "Back link returns to 
 ok(h.includes("Share / Save as PDF") && h.includes("print()"), "Save as PDF button");
 ok(h.includes("id=sv") && h.includes("navigator.share"), "Share button");
 ok(!/var T=[^;]*<\/script>/.test(h), "transcript text cannot close the script tag");
-ok(h.includes("@media print{body{background:#fff}.bar{display:none}"), "buttons are hidden on the PDF");
+ok(h.includes("@media print{body{background:#fff}.bar,.no{display:none}"), "buttons are hidden on the PDF");   // v627: the small Delete control is hidden too
 const u2 = new URL("https://w/momo/work/rec/view?key=bad&id=20261024abc"); const r2 = await m.workRoute(new Request(u2), env, u2, deps);
 ok(r2.status === 404, "wrong key sees nothing");
 console.log("v623 rec view: " + pass + " passed, " + fail + " failed"); if (fail) process.exit(1);

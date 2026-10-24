@@ -361,7 +361,7 @@ const dubaiHM = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(11, 
 const recId = (v) => String(v || "").replace(/[^a-z0-9]/gi, "").slice(0, 24);
 const recDateOf = (id) => id.slice(0, 4) + "-" + id.slice(4, 6) + "-" + id.slice(6, 8);
 const escH = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]));
-async function recGet(env, id) { try { return JSON.parse(await env.MEETINGS.get(RECW + id)); } catch (e) { return null; } }
+async function recGet(env, id) { try { const m = JSON.parse(await env.MEETINGS.get(RECW + id)); return m && m.deleted ? null : m; } catch (e) { return null; } }   // v627 - a recording marked deleted is gone for every route, even if a purge was cut short
 async function recPut(env, m) { await env.MEETINGS.put(RECW + m.id, JSON.stringify(m)); }
 function recB64(bytes) { let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
 // v625 - ONE place where audio becomes text, so a speaker-labelling provider can slot in later without touching the callers. The language is no longer forced to English:
@@ -428,6 +428,14 @@ async function recNotes(env, deps, m, transcript) {
   return { summary: String(x.summary || "").slice(0, 1800).trim(), topics: arr(x.topics, 10), decisions: arr(x.decisions, 15), people: arr(x.people, 20),
     actions: (Array.isArray(x.actions) ? x.actions : []).slice(0, 25).map((a) => ({ what: String(a.what || "").slice(0, 240).trim(), owner: String(a.owner || "").slice(0, 60).trim(), due: String(a.due || "").slice(0, 60).trim() })).filter((a) => a.what) };
 }
+// v627 - delete a recording completely: mark it deleted first (so it cannot come back in any list or route even if this is cut short), then every text part (recs_), every retry audio (reca_) and the record itself (recw_)
+async function recPurge(env, id, m) {
+  await env.MEETINGS.put(RECW + id, JSON.stringify({ ...m, deleted: true }));
+  for (const pre of [RECS + id + "_", RECA + id + "_"]) {
+    let cursor; do { const r = await env.MEETINGS.list({ prefix: pre, cursor }); cursor = r.list_complete ? null : r.cursor; for (const k of r.keys) await env.MEETINGS.delete(k.name); } while (cursor);
+  }
+  await env.MEETINGS.delete(RECW + id);
+}
 async function recApi(request, env, J, deps) {
   let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
   if (b.action === "start") {
@@ -450,8 +458,7 @@ async function recApi(request, env, J, deps) {
   const id = recId(b.id), m = id ? await recGet(env, id) : null;
   if (!m) return J({ error: "I cannot find that recording." }, 404);
   if (b.action === "delete") {
-    for (const g of await recSegs(env, id)) { await env.MEETINGS.delete(segKey(id, g.n)); await env.MEETINGS.delete(RECA + id + "_" + String(g.n).padStart(3, "0")); }
-    await env.MEETINGS.delete(RECW + id); return J({ ok: true });
+    await recPurge(env, id, m); return J({ ok: true });   // v627
   }
   if (b.action === "finish") {
     let segs = await recSegs(env, id);
@@ -522,13 +529,14 @@ async function recView(env, url) {
   const li = (a) => a.length ? "<ul>" + a.map((t) => "<li>" + escH(t) + "</li>").join("") + "</ul>" : "<p class=m>None stated.</p>";
   const body = "<h1>" + escH(m.title || "Recording") + "</h1><p class=m>" + escH(m.date) + " · " + escH(m.started_hm || "") + (m.ended_hm ? " to " + escH(m.ended_hm) : "") + " · " + Math.round((m.secs || 0) / 60) + " minutes · " + segs.length + " parts</p>"
     + (n ? "<h2>Summary</h2><p>" + escH(n.summary) + "</p><h2>Decisions</h2>" + li(n.decisions) + "<h2>Tasks and follow-ups</h2>" + li(n.actions.map((a) => a.what + (a.owner ? " (" + a.owner + ")" : "") + (a.due ? ", by " + a.due : ""))) + "<h2>People</h2><p>" + escH(n.people.join(", ") || "Not stated") + "</p>" : "<p class=m>Notes are written when you tap Make entry.</p>")
-    + "<h2>Transcript</h2><p class=m>Written automatically: names and numbers may be misheard.</p><div class=tx>" + escH(tx).replace(/\n\n/g, "<br><br>") + "</div>";
+    + "<h2>Transcript</h2><p class=m>Written automatically: names and numbers may be misheard.</p><div class=tx>" + escH(tx).replace(/\n\n/g, "<br><br>") + "</div>"
+    + "<div class=no style='margin-top:28px;text-align:center'><button class=gh id=dl>Delete this recording</button><div id=dq style='display:none;background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:14px;margin-top:10px'>Delete this recording and its transcript? This cannot be undone.<div style='display:flex;gap:8px;justify-content:center;margin-top:10px'><button class='bt pr' id=dy>Delete it</button><button class=bt id=dn>Keep it</button></div></div></div>";
   // v623 - the transcript page had no way back and no way out (Kendall, 24 Oct 2026): a Back button, "Share / Save as PDF" (the print sheet, as on the plan PDFs) and Share (the phone's share sheet, else copy)
   const key = url.searchParams.get("key") || "", back = "/momo/work?key=" + encodeURIComponent(key);
   const shareText = (m.title || "Recording") + " - " + m.date + (n && n.summary ? "\n\n" + n.summary : "") + "\n\nTranscript (automatic, may mishear names):\n" + tx;
   const bar = "<div class=bar><a class=bk href='" + back + "' onclick=\"if(history.length>1){history.back();return false}\">&#8592; Back</a><span class=sp></span><button class=bt id=sv>Share</button><button class='bt pr' onclick='print()'>Share / Save as PDF</button></div>";
-  const js = "<script>var T=" + JSON.stringify(shareText).replace(/</g, "\\u003c") + ";document.getElementById('sv').onclick=function(){var d={title:document.title,text:T};if(navigator.share){navigator.share(d).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(T).then(function(){alert('Copied. Paste it where you want it.')})}else{alert('Use Share / Save as PDF')}}</script>";
-  return new Response("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + escH(m.title || "Recording") + "</title><meta name=robots content=noindex><style>body{font:16px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#1C2321;background:#FAF7F1;margin:0;padding:0 16px 80px}.w{max-width:720px;margin:0 auto;padding-top:12px}.bar{position:sticky;top:0;background:#FAF7F1;display:flex;align-items:center;gap:8px;padding:10px 0;max-width:720px;margin:0 auto;border-bottom:1px solid #E3DDD1}.sp{flex:1}.bk{color:#0A4F4A;text-decoration:none;font-weight:600;padding:8px 10px}.bt{font:inherit;font-size:.9rem;padding:9px 14px;border-radius:12px;border:1px solid #0A4F4A;background:#fff;color:#0A4F4A}.bt.pr{background:#0A4F4A;color:#fff}h1{color:#0A4F4A;margin:8px 0 4px}h2{font-size:1rem;color:#8A6F3E;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.08em}.m{color:#626B78;font-size:.9rem}.tx{background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:16px;font-size:.95rem}@media print{body{background:#fff}.bar{display:none}.tx{border:0;padding:0}}</style></head><body>" + bar + "<div class=w>" + body + "</div>" + js + "</body></html>",
+  const js = "<script>var T=" + JSON.stringify(shareText).replace(/</g, "\\u003c") + ";var K=new URLSearchParams(location.search),ID=K.get('id'),KY=K.get('key')||'';document.getElementById('dl').onclick=function(){this.style.display='none';document.getElementById('dq').style.display='block'};document.getElementById('dn').onclick=function(){document.getElementById('dq').style.display='none';document.getElementById('dl').style.display=''};document.getElementById('dy').onclick=function(){var b=this;b.disabled=true;fetch('/momo/work/rec/api?key='+encodeURIComponent(KY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',id:ID})}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){location.href='/momo/work?key='+encodeURIComponent(KY)}else{b.disabled=false;alert('Could not delete it just now. Nothing was changed.')}}).catch(function(){b.disabled=false;alert('Could not delete it just now. Nothing was changed.')})};document.getElementById('sv').onclick=function(){var d={title:document.title,text:T};if(navigator.share){navigator.share(d).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(T).then(function(){alert('Copied. Paste it where you want it.')})}else{alert('Use Share / Save as PDF')}}</script>";
+  return new Response("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + escH(m.title || "Recording") + "</title><meta name=robots content=noindex><style>body{font:16px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#1C2321;background:#FAF7F1;margin:0;padding:0 16px 80px}.w{max-width:720px;margin:0 auto;padding-top:12px}.bar{position:sticky;top:0;background:#FAF7F1;display:flex;align-items:center;gap:8px;padding:10px 0;max-width:720px;margin:0 auto;border-bottom:1px solid #E3DDD1}.sp{flex:1}.bk{color:#0A4F4A;text-decoration:none;font-weight:600;padding:8px 10px}.bt{font:inherit;font-size:.9rem;padding:9px 14px;border-radius:12px;border:1px solid #0A4F4A;background:#fff;color:#0A4F4A}.bt.pr{background:#0A4F4A;color:#fff}h1{color:#0A4F4A;margin:8px 0 4px}h2{font-size:1rem;color:#8A6F3E;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.08em}.m{color:#626B78;font-size:.9rem}.tx{background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:16px;font-size:.95rem}.gh{font:inherit;font-size:.85rem;background:none;border:0;color:#626B78;text-decoration:underline;padding:8px}@media print{body{background:#fff}.bar,.no{display:none}.tx{border:0;padding:0}}</style></head><body>" + bar + "<div class=w>" + body + "</div>" + js + "</body></html>",
     { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
 }
 
@@ -1230,6 +1238,9 @@ $("wfile").onchange=function(){var f=this.files&&this.files[0];if(!f)return;if(f
    preview(QUEUE[0]);scrollTo(0,0)}).catch(function(){lab.textContent="Upload a file";$("wfile").value="";alert("Could not read that file just now.")})};rd.readAsDataURL(f)};
 var UPL=null;
 // v571 - Start over: clears the box and anything being checked; saved entries are untouched
-$("wreset").onclick=function(){clearDraft();if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;QUEUE=[];QI=0;EDIT=null;PREV=null;UPL=null;$("wprev").innerHTML="";$("wt").value="";if($("wl"))$("wl").value="";$("wd").value=D?D.today:"";$("wt").focus()};
+function resetAll(){clearDraft();QUEUE=[];QI=0;EDIT=null;PREV=null;UPL=null;$("wprev").innerHTML="";$("wt").value="";if($("wl"))$("wl").value="";$("wd").value=D?D.today:"";$("wt").focus()}
+$("wreset").onclick=function(){var srcRec="";for(var i=0;i<QUEUE.length;i++){if(QUEUE[i]&&QUEUE[i].src_rec){srcRec=QUEUE[i].src_rec;break}}   // v627 - a queue that came from a recording asks whether the recording goes too
+ if(srcRec&&window.recStartOver){window.recStartOver(srcRec,resetAll);return}
+ clearDraft();if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;resetAll()};
 $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1)};
 ` + REC_JS + String.raw`load();resumeDraft()})();`;

@@ -103,7 +103,7 @@ ok(/<td>Book the room<\/td><td><mark>\[to confirm\]<\/mark><\/td>/.test(h), "a m
 ok(h.includes("Minutes by</dt><dd>Najjuko Ganyana") && h.includes("Saturday 24 October 2026") === false || h.includes(mm.longDate(rec.date)), "header: date and Minutes by");
 ok(!/<\/script><b>/.test(h) && !/var T=[^;]*<\/script>/.test(h), "meeting text cannot close the script tag or inject markup");
 ok(h.includes("&lt;/script&gt;&lt;b&gt;plan"), "title is escaped on the page");
-ok(h.includes("@media print{body{background:#fff;padding:0 0 46px}.bar,.hint{display:none}"), "buttons are hidden on the PDF");
+ok(h.includes("@media print{") && h.includes("body{background:#fff;padding:0 0 46px}.bar,.hint{display:none}"), "buttons are hidden on the PDF");   // v627: print colours are kept for the FN header
 ok(!/\bsend\b.*automatically|mailto:|wa\.me/i.test(h), "the page has no send path: drafts only");
 ok(h.includes("Momo sends nothing"), "the page says Momo sends nothing");
 ok(mm.longDate("2026-10-24") === "Saturday 24 October 2026", "long date: weekday and full date");

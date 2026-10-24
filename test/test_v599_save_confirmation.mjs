@@ -11,7 +11,7 @@ ok(/\.catch\(function\(\)\{\$\("pv"\)\.disabled=false;\$\("pv"\)\.classList\.rem
 ok(/toast\("Not saved: "\+\(j\.error/.test(js) && !/alert\(j\.error\|\|"Could not save"\)/.test(js), "a refused save says so in the same place instead of a pop-up");
 ok(/The server answered |The server sent something unexpected/.test(js), "a non-JSON or error answer becomes a readable message");
 ok(/momo_work_draft/.test(js) && /function resumeDraft/.test(js) && /load\(\);resumeDraft\(\)/.test(js) && /function preview\(e\)\{PREV=JSON\.parse\(JSON\.stringify\(e\)\);saveDraft\(\);/.test(js), "an entry being checked is kept as a draft and offered back when the app opens");
-ok(/clearDraft\(\);EDIT=null;/.test(js) && /\$\("wreset"\)\.onclick=function\(\)\{clearDraft\(\)/.test(js), "cancelling or starting over discards the draft");
+ok(/clearDraft\(\);EDIT=null;/.test(js) && /function resetAll\(\)\{clearDraft\(\)/.test(js) && /\$\("wreset"\)\.onclick=function\(\)\{/.test(js) && /clearDraft\(\);if\(\(\$\("wt"\)/.test(js), "cancelling or starting over discards the draft");   // v627: the reset body moved into resetAll(), which a recording's Start over card also calls
 // run the draft helpers against a small localStorage stand-in
 const lift = (name) => { const at = js.indexOf("function " + name + "("); let d = 0; for (let i = js.indexOf("{", at); i < js.length; i++) { if (js[i] === "{") d++; else if (js[i] === "}" && --d === 0) return js.slice(at, i + 1); } };
 const store = {}; const localStorage = { setItem: (k, v) => (store[k] = v), getItem: (k) => store[k] || null, removeItem: (k) => delete store[k] };
