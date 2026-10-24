@@ -85,7 +85,7 @@ ok(pg.includes('if(srcRec&&window.recStartOver)'), "only a recording-sourced que
   const docCss = html.slice(html.indexOf("#sheet{"), html.indexOf("@page"));
   ok(!docCss.includes("#0A4F4A"), "no Momo teal inside the minutes document styles", docCss.match(/#0A4F4A/g));
   ok(html.includes(".bk{color:#0A4F4A") && html.includes("Back</a>") && html.includes(">Edit<") && html.includes("Share / Save as PDF"), "the Back / Edit / Share bar stays in Momo style");
-  ok(html.includes("@page{size:A4") && html.includes(".bar,.hint{display:none}") && html.includes("position:fixed"), "A4 print: bar hidden, footer fixed on every page");
+  ok(html.includes("@page{size:A4") && html.includes(".bar,.hint{display:none}") && html.includes("<tfoot>") && !html.includes("position:fixed"), "A4 print: bar hidden, footer in the page flow (tfoot), not fixed");
   ok(html.includes(FOOTER.slice(0, 60)) && /zigzag|lattice/i.test(html) === false, "the confidentiality footer is present; no zigzag or lattice pattern");
   ok((html.match(/<img /g) || []).length === 1, "the monogram is the only image on the page");
 }

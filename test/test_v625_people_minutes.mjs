@@ -94,7 +94,7 @@ ok(hit.status === 200, "the minutes page opens for her key");
 ok((await call("/momo/work/rec/minutes?id=" + s1.id, {}, "bad")).status === 404, "wrong key sees no minutes");
 ok(/Back<\/a>/.test(h) && h.includes("/momo/work?key=K"), "Back goes to the work log");
 ok(h.includes("Share / Save as PDF") && h.includes("print()") && h.includes("id=sv") && h.includes("id=ed") && h.includes(">Edit<"), "Edit, Share and Share / Save as PDF are there");
-ok(h.includes("CONFIDENTIAL · FN Realty internal use only.") && h.includes(".foot{position:fixed"), "the confidentiality footer is on the page and repeats on every printed page");
+ok(h.includes("CONFIDENTIAL · FN Realty internal use only.") && h.includes("<tfoot><tr><td><div class=foot>") && h.includes(".pg>tfoot{display:table-footer-group}"), "the confidentiality footer is on the page and repeats on every printed page");
 ok(h.includes("<h2>1. Key decisions</h2>") && h.includes("<h2>2. Discussion summary</h2>") && h.includes("<h2>3. Action items</h2>") && h.includes("<h2>4. Open questions</h2>"), "the four fixed sections, in order");
 ok(h.indexOf("1. Key decisions") < h.indexOf("2. Discussion summary") && h.indexOf("2. Discussion summary") < h.indexOf("3. Action items") && h.indexOf("3. Action items") < h.indexOf("4. Open questions"), "sections come in the fixed order");
 ok(h.includes("<mark>[to confirm]</mark>") && h.includes("<mark>[role to confirm]</mark>"), "uncertain points are marked yellow");
@@ -103,7 +103,7 @@ ok(/<td>Book the room<\/td><td><mark>\[to confirm\]<\/mark><\/td>/.test(h), "a m
 ok(h.includes("Minutes by</dt><dd>Najjuko Ganyana") && h.includes("Saturday 24 October 2026") === false || h.includes(mm.longDate(rec.date)), "header: date and Minutes by");
 ok(!/<\/script><b>/.test(h) && !/var T=[^;]*<\/script>/.test(h), "meeting text cannot close the script tag or inject markup");
 ok(h.includes("&lt;/script&gt;&lt;b&gt;plan"), "title is escaped on the page");
-ok(h.includes("@media print{") && h.includes("body{background:#fff;padding:0 0 46px}.bar,.hint{display:none}"), "buttons are hidden on the PDF");   // v627: print colours are kept for the FN header
+ok(h.includes("@media print{") && h.includes("body{background:#fff;padding:0}.bar,.hint{display:none}"), "buttons are hidden on the PDF");   // v627: print colours are kept for the FN header
 ok(!/\bsend\b.*automatically|mailto:|wa\.me/i.test(h), "the page has no send path: drafts only");
 ok(h.includes("Momo sends nothing"), "the page says Momo sends nothing");
 ok(mm.longDate("2026-10-24") === "Saturday 24 October 2026", "long date: weekday and full date");
