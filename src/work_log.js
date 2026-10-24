@@ -364,10 +364,13 @@ const escH = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&":
 async function recGet(env, id) { try { return JSON.parse(await env.MEETINGS.get(RECW + id)); } catch (e) { return null; } }
 async function recPut(env, m) { await env.MEETINGS.put(RECW + m.id, JSON.stringify(m)); }
 function recB64(bytes) { let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
-async function recTranscribe(env, bytes) {
-  const out = await env.AI.run(STT_MODEL, { audio: recB64(bytes), language: "en", vad_filter: true });
-  return String(out && out.text || "").trim();
+// v625 - ONE place where audio becomes text, so a speaker-labelling provider can slot in later without touching the callers. The language is no longer forced to English:
+// Whisper detects it per part, so Arabic and English in the same meeting are both read (Kendall, 24 Oct 2026).
+async function recSpeech(env, bytes) {
+  const out = await env.AI.run(STT_MODEL, { audio: recB64(bytes), vad_filter: true });
+  return { text: String(out && out.text || "").trim() };
 }
+async function recTranscribe(env, bytes) { return (await recSpeech(env, bytes)).text; }
 const segKey = (id, n) => RECS + id + "_" + String(n).padStart(3, "0");
 async function recSegs(env, id) {
   const keys = []; let cursor;
@@ -404,6 +407,8 @@ async function recNotes(env, deps, m, transcript) {
   const names = PEOPLE.map((x) => x[0]).join(", ");
   const sys = "You write meeting notes for Najjuko, the Strategic Lead at FN Realty (a Dubai real-estate brokerage), from an AUTOMATIC transcript of a meeting, briefing or interview she attended or ran. "
     + "The speech engine mishears names and numbers: use a name only when the transcript clearly supports it, and prefer these team names when a spelling is close: " + names + ". "
+    + (m.attendees && m.attendees.length ? "Najjuko told Momo who was in the room: " + attendeeLine(m.attendees) + ". Use those spellings. " : "")
+    + "Other common mishearings: " + nameFixLine() + ". "
     + "Never invent anything: no people, figures, dates, decisions or tasks that the transcript does not contain. If something is unclear, leave it out. Plain, third-person, specific; no filler. "
     + "summary: five to eight sentences on what the meeting was and what it decided. topics: the main subjects, a few words each. decisions: each decision taken. actions: each task or follow-up with its owner (a name, or 'Najjuko' when it is hers, or '' if unstated) and the due date or time as said ('' if none). people: everyone who clearly took part.";
   let input = transcript;
@@ -431,13 +436,15 @@ async function recApi(request, env, J, deps) {
     if (have >= REC_MAX_PER_DAY) return J({ error: "That is forty recordings today. Delete some you no longer need." }, 429);
     const id = compact + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 5);
     const m = { id, date: today, title: String(b.title || "").slice(0, 90).trim(), started_hm: dubaiHM(), started: new Date().toISOString(), status: "recording", secs: 0 };
+    if (Array.isArray(b.attendees) && b.attendees.length) { let raw = null; try { raw = JSON.parse(await env.MEETINGS.get(PEOPLE_KEY)); } catch (e) { raw = null; } m.attendees = cleanAttendees(b.attendees, cleanRoster(raw)); await bumpUses(env, m.attendees); }   // v625 - who is in the room
     await recPut(env, m); return J({ ok: true, id, date: today });
   }
+  if (b.action === "people") return J({ ok: true, ...(await loadRoster(env)) });   // v625 - the roster for the "who is in the room" step (private, from KV)
   if (b.action === "list") {
     const date = okDate(b.date), compact = date.replace(/-/g, ""), out = [];
     for (const k of (await env.MEETINGS.list({ prefix: RECW + compact })).keys) { const m = await recGet(env, k.name.slice(RECW.length)); if (m) out.push(m); }
     const recs = [];
-    for (const m of out.sort((a, c) => (a.started < c.started ? 1 : -1))) { const segs = await recSegs(env, m.id); recs.push({ id: m.id, title: m.title, started_hm: m.started_hm, status: m.status, secs: m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0), parts: segs.length }); }
+    for (const m of out.sort((a, c) => (a.started < c.started ? 1 : -1))) { const segs = await recSegs(env, m.id); recs.push({ id: m.id, title: m.title, started_hm: m.started_hm, status: m.status, minutes: !!m.minutes, secs: m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0), parts: segs.length }); }
     return J({ ok: true, recs, date });
   }
   const id = recId(b.id), m = id ? await recGet(env, id) : null;
@@ -488,6 +495,22 @@ async function recApi(request, env, J, deps) {
     await recPut(env, m);
     return J({ ok: true, entries: list.slice(0, 20), title: m.title, secs: m.secs, date, notes: !!notes });
   }
+  if (b.action === "notes") {   // v625 - write the notes only (no log entry), then she opens the notes page
+    if (m.notes && m.notes.summary) return J({ ok: true, again: true });
+    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true);
+    if (transcript.length < 40) return J({ error: "There is no speech to read in that recording yet." }, 422);
+    const n = await recNotes(env, deps, m, transcript); if (!n) return J({ error: "Momo could not write the notes just now. The recording is safe: try again." }, 502);
+    m.notes = n; await recPut(env, m); return J({ ok: true });
+  }
+  if (b.action === "minutes") {   // v625 - FN meeting minutes from the recording; kept on the record so reopening never re-writes (b.again forces a fresh draft)
+    if (m.minutes && !b.again) return J({ ok: true, again: true });
+    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true);
+    if (transcript.length < 40) return J({ error: "There is no speech to read in that recording yet." }, 422);
+    if (!m.notes || !m.notes.summary) { const n = await recNotes(env, deps, m, transcript); if (n) m.notes = n; }
+    const mn = await buildMinutes(env, deps, m, m.notes, transcript);
+    if (!mn) return J({ error: "Momo could not write the minutes just now. The recording is safe: try again." }, 502);
+    m.minutes = mn; await recPut(env, m); return J({ ok: true });
+  }
   if (b.action === "log") { m.log = (m.log || []).concat((Array.isArray(b.ev) ? b.ev : []).slice(0, 80).map((x) => String(x).replace(/[^ -~]/g, "").slice(0, 120))).slice(-120); await recPut(env, m); return J({ ok: true }); }   // v620 - the page's own step trail (event names and sizes only), so a stuck recording can be traced
   if (b.action === "filed") { m.status = "filed"; await recPut(env, m); return J({ ok: true }); }
   return J({ error: "Unknown action." }, 400);
@@ -525,6 +548,7 @@ export async function workRoute(request, env, url, deps) {
   if (p === "/momo/work/rec/chunk" && request.method === "POST") return recChunk(request, env, url, J);        // v617 - one part of a recording
   if (p === "/momo/work/rec/api" && request.method === "POST") return recApi(request, env, J, deps);
   if (p === "/momo/work/rec/view") return recView(env, url);
+  if (p === "/momo/work/rec/minutes") { const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null; if (!m || !m.minutes) return new Response("not found", { status: 404 }); return new Response(renderMinutes(m, m.minutes, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }); }   // v625
   if (p === "/momo/work/api") {
     if (request.method === "GET") {
       const [f, t] = weekOf(okDate(url.searchParams.get("week")));
@@ -713,6 +737,7 @@ const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.open
 import { planRoute } from "./work_plan.js";
 import { teamRoute } from "./work_team.js";
 import { REC_JS, REC_BTN } from "./work_rec_page.js";
+import { loadRoster, cleanRoster, cleanAttendees, bumpUses, buildMinutes, renderMinutes, nameFixLine, attendeeLine, PEOPLE_KEY } from "./work_minutes.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 // soft language for the work-kind split (Kendall 14 Oct: "very soft language when you're differentiating these things")
 const KIND_SOFT = { "Strategic Lead": "As Strategic Lead", "Broker": "As a broker", "Other departments": "Supporting other departments" };
