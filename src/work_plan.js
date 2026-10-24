@@ -4,6 +4,7 @@
 // day the artwork has to START (the lead time of its format). The team receives the plan as a one-page PDF (/momo/work/plan/week) - never a link into Momo Work.
 // This is the Momo Work side of the plan; the development team's Content Planner service will later supply the same items through a feed (see
 // Client_Engagements/FN_Realty/Strategy/FN_Content_Engine_Developer_Spec_14OCT2026.md section 8). Until then the items live in her own KV, so it works today.
+import { TEAM_JS } from "./work_team.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 
 const PLP = "work_naj_plan_", TRP = "work_naj_trend_", TMP = "work_naj_team_", SEED_KEY = "work_naj_planseed";
@@ -506,13 +507,13 @@ function foundSheet(j,n){var f=j.found||{},t=today(),ch=j.checked||{},pick=-1,wh
    var d=when==="date"?f.start:when==="pick"?(s.querySelector("#f_date").value||t):t,e=when==="date"&&f.end?f.end:d,fm=fmtOf();
    if(when!=="none"){var days=Math.round((Date.parse(d)-Date.parse(t))/864e5);if(days<(D.lead[fm]||7)&&days>=D.lead.story)fm="story"}   // too close for the chosen format: the story the note promised
    api({action:"item_save",item:{title:f.name,start:d,end:e,pillar:pillar,sub:f.sub||"",certainty:f.certainty||"Researched",format:fm,owner:ownerFor(fm),activity:[actOfA()],note:f.why||"",angle:ang,mine:true,undated:when==="none",source:n.url||""}}).then(function(r){if(r.error)return back(r);showItem(r)},function(){back({error:"Not saved: no connection. Try again."})})}})}
-function drawCat(){var el=$("pcat");if(VIEW==="tr"){el.style.display="none";return}el.style.display="";var cnt=function(c){return D.items.filter(function(i){return i.pillar!=="trend"&&(c==="all"||i.pillar===c)&&i.state!=="Posted"}).length};
+function drawCat(){var el=$("pcat");if(VIEW==="tr"||VIEW==="tm"){el.style.display="none";return}el.style.display="";var cnt=function(c){return D.items.filter(function(i){return i.pillar!=="trend"&&(c==="all"||i.pillar===c)&&i.state!=="Posted"}).length};
  el.innerHTML=[["all","All"],["known","Commercial"],["market","Industry related"]].map(function(c){return '<button type=button data-c="'+c[0]+'"'+(CAT===c[0]?' class=on':'')+' style="padding:10px 4px;font-size:.8rem">'+c[1]+' <small style="opacity:.7">'+cnt(c[0])+'</small></button>'}).join("");
  el.querySelectorAll("button").forEach(function(b){b.onclick=function(){CAT=b.getAttribute("data-c");draw()}})}
-function drawSub(){var el=$("psub");if(!el)return;if(VIEW==="tr"||CAT!=="market"){el.style.display="none";return}el.style.display="";var cnt=function(c){return D.items.filter(function(i){return i.pillar==="market"&&i.state!=="Posted"&&(c==="all"||(c==="partner"?i.sub==="partner":i.sub!=="partner"))}).length};
+function drawSub(){var el=$("psub");if(!el)return;if(VIEW==="tr"||VIEW==="tm"||CAT!=="market"){el.style.display="none";return}el.style.display="";var cnt=function(c){return D.items.filter(function(i){return i.pillar==="market"&&i.state!=="Posted"&&(c==="all"||(c==="partner"?i.sub==="partner":i.sub!=="partner"))}).length};
  el.innerHTML=[["all","All industry"],["event","Events and launches"],["partner","Partners"]].map(function(c){return '<button type=button data-s="'+c[0]+'"'+(SUB===c[0]?' class=on':'')+' style="padding:8px 4px;font-size:.76rem">'+c[1]+' <small style="opacity:.7">'+cnt(c[0])+'</small></button>'}).join("");
  el.querySelectorAll("button").forEach(function(b){b.onclick=function(){SUB=b.getAttribute("data-s");draw()}})}
-function draw(){drawCat();drawSub();$("tcal").classList.toggle("on",VIEW==="cal");$("tmon").classList.toggle("on",VIEW==="mon");$("ttr").classList.toggle("on",VIEW==="tr");$("padd").textContent=VIEW==="tr"?"Add a trend":"Add to the plan";if(VIEW==="cal")drawCal();else if(VIEW==="mon")drawMonth();else drawTrends()}
+function draw(){drawCat();drawSub();$("tcal").classList.toggle("on",VIEW==="cal");$("tmon").classList.toggle("on",VIEW==="mon");$("ttr").classList.toggle("on",VIEW==="tr");$("ttm").classList.toggle("on",VIEW==="tm");$("pact").style.display=VIEW==="tm"?"none":"grid";$("padd").textContent=VIEW==="tr"?"Add a trend":"Add to the plan";if(VIEW==="cal")drawCal();else if(VIEW==="mon")drawMonth();else if(VIEW==="tm")drawTeam();else drawTrends()}
 function load(cb){fetch("/momo/work/plan/api?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(j){D=j;draw();if(cb)cb()})}
 // v616 - Done must answer. toast() says what happened; showItem() closes the sheets, reloads, then makes the saved item visible: it lifts a category filter that hides it,
 // jumps the list to the month view when the date is outside the 60-day list window (a December item added in October vanished before), scrolls to the card and flashes it.
@@ -527,18 +528,18 @@ function showItem(r,verb){var it=r&&r.item;if(!it){SHEETALL();return}while(STACK
   draw();var el=document.querySelector('[data-id="'+it.id.replace(/"/g,"")+'"]');
   if(el){el.scrollIntoView({block:"center"});el.style.transition="box-shadow .3s";el.style.boxShadow="0 0 0 3px #C5A56A";setTimeout(function(){el.style.boxShadow=""},2600)}
   toast((verb||"Added to the plan")+": "+it.title+(it.undated?" (no date yet)":" · "+fd(it.start))+(el?"":" · open "+MN[+it.start.slice(5,7)-1]+" in Month to see it"))})}
-$("tcal").onclick=function(){VIEW="cal";draw()};$("tmon").onclick=function(){VIEW="mon";draw()};$("ttr").onclick=function(){VIEW="tr";draw()};$("padd").onclick=function(){if(VIEW==="tr")addTrend();else addItem()};$("pshare").onclick=shareSheet;$("pidea").onclick=ideaSheet;
+$("tcal").onclick=function(){VIEW="cal";draw()};$("tmon").onclick=function(){VIEW="mon";draw()};$("ttr").onclick=function(){VIEW="tr";draw()};$("ttm").onclick=function(){VIEW="tm";TMV="home";TM=null;draw()};$("padd").onclick=function(){if(VIEW==="tr")addTrend();else addItem()};$("pshare").onclick=shareSheet;$("pidea").onclick=ideaSheet;
 $("pback").href="/momo/work?key="+encodeURIComponent(KEY);load();
 `;
 
 const PLAN_BODY = '<a class=back id=pback href="#">&#8592; Work log</a><div class=tag>MOMO · WORK</div><h1>Content plan</h1>'
-  + '<div class=seg style="margin:8px 0 12px;grid-template-columns:1fr 1fr 1fr"><button type=button id=tcal class=on>List</button><button type=button id=tmon>Month</button><button type=button id=ttr>Trends</button></div>'
-  + '<div class=seg id=pcat style="margin:0 0 8px;grid-template-columns:1fr 1fr 1fr;gap:6px"></div><div class=seg id=psub style="margin:0 0 10px;grid-template-columns:1fr 1fr 1fr;gap:6px;display:none"></div><div style="display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;margin-bottom:10px"><button type=button id=pidea class=gold>I have an idea</button><button type=button id=padd class=ghost>Add to the plan</button><button type=button id=pshare class=ghost>Share</button></div><div id=pbody></div>';
+  + '<div class=seg style="margin:8px 0 12px;grid-template-columns:1fr 1fr 1fr 1fr"><button type=button id=tcal class=on>List</button><button type=button id=tmon>Month</button><button type=button id=ttr>Trends</button><button type=button id=ttm>Team</button></div>'
+  + '<div class=seg id=pcat style="margin:0 0 8px;grid-template-columns:1fr 1fr 1fr;gap:6px"></div><div class=seg id=psub style="margin:0 0 10px;grid-template-columns:1fr 1fr 1fr;gap:6px;display:none"></div><div id=pact style="display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;margin-bottom:10px"><button type=button id=pidea class=gold>I have an idea</button><button type=button id=padd class=ghost>Add to the plan</button><button type=button id=pshare class=ghost>Share</button></div><div id=pbody></div>';
 
 export async function planRoute(request, env, url, deps, ctx) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
-  if (p === "/momo/work/plan") return new Response(deps.page(key, rk, PLAN_BODY + "<script>" + PLAN_JS + "</script>"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  if (p === "/momo/work/plan") return new Response(deps.page(key, rk, PLAN_BODY + "<script>" + PLAN_JS + TEAM_JS + "</script>"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work/plan/week") {
     await ensureSeed(env);
     const mon = mondayOf(okD(url.searchParams.get("from")) || today());
