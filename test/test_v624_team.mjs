@@ -19,7 +19,8 @@ r = await get("/momo/work/team/report?key=K"); ok(r.status === 404, "report 404 
 
 store.set("work_naj_cfg_sheet", "SYNTHETIC_SHEET_ID");
 r = await get("/momo/work/team/api?key=K"); j = await r.json(); const m = j.model;
-ok(!!m && calls.length === 3 && calls.every((u) => u.includes("SYNTHETIC_SHEET_ID") && u.includes("gviz")), "reads the three tabs by name, read only (GET gviz)");
+ok(!!m && calls.length === 2 && calls.every((u) => u.includes("SYNTHETIC_SHEET_ID") && u.includes("gviz")), "reads the two main tabs by name, read only (GET gviz); the daily tab is skipped quietly while its KV name is unset");
+ok(!/\bLiam\b/.test(T.TEAM_JS + String(T.loadModel)), "no person's name is hard-coded in the public file");
 ok(m.needs.length === 2 && m.needs.some((n) => n.task === "Epsilon invite") && m.needs.some((n) => n.task === "Video three"), "open tasks with nobody named are listed; named, done and cancelled are not");
 const dana = m.people["Dana Test"]; ok(dana && dana.open.length === 2, "designer open count");
 const eli = m.people["Eli Sample"]; ok(eli && eli.open.length === 0 && eli.recent === 1, "recent = done within 10 days; the 20-day-old one is not; cancelled ignored");
@@ -27,6 +28,10 @@ ok(m.people["Fay Mock"] && m.people["Fay Mock"].open.length === 1 && m.people["F
 ok(m.groups.map((g) => g.role).join("|") === "Graphic design|Video|Photography" && m.groups[2].people.length === 0, "three groups, Photography empty");
 ok(m.groups[0].people[0].name === "Dana Test", "most open work first");
 ok(m.groups[1].people.some((p) => p.name === "Fay Mock"), "video group lists the editor");
+store.delete("work_naj_team_model"); store.set("work_naj_cfg_daily_tab", "Zed Daily task"); calls.length = 0;
+j = await (await get("/momo/work/team/api?key=K")).json();
+ok(calls.length === 3 && calls.some((u) => u.includes("Zed%20Daily%20task")), "with the daily tab named in KV it is read as the third tab");
+ok(j.model.people["Zed"] && j.model.people["Zed"].notes.length === 1 && j.model.groups[1].people.some((p) => p.name === "Zed"), "the daily list becomes that person's notes under Video");
 const before = calls.length; await get("/momo/work/team/api?key=K"); ok(calls.length === before, "fresh copy is served from KV, no second fetch");
 const later = { ...deps, now: () => NOW + 5 * 3600e3, fetchText: async () => { throw new Error("down"); } };
 j = await (await get("/momo/work/team/api?key=K", later)).json(); ok(j.model && j.stale, "sheet down: last copy with a stale note");

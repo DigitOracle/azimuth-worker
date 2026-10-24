@@ -3,7 +3,7 @@
 // and which tasks have nobody named; the "needs a person" list has a report page she can save as a PDF and hand to the sheet's owner herself (Momo sends nothing).
 // The sheet id is NOT in this file (the repo is public and the sheet is open to anyone with its link): it lives in KV under work_naj_cfg_sheet (set once by Kendall).
 // The parsed copy lives in KV work_naj_team_model and is refreshed when it is older than STALE_MS and Najjuko opens Team (no cron, nothing runs when nobody looks).
-const KEY_CFG = "work_naj_cfg_sheet", KEY_MODEL = "work_naj_team_model", STALE_MS = 4 * 3600e3, RECENT_DAYS = 10;
+const KEY_CFG = "work_naj_cfg_sheet", KEY_DAILY = "work_naj_cfg_daily_tab",KEY_MODEL = "work_naj_team_model", STALE_MS = 4 * 3600e3, RECENT_DAYS = 10;
 const TABS = { design: "Graphic Design", motion: "Motion Graphics" };
 
 export function parseCsv(text) {
@@ -92,8 +92,11 @@ async function readSheet(env, deps, id) {
     if (/<html|<!doctype/i.test(t.slice(0, 200))) throw new Error("The sheet did not answer with data (is it still shared by link?)");
     return parseCsv(t);
   };
-  const [design, motion, liam] = await Promise.all([get(TABS.design), get(TABS.motion), get("Liam Daily task").catch(() => [])]);
-  return { design: readDesign(design), motion: readMotion(motion), daily: liam.length ? [readDaily(liam, "Liam")] : [] };
+  // the daily-tasks tab (one editor's day-by-day list) is named in KV, never in this public file: work_naj_cfg_daily_tab = "<Name> Daily task"; unset = that tab is skipped quietly
+  let tab = ""; try { tab = String((await env.MEETINGS.get(KEY_DAILY)) || "").trim().slice(0, 80); } catch (e) {}
+  const who = tab.replace(/\s*daily.*$/i, "").trim();
+  const [design, motion, daily] = await Promise.all([get(TABS.design), get(TABS.motion), tab && who ? get(tab).catch(() => []) : Promise.resolve([])]);
+  return { design: readDesign(design), motion: readMotion(motion), daily: daily.length ? [readDaily(daily, who)] : [] };
 }
 
 export async function loadModel(env, deps, force) {

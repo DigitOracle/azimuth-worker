@@ -537,6 +537,7 @@ export async function workRoute(request, env, url, deps) {
   if (!p.startsWith("/momo/work")) return null;
   const key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  if (p === "/momo/work/voicetest") { if (!deps.isNaj(env, url)) return J({ error: "Not allowed." }, 401); return voiceTestRoute(request, env, url, J, deps); }   // v626 - the private speaker-detection test; a wrong key is a 401 and nothing runs
   if (!deps.isNaj(env, url)) {   // the owner (or anyone else): the room exists, the log is hers alone
     if (p !== "/momo/work") return new Response("not found", { status: 404 });
     return new Response(deps.page(key, rk, '<a class=back href="/momo?key=' + encodeURIComponent(key) + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty><p>Najjuko\'s work log is private to her link.</p></div>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
@@ -736,6 +737,7 @@ const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.open
 // v580 - FN's own marks, cut from the Company Template she sent (src/fn_logo.js): the navy monogram, the gold lattice band, FN navy/peach/gold
 import { planRoute } from "./work_plan.js";
 import { teamRoute } from "./work_team.js";
+import { voiceTestRoute } from "./work_voicetest.js";
 import { REC_JS, REC_BTN } from "./work_rec_page.js";
 import { loadRoster, cleanRoster, cleanAttendees, bumpUses, buildMinutes, renderMinutes, nameFixLine, attendeeLine, PEOPLE_KEY } from "./work_minutes.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
