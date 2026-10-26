@@ -46,7 +46,7 @@ await post("/momo/work/jobs/api", NAJ, { action: "save_view", view: { groups: ["
 const vw = (await (await get("/momo/work/jobs/rec", OWNER)).json()).view; ok(vw.groups.join() === "MKT" && vw.cities.join() === "Dubai" && vw.avoid === "intern", "view is cleaned", vw);
 await post("/momo/work/jobs/api", NAJ, { action: "save_tpl", tpl: { auto: "Shared line.", letters: { MKT: { hook: "Opening.", proof: "Proof.", close: "Close." } }, headlines: ["H1"], why: ["W1"] } });
 const tp = (await (await get("/momo/work/jobs/rec", NAJ)).json()).tpl; ok(tp.letters.MKT.hook === "Opening." && tp.letters.PR.hook === "" && tp.auto === "Shared line.", "letter templates are saved per group", tp);
-r = await post("/momo/work/jobs/api", OWNER, { action: "mark_applied", url: "https://example.com/1", on: true, date: "2026-10-26" }); j = await r.json(); ok(j.rec.applied["https://example.com/1"] === "2026-10-26", "mark applied", j.rec && j.rec.applied);
+r = await post("/momo/work/jobs/api", OWNER, { action: "mark_applied", url: "https://example.com/1", on: true, date: "2026-10-26" }); j = await r.json(); ok(j.rec.applied["https://example.com/1"].d === "2026-10-26", "mark applied (object form)", j.rec && j.rec.applied);
 j = await (await post("/momo/work/jobs/api", NAJ, { action: "mark_applied", url: "https://example.com/1", on: false })).json(); ok(!j.rec.applied["https://example.com/1"], "undo applied");
 ok((await post("/momo/work/jobs/api", NAJ, { action: "mark_applied", url: "nope" })).status === 400 && (await post("/momo/work/jobs/api", NAJ, { action: "wat" })).status === 400, "bad requests answer 400");
 ok(JSON.parse(store.get(JOBS_REC_KEY)).v === 2, "stored as one v2 document");

@@ -38,7 +38,25 @@ export async function jobsFeed(env, fetchFn, force) {
 
 // ---- the shared record (v2) ----
 export const emptyRec = () => ({ v: 2, updatedAt: "", profile: { name: "", headline: "", location: "", email: "", phone: "", bio: "", direct: "", indirect: "", cvPrefix: "" },
-  docs: {}, view: { groups: GROUP_KEYS.slice(), cities: ["Dubai", "Abu Dhabi"], avoid: "" }, applied: {}, tpl: { auto: "", headlines: [], why: [], letters: {} }, ish: {} });
+  docs: {}, view: { groups: GROUP_KEYS.slice(), cities: ["Dubai", "Abu Dhabi"], avoid: "" }, applied: {}, hidden: {}, fit: [], tpl: { auto: "", headlines: [], why: [], letters: {} }, ish: {} });
+const DATE_RE = /^\d{4}-\d\d-\d\d$/;
+// v635 - applied entries are objects {d: date, c: company, t: title, g: group, f: follow-up date}; the old plain date string still reads
+export function cleanApplied(a) {
+  a = a && typeof a === "object" ? a : {}; const o = {};
+  Object.keys(a).slice(0, 2000).forEach((k) => {
+    const u = httpUrl(k); if (!u) return; const v = a[k];
+    const e = typeof v === "string" ? { d: v } : v && typeof v === "object" ? v : null; if (!e || !DATE_RE.test(String(e.d || ""))) return;
+    const r = { d: e.d }; if (e.c) r.c = S(e.c, 120); if (e.t) r.t = S(e.t, 200); if (GROUP_KEYS.includes(e.g)) r.g = e.g; if (DATE_RE.test(String(e.f || ""))) r.f = e.f; o[u] = r;
+  });
+  return o;
+}
+export function cleanHidden(h) {
+  h = h && typeof h === "object" ? h : {}; const o = {};
+  Object.keys(h).slice(0, 3000).forEach((k) => { const u = httpUrl(k); if (u && DATE_RE.test(String(h[k] || ""))) o[u] = h[k]; });
+  return o;
+}
+// her own extra words for the match score (optional, kept in the record, never in code)
+export function cleanFit(f) { return (Array.isArray(f) ? f : []).slice(0, 40).map((x) => S(x, 30).trim().toLowerCase()).filter(Boolean); }
 export function cleanProfile(p) {
   p = p && typeof p === "object" ? p : {};
   const o = {}; ["name", "headline", "location", "email", "phone", "cvPrefix"].forEach((k) => { o[k] = S(p[k], 120).trim(); }); o.bio = S(p.bio, 800).trim();
@@ -60,7 +78,7 @@ export async function readRec(env) {
   let r = null; try { r = JSON.parse(await env.MEETINGS.get(JOBS_REC_KEY)); } catch (e) {}
   const e = emptyRec(); if (!r || typeof r !== "object") return e;
   return { v: 2, updatedAt: S(r.updatedAt, 30), profile: Object.assign(e.profile, cleanProfile(r.profile)), docs: cleanDocs(r.docs), view: cleanView(r.view),
-    applied: r.applied && typeof r.applied === "object" ? r.applied : {}, tpl: cleanTpl(r.tpl), ish: r.ish && typeof r.ish === "object" ? r.ish : {} };
+    applied: cleanApplied(r.applied), hidden: cleanHidden(r.hidden), fit: cleanFit(r.fit), tpl: cleanTpl(r.tpl), ish: r.ish && typeof r.ish === "object" ? r.ish : {} };
 }
 export async function jobsApi(env, b) {
   const rec = await readRec(env);
@@ -69,10 +87,26 @@ export async function jobsApi(env, b) {
     case "save_docs": rec.docs = cleanDocs(b.docs); break;
     case "save_view": rec.view = cleanView(b.view); break;
     case "save_tpl": rec.tpl = cleanTpl(b.tpl); break;
+    case "save_fit": rec.fit = cleanFit(b.fit); break;
     case "mark_applied": {
       const u = httpUrl(b.url); if (!u) return { error: "No advert link.", status: 400 };
-      if (b.on === false) delete rec.applied[u]; else rec.applied[u] = /^\d{4}-\d\d-\d\d$/.test(String(b.date || "")) ? b.date : new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
-      const keys = Object.keys(rec.applied); if (keys.length > 800) keys.sort((a, c) => String(rec.applied[a]).localeCompare(String(rec.applied[c]))).slice(0, keys.length - 800).forEach((k) => delete rec.applied[k]);
+      if (b.on === false) delete rec.applied[u];
+      else {
+        const prev = rec.applied[u] || {}, d = DATE_RE.test(String(b.date || "")) ? b.date : new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+        rec.applied[u] = cleanApplied({ [u]: { d: prev.d || d, c: b.c || prev.c, t: b.t || prev.t, g: b.g || prev.g, f: prev.f } })[u] || { d };
+      }
+      const keys = Object.keys(rec.applied); if (keys.length > 800) keys.sort((a, c) => String(rec.applied[a].d).localeCompare(String(rec.applied[c].d))).slice(0, keys.length - 800).forEach((k) => delete rec.applied[k]);
+      break;
+    }
+    case "mark_followed": {
+      const u = httpUrl(b.url); if (!u || !rec.applied[u]) return { error: "Not an applied role.", status: 400 };
+      rec.applied[u].f = DATE_RE.test(String(b.date || "")) ? b.date : new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10); break;
+    }
+    case "set_hidden": {   // urls: the same role on several boards; on:false brings it back
+      const urls = (Array.isArray(b.urls) ? b.urls : []).slice(0, 6).map((x) => httpUrl(x)).filter(Boolean); if (!urls.length) return { error: "No advert link.", status: 400 };
+      const d = new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+      urls.forEach((u) => { if (b.on === false) delete rec.hidden[u]; else rec.hidden[u] = d; });
+      const hk = Object.keys(rec.hidden); if (hk.length > 1500) hk.sort((a, c) => rec.hidden[a].localeCompare(rec.hidden[c])).slice(0, hk.length - 1500).forEach((k) => delete rec.hidden[k]);
       break;
     }
     default: return { error: "Unknown action.", status: 400 };
