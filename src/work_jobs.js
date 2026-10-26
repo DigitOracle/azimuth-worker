@@ -4,7 +4,7 @@
 // insider key open the SAME record. THIS REPO IS PUBLIC: no person's details, CV text or letter wording live in code - they live in the KV record, entered through the page or seeded once.
 // Spec: Client_Engagements/RealEstateBroker/02_Execution/JOB_TILE_MOMO_SPEC.md (UPDATE 26 Oct 2026 late).
 import { JOBS_JS, JOBS_BODY } from "./work_jobs_page.js";
-export const JOBS_FEED_URL = "https://jobsearch-command-centre-digitalchemys-projects.vercel.app/jobs.json";
+export const JOBS_FEED_URL = "https://jobsearch-template.vercel.app/jobs.json";
 export const JOBS_CACHE_KEY = "jobs_feed_cache", JOBS_REC_KEY = "jobs_rec_najjuko";
 const FRESH_MS = 3 * 3600 * 1000, KV_TTL = 7 * 86400;
 const GROUP_KEYS = ["MKT", "DIG", "PR", "BD", "RE"], DOC_KEYS = GROUP_KEYS.concat(["PORT", "OTHER"]), CITIES = ["Dubai", "Abu Dhabi", "Sharjah"];
