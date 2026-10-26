@@ -18,6 +18,7 @@ export const CENTRES_CSS = String.raw`
 #fbar #lockchips{position:static;max-width:none}
 #fbar .fg{display:inline-flex;align-items:center;max-width:100%;background:#0e1413;border:1px solid var(--line);border-radius:999px}
 #fbar .fg.on{border-color:var(--gold)}
+#fbar #freset{order:5}
 #fbar .fchip{display:inline-flex;align-items:center;gap:5px;min-height:34px;min-width:0;max-width:100%;background:none;border:0;color:#f5efe2;border-radius:999px;padding:3px 9px;font:inherit;font-size:12px;cursor:pointer}
 #fbar .fchip .fl{color:var(--muted);font-size:11px;white-space:nowrap}
 #fbar .fchip b{min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
@@ -178,6 +179,7 @@ function barHtml(){var h="",lk=locked(),ix=ixv(),W=c.DM.TIER_WORDS;
     h+=grp("dev","buildings","Developer","All developers",false);
     h+=grp("band","chart-bar","Price band",S.band!=null?W[S.band]:"All price bands",S.band!=null);
     h+=grp("win","stack","Window",winLabel(),S.win!==defWin())}
+  h+='<span class=fg id=freset><button type=button class=fchip data-f="reset" aria-label="Reset all filters to the default view" title="Reset all filters"><svg class=evi viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.8 stroke-linecap=round stroke-linejoin=round aria-hidden=true><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.6h4.6"/></svg><span class=fl>Reset</span></button></span>';   // v636 - one tap back to the default view (always shown)
   return h}
 CF.barHtml=barHtml;
 function opt(v,body,on,wide){return '<button type=button class="fopt'+(on?' on':'')+(wide?' wide':'')+'" data-v="'+X(v)+'">'+body+'</button>'}
@@ -200,10 +202,15 @@ function onBar(e){var t=e.target;if(!t||!t.closest)return;var xb=t.closest("butt
   var sh=t.closest("[data-sh]");if(sh){CF.act("shade",S.cshade===false);return}
   var v=t.closest("[data-v]");if(v){CF.act(S.fmenu,v.getAttribute("data-v"));return}
   var x=t.closest("[data-x]");if(x){var k=x.getAttribute("data-x");if(k==="menu"){S.fmenu=null;drawBar()}else CF.act(k,null,true);return}
-  var f=t.closest("[data-f]");if(f){var k2=f.getAttribute("data-f");if(k2==="coast"){CF.act("coast",!S.coast);return}S.fmenu=S.fmenu===k2?null:k2;drawBar()}}
+  var f=t.closest("[data-f]");if(f){var k2=f.getAttribute("data-f");if(k2==="coast"){CF.act("coast",!S.coast);return}if(k2==="reset"){CF.reset();return}S.fmenu=S.fmenu===k2?null:k2;drawBar()}}
 function pick(k){S.cen=k;S.fmenu=null;if(S.sel&&!CF.ok(S.sel)){S.sel=null;S.pj=null;S.parea=null;S.drawer=null;S.fdev=null}if(S.parea&&!CF.ok(S.parea))S.parea=null;S.cenAll=false;c.renderAll();
   var m=c.map();if(m&&m.fitBounds){if(k&&CBY[k]){var b=CBY[k].bbox;m.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:c.pad(),duration:700})}else m.flyTo({center:DEF,zoom:9.6,duration:700})}}
 CF.pick=pick;
+// v636 - RESET: Centre All of Dubai, Coastal off, no developer, no area, All price bands, the default window; any open card, shade or places selection is closed (c.resetExtra, the page's own) and the map flies back to the default Dubai view
+CF.reset=function(){S.fmenu=null;S.cen=null;S.coast=false;S.cenAll=false;S.band=null;S.bandsAsk=false;S.cshade=undefined;S.sel=null;S.pj=null;S.parea=null;S.drawer=null;S.fdev=null;S.prof=null;
+  if(c.resetExtra)c.resetExtra();
+  c.setWin(defWin());
+  var m=c.map();if(m&&m.flyTo)m.flyTo({center:DEF,zoom:9.6,duration:700})};
 // one entry point for every choice (the bar's menus call it; so do the tests). kind: cen, coast, area, dev, band, win, shade
 CF.act=function(kind,val,isClear){S.fmenu=null;var nul=val==null||val==="";
   if(kind==="cen"){pick(nul?null:Number(val));return}
