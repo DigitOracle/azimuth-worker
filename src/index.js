@@ -5019,13 +5019,14 @@ function momoHtml(key, rk, work) {
   const ic = (d) => '<svg viewBox="0 0 24 24" width=30 height=30 fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + d + "</svg>";
   const WORK = ic('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>');
   const PLAY = ic('<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>');
+  const FUTURE = ic('<path d="M4 20l5-5 4 3 7-9"/><path d="M15 9h5v5"/>');   // v632 - the third card: Future (the job search)
   const body = work
     ? '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty>' + WORK + '<p>Nothing here yet.</p></div>'
-    : '<div class=tag>MOMO</div><h1>Work or play?</h1><div class=pick><a class=card href="/momo/work' + q + '">' + WORK + '<b>Work</b></a><a class=card href="/fit' + q + '">' + PLAY + '<b>Play</b></a></div>';
+    : '<div class=tag>MOMO</div><h1>Work, play or future?</h1><div class=pick><a class=card href="/momo/work' + q + '">' + WORK + '<b>Work</b></a><a class=card href="/fit' + q + '">' + PLAY + '<b>Play</b></a><a class=card href="/momo/work/jobs' + q + '">' + FUTURE + '<b>Future</b></a></div>';
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#0C1413"><title>Momo</title>' + NAJ_FONTS
     + '<style>body{margin:0;background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans",sans-serif;padding:28px 16px 110px}.w{max-width:560px;margin:0 auto}.tag{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.14em;color:#C5A56A}'
-    + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:2rem;margin:6px 0 22px}.pick{display:grid;grid-template-columns:1fr 1fr;gap:12px}.card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;aspect-ratio:1;border:1px solid #C5A56A;border-radius:18px;background:#0E1918;color:#C5A56A;text-decoration:none;-webkit-tap-highlight-color:transparent}'
-    + '.card b{font-family:Fraunces,serif;font-weight:600;font-size:1.35rem;color:#E8E4D8}.card:active{background:#15231F}.back{color:#8FA39B;text-decoration:none;font-size:.85rem}.empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:48px 0;border:1px dashed #24352F;border-radius:18px;color:#8FA39B}.empty p{margin:0}'
+    + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:2rem;margin:6px 0 22px}.pick{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;aspect-ratio:1;border:1px solid #C5A56A;border-radius:18px;background:#0E1918;color:#C5A56A;text-decoration:none;-webkit-tap-highlight-color:transparent}'
+    + '.card b{font-family:Fraunces,serif;font-weight:600;font-size:1.1rem;color:#E8E4D8}.card:active{background:#15231F}.back{color:#8FA39B;text-decoration:none;font-size:.85rem}.empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:48px 0;border:1px dashed #24352F;border-radius:18px;color:#8FA39B}.empty p{margin:0}'
     + NAJ_NAV_CSS + '</style></head><body><div class=w>' + body + '</div>' + najNav(key, "fit", rk) + '</body></html>';
 }
 
