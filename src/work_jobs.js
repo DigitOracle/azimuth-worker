@@ -1,25 +1,29 @@
-// v630 - MOMO WORK - JOBS tile, phase 2 (Kendall 26 Oct 2026: the job-search app becomes one more icon inside Momo Work).
-// Read-only. The daily scanner publishes public job listings to a static jobs.json; this worker fetches that file, keeps a copy in KV and shows it as cards.
-// Gate: Najjuko's key OR Kendall's (any insider key) - one shared tile; the work LOG itself stays hers alone (workRoute's own gate).
-// Spec: Client_Engagements/RealEstateBroker/02_Execution/JOB_TILE_MOMO_SPEC.md (phase 3, the shared application record, is not built here).
+// v631 - MOMO WORK - JOBS (Kendall 26 Oct 2026: the finished job-search app becomes one more icon inside Momo Work).
+// PHASE 2: the daily feed - the worker fetches the public jobs.json (public listings only), keeps a copy in KV (3 h refresh, 7-day expiry) and the page shows it as five accordion groups.
+// PHASE 3: ONE shared record (jobs_rec_najjuko, v2) holding the profile, the CV share links, the view choices, the applied map and the letter templates. Both Najjuko's key and the owner's
+// insider key open the SAME record. THIS REPO IS PUBLIC: no person's details, CV text or letter wording live in code - they live in the KV record, entered through the page or seeded once.
+// Spec: Client_Engagements/RealEstateBroker/02_Execution/JOB_TILE_MOMO_SPEC.md (UPDATE 26 Oct 2026 late).
+import { JOBS_JS, JOBS_BODY } from "./work_jobs_page.js";
 export const JOBS_FEED_URL = "https://jobsearch-command-centre-digitalchemys-projects.vercel.app/jobs.json";
-export const JOBS_CACHE_KEY = "jobs_feed_cache";
+export const JOBS_CACHE_KEY = "jobs_feed_cache", JOBS_REC_KEY = "jobs_rec_najjuko";
 const FRESH_MS = 3 * 3600 * 1000, KV_TTL = 7 * 86400;
+const GROUP_KEYS = ["MKT", "DIG", "PR", "BD", "RE"], DOC_KEYS = GROUP_KEYS.concat(["PORT", "OTHER"]), CITIES = ["Dubai", "Abu Dhabi", "Sharjah"];
+const S = (v, n) => String(v == null ? "" : v).slice(0, n);
+const httpUrl = (v, n) => (/^https?:\/\//i.test(String(v || "").trim()) ? S(String(v).trim(), n || 500) : "");
 
 export function cleanFeed(raw) {
   const o = raw && typeof raw === "object" ? raw : {};
-  const jobs = (Array.isArray(o.jobs) ? o.jobs : []).slice(0, 400).map((j) => ({
-    c: String((j && j.c) || "").slice(0, 120), t: String((j && j.t) || "").slice(0, 200),
-    u: /^https?:\/\//i.test(String((j && j.u) || "")) ? String(j.u).slice(0, 500) : "",
-    k: String((j && j.k) || "").slice(0, 40), d: String((j && j.d) || "").slice(0, 10), n: j && j.n ? 1 : 0, s: String((j && j.s) || "").slice(0, 20),
+  const jobs = (Array.isArray(o.jobs) ? o.jobs : []).slice(0, 300).map((j) => ({
+    c: S(j && j.c, 120), t: S(j && j.t, 200), u: httpUrl(j && j.u), k: S(j && j.k, 40), d: S(j && j.d, 10), n: j && j.n ? 1 : 0, s: S(j && j.s, 20), l: S(j && j.l, 48),
   })).filter((j) => j.t);
-  return { updated: String(o.updated || "").slice(0, 10), total: jobs.length, new: jobs.filter((j) => j.n).length, jobs };
+  return { updated: S(o.updated, 10), at: /^\d\d:\d\d$/.test(String(o.at || "")) ? String(o.at) : "", total: jobs.length, new: jobs.filter((j) => j.n).length, jobs };
 }
 
-export async function jobsFeed(env, fetchFn) {
+// force = the page's Refresh button: skip the 3 h wait. Nothing changed = the same copy comes back, so the page can say "no newer list yet".
+export async function jobsFeed(env, fetchFn, force) {
   let cached = null; try { cached = JSON.parse(await env.MEETINGS.get(JOBS_CACHE_KEY)); } catch (e) {}
   const age = cached && cached.fetchedAt ? Date.now() - Date.parse(cached.fetchedAt) : Infinity;
-  if (cached && cached.feed && age < FRESH_MS) return Object.assign({}, cached.feed, { stale: false, fetchedAt: cached.fetchedAt });
+  if (!force && cached && cached.feed && age < FRESH_MS) return Object.assign({}, cached.feed, { stale: false, fetchedAt: cached.fetchedAt });
   try {
     const r = await (fetchFn || fetch)(JOBS_FEED_URL, { headers: { Accept: "application/json" } });
     if (!r.ok) throw new Error("status " + r.status);
@@ -28,37 +32,68 @@ export async function jobsFeed(env, fetchFn) {
     return Object.assign({}, feed, { stale: false, fetchedAt });
   } catch (e) {
     if (cached && cached.feed) return Object.assign({}, cached.feed, { stale: true, fetchedAt: cached.fetchedAt });
-    return { updated: "", total: 0, new: 0, jobs: [], stale: true, fetchedAt: "" };
+    return { updated: "", at: "", total: 0, new: 0, jobs: [], stale: true, fetchedAt: "" };
   }
 }
 
+// ---- the shared record (v2) ----
+export const emptyRec = () => ({ v: 2, updatedAt: "", profile: { name: "", headline: "", location: "", email: "", phone: "", bio: "", direct: "", indirect: "", cvPrefix: "" },
+  docs: {}, view: { groups: GROUP_KEYS.slice(), cities: ["Dubai", "Abu Dhabi"], avoid: "" }, applied: {}, tpl: { auto: "", headlines: [], why: [], letters: {} }, ish: {} });
+export function cleanProfile(p) {
+  p = p && typeof p === "object" ? p : {};
+  const o = {}; ["name", "headline", "location", "email", "phone", "cvPrefix"].forEach((k) => { o[k] = S(p[k], 120).trim(); }); o.bio = S(p.bio, 800).trim();
+  ["direct", "indirect"].forEach((k) => { o[k] = S(p[k], 8).replace(/[^\d\-+ ]/g, "").trim(); }); return o;
+}
+export function cleanDocs(d) { d = d && typeof d === "object" ? d : {}; const o = {}; DOC_KEYS.forEach((k) => { const u = httpUrl(d[k]); if (u) o[k] = u; }); return o; }
+export function cleanView(v) {
+  v = v && typeof v === "object" ? v : {};
+  const groups = (Array.isArray(v.groups) ? v.groups : []).filter((g) => GROUP_KEYS.includes(g)), cities = (Array.isArray(v.cities) ? v.cities : []).filter((c) => CITIES.includes(c));
+  return { groups: groups.length ? groups : GROUP_KEYS.slice(), cities: cities.length ? cities : ["Dubai"], avoid: S(v.avoid, 300).trim() };
+}
+export function cleanTpl(t) {
+  t = t && typeof t === "object" ? t : {};
+  const letters = {}; GROUP_KEYS.forEach((g) => { const l = (t.letters && t.letters[g]) || {}; letters[g] = { hook: S(l.hook, 1200), proof: S(l.proof, 2000), close: S(l.close, 800) }; });
+  const list = (a, n) => (Array.isArray(a) ? a : []).slice(0, n).map((x) => S(x, 200)).filter(Boolean);
+  return { auto: S(t.auto, 600), headlines: list(t.headlines, 12), why: list(t.why, 12), letters };
+}
+export async function readRec(env) {
+  let r = null; try { r = JSON.parse(await env.MEETINGS.get(JOBS_REC_KEY)); } catch (e) {}
+  const e = emptyRec(); if (!r || typeof r !== "object") return e;
+  return { v: 2, updatedAt: S(r.updatedAt, 30), profile: Object.assign(e.profile, cleanProfile(r.profile)), docs: cleanDocs(r.docs), view: cleanView(r.view),
+    applied: r.applied && typeof r.applied === "object" ? r.applied : {}, tpl: cleanTpl(r.tpl), ish: r.ish && typeof r.ish === "object" ? r.ish : {} };
+}
+export async function jobsApi(env, b) {
+  const rec = await readRec(env);
+  switch (b && b.action) {
+    case "save_profile": rec.profile = Object.assign(rec.profile, cleanProfile(b.profile)); break;
+    case "save_docs": rec.docs = cleanDocs(b.docs); break;
+    case "save_view": rec.view = cleanView(b.view); break;
+    case "save_tpl": rec.tpl = cleanTpl(b.tpl); break;
+    case "mark_applied": {
+      const u = httpUrl(b.url); if (!u) return { error: "No advert link.", status: 400 };
+      if (b.on === false) delete rec.applied[u]; else rec.applied[u] = /^\d{4}-\d\d-\d\d$/.test(String(b.date || "")) ? b.date : new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+      const keys = Object.keys(rec.applied); if (keys.length > 800) keys.sort((a, c) => String(rec.applied[a]).localeCompare(String(rec.applied[c]))).slice(0, keys.length - 800).forEach((k) => delete rec.applied[k]);
+      break;
+    }
+    default: return { error: "Unknown action.", status: 400 };
+  }
+  rec.updatedAt = new Date().toISOString();
+  await env.MEETINGS.put(JOBS_REC_KEY, JSON.stringify(rec));
+  return { ok: true, rec };
+}
+
 export const JOBS_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>';
-
-const JOBS_CSS = '<style>.jf{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 14px}.jf button{border:1px solid #CFE0D2;background:#fff;color:#2F5D3F;border-radius:999px;padding:7px 12px;font:600 .8rem "IBM Plex Sans",sans-serif;cursor:pointer}.jf button.on{background:#2F5D3F;color:#fff;border-color:#2F5D3F}'
-  + '.jc{display:block;background:#fff;border:1px solid #E3EBE4;border-radius:14px;padding:12px 14px;margin:0 0 10px;text-decoration:none;color:#1C2321}.jc b{display:block;font-size:.95rem;line-height:1.3}.jc span.co{color:#5F6B66;font-size:.82rem}'
-  + '.jc .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}.jc i{font-style:normal;font-size:.7rem;font-weight:600;border-radius:999px;padding:3px 8px;background:#EAF2EC;color:#2F5D3F}.jc i.new{background:#2F5D3F;color:#fff}.jc i.d{background:#F3F0E8;color:#5F6B66}'
-  + '.jh{color:#5F6B66;font-size:.8rem;margin:0 0 4px}.je{padding:30px 0;text-align:center;color:#5F6B66}</style>';
-
-export const JOBS_BODY = JOBS_CSS + '<a class=back href="/momo/work" id=jback>&#8592; Work</a><div class=tag>MOMO</div><h1>Jobs</h1><p class=jh id=jhead>Loading...</p><div class=jf id=jfil></div><div id=jlist></div>';
-
-export const JOBS_JS = `(function(){var KEY=new URLSearchParams(location.search).get("key")||"",F="All",D=null;
-var $=function(i){return document.getElementById(i)};$("jback").href="/momo/work?key="+encodeURIComponent(KEY);
-function src(j){return j.s==="LinkedIn"?"LinkedIn":j.s==="Bayt"?"Bayt":"Company site"}
-function draw(){var js=D.jobs.filter(function(j){return F==="All"||src(j)===F});var cnt={All:D.jobs.length,LinkedIn:0,Bayt:0,"Company site":0};D.jobs.forEach(function(j){cnt[src(j)]++});
-var fl=$("jfil");fl.textContent="";["All","LinkedIn","Bayt","Company site"].forEach(function(n){var b=document.createElement("button");b.type="button";b.textContent=n+" "+cnt[n];if(n===F)b.className="on";b.onclick=function(){F=n;draw()};fl.appendChild(b)});
-var l=$("jlist");l.textContent="";if(!js.length){var e=document.createElement("div");e.className="je";e.textContent="No roles here yet.";l.appendChild(e);return}
-js.forEach(function(j){var a=document.createElement(j.u?"a":"div");a.className="jc";if(j.u){a.href=j.u;a.target="_blank";a.rel="noopener noreferrer"}
-var t=document.createElement("b");t.textContent=j.t;a.appendChild(t);var c=document.createElement("span");c.className="co";c.textContent=j.c;a.appendChild(c);
-var r=document.createElement("div");r.className="row";function chip(x,k){if(!x)return;var i=document.createElement("i");if(k)i.className=k;i.textContent=x;r.appendChild(i)}
-if(j.n)chip("NEW","new");chip(src(j));chip(j.k.replace(/\\//g," / "));chip(j.d,"d");a.appendChild(r);l.appendChild(a)})}
-fetch("/momo/work/jobs/feed?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(d){D=d;
-$("jhead").textContent=d.total?(d.total+" roles, "+d.new+" new. Updated "+d.updated+(d.stale?" (last saved copy)":"")+". The scan runs every morning."):"No roles yet. The scan runs every morning.";draw()}).catch(function(){$("jhead").textContent="Could not load the roles. Try again in a minute."})})();`;
 
 export async function jobsRoute(request, env, url, deps) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   if (!deps.isAny(env, url)) return new Response("not found", { status: 404 });
-  if (p === "/momo/work/jobs/feed" && request.method === "GET") return J(await jobsFeed(env, deps.fetch));
+  if (p === "/momo/work/jobs/feed" && request.method === "GET") return J(await jobsFeed(env, deps.fetch, url.searchParams.get("fresh") === "1"));
+  if (p === "/momo/work/jobs/rec" && request.method === "GET") return J(await readRec(env));
+  if (p === "/momo/work/jobs/api" && request.method === "POST") {
+    let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
+    const r = await jobsApi(env, b); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
+  }
   if (p === "/momo/work/jobs" && request.method === "GET") return new Response(deps.page(key, rk, JOBS_BODY + "<script>" + JOBS_JS + "</script>"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   return null;
 }
