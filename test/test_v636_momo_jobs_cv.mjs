@@ -13,9 +13,9 @@ const call = (path, key, body, method) => worker.fetch(new Request("https://w" +
 let r = await call("/momo/work/jobs/cv", NAJ, { action: "put", group: "MKT", name: "Test_CV_Marketing.pdf", data: b64(FAKEPDF) }), j = await r.json();
 ok(r.status === 200 && j.ok && j.cv.MKT.name === "Test_CV_Marketing.pdf" && j.cv.MKT.size === FAKEPDF.length && j.cv.MKT.type === "pdf", "her key uploads a CV", [r.status, j]);
 ok(store.get("jobs_cv_najjuko_MKT") === b64(FAKEPDF) && JSON.parse(store.get("jobs_cvmeta_najjuko")).MKT.size === FAKEPDF.length, "stored as base64 with a meta record");
-r = await call("/momo/work/jobs/cv/MKT", OWNER); const got = new Uint8Array(await r.arrayBuffer());
-ok(r.status === 200 && r.headers.get("content-type") === "application/pdf" && /Test_CV_Marketing\.pdf/.test(r.headers.get("content-disposition")) && Buffer.compare(Buffer.from(got), Buffer.from(FAKEPDF)) === 0, "the owner's key gets the exact bytes back", [r.status, r.headers.get("content-type")]);
-j = await (await call("/momo/work/jobs/cv", OWNER)).json(); ok(j.cv && j.cv.MKT && !j.cv.DIG, "the list shows what is saved");
+r = await call("/momo/work/jobs/cv/MKT", NAJ); const got = new Uint8Array(await r.arrayBuffer());
+ok(r.status === 200 && r.headers.get("content-type") === "application/pdf" && /Test_CV_Marketing\.pdf/.test(r.headers.get("content-disposition")) && Buffer.compare(Buffer.from(got), Buffer.from(FAKEPDF)) === 0, "her key gets the exact bytes back", [r.status, r.headers.get("content-type")]);
+j = await (await call("/momo/work/jobs/cv", NAJ)).json(); ok(j.cv && j.cv.MKT && !j.cv.DIG, "the list shows what is saved");
 // refusals
 const bad = async (body, st, msg) => { const x = await call("/momo/work/jobs/cv", NAJ, body); ok(x.status === st, msg, x.status); };
 await bad({ action: "put", group: "XX", name: "a.pdf", data: b64(FAKEPDF) }, 400, "unknown group refused");

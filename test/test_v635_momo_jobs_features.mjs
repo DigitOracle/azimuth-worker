@@ -22,7 +22,7 @@ j = await post({ action: "set_hidden", urls: [U2], on: false }); ok(!j.rec.hidde
 j = await post({ action: "save_fit", fit: ["Alpha", " beta ", "", "x".repeat(80)] }); ok(j.rec.fit.length === 3 && j.rec.fit[0] === "alpha" && j.rec.fit[1] === "beta" && j.rec.fit[2].length === 30, "fit words trimmed, lower-cased, capped", j.rec.fit);
 // an old record with plain date strings still reads, junk is dropped
 store.set("jobs_rec_najjuko", JSON.stringify({ v: 2, applied: { [U3]: "2026-10-01", "ftp://bad": "2026-10-01", [U2]: "not a date" }, hidden: { [U3]: "2026-10-02" } }));
-const rec = await (await worker.fetch(new Request("https://w/momo/work/jobs/rec?key=" + OWNER), env, ctx)).json();
+const rec = await (await worker.fetch(new Request("https://w/momo/work/jobs/rec?key=" + NAJ), env, ctx)).json();
 ok(rec.applied[U3] && rec.applied[U3].d === "2026-10-01" && Object.keys(rec.applied).length === 1, "old string form is read as an object, junk dropped", rec.applied);
 ok(rec.hidden[U3] === "2026-10-02" && Array.isArray(rec.fit), "hidden and fit come back with the record", rec);
 for (const k of ["", "wrong"]) { const r = await worker.fetch(new Request("https://w/momo/work/jobs/api?key=" + k, { method: "POST", body: "{}" }), env, ctx); ok(r.status === 401 || r.status === 404, "refused with key '" + k + "'", r.status); }

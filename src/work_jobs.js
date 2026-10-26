@@ -4,6 +4,7 @@
 // insider key open the SAME record. THIS REPO IS PUBLIC: no person's details, CV text or letter wording live in code - they live in the KV record, entered through the page or seeded once.
 // Spec: Client_Engagements/RealEstateBroker/02_Execution/JOB_TILE_MOMO_SPEC.md (UPDATE 26 Oct 2026 late).
 import { JOBS_JS, JOBS_BODY } from "./work_jobs_page.js";
+import { whatApi, readWhat, cvDraftApi } from "./work_jobs_ai.js";
 export const JOBS_FEED_URL = "https://jobsearch-template.vercel.app/jobs.json";
 export const JOBS_CACHE_KEY = "jobs_feed_cache", JOBS_REC_KEY = "jobs_rec_najjuko";
 const FRESH_MS = 3 * 3600 * 1000, KV_TTL = 7 * 86400;
@@ -14,7 +15,7 @@ const httpUrl = (v, n) => (/^https?:\/\//i.test(String(v || "").trim()) ? S(Stri
 export function cleanFeed(raw) {
   const o = raw && typeof raw === "object" ? raw : {};
   const jobs = (Array.isArray(o.jobs) ? o.jobs : []).slice(0, 300).map((j) => ({
-    c: S(j && j.c, 120), t: S(j && j.t, 200), u: httpUrl(j && j.u), k: S(j && j.k, 40), d: S(j && j.d, 10), n: j && j.n ? 1 : 0, s: S(j && j.s, 20), l: S(j && j.l, 48),
+    c: S(j && j.c, 120), t: S(j && j.t, 200), u: httpUrl(j && j.u), k: S(j && j.k, 40), d: S(j && j.d, 10), n: j && j.n ? 1 : 0, s: S(j && j.s, 20), l: S(j && j.l, 48), x: S(String((j && j.x) || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(), 2000),
   })).filter((j) => j.t);
   return { updated: S(o.updated, 10), at: /^\d\d:\d\d$/.test(String(o.at || "")) ? String(o.at) : "", total: jobs.length, new: jobs.filter((j) => j.n).length, jobs };
 }
@@ -155,8 +156,24 @@ export async function jobsRoute(request, env, url, deps) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   if (!deps.isAny(env, url)) return new Response("not found", { status: 404 });
+  // v637 (Kendall 27 Oct: "keep it for her only"): the owner's key gets the daily feed and the page, and an EMPTY record. Her details, CV files, drafts and the Work-log lines are hers alone.
+  const her = !!deps.isNaj(env, url), J404 = () => new Response("not found", { status: 404 });
+  if (!her && p !== "/momo/work/jobs/feed" && p !== "/momo/work/jobs" && !(p === "/momo/work/jobs/rec" && request.method === "GET")) return J404();
+  if (!her && p === "/momo/work/jobs/rec") return J(Object.assign(emptyRec(), { me: false }));
+  if (her) {
+    const xd = Object.assign({}, deps, { names: deps.names || [] });
+    if (p === "/momo/work/jobs/whatido" && request.method === "GET") return J(await readWhat(env));
+    if (p === "/momo/work/jobs/whatido" && request.method === "POST") {
+      let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
+      const r = await whatApi(env, b, xd); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
+    }
+    if (p === "/momo/work/jobs/cvdraft" && request.method === "POST") {
+      let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
+      const r = await cvDraftApi(env, b, xd, await readRec(env)); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
+    }
+  }
   if (p === "/momo/work/jobs/feed" && request.method === "GET") return J(await jobsFeed(env, deps.fetch, url.searchParams.get("fresh") === "1"));
-  if (p === "/momo/work/jobs/rec" && request.method === "GET") return J(await readRec(env));
+  if (p === "/momo/work/jobs/rec" && request.method === "GET") return J(Object.assign(await readRec(env), { me: true }));
   if (p === "/momo/work/jobs/cv" && request.method === "GET") return J({ cv: await readCvMeta(env) });
   if (p === "/momo/work/jobs/cv" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }

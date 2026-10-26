@@ -609,7 +609,7 @@ export async function workRoute(request, env, url, deps) {
   const key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   if (p === "/momo/work/voicetest") { if (!deps.isNaj(env, url)) return J({ error: "Not allowed." }, 401); return voiceTestRoute(request, env, url, J, deps); }   // v626 - the private speaker-detection test; a wrong key is a 401 and nothing runs
-  if (p.startsWith("/momo/work/jobs")) return jobsRoute(request, env, url, deps);   // v630 - the Jobs tile: her key or the owner's (its own gate)
+  if (p.startsWith("/momo/work/jobs")) return jobsRoute(request, env, url, Object.assign({}, deps, { listEntries, names: PEOPLE.map((x) => x[0]).concat(WORKS), kpiName: (k) => { const q = KPIS.find((y) => y.id === k); return q ? q.name : "Focus area " + k; } }));   // v630 - the Jobs tile: her key or the owner's (its own gate)
   if (!deps.isNaj(env, url)) {   // the owner (or anyone else): the room exists, the log is hers alone
     if (p !== "/momo/work") return new Response("not found", { status: 404 });
     return new Response(deps.page(key, rk, '<a class=back href="/momo?key=' + encodeURIComponent(key) + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty><p>Najjuko\'s work log is private to her link.</p></div>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
