@@ -609,6 +609,7 @@ export async function workRoute(request, env, url, deps) {
   const key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   if (p === "/momo/work/voicetest") { if (!deps.isNaj(env, url)) return J({ error: "Not allowed." }, 401); return voiceTestRoute(request, env, url, J, deps); }   // v626 - the private speaker-detection test; a wrong key is a 401 and nothing runs
+  if (p.startsWith("/momo/work/jobs")) return jobsRoute(request, env, url, deps);   // v630 - the Jobs tile: her key or the owner's (its own gate)
   if (!deps.isNaj(env, url)) {   // the owner (or anyone else): the room exists, the log is hers alone
     if (p !== "/momo/work") return new Response("not found", { status: 404 });
     return new Response(deps.page(key, rk, '<a class=back href="/momo?key=' + encodeURIComponent(key) + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty><p>Najjuko\'s work log is private to her link.</p></div>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
@@ -807,6 +808,7 @@ const RAMP = ["#6FBFB4", "#52ADA1", "#3A968A", "#287C71", "#15665C"], TEAL = "#1
 const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.opener||history.length<=1){window.close()}if(history.length>1){history.back()}else{var k=new URLSearchParams(location.search).get("key")||"";location.href="/momo/work?key="+encodeURIComponent(k)}};';
 // v580 - FN's own marks, cut from the Company Template she sent (src/fn_logo.js): the navy monogram, the gold lattice band, FN navy/peach/gold
 import { planRoute } from "./work_plan.js";
+import { jobsRoute } from "./work_jobs.js";
 import { teamRoute } from "./work_team.js";
 import { voiceTestRoute } from "./work_voicetest.js";
 import { REC_JS, REC_BTN } from "./work_rec_page.js";
@@ -963,7 +965,7 @@ export function reportHtml(es, from, to, allTasks, pickedDays) {
 
 // v577 (Kendall 14 Oct: "at the very top of the hierarchy it's what did you do? And then something else that says report") - two tabs, that is the whole first screen
 const WORK_BODY = '<div class=tag>MOMO · WORK</div>'
-  + '<div class=seg id=wtabs style="margin:8px 0 14px;grid-template-columns:1fr 1fr 1fr"><button type=button id=tlog class=on>What did you do?</button><button type=button id=trep>Report</button><button type=button id=tplan>Plan</button></div>'
+  + '<div class=seg id=wtabs style="margin:8px 0 14px;grid-template-columns:1fr 1fr 1fr 1fr"><button type=button id=tlog class=on>What did you do?</button><button type=button id=trep>Report</button><button type=button id=tplan>Plan</button><button type=button id=tjobs>Jobs</button></div>'
   + '<div id=vrep style="display:none"><h1 style="font-size:1.35rem">Make a report</h1><div class=seg style="grid-template-columns:1fr 1fr 1fr 1fr;gap:6px"><button type=button class="on" data-rp=today style="padding:12px 4px;font-size:.85rem">Today</button><button type=button data-rp=week style="padding:12px 4px;font-size:.85rem">Week</button><button type=button data-rp=month style="padding:12px 4px;font-size:.85rem">Months</button><button type=button data-rp=pick style="padding:12px 4px;font-size:.85rem">Pick days</button></div>'
   + '<div id=rpick style="display:none"><div class=line>Tap the days to include</div><div class=grid id=rdays style="grid-template-columns:repeat(7,1fr);gap:6px"></div></div>'
   + '<div id=rmonths style="display:none"><div class=line>From</div><div class=grid id=rmfrom style="grid-template-columns:repeat(3,1fr);gap:6px"></div><div class=line style="margin-top:8px">To</div><div class=grid id=rmto style="grid-template-columns:repeat(3,1fr);gap:6px"></div><button type=button id=rall class=ghost style="width:100%;margin-top:10px">Everything since 2 Oct 2026</button></div>'
@@ -1269,6 +1271,7 @@ $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(
 // v615 - Months: one month, from one month to another, or everything since the engagement began; a span of months comes back as one summary and one page per month
 (function(){var mode="today",picked={},MF=null,MT=null,ALL=false;function show(rep){$("vlog").style.display=rep?"none":"block";$("vrep").style.display=rep?"block":"none";$("tlog").classList.toggle("on",!rep);$("trep").classList.toggle("on",rep);if(rep)rdraw()}
  $("tplan").onclick=function(){location.href="/momo/work/plan?key="+encodeURIComponent(KEY)};
+ $("tjobs").onclick=function(){location.href="/momo/work/jobs?key="+encodeURIComponent(KEY)};
  $("tlog").onclick=function(){show(false)};$("trep").onclick=function(){show(true)};
  function tdy(){return D?D.today:new Date(Date.now()+4*3600e3).toISOString().slice(0,10)}
  function start(){return (D&&D.start)||"2026-10-02"}

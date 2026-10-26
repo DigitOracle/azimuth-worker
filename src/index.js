@@ -2321,7 +2321,7 @@ async function appFetch(request, env, ctx) {
     }
     { const _ak = await askRoute(request, env, url, { keyTier }); if (_ak) return _ak; }   // v555 - Ask Najma (stub engine, owner only)
     // v564.1 - Momo Work's saves and filings are POSTs: answered here, before the POST guard further down refuses them
-    if (request.method === "POST" && MOMO_WORK_POSTS.has(url.pathname)) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
+    if (request.method === "POST" && MOMO_WORK_POSTS.has(url.pathname)) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
     if (url.pathname === "/desk_ref_set" && request.method === "GET") {   // v549 - owner key; ?n=<ref>&approved=0|1 - takes a reference photo out of use (or back), the photo itself is kept
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       const _sn = Number(url.searchParams.get("n")) || 0; let _sm = null; try { _sm = JSON.parse(await env.MEETINGS.get("desk_ref_" + _sn) || "null"); } catch (e) {}
@@ -3388,7 +3388,7 @@ async function appFetch(request, env, ctx) {
         if (!clientOk(env, url) || keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
         // v564 - Work is Najjuko's private FN Realty log (src/work_log.js); her MOMO tab opens straight on it (Play is Kendall's health log)
         if (url.pathname === "/momo" && isNajjuko(env, url) && !url.searchParams.has("door")) return Response.redirect(url.origin + "/momo/work?key=" + encodeURIComponent(url.searchParams.get("key") || ""), 302);
-        if (url.pathname.startsWith("/momo/work")) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
+        if (url.pathname.startsWith("/momo/work")) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
         return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
