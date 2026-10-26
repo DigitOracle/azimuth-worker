@@ -116,6 +116,39 @@ export async function jobsApi(env, b) {
   return { ok: true, rec };
 }
 
+// v636 - CVs uploaded once and kept in Momo's KV (not on the phone): jobs_cv_najjuko_<group> holds the file as base64, jobs_cvmeta_najjuko the list of names and sizes.
+// Checked by extension AND the file's first bytes, 6 MB cap; the files themselves never appear in the repo or the tests.
+export const CV_KEY = "jobs_cv_najjuko_", CV_META_KEY = "jobs_cvmeta_najjuko", CV_MAX = 6 * 1024 * 1024;
+const CV_TYPES = { pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
+export function cvKind(name, bytes) {   // the type, only when the extension and the first bytes agree
+  const ext = String(name || "").toLowerCase().split(".").pop(), b = bytes || [];
+  if (ext === "pdf" && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d) return "pdf";
+  if (ext === "docx" && b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04) return "docx";
+  if (ext === "doc" && b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0 && b[4] === 0xa1 && b[5] === 0xb1 && b[6] === 0x1a && b[7] === 0xe1) return "doc";
+  return "";
+}
+export async function readCvMeta(env) {
+  let m = null; try { m = JSON.parse(await env.MEETINGS.get(CV_META_KEY)); } catch (e) {}
+  const o = {}; GROUP_KEYS.forEach((g) => { const x = m && m[g]; if (x && typeof x === "object") o[g] = { name: S(x.name, 120), type: CV_TYPES[x.type] ? x.type : "pdf", size: Math.max(0, Math.min(CV_MAX, +x.size || 0)), at: S(x.at, 30) }; });
+  return o;
+}
+export async function cvApi(env, b) {
+  const g = b && b.group; if (!GROUP_KEYS.includes(g)) return { error: "Choose one of the five CV groups.", status: 400 };
+  const meta = await readCvMeta(env);
+  if (b.action === "delete") { await env.MEETINGS.delete(CV_KEY + g); delete meta[g]; await env.MEETINGS.put(CV_META_KEY, JSON.stringify(meta)); return { ok: true, cv: meta }; }
+  if (b.action !== "put") return { error: "Unknown action.", status: 400 };
+  const name = Array.from(S(b.name, 120)).filter((ch) => ch.charCodeAt(0) > 31 && !"\\/:*?\"<>|".includes(ch)).join("").trim(), b64 = String(b.data || "").replace(/\s+/g, "");
+  if (!name || !b64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { error: "That file did not arrive. Try again.", status: 400 };
+  if (Math.floor(b64.length * 3 / 4) > CV_MAX + 3) return { error: "That file is over 6 MB. Save a smaller copy.", status: 413 };
+  let bytes; try { const bin = atob(b64); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); } catch (e) { return { error: "That file did not arrive. Try again.", status: 400 }; }
+  if (bytes.length > CV_MAX) return { error: "That file is over 6 MB. Save a smaller copy.", status: 413 };
+  const kind = cvKind(name, bytes); if (!kind) return { error: "Upload a PDF or Word file (.pdf, .doc or .docx).", status: 400 };
+  await env.MEETINGS.put(CV_KEY + g, b64);
+  meta[g] = { name, type: kind, size: bytes.length, at: new Date().toISOString() };
+  await env.MEETINGS.put(CV_META_KEY, JSON.stringify(meta));
+  return { ok: true, cv: meta };
+}
+
 export const JOBS_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>';
 
 export async function jobsRoute(request, env, url, deps) {
@@ -124,6 +157,17 @@ export async function jobsRoute(request, env, url, deps) {
   if (!deps.isAny(env, url)) return new Response("not found", { status: 404 });
   if (p === "/momo/work/jobs/feed" && request.method === "GET") return J(await jobsFeed(env, deps.fetch, url.searchParams.get("fresh") === "1"));
   if (p === "/momo/work/jobs/rec" && request.method === "GET") return J(await readRec(env));
+  if (p === "/momo/work/jobs/cv" && request.method === "GET") return J({ cv: await readCvMeta(env) });
+  if (p === "/momo/work/jobs/cv" && request.method === "POST") {
+    let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
+    const r = await cvApi(env, b); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
+  }
+  if (/^\/momo\/work\/jobs\/cv\/[A-Z]+$/.test(p) && request.method === "GET") {
+    const g = p.split("/").pop(), meta = await readCvMeta(env); if (!GROUP_KEYS.includes(g) || !meta[g]) return new Response("not found", { status: 404 });
+    const b64 = await env.MEETINGS.get(CV_KEY + g); if (!b64) return new Response("not found", { status: 404 });
+    const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return new Response(u, { headers: { "Content-Type": CV_TYPES[meta[g].type], "Content-Disposition": 'attachment; filename="' + meta[g].name.replace(/"/g, "") + '"', "Cache-Control": "no-store" } });
+  }
   if (p === "/momo/work/jobs/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
     const r = await jobsApi(env, b); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
