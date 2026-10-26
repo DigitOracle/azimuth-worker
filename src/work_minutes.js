@@ -101,6 +101,30 @@ export async function buildMinutes(env, deps, m, notes, transcript) {
   return normMinutes(x);
 }
 
+// v629 - a LONG recording (over 24,000 characters) writes its minutes in two short requests instead of one very large one (Kendall, 26 Oct 2026: a 58-minute recording looked frozen):
+// part A = title, purpose, decisions and discussion (from the transcript); part B = actions and open questions (from the notes and the condensed transcript, so it is quick).
+const pick = (keys) => ({ type: "object", additionalProperties: false, required: keys, properties: Object.fromEntries(keys.map((k) => [k, MINUTES_SCHEMA.properties[k]])) });
+export const MINUTES_PART_A = pick(["title", "purpose", "decisions", "discussion"]);
+export const MINUTES_PART_B = pick(["actions", "open_questions"]);
+function notesBlock(notes) { return notes ? "\nHer notes (already written from this recording):\nSummary: " + notes.summary + "\nDecisions: " + (notes.decisions || []).join("; ") + "\nTasks: " + (notes.actions || []).map((a) => a.what + (a.owner ? " (" + a.owner + ")" : "") + (a.due ? " by " + a.due : "")).join("; ") + "\n" : ""; }
+function headBlock(m) { return "Date: " + m.date + "\nAttendees: " + attendeeLine(m.attendees) + "\nMeeting: " + (m.title || "untitled") + " (" + Math.round((m.secs || 0) / 60) + " minutes)\n"; }
+export async function buildMinutesA(env, deps, m, notes, transcript) {
+  const body = headBlock(m) + notesBlock(notes) + "\nTranscript:\n" + String(transcript || "").slice(0, 60000);
+  let x = null; try { x = await deps.claudeJSON(env, MINUTES_SYS + " Fill ONLY: title, purpose, decisions, discussion (the actions and open questions are written separately).", body, MINUTES_PART_A, deps.model, 3500); } catch (e) { x = null; }
+  if (!x || typeof x !== "object") return null;
+  const n = normMinutes({ ...x, actions: [], open_questions: [] });
+  return n ? { title: n.title, purpose: n.purpose, decisions: n.decisions, discussion: n.discussion } : null;
+}
+export async function buildMinutesB(env, deps, m, notes, condensed, partA) {
+  const heads = partA ? "\nThe minutes already cover these decisions: " + (partA.decisions || []).map((d) => d.headline).join("; ") + "\nand these discussion topics: " + (partA.discussion || []).map((d) => d.heading).join("; ") + "\n" : "";
+  const body = headBlock(m) + notesBlock(notes) + heads + "\nCondensed transcript:\n" + String(condensed || "").slice(0, 30000);
+  let x = null; try { x = await deps.claudeJSON(env, MINUTES_SYS + " Fill ONLY: actions and open_questions (the rest is written separately). Anything uncertain in the meeting is also listed in open_questions.", body, MINUTES_PART_B, deps.model, 2500); } catch (e) { x = null; }
+  if (!x || typeof x !== "object") return null;
+  const n = normMinutes({ ...x, decisions: [], discussion: [] });
+  return n ? { actions: n.actions, open_questions: n.open_questions } : null;
+}
+export function mergeMinutes(a, b) { return normMinutes({ ...(a || {}), ...(b || {}) }); }
+
 // ---------------------------------------------------------------- the page
 const escH = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]));
 const mark = (s) => escH(s).replace(/\[[^\]\n]{1,80}\]/g, (t) => "<mark>" + t + "</mark>");   // [to confirm] shows yellow so she can see what to check

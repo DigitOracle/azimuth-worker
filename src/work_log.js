@@ -403,7 +403,21 @@ const REC_NOTES_SCHEMA = { type: "object", additionalProperties: false, required
   summary: { type: "string" }, decisions: { type: "array", items: { type: "string" } }, topics: { type: "array", items: { type: "string" } }, people: { type: "array", items: { type: "string" } },
   actions: { type: "array", items: { type: "object", additionalProperties: false, required: ["what", "owner", "due"], properties: { what: { type: "string" }, owner: { type: "string" }, due: { type: "string" } } } } } };
 const REC_BLOCK_SCHEMA = { type: "object", additionalProperties: false, required: ["notes"], properties: { notes: { type: "string" } } };
+// v629 - the notes in two steps so a long meeting can be read one short request at a time: recCondense (a long transcript is condensed part by part, in parallel), then recNotesCore (the notes from the condensed text)
+async function recCondense(env, deps, transcript) {
+  const paras = [], blocks = []; let cur = "";
+  for (const q of transcript.split(/\n+/)) { let t = q; while (t.length > 12000) { paras.push(t.slice(0, 12000)); t = t.slice(12000); } if (t) paras.push(t); }
+  for (const p of paras) { if (cur && cur.length + p.length > 14000) { blocks.push(cur); cur = ""; } cur += (cur ? "\n\n" : "") + p; }
+  if (cur) blocks.push(cur);
+  const sysB = "Condense this part of a long meeting transcript into dense notes of at most 1500 characters: who said what that matters, decisions, tasks with owners and dates, figures, names, open questions. Never invent; the speech engine mishears names, so mark an uncertain one with a question mark.";
+  const notes = await Promise.all(blocks.map(async (b, i) => { try { const x = await deps.claudeJSON(env, sysB, "Part " + (i + 1) + " of " + blocks.length + ":\n" + b, REC_BLOCK_SCHEMA, deps.model, 900); return x && x.notes ? String(x.notes) : b.slice(0, 1500); } catch (e) { return b.slice(0, 1500); } }));
+  return notes.map((t, i) => "[Part " + (i + 1) + " of " + notes.length + "]\n" + t).join("\n\n");
+}
 async function recNotes(env, deps, m, transcript) {
+  const input = transcript.length > 24000 ? await recCondense(env, deps, transcript) : transcript;
+  return recNotesCore(env, deps, m, transcript, input);
+}
+async function recNotesCore(env, deps, m, transcript, input) {
   const names = PEOPLE.map((x) => x[0]).join(", ");
   const sys = "You write meeting notes for Najjuko, the Strategic Lead at FN Realty (a Dubai real-estate brokerage), from an AUTOMATIC transcript of a meeting, briefing or interview she attended or ran. "
     + "The speech engine mishears names and numbers: use a name only when the transcript clearly supports it, and prefer these team names when a spelling is close: " + names + ". "
@@ -411,16 +425,6 @@ async function recNotes(env, deps, m, transcript) {
     + "Other common mishearings: " + nameFixLine() + ". "
     + "Never invent anything: no people, figures, dates, decisions or tasks that the transcript does not contain. If something is unclear, leave it out. Plain, third-person, specific; no filler. "
     + "summary: five to eight sentences on what the meeting was and what it decided. topics: the main subjects, a few words each. decisions: each decision taken. actions: each task or follow-up with its owner (a name, or 'Najjuko' when it is hers, or '' if unstated) and the due date or time as said ('' if none). people: everyone who clearly took part.";
-  let input = transcript;
-  if (transcript.length > 24000) {   // a long meeting: condense each part first, in parallel, then write the notes from the condensed parts
-    const paras = [], blocks = []; let cur = "";
-    for (const q of transcript.split(/\n+/)) { let t = q; while (t.length > 12000) { paras.push(t.slice(0, 12000)); t = t.slice(12000); } if (t) paras.push(t); }
-    for (const p of paras) { if (cur && cur.length + p.length > 14000) { blocks.push(cur); cur = ""; } cur += (cur ? "\n\n" : "") + p; }
-    if (cur) blocks.push(cur);
-    const sysB = "Condense this part of a long meeting transcript into dense notes of at most 1500 characters: who said what that matters, decisions, tasks with owners and dates, figures, names, open questions. Never invent; the speech engine mishears names, so mark an uncertain one with a question mark.";
-    const notes = await Promise.all(blocks.map(async (b, i) => { try { const x = await deps.claudeJSON(env, sysB, "Part " + (i + 1) + " of " + blocks.length + ":\n" + b, REC_BLOCK_SCHEMA, deps.model, 900); return x && x.notes ? String(x.notes) : b.slice(0, 1500); } catch (e) { return b.slice(0, 1500); } }));
-    input = notes.map((t, i) => "[Part " + (i + 1) + " of " + notes.length + "]\n" + t).join("\n\n");
-  }
   let x = null;
   try { x = await deps.claudeJSON(env, sys, "Meeting: " + (m.title || "untitled") + ", " + m.date + ", " + (m.started_hm || "") + (m.ended_hm ? " to " + m.ended_hm : "") + " (" + Math.round((m.secs || 0) / 60) + " minutes).\n\nTranscript" + (transcript.length > 24000 ? " (condensed)" : "") + ":\n" + input, REC_NOTES_SCHEMA, deps.model, 2500); } catch (e) { x = null; }
   if (!x || typeof x !== "object") return null;
@@ -431,10 +435,61 @@ async function recNotes(env, deps, m, transcript) {
 // v627 - delete a recording completely: mark it deleted first (so it cannot come back in any list or route even if this is cut short), then every text part (recs_), every retry audio (reca_) and the record itself (recw_)
 async function recPurge(env, id, m) {
   await env.MEETINGS.put(RECW + id, JSON.stringify({ ...m, deleted: true }));
-  for (const pre of [RECS + id + "_", RECA + id + "_"]) {
+  for (const pre of [RECS + id + "_", RECA + id + "_", RECJ + id + "_"]) {
     let cursor; do { const r = await env.MEETINGS.list({ prefix: pre, cursor }); cursor = r.list_complete ? null : r.cursor; for (const k of r.keys) await env.MEETINGS.delete(k.name); } while (cursor);
   }
   await env.MEETINGS.delete(RECW + id);
+}
+// v629 - reading a recording is a JOB of short stages kept in KV (recj_<id>_<kind>): condense -> notes -> minutes (a long meeting: minutes_a -> minutes_b). Every call to action "read" does ONE stage and
+// answers with where it is, so a dropped connection, a locked phone or a closed page loses at most one stage; the next call carries on from the saved state (Kendall, 26 Oct 2026: a 58-minute recording looked frozen).
+const RECJ = "recj_", REC_LONG = 24000;
+async function recJobGet(env, id, kind) { try { return JSON.parse(await env.MEETINGS.get(RECJ + id + "_" + kind)); } catch (e) { return null; } }
+async function recJobPut(env, id, kind, j) { await env.MEETINGS.put(RECJ + id + "_" + kind, JSON.stringify(j), { expirationTtl: 172800 }); }
+const REC_STAGE_LABEL = { condense: "Reading the long recording in parts", notes: "Writing the notes", minutes: "Writing the minutes", minutes_a: "Writing the decisions and the discussion", minutes_b: "Writing the actions and the open questions" };
+function recStagesFor(kind, m, tlen, fresh) {
+  const s = [];
+  if (!(m.notes && m.notes.summary)) { if (tlen > REC_LONG) s.push("condense"); s.push("notes"); }
+  if (kind === "minutes" && (!m.minutes || fresh)) { if (tlen > REC_LONG) s.push("minutes_a", "minutes_b"); else s.push("minutes"); }
+  return s;
+}
+async function recRead(env, deps, J, id, b) {
+  const kind = b.kind === "minutes" ? "minutes" : "notes";
+  let m = await recGet(env, id);
+  const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true);
+  if (transcript.length < 40) return J({ state: "error", fatal: true, error: "There is no speech to read in that recording yet." });
+  let job = await recJobGet(env, id, kind);
+  if (!job || b.restart || (job.state === "ready" && b.fresh && kind === "minutes")) job = { kind, started: Date.now(), done: [], tries: 0, state: "reading", fresh: kind === "minutes" && !!b.fresh };
+  const plan = () => recStagesFor(kind, m, transcript.length, job.fresh).filter((s) => !job.done.includes(s));
+  const now = Date.now(), todo = plan(), of = job.done.length + todo.length;
+  if (!todo.length) { job.state = "ready"; job.busy_until = 0; await recJobPut(env, id, kind, job); return J({ state: "ready", n: of, of }); }
+  if (job.busy_until && job.busy_until > now && !b.takeover) return J({ state: "reading", waiting: true, stage: job.stage, label: REC_STAGE_LABEL[job.stage] || "Reading", n: job.done.length, of });   // another call is on this stage right now: wait, do not run it twice
+  const stage = todo[0];
+  job.stage = stage; job.state = "reading"; job.busy_until = now + 110000; job.updated = now; delete job.error; await recJobPut(env, id, kind, job);
+  let err = "";
+  try {
+    if (stage === "condense") { job.condensed = String(await recCondense(env, deps, transcript)).slice(0, 12000); }
+    else if (stage === "notes") {
+      const input = transcript.length > REC_LONG ? (job.condensed || await recCondense(env, deps, transcript)) : transcript;
+      const n = await recNotesCore(env, deps, m, transcript, input);
+      if (!n) err = "Momo could not write the notes just now."; else { m = (await recGet(env, id)) || m; m.notes = n; await recPut(env, m); }
+    }
+    else if (stage === "minutes") {
+      const mn = await buildMinutes(env, deps, m, m.notes, transcript);
+      if (!mn) err = "Momo could not write the minutes just now."; else { m = (await recGet(env, id)) || m; m.minutes = mn; await recPut(env, m); }
+    }
+    else if (stage === "minutes_a") { const a = await buildMinutesA(env, deps, m, m.notes, transcript); if (!a) err = "Momo could not write the decisions and discussion just now."; else job.partA = a; }
+    else if (stage === "minutes_b") {
+      const bb = await buildMinutesB(env, deps, m, m.notes, job.condensed || transcript.slice(0, 30000), job.partA);
+      if (!bb) err = "Momo could not write the actions and open questions just now."; else { const mn = mergeMinutes(job.partA, bb); m = (await recGet(env, id)) || m; m.minutes = mn; await recPut(env, m); delete job.partA; }
+    }
+  } catch (e) { err = "Momo hit a snag while reading."; }
+  job.busy_until = 0; job.updated = Date.now();
+  if (err) { job.state = "error"; job.tries = (job.tries || 0) + 1; job.error = err + " Your recording is safe. Tap Try again: it carries on from where it stopped."; await recJobPut(env, id, kind, job); return J({ state: "error", error: job.error, stage, label: REC_STAGE_LABEL[stage] || "Reading", n: job.done.length, of }); }
+  job.done.push(stage);
+  const left = plan();
+  job.state = left.length ? "reading" : "ready"; if (left.length) job.stage = left[0];
+  await recJobPut(env, id, kind, job);
+  return left.length ? J({ state: "reading", stage: left[0], label: REC_STAGE_LABEL[left[0]] || "Reading", n: job.done.length, of }) : J({ state: "ready", n: of, of });
 }
 async function recApi(request, env, J, deps) {
   let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
@@ -452,7 +507,12 @@ async function recApi(request, env, J, deps) {
     const date = okDate(b.date), compact = date.replace(/-/g, ""), out = [];
     for (const k of (await env.MEETINGS.list({ prefix: RECW + compact })).keys) { const m = await recGet(env, k.name.slice(RECW.length)); if (m) out.push(m); }
     const recs = [];
-    for (const m of out.sort((a, c) => (a.started < c.started ? 1 : -1))) { const segs = await recSegs(env, m.id); recs.push({ id: m.id, title: m.title, started_hm: m.started_hm, status: m.status, minutes: !!m.minutes, secs: m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0), parts: segs.length }); }
+    for (const m of out.sort((a, c) => (a.started < c.started ? 1 : -1))) {
+      const segs = await recSegs(env, m.id);
+      let job = null;   // v629 - an unfinished read, so the list can say Reading / Needs a retry and offer Continue
+      if (!(m.notes && m.notes.summary && m.minutes)) for (const kd of ["minutes", "notes"]) { const jj = await recJobGet(env, m.id, kd); if (jj && jj.state && jj.state !== "ready") { job = { kind: kd, state: jj.state, stage: jj.stage || "", n: (jj.done || []).length, updated: jj.updated || 0, error: jj.error || "" }; break; } }
+      recs.push({ id: m.id, title: m.title, started_hm: m.started_hm, status: m.status, minutes: !!m.minutes, notes: !!(m.notes && m.notes.summary), lost: m.lost || null, job, secs: m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0), parts: segs.length });
+    }
     return J({ ok: true, recs, date });
   }
   const id = recId(b.id), m = id ? await recGet(env, id) : null;
@@ -469,11 +529,14 @@ async function recApi(request, env, J, deps) {
     segs = await recSegs(env, id);
     const missing = segs.filter((g) => g.pending && !g.text).map((g) => g.n), text = recTranscriptText(segs, false);
     m.secs = Math.max(Math.round(Number(b.secs) || 0), segs.reduce((a, g) => a + (g.secs || 0), 0)); m.ended_hm = dubaiHM(); m.chars = text.length; m.parts = segs.length;
+    const segSecs = segs.reduce((a, g) => a + (g.secs || 0), 0), lostSecs = Math.max(0, Math.round(Number(b.secs) || 0) - segSecs);   // v629 - time the phone's microphone ran but gave no sound (parts that came back empty are never stored)
+    if (lostSecs >= 60 && segSecs > 0) m.lost = { secs: lostSecs, from: segSecs }; else delete m.lost;
     if (m.status === "recording") m.status = "transcribed";
     await recPut(env, m);
     if (text.length < 40) return J({ error: segs.length ? "I could not hear any speech in that recording. Check the microphone, or try again." : "No audio reached the server for that recording: the phone sent empty audio (a locked screen or another app can cut the microphone). Nothing can be read from it.", parts: segs.length }, 422);
-    return J({ ok: true, parts: segs.length, chars: text.length, secs: m.secs, missing });
+    return J({ ok: true, parts: segs.length, chars: text.length, secs: m.secs, missing, lost: m.lost || null });
   }
+  if (b.action === "read") return recRead(env, deps, J, id, b);   // v629 - one short stage of the notes / minutes job per call
   if (b.action === "entries") {
     const segs = await recSegs(env, id), transcript = recTranscriptText(segs, false);
     if (transcript.length < 40) return J({ error: (segs.length ? "There is no speech to read in that recording yet." : "This recording has no audio: no part ever reached the server because the phone sent empty audio. Nothing can be read from it. Delete it from the list and record again with the screen on.") }, 422);
@@ -747,7 +810,7 @@ import { planRoute } from "./work_plan.js";
 import { teamRoute } from "./work_team.js";
 import { voiceTestRoute } from "./work_voicetest.js";
 import { REC_JS, REC_BTN } from "./work_rec_page.js";
-import { loadRoster, cleanRoster, cleanAttendees, bumpUses, buildMinutes, renderMinutes, nameFixLine, attendeeLine, PEOPLE_KEY } from "./work_minutes.js";
+import { loadRoster, cleanRoster, cleanAttendees, bumpUses, buildMinutes, buildMinutesA, buildMinutesB, mergeMinutes, renderMinutes, nameFixLine, attendeeLine, PEOPLE_KEY } from "./work_minutes.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 // soft language for the work-kind split (Kendall 14 Oct: "very soft language when you're differentiating these things")
 const KIND_SOFT = { "Strategic Lead": "As Strategic Lead", "Broker": "As a broker", "Other departments": "Supporting other departments" };
