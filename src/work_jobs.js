@@ -89,7 +89,7 @@ export function cleanHidden(h) {
 export function cleanFit(f) { return (Array.isArray(f) ? f : []).slice(0, 40).map((x) => S(x, 30).trim().toLowerCase()).filter(Boolean); }
 export function cleanProfile(p) {
   p = p && typeof p === "object" ? p : {};
-  const o = {}; ["name", "headline", "location", "email", "phone", "cvPrefix"].forEach((k) => { o[k] = S(p[k], 120).trim(); }); o.bio = S(p.bio, 800).trim();
+  const o = {}; ["name", "headline", "location", "email", "phone", "cvPrefix"].forEach((k) => { o[k] = S(p[k], 120).trim(); }); o.bio = S(p.bio, 800).trim(); o.whatsapp = !!p.whatsapp;
   ["direct", "indirect"].forEach((k) => { o[k] = S(p[k], 8).replace(/[^\d\-+ ]/g, "").trim(); }); return o;
 }
 export function cleanDocs(d, gk) { d = d && typeof d === "object" ? d : {}; const o = {}; keysOf(gk).concat(RESERVED).forEach((k) => { const u = httpUrl(d[k]); if (u) o[k] = u; }); return o; }
