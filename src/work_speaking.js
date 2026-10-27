@@ -3,7 +3,7 @@
 // objectives and session outline. Kendall's key only (personOfKey = "kendall"); anyone else gets "not found". THIS REPO IS PUBLIC: titles, organisers,
 // venues and outlines live in the KV record (loaded once by a script kept outside git, then edited on the page); the code holds only the shape and the page.
 export const SPK_PREFIX = "speaking_rec_";
-export const TYPES = ["masterclass", "keynote", "talk", "panel", "webinar", "lecture", "award"];
+export const TYPES = ["masterclass", "keynote", "talk", "panel", "webinar", "lecture", "award", "judge"];
 export const FORMATS = ["in-person", "online", "hybrid"];
 export const SPK_STATUSES = ["proposed", "confirmed", "delivered", "cancelled"];
 export const MAX_ITEMS = 300;
@@ -83,13 +83,14 @@ export async function spkApi(env, person, b) {
 export const dubaiDay = (ms) => new Date((ms == null ? Date.now() : ms) + 4 * 3600e3).toISOString().slice(0, 10);
 export function splitItems(items, today) {
   const t = today || dubaiDay(), last = (i) => i.endDate || i.date;
-  const up = items.filter((i) => i.date && last(i) >= t && i.status !== "cancelled").sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  const tbc = (i) => !i.date && (i.status === "proposed" || i.status === "confirmed");   // date TBC: listed under Upcoming, after the dated ones
+  const up = items.filter((i) => (i.date && last(i) >= t && i.status !== "cancelled") || tbc(i)).sort((a, b) => (a.date ? 0 : 1) - (b.date ? 0 : 1) || (a.date + a.start).localeCompare(b.date + b.start));
   const past = items.filter((i) => !up.includes(i)).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   return { up, past };
 }
 const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MO = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export function whenLabel(i) {
-  if (!i.date) return "Date to confirm";
+  if (!i.date) return "Date TBC";
   const d = new Date(i.date + "T00:00:00Z"), a = WD[d.getUTCDay()] + " " + d.getUTCDate() + " " + MO[d.getUTCMonth()] + " " + d.getUTCFullYear();
   const e = i.endDate && i.endDate !== i.date ? " to " + Number(i.endDate.slice(8)) + " " + MO[Number(i.endDate.slice(5, 7)) - 1] : "";
   return a + e + (i.start ? ", " + i.start + (i.end ? "-" + i.end : "") + " GST" : "");

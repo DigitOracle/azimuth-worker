@@ -35,7 +35,7 @@ r = await (await post({ action: "import_items", items: [{ id: "fake-masterclass"
 ok(r.added === 1 && r.merged === 1 && r.rec.items[0].venue === "New Hall" && r.rec.items[0].organiser === "Example Academy" && r.rec.items[0].status === "delivered", "import merges by id and keeps the rest", r.rec.items[0]);
 // upcoming / past split
 const sp = splitItems([{ id: "a", date: "2026-10-31", start: "10:00", status: "confirmed" }, { id: "b", date: "2026-10-20", status: "delivered" }, { id: "c", date: "2026-12-03", endDate: "2026-12-04", status: "confirmed" }, { id: "d", date: "2026-11-01", status: "cancelled" }, { id: "e", date: "", status: "proposed" }], "2026-10-27");
-ok(sp.up.map((x) => x.id).join() === "a,c" && sp.past.map((x) => x.id).join() === "d,b,e", "upcoming soonest first, past newest first, cancelled and undated in past", [sp.up.map((x) => x.id), sp.past.map((x) => x.id)]);
+ok(sp.up.map((x) => x.id).join() === "a,c,e" && sp.past.map((x) => x.id).join() === "d,b", "upcoming soonest first then date TBC, past newest first, cancelled in past", [sp.up.map((x) => x.id), sp.past.map((x) => x.id)]);
 ok(splitItems([{ id: "m", date: "2026-12-03", endDate: "2026-12-04", status: "confirmed" }], "2026-12-04").up.length === 1, "a two-day event stays upcoming on its last day");
 ok(countdown({ date: "2026-10-31" }, "2026-10-27") === "in 4 days" && countdown({ date: "2026-10-28" }, "2026-10-27") === "tomorrow" && countdown({ date: "2026-10-27" }, "2026-10-27") === "today", "countdown");
 ok(whenLabel({ date: "2026-10-31", start: "10:00", end: "14:00" }) === "Sat 31 Oct 2026, 10:00-14:00 GST", "when label", whenLabel({ date: "2026-10-31", start: "10:00", end: "14:00" }));
@@ -50,5 +50,6 @@ ok(!/[\u{1F300}-\u{1FAFF}]/u.test(h), "no emoji in report");
 // page
 h = await (await get("/momo/work/speaking", KEN)).text(); ok(/<h1>Speaking<\/h1>/.test(h) && /id=sup/.test(h) && /id=spast/.test(h) && /id=sform/.test(h), "page has upcoming, past and form");
 let parses = true; try { new Function(SPK_JS); } catch (e) { parses = false; } ok(parses, "page script parses");
+ok(cleanItem({ title: "t", type: "judge" }).type === "judge" && whenLabel({ date: "" }) === "Date TBC" && splitItems([{ id: "x", date: "", status: "delivered" }], "2026-10-27").past.length === 1, "judge type, Date TBC label, undated delivered stays in past");
 ok(MAX_ITEMS === 300 && cleanItem({ title: "t" }).id, "limits and ids");
 console.log("v646 speaking: " + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
