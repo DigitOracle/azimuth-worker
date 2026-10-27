@@ -17,7 +17,7 @@ for (const p of ["/momo/work/speaking", "/momo/work/speaking/rec", "/momo/work/s
 for (const k of [NAJ, OTH, ""]) { const r = await post({ action: "save_item", item: { title: "x" } }, k); ok(r.status === 404 || r.status === 401, "POST refused for '" + k.slice(0, 12) + "'", r.status); }
 // front door
 const door = async (k) => (await (await get("/momo?door=1", k)).text());
-let h = await door(KEN); ok(/<b>Speaking<\/b>/.test(h) && /\/momo\/work\/speaking\?key=/.test(h) && cards(h) === 4, "Speaking card on Kendall's front door (4 cards)", cards(h));
+let h = await door(KEN); ok(/<b>Speaking<\/b>/.test(h) && /\/momo\/work\/speaking\?key=/.test(h) && cards(h) === 5, "Speaking card on Kendall's front door (5 cards with GGU, v650)", cards(h));
 ok(/grid-template-columns:1fr 1fr;/.test(h), "2-column grid for Kendall");
 ok(!/<b>Speaking<\/b>/.test(await door(NAJ)) && !/<b>Speaking<\/b>/.test(await door(OTH)), "no Speaking card for Najjuko or others");
 // save + sanitise

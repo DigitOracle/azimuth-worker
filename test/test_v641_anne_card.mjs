@@ -43,7 +43,7 @@ r = await post({ action: "bogus" }, K); ok(r.status === 400, "unknown action 400
 const many = Array.from({ length: 200 }, (_, i) => ({ id: "m" + i, property: "P" + i })); r = await (await post({ action: "import_leads", leads: many }, K)).json(); ok(r.rec.leads.length <= MAX_LEADS, "lead cap", r.rec.leads.length);
 // front door: record present -> 4 cards for Najjuko, still 3 for Kendall and the other key
 h = await door(K); ok(cards(h) === 4 && /Fake Client/.test(h) && /\/momo\/work\/anne\?key=/.test(h), "4 cards for Najjuko with the client's title", cards(h));
-ok(cards(await door(N)) === 4 && !/Fake Client/.test(await door(N)), "4 cards for Kendall (v646: + Speaking), no client card");
+ok(cards(await door(N)) === 5 && !/Fake Client/.test(await door(N)), "5 cards for Kendall (v646: + Speaking, v650: + GGU), no client card");
 ok(cards(await door(O)) === 3, "3 cards for another insider");
 // archive hides the card; unarchive brings it back
 await post({ action: "archive" }, K); h = await door(K); ok(cards(h) === 3 && !/Fake Client/.test(h), "archived: card gone from the front door", cards(h));
