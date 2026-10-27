@@ -1,0 +1,26 @@
+// v654 - client card: contacted-and-going-well leads shaded green; "Declined" keeps the lead but drops it from the list and register. FAKE data only.
+const worker = (await import("../src/index.js")).default;
+const { ANNE_JS, STATUSES, DECLINED, GOOD, bestRank } = await import("../src/work_anne.js");
+let pass = 0, fail = 0; const ok = (c, m, x) => { if (c) pass++; else { fail++; console.log("FAIL", m, x === undefined ? "" : JSON.stringify(x).slice(0, 300)); } };
+const store = new Map();
+const KV = { get: async (k) => (store.has(k) ? store.get(k) : null), put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); }, list: async () => ({ keys: [], list_complete: true }) };
+const K = "ins_najjuko_TESTKEY0123456789abcd", N = "ins_kendall_TESTKEY0123456789abcd";
+const env = { MEETINGS: KV, INSIDER_KEY: [K, N].join(",") }, ctx = { waitUntil() {}, passThroughOnException() {} };
+const get = (p, k) => worker.fetch(new Request("https://w" + p + (p.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(k)), env, ctx);
+const post = (b, k) => worker.fetch(new Request("https://w/momo/work/anne/api?key=" + encodeURIComponent(k), { method: "POST", body: JSON.stringify(b), headers: { "content-type": "application/json" } }), env, ctx);
+ok(STATUSES.includes(DECLINED) && GOOD.every((g) => STATUSES.includes(g)), "Declined and the good statuses are real statuses");
+ok(!(() => { try { new Function(ANNE_JS); } catch (e) { return true; } })(), "page script parses");
+ok(ANNE_JS.includes(JSON.stringify(STATUSES)) && !ANNE_JS.includes("JSON.stringify(STATUSES)"), "page statuses come from the server list");
+await post({ action: "import_leads", title: "Fake Client", leads: [{ id: "a", community: "C1", property: "House A" }, { id: "b", community: "C1", property: "House B" }, { id: "c", community: "C2", property: "House C" }] }, K);
+let r = await post({ action: "set_status", id: "b", status: DECLINED }, K); ok(r.status === 200, "set Declined", r.status);
+r = await post({ action: "set_status", id: "a", status: "Contacted" }, K); ok(r.status === 200, "set Contacted");
+const rec = (await (await get("/momo/work/anne/rec", K)).json()).rec;
+ok(rec.leads.length === 3 && rec.leads.find((l) => l.id === "b").status === DECLINED, "declined lead is kept in the record");
+ok(bestRank(rec.leads.find((l) => l.id === "b")) === 99, "declined ranks last");
+let h = await (await get("/momo/work/anne/report", K)).text();
+ok(h.includes("House A") && !h.includes("House B"), "register leaves declined out by default");
+h = await (await get("/momo/work/anne/report?status=" + encodeURIComponent(DECLINED), K)).text();
+ok(h.includes("House B") && !h.includes("House A"), "register of declined only when asked");
+r = await post({ action: "set_status", id: "b", status: "Contacted" }, K); ok(r.status === 200, "undo declined");
+r = await post({ action: "set_status", id: "b", status: DECLINED }, N); ok(r.status === 404, "Kendall's key still refused", r.status);
+console.log(`v654 anne status: ${pass} passed, ${fail} failed`); if (fail) process.exit(1);

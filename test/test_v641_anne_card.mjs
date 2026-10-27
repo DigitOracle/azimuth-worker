@@ -51,7 +51,7 @@ ok((await get("/momo/work/anne", K)).status === 200, "archived page still opens 
 await post({ action: "unarchive" }, K); ok(cards(await door(K)) === 4, "restored: card back");
 // the page code holds no lead data
 const pg = await (await get("/momo/work/anne", K)).text(); ok(!/Fake House/.test(pg), "page code holds no lead data");
-ok(STATUSES.length === 7, "7 statuses"); ok(cleanLead({ phone: "<script>+1 (2)" }).phone === "+1 (2)", "phone chars cleaned");
+ok(STATUSES.length === 8, "8 statuses (v654 Declined)"); ok(cleanLead({ phone: "<script>+1 (2)" }).phone === "+1 (2)", "phone chars cleaned");
 const fl = cleanLead({ id: "f1", property: "P", trakheesi: "123", verified: "exact advert", flags: ["a", "", "b"], phoneType: "DLD registered" });
 ok(fl.trakheesi === "123" && fl.verified === "exact advert" && fl.flags.length === 2 && fl.phoneType === "DLD registered", "trakheesi, verified, flags and DLD registered type kept", fl);
 ok(cleanLead({ verified: "made up", flags: "x" }).verified === "" && cleanLead({ flags: "x" }).flags.length === 0, "bad verified and non-array flags sanitised");
