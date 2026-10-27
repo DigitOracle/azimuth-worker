@@ -1,6 +1,7 @@
 import { askBoxHtml, askRoute, askFloatHtml } from "./ask_najma.js";   // v555, v556
 import { feedPdfStore, FEED_PDF_RX } from "./feed_pdf.js";   // v622 - the day's feed as a PDF for the graphic designer
-import { readAnne, ANNE_ICON } from "./work_anne.js";   // v641 - the temporary client card (v643: Najjuko key only)
+import { readAnne, ANNE_ICON } from "./work_anne.js";
+import { SPK_ICON } from "./work_speaking.js";   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
 import { workRoute, WORK_CSS } from "./work_log.js";   // v564 - Momo Work: Najjuko's FN Realty work log
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
@@ -3390,7 +3391,7 @@ async function appFetch(request, env, ctx) {
         // v564 - Work is Najjuko's private FN Realty log (src/work_log.js); her MOMO tab opens straight on it (Play is Kendall's health log)
         if (url.pathname === "/momo" && isNajjuko(env, url) && !url.searchParams.has("door")) return Response.redirect(url.origin + "/momo/work?key=" + encodeURIComponent(url.searchParams.get("key") || ""), 302);
         if (url.pathname.startsWith("/momo/work")) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
-        const _ar = personOfKey(env, url) === "najjuko" ? await readAnne(env) : null;   /* v643 - the client card is hers */ return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false, _ar && !_ar.archived ? (_ar.title || "Client") : ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+        const _ar = personOfKey(env, url) === "najjuko" ? await readAnne(env) : null;   /* v643 - the client card is hers */ return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false, _ar && !_ar.archived ? (_ar.title || "Client") : "", personOfKey(env, url) === "kendall"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
@@ -5015,19 +5016,20 @@ function momoPage(key, rk, body) {
     + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:1.7rem;margin:4px 0 14px;color:#0A4F4A}.back{color:#5F6B66;text-decoration:none;font-size:.85rem}.empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:48px 0;border:1px dashed #D8D1C4;border-radius:18px;color:#5F6B66}.empty p{margin:0}'
     + WORK_CSS + NAJ_NAV_CSS + '</style></head><body><div class=w>' + body + '</div>' + najNav(key, "fit", rk) + '</body></html>';
 }
-function momoHtml(key, rk, work, anne) {
+function momoHtml(key, rk, work, anne, speaking) {
   const k = encodeURIComponent(key), q = "?key=" + k + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const ic = (d) => '<svg viewBox="0 0 24 24" width=30 height=30 fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + d + "</svg>";
   const WORK = ic('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>');
   const PLAY = ic('<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>');
   const FUTURE = ic('<path d="M2.5 20.5l6.5-11 4 6.5 2.5-3.5 6 8z"/><path d="M9 9.5V3.5l4.5 1.8L9 7"/>');
+  const SPKIC = ic(SPK_ICON);
   const ANNEIC = ic(ANNE_ICON);   // v641 - the fourth card, only while a retained client card exists (Kendall's key)   // v632 - the third card: Ascend (the job search), a peak with a flag
   const body = work
     ? '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty>' + WORK + '<p>Nothing here yet.</p></div>'
-    : '<div class=tag>MOMO</div><h1>' + (anne ? "Where to?" : "Work, play or ascend?") + '</h1><div class=pick><a class=card href="/momo/work' + q + '">' + WORK + '<b>Work</b></a><a class=card href="/fit' + q + '">' + PLAY + '<b>Play</b></a><a class=card href="/momo/work/jobs' + q + '">' + FUTURE + '<b>Ascend</b></a>' + (anne ? '<a class=card href="/momo/work/anne' + q + '">' + ANNEIC + '<b>' + String(anne).replace(/[<>&"]/g, "") + '</b></a>' : "") + '</div>';
+    : '<div class=tag>MOMO</div><h1>' + (anne || speaking ? "Where to?" : "Work, play or ascend?") + '</h1><div class=pick><a class=card href="/momo/work' + q + '">' + WORK + '<b>Work</b></a><a class=card href="/fit' + q + '">' + PLAY + '<b>Play</b></a><a class=card href="/momo/work/jobs' + q + '">' + FUTURE + '<b>Ascend</b></a>' + (speaking ? '<a class=card href="/momo/work/speaking' + q + '">' + SPKIC + '<b>Speaking</b></a>' : "") + (anne ? '<a class=card href="/momo/work/anne' + q + '">' + ANNEIC + '<b>' + String(anne).replace(/[<>&"]/g, "") + '</b></a>' : "") + '</div>';
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#0C1413"><title>Momo</title>' + NAJ_FONTS
     + '<style>body{margin:0;background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans",sans-serif;padding:28px 16px 110px}.w{max-width:560px;margin:0 auto}.tag{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.14em;color:#C5A56A}'
-    + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:2rem;margin:6px 0 22px}' + (anne ? '.pick{display:grid;grid-template-columns:1fr 1fr;gap:10px}' : '.pick{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}') + '.card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;aspect-ratio:1;border:1px solid #C5A56A;border-radius:18px;background:#0E1918;color:#C5A56A;text-decoration:none;-webkit-tap-highlight-color:transparent}'
+    + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:2rem;margin:6px 0 22px}' + (anne || speaking ? '.pick{display:grid;grid-template-columns:1fr 1fr;gap:10px}' : '.pick{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}') + '.card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;aspect-ratio:1;border:1px solid #C5A56A;border-radius:18px;background:#0E1918;color:#C5A56A;text-decoration:none;-webkit-tap-highlight-color:transparent}'
     + '.card b{font-family:Fraunces,serif;font-weight:600;font-size:1.1rem;color:#E8E4D8}.card:active{background:#15231F}.back{color:#8FA39B;text-decoration:none;font-size:.85rem}.empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:48px 0;border:1px dashed #24352F;border-radius:18px;color:#8FA39B}.empty p{margin:0}'
     + NAJ_NAV_CSS + '</style></head><body><div class=w>' + body + '</div>' + najNav(key, "fit", rk) + '</body></html>';
 }
@@ -12900,7 +12902,7 @@ function residentsKeyOf(env, url) {
 // links sent to clients can stay alive. A client value under 12 characters, or equal to READ_KEY or RESIDENTS_KEY, is ignored.
 // v619 (Kendall 21 Oct 2026: "the plan never saved", "Record: nothing happens after Starting") - the Momo Work POST addresses. Only /api was let through before the POST guard, so the content plan
 // (/plan/api) and the recorder (/rec/api, /rec/chunk) answered 401 on the live worker. Each is still gated by isNajjuko inside workRoute / planRoute.
-const MOMO_WORK_POSTS = new Set(["/momo/work/api", "/momo/work/plan/api", "/momo/work/rec/api", "/momo/work/rec/chunk", "/momo/work/voicetest", "/momo/work/jobs/api", "/momo/work/jobs/cv", "/momo/work/jobs/cvdraft", "/momo/work/jobs/whatido", "/momo/work/anne/api"]);   // v626 - the private speaker-detection test (still gated by isNajjuko, and a wrong key is a 401)
+const MOMO_WORK_POSTS = new Set(["/momo/work/api", "/momo/work/plan/api", "/momo/work/rec/api", "/momo/work/rec/chunk", "/momo/work/voicetest", "/momo/work/jobs/api", "/momo/work/jobs/cv", "/momo/work/jobs/cvdraft", "/momo/work/jobs/whatido", "/momo/work/anne/api", "/momo/work/speaking/api"]);   // v626 - the private speaker-detection test (still gated by isNajjuko, and a wrong key is a 401)
 const CLIENT_PATHS = ["/adv_bldg", "/city_bldg", "/start", "/contracts_api", "/contracts", "/brief_blocks", "/brief_pdf", "/blocks", "/brief_api", "/brief", "/more", "/find", "/home", "/dev", "/compare", "/cards", "/avail", "/market", "/skyline", "/building", "/view", "/map", "/plans", "/versus", "/charts", "/clock", "/esri_token", "/iso", "/walk_status", "/tapcards/pages", "/amenity_cards", "/amenity_photo", "/developers_map", "/developers_map_api", "/developers_pdf", "/developer_profile", "/developer_profile_pdf", "/doc_client", "/doc_broker"];   // v280 - /tapcards/pages: which footprints have a building page (the tap card); v290 - /amenity_cards, /amenity_photo: the Brief's amenity cards and their pictures
 const CLIENT_DOSSIER_RX = /^\/sheet\/b_[a-z0-9]+_[a-z0-9]+\.pdf$/;   // v212 - the one file on the sheet rail a client key may open: a building dossier, never a client fact sheet
 const CLIENT_PREFIXES = ["/skyline/", "/building/", "/area/", "/report/", "/render/"];   // v187 - a building page is a client page
