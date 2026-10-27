@@ -515,6 +515,12 @@ async function recApi(request, env, J, deps) {
     }
     return J({ ok: true, recs, date });
   }
+  if (b.action === "archive") {   // v645 - every earlier recording (any day), newest first, so one meeting can be printed on its own later
+    const ids = []; let cursor;
+    do { const r = await env.MEETINGS.list({ prefix: RECW, cursor }); cursor = r.list_complete ? null : r.cursor; for (const k of r.keys) ids.push(k.name.slice(RECW.length)); } while (cursor);
+    const ms = (await Promise.all(ids.map((x) => recGet(env, x)))).filter(Boolean).sort((a, c) => (String(a.started || a.date) < String(c.started || c.date) ? 1 : -1)).slice(0, 120);
+    return J({ ok: true, recs: ms.map((x) => ({ id: x.id, title: x.title || "Recording", date: x.date, started_hm: x.started_hm || "", secs: x.secs || 0, minutes: !!x.minutes, notes: !!(x.notes && x.notes.summary) })) });
+  }
   const id = recId(b.id), m = id ? await recGet(env, id) : null;
   if (!m) return J({ error: "I cannot find that recording." }, 404);
   if (b.action === "delete") {
@@ -622,6 +628,7 @@ export async function workRoute(request, env, url, deps) {
   if (p === "/momo/work/rec/chunk" && request.method === "POST") return recChunk(request, env, url, J);        // v617 - one part of a recording
   if (p === "/momo/work/rec/api" && request.method === "POST") return recApi(request, env, J, deps);
   if (p === "/momo/work/rec/view") return recView(env, url);
+  if (p.startsWith("/momo/work/item/")) return itemRoute(env, url);   // v645 - one item (an entry, a task, a meeting) as its own FN Realty PDF, any day
   if (p === "/momo/work/rec/minutes") { const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null; if (!m || !m.minutes) return new Response("not found", { status: 404 }); return new Response(renderMinutes(m, m.minutes, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }); }   // v625
   if (p === "/momo/work/api") {
     if (request.method === "GET") {
@@ -781,6 +788,81 @@ export async function workRoute(request, env, url, deps) {
   return new Response("not found", { status: 404 });
 }
 
+// v645 (Kendall and Najjuko, 27 Oct 2026: "go to one particular task and get a PDF only for that, so you could hand that off to a particular person") -
+// one entry, one task or one meeting as its own FN Realty page, at any time after it was logged. Same frame and footer (clause 12.2) as the reports.
+const ITEM_CSS = '<style>.kv{width:100%;border-collapse:collapse;margin:6px 0 12px;font-size:9.8pt}.kv th{text-align:left;width:150px;color:#626B7C;font-weight:600;padding:6px 8px;border-bottom:1px solid #EFE9DE;vertical-align:top}.kv td{padding:6px 8px;border-bottom:1px solid #EFE9DE;vertical-align:top}'
+  + '.at{width:100%;border-collapse:collapse;font-size:9.6pt;margin:4px 0 12px}.at th{text-align:left;font-size:8pt;letter-spacing:.06em;text-transform:uppercase;color:#626B7C;border-bottom:1px solid ' + FN_GOLD + ';padding:5px 6px}.at td{padding:6px;border-bottom:1px solid #EFE9DE;vertical-align:top}'
+  + '.lead{font-size:11pt;margin:0 0 10px}.it h2{margin-top:16px}.it ul{margin:0 0 8px 18px;padding:0}.it li{margin:2px 0}.txt{white-space:pre-wrap;font-size:9.6pt;color:#3B4441;background:#FBF8F2;border-left:3px solid ' + FN_GOLD + ';padding:8px 10px;margin:4px 0 10px}</style>';
+const kpiNames = (ks) => (ks || []).map((k) => { const x = KPIS.find((y) => y.id === k); return x ? x.name : "Focus area " + k; });
+const scopeNames = (ss) => (ss || []).map((id) => { const x = SCOPE.find((y) => y.id === id); return x ? x.area + ": " + x.name : id; });
+const kvRow = (k, v) => v ? "<tr><th>" + k + "</th><td>" + v + "</td></tr>" : "";
+const ulOf = (a) => a && a.length ? "<ul>" + a.map((x) => "<li>" + x + "</li>").join("") + "</ul>" : "";
+function itemDoc(kindWord, span, body, docTitle, autoPrint) {
+  const h = reportDoc(kindWord, span, '<div class=it>' + ITEM_CSS + body + '</div>', docTitle);
+  return autoPrint ? h.replace("</body>", "<script>addEventListener('load',function(){setTimeout(function(){print()},400)})</script></body>") : h;
+}
+export function itemEntryHtml(e, autoPrint) {
+  const owners = [...new Set((e.progress || []).flatMap((t) => t.owners || []))];
+  const who = (e.people || []).concat((e.external || []).map((o) => o.name));
+  const body = "<h2>" + esc(e.title) + "</h2>" + (e.summary ? "<p class=lead>" + esc(e.summary) + "</p>" : "")
+    + "<table class=kv>" + kvRow("Date", esc(dayName(e.date)) + " " + esc(fmtD(e.date)) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ", " + esc(e.time_of_day.toLowerCase()) : ""))
+    + kvRow("Type", esc(e.type)) + kvRow("People", esc(who.join(", ")) || (e.alone ? "Najjuko alone" : ""))
+    + kvRow("Assigned to", esc(owners.join(", "))) + kvRow("Focus areas", esc(kpiNames(e.kpis).join(", "))) + kvRow("Scope", esc(scopeNames(e.scope).join("; ")))
+    + kvRow("Role", e.in_scope === false ? "Supporting another department" + (e.out_role ? " (" + esc(e.out_role) + ")" : "") : "Within her role")
+    + kvRow("Status", (e.progress || []).map((t) => esc(t.work) + ": " + esc(t.status) + ", " + (t.percent || 0) + "%").join("<br>"))
+    + kvRow("Produced", esc((e.deliverables || []).join("; "))) + (e.link ? kvRow("File", '<a href="' + esc(e.link) + '">' + esc(e.link) + "</a>") : "") + "</table>"
+    + ((e.next || []).length ? "<h2>Next steps</h2>" + ulOf(e.next.map(esc)) : "")
+    + (e.text ? "<h2>Her notes</h2><div class=txt>" + esc(e.text) + "</div>" : "");
+  return itemDoc("Activity", esc(dayName(e.date)) + " " + esc(fmtD(e.date)), body, "FN Activity " + fmtD(e.date) + " " + String(e.title || "").slice(0, 60), autoPrint);
+}
+export function itemTaskHtml(t, es, autoPrint) {
+  const mine = es.filter((e) => (e.works || []).includes(t.name)).sort((a, b) => (a.date + (a.created || "") < b.date + (b.created || "") ? 1 : -1));
+  const nextSteps = mine.length ? (mine[0].next || []) : [];
+  const body = "<h2>" + esc(t.name) + "</h2>"
+    + "<table class=kv>" + kvRow("Status", esc(t.status) + ", " + (t.percent || 0) + "% complete" + (t.set_by_hand ? " (set by hand)" : ""))
+    + kvRow("Assigned to", esc((t.owners || []).join(", "))) + kvRow("Also involved", esc((t.touched || []).filter((n) => !(t.owners || []).includes(n)).join(", ")))
+    + kvRow("Started", esc(fmtD(t.first))) + kvRow("Last worked", esc(fmtD(t.last))) + kvRow("Time so far", t.days + " day" + (t.days === 1 ? "" : "s") + " worked, about " + t.hours + " h")
+    + kvRow("Focus areas", esc(kpiNames(t.kpis).join(", "))) + "</table>"
+    + (nextSteps.length ? "<h2>Next steps</h2>" + ulOf(nextSteps.map(esc)) : "")
+    + (mine.length ? "<h2>Work logged on this task</h2><table class=at><tr><th>Date</th><th>Activity</th><th>Progress then</th></tr>" + mine.map((e) => { const pr = (e.progress || []).find((x) => x.work === t.name);
+      return "<tr><td>" + esc(fmtD(e.date)) + "</td><td><b>" + esc(e.title) + "</b>" + (e.summary ? "<br>" + esc(e.summary) : "") + "</td><td>" + (pr ? esc(pr.status) + ", " + (pr.percent || 0) + "%" : "") + "</td></tr>"; }).join("") + "</table>" : "");
+  return itemDoc("Task", "Status at " + esc(fmtD(dubaiToday())), body, "FN Task " + String(t.name).slice(0, 70), autoPrint);
+}
+export function itemMeetingHtml(m, autoPrint) {
+  const mn = m.minutes, n = m.notes;
+  let body = "<h2>" + esc((mn && mn.title) || m.title || "Meeting") + "</h2><table class=kv>" + kvRow("Date", esc(longDate(m.date)) + (m.started_hm ? ", " + esc(m.started_hm) + (m.ended_hm ? " to " + esc(m.ended_hm) : "") : ""))
+    + kvRow("Attendees", esc(attendeeLine(m.attendees))) + kvRow("Length", Math.round((m.secs || 0) / 60) + " minutes") + (mn ? kvRow("Purpose", esc(mn.purpose)) : "") + kvRow("Minutes by", "Najjuko Ganyana") + "</table>";
+  if (mn) {
+    body += "<h2>Key decisions</h2>" + (mn.decisions.length ? ulOf(mn.decisions.map((d) => "<b>" + esc(d.headline) + ".</b> " + esc(d.detail))) : "<p>None recorded.</p>")
+      + "<h2>Action items</h2>" + (mn.actions.length ? "<table class=at><tr><th>#</th><th>Action</th><th>Owner</th><th>Due</th></tr>" + mn.actions.map((a, i) => "<tr><td>" + (i + 1) + "</td><td>" + esc(a.action) + "</td><td>" + esc(a.owner || "To confirm") + "</td><td>" + esc(dueText(a)) + "</td></tr>").join("") + "</table>" : "<p>None recorded.</p>")
+      + "<h2>Discussion summary</h2>" + mn.discussion.map((d) => "<p><b>" + esc(d.heading) + "</b></p>" + ulOf(d.bullets.map(esc))).join("")
+      + (mn.open_questions.length ? "<h2>Open questions</h2>" + ulOf(mn.open_questions.map(esc)) : "");
+  } else if (n && n.summary) {
+    body += "<h2>Summary</h2><p>" + esc(n.summary) + "</p>" + ((n.decisions || []).length ? "<h2>Decisions</h2>" + ulOf(n.decisions.map(esc)) : "")
+      + ((n.actions || []).length ? "<h2>Action items</h2><table class=at><tr><th>#</th><th>Action</th><th>Owner</th><th>Due</th></tr>" + n.actions.map((a, i) => "<tr><td>" + (i + 1) + "</td><td>" + esc(a.what) + "</td><td>" + esc(a.owner || "To confirm") + "</td><td>" + esc(a.due || "To confirm") + "</td></tr>").join("") + "</table>" : "");
+  } else body += "<p>This recording has not been read yet. Open it in Momo and tap Make entry first.</p>";
+  return itemDoc("Meeting", esc(longDate(m.date)), body, "FN Meeting " + fmtD(m.date) + " " + String((mn && mn.title) || m.title || "").slice(0, 60), autoPrint);
+}
+async function itemRoute(env, url) {
+  const p = url.pathname, id = String(url.searchParams.get("id") || ""), auto = url.searchParams.get("print") === "1";
+  const H = (h) => new Response(h, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }), NF = () => new Response("not found", { status: 404 });
+  if (p === "/momo/work/item/entry") {
+    const mm = /^(\d{4}-\d{2}-\d{2})_([a-z0-9]{1,40})$/.exec(id); if (!mm) return NF();
+    let e = null; try { e = JSON.parse(await env.MEETINGS.get(PFX + mm[1] + "_" + mm[2])); } catch (x) {}
+    return e ? H(itemEntryHtml(e, auto)) : NF();
+  }
+  if (p === "/momo/work/item/task") {
+    if (!id || id.length > 120) return NF();
+    const es = await listEntries(env), t = applyOverrides(tasksOf(es), await taskOverrides(env)).find((x) => x.name === id);
+    return t ? H(itemTaskHtml(t, es, auto)) : NF();
+  }
+  if (p === "/momo/work/item/meeting") {
+    const rid = recId(id), m = rid ? await recGet(env, rid) : null;
+    return m ? H(itemMeetingHtml(m, auto)) : NF();
+  }
+  return NF();
+}
+
 export function debriefHtml(e) {
   const FOOT = "<b>CONFIDENTIAL · FN Realty internal use only.</b> Not to be copied, distributed, modified, reissued or shared outside FN Realty without prior written approval from FN Realty management. © 2026 FN Realty. All rights reserved.";
   const row = (k, v) => v ? '<tr><td>' + k + '</td><td>' + v + '</td></tr>' : '';
@@ -818,7 +900,7 @@ import { anneRoute, readAnne } from "./work_anne.js";
 import { teamRoute } from "./work_team.js";
 import { voiceTestRoute } from "./work_voicetest.js";
 import { REC_JS, REC_BTN } from "./work_rec_page.js";
-import { loadRoster, cleanRoster, cleanAttendees, bumpUses, buildMinutes, buildMinutesA, buildMinutesB, mergeMinutes, renderMinutes, nameFixLine, attendeeLine, PEOPLE_KEY } from "./work_minutes.js";
+import { loadRoster, cleanRoster, cleanAttendees, bumpUses, buildMinutes, buildMinutesA, buildMinutesB, mergeMinutes, renderMinutes, nameFixLine, attendeeLine, PEOPLE_KEY, longDate, dueText } from "./work_minutes.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 // soft language for the work-kind split (Kendall 14 Oct: "very soft language when you're differentiating these things")
 const KIND_SOFT = { "Strategic Lead": "As Strategic Lead", "Broker": "As a broker", "Other departments": "Supporting other departments" };
@@ -1082,7 +1164,9 @@ export const WORK_ICONS = {
   Morning: WI('<path d="M12 3v2M4.2 6.2l1.4 1.4M3 13h2M19 13h2M18.4 6.2L17 7.6M6 17a6 6 0 0 1 12 0M3 21h18"/>'), Midday: WI('<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'),
   Afternoon: WI('<circle cx="12" cy="12" r="4"/><path d="M12 2v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 7l2.1-2.1M4 20h16"/>'), Evening: WI('<path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/>'), Unspecified: WI('<circle cx="12" cy="12" r="8"/><path d="M8 12h8"/>'),
 };
-const WORK_JS = String.raw`var ICON=` + JSON.stringify(WORK_ICONS) + String.raw`;(function(){
+// v645 - the small document drawing beside every 'FN Realty PDF' link (an entry, a task, a meeting)
+export const SVG_FNPDF = "<svg viewBox=\"0 0 24 24\" width=\"13\" height=\"13\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" style=\"vertical-align:-2px;margin-right:4px\"><path d=\"M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z\"/><path d=\"M14 3v5h5M9 13h6M9 17h4\"/></svg>";
+const WORK_JS = String.raw`var ICON=` + JSON.stringify(WORK_ICONS) + `;var FNPDF=` + JSON.stringify(SVG_FNPDF) + String.raw`;(function(){
 var KEY=(document.currentScript.src.split("key=")[1]||"").split("&")[0];KEY=decodeURIComponent(KEY);
 var $=function(i){return document.getElementById(i)};var D=null,WEEK=null,PREV=null,EDIT=null;
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
@@ -1118,12 +1202,12 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
   +(e.deliverables.length?'<div class=m style="margin-top:6px">Produced: '+esc(e.deliverables.join("; "))+'</div>':'')+(e.link?'<div class=m><a style="color:#C5A56A" href="'+esc(e.link)+'" target=_blank rel=noopener>Open the file</a></div>':'')
   +((e.external||[]).length?e.external.slice(0,2).map(function(o){return '<a class=mic style="text-decoration:none;margin:8px 6px 2px 0" href="/momo/work/vet?key='+encodeURIComponent(KEY)+'&name='+encodeURIComponent(o.name)+'&hint='+encodeURIComponent(o.kind||"")+'">Vet '+esc(o.name.split(" ").slice(0,2).join(" "))+' &#8594;</a>'}).join("")+'<br>':'')
   +(e.prep&&e.prep.needed?'<a class=mic style="text-decoration:none;margin:8px 0 2px" href="/momo/work/prep?key='+encodeURIComponent(KEY)+'&dev='+encodeURIComponent(e.prep.developer||"")+'&project='+encodeURIComponent(e.prep.project||"")+'&area='+encodeURIComponent(e.prep.area||"")+'&event='+encodeURIComponent(e.prep.event||e.title)+'">Prepare me &#8594;</a><br>':'')
-  +'<a class=del style="text-decoration:none" href="/momo/work/debrief?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(e.id)+'&date='+e.date+'" target=_blank>Debrief</a> &middot; <button class=del data-e='+i+'>Edit</button> &middot; <button class=del data-d='+i+'>Delete</button></div>'}).join(""):'<p style="color:#8FA39B">Nothing logged this week yet.</p>';
+  +'<a class="del fnpdf" style="text-decoration:none" href="/momo/work/item/entry?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(e.date+'_'+e.id)+'" target=_blank>'+FNPDF+'FN Realty PDF</a> &middot; '+'<a class=del style="text-decoration:none" href="/momo/work/debrief?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(e.id)+'&date='+e.date+'" target=_blank>Debrief</a> &middot; <button class=del data-e='+i+'>Edit</button> &middot; <button class=del data-d='+i+'>Delete</button></div>'}).join(""):'<p style="color:#8FA39B">Nothing logged this week yet.</p>';
  $("wlist").querySelectorAll("[data-d]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-d")];if(!confirm("Delete \""+e.title+"\"?"))return;api({action:"delete",id:e.id,date:e.date}).then(function(){load(WEEK)})}});
  $("wlist").querySelectorAll("[data-e]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-e")];EDIT=e;$("wt").value=e.text;$("wd").value=e.date;if($("wl"))$("wl").value=e.link||"";preview(e);scrollTo(0,0)}});
  $("wtasks").innerHTML=(D.tasks||[]).length?D.tasks.map(function(t,ti){return '<div class="tk'+(t.status==="Done"?' done':'')+'" data-tk='+ti+' style="cursor:pointer"><b>'+esc(t.name)+'</b> <span style="color:#C5A56A;float:right">'+t.percent+'% &#9998;</span><div class=pb><i style="width:'+t.percent+'%"></i></div>'
   +'<div class=m>'+esc(t.status)+' · started '+esc(fd(t.first))+' · '+t.days+' day'+(t.days===1?'':'s')+' worked · about '+t.hours+' h'+(t.last!==t.first?' · last '+esc(fd(t.last)):'')+'</div>'
-  +(t.owners.length?'<div class=m>With: '+esc(t.owners.join(", "))+'</div>':'')+'</div>'}).join(""):'<p style="color:#8FA39B">Tasks appear here as you log work on them.</p>';
+  +(t.owners.length?'<div class=m>With: '+esc(t.owners.join(", "))+'</div>':'')+'<div style="margin-top:6px"><a class=fnpdf style="color:#8A6F3E;font-size:.82rem;text-decoration:none" target=_blank onclick="event.stopPropagation()" href="/momo/work/item/task?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(t.name)+'">'+FNPDF+'FN Realty PDF</a></div></div>'}).join(""):'<p style="color:#8FA39B">Tasks appear here as you log work on them.</p>';
  $("wtasks").querySelectorAll("[data-tk]").forEach(function(r){r.onclick=function(){taskSheet(D.tasks[+r.getAttribute("data-tk")])}});
  $("wdept").innerHTML=(D.depts||[]).map(function(d){return '<details class=dp><summary><span><b>'+esc(d.dept)+'</b><br><small>'+(d.people.length?esc(d.people.slice(0,4).join(", "))+(d.people.length>4?" +"+(d.people.length-4):""):"No open tasks")+'</small></span><span class=n>'+d.open+'</span></summary>'
   +d.tasks.map(function(t){return '<div class=dpt><b>'+esc(t.name)+'</b> <span style="color:#C5A56A;float:right">'+t.percent+'%</span><div class=m>'+esc(t.status)+' · with '+esc(t.who.join(", "))+'</div><div class="m'+(t.quiet>=5?' chase':'')+'">'+(t.quiet<=0?'Moved today':'Last moved '+esc(fd(t.last))+' · '+t.quiet+' day'+(t.quiet===1?'':'s')+' quiet'+(t.quiet>=5?' · chase':''))+'</div></div>'}).join("")+'</details>'}).join("");
