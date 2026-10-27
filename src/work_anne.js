@@ -5,7 +5,11 @@
 export const ANNE_KEY = "annemarie_rec";
 export const STATUSES = ["New", "Contacted", "Available", "Viewing booked", "Viewed", "Rejected", "Expired"];
 export const DOGS = ["unknown", "yes", "no"];
-export const PHONE_TYPES = ["", "agent", "agency", "DLD business", "DLD registered"];
+export const PHONE_TYPES = ["", "agent", "agency", "DLD business", "DLD registered", "portal line"];
+// v644 - the three questions she asks every agent, each yes / no / unknown; and the WhatsApp wording (kept in the record, never in the repo).
+export const ANSWERS = ["unknown", "yes", "no"];
+export const QUESTIONS = [["available", "Available?"], ["furnishedOk", "Furnished as advertised?"], ["dogsOk", "Dogs allowed?"]];
+export const DEFAULT_WA = "Hi {agent_first}, this is {broker_name} from {broker_agency}. I have a client interested in your listing {ref} ({property}, AED {rent}/yr). Is it still available, is it furnished as advertised, and are dogs allowed? Could we view it this week? Thank you.";
 export const VERIFIED = ["", "exact advert", "area search / agent profile", "historical"];
 const S = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").slice(0, n);
 const url = (v) => { const u = S(v, 500).trim(); return /^https?:\/\/[^\s]+$/i.test(u) ? u : ""; };
@@ -30,6 +34,10 @@ export function cleanLead(x, prev) {
   if (has("verified")) o.verified = VERIFIED.includes(g.verified) ? g.verified : ""; else if (o.verified === undefined) o.verified = "";
   if (has("flags")) o.flags = (Array.isArray(g.flags) ? g.flags : []).slice(0, 8).map((f) => S(f, 80).trim()).filter(Boolean); else if (!Array.isArray(o.flags)) o.flags = [];
   if (has("notes")) o.notes = S(g.notes, 1500); else if (o.notes === undefined) o.notes = "";
+  QUESTIONS.forEach(([k]) => { if (has(k)) o[k] = ANSWERS.includes(g[k]) ? g[k] : "unknown"; else if (!ANSWERS.includes(o[k])) o[k] = "unknown"; });
+  if (has("dog") && !has("dogsOk")) o.dogsOk = o.dog;   // v644 - the older dog field and the new question are one answer
+  else if (!has("dogsOk") && o.dogsOk === "unknown" && o.dog && o.dog !== "unknown") o.dogsOk = o.dog;
+  if (has("dogsOk")) o.dog = o.dogsOk;
   o.id = slug(g.id || o.id) || ("l" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
   return o;
 }
@@ -41,13 +49,33 @@ export function cleanBrief(b) {
     communities: (Array.isArray(x.communities) ? x.communities : []).slice(0, 8).map((c) => S(c, 50).trim()).filter(Boolean) };
 }
 
-export const emptyAnne = () => ({ v: 1, updatedAt: "", title: "", archived: false, brief: cleanBrief({}), leads: [], log: [] });
+export function cleanTpl(t) { const x = t && typeof t === "object" ? t : {}; return { whatsapp: S(x.whatsapp, 600).trim() || DEFAULT_WA, brokerName: S(x.brokerName, 60).trim(), brokerAgency: S(x.brokerAgency, 80).trim() }; }
+export const emptyAnne = () => ({ v: 1, updatedAt: "", title: "", archived: false, brief: cleanBrief({}), tpl: cleanTpl({}), leads: [], log: [] });
+
+// v644 - shared by the server (tests, register) and the page: their source is written into the page script, so both always agree. Self-contained on purpose.
+export function waDigits(p, type) {   // a wa.me number, or "" when WhatsApp cannot reach it (portal call lines, UAE landlines)
+  if (type === "portal line") return "";
+  var d = String(p || "").replace(/[^0-9]/g, ""); if (d.indexOf("00") === 0) d = d.slice(2);
+  if (/^05\d{8}$/.test(d)) d = "971" + d.slice(1); else if (/^5\d{8}$/.test(d)) d = "971" + d;
+  if (/^971/.test(d)) return /^9715\d{8}$/.test(d) ? d : "";
+  return d.length >= 8 && d.length <= 15 && d[0] !== "0" ? d : "";
+}
+export function fillWa(tpl, l) {
+  var t = (tpl && tpl.whatsapp) || "", n = l.rent ? Number(l.rent).toLocaleString("en") : "", a = String(l.agent || "").trim();
+  var v = { agent_first: a.split(/\s+/)[0] || "there", agent: a || "there", ref: l.ref || l.portalRef || l.listingUrl || "", property: l.property || l.community || "", rent: n, community: l.community || "", broker_name: (tpl && tpl.brokerName) || "", broker_agency: (tpl && tpl.brokerAgency) || "" };
+  return t.replace(/\{(agent_first|agent|ref|property|rent|community|broker_name|broker_agency)\}/g, function (m, k) { return v[k]; }).replace(/[ \t]{2,}/g, " ").replace(/ ([,.?])/g, "$1").trim();
+}
+export function bestRank(l) {   // lower comes first: available, then dogs, then furnishing; expired and rejected last
+  if (l.status === "Expired" || l.status === "Rejected") return 99;
+  var y = function (v) { return v === "yes" ? 0 : v === "unknown" ? 1 : 2; };
+  return y(l.available) * 9 + y(l.dogsOk) * 3 + y(l.furnishedOk);
+}
 
 export function cleanAnne(r) {
   const e = emptyAnne(), x = r && typeof r === "object" ? r : {};
   const seen = new Set(), leads = [];
   (Array.isArray(x.leads) ? x.leads : []).slice(0, MAX_LEADS).forEach((l) => { const c = cleanLead(l); c.updatedAt = S(l && l.updatedAt, 30); if (!seen.has(c.id)) { seen.add(c.id); leads.push(c); } });
-  return Object.assign(e, { updatedAt: S(x.updatedAt, 30), title: S(x.title, 40).trim(), archived: !!x.archived, brief: cleanBrief(x.brief), leads,
+  return Object.assign(e, { updatedAt: S(x.updatedAt, 30), title: S(x.title, 40).trim(), archived: !!x.archived, brief: cleanBrief(x.brief), tpl: cleanTpl(x.tpl), leads,
     log: (Array.isArray(x.log) ? x.log : []).slice(0, 40).map((l) => ({ at: S(l && l.at, 30), text: S(l && l.text, 200) })).filter((l) => l.text) });
 }
 
@@ -98,6 +126,18 @@ export async function anneApi(env, b) {
       if (b.title !== undefined) rec.title = S(b.title, 40).trim();
       await writeAnne(env, rec, "Leads refreshed: " + added + " new, " + merged + " updated"); return { ok: true, added, merged, rec };
     }
+    case "set_answer": {   // v644 - one of the three questions, saved at once
+      const i = find(b.id); if (i < 0) return { error: "No such lead.", status: 404 };
+      if (!QUESTIONS.some(([k]) => k === b.q) || !ANSWERS.includes(b.v)) return { error: "Unknown answer.", status: 400 };
+      rec.leads[i][b.q] = b.v; if (b.q === "dogsOk") rec.leads[i].dog = b.v; rec.leads[i].updatedAt = new Date().toISOString();
+      await writeAnne(env, rec, (rec.leads[i].property || rec.leads[i].community) + ": " + QUESTIONS.find(([k]) => k === b.q)[1] + " " + b.v); return { ok: true, rec };
+    }
+    case "save_tpl": { rec.tpl = cleanTpl(b.tpl); await writeAnne(env, rec, "Message wording updated"); return { ok: true, rec }; }
+    case "contacted": {   // v644 - she opened WhatsApp or copied the message: New becomes Contacted; the message itself is never stored
+      const i = find(b.id); if (i < 0) return { error: "No such lead.", status: 404 };
+      if (rec.leads[i].status === "New") rec.leads[i].status = "Contacted"; rec.leads[i].updatedAt = new Date().toISOString();
+      await writeAnne(env, rec, (b.how === "copy" ? "Message copied: " : "WhatsApp opened: ") + (rec.leads[i].property || rec.leads[i].community)); return { ok: true, rec };
+    }
     case "archive": rec.archived = true; await writeAnne(env, rec, "Card retired"); return { ok: true, rec };
     case "unarchive": rec.archived = false; await writeAnne(env, rec, "Card restored"); return { ok: true, rec };
     default: return { error: "Unknown action.", status: 400 };
@@ -111,14 +151,16 @@ const ANNE_CSS = '<style>.ah{color:#5F6B66;font-size:.8rem;margin:0 0 8px}.ac{di
   + '.lc{background:#fff;border:1px solid #E3EBE4;border-radius:14px;padding:12px 14px;margin:0 0 10px}.lc h3{margin:0;font-size:1rem}.lc .sub{color:#5F6B66;font-size:.8rem;margin:2px 0 6px}.lc .grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:.82rem;margin:6px 0}.lc .grid span{color:#5F6B66}'
   + '.lc .row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.lc select,.lc textarea,.fm input,.fm select,.fm textarea{width:100%;box-sizing:border-box;border:1px solid #D8D1C4;border-radius:10px;padding:8px;font:inherit;font-size:.85rem;background:#FFFDF6}.lc textarea{min-height:56px}'
   + '.st{font-size:.72rem;font-weight:700;border-radius:999px;padding:3px 9px;background:#F3F0E8;color:#5F6B66;display:inline-block}.st.Available,.st.Viewing{background:#2F5D3F;color:#fff}.st.Rejected,.st.Expired{background:#F0E3E1;color:#8A3B32}'
-  + '.fm{background:#fff;border:1px solid #E3EBE4;border-radius:14px;padding:12px 14px;margin:12px 0}.fm label{display:block;font-size:.74rem;color:#5F6B66;margin:8px 0 2px}.lg{font-size:.78rem;color:#5F6B66;margin:6px 0 0}.fl{font-style:normal;font-size:.7rem;font-weight:600;border-radius:999px;padding:3px 9px;background:#FBF1DC;color:#7A5A12}.fl.mc{background:#F0E3E1;color:#8A3B32}.ag{border:1px dashed #D8D1C4;border-radius:14px;padding:18px;text-align:center;color:#5F6B66}</style>';
+  + '.fm{background:#fff;border:1px solid #E3EBE4;border-radius:14px;padding:12px 14px;margin:12px 0}.fm label{display:block;font-size:.74rem;color:#5F6B66;margin:8px 0 2px}.lg{font-size:.78rem;color:#5F6B66;margin:6px 0 0}.fl{font-style:normal;font-size:.7rem;font-weight:600;border-radius:999px;padding:3px 9px;background:#FBF1DC;color:#7A5A12}.fl.mc{background:#F0E3E1;color:#8A3B32}.ag{border:1px dashed #D8D1C4;border-radius:14px;padding:18px;text-align:center;color:#5F6B66}.qa{display:flex;align-items:center;gap:4px;font-size:.76rem;color:#5F6B66;flex:1 1 140px}.lc .qa select{width:auto;padding:4px 6px;font-size:.78rem}.fm textarea{width:100%;box-sizing:border-box;border:1px solid #D8D1C4;border-radius:10px;padding:8px;font:inherit;font-size:.85rem;background:#FFFDF6}</style>';
 
 export const ANNE_BODY = ANNE_CSS + '<a class=back href="/momo" id=aback>&#8592; Momo</a><div class=tag>MOMO</div><h1 id=atitle>Client card</h1><p class=ah id=aupd></p><div class=ac id=abrief></div><div id=aarch></div><div class=af id=acom></div><div class=af id=asta></div><div id=alist></div>'
   + '<div class=fm><b>Add a lead</b><label>Property</label><input id=n_prop><label>Community</label><input id=n_com><label>Asking rent a year (AED)</label><input id=n_rent inputmode=numeric><label>Agent</label><input id=n_agent><label>Agency</label><input id=n_agency><label>Phone</label><input id=n_phone><label>Advert link</label><input id=n_url><div class=row style="margin-top:10px"><button class="ab p" id=n_add type=button>Add lead</button> <span class=ah id=n_msg></span></div></div>'
+  + '<div class=fm><b>Message wording</b><p class=ah style="margin:4px 0 0">Used by WhatsApp the agent and Copy message on every lead. You press send yourself; nothing is sent from Momo. Placeholders: {agent_first} {agent} {ref} {property} {rent} {community} {broker_name} {broker_agency}.</p><label>Your name</label><input id=w_name><label>Your agency</label><input id=w_agency><label>Message</label><textarea id=w_text rows=5 maxlength=600></textarea><div class=row style="margin-top:10px"><button class="ab p" id=w_save type=button>Save wording</button> <span class=ah id=w_msg></span></div></div>'
   + '<div class=fm><b>Recent changes</b><div id=alog class=lg></div><div class=row style="margin-top:10px"><button class=ab id=aret type=button>Retire this card</button></div></div>'
   + '<div class=fm><b>Download</b><p class=ah style="margin:4px 0 8px">The register as a page you can save or print. It follows the filters picked above.</p><div class=row><a class="ab p" id=adl href="#" target=_blank rel=noopener>Download (HTML)</a> <a class=ab id=apdf href="#" target=_blank rel=noopener>Save as PDF</a></div></div>';
 
-export const ANNE_JS = String.raw`(function(){var KEY=new URLSearchParams(location.search).get("key")||"",REC=null,FC="All",FS="All";
+export const ANNE_JS = "var waDigits=" + waDigits.toString() + ";var fillWa=" + fillWa.toString() + ";var bestRank=" + bestRank.toString() + ";" + String.raw`(function(){var KEY=new URLSearchParams(location.search).get("key")||"",REC=null,FC="All",FS="All",BEST=false;
+var QS=[["available","Available?"],["furnishedOk","Furnished as advertised?"],["dogsOk","Dogs allowed?"]];
 var $=function(i){return document.getElementById(i)};$("aback").href="/momo?door=1&key="+encodeURIComponent(KEY);
 var STA=["New","Contacted","Available","Viewing booked","Viewed","Rejected","Expired"];
 function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
@@ -129,10 +171,12 @@ function link(href,txt,cls){var a=el("a",cls||"ab",txt);a.href=href;if(/^https?:
 function card(l){var c=el("div","lc");c.appendChild(el("h3","",l.property||l.community));
 var sub=[l.community,l.ref?"Ref "+l.ref:"",l.portalRef?"Portal "+l.portalRef:""].filter(Boolean).join("  |  ");c.appendChild(el("div","sub",sub));
 var g=el("div","grid");function kv(k,v){if(!v)return;var d=el("div","");d.appendChild(el("span","",k+" "));d.appendChild(document.createTextNode(v));g.appendChild(d)}
-kv("Rent",l.rent?"AED "+fmt(l.rent)+" / yr":"");kv("Beds",l.beds);kv("Baths",l.baths);kv("Size",l.sizeSqft?fmt(l.sizeSqft)+" sq ft":"");kv("Furnished",l.furnished);kv("Dog",l.dog==="unknown"?"not confirmed":l.dog);kv("Agent",l.agent);kv("Agency",l.agency);kv("Broker card no.",l.brokerLicence);kv("Advert permit",l.trakheesi);c.appendChild(g);
+kv("Rent",l.rent?"AED "+fmt(l.rent)+" / yr":"");kv("Beds",l.beds);kv("Baths",l.baths);kv("Size",l.sizeSqft?fmt(l.sizeSqft)+" sq ft":"");kv("Furnished",l.furnished);kv("Agent",l.agent);kv("Agency",l.agency);kv("Broker card no.",l.brokerLicence);kv("Advert permit",l.trakheesi);c.appendChild(g);
 var fl=(l.flags||[]).slice();var dl=l.listingUrl||(l.contactUrl&&l.contactUrl.indexOf("/agent/")>=0);if(!l.phone&&!l.email&&!dl)fl.unshift("Missing contact");if(fl.length){var fr=el("div","row");fl.forEach(function(f){fr.appendChild(el("i","fl"+(f==="Missing contact"?" mc":""),f))});c.appendChild(fr)}
 if(l.verified)c.appendChild(el("div","lg","Link: "+l.verified));
-if(l.phone){var pt=l.phoneType?" ("+l.phoneType+")":"";var r=el("div","row");r.appendChild(link("tel:"+l.phone.replace(/[^0-9+]/g,""),"Call "+l.phone+pt,"ab p"));if(digits(l.phone))r.appendChild(link("https://wa.me/"+digits(l.phone),"WhatsApp"));c.appendChild(r)}
+var msg=fillWa(REC.tpl||{},l);var r=el("div","row");if(l.phone){var pt=l.phoneType?" ("+l.phoneType+")":"";r.appendChild(link("tel:"+l.phone.replace(/[^0-9+]/g,""),"Call "+l.phone+pt,"ab p"));var wd=waDigits(l.phone,l.phoneType);if(wd){var wa=link("https://wa.me/"+wd+"?text="+encodeURIComponent(msg),"WhatsApp the agent");wa.onclick=function(){api({action:"contacted",id:l.id,how:"whatsapp"}).catch(function(){})};r.appendChild(wa)}}
+var cp=el("button","ab","Copy message");cp.type="button";cp.onclick=function(){var done=function(){cp.textContent="Copied";api({action:"contacted",id:l.id,how:"copy"}).catch(function(){})};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(msg).then(done,function(){window.prompt("Copy the message:",msg);done()});else{window.prompt("Copy the message:",msg);done()}};r.appendChild(cp);c.appendChild(r);
+var qa=el("div","row");QS.forEach(function(q){var w=el("label","qa");w.appendChild(el("span","",q[1]+" "));var s2=el("select","qs");[["unknown","Unknown"],["yes","Yes"],["no","No"]].forEach(function(o){var x=el("option","",o[1]);x.value=o[0];if((l[q[0]]||"unknown")===o[0])x.selected=true;s2.appendChild(x)});s2.onchange=function(){api({action:"set_answer",id:l.id,q:q[0],v:s2.value})};w.appendChild(s2);qa.appendChild(w)});c.appendChild(qa);
 var r2=el("div","row");if(l.email)r2.appendChild(link("mailto:"+l.email,"Email"));if(l.listingUrl)r2.appendChild(link(l.listingUrl,"Open advert"));if(l.contactUrl)r2.appendChild(link(l.contactUrl,"Agent page"));if(r2.childNodes.length)c.appendChild(r2);
 if(l.verification)c.appendChild(el("div","lg",l.verification));
 var s=el("select");STA.forEach(function(x){var o=el("option","",x);o.value=x;if(x===l.status)o.selected=true;s.appendChild(o)});s.onchange=function(){api({action:"set_status",id:l.id,status:s.value})};
@@ -144,10 +188,13 @@ var b=$("abrief");b.textContent="";var br=REC.brief||{};if(br.budgetMin||br.budg
 var ar=$("aarch");ar.textContent="";if(REC.archived){var d=el("div","ag","This card is retired and hidden from the Momo front door. ");var bt=el("button","ab p","Restore it");bt.type="button";bt.onclick=function(){api({action:"unarchive"})};d.appendChild(bt);ar.appendChild(d)}
 var coms=["All"];REC.leads.forEach(function(l){if(l.community&&coms.indexOf(l.community)<0)coms.push(l.community)});var cf=$("acom");cf.textContent="";coms.forEach(function(c){var x=el("button",c===FC?"on":"",c+" "+(c==="All"?REC.leads.length:count(function(l){return l.community===c})));x.type="button";x.onclick=function(){FC=c;draw()};cf.appendChild(x)});
 var sf=$("asta");sf.textContent="";["All"].concat(STA).forEach(function(s){var n=s==="All"?REC.leads.length:count(function(l){return l.status===s});if(s!=="All"&&!n)return;var x=el("button",s===FS?"on":"",s+" "+n);x.type="button";x.onclick=function(){FS=s;draw()};sf.appendChild(x)});
-var L=$("alist");L.textContent="";var ls=REC.leads.filter(function(l){return(FC==="All"||l.community===FC)&&(FS==="All"||l.status===FS)});if(!ls.length)L.appendChild(el("div","ag","No leads here yet."));ls.forEach(function(l){L.appendChild(card(l))});
+var bb=el("button",BEST?"on":"","Best first");bb.type="button";bb.onclick=function(){BEST=!BEST;draw()};sf.appendChild(bb);
+var L=$("alist");L.textContent="";var ls=REC.leads.filter(function(l){return(FC==="All"||l.community===FC)&&(FS==="All"||l.status===FS)});if(BEST)ls=ls.map(function(l,i){return[bestRank(l),i,l]}).sort(function(a,b){return a[0]-b[0]||a[1]-b[1]}).map(function(x){return x[2]});
+var tp=REC.tpl||{};$("w_name").value=tp.brokerName||"";$("w_agency").value=tp.brokerAgency||"";if(document.activeElement!==$("w_text"))$("w_text").value=tp.whatsapp||"";if(!ls.length)L.appendChild(el("div","ag","No leads here yet."));ls.forEach(function(l){L.appendChild(card(l))});
 var qs="?key="+encodeURIComponent(KEY)+(FS!=="All"?"&status="+encodeURIComponent(FS):"")+(FC!=="All"?"&community="+encodeURIComponent(FC):"");$("adl").href="/momo/work/anne/report"+qs;$("apdf").href="/momo/work/anne/report"+qs+"&print=1";
 var lg=$("alog");lg.textContent="";(REC.log||[]).slice(0,8).forEach(function(x){lg.appendChild(el("div","",x.at.slice(0,10)+": "+x.text))});$("aret").style.display=REC.archived?"none":""}
 $("n_add").onclick=function(){var m=$("n_msg");api({action:"save_lead",lead:{property:$("n_prop").value,community:$("n_com").value,rent:$("n_rent").value,agent:$("n_agent").value,agency:$("n_agency").value,phone:$("n_phone").value,listingUrl:$("n_url").value}}).then(function(){["n_prop","n_com","n_rent","n_agent","n_agency","n_phone","n_url"].forEach(function(i){$(i).value=""});m.textContent="Added."}).catch(function(e){m.textContent=e.message})};
+$("w_save").onclick=function(){var m=$("w_msg");api({action:"save_tpl",tpl:{whatsapp:$("w_text").value,brokerName:$("w_name").value,brokerAgency:$("w_agency").value}}).then(function(){m.textContent="Saved."}).catch(function(e){m.textContent=e.message})};
 $("aret").onclick=function(){if(confirm("Retire this card? It disappears from the Momo front door; you can restore it from this page."))api({action:"archive"})};
 fetch("/momo/work/anne/rec?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(d){REC=d.rec||{leads:[],brief:{},log:[]};draw()}).catch(function(){$("aupd").textContent="Could not load the card. Try again in a minute."})})();`;
 
@@ -177,7 +224,7 @@ export function anneReport(rec, q) {
     const fl = (l.flags || []).concat(!l.phone && !l.email && !l.listingUrl && !(l.contactUrl && l.contactUrl.indexOf("/agent/") >= 0) ? ["Missing contact"] : []);
     return '<section class=lead><h3>' + esc(l.property || l.community) + " <small>" + esc([l.ref ? "Ref " + l.ref : "", l.portalRef ? "Portal " + l.portalRef : "", l.trakheesi ? "Permit " + l.trakheesi : ""].filter(Boolean).join("  |  ")) + "</small><em class=st>" + esc(l.status) + "</em></h3>"
       + "<div class=grid>" + row("Rent", l.rent ? "AED " + fmtN(l.rent) + " / yr" : "") + row("Beds / baths", esc([l.beds, l.baths].filter(Boolean).join(" / "))) + row("Size", l.sizeSqft ? fmtN(l.sizeSqft) + " sq ft" : "") + row("Furnished", esc(l.furnished))
-      + row("Dog", l.dog === "unknown" ? "not confirmed" : esc(l.dog)) + row("Agent", esc(l.agent)) + row("Agency", esc(l.agency)) + row("Broker card", esc(l.brokerLicence)) + "</div>"
+      + QUESTIONS.map(([k, q]) => row(q, esc((l[k] || "unknown") === "unknown" ? "not confirmed" : l[k]))).join("") + row("Agent", esc(l.agent)) + row("Agency", esc(l.agency)) + row("Broker card", esc(l.brokerLicence)) + "</div>"
       + (tel || mail || adv || ag ? "<div class=links>" + [tel, mail, adv, ag].filter(Boolean).join(" ") + "</div>" : "")
       + (fl.length ? "<div class=flags>" + fl.map((f) => "<i>" + esc(f) + "</i>").join("") + "</div>" : "")
       + (l.verification ? "<p class=vf>" + esc(l.verification) + "</p>" : "") + (l.notes ? "<p class=nt>" + esc(l.notes).replace(/\n/g, "<br>") + "</p>" : "") + "</section>";
