@@ -32,7 +32,7 @@ ok(!/\$\{/.test(JOBS_JS) && !/`/.test(JOBS_JS), "the client script has no back-t
 try { new Function(JOBS_JS); ok(true, ""); } catch (e) { ok(false, "client script parses", e.message); }
 ok(!/(openai|chatgpt|claude|anthropic|gemini)/i.test(JOBS_BODY + JOBS_JS), "no model or vendor name in the page text");
 ok(!/#0A4F4A|#C5A56A|dark/i.test(JOBS_BODY), "cream and green only: no gold, no dark theme");
-const w = await (await get("/momo/work", NAJ)).text(); ok(/id=tjobs/.test(w), "the Work page carries the Jobs tab");
+const w = await (await get("/momo/work", NAJ)).text(); ok(!/id=tjobs/.test(w) && !/>Jobs</.test(w), "v652: the Work page has NO Jobs tab (jobs live on the Ascend card)");
 
 // ---- the record ----
 let rec = await (await get("/momo/work/jobs/rec", NAJ)).json();

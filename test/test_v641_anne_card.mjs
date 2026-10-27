@@ -73,7 +73,8 @@ for (const k of [N, O, "", "wrong"]) { const r = await get("/momo/work/anne/repo
 { const t = await (await get("/momo/work/anne", K)).text(); ok(/id=adl/.test(t) && /id=apdf/.test(t) && /\/momo\/work\/anne\/report/.test(t), "the page has Download and Save as PDF"); }
 
 // v643 - her Work page carries the client button while the record is active; Kendall's Work page never does
-{ const wk = await (await get("/momo/work", K)).text(); ok(/id=tanne/.test(wk) && /\/momo\/work\/anne\?key=/.test(wk), "her Work page shows the client button"); }
+{ const wk = await (await get("/momo/work", K)).text(); ok(!/id=tanne/.test(wk), "v652: one entry point only: no client button inside Work");
+  const dr = await get("/momo", K); const dh = await dr.text(); ok(dr.status === 200 && /\/momo\/work\/anne\?key=/.test(dh), "v652: her plain Momo link opens the front door with the client card", dr.status); }
 { const wk = await (await get("/momo/work", N)).text(); ok(!/id=tanne/.test(wk), "Kendall's Work page has no client button"); }
 { const a0 = await post({ action: "archive" }, K); ok(a0.status === 200, "archive ok", a0.status);
   const wk = await (await get("/momo/work", K)).text(); ok(!/id=tanne/.test(wk), "archived: no client button on her Work page");

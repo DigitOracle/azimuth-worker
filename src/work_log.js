@@ -787,11 +787,6 @@ export async function workRoute(request, env, url, deps) {
     const v = (n) => esc(url.searchParams.get(n) || "");
     return new Response(deps.page(key, rk, PREP_BODY.replace("__DEV__", v("dev")).replace("__PRJ__", v("project")).replace("__AREA__", v("area")).replace("__EVT__", v("event") || "Client briefing").replace(/__KEY__/g, esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
-  if (p === "/momo/work") {   // v643 - an active client card shows as a button under the tabs (her Momo link opens Work, not the front door)
-    let _ar = null; try { _ar = await readAnne(env); } catch (e) {}
-    const _cb = _ar && !_ar.archived ? '<a id=tanne href="/momo/work/anne?key=' + encodeURIComponent(key) + '" style="display:block;text-align:center;margin:-6px 0 14px;padding:11px;border:1px solid #2F5D3F;border-radius:12px;color:#2F5D3F;font-weight:600;text-decoration:none">' + esc(_ar.title || "Client") + '</a>' : '';
-    return new Response(deps.page(key, rk, WORK_BODY.replace(/__KEY__/g, esc(key)).replace('id=tjobs>Jobs</button></div>', 'id=tjobs>Jobs</button></div>' + _cb)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
-  }
   return new Response("not found", { status: 404 });
 }
 
@@ -1062,7 +1057,7 @@ export function reportHtml(es, from, to, allTasks, pickedDays) {
 
 // v577 (Kendall 14 Oct: "at the very top of the hierarchy it's what did you do? And then something else that says report") - two tabs, that is the whole first screen
 const WORK_BODY = '<div class=tag>MOMO · WORK</div>'
-  + '<div class=seg id=wtabs style="margin:8px 0 14px;grid-template-columns:1fr 1fr 1fr 1fr"><button type=button id=tlog class=on>What did you do?</button><button type=button id=trep>Report</button><button type=button id=tplan>Plan</button><button type=button id=tjobs>Jobs</button></div>'
+  + '<div class=seg id=wtabs style="margin:8px 0 14px;grid-template-columns:1fr 1fr 1fr"><button type=button id=tlog class=on>What did you do?</button><button type=button id=trep>Report</button><button type=button id=tplan>Plan</button></div>'
   + '<div id=vrep style="display:none"><h1 style="font-size:1.35rem">Make a report</h1><div class=seg style="grid-template-columns:1fr 1fr 1fr 1fr;gap:6px"><button type=button class="on" data-rp=today style="padding:12px 4px;font-size:.85rem">Today</button><button type=button data-rp=week style="padding:12px 4px;font-size:.85rem">Week</button><button type=button data-rp=month style="padding:12px 4px;font-size:.85rem">Months</button><button type=button data-rp=pick style="padding:12px 4px;font-size:.85rem">Pick days</button></div>'
   + '<div id=rpick style="display:none"><div class=line>Tap the days to include</div><div class=grid id=rdays style="grid-template-columns:repeat(7,1fr);gap:6px"></div></div>'
   + '<div id=rmonths style="display:none"><div class=line>From</div><div class=grid id=rmfrom style="grid-template-columns:repeat(3,1fr);gap:6px"></div><div class=line style="margin-top:8px">To</div><div class=grid id=rmto style="grid-template-columns:repeat(3,1fr);gap:6px"></div><button type=button id=rall class=ghost style="width:100%;margin-top:10px">Everything since 2 Oct 2026</button></div>'
@@ -1370,7 +1365,6 @@ $("wf").onsubmit=function(ev){ev.preventDefault();var t=$("wt").value.trim();if(
 // v615 - Months: one month, from one month to another, or everything since the engagement began; a span of months comes back as one summary and one page per month
 (function(){var mode="today",picked={},MF=null,MT=null,ALL=false;function show(rep){$("vlog").style.display=rep?"none":"block";$("vrep").style.display=rep?"block":"none";$("tlog").classList.toggle("on",!rep);$("trep").classList.toggle("on",rep);if(rep)rdraw()}
  $("tplan").onclick=function(){location.href="/momo/work/plan?key="+encodeURIComponent(KEY)};
- $("tjobs").onclick=function(){location.href="/momo/work/jobs?key="+encodeURIComponent(KEY)};
  $("tlog").onclick=function(){show(false)};$("trep").onclick=function(){show(true)};
  function tdy(){return D?D.today:new Date(Date.now()+4*3600e3).toISOString().slice(0,10)}
  function start(){return (D&&D.start)||"2026-10-02"}

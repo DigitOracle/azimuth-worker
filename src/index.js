@@ -3390,7 +3390,7 @@ async function appFetch(request, env, ctx) {
       if (url.pathname === "/momo" || url.pathname.startsWith("/momo/work")) {   // v563 (Kendall 14 Oct 2026) - MOMO opens on Work and Play; Play is today's Momo (/fit)
         if (!clientOk(env, url) || keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
         // v564 - Work is Najjuko's private FN Realty log (src/work_log.js); her MOMO tab opens straight on it (Play is Kendall's health log)
-        if (url.pathname === "/momo" && isNajjuko(env, url) && !url.searchParams.has("door")) return Response.redirect(url.origin + "/momo/work?key=" + encodeURIComponent(url.searchParams.get("key") || ""), 302);
+        // v652 (Kendall 27 Oct): her Momo link opens the front door (Work, Play, Ascend and the one client card) instead of jumping into Work.
         if (url.pathname.startsWith("/momo/work")) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
         const _ar = personOfKey(env, url) === "najjuko" ? await readAnne(env) : null;   /* v643 - the client card is hers */ return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false, _ar && !_ar.archived ? (_ar.title || "Client") : "", personOfKey(env, url) === "kendall"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
