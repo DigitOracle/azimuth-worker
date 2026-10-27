@@ -3,7 +3,8 @@ import { feedPdfStore, FEED_PDF_RX } from "./feed_pdf.js";   // v622 - the day's
 import { readAnne, ANNE_ICON } from "./work_anne.js";
 import { SPK_ICON } from "./work_speaking.js";
 import { GGU_ICON } from "./work_ggu.js";   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
-import { workRoute, WORK_CSS } from "./work_log.js";   // v564 - Momo Work: Najjuko's FN Realty work log
+import { workRoute, WORK_CSS } from "./work_log.js";
+import { bridgeRoute } from "./work_bridge.js";   // v654 - the Momo bridge: JSON for a person's own Claude Code, header key only   // v564 - Momo Work: Najjuko's FN Realty work log
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
@@ -4868,6 +4869,7 @@ async function appFetch(request, env, ctx) {
 export default {
   async fetch(request, env, ctx) {   // v153 - question notes: their routes first, then the question button on private app pages
     const url = new URL(request.url);
+    if (url.pathname.startsWith("/momo/bridge/")) { const _br = await bridgeRoute(request, env, url); return _br || new Response(JSON.stringify({ ok: false, code: "not_found", error: "Unknown route." }), { status: 404, headers: { "Content-Type": "application/json" } }); }   // v654 - first, before every key gate: the bridge has its own header auth
     { const _wd = await deskRegRoutes(request, env, url, { graph: WA_GRAPH }); if (_wd) return _wd; }   // v409
     { const _wt = await templateRoutes(request, env, url, { graph: WA_GRAPH }); if (_wt) return _wt; }   // v329 - /wa_template_create, /wa_template_status, /wa_template_use (owner key; POST writes; dry-run by default)
     if (url.pathname.indexOf("/questions/") === 0) return questionsRoute(request, env, url);

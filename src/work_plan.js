@@ -8,7 +8,7 @@ import { TEAM_JS } from "./work_team.js";
 import { PDF_TOOLS } from "./pdf_tools.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 
-const PLP = "work_naj_plan_", TRP = "work_naj_trend_", TMP = "work_naj_team_", SEED_KEY = "work_naj_planseed";
+export const PLP = "work_naj_plan_", TRP = "work_naj_trend_", TMP = "work_naj_team_", SEED_KEY = "work_naj_planseed";
 export const LEAD = { story: 3, post: 7, carousel: 14, reel: 21 };            // days before publication that the artwork must start (team guide, section 3)
 export const FORMATS = [["story", "Story"], ["post", "Post"], ["carousel", "Carousel"], ["reel", "Reel"]];
 export const OWNERS = ["Graphic designer", "Videographer", "Social media manager", "Agent"];
@@ -176,7 +176,7 @@ export const SEED = [
   ["k_worldcup_2027", "2027-03-27", "2027-03-27", "Dubai World Cup", "known", "Announced", "story", "Graphic designer", "Luxury lifestyle story"],
 ];
 
-function cleanItem(x, id) {
+export function cleanItem(x, id) {
   const pick = (v, list, d) => (list.includes(v) ? v : d);
   const start = okD(x.start) || today(), end = okD(x.end) || start;
   return {

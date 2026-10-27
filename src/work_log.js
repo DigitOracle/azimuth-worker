@@ -1404,3 +1404,6 @@ $("wreset").onclick=function(){var srcRec="";for(var i=0;i<QUEUE.length;i++){if(
  clearDraft();if(($("wt").value.trim()||QUEUE.length)&&!confirm("Clear what you have typed and start again? Anything already saved stays."))return;resetAll()};
 $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1)};
 ` + REC_JS + String.raw`load();resumeDraft()})();`;
+
+// v654 - the pieces the Momo bridge (src/work_bridge.js) reuses, so its reads and saves are exactly the app's
+export const BRIDGE_LOG = { PFX, TPFX, RECW, listEntries, taskOverrides, recGet, recPut, recId, clean, okDate, dubaiToday, slug, STATUS };
