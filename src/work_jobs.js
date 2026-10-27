@@ -7,10 +7,37 @@ import { JOBS_JS, JOBS_BODY } from "./work_jobs_page.js";
 import { whatApi, readWhat, cvDraftApi } from "./work_jobs_ai.js";
 export const JOBS_FEED_URL = "https://jobsearch-template.vercel.app/jobs.json";
 export const JOBS_CACHE_KEY = "jobs_feed_cache", JOBS_REC_KEY = "jobs_rec_najjuko";
+// v639 - ONE RECORD PER PERSON: the key that signs in is mapped to a person id (index.js personOfKey: ins_najjuko_* -> najjuko, ins_kendall_* -> kendall, anything else is refused) and every key below carries that id.
+// Najjuko's existing keys keep their names exactly (jobs_rec_najjuko, jobs_cv_najjuko_<group>, jobs_cvmeta_najjuko). A person's groups, match words and own feed address live in THEIR record, never in code.
+export const PEOPLE_IDS = ["najjuko", "kendall"];
+export const recKey = (p) => "jobs_rec_" + p, cvKey = (p, g) => "jobs_cv_" + p + "_" + g, cvMetaKey = (p) => "jobs_cvmeta_" + p, feedKey = (p) => "jobs_feed_cache_" + p;
+export const DEFAULT_GROUPS = [{ k: "MKT", n: "Marketing & brand" }, { k: "DIG", n: "Digital, social & content" }, { k: "PR", n: "Communications & PR" }, { k: "BD", n: "Business development & sales" }, { k: "RE", n: "Real estate & property" }];
+const RESERVED = ["PORT", "OTHER"];
+export const ICON_NAMES = ["chip", "city", "server", "shield", "cap", "megaphone", "phone", "trend", "home", "briefcase"];   // a group may name one of these drawings for its card; anything else gets the default
 const FRESH_MS = 3 * 3600 * 1000, KV_TTL = 7 * 86400;
-const GROUP_KEYS = ["MKT", "DIG", "PR", "BD", "RE"], DOC_KEYS = GROUP_KEYS.concat(["PORT", "OTHER"]), CITIES = ["Dubai", "Abu Dhabi", "Sharjah"];
+const GROUP_KEYS = DEFAULT_GROUPS.map((g) => g.k), CITIES = ["Dubai", "Abu Dhabi", "Sharjah"];
 const S = (v, n) => String(v == null ? "" : v).slice(0, n);
 const httpUrl = (v, n) => (/^https?:\/\//i.test(String(v || "").trim()) ? S(String(v).trim(), n || 500) : "");
+
+export function cleanGroups(g) {   // [{k: 2-4 capital letters, n: label}], at most 8; nothing usable = the default five
+  const seen = {}, o = [];
+  (Array.isArray(g) ? g : []).slice(0, 8).forEach((x) => {
+    const k = String((x && x.k) || "").trim(); if (!/^[A-Z]{2,4}$/.test(k) || RESERVED.includes(k) || seen[k]) return;
+    seen[k] = 1; o.push({ k, n: S((x && (x.n || x.name)) || "", 60).trim() || k, i: ICON_NAMES.includes(x && x.i) ? x.i : "" });
+  });
+  return o.length ? o : DEFAULT_GROUPS.map((x) => Object.assign({}, x));
+}
+export function cleanClassify(c, gk) {   // group -> words that put a job title in that group (the person's own words, kept in the record)
+  c = c && typeof c === "object" ? c : {}; const o = {};
+  gk.forEach((k) => { const a = Array.isArray(c[k]) ? c[k] : []; const w = a.slice(0, 40).map((x) => S(x, 30).toLowerCase()).filter((x) => x.trim()); if (w.length) o[k] = w; });
+  const ord = (Array.isArray(c._order) ? c._order : []).filter((k) => gk.includes(k)); if (ord.length) o._order = ord;   // which group is tried first; _else is where a title that matches nothing goes
+  if (gk.includes(c._else)) o._else = c._else;
+  return o;
+}
+export function cleanFeedUrl(u) {   // an own feed address: https, and only a host we recognise as a static site or worker
+  try { const x = new URL(String(u || "").trim()); if (x.protocol !== "https:") return ""; if (!(x.hostname.endsWith(".vercel.app") || x.hostname.endsWith(".workers.dev"))) return ""; return S(x.toString(), 300); } catch (e) { return ""; }
+}
+const keysOf = (gk) => (Array.isArray(gk) && gk.length ? gk : GROUP_KEYS);
 
 export function cleanFeed(raw) {
   const o = raw && typeof raw === "object" ? raw : {};
@@ -21,15 +48,17 @@ export function cleanFeed(raw) {
 }
 
 // force = the page's Refresh button: skip the 3 h wait. Nothing changed = the same copy comes back, so the page can say "no newer list yet".
-export async function jobsFeed(env, fetchFn, force) {
-  let cached = null; try { cached = JSON.parse(await env.MEETINGS.get(JOBS_CACHE_KEY)); } catch (e) {}
+export async function jobsFeed(env, fetchFn, force, person, feedUrl) {
+  const ck = person ? feedKey(person) : JOBS_CACHE_KEY, src = cleanFeedUrl(feedUrl) || JOBS_FEED_URL;
+  let cached = null; try { cached = JSON.parse(await env.MEETINGS.get(ck)); } catch (e) {}
+  if (cached && cached.src && cached.src !== src) cached = null;   // the person pointed to a different feed: the old copy is not theirs any more
   const age = cached && cached.fetchedAt ? Date.now() - Date.parse(cached.fetchedAt) : Infinity;
   if (!force && cached && cached.feed && age < FRESH_MS) return Object.assign({}, cached.feed, { stale: false, fetchedAt: cached.fetchedAt });
   try {
-    const r = await (fetchFn || fetch)(JOBS_FEED_URL, { headers: { Accept: "application/json" } });
+    const r = await (fetchFn || fetch)(src, { headers: { Accept: "application/json" } });
     if (!r.ok) throw new Error("status " + r.status);
     const feed = cleanFeed(await r.json()), fetchedAt = new Date().toISOString();
-    await env.MEETINGS.put(JOBS_CACHE_KEY, JSON.stringify({ fetchedAt, feed }), { expirationTtl: KV_TTL });
+    await env.MEETINGS.put(ck, JSON.stringify({ fetchedAt, feed, src }), { expirationTtl: KV_TTL });
     return Object.assign({}, feed, { stale: false, fetchedAt });
   } catch (e) {
     if (cached && cached.feed) return Object.assign({}, cached.feed, { stale: true, fetchedAt: cached.fetchedAt });
@@ -38,16 +67,16 @@ export async function jobsFeed(env, fetchFn, force) {
 }
 
 // ---- the shared record (v2) ----
-export const emptyRec = () => ({ v: 2, updatedAt: "", profile: { name: "", headline: "", location: "", email: "", phone: "", bio: "", direct: "", indirect: "", cvPrefix: "" },
-  docs: {}, view: { groups: GROUP_KEYS.slice(), cities: ["Dubai", "Abu Dhabi"], avoid: "" }, applied: {}, hidden: {}, fit: [], tpl: { auto: "", headlines: [], why: [], letters: {} }, ish: {} });
+export const emptyRec = (gk) => ({ v: 2, updatedAt: "", groups: gk ? gk.map((k) => Object.assign({}, DEFAULT_GROUPS.find((d) => d.k === k) || { k, n: k })) : DEFAULT_GROUPS.map((x) => Object.assign({}, x)), classify: {}, feedUrl: "", profile: { name: "", headline: "", location: "", email: "", phone: "", bio: "", direct: "", indirect: "", cvPrefix: "" },
+  docs: {}, view: { groups: keysOf(gk).slice(), cities: ["Dubai", "Abu Dhabi"], avoid: "" }, applied: {}, hidden: {}, fit: [], tpl: { auto: "", headlines: [], why: [], letters: {} }, ish: {} });
 const DATE_RE = /^\d{4}-\d\d-\d\d$/;
 // v635 - applied entries are objects {d: date, c: company, t: title, g: group, f: follow-up date}; the old plain date string still reads
-export function cleanApplied(a) {
+export function cleanApplied(a, gk) {
   a = a && typeof a === "object" ? a : {}; const o = {};
   Object.keys(a).slice(0, 2000).forEach((k) => {
     const u = httpUrl(k); if (!u) return; const v = a[k];
     const e = typeof v === "string" ? { d: v } : v && typeof v === "object" ? v : null; if (!e || !DATE_RE.test(String(e.d || ""))) return;
-    const r = { d: e.d }; if (e.c) r.c = S(e.c, 120); if (e.t) r.t = S(e.t, 200); if (GROUP_KEYS.includes(e.g)) r.g = e.g; if (DATE_RE.test(String(e.f || ""))) r.f = e.f; o[u] = r;
+    const r = { d: e.d }; if (e.c) r.c = S(e.c, 120); if (e.t) r.t = S(e.t, 200); if (keysOf(gk).includes(e.g)) r.g = e.g; if (DATE_RE.test(String(e.f || ""))) r.f = e.f; o[u] = r;
   });
   return o;
 }
@@ -63,38 +92,46 @@ export function cleanProfile(p) {
   const o = {}; ["name", "headline", "location", "email", "phone", "cvPrefix"].forEach((k) => { o[k] = S(p[k], 120).trim(); }); o.bio = S(p.bio, 800).trim();
   ["direct", "indirect"].forEach((k) => { o[k] = S(p[k], 8).replace(/[^\d\-+ ]/g, "").trim(); }); return o;
 }
-export function cleanDocs(d) { d = d && typeof d === "object" ? d : {}; const o = {}; DOC_KEYS.forEach((k) => { const u = httpUrl(d[k]); if (u) o[k] = u; }); return o; }
-export function cleanView(v) {
-  v = v && typeof v === "object" ? v : {};
-  const groups = (Array.isArray(v.groups) ? v.groups : []).filter((g) => GROUP_KEYS.includes(g)), cities = (Array.isArray(v.cities) ? v.cities : []).filter((c) => CITIES.includes(c));
-  return { groups: groups.length ? groups : GROUP_KEYS.slice(), cities: cities.length ? cities : ["Dubai"], avoid: S(v.avoid, 300).trim() };
+export function cleanDocs(d, gk) { d = d && typeof d === "object" ? d : {}; const o = {}; keysOf(gk).concat(RESERVED).forEach((k) => { const u = httpUrl(d[k]); if (u) o[k] = u; }); return o; }
+export function cleanView(v, gk) {
+  v = v && typeof v === "object" ? v : {}; gk = keysOf(gk);
+  const groups = (Array.isArray(v.groups) ? v.groups : []).filter((g) => gk.includes(g)), cities = (Array.isArray(v.cities) ? v.cities : []).filter((c) => CITIES.includes(c));
+  return { groups: groups.length ? groups : gk.slice(), cities: cities.length ? cities : ["Dubai"], avoid: S(v.avoid, 300).trim() };
 }
-export function cleanTpl(t) {
+export function cleanTpl(t, gk) {
   t = t && typeof t === "object" ? t : {};
-  const letters = {}; GROUP_KEYS.forEach((g) => { const l = (t.letters && t.letters[g]) || {}; letters[g] = { hook: S(l.hook, 1200), proof: S(l.proof, 2000), close: S(l.close, 800) }; });
+  const letters = {}; keysOf(gk).forEach((g) => { const l = (t.letters && t.letters[g]) || {}; letters[g] = { hook: S(l.hook, 1200), proof: S(l.proof, 2000), close: S(l.close, 800) }; });
   const list = (a, n) => (Array.isArray(a) ? a : []).slice(0, n).map((x) => S(x, 200)).filter(Boolean);
   return { auto: S(t.auto, 600), headlines: list(t.headlines, 12), why: list(t.why, 12), letters };
 }
-export async function readRec(env) {
-  let r = null; try { r = JSON.parse(await env.MEETINGS.get(JOBS_REC_KEY)); } catch (e) {}
-  const e = emptyRec(); if (!r || typeof r !== "object") return e;
-  return { v: 2, updatedAt: S(r.updatedAt, 30), profile: Object.assign(e.profile, cleanProfile(r.profile)), docs: cleanDocs(r.docs), view: cleanView(r.view),
-    applied: cleanApplied(r.applied), hidden: cleanHidden(r.hidden), fit: cleanFit(r.fit), tpl: cleanTpl(r.tpl), ish: r.ish && typeof r.ish === "object" ? r.ish : {} };
+export async function readRec(env, person) {
+  person = person || "najjuko";
+  let r = null; try { r = JSON.parse(await env.MEETINGS.get(recKey(person))); } catch (e) {}
+  const groups = cleanGroups(r && r.groups), gk = groups.map((g) => g.k), e = emptyRec(gk);
+  if (!r || typeof r !== "object") return Object.assign(e, { person });
+  return { v: 2, person, updatedAt: S(r.updatedAt, 30), groups, classify: cleanClassify(r.classify, gk), feedUrl: cleanFeedUrl(r.feedUrl), profile: Object.assign(e.profile, cleanProfile(r.profile)), docs: cleanDocs(r.docs, gk), view: cleanView(r.view, gk),
+    applied: cleanApplied(r.applied, gk), hidden: cleanHidden(r.hidden), fit: cleanFit(r.fit), tpl: cleanTpl(r.tpl, gk), ish: r.ish && typeof r.ish === "object" ? r.ish : {} };
 }
-export async function jobsApi(env, b) {
-  const rec = await readRec(env);
+export async function jobsApi(env, b, person) {
+  person = person || "najjuko";
+  const rec = await readRec(env, person), gk = rec.groups.map((g) => g.k);
   switch (b && b.action) {
     case "save_profile": rec.profile = Object.assign(rec.profile, cleanProfile(b.profile)); break;
-    case "save_docs": rec.docs = cleanDocs(b.docs); break;
-    case "save_view": rec.view = cleanView(b.view); break;
-    case "save_tpl": rec.tpl = cleanTpl(b.tpl); break;
+    case "save_docs": rec.docs = cleanDocs(b.docs, gk); break;
+    case "save_view": rec.view = cleanView(b.view, gk); break;
+    case "save_tpl": rec.tpl = cleanTpl(b.tpl, gk); break;
+    case "save_groups": {   // the person's own groups, match words and (optional) own feed address
+      rec.groups = cleanGroups(b.groups); const nk = rec.groups.map((g) => g.k);
+      rec.classify = cleanClassify(b.classify, nk); rec.feedUrl = cleanFeedUrl(b.feedUrl);
+      rec.docs = cleanDocs(rec.docs, nk); rec.view = cleanView(rec.view, nk); rec.tpl = cleanTpl(rec.tpl, nk); rec.applied = cleanApplied(rec.applied, nk); break;
+    }
     case "save_fit": rec.fit = cleanFit(b.fit); break;
     case "mark_applied": {
       const u = httpUrl(b.url); if (!u) return { error: "No advert link.", status: 400 };
       if (b.on === false) delete rec.applied[u];
       else {
         const prev = rec.applied[u] || {}, d = DATE_RE.test(String(b.date || "")) ? b.date : new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
-        rec.applied[u] = cleanApplied({ [u]: { d: prev.d || d, c: b.c || prev.c, t: b.t || prev.t, g: b.g || prev.g, f: prev.f } })[u] || { d };
+        rec.applied[u] = cleanApplied({ [u]: { d: prev.d || d, c: b.c || prev.c, t: b.t || prev.t, g: b.g || prev.g, f: prev.f } }, gk)[u] || { d };
       }
       const keys = Object.keys(rec.applied); if (keys.length > 800) keys.sort((a, c) => String(rec.applied[a].d).localeCompare(String(rec.applied[c].d))).slice(0, keys.length - 800).forEach((k) => delete rec.applied[k]);
       break;
@@ -113,7 +150,7 @@ export async function jobsApi(env, b) {
     default: return { error: "Unknown action.", status: 400 };
   }
   rec.updatedAt = new Date().toISOString();
-  await env.MEETINGS.put(JOBS_REC_KEY, JSON.stringify(rec));
+  await env.MEETINGS.put(recKey(person), JSON.stringify(rec));
   return { ok: true, rec };
 }
 
@@ -128,15 +165,16 @@ export function cvKind(name, bytes) {   // the type, only when the extension and
   if (ext === "doc" && b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0 && b[4] === 0xa1 && b[5] === 0xb1 && b[6] === 0x1a && b[7] === 0xe1) return "doc";
   return "";
 }
-export async function readCvMeta(env) {
-  let m = null; try { m = JSON.parse(await env.MEETINGS.get(CV_META_KEY)); } catch (e) {}
-  const o = {}; GROUP_KEYS.forEach((g) => { const x = m && m[g]; if (x && typeof x === "object") o[g] = { name: S(x.name, 120), type: CV_TYPES[x.type] ? x.type : "pdf", size: Math.max(0, Math.min(CV_MAX, +x.size || 0)), at: S(x.at, 30) }; });
+export async function readCvMeta(env, person, gk) {
+  let m = null; try { m = JSON.parse(await env.MEETINGS.get(cvMetaKey(person || "najjuko"))); } catch (e) {}
+  const o = {}; keysOf(gk).forEach((g) => { const x = m && m[g]; if (x && typeof x === "object") o[g] = { name: S(x.name, 120), type: CV_TYPES[x.type] ? x.type : "pdf", size: Math.max(0, Math.min(CV_MAX, +x.size || 0)), at: S(x.at, 30) }; });
   return o;
 }
-export async function cvApi(env, b) {
-  const g = b && b.group; if (!GROUP_KEYS.includes(g)) return { error: "Choose one of the five CV groups.", status: 400 };
-  const meta = await readCvMeta(env);
-  if (b.action === "delete") { await env.MEETINGS.delete(CV_KEY + g); delete meta[g]; await env.MEETINGS.put(CV_META_KEY, JSON.stringify(meta)); return { ok: true, cv: meta }; }
+export async function cvApi(env, b, person, gk) {
+  person = person || "najjuko";
+  const g = b && b.group; if (!keysOf(gk).includes(g)) return { error: "Choose one of your CV groups.", status: 400 };
+  const meta = await readCvMeta(env, person, gk);
+  if (b.action === "delete") { await env.MEETINGS.delete(cvKey(person, g)); delete meta[g]; await env.MEETINGS.put(cvMetaKey(person), JSON.stringify(meta)); return { ok: true, cv: meta }; }
   if (b.action !== "put") return { error: "Unknown action.", status: 400 };
   const name = Array.from(S(b.name, 120)).filter((ch) => ch.charCodeAt(0) > 31 && !"\\/:*?\"<>|".includes(ch)).join("").trim(), b64 = String(b.data || "").replace(/\s+/g, "");
   if (!name || !b64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { error: "That file did not arrive. Try again.", status: 400 };
@@ -144,9 +182,9 @@ export async function cvApi(env, b) {
   let bytes; try { const bin = atob(b64); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); } catch (e) { return { error: "That file did not arrive. Try again.", status: 400 }; }
   if (bytes.length > CV_MAX) return { error: "That file is over 6 MB. Save a smaller copy.", status: 413 };
   const kind = cvKind(name, bytes); if (!kind) return { error: "Upload a PDF or Word file (.pdf, .doc or .docx).", status: 400 };
-  await env.MEETINGS.put(CV_KEY + g, b64);
+  await env.MEETINGS.put(cvKey(person, g), b64);
   meta[g] = { name, type: kind, size: bytes.length, at: new Date().toISOString() };
-  await env.MEETINGS.put(CV_META_KEY, JSON.stringify(meta));
+  await env.MEETINGS.put(cvMetaKey(person), JSON.stringify(meta));
   return { ok: true, cv: meta };
 }
 
@@ -155,11 +193,11 @@ export const JOBS_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="
 export async function jobsRoute(request, env, url, deps) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
-  if (!deps.isAny(env, url)) return new Response("not found", { status: 404 });
-  // v637 (Kendall 27 Oct: "keep it for her only"): the owner's key gets the daily feed and the page, and an EMPTY record. Her details, CV files, drafts and the Work-log lines are hers alone.
-  const her = !!deps.isNaj(env, url), J404 = () => new Response("not found", { status: 404 });
-  if (!her && p !== "/momo/work/jobs/feed" && p !== "/momo/work/jobs" && !(p === "/momo/work/jobs/rec" && request.method === "GET")) return J404();
-  if (!her && p === "/momo/work/jobs/rec") return J(Object.assign(emptyRec(), { me: false }));
+  // v639 - the signing key decides whose record this is. A key that is nobody's gets "not found"; one person never reads or writes the other's record, CVs, drafts or Work-log lines.
+  const person = typeof deps.person === "function" ? deps.person(env, url) : "";
+  if (!PEOPLE_IDS.includes(person)) return new Response("not found", { status: 404 });
+  const her = person === "najjuko" && !!deps.isNaj(env, url), J404 = () => new Response("not found", { status: 404 });
+  const rec = await readRec(env, person), gk = rec.groups.map((g) => g.k);
   if (her) {
     const xd = Object.assign({}, deps, { names: deps.names || [] });
     if (p === "/momo/work/jobs/whatido" && request.method === "GET") return J(await readWhat(env));
@@ -167,27 +205,28 @@ export async function jobsRoute(request, env, url, deps) {
       let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
       const r = await whatApi(env, b, xd); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
     }
-    if (p === "/momo/work/jobs/cvdraft" && request.method === "POST") {
-      let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
-      const r = await cvDraftApi(env, b, xd, await readRec(env)); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
-    }
   }
-  if (p === "/momo/work/jobs/feed" && request.method === "GET") return J(await jobsFeed(env, deps.fetch, url.searchParams.get("fresh") === "1"));
-  if (p === "/momo/work/jobs/rec" && request.method === "GET") return J(Object.assign(await readRec(env), { me: true }));
-  if (p === "/momo/work/jobs/cv" && request.method === "GET") return J({ cv: await readCvMeta(env) });
+  if (p === "/momo/work/jobs/whatido") return J404();
+  if (p === "/momo/work/jobs/cvdraft" && request.method === "POST") {
+    let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
+    const r = await cvDraftApi(env, b, Object.assign({}, deps, { names: deps.names || [] }), rec, { what: her }); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
+  }
+  if (p === "/momo/work/jobs/feed" && request.method === "GET") return J(await jobsFeed(env, deps.fetch, url.searchParams.get("fresh") === "1", person, rec.feedUrl));
+  if (p === "/momo/work/jobs/rec" && request.method === "GET") return J(Object.assign(rec, { me: true, person, canWhat: her }));
+  if (p === "/momo/work/jobs/cv" && request.method === "GET") return J({ cv: await readCvMeta(env, person, gk) });
   if (p === "/momo/work/jobs/cv" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
-    const r = await cvApi(env, b); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
+    const r = await cvApi(env, b, person, gk); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
   }
   if (/^\/momo\/work\/jobs\/cv\/[A-Z]+$/.test(p) && request.method === "GET") {
-    const g = p.split("/").pop(), meta = await readCvMeta(env); if (!GROUP_KEYS.includes(g) || !meta[g]) return new Response("not found", { status: 404 });
-    const b64 = await env.MEETINGS.get(CV_KEY + g); if (!b64) return new Response("not found", { status: 404 });
+    const g = p.split("/").pop(), meta = await readCvMeta(env, person, gk); if (!gk.includes(g) || !meta[g]) return new Response("not found", { status: 404 });
+    const b64 = await env.MEETINGS.get(cvKey(person, g)); if (!b64) return new Response("not found", { status: 404 });
     const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
     return new Response(u, { headers: { "Content-Type": CV_TYPES[meta[g].type], "Content-Disposition": 'attachment; filename="' + meta[g].name.replace(/"/g, "") + '"', "Cache-Control": "no-store" } });
   }
   if (p === "/momo/work/jobs/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
-    const r = await jobsApi(env, b); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
+    const r = await jobsApi(env, b, person); return r.error ? J({ error: r.error }, r.status || 400) : J(r);
   }
   if (p === "/momo/work/jobs" && request.method === "GET") return new Response(deps.page(key, rk, JOBS_BODY + "<script>" + JOBS_JS + "</script>"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   return null;

@@ -4,7 +4,7 @@ const { cvKind, JOBS_JS } = await Promise.all([import("../src/work_jobs.js"), im
 let pass = 0, fail = 0; const ok = (c, m, x) => { if (c) pass++; else { fail++; console.log("FAIL", m, x === undefined ? "" : JSON.stringify(x).slice(0, 300)); } };
 const store = new Map();
 const KV = { get: async (k) => (store.has(k) ? store.get(k) : null), put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); }, list: async () => ({ keys: [], list_complete: true }) };
-const NAJ = "ins_najjuko_TESTKEY0123456789abcd", OWNER = "ins_owner_0123456789abcdefghijk";
+const NAJ = "ins_najjuko_TESTKEY0123456789abcd", OWNER = "ins_kendall_0123456789abcdefghij";
 const env = { MEETINGS: KV, INSIDER_KEY: NAJ + "," + OWNER }, ctx = { waitUntil() {}, passThroughOnException() {} };
 const b64 = (u8) => Buffer.from(u8).toString("base64");
 const FAKEPDF = new TextEncoder().encode("%PDF-1.4\nfake test file, not a real CV\n%%EOF");

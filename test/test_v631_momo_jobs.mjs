@@ -1,11 +1,11 @@
 // v631 - Momo Work JOBS: the feed (phase 2) and the shared record (phase 3), through the REAL worker entry. FAKE data only (the worker repo is public).
 const worker = (await import("../src/index.js")).default;
-const { cleanFeed, JOBS_CACHE_KEY, JOBS_REC_KEY, readRec } = await import("../src/work_jobs.js");
+const { cleanFeed, feedKey, JOBS_REC_KEY, readRec } = await import("../src/work_jobs.js");
 const { JOBS_JS, JOBS_BODY } = await import("../src/work_jobs_page.js");
 let pass = 0, fail = 0; const ok = (c, m, x) => { if (c) pass++; else { fail++; console.log("FAIL", m, x === undefined ? "" : JSON.stringify(x).slice(0, 300)); } };
 const store = new Map(), puts = [];
 const KV = { get: async (k) => (store.has(k) ? store.get(k) : null), put: async (k, v, o) => { puts.push([k, o]); store.set(k, v); }, delete: async (k) => { store.delete(k); }, list: async () => ({ keys: [], list_complete: true }) };
-const NAJ = "ins_najjuko_TESTKEY0123456789abcd", OWNER = "ins_owner_0123456789abcdefghijk";
+const NAJ = "ins_najjuko_TESTKEY0123456789abcd", OWNER = "ins_kendall_0123456789abcdefghij";
 const env = { MEETINGS: KV, INSIDER_KEY: NAJ + "," + OWNER };
 const ctx = { waitUntil() {}, passThroughOnException() {} };
 const FIX = { updated: "2026-01-01", at: "07:35", jobs: [{ c: "Example Co", t: "Marketing Manager", u: "https://example.com/1", k: "MKT", d: "2026-01-01", n: 1, s: "LinkedIn", l: "Dubai" }, { c: "Sample Ltd", t: "Sales Consultant", u: "javascript:alert(1)", k: "RE", d: "", n: 0, s: "", l: "x".repeat(90) }] };
@@ -18,10 +18,10 @@ const post = (path, key, body) => worker.fetch(new Request("https://w" + path + 
 let r = await get("/momo/work/jobs/feed", NAJ), j = await r.json();
 ok(r.status === 200 && j.total === 2 && j.new === 1 && j.at === "07:35" && j.stale === false, "her key reads the feed with its scan time", j);
 ok(j.jobs[1].u === "" && j.jobs[1].l.length === 48, "a non-http link is dropped and a location is cut to 48", j.jobs[1]);
-ok(calls === 1 && puts[0][0] === JOBS_CACHE_KEY && puts[0][1].expirationTtl === 7 * 86400, "fetched once, cached with a 7-day expiry", puts);
-await get("/momo/work/jobs/feed", OWNER); ok(calls === 1, "a second read inside 3 h uses the cache");
-await get("/momo/work/jobs/feed?fresh=1", OWNER); ok(calls === 2, "Refresh (fresh=1) fetches again at once", calls);
-const c = JSON.parse(store.get(JOBS_CACHE_KEY)); c.fetchedAt = new Date(Date.now() - 4 * 3600e3).toISOString(); store.set(JOBS_CACHE_KEY, JSON.stringify(c)); mode = "fail";
+ok(calls === 1 && puts[0][0] === feedKey("najjuko") && puts[0][1].expirationTtl === 7 * 86400, "fetched once, cached with a 7-day expiry", puts);
+await get("/momo/work/jobs/feed", NAJ); ok(calls === 1, "a second read inside 3 h uses the cache");
+await get("/momo/work/jobs/feed?fresh=1", NAJ); ok(calls === 2, "Refresh (fresh=1) fetches again at once", calls);
+const c = JSON.parse(store.get(feedKey("najjuko"))); c.fetchedAt = new Date(Date.now() - 4 * 3600e3).toISOString(); store.set(feedKey("najjuko"), JSON.stringify(c)); mode = "fail";
 j = await (await get("/momo/work/jobs/feed", NAJ)).json(); ok(j.total === 2 && j.stale === true, "a failed refresh serves the saved copy marked stale", j);
 ok(cleanFeed({ jobs: new Array(400).fill({ t: "T", u: "https://e.com" }) }).jobs.length === 300, "the feed holds up to 300 roles");
 ok(cleanFeed(null).jobs.length === 0, "junk input gives an empty feed");

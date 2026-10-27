@@ -5,7 +5,7 @@ const { JOBS_JS } = await import("../src/work_jobs_page.js");
 let pass = 0, fail = 0; const ok = (c, m, x) => { if (c) pass++; else { fail++; console.log("FAIL", m, x === undefined ? "" : JSON.stringify(x).slice(0, 300)); } };
 const store = new Map();
 const KV = { get: async (k) => (store.has(k) ? store.get(k) : null), put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); }, list: async () => ({ keys: [], list_complete: true }) };
-const NAJ = "ins_najjuko_TESTKEY0123456789abcd", OWNER = "ins_owner_0123456789abcdefghijk";
+const NAJ = "ins_najjuko_TESTKEY0123456789abcd", OWNER = "ins_kendall_0123456789abcdefghij";
 const env = { MEETINGS: KV, INSIDER_KEY: NAJ + "," + OWNER }, ctx = { waitUntil() {}, passThroughOnException() {} };
 const post = (body, key) => worker.fetch(new Request("https://w/momo/work/jobs/api?key=" + (key || NAJ), { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } }), env, ctx).then((r) => r.json());
 const U1 = "https://example.com/a", U2 = "https://example.org/b", U3 = "https://example.net/c";

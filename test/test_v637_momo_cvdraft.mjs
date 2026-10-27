@@ -5,7 +5,7 @@ let pass = 0, fail = 0; const ok = (c, m, x) => { if (c) pass++; else { fail++; 
 const store = new Map();
 const KV = { get: async (k) => (store.has(k) ? store.get(k) : null), put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); },
   list: async ({ prefix } = {}) => ({ keys: [...store.keys()].filter((k) => !prefix || k.startsWith(prefix)).map((name) => ({ name })), list_complete: true }) };
-const NAJ = "ins_najjuko_TESTKEY0123456789abcd", OWNER = "ins_owner_0123456789abcdefghijk";
+const NAJ = "ins_najjuko_TESTKEY0123456789abcd", OWNER = "ins_kendall_0123456789abcdefghij";
 const env = { MEETINGS: KV, INSIDER_KEY: NAJ + "," + OWNER, ANTHROPIC_API_KEY: "test-not-real" }, ctx = { waitUntil() {}, passThroughOnException() {} };
 let lastUser = "", lastSys = "", modelCalls = 0, mode = "ok"; const realFetch = globalThis.fetch;
 globalThis.fetch = async (u, o) => {
@@ -20,15 +20,13 @@ globalThis.fetch = async (u, o) => {
 const call = (path, key, body) => worker.fetch(new Request("https://w" + path + "?key=" + encodeURIComponent(key), body === undefined ? {} : { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } }), env, ctx);
 const ADVERT = "We are looking for a Marketing Manager to lead brand campaigns, manage an agency, run paid search and report on results every month. ".repeat(2);
 
-// owner key: feed and page yes, everything personal no
-for (const [p, b] of [["/momo/work/jobs/cvdraft", { title: "X", desc: ADVERT }], ["/momo/work/jobs/whatido", { action: "suggest" }], ["/momo/work/jobs/cv", { action: "list" }], ["/momo/work/jobs/api", { action: "save_profile", profile: { name: "Fake" } }]]) {
-  const r = await call(p, OWNER, b); ok(r.status === 404, "owner key refused on POST " + p, r.status); }
-for (const p of ["/momo/work/jobs/whatido", "/momo/work/jobs/cv", "/momo/work/jobs/cv/MKT"]) { const r = await call(p, OWNER); ok(r.status === 404, "owner key refused on GET " + p, r.status); }
-ok((await call("/momo/work/jobs/feed", OWNER)).status === 200 || true, "owner reaches the feed route");
-ok((await call("/momo/work/jobs", OWNER)).status === 200, "owner still opens the page");
+// v639: the second key (ins_kendall_*) is a PERSON of its own: it never reaches her Work log, her record or her CV files; it has its own empty record
+for (const p of ["/momo/work/jobs/whatido"]) { const r = await call(p, OWNER, { action: "suggest" }); ok(r.status === 404, "second key refused on POST " + p, r.status); }
+{ const r = await call("/momo/work/jobs/whatido", OWNER); ok(r.status === 404, "second key refused on GET whatido", r.status); }
+ok((await call("/momo/work/jobs", OWNER)).status === 200, "second key opens the page");
 store.set("jobs_rec_najjuko", JSON.stringify({ v: 2, profile: { name: "Fake Person", bio: "A fake bio of enough length.", email: "fake@example.com", phone: "000", direct: "3", indirect: "17" }, docs: { MKT: "https://example.com/cv" } }));
-const orec = await (await call("/momo/work/jobs/rec", OWNER)).json(); ok(orec.me === false && !orec.profile.name && !orec.profile.email && !orec.profile.bio && !Object.keys(orec.docs).length, "owner reads an EMPTY record", orec);
-const hrec = await (await call("/momo/work/jobs/rec", NAJ)).json(); ok(hrec.me === true && hrec.profile.name === "Fake Person", "her key reads her record", hrec.me);
+const orec = await (await call("/momo/work/jobs/rec", OWNER)).json(); ok(orec.me === true && orec.canWhat === false && orec.person === "kendall" && !orec.profile.name && !orec.profile.email && !orec.profile.bio && !Object.keys(orec.docs).length, "second key reads its OWN empty record, never hers", orec);
+const hrec = await (await call("/momo/work/jobs/rec", NAJ)).json(); ok(hrec.me === true && hrec.canWhat === true && hrec.profile.name === "Fake Person", "her key reads her record", hrec.me);
 for (const k of ["", "wrong"]) { const r = await call("/momo/work/jobs/whatido", k); ok(r.status === 404, "no/wrong key refused: '" + k + "'", r.status); }
 
 // What I do: empty log -> clear message, no model call

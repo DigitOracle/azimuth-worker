@@ -61,13 +61,16 @@ const CV_SYS = "You draft a tailored CV for one job advert from a person's own r
   + "relevance to the advert; a skills list ordered to match the advert; and 'gaps': each requirement in the advert for which the record shows no evidence (short phrases) so the person can address it in her cover letter. "
   + "Plain business English, no jargon, no mention of any AI, tool or vendor.";
 
-export async function cvDraftApi(env, b, deps, rec) {
+export async function cvDraftApi(env, b, deps, rec, opts) {
   const title = S(b && b.title, 200).trim(), company = S(b && b.company, 120).trim(), desc = S(b && b.desc, 6000).replace(/\s+/g, " ").trim(), group = S(b && b.group, 4);
   if (!title) return { error: "Choose a role first.", status: 400 };
   if (desc.length < 80) return { error: "Paste the advert text first (the description is too short).", status: 400 };
   if (typeof deps.claudeJSON !== "function") return { error: "Not available right now.", status: 503 };
-  const what = await readWhat(env), keep = what.lines.filter((l) => l.state === "keep").map((l) => l.text), p = (rec && rec.profile) || {};
-  if (!keep.length && !p.bio) return { error: "Approve some lines under 'What I do' first, or add a short bio to your details, so the draft has facts to work from.", status: 400 };
+  // v639 - the Work-log lines ('What I do') belong to the one person who has a Work log; anyone else drafts from their own record: bio plus their own letter facts (proof lines)
+  const own = !(opts && opts.what === false), what = own ? await readWhat(env) : { lines: [], skills: [] }, p = (rec && rec.profile) || {};
+  let keep = what.lines.filter((l) => l.state === "keep").map((l) => l.text);
+  if (!own) { const lt = (rec && rec.tpl && rec.tpl.letters) || {}; keep = Object.keys(lt).map((g) => S(lt[g] && lt[g].proof, 600).trim()).filter(Boolean).slice(0, 8); }
+  if (!keep.length && !p.bio) return { error: own ? "Approve some lines under 'What I do' first, or add a short bio to your details, so the draft has facts to work from." : "Add a short bio or your letter wording to your details first, so the draft has facts to work from.", status: 400 };
   const record = "Record (the only facts allowed):\nName: " + S(p.name, 80) + "\nCurrent headline: " + S(p.headline, 120) + "\nLocation: " + S(p.location, 60) + "\nBio: " + S(p.bio, 800)
     + "\nTeam: " + (p.direct ? S(p.direct, 6) + " direct reports" : "") + (p.indirect ? ", " + S(p.indirect, 6) + " indirect" : "")
     + "\nApproved experience lines:\n" + (keep.length ? keep.map((t) => "- " + t).join("\n") : "(none)") + "\nSkills: " + what.skills.join(", ");
