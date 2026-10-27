@@ -627,7 +627,8 @@ export async function workRoute(request, env, url, deps) {
   if (p === "/momo/work/voicetest") { if (!deps.isNaj(env, url)) return J({ error: "Not allowed." }, 401); return voiceTestRoute(request, env, url, J, deps); }   // v626 - the private speaker-detection test; a wrong key is a 401 and nothing runs
   if (p.startsWith("/momo/work/ggu")) return gguRoute(request, env, url, deps);   // v650 - GGU (Golden Gate University): Kendall's key only (its own gate)
   if (p.startsWith("/momo/work/speaking")) return speakingRoute(request, env, url, deps);   // v646 - Speaking engagements: Kendall's key only (its own gate)
-  if (p.startsWith("/momo/work/anne")) return anneRoute(request, env, url, deps);   // v641 - the temporary client card: Kendall's key only (its own gate)
+  if (p.startsWith("/momo/work/anne")) return anneRoute(request, env, url, deps);
+  if (p.startsWith("/momo/work/brief")) return dossierRoute(request, env, url, deps);   // v657 - building briefing cards (Najjuko only)   // v641 - the temporary client card: Kendall's key only (its own gate)
   if (p.startsWith("/momo/work/jobs")) return jobsRoute(request, env, url, Object.assign({}, deps, { listEntries, names: PEOPLE.map((x) => x[0]).concat(WORKS), kpiName: (k) => { const q = KPIS.find((y) => y.id === k); return q ? q.name : "Focus area " + k; } }));   // v630 - the Jobs tile: her key or the owner's (its own gate)
   if (!deps.isNaj(env, url)) {   // the owner (or anyone else): the room exists, the log is hers alone
     if (p !== "/momo/work") return new Response("not found", { status: 404 });
@@ -904,6 +905,7 @@ const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.open
 import { planRoute } from "./work_plan.js";
 import { jobsRoute } from "./work_jobs.js";
 import { anneRoute, readAnne } from "./work_anne.js";
+import { dossierRoute } from "./work_dossier.js";
 import { PDF_TOOLS } from "./pdf_tools.js";
 import { speakingRoute } from "./work_speaking.js";
 import { gguRoute } from "./work_ggu.js";
