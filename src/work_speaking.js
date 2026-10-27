@@ -34,8 +34,17 @@ export function cleanItem(x, prev) {
   else if (!Array.isArray(o.outline)) o.outline = [];
   if (has("materials")) o.materials = (Array.isArray(g.materials) ? g.materials : []).slice(0, 20).map((m) => ({ label: S(m && m.label, 120).trim(), url: url(m && m.url) })).filter((m) => m.label && m.url);
   else if (!Array.isArray(o.materials)) o.materials = [];
+  if (has("due")) o.due = cleanDue(g.due);   // v648 - absent = defaults by type (dueOf); [] = nothing due
+  if (o.due == null) delete o.due;
   o.id = slug(g.id || o.id) || ("s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
   return o;
+}
+// v648 (Kendall 27 Oct: "it should tell me if I have something due ... don't make it too complicated"): a short due list per engagement.
+export const MAX_DUE = 8;
+export function cleanDue(a) {
+  if (!Array.isArray(a)) return null;
+  const real = (v) => { const d = day(v); return d && !isNaN(Date.parse(d + "T00:00:00Z")) && new Date(d + "T00:00:00Z").toISOString().slice(0, 10) === d ? d : ""; };
+  return a.map((d) => ({ what: S(d && d.what, 80).trim(), by: real(d && d.by), done: !!(d && d.done) })).filter((d) => d.what).slice(0, MAX_DUE);
 }
 export const emptySpk = () => ({ v: 1, updatedAt: "", items: [], log: [] });
 export function cleanSpk(r) {
@@ -75,6 +84,18 @@ export async function spkApi(env, person, b) {
       }
       await writeSpk(env, person, rec, "Imported " + added + " new, " + merged + " updated"); return { ok: true, added, merged, rec };
     }
+    case "set_due": {
+      const i = find(b.id); if (i < 0) return { error: "Not found.", status: 404 };
+      rec.items[i].due = cleanDue(Array.isArray(b.due) ? b.due : []); rec.items[i].updatedAt = now;
+      await writeSpk(env, person, rec, rec.items[i].title + ": due list updated"); return { ok: true, rec };
+    }
+    case "toggle_due": {
+      const i = find(b.id); if (i < 0) return { error: "Not found.", status: 404 };
+      const it = rec.items[i]; if (!Array.isArray(it.due)) it.due = dueOf(it).map((d) => ({ what: d.what, by: d.by, done: d.done }));
+      const k = Math.floor(Number(b.index)); if (!(k >= 0 && k < it.due.length)) return { error: "No such item.", status: 400 };
+      it.due[k].done = b.done === undefined ? !it.due[k].done : !!b.done; it.updatedAt = now;
+      await writeSpk(env, person, rec, it.title + ": " + it.due[k].what + (it.due[k].done ? " done" : " reopened")); return { ok: true, rec };
+    }
     default: return { error: "Unknown action.", status: 400 };
   }
 }
@@ -101,6 +122,30 @@ export function countdown(i, today) {
   return n < 0 ? "under way" : n === 0 ? "today" : n === 1 ? "tomorrow" : "in " + n + " days";
 }
 
+// v648 - what is due: an explicit list wins; otherwise panels, judging and awards need nothing, and talks of every kind need slides.
+export const NODUE = ["panel", "judge", "award"];
+export function dueOf(i) {
+  if (i.status === "delivered" || i.status === "cancelled") return [];   // nothing is due on an engagement that is over
+  if (Array.isArray(i.due)) return i.due;
+  return NODUE.indexOf(i.type) >= 0 ? [] : [{ what: "Slides / presentation", by: "", done: false, implied: true }];
+}
+export function dueChip(i, today) {
+  var t = today || new Date(Date.now() + 144e5).toISOString().slice(0, 10), open = dueOf(i).filter(function (d) { return !d.done; });
+  if (!open.length) return { cls: "ok", text: NODUE.indexOf(i.type) >= 0 && !Array.isArray(i.due) ? "Nothing due, just show up" : "Nothing due", open: 0 };
+  var f = open[0], n = i.date ? Math.round((Date.parse(i.date + "T00:00:00Z") - Date.parse(t + "T00:00:00Z")) / 864e5) : 99;
+  var soon = n <= 2 || (f.by && f.by <= t), more = open.length > 1 ? " +" + (open.length - 1) + " more" : "";
+  return { cls: soon ? "red" : "amber", text: (soon ? "Due soon: " : "Due: ") + f.what + more, open: open.length };
+}
+export function dueQuestion(i, today) {
+  var t = today || new Date(Date.now() + 144e5).toISOString().slice(0, 10), open = dueOf(i).filter(function (d) { return !d.done; });
+  var W = { talk: "Presentation", lecture: "Presentation", webinar: "Webinar", keynote: "Keynote", masterclass: "Masterclass", panel: "Panel", judge: "Judging", award: "Awards" };
+  var n = i.date ? Math.round((Date.parse(i.date + "T00:00:00Z") - Date.parse(t + "T00:00:00Z")) / 864e5) : null;
+  var when = n == null ? "date TBC" : n < 0 ? "under way" : n === 0 ? "today" : n === 1 ? "tomorrow" : "in " + n + " days";
+  var head = (W[i.type] || "Engagement") + " " + when + ". ";
+  if (!open.length) return head + (NODUE.indexOf(i.type) >= 0 && !Array.isArray(i.due) ? "Nothing due, just show up." : "Nothing due.");
+  var w = open[0].what; return head + w + (/slide|presentation|deck/i.test(w) ? " ready?" : " done?");
+}
+
 // ---- page ----
 export const SPK_ICON = '<path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M8 21h8"/>';
 const SPK_CSS = '<style>.sh{color:#5F6B66;font-size:.82rem;margin:0 0 10px}.nx{background:#0A4F4A;color:#fff;border-radius:16px;padding:14px 16px;margin:0 0 14px}.nx small{color:#C5A56A;font-family:"IBM Plex Mono",monospace;letter-spacing:.12em;font-size:.66rem}'
@@ -112,7 +157,7 @@ const SPK_CSS = '<style>.sh{color:#5F6B66;font-size:.82rem;margin:0 0 10px}.nx{b
   + '.sd th,.sd td{border-bottom:1px solid #EEE7DA;text-align:left;padding:5px 4px;vertical-align:top}.sd th{color:#0A4F4A}.sb{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}'
   + '.sb a,.sb button{border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:999px;padding:7px 12px;font:600 .78rem "IBM Plex Sans",sans-serif;text-decoration:none;cursor:pointer}'
   + '.sb .pri{background:#0A4F4A;color:#fff}.fm{display:none;background:#fff;border:1px solid #E5DFD3;border-radius:14px;padding:12px;margin:10px 0}.fm.on{display:block}.fm label{display:block;font-size:.74rem;color:#5F6B66;margin:8px 0 2px}'
-  + '.fm input,.fm select,.fm textarea{width:100%;box-sizing:border-box;border:1px solid #D8D1C4;border-radius:10px;padding:8px;font:400 .86rem "IBM Plex Sans",sans-serif}.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.em{color:#5F6B66;font-size:.85rem;padding:16px 0}</style>';
+  + '.fm input,.fm select,.fm textarea{width:100%;box-sizing:border-box;border:1px solid #D8D1C4;border-radius:10px;padding:8px;font:400 .86rem "IBM Plex Sans",sans-serif}.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc{display:inline-block;border-radius:999px;padding:3px 10px;font-weight:700;font-size:.74rem;margin-top:6px}.dc.ok{background:#E3F1E7;color:#1F6B3A}.dc.amber{background:#FBEFD5;color:#8A5A00}.dc.red{background:#FBE1DE;color:#A12A1D}.nx .dc{margin-right:6px}.nx .yd{border:0;background:#C5A56A;color:#0A4F4A;border-radius:999px;padding:5px 12px;font-weight:700;font-size:.78rem;cursor:pointer}.dl label{display:flex;gap:8px;align-items:center;margin:4px 0;font-size:.84rem}.dl .add{display:flex;gap:6px;margin-top:6px}.dl .add input{flex:1;border:1px solid #D8D1C4;border-radius:10px;padding:6px}.dl .add button{border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:999px;padding:5px 12px;font-weight:600;cursor:pointer}.em{color:#5F6B66;font-size:.85rem;padding:16px 0}</style>';
 export const SPK_BODY = SPK_CSS + '<a class=back href="/momo" id=sback>&#8592; Momo</a><div class=tag>MOMO</div><h1>Speaking</h1><p class=sh id=supd>Loading...</p><div id=snext></div>'
   + '<div class=sf><select id=fy><option value="">All years</option></select><select id=ft><option value="">All types</option></select><button type=button id=sadd style="border:1px solid #0A4F4A;background:#0A4F4A;color:#fff;border-radius:999px;padding:7px 12px;font:600 .8rem IBM Plex Sans,sans-serif">Add</button>'
   + '<a id=sall target=_blank rel=noopener style="border:1px solid #0A4F4A;color:#0A4F4A;border-radius:999px;padding:7px 12px;font:600 .8rem IBM Plex Sans,sans-serif;text-decoration:none">Download all</a></div>'
@@ -127,7 +172,7 @@ export const SPK_BODY = SPK_CSS + '<a class=back href="/momo" id=sback>&#8592; M
   + '<div class=sb><button type=button class=pri id=f_save>Save</button><button type=button id=f_cancel>Cancel</button></div><p class=sh id=f_msg></p></div>'
   + '<h2>Upcoming</h2><div id=sup></div><h2>Past</h2><div id=spast></div>';
 // v647 - wrangler's bundler wraps functions with __name(fn,"name"); embedding fn.toString() in the page carries that call, so the page must define __name or it throws before drawing (Speaking showed "Could not load", 27 Oct).
-export const SPK_JS = "var __name=function(f){return f};var whenLabel=" + whenLabel.toString() + ";var countdown=" + countdown.toString() + ";var splitItems=" + splitItems.toString() + ";var dubaiDay=" + dubaiDay.toString() + ";var WD=" + JSON.stringify(WD) + ";var MO=" + JSON.stringify(MO)
+export const SPK_JS = "var __name=function(f){return f};var whenLabel=" + whenLabel.toString() + ";var countdown=" + countdown.toString() + ";var splitItems=" + splitItems.toString() + ";var dubaiDay=" + dubaiDay.toString() + ";var NODUE=" + JSON.stringify(NODUE) + ";var dueOf=" + dueOf.toString() + ";var dueChip=" + dueChip.toString() + ";var dueQuestion=" + dueQuestion.toString() + ";var WD=" + JSON.stringify(WD) + ";var MO=" + JSON.stringify(MO)
   + ";var TYPES=" + JSON.stringify(TYPES) + ";var FORMATS=" + JSON.stringify(FORMATS) + ";var STS=" + JSON.stringify(SPK_STATUSES) + ";" + String.raw`(function(){
 var KEY=new URLSearchParams(location.search).get("key")||"",REC={items:[]},$=function(i){return document.getElementById(i)};
 $("sback").href="/momo?door=1&key="+encodeURIComponent(KEY);$("sall").href="/momo/work/speaking/report?key="+encodeURIComponent(KEY);
@@ -136,8 +181,8 @@ function opts(id,list){var s=$(id);list.forEach(function(v){var o=el("option",""
 opts("f_type",TYPES);opts("f_status",STS);opts("f_format",FORMATS);opts("ft",TYPES);
 function api(b){return fetch("/momo/work/speaking/api?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(function(r){return r.json()})}
 function card(i){var c=el("div","sc");c.appendChild(el("h3","",i.title));c.appendChild(el("p","",(i.organiser||"")+(i.venue?" | "+i.venue:"")+(i.city?", "+i.city:"")));c.appendChild(el("p","",whenLabel(i)));
-var t=el("p");var a=el("i","",i.type);t.appendChild(a);var b=el("i","st",i.status);t.appendChild(b);if(i.format)t.appendChild(el("i","",i.format));c.appendChild(t);
-var d=el("div","sd");if(i.audience)d.appendChild(el("p","","Audience: "+i.audience));if(i.summary)d.appendChild(el("p","",i.summary));
+var t=el("p");var a=el("i","",i.type);t.appendChild(a);var b=el("i","st",i.status);t.appendChild(b);if(i.format)t.appendChild(el("i","",i.format));c.appendChild(t);var dch=dueChip(i,dubaiDay());c.appendChild(el("span","dc "+dch.cls,dch.text));
+var d=el("div","sd");d.appendChild(dueList(i));if(i.audience)d.appendChild(el("p","","Audience: "+i.audience));if(i.summary)d.appendChild(el("p","",i.summary));
 if(i.objectives&&i.objectives.length){var ul=el("ul");i.objectives.forEach(function(o){ul.appendChild(el("li","",o))});d.appendChild(el("p","","Objectives"));d.appendChild(ul)}
 if(i.outline&&i.outline.length){var tb=el("table"),h=el("tr");["Time","Min","Segment","What it covers","Interactive"].forEach(function(x){h.appendChild(el("th","",x))});tb.appendChild(h);
 i.outline.forEach(function(s){var r=el("tr");[s.time,s.mins||"",s.segment,s.covers,s.interactive].forEach(function(x){r.appendChild(el("td","",x))});tb.appendChild(r)});d.appendChild(tb)}
@@ -149,11 +194,19 @@ var ed=el("button","","Edit");ed.type="button";ed.onclick=function(e){e.stopProp
 var ss=el("select");STS.forEach(function(v){var o=el("option","",v);o.value=v;if(v===i.status)o.selected=true;ss.appendChild(o)});ss.onclick=function(e){e.stopPropagation()};
 ss.onchange=function(){api({action:"set_status",id:i.id,status:ss.value}).then(function(r){if(r.rec){REC=r.rec;draw()}})};sb.appendChild(ss);d.appendChild(sb);c.appendChild(d);
 c.onclick=function(){c.classList.toggle("open")};return c}
+function dueList(i){var box=el("div","dl"),L=dueOf(i);box.appendChild(el("p","",L.length?"What is due":"Nothing due"));box.onclick=function(e){e.stopPropagation()};
+L.forEach(function(x,k){var lb=el("label"),cb=el("input");cb.type="checkbox";cb.checked=!!x.done;cb.onchange=function(){api({action:"toggle_due",id:i.id,index:k,done:cb.checked}).then(function(r){if(r.rec){REC=r.rec;draw()}})};lb.appendChild(cb);lb.appendChild(el("span","",x.what+(x.by?" (by "+x.by+")":"")));box.appendChild(lb)});
+var ad=el("div","add"),inp=el("input"),bt=el("button","","Add");inp.placeholder="Add something due";bt.type="button";
+bt.onclick=function(){var w=inp.value.trim();if(!w)return;var cur=dueOf(i).map(function(x){return{what:x.what,by:x.by,done:x.done}});cur.push({what:w,by:"",done:false});api({action:"set_due",id:i.id,due:cur}).then(function(r){if(r.rec){REC=r.rec;draw()}})};
+ad.appendChild(inp);ad.appendChild(bt);box.appendChild(ad);return box}
 function draw(){$("supd").textContent=REC.items.length+" engagements"+(REC.updatedAt?" | updated "+REC.updatedAt.slice(0,10):"");
 var ys={};REC.items.forEach(function(i){if(i.date)ys[i.date.slice(0,4)]=1});var fy=$("fy"),cur=fy.value;while(fy.options.length>1)fy.remove(1);Object.keys(ys).sort().reverse().forEach(function(y){var o=el("option","",y);o.value=y;fy.appendChild(o)});fy.value=cur;
 var Y=fy.value,T=$("ft").value,list=REC.items.filter(function(i){return(!Y||(i.date||"").slice(0,4)===Y)&&(!T||i.type===T)});
 var sp=splitItems(list,dubaiDay()),nx=$("snext");nx.textContent="";var all=splitItems(REC.items,dubaiDay());
-if(all.up.length){var n=all.up[0],b=el("div","nx");b.appendChild(el("small","","NEXT"));b.appendChild(el("b","",n.title));b.appendChild(el("span","",whenLabel(n)+(n.venue?" | "+n.venue:"")));b.appendChild(el("div"));b.lastChild.appendChild(el("span","ch",countdown(n,dubaiDay())));nx.appendChild(b)}
+if(all.up.length){var n=all.up[0],b=el("div","nx");b.appendChild(el("small","","NEXT"));b.appendChild(el("b","",n.title));b.appendChild(el("span","",whenLabel(n)+(n.venue?" | "+n.venue:"")));b.appendChild(el("div"));b.lastChild.appendChild(el("span","ch",countdown(n,dubaiDay())));
+var q=el("div");q.style.marginTop="8px";var qc=dueChip(n,dubaiDay());q.appendChild(el("span","dc "+qc.cls,dueQuestion(n,dubaiDay())));
+if(qc.open){var yb=el("button","yd","Yes, done");yb.type="button";var NL=dueOf(n),ix=NL.findIndex(function(x){return!x.done});yb.onclick=function(){api({action:"toggle_due",id:n.id,index:ix,done:true}).then(function(r){if(r.rec){REC=r.rec;draw()}})};q.appendChild(yb)}
+b.appendChild(q);nx.appendChild(b)}
 [["sup",sp.up,"Nothing coming up."],["spast",sp.past,"Nothing yet."]].forEach(function(x){var box=$(x[0]);box.textContent="";if(!x[1].length)box.appendChild(el("p","em",x[2]));x[1].forEach(function(i){box.appendChild(card(i))})})}
 function openForm(i){i=i||{};$("sform").classList.add("on");$("f_id").value=i.id||"";$("f_title").value=i.title||"";$("f_org").value=i.organiser||"";$("f_type").value=i.type||"talk";$("f_status").value=i.status||"proposed";
 $("f_date").value=i.date||"";$("f_end").value=i.endDate||"";$("f_start").value=i.start||"";$("f_endt").value=i.end||"";$("f_venue").value=i.venue||"";$("f_city").value=i.city||"";$("f_country").value=i.country||"";
@@ -182,6 +235,7 @@ export function spkReport(rec, id) {
       + (one.audience ? "<h2>Audience</h2><p>" + esc(one.audience) + "</p>" : "") + (one.summary ? "<h2>Summary</h2><p>" + esc(one.summary) + "</p>" : "")
       + (one.objectives.length ? "<h2>Objectives</h2><ul>" + one.objectives.map((o) => "<li>" + esc(o) + "</li>").join("") + "</ul>" : "")
       + (one.outline.length ? "<h2>Session outline</h2><table><tr><th>Time</th><th>Min</th><th>Segment</th><th>What it covers</th><th>Interactive element</th></tr>" + one.outline.map((s) => "<tr><td>" + esc(s.time) + "</td><td>" + (s.mins || "") + "</td><td>" + esc(s.segment) + "</td><td>" + esc(s.covers) + "</td><td>" + esc(s.interactive) + "</td></tr>").join("") + "</table>" : "")
+      + "<h2>What is due</h2>" + (dueOf(one).length ? "<ul>" + dueOf(one).map((d) => "<li>" + esc(d.what) + (d.by ? " (by " + esc(d.by) + ")" : "") + " - " + (d.done ? "done" : "open") + "</li>").join("") + "</ul>" : "<p>" + esc(dueChip(one).text) + "</p>")
       + (one.notes ? "<h2>Notes</h2><p>" + esc(one.notes) + "</p>" : "") + "</div>";
   } else {
     const sp = splitItems(rec.items);
