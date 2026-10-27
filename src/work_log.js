@@ -883,7 +883,7 @@ export function debriefHtml(e) {
     + row('Role', e.in_scope === false ? 'Outside her role' + (e.out_role ? ' (' + esc(e.out_role) + ')' : '') : 'Within her role') + row('Progress', tasks) + row('Produced', (e.deliverables || []).map(esc).join('; ')) + (e.link ? row('File', '<a href="' + esc(e.link) + '">' + esc(e.link) + '</a>') : '') + '</table>'
     + ((e.next || []).length ? '<h2 style="font-size:12pt">NEXT STEPS</h2><ul>' + e.next.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>' : '')
     + '<div class=note style="margin-top:22px;padding-top:8px;border-top:1px solid #E9EAEC;font-size:7.8pt;color:#626B7C;line-height:1.45">Prepared by Serah Najjuko Ganyana for FN Realty. The method, templates and tools that produced this debrief are her own (employment contract, clause 12.2) and are not part of what is provided.</div>'
-    + '</div><div class=btns style="position:fixed;right:14px;bottom:14px;display:flex;gap:8px"><button class=btn id=bk>&#8592; Back</button><button class=btn onclick="print()">Share / Save as PDF</button></div><script>' + BACK_JS + '</script></body></html>';
+    + '</div><div class=btns style="position:fixed;right:14px;bottom:14px;display:flex;gap:8px"><button class=btn id=bk>&#8592; Back</button>' + PDF_TOOLS + '</div><script>' + BACK_JS + '</script></body></html>';
 }
 // the weekly report: FN Realty's brand (navy #1F2B44, gold #C9A97A, Anton + Inter), internal confidentiality footer on every page
 // v577 (Kendall 14 Oct: "senior management ... fifteen seconds maximum ... donut charts, line charts ... not text heavy") - THE 15-SECOND REPORT.
@@ -899,6 +899,7 @@ const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.open
 import { planRoute } from "./work_plan.js";
 import { jobsRoute } from "./work_jobs.js";
 import { anneRoute, readAnne } from "./work_anne.js";
+import { PDF_TOOLS } from "./pdf_tools.js";
 import { speakingRoute } from "./work_speaking.js";
 import { gguRoute } from "./work_ggu.js";
 import { teamRoute } from "./work_team.js";
@@ -1032,7 +1033,7 @@ export function reportDoc(kindWord, span, body, docTitle) {
     + '<div class=note>Prepared by Serah Najjuko Ganyana for FN Realty. The figures are FN Realty\'s to use. The method, templates and tools that produced this report are her own (employment contract, clause 12.2) and are not part of what is provided.</div>'
     // v582 (Kendall: "once she clicks on debrief, there's no way to exit back out of it") - Back on every report page: closes the tab it opened in,
     // or steps back where it was opened in place.
-    + '<div class=btns><button class=btn id=bk>&#8592; Back</button><button class=btn onclick="print()">Share / Save as PDF</button></div>'
+    + '<div class=btns><button class=btn id=bk>&#8592; Back</button>' + PDF_TOOLS + '</div>'
     + '<script>document.title=' + JSON.stringify(docTitle) + ';' + BACK_JS + '</script></body></html>';
 }
 export function reportHtml(es, from, to, allTasks, pickedDays) {

@@ -5,6 +5,7 @@
 // This is the Momo Work side of the plan; the development team's Content Planner service will later supply the same items through a feed (see
 // Client_Engagements/FN_Realty/Strategy/FN_Content_Engine_Developer_Spec_14OCT2026.md section 8). Until then the items live in her own KV, so it works today.
 import { TEAM_JS } from "./work_team.js";
+import { PDF_TOOLS } from "./pdf_tools.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 
 const PLP = "work_naj_plan_", TRP = "work_naj_trend_", TMP = "work_naj_team_", SEED_KEY = "work_naj_planseed";
@@ -242,7 +243,7 @@ function weekHtml(items, trends, mon) {
     + (blogs.length ? '<h2>BLOG POSTS DUE (ONE WEEK BEFORE ANYTHING WE TAKE PART IN)</h2>' + blogTbl : '') + (startNow.length ? '<h2>ARTWORK STARTS THIS WEEK</h2>' + tbl(startNow) : '') + (late.length ? '<h2>ALREADY LATE TO START: USE THE FAST LANE</h2>' + tbl(late) : '')
     + (live.length ? '<h2>TRENDS TO MAKE (EACH EXPIRES 72 HOURS AFTER IT WAS SEEN)</h2><table><tr><th>Trend</th><th>Platform</th><th>For</th><th>Our angle</th></tr>' + live.map((t) => '<tr><td><b>' + esc(t.hook) + '</b><small>' + esc(t.why) + '</small></td><td>' + esc(t.platform) + '</td><td>' + esc(t.agent) + '</td><td>' + esc(t.angle) + '</td></tr>').join("") + '</table>' : '')
     + '<div class=note>Every number in a post comes from Najma with its date; reviews are summarised, never quoted; property advertisements carry the advertising permit number; the Managing Director approves sensitive items. Prepared by Serah Najjuko Ganyana for FN Realty. The method, templates and tools that produced this plan are her own (employment contract, clause 12.2) and are not part of what is provided.</div></div>'
-    + '<div class=btns><button class=btn onclick="print()">Share / Save as PDF</button></div></body></html>';
+    + '<div class=btns>' + PDF_TOOLS + '</div></body></html>';
 }
 
 // v615 - the month page is built per month (monthSection) so the PDF for Ali can run from one month to another, one page per month
@@ -293,7 +294,7 @@ function monthHtml(items, ymFrom, ymTo) {
     + '<header><div>' + head + '</div><img src="' + FN_LOGO + '" alt="FN Realty"></header>'
     + body
     + '<div class=note>For a decision: tick one box per line. “Attend” means FN takes part and creates content from it; “Content only” means we cover it from the office without attending; “Skip” means we leave it. Dates marked Expected depend on a moon sighting or an official announcement and may move. Prepared by Serah Najjuko Ganyana for FN Realty. The method, templates and tools that produced this are her own (employment contract, clause 12.2) and are not part of what is provided.</div></div>'
-    + '<div class=btns><button class=btn onclick="print()">Share / Save as PDF</button></div></body></html>';
+    + '<div class=btns>' + PDF_TOOLS + '</div></body></html>';
 }
 
 const PLAN_JS = String.raw`
