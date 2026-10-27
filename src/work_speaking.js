@@ -126,7 +126,8 @@ export const SPK_BODY = SPK_CSS + '<a class=back href="/momo" id=sback>&#8592; M
   + '<label>Objectives (one per line)</label><textarea id=f_obj rows=3></textarea><label>Notes</label><textarea id=f_notes rows=2></textarea>'
   + '<div class=sb><button type=button class=pri id=f_save>Save</button><button type=button id=f_cancel>Cancel</button></div><p class=sh id=f_msg></p></div>'
   + '<h2>Upcoming</h2><div id=sup></div><h2>Past</h2><div id=spast></div>';
-export const SPK_JS = "var whenLabel=" + whenLabel.toString() + ";var countdown=" + countdown.toString() + ";var splitItems=" + splitItems.toString() + ";var dubaiDay=" + dubaiDay.toString() + ";var WD=" + JSON.stringify(WD) + ";var MO=" + JSON.stringify(MO)
+// v647 - wrangler's bundler wraps functions with __name(fn,"name"); embedding fn.toString() in the page carries that call, so the page must define __name or it throws before drawing (Speaking showed "Could not load", 27 Oct).
+export const SPK_JS = "var __name=function(f){return f};var whenLabel=" + whenLabel.toString() + ";var countdown=" + countdown.toString() + ";var splitItems=" + splitItems.toString() + ";var dubaiDay=" + dubaiDay.toString() + ";var WD=" + JSON.stringify(WD) + ";var MO=" + JSON.stringify(MO)
   + ";var TYPES=" + JSON.stringify(TYPES) + ";var FORMATS=" + JSON.stringify(FORMATS) + ";var STS=" + JSON.stringify(SPK_STATUSES) + ";" + String.raw`(function(){
 var KEY=new URLSearchParams(location.search).get("key")||"",REC={items:[]},$=function(i){return document.getElementById(i)};
 $("sback").href="/momo?door=1&key="+encodeURIComponent(KEY);$("sall").href="/momo/work/speaking/report?key="+encodeURIComponent(KEY);

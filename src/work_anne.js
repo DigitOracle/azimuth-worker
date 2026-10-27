@@ -159,7 +159,8 @@ export const ANNE_BODY = ANNE_CSS + '<a class=back href="/momo" id=aback>&#8592;
   + '<div class=fm><b>Recent changes</b><div id=alog class=lg></div><div class=row style="margin-top:10px"><button class=ab id=aret type=button>Retire this card</button></div></div>'
   + '<div class=fm><b>Download</b><p class=ah style="margin:4px 0 8px">The register as a page you can save or print. It follows the filters picked above.</p><div class=row><a class="ab p" id=adl href="#" target=_blank rel=noopener>Download (HTML)</a> <a class=ab id=apdf href="#" target=_blank rel=noopener>Save as PDF</a></div></div>';
 
-export const ANNE_JS = "var waDigits=" + waDigits.toString() + ";var fillWa=" + fillWa.toString() + ";var bestRank=" + bestRank.toString() + ";" + String.raw`(function(){var KEY=new URLSearchParams(location.search).get("key")||"",REC=null,FC="All",FS="All",BEST=false;
+// v647 - wrangler's bundler wraps functions with __name(fn,"name"); embedding fn.toString() in the page carries that call, so the page must define __name or it throws before drawing (Speaking showed "Could not load", 27 Oct).
+export const ANNE_JS = "var __name=function(f){return f};var waDigits=" + waDigits.toString() + ";var fillWa=" + fillWa.toString() + ";var bestRank=" + bestRank.toString() + ";" + String.raw`(function(){var KEY=new URLSearchParams(location.search).get("key")||"",REC=null,FC="All",FS="All",BEST=false;
 var QS=[["available","Available?"],["furnishedOk","Furnished as advertised?"],["dogsOk","Dogs allowed?"]];
 var $=function(i){return document.getElementById(i)};$("aback").href="/momo?door=1&key="+encodeURIComponent(KEY);
 var STA=["New","Contacted","Available","Viewing booked","Viewed","Rejected","Expired"];
