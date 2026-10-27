@@ -58,4 +58,17 @@ ok(cleanLead({ verified: "made up", flags: "x" }).verified === "" && cleanLead({
 await post({ action: "delete_lead", id: "m0" }, K);
 const mp = await (await post({ action: "save_lead", lead: { property: "No Contact House", community: "C" } }, K)).json(); ok(mp.ok && mp.lead.flags.length === 0, "a lead without a phone saves (the Missing contact chip is drawn by the page)");
 ok(/Missing contact/.test(await (await get("/momo/work/anne", K)).text()), "page code draws the Missing contact chip");
+// v642 - the printable register
+for (const k of [N, O, "", "wrong"]) { const r = await get("/momo/work/anne/report", k); ok(r.status === 404, "report 404 for key '" + k.slice(0, 10) + "'", r.status); }
+{ const r = await get("/momo/work/anne/report", K), t = await r.text();
+  ok(r.status === 200 && /text\/html/.test(r.headers.get("content-type")) && /Fake Client/.test(t) && /Fake House 1/.test(t) && /Fake Community/.test(t), "his key gets the report with the record", r.status);
+  ok(/Advertised leads, not confirmed availability/.test(t) && /Updated \d{4}-\d\d-\d\d/.test(t) && /window\.print\(\)/.test(t) && /page-break-inside:avoid/.test(t) && /@page\{size:A4 portrait/.test(t), "footer, updated line, print button, A4 and page-break rules");
+  ok(/href="tel:\+00000000000"/.test(t) && /\(agent\)/.test(t) && /href="https:\/\/example\.com\/1"/.test(t), "phone as tel link with its type, advert link");
+  ok(!/<img/.test(t) && !/[\u{1F300}-\u{1FAFF}]/u.test(t), "no images, no emojis");
+  ok(/Missing contact/.test(t), "Missing contact chip in the report for a lead without a route"); }
+{ const t = await (await get("/momo/work/anne/report?status=Viewing%20booked", K)).text(); ok(/Fake House 1/.test(t) && !/Fake House 2/.test(t) && /status Viewing booked/.test(t), "status filter narrows the report"); }
+{ const t = await (await get("/momo/work/anne/report?community=C2", K)).text(); ok(/Fake House 4/.test(t) && !/Fake House 1/.test(t), "community filter narrows the report"); }
+{ const t = await (await get("/momo/work/anne/report?status=Bogus", K)).text(); ok(/Fake House 1/.test(t) && /Fake House 2/.test(t), "an unknown status is ignored"); }
+{ const t = await (await get("/momo/work/anne/report?community=Nowhere", K)).text(); ok(/No leads match/.test(t), "an empty filter says so"); }
+{ const t = await (await get("/momo/work/anne", K)).text(); ok(/id=adl/.test(t) && /id=apdf/.test(t) && /\/momo\/work\/anne\/report/.test(t), "the page has Download and Save as PDF"); }
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

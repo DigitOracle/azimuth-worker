@@ -115,7 +115,8 @@ const ANNE_CSS = '<style>.ah{color:#5F6B66;font-size:.8rem;margin:0 0 8px}.ac{di
 
 export const ANNE_BODY = ANNE_CSS + '<a class=back href="/momo" id=aback>&#8592; Momo</a><div class=tag>MOMO</div><h1 id=atitle>Client card</h1><p class=ah id=aupd></p><div class=ac id=abrief></div><div id=aarch></div><div class=af id=acom></div><div class=af id=asta></div><div id=alist></div>'
   + '<div class=fm><b>Add a lead</b><label>Property</label><input id=n_prop><label>Community</label><input id=n_com><label>Asking rent a year (AED)</label><input id=n_rent inputmode=numeric><label>Agent</label><input id=n_agent><label>Agency</label><input id=n_agency><label>Phone</label><input id=n_phone><label>Advert link</label><input id=n_url><div class=row style="margin-top:10px"><button class="ab p" id=n_add type=button>Add lead</button> <span class=ah id=n_msg></span></div></div>'
-  + '<div class=fm><b>Recent changes</b><div id=alog class=lg></div><div class=row style="margin-top:10px"><button class=ab id=aret type=button>Retire this card</button></div></div>';
+  + '<div class=fm><b>Recent changes</b><div id=alog class=lg></div><div class=row style="margin-top:10px"><button class=ab id=aret type=button>Retire this card</button></div></div>'
+  + '<div class=fm><b>Download</b><p class=ah style="margin:4px 0 8px">The register as a page you can save or print. It follows the filters picked above.</p><div class=row><a class="ab p" id=adl href="#" target=_blank rel=noopener>Download (HTML)</a> <a class=ab id=apdf href="#" target=_blank rel=noopener>Save as PDF</a></div></div>';
 
 export const ANNE_JS = String.raw`(function(){var KEY=new URLSearchParams(location.search).get("key")||"",REC=null,FC="All",FS="All";
 var $=function(i){return document.getElementById(i)};$("aback").href="/momo?door=1&key="+encodeURIComponent(KEY);
@@ -144,10 +145,53 @@ var ar=$("aarch");ar.textContent="";if(REC.archived){var d=el("div","ag","This c
 var coms=["All"];REC.leads.forEach(function(l){if(l.community&&coms.indexOf(l.community)<0)coms.push(l.community)});var cf=$("acom");cf.textContent="";coms.forEach(function(c){var x=el("button",c===FC?"on":"",c+" "+(c==="All"?REC.leads.length:count(function(l){return l.community===c})));x.type="button";x.onclick=function(){FC=c;draw()};cf.appendChild(x)});
 var sf=$("asta");sf.textContent="";["All"].concat(STA).forEach(function(s){var n=s==="All"?REC.leads.length:count(function(l){return l.status===s});if(s!=="All"&&!n)return;var x=el("button",s===FS?"on":"",s+" "+n);x.type="button";x.onclick=function(){FS=s;draw()};sf.appendChild(x)});
 var L=$("alist");L.textContent="";var ls=REC.leads.filter(function(l){return(FC==="All"||l.community===FC)&&(FS==="All"||l.status===FS)});if(!ls.length)L.appendChild(el("div","ag","No leads here yet."));ls.forEach(function(l){L.appendChild(card(l))});
+var qs="?key="+encodeURIComponent(KEY)+(FS!=="All"?"&status="+encodeURIComponent(FS):"")+(FC!=="All"?"&community="+encodeURIComponent(FC):"");$("adl").href="/momo/work/anne/report"+qs;$("apdf").href="/momo/work/anne/report"+qs+"&print=1";
 var lg=$("alog");lg.textContent="";(REC.log||[]).slice(0,8).forEach(function(x){lg.appendChild(el("div","",x.at.slice(0,10)+": "+x.text))});$("aret").style.display=REC.archived?"none":""}
 $("n_add").onclick=function(){var m=$("n_msg");api({action:"save_lead",lead:{property:$("n_prop").value,community:$("n_com").value,rent:$("n_rent").value,agent:$("n_agent").value,agency:$("n_agency").value,phone:$("n_phone").value,listingUrl:$("n_url").value}}).then(function(){["n_prop","n_com","n_rent","n_agent","n_agency","n_phone","n_url"].forEach(function(i){$(i).value=""});m.textContent="Added."}).catch(function(e){m.textContent=e.message})};
 $("aret").onclick=function(){if(confirm("Retire this card? It disappears from the Momo front door; you can restore it from this page."))api({action:"archive"})};
 fetch("/momo/work/anne/rec?key="+encodeURIComponent(KEY)).then(function(r){return r.json()}).then(function(d){REC=d.rec||{leads:[],brief:{},log:[]};draw()}).catch(function(){$("aupd").textContent="Could not load the card. Try again in a minute."})})();`;
+
+
+// v642 - the card as a printable register (Kendall: "downloadable as PDF or HTML"). Server-rendered from the record, grouped by community; ?status= and ?community= narrow it; ?print=1 opens the print dialog.
+const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtN = (n) => (n ? Number(n).toLocaleString("en") : "");
+const RI = (d) => '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
+const RICON = { phone: RI('<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>'), mail: RI('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'), link: RI('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'), home: RI(ANNE_ICON) };
+const REPORT_CSS = '@page{size:A4 portrait;margin:14mm}body{margin:0;background:#FAF7F1;color:#1C2321;font-family:"IBM Plex Sans",Arial,sans-serif;font-size:12.5px;padding:20px 16px 40px}.w{max-width:760px;margin:0 auto}'
+  + '.tag{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.14em;color:#8A6F3E;font-weight:600}h1{font-family:Georgia,serif;font-weight:600;font-size:1.6rem;margin:4px 0 6px;color:#0A4F4A}h2{font-size:1.05rem;color:#2F5D3F;margin:18px 0 8px;border-bottom:1px solid #CFE0D2;padding-bottom:4px;display:flex;align-items:center;gap:6px}h2 small{color:#5F6B66;font-weight:400}'
+  + '.sub{color:#5F6B66;margin:0 0 6px}.chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}.chips i,.flags i{font-style:normal;background:#EAF2EC;color:#2F5D3F;border-radius:999px;padding:3px 9px;font-size:.72rem;font-weight:600}.flags i{background:#FBF1DC;color:#7A5A12}'
+  + '.lead{background:#fff;border:1px solid #E3EBE4;border-radius:12px;padding:10px 12px;margin:0 0 8px;page-break-inside:avoid;break-inside:avoid}.lead h3{margin:0 0 4px;font-size:1rem;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.lead h3 small{color:#5F6B66;font-weight:400;font-size:.78rem}.st{margin-left:auto;font-style:normal;font-size:.7rem;font-weight:700;border-radius:999px;padding:2px 8px;background:#F3F0E8;color:#5F6B66}'
+  + '.grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}.grid div span{color:#5F6B66;margin-right:4px}.links{display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 2px}.links a{color:#2F5D3F;text-decoration:none;display:inline-flex;align-items:center;gap:4px;font-weight:600}.flags{display:flex;gap:5px;flex-wrap:wrap;margin:5px 0}.vf,.nt{margin:4px 0 0;color:#5F6B66;font-size:.78rem}'
+  + '.bar{display:flex;gap:8px;margin:0 0 14px}.bar button,.bar a{border:1px solid #2F5D3F;background:#2F5D3F;color:#fff;border-radius:999px;padding:8px 14px;font:600 .82rem "IBM Plex Sans",Arial,sans-serif;cursor:pointer;text-decoration:none}.bar a{background:#fff;color:#2F5D3F}footer{margin-top:18px;padding-top:8px;border-top:1px solid #CFE0D2;color:#5F6B66;font-size:.76rem}'
+  + '@media print{.bar{display:none}body{background:#fff;padding:0}.lead{border-color:#CFE0D2}}';
+export function anneReport(rec, q) {
+  const st = q && STATUSES.includes(q.status) ? q.status : "", cm = q && q.community ? S(q.community, 60) : "";
+  const leads = rec.leads.filter((l) => (!st || l.status === st) && (!cm || l.community === cm));
+  const groups = []; leads.forEach((l) => { let g = groups.find((x) => x.name === (l.community || "Other")); if (!g) { g = { name: l.community || "Other", leads: [] }; groups.push(g); } g.leads.push(l); });
+  const b = rec.brief || {}, upd = rec.updatedAt ? rec.updatedAt.slice(0, 10) : "";
+  const row = (k, v) => (v ? "<div><span>" + k + "</span>" + v + "</div>" : "");
+  const lead = (l) => {
+    const tel = l.phone ? '<a href="tel:' + esc(l.phone.replace(/[^0-9+]/g, "")) + '">' + RICON.phone + " " + esc(l.phone) + (l.phoneType ? " (" + esc(l.phoneType) + ")" : "") + "</a>" : "";
+    const mail = l.email ? '<a href="mailto:' + esc(l.email) + '">' + RICON.mail + " " + esc(l.email) + "</a>" : "";
+    const adv = l.listingUrl ? '<a href="' + esc(l.listingUrl) + '">' + RICON.link + " Advert</a>" : "", ag = l.contactUrl ? '<a href="' + esc(l.contactUrl) + '">' + RICON.link + " Agent page</a>" : "";
+    const fl = (l.flags || []).concat(!l.phone && !l.email && !l.listingUrl && !(l.contactUrl && l.contactUrl.indexOf("/agent/") >= 0) ? ["Missing contact"] : []);
+    return '<section class=lead><h3>' + esc(l.property || l.community) + " <small>" + esc([l.ref ? "Ref " + l.ref : "", l.portalRef ? "Portal " + l.portalRef : "", l.trakheesi ? "Permit " + l.trakheesi : ""].filter(Boolean).join("  |  ")) + "</small><em class=st>" + esc(l.status) + "</em></h3>"
+      + "<div class=grid>" + row("Rent", l.rent ? "AED " + fmtN(l.rent) + " / yr" : "") + row("Beds / baths", esc([l.beds, l.baths].filter(Boolean).join(" / "))) + row("Size", l.sizeSqft ? fmtN(l.sizeSqft) + " sq ft" : "") + row("Furnished", esc(l.furnished))
+      + row("Dog", l.dog === "unknown" ? "not confirmed" : esc(l.dog)) + row("Agent", esc(l.agent)) + row("Agency", esc(l.agency)) + row("Broker card", esc(l.brokerLicence)) + "</div>"
+      + (tel || mail || adv || ag ? "<div class=links>" + [tel, mail, adv, ag].filter(Boolean).join(" ") + "</div>" : "")
+      + (fl.length ? "<div class=flags>" + fl.map((f) => "<i>" + esc(f) + "</i>").join("") + "</div>" : "")
+      + (l.verification ? "<p class=vf>" + esc(l.verification) + "</p>" : "") + (l.notes ? "<p class=nt>" + esc(l.notes).replace(/\n/g, "<br>") + "</p>" : "") + "</section>";
+  };
+  const body = "<header><div class=tag>NAJMA / CLIENT REGISTER</div><h1>" + esc(rec.title || "Client card") + "</h1>"
+    + "<p class=sub>" + (upd ? "Updated " + esc(upd) + ". " : "") + leads.length + " lead" + (leads.length === 1 ? "" : "s") + (st ? ", status " + esc(st) : "") + (cm ? ", " + esc(cm) : "") + "</p>"
+    + ((b.budgetMin || b.budgetMax) || (b.chips || []).length ? "<div class=chips>" + ((b.budgetMin || b.budgetMax) ? "<i>AED " + fmtN(b.budgetMin) + " to " + fmtN(b.budgetMax) + " / yr</i>" : "") + (b.chips || []).map((c) => "<i>" + esc(c) + "</i>").join("") + "</div>" : "")
+    + (b.summary ? "<p class=sub>" + esc(b.summary) + "</p>" : "") + "</header>"
+    + (groups.length ? groups.map((g) => "<h2>" + RICON.home + " " + esc(g.name) + " <small>" + g.leads.length + "</small></h2>" + g.leads.map(lead).join("")).join("") : "<p class=sub>No leads match.</p>")
+    + "<footer>Advertised leads, not confirmed availability. Rents are as advertised; agent, furnishing, pet policy and viewing must be confirmed before travel.</footer>";
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>' + esc(rec.title || "Client card") + " register</title><style>" + REPORT_CSS + "</style></head><body><div class=w>"
+    + '<div class=bar><button type=button onclick="window.print()">Save as PDF</button><a href="javascript:history.back()">Back</a></div>' + body
+    + '</div><script>if(/[?&]print=1/.test(location.search))setTimeout(function(){window.print()},400)</script></body></html>';
+}
 
 export async function anneRoute(request, env, url, deps) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
@@ -155,6 +199,7 @@ export async function anneRoute(request, env, url, deps) {
   const person = typeof deps.person === "function" ? deps.person(env, url) : "";
   if (person !== "kendall") return new Response("not found", { status: 404 });   // Kendall's key only
   if (p === "/momo/work/anne" && request.method === "GET") return new Response(deps.page(key, rk, ANNE_BODY + "<script>" + ANNE_JS + "</script>"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  if (p === "/momo/work/anne/report" && request.method === "GET") return new Response(anneReport((await readAnne(env)) || emptyAnne(), { status: url.searchParams.get("status") || "", community: url.searchParams.get("community") || "" }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   if (p === "/momo/work/anne/rec" && request.method === "GET") return J({ rec: (await readAnne(env)) || emptyAnne() });
   if (p === "/momo/work/anne/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
