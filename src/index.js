@@ -1,6 +1,6 @@
 import { askBoxHtml, askRoute, askFloatHtml } from "./ask_najma.js";   // v555, v556
 import { feedPdfStore, FEED_PDF_RX } from "./feed_pdf.js";   // v622 - the day's feed as a PDF for the graphic designer
-import { readAnne, ANNE_ICON } from "./work_anne.js";   // v641 - the temporary client card (Kendall key only)
+import { readAnne, ANNE_ICON } from "./work_anne.js";   // v641 - the temporary client card (v643: Najjuko key only)
 import { workRoute, WORK_CSS } from "./work_log.js";   // v564 - Momo Work: Najjuko's FN Realty work log
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
@@ -3390,7 +3390,7 @@ async function appFetch(request, env, ctx) {
         // v564 - Work is Najjuko's private FN Realty log (src/work_log.js); her MOMO tab opens straight on it (Play is Kendall's health log)
         if (url.pathname === "/momo" && isNajjuko(env, url) && !url.searchParams.has("door")) return Response.redirect(url.origin + "/momo/work?key=" + encodeURIComponent(url.searchParams.get("key") || ""), 302);
         if (url.pathname.startsWith("/momo/work")) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
-        const _ar = personOfKey(env, url) === "kendall" ? await readAnne(env) : null; return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false, _ar && !_ar.archived ? (_ar.title || "Client") : ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+        const _ar = personOfKey(env, url) === "najjuko" ? await readAnne(env) : null;   /* v643 - the client card is hers */ return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false, _ar && !_ar.archived ? (_ar.title || "Client") : ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });

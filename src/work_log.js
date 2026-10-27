@@ -773,7 +773,11 @@ export async function workRoute(request, env, url, deps) {
     const v = (n) => esc(url.searchParams.get(n) || "");
     return new Response(deps.page(key, rk, PREP_BODY.replace("__DEV__", v("dev")).replace("__PRJ__", v("project")).replace("__AREA__", v("area")).replace("__EVT__", v("event") || "Client briefing").replace(/__KEY__/g, esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
-  if (p === "/momo/work") return new Response(deps.page(key, rk, WORK_BODY.replace(/__KEY__/g, esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  if (p === "/momo/work") {   // v643 - an active client card shows as a button under the tabs (her Momo link opens Work, not the front door)
+    let _ar = null; try { _ar = await readAnne(env); } catch (e) {}
+    const _cb = _ar && !_ar.archived ? '<a id=tanne href="/momo/work/anne?key=' + encodeURIComponent(key) + '" style="display:block;text-align:center;margin:-6px 0 14px;padding:11px;border:1px solid #2F5D3F;border-radius:12px;color:#2F5D3F;font-weight:600;text-decoration:none">' + esc(_ar.title || "Client") + '</a>' : '';
+    return new Response(deps.page(key, rk, WORK_BODY.replace(/__KEY__/g, esc(key)).replace('id=tjobs>Jobs</button></div>', 'id=tjobs>Jobs</button></div>' + _cb)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  }
   return new Response("not found", { status: 404 });
 }
 
@@ -810,7 +814,7 @@ const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.open
 // v580 - FN's own marks, cut from the Company Template she sent (src/fn_logo.js): the navy monogram, the gold lattice band, FN navy/peach/gold
 import { planRoute } from "./work_plan.js";
 import { jobsRoute } from "./work_jobs.js";
-import { anneRoute } from "./work_anne.js";
+import { anneRoute, readAnne } from "./work_anne.js";
 import { teamRoute } from "./work_team.js";
 import { voiceTestRoute } from "./work_voicetest.js";
 import { REC_JS, REC_BTN } from "./work_rec_page.js";

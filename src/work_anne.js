@@ -1,5 +1,5 @@
 // v641 - MOMO - a TEMPORARY CLIENT CARD (Kendall, 27 Oct 2026: "a temporary card, easy to access and continually updated"). One record, annemarie_rec in KV: a short brief and a list of
-// property leads (agent, phone, advert link, status, notes). Kendall's key only (personOfKey = "kendall"); anyone else gets "not found". The front door shows the card while the record exists and is
+// property leads (agent, phone, advert link, status, notes). v643: Najjuko's key only (personOfKey = "najjuko"); anyone else, Kendall included, gets "not found". The front door shows the card while the record exists and is
 // not retired. THIS REPO IS PUBLIC: the client's name, the brief, every lead, name, number and link live in the KV record (loaded once by a script kept outside git, then edited on the page); the code
 // holds only the shape, the limits and the page.
 export const ANNE_KEY = "annemarie_rec";
@@ -197,7 +197,7 @@ export async function anneRoute(request, env, url, deps) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   const person = typeof deps.person === "function" ? deps.person(env, url) : "";
-  if (person !== "kendall") return new Response("not found", { status: 404 });   // Kendall's key only
+  if (person !== "najjuko") return new Response("not found", { status: 404 });   // v643 - Najjuko's key only (Kendall 27 Oct: "the Anne-Marie was for Najjuko, not for me")
   if (p === "/momo/work/anne" && request.method === "GET") return new Response(deps.page(key, rk, ANNE_BODY + "<script>" + ANNE_JS + "</script>"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work/anne/report" && request.method === "GET") return new Response(anneReport((await readAnne(env)) || emptyAnne(), { status: url.searchParams.get("status") || "", community: url.searchParams.get("community") || "" }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   if (p === "/momo/work/anne/rec" && request.method === "GET") return J({ rec: (await readAnne(env)) || emptyAnne() });
