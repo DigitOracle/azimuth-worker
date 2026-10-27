@@ -596,6 +596,10 @@ async function recApi(request, env, J, deps) {
   if (b.action === "filed") { m.status = "filed"; await recPut(env, m); return J({ ok: true }); }
   return J({ error: "Unknown action." }, 400);
 }
+function addedNotesHtml(a) {
+  if (!Array.isArray(a) || !a.length) return "";
+  return "<h2>Added notes</h2><ul>" + a.map((x) => "<li>" + escH(x.text || "") + (x.link && /^https:\/\//.test(x.link.url || "") ? " <a href=\"" + escH(x.link.url) + "\" target=_blank rel=noopener>" + escH(x.link.label || "Open") + "</a>" : "") + " <span class=m>" + escH(String(x.at || "").slice(0, 16).replace("T", " ")) + "</span></li>").join("") + "</ul>";
+}
 async function recView(env, url) {
   const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null;
   if (!m) return new Response("not found", { status: 404 });
@@ -603,6 +607,7 @@ async function recView(env, url) {
   const li = (a) => a.length ? "<ul>" + a.map((t) => "<li>" + escH(t) + "</li>").join("") + "</ul>" : "<p class=m>None stated.</p>";
   const body = "<h1>" + escH(m.title || "Recording") + "</h1><p class=m>" + escH(m.date) + " · " + escH(m.started_hm || "") + (m.ended_hm ? " to " + escH(m.ended_hm) : "") + " · " + Math.round((m.secs || 0) / 60) + " minutes · " + segs.length + " parts</p>"
     + (n ? "<h2>Summary</h2><p>" + escH(n.summary) + "</p><h2>Decisions</h2>" + li(n.decisions) + "<h2>Tasks and follow-ups</h2>" + li(n.actions.map((a) => a.what + (a.owner ? " (" + a.owner + ")" : "") + (a.due ? ", by " + a.due : ""))) + "<h2>People</h2><p>" + escH(n.people.join(", ") || "Not stated") + "</p>" : "<p class=m>Notes are written when you tap Make entry.</p>")
+    + addedNotesHtml(m.added_notes)   // v656 - notes filed through the bridge (her own Claude Code), links tappable
     + "<h2>Transcript</h2><p class=m>Written automatically: names and numbers may be misheard.</p><div class=tx>" + escH(tx).replace(/\n\n/g, "<br><br>") + "</div>"
     + "<div class=no style='margin-top:28px;text-align:center'><button class=gh id=dl>Delete this recording</button><div id=dq style='display:none;background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:14px;margin-top:10px'>Delete this recording and its transcript? This cannot be undone.<div style='display:flex;gap:8px;justify-content:center;margin-top:10px'><button class='bt pr' id=dy>Delete it</button><button class=bt id=dn>Keep it</button></div></div></div>";
   // v623 - the transcript page had no way back and no way out (Kendall, 24 Oct 2026): a Back button, "Share / Save as PDF" (the print sheet, as on the plan PDFs) and Share (the phone's share sheet, else copy)
@@ -1406,4 +1411,4 @@ $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1
 ` + REC_JS + String.raw`load();resumeDraft()})();`;
 
 // v654 - the pieces the Momo bridge (src/work_bridge.js) reuses, so its reads and saves are exactly the app's
-export const BRIDGE_LOG = { PFX, TPFX, RECW, listEntries, taskOverrides, recGet, recPut, recId, clean, okDate, dubaiToday, slug, STATUS };
+export const BRIDGE_LOG = { PFX, TPFX, RECW, listEntries, taskOverrides, recGet, recPut, recId, clean, okDate, dubaiToday, slug, STATUS, recSegs, recTranscriptText };

@@ -78,6 +78,22 @@ function pdfLinks(origin, type, id) {
 }
 const entryId = (e) => e.date + "_" + e.id;
 const meetingOut = (m) => ({ id: m.id, title: m.title || "Recording", date: m.date, started_hm: m.started_hm || "", status: m.status || "", secs: m.secs || 0, attendees: m.attendees || [], notes: m.notes || null, minutes: m.minutes || null, added_notes: m.added_notes || [] });
+// v656 - the meeting with its transcript (Momo's own speech-to-text: the recs_<id>_<nnn> parts joined with [mm:ss] markers) and the minutes in a fixed
+// shape: { title, purpose, decisions[{headline, detail}], discussion[{heading, bullets[]}], actions[{action, owner, due, due_stated}], open_questions[] }
+const TX_MAX = 400000;
+const arr = (v) => (Array.isArray(v) ? v : []);
+const minutesOut = (x) => (x && typeof x === "object" ? { title: String(x.title || ""), purpose: String(x.purpose || ""),
+  decisions: arr(x.decisions).map((d) => ({ headline: String((d && d.headline) || ""), detail: String((d && d.detail) || "") })),
+  discussion: arr(x.discussion).map((d) => ({ heading: String((d && d.heading) || ""), bullets: arr(d && d.bullets).map(String) })),
+  actions: arr(x.actions).map((a) => ({ action: String((a && a.action) || ""), owner: String((a && a.owner) || ""), due: String((a && a.due) || ""), due_stated: !!(a && a.due_stated) })),
+  open_questions: arr(x.open_questions).map(String) } : null);
+async function meetingFull(env, m) {
+  const tx = L.recTranscriptText(await L.recSegs(env, m.id), true), o = meetingOut(m);
+  o.minutes = minutesOut(m.minutes); o.transcript_chars = tx.length;
+  o.transcript_status = !tx.trim() ? "not_transcribed" : tx.length > TX_MAX ? "too_long_truncated" : "ready";
+  o.transcript = tx.slice(0, TX_MAX);
+  return o;
+}
 
 async function doGet(env, url, person, route) {
   if (route === "whoami") return OK({ person, routes: Object.keys(ROUTES).filter((r) => ROUTES[r][1].includes(person)).map((r) => (ROUTES[r][0] + " " + BRIDGE_BASE + r.replace(/^post:/, ""))), limits: { per_minute: RATE_PER_MIN, max_span_days: MAX_SPAN_DAYS } });
@@ -108,7 +124,7 @@ async function doGet(env, url, person, route) {
   }
   if (route === "meeting") {
     const id = L.recId(url.searchParams.get("id")), m = id ? await L.recGet(env, id) : null;
-    return m ? OK(meetingOut(m)) : ERR("not_found", "No meeting with that id.", 404);
+    return m ? OK(await meetingFull(env, m)) : ERR("not_found", "No meeting with that id.", 404);
   }
   if (route === "anne") { const a = await readAnne(env); return a ? OK(a) : ERR("not_found", "There is no client card.", 404); }
   if (route === "pdf-links") {
@@ -148,6 +164,11 @@ async function doPost(env, b, person, route) {
   if (route === "post:note") {
     const text = String(b.text || "").trim().slice(0, 2000); if (!text) return [400, { ok: false, code: "empty", error: "Send text." }];
     const note = { at: now, text };
+    if (b.link != null) {   // v656 - an optional tappable link, https only
+      const u = String((b.link && b.link.url) || "").trim(), lb = String((b.link && b.link.label) || "").trim().slice(0, 80);
+      if (!/^https:\/\/[^\s<>"']+$/.test(u) || u.length > 500) return [400, { ok: false, code: "bad_link", error: "link.url must be an https address of at most 500 characters." }];
+      note.link = { url: u, label: lb || "Open" };
+    }
     if (b.type === "meeting") {
       const id = L.recId(b.id), m = id ? await L.recGet(env, id) : null; if (!m) return [404, { ok: false, code: "not_found", error: "No meeting with that id." }];
       m.added_notes = (m.added_notes || []).concat(note).slice(-50); await L.recPut(env, m); return [200, { ok: true, data: meetingOut(m) }];
@@ -156,7 +177,7 @@ async function doPost(env, b, person, route) {
       const mm = /^(\d{4}-\d{2}-\d{2})_([a-z0-9]{1,40})$/.exec(String(b.id || "")); if (!mm) return [400, { ok: false, code: "bad_id", error: "id is <date>_<id>." }];
       let e = null; try { e = JSON.parse(await env.MEETINGS.get(L.PFX + mm[1] + "_" + mm[2])); } catch (x) {}
       if (!e) return [404, { ok: false, code: "not_found", error: "No entry with that id." }];
-      e.text = (String(e.text || "") + (e.text ? "\n" : "") + "[" + now.slice(0, 16).replace("T", " ") + "] " + text).slice(-6000); e.updated = now;
+      e.text = (String(e.text || "") + (e.text ? "\n" : "") + "[" + now.slice(0, 16).replace("T", " ") + "] " + text + (note.link ? " " + note.link.label + ": " + note.link.url : "")).slice(-6000); e.updated = now;
       await env.MEETINGS.put(L.PFX + mm[1] + "_" + mm[2], JSON.stringify(e)); return [200, { ok: true, data: Object.assign({ ref: entryId(e) }, e) }];
     }
     return [400, { ok: false, code: "bad_type", error: "type is meeting or entry." }];
