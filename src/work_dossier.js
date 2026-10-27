@@ -2,9 +2,10 @@
 // building, keyed by a slug (first: berkeley). Najjuko's key only; anyone else, Kendall included, gets "not found" (as the client card, v643). THIS REPO IS PUBLIC:
 // the briefing text, the figures and the PDF live in KV (loaded by a script kept outside git); the code holds only the shape, the limits, the renderer and the page.
 //   dossier_list_najjuko          [{slug, title}]                        - which cards the front door shows
-//   dossier_rec_najjuko_<slug>    {title, subtitle, updatedAt, usps, sections:[{id, title, icon, md}]}
+//   dossier_rec_najjuko_<slug>    {title, subtitle, updatedAt, usps, kpis, charts, sections:[{id, title, icon, md, open}]}   (kpis and charts: v658, work_dossier_charts.js)
 //   dossier_pdf_najjuko_<slug>    the PDF, base64
 //   dossier_notes_najjuko_<slug>  [{id, at, section, text}]                - her own notes and research to do
+import { cleanGlance, glanceHtml, GLANCE_CSS } from "./work_dossier_charts.js";
 const LIST = "dossier_list_najjuko", REC = "dossier_rec_najjuko_", PDF = "dossier_pdf_najjuko_", NOTES = "dossier_notes_najjuko_";
 const S = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").slice(0, n);
 export const slugOk = (v) => { const s = S(v, 40).toLowerCase(); return /^[a-z0-9][a-z0-9-]{0,39}$/.test(s) ? s : ""; };
@@ -16,15 +17,21 @@ export const DOSSIER_ICONS = {
   market: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', area: '<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
   compete: '<path d="M3 21V8l6-4v17M9 21V11l6-3v13M15 21V5l6 3v13"/>', grade: '<path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/>',
   ask: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/>', sources: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/>',
-  doc: '<path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6"/>'
+  doc: '<path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6"/>',
+  // v658 - more section kinds for the at-a-glance card
+  price: '<path d="M20 12l-8 8-8-8V4h8z"/><circle cx="8.5" cy="8.5" r="1.5"/>', plan: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  units: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 12h16M12 4v16"/>', transport: '<rect x="6" y="3" width="12" height="14" rx="3"/><path d="M6 11h12M9 21l1-4M15 21l-1-4"/>',
+  amenity: '<path d="M4 20c4-1 6-5 8-10 2 5 4 9 8 10"/><circle cx="12" cy="6" r="2"/>', risk: '<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
+  trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>', rent: '<path d="M3 11l9-7 9 7v9H3z"/><path d="M9 20v-6h6v6"/>'
 };
 export const DOSSIER_ICON = '<path d="M5 21V4h9v17M14 9h5v12M8 8h3M8 12h3M8 16h3"/><path d="M3 21h18"/>';
 
 export function cleanDossier(x) {
   const g = x && typeof x === "object" ? x : {};
   const sections = (Array.isArray(g.sections) ? g.sections : []).slice(0, 30).map((s, i) => ({
-    id: slugOk(s && s.id) || ("s" + i), title: S(s && s.title, 120).trim() || "Section", icon: DOSSIER_ICONS[s && s.icon] ? s.icon : "doc", md: S(s && s.md, 60000) }));
-  return { title: S(g.title, 80).trim() || "Briefing", subtitle: S(g.subtitle, 200).trim(), updatedAt: S(g.updatedAt, 40), usps: S(g.usps, 4000).trim(), sections };
+    id: slugOk(s && s.id) || ("s" + i), title: S(s && s.title, 120).trim() || "Section", icon: DOSSIER_ICONS[s && s.icon] ? s.icon : "doc", md: S(s && s.md, 60000), open: !!(s && s.open) }));
+  const gl = cleanGlance(g);
+  return { title: S(g.title, 80).trim() || "Briefing", subtitle: S(g.subtitle, 200).trim(), updatedAt: S(g.updatedAt, 40), usps: S(g.usps, 4000).trim(), kpis: gl.kpis, charts: gl.charts, sections };
 }
 
 // Markdown to safe HTML: everything is escaped FIRST, then a small known subset is turned into tags (headings, bullets, numbers, tables, bold, italics,
@@ -97,11 +104,12 @@ var sv=el('dsave');if(sv)sv.onclick=function(){var t=(el('dtext')||{}).value||''
 export function dossierPage(rec) {
   const ic = (d) => '<svg viewBox="0 0 24 24" width=22 height=22 fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + d + "</svg>";
   const e = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const secs = rec.sections.map((s, i) => '<details class=ds' + (i === 0 ? " open" : "") + ' id="s-' + e(s.id) + '"><summary>' + ic(DOSSIER_ICONS[s.icon] || DOSSIER_ICONS.doc) + e(s.title) + '</summary><div class=dx>' + mdToHtml(s.md) + "</div></details>").join("");
+  const anyOpen = rec.sections.some((s) => s.open);   // v658 - the record says which sections open; older records keep "first one open"
+  const secs = rec.sections.map((s, i) => '<details class=ds' + ((anyOpen ? s.open : i === 0) ? " open" : "") + ' id="s-' + e(s.id) + '"><summary>' + ic(DOSSIER_ICONS[s.icon] || DOSSIER_ICONS.doc) + e(s.title) + '</summary><div class=dx>' + mdToHtml(s.md) + "</div></details>").join("");
   const opts = '<option value="">General</option>' + rec.sections.map((s) => '<option>' + e(s.title) + "</option>").join("");
-  return CSS + '<a class=back href="/momo" id=dback>&#8592; Momo</a><div class=tag>MOMO · BRIEFING</div><h1>' + e(rec.title) + '</h1><p class=dh>' + e(rec.subtitle) + (rec.updatedAt ? " · updated " + e(rec.updatedAt) : "") + "</p>"
+  return CSS + GLANCE_CSS + '<a class=back href="/momo" id=dback>&#8592; Momo</a><div class=tag>MOMO · BRIEFING</div><h1>' + e(rec.title) + '</h1><p class=dh>' + e(rec.subtitle) + (rec.updatedAt ? " · updated " + e(rec.updatedAt) : "") + "</p>"
     + '<div class=db><a id=dpdf href="#" target=_blank>Open PDF</a><button id=dshare type=button>Share PDF</button><button id=dcopy class=lt type=button>Copy USPs</button><a class=lt href="#dnotes">My notes</a></div>'
-    + '<textarea id=dusps hidden>' + e(rec.usps) + "</textarea>" + secs
+    + '<textarea id=dusps hidden>' + e(rec.usps) + "</textarea>" + glanceHtml(rec) + (rec.sections.length && (rec.kpis.length || rec.charts.length) ? "<div class=gl>The detail</div>" : "") + secs
     + '<details class=ds open id=dnotes><summary>' + ic('<path d="M4 20h4l11-11-4-4L4 16z"/><path d="M13 6l4 4"/>') + 'My notes and research to do</summary><div class="dx dn"><select id=dsec>' + opts + '</select><textarea id=dtext placeholder="What to check, who to call, what you found..."></textarea><div class=db style="margin-top:8px"><button id=dsave type=button>Save note</button></div><div class=nl id=dnl></div></div></details>';
 }
 
