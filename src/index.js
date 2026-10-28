@@ -6,7 +6,8 @@ import { SPK_ICON } from "./work_speaking.js";
 import { GGU_ICON } from "./work_ggu.js";   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
 import { workRoute, WORK_CSS } from "./work_log.js";
 import { bridgeRoute } from "./work_bridge.js";
-import { liveRoute } from "./live_poll.js";   // v659 - the live room: public QR pages for a workshop (scale, board, vote, wall), screen behind the event key   // v654 - the Momo bridge: JSON for a person's own Claude Code, header key only   // v564 - Momo Work: Najjuko's FN Realty work log
+import { liveRoute } from "./live_poll.js";
+import { PRICE_SLIDER_HTML } from "./price_slider_page.js";   // v661 - public price slider (public Esri data only)   // v659 - the live room: public QR pages for a workshop (scale, board, vote, wall), screen behind the event key   // v654 - the Momo bridge: JSON for a person's own Claude Code, header key only   // v564 - Momo Work: Najjuko's FN Realty work log
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
@@ -4871,6 +4872,7 @@ async function appFetch(request, env, ctx) {
 export default {
   async fetch(request, env, ctx) {   // v153 - question notes: their routes first, then the question button on private app pages
     const url = new URL(request.url);
+    if (url.pathname === "/price_slider") return new Response(PRICE_SLIDER_HTML, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Robots-Tag": "noindex" } });   // v661 - public, no key
     if (url.pathname.startsWith("/live/")) { const _lv = await liveRoute(request, env, url); if (_lv) return _lv; }   // v659 - public, before every key gate
     if (url.pathname.startsWith("/momo/bridge/")) { const _br = await bridgeRoute(request, env, url); return _br || new Response(JSON.stringify({ ok: false, code: "not_found", error: "Unknown route." }), { status: 404, headers: { "Content-Type": "application/json" } }); }   // v654 - first, before every key gate: the bridge has its own header auth
     { const _wd = await deskRegRoutes(request, env, url, { graph: WA_GRAPH }); if (_wd) return _wd; }   // v409
