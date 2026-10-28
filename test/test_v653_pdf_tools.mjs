@@ -26,6 +26,7 @@ for (const [name, path] of Object.entries(pages)) {
   ok(parsed, name + ": tools script parses");
   ok(m && /navigator\.share/.test(m[1]) && /canShare/.test(m[1]) && /contentEditable/.test(m[1]) && /"FN_"/.test(m[1]), name + ": share, fallback, edit and file name code present");
   const o = await get(path, OWNER), w = await get(path, "nope");
-  ok(o.status === 404 && w.status === 404, name + ": other keys get 404", [o.status, w.status]);
+  const ot = o.status === 200 ? await o.text() : "";   // v662 - the owner's key opens HIS OWN Work pages, never hers
+  ok(w.status === 404 && (o.status === 404 || !/Najjuko|FN Realty/.test(ot)), name + ": other keys get 404; the owner gets only his own page", [o.status, w.status]);
 }
 console.log(`v653 pdf tools: ${pass} passed, ${fail} failed`); if (fail) process.exit(1);

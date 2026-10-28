@@ -29,7 +29,7 @@ r = await call("meeting?id=" + N, { key: NB });
 ok(r.s === 200 && r.j.data.transcript_status === "not_transcribed" && r.j.data.transcript === "" && r.j.data.minutes === null, "no transcript yet", r.j);
 r = await call("meeting?id=" + T, { key: NB });
 ok(r.s === 200 && r.j.data.transcript_status === "too_long_truncated" && r.j.data.transcript.length === 400000 && r.j.data.transcript_chars > 400000, "long transcript truncated at 400k", r.j && { st: r.j.data.transcript_status, n: r.j.data.transcript_chars });
-ok((await call("meeting?id=" + A, { key: KB })).s === 403, "kendall key cannot read her meeting");
+ok((await call("meeting?id=" + A, { key: KB })).s === 404, "kendall key cannot read her meeting (v662: his own Work has no such meeting)");
 ok((await call("meeting?id=" + A)).s === 401, "no key: 401");
 
 // note with a link
@@ -42,7 +42,7 @@ ok(r.s === 200 && r.j.data.added_notes[1].link.label.length === 80, "label cappe
 store.set("work_naj_" + today + "_abc123", JSON.stringify({ id: "abc123", date: today, created: today + "T08:00:00Z", title: "Example entry", type: "Meeting", summary: "x", people: [], kpis: [], scope: [], works: [], effort: "1-2 hours", text: "Notes." }));
 r = await call("note", { key: NB, method: "POST", body: { type: "entry", id: today + "_abc123", text: "Brief ready.", link: { url: "https://example.com/brief", label: "Brief" } }, idem: "note-link-0003" });
 ok(r.s === 200 && /Brief ready\. Brief: https:\/\/example\.com\/brief/.test(r.j.data.text), "entry note carries the link in the text", r.j);
-ok((await call("note", { key: KB, method: "POST", body: { type: "meeting", id: A, text: "x", link: { url: "https://example.com" } }, idem: "note-kendall-01" })).s === 403, "kendall key cannot add a note to her meeting");
+ok((await call("note", { key: KB, method: "POST", body: { type: "meeting", id: A, text: "x", link: { url: "https://example.com" } }, idem: "note-kendall-01" })).s === 404, "kendall key cannot add a note to her meeting");
 
 // the app's recording page shows the added notes with a tappable link
 const v = await worker.fetch(new Request("https://w/momo/work/rec/view?id=" + A + "&key=" + NAJ_LINK), env, ctx), html = await v.text();

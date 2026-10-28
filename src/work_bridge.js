@@ -5,7 +5,8 @@
 // client card); kendall = his Jobs, Speaking and GGU records (read only). Every POST needs an Idempotency-Key header (the last 500 per person are
 // remembered, so a retry returns the first answer and writes nothing twice). 120 requests a minute per key. Each call is logged (person, route,
 // status, time; never the content) for 14 days. Nothing here sends anything to anyone.
-import { BRIDGE_LOG as L, tasksOf, applyOverrides } from "./work_log.js";
+import { BRIDGE_LOG as L, tasksOf, applyOverrides, NAJ_PROF, profOf } from "./work_log.js";
+import { workEnv, readCfg } from "./work_person.js";   // v662 - kendall's bridge key opens HIS Work, on his own keys
 import { planItems, cleanItem, PLP } from "./work_plan.js";
 import { readAnne } from "./work_anne.js";
 import { readRec } from "./work_jobs.js";
@@ -16,10 +17,10 @@ export const BRIDGE_BASE = "/momo/bridge/v1/";
 export const RATE_PER_MIN = 120, IDEM_MAX = 500, LOG_TTL = 14 * 86400, MAX_SPAN_DAYS = 92;
 const PEOPLE = ["najjuko", "kendall"];
 const ROUTES = {   // route -> [method, who may call it]
-  whoami: ["GET", PEOPLE], entries: ["GET", ["najjuko"]], entry: ["GET", ["najjuko"]], tasks: ["GET", ["najjuko"]], plan: ["GET", ["najjuko"]],
-  meetings: ["GET", ["najjuko"]], meeting: ["GET", ["najjuko"]], anne: ["GET", ["najjuko"]], "pdf-links": ["GET", ["najjuko"]],
+  whoami: ["GET", PEOPLE], entries: ["GET", PEOPLE], entry: ["GET", PEOPLE], tasks: ["GET", PEOPLE], plan: ["GET", PEOPLE],
+  meetings: ["GET", PEOPLE], meeting: ["GET", PEOPLE], anne: ["GET", ["najjuko"]], "pdf-links": ["GET", PEOPLE],
   jobs: ["GET", ["kendall"]], speaking: ["GET", ["kendall"]], ggu: ["GET", ["kendall"]],
-  "post:entry": ["POST", ["najjuko"]], "post:task": ["POST", ["najjuko"]], "post:plan-item": ["POST", ["najjuko"]], "post:note": ["POST", ["najjuko"]],
+  "post:entry": ["POST", PEOPLE], "post:task": ["POST", PEOPLE], "post:plan-item": ["POST", PEOPLE], "post:note": ["POST", PEOPLE],
 };
 
 function ctEq(a, b) { a = String(a || ""); b = String(b || ""); let r = a.length ^ b.length; for (let i = 0; i < Math.max(a.length, b.length); i++) r |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0); return r === 0; }
@@ -95,7 +96,15 @@ async function meetingFull(env, m) {
   return o;
 }
 
+// v662 - the Work routes run on the caller's own Work keys (her legacy keys for najjuko, parallel keys for kendall); never on anyone else's
+const WORK_ROUTES = new Set(["entries", "entry", "tasks", "plan", "meetings", "meeting", "post:entry", "post:task", "post:plan-item", "post:note"]);
+async function workSide(env, person) {
+  const w = workEnv(env, person);
+  if (person !== "najjuko" && !(await w.MEETINGS.get("work_naj_planseed"))) await w.MEETINGS.put("work_naj_planseed", "1");   // her campaign seed never lands in his plan
+  return w;
+}
 async function doGet(env, url, person, route) {
+  if (WORK_ROUTES.has(route)) env = await workSide(env, person);
   if (route === "whoami") return OK({ person, routes: Object.keys(ROUTES).filter((r) => ROUTES[r][1].includes(person)).map((r) => (ROUTES[r][0] + " " + BRIDGE_BASE + r.replace(/^post:/, ""))), limits: { per_minute: RATE_PER_MIN, max_span_days: MAX_SPAN_DAYS } });
   if (route === "entries") {
     const sp = span(url, 7); if (!sp) return ERR("span_too_long", "Ask for at most " + MAX_SPAN_DAYS + " days at a time.", 400);
@@ -130,7 +139,7 @@ async function doGet(env, url, person, route) {
   if (route === "pdf-links") {
     const links = pdfLinks(url.origin, String(url.searchParams.get("type") || ""), String(url.searchParams.get("id") || ""));
     if (!links) return ERR("bad_item", "type is entry, task, meeting, report (id from_to), plan-week (id = Monday) or plan-month (id = YYYY-MM).", 400);
-    return OK({ links, open_with: "These pages open on her own Momo link. Give her the address; she opens it with her link (or adds &key=<her link key> herself). The bridge key does not open them." });
+    return OK({ links, open_with: "These pages open on the person's own Momo link. Give them the address; they open it with their link (or add &key=<their link key>). The bridge key does not open them." });
   }
   if (route === "jobs") { const r = await readRec(env, person); return OK(r || null); }
   if (route === "speaking") { const r = await readSpk(env, person); return OK(r || null); }
@@ -139,9 +148,10 @@ async function doGet(env, url, person, route) {
 }
 
 async function doPost(env, b, person, route) {
-  const now = new Date().toISOString();
+  const now = new Date().toISOString(), prof = person === "najjuko" ? NAJ_PROF : profOf(await readCfg(env, person));
+  if (WORK_ROUTES.has(route)) env = await workSide(env, person);
   if (route === "post:entry") {
-    const date = dOk(b.date) ? b.date : L.dubaiToday(), e = L.clean(b.entry || {});
+    const date = dOk(b.date) ? b.date : L.dubaiToday(), e = L.clean(b.entry || {}, prof);
     if (!e.title && !String(b.text || "").trim()) return [400, { ok: false, code: "empty", error: "An entry needs a title or text." }];
     const id = String(b.id || "").replace(/[^a-z0-9]/g, "").slice(0, 16) || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
     let prev = null; if (b.id) { try { prev = JSON.parse(await env.MEETINGS.get(L.PFX + (dOk(b.oldDate) ? b.oldDate : date) + "_" + id)); } catch (x) {} }

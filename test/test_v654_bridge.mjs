@@ -48,10 +48,11 @@ r = await call("pdf-links?type=entry&id=" + today + "_abc123", { key: NB }); ok(
 ok((await call("pdf-links?type=x&id=1", { key: NB })).s === 400, "pdf-links bad type");
 
 // person separation
-for (const p of ["entries", "tasks", "plan", "meetings", "anne"]) ok((await call(p, { key: KB })).s === 403, "kendall key cannot read her " + p);
+ok((await call("anne", { key: KB })).s === 403, "kendall key cannot read her client card");
+for (const p of ["entries", "tasks", "plan", "meetings"]) { const r = await call(p, { key: KB }); const d = r.j && r.j.data; ok(r.s === 200 && !JSON.stringify(d).includes("Example"), "kendall key reads only HIS OWN " + p + " (v662), never hers", r.j); }
 for (const p of ["jobs", "speaking", "ggu"]) ok((await call(p, { key: NB })).s === 403, "her key cannot read kendall " + p);
 ok((await call("speaking", { key: KB })).s === 200, "kendall speaking");
-ok((await call("entry", { key: KB, method: "POST", body: { entry: { title: "x" } }, idem: "kendall-idem-1" })).s === 403, "kendall cannot write her entries");
+{ const nb = [...store.keys()].filter((k) => /^work_naj_\d{4}/.test(k)).length; const r = await call("entry", { key: KB, method: "POST", body: { entry: { title: "x" } }, idem: "kendall-idem-1" }); ok(r.s === 200 && [...store.keys()].filter((k) => /^work_naj_\d{4}/.test(k)).length === nb && [...store.keys()].some((k) => /^work_kendall_\d{4}/.test(k)), "kendall writes HIS OWN entry (v662), never hers", r.j); }
 ok((await call("nothing", { key: NB })).s === 404, "unknown route 404");
 ok((await call("entries", { key: NB, method: "POST", body: {}, idem: "abcdefgh1" })).s === 404, "GET route by POST is 404");
 

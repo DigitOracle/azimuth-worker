@@ -53,7 +53,8 @@ const post = (body) => worker.fetch(new Request("https://w/momo/work/rec/api?key
 const a = await (await post({ action: "archive" })).json();
 ok(a.ok && a.recs.length === 2 && a.recs[0].id === "20261021unread99" && a.recs[1].minutes === true, "archive lists every recording, newest first", a);
 const ownerArch = await worker.fetch(new Request("https://w/momo/work/rec/api?key=" + OWNER, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "archive" }) }), env, ctx);
-ok(ownerArch.status === 401 || ownerArch.status === 404, "the owner cannot list her recordings", ownerArch.status);
+const oa = ownerArch.status === 200 ? await ownerArch.json() : null;   // v662 - the owner lists HIS OWN recordings (none here), never hers
+ok(ownerArch.status === 401 || ownerArch.status === 404 || (oa && oa.recs.length === 0), "the owner cannot list her recordings", ownerArch.status);
 
 // the page scripts carry the buttons
 const js = await (await get("/momo/work.js", NAJ)).text();

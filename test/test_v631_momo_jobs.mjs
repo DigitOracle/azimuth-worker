@@ -57,5 +57,5 @@ for (const k of ["", "wrong", "ins_short"]) {
   const x = await post("/momo/work/jobs/api", k, { action: "save_profile", profile: { name: "Intruder" } }); ok(x.status === 401 || x.status === 404, "POST jobs/api refused with key '" + k + "'", x.status);
 }
 ok((await readRec(env)).profile.name === "Test Person", "no refused request changed the record");
-ok((await get("/momo/work/api", OWNER)).status === 404, "the owner still cannot read her work log");
+{ const r = await get("/momo/work/api", OWNER), j = r.status === 200 ? await r.json() : null; ok(r.status === 404 || (j && j.entries.length === 0 && !(j.people || []).length), "the owner still cannot read her work log (v662: he opens his own, empty here)"); }
 globalThis.fetch = realFetch; console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

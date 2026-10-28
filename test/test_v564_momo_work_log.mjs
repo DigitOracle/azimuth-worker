@@ -14,7 +14,7 @@ const deps = (naj, model) => ({ isNaj: () => naj, model: "m", page: (k, rk, b) =
 const req = (path, naj, body, model) => workRoute(new Request("https://w" + path, body ? { method: "POST", body: JSON.stringify(body) } : {}), env, new URL("https://w" + path + (path.includes("?") ? "&" : "?") + "key=k"), deps(naj, model));
 // privacy
 const own = await (await req("/momo/work", false)).text();
-ok(/private to her link/.test(own) && !/wf/.test(own), "the owner sees only that the log is private");
+ok(/private to its owner/.test(own) && !/wf/.test(own), "the owner sees only that the log is private");
 ok((await req("/momo/work/api", false)).status === 404, "the owner cannot read the log's data");
 ok((await req("/momo/work/report", false)).status === 404, "the owner cannot open her report");
 // reference data

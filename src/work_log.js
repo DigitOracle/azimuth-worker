@@ -117,7 +117,33 @@ const SCHEMA = { type: "object", additionalProperties: false, required: ["title"
 // v570 (Kendall 14 Oct: "she entered in a whole day at once ... multiple meetings, briefings, phone calls") - the model returns ONE ENTRY PER ACTIVITY
 const DAY_SCHEMA = { type: "object", additionalProperties: false, required: ["entries"], properties: { entries: { type: "array", items: SCHEMA } } };
 
-function sysPrompt() {
+// v662 - whose Work this request is: her constants for najjuko, the person's KV record (work_cfg_<person>) for anyone else. CUR is set only around
+// SYNCHRONOUS page builders (withP), so two requests can never see each other's profile.
+export const NAJ_PROF = { person: "najjuko", kpis: KPIS, scope: SCOPE, people: PEOPLE, works: WORKS, depts: DEPTS, deptOf: (n) => deptOf(n), start: PHASES[0].from, review_due: REVIEW_DUE, term_end: TERM_END, phases: PHASES, areas: ["Marketing", "PR", "Business Development"] };
+export function profOf(cfg) {
+  const dmap = {}; cfg.people.forEach((p) => { dmap[p[0]] = p[2]; });
+  return { person: cfg.person, cfg, kpis: cfg.kpis, scope: cfg.scope, people: cfg.people, works: cfg.works, depts: cfg.depts, deptOf: (n) => dmap[n] || "External", start: cfg.start, review_due: cfg.review_due, term_end: "2099-12-31",
+    phases: [{ name: "Ongoing", from: cfg.start, to: "2099-12-31", aim: "" }], areas: cfg.kpis.map((k) => k.name) };
+}
+let CUR = null;
+const PF = () => CUR || NAJ_PROF;
+export function withP(prof, fn) { const was = CUR; CUR = prof; try { return fn(); } finally { CUR = was; } }
+function otherPrompt(pf) {
+  const c = pf.cfg, nm = c.name || "the owner";
+  return "You file work-log entries for " + nm + ", " + c.role + " at " + c.org + ".\n"
+    + "The person often types a WHOLE DAY in one go. SPLIT it: one entry per distinct activity (a meeting, a call, a deliverable, an event, a chase), in the order written. Never merge unrelated activities.\n"
+    + "Focus areas (kpis, use the numbers):\n" + pf.kpis.map((k) => k.id + ". " + k.name + (k.good ? ": " + k.good : "") + (k.ev ? ". Evidence: " + k.ev : "")).join("\n")
+    + "\nScope (use the ids):\n" + pf.scope.map((x) => x.id + " = " + x.name).join("\n")
+    + (pf.people.length ? "\nPeople (use these exact names when the entry mentions them):\n" + pf.people.map((p) => p[0] + " - " + p[1]).join("\n") : "\nNo people list is kept: people stays empty.")
+    + (pf.works.length ? "\nRunning work (works, use these exact names):\n" + pf.works.join("\n") : "")
+    + "\nworks may also include a NEW piece of work in a few words. progress: one item per work: status (" + STATUS.join(", ") + ") and percent complete as described; owners from the people list. effort: a rough time (" + EFFORT.map((x) => x[0]).join(", ") + ").\n"
+    + "prep: needed = false with empty strings unless the entry is about a client-facing event about a named project. time_of_day from the entry's own words, Unspecified if none. start and end: 24-hour HH:MM only when the entry gives a time span, else empty strings. "
+    + "where: Office, Home, On site, Other or Unspecified. alone: true when done alone. in_scope: true. broker: false. external: companies or outside people dealt with (name, kind in two or three words, person or empty string).\n"
+    + "Rules: use only what the entry says; never invent people, figures or outcomes. title: under 8 words. summary: one or two plain sentences. kpis: only the areas genuinely advanced, usually one or two. "
+    + "Up to three short questions only when something material is missing. Spell out abbreviations. Plain English.";
+}
+function sysPrompt(pf) {
+  if (pf && pf.person !== "najjuko") return otherPrompt(pf);
   return "You file work-log entries for Serah Najjuko Ganyana, Strategic Lead - Marketing, PR & Business Development at FN Realty (a Dubai off-plan real estate advisory). "
     + "She reports to Ali Kalhor. Her role is strategic: she strategises, manages, delegates and reviews; hands-on work belongs to the Execution Team.\n"
     + "She often types a WHOLE DAY in one go: several meetings, calls, briefings, posts, chases. SPLIT it: one entry per distinct activity (a meeting, a call, a deliverable, an event, a chase), "
@@ -168,7 +194,8 @@ export function spanOf(t) {
   return { start: f(h1, mm1), end: f(h2 === 24 ? 0 : h2, mm2) };
 }
 // keyword fallback when the writing model is unavailable: still files the entry, marked for her to check
-function fallback(text) {
+function fallback(text, pf) {
+  pf = pf || NAJ_PROF; const PEOPLE = pf.people, WORKS = pf.works;
   const t = text.toLowerCase(), kp = new Set(), sc = new Set();
   if (/strateg|plan|positioning|message/.test(t)) { kp.add(1); sc.add("m1"); }
   if (/content|video|film|edit|design|creative|calendar|shoot/.test(t)) { kp.add(2); sc.add("m2"); }
@@ -199,11 +226,12 @@ function fallback(text) {
     progress: works.map((w) => ({ work: w, status: p0 >= 100 ? "Done" : started && !half && !pct ? "Started" : "In progress", percent: p0, owners: people.filter((n) => n !== "All sales agents") })) };
 }
 
-function clean(x) {
+function clean(x, pf) {
+  pf = pf && pf.person ? pf : NAJ_PROF; const SCOPE = pf.scope, PEOPLE = pf.people;
   const ids = new Set(SCOPE.map((s) => s.id)), names = new Set(PEOPLE.map((p) => p[0]));
   const arr = (a, n) => (Array.isArray(a) ? a : []).map((v) => String(v).slice(0, 200)).filter(Boolean).slice(0, n || 12);
   return { title: (String(x.title || "").length > 90 ? String(x.title || "").slice(0, 89).trimEnd() + "\u2026" : String(x.title || "")), type: TYPES.includes(x.type) ? x.type : "Other", summary: String(x.summary || "").slice(0, 700),
-    people: arr(x.people).filter((p) => names.has(p)), kpis: [...new Set((x.kpis || []).map(Number).filter((n) => n >= 1 && n <= 5))],
+    people: arr(x.people).filter((p) => names.has(p)), kpis: [...new Set((x.kpis || []).map(Number).filter((n) => pf.kpis.some((k) => k.id === n)))],
     scope: [...new Set(arr(x.scope).filter((s) => ids.has(s)))], works: [...new Set(arr(x.works).map((w) => w.slice(0, 80).trim()).filter(Boolean))].slice(0, 6),
     effort: EFFORT.some((e) => e[0] === x.effort) ? x.effort : "1-2 hours",
     time_of_day: TIMES.includes(x.time_of_day) ? x.time_of_day : "Unspecified", alone: !!x.alone, in_scope: x.in_scope !== false || !!x.broker, broker: !!x.broker, broker_tasks: (Array.isArray(x.broker_tasks) ? x.broker_tasks : []).map(String).filter((t) => BROKER_IDS.has(t)).slice(0, 10),
@@ -293,7 +321,8 @@ async function taskOverrides(env) {
   return out;
 }
 // v566 - one card per department: the open tasks its people hold or touched, who, how far along, how long since anything moved
-export function deptBoard(tasks, today) {
+export function deptBoard(tasks, today, pf) {
+  const DEPTS = (pf || NAJ_PROF).depts, deptOf = (pf || NAJ_PROF).deptOf;
   return DEPTS.map((d) => {
     const ts = tasks.filter((t) => t.status !== "Done" && [...t.owners, ...t.touched].some((n) => deptOf(n) === d))
       .map((t) => ({ name: t.name, percent: t.percent, status: t.status, last: t.last, quiet: Math.round((Date.parse(today) - Date.parse(t.last)) / 864e5),
@@ -302,8 +331,8 @@ export function deptBoard(tasks, today) {
     return { dept: d, open: ts.length, people: [...new Set(ts.flatMap((t) => t.who))], tasks: ts };
   });
 }
-export function hoursByKpi(es) {
-  return KPIS.map((k) => ({ id: k.id, name: k.name, hours: Math.round(es.filter((e) => (e.kpis || []).includes(k.id)).reduce((s, e) => s + hoursOf(e) / Math.max(1, (e.kpis || []).length), 0) * 10) / 10 }));
+export function hoursByKpi(es, pf) {
+  return (pf || PF()).kpis.map((k) => ({ id: k.id, name: k.name, hours: Math.round(es.filter((e) => (e.kpis || []).includes(k.id)).reduce((s, e) => s + hoursOf(e) / Math.max(1, (e.kpis || []).length), 0) * 10) / 10 }));
 }
 // v578 - the hours picture for a set of entries: total, how much is clocked vs estimated, the 15 h meter, and the two splits (what kind of work; where)
 export function hoursPicture(es) {
@@ -423,7 +452,7 @@ async function recNotes(env, deps, m, transcript) {
   return recNotesCore(env, deps, m, transcript, input);
 }
 async function recNotesCore(env, deps, m, transcript, input) {
-  const names = PEOPLE.map((x) => x[0]).join(", ");
+  const names = ((deps.prof || NAJ_PROF).people).map((x) => x[0]).join(", ");
   const sys = "You write meeting notes for Najjuko, the Strategic Lead at FN Realty (a Dubai real-estate brokerage), from an AUTOMATIC transcript of a meeting, briefing or interview she attended or ran. "
     + "The speech engine mishears names and numbers: use a name only when the transcript clearly supports it, and prefer these team names when a spelling is close: " + names + ". "
     + (m.attendees && m.attendees.length ? "Najjuko told Momo who was in the room: " + attendeeLine(m.attendees) + ". Use those spellings. " : "")
@@ -560,8 +589,8 @@ async function recApi(request, env, J, deps) {
         : "Transcript (automatic, may mishear names):\n" + transcript.slice(0, 12000))
       + "\n\nFile it as her work-log entry. ONE entry for the meeting itself (a briefing, interview or meeting she attended or ran is a Meeting). Add a separate entry only for something clearly separate that she herself did or was handed in it. "
       + "Every task or follow-up goes in works/progress with its owner and status; decisions and next steps go in the summary, evidence and next. Use only what the notes say.";
-    let x = null; try { x = await deps.claudeJSON(env, sysPrompt(), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
-    let list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map(clean) : [clean(fallback((m.title || "Meeting") + ". " + (notes ? notes.summary : transcript.slice(0, 600))))];
+    let x = null; try { x = await deps.claudeJSON(env, sysPrompt(deps.prof), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
+    let list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, deps.prof)) : [clean(fallback((m.title || "Meeting") + ". " + (notes ? notes.summary : transcript.slice(0, 600)), deps.prof), deps.prof)];
     list.forEach((e, i) => { if (i === 0 && m.secs >= 60 && !e.start && toMin(m.started_hm) != null && toMin(m.ended_hm) != null && toMin(m.ended_hm) > toMin(m.started_hm)) { e.start = m.started_hm; e.end = m.ended_hm; }
       if (e.time_of_day === "Unspecified" && toMin(e.start || m.started_hm) != null) { const h = Math.floor(toMin(e.start || m.started_hm) / 60); e.time_of_day = h < 12 ? "Morning" : h < 14 ? "Midday" : h < 18 ? "Afternoon" : "Evening"; } });
     const known = await knownParties(env), seen = {};
@@ -624,44 +653,61 @@ export async function workRoute(request, env, url, deps) {
   if (!p.startsWith("/momo/work")) return null;
   const key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
-  if (p === "/momo/work/voicetest") { if (!deps.isNaj(env, url)) return J({ error: "Not allowed." }, 401); return voiceTestRoute(request, env, url, J, deps); }   // v626 - the private speaker-detection test; a wrong key is a 401 and nothing runs
   if (p.startsWith("/momo/work/ggu")) return gguRoute(request, env, url, deps);   // v650 - GGU (Golden Gate University): Kendall's key only (its own gate)
   if (p.startsWith("/momo/work/speaking")) return speakingRoute(request, env, url, deps);   // v646 - Speaking engagements: Kendall's key only (its own gate)
   if (p.startsWith("/momo/work/anne")) return anneRoute(request, env, url, deps);
   if (p.startsWith("/momo/work/brief")) return dossierRoute(request, env, url, deps);   // v657 - building briefing cards (Najjuko only)   // v641 - the temporary client card: Kendall's key only (its own gate)
   if (p.startsWith("/momo/work/jobs")) return jobsRoute(request, env, url, Object.assign({}, deps, { listEntries, names: PEOPLE.map((x) => x[0]).concat(WORKS), kpiName: (k) => { const q = KPIS.find((y) => y.id === k); return q ? q.name : "Focus area " + k; } }));   // v630 - the Jobs tile: her key or the owner's (its own gate)
-  if (!deps.isNaj(env, url)) {   // the owner (or anyone else): the room exists, the log is hers alone
+  // v662 - Work is per person (src/work_person.js): najjuko on her legacy keys, kendall on his own parallel keys; any other key sees the private note
+  const who = typeof deps.person === "function" ? deps.person(env, url) : (deps.isNaj(env, url) ? "najjuko" : "");
+  if (!WORK_PEOPLE.includes(who) || (who === "najjuko" && !deps.isNaj(env, url))) {
+    if (p === "/momo/work/voicetest") return J({ error: "Not allowed." }, 401);
     if (p !== "/momo/work") return new Response("not found", { status: 404 });
-    return new Response(deps.page(key, rk, '<a class=back href="/momo?key=' + encodeURIComponent(key) + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty><p>Najjuko\'s work log is private to her link.</p></div>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+    return new Response(deps.page(key, rk, '<a class=back href="/momo?key=' + encodeURIComponent(key) + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty><p>This work log is private to its owner\'s link.</p></div>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
+  if (who === "najjuko") return workInner(request, env, url, Object.assign({}, deps, { prof: NAJ_PROF }), NAJ_PROF, J, key, rk);
+  const cfg = await readCfg(env, who), prof = profOf(cfg), wenv = workEnv(env, who);
+  const cj = deps.claudeJSON;
+  const wdeps = Object.assign({}, deps, { prof, claudeJSON: cj ? (e, sys, ...rest) => cj(e, swapPrompt(sys, cfg, nameFixLine()), ...rest) : cj });
+  if (!(await wenv.MEETINGS.get("work_naj_planseed"))) await wenv.MEETINGS.put("work_naj_planseed", "1");   // her campaign seed never lands in anyone else's plan
+  const res = await workInner(request, wenv, url, wdeps, prof, J, key, rk);
+  const ct = (res && res.headers.get("Content-Type")) || "";
+  if (!res || !/text\/html|javascript/.test(ct)) return res;
+  return new Response(swapPage(await res.text(), cfg, [FN_LOGO, FN_LATTICE, FN_MONOGRAM]), { status: res.status, headers: res.headers });
+}
+async function workInner(request, env, url, deps, prof, J, key, rk) {
+  const p = url.pathname;
+  if (p === "/momo/work/voicetest") { return voiceTestRoute(request, env, url, J, deps); }   // v626 - the private speaker-detection test; a wrong key is a 401 and nothing runs
+  if (p === "/momo/work") return new Response(deps.page(key, rk, WORK_BODY.replace(/__KEY__/g, esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v662 - restored: v652 dropped this route with the Jobs tab, so the Work page itself answered 404
   if (p.startsWith("/momo/work/team")) return teamRoute(request, env, url, deps);
-  if (p.startsWith("/momo/work/plan")) return planRoute(request, env, url, deps, { agents: PEOPLE.filter((x) => deptOf(x[0]) === "Sales").map((x) => x[0]), team: PEOPLE.filter((x) => ["Marketing", "Leadership"].includes(deptOf(x[0]))).map((x) => [x[0], x[1]]) });   // v590 - the content plan
+  if (p.startsWith("/momo/work/plan")) return planRoute(request, env, url, deps, prof.person === "najjuko" ? { agents: PEOPLE.filter((x) => deptOf(x[0]) === "Sales").map((x) => x[0]), team: PEOPLE.filter((x) => ["Marketing", "Leadership"].includes(deptOf(x[0]))).map((x) => [x[0], x[1]]) } : { agents: [], team: prof.people.map((x) => [x[0], x[1]]) });   // v590 - the content plan
   if (p === "/momo/work/prep.js") return new Response(PREP_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work.js") return new Response(WORK_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work/rec/chunk" && request.method === "POST") return recChunk(request, env, url, J);        // v617 - one part of a recording
   if (p === "/momo/work/rec/api" && request.method === "POST") return recApi(request, env, J, deps);
   if (p === "/momo/work/rec/view") return recView(env, url);
-  if (p.startsWith("/momo/work/item/")) return itemRoute(env, url);   // v645 - one item (an entry, a task, a meeting) as its own FN Realty PDF, any day
+  if (p.startsWith("/momo/work/item/")) return itemRoute(env, url, prof);   // v645 - one item (an entry, a task, a meeting) as its own FN Realty PDF, any day
   if (p === "/momo/work/rec/minutes") { const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null; if (!m || !m.minutes) return new Response("not found", { status: 404 }); return new Response(renderMinutes(m, m.minutes, url.searchParams.get("key") || ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }); }   // v625
   if (p === "/momo/work/api") {
     if (request.method === "GET") {
       const [f, t] = weekOf(okDate(url.searchParams.get("week")));
+      const KPIS = prof.kpis, SCOPE = prof.scope, PEOPLE = prof.people, WORKS = prof.works, DEPTS = prof.depts, deptOf = prof.deptOf, PHASES = prof.phases, REVIEW_DUE = prof.review_due, TERM_END = prof.term_end;   // v662 - this person's lists
       const week = await listEntries(env, f, t), all = await listEntries(env, PHASES[0].from, TERM_END);
       const tally = KPIS.map((k) => ({ id: k.id, name: k.name, week: week.filter((e) => e.kpis.includes(k.id)).length, term: all.filter((e) => e.kpis.includes(k.id)).length }));
       // v576 - outside-role work counted on its own, by whose job it was (the renewal evidence)
       const ow = week.filter((e) => e.in_scope === false), byD = {}; ow.forEach((e) => { const d = e.out_role || "Other"; byD[d] = (byD[d] || 0) + 1; });
       const outside = { week: ow.length, term: all.filter((e) => e.in_scope === false).length, by: Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => ({ dept: d, n: byD[d] })) };
-      return J({ from: f, to: t, today: dubaiToday(), start: PHASES[0].from, entries: week, tally, outside, hoursweek: hoursPicture(week), where: WHERE, tasks: applyOverrides(tasksOf(all), await taskOverrides(env)), depts: deptBoard(applyOverrides(tasksOf(all), await taskOverrides(env)), dubaiToday()), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES, broker_tasks: BROKER_TASKS,
+      return J({ from: f, to: t, today: dubaiToday(), start: PHASES[0].from, entries: week, tally, outside, hoursweek: hoursPicture(week), where: WHERE, tasks: applyOverrides(tasksOf(all), await taskOverrides(env)), depts: deptBoard(applyOverrides(tasksOf(all), await taskOverrides(env)), dubaiToday(), prof), org: DEPTS.map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) })), hours: hoursByKpi(week, prof), status: STATUS, effort: EFFORT.map((x) => x[0]), review_due: REVIEW_DUE, phase: PHASES.find((x) => dubaiToday() >= x.from && dubaiToday() <= x.to) || null, scope: SCOPE, kpis: KPIS, people: PEOPLE.map((x) => x[0]), works: WORKS, types: TYPES, times: TIMES, out_roles: OUT_ROLES, broker_tasks: BROKER_TASKS,
         // v571 - the people picker in hierarchy: Ali and Faez (and Sultan) on their own at the top, then each department's people
-        people_tree: [{ dept: "Leadership", people: PEOPLE.filter((x) => deptOf(x[0]) === "Leadership").map((x) => x[0]) }].concat(DEPTS.filter((d) => d !== "Leadership").map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) }))) });
+        people_tree: (prof.person === "najjuko" ? [{ dept: "Leadership", people: PEOPLE.filter((x) => deptOf(x[0]) === "Leadership").map((x) => x[0]) }] : []).concat(DEPTS.filter((d) => prof.person !== "najjuko" || d !== "Leadership").map((d) => ({ dept: d, people: PEOPLE.filter((x) => deptOf(x[0]) === d).map((x) => x[0]) }))) });
     }
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
     if (b.action === "parse") {
       const text = String(b.text || "").trim().slice(0, 4000);
       if (!text) return J({ error: "Write what happened first." }, 400);
       let x = null;
-      try { x = await deps.claudeJSON(env, sysPrompt(), "Date: " + okDate(b.date) + " (" + dayName(okDate(b.date)) + ")\nWhat she wrote:\n" + text, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
-      const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map(clean) : splitDay(text).map((s) => clean(fallback(s)));
+      try { x = await deps.claudeJSON(env, sysPrompt(prof), "Date: " + okDate(b.date) + " (" + dayName(okDate(b.date)) + ")\nWhat she wrote:\n" + text, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
+      const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, prof)) : splitDay(text).map((s) => clean(fallback(s, prof), prof));
       // v571 - third parties: a name she has confirmed before is recognised at once; a new one is looked up on the web and shown for her to confirm
       const known = await knownParties(env), seen = {};
       for (const e of list) for (const o of e.external) {
@@ -704,8 +750,8 @@ export async function workRoute(request, env, url, deps) {
       let x = null;
       const prompt = "Date: " + okDate(b.date) + " (" + dayName(okDate(b.date)) + ")\nShe uploaded a document named \"" + name + "\"." + (hit ? " This is a recurring document she has filed before as \"" + hit.title + "\" (" + hit.kind + "); last time it was filed as: " + hit.summary + ". File it the same way unless the content differs." : "")
         + "\nFile its contents as her work-log entries: what she did (prepared, presented, ran, agreed), who was there, every task or action it lists with its owner and status, decisions, next steps. A deck or agenda she produced is a Deliverable AND the meeting it was for is a Meeting.\nDocument text:\n" + text;
-      try { x = await deps.claudeJSON(env, sysPrompt(), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
-      const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map(clean) : splitDay(text.slice(0, 3000)).slice(0, 8).map((s) => clean(fallback(s)));
+      try { x = await deps.claudeJSON(env, sysPrompt(prof), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
+      const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, prof)) : splitDay(text.slice(0, 3000)).slice(0, 8).map((s) => clean(fallback(s, prof), prof));
       list.forEach((e) => { e.src_file = name; });
       return J({ entries: list.slice(0, 20), entry: list[0], file: name, chars: text.length, recognised: hit ? hit.title : "", excerpt: text.slice(0, 400) });
     }
@@ -746,7 +792,7 @@ export async function workRoute(request, env, url, deps) {
       return J({ status: "error", error: "busy" });
     }
     if (b.action === "save") {
-      const e = clean(b.entry || {}); const date = okDate(b.date), text = String(b.text || "").slice(0, 4000), link = /^https?:\/\//.test(String(b.link || "")) ? String(b.link).slice(0, 500) : "";
+      const e = clean(b.entry || {}, prof); const date = okDate(b.date), text = String(b.text || "").slice(0, 4000), link = /^https?:\/\//.test(String(b.link || "")) ? String(b.link).slice(0, 500) : "";
       const id = String(b.id || "").replace(/[^a-z0-9]/g, "").slice(0, 16) || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
       const rec = { id, date, text, link, ...e, check: false, created: b.created || new Date().toISOString(), updated: new Date().toISOString() };
       if (b.id && b.oldDate && b.oldDate !== date) await env.MEETINGS.delete(PFX + okDate(b.oldDate) + "_" + id);
@@ -769,11 +815,12 @@ export async function workRoute(request, env, url, deps) {
     // period followed by one page per month, so a single Save as PDF holds the whole record.
     const all = url.searchParams.get("all") === "1";
     const picked = all ? [] : String(url.searchParams.get("days") || "").split(",").map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
-    let from = all ? PHASES[0].from : picked.length ? picked[0] : okDate(url.searchParams.get("from") || weekOf(dubaiToday())[0]);
+    let from = all ? prof.start : picked.length ? picked[0] : okDate(url.searchParams.get("from") || weekOf(dubaiToday())[0]);
     let to = all ? dubaiToday() : picked.length ? picked[picked.length - 1] : okDate(url.searchParams.get("to") || weekOf(from)[1]);
     if (to < from) { const x = from; from = to; to = x; }
     if ((Date.parse(to) - Date.parse(from)) / 864e5 > 400) to = new Date(Date.parse(from) + 400 * 864e5).toISOString().slice(0, 10);   // a span is at most about 13 months
-    return new Response(reportHtml(await listEntries(env, from, to), from, to, applyOverrides(tasksOf(await listEntries(env, PHASES[0].from, to)), await taskOverrides(env)), picked), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    const _es = await listEntries(env, from, to), _all = applyOverrides(tasksOf(await listEntries(env, prof.start, to)), await taskOverrides(env));
+    return new Response(withP(prof, () => reportHtml(_es, from, to, _all, picked)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   // v573 DEBRIEF (Kendall 14 Oct: "Ali ... wants a debrief of what happened because he wasn't there ... immediately create a PDF ... very quick").
   // One entry, one page, in FN's brand: what, when, who, outcome, next steps. Short on purpose.
@@ -781,7 +828,7 @@ export async function workRoute(request, env, url, deps) {
     const id = String(url.searchParams.get("id") || "").replace(/[^a-z0-9]/g, ""), date = okDate(url.searchParams.get("date"));
     let e = null; try { e = JSON.parse(await env.MEETINGS.get(PFX + date + "_" + id)); } catch (x) {}
     if (!e) return new Response("not found", { status: 404 });
-    return new Response(debriefHtml(e), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    return new Response(withP(prof, () => debriefHtml(e)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   // v583 - the vendor report page: one page in FN's frame from the engine's /vet answer
   if (p === "/momo/work/vet") {
@@ -801,8 +848,8 @@ export async function workRoute(request, env, url, deps) {
 const ITEM_CSS = '<style>.kv{width:100%;border-collapse:collapse;margin:6px 0 12px;font-size:9.8pt}.kv th{text-align:left;width:150px;color:#626B7C;font-weight:600;padding:6px 8px;border-bottom:1px solid #EFE9DE;vertical-align:top}.kv td{padding:6px 8px;border-bottom:1px solid #EFE9DE;vertical-align:top}'
   + '.at{width:100%;border-collapse:collapse;font-size:9.6pt;margin:4px 0 12px}.at th{text-align:left;font-size:8pt;letter-spacing:.06em;text-transform:uppercase;color:#626B7C;border-bottom:1px solid ' + FN_GOLD + ';padding:5px 6px}.at td{padding:6px;border-bottom:1px solid #EFE9DE;vertical-align:top}'
   + '.lead{font-size:11pt;margin:0 0 10px}.it h2{margin-top:16px}.it ul{margin:0 0 8px 18px;padding:0}.it li{margin:2px 0}.txt{white-space:pre-wrap;font-size:9.6pt;color:#3B4441;background:#FBF8F2;border-left:3px solid ' + FN_GOLD + ';padding:8px 10px;margin:4px 0 10px}</style>';
-const kpiNames = (ks) => (ks || []).map((k) => { const x = KPIS.find((y) => y.id === k); return x ? x.name : "Focus area " + k; });
-const scopeNames = (ss) => (ss || []).map((id) => { const x = SCOPE.find((y) => y.id === id); return x ? x.area + ": " + x.name : id; });
+const kpiNames = (ks) => (ks || []).map((k) => { const x = PF().kpis.find((y) => y.id === k); return x ? x.name : "Focus area " + k; });
+const scopeNames = (ss) => (ss || []).map((id) => { const x = PF().scope.find((y) => y.id === id); return x ? x.area + ": " + x.name : id; });
 const kvRow = (k, v) => v ? "<tr><th>" + k + "</th><td>" + v + "</td></tr>" : "";
 const ulOf = (a) => a && a.length ? "<ul>" + a.map((x) => "<li>" + x + "</li>").join("") + "</ul>" : "";
 function itemDoc(kindWord, span, body, docTitle, autoPrint) {
@@ -851,22 +898,22 @@ export function itemMeetingHtml(m, autoPrint) {
   } else body += "<p>This recording has not been read yet. Open it in Momo and tap Make entry first.</p>";
   return itemDoc("Meeting", esc(longDate(m.date)), body, "FN Meeting " + fmtD(m.date) + " " + String((mn && mn.title) || m.title || "").slice(0, 60), autoPrint);
 }
-async function itemRoute(env, url) {
+async function itemRoute(env, url, prof) {
   const p = url.pathname, id = String(url.searchParams.get("id") || ""), auto = url.searchParams.get("print") === "1";
   const H = (h) => new Response(h, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }), NF = () => new Response("not found", { status: 404 });
   if (p === "/momo/work/item/entry") {
     const mm = /^(\d{4}-\d{2}-\d{2})_([a-z0-9]{1,40})$/.exec(id); if (!mm) return NF();
     let e = null; try { e = JSON.parse(await env.MEETINGS.get(PFX + mm[1] + "_" + mm[2])); } catch (x) {}
-    return e ? H(itemEntryHtml(e, auto)) : NF();
+    return e ? H(withP(prof, () => itemEntryHtml(e, auto))) : NF();
   }
   if (p === "/momo/work/item/task") {
     if (!id || id.length > 120) return NF();
     const es = await listEntries(env), t = applyOverrides(tasksOf(es), await taskOverrides(env)).find((x) => x.name === id);
-    return t ? H(itemTaskHtml(t, es, auto)) : NF();
+    return t ? H(withP(prof, () => itemTaskHtml(t, es, auto))) : NF();
   }
   if (p === "/momo/work/item/meeting") {
     const rid = recId(id), m = rid ? await recGet(env, rid) : null;
-    return m ? H(itemMeetingHtml(m, auto)) : NF();
+    return m ? H(withP(prof, () => itemMeetingHtml(m, auto))) : NF();
   }
   return NF();
 }
@@ -911,8 +958,9 @@ import { speakingRoute } from "./work_speaking.js";
 import { gguRoute } from "./work_ggu.js";
 import { teamRoute } from "./work_team.js";
 import { voiceTestRoute } from "./work_voicetest.js";
+import { WORK_PEOPLE, workEnv, readCfg, swapPrompt, swapPage } from "./work_person.js";   // v662 - Work per person
 import { REC_JS, REC_BTN } from "./work_rec_page.js";
-import { loadRoster, cleanRoster, cleanAttendees, bumpUses, buildMinutes, buildMinutesA, buildMinutesB, mergeMinutes, renderMinutes, nameFixLine, attendeeLine, PEOPLE_KEY, longDate, dueText } from "./work_minutes.js";
+import { loadRoster, cleanRoster, cleanAttendees, bumpUses, buildMinutes, buildMinutesA, buildMinutesB, mergeMinutes, renderMinutes, nameFixLine, attendeeLine, PEOPLE_KEY, longDate, dueText, FN_MONOGRAM } from "./work_minutes.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 // soft language for the work-kind split (Kendall 14 Oct: "very soft language when you're differentiating these things")
 const KIND_SOFT = { "Strategic Lead": "As Strategic Lead", "Broker": "As a broker", "Other departments": "Supporting other departments" };
@@ -937,11 +985,11 @@ function dayBars(days) {   // days: [{d, n, out}] - thin columns, rounded ends, 
 // together (and anything that was neither, grey). Left column counts activities, right column counts hours. Same colours throughout: the teal family is
 // always the Strategic Lead, the warm family always the Broker. A short "In short" summary follows, written from the same figures.
 const AREA_COL = { "Marketing": RAMP[0], "PR": RAMP[2], "Business Development": RAMP[4] }, BROKER_RAMP = ["#F2B27A", "#E08F4A", "#C46A1E", "#8F4A12", "#5E300B"];
-const areaOf = (e) => { const sc = SCOPE.find((s) => s.id === (e.scope || [])[0]); return sc ? sc.area : ((e.kpis || [])[0] && /^m/.test(e.kpis[0]) ? "Marketing" : "Unassigned"); };
+const areaOf = (e) => { const sc = PF().scope.find((s) => s.id === (e.scope || [])[0]); return sc ? sc.area : ((e.kpis || [])[0] && /^m/.test(e.kpis[0]) ? "Marketing" : "Unassigned"); };
 export function roleGrid(es) {
   const r1 = (n) => Math.round(n * 10) / 10, H = (list) => r1(list.reduce((s, e) => s + hoursOf(e), 0));
   const SL = es.filter((e) => kindOf(e) === "Strategic Lead"), BR = es.filter((e) => kindOf(e) === "Broker"), OT = es.filter((e) => kindOf(e) === "Other departments");
-  const areas = ["Marketing", "PR", "Business Development", "Unassigned"].map((a) => ({ name: a, es: SL.filter((e) => areaOf(e) === a), color: AREA_COL[a] || GREY })).filter((x) => x.es.length);
+  const areas = PF().areas.concat("Unassigned").map((a) => ({ name: a, es: SL.filter((e) => areaOf(e) === a), color: AREA_COL[a] || GREY })).filter((x) => x.es.length);
   const grpOf = (e) => { const t = (e.broker_tasks || [])[0], g = BROKER_TASKS.find((x) => x.items.some((i) => i[0] === t)); return g ? g.group : "Not specified"; };
   const kinds = {}; BR.forEach((e) => { const k = grpOf(e); (kinds[k] = kinds[k] || []).push(e); });
   const bparts = Object.keys(kinds).sort((a, b) => kinds[b].length - kinds[a].length).map((k, i) => ({ name: k, es: kinds[k], color: BROKER_RAMP[Math.min(i, 4)] }));
