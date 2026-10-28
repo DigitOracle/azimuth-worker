@@ -31,7 +31,9 @@ export function cleanDossier(x) {
   const sections = (Array.isArray(g.sections) ? g.sections : []).slice(0, 30).map((s, i) => ({
     id: slugOk(s && s.id) || ("s" + i), title: S(s && s.title, 120).trim() || "Section", icon: DOSSIER_ICONS[s && s.icon] ? s.icon : "doc", md: S(s && s.md, 60000), open: !!(s && s.open) }));
   const gl = cleanGlance(g);
-  return { title: S(g.title, 80).trim() || "Briefing", subtitle: S(g.subtitle, 200).trim(), updatedAt: S(g.updatedAt, 40), usps: S(g.usps, 4000).trim(), kpis: gl.kpis, charts: gl.charts, sections };
+  // v664 (Kendall 28 Oct: "these should be all separate") - separate documents, each with its own Open and Share. PDFs live under dossier_pdf_najjuko_<slug>__<doc id>.
+  const docs = (Array.isArray(g.docs) ? g.docs : []).slice(0, 12).map((d) => ({ id: slugOk(d && d.id), label: S(d && d.label, 80).trim(), note: S(d && d.note, 120).trim(), file: S(d && d.file, 80).trim() })).filter((d) => d.id && d.label);
+  return { title: S(g.title, 80).trim() || "Briefing", subtitle: S(g.subtitle, 200).trim(), updatedAt: S(g.updatedAt, 40), usps: S(g.usps, 4000).trim(), kpis: gl.kpis, charts: gl.charts, sections, docs };
 }
 
 // Markdown to safe HTML: everything is escaped FIRST, then a small known subset is turned into tags (headings, bullets, numbers, tables, bold, italics,
@@ -83,6 +85,7 @@ const CSS = '<style>.dh{color:#5F6B66;font-size:.85rem;margin:-8px 0 14px}.db{di
   + '.ds{border:1px solid #E6DED2;border-radius:16px;background:#fff;margin:0 0 10px;overflow:hidden}.ds>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:14px;cursor:pointer;font-weight:600;color:#1F2B44}.ds>summary::-webkit-details-marker{display:none}.ds>summary svg{flex:none;color:#C9A97A}.ds>summary:after{content:"+";margin-left:auto;color:#C9A97A;font-size:1.2rem}.ds[open]>summary:after{content:"\\2212"}'
   + '.dx{padding:0 14px 14px;font-size:.92rem;line-height:1.5;color:#202020}.dx h4{margin:14px 0 6px;color:#1F2B44;font-size:.95rem}.dx ul,.dx ol{padding-left:20px;margin:6px 0}.dx li{margin:3px 0}.dx p{margin:8px 0}.dx a{color:#1F2B44}.dx code{font-size:.8rem;background:#F9F1EF;padding:1px 4px;border-radius:4px}'
   + '.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0}.tw table{border-collapse:collapse;font-size:.8rem;min-width:560px}.tw th{background:#1F2B44;color:#F9F1EF;text-align:left;padding:6px}.tw td{border-bottom:1px solid #E6DED2;padding:6px;vertical-align:top}'
+  + '.dd{margin:0 0 16px}.dr{display:flex;align-items:center;gap:8px;border:1px solid #E6DED2;border-radius:14px;background:#fff;padding:10px 12px;margin:0 0 8px}.dr .dt{flex:1;min-width:0}.dr .dt b{display:block;color:#1F2B44;font-size:.95rem}.dr .dt small{color:#5F6B66;font-size:.78rem}.dr a,.dr button{padding:10px 12px;border-radius:12px;font:inherit;font-weight:600;font-size:.85rem;text-decoration:none;border:0;cursor:pointer}.dr a{background:#F9F1EF;color:#1F2B44}.dr button{background:#1F2B44;color:#fff}'
   + '.dn textarea{width:100%;box-sizing:border-box;min-height:84px;border:1px solid #D8D1C4;border-radius:12px;padding:10px;font:inherit}.dn select{width:100%;margin:6px 0;padding:8px;border-radius:10px;border:1px solid #D8D1C4}.dn .nl{margin-top:10px}.dn .ni{border-top:1px solid #EEE7DB;padding:8px 0;font-size:.88rem}.dn .ni small{color:#8A6F3E;display:block}</style>';
 
 export const DOSSIER_JS = "var __name=function(f){return f};" + String.raw`(function(){
@@ -91,8 +94,11 @@ function el(i){return document.getElementById(i)}
 function esc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 var back=el('dback');if(back)back.href='/momo?key='+encodeURIComponent(KY)+(RK?'&rk='+encodeURIComponent(RK):'');
 var pdfUrl='/momo/work/brief/pdf'+q;var op=el('dpdf');if(op)op.href=pdfUrl;
-var sh=el('dshare');if(sh)sh.onclick=function(){var t=document.title;fetch(pdfUrl).then(function(r){if(!r.ok)throw 0;return r.blob()}).then(function(b){var f=null;try{f=new File([b],(B||'briefing')+'.pdf',{type:'application/pdf'})}catch(e){}
- if(f&&navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f],title:t}).catch(function(){})}else if(navigator.share){navigator.share({title:t,url:location.origin+pdfUrl}).catch(function(){})}else{window.open(pdfUrl,'_blank')}}).catch(function(){alert('Could not get the PDF just now.')})};
+function share(u,name,t){fetch(u).then(function(r){if(!r.ok)throw 0;return r.blob()}).then(function(b){var f=null;try{f=new File([b],name+'.pdf',{type:'application/pdf'})}catch(e){}
+ if(f&&navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f],title:t}).catch(function(){})}else if(navigator.share){navigator.share({title:t,url:location.origin+u}).catch(function(){})}else{window.open(u,'_blank')}}).catch(function(){alert('Could not get the PDF just now.')})}
+var sh=el('dshare');if(sh)sh.onclick=function(){share(pdfUrl,B||'briefing',document.title)};
+document.querySelectorAll('[data-doc]').forEach(function(r){var d=r.getAttribute('data-doc'),u=pdfUrl+'&d='+encodeURIComponent(d),nm=r.getAttribute('data-file')||d,lb=r.getAttribute('data-label')||d;
+ var o=r.querySelector('.dopen');if(o)o.href=u;var s2=r.querySelector('.dshr');if(s2)s2.onclick=function(){share(u,nm,lb)}});
 var cp=el('dcopy');if(cp)cp.onclick=function(){var t=(el('dusps')||{}).value||'';if(!t){alert('No selling points saved yet.');return}
  if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){cp.textContent='Copied';setTimeout(function(){cp.textContent='Copy USPs'},1600)},function(){prompt('Copy:',t)})}else{prompt('Copy:',t)}};
 function drawNotes(a){var h='';(a||[]).slice().reverse().forEach(function(n){h+='<div class=ni><small>'+esc(new Date(n.at).toLocaleString())+(n.section?' · '+esc(n.section):'')+'</small>'+esc(n.text).replace(/\n/g,'<br>')+'</div>'});var w=el('dnl');if(w)w.innerHTML=h||'<p class=dh>No notes yet.</p>'}
@@ -108,7 +114,8 @@ export function dossierPage(rec) {
   const secs = rec.sections.map((s, i) => '<details class=ds' + ((anyOpen ? s.open : i === 0) ? " open" : "") + ' id="s-' + e(s.id) + '"><summary>' + ic(DOSSIER_ICONS[s.icon] || DOSSIER_ICONS.doc) + e(s.title) + '</summary><div class=dx>' + mdToHtml(s.md) + "</div></details>").join("");
   const opts = '<option value="">General</option>' + rec.sections.map((s) => '<option>' + e(s.title) + "</option>").join("");
   return CSS + GLANCE_CSS + '<a class=back href="/momo" id=dback>&#8592; Momo</a><div class=tag>MOMO · BRIEFING</div><h1>' + e(rec.title) + '</h1><p class=dh>' + e(rec.subtitle) + (rec.updatedAt ? " · updated " + e(rec.updatedAt) : "") + "</p>"
-    + '<div class=db><a id=dpdf href="#" target=_blank>Open PDF</a><button id=dshare type=button>Share PDF</button><button id=dcopy class=lt type=button>Copy USPs</button><a class=lt href="#dnotes">My notes</a></div>'
+    + '<div class=db>' + (rec.docs.length ? '' : '<a id=dpdf href="#" target=_blank>Open PDF</a><button id=dshare type=button>Share PDF</button>') + '<button id=dcopy class=lt type=button>Copy USPs</button><a class=lt href="#dnotes">My notes</a></div>'
+    + (rec.docs.length ? '<div class=dd><div class=gl>Documents to send</div>' + rec.docs.map((d) => '<div class=dr data-doc="' + e(d.id) + '" data-file="' + e(d.file || d.id) + '" data-label="' + e(d.label) + '"><div class=dt><b>' + e(d.label) + '</b>' + (d.note ? '<small>' + e(d.note) + '</small>' : '') + '</div><a class=dopen href="#" target=_blank>Open</a><button class=dshr type=button>Share</button></div>').join('') + '</div>' : '')
     + '<textarea id=dusps hidden>' + e(rec.usps) + "</textarea>" + glanceHtml(rec) + (rec.sections.length && (rec.kpis.length || rec.charts.length) ? "<div class=gl>The detail</div>" : "") + secs
     + '<details class=ds open id=dnotes><summary>' + ic('<path d="M4 20h4l11-11-4-4L4 16z"/><path d="M13 6l4 4"/>') + 'My notes and research to do</summary><div class="dx dn"><select id=dsec>' + opts + '</select><textarea id=dtext placeholder="What to check, who to call, what you found..."></textarea><div class=db style="margin-top:8px"><button id=dsave type=button>Save note</button></div><div class=nl id=dnl></div></div></details>';
 }
@@ -124,9 +131,10 @@ export async function dossierRoute(request, env, url, deps) {
   if (p === "/momo/work/brief" && request.method === "GET") return new Response(deps.page(key, rk, dossierPage(rec) + "<script>" + DOSSIER_JS + "</script>"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   if (p === "/momo/work/brief/rec" && request.method === "GET") return J({ rec, notes: await readNotes(env, slug) });
   if (p === "/momo/work/brief/pdf" && request.method === "GET") {
-    const b64 = await env.MEETINGS.get(PDF + slug); if (!b64) return NF();
+    const d = slugOk(url.searchParams.get("d")), doc = d ? rec.docs.find((x) => x.id === d) : null; if (d && !doc) return NF();
+    const b64 = await env.MEETINGS.get(PDF + slug + (doc ? "__" + doc.id : "")); if (!b64) return NF();
     let bytes; try { const bin = atob(b64); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); } catch (e) { return NF(); }
-    return new Response(bytes, { headers: { "Content-Type": "application/pdf", "Content-Disposition": 'inline; filename="' + slug + '-briefing.pdf"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    return new Response(bytes, { headers: { "Content-Type": "application/pdf", "Content-Disposition": 'inline; filename="' + (doc ? (doc.file || doc.id) : slug + "-briefing").replace(/[^A-Za-z0-9._-]/g, "_") + '.pdf"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   if (p === "/momo/work/brief/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
