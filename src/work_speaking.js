@@ -3,6 +3,7 @@
 // objectives and session outline. Kendall's key only (personOfKey = "kendall"); anyone else gets "not found". THIS REPO IS PUBLIC: titles, organisers,
 // venues and outlines live in the KV record (loaded once by a script kept outside git, then edited on the page); the code holds only the shape and the page.
 export const SPK_PREFIX = "speaking_rec_";
+export const SPK_FILE = "speaking_file_";   // v660 - speaking_file_<person>_<slug>: base64 body, metadata {type, name}
 export const TYPES = ["masterclass", "keynote", "talk", "panel", "webinar", "lecture", "award", "judge"];
 export const FORMATS = ["in-person", "online", "hybrid"];
 export const SPK_STATUSES = ["proposed", "confirmed", "delivered", "cancelled"];
@@ -262,7 +263,7 @@ if(i.objectives&&i.objectives.length){var ul=el("ul");i.objectives.forEach(funct
 if(i.outline&&i.outline.length){var tb=el("table"),h=el("tr");["Time","Min","Segment","What it covers","Interactive"].forEach(function(x){h.appendChild(el("th","",x))});tb.appendChild(h);
 i.outline.forEach(function(s){var r=el("tr");[s.time,s.mins||"",s.segment,s.covers,s.interactive].forEach(function(x){r.appendChild(el("td","",x))});tb.appendChild(r)});d.appendChild(tb)}
 if(i.website){var w=el("a","",i.website);w.href=i.website;w.target="_blank";w.rel="noopener noreferrer";var wp=el("p");wp.appendChild(w);d.appendChild(wp)}
-(i.materials||[]).forEach(function(m){var mp=el("p"),ma=el("a","",m.label);ma.href=m.url;ma.target="_blank";ma.rel="noopener noreferrer";mp.appendChild(ma);d.appendChild(mp)});
+(i.materials||[]).forEach(function(m){var mp=el("p"),ma=el("a","",m.label);ma.href=/\/momo\/work\/speaking\/file\?/.test(m.url)?m.url.replace(/^https?:\/\/[^\/]+/,"")+"&key="+encodeURIComponent(KEY):m.url;ma.target="_blank";ma.rel="noopener noreferrer";mp.appendChild(ma);d.appendChild(mp)});
 if(i.folder)d.appendChild(el("p","","Folder: "+i.folder));if(i.notes)d.appendChild(el("p","","Notes: "+i.notes));
 var sb=el("div","sb"),pdf=el("a","pri","Brief (PDF)");pdf.href="/momo/work/speaking/report?id="+encodeURIComponent(i.id)+"&key="+encodeURIComponent(KEY);pdf.target="_blank";sb.appendChild(pdf);
 var ed=el("button","","Edit");ed.type="button";ed.onclick=function(e){e.stopPropagation();openForm(i)};sb.appendChild(ed);
@@ -353,6 +354,12 @@ export async function speakingRoute(request, env, url, deps) {
   if (p === "/momo/work/speaking" && request.method === "GET") return new Response(deps.page(key, rk, SPK_BODY + "<script>" + SPK_JS + "</script>"), { headers: H });
   if (p === "/momo/work/speaking/dna" && request.method === "GET") return J({ dna: (await readDna(env, person)) || cleanDna({}) });
   if (p === "/momo/work/speaking/rec" && request.method === "GET") return J({ rec: (await readSpk(env, person)) || emptySpk() });
+  if (p === "/momo/work/speaking/file" && request.method === "GET") {   // v660 - a file for an engagement (PDF or picture), loaded to KV outside git; Kendall's key only
+    const f = slug(url.searchParams.get("f") || ""), r = f ? await env.MEETINGS.getWithMetadata(SPK_FILE + person + "_" + f) : null;
+    if (!r || !r.value) return new Response("not found", { status: 404 });
+    const bin = Uint8Array.from(atob(r.value), (c) => c.charCodeAt(0)), m = r.metadata || {};
+    return new Response(bin, { headers: { "Content-Type": m.type || "application/pdf", "Content-Disposition": 'inline; filename="' + String(m.name || f).replace(/[^\w. -]/g, "") + '"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  }
   if (p === "/momo/work/speaking/report" && request.method === "GET") return new Response(spkReport((await readSpk(env, person)) || emptySpk(), url.searchParams.get("id") || ""), { headers: H });
   if (p === "/momo/work/speaking/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
