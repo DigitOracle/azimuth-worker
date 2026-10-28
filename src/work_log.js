@@ -400,11 +400,13 @@ async function recPut(env, m) { await env.MEETINGS.put(RECW + m.id, JSON.stringi
 function recB64(bytes) { let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
 // v625 - ONE place where audio becomes text, so a speaker-labelling provider can slot in later without touching the callers. The language is no longer forced to English:
 // Whisper detects it per part, so Arabic and English in the same meeting are both read (Kendall, 24 Oct 2026).
-async function recSpeech(env, bytes) {
+async function recWhisper(env, bytes) {
   const out = await env.AI.run(STT_MODEL, { audio: recB64(bytes), vad_filter: true });
-  return { text: String(out && out.text || "").trim() };
+  return String(out && out.text || "").trim();
 }
-async function recTranscribe(env, bytes) { return (await recSpeech(env, bytes)).text; }
+// v663 - Nova-3 with speaker separation first, Whisper as the automatic fallback (src/work_speakers.js); a part keeps { text, utts?, engine }
+async function recSpeech(env, bytes, mime) { return speechWithSpeakers(env, bytes, mime, recWhisper); }
+const segOf = (n, secs, sp) => Object.assign({ n, secs, text: sp.text, engine: sp.engine }, sp.utts ? { utts: sp.utts } : {});
 const segKey = (id, n) => RECS + id + "_" + String(n).padStart(3, "0");
 async function recSegs(env, id) {
   const keys = []; let cursor;
@@ -413,8 +415,14 @@ async function recSegs(env, id) {
   return vals.filter(Boolean).sort((a, b) => a.n - b.n);
 }
 const mmss = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(Math.round(s % 60)).padStart(2, "0");
-function recTranscriptText(segs, markers) {
-  let t = 0; return segs.map((g) => { const head = markers ? "[" + mmss(t) + "] " : ""; t += g.secs || 0; return g.text ? head + g.text : ""; }).filter(Boolean).join(markers ? "\n\n" : "\n");
+// v663 - a part read with speakers gives one line per utterance, "[mm:ss] Name: text" (time offset by the part's start; Name from the matched speakers, else "Speaker N");
+// a part without speaker data (older recordings, or a Whisper fallback) renders exactly as before. m is optional.
+function recTranscriptText(segs, markers, m) {
+  let t = 0; return segs.map((g) => {
+    const at = t; t += g.secs || 0;
+    if (Array.isArray(g.utts) && g.utts.length) return g.utts.map((u) => (markers ? "[" + mmss(at + (u.t || 0)) + "] " : "") + speakerName(m, partLabel(g.n, u.s)) + ": " + u.x).join("\n");
+    return g.text ? (markers ? "[" + mmss(at) + "] " : "") + g.text : "";
+  }).filter(Boolean).join(markers ? "\n\n" : "\n");
 }
 async function recChunk(request, env, url, J) {
   const id = recId(url.searchParams.get("id")), n = Math.max(0, Math.min(999, parseInt(url.searchParams.get("n"), 10) || 0)), secs = Math.max(0, Math.min(1800, parseInt(url.searchParams.get("secs"), 10) || 0));
@@ -423,15 +431,15 @@ async function recChunk(request, env, url, J) {
   const bytes = new Uint8Array(await request.arrayBuffer());
   if (bytes.length < 1000) return J({ error: "That part was empty." }, 400);
   if (bytes.length > REC_MAX_PART) return J({ error: "That part is too big." }, 413);
-  let text = null;
-  try { text = await recTranscribe(env, bytes); } catch (e) { text = null; }
-  if (text == null) {   // the speech engine failed: keep the audio for 48 hours so Stop can retry it
+  let sp = null;
+  try { sp = await recSpeech(env, bytes, request.headers.get("Content-Type")); } catch (e) { sp = null; }
+  if (sp == null) {   // the speech engine failed: keep the audio for 48 hours so Stop can retry it
     await env.MEETINGS.put(RECA + id + "_" + String(n).padStart(3, "0"), bytes.buffer, { expirationTtl: 172800 });
     await env.MEETINGS.put(segKey(id, n), JSON.stringify({ n, secs, text: "", pending: true }));
     return J({ ok: true, n, pending: true });
   }
-  await env.MEETINGS.put(segKey(id, n), JSON.stringify({ n, secs, text }));
-  return J({ ok: true, n, chars: text.length });
+  await env.MEETINGS.put(segKey(id, n), JSON.stringify(segOf(n, secs, sp)));
+  return J({ ok: true, n, chars: sp.text.length, engine: sp.engine, speakers: sp.utts ? new Set(sp.utts.map((u) => u.s)).size : 0 });
 }
 const REC_NOTES_SCHEMA = { type: "object", additionalProperties: false, required: ["summary", "decisions", "actions", "people", "topics"], properties: {
   summary: { type: "string" }, decisions: { type: "array", items: { type: "string" } }, topics: { type: "array", items: { type: "string" } }, people: { type: "array", items: { type: "string" } },
@@ -457,6 +465,7 @@ async function recNotesCore(env, deps, m, transcript, input) {
     + "The speech engine mishears names and numbers: use a name only when the transcript clearly supports it, and prefer these team names when a spelling is close: " + names + ". "
     + (m.attendees && m.attendees.length ? "Najjuko told Momo who was in the room: " + attendeeLine(m.attendees) + ". Use those spellings. " : "")
     + "Other common mishearings: " + nameFixLine() + ". "
+    + SPEAKER_RULE
     + "Never invent anything: no people, figures, dates, decisions or tasks that the transcript does not contain. If something is unclear, leave it out. Plain, third-person, specific; no filler. "
     + "summary: five to eight sentences on what the meeting was and what it decided. topics: the main subjects, a few words each. decisions: each decision taken. actions: each task or follow-up with its owner (a name, or 'Najjuko' when it is hers, or '' if unstated) and the due date or time as said ('' if none). people: everyone who clearly took part.";
   let x = null;
@@ -489,7 +498,7 @@ function recStagesFor(kind, m, tlen, fresh) {
 async function recRead(env, deps, J, id, b) {
   const kind = b.kind === "minutes" ? "minutes" : "notes";
   let m = await recGet(env, id);
-  const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true);
+  const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true, m);
   if (transcript.length < 40) return J({ state: "error", fatal: true, error: "There is no speech to read in that recording yet." });
   let job = await recJobGet(env, id, kind);
   if (!job || b.restart || (job.state === "ready" && b.fresh && kind === "minutes")) job = { kind, started: Date.now(), done: [], tries: 0, state: "reading", fresh: kind === "minutes" && !!b.fresh };
@@ -564,7 +573,7 @@ async function recApi(request, env, J, deps) {
     let segs = await recSegs(env, id);
     for (const g of segs) if (g.pending) {   // retry the parts the speech engine could not read when they arrived
       const key = RECA + id + "_" + String(g.n).padStart(3, "0");
-      try { const buf = await env.MEETINGS.get(key, "arrayBuffer"); if (buf) { const text = await recTranscribe(env, new Uint8Array(buf)); await env.MEETINGS.put(segKey(id, g.n), JSON.stringify({ n: g.n, secs: g.secs, text })); await env.MEETINGS.delete(key); } } catch (e) {}
+      try { const buf = await env.MEETINGS.get(key, "arrayBuffer"); if (buf) { const sp = await recSpeech(env, new Uint8Array(buf)); await env.MEETINGS.put(segKey(id, g.n), JSON.stringify(segOf(g.n, g.secs, sp))); await env.MEETINGS.delete(key); } } catch (e) {}
     }
     segs = await recSegs(env, id);
     const missing = segs.filter((g) => g.pending && !g.text).map((g) => g.n), text = recTranscriptText(segs, false);
@@ -572,16 +581,23 @@ async function recApi(request, env, J, deps) {
     const segSecs = segs.reduce((a, g) => a + (g.secs || 0), 0), lostSecs = Math.max(0, Math.round(Number(b.secs) || 0) - segSecs);   // v629 - time the phone's microphone ran but gave no sound (parts that came back empty are never stored)
     if (lostSecs >= 60 && segSecs > 0) m.lost = { secs: lostSecs, from: segSecs }; else delete m.lost;
     if (m.status === "recording") m.status = "transcribed";
+    if (segs.some((g) => g.utts && g.utts.length)) { try { const sp = await matchSpeakers(env, deps, m, segs); if (sp) m.speakers = sp; } catch (e) {} }   // v663 - the "match speakers" step
     await recPut(env, m);
     if (text.length < 40) return J({ error: segs.length ? "I could not hear any speech in that recording. Check the microphone, or try again." : "No audio reached the server for that recording: the phone sent empty audio (a locked screen or another app can cut the microphone). Nothing can be read from it.", parts: segs.length }, 422);
     return J({ ok: true, parts: segs.length, chars: text.length, secs: m.secs, missing, lost: m.lost || null });
   }
+  if (b.action === "speakers") {   // v663 - op: list | match (again) | rename {group, name} | merge {group, into}; a name applies to every line of that speaker in this meeting
+    const op = String(b.op || "list");
+    if (op === "match") { const segs = await recSegs(env, id); const sp = await matchSpeakers(env, deps, m, segs); if (!sp) return J({ error: "This recording has no speaker data." }, 422); m.speakers = sp; await recPut(env, m); }
+    else if (op === "rename" || op === "merge") { const err = editSpeakers(m, { ...b, op }); if (err) return J({ error: err }, 400); await recPut(env, m); }
+    return J({ ok: true, speakers: speakersOut(m) });
+  }
   if (b.action === "read") return recRead(env, deps, J, id, b);   // v629 - one short stage of the notes / minutes job per call
   if (b.action === "entries") {
-    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, false);
+    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, false, m);
     if (transcript.length < 40) return J({ error: (segs.length ? "There is no speech to read in that recording yet." : "This recording has no audio: no part ever reached the server because the phone sent empty audio. Nothing can be read from it. Delete it from the list and record again with the screen on.") }, 422);
     if (!m.ended_hm) { m.ended_hm = dubaiHM(); m.secs = m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0); }
-    const notes = m.notes && m.notes.summary ? m.notes : await recNotes(env, deps, m, recTranscriptText(segs, true));
+    const notes = m.notes && m.notes.summary ? m.notes : await recNotes(env, deps, m, recTranscriptText(segs, true, m));
     if (notes) m.notes = notes;
     const date = m.date, mins = Math.max(1, Math.round((m.secs || 0) / 60));
     const prompt = "Date: " + date + " (" + dayName(date) + ")\nShe recorded " + (m.title ? "\"" + m.title + "\"" : "a meeting") + ", " + (m.started_hm || "") + " to " + (m.ended_hm || "") + " (" + mins + " minutes), and the notes below were written from the recording.\n\n"
@@ -607,14 +623,14 @@ async function recApi(request, env, J, deps) {
   }
   if (b.action === "notes") {   // v625 - write the notes only (no log entry), then she opens the notes page
     if (m.notes && m.notes.summary) return J({ ok: true, again: true });
-    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true);
+    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true, m);
     if (transcript.length < 40) return J({ error: "There is no speech to read in that recording yet." }, 422);
     const n = await recNotes(env, deps, m, transcript); if (!n) return J({ error: "Momo could not write the notes just now. The recording is safe: try again." }, 502);
     m.notes = n; await recPut(env, m); return J({ ok: true });
   }
   if (b.action === "minutes") {   // v625 - FN meeting minutes from the recording; kept on the record so reopening never re-writes (b.again forces a fresh draft)
     if (m.minutes && !b.again) return J({ ok: true, again: true });
-    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true);
+    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true, m);
     if (transcript.length < 40) return J({ error: "There is no speech to read in that recording yet." }, 422);
     if (!m.notes || !m.notes.summary) { const n = await recNotes(env, deps, m, transcript); if (n) m.notes = n; }
     const mn = await buildMinutes(env, deps, m, m.notes, transcript);
@@ -625,6 +641,15 @@ async function recApi(request, env, J, deps) {
   if (b.action === "filed") { m.status = "filed"; await recPut(env, m); return J({ ok: true }); }
   return J({ error: "Unknown action." }, 400);
 }
+function speakersHtml(m) {
+  const gs = m.speakers && m.speakers.groups; if (!gs || !gs.length) return "";
+  return "<h2 class=no>Speakers</h2><p class=m>Momo separated the voices and suggested who is who" + (m.attendees && m.attendees.length ? " from the people in the room" : "") + ". Check each one: type the right name and tap Save, or leave it blank for 'Speaker A'. A name changes every line of that speaker.</p>"
+    + gs.map((g) => "<div class=no data-sp=\"" + escH(g.id) + "\" style='display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0'><b style='min-width:84px'>Speaker " + escH(g.id) + "</b>"
+      + "<input value=\"" + escH(g.name || "") + "\" placeholder='Name' style='flex:1;min-width:120px;padding:8px;border:1px solid #E3DDD1;border-radius:10px'><button class='bt spok' type=button>Save</button>"
+      + "<span class=m>" + (g.confirmed ? "confirmed" : g.name ? "suggested, " + Math.round((g.confidence || 0) * 100) + "% sure" : "not identified") + "</span>"
+      + (gs.length > 1 ? "<select style='padding:6px;border-radius:10px'><option value=''>Same person as...</option>" + gs.filter((x) => x !== g).map((x) => "<option value=\"" + escH(x.id) + "\">Speaker " + escH(x.id) + (x.name ? " (" + escH(x.name) + ")" : "") + "</option>").join("") + "</select>" : "") + "</div>").join("")
+    + "<p class=no><button class=gh id=sprm type=button>Suggest the speakers again</button></p>";
+}
 function addedNotesHtml(a) {
   if (!Array.isArray(a) || !a.length) return "";
   return "<h2>Added notes</h2><ul>" + a.map((x) => "<li>" + escH(x.text || "") + (x.link && /^https:\/\//.test(x.link.url || "") ? " <a href=\"" + escH(x.link.url) + "\" target=_blank rel=noopener>" + escH(x.link.label || "Open") + "</a>" : "") + " <span class=m>" + escH(String(x.at || "").slice(0, 16).replace("T", " ")) + "</span></li>").join("") + "</ul>";
@@ -632,18 +657,19 @@ function addedNotesHtml(a) {
 async function recView(env, url) {
   const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null;
   if (!m) return new Response("not found", { status: 404 });
-  const segs = await recSegs(env, id), tx = recTranscriptText(segs, true), n = m.notes;
+  const segs = await recSegs(env, id), tx = recTranscriptText(segs, true, m), n = m.notes;
   const li = (a) => a.length ? "<ul>" + a.map((t) => "<li>" + escH(t) + "</li>").join("") + "</ul>" : "<p class=m>None stated.</p>";
   const body = "<h1>" + escH(m.title || "Recording") + "</h1><p class=m>" + escH(m.date) + " · " + escH(m.started_hm || "") + (m.ended_hm ? " to " + escH(m.ended_hm) : "") + " · " + Math.round((m.secs || 0) / 60) + " minutes · " + segs.length + " parts</p>"
     + (n ? "<h2>Summary</h2><p>" + escH(n.summary) + "</p><h2>Decisions</h2>" + li(n.decisions) + "<h2>Tasks and follow-ups</h2>" + li(n.actions.map((a) => a.what + (a.owner ? " (" + a.owner + ")" : "") + (a.due ? ", by " + a.due : ""))) + "<h2>People</h2><p>" + escH(n.people.join(", ") || "Not stated") + "</p>" : "<p class=m>Notes are written when you tap Make entry.</p>")
     + addedNotesHtml(m.added_notes)   // v656 - notes filed through the bridge (her own Claude Code), links tappable
+    + speakersHtml(m)   // v663 - who said what: confirm, rename or merge the speakers; a name applies to every line of that speaker
     + "<h2>Transcript</h2><p class=m>Written automatically: names and numbers may be misheard.</p><div class=tx>" + escH(tx).replace(/\n\n/g, "<br><br>") + "</div>"
     + "<div class=no style='margin-top:28px;text-align:center'><button class=gh id=dl>Delete this recording</button><div id=dq style='display:none;background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:14px;margin-top:10px'>Delete this recording and its transcript? This cannot be undone.<div style='display:flex;gap:8px;justify-content:center;margin-top:10px'><button class='bt pr' id=dy>Delete it</button><button class=bt id=dn>Keep it</button></div></div></div>";
   // v623 - the transcript page had no way back and no way out (Kendall, 24 Oct 2026): a Back button, "Share / Save as PDF" (the print sheet, as on the plan PDFs) and Share (the phone's share sheet, else copy)
   const key = url.searchParams.get("key") || "", back = "/momo/work?key=" + encodeURIComponent(key);
   const shareText = (m.title || "Recording") + " - " + m.date + (n && n.summary ? "\n\n" + n.summary : "") + "\n\nTranscript (automatic, may mishear names):\n" + tx;
   const bar = "<div class=bar><a class=bk href='" + back + "' onclick=\"if(history.length>1){history.back();return false}\">&#8592; Back</a><span class=sp></span><button class=bt id=sv>Share</button><button class='bt pr' onclick='print()'>Share / Save as PDF</button></div>";
-  const js = "<script>var T=" + JSON.stringify(shareText).replace(/</g, "\\u003c") + ";var K=new URLSearchParams(location.search),ID=K.get('id'),KY=K.get('key')||'';document.getElementById('dl').onclick=function(){this.style.display='none';document.getElementById('dq').style.display='block'};document.getElementById('dn').onclick=function(){document.getElementById('dq').style.display='none';document.getElementById('dl').style.display=''};document.getElementById('dy').onclick=function(){var b=this;b.disabled=true;fetch('/momo/work/rec/api?key='+encodeURIComponent(KY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',id:ID})}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){location.href='/momo/work?key='+encodeURIComponent(KY)}else{b.disabled=false;alert('Could not delete it just now. Nothing was changed.')}}).catch(function(){b.disabled=false;alert('Could not delete it just now. Nothing was changed.')})};document.getElementById('sv').onclick=function(){var d={title:document.title,text:T};if(navigator.share){navigator.share(d).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(T).then(function(){alert('Copied. Paste it where you want it.')})}else{alert('Use Share / Save as PDF')}}</script>";
+  const js = "<script>var T=" + JSON.stringify(shareText).replace(/</g, "\\u003c") + ";var K=new URLSearchParams(location.search),ID=K.get('id'),KY=K.get('key')||'';document.getElementById('dl').onclick=function(){this.style.display='none';document.getElementById('dq').style.display='block'};document.getElementById('dn').onclick=function(){document.getElementById('dq').style.display='none';document.getElementById('dl').style.display=''};document.getElementById('dy').onclick=function(){var b=this;b.disabled=true;fetch('/momo/work/rec/api?key='+encodeURIComponent(KY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',id:ID})}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){location.href='/momo/work?key='+encodeURIComponent(KY)}else{b.disabled=false;alert('Could not delete it just now. Nothing was changed.')}}).catch(function(){b.disabled=false;alert('Could not delete it just now. Nothing was changed.')})};var SP=document.querySelectorAll('[data-sp]');function spPost(o){o.action='speakers';o.id=ID;return fetch('/momo/work/rec/api?key='+encodeURIComponent(KY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){location.reload()}else{alert((j&&j.error)||'Could not save that just now.')}}).catch(function(){alert('Could not save that just now.')})}for(var i=0;i<SP.length;i++){(function(row){var g=row.getAttribute('data-sp');row.querySelector('.spok').onclick=function(){spPost({op:'rename',group:g,name:row.querySelector('input').value})};var mg=row.querySelector('select');if(mg)mg.onchange=function(){if(mg.value&&confirm('Speaker '+g+' and Speaker '+mg.value+' are the same person?'))spPost({op:'merge',group:g,into:mg.value})}})(SP[i])}var RM=document.getElementById('sprm');if(RM)RM.onclick=function(){spPost({op:'match'})};document.getElementById('sv').onclick=function(){var d={title:document.title,text:T};if(navigator.share){navigator.share(d).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(T).then(function(){alert('Copied. Paste it where you want it.')})}else{alert('Use Share / Save as PDF')}}</script>";
   return new Response("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + escH(m.title || "Recording") + "</title><meta name=robots content=noindex><style>body{font:16px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#1C2321;background:#FAF7F1;margin:0;padding:0 16px 80px}.w{max-width:720px;margin:0 auto;padding-top:12px}.bar{position:sticky;top:0;background:#FAF7F1;display:flex;align-items:center;gap:8px;padding:10px 0;max-width:720px;margin:0 auto;border-bottom:1px solid #E3DDD1}.sp{flex:1}.bk{color:#0A4F4A;text-decoration:none;font-weight:600;padding:8px 10px}.bt{font:inherit;font-size:.9rem;padding:9px 14px;border-radius:12px;border:1px solid #0A4F4A;background:#fff;color:#0A4F4A}.bt.pr{background:#0A4F4A;color:#fff}h1{color:#0A4F4A;margin:8px 0 4px}h2{font-size:1rem;color:#8A6F3E;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.08em}.m{color:#626B78;font-size:.9rem}.tx{background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:16px;font-size:.95rem}.gh{font:inherit;font-size:.85rem;background:none;border:0;color:#626B78;text-decoration:underline;padding:8px}@media print{body{background:#fff}.bar,.no{display:none}.tx{border:0;padding:0}}</style></head><body>" + bar + "<div class=w>" + body + "</div>" + js + "</body></html>",
     { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
 }
@@ -958,6 +984,7 @@ import { speakingRoute } from "./work_speaking.js";
 import { gguRoute } from "./work_ggu.js";
 import { teamRoute } from "./work_team.js";
 import { voiceTestRoute } from "./work_voicetest.js";
+import { speechWithSpeakers, matchSpeakers, editSpeakers, speakerName, partLabel, speakersOut, SPEAKER_RULE } from "./work_speakers.js";
 import { WORK_PEOPLE, workEnv, readCfg, swapPrompt, swapPage } from "./work_person.js";   // v662 - Work per person
 import { REC_JS, REC_BTN } from "./work_rec_page.js";
 import { loadRoster, cleanRoster, cleanAttendees, bumpUses, buildMinutes, buildMinutesA, buildMinutesB, mergeMinutes, renderMinutes, nameFixLine, attendeeLine, PEOPLE_KEY, longDate, dueText, FN_MONOGRAM } from "./work_minutes.js";
@@ -1461,4 +1488,4 @@ $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1
 ` + REC_JS + String.raw`load();resumeDraft()})();`;
 
 // v654 - the pieces the Momo bridge (src/work_bridge.js) reuses, so its reads and saves are exactly the app's
-export const BRIDGE_LOG = { PFX, TPFX, RECW, listEntries, taskOverrides, recGet, recPut, recId, clean, okDate, dubaiToday, slug, STATUS, recSegs, recTranscriptText };
+export const BRIDGE_LOG = { PFX, TPFX, RECW, listEntries, taskOverrides, recGet, recPut, recId, clean, okDate, dubaiToday, slug, STATUS, recSegs, recTranscriptText, speakersOut };

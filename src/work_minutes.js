@@ -1,3 +1,4 @@
+import { SPEAKER_RULE } from "./work_speakers.js";   // v663
 // v625 - Momo Work: the people in the room, and FN meeting minutes from a recording (Kendall, 24 Oct 2026).
 // The roster is PRIVATE: it lives in KV (work_naj_people), never in this public repo. This file only knows its SHAPE
 // (the fn-people-and-org.json of the FN Knowledge Pack). The minutes follow the FN Meeting Minutes playbook: fixed order, plain third person,
@@ -78,6 +79,7 @@ export const MINUTES_SYS = "You write FN Realty's internal MEETING MINUTES for N
   + "(3) Plain, formal English that is easy for non-native speakers; third person for decisions ('FN will...'); short enough to read in five minutes. "
   + "(4) Figures or claims said in the meeting (for example team numbers) are marked 'to verify before public use'. "
   + "(5) Personal, health, pay or private matters that are not business decisions stay OUT. "
+  + "(5b) " + SPEAKER_RULE   // v663 - named speakers, owners by name, unknown speakers never guessed
   + "(6) The speech engine mishears names: " + nameFixLine() + ". Spell names as in the attendee list when they are close; a name not in the list stays as heard with '[surname / role to confirm]'. "
   + "Fill: title (the meeting topic, no 'Meeting Minutes:' prefix); purpose (one sentence); decisions (headline in a few words + one or two sentences); discussion (numbered-topic headings, each with short bullets); "
   + "actions (each starts with a verb; owner = a person's name or '' if not stated; due = the date as said, or your suggestion if none was given; due_stated = true only if the meeting itself gave the date); open_questions (what still needs an answer).";

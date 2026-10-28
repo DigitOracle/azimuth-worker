@@ -6,7 +6,7 @@ const store = new Map();
 const KV = { get: async (k, t) => { const v = store.get(k); return v == null ? null : v; }, put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); },
   list: async ({ prefix }) => ({ keys: [...store.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })), list_complete: true }) };
 let aiCalls = 0, aiFailOn = new Set();
-const env = { MEETINGS: KV, AI: { run: async (model, o) => { aiCalls++; if (aiFailOn.has(aiCalls)) throw new Error("engine down"); ok(model.includes("whisper"), "the speech model is Whisper", model); ok(o.audio && o.audio.length > 100, "audio sent as base64"); return { text: "Good morning. Ali wants the content calendar confirmed by Thursday. Najjuko will draft the posts for the designer and Sultan confirms the budget." }; } } };
+const env = { MEETINGS: KV, AI: { run: async (model, o) => { if (model.includes("nova")) throw new Error("no diarizer in this test (v663: falls back to Whisper)"); aiCalls++; if (aiFailOn.has(aiCalls)) throw new Error("engine down"); ok(model.includes("whisper"), "the speech model is Whisper", model); ok(o.audio && o.audio.length > 100, "audio sent as base64"); return { text: "Good morning. Ali wants the content calendar confirmed by Thursday. Najjuko will draft the posts for the designer and Sultan confirms the budget." }; } } };
 const seen = [];
 const deps = { isNaj: (e, u) => u.searchParams.get("key") === "K", model: "m", page: (k, rk, b) => "<html>" + b + "</html>",
   claudeJSON: async (e, sys, user, schema) => {

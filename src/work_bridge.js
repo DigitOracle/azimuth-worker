@@ -89,7 +89,8 @@ const minutesOut = (x) => (x && typeof x === "object" ? { title: String(x.title 
   actions: arr(x.actions).map((a) => ({ action: String((a && a.action) || ""), owner: String((a && a.owner) || ""), due: String((a && a.due) || ""), due_stated: !!(a && a.due_stated) })),
   open_questions: arr(x.open_questions).map(String) } : null);
 async function meetingFull(env, m) {
-  const tx = L.recTranscriptText(await L.recSegs(env, m.id), true), o = meetingOut(m);
+  const tx = L.recTranscriptText(await L.recSegs(env, m.id), true, m), o = meetingOut(m);   // v663 - lines carry the named speakers when the recording has them
+  o.speakers = L.speakersOut(m);   // v663 - [{ id, name, shown_as, confidence, confirmed, labels }], [] for a recording without speaker data
   o.minutes = minutesOut(m.minutes); o.transcript_chars = tx.length;
   o.transcript_status = !tx.trim() ? "not_transcribed" : tx.length > TX_MAX ? "too_long_truncated" : "ready";
   o.transcript = tx.slice(0, TX_MAX);
