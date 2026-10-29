@@ -693,6 +693,8 @@ export async function workRoute(request, env, url, deps) {
     return new Response(deps.page(key, rk, '<a class=back href="/momo?key=' + encodeURIComponent(key) + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty><p>This work log is private to its owner\'s link.</p></div>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
   if (who === "najjuko") return workInner(request, env, url, Object.assign({}, deps, { prof: NAJ_PROF }), NAJ_PROF, J, key, rk);
+  if (who === "kendall" && p === "/momo/work" && !url.searchParams.get("full")) return new Response(deps.page(key, rk, SIMPLE_BODY(key)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v671 - simple Momo: record, minutes, send
+  if (who === "kendall" && p === "/momo/work/simple.js") return new Response(SIMPLE_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   const cfg = await readCfg(env, who), prof = profOf(cfg), wenv = workEnv(env, who);
   const cj = deps.claudeJSON;
   const wdeps = Object.assign({}, deps, { prof, claudeJSON: cj ? (e, sys, ...rest) => cj(e, swapPrompt(sys, cfg, nameFixLine()), ...rest) : cj });
@@ -700,7 +702,8 @@ export async function workRoute(request, env, url, deps) {
   const res = await workInner(request, wenv, url, wdeps, prof, J, key, rk);
   const ct = (res && res.headers.get("Content-Type")) || "";
   if (!res || !/text\/html|javascript/.test(ct)) return res;
-  return new Response(swapPage(await res.text(), cfg, [FN_LOGO, FN_LATTICE, FN_MONOGRAM]), { status: res.status, headers: res.headers });
+  const out = swapPage(await res.text(), cfg, [FN_LOGO, FN_LATTICE, FN_MONOGRAM]);
+  return new Response(who === "kendall" && p === "/momo/work/rec/minutes" ? simpleMinutesPage(out) : out, { status: res.status, headers: res.headers });   // v671 - his minutes: no logo, participants footer, WhatsApp / Email
 }
 async function workInner(request, env, url, deps, prof, J, key, rk) {
   const p = url.pathname;
@@ -989,6 +992,7 @@ import { voiceTestRoute } from "./work_voicetest.js";
 import { speechWithSpeakers, matchSpeakers, editSpeakers, speakerName, partLabel, speakersOut, SPEAKER_RULE } from "./work_speakers.js";
 import { WORK_PEOPLE, workEnv, readCfg, swapPrompt, swapPage } from "./work_person.js";   // v662 - Work per person
 import { REC_JS, REC_BTN } from "./work_rec_page.js";
+import { SIMPLE_BODY, SIMPLE_JS, simpleMinutesPage } from "./work_simple.js";   // v671
 import { loadRoster, cleanRoster, cleanAttendees, bumpUses, buildMinutes, buildMinutesA, buildMinutesB, mergeMinutes, renderMinutes, nameFixLine, attendeeLine, PEOPLE_KEY, longDate, dueText, FN_MONOGRAM } from "./work_minutes.js";
 import { FN_LOGO_B64 as FN_LOGO, FN_LATTICE_B64 as FN_LATTICE, FN_NAVY, FN_PEACH, FN_GOLD } from "./fn_logo.js";
 // soft language for the work-kind split (Kendall 14 Oct: "very soft language when you're differentiating these things")

@@ -53,7 +53,8 @@ ok(!"work_kendall_".startsWith("work_naj_") && !"kendall_recw_".startsWith("recw
 // ---- front door and the page
 let r = await get("/momo", KEN), h = await r.text(); ok(r.status === 200 && /href="\/momo\/work\?key=/.test(h), "his front door has a Work card");
 ok(/speaking/.test(h), "his own cards stay (Speaking)");
-r = await get("/momo/work", KEN); h = await r.text(); ok(r.status === 200 && /id=wf/.test(h) && /\/momo\/work\.js/.test(h) && !/private/.test(h), "his key opens his Work page", h.slice(0, 200));
+r = await get("/momo/work", KEN); h = await r.text(); ok(r.status === 200 && /Record, minutes, send/.test(h) && /\/momo\/work\/simple\.js/.test(h) && !/id=wf/.test(h), "v671: his key opens the simple Momo (record, minutes, send)", h.slice(0, 200));
+r = await get("/momo/work?full=1", KEN); h = await r.text(); ok(r.status === 200 && /id=wf/.test(h) && /\/momo\/work\.js/.test(h) && !/private/.test(h), "his key opens his Work page", h.slice(0, 200));
 ok(!/Najjuko|FN Realty/.test(h), "his page carries none of her names");
 r = await get("/momo/work", NAJ); h = await r.text(); ok(r.status === 200 && /id=wf/.test(h), "her key opens her Work page");
 r = await get("/momo/work", OTHER); h = await r.text(); ok(/private to its owner/.test(h) && !/id=wf/.test(h), "another insider key sees only the private note");
