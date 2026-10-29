@@ -3,7 +3,8 @@ import { feedPdfStore, FEED_PDF_RX } from "./feed_pdf.js";   // v622 - the day's
 import { readAnne, ANNE_ICON } from "./work_anne.js";
 import { readList as readDossiers, DOSSIER_ICON } from "./work_dossier.js";
 import { SPK_ICON } from "./work_speaking.js";
-import { GGU_ICON } from "./work_ggu.js";   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
+import { GGU_ICON } from "./work_ggu.js";
+import { BRIEFS_ICON, briefsPublic } from "./work_briefs.js";   // v667 - Product briefs card (Kendall) + public /pb/ pictures   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
 import { workRoute, WORK_CSS } from "./work_log.js";
 import { bridgeRoute } from "./work_bridge.js";
 import { liveRoute } from "./live_poll.js";
@@ -3391,6 +3392,7 @@ async function appFetch(request, env, ctx) {
         const _mrk = residentsKeyOf(env, url);
         return clientResp(env, url, najMoreHtml(url.searchParams.get("key") || "", _mrk, keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
+      if (url.pathname.startsWith("/pb/")) { const _pb = await briefsPublic(request, env, url); if (_pb) return _pb; }   // v667 - public product-brief pictures and share pages (no key: marketing cards)
       if (url.pathname === "/momo" || url.pathname.startsWith("/momo/work")) {   // v563 (Kendall 14 Oct 2026) - MOMO opens on Work and Play; Play is today's Momo (/fit)
         if (!clientOk(env, url) || keyTier(env, url) !== "admin") return new Response("not found", { status: 404 });
         // v564 - Work is Najjuko's private FN Realty log (src/work_log.js); her MOMO tab opens straight on it (Play is Kendall's health log)
@@ -5033,11 +5035,12 @@ function momoHtml(key, rk, work, anne, speaking, briefs) {
   const FUTURE = ic('<path d="M2.5 20.5l6.5-11 4 6.5 2.5-3.5 6 8z"/><path d="M9 9.5V3.5l4.5 1.8L9 7"/>');
   const SPKIC = ic(SPK_ICON);
   const GGUIC = ic(GGU_ICON);
+  const PBIC = ic(BRIEFS_ICON);   // v667 - Product briefs, first card on Kendall's front door
   const BRIC = ic(DOSSIER_ICON);   // v657 - one card per building briefing (Najjuko's key)
   const ANNEIC = ic(ANNE_ICON);   // v641 - the fourth card, only while a retained client card exists (Kendall's key)   // v632 - the third card: Ascend (the job search), a peak with a flag
   const body = work
     ? '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty>' + WORK + '<p>Nothing here yet.</p></div>'
-    : '<div class=tag>MOMO</div><h1>' + (anne || speaking || briefs.length ? "Where to?" : "Work, play or ascend?") + '</h1><div class=pick><a class=card href="/momo/work' + q + '">' + WORK + '<b>Work</b></a><a class=card href="/fit' + q + '">' + PLAY + '<b>Play</b></a><a class=card href="/momo/work/jobs' + q + '">' + FUTURE + '<b>Ascend</b></a>' + (speaking ? '<a class=card href="/momo/work/speaking' + q + '">' + SPKIC + '<b>Speaking</b></a>' : "")+ (speaking ? '<a class=card href="/momo/work/ggu' + q + '">' + GGUIC + '<b>GGU</b></a>' : "") + (anne ? '<a class=card href="/momo/work/anne' + q + '">' + ANNEIC + '<b>' + String(anne).replace(/[<>&"]/g, "") + '</b></a>' : "") + briefs.map((d) => '<a class=card href="/momo/work/brief' + q + '&b=' + encodeURIComponent(d.slug) + '">' + BRIC + '<b>' + String(d.title || d.slug).replace(/[<>&"]/g, "") + '</b></a>').join("") + '</div>';
+    : '<div class=tag>MOMO</div><h1>' + (anne || speaking || briefs.length ? "Where to?" : "Work, play or ascend?") + '</h1><div class=pick>' + (speaking ? '<a class=card href="/momo/work/briefs' + q + '">' + PBIC + '<b>Product briefs</b></a>' : "") + '<a class=card href="/momo/work' + q + '">' + WORK + '<b>Work</b></a><a class=card href="/fit' + q + '">' + PLAY + '<b>Play</b></a><a class=card href="/momo/work/jobs' + q + '">' + FUTURE + '<b>Ascend</b></a>' + (speaking ? '<a class=card href="/momo/work/speaking' + q + '">' + SPKIC + '<b>Speaking</b></a>' : "")+ (speaking ? '<a class=card href="/momo/work/ggu' + q + '">' + GGUIC + '<b>GGU</b></a>' : "") + (anne ? '<a class=card href="/momo/work/anne' + q + '">' + ANNEIC + '<b>' + String(anne).replace(/[<>&"]/g, "") + '</b></a>' : "") + briefs.map((d) => '<a class=card href="/momo/work/brief' + q + '&b=' + encodeURIComponent(d.slug) + '">' + BRIC + '<b>' + String(d.title || d.slug).replace(/[<>&"]/g, "") + '</b></a>').join("") + '</div>';
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#0C1413"><title>Momo</title>' + NAJ_FONTS
     + '<style>body{margin:0;background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans",sans-serif;padding:28px 16px 110px}.w{max-width:560px;margin:0 auto}.tag{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.14em;color:#C5A56A}'
     + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:2rem;margin:6px 0 22px}' + (anne || speaking || briefs.length ? '.pick{display:grid;grid-template-columns:1fr 1fr;gap:10px}' : '.pick{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}') + '.card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;aspect-ratio:1;border:1px solid #C5A56A;border-radius:18px;background:#0E1918;color:#C5A56A;text-decoration:none;-webkit-tap-highlight-color:transparent}'
