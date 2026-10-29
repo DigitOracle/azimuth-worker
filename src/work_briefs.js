@@ -57,44 +57,35 @@ export async function briefsPublic(request, env, url) {
 
 function briefsBody(key, rk, items, origin) {
   const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
-  // children: one collapsible group per product line, so 73 cards never become one long scroll (Kendall, 29 Oct)
+  // v669 (Kendall, 29 Oct): categories, then children, then a three-column grid of tiles; one tap opens the action sheet.
   const groups = []; items.forEach((e) => { const g = String(e.group || "Other"); if (!groups.includes(g)) groups.push(g); });
-  const row = (e, kind) => {
-      if (e.kind === "deck") {   // v668 - a whole presentation: one item, one link, sent as a PDF
-        const share = origin + "/pb/" + e.slug, pdf = origin + "/pb/d/" + e.slug + ".pdf";
-        const txt = encodeURIComponent(e.title + " - DigitAlchemy presentation (PDF)\n" + share), mb = encodeURIComponent("Hello,\n\nPlease find our presentation, " + e.title + ", here:\n" + share + "\n\nKind regards,\nDr. Kendall Wilson\nDigitAlchemy Tech Limited\ncontact@digitalabbot.io | +971 56 227 6093");
-        return '<div class="pb dk"><a class=th href="' + esc(pdf) + '" target=_blank rel=noopener>' + (e.wide ? '<img loading=lazy src="/pb/t/' + e.slug + '_wide.jpg" alt="">' : '<span class=pdf>PDF</span>') + '</a><div class=pi><b>' + esc(e.title) + '</b><small>' + (e.pages ? e.pages + " slides · " : "") + 'one PDF</small><div class=bt>'
-          + '<a class=b href="https://wa.me/?text=' + txt + '" target=_blank rel=noopener>WhatsApp</a><a class=b href="mailto:?subject=' + encodeURIComponent(e.title + " - DigitAlchemy") + '&body=' + mb + '">Email</a><button class=b type=button data-l="' + esc(share) + '">Copy link</button><a class="b o" href="' + esc(pdf) + '" target=_blank rel=noopener>Open PDF</a>' + (e.pptx ? '<a class="b o" href="' + esc(origin + "/pb/d/" + e.slug + ".pptx") + '">PowerPoint</a>' : "") + '</div></div></div>';
-      }
-      return null;
+  const tile = (e, kind) => {
+    const deck = e.kind === "deck";
+    const share = origin + "/pb/" + e.slug + (deck ? "" : "?v=" + kind), file = deck ? origin + "/pb/d/" + e.slug + ".pdf" : origin + "/pb/" + e.slug + "_" + kind + ".png";
+    const th = (deck ? e.wide : e[kind]) ? '<img loading=lazy src="/pb/t/' + e.slug + "_" + (deck ? "wide" : kind) + '.jpg" alt="">' : '<span class=pdf>PDF</span>';
+    return '<button class="tl' + (deck ? " dk" : "") + '" type=button data-t="' + esc(e.title) + '" data-s="' + esc(share) + '" data-f="' + esc(file) + '"' + (deck && e.pptx ? ' data-p="' + esc(origin + "/pb/d/" + e.slug + ".pptx") + '"' : "") + (deck ? ' data-d=1' : "") + '>' + th + '<span>' + esc(e.title) + '</span></button>';
   };
+  const grid = (list, kind) => '<div class=g>' + list.map((e) => tile(e, kind)).join("") + '</div>';
   const sec = (kind) => groups.map((g) => {
     const inG = items.filter((e) => String(e.group || "Other") === g && (e.kind === "deck" || e[kind]));
+    if (!inG.length) return "";
     const ents = []; inG.forEach((e) => { const t = String(e.entity || ""); if (t && !ents.includes(t)) ents.push(t); });
-    const render = (list) => list.map((e) => row(e, kind) || (() => {
-      const share = origin + "/pb/" + e.slug + "?v=" + kind, img = origin + "/pb/" + e.slug + "_" + kind + ".png";
-      const txt = encodeURIComponent(e.title + " - DigitAlchemy\n" + share), mb = encodeURIComponent("Hello,\n\nHere is our " + e.title + " brief:\n" + share + "\n\nKind regards,\nDr. Kendall Wilson\nDigitAlchemy Tech Limited\ncontact@digitalabbot.io | +971 56 227 6093");
-      return '<div class=pb><a class=th href="' + esc(img) + '" target=_blank rel=noopener><img loading=lazy src="/pb/t/' + e.slug + "_" + kind + '.jpg" alt=""></a><div class=pi><b>' + esc(e.title) + '</b><div class=bt>'
-        + '<a class=b href="https://wa.me/?text=' + txt + '" target=_blank rel=noopener>WhatsApp</a>'
-        + '<a class=b href="mailto:?subject=' + encodeURIComponent(e.title + " - DigitAlchemy") + '&body=' + mb + '">Email</a>'
-        + '<button class=b type=button data-l="' + esc(share) + '">Copy link</button>'
-        + '<a class="b o" href="' + esc(img) + '" target=_blank rel=noopener>Open</a></div></div></div>';
-    })()).join("");
-    // children: when a group has entities (a client each), one sub-menu per entity; decks first, then that entity's single slides
-    const rows = ents.length
-      ? ents.map((t) => { const l = inG.filter((e) => String(e.entity || "") === t).sort((a, b) => (a.kind === "deck" ? -1 : 0) - (b.kind === "deck" ? -1 : 0)); return '<details class="grp sub"><summary>' + esc(t) + '<span class=n>' + l.length + '</span></summary>' + render(l) + '</details>'; }).join("") + render(inG.filter((e) => !e.entity))
-      : render(inG);
-    const n = inG.length;
-    return n ? '<details class=grp' + (groups.length === 1 ? " open" : "") + '><summary>' + esc(g) + '<span class=n>' + n + '</span></summary>' + rows + '</details>' : "";
+    const loose = inG.filter((e) => !e.entity);
+    const body = ents.map((t) => { const l = inG.filter((e) => String(e.entity || "") === t).sort((a, b) => (a.kind === "deck" ? -1 : 0) - (b.kind === "deck" ? -1 : 0)); return '<details class="grp sub"><summary>' + esc(t) + '<span class=n>' + l.length + '</span></summary>' + grid(l, kind) + '</details>'; }).join("") + (loose.length ? grid(loose, kind) : "");
+    return '<details class=grp><summary>' + esc(g) + '<span class=n>' + inG.length + '</span></summary>' + body + '</details>';
   }).join("") || '<div class=empty><p>Nothing here yet.</p></div>';
   return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Product briefs</h1>'
     + '<div class=tabs><button class="tb on" data-k=phone type=button>' + KINDS.phone + '</button><button class=tb data-k=wide type=button>' + KINDS.wide + '</button></div>'
     + '<div class=sec id=phone>' + sec("phone") + '</div><div class="sec hide" id=wide>' + sec("wide") + '</div>'
-    + '<style>.grp.sub{background:#F7F3EA;margin:0 0 10px}.grp.sub summary{font-size:.95rem;padding:10px 2px}.pb.dk{border-color:#C5A56A}.pdf{display:flex;align-items:center;justify-content:center;width:96px;height:72px;border-radius:8px;background:#0A4F4A;color:#fff;font:700 .9rem "IBM Plex Mono",monospace}.pi small{display:block;color:#5F6B66;font-size:.75rem;margin:-4px 0 8px}.grp{border:1px solid #E7E1D6;border-radius:14px;background:#FFFDF9;margin:0 0 10px;padding:0 10px}.grp summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;padding:12px 2px;font:600 1rem Fraunces,serif;color:#0A4F4A}.grp summary::-webkit-details-marker{display:none}.grp .n{font:600 .75rem "IBM Plex Mono",monospace;color:#8A6F3E;border:1px solid #C5A56A;border-radius:999px;padding:2px 8px}.grp[open] summary{border-bottom:1px solid #EEE8DD;margin-bottom:10px}.tabs{display:flex;gap:8px;margin:0 0 14px}.tb{flex:1;border:1px solid #D8D1C4;background:#fff;border-radius:999px;padding:9px;font:600 .9rem "IBM Plex Sans",sans-serif;color:#5F6B66}.tb.on{background:#0A4F4A;color:#fff;border-color:#0A4F4A}.hide{display:none}'
-    + '.pb{display:flex;gap:12px;background:#fff;border:1px solid #E7E1D6;border-radius:16px;padding:10px;margin:0 0 10px}.th img{width:96px;border-radius:8px;display:block}#wide .th img{width:150px}.pi{flex:1;min-width:0}.pi b{font-family:Fraunces,serif;font-weight:600;font-size:1rem;color:#0A4F4A;display:block;margin:2px 0 8px}'
-    + '.bt{display:flex;flex-wrap:wrap;gap:6px}.b{border:1px solid #0A4F4A;color:#0A4F4A;background:#fff;border-radius:999px;padding:6px 11px;font:600 .78rem "IBM Plex Sans",sans-serif;text-decoration:none;cursor:pointer}.b.o{border-color:#C5A56A;color:#8A6F3E}.b.ok{background:#0A4F4A;color:#fff}</style>'
+    + '<div class=sh id=sh><div class=shc><b id=sht></b><a class=b id=shw target=_blank rel=noopener>WhatsApp</a><a class=b id=she>Email</a><button class=b id=shc type=button>Copy link</button><a class="b o" id=sho target=_blank rel=noopener>Open</a><a class="b o hide" id=shp>PowerPoint</a><button class="b x" id=shx type=button>Close</button></div></div>'
+    + '<style>.tabs{display:flex;gap:8px;margin:0 0 14px}.tb{flex:1;border:1px solid #D8D1C4;background:#fff;border-radius:999px;padding:9px;font:600 .9rem "IBM Plex Sans",sans-serif;color:#5F6B66}.tb.on{background:#0A4F4A;color:#fff;border-color:#0A4F4A}.hide{display:none}'
+    + '.grp{border:1px solid #E7E1D6;border-radius:14px;background:#FFFDF9;margin:0 0 10px;padding:0 10px}.grp summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;padding:12px 2px;font:600 1rem Fraunces,serif;color:#0A4F4A}.grp summary::-webkit-details-marker{display:none}.grp .n{font:600 .75rem "IBM Plex Mono",monospace;color:#8A6F3E;border:1px solid #C5A56A;border-radius:999px;padding:2px 8px}.grp[open]>summary{border-bottom:1px solid #EEE8DD;margin-bottom:10px}.grp.sub{background:#F7F3EA}.grp.sub summary{font-size:.92rem;padding:10px 2px}'
+    + '.g{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px}.tl{border:1px solid #E7E1D6;background:#fff;border-radius:12px;padding:6px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:6px}.tl img{width:100%;aspect-ratio:1;object-fit:cover;object-position:top;border-radius:8px;display:block}#wide .tl img{aspect-ratio:16/9}.tl span{font:600 .72rem "IBM Plex Sans",sans-serif;color:#1C2321;line-height:1.25;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.tl.dk{border-color:#C5A56A}.pdf{display:flex;align-items:center;justify-content:center;aspect-ratio:1;border-radius:8px;background:#0A4F4A;color:#fff;font:700 .9rem "IBM Plex Mono",monospace}'
+    + '.sh{position:fixed;inset:0;background:rgba(12,20,19,.55);display:none;align-items:flex-end;z-index:50}.sh.on{display:flex}.shc{background:#FAF7F1;width:100%;max-width:560px;margin:0 auto;border-radius:18px 18px 0 0;padding:18px 16px 28px;display:flex;flex-direction:column;gap:8px}.shc b{font-family:Fraunces,serif;font-size:1.05rem;color:#0A4F4A;margin-bottom:6px}.b{border:1px solid #0A4F4A;color:#0A4F4A;background:#fff;border-radius:999px;padding:11px 14px;font:600 .9rem "IBM Plex Sans",sans-serif;text-decoration:none;text-align:center;cursor:pointer}.b.o{border-color:#C5A56A;color:#8A6F3E}.b.x{border-color:#D8D1C4;color:#5F6B66}.b.ok{background:#0A4F4A;color:#fff}</style>'
     + '<script>document.querySelectorAll(".tb").forEach(function(t){t.onclick=function(){document.querySelectorAll(".tb").forEach(function(x){x.classList.remove("on")});t.classList.add("on");document.querySelectorAll(".sec").forEach(function(s){s.classList.toggle("hide",s.id!==t.dataset.k)})}});'
-    + 'document.querySelectorAll("button[data-l]").forEach(function(b){b.onclick=function(){navigator.clipboard.writeText(b.dataset.l).then(function(){b.textContent="Copied";b.classList.add("ok");setTimeout(function(){b.textContent="Copy link";b.classList.remove("ok")},1500)})}})</script>';
+    + 'var SIG="\n\nKind regards,\nDr. Kendall Wilson\nDigitAlchemy Tech Limited\ncontact@digitalabbot.io | +971 56 227 6093";var sh=document.getElementById("sh");function E(i){return document.getElementById(i)}'
+    + 'document.querySelectorAll(".tl").forEach(function(b){b.onclick=function(){var t=b.dataset.t,s=b.dataset.s,d=b.dataset.d;E("sht").textContent=t;E("shw").href="https://wa.me/?text="+encodeURIComponent(t+" - DigitAlchemy"+(d?" presentation (PDF)":"")+"\n"+s);E("she").href="mailto:?subject="+encodeURIComponent(t+" - DigitAlchemy")+"&body="+encodeURIComponent("Hello,\n\n"+(d?"Please find our presentation, "+t+", here:":"Here is our "+t+" brief:")+"\n"+s+SIG);E("sho").href=b.dataset.f;E("sho").textContent=d?"Open PDF":"Open";E("shc").dataset.l=s;E("shc").textContent="Copy link";E("shc").classList.remove("ok");var p=E("shp");if(b.dataset.p){p.href=b.dataset.p;p.classList.remove("hide")}else p.classList.add("hide");sh.classList.add("on")}});'
+    + 'E("shx").onclick=function(){sh.classList.remove("on")};sh.onclick=function(e){if(e.target===sh)sh.classList.remove("on")};E("shc").onclick=function(){var b=E("shc");navigator.clipboard.writeText(b.dataset.l).then(function(){b.textContent="Copied";b.classList.add("ok")})}</script>';
 }
 
 export async function briefsRoute(request, env, url, deps) {
