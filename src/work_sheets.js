@@ -37,7 +37,7 @@ export function uniqueSlug(base, taken) { let s = base, n = 2; while (taken.has(
 // the sheets one person may see: the loaded ones (no uploaded_by) plus their own bridge uploads
 export const sheetsFor = (index, person) => index.filter((e) => !e.uploaded_by || e.uploaded_by === person);
 export const sheetOut = (e, origin) => ({ slug: e.slug, title: e.title, group: e.group || "Data sheets", kind: e.kind, ext: extOf(e), share: origin + "/pds/" + e.slug, file: origin + "/pds/f/" + e.slug + "." + extOf(e),
-  thumb: e.thumb ? origin + "/pds/t/" + e.slug + ".jpg" : null, uploaded_by: e.uploaded_by || null, added_at: e.added_at || null });
+  thumb: e.thumb ? origin + "/pds/t/" + e.slug + ".jpg" : null, uploaded_by: e.uploaded_by || null, added_at: e.added_at || null, info: e.info || null, for: e.for || null });
 // v675 - every index write RE-READS pds_index and merges by slug (a loader or another person may have written since): never from a stale copy
 async function mergeIndex(env, fn) {
   const cur = await readSheetsIndex(env), next = fn(cur.slice());
@@ -64,8 +64,34 @@ export async function bridgeSheetUpload(env, person, b, origin) {
   const taken = new Set((await readSheetsIndex(env)).map((e) => e.slug)), slug = uniqueSlug(slugify(title), taken), now = new Date().toISOString();
   await env.MEETINGS.put("pds_file_" + slug, u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
   const rec = { slug, title, group, kind: sn.kind, ext: sn.ext, thumb: false, uploaded_by: person, added_at: now, bytes: u8.length, filename: String(b.filename || "").slice(0, 120) };
+  if (b.for != null && String(b.for) !== "") {   // v676 - an infographic may name the brief it belongs to as it is uploaded
+    const bad = pairError(await readSheetsIndex(env), person, rec, String(b.for)); if (bad) return bad;
+    rec.for = String(b.for);
+  }
   await mergeIndex(env, (idx) => idx.filter((e) => e.slug !== slug).concat(rec));
   return [200, { ok: true, slug, share: origin + "/pds/" + slug, file: origin + "/pds/f/" + slug + "." + sn.ext, kind: sn.kind, ext: sn.ext, bytes: u8.length, data: sheetOut(rec, origin) }];
+}
+// v676 - POST sheet/pair {slug, for}: one of the person's OWN infographics joins the brief PDF `for` as one card; for "" (or null) unpairs it.
+// The pairing lives on the picture (its uploader may change it); the brief may be a loaded sheet or the person's own PDF.
+function pairError(idx, person, img, target) {
+  if (img.kind !== "image") return [400, { ok: false, code: "not_image", error: "Only a picture (the infographic) is paired with a brief." }];
+  if (!SLUG_RE.test(target)) return [400, { ok: false, code: "bad_for", error: "Send for: the slug of the brief PDF." }];
+  const t = idx.find((x) => x.slug === target);
+  if (!t || (t.uploaded_by && t.uploaded_by !== person)) return [404, { ok: false, code: "no_brief", error: "No brief with that slug (GET sheets lists them)." }];
+  if (t.kind !== "pdf") return [400, { ok: false, code: "not_pdf", error: "for must be a PDF brief, not a picture." }];
+  const other = idx.find((x) => x.kind === "image" && x.for === target && x.slug !== img.slug);
+  if (other) return [409, { ok: false, code: "taken", error: "That brief already has an infographic (" + other.slug + "). Unpair or delete it first." }];
+  return null;
+}
+export async function bridgeSheetPair(env, person, b, origin) {
+  const slug = String(b.slug || "").trim(); if (!SLUG_RE.test(slug)) return [400, { ok: false, code: "bad_slug", error: "Send slug (your infographic)." }];
+  const idx = await readSheetsIndex(env), e = idx.find((x) => x.slug === slug);
+  if (!e) return [404, { ok: false, code: "not_found", error: "No sheet with that slug." }];
+  if (e.uploaded_by !== person) return [403, { ok: false, code: "not_yours", error: "Only your own uploads can be paired." }];
+  const target = b.for == null ? "" : String(b.for).trim();
+  if (target) { const bad = pairError(idx, person, e, target); if (bad) return bad; }
+  const next = await mergeIndex(env, (cur) => cur.map((x) => { if (x.slug !== slug) return x; const y = Object.assign({}, x); if (target) y.for = target; else delete y.for; return y; }));
+  return [200, { ok: true, slug, for: target || null, data: sheetOut(next.find((x) => x.slug === slug), origin) }];
 }
 // v675 - POST sheet/delete: only the person who uploaded it; the loaded sheets are nobody's to delete here.
 export async function bridgeSheetDelete(env, person, b) {
@@ -103,11 +129,12 @@ export async function sheetsPublic(request, env, url) {
     const e = (await readSheetsIndex(env)).find((x) => x.slug === m[1]);
     if (!e) return new Response("not found", { status: 404 });
     const file = url.origin + "/pds/f/" + e.slug + "." + extOf(e);
-    const pic = e.kind === "image" ? file : e.thumb ? url.origin + "/pds/t/" + e.slug + ".jpg" : "";
+    const inf = infoOf(e, await readSheetsIndex(env)), infFile = inf ? url.origin + "/pds/f/" + inf.slug + "." + extOf(inf) : "";   // v676
+    const pic = inf ? infFile : e.kind === "image" ? file : e.thumb ? url.origin + "/pds/t/" + e.slug + ".jpg" : "";
     return new Response('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(e.title) + '</title>'
       + '<meta property="og:title" content="' + esc(e.title) + '"><meta property="og:description" content="Product data sheet' + (e.kind === "pdf" ? " (PDF)" : "") + '."' + (pic ? '><meta property="og:image" content="' + esc(pic) + '"' : "") + '><meta name="twitter:card" content="summary_large_image">'
       + '<style>body{margin:0;background:#0C1413;color:#E8E4D8;display:flex;flex-direction:column;align-items:center;padding:16px;font-family:system-ui,sans-serif;text-align:center}img{max-width:100%;max-height:88vh;border-radius:8px}h1{font-size:1.2rem;font-weight:600;margin:14px 0 6px}a.b{display:inline-block;margin:8px 6px;padding:11px 18px;border-radius:999px;background:#C5A56A;color:#0C1413;font-weight:700;text-decoration:none}</style></head><body>'
-      + (pic ? '<img src="' + esc(pic) + '" alt="' + esc(e.title) + '">' : "") + '<h1>' + esc(e.title) + '</h1><div><a class=b href="' + esc(file) + '"' + (e.kind === "image" ? " download" : "") + '>' + (e.kind === "pdf" ? "Open the PDF" : "Download the picture") + '</a></div></body></html>',
+      + (pic ? '<img src="' + esc(pic) + '" alt="' + esc(e.title) + '">' : "") + '<h1>' + esc(e.title) + '</h1><div><a class=b href="' + esc(file) + '"' + (e.kind === "image" ? " download" : "") + '>' + (e.kind === "pdf" ? "Open the PDF" : "Download the picture") + '</a>' + (inf ? '<a class=b href="' + esc(infFile) + '" download>Download the infographic</a>' : "") + '</div></body></html>',
       { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=600" } });
   }
   return null;
@@ -118,26 +145,38 @@ const SIGN = {
   kendall: "\\n\\nKind regards,\\nDr. Kendall Wilson\\nDigitAlchemy Tech Limited\\ncontact@digitalabbot.io | +971 56 227 6093",
 };
 
+// v676 (Kendall 30 Oct: "one card has the product brief and the infographic that matches it") - a PDF sheet may name its matching infographic
+// (info: <slug of an image sheet>). The pair is ONE tile: the infographic is its picture, the sheet offers both, and the infographic is not
+// shown again as a tile of its own. A missing or non-image info is ignored, so a deleted infographic leaves the PDF on its own.
+// The pairing is read from either side: info on the PDF (set by a loader) or for on the picture (set through the bridge by its uploader).
+export const infoOf = (e, items) => {
+  if (!e || e.kind !== "pdf") return null;
+  const i = e.info ? items.find((x) => x.slug === e.info) : items.find((x) => x.kind === "image" && x.for === e.slug);
+  return i && i.kind === "image" ? i : null;
+};
+export const pairedSlugs = (items) => new Set(items.map((e) => infoOf(e, items)).filter(Boolean).map((i) => i.slug));
 export function sheetsBody(key, rk, items, origin, who) {
   const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
+  const hide = pairedSlugs(items), all = items; items = items.filter((e) => !hide.has(e.slug));
   const groups = []; items.forEach((e) => { const g = String(e.group || "Data sheets"); if (!groups.includes(g)) groups.push(g); });
   const tile = (e) => {
-    const share = origin + "/pds/" + e.slug, file = origin + "/pds/f/" + e.slug + "." + extOf(e);
-    const th = e.thumb ? '<img loading=lazy src="/pds/t/' + e.slug + '.jpg" alt="">' : e.kind === "image" ? '<img loading=lazy src="/pds/f/' + e.slug + "." + extOf(e) + '" alt="">' : '<span class=pdf>PDF</span>';
+    const share = origin + "/pds/" + e.slug, file = origin + "/pds/f/" + e.slug + "." + extOf(e), inf = infoOf(e, all);
+    const ifile = inf ? "/pds/f/" + inf.slug + "." + extOf(inf) : "";
+    const th = inf ? '<img loading=lazy src="' + ifile + '" alt="">' : e.thumb ? '<img loading=lazy src="/pds/t/' + e.slug + '.jpg" alt="">' : e.kind === "image" ? '<img loading=lazy src="/pds/f/' + e.slug + "." + extOf(e) + '" alt="">' : '<span class=pdf>PDF</span>';
     const mine = e.uploaded_by && e.uploaded_by === who ? '<i class=me>added by you</i>' : "";   // v675
-    return '<button class=tl type=button data-t="' + esc(e.title) + '" data-s="' + esc(share) + '" data-f="' + esc(file) + '"' + (e.kind === "pdf" ? " data-d=1" : "") + '>' + th + '<span>' + esc(e.title) + '</span>' + mine + '</button>';
+    return '<button class=tl type=button data-t="' + esc(e.title) + '" data-s="' + esc(share) + '" data-f="' + esc(file) + '"' + (e.kind === "pdf" ? " data-d=1" : "") + (inf ? ' data-i="' + esc(origin + ifile) + '"' : "") + '>' + th + '<span>' + esc(e.title) + '</span>' + (inf ? '<i class=me>PDF + infographic</i>' : "") + mine + '</button>';
   };
   const list = items.length
     ? groups.map((g) => { const l = items.filter((e) => String(e.group || "Data sheets") === g); return '<details class=grp open><summary>' + esc(g) + '<span class=n>' + l.length + '</span></summary><div class=g>' + l.map(tile).join("") + '</div></details>'; }).join("")
     : '<div class=empty id=pds_empty><svg viewBox="0 0 24 24" width=34 height=34 fill="none" stroke="#C5A56A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + SHEETS_ICON + '</svg><p><b>Sheets coming</b></p><p>Your product data sheets are being checked. They will appear here, ready to send by WhatsApp or email.</p></div>';
   return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Product data sheets</h1>' + list
-    + '<div class=sh id=pds_sh><div class=shc><b id=pds_t></b><a class=b id=pds_w target=_blank rel=noopener>WhatsApp</a><a class=b id=pds_e>Email</a><button class=b id=pds_c type=button>Copy link</button><a class="b o" id=pds_o target=_blank rel=noopener>Open</a><button class="b x" id=pds_x type=button>Close</button></div></div>'
+    + '<div class=sh id=pds_sh><div class=shc><b id=pds_t></b><a class=b id=pds_w target=_blank rel=noopener>WhatsApp</a><a class=b id=pds_e>Email</a><button class=b id=pds_c type=button>Copy link</button><a class="b o" id=pds_o target=_blank rel=noopener>Open</a><a class="b o" id=pds_i target=_blank rel=noopener style="display:none">Open infographic</a><button class="b x" id=pds_x type=button>Close</button></div></div>'
     + '<style>.grp{border:1px solid #E7E1D6;border-radius:14px;background:#FFFDF9;margin:0 0 10px;padding:0 10px}.grp summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;padding:12px 2px;font:600 1rem Fraunces,serif;color:#0A4F4A}.grp summary::-webkit-details-marker{display:none}.grp .n{font:600 .75rem "IBM Plex Mono",monospace;color:#8A6F3E;border:1px solid #C5A56A;border-radius:999px;padding:2px 8px}.grp[open]>summary{border-bottom:1px solid #EEE8DD;margin-bottom:10px}'
     + '.g{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:0 0 12px}.tl{border:1px solid #E7E1D6;background:#fff;border-radius:12px;padding:6px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:6px}.tl img{width:100%;aspect-ratio:3/4;object-fit:cover;object-position:top;border-radius:8px;display:block}.tl span{font:600 .78rem "IBM Plex Sans",sans-serif;color:#1C2321;line-height:1.25}.tl .me{font:500 .62rem "IBM Plex Mono",monospace;color:#8A6F3E;font-style:normal}.tl .pdf{display:flex;width:100%;align-items:center;justify-content:center;aspect-ratio:3/4;border-radius:8px;background:#0A4F4A;color:#fff;font:700 .9rem "IBM Plex Mono",monospace}'
     + '.empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:40px 18px;border:1px dashed #C5A56A;border-radius:18px;text-align:center;color:#5F6B66}.empty p{margin:0}.empty b{font-family:Fraunces,serif;font-size:1.1rem;color:#0A4F4A}'
     + '.sh{position:fixed;inset:0;background:rgba(12,20,19,.55);display:none;align-items:flex-end;z-index:50}.sh.on{display:flex}.shc{background:#FAF7F1;width:100%;max-width:560px;margin:0 auto;border-radius:18px 18px 0 0;padding:18px 16px 28px;display:flex;flex-direction:column;gap:8px}.shc b{font-family:Fraunces,serif;font-size:1.05rem;color:#0A4F4A;margin-bottom:6px}.b{border:1px solid #0A4F4A;color:#0A4F4A;background:#fff;border-radius:999px;padding:11px 14px;font:600 .9rem "IBM Plex Sans",sans-serif;text-decoration:none;text-align:center;cursor:pointer}.b.o{border-color:#C5A56A;color:#8A6F3E}.b.x{border-color:#D8D1C4;color:#5F6B66}.b.ok{background:#0A4F4A;color:#fff}</style>'
     + '<script>(function(){var SIG="' + (SIGN[who] || SIGN.najjuko) + '";function E(i){return document.getElementById(i)}var sh=E("pds_sh");'
-    + 'document.querySelectorAll(".tl").forEach(function(b){b.onclick=function(){var t=b.dataset.t,s=b.dataset.s,d=b.dataset.d;E("pds_t").textContent=t;E("pds_w").href="https://wa.me/?text="+encodeURIComponent(t+" - product data sheet"+(d?" (PDF)":"")+"\\n"+s);E("pds_e").href="mailto:?subject="+encodeURIComponent(t+" - product data sheet")+"&body="+encodeURIComponent("Hello,\\n\\nPlease find the product data sheet for "+t+" here:\\n"+s+SIG);E("pds_o").href=b.dataset.f;E("pds_o").textContent=d?"Open PDF":"Open";E("pds_c").dataset.l=s;E("pds_c").textContent="Copy link";E("pds_c").classList.remove("ok");sh.classList.add("on")}});'
+    + 'document.querySelectorAll(".tl").forEach(function(b){b.onclick=function(){var t=b.dataset.t,s=b.dataset.s,d=b.dataset.d;E("pds_t").textContent=t;E("pds_w").href="https://wa.me/?text="+encodeURIComponent(t+" - product data sheet"+(d?" (PDF)":"")+"\\n"+s);E("pds_e").href="mailto:?subject="+encodeURIComponent(t+" - product data sheet")+"&body="+encodeURIComponent("Hello,\\n\\nPlease find the product data sheet for "+t+" here:\\n"+s+SIG);E("pds_o").href=b.dataset.f;E("pds_o").textContent=d?"Open PDF":"Open";E("pds_i").style.display=b.dataset.i?"":"none";if(b.dataset.i)E("pds_i").href=b.dataset.i;E("pds_c").dataset.l=s;E("pds_c").textContent="Copy link";E("pds_c").classList.remove("ok");sh.classList.add("on")}});'
     + 'E("pds_x").onclick=function(){sh.classList.remove("on")};sh.onclick=function(e){if(e.target===sh)sh.classList.remove("on")};E("pds_c").onclick=function(){var b=E("pds_c");navigator.clipboard.writeText(b.dataset.l).then(function(){b.textContent="Copied";b.classList.add("ok")},function(){b.textContent=b.dataset.l})}})()</script>';
 }
 

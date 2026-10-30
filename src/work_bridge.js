@@ -12,7 +12,7 @@ import { readAnne } from "./work_anne.js";
 import { readRec } from "./work_jobs.js";
 import { readSpk } from "./work_speaking.js";
 import { readGgu } from "./work_ggu.js";
-import { readSheetsIndex, sheetsFor, sheetOut, bridgeSheetUpload, bridgeSheetDelete } from "./work_sheets.js";   // v675 - Product data sheets through the bridge
+import { readSheetsIndex, sheetsFor, sheetOut, bridgeSheetUpload, bridgeSheetDelete, bridgeSheetPair } from "./work_sheets.js";   // v675 - Product data sheets through the bridge
 
 export const BRIDGE_BASE = "/momo/bridge/v1/";
 export const RATE_PER_MIN = 120, IDEM_MAX = 500, LOG_TTL = 14 * 86400, MAX_SPAN_DAYS = 92;
@@ -23,7 +23,7 @@ const ROUTES = {   // route -> [method, who may call it]
   jobs: ["GET", ["kendall"]], speaking: ["GET", ["kendall"]], ggu: ["GET", ["kendall"]],
   "post:entry": ["POST", PEOPLE], "post:task": ["POST", PEOPLE], "post:plan-item": ["POST", PEOPLE], "post:note": ["POST", PEOPLE],
   // v675 - Product data sheets (the shared pds_* store, not a person's Work keys): the loaded sheets plus the caller's own uploads
-  sheets: ["GET", PEOPLE], "post:sheet": ["POST", PEOPLE], "post:sheet/delete": ["POST", PEOPLE],
+  sheets: ["GET", PEOPLE], "post:sheet": ["POST", PEOPLE], "post:sheet/delete": ["POST", PEOPLE], "post:sheet/pair": ["POST", PEOPLE],   // v676 - an infographic joins its brief
 };
 
 function ctEq(a, b) { a = String(a || ""); b = String(b || ""); let r = a.length ^ b.length; for (let i = 0; i < Math.max(a.length, b.length); i++) r |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0); return r === 0; }
@@ -155,6 +155,7 @@ async function doGet(env, url, person, route) {
 async function doPost(env, b, person, route, origin) {
   if (route === "post:sheet") return bridgeSheetUpload(env, person, b, origin);   // v675 - sniffed by content, at most 12 MB, index merged by slug
   if (route === "post:sheet/delete") return bridgeSheetDelete(env, person, b);   // v675 - only the uploader
+  if (route === "post:sheet/pair") return bridgeSheetPair(env, person, b, origin);   // v676 - only the uploader's own picture
   const now = new Date().toISOString(), prof = person === "najjuko" ? NAJ_PROF : profOf(await readCfg(env, person));
   if (WORK_ROUTES.has(route)) env = await workSide(env, person);
   if (route === "post:entry") {
