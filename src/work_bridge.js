@@ -12,6 +12,7 @@ import { readAnne } from "./work_anne.js";
 import { readRec } from "./work_jobs.js";
 import { readSpk } from "./work_speaking.js";
 import { readGgu } from "./work_ggu.js";
+import { readSheetsIndex, sheetsFor, sheetOut, bridgeSheetUpload, bridgeSheetDelete } from "./work_sheets.js";   // v675 - Product data sheets through the bridge
 
 export const BRIDGE_BASE = "/momo/bridge/v1/";
 export const RATE_PER_MIN = 120, IDEM_MAX = 500, LOG_TTL = 14 * 86400, MAX_SPAN_DAYS = 92;
@@ -21,6 +22,8 @@ const ROUTES = {   // route -> [method, who may call it]
   meetings: ["GET", PEOPLE], meeting: ["GET", PEOPLE], anne: ["GET", ["najjuko"]], "pdf-links": ["GET", PEOPLE],
   jobs: ["GET", ["kendall"]], speaking: ["GET", ["kendall"]], ggu: ["GET", ["kendall"]],
   "post:entry": ["POST", PEOPLE], "post:task": ["POST", PEOPLE], "post:plan-item": ["POST", PEOPLE], "post:note": ["POST", PEOPLE],
+  // v675 - Product data sheets (the shared pds_* store, not a person's Work keys): the loaded sheets plus the caller's own uploads
+  sheets: ["GET", PEOPLE], "post:sheet": ["POST", PEOPLE], "post:sheet/delete": ["POST", PEOPLE],
 };
 
 function ctEq(a, b) { a = String(a || ""); b = String(b || ""); let r = a.length ^ b.length; for (let i = 0; i < Math.max(a.length, b.length); i++) r |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0); return r === 0; }
@@ -142,13 +145,16 @@ async function doGet(env, url, person, route) {
     if (!links) return ERR("bad_item", "type is entry, task, meeting, report (id from_to), plan-week (id = Monday) or plan-month (id = YYYY-MM).", 400);
     return OK({ links, open_with: "These pages open on the person's own Momo link. Give them the address; they open it with their link (or add &key=<their link key>). The bridge key does not open them." });
   }
+  if (route === "sheets") return OK({ sheets: sheetsFor(await readSheetsIndex(env), person).map((e) => sheetOut(e, url.origin)), max_bytes: 12 * 1024 * 1024, accepts: ["image/png", "image/jpeg", "image/webp", "application/pdf"] });   // v675
   if (route === "jobs") { const r = await readRec(env, person); return OK(r || null); }
   if (route === "speaking") { const r = await readSpk(env, person); return OK(r || null); }
   if (route === "ggu") { const r = await readGgu(env, person); return OK(r || null); }
   return ERR("not_found", "Unknown route.", 404);
 }
 
-async function doPost(env, b, person, route) {
+async function doPost(env, b, person, route, origin) {
+  if (route === "post:sheet") return bridgeSheetUpload(env, person, b, origin);   // v675 - sniffed by content, at most 12 MB, index merged by slug
+  if (route === "post:sheet/delete") return bridgeSheetDelete(env, person, b);   // v675 - only the uploader
   const now = new Date().toISOString(), prof = person === "najjuko" ? NAJ_PROF : profOf(await readCfg(env, person));
   if (WORK_ROUTES.has(route)) env = await workSide(env, person);
   if (route === "post:entry") {
@@ -219,7 +225,7 @@ export async function bridgeRoute(request, env, url) {
       else {
         const b = await readJson(request);
         if (!b) res = ERR("bad_json", "Send a JSON body.", 400);
-        else { const [s, body] = await doPost(env, b, person, route); if (s < 500) await idemPut(env, person, h, s, body); res = J(body, s); }
+        else { const [s, body] = await doPost(env, b, person, route, url.origin); if (s < 500) await idemPut(env, person, h, s, body); res = J(body, s); }
       }
     }
   }
