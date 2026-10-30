@@ -51,7 +51,45 @@ export const REVIEW_DUE = "2026-12-15", TERM_END = "2027-01-01";
 const TYPES = ["Meeting", "Deliverable", "Update", "Organising", "Outreach", "Event", "Other"];
 // v565 (Najjuko 14 Oct: "my videographer ... will say 50% ... I need to be able to communicate, I started this task ... it took five days") -
 // each entry moves its tasks on (status + percent) and carries a rough effort, so a task shows how far along it is and how many days it took
-export const STATUS = ["Started", "In progress", "Waiting on others", "Done"];
+// v674 (Kendall 30 Oct: "Stuck at any time", "replace waiting on others") - Stuck replaces "Waiting on others". Old records, old entries and her
+// task-board sync still say "Waiting on others": normStatus() reads that as Stuck everywhere, so nothing written before v674 changes meaning.
+export const STATUS = ["Started", "In progress", "Stuck", "Done"];
+export const LEGACY_STUCK = "Waiting on others";
+export const normStatus = (s) => (s === LEGACY_STUCK ? "Stuck" : s);
+export const STUCK_REASONS = ["System glitch", "Waiting on someone", "Missing data or access", "Ran out of time", "Other"];
+// One rule for a task record, used by her progress sheet (needReason) and the bridge's POST task. A Stuck record carries what is blocking it, whether
+// it was in her control, a note and stuck_since (kept while it stays Stuck); leaving Stuck closes the period into stuck_log, which the report times.
+export function taskRecord(prev, b, nowIso, needReason) {
+  const name = String(b.name || "").trim().slice(0, 80); if (!name) return { error: "Which task?" };
+  const pct = Math.max(0, Math.min(100, Math.round(Number(b.percent) || 0))), want = normStatus(b.status);
+  const st = STATUS.includes(want) ? want : (pct >= 100 ? "Done" : "In progress");
+  const p = prev && prev.name === name ? prev : null, wasStuck = !!(p && normStatus(p.status) === "Stuck" && p.stuck_since);
+  const log = Array.isArray(p && p.stuck_log) ? p.stuck_log.slice(-29) : [];
+  const rec = { name, percent: st === "Done" ? 100 : pct, status: st, updated: nowIso };
+  if (st === "Stuck") {
+    const reason = STUCK_REASONS.includes(b.reason) ? b.reason : (b.status === LEGACY_STUCK ? "Waiting on someone" : null);
+    const control = b.control === "Yes" || b.control === "No" ? b.control : null, note = String(b.note || "").trim().slice(0, 200);
+    if (needReason) {
+      if (!reason) return { error: "Pick what is blocking it." };
+      if (!control) return { error: "Say whether it was in your control." };
+      if (reason === "Other" && !note) return { error: "Say what happened, in a few words." };
+    }
+    Object.assign(rec, { stuck_reason: reason || (wasStuck ? p.stuck_reason || null : null), stuck_control: control || (wasStuck ? p.stuck_control || null : null),
+      stuck_note: note || (wasStuck && !reason ? p.stuck_note || "" : ""), stuck_since: wasStuck ? p.stuck_since : nowIso });
+  } else if (wasStuck) log.push({ reason: p.stuck_reason || null, control: p.stuck_control || null, note: p.stuck_note || "", from: p.stuck_since, to: nowIso });
+  if (log.length) rec.stuck_log = log;
+  return { rec };
+}
+// minutes a task spent Stuck between two instants: closed periods from stuck_log plus the one still open
+export function stuckPeriods(t, nowIso) {
+  const out = (t.stuck_log || []).filter((x) => x && x.from && x.to).map((x) => ({ reason: x.reason, control: x.control, from: x.from, to: x.to }));
+  if (normStatus(t.status) === "Stuck" && t.stuck_since) out.push({ reason: t.stuck_reason, control: t.stuck_control, from: t.stuck_since, to: nowIso });
+  return out;
+}
+export function stuckMinutes(periods, fromMs, toMs) {
+  return Math.round(periods.reduce((s, x) => s + Math.max(0, Math.min(toMs, Date.parse(x.to)) - Math.max(fromMs, Date.parse(x.from))), 0) / 60000);
+}
+export const fmtMins = (m) => (m < 60 ? m + " min" : m < 1440 ? Math.round(m / 6) / 10 + " h" : Math.round(m / 144) / 10 + " days");
 export const EFFORT = [["Under 1 hour", 0.5], ["1-2 hours", 1.5], ["Half a day", 4], ["Full day", 8]];
 
 // v571 (Kendall 14 Oct: "time of day, the department it affects, who I did this with or by myself, within or outside scope, third parties off-site")
@@ -239,7 +277,7 @@ function clean(x, pf) {
     out_role: x.in_scope === false && !x.broker ? (OUT_ROLES.some((r) => r[0] === (OUT_ALIAS[x.out_role] || x.out_role)) ? (OUT_ALIAS[x.out_role] || x.out_role) : "Other") : "",
     external: (Array.isArray(x.external) ? x.external : []).map((o) => ({ name: String(o.name || "").slice(0, 100).trim(), kind: String(o.kind || "").slice(0, 40), person: String(o.person || "").slice(0, 80), confirmed: !!o.confirmed, note: String(o.note || "").slice(0, 300) })).filter((o) => o.name).slice(0, 6),
     prep: x.prep && x.prep.needed ? { needed: true, developer: String(x.prep.developer || "").slice(0, 80), project: String(x.prep.project || "").slice(0, 80), area: String(x.prep.area || "").slice(0, 80), event: String(x.prep.event || "").slice(0, 80) } : null,
-    progress: (Array.isArray(x.progress) ? x.progress : []).map((p) => ({ work: String(p.work || "").slice(0, 80).trim(), status: STATUS.includes(p.status) ? p.status : "In progress", percent: Math.max(0, Math.min(100, Math.round(Number(p.percent) || 0))), owners: (Array.isArray(p.owners) ? p.owners : []).map(String).filter((n) => names.has(n)).slice(0, 12) })).filter((p) => p.work).slice(0, 6), questions: arr(x.questions, 3), answers: arr(x.answers, 3), deliverables: arr(x.deliverables, 8), evidence: arr(x.evidence, 8), next: arr(x.next, 8), check: !!x.check };
+    progress: (Array.isArray(x.progress) ? x.progress : []).map((p) => ({ work: String(p.work || "").slice(0, 80).trim(), status: STATUS.includes(normStatus(p.status)) ? normStatus(p.status) : "In progress", percent: Math.max(0, Math.min(100, Math.round(Number(p.percent) || 0))), owners: (Array.isArray(p.owners) ? p.owners : []).map(String).filter((n) => names.has(n)).slice(0, 12) })).filter((p) => p.work).slice(0, 6), questions: arr(x.questions, 3), answers: arr(x.answers, 3), deliverables: arr(x.deliverables, 8), evidence: arr(x.evidence, 8), next: arr(x.next, 8), check: !!x.check };
 }
 const dubaiToday = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
 const okDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || "")) ? String(d) : dubaiToday();
@@ -302,7 +340,7 @@ export function tasksOf(es) {
       const t = T[w] = T[w] || { name: w, first: e.date, last: e.date, days: new Set(), hours: 0, status: "In progress", percent: 0, entries: 0, kpis: new Set(), owners: new Set(), touched: new Set() };
       const p = (e.progress || []).find((x) => x.work === w);
       t.last = e.date; t.days.add(e.date); t.hours += hrs / ws.length; t.entries++; (e.kpis || []).forEach((k) => t.kpis.add(k)); (e.people || []).forEach((n) => t.touched.add(n));
-      t.lastc = e.created || ""; if (p) { t.status = p.status; t.percent = p.percent; (p.owners || []).forEach((n) => t.owners.add(n)); }
+      t.lastc = e.created || ""; if (p) { t.status = normStatus(p.status); t.percent = p.percent; (p.owners || []).forEach((n) => t.owners.add(n)); }
     });
   });
   return Object.values(T).map((t) => ({ ...t, days: t.days.size, kpis: [...t.kpis], owners: [...t.owners], touched: [...t.touched], hours: Math.round(t.hours * 10) / 10 }))
@@ -311,8 +349,13 @@ export function tasksOf(es) {
 // v600 - a progress set by hand wins over the entries until an entry newer than it moves the task again
 export function applyOverrides(tasks, ovs) {
   const m = {}; (ovs || []).forEach((o) => { if (o && o.name) m[o.name] = o; });
-  return tasks.map((t) => { const o = m[t.name]; if (!o || !(String(o.updated || "") > String(t.lastc || ""))) return t; const done = o.status === "Done" || o.percent >= 100;
-    return { ...t, percent: done ? 100 : o.percent, status: done ? "Done" : o.status, set_by_hand: true, last: String(o.updated).slice(0, 10) > t.last ? String(o.updated).slice(0, 10) : t.last }; })
+  // v674 - Stuck set by hand holds while she logs more work on the task (chasing a reply is still being stuck), until she changes it or an entry marks it Done;
+  // the stuck history (stuck_log) always rides along so the report can time it
+  return tasks.map((t) => { const o = m[t.name]; if (!o) return t; const ost = normStatus(o.status), hold = ost === "Stuck" && t.status !== "Done";
+    const base = o.stuck_log ? { ...t, stuck_log: o.stuck_log } : t;
+    if (!hold && !(String(o.updated || "") > String(t.lastc || ""))) return base; const done = ost === "Done" || o.percent >= 100;
+    return { ...base, percent: done ? 100 : o.percent, status: done ? "Done" : ost, set_by_hand: true, last: String(o.updated).slice(0, 10) > t.last ? String(o.updated).slice(0, 10) : t.last,
+      ...(!done && ost === "Stuck" ? { stuck_reason: o.stuck_reason || null, stuck_control: o.stuck_control || null, stuck_note: o.stuck_note || "", stuck_since: o.stuck_since || o.updated } : {}) }; })
     .sort((a, b) => (a.status === "Done") - (b.status === "Done") || (a.last < b.last ? 1 : -1));
 }
 async function taskOverrides(env) {
@@ -764,9 +807,9 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
     if (b.action === "parties") return J({ parties: await knownParties(env) });
     if (b.action === "task_progress") {
       const name = String(b.name || "").trim().slice(0, 80); if (!name) return J({ error: "Which task?" }, 400);
-      const pct = Math.max(0, Math.min(100, Math.round(Number(b.percent) || 0))); let st = STATUS.includes(b.status) ? b.status : (pct >= 100 ? "Done" : "In progress"); if (st === "Done") st = "Done";
-      const rec = { name, percent: st === "Done" ? 100 : pct, status: st, updated: new Date().toISOString() };
-      await env.MEETINGS.put(TPFX + slug(name), JSON.stringify(rec)); return J({ ok: true, task: rec });
+      let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(TPFX + slug(name))) || "null"); } catch (e) {}
+      const r = taskRecord(prev, b, new Date().toISOString(), true); if (r.error) return J({ error: r.error }, 400);   // v674 - Stuck needs its reason
+      await env.MEETINGS.put(TPFX + slug(name), JSON.stringify(r.rec)); return J({ ok: true, task: r.rec });
     }
     // v583 UPLOAD (Kendall 14 Oct: "upload an existing PDF ... extract activities, tasks ... the morning huddle PDF ... build out a DNA for that type of
     // meeting"). The file's text is read in the Worker (Workers AI toMarkdown for PDF, Word, Excel, CSV; the OCR lane for scans), then filed through
@@ -1051,6 +1094,46 @@ export function roleGrid(es) {
 // v615 - the report is built in three pieces so a span of months can repeat the middle one once per month: reportSection (the tiles,
 // the 15 h meter, the two roles, the at-a-glance grid, the tasks, the days), reportDoc (the FN page around it) and reportHtml (which decides).
 const REPORT_MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+// v674 - THE 6 PM CHECK (Kendall 30 Oct: "whatsapp for the 6 pm check"). Once a day, 18:00-18:29 Dubai, on her instance only (WORK_EOD="on"):
+// her open tasks (not Done, not Stuck) that moved in the last 7 days but not today, by WhatsApp, with her Momo link. Free-form while her 24-hour
+// window is open; when it is shut, the approved TASK_CHECK_TEMPLATE if one is set (taskCheckTemplateDef), otherwise it is skipped and the day's
+// flag says why. Momo has no due dates yet, so "moved this week, not today" stands in for "due today".
+export function eodCandidates(tasks, today) {
+  const wk = new Date(Date.parse(today + "T00:00:00Z") - 7 * 864e5).toISOString().slice(0, 10);
+  return tasks.filter((t) => t.status !== "Done" && normStatus(t.status) !== "Stuck" && t.last >= wk && t.last < today);
+}
+export function eodText(names, link) {
+  return "6 pm check: " + (names.length === 1 ? "this task did" : "these " + names.length + " tasks did") + " not move today.\n" + names.map((n) => "• " + n).join("\n")
+    + "\n\nDone, or stuck? Mark each one in Momo" + (link ? ": " + link : ".");
+}
+export function taskCheckTemplateDef() {
+  return { name: "momo_task_check", language: "en_US", category: "UTILITY", components: [
+    { type: "BODY", text: "Your 6 pm task check: {{1}} did not move today: {{2}}. Open Momo to mark each one done or stuck.", example: { body_text: [["2 tasks", "Log new listings; Follow up 3 Shamal leads"]] } }] };
+}
+export async function workEveningCheck(env, deps, nowMs) {
+  if (env.WORK_EOD !== "on" || !env.WA_ALLOWED) return "off";
+  const t = new Date((nowMs || Date.now()) + 4 * 3600e3), hm = t.toISOString().slice(11, 16), today = t.toISOString().slice(0, 10);
+  if (hm < "18:00" || hm >= "18:30") return "not now";
+  const fk = "wl_eod_naj_" + today; if (await env.MEETINGS.get(fk)) return "done today";   // NOT under PFX: listEntries reads every work_naj_* key as an entry
+  const tasks = applyOverrides(tasksOf(await listEntries(env, PHASES[0].from, today)), await taskOverrides(env));
+  const c = eodCandidates(tasks, today), names = c.slice(0, 6).map((x) => shownTask(x.name)).concat(c.length > 6 ? ["and " + (c.length - 6) + " more"] : []);
+  const mark = (v) => env.MEETINGS.put(fk, v, { expirationTtl: 3 * 86400 });
+  if (!c.length) { await mark("nothing to check"); return "nothing"; }
+  let open = false; try { open = !!(await deps.ownerWindowOpen(env)); } catch (e) {}
+  if (open) { await mark("sent"); const r = await deps.waSend(env, env.WA_ALLOWED, eodText(names, deps.link || "")); return r && r.ok === false ? "send failed" : "sent"; }
+  if (env.TASK_CHECK_TEMPLATE && deps.waSendTemplate) { await mark("template"); await deps.waSendTemplate(env, env.WA_ALLOWED, env.TASK_CHECK_TEMPLATE, env.TASK_CHECK_LANG || "en_US", [c.length + " task" + (c.length === 1 ? "" : "s"), names.join("; ").replace(/\s+/g, " ").slice(0, 900)]); return "template"; }
+  await mark("window shut, no template"); return "window shut";
+}
+// v674 - time lost to blockers in the report's days: stuck time per reason, and how much of it she marked as outside her control
+export function blockedLine(tasks, days, nowIso) {
+  if (!days.length) return "";
+  const from = Date.parse(days[0] + "T00:00:00+04:00"), to = Date.parse(days[days.length - 1] + "T00:00:00+04:00") + 864e5, now = nowIso || new Date().toISOString();
+  const by = {}; let all = 0, outside = 0, n = 0;
+  tasks.forEach((t) => { let hit = false; stuckPeriods(t, now).forEach((p) => { const m = stuckMinutes([p], from, to); if (!m) return; hit = true; all += m; if (p.control === "No") outside += m; const r = p.reason || "Not given"; by[r] = (by[r] || 0) + m; }); if (hit) n++; });
+  if (!all) return "";
+  return '<div class=out><b>Time lost to blockers: ' + fmtMins(all) + '</b> on ' + n + ' task' + (n === 1 ? '' : 's') + (outside ? ' · ' + fmtMins(outside) + ' outside her control' : '') + ' · '
+    + esc(Object.keys(by).sort((a, b) => by[b] - by[a]).map((r) => r + ' ' + fmtMins(by[r])).join(", ")) + '</div>';
+}
 export function reportSection(es, days, allTasks, opt) {
   opt = opt || {};
   const daily = days.length === 1, monthly = days.length > 7, HP = hoursPicture(es), totH = HP.total;
@@ -1083,7 +1166,8 @@ export function reportSection(es, days, allTasks, opt) {
     : days.length > 1 ? '<h2>WEEK AT A GLANCE</h2>' + dayBars(perDay)
       + '<table class=glance><tr><th>Day</th><th>Activities</th><th>Hours</th><th>With</th><th>Outside role</th></tr>' + days.map((d) => { const de = es.filter((e) => e.date === d), h = Math.round(de.reduce((s, e) => s + hoursOf(e), 0) * 10) / 10, who = [...new Set(de.flatMap((e) => (e.people || []).filter((n) => n !== "All sales agents").map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0])))], o = de.filter((e) => e.in_scope === false).length;
         return '<tr' + (de.length ? '' : ' class=empty') + '><td><b>' + esc(dayName(d).slice(0, 3)) + '</b> ' + (+d.slice(8)) + '</td><td>' + (de.length ? de.map((e) => esc(e.title) + (isClocked(e) ? ' <span>' + esc(e.start) + '–' + esc(e.end) + '</span>' : '')).join('; ') : '<span>—</span>') + '</td><td class=num>' + (de.length ? h : '') + '</td><td>' + esc(who.slice(0, 4).join(', ')) + (who.length > 4 ? ' +' + (who.length - 4) : '') + '</td><td class=num>' + (o ? '<span class=og>' + o + '</span>' : '') + '</td></tr>'; }).join("") + '</table>' : '')
-    + (tk.length ? '<h2>TASKS</h2>' + tk.slice(0, 8).map((t) => '<div class=tk><div><b>' + esc(shownTask(t.name)) + '</b><small>' + esc(t.status) + ' · ' + t.days + ' day' + (t.days === 1 ? '' : 's') + (t.owners && t.owners.length ? ' · with ' + esc(t.owners.slice(0, 3).join(", ")) : '') + '</small></div>' + pbar(t.percent, t.status === "Done" ? RAMP[4] : TEAL) + '<div class=pct>' + t.percent + '%</div></div>').join("") : '')
+    + (tk.length ? '<h2>TASKS</h2>' + tk.slice(0, 8).map((t) => '<div class=tk><div><b>' + esc(shownTask(t.name)) + '</b><small>' + (t.status === "Stuck" ? '<span style="color:#B4532A;font-weight:600">Stuck</span>' + (t.stuck_reason ? ': ' + esc(t.stuck_reason) : '') + (t.stuck_control === "No" ? ' (outside her control)' : '') + (t.stuck_note ? ', ' + esc(t.stuck_note) : '') : esc(t.status)) + ' · ' + t.days + ' day' + (t.days === 1 ? '' : 's') + (t.owners && t.owners.length ? ' · with ' + esc(t.owners.slice(0, 3).join(", ")) : '') + '</small></div>' + pbar(t.percent, t.status === "Done" ? RAMP[4] : TEAL) + '<div class=pct>' + t.percent + '%</div></div>').join("") : '')
+    + blockedLine(allTasks || tasksOf(es), days)
     + (outRole.length ? '<div class=out><b>Going beyond the role: ' + outRole.length + (outRole.length === 1 ? ' activity' : ' activities') + '</b> · ' + esc(Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => (d === "Sales" ? "as a broker" : "for " + d) + ' ' + byD[d]).join(", ")) + ' · support given to the wider team, noted alongside the Strategic Lead work.</div>' : '')
     + (byDay.length ? '<div class=day>' + byDay.map((x) => '<h3>' + esc(dayName(x.d)) + ' ' + esc(fmtD(x.d)) + '</h3>' + x.es.map((e) => '<div class=li><i style="background:' + (e.in_scope === false ? WARM : TEAL) + '"></i><div>' + esc(e.title) + ' <span>· ' + esc(e.type) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ' · ' + esc(e.time_of_day.toLowerCase()) : '') + ((e.people || []).length ? ' · ' + esc(e.people.map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0]).slice(0, 3).join(", ")) : '') + '</span></div></div>').join("")).join("") + '</div>' : '');
 }
@@ -1269,6 +1353,9 @@ var KEY=(document.currentScript.src.split("key=")[1]||"").split("&")[0];KEY=deco
 var $=function(i){return document.getElementById(i)};var D=null,WEEK=null,PREV=null,EDIT=null;
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
 function sn(n){return String(n==null?"":n).replace(/^TASK-\d+\s+/i,"")}
+var REASONS=["System glitch","Waiting on someone","Missing data or access","Ran out of time","Other"];
+function forTxt(iso){var m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000));return m<60?m+" min":m<1440?Math.round(m/60)+" h":Math.round(m/1440)+" day"+(Math.round(m/1440)===1?"":"s")}
+function stTxt(t){if(t.status!=="Stuck")return esc(t.status);return '<b style="color:#B4532A">Stuck</b>'+(t.stuck_reason?' · '+esc(t.stuck_reason):'')+(t.stuck_control==="No"?' · not in my control':'')+(t.stuck_since?' · for '+forTxt(t.stuck_since):'')}
 var M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],DN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 function fd(d){var p=d.split("-");return DN[new Date(d+"T00:00:00Z").getUTCDay()]+" "+(+p[2])+" "+M[+p[1]-1]}
 function api(o){return fetch("/momo/work/api?key="+encodeURIComponent(KEY),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)}).then(function(r){return r.json().then(function(j){if(!r.ok&&!j.error)j.error="The server answered "+r.status;return j},function(){return {error:"The server sent something unexpected (status "+r.status+")."}})})}
@@ -1305,7 +1392,7 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
  $("wlist").querySelectorAll("[data-d]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-d")];if(!confirm("Delete \""+e.title+"\"?"))return;api({action:"delete",id:e.id,date:e.date}).then(function(){load(WEEK)})}});
  $("wlist").querySelectorAll("[data-e]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-e")];EDIT=e;$("wt").value=e.text;$("wd").value=e.date;if($("wl"))$("wl").value=e.link||"";preview(e);scrollTo(0,0)}});
  $("wtasks").innerHTML=(D.tasks||[]).length?D.tasks.map(function(t,ti){return '<div class="tk'+(t.status==="Done"?' done':'')+'" data-tk='+ti+' style="cursor:pointer"><b>'+esc(sn(t.name))+'</b> <span style="color:#C5A56A;float:right">'+t.percent+'% &#9998;</span><div class=pb><i style="width:'+t.percent+'%"></i></div>'
-  +'<div class=m>'+esc(t.status)+' · started '+esc(fd(t.first))+' · '+t.days+' day'+(t.days===1?'':'s')+' worked · about '+t.hours+' h'+(t.last!==t.first?' · last '+esc(fd(t.last)):'')+'</div>'
+  +'<div class=m>'+stTxt(t)+' · started '+esc(fd(t.first))+' · '+t.days+' day'+(t.days===1?'':'s')+' worked · about '+t.hours+' h'+(t.last!==t.first?' · last '+esc(fd(t.last)):'')+'</div>'
   +(t.owners.length?'<div class=m>With: '+esc(t.owners.join(", "))+'</div>':'')+'<div style="margin-top:6px"><a class=fnpdf style="color:#8A6F3E;font-size:.82rem;text-decoration:none" target=_blank onclick="event.stopPropagation()" href="/momo/work/item/task?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(t.name)+'">'+FNPDF+'FN Realty PDF</a></div></div>'}).join(""):'<p style="color:#8FA39B">Tasks appear here as you log work on them.</p>';
  $("wtasks").querySelectorAll("[data-tk]").forEach(function(r){r.onclick=function(){taskSheet(D.tasks[+r.getAttribute("data-tk")])}});
  $("wdept").innerHTML=(D.depts||[]).map(function(d){return '<details class=dp><summary><span><b>'+esc(d.dept)+'</b><br><small>'+(d.people.length?esc(d.people.slice(0,4).join(", "))+(d.people.length>4?" +"+(d.people.length-4):""):"No open tasks")+'</small></span><span class=n>'+d.open+'</span></summary>'
@@ -1337,13 +1424,23 @@ function kpiOf(id){return D.kpis.filter(function(k){return k.id===id})[0]}
 function brokerLabel(id){var r="";(D.broker_tasks||[]).forEach(function(g){g.items.forEach(function(i){if(i[0]===id)r=i[1]})});return r}
 function brokerSummary(){var t=PREV.broker_tasks||[];return t.length?brokerLabel(t[0])+(t.length>1?" +"+(t.length-1):""):"What kind of broker work?"}
 // v600 - set a task's progress directly (Najjuko 14 Oct: "the edit button on the task is not working, I can't change something to fix the progress"). Its own overlay: the log has no entry open behind it.
-function taskSheet(t){if(!t)return;var pct=t.percent,st=t.status,bg=document.createElement("div");bg.className="sheetbg";var s=document.createElement("div");s.className="sheet";
+// v674 - Stuck at any time: picking Stuck asks what is blocking it (five reasons), whether it was in her control, and a note (needed for Other)
+function taskSheet(t){if(!t)return;var pct=t.percent,st=t.status,rs=t.stuck_reason||"",rc=t.stuck_control||"",rn=t.stuck_note||"",er="",bg=document.createElement("div");bg.className="sheetbg";var s=document.createElement("div");s.className="sheet";
  var close=function(){bg.remove();s.remove()};
+ var keep=function(){var n=s.querySelector("#tp_n");if(n)rn=n.value};
  var draw=function(){s.innerHTML='<h4>'+esc(sn(t.name))+'</h4><div class=line style="color:#1C2321;font-weight:500">Progress <b id=tp_v style="color:#0A4F4A;float:right">'+pct+'%</b></div><input type=range min=0 max=100 step=5 value='+pct+' id=tp_r style="width:100%;margin:6px 0 10px"><div class=chips>'
-   +D.status.map(function(x){return '<button type=button class="chip'+(x===st?' on':'')+'" data-s="'+esc(x)+'">'+esc(x)+'</button>'}).join("")+'</div><div class=line style="margin-top:8px">Saved when you tap Save progress. Your next activity on this task moves it again.</div><button type=button class="gold done" id=tp_ok style="margin-top:8px">Save progress</button>';
-  s.querySelector("#tp_r").oninput=function(){pct=+this.value;s.querySelector("#tp_v").textContent=pct+"%";if(pct>=100)st="Done";else if(st==="Done")st="In progress"};
-  s.querySelectorAll("[data-s]").forEach(function(b){b.onclick=function(){st=b.getAttribute("data-s");if(st==="Done")pct=100;draw()}});
-  s.querySelector("#tp_ok").onclick=function(){var b=this;b.disabled=true;b.textContent="Saving...";api({action:"task_progress",name:t.name,percent:pct,status:st}).then(function(j){if(!j.ok){b.disabled=false;b.textContent="Save progress";toast("Not saved: "+(j.error||"something went wrong")+". Tap Save progress again.",true);return}
+   +D.status.map(function(x){return '<button type=button class="chip'+(x===st?' on':'')+'" data-s="'+esc(x)+'">'+esc(x)+'</button>'}).join("")+'</div>'
+   +(st==="Stuck"?'<div class=line style="color:#1C2321;font-weight:500;margin-top:10px">What is blocking it?</div><div class=chips>'+REASONS.map(function(x){return '<button type=button class="chip'+(x===rs?' on':'')+'" data-r="'+esc(x)+'">'+esc(x)+'</button>'}).join("")+'</div>'
+     +'<div class=line style="color:#1C2321;font-weight:500;margin-top:8px">Was it in your control?</div><div class=chips>'+["Yes","No"].map(function(x){return '<button type=button class="chip'+(x===rc?' on':'')+'" data-c="'+x+'">'+x+'</button>'}).join("")+'</div>'
+     +'<textarea id=tp_n rows=2 maxlength=200 placeholder="'+(rs==="Other"?"What happened? (needed)":"Add a note (optional)")+'" style="width:100%;margin-top:8px;font:inherit;font-size:16px;padding:8px;border-radius:10px;border:1px solid #D8DED9">'+esc(rn)+'</textarea>':'')
+   +(er?'<div class=line style="color:#B4532A;margin-top:6px">'+esc(er)+'</div>':'')
+   +'<div class=line style="margin-top:8px">'+(st==="Stuck"?'Momo times how long it stays stuck. Set another status when it moves again.':'Saved when you tap Save progress. Your next activity on this task moves it again.')+'</div><button type=button class="gold done" id=tp_ok style="margin-top:8px">Save progress</button>';
+  s.querySelector("#tp_r").oninput=function(){pct=+this.value;s.querySelector("#tp_v").textContent=pct+"%";if(pct>=100&&st!=="Done"){st="Done";keep();draw()}else if(pct<100&&st==="Done"){st="In progress";keep();draw()}};
+  s.querySelectorAll("[data-s]").forEach(function(b){b.onclick=function(){keep();st=b.getAttribute("data-s");er="";if(st==="Done")pct=100;draw()}});
+  s.querySelectorAll("[data-r]").forEach(function(b){b.onclick=function(){keep();rs=b.getAttribute("data-r");er="";draw()}});
+  s.querySelectorAll("[data-c]").forEach(function(b){b.onclick=function(){keep();rc=b.getAttribute("data-c");er="";draw()}});
+  s.querySelector("#tp_ok").onclick=function(){keep();if(st==="Stuck"){er=!rs?"Pick what is blocking it.":!rc?"Say whether it was in your control.":(rs==="Other"&&!rn.trim())?"Say what happened, in a few words.":"";if(er){draw();return}}
+   var b=this;b.disabled=true;b.textContent="Saving...";api({action:"task_progress",name:t.name,percent:pct,status:st,reason:rs,control:rc,note:rn}).then(function(j){if(!j.ok){b.disabled=false;b.textContent="Save progress";toast("Not saved: "+(j.error||"something went wrong")+". Tap Save progress again.",true);return}
     close();toast("\u2713 Saved: "+sn(t.name)+" is at "+j.task.percent+"% ("+j.task.status+").");load(WEEK)}).catch(function(){b.disabled=false;b.textContent="Save progress";toast("Not saved: no connection. Tap Save progress again.",true)})}};
  bg.onclick=close;draw();document.body.appendChild(bg);document.body.appendChild(s)}
 function areaSheet(){
@@ -1500,4 +1597,4 @@ $("wprevw").onclick=function(){shift(-1)};$("wnextw").onclick=function(){shift(1
 ` + REC_JS + String.raw`load();resumeDraft()})();`;
 
 // v654 - the pieces the Momo bridge (src/work_bridge.js) reuses, so its reads and saves are exactly the app's
-export const BRIDGE_LOG = { PFX, TPFX, RECW, listEntries, taskOverrides, recGet, recPut, recId, clean, okDate, dubaiToday, slug, STATUS, recSegs, recTranscriptText, speakersOut };
+export const BRIDGE_LOG = { PFX, TPFX, RECW, listEntries, taskOverrides, recGet, recPut, recId, clean, okDate, dubaiToday, slug, STATUS, taskRecord, recSegs, recTranscriptText, speakersOut };

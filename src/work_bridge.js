@@ -163,8 +163,10 @@ async function doPost(env, b, person, route) {
   }
   if (route === "post:task") {
     const name = String(b.name || "").trim().slice(0, 80); if (!name) return [400, { ok: false, code: "bad_task", error: "Which task? Send name." }];
-    const pct = Math.max(0, Math.min(100, Math.round(Number(b.percent) || 0))), st = L.STATUS.includes(b.status) ? b.status : (pct >= 100 ? "Done" : "In progress");
-    const rec = { name, percent: st === "Done" ? 100 : pct, status: st, updated: now };
+    // v674 - the same record rule as her progress sheet: "Waiting on others" arrives as Stuck (reason "Waiting on someone"), a stuck reason she set is
+    // kept when the sync re-sends Stuck, and leaving Stuck closes the stuck period. reason/control/note are optional here.
+    let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(L.TPFX + L.slug(name))) || "null"); } catch (e) {}
+    const rec = L.taskRecord(prev, b, now, false).rec;
     await env.MEETINGS.put(L.TPFX + L.slug(name), JSON.stringify(rec)); return [200, { ok: true, data: rec }];
   }
   if (route === "post:plan-item") {

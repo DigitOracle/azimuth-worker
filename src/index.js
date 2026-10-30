@@ -6,7 +6,7 @@ import { SPK_ICON } from "./work_speaking.js";
 import { GGU_ICON } from "./work_ggu.js";
 import { SHEETS_ICON, sheetsPublic } from "./work_sheets.js";   // v672 - Product data sheets card (Najjuko first, Kendall) + public /pds/ files
 import { BRIEFS_ICON, briefsPublic } from "./work_briefs.js";   // v667 - Product briefs card (Kendall) + public /pb/ pictures   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
-import { workRoute, WORK_CSS } from "./work_log.js";
+import { workRoute, WORK_CSS, workEveningCheck } from "./work_log.js";
 import { bridgeRoute } from "./work_bridge.js";
 import { liveRoute } from "./live_poll.js";
 import { PRICE_SLIDER_HTML } from "./price_slider_page.js";   // v661 - public price slider (public Esri data only)   // v659 - the live room: public QR pages for a workshop (scale, board, vote, wall), screen behind the event key   // v654 - the Momo bridge: JSON for a person's own Claude Code, header key only   // v564 - Momo Work: Najjuko's FN Realty work log
@@ -4918,6 +4918,8 @@ export default {
       ctx.waitUntil((async () => {
         try { await env.MEETINGS.put("minute_tick_at", new Date().toISOString(), { expirationTtl: 86400 }); } catch (e) {}
         try { await meetingNudges(env); } catch (e) {}
+        try { const _nk = String(env.INSIDER_KEY || "").split(",").map((x) => x.trim()).find((x) => x.indexOf("ins_najjuko_") === 0);   // v674 - her 6 pm task check (WORK_EOD="on" on her instance only)
+          await workEveningCheck(env, { ownerWindowOpen, waSend, waSendTemplate, link: _nk ? String(env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "") + "/momo?key=" + _nk : "" }, event.scheduledTime || Date.now()); } catch (e) {}
         try { await fitEvening(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}
         try { await fitMorning(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v355 - the 05:00 opener, inside the 24-hour window only
         try { await fitReminders(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v351 - the daily "write in my book" reminder, inside the 24-hour window only   // v328 - the 21:00 GST FIT verdict; once a day, only while the 24-hour window is open
