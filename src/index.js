@@ -7,6 +7,7 @@ import { GGU_ICON } from "./work_ggu.js";
 import { SHEETS_ICON, sheetsPublic } from "./work_sheets.js";   // v672 - Product data sheets card (Najjuko first, Kendall) + public /pds/ files
 import { BRIEFS_ICON, briefsPublic } from "./work_briefs.js";   // v667 - Product briefs card (Kendall) + public /pb/ pictures   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
 import { workRoute, WORK_CSS, workEveningCheck } from "./work_log.js";
+import * as FS from "./feed_sets.js";   // v677 - Beyond property + Emotional intelligence sets, named palettes
 import { bridgeRoute } from "./work_bridge.js";
 import { liveRoute } from "./live_poll.js";
 import { PRICE_SLIDER_HTML } from "./price_slider_page.js";   // v661 - public price slider (public Esri data only)   // v659 - the live room: public QR pages for a workshop (scale, board, vote, wall), screen behind the event key   // v654 - the Momo bridge: JSON for a person's own Claude Code, header key only   // v564 - Momo Work: Najjuko's FN Realty work log
@@ -3963,23 +3964,15 @@ async function appFetch(request, env, ctx) {
             else if (bid === "st:change" && _sf.step === "card") { _sf.step = "change"; await styleSet(env, _sf); await waSend(env, from, STYLE_MSG.change); }
             return new Response("ok");
           }
-          if (/^mkt:pic:\d{1,2}$/.test(bid)) {                                        // v120 - a morning angle becomes a picture
+          if (/^pal:\d{1,2}:(property|general|ei|usual)$/.test(bid)) {               // v677 - her palette for a real-estate card, then the backdrop step as before
+            const _pp = bid.split(":"); try { await env.MEETINGS.put("card_pal_" + _pp[1], _pp[2], { expirationTtl: 7 * 86400 }); } catch (e) {}
+            await picBackdropStep(env, from, _pp[1]); return new Response("ok");
+          }
+          if (/^mkt:pic:\d{1,2}$/.test(bid)) {                                        // v120 - a morning angle becomes a picture; v677 - the palette is asked first
             const _n = bid.slice(8);
-            let _cx = null; try { _cx = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
-            const _a = _cx && (_cx.angles || [])[Number(_n) - 1];
-            if (!_a) { await waSend(env, from, "That angle isn't on file any more - say \u201cfeed\u201d and I'll show today's again."); return new Response("ok"); }
-            let _d = null; try { _d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
-            const _area = angleArea(_a, _d);
-            const _opts = feedBackdrops(_a, _area, true);   // v296 - her list carries "Describe your own"
-            try { await env.MEETINGS.put("fbg_" + _n, JSON.stringify({ n: _n, area: _area || "", angle: _a, options: _opts }), { expirationTtl: 7 * 86400 }); } catch (e) {}
-            const _mh = await mediaFor(env, _a);                                     // v124 - do we hold the developer's own renders?
-            if (_mh) {
-              await waSendButtons(env, from, _mh.n + (_mh.n === 1 ? " render" : " renders") + " on file from " + _mh.developer + " for " + _mh.project + ". Use one of theirs, or make a new picture?",
-                [{ id: "mth:" + _n, title: "Use theirs" }, { id: "fbg:menu:" + _n, title: "Make a new one" }]);
-              return new Response("ok");
-            }
-            await waSendList(env, from, (_area ? _area + ". " : "") + "Which backdrop?", "Backdrops",
-              _opts.map(o => ({ id: "fbg:" + _n + ":" + o.id, title: o.name, description: o.note })));
+            let _cx0 = null; try { _cx0 = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+            if (!(_cx0 && (_cx0.angles || [])[Number(_n) - 1])) { await waSend(env, from, "That angle isn't on file any more - say \u201cfeed\u201d and I'll show today's again."); return new Response("ok"); }
+            await waSendList(env, from, "Which palette for this card?", "Palette", FS.paletteRows("pal:" + _n, "property"));
             return new Response("ok");
           }
           if (/^fbg:menu:\d{1,2}$/.test(bid)) {                                      // v124 - "make a new one" from the offer
@@ -4204,6 +4197,7 @@ async function appFetch(request, env, ctx) {
             const _mt = bid.split(":");
             await runDrafts(env, from, _mt[1], _mt[2], _mt[3]);
           }
+          else if (bid.indexOf("fs:") === 0) { await FS.handleSetButton(env, await feedSetDeps(env), from, bid, url.origin); }   // v677 - Beyond property / Emotional intelligence taps
           else if (/^feed:\d{1,2}(?:\+\d{1,2})*$/.test(bid)) {  // v37 — daily-feed pick; v83 — any angle the feed sent, one or several
             await handleFeedPick(env, from, bid.slice(5).split("+").map(x => parseInt(x, 10)).filter(x => x > 0));
           }
@@ -4716,8 +4710,12 @@ async function appFetch(request, env, ctx) {
           if (FEED_PDF_RX.test(text)) {   // v622 - today's list as a PDF she can forward to the designer
             let _bc = null; try { _bc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
             const _ang = (_bc && Array.isArray(_bc.angles) ? _bc.angles : []).filter(a => a && a.hook && !a.campaign);
+            for (const _sid of FS.SET_IDS) {   // v677 - the Beyond property and Emotional intelligence sets follow the five in the same PDF
+              let _sc = null; try { _sc = JSON.parse((await env.MEETINGS.get("mkt_briefctx_" + _sid)) || "null"); } catch (e) {}
+              if (_sc && Array.isArray(_sc.angles) && Date.now() - (_sc.at || 0) <= 36 * 3600000) _ang.push(..._sc.angles.filter(a => a && a.hook).map(a => Object.assign({}, a, { family: a.lane, set: _sid })));
+            }
             if (!_bc || Date.now() - (_bc.at || 0) > 36 * 3600000 || !_ang.length) { await waSend(env, from, "There is no list for today yet. Say *feed* and I will build it, then say *pdf*." + UPDATE_SIGNOFF); return new Response("ok"); }
-            await waSend(env, from, "Putting today's " + Math.min(_ang.length, 10) + " ideas into a PDF for your designer - about a minute.");
+            await waSend(env, from, "Putting today's " + Math.min(_ang.length, 15) + " ideas into a PDF for your designer - about a minute.");
             try {
               const _ds = gstDateStr(gstNow()); const _st = await feedPdfStore(env, _ang, _ds);
               const _fn = "Najma_Market_News_" + _ds + ".pdf";
@@ -4732,13 +4730,14 @@ async function appFetch(request, env, ctx) {
               try { _sr = JSON.parse((await env.MEETINGS.get("mkt_feed_sent")) || "null"); } catch (e) {}
               try { _pend = JSON.parse((await env.MEETINGS.get("mkt_feed_pending")) || "null"); } catch (e) {}
               const _held = (await env.MEETINGS.get("mktfeed_" + _today)) === "held";
-              const _sentToday = _sr && _sr.date === _today && Date.now() - (_sr.at || 0) <= 3600000;
+              const _sentToday = _sr && _sr.date === _today;   // v677 (Kendall 30 Oct: "she can always type feed"): the day's lists come back any time; "feed again" builds fresh
               if (_sentToday && _sr.via === "flush" && Date.now() - _sr.at < 180000) return new Response("ok");   // her own message just opened the window: the held set is going out, that is the answer
               if (_pend && Date.now() - (_pend.at || 0) <= FEED_HOLD_MAX_MS) return new Response("ok");        // held set still being flushed by the line above
               if (!_sentToday && _held && !_pend) return new Response("ok");                                    // flush in flight
               if (_sentToday) {
                 await waSend(env, from, "Today's list is above - tap a number below, say *pdf* to send it all to your designer, or say *feed again* for a fresh set.");
                 if (Array.isArray(_sr.rows) && _sr.rows.length) { try { await waSendList(env, from, "Today's pick:", "Choose an angle", _sr.rows); } catch (e) {} }
+                try { await FS.resendSetLists(env, await feedSetDeps(env), from, _today); } catch (e) {}   // v677 - the other two lists follow
                 return new Response("ok");
               }
             }
@@ -5581,8 +5580,9 @@ async function draftFromAngle(env, to, kind, n, timeId) {
   // campaign's own images where there are any. Nothing here needs her to type a thing.
   if (_ang && (kind === "li" || kind === "ig" || kind === "car")) {                                // v89 - the finished image; v105 - both sizes, five looks
     try { const _o = env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev";
-      const _sq = await renderAngleCard(env, _ang, n, _o, ctx.at, to, "square");
-      const _st = await renderAngleCard(env, _ang, n, _o, ctx.at, to, "story");
+      const _pl = await cardPaletteFor(env, n);   // v677 - her palette for this angle, if she chose one
+      const _sq = await renderAngleCard(env, _ang, n, _o, ctx.at, to, "square", _pl || undefined);
+      const _st = await renderAngleCard(env, _ang, n, _o, ctx.at, to, "story", _pl || undefined);
       if (_sq) await waSendImage(env, to, _sq.url, "Your card for angle " + n + (_sq.area ? " · " + _sq.area : "") + " - 1080×1080 for the grid.");
       if (_st) await waSendImage(env, to, _st.url, "Same card at 1080×1920 - Stories, Reels and TikTok.");
       if (_sq || _st) await cardLedger(env, { kind: "angle", key: (_sq || _st).key, n, hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "", area: (_sq && _sq.area) || "" });   // v149
@@ -6827,6 +6827,7 @@ async function dailyFeedTick(env, force, dry) {
   const _rows = angles.slice(0, 10).map((a, i) => ({ id: "feed:" + (i + 1), title: (i + 1) + "️⃣ " + (a.campaign ? "🏡 " : "") + (a.figure || "").slice(0, 18), description: a.hook }));
   if (!(await ownerWindowOpen(env))) {   // v186 - her window is shut: hold it, nudge her, tell Kendall. Sending now would fail silently.
     const _h = await feedHold(env, bodyTxt, _rows, angles);   // v187 - held: famhist is written at the flush, not now
+    try { await FS.buildExtraSets(env, await feedSetDeps(env), {}); } catch (e) {}   // v677 - built now, held with the five
     if (!force) { try { await env.MEETINGS.put(fk, "held", { expirationTtl: 2 * 86400 }); } catch (e) {} }
     return;
   }
@@ -6839,6 +6840,7 @@ async function dailyFeedTick(env, force, dry) {
   try { await env.MEETINGS.put("mkt_feed_sent", JSON.stringify({ at: Date.now(), date: gstDateStr(gstNow()), via: force ? "force" : "tick", bodyTxt, rows: _rows }), { expirationTtl: 2 * 86400 }); } catch (e) {}   // v412 - what 'Feed' answers from
   await _famWrite();
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", _rows);
+  try { await FS.buildExtraSets(env, await feedSetDeps(env), {}); } catch (e) {}   // v677 - Beyond property and Emotional intelligence follow the five
   // v281 - EJARI · WHAT MOVED: the card goes straight after the morning list and its picker, only on a morning that passed the gate
   // and was delivered (a held or refused morning returned above, so the card never arrives on its own). Missing or stale data, a
   // failed render or any error skips the card and leaves a line in the QA note; the rest of the chain carries on regardless.
@@ -6974,6 +6976,36 @@ async function feedGate(env, angles, famh, hist, soft) {   // v295 - soft: ledge
 // offers, she taps). v185 made all five cards without asking, which took away the backdrop, the light and the photo she used to
 // pick. Now the morning ends with one question. "Make all five" makes them exactly as before; "I'll choose" leaves it to her,
 // and tapping an angle still opens the old backdrop -> light -> photo walk. Nothing is made until she says so.
+// v677 - the palette she chose for a real-estate card (pal:<n>:<id> -> card_pal_<n>); null means "Momo's usual" (style_palette, as before)
+async function cardPaletteFor(env, n) {
+  let pid = null; try { pid = n ? await env.MEETINGS.get("card_pal_" + n) : null; } catch (e) {}
+  if (!pid || pid === "usual") return null;
+  const p = await FS.paletteFor(env, { stylePalette }, pid); return p ? { palette: p.colours, palId: p.id } : null;
+}
+// v677 - what src/feed_sets.js needs from this file
+async function feedSetDeps(env) {
+  let voice = ""; try { voice = feedVoice(await styleVoice(env)); } catch (e) {}
+  return { waSend, waSendList, waSendImage, claudeJSON, claudeText, renderAngleCard, pubOrigin: (o) => pubOrigin(env, o), ownerWindowOpen, dnaSignal, gcTellOwner, parseNewsFeed, fetchT, gstDateStr, stylePalette, propRx: NEWS_PROP_RX, model: CLAUDE_SMART, voice,
+    gstDay: { fmt: (ms) => { const d = new Date(ms + OFFSET_MIN * 60000); return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear() + " " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + " GST"; }, isToday: (ms) => gstDateStr(new Date(ms + OFFSET_MIN * 60000)) === gstDateStr(gstNow()) } };
+}
+// v677 - the backdrop step of "Picture with you" (was inline in the mkt:pic branch until v676): runs after her palette is chosen
+async function picBackdropStep(env, from, _n) {
+  let _cx = null; try { _cx = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+  const _a = _cx && (_cx.angles || [])[Number(_n) - 1];
+  if (!_a) { await waSend(env, from, "That angle isn't on file any more - say \u201cfeed\u201d and I'll show today's again."); return; }
+  let _d = null; try { _d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+  const _area = angleArea(_a, _d);
+  const _opts = feedBackdrops(_a, _area, true);   // v296 - her list carries "Describe your own"
+  try { await env.MEETINGS.put("fbg_" + _n, JSON.stringify({ n: _n, area: _area || "", angle: _a, options: _opts }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  const _mh = await mediaFor(env, _a);                                     // v124 - do we hold the developer's own renders?
+  if (_mh) {
+    await waSendButtons(env, from, _mh.n + (_mh.n === 1 ? " render" : " renders") + " on file from " + _mh.developer + " for " + _mh.project + ". Use one of theirs, or make a new picture?",
+      [{ id: "mth:" + _n, title: "Use theirs" }, { id: "fbg:menu:" + _n, title: "Make a new one" }]);
+    return;
+  }
+  await waSendList(env, from, (_area ? _area + ". " : "") + "Which backdrop?", "Backdrops",
+    _opts.map(o => ({ id: "fbg:" + _n + ":" + o.id, title: o.name, description: o.note })));
+}
 async function feedSceneOffer(env, angles) {
   if (env.FEED_SCENES !== "on" || !env.WA_ALLOWED) return false;
   if (await env.MEETINGS.get("feed_scenes_off")) return false;
@@ -7195,6 +7227,7 @@ async function feedFlush(env) {
       await env.MEETINGS.put("mkt_feed_famhist", JSON.stringify(p.famRows.map(r => Object.assign({}, r, { d: today })).concat(keep).slice(0, 240)), { expirationTtl: 30 * 86400 }); } catch (e) {}
   }
   if (Array.isArray(p.rows) && p.rows.length) { try { await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", p.rows); } catch (e) {} }
+  try { await FS.flushExtraSets(env, await feedSetDeps(env)); } catch (e) {}   // v677
   try { if (Array.isArray(p.angles) && p.angles.length) await feedSceneOffer(env, p.angles); } catch (e) {}   // v188 - a held morning offers too
   try { await gcTellOwner(env, "Naj wrote back, so the morning I was holding has gone to her" + (r1 && r1.ok ? "" : " (the text was refused: " + ((r1 && r1.status) || "?") + ")") + "."); } catch (e) {}
   return { flushed: !!(r1 && r1.ok) };
@@ -8036,13 +8069,13 @@ const UNIT_MIX_CSS = '.um{margin-top:10px;border:1px solid var(--line);border-ra
 const UPDATE_SIGNOFF = "\n\n— Curated for Black Coffee, by Papi";   // v89.3 - every update to her signs off this way (Kendall, 5 Sep 2026); v120.1 - his wording, 11 Sep: for her, by him
 let RENDER_LAST_ERR = "";
 const cardKey = (ctxAt, n, size) => "angle_" + String(ctxAt || 0) + "_" + n + (size === "story" ? "_s" : "");   // v105 - "_s" = 1080x1920
-async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl, credit, imgAlign, wash) {
+async function angleCardHtml(env, angle, n, origin, size, t, imgOverride, meUrl, credit, imgAlign, wash, palette) {   // v677 - palette: a named palette wins over style_palette
   let d = null; try { d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
   const area = angleArea(angle, d); let img = imgOverride || null;   // v109 - a made plate wins over the satellite
   // v363 - no satellite lookup: a card without a made plate uses the market background
   if (!img) img = origin + "/img/bg_market";
   const story = size === "story", W = 1080, H = story ? 1920 : 1080;
-  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "", palette: await stylePalette(env), credit: credit || "", imgAlign: imgAlign || "", wash: Array.isArray(wash) ? wash : null });   // v124 - the credit rides through; this builder never saw opts
+  const svg = angleCardSvg(angle, area, img, n, { size: story ? "story" : "square", t, me: meUrl || "", palette: palette || await stylePalette(env), credit: credit || "", imgAlign: imgAlign || "", wash: Array.isArray(wash) ? wash : null });   // v124 - the credit rides through; this builder never saw opts
   return { area, W, H, html: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;700&display=swap"><style>html,body{margin:0;background:#0C1413;width:${W}px;height:${H}px;overflow:hidden}svg{display:block}</style></head><body>${svg}</body></html>` };
 }
 // v105 - render HTML to PNG inside the Worker through the Browser Rendering binding. One browser per call; fonts awaited.
@@ -8060,9 +8093,9 @@ async function renderHtmlPng(env, html, W, H) {
 }
 async function renderAngleCard(env, angle, n, origin, ctxAt, wantedBy, size, opts) {
   RENDER_LAST_ERR = ""; size = size === "story" ? "story" : "square";
-  const k = opts && opts.key ? opts.key + (size === "story" ? "_s" : "") : cardKey(ctxAt, n, size);   // v109 - a plate card keys by its plate, not the morning brief
+  let k = opts && opts.key ? opts.key + (size === "story" ? "_s" : "") : cardKey(ctxAt, n, size); if (opts && opts.palId && !(opts.key && String(opts.key).indexOf("_" + opts.palId) >= 0)) k += "_p" + opts.palId;   // v677 - a different palette is a different card   // v109 - a plate card keys by its plate, not the morning brief
   try { if (await env.MEETINGS.get("img_" + k, "arrayBuffer")) return { key: k, url: pubOrigin(env, origin) + "/img/" + k, area: angleArea(angle, null), size }; } catch (e) {}
-  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me, opts && opts.credit, opts && opts.align && opts.align[size], opts && opts.wash);
+  const { area, W, H, html } = await angleCardHtml(env, angle, n, origin, size, opts && opts.t, opts && opts.img, opts && opts.me, opts && opts.credit, opts && opts.align && opts.align[size], opts && opts.wash, opts && opts.palette);
   const png = await renderCardPng(env, html, W, H);
   if (!png || png.byteLength < 5000) {
     if (!RENDER_LAST_ERR) RENDER_LAST_ERR = "png too small";
@@ -13705,6 +13738,7 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
   if (opt && opt.useKey) {                                                        // v124 - the developer's own render, already on the Worker: nothing to generate
     out.photo = origin + "/img/" + opt.useKey;
     const _o = { img: out.photo, t: 5, me: "", key: opt.useKey + "_card" + PLATE_CARD_V, credit: opt.credit || "" };
+    { const _pl = await cardPaletteFor(env, post.idp === "feed_" ? post.n : 0); if (_pl) Object.assign(_o, _pl); }   // v677
     const lix = hashStr(String(angle.hook || "") + "|" + String(angle.figure || "")) % 4;
     const mv = ["warm", "blue", "day", "soft"][lix];
     { const _mc = await meCutFor(env, origin, opt, mv); if (_mc.url) { _o.me = _mc.url; _o.key += _mc.tag; } }   // v141 - her chosen photo, else the default look
@@ -13734,6 +13768,7 @@ async function plateRun(env, post, opt, to, origin, sendIt) {
   }
   out.withMe = !!meUrl; out.meVariant = meUrl ? meVar : "";
   const o = { img: out.photo, t: 5, me: meUrl, key: photo + "_card" + PLATE_CARD_V + (meUrl ? meTag : "") };
+  { const _pl = await cardPaletteFor(env, post.idp === "feed_" ? post.n : 0); if (_pl) Object.assign(o, _pl); }   // v677
   const sq = await renderAngleCard(env, angle, post.n, origin, 0, null, "square", o);
   const st = await renderAngleCard(env, angle, post.n, origin, 0, null, "story", o);
   out.square = sq && sq.url; out.story = st && st.url; if (!sq && !st) out.err = RENDER_LAST_ERR || "render failed";

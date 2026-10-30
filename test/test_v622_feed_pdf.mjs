@@ -14,7 +14,7 @@ ok(html.includes("Idea 1 &lt;b&gt;&amp;"), "hook escaped form present");
 ok(/Artwork lead time/.test(html) && /Picture direction/.test(html) && /No text, no people/.test(html), "designer box");
 ok(html.includes("Curated by Najjuko"), "footer");
 ok(!/[\u{1F300}-\u{1FAFF}☀-➿]/u.test(html), "no emoji");
-ok(feedPdfHtml(angles.concat(angles), "x").match(/<div class=card>/g).length === 10, "capped at 10");
+ok(feedPdfHtml(angles.concat(angles), "x").match(/<div class=card>/g).length === 15, "capped at 15 (v677: three sets of five)");
 ok(feedPdfHtml([{ hook: "a", figure: "b", campaign: true }], "x").indexOf("<div class=card>") < 0, "campaign angles excluded");
 ok((feedPdfHtml(angles.slice(0, 3), "x").match(/<section class=pg>/g) || []).length === 2, "3 ideas = 2 card pages");
 for (const t of ["pdf", "PDF", "feed pdf", "designer", "send to designer", "send it to the designer", "Pdf!"]) ok(FEED_PDF_RX.test(t), "rx hit " + t);

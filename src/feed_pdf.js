@@ -24,7 +24,23 @@ const FAM = {
   education: ["Learn", "school", "Authority", "Carousel", 14, "A notebook and a floor plan, flat lay, soft shadows."],
   growth_plan: ["Growth plan", "chart", "Invest", "Carousel", 14, "A cut-away of a tower with a rising line behind it."],
 };
-const famOf = (a) => FAM[a && a.family] || FAM.education;
+// v677 - the Beyond property and Emotional intelligence sets carry a lane instead of a family; same card, their own designer notes
+const LANE = {
+  city: ["Beyond property: the city", "city", "Beyond property", "Story", 3, "A wide, warm view of the place in the story, no people."],
+  transport: ["Beyond property: transport", "train", "Beyond property", "Story", 3, "The train, road or station in the story, early light, no people."],
+  economy: ["Beyond property: the economy", "chart", "Beyond property", "Post", 7, "A clean skyline with a rising line behind it."],
+  culture: ["Beyond property: culture and sport", "media", "Beyond property", "Reel", 21, "The venue or the event in the story at golden hour."],
+  world: ["Beyond property: the world", "media", "Beyond property", "Post", 7, "A newsstand mood: layered paper in navy and cream."],
+  workplace: ["Emotional intelligence: at work", "school", "EI", "Carousel", 14, "A quiet meeting room, one chair pulled out, soft morning light."],
+  selling: ["Emotional intelligence: selling", "key", "EI", "Reel", 21, "Two chairs facing each other across a small table, warm light."],
+  everyday: ["Emotional intelligence: everyday", "home", "EI", "Story", 3, "A phone face-down on a kitchen table, morning light."],
+  self: ["Emotional intelligence: self", "pin", "EI", "Post", 7, "A single window with soft light on a plain wall."],
+  leadership: ["Emotional intelligence: leadership", "builder", "EI", "Carousel", 14, "A long table seen from the head of it, empty chairs, warm light."],
+  everyday_life: ["Emotional intelligence: everyday", "home", "EI", "Story", 3, "A phone face-down on a kitchen table, morning light."],
+  negotiation_clients: ["Emotional intelligence: negotiation", "tag", "EI", "Carousel", 14, "Two cups of coffee and a signed page on a table, soft light."],
+};
+const famOf = (a) => FAM[a && a.family] || LANE[a && a.family] || FAM.education;
+const SET_NAME = { property: "real estate", general: "beyond property", ei: "emotional intelligence" };
 
 function card(a, i) {
   const f = famOf(a);
@@ -41,7 +57,9 @@ function card(a, i) {
 }
 
 export function feedPdfHtml(angles, dateStr) {
-  const list = (angles || []).filter(a => a && a.hook && !a.campaign).slice(0, 10);
+  const list = (angles || []).filter(a => a && a.hook && !a.campaign).slice(0, 15);   // v677 - three sets of five
+  const bySet = {}; list.forEach(a => { const k = a.set || "property"; bySet[k] = (bySet[k] || 0) + 1; });
+  const mix = Object.keys(bySet).length > 1 ? Object.keys(bySet).map(k => bySet[k] + " " + (SET_NAME[k] || k)).join(" &middot; ") : list.length + " ideas from this morning\'s Najma list";
   const tiles = list.map((a, i) => '<div class=tile><b>' + (i + 1) + '</b><span>' + esc(a.hook) + '</span></div>').join("");
   const pages = [];
   for (let i = 0; i < list.length; i += 2) pages.push('<section class=pg>' + band() + card(list[i], i) + (list[i + 1] ? card(list[i + 1], i + 1) : "") + foot() + '</section>');
@@ -65,7 +83,7 @@ export function feedPdfHtml(angles, dateStr) {
     + '.tiles{display:grid;grid-template-columns:1fr 1fr;gap:3mm}.tile{display:flex;gap:3mm;background:#fff;border:1px solid #E6DCCB;border-radius:3mm;padding:3mm;font-size:9pt;align-items:center}'
     + '.tile b{font:400 14pt Anton,sans-serif;color:' + FN_GOLD + '}.how{margin-top:8mm;background:#F4EEE2;border-radius:3mm;padding:5mm;font-size:9pt;line-height:1.5}'
     + '</style></head><body>'
-    + '<section class="pg cover">' + band() + '<h1>Market news for the designer</h1><p>' + esc(dateStr || "") + ' &middot; ' + list.length + ' ideas from this morning\'s Najma list</p>'
+    + '<section class="pg cover">' + band() + '<h1>Market news for the designer</h1><p>' + esc(dateStr || "") + ' &middot; ' + mix + '</p>'
     + '<div class=tiles>' + tiles + '</div>'
     + '<div class=how><b>How to use this page.</b> Each idea has one card. The headline and the figure go on the artwork exactly as written. The right-hand box says the format, how many days the artwork needs, and what the picture should show. Pictures are illustrations only: no text and no people inside them.</div>'
     + foot() + '</section>' + pages.join("") + '</body></html>';

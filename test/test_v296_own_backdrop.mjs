@@ -38,6 +38,9 @@ store.set("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: "", data: "", 
 console.log("L - the backdrop list");
 let i = sent.length; await tap("mkt:pic:1"); await settle();
 let rows = rowsOf(lastList(i));
+ok(rows.length === 4 && rows[0].id === "pal:1:property" && rows[3].id === "pal:1:usual", "v677: the palette is asked first (3 named + Momo's usual)", rows.map((r) => r.id).join(", "));   // v677
+i = sent.length; await tap("pal:1:usual"); await settle();
+rows = rowsOf(lastList(i));
 ok(rows.length === 9 && rows[8] && rows[8].title === "Describe your own" && rows[8].id === "fbg:1:X", "backdrops: 9 rows, the last is \"Describe your own\" (fbg:1:X)", rows.map((r) => r.id + "=" + r.title).join(", "));
 ok(rows.length <= 10, "inside WhatsApp's 10-row list limit");
 

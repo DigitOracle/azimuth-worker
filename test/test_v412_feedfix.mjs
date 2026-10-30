@@ -160,10 +160,10 @@ ok(!texts().some((t) => /Building/.test(t)) && texts().some((t) => /list is abov
 ok(texts().some((t) => /Choose an angle/.test(t)), "C1 and gets the same buttons again");
 await say(s, "feed");
 ok(claudeCalls === 0, "C2 twice in a row (the 06:26 double) still builds nothing");
-// the set is older than an hour: the old behaviour (a fresh build) returns
-s.set("mkt_feed_sent", JSON.stringify({ at: Date.now() - 90 * 60000, date: today, via: "tick", bodyTxt: "old", rows: [] }));
+// v677 (Kendall 30 Oct: "she can always type feed"): a set from TODAY, however old, comes back as the lists; only "feed again" builds
+s.set("mkt_feed_sent", JSON.stringify({ at: Date.now() - 90 * 60000, date: today, via: "tick", bodyTxt: "old", rows: [{ id: "feed:1", title: "1", description: "x" }] }));
 await say(s, "Feed");
-ok(claudeCalls > 0 && texts().some((t) => /Building/.test(t)), "C3 a set older than 60 min: 'Feed' builds, as before");
+ok(claudeCalls === 0 && texts().some((t) => /Today's list is above/.test(t)), "C3 (v677) a set from today, 90 min old: 'Feed' shows the lists again, builds nothing");
 // explicit again
 s = new Map([["mkt_latest", FRESH_NOW], ["mkt_feed_famhist", "[]"], ["mktfeed_" + today, "done"],
   ["mkt_feed_sent", JSON.stringify({ at: Date.now() - 5 * 60000, date: today, via: "tick", bodyTxt: "Najma daily SET ONE", rows: [] })]]);
