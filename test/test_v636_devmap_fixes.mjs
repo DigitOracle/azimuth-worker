@@ -31,5 +31,5 @@ ok(/function showSnap\(p,pin\)\{var el=\$\("bsnap"\);if\(!el\)return;if\(NOPOP\)
 // v636 - the Reset pill in the top filter bar
 ok(html.includes('data-f="reset"') && html.includes("<span class=fl>Reset</span>") && html.includes("#fbar #freset{order:5}"), "the filter bar carries a Reset pill with an inline SVG icon");
 ok(html.includes('if(k2==="reset"){CF.reset();return}') && html.includes("CF.reset=function(){"), "the pill calls CF.reset");
-ok(/CF\.reset=function\(\)\{S\.fmenu=null;S\.cen=null;S\.coast=false;[^]*S\.band=null;[^]*S\.sel=null;[^]*S\.parea=null;[^]*S\.prof=null;[^]*c\.resetExtra\(\)[^]*c\.setWin\(defWin\(\)\)[^]*m\.flyTo\(\{center:DEF,zoom:9\.6/.test(html), "reset clears centre, coastal, developer, area, band, window and flies to the default view");
+ok(/CF\.reset=function\(\)\{S\.fmenu=null;S\.empty=null;epShow\(\);S\.cen=null;S\.coast=false;[^]*S\.band=null;[^]*S\.sel=null;[^]*S\.parea=null;[^]*S\.prof=null;[^]*c\.resetExtra\(\)[^]*c\.setWin\(defWin\(\)\)[^]*m\.flyTo\(\{center:DEF,zoom:9\.6/.test(html), "reset clears centre, coastal, developer, area, band, window and flies to the default view");
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

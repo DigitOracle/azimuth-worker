@@ -5,7 +5,7 @@
 //   THE OPENING: with the data present (and no ?bands=1) the map opens on the five centres as large coloured areas, each labelled with its number and name; core and adjacent areas solid,
 //   peripheral ones in a lighter tint; everything else neutral. Price-band shading is an optional layer that appears once a centre, an area or a developer is chosen.
 //   ?bands=1 restores the old opening. No data file: the old opening.
-//   THE FILTER BAR: upper-left of the map on every screen: Centre, Coastal, Area, Developer, Price band, Window (and the developer lock chips, when a developer is locked, take the place of
+//   THE FILTER BAR: upper-left of the map on every screen: Centre, Coastal, Area, Developer, Empty plots (v680: Price band and Window chips removed from the bar, their state kept) (and the developer lock chips, when a developer is locked, take the place of
 //   the last four so the bar never says the same thing twice). A tap opens the choices, x clears.
 //   THE GROUPING IS OURS: the plan (Dubai 2040 Urban Master Plan, UAE Government, 13 Mar 2021) names five centres and their roles, it publishes no boundaries. The sixth layer, coastal, is Najma's.
 //
@@ -177,8 +177,7 @@ function barHtml(){var h="",lk=locked(),ix=ixv(),W=c.DM.TIER_WORDS;
     h+='<span class="fg'+(S.coast?' on':'')+'"><button type=button class="fchip fsw" data-f="coast" role=switch aria-checked="'+(S.coast?'true':'false')+'" aria-label="Coastal: sea coast within 500 m"><span class=fl>Coastal</span><i class=swk></i>'+(S.coast?'<span class=fwf title="Inland waterfront (creek, canal or marina basin within 250 m) is a second badge on the cards and the map, not part of the filter">+ waterfront badge</span>':'')+'</button></span>'}
   if(!lk){var an=S.sel&&ix.areas&&ix.areas[S.sel]?ix.areas[S.sel].name:null;h+=grp("area","map-pin","Area",an||"All areas",!!an);
     h+=grp("dev","buildings","Developer","All developers",false);
-    h+=grp("band","chart-bar","Price band",S.band!=null?W[S.band]:"All price bands",S.band!=null);
-    h+=grp("win","stack","Window",winLabel(),S.win!==defWin())}
+    h+=grp("empty","map-trifold","Empty plots",S.empty?EPW[S.empty]:"Off",!!S.empty)}   // v680 (Kendall 31 Oct 2026): Price band and Window chips removed, Empty plots in their place
   h+='<span class=fg id=freset><button type=button class=fchip data-f="reset" aria-label="Reset all filters to the default view" title="Reset all filters"><svg class=evi viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.8 stroke-linecap=round stroke-linejoin=round aria-hidden=true><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.6h4.6"/></svg><span class=fl>Reset</span></button></span>';   // v636 - one tap back to the default view (always shown)
   return h}
 CF.barHtml=barHtml;
@@ -188,6 +187,7 @@ function menuHtml(){var f=S.fmenu;if(!f)return "";var ix=ixv(),W=c.DM.TIER_WORDS
   else if(f==="area"){t="Choose an area";var list=locked()?lockAreas():areaList();list.sort(function(a,b){return String((ix.areas[a]||{}).name||a).localeCompare(String((ix.areas[b]||{}).name||b))});o=opt("",'<span><b>All areas</b></span>',!S.sel&&!S.parea,true)+list.map(function(s){return opt(s,'<span><b dir=auto>'+X((ix.areas[s]||{}).name||s)+'</b></span>',S.sel===s||S.parea===s)}).join("")}
   else if(f==="dev"){t="Choose a developer";var ml=c.mineList().filter(function(k){return k!==S.prof});o=opt("",'<span><b>All developers</b></span>',!S.prof,true)+ml.map(function(k){return opt(k,'<span><b dir=auto>'+X(c.devName(k))+'</b></span>',S.prof===k)}).join("");nt=ml.length?"Your developers. Add more on screen 1.":"Choose your developers on screen 1 first."}
   else if(f==="band"){t="Choose a price band";o=opt("",'<span><b>All price bands</b></span>',S.band==null,true)+[0,1,2,3].map(function(i){return opt(String(i),'<span><b>'+W[i]+'</b></span>',S.band===i)}).join("")+'<button type=button class="fopt wide'+(S.cshade===false?'':' on')+'" data-sh="1"><span><b>Price-band shading on the map: '+(S.cshade===false?'off':'on')+'</b><small>tap to switch</small></span></button>';nt=fillMode()?"Price bands appear on the map once you choose a centre, an area or a developer.":(S.screen!==1?"Price bands colour screen 1. On this screen the map is shaded by your developers.":"")}
+  else if(f==="empty"){t="Empty plots";o=opt("",'<span><b>Off</b></span>',!S.empty,true)+["all","res","com","oth"].map(function(k){return opt(k,'<span><b>'+EPW[k]+'</b>'+(EPN&&EPN[k]!=null?'<small>'+fm(EPN[k])+' plots</small>':'')+'</span>',S.empty===k)}).join("");nt=EP_NOTE}
   else if(f==="win"){t="Choose the window";o=(ix.ev?opt("l12",'<span><b>Last 12 months</b></span>',S.win==="l12")+opt("all",'<span><b>All years</b></span>',S.win==="all"):opt("all",'<span><b>All years</b></span>',true,true));nt=ix.ev?"":"This data has no yearly record yet."}
   return '<div class=fmenu id=fmenu role=dialog aria-label="'+t+'"><div class=fmh><b>'+t+'</b><button type=button class=fx data-x=menu aria-label="Close">'+ico("x","evi")+'</button></div><div class=fopts>'+o+(nt?'<p class=fnote>'+X(nt)+'</p>':'')+'</div></div>'}
 function lockAreas(){var p=c.DM.devProfile(c.ixOf(S.win),S.prof);return (p.priced||[]).concat(p.thin||[]).map(function(a){return a.slug}).filter(CF.ok)}
@@ -207,7 +207,7 @@ function pick(k){S.cen=k;S.fmenu=null;if(S.sel&&!CF.ok(S.sel)){S.sel=null;S.pj=n
   var m=c.map();if(m&&m.fitBounds){if(k&&CBY[k]){var b=CBY[k].bbox;m.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:c.pad(),duration:700})}else m.flyTo({center:DEF,zoom:9.6,duration:700})}}
 CF.pick=pick;
 // v636 - RESET: Centre All of Dubai, Coastal off, no developer, no area, All price bands, the default window; any open card, shade or places selection is closed (c.resetExtra, the page's own) and the map flies back to the default Dubai view
-CF.reset=function(){S.fmenu=null;S.cen=null;S.coast=false;S.cenAll=false;S.band=null;S.bandsAsk=false;S.cshade=undefined;S.sel=null;S.pj=null;S.parea=null;S.drawer=null;S.fdev=null;S.prof=null;
+CF.reset=function(){S.fmenu=null;S.empty=null;epShow();S.cen=null;S.coast=false;S.cenAll=false;S.band=null;S.bandsAsk=false;S.cshade=undefined;S.sel=null;S.pj=null;S.parea=null;S.drawer=null;S.fdev=null;S.prof=null;
   if(c.resetExtra)c.resetExtra();
   c.setWin(defWin());
   var m=c.map();if(m&&m.flyTo)m.flyTo({center:DEF,zoom:9.6,duration:700})};
@@ -219,8 +219,26 @@ CF.act=function(kind,val,isClear){S.fmenu=null;var nul=val==null||val==="";
   if(kind==="dev"){if(nul){if(S.prof)c.leaveProf();else c.renderAll()}else{if(S.prof&&S.prof!==val)c.leaveProf();c.openProf(val)}return}
   if(kind==="band"){S.band=nul?null:Number(val);S.bandsAsk=S.band!=null;if(S.band!=null)S.cshade=true;c.renderAll();return}
   if(kind==="win"){c.setWin(nul?defWin():val);return}
+  if(kind==="empty"){S.empty=nul?null:val;epShow();drawBar();return}
   if(kind==="shade"){S.cshade=!!val;c.renderAll();return}
   drawBar()};
+// ---- v680 EMPTY PLOTS: a plot with an outline, no Dubai Municipality building, no Makani building, Land Department project not started or pending ----
+var EPW={all:"All empty plots",res:"Residential land",com:"Commercial land",oth:"Other land"},EPN=null,EPD=null,EPL=false,EPB=false;
+var EP_NOTE="Empty = we hold the plot outline, Dubai Municipality and Makani show no building on it, and the Land Department project is not started. Research only. Source: Dubai Municipality plot outlines (Makani), Dubai Municipality buildings, Land Department register.";
+function epKind(t){return t==="Residential"?"res":t==="Commercial"?"com":"oth"}
+function epFilter(){var k=S.empty;return !k||k==="all"?["has","k"]:["==",["get","k"],k]}
+function epAdd(m){if(!EPD||!m||!m.addSource||(m.getSource&&m.getSource("ep")))return;try{m.addSource("ep",{type:"geojson",data:EPD});
+  m.addLayer({id:"ep-fill",type:"fill",source:"ep",paint:{"fill-color":["match",["get","k"],"res","#e8b04b","com","#7fd4ff","#c9a0dc"],"fill-opacity":0.55}});
+  m.addLayer({id:"ep-line",type:"line",source:"ep",paint:{"line-color":"#f5efe2","line-width":0.6,"line-opacity":0.8}});
+  if(!EPB&&m.on){EPB=true;m.on("click","ep-fill",function(e){var f=e.features&&e.features[0];if(!f||!window.maplibregl)return;var p=f.properties||{},sq=Number(p.a)||0;
+    new window.maplibregl.Popup({closeButton:true,maxWidth:"260px"}).setLngLat(e.lngLat).setHTML('<b>Empty plot '+X(p.id)+'</b><br>'+X(p.d||"")+(p.m?' · '+X(p.m):'')+'<br>'+X(p.t||"Land type not given")+' · '+fm(Math.round(sq))+' sq m ('+fm(Math.round(sq*10.7639))+' sq ft)<br>Project: '+X(String(p.s||"").replace(/_/g," ").toLowerCase())+(p.z?'<br>Permitted use: '+X(p.z):'')+(p.g?'<br>Permitted floor area: '+fm(Math.round(Number(p.g)))+' sq m':'')).addTo(m)});
+    m.on("mouseenter","ep-fill",function(){m.getCanvas().style.cursor="pointer"});m.on("mouseleave","ep-fill",function(){m.getCanvas().style.cursor=""})}}catch(e){if(window.console)console.warn("empty plots layer",e)}}
+function epShow(){var m=c.map();if(!S.empty){try{if(m&&m.getLayer&&m.getLayer("ep-fill")){m.setLayoutProperty("ep-fill","visibility","none");m.setLayoutProperty("ep-line","visibility","none")}}catch(e){}return}
+  if(!EPD){if(EPL)return;EPL=true;fetch("/img/empty_plots",{referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(j){EPL=false;if(!j||!j.features)return;
+    EPN={all:0,res:0,com:0,oth:0};j.features.forEach(function(f){var k=epKind(f.properties.t);f.properties.k=k;EPN.all++;EPN[k]++});EPD=j;epShow();drawBar()}).catch(function(){EPL=false});return}
+  if(m&&m.getSource&&!m.getSource("ep"))epAdd(m);
+  try{m.setFilter("ep-fill",epFilter());m.setFilter("ep-line",epFilter());m.setLayoutProperty("ep-fill","visibility","visible");m.setLayoutProperty("ep-line","visibility","visible")}catch(e){}}
+CF.empty=function(){return {on:S.empty||null,loaded:!!EPD,counts:EPN}};
 // ---- the map layers ----
 function cenFeatures(){var fmode=fillMode(),cen=S.cen,fs=[];D.geo.features.forEach(function(f){var r=D.comms[f.properties.i],cc=r.c,col=cc&&CBY[cc]?CBY[cc].colour:"#7fd4ff",fo=0,lo=0;
   if(cc){if(fmode){fo=r.t==="p"?0.2:0.5;lo=r.t==="p"?0.3:0.55}else if(cen!=null&&cen===cc){fo=r.t==="p"?0.05:0.11;lo=0.8}}
@@ -229,7 +247,7 @@ function olFeatures(){var fmode=fillMode(),fs=[];((D.ol&&D.ol.features)||[]).for
 function labFeatures(){return {type:"FeatureCollection",features:D.centres.map(function(e){return {type:"Feature",geometry:{type:"Point",coordinates:e.lab},properties:{t:e.id+"  "+e.name}}})}}
 CF.cenFeatures=function(){return D?cenFeatures():null};
 var AF=null;
-CF.addLayers=function(map,font){if(!D||!map)return;try{
+CF.addLayers=function(map,font){if(S.empty&&EPD)setTimeout(function(){epAdd(map);epShow()},0);if(!D||!map)return;try{
   map.addSource("cen",{type:"geojson",data:cenFeatures()});map.addSource("cenol",{type:"geojson",data:olFeatures()});map.addSource("cenlab",{type:"geojson",data:labFeatures()});
   AF=map.getPaintProperty("a-fill","fill-opacity");
   map.addLayer({id:"c-fill",type:"fill",source:"cen",paint:{"fill-color":["get","col"],"fill-opacity":["get","fo"]}},"a-fill");
