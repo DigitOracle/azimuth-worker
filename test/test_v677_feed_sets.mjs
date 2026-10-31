@@ -89,6 +89,7 @@ ok(parseSetButton("fs:g:pick:4").n === 4 && parseSetButton("fs:e:again").act ===
   deps.fetchT = async () => ({ ok: false }); deps.parseNewsFeed = () => []; deps.propRx = propRx; deps.gstDay = gstDay;
   const note = await buildExtraSets(env, deps, { nowMs: now });
   ok(note.some((x) => /general: only 0/.test(x)) && note.some((x) => x === "ei: held") && s.m.has("fs_pending_ei") && lists.length === lists0, "window shut: EI built and held, general had no stories, nothing sent");
+  { const p = JSON.parse(s.m.get("fs_pending_ei")); p.at = Date.now(); s.m.set("fs_pending_ei", JSON.stringify(p)); }   // the held set carries the fixed test clock; flush drops anything older than 20 h by the real clock, so this failed the morning after it was written
   deps.ownerWindowOpen = async () => true; await flushExtraSets(env, deps);
   ok(!s.m.has("fs_pending_ei") && lists.length === lists0 + 1 && lists[lists.length - 1].rows.length === 5 && JSON.parse(s.m.get("fs_hist_ei")).length === 5, "flush: the held EI set goes out, history kept");
   ok(JSON.parse(s.m.get("mkt_briefctx_ei")).angles.every((a) => !/\d/.test(a.hook)), "no digits in the EI hooks"); }
