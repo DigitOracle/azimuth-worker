@@ -21,6 +21,15 @@ export const FEED_SETS = {
   ei: { id: "ei", tag: "e", name: "Emotional intelligence", palette: "ei", header: "💛 *Emotional intelligence — five for today*", lanes: ["workplace", "selling", "everyday", "self", "leadership"] },
 };
 export const SET_IDS = Object.keys(FEED_SETS);
+// v678 - a set's ideas live at 11-15 (Beyond property) and 21-25 (Emotional intelligence) in the picture chain (fbg_/stm:/sk: in index.js), so
+// the real-estate 1-5 and the two sets never share a key; setAngleByN hands the chain the idea and the list's name for the masthead
+export const setOffset = (setId) => (setId === "ei" ? 20 : setId === "general" ? 10 : 0);
+export async function setAngleByN(env, n) {
+  const setId = n >= 21 ? "ei" : n >= 11 ? "general" : null; if (!setId) return null;
+  const set = FEED_SETS[setId]; let c = null; try { c = JSON.parse((await env.MEETINGS.get(ctxKey(setId))) || "null"); } catch (e) {}
+  const a = c && Array.isArray(c.angles) ? c.angles[n - setOffset(setId) - 1] : null; if (!a) return null;
+  return { set, setId, angle: a, label: set.name, at: c.at || 0 };
+}
 export const setByTag = (t) => SET_IDS.map((k) => FEED_SETS[k]).find((s) => s.tag === t) || null;
 const ctxKey = (id) => "mkt_briefctx_" + id, histKey = (id) => "fs_hist_" + id, pendKey = (id) => "fs_pending_" + id;
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -166,7 +175,7 @@ export function validateEi(angles, mat) {
 }
 export function setText(set, angles) {
   return set.header + "\n\n" + angles.map((a, i) => (i + 1) + "️⃣ " + a.hook + "\n     " + a.figure + " · " + a.source + (a.video ? "\n     ▶ " + a.video.url : "")).join("\n\n")
-    + "\n\n_" + (set.id === "ei" ? "One per lane: " + angles.map((a) => String(a.lane || "").replace(/_/g, " ")).filter(Boolean).join(", ") + ". Nothing here is a statistic." : "Every figure is printed in the story it cites.") + "_\n\nPick one from the list, or type *feed* any time today to see all three lists again.";
+    + "\n\n_" + (set.id === "ei" ? "One per lane: " + angles.map((a) => String(a.lane || "").replace(/_/g, " ")).filter(Boolean).join(", ") + ". Nothing here is a statistic." + (angles.some((a) => a.video) ? " ▶ is a short explainer to watch first, nothing to script." : "") : "Every figure is printed in the story it cites.") + "_\n\nPick one from the list, or type *feed* any time today to see all three lists again.";
 }
 export const setRows = (set, angles) => angles.slice(0, 10).map((a, i) => ({ id: "fs:" + set.tag + ":pick:" + (i + 1), title: (i + 1) + "️⃣ " + String(a.figure || "").slice(0, 18), description: a.hook }));
 
@@ -227,10 +236,10 @@ export async function resendSetLists(env, deps, to, today) {
 // ---- her taps ---------------------------------------------------------------------------------------------------------------------------
 export function parseSetButton(bid) {
   bid = String(bid || ""); let m;
-  if ((m = /^fs:([ge]):(pick|pic):(\d{1,2})$/.exec(bid))) { const set = setByTag(m[1]); return set ? { set, act: m[2], n: +m[3] } : null; }
+  if ((m = /^fs:([ge]):(pick|pic|card):(\d{1,2})$/.exec(bid))) { const set = setByTag(m[1]); return set ? { set, act: m[2], n: +m[3] } : null; }
   if ((m = /^fs:([ge]):again$/.exec(bid))) { const set = setByTag(m[1]); return set ? { set, act: "again" } : null; }
   if ((m = /^fs:([ge]):fmt:(li|ig|car):(\d{1,2})$/.exec(bid))) { const set = setByTag(m[1]); return set ? { set, act: "fmt", kind: m[2], n: +m[3] } : null; }
-  if ((m = /^fs:([ge]):pal:(\d{1,2}):(property|general|ei|usual)$/.exec(bid))) { const set = setByTag(m[1]); return set ? { set, act: "pal", n: +m[2], pid: m[3] } : null; }
+  if ((m = /^fs:([ge]):(pal|cpal):(\d{1,2}):(property|general|ei|usual)$/.exec(bid))) { const set = setByTag(m[1]); return set ? { set, act: m[2], n: +m[3], pid: m[4] } : null; }
   return null;
 }
 const DRAFT_SYS = {
@@ -254,7 +263,8 @@ export async function handleSetButton(env, deps, from, bid, origin) {
       { id: p + "fmt:li:" + b.n, title: "✍️ LinkedIn post", description: "Short feed post to copy in" },
       { id: p + "fmt:ig:" + b.n, title: "📸 Instagram", description: "Reel script + caption" },
       { id: p + "fmt:car:" + b.n, title: "🎠 Carousel", description: "6 slides + caption" },
-      { id: p + "pic:" + b.n, title: "📷 Picture with you", description: "Your card, in the palette you choose" },
+      { id: p + "pic:" + b.n, title: "📷 Picture with you", description: "Backdrop, the light, your photo, then the card" },
+      { id: p + "card:" + b.n, title: "🃏 Card only", description: "No photo - the words in your palette" },
       { id: p + "again", title: "🔁 Another idea", description: "Show the list again" }]);
     return true;
   }
@@ -265,8 +275,14 @@ export async function handleSetButton(env, deps, from, bid, origin) {
     await deps.waSendList(env, from, "Want the picture to go with it?", "Picture", paletteRows("fs:" + set.tag + ":pal:" + b.n, set.palette).concat([{ id: "fs:" + set.tag + ":again", title: "Not now", description: "Back to the list" }]));
     return true;
   }
-  if (b.act === "pic") { await deps.waSendList(env, from, "Which palette for this card?", "Palette", paletteRows("fs:" + set.tag + ":pal:" + b.n, set.palette)); return true; }
-  // pal: draw it, both sizes, keyed by the morning, the idea and the palette (a different palette is a different card)
+  if (b.act === "pic") { await deps.waSendList(env, from, "Which palette for this picture?", "Palette", paletteRows("fs:" + set.tag + ":pal:" + b.n, set.palette)); return true; }
+  if (b.act === "card") { await deps.waSendList(env, from, "Which palette for this card?", "Palette", paletteRows("fs:" + set.tag + ":cpal:" + b.n, set.palette)); return true; }
+  if (b.act === "pal") {   // v678 - the full picture chain, as the real-estate list has it: backdrops of this list's own, the light, her photo, the preview, Make it
+    const nn = setOffset(set.id) + b.n;
+    try { await env.MEETINGS.put("card_pal_" + nn, b.pid, { expirationTtl: 7 * 86400 }); } catch (e) {}
+    await deps.picBackdropStep(env, from, String(nn), set.id); return true;
+  }
+  // cpal: the card alone, both sizes, keyed by the morning, the idea and the palette (a different palette is a different card)
   const pal = await paletteFor(env, deps, b.pid); if (!pal) return true;
   const o = deps.pubOrigin(origin), key = "fs_" + set.id + "_" + String((c && c.at) || 0) + "_" + b.n + "_" + pal.id;
   const angle = { hook: a.hook, figure: a.figure, source: a.source, buyer: a.buyer };
@@ -274,7 +290,7 @@ export async function handleSetButton(env, deps, from, bid, origin) {
   const st = await deps.renderAngleCard(env, angle, b.n, o, 0, from, "story", { key, palette: pal.colours, palId: pal.id, t: set.id === "ei" ? 5 : undefined });
   if (sq) await deps.waSendImage(env, from, sq.url, "Your card for idea " + b.n + " · " + FEED_PALETTES[pal.id === "usual" ? "property" : pal.id].name + " palette · 1080×1080 for the grid.");
   if (st) await deps.waSendImage(env, from, st.url, "Same card at 1080×1920 - Stories, Reels and TikTok.");
-  if (!sq && !st) await deps.waSend(env, from, "Your card is rendering - it lands here in a few minutes.");
+  if (!sq && !st) await deps.waSend(env, from, "That card didn't render just now - tap the idea again in a minute and I'll try once more.");   // v678 - nothing was ever going to land
   try { await deps.dnaSignal(env, "palette_" + pal.id, set.id); } catch (e) {}
   return true;
 }

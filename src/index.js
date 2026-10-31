@@ -7,7 +7,8 @@ import { GGU_ICON } from "./work_ggu.js";
 import { SHEETS_ICON, sheetsPublic } from "./work_sheets.js";   // v672 - Product data sheets card (Najjuko first, Kendall) + public /pds/ files
 import { BRIEFS_ICON, briefsPublic } from "./work_briefs.js";   // v667 - Product briefs card (Kendall) + public /pb/ pictures   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
 import { workRoute, WORK_CSS, workEveningCheck } from "./work_log.js";
-import * as FS from "./feed_sets.js";   // v677 - Beyond property + Emotional intelligence sets, named palettes
+import * as FS from "./feed_sets.js";
+import { backdropsFor, backdropRows, BACKDROP_OWN_LINE } from "./backdrops.js";   // v678 - ten backdrops per list, her own scene by a typed line   // v677 - Beyond property + Emotional intelligence sets, named palettes
 import { bridgeRoute } from "./work_bridge.js";
 import { liveRoute } from "./live_poll.js";
 import { PRICE_SLIDER_HTML } from "./price_slider_page.js";   // v661 - public price slider (public Esri data only)   // v659 - the live room: public QR pages for a workshop (scale, board, vote, wall), screen behind the event key   // v654 - the Momo bridge: JSON for a person's own Claude Code, header key only   // v564 - Momo Work: Najjuko's FN Realty work log
@@ -3979,8 +3980,8 @@ async function appFetch(request, env, ctx) {
             const _n = bid.slice(9);
             let _st = null; try { _st = JSON.parse((await env.MEETINGS.get("fbg_" + _n)) || "null"); } catch (e) {}
             if (!_st) { await waSend(env, from, "Pick the angle again and I will offer the backdrops fresh."); return new Response("ok"); }
-            await waSendList(env, from, (_st.area ? _st.area + ". " : "") + "Which backdrop?", "Backdrops",
-              (_st.options || []).map(o => ({ id: "fbg:" + _n + ":" + o.id, title: o.name, description: o.note })));
+            try { await env.MEETINGS.put("fbgown_" + from, JSON.stringify({ n: _n }), { expirationTtl: 1800 }); } catch (e) {}   // v678
+            await waSendList(env, from, (_st.masthead || _st.area ? (_st.masthead || _st.area) + ". " : "") + "Which backdrop? " + BACKDROP_OWN_LINE, "Backdrops", backdropRows(_n, _st.options || []));
             return new Response("ok");
           }
           if (/^mth:\d{1,2}$/.test(bid)) {                                           // v124 - show the developer's own renders
@@ -4003,7 +4004,7 @@ async function appFetch(request, env, ctx) {
             if (!_r) { await waSend(env, from, "That render is not on file any more."); return new Response("ok"); }
             const _ang = _st.angle || {};
             const _post = { n: _n, idp: "feed_", hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "",
-                            masthead: _mh.project || _st.area || "Dubai",
+                            masthead: _mh.project || _st.masthead || _st.area || "Dubai",
                             caption: [_ang.hook || "", (_ang.figure || "") + " \u2014 " + (_ang.source || ""), _r.credit].filter(Boolean).join("\n\n").slice(0, 1000) };
             const _opt = { id: _mid, name: _r.credit, useKey: _mid, credit: _r.credit };
             if (await meOffer(env, from, url.origin, { kind: "mtu", n: _n, oid: _mid, to: from, post: _post, option: _opt, angle: _ang,
@@ -4055,7 +4056,7 @@ async function appFetch(request, env, ctx) {
             const _opt = _st && (_st.options || []).find(o => o.id === _oid);
             if (!_opt || !_tm) { await waSend(env, from, "Those backdrops have expired - pick the angle again and I'll offer them fresh."); return new Response("ok"); }
             const _ang = _st.angle || {};
-            const _post = { n: _n, idp: "feed_", hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "", masthead: _st.area || "Dubai",
+            const _post = { n: _n, idp: "feed_", hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "", masthead: _st.masthead || _st.area || "Dubai",
                             caption: [_ang.hook || "", (_ang.figure || "") + " — " + (_ang.source || "")].filter(Boolean).join("\n\n").slice(0, 1000) };
             const _job = { kind: "scene", n: _n, oid: _oid, tid: _tm.id, to: from, post: _post, option: _opt, angle: _ang,
                            ask: "Good pick - " + _opt.name + " " + _tm.when + ". Which photo of you for this one?" };
@@ -4121,6 +4122,7 @@ async function appFetch(request, env, ctx) {
             let _st = null; try { _st = JSON.parse((await env.MEETINGS.get("fbg_" + _n)) || "null"); } catch (e) {}
             const _opt = _st && (_st.options || []).find(o => o.id === _oid);
             if (!_opt) { await waSend(env, from, "Those backdrops have expired - pick the angle again and I'll offer them fresh."); return new Response("ok"); }
+            if (!_opt.own) { try { await env.MEETINGS.delete("fbgown_" + from); } catch (e) {} }   // v678
             if (_opt.own) {                                              // v296 - Describe your own: ask for the scene, her next line is it
               try { await env.MEETINGS.put("fbgown_" + from, JSON.stringify({ n: _n }), { expirationTtl: 1800 }); } catch (e) {}
               await waSend(env, from, "Describe the scene in a line - for example \u201cat a petrol station at dusk, filling up the car\u201d. I'll build the picture around it.");
@@ -4128,7 +4130,7 @@ async function appFetch(request, env, ctx) {
             }
             const _ang = _st.angle || {};
             const _post = { n: _n, idp: "feed_", hook: _ang.hook || "", figure: _ang.figure || "", source: _ang.source || "",
-                            masthead: _st.area || "Dubai",
+                            masthead: _st.masthead || _st.area || "Dubai",
                             caption: [_ang.hook || "", (_ang.figure || "") + " — " + (_ang.source || "")].filter(Boolean).join("\n\n").slice(0, 1000) };   // v130 - buyer is targeting notes, not caption copy
             if (!env.OPENAI_API_KEY) { await waSend(env, from, "I can't make pictures just now - the image key is missing."); return new Response("ok"); }
             if (env.SCENE_PICTURES === "on") {                                          // v147 - scene pictures: the time of day next, then her photo
@@ -6985,26 +6987,36 @@ async function cardPaletteFor(env, n) {
 // v677 - what src/feed_sets.js needs from this file
 async function feedSetDeps(env) {
   let voice = ""; try { voice = feedVoice(await styleVoice(env)); } catch (e) {}
-  return { waSend, waSendList, waSendImage, claudeJSON, claudeText, renderAngleCard, pubOrigin: (o) => pubOrigin(env, o), ownerWindowOpen, dnaSignal, gcTellOwner, parseNewsFeed, fetchT, gstDateStr, stylePalette, propRx: NEWS_PROP_RX, model: CLAUDE_SMART, voice,
+  return { waSend, waSendList, waSendImage, claudeJSON, claudeText, renderAngleCard, picBackdropStep, pubOrigin: (o) => pubOrigin(env, o), ownerWindowOpen, dnaSignal, gcTellOwner, parseNewsFeed, fetchT, gstDateStr, stylePalette, propRx: NEWS_PROP_RX, model: CLAUDE_SMART, voice,
     gstDay: { fmt: (ms) => { const d = new Date(ms + OFFSET_MIN * 60000); return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear() + " " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + " GST"; }, isToday: (ms) => gstDateStr(new Date(ms + OFFSET_MIN * 60000)) === gstDateStr(gstNow()) } };
 }
 // v677 - the backdrop step of "Picture with you" (was inline in the mkt:pic branch until v676): runs after her palette is chosen
-async function picBackdropStep(env, from, _n) {
-  let _cx = null; try { _cx = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
-  const _a = _cx && (_cx.angles || [])[Number(_n) - 1];
-  if (!_a) { await waSend(env, from, "That angle isn't on file any more - say \u201cfeed\u201d and I'll show today's again."); return; }
-  let _d = null; try { _d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
-  const _area = angleArea(_a, _d);
-  const _opts = feedBackdrops(_a, _area, true);   // v296 - her list carries "Describe your own"
-  try { await env.MEETINGS.put("fbg_" + _n, JSON.stringify({ n: _n, area: _area || "", angle: _a, options: _opts }), { expirationTtl: 7 * 86400 }); } catch (e) {}
-  const _mh = await mediaFor(env, _a);                                     // v124 - do we hold the developer's own renders?
-  if (_mh) {
-    await waSendButtons(env, from, _mh.n + (_mh.n === 1 ? " render" : " renders") + " on file from " + _mh.developer + " for " + _mh.project + ". Use one of theirs, or make a new picture?",
-      [{ id: "mth:" + _n, title: "Use theirs" }, { id: "fbg:menu:" + _n, title: "Make a new one" }]);
-    return;
+async function picBackdropStep(env, from, _n, setId) {
+  // v678 - n 1-5 is the real-estate list (mkt_briefctx); 11-15 Beyond property and 21-25 Emotional intelligence (their own ctx), each with its
+  // own ten backdrops, so an EI idea is drawn in a zen garden or a workshop room, never in front of a tower. Her own scene is a typed line.
+  _n = String(_n); const _ix = Number(_n);
+  const _set = setId && setId !== "property" ? setId : (_ix >= 21 ? "ei" : _ix >= 11 ? "general" : "");
+  let _a = null, _area = "", _label = "";
+  if (_set) { const _r = await FS.setAngleByN(env, _ix); _a = _r && _r.angle; _label = (_r && _r.label) || ""; }
+  else {
+    let _cx = null; try { _cx = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
+    _a = _cx && (_cx.angles || [])[_ix - 1];
+    let _d = null; try { _d = JSON.parse((await env.MEETINGS.get("mkt_latest")) || "null"); } catch (e) {}
+    _area = _a ? angleArea(_a, _d) : ""; _label = _area;
   }
-  await waSendList(env, from, (_area ? _area + ". " : "") + "Which backdrop?", "Backdrops",
-    _opts.map(o => ({ id: "fbg:" + _n + ":" + o.id, title: o.name, description: o.note })));
+  if (!_a) { await waSend(env, from, "That idea isn't on file any more - say \u201cfeed\u201d and I'll show today's lists again."); return; }
+  const _opts = backdropsFor(_set || "property", _a, _area, true);
+  try { await env.MEETINGS.put("fbg_" + _n, JSON.stringify({ n: _n, set: _set || "property", area: _area || "", masthead: _set ? _label : "", angle: _a, options: _opts }), { expirationTtl: 7 * 86400 }); } catch (e) {}
+  if (!_set) {
+    const _mh = await mediaFor(env, _a);                                     // v124 - do we hold the developer's own renders?
+    if (_mh) {
+      await waSendButtons(env, from, _mh.n + (_mh.n === 1 ? " render" : " renders") + " on file from " + _mh.developer + " for " + _mh.project + ". Use one of theirs, or make a new picture?",
+        [{ id: "mth:" + _n, title: "Use theirs" }, { id: "fbg:menu:" + _n, title: "Make a new one" }]);
+      return;
+    }
+  }
+  try { await env.MEETINGS.put("fbgown_" + from, JSON.stringify({ n: _n }), { expirationTtl: 1800 }); } catch (e) {}   // v678 - a typed line in the next 30 min is her own scene
+  await waSendList(env, from, (_label ? _label + ". " : "") + "Which backdrop? " + BACKDROP_OWN_LINE, "Backdrops", backdropRows(_n, _opts));
 }
 async function feedSceneOffer(env, angles) {
   if (env.FEED_SCENES !== "on" || !env.WA_ALLOWED) return false;
@@ -12231,7 +12243,7 @@ function scenePrompt(option, extra) {
   const render = !!(option && option.useKey);
   const _pr = String((option && option.place) || "a residential setting in Dubai").trim().replace(/\s+-\s+/g, ", ");
   const place = _pr.charAt(0).toLowerCase() + _pr.slice(1);
-  const pose = render ? "standing naturally at a believable spot in the scene from the second reference image" : (SCENE_POSE[id] || "standing naturally in the scene, looking towards the camera");
+  const pose = render ? "standing naturally at a believable spot in the scene from the second reference image" : ((option && option.pose) || SCENE_POSE[id] || "standing naturally in the scene, looking towards the camera");
   const light = render ? "Match the light and colour of that scene exactly" : (SCENE_LIGHT[id] || "Natural daylight, the light on her matching the scene");
   const out = ["A realistic photograph of the woman in the reference photo " + pose + "."];
   out.push(render ? "The setting is the scene in the second reference image, kept as it is." : "The setting: " + place + ".");
@@ -12326,7 +12338,7 @@ function sceneCardPrompt(option, timeId, extra, faceRef) {
   let _pr = String((option && option.place) || "a residential setting in Dubai").trim().replace(/\s+-\s+/g, ", ").replace(/\bDubai,\s*Dubai\b/g, "Dubai");
   if (tm) _pr = _pr.replace(/,?\s*(at\s+)?(early morning|late afternoon|blue hour)\b/gi, "");   // the backdrop's own time of day gives way to hers
   const place = _pr.charAt(0).toLowerCase() + _pr.slice(1);
-  const pose = SCENE_POSE[id] || "standing naturally in the scene, looking towards the camera";
+  const pose = (option && option.pose) || SCENE_POSE[id] || "standing naturally in the scene, looking towards the camera";
   const layout = "the soft cream column on the left, plain and empty with no words or marks on it, fading into the photograph, and the woman at the size and in the place she stands there, in the right-hand part of the frame and clear of the cream column. Do not enlarge her, crop her or move her towards the centre: her whole figure shows, from the top of her head to her feet.";
   const out = [];
   if (faceRef === "first") {
@@ -12393,7 +12405,7 @@ async function sceneLayoutRef(env, origin, meKey, bgKey, id) {
 function sceneDescription(option, tid, extra) {
   const id = String((option && option.id) || "").toUpperCase();
   const tm = SCENE_TIMES.find(x => x.id === tid) || null;
-  const pose = String(SCENE_POSE[id] || "standing naturally in the scene, looking towards the camera").split(",")[0];
+  const pose = String((option && option.pose) || SCENE_POSE[id] || "standing naturally in the scene, looking towards the camera").split(",")[0];
   let where = String((option && option.place) || "a residential setting in Dubai").trim().replace(/\s+-\s+/g, ", ").replace(/\bDubai,\s*Dubai\b/g, "Dubai")
     .replace(/,?\s*(at\s+)?(early morning|late afternoon|blue hour)\b/gi, "").replace(/\s+at eye level\b/gi, "").replace(/,?\s*ordinary and lived-in rather than promotional/gi, "").replace(/\s+,/g, ",").trim();
   where = where.charAt(0).toLowerCase() + where.slice(1);
@@ -13817,29 +13829,8 @@ async function styleKeep(env, bytes, mime, kind, cap) {
 // v120 - backdrops for an ordinary morning angle. The IPS pack was written by hand for one event;
 // this builds the same three shapes from whatever the angle is about, so every angle can become a picture.
 // Deliberately three: a wide view of the place, a street-level human one, and a lived-in interior.
-function feedBackdrops(angle, area, withOwn) {   // v296 - withOwn: the list SHE is shown gets the "Describe your own" row; automatic picks never see it
-  const where = area ? ("Dubai, " + area) : "Dubai";
-  const A = area || "Dubai";
-  const _all = [
-    { id: "A", name: "Skyline, blue hour", note: "Towers across water, lights just on",
-      place: "The " + where + " skyline seen across open water or a wide boulevard at blue hour - towers in silhouette with their lights just on, calm water or empty road in the foreground" },
-    { id: "B", name: "Street level", note: "A real residential street, lived-in",
-      place: "A residential street in " + where + " at eye level - low-rise and mid-rise buildings, mature planting along the pavement, parked cars, a shaded walkway, ordinary and lived-in rather than promotional" },
-    { id: "C", name: "Balcony view", note: "Looking out from a furnished balcony",
-      place: "The view out from a furnished apartment balcony in " + where + " - pale stone floor, a planter and a low chair in the near corner, the community and skyline beyond the rail" },
-    { id: "D", name: "Lobby", note: "Inside the entrance, warm and quiet",
-      place: "The residential lobby of a new building in " + where + " - stone floor, warm timber and brass, deep seating, tall glass out to a planted forecourt, quiet and empty" },
-    { id: "E", name: "Pool deck", note: "Podium deck, loungers, late sun",
-      place: "The podium pool deck of a residential tower in " + where + " - still water, loungers and umbrellas, planting along the edge, the surrounding community beyond, late afternoon" },
-    { id: "F", name: "Handover site", note: "Under construction, cranes up",
-      place: "A residential development under construction in " + A + ", Dubai - topped-out concrete frame with cranes still up, hoarding and site road in the foreground, the finished community behind" },
-    { id: "G", name: "Villa street", note: "Low-rise, gardens, wide pavement",
-      place: "A villa street in " + A + ", Dubai - two-storey homes set back behind low walls and mature gardens, a wide pavement and street trees, cars on the drives, early morning" },
-    { id: "H", name: "Waterfront walk", note: "Promenade, water, towers behind",
-      place: "A waterfront promenade in " + A + ", Dubai - boardwalk and railing along the water, planting and benches, moored boats or open water across the middle distance, the towers of the community behind" },
-    { id: "X", name: "Describe your own", note: "Tell me the scene in a line", own: true, place: "" },   // v296 - her own scene (Kendall, 3 Oct: the petrol angle is not on the list)
-  ];
-  return withOwn ? _all : _all.filter(o => !o.own);
+function feedBackdrops(angle, area, withOwn) {   // v296 withOwn; v678 - the property catalogue now lives in src/backdrops.js (ten scenes + her own)
+  return backdropsFor("property", angle, area, withOwn);
 }
 function bgPromptBlock(angle, place, pal, timeId) {   // v151 - timeId (em|md|la|ss|nt): her time of day sets the light
   const PC = Object.assign({ beige: "#F0DECC", gold: "#A88448", green: "#003C1E", ink: "#00120C" }, pal || {});

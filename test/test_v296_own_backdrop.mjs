@@ -41,7 +41,7 @@ let rows = rowsOf(lastList(i));
 ok(rows.length === 4 && rows[0].id === "pal:1:property" && rows[3].id === "pal:1:usual", "v677: the palette is asked first (3 named + Momo's usual)", rows.map((r) => r.id).join(", "));   // v677
 i = sent.length; await tap("pal:1:usual"); await settle();
 rows = rowsOf(lastList(i));
-ok(rows.length === 9 && rows[8] && rows[8].title === "Describe your own" && rows[8].id === "fbg:1:X", "backdrops: 9 rows, the last is \"Describe your own\" (fbg:1:X)", rows.map((r) => r.id + "=" + r.title).join(", "));
+ok(rows.length === 10 && rows.every((r) => r.id !== "fbg:1:X") && rows[9].id === "fbg:1:J", "v678: backdrops are ten scenes, her own scene is a typed line (no X row)", rows.map((r) => r.id + "=" + r.title).join(", "));
 ok(rows.length <= 10, "inside WhatsApp's 10-row list limit");
 
 console.log("T - tapping it");
@@ -69,8 +69,8 @@ ok(!store.has("fbgown_" + HER), "a bare number also cancels it");
 
 console.log("A - automatic picks");
 const src = (await import("node:fs")).readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-ok(/return withOwn \? _all : _all\.filter\(o => !o\.own\);/.test(src), "feedBackdrops hides the own row unless asked (code check)");
-ok((src.match(/feedBackdrops\([^)]*, true\)/g) || []).length === 1, "only one caller (her list) passes withOwn");
+ok(/return backdropsFor\("property", angle, area, withOwn\);/.test(src), "v678: feedBackdrops delegates to src/backdrops.js and still honours withOwn (code check)");
+ok((src.match(/backdropsFor\([^)]*, true\)/g) || []).length === 1 && (src.match(/feedBackdrops\([^)]*, true\)/g) || []).length === 0, "only one caller (her list, picBackdropStep) asks for the own option");
 
 console.log("\n" + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

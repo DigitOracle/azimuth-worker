@@ -68,18 +68,20 @@ ok(setByTag("g") === FEED_SETS.general && setByTag("x") === null, "tags");
 ok(parseSetButton("fs:g:pick:4").n === 4 && parseSetButton("fs:e:again").act === "again" && parseSetButton("fs:e:fmt:ig:2").kind === "ig" && parseSetButton("fs:e:pal:2:usual").pid === "usual" && parseSetButton("fs:e:pal:2:usual").n === 2 && parseSetButton("fs:e:pal:2:neon") === null && parseSetButton("fs:e:pal:usual:2") === null && parseSetButton("feed:3") === null && parseSetButton("fs:e:fmt:vid:2") === null, "button grammar");
 
 // the flow with mocked deps
-{ const s = kvStore(), sent = [], lists = [], imgs = [], renders = [];
+{ const s = kvStore(), sent = [], lists = [], imgs = [], renders = [], steps = [];
   const deps = { waSend: async (e, to, t) => { sent.push(t); return { ok: true }; }, waSendList: async (e, to, body, lbl, rows) => { lists.push({ body, rows }); return { ok: true }; }, waSendImage: async (e, to, u, cap) => { imgs.push(cap); return { ok: true }; },
     claudeText: async () => "DRAFT TEXT", claudeJSON: async () => null, renderAngleCard: async (e, a, n, o, at, by, size, opts) => { renders.push({ size, opts, a }); return { url: "https://x/" + size, key: opts.key }; },
-    pubOrigin: (o) => o, ownerWindowOpen: async () => true, dnaSignal: async () => {}, gcTellOwner: async () => {}, gstDateStr: (d) => d.toISOString().slice(0, 10), stylePalette: async () => ({}), voice: "", model: "m" };
+    picBackdropStep: async (e, from, n, setId) => { steps.push([n, setId]); }, pubOrigin: (o) => o, ownerWindowOpen: async () => true, dnaSignal: async () => {}, gcTellOwner: async () => {}, gstDateStr: (d) => d.toISOString().slice(0, 10), stylePalette: async () => ({}), voice: "", model: "m" };
   const env = { MEETINGS: s.MEETINGS, WA_ALLOWED: "971" };
   s.m.set("mkt_briefctx_ei", JSON.stringify({ at: 123, date: "2026-10-30", set: "ei", angles: angs }));
-  ok(await handleSetButton(env, deps, "971", "fs:e:pick:3", "https://o") === true && /Good pick/.test(sent[0]) && /youtu\.be\/x/.test(sent[0]) && lists[0].rows.length === 5 && lists[0].rows[3].id === "fs:e:pic:3", "pick: the video link, the format list with Picture with you");
+  ok(await handleSetButton(env, deps, "971", "fs:e:pick:3", "https://o") === true && /Good pick/.test(sent[0]) && /youtu\.be\/x/.test(sent[0]) && lists[0].rows.length === 6 && lists[0].rows[3].id === "fs:e:pic:3" && lists[0].rows[4].id === "fs:e:card:3", "pick: the video link, the format list with Picture with you");
   ok(JSON.parse(s.m.get("mkt_picks"))[0].set === "ei", "the pick is recorded with its set");
   await handleSetButton(env, deps, "971", "fs:e:fmt:li:3", "https://o");
   ok(sent[1] === "DRAFT TEXT" && lists[1].rows.length === 5 && lists[1].rows[2].id === "fs:e:pal:3:ei", "format: the draft, then the palette question");
-  await handleSetButton(env, deps, "971", "fs:e:pal:3:general", "https://o");
+  await handleSetButton(env, deps, "971", "fs:e:cpal:3:general", "https://o");   // v678 - cpal is the card alone; pal is the picture chain
   ok(renders.length === 2 && renders[0].opts.palette.green === FEED_PALETTES.general.green && renders[0].opts.key === "fs_ei_123_3_general" && renders[0].opts.palId === "general" && imgs.length === 2 && /Beyond property palette/.test(imgs[0]) && /1080×1920/.test(imgs[1]), "palette: both sizes drawn in the chosen palette, keyed by palette");
+  await handleSetButton(env, deps, "971", "fs:e:pal:3:ei", "https://o");
+  ok(steps.length === 1 && steps[0][0] === "23" && steps[0][1] === "ei" && s.m.get("card_pal_23") === "ei" && renders.length === 2, "v678: pal = the picture chain at 23 (EI idea 3), palette on card_pal_23, no flat card");
   ok(await handleSetButton(env, deps, "971", "feed:3", "https://o") === false, "a real-estate tap is not ours");
   ok((await resendSetLists(env, deps, "971", "2026-10-30")) === 1 && lists[lists.length - 1].rows[0].id === "fs:e:pick:1", "feed later in the day: the EI list again (general has none)");
   ok((await resendSetLists(env, deps, "971", "2026-10-31")) === 0, "yesterday's list is not re-sent as today's");
