@@ -1171,7 +1171,7 @@ export function reportSection(es, days, allTasks, opt) {
     + (outRole.length ? '<div class=out><b>Going beyond the role: ' + outRole.length + (outRole.length === 1 ? ' activity' : ' activities') + '</b> · ' + esc(Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => (d === "Sales" ? "as a broker" : "for " + d) + ' ' + byD[d]).join(", ")) + ' · support given to the wider team, noted alongside the Strategic Lead work.</div>' : '')
     + (byDay.length ? '<div class=day>' + byDay.map((x) => '<h3>' + esc(dayName(x.d)) + ' ' + esc(fmtD(x.d)) + '</h3>' + x.es.map((e) => '<div class=li><i style="background:' + (e.in_scope === false ? WARM : TEAL) + '"></i><div>' + esc(e.title) + ' <span>· ' + esc(e.type) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ' · ' + esc(e.time_of_day.toLowerCase()) : '') + ((e.people || []).length ? ' · ' + esc(e.people.map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0]).slice(0, 3).join(", ")) : '') + '</span></div></div>').join("")).join("") + '</div>' : '');
 }
-export function reportDoc(kindWord, span, body, docTitle) {
+export function reportDoc(kindWord, span, body, docTitle, period) {   // v679 - period: the cover's own date line (the exact days the report covers)
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (kindWord === 'Daily' ? 'Daily' : 'Activity') + ' report</title>'
     + '<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap"><style>'
     // v579 (Najjuko 14 Oct, from her own PDF): the browser's print header stamped the Azimuth link (with her key) on every page - @page margin boxes are
@@ -1199,7 +1199,16 @@ export function reportDoc(kindWord, span, body, docTitle) {
     + '.btns{position:fixed;right:14px;bottom:14px;display:flex;gap:8px}.btn{background:' + FN_NAVY + ';color:' + FN_PEACH + ';border:0;border-radius:99px;padding:10px 16px;font:600 10pt Inter,sans-serif;cursor:pointer}.btn:disabled{opacity:.6}'
     // v615 - a span of months: one section per month, each on its own printed page
     + '.mth{break-before:page;page-break-before:always;margin-top:26px;padding-top:14px;border-top:1px solid ' + FN_GOLD + '}.mh2{font-size:15pt;margin:0 0 8px}'
-    + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 14px}.btns{display:none}.mth{border-top:0;margin-top:0;padding-top:0}}</style></head><body><div class=pg>'
+    // v679 (Kendall 31 Oct 2026: "all of those reports need a cover page ... the FN Realty logo ... this is a weekly report for the week and the dates") -
+    // page one of every report: the lattice band, the FN mark, DAILY / WEEKLY / MONTHLY / ACTIVITY REPORT in Anton, the period, her name. Prints on its own page.
+    + '.cover{position:relative;max-width:780px;margin:0 auto 18px;background:#fff;border:1px solid ' + FN_GOLD + ';border-radius:2px;padding:0 48px 40px;text-align:center;min-height:980px;break-after:page;page-break-after:always;box-sizing:border-box}'
+    + '.cover .latt{margin:0 -48px 0}.cover .mark{height:84px;width:auto;display:block;margin:54px auto 0}.cover .mid{margin-top:150px}.cover .kick{font-size:10pt;letter-spacing:.32em;color:#626B7C;margin-bottom:14px}'
+    + '.cover h1{font-family:Anton,sans-serif;font-weight:400;font-size:46pt;line-height:1.02;margin:0;color:' + FN_NAVY + ';letter-spacing:.02em}.cover h1 span{display:block;color:' + FN_PEACH + '}.cover .rule{width:72px;height:3px;background:' + FN_GOLD + ';margin:22px auto}'
+    + '.cover .when{font-size:15pt;font-weight:600;color:' + FN_NAVY + '}.cover .cf{position:absolute;left:48px;right:48px;bottom:40px;font-size:8.5pt;color:#626B7C;line-height:1.5;border-top:1px solid #E9EAEC;padding-top:12px}.cover .cf b{color:' + FN_NAVY + '}'
+    + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 14px}.btns{display:none}.mth{border-top:0;margin-top:0;padding-top:0}.cover{max-width:none;min-height:calc(100vh - 26mm);margin:0;border:0}}</style></head><body>'
+    + '<section class=cover><div class=latt></div><img class=mark src="' + FN_LOGO + '" alt="FN Realty"><div class=mid><div class=kick>FN REALTY</div><h1>' + esc(String(kindWord).toUpperCase()) + '<span>REPORT</span></h1><div class=rule></div><div class=when>' + (period || span) + '</div></div>'
+    + '<div class=cf><b>Serah Najjuko Ganyana</b> · Strategic Lead – Marketing, PR &amp; Business Development<br>Internal · prepared for FN Realty management</div></section>'
+    + '<div class=pg>'
     + '<div class=latt></div><header><div><h1><em>' + kindWord + '</em> Report</h1><p>' + span + '</p></div><div class=who><div class=fnmark><img src="' + FN_LOGO + '" alt="FN Realty"></div><b>Serah Najjuko Ganyana</b>Strategic Lead – Marketing, PR &amp; Business Development</div></header>'
     + body
     + '</div>'
@@ -1219,18 +1228,22 @@ export function reportHtml(es, from, to, allTasks, pickedDays) {
   const daily = days.length === 1, monthly = days.length > 7;
   const months = [...new Set(days.map((d) => d.slice(0, 7)))];
   const lab = (ym) => REPORT_MON[+ym.slice(5, 7) - 1] + ' ' + ym.slice(0, 4);
+  // v679 (Kendall 31 Oct: "it can be daily, weekly, or specific ranges ... on the front cover") - the cover states the exact days covered
+  const last = days[days.length - 1], contiguous = days.length === Math.round((Date.parse(last) - Date.parse(days[0])) / 864e5) + 1;
+  const period = daily ? esc(dayName(days[0]) + ' ' + fmtD(days[0]))
+    : esc(fmtD(days[0]) + ' to ' + fmtD(last) + ' · ' + days.length + (contiguous ? ' days' : ' selected days'));
   // v615 - more than one calendar month: the whole period summarised once, then one page per month
-  if (months.length > 1) {
+  if (months.length > 1 && days.length > 7) {   // v679 - a seven-day week that crosses a month end is still the Weekly report
     const span = esc(lab(months[0]) + ' to ' + lab(months[months.length - 1]) + ' · ' + fmtD(days[0]) + ' to ' + fmtD(days[days.length - 1]) + ' · one page per month');
     const body = '<h2>THE WHOLE PERIOD · ' + months.length + ' MONTHS</h2>' + reportSection(es, days, allTasks, { summaryOnly: true })
       + months.map((ym) => { const md = days.filter((d) => d.slice(0, 7) === ym), me = es.filter((e) => md.includes(e.date));
         return '<section class=mth><h2 class=mh2>' + esc(lab(ym).toUpperCase()) + (me.length ? '' : ' · NOTHING LOGGED') + '</h2>' + reportSection(me, md, allTasks) + '</section>'; }).join("");
-    return reportDoc('Activity', span, body, 'FN Activity report ' + lab(months[0]) + ' to ' + lab(months[months.length - 1]));
+    return reportDoc('Activity', span, body, 'FN Activity report ' + lab(months[0]) + ' to ' + lab(months[months.length - 1]), period);
   }
-  const span = daily ? esc(dayName(days[0])) + ' ' + esc(fmtD(days[0])) : monthly ? lab(months[0]) + ' · to ' + esc(fmtD(days[days.length - 1])) : (days.length === 7 && weekOf(days[0])[0] === days[0] ? 'Week of ' + esc(fmtD(days[0])) : days.map((d) => dayName(d).slice(0, 3)).join(", ") + ' · ' + esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[days.length - 1])));
+  const span = daily ? esc(dayName(days[0])) + ' ' + esc(fmtD(days[0])) : monthly ? lab(months[0]) + ' · to ' + esc(fmtD(days[days.length - 1])) : (days.length === 7 && weekOf(days[0])[0] === days[0] ? 'Week of ' + esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[6])) : days.map((d) => dayName(d).slice(0, 3)).join(", ") + ' · ' + esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[days.length - 1])));
   const kindWord = daily ? 'Daily' : monthly ? 'Monthly' : days.length === 7 ? 'Weekly' : 'Activity';
   const title = (daily ? 'FN Daily report ' : monthly ? 'FN Monthly report ' : days.length === 7 ? 'FN Weekly report ' : 'FN Activity report ') + (daily ? fmtD(days[0]) : monthly ? lab(months[0]) : fmtD(days[0]) + ' to ' + fmtD(days[days.length - 1]));
-  return reportDoc(kindWord, span, reportSection(es, days, allTasks), title);
+  return reportDoc(kindWord, span, reportSection(es, days, allTasks), title, period);
 }
 
 // v577 (Kendall 14 Oct: "at the very top of the hierarchy it's what did you do? And then something else that says report") - two tabs, that is the whole first screen
