@@ -378,7 +378,11 @@ export function hoursByKpi(es, pf) {
   return (pf || PF()).kpis.map((k) => ({ id: k.id, name: k.name, hours: Math.round(es.filter((e) => (e.kpis || []).includes(k.id)).reduce((s, e) => s + hoursOf(e) / Math.max(1, (e.kpis || []).length), 0) * 10) / 10 }));
 }
 // v578 - the hours picture for a set of entries: total, how much is clocked vs estimated, the 15 h meter, and the two splits (what kind of work; where)
+// v689 - one source of truth for every hours figure in the report: each entry's hours rounded to 0.1 h FIRST (hoursAt), then summed, so role
+// parts, role totals, the KPI tile, the donuts and the weekly bars always add up exactly (no 0.1 h drift from rounding sums).
+export const hoursAt = (e) => Math.round(hoursOf(e) * 10) / 10;
 export function hoursPicture(es) {
+  const hoursOf = hoursAt;
   const r1 = (n) => Math.round(n * 10) / 10, tot = r1(es.reduce((s, e) => s + hoursOf(e), 0)), clk = r1(es.filter(isClocked).reduce((s, e) => s + hoursOf(e), 0));
   const kinds = ["Strategic Lead", "Broker", "Other departments"].map((k) => ({ name: k, hours: r1(es.filter((e) => kindOf(e) === k).reduce((s, e) => s + hoursOf(e), 0)) }));
   const places = WHERE.map((w) => ({ name: w === "Unspecified" ? "Not stated" : w, hours: r1(es.filter((e) => (e.where || "Unspecified") === w).reduce((s, e) => s + hoursOf(e), 0)) }));
@@ -1087,7 +1091,7 @@ const KIND_SOFT = { "Strategic Lead": "As Strategic Lead", "Broker": "As a broke
 function donut(parts, total, label) {   // parts: [{v, color, name}] - a ring with a hero number in the middle; 2px surface gaps between segments
   const R = 54, r = 36, C = 2 * Math.PI * R; let acc = 0; const segs = [];
   parts.filter((p) => p.v > 0).forEach((p) => { const f = p.v / Math.max(total, 1), len = Math.max(0, C * f - 2); segs.push('<circle r="' + R + '" cx="70" cy="70" fill="none" stroke="' + p.color + '" stroke-width="' + (R - r) + '" stroke-dasharray="' + len + ' ' + (C - len) + '" stroke-dashoffset="' + (-acc * C) + '" transform="rotate(-90 70 70)"/>'); acc += f; });
-  return '<svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="' + esc(label) + '">' + (segs.length ? segs.join("") : '<circle r="' + R + '" cx="70" cy="70" fill="none" stroke="#EFE9DE" stroke-width="' + (R - r) + '"/>')
+  return '<svg class=dn viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="' + esc(label) + '">' + (segs.length ? segs.join("") : '<circle r="' + R + '" cx="70" cy="70" fill="none" stroke="#EFE9DE" stroke-width="' + (R - r) + '"/>')
     + '<text x="70" y="66" text-anchor="middle" font-family="Inter,sans-serif" font-size="26" font-weight="600" fill="#1C2321">' + esc(total) + '</text><text x="70" y="84" text-anchor="middle" font-family="Inter,sans-serif" font-size="9" fill="#626B7C">' + esc(label) + '</text></svg>';
 }
 function dayBars(days) {   // days: [{d, n, out}] - thin columns, rounded ends, in-role teal with outside-role warm stacked on top, 2px gap
@@ -1107,7 +1111,7 @@ function dayBars(days) {   // days: [{d, n, out}] - thin columns, rounded ends, 
 const AREA_COL = { "Marketing": RAMP[0], "PR": RAMP[2], "Business Development": RAMP[4] }, BROKER_RAMP = ["#F2B27A", "#E08F4A", "#C46A1E", "#8F4A12", "#5E300B"];
 const areaOf = (e) => { const sc = PF().scope.find((s) => s.id === (e.scope || [])[0]); return sc ? sc.area : ((e.kpis || [])[0] && /^m/.test(e.kpis[0]) ? "Marketing" : "Unassigned"); };
 export function roleGrid(es) {
-  const r1 = (n) => Math.round(n * 10) / 10, H = (list) => r1(list.reduce((s, e) => s + hoursOf(e), 0));
+  const r1 = (n) => Math.round(n * 10) / 10, H = (list) => r1(list.reduce((s, e) => s + hoursAt(e), 0));
   const SL = es.filter((e) => kindOf(e) === "Strategic Lead"), BR = es.filter((e) => kindOf(e) === "Broker"), OT = es.filter((e) => kindOf(e) === "Other departments");
   const areas = PF().areas.concat("Unassigned").map((a) => ({ name: a, es: SL.filter((e) => areaOf(e) === a), color: AREA_COL[a] || GREY })).filter((x) => x.es.length);
   const grpOf = (e) => { const t = (e.broker_tasks || [])[0], g = BROKER_TASKS.find((x) => x.items.some((i) => i[0] === t)); return g ? g.group : "Not specified"; };
@@ -1116,9 +1120,11 @@ export function roleGrid(es) {
   const both = [{ name: "Strategic Lead", es: SL, color: TEAL }, { name: "Broker", es: BR, color: WARM }, { name: "Other departments", es: OT, color: GREY }].filter((x) => x.es.length);
   const cell = (parts, byH, centre, sub) => { const tot = byH ? r1(parts.reduce((s, p) => s + H(p.es), 0)) : parts.reduce((s, p) => s + p.es.length, 0);
     const ps = parts.map((p) => ({ name: p.name, v: byH ? H(p.es) : p.es.length, color: p.color }));
-    return '<td>' + (tot ? '<div class=two style="margin:0;grid-template-columns:118px 1fr;gap:10px">' + donut(ps, tot, centre || (byH ? 'hours' : 'activities')) + '<div class=leg>' + ps.filter((p) => p.v).map((p) => '<div><i style="background:' + p.color + '"></i>' + esc(p.name) + '<b>' + p.v + (byH ? ' h' : '') + '</b></div>').join("") + (sub ? '<div style="color:#626B7C;font-size:8pt;margin-top:4px">' + sub + '</div>' : '') + '</div></div>' : '<div style="color:#9AA0B5;font-size:9pt">Nothing logged</div>') + '</td>'; };
+    return '<td>' + (tot ? '<div class=dc>' + donut(ps, tot, centre || (byH ? 'hours' : 'activities')) + '<div class=lg>' + ps.filter((p) => p.v).map((p) => '<div class=lr><i style="background:' + p.color + '"></i><span>' + esc(p.name) + '</span><b>' + p.v + (byH ? '&nbsp;h' : '') + '</b></div>').join("") + (sub ? '<div class=lsub>' + sub + '</div>' : '') + '</div></div>' : '<div style="color:#9AA0B5;font-size:9pt">Nothing logged</div>') + '</td>'; };
   const pct = (a, b) => (a + b ? Math.round(a / (a + b) * 100) : 0);
-  const sh = H(SL), bh = H(BR), oh = H(OT), sn = SL.length, bn = BR.length, on = OT.length;
+  // v689 - the both-roles hours come from hoursPicture, the same function the weekly bars use, so the donut and the bars always agree
+  const HPk = (n) => hoursPicture(es).kinds.find((k) => k.name === n).hours;
+  const sh = HPk("Strategic Lead"), bh = HPk("Broker"), oh = HPk("Other departments"), sn = SL.length, bn = BR.length, on = OT.length;
   const rows = '<tr class=sl><th>Strategic Lead<small>Marketing · PR · Business Development</small></th>' + cell(areas, false) + cell(areas, true) + '</tr>'
     + '<tr class=bk><th>Broker<small>leads, calls, viewings, open houses</small></th>' + cell(bparts, false) + cell(bparts, true) + '</tr>'
     + '<tr class=al><th>Both roles<small>the week as a whole</small></th>' + cell(both, false, pct(sn, bn) + '% · ' + pct(bn, sn) + '%', 'Strategic Lead · Broker') + cell(both, true, sh + ' h · ' + bh + ' h', 'Strategic Lead · Broker') + '</tr>';
@@ -1128,7 +1134,7 @@ export function roleGrid(es) {
     + (bh ? 'Broker work took ' + bh + ' h across ' + bn + (bn === 1 ? ' activity' : ' activities') + (topb.length ? ', led by ' + topb.map((a) => esc(a.name.toLowerCase()) + ' (' + H(a.es) + ' h)' ).join(' and ') : '') + '. ' : 'No broker work was logged. ')
     + (oh ? oh + ' h went to other departments, outside both roles. ' : '')
     + (sh >= MIN_HOURS ? 'The 15 h line for the Strategic Lead role was met' + (sh - MIN_HOURS >= 0.5 ? ' with ' + r1(sh - MIN_HOURS) + ' h to spare.' : '.') : 'The Strategic Lead role is ' + r1(MIN_HOURS - sh) + ' h short of the 15 h line (clause 8.1).');
-  return '<h2>THE TWO ROLES</h2><table class=rg><tr><th></th><th class=ch>Activities</th><th class=ch>Time (hours)</th></tr>' + rows + '</table><div class=sum><b>IN SHORT</b>' + summary + '</div>';
+  return '<div class=keep><h2>THE TWO ROLES</h2><table class=rg><tr><th></th><th class=ch>Activities</th><th class=ch>Time (hours)</th></tr>' + rows + '</table></div><div class=sum><b>IN SHORT</b>' + summary + '</div>';
 }
 // v615 - the report is built in three pieces so a span of months can repeat the middle one once per month: reportSection (the tiles,
 // the 15 h meter, the two roles, the at-a-glance grid, the tasks, the days), reportDoc (the FN page around it) and reportHtml (which decides).
@@ -1179,6 +1185,20 @@ export function blockedLine(tasks, days, nowIso) {
   return '<div class=out><b>Time lost to blockers: ' + fmtMins(all) + '</b> on ' + n + ' task' + (n === 1 ? '' : 's') + (outside ? ' · ' + fmtMins(outside) + ' outside her control' : '') + ' · '
     + esc(Object.keys(by).sort((a, b) => by[b] - by[a]).map((r) => r + ' ' + fmtMins(by[r])).join(", ")) + '</div>';
 }
+// v689 (Kendall 1 Nov 2026, from the printed October report on his iPhone: the daily bar chart's day labels ran into one unreadable string) -
+// the month reads as one bar per WEEK, the same weeks as the table under it: length = hours, split by role colour, a navy line at the 15 h
+// weekly minimum, the hours written at the end of the bar, part weeks labelled. Plain HTML, so text never overlaps at any width.
+export function weekBars(weeks) {
+  const COL = [["Strategic Lead", TEAL], ["Broker", WARM], ["Other departments", GREY]];
+  const scale = Math.max(MIN_HOURS * 1.25, ...weeks.map((w) => w.pic.total)), pc = (h) => Math.round(h / scale * 1000) / 10;
+  const line = '<i class=wm style="left:' + pc(MIN_HOURS) + '%"></i>';
+  return '<div class=wbs><div class="wbr wbh"><span></span><div class=wt>' + '<b class=wml style="left:' + pc(MIN_HOURS) + '%">15 h minimum</b></div><span></span></div>'
+    + weeks.map((w) => { const part = w.days.length < 7, k = (n) => (w.pic.kinds.find((x) => x.name === n) || {}).hours || 0;
+      return '<div class=wbr><span class=wl><b>' + esc(fmtD(w.days[0]).slice(0, 6).trim()) + '–' + esc(fmtD(w.days[w.days.length - 1]).slice(0, 6).trim()) + '</b>' + (part ? '<small>part week · ' + w.days.length + ' days</small>' : '') + '</span>'
+        + '<div class=wt>' + COL.map(([n, c]) => k(n) ? '<i class=ws data-role="' + n + '" data-h="' + k(n) + '" style="width:' + pc(k(n)) + '%;background:' + c + '"></i>' : '').join('') + line + '</div>'
+        + '<span class=wn>' + w.pic.total + '&nbsp;h</span></div>'; }).join('')
+    + '<div class=wkey>' + COL.map(([n, c]) => '<span><i style="background:' + c + '"></i>' + esc(KIND_SOFT[n]) + '</span>').join('') + '<span><i class=wkm></i>15 h weekly minimum (clause 8.1)</span></div></div>';
+}
 export function reportSection(es, days, allTasks, opt) {
   opt = opt || {};
   const daily = days.length === 1, monthly = days.length > 7, HP = hoursPicture(es), totH = HP.total;
@@ -1205,16 +1225,16 @@ export function reportSection(es, days, allTasks, opt) {
   if (opt.summaryOnly) return head;
   return head
     // v577.1 (the Excel idiom she reads: a Mon-Fri day-at-a-glance grid, one row per day: what, hours, with whom, outside-role flagged)
-    + (monthly ? '<h2>MONTH AT A GLANCE</h2>' + dayBars(perDay)
+    + (monthly ? '<div class=keep><h2>MONTH AT A GLANCE</h2>' + weekBars(weeks.map((wkk) => ({ days: wkk.days, pic: hoursPicture(es.filter((e) => wkk.days.includes(e.date))) }))) + '</div>'
       + '<table class=glance><tr><th>Week</th><th>Activities</th><th>Hours</th><th>Of 15 h</th><th>As Strategic Lead</th><th>As a broker</th><th>Supporting</th></tr>' + weeks.map((wkk) => { const we = es.filter((e) => wkk.days.includes(e.date)), wp = hoursPicture(we), k = (n) => (wp.kinds.find((x) => x.name === n) || {}).hours || 0;
         return '<tr' + (we.length ? '' : ' class=empty') + '><td><b>' + esc(fmtD(wkk.days[0]).slice(0, 6)) + '</b>–' + esc(fmtD(wkk.days[wkk.days.length - 1]).slice(0, 6)) + '</td><td class=num>' + we.length + '</td><td class=num>' + wp.total + '</td><td class=num>' + (wp.total >= MIN_HOURS ? '<span style="color:#15948A;font-weight:600">met</span>' : (wkk.days.length < 7 ? 'part week' : (Math.round((MIN_HOURS - wp.total) * 10) / 10) + ' short')) + '</td><td class=num>' + k("Strategic Lead") + '</td><td class=num>' + k("Broker") + '</td><td class=num>' + k("Other departments") + '</td></tr>'; }).join("") + '</table>'
     : days.length > 1 ? '<h2>WEEK AT A GLANCE</h2>' + dayBars(perDay)
       + '<table class=glance><tr><th>Day</th><th>Activities</th><th>Hours</th><th>With</th><th>Outside role</th></tr>' + days.map((d) => { const de = es.filter((e) => e.date === d), h = Math.round(de.reduce((s, e) => s + hoursOf(e), 0) * 10) / 10, who = [...new Set(de.flatMap((e) => (e.people || []).filter((n) => n !== "All sales agents").map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0])))], o = de.filter((e) => e.in_scope === false).length;
         return '<tr' + (de.length ? '' : ' class=empty') + '><td><b>' + esc(dayName(d).slice(0, 3)) + '</b> ' + (+d.slice(8)) + '</td><td>' + (de.length ? de.map((e) => esc(e.title) + (isClocked(e) ? ' <span>' + esc(e.start) + '–' + esc(e.end) + '</span>' : '')).join('; ') : '<span>—</span>') + '</td><td class=num>' + (de.length ? h : '') + '</td><td>' + esc(who.slice(0, 4).join(', ')) + (who.length > 4 ? ' +' + (who.length - 4) : '') + '</td><td class=num>' + (o ? '<span class=og>' + o + '</span>' : '') + '</td></tr>'; }).join("") + '</table>' : '')
-    + (tk.length ? '<h2>TASKS</h2>' + tk.slice(0, 8).map((t) => '<div class=tk><div><b>' + esc(shownTask(t.name)) + '</b><small>' + (t.status === "Stuck" ? '<span style="color:#B4532A;font-weight:600">Stuck</span>' + (t.stuck_reason ? ': ' + esc(t.stuck_reason) : '') + (t.stuck_control === "No" ? ' (outside her control)' : '') + (t.stuck_note ? ', ' + esc(t.stuck_note) : '') : esc(t.status)) + ' · ' + t.days + ' day' + (t.days === 1 ? '' : 's') + (t.owners && t.owners.length ? ' · with ' + esc(t.owners.slice(0, 3).join(", ")) : '') + '</small></div>' + pbar(t.percent, t.status === "Done" ? RAMP[4] : TEAL) + '<div class=pct>' + t.percent + '%</div></div>').join("") : '')
+    + (tk.length ? '<div class=keep><h2>TASKS</h2>' + tk.slice(0, 8).map((t) => '<div class=tk><div><b>' + esc(shownTask(t.name)) + '</b><small>' + (t.status === "Stuck" ? '<span style="color:#B4532A;font-weight:600">Stuck</span>' + (t.stuck_reason ? ': ' + esc(t.stuck_reason) : '') + (t.stuck_control === "No" ? ' (outside her control)' : '') + (t.stuck_note ? ', ' + esc(t.stuck_note) : '') : esc(t.status)) + ' · ' + t.days + ' day' + (t.days === 1 ? '' : 's') + (t.owners && t.owners.length ? ' · with ' + esc(t.owners.slice(0, 3).join(", ")) : '') + '</small></div>' + pbar(t.percent, t.status === "Done" ? RAMP[4] : TEAL) + '<div class=pct>' + t.percent + '%</div></div>').join("") + '</div>' : '')
     + blockedLine(allTasks || tasksOf(es), days)
     + (outRole.length ? '<div class=out><b>Going beyond the role: ' + outRole.length + (outRole.length === 1 ? ' activity' : ' activities') + '</b> · ' + esc(Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => (d === "Sales" ? "as a broker" : "for " + d) + ' ' + byD[d]).join(", ")) + ' · support given to the wider team, noted alongside the Strategic Lead work.</div>' : '')
-    + (byDay.length ? '<div class=day>' + byDay.map((x) => '<h3>' + esc(dayName(x.d)) + ' ' + esc(fmtD(x.d)) + '</h3>' + x.es.map((e) => '<div class=li><i style="background:' + (e.in_scope === false ? WARM : TEAL) + '"></i><div>' + esc(e.title) + ' <span>· ' + esc(e.type) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ' · ' + esc(e.time_of_day.toLowerCase()) : '') + ((e.people || []).length ? ' · ' + esc(e.people.map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0]).slice(0, 3).join(", ")) : '') + '</span></div></div>').join("")).join("") + '</div>' : '');
+    + (byDay.length ? '<div class=day>' + byDay.map((x) => '<div class=dd><h3>' + esc(dayName(x.d)) + ' ' + esc(fmtD(x.d)) + '</h3>' + x.es.map((e) => '<div class=li><i style="background:' + (e.in_scope === false ? WARM : TEAL) + '"></i><div>' + esc(e.title) + ' <span>· ' + esc(e.type) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ' · ' + esc(e.time_of_day.toLowerCase()) : '') + ((e.people || []).length ? ' · ' + esc(e.people.map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0]).slice(0, 3).join(", ")) : '') + '</span></div></div>').join("") + '</div>').join("") + '</div>' : '');
 }
 export function reportDoc(kindWord, span, body, docTitle, period) {   // v679 - period: the cover's own date line (the exact days the report covers)
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (kindWord === 'Daily' ? 'Daily' : 'Activity') + ' report</title>'
@@ -1233,6 +1253,12 @@ export function reportDoc(kindWord, span, body, docTitle, period) {   // v679 - 
     + 'h2{font-family:Anton,sans-serif;font-weight:400;color:' + FN_NAVY + ';font-size:12pt;letter-spacing:.04em;margin:18px 0 8px}'
     + '.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.tile{background:#fff;border:1px solid ' + FN_GOLD + ';border-radius:4px;padding:10px 8px;text-align:center}.tile b{display:block;font-size:26pt;font-weight:600;color:' + FN_NAVY + ';line-height:1.1}.tile span{font-size:8pt;color:#626B7C}'
     + '.two{display:grid;grid-template-columns:150px 1fr;gap:18px;align-items:center;margin-top:12px}.leg{font-size:9pt;color:#3B4441}.leg div{display:flex;align-items:center;gap:8px;margin:4px 0}.leg i{display:inline-block;width:12px;height:12px;border-radius:3px}.leg b{margin-left:auto;color:#1C2321}'
+    + '.dc{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:center}.dn{width:100%;height:auto;max-width:96px;display:block}.lg{font-size:8.6pt;color:#3B4441;min-width:0}.lr{display:grid;grid-template-columns:10px minmax(0,1fr) auto;column-gap:6px;align-items:start;margin:3px 0;line-height:1.25}.lr i{width:10px;height:10px;border-radius:3px;margin-top:2px}.lr span{min-width:0;overflow-wrap:break-word}.lr b{white-space:nowrap;text-align:right;color:#1C2321;font-variant-numeric:tabular-nums}.lsub{color:#626B7C;font-size:7.8pt;margin-top:4px}'
+    + '.wbs{margin-top:6px}.wbr{display:grid;grid-template-columns:104px minmax(0,1fr) 52px;gap:10px;align-items:center;padding:5px 0;break-inside:avoid}.wbh{padding:0}.wl{font-size:10pt;line-height:1.2;white-space:nowrap}.wl b{font-weight:600;color:#1C2321}.wl small{display:block;font-size:8.5pt;color:#626B7C}.wt{position:relative;height:20px;background:#F4F1EA;border-radius:4px;display:flex}.wbh .wt{height:16px;background:none}.ws{display:block;height:100%}.ws:first-child{border-radius:4px 0 0 4px}.wm{position:absolute;top:-4px;bottom:-4px;width:0;border-left:2px solid ' + FN_NAVY + '}.wml{position:absolute;bottom:0;transform:translateX(-50%);font-size:8.5pt;font-weight:600;color:' + FN_NAVY + ';white-space:nowrap}.wn{font-size:11pt;font-weight:600;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.wkey{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:8.5pt;color:#3B4441}.wkey span{display:flex;align-items:center;gap:6px;white-space:nowrap}.wkey i{display:inline-block;width:10px;height:10px;border-radius:3px}.wkey i.wkm{width:0;height:12px;border-left:2px solid ' + FN_NAVY + ';border-radius:0}'
+    // v689 - print: nothing that belongs together is split across pages; a heading never sits alone at the foot of a page
+    + '.keep,.sum,.tile,.tiles,.meter,.tk,.out,.dd,.rg tr,.glance tr{break-inside:avoid;page-break-inside:avoid}h2,h3{break-after:avoid;page-break-after:avoid}'
+    // v689 - phones: the two-roles grid stacks (row name above, the two donut cards side by side, legend under each donut)
+    + '@media (max-width:600px){body .pg{padding:20px 14px 28px}body .latt{margin:-20px -14px 14px}body header{flex-wrap:wrap}body .tiles{grid-template-columns:repeat(2,1fr)}body .rg,body .rg tbody{display:block}body .rg tr{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px}body .rg tr:first-child{display:none}body .rg th{grid-column:1/-1;width:auto}body .rg td{width:auto}body .dc{grid-template-columns:88px minmax(0,1fr)}body .wbr{grid-template-columns:76px minmax(0,1fr) 44px;gap:8px}body .wl{white-space:normal}body .glance{display:block;overflow-x:auto}body .tk{grid-template-columns:1fr 70px 40px}body .cover{padding:0 20px 30px;min-height:640px}body .cover .latt{margin:0 -20px}body .cover .mid{margin-top:70px}body .cover h1{font-size:34pt}body .cover .cf{left:20px;right:20px}}'
     + '.tk{display:grid;grid-template-columns:1fr 150px 48px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #EFE9DE;font-size:9.5pt}.tk b{font-weight:600}.tk small{display:block;color:#626B7C;font-size:8pt;font-weight:400}.pb{height:8px;background:#EFE9DE;border-radius:4px;overflow:hidden}.pb i{display:block;height:8px;border-radius:4px}.pct{text-align:right;font-weight:600;color:#1C2321}'
     + '.out{margin-top:14px;padding:10px 12px;border-radius:10px;background:#FBF1EA;border-left:4px solid ' + WARM + ';font-size:9.5pt}.out b{color:#1C2321}'
     + '.meter{margin-top:12px}.mh{display:flex;justify-content:space-between;align-items:baseline;font-size:9.5pt;color:#626B7C}.mh b{font-size:14pt;color:#1C2321}'
@@ -1250,7 +1276,7 @@ export function reportDoc(kindWord, span, body, docTitle, period) {   // v679 - 
     + '.cover .latt{margin:0 -48px 0}.cover .mark{height:84px;width:auto;display:block;margin:54px auto 0}.cover .mid{margin-top:150px}.cover .kick{font-size:10pt;letter-spacing:.32em;color:#626B7C;margin-bottom:14px}'
     + '.cover h1{font-family:Anton,sans-serif;font-weight:400;font-size:46pt;line-height:1.02;margin:0;color:' + FN_NAVY + ';letter-spacing:.02em}.cover h1 span{display:block;color:' + FN_PEACH + '}.cover .rule{width:72px;height:3px;background:' + FN_GOLD + ';margin:22px auto}'
     + '.cover .when{font-size:15pt;font-weight:600;color:' + FN_NAVY + '}.cover .cf{position:absolute;left:48px;right:48px;bottom:40px;font-size:8.5pt;color:#626B7C;line-height:1.5;border-top:1px solid #E9EAEC;padding-top:12px}.cover .cf b{color:' + FN_NAVY + '}'
-    + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 14px}.btns{display:none}.mth{border-top:0;margin-top:0;padding-top:0}.cover{max-width:none;min-height:calc(100vh - 26mm);margin:0;border:0}}</style></head><body>'
+    + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 14px}.btns{display:none}.mth{border-top:0;margin-top:0;padding-top:0}.cover{max-width:none;width:auto;min-height:0;height:262mm;margin:0;padding:0 14mm 0;border:0;overflow:hidden;break-inside:avoid;page-break-inside:avoid}.cover .latt{margin:0 -14mm}.cover .mark{margin-top:30mm}.cover .mid{margin-top:40mm}.cover .cf{left:14mm;right:14mm;bottom:8mm}.dc{grid-template-columns:96px minmax(0,1fr)}}</style></head><body>'
     + '<section class=cover><div class=latt></div><img class=mark src="' + FN_LOGO + '" alt="FN Realty"><div class=mid><div class=kick>FN REALTY</div><h1>' + esc(String(kindWord).toUpperCase()) + '<span>REPORT</span></h1><div class=rule></div><div class=when>' + (period || span) + '</div></div>'
     + '<div class=cf><b>Serah Najjuko Ganyana</b> · Strategic Lead – Marketing, PR &amp; Business Development<br>Internal · prepared for FN Realty management</div></section>'
     + '<div class=pg>'
