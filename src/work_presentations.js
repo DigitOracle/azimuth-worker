@@ -1,6 +1,6 @@
 // v684 (Kendall, 1 Nov 2026): the Presentations card on Najjuko's Momo front door (and Kendall's), modelled on src/work_sheets.js.
 // One entry = one talk or event: the deck (PPTX), its PDF and a walkthrough video (or a link to one). KV keys in MEETINGS:
-//   pres_index               JSON list of {slug, title, date?, pptx?: true, pdf?: true, video_key?, video_url?}
+//   pres_index               JSON list of {slug, title, date?, pptx?: true, pdf?: true, video_key?, video_url?, slides_url?}
 //   pres_file_<slug>_pptx    the PowerPoint file
 //   pres_file_<slug>_pdf     the PDF
 //   vid_<video_key>          the video, through the existing /video_upload + /video/<key> route (KV up to 24 MB; R2 MEDIA fallback)
@@ -27,6 +27,7 @@ export function cleanEntry(x) {
   if (x.pdf) e.pdf = true;
   if (x.video_key && VKEY_RE.test(String(x.video_key))) e.video_key = String(x.video_key);
   else if (cleanUrl(x.video_url)) e.video_url = cleanUrl(x.video_url);
+  if (/^https:\/\/docs\.google\.com\/presentation\//.test(cleanUrl(x.slides_url))) e.slides_url = cleanUrl(x.slides_url);
   return e;
 }
 export async function readPresIndex(env) {
@@ -65,6 +66,7 @@ export async function presPublic(request, env, url) {
     if (!e) return new Response("not found", { status: 404 });
     const v = videoSrc(e), dt = presDate(e.date);
     const btn = (e.pptx ? '<a class=b id=pres_pptx href="/pres/f/' + e.slug + '.pptx" download>Download PPTX</a>' : "")
+      + (e.slides_url ? '<a class=b id=pres_slides href="' + esc(e.slides_url) + '" target=_blank rel=noopener>Open in Google Slides</a>' : "")
       + (e.pdf ? '<a class=b id=pres_pdf href="/pres/f/' + e.slug + '.pdf" target=_blank rel=noopener>Open PDF</a>' : "")
       + (v ? '<a class=b id=pres_watch href="' + esc(v) + '"' + (e.video_key ? "" : " target=_blank rel=noopener") + '>Watch</a>' : "");
     return new Response('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(e.title) + '</title>'

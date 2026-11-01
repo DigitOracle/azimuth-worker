@@ -64,6 +64,12 @@ ok(r.status === 200 && r.headers.get("Content-Type") === "application/pdf" && r.
 r = await get("/video/pres_high_tea_2nov", undefined, { Range: "bytes=0-99" });
 ok(r.status === 206 && r.headers.get("Content-Range") === "bytes 0-99/1000", "video plays with ranges", r.status);
 
+// v685: a Google Slides link on the entry shows an "Open in Google Slides" button; only docs.google.com/presentation links are kept
+ok(P.cleanEntry({ slug: "a", title: "a", slides_url: "https://evil.example/x" }).slides_url === undefined, "non-Slides link dropped");
+await P.putPresEntry(env, { slug: "high-tea-theblocks-2nov2026", title: "High Tea · TheBlocks HQ", slides_url: "https://docs.google.com/presentation/d/FAKEID/edit" });
+r = await get("/pres/high-tea-theblocks-2nov2026"); t = await r.text();
+ok(t.includes('id=pres_slides href="https://docs.google.com/presentation/d/FAKEID/edit"') && t.includes("Download PPTX"), "Slides button shown, other buttons kept", t.slice(0, 200));
+
 const src = fs.readFileSync(new URL("../src/work_presentations.js", import.meta.url), "utf8");
 ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(src), "no emoji in the source");
 const isrc = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
