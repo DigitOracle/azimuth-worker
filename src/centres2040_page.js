@@ -228,16 +228,22 @@ var EP_NOTE="Empty = we hold the plot outline, Dubai Municipality and Makani sho
 function epKind(t,k){return k==="bare"?"bare":t==="Residential"?"res":t==="Commercial"?"com":"oth"}   // v687: k=bare rides in the file
 function epFilter(){var k=S.empty;return !k||k==="all"?["!=",["get","k"],"bare"]:["==",["get","k"],k]}
 function epAdd(m){if(!EPD||!m||!m.addSource||(m.getSource&&m.getSource("ep")))return;try{m.addSource("ep",{type:"geojson",data:EPD});
-  m.addLayer({id:"ep-fill",type:"fill",source:"ep",paint:{"fill-color":["match",["get","k"],"res","#e8b04b","com","#7fd4ff","bare","#8fbf9f","#c9a0dc"],"fill-opacity":0.55}});
-  m.addLayer({id:"ep-line",type:"line",source:"ep",paint:{"line-color":"#f5efe2","line-width":0.6,"line-opacity":0.8}});
+  m.addLayer({id:"ep-fill",type:"fill",source:"ep",paint:{"fill-color":["match",["get","k"],"res","#ffb020","com","#33c3ff","bare","#39ff9a","#e07bff"],"fill-opacity":0.9}});
+  m.addLayer({id:"ep-line",type:"line",source:"ep",paint:{"line-color":"#ffffff","line-width":1,"line-opacity":0.9}});
+  // v688: a dot per plot so plots read at city zoom, where a plot is smaller than a pixel
+  m.addSource("epp",{type:"geojson",data:{type:"FeatureCollection",features:EPD.features.map(function(f){var g=f.geometry,r=g&&(g.type==="Polygon"?g.coordinates[0]:g.type==="MultiPolygon"?g.coordinates[0][0]:null);if(!r||!r.length)return null;var x=0,y=0;r.forEach(function(c){x+=c[0];y+=c[1]});return {type:"Feature",properties:f.properties,geometry:{type:"Point",coordinates:[x/r.length,y/r.length]}}}).filter(Boolean)}});
+  m.addLayer({id:"ep-dot",type:"circle",source:"epp",maxzoom:14,paint:{"circle-color":["match",["get","k"],"res","#ffb020","com","#33c3ff","bare","#39ff9a","#e07bff"],"circle-radius":["interpolate",["linear"],["zoom"],9,2.2,12,3.5,14,5],"circle-stroke-color":"#0e1413","circle-stroke-width":0.6,"circle-opacity":0.95}});
   if(!EPB&&m.on){EPB=true;m.on("click","ep-fill",function(e){var f=e.features&&e.features[0];if(!f||!window.maplibregl)return;var p=f.properties||{},sq=Number(p.a)||0;
     new window.maplibregl.Popup({closeButton:true,maxWidth:"260px"}).setLngLat(e.lngLat).setHTML('<b>Empty plot '+X(p.id)+'</b><br>'+X(p.d||"")+(p.m?' · '+X(p.m):'')+'<br>'+X(p.t||"Land type not given")+' · '+fm(Math.round(sq))+' sq m ('+fm(Math.round(sq*10.7639))+' sq ft)<br>Project: '+X(String(p.s||"").replace(/_/g," ").toLowerCase())+(p.p?'<br>'+X(p.p)+(p.v?' · '+X(p.v):'')+(p.pc!=null?' · '+fm(Math.round(Number(p.pc)))+'% built':''):'')+(p.z?'<br>Permitted use: '+X(p.z):'')+(p.g?'<br>Permitted floor area: '+fm(Math.round(Number(p.g)))+' sq m':'')).addTo(m)});
     m.on("mouseenter","ep-fill",function(){m.getCanvas().style.cursor="pointer"});m.on("mouseleave","ep-fill",function(){m.getCanvas().style.cursor=""})}}catch(e){if(window.console)console.warn("empty plots layer",e)}}
-function epShow(){var m=c.map();if(!S.empty){try{if(m&&m.getLayer&&m.getLayer("ep-fill")){m.setLayoutProperty("ep-fill","visibility","none");m.setLayoutProperty("ep-line","visibility","none")}}catch(e){}return}
+function epShow(){var m=c.map();if(!S.empty){epQuiet(m,false);try{if(m&&m.getLayer&&m.getLayer("ep-fill")){m.setLayoutProperty("ep-fill","visibility","none");m.setLayoutProperty("ep-line","visibility","none");m.setLayoutProperty("ep-dot","visibility","none")}}catch(e){}return}
   if(!EPD){if(EPL)return;EPL=true;fetch("/img/empty_plots",{referrerPolicy:"no-referrer"}).then(function(r){return r.ok?r.json():null}).then(function(j){EPL=false;if(!j||!j.features)return;
     EPN={all:0,res:0,com:0,oth:0,bare:0};j.features.forEach(function(f){var k=epKind(f.properties.t,f.properties.k);f.properties.k=k;if(k!=="bare")EPN.all++;EPN[k]++});EPD=j;epShow();drawBar()}).catch(function(){EPL=false});return}
   if(m&&m.getSource&&!m.getSource("ep"))epAdd(m);
-  try{m.setFilter("ep-fill",epFilter());m.setFilter("ep-line",epFilter());m.setLayoutProperty("ep-fill","visibility","visible");m.setLayoutProperty("ep-line","visibility","visible")}catch(e){}}
+  try{epQuiet(m,true);m.setFilter("ep-fill",epFilter());m.setFilter("ep-line",epFilter());m.setFilter("ep-dot",epFilter());["ep-fill","ep-line","ep-dot"].forEach(function(l){m.setLayoutProperty(l,"visibility","visible");m.moveLayer(l)})}catch(e){}}
+// v688 (Kendall 1 Nov: turn everything else off and make the plots pop): while Empty plots is on, the centre, area and project colour fills step aside
+var EPQ=["c-fill","c-seafill","a-fill","pj-ctx","pj-fill","pj-halo","devpf"];
+function epQuiet(m,on){if(!m||!m.getLayer)return;EPQ.forEach(function(l){try{if(m.getLayer(l))m.setLayoutProperty(l,"visibility",on?"none":"visible")}catch(e){}})}
 CF.empty=function(){return {on:S.empty||null,loaded:!!EPD,counts:EPN}};
 // ---- the map layers ----
 function cenFeatures(){var fmode=fillMode(),cen=S.cen,fs=[];D.geo.features.forEach(function(f){var r=D.comms[f.properties.i],cc=r.c,col=cc&&CBY[cc]?CBY[cc].colour:"#7fd4ff",fo=0,lo=0;

@@ -11,7 +11,7 @@ ok(!/h\+=grp\("band"/.test(src) && !/h\+=grp\("win"/.test(src), "the Price band 
 ok(/if\(kind==="win"\)/.test(src) && /function defWin\(\)/.test(src), "the window state and its default are kept (other screens still use them)");
 ok(/f==="empty"\)\{t="Empty plots";o=opt\("",'<span><b>Off<\/b>/.test(src) && /\["all","res","com","oth","bare"\]/.test(src), "the menu offers Off, All, Residential, Commercial, Other land and (v687) No building yet");
 ok(/k==="all"\?\["!=",\["get","k"\],"bare"\]/.test(src) && /if\(k!=="bare"\)EPN\.all\+\+/.test(src), "v687: All empty plots never includes the registered-project plots, nor counts them");
-ok(/"bare","#8fbf9f"/.test(src) && /bare:"No building yet, project registered"/.test(src), "v687: registered-project plots have their own colour and label");
+ok(/"bare","#39ff9a"/.test(src) && /id:"ep-dot",type:"circle"/.test(src) && /function epQuiet/.test(src) && /bare:"No building yet, project registered"/.test(src), "v687: registered-project plots have their own colour and label");
 ok(/if\(kind==="empty"\)\{S\.empty=nul\?null:val;epShow\(\);drawBar\(\);return\}/.test(src), "a choice sets the state, shows the layer and redraws the bar");
 ok(/fetch\("\/img\/empty_plots"/.test(src) && /if\(!EPD\)\{if\(EPL\)return;EPL=true/.test(src), "the data is fetched once, on first use, never twice in flight");
 ok(/CF\.reset=function\(\)\{S\.fmenu=null;S\.empty=null;epShow\(\);/.test(src), "Reset turns the layer off");
