@@ -48,7 +48,7 @@ ok(![...store.keys()].some((k) => k.startsWith("work_naj_")), "delete removes it
 const js = await (await req("/momo/work.js", true)).text();
 try { new Function(js); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse", e.message); }
 const ix = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
-ok(/isNajjuko\(env, url\) && !url\.searchParams\.has\("door"\)\) return Response\.redirect\(url\.origin \+ "\/momo\/work\?key="/.test(ix), "her MOMO tab opens straight on Work; /momo?door=1 shows the Work and Play door");
+ok(!/isNajjuko\(env, url\) && !url\.searchParams\.has\("door"\)\) return Response\.redirect\(url\.origin \+ "\/momo\/work\?key="/.test(ix), "v652: her MOMO tab opens the front door (the redirect straight to Work was removed on purpose)");
 ok(/x\.indexOf\("ins_najjuko_"\) === 0/.test(ix), "only her insider key counts as her");
 // v565 - task progress over days, rough time, daily summary
 { const { tasksOf, hoursByKpi } = await import("../src/work_log.js");
@@ -175,7 +175,7 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(al.entries[0].out_role === "Sales", "the old 'Sales agent' label still maps to Sales"); }
 // v576 - light theme on Work; the outside-role tally by department on the week view
 { ok(/function momoPage\(key, rk, body\)[\s\S]{0,400}background:#FAF7F1;color:#1C2321/.test(ix), "Momo Work is light (cream page, ink text)");
-  ok(/function momoHtml\(key, rk, work\)[\s\S]{0,1600}background:#0C1413;color:#E8E4D8/.test(ix), "the Work-or-Play door and Play stay dark");
+  ok(/function momoHtml\([^)]*\)[\s\S]{0,4000}background:#0C1413;color:#E8E4D8/.test(ix), "the Work-or-Play door and Play stay dark");
   await req("/momo/work/api", true, { action: "save", entry: { title: "a", type: "Meeting", summary: "s", people: [], kpis: [], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: false, out_role: "Sales", effort: "1-2 hours", progress: [], time_of_day: "Morning" }, text: "t", date: "2026-10-13" });
   await req("/momo/work/api", true, { action: "save", entry: { title: "b", type: "Update", summary: "s", people: [], kpis: [], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: false, out_role: "HR, Admin & Compliance", effort: "1-2 hours", progress: [], time_of_day: "Morning" }, text: "t", date: "2026-10-14" });
   await req("/momo/work/api", true, { action: "save", entry: { title: "c", type: "Update", summary: "s", people: [], kpis: [2], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: true, out_role: "", effort: "1-2 hours", progress: [], time_of_day: "Morning" }, text: "t", date: "2026-10-14" });
@@ -188,7 +188,7 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(Array.isArray(bapi.broker_tasks) && bapi.broker_tasks.length === 8 && bapi.broker_tasks.map((g) => g.group).join() === "Leads,Conversations,Developers and projects,Viewings,Deals,Owners and listings,After-sales and tenancies,Market and growth" && bapi.broker_tasks.some((g) => g.items.some((i) => i[0] === "dev_brief")), "v651: the Broker button opens eight collapsed groups incl. developer briefings, not a wall of pills");
   const bs = await (await req("/momo/work/api", true, { action: "save", entry: { title: "Vetted new leads", type: "Update", summary: "s", people: [], kpis: [], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: true, broker: true, broker_tasks: ["lead_vet", "wa", "nonsense"], effort: "1-2 hours", progress: [], time_of_day: "Morning", start: "09:00", end: "10:00" }, text: "t", date: "2026-10-14" })).json();
   ok(bs.entry.broker === true && bs.entry.in_scope === true && bs.entry.broker_tasks.join() === "lead_vet,wa", "v588: ticked broker items are kept, unknown ids dropped; broker work stays inside the role");
-  const brr = await (await req("/momo/work/report?days=1&day=2026-10-14", true)).text();
+  const brr = await (await req("/momo/work/report?days=2026-10-14", true)).text();
   ok(/THE TWO ROLES/.test(brr) && /Leads<b>/.test(brr), "v588: the Broker row of the role grid is split by the broker groups", brr.match(/THE TWO ROLES[\s\S]{0,300}/)?.[0]?.replace(/<[^>]+>/g, " "));
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
 // v577 - Log / Report tabs; the 15-second report: headline tiles, donut, per-day bars, week-at-a-glance grid, tasks, outside-role line; picked days
@@ -302,7 +302,7 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   const js13 = await (await req("/momo/work.js", true)).text();
   ok(/k\.hours\+' h '\+\(k\.name==="Strategic Lead"\?"as Strategic Lead":k\.name==="Broker"\?"as a broker"/.test(js13), "the week view's meter says it the same way");
   for (const k of [...store.keys()]) if (k.startsWith("work_naj_")) store.delete(k); }
-ok(/request\.method === "POST" && url\.pathname === "\/momo\/work\/api"/.test(ix), "v564.1: her saves and filings are answered before the POST guard");
+ok(/request\.method === "POST" && MOMO_WORK_POSTS\.has\(url\.pathname\)\) \{ const _wr = await workRoute/.test(ix) && /MOMO_WORK_POSTS = new Set\(\[[^\]]*"\/momo\/work\/api"/.test(ix), "v564.1 (v619 list): her saves and filings are answered before the POST guard");
 console.log(`v564 momo work log: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
 

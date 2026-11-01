@@ -48,7 +48,7 @@ const deps = { clientOk: () => true, najNav: () => "", NAJ_NAV_CSS: "", NAJ_FONT
 const html = devmapHtml("k", deps);
 ok(html.includes("var THEME=(function(){") && html.includes('style:(typeof THEME!=="undefined"&&THEME?THEME.init():"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json")'), "the map is created with the theme's basemap");
 ok(html.includes("function buildLayers(){") && html.includes("function bindMap(){") && html.includes('map.on("load",buildLayers);'), "the load handler is split into layers (rebuilt) and handlers (once)");
-ok(html.includes('THEME.onStyle(function(u){map.setStyle(u);map.once("style.load",buildLayers)})'), "a theme change swaps the basemap and rebuilds the layers");
+ok(html.includes('THEME.onStyle(function(u){map.once("style.load",buildLayers);map.setStyle(u,{diff:false})'), "a theme change swaps the basemap and rebuilds the layers (v636: listener first, no style diff)");
 ok(html.includes("if(!BOUND)CF.bind(map,maplibregl)") && html.includes("if(!BOUND){BOUND=true;bindMap()}"), "the centres module and the page bind once");
 const bl = html.slice(html.indexOf("function buildLayers(){"), html.indexOf("function bindMap(){"));
 ok(/updatePj\(\);if\(typeof PLACES!=="undefined"&&PLACES&&PLACES\.redraw\)PLACES\.redraw\(\);refreshMap\(\);/.test(bl) && !/map\.on\("mousemove"/.test(bl) && !/map\.on\("click"/.test(bl), "buildLayers refreshes the data after re-adding and binds nothing");

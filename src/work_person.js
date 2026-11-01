@@ -77,6 +77,13 @@ export function swapPage(s, cfg, marks) {
   let t = String(s);
   for (const m of marks || []) if (m && m.length > 40) t = t.split(m).join(m.startsWith("data:") ? BLANK_PNG : "");
   const nm = cfg.name || "", first = nm.split(/\s+/)[0];
+  // v681 (audit 1 Nov 2026) - the v679 report cover, seen by anyone but her: the kicker "FN REALTY" (capitals, so the FN Realty swap below missed it)
+  // becomes their organisation, her role (en dash and &amp;, so the role pattern below never matched) becomes theirs, and the FN mark, already
+  // blanked by the marks loop above, is hidden instead of leaving an empty slot at the top of the cover.
+  const H = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  t = t.split('<img class=mark src="' + BLANK_PNG + '"').join('<img class=mark style="display:none" src="' + BLANK_PNG + '"')
+    .replace(/<div class=kick>FN REALTY<\/div>/g, "<div class=kick>" + H(String(cfg.org || "").toUpperCase()) + "</div>")
+    .replace(/Strategic Lead – Marketing, PR &amp; Business Development/g, H(cfg.role));
   return t.replace(/FN Realty PDF/g, "PDF").replace(/<title>FN /g, "<title>").replace(/alt="FN Realty"|alt="FN"/g, 'alt=""')
     .replace(/Serah Najjuko Ganyana · Strategic Lead[^<]*/g, (nm ? nm + " · " : "") + cfg.role + " · " + cfg.org)
     .replace(/Prepared by Serah Najjuko Ganyana for FN Realty\.[^<]*/g, "Prepared" + (nm ? " by " + nm : "") + " for " + cfg.org + ".")

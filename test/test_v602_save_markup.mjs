@@ -9,7 +9,7 @@ const js = await (await m.workRoute(new Request("https://w/momo/work.js?key=K"),
 const ids = new Set([...html.matchAll(/\bid=([a-z_][a-z0-9_]*)/g)].map((x) => x[1]));
 // every $("id") the script reads OUTSIDE a sheet/preview builder must exist in the page markup, or be guarded
 const read = [...js.matchAll(/\$\("([a-z_][a-z0-9_]*)"\)\.value/g)].map((x) => x[1]);
-const dynamic = new Set(["ps", "pxn", "ar_n", "pnw", "t_n", "a_t", "a_d", "a_s", "p_t", "e_note", "n_u", "n_h", "n_w", "n_a", "wd", "t_h", "t_w", "t_a", "tp_r"]);   // built by preview()/sheets, or present
+const dynamic = new Set(["ps", "pxn", "ar_n", "pnw", "t_n", "a_t", "a_d", "a_s", "p_t", "e_note", "n_u", "n_h", "n_w", "n_a", "wd", "t_h", "t_w", "t_a", "tp_r", "rec_title"]);   // v681: rec_title is drawn by the Record script (work_rec_page.js drawStart) before its Start buttons read it   // built by preview()/sheets, or present
 const guarded = (id) => js.includes('if($("' + id + '"))$("' + id + '")') || js.includes('($("' + id + '")?$("' + id + '")');
 const missing = [...new Set(read)].filter((id) => !ids.has(id) && !dynamic.has(id) && !guarded(id));
 ok(missing.length === 0, "every field the script reads exists in the page or is guarded", missing);

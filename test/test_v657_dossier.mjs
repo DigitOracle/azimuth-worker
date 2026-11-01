@@ -48,6 +48,6 @@ r = await post({ action: "note", text: "x" }, null); ok(r.status !== 200, "no ke
 j = await (await get("/momo/work/brief/rec?b=faketower", K)).json(); ok(j.notes.length === 1 && j.rec.title === "Fake Tower", "rec returns record and notes");
 
 fd = await (await get("/momo", K)).text(); ok(fd.includes("/momo/work/brief?key=") && fd.includes("&b=faketower") && fd.includes("<b>Fake Tower</b>"), "front-door card for her");
-fd = await (await get("/momo", N)).text(); ok(!fd.includes("/momo/work/brief"), "no card on Kendall's front door");
+fd = await (await get("/momo", N)).text(); ok(!/\/momo\/work\/brief\?key=[^"]*&b=/.test(fd), "no dossier card on Kendall's front door (his Product briefs card links /momo/work/briefs, not a dossier)");
 
 console.log(`v657 dossier: ${pass} passed, ${fail} failed`); if (fail) process.exit(1);

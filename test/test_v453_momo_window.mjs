@@ -61,7 +61,7 @@ const other = { from: HIM, id: "wamid.btn3", type: "button", button: { payload: 
 ok((await fit.fitGuest(env, HIM, other, deps)) === false, "a template button that is not Momo's is not taken");
 
 console.log("open window -> normal free text");
-store.set("fitc_in_kendall", { v: new Date(T("2026-10-11T15:00:00Z")).toISOString() });
+store.set("fitc_in_kendall", { v: new Date().toISOString() });   // v681: the window is judged by the real clock (fit.js recentIn), as in test_v328; a fixed date went stale once it was a day old
 reset(); await fit.fitEvening(env, deps, T("2026-10-11T17:05:00Z"));
 ok(!tpl.some((x) => x.to === HIM) && texts.some((x) => x.to === HIM && /VERDICT|check-in/i.test(x.b)), "his window open: the verdict goes as free text, no template", JSON.stringify({ tpl, texts }).slice(0, 300));
 ok(tpl.length === 0, "the owner (window open) gets no template either");

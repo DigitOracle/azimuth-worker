@@ -580,6 +580,53 @@ async function recRead(env, deps, J, id, b) {
   await recJobPut(env, id, kind, job);
   return left.length ? J({ state: "reading", stage: left[0], label: REC_STAGE_LABEL[left[0]] || "Reading", n: job.done.length, of }) : J({ state: "ready", n: of, of });
 }
+// v681 - the Finish step, shared by the page's Finish button and the server's sweep below. opt.endedHm: the sweep passes the time the audio stopped,
+// not the time it happened to run.
+async function recFinish(env, deps, m, clientSecs, opt) {
+  const id = m.id;
+  let segs = await recSegs(env, id);
+  for (const g of segs) if (g.pending) {   // retry the parts the speech engine could not read when they arrived
+    const key = RECA + id + "_" + String(g.n).padStart(3, "0");
+    try { const buf = await env.MEETINGS.get(key, "arrayBuffer"); if (buf) { const sp = await recSpeech(env, new Uint8Array(buf)); await env.MEETINGS.put(segKey(id, g.n), JSON.stringify(segOf(g.n, g.secs, sp))); await env.MEETINGS.delete(key); } } catch (e) {}
+  }
+  segs = await recSegs(env, id);
+  const missing = segs.filter((g) => g.pending && !g.text).map((g) => g.n), text = recTranscriptText(segs, false);
+  m.secs = Math.max(Math.round(Number(clientSecs) || 0), segs.reduce((a, g) => a + (g.secs || 0), 0)); m.ended_hm = (opt && opt.endedHm) || dubaiHM(); m.chars = text.length; m.parts = segs.length;
+  const segSecs = segs.reduce((a, g) => a + (g.secs || 0), 0), lostSecs = Math.max(0, Math.round(Number(clientSecs) || 0) - segSecs);   // v629 - time the phone's microphone ran but gave no sound (parts that came back empty are never stored)
+  if (lostSecs >= 60 && segSecs > 0) m.lost = { secs: lostSecs, from: segSecs }; else delete m.lost;
+  if (m.status === "recording") m.status = "transcribed";
+  if (deps && deps.claudeJSON && segs.some((g) => g.utts && g.utts.length)) { try { const sp = await matchSpeakers(env, deps, m, segs); if (sp) m.speakers = sp; } catch (e) {} }   // v663 - the "match speakers" step
+  await recPut(env, m);
+  return { segs, text, missing };
+}
+// v681 (audit 1 Nov 2026) - THE RECORDING SWEEP. Only the page's Finish button ever finished a recording, so a recording whose page was closed, or whose
+// phone went to sleep, stayed "recording" for good, and a part the speech engine had failed on was lost when its audio expired after 48 hours
+// (one of hers: 26 Oct, one part, never finished). Every 15 minutes the minute tick finishes, for each person, any recording that has had no audio for
+// an hour: it retries the failed parts while their audio still exists and marks it auto_finished so the list can say so. Notes and minutes stay on
+// request, exactly as before. At most six recordings a sweep.
+export const REC_IDLE_MS = 3600e3;
+export async function recSweep(env, deps, nowMs) {
+  const now = nowMs || Date.now(), out = [];
+  if (Math.floor(now / 60000) % 15 !== 7) return out;
+  for (const person of WORK_PEOPLE) {
+    const e = workEnv(env, person); let cursor;
+    do {
+      const r = await e.MEETINGS.list({ prefix: RECW, cursor }); cursor = r.list_complete ? null : r.cursor;
+      for (const k of r.keys) {
+        if (out.length >= 6) return out;
+        const m = await recGet(e, k.name.slice(RECW.length));
+        if (!m || m.status !== "recording") continue;
+        const segs = await recSegs(e, m.id), segSecs = segs.reduce((a, g) => a + (g.secs || 0), 0), began = Date.parse(m.started || "");
+        if (!began || began + segSecs * 1000 + REC_IDLE_MS > now) continue;   // still live, or not an hour since its last audio
+        const endHm = new Date(began + segSecs * 1000 + 4 * 3600e3).toISOString().slice(11, 16);
+        m.auto_finished = new Date(now).toISOString();
+        const f = await recFinish(e, deps, m, 0, { endedHm: endHm });
+        out.push({ person, id: m.id, parts: f.segs.length, chars: f.text.length, missing: f.missing.length });
+      }
+    } while (cursor);
+  }
+  return out;
+}
 async function recApi(request, env, J, deps) {
   let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
   if (b.action === "start") {
@@ -600,7 +647,7 @@ async function recApi(request, env, J, deps) {
       const segs = await recSegs(env, m.id);
       let job = null;   // v629 - an unfinished read, so the list can say Reading / Needs a retry and offer Continue
       if (!(m.notes && m.notes.summary && m.minutes)) for (const kd of ["minutes", "notes"]) { const jj = await recJobGet(env, m.id, kd); if (jj && jj.state && jj.state !== "ready") { job = { kind: kd, state: jj.state, stage: jj.stage || "", n: (jj.done || []).length, updated: jj.updated || 0, error: jj.error || "" }; break; } }
-      recs.push({ id: m.id, title: m.title, started_hm: m.started_hm, status: m.status, minutes: !!m.minutes, notes: !!(m.notes && m.notes.summary), lost: m.lost || null, job, secs: m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0), parts: segs.length });
+      recs.push({ id: m.id, title: m.title, started_hm: m.started_hm, status: m.status, minutes: !!m.minutes, notes: !!(m.notes && m.notes.summary), lost: m.lost || null, auto: m.auto_finished || "", job, secs: m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0), parts: segs.length });
     }
     return J({ ok: true, recs, date });
   }
@@ -616,19 +663,7 @@ async function recApi(request, env, J, deps) {
     await recPurge(env, id, m); return J({ ok: true });   // v627
   }
   if (b.action === "finish") {
-    let segs = await recSegs(env, id);
-    for (const g of segs) if (g.pending) {   // retry the parts the speech engine could not read when they arrived
-      const key = RECA + id + "_" + String(g.n).padStart(3, "0");
-      try { const buf = await env.MEETINGS.get(key, "arrayBuffer"); if (buf) { const sp = await recSpeech(env, new Uint8Array(buf)); await env.MEETINGS.put(segKey(id, g.n), JSON.stringify(segOf(g.n, g.secs, sp))); await env.MEETINGS.delete(key); } } catch (e) {}
-    }
-    segs = await recSegs(env, id);
-    const missing = segs.filter((g) => g.pending && !g.text).map((g) => g.n), text = recTranscriptText(segs, false);
-    m.secs = Math.max(Math.round(Number(b.secs) || 0), segs.reduce((a, g) => a + (g.secs || 0), 0)); m.ended_hm = dubaiHM(); m.chars = text.length; m.parts = segs.length;
-    const segSecs = segs.reduce((a, g) => a + (g.secs || 0), 0), lostSecs = Math.max(0, Math.round(Number(b.secs) || 0) - segSecs);   // v629 - time the phone's microphone ran but gave no sound (parts that came back empty are never stored)
-    if (lostSecs >= 60 && segSecs > 0) m.lost = { secs: lostSecs, from: segSecs }; else delete m.lost;
-    if (m.status === "recording") m.status = "transcribed";
-    if (segs.some((g) => g.utts && g.utts.length)) { try { const sp = await matchSpeakers(env, deps, m, segs); if (sp) m.speakers = sp; } catch (e) {} }   // v663 - the "match speakers" step
-    await recPut(env, m);
+    const { segs, text, missing } = await recFinish(env, deps, m, b.secs);
     if (text.length < 40) return J({ error: segs.length ? "I could not hear any speech in that recording. Check the microphone, or try again." : "No audio reached the server for that recording: the phone sent empty audio (a locked screen or another app can cut the microphone). Nothing can be read from it.", parts: segs.length }, 422);
     return J({ ok: true, parts: segs.length, chars: text.length, secs: m.secs, missing, lost: m.lost || null });
   }
@@ -1114,14 +1149,20 @@ export async function workEveningCheck(env, deps, nowMs) {
   if (env.WORK_EOD !== "on" || !env.WA_ALLOWED) return "off";
   const t = new Date((nowMs || Date.now()) + 4 * 3600e3), hm = t.toISOString().slice(11, 16), today = t.toISOString().slice(0, 10);
   if (hm < "18:00" || hm >= "18:30") return "not now";
-  const fk = "wl_eod_naj_" + today; if (await env.MEETINGS.get(fk)) return "done today";   // NOT under PFX: listEntries reads every work_naj_* key as an entry
+  // v681 (audit 1 Nov 2026) - the day is still marked BEFORE the send (two minute ticks must never both send), but a send that fails now writes
+  // "failed:<n>" over the mark, and the next tick inside 18:00-18:29 tries again, at most three times. It used to say "sent" and never retry.
+  const fk = "wl_eod_naj_" + today, prior = await env.MEETINGS.get(fk);   // NOT under PFX: listEntries reads every work_naj_* key as an entry
+  const tries = /^failed:\d+$/.test(String(prior || "")) ? +String(prior).split(":")[1] : 0;
+  if (prior && !tries) return "done today";
+  if (tries >= 3) return "gave up";
+  const failed = async (why) => { await env.MEETINGS.put(fk, "failed:" + (tries + 1), { expirationTtl: 3 * 86400 }); return why; };
   const tasks = applyOverrides(tasksOf(await listEntries(env, PHASES[0].from, today)), await taskOverrides(env));
   const c = eodCandidates(tasks, today), names = c.slice(0, 6).map((x) => shownTask(x.name)).concat(c.length > 6 ? ["and " + (c.length - 6) + " more"] : []);
   const mark = (v) => env.MEETINGS.put(fk, v, { expirationTtl: 3 * 86400 });
   if (!c.length) { await mark("nothing to check"); return "nothing"; }
   let open = false; try { open = !!(await deps.ownerWindowOpen(env)); } catch (e) {}
-  if (open) { await mark("sent"); const r = await deps.waSend(env, env.WA_ALLOWED, eodText(names, deps.link || "")); return r && r.ok === false ? "send failed" : "sent"; }
-  if (env.TASK_CHECK_TEMPLATE && deps.waSendTemplate) { await mark("template"); await deps.waSendTemplate(env, env.WA_ALLOWED, env.TASK_CHECK_TEMPLATE, env.TASK_CHECK_LANG || "en_US", [c.length + " task" + (c.length === 1 ? "" : "s"), names.join("; ").replace(/\s+/g, " ").slice(0, 900)]); return "template"; }
+  if (open) { await mark("sent"); let r = null; try { r = await deps.waSend(env, env.WA_ALLOWED, eodText(names, deps.link || "")); } catch (e) { r = { ok: false }; } return r && r.ok === false ? failed("send failed") : "sent"; }
+  if (env.TASK_CHECK_TEMPLATE && deps.waSendTemplate) { await mark("template"); let r = null; try { r = await deps.waSendTemplate(env, env.WA_ALLOWED, env.TASK_CHECK_TEMPLATE, env.TASK_CHECK_LANG || "en_US", [c.length + " task" + (c.length === 1 ? "" : "s"), names.join("; ").replace(/\s+/g, " ").slice(0, 900)]); } catch (e) { r = { ok: false }; } return r && r.ok === false ? failed("template failed") : "template"; }
   await mark("window shut, no template"); return "window shut";
 }
 // v674 - time lost to blockers in the report's days: stuck time per reason, and how much of it she marked as outside her control
@@ -1240,9 +1281,13 @@ export function reportHtml(es, from, to, allTasks, pickedDays) {
         return '<section class=mth><h2 class=mh2>' + esc(lab(ym).toUpperCase()) + (me.length ? '' : ' · NOTHING LOGGED') + '</h2>' + reportSection(me, md, allTasks) + '</section>'; }).join("");
     return reportDoc('Activity', span, body, 'FN Activity report ' + lab(months[0]) + ' to ' + lab(months[months.length - 1]), period);
   }
-  const span = daily ? esc(dayName(days[0])) + ' ' + esc(fmtD(days[0])) : monthly ? lab(months[0]) + ' · to ' + esc(fmtD(days[days.length - 1])) : (days.length === 7 && weekOf(days[0])[0] === days[0] ? 'Week of ' + esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[6])) : days.map((d) => dayName(d).slice(0, 3)).join(", ") + ' · ' + esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[days.length - 1])));
-  const kindWord = daily ? 'Daily' : monthly ? 'Monthly' : days.length === 7 ? 'Weekly' : 'Activity';
-  const title = (daily ? 'FN Daily report ' : monthly ? 'FN Monthly report ' : days.length === 7 ? 'FN Weekly report ' : 'FN Activity report ') + (daily ? fmtD(days[0]) : monthly ? lab(months[0]) : fmtD(days[0]) + ' to ' + fmtD(days[days.length - 1]));
+  // v681 (audit 1 Nov 2026) - the label used to go by day count alone: any 8+ days said MONTHLY (a 10-day range inside October) and any 7 days said
+  // WEEKLY (seven picked days, or Thu-Wed). Now Monthly = consecutive days from the 1st of one month (the whole month or month to date), Weekly =
+  // seven consecutive days, anything else = Activity. The layout (week-by-week rows past seven days) is unchanged.
+  const isMonth = monthly && contiguous && days[0].slice(8) === "01", isWeek = days.length === 7 && contiguous;
+  const span = daily ? esc(dayName(days[0])) + ' ' + esc(fmtD(days[0])) : isMonth ? lab(months[0]) + ' · to ' + esc(fmtD(days[days.length - 1])) : monthly ? esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[days.length - 1])) : (isWeek && weekOf(days[0])[0] === days[0] ? 'Week of ' + esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[6])) : days.map((d) => dayName(d).slice(0, 3)).join(", ") + ' · ' + esc(fmtD(days[0])) + ' to ' + esc(fmtD(days[days.length - 1])));
+  const kindWord = daily ? 'Daily' : isMonth ? 'Monthly' : isWeek ? 'Weekly' : 'Activity';
+  const title = 'FN ' + kindWord + ' report ' + (daily ? fmtD(days[0]) : isMonth ? lab(months[0]) : fmtD(days[0]) + ' to ' + fmtD(days[days.length - 1]));
   return reportDoc(kindWord, span, reportSection(es, days, allTasks), title, period);
 }
 
