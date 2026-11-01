@@ -9,7 +9,9 @@ const src = fs.readFileSync(new URL("../src/centres2040_page.js", import.meta.ur
 ok(/grp\("empty","map-trifold","Empty plots"/.test(src), "the bar carries an Empty plots chip");
 ok(!/h\+=grp\("band"/.test(src) && !/h\+=grp\("win"/.test(src), "the Price band and Window chips are gone from the bar");
 ok(/if\(kind==="win"\)/.test(src) && /function defWin\(\)/.test(src), "the window state and its default are kept (other screens still use them)");
-ok(/f==="empty"\)\{t="Empty plots";o=opt\("",'<span><b>Off<\/b>/.test(src) && /\["all","res","com","oth"\]/.test(src), "the menu offers Off, All, Residential, Commercial and Other land");
+ok(/f==="empty"\)\{t="Empty plots";o=opt\("",'<span><b>Off<\/b>/.test(src) && /\["all","res","com","oth","bare"\]/.test(src), "the menu offers Off, All, Residential, Commercial, Other land and (v687) No building yet");
+ok(/k==="all"\?\["!=",\["get","k"\],"bare"\]/.test(src) && /if\(k!=="bare"\)EPN\.all\+\+/.test(src), "v687: All empty plots never includes the registered-project plots, nor counts them");
+ok(/"bare","#8fbf9f"/.test(src) && /bare:"No building yet, project registered"/.test(src), "v687: registered-project plots have their own colour and label");
 ok(/if\(kind==="empty"\)\{S\.empty=nul\?null:val;epShow\(\);drawBar\(\);return\}/.test(src), "a choice sets the state, shows the layer and redraws the bar");
 ok(/fetch\("\/img\/empty_plots"/.test(src) && /if\(!EPD\)\{if\(EPL\)return;EPL=true/.test(src), "the data is fetched once, on first use, never twice in flight");
 ok(/CF\.reset=function\(\)\{S\.fmenu=null;S\.empty=null;epShow\(\);/.test(src), "Reset turns the layer off");
