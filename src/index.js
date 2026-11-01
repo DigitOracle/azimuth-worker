@@ -4724,7 +4724,8 @@ async function appFetch(request, env, ctx) {
             try {
               const _ds = gstDateStr(gstNow()); const _st = await feedPdfStore(env, _ang, _ds);
               const _fn = "Najma_Market_News_" + _ds + ".pdf";
-              await waSendDocument(env, from, new URL(request.url).origin + "/img/" + _st.name, _fn, "Black Coffee, here is today's market news for the designer: one card per idea, with format, lead time and picture direction." + UPDATE_SIGNOFF);
+              await waSendDocument(env, from, String(env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "") + "/img/" + _st.name, _fn,   // v689: request.url can be an internal hostname that WhatsApp rejects (1 Nov: "document.link is not a valid URI")
+              "Black Coffee, here is today's market news for the designer: one card per idea, with format, lead time and picture direction." + UPDATE_SIGNOFF);
             } catch (e) { await noteErr(env, "feed-pdf", String((e && e.message) || e).slice(0, 160)); await waSend(env, from, "The PDF did not build this time. Say *pdf* again in a minute." + UPDATE_SIGNOFF); }
             return new Response("ok");
           }
