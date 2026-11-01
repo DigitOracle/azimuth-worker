@@ -33,11 +33,11 @@ export const CENTRES_CSS = String.raw`
 #fbar .fwf{font-size:10.5px;color:var(--muted);white-space:nowrap}
 #fbar #lockchips .chip{cursor:pointer}
 #fbar button:focus-visible,#fbar .chip:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-#fbar .fmenu{order:9;flex:0 0 100%;min-width:min(300px,calc(100vw - 80px));max-height:min(46vh,380px);overflow:auto;background:#0e1413;border:1px solid var(--gold);border-radius:10px;padding:8px;color:#f5efe2}
+#fbar .fmenu{order:9;flex:0 0 100%;min-width:min(300px,calc(100vw - 80px));max-height:min(46vh,380px);overflow:auto;background:var(--ground);border:1px solid var(--gold);border-radius:10px;padding:8px;color:var(--ink)}
 #fbar .fmh{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
 #fbar .fmh b{font-size:12.5px}
 #fbar .fopts{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-#fbar .fopt{display:flex;align-items:center;gap:7px;text-align:left;min-width:0;min-height:40px;background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:#f5efe2;font:inherit;font-size:12px;cursor:pointer;overflow-wrap:anywhere}
+#fbar .fopt{display:flex;align-items:center;gap:7px;text-align:left;min-width:0;min-height:40px;background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);font:inherit;font-size:12px;cursor:pointer;overflow-wrap:anywhere}
 #fbar .fopt.on{border-color:var(--gold)}
 #fbar .fopt small{display:block;color:var(--muted);font-size:10.5px}
 #fbar .fopt.wide{grid-column:1/-1}
