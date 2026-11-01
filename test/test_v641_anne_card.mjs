@@ -16,7 +16,7 @@ for (const k of [N, O, "wrong"]) { const r = await post({ action: "archive" }, k
 ok((await get("/momo/work/anne", K)).status === 200, "the owner's (Najjuko's) key opens the page");
 const rec0 = await (await get("/momo/work/anne/rec", K)).json(); ok(rec0.rec && rec0.rec.leads.length === 0, "an empty card before any data", rec0);
 // front door: no record -> no card
-let h = await door(K); ok(cards(h) === 4, "no record: 4 cards for Najjuko (v672: + Product data sheets)", cards(h));
+let h = await door(K); ok(cards(h) === 5, "no record: 5 cards for Najjuko (v672: + Product data sheets, v682: + Brokers)", cards(h));
 // import and merge by id
 let r = await (await post({ action: "import_leads", title: "Fake Client", brief: { budgetMin: 100, budgetMax: 200, chips: ["a", "b"] }, leads: [
   { id: "L1", community: "Fake Community", property: "Fake House 1", rent: "AED 150,000", agent: "Fake Agent", phone: "+000 0 000 0000", phoneType: "agent", listingUrl: "https://example.com/1", status: "Contacted", dog: "yes" },
@@ -42,13 +42,13 @@ r = await post({ action: "bogus" }, K); ok(r.status === 400, "unknown action 400
 // cap
 const many = Array.from({ length: 200 }, (_, i) => ({ id: "m" + i, property: "P" + i })); r = await (await post({ action: "import_leads", leads: many }, K)).json(); ok(r.rec.leads.length <= MAX_LEADS, "lead cap", r.rec.leads.length);
 // front door: record present -> 5 cards for Najjuko; Kendall has 7 (v667 Product briefs, v672 Product data sheets)
-h = await door(K); ok(cards(h) === 5 && /Fake Client/.test(h) && /\/momo\/work\/anne\?key=/.test(h), "5 cards for Najjuko with the client's title", cards(h));
+h = await door(K); ok(cards(h) === 6 && /Fake Client/.test(h) && /\/momo\/work\/anne\?key=/.test(h), "6 cards for Najjuko with the client's title", cards(h));
 ok(cards(await door(N)) === 7 && !/Fake Client/.test(await door(N)), "7 cards for Kendall (v646 Speaking, v650 GGU, v667 Product briefs, v672 Product data sheets), no client card");
 ok(cards(await door(O)) === 3, "3 cards for another insider");
 // archive hides the card; unarchive brings it back
-await post({ action: "archive" }, K); h = await door(K); ok(cards(h) === 4 && !/Fake Client/.test(h), "archived: card gone from the front door", cards(h));
+await post({ action: "archive" }, K); h = await door(K); ok(cards(h) === 5 && !/Fake Client/.test(h), "archived: card gone from the front door", cards(h));
 ok((await get("/momo/work/anne", K)).status === 200, "archived page still opens (to restore)");
-await post({ action: "unarchive" }, K); ok(cards(await door(K)) === 5, "restored: card back");
+await post({ action: "unarchive" }, K); ok(cards(await door(K)) === 6, "restored: card back");
 // the page code holds no lead data
 const pg = await (await get("/momo/work/anne", K)).text(); ok(!/Fake House/.test(pg), "page code holds no lead data");
 ok(STATUSES.length === 8, "8 statuses (v654 Declined)"); ok(cleanLead({ phone: "<script>+1 (2)" }).phone === "+1 (2)", "phone chars cleaned");
