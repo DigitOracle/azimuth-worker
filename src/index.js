@@ -8103,7 +8103,11 @@ async function renderHtmlPng(env, html, W, H) {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
-    await page.setContent(html, { waitUntil: "networkidle0", timeout: 25000 });
+    try { await page.setContent(html, { waitUntil: "networkidle0", timeout: 25000 }); }
+    catch (e) {   // v685 (1 Nov 2026: two morning cards lost to "Navigation timeout of 25000 ms exceeded") - a slow font or image fetch, not a failed page
+      if (!/timeout/i.test(String((e && e.message) || e))) throw e;
+      try { await page.waitForNetworkIdle({ idleTime: 500, timeout: 10000 }); } catch (x) {}
+    }
     try { await page.evaluate(() => document.fonts.ready.then(() => true)); } catch (e) {}
     const png = await page.screenshot({ type: "png", clip: { x: 0, y: 0, width: W, height: H } });
     return png && png.byteLength ? png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) : null;
@@ -12518,6 +12522,7 @@ async function sceneJobRun(env, jk, j, origin) {
   origin = pubOrigin(env, origin);
   if (j.versus) return versusJobRun(env, jk, j, origin);                              // v164 - a Versus picture
   if (j.gaveUp) return { done: false, why: "gave up" };
+  if (j.next_at && j.next_at > Date.now()) return { done: false, why: "waiting to retry" };   // v685 - backoff, see sceneBackoffMs
   if (j.running_until && j.running_until > Date.now()) return { done: false, why: "making" };
   const lock = rid();
   j.tries = (j.tries | 0) + 1; j.last = Date.now(); j.running_until = Date.now() + 180000; j.lock = lock;
@@ -12553,13 +12558,42 @@ async function sceneJobRun(env, jk, j, origin) {
     err = "send rejected";
   } catch (e) { err = String((e && e.message) || e).slice(0, 200); }
   j.running_until = 0;
+  j.errs = (Array.isArray(j.errs) ? j.errs : []).concat({ at: new Date().toISOString(), try: j.tries | 0, err }).slice(-8);   // v685 - every failure kept on the job, not only the last one anywhere
   try { await env.MEETINGS.put("plate_last_fail", JSON.stringify({ at: new Date().toISOString(), job: jk, err }), { expirationTtl: 7 * 86400 }); } catch (e) {}
-  if ((j.tries | 0) >= 3) {                                                            // three real failures: stop, give her the prompt, keep the record
-    try { await waSend(env, j.to, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, j.to, bgPromptBlock(j.angle || {}, (j.option || {}).place)); } catch (e) {}
-    j.gaveUp = Date.now();
-  }
+  if ((j.tries | 0) >= sceneMaxTries(j)) {
+    const g = await sceneGiveUp(env, jk, j, origin, err);
+    if (g.done) return g;
+  } else j.next_at = Date.now() + sceneBackoffMs(j.tries | 0);
   try { await env.MEETINGS.put(jk, JSON.stringify(j), { expirationTtl: 2 * 86400 }); } catch (e) {}
   return { done: false, why: err };
+}
+// v685 - SCENE RETRIES (Kendall, 1 Nov 2026: "Nothing should be getting stuck on that early morning one"). The five feed jobs are
+// queued together and the minute tick retried a scene job on the very next tick with no wait, so angles 2 and 3 spent all three
+// tries inside five minutes (07:14-07:20 UTC) while Browser Rendering was busy with the other cards, and gave up. Now the gap grows
+// (2, 5, 10, 20, 30 minutes), a feed job gets six tries (about 67 minutes), and picResume runs at most two scene jobs at once.
+const SCENE_BACKOFF_MIN = [2, 5, 10, 20, 30];
+function sceneBackoffMs(tries) { return SCENE_BACKOFF_MIN[Math.min(Math.max((tries | 0) - 1, 0), SCENE_BACKOFF_MIN.length - 1)] * 60000; }
+function sceneMaxTries(j) { return j && j.auto === "feed" ? 6 : 4; }
+const SCENE_MAX_RUNNING = 2;
+// The last try failed. If the picture of her was already made (paid for) and only the words-on-top card failed, she still gets the
+// picture with the caption, so a card never ships empty. Kendall hears about every give-up; Naj is never told about a failure in an
+// automatic feed job (she did not ask for that one by hand). A picture she tapped for herself still gets the prompt, as before.
+async function sceneGiveUp(env, jk, j, origin, err) {
+  const post = j.post || {}, what = "angle " + (post.n || j.n || "?") + " (" + ((j.option || {}).name || j.opt || "") + ")";
+  if (j.sceneKey) {
+    let ok = false; try { const r = await waSendImage(env, j.to, origin + "/img/" + j.sceneKey, String(post.caption || "").slice(0, 1000)); ok = !!(r && r.ok); } catch (e) {}
+    if (ok) {
+      try { await env.MEETINGS.delete(jk); } catch (e) {}
+      await cardLedger(env, { kind: "scene", key: j.sceneKey, n: post.n, hook: post.hook || "", figure: post.figure || "", source: post.source || "", area: post.masthead || "",
+        backdrop: (j.option || {}).name || "", time: (SCENE_TIMES.find(x => x.id === j.tid) || {}).name || "", photo: j.meKey || "", caption: String(post.caption || "").slice(0, 400), fallback: "no card" });
+      try { await gcTellOwner(env, "Naj's scene picture for " + what + " was sent WITHOUT the card words: the card render failed " + (j.tries | 0) + " times (last: " + String(err).slice(0, 120) + "). Job " + jk + "."); } catch (e) {}
+      return { done: true, fallback: "picture without card" };
+    }
+  }
+  if (j.auto !== "feed") { try { await waSend(env, j.to, "The picture didn't come out this time, so here is the prompt instead."); await waSend(env, j.to, bgPromptBlock(j.angle || {}, (j.option || {}).place)); } catch (e) {} }
+  try { await gcTellOwner(env, "Naj's scene picture for " + what + " GAVE UP after " + (j.tries | 0) + " tries (last: " + String(err).slice(0, 120) + "). Nothing was sent to her for it. Job " + jk + " is kept for 2 days; clear gaveUp/tries/next_at on it and the minute tick makes it again."); } catch (e) {}
+  j.gaveUp = Date.now();
+  return { done: false };
 }
 // v149 - CARD LEDGER + INSTAGRAM INSIGHTS (Kendall, 14 Sep 2026: "Instagram insights on her posts, to learn which cards perform").
 // Every card sent to her goes into cards_sent: what it said, and which look, backdrop, time of day and photo made it. Her Instagram
@@ -13676,10 +13710,15 @@ async function picResume(env, origin, minAgeMs) {
   origin = pubOrigin(env, origin);                                  // v129
   const out = []; let lst = null;
   try { lst = await env.MEETINGS.list({ prefix: "picjob_" }); } catch (e) { return out; }
-  for (const k of ((lst && lst.keys) || [])) {
-    let j = null; try { j = JSON.parse((await env.MEETINGS.get(k.name)) || "null"); } catch (e) {}
+  const _jobs = [];
+  for (const k of ((lst && lst.keys) || [])) { let j = null; try { j = JSON.parse((await env.MEETINGS.get(k.name)) || "null"); } catch (e) {} _jobs.push([k, j]); }
+  let _running = _jobs.filter(([k, j]) => j && !j.gaveUp && j.scene && j.running_until && j.running_until > Date.now()).length;   // v685
+  for (const [k, j] of _jobs) {
     if (!j || j.gaveUp) continue;
     if (j.scene && j.running_until && j.running_until > Date.now()) { out.push({ job: k.name, skipped: "making" }); continue; }   // v147 - a scene job carries its own lock and waits for no age
+    if (j.scene && j.next_at && j.next_at > Date.now()) { out.push({ job: k.name, skipped: "retry in " + Math.round((j.next_at - Date.now()) / 1000) + "s" }); continue; }   // v685
+    if (j.scene && _running >= SCENE_MAX_RUNNING) { out.push({ job: k.name, skipped: "queued behind " + _running }); continue; }   // v685 - no browser stampede
+    if (j.scene) _running++;
     const age = Date.now() - (j.last || j.at || 0);
     if (!j.scene && age < minAgeMs) { out.push({ job: k.name, skipped: "in flight " + Math.round(age / 1000) + "s" }); continue; }
     const r = await picJobRun(env, k.name, origin);
