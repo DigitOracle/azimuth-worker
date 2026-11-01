@@ -105,3 +105,46 @@ export async function feedPdfStore(env, angles, dateStr, deps) {
 }
 
 export const FEED_PDF_RX = /^(?:feed\s+pdf|pdf|designer(?:\s+pdf)?|send\s+(?:it\s+)?to\s+(?:the\s+)?designer|(?:feed|list)\s+to\s+designer)\s*[?!.]*$/i;
+
+// v690 (Kendall, 1 Nov 2026, option 2): the morning feed carries this PDF on its own; she only forwards it.
+// The PDF is the five market angles + the Beyond property (news) set ONLY - "she doesn't need emotional, she needs market and proper news".
+export const FEED_PDF_SETS = ["general"];
+export const feedAnglesKey = (dateStr) => "mkt_feed_angles_" + dateStr;
+const FRESH_MS = 36 * 3600000;
+// The day's five live in their own key (mkt_feed_angles_<GST date>); mkt_briefctx is a shared drafting context that the market
+// brief overwrites without angles (1 Nov: 'pdf' found no market ideas). Read the durable key first, then fall back.
+export async function feedPdfAngles(env, dateStr, now) {
+  now = now || Date.now();
+  let base = null;
+  try { const d = JSON.parse((await env.MEETINGS.get(feedAnglesKey(dateStr))) || "null"); if (d && Array.isArray(d.angles) && d.angles.length) base = d; } catch (e) {}
+  if (!base) { try { const c = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); if (c && Array.isArray(c.angles) && c.angles.length && now - (c.at || 0) <= FRESH_MS) base = c; } catch (e) {} }
+  const market = ((base && base.angles) || []).filter(a => a && a.hook && !a.campaign);
+  const out = market.slice();
+  for (const sid of FEED_PDF_SETS) {
+    let sc = null; try { sc = JSON.parse((await env.MEETINGS.get("mkt_briefctx_" + sid)) || "null"); } catch (e) {}
+    if (sc && Array.isArray(sc.angles) && now - (sc.at || 0) <= FRESH_MS) out.push(...sc.angles.filter(a => a && a.hook).map(a => Object.assign({}, a, { family: a.lane, set: sid })));
+  }
+  return { angles: out, market: market.length };
+}
+function hookHash(angles) { let h = 5381; const s = angles.map(a => a.hook).join("|"); for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); }
+export const FEED_PDF_AUTO_CAPTION = "For marketing: today's market and news ideas as one PDF. Tap and hold, then Forward.";
+// Sent after the feed text, never before it. One PDF per set per day (guard key), no retry: a failure is logged and the call returns.
+// deps: { sendDocument(to, link, filename, caption), noteErr(where, detail), windowOpen(), origin, renderPdf?, signoff? }
+export async function feedPdfAutoSend(env, to, dateStr, deps) {
+  try {
+    if (deps.windowOpen && !(await deps.windowOpen())) return { sent: false, why: "window shut" };
+    const { angles, market } = await feedPdfAngles(env, dateStr);
+    if (!market) return { sent: false, why: "no market angles" };
+    const gk = "mkt_feedpdf_auto_" + dateStr + "_" + hookHash(angles);
+    if (await env.MEETINGS.get(gk)) return { sent: false, why: "already sent" };
+    await env.MEETINGS.put(gk, "1", { expirationTtl: 2 * 86400 });   // claimed before the send: a retried tick never doubles it, a failure is not retried
+    const st = await feedPdfStore(env, angles, dateStr, deps.renderPdf ? { renderPdf: deps.renderPdf } : undefined);
+    const link = String(deps.origin || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "") + "/img/" + st.name;
+    const r = await deps.sendDocument(to, link, "Najma_Market_News_" + dateStr + ".pdf", FEED_PDF_AUTO_CAPTION + (deps.signoff || ""));
+    if (r && r.ok === false) { try { await deps.noteErr("feed-pdf-auto", "document refused: " + String(r.status || "?").slice(0, 120)); } catch (e) {} return { sent: false, why: "refused" }; }
+    return { sent: true, name: st.name, count: angles.length };
+  } catch (e) {
+    try { await deps.noteErr("feed-pdf-auto", String((e && e.message) || e).slice(0, 160)); } catch (e2) {}
+    return { sent: false, why: "error" };
+  }
+}

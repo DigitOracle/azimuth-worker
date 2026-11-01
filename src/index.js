@@ -1,5 +1,5 @@
 import { askBoxHtml, askRoute, askFloatHtml } from "./ask_najma.js";   // v555, v556
-import { feedPdfStore, FEED_PDF_RX } from "./feed_pdf.js";   // v622 - the day's feed as a PDF for the graphic designer
+import { feedPdfStore, FEED_PDF_RX, feedPdfAngles, feedPdfAutoSend, feedAnglesKey } from "./feed_pdf.js";   // v622 - the day's feed as a PDF for the graphic designer
 import { readAnne, ANNE_ICON } from "./work_anne.js";
 import { readList as readDossiers, DOSSIER_ICON } from "./work_dossier.js";
 import { SPK_ICON } from "./work_speaking.js";
@@ -4713,13 +4713,10 @@ async function appFetch(request, env, ctx) {
             return new Response("ok");
           }
           if (FEED_PDF_RX.test(text)) {   // v622 - today's list as a PDF she can forward to the designer
-            let _bc = null; try { _bc = JSON.parse((await env.MEETINGS.get("mkt_briefctx")) || "null"); } catch (e) {}
-            const _ang = (_bc && Array.isArray(_bc.angles) ? _bc.angles : []).filter(a => a && a.hook && !a.campaign);
-            for (const _sid of FS.SET_IDS) {   // v677 - the Beyond property and Emotional intelligence sets follow the five in the same PDF
-              let _sc = null; try { _sc = JSON.parse((await env.MEETINGS.get("mkt_briefctx_" + _sid)) || "null"); } catch (e) {}
-              if (_sc && Array.isArray(_sc.angles) && Date.now() - (_sc.at || 0) <= 36 * 3600000) _ang.push(..._sc.angles.filter(a => a && a.hook).map(a => Object.assign({}, a, { family: a.lane, set: _sid })));
-            }
-            if (!_bc || Date.now() - (_bc.at || 0) > 36 * 3600000 || !_ang.length) { await waSend(env, from, "There is no list for today yet. Say *feed* and I will build it, then say *pdf*." + UPDATE_SIGNOFF); return new Response("ok"); }
+            // v690 - the durable mkt_feed_angles_<date> first (the market brief overwrites mkt_briefctx without angles), then mkt_briefctx;
+            // the five + Beyond property only, never the Emotional intelligence set (Kendall 1 Nov)
+            const _pa = await feedPdfAngles(env, gstDateStr(gstNow())); const _ang = _pa.angles;
+            if (!_pa.market) { await waSend(env, from, "There is no list for today yet. Say *feed* and I will build it, then say *pdf*." + UPDATE_SIGNOFF); return new Response("ok"); }
             await waSend(env, from, "Putting today's " + Math.min(_ang.length, 15) + " ideas into a PDF for your designer - about a minute.");
             try {
               const _ds = gstDateStr(gstNow()); const _st = await feedPdfStore(env, _ang, _ds);
@@ -6802,6 +6799,7 @@ async function dailyFeedTick(env, force, dry) {
   // store as the drafting context (draftFromAngle reads this) + remember the hooks
   const briefTxt = angles.map((a, i) => "ANGLE " + (i + 1) + ": " + a.hook + "\nFigure: " + a.figure + " (" + a.source + ")\nBuyer: " + a.buyer).join("\n\n");
   await env.MEETINGS.put("mkt_briefctx", JSON.stringify({ at: Date.now(), brief: briefTxt, data, angles }), { expirationTtl: 3 * 86400 });
+  try { await env.MEETINGS.put(feedAnglesKey(gstDateStr(gstNow())), JSON.stringify({ at: Date.now(), date: gstDateStr(gstNow()), via: force ? "force" : "tick", angles }), { expirationTtl: 3 * 86400 }); } catch (e) {}   // v690 - the day's five in their own key
   hist = angles.map(a => a.hook).concat(hist).slice(0, 24);
   await env.MEETINGS.put("mkt_feed_hist", JSON.stringify(hist), { expirationTtl: 30 * 86400 });
   for (let i = 0; i < angles.length; i++) { const a = angles[i]; await bridgeRecord(env, { id: "angle-" + String(i + 1).padStart(2, "0"), set: force ? "ondemand" : "feed", type: "angle", topic_family: a.family || famOf(a), campaign: a.campaign ? "the_valley" : "", hook: a.hook, figure: a.figure, body: a.hook + "\n" + a.figure + " - " + a.source + "\n" + (a.buyer || ""), source_line: "Source: " + a.source, what_not_to_claim: guardLine(a), campaign_rules: a.campaign ? "#ThisIsTheValley - @EmaarInsider - 60-90 s - Emaar visuals only" : "", image_prompt: "", timing: "", trend: a.trend || "", shot: a.shot || "", qa: qa.note }); }
@@ -6850,6 +6848,7 @@ async function dailyFeedTick(env, force, dry) {
   await _famWrite();
   await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", _rows);
   try { await FS.buildExtraSets(env, await feedSetDeps(env), {}); } catch (e) {}   // v677 - Beyond property and Emotional intelligence follow the five
+  await feedPdfAuto(env);   // v690 - the marketing PDF follows the lists; never throws, one per set per day
   // v281 - EJARI · WHAT MOVED: the card goes straight after the morning list and its picker, only on a morning that passed the gate
   // and was delivered (a held or refused morning returned above, so the card never arrives on its own). Missing or stale data, a
   // failed render or any error skips the card and leaves a line in the QA note; the rest of the chain carries on regardless.
@@ -7229,6 +7228,15 @@ async function feedEarlyNudge(env, nowMs) {
   return { sent: !!(r && r.ok), nudge: r };
 }
 // Her next message reopens the window: send the held morning at once, then queue its cards.
+// v690 (Kendall 1 Nov, option 2) - the morning feed carries the marketing PDF itself: the five + Beyond property, sent after the text.
+async function feedPdfAuto(env) {
+  try {
+    return await feedPdfAutoSend(env, env.WA_ALLOWED, gstDateStr(gstNow()), {
+      origin: env.PUBLIC_ORIGIN, signoff: UPDATE_SIGNOFF, windowOpen: () => ownerWindowOpen(env),
+      sendDocument: (to, link, fn, cap) => waSendDocument(env, to, link, fn, cap),
+      noteErr: (w, d) => noteErr(env, w, d) });
+  } catch (e) { try { await noteErr(env, "feed-pdf-auto", String((e && e.message) || e).slice(0, 160)); } catch (e2) {} return { sent: false }; }
+}
 async function feedFlush(env) {
   let p = null; try { p = JSON.parse((await env.MEETINGS.get("mkt_feed_pending")) || "null"); } catch (e) {}
   if (!p || !p.bodyTxt) return { flushed: false };
@@ -7247,6 +7255,7 @@ async function feedFlush(env) {
   }
   if (Array.isArray(p.rows) && p.rows.length) { try { await waSendList(env, env.WA_ALLOWED, "Today's pick:", "Choose an angle", p.rows); } catch (e) {} }
   try { await FS.flushExtraSets(env, await feedSetDeps(env)); } catch (e) {}   // v677
+  if (r1 && r1.ok) await feedPdfAuto(env);   // v690 - only once she has the text
   try { if (Array.isArray(p.angles) && p.angles.length) await feedSceneOffer(env, p.angles); } catch (e) {}   // v188 - a held morning offers too
   try { await gcTellOwner(env, "Naj wrote back, so the morning I was holding has gone to her" + (r1 && r1.ok ? "" : " (the text was refused: " + ((r1 && r1.status) || "?") + ")") + "."); } catch (e) {}
   return { flushed: !!(r1 && r1.ok) };
