@@ -550,7 +550,7 @@ await fit.fitAdd(env, { k: "food", x: "=SUM(1,1) \"quoted\", with comma", t: Dat
 const csvR = await call(K("/fit_api?view=csv")), csv = await csvR.text();
 ok(csvR.status === 200 && /text\/csv/.test(csvR.headers.get("content-type")) && /attachment; filename="momo-me-/.test(csvR.headers.get("content-disposition") || ""), "the CSV downloads as an attachment");
 const rowsC = csv.trim().split("\n");
-ok(rowsC[0] === "date,time_gst,kind,what,minutes,steps,value,outside_eating_window,source,protein_g_rough" && rowsC.length === 4, "header plus one row per entry (" + (rowsC.length - 1) + " rows)");
+ok(rowsC[0] === "date,time_gst,kind,what,minutes,steps,value,outside_eating_window,source,protein_g_rough,window" && rowsC.length === 4, "header plus one row per entry (" + (rowsC.length - 1) + " rows)");
 ok(csv.includes("\"'=SUM(1,1) \"\"quoted\"\", with comma\""), "a cell that starts with = is defused and quotes are escaped, so it cannot run as a formula");
 ok(/exercise,Weight training,30,/.test(csv) && /measurement,weight,,,80,/.test(csv), "exercise and measurement rows carry their numbers");
 eq([(await call("/fit_api?view=csv")).status, (await call(K("/fit_api?view=csv", CLIENT))).status, (await call(K("/fit_api?view=health", CLIENT))).status], [404, 404, 404], "CSV and health are owner-only");

@@ -328,7 +328,7 @@ export function dayStats(entries, cfg) {
   const s = { meals: 0, out: 0, ex: 0, steps: 0, protein: 0, pmeals: 0, qualifies: false };
   for (const e of entries || []) {
     if (e.k === "food") { s.meals++; if (e.o) s.out++; if (e.pr === "rough" && Number.isFinite(e.p)) { s.protein += e.p; s.pmeals++; } }
-    else if (e.k === "ex") { if (e.n) s.steps = Math.max(s.steps, e.n); else s.ex += e.m || 0; }   // steps are a total for the day (typed, or sent by the phone): the largest wins, they never add
+    else if (e.k === "ex") { if (e.n) s.steps = Math.max(s.steps, e.n); else if (fitIsExercise(e.x)) s.ex += e.m || 0; }   // steps are a total for the day (typed, or sent by the phone): the largest wins, they never add. v683: a balloon ride logged as exercise counts for nothing
   }
   s.qualifies = s.ex >= cfg.minDay || (cfg.stepsFloor > 0 && s.steps >= cfg.stepsFloor);
   return s;
@@ -336,9 +336,12 @@ export function dayStats(entries, cfg) {
 export function groupByDay(entries) { const g = {}; for (const e of entries || []) (g[e.d] = g[e.d] || []).push(e); return g; }
 export function weekMinutes(byDay, d) {
   const ws = weekStart(d); let m = 0;
-  for (let i = 0; i < 7; i++) for (const e of byDay[addDays(ws, i)] || []) if (e.k === "ex" && !e.n) m += e.m || 0;
+  for (let i = 0; i < 7; i++) for (const e of byDay[addDays(ws, i)] || []) if (e.k === "ex" && !e.n && fitIsExercise(e.x)) m += e.m || 0;
   return { start: ws, minutes: m };
 }
+// v683: things that got logged as exercise and are not. They stay in the log (the person said it), but count toward nothing: not the minutes, not the floor.
+const NOT_EX_RX = /\b(hot[\s-]*air\s+balloon|balloon(?:\s+(?:ride|flight))?|massage|sauna|steam\s+room|jacuzzi|hot\s+tub|spa\s+day|nap|sleep|cinema|movie|sunbath\w*)\b/i;
+export const fitIsExercise = (x) => !NOT_EX_RX.test(String(x || ""));
 export function challengeStats(byDay, cfg, today, paused) {
   if (!cfg.start) return null;
   const end = addDays(cfg.start, cfg.days - 1);
@@ -391,8 +394,9 @@ async function storedTargets(env, u) {
   return out;
 }
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-export async function fitHistory(env, cfg, today, deps) {
+export async function fitHistory(env, cfg, today, deps, range) {
   let from = cfg.start && cfg.start <= today ? cfg.start : addDays(today, -29);
+  if (range && DATE_RX.test(String(range.from)) && DATE_RX.test(String(range.to)) && range.from <= range.to) { from = range.from; if (range.to < today) today = range.to; }   // v683: a frozen window (an archived month) is read over its own dates; the raw days are still in KV
   if (from < addDays(today, -400)) from = addDays(today, -400);
   const all = await fitRange(env, from, today, cfg.u);
   await fitBackfillProtein(env, deps, all.filter((e) => e.d >= addDays(today, -14)).sort((a, b) => b.t - a.t), 8);   // the last two weeks, NEWEST first, so the days you look at are done before the older ones
@@ -423,7 +427,171 @@ export async function fitHistory(env, cfg, today, deps) {
     if (w.complete) { t.weeksDone++; if (w.met) t.weeksMet++; }
   }
   t.pavg = t.pdays ? Math.round(t.protein / t.pdays) : 0;
-  return { today, cfg, days, weeks: wl, months: Object.values(months).sort((a, b) => (a.m < b.m ? -1 : 1)), totals: t, measures: fitMeasures(all) };
+  const cur = Object.values(months).sort((a, b) => (a.m < b.m ? -1 : 1)), measures = fitMeasures(all);
+  if (range) return Object.assign({ today, cfg, from, to: today, days, weeks: wl, months: cur, totals: t, measures }, range.detail ? { detail: monthDetail(all, cfg) } : {});   // detail (what was eaten) only for the person's own one-pager, never in a summary
+  // v683: archived months come first (frozen), then the current window; "All time" is the archives plus the current window
+  const archives = await fitArchives(env, cfg.u);
+  const archMonths = archives.map((a) => ({ m: a.start.slice(0, 7), label: a.label, start: a.start, end: a.end, days: a.days, rest: a.rest, hit: a.hit, minutes: a.minutes, steps: a.steps, meals: a.meals, out: a.out, archived: true }));
+  return { today, cfg, label: windowLabel(cfg), days, weeks: wl, months: archMonths.concat(cur), archives, allTime: allTimeTotals(archives, t), totals: t, measures };
+}
+
+// ---- v683: a month is archived, then the next one starts ("need to reset from today, but archive last month, as well need a running total") ----
+// "momo new month" (or the page button) freezes the current window as ONE summary record under fitc_arch_<user> (a JSON list, appended, never
+// rewritten), moves cfg.start to today and keeps the length, the targets and the windows. Entries are never deleted: the archive is a frozen
+// summary and the raw days stay in KV, readable through the Archive tab. A second "new month" on the same day changes nothing and restates.
+const monthLabel = (d) => (DATE_RX.test(String(d || "")) ? MONTHS[parseInt(d.slice(5, 7), 10) - 1] + " " + d.slice(0, 4) : "");
+export const windowLabel = (cfg) => monthLabel(cfg && cfg.start);
+export async function fitArchives(env, u) {
+  let raw = null; try { raw = JSON.parse((await env.MEETINGS.get("fitc_arch_" + pickUser(env, u))) || "null"); } catch (e) {}
+  return Array.isArray(raw) ? raw.filter((a) => a && DATE_RX.test(String(a.start)) && DATE_RX.test(String(a.end))).sort((a, b) => (a.start < b.start ? -1 : 1)) : [];
+}
+export function archiveRecord(h, label) {
+  const t = h.totals, ms = {};
+  for (const [what, m] of Object.entries(h.measures || {})) ms[what] = { unit: m.unit, first: m.first, last: m.latest, change: m.change, count: m.count };
+  return { label: label || monthLabel(h.from), start: h.from, end: h.to, days: t.days, hit: t.hit, rest: t.rest, minutes: t.minutes, steps: t.steps, meals: t.meals, out: t.out, bestStreak: t.bestStreak, weeksMet: t.weeksMet, weeksDone: t.weeksDone, pdays: t.pdays, pavg: t.pavg, measures: ms };
+}
+export function allTimeTotals(archives, t) {
+  const a = { days: t.days, hit: t.hit, rest: t.rest, minutes: t.minutes, steps: t.steps, meals: t.meals, out: t.out, bestStreak: t.bestStreak, weeksMet: t.weeksMet, weeksDone: t.weeksDone, months: archives.length };
+  for (const r of archives) { a.days += r.days || 0; a.hit += r.hit || 0; a.rest += r.rest || 0; a.minutes += r.minutes || 0; a.steps += r.steps || 0; a.meals += r.meals || 0; a.out += r.out || 0; a.weeksMet += r.weeksMet || 0; a.weeksDone += r.weeksDone || 0; if ((r.bestStreak || 0) > a.bestStreak) a.bestStreak = r.bestStreak; }
+  return a;
+}
+export async function fitNewMonth(env, cfg, today, deps) {
+  const archives = await fitArchives(env, cfg.u), last = archives[archives.length - 1] || null;
+  if (cfg.start === today) return { ok: true, same: true, archive: last, cfg, label: windowLabel(cfg) };   // already done today: restate, change nothing
+  let archive = null;
+  if (cfg.start && cfg.start < today) {
+    const end = [addDays(today, -1), addDays(cfg.start, cfg.days - 1)].sort()[0];   // yesterday or the window's last day, whichever is earlier
+    const h = await fitHistory(env, cfg, today, deps, { from: cfg.start, to: end });
+    archive = archiveRecord(h, monthLabel(cfg.start)); archive.archivedOn = today;
+    archives.push(archive);
+    await env.MEETINGS.put("fitc_arch_" + pickUser(env, cfg.u), JSON.stringify(archives));
+  }
+  cfg.start = today; await fitSaveCfg(env, cfg);   // days, targets and windows all stay
+  return { ok: true, same: false, archive, cfg, label: windowLabel(cfg) };
+}
+export function archiveText(a) {
+  if (!a) return "Nothing to archive yet.";
+  const L = [a.label + " archived (" + dm(a.start) + " to " + dm(a.end) + ")", "Days hit: " + a.hit + " of " + a.days + (a.rest ? " (" + a.rest + " rest left out)" : "") + " - best streak " + a.bestStreak,
+    "Exercise: " + fmtMin(a.minutes) + (a.steps ? " - " + fmtSteps(a.steps) + " steps" : ""), "Weeks on target: " + a.weeksMet + " of " + a.weeksDone + " - meals outside windows: " + a.out + " of " + a.meals];
+  for (const [what, m] of Object.entries(a.measures || {})) if (m.count > 1) L.push((what === "weight" ? "Weight: " : "Waist: ") + m.first + " to " + m.last + " " + m.unit + " (" + sgn(m.change) + ")");
+  return L.join("\n");
+}
+export const newMonthText = (r) => (r.same ? "Already on Day 1 of " + r.cfg.days + " today (" + r.label + ")." + (r.archive ? "\n\n" + archiveText(r.archive) : "") : (r.archive ? archiveText(r.archive) + "\n\n" : "") + r.label + ": Day 1 of " + r.cfg.days + " starts today.");
+// the one-page month summary (/fit?month=YYYY-MM): an archived month is read over its frozen dates, the current window over its own; else the calendar month
+export async function fitMonthRange(env, cfg, ym, today) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(ym))) return null;
+  const a = (await fitArchives(env, cfg.u)).filter((x) => x.start.slice(0, 7) === ym).pop();
+  if (a) return { from: a.start, to: a.end, label: a.label, archived: true };
+  if (cfg.start && cfg.start.slice(0, 7) === ym && cfg.start <= today) return { from: cfg.start, to: [addDays(cfg.start, cfg.days - 1), today].sort()[0], label: monthLabel(cfg.start), archived: false };
+  const y = parseInt(ym.slice(0, 4), 10), mo = parseInt(ym.slice(5), 10), first = ym + "-01";
+  const last = addDays((mo === 12 ? y + 1 : y) + "-" + String(mo === 12 ? 1 : mo + 1).padStart(2, "0") + "-01", -1);
+  return first > today ? null : { from: first, to: [last, today].sort()[0], label: monthLabel(first), archived: false, calendar: true };
+}
+// v683: the detail layer of a person's OWN month page: the exercise mix, the strength sets, meals by window, protein. Only ever rendered for the
+// person whose log it is; what the other person sees (fitPartners, the archive records) stays counts only.
+const STRENGTH_RX = /^(.+?)\s+(\d+)\s*[x×]\s*(\d+)(?:\s*@\s*([\d.]+)\s*kg)?\s*$/i;
+const ISOLATION_RX = /\b(lateral|front|rear)\s+raise|\b(crunch|curl|fly|flye|kickback|extension|pulldown|shrug|calf)\b/i;   // moves where 150 kg or more is almost certainly a typing slip
+const MIX_NAMES = { walk: "Walking", run: "Running", "outdoor cycling": "Cycling", cycling: "Cycling", "weight training": "Weight training", gym: "Gym session", elliptical: "Elliptical", swimming: "Swimming", "spin class": "Spin class" };
+export function monthDetail(entries, cfg) {
+  const ex = [], notEx = [], strength = [], mix = {};
+  for (const e of entries || []) {
+    if (e.k !== "ex" || e.n) continue;
+    if (!fitIsExercise(e.x)) { notEx.push({ d: e.d, x: e.x, m: e.m || 0 }); continue; }
+    ex.push(e);
+    const s = STRENGTH_RX.exec(String(e.x || ""));
+    let lab;
+    if (s && !MIX_NAMES[String(e.x || "").toLowerCase()]) {
+      const kg = s[4] ? parseFloat(s[4]) : 0, name = clip(s[1], 40);
+      strength.push({ d: e.d, name, sets: parseInt(s[2], 10), reps: parseInt(s[3], 10), kg, check: kg >= 150 && ISOLATION_RX.test(name) });
+      lab = "Strength sets";
+    } else lab = MIX_NAMES[String(e.x || "").toLowerCase()] || clip(e.x, 30) || "Other";
+    const m = mix[lab] || (mix[lab] = { label: lab, minutes: 0, sessions: 0 }); m.minutes += e.m || 0; m.sessions++;
+  }
+  const mixList = Object.values(mix).sort((a, b) => b.minutes - a.minutes);
+  strength.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+  const fd = (entries || []).filter((e) => e.k === "food" && e.x !== WATER_X), daysLogged = new Set(fd.map((e) => e.d)).size;
+  const byWin = {}, order = ((cfg && cfg.windows) || []).map((w) => w.n).concat(["Outside the windows"]);
+  for (const n of order) byWin[n] = 0;
+  const outHours = {}, pday = {};
+  for (const e of fd) {
+    const w = windowFor(cfg, e.t); byWin[w.out || !w.name ? "Outside the windows" : w.name] = (byWin[w.out || !w.name ? "Outside the windows" : w.name] || 0) + 1;
+    if (w.out) { const hh = gstHM(e.t).slice(0, 2) + ":00"; outHours[hh] = (outHours[hh] || 0) + 1; }
+    if (e.pr === "rough" && Number.isFinite(e.p)) pday[e.d] = (pday[e.d] || 0) + e.p;
+  }
+  const pdays = Object.entries(pday), pavg = pdays.length ? Math.round(pdays.reduce((a, [, v]) => a + v, 0) / pdays.length) : 0;
+  const best = pdays.sort((a, b) => b[1] - a[1])[0] || null;
+  return { sessions: ex.length, strengthDays: new Set(strength.map((s) => s.d)).size, mix: mixList, strength, notEx, checkLoads: strength.filter((s) => s.check),
+    meals: fd.length, daysLogged, mealsPerDay: daysLogged ? Math.round(fd.length / daysLogged * 10) / 10 : 0, byWindow: order.map((n) => ({ n, count: byWin[n] || 0 })),
+    outHours: Object.entries(outHours).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([h, n]) => ({ h, n })),
+    pavg, pdays: pdays.length, bestDay: best ? { d: best[0], g: Math.round(best[1]) } : null,
+    topMeals: fd.filter((e) => e.pr === "rough" && Number.isFinite(e.p)).sort((a, b) => b.p - a.p).slice(0, 5).map((e) => ({ d: e.d, g: e.p, x: clip(e.x, 70) })) };
+}
+// v683: the printable one-page month card, in the LIGHT Momo Work style (cream ground, white cards, ink, teal headings, gold accents, green for days
+// hit; Kendall, 1 Nov). One column = the person's own month with full detail. Two columns side by side, both in full detail, only when BOTH people
+// have sharing on ("momo share on"); otherwise nothing of the other person is on the page (the home card already carries their counts).
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const MONTH_CSS = ':root{--bg:#FAF7F1;--card:#FFFFFF;--ink:#1C2321;--muted:#6B6F6A;--line:#E8E1D4;--gold:#B8924F;--teal:#0A4F4A;--hit:#2F8F5B;--miss:#E9E3D8;--rest:#7A93B5;--warn:#B7791F}' +
+  '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",Inter,system-ui,sans-serif;font-size:14px;line-height:1.45;color-scheme:light}' +
+  '.wrap{max-width:1180px;margin:0 auto;padding:26px 16px 40px;display:grid;gap:18px}h1.ft{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:clamp(26px,4vw,36px);margin:0;color:var(--teal)}.lede{color:var(--muted);margin:4px 0 0}' +
+  '.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}@media (max-width:860px){.two{grid-template-columns:1fr}}' +
+  '.p{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;display:grid;gap:12px;min-width:0;box-shadow:0 4px 18px rgba(28,35,33,.05)}' +
+  '.tag{font-size:11px;letter-spacing:.1em;color:var(--gold)}.who h2{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:26px;margin:2px 0;color:var(--teal)}.who small{color:var(--muted)}' +
+  '.hero{display:flex;gap:16px;align-items:center}.ring{width:96px;height:96px;border-radius:50%;flex:none;display:grid;place-items:center;background:conic-gradient(var(--gold) calc(var(--p)*1%),var(--miss) 0)}' +
+  '.ring span{width:76px;height:76px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-size:26px;font-weight:600;line-height:1;text-align:center}.ring small{display:block;font-size:11px;color:var(--muted);font-weight:400}' +
+  '.hl{display:grid;gap:3px}.hl b{font-size:17px}.hl span{color:var(--muted)}.cal{display:grid;grid-template-columns:repeat(10,1fr);gap:5px}.c{aspect-ratio:1;border-radius:5px;display:block}.c.hit{background:var(--hit)}.c.miss{background:var(--miss)}.c.rest{background:var(--rest)}' +
+  '.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tile{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;display:grid;gap:2px}.tl{color:var(--muted);font-size:11.5px}.tv{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}.tv.sm{font-size:13px;font-weight:500}.ts{color:var(--muted);font-size:12px}' +
+  'h2{margin:6px 0 0;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--teal);font-weight:600}' +
+  '.wk,.mx{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px}.bar{height:8px;border-radius:8px;background:var(--miss);overflow:hidden}.bar i{display:block;height:100%;background:var(--gold)}.n{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}' +
+  '.row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0}.row b{font-variant-numeric:tabular-nums;white-space:nowrap}.row small{color:var(--muted);margin-left:6px}' +
+  '.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px;min-width:340px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:500;font-size:11.5px}td.n{font-variant-numeric:tabular-nums;white-space:nowrap}' +
+  '.empty,.note{color:var(--muted);margin:0;font-size:13px}.flag{margin:0;font-size:12.5px;color:var(--warn);border-left:3px solid var(--warn);padding-left:10px}' +
+  '.key{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12px}.key i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}.foot{color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:12px}' +
+  '.add{display:flex;gap:8px}.btn{background:var(--teal);color:#fff;border:0;border-radius:10px;padding:9px 14px;font:inherit;font-weight:600;text-decoration:none;cursor:pointer}@media print{.noprint{display:none}.p{box-shadow:none;break-inside:avoid}}';
+const tileH = (v, l, s, sm) => '<div class="tile"><div class="tv' + (sm ? " sm" : "") + '">' + esc(v) + '</div><div class="tl">' + esc(l) + "</div>" + (s ? '<div class="ts">' + esc(s) + "</div>" : "") + "</div>";
+const barH = (p) => '<span class="bar"><i style="width:' + Math.max(0, Math.min(100, Math.round(p))) + '%"></i></span>';
+// one person's column: the counts on top (always), the detail below (only when h.detail was computed: their own page, or both sharing)
+export function monthPersonHtml(h, range, name) {
+  const t = h.totals, cfg = h.cfg, pct = t.days ? Math.round(100 * t.hit / t.days) : 0;
+  const cal = h.days.map((d) => '<i class="c ' + (d.rest ? "rest" : d.ok ? "hit" : "miss") + '" title="' + esc(dm(d.d) + ": " + (d.rest ? "rest day" : d.ok ? "hit" : "missed") + (d.ex ? ", " + fmtMin(d.ex) : "")) + '"></i>').join("");
+  const weeks = h.weeks.map((w) => '<div class="wk"><span>Week of ' + esc(dm(w.ws)) + "</span>" + barH(w.target ? 100 * w.minutes / w.target : 0) + '<span class="n">' + w.hit + " of " + w.days + " days &middot; " + esc(fmtMin(w.minutes)) + "</span></div>").join("");
+  const best = h.days.filter((d) => d.ex > 0 || d.steps > 0).sort((a, b) => (b.ex - a.ex) || (b.steps - a.steps)).slice(0, 3)
+    .map((d) => '<div class="row"><span>' + esc(wd(d.d) + " " + dm(d.d)) + "</span><b>" + esc(fmtMin(d.ex)) + (d.steps ? " &middot; " + esc(fmtSteps(d.steps)) + " steps" : "") + "</b></div>").join("");
+  const ms = Object.entries(h.measures || {}), mTiles = ms.map(([what, m]) => tileH(m.latest + " " + m.unit, what === "weight" ? "Weight" : "Waist", m.count > 1 ? m.first + " to " + m.latest + " " + m.unit + " (" + sgn(m.change) + ")" : "one reading")).join("");
+  return '<section class="p"><div class="who"><span class="tag">' + esc(range.label.toUpperCase()) + (range.archived ? " &middot; ARCHIVED" : range.calendar ? " &middot; CALENDAR MONTH" : " &middot; THIS MONTH") + "</span><h2>" + esc(name) + "</h2><small>" + esc(dm(h.from) + " to " + dm(h.to)) + " &middot; daily floor " + cfg.minDay + " min" + (cfg.stepsFloor ? " or " + esc(fmtSteps(cfg.stepsFloor)) + " steps" : "") + " &middot; weekly target " + esc(fmtMin(cfg.weekMin)) + "</small></div>" +
+    '<div class="hero"><div class="ring" style="--p:' + pct + '"><span>' + t.hit + "<small>of " + t.days + '</small></span></div><div class="hl"><b>' + pct + "% of days hit</b><span>Best streak " + t.bestStreak + (t.bestStreak === 1 ? " day" : " days") + (t.rest ? " &middot; " + t.rest + " rest day" + (t.rest === 1 ? "" : "s") + " left out" : "") + "</span></div></div>" +
+    '<div class="cal">' + cal + "</div>" +
+    '<div class="tiles">' + tileH(fmtMin(t.minutes), "Exercise", t.steps ? fmtSteps(t.steps) + " steps" : "") + tileH(String(t.meals), "Meals logged", t.out + " outside the eating windows (" + (t.meals ? Math.round(100 * t.out / t.meals) : 0) + "%)") +
+    tileH(t.weeksMet + " of " + t.weeksDone, "Weeks on target", "finished weeks") + tileH(t.pdays + (t.pdays === 1 ? " day" : " days"), "Protein days", t.pdays ? "about " + t.pavg + " g a day (rough)" : "none estimated") + mTiles + "</div>" +
+    "<h2>Week by week</h2>" + (weeks || '<div class="empty">No weeks yet.</div>') + "<h2>Best days</h2>" + (best || '<div class="empty">No exercise logged.</div>') + monthDetailHtml(h.detail) + "</section>";
+}
+function monthDetailHtml(d) {
+  if (!d) return "";
+  const mixTot = d.mix.reduce((a, m) => a + m.minutes, 0) || 1;
+  const mixRows = d.mix.map((m) => '<div class="mx"><span>' + esc(m.label) + "</span>" + barH(100 * m.minutes / mixTot) + '<b class="n">' + esc(fmtMin(m.minutes)) + " &middot; " + m.sessions + "</b></div>").join("");
+  const sRows = d.strength.map((s) => "<tr><td>" + esc(dm(s.d)) + "</td><td>" + esc(s.name) + '</td><td class="n">' + s.sets + " &times; " + s.reps + '</td><td class="n">' + (s.kg ? s.kg + " kg" + (s.check ? ' <span class="flag">check the weight</span>' : "") : "body weight") + "</td></tr>").join("");
+  const mealsTot = d.meals || 1, wRows = d.byWindow.filter((w) => w.count).map((w) => '<div class="mx"><span>' + esc(w.n) + "</span>" + barH(100 * w.count / mealsTot) + '<b class="n">' + w.count + "</b></div>").join("");
+  const top = d.topMeals.map((m) => '<div class="row"><span>' + esc(m.x) + " <small>" + esc(dm(m.d)) + "</small></span><b>" + m.g + " g</b></div>").join("");
+  let flags = "";
+  if (d.notEx.length) flags += '<div class="flag">Left out of exercise: ' + esc(d.notEx.map((e) => e.x + " on " + dm(e.d)).join(", ")) + ". Logged as exercise, but it is not, so it counts for nothing.</div>";
+  if (d.checkLoads.length) flags += '<div class="flag">Check the weights: ' + esc(d.checkLoads.map((s) => s.name + " " + s.kg + " kg on " + dm(s.d)).join(", ")) + ". A load like that on that move looks like a typing slip; the entry is left as logged.</div>";
+  return "<h2>Exercise mix</h2>" + (mixRows || '<div class="empty">No exercise logged.</div>') +
+    '<div class="tiles">' + tileH(String(d.sessions), "Exercise sessions") + tileH(String(d.strengthDays), "Strength days") + "</div>" +
+    '<h2>Strength sets</h2><div class="tw"><table><thead><tr><th>Day</th><th>Exercise</th><th>Sets &times; reps</th><th>Load</th></tr></thead><tbody>' + (sRows || '<tr><td colspan="4">No strength sets logged</td></tr>') + "</tbody></table></div>" +
+    '<h2>Food</h2><div class="tiles">' + tileH(String(d.meals), "Meals logged (water left out)", d.mealsPerDay + " a day on " + d.daysLogged + " day" + (d.daysLogged === 1 ? "" : "s")) + tileH(d.pdays ? d.pavg + " g" : "-", "Protein a day, rough", d.bestDay ? "best day " + d.bestDay.g + " g on " + dm(d.bestDay.d) : "no estimates yet") + "</div>" +
+    "<h2>When you ate</h2>" + (wRows || '<div class="empty">No meals logged.</div>') +
+    (d.outHours.length ? '<div class="note">Most meals outside your windows came at ' + esc(d.outHours.map((o) => o.h + " (" + o.n + ")").join(", ")) + ".</div>" : "") +
+    "<h2>Highest-protein meals</h2>" + (top || '<div class="empty">No estimated meals.</div>') + flags;
+}
+// o.people = [{ history, range, name }] - one (own) or two (both sharing); the first is the person whose link this is
+export function monthPageHtml(o) {
+  const P = o.people || [], keyQ = encodeURIComponent(o.key || ""), label = P.length ? P[0].range.label : "";
+  const names = P.map((p) => p.name).filter(Boolean), two = P.length > 1;
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FAF7F1"><title>Momo</title>' + (o.fonts || "") +
+    "<style>" + MONTH_CSS + '</style></head><body><div class="wrap"><header><h1 class="ft">' + esc(label) + (two ? " in Play" : "") + '</h1><p class="lede">' + esc(names.join(" and ")) + (two ? ", side by side: " : ": ") + esc(dm(P[0].history.from) + " to " + dm(P[0].history.to)) + ", exercise and food, from " + (two ? "your Play logs. Both of you switched sharing on." : "your own Play log. This page is yours; the other person only ever sees counts.") + "</p></header>" +
+    '<div class="key"><span><i style="background:var(--hit)"></i>Day hit</span><span><i style="background:var(--miss)"></i>Missed</span><span><i style="background:var(--rest)"></i>Rest day</span><span>Weekly bars measure exercise minutes against each person\'s own weekly target</span></div>' +
+    '<div class="' + (two ? "two" : "one") + '">' + P.map((p) => monthPersonHtml(p.history, p.range, p.name)).join("") + "</div>" +
+    '<p class="foot">From the Momo Play log as of ' + esc(dm(o.today || P[0].history.to)) + ". A day counts when exercise reaches the daily floor or steps reach the step floor. Entries that are not exercise, such as a balloon ride, are left out. Protein figures are rough estimates made when each meal was logged, not nutrition advice.</p>" +
+    '<div class="add noprint"><a class="btn" href="/fit?key=' + keyQ + '">Back to Momo</a><button class="btn" onclick="window.print()">Print</button></div></div></body></html>';
 }
 // ---- weight and waist (optional; nothing asks for them) ---------------------------------------------------------------------
 // The challenge has an end goal but nothing measures it. "momo weight 82.5" / "momo waist 90" keep the last reading of each day.
@@ -512,9 +680,11 @@ function sundayExtras(cfg, sum, today) {
 // ---- export: everything one person has logged, as a spreadsheet ------------------------------------------------------------
 const csvCell = (v) => { let t = String(v == null ? "" : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };   // a leading = + - @ would run as a formula in a spreadsheet
 export async function fitCsv(env, cfg, today) {
-  const from = cfg.start && cfg.start <= today ? (cfg.start < addDays(today, -400) ? addDays(today, -400) : cfg.start) : addDays(today, -400);
-  const rows = [["date", "time_gst", "kind", "what", "minutes", "steps", "value", "outside_eating_window", "source", "protein_g_rough"]];
-  for (const e of await fitRange(env, from, today, cfg.u)) rows.push([e.d, gstHM(e.t), e.k === "ex" ? "exercise" : e.k === "w" ? "measurement" : "food", e.x, e.k === "ex" && !e.n ? e.m : "", e.n || "", e.k === "w" ? e.v : "", e.k === "food" ? (e.o ? "yes" : "no") : "", e.s, e.k === "food" && e.pr === "rough" ? e.p : ""]);
+  const archives = await fitArchives(env, cfg.u), first = archives.length ? archives[0].start : "";   // v683: the export reaches back over every archived month, and names the window each row fell in
+  const from = cfg.start && cfg.start <= today ? ([first || cfg.start, cfg.start].sort()[0] < addDays(today, -400) ? addDays(today, -400) : [first || cfg.start, cfg.start].sort()[0]) : addDays(today, -400);
+  const winOf = (d) => { if (cfg.start && d >= cfg.start) return windowLabel(cfg); const a = archives.find((x) => d >= x.start && d <= x.end); return a ? a.label : ""; };
+  const rows = [["date", "time_gst", "kind", "what", "minutes", "steps", "value", "outside_eating_window", "source", "protein_g_rough", "window"]];
+  for (const e of await fitRange(env, from, today, cfg.u)) rows.push([e.d, gstHM(e.t), e.k === "ex" ? "exercise" : e.k === "w" ? "measurement" : "food", e.x, e.k === "ex" && !e.n ? e.m : "", e.n || "", e.k === "w" ? e.v : "", e.k === "food" ? (e.o ? "yes" : "no") : "", e.s, e.k === "food" && e.pr === "rough" ? e.p : "", winOf(e.d)]);
   return rows.map((r) => r.map(csvCell).join(",")).join("\n") + "\n";
 }
 // ---- is it working? one look at when things last happened ----------------------------------------------------------------
@@ -721,7 +891,7 @@ function statusText(cfg, sum, partners) {
   L.push("", "Open Momo in the bottom bar for the full view.");
   return L.join("\n");
 }
-const HELP_TEXT = "Momo - just say it and it is logged. (Protein figures are rough estimates, not nutrition advice.)\nfood: grilled chicken and rice (or send a photo of the plate)\nweights 45 min · spin class 40 min · 10k steps\nexercise types: walk, run, weight training, spin class, outdoor cycling, swimming, elliptical (anything else is logged under its own name)\n\nmomo - today · momo today (what you ate, with rough protein) · momo week · momo history\nmomo again (repeat your last meal) · momo undo · momo fix <the right text or number>\nmomo pause [days] [why] · momo resume\nmomo weight 82.5 · momo waist 90\nmomo target 10 · momo protein 120 (an optional guide; momo protein off removes it) · momo goal <text> · momo tone kind|firm|brutal\nmomo share on|off · momo extend\njournal: <text> (or a voice note that starts with \"journal\") · momo journal (today's entries)\nmomo book 21:30 · momo book off · momo booked (write in your paper book: a daily reminder)";
+const HELP_TEXT = "Momo - just say it and it is logged. (Protein figures are rough estimates, not nutrition advice.)\nfood: grilled chicken and rice (or send a photo of the plate)\nweights 45 min · spin class 40 min · 10k steps\nexercise types: walk, run, weight training, spin class, outdoor cycling, swimming, elliptical (anything else is logged under its own name)\n\nmomo - today · momo today (what you ate, with rough protein) · momo week · momo history\nmomo again (repeat your last meal) · momo undo · momo fix <the right text or number>\nmomo pause [days] [why] · momo resume\nmomo weight 82.5 · momo waist 90\nmomo target 10 · momo protein 120 (an optional guide; momo protein off removes it) · momo goal <text> · momo tone kind|firm|brutal\nmomo share on|off · momo extend · momo new month (archive this month, start Day 1 today)\njournal: <text> (or a voice note that starts with \"journal\") · momo journal (today's entries)\nmomo book 21:30 · momo book off · momo booked (write in your paper book: a daily reminder)";
 function mealsText(cfg, sum) {
   const meals = sum.entries.filter((e) => e.k === "food"), st = sum.stats, L = [(sum.d === sum.today ? "Today" : dm(sum.d)) + " - what you ate"];
   if (!meals.length) L.push("Nothing logged yet.");
@@ -782,6 +952,7 @@ export async function fitWhatsAppText(env, from, text, deps, opts) {
   }
   if ((c = /^\s*fit\s+tone\s*[:\-–—]?\s*(kind|firm|brutal)\s*$/i.exec(text))) { const cfg = await fitCfg(env, U); cfg.tone = c[1].toLowerCase(); await fitSaveCfg(env, cfg); await reply(env, deps, from, "Tone set to " + cfg.tone + "."); return true; }
   if (/^\s*fit\s+extend\s*$/i.test(text)) { const cfg = await fitCfg(env, U); cfg.days = Math.min(365, cfg.days + 30); await fitSaveCfg(env, cfg); await reply(env, deps, from, "➕ Challenge extended to " + cfg.days + " days."); return true; }
+  if (/^\s*fit\s+(new\s+month|reset)\s*$/i.test(text)) { const cfg = await fitCfg(env, U); await reply(env, deps, from, newMonthText(await fitNewMonth(env, cfg, gstDate(Date.now()), deps))); return true; }   // v683: archive the window, start Day 1 today
   if (/^\s*fit\s+(start|restart)\s*$/i.test(text)) { const cfg = await fitCfg(env, U); cfg.start = gstDate(Date.now()); await fitSaveCfg(env, cfg); await reply(env, deps, from, "▶️ Challenge starts today - " + cfg.days + " days."); return true; }
   if (/^\s*fit\s+(today|meals|what i ate)\s*$/i.test(text)) {
     const cfg = await fitCfg(env, U), today = gstDate(Date.now()); let sm = await fitSummary(env, today, cfg, today);
@@ -1455,13 +1626,28 @@ export async function fitRoutes(request, env, url, h) {
     const bytes = IMG_BYTES[n] || (IMG_BYTES[n] = Uint8Array.from(atob(FIT_IMG[n]), (c) => c.charCodeAt(0)));   // constants of the bundle, never user data: safe to keep between requests
     return new Response(bytes, { headers: { "Content-Type": FIT_IMG_TYPE[n] || "image/jpeg", "Cache-Control": "private, max-age=86400", "X-Robots-Tag": "noindex", "Referrer-Policy": "no-referrer" } });
   }
+  if (p === "/fit" && url.searchParams.get("month")) {   // v683: the one-page month card, owner only (gated above)
+    const today = gstDate(Date.now()), cfg = await fitCfg(env, url.searchParams.get("u")), range = await fitMonthRange(env, cfg, url.searchParams.get("month"), today);
+    if (!range) return new Response("not found", { status: 404 });
+    const ulist = fitUsers(env), nameOf = (id) => { const x = ulist.find((y) => y.id === id); return x ? niceName(x) : id; };
+    const people = [{ history: await fitHistory(env, cfg, today, h, { from: range.from, to: range.to, detail: true }), range, name: nameOf(cfg.u) }];   // the person's OWN page: full detail
+    if (await fitShareOn(env, cfg.u)) for (const other of ulist) {   // side by side, both in full detail, only when BOTH switched sharing on; otherwise nothing of the other person is here
+      if (other.id === cfg.u || !(await fitShareOn(env, other.id))) continue;
+      const oc = await fitCfg(env, other.id), orange = await fitMonthRange(env, oc, url.searchParams.get("month"), today);
+      if (orange) people.push({ history: await fitHistory(env, oc, today, h, { from: orange.from, to: orange.to, detail: true }), range: orange, name: nameOf(other.id) });
+    }
+    return new Response(monthPageHtml({ key, people, today, fonts: h.NAJ_FONTS }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer" } });
+  }
   if (p === "/fit") {
     const html = fitPageHtml({ key, nav: h.najNav(key, "fit", ""), navCss: h.NAJ_NAV_CSS, fonts: h.NAJ_FONTS });
     return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer" } });
   }
   const now = Date.now(), today = gstDate(now), ulist = fitUsers(env), us = ulist.map((x) => x.id), names = Object.fromEntries(ulist.map((x) => [x.id, x.name || x.id.charAt(0).toUpperCase() + x.id.slice(1)])), cfg = await fitCfg(env, url.searchParams.get("u"));
   if (request.method === "GET") {
-    if (url.searchParams.get("view") === "history") return J(Object.assign({ ok: true, u: cfg.u, users: us, names }, await fitHistory(env, cfg, today, h)));
+    if (url.searchParams.get("view") === "history") {   // v683: &from=&to= reads a frozen window (an archived month's days) instead of the current one
+      const f = url.searchParams.get("from"), t = url.searchParams.get("to");
+      return J(Object.assign({ ok: true, u: cfg.u, users: us, names }, await fitHistory(env, cfg, today, h, f && t ? { from: f, to: t } : null)));
+    }
     if (url.searchParams.get("view") === "csv") return new Response(await fitCsv(env, cfg, today), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="momo-' + cfg.u + '-' + today + '.csv"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
     if (url.searchParams.get("view") === "feedback") return J(await fitFeedback(env, cfg, now));
     if (url.searchParams.get("view") === "journal") {
@@ -1473,7 +1659,9 @@ export async function fitRoutes(request, env, url, h) {
     let d = url.searchParams.get("d") || today; if (!DATE_RX.test(d) || d > today) d = today;
     let sum = await fitSummary(env, d, cfg, today);
     if (await fitBackfillProtein(env, h, sum.entries, 8)) sum = await fitSummary(env, d, cfg, today);   // opening a day estimates its meals that have no estimate yet
+    const archives = await fitArchives(env, cfg.u);   // v683: the month label on the home card, and the month just archived (so the reset reads as a page turn)
     return J({ ok: true, u: cfg.u, users: us, names, share: await fitShareOn(env, cfg.u), partners: await fitPartners(env, cfg, today), rest: sum.rest, paused: sum.paused, today, d, cfg, entries: sum.entries, stats: sum.stats, strip: sum.strip, week: sum.week, challenge: sum.challenge,
+      label: windowLabel(cfg), lastArchive: archives.length ? archives[archives.length - 1] : null,
       machines: Object.values(await liftHist(env, cfg.u)), groups: ((await liftLog(env, cfg.u)).find((r) => r.d === d) || {}).g || [],   // v436 session card + progress
       window: await fitWindow(env, cfg.u, now) });   // v453 - a guest's WhatsApp window: the page shows "Send to Momo on WhatsApp" when it is shut or nearly shut
   }
@@ -1597,6 +1785,7 @@ export async function fitRoutes(request, env, url, h) {
   if (op === "weektarget") { const r = await fitSetWeekTarget(env, cfg, Math.round(Number(b.hours) * 60), today); return r ? J({ ok: true, target: r }) : J({ ok: false, why: "hours out of range" }, 400); }
   if (op === "cfg") { const next = fitCleanCfg(b.cfg, cfg); await fitSaveCfg(env, next); return J({ ok: true, cfg: next }); }
   if (op === "extend") { cfg.days = Math.min(365, cfg.days + 30); await fitSaveCfg(env, cfg); return J({ ok: true, cfg }); }
+  if (op === "newmonth") { const r = await fitNewMonth(env, cfg, today, h); return J(Object.assign({ text: newMonthText(r) }, r)); }   // v683: the page confirms on the page first
   return J({ ok: false, why: "unknown op" }, 400);
 }
 
@@ -1652,7 +1841,8 @@ function fitPageHtml(o) {
     '<label>PROTEIN GUIDE (GRAMS A DAY, OPTIONAL, 0 = NONE) - A ROUGH GUIDE YOU SET FOR YOURSELF, NOT NUTRITION ADVICE</label><input id="s_protein" type="number" min="0" max="400" step="5">' +
     '<label>WATER TARGET (BOTTLES A DAY, 0 = NONE)</label><input id="s_water" type="number" min="0" max="20" step="1">' +
     '<label class="chk"><input type="checkbox" id="s_bookon"><span>Remind me to write in my book every day (WhatsApp, only while your 24-hour window is open)</span></label><label>BOOK REMINDER TIME (DUBAI)</label><input id="s_booktime" type="time"><label class="chk"><input type="checkbox" id="s_jrem"><span>Also remind me to add a line to my journal in the app</span></label><label>EATING WINDOWS (NAME, FROM, TO)</label><div id="s_win"></div>' +
-    '<div class="note" id="dirt" style="display:none;color:#E0A458">You have unsaved changes - tap "Save the plan" below.</div><label class="chk" id="shl"><input type="checkbox" id="s_share"><span>Share my week and streak with the other person (counts only, never what I ate). It shows only when we both switch it on.</span></label><div class="add"><a class="btn s" id="csv" href="#">Download my log (CSV)</a></div><div class="add"><button class="btn" id="save">Save the plan</button><button class="btn s" id="ext">Extend +30 days</button></div></details>' +
+    '<div class="note" id="dirt" style="display:none;color:#E0A458">You have unsaved changes - tap "Save the plan" below.</div><label class="chk" id="shl"><input type="checkbox" id="s_share"><span>Share my week and streak with the other person (counts only, never what I ate). It shows only when we both switch it on.</span></label><div class="add"><a class="btn s" id="csv" href="#">Download my log (CSV)</a></div><div class="add"><button class="btn" id="save">Save the plan</button><button class="btn s" id="ext">Extend +30 days</button></div>' +
+    '<div class="add"><button class="btn s" id="nm">Start a new month</button></div><div class="note" id="nmc" style="display:none"></div></details>' +
     '</div><div id="vj" style="display:none"><div class="fc" id="bk"></div><div class="fc" id="jr"><h2>JOURNAL</h2><div id="jb"></div></div></div>' +
     '<div class="cred">Photos: Pexels</div><div class="toast" id="toast"></div></div>' +
     '<div class="sheet" id="fbs" hidden><div class="sbg" id="fbbg"></div><div class="sp" role="dialog" aria-modal="true" aria-label="How you are doing"><div class="grab"></div><div id="fbc"></div><div class="add"><button class="btn" id="fbx" style="width:100%;justify-content:center">Got it</button></div></div></div>' + (o.nav || "") +
