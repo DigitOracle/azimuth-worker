@@ -17,6 +17,7 @@ import { PRICE_SLIDER_HTML } from "./price_slider_page.js";   // v661 - public p
 import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCard, schedToMeeting, schedCaptionHit, schedKey, eventCaptionHit } from "./sched_image.js";   // v356 - a picture of a schedule becomes events, after she says yes
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
+import { plotPassportRoutes } from "./plot_passport.js";   // Plot Passport (More), 2 Nov 2026
 import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - the client brief as a chat; Naj only when switched on
 import { deskReelTick } from "./desk_lab.js";
 import { clipTick } from "./heygen.js";   // v476
@@ -2131,6 +2132,7 @@ async function appFetch(request, env, ctx) {
     if (_sh) return _sh;
     // ---- THE BRIEF (part B, 30 Sep 2026): GET /brief - the form, the ranked list and the output buttons. All logic in src/brief_page.js. ----
     // After the client gate (/brief is in CLIENT_PATHS); briefRoutes applies clientOk itself. Returns null for any other path.
+    if (url.pathname === "/plot_passport" || url.pathname.indexOf("/plot_passport/") === 0) { const _pp = await plotPassportRoutes(request, env, url, { clientOk, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_pp) return _pp; }   // Plot Passport
     if (url.pathname === "/brief") { const _br = await briefRoutes(request, env, url, { clientOk, keyTier, clientLinkKey, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_br) return _br; }
     // ---- end THE BRIEF ----
     // ---- v279 CONTRACTS SIGNED (Ejari, Kendall 1 Oct 2026): GET /contracts and /contracts_api. All logic in src/ejari_page.js. ----
@@ -5152,7 +5154,8 @@ const NAJ_ROOMS = [
   ["TWIN", "/skyline?all=1", "cube", "The city in 3D. The showpiece \u2014 open it when they want to see the skyline, not read about it."],
   ["PLANS", "/plans", "plan", "Floor plans, by developer. What the flat actually looks like."],
   ["VS", "/versus", "buildings", "Dubai against a world city \u2014 the 45-second answer to \u201cwhy not London?\u201d"],
-  ["TIME", "/clock", "clock", "The world clock. Whose morning it is before you call them."]
+  ["TIME", "/clock", "clock", "The world clock. Whose morning it is before you call them."],
+  ["PLOT PASSPORT", "/plot_passport", "file", "One plot, every connected record: land, projects, permits, buildings and dates, each with how sure the link is. Search by parcel number or name."]
 ];
 
 const NAJ_START_CSS = 'body{background:#0C1413;color:#E8E4D8;font-family:"IBM Plex Sans",system-ui,sans-serif;margin:0;padding:16px 14px 96px;max-width:560px;margin-inline:auto;-webkit-text-size-adjust:100%}'
