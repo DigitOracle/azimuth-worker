@@ -58,6 +58,7 @@ import { checklistRoutes } from "./checklist.js";   // v291 CHECKLIST - owner-on
 import { briefDocsRoute } from "./brief_docs.js";   // THE BRIEF part C - /brief_pdf documents and the /brief_blocks LOD 100 view (all logic in the module)
 import { feedEjariCard, ejDoc as ejariDoc, subSay as ejariSubSay } from "./feed_ejari.js";
 import { planFacts, registerFacts, otherFacts, ejariFacts, newsFacts, factMenu } from "./feed_ledger.js";   // v284 - THE FACT LEDGER: fresh facts are chosen BEFORE generation (all its builders live in feed_ledger.js)   // v281 - EJARI · WHAT MOVED, the morning card after the list (all its logic lives in feed_ejari.js)
+import { plotReconcileRoutes } from "./plot_reconcile.js";   // DATA CHECKS - the data discrepancy report (Land Department vs Municipality research flags), owner only; all logic in src/plot_reconcile.js
 import { fitRoutes, fitWhatsAppText, fitPhotoCaptioned, fitPhotoRead, fitButton, fitEvening, fitMorning, fitCaptionIsFood, fitGuest, fitReminders, fitIsJournalText } from "./fit.js";   // v328 FIT - food and exercise log, owner only (/fit, /fit_api, the FIT tab, WhatsApp logging); all logic in src/fit.js
 import { isDeskState as igDeskIsState, deskIgLink, deskIgCallback, deskIgStatus, deskIgDeauth, deskIgRefresh, deskIgPublishReel } from "./ig_desk.js";   // v404 - the desk's own Instagram connection (ig_auth_desk), separate from Najjuko's
 import { deskPostTick, deskMorningTick, deskPostPull, refImport, markRefRequest, genImage as deskGenImage, posterTest, refClassify } from "./desk_post.js";   // v413 - the desk posting loop
@@ -3392,6 +3393,7 @@ async function appFetch(request, env, ctx) {
         const _srk = residentsKeyOf(env, url);
         return clientResp(env, url, najStartHtml(url.searchParams.get("key") || "", _srk, keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
+      if (url.pathname === "/data_checks" || url.pathname.startsWith("/data_checks/")) { const _pr = await plotReconcileRoutes(request, env, url, { clientOk, isOwner: (e, u) => keyTier(e, u) === "admin", clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_pr) return _pr; }   // DATA CHECKS (src/plot_reconcile.js)
       if (url.pathname === "/more") {                          // v235 - every room, in plain English
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
         const _mrk = residentsKeyOf(env, url);
@@ -5213,7 +5215,8 @@ function najMoreHtml(key, rk, owner) {
   // BOARD and CHARTS are owner rooms; clientResp strips the board link on a client key, and CHARTS is the
   // postable card sheet that feeds the posts, not a room a client is walked into.
   const ownerRooms = !owner ? "" : '<a class=rm href="/board?key=' + k + '"><div class=t>' + najIcon("house") + 'BOARD</div><p>Your own board \u2014 what is on the plate today.</p></a>'
-    + '<a class=rm href="/charts?key=' + k + '"><div class=t>' + najIcon("chart") + 'CARD SHEET</div><p>The day\u2019s angles drawn as postable cards. Long-press to save, then post. Not part of the client walk.</p></a>';
+    + '<a class=rm href="/charts?key=' + k + '"><div class=t>' + najIcon("chart") + 'CARD SHEET</div><p>The day\u2019s angles drawn as postable cards. Long-press to save, then post. Not part of the client walk.</p></a>'
+    + '<a class=rm href="/data_checks?key=' + k + '"><div class=t>' + najIcon("buildings") + 'DATA CHECKS</div><p>Plots where the Land Department and Municipality records do not agree. Research flags, not findings: open one plot or download the list.</p></a>';   // DATA CHECKS (src/plot_reconcile.js)
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>More \u2014 Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS
     + '<style>' + NAJ_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
