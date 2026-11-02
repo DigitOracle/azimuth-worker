@@ -86,7 +86,8 @@ function make(c){
 var S=c.S,D=null,RC={},CBY={},CF={NOTE:NOTE,SRC:SRC,TW:TW,EVW:EVW};
 function valid(d){return !!(d&&d.centres&&d.centres.length===5&&d.comms&&d.comms.length&&d.sl&&d.geo&&d.geo.features&&d.geo.features.length)}
 CF.load=function(d){D=valid(d)?d:null;RC={};CBY={};S.cen=null;S.coast=false;S.cshade=true;S.bandsAsk=false;S.fmenu=null;S.cenAll=false;S.bflag=false;
-  if(D){D.centres.forEach(function(e){CBY[e.id]=e});try{S.bflag=new URLSearchParams(location.search).get("bands")==="1"}catch(e){}}};
+  if(D){D.centres.forEach(function(e){CBY[e.id]=e});try{S.bflag=new URLSearchParams(location.search).get("bands")==="1"}catch(e){}
+    try{var _ep=new URLSearchParams(location.search).get("empty");if(_ep&&/^(all|res|com|oth|bare)$/.test(_ep)){S.empty=_ep;setTimeout(epShow,0)}}catch(e){}}};   // v691: ?empty=all|bare opens straight on the Empty plots layer (the Land scanner's "See on map")
 CF.on=function(){return !!D};
 CF.data=function(){return D};
 function locked(){return !!(S.prof&&S.screen===1)}
