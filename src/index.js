@@ -1,3 +1,4 @@
+import { plotIntelRoutes, PLOT_ROOMS } from "./plot_intel.js";   // v691 - Activity radar + Land scanner (MORE)
 import { askBoxHtml, askRoute, askFloatHtml } from "./ask_najma.js";   // v555, v556
 import { feedPdfStore, FEED_PDF_RX, feedPdfAngles, feedPdfAutoSend, feedAnglesKey } from "./feed_pdf.js";   // v622 - the day's feed as a PDF for the graphic designer
 import { readAnne, ANNE_ICON } from "./work_anne.js";
@@ -2137,6 +2138,7 @@ async function appFetch(request, env, ctx) {
     // After the client gate (both are in CLIENT_PATHS); ejariRoutes applies clientOk itself and only ever READS KV.
     if (url.pathname === "/contracts" || url.pathname === "/contracts_api") { const _ej = await ejariRoutes(request, env, url, { clientOk, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_ej) return _ej; }
     // v301 - developers by area: Land Department register data only, so a client key opens it (both paths are in CLIENT_PATHS); devmapRoutes applies clientOk itself and 401s anything else.
+    if (url.pathname === "/plot_radar" || url.pathname === "/plot_land") { const _pi = await plotIntelRoutes(request, env, url, { clientOk, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_pi) return _pi; }   // v691
     if (url.pathname === "/developers_map" || url.pathname === "/developers_map_api") { const _dm = await devmapRoutes(request, env, url, { clientOk, keyTier, clientResp, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_dm) return _dm; }
     // v614 - developer profile: the same Land Department register data as the map, so a client key opens it (both paths are in CLIENT_PATHS); devprofileRoutes applies clientOk itself.
     if (url.pathname === "/developer_profile" || url.pathname === "/developer_profile_pdf") { const _dp = await devprofileRoutes(request, env, url, { clientOk, clientResp, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_dp) return _dp; }
@@ -5205,7 +5207,7 @@ function najStartHtml(key, rk, isOwner) {
 function najMoreHtml(key, rk, owner) {
   const esc3 = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const k = encodeURIComponent(key || "");
-  const rooms = NAJ_ROOMS.map((r) => {
+  const rooms = NAJ_ROOMS.concat(PLOT_ROOMS).map((r) => {   // v691 - PLOT_ROOMS from src/plot_intel.js
     const href = r[1] + (r[1].indexOf("?") >= 0 ? "&key=" : "?key=") + k + (rk ? "&rk=" + encodeURIComponent(rk) : "");
     return '<a class=rm href="' + esc3(href) + '"><div class=t>' + najIcon(r[2]) + esc3(r[0]) + '</div><p>' + esc3(r[3]) + '</p></a>';
   }).join("");
