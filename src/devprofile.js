@@ -51,7 +51,7 @@ export function cleanIndex(raw) {
 const PROFILE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#C5A56A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/></svg>';
 export function devprofileStartHalf(key) {
   return '<a class="dvh dvp" href="/developer_profile?key=' + esc(encodeURIComponent(key || "")) + '">'
-    + '<div class=ejh><div class="ic suic">' + PROFILE_SVG + '</div><div><b>Developer profile</b><span>Projects, escrow and delivery record. PDF to download</span></div></div></a>';
+    + '<div class=ejh><div class="ic suic">' + PROFILE_SVG + '</div><div><b>Developers DNA</b><span>Projects, escrow and delivery record. PDF to download</span></div></div></a>';
 }
 export const DEVPROFILE_START_CSS = '.dvsplit{padding:0!important;gap:0!important;overflow:hidden}.dvsplit .dvh{display:block;flex:1 1 0;padding:14px;color:inherit;text-decoration:none}'
   + '.dvsplit .dvp{border-top:1px solid #3A3222}';
@@ -183,4 +183,20 @@ export async function devprofileRoutes(request, env, url, deps) {
   }
   if (!pdf || !pdf.byteLength) return J({ ok: false, reason: "the renderer returned nothing" }, 502);
   return new Response(pdf, { headers: Object.assign({ "Content-Type": "application/pdf", "Content-Disposition": 'inline; filename="' + doc.fname + '"' }, hdr) });
+}
+
+// ------------------------------------------------------------------------------------------------ DEVELOPERS DNA (v692, 2 Nov 2026)
+// Kendall, 2 Nov 2026: HOMES and the Developer profile "should be combined" -> HOMES is renamed DEVELOPERS DNA and each developer's
+// page (/dev) carries its profile (escrow + delivery pages, PDF) under the pillars. Same index, same whitelist: an id not in the
+// roster shows nothing; a developer with no pages says "in preparation".
+export function devDnaBlock(rawIdx, id, key) {
+  const idx = cleanIndex(rawIdx);
+  const d = idx && idx.developers.find((x) => x.id === String(id || "").toLowerCase());
+  if (!d) return "";
+  const k = esc(encodeURIComponent(key || ""));
+  const box = 'style="display:block;text-decoration:none;color:inherit;background:#101D1B;border:1px solid #24352F;border-left:3px solid #C5A56A;border-radius:12px;padding:12px 14px;margin:14px 0"';
+  const t = '<div style="font-family:IBM Plex Mono,monospace;font-size:.68rem;letter-spacing:.1em;color:#C5A56A">DEVELOPER PROFILE \u00b7 ESCROW AND DELIVERY</div>';
+  if (!d.pages) return '<div ' + box + '>' + t + '<div style="color:#8FA39B;font-size:.8rem;margin-top:5px">In preparation.</div></div>';
+  return '<a ' + box + ' href="/developer_profile?id=' + esc(d.id) + '&amp;key=' + k + '">' + t
+    + '<div style="color:#E8E4D8;font-size:.82rem;margin-top:5px">' + d.pages + (d.pages === 1 ? " page" : " pages") + ' \u2014 projects, escrow and delivery record. Open, or download the PDF \u203a</div></a>';
 }

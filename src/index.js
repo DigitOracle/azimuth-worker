@@ -45,7 +45,7 @@ import { ejariRoutes } from "./ejari_page.js";   // v279 CONTRACTS SIGNED (Ejari
 import { docOptionsRoute } from "./doc_options_docs.js";   // v407 - /doc_client and /doc_broker: choose the options before the Client or Broker PDF is made
 import { devmapPdfRoute } from "./devmap_pdf.js";   // v324 - the two Developers-by-area PDFs (snapshot, detailed)
 import { devmapRoutes } from "./devmap_page.js";   // v301 DEVELOPERS BY AREA
-import { devprofileRoutes } from "./devprofile.js";   // v614 DEVELOPER PROFILE - the three-page profile and its PDF
+import { devprofileRoutes, devDnaBlock } from "./devprofile.js";   // v614 DEVELOPER PROFILE - the three-page profile and its PDF
 import { mergePlots, mergeSearchIndex, readSearchExtra } from "./nosales.js";   // v392 - no-sales projects with a plot position join the map search
 import { mergeSearchItems, SEARCH_EXTRA_ANNOUNCED_KV } from "./announced.js";   // v397d - announced, not yet registered: Find-page items merge after img_search_extra, each only when present
 import { supplyRoutes, pollerRoutes } from "./supply_page.js";   // v279 ADVERTISED SUPPLY - owner only: /supply*, and /pf_queue + /pf_status for the laptop poller; all logic in src/supply_page.js
@@ -3480,7 +3480,8 @@ async function appFetch(request, env, ctx) {
             if (_rec) _pdev = developerPillarsCard(_rec);
           }
         } catch (e) {}
-        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids, keyTier(env, url) === "admin", _cj, _ls, _pdev), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+        let _dna = ""; try { _dna = devDnaBlock(JSON.parse((await env.MEETINGS.get("img_devprofile_index")) || "null"), _dv.key, url.searchParams.get("key") || ""); } catch (e) {}   // v692 DEVELOPERS DNA
+        return clientResp(env, url, renderDev(_dv, _bd, _galleries, url.searchParams.get("key") || "", _umx, _vids, keyTier(env, url) === "admin", _cj, _ls, (_pdev || "") + _dna), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/compare") {                      // v73.3 - two developers side by side, click-only (dev_compare pushed by build_compare.py)
         if (!clientOk(env, url)) return new Response("unauthorized", { status: 401 });
@@ -5152,7 +5153,7 @@ const NAJ_CHEAT = [
 
 const NAJ_ROOMS = [
   ["FIND", "/find", "search", "Search any developer, development or building by name. The fastest way in when the client says a name out loud."],
-  ["HOMES", "/home", "grid", "The developers, ten to a screen. Tap one for its properties, its record and its price position."],
+  ["DEVELOPERS DNA", "/home", "grid", "The developers, ten to a screen. Tap one for its properties, its scores, and its escrow and delivery profile with the PDF."],
   ["PULSE", "/market", "trend", "The market scoreboard. Registered sales, median price per sq ft, and where Dubai is trading this week."],
   ["MAP", "/map", "pin", "Dubai live. Areas, amenities, what is trading. Tap an area for its briefing, then any tower to go down to the units."],
   ["TWIN", "/skyline?all=1", "cube", "The city in 3D. The showpiece \u2014 open it when they want to see the skyline, not read about it."],
