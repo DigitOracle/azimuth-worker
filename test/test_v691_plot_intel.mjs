@@ -48,7 +48,7 @@ ok(!/construction (has )?start|work (has )?start|started/i.test(h.replace(/not p
 ok(/Records checked up to <b>1 Nov 2026/.test(h), "radar shows the data date");
 ok(h.indexOf("6488707") < h.indexOf("3456001") && h.indexOf("3456001") < h.indexOf("6457865"), "radar ranks strong, medium, weak");
 ok(/project-level record/.test(h), "project registration labelled project-level");
-ok(rs.includes('"pp":"/najma/plot"') && rs.includes('"?id="'), "rows open the Plot Passport by plot id");
+ok(rs.includes('"pp":"/plot_passport"') && rs.includes('"?id="'), "rows open the Plot Passport by plot id");
 ok(!EMOJI.test(h), "radar: no emoji");
 h = await (await call("/plot_land?key=" + READ)).text();
 const ls = scripts(h).join(";");

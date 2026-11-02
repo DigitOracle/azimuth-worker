@@ -2134,14 +2134,14 @@ async function appFetch(request, env, ctx) {
     if (_sh) return _sh;
     // ---- THE BRIEF (part B, 30 Sep 2026): GET /brief - the form, the ranked list and the output buttons. All logic in src/brief_page.js. ----
     // After the client gate (/brief is in CLIENT_PATHS); briefRoutes applies clientOk itself. Returns null for any other path.
-    if (url.pathname === "/plot_passport" || url.pathname.indexOf("/plot_passport/") === 0) { const _pp = await plotPassportRoutes(request, env, url, { clientOk, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_pp) return _pp; }   // Plot Passport
+    if ((url.pathname === "/plot_passport" || url.pathname.indexOf("/plot_passport/") === 0) && keyTier(env, url) === "admin") { const _pp = await plotPassportRoutes(request, env, url, { clientOk, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_pp) return _pp; }   // Plot Passport
     if (url.pathname === "/brief") { const _br = await briefRoutes(request, env, url, { clientOk, keyTier, clientLinkKey, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_br) return _br; }
     // ---- end THE BRIEF ----
     // ---- v279 CONTRACTS SIGNED (Ejari, Kendall 1 Oct 2026): GET /contracts and /contracts_api. All logic in src/ejari_page.js. ----
     // After the client gate (both are in CLIENT_PATHS); ejariRoutes applies clientOk itself and only ever READS KV.
     if (url.pathname === "/contracts" || url.pathname === "/contracts_api") { const _ej = await ejariRoutes(request, env, url, { clientOk, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_ej) return _ej; }
     // v301 - developers by area: Land Department register data only, so a client key opens it (both paths are in CLIENT_PATHS); devmapRoutes applies clientOk itself and 401s anything else.
-    if (url.pathname === "/plot_radar" || url.pathname === "/plot_land") { const _pi = await plotIntelRoutes(request, env, url, { clientOk, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_pi) return _pi; }   // v691
+    if ((url.pathname === "/plot_radar" || url.pathname === "/plot_land") && keyTier(env, url) === "admin") { const _pi = await plotIntelRoutes(request, env, url, { clientOk, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_pi) return _pi; }   // v691
     if (url.pathname === "/developers_map" || url.pathname === "/developers_map_api") { const _dm = await devmapRoutes(request, env, url, { clientOk, keyTier, clientResp, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_dm) return _dm; }
     // v614 - developer profile: the same Land Department register data as the map, so a client key opens it (both paths are in CLIENT_PATHS); devprofileRoutes applies clientOk itself.
     if (url.pathname === "/developer_profile" || url.pathname === "/developer_profile_pdf") { const _dp = await devprofileRoutes(request, env, url, { clientOk, clientResp, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_dp) return _dp; }

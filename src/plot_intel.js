@@ -8,8 +8,8 @@
 //   - availability for purchase is unknown and the page says so; the data date is on screen
 //   - cards, never lists; inline SVG icons, never emoji; every abbreviation spelled out
 
-// The Plot Passport is built by a parallel workstream. ASSUMPTION (not found on the branch on 2 Nov): it will live at /najma/plot?id=<najma_plot_id>.
-export const PASSPORT_PATH = "/najma/plot";
+// The Plot Passport lives at /plot_passport?id=<najma_plot_id> (merged 2 Nov).
+export const PASSPORT_PATH = "/plot_passport";
 export const MAP_PATH = "/developers_map";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
