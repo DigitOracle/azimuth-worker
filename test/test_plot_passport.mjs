@@ -16,7 +16,9 @@ const P = { id: ID, parcel: "3190268", plot_no: "319-268", area_land: "388/80", 
   permits: [{ no: "458961-1-1", type: "Apply for Buildings Drawings", status: "Approved", date: "2025-08-06", s: "d" }],
   evidence: [{ src: "g_dm__building_permits", label: "Building permits (Dubai Municipality)", method: "parcel_direct", conf: 0.95, n: 1, s: "d", as_of: "2026-11-01", cov: 94.3 }, { src: "lk_rooftop_2017", label: "2017 rooftop outlines", method: "point_in_parcel_2017", conf: 0.7, n: 26, s: "m" }],
   projlevel: [{ src: "lk_dld_rents", label: "Rent contracts (Ejari), project level", method: "via_project", conf: 0.4, n: 3, s: "p" }],
-  timeline: [{ date: "2025-12-12", what: "Project 456378 completed", src: "g_dm__project_information", s: "d" }], flags: [{ k: "map_only", t: "Some records reach this plot only by location." }] };
+  timeline: [{ date: "2025-12-12", what: "Project 456378 completed", src: "g_dm__project_information", s: "d" }],
+  flats: { checked: "2026-11-01", total: 2, sale: 1, rent: 1, items: [{ b: "Oud Metha Tower", beds: 2, sqft: 1210, price: 1850000, mode: "sale", date: "2026-10-28", portal: "Property Finder", agent: "Sara Khan", firm: "Bay Homes Real Estate", phone: "+971 50 123 4567", card: "54321" }, { b: "Oud Metha Tower", beds: 1, sqft: 780, price: 95000, mode: "rent", date: "2026-10-30", portal: "Property Finder", agent: "Omar Ali", firm: "Metro Lettings", phone: "+971 55 765 4321" }] },
+  prices: { scope: "building", name: "Oud Metha Tower", years: ["2024", "2025", "2026"], ytd: "2026", to: "2026-10-16", rent: { "2024": { "1": [80000, 3, "b"] }, "2025": { "1": [88000, 1, "b"], "2": [130000, 12, "d"] }, "2026": {} }, sale: { "2026": { "2": [1700000, 2, "b"] } } }, flags: [{ k: "map_only", t: "Some records reach this plot only by location." }] };
 store.set("pp_meta", JSON.stringify({ as_of: "2026-11-01", plots: 1, buckets: 4096, built_at: "2026-11-02T02:00:00Z" }));
 store.set("pp_b_" + (ppCrc32(ID) % 4096), JSON.stringify({ [ID]: P }));
 store.set("pp_s_31", JSON.stringify([["3190268", "Plot 3190268 · Oud Metha", ID, ppCrc32(ID) % 4096, "number"], ["319 268", "Plot 3190268 · Oud Metha", ID, 0, "number"]]));
@@ -27,12 +29,11 @@ ok(r.status === 200 && /Plot <em>passport<\/em>/.test(html), "the page serves");
 ok(/Register snapshot 2026-11-01/.test(html), "the page states the data freshness");
 ok(!/[\u{1F300}-\u{1FAFF}☀-➿]/u.test(html), "no emoji on the page");
 ok(!/dewa/i.test(html) && !/google\s*(places|maps)/i.test(html), "no DEWA or Google content");
-ok(/Direct match/.test(html) && /Map-based estimate/.test(html) && /Project-level only/.test(html), "the legend carries all three strengths");
+ok(!/Everything we hold/.test(html) && !/What the labels mean/.test(html) && !/How it was linked/.test(html), "no view toggle, no label legend, no source drill-down in the page");
 const js = html.match(/<script>(\(function\(\)\{[\s\S]*?\}\)\(\);)<\/script>/);
 ok(!!js, "the page script is present");
 try { new vm.Script(js[1]); } catch (e) { ok(false, "page script parses: " + e.message); }
 for (const id of [...js[1].matchAll(/\$\("([a-z]+)"\)/g)].map((m) => m[1])) ok(html.includes("id=" + id), "markup has #" + id + " that the script reads");
-ok(/id=ppmt/.test(html), "method vocabulary embedded");
 let j = await (await get("/plot_passport/search?key=RK&q=319-268")).json();
 ok(j.results.length === 1 && j.results[0].id === ID, "search by municipality plot number (319-268) finds the plot once");
 j = await (await get("/plot_passport/search?key=RK&q=3190268")).json();
@@ -48,22 +49,47 @@ ok((await get("/plot_passport/p?key=RK&id=naj:plot:9999999")).status === 404, "a
 r = await get("/plot_passport/report?key=RK&id=" + encodeURIComponent(ID)); const rep = await r.text();
 ok(r.status === 200 && /Print or save as PDF/.test(rep), "report serves with a print button");
 ok(/Research use only/.test(rep) && /snapshot 2026-11-01/.test(rep), "report states research use and the snapshot date");
-ok(/Rent contracts \(Ejari\), project level/.test(rep) && /Project-level only/.test(rep), "project-level evidence is labelled project-level, not a plot fact");
-ok(/ACME Consultants/.test(rep) && /458961-1-1/.test(rep), "report carries projects and permits");
+ok(!/Sources and how each was linked/.test(rep) && !/lk_dld_rents/.test(rep), "report has no sources appendix");
+ok(/Sara Khan/.test(rep) && /\+971 50 123 4567/.test(rep) && /broker card 54321/.test(rep), "report lists the flats with agent, phone and broker card");
+ok(/This building: Oud Metha Tower/.test(rep) && /not to this plot alone/.test(rep) && /district\)/.test(rep), "report prices say building-level and mark district fallback");
+ok(/Project 456378 completed/.test(rep), "report carries the timeline");
 ok(/Prepared for Dr\. Digital Abbot/.test(rep), "report addressed per house style");
 const more = await (await get("/more?key=RK")).text();
 ok(/href="\/plot_passport\?key=RK/.test(more) && /PLOT PASSPORT/.test(more), "More lists PLOT PASSPORT with the key carried");
 // the served script run against a minimal DOM, fetching through the worker (page + script together)
 const els = {}; const mk = (id) => (els[id] = els[id] || { id, value: "", hidden: false, innerHTML: "", textContent: "", classList: { contains() { return false; }, toggle() {} }, addEventListener() {}, scrollIntoView() {}, querySelector() { return null; } });
-const doc = { body: { getAttribute: (a) => (a === "data-key" ? "RK" : "") }, getElementById: (id) => (id === "ppmt" ? { textContent: html.match(/id=ppmt>([\s\S]*?)<\/script>/)[1] } : /^ic-/.test(id) ? { innerHTML: "<svg></svg>" } : mk(id)), addEventListener() {}, title: "" };
+let CLICK = null;
+const doc = { body: { getAttribute: (a) => (a === "data-key" ? "RK" : "") }, getElementById: (id) => (/^ic-/.test(id) ? { innerHTML: "<svg></svg>" } : mk(id)), addEventListener(t, f) { if (t === "click") CLICK = f; }, title: "" };
 const ctx = { document: doc, window: { addEventListener() {} }, location: { search: "?key=RK&id=" + encodeURIComponent(ID), href: "" }, history: { pushState() {} }, URLSearchParams, setTimeout, clearTimeout, navigator: {}, fetch: async (u) => get(u) };
 vm.runInNewContext(js[1], ctx);
 await new Promise((res) => setTimeout(res, 50));
 const outH = els.ppout.innerHTML;
 ok(/Plot 3190268/.test(outH) && /3,716 sq m/.test(outH), "page script renders the summary in plain words");
-ok(/Research report/.test(outH) && /Research flags/.test(outH), "renders the report button and research flags");
-ok(!/Rent contracts \(Ejari\)/.test(outH) && /more source/.test(outH), "default view hides inferred links and says they exist");
-ok(!/2017 rooftop outlines/.test(outH), "default view: map-based links are not shown as direct facts");
+ok(/Research report/.test(outH) && /1 research flag on this plot/.test(outH) && /href="\/data_checks\?key=RK"/.test(outH), "renders the report button and a single research-flag line linking to Data checks");
+ok(!/Sources/.test(outH) && !/Rent contracts \(Ejari\)/.test(outH) && !/2017 rooftop outlines/.test(outH) && !/Inferred associations/.test(outH), "no sources section and no inferred-associations card");
+ok(/role=tablist/.test(outH) && ["flats", "prices", "bldg", "tl"].every((t) => outH.includes('data-tab="' + t + '"')), "four tabs: flats, prices, buildings, timeline");
+ok(/data-tab="flats" aria-selected=true/.test(outH), "default tab is Flats when adverts exist");
+ok(/2 flats advertised<\/b>: 1 for sale, 1 to rent/.test(outH), "flats count line in plain words");
+ok(/Sara Khan/.test(outH) && /Bay Homes Real Estate/.test(outH) && /href="tel:\+971501234567"/.test(outH) && /broker card 54321/.test(outH), "listing card shows agent, brokerage, agent phone and broker card");
+ok(/AED 1\.9m/.test(outH) && /AED 95k<small> a year/.test(outH) && /Listed 28 Oct 2026/.test(outH), "listing card shows price and listed date");
+ok(!/45560345/.test(outH), "never the portal's shared WhatsApp line");
+ok(/class="dot d"/.test(outH) && !/class="chip/.test(outH), "strength is a small dot, not a chip");
+const tabTo = (t) => { CLICK({ target: { closest: () => ({ id: "", hasAttribute: (a) => a === "data-tab", getAttribute: () => t, classList: { contains: () => false } }) } }); return els.ppout.innerHTML; };
+let tH = tabTo("prices");
+ok(/data-tab="prices" aria-selected=true/.test(tH) && (tH.match(/<svg class=chart/g) || []).length === 2, "Prices tab draws two charts (rent and purchase)");
+ok(/This building: Oud Metha Tower/.test(tH) && /not for this plot alone/.test(tH), "prices labelled This building, not plot facts");
+ok(/>80k<\/text>/.test(tH) && />1\.7m<\/text>/.test(tH) && />1<\/text>/.test(tH), "value labels in AED k / m and deal count under a 1-deal bar");
+ok(/class="b2 dis"/.test(tH) && />d 12<\/text>/.test(tH) && /district \(d\)/.test(tH), "zero-deal cell falls back to district, lighter and marked d");
+ok(/>none<\/text>/.test(tH), "a cell with no deals anywhere says none");
+tH = tabTo("bldg"); ok(/Floors/.test(tH) && /Completion/.test(tH) && /12 Dec 2025/.test(tH) && /Completed/.test(tH), "Buildings tab: floors, completion, status");
+tH = tabTo("tl"); ok(/<ol class=tl>/.test(tH) && /Project 456378 completed/.test(tH), "Timeline tab lists dated events");
+{ const k = "pp_b_" + (ppCrc32("naj:plot:1-1") % 4096); const cur = JSON.parse(store.get(k) || "{}"); cur["naj:plot:1-1"] = { ...P, id: "naj:plot:1-1", parcel: "1000001", flats: { checked: "2026-11-01", items: [] }, prices: null }; store.set(k, JSON.stringify(cur)); }
+{ const c3 = { ...ctx, location: { search: "?key=RK&id=naj:plot:1-1", href: "" } }; for (const k in els) delete els[k]; vm.runInNewContext(js[1], c3); await new Promise((res) => setTimeout(res, 50));
+  ok(/data-tab="bldg" aria-selected=true/.test(els.ppout.innerHTML), "default tab is Buildings when no adverts");
+  CLICK({ target: { closest: () => ({ id: "", hasAttribute: (a) => a === "data-tab", getAttribute: () => "flats", classList: { contains: () => false } }) } });
+  ok(/No flats advertised on this plot right now \(checked 1 Nov 2026\)/.test(els.ppout.innerHTML), "no adverts: says so with the date checked");
+  CLICK({ target: { closest: () => ({ id: "", hasAttribute: (a) => a === "data-tab", getAttribute: () => "prices", classList: { contains: () => false } }) } });
+  ok(/No registered sales or rent contracts/.test(els.ppout.innerHTML), "no prices: says so plainly"); }
 // ---- hierarchical browse (Kendall 2 Nov: users will not know parcel numbers): district -> building -> plot
 const ID2 = "naj:plot:346-550", ID3 = "naj:plot:346-551", ID4 = "naj:plot:346-552";
 for (const [i, x] of [[ID2, "3460550"], [ID3, "3460551"], [ID4, "3460552"]]) { const k = "pp_b_" + (ppCrc32(i) % 4096); const cur = JSON.parse(store.get(k) || "{}"); cur[i] = { ...P, id: i, parcel: x, district: "businessbay", area_name: "Business Bay" }; store.set(k, JSON.stringify(cur)); }
@@ -79,7 +105,7 @@ ok(/id=ppb1/.test(html) && /id=ppb2/.test(html) && /role=dialog/.test(html) && /
 {
   const E = {}; let clickH = null;
   const el = (id) => (E[id] = E[id] || { id, value: "", hidden: id === "ppsheet" || id === "ppscrim", disabled: false, innerHTML: "", textContent: "", placeholder: "", attrs: {}, setAttribute(a, v) { this.attrs[a] = v; }, getAttribute(a) { return this.attrs[a]; }, hasAttribute(a) { return a in this.attrs; }, classList: { contains() { return false; }, toggle() {} }, addEventListener(t, f) { if (id === "ppshq" && t === "input") this.onin = f; }, focus() {}, scrollIntoView() {}, querySelector() { return null; } });
-  const d2 = { body: { getAttribute: (a) => (a === "data-key" ? "RK" : "") }, activeElement: null, getElementById: (id) => (id === "ppmt" ? { textContent: html.match(/id=ppmt>([\s\S]*?)<\/script>/)[1] } : /^ic-/.test(id) ? { innerHTML: "<svg></svg>" } : el(id)), addEventListener(t, f) { if (t === "click") clickH = f; }, title: "" };
+  const d2 = { body: { getAttribute: (a) => (a === "data-key" ? "RK" : "") }, activeElement: null, getElementById: (id) => (/^ic-/.test(id) ? { innerHTML: "<svg></svg>" } : el(id)), addEventListener(t, f) { if (t === "click") clickH = f; }, title: "" };
   const c2 = { document: d2, window: { addEventListener() {} }, location: { search: "?key=RK", href: "" }, history: { pushState() {} }, URLSearchParams, setTimeout, clearTimeout, navigator: {}, fetch: async (u) => get(u) };
   vm.runInNewContext(js[1], c2);
   const tick = () => new Promise((res) => setTimeout(res, 30));
