@@ -121,6 +121,25 @@ h1{font-family:Fraunces,Georgia,serif;font-size:1.7rem;font-weight:600;margin:.2
 .legend .row{display:flex;gap:10px;align-items:flex-start;margin:8px 0;font-size:.84rem;color:var(--soft)}
 .note{color:var(--muted);font-size:.74rem;margin:14px 2px}
 .inf{border-style:dashed}
+.browse h2{margin-bottom:8px}.steps{display:grid;grid-template-columns:1fr;gap:8px}@media(min-width:620px){.steps{grid-template-columns:1fr 1fr}}
+.step{display:flex;gap:12px;align-items:center;text-align:left;min-height:60px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:var(--raise);color:var(--ink);font:inherit;cursor:pointer;width:100%}
+.step:hover,.step:focus-visible{border-color:var(--gold)}.step:disabled{opacity:.55;cursor:default}
+.step .sn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--gold);color:#0C1413;font-family:"IBM Plex Mono",monospace;font-size:.75rem;display:flex;align-items:center;justify-content:center}
+.step small{display:block;color:var(--muted);font-size:.7rem;letter-spacing:.04em}.step b{display:block;font-size:.95rem;overflow-wrap:anywhere}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.74rem;margin:4px 0 10px}.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60}.scrim[hidden],.sheet[hidden]{display:none}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:61;max-height:86vh;display:flex;flex-direction:column;background:var(--card);border-top:1px solid var(--line);border-radius:16px 16px 0 0;padding:10px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -8px 30px rgba(0,0,0,.35)}
+@media(min-width:760px){.sheet{left:50%;right:auto;bottom:auto;top:8vh;width:560px;transform:translateX(-50%);border-radius:16px;border:1px solid var(--line);max-height:80vh}}
+.sheet .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 8px}
+.shd{display:flex;align-items:center;gap:8px;margin:0 0 8px}.shd b{flex:1;font-family:Fraunces,Georgia,serif;font-size:1.15rem}
+.sheet input{min-height:48px;border:1px solid var(--line);border-radius:10px;background:var(--raise);color:var(--ink);font:inherit;font-size:16px;padding:0 12px;width:100%}
+.sheet input:focus{outline:none;border-color:var(--gold)}
+.shl{overflow:auto;-webkit-overflow-scrolling:touch;margin-top:8px;flex:1}
+.opt{display:flex;gap:10px;align-items:center;width:100%;text-align:left;min-height:52px;padding:8px 10px;margin:0 0 6px;border:1px solid var(--line);border-radius:10px;background:var(--raise);color:var(--ink);font:inherit;cursor:pointer}
+.opt:hover,.opt:focus-visible{border-color:var(--gold)}.opt .ic{color:var(--gold)}.opt b{display:block;font-size:.92rem;overflow-wrap:anywhere}.opt small{color:var(--muted);font-size:.74rem}.opt.sp{border-style:dashed}
+.crumb{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 0 10px;font-size:.82rem;color:var(--muted)}
+.crumb button{min-height:36px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--gold);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.crumb span[aria-current]{color:var(--ink);font-weight:600;padding:0 4px}
 `;
 
 const PP_JS = String.raw`(function(){
@@ -150,10 +169,10 @@ function search(){var v=q.value.trim();clr.hidden=!v;if(T)clearTimeout(T);if(v.l
       say(j.total>j.results.length?("Showing "+j.results.length+" of "+j.total+". Keep typing to narrow it."):(j.total===1?"One plot matches.":j.total+" plots match."));
       sug.innerHTML=j.results.map(function(r){return '<button type=button class=sg data-id="'+esc(r.id)+'">'+ic(r.kind==="name"?"bldg":"pin")+'<span><b>'+esc(r.label)+'</b><small>'+(r.kind==="name"?"by name":"by number")+'</small></span></button>'}).join("")}).catch(function(){say("Search is not reachable just now. Try again in a moment.")})},180)}
 
-function open(id,push){say("Opening the passport…");sug.innerHTML="";
+var CTX={};function open(id,push,ctx){CTX=ctx||{d:null,g:null};closeSheet();say("Opening the passport…");sug.innerHTML="";
   fetch("/plot_passport/p?"+kq()+"&id="+encodeURIComponent(id)).then(function(r){return r.json()}).then(function(j){if(!j.ok){say(j.error||"That plot is not in the passport data.");return}
     CUR=j.plot;say("");render();if(push!==false){try{history.pushState({id:id},"","/plot_passport?"+kq()+"&id="+encodeURIComponent(id))}catch(e){}}
-    var s=$("pp-sum");if(s)s.scrollIntoView({block:"start"})}).catch(function(){say("The passport could not be opened just now.")})}
+    var s=$("pp-crumb");if(s)s.scrollIntoView({block:"start"})}).catch(function(){say("The passport could not be opened just now.")})}
 
 function sentence(p){var a=[];var sq=p.sqm?(num(Math.round(p.sqm))+" sq m ("+num(Math.round(p.sqm*10.7639))+" sq ft)"):null;
   var use=(p.sub_type||p.land_type||"").toLowerCase();
@@ -167,7 +186,9 @@ function sentence(p){var a=[];var sq=p.sqm?(num(Math.round(p.sqm))+" sq m ("+num
   return a.join(" ")}
 
 function render(){var p=CUR;if(!p)return;var ttl="Plot "+(p.parcel||p.plot_no||p.id.replace("naj:plot:",""));document.title=ttl+" — Plot passport";
-  var h='<section class="card sum" id=pp-sum><p class=t>'+esc(ttl)+'</p><div class=w>'+esc([p.area_name,p.master||p.project].filter(Boolean).join(" · "))+'</div><p>'+esc(sentence(p))+'</p>'
+  var dn=CTX.d?CTX.d.name:(p.area_name||"District"),gn=CTX.g?CTX.g.name:null;
+  var h='<nav class=crumb id=pp-crumb aria-label="Where this plot sits"><button type=button data-crumb=d>'+esc(dn)+'</button><span aria-hidden=true>›</span>'+(gn?'<button type=button data-crumb=g>'+esc(gn)+'</button><span aria-hidden=true>›</span>':'')+'<span aria-current=page>'+esc(ttl)+'</span></nav>';
+  h+='<section class="card sum" id=pp-sum><p class=t>'+esc(ttl)+'</p><div class=w>'+esc([p.area_name,p.master||p.project].filter(function(v,i,a){return v&&a.indexOf(v)===i}).join(" · "))+'</div><p>'+esc(sentence(p))+'</p>'
    +'<div class=acts><a class="btn pri" target=_blank rel=noopener href="/plot_passport/report?'+kq()+'&id='+encodeURIComponent(p.id)+'">'+ic("print")+'Research report</a><button type=button class=btn id=ppcopy>'+ic("copy")+'Copy link</button></div></section>';
   h+='<nav class=jump aria-label="Sections"><a href="#pp-land">Land</a><a href="#pp-proj">Projects</a><a href="#pp-perm">Permits</a><a href="#pp-bldg">Buildings</a><a href="#pp-tl">Timeline</a><a href="#pp-src">Sources</a></nav>';
   h+='<div class=seg role=group aria-label="What to show"><button type=button data-view=d aria-pressed='+(VIEW==="d")+'>Direct facts</button><button type=button data-view=all aria-pressed='+(VIEW==="all")+'>Everything we hold</button></div>';
@@ -195,7 +216,35 @@ document.addEventListener("click",function(e){var t=e.target.closest("button,a")
   if(t.hasAttribute("data-more")){var c=t.parentNode;[].forEach.call(c.querySelectorAll(".it[data-x],li[data-x]"),function(n){n.hidden=false});t.remove();return}
   if(t.hasAttribute("data-det")){var d=t.parentNode.querySelector(".m[data-x]");if(d){d.hidden=!d.hidden;t.textContent=d.hidden?"How it was linked":"Hide"}return}
   if(t.id==="ppcopy"){try{navigator.clipboard.writeText(location.href);t.lastChild.textContent="Link copied"}catch(err){}return}
+  if(t.hasAttribute("data-opt")){var o=SH[+t.getAttribute("data-opt")];if(o)o.fn();return}
+  if(t.id==="ppshx"){closeSheet();return}
+  if(t.id==="ppb1"){districts();return}
+  if(t.id==="ppb2"){groups();return}
+  if(t.hasAttribute("data-crumb")){if(t.getAttribute("data-crumb")==="g"&&CTX.g){DC=CTX.d;pickG(CTX.g);return}
+    var sl=(CTX.d&&CTX.d.slug)||(CUR&&CUR.district);if(sl)pickD(sl);else districts();return}
   if(t.id==="ppclr"){q.value="";search();q.focus();return}});
+var sh=$("ppsheet"),scr=$("ppscrim"),shq=$("ppshq"),shl=$("ppshl"),SH=[],SHBACK=null,DL=null,DC=null,DCACHE={};
+function nq(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
+function hit(o,f){return !f||o.sticky||(" "+nq(o.t)).indexOf(" "+f)>=0||nq(o.t).indexOf(f)>=0}
+function drawSheet(){var f=nq(shq.value),n=0,m=0,h="";SH.forEach(function(o,i){if(!hit(o,f))return;if(!o.sticky)m++;if(n>=150)return;n++;h+='<button type=button class="opt'+(o.sticky?" sp":"")+'" data-opt="'+i+'">'+ic(o.i||"pin")+'<span><b>'+esc(o.t)+'</b>'+(o.s?'<small>'+esc(o.s)+'</small>':'')+'</span></button>'});
+  shl.innerHTML=h+(m>150?'<p class=empty>'+m+' match. Type more letters to narrow the list.</p>':'')+(!n?'<p class=empty>Nothing matches “'+esc(shq.value)+'” here.</p>':'')}
+function openSheet(title,items,ph,back){SH=items;SHBACK=back||document.activeElement;$("ppsht").textContent=title;shq.value="";shq.placeholder=ph||"Type the first few letters";shq.setAttribute("aria-label",ph||"Filter this list");drawSheet();sh.hidden=false;scr.hidden=false;try{shq.focus({preventScroll:true})}catch(e){}}
+function closeSheet(){if(sh.hidden)return;sh.hidden=true;scr.hidden=true;if(SHBACK&&SHBACK.focus)try{SHBACK.focus({preventScroll:true})}catch(e){}}
+function getJ(u){return fetch(u).then(function(r){return r.json()})}
+function districts(){if(DL){openSheet("Choose a district",DL.map(function(d){return {t:d.name,s:num(d.n)+" plots",i:"pin",fn:function(){pickD(d.slug)}}}),"Type a district, e.g. Business Bay",$("ppb1"));return}
+  getJ("/plot_passport/districts?"+kq()).then(function(j){DL=j.districts||[];if(!DL.length){say("The district list has not been loaded yet.");return}districts()}).catch(function(){say("The district list is not reachable just now.")})}
+function pickD(slug){var go=function(d){DC=d;$("ppb1v").textContent=d.name;$("ppb2").disabled=false;$("ppb2v").textContent="Choose a building or project";groups()};
+  if(DCACHE[slug])return go(DCACHE[slug]);getJ("/plot_passport/d?"+kq()+"&slug="+encodeURIComponent(slug)).then(function(j){if(!j.ok){say(j.error||"That district is not loaded yet.");return}DCACHE[slug]=j.district;go(j.district)}).catch(function(){say("That district is not reachable just now.")})}
+function kindW(k){return k==="b"?"building":k==="p"?"project":k==="m"?"master community":"buildings"}
+function groups(){if(!DC)return districts();var it=[];if(DC.vacant&&DC.vacant.length)it.push({t:"Plots without a building",s:num(DC.vacant.length)+" plots of vacant or unbuilt land",i:"land",sticky:true,fn:function(){pickG({name:"Plots without a building",plots:DC.vacant})}});
+  DC.groups.forEach(function(g){it.push({t:g[0],s:kindW(g[1])+" · "+(g[2].length===1?"1 plot":g[2].length+" plots"),i:g[1]==="m"?"land":g[1]==="p"?"crane":"bldg",fn:function(){pickG({name:g[0],plots:g[2]})}})});
+  openSheet(DC.name+": buildings and projects",it,"Type the first few letters of the building",$("ppb2"))}
+function pickG(g){$("ppb2v").textContent=g.name;if(g.plots.length===1){open(g.plots[0][0],true,{d:DC,g:g});return}
+  openSheet(g.name+": choose the plot",g.plots.map(function(x){return {t:x[1],i:"pin",fn:function(){open(x[0],true,{d:DC,g:g})}}}),"Type a plot number",$("ppb2"))}
+shq.addEventListener("input",drawSheet);
+shq.addEventListener("keydown",function(e){if(e.key==="Enter"){var f=shl.querySelector(".opt");if(f)f.click()}});
+document.addEventListener("keydown",function(e){if(e.key==="Escape")closeSheet()});
+scr.addEventListener("click",closeSheet);
 q.addEventListener("input",search);
 q.addEventListener("keydown",function(e){if(e.key==="Enter"){var f=sug.querySelector(".sg");if(f)open(f.getAttribute("data-id"))}});
 window.addEventListener("popstate",function(e){if(e.state&&e.state.id)open(e.state.id,false)});
@@ -212,6 +261,12 @@ export function plotPassportHtml(key, rk, meta, deps) {
     + "<style>" + PP_CSS + (deps.NAJ_NAV_CSS || "") + "html[data-theme=light] .nnav{background:rgba(242,238,227,.95);border-top-color:#DDD5C2}</style></head>"
     + '<body data-key="' + escH(key) + '" data-rk="' + escH(rk || "") + '">' + icTpl
     + '<h1>Plot <em>passport</em></h1><p class=sub>One plot. Every connected record. Every claim traceable.</p>'
+    + '<section class="card browse" aria-label="Find a plot by place"><h2>' + ic("pin") + 'Find it by place</h2><div class=steps>'
+    + '<button type=button class=step id=ppb1 aria-haspopup=dialog><span class=sn>1</span><span><small>DISTRICT</small><b id=ppb1v>Choose a district</b></span></button>'
+    + '<button type=button class=step id=ppb2 aria-haspopup=dialog disabled><span class=sn>2</span><span><small>BUILDING OR PROJECT</small><b id=ppb2v>Choose a district first</b></span></button>'
+    + '</div><p class=empty style="margin-top:8px">Pick the district, then the building. A building on one plot opens its passport straight away.</p></section>'
+    + '<div class=or>or search if you know the number</div>'
+    + '<div class=scrim id=ppscrim hidden></div><div class=sheet id=ppsheet hidden role=dialog aria-modal=true aria-labelledby=ppsht><div class=grab aria-hidden=true></div><div class=shd><b id=ppsht></b><button type=button class=btn id=ppshx aria-label="Close this list">' + ic("x") + '</button></div><input id=ppshq type=search autocomplete=off><div class=shl id=ppshl></div></div>'
     + '<div class=sbar role=search>' + ic("search") + '<input id=ppq type=search inputmode=search autocomplete=off placeholder="Parcel number, plot number or project name" aria-label="Search for a plot by parcel number, plot number, or project or building name"><button type=button class=btn id=ppclr hidden aria-label="Clear the search">' + ic("x") + "</button></div>"
     + '<div class=hint id=pphint aria-live=polite></div><div class=sug id=ppsug></div><div id=ppout></div>'
     + '<details class="card legend"><summary>' + ic("info") + "What the labels mean</summary>" + leg + "</details>"
@@ -257,6 +312,13 @@ export async function plotPassportRoutes(request, env, url, deps) {
   if (p !== "/plot_passport" && p.indexOf("/plot_passport/") !== 0) return null;
   if (!deps.clientOk(env, url)) return new Response("unauthorized", { status: 401 });
   const key = url.searchParams.get("key") || "";
+  if (p === "/plot_passport/districts") return json({ districts: (await readJson(env, "pp_dl")) || [] });
+  if (p === "/plot_passport/d") {
+    const slug = url.searchParams.get("slug") || "";
+    if (!/^[a-z0-9_]{1,60}$/.test(slug)) return json({ ok: false, error: "That is not a district." }, 400);
+    const d = await readJson(env, "pp_d_" + slug);
+    return d ? json({ ok: true, district: d }) : json({ ok: false, error: "That district is not loaded yet." }, 404);
+  }
   if (p === "/plot_passport/search") return json(await ppSearch(env, url.searchParams.get("q") || ""));
   if (p === "/plot_passport/p") {
     const id = url.searchParams.get("id") || "";

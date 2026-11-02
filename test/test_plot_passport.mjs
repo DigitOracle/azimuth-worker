@@ -64,4 +64,44 @@ ok(/Plot 3190268/.test(outH) && /3,716 sq m/.test(outH), "page script renders th
 ok(/Research report/.test(outH) && /Research flags/.test(outH), "renders the report button and research flags");
 ok(!/Rent contracts \(Ejari\)/.test(outH) && /more source/.test(outH), "default view hides inferred links and says they exist");
 ok(!/2017 rooftop outlines/.test(outH), "default view: map-based links are not shown as direct facts");
+// ---- hierarchical browse (Kendall 2 Nov: users will not know parcel numbers): district -> building -> plot
+const ID2 = "naj:plot:346-550", ID3 = "naj:plot:346-551", ID4 = "naj:plot:346-552";
+for (const [i, x] of [[ID2, "3460550"], [ID3, "3460551"], [ID4, "3460552"]]) { const k = "pp_b_" + (ppCrc32(i) % 4096); const cur = JSON.parse(store.get(k) || "{}"); cur[i] = { ...P, id: i, parcel: x, district: "businessbay", area_name: "Business Bay" }; store.set(k, JSON.stringify(cur)); }
+store.set("pp_dl", JSON.stringify([{ slug: "businessbay", name: "Business Bay", n: 3, g: 2 }, { slug: "oudmetha", name: "Oud Metha", n: 1, g: 1 }]));
+store.set("pp_d_businessbay", JSON.stringify({ slug: "businessbay", name: "Business Bay", n: 3, groups: [["014 TOWER", "b", [[ID2, "Plot 3460550"]]], ["Bay Square", "p", [[ID3, "Plot 3460551"], [ID4, "Plot 3460552"]]], ["Burj Views", "b", [[ID4, "Plot 3460552"]]]], vacant: [[ID4, "Plot 3460552 · Residential"]] }));
+j = await (await get("/plot_passport/districts?key=RK")).json();
+ok(j.districts.length === 2 && j.districts[0].name === "Business Bay", "districts route lists friendly names");
+j = await (await get("/plot_passport/d?key=RK&slug=businessbay")).json();
+ok(j.ok && j.district.groups.length === 3 && j.district.vacant.length === 1, "district route returns buildings, projects and plots without a building");
+ok((await get("/plot_passport/d?key=RK&slug=../x")).status === 400 && (await get("/plot_passport/d?key=RK&slug=nowhere")).status === 404, "bad or unknown district refused");
+ok((await get("/plot_passport/districts?key=BAD")).status === 401, "districts route is key-gated");
+ok(/id=ppb1/.test(html) && /id=ppb2/.test(html) && /role=dialog/.test(html) && /aria-labelledby=ppsht/.test(html), "browse steps and an accessible sheet are in the markup");
+{
+  const E = {}; let clickH = null;
+  const el = (id) => (E[id] = E[id] || { id, value: "", hidden: id === "ppsheet" || id === "ppscrim", disabled: false, innerHTML: "", textContent: "", placeholder: "", attrs: {}, setAttribute(a, v) { this.attrs[a] = v; }, getAttribute(a) { return this.attrs[a]; }, hasAttribute(a) { return a in this.attrs; }, classList: { contains() { return false; }, toggle() {} }, addEventListener(t, f) { if (id === "ppshq" && t === "input") this.onin = f; }, focus() {}, scrollIntoView() {}, querySelector() { return null; } });
+  const d2 = { body: { getAttribute: (a) => (a === "data-key" ? "RK" : "") }, activeElement: null, getElementById: (id) => (id === "ppmt" ? { textContent: html.match(/id=ppmt>([\s\S]*?)<\/script>/)[1] } : /^ic-/.test(id) ? { innerHTML: "<svg></svg>" } : el(id)), addEventListener(t, f) { if (t === "click") clickH = f; }, title: "" };
+  const c2 = { document: d2, window: { addEventListener() {} }, location: { search: "?key=RK", href: "" }, history: { pushState() {} }, URLSearchParams, setTimeout, clearTimeout, navigator: {}, fetch: async (u) => get(u) };
+  vm.runInNewContext(js[1], c2);
+  const tick = () => new Promise((res) => setTimeout(res, 30));
+  const tap = (attrs, id) => clickH({ target: { closest: () => ({ id: id || "", attrs, hasAttribute: (a) => a in attrs, getAttribute: (a) => attrs[a], classList: { contains: () => false } }) } });
+  const optIndex = (label) => { const m = [...E.ppshl.innerHTML.matchAll(/data-opt="(\d+)"><svg[^>]*>.*?<\/svg><span><b>([^<]*)<\/b>/g)].find((x) => x[2] === label); return m ? m[1] : null; };
+  tap({}, "ppb1"); await tick();
+  ok(E.ppsheet.hidden === false && /Choose a district/.test(E.ppsht.textContent) && optIndex("Business Bay") !== null, "tap 1 opens the district sheet with friendly names");
+  E.ppshq.value = "busi"; E.ppshq.onin(); ok(optIndex("Business Bay") !== null && optIndex("Oud Metha") === null, "type-ahead filters the district list");
+  tap({ "data-opt": optIndex("Business Bay") }); await tick();
+  ok(/Business Bay: buildings and projects/.test(E.ppsht.textContent) && E.ppb1v.textContent === "Business Bay" && E.ppb2.disabled === false, "choosing a district opens its buildings straight away and fills step 1");
+  ok(/Plots without a building/.test(E.ppshl.innerHTML), "the building list offers Plots without a building");
+  E.ppshq.value = "bur"; E.ppshq.onin();
+  ok(optIndex("Burj Views") !== null && optIndex("014 TOWER") === null && optIndex("Bay Square") === null, "scoped filter inside the district: first letters narrow the buildings");
+  ok(/Plots without a building/.test(E.ppshl.innerHTML), "the vacant-land option stays visible while filtering");
+  E.ppshq.value = "014"; E.ppshq.onin(); tap({ "data-opt": optIndex("014 TOWER") }); await tick(); await tick();
+  ok(/Plot 3460550/.test(E.ppout.innerHTML) && E.ppsheet.hidden === true, "a building on one plot opens its passport with no extra tap");
+  ok(/id=pp-crumb/.test(E.ppout.innerHTML) && /data-crumb=d>Business Bay</.test(E.ppout.innerHTML) && /data-crumb=g>014 TOWER</.test(E.ppout.innerHTML) && /aria-current=page>Plot 3460550</.test(E.ppout.innerHTML), "breadcrumb reads District > Building > Plot");
+  tap({ "data-crumb": "d" }); await tick();
+  ok(E.ppsheet.hidden === false && /Business Bay: buildings and projects/.test(E.ppsht.textContent), "the district crumb steps back up to the building list");
+  tap({}, "ppshx"); tap({}, "ppb2"); E.ppshq.value = "bay sq"; E.ppshq.onin(); tap({ "data-opt": optIndex("Bay Square") }); await tick();
+  ok(/Bay Square: choose the plot/.test(E.ppsht.textContent) && /Plot 3460551/.test(E.ppshl.innerHTML) && /Plot 3460552/.test(E.ppshl.innerHTML), "a project on several plots lists its plots (tap 3)");
+  tap({ "data-opt": "1" }); await tick(); await tick();
+  ok(/Plot 3460552/.test(E.ppout.innerHTML) && /data-crumb=g>Bay Square</.test(E.ppout.innerHTML), "tap 3 opens the chosen plot with the project in the breadcrumb");
+}
 console.log("plot passport: " + pass + " passed, " + fail + " failed"); if (fail) process.exit(1);
