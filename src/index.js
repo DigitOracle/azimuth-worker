@@ -7952,8 +7952,10 @@ function angleCardSvg(angle, areaName, imgUrl, n, opts) {
     const colW = Math.round(W * 0.45), x0 = 64;
     const hk = fitLines(hook, colW + 24, story ? 54 : 46, story ? 11 : 8, 0.54, 30);   // v109.2 - feed hooks run long; more lines before the ellipsis
     const bigTxt = fp.kind === "num" ? fp.num : fp.text, unitTxt = fp.kind === "num" ? String(fp.unit || "").toUpperCase().slice(0, 36) : "";   // v109.1 - her card: the number big, the unit as a spaced label under it
-    const ffz = fitOne(bigTxt, colW + 60, story ? 200 : 150, 0.58, 72);
-    const my = story ? 150 : 120, ky = my + 38, fy = ky + 44 + ffz, uy = unitTxt ? fy + 40 : fy, hy = uy + 44 + hk.fz;
+    const _one = fitOne(bigTxt, colW + 60, story ? 200 : 150, 0.58, 72);
+    const bl = (fp.kind === "num" || String(bigTxt).length * 0.58 * _one <= colW + 60) ? { lines: [bigTxt], fz: _one } : fitLines(bigTxt, colW + 24, story ? 84 : 72, 3, 0.55, 36);   // v695 - a phrase wraps in the column instead of running off the card (Naj, 2 Nov)
+    const ffz = bl.fz, bh = (bl.lines.length - 1) * Math.round(ffz * 1.08);
+    const my = story ? 150 : 120, ky = my + 38, fy = ky + 44 + ffz, uy = unitTxt ? fy + bh + 40 : fy + bh, hy = uy + 44 + hk.fz;
     const endY = hy + (hk.lines.length - 1) * Math.round(hk.fz * 1.12);
     const srcL = wrapWords(src, 34).slice(0, 3);
     const _w0 = Math.min(0.9, Math.max(0, Number(opts.wash && opts.wash[0]) || 0.42)), _w1 = Math.min(1, Math.max(_w0, Number(opts.wash && opts.wash[1]) || 0.72));   // v145 - a scene card's cream fades sooner, as on the card she made
@@ -7961,7 +7963,7 @@ function angleCardSvg(angle, areaName, imgUrl, n, opts) {
       `<defs><linearGradient id="wash" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${C.beige}"/><stop offset="${_w0}" stop-color="${C.beige}"/><stop offset="${_w1}" stop-color="${C.beige}" stop-opacity="0"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#wash)"/>` +
       `<text x="${x0}" y="${my}" fill="${C.green}" font-size="${story ? 30 : 26}" font-weight="700" letter-spacing="9" font-family="${F_SANS}">THE DIGEST</text>` +
       (area ? `<text x="${x0}" y="${ky}" fill="${C.goldD}" font-size="20" letter-spacing="4" font-family="${F_MONO}">${_sx(String(area).toUpperCase().slice(0, 34))}</text>` : "") +
-      `<text x="${x0 - 4}" y="${fy}" fill="${C.gold}" font-size="${ffz}" font-weight="700" font-family="${F_SERIF}">${_sx(bigTxt)}</text>` +
+      svgLines(bl.lines, x0 - 4, fy, ffz, C.gold, F_SERIF, 700, 1.08) +
       (unitTxt ? `<text x="${x0}" y="${uy}" fill="${C.green}" font-size="24" letter-spacing="5" font-family="${F_MONO}">${_sx(unitTxt)}</text>` : "") +
       svgLines(hk.lines, x0, hy, hk.fz, C.green, F_SANS, 600, 1.12) +
       `<rect x="${x0}" y="${endY + 34}" width="${Math.round(colW / 3)}" height="3" fill="${C.gold}"/>` +
