@@ -65,12 +65,34 @@ export async function bppPublic(request, env, url) {
     const b = await env.MEETINGS.get("bpp_file_" + m[1] + "_pdf", "arrayBuffer");
     return b ? new Response(b, { headers: { "Content-Type": "application/pdf", "Cache-Control": "public, max-age=3600", "Content-Disposition": 'inline; filename="' + m[1] + '.pdf"' } }) : new Response("not found", { status: 404 });
   }
+  m = p.match(/^\/bp\/img\/([a-z0-9-]{1,80})$/);   // v702 - the hero picture: Google's, fetched live each time (never stored), or the stored illustration
+  if (m) {
+    const im = await bppImage(env, m[1]).catch(() => null);
+    return im ? new Response(im.body, { headers: { "Content-Type": im.type, "Cache-Control": im.google ? "no-store" : "public, max-age=86400" } }) : new Response("not found", { status: 404 });
+  }
+  if (p === "/bp/photo_test") return photoTest(env, url);
   m = p.match(/^\/bp\/([a-z0-9-]{1,80})\/?$/);
   if (m) {
     const h = await env.MEETINGS.get("bpp_file_" + m[1] + "_html");
     return h ? new Response(h, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=600" } }) : new Response("not found", { status: 404 });
   }
   return null;
+}
+
+// v702 test bench: the hero photo for one building WITHOUT a passport job (no ChatGPT, no request, no message to anyone).
+// Closed unless KV bpp_photo_test_token is set (set it, test, delete it). Writes only bpp_photo_t-<slug> / bpp_img_t-<slug>.
+async function photoTest(env, url) {
+  const tok = await env.MEETINGS.get("bpp_photo_test_token");
+  if (!tok || url.searchParams.get("t") !== tok) return new Response("not found", { status: 404 });
+  const res = await bppResolve(env, url.searchParams.get("q") || "");
+  const pp = res.id ? await ppGet(env, res.id) : null;
+  if (!pp) return J({ ok: false, error: res.err || "not found" }, 404);
+  const f = bppFacts(pp, await readJson(env, "pp_pack_" + res.id.replace("naj:plot:", "")), todayGst());
+  const slug = "t-" + bppSlug(f.name, f.parcel).slice(0, 70);
+  const ph = url.searchParams.get("again") ? await bppPhoto(env, slug, f, pp) : (await readJson(env, "bpp_photo_" + slug)) || await bppPhoto(env, slug, f, pp);
+  const box = '<div class="bpp-photo" style="width:78mm;height:58mm"></div>';
+  return new Response("<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width\"><body style=\"background:#F6F2E9;font-family:Inter,sans-serif;padding:16px\"><h1>" + esc(f.name) + "</h1><p>" + esc(f.area) + " · photo: " + esc(ph.kind) + (ph.why ? " (" + esc(ph.why) + ")" : "") + "</p>"
+    + placePhoto(box, heroFigure(ph, "/bp/img/" + slug)) + "</body>", { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 // ------------------------------------------------------------------------------------------------ the facts (register figures only)
@@ -176,7 +198,7 @@ export function bppFacts(pp, pack, today) {
 export function bppPrompt(f, dateText) {
   return "Design a premium, magazine-quality \"Building Passport\" as ONE self-contained HTML file (inline CSS only, no JavaScript, Google Fonts allowed: Fraunces + Inter + IBM Plex Mono). It must print as exactly 3 A4 pages (use @page size A4 margin 0, and three .page sections of exactly 210mm x 297mm with overflow hidden; content must FIT - no overflow, everything ends at least 8mm above the footer) and also read well on a phone screen. "
     + "Brand: Najma (Dubai property intelligence). Palette: deep green #0F3D33, gold #C5A56A, cream #F6F2E9, ink #1C2826. Use the logo as <img src=\"najma_logo.png\" alt=\"Najma\"> in the hero band. No emojis anywhere; use small inline SVG line icons. "
-    + "Design direction (look only): a cream page with a thin gold rule under the header; a large serif title block (\"BUILDING PASSPORT\" then the building name in italic serif and a one-line purpose); section headers as dark-green tab banners with a small gold line icon and a numbered gold kicker (\"01 - THE BUILDING\", \"02 - THE MARKET\", \"03 - RISKS AND OPPORTUNITIES\"); rounded cream cards with thin gold borders; an elegant inline-SVG line illustration of a generic tower with palms and the city skyline beside the title on page 1, captioned \"Illustration\" (never a picture claiming to be this building). Do NOT add any other logos. "
+    + "Design direction (look only): a cream page with a thin gold rule under the header; a large serif title block (\"BUILDING PASSPORT\" then the building name in italic serif and a one-line purpose); section headers as dark-green tab banners with a small gold line icon and a numbered gold kicker (\"01 - THE BUILDING\", \"02 - THE MARKET\", \"03 - RISKS AND OPPORTUNITIES\"); rounded cream cards with thin gold borders; beside the title on page 1 an EMPTY photo box exactly <div class=\"bpp-photo\" style=\"width:78mm;height:58mm\"></div> (leave it empty: the photo and its caption are put in later; draw no illustration, picture or skyline anywhere). Do NOT add any other logos. "
     + "Every section header carries a source chip: \"From the registers\" (green), \"From the adverts\" (gold: live adverts, asking rents, agencies and broker cards), \"Calculated\" (blue), \"Live from Google\" (amber, ONLY on the Google reviews box), \"Developer source\" (purple), \"Not available yet\" (grey). "
     + "Wording: a percentage complete is construction progress at the register date, never a completion; a planned date is planned. Use the logo at least 22mm tall. Keep every card fully inside its page: no card may extend past the right edge, and the last card on each page must end at least 10mm above the footer; if space is short, make cards smaller, never cut them. The milestone timeline must fit inside its card width. "
     + "Footer on every page: \"Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397\" on the left and \"Najma Building Passport · " + dateText + " · page N of 3\" on the right. "
@@ -196,6 +218,108 @@ export const bppSlug = (name, parcel) => (String(name || "building").normalize("
 export const pdfPages = (buf) => { const s = new TextDecoder("latin1").decode(new Uint8Array(buf)); return (s.match(/\/Type\s*\/Page(?![s\w])/g) || []).length; };
 export const extractHtml = (txt) => { const m = /<!doctype html[\s\S]*<\/html>/i.exec(String(txt || "")); return m ? m[0] : ""; };
 export const responseText = (r) => (r && r.output || []).filter((o) => o.type === "message").map((o) => (o.content || []).map((c) => c.text || "").join("")).join("");
+
+// ------------------------------------------------------------------------------------------------ v702 the hero photo (Kendall, 3 Nov 2026: "Go photo")
+// ON REQUEST ONLY, chosen once in the pending step of that passport's job (never a bulk run over plots):
+//   1. Google Places (New) Text Search for "<building>, <area>, Dubai" -> the first place whose name carries the building's words -> its first
+//      landscape photo at least 1200 px wide. We keep ONLY place_id + the photo resource name + the author credits (bpp_photo_<slug>);
+//      the picture itself is fetched LIVE from Google each time /bp/img/<slug> is opened (and once at PDF render), never stored (Google's terms).
+//   2. No acceptable Google photo -> ONE generated architectural exterior from the register facts, kept for that passport only
+//      (bpp_img_<slug>), captioned "Illustration". At most 20 a day (bpp_imgcount_<GST day>); over the cap = no photo at all.
+//   Unnamed plots ("Plot 1234567") never go to Google: a text search on a plot number finds the wrong building.
+const IMG_MODEL = "gpt-image-2.5-flare";
+const IMG_CAP = 20;
+const PLACES = "https://places.googleapis.com/v1/";
+const STOP = ["the", "and", "tower", "towers", "building", "residence", "residences", "dubai"];
+const words = (s) => String(s || "").normalize("NFKD").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.includes(w));
+const b64ToBytes = (b64) => { const s = atob(b64); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; };
+const bytesToB64 = (buf) => { const u = new Uint8Array(buf); let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+export const bestPhoto = (photos) => (photos || []).find((p) => p && p.name && +p.widthPx >= 1200 && +p.widthPx > +p.heightPx) || null;
+export const nameMatches = (want, got) => { const w = words(want), g = words(got); return w.length > 0 && w.every((x) => g.includes(x)); };
+const credits = (p) => (p.authorAttributions || []).map((a) => ({ n: String(a.displayName || "").slice(0, 80), u: /^https:\/\//.test(a.uri || "") ? String(a.uri).slice(0, 300) : "" })).filter((a) => a.n).slice(0, 3);
+
+async function googlePick(env, name, area) {
+  if (!env.GOOGLE_MAPS_KEY || /^Plot\s/i.test(name) || !words(name).length) return null;
+  const r = await fetch(PLACES + "places:searchText", { method: "POST", headers: { "Content-Type": "application/json", "X-Goog-Api-Key": env.GOOGLE_MAPS_KEY, "X-Goog-FieldMask": "places.id,places.displayName,places.photos" },
+    body: JSON.stringify({ textQuery: name + ", " + (area || "") + ", Dubai", maxResultCount: 5, locationBias: { circle: { center: { latitude: 25.13, longitude: 55.22 }, radius: 50000 } } }) });
+  if (!r.ok) return null;
+  const j = await r.json().catch(() => ({}));
+  for (const pl of j.places || []) {
+    if (!nameMatches(name, pl.displayName && pl.displayName.text)) continue;
+    const ph = bestPhoto(pl.photos);
+    if (ph) return { kind: "google", place_id: pl.id, name: ph.name, w: ph.widthPx, h: ph.heightPx, attr: credits(ph) };
+  }
+  return null;
+}
+async function googleMedia(env, ph) {
+  const get = (nm) => fetch(PLACES + String(nm).split("/").map(encodeURIComponent).join("/") + "/media?maxWidthPx=1600&key=" + env.GOOGLE_MAPS_KEY);
+  let r = await get(ph.name);
+  if (!r.ok && ph.place_id) {   // photo names expire: look the place up again and take its best photo now
+    const d = await fetch(PLACES + "places/" + encodeURIComponent(ph.place_id), { headers: { "X-Goog-Api-Key": env.GOOGLE_MAPS_KEY, "X-Goog-FieldMask": "photos" } });
+    const best = d.ok ? bestPhoto((await d.json().catch(() => ({}))).photos) : null;
+    if (!best) return null;
+    r = await get(best.name);
+  }
+  return r.ok ? r : null;
+}
+export function imagePrompt(f, pp) {
+  const fl = Math.max(0, ...((pp && pp.buildings) || []).map((b) => +b.floors || 0));
+  return "Photorealistic architectural exterior photograph of a residential building in " + (f.area || "Dubai") + ", Dubai, UAE, seen from street level at golden hour, clear sky, "
+    + (fl ? "about " + fl + " floors tall, " : "") + (pp && pp.land_type ? "on a " + String(pp.land_type).toLowerCase() + " plot, " : "")
+    + "contemporary Gulf architecture, landscaped entrance with palms, no people close up, no text, no signage, no logos, no watermark. Landscape 3:2.";
+}
+async function generatePhoto(env, slug, f, pp, now) {
+  if (!env.OPENAI_API_KEY) return null;
+  const ck = "bpp_imgcount_" + todayGst(now);
+  const n = parseInt(await env.MEETINGS.get(ck), 10) || 0;
+  if (n >= IMG_CAP) return { kind: "none", why: "daily cap" };
+  await env.MEETINGS.put(ck, String(n + 1), { expirationTtl: 3 * 86400 });   // counted before the call: a failed call still cost a try
+  const r = await fetch("https://api.openai.com/v1/images/generations", { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: IMG_MODEL, prompt: imagePrompt(f, pp), size: "1536x1024", quality: "medium", output_format: "jpeg", n: 1 }) });
+  if (!r.ok) return { kind: "none", why: "picture service " + r.status };
+  const j = await r.json().catch(() => ({}));
+  const b64 = j && j.data && j.data[0] && j.data[0].b64_json;
+  if (!b64) return { kind: "none", why: "no picture came back" };
+  await env.MEETINGS.put("bpp_img_" + slug, b64ToBytes(b64));
+  return { kind: "gen" };
+}
+// picks and records the photo for one passport; returns the record (kind google | gen | none)
+export async function bppPhoto(env, slug, f, pp, now) {
+  let ph = null;
+  try { ph = await googlePick(env, f.name, f.area); } catch (e) {}
+  if (!ph) { try { ph = await generatePhoto(env, slug, f, pp, now); } catch (e) { ph = { kind: "none", why: String(e && e.message || e).slice(0, 80) }; } }
+  ph = ph || { kind: "none" };
+  ph.at = new Date(now || Date.now()).toISOString();
+  await env.MEETINGS.put("bpp_photo_" + slug, JSON.stringify(ph));
+  return ph;
+}
+// the picture bytes, live: Google each time, or the stored illustration
+export async function bppImage(env, slug) {
+  const ph = await readJson(env, "bpp_photo_" + slug);
+  if (!ph) return null;
+  if (ph.kind === "google" && env.GOOGLE_MAPS_KEY) {
+    const r = await googleMedia(env, ph);
+    return r ? { body: await r.arrayBuffer(), type: r.headers.get("Content-Type") || "image/jpeg", google: true } : null;
+  }
+  if (ph.kind === "gen") { const b = await env.MEETINGS.get("bpp_img_" + slug, "arrayBuffer"); return b ? { body: b, type: "image/jpeg" } : null; }
+  return null;
+}
+export async function bppImageDataUri(env, slug) { const im = await bppImage(env, slug); return im ? "data:" + im.type + ";base64," + bytesToB64(im.body) : ""; }
+// the hero figure that fills the model's empty photo box; src is the live route (page) or a data: URI (PDF render)
+export function heroFigure(ph, src) {
+  if (!ph || !src || (ph.kind !== "google" && ph.kind !== "gen")) return "";
+  const who = (ph.attr || []).map((a) => a.u ? '<a href="' + esc(a.u) + '" style="color:inherit">' + esc(a.n) + "</a>" : esc(a.n)).join(", ");
+  const cap = ph.kind === "gen" ? "Illustration" : "Photo: " + (who || "Google") + " · Google Maps";
+  return '<figure class="bpp-hero" style="margin:0;width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;border-radius:10px;border:1px solid #C5A56A">'
+    + '<img src="' + esc(src) + '" alt="' + (ph.kind === "gen" ? "Illustration" : "Photo of the building") + '" style="flex:1;min-height:0;width:100%;object-fit:cover;display:block">'
+    + '<figcaption style="font:500 8pt Inter,sans-serif;color:#1C2826;background:#F6F2E9;padding:3px 7px">' + cap + "</figcaption></figure>";
+}
+const HOLDER_RE = /(<div[^>]*class=(["'])[^"']*\bbpp-photo\b[^"']*\2[^>]*>)\s*<\/div>/i;
+export const hasHolder = (html) => HOLDER_RE.test(String(html || ""));
+export function placePhoto(html, fig) {
+  if (!fig) return html;
+  return html.replace(HOLDER_RE, (m, open) => open + fig + "</div>");   // no box from the model = no photo, never one dropped in at random
+}
 
 // ------------------------------------------------------------------------------------------------ requests
 async function readReqIds(env) { const r = await readJson(env, "bpp_requests"); return Array.isArray(r) ? r.filter((x) => /^[a-z0-9]{6,24}$/.test(x)) : []; }
@@ -277,6 +401,7 @@ export async function bppTick(env, nowMs) {
         const today = todayGst(now);
         const f = bppFacts(pp, pack, today);
         r.plot_id = res.id; r.title = f.name; r.area = f.area; r.parcel = f.parcel; r.slug = bppSlug(f.name, f.parcel);
+        r.photo = (await bppPhoto(env, r.slug, f, pp, now)).kind;   // v702 - the hero photo, chosen once per request
         r.prompt_chars = 0; const prompt = bppPrompt(f, bppDate(today)); r.prompt_chars = prompt.length;
         r.resp = await oaiStart(env, prompt); r.status = "writing"; r.tries = 0; r.started = new Date(now).toISOString();
         await putReq(env, id, r); return { started: id };
@@ -289,8 +414,10 @@ export async function bppTick(env, nowMs) {
         const html = extractHtml(responseText(o));
         if (!html) { r.status = "failed"; r.msg = "ChatGPT returned no HTML."; await putReq(env, id, r); continue; }
         r.lock = new Date(now).toISOString(); await putReq(env, id, r);
-        const full = await withLogo(env, html);
-        const { pdf, over } = await renderPdf(env, full);
+        const logo = await withLogo(env, html);
+        const ph = await readJson(env, "bpp_photo_" + r.slug);   // v702 - the page links the live picture; the PDF gets it once, at render
+        const full = placePhoto(logo, heroFigure(ph, "/bp/img/" + r.slug));
+        const { pdf, over } = await renderPdf(env, placePhoto(logo, heroFigure(ph, await bppImageDataUri(env, r.slug).catch(() => ""))));
         const n = pdfPages(pdf);
         r.over = over.slice(0, 6);
         if ((n !== 3 || over.length) && !(r.tries >= 1)) {
