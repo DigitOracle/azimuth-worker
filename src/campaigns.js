@@ -1,0 +1,764 @@
+// v723 (Kendall, 3 Nov 2026: "build it out in Azimuth") - the WhatsApp CAMPAIGN ENGINE: the four missing pieces of
+// Operations/Research/WhatsApp_Campaign_Roadmap_03NOV2026 (M2 consent register, M3 throttled sender, M4 opt-out store, M5 log + dashboard,
+// M6 tracked links). Owner only: Kendall's insider key (ins_kendall_) or READ_KEY. Najjuko's key gets "not found".
+//
+// NOTHING SENDS unless a campaign has been set to status "live" by the owner route with confirm=<campaign id>. Dry run (action "dry")
+// walks the exact same code path as the minute tick and logs every payload it WOULD post, without calling Meta. CAMPAIGNS_OFF="1" stops all.
+//
+// KV keys (binding MEETINGS; digits = the E.164 number without "+"):
+//   camp_contact_<digits>   {e164, name, company, role, source, tags[], consent{text,date,by,import_id}, added, last_mkt?, last_camp?}
+//   camp_contact_index      [digits...]
+//   camp_consent_<import>   the consent register entry for one import: rows accepted (with the wording) and every rejection with its reason
+//   camp_imports            [{id, at, accepted, rejected, duplicates, updated}]
+//   camp_optout_<digits>    {at, how, text?, cid?} PERMANENT (no TTL); the sender reads it before EVERY message
+//   camp_optout_index       [digits...]
+//   camp_index              [campaign ids]; camp_<id> the campaign; camp_stats_<id> its counters; camp_q_<id> {list, pos} its audience
+//   camp_msgs_<id>          [wamids] (written by the sender only); camp_msg_<wamid> {cid, d, at, st, err?, replied?, tap?, optout?, link?}
+//   camp_sent24             [epoch ms] every campaign send in the last 24 h, shared by BOTH numbers (the Meta limit is per portfolio)
+//   camp_dry_<id>           the last dry run: exactly what would have been posted
+//   camp_link_<code>        {cid, d, url, clicks, first} - /c/<code> logs the click and redirects
+// Never touches picjob_*, gmp_*, gcal_state.
+import { WA_TEMPLATES } from "./wa_templates.js";
+
+const esc = (s) => String(s == null ? "" : s).replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[c]));
+const DIG = (s) => String(s || "").replace(/[^0-9]/g, "");
+const J = (o, s) => new Response(JSON.stringify(o, null, 1), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+const getJ = async (env, k, d) => { try { const v = await env.MEETINGS.get(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
+const putJ = (env, k, v) => env.MEETINGS.put(k, JSON.stringify(v));
+const DAY = 86400000;
+
+export const CAMP_ICON = '<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12"/>';
+export const DEFAULTS = { cap: 250, shared: 250, batch: 5, window: "10:00-19:00", freqDays: 7,
+  block: 0.005, optout: 0.02, quality: 0.10, failed: 0.20, min: 20 };
+// Meta error codes. HARD: one is enough to stop the campaign. QUALITY: counted against the quality threshold. BLOCK: the person blocked marketing.
+export const HARD_STOP = [131048, 131031, 368, 131056, 130429, 133010, 131045];
+export const QUALITY = [131049, 131026, 131048, 131047];
+export const BLOCK = [131050];
+
+// ---------- phone numbers ----------
+// UAE mobile: 05X XXX XXXX, 5X XXX XXXX, 9715..., 009715..., +9715... -> +9715XXXXXXXX. Other countries need a full + or 00 prefix.
+export function normPhone(raw) {
+  let s = String(raw || "").trim().replace(/[\s\-().‎‏]/g, "");
+  if (!s) return "";
+  if (s.indexOf("00") === 0) s = "+" + s.slice(2);
+  if (/^\+/.test(s)) s = "+" + DIG(s); else {
+    const d = DIG(s);
+    if (/^05\d{8}$/.test(d)) s = "+971" + d.slice(1);
+    else if (/^5\d{8}$/.test(d)) s = "+971" + d;
+    else if (/^9715\d{8}$/.test(d)) s = "+" + d;
+    else return "";
+  }
+  if (s.indexOf("+971") === 0) return /^\+9715\d{8}$/.test(s) ? s : "";   // UAE landlines and short codes are not WhatsApp numbers
+  return /^\+[1-9]\d{7,14}$/.test(s) ? s : "";
+}
+
+// ---------- CSV ----------
+export function parseCsv(text) {
+  const rows = []; let row = [], f = "", q = false; const t = String(text || "").replace(/^﻿/, "");
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (q) { if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; continue; }
+    if (c === '"') q = true; else if (c === ",") { row.push(f); f = ""; } else if (c === "\n" || c === "\r") { if (c === "\r" && t[i + 1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; } else f += c;
+  }
+  if (f !== "" || row.length) { row.push(f); rows.push(row); }
+  return rows.filter((r) => r.some((x) => String(x).trim() !== ""));
+}
+const HDR = { name: ["name", "full name", "full_name"], phone: ["phone", "mobile", "number", "whatsapp", "e164"], source: ["source"], company: ["company"], role: ["role", "title"],
+  consent_text: ["consent_text", "consent text", "consent", "consent wording"], consent_date: ["consent_date", "consent date", "opted in", "opt_in_date"], consent_by: ["consent_by", "collected by", "collected_by"], tags: ["tags", "tag", "segment"] };
+const cleanTag = (x) => String(x || "").toLowerCase().trim().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
+export const parseTags = (s) => [...new Set(String(s || "").split(/[;|,]/).map(cleanTag).filter(Boolean))];
+function consentDate(s, now) {
+  const v = String(s || "").trim(); if (!v) return "";
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v), d = null;
+  if (m) d = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  else if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v))) d = Date.UTC(+m[3], +m[2] - 1, +m[1]);   // day/month/year, the UAE way
+  if (d == null || isNaN(d) || d > now + DAY) return "";
+  return new Date(d).toISOString().slice(0, 10);
+}
+
+// Import: dry by default (apply=false returns the preview and stores nothing). Every row needs a valid number, consent wording and a consent date.
+export async function importContacts(env, csv, opts) {
+  opts = opts || {}; const now = opts.now || Date.now(); const rows = parseCsv(csv);
+  if (!rows.length) return { ok: false, error: "empty file" };
+  const head = rows[0].map((h) => String(h).trim().toLowerCase()); const col = {};
+  for (const k of Object.keys(HDR)) { const i = head.findIndex((h) => HDR[k].includes(h)); if (i >= 0) col[k] = i; }
+  if (col.phone == null) return { ok: false, error: "no phone column (expected one of: " + HDR.phone.join(", ") + ")" };
+  const id = "imp" + new Date(now).toISOString().replace(/[^0-9]/g, "").slice(0, 14) + Math.random().toString(36).slice(2, 6);
+  const seen = new Set(), accepted = [], rejected = []; let duplicates = 0, updated = 0;
+  const index = await getJ(env, "camp_contact_index", []); const known = new Set(index);
+  const cell = (r, k) => (col[k] == null ? "" : String(r[col[k]] == null ? "" : r[col[k]]).trim());
+  for (let n = 1; n < rows.length; n++) {
+    const r = rows[n], line = n + 1, e164 = normPhone(cell(r, "phone"));
+    if (!e164) { rejected.push({ line, reason: "bad_phone", phone: cell(r, "phone").slice(0, 24) }); continue; }
+    const d = DIG(e164);
+    if (seen.has(d)) { duplicates++; rejected.push({ line, reason: "duplicate_in_file", e164 }); continue; }
+    seen.add(d);
+    const text = cell(r, "consent_text"), date = consentDate(cell(r, "consent_date"), now);
+    if (!text || text.length < 8) { rejected.push({ line, reason: "no_consent_text", e164 }); continue; }
+    if (!date) { rejected.push({ line, reason: "no_consent_date", e164 }); continue; }
+    if (await env.MEETINGS.get("camp_optout_" + d)) { rejected.push({ line, reason: "opted_out", e164 }); continue; }
+    const c = { e164, name: cell(r, "name").slice(0, 80), company: cell(r, "company").slice(0, 80), role: cell(r, "role").slice(0, 80),
+      source: (cell(r, "source") || opts.source || "csv").slice(0, 80), tags: parseTags(cell(r, "tags") + (opts.tags ? ";" + opts.tags : "")),
+      consent: { text: text.slice(0, 600), date, by: cell(r, "consent_by").slice(0, 80), import_id: id }, added: new Date(now).toISOString() };
+    if (known.has(d)) { duplicates++; updated++; }
+    accepted.push(c);
+  }
+  const res = { ok: true, apply: !!opts.apply, import_id: id, rows: rows.length - 1, accepted: accepted.length, rejected: rejected.length, duplicates, updated,
+    rejections: rejected.slice(0, 200), preview: accepted.slice(0, 10).map((c) => ({ e164: c.e164, name: c.name, tags: c.tags, consent_date: c.consent.date })) };
+  if (!opts.apply) return res;
+  for (const c of accepted) {
+    const d = DIG(c.e164), k = "camp_contact_" + d;
+    if (known.has(d)) { const o = await getJ(env, k, null); if (o) { c.tags = [...new Set((o.tags || []).concat(c.tags))]; if (o.last_mkt) c.last_mkt = o.last_mkt; if (o.last_camp) c.last_camp = o.last_camp; c.added = o.added || c.added; c.consent_history = (o.consent_history || []).concat([o.consent]).slice(-5); } }
+    else { index.push(d); known.add(d); }
+    await putJ(env, k, c);
+  }
+  await putJ(env, "camp_contact_index", index);
+  await putJ(env, "camp_consent_" + id, { id, at: new Date(now).toISOString(), source: opts.source || "", rows: res.rows,
+    accepted: accepted.map((c) => ({ e164: c.e164, name: c.name, source: c.source, consent: c.consent })), rejected });
+  const imps = await getJ(env, "camp_imports", []); imps.unshift({ id, at: new Date(now).toISOString(), accepted: res.accepted, rejected: res.rejected, duplicates, updated });
+  await putJ(env, "camp_imports", imps.slice(0, 100));
+  return res;
+}
+
+// ---------- opt-out ----------
+// The whole message (trimmed, punctuation and emoji removed) must be one of these, so "don't stop" or a long sentence never opts anyone out.
+const OPT_EN = ["stop", "stop messages", "stop message", "stop it", "stop all", "unsubscribe", "unsubscribe me", "opt out", "optout", "opt-out", "remove me", "remove",
+  "not for me", "not this time", "no more", "no more messages", "dont message me", "do not message me", "dont contact me", "do not contact me", "leave me alone", "end", "quit", "cancel subscription"];
+const OPT_AR = ["إلغاء", "الغاء", "إلغاء الاشتراك", "الغاء الاشتراك", "توقف", "توقّف", "أوقف", "اوقف", "إيقاف", "ايقاف", "قف", "لا أريد", "لا اريد", "لا شكرا", "لا شكراً", "أزلني", "ازلني", "احذفني", "احذف رقمي", "لا ترسل", "لا ترسلوا", "توقفوا"];
+export function optOutNorm(s) {
+  return String(s || "").normalize("NFC").toLowerCase().replace(/[ً-ْـ]/g, "").replace(/['’`]/g, "").replace(/[^\p{L}\p{N}\s-]/gu, " ").replace(/\s+/g, " ").trim();
+}
+const OPT_SET = new Set(OPT_EN.concat(OPT_AR).map(optOutNorm));
+export function isOptOutText(s) { const n = optOutNorm(s); return !!n && n.length <= 40 && OPT_SET.has(n); }
+export async function isOptedOut(env, d) { return !!(await env.MEETINGS.get("camp_optout_" + DIG(d))); }
+export async function optOut(env, d, how, extra, now) {
+  d = DIG(d); if (!d) return false;
+  if (await env.MEETINGS.get("camp_optout_" + d)) return false;
+  await putJ(env, "camp_optout_" + d, Object.assign({ at: new Date(now || Date.now()).toISOString(), how }, extra || {}));
+  const ix = await getJ(env, "camp_optout_index", []); if (!ix.includes(d)) { ix.push(d); await putJ(env, "camp_optout_index", ix); }
+  const c = await getJ(env, "camp_contact_" + d, null); if (c) { c.opted_out = true; await putJ(env, "camp_contact_" + d, c); }
+  return true;
+}
+export const OPTOUT_REPLY = "Done. You will not get any more marketing messages from DigitAlchemy on WhatsApp. Reply here any time if you need us.";
+
+// ---------- stats ----------
+const blankStats = () => ({ sent: 0, delivered: 0, read: 0, failed: 0, replies: 0, taps: 0, clicks: 0, uclicks: 0, optouts: 0, blocks: 0, quality: 0, err: {}, day: {}, skipped: {} });
+async function bump(env, cid, f) { const k = "camp_stats_" + cid; const s = Object.assign(blankStats(), await getJ(env, k, {})); f(s); await putJ(env, k, s); return s; }
+export function rates(s) {
+  const n = s.sent || 0, p = (x) => (n ? x / n : 0);
+  return { sent: n, delivered: p(s.delivered), read: p(s.read), replied: p(s.replies), clicked: p(s.uclicks), optout: p(s.optouts), block: p(s.blocks), quality: p(s.quality), failed: p(s.failed) };
+}
+// The auto-stop rule (roadmap 3 Nov: block rate over 0.5%, opt-outs over 2%, quality-error spikes). Returns the reason or "".
+export function stopReason(c, s) {
+  const t = Object.assign({}, DEFAULTS, c.thresholds || {}), r = rates(s);
+  for (const code of HARD_STOP) if ((s.err || {})[code]) return "Meta error " + code + " (hard stop)";
+  if (r.sent < t.min) return "";
+  if (r.block > t.block) return "block rate " + (r.block * 100).toFixed(1) + "% over " + (t.block * 100) + "%";
+  if (r.optout > t.optout) return "opt-out rate " + (r.optout * 100).toFixed(1) + "% over " + (t.optout * 100) + "%";
+  if (r.quality > t.quality) return "quality errors " + (r.quality * 100).toFixed(1) + "% over " + (t.quality * 100) + "%";
+  if (r.failed > t.failed) return "failed " + (r.failed * 100).toFixed(1) + "% over " + (t.failed * 100) + "%";
+  return "";
+}
+async function autoStop(env, cid, s, now) {
+  const c = await getJ(env, "camp_" + cid, null); if (!c || c.status !== "live") return "";
+  const why = stopReason(c, s); if (!why) return "";
+  c.status = "stopped"; c.stopped = { at: new Date(now || Date.now()).toISOString(), why, auto: true }; await putJ(env, "camp_" + cid, c);
+  return why;
+}
+
+// ---------- webhook hook ----------
+// Called from /wa for EVERY event before the existing handlers; it never consumes the event and never throws. It only acts on
+// (a) status callbacks for a message the campaign sender sent (camp_msg_<wamid>), and (b) messages from a number in the contact list
+// or replying to a campaign message. The owner numbers (WA_ALLOWED, WA_DESK_OWNER) can only opt out by tapping a campaign button or
+// replying to a campaign message, so Najjuko's and the desk's ordinary chats are untouched.
+export async function campWebhook(env, body, deps) {
+  const out = { statuses: 0, optouts: 0, replies: 0, taps: 0, stopped: "" };
+  try {
+    const now = (deps && deps.now) || Date.now();
+    const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
+    if (!val) return out;
+    const pid = DIG(val.metadata && val.metadata.phone_number_id);
+    for (const s of (val.statuses || [])) {
+      const k = "camp_msg_" + String(s.id || ""); const m = s.id ? await getJ(env, k, null) : null; if (!m) continue;
+      out.statuses++;
+      const st = String(s.status || ""), prev = m.st || "sent", codes = (s.errors || []).map((e) => Number(e && e.code)).filter(Boolean);
+      const inc = { delivered: 0, read: 0, failed: 0 };
+      if (st === "delivered" && !m.delivered) { m.delivered = true; inc.delivered = 1; }
+      if (st === "read") { if (!m.delivered) { m.delivered = true; inc.delivered = 1; } if (!m.read) { m.read = true; inc.read = 1; } }
+      if (st === "failed" && prev !== "failed") { inc.failed = 1; m.err = codes; }
+      if (st === "failed") m.st = "failed"; else if (prev !== "failed" && (st === "read" || (st === "delivered" && prev !== "read"))) m.st = st;
+      if (!inc.delivered && !inc.read && !inc.failed) continue;
+      await putJ(env, k, m);
+      const S = await bump(env, m.cid, (x) => { x.delivered += inc.delivered; x.read += inc.read; x.failed += inc.failed;
+        if (inc.failed) for (const c of codes) { x.err[c] = (x.err[c] || 0) + 1; if (QUALITY.includes(c)) x.quality++; if (BLOCK.includes(c)) { x.blocks++; x.bday = x.bday || {}; x.bday[dubaiDate(now)] = (x.bday[dubaiDate(now)] || 0) + 1; } } });
+      if (inc.failed) { if (codes.some((c) => BLOCK.includes(c))) await optOut(env, m.d, "blocked_marketing", { cid: m.cid, code: 131050 }, now);
+        const w = await autoStop(env, m.cid, S, now); if (w) out.stopped = w; }
+    }
+    for (const msg of (val.messages || [])) {
+      const d = DIG(msg.from); if (!d) continue;
+      const ctxId = msg.context && msg.context.id ? String(msg.context.id) : "";
+      const cm = ctxId ? await getJ(env, "camp_msg_" + ctxId, null) : null;
+      const contact = await getJ(env, "camp_contact_" + d, null);
+      if (!cm && !contact) continue;
+      const isBtn = msg.type === "button" || (msg.type === "interactive" && msg.interactive && (msg.interactive.button_reply || msg.interactive.list_reply));
+      const txt = msg.type === "text" ? (msg.text && msg.text.body) : msg.type === "button" ? ((msg.button && (msg.button.text || msg.button.payload)) || "")
+        : (msg.interactive && ((msg.interactive.button_reply && msg.interactive.button_reply.title) || (msg.interactive.list_reply && msg.interactive.list_reply.title))) || "";
+      const owner = [DIG(env.WA_ALLOWED), DIG(env.WA_DESK_OWNER)].filter(Boolean).includes(d);
+      const cid = (cm && cm.cid) || (contact && contact.last_camp) || "";
+      const mk = cm ? "camp_msg_" + ctxId : (contact && contact.last_wamid ? "camp_msg_" + contact.last_wamid : "");
+      const mrec = cm || (mk ? await getJ(env, mk, null) : null);
+      if (isOptOutText(txt) && (!owner || isBtn || cm)) {
+        const fresh = await optOut(env, d, isBtn ? "button" : "text", { text: String(txt).slice(0, 60), cid }, now);
+        if (fresh) {
+          out.optouts++;
+          if (mrec && mk && !mrec.optout) { mrec.optout = true; await putJ(env, mk, mrec); }
+          if (cid) { const S = await bump(env, cid, (x) => { x.optouts++; x.oday = x.oday || {}; x.oday[dubaiDate(now)] = (x.oday[dubaiDate(now)] || 0) + 1; }); const w = await autoStop(env, cid, S, now); if (w) out.stopped = w; }
+          if (env.CAMP_OPTOUT_REPLY !== "off" && deps && typeof deps.send === "function") { try { await deps.send(env, d, OPTOUT_REPLY, pid); } catch (e) {} }
+        }
+        continue;
+      }
+      if (isBtn) { try { const fc = await flowChoice(env, msg, d, deps, now); if (fc) out.flow = (out.flow || []).concat([fc]); } catch (e) { out.flow_error = String(e && e.message || e).slice(0, 120); } }
+      if (!cid || !mrec || owner && !cm && !isBtn) continue;
+      let rep = 0, tap = 0;
+      if (!mrec.replied) { mrec.replied = true; rep = 1; out.replies++; }
+      if (isBtn && !mrec.tap) { mrec.tap = String(txt).slice(0, 40) || true; tap = 1; out.taps++; }
+      if (rep || tap) { await putJ(env, mk, mrec); await bump(env, cid, (x) => { x.replies += rep; x.taps += tap; if (rep) { x.rday = x.rday || {}; x.rday[dubaiDate(now)] = (x.rday[dubaiDate(now)] || 0) + 1; } }); }
+    }
+  } catch (e) { out.error = String(e && e.message || e).slice(0, 120); }
+  return out;
+}
+
+// ---------- tracked links ----------
+const B62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const code8 = () => { const a = new Uint8Array(8); crypto.getRandomValues(a); return [...a].map((x) => B62[x % 62]).join(""); };
+export const cleanTarget = (u) => { const s = String(u || "").trim(); return /^https:\/\/[^\s"<>]+$/i.test(s) && s.length <= 500 ? s : ""; };
+export async function makeLink(env, cid, d, target) {
+  const url = cleanTarget(target); if (!url) return "";
+  const code = code8(); await putJ(env, "camp_link_" + code, { cid, d: DIG(d), url, clicks: 0 });
+  if (cid) { const L = await getJ(env, "camp_links_" + cid, []); L.push(code); await putJ(env, "camp_links_" + cid, L.slice(-5000)); }
+  return code;
+}
+export async function linkRoute(request, env, url, now) {
+  const m = url.pathname.match(/^\/c\/([0-9A-Za-z]{6,12})\/?$/); if (!m) return null;
+  const L = await getJ(env, "camp_link_" + m[1], null);
+  if (!L || !cleanTarget(L.url)) return new Response("not found", { status: 404 });
+  const ua = String(request.headers.get("User-Agent") || "");
+  const bot = /facebookexternalhit|WhatsApp\/|bot|crawler|preview|Slackbot|TelegramBot/i.test(ua);   // the link-preview fetch is not a click
+  if (!bot) {
+    const first = !L.clicks; L.clicks = (L.clicks || 0) + 1; if (first) L.first = new Date(now || Date.now()).toISOString(); L.last = new Date(now || Date.now()).toISOString();
+    await putJ(env, "camp_link_" + m[1], L);
+    if (L.cid) await bump(env, L.cid, (x) => { x.clicks++; if (first) x.uclicks++; });
+  }
+  return new Response(null, { status: 302, headers: { Location: L.url, "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+}
+
+// ---------- campaigns ----------
+const ID_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
+export function parseWindow(w) { const m = /^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/.exec(String(w || DEFAULTS.window)); if (!m) return null; const a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4]; return a < b && b <= 1440 ? [a, b] : null; }
+export const dubaiMin = (now) => { const d = new Date(now + 4 * 3600000); return d.getUTCHours() * 60 + d.getUTCMinutes(); };   // Dubai is UTC+4 all year
+export const dubaiDate = (now) => new Date(now + 4 * 3600000).toISOString().slice(0, 10);
+export const inWindow = (c, now) => { const w = parseWindow(c.window); const m = dubaiMin(now); return !!w && m >= w[0] && m < w[1]; };
+export function cleanCampaign(x, prev) {
+  const c = Object.assign({}, prev || {}); const err = [];
+  if (!prev) { if (!ID_RE.test(String(x.id || ""))) err.push("id: lowercase letters, digits and dashes"); c.id = String(x.id || ""); c.status = "draft"; c.created = new Date().toISOString(); }
+  if (x.name != null) c.name = String(x.name).slice(0, 80);
+  if (x.template != null) c.template = String(x.template).replace(/[^a-z0-9_]/g, "").slice(0, 80);
+  const def = WA_TEMPLATES[c.template];
+  if (x.lang != null) c.lang = String(x.lang).replace(/[^A-Za-z_]/g, "").slice(0, 8);
+  if (!c.lang && def) c.lang = def.language;
+  if (x.vars != null) c.vars = (Array.isArray(x.vars) ? x.vars : String(x.vars).split("|")).map((v) => String(v).slice(0, 300));
+  if (x.tags != null) c.tags = Array.isArray(x.tags) ? x.tags.map(cleanTag).filter(Boolean) : parseTags(x.tags);
+  if (x.cap != null) c.cap = Math.max(1, Math.min(10000, parseInt(x.cap, 10) || DEFAULTS.cap));
+  if (x.batch != null) c.batch = Math.max(1, Math.min(20, parseInt(x.batch, 10) || DEFAULTS.batch));
+  if (x.window != null) c.window = String(x.window).replace(/\s+/g, "");
+  if (x.phone != null) c.phone = x.phone === "main" ? "main" : "desk";
+  if (x.flow != null) c.flow = ID_RE.test(String(x.flow)) ? String(x.flow) : "";
+  if (x.freq_days != null) c.freq_days = Math.max(1, Math.min(60, parseInt(x.freq_days, 10) || DEFAULTS.freqDays));
+  if (x.qr != null) c.qr = Math.max(0, Math.min(10, parseInt(x.qr, 10) || 0));
+  if (x.link_url != null) c.link_url = cleanTarget(x.link_url);
+  if (x.header != null) c.header = x.header && /^(image|video|document)$/.test(x.header.type) && (cleanTarget(x.header.link) || /^\d{5,30}$/.test(String(x.header.id || ""))) ? { type: x.header.type, link: cleanTarget(x.header.link) || undefined, id: x.header.id ? String(x.header.id) : undefined } : null;
+  if (x.thresholds != null && typeof x.thresholds === "object") { c.thresholds = {}; for (const k of ["block", "optout", "quality", "failed", "min"]) if (Number(x.thresholds[k]) >= 0) c.thresholds[k] = Number(x.thresholds[k]); }
+  c.cap = c.cap || DEFAULTS.cap; c.batch = c.batch || DEFAULTS.batch; c.window = c.window || DEFAULTS.window; c.phone = c.phone || "desk"; c.vars = c.vars || []; c.tags = c.tags || [];
+  if (!c.template) err.push("template required");
+  if (!c.lang) err.push("lang required (template not in wa_templates.js)");
+  if (!parseWindow(c.window)) err.push("window like 10:00-19:00 (Dubai)");
+  if (!c.tags.length) err.push("at least one audience tag");
+  if (def) {
+    const need = (String(def.body).match(/\{\{\d+\}\}/g) || []).length; if (c.vars.length !== need) err.push("template " + c.template + " needs " + need + " variable(s), got " + c.vars.length);
+    if ((def.header_image_key || def.header_video_key) && !c.header) err.push("template has a " + (def.header_image_key ? "image" : "video") + " header: give header {type, link|id}");
+    if (!c.flow) c.qr = (def.buttons || []).filter((b) => b.type === "QUICK_REPLY").length;
+  }
+  if (c.vars.includes("link") && !c.link_url) err.push("variable 'link' needs link_url (https)");
+  return { c, err };
+}
+export const phoneIdOf = (env, c) => DIG(c.phone === "main" ? env.WA_PHONE_ID : env.WA_DESK_PHONE_ID);
+const firstName = (n) => (String(n || "").trim().split(/\s+/)[0] || "there").slice(0, 40);
+export function buildPayload(c, contact, link) {
+  const val = (v) => v === "name" ? firstName(contact.name) : v === "fullname" ? (contact.name || "there") : v === "company" ? (contact.company || "your team") : v === "role" ? (contact.role || "") : v === "link" ? link : v.charAt(0) === "=" ? v.slice(1) : String(contact[v] || "");
+  const comps = [];
+  if (c.header) comps.push({ type: "header", parameters: [{ type: c.header.type, [c.header.type]: c.header.id ? { id: c.header.id } : { link: c.header.link } }] });
+  if (c.vars.length) comps.push({ type: "body", parameters: c.vars.map((v) => ({ type: "text", text: (String(val(v)).replace(/\s+/g, " ").trim() || "-").slice(0, 900) })) });
+  for (let i = 0; i < (c.qr || 0); i++) comps.push({ type: "button", sub_type: "quick_reply", index: String(i), parameters: [{ type: "payload", payload: "camp:" + c.id + ":" + i }] });
+  const p = { messaging_product: "whatsapp", to: DIG(contact.e164), type: "template", template: { name: c.template, language: { code: c.lang } } };
+  if (comps.length) p.template.components = comps;
+  return p;
+}
+async function buildQueue(env, c) {
+  const ix = await getJ(env, "camp_contact_index", []), list = [];
+  for (const d of ix) { const k = await getJ(env, "camp_contact_" + d, null); if (k && !k.opted_out && (k.tags || []).some((t) => c.tags.includes(t))) list.push(d); }
+  return { list, pos: 0, built: new Date().toISOString() };
+}
+
+// ONE step of a campaign: the minute tick (dry=false, status must be "live") and the dry run (dry=true) both come here.
+export async function campStep(env, c, deps, dry) {
+  const now = (deps && deps.now) || Date.now(), f = (deps && deps.fetch) || fetch, graph = (deps && deps.graph) || "https://graph.facebook.com/v21.0";
+  const r = { id: c.id, dry: !!dry, sent: 0, would: [], skipped: {}, stop: "", note: "" };
+  const skip = (why) => { r.skipped[why] = (r.skipped[why] || 0) + 1; };
+  if (!dry && c.status !== "live") { r.note = "not live"; return r; }
+  if (env.CAMPAIGNS_OFF === "1") { r.note = "CAMPAIGNS_OFF"; return r; }
+  const pid = phoneIdOf(env, c); if (!pid) { r.note = "no phone id for " + c.phone; return r; }
+  if (c.phone === "main" && env.CAMP_MAIN_PHONE !== "on") { r.note = "main number refused: its replies and receipts do not reach this worker (set CAMP_MAIN_PHONE=on once routed)"; return r; }
+  const open = inWindow(c, now); r.window = open;
+  if (!open && !dry) { r.note = "outside window " + c.window; return r; }
+  const S = Object.assign(blankStats(), await getJ(env, "camp_stats_" + c.id, {}));
+  const why0 = stopReason(c, S); if (why0) { r.stop = why0; if (!dry) await autoStop(env, c.id, S, now); return r; }
+  const today = dubaiDate(now), s24 = (await getJ(env, "camp_sent24", [])).filter((t) => now - t < DAY);
+  const shared = Math.max(0, parseInt(env.CAMP_SHARED_CAP, 10) || DEFAULTS.shared);
+  let room = Math.min(c.batch || DEFAULTS.batch, (c.cap || DEFAULTS.cap) - (S.day[today] || 0), shared - s24.length);
+  if (dry) room = Math.min((c.cap || DEFAULTS.cap) - (S.day[today] || 0), shared - s24.length);   // the dry run shows the whole of today's allowance
+  r.room = Math.max(0, room); r.shared_used = s24.length; r.shared_cap = shared;
+  if (room <= 0) { r.note = (shared - s24.length <= 0) ? "shared 24 h cap reached" : "daily cap reached"; return r; }
+  let q = await getJ(env, "camp_q_" + c.id, null); if (!q) { q = await buildQueue(env, c); if (!dry) await putJ(env, "camp_q_" + c.id, q); }
+  let pos = q.pos || 0; const sentIds = [];
+  const freq = (c.freq_days != null ? c.freq_days : DEFAULTS.freqDays) * DAY;
+  while (room > 0 && pos < q.list.length) {
+    const d = q.list[pos++];
+    const k = await getJ(env, "camp_contact_" + d, null);
+    if (!k) { skip("gone"); continue; }
+    if (await env.MEETINGS.get("camp_optout_" + d)) { skip("opted_out"); continue; }   // checked before EVERY message
+    if (k.opted_out) { skip("opted_out"); continue; }
+    if (!k.consent || !k.consent.text || !k.consent.date) { skip("no_consent"); continue; }
+    if (!(k.tags || []).some((t) => c.tags.includes(t))) { skip("tags_changed"); continue; }
+    if (k.last_mkt && now - Date.parse(k.last_mkt) < freq) { skip("messaged_this_week"); continue; }
+    let code = "", link = "";
+    if (c.vars.includes("link")) { const base = String(env.PUBLIC_ORIGIN || (deps && deps.origin) || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "");
+      if (dry) { code = "DRYRUN00"; } else { code = await makeLink(env, c.id, d, c.link_url); } link = base + "/c/" + code; }
+    const payload = buildPayload(c, k, link);
+    if (dry) { r.would.push({ from_phone_id: pid, url: graph + "/" + pid + "/messages", payload }); room--; continue; }
+    let res = null, j = {}, code0 = 0;
+    try { res = await f(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); j = await res.json().catch(() => ({})); } catch (e) { j = { error: { code: 0, message: String(e && e.message || e) } }; }
+    const wamid = j && j.messages && j.messages[0] && j.messages[0].id;
+    if (res && res.ok && wamid) {
+      room--; r.sent++; s24.push(now); sentIds.push(wamid);
+      await putJ(env, "camp_msg_" + wamid, { cid: c.id, d, at: new Date(now).toISOString(), st: "sent", link: code || undefined });
+      k.last_mkt = new Date(now).toISOString(); k.last_camp = c.id; k.last_wamid = wamid; await putJ(env, "camp_contact_" + d, k);
+      if (code) { const L = await getJ(env, "camp_link_" + code, null); if (L) { L.wamid = wamid; await putJ(env, "camp_link_" + code, L); } }
+    } else {
+      code0 = Number(j && j.error && j.error.code) || 0; r.errors = (r.errors || []).concat([{ d: d.slice(0, 5) + "...", code: code0, msg: String(j && j.error && j.error.message || "").slice(0, 100) }]).slice(-10);
+      await bump(env, c.id, (x) => { x.sent++; x.failed++; x.err[code0] = (x.err[code0] || 0) + 1; if (QUALITY.includes(code0)) x.quality++; if (BLOCK.includes(code0)) x.blocks++; x.day[today] = (x.day[today] || 0) + 1; });
+      if (BLOCK.includes(code0)) await optOut(env, d, "blocked_marketing", { cid: c.id, code: code0 }, now);
+      if (code0 === 131049) { /* Meta's per-person marketing cap: never retry in a loop; the person is skipped this week */ k.last_mkt = new Date(now).toISOString(); await putJ(env, "camp_contact_" + d, k); }
+      if (HARD_STOP.includes(code0)) break;
+    }
+  }
+  if (dry) { r.queue = q.list.length; r.from = q.pos || 0; await putJ(env, "camp_dry_" + c.id, { at: new Date(now).toISOString(), window_open: open, room: r.room, would: r.would, skipped: r.skipped }); return r; }
+  q.pos = pos; await putJ(env, "camp_q_" + c.id, q);
+  await putJ(env, "camp_sent24", s24.filter((t) => now - t < DAY));
+  if (sentIds.length) { const L = await getJ(env, "camp_msgs_" + c.id, []); await putJ(env, "camp_msgs_" + c.id, L.concat(sentIds)); }
+  const S2 = await bump(env, c.id, (x) => { x.sent += r.sent; x.day[today] = (x.day[today] || 0) + r.sent; for (const w of Object.keys(r.skipped)) x.skipped[w] = (x.skipped[w] || 0) + r.skipped[w]; });
+  const why = await autoStop(env, c.id, S2, now); if (why) r.stop = why;
+  if (!why && pos >= q.list.length) { const cc = await getJ(env, "camp_" + c.id, null); if (cc && cc.status === "live") { cc.status = "done"; cc.done = new Date(now).toISOString(); await putJ(env, "camp_" + c.id, cc); } }
+  return r;
+}
+// The minute tick: every LIVE campaign, one small batch each. Nothing else runs.
+export async function campTick(env, deps) {
+  if (env.CAMPAIGNS_OFF === "1") return [];
+  const ids = await getJ(env, "camp_index", []), out = [];
+  for (const id of ids) { const c = await getJ(env, "camp_" + id, null); if (c && (c.status === "live" || (c.status === "done" && c.flow))) { try { if (c.status === "live") out.push(await campStep(env, c, deps, false)); if (c.flow) out.push(await flowFollowups(env, c, deps)); } catch (e) { out.push({ id, error: String(e && e.message || e).slice(0, 120) }); } } }
+  return out;
+}
+// Rebuild the counters from the per-message records (the webhook and the sender both write counters; this is the check).
+export async function recount(env, cid) {
+  const ids = await getJ(env, "camp_msgs_" + cid, []), old = Object.assign(blankStats(), await getJ(env, "camp_stats_" + cid, {}));
+  const s = blankStats(); s.day = old.day; s.skipped = old.skipped;
+  const sendFails = old.sent - ids.length;   // refusals at send time have no wamid; keep them as counted
+  s.sent = ids.length + Math.max(0, sendFails); s.failed = Math.max(0, sendFails); s.err = Object.assign({}, old.err);
+  for (const w of ids) { const m = await getJ(env, "camp_msg_" + w, null); if (!m) continue;
+    if (m.delivered) s.delivered++; if (m.read) s.read++; if (m.st === "failed") s.failed++; if (m.replied) s.replies++; if (m.tap) s.taps++; if (m.optout) s.optouts++;
+    if (m.link) { const L = await getJ(env, "camp_link_" + m.link, null); if (L && L.clicks) { s.clicks += L.clicks; s.uclicks++; } } }
+  s.blocks = old.blocks; s.quality = old.quality;
+  await putJ(env, "camp_stats_" + cid, s); return s;
+}
+
+// ---------- owner routes ----------
+// v723 (coordinator 3 Nov): the Campaigns card is NAJJUKO's card - her key and Kendall's open it; GOING LIVE stays with the owner (Kendall's key or READ_KEY).
+export const isCampViewer = (env, url, deps) => isCampOwner(env, url, deps) || !!(deps && typeof deps.person === "function" && deps.person(env, url) === "najjuko" && (typeof deps.isNaj !== "function" || deps.isNaj(env, url)));
+export const isCampOwner = (env, url, deps) => { const k = url.searchParams.get("key") || ""; if (!k) return false;
+  if (deps && typeof deps.person === "function" && deps.person(env, url) === "kendall") return true;
+  return !!env.READ_KEY && deps && typeof deps.ctEq === "function" ? deps.ctEq(k, String(env.READ_KEY)) : (!!env.READ_KEY && k === String(env.READ_KEY)); };
+
+export async function campaignRoute(request, env, url, deps) {
+  const p = url.pathname;
+  if (p.startsWith("/c/")) return linkRoute(request, env, url, deps && deps.now);
+  if (p.startsWith("/cb/")) return briefRoute(request, env, url);
+  if (!p.startsWith("/momo/campaigns")) return null;
+  if (!isCampViewer(env, url, deps)) return new Response("not found", { status: 404 });
+  const owner = isCampOwner(env, url, deps);
+  const key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
+  const now = (deps && deps.now) || Date.now();
+  if (p === "/momo/campaigns" && request.method === "GET") {
+    const body = await dashBody(env, key, rk, now, url.searchParams.get("c") || "", owner);
+    const html = deps && typeof deps.page === "function" ? deps.page(key, rk, body) : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Campaigns</title></head><body>' + body + '</body></html>';
+    return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  }
+  if (p === "/momo/campaigns/import" && request.method === "POST") {
+    const ct = String(request.headers.get("Content-Type") || ""); let csv = "", b = {};
+    if (/json/i.test(ct)) { try { b = await request.json(); } catch (e) { return J({ ok: false, error: "bad json" }, 400); } csv = String(b.csv || ""); } else csv = await request.text();
+    if (csv.length > 2000000) return J({ ok: false, error: "file over 2 MB" }, 413);
+    const r = await importContacts(env, csv, { apply: url.searchParams.get("apply") === "1" || b.apply === true, source: url.searchParams.get("source") || b.source || "", tags: url.searchParams.get("tags") || b.tags || "", now });
+    return J(r, r.ok ? 200 : 400);
+  }
+  if (p === "/momo/campaigns/api" && request.method === "GET") {
+    const ids = await getJ(env, "camp_index", []), list = [];
+    for (const id of ids) { const c = await getJ(env, "camp_" + id, null); if (c) list.push({ campaign: c, stats: Object.assign(blankStats(), await getJ(env, "camp_stats_" + id, {})), rates: rates(Object.assign(blankStats(), await getJ(env, "camp_stats_" + id, {}))) }); }
+    const s24 = (await getJ(env, "camp_sent24", [])).filter((t) => now - t < DAY);
+    return J({ ok: true, contacts: (await getJ(env, "camp_contact_index", [])).length, optouts: (await getJ(env, "camp_optout_index", [])).length, shared_24h: s24.length, shared_cap: parseInt(env.CAMP_SHARED_CAP, 10) || DEFAULTS.shared, imports: await getJ(env, "camp_imports", []), campaigns: list });
+  }
+  if (p === "/momo/campaigns/api" && request.method === "POST") {
+    let b = {}; try { b = await request.json(); } catch (e) { return J({ ok: false, error: "bad json" }, 400); }
+    const a = String(b.action || ""), id = String(b.id || "");
+    if (a === "flow_put") { const { f, err } = cleanFlow(b.flow); if (err.length) return J({ ok: false, error: err }, 400); await putJ(env, "camp_flow_" + f.id, f); return J({ ok: true, flow: f }); }
+    if (a === "flow_get") { const f = await getJ(env, "camp_flow_" + String(b.flow || ""), null); return f ? J({ ok: true, flow: f }) : J({ ok: false, error: "no such flow" }, 404); }
+    if (a === "simulate") { const f = await getJ(env, "camp_flow_" + String(b.flow || ""), null); if (!f) return J({ ok: false, error: "no such flow" }, 404); return J({ ok: true, result: simulateFlow(f, Array.isArray(b.choices) ? b.choices : [], b.contact || { name: "Test Owner", e164: "+971500000000" }) }); }
+    if (a === "handovers") return J({ ok: true, handovers: await getJ(env, "camp_handover_index", []) });
+    if (a === "create") {
+      const ix = await getJ(env, "camp_index", []); if (ix.includes(String(b.id || ""))) return J({ ok: false, error: "id exists" }, 409);
+      if (b.flow) { const f = await getJ(env, "camp_flow_" + String(b.flow), null); if (!f) return J({ ok: false, error: "no such flow" }, 400); const st = f.nodes[f.start];
+        b = Object.assign({}, b, { template: st.template, lang: st.lang, vars: st.vars || [], header: st.header || b.header, qr: (st.buttons || []).length, freq_days: b.freq_days || f.freq_days || 14 }); }
+      const { c, err } = cleanCampaign(b, null); if (err.length) return J({ ok: false, error: err }, 400);
+      await putJ(env, "camp_" + c.id, c); ix.push(c.id); await putJ(env, "camp_index", ix); return J({ ok: true, campaign: c });
+    }
+    if (a === "optout") { const d = DIG(normPhone(b.phone)); if (!d) return J({ ok: false, error: "bad phone" }, 400); return J({ ok: true, fresh: await optOut(env, d, "owner", { note: String(b.note || "").slice(0, 80) }, now) }); }
+    const c = ID_RE.test(id) ? await getJ(env, "camp_" + id, null) : null; if (!c) return J({ ok: false, error: "no such campaign" }, 404);
+    const save = async (st, extra) => { c.status = st; Object.assign(c, extra || {}); await putJ(env, "camp_" + id, c); return J({ ok: true, campaign: c }); };
+    if (a === "update") { if (c.status === "live") return J({ ok: false, error: "pause it first" }, 409); const { c: n, err } = cleanCampaign(b, c); if (err.length) return J({ ok: false, error: err }, 400); Object.assign(c, n); await env.MEETINGS.delete("camp_q_" + id); await putJ(env, "camp_" + id, c); return J({ ok: true, campaign: c }); }
+    if (a === "dry") { const r = await campStep(env, c, deps, true); return J({ ok: true, result: r }); }
+    if (a === "request_live") { if (!["draft", "paused"].includes(c.status)) return J({ ok: false, error: "status " + c.status }, 409); c.live_requested = { at: new Date(now).toISOString(), by: owner ? "owner" : "najjuko" }; await putJ(env, "camp_" + id, c); return J({ ok: true, campaign: c, note: "Kendall must approve: action live with confirm=<id> on his key" }); }
+    if (a === "live") {
+      if (!owner) return J({ ok: false, error: "going live needs Kendall's approval (owner key)" }, 403);
+      if (b.confirm !== id) return J({ ok: false, error: "confirm must equal the campaign id" }, 400);
+      if (!["draft", "paused"].includes(c.status)) return J({ ok: false, error: "status " + c.status + " cannot go live" }, 409);
+      const { err } = cleanCampaign({}, c); if (err.length) return J({ ok: false, error: err }, 400);
+      return save("live", { started: c.started || new Date(now).toISOString(), live_by: "owner" });
+    }
+    if (a === "pause") { if (c.status !== "live") return J({ ok: false, error: "not live" }, 409); return save("paused", { paused: new Date(now).toISOString() }); }
+    if (a === "resume") { if (!owner) return J({ ok: false, error: "resuming needs Kendall's approval (owner key)" }, 403); if (c.status !== "paused") return J({ ok: false, error: "not paused" }, 409); return save("live", { resumed: new Date(now).toISOString() }); }
+    if (a === "stop") { if (["stopped", "done"].includes(c.status)) return J({ ok: false, error: "already " + c.status }, 409); return save("stopped", { stopped: { at: new Date(now).toISOString(), why: "owner", auto: false } }); }
+    if (a === "recount") return J({ ok: true, stats: await recount(env, id) });
+    if (a === "audience") { const q = await buildQueue(env, c); return J({ ok: true, size: q.list.length }); }
+    if (a === "followup") { const mw = b.w ? await getJ(env, "camp_msg_" + String(b.w), null) : null; const d = mw && mw.cid === id ? mw.d : ""; const k = d ? await getJ(env, "camp_contact_" + d, null) : null; if (!k) return J({ ok: false, error: "no such contact" }, 404);
+      const ix = await getJ(env, "camp_handover_index", []); ix.unshift({ kind: "follow_up", cid: id, d, name: k.name || "", e164: k.e164, at: new Date(now).toISOString(), by: owner ? "owner" : "najjuko", status: "open" }); await putJ(env, "camp_handover_index", ix.slice(0, 500));
+      return J({ ok: true, note: "flagged; nothing was sent" }); }
+    return J({ ok: false, error: "unknown action" }, 400);
+  }
+  return new Response("not found", { status: 404 });
+}
+
+// ---------- dashboard (cards, phone-first) ----------
+const pc = (x) => (x * 100).toFixed(x > 0 && x < 0.1 ? 1 : 0) + "%";
+const ic = (d, s) => '<svg viewBox="0 0 24 24" width=' + (s || 22) + ' height=' + (s || 22) + ' fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + d + '</svg>';
+const I = { users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>', ban: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>' };
+const ST = { draft: ["Draft", "#5F6B66"], live: ["Live", "#0A4F4A"], paused: ["Paused", "#8A6F3E"], stopped: ["Stopped", "#A33A2B"], done: ["Done", "#0A4F4A"] };
+// The Campaigns card (Najjuko's; phone-first, 375 px). Every chart is inline SVG drawn here; every number carries its label.
+const TEAL = "#0A4F4A", GOLD = "#C5A56A", INK = "#1C2321", MUTE = "#5F6B66", RED = "#A33A2B", LINE = "#E7E1D6";
+const maskNum = (e) => { const d = DIG(e); return d.length > 4 ? "+" + d.slice(0, 3) + " ••• " + d.slice(-4) : "+" + d; };
+const lastDays = (now, n) => { const o = []; for (let i = n - 1; i >= 0; i--) o.push(dubaiDate(now - i * DAY)); return o; };
+const updatesConsent = (k) => { const c = (k && k.consents) || {}; const t = Object.keys(c).find((x) => /update/.test(x)); return t ? c[t].value : null; };
+function svgFunnel(st) {
+  const max = Math.max(1, st[0][1]), W = 340, rh = 30;
+  return '<svg viewBox="0 0 ' + W + ' ' + (st.length * rh + 4) + '" width="100%" role="img" aria-label="Funnel">' + st.map(([lab, v], i) => {
+    const w = Math.max(2, Math.round((v / max) * 200)), y = i * rh + 2, pct = i ? Math.round((v / max) * 100) + "%" : "";
+    return '<text x="0" y="' + (y + 18) + '" font-size="11" fill="' + MUTE + '">' + esc(lab) + '</text><rect x="92" y="' + (y + 5) + '" width="' + w + '" height="18" rx="4" fill="' + (i % 2 ? GOLD : TEAL) + '"/>'
+      + '<text x="' + (96 + w) + '" y="' + (y + 18) + '" font-size="11" font-weight="600" fill="' + INK + '">' + v + (pct ? " · " + pct : "") + '</text>';
+  }).join("") + '</svg>';
+}
+function svgDonut(parts) {
+  const tot = parts.reduce((a, p) => a + p[1], 0); if (!tot) return '<p class=nd>No choices yet.</p>';
+  const C = 2 * Math.PI * 42, cols = [TEAL, GOLD, "#5E8C84", "#8A6F3E", RED, "#9AA6A0"]; let off = 0;
+  const arcs = parts.map((p, i) => { const L = (p[1] / tot) * C; const s = '<circle cx="60" cy="60" r="42" fill="none" stroke="' + cols[i % cols.length] + '" stroke-width="20" stroke-dasharray="' + L.toFixed(2) + ' ' + (C - L).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 60 60)"/>'; off += L; return s; }).join("");
+  const leg = parts.map((p, i) => '<div class=lg><span style="background:' + cols[i % cols.length] + '"></span>' + esc(p[0]) + ' <b>' + p[1] + '</b> <em>' + Math.round(p[1] / tot * 100) + '%</em></div>').join("");
+  return '<div class=dn><svg viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Branch choices">' + arcs + '<text x="60" y="58" text-anchor="middle" font-size="18" font-weight="600" fill="' + INK + '">' + tot + '</text><text x="60" y="74" text-anchor="middle" font-size="9" fill="' + MUTE + '">choices</text></svg><div class=lgs>' + leg + '</div></div>';
+}
+function svgDaily(days, sends, reps, cap) {
+  const W = 340, H = 140, top = 14, bh = 100, max = Math.max(cap, 1, ...sends), bw = Math.floor((W - 30) / days.length);
+  const y = (v) => top + bh - (v / max) * bh;
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Daily sends and replies">';
+  s += '<line x1="24" x2="' + W + '" y1="' + y(cap).toFixed(1) + '" y2="' + y(cap).toFixed(1) + '" stroke="' + RED + '" stroke-dasharray="4 3"/><text x="' + (W - 2) + '" y="' + (y(cap) - 3).toFixed(1) + '" font-size="9" text-anchor="end" fill="' + RED + '">daily cap ' + cap + '</text>';
+  days.forEach((d, i) => { const x = 26 + i * bw;
+    s += '<rect x="' + x + '" y="' + y(sends[i]).toFixed(1) + '" width="' + Math.max(2, bw / 2 - 1) + '" height="' + (top + bh - y(sends[i])).toFixed(1) + '" fill="' + TEAL + '"><title>' + d + ' sent ' + sends[i] + '</title></rect>'
+      + '<rect x="' + (x + bw / 2) + '" y="' + y(reps[i]).toFixed(1) + '" width="' + Math.max(2, bw / 2 - 1) + '" height="' + (top + bh - y(reps[i])).toFixed(1) + '" fill="' + GOLD + '"><title>' + d + ' replies ' + reps[i] + '</title></rect>';
+    if (i % 3 === 0 || i === days.length - 1) s += '<text x="' + x + '" y="' + (H - 12) + '" font-size="9" fill="' + MUTE + '">' + d.slice(8) + '/' + d.slice(5, 7) + '</text>'; });
+  return s + '<text x="0" y="' + (top + 4) + '" font-size="9" fill="' + MUTE + '">' + max + '</text><text x="0" y="' + (top + bh) + '" font-size="9" fill="' + MUTE + '">0</text></svg><div class=lgs2><div class=lg><span style="background:' + TEAL + '"></span>Sent</div><div class=lg><span style="background:' + GOLD + '"></span>Replies</div></div>';
+}
+function svgRate(days, rates) {
+  const W = 340, H = 130, top = 12, h = 90, max = Math.max(0.01, ...rates) * 1.2, x = (i) => 30 + i * ((W - 40) / Math.max(1, days.length - 1)), y = (v) => top + h - (v / max) * h;
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Opt-out and block rate">';
+  s += '<line x1="30" x2="' + W + '" y1="' + y(0.005).toFixed(1) + '" y2="' + y(0.005).toFixed(1) + '" stroke="' + RED + '" stroke-dasharray="4 3"/><text x="' + (W - 2) + '" y="' + (y(0.005) - 3).toFixed(1) + '" font-size="9" text-anchor="end" fill="' + RED + '">0.5% stop line</text>';
+  s += '<polyline fill="none" stroke="' + TEAL + '" stroke-width="2" points="' + rates.map((r, i) => x(i).toFixed(1) + "," + y(r).toFixed(1)).join(" ") + '"/>';
+  rates.forEach((r, i) => { s += '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(r).toFixed(1) + '" r="2.5" fill="' + TEAL + '"><title>' + days[i] + ' ' + (r * 100).toFixed(2) + '%</title></circle>'; if (i % 3 === 0 || i === days.length - 1) s += '<text x="' + (x(i) - 8).toFixed(1) + '" y="' + (H - 10) + '" font-size="9" fill="' + MUTE + '">' + days[i].slice(8) + '/' + days[i].slice(5, 7) + '</text>'; });
+  return s + '<text x="0" y="' + (top + 4) + '" font-size="9" fill="' + MUTE + '">' + (max * 100).toFixed(1) + '%</text><text x="0" y="' + (top + h) + '" font-size="9" fill="' + MUTE + '">0%</text></svg>';
+}
+function svgClicks(rows) {
+  if (!rows.length) return '<p class=nd>No tracked links yet.</p>';
+  const max = Math.max(1, ...rows.map((r) => r[1])), rh = 34;
+  return '<svg viewBox="0 0 340 ' + (rows.length * rh) + '" width="100%" role="img" aria-label="Clicks per link">' + rows.map(([u, v, p], i) => { const w = Math.max(2, Math.round(v / max * 230)), y0 = i * rh;
+    return '<text x="0" y="' + (y0 + 11) + '" font-size="10" fill="' + MUTE + '">' + esc(u.replace(/^https:\/\//, "").slice(0, 46)) + '</text><rect x="0" y="' + (y0 + 15) + '" width="' + w + '" height="13" rx="3" fill="' + GOLD + '"/><text x="' + (w + 4) + '" y="' + (y0 + 26) + '" font-size="10" font-weight="600" fill="' + INK + '">' + v + ' clicks · ' + p + ' people</text>'; }).join("") + '</svg>';
+}
+async function dashBody(env, key, rk, now, want, owner) {
+  const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
+  const ids = await getJ(env, "camp_index", []), camps = [];
+  for (const id of ids) { const c = await getJ(env, "camp_" + id, null); if (c) camps.push(c); }
+  const cur = camps.find((c) => c.id === want) || camps[camps.length - 1] || null;
+  const cix = await getJ(env, "camp_contact_index", []); let consentN = 0;
+  for (const d of cix.slice(0, 1500)) { const k = await getJ(env, "camp_contact_" + d, null); if (updatesConsent(k) === true) consentN++; }
+  const S = cur ? Object.assign(blankStats(), await getJ(env, "camp_stats_" + cur.id, {})) : blankStats(), R = rates(S);
+  const head = '<div class=hg>' + [["Contacts", cix.length], ["Sent", S.sent], ["Reply rate", pc(R.replied)], ["Consent to updates", consentN]].map((x) => '<div class=hc><b>' + esc(x[1]) + '</b><i>' + esc(x[0]) + '</i></div>').join("") + '</div>';
+  const pick = camps.length > 1 ? '<div class=pk>' + camps.slice().reverse().map((c) => '<a class="pkc' + (cur && c.id === cur.id ? " on" : "") + '" href="/momo/campaigns' + q + '&c=' + encodeURIComponent(c.id) + '">' + esc(c.name || c.id) + '</a>').join("") + '</div>' : "";
+  if (!cur) return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Campaigns</h1>' + head + '<div class=empty id=camp_empty>' + ic(CAMP_ICON, 34) + '<p><b>No campaigns yet</b></p><p>Import a consented list, create a campaign, then run a dry run.</p></div>' + DASH_CSS;
+  const st = ST[cur.status] || [cur.status, MUTE];
+  const btn = (a, lab, cls) => '<button class="cb ' + (cls || "") + '" type=button data-a=' + a + ' data-id="' + esc(cur.id) + '">' + lab + '</button>';
+  const acts = [btn("dry", "Dry run")];
+  if (cur.status === "live") acts.push(btn("pause", "Pause", "pz"));
+  if (["draft", "paused"].includes(cur.status)) acts.push(owner ? btn(cur.status === "paused" ? "resume" : "live", cur.status === "paused" ? "Resume (Kendall)" : "Approve live (Kendall)", "go") : btn("request_live", cur.live_requested ? "Asked Kendall" : "Ask Kendall to go live", "go"));
+  const top = '<div class=cc id="camp_' + esc(cur.id) + '"><div class=ch><b>' + esc(cur.name || cur.id) + '</b><span class=cs style="background:' + st[1] + '">' + st[0] + '</span></div>'
+    + '<p class=cm>' + esc(cur.template) + ' · ' + (cur.phone === "main" ? "main number" : "desk number") + ' · ' + esc(cur.window) + ' Dubai · cap ' + cur.cap + '/day · ' + esc((cur.tags || []).join(", ")) + '</p>'
+    + (cur.stopped && cur.stopped.why ? '<p class=cw>Stopped: ' + esc(cur.stopped.why) + '</p>' : "") + (cur.live_requested && cur.status !== "live" ? '<p class=cm>Go-live asked ' + esc(cur.live_requested.at.slice(0, 16).replace("T", " ")) + ' UTC, waiting for Kendall.</p>' : "")
+    + '<div class=cba>' + acts.join("") + '</div><p class=cr id="res_' + esc(cur.id) + '"></p></div>';
+  const funnel = svgFunnel([["Sent", S.sent], ["Delivered", S.delivered], ["Read", S.read], ["Replied", S.replies], ["Clicked", S.uclicks], ["To Najjuko", S.handovers || 0]]);
+  // branch donut: the opener's options by their titles, plus opt-outs as "Stopped"
+  let parts = [];
+  if (cur.flow) { const f = await getJ(env, "camp_flow_" + cur.flow, null); const n0 = f && f.nodes[f.start];
+    if (n0) parts = (n0.buttons || []).filter((b) => !b.optout).map((b) => [b.title, (S.branch || {})[f.start + "." + b.id] || 0]); parts.push(["Stopped", S.optouts]); }
+  const days = lastDays(now, 14);
+  const daily = svgDaily(days, days.map((d) => S.day[d] || 0), days.map((d) => (S.rday || {})[d] || 0), cur.cap);
+  const rl = svgRate(days, days.map((d) => { const n = S.day[d] || 0; return n ? (((S.oday || {})[d] || 0) + ((S.bday || {})[d] || 0)) / n : 0; }));
+  const byUrl = {}; for (const code of (await getJ(env, "camp_links_" + cur.id, [])).slice(-2000)) { const L = await getJ(env, "camp_link_" + code, null); if (!L) continue; const u = byUrl[L.url] || (byUrl[L.url] = [L.url, 0, 0]); u[1] += L.clicks || 0; if (L.clicks) u[2]++; }
+  const clicks = svgClicks(Object.values(byUrl).sort((a, b) => b[1] - a[1]).slice(0, 8));
+  const seen = new Set(), people = [];
+  for (const w of (await getJ(env, "camp_msgs_" + cur.id, [])).slice(-300).reverse()) { const m = await getJ(env, "camp_msg_" + w, null); if (!m || seen.has(m.d)) continue; seen.add(m.d);
+    const k = await getJ(env, "camp_contact_" + m.d, null) || {}, s2 = await getJ(env, "camp_state_" + cur.id + "_" + m.d, null), oo = await env.MEETINGS.get("camp_optout_" + m.d);
+    const status = oo ? "Opted out" : m.st === "failed" ? "Failed" : (s2 && s2.path && s2.path.length) || m.replied ? "Replied" : m.read ? "Read" : m.delivered ? "Delivered" : "Sent";
+    const br = s2 && s2.path && s2.path.length ? s2.path[s2.path.length - 1] : "-", cu = updatesConsent(k);
+    people.push('<div class=pc data-s="' + esc(((k.name || "") + " " + DIG(k.e164 || m.d).slice(-4)).toLowerCase()) + '"><div class=ph><b>' + esc(k.name || "Unknown") + '</b><span class="pst s_' + status.replace(/\s/g, "") + '">' + status + '</span></div>'
+      + '<div class=pg><div><i>Number</i>' + esc(maskNum(k.e164 || m.d)) + '</div><div><i>Branch</i>' + esc(br) + '</div><div><i>Last activity</i>' + esc(String((s2 && s2.at) || m.at || "").slice(0, 16).replace("T", " ")) + '</div><div><i>Updates consent</i>' + (cu === true ? "Yes" : cu === false ? "No" : "Not asked") + '</div></div>'
+      + (oo ? "" : '<button class="cb fu" type=button data-a=followup data-id="' + esc(cur.id) + '" data-w="' + esc(w) + '">Follow up</button>') + '</div>'); }
+  const card = (t, b) => '<div class=gc><h2>' + t + '</h2>' + b + '</div>';
+  return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Campaigns</h1>' + head + pick + top
+    + card("Funnel", funnel) + (cur.flow ? card("Branch choices", svgDonut(parts)) : "") + card("Daily sends and replies", daily) + card("Opt-out and block rate", rl) + card("Clicks per link", clicks)
+    + card("People (" + people.length + ")", '<input id=psearch class=srch type=search placeholder="Search name or last 4 digits">' + (people.length ? '<div class=pl>' + people.join("") + '</div>' : '<p class=nd>Nobody messaged yet.</p>'))
+    + DASH_CSS + '<script>(function(){var K=new URLSearchParams(location.search).get("key")||"";var sr=document.getElementById("psearch");if(sr)sr.oninput=function(){var v=sr.value.toLowerCase().trim();document.querySelectorAll(".pc").forEach(function(c){c.style.display=!v||c.dataset.s.indexOf(v)>=0?"":"none"})};'
+    + 'document.querySelectorAll(".cb").forEach(function(b){b.onclick=function(){var a=b.dataset.a,id=b.dataset.id,o=document.getElementById("res_"+id);var body={action:a,id:id};if(a==="pause"&&!confirm("Pause this campaign?"))return;if(a==="live"){var c=prompt("Type the campaign id to approve it going live: "+id);if(c!==id)return;body.confirm=c}if(a==="followup")body.w=b.dataset.w;b.disabled=true;'
+    + 'fetch("/momo/campaigns/api?key="+encodeURIComponent(K),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(j){b.disabled=false;if(a==="dry"){var x=j.result||{};o.textContent=j.ok?("Dry run: "+(x.would||[]).length+" would go now"+(x.window?"":" (outside the send window, live would wait)")+(x.note?" - "+x.note:"")+(x.stop?" - would stop: "+x.stop:"")+". Nothing was sent."):String(j.error)}else if(a==="followup"){b.textContent=j.ok?"Flagged for follow-up":"Not saved"}else if(j.ok)location.reload();else if(o)o.textContent=String(j.error)}).catch(function(){b.disabled=false;if(o)o.textContent="Network error"})}})})()</script>';
+}
+const DASH_CSS = '<style>.hg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}.hc{border:1px solid ' + GOLD + ';background:' + TEAL + ';color:#fff;border-radius:14px;padding:12px;min-width:0}.hc b{display:block;font:600 1.4rem Fraunces,serif}.hc i{font:500 .72rem "IBM Plex Sans",sans-serif;font-style:normal;color:#E8DCC0}'
+  + '.pk{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px}.pkc{border:1px solid ' + GOLD + ';border-radius:999px;padding:6px 12px;color:' + TEAL + ';text-decoration:none;font-size:.8rem;white-space:nowrap}.pkc.on{background:' + TEAL + ';color:#fff}'
+  + '.cc,.gc{border:1px solid ' + LINE + ';background:#FFFDF9;border-radius:14px;padding:12px;box-sizing:border-box;min-width:0;margin-bottom:12px}.gc h2{font:600 1rem Fraunces,serif;color:' + TEAL + ';margin:0 0 8px}.ch{display:flex;justify-content:space-between;align-items:center;gap:8px}.ch b{font:600 1.05rem Fraunces,serif;color:' + TEAL + ';overflow-wrap:anywhere}.cs{color:#fff;border-radius:999px;padding:3px 10px;font:600 .68rem "IBM Plex Mono",monospace;white-space:nowrap}'
+  + '.cm{margin:4px 0 8px;font-size:.76rem;color:' + MUTE + ';overflow-wrap:anywhere}.cw{margin:0 0 8px;font-size:.8rem;color:' + RED + ';font-weight:600}.cba{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}.cb{border:1px solid ' + TEAL + ';color:' + TEAL + ';background:#fff;border-radius:999px;padding:10px 12px;font:600 .85rem "IBM Plex Sans",sans-serif;cursor:pointer}.cb.pz{background:#8A6F3E;border-color:#8A6F3E;color:#fff}.cb.go{background:' + TEAL + ';color:#fff}.cr{font-size:.75rem;color:' + MUTE + ';margin:6px 0 0;overflow-wrap:anywhere}'
+  + '.dn{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.lgs{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}.lgs2{display:flex;gap:12px;margin-top:4px}.lg{font-size:.78rem;color:' + INK + ';display:flex;align-items:center;gap:6px}.lg span{width:10px;height:10px;border-radius:3px;display:inline-block}.lg em{color:' + MUTE + ';font-style:normal}.nd{color:' + MUTE + ';font-size:.85rem;margin:0}'
+  + '.srch{width:100%;box-sizing:border-box;border:1px solid ' + LINE + ';border-radius:999px;padding:10px 14px;font:inherit;margin-bottom:10px}.pl{display:flex;flex-direction:column;gap:8px}.pc{border:1px solid ' + LINE + ';border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}.ph{display:flex;justify-content:space-between;gap:8px;align-items:center}.ph b{color:' + TEAL + ';overflow-wrap:anywhere}'
+  + '.pst{font:600 .66rem "IBM Plex Mono",monospace;border-radius:999px;padding:2px 8px;border:1px solid ' + GOLD + ';color:#8A6F3E;white-space:nowrap}.s_Optedout,.s_Failed{border-color:' + RED + ';color:' + RED + '}.s_Replied{background:' + TEAL + ';color:#fff;border-color:' + TEAL + '}.pg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;font-size:.8rem}.pg i{display:block;font-style:normal;font-size:.66rem;color:#8A6F3E;font-weight:600}.cb.fu{padding:8px}'
+  + '.empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 18px;border:1px dashed ' + GOLD + ';border-radius:18px;text-align:center;color:' + MUTE + '}.empty p{margin:0}</style>';
+
+// ---------- FLOWS (v723, 3 Nov: the Palm Jebel Ali owners campaign is a small decision tree) ----------
+// A flow is DATA in KV (camp_flow_<id>), so a new flow needs no code change. Shape:
+//   { id, start, freq_days?, followup?: { after_hours, node }, nodes: { <nodeId>: node } }
+// Node types:
+//   template  the opening (or follow-up) template; buttons[] map its quick replies BY INDEX: {id, title, next?, consent?, optout?}
+//   buttons   interactive reply buttons (max 3, titles max 20 chars): {text, buttons:[{id, title, next?, consent?:{topic, value}, optout?}]}
+//   list      interactive list (max 10 rows, titles max 24): {text, button, rows:[{id, title, description?, next?, consent?}]}
+//   text      {text, next?}
+//   doc       {text, link (https; sent as a tracked /c/ link), next?}
+//   brief     {text, brief: <slug>, next?} sends the tracked link to /cb/<slug>, the one-page brief built from captured developer data
+//   handover  {text?, note, next?} records a human handover for the agent (camp_handover_index); never commits anything, never messages her
+//   end       {text?}
+// Text may use {first} {name} {company}. Free-form nodes only go out right after the person tapped (their 24-hour window is open).
+// Interactive reply ids are cf:<campaign>:<node>:<index>; template quick replies carry camp:<campaign>:<index> (see buildPayload).
+const NODE_TYPES = ["template", "buttons", "list", "text", "doc", "brief", "handover", "end"];
+export function cleanFlow(x) {
+  const err = [], f = { id: String((x && x.id) || ""), start: String((x && x.start) || ""), nodes: {} };
+  if (!ID_RE.test(f.id)) err.push("flow id: lowercase letters, digits and dashes");
+  if (x && Number(x.freq_days) > 0) f.freq_days = Math.min(60, Math.round(Number(x.freq_days)));
+  if (x && x.followup && x.followup.node) f.followup = { after_hours: Math.max(12, Math.min(24 * 14, Number(x.followup.after_hours) || 72)), node: String(x.followup.node) };
+  const N = (x && x.nodes) || {};
+  for (const id of Object.keys(N)) {
+    const n = N[id] || {}; if (!/^[a-z0-9_-]{1,24}$/.test(id)) { err.push("node id " + id); continue; }
+    if (!NODE_TYPES.includes(n.type)) { err.push(id + ": type " + n.type); continue; }
+    const o = { type: n.type };
+    for (const k of ["text", "note", "template", "lang", "button", "next", "brief"]) if (n[k] != null) o[k] = String(n[k]).slice(0, k === "text" ? 1000 : 200);
+    if (n.vars) o.vars = n.vars.map(String);
+    if (n.header) o.header = n.header;
+    if (n.link) { o.link = cleanTarget(n.link); if (!o.link) err.push(id + ": link must be https"); }
+    if (n.type === "brief" && !/^[a-z0-9-]{1,60}$/.test(String(n.brief || ""))) err.push(id + ": brief slug");
+    const opts = n.type === "list" ? n.rows : n.buttons;
+    if (opts) {
+      const max = n.type === "list" ? 10 : n.type === "buttons" ? 3 : 10, tl = n.type === "list" ? 24 : 20;
+      if (opts.length > max) err.push(id + ": at most " + max + " options");
+      o[n.type === "list" ? "rows" : "buttons"] = opts.map((b, i) => {
+        const r = { id: String(b.id || i), title: String(b.title || "") };
+        if (!r.title || (n.type !== "template" && r.title.length > tl)) err.push(id + ": option " + r.id + " title 1-" + tl + " chars");
+        if (b.description) r.description = String(b.description).slice(0, 72);
+        if (b.next) r.next = String(b.next);
+        if (b.optout) r.optout = true;
+        if (b.consent && b.consent.topic) r.consent = { topic: cleanTag(b.consent.topic), value: !!b.consent.value };
+        return r;
+      });
+    }
+    if (n.type === "template" && !o.template) err.push(id + ": template name");
+    if (n.type === "template" && !o.lang) err.push(id + ": template lang");
+    if ((n.type === "buttons" || n.type === "list") && !(opts && opts.length)) err.push(id + ": needs options");
+    if (["buttons", "list", "text", "doc", "brief"].includes(n.type) && !o.text) err.push(id + ": needs text");
+    f.nodes[id] = o;
+  }
+  if (!f.nodes[f.start] || f.nodes[f.start].type !== "template") err.push("start must be a template node");
+  if (f.followup && (!f.nodes[f.followup.node] || f.nodes[f.followup.node].type !== "template")) err.push("followup.node must be a template node (no reply means the window is shut)");
+  for (const [id, n] of Object.entries(f.nodes)) for (const nx of [n.next].concat((n.buttons || n.rows || []).map((b) => b.next))) if (nx && !f.nodes[nx]) err.push(id + ": next " + nx + " does not exist");
+  return { f, err };
+}
+const fill = (t, k) => String(t || "").replace(/\{first\}/g, firstName(k.name)).replace(/\{name\}/g, k.name || "there").replace(/\{company\}/g, k.company || "your company");
+const originOf = (env, deps) => String(env.PUBLIC_ORIGIN || (deps && deps.origin) || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "");
+// The payload for one free-form node (no send): what flowRun posts and what the simulator returns.
+export function nodePayload(cid, nid, n, k, linkUrl) {
+  const to = DIG(k.e164);
+  if (n.type === "buttons") return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: fill(n.text, k) },
+    action: { buttons: n.buttons.map((b, i) => ({ type: "reply", reply: { id: "cf:" + cid + ":" + nid + ":" + i, title: b.title } })) } } };
+  if (n.type === "list") return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "list", body: { text: fill(n.text, k) },
+    action: { button: (n.button || "Choose").slice(0, 20), sections: [{ title: "Options", rows: n.rows.map((r, i) => Object.assign({ id: "cf:" + cid + ":" + nid + ":" + i, title: r.title }, r.description ? { description: r.description } : {})) }] } } };
+  if (n.type === "doc" || n.type === "brief") return { messaging_product: "whatsapp", to, type: "text", text: { body: fill(n.text, k) + "\n" + (linkUrl || n.link || ("/cb/" + n.brief)), preview_url: true } };
+  if ((n.type === "text" || n.type === "end" || n.type === "handover") && n.text) return { messaging_product: "whatsapp", to, type: "text", text: { body: fill(n.text, k) } };
+  return null;
+}
+// Walk from node nid: send it, and keep going through nodes with no options (text/doc/brief/handover), at most 6 steps.
+async function flowRun(env, c, f, nid, k, deps, now, trail) {
+  const f2 = (deps && deps.fetch) || fetch, graph = (deps && deps.graph) || "https://graph.facebook.com/v21.0", pid = phoneIdOf(env, c), d = DIG(k.e164);
+  for (let step = 0; nid && step < 6; step++) {
+    const n = f.nodes[nid]; if (!n || n.type === "template") break;
+    if (n.type === "handover") {
+      const st = await getJ(env, "camp_state_" + c.id + "_" + d, { path: [] });
+      const h = { cid: c.id, d, name: k.name || "", e164: k.e164, node: nid, note: n.note || "", path: st.path || [], at: new Date(now).toISOString(), status: "open" };
+      const ix = await getJ(env, "camp_handover_index", []); ix.unshift(h); await putJ(env, "camp_handover_index", ix.slice(0, 500));
+      await bump(env, c.id, (x) => { x.handovers = (x.handovers || 0) + 1; });
+      trail.push({ handover: nid });
+    }
+    let link = "";
+    if (n.type === "doc" || n.type === "brief") { const target = n.type === "brief" ? originOf(env, deps) + "/cb/" + n.brief : n.link; const code = await makeLink(env, c.id, d, target); link = originOf(env, deps) + "/c/" + code; }
+    const payload = nodePayload(c.id, nid, n, k, link);
+    if (payload) {
+      let ok = false, code = 0;
+      try { const r = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const j = await r.json().catch(() => ({})); ok = r.ok && !!(j.messages && j.messages[0]); code = Number(j.error && j.error.code) || 0; } catch (e) {}
+      trail.push({ node: nid, sent: ok, code: code || undefined });
+    }
+    if (n.buttons || n.rows) break;   // wait for the tap
+    nid = n.next;
+  }
+}
+// A tap on a campaign button: record the branch (and the consent, per branch), then send the next node.
+export async function flowChoice(env, msg, d, deps, now) {
+  let cid = "", nid = "", idx = -1, m;
+  const pay = msg.type === "button" ? String((msg.button && msg.button.payload) || "") : "";
+  const rid = msg.type === "interactive" && msg.interactive ? String(((msg.interactive.button_reply || msg.interactive.list_reply) || {}).id || "") : "";
+  if ((m = /^camp:([a-z0-9-]+):(\d+)$/.exec(pay))) { cid = m[1]; idx = +m[2]; }
+  else if ((m = /^cf:([a-z0-9-]+):([a-z0-9_-]+):(\d+)$/.exec(rid))) { cid = m[1]; nid = m[2]; idx = +m[3]; }
+  else return null;
+  const c = await getJ(env, "camp_" + cid, null); if (!c || !c.flow || c.status === "draft" || env.CAMPAIGNS_OFF === "1") return null;
+  const f = await getJ(env, "camp_flow_" + c.flow, null); if (!f) return null;
+  const k = await getJ(env, "camp_contact_" + d, null); if (!k) return null;
+  const sk = "camp_state_" + cid + "_" + d, st = await getJ(env, sk, { path: [] });
+  if (!nid) nid = st.followed_node || f.start;   // a template tap: the opener, or the follow-up template when that was the last one sent
+  const n = f.nodes[nid], opt = n && (n.buttons || n.rows || [])[idx]; if (!opt) return null;
+  const tag = nid + "." + opt.id;
+  if ((st.path || []).includes(tag)) return { cid, choice: tag, repeat: true };   // a double tap or a webhook retry
+  st.path = (st.path || []).concat([tag]); st.node = opt.next || nid; st.at = new Date(now).toISOString(); await putJ(env, sk, st);
+  await bump(env, cid, (x) => { x.branch = x.branch || {}; x.branch[tag] = (x.branch[tag] || 0) + 1; });
+  if (opt.consent) {
+    k.consents = k.consents || {};
+    k.consents[opt.consent.topic] = { value: opt.consent.value, at: new Date(now).toISOString(), cid, node: nid, choice: opt.id, wording: n.text || n.template || "" };
+    await putJ(env, "camp_contact_" + d, k);
+    const cl = await getJ(env, "camp_consentlog_" + d, []); cl.push(Object.assign({ topic: opt.consent.topic }, k.consents[opt.consent.topic])); await putJ(env, "camp_consentlog_" + d, cl.slice(-50));
+  }
+  if (opt.optout) { await optOut(env, d, "flow_button", { cid, choice: tag }, now); return { cid, choice: tag, optout: true }; }
+  const trail = []; if (opt.next) await flowRun(env, c, f, opt.next, k, deps, now, trail);
+  return { cid, choice: tag, trail };
+}
+// The ONE follow-up to a non-replier (a TEMPLATE: their window is shut). Never more than one per person per campaign.
+export async function flowFollowups(env, c, deps) {
+  const now = (deps && deps.now) || Date.now(), r = { id: c.id, followups: 0, skipped: {} };
+  const f = await getJ(env, "camp_flow_" + c.flow, null); if (!f || !f.followup || !inWindow(c, now) || env.CAMPAIGNS_OFF === "1") return r;
+  const n = f.nodes[f.followup.node], after = f.followup.after_hours * 3600000;
+  const ids = await getJ(env, "camp_msgs_" + c.id, []), cur = await getJ(env, "camp_fupos_" + c.id, 0);
+  const s24 = (await getJ(env, "camp_sent24", [])).filter((t) => now - t < DAY), shared = parseInt(env.CAMP_SHARED_CAP, 10) || DEFAULTS.shared;
+  const S = Object.assign(blankStats(), await getJ(env, "camp_stats_" + c.id, {})), today = dubaiDate(now);
+  let room = Math.min(c.batch || DEFAULTS.batch, (c.cap || DEFAULTS.cap) - (S.day[today] || 0), shared - s24.length), i = cur, sent = 0;
+  const fc = Object.assign({}, c, { template: n.template, lang: n.lang, vars: n.vars || [], header: n.header || null, qr: (n.buttons || []).length });
+  const f2 = (deps && deps.fetch) || fetch, graph = (deps && deps.graph) || "https://graph.facebook.com/v21.0", pid = phoneIdOf(env, c);
+  for (; i < ids.length && room > 0; i++) {
+    const m = await getJ(env, "camp_msg_" + ids[i], null); if (!m || m.fu) continue;
+    if (now - Date.parse(m.at) < after) break;   // the list is in send order: the rest are younger
+    const st = await getJ(env, "camp_state_" + c.id + "_" + m.d, null);
+    if (m.replied || m.optout || (st && st.path && st.path.length)) { r.skipped.replied = (r.skipped.replied || 0) + 1; continue; }
+    if (await env.MEETINGS.get("camp_optout_" + m.d)) { r.skipped.opted_out = (r.skipped.opted_out || 0) + 1; continue; }
+    const k = await getJ(env, "camp_contact_" + m.d, null); if (!k) continue;
+    m.fu = true; await putJ(env, "camp_msg_" + ids[i], m);   // marked BEFORE the send, so a retry can never make it two
+    let j = {}, ok = false;
+    try { const res = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(buildPayload(fc, k, "")) }); j = await res.json().catch(() => ({})); ok = res.ok && !!(j.messages && j.messages[0]); } catch (e) {}
+    if (ok) {
+      const w = j.messages[0].id; room--; sent++; s24.push(now);
+      await putJ(env, "camp_msg_" + w, { cid: c.id, d: m.d, at: new Date(now).toISOString(), st: "sent", fu: true, followup: true });
+      await putJ(env, "camp_state_" + c.id + "_" + m.d, Object.assign(st || { path: [] }, { node: f.followup.node, followed_node: f.followup.node }));
+      k.last_mkt = new Date(now).toISOString(); k.last_wamid = w; await putJ(env, "camp_contact_" + m.d, k);
+      const L = await getJ(env, "camp_msgs_" + c.id, []); L.push(w); await putJ(env, "camp_msgs_" + c.id, L);
+    }
+  }
+  await putJ(env, "camp_fupos_" + c.id, i); await putJ(env, "camp_sent24", s24);
+  if (sent) await bump(env, c.id, (x) => { x.sent += sent; x.followups = (x.followups || 0) + sent; x.day[today] = (x.day[today] || 0) + sent; });
+  r.followups = sent; return r;
+}
+// Dry walk of a flow for a list of choices (option ids). No KV, no Meta: exactly the payloads that would go out.
+export function simulateFlow(f, choices, k) {
+  const out = []; let nid = f.start, ci = 0;
+  for (let step = 0; nid && step < 30; step++) {
+    const n = f.nodes[nid]; if (!n) break;
+    if (n.type === "template") out.push({ node: nid, template: n.template, buttons: (n.buttons || []).map((b) => b.title) });
+    else out.push({ node: nid, type: n.type, payload: nodePayload("sim", nid, n, k, ""), handover: n.type === "handover" ? n.note : undefined });
+    const opts = n.buttons || n.rows;
+    if (opts) {
+      const o = opts.find((b) => b.id === choices[ci]); ci++;
+      if (!o) { out.push({ waiting_for: opts.map((b) => b.id) }); break; }
+      out.push({ chose: nid + "." + o.id, consent: o.consent, optout: o.optout || undefined }); if (o.optout) break; nid = o.next;
+    } else nid = n.next;
+  }
+  return out;
+}
+
+// ---------- PROJECT BRIEFS (/cb/<slug>) ----------
+// Built from the developer-availability group capture by scripts/build_camp_brief.py and stored as camp_brief_<slug>:
+//   {slug, project, developer, location, price, payment_plan, handover, unit_types, unit_sizes, highlights[], nearby[], images[], caveat, source{file, captured_at}}
+// Every field the capture did not state is the literal "to confirm"; the page never fills a gap with a figure.
+export const TBC = "to confirm";
+export async function briefRoute(request, env, url) {
+  const m = url.pathname.match(/^\/cb\/([a-z0-9-]{1,60})\/?$/); if (!m) return null;
+  const b = await getJ(env, "camp_brief_" + m[1], null); if (!b) return new Response("not found", { status: 404 });
+  const v = (x) => (x == null || x === "" || (Array.isArray(x) && !x.length)) ? TBC : Array.isArray(x) ? x.join(", ") : String(x);
+  const row = (lab, x) => { const t = v(x); return '<div class=bc><i>' + esc(lab) + '</i><b' + (t === TBC ? ' class=tbc' : "") + '>' + esc(t) + '</b></div>'; };
+  const imgs = (b.images || []).filter((u) => /^https:\/\//.test(u) || /^\/img\//.test(u)).slice(0, 4);
+  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(b.project || "Project brief") + '</title><meta name="robots" content="noindex">'
+    + '<style>body{margin:0;background:#FAF7F1;color:#1C2321;font-family:"IBM Plex Sans",system-ui,sans-serif;padding:20px 16px 40px}.w{max-width:560px;margin:0 auto}.tag{font:600 .68rem "IBM Plex Mono",monospace;letter-spacing:.14em;color:#8A6F3E}h1{font-family:Fraunces,serif;color:#0A4F4A;margin:4px 0 2px;font-size:1.7rem}.sub{color:#5F6B66;margin:0 0 14px}'
+    + '.g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.bc{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:10px;min-width:0}.bc i{display:block;font:600 .7rem "IBM Plex Sans",sans-serif;color:#8A6F3E;font-style:normal}.bc b{font-weight:600;overflow-wrap:anywhere}.bc b.tbc{color:#A33A2B;font-style:italic;font-weight:500}'
+    + 'img{width:100%;border-radius:12px;margin:10px 0 0}.cv{font-size:.75rem;color:#5F6B66;margin-top:14px}.ft{font-size:.78rem;color:#5F6B66;margin-top:18px;border-top:1px solid #E7E1D6;padding-top:10px}</style></head><body><div class=w>'
+    + '<div class=tag>PROJECT BRIEF</div><h1>' + esc(b.project || TBC) + '</h1><p class=sub>' + esc(v(b.developer)) + ' · ' + esc(v(b.location)) + '</p><div class=g>'
+    + row("Developer", b.developer) + row("Price", b.price) + row("Payment plan", b.payment_plan) + row("Handover", b.handover) + row("Unit types", b.unit_types) + row("Unit sizes", b.unit_sizes)
+    + row("Highlights", b.highlights) + row("Nearby", b.nearby) + '</div>' + imgs.map((u) => '<img loading=lazy alt="" src="' + esc(u) + '">').join("")
+    + '<p class=cv>' + esc(b.caveat || "Indicative information from the developer, subject to change and to official release.") + '</p>'
+    + '<p class=ft>Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397</p></div></body></html>';
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Robots-Tag": "noindex" } });
+}
