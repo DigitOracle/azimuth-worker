@@ -101,6 +101,11 @@ h1{font-family:Fraunces,Georgia,serif;font-size:1.7rem;font-weight:600;margin:.2
 .tl{position:relative;margin:0;padding:0 0 0 18px;list-style:none}.tl:before{content:"";position:absolute;left:5px;top:4px;bottom:4px;width:2px;background:var(--line)}
 .tl li{position:relative;margin:0 0 10px}.tl li:before{content:"";position:absolute;left:-17px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--card);border:2px solid var(--gold)}
 .tl .dt{font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--muted)}.tl .wt{font-size:.88rem}
+.tl .yh{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--gold);margin:12px 0 6px -18px}.tl .yh:before{display:none}
+.st{margin:12px 0 2px}.st h2{margin-bottom:6px}.st .bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:4px 0 2px}.st .bar i{display:block;height:100%;background:var(--gold)}.st .pl{font-size:.74rem;color:var(--muted)}
+.ms{display:flex;overflow-x:auto;padding:8px 0 4px;margin:8px 0 0;list-style:none;scroll-snap-type:x mandatory}.ms li{flex:0 0 auto;width:118px;position:relative;padding:20px 10px 0 0;scroll-snap-align:start}
+.ms li:before{content:"";position:absolute;top:5px;left:0;right:0;height:2px;background:var(--line)}.ms li:after{content:"";position:absolute;top:0;left:0;width:12px;height:12px;border-radius:50%;background:var(--card);border:2px solid var(--gold)}
+.ms li.pl:after{border-style:dashed;border-color:var(--muted)}.ms .y{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--gold)}.ms .l{font-size:.8rem;line-height:1.25;margin-top:2px}
 .more{width:100%;margin-top:4px}
 .empty{color:var(--muted);font-size:.86rem;margin:0}
 .legend summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;color:var(--soft);font-size:.86rem}
@@ -220,20 +225,42 @@ function pricesPanel(p){var P=p.prices;if(!P)return '<p class=empty>No registere
   return '<p class=cnt><b>'+esc(who)+': '+esc(P.name||"")+'</b><small>Registered deals for the '+(P.scope==="building"?"building":"whole project")+', not for this plot alone. Median per year; the small number under each bar is how many deals it rests on'+(dis?'. Where it had no deal that year, the lighter bar marked d is the district median':'')+'.</small></p>'
    +leg+'<h3 class=bh>'+ic("key")+'Annual rent (new contracts)</h3>'+chart(P,"rent")+'<h3 class=bh>'+ic("tag")+'Purchase price</h3>'+chart(P,"sale")
    +'<p class=note>Rent: new Ejari contracts for flats, renewals left out. Purchase: Land Department registered sales of flats, at the registered price. Deals to '+esc(dt(P.to))+'.</p>'}
-function bldgPanel(p){var pr=p.projects||[],one=pr.length===1?pr[0]:null;
-  var h=p.buildings.length?'<div class=fc>'+p.buildings.map(function(x,i){var u=[x.flats?num(x.flats)+" flats":"",x.shops?num(x.shops)+" shops":"",x.offices?num(x.offices)+" offices":""].filter(Boolean).join(", ");
-    return '<div class=lc'+(i>=6?' data-x hidden':'')+'><div class=ft><b>'+esc(x.name||("Building "+(x.no||"")))+'</b>'+dot(x.s)+'</div><div class=kv>'
-     +(x.floors?'<span><small>Floors</small>'+esc(x.floors)+'</span>':'')+(u?'<span><small>Units</small>'+esc(u)+'</span>':'')
-     +'<span><small>Completion</small>'+esc(one&&one.done?dt(one.done):(one&&one.due?"expected "+dt(one.due):(x.date?"registered "+dt(x.date):"not recorded")))+'</span>'
-     +'<span><small>Status</small>'+esc(one&&one.status?one.status:(x.date?"Registered":"Not recorded"))+'</span></div></div>'}).join("")+'</div>'+(p.buildings.length>6?'<button type=button class="btn more" data-more>Show all '+p.buildings.length+'</button>':''):'<p class=empty>No registered building is linked to this plot.</p>';
+// v696 (Kendall, 3 Nov 2026): the building's life as milestones, oldest first, from the timeline the builder already writes.
+var MS=[[/PLANNED completion/i,"Completion planned",1],[/start date/i,"Construction start",0],[/first sale registered[^]*off-plan/i,"First off-plan sale",0],[/first sale of a ready/i,"First ready-home sale",0],[/first sale registered/i,"First sale",0],[/first rent contract/i,"First tenancy",0],[/Buildings entered/i,"Buildings registered",0],[/recorded as complete|completion date recorded|completed on/i,"Completed",0]];
+function today(){return new Date().toISOString().slice(0,10)}
+function life(p){var L={ev:[]};(p.timeline||[]).forEach(function(x){var w=x.what||"",m=w.match(/construction (\d+)% complete/i);
+    if(m){if(!L.pctAt||x.date>L.pctAt){L.pct=+m[1];L.pctAt=x.date}L.ev.push({d:x.date,l:m[1]+"% built",pl:0});return}
+    for(var i=0;i<MS.length;i++){if(MS[i][0].test(w)){L.ev.push({d:x.date,l:MS[i][1],pl:MS[i][2]});if(MS[i][2])L.planned=x.date;else if(MS[i][1]==="Completed")L.done=x.date;return}}
+    L.ev.push({d:x.date,l:w.replace(/^The [^:]+ project: /,"").replace(/ \(.*$/,""),pl:0})});
+  L.ev.sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:0});
+  L.late=!!(L.planned&&L.planned<today()&&!L.done);L.ev.forEach(function(e){if(e.pl&&L.late)e.l="Completion was planned"});
+  L.ev.forEach(function(e){if(!L.ready&&/First tenancy|First ready-home sale/.test(e.l))L.ready=e.d});   // people living there or buying it ready outranks an older progress reading
+  if(L.ready&&L.pctAt&&L.ready<L.pctAt)L.ready=null;
+  if(L.ready)L.late=false;
+  L.status=L.done||L.pct>=100?"Complete":L.ready?"Handed over (homes rented or sold ready from "+dt(L.ready)+")":(L.pct!=null?"Under construction, "+L.pct+"% ("+dt(L.pctAt)+")":null);return L}
+function story(p){var L=life(p);if(!L.ev.length)return "";
+  var h='<div class=st><h2>'+ic("bldg")+'Building story</h2>';
+  if(L.ready)h+='<div class=pl>'+esc("Handed over: homes rented or sold ready from "+dt(L.ready)+(L.pct!=null&&L.pct<100?" (the last progress reading, "+L.pct+"% on "+dt(L.pctAt)+", is older)":""))+'</div>';
+  else if(L.pct!=null&&!L.done&&L.pct<100)h+='<div class=bar role=img aria-label="'+L.pct+' percent built"><i style="width:'+Math.max(2,Math.min(100,L.pct))+'%"></i></div><div class=pl>'+esc(L.pct+"% built as of "+dt(L.pctAt)+(L.planned?" · completion "+(L.late?"was planned for ":"planned for ")+dt(L.planned):""))+'</div>';
+  return h+'<ol class=ms>'+L.ev.map(function(e){return '<li'+(e.pl?' class=pl':'')+'><div class=y>'+esc(dt(e.d))+'</div><div class=l>'+esc(e.l)+'</div></li>'}).join("")+'</ol></div>'}
+function bldgPanel(p){var pr=p.projects||[],one=pr.length===1?pr[0]:null,L=life(p),many=p.buildings.length>1;
+  var bs=p.buildings.slice().sort(function(a,b){return (+a.no||0)-(+b.no||0)});
+  var h=bs.length?'<div class=fc>'+bs.map(function(x,i){var u=[x.flats?num(x.flats)+" flats":"flats not in the register",x.shops?num(x.shops)+" shops":"",x.offices?num(x.offices)+" offices":""].filter(Boolean).join(", ");
+    var done=(one&&one.done)||L.done||(L.ready?"handed over by "+dt(L.ready):""),due=(one&&one.due)||L.planned,st=(one&&one.status)||L.status;
+    return '<div class=lc'+(i>=6?' data-x hidden':'')+'><div class=ft><b>'+esc((x.name||"Building")+(x.no&&(many||!x.name)?" · Building "+x.no:""))+'</b>'+dot(x.s)+'</div><div class=kv>'
+     +(x.floors?'<span><small>Floors</small>'+esc(x.floors)+'</span>':'')+'<span><small>Units</small>'+esc(u)+'</span>'
+     +'<span><small>Completion</small>'+esc(done?(/^\d{4}-/.test(done)?dt(done):done):(due?(due<today()?"was planned for ":"planned for ")+dt(due):"not recorded"))+'</span>'
+     +'<span><small>Status</small>'+esc(st||"Registered, no progress on record")+'</span>'
+     +(x.date?'<span><small>In the register since</small>'+esc(dt(x.date))+'</span>':'')+'</div></div>'}).join("")+'</div>'+(bs.length>6?'<button type=button class="btn more" data-more>Show all '+bs.length+'</button>':''):'<p class=empty>No registered building is linked to this plot.</p>';
   if(pr.length>1)h+='<p class=note>'+pr.length+' construction projects on record; their dates are in the Timeline.</p>';
   return h}
-function tlPanel(p){return p.timeline.length?'<ol class=tl>'+p.timeline.map(function(x,i){return '<li'+(i>=8?' data-x hidden':'')+'><div class=dt>'+esc(dt(x.date))+'</div><div class=wt>'+esc(x.what)+' '+dot(x.s)+'</div></li>'}).join("")+'</ol>'+(p.timeline.length>8?'<button type=button class="btn more" data-more>Show all '+p.timeline.length+'</button>':''):'<p class=empty>No dated events on record.</p>'}
+function tlPanel(p){var t=(p.timeline||[]).slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0});if(!t.length)return '<p class=empty>No dated events on record.</p>';   // v696 - oldest first, one heading per year
+  var y0="",h='<ol class=tl>';t.forEach(function(x){var y=String(x.date||"").slice(0,4);if(y!==y0){h+='<li class=yh aria-hidden=true>'+esc(y)+'</li>';y0=y}h+='<li><div class=dt>'+esc(dt(x.date))+'</div><div class=wt>'+esc(x.what)+' '+dot(x.s)+'</div></li>'});return h+'</ol>'}
 function render(){var p=CUR;if(!p)return;var ttl="Plot "+(p.parcel||p.plot_no||p.id.replace("naj:plot:",""));document.title=ttl+" — Plot passport";
   if(TABFOR!==p.id){TABFOR=p.id;TAB=(p.flats&&p.flats.items&&p.flats.items.length)?"flats":"bldg"}
   var dn=CTX.d?CTX.d.name:(p.area_name||"District"),gn=CTX.g?CTX.g.name:null;
   var h='<nav class=crumb id=pp-crumb aria-label="Where this plot sits"><button type=button data-crumb=d>'+esc(dn)+'</button><span aria-hidden=true>›</span>'+(gn?'<button type=button data-crumb=g>'+esc(gn)+'</button><span aria-hidden=true>›</span>':'')+'<span aria-current=page>'+esc(ttl)+'</span></nav>';
-  h+='<section class="card sum" id=pp-sum><p class=t>'+esc(ttl)+'</p><div class=w>'+esc([p.area_name,p.master||p.project].filter(function(v,i,a){return v&&a.indexOf(v)===i}).join(" · "))+'</div><p>'+esc(sentence(p))+'</p>'
+  h+='<section class="card sum" id=pp-sum><p class=t>'+esc(ttl)+'</p><div class=w>'+esc([p.area_name,p.master||p.project].filter(function(v,i,a){return v&&a.indexOf(v)===i}).join(" · "))+'</div><p>'+esc(sentence(p))+'</p>'+story(p)
    +'<div class=acts><a class="btn pri" target=_blank rel=noopener href="/plot_passport/report?'+kq()+'&id='+encodeURIComponent(p.id)+'">'+ic("print")+'Research report</a><button type=button class=btn id=ppcopy>'+ic("copy")+'Copy link</button></div>'
    +(p.flags&&p.flags.length?'<p class=flagl>'+ic("flag")+'<span>'+(p.flags.length===1?"1 research flag on this plot":p.flags.length+" research flags on this plot")+' — <a href="/data_checks?'+kq()+'">see Data checks</a></span></p>':'')+'</section>';
   var nf=(p.flats&&p.flats.items)?(p.flats.total||p.flats.items.length):0;
