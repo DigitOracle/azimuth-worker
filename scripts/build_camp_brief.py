@@ -139,7 +139,7 @@ def main():
     json.dump(brief, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(json.dumps(brief, ensure_ascii=False, indent=1))
     print("\nwrote", os.path.abspath(p))
-    print("to store it (NOT run): npx wrangler kv key put --env azimuth2 --binding MEETINGS camp_brief_" + a.slug + " --path " + os.path.abspath(p) + " --remote")
+    print("to store it (NOT run): npx wrangler kv key put --env azimuth2 --binding MEETINGS camp_brief_" + a.slug + " --path " + os.path.abspath(p))
 
 
 if __name__ == "__main__":

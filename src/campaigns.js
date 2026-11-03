@@ -174,6 +174,7 @@ async function autoStop(env, cid, s, now) {
 export async function campWebhook(env, body, deps) {
   const out = { statuses: 0, optouts: 0, replies: 0, taps: 0, stopped: "" };
   try {
+    const pv = await campPreview(env, body, deps); if (pv && pv.consumed) { out.consumed = true; out.preview = pv; return out; }
     const now = (deps && deps.now) || Date.now();
     const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
     if (!val) return out;
@@ -587,6 +588,7 @@ const NODE_TYPES = ["template", "buttons", "list", "text", "doc", "brief", "hand
 export function cleanFlow(x) {
   const err = [], f = { id: String((x && x.id) || ""), start: String((x && x.start) || ""), nodes: {} };
   if (!ID_RE.test(f.id)) err.push("flow id: lowercase letters, digits and dashes");
+  if (x && /^[a-z0-9-]{1,40}$/.test(String(x.facts || ""))) f.facts = String(x.facts);
   if (x && Number(x.freq_days) > 0) f.freq_days = Math.min(60, Math.round(Number(x.freq_days)));
   if (x && x.followup && x.followup.node) f.followup = { after_hours: Math.max(12, Math.min(24 * 14, Number(x.followup.after_hours) || 72)), node: String(x.followup.node) };
   const N = (x && x.nodes) || {};
@@ -594,7 +596,7 @@ export function cleanFlow(x) {
     const n = N[id] || {}; if (!/^[a-z0-9_-]{1,24}$/.test(id)) { err.push("node id " + id); continue; }
     if (!NODE_TYPES.includes(n.type)) { err.push(id + ": type " + n.type); continue; }
     const o = { type: n.type };
-    for (const k of ["text", "note", "template", "lang", "button", "next", "brief"]) if (n[k] != null) o[k] = String(n[k]).slice(0, k === "text" ? 1000 : 200);
+    for (const k of ["text", "note", "template", "lang", "button", "next", "brief", "body"]) if (n[k] != null) o[k] = String(n[k]).slice(0, k === "text" || k === "body" ? 1024 : 200);
     if (n.vars) o.vars = n.vars.map(String);
     if (n.header) o.header = n.header;
     if (n.link) { o.link = cleanTarget(n.link); if (!o.link) err.push(id + ": link must be https"); }
@@ -624,21 +626,24 @@ export function cleanFlow(x) {
   for (const [id, n] of Object.entries(f.nodes)) for (const nx of [n.next].concat((n.buttons || n.rows || []).map((b) => b.next))) if (nx && !f.nodes[nx]) err.push(id + ": next " + nx + " does not exist");
   return { f, err };
 }
-const fill = (t, k) => String(t || "").replace(/\{first\}/g, firstName(k.name)).replace(/\{name\}/g, k.name || "there").replace(/\{company\}/g, k.company || "your company");
+export const factText = (facts, key) => { const f = facts && facts[key]; const v = f && typeof f === "object" && "value" in f ? f.value : f; return v == null || v === "" || typeof v === "object" ? TBC : String(v); };
+const fill = (t, k, facts) => String(t || "").replace(/\{first\}/g, firstName(k.name)).replace(/\{name\}/g, k.name || "there").replace(/\{company\}/g, k.company || "your company").replace(/\{\{1\}\}/g, firstName(k.name)).replace(/\{fact:([a-z0-9_]+)\}/g, (m, key) => factText(facts, key));
 const originOf = (env, deps) => String(env.PUBLIC_ORIGIN || (deps && deps.origin) || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "");
 // The payload for one free-form node (no send): what flowRun posts and what the simulator returns.
-export function nodePayload(cid, nid, n, k, linkUrl) {
+export function nodePayload(cid, nid, n, k, linkUrl, facts, pfx) {
+  pfx = pfx || "cf"; const head = pfx === "pv" ? "TEST PREVIEW\n\n" : "";
   const to = DIG(k.e164);
-  if (n.type === "buttons") return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: fill(n.text, k) },
-    action: { buttons: n.buttons.map((b, i) => ({ type: "reply", reply: { id: "cf:" + cid + ":" + nid + ":" + i, title: b.title } })) } } };
-  if (n.type === "list") return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "list", body: { text: fill(n.text, k) },
-    action: { button: (n.button || "Choose").slice(0, 20), sections: [{ title: "Options", rows: n.rows.map((r, i) => Object.assign({ id: "cf:" + cid + ":" + nid + ":" + i, title: r.title }, r.description ? { description: r.description } : {})) }] } } };
-  if (n.type === "doc" || n.type === "brief") return { messaging_product: "whatsapp", to, type: "text", text: { body: fill(n.text, k) + "\n" + (linkUrl || n.link || ("/cb/" + n.brief)), preview_url: true } };
-  if ((n.type === "text" || n.type === "end" || n.type === "handover") && n.text) return { messaging_product: "whatsapp", to, type: "text", text: { body: fill(n.text, k) } };
+  if (n.type === "buttons") return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: head + fill(n.text, k, facts) },
+    action: { buttons: n.buttons.map((b, i) => ({ type: "reply", reply: { id: pfx + ":" + cid + ":" + nid + ":" + i, title: b.title } })) } } };
+  if (n.type === "list") return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "list", body: { text: head + fill(n.text, k, facts) },
+    action: { button: (n.button || "Choose").slice(0, 20), sections: [{ title: "Options", rows: n.rows.map((r, i) => Object.assign({ id: pfx + ":" + cid + ":" + nid + ":" + i, title: r.title }, r.description ? { description: r.description } : {})) }] } } };
+  if (n.type === "doc" || n.type === "brief") return { messaging_product: "whatsapp", to, type: "text", text: { body: head + fill(n.text, k, facts) + "\n" + (linkUrl || n.link || ("/cb/" + n.brief)), preview_url: true } };
+  if ((n.type === "text" || n.type === "end" || n.type === "handover") && n.text) return { messaging_product: "whatsapp", to, type: "text", text: { body: head + fill(n.text, k, facts) } };
   return null;
 }
 // Walk from node nid: send it, and keep going through nodes with no options (text/doc/brief/handover), at most 6 steps.
 async function flowRun(env, c, f, nid, k, deps, now, trail) {
+  const facts = f.facts ? await getJ(env, "camp_facts_" + f.facts, {}) : {};
   const f2 = (deps && deps.fetch) || fetch, graph = (deps && deps.graph) || "https://graph.facebook.com/v21.0", pid = phoneIdOf(env, c), d = DIG(k.e164);
   for (let step = 0; nid && step < 6; step++) {
     const n = f.nodes[nid]; if (!n || n.type === "template") break;
@@ -651,7 +656,7 @@ async function flowRun(env, c, f, nid, k, deps, now, trail) {
     }
     let link = "";
     if (n.type === "doc" || n.type === "brief") { const target = n.type === "brief" ? originOf(env, deps) + "/cb/" + n.brief : n.link; const code = await makeLink(env, c.id, d, target); link = originOf(env, deps) + "/c/" + code; }
-    const payload = nodePayload(c.id, nid, n, k, link);
+    const payload = nodePayload(c.id, nid, n, k, link, facts);
     if (payload) {
       let ok = false, code = 0;
       try { const r = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -729,7 +734,7 @@ export function simulateFlow(f, choices, k) {
   for (let step = 0; nid && step < 30; step++) {
     const n = f.nodes[nid]; if (!n) break;
     if (n.type === "template") out.push({ node: nid, template: n.template, buttons: (n.buttons || []).map((b) => b.title) });
-    else out.push({ node: nid, type: n.type, payload: nodePayload("sim", nid, n, k, ""), handover: n.type === "handover" ? n.note : undefined });
+    else out.push({ node: nid, type: n.type, payload: nodePayload("sim", nid, n, k, "", k.facts), handover: n.type === "handover" ? n.note : undefined });
     const opts = n.buttons || n.rows;
     if (opts) {
       const o = opts.find((b) => b.id === choices[ci]); ci++;
@@ -745,20 +750,99 @@ export function simulateFlow(f, choices, k) {
 //   {slug, project, developer, location, price, payment_plan, handover, unit_types, unit_sizes, highlights[], nearby[], images[], caveat, source{file, captured_at}}
 // Every field the capture did not state is the literal "to confirm"; the page never fills a gap with a figure.
 export const TBC = "to confirm";
+const BRIEF_ROWS = [["developer", "Developer"], ["developer_register", "Developer (DLD register)"], ["location", "Location"], ["homes", "Homes"], ["units_register", "Units (DLD register)"],
+  ["price", "Price"], ["price_list", "Price list"], ["compare_pja", "Against Palm Jebel Ali"], ["payment_plan", "Payment plan"], ["handover", "Handover"], ["unit_types", "Unit types"],
+  ["unit_types_brochure", "Unit types (brochure)"], ["unit_sizes", "Unit sizes"], ["dld_register", "DLD register"], ["highlights", "Highlights"], ["nearby", "Nearby"]];
 export async function briefRoute(request, env, url) {
   const m = url.pathname.match(/^\/cb\/([a-z0-9-]{1,60})\/?$/); if (!m) return null;
   const b = await getJ(env, "camp_brief_" + m[1], null); if (!b) return new Response("not found", { status: 404 });
-  const v = (x) => (x == null || x === "" || (Array.isArray(x) && !x.length)) ? TBC : Array.isArray(x) ? x.join(", ") : String(x);
-  const row = (lab, x) => { const t = v(x); return '<div class=bc><i>' + esc(lab) + '</i><b' + (t === TBC ? ' class=tbc' : "") + '>' + esc(t) + '</b></div>'; };
+  const v = (x) => { const y = x && typeof x === "object" && !Array.isArray(x) && "value" in x ? x.value : x;
+    return (y == null || y === "" || (Array.isArray(y) && !y.length)) ? TBC : Array.isArray(y) ? y.map((e) => typeof e === "object" ? Object.values(e).join(" ") : e).join(", ") : String(y); };
+  const srcOf = (x) => x && typeof x === "object" && !Array.isArray(x) && x.source ? x.source + (x.as_of ? ", " + x.as_of : "") : "";
+  const row = (key, lab) => { if (!(key in b) && !["developer", "price", "payment_plan", "handover", "unit_types"].includes(key)) return ""; const t = v(b[key]), sc = srcOf(b[key]);
+    return '<div class=bc><i>' + esc(lab) + '</i><b' + (t === TBC ? ' class=tbc' : "") + '>' + esc(t) + '</b>' + (sc ? '<em>' + esc(sc) + '</em>' : "") + '</div>'; };
   const imgs = (b.images || []).filter((u) => /^https:\/\//.test(u) || /^\/img\//.test(u)).slice(0, 4);
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(b.project || "Project brief") + '</title><meta name="robots" content="noindex">'
     + '<style>body{margin:0;background:#FAF7F1;color:#1C2321;font-family:"IBM Plex Sans",system-ui,sans-serif;padding:20px 16px 40px}.w{max-width:560px;margin:0 auto}.tag{font:600 .68rem "IBM Plex Mono",monospace;letter-spacing:.14em;color:#8A6F3E}h1{font-family:Fraunces,serif;color:#0A4F4A;margin:4px 0 2px;font-size:1.7rem}.sub{color:#5F6B66;margin:0 0 14px}'
-    + '.g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.bc{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:10px;min-width:0}.bc i{display:block;font:600 .7rem "IBM Plex Sans",sans-serif;color:#8A6F3E;font-style:normal}.bc b{font-weight:600;overflow-wrap:anywhere}.bc b.tbc{color:#A33A2B;font-style:italic;font-weight:500}'
+    + '.g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.bc{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:10px;min-width:0}.bc i{display:block;font:600 .7rem "IBM Plex Sans",sans-serif;color:#8A6F3E;font-style:normal}.bc b{font-weight:600;overflow-wrap:anywhere}.bc b.tbc{color:#A33A2B;font-style:italic;font-weight:500}.bc em{display:block;font:400 .62rem "IBM Plex Mono",monospace;color:#5F6B66;font-style:normal;margin-top:4px;overflow-wrap:anywhere}'
     + 'img{width:100%;border-radius:12px;margin:10px 0 0}.cv{font-size:.75rem;color:#5F6B66;margin-top:14px}.ft{font-size:.78rem;color:#5F6B66;margin-top:18px;border-top:1px solid #E7E1D6;padding-top:10px}</style></head><body><div class=w>'
     + '<div class=tag>PROJECT BRIEF</div><h1>' + esc(b.project || TBC) + '</h1><p class=sub>' + esc(v(b.developer)) + ' · ' + esc(v(b.location)) + '</p><div class=g>'
-    + row("Developer", b.developer) + row("Price", b.price) + row("Payment plan", b.payment_plan) + row("Handover", b.handover) + row("Unit types", b.unit_types) + row("Unit sizes", b.unit_sizes)
-    + row("Highlights", b.highlights) + row("Nearby", b.nearby) + '</div>' + imgs.map((u) => '<img loading=lazy alt="" src="' + esc(u) + '">').join("")
+    + BRIEF_ROWS.map((r) => row(r[0], r[1])).join("") + '</div>' + imgs.map((u) => '<img loading=lazy alt="" src="' + esc(u) + '">').join("")
     + '<p class=cv>' + esc(b.caveat || "Indicative information from the developer, subject to change and to official release.") + '</p>'
     + '<p class=ft>Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397</p></div></body></html>';
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Robots-Tag": "noindex" } });
+}
+
+// ---------- PREVIEW MODE (v724, Kendall 3 Nov: Najjuko walks the flow on her own phone and judges the wording) ----------
+// She types "campaign preview" (or "preview pja", or "preview <flow id>") to the number she already talks to Azimuth on. No Meta template is
+// approved yet, so everything goes as free-form interactive messages inside her open 24-hour window, each starting "TEST PREVIEW".
+// Only WA_ALLOWED (Najjuko), WA_DESK_OWNER (Kendall) and CAMP_PREVIEW_NUMBERS can start it. It is logged in camp_preview_* ONLY: never in
+// campaign stats, never in camp_sent24 (the shared cap), never an opt-out, never a handover. Without the keyword or a pv: button nothing changes.
+// If the flow is not in KV the event is NOT consumed, so the instance behaves exactly as before.
+const PV_KEY = /^(?:campaign\s+preview|preview\s+campaign|preview(?:\s+([a-z0-9-]{2,40}))?)$/i;
+const PV_ALIAS = { pja: "pja-owners" };
+const PV_NAME = "Ahmed";   // the sample owner name in the template examples; {{1}} becomes this in a preview
+export const previewAllowed = (env, d) => [DIG(env.WA_ALLOWED), DIG(env.WA_DESK_OWNER)].concat(String(env.CAMP_PREVIEW_NUMBERS || "").split(",").map(DIG)).filter(Boolean).includes(DIG(d));
+const shortTitle = (t, n) => { t = String(t || ""); if (t.length <= n) return t; const c = t.slice(0, n - 1); return c.slice(0, Math.max(c.lastIndexOf(" "), 8)) + "\u2026"; };
+// a template node as an interactive message: buttons when it fits (3 options, 20 chars), otherwise a list (full wording in the description)
+export function previewTemplatePayload(f, nid, to, facts) {
+  const n = f.nodes[nid], opts = n.buttons || [], k = { name: PV_NAME };
+  const text = "TEST PREVIEW (template " + n.template + ")\n\n" + fill(n.body || n.text || "(no draft wording stored for this template)", k, facts);
+  if (opts.length <= 3 && opts.every((b) => b.title.length <= 20)) return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text }, action: { buttons: opts.map((b, i) => ({ type: "reply", reply: { id: "pv:" + f.id + ":" + nid + ":" + i, title: b.title } })) } } };
+  return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "list", body: { text }, action: { button: "Choose", sections: [{ title: "Your options", rows: opts.map((b, i) => Object.assign({ id: "pv:" + f.id + ":" + nid + ":" + i, title: shortTitle(b.title, 24) }, b.title.length > 24 ? { description: b.title.slice(0, 72) } : {})) }] } } };
+}
+const pvControls = (f, to, note) => ({ messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text: "TEST PREVIEW: end of this branch." + (note ? "\n\n" + note : "") + "\n\nTry another branch?" },
+  action: { buttons: [{ type: "reply", reply: { id: "pv:" + f.id + ":__:0", title: "Start again" } }].concat(f.followup ? [{ type: "reply", reply: { id: "pv:" + f.id + ":__:2", title: "See the follow-up" } }] : []).concat([{ type: "reply", reply: { id: "pv:" + f.id + ":__:1", title: "End preview" } }]) } } });
+async function pvSend(env, deps, payload, pid) {
+  if (deps && typeof deps.post === "function") return deps.post(env, payload, pid);
+  const graph = (deps && deps.graph) || "https://graph.facebook.com/v21.0";
+  return ((deps && deps.fetch) || fetch)(graph + "/" + (pid || DIG(env.WA_PHONE_ID)) + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+}
+async function pvLog(env, d, flow, what, now) {
+  const L = await getJ(env, "camp_preview_log", []); L.unshift({ at: new Date(now).toISOString(), who: d.slice(-4), flow, what }); await putJ(env, "camp_preview_log", L.slice(0, 300));
+}
+export async function campPreview(env, body, deps) {
+  if (env.CAMP_PREVIEW === "off") return null;
+  const now = (deps && deps.now) || Date.now();
+  const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
+  const msg = val && val.messages && val.messages[0]; if (!msg) return null;
+  const d = DIG(msg.from); if (!previewAllowed(env, d)) return null;
+  const pid = DIG(val.metadata && val.metadata.phone_number_id);
+  let flowId = "", nid = "", idx = -1, m;
+  const txt = msg.type === "text" ? String((msg.text && msg.text.body) || "").trim() : "";
+  const rid = msg.type === "interactive" && msg.interactive ? String(((msg.interactive.button_reply || msg.interactive.list_reply) || {}).id || "") : "";
+  if (txt && (m = PV_KEY.exec(txt))) flowId = m[1] ? (PV_ALIAS[m[1].toLowerCase()] || m[1].toLowerCase()) : String(env.CAMP_PREVIEW_FLOW || "pja-owners");
+  else if ((m = /^pv:([a-z0-9-]+):([a-z0-9_-]+|__):(\d+)$/.exec(rid))) { flowId = m[1]; nid = m[2]; idx = +m[3]; }
+  else return null;
+  const f = await getJ(env, "camp_flow_" + flowId, null); if (!f) return null;   // no flow here: not ours, behave as before
+  if (msg.id) { const sk = "camp_preview_seen_" + msg.id; if (await env.MEETINGS.get(sk)) return { consumed: true, repeat: true }; await env.MEETINGS.put(sk, "1", { expirationTtl: 3 * 86400 }); }
+  const facts = f.facts ? await getJ(env, "camp_facts_" + f.facts, {}) : {};
+  const sent = [], send = async (p) => { sent.push(p); try { await pvSend(env, deps, p, pid); } catch (e) {} };
+  const k = { name: PV_NAME, e164: "+" + d };
+  const stK = "camp_preview_" + d, st = await getJ(env, stK, { flow: flowId, path: [] });
+  const start = async () => { await putJ(env, stK, { flow: flowId, path: [], at: new Date(now).toISOString() }); await send(previewTemplatePayload(f, f.start, d, facts)); await pvLog(env, d, flowId, "start", now); };
+  if (!nid) { await start(); return { consumed: true, sent }; }
+  if (nid === "__") {
+    if (idx === 0) await start();
+    else if (idx === 2 && f.followup) { await send(previewTemplatePayload(f, f.followup.node, d, facts)); await pvLog(env, d, flowId, "followup", now); }
+    else { await send({ messaging_product: "whatsapp", to: d, type: "text", text: { body: "TEST PREVIEW ended. Type \"campaign preview\" to start again." } }); await pvLog(env, d, flowId, "end", now); }
+    return { consumed: true, sent };
+  }
+  const n = f.nodes[nid], opt = n && (n.buttons || n.rows || [])[idx]; if (!opt) return { consumed: true, sent };
+  st.path = (st.path || []).concat([nid + "." + opt.id]); st.at = new Date(now).toISOString(); await putJ(env, stK, st);
+  await pvLog(env, d, flowId, nid + "." + opt.id, now);
+  if (opt.consent) await send({ messaging_product: "whatsapp", to: d, type: "text", text: { body: "TEST PREVIEW: here the live campaign would record consent \"" + opt.consent.topic + "\" = " + (opt.consent.value ? "yes" : "no") + " (nothing recorded in a preview)." } });
+  if (opt.optout || isOptOutText(opt.title)) { await send({ messaging_product: "whatsapp", to: d, type: "text", text: { body: "TEST PREVIEW (no opt-out recorded)\n\n" + OPTOUT_REPLY } }); await send(pvControls(f, d, "")); return { consumed: true, sent }; }
+  let cur = opt.next;
+  for (let step = 0; cur && step < 8; step++) {
+    const x = f.nodes[cur]; if (!x) break;
+    if (x.type === "template") { await send(previewTemplatePayload(f, cur, d, facts)); return { consumed: true, sent }; }
+    const link = x.type === "brief" ? originOf(env, deps) + "/cb/" + x.brief : x.type === "doc" ? x.link : "";
+    const p = nodePayload(f.id, cur, x, k, link, facts, "pv"); if (p) await send(p);
+    if (x.type === "handover") await send({ messaging_product: "whatsapp", to: d, type: "text", text: { body: "TEST PREVIEW: in the live campaign this is handed to Najjuko: " + (x.note || "") + " (nothing recorded in a preview)." } });
+    if (x.buttons || x.rows) return { consumed: true, sent };
+    cur = x.next;
+  }
+  await send(pvControls(f, d, ""));
+  return { consumed: true, sent };
 }

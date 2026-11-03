@@ -2,45 +2,222 @@
  "id": "pja-owners",
  "start": "s1",
  "freq_days": 14,
- "followup": { "after_hours": 72, "node": "nudge" },
+ "followup": {
+  "after_hours": 72,
+  "node": "nudge"
+ },
  "nodes": {
-  "s1": { "type": "template", "template": "fnrealty_pja_owner_intro", "lang": "en", "vars": ["name"],
+  "s1": {
+   "type": "template",
+   "template": "najjuko_pja_owner_intro",
+   "lang": "en",
+   "vars": [
+    "name"
+   ],
    "buttons": [
-    { "id": "handover", "title": "Keeping it until handover", "next": "a1" },
-    { "id": "selling", "title": "Open to selling", "next": "b1" },
-    { "id": "palmsprings", "title": "Another Palm investment", "next": "c1" },
-    { "id": "notnow", "title": "Not now", "next": "d1" },
-    { "id": "stop", "title": "STOP", "optout": true }
-   ] },
-  "a1": { "type": "text", "text": "Thank you {first}. If it helps, I can support you with handover, snagging and getting the home ready to lease when the time comes.", "next": "a2" },
-  "a2": { "type": "buttons", "text": "Would you like a short Palm Jebel Ali market update every two weeks?",
+    {
+     "id": "handover",
+     "title": "Keeping it until handover",
+     "next": "a1"
+    },
+    {
+     "id": "selling",
+     "title": "Open to selling",
+     "next": "b1"
+    },
+    {
+     "id": "palmsprings",
+     "title": "Another Palm investment",
+     "next": "c1"
+    },
+    {
+     "id": "notnow",
+     "title": "Not now",
+     "next": "d1"
+    },
+    {
+     "id": "stop",
+     "title": "Stop messages",
+     "optout": true
+    }
+   ],
+   "body": "Hi {{1}}, Najjuko here. I specialise in Palm Jebel Ali. Quick question about your unit: what’s your plan for it right now?\n\nTotally your call, and you can tap Stop anytime."
+  },
+  "a1": {
+   "type": "text",
+   "text": "Thank you {first}. If it helps, I can support you with handover, snagging and getting the home ready to lease when the time comes.",
+   "next": "a2"
+  },
+  "a2": {
+   "type": "buttons",
+   "text": "Would you like a short Palm Jebel Ali market update every two weeks?",
    "buttons": [
-    { "id": "yes", "title": "Yes please", "consent": { "topic": "market-updates", "value": true }, "next": "a3" },
-    { "id": "no", "title": "No thanks", "consent": { "topic": "market-updates", "value": false }, "next": "endok" }
-   ] },
-  "a3": { "type": "end", "text": "Lovely, you will get one update every two weeks. Reply STOP at any time." },
-  "endok": { "type": "end", "text": "No problem at all. I am here whenever you need me." },
-  "b1": { "type": "list", "text": "Thank you {first}. Is your unit already listed with an agent?", "button": "Choose",
-   "rows": [ { "id": "listed", "title": "Already listed", "next": "b2" }, { "id": "notlisted", "title": "Not listed yet", "next": "b4" } ] },
-  "b2": { "type": "buttons", "text": "With how many agents?",
-   "buttons": [ { "id": "one", "title": "1 agent", "next": "b3" }, { "id": "two", "title": "2 agents", "next": "b3" }, { "id": "three", "title": "3 or more", "next": "bh" } ] },
-  "b3": { "type": "text", "text": "Would you consider a time-boxed trial listing with us, 60 to 90 days, removed if it has not sold? I will call you to agree the details.", "next": "bh" },
-  "b4": { "type": "text", "text": "I can prepare a valuation for your unit from the latest Najma market data, at no cost.", "next": "bh" },
-  "bh": { "type": "handover", "note": "Selling path: call the owner. Nothing agreed yet.", "text": "Thank you. I will be in touch personally to take it from here." },
-  "c1": { "type": "brief", "brief": "palm-springs", "text": "Here is a one-page brief on Palm Springs, the next launch nearby:", "next": "c2" },
-  "c2": { "type": "buttons", "text": "Would you like a short call to talk it through?",
-   "buttons": [ { "id": "call", "title": "Book a call", "next": "ch" }, { "id": "later", "title": "Maybe later", "next": "endok" } ] },
-  "ch": { "type": "handover", "note": "Palm Springs: owner asked for a call.", "text": "Perfect, I will message you to find a time." },
-  "d1": { "type": "buttons", "text": "Of course. May I send you a short market update every two weeks instead?",
+    {
+     "id": "yes",
+     "title": "Yes please",
+     "consent": {
+      "topic": "market-updates",
+      "value": true
+     },
+     "next": "a3"
+    },
+    {
+     "id": "no",
+     "title": "No thanks",
+     "consent": {
+      "topic": "market-updates",
+      "value": false
+     },
+     "next": "endok"
+    }
+   ]
+  },
+  "a3": {
+   "type": "end",
+   "text": "Lovely, you will get one update every two weeks. Reply STOP at any time."
+  },
+  "endok": {
+   "type": "end",
+   "text": "No problem at all. I am here whenever you need me."
+  },
+  "b1": {
+   "type": "list",
+   "text": "Thank you {first}. Is your unit already listed with an agent?",
+   "button": "Choose",
+   "rows": [
+    {
+     "id": "listed",
+     "title": "Already listed",
+     "next": "b2"
+    },
+    {
+     "id": "notlisted",
+     "title": "Not listed yet",
+     "next": "b4"
+    }
+   ]
+  },
+  "b2": {
+   "type": "buttons",
+   "text": "With how many agents?",
    "buttons": [
-    { "id": "yes", "title": "Yes please", "consent": { "topic": "market-updates", "value": true }, "next": "a3" },
-    { "id": "no", "title": "No thanks", "consent": { "topic": "market-updates", "value": false }, "next": "endok" }
-   ] },
-  "nudge": { "type": "template", "template": "fnrealty_market_updates_ask", "lang": "en", "vars": ["name"],
+    {
+     "id": "one",
+     "title": "1 agent",
+     "next": "b3"
+    },
+    {
+     "id": "two",
+     "title": "2 agents",
+     "next": "b3"
+    },
+    {
+     "id": "three",
+     "title": "3 or more",
+     "next": "bh"
+    }
+   ]
+  },
+  "b3": {
+   "type": "text",
+   "text": "Would you consider a time-boxed trial listing with us, 60 to 90 days, removed if it has not sold? I will call you to agree the details.",
+   "next": "bh"
+  },
+  "b4": {
+   "type": "text",
+   "text": "I can prepare a valuation for your unit from the latest Najma market data, at no cost. For context, DLD records show {fact:pja_home_sales}, at a median of {fact:pja_median_psf}.",
+   "next": "bh"
+  },
+  "bh": {
+   "type": "handover",
+   "note": "Selling path: call the owner. Nothing agreed yet.",
+   "text": "Thank you. I will be in touch personally to take it from here."
+  },
+  "c1": {
+   "type": "brief",
+   "brief": "palm-springs",
+   "text": "Here is a one-page brief on Palm Springs, the next launch nearby:",
+   "next": "c2"
+  },
+  "c2": {
+   "type": "buttons",
+   "text": "Would you like a short call to talk it through?",
    "buttons": [
-    { "id": "yes", "title": "Yes please", "consent": { "topic": "market-updates", "value": true }, "next": "a3" },
-    { "id": "no", "title": "No thanks", "consent": { "topic": "market-updates", "value": false }, "next": "endok" },
-    { "id": "stop", "title": "STOP", "optout": true }
-   ] }
- }
+    {
+     "id": "call",
+     "title": "Book a call",
+     "next": "ch"
+    },
+    {
+     "id": "later",
+     "title": "Maybe later",
+     "next": "endok"
+    }
+   ]
+  },
+  "ch": {
+   "type": "handover",
+   "note": "Palm Springs: owner asked for a call.",
+   "text": "Perfect, I will message you to find a time."
+  },
+  "d1": {
+   "type": "buttons",
+   "text": "Of course. May I send you a short market update every two weeks instead?",
+   "buttons": [
+    {
+     "id": "yes",
+     "title": "Yes please",
+     "consent": {
+      "topic": "market-updates",
+      "value": true
+     },
+     "next": "a3"
+    },
+    {
+     "id": "no",
+     "title": "No thanks",
+     "consent": {
+      "topic": "market-updates",
+      "value": false
+     },
+     "next": "endok"
+    }
+   ]
+  },
+  "nudge": {
+   "type": "template",
+   "template": "najjuko_market_updates_ask",
+   "lang": "en",
+   "vars": [
+    "name"
+   ],
+   "buttons": [
+    {
+     "id": "yes",
+     "title": "Yes please",
+     "consent": {
+      "topic": "market-updates",
+      "value": true
+     },
+     "next": "a3"
+    },
+    {
+     "id": "no",
+     "title": "No thanks",
+     "consent": {
+      "topic": "market-updates",
+      "value": false
+     },
+     "next": "endok"
+    },
+    {
+     "id": "stop",
+     "title": "Stop messages",
+     "optout": true
+    }
+   ],
+   "body": "Hi {{1}}, Najjuko again. No need to reply to my last message. Would you like a short Palm Jebel Ali market update every two weeks? Three numbers, what they mean, nothing more."
+  }
+ },
+ "facts": "pja"
 }
