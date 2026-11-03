@@ -764,6 +764,7 @@ export async function workRoute(request, env, url, deps) {
   if (!p.startsWith("/momo/work")) return null;
   const key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  if (p.startsWith("/momo/work/passports")) return bppRoute(request, env, url, deps);   // v697 - Building Passports: Najjuko and Kendall (its own gate)
   if (p.startsWith("/momo/work/presentations")) return presRoute(request, env, url, deps);   // v684 - Presentations: Najjuko and Kendall (its own gate)
   if (p.startsWith("/momo/work/brokers")) return brokersRoute(request, env, url, deps);   // v682 - Brokers: the DLD register, her key only (its own gate)
   if (p.startsWith("/momo/work/sheets")) return sheetsRoute(request, env, url, deps);   // v672 - Product data sheets: Najjuko and Kendall (its own gate)
@@ -1077,7 +1078,8 @@ import { gguRoute } from "./work_ggu.js";
 import { briefsRoute } from "./work_briefs.js";
 import { sheetsRoute } from "./work_sheets.js";   // v672   // v667
 import { brokersRoute } from "./work_brokers.js";   // v682 - the Brokers card (Najjuko only)
-import { presRoute } from "./work_presentations.js";   // v684
+import { presRoute } from "./work_presentations.js";
+import { bppRoute } from "./building_passports.js";   // v697   // v684
 import { teamRoute } from "./work_team.js";
 import { voiceTestRoute } from "./work_voicetest.js";
 import { speechWithSpeakers, matchSpeakers, editSpeakers, speakerName, partLabel, speakersOut, SPEAKER_RULE } from "./work_speakers.js";
