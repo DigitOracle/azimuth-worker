@@ -108,6 +108,59 @@ async function photoTest(env, url) {
     + placePhoto(box, heroFigure(ph, "/bp/img/" + slug)) + "</body>", { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
+// ------------------------------------------------------------------------------------------------ v725 Release 1 helpers (Kendall, 4 Nov 2026)
+// Audit: Operations/Research/Building_Passport_Coverage_Audit_04NOV2026.md section 10. The pack fields come from
+// naj-market-pulse/scripts/plot_passport_market.py r1_extras (bldgs, refs, google, access, adverts_hist, asof).
+export const STALE_DAYS = 45;
+const FRESH_NAME = { g_dld__projects: "projects register (Dubai Land Department)", g_dld__units: "units register (Dubai Land Department)", g_dld__buildings: "buildings register (Dubai Land Department)" };
+// " (source, as of 15 Jun 2026; NOTE: this register is 141 days old, so later changes may not show)"; nothing when no date is known
+export function asOf(pack, table, fallbackDate, today) {
+  const a = (pack && pack.asof && pack.asof[table]) || {};
+  const d = a.date || (fallbackDate ? String(fallbackDate).slice(0, 10) : "");
+  if (!d) return "";
+  let days = a.days;
+  if (days == null && today) days = Math.round((Date.parse(today) - Date.parse(d)) / 864e5);
+  return " (" + (a.src || FRESH_NAME[table] || "register") + ", as of " + bppDate(d)
+    + (days != null && days > STALE_DAYS ? "; NOTE: this register is " + days + " days old, so later changes may not show" : "") + ")";
+}
+export function bldgText(b) {
+  const nm = (b.name ? b.name + " " : "") + "(building no. " + (b.no || "not recorded") + ")";
+  const bits = [b.floors ? b.floors + " floors" : "floors not recorded"];
+  if (b.flats) bits.push(int(b.flats) + " flats");
+  if (b.offices) bits.push(int(b.offices) + " offices");
+  if (b.shops) bits.push(int(b.shops) + " shops");
+  bits.push(b.car_parks ? int(b.car_parks) + " car parks" : "car parks not recorded");
+  bits.push(b.lifts ? b.lifts + " lifts" : "lifts not recorded");
+  if (b.pools) bits.push(b.pools + " pool" + (b.pools > 1 ? "s" : ""));
+  if (b.bua_sqm) bits.push("built-up area " + int(b.bua_sqm) + " m2");
+  if (b.units) bits.push(int(b.units) + " registered units" + (b.mix && b.mix.length ? " (" + b.mix.slice(0, 5).map((u) => (u.rooms || u.type || "other") + " " + u.n).join(", ") + ")" : ""));
+  return nm + ": " + bits.join(", ");
+}
+const DEST = { dubai_mall: "Dubai Mall", difc: "DIFC (Dubai International Financial Centre)", dxb: "Dubai International Airport", marina: "Dubai Marina", expo: "Expo City" };
+export function accessLine(a) {
+  if (!a) return "";
+  if (a.kind === "straight") return "Access (calculated, straight-line distance on the map, not a drive time): nearest metro station " + a.metro + (a.line ? " (" + a.line + ")" : "") + " about " + a.metro_km + " km away.";
+  const m = Object.keys(a.mins || {}).map((k) => (DEST[k] || k) + " " + Math.round(a.mins[k]) + " min");
+  return "Access (calculated drive times by road" + (a.solved_on ? ", worked out " + bppDate(a.solved_on) : "") + "): nearest metro " + (a.metro || "not recorded") + (a.metro_min != null ? " " + Math.round(a.metro_min) + " min drive" : "")
+    + (a.tram ? "; nearest tram " + a.tram + (a.tram_min != null ? " " + Math.round(a.tram_min) + " min" : "") : "") + (m.length ? "; " + m.join(", ") : "") + ".";
+}
+// one Google place per building: a place shared by several building records is shown once; sales-office places are kept OUT of resident experience
+export function googleLines(g) {
+  const out = [];
+  const places = ((g && g.places) || []).filter((p, i, a) => p && p.place_id && a.findIndex((q) => q.place_id === p.place_id) === i);
+  if (!places.length) return out;
+  const res = places.filter((p) => !p.sales_office), so = places.filter((p) => p.sales_office);
+  for (const p of res) {
+    out.push("Google box ('Live from Google' chip, building experience): Google Maps place \"" + (p.name || "") + "\""
+      + (p.rating != null ? ", rating " + p.rating + " out of 5 from " + int(p.count || 0) + " reviews" : ", no rating yet")
+      + ", retrieved " + bppDate(p.as_of) + ", place id " + p.place_id + (p.uri ? ", link " + p.uri : "")
+      + (p.praise && p.praise.length ? ". Themes reviewers praise: " + p.praise.join(", ") : "") + (p.complaint && p.complaint.length ? ". Themes reviewers complain about: " + p.complaint.join(", ") : "")
+      + ". We hold at most 5 review texts per place (" + (p.held || 0) + " here), so this is NOT every review; never quote names.");
+  }
+  for (const p of so) out.push("Google note (not resident experience): the Google place \"" + (p.name || "") + "\" (place id " + p.place_id + ", retrieved " + bppDate(p.as_of) + ") is left out of the building experience because " + p.sales_office + ". Show it only as this note, with no stars.");
+  return out;
+}
+
 // ------------------------------------------------------------------------------------------------ the facts (register figures only)
 // Everything the model may print, as plain lines, plus the computed risks and opportunities. Missing = said so, never guessed.
 export function bppFacts(pp, pack, today) {
@@ -122,16 +175,22 @@ export function bppFacts(pp, pack, today) {
   if (pj.number) {
     L.push("Developer: brand " + (pj.brand || "not recorded") + "; registered developer " + (pj.developer_en || pj.developer_ar || "not recorded") + (pj.developer_no ? " (DLD developer " + Math.round(pj.developer_no) + ")" : "")
       + ". Escrow bank " + (pj.escrow_en || pj.escrow_ar || "not recorded") + ". Planning authority " + (pj.authority || "not recorded") + ".");
-    L.push("Project register (Land Department, as of " + bppDate(pj.as_of) + "): status " + (pj.status || "not recorded") + ", " + (pj.pct != null ? pj.pct + "% complete" : "progress not recorded")
+    L.push("Project register" + asOf(pack, "g_dld__projects", pj.as_of, today) + ": status " + (pj.status || "not recorded") + ", " + (pj.pct != null ? pj.pct + "% complete" : "progress not recorded")
       + ", start " + (bppDate(pj.start) || "not recorded") + ", planned completion " + (bppDate(pj.end_planned) || "not recorded") + ", " + (pj.buildings != null ? pj.buildings + " buildings" : "") + ", " + (pj.units != null ? pj.units + " units" : "") + ".");
     if (pj.description) L.push("Project description in the register (use it for the physical building section): " + pj.description);
   } else missing.push("project register record");
   const bl = pp.buildings || [];
-  if (bl.length) L.push("Buildings register: " + bl.length + " buildings on the plot: " + bl.map((b) => "no. " + b.no + " " + (b.floors ? b.floors + " floors" : "floors not recorded") + (b.shops ? ", " + b.shops + " shops" : "") + (b.offices ? ", " + b.offices + " offices" : "")).join("; ") + ".");
+  const bd = pack.bldgs || [];
+  if (bd.length) {   // v725 R1 item 1: one line per BUILDING (DLD parent property id), never project totals on one record
+    L.push("Buildings register" + asOf(pack, "g_dld__buildings") + ": " + bd.length + " building" + (bd.length > 1 ? "s" : "") + " on this plot, each with its own figures (never add them up as one building): "
+      + bd.map(bldgText).join("; ") + ".");
+    if (bd.length > 1) L.push("Building-level rule: the floors, homes, car parks and lifts above belong to each building separately. Sales and rents below are " + (pack.projects_on_plot ? "for DLD project " + (pj.number || "") + " only (" + pack.projects_on_plot.length + " DLD projects share this plot)" : "for the whole project") + ", labelled project level.");
+  } else if (bl.length) L.push("Buildings register: " + bl.length + " buildings on the plot: " + bl.map((b) => "no. " + b.no + " " + (b.floors ? b.floors + " floors" : "floors not recorded") + (b.shops ? ", " + b.shops + " shops" : "") + (b.offices ? ", " + b.offices + " offices" : "")).join("; ") + ".");
   const units = (pack.units || []).filter((u) => u.type !== "Building");
   const homes = units.filter((u) => u.type === "Flat" || u.type === "Villa" || /B\/R|Studio/i.test(u.rooms || ""));
   const nHomes = homes.reduce((s, u) => s + u.n, 0), nOther = units.filter((u) => homes.indexOf(u) < 0).reduce((s, u) => s + u.n, 0);
-  if (homes.length) L.push("Units register: " + int(nHomes) + " homes plus " + int(nOther) + " non-residential units. Mix: " + homes.map((u) => (u.rooms || "unknown") + " " + u.n + (u.median_sqm ? " (median " + u.median_sqm + " m2)" : "")).join(", ") + ".");
+  if (pack.refs && pack.refs.default_height) missing.push("measured building height (the 12 m figure in our model is a default, not a measurement)");
+  if (homes.length) L.push("Units register" + asOf(pack, "g_dld__units") + ": " + int(nHomes) + " homes plus " + int(nOther) + " non-residential units. Mix: " + homes.map((u) => (u.rooms || "unknown") + " " + u.n + (u.median_sqm ? " (median " + u.median_sqm + " m2)" : "")).join(", ") + ".");
   else missing.push("unit mix");
   const tl = (pp.timeline || []).slice().reverse();
   if (tl.length) L.push("Building story (oldest first): " + tl.map((t) => bppDate(t.date) + " " + t.what.replace(/^The .*? project: /, "")).join("; ") + ".");
@@ -151,7 +210,10 @@ export function bppFacts(pp, pack, today) {
   const since = ten && ten.first && (Date.parse(ten.to) - Date.parse(ten.first)) / 864e5 <= (ten.window_days || 400);
   if (ten && ten.total) {
     const bs = Object.keys(ten.beds).sort();
-    L.push("Rentals (Ejari tenancies registered in this building " + (since ? "since the first one on " + bppDate(ten.first) : "in the last " + ten.window_days + " days") + ", to " + bppDate(ten.to) + "): " + ten.total + " contracts. Medians: " + bs.map((b) => BEDS(b) + " " + aed(ten.beds[b][0]) + " (" + ten.beds[b][1] + " contracts)").join(", ") + ".");
+    const h = ten.history;
+    if (h) L.push("Tenancy history (Ejari, the Dubai Land Department tenancy register, project level, every contract length, to " + bppDate(h.to) + "): " + int(h.all_time) + " residential contracts since " + bppDate(h.first)
+      + "; " + int(h.last_12m) + " in the last 12 months, of which " + int(h.renewals_12m) + " renewals" + (h.last_12m ? " (" + Math.round(h.renewals_12m / h.last_12m * 100) + "% renewal rate, " + h.renewals_12m + " of " + h.last_12m + ")" : "") + ".");
+    L.push("Rentals (Ejari tenancies registered in this " + (bd.length > 1 || pack.projects_on_plot ? "project, project level, " : "building ") + (since ? "since the first one on " + bppDate(ten.first) : "in the last " + ten.window_days + " days") + ", to " + bppDate(ten.to) + "): " + ten.total + " contracts. Medians: " + bs.map((b) => BEDS(b) + " " + aed(ten.beds[b][0]) + " (" + ten.beds[b][1] + " contracts)").join(", ") + ".");
   } else missing.push("registered tenancies in this building");
   if (pr && pr.rent) {
     const rows = [];
@@ -174,7 +236,11 @@ export function bppFacts(pp, pack, today) {
     if (ex.length) L.push("Sample listings: " + ex.join(". ") + ".");
   } else missing.push("live adverts");
   // occupancy signals (never a vacancy %)
-  if (nHomes && (ten || fl.total)) L.push("Occupancy signals (never show a vacancy percentage; show a stacked bar): " + int(nHomes) + " homes; " + (ten ? ten.total : 0) + " let (registered tenancies" + (since ? " since handover" : ", last " + (ten ? ten.window_days : 400) + " days") + "); " + (fl.rent || 0) + " rental adverts live (upper bound); the remainder: no signal (owner-occupied, empty or not yet advertised; no register says which).");
+  // v725: when several DLD projects share the plot, the lets belong to the primary project only, so the homes in the bar are that project's buildings' homes
+  const isHome = (u) => u.type === "Flat" || u.type === "Villa" || /B\/R|Studio/i.test(u.rooms || "");
+  const own = pack.projects_on_plot && pj.number ? bd.filter((b) => b.pn === pj.number) : [];
+  const homesOcc = own.length ? own.reduce((s, b) => s + (b.mix || []).filter(isHome).reduce((t, u) => t + u.n, 0), 0) : nHomes;
+  if (homesOcc && (ten || fl.total)) L.push("Occupancy signals (never show a vacancy percentage; show a stacked bar): " + int(homesOcc) + " homes" + (own.length ? " in " + own.map((b) => b.name || "building " + b.no).join(", ") + " (DLD project " + pj.number + ")" : "") + "; " + (ten ? ten.total : 0) + " let (registered tenancies" + (since ? " since handover" : ", last " + (ten ? ten.window_days : 400) + " days") + "); " + (fl.rent || 0) + " rental adverts live (upper bound); the remainder: no signal (owner-occupied, empty or not yet advertised; no register says which).");
   // investment
   const y = pr && pr.sale ? (pr.years || []).slice().reverse().find((yy) => pr.sale[yy] && pr.sale[yy]["1"] && pr.sale[yy]["1"][2] === "b") : null;
   const p1 = y ? pr.sale[y]["1"][0] : null, r1 = ten && ten.beds["1"] ? ten.beds["1"][0] : null;
@@ -183,7 +249,15 @@ export function bppFacts(pp, pack, today) {
   else { missing.push("gross yield (needs both a registered 1-bed rent and a 1-bed sale median in this building)"); L.push("Investment: gross yield not available (see missing). Service charge: not available yet (grey chip)."); }
   missing.push("service-charge rate", "facilities and amenities (developer brochure)", "Makani number");
   const nr = pack.near || {};
-  L.push("Neighbourhood (from the tenancy register): nearest metro " + (nr.metro || "not recorded") + "; nearest mall " + (nr.mall || "not recorded") + "; landmark " + (nr.landmark || "not recorded") + ". Plus a 'Live from Google' box: 'Google rating and review summary load live when the passport is opened' with a star icon and NO numbers.");
+  L.push("Neighbourhood (from the tenancy register): nearest metro " + (nr.metro || "not recorded") + "; nearest mall " + (nr.mall || "not recorded") + "; landmark " + (nr.landmark || "not recorded") + ".");
+  const ac = accessLine(pack.access);
+  if (ac) L.push(ac); else missing.push("drive times and nearest station for this building");
+  const gl = googleLines(pack.google);
+  if (gl.length) L.push(...gl);
+  else L.push("Google box ('Live from Google' chip): no Google place is matched to this building yet; say so, show no rating.");
+  const ah = pack.adverts_hist;
+  if (ah && ah.distinct_90d) L.push("Advert history (Property Finder, last 90 days to " + bppDate(ah.last) + "): " + int(ah.distinct_90d) + " different adverts seen, " + int(ah.rent_90d) + " of them for rent. One portal only; one flat can be advertised several times.");
+  else if (fl.total) L.push("Adverts note: the adverts above are a sample of live adverts from one portal on one day, not the full stock for sale or rent.");
   const ev = pp.evidence || [];
   L.push("Evidence: " + ev.length + " linked records on this plot; " + (ev.filter((e) => e.s === "d" && /Dubai/.test(e.label)).length ? ev.filter((e) => e.s === "d" && /Dubai/.test(e.label)) : ev.filter((e) => e.s === "d")).map((e) => e.label).slice(0, 6).join(", ") + ": direct matches" + (ev.some((e) => e.s === "m") ? "; " + ev.filter((e) => e.s === "m").length + " more by map location (best matches)" : "") + ".");
 
@@ -219,6 +293,7 @@ export function bppPrompt(f, dateText) {
     + "page 2 = what the market is doing (sales with a line or bars for the 1-bed sale median by year, rentals with grouped bars for asking vs registered rent by bedroom, occupancy as a stacked horizontal bar of signals, investment KPI cards, a grid of broker cards: agent, agency, phone, listing); "
     + "page 3 = what it means: a prominent \"Risks and opportunities\" panel (chip: Calculated) as a row of cards with exactly the points given below, a \"Najma summary\" card (what is confirmed, what needs verification, why it matters - only from the facts), a \"Recommended next actions\" card (numbered, practical, drawn from the risks and missing items), then compact construction, operations, neighbourhood, developer and evidence cards. "
     + "Sections numbered 01 to 12 across the three pages: 01 Identity and location, 02 Physical building, 03 Apartment inventory, 04 Sales, 05 Rentals, 06 Occupancy, 07 Investment, 08 Construction and approvals, 09 Operations and service charges, 10 Neighbourhood, 11 Developer, 12 Evidence. "
+    + "Under every register-backed figure print its source and as-of date in small text exactly as given in DATA; any \"NOTE: this register is N days old\" must be printed visibly beside that figure (small amber note). Figures for one building are never added up into a project total, and project-level figures are labelled \"project level\". The Google box shows the rating, the review count, the retrieval date and the Google Maps link as given, plus the line \"Google shows at most 5 reviews per place; this is not every review\". "
     + "HARD RULES: never invent a number, rating, name or fact; every number must come from DATA below; never leave out an available metric; label every missing item \"Not available yet\". Return ONLY the complete HTML document, starting with <!doctype html>.\n\n"
     + "DATA (use exactly):\n" + f.lines.join("\n")
     + "\nNot available yet (show as such, grey chip): " + f.missing.join("; ") + "."

@@ -1,0 +1,6 @@
+listing_id,run_date,building_slug,building_name,property_type,bedrooms,size_sqft,price,price_period,listed_date,agent_name,agency_name,phone,broker_license,lat,lon,project_number,whatsapp
+L1,2026-10-01,dubai-wharf-tower-2,Dubai Wharf Tower 2,Apartment,1,800,80000,yearly,2026-09-30,Test Agent A,Test Agency,+971500000001,B1,25.21,55.33,1869,+971500000999
+L1,2026-10-01,dubai-wharf-tower-2,Dubai Wharf Tower 2,Apartment,1,800,80000,yearly,2026-09-30,Test Agent A,Test Agency,+971500000001,B1,25.21,55.33,1869,+971500000999
+L1,2026-10-02,dubai-wharf-tower-2,Dubai Wharf Tower 2,Apartment,1,800,79000,yearly,2026-09-30,Test Agent A,Test Agency,+971500000001,B1,25.21,55.33,1869,+971500000999
+L2,2026-10-02,dubai-wharf-tower-2,Dubai Wharf Tower 2,Apartment,2,1200,1500000,sale,2026-10-01,Test Agent B,Test Agency,+971500000002,B2,25.21,55.33,1869,+971500000999
+L3,2026-10-02,u-bora,U-Bora Towers,Apartment,1,900,90000,yearly,2026-10-01,Test Agent C,Other Agency,+971500000003,B3,25.18,55.27,,+971500000999

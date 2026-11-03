@@ -1,0 +1,695 @@
+{
+ "naj:plot:326-5635": {
+  "plot": "naj:plot:326-5635",
+  "parcel": "3265635",
+  "built_at": "2026-11-04",
+  "units": [
+   {
+    "rooms": "2 B/R",
+    "type": "Flat",
+    "n": 266,
+    "median_sqm": 139.6
+   },
+   {
+    "rooms": "1 B/R",
+    "type": "Flat",
+    "n": 164,
+    "median_sqm": 93.0
+   },
+   {
+    "rooms": "Shop",
+    "type": "Shop",
+    "n": 104,
+    "median_sqm": 134.8
+   },
+   {
+    "rooms": "Studio",
+    "type": "Flat",
+    "n": 97,
+    "median_sqm": 61.8
+   },
+   {
+    "rooms": "3 B/R",
+    "type": "Flat",
+    "n": 67,
+    "median_sqm": 190.4
+   },
+   {
+    "rooms": "GYM",
+    "type": "Gymnasium",
+    "n": 1,
+    "median_sqm": 921.3
+   }
+  ],
+  "bldgs": [
+   {
+    "pid": 93652359,
+    "pn": 1878,
+    "no": "1",
+    "name": "Dubai Wharf - Tower 1",
+    "type": "Building",
+    "floors": 7,
+    "flats": 128,
+    "offices": 0,
+    "shops": 0,
+    "car_parks": 221,
+    "lifts": 4,
+    "pools": 1,
+    "bua_sqm": 17815,
+    "units": 128,
+    "mix": [
+     {
+      "rooms": "2 B/R",
+      "type": "Flat",
+      "n": 75,
+      "median_sqm": 140.3
+     },
+     {
+      "rooms": "1 B/R",
+      "type": "Flat",
+      "n": 34,
+      "median_sqm": 92.3
+     },
+     {
+      "rooms": "3 B/R",
+      "type": "Flat",
+      "n": 19,
+      "median_sqm": 190.4
+     }
+    ]
+   },
+   {
+    "pid": 927121760,
+    "pn": 1869,
+    "no": "2",
+    "name": "Dubai Wharf - Tower 2",
+    "type": "Building",
+    "floors": 7,
+    "flats": 254,
+    "offices": 0,
+    "shops": 0,
+    "car_parks": 294,
+    "lifts": 8,
+    "pools": 1,
+    "bua_sqm": 27575,
+    "units": 254,
+    "mix": [
+     {
+      "rooms": "Studio",
+      "type": "Flat",
+      "n": 91,
+      "median_sqm": 61.8
+     },
+     {
+      "rooms": "2 B/R",
+      "type": "Flat",
+      "n": 83,
+      "median_sqm": 137.7
+     },
+     {
+      "rooms": "1 B/R",
+      "type": "Flat",
+      "n": 61,
+      "median_sqm": 93.1
+     },
+     {
+      "rooms": "3 B/R",
+      "type": "Flat",
+      "n": 19,
+      "median_sqm": 189.9
+     }
+    ]
+   },
+   {
+    "pid": 744953354,
+    "pn": 1583,
+    "no": "3",
+    "name": "DUBAI WHARF",
+    "type": "Building",
+    "floors": 6,
+    "flats": 124,
+    "offices": 0,
+    "shops": 0,
+    "car_parks": 161,
+    "lifts": 4,
+    "pools": 1,
+    "bua_sqm": 17434,
+    "units": 124,
+    "mix": [
+     {
+      "rooms": "2 B/R",
+      "type": "Flat",
+      "n": 54,
+      "median_sqm": 138.7
+     },
+     {
+      "rooms": "1 B/R",
+      "type": "Flat",
+      "n": 46,
+      "median_sqm": 92.2
+     },
+     {
+      "rooms": "3 B/R",
+      "type": "Flat",
+      "n": 24,
+      "median_sqm": 192.6
+     }
+    ]
+   },
+   {
+    "pid": 788264273,
+    "pn": 1583,
+    "no": "4",
+    "name": "DUBAI WHARF",
+    "type": "Building",
+    "floors": 6,
+    "flats": 88,
+    "offices": 0,
+    "shops": 0,
+    "car_parks": null,
+    "lifts": null,
+    "pools": null,
+    "bua_sqm": 11830,
+    "units": 88,
+    "mix": [
+     {
+      "rooms": "2 B/R",
+      "type": "Flat",
+      "n": 54,
+      "median_sqm": 145.7
+     },
+     {
+      "rooms": "1 B/R",
+      "type": "Flat",
+      "n": 23,
+      "median_sqm": 94.9
+     },
+     {
+      "rooms": "Studio",
+      "type": "Flat",
+      "n": 6,
+      "median_sqm": 49.6
+     },
+     {
+      "rooms": "3 B/R",
+      "type": "Flat",
+      "n": 5,
+      "median_sqm": 173.8
+     }
+    ]
+   },
+   {
+    "pid": 2131485781,
+    "pn": null,
+    "no": "5",
+    "name": null,
+    "type": "Building",
+    "floors": 2,
+    "flats": 0,
+    "offices": 0,
+    "shops": 104,
+    "car_parks": 1154,
+    "lifts": 9,
+    "pools": 0,
+    "bua_sqm": 21670,
+    "units": 105,
+    "mix": [
+     {
+      "rooms": "Shop",
+      "type": "Shop",
+      "n": 104,
+      "median_sqm": 134.8
+     },
+     {
+      "rooms": "GYM",
+      "type": "Gymnasium",
+      "n": 1,
+      "median_sqm": 921.3
+     }
+    ]
+   }
+  ],
+  "projects_on_plot": [
+   1583,
+   1869,
+   1878
+  ],
+  "asof": {
+   "pp_dld__rent_contracts": {
+    "src": "tenancy register (Ejari)",
+    "date": "2026-10-30",
+    "days": 4
+   },
+   "lk_dld_transactions": {
+    "src": "sales register (Dubai Land Department)",
+    "date": "2026-11-02",
+    "days": 1
+   },
+   "g_dld__units": {
+    "src": "units register (Dubai Land Department)",
+    "date": "2026-10-15",
+    "days": 19
+   },
+   "g_dld__buildings": {
+    "src": "buildings register (Dubai Land Department)",
+    "date": "2026-10-24",
+    "days": 10
+   },
+   "g_dld__projects": {
+    "src": "projects register (Dubai Land Department)",
+    "date": "2026-06-15",
+    "days": 141
+   },
+   "lk_d_project": {
+    "src": "Najma project table (from the Land Department registers)",
+    "date": "2026-08-25",
+    "days": 70
+   }
+  },
+  "project": {
+   "number": 1869,
+   "name_ar": "دبي وورف - برج 2",
+   "developer_no": 1031.0,
+   "developer_ar": "دبي للعقارات (ش.ذ.م.م)",
+   "developer_en": "DUBAI WHARF L.L.C",
+   "brand": "DUBAI WHARF L.L.C",
+   "escrow_ar": "بنك المشرق (شركة مساهمة عامة)",
+   "escrow_en": "MASHREQ BANK PSC",
+   "status": "FINISHED",
+   "pct": 100.0,
+   "start": "2014-10-30",
+   "end_planned": "2017-02-15",
+   "completion": "2017-02-15",
+   "buildings": 1,
+   "units": 254,
+   "authority": "Dubai Development Authority (DDA)",
+   "description": "Residential Tower with 254 apartments sharing a Retail podium and 3 levels of basement car parking With 3 towers 3(3B+G+P+7,8)",
+   "as_of": "2026-06-15"
+  },
+  "tenancies": {
+   "first": "2017-01-29",
+   "to": "2026-10-30",
+   "window_days": 400,
+   "total": 171,
+   "beds": {
+    "0": [
+     56000,
+     68
+    ],
+    "1": [
+     76500,
+     34
+    ],
+    "3": [
+     125938,
+     10
+    ],
+    "2": [
+     98900,
+     59
+    ]
+   },
+   "history": {
+    "all_time": 1496,
+    "last_12m": 148,
+    "renewals_12m": 96,
+    "first": "2017-01-29",
+    "to": "2026-10-30"
+   }
+  },
+  "sales": {
+   "year": "2026",
+   "to": "2026-11-01",
+   "kinds": {
+    "ready": {
+     "deals": 9,
+     "aed_m2": 15631,
+     "aed_sqft": 1452
+    }
+   },
+   "all_time": 270
+  },
+  "near": {
+   "metro": "Al Jadaf Metro Station",
+   "mall": "Dubai Mall",
+   "landmark": "Dubai International Airport"
+  },
+  "access": {
+   "kind": "straight",
+   "metro": "Al Jadaf Metro Station",
+   "line": "Green Metro line",
+   "metro_km": 0.6
+  },
+  "google": {
+   "places": [
+    {
+     "place_id": "ChIJ26BGmWpdXz4R_PWo_e3uxVk",
+     "name": "Dubai Wharf Tower 2 Block 3",
+     "type": "apartment_building",
+     "rating": 3.1,
+     "count": 8,
+     "uri": "https://maps.google.com/?cid=6468839145717954044&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+     "as_of": "2026-10-15",
+     "held": 5,
+     "praise": [],
+     "complaint": [
+      "security"
+     ],
+     "buildings": 1
+    }
+   ],
+   "records": 1
+  },
+  "refs": {
+   "records": 1,
+   "filed": 1,
+   "default_height": 0
+  }
+ },
+ "naj:plot:346-6876": {
+  "plot": "naj:plot:346-6876",
+  "parcel": "3466876",
+  "built_at": "2026-11-04",
+  "units": [
+   {
+    "rooms": "Office",
+    "type": "Office",
+    "n": 138,
+    "median_sqm": 240.7
+   },
+   {
+    "rooms": "1 B/R",
+    "type": "Flat",
+    "n": 131,
+    "median_sqm": 91.8
+   },
+   {
+    "rooms": "2 B/R",
+    "type": "Flat",
+    "n": 88,
+    "median_sqm": 147.3
+   },
+   {
+    "rooms": "Shop",
+    "type": "Shop",
+    "n": 41,
+    "median_sqm": 117.8
+   },
+   {
+    "rooms": null,
+    "type": "Office",
+    "n": 25,
+    "median_sqm": 277.4
+   },
+   {
+    "rooms": "3 B/R",
+    "type": "Flat",
+    "n": 6,
+    "median_sqm": 227.2
+   },
+   {
+    "rooms": "NA",
+    "type": "Sized Partition",
+    "n": 1,
+    "median_sqm": 68509.4
+   }
+  ],
+  "bldgs": [
+   {
+    "pid": 632532451,
+    "pn": 516,
+    "no": "1",
+    "name": "U-BORA TOWERS",
+    "type": "Building",
+    "floors": 17,
+    "flats": 225,
+    "offices": 0,
+    "shops": 0,
+    "car_parks": 0,
+    "lifts": null,
+    "pools": null,
+    "bua_sqm": 97058,
+    "units": 226,
+    "mix": [
+     {
+      "rooms": "1 B/R",
+      "type": "Flat",
+      "n": 131,
+      "median_sqm": 91.8
+     },
+     {
+      "rooms": "2 B/R",
+      "type": "Flat",
+      "n": 88,
+      "median_sqm": 147.3
+     },
+     {
+      "rooms": "3 B/R",
+      "type": "Flat",
+      "n": 6,
+      "median_sqm": 227.2
+     },
+     {
+      "rooms": "NA",
+      "type": "Sized Partition",
+      "n": 1,
+      "median_sqm": 68509.4
+     }
+    ]
+   },
+   {
+    "pid": 184594973,
+    "pn": 516,
+    "no": "2",
+    "name": "U-BORA TOWERS",
+    "type": "Building",
+    "floors": 53,
+    "flats": 0,
+    "offices": 160,
+    "shops": 0,
+    "car_parks": 0,
+    "lifts": null,
+    "pools": null,
+    "bua_sqm": 160159,
+    "units": 159,
+    "mix": [
+     {
+      "rooms": "Office",
+      "type": "Office",
+      "n": 134,
+      "median_sqm": 254.9
+     },
+     {
+      "rooms": null,
+      "type": "Office",
+      "n": 25,
+      "median_sqm": 277.4
+     }
+    ]
+   },
+   {
+    "pid": 674795162,
+    "pn": 516,
+    "no": "3",
+    "name": "U-BORA TOWERS",
+    "type": "Building",
+    "floors": 4,
+    "flats": 0,
+    "offices": 0,
+    "shops": 9,
+    "car_parks": 0,
+    "lifts": null,
+    "pools": null,
+    "bua_sqm": 3503,
+    "units": 9,
+    "mix": [
+     {
+      "rooms": "Shop",
+      "type": "Shop",
+      "n": 9,
+      "median_sqm": 293.1
+     }
+    ]
+   },
+   {
+    "pid": 1716890172,
+    "pn": 516,
+    "no": "4",
+    "name": "U-BORA TOWERS",
+    "type": "Building",
+    "floors": 2,
+    "flats": 0,
+    "offices": 4,
+    "shops": 25,
+    "car_parks": 0,
+    "lifts": null,
+    "pools": null,
+    "bua_sqm": 3744,
+    "units": 29,
+    "mix": [
+     {
+      "rooms": "Shop",
+      "type": "Shop",
+      "n": 25,
+      "median_sqm": 102.7
+     },
+     {
+      "rooms": "Office",
+      "type": "Office",
+      "n": 4,
+      "median_sqm": 138.7
+     }
+    ]
+   },
+   {
+    "pid": 2094151947,
+    "pn": 516,
+    "no": "U-BORA TOWERS",
+    "name": "U-BORA TOWERS",
+    "type": "Building",
+    "floors": 1,
+    "flats": 7,
+    "offices": 0,
+    "shops": 0,
+    "car_parks": null,
+    "lifts": null,
+    "pools": null,
+    "bua_sqm": 5008,
+    "units": 7,
+    "mix": [
+     {
+      "rooms": "Shop",
+      "type": "Shop",
+      "n": 7,
+      "median_sqm": 389.5
+     }
+    ]
+   }
+  ],
+  "asof": {
+   "pp_dld__rent_contracts": {
+    "src": "tenancy register (Ejari)",
+    "date": "2026-10-30",
+    "days": 4
+   },
+   "lk_dld_transactions": {
+    "src": "sales register (Dubai Land Department)",
+    "date": "2026-11-02",
+    "days": 1
+   },
+   "g_dld__units": {
+    "src": "units register (Dubai Land Department)",
+    "date": "2026-10-15",
+    "days": 19
+   },
+   "g_dld__buildings": {
+    "src": "buildings register (Dubai Land Department)",
+    "date": "2026-10-24",
+    "days": 10
+   },
+   "g_dld__projects": {
+    "src": "projects register (Dubai Land Department)",
+    "date": "2026-06-15",
+    "days": 141
+   },
+   "lk_d_project": {
+    "src": "Najma project table (from the Land Department registers)",
+    "date": "2026-08-25",
+    "days": 70
+   }
+  },
+  "project": {
+   "number": 516,
+   "name_ar": "أبراج يو بورا",
+   "developer_no": 308.0,
+   "developer_ar": "مراس العقارية (ش.ذ.م.م)",
+   "developer_en": "BANDO ENGINEERING & CONSTRUCTION CO LTD - DUBAI BRANCH",
+   "brand": "BANDO ENGINEERING & CONSTRUCTION CO LTD - DUBAI BRANCH",
+   "escrow_ar": "ستاندرد تشارترد بنك",
+   "escrow_en": "STANDARD CHARTERED BANK",
+   "status": "FINISHED",
+   "pct": 100.0,
+   "start": "2006-10-01",
+   "end_planned": "2011-01-20",
+   "completion": "2011-01-20",
+   "buildings": 5,
+   "units": 305,
+   "authority": "Dubai Development Authority (DDA)",
+   "description": "Freehold commercial/ residential development located in Dubai Business Bay. The development is designed as two buildings, residential (16 Storey)  and offices (52 Storey) to be constructed on a shared 2B+G+5P+Mech. in a concrete structure with external and internal finishes.  The office units will be handed over as ?core and shell? to be individually fitted by their respective owners.",
+   "as_of": "2026-06-15"
+  },
+  "tenancies": {
+   "first": "2012-01-02",
+   "to": "2026-10-30",
+   "window_days": 400,
+   "total": 97,
+   "beds": {
+    "3": [
+     105000,
+     2
+    ],
+    "2": [
+     136453,
+     28
+    ],
+    "1": [
+     88000,
+     67
+    ]
+   },
+   "history": {
+    "all_time": 1590,
+    "last_12m": 87,
+    "renewals_12m": 31,
+    "first": "2012-02-01",
+    "to": "2026-10-30"
+   }
+  },
+  "sales": {
+   "year": "2026",
+   "to": "2026-11-01",
+   "kinds": {
+    "ready": {
+     "deals": 13,
+     "aed_m2": 12904,
+     "aed_sqft": 1199
+    }
+   },
+   "all_time": 507
+  },
+  "near": {
+   "metro": "Business Bay Metro Station",
+   "mall": "Dubai Mall",
+   "landmark": "Downtown Dubai"
+  },
+  "access": {
+   "kind": "straight",
+   "metro": "Business Bay Metro Station",
+   "line": "Red Metro line",
+   "metro_km": 1.6
+  },
+  "google": {
+   "places": [
+    {
+     "place_id": "ChIJIa5MVzNoXz4RX39qnOlAqUY",
+     "name": "U Bora Towers",
+     "type": "premise",
+     "rating": null,
+     "count": null,
+     "uri": "https://maps.google.com/?cid=5091672225814839135&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+     "as_of": "2026-10-14",
+     "held": 0,
+     "praise": [],
+     "complaint": [],
+     "buildings": 1
+    }
+   ],
+   "records": 1
+  },
+  "refs": {
+   "records": 1,
+   "filed": 1,
+   "default_height": 0
+  }
+ }
+}
