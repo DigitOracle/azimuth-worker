@@ -3304,8 +3304,9 @@ async function appFetch(request, env, ctx) {
       }
       if (url.pathname === "/versus") {                        // v155 - Dubai against one of ten cities, beside a client. v155.2 (Kendall, 16 Sep): in the tab bar, so a client key opens it; the sends stay owner-only
         const _vk = url.searchParams.get("key") || "";
-        const _vOwner = !!env.READ_KEY && _vk === env.READ_KEY;
-        if (!_vOwner && !clientKeysOf(env).some((c) => ctEq(_vk, c))) return new Response("unauthorized", { status: 401 });
+        // v741a (4 Nov: VS "not authorised" on Najjuko's Momo) - the shared key tier, so insider keys (Kendall, Najjuko) open it like every other tab
+        const _vTier = keyTier(env, url), _vOwner = (!!env.READ_KEY && ctEq(_vk, String(env.READ_KEY))) || personOfKey(env, url) === "kendall";   // send buttons stay Kendall's
+        if (!_vTier) return new Response("unauthorized", { status: 401 });
         let _fb = {}; try { _fb = (JSON.parse((await env.MEETINGS.get("world_review")) || "{}") || {}).fb || {}; } catch (e) {}
         return new Response(worldPageHtml(_fb, _vOwner, { css: NAJ_NAV_CSS, html: najNav(_vk, "versus") }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex", "Referrer-Policy": "strict-origin" } })   // v156 - owner flag: the send buttons are drawn only for the owner key (DA-AUD-005). /versus is NOT on the client list, so this is true today; it stays correct if it ever is.;
       }
