@@ -33,7 +33,7 @@ const ppE = { id: "naj:plot:987-1152", parcel: "9871152", plot_no: "987-1152", a
   ok(/drive times \(no measured community point within 2 km\)/.test(t), "no drive time invented", t);
   ok(/this plot has no reviews of its own|not built, so it has no reviews of its own/.test(t) && /our Google place data does not cover this area yet/.test(t) && !/rating 4\.1 out of 5/.test(t), "Google: no reviews of the plot itself; coverage gap said plainly", t);
   ok(/district profile \(district DNA\) for allayan1: not covered/.test(t), "no district DNA: Not available yet, named", t);
-  ok(/building height: height not verified/.test(t) && /zoning rules: Not verified/.test(t), "no height / zoning row: not verified", t);
+  ok(/floors \(floor count not loaded yet\)/.test(t) && /zoning rules: Not verified/.test(t) && !/Height evidence/.test(t), "no floors / zoning row: said so; no height shown", t);
   ok(!/Nearby places/.test(t), "no nearby box when there are no nearby places");
 }
 // ---------- no position at all
@@ -50,7 +50,8 @@ const ppE = { id: "naj:plot:987-1152", parcel: "9871152", plot_no: "987-1152", a
   ok(/Drive times \(Google Routes, measured from Q Gardens Lofts 2[^\n]*DIFC 30 min \(25 free-flowing\)/.test(t), "drive times with where they are measured from", t);
   ok(/'District DNA: Jumeirah Village Circle'[^\n]*DISTRICT LEVEL[^\n]*overall 60, families 64\.8/.test(t) && /green cover 9\.6% \(Copernicus Sentinel-2 satellite, 19 Oct 2026\)/.test(t), "district DNA card, labelled district level", t);
   ok(/District DNA line \(district level; source KHDA register/.test(t), "district lines carry source and date", t);
-  ok(/about 41 m, model estimate - towers read low[^\n]*NOT a Dubai Municipality height[^\n]*towers read low on this source, check/.test(t) && !/55 m/.test(t), "height: best_h_max with kind, never DM, globfp never headline", t);
+  ok(/Height evidence \(background only[^\n]*about 41 m, model estimate - towers read low[^\n]*Not a Dubai Municipality height[^\n]*towers read low on this source, check/.test(t) && !/55 m/.test(t) && !/Plot height \(section 02\)/.test(t), "height is evidence only, never DM, globfp never shown", t);
+  ok(/floors \(floor count not loaded yet\)/.test(t), "no floors row: said so", t);
   ok(/mall Circle Mall by Dubai Retail 1\.3 km/.test(t), "nearest mall", t);
   ok(/District DNA/.test(B.bppPrompt(f, "4 Nov 2026")), "prompt asks for the district card");
 }
@@ -73,6 +74,17 @@ const ppE = { id: "naj:plot:987-1152", parcel: "9871152", plot_no: "987-1152", a
   ok(p.zoning && p.zoning.far === 2.5 && p.zoning.verified === false, "far feeds the developer view, not verified unless class A", p.zoning);
   const pl = N.plotFactLines(N.withNb({}, { nb: Object.assign({}, JVC, { facts: { bind: { plot_level: true, project_sales: 4 }, zone: { evidence_class: "A", height_text_en: "G+12", storeys: 13, storeys_status: "parsed: plain G+N", far: 4 } } }) })).lines.join("\n");
   ok(/\(plot level;/.test(pl) && /\(13 storeys\)/.test(pl) && !/preliminary/.test(pl), "plot-level bind; parsed storeys; class A not preliminary", pl);
+}
+// ---------- floors headline (Kendall: floors, not height)
+{
+  const F = (fl) => N.plotFactLines(N.withNb({}, { nb: { pt: JVC.pt, facts: { fl } } })).lines.join("\n");
+  ok(/Floors \(section 02 headline; print the label exactly\): Ground \+ 2 floors \(source: DM building record\)\. DM record as written: "G\+2"/.test(F({ floors_label: "Ground + 2 floors", floors_source: "DM building record", floors_shown: true, dm_record_text: "G+2" })), "DM floors with the record verbatim");
+  ok(/: At least ground \+ 34 floors/.test(F({ floors_label: "Ground + 34 floors", floors_source: "DLD unit register (at least)", floors_shown: true })), "DLD figures are always 'at least'");
+  ok(/About ground \+ 1 floor \(likely 2 to 3 levels\)[^\n]*estimate, medium confidence, likely 2 to 3 levels/.test(F({ floors_label: "About ground + 1 floor (likely 2 to 3 levels)", floors_source: "estimate", floors_shown: true, est_confidence: "medium", floors_low: 2, floors_high: 3 })), "estimate: About + range + confidence");
+  const low = F({ floors_label: "About ground + 1 floor (likely 2 to 3 levels)", floors_source: "estimate", floors_shown: false, est_confidence: "low", floors_low: 2, floors_high: 3 });
+  ok(/Building present - floors not verified/.test(low) && !/About ground/.test(low), "never a low-confidence estimate", low);
+  ok(/Building present - floors not verified/.test(F({ floors_label: "Ground + 1 floor", floors_source: "estimate", est_confidence: "high" })), "an estimate without 'About' and a range is not shown");
+  ok(/headline; print the label exactly\): No building recorded\.$/m.test(F({ floors_label: "No building recorded", floors_source: null, floors_shown: false })), "no building recorded");
 }
 // ---------- KV read: pp_nb_<crc32 % 4096> + pp_dna
 {
