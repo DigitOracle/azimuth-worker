@@ -109,7 +109,7 @@ ok(B.bppTtl("u-bora-3466876").expirationTtl === 86400 && B.bppTtl("t-test") === 
   const scripts = [...body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
   let parsed = true; scripts.forEach((c) => { try { new Function(c); } catch (e) { parsed = false; console.log(e.message); } });
   ok(scripts.length >= 2 && parsed, "card scripts parse");
-  ok(scripts.some((c) => /op:"status"/.test(c) && /15000/.test(c) && /location\.reload/.test(c)), "poll every 15 s, reload when done");
+  ok(scripts.some((c) => /op:"status"/.test(c) && /5000/.test(c) && /location\.reload/.test(c)), "poll every 5 s (v739, was 15 s), reload when done");
   const kv = memKV({ bpp_requests: JSON.stringify(["bbbbbb1", "bbbbbb2"]), bpp_req_bbbbbb1: JSON.stringify(reqs[0]), bpp_req_bbbbbb2: JSON.stringify({ id: "bbbbbb2", text: "x", reader: "broker", status: "failed", msg: "The writer stopped (x).", at: iso(Date.now()) }) });
   const deps = { person: () => "kendall", page: (k, rk, b) => b };
   const res = await B.bppRoute(new Request("https://x/momo/work/passports/api", { method: "POST", body: JSON.stringify({ op: "status", ids: ["bbbbbb1", "zzzzzz9", "../bad"] }) }), { MEETINGS: kv }, new URL("https://x/momo/work/passports/api"), deps);
