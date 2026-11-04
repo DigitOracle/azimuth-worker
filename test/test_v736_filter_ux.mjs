@@ -14,10 +14,10 @@ function el(id) {
     appendChild(c) { this.children.push(c); if (c.tag === "option") this.options.push(c); if (c.tag === "optgroup") c.children.forEach((o) => this.options.push(o)); c.parent = this; return c; },
     addEventListener() {}, focus() {}, classList: { toggle() {}, contains() { return false; } },
     querySelector(s) { return this.querySelectorAll(s)[0] || null; },
-    querySelectorAll(s) { if (s === "[data-ltd]") return this._btn.filter((b) => b.attrs["data-ltd"]); if (s === "[data-ltclr]") return this._btn.filter((b) => b.attrs["data-ltclr"]); if (s === "[data-ltl]") return this._btn.filter((b) => b.attrs["data-ltl"]); if (s === "[data-ltmore]") return this._btn.filter((b) => b.attrs["data-ltmore"]); if (s === "b") return []; if (s === "[data-ltu]") return this._btn.filter((b) => b.attrs["data-ltu"]); return []; },
+    querySelectorAll(s) { if (s === "[data-ltd]") return this._btn.filter((b) => b.attrs["data-ltd"]); if (s === "[data-ltclr]") return this._btn.filter((b) => b.attrs["data-ltclr"]); if (s === "[data-ltl]") return this._btn.filter((b) => b.attrs["data-ltl"]); if (s === "[data-ltmore]") return this._btn.filter((b) => b.attrs["data-ltmore"]); if (s === "[data-ltoth]") return this._btn.filter((b) => b.attrs["data-ltoth"]); if (s === "b") return []; if (s === "[data-ltu]") return this._btn.filter((b) => b.attrs["data-ltu"]); return []; },
     _btn: [] };
   Object.defineProperty(e, "innerHTML", { get() { return this._h; }, set(v) { this._h = v; this.children = []; this.options = [];
-    this._btn = [...String(v).matchAll(/<button[^>]*>/g)].map((m) => { const b = el(); const d = /data-ltd="(\w+)" data-ltv="(\w+)"/.exec(m[0]); if (d) { b.attrs["data-ltd"] = d[1]; b.attrs["data-ltv"] = d[2]; } if (/data-ltclr=1/.test(m[0])) b.attrs["data-ltclr"] = "1"; const mo = /data-ltmore="([a-z]+)"/.exec(m[0]); if (mo) b.attrs["data-ltmore"] = mo[1]; const q = /data-lt([lu])="([\w,]+)"/.exec(m[0]); if (q) b.attrs["data-lt" + q[1]] = q[2]; return b; });
+    this._btn = [...String(v).matchAll(/<button[^>]*>/g)].map((m) => { const b = el(); const d = /data-ltd="(\w+)" data-ltv="(\w+)"/.exec(m[0]); if (d) { b.attrs["data-ltd"] = d[1]; b.attrs["data-ltv"] = d[2]; } if (/data-ltclr=1/.test(m[0])) b.attrs["data-ltclr"] = "1"; if (/data-ltoth=1/.test(m[0])) b.attrs["data-ltoth"] = "1"; const mo = /data-ltmore="([a-z]+)"/.exec(m[0]); if (mo) b.attrs["data-ltmore"] = mo[1]; const q = /data-lt([lu])="([\w,]+)"/.exec(m[0]); if (q) b.attrs["data-lt" + q[1]] = q[2]; return b; });
     } });
   return e;
 }
@@ -57,12 +57,13 @@ const D6 = { slug: "businessbay", name: "Business Bay", n: 9, sa: "2026-08-31", 
   ok(/Narrow Commercial by use/.test(ids.bpp_lsu.innerHTML) && !ids.bpp_lsu.hidden, "Use row appears only with a land type", ids.bpp_lsu.innerHTML.slice(0, 200));
   ok(ids.bpp_d.options.length === 2, "card filters districts and opens nothing else");
   const used = ids.bpp_lsu._btn.filter((b) => b.attrs["data-ltd"] === "u").map((b) => b.attrs["data-ltv"]);
-  ok(used.join(",") === "ho,co,mx,in" && ids.bpp_lsu._btn.some((b) => b.attrs["data-ltmore"] === "u"), "biggest four uses + More...", used);
-  ids.bpp_lsu._btn.find((b) => b.attrs["data-ltmore"] === "u").onclick();
-  ok(ids.bpp_lsu._btn.filter((b) => b.attrs["data-ltd"] === "u").length === 6 && !/data-ltmore/.test(ids.bpp_lsu.innerHTML), "More expands the rest inline");
+  // v746: only the uses that belong under Commercial are peers; Industrial / Community / Utilities on Commercial land go into "Other recorded uses"
+  ok(used.join(",") === "ho,co,mx" && ids.bpp_lsu._btn.some((b) => b.attrs["data-ltoth"]) && /Other recorded uses \(3\)/.test(ids.bpp_lsu.innerHTML), "v746: belonging uses + one Other chip", used);
+  ids.bpp_lsu._btn.find((b) => b.attrs["data-ltoth"]).onclick();
+  ok(ids.bpp_lsu._btn.filter((b) => b.attrs["data-ltd"] === "u").length === 6, "Other expands its uses inline");
   ids.bpp_lt._btn.find((b) => b.attrs["data-ltd"] === "s" && b.attrs["data-ltv"] === "o").onclick();
   ids.bpp_lsu._btn.find((b) => b.attrs["data-ltd"] === "u" && b.attrs["data-ltv"] === "co").onclick();
-  ok(ids.bpp_sumt.textContent === "Off-plan › Commercial › Commercial · 2 plots" && ids.bpp_see.textContent === "See 2 plots" && ids.bpp_sumx.hidden === false, "summary: Status › Land type › Use · N plots", ids.bpp_sumt.textContent);
+  ok(ids.bpp_sumt.textContent === "Off-plan › Commercial › Offices, shops & hotels · 2 plots" && ids.bpp_see.textContent === "See 2 plots" && ids.bpp_sumx.hidden === false, "summary: Status › Land type › Use · N plots", ids.bpp_sumt.textContent);
   ids.bpp_lsu._btn.find((b) => b.attrs["data-ltd"] === "u" && b.attrs["data-ltv"] === "co").onclick();
   ok(ids.bpp_sumt.textContent === "Off-plan › Commercial · 3 plots", "tap the use again = removed", ids.bpp_sumt.textContent);
   ids.bpp_lt4._btn.find((b) => b.attrs["data-ltd"] === "f" && b.attrs["data-ltv"] === "1").onclick();
@@ -86,7 +87,7 @@ const D6 = { slug: "businessbay", name: "Business Bay", n: 9, sa: "2026-08-31", 
   ok(/Narrow Commercial by use/.test(e.innerHTML), "picker: Use row under the land type");
   e._btn.find((b) => b.attrs["data-ltd"] === "u" && b.attrs["data-ltv"] === "ho").onclick(); ok(F.u === "ho", "use selected");
   e._btn.find((b) => b.attrs["data-ltd"] === "l" && b.attrs["data-ltv"] === "co").onclick(); ok(F.l === "" && F.u === "", "tap again clears the land type and its use");
-  ok(ctx.ltfSum({}, 265619) === "All plots · 265,619" && ctx.ltfSum({ s: "o", l: "co", u: "ho" }, 12340) === "Off-plan › Commercial › Homes · 12,340 plots", "summary text");
+  ok(ctx.ltfSum({}, 265619) === "All plots · 265,619" && ctx.ltfSum({ s: "o", l: "co", u: "ho" }, 12340) === "Off-plan › Commercial › Apartments / flats · 12,340 plots", "summary text");
 }
 console.log("v736 filter ux: " + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);

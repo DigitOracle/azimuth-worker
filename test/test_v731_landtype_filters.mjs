@@ -47,7 +47,7 @@ const DLold = DL4.map((d) => ({ slug: d.slug, name: d.name, n: d.n, g: d.g }));
   ok(ctx.ltfHas(DL4) && !ctx.ltfHas(DLold) && !ctx.ltfHas([]), "packs with codes are detected; old packs are not");
   ok(ctx.ltfN(DL4, F) === 9, "no filter = every plot", ctx.ltfN(DL4, F));
   ok(ctx.ltfN(DL4, { u: "ho", l: "", f: "" }) === 4 && ctx.ltfN(DL4, { u: "ho", l: "", f: "1" }) === 3 && ctx.ltfN(DL4, { u: "ho", l: "re", f: "" }) === 1, "use, land type and tenure combine");
-  ok(ctx.ltfN(DL4, { u: "ot", l: "", f: "" }) === 1 && ctx.ltfN(DL4, { u: "", l: "nr", f: "n" }) === 1, "no sub-type counts as Other / not recorded; no tenure counts as not recorded");
+  ok(ctx.ltfN(DL4, { u: "nr", l: "", f: "" }) === 1 && ctx.ltfN(DL4, { u: "", l: "nr", f: "n" }) === 1, "v746: no sub-type counts as Use not recorded by DLD; no tenure counts as not recorded");
   const d = ctx.ltfDim(DL4, { u: "", l: "", f: "0" }, "u");
   ok(d.in === 2 && d.gh === 1 && d.ho === 1 && !d.co, "chip counts follow the other filters", d);
   ok(ctx.ltfM("ho.co.1", { u: "ho", l: "", f: "" }) && !ctx.ltfM("co.co.1", { u: "ho", l: "", f: "" }) && ctx.ltfM(undefined, F) && !ctx.ltfM(undefined, { u: "ho" }), "row match");
@@ -62,10 +62,10 @@ const DLold = DL4.map((d) => ({ slug: d.slug, name: d.name, n: d.n, g: d.g }));
   ok(/class="zg"/.test(e.innerHTML) && /class="zc"/.test(e.innerHTML), "2-up card grid in the card's own classes");
   e._btn.find((b) => b.attrs["data-ltd"] === "l" && b.attrs["data-ltv"] === "co").onclick(); ok(F.l === "co" && n === 1, "tapping a land type sets it");
   ctx.ltfDraw(e, DL4, F, () => n++, { g: "zg", c: "zc", on: "on", tc: "fl" });
-  ok(/Narrow Commercial by use/.test(e.innerHTML) && />Homes<\/b><span>3 plots/.test(e.innerHTML), "v736: Use row under the land type", e.innerHTML.slice(0, 400));
+  ok(/Narrow Commercial by use/.test(e.innerHTML) && />Homes on commercial-class land<\/b><span>3 plots/.test(e.innerHTML), "v736: Use row under the land type", e.innerHTML.slice(0, 400));
   const hb = e._btn.find((b) => b.attrs["data-ltv"] === "ho" && b.attrs["data-ltd"] === "u"); hb.onclick(); ok(F.u === "ho" && n === 2, "tapping a chip sets the filter");
   hb.onclick(); ok(F.u === "", "tapping it again clears it");
-  ok(L.LT_USE.length === 11 && L.LT_USE.map((x) => x[1]).join("|") === "Homes|Villas|Commercial|Mixed use|Industrial & warehouses|Government housing|Community|Utilities & infrastructure|Agricultural|Labour camps|Other / not recorded", "the eleven use categories, in order");
+  ok(L.LT_USE.length === 12 && L.LT_USE.map((x) => x[1]).join("|") === "Apartments / flats|Villas|Offices, shops & hotels|Mixed use|Industrial & warehouses|Government housing|Community|Utilities & infrastructure|Agricultural|Labour camps|Unclassified sub-type|Use not recorded by DLD", "v746: the twelve use categories, in order");
 }
 
 // ---------- 2. the Python pack builder classifies the DLD sub-types into the same ids
@@ -118,7 +118,7 @@ async function runBP(DL, D) {
   ds.value = "businessbay"; ds.onchange(); await tick(); await tick();
   const labs = bs.options.map((o) => o.textContent).join(" | ");
   ok(/Plot 1/.test(labs) && /Tower B/.test(labs) && /Plot 4/.test(labs) && !/Plot 2/.test(labs) && !/Plot 5/.test(labs), "Homes narrows the building/plot list", labs);
-  ok(/Homes<\/b><span>3 plots/.test(ids.bpp_lsu.innerHTML), "chip counts follow the chosen district", ids.bpp_lsu.innerHTML.slice(0, 300));
+  ok(/Homes on commercial-class land<\/b><span>3 plots/.test(ids.bpp_lsu.innerHTML), "chip counts follow the chosen district", ids.bpp_lsu.innerHTML.slice(0, 300));
 }
 {
   const { ids } = await runBP(DLold, { ...D4, x: undefined, groups: D4.groups.map((g) => [g[0], g[1], g[2].map((p) => p.slice(0, 2))]), vacant: D4.vacant.map((p) => p.slice(0, 2)) });
@@ -138,7 +138,7 @@ async function runBP(DL, D) {
   ok(cards.length === 13 && cards.some((c) => c.attrs["data-ltl"] === "ed,wb,hs,hc"), "13 tappable land-type cards", cards.length);
   co.onclick();
   ok(/\bon\b/.test(co.className) && co.attrs["aria-pressed"] === "true", "tapped card highlighted");
-  ok(!ids.bpp_lsu.hidden && /Narrow Commercial by use/.test(ids.bpp_lsu.innerHTML) && />Homes<\/b><span>3 plots/.test(ids.bpp_lsu.innerHTML) && />Commercial<\/b><span>1 plots/.test(ids.bpp_lsu.innerHTML), "v736: Use row shows the uses of that land type", ids.bpp_lsu.innerHTML.slice(0, 300));
+  ok(!ids.bpp_lsu.hidden && /Narrow Commercial by use/.test(ids.bpp_lsu.innerHTML) && />Homes on commercial-class land<\/b><span>3 plots/.test(ids.bpp_lsu.innerHTML) && />Offices, shops &amp; hotels<\/b><span>1 plots/.test(ids.bpp_lsu.innerHTML), "v736: Use row shows the uses of that land type", ids.bpp_lsu.innerHTML.slice(0, 300));
   ok(ids.bpp_d.options.length === 2, "card filter narrows districts", ids.bpp_d.options.map((o) => o.textContent));
   ok(/^Commercial \u00b7 4 plots$/.test(ids.bpp_sumt.textContent), "summary shows the one land-type filter", ids.bpp_sumt.textContent);
   ids.bpp_lsu._btn.find((b) => b.attrs["data-ltv"] === "ho" && b.attrs["data-ltd"] === "u").onclick();
