@@ -57,6 +57,7 @@ export function cleanEntry(x) {
   if (BPP_READERS[x.reader]) e.reader = x.reader;   // v728 - keep the reader (it was being dropped, so the tile lost "For an investor")
   if (/^[a-z]{1,20}$/.test(String(x.fin || ""))) e.fin = String(x.fin);
   if (x.csv) e.csv = true;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(String(x.made || "")) && Number.isFinite(Date.parse(x.made))) e.made = new Date(Date.parse(x.made)).toISOString();   // v729 - when it was made (the 24 h clock)
   return e;
 }
 // v728 (Kendall, 4 Nov 2026: "we do not need to store previous passports") - ONE passport per plot per reader.
@@ -64,6 +65,38 @@ export function cleanEntry(x) {
 export const bppKeyOf = (e) => (e && e.plot_id ? e.plot_id + "|" + (BPP_READERS[e.reader] ? e.reader : "broker") : "slug|" + (e && e.slug));
 // every KV key that belongs to one stored passport (its files and its hero picture)
 export const bppSlugKeys = (slug) => ["bpp_file_" + slug + "_html", "bpp_file_" + slug + "_pdf", "bpp_file_" + slug + "_csv", "bpp_photo_" + slug, "bpp_img_" + slug];
+// v729 (Kendall, 4 Nov 2026: "remove [passports] after we run it because the listings will change, it's not static") - a passport is a
+// snapshot, never a library. Kept 24 hours from when it was made (open, download, send), then deleted: KV expirationTtl on every file and
+// picture as it is written, and bppTick prunes index entries + finished/failed jobs past 24 h so the list and the storage agree.
+export const BPP_KEEP_S = 86400, BPP_KEEP_MS = BPP_KEEP_S * 1000;
+export const bppTtl = (slug) => (/^t-/.test(String(slug || "")) ? undefined : { expirationTtl: BPP_KEEP_S });   // photo-test keys (t-) left as they were
+// ms since epoch the entry was made: the stored time, else the start of its GST day (entries written before v729)
+export function bppMadeMs(e) { const t = Date.parse(e && e.made || ""); if (Number.isFinite(t)) return t; const d = Date.parse(String(e && e.date || "") + "T00:00:00+04:00"); return Number.isFinite(d) ? d : 0; }
+export const bppLeftMs = (e, now) => bppMadeMs(e) + BPP_KEEP_MS - (now || Date.now());
+export const bppExpired = (e, now) => bppLeftMs(e, now) <= 0;
+export function bppLeftText(ms) { if (!(ms > 0)) return "expiring now"; const h = Math.floor(ms / 3600e3), m = Math.floor((ms % 3600e3) / 60e3); return h ? h + " h " + m + " min left" : Math.max(1, m) + " min left"; }
+const reqTime = (q) => { const t = Date.parse(q && (q.updated || q.at) || ""); return Number.isFinite(t) ? t : 0; };
+// pure plan: which index entries, KV keys and job ids are past 24 h. Jobs still running are never touched.
+export function bppExpirePlan(rawIndex, reqs, now) {
+  const items = (Array.isArray(rawIndex) ? rawIndex : []).map(cleanEntry).filter(Boolean);
+  const gone = items.filter((e) => bppExpired(e, now)), keep = items.filter((e) => !bppExpired(e, now));
+  const keepSlugs = new Set(keep.map((e) => e.slug)), keys = new Set();
+  gone.forEach((e) => { if (!keepSlugs.has(e.slug)) bppSlugKeys(e.slug).forEach((k) => keys.add(k)); });
+  const jobs = (reqs || []).filter((q) => q && q.id && ["done", "failed", "needs a plot number"].includes(q.status) && now - reqTime(q) >= BPP_KEEP_MS).map((q) => q.id);
+  jobs.forEach((id) => keys.add("bpp_req_" + id));
+  return { index: keep, expired: gone.map((e) => e.slug), keys: [...keys].sort(), jobs };
+}
+export async function bppExpire(env, now) {
+  now = now || Date.now();
+  const raw = await readJson(env, "bpp_index");
+  const ids = await readReqIds(env);
+  const reqs = (await Promise.all(ids.map((id) => readReq(env, id)))).filter(Boolean);
+  const plan = bppExpirePlan(raw, reqs, now);
+  if (plan.expired.length) { const r2 = await readJson(env, "bpp_index"); const cur = Array.isArray(r2) ? r2.map(cleanEntry).filter(Boolean) : []; await env.MEETINGS.put("bpp_index", JSON.stringify(cur.filter((e) => !bppExpired(e, now)))); }   // re-read just before the write
+  for (const k of plan.keys) await env.MEETINGS.delete(k);
+  if (plan.jobs.length) { const cur = await readReqIds(env); await env.MEETINGS.put("bpp_requests", JSON.stringify(cur.filter((x) => !plan.jobs.includes(x)))); }
+  return { expired: plan.expired.length, jobs: plan.jobs.length, keys: plan.keys.length };
+}
 // newest per identity (date, then later in the list wins a tie); returns { keep, drop } of index entries
 export function bppNewest(items) {
   const best = new Map();
@@ -73,7 +106,7 @@ export function bppNewest(items) {
 }
 export async function readBppIndex(env) {
   const r = await readJson(env, "bpp_index");
-  return Array.isArray(r) ? bppNewest(r.map(cleanEntry).filter(Boolean)).keep : [];   // v728 - the list shows only the current passports
+  return Array.isArray(r) ? bppNewest(r.map(cleanEntry).filter(Boolean)).keep.filter((e) => !(e.made && bppExpired(e))) : [];   // v729 - never one past 24 h (undated legacy entries go on the next tick)   // v728 - the list shows only the current passports
 }
 export const bppSorted = (items) => items.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 export function mergeEntry(cur, entry) { return mergeEntryPlan(cur, entry).next; }
@@ -461,7 +494,7 @@ async function generatePhoto(env, slug, f, pp, now) {
   const j = await r.json().catch(() => ({}));
   const b64 = j && j.data && j.data[0] && j.data[0].b64_json;
   if (!b64) return { kind: "none", why: "no picture came back" };
-  await env.MEETINGS.put("bpp_img_" + slug, b64ToBytes(b64));
+  await env.MEETINGS.put("bpp_img_" + slug, b64ToBytes(b64), bppTtl(slug));   // v729 - 24 h
   return { kind: "gen" };
 }
 // picks and records the photo for one passport; returns the record (kind google | gen | none)
@@ -471,7 +504,7 @@ export async function bppPhoto(env, slug, f, pp, now) {
   if (!ph) { try { ph = await generatePhoto(env, slug, f, pp, now); } catch (e) { ph = { kind: "none", why: String(e && e.message || e).slice(0, 80) }; } }
   ph = ph || { kind: "none" };
   ph.at = new Date(now || Date.now()).toISOString();
-  await env.MEETINGS.put("bpp_photo_" + slug, JSON.stringify(ph));
+  await env.MEETINGS.put("bpp_photo_" + slug, JSON.stringify(ph), bppTtl(slug));   // v729 - 24 h
   return ph;
 }
 // the picture bytes, live: Google each time, or the stored illustration
@@ -561,6 +594,14 @@ async function renderPdf(env, html) {
     return { pdf, over: Array.isArray(over) ? over : [] };
   } finally { try { await browser.close(); } catch (e) {} }
 }
+// v729 - every passport says it is a snapshot. A fixed line repeats at the top of each printed page and never adds a page.
+export function bppStamp(iso) { const d = new Date(Date.parse(iso) + 4 * 3600e3); return Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + " " + d.toISOString().slice(11, 16) + " GST" : ""; }
+export function snapshotNote(html, iso) {
+  const t = "Snapshot made " + bppStamp(iso) + "; listings change daily, generate a fresh one before sending.";
+  const div = '<div class="bpp-snap" style="position:fixed;top:1.5mm;left:0;right:0;text-align:center;font:500 7pt Inter,sans-serif;color:#5F6B66;z-index:9;pointer-events:none">' + esc(t) + "</div>";
+  const h = String(html || "");
+  return /<body[^>]*>/i.test(h) ? h.replace(/<body[^>]*>/i, (m) => m + div) : div + h;
+}
 async function withLogo(env, html) {
   const b64 = await env.MEETINGS.get("bpp_logo_png");
   return b64 ? html.replace(/(["'])najma_logo\.png\1/g, '"data:image/png;base64,' + b64 + '"') : html;
@@ -568,8 +609,9 @@ async function withLogo(env, html) {
 
 // one step of one job per call; safe to run every minute
 export async function bppTick(env, nowMs) {
-  if (!env.OPENAI_API_KEY) return { idle: "no key" };
   const now = nowMs || Date.now();
+  await bppExpire(env, now).catch(() => null);   // v729 - every minute: passports and jobs past 24 h go
+  if (!env.OPENAI_API_KEY) return { idle: "no key" };
   const ids = (await readReqIds(env)).slice(-40);
   for (const id of ids) {
     const r = await readReq(env, id);
@@ -588,7 +630,7 @@ export async function bppTick(env, nowMs) {
         r.reader_used = fin.reader; r.fin_status = fin.status;
         r.plot_id = res.id; r.title = f0.name; r.area = f0.area; r.parcel = f0.parcel; r.slug = bppSlugFor(f0.name, f0.parcel, fin.reader);
         const f = withFinance(f0, fin, r.slug);
-        if (fin.csv) await env.MEETINGS.put("bpp_file_" + r.slug + "_csv", fin.csv); r.csv = !!fin.csv;
+        if (fin.csv) await env.MEETINGS.put("bpp_file_" + r.slug + "_csv", fin.csv, bppTtl(r.slug)); r.csv = !!fin.csv;
         r.photo = (await bppPhoto(env, r.slug, f, pp, now)).kind;   // v702 - the hero photo, chosen once per request
         r.prompt_chars = 0; const prompt = bppPrompt(f, bppDate(today)); r.prompt_chars = prompt.length;
         r.resp = await oaiStart(env, prompt); r.status = "writing"; r.tries = 0; r.started = new Date(now).toISOString();
@@ -604,8 +646,9 @@ export async function bppTick(env, nowMs) {
         r.lock = new Date(now).toISOString(); await putReq(env, id, r);
         const logo = await withLogo(env, html);
         const ph = await readJson(env, "bpp_photo_" + r.slug);   // v702 - the page links the live picture; the PDF gets it once, at render
+        const made = new Date(now).toISOString();
         const full = placePhoto(logo, heroFigure(ph, "/bp/img/" + r.slug));
-        const { pdf, over } = await renderPdf(env, placePhoto(logo, heroFigure(ph, await bppImageDataUri(env, r.slug).catch(() => ""))));
+        const { pdf, over } = await renderPdf(env, snapshotNote(placePhoto(logo, heroFigure(ph, await bppImageDataUri(env, r.slug).catch(() => ""))), made));
         const n = pdfPages(pdf);
         r.over = over.slice(0, 6);
         if ((n !== 3 || over.length) && !(r.tries >= 1)) {
@@ -613,9 +656,9 @@ export async function bppTick(env, nowMs) {
           r.resp = await oaiStart(env, "Revise this Building Passport HTML. Printed to PDF in Chrome it came out as " + n + " pages" + (over.length ? " and these items are cut off at the page edge or run into the footer: " + over.join(" | ") : "") + ". Content overflowed. Keep the design, palette, fonts, every number and the 3-page A4 structure; tighten spacing, shrink charts and type, and make everything fit in exactly three 210mm x 297mm .page sections with overflow hidden, ending at least 8mm above the footer. Never invent or drop a number. Return ONLY the complete corrected HTML document starting with <!doctype html>.\n\nHTML:\n" + html);
           r.status = "fixing"; await putReq(env, id, r); return { reask: id };
         }
-        await env.MEETINGS.put("bpp_file_" + r.slug + "_html", full);
-        await env.MEETINGS.put("bpp_file_" + r.slug + "_pdf", pdf);
-        await putBppEntry(env, { slug: r.slug, title: r.title, area: r.area, plot_id: r.plot_id, parcel: r.parcel, date: todayGst(now), html: true, pdf: true, reader: r.reader_used || "broker", fin: r.fin_status || "", csv: !!r.csv });
+        await env.MEETINGS.put("bpp_file_" + r.slug + "_html", snapshotNote(full, made), bppTtl(r.slug));   // v729 - 24 h, with the snapshot line
+        await env.MEETINGS.put("bpp_file_" + r.slug + "_pdf", pdf, bppTtl(r.slug));
+        await putBppEntry(env, { slug: r.slug, title: r.title, area: r.area, plot_id: r.plot_id, parcel: r.parcel, date: todayGst(now), made, html: true, pdf: true, reader: r.reader_used || "broker", fin: r.fin_status || "", csv: !!r.csv });
         r.status = "done"; r.pages = n; delete r.lock; delete r.resp; await putReq(env, id, r);
         await dropOldJobs(env, id, r.plot_id, r.reader_used || "broker").catch(() => []);   // v728 - only the latest passport is kept
         return { done: id, pages: n };
@@ -631,19 +674,20 @@ const ic = (d, s, c) => '<svg viewBox="0 0 24 24" width=' + (s || 26) + ' height
 const forWho = (k) => (k === "investor" ? "an investor" : "a " + k);   // v727
 const ST = { pending: "Waiting to start", writing: "Being made", fixing: "Being made (fitting to 3 pages)", done: "Ready", failed: "Could not be made", "needs a plot number": "Needs a plot number" };
 
-export function bppBody(key, rk, items, reqs, origin, who) {
+export function bppBody(key, rk, items, reqs, origin, who, nowMs) {
+  const now = nowMs || Date.now();
   const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const tile = (e) => {
     const share = origin + "/bp/" + e.slug;
-    return '<div class=bt><div class=bh><span class=pi>' + ic(BPP_ICON) + '</span><span class=px><b>' + esc(e.title) + '</b><i>' + esc([e.reader && BPP_READERS[e.reader] ? "For " + forWho(e.reader) + (e.fin === "preliminary" ? " (preliminary)" : "") : "", e.area, bppDate(e.date)].filter(Boolean).join(" · ")) + '</i></span></div>'
+    return '<div class=bt><div class=bh><span class=pi>' + ic(BPP_ICON) + '</span><span class=px><b>' + esc(e.title) + '</b><i>' + esc([e.reader && BPP_READERS[e.reader] ? "For " + forWho(e.reader) + (e.fin === "preliminary" ? " (preliminary)" : "") : "", e.area, bppDate(e.date), bppLeftText(bppLeftMs(e, now))].filter(Boolean).join(" · ")) + '</i></span></div>'
       + '<div class=ba><a class=b href="/bp/' + e.slug + '" target=_blank rel=noopener>Open</a>' + (e.pdf ? '<a class=b href="/bp/f/' + e.slug + '.pdf" target=_blank rel=noopener>PDF</a>' : "") + (e.csv ? '<a class=b href="/bp/f/' + e.slug + '.csv">Schedule (Excel CSV)</a>' : "")
       + '<a class="b w" target=_blank rel=noopener href="https://wa.me/?text=' + encodeURIComponent(e.title + " - Building Passport\n" + share) + '">Send on WhatsApp</a>'
       + (e.plot_id ? '<a class="b o" href="/plot_passport' + q + "&id=" + encodeURIComponent(e.plot_id) + '">Full evidence</a>' : "") + '</div></div>';
   };
   // v701 (Kendall, 3 Nov): the page opens on what is in the register, not on one passport; made passports sit below the form
-  const list = items.length ? '<details class=made><summary>Passports made (' + items.length + ')</summary><div class=pl id=bpp_list>' + bppSorted(items).map(tile).join("") + '</div></details>'
-    : '<p class=fmm id=bpp_empty>No passports made yet.</p>';
-  const stats = '<div class=sts id=bpp_stats><div><b id=bpp_sp>-</b><span>plots in the register</span></div><div><b id=bpp_sd>-</b><span>districts</span></div><div><b>' + items.length + '</b><span>passports made</span></div></div>'
+  const list = items.length ? '<details class=made open><summary>Ready to download (kept 24 hours) (' + items.length + ')</summary><p class=fmm>Each passport is a snapshot. Listings change daily, so it is deleted 24 hours after it is made; generate a fresh one before sending.</p><div class=pl id=bpp_list>' + bppSorted(items).map(tile).join("") + '</div></details>'
+    : '<p class=fmm id=bpp_empty>Nothing ready to download. Passports are kept 24 hours after they are made.</p>';
+  const stats = '<div class=sts id=bpp_stats><div><b id=bpp_sp>-</b><span>plots in the register</span></div><div><b id=bpp_sd>-</b><span>districts</span></div><div><b>' + items.length + '</b><span>ready (24 h)</span></div></div>'
     + '<style>.sts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0 4px}.sts div{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:12px 8px;text-align:center}.sts b{display:block;font:600 1.25rem Fraunces,serif;color:#0A4F4A}.sts span{font:500 .72rem "IBM Plex Sans",sans-serif;color:#5F6B66}.made summary{font:600 1.05rem Fraunces,serif;color:#0A4F4A;cursor:pointer;margin:22px 0 8px}</style>';
   const rq = reqs.filter((r) => r && r.status !== "done").slice(-12).reverse();
   const reqH = rq.length ? '<div class=rl id=bpp_reqs>' + rq.map((r) => '<div class=rq><b>' + esc((r.title || r.text) + (r.reader && BPP_READERS[r.reader] ? " · for " + forWho(r.reader) : "")) + '</b><span class="s s_' + esc(String(r.status).replace(/\W/g, "")) + '">' + esc(ST[r.status] || r.status) + '</span>' + (r.msg ? '<i>' + esc(r.msg) + '</i>' : "") + '</div>').join("") + '</div>' : "";
