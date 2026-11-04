@@ -76,7 +76,7 @@ ok(B.bppTtl("u-bora-3466876").expirationTtl === 86400 && B.bppTtl("t-test") === 
 {
   const h = B.snapshotNote("<!doctype html><html><body class=x><div class=page>p</div></body></html>", "2026-11-04T16:05:00Z");
   ok(h.includes("Snapshot made 2026-11-04 20:05 GST; listings change daily, generate a fresh one before sending."), "snapshot line with GST date time", h);
-  ok(/<body class=x><div class="bpp-snap"/.test(h) && /position:fixed/.test(h), "placed right after <body>, fixed (no extra page)");
+  ok(/<div class=page>p<div class="bpp-snap">Snapshot made/.test(h) && !/position:fixed/.test(h), "v734: inside each page, in its own bottom band (never fixed over the header)", h);
   const src = fs.readFileSync(new URL("../src/building_passports.js", import.meta.url), "utf8");
   ok(/renderPdf\(env, snapshotNote\(/.test(src), "PDF render carries the snapshot line");
 }
