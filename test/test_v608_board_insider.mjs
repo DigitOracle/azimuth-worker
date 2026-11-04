@@ -14,7 +14,7 @@ const board = at('if (url.pathname === "/board") {'), done = at('if (url.pathnam
 ok(src.split('if (url.pathname === "/board") {').length === 2 && /^[^]{0,140}!== env\.READ_KEY && !isInsider\(env, url\)\) return new Response\("unauthorized", \{ status: 401 \}\)/.test(board.slice('if (url.pathname === "/board") {'.length)), "/board accepts the owner key or an insider key", board);
 ok(src.split('if (url.pathname === "/done") {').length === 2 && /!== env\.READ_KEY && !isInsider\(env, url\)\) return new Response\("unauthorized", \{ status: 401 \}\)/.test(done), "/done (the board's tick-to-delete) accepts the same two", done);
 ok((src.match(/get\("key"\) !== env\.READ_KEY && !isInsider\(env, url\)\)/g) || []).length === 2, "exactly two checks were widened");
-ok((src.match(/get\("key"\) !== env\.READ_KEY\)/g) || []).length === 97, "the other 97 strict owner checks are untouched", (src.match(/get\("key"\) !== env\.READ_KEY\)/g) || []).length);
+ok((src.match(/get\("key"\) !== env\.READ_KEY\)/g) || []).length === 96, "the other 96 strict owner checks are untouched (v742: /studio moved to keyTier admin, so 97 -> 96)", (src.match(/get\("key"\) !== env\.READ_KEY\)/g) || []).length);
 
 console.log("B - routes that must stay owner-only");
 for (const r of ["/note", "/reindex", "/src", "/backfill", "/debugatt", "/setbg"]) {
