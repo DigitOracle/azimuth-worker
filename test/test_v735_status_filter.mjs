@@ -51,7 +51,7 @@ const DL4 = DL5.map((d) => { const x = {}; for (const k in d.x) { const c = k.sp
   const e = el("x"); const F = { u: "", l: "", f: "" }; let n = 0;
   ctx.ltfDraw(e, DL5, F, () => n++, { g: "zg", c: "zc", on: "on", t: "Use (DLD)", tc: "fl" });
   const h = e.innerHTML;
-  ok(h.indexOf(">Status<") >= 0 && h.indexOf(">Status<") < h.indexOf("Use (DLD)") && h.indexOf(">Status<") < h.indexOf("<details"), "Status shows FIRST, outside the accordion");
+  ok(h.indexOf(">Status<") >= 0 && h.indexOf(">Status<") < h.indexOf("Land type (DLD)") && h.indexOf("<details") < 0, "Status shows FIRST, no nested menu");
   ok(/>Ready<\/b><span>4 plots/.test(h) && />Off-plan<\/b><span>2 plots/.test(h) && />Empty plot<\/b><span>2 plots/.test(h) && />Not known<\/b><span>1 plots/.test(h), "status chips with counts", h.slice(0, 900));
   ok(/Status from DLD project register and DM construction records, as of 31 Aug 2026\./.test(h), "source + as-of line on screen", h.slice(0, 1400));
   ok(/1 plots: registers disagree \(newer record used\)/.test(h), "registers-disagree note");
@@ -62,7 +62,7 @@ const DL4 = DL5.map((d) => { const x = {}; for (const k in d.x) { const c = k.sp
   ctx.ltfDraw(e, DL5, F, () => n++, {}); ok(/Clear filters/.test(e.innerHTML), "clear control with only a status filter on");
   e._btn.find((b) => b.attrs["data-ltclr"]).onclick(); ok(F.s === "" && F.u === "", "clear resets status too");
   ctx.ltfDraw(e, DL4, { u: "", l: "", f: "" }, () => {}, {});
-  ok(!e.hidden && e.innerHTML.indexOf(">Status<") < 0 && /Homes/.test(e.innerHTML), "v731 packs: status hidden, the other chips unchanged");
+  ok(!e.hidden && e.innerHTML.indexOf(">Status<") < 0 && /Freehold/.test(e.innerHTML), "v731 packs: status hidden, the other chips unchanged");
   ctx.ltfDraw(e, [{ n: 3 }], {}, () => {}, {}); ok(e.hidden && e.innerHTML === "", "pre-v731 packs: everything hidden");
 }
 
@@ -96,7 +96,7 @@ const DL4 = DL5.map((d) => { const x = {}; for (const k in d.x) { const c = k.sp
   document.getElementById("bpp_ltc").innerHTML = (/<div class=zg id=bpp_ltc>([\s\S]*?)<\/div>/.exec(body) || [])[1] || "";
   vm.createContext(ctx); vm.runInContext(main, ctx); await tick(); await tick();
   const lt = ids.bpp_lt, ds = ids.bpp_d, bs = ids.bpp_b;
-  ok(!lt.hidden && lt.innerHTML.indexOf(">Status<") >= 0 && lt.innerHTML.indexOf(">Status<") < lt.innerHTML.indexOf("Use (DLD)"), "card: Status first");
+  ok(!lt.hidden && lt.innerHTML.indexOf(">Status<") >= 0 && body.indexOf("id=bpp_lt ") < body.indexOf("id=bpp_ltc"), "card: Status first");
   lt._btn.find((b) => b.attrs["data-ltd"] === "s" && b.attrs["data-ltv"] === "o").onclick();
   ok(ds.options.length === 2 && /Business Bay \u00b7 2 plots/.test(ds.options[1].textContent), "Off-plan narrows districts and counts", ds.options.map((o) => o.textContent));
   ds.value = "businessbay"; ds.onchange(); await tick(); await tick();

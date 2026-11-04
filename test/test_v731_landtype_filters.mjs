@@ -56,11 +56,14 @@ const DLold = DL4.map((d) => ({ slug: d.slug, name: d.name, n: d.n, g: d.g }));
   ok(e.hidden === true && e.innerHTML === "", "hidden gracefully until the rebuilt packs are stored");
   ctx.ltfDraw(e, DL4, F, () => n++, { g: "zg", c: "zc", on: "on", t: "Use (DLD)", tc: "fl" });
   ok(!e.hidden && /DLD categories; land type and sub-type can disagree/.test(e.innerHTML), "the disagreement note is on screen");
-  ok(/>Homes<\/b><span>4 plots/.test(e.innerHTML) && /Industrial &amp; warehouses/.test(e.innerHTML) && /Government housing/.test(e.innerHTML) && /Other \/ not recorded/.test(e.innerHTML), "use chips with counts", e.innerHTML.slice(0, 400));
-  ok(/Land type and tenure \(DLD\)/.test(e.innerHTML) && />Freehold<\/b><span>4 plots/.test(e.innerHTML) && />Not freehold<\/b><span>4 plots/.test(e.innerHTML), "land type and tenure are secondary filters");
+  ok(!/data-ltd="u"/.test(e.innerHTML) && /data-ltd="l" data-ltv="co"/.test(e.innerHTML), "v736: no Use row until a land type is chosen; land-type chips show");
+  ok(/>Freehold<\/b><span>4 plots/.test(e.innerHTML) && />Not freehold<\/b><span>4 plots/.test(e.innerHTML) && !/<details/.test(e.innerHTML), "v736: Freehold chips, no nested menu");
   ok(!/>Villas</.test(e.innerHTML) && !/>Labour camps</.test(e.innerHTML), "chips with no plots are not shown");
   ok(/class="zg"/.test(e.innerHTML) && /class="zc"/.test(e.innerHTML), "2-up card grid in the card's own classes");
-  const hb = e._btn.find((b) => b.attrs["data-ltv"] === "ho" && b.attrs["data-ltd"] === "u"); hb.onclick(); ok(F.u === "ho" && n === 1, "tapping a chip sets the filter");
+  e._btn.find((b) => b.attrs["data-ltd"] === "l" && b.attrs["data-ltv"] === "co").onclick(); ok(F.l === "co" && n === 1, "tapping a land type sets it");
+  ctx.ltfDraw(e, DL4, F, () => n++, { g: "zg", c: "zc", on: "on", tc: "fl" });
+  ok(/Narrow Commercial by use/.test(e.innerHTML) && />Homes<\/b><span>3 plots/.test(e.innerHTML), "v736: Use row under the land type", e.innerHTML.slice(0, 400));
+  const hb = e._btn.find((b) => b.attrs["data-ltv"] === "ho" && b.attrs["data-ltd"] === "u"); hb.onclick(); ok(F.u === "ho" && n === 2, "tapping a chip sets the filter");
   hb.onclick(); ok(F.u === "", "tapping it again clears it");
   ok(L.LT_USE.length === 11 && L.LT_USE.map((x) => x[1]).join("|") === "Homes|Villas|Commercial|Mixed use|Industrial & warehouses|Government housing|Community|Utilities & infrastructure|Agricultural|Labour camps|Other / not recorded", "the eleven use categories, in order");
 }
@@ -100,26 +103,26 @@ async function runBP(DL, D) {
 {
   const { body, ids } = await runBP(DL4, D4);
   ok(body.indexOf("function ltfDraw") >= 0 && /<div id=bpp_lt class=ltw hidden><\/div>/.test(body), "card ships the filter block");
-  ok(!/<details[^>]*open/.test(body) && (body.match(/<details class="?[^>]*acc[^>]*name=bpa/g) || []).length === 3 && body.indexOf("id=bpp_sp") < body.indexOf("name=bpa"), "accordion: sections closed by default, one name group, stats row outside", (body.match(/<details[^>]*>/g) || []));
+  ok(!/<details[^>]*open/.test(body) && (body.match(/<details class="?[^>]*acc[^>]*name=bpa/g) || []).length === 2 && body.indexOf("id=bpp_sp") < body.indexOf("name=bpa"), "accordion: sections closed by default, one name group, stats row outside", (body.match(/<details[^>]*>/g) || []));
   ok(/details\.acc/.test(body) && /o\.open=false/.test(body), "opening one section closes the others (fallback)");
-  ok(body.indexOf("id=bpp_lts") < body.indexOf("<summary>Request a passport") && !/<form[\s\S]*id=bpp_lt class=ltw[\s\S]*<\/form>/.test(body), "filters are their own section, before the form");
+  ok(body.indexOf("id=bpp_lt ") < body.indexOf("<summary>Request a passport") && body.indexOf("id=bpp_lt ") < body.indexOf("id=bpp_ltc") && !/<form[\s\S]*id=bpp_lt class=ltw[\s\S]*<\/form>/.test(body), "v736: filters sit in the land-type card, before the form");
   const lt = ids.bpp_lt, ds = ids.bpp_d, bs = ids.bpp_b;
-  ok(!lt.hidden && !ids.bpp_lts.hidden && /Use \(DLD\)/.test(lt.innerHTML), "chips (and their section) show once the packs carry codes");
+  ok(lt.hidden && !ids.bpp_lt4.hidden && /Freehold/.test(ids.bpp_lt4.innerHTML), "v731 packs: no Status row; Freehold chips show");
   ok(ds.options.length === 3, "both districts listed with no filter", ds.options.map((o) => o.textContent));
-  lt._btn.find((b) => b.attrs["data-ltv"] === "in").onclick();
+  ids.bpp_ltc._btn.find((c) => c.attrs["data-ltl"] === "in").onclick();
   ok(ds.options.length === 2 && /Al Qusais \u00b7 2 plots/.test(ds.options[1].textContent), "Industrial narrows the district list and its count", ds.options.map((o) => o.textContent));
-  ok(/Clear filters/.test(lt.innerHTML), "clear control while a filter is on");
-  lt._btn.find((b) => b.attrs["data-ltclr"]).onclick();
+  ok(ids.bpp_sumx.hidden === false, "clear control while a filter is on");
+  ids.bpp_sumx.onclick();
   ok(ds.options.length === 3, "clear restores the list");
-  lt._btn.find((b) => b.attrs["data-ltv"] === "ho" && b.attrs["data-ltd"] === "u").onclick();
+  ids.bpp_ltc._btn.find((c) => c.attrs["data-ltl"] === "co").onclick(); ids.bpp_lsu._btn.find((b) => b.attrs["data-ltv"] === "ho" && b.attrs["data-ltd"] === "u").onclick();
   ds.value = "businessbay"; ds.onchange(); await tick(); await tick();
   const labs = bs.options.map((o) => o.textContent).join(" | ");
   ok(/Plot 1/.test(labs) && /Tower B/.test(labs) && /Plot 4/.test(labs) && !/Plot 2/.test(labs) && !/Plot 5/.test(labs), "Homes narrows the building/plot list", labs);
-  ok(/>Homes<\/b><span>3 plots/.test(lt.innerHTML) || /Homes<\/b><span>3 plots/.test(lt.innerHTML), "chip counts follow the chosen district", lt.innerHTML.slice(0, 300));
+  ok(/Homes<\/b><span>3 plots/.test(ids.bpp_lsu.innerHTML), "chip counts follow the chosen district", ids.bpp_lsu.innerHTML.slice(0, 300));
 }
 {
   const { ids } = await runBP(DLold, { ...D4, x: undefined, groups: D4.groups.map((g) => [g[0], g[1], g[2].map((p) => p.slice(0, 2))]), vacant: D4.vacant.map((p) => p.slice(0, 2)) });
-  ok(ids.bpp_lt.hidden === true && ids.bpp_lts.hidden === true, "old packs: filters and their section stay hidden");
+  ok(ids.bpp_lt.hidden === true && ids.bpp_lt4.hidden === true && ids.bpp_lsu.hidden === true, "old packs: filters stay hidden");
   ok(ids.bpp_d.options.length === 3 && /Business Bay \u00b7 5 plots/.test(ids.bpp_d.options[1].textContent), "old packs: districts list as before", ids.bpp_d.options.map((o) => o.textContent));
   ids.bpp_d.value = "businessbay"; ids.bpp_d.onchange(); await tick(); await tick();
   ok(ids.bpp_b.options.length === 6, "old packs: every plot still listed", ids.bpp_b.options.map((o) => o.textContent));
@@ -135,20 +138,20 @@ async function runBP(DL, D) {
   ok(cards.length === 13 && cards.some((c) => c.attrs["data-ltl"] === "ed,wb,hs,hc"), "13 tappable land-type cards", cards.length);
   co.onclick();
   ok(/\bon\b/.test(co.className) && co.attrs["aria-pressed"] === "true", "tapped card highlighted");
-  ok(!ids.bpp_ltp.hidden && />Homes<\/b><span>3 plots/.test(ids.bpp_ltp.innerHTML) && />Commercial<\/b><span>1 plots/.test(ids.bpp_ltp.innerHTML), "panel shows the sub-type uses of that land type", ids.bpp_ltp.innerHTML.slice(0, 300));
+  ok(!ids.bpp_lsu.hidden && /Narrow Commercial by use/.test(ids.bpp_lsu.innerHTML) && />Homes<\/b><span>3 plots/.test(ids.bpp_lsu.innerHTML) && />Commercial<\/b><span>1 plots/.test(ids.bpp_lsu.innerHTML), "v736: Use row shows the uses of that land type", ids.bpp_lsu.innerHTML.slice(0, 300));
   ok(ids.bpp_d.options.length === 2, "card filter narrows districts", ids.bpp_d.options.map((o) => o.textContent));
-  ok(/data-ltd="l" data-ltv="co"/.test(ids.bpp_lt.innerHTML) && /aria-pressed="true" data-ltd="l" data-ltv="co"/.test(ids.bpp_lt.innerHTML), "chips show the same land-type filter (one state)");
-  ids.bpp_ltp._btn.find((b) => b.attrs["data-ltu"] === "ho").onclick();
-  ok(/aria-pressed="true" data-ltd="u" data-ltv="ho"/.test(ids.bpp_lt.innerHTML), "sub-use tap sets the Use chip too");
-  ids.bpp_lt._btn.find((b) => b.attrs["data-ltclr"]).onclick();
-  ok(!/\bon\b/.test(ids.bpp_ltc._btn.find((c) => c.attrs["data-ltl"] === "co").className) && ids.bpp_ltp.hidden, "clearing the chips clears the card and closes the panel");
+  ok(/^Commercial \u00b7 4 plots$/.test(ids.bpp_sumt.textContent), "summary shows the one land-type filter", ids.bpp_sumt.textContent);
+  ids.bpp_lsu._btn.find((b) => b.attrs["data-ltv"] === "ho" && b.attrs["data-ltd"] === "u").onclick();
+  ok(/aria-pressed="true" data-ltd="u" data-ltv="ho"/.test(ids.bpp_lsu.innerHTML), "use tap selects the use chip");
+  ids.bpp_sumx.onclick();
+  ok(!/\bon\b/.test(ids.bpp_ltc._btn.find((c) => c.attrs["data-ltl"] === "co").className) && ids.bpp_lsu.hidden, "clearing clears the card and removes the Use row");
   ids.bpp_ltc._btn.find((c) => c.attrs["data-ltl"] === "ed,wb,hs,hc").onclick();
   ok(ids.bpp_d.options.length === 1, "merged card filters on its four classes (none in sample)", ids.bpp_d.options.map((o) => o.textContent));
 }
 {
   const { ids } = await runBP(DLold, D4);
   ids.bpp_ltc._btn[0].onclick();
-  ok(ids.bpp_ltp.hidden && ids.bpp_d.options.length === 3, "old packs: cards stay inert");
+  ok(ids.bpp_lsu.hidden && ids.bpp_d.options.length === 3, "old packs: cards stay inert");
 }
 
 // ---------- 4. plot passport picker carries the same filters
