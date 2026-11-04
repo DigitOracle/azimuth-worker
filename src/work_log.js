@@ -692,7 +692,8 @@ async function recApi(request, env, J, deps) {
       + "Every task or follow-up goes in works/progress with its owner and status; decisions and next steps go in the summary, evidence and next. Use only what the notes say.";
     let x = null; try { x = await deps.claudeJSON(env, sysPrompt(deps.prof), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
     let list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, deps.prof)) : [clean(fallback((m.title || "Meeting") + ". " + (notes ? notes.summary : transcript.slice(0, 600)), deps.prof), deps.prof)];
-    list.forEach((e, i) => { if (i === 0 && m.secs >= 60 && !e.start && toMin(m.started_hm) != null && toMin(m.ended_hm) != null && toMin(m.ended_hm) > toMin(m.started_hm)) { e.start = m.started_hm; e.end = m.ended_hm; }
+    list.forEach((e, i) => { if (i === 0) e.type = "Meeting";   // v753 - a recording is a meeting: the first entry is never left to the model or the keyword fallback
+      if (i === 0 && m.secs >= 60 && !e.start && toMin(m.started_hm) != null && toMin(m.ended_hm) != null && toMin(m.ended_hm) > toMin(m.started_hm)) { e.start = m.started_hm; e.end = m.ended_hm; }
       if (e.time_of_day === "Unspecified" && toMin(e.start || m.started_hm) != null) { const h = Math.floor(toMin(e.start || m.started_hm) / 60); e.time_of_day = h < 12 ? "Morning" : h < 14 ? "Midday" : h < 18 ? "Afternoon" : "Evening"; } });
     const known = await knownParties(env), seen = {};
     for (const e of list) for (const o of e.external) {
@@ -1240,8 +1241,9 @@ export function reportSection(es, days, allTasks, opt) {
     + (outRole.length ? '<div class=out><b>Going beyond the role: ' + outRole.length + (outRole.length === 1 ? ' activity' : ' activities') + '</b> · ' + esc(Object.keys(byD).sort((a, b) => byD[b] - byD[a]).map((d) => (d === "Sales" ? "as a broker" : "for " + d) + ' ' + byD[d]).join(", ")) + ' · support given to the wider team, noted alongside the Strategic Lead work.</div>' : '')
     + (byDay.length ? '<div class=day>' + byDay.map((x) => '<div class=dd><h3>' + esc(dayName(x.d)) + ' ' + esc(fmtD(x.d)) + '</h3>' + x.es.map((e) => '<div class=li><i style="background:' + (e.in_scope === false ? WARM : TEAL) + '"></i><div>' + esc(e.title) + ' <span>· ' + esc(e.type) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ' · ' + esc(e.time_of_day.toLowerCase()) : '') + ((e.people || []).length ? ' · ' + esc(e.people.map((n) => n.replace(/\s*\(.*\)$/, "").split(" ")[0]).slice(0, 3).join(", ")) : '') + '</span></div></div>').join("") + '</div>').join("") + '</div>' : '');
 }
-export function reportDoc(kindWord, span, body, docTitle, period) {   // v679 - period: the cover's own date line (the exact days the report covers)
-  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (kindWord === 'Daily' ? 'Daily' : 'Activity') + ' report</title>'
+export function reportDoc(kindWord, span, body, docTitle, period) {   // v753 (Kendall 4 Nov 2026: "meeting minutes is simply meeting minutes ... doesn't require a cover page") - a recorded meeting prints as Meeting minutes, no cover; the tab title said 'Activity report' for every kind but Daily
+  // // v679 - period: the cover's own date line (the exact days the report covers)
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (kindWord === 'Meeting' ? 'Meeting minutes' : esc(kindWord) + ' report') + '</title>'
     + '<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap"><style>'
     // v579 (Najjuko 14 Oct, from her own PDF): the browser's print header stamped the Azimuth link (with her key) on every page - @page margin boxes are
     // emptied so no URL, date or page number prints; the confidentiality footer is gone; the FN wordmark (the real logo file replaces it when she sends it).
@@ -1281,10 +1283,10 @@ export function reportDoc(kindWord, span, body, docTitle, period) {   // v679 - 
     + '.cover h1{font-family:Anton,sans-serif;font-weight:400;font-size:46pt;line-height:1.02;margin:0;color:' + FN_NAVY + ';letter-spacing:.02em}.cover h1 span{display:block;color:' + FN_PEACH + '}.cover .rule{width:72px;height:3px;background:' + FN_GOLD + ';margin:22px auto}'
     + '.cover .when{font-size:15pt;font-weight:600;color:' + FN_NAVY + '}.cover .cf{position:absolute;left:48px;right:48px;bottom:40px;font-size:8.5pt;color:#626B7C;line-height:1.5;border-top:1px solid #E9EAEC;padding-top:12px}.cover .cf b{color:' + FN_NAVY + '}'
     + '@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 14px}.btns{display:none}.mth{border-top:0;margin-top:0;padding-top:0}.cover{max-width:none;width:auto;min-height:0;height:262mm;margin:0;padding:0 14mm 0;border:0;overflow:hidden;break-inside:avoid;page-break-inside:avoid}.cover .latt{margin:0 -14mm}.cover .mark{margin-top:30mm}.cover .mid{margin-top:40mm}.cover .cf{left:14mm;right:14mm;bottom:8mm}.dc{grid-template-columns:96px minmax(0,1fr)}}</style></head><body>'
-    + '<section class=cover><div class=latt></div><img class=mark src="' + FN_LOGO + '" alt="FN Realty"><div class=mid><div class=kick>FN REALTY</div><h1>' + esc(String(kindWord).toUpperCase()) + '<span>REPORT</span></h1><div class=rule></div><div class=when>' + (period || span) + '</div></div>'
-    + '<div class=cf><b>Serah Najjuko Ganyana</b> · Strategic Lead – Marketing, PR &amp; Business Development<br>Internal · prepared for FN Realty management</div></section>'
+    + (kindWord === 'Meeting' ? '' : '<section class=cover><div class=latt></div><img class=mark src="' + FN_LOGO + '" alt="FN Realty"><div class=mid><div class=kick>FN REALTY</div><h1>' + esc(String(kindWord).toUpperCase()) + '<span>REPORT</span></h1><div class=rule></div><div class=when>' + (period || span) + '</div></div>'
+    + '<div class=cf><b>Serah Najjuko Ganyana</b> · Strategic Lead – Marketing, PR &amp; Business Development<br>Internal · prepared for FN Realty management</div></section>')
     + '<div class=pg>'
-    + '<div class=latt></div><header><div><h1><em>' + kindWord + '</em> Report</h1><p>' + span + '</p></div><div class=who><div class=fnmark><img src="' + FN_LOGO + '" alt="FN Realty"></div><b>Serah Najjuko Ganyana</b>Strategic Lead – Marketing, PR &amp; Business Development</div></header>'
+    + '<div class=latt></div><header><div><h1>' + (kindWord === 'Meeting' ? 'Meeting minutes' : '<em>' + kindWord + '</em> Report') + '</h1><p>' + span + '</p></div><div class=who><div class=fnmark><img src="' + FN_LOGO + '" alt="FN Realty"></div><b>Serah Najjuko Ganyana</b>Strategic Lead – Marketing, PR &amp; Business Development</div></header>'
     + body
     + '</div>'
     // v579 - the Azimuth link (her key rides in it) is never what gets shared. The page title is "FN Daily report 14 Oct 2026", so the browser's
