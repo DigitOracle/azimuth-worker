@@ -1,4 +1,5 @@
 import { calendarRoute } from "./content_calendar.js";   // v754
+import { plannerRoute } from "./content_planner.js";   // v758 - FN Content Planner
 import { creamTheme } from "./cream_theme.js";   // v728
 import { plotIntelRoutes, PLOT_ROOMS } from "./plot_intel.js";   // v691 - Activity radar + Land scanner (MORE)
 import { askBoxHtml, askRoute, askFloatHtml } from "./ask_najma.js";   // v555, v556
@@ -3437,6 +3438,7 @@ async function appFetch(request, env, ctx) {
         // v564 - Work is Najjuko's private FN Realty log (src/work_log.js); her MOMO tab opens straight on it (Play is Kendall's health log)
         // v652 (Kendall 27 Oct): her Momo link opens the front door (Work, Play, Ascend and the one client card) instead of jumping into Work.
         if (url.pathname === "/momo/work/calendar" && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _cc = await calendarRoute(request, env, url, { page: momoPage }); if (_cc) return _cc; }   // v754 - content calendar connect
+        if (url.pathname.startsWith("/momo/work/planner") && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _cp = await plannerRoute(request, env, url, { page: momoPage, person: personOfKey }); if (_cp) return _cp; }   // v758 - FN Content Planner
         const _prod = url.pathname === "/momo/work/products";   // v754 (Kendall 4 Nov 2026: "merge the cards") - Product sheets: briefs, data sheets and building briefings behind one card
         if (url.pathname.startsWith("/momo/work") && !_prod) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
         const _ar = personOfKey(env, url) === "najjuko" ? await readAnne(env) : null;   /* v643 - the client card is hers */ const _dl = personOfKey(env, url) === "najjuko" ? await readDossiers(env) : [];   /* v657 - her building briefing cards */ return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false, _ar && !_ar.archived ? (_ar.title || "Client") : "", personOfKey(env, url) === "kendall", _dl, (personOfKey(env, url) === "najjuko" && isNajjuko(env, url)) || personOfKey(env, url) === "kendall", personOfKey(env, url) === "najjuko" && isNajjuko(env, url), _prod), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
