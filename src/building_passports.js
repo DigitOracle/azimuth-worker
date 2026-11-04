@@ -9,6 +9,7 @@
 // Risks and opportunities are computed HERE by simple rules from the figures (bppFacts), never left to the model to invent.
 import puppeteer from "@cloudflare/puppeteer";
 import { ppGet, ppSearch } from "./plot_passport.js";
+import { bppFinance, BPP_READERS, readerFor } from "./passport_finance.js";   // v727 - the financial engine on page 2, by reader (investor / broker / developer)
 
 const esc = (s) => String(s == null ? "" : s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;
@@ -77,6 +78,11 @@ export async function bppPublic(request, env, url) {
   if (m) {
     const b = await env.MEETINGS.get("bpp_file_" + m[1] + "_pdf", "arrayBuffer");
     return b ? new Response(b, { headers: { "Content-Type": "application/pdf", "Cache-Control": "public, max-age=3600", "Content-Disposition": 'inline; filename="' + m[1] + '.pdf"' } }) : new Response("not found", { status: 404 });
+  }
+  m = p.match(/^\/bp\/f\/([a-z0-9-]{1,80})\.csv$/);   // v727 - the downloadable schedule behind the investor / developer figures (CSV; opens in Excel)
+  if (m) {
+    const c = await env.MEETINGS.get("bpp_file_" + m[1] + "_csv");
+    return c ? new Response(c, { headers: { "Content-Type": "text/csv; charset=utf-8", "Cache-Control": "public, max-age=600", "Content-Disposition": 'attachment; filename="' + m[1] + '_schedule.csv"' } }) : new Response("not found", { status: 404 });
   }
   m = p.match(/^\/bp\/img\/([a-z0-9-]{1,80})$/);   // v702 - the hero picture: Google's, fetched live each time (never stored), or the stored illustration
   if (m) {
@@ -299,8 +305,21 @@ export function bppPrompt(f, dateText) {
     + "\nNot available yet (show as such, grey chip): " + f.missing.join("; ") + "."
     + "\nRisks (computed; print exactly these): " + f.risks.map((r, i) => "(" + String.fromCharCode(97 + i) + ") " + r).join(" ")
     + "\nOpportunities (computed; print exactly these): " + f.opps.map((r, i) => "(" + String.fromCharCode(97 + i) + ") " + r).join(" ")
+    + (f.finance && f.finance.length ? "\nFINANCE for section 07 Investment on page 2 (v727; it replaces the plain investment KPI cards; print exactly; under every figure say observed or assumed and its source and as-of date as given; a figure marked preliminary shows the word \"preliminary\" and NO number; show the assumptions as a small table with their values; keep it inside page 2):\n" + f.finance.join("\n") : "")
     + "\nDisclaimer: Research use only. Not a valuation, legal title or offer. Registered deals are actual prices; adverts are asking prices.";
 }
+
+// v727: one set of investment figures only. The engine's reader view replaces the older plain gross-yield line and opportunity (different method),
+// and the schedule link gets this passport's own address.
+export function withFinance(f, fin, slug) {
+  const lines = f.lines.filter((l) => !/^Investment( \(calculated\))?:/.test(l));
+  const opps = f.opps.filter((o) => !/gross yield on a 1 bed/.test(o));
+  if (fin.reader === "investor" && fin.gross && fin.gross.value != null) opps.push("About " + (fin.gross.value * 100).toFixed(1) + "% gross yield on a typical " + (fin.unit.b === "0" ? "studio" : fin.unit.b + " bed") + " (registered rent over registered ready price per m2 x median size).");
+  if (!opps.length) opps.push("No opportunity can be computed from the register figures held today; say so plainly.");
+  const finance = fin.lines.map((l) => l.replace("/bp/f/<this passport>.csv", "/bp/f/" + slug + ".csv"));
+  return { ...f, lines, opps, finance };
+}
+export const bppSlugFor = (name, parcel, reader) => bppSlug(name, parcel) + (reader && reader !== "broker" ? "-" + reader : "");
 
 export const bppSlug = (name, parcel) => (String(name || "building").normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "building") + (parcel ? "-" + String(parcel).replace(/[^0-9]/g, "") : "");
 export const pdfPages = (buf) => { const s = new TextDecoder("latin1").decode(new Uint8Array(buf)); return (s.match(/\/Type\s*\/Page(?![s\w])/g) || []).length; };
@@ -487,8 +506,12 @@ export async function bppTick(env, nowMs) {
         if (!pp) { r.status = "failed"; r.msg = "That plot is not in the passport data."; await putReq(env, id, r); continue; }
         const pack = await readJson(env, "pp_pack_" + res.id.replace("naj:plot:", ""));
         const today = todayGst(now);
-        const f = bppFacts(pp, pack, today);
-        r.plot_id = res.id; r.title = f.name; r.area = f.area; r.parcel = f.parcel; r.slug = bppSlug(f.name, f.parcel);
+        const f0 = bppFacts(pp, pack, today);
+        const fin = bppFinance(pp, pack, readerFor(r.reader), today);   // v727 - the asset type can change the reader (empty plot -> developer)
+        r.reader_used = fin.reader; r.fin_status = fin.status;
+        r.plot_id = res.id; r.title = f0.name; r.area = f0.area; r.parcel = f0.parcel; r.slug = bppSlugFor(f0.name, f0.parcel, fin.reader);
+        const f = withFinance(f0, fin, r.slug);
+        if (fin.csv) await env.MEETINGS.put("bpp_file_" + r.slug + "_csv", fin.csv); r.csv = !!fin.csv;
         r.photo = (await bppPhoto(env, r.slug, f, pp, now)).kind;   // v702 - the hero photo, chosen once per request
         r.prompt_chars = 0; const prompt = bppPrompt(f, bppDate(today)); r.prompt_chars = prompt.length;
         r.resp = await oaiStart(env, prompt); r.status = "writing"; r.tries = 0; r.started = new Date(now).toISOString();
@@ -515,7 +538,7 @@ export async function bppTick(env, nowMs) {
         }
         await env.MEETINGS.put("bpp_file_" + r.slug + "_html", full);
         await env.MEETINGS.put("bpp_file_" + r.slug + "_pdf", pdf);
-        await putBppEntry(env, { slug: r.slug, title: r.title, area: r.area, plot_id: r.plot_id, parcel: r.parcel, date: todayGst(now), html: true, pdf: true });
+        await putBppEntry(env, { slug: r.slug, title: r.title, area: r.area, plot_id: r.plot_id, parcel: r.parcel, date: todayGst(now), html: true, pdf: true, reader: r.reader_used || "broker", fin: r.fin_status || "", csv: !!r.csv });
         r.status = "done"; r.pages = n; delete r.lock; delete r.resp; await putReq(env, id, r);
         return { done: id, pages: n };
       }
@@ -527,14 +550,15 @@ export async function bppTick(env, nowMs) {
 // ------------------------------------------------------------------------------------------------ the card page
 const SIGN = { najjuko: "\\n\\nKind regards,\\nNajjuko", kendall: "\\n\\nKind regards,\\nDr. Kendall Wilson\\nDigitAlchemy Tech Limited\\ncontact@digitalabbot.io | +971 56 227 6093" };
 const ic = (d, s, c) => '<svg viewBox="0 0 24 24" width=' + (s || 26) + ' height=' + (s || 26) + ' fill="none" stroke="' + (c || "#C5A56A") + '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + d + '</svg>';
+const forWho = (k) => (k === "investor" ? "an investor" : "a " + k);   // v727
 const ST = { pending: "Waiting to start", writing: "Being made", fixing: "Being made (fitting to 3 pages)", done: "Ready", failed: "Could not be made", "needs a plot number": "Needs a plot number" };
 
 export function bppBody(key, rk, items, reqs, origin, who) {
   const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const tile = (e) => {
     const share = origin + "/bp/" + e.slug;
-    return '<div class=bt><div class=bh><span class=pi>' + ic(BPP_ICON) + '</span><span class=px><b>' + esc(e.title) + '</b><i>' + esc([e.area, bppDate(e.date)].filter(Boolean).join(" · ")) + '</i></span></div>'
-      + '<div class=ba><a class=b href="/bp/' + e.slug + '" target=_blank rel=noopener>Open</a>' + (e.pdf ? '<a class=b href="/bp/f/' + e.slug + '.pdf" target=_blank rel=noopener>PDF</a>' : "")
+    return '<div class=bt><div class=bh><span class=pi>' + ic(BPP_ICON) + '</span><span class=px><b>' + esc(e.title) + '</b><i>' + esc([e.reader && BPP_READERS[e.reader] ? "For " + forWho(e.reader) + (e.fin === "preliminary" ? " (preliminary)" : "") : "", e.area, bppDate(e.date)].filter(Boolean).join(" · ")) + '</i></span></div>'
+      + '<div class=ba><a class=b href="/bp/' + e.slug + '" target=_blank rel=noopener>Open</a>' + (e.pdf ? '<a class=b href="/bp/f/' + e.slug + '.pdf" target=_blank rel=noopener>PDF</a>' : "") + (e.csv ? '<a class=b href="/bp/f/' + e.slug + '.csv">Schedule (Excel CSV)</a>' : "")
       + '<a class="b w" target=_blank rel=noopener href="https://wa.me/?text=' + encodeURIComponent(e.title + " - Building Passport\n" + share) + '">Send on WhatsApp</a>'
       + (e.plot_id ? '<a class="b o" href="/plot_passport' + q + "&id=" + encodeURIComponent(e.plot_id) + '">Full evidence</a>' : "") + '</div></div>';
   };
@@ -544,7 +568,7 @@ export function bppBody(key, rk, items, reqs, origin, who) {
   const stats = '<div class=sts id=bpp_stats><div><b id=bpp_sp>-</b><span>plots in the register</span></div><div><b id=bpp_sd>-</b><span>districts</span></div><div><b>' + items.length + '</b><span>passports made</span></div></div>'
     + '<style>.sts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0 4px}.sts div{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:12px 8px;text-align:center}.sts b{display:block;font:600 1.25rem Fraunces,serif;color:#0A4F4A}.sts span{font:500 .72rem "IBM Plex Sans",sans-serif;color:#5F6B66}.made summary{font:600 1.05rem Fraunces,serif;color:#0A4F4A;cursor:pointer;margin:22px 0 8px}</style>';
   const rq = reqs.filter((r) => r && r.status !== "done").slice(-12).reverse();
-  const reqH = rq.length ? '<div class=rl id=bpp_reqs>' + rq.map((r) => '<div class=rq><b>' + esc(r.title || r.text) + '</b><span class="s s_' + esc(String(r.status).replace(/\W/g, "")) + '">' + esc(ST[r.status] || r.status) + '</span>' + (r.msg ? '<i>' + esc(r.msg) + '</i>' : "") + '</div>').join("") + '</div>' : "";
+  const reqH = rq.length ? '<div class=rl id=bpp_reqs>' + rq.map((r) => '<div class=rq><b>' + esc((r.title || r.text) + (r.reader && BPP_READERS[r.reader] ? " · for " + forWho(r.reader) : "")) + '</b><span class="s s_' + esc(String(r.status).replace(/\W/g, "")) + '">' + esc(ST[r.status] || r.status) + '</span>' + (r.msg ? '<i>' + esc(r.msg) + '</i>' : "") + '</div>').join("") + '</div>' : "";
   return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Building Passports</h1>' + stats
     + '<h2>Request a passport</h2><form id=bpp_f class=fm>'   // v698 (Kendall, 3 Nov): district first, then its buildings - no typing through thousands
     // v703 (Kendall, 3 Nov: "go hierarchy"): area first (Dubai 2040 urban centre, OUR grouping, see BPP_ZONES), then district, then building
@@ -553,6 +577,7 @@ export function bppBody(key, rk, items, reqs, origin, who) {
     + '<label class=fl for=bpp_d>District</label><select id=bpp_d><option value="">Loading districts...</option></select>'
     + '<label class=fl for=bpp_b>Building</label><select id=bpp_b disabled><option value="">Choose a district first</option></select>'
     + '<details class=alt><summary>Or type a plot / parcel number</summary><input id=bpp_t maxlength=120 placeholder="e.g. 3460188 or 346-188"></details>'
+    + '<label class=fl>Passport for</label><div class=zg id=bpp_r role=radiogroup aria-label="Passport for">' + Object.keys(BPP_READERS).map((k) => '<label class="zc rd' + (k === "broker" ? " on" : "") + '"><input type=radio name=bpp_reader value=' + k + (k === "broker" ? " checked" : "") + ' style="position:absolute;opacity:0;width:1px;height:1px"><b>' + esc(BPP_READERS[k].label) + '</b><span>' + esc(BPP_READERS[k].line.replace(/^Passport for an? [a-z]+: /, "")) + '</span></label>').join("") + '</div>'
     + '<input id=bpp_n maxlength=300 placeholder="Note (optional)"><button class="b ok" type=submit>Generate passport</button><p id=bpp_m class=fmm></p></form>' + reqH + list
     + '<style>.bt,.fm input,.b,.rq{box-sizing:border-box;min-width:0;max-width:100%}.pl{display:flex;flex-direction:column;gap:10px}.bt{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}.bh{display:flex;gap:12px;align-items:center}.pi{flex:0 0 44px;height:44px;border-radius:10px;background:#0A4F4A;display:flex;align-items:center;justify-content:center}.px{display:flex;flex-direction:column;gap:3px}.px b{font:600 1rem Fraunces,serif;color:#0A4F4A}.px i{font:500 .78rem "IBM Plex Sans",sans-serif;color:#5F6B66;font-style:normal}'
     + '.ba{display:grid;grid-template-columns:1fr 1fr;gap:8px}.b{border:1px solid #0A4F4A;color:#0A4F4A;background:#fff;border-radius:999px;padding:10px 12px;font:600 .85rem "IBM Plex Sans",sans-serif;text-decoration:none;text-align:center;cursor:pointer}.b.w{background:#0A4F4A;color:#fff}.b.o{border-color:#C5A56A;color:#8A6F3E}.b.ok{background:#0A4F4A;color:#fff}'
@@ -579,8 +604,9 @@ export function bppBody(key, rk, items, reqs, origin, who) {
     + 'fetch("/plot_passport/d?"+Q+"&slug="+encodeURIComponent(ds.value)).then(function(r){return r.json()}).then(function(j){var D=j.district||{},g=(D.groups||[]).slice().sort(function(a,b){return String(a[0]).localeCompare(String(b[0]))});'
     + 'g.forEach(function(x){var u=x[1]==="u"||/no (registered|building) name/i.test(x[0]),ps=x[2]||[];ps.forEach(function(p){var lab=u?String(p[1]):(ps.length===1?x[0]+" \\u00b7 "+String(p[1]).replace(/^Plot \\S+ \\u00b7 /,""):x[0]+" \\u00b7 "+String(p[1]));ROWS.push({id:p[0],t:lab,k:u?1:0,s:lab.toLowerCase()})})});'
     + '(D.vacant||[]).forEach(function(p){var lab=String(p[1]);ROWS.push({id:p[0],t:lab,k:2,s:lab.toLowerCase()})});qi.disabled=false;draw()}).catch(function(){bs.innerHTML="";bs.appendChild(opt("","Buildings could not load"))})};'
+    + 'Array.prototype.forEach.call(document.querySelectorAll("#bpp_r input"),function(i){i.onchange=function(){Array.prototype.forEach.call(document.querySelectorAll("#bpp_r .rd"),function(l){l.classList.toggle("on",l.querySelector("input").checked)})}});'
     + 'var f=document.getElementById("bpp_f"),m=document.getElementById("bpp_m");f.onsubmit=function(e){e.preventDefault();var t=bs.value||document.getElementById("bpp_t").value.trim();if(!t){m.textContent="Choose a district and a building, or type a plot number.";return}var nm=bs.value?bs.options[bs.selectedIndex].textContent:"",nt=document.getElementById("bpp_n").value.trim();m.textContent="Sending...";'
-    + 'fetch("/momo/work/passports/api"+location.search,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op:"request",text:t,note:(nm?nm+(nt?" \\u2014 ":""):"")+nt})}).then(function(r){return r.json()}).then(function(j){if(j.ok){m.textContent="Requested. It shows below while it is being made (a few minutes).";setTimeout(function(){location.reload()},1200)}else m.textContent=j.error||"That did not go through."}).catch(function(){m.textContent="That did not go through."})}})()</script>';
+    + 'fetch("/momo/work/passports/api"+location.search,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op:"request",reader:(document.querySelector("#bpp_r input:checked")||{}).value||"broker",text:t,note:(nm?nm+(nt?" \\u2014 ":""):"")+nt})}).then(function(r){return r.json()}).then(function(j){if(j.ok){m.textContent="Requested. It shows below while it is being made (a few minutes).";setTimeout(function(){location.reload()},1200)}else m.textContent=j.error||"That did not go through."}).catch(function(){m.textContent="That did not go through."})}})()</script>';
 }
 
 export async function bppRoute(request, env, url, deps) {
@@ -599,7 +625,7 @@ export async function bppRoute(request, env, url, deps) {
     const ids = await readReqIds(env);
     if (ids.length >= 200) return J({ ok: false, error: "Too many open requests." }, 429);
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    await putReq(env, id, { id, text, note: String(b.note || "").slice(0, 300), at: new Date().toISOString(), by: who, status: "pending" });
+    await putReq(env, id, { id, text, note: String(b.note || "").slice(0, 300), reader: readerFor(b.reader), at: new Date().toISOString(), by: who, status: "pending" });   // v727 - reader (default broker)
     const cur = await readReqIds(env);   // re-read just before the write
     await env.MEETINGS.put("bpp_requests", JSON.stringify(cur.concat(id).slice(-200)));
     return J({ ok: true, id });
