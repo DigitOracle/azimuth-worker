@@ -10,7 +10,8 @@
 import puppeteer from "@cloudflare/puppeteer";
 import { ppGet, ppSearch } from "./plot_passport.js";
 import { LTF_JS } from "./landtype_filters.js";   // v731 - DLD use / land type / tenure filters (hidden until the v4 packs are stored)
-import { bppFinance, BPP_READERS, readerFor } from "./passport_finance.js";   // v727 - the financial engine on page 2, by reader (investor / broker / developer)
+import { bppFinance, BPP_READERS, readerFor } from "./passport_finance.js";
+import { nbGet, withNb, neighbourhoodLines, dnaLines, plotFactLines } from "./passport_neighbourhood.js";   // v734 - neighbourhood from location, district DNA, plot facts   // v727 - the financial engine on page 2, by reader (investor / broker / developer)
 
 const esc = (s) => String(s == null ? "" : s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;
@@ -214,7 +215,7 @@ async function photoTest(env, url) {
   const res = await bppResolve(env, url.searchParams.get("q") || "");
   const pp = res.id ? await ppGet(env, res.id) : null;
   if (!pp) return J({ ok: false, error: res.err || "not found" }, 404);
-  const f = bppFacts(pp, await readJson(env, "pp_pack_" + res.id.replace("naj:plot:", "")), todayGst());
+  const f = bppFacts(pp, withNb(await readJson(env, "pp_pack_" + res.id.replace("naj:plot:", "")), await nbGet(env, res.id).catch(() => null)), todayGst());
   const slug = "t-" + bppSlug(f.name, f.parcel).slice(0, 70);
   const ph = url.searchParams.get("again") ? await bppPhoto(env, slug, f, pp) : (await readJson(env, "bpp_photo_" + slug)) || await bppPhoto(env, slug, f, pp);
   const box = '<div class="bpp-photo" style="width:78mm;height:58mm"></div>';
@@ -362,13 +363,15 @@ export function bppFacts(pp, pack, today) {
   if (p1 && r1) { yld = r1 / p1 * 100; L.push("Investment (calculated): gross yield 1 bed about " + yld.toFixed(1) + "% (registered rent " + int(r1) + " divided by " + y + " median price " + int(p1) + "); price-to-rent about " + Math.round(p1 / r1) + " years" + (sal ? "; liquidity " + int(sal.all_time || 0) + " sales all time, " + Object.values(sal.kinds || {}).reduce((s, k) => s + k.deals, 0) + " in " + sal.year + " to " + bppDate(sal.to) : "") + ". Service charge: not available yet (grey chip)."); }
   else { missing.push("gross yield (needs both a registered 1-bed rent and a 1-bed sale median in this building)"); L.push("Investment: gross yield not available (see missing). Service charge: not available yet (grey chip)."); }
   missing.push("service-charge rate", "facilities and amenities (developer brochure)", "Makani number");
-  const nr = pack.near || {};
-  L.push("Neighbourhood (from the tenancy register): nearest metro " + (nr.metro || "not recorded") + "; nearest mall " + (nr.mall || "not recorded") + "; landmark " + (nr.landmark || "not recorded") + ".");
+  // v734 - the neighbourhood comes from the plot's LOCATION (passport_neighbourhood.js), never from the tenancy register's free-text fields
   const ac = accessLine(pack.access);
-  if (ac) L.push(ac); else missing.push("drive times and nearest station for this building");
+  if (ac) L.push(ac);
   const gl = googleLines(pack.google);
   if (gl.length) L.push(...gl);
-  else L.push("Google box ('Live from Google' chip): no Google place is matched to this building yet; say so, show no rating.");
+  const nh = neighbourhoodLines(pack, { built: !!(bd.length || pj.number), google: gl.length > 0 });
+  L.push(...nh.lines); missing.push(...nh.missing);
+  const dn = dnaLines(pack); L.push(...dn.lines); missing.push(...dn.missing);
+  const pf = plotFactLines(pack); L.push(...pf.lines); missing.push(...pf.missing); risks.push(...pf.flags);
   const ah = pack.adverts_hist;
   if (ah && ah.distinct_90d) L.push("Advert history (Property Finder, last 90 days to " + bppDate(ah.last) + "): " + int(ah.distinct_90d) + " different adverts seen, " + int(ah.rent_90d) + " of them for rent. One portal only; one flat can be advertised several times.");
   else if (fl.total) L.push("Adverts note: the adverts above are a sample of live adverts from one portal on one day, not the full stock for sale or rent.");
@@ -400,12 +403,12 @@ export function bppPrompt(f, dateText) {
   return "Design a premium, magazine-quality \"Building Passport\" as ONE self-contained HTML file (inline CSS only, no JavaScript, Google Fonts allowed: Fraunces + Inter + IBM Plex Mono). It must print as exactly 3 A4 pages (use @page size A4 margin 0, and three .page sections of exactly 210mm x 297mm with overflow hidden; content must FIT - no overflow, everything ends at least 8mm above the footer) and also read well on a phone screen. "
     + "Brand: Najma (Dubai property intelligence). Palette: deep green #0F3D33, gold #C5A56A, cream #F6F2E9, ink #1C2826. Use the logo as <img src=\"najma_logo.png\" alt=\"Najma\"> in the hero band. No emojis anywhere; use small inline SVG line icons. "
     + "Design direction (look only): a cream page with a thin gold rule under the header; a large serif title block (\"BUILDING PASSPORT\" then the building name in italic serif and a one-line purpose); section headers as dark-green tab banners with a small gold line icon and a numbered gold kicker (\"01 - THE BUILDING\", \"02 - THE MARKET\", \"03 - RISKS AND OPPORTUNITIES\"); rounded cream cards with thin gold borders; beside the title on page 1 an EMPTY photo box exactly <div class=\"bpp-photo\" style=\"width:78mm;height:58mm\"></div> (leave it empty: the photo and its caption are put in later; draw no illustration, picture or skyline anywhere). Do NOT add any other logos. "
-    + "Every section header carries a source chip: \"From the registers\" (green), \"From the adverts\" (gold: live adverts, asking rents, agencies and broker cards), \"Calculated\" (blue), \"Live from Google\" (amber, ONLY on the Google reviews box), \"Developer source\" (purple), \"Not available yet\" (grey). "
+    + "Every section header carries a source chip: \"From the registers\" (green), \"From the adverts\" (gold: live adverts, asking rents, agencies and broker cards), \"Calculated\" (blue), \"Live from Google\" (amber, ONLY on the Google box: reviews of the building, or \"Nearby places\" for a plot with none), \"Developer source\" (purple), \"Not available yet\" (grey). "
     + "Wording: a percentage complete is construction progress at the register date, never a completion; a planned date is planned. Use the logo at least 22mm tall. Keep every card fully inside its page: no card may extend past the right edge, and the last card on each page must end at least 10mm above the footer; if space is short, make cards smaller, never cut them. The milestone timeline must fit inside its card width. "
-    + "Footer on every page: \"Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397\" on the left and \"Najma Building Passport · " + dateText + " · page N of 3\" on the right. "
+    + "Keep the bottom 3.5mm of every .page empty (a snapshot line is put there later; the footer sits above it). Footer on every page: \"Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397\" on the left and \"Najma Building Passport · " + dateText + " · page N of 3\" on the right. "
     + "Page structure: page 1 = what the building is (identity and location, physical building, apartment inventory with a donut for the unit mix, building story as a horizontal milestone timeline with every date and label fully visible inside the card); "
     + "page 2 = what the market is doing (sales with a line or bars for the 1-bed sale median by year, rentals with grouped bars for asking vs registered rent by bedroom, occupancy as a stacked horizontal bar of signals, investment KPI cards, a grid of broker cards: agent, agency, phone, listing); "
-    + "page 3 = what it means: a prominent \"Risks and opportunities\" panel (chip: Calculated) as a row of cards with exactly the points given below, a \"Najma summary\" card (what is confirmed, what needs verification, why it matters - only from the facts), a \"Recommended next actions\" card (numbered, practical, drawn from the risks and missing items), then compact construction, operations, neighbourhood, developer and evidence cards. "
+    + "page 3 = what it means: a prominent \"Risks and opportunities\" panel (chip: Calculated) as a row of cards with exactly the points given below, a \"Najma summary\" card (what is confirmed, what needs verification, why it matters - only from the facts), a \"Recommended next actions\" card (numbered, practical, drawn from the risks and missing items), then compact construction, operations, neighbourhood, developer and evidence cards, and a compact \"District DNA\" card labelled district level when DATA gives one (v734). Section 10 Neighbourhood always shows the nearest metro, mall, school, clinic and drive times as given in DATA with their source and date, saying straight line where DATA says so. "
     + "Sections numbered 01 to 12 across the three pages: 01 Identity and location, 02 Physical building, 03 Apartment inventory, 04 Sales, 05 Rentals, 06 Occupancy, 07 Investment, 08 Construction and approvals, 09 Operations and service charges, 10 Neighbourhood, 11 Developer, 12 Evidence. "
     + "Under every register-backed figure print its source and as-of date in small text exactly as given in DATA; any \"NOTE: this register is N days old\" must be printed visibly beside that figure (small amber note). Figures for one building are never added up into a project total, and project-level figures are labelled \"project level\". The Google box shows the rating, the review count, the retrieval date and the Google Maps link as given, plus the line \"Google shows at most 5 reviews per place; this is not every review\". "
     + "HARD RULES: never invent a number, rating, name or fact; every number must come from DATA below; never leave out an available metric; label every missing item \"Not available yet\". Return ONLY the complete HTML document, starting with <!doctype html>.\n\n"
@@ -573,7 +576,7 @@ async function oaiGet(env, id) {
 export const OVERFLOW_JS = `(() => { const out = []; const mm = 96 / 25.4;
   document.querySelectorAll(".page").forEach((pg, i) => { const P = pg.getBoundingClientRect(); const foot = pg.querySelector("footer, .footer, [class*=foot]");
     const F = foot ? foot.getBoundingClientRect().top : P.bottom - 14 * mm;
-    pg.querySelectorAll("*").forEach((el) => { if (foot && (el === foot || foot.contains(el))) return; const r = el.getBoundingClientRect(); if (!r.width || !r.height) return;
+    pg.querySelectorAll("*").forEach((el) => { if (foot && (el === foot || foot.contains(el))) return; if (el.closest && el.closest(".bpp-snap")) return; const r = el.getBoundingClientRect(); if (!r.width || !r.height) return;
       const st = getComputedStyle(el); if (st.position === "absolute" && /decor|bg|orn|watermark/i.test(el.className || "")) return;
       if (r.right > P.right + 2 || r.bottom > F + 1) { const t = (el.innerText || "").trim().replace(/\\s+/g, " ").slice(0, 60); if (t && el.children.length === 0) out.push("page " + (i + 1) + ": " + t); } }); });
   return out.slice(0, 12); })()`;
@@ -595,12 +598,31 @@ async function renderPdf(env, html) {
     return { pdf, over: Array.isArray(over) ? over : [] };
   } finally { try { await browser.close(); } catch (e) {} }
 }
-// v729 - every passport says it is a snapshot. A fixed line repeats at the top of each printed page and never adds a page.
+// v729 - every passport says it is a snapshot. v734 (Kendall, 4 Nov: the fixed top line overlapped each page's header): the line now sits
+// in its own thin band at the very bottom of each .page, under the footer text and inside the page's bottom margin; it never adds a page.
 export function bppStamp(iso) { const d = new Date(Date.parse(iso) + 4 * 3600e3); return Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + " " + d.toISOString().slice(11, 16) + " GST" : ""; }
 export function snapshotNote(html, iso) {
   const t = "Snapshot made " + bppStamp(iso) + "; listings change daily, generate a fresh one before sending.";
-  const div = '<div class="bpp-snap" style="position:fixed;top:1.5mm;left:0;right:0;text-align:center;font:500 7pt Inter,sans-serif;color:#5F6B66;z-index:9;pointer-events:none">' + esc(t) + "</div>";
-  const h = String(html || "");
+  const band = '<div class="bpp-snap">' + esc(t) + "</div>";
+  const css = "<style>.page{position:relative}.bpp-snap{position:absolute;left:0;right:0;bottom:0;height:3.2mm;line-height:3.2mm;text-align:center;font:500 6pt Inter,sans-serif;color:#5F6B66;background:transparent;z-index:9;pointer-events:none;overflow:hidden;white-space:nowrap}</style>";
+  let h = String(html || "");
+  h = /<\/head>/i.test(h) ? h.replace(/<\/head>/i, css + "</head>") : css + h;
+  // one band per page: insert just before each .page section closes (sections are the page boxes the prompt asks for)
+  const opens = h.match(/<(section|div)\b[^>]*\bclass=["']?[^"'>]*(?<![\w-])page(?![\w-])[^>]*>/gi) || [];
+  if (opens.length) {
+    let out = "", i = 0;
+    const re = /<(section|div)\b[^>]*\bclass=["']?[^"'>]*(?<![\w-])page(?![\w-])[^>]*>/gi; let m, starts = [];
+    while ((m = re.exec(h))) starts.push({ at: m.index, tag: m[1].toLowerCase() });
+    for (let k = 0; k < starts.length; k++) {
+      const end = k + 1 < starts.length ? starts[k + 1].at : h.length;
+      let seg = h.slice(i, end);
+      const close = "</" + starts[k].tag + ">", j = seg.lastIndexOf(close);
+      seg = j >= 0 ? seg.slice(0, j) + band + seg.slice(j) : seg + band;
+      out += seg; i = end;
+    }
+    return out + h.slice(i);
+  }
+  const div = '<div class="bpp-snap" style="position:fixed;top:auto;bottom:0">' + esc(t) + "</div>";
   return /<body[^>]*>/i.test(h) ? h.replace(/<body[^>]*>/i, (m) => m + div) : div + h;
 }
 async function withLogo(env, html) {
@@ -624,7 +646,7 @@ export async function bppTick(env, nowMs) {
         if (!res.id) { r.status = /plot number/.test(res.err) ? "needs a plot number" : "failed"; r.msg = res.err; await putReq(env, id, r); continue; }
         const pp = await ppGet(env, res.id);
         if (!pp) { r.status = "failed"; r.msg = "That plot is not in the passport data."; await putReq(env, id, r); continue; }
-        const pack = await readJson(env, "pp_pack_" + res.id.replace("naj:plot:", ""));
+        const pack = withNb(await readJson(env, "pp_pack_" + res.id.replace("naj:plot:", "")), await nbGet(env, res.id).catch(() => null));   // v734
         const today = todayGst(now);
         const f0 = bppFacts(pp, pack, today);
         const fin = bppFinance(pp, pack, readerFor(r.reader), today);   // v727 - the asset type can change the reader (empty plot -> developer)
