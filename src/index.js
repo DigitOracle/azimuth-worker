@@ -5268,7 +5268,7 @@ function najMoreHtml(key, rk, owner) {
     + '<style>' + NAJ_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
     + '<div class=h>Every <em>room</em></div>'
     + '<div class=s>The rooms that are not on the bar below. Find, Pulse, Map and Twin live on the bar.</div>'
-    + '<style>.mg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mg .rm{margin:0}.mg .rm p{font-size:.8rem}</style><div class=mg>' + rooms + '</div>'   // v750: RESIDENTS removed from MORE (Kendall: available elsewhere); /residents still opens from the map
+    + '<style>.mg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mg .rm{margin:0}.mg .rm p{font-size:.8rem}</style><div class=mg>' + rooms + priv + '</div>'   // v759 (Kendall 5 Nov: "put the nationalities card back"): RESIDENTS back in MORE, after v750 took it out
     + (ownerRooms ? '<div class=hd>YOURS</div>' + ownerRooms : "")
     + najNav(key, "more", rk) + '</body></html>';
 }
