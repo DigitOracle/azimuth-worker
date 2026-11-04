@@ -11,6 +11,7 @@ import puppeteer from "@cloudflare/puppeteer";
 import { ppGet, ppSearch } from "./plot_passport.js";
 import { LTF_JS } from "./landtype_filters.js";   // v731 - DLD use / land type / tenure filters (hidden until the v4 packs are stored)
 import { bppFinance, BPP_READERS, readerFor } from "./passport_finance.js";
+import { storyBlock, placeStory, STORY_H_MM } from "./story_timeline.js";   // v745 - section 03A Building story, drawn by the worker
 import { nbGet, withNb, neighbourhoodLines, dnaLines, plotFactLines } from "./passport_neighbourhood.js";   // v734 - neighbourhood from location, district DNA, plot facts   // v727 - the financial engine on page 2, by reader (investor / broker / developer)
 
 const esc = (s) => String(s == null ? "" : s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
@@ -339,7 +340,7 @@ export function bppFacts(pp, pack, today) {
   if (homes.length) L.push("Units register" + asOf(pack, "g_dld__units") + ": " + int(nHomes) + " homes plus " + int(nOther) + " non-residential units. Mix: " + homes.map((u) => (u.rooms || "unknown") + " " + u.n + (u.median_sqm ? " (median " + u.median_sqm + " m2)" : "")).join(", ") + ".");
   else missing.push("unit mix");
   const tl = (pp.timeline || []).slice().reverse();
-  if (tl.length) L.push("Building story (oldest first): " + tl.map((t) => bppDate(t.date) + " " + t.what.replace(/^The .*? project: /, "")).join("; ") + ".");
+  if (tl.length) L.push("Building story (oldest first; v745: already drawn in the 03A box, do NOT print these again): " + tl.map((t) => bppDate(t.date) + " " + t.what.replace(/^The .*? project: /, "")).join("; ") + ".");
   // sales
   const pr = pp.prices || null, sal = pack.sales || null;
   if (sal) {
@@ -441,9 +442,9 @@ export function bppPrompt(f, dateText) {
     + "Brand: Najma (Dubai property intelligence). Palette: deep green #0F3D33, gold #C5A56A, cream #F6F2E9, ink #1C2826. Use the logo as <img src=\"najma_logo.png\" alt=\"Najma\"> in the hero band. No emojis anywhere; use small inline SVG line icons. "
     + "Design direction (look only): a cream page with a thin gold rule under the header; a large serif title block (\"BUILDING PASSPORT\" then the building name in italic serif and a one-line purpose); section headers as dark-green tab banners with a small gold line icon and a numbered gold kicker (\"01 - THE BUILDING\", \"02 - THE MARKET\", \"03 - RISKS AND OPPORTUNITIES\"); rounded cream cards with thin gold borders; beside the title on page 1 an EMPTY photo box exactly <div class=\"bpp-photo\" style=\"width:78mm;height:58mm\"></div> (leave it empty: the photo and its caption are put in later; draw no illustration, picture or skyline anywhere). Do NOT add any other logos. "
     + "Every section header carries a source chip: \"From the registers\" (green), \"From the adverts\" (gold: live adverts, asking rents, agencies and broker cards), \"Calculated\" (blue), \"Live from Google\" (amber, ONLY on the Google box: reviews of the building, or \"Nearby places\" for a plot with none), \"Developer source\" (purple), \"Not available yet\" (grey). "
-    + "Wording: a percentage complete is construction progress at the register date, never a completion; a planned date is planned. Use the logo at least 22mm tall. Keep every card fully inside its page: no card may extend past the right edge, and the last card on each page must end at least 10mm above the footer; if space is short, make cards smaller, never cut them. The milestone timeline must fit inside its card width. "
+    + "Wording: a percentage complete is construction progress at the register date, never a completion; a planned date is planned. Use the logo at least 22mm tall. Keep every card fully inside its page: no card may extend past the right edge, and the last card on each page must end at least 10mm above the footer; if space is short, make cards smaller, never cut them. "
     + "Keep the bottom 3.5mm of every .page empty (a snapshot line is put there later; the footer sits above it). Footer on every page: \"Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397\" on the left and \"Najma Building Passport · " + dateText + " · page N of 3\" on the right. "
-    + "Page structure: page 1 = what the building is (identity and location, physical building, apartment inventory with a donut for the unit mix, building story as a horizontal milestone timeline with every date and label fully visible inside the card); "
+    + "Page structure: page 1 = what the building is (identity and location, physical building, apartment inventory with a donut for the unit mix, then section \"03A - BUILDING STORY\" (chip: From the registers) as a full-width card whose body is ONLY this empty, pre-sized box, inserted verbatim: <div class=\"bpp-story\" style=\"width:100%;height:" + STORY_H_MM + "mm;overflow:hidden\"></div> (v745: the timeline, its summary, sources and event list are drawn into it later at a FIXED height; leave it empty, draw no timeline, list or dates of your own for the building story, and budget page 1 for that " + STORY_H_MM + "mm box plus its header)); "
     + "page 2 = what the market is doing (sales with a line or bars for the 1-bed sale median by year, rentals with grouped bars for asking vs registered rent by bedroom, occupancy as a stacked horizontal bar of signals, investment KPI cards, a grid of broker cards: agent, agency, phone, listing); "
     + "page 3 = what it means: a prominent \"Risks and opportunities\" panel (chip: Calculated) as a row of cards with exactly the points given below, a \"Najma summary\" card (what is confirmed, what needs verification, why it matters - only from the facts), a \"Recommended next actions\" card (numbered, practical, drawn from the risks and missing items), then compact construction, operations, neighbourhood, developer and evidence cards, and a compact \"District DNA\" card labelled district level when DATA gives one (v734). Section 10 Neighbourhood always shows the nearest metro, mall, school, clinic and drive times as given in DATA with their source and date, saying straight line where DATA says so. "
     + "Sections numbered 01 to 12 across the three pages: 01 Identity and location, 02 Physical building, 03 Apartment inventory, 04 Sales, 05 Rentals, 06 Occupancy, 07 Investment, 08 Construction and approvals, 09 Operations and service charges, 10 Neighbourhood, 11 Developer, 12 Evidence. "
@@ -668,6 +669,12 @@ async function withLogo(env, html) {
 }
 
 // one step of one job per call; safe to run every minute
+// v745 - the 03A Building story block for a plot, from the same plot record and pack the facts came from
+export async function bppStory(env, plotId, now) {
+  const pp = await ppGet(env, plotId); if (!pp) return "";
+  const pack = await readJson(env, "pp_pack_" + String(plotId).replace("naj:plot:", ""));
+  return storyBlock(pp, pack, todayGst(now));
+}
 export async function bppTick(env, nowMs) {
   const now = nowMs || Date.now();
   await bppExpire(env, now).catch(() => null);   // v729 - every minute: passports and jobs past 24 h go
@@ -707,13 +714,14 @@ export async function bppTick(env, nowMs) {
         const logo = await withLogo(env, html);
         const ph = await readJson(env, "bpp_photo_" + r.slug);   // v702 - the page links the live picture; the PDF gets it once, at render
         const made = new Date(now).toISOString();
-        const full = placePhoto(logo, heroFigure(ph, "/bp/img/" + r.slug));
-        const { pdf, over } = await renderPdf(env, snapshotNote(placePhoto(logo, heroFigure(ph, await bppImageDataUri(env, r.slug).catch(() => ""))), made));
+        const story = await bppStory(env, r.plot_id, now).catch(() => "");   // v745 - 03A timeline, drawn here, never by the writer
+        const full = placeStory(placePhoto(logo, heroFigure(ph, "/bp/img/" + r.slug)), story);
+        const { pdf, over } = await renderPdf(env, snapshotNote(placeStory(placePhoto(logo, heroFigure(ph, await bppImageDataUri(env, r.slug).catch(() => ""))), story), made));
         const n = pdfPages(pdf);
         r.over = over.slice(0, 6);
         if ((n !== 3 || over.length) && !(r.tries >= 1)) {
           r.tries = (r.tries || 0) + 1; r.pages = n; delete r.lock;
-          r.resp = await oaiStart(env, "Revise this Building Passport HTML. Printed to PDF in Chrome it came out as " + n + " pages" + (over.length ? " and these items are cut off at the page edge or run into the footer: " + over.join(" | ") : "") + ". Content overflowed. Keep the design, palette, fonts, every number and the 3-page A4 structure; tighten spacing, shrink charts and type, and make everything fit in exactly three 210mm x 297mm .page sections with overflow hidden, ending at least 8mm above the footer. Never invent or drop a number. Return ONLY the complete corrected HTML document starting with <!doctype html>.\n\nHTML:\n" + html);
+          r.resp = await oaiStart(env, "Revise this Building Passport HTML. Printed to PDF in Chrome it came out as " + n + " pages" + (over.length ? " and these items are cut off at the page edge or run into the footer: " + over.join(" | ") : "") + ". Content overflowed. Keep the design, palette, fonts, every number, the empty fixed-height <div class=\"bpp-story\"> box (leave it empty and keep its height) and the 3-page A4 structure; tighten spacing, shrink charts and type, and make everything fit in exactly three 210mm x 297mm .page sections with overflow hidden, ending at least 8mm above the footer. Never invent or drop a number. Return ONLY the complete corrected HTML document starting with <!doctype html>.\n\nHTML:\n" + html);
           r.status = "fixing"; await putReq(env, id, r); return { reask: id };
         }
         await env.MEETINGS.put("bpp_file_" + r.slug + "_html", snapshotNote(full, made), bppTtl(r.slug));   // v729 - 24 h, with the snapshot line
