@@ -39,7 +39,20 @@ export async function ppSearch(env, q) {
     if (out.length < 12) out.push({ label: e[1], id: e[2], kind: e[4], exact: t === n });
   }
   out.sort((a, b) => (b.exact - a.exact) || ((a.kind === "number" ? 0 : 1) - (b.kind === "number" ? 0 : 1)));
-  return { q: n, results: out, total };
+  // v761 (Kendall 5 Nov: "Arabian Ranches ... then all of the plots within"): a villa community is thousands of entries under one
+  // name, so the matches are also grouped by name - one row per community/cluster with its plot count and main district
+  const G = new Map();
+  for (const e of shard) {
+    const t = e[0]; if (!(t.startsWith(n) || t.indexOf(" " + n) >= 0)) continue;
+    const parts = String(e[1]).split(" \u00b7 "), nm = parts[0], dist = parts[parts.length - 1];
+    if (/^plot \S+$/i.test(nm)) continue;
+    const g = G.get(nm.toLowerCase()) || { name: nm, n: 0, ids: new Set(), d: {} };
+    if (!g.ids.has(e[2])) { g.ids.add(e[2]); g.n++; g.d[dist] = (g.d[dist] || 0) + 1; }
+    G.set(nm.toLowerCase(), g);
+  }
+  const groups = [...G.values()].filter((g) => g.n > 1).sort((x, y) => y.n - x.n).slice(0, 8)
+    .map((g) => ({ name: g.name, plots: g.n, district: Object.entries(g.d).sort((x, y) => y[1] - x[1])[0][0], districts: Object.keys(g.d).length }));
+  return { q: n, results: out, total, groups };
 }
 
 export async function ppGet(env, id) {
