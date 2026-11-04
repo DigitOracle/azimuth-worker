@@ -19,9 +19,25 @@
 // DLD and DM disagree -> the newer as-of date wins and the letter carries "!" ("registers disagree"); the chip counts those on screen.
 // The Status group shows FIRST, outside the accordion; it stays hidden until the codes carry the 4th segment.
 
-export const LT_USE = [["ho", "Homes"], ["vi", "Villas"], ["co", "Commercial"], ["mx", "Mixed use"], ["in", "Industrial & warehouses"],
+export const LT_USE = [["ho", "Apartments / flats"], ["vi", "Villas"], ["co", "Offices, shops & hotels"], ["mx", "Mixed use"], ["in", "Industrial & warehouses"],
   ["gh", "Government housing"], ["cm", "Community"], ["ut", "Utilities & infrastructure"], ["ag", "Agricultural"], ["lc", "Labour camps"],
-  ["ot", "Other / not recorded"]];
+  ["ot", "Unclassified sub-type"], ["nr", "Use not recorded by DLD"]];
+// v746 (Kendall, 4 Nov 2026: "I chose Residential but it gives me all children; audit the cascading structure"). The parent -> child tree:
+// for each DLD land type, the uses (from the DLD sub-type) that BELONG under it, with the label they get there. A use recorded under a land
+// type it does not belong to (e.g. "Commercial" on Residential land) is a DLD inconsistency: it goes, with the unclassified sub-types, into ONE
+// collapsed chip "Other recorded uses (N)" (tap to expand); "Use not recorded by DLD" (no sub-type) always comes last.
+// Land types with no entry (Not recorded, Other) have no parent rule: every use is a normal child. Children + Other + not recorded = parent.
+// DLD files ~92,000 homes on Commercial-class land, so those are real children of Commercial with their own label.
+// Offices / shops / hotels are one use id in the v4 packs (use_cat "co" in build_plot_passport.py); splitting them needs a pack rebuild.
+export const LT_TREE = {
+  re: [["vi", "Villas"], ["ho", "Apartments / flats"], ["gh", "Government housing"], ["mx", "Mixed use"]],
+  co: [["co", "Offices, shops & hotels"], ["ho", "Homes on commercial-class land"], ["vi", "Villas on commercial-class land"], ["mx", "Mixed use"]],
+  in: [["in", "Warehouses & industrial units"], ["lc", "Labour camps"]],
+  pf: [["cm", "Community (mosques, schools, clinics, sports)"], ["ut", "Utilities & infrastructure"], ["gh", "Government housing"], ["lc", "Labour camps"]],
+  ga: [["ut", "Utilities & infrastructure"], ["cm", "Community (mosques, schools, clinics, sports)"], ["gh", "Government housing"]],
+  ag: [["ag", "Farms"]], ut: [["ut", "Utilities & infrastructure"]], tr: [["ut", "Transport & utilities"]], os: [], fd: [],
+  rc: [["cm", "Community & sports"]], ed: [["cm", "Schools & community"]], hc: [["cm", "Clinics & community"]], hs: [["co", "Hotels"]], wb: []
+};
 export const LT_LAND = [["co", "Commercial"], ["re", "Residential"], ["in", "Industrial"], ["pf", "Public facilities"], ["ga", "Government authorities"],
   ["os", "Open space"], ["ut", "Utility"], ["ag", "Agricultural"], ["fd", "Future development"], ["rc", "Recreational"], ["tr", "Transport"],
   ["ed", "Educational"], ["wb", "Water body"], ["hs", "Hospitality"], ["hc", "Healthcare"], ["ot", "Other"], ["nr", "Not recorded"]];
@@ -35,9 +51,9 @@ export const LTF_CSS = ".ltfc [role=group]{display:grid!important;grid-template-
   + ".ltfc button[data-ltd] span{font-size:.7rem!important}.ltfc .ltsn{margin:2px 0 6px;font-size:.7rem;color:#5F6B69}";
 
 // ltfDraw(el, districts, F, onChange, cls): cls = {g: grid class, c: chip class, on: selected class}; F = {u, l, f, s}
-export const LTF_JS = 'var LTU=' + JSON.stringify(LT_USE) + ',LTL=' + JSON.stringify(LT_LAND) + ',LTT=' + JSON.stringify(LT_TEN) + ',LTS=' + JSON.stringify(LT_STAT) + ',LTN=' + JSON.stringify(LT_NOTE) + ',LTSN=' + JSON.stringify(LT_SNOTE) + ',LTCSS=' + JSON.stringify(LTF_CSS) + ';'
+export const LTF_JS = 'var LTU=' + JSON.stringify(LT_USE) + ',LTR=' + JSON.stringify(LT_TREE) + ',LTL=' + JSON.stringify(LT_LAND) + ',LTT=' + JSON.stringify(LT_TEN) + ',LTS=' + JSON.stringify(LT_STAT) + ',LTN=' + JSON.stringify(LT_NOTE) + ',LTSN=' + JSON.stringify(LT_SNOTE) + ',LTCSS=' + JSON.stringify(LTF_CSS) + ';'
   + 'function ltfOn(F){return !!(F&&(F.u||F.l||F.f||F.s))}'
-  + 'function ltfP(c){var a=String(c).split(".");return {u:a[0]==="nr"?"ot":(a[0]||"ot"),l:a[1]||"nr",f:a[2]==="1"||a[2]==="0"?a[2]:"n",s:a.length>3?(String(a[3]).charAt(0)||"k"):"",dis:a.length>3&&String(a[3]).indexOf("!")>0}}'
+  + 'function ltfP(c){var a=String(c).split(".");return {u:a[0]||"nr",l:a[1]||"nr",f:a[2]==="1"||a[2]==="0"?a[2]:"n",s:a.length>3?(String(a[3]).charAt(0)||"k"):"",dis:a.length>3&&String(a[3]).indexOf("!")>0}}'
   + 'function ltfM(c,F,skip){if(!ltfOn(F))return true;if(c==null||c==="")return false;var p=ltfP(c);return (skip==="u"||!F.u||p.u===F.u)&&(skip==="l"||!F.l||(","+F.l+",").indexOf(","+p.l+",")>=0)&&(skip==="f"||!F.f||p.f===F.f)&&(skip==="s"||!F.s||p.s===F.s)}'
   + 'function ltfN(L,F,skip){var n=0;(L||[]).forEach(function(d){var x=d&&d.x||{};for(var k in x)if(Object.prototype.hasOwnProperty.call(x,k)&&ltfM(k,F,skip))n+=Number(x[k])||0});return n}'
   + 'function ltfHas(L){return (L||[]).some(function(d){return d&&d.x&&typeof d.x==="object"})}'
@@ -50,13 +66,25 @@ export const LTF_JS = 'var LTU=' + JSON.stringify(LT_USE) + ',LTL=' + JSON.strin
   // ltfSum = the summary line ("Off-plan > Commercial > Homes . 12,340 plots" / "All plots . 265,619"); nm = optional land-id -> card name.
   + 'function ltfLab(dim,v,nm){if(dim==="l"&&nm&&nm[v])return nm[v];var T={u:LTU,l:LTL,f:LTT,s:LTS}[dim]||[],r=v;T.forEach(function(x){if(x[0]===v)r=x[1]});return r}'
   + 'function ltfSum(F,n,nm){var p=[];if(F.s)p.push(ltfLab("s",F.s));if(F.l)p.push(ltfLab("l",F.l,nm));if(F.u)p.push(ltfLab("u",F.u));if(F.f)p.push(ltfLab("f",F.f));var c=(Number(n)||0).toLocaleString("en");return p.length?p.join(" \\u203a ")+" \\u00b7 "+c+" plots":"All plots \\u00b7 "+c}'
-  + 'function ltfClr(F){F.u="";F.l="";F.f="";F.s="";F.mu=0}'
+  + 'function ltfClr(F){F.u="";F.l="";F.f="";F.s="";F.mu=0;F.mo=0}'
   + 'function ltfGrp(L,F,dim,list,lab,cls,max){var o=ltfDim(L,F,dim),a=[],h="";list.forEach(function(x){var n=o[x[0]]||0,on=F[dim]===x[0];if(n||on)a.push([x,n,on])});if(max)a.sort(function(p,q){return q[1]-p[1]});var more=max&&!F["m"+dim]&&a.length>max+1;'
   + '(more?a.filter(function(y,i){return i<max||y[2]}):a).forEach(function(y){h+=\'<button type=button class="\'+cls.c+(y[2]?" "+cls.on:"")+\'" aria-pressed="\'+y[2]+\'" data-ltd="\'+dim+\'" data-ltv="\'+y[0][0]+\'"><b>\'+ltfE(y[0][1])+\'</b><span>\'+y[1].toLocaleString("en")+" plots</span></button>"});'
   + 'if(more)h+=\'<button type=button class="\'+cls.c+\' ltm" data-ltmore="\'+dim+\'"><b>More\\u2026</b><span>\'+(a.length-max)+" more</span></button>";return h?\'<div class="\'+cls.g+\'" role=group aria-label="\'+lab+\'">\'+h+"</div>":"<p class=ltn>No plots here.</p>"}'
-  + 'function ltfUse(L,F,cls,nm){return F.l?\'<div class="\'+(cls.tc||"ltt")+\'">Narrow \'+ltfE(ltfLab("l",F.l,nm))+" by use</div>"+ltfGrp(L,F,"u",LTU,"Narrow by use",cls,4):""}'
-  + 'function ltfBind(el,F,cb){Array.prototype.forEach.call(el.querySelectorAll("[data-ltd]"),function(b){b.onclick=function(){var d=b.getAttribute("data-ltd"),v=b.getAttribute("data-ltv");F[d]=F[d]===v?"":v;if(d==="l"){F.u="";F.mu=0}cb()}});'
-  + 'Array.prototype.forEach.call(el.querySelectorAll("[data-ltmore]"),function(b){b.onclick=function(){F["m"+b.getAttribute("data-ltmore")]=1;cb()}});var x=el.querySelector("[data-ltclr]");if(x)x.onclick=function(){ltfClr(F);cb()}}'
+  // v746: ltfTree(L,F) = {kids:[[id,label,n]], oth:[[id,label,n]], nr:n, total:n} for the chosen land type(s) (F.l may be a comma list);
+  // kids by count; oth = uses recorded under a land type they do not belong to + unclassified sub-types; nr = no sub-type. Sums to the parent.
+  + 'function ltfTree(L,F){var o=ltfDim(L,F,"u"),ls=String(F.l||"").split(","),bel={},lab={},rule=false,k={},oth=[],t=0;ls.forEach(function(l){var r=LTR[l];if(!r)return;rule=true;r.forEach(function(x){bel[x[0]]=1;if(!lab[x[0]])lab[x[0]]=x[1]})});'
+  + 'LTU.forEach(function(x){var n=o[x[0]]||0;t+=n;if(x[0]==="nr")return;if(!rule||bel[x[0]])k[x[0]]=[x[0],lab[x[0]]||x[1],n];else if(n||F.u===x[0])oth.push([x[0],x[1],n])});'
+  + 'var kids=[];for(var i in k)if(k[i][2]||F.u===i)kids.push(k[i]);kids.sort(function(p,q){return q[2]-p[2]});oth.sort(function(p,q){return q[2]-p[2]});return {kids:kids,oth:oth,nr:o.nr||0,total:t}}'
+  + 'function ltfChip(cls,y){return \'<button type=button class="\'+cls.c+(y[3]?" "+cls.on:"")+\'" aria-pressed="\'+!!y[3]+\'" data-ltd="u" data-ltv="\'+y[0]+\'"><b>\'+ltfE(y[1])+\'</b><span>\'+y[2].toLocaleString("en")+" plots</span></button>"}'
+  // top 4 belonging uses then More... (expands the rest), then the collapsed "Other recorded uses (N)" chip (tap = expand, not a filter), then not recorded
+  + 'function ltfUse(L,F,cls,nm){if(!F.l)return "";var T=ltfTree(L,F),h="",max=4,on=function(y){return y.concat([F.u===y[0]])};var ks=T.kids,more=!F.mu&&ks.length>max+1;'
+  + '(more?ks.filter(function(y,i){return i<max||F.u===y[0]}):ks).forEach(function(y){h+=ltfChip(cls,on(y))});'
+  + 'if(more)h+=\'<button type=button class="\'+cls.c+\' ltm" data-ltmore="u"><b>More\\u2026</b><span>\'+(ks.length-max)+" more</span></button>";'
+  + 'var ox=F.mo||T.oth.some(function(y){return F.u===y[0]}),on3=0;T.oth.forEach(function(y){on3+=y[2]});if(T.oth.length)h+=\'<button type=button class="\'+cls.c+\' lto\'+(ox?" "+cls.on:"")+\'" aria-expanded="\'+!!ox+\'" data-ltoth=1><b>Other recorded uses (\'+on3.toLocaleString("en")+\')</b><span>\'+(ox?"tap to hide":"filed under another land type")+"</span></button>";'
+  + 'if(ox)T.oth.forEach(function(y){h+=ltfChip(cls,on(y))});if(T.nr||F.u==="nr")h+=ltfChip(cls,on(["nr",ltfLab("u","nr"),T.nr]));'
+  + 'return \'<div class="\'+(cls.tc||"ltt")+\'">Narrow \'+ltfE(ltfLab("l",F.l,nm))+" by use</div>"+(h?\'<div class="\'+cls.g+\'" role=group aria-label="Narrow by use">\'+h+"</div>":"<p class=ltn>No plots here.</p>")}'
+  + 'function ltfBind(el,F,cb){Array.prototype.forEach.call(el.querySelectorAll("[data-ltd]"),function(b){b.onclick=function(){var d=b.getAttribute("data-ltd"),v=b.getAttribute("data-ltv");F[d]=F[d]===v?"":v;if(d==="l"){F.u="";F.mu=0;F.mo=0}cb()}});'
+  + 'Array.prototype.forEach.call(el.querySelectorAll("[data-ltmore]"),function(b){b.onclick=function(){F["m"+b.getAttribute("data-ltmore")]=1;cb()}});Array.prototype.forEach.call(el.querySelectorAll("[data-ltoth]"),function(b){b.onclick=function(){F.mo=F.mo?0:1;cb()}});var x=el.querySelector("[data-ltclr]");if(x)x.onclick=function(){ltfClr(F);cb()}}'
   // cls.only = the steps to draw (any of "sluf", default all four); cls.noL = no land-type chips (the host page has its own land cards)
   + 'function ltfDraw(el,L,F,cb,cls){if(!el)return;if(!ltfHas(L)){el.hidden=true;el.innerHTML="";return}el.hidden=false;cls=cls||{g:"ltg",c:"ltc",on:"on"};var w=cls.only||"sluf",tc=cls.tc||"ltt",h="";'
   + 'function T(t){return \'<div class="\'+tc+\'">\'+t+"</div>"}'
