@@ -351,7 +351,9 @@ export function applyOverrides(tasks, ovs) {
   const m = {}; (ovs || []).forEach((o) => { if (o && o.name) m[o.name] = o; });
   // v674 - Stuck set by hand holds while she logs more work on the task (chasing a reply is still being stuck), until she changes it or an entry marks it Done;
   // the stuck history (stuck_log) always rides along so the report can time it
-  return tasks.map((t) => { const o = m[t.name]; if (!o) return t; const ost = normStatus(o.status), hold = ost === "Stuck" && t.status !== "Done";
+  // v757 (Kendall 4 Nov 2026: "she also needs a delete button") - a task she deleted is gone from every list; logging new work on it later brings it back
+  return tasks.filter((t) => { const o = m[t.name]; return !(o && o.deleted && !(String(t.lastc || "") > String(o.updated || ""))); })
+    .map((t) => { const o = m[t.name]; if (!o) return t; const ost = normStatus(o.status), hold = ost === "Stuck" && t.status !== "Done";
     const base = o.stuck_log ? { ...t, stuck_log: o.stuck_log } : t;
     if (!hold && !(String(o.updated || "") > String(t.lastc || ""))) return base; const done = ost === "Done" || o.percent >= 100;
     return { ...base, percent: done ? 100 : o.percent, status: done ? "Done" : ost, set_by_hand: true, last: String(o.updated).slice(0, 10) > t.last ? String(o.updated).slice(0, 10) : t.last,
@@ -849,6 +851,11 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
       return J({ ok: true, party: rec });
     }
     if (b.action === "parties") return J({ parties: await knownParties(env) });
+    if (b.action === "task_delete") {   // v757 - kept as a record marked deleted (not erased), so the log entries behind it stay intact
+      const name = String(b.name || "").trim().slice(0, 80); if (!name) return J({ error: "Which task?" }, 400);
+      let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(TPFX + slug(name))) || "null"); } catch (e) {}
+      await env.MEETINGS.put(TPFX + slug(name), JSON.stringify({ ...(prev || {}), name, deleted: true, updated: new Date().toISOString() })); return J({ ok: true });
+    }
     if (b.action === "task_progress") {
       const name = String(b.name || "").trim().slice(0, 80); if (!name) return J({ error: "Which task?" }, 400);
       let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(TPFX + slug(name))) || "null"); } catch (e) {}
@@ -1526,7 +1533,8 @@ function taskSheet(t){if(!t)return;var pct=t.percent,st=t.status,rs=t.stuck_reas
      +'<div class=line style="color:#1C2321;font-weight:500;margin-top:8px">Was it in your control?</div><div class=chips>'+["Yes","No"].map(function(x){return '<button type=button class="chip'+(x===rc?' on':'')+'" data-c="'+x+'">'+x+'</button>'}).join("")+'</div>'
      +'<textarea id=tp_n rows=2 maxlength=200 placeholder="'+(rs==="Other"?"What happened? (needed)":"Add a note (optional)")+'" style="width:100%;margin-top:8px;font:inherit;font-size:16px;padding:8px;border-radius:10px;border:1px solid #D8DED9">'+esc(rn)+'</textarea>':'')
    +(er?'<div class=line style="color:#B4532A;margin-top:6px">'+esc(er)+'</div>':'')
-   +'<div class=line style="margin-top:8px">'+(st==="Stuck"?'Momo times how long it stays stuck. Set another status when it moves again.':'Saved when you tap Save progress. Your next activity on this task moves it again.')+'</div><button type=button class="gold done" id=tp_ok style="margin-top:8px">Save progress</button>';
+   +'<div class=line style="margin-top:8px">'+(st==="Stuck"?'Momo times how long it stays stuck. Set another status when it moves again.':'Saved when you tap Save progress. Your next activity on this task moves it again.')+'</div><button type=button class="gold done" id=tp_ok style="margin-top:8px">Save progress</button><button type=button id=tp_del style="display:block;width:100%;margin-top:10px;background:none;border:1px solid #B4533C;color:#B4533C;border-radius:999px;padding:10px;font-weight:600;font-size:.9rem;cursor:pointer">Delete task</button>';
+  s.querySelector("#tp_del").onclick=function(){if(!confirm("Delete \u201c"+sn(t.name)+"\u201d from your tasks? Your log entries stay."))return;var b=this;b.disabled=true;b.textContent="Deleting...";api({action:"task_delete",name:t.name}).then(function(j){if(!j.ok){b.disabled=false;b.textContent="Delete task";toast("Not deleted: "+(j.error||"something went wrong")+".",true);return}close();toast("\u2713 Deleted: "+sn(t.name)+".");load(WEEK)}).catch(function(){b.disabled=false;b.textContent="Delete task";toast("Not deleted: no connection. Try again.",true)})};
   s.querySelector("#tp_r").oninput=function(){pct=+this.value;s.querySelector("#tp_v").textContent=pct+"%";if(pct>=100&&st!=="Done"){st="Done";keep();draw()}else if(pct<100&&st==="Done"){st="In progress";keep();draw()}};
   s.querySelectorAll("[data-s]").forEach(function(b){b.onclick=function(){keep();st=b.getAttribute("data-s");er="";if(st==="Done")pct=100;draw()}});
   s.querySelectorAll("[data-r]").forEach(function(b){b.onclick=function(){keep();rs=b.getAttribute("data-r");er="";draw()}});
