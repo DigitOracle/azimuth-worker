@@ -11,6 +11,7 @@
 // RULES: project-level links are never shown as plot facts and never summed; no DEWA data; no Google content; research use only.
 // Page script is String.raw with no substitutions and no backticks.
 
+import { LTF_JS } from "./landtype_filters.js";   // v731 - DLD use / land type / tenure filters on the district/building picker
 const PP_ID = /^naj:plot:[A-Za-z0-9\-]{1,40}$/;
 const normQ = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 let CRC_T = null;
@@ -128,6 +129,7 @@ h1{font-family:Fraunces,Georgia,serif;font-size:1.7rem;font-weight:600;margin:.2
 .shl{overflow:auto;-webkit-overflow-scrolling:touch;margin-top:8px;flex:1}
 .opt{display:flex;gap:10px;align-items:center;width:100%;text-align:left;min-height:52px;padding:8px 10px;margin:0 0 6px;border:1px solid var(--line);border-radius:10px;background:var(--raise);color:var(--ink);font:inherit;cursor:pointer}
 .opt:hover,.opt:focus-visible{border-color:var(--gold)}.opt .ic{color:var(--gold)}.opt b{display:block;font-size:.92rem;overflow-wrap:anywhere}.opt small{color:var(--muted);font-size:.74rem}.opt.sp{border-style:dashed}
+.ltw{margin-top:10px}.ltt{font-size:.7rem;letter-spacing:.08em;color:var(--gold);text-transform:uppercase;margin:0 0 4px}.ltn{margin:4px 0 6px;color:var(--muted);font-size:.74rem}.ltg{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ltc{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;min-height:52px;text-align:left;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--raise);color:var(--ink);font:inherit;cursor:pointer}.ltc b{font-size:.84rem;overflow-wrap:anywhere}.ltc span{font-size:.7rem;color:var(--muted)}.ltc.on{background:var(--gold);border-color:var(--gold);color:#0C1413}.ltc.on span{color:#0C1413}.ltx{border:0;background:none;color:var(--gold);text-decoration:underline;font:inherit;cursor:pointer}.ltd summary{cursor:pointer;color:var(--muted);font-size:.8rem;margin:6px 0}
 .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:0 0 10px;padding:4px;background:var(--card);border:1px solid var(--line);border-radius:12px}
 .tabs button{min-height:48px;padding:4px 6px;border:0;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:.78rem;font-weight:600;line-height:1.2;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .tabs button[aria-selected=true]{background:var(--raise);color:var(--ink);box-shadow:inset 0 -2px 0 var(--gold)}.tabs .n{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--gold)}
@@ -283,6 +285,8 @@ document.addEventListener("click",function(e){var t=e.target.closest("button,a")
     var sl=(CTX.d&&CTX.d.slug)||(CUR&&CUR.district);if(sl)pickD(sl);else districts();return}
   if(t.id==="ppclr"){q.value="";search();q.focus();return}});
 var sh=$("ppsheet"),scr=$("ppscrim"),shq=$("ppshq"),shl=$("ppshl"),SH=[],SHBACK=null,DL=null,DC=null,DCACHE={};
+// v731 DLD filters: counts follow the chosen district (or all districts); they narrow the district list, then buildings and plots
+var LF={u:"",l:"",f:""},lfe=$("ppltf"),LT=typeof ltfDraw==="function",lOn=LT?ltfOn:function(){return false},lN=LT?ltfN:function(){return 0},lM=LT?ltfM:function(){return true},lDraw=LT?ltfDraw:function(){};function lsel(){return DC?[DC]:(DL||[])}function ldraw(){lDraw(lfe,lsel(),LF,ldraw,{g:"ltg",c:"ltc",on:"on",t:"Use (DLD)"})}function dN(d){return lOn(LF)?lN([d],LF):d.n}
 function nq(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
 function hit(o,f){return !f||o.sticky||(" "+nq(o.t)).indexOf(" "+f)>=0||nq(o.t).indexOf(f)>=0}
 function drawSheet(){var f=nq(shq.value),n=0,m=0,h="";SH.forEach(function(o,i){if(!hit(o,f))return;if(!o.sticky)m++;if(n>=150)return;n++;h+='<button type=button class="opt'+(o.sticky?" sp":"")+'" data-opt="'+i+'">'+ic(o.i||"pin")+'<span><b>'+esc(o.t)+'</b>'+(o.s?'<small>'+esc(o.s)+'</small>':'')+'</span></button>'});
@@ -290,13 +294,13 @@ function drawSheet(){var f=nq(shq.value),n=0,m=0,h="";SH.forEach(function(o,i){i
 function openSheet(title,items,ph,back){SH=items;SHBACK=back||document.activeElement;$("ppsht").textContent=title;shq.value="";shq.placeholder=ph||"Type the first few letters";shq.setAttribute("aria-label",ph||"Filter this list");drawSheet();sh.hidden=false;scr.hidden=false;try{shq.focus({preventScroll:true})}catch(e){}}
 function closeSheet(){if(sh.hidden)return;sh.hidden=true;scr.hidden=true;if(SHBACK&&SHBACK.focus)try{SHBACK.focus({preventScroll:true})}catch(e){}}
 function getJ(u){return fetch(u).then(function(r){return r.json()})}
-function districts(){if(DL){openSheet("Choose a district",DL.map(function(d){return {t:d.name,s:num(d.n)+" plots",i:"pin",fn:function(){pickD(d.slug)}}}),"Type a district, e.g. Business Bay",$("ppb1"));return}
+function districts(){if(DL){openSheet("Choose a district",DL.filter(function(d){return !lOn(LF)||dN(d)>0}).map(function(d){return {t:d.name,s:num(dN(d))+" plots"+(lOn(LF)?" match the filters":""),i:"pin",fn:function(){pickD(d.slug)}}}),"Type a district, e.g. Business Bay",$("ppb1"));return}
   getJ("/plot_passport/districts?"+kq()).then(function(j){DL=j.districts||[];if(!DL.length){say("The district list has not been loaded yet.");return}districts()}).catch(function(){say("The district list is not reachable just now.")})}
-function pickD(slug){var go=function(d){DC=d;$("ppb1v").textContent=d.name;$("ppb2").disabled=false;$("ppb2v").textContent="Choose a building or project";groups()};
+function pickD(slug){var go=function(d){DC=d;ldraw();$("ppb1v").textContent=d.name;$("ppb2").disabled=false;$("ppb2v").textContent="Choose a building or project";groups()};
   if(DCACHE[slug])return go(DCACHE[slug]);getJ("/plot_passport/d?"+kq()+"&slug="+encodeURIComponent(slug)).then(function(j){if(!j.ok){say(j.error||"That district is not loaded yet.");return}DCACHE[slug]=j.district;go(j.district)}).catch(function(){say("That district is not reachable just now.")})}
 function kindW(k){return k==="b"?"building":k==="p"?"project":k==="m"?"master community":"buildings"}
-function groups(){if(!DC)return districts();var it=[];if(DC.vacant&&DC.vacant.length)it.push({t:"Plots without a building",s:num(DC.vacant.length)+" plots of vacant or unbuilt land",i:"land",sticky:true,fn:function(){pickG({name:"Plots without a building",plots:DC.vacant})}});
-  DC.groups.forEach(function(g){it.push({t:g[0],s:kindW(g[1])+" · "+(g[2].length===1?"1 plot":g[2].length+" plots"),i:g[1]==="m"?"land":g[1]==="p"?"crane":"bldg",fn:function(){pickG({name:g[0],plots:g[2]})}})});
+function groups(){if(!DC)return districts();var it=[],vac=(DC.vacant||[]).filter(function(x){return lM(x[2],LF)});if(vac.length)it.push({t:"Plots without a building",s:num(vac.length)+" plots of vacant or unbuilt land",i:"land",sticky:true,fn:function(){pickG({name:"Plots without a building",plots:vac})}});
+  DC.groups.forEach(function(g){var ps=g[2].filter(function(x){return lM(x[2],LF)});if(!ps.length)return;it.push({t:g[0],s:kindW(g[1])+" · "+(ps.length===1?"1 plot":ps.length+" plots"),i:g[1]==="m"?"land":g[1]==="p"?"crane":"bldg",fn:function(){pickG({name:g[0],plots:ps})}})});
   openSheet(DC.name+": buildings and projects",it,"Type the first few letters of the building",$("ppb2"))}
 function pickG(g){$("ppb2v").textContent=g.name;if(g.plots.length===1){open(g.plots[0][0],true,{d:DC,g:g});return}
   openSheet(g.name+": choose the plot",g.plots.map(function(x){return {t:x[1],i:"pin",fn:function(){open(x[0],true,{d:DC,g:g})}}}),"Type a plot number",$("ppb2"))}
@@ -307,6 +311,7 @@ scr.addEventListener("click",closeSheet);
 q.addEventListener("input",search);
 q.addEventListener("keydown",function(e){if(e.key==="Enter"){var f=sug.querySelector(".sg");if(f)open(f.getAttribute("data-id"))}});
 window.addEventListener("popstate",function(e){if(e.state&&e.state.id)open(e.state.id,false)});
+getJ("/plot_passport/districts?"+kq()).then(function(j){if(!DL)DL=j.districts||[];ldraw()}).catch(function(){});   // v731 - chips appear only once the packs carry DLD codes
 var st0=new URLSearchParams(location.search).get("id");if(st0)open(st0,false);
 })();`;
 
@@ -322,13 +327,13 @@ export function plotPassportHtml(key, rk, meta, deps) {
     + '<section class="card browse" aria-label="Find a plot by place"><h2>' + ic("pin") + 'Find it by place</h2><div class=steps>'
     + '<button type=button class=step id=ppb1 aria-haspopup=dialog><span class=sn>1</span><span><small>DISTRICT</small><b id=ppb1v>Choose a district</b></span></button>'
     + '<button type=button class=step id=ppb2 aria-haspopup=dialog disabled><span class=sn>2</span><span><small>BUILDING OR PROJECT</small><b id=ppb2v>Choose a district first</b></span></button>'
-    + '</div><p class=empty style="margin-top:8px">Pick the district, then the building. A building on one plot opens its passport straight away.</p></section>'
+    + '</div><div id=ppltf class=ltw hidden></div><p class=empty style="margin-top:8px">Pick the district, then the building. A building on one plot opens its passport straight away.</p></section>'
     + '<div class=or>or search if you know the number</div>'
     + '<div class=scrim id=ppscrim hidden></div><div class=sheet id=ppsheet hidden role=dialog aria-modal=true aria-labelledby=ppsht><div class=grab aria-hidden=true></div><div class=shd><b id=ppsht></b><button type=button class=btn id=ppshx aria-label="Close this list">' + ic("x") + '</button></div><input id=ppshq type=search autocomplete=off><div class=shl id=ppshl></div></div>'
     + '<div class=sbar role=search>' + ic("search") + '<input id=ppq type=search inputmode=search autocomplete=off placeholder="Parcel number, plot number or project name" aria-label="Search for a plot by parcel number, plot number, or project or building name"><button type=button class=btn id=ppclr hidden aria-label="Clear the search">' + ic("x") + "</button></div>"
     + '<div class=hint id=pphint aria-live=polite></div><div class=sug id=ppsug></div><div id=ppout></div>'
     + '<p class=note>' + fresh + ". Research use only.</p>"
-    + "<script>" + PP_JS + "</script>" + (deps.najNav ? deps.najNav(key, "more", rk) : "") + "</body></html>";
+    + "<script>" + LTF_JS + "</script><script>" + PP_JS + "</script>" + (deps.najNav ? deps.najNav(key, "more", rk) : "") + "</body></html>";
 }
 
 const aed = (v) => (v == null ? "—" : v >= 1e6 ? "AED " + (Math.round(v / 1e5) / 10) + "m" : "AED " + Math.round(v / 1e3) + "k");
