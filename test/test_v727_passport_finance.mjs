@@ -18,9 +18,9 @@ const T = "2026-11-04";
   ok(E.ENGINE_VERSION.startsWith("NFE-1.0.0"), "engine version NFE-1.0.0", E.ENGINE_VERSION);
   ok(ENGINE_SOURCE.commit === "58542f7" && ENGINE_SOURCE.excluded.includes("excel.js"), "source commit and the Excel module left out");
   ok(!fs.existsSync(new URL("../src/finance/excel.js", import.meta.url)), "no Node-only excel.js in the worker tree");
-  const src = "C:/Dev/najma-finance-engine/src/";
+  const src = "C:/Dev/najma-finance-engine/src/", LF = (s) => s.replace(/\r\n/g, "\n");
   if (fs.existsSync(src)) for (const n of ["provenance", "units", "area", "returns", "costplan", "development", "cashflow", "income", "analysis", "modes", "index"])
-    ok(fs.readFileSync(src + n + ".js", "utf8") === fs.readFileSync(new URL("../src/finance/" + n + ".js", import.meta.url), "utf8"), "vendored " + n + ".js is byte-identical to the engine repo");
+    ok(LF(fs.readFileSync(src + n + ".js", "utf8")) === LF(fs.readFileSync(new URL("../src/finance/" + n + ".js", import.meta.url), "utf8")), "vendored " + n + ".js is identical to the engine repo (line endings aside)");
   const pf = fs.readFileSync(new URL("../src/passport_finance.js", import.meta.url), "utf8");
   ok(!/devmap_irr/.test(pf.replace(/^\/\/.*$/gm, "")), "passports do not import the old devmap_irr definitions");
   ok(!/Math\.pow\(1 \+ r/.test(pf) && !/function irr|function npv/.test(pf), "no IRR / NPV re-implemented in the passport layer");
