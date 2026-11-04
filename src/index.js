@@ -5168,7 +5168,7 @@ const NAJ_CHEAT = [
 
 const NAJ_ROOMS = [
   ["FIND", "/find", "search", "Search any developer, development or building by name. The fastest way in when the client says a name out loud."],
-  ["DEVELOPERS DNA", "/home", "grid", "The developers, ten to a screen. Tap one for its properties, its scores, and its escrow and delivery profile with the PDF."],
+  ["DEVELOPERS DNA", "/developer_profile", "grid", "Each developer’s DNA: delivery record, escrow, scores and the profile PDF."],   // v750 (Kendall, 4 Nov): the room opens the developer profile builder, not the projects list (/home)
   ["PULSE", "/market", "trend", "The market scoreboard. Registered sales, median price per sq ft, and where Dubai is trading this week."],
   ["MAP", "/map", "pin", "Dubai live. Areas, amenities, what is trading. Tap an area for its briefing, then any tower to go down to the units."],
   ["TWIN", "/skyline?all=1", "cube", "The city in 3D. The showpiece \u2014 open it when they want to see the skyline, not read about it."],
@@ -5228,7 +5228,7 @@ function najStartHtml(key, rk, isOwner) {
 function najMoreHtml(key, rk, owner) {
   const esc3 = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const k = encodeURIComponent(key || "");
-  const ON_BAR = ["/find", "/market", "/map", "/skyline"];   // v749 (Kendall, 4 Nov: "MORE has got bloated"): rooms already on the bottom bar are not repeated here
+  const ON_BAR = ["/find", "/market", "/map", "/skyline", "/plans", "/plot_radar"];   // v750 (Kendall, 4 Nov): Plans shelved, Activity radar dropped   // v749 (Kendall, 4 Nov: "MORE has got bloated"): rooms already on the bottom bar are not repeated here
   const rooms = NAJ_ROOMS.concat(PLOT_ROOMS).filter((r) => !ON_BAR.some((p) => r[1].split("?")[0] === p)).filter((r) => owner || r[1].indexOf("/plot_") !== 0).map(   // v742 - the plot rooms open only for an owner key (keyTier admin), so a client key is not shown a door that refuses it
    (r) => {   // v691 - PLOT_ROOMS from src/plot_intel.js
     const href = r[1] + (r[1].indexOf("?") >= 0 ? "&key=" : "?key=") + k + (rk ? "&rk=" + encodeURIComponent(rk) : "");
@@ -5245,7 +5245,7 @@ function najMoreHtml(key, rk, owner) {
     + '<style>' + NAJ_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
     + '<div class=h>Every <em>room</em></div>'
     + '<div class=s>The rooms that are not on the bar below. Find, Pulse, Map and Twin live on the bar.</div>'
-    + '<style>.mg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mg .rm{margin:0}.mg .rm p{font-size:.8rem}</style><div class=mg>' + rooms + priv + '</div>'
+    + '<style>.mg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mg .rm{margin:0}.mg .rm p{font-size:.8rem}</style><div class=mg>' + rooms + '</div>'   // v750: RESIDENTS removed from MORE (Kendall: available elsewhere); /residents still opens from the map
     + (ownerRooms ? '<div class=hd>YOURS</div>' + ownerRooms : "")
     + najNav(key, "more", rk) + '</body></html>';
 }

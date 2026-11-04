@@ -67,6 +67,6 @@ ok(sizeBand(999) === "s" && sizeBand(5000) === "m" && sizeBand(5001) === "l", "s
 
 // 5. MORE lists both rooms
 h = await (await call("/more?key=" + READ)).text();
-ok(/\/plot_radar\?key=/.test(h) && /\/plot_land\?key=/.test(h), "MORE lists Activity radar and Land scanner");
+ok(!/\/plot_radar\?key=/.test(h) && /\/plot_land\?key=/.test(h), "MORE lists Land scanner; Activity radar removed from MORE (v750, Kendall 4 Nov)");
 
 console.log("\n" + pass + " passed, " + fail + " failed"); if (fail) process.exit(1);
