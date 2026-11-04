@@ -47,7 +47,7 @@ const D6 = { slug: "businessbay", name: "Business Bay", n: 9, sa: "2026-08-31", 
   const fetch = (u) => Promise.resolve({ json: () => Promise.resolve(u.indexOf("/plot_passport/districts") === 0 ? { districts: DL6 } : { ok: true, district: D6 }) });
   const ctx = { document, location: { search: "?key=k" }, fetch, setTimeout, JSON, Object, String, Number, Array };
   document.getElementById("bpp_ltc").innerHTML = (/<div class=zg id=bpp_ltc>([\s\S]*?)<\/div>/.exec(body) || [])[1] || "";
-  let scrolled = 0; document.getElementById("bpp_d").scrollIntoView = () => scrolled++;
+  let scrolled = 0; document.getElementById("bpp_dp").scrollIntoView = () => scrolled++;
   vm.createContext(ctx); vm.runInContext(main, ctx); await tick(); await tick();
   const card = (v) => ids.bpp_ltc._btn.find((c) => c.attrs["data-ltl"] === v);
   ok(ids.bpp_sumt.textContent === "All plots · 14" && ids.bpp_see.textContent === "See 14 plots" && ids.bpp_sumx.hidden === true, "default = nothing selected = all plots", ids.bpp_sumt.textContent);
