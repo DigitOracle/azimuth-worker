@@ -65,7 +65,8 @@ export function reelsBody(key, rk, items, origin) {
       + (meta.length ? '<span class=ch>' + meta.map((h) => '<em>' + esc(h) + '</em>').join("") + '</span>' : "") + '</div>'
       + '<div class=ba><button class=b type=button data-p=' + i + '>Play</button><a class=b href="' + esc(v) + '" download="' + esc(e.slug) + '.mp4">Save</a>'
       + '<a class="b w" target=_blank rel=noopener href="https://wa.me/?text=' + encodeURIComponent(e.title + "\n" + share) + '">Send on WhatsApp</a>'
-      + (e.caption ? '<button class="b o rc" type=button data-c="' + esc(e.caption) + '">Copy caption</button>' : "") + '</div></div>';
+      + (e.caption ? '<button class="b o rc" type=button data-c="' + esc(e.caption) + '">Copy caption</button>' : "")
+      + '<button class="b d rd" type=button data-s="' + esc(e.slug) + '" data-t="' + esc(e.title) + '">Delete</button></div></div>';
   };
   const list = items.length ? '<div class=pl id=reels_list>' + reelsSorted(items).map(tile).join("") + '</div>'
     : '<div class=empty id=reels_empty>' + ic(REELS_ICON, 34) + '<p><b>Reels coming</b></p><p>Finished videos will appear here, ready to play, save and send.</p></div>';
@@ -73,11 +74,13 @@ export function reelsBody(key, rk, items, origin) {
     + '<style>.rt,.b,.rv,.rx{box-sizing:border-box;min-width:0;max-width:100%}.rx b,.rx i{overflow-wrap:anywhere}.pl{display:flex;flex-direction:column;gap:12px}.rt{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}'
     + '.rv{position:relative;border-radius:10px;overflow:hidden;background:#0C1413}.rp{display:block;width:100%;max-height:340px;object-fit:contain}.rpl{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;border:0;background:rgba(10,79,74,.85);display:flex;align-items:center;justify-content:center;cursor:pointer}.rvid{width:100%;max-height:70vh;background:#000}'
     + '.rx{display:flex;flex-direction:column;gap:3px}.rx b{font:600 1rem Fraunces,serif;color:#0A4F4A}.rx i{font:500 .78rem "IBM Plex Sans",sans-serif;color:#5F6B66;font-style:normal}.rx i.rf{color:#8A6F3E}.ch{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}.ch em{font:600 .62rem "IBM Plex Mono",monospace;color:#8A6F3E;border:1px solid #C5A56A;border-radius:999px;padding:2px 8px;font-style:normal}'
-    + '.ba{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.b{border:1px solid #0A4F4A;color:#0A4F4A;background:#fff;border-radius:999px;padding:10px 12px;font:600 .85rem "IBM Plex Sans",sans-serif;text-decoration:none;text-align:center;cursor:pointer}.b.w{background:#0A4F4A;color:#fff}.b.o{border-color:#C5A56A;color:#8A6F3E}.b.ok{background:#0A4F4A;color:#fff;border-color:#0A4F4A}'
+    + '.ba{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.b{border:1px solid #0A4F4A;color:#0A4F4A;background:#fff;border-radius:999px;padding:10px 12px;font:600 .85rem "IBM Plex Sans",sans-serif;text-decoration:none;text-align:center;cursor:pointer}.b.w{background:#0A4F4A;color:#fff}.b.o{border-color:#C5A56A;color:#8A6F3E}.b.ok{background:#0A4F4A;color:#fff;border-color:#0A4F4A}.b.d{border-color:#B4533C;color:#B4533C}'
     + '.empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 18px;border:1px dashed #C5A56A;border-radius:18px;text-align:center;color:#5F6B66}.empty p{margin:0}.empty b{font-family:Fraunces,serif;font-size:1.1rem;color:#0A4F4A}</style>'
     + '<script>(function(){var T=document.querySelectorAll(".rt");function play(i){var t=T[i];if(!t)return;var v=t.querySelector("video");if(!v.src)v.src=v.dataset.src;v.hidden=false;var p=t.querySelector(".rp"),b=t.querySelector(".rpl");if(p)p.remove();if(b)b.remove();var r=v.play();if(r&&r.catch)r.catch(function(){})}'
     + 'document.querySelectorAll("[data-p],.rpl").forEach(function(b){b.onclick=function(){play(+(b.dataset.p||b.dataset.i))}});'
-    + 'document.querySelectorAll(".rc").forEach(function(b){b.onclick=function(){var c=b.dataset.c;function ok(){b.textContent="Copied";b.classList.add("ok");setTimeout(function(){b.textContent="Copy caption";b.classList.remove("ok")},2500)}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(ok,function(){fb()})}else fb();function fb(){var a=document.createElement("textarea");a.value=c;document.body.appendChild(a);a.select();try{document.execCommand("copy");ok()}catch(e){}a.remove()}}})})()</script>';
+    + 'document.querySelectorAll(".rc").forEach(function(b){b.onclick=function(){var c=b.dataset.c;function ok(){b.textContent="Copied";b.classList.add("ok");setTimeout(function(){b.textContent="Copy caption";b.classList.remove("ok")},2500)}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(ok,function(){fb()})}else fb();function fb(){var a=document.createElement("textarea");a.value=c;document.body.appendChild(a);a.select();try{document.execCommand("copy");ok()}catch(e){}a.remove()}}});'
+    + 'document.querySelectorAll(".rd").forEach(function(b){b.onclick=function(){if(!confirm("Delete \\u201c"+b.dataset.t+"\\u201d? It will be removed from Reels and its share link will stop working."))return;b.disabled=true;b.textContent="Deleting\\u2026";'
+    + 'fetch("/momo/work/reels/delete' + q + '",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slug:b.dataset.s})}).then(function(r){if(!r.ok)throw 0;var t=document.getElementById("reel_"+b.dataset.s);if(t)t.remove()}).catch(function(){b.disabled=false;b.textContent="Delete";alert("Could not delete. Try again.")})}})})()</script>';
 }
 
 export async function reelsRoute(request, env, url, deps) {
@@ -86,6 +89,24 @@ export async function reelsRoute(request, env, url, deps) {
   if (!REELS_PEOPLE.includes(who) || (who === "najjuko" && typeof deps.isNaj === "function" && !deps.isNaj(env, url))) return new Response("not found", { status: 404 });
   if (p === "/momo/work/reels" && request.method === "GET") {
     return new Response(deps.page(key, rk, reelsBody(key, rk, await readReels(env), url.origin)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  }
+  // v751 (Kendall, 4 Nov 2026: "I also need a delete button"): drop the entry from reels_index (re-read just before the write),
+  // then delete its video + poster unless another entry still uses the same video_key.
+  if (p === "/momo/work/reels/delete" && request.method === "POST") {
+    let slug = ""; try { slug = String((await request.json()).slug || ""); } catch (e) {}
+    if (!SLUG_RE.test(slug)) return new Response("bad slug", { status: 400 });
+    let raw = []; try { raw = JSON.parse(await env.MEETINGS.get("reels_index")) || []; } catch (e) {}
+    if (!Array.isArray(raw)) raw = [];
+    const gone = raw.find((x) => x && x.slug === slug);
+    if (!gone) return new Response(JSON.stringify({ ok: true, deleted: 0 }), { headers: { "Content-Type": "application/json" } });
+    const keep = raw.filter((x) => !(x && x.slug === slug));
+    await env.MEETINGS.put("reels_index", JSON.stringify(keep));
+    const vk = String(gone.video_key || "");
+    if (VKEY_RE.test(vk) && !keep.some((x) => x && x.video_key === vk)) {
+      await env.MEETINGS.delete("vid_" + vk); await env.MEETINGS.delete("vidposter_" + vk);
+      if (env.MEDIA) { try { await env.MEDIA.delete("vid_" + vk); } catch (e) {} }   // clips over 25 MB live in R2 (v506)
+    }
+    return new Response(JSON.stringify({ ok: true, deleted: 1 }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   }
   if (p === "/momo/work/reels/list" && request.method === "GET") return new Response(JSON.stringify(reelsSorted(await readReels(env))), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   return new Response("not found", { status: 404 });
