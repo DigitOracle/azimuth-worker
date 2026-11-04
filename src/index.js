@@ -812,7 +812,7 @@ function renderBoard(meetings, actions, key, env, mkt, avail) {
   const acts = actions || [];
   const tasksHtml = acts.length ? acts.slice(0, 200).map(a => {
     const hi = /\b(pay|approve|sign|urgent|asap|today|deadline|overdue)\b/i.test(a.text || "");
-    return `<div class="task" data-id="${a.id}"><span class="ring" role="button" tabindex="0" aria-label="Mark done"></span><div class="tinfo"><div class="tt">${esc(a.text)}</div><div class="meta"><span>${esc((a.from||"").split("@")[0]||"inbox")}</span>${a.due_iso?'·<span class="due">⏰ '+esc(humanGst(a.due_iso))+'</span>':''}${hi?'·<span class="pri"><span class="pd"></span>High</span>':''}${srcLink(a,key)}</div></div></div>`;
+    return `<div class="task" data-id="${a.id}"><span class="ring" role="button" tabindex="0" aria-label="Mark done"></span><div class="tinfo"><div class="tt">${esc(a.text)}</div><div class="meta"><span>${esc((a.from||"").split("@")[0]||"inbox")}</span>${a.due_iso?'·<span class="due">⏰ '+esc(humanGst(a.due_iso))+'</span>':''}${hi?'·<span class="pri"><span class="pd"></span>High</span>':''}${key === env.READ_KEY ? srcLink(a,key) : ""}</div></div></div>`;
   }).join("") : `<div class="empty">Plate's clear — nothing open. 🎉</div>`;
 
   const upd = gn.getUTCHours ? `${pad(gn.getUTCHours())}:${pad(gn.getUTCMinutes())}` : "";
@@ -2270,7 +2270,7 @@ async function appFetch(request, env, ctx) {
     }
     if (url.pathname === "/versus/picture" && request.method === "POST") {   // v155.3 (Kendall, 16 Sep 2026) - a picture of the pair from the script, through the image API the podcast plates use, to her own WhatsApp. Owner key only: it spends money and writes into her chat.
       let _pb = {}; try { _pb = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
-      if (!env.READ_KEY || !_pb || _pb.key !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      if (!_pb || !vsOwnerKey(env, _pb.key)) return new Response("unauthorized", { status: 401 });   // v742 - READ_KEY or Kendall's insider key, the same keys the page draws the button for
       const _pc = worldCity(_pb.city || ""); if (!_pc || _pc.base) return new Response("unknown city", { status: 404 });
       if (!env.OPENAI_API_KEY) return new Response("no image key on this env", { status: 500 });
       // v164 - the tap no longer spends. It opens the morning's ritual in her chat: which shape, which backdrop, what time
@@ -2280,7 +2280,7 @@ async function appFetch(request, env, ctx) {
     }
     if (url.pathname === "/versus/send" && request.method === "POST") {   // v155 - the script or the client card for a city, to her own WhatsApp, plain text. POST on purpose: a GET that sends would fire on link previews.
       let _b = {}; try { _b = await request.json(); } catch (e) { return new Response("bad json", { status: 400 }); }
-      if (!_b || _b.key !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+      if (!_b || !vsOwnerKey(env, _b.key)) return new Response("unauthorized", { status: 401 });   // v742 - the page draws the sends for Kendall's insider key too, so the send must accept it
       const _c = worldCity(_b.city || ""); if (!_c || _c.base) return new Response("unknown city", { status: 404 });
       const _what = _b.what === "card" ? "card" : "script";
       const _bud = Math.max(1, parseFloat(_b.budget) || 5000000), _cur = String(_b.cur || "AED").toUpperCase().slice(0, 3);
@@ -3654,7 +3654,7 @@ async function appFetch(request, env, ctx) {
         return clientResp(env, url, renderSkyline(_sk, _an2, url.searchParams.get("key") || "", _rail, _rkT, _tbOn), { headers: Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }, resHeaders(_rkT)) });
       }
       if (url.pathname === "/studio") {                        // v61 — editorial card studio (MUST sit above the keyed catch-all dump below)
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (keyTier(env, url) !== "admin") return new Response("unauthorized", { status: 401 });
         return new Response(renderStudio(await env.MEETINGS.get("mkt_latest"), url.searchParams.get("key") || "", !!(env.ESRI_CLIENT_ID && env.ESRI_CLIENT_SECRET)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       // ---- BLOCKS (30 Sep 2026, Kendall) - /blocks, the LOD 100 view between the map and the twin. Client-key gated like /map; everything else is in src/blocks_page.js.
@@ -5228,7 +5228,8 @@ function najStartHtml(key, rk, isOwner) {
 function najMoreHtml(key, rk, owner) {
   const esc3 = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const k = encodeURIComponent(key || "");
-  const rooms = NAJ_ROOMS.concat(PLOT_ROOMS).map((r) => {   // v691 - PLOT_ROOMS from src/plot_intel.js
+  const rooms = NAJ_ROOMS.concat(PLOT_ROOMS).filter((r) => owner || r[1].indexOf("/plot_") !== 0).map(   // v742 - the plot rooms open only for an owner key (keyTier admin), so a client key is not shown a door that refuses it
+   (r) => {   // v691 - PLOT_ROOMS from src/plot_intel.js
     const href = r[1] + (r[1].indexOf("?") >= 0 ? "&key=" : "?key=") + k + (rk ? "&rk=" + encodeURIComponent(rk) : "");
     return '<a class=rm href="' + esc3(href) + '"><div class=t>' + najIcon(r[2]) + esc3(r[0]) + '</div><p>' + esc3(r[3]) + '</p></a>';
   }).join("");
@@ -13066,6 +13067,12 @@ function personOfKey(env, url) {
   const k = String(url.searchParams.get("key") || ""); if (!k) return "";
   const hit = (pre) => String(env.INSIDER_KEY || "").split(",").map((x) => x.trim()).filter((x) => x.indexOf(pre) === 0 && x.length >= 20).some((x) => ctEq(k, x));
   return hit("ins_najjuko_") ? "najjuko" : hit("ins_kendall_") ? "kendall" : "";
+}
+// v742 - the VS sends (POST body key): the owner key, or Kendall's own insider key; never Najjuko's, never a client key
+function vsOwnerKey(env, k) {
+  k = String(k || ""); if (!k) return false;
+  if (env.READ_KEY && ctEq(k, String(env.READ_KEY))) return true;
+  return personOfKey(env, { searchParams: new URLSearchParams({ key: k }) }) === "kendall";
 }
 function isInsider(env, url) {
   const k = url.searchParams.get("key") || "";
