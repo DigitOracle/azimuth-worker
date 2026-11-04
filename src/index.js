@@ -2736,14 +2736,14 @@ async function appFetch(request, env, ctx) {
         return new Response(JSON.stringify({ fired }), { headers: { "Content-Type": "application/json" } });
       }
       if (url.pathname === "/people") {                        // v35 — relationship roster
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (url.searchParams.get("key") !== env.READ_KEY && !isInsider(env, url)) return new Response("unauthorized", { status: 401 });   // v743 (Kendall, 4 Nov): Kendall and Najjuko both open the people pages
         const parties = await listParties(env);
         if (url.searchParams.get("format") === "json") return new Response(JSON.stringify(parties), { headers: { "Content-Type": "application/json" } });
         const allC = await openCommitments(env);
         return new Response(renderPeople(parties, allC, url.searchParams.get("key")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       }
       if (url.pathname === "/person") {                        // v35 — per-party screen
-        if (url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
+        if (url.searchParams.get("key") !== env.READ_KEY && !isInsider(env, url)) return new Response("unauthorized", { status: 401 });   // v743 (Kendall, 4 Nov): Kendall and Najjuko both open the people pages
         const o = await assembleParty(env, url.searchParams.get("id") || "");
         if (!o) return new Response("not found", { status: 404 });
         if (url.searchParams.get("format") === "json") return new Response(JSON.stringify(o), { headers: { "Content-Type": "application/json" } });

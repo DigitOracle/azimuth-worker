@@ -27,7 +27,7 @@ const MATRIX = [
   ["/momo/work/reels", "Momo tile", [N, O, O, U, N]], ["/momo/work/brokers", "Momo tile (Najjuko only)", [U, O, U, U, N]], ["/momo/campaigns", "Momo tile", [O, O, O, N, N]],
   ["/developers_map", "MORE / START", [O, O, O, O, U]], ["/developer_profile", "FIND", [O, O, O, O, U]],
   // owner-only ops/data endpoints stay owner-only: an insider key must NOT widen these
-  ["/people", "none (owner tool)", [O, U, U, U, U]], ["/groups_ui", "none (owner tool)", [O, U, U, U, U]], ["/twin_audit", "none (ops)", [null, U, U, U, U]],
+  ["/people", "MORE people (v743: Kendall + Najjuko)", [O, O, O, U, U]], ["/groups_ui", "none (owner tool)", [O, U, U, U, U]], ["/twin_audit", "none (ops)", [null, U, U, U, U]],
   ["/setbg", "none (KV write)", [null, U, U, U, U]], ["/health", "none (ops)", [null, U, U, U, U]],
 ];
 for (const [p, from, exp] of MATRIX) {

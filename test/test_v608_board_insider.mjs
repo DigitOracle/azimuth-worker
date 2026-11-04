@@ -13,8 +13,8 @@ const at = (needle) => { const i = src.indexOf(needle); return i < 0 ? "" : src.
 const board = at('if (url.pathname === "/board") {'), done = at('if (url.pathname === "/done") {');
 ok(src.split('if (url.pathname === "/board") {').length === 2 && /^[^]{0,140}!== env\.READ_KEY && !isInsider\(env, url\)\) return new Response\("unauthorized", \{ status: 401 \}\)/.test(board.slice('if (url.pathname === "/board") {'.length)), "/board accepts the owner key or an insider key", board);
 ok(src.split('if (url.pathname === "/done") {').length === 2 && /!== env\.READ_KEY && !isInsider\(env, url\)\) return new Response\("unauthorized", \{ status: 401 \}\)/.test(done), "/done (the board's tick-to-delete) accepts the same two", done);
-ok((src.match(/get\("key"\) !== env\.READ_KEY && !isInsider\(env, url\)\)/g) || []).length === 2, "exactly two checks were widened");
-ok((src.match(/get\("key"\) !== env\.READ_KEY\)/g) || []).length === 96, "the other 96 strict owner checks are untouched (v742: /studio moved to keyTier admin, so 97 -> 96)", (src.match(/get\("key"\) !== env\.READ_KEY\)/g) || []).length);
+ok((src.match(/get\("key"\) !== env\.READ_KEY && !isInsider\(env, url\)\)/g) || []).length === 4, "exactly four checks were widened (v743: + /people, /person)");
+ok((src.match(/get\("key"\) !== env\.READ_KEY\)/g) || []).length === 94, "the other 94 strict owner checks are untouched (v742 /studio, v743 /people + /person)", (src.match(/get\("key"\) !== env\.READ_KEY\)/g) || []).length);
 
 console.log("B - routes that must stay owner-only");
 for (const r of ["/note", "/reindex", "/src", "/backfill", "/debugatt", "/setbg"]) {
