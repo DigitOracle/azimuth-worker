@@ -11,7 +11,8 @@
 // RULES: project-level links are never shown as plot facts and never summed; no DEWA data; no Google content; research use only.
 // Page script is String.raw with no substitutions and no backticks.
 
-import { LTF_JS } from "./landtype_filters.js";   // v731 - DLD use / land type / tenure filters on the district/building picker
+import { LTF_JS } from "./landtype_filters.js";
+import { withCommunities } from "./district_communities.js";   // v737 - community names beside official district names   // v731 - DLD use / land type / tenure filters on the district/building picker
 const PP_ID = /^naj:plot:[A-Za-z0-9\-]{1,40}$/;
 const normQ = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 let CRC_T = null;
@@ -288,13 +289,13 @@ var sh=$("ppsheet"),scr=$("ppscrim"),shq=$("ppshq"),shl=$("ppshl"),SH=[],SHBACK=
 // v731 DLD filters: counts follow the chosen district (or all districts); they narrow the district list, then buildings and plots
 var LF={u:"",l:"",f:""},lfe=$("ppltf"),LT=typeof ltfDraw==="function",lOn=LT?ltfOn:function(){return false},lN=LT?ltfN:function(){return 0},lM=LT?ltfM:function(){return true},lDraw=LT?ltfDraw:function(){};function lsel(){return DC?[DC]:(DL||[])}function ldraw(){lDraw(lfe,lsel(),LF,ldraw,{g:"ltg",c:"ltc",on:"on",t:"Use (DLD)"})}function dN(d){return lOn(LF)?lN([d],LF):d.n}
 function nq(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
-function hit(o,f){return !f||o.sticky||(" "+nq(o.t)).indexOf(" "+f)>=0||nq(o.t).indexOf(f)>=0}
+function hit(o,f){return !f||o.sticky||(" "+nq(o.t)).indexOf(" "+f)>=0||nq(o.t).indexOf(f)>=0||(!!o.k&&nq(o.k).indexOf(f)>=0)}
 function drawSheet(){var f=nq(shq.value),n=0,m=0,h="";SH.forEach(function(o,i){if(!hit(o,f))return;if(!o.sticky)m++;if(n>=150)return;n++;h+='<button type=button class="opt'+(o.sticky?" sp":"")+'" data-opt="'+i+'">'+ic(o.i||"pin")+'<span><b>'+esc(o.t)+'</b>'+(o.s?'<small>'+esc(o.s)+'</small>':'')+'</span></button>'});
   shl.innerHTML=h+(m>150?'<p class=empty>'+m+' match. Type more letters to narrow the list.</p>':'')+(!n?'<p class=empty>Nothing matches “'+esc(shq.value)+'” here.</p>':'')}
 function openSheet(title,items,ph,back){SH=items;SHBACK=back||document.activeElement;$("ppsht").textContent=title;shq.value="";shq.placeholder=ph||"Type the first few letters";shq.setAttribute("aria-label",ph||"Filter this list");drawSheet();sh.hidden=false;scr.hidden=false;try{shq.focus({preventScroll:true})}catch(e){}}
 function closeSheet(){if(sh.hidden)return;sh.hidden=true;scr.hidden=true;if(SHBACK&&SHBACK.focus)try{SHBACK.focus({preventScroll:true})}catch(e){}}
 function getJ(u){return fetch(u).then(function(r){return r.json()})}
-function districts(){if(DL){openSheet("Choose a district",DL.filter(function(d){return !lOn(LF)||dN(d)>0}).map(function(d){return {t:d.name,s:num(dN(d))+" plots"+(lOn(LF)?" match the filters":""),i:"pin",fn:function(){pickD(d.slug)}}}),"Type a district, e.g. Business Bay",$("ppb1"));return}
+function districts(){if(DL){openSheet("Choose a district",DL.filter(function(d){return !lOn(LF)||dN(d)>0}).map(function(d){return {t:d.label||d.name,k:(d.kw||""),s:num(dN(d))+" plots"+(lOn(LF)?" match the filters":""),i:"pin",fn:function(){pickD(d.slug)}}}),"Type a district, e.g. Business Bay",$("ppb1"));return}
   getJ("/plot_passport/districts?"+kq()).then(function(j){DL=j.districts||[];if(!DL.length){say("The district list has not been loaded yet.");return}districts()}).catch(function(){say("The district list is not reachable just now.")})}
 function pickD(slug){var go=function(d){DC=d;ldraw();$("ppb1v").textContent=d.name;$("ppb2").disabled=false;$("ppb2v").textContent="Choose a building or project";groups()};
   if(DCACHE[slug])return go(DCACHE[slug]);getJ("/plot_passport/d?"+kq()+"&slug="+encodeURIComponent(slug)).then(function(j){if(!j.ok){say(j.error||"That district is not loaded yet.");return}DCACHE[slug]=j.district;go(j.district)}).catch(function(){say("That district is not reachable just now.")})}
@@ -368,7 +369,7 @@ export async function plotPassportRoutes(request, env, url, deps) {
   if (p !== "/plot_passport" && p.indexOf("/plot_passport/") !== 0) return null;
   if (!deps.clientOk(env, url)) return new Response("unauthorized", { status: 401 });
   const key = url.searchParams.get("key") || "";
-  if (p === "/plot_passport/districts") return json({ districts: (await readJson(env, "pp_dl")) || [] });
+  if (p === "/plot_passport/districts") return json({ districts: withCommunities((await readJson(env, "pp_dl")) || []) });
   if (p === "/plot_passport/d") {
     const slug = url.searchParams.get("slug") || "";
     if (!/^[a-z0-9_]{1,60}$/.test(slug)) return json({ ok: false, error: "That is not a district." }, 400);
