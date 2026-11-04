@@ -1,3 +1,4 @@
+import { creamTheme } from "./cream_theme.js";   // v728
 import { plotIntelRoutes, PLOT_ROOMS } from "./plot_intel.js";   // v691 - Activity radar + Land scanner (MORE)
 import { askBoxHtml, askRoute, askFloatHtml } from "./ask_najma.js";   // v555, v556
 import { feedPdfStore, FEED_PDF_RX, feedPdfAngles, feedPdfAutoSend, feedAnglesKey } from "./feed_pdf.js";   // v622 - the day's feed as a PDF for the graphic designer
@@ -4889,7 +4890,8 @@ async function appFetch(request, env, ctx) {
 }
 
 export default {
-  async fetch(request, env, ctx) {   // v153 - question notes: their routes first, then the question button on private app pages
+  async fetch(request, env, ctx) { return creamTheme(request, new URL(request.url), await this._fetch(request, env, ctx)); },   // v728 - every dark app page leaves in the cream theme (src/cream_theme.js); ?theme=dark opts out
+  async _fetch(request, env, ctx) {   // v153 - question notes: their routes first, then the question button on private app pages
     const url = new URL(request.url);
     if (url.pathname === "/price_slider") return new Response(PRICE_SLIDER_HTML, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Robots-Tag": "noindex" } });   // v661 - public, no key
     if (url.pathname.startsWith("/live/")) { const _lv = await liveRoute(request, env, url); if (_lv) return _lv; }   // v659 - public, before every key gate
@@ -5026,7 +5028,7 @@ const najSlug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const najSat = (name) => '/img/sat_' + najSlug(name);
 const NAJ_FONTS = '<link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">';
 // v51 — shared bottom tab bar: one app, four rooms. Inject NAJ_NAV_CSS in <style> and najNav() before </body>.
-const NAJ_NAV_CSS = '.nnav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-around;align-items:center;background:rgba(12,20,19,.93);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-top:1px solid #24352F;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.nnav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8FA39B;font-size:.58rem;font-family:"IBM Plex Mono",monospace;letter-spacing:.05em;-webkit-tap-highlight-color:transparent}.nnav a svg{width:19px;height:19px}.nnav a.on{color:#C5A56A}';
+const NAJ_NAV_CSS = '.nnav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:space-around;align-items:center;background:rgba(247,243,234,.95);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-top:1px solid #DCD5C2;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.nnav a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#566963;font-size:.58rem;font-family:"IBM Plex Mono",monospace;letter-spacing:.05em;-webkit-tap-highlight-color:transparent}.nnav a svg{width:19px;height:19px}.nnav a.on{color:#8A6A2C}';
 const najNav = (key, active, rk) => {   // v208 (Kendall, 21 Sep 2026) - rk rides EVERY tab: pinned to MAP and TWIN it vanished the moment Naj tapped another room, and this app has two users
   const k = encodeURIComponent(key || "");
   // v235 (Kendall, 22 Sep 2026) - ten tabs in a phone-width bar is not a menu, it is a wall: he could not
