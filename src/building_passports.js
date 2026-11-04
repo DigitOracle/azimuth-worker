@@ -457,7 +457,10 @@ async function renderPdf(env, html) {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
-    await page.setContent(html, { waitUntil: "networkidle0", timeout: 45000 });
+    // v726 - a slow outside picture or font must not lose the whole passport (4 Nov: "Navigation timeout of 45000 ms exceeded"):
+    // wait for the network to go quiet up to 30 s, then print what has loaded
+    try { await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 }); }
+    catch (e) { if (!/timeout/i.test(String((e && e.message) || e))) throw e; }
     try { await page.evaluate(() => document.fonts.ready.then(() => true)); } catch (e) {}
     let over = [];
     try { over = await page.evaluate(OVERFLOW_JS); } catch (e) {}
