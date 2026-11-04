@@ -54,21 +54,95 @@ export function cleanEntry(x) {
   if (/^\d{4}-\d{2}-\d{2}/.test(String(x.date || ""))) e.date = String(x.date).slice(0, 10);
   if (x.html) e.html = true;
   if (x.pdf) e.pdf = true;
+  if (BPP_READERS[x.reader]) e.reader = x.reader;   // v728 - keep the reader (it was being dropped, so the tile lost "For an investor")
+  if (/^[a-z]{1,20}$/.test(String(x.fin || ""))) e.fin = String(x.fin);
+  if (x.csv) e.csv = true;
   return e;
+}
+// v728 (Kendall, 4 Nov 2026: "we do not need to store previous passports") - ONE passport per plot per reader.
+// The identity is plot_id + reader (broker when unset); an entry without a plot_id is its own identity (its slug).
+export const bppKeyOf = (e) => (e && e.plot_id ? e.plot_id + "|" + (BPP_READERS[e.reader] ? e.reader : "broker") : "slug|" + (e && e.slug));
+// every KV key that belongs to one stored passport (its files and its hero picture)
+export const bppSlugKeys = (slug) => ["bpp_file_" + slug + "_html", "bpp_file_" + slug + "_pdf", "bpp_file_" + slug + "_csv", "bpp_photo_" + slug, "bpp_img_" + slug];
+// newest per identity (date, then later in the list wins a tie); returns { keep, drop } of index entries
+export function bppNewest(items) {
+  const best = new Map();
+  (items || []).forEach((e, i) => { const k = bppKeyOf(e), b = best.get(k); if (!b || String(e.date || "") >= String(b.e.date || "")) best.set(k, { e, i }); });
+  const keepIdx = new Set([...best.values()].map((x) => x.i));
+  return { keep: (items || []).filter((_, i) => keepIdx.has(i)), drop: (items || []).filter((_, i) => !keepIdx.has(i)) };
 }
 export async function readBppIndex(env) {
   const r = await readJson(env, "bpp_index");
-  return Array.isArray(r) ? r.map(cleanEntry).filter(Boolean) : [];
+  return Array.isArray(r) ? bppNewest(r.map(cleanEntry).filter(Boolean)).keep : [];   // v728 - the list shows only the current passports
 }
 export const bppSorted = (items) => items.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-export function mergeEntry(cur, entry) {
-  const e = cleanEntry(entry); if (!e) return cur;
+export function mergeEntry(cur, entry) { return mergeEntryPlan(cur, entry).next; }
+// v728 - the new entry replaces any entry with the same slug AND any older passport for the same plot + reader.
+// superseded = the slugs whose files must now be deleted (never the new slug: its files were just written).
+export function mergeEntryPlan(cur, entry) {
+  const e = cleanEntry(entry); if (!e) return { next: cur, superseded: [] };
+  const k = bppKeyOf(e);
   const old = cur.find((x) => x.slug === e.slug);
-  return cur.filter((x) => x.slug !== e.slug).concat(Object.assign({}, old || {}, e));
+  const gone = cur.filter((x) => x.slug !== e.slug && bppKeyOf(x) === k);
+  return { next: cur.filter((x) => x.slug !== e.slug && bppKeyOf(x) !== k).concat(Object.assign({}, old || {}, e)), superseded: [...new Set(gone.map((x) => x.slug))] };
 }
 export async function putBppEntry(env, entry) {
-  const next = mergeEntry(await readBppIndex(env), entry);   // re-read NOW, never a stale copy
-  await env.MEETINGS.put("bpp_index", JSON.stringify(next)); return next;
+  const r = await readJson(env, "bpp_index");   // re-read NOW, never a stale copy (raw, so stored duplicates are seen and removed)
+  const { next, superseded } = mergeEntryPlan(Array.isArray(r) ? r.map(cleanEntry).filter(Boolean) : [], entry);
+  await env.MEETINGS.put("bpp_index", JSON.stringify(next));
+  for (const slug of superseded) for (const key of bppSlugKeys(slug)) await env.MEETINGS.delete(key);
+  return next;
+}
+// v728 - after a passport is made, the older job records for the same plot + reader go (finished ones only; never one still running)
+export async function dropOldJobs(env, keepId, plotId, reader) {
+  const ids = await readReqIds(env), drop = [];
+  for (const id of ids) {
+    if (id === keepId) continue;
+    const q = await readReq(env, id);
+    if (q && q.plot_id === plotId && (q.reader_used || readerFor(q.reader)) === reader && ["done", "failed"].includes(q.status)) drop.push(id);
+  }
+  for (const id of drop) await env.MEETINGS.delete("bpp_req_" + id);
+  if (drop.length) { const cur = await readReqIds(env); await env.MEETINGS.put("bpp_requests", JSON.stringify(cur.filter((x) => !drop.includes(x)))); }
+  return drop;
+}
+
+// v728 - ONE-OFF cleanup of passports stored before the rule. Pure plan: from the raw index, the request records and the
+// bpp_file_ key names, which KV keys go. Keeps the newest per plot + reader; also drops files whose slug is no longer in the index
+// and finished jobs superseded by a newer finished job for the same plot + reader. Never touches the logo, photo-test token or counters.
+export function bppCleanupPlan(rawIndex, reqs, fileKeys) {
+  const items = (Array.isArray(rawIndex) ? rawIndex : []).map(cleanEntry).filter(Boolean);
+  const { keep, drop } = bppNewest(items);
+  const keepSlugs = new Set(keep.map((e) => e.slug));
+  const keys = new Set();
+  drop.forEach((e) => { if (!keepSlugs.has(e.slug)) bppSlugKeys(e.slug).forEach((k) => keys.add(k)); });
+  (fileKeys || []).forEach((k) => { const m = /^bpp_file_([a-z0-9-]{1,80})_(html|pdf|csv)$/.exec(k); if (m && !keepSlugs.has(m[1])) keys.add(k); });
+  const latest = new Map(), jobs = [];
+  (reqs || []).filter((q) => q && q.id && q.plot_id && ["done", "failed"].includes(q.status)).forEach((q) => {
+    const k = q.plot_id + "|" + (q.reader_used || readerFor(q.reader)), b = latest.get(k);
+    if (!b) { latest.set(k, q); return; }
+    const newer = String(q.at || "") > String(b.at || "") ? q : b, older = newer === q ? b : q;
+    latest.set(k, newer); jobs.push(older.id);
+  });
+  jobs.forEach((id) => keys.add("bpp_req_" + id));
+  return { index: keep, keys: [...keys].sort(), jobs, kept: keep.length, dropped_entries: drop.length };
+}
+async function kvKeys(env, prefix) {
+  const out = []; let cursor;
+  do { const r = await env.MEETINGS.list({ prefix, cursor }); (r.keys || []).forEach((k) => out.push(k.name)); cursor = r.list_complete ? null : r.cursor; } while (cursor);
+  return out;
+}
+// guarded admin action: Kendall only, dry run unless confirm === BPP_CLEANUP_CONFIRM
+export const BPP_CLEANUP_CONFIRM = "delete-older-passports";
+export async function bppCleanup(env, confirm) {
+  const raw = await readJson(env, "bpp_index");
+  const ids = await readReqIds(env);
+  const reqs = (await Promise.all(ids.map((id) => readReq(env, id)))).filter(Boolean);
+  const plan = bppCleanupPlan(raw, reqs, await kvKeys(env, "bpp_file_"));
+  if (confirm !== BPP_CLEANUP_CONFIRM) return { ok: true, dry_run: true, would_delete: plan.keys.length, keys: plan.keys, kept: plan.kept, dropped_entries: plan.dropped_entries };
+  await env.MEETINGS.put("bpp_index", JSON.stringify(plan.index));
+  for (const k of plan.keys) await env.MEETINGS.delete(k);
+  if (plan.jobs.length) { const cur = await readReqIds(env); await env.MEETINGS.put("bpp_requests", JSON.stringify(cur.filter((x) => !plan.jobs.includes(x)))); }
+  return { ok: true, dry_run: false, deleted: plan.keys.length, kept: plan.kept };
 }
 
 // ------------------------------------------------------------------------------------------------ public pages
@@ -540,6 +614,7 @@ export async function bppTick(env, nowMs) {
         await env.MEETINGS.put("bpp_file_" + r.slug + "_pdf", pdf);
         await putBppEntry(env, { slug: r.slug, title: r.title, area: r.area, plot_id: r.plot_id, parcel: r.parcel, date: todayGst(now), html: true, pdf: true, reader: r.reader_used || "broker", fin: r.fin_status || "", csv: !!r.csv });
         r.status = "done"; r.pages = n; delete r.lock; delete r.resp; await putReq(env, id, r);
+        await dropOldJobs(env, id, r.plot_id, r.reader_used || "broker").catch(() => []);   // v728 - only the latest passport is kept
         return { done: id, pages: n };
       }
     } catch (e) { r.status = "failed"; r.msg = String(e && e.message || e).slice(0, 200); delete r.lock; await putReq(env, id, r); return { failed: id }; }
@@ -619,6 +694,7 @@ export async function bppRoute(request, env, url, deps) {
   if (p === "/momo/work/passports/list" && request.method === "GET") return J({ passports: bppSorted(await readBppIndex(env)), requests: await reqs() });
   if (p === "/momo/work/passports/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) {}
+    if (b.op === "cleanup") return who === "kendall" ? J(await bppCleanup(env, b.confirm)) : J({ ok: false, error: "Not allowed." }, 403);   // v728 - one-off, dry run unless confirmed
     if (b.op !== "request") return J({ ok: false, error: "Unknown action." }, 400);
     const text = String(b.text || "").replace(/\s+/g, " ").trim().slice(0, 120);
     if (text.length < 2) return J({ ok: false, error: "Type a building name or a plot number." }, 400);
