@@ -278,6 +278,28 @@ export function googleLines(g) {
 
 // ------------------------------------------------------------------------------------------------ the facts (register figures only)
 // Everything the model may print, as plain lines, plus the computed risks and opportunities. Missing = said so, never guessed.
+// v740: the market signal for EVERY passport from the DLD transactions register: off-plan (pre-registration / Oqood) and ready sales,
+// pace, 12-month and all-time medians, by bedroom. Registered (actual) deals, never asking prices; never buyer names.
+export function marketLines(m) {
+  const out = [];
+  if (!m || !m.kinds) return out;
+  const LAB = { offplan: "OFF-PLAN sales (registered before handover, e.g. 'Sell - Pre registration' / Oqood)", ready: "READY sales (existing properties)", other: "other sales" };
+  for (const k of ["offplan", "ready", "other"]) {
+    const x = m.kinds[k];
+    if (!x) continue;
+    const bd = x.beds_12m ? Object.keys(x.beds_12m).sort().map((b) => BEDS(b) + " " + int(x.beds_12m[b][0]) + " deals" + (x.beds_12m[b][1] ? ", median AED " + int(x.beds_12m[b][1]) + " per m2" : "") + (x.beds_12m[b][2] ? ", median price " + aed(x.beds_12m[b][2]) : "")).join("; ") : "";
+    out.push("Market signal, REGISTERED (actual) - " + LAB[k] + ", project level, " + m.src + ", to " + bppDate(m.to) + ": " + int(x.deals) + " deals all time, first " + bppDate(x.first) + ", latest " + bppDate(x.latest)
+      + "; " + int(x.deals_12m) + " in the last 12 months, " + int(x.deals_ytd) + " in " + x.year
+      + (x.aed_m2_12m ? "; median AED " + int(x.aed_m2_12m) + " per m2 (AED " + int(x.aed_m2_12m / 10.7639) + " per sq ft) last 12 months" : "")
+      + (x.aed_m2 ? ", AED " + int(x.aed_m2) + " per m2 all time" : "")
+      + "; pace " + x.pace["3m"] + " / " + x.pace["6m"] + " / " + x.pace["12m"] + " deals a month over 3 / 6 / 12 months"
+      + (bd ? ". By bedroom, last 12 months: " + bd : "") + ".");
+  }
+  const o = m.kinds.offplan, r = m.kinds.ready;
+  if (o || r) out.push("Ready vs off-plan split (registered deals, last 12 months): " + int(r ? r.deals_12m : 0) + " ready, " + int(o ? o.deals_12m : 0) + " off-plan.");
+  return out;
+}
+
 export function bppFacts(pp, pack, today) {
   pack = pack || {};
   const L = [], risks = [], opps = [], missing = [];
@@ -290,10 +312,19 @@ export function bppFacts(pp, pack, today) {
   if (pj.number) {
     L.push("Developer: brand " + (pj.brand || "not recorded") + "; registered developer " + (pj.developer_en || pj.developer_ar || "not recorded") + (pj.developer_no ? " (DLD developer " + Math.round(pj.developer_no) + ")" : "")
       + ". Escrow bank " + (pj.escrow_en || pj.escrow_ar || "not recorded") + ". Planning authority " + (pj.authority || "not recorded") + ".");
+    if (pj.src) L.push("Project record source: " + pj.src + (pj.as_of ? ", as of " + bppDate(pj.as_of) : "") + " (" + (pj.note || "") + ")."
+      + (pj.registered ? " The project was registered with the Land Department on " + bppDate(pj.registered) + ": a registered project is coming, before it is built." : "")
+      + (pj.units_registered != null ? " Units registered so far " + int(pj.units_registered) + " of " + (pj.units != null ? int(pj.units) : "an unrecorded number") + " planned." : ""));
+    if (pack.project_plots > 1) L.push("Project-level (one of " + pack.project_plots + " plots): the project record, sales and rents below cover the whole project, not this plot alone.");
     L.push("Project register" + asOf(pack, "g_dld__projects", pj.as_of, today) + ": status " + (pj.status || "not recorded") + ", " + (pj.pct != null ? pj.pct + "% complete" : "progress not recorded")
       + ", start " + (bppDate(pj.start) || "not recorded") + ", planned completion " + (bppDate(pj.end_planned) || "not recorded") + ", " + (pj.buildings != null ? pj.buildings + " buildings" : "") + ", " + (pj.units != null ? pj.units + " units" : "") + ".");
     if (pj.description) L.push("Project description in the register (use it for the physical building section): " + pj.description);
-  } else missing.push("project register record");
+  } else {
+    const pm = pack.project_missing;
+    if (pm) L.push("Project record: DLD project " + pm.number + " is " + pm.note + ". Number found by " + (pm.pn_method || "the registers") + ".");
+    missing.push("project register record (status, construction % complete, planned completion)");
+  }
+  if (pack.buildings_registered) L.push("Buildings registered with the Land Department: " + pack.buildings_registered.buildings + ", first on " + bppDate(pack.buildings_registered.first) + " (DLD buildings register; registration proves the building is coming, not that it is built).");
   const bl = pp.buildings || [];
   const bd = pack.bldgs || [];
   if (bd.length) {   // v725 R1 item 1: one line per BUILDING (DLD parent property id), never project totals on one record
@@ -315,6 +346,7 @@ export function bppFacts(pp, pack, today) {
     const k = sal.kinds || {};
     L.push("Sales registered with the Land Department, " + sal.year + " to " + bppDate(sal.to) + ": " + Object.keys(k).map((x) => (x === "ready" ? "ready resale" : x === "offplan" ? "off-plan" : x) + " " + k[x].deals + " deals, median AED " + int(k[x].aed_m2) + " per m2 (AED " + int(k[x].aed_sqft) + " per sq ft)").join("; ") + ". Sales all time: " + int(sal.all_time || 0) + ".");
   } else missing.push("ready vs off-plan sales split");
+  for (const l of marketLines(pack.market)) L.push(l);
   if (pr && pr.sale) {
     const rows = [];
     for (const y of pr.years || []) for (const b of ["1", "2", "3"]) { const c = (pr.sale[y] || {})[b]; if (c) rows.push(BEDS(b) + " " + y + " " + aed(c[0]) + " (" + c[1] + " deals" + (c[2] === "d" ? ", " + (pp.area_name || "district") + " median, this " + pr.scope + " had none" : "") + ")"); }
@@ -329,7 +361,12 @@ export function bppFacts(pp, pack, today) {
     if (h) L.push("Tenancy history (Ejari, the Dubai Land Department tenancy register, project level, every contract length, to " + bppDate(h.to) + "): " + int(h.all_time) + " residential contracts since " + bppDate(h.first)
       + "; " + int(h.last_12m) + " in the last 12 months, of which " + int(h.renewals_12m) + " renewals" + (h.last_12m ? " (" + Math.round(h.renewals_12m / h.last_12m * 100) + "% renewal rate, " + h.renewals_12m + " of " + h.last_12m + ")" : "") + ".");
     L.push("Rentals (Ejari tenancies registered in this " + (bd.length > 1 || pack.projects_on_plot ? "project, project level, " : "building ") + (since ? "since the first one on " + bppDate(ten.first) : "in the last " + ten.window_days + " days") + ", to " + bppDate(ten.to) + "): " + ten.total + " contracts. Medians: " + bs.map((b) => BEDS(b) + " " + aed(ten.beds[b][0]) + " (" + ten.beds[b][1] + " contracts)").join(", ") + ".");
-  } else missing.push("registered tenancies in this building");
+  } else {
+    missing.push("registered tenancies in this building");
+    const cr = pack.community_rents;
+    if (cr && cr.beds) L.push("Rents REGISTERED (actual), same-community comparables, " + (cr.area || "this DLD area") + " (community level, NOT this building; " + cr.src + ", to " + bppDate(cr.to) + "): "
+      + Object.keys(cr.beds).sort().map((b) => BEDS(b) + " median " + aed(cr.beds[b][0]) + " a year (" + int(cr.beds[b][1]) + " contracts)").join(", ") + ".");
+  }
   if (pr && pr.rent) {
     const rows = [];
     for (const y of pr.years || []) for (const b of ["1", "2", "3"]) { const c = (pr.rent[y] || {})[b]; if (c && c[2] === "d") rows.push(BEDS(b) + " " + y + " " + aed(c[0]) + " (" + int(c[1]) + " contracts)"); }
@@ -342,7 +379,7 @@ export function bppFacts(pp, pack, today) {
   if (fl.total) {
     L.push("Adverts live on " + bppDate(fl.checked) + ": " + fl.total + " (" + (fl.rent || 0) + " for rent, " + (fl.sale || 0) + " for sale). Adverts can repeat a unit, so this is an upper bound.");
     const askL = Object.keys(ask).sort().map((b) => BEDS(b) + " median " + aed(median(ask[b])) + " (" + ask[b].length + " adverts)");
-    if (askL.length) L.push("Asking rents from the newest " + items.length + " adverts: " + askL.join(", ") + ".");
+    if (askL.length) L.push("ASKING (advert, not registered) - asking rents from the newest " + items.length + " adverts: " + askL.join(", ") + ".");
     const ag = {};
     for (const x of fl.items || []) if (x.firm) ag[x.firm] = (ag[x.firm] || 0) + 1;
     const top = Object.entries(ag).sort((a, b) => b[1] - a[1]).slice(0, 6);

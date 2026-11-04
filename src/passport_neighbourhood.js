@@ -57,13 +57,17 @@ export function neighbourhoodLines(pack, opts) {
     L.push("Drive times (Google Routes, measured from " + nb.drive.from + ", our nearest measured community point, about " + nb.drive.km + " km " + from + "; " + (nb.drive.when ? "weekday peak " + nb.drive.when + " / free-flowing" : "peak / free-flowing") + (nb.drive.as_of ? ", as of " + nbDate(nb.drive.as_of) : "") + "): "
       + Object.keys(d).map((k) => k + " " + d[k][0] + " min (" + d[k][1] + " free-flowing)").join(", ") + ".");
   } else missing.push("drive times (no measured community point within 2 km)");
+  // v740: our own amenity list (DHA, KHDA, OSM, RTA, DEWA), nearest of each kind within 5 km, labelled by distance band
+  const own = nb.own || {}, ok = Object.keys(own);
+  if (ok.length) L.push("Amenities from our own lists (DHA clinics and pharmacies, KHDA schools, OpenStreetMap parks, beaches, malls and supermarkets, DEWA charging; positions approximate; straight line " + from + "): "
+    + ok.map((k) => k + " " + own[k].n + " " + own[k].km + " km (within " + own[k].band + " km, source " + own[k].src + ")").join("; ") + ".");
   // Google: NEARBY places, never reviews of the plot (an empty plot has no reviews of its own)
-  const top = nb.top || [];
+  const top = nb.top || [], tb = nb.tb || 1;
   if (!haveGoogle) {
-    if (top.length) L.push("Google box, titled 'Nearby places' ('Live from Google' chip; these are places within about 1 km " + from + ", NOT reviews of this " + (built ? "building" : "plot") + "): "
+    if (top.length) L.push("Google box, titled 'Nearby places' ('Live from Google' chip; these are places within about " + tb + " km " + from + ", NOT reviews of this " + (built ? "building" : "plot") + "): "
       + top.map((t) => t.n + " (" + t.t + "), rated " + t.r + " from " + int(t.c) + " reviews, " + t.m + " m, retrieved " + nbDate(t.d)).join("; ") + ". Print also: \"Google shows at most 5 reviews per place; this is not every review\".");
-    else L.push("Google box ('Live from Google' chip): " + "no Google place is matched to this building yet" + (built ? "" : " (the plot is not built, so it has no reviews of its own)") + ", and " + (nb.swept ? "no well-reviewed place (20+ reviews) lies within 1 km in our Google data" : "our Google place data does not cover this area yet") + "; say so, show no rating.");
-  } else if (top.length) L.push("Nearby places (Google, within about 1 km " + from + ", not reviews of this building): " + top.slice(0, 3).map((t) => t.n + " rated " + t.r + " from " + int(t.c) + " reviews, " + t.m + " m").join("; ") + ", retrieved " + nbDate(top[0].d) + ".");
+    else L.push("Google box ('Live from Google' chip): " + "no Google place is matched to this building yet" + (built ? "" : " (the plot is not built, so it has no reviews of its own)") + ", and " + (nb.swept ? "no well-reviewed place (20+ reviews) lies within 5 km in our Google data" : "our Google place data does not cover this area yet") + "; say so, show no rating.");
+  } else if (top.length) L.push("Nearby places (Google, within about " + tb + " km " + from + ", not reviews of this building): " + top.slice(0, 3).map((t) => t.n + " rated " + t.r + " from " + int(t.c) + " reviews, " + t.m + " m").join("; ") + ", retrieved " + nbDate(top[0].d) + ".");
   return { lines: L, missing };
 }
 

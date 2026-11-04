@@ -1,0 +1,958 @@
+{
+"pp": {
+"id": "naj:plot:1011305",
+"parcel": "1011305",
+"plot_no": "101-1305",
+"area_land": "432/3040",
+"sub": 0,
+"area_name": "Palm Deira",
+"district": "palmdeira",
+"master": "Palm Deira",
+"project": "Hado By Beyond",
+"project_id": 842403212,
+"land_type": "Commercial",
+"prop_type": "Land",
+"sub_type": "Commercial",
+"sqm": 198383.51,
+"freehold": true,
+"as_of": "2026-11-02",
+"rule": "plot-master v1 2026-11-01",
+"last": "2025-12-04",
+"buildings": [
+{
+"no": "1",
+"name": "Hado By Beyond",
+"floors": "23",
+"flats": null,
+"shops": 5.0,
+"offices": 0.0,
+"type": "Building",
+"date": "2025-12-04",
+"s": "d"
+},
+{
+"no": "2",
+"name": "Hado By Beyond",
+"floors": "23",
+"flats": null,
+"shops": 2.0,
+"offices": 0.0,
+"type": "Building",
+"date": "2025-12-04",
+"s": "d"
+},
+{
+"no": "3",
+"name": "Hado By Beyond",
+"floors": "23",
+"flats": null,
+"shops": 7.0,
+"offices": 0.0,
+"type": "Building",
+"date": "2025-12-04",
+"s": "d"
+}
+],
+"projects": [],
+"permits": [],
+"evidence": [
+{
+"src": "g_dld__land_registry",
+"label": "Land register (Dubai Land Department)",
+"method": "self",
+"conf": 1.0,
+"n": 1,
+"s": "d",
+"as_of": "2026-11-02",
+"cov": 100.0
+},
+{
+"src": "g_dld__units",
+"label": "Units register (Dubai Land Department)",
+"method": "parcel_direct",
+"conf": 0.95,
+"n": 1,
+"s": "d",
+"as_of": "2026-11-02",
+"cov": 99.12
+},
+{
+"src": "lk_project_coordinates",
+"label": "Project coordinates (Najma link table)",
+"method": "parcel_direct",
+"conf": 0.95,
+"n": 1,
+"s": "d",
+"as_of": "2026-11-02",
+"cov": 97.53
+},
+{
+"src": "g_dld__buildings",
+"label": "Buildings register (Dubai Land Department)",
+"method": "parcel_direct",
+"conf": 0.95,
+"n": 1,
+"s": "d",
+"as_of": "2026-11-02",
+"cov": 99.6
+},
+{
+"src": "lk_makani_plot_2026",
+"label": "Makani plot 2026 (Najma link table)",
+"method": "parcel_direct",
+"conf": 0.95,
+"n": 1,
+"s": "d",
+"as_of": "2026-11-02",
+"cov": 93.83
+},
+{
+"src": "lk_project_access",
+"label": "Project access (Najma link table)",
+"method": "point_in_makani_plot",
+"conf": 0.8,
+"n": 1,
+"s": "m",
+"as_of": "2026-11-02",
+"cov": 95.56
+},
+{
+"src": "lk_rooftop_2017",
+"label": "2017 rooftop outlines",
+"method": "point_in_makani_plot",
+"conf": 0.8,
+"n": 1,
+"s": "m",
+"as_of": "2026-11-02",
+"cov": 83.02
+}
+],
+"projlevel": [
+{
+"src": "lk_dld_projects",
+"label": "Projects (Dubai Land Department)",
+"method": "via_project",
+"conf": 0.4,
+"n": 2,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 90.63
+},
+{
+"src": "g_dld__buildings",
+"label": "Buildings register (Dubai Land Department)",
+"method": "via_project_name",
+"conf": 0.3,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 99.6
+},
+{
+"src": "lk_project_date_history",
+"label": "Project date history (Najma link table)",
+"method": "via_project",
+"conf": 0.4,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 87.01
+},
+{
+"src": "lk_dld_transactions",
+"label": "Sales (Dubai Land Department), project level",
+"method": "via_project_name",
+"conf": 0.3,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 83.8
+},
+{
+"src": "lk_identity_xref",
+"label": "Identity xref (Najma link table)",
+"method": "via_project_name",
+"conf": 0.3,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 96.75
+},
+{
+"src": "lk_identity_xref",
+"label": "Identity xref (Najma link table)",
+"method": "via_project",
+"conf": 0.4,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 96.75
+},
+{
+"src": "lk_project_number_names",
+"label": "Project number names (Najma link table)",
+"method": "via_project",
+"conf": 0.4,
+"n": 2,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 94.85
+},
+{
+"src": "lk_project_alias",
+"label": "Project alias (Najma link table)",
+"method": "via_project",
+"conf": 0.4,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 94.17
+},
+{
+"src": "lk_d_project",
+"label": "D project (Najma link table)",
+"method": "via_project",
+"conf": 0.4,
+"n": 2,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 89.35
+},
+{
+"src": "g_dld__units",
+"label": "Units register (Dubai Land Department)",
+"method": "via_project",
+"conf": 0.4,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 99.12
+},
+{
+"src": "g_dld__transactions",
+"label": "Transactions (Dubai Land Department)",
+"method": "via_project_name",
+"conf": 0.3,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 71.39
+},
+{
+"src": "lk_project_numbers",
+"label": "Project numbers (Najma link table)",
+"method": "via_project",
+"conf": 0.4,
+"n": 2,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 90.56
+},
+{
+"src": "lk_txn_register",
+"label": "Txn register (Najma link table)",
+"method": "via_project",
+"conf": 0.4,
+"n": 2,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 85.28
+},
+{
+"src": "lk_project_access",
+"label": "Project access (Najma link table)",
+"method": "via_project",
+"conf": 0.4,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 95.56
+},
+{
+"src": "lk_project_number_names",
+"label": "Project number names (Najma link table)",
+"method": "via_project_name",
+"conf": 0.3,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 94.85
+},
+{
+"src": "g_dld__transactions",
+"label": "Transactions (Dubai Land Department)",
+"method": "via_project",
+"conf": 0.4,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 71.39
+},
+{
+"src": "g_dld__units",
+"label": "Units register (Dubai Land Department)",
+"method": "via_project_name",
+"conf": 0.3,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 99.12
+},
+{
+"src": "lk_project_coordinates",
+"label": "Project coordinates (Najma link table)",
+"method": "via_project",
+"conf": 0.4,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 97.53
+},
+{
+"src": "g_dld__buildings",
+"label": "Buildings register (Dubai Land Department)",
+"method": "via_project",
+"conf": 0.4,
+"n": 1,
+"s": "p",
+"as_of": "2026-11-02",
+"cov": 99.6
+}
+],
+"timeline": [
+{
+"date": "2025-12-04",
+"what": "Buildings entered in the Land Department register (3)",
+"src": "g_dld__buildings",
+"s": "d"
+},
+{
+"date": "2025-05-26",
+"what": "The Hado By Beyond project: first sale registered with the Land Department (ready property)",
+"src": "chat_sales",
+"s": "p"
+}
+],
+"flags": [
+{
+"k": "map_only",
+"t": "Some records reach this plot only by location. Treat them as best matches."
+}
+],
+"flats": {
+"checked": "2026-11-03",
+"total": 0,
+"items": []
+},
+"prices": {
+"scope": "project",
+"name": "Hado By Beyond",
+"years": [
+"2024",
+"2025",
+"2026"
+],
+"ytd": "2026",
+"to": "2026-10-30",
+"rent": {
+"2026": {
+"1": [
+120000,
+7,
+"d"
+],
+"2": [
+117684,
+9,
+"d"
+],
+"3": [
+155000,
+1,
+"d"
+]
+}
+},
+"sale": {
+"2024": {
+"1": [
+1987000,
+501,
+"d"
+],
+"2": [
+3013277,
+433,
+"d"
+],
+"3": [
+5398800,
+145,
+"d"
+]
+},
+"2025": {
+"1": [
+2141000,
+1953,
+"d"
+],
+"2": [
+3261000,
+1786,
+"d"
+],
+"3": [
+5065000,
+433,
+"d"
+]
+},
+"2026": {
+"1": [
+2585000,
+353,
+"b"
+],
+"2": [
+4387000,
+207,
+"b"
+],
+"3": [
+7410000,
+61,
+"b"
+]
+}
+}
+}
+},
+"pack": {
+"plot": "naj:plot:1011305",
+"parcel": "1011305",
+"built_at": "2026-11-04",
+"units": [
+{
+"rooms": "1 B/R",
+"type": "Flat",
+"n": 373,
+"median_sqm": 77.3
+},
+{
+"rooms": "2 B/R",
+"type": "Flat",
+"n": 226,
+"median_sqm": 117.7
+},
+{
+"rooms": "3 B/R",
+"type": "Flat",
+"n": 74,
+"median_sqm": 202.3
+},
+{
+"rooms": "NA",
+"type": "Shop",
+"n": 14,
+"median_sqm": 189.5
+},
+{
+"rooms": "4 B/R",
+"type": "Flat",
+"n": 5,
+"median_sqm": 261.0
+}
+],
+"bldgs": [
+{
+"pid": 1124714491,
+"pn": null,
+"no": "1",
+"name": "Hado By Beyond",
+"type": "Building",
+"floors": 23,
+"flats": null,
+"offices": 0,
+"shops": 5,
+"car_parks": 867,
+"lifts": 4,
+"pools": 1,
+"bua_sqm": 57303,
+"units": 243,
+"mix": [
+{
+"rooms": "1 B/R",
+"type": "Flat",
+"n": 134,
+"median_sqm": 77.3
+},
+{
+"rooms": "2 B/R",
+"type": "Flat",
+"n": 74,
+"median_sqm": 118.1
+},
+{
+"rooms": "3 B/R",
+"type": "Flat",
+"n": 29,
+"median_sqm": 212.0
+},
+{
+"rooms": "NA",
+"type": "Shop",
+"n": 5,
+"median_sqm": 212.8
+},
+{
+"rooms": "4 B/R",
+"type": "Flat",
+"n": 1,
+"median_sqm": 444.5
+}
+]
+},
+{
+"pid": 1363822795,
+"pn": null,
+"no": "2",
+"name": "Hado By Beyond",
+"type": "Building",
+"floors": 23,
+"flats": null,
+"offices": 0,
+"shops": 2,
+"car_parks": 867,
+"lifts": 4,
+"pools": 1,
+"bua_sqm": 49287,
+"units": 204,
+"mix": [
+{
+"rooms": "1 B/R",
+"type": "Flat",
+"n": 105,
+"median_sqm": 76.9
+},
+{
+"rooms": "2 B/R",
+"type": "Flat",
+"n": 78,
+"median_sqm": 114.5
+},
+{
+"rooms": "3 B/R",
+"type": "Flat",
+"n": 16,
+"median_sqm": 191.1
+},
+{
+"rooms": "4 B/R",
+"type": "Flat",
+"n": 3,
+"median_sqm": 256.2
+},
+{
+"rooms": "NA",
+"type": "Shop",
+"n": 2,
+"median_sqm": 224.4
+}
+]
+},
+{
+"pid": 1741715306,
+"pn": null,
+"no": "3",
+"name": "Hado By Beyond",
+"type": "Building",
+"floors": 23,
+"flats": null,
+"offices": 0,
+"shops": 7,
+"car_parks": 867,
+"lifts": 4,
+"pools": 1,
+"bua_sqm": 57350,
+"units": 245,
+"mix": [
+{
+"rooms": "1 B/R",
+"type": "Flat",
+"n": 134,
+"median_sqm": 77.3
+},
+{
+"rooms": "2 B/R",
+"type": "Flat",
+"n": 74,
+"median_sqm": 118.1
+},
+{
+"rooms": "3 B/R",
+"type": "Flat",
+"n": 29,
+"median_sqm": 212.0
+},
+{
+"rooms": "NA",
+"type": "Shop",
+"n": 7,
+"median_sqm": 177.0
+},
+{
+"rooms": "4 B/R",
+"type": "Flat",
+"n": 1,
+"median_sqm": 444.5
+}
+]
+}
+],
+"asof": {
+"pp_dld__rent_contracts": {
+"src": "tenancy register (Ejari)",
+"date": "2026-11-02",
+"days": 2
+},
+"lk_dld_transactions": {
+"src": "sales register (Dubai Land Department)",
+"date": "2026-11-03",
+"days": 1
+},
+"g_dld__units": {
+"src": "units register (Dubai Land Department)",
+"date": "2026-10-15",
+"days": 20
+},
+"g_dld__buildings": {
+"src": "buildings register (Dubai Land Department)",
+"date": "2026-10-24",
+"days": 11
+},
+"g_dld__projects": {
+"src": "projects register (Dubai Land Department)",
+"date": "2026-06-15",
+"days": 142
+},
+"lk_d_project": {
+"src": "Najma project table (from the Land Department registers)",
+"date": "2026-08-25",
+"days": 71
+}
+},
+"project": {
+"number": 4210,
+"name_ar": "هادو من بيوند",
+"developer_no": 2409,
+"developer_en": "SANDY SHORES REAL ESTATE L.L.C S.O.C",
+"escrow_id": 33,
+"status": "NOT_STARTED",
+"pct": 0.01,
+"start": "2026-06-30",
+"end_planned": "2029-06-30",
+"completion": null,
+"buildings": 3,
+"units": 692,
+"authority": "Trakhees",
+"registered": "2025-12-09",
+"units_registered": 692,
+"buildings_registered": 3,
+"as_of": "2026-08-25",
+"src": "Najma project spine (DLD projects register + 2026 project registrations; projects register, 2026 registrations, buildings, land, units)",
+"note": "not in our copy of the DLD projects register; taken from the project spine"
+},
+"sales": {
+"year": "2026",
+"to": "2026-11-01",
+"kinds": {
+"offplan": {
+"deals": 626,
+"aed_m2": 33957,
+"aed_sqft": 3155
+}
+},
+"all_time": 627
+},
+"access": {
+"kind": "drive",
+"method": "network-v2",
+"solved_on": "2026-10-21",
+"confidence": "medium",
+"coord": "T1_plot",
+"metro": "Gold Souq",
+"metro_min": 9.7,
+"tram": "Al Sufouh",
+"tram_min": 42.9,
+"mins": {
+"dubai_mall": 19.6,
+"difc": 18.2,
+"dxb": 17.9,
+"marina": 34.3,
+"expo": 50.1
+}
+},
+"market": {
+"to": "2026-11-01",
+"src": "DLD transactions register (Sales; no buyer names)",
+"kinds": {
+"offplan": {
+"first": "2026-01-12",
+"latest": "2026-10-12",
+"deals": 626,
+"deals_12m": 626,
+"deals_ytd": 626,
+"year": "2026",
+"aed_m2": 33957,
+"aed_m2_12m": 33957,
+"pace": {
+"3m": 3.3,
+"6m": 7.8,
+"12m": 52.2
+},
+"beds_12m": {
+"4": [
+5,
+52561,
+13563000
+],
+"3": [
+61,
+38130,
+7410000
+],
+"2": [
+207,
+35783,
+4387000
+],
+"1": [
+353,
+33338,
+2585000
+]
+}
+},
+"ready": {
+"first": "2025-05-26",
+"latest": "2025-05-26",
+"deals": 1,
+"deals_12m": 0,
+"deals_ytd": 0,
+"year": "2026",
+"aed_m2": 7569,
+"aed_m2_12m": null,
+"pace": {
+"3m": 0.0,
+"6m": 0.0,
+"12m": 0.0
+}
+}
+}
+},
+"buildings_registered": {
+"first": "2025-12-04",
+"buildings": 3,
+"src": "DLD buildings register"
+},
+"community_rents": {
+"to": "2026-10-30",
+"src": "Ejari tenancy register, new residential flat contracts, last 12 months",
+"beds": {
+"1": [
+120000,
+7
+],
+"2": [
+117684,
+9
+],
+"3": [
+155000,
+1
+]
+},
+"area": "Palm Deira"
+}
+},
+"nb": {
+"pt": {
+"lat": 25.31524,
+"lon": 55.32705,
+"basis": "area centre: middle of 705 mapped plots in Palm Deira, not this plot's own position"
+},
+"district": "palmdeira",
+"metro": {
+"n": "Abu Hail Metro Station",
+"l": "Green Metro line",
+"km": 4.8,
+"as_of": "2026-09-21",
+"src": "RTA metro station list"
+},
+"near": {
+"supermarket": {
+"n": "Union Coop Al Mamzar",
+"km": 1.5,
+"r": 4.1,
+"c": 399,
+"d": "2026-10-14"
+},
+"park": {
+"n": "Abu Hail Park",
+"km": 4.3,
+"r": 4.3,
+"c": 1148,
+"d": "2026-10-14"
+},
+"beach": {
+"n": "Sadaf Beach",
+"km": 2.4,
+"r": 4.4,
+"c": 18,
+"d": "2026-10-14"
+},
+"mall": {
+"n": "Waterfront Market",
+"km": 2.7,
+"r": 4.5,
+"c": 43253,
+"d": "2026-10-14"
+},
+"pharmacy": {
+"n": "Novo Pharmacy - Al Rasheed",
+"km": 4.3,
+"r": 2.7,
+"c": 10,
+"d": "2026-11-03"
+},
+"hospital": {
+"n": "Canadian Specialist Hospital",
+"km": 4.7,
+"r": 4.6,
+"c": 5712,
+"d": "2026-10-14"
+},
+"school": {
+"n": "Sabari Indian School",
+"km": 3.2,
+"r": 4.1,
+"c": 221,
+"d": "2026-10-14"
+},
+"clinic": {
+"n": "Al Mamzar Health Center | مركز الممزر الصحي",
+"km": 2.8,
+"r": 4.2,
+"c": 278,
+"d": "2026-10-14"
+}
+},
+"tb": 3,
+"top": [
+{
+"n": "Waterfront Market",
+"t": "mall",
+"r": 4.5,
+"c": 43253,
+"m": 2666,
+"d": "2026-10-14"
+},
+{
+"n": "Flamingo beach",
+"t": "beach",
+"r": 4.3,
+"c": 94,
+"m": 2780,
+"d": "2026-10-14"
+},
+{
+"n": "Al Mamzar Health Center | مركز الممزر الصحي",
+"t": "clinic",
+"r": 4.2,
+"c": 278,
+"m": 2797,
+"d": "2026-10-14"
+},
+{
+"n": "Union Coop Al Mamzar",
+"t": "supermarket",
+"r": 4.1,
+"c": 399,
+"m": 1501,
+"d": "2026-10-14"
+},
+{
+"n": "Lulu Hypermarket - Waterfront Market",
+"t": "supermarket",
+"r": 4.0,
+"c": 728,
+"m": 2683,
+"d": "2026-10-14"
+}
+],
+"swept": true,
+"own": {
+"hospital": {
+"n": "Dubai Hospital - Dubai Health",
+"km": 3.4,
+"band": 5,
+"src": "dha+google"
+},
+"beach": {
+"n": "beach (unnamed)",
+"km": 1.0,
+"band": 3,
+"src": "osm"
+},
+"fuel": {
+"n": "Emarat",
+"km": 2.2,
+"band": 3,
+"src": "osm"
+},
+"mall": {
+"n": "Waterfront Market",
+"km": 2.6,
+"band": 3,
+"src": "osm"
+},
+"clinic": {
+"n": "Al Mamzar Medical Center - PHC",
+"km": 2.8,
+"band": 3,
+"src": "dha"
+},
+"supermarket": {
+"n": "Union Coop - Al Mamzar",
+"km": 1.5,
+"band": 3,
+"src": "osm"
+},
+"pharmacy": {
+"n": "RUKN AL MAMZAR PHARMACY LLC",
+"km": 1.6,
+"band": 3,
+"src": "dha"
+},
+"school": {
+"n": "Al Ittihad Private School",
+"km": 2.1,
+"band": 3,
+"src": "khda"
+},
+"park": {
+"n": "Al Mamzar Park",
+"km": 2.4,
+"band": 3,
+"src": "osm"
+},
+"ev": {
+"n": "DEIRA-Dubai Civil Defense Fire Station",
+"km": 2.1,
+"band": 3,
+"src": "dewa"
+}
+}
+}
+}
