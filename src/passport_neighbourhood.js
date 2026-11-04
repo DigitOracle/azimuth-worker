@@ -77,7 +77,9 @@ export function dnaLines(pack) {
   if (!d) { missing.push("district profile (district DNA) for " + ((nb && nb.district) || "this plot's district") + ": not covered by our district studies yet"); return { lines: L, missing }; }
   const nm = d.name || (nb && nb.district) || "the district";
   const parts = [];
-  if (d.live && d.live.p) parts.push("Najma liveability index " + d.live.v + " (0 to 100, ranked among the districts we study, as of " + nbDate(d.live.as_of) + "): " + Object.keys(PROFILE).filter((k) => d.live.p[k] != null).map((k) => PROFILE[k] + " " + d.live.p[k]).join(", "));
+  // v747: d.live.v is the index VERSION (lk_livability_scores.index_version, e.g. "0.3"), never a score. The scores are the profiles, 0 to 100 rank among the districts studied.
+  if (d.live && d.live.p) { const ks = Object.keys(PROFILE).filter((k) => d.live.p[k] != null && isFinite(+d.live.p[k]));
+    if (ks.length) parts.push("Najma liveability index (scores 0 to 100, a rank among the districts we study, higher is better; index version " + d.live.v + ", as of " + nbDate(d.live.as_of) + "): " + ks.map((k) => PROFILE[k] + " " + d.live.p[k]).join(", ")); }
   if (d.dims && Object.keys(d.dims).length) parts.push("strengths and gaps (0 to 100): " + Object.keys(DIM).filter((k) => d.dims[k] != null).map((k) => DIM[k] + " " + d.dims[k]).join(", "));
   if (d.pop) parts.push("population about " + int(d.pop) + " (Dubai Statistics Center 2025)");
   if (d.green) parts.push("green cover " + d.green.share + "% (" + d.green.src + ", " + nbDate(d.green.d) + ")");
@@ -87,6 +89,15 @@ export function dnaLines(pack) {
   return { lines: L, missing };
 }
 
+// v747: floors from the DLD buildings register in the pack (bldgs, else pp.buildings): "25 floors", or per building on a multi-building plot
+export function dldFloors(pack) {
+  const bd = ((pack || {}).bldgs || []).length ? pack.bldgs : (((pack || {}).pp || {}).buildings || []);
+  const w = bd.filter((b) => +b.floors > 0);
+  if (!w.length) return "";
+  if (w.length === 1 || w.every((b) => +b.floors === +w[0].floors)) return (+w[0].floors) + " floors" + (w.length > 1 ? " (each of " + w.length + " buildings)" : "");
+  return w.map((b) => (b.name || "building " + (b.no || "?")) + " " + (+b.floors) + " floors").join("; ");
+}
+
 // plot facts: height, project bind, zoning (display rules from the coordinator, 4 Nov 2026)
 export function plotFactLines(pack) {
   const f = ((pack || {}).nb || {}).facts || {}, L = [], missing = [], flags = [];
@@ -94,7 +105,12 @@ export function plotFactLines(pack) {
   const fl = f.fl;
   const est = fl && fl.floors_source === "estimate";
   const estOk = est && /^(high|medium)$/i.test(String(fl.est_confidence || "")) && /^About\b/.test(String(fl.floors_label || "")) && fl.floors_low != null && fl.floors_high != null;
-  if (fl && fl.floors_label && (!est || estOk) && !(est && fl.floors_shown === false)) {
+  // v747 (Kendall, Luma Park Views: page 1 "Floors 25", appendix "floor count not loaded yet"): ONE floors answer per passport. Order: DM record /
+  // DLD "at least" (lk_plot_floors) > the DLD buildings register floors (the same figure page 1 shows) > an "About" estimate. "Not loaded" only when no source has floors.
+  const reg = dldFloors(pack);
+  const flUsable = fl && fl.floors_label && (!est || estOk) && !(est && fl.floors_shown === false);
+  if (reg && (!fl || !flUsable || est)) L.push("Floors (section 02 headline; print exactly, the same figure everywhere in the passport): " + reg + " (source: DLD buildings register).");
+  else if (flUsable) {
     const dld = /DLD/.test(fl.floors_source || "");
     let lab = String(fl.floors_label);
     if (dld && !/at least/i.test(lab)) lab = "At least " + lab.charAt(0).toLowerCase() + lab.slice(1);

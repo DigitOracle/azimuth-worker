@@ -252,6 +252,14 @@ export function bldgText(b) {
   if (b.units) bits.push(int(b.units) + " registered units" + (b.mix && b.mix.length ? " (" + b.mix.slice(0, 5).map((u) => (u.rooms || u.type || "other") + " " + u.n).join(", ") + ")" : ""));
   return nm + ": " + bits.join(", ");
 }
+// v747: "Makani number: 1234 56789" (all of them on a multi-building plot); "" when the pack holds none
+export function makaniLine(m) {
+  const ns = ((m && m.numbers) || []).filter((x) => /^\d{10}$/.test(String(x)));
+  if (!ns.length) return "";
+  const f = (x) => String(x).replace(/^(\d{5})(\d{5})$/, "$1 $2");
+  return "Makani number" + (ns.length > 1 ? "s (" + ns.length + " on this plot, one per building entrance; print them all)" : "") + ": " + ns.map(f).join(", ")
+    + " (source: " + ((m && m.src) || "Makani, Dubai Municipality") + ").";
+}
 const DEST = { dubai_mall: "Dubai Mall", difc: "DIFC (Dubai International Financial Centre)", dxb: "Dubai International Airport", marina: "Dubai Marina", expo: "Expo City" };
 export function accessLine(a) {
   if (!a) return "";
@@ -400,7 +408,10 @@ export function bppFacts(pp, pack, today) {
   let yld = null;
   if (p1 && r1) { yld = r1 / p1 * 100; L.push("Investment (calculated): gross yield 1 bed about " + yld.toFixed(1) + "% (registered rent " + int(r1) + " divided by " + y + " median price " + int(p1) + "); price-to-rent about " + Math.round(p1 / r1) + " years" + (sal ? "; liquidity " + int(sal.all_time || 0) + " sales all time, " + Object.values(sal.kinds || {}).reduce((s, k) => s + k.deals, 0) + " in " + sal.year + " to " + bppDate(sal.to) : "") + ". Service charge: not available yet (grey chip)."); }
   else { missing.push("gross yield (needs both a registered 1-bed rent and a 1-bed sale median in this building)"); L.push("Investment: gross yield not available (see missing). Service charge: not available yet (grey chip)."); }
-  missing.push("service-charge rate", "facilities and amenities (developer brochure)", "Makani number");
+  missing.push("service-charge rate", "facilities and amenities (developer brochure)");
+  // v747 (Kendall, Luma Park Views): the Makani numbers come from the pack (2026 Makani plot layer); every number on a multi-building plot
+  const mk = makaniLine(pack.makani);
+  if (mk) L.push(mk); else missing.push("Makani number");
   // v734 - the neighbourhood comes from the plot's LOCATION (passport_neighbourhood.js), never from the tenancy register's free-text fields
   const ac = accessLine(pack.access);
   if (ac) L.push(ac);
