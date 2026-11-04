@@ -13,6 +13,7 @@ import { LTF_JS } from "./landtype_filters.js";   // v731 - DLD use / land type 
 import { bppFinance, BPP_READERS, readerFor } from "./passport_finance.js";
 import { storyBlock, placeStory, STORY_H_MM } from "./story_timeline.js";   // v745 - section 03A Building story, drawn by the worker
 import { dashBlock, placeDash, DASH_H_MM } from "./passport_dashboard.js";   // v748 - page 1 dashboard, drawn by the worker
+import { pagesBlocks, placePages } from "./passport_pages.js";   // v751 - pages 2 and 3 drawn by the worker as visuals (Kendall: "tell the story through the infographics")
 import { nbGet, withNb, neighbourhoodLines, dnaLines, plotFactLines } from "./passport_neighbourhood.js";   // v734 - neighbourhood from location, district DNA, plot facts   // v727 - the financial engine on page 2, by reader (investor / broker / developer)
 
 const esc = (s) => String(s == null ? "" : s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
@@ -450,17 +451,14 @@ export function bppFacts(pp, pack, today) {
 }
 
 export function bppPrompt(f, dateText) {
-  return "Design a premium, magazine-quality \"Building Passport\" as ONE self-contained HTML file (inline CSS only, no JavaScript, Google Fonts allowed: Fraunces + Inter + IBM Plex Mono). It must print as exactly 3 A4 pages (use @page size A4 margin 0, and three .page sections of exactly 210mm x 297mm with overflow hidden; content must FIT - no overflow, everything ends at least 8mm above the footer) and also read well on a phone screen. "
+  return "Design a premium, magazine-quality \"Building Passport\" as ONE self-contained HTML file (inline CSS only, no JavaScript, Google Fonts allowed: Fraunces + Inter + IBM Plex Mono). It is page 1 of a 3-page A4 passport (use @page size A4 margin 0, and ONE .page section of exactly 210mm x 297mm with overflow hidden; content must FIT - no overflow, everything ends at least 8mm above the footer) and also read well on a phone screen. "
     + "Brand: Najma (Dubai property intelligence). Palette: deep green #0F3D33, gold #C5A56A, cream #F6F2E9, ink #1C2826. Use the logo as <img src=\"najma_logo.png\" alt=\"Najma\"> in the hero band. No emojis anywhere; use small inline SVG line icons. "
     + "Design direction (look only): a cream page with a thin gold rule under the header; a large serif title block (\"BUILDING PASSPORT\" then the building name in italic serif and a one-line purpose); section headers as dark-green tab banners with a small gold line icon and a numbered gold kicker (\"01 - THE BUILDING\", \"02 - THE MARKET\", \"03 - RISKS AND OPPORTUNITIES\"); rounded cream cards with thin gold borders; beside the title on page 1 an EMPTY photo box exactly <div class=\"bpp-photo\" style=\"width:78mm;height:58mm\"></div> (leave it empty: the photo and its caption are put in later; draw no illustration, picture or skyline anywhere). Do NOT add any other logos. "
     + "Every section header carries a source chip: \"From the registers\" (green), \"From the adverts\" (gold: live adverts, asking rents, agencies and broker cards), \"Calculated\" (blue), \"Live from Google\" (amber, ONLY on the Google box: reviews of the building, or \"Nearby places\" for a plot with none), \"Developer source\" (purple), \"Not available yet\" (grey). "
     + "Wording: a percentage complete is construction progress at the register date, never a completion; a planned date is planned. Use the logo at least 22mm tall. Keep every card fully inside its page: no card may extend past the right edge, and the last card on each page must end at least 10mm above the footer; if space is short, make cards smaller, never cut them. "
     + "Keep the bottom 3.5mm of every .page empty (a snapshot line is put there later; the footer sits above it). Footer on every page: \"Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397\" on the left and \"Najma Building Passport · " + dateText + " · page N of 3\" on the right. "
     + "Page structure (v748): page 1 = the whole answer at a glance, a DASHBOARD: ONLY the header band (logo, \"BUILDING PASSPORT\", the building name in italic serif, one-line purpose) beside the empty photo box, then this empty, pre-sized box inserted verbatim: <div class=\"bpp-dash\" style=\"width:100%;height:" + DASH_H_MM + "mm;overflow:hidden\"></div> (status, KPI tiles, price line, places and the verdict are drawn into it later; leave it empty and put NOTHING else on page 1 apart from the footer; keep the header band at most 76mm tall); "
-    + "page 2 = what the building is and what the market is doing: 01 Identity and location, 02 Physical building, 03 Apartment inventory with a donut for the unit mix, then section \"03A - BUILDING STORY\" (chip: From the registers) as a full-width card whose body is ONLY this empty, pre-sized box, inserted verbatim: <div class=\"bpp-story\" style=\"width:100%;height:" + STORY_H_MM + "mm;overflow:hidden\"></div> (v745: the timeline, its summary, sources and event list are drawn into it later at a FIXED height; leave it empty, draw no timeline, list or dates of your own for the building story, and budget page 2 for that " + STORY_H_MM + "mm box plus its header), then 04 Sales with a line or bars for the 1-bed sale median by year and 05 Rentals with grouped bars for asking vs registered rent by bedroom; "
-    + "page 3 = the detail and what it means, compact (7 to 8pt body type): 06 Occupancy as a stacked horizontal bar of signals, 07 Investment KPI cards, a grid of broker cards: agent, agency, phone, listing; "
-    + "then on page 3: a prominent \"Risks and opportunities\" panel (chip: Calculated) as a row of cards with exactly the points given below, a \"Najma summary\" card (what is confirmed, what needs verification, why it matters - only from the facts), a \"Recommended next actions\" card (numbered, practical, drawn from the risks and missing items), then compact construction, operations, neighbourhood, developer and evidence cards, and a compact \"District DNA\" card labelled district level when DATA gives one (v734). Section 10 Neighbourhood always shows the nearest metro, mall, school, clinic and drive times as given in DATA with their source and date, saying straight line where DATA says so. "
-    + "Sections numbered 01 to 12 across pages 2 and 3 (page 1 is the dashboard): 01 Identity and location, 02 Physical building, 03 Apartment inventory, 04 Sales, 05 Rentals, 06 Occupancy, 07 Investment, 08 Construction and approvals, 09 Operations and service charges, 10 Neighbourhood, 11 Developer, 12 Evidence. "
+    + "v751: write ONLY page 1, as ONE .page section of exactly 210mm x 297mm. Pages 2 and 3 (sections 01 to 12, the building story, sales, rentals, occupancy, investment, risks and opportunities, neighbourhood, Google, district DNA, developer, evidence and broker cards) are drawn later by the system from the same data as visuals: do NOT write them, do NOT add any other .page, and keep the whole document to that single page plus its styles. "
     + "Under every register-backed figure print its source and as-of date in small text exactly as given in DATA; any \"NOTE: this register is N days old\" must be printed visibly beside that figure (small amber note). Figures for one building are never added up into a project total, and project-level figures are labelled \"project level\". The Google box shows the rating, the review count, the retrieval date and the Google Maps link as given, plus the line \"Google shows at most 5 reviews per place; this is not every review\". "
     + "HARD RULES: never invent a number, rating, name or fact; every number must come from DATA below; never leave out an available metric; label every missing item \"Not available yet\". Return ONLY the complete HTML document, starting with <!doctype html>.\n\n"
     + "DATA (use exactly):\n" + f.lines.join("\n")
@@ -775,6 +773,13 @@ export async function bppDash(env, plotId, now) {
   const today = todayGst(now);
   return dashBlock(pp, pack, today, bppFacts(pp, pack, today));
 }
+// v751 - pages 2 and 3 for a plot, from the same plot record, pack, neighbourhood and computed facts the dashboard reads
+export async function bppPages(env, plotId, now) {
+  const pp = await ppGet(env, plotId); if (!pp) return null;
+  const pack = withNb(await readJson(env, "pp_pack_" + String(plotId).replace("naj:plot:", "")), await nbGet(env, plotId).catch(() => null));
+  const today = todayGst(now);
+  return pagesBlocks(pp, pack, today, bppFacts(pp, pack, today), bppDate(today));
+}
 export async function bppTick(env, nowMs) {
   const now = nowMs || Date.now();
   await bppExpire(env, now).catch(() => null);   // v729 - every minute: passports and jobs past 24 h go
@@ -811,7 +816,8 @@ export async function bppTick(env, nowMs) {
         const html = extractHtml(responseText(o));
         if (!html) { r.status = "failed"; r.msg = "The writer returned no passport."; await putReq(env, id, r); continue; }
         r.lock = new Date(now).toISOString(); await putReq(env, id, r);
-        const logo = await withLogo(env, html);
+        const pages = await bppPages(env, r.plot_id, now).catch(() => null);   // v751 - pages 2 and 3, drawn here, never by the writer
+        const logo = await withLogo(env, pages ? placePages(html, pages.p2, pages.p3) : html);
         const ph = await readJson(env, "bpp_photo_" + r.slug);   // v702 - the page links the live picture; the PDF gets it once, at render
         const made = new Date(now).toISOString();
         const story = await bppStory(env, r.plot_id, now).catch(() => "");   // v745 - 03A timeline, drawn here, never by the writer
@@ -824,7 +830,7 @@ export async function bppTick(env, nowMs) {
         const worst = Math.max(0, ...rp.fit.map((p) => p.over_mm));
         if (!fitsThree(rp.pages, rp.fit) && !(r.tries >= 1) && (rp.pages !== 3 || worst > 15)) {
           r.tries = (r.tries || 0) + 1; r.pages = rp.pages; r.fit = rp.fit.map((p) => ({ page: p.page, over_mm: p.over_mm, sections: p.sections })); delete r.lock;
-          r.resp = await oaiStart(env, "Revise this Building Passport HTML. " + fitBrief(rp.pages, rp.fit) + " Keep the design, palette, fonts, every number, the empty fixed-height <div class=\"bpp-dash\"> and <div class=\"bpp-story\"> boxes (leave them empty and keep their heights) and the 3-page A4 structure: exactly three 210mm x 297mm .page sections (box-sizing:border-box, padding inside the 297mm, overflow hidden), everything ending at least 8mm above the footer. Never invent or drop a number. Return ONLY the complete corrected HTML document starting with <!doctype html>.\n\nHTML:\n" + html);
+          r.resp = await oaiStart(env, "Revise this Building Passport HTML. " + fitBrief(rp.pages, rp.fit) + " Keep the design, palette, fonts, every number, the empty fixed-height <div class=\"bpp-dash\"> and <div class=\"bpp-story\"> boxes (leave them empty and keep their heights) and the page 1 structure: ONE 210mm x 297mm .page section (box-sizing:border-box, padding inside the 297mm, overflow hidden), everything ending at least 8mm above the footer; pages 2 and 3 are added by the system, never write them. Never invent or drop a number. Return ONLY the complete corrected HTML document starting with <!doctype html>.\n\nHTML:\n" + html);
           r.status = "fixing"; await putReq(env, id, r); return { reask: id };
         }
         if (!fitsThree(rp.pages, rp.fit)) rp = await renderPdf(env, printHtml, { fit: true });   // the deterministic last resort

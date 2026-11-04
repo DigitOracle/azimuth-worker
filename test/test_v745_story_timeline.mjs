@@ -65,7 +65,8 @@ ok(T.hasStory(html) && T.placeStory(html, blk1).indexOf("<svg") > 0, "placeholde
 ok(T.placeStory("<div class=page></div>", blk1) === "<div class=page></div>", "no placeholder, nothing injected");
 const f = B.bppFacts(luma.pp, luma.pack, TODAY);
 const pr = B.bppPrompt(f, "4 Nov 2026");
-ok(pr.indexOf('<div class=\\"bpp-story\\"') < 0 && pr.indexOf('<div class="bpp-story" style="width:100%;height:' + T.STORY_H_MM + 'mm;overflow:hidden"></div>') > 0 && /03A - BUILDING STORY/.test(pr), "prompt carries the verbatim placeholder");
+// v751: the 03A story box now sits on page 2, which the worker draws (passport_pages.js); the writer writes page 1 only
+ok(/write ONLY page 1/.test(pr) && /the building story/.test(pr) && pr.indexOf('class="bpp-story"') < 0, "prompt: the writer leaves the building story to the worker");
 ok(/do NOT print these again/.test(pr), "the DATA story line tells the writer not to repeat it");
 ok(/<\/svg>/.test(T.storyBlock({ timeline: [] }, {}, TODAY)) === false, "no events: a plain note, no svg");
 

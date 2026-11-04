@@ -79,7 +79,7 @@ ok(/What the evidence supports/.test(blk) && /What could affect the decision/.te
 ok(/font:600 20pt Fraunces/.test(blk) && /<svg/.test(blk) && !/[\u{1F300}-\u{1FAFF}☀-➿]/u.test(blk.replace(/&#96\d\d;/g, "")), "big numbers, icons are svg, no emoji");
 ok(D.placeDash('<div class="page"><div class="bpp-dash" style="width:100%;height:' + D.DASH_H_MM + 'mm;overflow:hidden"></div></div>', blk).indexOf("bpp-dash-in") > 0 && D.placeDash("<div class=page></div>", blk) === "<div class=page></div>", "placeholder filled; none = nothing injected");
 const pr = B.bppPrompt(f, "4 Nov 2026");
-ok(pr.indexOf('<div class="bpp-dash" style="width:100%;height:' + D.DASH_H_MM + 'mm;overflow:hidden"></div>') > 0 && /page 1 = the whole answer at a glance, a DASHBOARD/.test(pr) && /page 2 = what the building is/.test(pr), "prompt: page 1 dashboard box, detail on pages 2-3");
+ok(pr.indexOf('<div class="bpp-dash" style="width:100%;height:' + D.DASH_H_MM + 'mm;overflow:hidden"></div>') > 0 && /page 1 = the whole answer at a glance, a DASHBOARD/.test(pr) && /write ONLY page 1/.test(pr) && !/page 2 = what the building is/.test(pr), "prompt: page 1 dashboard box; pages 2-3 drawn by the worker (v751)");
 // a building with no evidence: every tile says Not available yet, nothing invented
 const e = D.dashBlock({ parcel: "1" }, {}, TODAY, { risks: [], opps: [], missing: [] });
 ok((e.match(/Not available yet/g) || []).length >= 6, "empty pack: tiles say Not available yet");

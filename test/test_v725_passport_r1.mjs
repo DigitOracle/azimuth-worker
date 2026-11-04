@@ -69,7 +69,8 @@ const all = (f) => f.lines.join("\n");
   const t = all(B.bppFacts(pp({ flats }), {}, "2026-11-04"));
   ok(/a sample of live adverts from one portal on one day/.test(t), "without history: labelled a sample");
   ok(/agent Test Agent, Test Firm, \+971500000001/.test(t), "agent, agency and phone STAY (Kendall change, 4 Nov: item 2 dropped)");
-  ok(/broker cards: agent, agency, phone/.test(B.bppPrompt(B.bppFacts(pp({ flats }), {}, "2026-11-04"), "x")), "broker-card instruction unchanged");
+  // v751: broker cards are drawn by the worker on page 3 (passport_pages.js); the facts still carry agent, agency and phone
+  ok(/write ONLY page 1/.test(B.bppPrompt(B.bppFacts(pp({ flats }), {}, "2026-11-04"), "x")) && /Sample listings: .*agent /.test(B.bppFacts(pp({ flats }), {}, "2026-11-04").lines.join("\n")), "broker cards: page 3 is drawn by the worker; the facts keep agent, agency, phone");
   const h = all(B.bppFacts(pp({ flats }), { adverts_hist: { distinct_90d: 57, rent_90d: 40, last: "2026-11-03" } }, "2026-11-04"));
   ok(/Advert history \(Property Finder, last 90 days to 3 Nov 2026\): 57 different adverts seen, 40 of them for rent/.test(h), "with history: distinct adverts");
 }
