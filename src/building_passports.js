@@ -12,6 +12,7 @@ import { ppGet, ppSearch } from "./plot_passport.js";
 import { LTF_JS } from "./landtype_filters.js";   // v731 - DLD use / land type / tenure filters (hidden until the v4 packs are stored)
 import { bppFinance, BPP_READERS, readerFor } from "./passport_finance.js";
 import { storyBlock, placeStory, STORY_H_MM } from "./story_timeline.js";   // v745 - section 03A Building story, drawn by the worker
+import { dashBlock, placeDash, DASH_H_MM } from "./passport_dashboard.js";   // v748 - page 1 dashboard, drawn by the worker
 import { nbGet, withNb, neighbourhoodLines, dnaLines, plotFactLines } from "./passport_neighbourhood.js";   // v734 - neighbourhood from location, district DNA, plot facts   // v727 - the financial engine on page 2, by reader (investor / broker / developer)
 
 const esc = (s) => String(s == null ? "" : s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
@@ -455,17 +456,18 @@ export function bppPrompt(f, dateText) {
     + "Every section header carries a source chip: \"From the registers\" (green), \"From the adverts\" (gold: live adverts, asking rents, agencies and broker cards), \"Calculated\" (blue), \"Live from Google\" (amber, ONLY on the Google box: reviews of the building, or \"Nearby places\" for a plot with none), \"Developer source\" (purple), \"Not available yet\" (grey). "
     + "Wording: a percentage complete is construction progress at the register date, never a completion; a planned date is planned. Use the logo at least 22mm tall. Keep every card fully inside its page: no card may extend past the right edge, and the last card on each page must end at least 10mm above the footer; if space is short, make cards smaller, never cut them. "
     + "Keep the bottom 3.5mm of every .page empty (a snapshot line is put there later; the footer sits above it). Footer on every page: \"Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397\" on the left and \"Najma Building Passport · " + dateText + " · page N of 3\" on the right. "
-    + "Page structure: page 1 = what the building is (identity and location, physical building, apartment inventory with a donut for the unit mix, then section \"03A - BUILDING STORY\" (chip: From the registers) as a full-width card whose body is ONLY this empty, pre-sized box, inserted verbatim: <div class=\"bpp-story\" style=\"width:100%;height:" + STORY_H_MM + "mm;overflow:hidden\"></div> (v745: the timeline, its summary, sources and event list are drawn into it later at a FIXED height; leave it empty, draw no timeline, list or dates of your own for the building story, and budget page 1 for that " + STORY_H_MM + "mm box plus its header)); "
-    + "page 2 = what the market is doing (sales with a line or bars for the 1-bed sale median by year, rentals with grouped bars for asking vs registered rent by bedroom, occupancy as a stacked horizontal bar of signals, investment KPI cards, a grid of broker cards: agent, agency, phone, listing); "
-    + "page 3 = what it means: a prominent \"Risks and opportunities\" panel (chip: Calculated) as a row of cards with exactly the points given below, a \"Najma summary\" card (what is confirmed, what needs verification, why it matters - only from the facts), a \"Recommended next actions\" card (numbered, practical, drawn from the risks and missing items), then compact construction, operations, neighbourhood, developer and evidence cards, and a compact \"District DNA\" card labelled district level when DATA gives one (v734). Section 10 Neighbourhood always shows the nearest metro, mall, school, clinic and drive times as given in DATA with their source and date, saying straight line where DATA says so. "
-    + "Sections numbered 01 to 12 across the three pages: 01 Identity and location, 02 Physical building, 03 Apartment inventory, 04 Sales, 05 Rentals, 06 Occupancy, 07 Investment, 08 Construction and approvals, 09 Operations and service charges, 10 Neighbourhood, 11 Developer, 12 Evidence. "
+    + "Page structure (v748): page 1 = the whole answer at a glance, a DASHBOARD: ONLY the header band (logo, \"BUILDING PASSPORT\", the building name in italic serif, one-line purpose) beside the empty photo box, then this empty, pre-sized box inserted verbatim: <div class=\"bpp-dash\" style=\"width:100%;height:" + DASH_H_MM + "mm;overflow:hidden\"></div> (status, KPI tiles, price line, places and the verdict are drawn into it later; leave it empty and put NOTHING else on page 1 apart from the footer; keep the header band at most 76mm tall); "
+    + "page 2 = what the building is and what the market is doing: 01 Identity and location, 02 Physical building, 03 Apartment inventory with a donut for the unit mix, then section \"03A - BUILDING STORY\" (chip: From the registers) as a full-width card whose body is ONLY this empty, pre-sized box, inserted verbatim: <div class=\"bpp-story\" style=\"width:100%;height:" + STORY_H_MM + "mm;overflow:hidden\"></div> (v745: the timeline, its summary, sources and event list are drawn into it later at a FIXED height; leave it empty, draw no timeline, list or dates of your own for the building story, and budget page 2 for that " + STORY_H_MM + "mm box plus its header), then 04 Sales with a line or bars for the 1-bed sale median by year and 05 Rentals with grouped bars for asking vs registered rent by bedroom; "
+    + "page 3 = the detail and what it means, compact (7 to 8pt body type): 06 Occupancy as a stacked horizontal bar of signals, 07 Investment KPI cards, a grid of broker cards: agent, agency, phone, listing; "
+    + "then on page 3: a prominent \"Risks and opportunities\" panel (chip: Calculated) as a row of cards with exactly the points given below, a \"Najma summary\" card (what is confirmed, what needs verification, why it matters - only from the facts), a \"Recommended next actions\" card (numbered, practical, drawn from the risks and missing items), then compact construction, operations, neighbourhood, developer and evidence cards, and a compact \"District DNA\" card labelled district level when DATA gives one (v734). Section 10 Neighbourhood always shows the nearest metro, mall, school, clinic and drive times as given in DATA with their source and date, saying straight line where DATA says so. "
+    + "Sections numbered 01 to 12 across pages 2 and 3 (page 1 is the dashboard): 01 Identity and location, 02 Physical building, 03 Apartment inventory, 04 Sales, 05 Rentals, 06 Occupancy, 07 Investment, 08 Construction and approvals, 09 Operations and service charges, 10 Neighbourhood, 11 Developer, 12 Evidence. "
     + "Under every register-backed figure print its source and as-of date in small text exactly as given in DATA; any \"NOTE: this register is N days old\" must be printed visibly beside that figure (small amber note). Figures for one building are never added up into a project total, and project-level figures are labelled \"project level\". The Google box shows the rating, the review count, the retrieval date and the Google Maps link as given, plus the line \"Google shows at most 5 reviews per place; this is not every review\". "
     + "HARD RULES: never invent a number, rating, name or fact; every number must come from DATA below; never leave out an available metric; label every missing item \"Not available yet\". Return ONLY the complete HTML document, starting with <!doctype html>.\n\n"
     + "DATA (use exactly):\n" + f.lines.join("\n")
     + "\nNot available yet (show as such, grey chip): " + f.missing.join("; ") + "."
     + "\nRisks (computed; print exactly these): " + f.risks.map((r, i) => "(" + String.fromCharCode(97 + i) + ") " + r).join(" ")
     + "\nOpportunities (computed; print exactly these): " + f.opps.map((r, i) => "(" + String.fromCharCode(97 + i) + ") " + r).join(" ")
-    + (f.finance && f.finance.length ? "\nFINANCE for section 07 Investment on page 2 (v727; it replaces the plain investment KPI cards; print exactly; under every figure say observed or assumed and its source and as-of date as given; a figure marked preliminary shows the word \"preliminary\" and NO number; the ASSUMPTIONS table goes on PAGE 3, never page 2 (v729: on page 2 it overflowed): a compact two-column grid (label | value, source on the same line in 6.5pt), 7pt type, tight rows; page 2 keeps only the headline figures):\n" + f.finance.join("\n") : "")
+    + (f.finance && f.finance.length ? "\nFINANCE for section 07 Investment on page 3 (v727; it replaces the plain investment KPI cards; print exactly; under every figure say observed or assumed and its source and as-of date as given; a figure marked preliminary shows the word \"preliminary\" and NO number; the ASSUMPTIONS table goes on PAGE 3, never page 2 (v729: on page 2 it overflowed): a compact two-column grid (label | value, source on the same line in 6.5pt), 7pt type, tight rows; section 07 keeps only the headline figures):\n" + f.finance.join("\n") : "")
     + "\nDisclaimer: Research use only. Not a valuation, legal title or offer. Registered deals are actual prices; adverts are asking prices.";
 }
 
@@ -629,24 +631,104 @@ export const OVERFLOW_JS = `(() => { const out = []; const mm = 96 / 25.4;
       const st = getComputedStyle(el); if (st.position === "absolute" && /decor|bg|orn|watermark/i.test(el.className || "")) return;
       if (r.right > P.right + 2 || r.bottom > F + 1) { const t = (el.innerText || "").trim().replace(/\\s+/g, " ").slice(0, 60); if (t && el.children.length === 0) out.push("page " + (i + 1) + ": " + t); } }); });
   return out.slice(0, 12); })()`;
+// v748 (Kendall, 4 Nov 2026, Luma Park Views: "it is cut off"; the PDF printed 5 pages, pages 3 and 5 only a footer). Cause: the writer's
+// .page boxes grew past 297 mm (height:auto / content-box padding), so each long page spilled its footer and snapshot line onto a page
+// of its own, and OVERFLOW_JS measured against the grown box so it saw nothing. Now the worker, not the writer, owns the page box: every
+// .page prints as exactly one A4 sheet (border-box 210 x 297 mm, overflow hidden, a page break after it, cards never split), the fit is
+// measured in PRINT media against the fixed box, the re-ask names the sections and the millimetres, and a deterministic shrink is the
+// last resort. A PDF of more or fewer than 3 physical pages is a failure, never delivered.
+export const PAGE_FIT_CSS = '<style id="bpp-fit">@media print{@page{size:A4;margin:0}html,body{margin:0!important;padding:0!important;width:210mm!important}'
+  + '.page{box-sizing:border-box!important;width:210mm!important;height:297mm!important;min-height:297mm!important;max-height:297mm!important;overflow:hidden!important;margin:0!important;'
+  + 'break-after:page!important;page-break-after:always!important;break-inside:avoid!important;page-break-inside:avoid!important}'
+  + '.page:last-of-type{break-after:auto!important;page-break-after:auto!important}.page section,.page .card,.page [class*=card]{break-inside:avoid}}</style>';
+export function withPageFit(html) {
+  const h = String(html || "").replace(/<style id="bpp-fit">[\s\S]*?<\/style>/g, "");
+  return /<\/head>/i.test(h) ? h.replace(/<\/head>/i, PAGE_FIT_CSS + "</head>") : PAGE_FIT_CSS + h;
+}
+// runs in the page (print media): per .page, how far the content runs past the line 2 mm above the footer (mm), the sections it is in
+// (by their "04", "05 ..." kickers) and the cut-off texts
+export const FIT_JS = `(() => { const mm = 96 / 25.4;
+  return [...document.querySelectorAll(".page")].map((pg, i) => { const P = pg.getBoundingClientRect();
+    const foot = [...pg.querySelectorAll("footer, .footer, [class*=foot]")].find((x) => !x.closest(".bpp-snap"));
+    const fs = foot ? getComputedStyle(foot).position : "";
+    const F = foot && (fs === "absolute" || fs === "fixed") ? foot.getBoundingClientRect().top - 2 * mm : P.bottom - 14 * mm;
+    const kick = []; pg.querySelectorAll("h1,h2,h3,h4,div,span,p,b,strong").forEach((el) => { if (el.children.length > 1) return; const t = (el.innerText || "").trim();
+      const m = /^(0[1-9]|1[0-2])A?\\b/.exec(t); if (m && t.length < 80) kick.push({ y: el.getBoundingClientRect().top, t: t.replace(/\\s+/g, " ").slice(0, 40) }); });
+    let maxB = P.top, wide = 0; const secs = new Set(), cut = [];
+    pg.querySelectorAll("*").forEach((el) => { if (foot && (el === foot || foot.contains(el))) return; if (el.closest(".bpp-snap")) return;
+      if (el.closest(".bpp-dash-in,.bpp-story-in")) return; const st = getComputedStyle(el); if (st.position === "absolute" || st.position === "fixed") return;
+      const r = el.getBoundingClientRect(); if (!r.width || !r.height) return;
+      if (r.right > P.right + 2) wide++;
+      if (r.bottom > maxB) maxB = r.bottom;
+      if (r.bottom > F + 1 && el.children.length === 0) { const t = (el.innerText || "").trim().replace(/\\s+/g, " ").slice(0, 60); if (t) cut.push(t);
+        const k = kick.filter((q) => q.y <= r.top + 1).pop(); if (k) secs.add(k.t); } });
+    return { page: i + 1, over_mm: Math.max(0, Math.round((maxB - F) / mm * 10) / 10), wide, sections: [...secs].slice(0, 6), cut: cut.slice(0, 6), story: !!pg.querySelector(".bpp-story") }; }); })()`;
+// the deterministic last resort: scale the content of an overflowing page (never the page box, footer or snapshot line).
+// zooms = [1, 0.91, 1] (one per .page); story60 = the pages whose 03A box drops from 74 mm to 60 mm
+export function fitZoomCss(zooms, story60) {
+  let css = "";
+  (zooms || []).forEach((z, i) => { if (z && z < 1) css += '.page[data-bpp-p="' + (i + 1) + '"]>*:not(footer):not(.footer):not([class*=foot]):not(.bpp-snap){zoom:' + z + "}"; });
+  (story60 || []).forEach((p) => { css += '.page[data-bpp-p="' + p + '"] .bpp-story{height:60mm!important}'; });
+  return css ? '<style id="bpp-zoom">@media print{' + css + "}</style>" : "";
+}
+// number the .page boxes so the zoom rules can address them
+export function tagPages(html) {
+  let n = 0;
+  return String(html || "").replace(/<(section|div)\b([^>]*\bclass=["']?[^"'>]*(?<![\w-])page(?![\w-])[^>]*)>/gi, (m, tag, rest) => (/data-bpp-p=/.test(rest) ? m : "<" + tag + ' data-bpp-p="' + (++n) + '"' + rest + ">"));
+}
+export function withFit(html, zooms, story60) {
+  const h = withPageFit(tagPages(html)).replace(/<style id="bpp-zoom">[\s\S]*?<\/style>/g, ""), z = fitZoomCss(zooms, story60);
+  return z ? h.replace(/<\/head>/i, z + "</head>") : h;
+}
+export const ZOOM_STEPS = [0.97, 0.94, 0.91, 0.88, 0.85, 0.82, 0.79, 0.76];
+// v748 - what the fitting re-ask tells the writer: which page, which sections, by how many millimetres; cut words, never data rows
+export function fitBrief(n, fit) {
+  const bad = (fit || []).filter((p) => p.over_mm > 0 || p.wide);
+  return "Printed to PDF in Chrome on fixed 210mm x 297mm pages it came out as " + n + " physical page" + (n === 1 ? "" : "s") + " (it must be exactly 3)"
+    + (bad.length ? ". These pages overflow: " + bad.map((p) => "page " + p.page + " runs " + p.over_mm + " mm past the footer line"
+      + (p.sections.length ? " (sections " + p.sections.join(", ") + ")" : "") + (p.wide ? " and " + p.wide + " items run past the right edge" : "")
+      + (p.cut.length ? "; cut off: " + p.cut.slice(0, 3).join(" | ") : "")).join("; ") : "")
+    + ". Fix it by cutting and condensing TEXT in those sections (shorter sentences, fewer words, smaller gaps, tighter cards and charts) by at least the millimetres given plus 6 mm; NEVER drop a data row, a number, a broker card or a source line.";
+}
 let LAUNCH = (binding) => puppeteer.launch(binding);
 export function __setLauncher(fn) { LAUNCH = fn || ((binding) => puppeteer.launch(binding)); }
-async function renderPdf(env, html) {
+// opts.fit: shrink overflowing pages step by step (the last resort). Returns the PDF, its physical page count, the per-page fit
+// and the zooms used, so the same fit is written into the stored HTML.
+async function renderPdf(env, html, opts) {
+  opts = opts || {};
   const browser = await LAUNCH(env.BROWSER);
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
+    try { await page.emulateMediaType("print"); } catch (e) {}   // v748 - measure what prints, not the phone layout
     // v726 - a slow outside picture or font must not lose the whole passport (4 Nov: "Navigation timeout of 45000 ms exceeded"):
     // wait for the network to go quiet up to 30 s, then print what has loaded
-    try { await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 }); }
+    try { await page.setContent(withFit(html), { waitUntil: "networkidle0", timeout: 30000 }); }
     catch (e) { if (!/timeout/i.test(String((e && e.message) || e))) throw e; }
     try { await page.evaluate(() => document.fonts.ready.then(() => true)); } catch (e) {}
+    const measure = async () => { try { const f = await page.evaluate(FIT_JS); return Array.isArray(f) ? f : []; } catch (e) { return []; } };
+    let fit = await measure();
+    const zooms = fit.map(() => 1), story60 = [];
+    if (opts.fit) {
+      const setCss = async () => { const css = fitZoomCss(zooms, story60).replace(/^<style id="bpp-zoom">|<\/style>$/g, "");
+        try { await page.evaluate("(() => { let s = document.getElementById('bpp-zoom'); if (!s) { s = document.createElement('style'); s.id = 'bpp-zoom'; document.head.appendChild(s); } s.textContent = " + JSON.stringify(css) + "; return true; })()"); } catch (e) {} };
+      const tight = fit.filter((p) => p.over_mm > 0 && p.story).map((p) => p.page);   // first the 03A box (74 -> 60 mm), then the zoom steps
+      if (tight.length) { story60.push(...tight); await setCss(); fit = await measure(); }
+      for (const z of ZOOM_STEPS) {
+        const bad = fit.filter((p) => p.over_mm > 0);
+        if (!bad.length) break;
+        bad.forEach((p) => { zooms[p.page - 1] = z; });
+        await setCss(); fit = await measure();
+      }
+    }
     let over = [];
     try { over = await page.evaluate(OVERFLOW_JS); } catch (e) {}
     const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
-    return { pdf, over: Array.isArray(over) ? over : [] };
+    return { pdf, over: Array.isArray(over) ? over : [], fit, zooms, story60, pages: pdfPages(pdf) };
   } finally { try { await browser.close(); } catch (e) {} }
 }
+// v748 - did it fit: exactly 3 physical pages and nothing running past the footer line
+export const fitsThree = (pages, fit) => pages === 3 && !(fit || []).some((p) => p.over_mm > 0);
 // v729 - every passport says it is a snapshot. v734 (Kendall, 4 Nov: the fixed top line overlapped each page's header): the line now sits
 // in its own thin band at the very bottom of each .page, under the footer text and inside the page's bottom margin; it never adds a page.
 export function bppStamp(iso) { const d = new Date(Date.parse(iso) + 4 * 3600e3); return Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + " " + d.toISOString().slice(11, 16) + " GST" : ""; }
@@ -685,6 +767,13 @@ export async function bppStory(env, plotId, now) {
   const pp = await ppGet(env, plotId); if (!pp) return "";
   const pack = await readJson(env, "pp_pack_" + String(plotId).replace("naj:plot:", ""));
   return storyBlock(pp, pack, todayGst(now));
+}
+// v748 - the page 1 dashboard for a plot, from the same plot record, pack and computed facts the writer gets
+export async function bppDash(env, plotId, now) {
+  const pp = await ppGet(env, plotId); if (!pp) return "";
+  const pack = withNb(await readJson(env, "pp_pack_" + String(plotId).replace("naj:plot:", "")), await nbGet(env, plotId).catch(() => null));
+  const today = todayGst(now);
+  return dashBlock(pp, pack, today, bppFacts(pp, pack, today));
 }
 export async function bppTick(env, nowMs) {
   const now = nowMs || Date.now();
@@ -726,16 +815,27 @@ export async function bppTick(env, nowMs) {
         const ph = await readJson(env, "bpp_photo_" + r.slug);   // v702 - the page links the live picture; the PDF gets it once, at render
         const made = new Date(now).toISOString();
         const story = await bppStory(env, r.plot_id, now).catch(() => "");   // v745 - 03A timeline, drawn here, never by the writer
-        const full = placeStory(placePhoto(logo, heroFigure(ph, "/bp/img/" + r.slug)), story);
-        const { pdf, over } = await renderPdf(env, snapshotNote(placeStory(placePhoto(logo, heroFigure(ph, await bppImageDataUri(env, r.slug).catch(() => ""))), story), made));
-        const n = pdfPages(pdf);
-        r.over = over.slice(0, 6);
-        if ((n !== 3 || over.length) && !(r.tries >= 1)) {
-          r.tries = (r.tries || 0) + 1; r.pages = n; delete r.lock;
-          r.resp = await oaiStart(env, "Revise this Building Passport HTML. Printed to PDF in Chrome it came out as " + n + " pages" + (over.length ? " and these items are cut off at the page edge or run into the footer: " + over.join(" | ") : "") + ". Content overflowed. Keep the design, palette, fonts, every number, the empty fixed-height <div class=\"bpp-story\"> box (leave it empty and keep its height) and the 3-page A4 structure; tighten spacing, shrink charts and type, and make everything fit in exactly three 210mm x 297mm .page sections with overflow hidden, ending at least 8mm above the footer. Never invent or drop a number. Return ONLY the complete corrected HTML document starting with <!doctype html>.\n\nHTML:\n" + html);
+        const dash = await bppDash(env, r.plot_id, now).catch(() => "");   // v748 - page 1 dashboard, drawn here, never by the writer
+        const fill = (h) => placeDash(placeStory(h, story), dash);
+        const full = fill(placePhoto(logo, heroFigure(ph, "/bp/img/" + r.slug)));
+        const printHtml = snapshotNote(fill(placePhoto(logo, heroFigure(ph, await bppImageDataUri(env, r.slug).catch(() => "")))), made);
+        // v748 - small overflow (<= 15 mm a page) is shrunk straight away; more goes back to the writer once with the exact sections and mm
+        let rp = await renderPdf(env, printHtml);
+        const worst = Math.max(0, ...rp.fit.map((p) => p.over_mm));
+        if (!fitsThree(rp.pages, rp.fit) && !(r.tries >= 1) && (rp.pages !== 3 || worst > 15)) {
+          r.tries = (r.tries || 0) + 1; r.pages = rp.pages; r.fit = rp.fit.map((p) => ({ page: p.page, over_mm: p.over_mm, sections: p.sections })); delete r.lock;
+          r.resp = await oaiStart(env, "Revise this Building Passport HTML. " + fitBrief(rp.pages, rp.fit) + " Keep the design, palette, fonts, every number, the empty fixed-height <div class=\"bpp-dash\"> and <div class=\"bpp-story\"> boxes (leave them empty and keep their heights) and the 3-page A4 structure: exactly three 210mm x 297mm .page sections (box-sizing:border-box, padding inside the 297mm, overflow hidden), everything ending at least 8mm above the footer. Never invent or drop a number. Return ONLY the complete corrected HTML document starting with <!doctype html>.\n\nHTML:\n" + html);
           r.status = "fixing"; await putReq(env, id, r); return { reask: id };
         }
-        await env.MEETINGS.put("bpp_file_" + r.slug + "_html", snapshotNote(full, made), bppTtl(r.slug));   // v729 - 24 h, with the snapshot line
+        if (!fitsThree(rp.pages, rp.fit)) rp = await renderPdf(env, printHtml, { fit: true });   // the deterministic last resort
+        const n = rp.pages, pdf = rp.pdf;
+        r.over = rp.over.slice(0, 6); r.fit = rp.fit.map((p) => ({ page: p.page, over_mm: p.over_mm, sections: p.sections })); r.zoom = rp.zooms; r.story60 = rp.story60;
+        if (!fitsThree(n, rp.fit)) {
+          r.status = "failed"; r.pages = n; delete r.lock; delete r.resp;
+          r.msg = n !== 3 ? "It printed as " + n + " pages, not 3, even after the fitting round." : "Page " + rp.fit.filter((p) => p.over_mm > 0).map((p) => p.page).join(", ") + " still ran past the footer after shrinking.";
+          await putReq(env, id, r); continue;
+        }
+        await env.MEETINGS.put("bpp_file_" + r.slug + "_html", withFit(snapshotNote(full, made), rp.zooms, rp.story60), bppTtl(r.slug));   // v729 - 24 h, with the snapshot line; v748 - and the same print fit
         await env.MEETINGS.put("bpp_file_" + r.slug + "_pdf", pdf, bppTtl(r.slug));
         await putBppEntry(env, { slug: r.slug, title: r.title, area: r.area, plot_id: r.plot_id, parcel: r.parcel, date: todayGst(now), made, html: true, pdf: true, reader: r.reader_used || "broker", fin: r.fin_status || "", csv: !!r.csv });
         r.status = "done"; r.pages = n; delete r.lock; delete r.resp; await putReq(env, id, r);
@@ -908,3 +1008,5 @@ export async function bppRoute(request, env, url, deps) {
   }
   return new Response("not found", { status: 404 });
 }
+
+export { renderPdf as __renderPdf };   // v748 - tests drive the real render with a local Chrome

@@ -67,7 +67,7 @@ ok(B.bppTtl("u-bora-3466876").expirationTtl === 86400 && B.bppTtl("t-test") === 
   await B.bppPhoto(env, "t-x", { name: "U", area: "A" }, {}, NOW);
   ok(kv.opts.get("bpp_photo_t-x") === undefined, "photo-test record has no TTL");
   const src = fs.readFileSync(new URL("../src/building_passports.js", import.meta.url), "utf8");
-  ["_csv\", fin.csv, bppTtl(r.slug)", "_html\", snapshotNote(full, made), bppTtl(r.slug)", "_pdf\", pdf, bppTtl(r.slug)", "b64ToBytes(b64), bppTtl(slug)"].forEach((s) => ok(src.includes(s), "TTL on write: " + s));
+  ["_csv\", fin.csv, bppTtl(r.slug)", "_html\", withFit(snapshotNote(full, made), rp.zooms, rp.story60), bppTtl(r.slug)", "_pdf\", pdf, bppTtl(r.slug)", "b64ToBytes(b64), bppTtl(slug)"].forEach((s) => ok(src.includes(s), "TTL on write: " + s));
   ok(/date: todayGst\(now\), made,/.test(src), "index entry records when it was made");
   ok(/bppExpire\(env, now\)[^\n]*\n\s*if \(!env\.OPENAI_API_KEY\)/.test(src), "prune runs before the key check, every tick");
 }
@@ -78,7 +78,7 @@ ok(B.bppTtl("u-bora-3466876").expirationTtl === 86400 && B.bppTtl("t-test") === 
   ok(h.includes("Snapshot made 2026-11-04 20:05 GST; listings change daily, generate a fresh one before sending."), "snapshot line with GST date time", h);
   ok(/<div class=page>p<div class="bpp-snap">Snapshot made/.test(h) && !/position:fixed/.test(h), "v734: inside each page, in its own bottom band (never fixed over the header)", h);
   const src = fs.readFileSync(new URL("../src/building_passports.js", import.meta.url), "utf8");
-  ok(/renderPdf\(env, snapshotNote\(/.test(src), "PDF render carries the snapshot line");
+  ok(/printHtml = snapshotNote\(/.test(src) && /renderPdf\(env, printHtml/.test(src), "PDF render carries the snapshot line (v748: via printHtml)");
 }
 
 // ---------- the card
