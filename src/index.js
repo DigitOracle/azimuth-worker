@@ -3857,7 +3857,7 @@ async function appFetch(request, env, ctx) {
         if (!_viaForward && env.WA_FORWARD_TOKEN && !env.WA_APP_SECRET) return new Response("forward token required", { status: 401 });   // receiver-only instance (no Meta secret): forwarding is the ONLY door
         if (!_viaForward && !(await waVerifySig(env, raw, request.headers.get("X-Hub-Signature-256")))) return new Response("bad sig", { status: 401 });
         let body; try { body = JSON.parse(raw); } catch (e) { return new Response("ok"); }
-        { let _cw = null; try { _cw = await campWebhook(env, body, { send: (e2, to, t, pid) => waSend(e2, to, t, pid || undefined), post: (e2, pl, pid) => waPost(e2, pl, "camp-preview", pid || undefined) }); } catch (e) {} if (_cw && _cw.consumed) return new Response("ok"); }   // v723 - campaign receipts, replies and opt-outs (never consumes those); v724 - consumes ONLY a preview keyword or a pv: tap from Najjuko or Kendall
+        { let _cw = null; try { _cw = await campWebhook(env, body, { send: (e2, to, t, pid) => waSend(e2, to, t, pid || undefined), post: (e2, pl, pid) => waPost(e2, pl, "camp-preview", pid || undefined), alert: campAlertSend }); } catch (e) {} if (_cw && _cw.consumed) return new Response("ok"); }   // v723 - campaign receipts, replies and opt-outs (never consumes those); v724 - consumes ONLY a preview keyword or a pv: tap from Najjuko or Kendall
         if (isDeskEvent(env, body)) { try { const _dv = body.entry[0].changes[0].value; for (const _s of ((_dv && _dv.statuses) || [])) await noteReceipt(env, _s); } catch (e) {}   // v470 - desk receipts were dropped, so every desk send stayed "accepted"
           await deskHandle(env, body, { waSend, post: deskPostDeps(env), lab: deskLabDeps(env) }); return new Response("ok"); }   // v388 - the desk number: consumed here BEFORE the shape probe and the router, never handed to the ordinary handlers, never routed on, no stranger digits stored
         try {                                                          // v20 shape probe — no message content stored
@@ -4941,7 +4941,7 @@ export default {
         try { await fitMorning(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v355 - the 05:00 opener, inside the 24-hour window only
         try { await fitReminders(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v351 - the daily "write in my book" reminder, inside the 24-hour window only   // v328 - the 21:00 GST FIT verdict; once a day, only while the 24-hour window is open
         try { await picResume(env, "", 90000); } catch (e) {}
-        try { await campTick(env, { graph: WA_GRAPH }); } catch (e) {}   // v723 - campaigns: one small batch per LIVE campaign (status "live" only, send window, daily + shared caps)
+        try { await campTick(env, { graph: WA_GRAPH, alert: campAlertSend }); } catch (e) {}   // v723 - campaigns: one small batch per LIVE campaign (status "live" only, send window, daily + shared caps)
         try { await bppTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v697 - one step of a building passport (ChatGPT in background mode, then the PDF)
         try { await deliveryWatch(env); } catch (e) {}   // v186 - accepted then failed is not sent
         try { await feedEarlyNudge(env, event.scheduledTime || Date.now()); } catch (e) {}   // v412 - 04:00-04:30: the template, if her window will be shut by the feed
@@ -5656,6 +5656,8 @@ function deskPostDeps(env) {
     list: (e, body, button, rows) => waPost(e, { messaging_product: "whatsapp", to: owner, type: "interactive", interactive: { type: "list", body: { text: String(body).slice(0, 1024) }, action: { button: String(button).slice(0, 20), sections: [{ title: "Choose one", rows: rows.slice(0, 10).map((x) => ({ id: x.id, title: String(x.title).slice(0, 24), description: x.description ? String(x.description).slice(0, 72) : undefined })) }] } } }, "list", pid),
   };
 }
+// v726 - campaign alerts (phone or template quality, pauses, back-off stops) to Kendall: WA_DESK_OWNER, from the desk number
+function campAlertSend(env, text) { const pid = String(env.WA_DESK_PHONE_ID || "").replace(/[^0-9]/g, ""), owner = String(env.WA_DESK_OWNER || "").replace(/[^0-9]/g, ""); if (!pid || !owner) return null; return waSend(env, owner, text, pid); }
 // v428 - the desk lab's sends: everything to WA_DESK_OWNER from WA_DESK_PHONE_ID. raw() returns Meta's own JSON (with .error when refused),
 // so a refused message type is reported to the desk word for word.
 function deskLabDeps(env) {

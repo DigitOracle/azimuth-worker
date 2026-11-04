@@ -176,7 +176,7 @@ await post("/momo/campaigns/api", KEN, { action: "live", id: "hard", confirm: "h
 store.set("camp_contact_971500000001", JSON.stringify(Object.assign(JSON.parse(store.get("camp_contact_971500000001")), { last_mkt: null })));
 nextErr = { code: 131048, message: "spam rate limit" };
 await post("/momo/campaigns/api", NAJ, { action: "pause", id: "big5-wave1" });
-await C.campTick(env, { now: IN + 3 * 86400000 });
+await C.campTick(env, { now: IN + 6 * 86400000 });   // v726: Mon-Fri window (was IN + 3 days, a Saturday)
 ok(JSON.parse(store.get("camp_hard")).status === "stopped" && /131048/.test(JSON.parse(store.get("camp_hard")).stopped.why), "131048 from Meta stops the campaign", JSON.parse(store.get("camp_hard")));
 
 // ---- tracked links ----
@@ -199,10 +199,10 @@ r = await post("/momo/campaigns/api", NAJ, { action: "flow_put", flow: FLOW }); 
 r = await post("/momo/campaigns/api", NAJ, { action: "simulate", flow: "pja-owners", choices: ["selling", "listed", "two"] }); j = await r.json();
 ok(j.ok && j.result.some((x) => x.handover) && j.result.some((x) => x.chose === "b2.two"), "simulate walks a branch with no KV writes and no Meta call", j);
 // owners imported on their own tag, Najjuko's campaign from the desk number
-const OWN = 'name,phone,source,consent_text,consent_date,tags\nPja A,0500000011,Najjuko form,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners\nPja B,0500000012,Najjuko form,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners\nPja C,0500000013,Najjuko form,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners\nPja D,0500000014,Najjuko form,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners\nPja E,0500000015,Najjuko form,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners\n';
+const OWN = 'name,phone,source,consent_text,consent_date,tags,why\nPja A,0500000011,Najjuko form,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners,you own a unit at Palm Jebel Ali\nPja B,0500000012,Najjuko form,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners,you own a unit at Palm Jebel Ali\nPja C,0500000013,Najjuko form,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners,you own a unit at Palm Jebel Ali\nPja D,0500000014,Najjuko form,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners,you own a unit at Palm Jebel Ali\nPja E,0500000015,Najjuko form,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners,you own a unit at Palm Jebel Ali\n';
 await post("/momo/campaigns/import?apply=1", NAJ, OWN, "text/csv");
-r = await post("/momo/campaigns/api", NAJ, { action: "create", id: "pja", name: "Palm Jebel Ali owners", flow: "pja-owners", tags: ["pjaowners"], cap: 10, batch: 5 }); j = await r.json();
-ok(j.ok && j.campaign.template === "najjuko_pja_owner_intro" && j.campaign.qr === 5 && j.campaign.freq_days === 14, "flow campaign takes template, buttons and fortnightly cap from the flow", j);
+r = await post("/momo/campaigns/api", NAJ, { action: "create", id: "pja", name: "Palm Jebel Ali owners", flow: "pja-owners", tags: ["pjaowners"], cap: 10, batch: 5, brn: "TEST1" }); j = await r.json();
+ok(j.ok && j.campaign.template === "najjuko_pja_owner_intro_v2" && j.campaign.phone === "desk" && j.campaign.qr === 5 && j.campaign.freq_days === 14, "flow campaign takes template, buttons and fortnightly cap from the flow", j);
 await post("/momo/campaigns/api", KEN, { action: "live", id: "pja", confirm: "pja" });
 calls.length = 0; store.delete("camp_sent24");
 await C.campTick(env, { now: IN });
@@ -234,17 +234,18 @@ calls.length = 0; await tap("971500000014", 3, pids[3]);
 ok(calls.length === 1 && /every two weeks/.test(calls[0].body.interactive.body.text), "(d) one gentle updates ask");
 // STOP on the opener
 calls.length = 0; await tap("971500000015", 4, pids[4]);
-ok(store.has("camp_optout_971500000015") && calls.length === 1 && /not get any more/.test(calls[0].body.text.body), "STOP button opts out");
+// v726: the PJA campaign has stop_forgets (the template says "Tap Stop and I'll delete your details"): opted out, details deleted, only a hashed opt-out kept
+ok(await C.isOptedOut(env, "971500000015") && !store.has("camp_optout_971500000015") && !store.has("camp_contact_971500000015") && calls.length === 1 && /details are deleted/.test(calls[0].body.text.body), "STOP button opts out (and forgets)");
 S = JSON.parse(store.get("camp_stats_pja"));
 ok(S.branch["s1.handover"] === 1 && S.branch["s1.selling"] === 1 && S.branch["s1.palmsprings"] === 1 && S.branch["s1.notnow"] === 1 && S.handovers === 1, "every branch choice in the log", S.branch);
 
 // ---- the follow-up: at most one, only to non-repliers, only after the wait ----
-await C.importContacts(env, 'name,phone,consent_text,consent_date,tags\nSilent,0500000016,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners\n', { apply: true, now: IN });
+await C.importContacts(env, 'name,phone,consent_text,consent_date,tags,why\nSilent,0500000016,"Yes to WhatsApp from Najjuko",2026-10-01,pjaowners,you own a unit at Palm Jebel Ali\n', { apply: true, now: IN });
 store.set("camp_q_pja", JSON.stringify(Object.assign(JSON.parse(store.get("camp_q_pja")), { list: JSON.parse(store.get("camp_q_pja")).list.concat(["971500000016"]) })));
 store.set("camp_pja", JSON.stringify(Object.assign(JSON.parse(store.get("camp_pja")), { status: "live" })));   // the audience grew: back to live
 calls.length = 0; await C.campTick(env, { now: IN + 3600000 }); ok(calls.length === 1, "late addition gets the opener", calls.length);
 calls.length = 0; await C.campTick(env, { now: IN + 7200000 }); ok(calls.length === 0, "no follow-up before 72 h");
-calls.length = 0; await C.campTick(env, { now: IN + 4 * 86400000 });
+calls.length = 0; await C.campTick(env, { now: IN + 6 * 86400000 });   // v726: Mon-Fri window (was IN + 4 days, a Saturday)
 ok(calls.length === 1 && calls[0].body.to === "971500000016" && calls[0].body.template.name === "najjuko_market_updates_ask", "exactly one follow-up, to the one who never replied", calls.map((c) => c.body.to));
 calls.length = 0; await C.campTick(env, { now: IN + 9 * 86400000 }); ok(calls.length === 0, "never a second follow-up");
 

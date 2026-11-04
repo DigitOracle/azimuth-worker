@@ -9,10 +9,12 @@
  "nodes": {
   "s1": {
    "type": "template",
-   "template": "najjuko_pja_owner_intro",
+   "template": "najjuko_pja_owner_intro_v2",
    "lang": "en",
    "vars": [
-    "name"
+    "name",
+    "why",
+    "brn"
    ],
    "buttons": [
     {
@@ -41,7 +43,7 @@
      "optout": true
     }
    ],
-   "body": "Hi {{1}}, Najjuko here. I specialise in Palm Jebel Ali. Quick question about your unit: what’s your plan for it right now?\n\nTotally your call, and you can tap Stop anytime."
+   "body": "Hi {{1}}, Najjuko here. I specialise in Palm Jebel Ali. You’re receiving this because {{2}}. Quick question about your unit: what’s your plan for it right now?\n\nNajjuko · BRN {{3}} · Tap Stop and I’ll delete your details."
   },
   "a1": {
    "type": "text",
@@ -189,7 +191,8 @@
    "template": "najjuko_market_updates_ask",
    "lang": "en",
    "vars": [
-    "name"
+    "name",
+    "brn"
    ],
    "buttons": [
     {
@@ -216,8 +219,10 @@
      "optout": true
     }
    ],
-   "body": "Hi {{1}}, Najjuko again. No need to reply to my last message. Would you like a short Palm Jebel Ali market update every two weeks? Three numbers, what they mean, nothing more."
+   "body": "Hi {{1}}, Najjuko again. No need to reply to my last message. Would you like a short Palm Jebel Ali market update every two weeks? Three numbers, what they mean, nothing more.\n\nNajjuko · BRN {{2}} · Tap Stop and I’ll delete your details."
   }
  },
- "facts": "pja"
+ "facts": "pja",
+ "stop_forgets": true,
+ "phone": "desk"
 }

@@ -28,12 +28,19 @@ const putJ = (env, k, v) => env.MEETINGS.put(k, JSON.stringify(v));
 const DAY = 86400000;
 
 export const CAMP_ICON = '<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12"/>';
-export const DEFAULTS = { cap: 250, shared: 250, batch: 5, window: "10:00-19:00", freqDays: 7,
-  block: 0.005, optout: 0.02, quality: 0.10, failed: 0.20, min: 20 };
+// v726 (Kendall 4 Nov): legal sending window Mon-Fri 10:00-17:30 Dubai; ramp 50 -> 100 -> 150 -> 250 a day.
+export const DEFAULTS = { cap: 250, shared: 250, batch: 5, window: "10:00-17:30", days: "mon-fri", freqDays: 7,
+  block: 0.005, optout: 0.02, quality: 0.10, failed: 0.20, min: 20, ramp: [50, 100, 150, 250], rampBlock: 0.003, ownerWindow: "10:00-19:00" };
 // Meta error codes. HARD: one is enough to stop the campaign. QUALITY: counted against the quality threshold. BLOCK: the person blocked marketing.
-export const HARD_STOP = [131048, 131031, 368, 131056, 130429, 133010, 131045];
-export const QUALITY = [131049, 131026, 131048, 131047];
+// v726: 131049 / 131026 / 131047 / 130472 are NOT quality (they cannot trip the 10% auto-stop); 130429 / 131056 back off and retry, not stop.
+export const HARD_STOP = [131048, 131031, 368, 133010, 131045];
+export const QUALITY = [131048];
 export const BLOCK = [131050];
+export const UNDELIVERABLE = [131026];          // not on WhatsApp / old app / terms not accepted: never sent to again
+export const SKIP_CYCLE = [131049, 130472];     // Meta's per-person marketing limit, or a Meta experiment: skip this cycle, no retry now
+export const FLOW_BUG = [131047];               // 24-hour window shut: our flow sent free-form when it should not have (our bug, not quality)
+export const BACKOFF = [130429, 131056];        // throughput / pair rate limit: wait and retry
+export const BACKOFF_STEPS = [30000, 120000, 600000, 1800000, 3600000];   // 30 s, 2 min, 10 min, 30 min, 1 h; one more and the campaign stops
 
 // ---------- phone numbers ----------
 // UAE mobile: 05X XXX XXXX, 5X XXX XXXX, 9715..., 009715..., +9715... -> +9715XXXXXXXX. Other countries need a full + or 00 prefix.
@@ -64,7 +71,8 @@ export function parseCsv(text) {
   return rows.filter((r) => r.some((x) => String(x).trim() !== ""));
 }
 const HDR = { name: ["name", "full name", "full_name"], phone: ["phone", "mobile", "number", "whatsapp", "e164"], source: ["source"], company: ["company"], role: ["role", "title"],
-  consent_text: ["consent_text", "consent text", "consent", "consent wording"], consent_date: ["consent_date", "consent date", "opted in", "opt_in_date"], consent_by: ["consent_by", "collected by", "collected_by"], tags: ["tags", "tag", "segment"] };
+  consent_text: ["consent_text", "consent text", "consent", "consent wording"], consent_date: ["consent_date", "consent date", "opted in", "opt_in_date"], consent_by: ["consent_by", "collected by", "collected_by"], tags: ["tags", "tag", "segment"],
+  why: ["why", "reason", "source_line", "why receiving", "receiving because"] };   // v726 - the per-owner "You're receiving this because ..." line (template {{2}})
 const cleanTag = (x) => String(x || "").toLowerCase().trim().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
 export const parseTags = (s) => [...new Set(String(s || "").split(/[;|,]/).map(cleanTag).filter(Boolean))];
 function consentDate(s, now) {
@@ -96,8 +104,8 @@ export async function importContacts(env, csv, opts) {
     const text = cell(r, "consent_text"), date = consentDate(cell(r, "consent_date"), now);
     if (!text || text.length < 8) { rejected.push({ line, reason: "no_consent_text", e164 }); continue; }
     if (!date) { rejected.push({ line, reason: "no_consent_date", e164 }); continue; }
-    if (await env.MEETINGS.get("camp_optout_" + d)) { rejected.push({ line, reason: "opted_out", e164 }); continue; }
-    const c = { e164, name: cell(r, "name").slice(0, 80), company: cell(r, "company").slice(0, 80), role: cell(r, "role").slice(0, 80),
+    if (await isOptedOut(env, d)) { rejected.push({ line, reason: "opted_out", e164 }); continue; }
+    const c = { e164, name: cell(r, "name").slice(0, 80), why: cell(r, "why").slice(0, 200) || undefined, company: cell(r, "company").slice(0, 80), role: cell(r, "role").slice(0, 80),
       source: (cell(r, "source") || opts.source || "csv").slice(0, 80), tags: parseTags(cell(r, "tags") + (opts.tags ? ";" + opts.tags : "")),
       consent: { text: text.slice(0, 600), date, by: cell(r, "consent_by").slice(0, 80), import_id: id }, added: new Date(now).toISOString() };
     if (known.has(d)) { duplicates++; updated++; }
@@ -123,23 +131,83 @@ export async function importContacts(env, csv, opts) {
 // ---------- opt-out ----------
 // The whole message (trimmed, punctuation and emoji removed) must be one of these, so "don't stop" or a long sentence never opts anyone out.
 const OPT_EN = ["stop", "stop messages", "stop message", "stop it", "stop all", "unsubscribe", "unsubscribe me", "opt out", "optout", "opt-out", "remove me", "remove",
-  "not for me", "not this time", "no more", "no more messages", "dont message me", "do not message me", "dont contact me", "do not contact me", "leave me alone", "end", "quit", "cancel subscription"];
+  "not for me", "not this time", "no more", "no more messages", "dont message me", "do not message me", "dont contact me", "do not contact me", "leave me alone", "end", "quit", "cancel subscription",
+  "stop promotions", "stop promotion", "stop promotional messages", "stop marketing", "stop marketing messages"];   // v726 - Meta's own marketing opt-out button ("Stop promotions")
+// v726 - asking for deletion: opt out AND forget (contact, consent and status rows deleted; only a hashed opt-out kept)
+const FORGET_EN = ["delete my details", "delete my data", "delete my number", "delete me", "forget me", "remove my details", "remove my number", "remove my data", "erase my data"];
+const FORGET_AR = ["احذفني", "احذف رقمي", "احذف بياناتي", "امسح رقمي", "امسح بياناتي"];
 const OPT_AR = ["إلغاء", "الغاء", "إلغاء الاشتراك", "الغاء الاشتراك", "توقف", "توقّف", "أوقف", "اوقف", "إيقاف", "ايقاف", "قف", "لا أريد", "لا اريد", "لا شكرا", "لا شكراً", "أزلني", "ازلني", "احذفني", "احذف رقمي", "لا ترسل", "لا ترسلوا", "توقفوا"];
 export function optOutNorm(s) {
   return String(s || "").normalize("NFC").toLowerCase().replace(/[ً-ْـ]/g, "").replace(/['’`]/g, "").replace(/[^\p{L}\p{N}\s-]/gu, " ").replace(/\s+/g, " ").trim();
 }
-const OPT_SET = new Set(OPT_EN.concat(OPT_AR).map(optOutNorm));
+const FORGET_SET = new Set(FORGET_EN.concat(FORGET_AR).map(optOutNorm));
+const OPT_SET = new Set(OPT_EN.concat(OPT_AR).map(optOutNorm).concat([...FORGET_SET]));
 export function isOptOutText(s) { const n = optOutNorm(s); return !!n && n.length <= 40 && OPT_SET.has(n); }
-export async function isOptedOut(env, d) { return !!(await env.MEETINGS.get("camp_optout_" + DIG(d))); }
+export function isForgetText(s) { const n = optOutNorm(s); return !!n && n.length <= 40 && FORGET_SET.has(n); }
+// v726 - a forgotten person is kept ONLY as camp_optout_h_<sha256(salt + digits)>: enough to never message them again, nothing to read back.
+export async function optHash(env, d) {
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(env.CAMP_HASH_SALT || "camp-optout-v726") + ":" + DIG(d)));
+  return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+export async function isOptedOut(env, d) { d = DIG(d); if (!d) return false; return !!(await env.MEETINGS.get("camp_optout_" + d)) || !!(await env.MEETINGS.get("camp_optout_h_" + (await optHash(env, d)))); }
+// "Forget me": delete the contact, consent log, flow state and per-message status rows; redact the number on message and link rows
+// (the counters stay right); remove from both indexes; keep a hashed opt-out with the date. Returns what was removed.
+export async function forgetContact(env, d, how, now) {
+  d = DIG(d); if (!d) return null; const h = await optHash(env, d), at = new Date(now || Date.now()).toISOString(), out = { deleted: 0, redacted: 0 };
+  const del = async (k) => { if ((await env.MEETINGS.get(k)) != null) { await env.MEETINGS.delete(k); out.deleted++; } };
+  await del("camp_contact_" + d); await del("camp_consentlog_" + d); await del("camp_optout_" + d);
+  const ci = await getJ(env, "camp_contact_index", []); if (ci.includes(d)) await putJ(env, "camp_contact_index", ci.filter((x) => x !== d));
+  const oi = await getJ(env, "camp_optout_index", []); if (oi.includes(d)) await putJ(env, "camp_optout_index", oi.filter((x) => x !== d));
+  for (const cid of await getJ(env, "camp_index", [])) {
+    await del("camp_state_" + cid + "_" + d);
+    for (const w of await getJ(env, "camp_msgs_" + cid, [])) { const m = await getJ(env, "camp_msg_" + w, null); if (!m || m.d !== d) continue; m.d = "h:" + h.slice(0, 16); await putJ(env, "camp_msg_" + w, m); out.redacted++; await del("camp_status_" + w); }
+    for (const code of await getJ(env, "camp_links_" + cid, [])) { const L = await getJ(env, "camp_link_" + code, null); if (L && L.d === d) { L.d = ""; await putJ(env, "camp_link_" + code, L); out.redacted++; } }
+    const q = await getJ(env, "camp_q_" + cid, null); if (q && q.list && q.list.includes(d)) { const i = q.list.indexOf(d); q.list.splice(i, 1); if (i < (q.pos || 0)) q.pos--; await putJ(env, "camp_q_" + cid, q); }
+  }
+  const hi = await getJ(env, "camp_handover_index", []); if (hi.some((x) => x.d === d)) await putJ(env, "camp_handover_index", hi.filter((x) => x.d !== d));
+  await putJ(env, "camp_optout_h_" + h, { at, how: how || "forget", forgotten: true });
+  const fl = await getJ(env, "camp_forget_log", []); fl.unshift({ at, how: how || "forget", h: h.slice(0, 12) }); await putJ(env, "camp_forget_log", fl.slice(0, 1000));
+  return out;
+}
 export async function optOut(env, d, how, extra, now) {
   d = DIG(d); if (!d) return false;
-  if (await env.MEETINGS.get("camp_optout_" + d)) return false;
+  if (await isOptedOut(env, d)) return false;
   await putJ(env, "camp_optout_" + d, Object.assign({ at: new Date(now || Date.now()).toISOString(), how }, extra || {}));
   const ix = await getJ(env, "camp_optout_index", []); if (!ix.includes(d)) { ix.push(d); await putJ(env, "camp_optout_index", ix); }
   const c = await getJ(env, "camp_contact_" + d, null); if (c) { c.opted_out = true; await putJ(env, "camp_contact_" + d, c); }
   return true;
 }
 export const OPTOUT_REPLY = "Done. You will not get any more marketing messages from DigitAlchemy on WhatsApp. Reply here any time if you need us.";
+export const FORGET_REPLY = "Done. Your details are deleted and Najjuko will not message you again on WhatsApp.";
+
+// ---------- alerts to Kendall (v726) ----------
+// Every alert is logged in camp_alerts; it is also sent to Kendall (WA_DESK_OWNER, from the desk number) through deps.alert,
+// which /wa and the minute tick wire to waSend. A send that fails (his window shut) still leaves the log line for the Campaigns card.
+async function campAlert(env, deps, kind, text, now) {
+  const L = await getJ(env, "camp_alerts", []); L.unshift({ at: new Date(now || Date.now()).toISOString(), kind, text: String(text).slice(0, 400) }); await putJ(env, "camp_alerts", L.slice(0, 200));
+  if (env.CAMP_ALERTS === "off" || !deps || typeof deps.alert !== "function") return false;
+  try { await deps.alert(env, "Campaigns: " + text); return true; } catch (e) { return false; }
+}
+
+// ---------- phone quality (v726) ----------
+// camp_quality_<desk|main> = {rating: GREEN|YELLOW|RED, raw, event, limit, at}. Missing = no warning from Meta = GREEN.
+const DESK_DISPLAY = "971585446093", MAIN_DISPLAY = "971585876093";   // the two business numbers (public, in the handover), overridable by env
+const phoneKeyOfDisplay = (env, disp) => { const d = DIG(disp); if (!d) return ""; if (d === DIG(env.CAMP_DESK_DISPLAY || DESK_DISPLAY)) return "desk"; if (d === DIG(env.CAMP_MAIN_DISPLAY || MAIN_DISPLAY)) return "main"; return ""; };
+const phoneKeyOfId = (env, pid) => { pid = DIG(pid); if (!pid) return ""; if (pid === DIG(env.WA_DESK_PHONE_ID)) return "desk"; if (pid === DIG(env.WA_PHONE_ID)) return "main"; return ""; };
+export const normRating = (r) => { r = String(r || "").toUpperCase(); return r === "GREEN" || r === "HIGH" ? "GREEN" : r === "YELLOW" || r === "MEDIUM" ? "YELLOW" : r === "RED" || r === "LOW" || r === "FLAGGED" ? "RED" : ""; };
+const TIER_N = { TIER_50: 50, TIER_250: 250, TIER_1K: 1000, TIER_2K: 2000, TIER_10K: 10000, TIER_100K: 100000, TIER_UNLIMITED: 1e9 };
+const tierN = (t) => { if (t == null || t === "") return 0; if (typeof t === "number") return t; const s = String(t).toUpperCase(); return TIER_N[s] || parseInt(s.replace(/[^0-9]/g, ""), 10) || 0; };
+export async function phoneQuality(env, c) { return await getJ(env, "camp_quality_" + (c.phone === "main" ? "main" : "desk"), null); }
+
+// ---------- per-message status rows (v726) ----------
+// camp_status_<wamid> = {cid, d, sent, delivered, read, failed, code}: one timestamp per stage, forward-only (a late "delivered" never
+// undoes "read"), kept 90 days (KV expirationTtl). camp_msg_<wamid> stays the counter record.
+const STATUS_TTL = 90 * 86400;
+async function statusRow(env, wamid, patch) {
+  const k = "camp_status_" + wamid, r = Object.assign({}, await getJ(env, k, {}));
+  for (const f of Object.keys(patch)) if (r[f] == null) r[f] = patch[f];
+  await env.MEETINGS.put(k, JSON.stringify(r), { expirationTtl: STATUS_TTL });
+}
 
 // ---------- stats ----------
 const blankStats = () => ({ sent: 0, delivered: 0, read: 0, failed: 0, replies: 0, taps: 0, clicks: 0, uclicks: 0, optouts: 0, blocks: 0, quality: 0, err: {}, day: {}, skipped: {} });
@@ -166,6 +234,90 @@ async function autoStop(env, cid, s, now) {
   return why;
 }
 
+// ---------- v726: what a failed code does to the contact and the campaign ----------
+async function failedCodes(env, cid, d, codes, deps, now) {
+  if (!codes.length) return;
+  const k = d ? await getJ(env, "camp_contact_" + d, null) : null;
+  if (k && codes.some((c) => UNDELIVERABLE.includes(c))) { k.undeliverable = { at: new Date(now).toISOString(), code: codes.find((c) => UNDELIVERABLE.includes(c)) }; await putJ(env, "camp_contact_" + d, k); }
+  else if (k && codes.some((c) => SKIP_CYCLE.includes(c))) { k.last_mkt = new Date(now).toISOString(); k.skip_code = codes.find((c) => SKIP_CYCLE.includes(c)); await putJ(env, "camp_contact_" + d, k); }
+  if (codes.some((c) => FLOW_BUG.includes(c))) await campAlert(env, deps, "flow_bug", "campaign " + cid + ": a message went out after the person's 24-hour reply window had closed (code 131047). That is a fault in our flow, not a quality problem. Nothing else changed.", now);
+  if (codes.some((c) => BACKOFF.includes(c))) await backOff(env, cid, codes.find((c) => BACKOFF.includes(c)), deps, now);
+}
+// Throughput limits: wait 30 s, 2 min, 10 min, 30 min, 1 h; a sixth in a row stops the campaign. A good send resets the count.
+async function backOff(env, cid, code, deps, now) {
+  const k = "camp_backoff_" + cid, b = await getJ(env, k, { n: 0 }); b.n = (b.n || 0) + 1; b.code = code; b.at = new Date(now).toISOString();
+  if (b.n > BACKOFF_STEPS.length) {
+    const c = await getJ(env, "camp_" + cid, null);
+    if (c && c.status === "live") { c.status = "stopped"; c.stopped = { at: b.at, why: "Meta throughput limit " + code + " " + b.n + " times in a row", auto: true }; await putJ(env, "camp_" + cid, c);
+      await campAlert(env, deps, "backoff_stop", "campaign " + cid + " stopped: Meta kept refusing for sending too fast (code " + code + ", " + b.n + " times in a row). It needs your resume.", now); }
+    b.until = 0;
+  } else b.until = now + BACKOFF_STEPS[b.n - 1];
+  await putJ(env, k, b); return b;
+}
+const TPL_BLOCK = ["PAUSED", "DISABLED", "REJECTED", "LOCKED", "FLAGGED", "PENDING_DELETION", "DELETED", "ARCHIVED", "LIMIT_EXCEEDED"];
+async function campTemplates(env, c) { const s = new Set([c.template].filter(Boolean)); if (c.flow) { const f = await getJ(env, "camp_flow_" + c.flow, null); if (f) for (const n of Object.values(f.nodes || {})) if (n.template) s.add(n.template); } return s; }
+// Pause every LIVE campaign that matches; returns their ids. Resuming stays with Kendall (the resume action needs his key).
+async function pauseWhere(env, pred, why, now) {
+  const ids = await getJ(env, "camp_index", []), hit = [];
+  for (const id of ids) { const c = await getJ(env, "camp_" + id, null); if (!c || c.status !== "live" || !(await pred(c))) continue;
+    c.status = "paused"; c.paused = new Date(now).toISOString(); c.paused_by = { at: c.paused, why, auto: true }; await putJ(env, "camp_" + id, c); hit.push(id); }
+  return hit;
+}
+// Account-level webhooks (same /wa callback, field != "messages"). Meta's documented fields (checked 4 Nov 2026):
+//   phone_number_quality_update {display_phone_number, event, current_limit, old_limit, max_daily_conversations_per_business}
+//   message_template_status_update {event, message_template_name, message_template_language, reason, other_info{title}}
+//   message_template_quality_update {previous_quality_score, new_quality_score, message_template_name}
+// The phone-rating names are read defensively: older payloads carry event FLAGGED / UNFLAGGED / DOWNGRADE / UPGRADE and no rating field;
+// any of quality_rating / current_quality_rating / quality_score / new_quality_score is used when present.
+export async function accountEvent(env, field, v, deps, now) {
+  now = now || Date.now(); const ev = String(v.event || "").toUpperCase();
+  if (field === "phone_number_quality_update") {
+    const key = phoneKeyOfDisplay(env, v.display_phone_number), keys = key ? [key] : ["desk", "main"];   // a number we cannot place: treat it as ours (safe side)
+    let rating = normRating(v.quality_rating || v.current_quality_rating || v.quality_score || v.new_quality_score || (v.quality && v.quality.rating));
+    if (!rating && ev === "FLAGGED") rating = "RED"; if (!rating && ev === "UNFLAGGED") rating = "GREEN";
+    const nl = tierN(v.max_daily_conversations_per_business || v.max_daily_conversation_per_phone || v.current_limit), ol = tierN(v.old_limit);
+    const down = /DOWNGRADE/.test(ev) || (ol > 0 && nl > 0 && nl < ol);
+    const res = { field, keys, rating, event: ev, limit: nl || undefined, down, paused: [] };
+    for (const pk of keys) {
+      const prev = await getJ(env, "camp_quality_" + pk, {}) || {};
+      const rec = { rating: rating || (down ? "RED" : prev.rating || ""), event: ev, limit: nl || prev.limit || undefined, raw: String(v.quality_rating || v.current_quality_rating || v.new_quality_score || "").slice(0, 20) || undefined, at: new Date(now).toISOString(), prev: prev.rating || undefined };
+      await putJ(env, "camp_quality_" + pk, rec);
+      const L = await getJ(env, "camp_quality_log", []); L.unshift(Object.assign({ phone: pk }, rec)); await putJ(env, "camp_quality_log", L.slice(0, 200));
+      const label = pk === "desk" ? "the campaign number (544 6093)" : "the main number (587 6093)";
+      if (rec.rating === "RED" || down) {
+        const hit = await pauseWhere(env, async (c) => (c.phone === "main" ? "main" : "desk") === pk, "phone quality " + (down ? "limit lowered" : "RED"), now); res.paused = res.paused.concat(hit);
+        await campAlert(env, deps, "quality_red", "Meta " + (down ? "lowered the messaging limit" : "rated " + label + " LOW (red)") + ". Paused " + (hit.length ? hit.join(", ") : "no live campaign") + ". Nothing sends from it until you resume.", now);
+      } else if (rec.rating === "YELLOW" && prev.rating !== "YELLOW") {
+        await campAlert(env, deps, "quality_yellow", "Meta rated " + label + " MEDIUM (yellow). Campaigns on it now send at half their daily cap until the rating is back to high.", now);
+      }
+    }
+    return res;
+  }
+  if (field === "business_capability_update" || field === "account_update") {
+    const nl = tierN(v.max_daily_conversations_per_business || v.max_daily_conversation_per_phone), prev = await getJ(env, "camp_meta_limit", {}) || {};
+    if (nl) await putJ(env, "camp_meta_limit", { limit: nl, at: new Date(now).toISOString(), prev: prev.limit || undefined });
+    const bad = field === "account_update" && /VIOLATION|RESTRICT|DISABLE|BAN|OFFBOARD|DELET/.test(ev), down = nl > 0 && prev.limit > 0 && nl < prev.limit;
+    if (!bad && !down) return { field, event: ev, limit: nl || undefined };
+    const hit = await pauseWhere(env, async () => true, field + " " + (ev || "limit lowered"), now);
+    await campAlert(env, deps, "account", "Meta sent an account notice (" + (ev || "messaging limit lowered to " + nl) + "). Paused " + (hit.length ? hit.join(", ") : "no live campaign") + ".", now);
+    return { field, event: ev, paused: hit };
+  }
+  if (field === "message_template_status_update" || field === "message_template_quality_update") {
+    const name = String(v.message_template_name || "").replace(/[^a-z0-9_]/g, ""); if (!name) return null;
+    const prev = await getJ(env, "camp_tpl_" + name, {}) || {}, rec = Object.assign({}, prev, { at: new Date(now).toISOString() });
+    let block = false, why = "";
+    if (field === "message_template_status_update") { rec.status = ev; rec.reason = v.reason || undefined; rec.title = (v.other_info && v.other_info.title) || undefined; block = TPL_BLOCK.includes(ev); why = "template " + name + " " + ev.toLowerCase() + (v.reason && v.reason !== "NONE" ? " (" + v.reason + ")" : ""); }
+    else { const q = normRating(v.new_quality_score), pq = normRating(v.previous_quality_score) || prev.quality || "GREEN"; rec.quality = q || String(v.new_quality_score || ""); const rank = { GREEN: 0, YELLOW: 1, RED: 2 };
+      block = !!q && q !== "GREEN" && (rank[q] > (rank[pq] || 0) || q === "RED"); why = "template " + name + " quality " + (q || "unknown").toLowerCase(); }
+    await putJ(env, "camp_tpl_" + name, rec);
+    if (!block) return { field, name, event: rec.status, quality: rec.quality };
+    const hit = await pauseWhere(env, async (c) => (await campTemplates(env, c)).has(name), why, now);
+    await campAlert(env, deps, "template", "Meta: " + why + ". Paused " + (hit.length ? hit.join(", ") : "no live campaign") + ".", now);
+    return { field, name, event: rec.status, quality: rec.quality, paused: hit };
+  }
+  return null;
+}
+
 // ---------- webhook hook ----------
 // Called from /wa for EVERY event before the existing handlers; it never consumes the event and never throws. It only acts on
 // (a) status callbacks for a message the campaign sender sent (camp_msg_<wamid>), and (b) messages from a number in the contact list
@@ -176,6 +328,10 @@ export async function campWebhook(env, body, deps) {
   try {
     const pv = await campPreview(env, body, deps); if (pv && pv.consumed) { out.consumed = true; out.preview = pv; return out; }
     const now = (deps && deps.now) || Date.now();
+    for (const en of (body && body.entry) || []) for (const ch of (en && en.changes) || []) {
+      if (!ch || !ch.value || !ch.field || ch.field === "messages") continue;
+      try { const a = await accountEvent(env, ch.field, ch.value, deps, now); if (a) out.account = (out.account || []).concat([a]); } catch (e) { out.account_error = String(e && e.message || e).slice(0, 120); }
+    }
     const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
     if (!val) return out;
     const pid = DIG(val.metadata && val.metadata.phone_number_id);
@@ -188,11 +344,14 @@ export async function campWebhook(env, body, deps) {
       if (st === "read") { if (!m.delivered) { m.delivered = true; inc.delivered = 1; } if (!m.read) { m.read = true; inc.read = 1; } }
       if (st === "failed" && prev !== "failed") { inc.failed = 1; m.err = codes; }
       if (st === "failed") m.st = "failed"; else if (prev !== "failed" && (st === "read" || (st === "delivered" && prev !== "read"))) m.st = st;
+      if (["sent", "delivered", "read", "failed"].includes(st)) { const ts = s.timestamp ? new Date(Number(s.timestamp) * 1000).toISOString() : new Date(now).toISOString(), patch = { [st]: ts };
+        if (st === "read") patch.delivered = ts; if (st === "failed" && codes.length) patch.code = codes[0]; await statusRow(env, String(s.id), patch); }
       if (!inc.delivered && !inc.read && !inc.failed) continue;
       await putJ(env, k, m);
       const S = await bump(env, m.cid, (x) => { x.delivered += inc.delivered; x.read += inc.read; x.failed += inc.failed;
-        if (inc.failed) for (const c of codes) { x.err[c] = (x.err[c] || 0) + 1; if (QUALITY.includes(c)) x.quality++; if (BLOCK.includes(c)) { x.blocks++; x.bday = x.bday || {}; x.bday[dubaiDate(now)] = (x.bday[dubaiDate(now)] || 0) + 1; } } });
+        if (inc.failed) for (const c of codes) { x.err[c] = (x.err[c] || 0) + 1; if (QUALITY.includes(c)) x.quality++; if (FLOW_BUG.includes(c)) x.flow_bug = (x.flow_bug || 0) + 1; if (BLOCK.includes(c)) { x.blocks++; x.bday = x.bday || {}; x.bday[dubaiDate(now)] = (x.bday[dubaiDate(now)] || 0) + 1; } } });
       if (inc.failed) { if (codes.some((c) => BLOCK.includes(c))) await optOut(env, m.d, "blocked_marketing", { cid: m.cid, code: 131050 }, now);
+        await failedCodes(env, m.cid, m.d, codes, deps, now);
         const w = await autoStop(env, m.cid, S, now); if (w) out.stopped = w; }
     }
     for (const msg of (val.messages || [])) {
@@ -209,12 +368,15 @@ export async function campWebhook(env, body, deps) {
       const mk = cm ? "camp_msg_" + ctxId : (contact && contact.last_wamid ? "camp_msg_" + contact.last_wamid : "");
       const mrec = cm || (mk ? await getJ(env, mk, null) : null);
       if (isOptOutText(txt) && (!owner || isBtn || cm)) {
+        const camp = cid ? await getJ(env, "camp_" + cid, null) : null;
+        const forget = isForgetText(txt) || !!(camp && camp.stop_forgets);   // v726 - the template says "Tap Stop and I'll delete your details"
         const fresh = await optOut(env, d, isBtn ? "button" : "text", { text: String(txt).slice(0, 60), cid }, now);
         if (fresh) {
           out.optouts++;
           if (mrec && mk && !mrec.optout) { mrec.optout = true; await putJ(env, mk, mrec); }
-          if (cid) { const S = await bump(env, cid, (x) => { x.optouts++; x.oday = x.oday || {}; x.oday[dubaiDate(now)] = (x.oday[dubaiDate(now)] || 0) + 1; }); const w = await autoStop(env, cid, S, now); if (w) out.stopped = w; }
-          if (env.CAMP_OPTOUT_REPLY !== "off" && deps && typeof deps.send === "function") { try { await deps.send(env, d, OPTOUT_REPLY, pid); } catch (e) {} }
+          if (cid) { const S = await bump(env, cid, (x) => { x.optouts++; if (forget) x.forgotten = (x.forgotten || 0) + 1; x.oday = x.oday || {}; x.oday[dubaiDate(now)] = (x.oday[dubaiDate(now)] || 0) + 1; }); const w = await autoStop(env, cid, S, now); if (w) out.stopped = w; }
+          if (forget) { out.forgotten = (out.forgotten || 0) + 1; await forgetContact(env, d, isBtn ? "button" : "text", now); }
+          if (env.CAMP_OPTOUT_REPLY !== "off" && deps && typeof deps.send === "function") { try { await deps.send(env, d, forget ? FORGET_REPLY : OPTOUT_REPLY, pid); } catch (e) {} }
         }
         continue;
       }
@@ -258,7 +420,39 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
 export function parseWindow(w) { const m = /^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/.exec(String(w || DEFAULTS.window)); if (!m) return null; const a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4]; return a < b && b <= 1440 ? [a, b] : null; }
 export const dubaiMin = (now) => { const d = new Date(now + 4 * 3600000); return d.getUTCHours() * 60 + d.getUTCMinutes(); };   // Dubai is UTC+4 all year
 export const dubaiDate = (now) => new Date(now + 4 * 3600000).toISOString().slice(0, 10);
-export const inWindow = (c, now) => { const w = parseWindow(c.window); const m = dubaiMin(now); return !!w && m >= w[0] && m < w[1]; };
+const WD = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+// v726: "mon-fri", "sun-thu", "mon,wed,fri", "all" -> weekday numbers (0 = Sunday); null when it cannot be read
+export function parseDays(s) {
+  s = String(s == null || s === "" ? DEFAULTS.days : s).toLowerCase().replace(/\s+/g, ""); if (s === "all" || s === "*") return [0, 1, 2, 3, 4, 5, 6];
+  const out = new Set();
+  for (const part of s.split(",")) { const m = /^([a-z]{3})(?:-([a-z]{3}))?$/.exec(part); if (!m) return null; const a = WD.indexOf(m[1]), b = m[2] ? WD.indexOf(m[2]) : a; if (a < 0 || b < 0) return null;
+    for (let i = a, n = 0; n < 7; i = (i + 1) % 7, n++) { out.add(i); if (i === b) break; } }
+  return out.size ? [...out].sort() : null;
+}
+const localParts = (now, offMin) => { const d = new Date(now + offMin * 60000); return { min: d.getUTCHours() * 60 + d.getUTCMinutes(), wd: d.getUTCDay() }; };
+// The Dubai legal window: the campaign's hours AND its weekdays (default Mon-Fri 10:00-17:30 Dubai).
+export const inWindow = (c, now) => { const w = parseWindow(c.window), days = parseDays(c.days), p = localParts(now, 240); return !!w && !!days && days.includes(p.wd) && p.min >= w[0] && p.min < w[1]; };
+// ---------- owner time zone (v726) ----------
+// Country calling code -> standard offset (minutes) and a summer-time rule ("eu": last Sunday Mar-Oct; "us": 2nd Sunday Mar - 1st Sunday Nov).
+// Compact on purpose: the main Palm Jebel Ali owner origins. US/Canada use Eastern time (most owners). Unknown -> Dubai.
+const TZ_CC = [
+  ["971", 240], ["966", 180], ["974", 180], ["973", 180], ["965", 180], ["968", 240], ["44", 0, "eu"], ["353", 0, "eu"], ["91", 330], ["92", 300], ["880", 360], ["94", 330], ["977", 345],
+  ["7", 180], ["86", 480], ["852", 480], ["65", 480], ["60", 480], ["63", 480], ["81", 540], ["82", 540], ["61", 600], ["64", 720], ["1", -300, "us"],
+  ["49", 60, "eu"], ["33", 60, "eu"], ["39", 60, "eu"], ["34", 60, "eu"], ["31", 60, "eu"], ["32", 60, "eu"], ["41", 60, "eu"], ["43", 60, "eu"], ["46", 60, "eu"], ["47", 60, "eu"], ["45", 60, "eu"],
+  ["48", 60, "eu"], ["420", 60, "eu"], ["36", 60, "eu"], ["351", 0, "eu"], ["30", 120, "eu"], ["40", 120, "eu"], ["359", 120, "eu"], ["358", 120, "eu"], ["380", 120, "eu"], ["961", 120, "eu"],
+  ["90", 180], ["962", 180], ["964", 180], ["98", 210], ["20", 120], ["212", 60], ["234", 60], ["254", 180], ["27", 120], ["233", 0], ["375", 180], ["994", 240], ["998", 300]
+].sort((a, b) => b[0].length - a[0].length);
+const nthSun = (y, mo, n) => { if (n > 0) { const d = new Date(Date.UTC(y, mo, 1)); return 1 + ((7 - d.getUTCDay()) % 7) + (n - 1) * 7; } const last = new Date(Date.UTC(y, mo + 1, 0)); return last.getUTCDate() - last.getUTCDay(); };
+function dstOn(rule, now, std) {
+  const y = new Date(now).getUTCFullYear();
+  if (rule === "eu") return now >= Date.UTC(y, 2, nthSun(y, 2, -1), 1) && now < Date.UTC(y, 9, nthSun(y, 9, -1), 1);
+  if (rule === "us") return now >= Date.UTC(y, 2, nthSun(y, 2, 2), 2) - std * 60000 && now < Date.UTC(y, 10, nthSun(y, 10, 1), 2) - (std + 60) * 60000;
+  return false;
+}
+export function ownerTz(e164) { const d = DIG(e164); for (const r of TZ_CC) if (d.indexOf(r[0]) === 0) return { cc: r[0], std: r[1], dst: r[2] || "" }; return { cc: "", std: 240, dst: "" }; }
+export const ownerOffset = (e164, now) => { const t = ownerTz(e164); return t.std + (t.dst && dstOn(t.dst, now, t.std) ? 60 : 0); };
+// The owner's own local window: 10:00-19:00, Monday-Friday of THEIR week. The sender needs this AND the Dubai window open.
+export const ownerOpen = (c, e164, now) => { if (c.owner_tz === false) return true; const w = parseWindow(c.owner_window || DEFAULTS.ownerWindow), p = localParts(now, ownerOffset(e164, now)); return !!w && p.wd >= 1 && p.wd <= 5 && p.min >= w[0] && p.min < w[1]; };
 export function cleanCampaign(x, prev) {
   const c = Object.assign({}, prev || {}); const err = [];
   if (!prev) { if (!ID_RE.test(String(x.id || ""))) err.push("id: lowercase letters, digits and dashes"); c.id = String(x.id || ""); c.status = "draft"; c.created = new Date().toISOString(); }
@@ -272,6 +466,11 @@ export function cleanCampaign(x, prev) {
   if (x.cap != null) c.cap = Math.max(1, Math.min(10000, parseInt(x.cap, 10) || DEFAULTS.cap));
   if (x.batch != null) c.batch = Math.max(1, Math.min(20, parseInt(x.batch, 10) || DEFAULTS.batch));
   if (x.window != null) c.window = String(x.window).replace(/\s+/g, "");
+  if (x.days != null) c.days = String(x.days).toLowerCase().replace(/\s+/g, "");
+  if (x.brn != null) c.brn = String(x.brn).replace(/[^0-9A-Za-z-]/g, "").slice(0, 20);
+  if (x.ramp != null) c.ramp = x.ramp === false || x.ramp === "off" ? false : (Array.isArray(x.ramp) ? x.ramp : String(x.ramp).split(/[,|]/)).map((n) => parseInt(n, 10)).filter((n) => n > 0).slice(0, 10);
+  if (x.owner_tz != null) c.owner_tz = !(x.owner_tz === false || x.owner_tz === "off");
+  if (x.stop_forgets != null) c.stop_forgets = !!x.stop_forgets;
   if (x.phone != null) c.phone = x.phone === "main" ? "main" : "desk";
   if (x.flow != null) c.flow = ID_RE.test(String(x.flow)) ? String(x.flow) : "";
   if (x.freq_days != null) c.freq_days = Math.max(1, Math.min(60, parseInt(x.freq_days, 10) || DEFAULTS.freqDays));
@@ -279,7 +478,8 @@ export function cleanCampaign(x, prev) {
   if (x.link_url != null) c.link_url = cleanTarget(x.link_url);
   if (x.header != null) c.header = x.header && /^(image|video|document)$/.test(x.header.type) && (cleanTarget(x.header.link) || /^\d{5,30}$/.test(String(x.header.id || ""))) ? { type: x.header.type, link: cleanTarget(x.header.link) || undefined, id: x.header.id ? String(x.header.id) : undefined } : null;
   if (x.thresholds != null && typeof x.thresholds === "object") { c.thresholds = {}; for (const k of ["block", "optout", "quality", "failed", "min"]) if (Number(x.thresholds[k]) >= 0) c.thresholds[k] = Number(x.thresholds[k]); }
-  c.cap = c.cap || DEFAULTS.cap; c.batch = c.batch || DEFAULTS.batch; c.window = c.window || DEFAULTS.window; c.phone = c.phone || "desk"; c.vars = c.vars || []; c.tags = c.tags || [];
+  c.cap = c.cap || DEFAULTS.cap; c.batch = c.batch || DEFAULTS.batch; c.window = c.window || DEFAULTS.window; c.days = c.days || DEFAULTS.days; c.phone = c.phone || "desk"; c.vars = c.vars || []; c.tags = c.tags || [];
+  if (!parseDays(c.days)) err.push("days like mon-fri (Dubai weekdays)");
   if (!c.template) err.push("template required");
   if (!c.lang) err.push("lang required (template not in wa_templates.js)");
   if (!parseWindow(c.window)) err.push("window like 10:00-19:00 (Dubai)");
@@ -295,7 +495,7 @@ export function cleanCampaign(x, prev) {
 export const phoneIdOf = (env, c) => DIG(c.phone === "main" ? env.WA_PHONE_ID : env.WA_DESK_PHONE_ID);
 const firstName = (n) => (String(n || "").trim().split(/\s+/)[0] || "there").slice(0, 40);
 export function buildPayload(c, contact, link) {
-  const val = (v) => v === "name" ? firstName(contact.name) : v === "fullname" ? (contact.name || "there") : v === "company" ? (contact.company || "your team") : v === "role" ? (contact.role || "") : v === "link" ? link : v.charAt(0) === "=" ? v.slice(1) : String(contact[v] || "");
+  const val = (v) => v === "name" ? firstName(contact.name) : v === "fullname" ? (contact.name || "there") : v === "company" ? (contact.company || "your team") : v === "role" ? (contact.role || "") : v === "link" ? link : v === "brn" ? (c.brn || "") : v === "why" ? (contact.why || "") : v.charAt(0) === "=" ? v.slice(1) : String(contact[v] || "");
   const comps = [];
   if (c.header) comps.push({ type: "header", parameters: [{ type: c.header.type, [c.header.type]: c.header.id ? { id: c.header.id } : { link: c.header.link } }] });
   if (c.vars.length) comps.push({ type: "body", parameters: c.vars.map((v) => ({ type: "text", text: (String(val(v)).replace(/\s+/g, " ").trim() || "-").slice(0, 900) })) });
@@ -306,10 +506,27 @@ export function buildPayload(c, contact, link) {
 }
 async function buildQueue(env, c) {
   const ix = await getJ(env, "camp_contact_index", []), list = [];
-  for (const d of ix) { const k = await getJ(env, "camp_contact_" + d, null); if (k && !k.opted_out && (k.tags || []).some((t) => c.tags.includes(t))) list.push(d); }
+  for (const d of ix) { const k = await getJ(env, "camp_contact_" + d, null); if (k && !k.opted_out && !k.undeliverable && (k.tags || []).some((t) => c.tags.includes(t))) list.push(d); }
   return { list, pos: 0, built: new Date().toISOString() };
 }
 
+// v726 - the ramp: today's step of c.ramp (default 50, 100, 150, 250 a day). Decided once per Dubai day: step up only when the previous
+// sending day's block rate was under 0.3% AND the phone is GREEN; otherwise hold. Never above c.cap or the shared cap (campStep takes the min).
+export function rampLevel(c, S, today, rating) {
+  const sched = c.ramp === false ? null : (Array.isArray(c.ramp) && c.ramp.length ? c.ramp : DEFAULTS.ramp);
+  if (!sched) return { cap: Infinity, level: -1 };
+  const st = Object.assign({ level: 0 }, S.ramp || {});
+  if (st.for === today) return { cap: sched[Math.min(st.level, sched.length - 1)], level: st.level };
+  const prev = Object.keys(S.day || {}).filter((d) => d < today && (S.day[d] || 0) > 0).sort().pop() || "";
+  let level = st.level || 0, why = "first day";
+  if (prev && prev !== st.prev) {
+    const n = S.day[prev] || 0, b = (S.bday || {})[prev] || 0, br = n ? b / n : 0, lim = (c.thresholds && c.thresholds.ramp_block != null) ? c.thresholds.ramp_block : DEFAULTS.rampBlock;
+    if (br < lim && rating === "GREEN") { level = Math.min(level + 1, sched.length - 1); why = "up: " + prev + " block rate " + (br * 100).toFixed(2) + "%"; }
+    else why = "hold: " + (rating !== "GREEN" ? "quality " + rating : prev + " block rate " + (br * 100).toFixed(2) + "%");
+  } else if (prev) why = "hold: no new sending day";
+  const state = { level, for: today, prev: prev || st.prev || "", why };
+  return { cap: sched[level], level, why, state };
+}
 // ONE step of a campaign: the minute tick (dry=false, status must be "live") and the dry run (dry=true) both come here.
 export async function campStep(env, c, deps, dry) {
   const now = (deps && deps.now) || Date.now(), f = (deps && deps.fetch) || fetch, graph = (deps && deps.graph) || "https://graph.facebook.com/v21.0";
@@ -321,23 +538,36 @@ export async function campStep(env, c, deps, dry) {
   if (c.phone === "main" && env.CAMP_MAIN_PHONE !== "on") { r.note = "main number refused: its replies and receipts do not reach this worker (set CAMP_MAIN_PHONE=on once routed)"; return r; }
   const open = inWindow(c, now); r.window = open;
   if (!open && !dry) { r.note = "outside window " + c.window; return r; }
+  // v726 - the phone's Meta quality: RED never sends (the webhook has already paused it); YELLOW halves the daily cap
+  const qual = await phoneQuality(env, c), rating = (qual && qual.rating) || "GREEN"; r.quality = rating;
+  if (rating === "RED") { r.note = "phone quality RED: not sending"; return r; }
+  for (const t of await campTemplates(env, c)) { const ts = await getJ(env, "camp_tpl_" + t, null); if (ts && (TPL_BLOCK.includes(ts.status) || ts.quality === "RED")) { r.note = "template " + t + " " + (ts.status || "quality " + ts.quality).toLowerCase() + ": not sending"; return r; } }
+  const bo = await getJ(env, "camp_backoff_" + c.id, null);
+  if (!dry && bo && bo.until > now) { r.note = "backing off after Meta code " + bo.code + " until " + new Date(bo.until).toISOString(); return r; }
   const S = Object.assign(blankStats(), await getJ(env, "camp_stats_" + c.id, {}));
   const why0 = stopReason(c, S); if (why0) { r.stop = why0; if (!dry) await autoStop(env, c.id, S, now); return r; }
   const today = dubaiDate(now), s24 = (await getJ(env, "camp_sent24", [])).filter((t) => now - t < DAY);
   const shared = Math.max(0, parseInt(env.CAMP_SHARED_CAP, 10) || DEFAULTS.shared);
-  let room = Math.min(c.batch || DEFAULTS.batch, (c.cap || DEFAULTS.cap) - (S.day[today] || 0), shared - s24.length);
-  if (dry) room = Math.min((c.cap || DEFAULTS.cap) - (S.day[today] || 0), shared - s24.length);   // the dry run shows the whole of today's allowance
+  const ramp = rampLevel(c, S, today, rating); r.ramp = ramp;
+  let dayCap = Math.min(c.cap || DEFAULTS.cap, ramp.cap, shared); if (rating === "YELLOW") dayCap = Math.floor(dayCap / 2); r.day_cap = dayCap;
+  let room = Math.min(c.batch || DEFAULTS.batch, dayCap - (S.day[today] || 0), shared - s24.length);
+  if (dry) room = Math.min(dayCap - (S.day[today] || 0), shared - s24.length);   // the dry run shows the whole of today's allowance
   r.room = Math.max(0, room); r.shared_used = s24.length; r.shared_cap = shared;
   if (room <= 0) { r.note = (shared - s24.length <= 0) ? "shared 24 h cap reached" : "daily cap reached"; return r; }
   let q = await getJ(env, "camp_q_" + c.id, null); if (!q) { q = await buildQueue(env, c); if (!dry) await putJ(env, "camp_q_" + c.id, q); }
   let pos = q.pos || 0; const sentIds = [];
   const freq = (c.freq_days != null ? c.freq_days : DEFAULTS.freqDays) * DAY;
-  while (room > 0 && pos < q.list.length) {
-    const d = q.list[pos++];
+  // v726 - owners whose own local time is outside 10:00-19:00 Mon-Fri wait in q.wait (worked first on every tick; the number alone gives the zone)
+  const wait = (q.wait || []).slice(), keepWait = []; let wi = 0;
+  while (room > 0 && (wi < wait.length || pos < q.list.length)) {
+    const fromWait = wi < wait.length, d = fromWait ? wait[wi++] : q.list[pos++];
+    if (!ownerOpen(c, d, now)) { skip("owner_local_hours"); if (!dry) keepWait.push(d); continue; }
     const k = await getJ(env, "camp_contact_" + d, null);
     if (!k) { skip("gone"); continue; }
-    if (await env.MEETINGS.get("camp_optout_" + d)) { skip("opted_out"); continue; }   // checked before EVERY message
+    if (await isOptedOut(env, d)) { skip("opted_out"); continue; }   // checked before EVERY message (v726: also the hashed "forget me" entries)
     if (k.opted_out) { skip("opted_out"); continue; }
+    if (k.undeliverable) { skip("undeliverable"); continue; }   // v726 - 131026 once: never again
+    if (c.vars.includes("why") && !k.why) { skip("no_reason_line"); continue; }   // the template must say why they are receiving it
     if (!k.consent || !k.consent.text || !k.consent.date) { skip("no_consent"); continue; }
     if (!(k.tags || []).some((t) => c.tags.includes(t))) { skip("tags_changed"); continue; }
     if (k.last_mkt && now - Date.parse(k.last_mkt) < freq) { skip("messaged_this_week"); continue; }
@@ -352,23 +582,31 @@ export async function campStep(env, c, deps, dry) {
     if (res && res.ok && wamid) {
       room--; r.sent++; s24.push(now); sentIds.push(wamid);
       await putJ(env, "camp_msg_" + wamid, { cid: c.id, d, at: new Date(now).toISOString(), st: "sent", link: code || undefined });
+      await statusRow(env, wamid, { cid: c.id, d, sent: new Date(now).toISOString() });
       k.last_mkt = new Date(now).toISOString(); k.last_camp = c.id; k.last_wamid = wamid; await putJ(env, "camp_contact_" + d, k);
       if (code) { const L = await getJ(env, "camp_link_" + code, null); if (L) { L.wamid = wamid; await putJ(env, "camp_link_" + code, L); } }
+      if (bo && bo.n) { await env.MEETINGS.delete("camp_backoff_" + c.id); bo.n = 0; }   // a good send ends the back-off run
     } else {
       code0 = Number(j && j.error && j.error.code) || 0; r.errors = (r.errors || []).concat([{ d: d.slice(0, 5) + "...", code: code0, msg: String(j && j.error && j.error.message || "").slice(0, 100) }]).slice(-10);
-      await bump(env, c.id, (x) => { x.sent++; x.failed++; x.err[code0] = (x.err[code0] || 0) + 1; if (QUALITY.includes(code0)) x.quality++; if (BLOCK.includes(code0)) x.blocks++; x.day[today] = (x.day[today] || 0) + 1; });
+      if (BACKOFF.includes(code0)) {   // v726 - nothing was sent: not a send, not a failure; this person goes first next time; wait and retry
+        await bump(env, c.id, (x) => { x.err[code0] = (x.err[code0] || 0) + 1; x.backoffs = (x.backoffs || 0) + 1; });
+        if (fromWait) wi--; else pos--;
+        const b = await backOff(env, c.id, code0, deps, now); r.backoff = b; break;
+      }
+      await bump(env, c.id, (x) => { x.sent++; x.failed++; x.err[code0] = (x.err[code0] || 0) + 1; if (QUALITY.includes(code0)) x.quality++; if (FLOW_BUG.includes(code0)) x.flow_bug = (x.flow_bug || 0) + 1;
+        if (BLOCK.includes(code0)) { x.blocks++; x.bday = x.bday || {}; x.bday[today] = (x.bday[today] || 0) + 1; } x.day[today] = (x.day[today] || 0) + 1; });
       if (BLOCK.includes(code0)) await optOut(env, d, "blocked_marketing", { cid: c.id, code: code0 }, now);
-      if (code0 === 131049) { /* Meta's per-person marketing cap: never retry in a loop; the person is skipped this week */ k.last_mkt = new Date(now).toISOString(); await putJ(env, "camp_contact_" + d, k); }
+      await failedCodes(env, c.id, d, [code0], deps, now);   // 131026 undeliverable for good; 131049 / 130472 skipped this cycle (no retry now); 131047 alert
       if (HARD_STOP.includes(code0)) break;
     }
   }
   if (dry) { r.queue = q.list.length; r.from = q.pos || 0; await putJ(env, "camp_dry_" + c.id, { at: new Date(now).toISOString(), window_open: open, room: r.room, would: r.would, skipped: r.skipped }); return r; }
-  q.pos = pos; await putJ(env, "camp_q_" + c.id, q);
+  q.pos = pos; q.wait = keepWait.concat(wait.slice(wi)); await putJ(env, "camp_q_" + c.id, q);
   await putJ(env, "camp_sent24", s24.filter((t) => now - t < DAY));
   if (sentIds.length) { const L = await getJ(env, "camp_msgs_" + c.id, []); await putJ(env, "camp_msgs_" + c.id, L.concat(sentIds)); }
-  const S2 = await bump(env, c.id, (x) => { x.sent += r.sent; x.day[today] = (x.day[today] || 0) + r.sent; for (const w of Object.keys(r.skipped)) x.skipped[w] = (x.skipped[w] || 0) + r.skipped[w]; });
+  const S2 = await bump(env, c.id, (x) => { x.sent += r.sent; x.day[today] = (x.day[today] || 0) + r.sent; if (ramp.state) x.ramp = ramp.state; for (const w of Object.keys(r.skipped)) x.skipped[w] = (x.skipped[w] || 0) + r.skipped[w]; });
   const why = await autoStop(env, c.id, S2, now); if (why) r.stop = why;
-  if (!why && pos >= q.list.length) { const cc = await getJ(env, "camp_" + c.id, null); if (cc && cc.status === "live") { cc.status = "done"; cc.done = new Date(now).toISOString(); await putJ(env, "camp_" + c.id, cc); } }
+  if (!why && pos >= q.list.length && !q.wait.length) { const cc = await getJ(env, "camp_" + c.id, null); if (cc && cc.status === "live") { cc.status = "done"; cc.done = new Date(now).toISOString(); await putJ(env, "camp_" + c.id, cc); } }
   return r;
 }
 // The minute tick: every LIVE campaign, one small batch each. Nothing else runs.
@@ -435,10 +673,14 @@ export async function campaignRoute(request, env, url, deps) {
     if (a === "create") {
       const ix = await getJ(env, "camp_index", []); if (ix.includes(String(b.id || ""))) return J({ ok: false, error: "id exists" }, 409);
       if (b.flow) { const f = await getJ(env, "camp_flow_" + String(b.flow), null); if (!f) return J({ ok: false, error: "no such flow" }, 400); const st = f.nodes[f.start];
-        b = Object.assign({}, b, { template: st.template, lang: st.lang, vars: st.vars || [], header: st.header || b.header, qr: (st.buttons || []).length, freq_days: b.freq_days || f.freq_days || 14 }); }
+        b = Object.assign({}, b, { template: st.template, lang: st.lang, vars: st.vars || [], header: st.header || b.header, qr: (st.buttons || []).length, freq_days: b.freq_days || f.freq_days || 14,
+          phone: b.phone || f.phone || "desk", stop_forgets: b.stop_forgets != null ? b.stop_forgets : !!f.stop_forgets }); }
       const { c, err } = cleanCampaign(b, null); if (err.length) return J({ ok: false, error: err }, 400);
       await putJ(env, "camp_" + c.id, c); ix.push(c.id); await putJ(env, "camp_index", ix); return J({ ok: true, campaign: c });
     }
+    if (a === "forget") { if (!owner) return J({ ok: false, error: "owner key" }, 403); const d = DIG(normPhone(b.phone)); if (!d) return J({ ok: false, error: "bad phone" }, 400);
+      await optOut(env, d, "owner_forget", {}, now); return J({ ok: true, removed: await forgetContact(env, d, "owner", now) }); }
+    if (a === "alerts") return J({ ok: true, alerts: await getJ(env, "camp_alerts", []), quality: { desk: await getJ(env, "camp_quality_desk", null), main: await getJ(env, "camp_quality_main", null) } });
     if (a === "optout") { const d = DIG(normPhone(b.phone)); if (!d) return J({ ok: false, error: "bad phone" }, 400); return J({ ok: true, fresh: await optOut(env, d, "owner", { note: String(b.note || "").slice(0, 80) }, now) }); }
     const c = ID_RE.test(id) ? await getJ(env, "camp_" + id, null) : null; if (!c) return J({ ok: false, error: "no such campaign" }, 404);
     const save = async (st, extra) => { c.status = st; Object.assign(c, extra || {}); await putJ(env, "camp_" + id, c); return J({ ok: true, campaign: c }); };
@@ -449,7 +691,7 @@ export async function campaignRoute(request, env, url, deps) {
       if (!owner) return J({ ok: false, error: "going live needs Kendall's approval (owner key)" }, 403);
       if (b.confirm !== id) return J({ ok: false, error: "confirm must equal the campaign id" }, 400);
       if (!["draft", "paused"].includes(c.status)) return J({ ok: false, error: "status " + c.status + " cannot go live" }, 409);
-      const { err } = cleanCampaign({}, c); if (err.length) return J({ ok: false, error: err }, 400);
+      const { err } = cleanCampaign({}, c); if (c.vars.includes("brn") && !c.brn) err.push("Najjuko's BRN is needed (update with brn)"); if (err.length) return J({ ok: false, error: err }, 400);
       return save("live", { started: c.started || new Date(now).toISOString(), live_by: "owner" });
     }
     if (a === "pause") { if (c.status !== "live") return J({ ok: false, error: "not live" }, 409); return save("paused", { paused: new Date(now).toISOString() }); }
@@ -590,6 +832,8 @@ export function cleanFlow(x) {
   if (!ID_RE.test(f.id)) err.push("flow id: lowercase letters, digits and dashes");
   if (x && /^[a-z0-9-]{1,40}$/.test(String(x.facts || ""))) f.facts = String(x.facts);
   if (x && Number(x.freq_days) > 0) f.freq_days = Math.min(60, Math.round(Number(x.freq_days)));
+  if (x && x.stop_forgets) f.stop_forgets = true;   // v726 - Stop deletes the person's details (the template promises it)
+  if (x && /^(main|desk)$/.test(String(x.phone || ""))) f.phone = String(x.phone);
   if (x && x.followup && x.followup.node) f.followup = { after_hours: Math.max(12, Math.min(24 * 14, Number(x.followup.after_hours) || 72)), node: String(x.followup.node) };
   const N = (x && x.nodes) || {};
   for (const id of Object.keys(N)) {
@@ -703,7 +947,11 @@ export async function flowFollowups(env, c, deps) {
   const ids = await getJ(env, "camp_msgs_" + c.id, []), cur = await getJ(env, "camp_fupos_" + c.id, 0);
   const s24 = (await getJ(env, "camp_sent24", [])).filter((t) => now - t < DAY), shared = parseInt(env.CAMP_SHARED_CAP, 10) || DEFAULTS.shared;
   const S = Object.assign(blankStats(), await getJ(env, "camp_stats_" + c.id, {})), today = dubaiDate(now);
-  let room = Math.min(c.batch || DEFAULTS.batch, (c.cap || DEFAULTS.cap) - (S.day[today] || 0), shared - s24.length), i = cur, sent = 0;
+  const qual = await phoneQuality(env, c), rating = (qual && qual.rating) || "GREEN"; if (rating === "RED" || (c.status !== "live" && c.status !== "done")) return r;   // v726
+  const bo = await getJ(env, "camp_backoff_" + c.id, null); if (bo && bo.until > now) return r;
+  if (n && n.template) { const ts = await getJ(env, "camp_tpl_" + n.template, null); if (ts && (TPL_BLOCK.includes(ts.status) || ts.quality === "RED")) return r; }
+  let dayCap = Math.min(c.cap || DEFAULTS.cap, rampLevel(c, S, today, rating).cap, shared); if (rating === "YELLOW") dayCap = Math.floor(dayCap / 2);
+  let room = Math.min(c.batch || DEFAULTS.batch, dayCap - (S.day[today] || 0), shared - s24.length), i = cur, sent = 0, firstWait = -1;
   const fc = Object.assign({}, c, { template: n.template, lang: n.lang, vars: n.vars || [], header: n.header || null, qr: (n.buttons || []).length });
   const f2 = (deps && deps.fetch) || fetch, graph = (deps && deps.graph) || "https://graph.facebook.com/v21.0", pid = phoneIdOf(env, c);
   for (; i < ids.length && room > 0; i++) {
@@ -711,20 +959,22 @@ export async function flowFollowups(env, c, deps) {
     if (now - Date.parse(m.at) < after) break;   // the list is in send order: the rest are younger
     const st = await getJ(env, "camp_state_" + c.id + "_" + m.d, null);
     if (m.replied || m.optout || (st && st.path && st.path.length)) { r.skipped.replied = (r.skipped.replied || 0) + 1; continue; }
-    if (await env.MEETINGS.get("camp_optout_" + m.d)) { r.skipped.opted_out = (r.skipped.opted_out || 0) + 1; continue; }
-    const k = await getJ(env, "camp_contact_" + m.d, null); if (!k) continue;
+    if (await isOptedOut(env, m.d)) { r.skipped.opted_out = (r.skipped.opted_out || 0) + 1; continue; }
+    if (!ownerOpen(c, m.d, now)) { r.skipped.owner_local_hours = (r.skipped.owner_local_hours || 0) + 1; if (firstWait < 0) firstWait = i; continue; }   // v726 - comes back next tick
+    const k = await getJ(env, "camp_contact_" + m.d, null); if (!k || k.undeliverable) continue;
     m.fu = true; await putJ(env, "camp_msg_" + ids[i], m);   // marked BEFORE the send, so a retry can never make it two
     let j = {}, ok = false;
     try { const res = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(buildPayload(fc, k, "")) }); j = await res.json().catch(() => ({})); ok = res.ok && !!(j.messages && j.messages[0]); } catch (e) {}
     if (ok) {
       const w = j.messages[0].id; room--; sent++; s24.push(now);
       await putJ(env, "camp_msg_" + w, { cid: c.id, d: m.d, at: new Date(now).toISOString(), st: "sent", fu: true, followup: true });
+      await statusRow(env, w, { cid: c.id, d: m.d, sent: new Date(now).toISOString(), followup: true });
       await putJ(env, "camp_state_" + c.id + "_" + m.d, Object.assign(st || { path: [] }, { node: f.followup.node, followed_node: f.followup.node }));
       k.last_mkt = new Date(now).toISOString(); k.last_wamid = w; await putJ(env, "camp_contact_" + m.d, k);
       const L = await getJ(env, "camp_msgs_" + c.id, []); L.push(w); await putJ(env, "camp_msgs_" + c.id, L);
     }
   }
-  await putJ(env, "camp_fupos_" + c.id, i); await putJ(env, "camp_sent24", s24);
+  await putJ(env, "camp_fupos_" + c.id, firstWait >= 0 ? Math.min(i, firstWait) : i); await putJ(env, "camp_sent24", s24);
   if (sent) await bump(env, c.id, (x) => { x.sent += sent; x.followups = (x.followups || 0) + sent; x.day[today] = (x.day[today] || 0) + sent; });
   r.followups = sent; return r;
 }
@@ -787,7 +1037,11 @@ const shortTitle = (t, n) => { t = String(t || ""); if (t.length <= n) return t;
 // a template node as an interactive message: buttons when it fits (3 options, 20 chars), otherwise a list (full wording in the description)
 export function previewTemplatePayload(f, nid, to, facts) {
   const n = f.nodes[nid], opts = n.buttons || [], k = { name: PV_NAME };
-  const text = "TEST PREVIEW (template " + n.template + ")\n\n" + fill(n.body || n.text || "(no draft wording stored for this template)", k, facts);
+  // v726 - {{2}}, {{3}} ... follow the node's vars: the reason line and the BRN show as clear samples in a preview
+  const PV_VAR = { why: "you own a unit at Palm Jebel Ali (sample reason)", brn: "(to confirm)" };
+  let bodyT = String(n.body || n.text || "(no draft wording stored for this template)");
+  (n.vars || []).forEach((v, i) => { if (i > 0) bodyT = bodyT.split("{{" + (i + 1) + "}}").join(PV_VAR[v] || (v.charAt(0) === "=" ? v.slice(1) : "(" + v + ")")); });
+  const text = "TEST PREVIEW (template " + n.template + ")\n\n" + fill(bodyT, k, facts);
   if (opts.length <= 3 && opts.every((b) => b.title.length <= 20)) return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text }, action: { buttons: opts.map((b, i) => ({ type: "reply", reply: { id: "pv:" + f.id + ":" + nid + ":" + i, title: b.title } })) } } };
   return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "list", body: { text }, action: { button: "Choose", sections: [{ title: "Your options", rows: opts.map((b, i) => Object.assign({ id: "pv:" + f.id + ":" + nid + ":" + i, title: shortTitle(b.title, 24) }, b.title.length > 24 ? { description: b.title.slice(0, 72) } : {})) }] } } };
 }
