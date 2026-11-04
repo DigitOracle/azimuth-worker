@@ -27,6 +27,14 @@ const escH = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&":
 
 async function readJson(env, k) { try { const v = await env.MEETINGS.get(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
 
+function editDist(a, b) {   // v762 - Levenshtein, small words only
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+
 export async function ppSearch(env, q) {
   const n = normQ(q);
   if (n.length < 2) return { q: n, results: [], total: 0, short: true };
@@ -50,9 +58,16 @@ export async function ppSearch(env, q) {
     if (!g.ids.has(e[2])) { g.ids.add(e[2]); g.n++; g.d[dist] = (g.d[dist] || 0) + 1; }
     G.set(nm.toLowerCase(), g);
   }
-  const groups = [...G.values()].filter((g) => g.n > 1).sort((x, y) => y.n - x.n).slice(0, 8)
+  const groups = [...G.values()].filter((g) => g.n > 1 || /\s-\s*\S/.test(g.name)).sort((x, y) => y.n - x.n).slice(0, 8)
     .map((g) => ({ name: g.name, plots: g.n, district: Object.entries(g.d).sort((x, y) => y[1] - x[1])[0][0], districts: Object.keys(g.d).length }));
-  return { q: n, results: out, total, groups };
+  const w0 = n.split(" ")[0], near = new Map();
+  const known = shard.filter((e) => (" " + e[0] + " ").indexOf(" " + w0 + " ") >= 0).length >= 10;   // a rare real word (Orchard, 3 entries) still gets its near names (Orchid)
+  if (w0.length >= 4 && !known) for (const e of shard) for (const w of e[0].split(" ")) {
+    if (w === w0 || near.has(w) || Math.abs(w.length - w0.length) > 2 || w.indexOf(w0) === 0) continue;
+    if (editDist(w, w0) <= 2) near.set(w, String(e[1]).split(" \u00b7 ")[0]);
+    if (near.size >= 4) break;
+  }
+  return { q: n, results: out, total, groups, didYouMean: [...near.keys()] };
 }
 
 export async function ppGet(env, id) {
