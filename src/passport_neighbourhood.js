@@ -1,7 +1,7 @@
 // v734 - the Building Passport neighbourhood from LOCATION, for every plot, built or empty (Kendall, 4 Nov 2026: "we know where the plot is,
 // we know the GPS, we know the neighbourhood, we have district DNA, so that all needs to be tied in").
 // Data: naj-market-pulse/scripts/plot_passport_neighbourhood.py -> KV pp_nb_<crc32(plot id) % 4096> {plot id: nb} and pp_dna {district: dna}.
-// Plot facts (coordinator, 4 Nov): plot height (lk_plot_heights), project bind (lk_plot_project_bind), zoning (lk_zoning_plot) ride on nb.facts.
+// Plot facts (coordinator, 4 Nov): floors (lk_plot_floors, the headline), height (lk_plot_heights, evidence only), project bind (lk_plot_project_bind), zoning (lk_zoning_plot) ride on nb.facts.
 // Never invented: anything missing says "Not available yet" and names the source it would come from.
 import { ppCrc32 } from "./plot_passport.js";
 
@@ -86,10 +86,26 @@ export function dnaLines(pack) {
 // plot facts: height, project bind, zoning (display rules from the coordinator, 4 Nov 2026)
 export function plotFactLines(pack) {
   const f = ((pack || {}).nb || {}).facts || {}, L = [], missing = [], flags = [];
+  // v734 (Kendall): an end user reads FLOORS, never a height. Floors are the headline (lk_plot_floors); height is background evidence only.
+  const fl = f.fl;
+  const est = fl && fl.floors_source === "estimate";
+  const estOk = est && /^(high|medium)$/i.test(String(fl.est_confidence || "")) && /^About\b/.test(String(fl.floors_label || "")) && fl.floors_low != null && fl.floors_high != null;
+  if (fl && fl.floors_label && (!est || estOk) && !(est && fl.floors_shown === false)) {
+    const dld = /DLD/.test(fl.floors_source || "");
+    let lab = String(fl.floors_label);
+    if (dld && !/at least/i.test(lab)) lab = "At least " + lab.charAt(0).toLowerCase() + lab.slice(1);
+    const xs = [];
+    if (est) xs.push("estimate, " + fl.est_confidence + " confidence, likely " + fl.floors_low + " to " + fl.floors_high + " levels");
+    if (fl.dm_record_text) xs.push("DM record as written: \"" + fl.dm_record_text + "\"");
+    for (const k of ["roof_note", "basement_note", "multi_building_note"]) if (fl[k]) xs.push(fl[k]);
+    L.push("Floors (section 02 headline; print the label exactly): " + lab + (fl.floors_source ? " (source: " + fl.floors_source + ")" : "") + (xs.length ? ". " + xs.join(". ") : "") + ".");
+  } else if (fl && est) L.push("Floors (section 02 headline): Building present - floors not verified.");
+  else if (fl && fl.floors_label) L.push("Floors (section 02 headline; print exactly): " + fl.floors_label + ".");
+  else missing.push("floors (floor count not loaded yet)");
   const h = f.h;
   if (h && h.src && h.m != null) {
-    L.push("Plot height (section 02): tallest building about " + Math.round(h.m) + " m, " + (h.kind || h.src) + " (source " + h.src + "). This is NOT a Dubai Municipality height; never call it one." + (/towers read low/i.test(h.kind || "") ? " Print the note: towers read low on this source, check." : ""));
-  } else missing.push("building height: height not verified");
+    L.push("Height evidence (background only, put it in section 12 Evidence, never as a headline or beside the floors): tallest building about " + Math.round(h.m) + " m, " + (h.kind || h.src) + " (source " + h.src + "). Not a Dubai Municipality height; never call it one." + (/towers read low/i.test(h.kind || "") ? " Note: towers read low on this source, check." : ""));
+  }
   const b = f.bind;
   if (b) {
     const lvl = b.plot_level === true ? "plot level" : "project-level (one of " + (b.plots_in_project != null ? int(b.plots_in_project) : "several") + " plots)";
