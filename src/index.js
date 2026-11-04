@@ -5228,7 +5228,8 @@ function najStartHtml(key, rk, isOwner) {
 function najMoreHtml(key, rk, owner) {
   const esc3 = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const k = encodeURIComponent(key || "");
-  const rooms = NAJ_ROOMS.concat(PLOT_ROOMS).filter((r) => owner || r[1].indexOf("/plot_") !== 0).map(   // v742 - the plot rooms open only for an owner key (keyTier admin), so a client key is not shown a door that refuses it
+  const ON_BAR = ["/find", "/market", "/map", "/skyline"];   // v749 (Kendall, 4 Nov: "MORE has got bloated"): rooms already on the bottom bar are not repeated here
+  const rooms = NAJ_ROOMS.concat(PLOT_ROOMS).filter((r) => !ON_BAR.some((p) => r[1].split("?")[0] === p)).filter((r) => owner || r[1].indexOf("/plot_") !== 0).map(   // v742 - the plot rooms open only for an owner key (keyTier admin), so a client key is not shown a door that refuses it
    (r) => {   // v691 - PLOT_ROOMS from src/plot_intel.js
     const href = r[1] + (r[1].indexOf("?") >= 0 ? "&key=" : "?key=") + k + (rk ? "&rk=" + encodeURIComponent(rk) : "");
     return '<a class=rm href="' + esc3(href) + '"><div class=t>' + najIcon(r[2]) + esc3(r[0]) + '</div><p>' + esc3(r[3]) + '</p></a>';
@@ -5243,8 +5244,8 @@ function najMoreHtml(key, rk, owner) {
     + '<title>More \u2014 Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + NAJ_FONTS
     + '<style>' + NAJ_START_CSS + NAJ_NAV_CSS + '</style></head><body>'
     + '<div class=h>Every <em>room</em></div>'
-    + '<div class=s>What each one is for, in words you can say out loud. The six on the bar are the ones you will use standing in front of someone.</div>'
-    + rooms + priv
+    + '<div class=s>The rooms that are not on the bar below. Find, Pulse, Map and Twin live on the bar.</div>'
+    + '<style>.mg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mg .rm{margin:0}.mg .rm p{font-size:.8rem}</style><div class=mg>' + rooms + priv + '</div>'
     + (ownerRooms ? '<div class=hd>YOURS</div>' + ownerRooms : "")
     + najNav(key, "more", rk) + '</body></html>';
 }
