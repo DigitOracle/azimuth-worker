@@ -412,7 +412,7 @@ export function bppPrompt(f, dateText) {
     + "\nNot available yet (show as such, grey chip): " + f.missing.join("; ") + "."
     + "\nRisks (computed; print exactly these): " + f.risks.map((r, i) => "(" + String.fromCharCode(97 + i) + ") " + r).join(" ")
     + "\nOpportunities (computed; print exactly these): " + f.opps.map((r, i) => "(" + String.fromCharCode(97 + i) + ") " + r).join(" ")
-    + (f.finance && f.finance.length ? "\nFINANCE for section 07 Investment on page 2 (v727; it replaces the plain investment KPI cards; print exactly; under every figure say observed or assumed and its source and as-of date as given; a figure marked preliminary shows the word \"preliminary\" and NO number; show the assumptions as a small table with their values; keep it inside page 2):\n" + f.finance.join("\n") : "")
+    + (f.finance && f.finance.length ? "\nFINANCE for section 07 Investment on page 2 (v727; it replaces the plain investment KPI cards; print exactly; under every figure say observed or assumed and its source and as-of date as given; a figure marked preliminary shows the word \"preliminary\" and NO number; the ASSUMPTIONS table goes on PAGE 3, never page 2 (v729: on page 2 it overflowed): a compact two-column grid (label | value, source on the same line in 6.5pt), 7pt type, tight rows; page 2 keeps only the headline figures):\n" + f.finance.join("\n") : "")
     + "\nDisclaimer: Research use only. Not a valuation, legal title or offer. Registered deals are actual prices; adverts are asking prices.";
 }
 
@@ -561,7 +561,7 @@ export async function bppResolve(env, text) {
 async function oaiStart(env, input) {
   const r = await fetch(OAI, { method: "POST", headers: { Authorization: "Bearer " + env.OPENAI_API_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ model: MODEL, input, background: true, store: true }) });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.id) throw new Error("ChatGPT did not accept the request (" + r.status + ")");
+  if (!r.ok || !j.id) throw new Error("The writer did not accept the request (" + r.status + ")");
   return j.id;
 }
 async function oaiGet(env, id) {
@@ -637,12 +637,12 @@ export async function bppTick(env, nowMs) {
         await putReq(env, id, r); return { started: id };
       }
       if (r.status === "writing" || r.status === "fixing") {
-        if (now - Date.parse(r.started || r.at) > 60 * 60e3) { r.status = "failed"; r.msg = "ChatGPT took over an hour."; await putReq(env, id, r); continue; }
+        if (now - Date.parse(r.started || r.at) > 60 * 60e3) { r.status = "failed"; r.msg = "The writer took over an hour."; await putReq(env, id, r); continue; }
         const o = await oaiGet(env, r.resp);
         if (o.status === "queued" || o.status === "in_progress") return { waiting: id };
-        if (o.status !== "completed") { r.status = "failed"; r.msg = "ChatGPT stopped (" + (o.status || "unknown") + ")."; await putReq(env, id, r); continue; }
+        if (o.status !== "completed") { r.status = "failed"; r.msg = "The writer stopped (" + (o.status || "unknown") + ")."; await putReq(env, id, r); continue; }
         const html = extractHtml(responseText(o));
-        if (!html) { r.status = "failed"; r.msg = "ChatGPT returned no HTML."; await putReq(env, id, r); continue; }
+        if (!html) { r.status = "failed"; r.msg = "The writer returned no passport."; await putReq(env, id, r); continue; }
         r.lock = new Date(now).toISOString(); await putReq(env, id, r);
         const logo = await withLogo(env, html);
         const ph = await readJson(env, "bpp_photo_" + r.slug);   // v702 - the page links the live picture; the PDF gets it once, at render
@@ -672,6 +672,16 @@ export async function bppTick(env, nowMs) {
 const SIGN = { najjuko: "\\n\\nKind regards,\\nNajjuko", kendall: "\\n\\nKind regards,\\nDr. Kendall Wilson\\nDigitAlchemy Tech Limited\\ncontact@digitalabbot.io | +971 56 227 6093" };
 const ic = (d, s, c) => '<svg viewBox="0 0 24 24" width=' + (s || 26) + ' height=' + (s || 26) + ' fill="none" stroke="' + (c || "#C5A56A") + '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + d + '</svg>';
 const forWho = (k) => (k === "investor" ? "an investor" : "a " + k);   // v727
+// v729 - say the view that was BUILT (reader_used), and why, when the plot changed it
+export function reqWho(r) {
+  if (!r || !BPP_READERS[r.reader]) return "";
+  const asked = readerFor(r.reader), used = BPP_READERS[r.reader_used] ? r.reader_used : asked;
+  if (used === asked) return "for " + forWho(asked);
+  if (used === "developer") return "for a developer (empty plot; " + asked + " view needs a built plot)";
+  return "for " + forWho(used) + " (built plot; developer view needs an empty plot)";
+}
+export function bppElapsed(r, now) { const t = Date.parse(r && r.at || ""); if (!Number.isFinite(t)) return ""; const m = Math.max(0, Math.round(((now || Date.now()) - t) / 60e3)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min"; }
+export const bppStatusRow = (r, now) => ({ id: r.id, status: r.status, label: ST[r.status] || r.status, msg: r.msg || "", title: r.title || r.text || "", reader: r.reader || "", reader_used: r.reader_used || "", who: reqWho(r), elapsed: bppElapsed(r, now) });
 const ST = { pending: "Waiting to start", writing: "Being made", fixing: "Being made (fitting to 3 pages)", done: "Ready", failed: "Could not be made", "needs a plot number": "Needs a plot number" };
 
 export function bppBody(key, rk, items, reqs, origin, who, nowMs) {
@@ -690,7 +700,9 @@ export function bppBody(key, rk, items, reqs, origin, who, nowMs) {
   const stats = '<div class=sts id=bpp_stats><div><b id=bpp_sp>-</b><span>plots in the register</span></div><div><b id=bpp_sd>-</b><span>districts</span></div><div><b>' + items.length + '</b><span>ready (24 h)</span></div></div>'
     + '<style>.sts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0 4px}.sts div{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:12px 8px;text-align:center}.sts b{display:block;font:600 1.25rem Fraunces,serif;color:#0A4F4A}.sts span{font:500 .72rem "IBM Plex Sans",sans-serif;color:#5F6B66}.made summary{font:600 1.05rem Fraunces,serif;color:#0A4F4A;cursor:pointer;margin:22px 0 8px}</style>';
   const rq = reqs.filter((r) => r && r.status !== "done").slice(-12).reverse();
-  const reqH = rq.length ? '<div class=rl id=bpp_reqs>' + rq.map((r) => '<div class=rq><b>' + esc((r.title || r.text) + (r.reader && BPP_READERS[r.reader] ? " · for " + forWho(r.reader) : "")) + '</b><span class="s s_' + esc(String(r.status).replace(/\W/g, "")) + '">' + esc(ST[r.status] || r.status) + '</span>' + (r.msg ? '<i>' + esc(r.msg) + '</i>' : "") + '</div>').join("") + '</div>' : "";
+  const reqH = rq.length ? '<div class=rl id=bpp_reqs>' + rq.map((r) => '<div class=rq data-id="' + esc(r.id || "") + '"><b>' + esc((r.title || r.text) + (reqWho(r) ? " · " + reqWho(r) : "")) + '</b><span class="s s_' + esc(String(r.status).replace(/\W/g, "")) + '">' + esc(ST[r.status] || r.status) + '</span><em class=el>' + esc(bppElapsed(r, now)) + '</em>' + (r.msg ? '<i>' + esc(r.msg) + '</i>' : "") + '</div>').join("") + '</div>'
+    // v729 - live rows: while any job is still being made, ask for its status every 15 s; a finished one reloads the list
+    + '<style>.rq .el{font:500 .72rem "IBM Plex Mono",monospace;color:#8A6F3E;font-style:normal}</style><script>(function(){var T=null;function tick(){var rows=document.querySelectorAll("#bpp_reqs .rq[data-id]"),open=[];Array.prototype.forEach.call(rows,function(x){var s=x.querySelector(".s");if(s&&!/s_(done|failed|needsaplotnumber)/.test(s.className))open.push(x.getAttribute("data-id"))});if(!open.length)return;'+ 'fetch("/momo/work/passports/api"+location.search,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op:"status",ids:open})}).then(function(r){return r.json()}).then(function(j){var done=false;(j.requests||[]).forEach(function(q){var x=document.querySelector("#bpp_reqs .rq[data-id="+q.id+"]");if(!x)return;var s=x.querySelector(".s");s.className="s s_"+String(q.status).replace(/\\W/g,"");s.textContent=q.label;x.querySelector("b").textContent=q.title+(q.who?" \u00b7 "+q.who:"");x.querySelector(".el").textContent=q.elapsed;var i=x.querySelector("i");if(q.msg){if(!i){i=document.createElement("i");x.appendChild(i)}i.textContent=q.msg}if(q.status==="done")done=true});if(done){location.reload();return}T=setTimeout(tick,15000)}).catch(function(){T=setTimeout(tick,15000)})}T=setTimeout(tick,15000)})()</script>' : "";
   return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Building Passports</h1>' + stats
     + '<h2>Request a passport</h2><form id=bpp_f class=fm>'   // v698 (Kendall, 3 Nov): district first, then its buildings - no typing through thousands
     // v703 (Kendall, 3 Nov: "go hierarchy"): area first (Dubai 2040 urban centre, OUR grouping, see BPP_ZONES), then district, then building
@@ -742,6 +754,11 @@ export async function bppRoute(request, env, url, deps) {
   if (p === "/momo/work/passports/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) {}
     if (b.op === "cleanup") return who === "kendall" ? J(await bppCleanup(env, b.confirm)) : J({ ok: false, error: "Not allowed." }, 403);   // v728 - one-off, dry run unless confirmed
+    if (b.op === "status") {   // v729 - the card polls this while a job is being made
+      const want = (Array.isArray(b.ids) ? b.ids : []).map(String).filter((x) => /^[a-z0-9]{6,24}$/.test(x)).slice(0, 20);
+      const all = await readReqIds(env), ids = want.length ? want.filter((x) => all.includes(x)) : all.slice(-20), now = Date.now();
+      return J({ ok: true, requests: (await Promise.all(ids.map((id) => readReq(env, id)))).filter(Boolean).map((r) => bppStatusRow(r, now)) });
+    }
     if (b.op !== "request") return J({ ok: false, error: "Unknown action." }, 400);
     const text = String(b.text || "").replace(/\s+/g, " ").trim().slice(0, 120);
     if (text.length < 2) return J({ ok: false, error: "Type a building name or a plot number." }, 400);

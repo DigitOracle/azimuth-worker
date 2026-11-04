@@ -97,5 +97,28 @@ ok(B.bppTtl("u-bora-3466876").expirationTtl === 86400 && B.bppTtl("t-test") === 
   ok(/status: "pending" \}\)/.test(src) && !/readBppIndex\(env\)[^\n]*op === "request"/.test(src), "request always queues a new build");
 }
 
+// ---------- coordinator additions: live status, reader actually built, no model names, assumptions on page 3
+{
+  ok(B.reqWho({ reader: "investor", reader_used: "developer" }) === "for a developer (empty plot; investor view needs a built plot)", "empty plot: says the developer view was built");
+  ok(B.reqWho({ reader: "investor", reader_used: "investor" }) === "for an investor" && B.reqWho({ reader: "investor" }) === "for an investor", "same reader unchanged");
+  ok(/built plot; developer view needs an empty plot/.test(B.reqWho({ reader: "developer", reader_used: "broker" })), "built plot asked as developer");
+  ok(B.bppElapsed({ at: iso(NOW - 2 * 60e3) }, NOW) === "2 min" && B.bppElapsed({ at: iso(NOW - 75 * 60e3) }, NOW) === "1 h 15 min", "elapsed text");
+  const reqs = [{ id: "bbbbbb1", text: "3466876", reader: "investor", reader_used: "developer", status: "fixing", at: iso(NOW - 3 * 60e3) }];
+  const body = B.bppBody("k", "", [], reqs, "https://x", "kendall", NOW);
+  ok(body.includes('data-id="bbbbbb1"') && body.includes("3 min") && body.includes("for a developer (empty plot"), "request row: id, elapsed, built view");
+  const scripts = [...body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  let parsed = true; scripts.forEach((c) => { try { new Function(c); } catch (e) { parsed = false; console.log(e.message); } });
+  ok(scripts.length >= 2 && parsed, "card scripts parse");
+  ok(scripts.some((c) => /op:"status"/.test(c) && /15000/.test(c) && /location\.reload/.test(c)), "poll every 15 s, reload when done");
+  const kv = memKV({ bpp_requests: JSON.stringify(["bbbbbb1", "bbbbbb2"]), bpp_req_bbbbbb1: JSON.stringify(reqs[0]), bpp_req_bbbbbb2: JSON.stringify({ id: "bbbbbb2", text: "x", reader: "broker", status: "failed", msg: "The writer stopped (x).", at: iso(Date.now()) }) });
+  const deps = { person: () => "kendall", page: (k, rk, b) => b };
+  const res = await B.bppRoute(new Request("https://x/momo/work/passports/api", { method: "POST", body: JSON.stringify({ op: "status", ids: ["bbbbbb1", "zzzzzz9", "../bad"] }) }), { MEETINGS: kv }, new URL("https://x/momo/work/passports/api"), deps);
+  const j = await res.json();
+  ok(j.ok && j.requests.length === 1 && j.requests[0].status === "fixing" && j.requests[0].label === "Being made (fitting to 3 pages)" && j.requests[0].reader_used === "developer" && /developer/.test(j.requests[0].who), "status op returns the live rows", j);
+  const src = fs.readFileSync(new URL("../src/building_passports.js", import.meta.url), "utf8");
+  ok(!/(msg = |new Error\()"ChatGPT/.test(src) && !/msg = "[^"]*(ChatGPT|OpenAI|GPT)/.test(src), "no AI model named in any user-visible message");
+  ok(/ASSUMPTIONS table goes on PAGE 3, never page 2/.test(src) && /two-column grid/.test(src), "assumptions table compact, on page 3");
+}
+
 console.log("v729 passport expiry: " + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
