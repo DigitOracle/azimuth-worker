@@ -34,7 +34,9 @@ import { musicRoute, renderVideo, overlayImage } from "./music.js";
 import { newsTick as deskNewsTick } from "./desk_news.js";   // v473 - the desk news watcher (AI, UAE tech, Dubai events, smart city / ISO, projects)   // v467 - music for posts (library route + the da-video service)
 import { liRoute, liRecord, liConnected, liStartLink, liStep, liReminder, liPostImages } from "./li_desk.js";   // v464 - LinkedIn from the desk   // v460 - an approved Instagram reel finishes on the minute tick
 import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
-import { templateRoutes, feedTemplateFlag, templateWatchTick, daTemplateSubmitTick } from "./wa_templates.js";   // v329 - owner-only template create/status/use routes + the feed_template flag
+import { templateRoutes, feedTemplateFlag, templateWatchTick, daTemplateSubmitTick } from "./wa_templates.js";
+import { CK_JS } from "./checkin.js";   // v764
+import { checkinRoute } from "./work_log.js";   // v764   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { buildingData, buildingPageHtml } from "./building_page.js";
@@ -4919,6 +4921,8 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/price_slider") return new Response(PRICE_SLIDER_HTML, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Robots-Tag": "noindex" } });   // v661 - public, no key
     if (url.pathname.startsWith("/live/")) { const _lv = await liveRoute(request, env, url); if (_lv) return _lv; }   // v659 - public, before every key gate
+    if (url.pathname === "/momo/checkin.js") return new Response(CK_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });   // v764 - the WhatsApp check-in picker (no data in it)
+    if (url.pathname.startsWith("/momo/checkin/")) return checkinRoute(request, env, url);   // v764 - public by design: one task, one person, 7 days, no key
     if (url.pathname.startsWith("/c/") || url.pathname.startsWith("/cb/") || url.pathname.startsWith("/momo/campaigns")) { const _cp = await campaignRoute(request, env, url, { person: personOfKey, isNaj: isNajjuko, ctEq, page: momoPage, graph: WA_GRAPH }); if (_cp) return _cp; }   // v723 - tracked links (public) and the Campaigns card (her key, Kendall's key or READ_KEY; its own gate)
     if (url.pathname.startsWith("/momo/bridge/")) { const _br = await bridgeRoute(request, env, url); return _br || new Response(JSON.stringify({ ok: false, code: "not_found", error: "Unknown route." }), { status: 404, headers: { "Content-Type": "application/json" } }); }   // v654 - first, before every key gate: the bridge has its own header auth
     { const _wd = await deskRegRoutes(request, env, url, { graph: WA_GRAPH }); if (_wd) return _wd; }   // v409
