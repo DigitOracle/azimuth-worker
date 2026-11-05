@@ -228,7 +228,7 @@ ok(calls.every((c) => c.body.to !== "971500000099"), "the handover never message
 // (c) another Palm investment -> tracked link to the /cb/ brief, then a call offer
 calls.length = 0; await tap("971500000013", 2, pids[2]);
 const lk = calls[0].body.text.body.match(/https:\/\/w\/c\/([0-9A-Za-z]{8})/);
-ok(lk && JSON.parse(store.get("camp_link_" + lk[1])).url === "https://w/cb/palm-springs" && calls[1].body.interactive.action.buttons[0].reply.title === "Book a call", "(c) brief sent as a tracked link + call offer", calls.map((c) => c.body));
+ok(lk && JSON.parse(store.get("camp_link_" + lk[1])).url === "https://w/dp/palm-springs?r=investor&ty=1" && calls[1].body.interactive.action.buttons[0].reply.title === "Book a call", "(c) brief sent as a tracked link + call offer", calls.map((c) => c.body));
 // (d) not now -> one gentle ask
 calls.length = 0; await tap("971500000014", 3, pids[3]);
 ok(calls.length === 1 && /every two weeks/.test(calls[0].body.interactive.body.text), "(d) one gentle updates ask");
@@ -252,7 +252,7 @@ calls.length = 0; await C.campTick(env, { now: IN + 9 * 86400000 }); ok(calls.le
 // ---- the /cb/ brief page: only stated facts, gaps say "to confirm" ----
 store.set("camp_brief_palm-springs", JSON.stringify({ slug: "palm-springs", project: "Palm Springs", developer: "Test Developer", price: "AED 1M to AED 2M (indicative)", payment_plan: "to confirm", handover: "", unit_types: "3-bed townhouses", highlights: ["Park"], images: [] }));
 r = await get("/cb/palm-springs"); t = await r.text();
-ok(r.status === 200 && t.includes("Test Developer") && t.includes("AED 1M to AED 2M") && (t.match(/class=tbc>to confirm/g) || []).length >= 2, "brief page: facts shown, missing fields 'to confirm'", t.slice(0, 200));
+ok(r.status === 301 && /\/dp\/palm-springs$/.test(r.headers.get("Location") || ""), "v771: /cb/palm-springs now opens the district passport (301 to /dp/)", r.status);
 ok(!/AED [0-9.]+M<\/b><\/div>.*Handover<\/i><b>[0-9]/.test(t), "no invented handover date");
 r = await get("/cb/nope"); ok(r.status === 404, "unknown brief 404");
 

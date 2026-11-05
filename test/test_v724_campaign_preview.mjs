@@ -93,7 +93,7 @@ store.set("camp_brief_palm-central", JSON.stringify({ slug: "palm-central", proj
   units_register: { value: "Frond X: 10 units", source: "TEST register", as_of: "2026-11-02" }, price: { value: "1 B/R median AED 1,000,000 (3 sales)", source: "TEST DLD", as_of: "2026-11-02" },
   payment_plan: { value: "to confirm", source: "TEST brochure", as_of: "2026-11-03" }, handover: { value: "", source: "TEST", as_of: "" }, highlights: { value: ["Pool", "Park"], source: "TEST brochure", as_of: "2026-11-03" } }));
 r = await worker.fetch(new Request("https://w/cb/palm-central"), env, ctx); const t = await r.text();
-ok(r.status === 200 && t.includes("Test Dev") && t.includes("<em>TEST brochure, 2026-11-03</em>") && t.includes("Units (DLD register)") && t.includes("Pool, Park") && (t.match(/class=tbc>to confirm/g) || []).length >= 3, "brief: sources and dates printed, gaps to confirm", t.slice(-1500));
+ok(r.status === 301 && /\/dp\/palm-central$/.test(r.headers.get("Location") || ""), "v771: /cb/palm-central now opens the district passport (301 to /dp/)", r.status);
 
 console.log("test_v724_campaign_preview: " + pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

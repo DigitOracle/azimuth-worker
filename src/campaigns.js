@@ -46,6 +46,8 @@ export const BACKOFF_STEPS = [30000, 120000, 600000, 1800000, 3600000];   // 30 
 // RENEW BY 22 Jul 2027: after that date the campaign must stop quoting it. A campaign may still set its own brn.
 export const NAJ_BRN = "98949", NAJ_BRN_EXPIRES = "2027-07-22";
 
+import { DP_SETS, dpReader } from "./district_passport.js";   // v771
+
 // ---------- phone numbers ----------
 // UAE mobile: 05X XXX XXXX, 5X XXX XXXX, 9715..., 009715..., +9715... -> +9715XXXXXXXX. Other countries need a full + or 00 prefix.
 export function normPhone(raw) {
@@ -644,7 +646,7 @@ export const isCampOwner = (env, url, deps) => { const k = url.searchParams.get(
 export async function campaignRoute(request, env, url, deps) {
   const p = url.pathname;
   if (p.startsWith("/c/")) return linkRoute(request, env, url, deps && deps.now);
-  if (p.startsWith("/cb/")) return briefRoute(request, env, url);
+  if (p.startsWith("/cb/")) { const _m = p.match(/^\/cb\/([a-z0-9-]{1,60})\/?$/); if (_m && DP_SETS[_m[1]]) return Response.redirect(new URL("/dp/" + _m[1] + url.search, url.origin).toString(), 301); return briefRoute(request, env, url); }   // v771 - /cb/ -> /dp/
   if (!p.startsWith("/momo/campaigns")) return null;
   if (!isCampViewer(env, url, deps)) return new Response("not found", { status: 404 });
   const owner = isCampOwner(env, url, deps);
@@ -837,7 +839,8 @@ export function cleanFlow(x) {
   if (!ID_RE.test(f.id)) err.push("flow id: lowercase letters, digits and dashes");
   if (x && /^[a-z0-9-]{1,40}$/.test(String(x.facts || ""))) f.facts = String(x.facts);
   if (x && Number(x.freq_days) > 0) f.freq_days = Math.min(60, Math.round(Number(x.freq_days)));
-  if (x && x.stop_forgets) f.stop_forgets = true;   // v726 - Stop deletes the person's details (the template promises it)
+  if (x && x.stop_forgets) f.stop_forgets = true;
+  if (x && x.send_card != null) f.send_card = x.send_card !== false;   // v771 - Najjuko's broker card after engagement (default on when absent)   // v726 - Stop deletes the person's details (the template promises it)
   if (x && /^(main|desk)$/.test(String(x.phone || ""))) f.phone = String(x.phone);
   if (x && x.followup && x.followup.node) f.followup = { after_hours: Math.max(12, Math.min(24 * 14, Number(x.followup.after_hours) || 72)), node: String(x.followup.node) };
   const N = (x && x.nodes) || {};
@@ -845,7 +848,7 @@ export function cleanFlow(x) {
     const n = N[id] || {}; if (!/^[a-z0-9_-]{1,24}$/.test(id)) { err.push("node id " + id); continue; }
     if (!NODE_TYPES.includes(n.type)) { err.push(id + ": type " + n.type); continue; }
     const o = { type: n.type };
-    for (const k of ["text", "note", "template", "lang", "button", "next", "brief", "body"]) if (n[k] != null) o[k] = String(n[k]).slice(0, k === "text" || k === "body" ? 1024 : 200);
+    for (const k of ["text", "note", "template", "lang", "button", "next", "brief", "body", "reader", "image"]) if (n[k] != null) o[k] = String(n[k]).slice(0, k === "text" || k === "body" ? 1024 : 200);
     if (n.vars) o.vars = n.vars.map(String);
     if (n.header) o.header = n.header;
     if (n.link) { o.link = cleanTarget(n.link); if (!o.link) err.push(id + ": link must be https"); }
@@ -904,17 +907,45 @@ async function flowRun(env, c, f, nid, k, deps, now, trail) {
       trail.push({ handover: nid });
     }
     let link = "";
-    if (n.type === "doc" || n.type === "brief") { const target = n.type === "brief" ? originOf(env, deps) + "/cb/" + n.brief : n.link; const code = await makeLink(env, c.id, d, target); link = originOf(env, deps) + "/c/" + code; }
-    const payload = nodePayload(c.id, nid, n, k, link, facts);
+    if (n.type === "doc" || n.type === "brief") { const target = n.type === "brief" ? originOf(env, deps) + "/dp/" + n.brief + "?r=" + dpReader(n.reader) + "&ty=1" : n.link; const code = await makeLink(env, c.id, d, target); link = originOf(env, deps) + "/c/" + code; }   // v771 - the district passport
+    let payload = nodePayload(c.id, nid, n, k, link, facts);
+    if (payload && n.type === "brief" && n.image) payload = { messaging_product: "whatsapp", to: payload.to, type: "image", image: { link: originOf(env, deps) + "/dp/img/" + n.image, caption: payload.text.body } };   // v771 - illustration as the header
     if (payload) {
       let ok = false, code = 0;
       try { const r = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         const j = await r.json().catch(() => ({})); ok = r.ok && !!(j.messages && j.messages[0]); code = Number(j.error && j.error.code) || 0; } catch (e) {}
       trail.push({ node: nid, sent: ok, code: code || undefined });
     }
+    if (n.type === "brief") { await sendCard(env, c, f, k, deps, now, trail, f2, graph, pid); await followTask(env, c, f, k, { opened: (DP_SETS[n.brief] || {}).name || n.brief, reader: dpReader(n.reader) }, now); }
     if (n.buttons || n.rows) break;   // wait for the tap
     nid = n.next;
   }
+}
+// v771 (Kendall 5 Nov) - after an owner ENGAGES, Najjuko's real broker card (the saved image, unaltered) with one line. Once per person per campaign,
+// never in the cold opener, off when the flow says send_card:false, off after the card expires.
+async function sendCard(env, c, f, k, deps, now, trail, f2, graph, pid) {
+  if (f.send_card === false || now > Date.parse(NAJ_BRN_EXPIRES + "T23:59:59+04:00")) return;
+  const d = DIG(k.e164), sk = "camp_cardsent_" + c.id + "_" + d; if (await env.MEETINGS.get(sk)) return;
+  if (!(await env.MEETINGS.get("dp_img_card_najjuko_meta"))) return;
+  const payload = { messaging_product: "whatsapp", to: d, type: "image", image: { link: originOf(env, deps) + "/dp/img/card.jpg", caption: "My broker card: BRN " + NAJ_BRN + ", Faez Noorzad Real Estate. You can check it with the QR code on the card. Najjuko" } };
+  let ok = false; try { const r = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); const j = await r.json().catch(() => ({})); ok = r.ok && !!(j.messages && j.messages[0]); } catch (e) {}
+  if (ok) await env.MEETINGS.put(sk, new Date(now).toISOString()); trail.push({ card: ok });
+}
+// v771 - every engaged owner becomes ONE follow-up for Najjuko: the campaign handover list (People "Follow up", the "To Najjuko" row) AND a task in her Work.
+// Keyed by campaign + contact, so later taps update the same task instead of adding new ones.
+export async function followTask(env, c, f, k, info, now) {
+  const d = DIG(k.e164), st = await getJ(env, "camp_state_" + c.id + "_" + d, { path: [] }), at = new Date(now).toISOString();
+  const ans = (st.path || []).map((t) => { const [nid, oid] = t.split("."); const n = f.nodes[nid]; const o = n && (n.buttons || n.rows || []).find((x) => String(x.id) === oid); return o ? o.title : ""; }).filter(Boolean);
+  const who = (k.name || "Owner") + " (+971 \u2022\u2022\u2022 " + d.slice(-4) + ")", camp = c.name || c.id;
+  const ix = await getJ(env, "camp_handover_index", []), i = ix.findIndex((x) => x.kind === "follow_up" && x.cid === c.id && x.d === d);
+  const h = Object.assign(i >= 0 ? ix[i] : { kind: "follow_up", cid: c.id, d, name: k.name || "", e164: k.e164, at, by: "flow", status: "open" }, { answers: ans, opened: info.opened || "", reader: info.reader || "", updated: at });
+  if (i >= 0) ix[i] = h; else ix.unshift(h); await putJ(env, "camp_handover_index", ix.slice(0, 500));
+  const tk = "camp_task_" + c.id + "_" + d; let key = await env.MEETINGS.get(tk); const day = new Date(now + 4 * 3600000).toISOString().slice(0, 10);
+  if (!key) { key = "work_naj_" + day + "_cf" + (c.id + d).replace(/[^a-z0-9]/gi, "").slice(-16); await env.MEETINGS.put(tk, key); }
+  const prev = await getJ(env, key, null), name = "Call " + who + ", " + camp;
+  const text = "Follow up from the " + camp + " campaign. Answers: " + (ans.join(" \u2192 ") || "none yet") + (info.opened ? ". Opened: " + info.opened + " (" + info.reader + ")" : "") + ". Call today or next working day.";
+  const e = Object.assign(prev || { id: key.slice(key.lastIndexOf("_") + 1), date: day, created: at, kpis: [], people: [k.name || ""], in_scope: true, check: false, link: "" }, { text, works: [name], progress: [{ work: name, status: (prev && prev.progress && prev.progress[0] && prev.progress[0].status) || "Started", percent: (prev && prev.progress && prev.progress[0] && prev.progress[0].percent) || 0 }], source: "campaign", campaign: c.id, contact_last4: d.slice(-4), updated: at });
+  await putJ(env, key, e); return { key, name };
 }
 // A tap on a campaign button: record the branch (and the consent, per branch), then send the next node.
 export async function flowChoice(env, msg, d, deps, now) {
@@ -942,6 +973,7 @@ export async function flowChoice(env, msg, d, deps, now) {
   }
   if (opt.optout) { await optOut(env, d, "flow_button", { cid, choice: tag }, now); return { cid, choice: tag, optout: true }; }
   const trail = []; if (opt.next) await flowRun(env, c, f, opt.next, k, deps, now, trail);
+  if (!trail.some((t) => t.node && f.nodes[t.node] && f.nodes[t.node].type === "brief") && !/^(d1|endok|nudge)/.test(nid + "") && !/not ?now|no thanks/i.test(opt.title || "")) await followTask(env, c, f, k, {}, now);   // v771
   return { cid, choice: tag, trail };
 }
 // The ONE follow-up to a non-replier (a TEMPLATE: their window is shut). Never more than one per person per campaign.
