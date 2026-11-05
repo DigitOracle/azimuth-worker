@@ -106,7 +106,7 @@ ok(!store.has("work_naj_brk_1001"), "nothing was written by the refused POSTs");
   ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(h), "no emoji on the page");
   ok(!/claude|anthropic|openai|gpt|gemini|mistral|llama/i.test(h), "no AI model named on the page");
   const f = await (await get("/momo", NAJ)).text(); const c = [...f.matchAll(/<a class=card[^>]*href="([^"]+)"[^>]*>.*?<b>([^<]+)<\/b><\/a>/g)].map((m) => m[2]);
-  ok(c[0] === "Product data sheets" && c[1] === "Brokers", "Brokers is the second card on her front door, after Product data sheets", c);
+  ok(c[0] === "Product sheets" && c[1] === "Brokers", "Brokers is the second card on her front door, after Product sheets (v754)", c);
   const fk = await (await get("/momo", KEN)).text(); ok(!fk.includes("<b>Brokers</b>"), "Kendall's front door has no Brokers card"); }
 // the source itself: no emoji
 { const src = fs.readFileSync(new URL("../src/work_brokers.js", import.meta.url), "utf8");

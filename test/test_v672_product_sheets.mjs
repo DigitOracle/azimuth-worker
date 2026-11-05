@@ -16,12 +16,12 @@ const cards = (h) => [...h.matchAll(/<a class=card[^>]*href="([^"]+)"[^>]*>.*?<b
 // 1. Najjuko's front door: Product data sheets is the FIRST card
 { const r = await get("/momo", NAJ); const h = await r.text(); const c = cards(h);
   ok(r.status === 200, "Najjuko's front door opens", r.status);
-  ok(c.length && c[0][1] === "Product data sheets" && c[0][0].startsWith("/momo/work/sheets?key="), "Product data sheets is her first card", c.slice(0, 3));
+  ok(c.length && c[0][1] === "Product sheets" && c[0][0].startsWith("/momo/work/products?key="), "Product sheets (v754: data sheets behind it) is her first card", c.slice(0, 3));
   ok(!c.some((x) => x[1] === "Product briefs"), "Kendall's Product briefs card is not on hers", c.map((x) => x[1]));
   ok(!/[\u{1F300}-\u{1FAFF}]/u.test(h), "no emoji on the front door"); }
 // 2. Kendall's front door: briefs first, sheets second
 { const h = await (await get("/momo", KEN)).text(); const c = cards(h).map((x) => x[1]);
-  ok(c[0] === "Product briefs" && c[1] === "Product data sheets", "Kendall sees Product briefs then Product data sheets", c.slice(0, 3)); }
+  ok(c[0] === "Product sheets", "Kendall sees Product sheets first (v754: briefs + data sheets behind it)", c.slice(0, 3)); }
 // 3. Nobody else gets the card
 { const r = await get("/momo", OTHER); const h = r.status === 200 ? await r.text() : "";
   ok(!h.includes("Product data sheets"), "another insider's front door has no sheets card", r.status); }

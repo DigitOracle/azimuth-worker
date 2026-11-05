@@ -26,7 +26,7 @@ const links = P.spkLinks([
   { id: "talk-c", title: "C", date: "2026-01-01", status: "cancelled" },
 ]);
 ok(links["talk-a"].date === "2026-11-10" && links["talk-b-1nov2026"].date === "2026-10-21" && !links["talk-c"], "speaking links by id and by materials url", links);
-const T = "2026-11-04";
+const T = new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);   // Dubai today (was fixed at 4 Nov; the page uses the real date)
 const items = [
   { slug: "talk-a", title: "A", date: "2026-10-01" },          // speaking wins: future -> main
   { slug: "talk-b-1nov2026", title: "B" },                     // speaking endDate 21 Oct -> archived

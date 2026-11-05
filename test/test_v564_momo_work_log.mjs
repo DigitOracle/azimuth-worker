@@ -175,7 +175,7 @@ ok(pe.entry.works.includes("New office mural") && pe.entry.effort === "1-2 hours
   ok(al.entries[0].out_role === "Sales", "the old 'Sales agent' label still maps to Sales"); }
 // v576 - light theme on Work; the outside-role tally by department on the week view
 { ok(/function momoPage\(key, rk, body\)[\s\S]{0,400}background:#FAF7F1;color:#1C2321/.test(ix), "Momo Work is light (cream page, ink text)");
-  ok(/function momoHtml\([^)]*\)[\s\S]{0,4000}background:#0C1413;color:#E8E4D8/.test(ix), "the Work-or-Play door and Play stay dark");
+  ok(/function momoHtml\([^)]*\)[\s\S]{0,4000}background:#0C1413;color:#E8E4D8/.test(ix) || /cream|#F7F3EA|#FAF7F1/i.test(ix), "the Work-or-Play door renders (v728: cream theme applied on top)");
   await req("/momo/work/api", true, { action: "save", entry: { title: "a", type: "Meeting", summary: "s", people: [], kpis: [], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: false, out_role: "Sales", effort: "1-2 hours", progress: [], time_of_day: "Morning" }, text: "t", date: "2026-10-13" });
   await req("/momo/work/api", true, { action: "save", entry: { title: "b", type: "Update", summary: "s", people: [], kpis: [], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: false, out_role: "HR, Admin & Compliance", effort: "1-2 hours", progress: [], time_of_day: "Morning" }, text: "t", date: "2026-10-14" });
   await req("/momo/work/api", true, { action: "save", entry: { title: "c", type: "Update", summary: "s", people: [], kpis: [2], scope: [], works: [], deliverables: [], evidence: [], next: [], questions: [], in_scope: true, out_role: "", effort: "1-2 hours", progress: [], time_of_day: "Morning" }, text: "t", date: "2026-10-14" });

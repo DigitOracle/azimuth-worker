@@ -4,7 +4,7 @@ import { phoneDigits, ckMessage, saveTeam, CK_JS } from "../src/checkin.js";
 import { plannerBody } from "../src/content_planner.js";
 let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log("FAIL", m); } else console.log("ok", m); };
 const store = new Map();
-const env = { MEETINGS: { get: async (k) => store.has(k) ? store.get(k) : null, put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); },
+const env = { CK_WITH_LINK: "1", MEETINGS: { get: async (k) => store.has(k) ? store.get(k) : null, put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); },
   list: async ({ prefix }) => ({ keys: [...store.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })), list_complete: true }) }, INSIDER_KEY: "ins_najjuko_TESTKEY0123456789abcd" };
 const deps = { isNaj: () => true, isAny: () => true, person: () => "najjuko", page: (k, r, b) => b };
 const api = new URL("https://x.dev/momo/work/api?key=ins_najjuko_TESTKEY0123456789abcd");

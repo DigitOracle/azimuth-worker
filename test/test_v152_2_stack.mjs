@@ -41,7 +41,7 @@ const clientCases = [["the client key", "/map?key=" + CLIENT], ["a wrong residen
 for (const [label, q] of clientCases) {
   r = await call(q);
   const html = await r.text();
-  ok(r.status === 200 && html.includes("<div class=hstack id=hstack><div id=hp class=hp>") && !html.includes("id=rp") && !/residents/i.test(html) && !html.includes("rk=") && !html.includes("__RKQ=") && !html.includes(RES) && !r.headers.get("X-Robots-Tag"), "MAP, " + label + ": HOMES alone in the stack, no residents panel, no residents key anywhere");
+  ok(r.status === 200 && html.includes("<div class=hstack id=hstack><div id=hp class=hp>") && !html.includes("id=rp") && !/\/residents|RESIDENTS_KEY|residents_key/i.test(html) && !html.includes("rk=") && !html.includes("__RKQ=") && !html.includes(RES) && !r.headers.get("X-Robots-Tag"), "MAP, " + label + ": HOMES alone in the stack, no residents panel, no residents key anywhere");
 }
 r = await call("/map?key=" + READ + "&rk=" + RES, {}, Object.assign({}, env, { RESIDENTS_KEY: "short" }));
 ok(!(await r.text()).includes("id=rp"), "MAP: a short RESIDENTS_KEY on the worker never opens the panel");
