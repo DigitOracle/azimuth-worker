@@ -157,8 +157,8 @@ store.set("camp_flow_pja-owners", JSON.stringify(f));
 const post = (p, key, b) => worker.fetch(new Request("https://w" + p + "?key=" + key, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }), Object.assign({}, env, { READ_KEY: "rk_TEST" }), ctx);
 let res = await (await post("/momo/campaigns/api", "rk_TEST", { action: "create", id: "pja", name: "PJA", flow: "pja-owners", tags: ["pja"] })).json();
 ok(res.ok && res.campaign.phone === "desk" && res.campaign.template === "najjuko_pja_owner_intro_v2" && res.campaign.stop_forgets === true, "PJA campaign: _v2 from the desk number", res);
-res = await (await post("/momo/campaigns/api", "rk_TEST", { action: "live", id: "pja", confirm: "pja" })).json(); ok(!res.ok && /BRN/.test(JSON.stringify(res.error)), "no BRN: cannot go live", res);
-res = await (await post("/momo/campaigns/api", "rk_TEST", { action: "update", id: "pja", brn: "TEST1" })).json(); res = await (await post("/momo/campaigns/api", "rk_TEST", { action: "live", id: "pja", confirm: "pja" })).json(); ok(res.ok, "with BRN: live", res);
+res = await (await post("/momo/campaigns/api", "rk_TEST", { action: "live", id: "pja", confirm: "pja" })).json(); ok(res.ok && res.campaign.brn === "98949", "v767: no BRN given -> her card 98949 is used, goes live", res);
+await post("/momo/campaigns/api", "rk_TEST", { action: "pause", id: "pja" }); res = await (await post("/momo/campaigns/api", "rk_TEST", { action: "update", id: "pja", brn: "TEST1" })).json(); ok(res.ok && res.campaign && res.campaign.brn === "TEST1", "a campaign may still set its own BRN", res); await post("/momo/campaigns/api", "rk_TEST", { action: "resume", id: "pja" });
 
 // an owner's reply on the DESK number reaches campWebhook (the flow answers) and the desk handler stays silent to them
 store.set("camp_quality_desk", JSON.stringify({ rating: "GREEN" })); store.delete("camp_tpl_najjuko_pja_owner_intro_v2");

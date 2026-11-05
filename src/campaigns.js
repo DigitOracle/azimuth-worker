@@ -42,6 +42,10 @@ export const FLOW_BUG = [131047];               // 24-hour window shut: our flow
 export const BACKOFF = [130429, 131056];        // throughput / pair rate limit: wait and retry
 export const BACKOFF_STEPS = [30000, 120000, 600000, 1800000, 3600000];   // 30 s, 2 min, 10 min, 30 min, 1 h; one more and the campaign stops
 
+// v767 (Kendall 5 Nov 2026): Najjuko's Dubai Land Department broker card (BRN) 98949, Faez Noorzad Real Estate L.L.C., valid 22 Jul 2026 - 22 Jul 2027.
+// RENEW BY 22 Jul 2027: after that date the campaign must stop quoting it. A campaign may still set its own brn.
+export const NAJ_BRN = "98949", NAJ_BRN_EXPIRES = "2027-07-22";
+
 // ---------- phone numbers ----------
 // UAE mobile: 05X XXX XXXX, 5X XXX XXXX, 9715..., 009715..., +9715... -> +9715XXXXXXXX. Other countries need a full + or 00 prefix.
 export function normPhone(raw) {
@@ -468,6 +472,7 @@ export function cleanCampaign(x, prev) {
   if (x.window != null) c.window = String(x.window).replace(/\s+/g, "");
   if (x.days != null) c.days = String(x.days).toLowerCase().replace(/\s+/g, "");
   if (x.brn != null) c.brn = String(x.brn).replace(/[^0-9A-Za-z-]/g, "").slice(0, 20);
+  if (!c.brn) c.brn = NAJ_BRN;   // v767 (Kendall 5 Nov) - her broker card number is the default on every campaign
   if (x.ramp != null) c.ramp = x.ramp === false || x.ramp === "off" ? false : (Array.isArray(x.ramp) ? x.ramp : String(x.ramp).split(/[,|]/)).map((n) => parseInt(n, 10)).filter((n) => n > 0).slice(0, 10);
   if (x.owner_tz != null) c.owner_tz = !(x.owner_tz === false || x.owner_tz === "off");
   if (x.stop_forgets != null) c.stop_forgets = !!x.stop_forgets;
@@ -1038,7 +1043,7 @@ const shortTitle = (t, n) => { t = String(t || ""); if (t.length <= n) return t;
 export function previewTemplatePayload(f, nid, to, facts) {
   const n = f.nodes[nid], opts = n.buttons || [], k = { name: PV_NAME };
   // v726 - {{2}}, {{3}} ... follow the node's vars: the reason line and the BRN show as clear samples in a preview
-  const PV_VAR = { why: "you own a unit at Palm Jebel Ali (sample reason)", brn: "(to confirm)" };
+  const PV_VAR = { why: "you own a unit at Palm Jebel Ali (sample reason)", brn: NAJ_BRN };
   let bodyT = String(n.body || n.text || "(no draft wording stored for this template)");
   (n.vars || []).forEach((v, i) => { if (i > 0) bodyT = bodyT.split("{{" + (i + 1) + "}}").join(PV_VAR[v] || (v.charAt(0) === "=" ? v.slice(1) : "(" + v + ")")); });
   const text = "TEST PREVIEW (template " + n.template + ")\n\n" + fill(bodyT, k, facts);

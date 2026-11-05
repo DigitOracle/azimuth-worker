@@ -43,7 +43,7 @@ calls.length = 0; await text(STRANGER, "campaign preview"); ok(pv().length === 0
 calls.length = 0; let r = await text(NAJ_NUM, "Campaign preview");
 ok(r.status === 200 && calls.length === 1 && calls[0].url.includes("/" + MAIN + "/messages") && calls[0].body.to === NAJ_NUM, "start: one message, from the number her chat arrived on", calls);
 const s1 = calls[0].body;
-ok(s1.interactive.type === "list" && bodyOf(calls[0]).startsWith("TEST PREVIEW (template najjuko_pja_owner_intro_v2)\n\nHi Ahmed, Najjuko here. I specialise in Palm Jebel Ali. You’re receiving this because you own a unit at Palm Jebel Ali (sample reason). Quick question about your unit: what’s your plan for it right now?\n\nNajjuko · BRN (to confirm) · Tap Stop and I’ll delete your details."), "exact approved wording, TEST PREVIEW first", bodyOf(calls[0]));
+ok(s1.interactive.type === "list" && bodyOf(calls[0]).startsWith("TEST PREVIEW (template najjuko_pja_owner_intro_v2)\n\nHi Ahmed, Najjuko here. I specialise in Palm Jebel Ali. You’re receiving this because you own a unit at Palm Jebel Ali (sample reason). Quick question about your unit: what’s your plan for it right now?\n\nNajjuko · BRN 98949 · Tap Stop and I’ll delete your details."), "exact approved wording, TEST PREVIEW first", bodyOf(calls[0]));
 const rows = s1.interactive.action.sections[0].rows;
 ok(rows.length === 5 && rows.every((x) => x.title.length <= 24) && rows[0].description === "Keeping it until handover" && rows.map((x) => x.description || x.title).join("|") === "Keeping it until handover|Open to selling|Another Palm investment|Not now|Stop messages", "five options, full wording kept", rows);
 calls.length = 0; await text(NAJ_NUM, "preview pja"); ok(calls.length === 1 && bodyOf(calls[0]).includes("Najjuko here"), "'preview pja' works too");
@@ -67,7 +67,7 @@ calls.length = 0; await tap(NAJ_NUM, "pv:pja-owners:s1:4");
 ok(bodyOf(calls[0]).startsWith("TEST PREVIEW (no opt-out recorded)") && !store.has("camp_optout_" + NAJ_NUM) && !store.has("camp_optout_index"), "STOP in preview writes no opt-out");
 // 8. the follow-up template preview
 calls.length = 0; await tap(NAJ_NUM, "pv:pja-owners:__:2");
-ok(calls[0].body.interactive.type === "button" && bodyOf(calls[0]) === "TEST PREVIEW (template najjuko_market_updates_ask)\n\nHi Ahmed, Najjuko again. No need to reply to my last message. Would you like a short Palm Jebel Ali market update every two weeks? Three numbers, what they mean, nothing more.\n\nNajjuko · BRN (to confirm) · Tap Stop and I’ll delete your details."
+ok(calls[0].body.interactive.type === "button" && bodyOf(calls[0]) === "TEST PREVIEW (template najjuko_market_updates_ask)\n\nHi Ahmed, Najjuko again. No need to reply to my last message. Would you like a short Palm Jebel Ali market update every two weeks? Three numbers, what they mean, nothing more.\n\nNajjuko · BRN 98949 · Tap Stop and I’ll delete your details."
   && calls[0].body.interactive.action.buttons.map((b) => b.reply.title).join() === "Yes please,No thanks,Stop messages", "follow-up wording exact", calls[0] && calls[0].body);
 calls.length = 0; await tap(NAJ_NUM, "pv:pja-owners:__:1"); ok(/TEST PREVIEW ended/.test(bodyOf(calls[0])), "End preview");
 // 9. a webhook retry of the same message does not send twice
