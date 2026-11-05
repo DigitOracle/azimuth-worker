@@ -271,7 +271,7 @@ export async function sheetPush(env, code, apply, who, why) {
   let vals; try { vals = await readTab(cx, ref.tab); } catch (e) { return [502, { error: String(e.message || e) }]; }
   const row = vals[ref.row - 1] || []; if (map.code != null ? String(row[map.code] || "").trim().toUpperCase().replace(/\s+/g, "") !== code : (map.date != null && parseDate(row[map.date]) !== it.date && parseDate(row[map.date]) !== (sm.dates && sm.dates[code]))) return [409, { error: "The sheet row moved. Import again first." }];
   const changes = [];
-  Object.keys(map).forEach((f) => { if (f === "code") return; const old = String(row[map[f]] || ""), nv = String(it[f] || "");
+  Object.keys(map).forEach((f) => { if (f === "code" || f === "story_no" || !(f in it)) return; const old = String(row[map[f]] || ""), nv = String(it[f] || "");
     if (f === "date" ? parseDate(old) !== nv : f === "time" ? parseTime(old) !== nv : old.trim() !== nv) changes.push({ cell: colA(map[f]) + ref.row, field: f, old, new: nv }); });
   if (!apply) return [200, { ok: true, tab: ref.tab, changes }];
   if (!changes.length) return [200, { ok: true, written: 0 }];
