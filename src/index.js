@@ -12,7 +12,8 @@ import { SHEETS_ICON, sheetsPublic } from "./work_sheets.js";   // v672 - Produc
 import { BROKERS_ICON } from "./work_brokers.js";   // v682 - the Brokers card on Najjuko's front door
 import { PRES_ICON, presPublic } from "./work_presentations.js";
 import { REELS_ICON, reelPublic } from "./work_reels.js";   // v700 - the Reels card and its public /reel/ pages
-import { CAMP_ICON, campaignRoute, campWebhook, campTick, optOut as campOptOut, isOptedOut as campIsOptedOut } from "./campaigns.js"; import { dpRoute } from "./district_passport.js";   // v771 import { docRoute } from "./district_doc.js"; import { dpOpened } from "./campaigns.js";   // v774   // v723 - the WhatsApp campaign engine (Najjuko's card; sends only when Kendall sets a campaign live)
+import { CAMP_ICON, campaignRoute, campWebhook, campTick, optOut as campOptOut, isOptedOut as campIsOptedOut } from "./campaigns.js"; import { dpRoute } from "./district_passport.js";   // v771   // v723 - the WhatsApp campaign engine (Najjuko's card; sends only when Kendall sets a campaign live)
+import { docRoute } from "./district_doc.js"; import { dpOpened } from "./campaigns.js";   // v774 - the personal passport page
 import { BPP_ICON, bppPublic, bppTick } from "./building_passports.js";   // v697 - the Building Passports card, its public /bp/ pages and the minute-tick job   // v684 - the Presentations card and its public /pres/ pages
 import { BRIEFS_ICON, briefsPublic } from "./work_briefs.js";   // v667 - Product briefs card (Kendall) + public /pb/ pictures   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
 import { workRoute, WORK_CSS, workEveningCheck, recSweep } from "./work_log.js";
