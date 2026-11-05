@@ -45,6 +45,61 @@ export function meetingLines(src) {
 }
 
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+// v773 PROACTIVE SYNC (Kendall, 5 Nov 2026: "when she mentions ... campaign, anything to do with posting ... a series of pop-ups ... during the
+// meeting you said you were changing such and such to such and such. Is this the case? And I will update your content calendar").
+// When she opens Work, each meeting of the last 3 days is read ONCE: if its record mentions content (the words below, a planner code that
+// exists, a developer or topic from the planner, or a team member), the same Sync analysis runs and the certain, applicable changes are kept
+// in ms_auto. Work then asks about them one at a time. Yes = the same syncApply path (planner log, sheet queue/write-back); No = remembered,
+// never asked again; Change = opens the item. Nothing is applied without her Yes. In-app only: nothing is sent to anyone.
+export const AUTO = "ms_auto";
+const CONTENT_RX = /\b(campaigns?|post(s|ed|ing)?|reels?|stor(y|ies)|carousels?|feed|shoot(s|ing)?|shot|captions?|publish(ed|ing)?|schedul(e|ed|ing)|calendar|content|go(es)? live|instagram|tiktok|linkedin)\b/i;
+const CODE_RX = /\b[A-Z]{2,4}-\d{1,4}\b/g;
+export function contentHit(lines, items, team) {
+  const text = (lines || []).join(" \n "), low = " " + norm(text) + " ", hits = [];
+  const w = text.match(CONTENT_RX); if (w) hits.push(w[0].toLowerCase());
+  const codes = new Set((items || []).map((i) => String(i.code || "").toUpperCase()));
+  (text.match(CODE_RX) || []).forEach((c) => { if (codes.has(c.toUpperCase())) hits.push(c.toUpperCase()); });
+  const names = new Set();
+  (items || []).forEach((i) => { [i.developer, i.topic].forEach((v) => { const n = norm(v); if (n.length >= 5) names.add(n); }); });
+  (team || []).forEach((t) => { const n = norm(t && t.name ? t.name : t); if (n.length >= 3) names.add(n); });
+  for (const n of names) if (low.indexOf(" " + n + " ") >= 0) { hits.push(n); if (hits.length > 6) break; }
+  return [...new Set(hits)];
+}
+async function getAuto(env) { try { return JSON.parse((await env.MEETINGS.get(AUTO)) || "{}") || {}; } catch (e) { return {}; } }
+async function putAuto(env, o) {
+  const ks = Object.keys(o).sort((a, b) => String(o[b].at || "").localeCompare(String(o[a].at || ""))).slice(0, 60), out = {};
+  ks.forEach((k) => { out[k] = o[k]; }); await env.MEETINGS.put(AUTO, JSON.stringify(out));
+}
+// scan: meetings = [{key, src, title, date}] newest first. At most `max` new meetings are read per call (one writer call each).
+export async function autoScan(env, deps, meetings, tasks, team, max) {
+  const A = await getAuto(env), items = await readItems(env); let read = 0;
+  for (const m of meetings) {
+    if (A[m.key] || read >= (max || 2)) continue;
+    const lines = meetingLines(m.src), hits = contentHit(lines, items, team);
+    if (!hits.length) { A[m.key] = { at: new Date().toISOString(), title: m.title, date: m.date, hits: [], changes: [] }; continue; }
+    read++;
+    const r = await syncPropose(env, deps, m.src, tasks);
+    if (!r.ok) continue;   // not stored: tried again next time Work opens
+    const keep = (r.changes || []).filter((c) => c.ok && c.certain);
+    A[m.key] = { at: new Date().toISOString(), title: m.title, date: m.date, hits, changes: keep, ans: {} };
+  }
+  await putAuto(env, A);
+  return autoOpen(A);
+}
+export function autoOpen(A) {
+  const out = [];
+  Object.keys(A).forEach((k) => { const a = A[k]; (a.changes || []).forEach((c) => { if (!(a.ans && a.ans[c.id])) out.push({ meeting: k, title: a.title, date: a.date, change: c }); }); });
+  return out.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+}
+export async function autoAnswer(env, meeting, id, answer) {
+  const A = await getAuto(env), a = A[meeting]; if (!a) return [404, { ok: false, error: "That meeting is not waiting for an answer." }];
+  const c = (a.changes || []).find((x) => x.id === id); if (!c) return [404, { ok: false, error: "That change is not waiting for an answer." }];
+  if (a.ans && a.ans[id]) return [200, { ok: true, already: a.ans[id], change: c, meeting: a }];
+  a.ans = a.ans || {}; a.ans[id] = answer === "yes" ? "yes" : "no"; await putAuto(env, A);
+  return [200, { ok: true, change: c, meeting: a }];
+}
+export async function autoBadges(env) { const A = await getAuto(env), n = {}; autoOpen(A).forEach((x) => { n[x.meeting] = (n[x.meeting] || 0) + 1; }); return n; }
 export function itemLine(it) { return [it.code, fmtDay(it.date), it.time, it.kind === "story" ? "story" : (it.format || "feed post"), it.topic, it.developer ? "(" + it.developer + ")" : ""].filter(Boolean).join(" · "); }
 
 // the model's list, checked against what is really stored
@@ -171,5 +226,17 @@ b.disabled=true;sapi({action:"sync_sheet",code:c,apply:false}).then(function(r){
 function run(src){SRC=src;shell('<h2>'+ic("sync")+' Sync this meeting</h2><p class=sye>Reading the meeting against your tasks and the content planner...</p>');sapi({action:"sync_propose",src:src}).then(function(j){if(!j.ok){shell('<h2>Sync</h2><p class=sye>'+h(j.error||"Could not read the meeting.")+'</p><div class=syb><button type=button id=sy_x>Close</button></div>');document.getElementById("sy_x").onclick=close;return}review(j)}).catch(function(){shell('<h2>Sync</h2><p class=sye>No connection. Nothing was changed.</p><div class=syb><button type=button id=sy_x>Close</button></div>');document.getElementById("sy_x").onclick=close})}
 document.addEventListener("click",function(e){var b=e.target.closest?e.target.closest("[data-sy]"):null;if(!b)return;e.preventDefault();var v=b.getAttribute("data-sy");run(v.indexOf("rec:")===0?{rec:v.slice(4)}:{entry:v})});
 var qs=(new URLSearchParams(location.search)).get("sync");if(qs)setTimeout(function(){run(qs.indexOf("rec:")===0?{rec:qs.slice(4)}:{entry:qs})},600);
+var AQ=[],AW=null;
+function ask(){if(!AQ.length){close();return}var x=AQ[0],c=x.change,q=c.quote||c.line_text||"";
+shell('<h2>'+ic("sync")+' From your meeting</h2><p class=sub>'+h(x.title||"Meeting")+(x.date?" \u00b7 "+h(fd(x.date)):"")+(AQ.length>1?" \u00b7 1 of "+AQ.length:"")+'</p>'
++'<div class=syq>'+(q?'<p class=ln>During the meeting you said: \u201c'+h(q)+'\u201d</p>':'')+'<p><b>'+h(title(c))+'</b></p>'+(c.match?'<p class=m>Matched: '+h(c.match)+'</p>':'')+'<p>Is that right?</p></div>'
++'<p id=sy_m class=sye></p><div class="syb sya"><button type=button id=sy_no>No</button><button type=button id=sy_ch>Change it\u2026</button><button type=button class=go id=sy_yes>Yes, update the calendar</button></div>');
+var m=document.getElementById("sy_m");
+document.getElementById("sy_no").onclick=function(){sapi({action:"sync_auto_answer",meeting:x.meeting,id:c.id,answer:"no"}).then(function(){AQ.shift();ask()})};
+document.getElementById("sy_ch").onclick=function(){if(c.code&&/^planner_/.test(c.type)){location.href="/momo/work/planner?key="+encodeURIComponent(K)+"&code="+encodeURIComponent(c.code);return}close();run({entry:x.meeting})};
+document.getElementById("sy_yes").onclick=function(){var b=this;b.disabled=true;m.textContent="Updating\u2026";sapi({action:"sync_auto_answer",meeting:x.meeting,id:c.id,answer:"yes"}).then(function(j){if(!j.ok){b.disabled=false;m.textContent=j.error||"Not updated.";return}AQ.shift();if(j.pending&&j.pending.length&&!AQ.length){done(j);return}ask()}).catch(function(){b.disabled=false;m.textContent="No connection. Try again."})}}
+function autoRun(){if(!K||document.getElementById("sy_s"))return;sapi({action:"sync_auto"}).then(function(j){if(!j||!j.ok)return;var B=j.badges||{};[].forEach.call(document.querySelectorAll("[data-sy]"),function(b){var n=B[b.getAttribute("data-sy")];if(n&&!b.querySelector(".syd")){var d=document.createElement("span");d.className="syd";d.textContent=n;b.appendChild(d)}});AQ=j.open||[];if(AQ.length)ask()}).catch(function(){})}
+var dcss=document.createElement("style");dcss.textContent=".syd{display:inline-block;min-width:16px;height:16px;line-height:16px;border-radius:999px;background:#C5A56A;color:#fff;font-size:.66rem;text-align:center;margin-left:4px;padding:0 4px}.sya{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.sya .go{grid-column:1/-1;order:-1}.sya button{min-width:0}.syq{box-sizing:border-box;max-width:100%;overflow-wrap:anywhere;border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:12px;margin:8px 0}.syq p{margin:6px 0}.syq .ln{color:#5F6B66;font-style:italic}.syq .m{color:#8A6F3E;font-size:.82rem}";document.head.appendChild(dcss);
+if(!(new URLSearchParams(location.search)).get("sync"))setTimeout(autoRun,1200);
 window.momoSync=run;
 })();`;

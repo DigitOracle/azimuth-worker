@@ -887,6 +887,20 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
       const all = await listEntries(env, prof.phases[0].from, prof.term_end), tasks = applyOverrides(tasksOf(all), await taskOverrides(env));
       const [st, o] = await ckDesk(env, b, tasks, deps.ckDesk(env)); return J(o, st);
     }
+    if (b.action === "sync_auto" || b.action === "sync_auto_answer") {   // v773 - proactive Sync: read new meetings once, ask about each change
+      const all = await listEntries(env, prof.phases[0].from, prof.term_end), tasks = applyOverrides(tasksOf(all), await taskOverrides(env));
+      if (b.action === "sync_auto") {
+        const d0 = new Date(Date.now() + 4 * 3600e3 - 3 * 86400e3).toISOString().slice(0, 10);
+        const meets = all.filter((e) => e && e.type === "Meeting" && e.id && String(e.date || "") >= d0).sort((x, y) => String(y.date + y.updated).localeCompare(String(x.date + x.updated))).slice(0, 12)
+          .map((e) => ({ key: e.date + "_" + e.id, src: { kind: "entry", entry: e, key: PFX + e.date + "_" + e.id }, title: e.title || "Meeting", date: e.date }));
+        let team = []; try { team = await readTeam(env); } catch (x) {}
+        const open = await autoScan(env, deps, meets, tasks, team, 2);
+        return J({ ok: true, open: open.slice(0, 20), badges: await autoBadges(env) });
+      }
+      const [st, o] = await autoAnswer(env, String(b.meeting || "").replace(/[^0-9a-z_-]/g, ""), String(b.id || ""), b.answer);
+      if (!o.ok || o.already || b.answer !== "yes") return J(o, st);
+      b = { action: "sync_apply", src: { entry: String(b.meeting || "") }, changes: [o.change] };   // Yes: the same apply path as the review sheet
+    }
     if (b.action === "sync_propose" || b.action === "sync_apply") {
       const src = b.src || {}; let S = null, why = "";
       if (src.entry) { const k = String(src.entry).replace(/[^0-9a-z_-]/g, ""); let e = null; try { e = JSON.parse((await env.MEETINGS.get(PFX + k)) || "null"); } catch (x) {} if (e) { S = { kind: "entry", entry: e, key: PFX + k }; why = "\u201c" + (e.title || "meeting") + "\u201d " + e.date; } }
@@ -1139,7 +1153,7 @@ const RAMP = ["#6FBFB4", "#52ADA1", "#3A968A", "#287C71", "#15665C"], TEAL = "#1
 const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.opener||history.length<=1){window.close()}if(history.length>1){history.back()}else{var k=new URLSearchParams(location.search).get("key")||"";location.href="/momo/work?key="+encodeURIComponent(k)}};';
 // v580 - FN's own marks, cut from the Company Template she sent (src/fn_logo.js): the navy monogram, the gold lattice band, FN navy/peach/gold
 import { planRoute } from "./work_plan.js";
-import { syncPropose, syncApply, syncSheet, SYNC_JS } from "./meeting_sync.js";
+import { syncPropose, syncApply, syncSheet, SYNC_JS, autoScan, autoAnswer, autoBadges } from "./meeting_sync.js";
 import { ckMake, ckDesk, ckRoute, readTeam, saveTeam, rosterAction, namesOn, CK_JS } from "./checkin.js";   // v764 - WhatsApp check-in from her own phone   // v764 - meeting Sync: meeting -> planner, tasks, sheet
 import { jobsRoute } from "./work_jobs.js";
 import { anneRoute, readAnne } from "./work_anne.js";
