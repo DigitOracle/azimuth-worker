@@ -12,7 +12,7 @@ import { SHEETS_ICON, sheetsPublic } from "./work_sheets.js";   // v672 - Produc
 import { BROKERS_ICON } from "./work_brokers.js";   // v682 - the Brokers card on Najjuko's front door
 import { PRES_ICON, presPublic } from "./work_presentations.js";
 import { REELS_ICON, reelPublic } from "./work_reels.js";   // v700 - the Reels card and its public /reel/ pages
-import { CAMP_ICON, campaignRoute, campWebhook, campTick } from "./campaigns.js";   // v723 - the WhatsApp campaign engine (Najjuko's card; sends only when Kendall sets a campaign live)
+import { CAMP_ICON, campaignRoute, campWebhook, campTick, optOut as campOptOut, isOptedOut as campIsOptedOut } from "./campaigns.js";   // v723 - the WhatsApp campaign engine (Najjuko's card; sends only when Kendall sets a campaign live)
 import { BPP_ICON, bppPublic, bppTick } from "./building_passports.js";   // v697 - the Building Passports card, its public /bp/ pages and the minute-tick job   // v684 - the Presentations card and its public /pres/ pages
 import { BRIEFS_ICON, briefsPublic } from "./work_briefs.js";   // v667 - Product briefs card (Kendall) + public /pb/ pictures   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
 import { workRoute, WORK_CSS, workEveningCheck, recSweep } from "./work_log.js";
@@ -34,9 +34,9 @@ import { musicRoute, renderVideo, overlayImage } from "./music.js";
 import { newsTick as deskNewsTick } from "./desk_news.js";   // v473 - the desk news watcher (AI, UAE tech, Dubai events, smart city / ISO, projects)   // v467 - music for posts (library route + the da-video service)
 import { liRoute, liRecord, liConnected, liStartLink, liStep, liReminder, liPostImages } from "./li_desk.js";   // v464 - LinkedIn from the desk   // v460 - an approved Instagram reel finishes on the minute tick
 import { flowSetupRoute } from "./wa_flows.js";   // v428 - WhatsApp Flows: owner-only setup of the client-brief form (tried on the desk first: src/desk_lab.js)
-import { templateRoutes, feedTemplateFlag, templateWatchTick, daTemplateSubmitTick } from "./wa_templates.js";
-import { CK_JS } from "./checkin.js";   // v764
-import { checkinRoute } from "./work_log.js";   // v764   // v329 - owner-only template create/status/use routes + the feed_template flag
+import { templateRoutes, feedTemplateFlag, templateWatchTick, daTemplateSubmitTick, templateStatus } from "./wa_templates.js";
+import { CK_JS, ckWebhook } from "./checkin.js";   // v764   // v770 - the desk check-in webhook
+import { checkinRoute, ckTaskAnswer } from "./work_log.js";   // v764   // v329 - owner-only template create/status/use routes + the feed_template flag
 import { worldPick, worldFacts, worldSystem, worldCheck, worldParse, worldMessage, worldListRows, worldCity, WORLD_SAMPLES, WORLD_REVIEW_INTRO, WORLD_REVIEW_BUTTONS, worldReviewBody, worldFbParse } from "./world.js";
 import { worldPageHtml, worldCardText, worldScriptText, worldPostCaption } from "./world_page.js";   // v155 - the Versus page and its two sends   // v154 - Dubai versus a world city, to camera
 import { buildingData, buildingPageHtml } from "./building_page.js";
@@ -2347,7 +2347,7 @@ async function appFetch(request, env, ctx) {
     }
     { const _ak = await askRoute(request, env, url, { keyTier }); if (_ak) return _ak; }   // v555 - Ask Najma (stub engine, owner only)
     // v564.1 - Momo Work's saves and filings are POSTs: answered here, before the POST guard further down refuses them
-    if (request.method === "POST" && MOMO_WORK_POSTS.has(url.pathname)) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
+    if (request.method === "POST" && MOMO_WORK_POSTS.has(url.pathname)) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr, ckDesk: ckDeskDeps }); if (_wr) return _wr; }
     if (url.pathname === "/desk_ref_set" && request.method === "GET") {   // v549 - owner key; ?n=<ref>&approved=0|1 - takes a reference photo out of use (or back), the photo itself is kept
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
       const _sn = Number(url.searchParams.get("n")) || 0; let _sm = null; try { _sm = JSON.parse(await env.MEETINGS.get("desk_ref_" + _sn) || "null"); } catch (e) {}
@@ -3442,7 +3442,7 @@ async function appFetch(request, env, ctx) {
         if (url.pathname === "/momo/work/calendar" && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _cc = await calendarRoute(request, env, url, { page: momoPage }); if (_cc) return _cc; }   // v754 - content calendar connect
         if (url.pathname.startsWith("/momo/work/planner") && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _cp = await plannerRoute(request, env, url, { page: momoPage, person: personOfKey }); if (_cp) return _cp; }   // v758 - FN Content Planner
         const _prod = url.pathname === "/momo/work/products";   // v754 (Kendall 4 Nov 2026: "merge the cards") - Product sheets: briefs, data sheets and building briefings behind one card
-        if (url.pathname.startsWith("/momo/work") && !_prod) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr }); if (_wr) return _wr; }
+        if (url.pathname.startsWith("/momo/work") && !_prod) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr, ckDesk: ckDeskDeps }); if (_wr) return _wr; }
         const _ar = personOfKey(env, url) === "najjuko" ? await readAnne(env) : null;   /* v643 - the client card is hers */ const _dl = personOfKey(env, url) === "najjuko" ? await readDossiers(env) : [];   /* v657 - her building briefing cards */ return new Response(momoHtml(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", false, _ar && !_ar.archived ? (_ar.title || "Client") : "", personOfKey(env, url) === "kendall", _dl, (personOfKey(env, url) === "najjuko" && isNajjuko(env, url)) || personOfKey(env, url) === "kendall", personOfKey(env, url) === "najjuko" && isNajjuko(env, url), _prod), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname === "/market") {                        // v36 — Market Pulse dashboard (GET — MUST sit above the keyed catch-all dump below)
@@ -3884,6 +3884,7 @@ async function appFetch(request, env, ctx) {
         if (!_viaForward && env.WA_FORWARD_TOKEN && !env.WA_APP_SECRET) return new Response("forward token required", { status: 401 });   // receiver-only instance (no Meta secret): forwarding is the ONLY door
         if (!_viaForward && !(await waVerifySig(env, raw, request.headers.get("X-Hub-Signature-256")))) return new Response("bad sig", { status: 401 });
         let body; try { body = JSON.parse(raw); } catch (e) { return new Response("ok"); }
+        { let _ck = null; try { _ck = await ckWebhook(env, body, { taskAnswer: (n, a, w, no, l) => ckTaskAnswer(env, n, a, w, no, l) }, { send: (to, t) => waSend(env, to, t, String(env.WA_DESK_PHONE_ID || "").replace(/[^0-9]/g, "")), optOut: (d) => campOptOut(env, d, "checkin_stop", {}, Date.now()) }); } catch (e) {} if (_ck && _ck.consumed) return new Response("ok"); }   // v770 - desk check-in buttons and replies (only those)
         { let _cw = null; try { _cw = await campWebhook(env, body, { send: (e2, to, t, pid) => waSend(e2, to, t, pid || undefined), post: (e2, pl, pid) => waPost(e2, pl, "camp-preview", pid || undefined), alert: campAlertSend }); } catch (e) {} if (_cw && _cw.consumed) return new Response("ok"); }   // v723 - campaign receipts, replies and opt-outs (never consumes those); v724 - consumes ONLY a preview keyword or a pv: tap from Najjuko or Kendall
         if (isDeskEvent(env, body)) { try { const _dv = body.entry[0].changes[0].value; for (const _s of ((_dv && _dv.statuses) || [])) await noteReceipt(env, _s); } catch (e) {}   // v470 - desk receipts were dropped, so every desk send stayed "accepted"
           await deskHandle(env, body, { waSend, post: deskPostDeps(env), lab: deskLabDeps(env) }); return new Response("ok"); }   // v388 - the desk number: consumed here BEFORE the shape probe and the router, never handed to the ordinary handlers, never routed on, no stranger digits stored
@@ -5689,6 +5690,12 @@ function deskPostDeps(env) {
   };
 }
 // v726 - campaign alerts (phone or template quality, pauses, back-off stops) to Kendall: WA_DESK_OWNER, from the desk number
+// v770 - what Ask (desk) needs: send from the desk number, the template's Meta status, the opt-out store, the shared cap
+function ckDeskDeps(env) {
+  const pid = String(env.WA_DESK_PHONE_ID || "").replace(/[^0-9]/g, "");
+  return { post: (payload) => waPost(env, payload, "checkin", pid), tplStatus: () => templateStatus(env, WA_GRAPH, "najjuko_task_checkin", env.WABA_ID || "1588773749592854"),
+    optedOut: (d) => campIsOptedOut(env, d), cap: parseInt(env.CAMP_SHARED_CAP, 10) || 250 };
+}
 function campAlertSend(env, text) { const pid = String(env.WA_DESK_PHONE_ID || "").replace(/[^0-9]/g, ""), owner = String(env.WA_DESK_OWNER || "").replace(/[^0-9]/g, ""); if (!pid || !owner) return null; return waSend(env, owner, text, pid); }
 // v428 - the desk lab's sends: everything to WA_DESK_OWNER from WA_DESK_PHONE_ID. raw() returns Meta's own JSON (with .error when refused),
 // so a refused message type is reported to the desk word for word.

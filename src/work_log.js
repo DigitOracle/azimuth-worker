@@ -66,8 +66,7 @@ async function ckLatest(env) {
   do { const r = await env.MEETINGS.list({ prefix: CKT, cursor }); cursor = r.list_complete ? null : r.cursor; for (const k of r.keys) { try { const a = JSON.parse(await env.MEETINGS.get(k.name)); if (a && a.name && a.last) out[a.name] = a.last; } catch (e) {} } } while (cursor);
   return out;
 }
-export async function checkinRoute(request, env, url) {
-  return ckRoute(request, env, url, { taskAnswer: async (name, ans, who, note, line) => {
+export async function ckTaskAnswer(env, name, ans, who, note, line) {   // v770 - shared by the link page and the desk webhook
     let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(TPFX + slug(name))) || "null"); } catch (e) {}
     if (ans === "done" || ans === "stuck") {
       const r = taskRecord(prev, ans === "done" ? { name, status: "Done", percent: 100 } : { name, status: "Stuck", percent: prev ? prev.percent : 0, reason: "Waiting on someone", control: "No", note: (who + ": " + (note || "stuck")).slice(0, 200) }, new Date().toISOString(), false);
@@ -77,7 +76,9 @@ export async function checkinRoute(request, env, url) {
     a = a || { name, log: [] }; const at = new Date(Date.now() + 4 * 3600e3).toISOString();
     a.last = { who, ans, at, note }; a.log = [{ who, ans, at, note, line }].concat(a.log || []).slice(0, 40);
     await env.MEETINGS.put(CKT + slug(name), JSON.stringify(a));
-  } });
+}
+export async function checkinRoute(request, env, url) {
+  return ckRoute(request, env, url, { taskAnswer: (name, ans, who, note, line) => ckTaskAnswer(env, name, ans, who, note, line) });
 }
 export function taskRecord(prev, b, nowIso, needReason) {
   const name = String(b.name || "").trim().slice(0, 80); if (!name) return { error: "Which task?" };
@@ -879,6 +880,11 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
       const all = await listEntries(env, prof.phases[0].from, prof.term_end), tasks = applyOverrides(tasksOf(all), await taskOverrides(env));
       const [st, o] = await ckMake(env, url.origin, b, tasks); return J(o, st);
     }
+    if (b.action === "ck_desk") {   // v770 - Ask (desk): sent now from the desk number with reply buttons
+      if (!deps.ckDesk) return J({ ok: false, error: "The desk is not connected here." }, 503);
+      const all = await listEntries(env, prof.phases[0].from, prof.term_end), tasks = applyOverrides(tasksOf(all), await taskOverrides(env));
+      const [st, o] = await ckDesk(env, b, tasks, deps.ckDesk(env)); return J(o, st);
+    }
     if (b.action === "sync_propose" || b.action === "sync_apply") {
       const src = b.src || {}; let S = null, why = "";
       if (src.entry) { const k = String(src.entry).replace(/[^0-9a-z_-]/g, ""); let e = null; try { e = JSON.parse((await env.MEETINGS.get(PFX + k)) || "null"); } catch (x) {} if (e) { S = { kind: "entry", entry: e, key: PFX + k }; why = "\u201c" + (e.title || "meeting") + "\u201d " + e.date; } }
@@ -1132,7 +1138,7 @@ const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.open
 // v580 - FN's own marks, cut from the Company Template she sent (src/fn_logo.js): the navy monogram, the gold lattice band, FN navy/peach/gold
 import { planRoute } from "./work_plan.js";
 import { syncPropose, syncApply, syncSheet, SYNC_JS } from "./meeting_sync.js";
-import { ckMake, ckRoute, readTeam, saveTeam, CK_JS } from "./checkin.js";   // v764 - WhatsApp check-in from her own phone   // v764 - meeting Sync: meeting -> planner, tasks, sheet
+import { ckMake, ckDesk, ckRoute, readTeam, saveTeam, CK_JS } from "./checkin.js";   // v764 - WhatsApp check-in from her own phone   // v764 - meeting Sync: meeting -> planner, tasks, sheet
 import { jobsRoute } from "./work_jobs.js";
 import { anneRoute, readAnne } from "./work_anne.js";
 import { dossierRoute } from "./work_dossier.js";

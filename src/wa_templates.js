@@ -64,6 +64,12 @@ export const WA_TEMPLATES = {
     example: ["Ahmed", "ISO 19650 asks for one shared information model from day one, not at handover"], footer: "DigitAlchemy® · Complexity into clarity",
     buttons: [{ type: "URL", text: "Read more", url: "https://digitalabbot.io" }, { type: "QUICK_REPLY", text: "Unsubscribe" }],
   },
+  najjuko_task_checkin: {   // v770 - the desk check-in (utility). Kendall submits it himself; Momo only uses it once APPROVED.
+    name: "najjuko_task_checkin", language: "en", category: "UTILITY",
+    body: "Hi {{1}}, Najjuko here. Quick check on {{2}}, due {{3}}. Where is it?",
+    example: ["Vishant", "FD-12 DAMAC Lagoons reel (Edit)", "Thu 6 Nov 18:00"],
+    buttons: [{ type: "QUICK_REPLY", text: "Done" }, { type: "QUICK_REPLY", text: "In progress" }, { type: "QUICK_REPLY", text: "Stuck" }],
+  },
   digitalchemy_event_countdown: {
     name: "digitalchemy_event_countdown", language: "en", category: "MARKETING",
     body: "Hi {{1}}, {{2}} starts in {{3}} days. The DigitAlchemy team will be there. Would you like to meet?",
