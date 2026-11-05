@@ -249,13 +249,15 @@ export async function sheetImport(env, apply, who) {
   const preview = { feed: got.filter((i) => i.kind === "feed").length, stories: got.filter((i) => i.kind === "story").length, tabs: { feed: feedTab || null, stories: storyTab || null },
     columns: Object.fromEntries(Object.entries(maps).map(([t, m]) => [t, Object.keys(m)])), sample: got.slice(0, 3).map((i) => ({ code: i.code, date: i.date, time: i.time, topic: i.topic })) };
   if (!apply) return [200, { ok: true, preview }];
-  const ref = {}, dates = {}; let made = 0, changed = 0;
+  const ref = {}, dates = {}, newCodes = []; let made = 0, changed = 0;
   for (const g of got) {
     const prev = await getJ(env, "cp_item_" + g.code, null), r = cleanItem(g, prev); if (r.error) continue;
     const it = r.item; it.code = g.code; it.added = prev ? !!prev.added : false; ref[g.code] = g._ref; dates[g.code] = g.date;
     const ch = diffLine(prev, it); if (prev && !ch) continue;
-    logAdd(it, "Sheet", prev ? "from the sheet: " + ch : "imported from the sheet"); it.updated = nowIso(); await saveItem(env, it); prev ? changed++ : made++;
+    logAdd(it, "Sheet", prev ? "from the sheet: " + ch : "imported from the sheet"); it.updated = nowIso();
+    await env.MEETINGS.put("cp_item_" + it.code, JSON.stringify(it)); newCodes.push(it.code); prev ? changed++ : made++;   // v773c - the index is written ONCE below (231 writes to one key were refused)
   }
+  if (newCodes.length) { const idx = await getJ(env, "cp_index", []); let add = false; for (const c of newCodes) if (!idx.includes(c)) { idx.push(c); add = true; } if (add) await env.MEETINGS.put("cp_index", JSON.stringify(idx)); }
   await env.MEETINGS.put("cp_sheetmap", JSON.stringify({ ref, dates, maps, at: nowIso(), by: who }));
   return [200, { ok: true, preview, created: made, updated: changed }];
 }
