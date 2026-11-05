@@ -12,7 +12,8 @@ import { readAnne } from "./work_anne.js";
 import { readRec } from "./work_jobs.js";
 import { readSpk } from "./work_speaking.js";
 import { readGgu } from "./work_ggu.js";
-import { plannerBridgeGet, plannerBridgePost } from "./content_planner.js";   // v758 - FN Content Planner through the bridge
+import { plannerBridgeGet, plannerBridgePost } from "./content_planner.js";
+import { pendingList, pendingDone } from "./meeting_sync.js";   // v764 - sheet edits queued by meeting Sync   // v758 - FN Content Planner through the bridge
 import { readSheetsIndex, sheetsFor, sheetOut, bridgeSheetUpload, bridgeSheetDelete, bridgeSheetPair } from "./work_sheets.js";   // v675 - Product data sheets through the bridge
 
 export const BRIDGE_BASE = "/momo/bridge/v1/";
@@ -24,7 +25,7 @@ const ROUTES = {   // route -> [method, who may call it]
   jobs: ["GET", ["kendall"]], speaking: ["GET", ["kendall"]], ggu: ["GET", ["kendall"]],
   "post:entry": ["POST", PEOPLE], "post:task": ["POST", PEOPLE], "post:plan-item": ["POST", PEOPLE], "post:note": ["POST", PEOPLE],
   // v675 - Product data sheets (the shared pds_* store, not a person's Work keys): the loaded sheets plus the caller's own uploads
-  "planner/items": ["GET", PEOPLE], "planner/report": ["GET", PEOPLE], "post:planner/item": ["POST", ["najjuko"]], "post:planner/tick": ["POST", ["najjuko"]],   // v758
+  "planner/items": ["GET", PEOPLE], "planner/report": ["GET", PEOPLE], "post:planner/item": ["POST", ["najjuko"]], "post:planner/tick": ["POST", ["najjuko"]], "planner/pending": ["GET", PEOPLE], "post:planner/pending/done": ["POST", ["najjuko"]],   // v758
   sheets: ["GET", PEOPLE], "post:sheet": ["POST", PEOPLE], "post:sheet/delete": ["POST", PEOPLE], "post:sheet/pair": ["POST", PEOPLE],   // v676 - an infographic joins its brief
 };
 
@@ -110,6 +111,7 @@ async function workSide(env, person) {
   return w;
 }
 async function doGet(env, url, person, route) {
+  if (route === "planner/pending") return OK({ pending: await pendingList(env) });   // v764
   if (route.startsWith("planner/")) { const r = await plannerBridgeGet(env, url, route); if (r) return J(r); }   // v758
   if (WORK_ROUTES.has(route)) env = await workSide(env, person);
   if (route === "whoami") return OK({ person, routes: Object.keys(ROUTES).filter((r) => ROUTES[r][1].includes(person)).map((r) => (ROUTES[r][0] + " " + BRIDGE_BASE + r.replace(/^post:/, ""))), limits: { per_minute: RATE_PER_MIN, max_span_days: MAX_SPAN_DAYS } });
@@ -156,6 +158,7 @@ async function doGet(env, url, person, route) {
 }
 
 async function doPost(env, b, person, route, origin) {
+  if (route === "post:planner/pending/done") { const [st, o] = await pendingDone(env, b.code); return st < 300 ? OK(o.data) : ERR(o.code, o.error, st); }   // v764
   if (route.startsWith("post:planner/")) { const r = await plannerBridgePost(env, b, person, route); if (r) return r; }   // v758
   if (route === "post:sheet") return bridgeSheetUpload(env, person, b, origin);   // v675 - sniffed by content, at most 12 MB, index merged by slug
   if (route === "post:sheet/delete") return bridgeSheetDelete(env, person, b);   // v675 - only the uploader
