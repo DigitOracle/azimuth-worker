@@ -477,7 +477,7 @@ export function plannerBody(key, rk, admin) {
     + '<div class=tabs id=tabs><button class=on data-v=day>Day</button><button data-v=week>Week</button><button data-v=month>Month</button><button data-v=queue>Queue</button><button data-v=flow>Workflow</button><button data-v=rep>Reports</button></div>'
     + '<div class=filt><select id=f_as></select><select id=f_show><option value=all>Show: feed + stories</option><option value=feed>Show: feed</option><option value=stories>Show: stories</option></select><select id=f_how></select><select id=f_who></select></div>'
     + '<div id=body><p class=mt>Loading the plan…</p></div><div id=scrim></div><div id=sheet></div><div id=toast class=toast></div></div>'
-    + '<style>' + CSS + '</style><script src="/momo/checkin.js"></script><script>(' + client.toString() + ')(' + JSON.stringify(CFG).replace(/</g, "\\u003c") + ')</script>';
+    + '<style>' + CSS + '</style><script src="/momo/checkin.js"></script><script>var __name=function(f){return f};(' + client.toString() + ')(' + JSON.stringify(CFG).replace(/</g, "\\u003c") + ')</script>';
 }
 
 const WHO = { najjuko: "Najjuko", kendall: "Kendall" };
