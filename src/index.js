@@ -1,6 +1,6 @@
 import { MOMO_CONFIRM_JS } from "./momo_confirm.js";   // v778
 import { calendarRoute } from "./content_calendar.js";   // v754
-import { plannerRoute } from "./content_planner.js";   // v758 - FN Content Planner
+import { plannerRoute, plannerEveningCheck } from "./content_planner.js";   // v758 - FN Content Planner
 import { creamTheme } from "./cream_theme.js";   // v728
 import { plotIntelRoutes, PLOT_ROOMS } from "./plot_intel.js";   // v691 - Activity radar + Land scanner (MORE)
 import { askBoxHtml, askRoute, askFloatHtml } from "./ask_najma.js";   // v555, v556
@@ -4982,7 +4982,8 @@ export default {
         try { await fitMorning(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v355 - the 05:00 opener, inside the 24-hour window only
         try { await fitReminders(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v351 - the daily "write in my book" reminder, inside the 24-hour window only   // v328 - the 21:00 GST FIT verdict; once a day, only while the 24-hour window is open
         try { await picResume(env, "", 90000); } catch (e) {}
-        try { await campTick(env, { graph: WA_GRAPH, alert: campAlertSend }); } catch (e) {}   // v723 - campaigns: one small batch per LIVE campaign (status "live" only, send window, daily + shared caps)
+        try { await campTick(env, { graph: WA_GRAPH, alert: campAlertSend }); } catch (e) {}
+        try { await plannerEveningCheck(env, event.scheduledTime || Date.now()); } catch (e) {}   // v782b - the planner check at 18:00 Dubai (stored for the Today card; no messages)   // v723 - campaigns: one small batch per LIVE campaign (status "live" only, send window, daily + shared caps)
         try { await bppTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v697 - one step of a building passport (ChatGPT in background mode, then the PDF)
         try { await deliveryWatch(env); } catch (e) {}   // v186 - accepted then failed is not sent
         try { await feedEarlyNudge(env, event.scheduledTime || Date.now()); } catch (e) {}   // v412 - 04:00-04:30: the template, if her window will be shut by the feed

@@ -5,6 +5,7 @@
 // KV (MEETINGS): cp_index [codes], cp_item_<code> {...item, log:[]}, cp_settings, cp_seq (ADD-n counter), cp_sheetmap (last import: code -> {tab,row}).
 // The Google Sheet (content calendar) is two-way but INERT until Momo is connected (gsheet_token / cc_cfg from src/content_calendar.js).
 import { gsToken } from "./content_calendar.js";
+import { plannerChecks } from "./planner_checks.js";   // v782b - planner checks the evening before
 
 export const FEED_STEPS = ["Planned", "Who & how", "Brief", "Made", "Caption", "Approved", "Trial", "Scheduled", "Live", "Results"];
 export const STORY_STEPS = ["Planned", "Who & how", "Made", "Approved", "Posted"];
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS = {
   pro_video_allowance: 10, on_camera_limit: 1, story_times: ["08:00", "13:00", "15:00"], plan_start: "2026-11-02", plan_end: "2026-12-31",
   best_from: "10:00", best_to: "14:00", evening_from: "17:00", evening_to: "21:00", reel_days: [2, 6], check_days: [1, 0],   // 0 Sun .. 6 Sat
   trial_hours: 72, feed_target: 51,
+  feed_min_week: 4, posting_days: null, market_deadline: "18:00", skip_days: [],   // v782b - planner checks
 };
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const esc = (s) => String(s == null ? "" : s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
@@ -154,6 +156,11 @@ export async function applyAction(env, b, who) {
     const code = String(b.code || "").toUpperCase(); const it = await getJ(env, "cp_item_" + code, null); if (!it) return [404, { error: "No item." }];
     it.deleted = true; logAdd(it, who, "deleted"); it.updated = nowIso(); await env.MEETINGS.put("cp_item_" + code, JSON.stringify(it)); return [200, { ok: true }];
   }
+  if (b.action === "skip_day") {   // v782b - "Skip this day": remembered, never flagged again (tap again to undo)
+    if (!okDate(b.date)) return [400, { error: "Which day?" }];
+    const cur = await getJ(env, "cp_settings", {}), set = new Set(cur.skip_days || []); if (b.on === false) set.delete(b.date); else set.add(b.date);
+    cur.skip_days = [...set].sort().slice(-120); await env.MEETINGS.put("cp_settings", JSON.stringify(cur)); return [200, { ok: true, skip_days: cur.skip_days }];
+  }
   if (b.action === "settings") {
     if (who !== "Najjuko" && who !== "Kendall") return [403, { error: "Only Najjuko changes the settings." }];
     const cur = await getJ(env, "cp_settings", {}), x = b.settings || {};
@@ -161,6 +168,10 @@ export async function applyAction(env, b, who) {
     ["best_from", "best_to", "evening_from", "evening_to"].forEach((k) => { if (okTime(x[k])) cur[k] = x[k]; });
     ["plan_start", "plan_end"].forEach((k) => { if (okDate(x[k])) cur[k] = x[k]; });
     if (Array.isArray(x.story_times) && x.story_times.every(okTime)) cur.story_times = x.story_times.slice(0, 6);
+    if (x.feed_min_week !== undefined && Number(x.feed_min_week) >= 0 && Number(x.feed_min_week) <= 14) cur.feed_min_week = Math.round(Number(x.feed_min_week));   // v782b
+    if (okTime(x.market_deadline)) cur.market_deadline = x.market_deadline;
+    if (Array.isArray(x.posting_days)) cur.posting_days = x.posting_days.map(Number).filter((n) => n >= 0 && n <= 6).slice(0, 7);
+    if (Array.isArray(x.skip_days)) cur.skip_days = x.skip_days.filter(okDate).slice(-120);
     await env.MEETINGS.put("cp_settings", JSON.stringify(cur)); return [200, { ok: true, settings: Object.assign({}, DEFAULT_SETTINGS, cur) }];
   }
   return [400, { error: "Unknown action." }];
@@ -303,31 +314,50 @@ function client(CFG) {
   var fd = function (d) { return d ? DOW[dow(d)] + " " + parseInt(d.slice(8), 10) + " " + MON[+d.slice(5, 7) - 1] : ""; };
   var add = function (d, n) { var x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
   var monday = function (d) { var w = dow(d); return add(d, w === 0 ? -6 : 1 - w); };
+  var OPEN_Q = (location.search.match(/[?&]open=([A-Za-z0-9-]+)/) || [])[1] || "", DAY_Q = (location.search.match(/[?&]day=(\d{4}-\d{2}-\d{2})/) || [])[1] || "";
   var api = function (b) { return fetch(CFG.base + "/api" + CFG.q, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).then(function (r) { return r.json(); }); };
   function toast(t, bad) { var e = $("toast"); e.textContent = t; e.className = "toast on" + (bad ? " bad" : ""); clearTimeout(e._t); e._t = setTimeout(function () { e.className = "toast"; }, 3200); }
-  function load(quiet) { return fetch(CFG.base + "/data" + CFG.q).then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) { if (!quiet) toast(j.error || "Could not load", true); return; } D = j; if (!DAY) DAY = j.today; draw(); }).catch(function () { if (!quiet) toast("No connection", true); }); }
+  function load(quiet) { return fetch(CFG.base + "/data" + CFG.q).then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) { if (!quiet) toast(j.error || "Could not load", true); return; } D = j; if (!DAY) DAY = DAY_Q || j.today; draw(); if (OPEN_Q) { var oq = D.items.filter(function (x) { return x.code === OPEN_Q; })[0]; OPEN_Q = ""; if (oq) panel(oq); } }).catch(function () { if (!quiet) toast("No connection", true); }); }
   function vis(it) { if (SHOW === "feed" && it.kind !== "feed") return false; if (SHOW === "stories" && it.kind !== "story") return false; if (HOWF && it.how !== HOWF) return false; if (WHOF && String(it.who || "").indexOf(WHOF) < 0) return false; if (AS && it.status.owner !== AS && it.maker !== AS) return false; return true; }
   function typeOf(it) { return it.kind === "story" ? "Story" + (it.story_type ? " · " + it.story_type : "") : "Feed" + (it.format ? " · " + it.format : ""); }
   function nameOf(it) { return it.topic || "No idea yet (empty in the sheet)"; }
   function stepBtns(it) { var d = {}; Object.keys(it.done || {}).forEach(function (k) { if (it.done[k] && it.done[k].done) d[k] = 1; }); if (it.who && it.how) d["Who & how"] = 1;
     return '<div class=stp>' + it.steps.map(function (s) { var c = d[s] ? "done" : (it.status.step === s ? "cur" : ""); return '<button type=button class="' + c + '" data-tick="' + esc(it.code) + '" data-step="' + esc(s) + '" data-on="' + (d[s] ? 0 : 1) + '">' + esc(s) + '</button>'; }).join("") + '</div>'; }
+  // v782b - planner checks: Fix (red) / Check (amber) chips, day dots, one-tap fixes
+  function chk(code) { return ((D.checks || {}).items || {})[code] || []; }
+  function dayChk(d) { return ((D.checks || {}).days || {})[d] || []; }
+  function chips(code) { var a = chk(code); if (!a.length) return ''; return '<div class=pcx>' + a.slice(0, 3).map(function (p) { return '<span class="pcc ' + p.lvl + '">' + (p.lvl === 'fix' ? 'Fix' : 'Check') + ' · ' + esc(p.what) + '</span>'; }).join('') + (a.length > 3 ? '<span class="pcc more">+' + (a.length - 3) + ' more</span>' : '') + '</div>'; }
+  function dot(d) { var a = dayChk(d); if (!a.length) return ''; return '<span class="pdot ' + (a.some(function (p) { return p.lvl === 'fix'; }) ? 'fix' : 'check') + '" title="' + a.length + ' to look at"></span>'; }
+  function dayBox(d) { var a = dayChk(d).filter(function (p) { return !p.code; }); if (!a.length) return '';
+    return '<div class=pcd>' + a.map(function (p) { return '<div class=pcr><span class="pcc ' + p.lvl + '">' + (p.lvl === 'fix' ? 'Fix' : 'Check') + '</span><div>' + esc(p.what) + '</div>'
+      + (p.fix === 'add' ? '<button class=bo data-add="' + (p.kind || 'feed') + '" data-adday="' + esc(d) + '">Add post</button>' : '') + (p.fix === 'popups' ? '<button class=bo data-act=popups>Answer them</button>' : '')
+      + '<button class=bo data-act=skipday data-skip="' + esc(d) + '">Skip this day</button></div>'; }).join('') + '</div>'; }
+  function fixBox(it) { var a = chk(it.code); if (!a.length) return '';
+    return '<div class=sec>TO FIX</div><div class=pcd>' + a.map(function (p) { var b = '';
+      if (p.fix === 'time') b = '<div class=pts>' + ((D.checks || {}).best || []).map(function (t) { return '<button class=bo data-settime="' + t + '">' + t + '</button>'; }).join('') + '</div>';
+      if (p.fix === 'topic') b = (p.said && p.said.length ? '<div class=psd><small>What the meetings said for ' + esc(fd(it.date)) + ':</small>' + p.said.slice(0, 4).map(function (q) { return '<button class=psq data-settopic="' + esc(q.replace(/^[^:]*: /, '').slice(0, 120)) + '">' + esc(q) + '</button>'; }).join('') + '</div>' : '') + '<button class=bo data-focus=p_topic>Write the topic</button>';
+      if ((p.fix === 'ask' || p.fix === 'made') && window.ckBtn) b = window.ckBtn('step|' + it.code + '|' + (p.step || 'Made'), p.step || 'Made') + '<small> ask ' + esc(p.owner || '') + ' on WhatsApp (message ready, you press send)</small>';
+      if (p.fix === 'camera') b = '<button class=bo data-focus=p_who>Choose someone else</button><button class=bo data-focus=p_date>Move to another day</button>';
+      if (p.fix === 'step') b = '<button class=bo data-focus=p_how>Choose how it\u2019s made</button>';
+      return '<div class=pcr><span class="pcc ' + p.lvl + '">' + (p.lvl === 'fix' ? 'Fix' : 'Check') + '</span><div>' + esc(p.what) + '<div class=pfx>' + b + '</div></div></div>'; }).join('')
+      + '<p class=mt>Fixes go through Save, then the workbook question.</p></div>'; }
   function card(it, trial) {
     if (trial) return '<div class=c data-open="' + esc(it.code) + '"><div class=h><span class=t>' + esc(it.trial.time || "") + '</span><span class=k>Trial Reel · goes live ' + esc(fd(it.date)) + '</span></div><div class=n>' + esc(nameOf(it)) + '</div><div class=nx>' + (it.done && it.done.Trial && it.done.Trial.done ? '<b>Trial posted</b>' : 'Next: <b>Trial</b> · Rouba') + '</div></div>';
-    return '<div class=c data-open="' + esc(it.code) + '"><div class=h><span class=t>' + esc(it.time || "--:--") + '</span><span class=k>' + esc(typeOf(it)) + '</span></div><div class=n>' + esc(nameOf(it)) + '</div><div class=nx>' + (it.status.step === "Done" ? '<b>All steps done</b>' : 'Next: <b>' + esc(it.status.step) + '</b> · ' + esc(it.status.owner)) + '</div>' + stepBtns(it) + '</div>';
+    return '<div class=c data-open="' + esc(it.code) + '"><div class=h><span class=t>' + esc(it.time || "--:--") + '</span><span class=k>' + esc(typeOf(it)) + '</span></div><div class=n>' + esc(nameOf(it)) + '</div><div class=nx>' + (it.status.step === "Done" ? '<b>All steps done</b>' : 'Next: <b>' + esc(it.status.step) + '</b> · ' + esc(it.status.owner)) + '</div>' + chips(it.code) + stepBtns(it) + '</div>';
   }
   function on(day) { return D.items.filter(function (i) { return i.date === day && vis(i); }).sort(function (a, b) { return (a.time || "99") < (b.time || "99") ? -1 : 1; }); }
   function trialsOn(day) { return D.items.filter(function (i) { return i.trial && i.trial.date === day && vis(i); }); }
   function empty() { return '<div class=emp><p><b>Nothing planned yet.</b></p><p>Import the content calendar, or add the first item.</p>' + (D.connected ? '<button class=bt data-act=import>Import from sheet</button>' : '<a class=bt href="/gsheet/start' + CFG.q + '">Connect the content calendar</a>') + '<div class=row2><button class=bo data-add=feed>+ Add feed post</button><button class=bo data-add=story>+ Add story</button></div></div>'; }
   function vDay() {
     var s = on(DAY).filter(function (i) { return i.kind === "story"; }), f = on(DAY).filter(function (i) { return i.kind === "feed"; }), t = trialsOn(DAY);
-    return '<div class=db><button class=ar data-day=-1 aria-label="Previous day">&#8249;</button><b>' + esc(fd(DAY)) + (DAY === D.today ? ' · today' : '') + '</b><button class=ar data-day=1 aria-label="Next day">&#8250;</button></div>'
+    return '<div class=db><button class=ar data-day=-1 aria-label="Previous day">&#8249;</button><b>' + esc(fd(DAY)) + (DAY === D.today ? ' · today' : '') + '</b><button class=ar data-day=1 aria-label="Next day">&#8250;</button></div>' + dayBox(DAY)
       + '<div class=sec>STORIES · ' + s.length + '<button class=ad data-add=story>+ Add story</button></div>' + (s.map(function (i) { return card(i); }).join("") || '<p class=mt>No stories planned.</p>')
       + '<div class=sec>FEED<button class=ad data-add=feed>+ Add feed post</button></div>' + (f.map(function (i) { return card(i); }).join("") || '<p class=mt>No feed post planned.</p>')
       + '<div class=sec>TRIAL REELS TODAY</div>' + (t.map(function (i) { return card(i, true); }).join("") || '<p class=mt>None.</p>');
   }
   function vWeek() {
     var m = monday(DAY), cols = ""; for (var k = 0; k < 7; k++) { var d = add(m, k);
-      cols += '<div class="wc' + (d === D.today ? ' td' : '') + '" data-goday="' + d + '"><b>' + DOW[dow(d)] + ' ' + parseInt(d.slice(8), 10) + '</b>'
+      cols += '<div class="wc' + (d === D.today ? ' td' : '') + '" data-goday="' + d + '"><b>' + DOW[dow(d)] + ' ' + parseInt(d.slice(8), 10) + dot(d) + '</b>'
         + on(d).filter(function (i) { return i.kind === "feed"; }).map(function (i) { return '<div class=wp draggable=true data-drag="' + esc(i.code) + '" data-open="' + esc(i.code) + '">' + esc((i.format || "Post") + " · " + nameOf(i)) + '</div>'; }).join("")
         + trialsOn(d).map(function (i) { return '<div class="wp tr" data-open="' + esc(i.code) + '">Trial · ' + esc(nameOf(i)) + '</div>'; }).join("")
         + on(d).filter(function (i) { return i.kind === "story"; }).map(function (i) { return '<div class=ws data-open="' + esc(i.code) + '">' + esc((i.time || "") + " " + (i.story_type || "Story")) + '</div>'; }).join("") + '</div>'; }
@@ -336,7 +366,7 @@ function client(CFG) {
   function vMonth() {
     var first = DAY.slice(0, 8) + "01", st = monday(first), h = ["M", "T", "W", "T", "F", "S", "S"].map(function (x) { return '<div class=dw>' + x + '</div>'; }).join("");
     for (var k = 0; k < 42; k++) { var d = add(st, k); if (k >= 35 && d.slice(0, 7) !== DAY.slice(0, 7)) break; var its = on(d), tr = trialsOn(d);
-      h += '<div class="md' + (d.slice(0, 7) !== DAY.slice(0, 7) ? ' oth' : '') + (d === D.today ? ' td' : '') + '" data-goday="' + d + '"><span>' + parseInt(d.slice(8), 10) + '</span><div class=dots>'
+      h += '<div class="md' + (d.slice(0, 7) !== DAY.slice(0, 7) ? ' oth' : '') + (d === D.today ? ' td' : '') + '" data-goday="' + d + '"><span>' + parseInt(d.slice(8), 10) + dot(d) + '</span><div class=dots>'
         + its.filter(function (i) { return i.kind === "feed"; }).map(function () { return '<i></i>'; }).join("") + its.filter(function (i) { return i.kind === "story"; }).map(function () { return '<i class=s></i>'; }).join("") + tr.map(function () { return '<i class=t></i>'; }).join("") + '</div></div>'; }
     return '<div class=db><button class=ar data-month=-1>&#8249;</button><b>' + MON[+DAY.slice(5, 7) - 1] + ' ' + DAY.slice(0, 4) + '</b><button class=ar data-month=1>&#8250;</button></div><div class=lg><span><i></i>Feed post</span><span><i class=s></i>Story</span><span><i class=t></i>Trial Reel</span></div><div class=mo>' + h + '</div>';
   }
@@ -368,7 +398,11 @@ function client(CFG) {
       + '<div class=sec>HOW FEED POSTS ARE MADE</div><div class=ppl>' + Object.keys(r.how || {}).map(function (h) { return '<div class=pe>' + esc(h) + '<em>' + r.how[h] + ' · ' + esc(D.maker[h] || "") + '</em></div>'; }).join("") + '</div>'
       + '<div class=sec>ON CAMERA THIS MONTH · LIMIT ' + (r.on_camera_limit || 0) + '</div><div class=ppl>' + (ppl.map(function (n) { var lim = oc[n] >= r.on_camera_limit; return '<div class="pe' + (lim ? ' lim' : '') + '"><i>' + esc(n.charAt(0)) + '</i>' + esc(n) + '<em>' + oc[n] + (lim ? ' · limit reached' : '') + '</em></div>'; }).join("") || '<p class=mt>Nobody on camera yet.</p>') + '</div>'
       + '<div class=sec>NIGHT-BEFORE CHECK · ' + esc(fd(add(D.today, 1)).toUpperCase()) + '</div>' + (on(add(D.today, 1)).map(function (i) { return '<div class=qr><input type=checkbox ' + (i.status.step === "Done" ? 'checked disabled ' : '') + 'data-tick="' + esc(i.code) + '" data-step="' + esc(i.status.step) + '" data-on=1><span class=qw>' + esc(i.time || "") + '</span><div data-open="' + esc(i.code) + '">' + esc(typeOf(i)) + ' — ' + esc(nameOf(i)) + '<br><small>Next: ' + esc(i.status.step) + ' · ' + esc(i.status.owner) + '</small></div></div>'; }).join("") || '<p class=mt>Nothing planned tomorrow.</p>')
-      + (CFG.admin ? '<div class=sec>SETTINGS</div><div class=set><label>Professional video allowance<input id=st_pv type=number min=0 value="' + D.settings.pro_video_allowance + '"></label><label>On camera, per person per month<input id=st_oc type=number min=0 value="' + D.settings.on_camera_limit + '"></label><label>Best posting window<span><input id=st_bf type=time value="' + D.settings.best_from + '"> to <input id=st_bt type=time value="' + D.settings.best_to + '"></span></label><label>Weak evening window<span><input id=st_ef type=time value="' + D.settings.evening_from + '"> to <input id=st_et type=time value="' + D.settings.evening_to + '"></span></label><label>Story times<input id=st_sx value="' + esc((D.settings.story_times || []).join(", ")) + '"></label><label>Feed posts planned to the end of the plan<input id=st_ft type=number min=0 value="' + D.settings.feed_target + '"></label><button class=bt data-act=settings>Save settings</button></div>' : '');
+      + (CFG.admin ? '<div class=sec>SETTINGS</div><div class=set><label>Professional video allowance<input id=st_pv type=number min=0 value="' + D.settings.pro_video_allowance + '"></label><label>On camera, per person per month<input id=st_oc type=number min=0 value="' + D.settings.on_camera_limit + '"></label><label>Best posting window<span><input id=st_bf type=time value="' + D.settings.best_from + '"> to <input id=st_bt type=time value="' + D.settings.best_to + '"></span></label><label>Weak evening window<span><input id=st_ef type=time value="' + D.settings.evening_from + '"> to <input id=st_et type=time value="' + D.settings.evening_to + '"></span></label><label>Story times<input id=st_sx value="' + esc((D.settings.story_times || []).join(", ")) + '"></label><label>Feed posts planned to the end of the plan<input id=st_ft type=number min=0 value="' + D.settings.feed_target + '"></label>'
+      + '<label>Minimum feed posts a week<input id=st_fm type=number min=0 max=14 value="' + (D.settings.feed_min_week || 4) + '"></label>'
+      + '<label>Monday market update ready by (Sunday)<input id=st_md type=time value="' + (D.settings.market_deadline || '18:00') + '"></label>'
+      + '<label>Posting days<span class=pdw>' + ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(function (n, i) { var on = ((D.settings.posting_days && D.settings.posting_days.length ? D.settings.posting_days : (D.checks || {}).posting_days) || []).indexOf(i) >= 0; return '<label class=pdc><input type=checkbox class=st_pd value=' + i + (on ? ' checked' : '') + '>' + n + '</label>'; }).join('') + '</span></label>'
+      + '<button class=bt data-act=settings>Save settings</button></div>' : '');
   }
   function draw() {
     $("conn").innerHTML = D.connected ? '<span class=ok>Content calendar connected</span><button class=bo data-act=import>Import from sheet</button>' : '<span>Not linked to the content calendar yet.</span><a class=bo href="/momo/work/calendar' + CFG.q + '">Connect</a>';
@@ -395,6 +429,7 @@ function client(CFG) {
       + '<dt>How it’s made</dt><dd>' + sel("p_how", it.how, D.how, "Choose") + '</dd></dl>'
       + '<div class=mk id=p_mk></div>';
     if (!isNew) {
+      h += fixBox(it);
       h += (it.qa && it.qa.length ? '<div class=qa>' + it.qa.map(function (x) { return '<div class=qq><span class="pl ' + x[0] + '">' + x[0].toUpperCase() + '</span><div>' + esc(x[1]) + '<br><small>' + esc(x[2]) + '</small></div></div>'; }).join("") + '</div>' : '')
         + (feed ? '<div class=sec>CAPTION CHECKLIST</div><ul class=ck><li>Under 100 characters</li><li>No questions</li><li>1–2 hashtags naming the developer</li><li>Persian or Arabic caption where it fits</li></ul>' : '')
         + '<div class=sec>STEPS</div>' + it.steps.map(function (s) { var dn = it.done && it.done[s] && it.done[s].done, auto = s === "Who & how" && it.who && it.how;
@@ -437,11 +472,16 @@ function client(CFG) {
   }
   document.addEventListener("click", function (e) {
     var t = e.target.closest("[data-tick],[data-open],[data-add],[data-act],[data-day],[data-month],[data-goday],[data-v],[data-kind],[data-rf]"); if (!t) return;
+    if (e.target.closest && e.target.closest("[data-settime]")) { var st = e.target.closest("[data-settime]"); var pt = $("p_time"); if (pt) { pt.value = st.dataset.settime; pt.focus(); } return; }
+    if (e.target.closest && e.target.closest("[data-settopic]")) { var sq = e.target.closest("[data-settopic]"); var tp = $("p_topic"); if (tp) { tp.value = sq.dataset.settopic; tp.focus(); } return; }
+    if (e.target.closest && e.target.closest("[data-focus]")) { var fx = $(e.target.closest("[data-focus]").dataset.focus); if (fx) { fx.focus(); if (fx.scrollIntoView) fx.scrollIntoView({ block: "center" }); } return; }
+    if (e.target.closest && e.target.closest("[data-skip]")) { var sd = e.target.closest("[data-skip]").dataset.skip; api({ action: "skip_day", date: sd }).then(function (j) { if (window.momoConfirm) window.momoConfirm(j.ok, j.ok ? "Skipped " + fd(sd) + " \u00b7 it won\u2019t be flagged again" : (j.error || "Not saved")); else toast(j.ok ? "Skipped " + fd(sd) : (j.error || "Not saved"), !j.ok); load(true); }); return; }
+    if (e.target.closest && e.target.closest("[data-act=popups]")) { location.href = "/momo/work" + CFG.q + "#sync"; return; }
     if (t.dataset.v) { V = t.dataset.v; document.querySelectorAll("#tabs button").forEach(function (b) { b.classList.toggle("on", b === t); }); draw(); return; }
     if (t.dataset.tick) { e.stopPropagation(); t.disabled = true; api({ action: "tick", code: t.dataset.tick, step: t.dataset.step, done: t.dataset.on === "1" }).then(function (j) { if (!j.ok) { toast(j.error || "Not saved", true); t.disabled = false; return; } toast("✓ " + t.dataset.step + (t.dataset.on === "1" ? " done" : " undone")); load(true); }).catch(function () { toast("No connection: not saved", true); t.disabled = false; }); return; }
     if (t.dataset.kind && t.id !== "sheet") { $("sheet").dataset.kind = t.dataset.kind; var cur = collect(); cur.kind = t.dataset.kind; var base = D.items.filter(function (x) { return x.code === cur.code; })[0] || {}; panel(Object.assign({}, base, cur, { steps: base.steps || [], status: base.status || {} }), !cur.code); return; }
     if (t.dataset.open && !e.target.closest("[data-tick]")) { var it = D.items.filter(function (x) { return x.code === t.dataset.open; })[0]; if (it) panel(it); return; }
-    if (t.dataset.add) { panel({ kind: t.dataset.add, date: DAY, time: t.dataset.add === "story" ? (D.settings.story_times || [])[0] : "" }, true); return; }
+    if (t.dataset.add) { panel({ kind: t.dataset.add, date: t.dataset.adday || DAY, time: t.dataset.add === "story" ? (D.settings.story_times || [])[0] : "" }, true); return; }
     if (t.dataset.day) { DAY = add(DAY, +t.dataset.day); draw(); return; }
     if (t.dataset.month) { var m = new Date(DAY.slice(0, 8) + "01T00:00:00Z"); m.setUTCMonth(m.getUTCMonth() + +t.dataset.month); DAY = m.toISOString().slice(0, 10); draw(); return; }
     if (t.dataset.goday) { if (e.target.closest("[data-open]")) return; DAY = t.dataset.goday; V = "day"; document.querySelectorAll("#tabs button").forEach(function (b) { b.classList.toggle("on", b.dataset.v === "day"); }); draw(); return; }
@@ -450,7 +490,7 @@ function client(CFG) {
     if (a === "save") { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); var b = collect(); t.disabled = true; var ps = $("p_status"); if (ps) ps.textContent = "Saving…"; api(b).then(function (j) { t.disabled = false; if (!j.ok) { if (ps) ps.textContent = "Not saved: " + (j.error || "please check the fields"); toast(j.error || "Not saved", true); return; } if (ps) ps.textContent = "Saved"; var cd = j.item.code; closeP(); load(true); if (!D.connected) { toast("✓ Saved " + cd); return; } writeAsk(cd, true); }); }
     if (a === "del") { if (!confirm("Delete this item from the planner?")) return; api({ action: "delete", code: $("sheet").dataset.code }).then(function (j) { if (j.ok) { toast("✓ Deleted"); closeP(); load(true); } else toast(j.error || "Not deleted", true); }); }
     if (a === "settings") { var sx = ($("st_sx").value || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean);
-      api({ action: "settings", settings: { pro_video_allowance: $("st_pv").value, on_camera_limit: $("st_oc").value, best_from: $("st_bf").value, best_to: $("st_bt").value, evening_from: $("st_ef").value, evening_to: $("st_et").value, story_times: sx, feed_target: $("st_ft").value } }).then(function (j) { if (j.ok) { toast("✓ Settings saved"); load(true); } else toast(j.error || "Not saved", true); }); }
+      api({ action: "settings", settings: { pro_video_allowance: $("st_pv").value, on_camera_limit: $("st_oc").value, best_from: $("st_bf").value, best_to: $("st_bt").value, evening_from: $("st_ef").value, evening_to: $("st_et").value, story_times: sx, feed_target: $("st_ft").value, feed_min_week: ($("st_fm") || {}).value, market_deadline: ($("st_md") || {}).value, posting_days: [].map.call(document.querySelectorAll(".st_pd:checked"), function (x) { return +x.value; }) } }).then(function (j) { if (j.ok) { toast("✓ Settings saved"); load(true); } else toast(j.error || "Not saved", true); }); }
     if (a === "print") window.print();
     if (a === "import") { t.disabled = true; toast("Reading the content calendar…"); api({ action: "import" }).then(function (j) { t.disabled = false; if (!j.ok) { toast(j.error === "not_connected" ? "Connect the content calendar first." : (j.error || "Could not read the sheet"), true); return; }
       var p = j.preview; if (!confirm("Import from the sheet?\n\n" + p.feed + " feed posts (" + (p.tabs.feed || "no Feed tab") + ")\n" + p.stories + " stories (" + (p.tabs.stories || "no Stories tab") + ")\n\nColumns found: " + Object.keys(p.columns).map(function (k) { return k + ": " + p.columns[k].join(", "); }).join(" | ") + "\n\nNothing is written to the sheet.")) return;
@@ -488,7 +528,7 @@ const CSS = ':root{--cr:#FAF7F1;--cd:#FFFDF9;--ln:#E7E1D6;--ink:#1C2321;--mu:#5F
   + '.cp .ppl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}.cp .pe{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--ln);border-radius:10px;padding:6px 8px;font-size:.76rem;min-width:0}.cp .pe i{flex:0 0 24px;width:24px;height:24px;border-radius:50%;background:var(--te);color:#fff;font:600 .62rem "IBM Plex Sans",sans-serif;font-style:normal;display:flex;align-items:center;justify-content:center}.cp .pe em{margin-left:auto;font-style:normal;font-size:.66rem;color:var(--mu);text-align:right}.cp .pe.lim{opacity:.6}.cp .pe.lim em{color:#9A3F2A}'
   + '.cp .seg2{display:flex;gap:6px;margin:4px 0}.cp .seg2 button{border:1px solid var(--ln);background:#fff;border-radius:999px;padding:6px 12px;font:600 .76rem "IBM Plex Sans",sans-serif;color:var(--mu);cursor:pointer}.cp .seg2 button.on{background:var(--go);color:#fff;border-color:var(--go)}'
   + '.cp .set{display:flex;flex-direction:column;gap:8px;background:#fff;border:1px solid var(--ln);border-radius:12px;padding:10px;font-size:.8rem}.cp .set label{display:flex;flex-direction:column;gap:4px;color:var(--mu)}.cp .set input{font:inherit;font-size:16px;border:1px solid var(--ln);border-radius:8px;padding:6px}'
-  + '#scrim{position:fixed;inset:0;background:rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .2s;z-index:60}#scrim.open{opacity:1;pointer-events:auto}'
+  + '.pcx{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0 2px}.pcc{font:600 .7rem IBM Plex Sans,sans-serif;border-radius:999px;padding:2px 8px;line-height:1.5}.pcc.fix{background:#F6DEDA;color:#8A3E3E}.pcc.check{background:#F5E9CF;color:#7A5A1E}.pcc.more{background:#EFE9DE;color:#5F6B66}.pdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:4px;vertical-align:middle}.pdot.fix{background:#B4533C}.pdot.check{background:#C5A56A}.pcd{border:1px solid #EFE2C9;background:#FFFDF6;border-radius:14px;padding:8px 10px;margin:8px 0}.pcr{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid #F2EBDD;flex-wrap:wrap}.pcr:first-child{border-top:0}.pcr>div{flex:1 1 60%;font-size:.86rem}.pfx{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.pts{display:flex;flex-wrap:wrap;gap:6px}.psd{display:flex;flex-direction:column;gap:4px;margin-bottom:6px}.psq{text-align:left;border:1px dashed #C5A56A;background:#fff;border-radius:10px;padding:6px 8px;font-size:.8rem;color:#1C2826}.pdw{display:flex;flex-wrap:wrap;gap:6px}.pdc{display:inline-flex;gap:4px;align-items:center;font-size:.82rem}.pdc input{width:auto!important}#scrim{position:fixed;inset:0;background:rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .2s;z-index:60}#scrim.open{opacity:1;pointer-events:auto}'
   + '#sheet{position:fixed;left:0;right:0;bottom:0;max-height:85vh;max-height:85dvh;max-width:560px;margin:0 auto;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.2);transform:translateY(105%);visibility:hidden;transition:transform .22s,visibility 0s .22s;overflow-y:auto;padding:12px 16px 28px;z-index:61}#sheet.open{transform:translateY(0);visibility:visible;transition:transform .22s}'
   + '#p_actions{position:sticky;bottom:0;background:#fff;padding:10px 0 calc(14px + env(safe-area-inset-bottom));margin-top:8px;box-shadow:0 -8px 12px -8px rgba(0,0,0,.12);z-index:2}#p_actions .bt{min-height:48px;font-size:1rem}#p_status{font:500 .82rem IBM Plex Sans,sans-serif;color:#5F6B66;min-height:1.1em;margin-top:6px;text-align:center}#sheet .grab{width:40px;height:4px;border-radius:9px;background:#DDD6C8;margin:0 auto 10px}#sheet .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--te);border-radius:999px;overflow:hidden;margin-bottom:10px}#sheet .seg button{border:0;background:#fff;padding:8px;font:600 .8rem "IBM Plex Sans",sans-serif;color:var(--te);cursor:pointer}#sheet .seg button.on{background:var(--te);color:#fff}'
   + '#sheet .f{display:grid;grid-template-columns:104px minmax(0,1fr);gap:8px 10px;font-size:.82rem;margin:8px 0;align-items:center}#sheet .f dt{color:var(--mu)}#sheet .f dd{margin:0}#sheet .f input,#sheet .f select,#sheet .f textarea{font:inherit;font-size:16px;border:1px solid var(--ln);border-radius:8px;padding:6px;width:100%;background:var(--cr)}'
@@ -514,12 +554,31 @@ function rangeFor(r, day, S) {
   if (r === "month") { const end = new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7), 0)).toISOString().slice(0, 10); return [day.slice(0, 8) + "01", end]; }
   const w = dowOf(day), m = addDays(day, w === 0 ? -6 : 1 - w); return [m, addDays(m, 6)];
 }
+// v782b - what the meetings said for each day, and the meeting pop-ups not answered yet (ms_auto, written by the v776/v781 scan)
+export async function meetingDays(env) {
+  const said = {}, popups = {}; let A = {}; try { A = JSON.parse((await env.MEETINGS.get("ms_auto")) || "{}") || {}; } catch (e) {}
+  Object.keys(A).forEach((k) => { const a = A[k]; (a.changes || []).forEach((c) => { const d = c.date || (c.current && c.current.date) || ""; if (!okDate(d)) return;
+    const q = String(c.quote || c.line_text || "").slice(0, 160); if (q) (said[d] = said[d] || []).push((a.title ? a.title + ": " : "") + q);
+    if (!(a.ans && a.ans[c.id])) popups[d] = (popups[d] || 0) + 1; }); });
+  return { said, popups };
+}
+export async function plannerChecksNow(env, now) {
+  const S = await readSettings(env), today = dubaiToday(now), items = (await readItems(env)).map((i) => derive(i, S, today)), md = await meetingDays(env);
+  return plannerChecks(items, S, today, { nowHm: new Date((now || Date.now()) + 4 * 3600e3).toISOString().slice(11, 16), said: md.said, popups: md.popups });
+}
+// v782b - the full check at 18:00 Dubai every evening (minute tick): stored, so the Today card can say what was found
+export async function plannerEveningCheck(env, now) {
+  const hm = new Date((now || Date.now()) + 4 * 3600e3).toISOString().slice(11, 16); if (hm !== "18:00") return null;
+  const c = await plannerChecksNow(env, now); await env.MEETINGS.put("cp_checks_last", JSON.stringify({ at: new Date(now || Date.now()).toISOString(), line: c.line, fix: c.fix, fix_tomorrow: c.fix_tomorrow, check: c.check }), { expirationTtl: 8 * 86400 }); return c;
+}
 export async function plannerData(env, url) {
   const S = await readSettings(env), today = dubaiToday(), items = await readItems(env);
   const day = okDate(url.searchParams.get("day")) ? url.searchParams.get("day") : today, r = url.searchParams.get("range") || "week";
   const [from, to] = okDate(url.searchParams.get("from")) && okDate(url.searchParams.get("to")) ? [url.searchParams.get("from"), url.searchParams.get("to")] : rangeFor(r, day, S);
   const tok = await env.MEETINGS.get("gsheet_token"), cfg = await env.MEETINGS.get("cc_cfg");
-  return { ok: true, today, settings: S, connected: !!(tok && cfg), items: items.map((i) => derive(i, S, today)), report: report(items, S, from, to, today),
+  const derived = items.map((i) => derive(i, S, today)), md = await meetingDays(env);
+  const checks = plannerChecks(derived, S, today, { nowHm: new Date(Date.now() + 4 * 3600e3).toISOString().slice(11, 16), said: md.said, popups: md.popups });
+  return { ok: true, today, settings: S, connected: !!(tok && cfg), items: derived, checks, said: md.said, report: report(items, S, from, to, today),
     team: TEAM, how: HOW, maker: MAKER, owner: OWNER, acc: ACCOUNTABLE, formats: FORMATS, story_types: STORY_TYPES, pillars: PILLARS };
 }
 
