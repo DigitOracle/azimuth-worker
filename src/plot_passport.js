@@ -35,9 +35,53 @@ function editDist(a, b) {   // v762 - Levenshtein, small words only
   return d[a.length][b.length];
 }
 
+// v763 (Kendall 5 Nov 2026) - the search built from the ONE-NAME LIST (naj-market-pulse scripts/build_search_gaz.py, gaz_entity / gaz_alias).
+// pp_g_<first 3 chars of a word> (or pp_g_<4 chars> when that bucket was split): [alias_norm, display, entity_id, level, path, n_plots, plot_id, district].
+// One entry per name per place, never per plot, and no bucket cap - the old pp_s_* lost 3,144 of 6,356 names. Used only once pp_meta.gaz is set.
+const GZ_RANK = { community: 0, cluster: 1, building: 2, plot: 3 };
+export async function ppSearchGaz(env, n, meta) {
+  const qw = n.split(" ").filter(Boolean);
+  const key = qw.filter((w) => w.length >= 2).sort((a, b) => b.length - a.length)[0] || qw[0];
+  let sh = await readJson(env, "pp_g_" + key.slice(0, 3));
+  if (sh && !Array.isArray(sh) && sh.split) sh = key.length >= 4 ? ((await readJson(env, "pp_g_" + key.slice(0, 4))) || sh.top || []) : (sh.top || []);
+  sh = Array.isArray(sh) ? sh : [];
+  const hit = (t) => { const tw = t.split(" "); return qw.every((w) => tw.some((x) => x.startsWith(w))); };
+  const best = new Map();
+  for (const e of sh) {
+    if (!hit(e[0])) continue;
+    const exact = e[0] === n ? 1 : 0, prev = best.get(e[2]);
+    if (!prev || exact > prev.exact) best.set(e[2], { e, exact });
+  }
+  const all = [...best.values()].sort((a, b) => (b.exact - a.exact) || ((GZ_RANK[a.e[3]] ?? 9) - (GZ_RANK[b.e[3]] ?? 9)) || (b.e[5] - a.e[5]) || a.e[0].localeCompare(b.e[0]));
+  const groups = [], results = [];
+  for (const { e, exact } of all) {
+    const isGroup = e[3] === "community" || e[3] === "cluster" || (e[3] === "building" && e[5] > 1);
+    if (isGroup) { if (groups.length < 8) groups.push({ id: e[2], level: e[3], name: e[1], path: e[4], plots: e[5], district: e[7] || "", districts: 1 }); }
+    else if (results.length < 12) results.push({ label: e[1] + (e[7] ? " \u00b7 " + e[7] : ""), id: e[6], kind: e[3] === "plot" ? "number" : "name", exact: !!exact, path: e[4], level: e[3] });
+  }
+  const w0 = key, near = new Map();
+  if (w0.length >= 4 && all.length < 4) for (const e of sh) for (const w of e[0].split(" ")) {
+    if (w === w0 || near.has(w) || Math.abs(w.length - w0.length) > 2 || w.indexOf(w0) === 0) continue;
+    if (editDist(w, w0) <= 2) near.set(w, 1);
+    if (near.size >= 4) break;
+  }
+  return { q: n, results, total: all.length, groups, didYouMean: [...near.keys()], gaz: 1 };
+}
+
+// v763 - one place: its children (clusters, buildings) and its plots, for "see them all"
+export async function ppEntity(env, id) {
+  if (!/^[A-Za-z0-9:_|\-]{2,160}$/.test(id || "")) return null;
+  const meta = (await readJson(env, "pp_meta")) || {};
+  if (!meta.gaz) return null;
+  const b = await readJson(env, "pp_ge_" + (ppCrc32(id) % (meta.gaz_ge_buckets || 2048)));
+  return b && b[id] ? Object.assign({ id }, b[id]) : null;
+}
+
 export async function ppSearch(env, q) {
   const n = normQ(q);
   if (n.length < 2) return { q: n, results: [], total: 0, short: true };
+  const _gm = (await readJson(env, "pp_meta")) || {};
+  if (_gm.gaz) return ppSearchGaz(env, n, _gm);
   const shard = (await readJson(env, "pp_s_" + n.split(" ")[0].slice(0, 2))) || [];
   const seen = new Set(), out = []; let total = 0;
   for (const e of shard) {
@@ -405,6 +449,7 @@ export async function plotPassportRoutes(request, env, url, deps) {
     return d ? json({ ok: true, district: d }) : json({ ok: false, error: "That district is not loaded yet." }, 404);
   }
   if (p === "/plot_passport/search") return json(await ppSearch(env, url.searchParams.get("q") || ""));
+  if (p === "/plot_passport/entity") { const en = await ppEntity(env, url.searchParams.get("id") || ""); return en ? json({ ok: true, entity: en }) : json({ ok: false, error: "That place is not in the list yet." }, 404); }   // v763
   if (p === "/plot_passport/p") {
     const id = url.searchParams.get("id") || "";
     if (!PP_ID.test(id)) return json({ ok: false, error: "That is not a Najma plot id." }, 400);
