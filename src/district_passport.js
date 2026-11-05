@@ -142,7 +142,6 @@ export function dpFull(d, reader, ty) {
 }
 
 const CSS = ':root{color-scheme:light only}html,body{background:#F7F3EA!important;color:#1C2826!important}'
-  + '@media print{@page{size:A4;margin:10mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.ph{max-width:none;padding:0 2mm}.pp{border:0;break-after:page}.pp:last-child{break-after:auto}.cta,.full{display:none}}'
   + ':root{--cream:#F7F3EA;--card:#FFFDF9;--line:#E7E1D6;--teal:#0A4F4A;--gold:#C5A56A;--gold2:#8A6F3E;--ink:#1C2826;--mute:#5F6B66;--green:#2F7D5B}*{box-sizing:border-box}'
   + 'body{margin:0;background:var(--cream);font-family:"IBM Plex Sans",sans-serif;color:var(--ink)}.ph{max-width:560px;margin:0 auto;padding:18px 16px 26px}.pp{border-bottom:8px solid #EDE7DA}'
   + '.top{display:flex;justify-content:space-between;gap:8px;font:500 .66rem "IBM Plex Mono",monospace;color:var(--gold2);letter-spacing:.1em}h1{font:600 1.8rem/1.1 Fraunces,serif;color:var(--teal);margin:10px 0 4px}'
@@ -157,14 +156,15 @@ const CSS = ':root{color-scheme:light only}html,body{background:#F7F3EA!importan
   + '.vb{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px;margin-top:8px}.vb img{width:96px;border-radius:6px}.vb b{font:600 .9rem Fraunces,serif;color:var(--teal);display:block}.vb span{font-size:.72rem;color:var(--mute)}'
   + '.foot{margin-top:14px;padding-top:8px;border-top:1px solid var(--line);font-size:.64rem;color:var(--mute);display:flex;justify-content:space-between;gap:8px}.pg{font:600 .62rem "IBM Plex Mono",monospace;color:var(--gold2)}'
   + '.bar{display:flex;align-items:center;gap:6px;font-size:.76rem;margin:4px 0}.bar i{height:9px;background:var(--teal);border-radius:4px;display:block}.bar span{width:60px;color:var(--mute)}'
-  + 'table{width:100%;border-collapse:collapse;font-size:.78rem}td,th{border-bottom:1px solid var(--line);padding:7px 4px;text-align:left;vertical-align:top}th{font:600 .6rem "IBM Plex Mono",monospace;color:var(--gold2);text-transform:uppercase}';
+  + 'table{width:100%;border-collapse:collapse;font-size:.78rem}td,th{border-bottom:1px solid var(--line);padding:7px 4px;text-align:left;vertical-align:top}th{font:600 .6rem "IBM Plex Mono",monospace;color:var(--gold2);text-transform:uppercase}'
+  + '@media print{@page{size:A4;margin:9mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.ph{max-width:none!important;padding:0 2mm!important}.pp{border:0!important;break-after:page}.pp:last-child{break-after:auto}.full{display:none!important}.hero img{aspect-ratio:16/7!important}.c{padding:7px 9px!important}.g{gap:6px!important}h1{margin-top:6px!important}.vb img{width:80px!important}}';   // v772b - print rules LAST so they win
 function page(title, body) {
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content=noindex><meta name=theme-color content="#F7F3EA"><meta name=color-scheme content="light only"><title>' + esc(title) + "</title>"
     + '<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel=stylesheet><style>' + CSS + "</style></head><body>" + body + "</body></html>";
 }
 
 export const dpFileName = (slug, reader, one) => (DP_SETS[slug] ? (one ? DP_SETS[slug].name : "Palm Jebel Ali") : slug) + " - " + DP_READERS[dpReader(reader)].label.replace("Keeping it", "Keeper").replace("Selling", "Seller") + (one ? " one-pager" : " passport") + " - Najjuko.pdf";
-async function dataVer(d) { const t = JSON.stringify([d.brief, d.facts, d.dna ? d.dna.live : null, d.hasImg, "v772"]); let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+async function dataVer(d) { const t = JSON.stringify([d.brief, d.facts, d.dna ? d.dna.live : null, d.hasImg, "v772b"]); let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 let LAUNCH = (b) => puppeteer.launch(b);
 export function __setDpLauncher(fn) { LAUNCH = fn || ((b) => puppeteer.launch(b)); }
 // the stored PDF for one district + reader (+ one-pager or the 4 pages); renders only when the data changed since the last render
