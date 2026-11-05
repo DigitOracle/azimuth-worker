@@ -2347,6 +2347,11 @@ async function appFetch(request, env, ctx) {
     }
     { const _ak = await askRoute(request, env, url, { keyTier }); if (_ak) return _ak; }   // v555 - Ask Najma (stub engine, owner only)
     // v564.1 - Momo Work's saves and filings are POSTs: answered here, before the POST guard further down refuses them
+    // v773 (Kendall 5 Nov: the content planner and the sheet connect were never let through the POST guard - every save, the sheet-link paste and Import answered 401)
+    if (request.method === "POST" && (url.pathname === "/momo/work/calendar" || url.pathname.startsWith("/momo/work/planner")) && ["najjuko", "kendall"].includes(personOfKey(env, url))) {
+      if (url.pathname === "/momo/work/calendar") { const _cc = await calendarRoute(request, env, url, { page: momoPage }); if (_cc) return _cc; }
+      else { const _cp = await plannerRoute(request, env, url, { page: momoPage, person: personOfKey }); if (_cp) return _cp; }
+    }
     if (request.method === "POST" && MOMO_WORK_POSTS.has(url.pathname)) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr, ckDesk: ckDeskDeps }); if (_wr) return _wr; }
     if (url.pathname === "/desk_ref_set" && request.method === "GET") {   // v549 - owner key; ?n=<ref>&approved=0|1 - takes a reference photo out of use (or back), the photo itself is kept
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
