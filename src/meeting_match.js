@@ -35,7 +35,28 @@ const RULES = [
   { rx: /\badvis[eo]r intake\b|\bali'?s video\b|\bpodcast\b/, kind: "feed", topic: "Ali (video or podcast clip)", format: "Reel", who: "Ali Kalhor", confirm: ["ali", "advisor", "adviser"] },
   { rx: /\bcarousel\b/, same: true, kind: "feed", format: "Carousel", topic: "Two carousels", confirm: ["carousel"] },
 ];
-const TASK_RX = /\b(arrange|email them|find a project|follow ?up with)\b/;
+const TASK_RX = /\b(arrange|email them|find a project)\b/;   // v782a - follow up with someone is a promise now (owner + due)
+// v782a - a promise: someone will do something ("I'll send the brochure", "Sousan will check the Babak recording", "check with Susan if she recorded")
+const PROMISE_RX = /\b(check with|follow ?up with|send (him|her|them|the|a|it)|email (him|her|them)|call (him|her|them)|book (a|the)|ask (him|her|them|ali|susan|sousan|monaza|vishant|liam|rouba))\b/;
+const ALIAS = { susan: "Sousan", sosan: "Sousan", sousan: "Sousan", monaza: "Monaza", vishant: "Vishant", liam: "Liam", kareem: "Kareem", karim: "Kareem", rouba: "Rouba", najjuko: "Najjuko", ali: "Ali Kalhor" };
+export function ownerIn(u, team) {
+  const n = " " + norm(u) + " ";
+  for (const k of Object.keys(ALIAS)) if (n.indexOf(" " + k + " ") >= 0 && !new RegExp("\\b(with|from|to|ask) " + k + "\\b").test(n)) return ALIAS[k];
+  for (const t of team || []) { const nm = norm(t && t.name ? t.name : t).split(" ")[0]; if (nm.length >= 3 && n.indexOf(" " + nm + " will ") >= 0) return t && t.name ? t.name : t; }
+  if (/\b(i'?ll|i will|i'?m going to)\b/.test(n)) return "Najjuko";
+  const w = /\b(check|follow ?up) with (\w+)/.exec(n); if (w && ALIAS[w[2]]) return "Najjuko";
+  return "Najjuko";
+}
+export function taskWords(u, before) {
+  let t = String(u || "").replace(/\s+/g, " ").trim();
+  // "follow up with her" names the person said just before ("Sosan was doing the editing")
+  if (/\bwith (her|him)\b/i.test(t)) { const b = " " + norm(before) + " "; const hit = Object.keys(ALIAS).filter((k) => b.indexOf(" " + k + " ") >= 0).pop(); if (hit) t = t.replace(/\bwith (her|him)\b/i, "with " + ALIAS[hit]); }
+  const m = /\b(follow-? ?up with|check with|send|email|call|book|ask)\b/i.exec(t); if (m) t = t.slice(m.index);
+  t = t.replace(/^follow-? ?up/i, "Follow up").replace(/^check with/i, "Check with").replace(/\b(susan|sosan)\b/gi, "Sousan").replace(/[.?!]+$/, "");
+  return (t.charAt(0).toUpperCase() + t.slice(1)).slice(0, 80);
+}
+const nextWorkday = (d) => { let x = d; for (let i = 0; i < 4; i++) { x = addD(x, 1); const w = new Date(x + "T00:00:00Z").getUTCDay(); if (w !== 0 && w !== 6) return x; } return x; };
+
 const EVENT_RX = /\b(huge|viral|event)\b.*\bvideo\b|\bvideo\b.*\b(huge|viral|event)\b/;
 
 // split into short spoken units (sentences), keeping order
@@ -73,6 +94,8 @@ export function matchMeeting(text, meetingDate, items, opt) {
   const byDay = {}; (items || []).forEach((i) => { if (!i.deleted) (byDay[i.date] = byDay[i.date] || []).push(i); });
   R.forEach((x, idx) => {
     const n = norm(x.u), day = x.date || x.carry; if (!n) return;
+    if (PROMISE_RX.test(n) && !TASK_RX.test(n) && x.u.length > 24 && (/\b(check with|follow ?up with|ask)\b/.test(n) || !RULES.some((r) => r.rx.test(n)))) { const owner = ownerIn(x.u, (opt && opt.team) || []), due = x.date && x.explicit ? addD(x.date, -1) > meetingDate ? addD(x.date, -1) : x.date : nextWorkday(meetingDate);
+      const key = "promise:" + n.slice(0, 40); if (!seen.has(key)) { seen.add(key); out.push({ cls: "task", promise: true, owner, due, quote: x.u, task: taskWords(x.u, R.slice(Math.max(0, idx - 3), idx).map((y) => y.u).join(" ")) }); } }
     if (TASK_RX.test(n) && !RULES.some((r) => r.rx.test(n))) { const key = "task:" + n.slice(0, 30); if (!seen.has(key)) { seen.add(key); out.push({ cls: "task", quote: x.u, task: x.u.replace(/^(we need to|need to)\s*/i, "").slice(0, 80) }); } return; }
     if (EVENT_RX.test(n) && x.explicit) { const key = "new:event:" + day; if (!seen.has(key)) { seen.add(key); out.push({ cls: "new", quote: x.u, date: day, kind: "feed", fields: { topic: "Video at the event", format: "Reel" } }); } return; }
     for (const r of RULES) {
@@ -105,7 +128,9 @@ export function matchMeeting(text, meetingDate, items, opt) {
   // the event video is said a sentence or two after its date ("Eleventh is Wednesday ... It's huge ... we should make video")
   R.forEach((x, i) => { if (!x.explicit) return; for (let j = i; j < Math.min(R.length, i + 4); j++) { const n2 = norm(R[j].u); if (/\b(huge|viral)\b/.test(n2) || (/\bvideo\b/.test(n2) && /\b(should|make)\b/.test(n2) && j > i)) { if (!res.some((p) => p.cls === "new" && p.date === x.date)) res.push({ cls: "new", quote: R[i].u + " " + R[j].u, date: x.date, kind: "feed", fields: { topic: "Video at the event", format: "Reel" } }); break; } } });
   // tasks said over several sentences become one task
-  const tasks = res.filter((p) => p.cls === "task");
-  if (tasks.length > 1) { const merged = { cls: "task", quote: tasks.map((t) => t.quote).join(" ").slice(0, 400), task: "Arrange the visits and projects discussed (" + tasks.length + " mentions)" }; res = res.filter((p) => p.cls !== "task").concat([merged]); }
-  return res.map((p, i) => Object.assign({ id: "m" + i }, p));
+  const tasks = res.filter((p) => p.cls === "task" && !p.promise);
+  if (tasks.length > 1) { const merged = { cls: "task", quote: tasks.map((t) => t.quote).join(" ").slice(0, 400), task: "Arrange the visits and projects discussed (" + tasks.length + " mentions)" }; res = res.filter((p) => !(p.cls === "task" && !p.promise)).concat([merged]); }
+  // v782a - a card keeps its id when a meeting is read again (her earlier answers stay on the right card)
+  const hid = (x) => { let h = 5381; const t = [x.cls, x.code || "", x.date || "", String(x.task || (x.fields && x.fields.topic) || ""), String(x.quote || "").slice(0, 60)].join("|"); for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return "m" + (h >>> 0).toString(36); };
+  const used = {}; return res.map((p) => { let id = hid(p); while (used[id]) id += "x"; used[id] = 1; return Object.assign({ id }, p); });
 }

@@ -78,7 +78,7 @@ export async function autoScan(env, deps, meetings, tasks, team, max) {
   for (const m of meetings) {
     const prev = A[m.key];
     const rec = m.src && m.src.entry && m.src.entry.rec ? String(m.src.entry.rec) : "";
-    if (prev && (prev.v === 2 || !rec)) continue;   // v781 - a recording's meeting read by the older scan is read again with the matcher
+    if (prev && (prev.v === 3 || (!rec && prev.v === 2))) continue;   // v782a - recordings read again once for meeting promises (answers kept)   // v781 - a recording's meeting read by the older scan is read again with the matcher
     if (read >= (max || 2)) continue;
     // v781 - the matcher reads what was SAID (the transcript), not the summary, so day words and names survive
     if (rec) {
@@ -87,7 +87,7 @@ export async function autoScan(env, deps, meetings, tasks, team, max) {
       if (text.trim().length > 40) {
         read++;
         const P = matchMeeting(text, m.date, items, { team });
-        A[m.key] = { v: 2, at: new Date().toISOString(), title: m.title, date: m.date, hits: ["matcher"], changes: P.map((x) => Object.assign({ type: "match", ok: true, certain: x.cls === "sure" }, x)), ans: (prev && prev.ans) || {} };
+        A[m.key] = { v: 3, at: new Date().toISOString(), title: m.title, date: m.date, hits: ["matcher"], changes: P.map((x) => Object.assign({ type: "match", ok: true, certain: x.cls === "sure" }, x)), ans: (prev && prev.ans) || {} };
         continue;
       }
     }
@@ -180,7 +180,7 @@ export function matchToChanges(c, answer, edits, items) {
   SETF.forEach((k) => { if (e[k] != null && String(e[k]).trim() !== "") f[k] = String(e[k]).slice(0, 300); });
   const day = okD(e.date) ? e.date : c.date, out = [], quote = c.quote || "";
   const newItem = (d) => ({ type: "planner_new", item_kind: c.kind === "story" ? "story" : "feed", date: d, time: okT(f.time) ? f.time : "", format: f.format || "", topic: f.topic || "", quote });
-  if (c.cls === "task") return [{ type: "task_new", task: String(e.task || c.task || "Follow up from the meeting").slice(0, 80), quote }];
+  if (c.cls === "task") return [{ type: "task_new", task: String(e.task || c.task || "Follow up from the meeting").slice(0, 80), owner: String(e.owner || c.owner || "").slice(0, 40), due: okD(e.due) ? e.due : (okD(c.due) ? c.due : ""), quote }];
   if (c.cls === "new" || answer === "add") return [newItem(day)];
   if (c.cls === "recurring" || answer === "repeat") {
     const start = okD(c.date) ? c.date : today();
@@ -210,7 +210,7 @@ export async function syncApply(env, changes, why, hooks) {
         r = it ? await applyAction(env, { action: "save", code: it.code, note: ("ON HOLD (" + String(why || "meeting").slice(0, 80) + "): " + String(c.quote || "").slice(0, 120) + (it.note ? " | " + it.note : "")).slice(0, 400) }, who) : [404, { error: "No item." }];
       } else if (c.type === "planner_new") r = await applyAction(env, { action: "save", kind: c.item_kind === "story" ? "story" : "feed", date: okD(c.date) ? c.date : "", time: okT(c.time) ? c.time : "", format: c.format || "", topic: String(c.topic || "").slice(0, 300), note: "Agreed in meeting " + String(why || "").slice(0, 120), added: true }, who);
       else if (c.type === "task_update") r = await hooks.taskUpdate(String(c.task || ""), c.status, c.percent);
-      else if (c.type === "task_new") r = await hooks.taskNew(String(c.task || ""));
+      else if (c.type === "task_new") r = await hooks.taskNew(String(c.task || ""), String(c.owner || ""), String(c.due || ""));
     } catch (e) { r = [500, { error: String(e.message || e).slice(0, 120) }]; }
     const okk = r && r[0] < 300;
     (okk ? done : failed).push({ id: c.id, type: c.type, code: (okk && r[1] && r[1].item && r[1].item.code) || c.code || "", task: c.task || "", error: okk ? "" : (r && r[1] && r[1].error) || "Not applied." });
@@ -283,7 +283,7 @@ function askM(x){var c=x.change,f=c.fields||{},q=c.quote||"",cl=c.cls,cur=c.curr
 var head={sure:"This matches a post",likely:"This looks like a post",conflict:"This changes something already planned",new:"Nothing is planned for this yet",task:"This is a task",recurring:"This sounds like a weekly rule"}[cl]||"From your meeting";
 var it=c.code?'<p class=m>'+h(c.code)+' \u00b7 '+(c.kind==="story"?"Story":"Feed post")+' \u00b7 '+h(dd(c.date))+(cur.topic?' \u00b7 now: '+h(cur.topic)+(cur.time?' '+h(cur.time):''):'')+'</p>':(c.date?'<p class=m>'+(c.kind==="story"?"Story":"Feed post")+' \u00b7 '+h(dd(c.date))+'</p>':'');
 var body='';
-if(cl==="task")body=fld("mf_task","Task",c.task);
+if(cl==="task")body=fld("mf_task","Task",c.task)+fld("mf_owner","Who",c.owner||"Najjuko")+fld("mf_due","Due",c.due||"","date");
 else if(cl==="recurring")body='<p><b>'+h(c.rule||"")+'</b> for the next 8 weeks.</p>'+fld("mf_time","Time",f.time,"time");
 else if(c.skip)body='<p><b>Leave '+h(c.code)+' empty (skip this day)?</b></p>';
 else body='<p class=sub2>Change it to:</p>'+fld("mf_topic","Topic",f.topic)+'<div class=sf2>'+fld("mf_time","Time",f.time||cur.time,"time")+fld("mf_format",c.kind==="story"?"Story type":"Format",c.kind==="story"?(f.story_type||""):(f.format||cur.format))+'</div>'+fld("mf_who","Who",f.who)+(cl==="new"?fld("mf_date","Day",c.date,"date"):'')+(c.ask?'<p class=m>'+h(c.ask)+'</p>':'');
@@ -298,7 +298,7 @@ shell('<h2>'+ic("sync")+' '+h(head)+'</h2><p class=sub>'+h(x.title||"Meeting")+(
 +'<p id=sy_m class=sye></p><div class="syb sya mfa">'+btn+'</div>');
 var m=document.getElementById("sy_m"),B=document.getElementById("mf_body");if(B&&B.className==="ro")[].forEach.call(B.querySelectorAll("input"),function(i){i.readOnly=true});
 var val=function(id){var e=document.getElementById(id);return e?e.value:""};
-var send=function(ans,btn){var fl={topic:val("mf_topic"),time:val("mf_time"),who:val("mf_who"),date:val("mf_date"),task:val("mf_task"),move_date:val("mf_mdate")};var fm=val("mf_format");if(c.kind==="story")fl.story_type=fm;else fl.format=fm;
+var send=function(ans,btn){var fl={topic:val("mf_topic"),time:val("mf_time"),who:val("mf_who"),date:val("mf_date"),task:val("mf_task"),owner:val("mf_owner"),due:val("mf_due"),move_date:val("mf_mdate")};var fm=val("mf_format");if(c.kind==="story")fl.story_type=fm;else fl.format=fm;
 if(btn)btn.disabled=true;m.textContent=ans==="no"?"":"Updating\u2026";
 sapi({action:"sync_auto_answer",meeting:x.meeting,id:c.id,answer:ans,fields:fl}).then(function(j){if(btn)btn.disabled=false;if(!j.ok){m.textContent=j.error||"Not updated.";return}AQ.shift();if(j.pending&&j.pending.length&&!AQ.length){done(j);return}ask()}).catch(function(){if(btn)btn.disabled=false;m.textContent="No connection. Try again."})};
 [].forEach.call(document.querySelectorAll("#sy_s [data-a]"),function(b){b.onclick=function(){var a=b.getAttribute("data-a");
@@ -309,5 +309,5 @@ send(a,b)}})}
 function autoRun(){if(!K||document.getElementById("sy_s"))return;sapi({action:"sync_auto"}).then(function(j){if(!j||!j.ok)return;var B=j.badges||{};[].forEach.call(document.querySelectorAll("[data-sy]"),function(b){var n=B[b.getAttribute("data-sy")];if(n&&!b.querySelector(".syd")){var d=document.createElement("span");d.className="syd";d.textContent=n;b.appendChild(d)}});AQ=j.open||[];if(AQ.length)ask()}).catch(function(){})}
 var dcss=document.createElement("style");dcss.textContent=".syd{display:inline-block;min-width:16px;height:16px;line-height:16px;border-radius:999px;background:#C5A56A;color:#fff;font-size:.66rem;text-align:center;margin-left:4px;padding:0 4px}.sya{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.sya .go{grid-column:1/-1;order:-1}.sya button{min-width:0}.sf{display:block;margin:6px 0}.sf span{display:block;font:600 .7rem IBM Plex Mono,monospace;letter-spacing:.06em;color:#8A6F3E;text-transform:uppercase}.sf input{box-sizing:border-box;width:100%;border:1px solid #D8D1C4;border-radius:10px;padding:9px;font:500 .92rem IBM Plex Sans,sans-serif;background:#fff}.ro input{border-color:transparent;background:#F7F3EA}.sf2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.sub2{margin:8px 0 2px;font-weight:600}.mfa{grid-template-columns:1fr 1fr}.mfa .go{grid-column:1/-1}.syq{box-sizing:border-box;max-width:100%;overflow-wrap:anywhere;border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:12px;margin:8px 0}.syq p{margin:6px 0}.syq .ln{color:#5F6B66;font-style:italic}.syq .m{color:#8A6F3E;font-size:.82rem}";document.head.appendChild(dcss);
 if(!(new URLSearchParams(location.search)).get("sync"))setTimeout(autoRun,1200);
-window.momoSync=run;
+window.momoSync=run;window.momoAuto=autoRun;
 })();`;
