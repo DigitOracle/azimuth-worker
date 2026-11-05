@@ -98,7 +98,7 @@ services = [
 ]
 
 [env.azimuth2.vars]
-SHORT_LINK_BASE = "https://fnrealty-dubai.vercel.app"   # v774d (Kendall 5 Nov) - short client passport links
+SHORT_LINK_BASE = "https://najma-passport.vercel.app"   # v774d (Kendall 5 Nov) - short client passport links
 CHECKIN_LINK_BASE = "https://fnrealty.vercel.app/c"   # v775 (Kendall 5 Nov) - teammates' check-in answer links
 ADD_TO = ""
 BOARD_BG = "off"
