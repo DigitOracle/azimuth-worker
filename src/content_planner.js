@@ -187,7 +187,7 @@ export function report(items, S, from, to, today) {
 
 // ---------- Google Sheet (two-way, inert until connected) ----------
 // Tolerant header matching. TODO(content_calendar_map.md on Najjuko's laptop): replace these patterns with the exact column map and the protected-cell list.
-const HEAD = { code: /^(task\s*)?code$|^id$/i, date: /^date$|day.*date|^date\b/i, time: /^time\b|post(ing)?\s*time/i, format: /^format$|post type|^type$/i, story_type: /story\s*type|^type$/i,
+const HEAD = { code: /^(task\s*)?code$|^id$/i, date: /^date$|day.*date|^date\b/i, time: /^time\b|post(ing)?\s*time/i, format: /^format$|post type|^type$/i, story_type: /story\s*type|^type$/i, story_no: /^story\s*(#|no\b|number)/i,
   pillar: /pillar/i, series: /series/i, topic: /topic|idea|story|content|title|hook/i, cta: /call to action|^cta$/i, campaign: /campaign/i, developer: /developer|project/i,
   who: /who'?s in it|talent|agent|featuring/i, how: /how it'?s made|production|made by|source/i };
 const PROTECTED = /trial/i;   // the trial-date formula column is never written
@@ -221,11 +221,15 @@ async function readTab(cx, title) {
   if (!r.ok) throw new Error("Google said " + r.status + " reading " + title); return (await r.json()).values || [];
 }
 export function rowsToItems(values, kind, tab) {
-  const headers = values[4] || [], map = headerMap(headers, kind), out = [];   // header row 5, data from row 6
+  const headers = values[4] || [], map = headerMap(headers, kind), out = [], seen = {};   // header row 5, data from row 6
   for (let r = 5; r < values.length; r++) {
     const row = values[r] || [], g = (f) => map[f] != null ? String(row[map[f]] || "").trim() : "";
-    const code = g("code").toUpperCase().replace(/\s+/g, ""), date = parseDate(g("date"));
-    if (!code || !date) continue;   // week band rows and blank rows carry no code + date
+    const date = parseDate(g("date")); if (!date) continue;   // week band rows and blank rows carry no date
+    // v773b (Kendall 5 Nov: her sheet has no code column) - Momo makes a stable code from the date and the order on that date (story # when given):
+    // FD-1103-1 = first feed post on 3 Nov, ST-1102-2 = story 2 on 2 Nov. A real code column, when the sheet has one, still wins.
+    const dk = kind + date; seen[dk] = (seen[dk] || 0) + 1;
+    const nth = kind === "story" && /^\d{1,2}$/.test(g("story_no")) ? g("story_no") : String(seen[dk]);
+    const code = (g("code") || ((kind === "story" ? "ST-" : "FD-") + date.slice(5, 7) + date.slice(8, 10) + "-" + nth)).toUpperCase().replace(/\s+/g, "");
     out.push({ code, kind, date, time: parseTime(g("time")), format: kind === "feed" ? pick(g("format"), FORMATS) : "", story_type: kind === "story" ? pick(g("story_type") || g("format"), STORY_TYPES) : "",
       pillar: kind === "feed" ? pick(g("pillar"), PILLARS) : "", series: g("series"), topic: g("topic"), cta: g("cta"), campaign: g("campaign"), developer: g("developer"), who: g("who"), how: pick(g("how"), HOW),
       _ref: { tab, row: r + 1 } });
@@ -245,14 +249,14 @@ export async function sheetImport(env, apply, who) {
   const preview = { feed: got.filter((i) => i.kind === "feed").length, stories: got.filter((i) => i.kind === "story").length, tabs: { feed: feedTab || null, stories: storyTab || null },
     columns: Object.fromEntries(Object.entries(maps).map(([t, m]) => [t, Object.keys(m)])), sample: got.slice(0, 3).map((i) => ({ code: i.code, date: i.date, time: i.time, topic: i.topic })) };
   if (!apply) return [200, { ok: true, preview }];
-  const ref = {}; let made = 0, changed = 0;
+  const ref = {}, dates = {}; let made = 0, changed = 0;
   for (const g of got) {
     const prev = await getJ(env, "cp_item_" + g.code, null), r = cleanItem(g, prev); if (r.error) continue;
-    const it = r.item; it.code = g.code; it.added = prev ? !!prev.added : false; ref[g.code] = g._ref;
+    const it = r.item; it.code = g.code; it.added = prev ? !!prev.added : false; ref[g.code] = g._ref; dates[g.code] = g.date;
     const ch = diffLine(prev, it); if (prev && !ch) continue;
     logAdd(it, "Sheet", prev ? "from the sheet: " + ch : "imported from the sheet"); it.updated = nowIso(); await saveItem(env, it); prev ? changed++ : made++;
   }
-  await env.MEETINGS.put("cp_sheetmap", JSON.stringify({ ref, maps, at: nowIso(), by: who }));
+  await env.MEETINGS.put("cp_sheetmap", JSON.stringify({ ref, dates, maps, at: nowIso(), by: who }));
   return [200, { ok: true, preview, created: made, updated: changed }];
 }
 // Momo -> sheet for one item: preview the cell changes, then (confirm) write them and append each to the Change log tab
@@ -263,7 +267,7 @@ export async function sheetPush(env, code, apply, who, why) {
   const ref = sm && sm.ref && sm.ref[code]; if (!ref) return [409, { error: "This item is not in the sheet yet (added in Momo). Add its row in the sheet, then Import." }];
   const map = sm.maps[ref.tab] || {};
   let vals; try { vals = await readTab(cx, ref.tab); } catch (e) { return [502, { error: String(e.message || e) }]; }
-  const row = vals[ref.row - 1] || []; if (String(row[map.code] || "").trim().toUpperCase().replace(/\s+/g, "") !== code) return [409, { error: "The sheet row moved. Import again first." }];
+  const row = vals[ref.row - 1] || []; if (map.code != null ? String(row[map.code] || "").trim().toUpperCase().replace(/\s+/g, "") !== code : (map.date != null && parseDate(row[map.date]) !== it.date && parseDate(row[map.date]) !== (sm.dates && sm.dates[code]))) return [409, { error: "The sheet row moved. Import again first." }];
   const changes = [];
   Object.keys(map).forEach((f) => { if (f === "code") return; const old = String(row[map[f]] || ""), nv = String(it[f] || "");
     if (f === "date" ? parseDate(old) !== nv : f === "time" ? parseTime(old) !== nv : old.trim() !== nv) changes.push({ cell: colA(map[f]) + ref.row, field: f, old, new: nv }); });
