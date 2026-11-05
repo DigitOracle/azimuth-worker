@@ -978,8 +978,10 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
         return J({ ok: true, open: open.slice(0, 20), badges: await autoBadges(env) });
       }
       const [st, o] = await autoAnswer(env, String(b.meeting || "").replace(/[^0-9a-z_-]/g, ""), String(b.id || ""), b.answer);
-      if (!o.ok || o.already || b.answer !== "yes") return J(o, st);
-      b = { action: "sync_apply", src: { entry: String(b.meeting || "") }, changes: [o.change] };   // Yes: the same apply path as the review sheet
+      if (!o.ok || o.already || b.answer === "no" || !b.answer) return J(o, st);
+      const _ch = o.change && o.change.type === "match" ? matchToChanges(o.change, b.answer, b.fields, await readPlannerItems(env)) : [o.change];   // v781 - matcher answers: yes / replace / move / keep / add / repeat, with her edits
+      if (!_ch.length) return J({ ok: false, error: "Pick the day to move it to." }, 400);
+      b = { action: "sync_apply", src: { entry: String(b.meeting || "") }, changes: _ch };   // Yes: the same apply path as the review sheet
     }
     if (b.action === "sync_propose" || b.action === "sync_apply") {
       const src = b.src || {}; let S = null, why = "";
@@ -1233,7 +1235,8 @@ const RAMP = ["#6FBFB4", "#52ADA1", "#3A968A", "#287C71", "#15665C"], TEAL = "#1
 const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.opener||history.length<=1){window.close()}if(history.length>1){history.back()}else{var k=new URLSearchParams(location.search).get("key")||"";location.href="/momo/work?key="+encodeURIComponent(k)}};';
 // v580 - FN's own marks, cut from the Company Template she sent (src/fn_logo.js): the navy monogram, the gold lattice band, FN navy/peach/gold
 import { planRoute } from "./work_plan.js";
-import { syncPropose, syncApply, syncSheet, SYNC_JS, autoScan, autoAnswer, autoBadges } from "./meeting_sync.js";
+import { syncPropose, syncApply, syncSheet, SYNC_JS, autoScan, autoAnswer, autoBadges, matchToChanges } from "./meeting_sync.js";
+import { readItems as readPlannerItems } from "./content_planner.js";   // v781
 import { ckMake, ckDesk, ckRoute, readTeam, saveTeam, rosterAction, namesOn, CK_JS } from "./checkin.js";   // v764 - WhatsApp check-in from her own phone   // v764 - meeting Sync: meeting -> planner, tasks, sheet
 import { jobsRoute } from "./work_jobs.js";
 import { anneRoute, readAnne } from "./work_anne.js";

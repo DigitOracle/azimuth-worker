@@ -1,0 +1,33 @@
+// v781: each answer on a matcher card becomes the right planner/task change; her edits win; the scan reads a recording's transcript
+import fs from "fs";
+import { matchToChanges, autoScan } from "../src/meeting_sync.js";
+let fail = 0; const ok = (c, m, x) => { if (!c) { fail++; console.log("FAIL", m, JSON.stringify(x).slice(0, 300)); } else console.log("ok", m); };
+const S = process.env.LOCALAPPDATA + "/Temp/claude/69ae2f9f80320527/dfdba7aa-873b-4c5f-b88e-7ca4eb14469d/scratchpad/";
+const items = JSON.parse(fs.readFileSync(S + "cp_items.json", "utf8"));
+const likely = { type: "match", cls: "likely", code: "FD-1106-1", kind: "feed", date: "2026-11-06", fields: { topic: "Mortgage + Ellington video", format: "Reel" }, quote: "Friday the sixth" };
+let ch = matchToChanges(likely, "yes", { time: "16:00" }, items);
+ok(ch.length === 1 && ch[0].type === "planner_set" && ch[0].code === "FD-1106-1" && ch[0].fields.topic === "Mortgage + Ellington video" && ch[0].fields.time === "16:00", "Yes fills the post, her edited time wins", ch);
+const conf = { type: "match", cls: "conflict", code: "FD-1107-1", kind: "feed", date: "2026-11-07", fields: { topic: "Object 1 goes live" } };
+ok(matchToChanges(conf, "replace", {}, items)[0].type === "planner_set", "Replace overwrites the planned post");
+ch = matchToChanges(conf, "move", { move_date: "2026-11-09" }, items);
+ok(ch.length === 2 && ch[0].type === "planner_move" && ch[0].date === "2026-11-09" && ch[1].type === "planner_new" && ch[1].date === "2026-11-07", "Move shifts the old post and adds the new one", ch);
+ok(matchToChanges(conf, "move", {}, items).length === 0, "Move needs a day");
+ch = matchToChanges(conf, "keep", {}, items);
+ok(ch.length === 1 && ch[0].type === "planner_new" && ch[0].date === "2026-11-07", "Keep both adds a second post", ch);
+ch = matchToChanges({ type: "match", cls: "new", kind: "feed", date: "2026-11-11", fields: { topic: "Video at the event" } }, "add", { date: "2026-11-12" }, items);
+ok(ch[0].type === "planner_new" && ch[0].date === "2026-11-12", "a new item lands on the day she picked", ch);
+ch = matchToChanges({ type: "match", cls: "task", task: "Arrange visits" }, "add", { task: "Arrange Heartland Villa visit" }, items);
+ok(ch[0].type === "task_new" && ch[0].task === "Arrange Heartland Villa visit", "a task is added with her wording", ch);
+ch = matchToChanges({ type: "match", cls: "recurring", kind: "story", date: "2026-11-09", weekday: 1, fields: { topic: "Market update by Monaza (morning)", story_type: "Market", time: "10:00" } }, "repeat", {}, items);
+ok(ch.length === 8 && ch.every((c) => c.type === "planner_set" || c.type === "planner_new"), "the Monday rule makes 8 weeks of posts (filling the Monday market stories)", ch.map((c) => c.type + ":" + (c.code || c.date)));
+ok(matchToChanges({ type: "match", cls: "sure", code: "FD-1113-1", skip: true }, "yes", {}, items)[0].type === "planner_hold", "skip puts the day on hold, nothing deleted");
+// the scan reads the recording's transcript with the matcher
+const store = {}; const part = (p) => fs.readFileSync(S + "part_" + p + ".txt", "utf8");
+store["recs_20261105bgpbid1n_000"] = part("000"); store["recs_20261105bgpbid1n_001"] = part("001");
+items.forEach((i) => { store["cp_item_" + i.code] = JSON.stringify(i); }); store["cp_index"] = JSON.stringify(items.map((i) => i.code));
+const env = { MEETINGS: { get: async (k) => store[k] ?? null, put: async (k, v) => { store[k] = v; }, delete: async () => {}, list: async ({ prefix }) => ({ keys: Object.keys(store).filter((k) => k.startsWith(prefix || "")).map((name) => ({ name })), list_complete: true }) } };
+const meets = [{ key: "2026-11-05_r05bgpbid1n0", src: { kind: "entry", entry: { id: "r05bgpbid1n0", date: "2026-11-05", rec: "20261105bgpbid1n", title: "Content plan" } }, title: "Two-Week Social Media Content Schedule", date: "2026-11-05" }];
+const open = await autoScan(env, {}, meets, [], [], 2);
+ok(open.length >= 14 && open.every((o) => o.change.type === "match"), "the Vishant meeting raises the matcher's cards (" + open.length + ")", open.length);
+fs.writeFileSync(S + "v781_open.json", JSON.stringify(open));
+process.exit(fail ? 1 : 0);
