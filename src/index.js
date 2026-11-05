@@ -17,7 +17,7 @@ import { CAMP_ICON, campaignRoute, campWebhook, campTick, optOut as campOptOut, 
 import { docRoute } from "./district_doc.js"; import { dpOpened } from "./campaigns.js";   // v774 - the personal passport page
 import { BPP_ICON, bppPublic, bppTick } from "./building_passports.js";   // v697 - the Building Passports card, its public /bp/ pages and the minute-tick job   // v684 - the Presentations card and its public /pres/ pages
 import { BRIEFS_ICON, briefsPublic } from "./work_briefs.js";   // v667 - Product briefs card (Kendall) + public /pb/ pictures   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
-import { workRoute, WORK_CSS, workEveningCheck, recSweep } from "./work_log.js";
+import { workRoute, WORK_CSS, workEveningCheck, recSweep, recAutoFile } from "./work_log.js";
 import * as FS from "./feed_sets.js";
 import { backdropsFor, backdropRows, BACKDROP_OWN_LINE } from "./backdrops.js";   // v678 - ten backdrops per list, her own scene by a typed line   // v677 - Beyond property + Emotional intelligence sets, named palettes
 import { bridgeRoute } from "./work_bridge.js";
@@ -4976,7 +4976,8 @@ export default {
         try { await meetingNudges(env); } catch (e) {}
         try { const _nk = String(env.INSIDER_KEY || "").split(",").map((x) => x.trim()).find((x) => x.indexOf("ins_najjuko_") === 0);   // v674 - her 6 pm task check (WORK_EOD="on" on her instance only)
           await workEveningCheck(env, { ownerWindowOpen, waSend, waSendTemplate, link: _nk ? String(env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "") + "/momo?key=" + _nk : "" }, event.scheduledTime || Date.now()); } catch (e) {}
-        try { await recSweep(env, { claudeJSON, model: CLAUDE_SMART }, event.scheduledTime || Date.now()); } catch (e) {}   // v681 - finish recordings left open an hour (every 15 min)
+        try { await recSweep(env, { claudeJSON, model: CLAUDE_SMART }, event.scheduledTime || Date.now()); } catch (e) {}
+        try { await recAutoFile(env, { claudeJSON, model: CLAUDE_SMART }, event.scheduledTime || Date.now()); } catch (e) {}   // v780 - finished meetings: minutes + log entry written automatically   // v681 - finish recordings left open an hour (every 15 min)
         try { await fitEvening(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}
         try { await fitMorning(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v355 - the 05:00 opener, inside the 24-hour window only
         try { await fitReminders(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v351 - the daily "write in my book" reminder, inside the 24-hour window only   // v328 - the 21:00 GST FIT verdict; once a day, only while the 24-hour window is open

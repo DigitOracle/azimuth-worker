@@ -673,6 +673,75 @@ export async function recSweep(env, deps, nowMs) {
   }
   return out;
 }
+// v780 (Kendall 5 Nov: a finished meeting must show in her Work list without tapping Minutes) - drafting the log entries from a
+// recording, shared by the page's action and the automatic filing in the minute tick. Returns the J(...) answer.
+async function recDraftEntries(env, deps, J, m) {
+  const id = m.id;
+    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, false, m);
+    if (transcript.length < 40) return J({ error: (segs.length ? "There is no speech to read in that recording yet." : "This recording has no audio: no part ever reached the server because the phone sent empty audio. Nothing can be read from it. Delete it from the list and record again with the screen on.") }, 422);
+    if (!m.ended_hm) { m.ended_hm = dubaiHM(); m.secs = m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0); }
+    const notes = m.notes && m.notes.summary ? m.notes : await recNotes(env, deps, m, recTranscriptText(segs, true, m));
+    if (notes) m.notes = notes;
+    const date = m.date, mins = Math.max(1, Math.round((m.secs || 0) / 60));
+    const prompt = "Date: " + date + " (" + dayName(date) + ")\nShe recorded " + (m.title ? "\"" + m.title + "\"" : "a meeting") + ", " + (m.started_hm || "") + " to " + (m.ended_hm || "") + " (" + mins + " minutes), and the notes below were written from the recording.\n\n"
+      + (notes ? "Summary: " + notes.summary + "\nTopics: " + notes.topics.join("; ") + "\nDecisions: " + (notes.decisions.join("; ") || "none stated") + "\nTasks and follow-ups: " + (notes.actions.map((a) => a.what + (a.owner ? " (" + a.owner + ")" : "") + (a.due ? " by " + a.due : "")).join("; ") || "none stated") + "\nPeople present: " + (notes.people.join(", ") || "not stated")
+        : "Transcript (automatic, may mishear names):\n" + transcript.slice(0, 12000))
+      + "\n\nFile it as her work-log entry. ONE entry for the meeting itself (a briefing, interview or meeting she attended or ran is a Meeting). Add a separate entry only for something clearly separate that she herself did or was handed in it. "
+      + "Every task or follow-up goes in works/progress with its owner and status; decisions and next steps go in the summary, evidence and next. Use only what the notes say.";
+    let x = null; try { x = await deps.claudeJSON(env, sysPrompt(deps.prof), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
+    let list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, deps.prof)) : [clean(fallback((m.title || "Meeting") + ". " + (notes ? notes.summary : transcript.slice(0, 600)), deps.prof), deps.prof)];
+    list.forEach((e, i) => { if (i === 0) e.type = "Meeting";   // v753 - a recording is a meeting: the first entry is never left to the model or the keyword fallback
+      if (i === 0 && m.secs >= 60 && !e.start && toMin(m.started_hm) != null && toMin(m.ended_hm) != null && toMin(m.ended_hm) > toMin(m.started_hm)) { e.start = m.started_hm; e.end = m.ended_hm; }
+      if (e.time_of_day === "Unspecified" && toMin(e.start || m.started_hm) != null) { const h = Math.floor(toMin(e.start || m.started_hm) / 60); e.time_of_day = h < 12 ? "Morning" : h < 14 ? "Midday" : h < 18 ? "Afternoon" : "Evening"; } });
+    const known = await knownParties(env), seen = {};
+    for (const e of list) for (const o of e.external) {
+      const k = known.find((p) => slug(p.name) === slug(o.name) || (p.aliases || []).some((a) => slug(a) === slug(o.name)));
+      if (k) { Object.assign(o, { name: k.name, kind: k.kind || o.kind, what: k.what || "", where: k.where || "", site: k.site || "", confirmed: true, known: true }); continue; }
+      const key = slug(o.name); if (!seen[key]) seen[key] = lookupParty(env, o.name, o.kind);
+      const f = await seen[key]; if (f) Object.assign(o, { suggested: f.name, kind: f.kind || o.kind, what: f.what, where: f.where, site: f.site, confidence: f.confidence, confirmed: false });
+      else Object.assign(o, { suggested: "", what: "", confirmed: false, notfound: true });
+    }
+    if (m.status !== "filed") m.status = "drafted";
+    await recPut(env, m);
+    return J({ ok: true, entries: list.slice(0, 20), title: m.title, secs: m.secs, date, notes: !!notes });
+}
+// v780 - AUTO-FILE: a recording that has finished (Stop with every part in, or the sweep) gets its notes, minutes and work-log entry written
+// by the minute tick, one model stage per tick, so the meeting appears in her weekly Work list on its own. Only Najjuko's log (NAJ_PROF),
+// only recordings from the last 3 days, never one she has already filed or is drafting by hand (status drafted / filed).
+export async function recAutoFile(env, deps, nowMs) {
+  const now = nowMs || Date.now(), out = [];
+  if (!deps || !deps.claudeJSON) return out;
+  const d2 = Object.assign({}, deps, { prof: NAJ_PROF }), J = (o, st) => Object.assign({ _status: st || 200 }, o);
+  const since = new Date(now - 3 * 86400e3 + 4 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
+  const r = await env.MEETINGS.list({ prefix: RECW });
+  for (const k of r.keys) {
+    const rid = k.name.slice(RECW.length); if (rid.slice(0, 8) < since) continue;
+    const m = await recGet(env, rid);
+    if (!m || m.status !== "transcribed" || m.auto_filed || m.auto_file_off) continue;
+    const segs = await recSegs(env, rid); if (recOwed(m, segs, now).waiting) continue;
+    if ((m.auto_file_tries || 0) >= 6) continue;
+    // minutes first (one stage per tick); the job runner keeps its own state, so a failed stage is retried next tick
+    if (!m.minutes) {
+      const a = await recRead(env, d2, J, rid, { kind: "minutes" });
+      out.push({ id: rid, step: "minutes", state: a.state, stage: a.stage || "" });
+      if (a.state === "error") { const mm = (await recGet(env, rid)) || m; mm.auto_file_tries = (mm.auto_file_tries || 0) + 1; await recPut(env, mm); }
+      return out;   // one model call per tick
+    }
+    const dr = await recDraftEntries(env, d2, J, m);
+    if (!dr.ok || !Array.isArray(dr.entries) || !dr.entries.length) { const mm = (await recGet(env, rid)) || m; mm.auto_file_tries = (mm.auto_file_tries || 0) + 1; mm.status = "transcribed"; await recPut(env, mm); out.push({ id: rid, step: "entries", error: dr.error || "no entries" }); return out; }
+    const at = new Date(now).toISOString(), keys = [];
+    for (let i = 0; i < Math.min(dr.entries.length, 6); i++) {
+      const e = dr.entries[i], eid = ("r" + rid.slice(-10) + i).replace(/[^a-z0-9]/g, "").slice(0, 16);
+      const rec = Object.assign({ id: eid, date: m.date, text: "", link: "" }, e, { check: false, rec: rid, auto: true, created: at, updated: at });
+      if (i === 0 && m.minutes) rec.minutes = true;
+      await env.MEETINGS.put(PFX + m.date + "_" + eid, JSON.stringify(rec)); keys.push(PFX + m.date + "_" + eid);
+    }
+    const mm = (await recGet(env, rid)) || m; mm.status = "filed"; mm.auto_filed = at; mm.entry_keys = keys; await recPut(env, mm);
+    out.push({ id: rid, step: "filed", entries: keys.length });
+    return out;
+  }
+  return out;
+}
 async function recApi(request, env, J, deps) {
   let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
   if (b.action === "start") {
@@ -740,35 +809,7 @@ async function recApi(request, env, J, deps) {
     return J({ ok: true, speakers: speakersOut(m) });
   }
   if (b.action === "read") return recRead(env, deps, J, id, b);   // v629 - one short stage of the notes / minutes job per call
-  if (b.action === "entries") {
-    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, false, m);
-    if (transcript.length < 40) return J({ error: (segs.length ? "There is no speech to read in that recording yet." : "This recording has no audio: no part ever reached the server because the phone sent empty audio. Nothing can be read from it. Delete it from the list and record again with the screen on.") }, 422);
-    if (!m.ended_hm) { m.ended_hm = dubaiHM(); m.secs = m.secs || segs.reduce((a, g) => a + (g.secs || 0), 0); }
-    const notes = m.notes && m.notes.summary ? m.notes : await recNotes(env, deps, m, recTranscriptText(segs, true, m));
-    if (notes) m.notes = notes;
-    const date = m.date, mins = Math.max(1, Math.round((m.secs || 0) / 60));
-    const prompt = "Date: " + date + " (" + dayName(date) + ")\nShe recorded " + (m.title ? "\"" + m.title + "\"" : "a meeting") + ", " + (m.started_hm || "") + " to " + (m.ended_hm || "") + " (" + mins + " minutes), and the notes below were written from the recording.\n\n"
-      + (notes ? "Summary: " + notes.summary + "\nTopics: " + notes.topics.join("; ") + "\nDecisions: " + (notes.decisions.join("; ") || "none stated") + "\nTasks and follow-ups: " + (notes.actions.map((a) => a.what + (a.owner ? " (" + a.owner + ")" : "") + (a.due ? " by " + a.due : "")).join("; ") || "none stated") + "\nPeople present: " + (notes.people.join(", ") || "not stated")
-        : "Transcript (automatic, may mishear names):\n" + transcript.slice(0, 12000))
-      + "\n\nFile it as her work-log entry. ONE entry for the meeting itself (a briefing, interview or meeting she attended or ran is a Meeting). Add a separate entry only for something clearly separate that she herself did or was handed in it. "
-      + "Every task or follow-up goes in works/progress with its owner and status; decisions and next steps go in the summary, evidence and next. Use only what the notes say.";
-    let x = null; try { x = await deps.claudeJSON(env, sysPrompt(deps.prof), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
-    let list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, deps.prof)) : [clean(fallback((m.title || "Meeting") + ". " + (notes ? notes.summary : transcript.slice(0, 600)), deps.prof), deps.prof)];
-    list.forEach((e, i) => { if (i === 0) e.type = "Meeting";   // v753 - a recording is a meeting: the first entry is never left to the model or the keyword fallback
-      if (i === 0 && m.secs >= 60 && !e.start && toMin(m.started_hm) != null && toMin(m.ended_hm) != null && toMin(m.ended_hm) > toMin(m.started_hm)) { e.start = m.started_hm; e.end = m.ended_hm; }
-      if (e.time_of_day === "Unspecified" && toMin(e.start || m.started_hm) != null) { const h = Math.floor(toMin(e.start || m.started_hm) / 60); e.time_of_day = h < 12 ? "Morning" : h < 14 ? "Midday" : h < 18 ? "Afternoon" : "Evening"; } });
-    const known = await knownParties(env), seen = {};
-    for (const e of list) for (const o of e.external) {
-      const k = known.find((p) => slug(p.name) === slug(o.name) || (p.aliases || []).some((a) => slug(a) === slug(o.name)));
-      if (k) { Object.assign(o, { name: k.name, kind: k.kind || o.kind, what: k.what || "", where: k.where || "", site: k.site || "", confirmed: true, known: true }); continue; }
-      const key = slug(o.name); if (!seen[key]) seen[key] = lookupParty(env, o.name, o.kind);
-      const f = await seen[key]; if (f) Object.assign(o, { suggested: f.name, kind: f.kind || o.kind, what: f.what, where: f.where, site: f.site, confidence: f.confidence, confirmed: false });
-      else Object.assign(o, { suggested: "", what: "", confirmed: false, notfound: true });
-    }
-    if (m.status !== "filed") m.status = "drafted";
-    await recPut(env, m);
-    return J({ ok: true, entries: list.slice(0, 20), title: m.title, secs: m.secs, date, notes: !!notes });
-  }
+  if (b.action === "entries") return recDraftEntries(env, deps, J, m);
   if (b.action === "notes") {   // v625 - write the notes only (no log entry), then she opens the notes page
     if (m.notes && m.notes.summary) return J({ ok: true, again: true });
     const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true, m);
