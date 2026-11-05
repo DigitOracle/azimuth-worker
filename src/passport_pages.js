@@ -151,10 +151,10 @@ const hbar = (label, v, mx, c, right) => '<div class="bd-hb"><span class="bd-hl"
 const ST1 = ic("star", 8, G).replace('fill="none"', 'fill="' + G + '"').replace('style="flex:none"', 'style="vertical-align:-.3mm"');   // an icon, never the star character
 const stars = (r) => { let s = ""; for (let i = 1; i <= 5; i++) s += ic("star", 12, i <= Math.round(r) ? G : "#D9CFBC").replace('fill="none"', 'fill="' + (i <= Math.round(r) ? G : "none") + '"'); return '<span class="bd-stars">' + s + "</span>"; };
 const short = (s, n) => { const t = String(s || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, t.lastIndexOf(" ", n - 1)) + "…" : t; };
-const mkPage = (n, title, sub, logo, inner, foot) => '<section class="page bd-page" data-bpp-det="' + n + '"><div class="bd-top">' + (logo ? '<img src="najma_logo.png" alt="Najma" class="bd-logo">' : "")
+const mkPage = (n, title, sub, logo, inner, foot, tot) => '<section class="page bd-page" data-bpp-det="' + n + '"><div class="bd-top">' + (logo ? '<img src="najma_logo.png" alt="Najma" class="bd-logo">' : "")
   + '<div class="bd-tt"><div class="bd-kick">' + esc(sub) + '</div><div class="bd-title">' + esc(title) + "</div></div></div>"
   + '<div class="bd-main">' + inner + "</div>"
-  + '<div class="footer bd-foot"><span>Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397</span><span>Najma Building Passport · ' + esc(foot) + " · page " + n + " of " + BPP_PAGES + "</span></div></section>";
+  + '<div class="footer bd-foot"><span>Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397</span><span>Najma Building Passport · ' + esc(foot) + " · " + (tot === 1 ? "one-pager" : "page " + n + " of " + (tot || BPP_PAGES)) + "</span></div></section>";
 
 // ---------------------------------------------------------------------------------------------------- page 2: the building and its market
 export function page2(F, story, dateText) {
@@ -278,6 +278,40 @@ export function page4(C, name, dateText) {
     + card("bd-c-natcav", "", '<div class="bd-ynote">' + ic("people", 13, T) + " These are account holders, not every resident. Shown for market understanding and planning content, never for recommending a home to anyone.</div>");
   return mkPage(4, "Who lives here", nm + " · nationality mix", true, inner, dateText);
 }
+
+// ---------------------------------------------------------------------------------------------------- the ONE-PAGER (v767)
+// Kendall 5 Nov: "One-pager (instant)" beside "Full passport". One A4 page made inside the request, no writer and no queue: only facts already
+// in the stored plot record, its pack and the community mix file. A fact that is missing is left out, never filled.
+export function onePage(F, C, dateText, title, path) {
+  const I = F.identity, P = F.physical, K = F.construction, S = F.sales, R = F.rentals;
+  const kv = (k, v) => (v == null || v === "" ? "" : '<div class="o1-kv"><span>' + esc(k) + "</span><b>" + v + "</b></div>");
+  const facts = [
+    kv("Plot", I.plot ? esc(I.plot) + (I.parcel ? ' <span class="bd-mut">· parcel ' + esc(I.parcel) + "</span>" : "") : null),
+    kv("Community", esc([I.master, I.area].filter(Boolean).join(" · ")) || null),
+    kv("Use", I.land ? esc(I.land) : null), kv("Tenure", I.tenure ? esc(I.tenure) : null),
+    kv("Plot size", I.sqm ? int(I.sqm) + " m²" : null),
+    kv("Homes", P.homes ? int(P.homes) : null), kv("Floors", P.floors ? int(P.floors) : null), kv("Buildings", P.buildings ? int(P.buildings) : null),
+    kv("Status", K && K.status ? esc(K.status) + (K.pct != null ? " · " + Math.round(K.pct) + "%" : "") : (F.kind ? esc(F.kind) : null)),
+    kv("Completion", K && K.end ? esc(dS(K.end)) : null), kv("Developer", F.developer && F.developer.brand ? esc(F.developer.brand) : null),
+  ].join("");
+  const last = (S.years || []).slice(-1)[0];
+  const price = last ? '<div class="o1-pr">' + Object.keys(last.v).map((b) => '<div><span>' + esc(b) + " bed</span><b>AED " + aedK(last.v[b].aed) + '</b><i>' + int(last.v[b].n) + (last.v[b].n === 1 ? " sale · " : " sales · ") + esc(last.y) + "</i></div>").join("") + "</div>" : "";
+  const rent = (R.rows || []).filter((r) => r.reg).slice(0, 4);
+  const rents = rent.length ? '<div class="o1-pr">' + rent.map((r) => '<div><span>' + esc(bedL(r.b)) + "</span><b>AED " + aedK(r.reg) + '</b><i>' + int(r.regN) + " contracts a year</i></div>").join("") + "</div>" : "";
+  const nat = C && Array.isArray(C.mix) && C.mix.length ? '<div class="o1-nat">' + ic("people", 13, T) + " <b>Who lives in " + esc(C.label || C.official || "the community") + ":</b> " + C.mix.slice(0, 3).map((m) => esc(m[0]) + " " + esc(m[1]) + "%").join(" · ") + ' <span class="bd-mut">· the full mix is on page 4 of the full passport</span></div>' : "";
+  const inner = card("bd-c-o1", head("", "The plot at a glance", "reg", "doc"), '<div class="o1-kvs">' + facts + "</div>", "Land Department registers")
+    + (price ? card("bd-c-o1p", head("", "Registered sale prices (median)", "reg", "coin"), price, esc(S.src || "Land Department sales register")) : "")
+    + (rents ? card("bd-c-o1r", head("", "Registered rents (median, yearly)", "reg", "coin"), rents, "Ejari tenancy register") : "")
+    + (nat ? card("bd-c-o1n", "", nat, "DEWA residential accounts, community level · account holders, not every resident") : "")
+    + '<div class="o1-asof">Facts as stored on ' + esc(dateText) + ". Only facts on record are shown; anything missing is left out, not estimated. For prices, neighbourhood, investment view and the full nationality mix, generate the Full passport.</div>";
+  return mkPage(1, title || I.name, path || "Building Passport · one-pager", true, inner, dateText, 1);
+}
+export const ONE_CSS = "<style id=\"bpp-one\">@page{size:A4;margin:0}html,body{margin:0;background:#F6F2E9}.bd-page{width:210mm;height:297mm;box-sizing:border-box;overflow:hidden;margin:0 auto}"
+  + ".o1-kvs{display:grid;grid-template-columns:1fr 1fr;gap:1.6mm 6mm}.o1-kv{display:flex;justify-content:space-between;gap:3mm;border-bottom:.3mm solid #E4D8BF;padding:1.4mm 0;font:500 8.4pt Inter,sans-serif;color:#5F6B66}.o1-kv b{color:#1C2826;font-weight:700;text-align:right}"
+  + ".o1-pr{display:grid;grid-template-columns:repeat(4,1fr);gap:2mm}.o1-pr div{background:#F6F2E9;border-radius:2.4mm;padding:2.4mm 3mm;display:flex;flex-direction:column;gap:.5mm}.o1-pr span{font:600 7.4pt Inter,sans-serif;color:#5F6B66}.o1-pr b{font:700 13pt Fraunces,Georgia,serif;color:#0A4F4A}.o1-pr i{font:500 6.8pt Inter,sans-serif;color:#8A6A2C;font-style:normal}"
+  + ".o1-nat{font:500 8.6pt Inter,sans-serif;color:#1C2826;display:flex;align-items:center;gap:1.4mm;flex-wrap:wrap}.o1-asof{font:500 7.2pt Inter,sans-serif;color:#5F6B66;margin-top:2mm}"
+  + ".o1-bar{position:sticky;top:0;display:flex;gap:8px;justify-content:center;padding:10px;background:#F6F2E9;border-bottom:1px solid #E4D8BF;z-index:5}.o1-bar button,.o1-bar a{font:600 15px Inter,sans-serif;border-radius:999px;padding:10px 18px;border:1px solid #0A4F4A;background:#0A4F4A;color:#fff;text-decoration:none;cursor:pointer}.o1-bar a{background:#fff;color:#0A4F4A}"
+  + "@media print{.o1-bar{display:none}}@media screen and (max-width:800px){.bd-page{width:100%;height:auto}.o1-kvs{grid-template-columns:1fr}.o1-pr{grid-template-columns:1fr 1fr}}</style>";
 
 export const PAGES_CSS = '<style id="bpp-det">'
   + ".bd-page{position:relative;background:#F6F2E9;padding:7mm 9mm 14mm;font-family:Inter,Arial,sans-serif;color:" + INK + "}"
