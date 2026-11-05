@@ -1515,7 +1515,7 @@ const WORK_BODY = '<div class=tag>MOMO · WORK</div>'
   + '<div class=line id=rsum style="margin:10px 2px"></div><a id=rgo class=gold style="display:block;text-align:center;text-decoration:none" target=_blank>Make report</a>'
   + '<div class=line style="margin-top:10px">Opens as a page with charts: Share sends it by email or WhatsApp; Save as PDF keeps a copy. Senior-management length: one page.</div></div>'
   + '<div id=vlog><h1>My work log</h1>'
-  + '<div class=wk id=wkhead></div><div id=wtoday></div>'
+  + '<div class=wk id=wkhead></div><div id=wtoday></div><div id=wtoday2></div>'
   + '<form id=wf class=box><label>What did you do? <button type=button id=wmic class=mic aria-label="Speak instead of typing"><svg viewBox="0 0 24 24" width=18 height=18 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Speak</span></button></label><textarea id=wt rows=4 placeholder="e.g. Monday huddle: built the PowerPoint, ran the meeting with Ali and the team, laid out the week."></textarea>'
   + '<div class=row><input id=wd type=date><label class=ghost id=wupl style="text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg viewBox="0 0 24 24" width=16 height=16 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg><span>Upload a file</span><input id=wfile type=file accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,image/*" style="display:none"></label></div>' + REC_BTN + '<div class=row2><button type=button id=wreset class=ghost>Start over</button><button type=submit id=wb class=gold>File it</button></div></form>'
   + '<div id=wprev></div><a id=wday class=gold style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>Today\'s summary</a>'
@@ -1560,7 +1560,7 @@ const PREP_BODY ='<a class=back href="/momo/work?key=__KEY__">&#8592; Work</a><d
   + '<form id=pf class=box><label>What are you preparing for?</label><input id=fd placeholder="Developer (e.g. Imtiaz Developments)" value="__DEV__">'
   + '<input id=fp placeholder="Project (e.g. the open house project)" value="__PRJ__" style="margin-top:8px"><input id=fa placeholder="Area or community (e.g. JVC, Dubai Hills)" value="__AREA__" style="margin-top:8px">'
   + '<button type=submit id=fb class=gold style="margin-top:10px">Build my briefing</button><div style="color:#8FA39B;font-size:.78rem;margin-top:6px">Every figure is from Najma\'s records, with its date. Selling points that are not in the records stay for you to add.</div></form>'
-  + '<div id=pout></div><script src="/momo/work/prep.js?key=__KEY__"></script>';
+  + '<div id=pout></div><script src="/momo/work/prep.js?key=__KEY__"></script><script src="/momo/today.js?key=__KEY__"></script>';
 const PREP_JS = String.raw`(function(){var KEY=decodeURIComponent((document.currentScript.src.split("key=")[1]||"").split("&")[0]);var $=function(i){return document.getElementById(i)};
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
 $("pf").onsubmit=function(ev){ev.preventDefault();var f={developer:$("fd").value.trim(),project:$("fp").value.trim(),area:$("fa").value.trim()};if(!f.developer&&!f.project&&!f.area)return;
@@ -1644,7 +1644,7 @@ function resumeDraft(){var d=null;try{d=JSON.parse(localStorage.getItem("momo_wo
  $("wprev").innerHTML='<div class=prev><div class=line style="margin:0 0 8px"><b>You have an entry that was not saved</b> (from '+esc(when)+'): '+esc(d.prev.title||"untitled")+'.</div><div class=acts><button type=button class=ghost id=dd>Discard</button><button type=button class=gold id=dc>Continue it</button></div></div>';
  $("dd").onclick=function(){clearDraft();$("wprev").innerHTML=""};
  $("dc").onclick=function(){QUEUE=d.q&&d.q.length?d.q:[d.prev];QI=Math.min(d.qi||0,QUEUE.length-1);if(d.date&&$("wd"))$("wd").value=d.date;preview(QUEUE[QI]||d.prev);scrollTo(0,0)}}
-function load(w){fetch("/momo/work/api?key="+encodeURIComponent(KEY)+(w?"&week="+w:"")).then(function(r){return r.json()}).then(function(j){D=j;WEEK=j.from;draw()})}
+function load(w){fetch("/momo/work/api?key="+encodeURIComponent(KEY)+(w?"&week="+w:"")).then(function(r){return r.json()}).then(function(j){D=j;window.D=j;WEEK=j.from;draw()})}window.load=load;window.taskSheet=function(t){try{taskSheet(t)}catch(e){}};
 function shift(n){var t=new Date(WEEK+"T00:00:00Z");t.setUTCDate(t.getUTCDate()+7*n);load(t.toISOString().slice(0,10))}
 function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today))/864e5);
  $("wkhead").textContent=(D.phase?D.phase.name+" · ":"")+(days>=0?days+" days to the day-75 review (15 Dec)":"Review due date passed");
