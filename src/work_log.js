@@ -641,6 +641,7 @@ export const REC_IDLE_MS = 3600e3, REC_WAIT_PARTS_MS = 6 * 3600e3;
 // v779 (Kendall 5 Nov: a slow phone lost the last 2 parts of a 19-min meeting) - a recording is not finished while the phone still owes parts,
 // for up to 6 hours after Stop; then it is finished with what arrived and says which parts are missing.
 export function recExpected(m) {
+  if (m && m.expect_override != null) return Math.max(0, parseInt(m.expect_override, 10) || 0);   // v779a - an audio file was added in place of the missing parts
   let n = Math.max(0, parseInt(m && m.expect_parts, 10) || 0);
   for (const l of (m && Array.isArray(m.log) ? m.log : [])) { const x = /part (\d+) ended: (\d+) bytes/.exec(String(l)); if (x && +x[2] >= 1000) n = Math.max(n, +x[1] + 1); }
   return n;
@@ -710,6 +711,20 @@ async function recApi(request, env, J, deps) {
   if (b.action === "expect") {   // v779 - Stop: the phone says how many parts it made, so the server knows what is still on the way
     m.expect_parts = Math.max(0, Math.min(999, parseInt(b.parts, 10) || 0)); m.stopped_at = m.stopped_at || new Date().toISOString(); await recPut(env, m);
     const segs0 = await recSegs(env, id); return J({ ok: true, ...recOwed(m, segs0) });
+  }
+  if (b.action === "addfile_slot") {   // v779a (Kendall 5 Nov: the last 10 min of the Vishant meeting is a separate file on her phone)
+    const segs0 = await recSegs(env, id), next = segs0.reduce((a, g) => Math.max(a, g.n + 1), 0);
+    return J({ ok: true, n: next, title: m.title || "", attendees: (m.attendees || []).map((a) => a.n || a) });
+  }
+  if (b.action === "addfile_done") {
+    const segs0 = await recSegs(env, id), n = parseInt(b.n, 10);
+    if (!segs0.some((g) => g.n === n)) return J({ error: "The added audio did not arrive. Try again." }, 409);
+    m.added_files = (Array.isArray(m.added_files) ? m.added_files : []).concat([{ n, secs: Math.max(0, parseInt(b.secs, 10) || 0), name: String(b.name || "").slice(0, 80), at: new Date().toISOString() }]).slice(-10);
+    m.expect_override = segs0.reduce((a, g) => Math.max(a, g.n + 1), 0);
+    delete m.minutes; if (m.notes) delete m.notes;   // the minutes are written again from every part, in order
+    for (const kd of ["minutes", "notes"]) { try { await env.MEETINGS.delete(RECJ + id + "_" + kd); } catch (e) {} }
+    const f = await recFinish(env, deps, m, 0);
+    return J({ ok: true, parts: f.segs.length, secs: m.secs, title: m.title || "" });
   }
   if (b.action === "owed") { const segs0 = await recSegs(env, id); return J({ ok: true, ...recOwed(m, segs0) }); }
   if (b.action === "finish") {
