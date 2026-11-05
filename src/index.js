@@ -1,7 +1,8 @@
 import { askRoute as askReportRoute, askWebhook as askReportWebhook, askTick as askReportTick } from "./ask_report.js";   // v783 - Ask report -> WhatsApp with the PDF
 import { MOMO_CONFIRM_JS } from "./momo_confirm.js";
 import { tripRoute, TRIP_ICON } from "./trip_card.js";
-import { todayFullRoute } from "./today_full.js";   // v786 - the full Today card   // v785 - the shared Thailand trip card (Kendall + Najjuko)   // v778
+import { todayFullRoute } from "./today_full.js";
+import { calStart, calCallback } from "./today_cal.js";   // v786b   // v786 - the full Today card   // v785 - the shared Thailand trip card (Kendall + Najjuko)   // v778
 import { calendarRoute } from "./content_calendar.js";   // v754
 import { plannerRoute, plannerEveningCheck } from "./content_planner.js";   // v758 - FN Content Planner
 import { creamTheme } from "./cream_theme.js";   // v728
@@ -2513,6 +2514,8 @@ async function appFetch(request, env, ctx) {
       if (url.pathname.indexOf("/yt/") === 0) { const { ytRoute } = await import("./yt_desk.js"); const _yr = await ytRoute(env, url, { notify: (e, t) => deskLabDeps(e).send(e, t) }); if (_yr) return _yr; }   // v477 - YouTube sign-in for the desk
     if (url.pathname.indexOf("/li/") === 0) { const _lr = await liRoute(env, url, { notify: (e, t) => deskLabDeps(e).send(e, t) }); if (_lr) return _lr; }   // v464 - LinkedIn sign-in for the desk
       if (url.pathname.indexOf("/ig/") === 0 || (url.pathname.indexOf("/ig_") === 0 && url.pathname.indexOf("/ig_media/") !== 0)) return igRoute(env, url, request);   // v149 - Instagram insights (404 unless IG_APP_ID); v427 - NOT /ig_media/: that is the public picture route below, which WhatsApp and Instagram fetch with no key. The /ig_ prefix swallowed it and every desk preview picture came back 401 (8 Oct)
+      if (url.pathname === "/gcal/read/start" && ["najjuko", "kendall"].includes(personOfKey(env, url))) return calStart(env, GC_REDIRECT(env));   // v786b - her calendar, read only
+      if (url.pathname === "/gcal/callback" && String(url.searchParams.get("state") || "").startsWith("gr")) return calCallback(env, url, GC_REDIRECT(env));   // v786b
       if (url.pathname.indexOf("/gcal/") === 0) return gcalRoute(env, url);   // v150 - Google Calendar consent and status for Meet bookings (404 unless GMEET)
       if (url.pathname === "/residents" || url.pathname === "/residents/data") return residentsRoute(env, url);   // v239 - PUBLIC: no key of any kind. What protects it is the flooring in the data (500+ accounts, 5% minimum, banded, no counts), not the audience
       if (url.pathname === "/setbg") {

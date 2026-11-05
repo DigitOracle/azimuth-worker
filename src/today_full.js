@@ -1,3 +1,4 @@
+import { calToday } from "./today_cal.js";   // v786b
 import { briefingPage } from "./dev_briefing.js";   // v786a
 // v786 (Kendall 5 Nov 2026: "build the full today card") - Najjuko's FULL Today card at the top of her Work.
 // 1 Meetings & visits (her own visits list + today's Meeting entries + tasks due today naming a developer; calendar in v786b)
@@ -40,6 +41,7 @@ export const waNum = (p) => { let d = String(p || "").replace(/\D/g, ""); if (/^
 export async function todayFullData(env) {
   const today = dubaiToday(), out = { today, visits: [], leads: [], quiet: [], deals: {}, calls: [], stock: [] };
   out.visits = await getJ(env, "naj_visits_" + today, []);
+  try { out.cal = await calToday(env, today); } catch (e) { out.cal = { connected: false, broken: true }; }
   const leads = await readLeads(env); out.leads = leads;
   const open = leads.filter((l) => l.stage !== "Won" && l.stage !== "Lost");
   STAGES.forEach((s) => { out.deals[s] = leads.filter((l) => l.stage === s).length; });
@@ -175,10 +177,14 @@ function TODAY_CLIENT() {
     var M = (X.visits || []).map(function (v) { return { v: v, time: v.time, with: v.with, kind: v.kind, src: "visit" }; });
     (D.entries || []).forEach(function (e) { if (e.date === today && (e.type === "Meeting" || (e.prep && e.prep.developer))) M.push({ time: e.start || "", with: (e.prep && e.prep.developer) || e.title, kind: e.prep && e.prep.developer ? "Developer" : "Internal", src: "entry" }); });
     var DEV = ["Sobha", "Nakheel", "DAMAC", "Emaar", "Beyond", "Binghatti", "Arada", "Imtiaz", "Select", "Fakhruddin", "Prestige One", "Object 1", "Ellington", "Meraas", "Danube", "Aldar", "Azizi", "Omniyat", "Samana"];
+    var CAL = X.cal || {}; (CAL.events || []).forEach(function (e) { var dv = DEV.filter(function (d) { return (" " + e.title + " ").toLowerCase().indexOf(" " + d.toLowerCase()) >= 0; })[0];
+      M.push({ time: e.all_day ? "All day" : e.time, with: dv || e.title, kind: dv ? "Developer" : (/client|viewing|buyer|tenant|owner/i.test(e.title) ? "Client" : "Internal"), src: "cal", title: e.title, where: e.where }); });
+    M.sort(function (a, b) { return String(a.time || "99").localeCompare(String(b.time || "99")); });
     TK.forEach(function (t) { if (t.status !== "Done" && t.due === today) { var dv = DEV.filter(function (d) { return (" " + t.name + " ").toLowerCase().indexOf(" " + d.toLowerCase()) >= 0; })[0]; if (dv) M.push({ time: "", with: dv, kind: "Developer", src: "task", task: t.name }); } });
     var mh = M.map(function (m, i) { var dev = m.kind === "Developer";
       var acts = (dev ? btn("Open briefing", 'data-brief="' + esc(m.with) + '" data-bt="' + esc(m.time || "") + '"', "tbp") : m.kind === "Client" ? btn("Prepare me", 'data-prep="' + esc(m.with) + '"', "tbp") : "") + btn("Record", "data-rec=1") + (m.src === "visit" ? btn("Edit", "data-ev=" + i) : "");
-      return row(I.cal, esc((m.time || "--:--") + " " + m.with), (dev ? "Briefing ready" : m.kind === "Client" ? "Pack ready" : "Internal") + (m.src === "task" ? " · from your task " + esc(m.task) : ""), acts); }).join("");
+      return row(I.cal, esc((m.time || "--:--") + " " + m.with), (dev ? "Briefing ready" : m.kind === "Client" ? "Pack ready" : "Internal") + (m.src === "task" ? " · from your task " + esc(m.task) : "") + (m.src === "cal" ? " · " + esc(m.with !== m.title ? m.title : "your calendar") + (m.where ? " · " + esc(m.where) : "") : ""), acts); }).join("");
+    if (!CAL.connected) mh += row(I.cal, CAL.broken ? "Your calendar needs reconnecting" : "Connect your Google Calendar", "One time. Momo only reads it, and your meetings show here each morning.", '<a class="tb tbp" href="/gcal/read/start' + Q + '">Connect your calendar</a>');
     h += sec(1, "Meetings & visits", mh, "No meetings yet today. + Add one, and a developer gets a briefing.");
     // 2 Broker
     var bh = "";

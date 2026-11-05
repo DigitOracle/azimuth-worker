@@ -19,7 +19,7 @@ const deps = { isNaj: () => true, isAny: () => true, person: () => "najjuko", pa
 const go = async (path) => { const u = new URL("https://x" + path + (path.includes("?") ? "&" : "?") + "key=ins_najjuko_TESTKEY0123456789abcd"); const r = await workRoute(new Request(u), env, u, deps); return r.text(); };
 let body = await go("/momo/work"), js = await go("/momo/work.js"), data = await go("/momo/work/api");
 const tu = new URL("https://x/momo/today.js"); const tjs = await (await todayFullRoute(new Request(tu), env, tu, deps)).text();
-const tdata = JSON.stringify({ ok: true, ...(await todayFullData(env)) });
+const _td = await todayFullData(env); if (process.env.CAL) _td.cal = { connected: true, events: [{ time: "11:00", title: "Sobha Realty sales gallery visit", where: "Sobha Hartland" }, { time: "18:00", title: "Viewing with client Sara", where: "JVC" }] }; const tdata = JSON.stringify({ ok: true, ..._td });
 body = body.replace(/<script src="?\/momo\/[^>]*><\/script>/g, "");
 const shim = "<script>window.__ERR=[];window.onerror=function(m,s,l,c,e){window.__ERR.push(m+' @'+l+':'+c)};var DATA=" + JSON.stringify(data) + ",TD=" + JSON.stringify(tdata)
   + ";window.fetch=function(u,o){u=String(u);var b=u.indexOf('/momo/work/today/data')>=0?TD:(u.indexOf('/momo/work/api')>=0&&(!o||o.method!=='POST'))?DATA:'{\"ok\":true,\"saved\":\"test\"}';return Promise.resolve(new Response(b,{headers:{'Content-Type':'application/json'}}))};</script>";
