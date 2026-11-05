@@ -970,8 +970,8 @@ export async function followTask(env, c, f, k, info, now) {
   if (!key) { key = "work_naj_" + day + "_cf" + (c.id + d).replace(/[^a-z0-9]/gi, "").slice(-16); await env.MEETINGS.put(tk, key); }
   const prev = await getJ(env, key, null), name = "Call " + who + ", " + camp;
   const text = "Follow up from the " + camp + " campaign. Answers: " + (ans.join(" \u2192 ") || "none yet") + (info.opened ? ". Opened: " + info.opened + " (" + info.reader + ")" : "") + ". Call today or next working day.";
-  const e = Object.assign(prev || { id: key.slice(key.lastIndexOf("_") + 1), date: day, created: at, kpis: [], people: [k.name || ""], in_scope: true, check: false, link: "" }, { text, works: [name], progress: [{ work: name, status: (prev && prev.progress && prev.progress[0] && prev.progress[0].status) || "Started", percent: (prev && prev.progress && prev.progress[0] && prev.progress[0].percent) || 0 }], source: "campaign", campaign: c.id, contact_last4: d.slice(-4), updated: at });
-  await putJ(env, key, e); return { key, name };
+  const e = Object.assign(prev || { id: key.slice(key.lastIndexOf("_") + 1), date: day, created: at, type: "Follow-up", kpis: [], people: [k.name || ""], deliverables: [], external: [], tasks: [], in_scope: true, check: false, link: "" }, { text, works: [name], progress: [{ work: name, status: (prev && prev.progress && prev.progress[0] && prev.progress[0].status) || "Started", percent: (prev && prev.progress && prev.progress[0] && prev.progress[0].percent) || 0 }], source: "campaign", campaign: c.id, contact_last4: d.slice(-4), updated: at });
+  e.title = e.title || name; e.summary = text; await putJ(env, key, e); return { key, name };   // v776b - full Work entry shape (title, summary, deliverables)
 }
 // A tap on a campaign button: record the branch (and the consent, per branch), then send the next node.
 export async function flowChoice(env, msg, d, deps, now) {
