@@ -13,7 +13,7 @@ import { LTF_JS } from "./landtype_filters.js";   // v731 - DLD use / land type 
 import { bppFinance, BPP_READERS, readerFor } from "./passport_finance.js";
 import { storyBlock, placeStory, STORY_H_MM } from "./story_timeline.js";   // v745 - section 03A Building story, drawn by the worker
 import { dashBlock, placeDash, DASH_H_MM } from "./passport_dashboard.js";   // v748 - page 1 dashboard, drawn by the worker
-import { pagesBlocks, placePages } from "./passport_pages.js";   // v751 - pages 2 and 3 drawn by the worker as visuals (Kendall: "tell the story through the infographics")
+import { pagesBlocks, placePages, BPP_PAGES } from "./passport_pages.js";   // v751 - pages 2 and 3 drawn by the worker as visuals (Kendall: "tell the story through the infographics")
 import { nbGet, withNb, neighbourhoodLines, dnaLines, plotFactLines } from "./passport_neighbourhood.js";   // v734 - neighbourhood from location, district DNA, plot facts   // v727 - the financial engine on page 2, by reader (investor / broker / developer)
 
 const esc = (s) => String(s == null ? "" : s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
@@ -456,7 +456,7 @@ export function bppPrompt(f, dateText) {
     + "Design direction (look only): a cream page with a thin gold rule under the header; a large serif title block (\"BUILDING PASSPORT\" then the building name in italic serif and a one-line purpose); section headers as dark-green tab banners with a small gold line icon and a numbered gold kicker (\"01 - THE BUILDING\", \"02 - THE MARKET\", \"03 - RISKS AND OPPORTUNITIES\"); rounded cream cards with thin gold borders; beside the title on page 1 an EMPTY photo box exactly <div class=\"bpp-photo\" style=\"width:78mm;height:58mm\"></div> (leave it empty: the photo and its caption are put in later; draw no illustration, picture or skyline anywhere). Do NOT add any other logos. "
     + "Every section header carries a source chip: \"From the registers\" (green), \"From the adverts\" (gold: live adverts, asking rents, agencies and broker cards), \"Calculated\" (blue), \"Live from Google\" (amber, ONLY on the Google box: reviews of the building, or \"Nearby places\" for a plot with none), \"Developer source\" (purple), \"Not available yet\" (grey). "
     + "Wording: a percentage complete is construction progress at the register date, never a completion; a planned date is planned. Use the logo at least 22mm tall. Keep every card fully inside its page: no card may extend past the right edge, and the last card on each page must end at least 10mm above the footer; if space is short, make cards smaller, never cut them. "
-    + "Keep the bottom 3.5mm of every .page empty (a snapshot line is put there later; the footer sits above it). Footer on every page: \"Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397\" on the left and \"Najma Building Passport · " + dateText + " · page N of 3\" on the right. "
+    + "Keep the bottom 3.5mm of every .page empty (a snapshot line is put there later; the footer sits above it). Footer on every page: \"Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397\" on the left and \"Najma Building Passport · " + dateText + " · page N of 4\" on the right. "
     + "Page structure (v748): page 1 = the whole answer at a glance, a DASHBOARD: ONLY the header band (logo, \"BUILDING PASSPORT\", the building name in italic serif, one-line purpose) beside the empty photo box, then this empty, pre-sized box inserted verbatim: <div class=\"bpp-dash\" style=\"width:100%;height:" + DASH_H_MM + "mm;overflow:hidden\"></div> (status, KPI tiles, price line, places and the verdict are drawn into it later; leave it empty and put NOTHING else on page 1 apart from the footer; keep the header band at most 76mm tall); "
     + "v751: write ONLY page 1, as ONE .page section of exactly 210mm x 297mm. Pages 2 and 3 (sections 01 to 12, the building story, sales, rentals, occupancy, investment, risks and opportunities, neighbourhood, Google, district DNA, developer, evidence and broker cards) are drawn later by the system from the same data as visuals: do NOT write them, do NOT add any other .page, and keep the whole document to that single page plus its styles. "
     + "Under every register-backed figure print its source and as-of date in small text exactly as given in DATA; any \"NOTE: this register is N days old\" must be printed visibly beside that figure (small amber note). Figures for one building are never added up into a project total, and project-level figures are labelled \"project level\". The Google box shows the rating, the review count, the retrieval date and the Google Maps link as given, plus the line \"Google shows at most 5 reviews per place; this is not every review\". "
@@ -680,9 +680,9 @@ export function withFit(html, zooms, story60) {
 }
 export const ZOOM_STEPS = [0.97, 0.94, 0.91, 0.88, 0.85, 0.82, 0.79, 0.76];
 // v748 - what the fitting re-ask tells the writer: which page, which sections, by how many millimetres; cut words, never data rows
-export function fitBrief(n, fit) {
+export function fitBrief(n, fit, want) {
   const bad = (fit || []).filter((p) => p.over_mm > 0 || p.wide);
-  return "Printed to PDF in Chrome on fixed 210mm x 297mm pages it came out as " + n + " physical page" + (n === 1 ? "" : "s") + " (it must be exactly 3)"
+  return "Printed to PDF in Chrome on fixed 210mm x 297mm pages it came out as " + n + " physical page" + (n === 1 ? "" : "s") + " (it must be exactly " + (want || 3) + ")"
     + (bad.length ? ". These pages overflow: " + bad.map((p) => "page " + p.page + " runs " + p.over_mm + " mm past the footer line"
       + (p.sections.length ? " (sections " + p.sections.join(", ") + ")" : "") + (p.wide ? " and " + p.wide + " items run past the right edge" : "")
       + (p.cut.length ? "; cut off: " + p.cut.slice(0, 3).join(" | ") : "")).join("; ") : "")
@@ -727,6 +727,7 @@ async function renderPdf(env, html, opts) {
 }
 // v748 - did it fit: exactly 3 physical pages and nothing running past the footer line
 export const fitsThree = (pages, fit) => pages === 3 && !(fit || []).some((p) => p.over_mm > 0);
+export const fitsPages = (pages, fit, want) => pages === (want || BPP_PAGES) && !(fit || []).some((p) => p.over_mm > 0);   // v766 - 4 pages
 // v729 - every passport says it is a snapshot. v734 (Kendall, 4 Nov: the fixed top line overlapped each page's header): the line now sits
 // in its own thin band at the very bottom of each .page, under the footer text and inside the page's bottom margin; it never adds a page.
 export function bppStamp(iso) { const d = new Date(Date.parse(iso) + 4 * 3600e3); return Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) + " " + d.toISOString().slice(11, 16) + " GST" : ""; }
@@ -778,7 +779,8 @@ export async function bppPages(env, plotId, now) {
   const pp = await ppGet(env, plotId); if (!pp) return null;
   const pack = withNb(await readJson(env, "pp_pack_" + String(plotId).replace("naj:plot:", "")), await nbGet(env, plotId).catch(() => null));
   const today = todayGst(now);
-  return pagesBlocks(pp, pack, today, bppFacts(pp, pack, today), bppDate(today));
+  const mix = await readJson(env, "priv_community_resident_mix").catch(() => null);   // v766 - page 4
+  return pagesBlocks(Object.assign({ id: plotId }, pp), pack, today, bppFacts(pp, pack, today), bppDate(today), mix);
 }
 export async function bppTick(env, nowMs) {
   const now = nowMs || Date.now();
@@ -817,7 +819,7 @@ export async function bppTick(env, nowMs) {
         if (!html) { r.status = "failed"; r.msg = "The writer returned no passport."; await putReq(env, id, r); continue; }
         r.lock = new Date(now).toISOString(); await putReq(env, id, r);
         const pages = await bppPages(env, r.plot_id, now).catch(() => null);   // v751 - pages 2 and 3, drawn here, never by the writer
-        const logo = await withLogo(env, pages ? placePages(html, pages.p2, pages.p3) : html);
+        const logo = await withLogo(env, pages ? placePages(html, pages.p2, pages.p3, pages.p4) : html);
         const ph = await readJson(env, "bpp_photo_" + r.slug);   // v702 - the page links the live picture; the PDF gets it once, at render
         const made = new Date(now).toISOString();
         const story = await bppStory(env, r.plot_id, now).catch(() => "");   // v745 - 03A timeline, drawn here, never by the writer
@@ -826,19 +828,20 @@ export async function bppTick(env, nowMs) {
         const full = fill(placePhoto(logo, heroFigure(ph, "/bp/img/" + r.slug)));
         const printHtml = snapshotNote(fill(placePhoto(logo, heroFigure(ph, await bppImageDataUri(env, r.slug).catch(() => "")))), made);
         // v748 - small overflow (<= 15 mm a page) is shrunk straight away; more goes back to the writer once with the exact sections and mm
+        const WANT = pages && pages.p4 ? BPP_PAGES : 3;
         let rp = await renderPdf(env, printHtml);
         const worst = Math.max(0, ...rp.fit.map((p) => p.over_mm));
-        if (!fitsThree(rp.pages, rp.fit) && !(r.tries >= 1) && (rp.pages !== 3 || worst > 15)) {
+        if (!fitsPages(rp.pages, rp.fit, WANT) && !(r.tries >= 1) && (rp.pages !== WANT || worst > 15)) {
           r.tries = (r.tries || 0) + 1; r.pages = rp.pages; r.fit = rp.fit.map((p) => ({ page: p.page, over_mm: p.over_mm, sections: p.sections })); delete r.lock;
-          r.resp = await oaiStart(env, "Revise this Building Passport HTML. " + fitBrief(rp.pages, rp.fit) + " Keep the design, palette, fonts, every number, the empty fixed-height <div class=\"bpp-dash\"> and <div class=\"bpp-story\"> boxes (leave them empty and keep their heights) and the page 1 structure: ONE 210mm x 297mm .page section (box-sizing:border-box, padding inside the 297mm, overflow hidden), everything ending at least 8mm above the footer; pages 2 and 3 are added by the system, never write them. Never invent or drop a number. Return ONLY the complete corrected HTML document starting with <!doctype html>.\n\nHTML:\n" + html);
+          r.resp = await oaiStart(env, "Revise this Building Passport HTML. " + fitBrief(rp.pages, rp.fit, WANT) + " Keep the design, palette, fonts, every number, the empty fixed-height <div class=\"bpp-dash\"> and <div class=\"bpp-story\"> boxes (leave them empty and keep their heights) and the page 1 structure: ONE 210mm x 297mm .page section (box-sizing:border-box, padding inside the 297mm, overflow hidden), everything ending at least 8mm above the footer; pages 2 and 3 are added by the system, never write them. Never invent or drop a number. Return ONLY the complete corrected HTML document starting with <!doctype html>.\n\nHTML:\n" + html);
           r.status = "fixing"; await putReq(env, id, r); return { reask: id };
         }
-        if (!fitsThree(rp.pages, rp.fit)) rp = await renderPdf(env, printHtml, { fit: true });   // the deterministic last resort
+        if (!fitsPages(rp.pages, rp.fit, WANT)) rp = await renderPdf(env, printHtml, { fit: true });   // the deterministic last resort
         const n = rp.pages, pdf = rp.pdf;
         r.over = rp.over.slice(0, 6); r.fit = rp.fit.map((p) => ({ page: p.page, over_mm: p.over_mm, sections: p.sections })); r.zoom = rp.zooms; r.story60 = rp.story60;
-        if (!fitsThree(n, rp.fit)) {
+        if (!fitsPages(n, rp.fit, WANT)) {
           r.status = "failed"; r.pages = n; delete r.lock; delete r.resp;
-          r.msg = n !== 3 ? "It printed as " + n + " pages, not 3, even after the fitting round." : "Page " + rp.fit.filter((p) => p.over_mm > 0).map((p) => p.page).join(", ") + " still ran past the footer after shrinking.";
+          r.msg = n !== WANT ? "It printed as " + n + " pages, not " + WANT + ", even after the fitting round." : "Page " + rp.fit.filter((p) => p.over_mm > 0).map((p) => p.page).join(", ") + " still ran past the footer after shrinking.";
           await putReq(env, id, r); continue;
         }
         await env.MEETINGS.put("bpp_file_" + r.slug + "_html", withFit(snapshotNote(full, made), rp.zooms, rp.story60), bppTtl(r.slug));   // v729 - 24 h, with the snapshot line; v748 - and the same print fit
@@ -877,9 +880,9 @@ export function bppPct(r, now) {
   if (r.status === "fixing") return Math.round(70 + 25 * sp(t("updated") || t("started"), 200));
   return Math.round(3 + 9 * sp(t("at"), 75));
 }
-const STEP = { pending: "Step 1 of 3 · queued", writing: "Step 2 of 3 · writing the passport", fixing: "Step 3 of 3 · fitting to 3 pages", done: "Done", failed: "Stopped" };
+const STEP = { pending: "Step 1 of 3 · queued", writing: "Step 2 of 3 · writing the passport", fixing: "Step 3 of 3 · fitting the pages", done: "Done", failed: "Stopped" };
 export const bppStatusRow = (r, now) => ({ id: r.id, status: r.status, label: ST[r.status] || r.status, msg: r.msg || "", title: r.title || r.text || "", reader: r.reader || "", reader_used: r.reader_used || "", who: reqWho(r), elapsed: bppElapsed(r, now), pct: bppPct(r, now), step: STEP[r.status] || "" });
-const ST = { pending: "Waiting to start", writing: "Being made", fixing: "Being made (fitting to 3 pages)", done: "Ready", failed: "Could not be made", "needs a plot number": "Needs a plot number" };
+const ST = { pending: "Waiting to start", writing: "Being made", fixing: "Being made (fitting the pages)", done: "Ready", failed: "Could not be made", "needs a plot number": "Needs a plot number" };
 
 export function bppBody(key, rk, items, reqs, origin, who, nowMs) {
   const now = nowMs || Date.now();

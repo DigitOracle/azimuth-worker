@@ -36,8 +36,8 @@ let bad = null; try { new Function("return " + B.FIT_JS); } catch (e) { bad = e.
 
 // 5. the tick: a 5-page first print goes back to the writer with the brief; a second 5-page print fails, never delivered; 3 pages delivered
 const src = fs.readFileSync(new URL("../src/building_passports.js", import.meta.url), "utf8");
-ok(/fitBrief\(rp\.pages, rp\.fit\)/.test(src) && /renderPdf\(env, printHtml, \{ fit: true \}\)/.test(src) && /emulateMediaType\("print"\)/.test(src), "tick: re-ask with the brief, shrink as last resort, print media");
-ok(/if \(!fitsThree\(n, rp\.fit\)\) \{\s*r\.status = "failed"/.test(src), "tick: not 3 pages after the fit = failed, not delivered");
+ok(/fitBrief\(rp\.pages, rp\.fit, WANT\)/.test(src) && /renderPdf\(env, printHtml, \{ fit: true \}\)/.test(src) && /emulateMediaType\("print"\)/.test(src), "tick: re-ask with the brief, shrink as last resort, print media");
+ok(/if \(!fitsPages\(n, rp\.fit, WANT\)\) \{\s*r\.status = "failed"/.test(src), "tick: not 3 pages after the fit = failed, not delivered");
 {
   const kv = new Map(), env = { OPENAI_API_KEY: "k", MEETINGS: { get: async (k, t) => { const v = kv.get(k); return v == null ? null : t === "json" ? JSON.parse(v) : v; }, put: async (k, v) => { kv.set(k, typeof v === "string" ? v : v); }, delete: async (k) => kv.delete(k), list: async () => ({ keys: [...kv.keys()].map((name) => ({ name })), list_complete: true }) } };
   let pages = 5, fits = [{ page: 1, over_mm: 0, wide: 0, sections: [], cut: [] }, { page: 2, over_mm: 38, wide: 0, sections: ["05 RENTALS"], cut: ["x"] }, { page: 3, over_mm: 0, wide: 0, sections: [], cut: [] }];

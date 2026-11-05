@@ -17,6 +17,7 @@ const dM = (iso) => { const m = /^(\d{4})-(\d{2})/.exec(String(iso || "")); retu
 const bedL = (b) => (String(b) === "0" ? "Studio" : b + " bed");
 const T = "#0A4F4A", G = "#C5A56A", GD = "#8A6A2C", INK = "#1C2826", MUT = "#5F6B66", LINE = "#E4D8BF", BLUE = "#2F6F9F", PALE = "#EFE7D6";
 export const STALE_DAYS = 45;
+export const BPP_PAGES = 4;   // v766 (Kendall 5 Nov): page 4 is the community nationality mix
 
 const ICON = {
   pin: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
@@ -41,7 +42,7 @@ const ICON = {
 };
 const ic = (k, s, c) => '<svg viewBox="0 0 24 24" width="' + (s || 14) + '" height="' + (s || 14) + '" fill="none" stroke="' + (c || G) + '" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none">' + (ICON[k] || "") + "</svg>";
 const NA = '<span class="bd-na">Not available yet</span>';
-const CHIP = { reg: ["From the registers", "#E3F0EA", "#0F5A3F"], ads: ["From the adverts", "#F6EBD3", GD], calc: ["Calculated", "#E3ECF4", BLUE], google: ["Live from Google", "#F8E8CF", "#9A5E12"], dev: ["Developer source", "#EEE7F5", "#6B4A99"], na: ["Not available yet", "#ECEDEC", "#5F6B66"] };
+const CHIP = { reg: ["From the registers", "#E3F0EA", "#0F5A3F"], ads: ["From the adverts", "#F6EBD3", GD], calc: ["Calculated", "#E3ECF4", BLUE], google: ["Live from Google", "#F8E8CF", "#9A5E12"], dewa: ["From DEWA accounts", "#E3F0EA", "#0F5A3F"], dev: ["Developer source", "#EEE7F5", "#6B4A99"], na: ["Not available yet", "#ECEDEC", "#5F6B66"] };
 const chip = (k) => { const c = CHIP[k]; return '<span class="bd-chip" style="background:' + c[1] + ";color:" + c[2] + '">' + c[0] + "</span>"; };
 
 // ---------------------------------------------------------------------------------------------------- the figures (from stored rows only)
@@ -153,7 +154,7 @@ const short = (s, n) => { const t = String(s || "").replace(/\s+/g, " ").trim();
 const mkPage = (n, title, sub, logo, inner, foot) => '<section class="page bd-page" data-bpp-det="' + n + '"><div class="bd-top">' + (logo ? '<img src="najma_logo.png" alt="Najma" class="bd-logo">' : "")
   + '<div class="bd-tt"><div class="bd-kick">' + esc(sub) + '</div><div class="bd-title">' + esc(title) + "</div></div></div>"
   + '<div class="bd-main">' + inner + "</div>"
-  + '<div class="footer bd-foot"><span>Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397</span><span>Najma Building Passport · ' + esc(foot) + " · page " + n + " of 3</span></div></section>";
+  + '<div class="footer bd-foot"><span>Curated by Najjuko · Dubai Decoded · WhatsApp +971 56 548 4397</span><span>Najma Building Passport · ' + esc(foot) + " · page " + n + " of " + BPP_PAGES + "</span></div></section>";
 
 // ---------------------------------------------------------------------------------------------------- page 2: the building and its market
 export function page2(F, story, dateText) {
@@ -238,6 +239,46 @@ export function page3(F, fin, dateText) {
 }
 
 // ---------------------------------------------------------------------------------------------------- styles and the splice
+
+// ---------------------------------------------------------------------------------------------------- page 4: who lives in the community
+// v766 (Kendall 5 Nov: "a donut chart ... really list out what all those nationalities are"). Source: priv_community_resident_mix, the same
+// community-grain DEWA aggregate the /residents page serves publicly (floored at 500 residential accounts, banded, no counts, no address).
+// The plot's community is the first three digits of its plot number (676-8698 -> community 676 = Al Hebiah Third, DAMAC HILLS). Never invented:
+// a community that is not in the file, or has no mix, gets a plain sentence and no chart.
+export function communityMix(file, plotId) {
+  const code = String(plotId || "").replace(/^naj:plot:/i, "").split("-")[0];
+  const list = (file && Array.isArray(file.communities)) ? file.communities : [];
+  return list.find((c) => String(c.comm) === code) || null;
+}
+const RC = [T, G, "#2F6F9F", GD, "#6E9C93", "#B4533C", "#7A6A9A", "#B9A47A", "#3E7E6A", "#9AA9A5"];
+function regionDonut(regs) {
+  const tot = regs.reduce((a, r) => a + (+r.pct || 0), 0); if (!tot) return "";
+  const R = 15.9155; let off = 25, s = "";
+  regs.forEach((r, i) => { const p = r.pct / tot * 100; s += '<circle r="' + R + '" cx="21" cy="21" fill="none" stroke="' + RC[i % RC.length] + '" stroke-width="8" stroke-dasharray="' + p.toFixed(2) + " " + (100 - p).toFixed(2) + '" stroke-dashoffset="' + off.toFixed(2) + '"/>'; off -= p; });
+  return '<svg viewBox="0 0 42 42" class="bd-donut bd-donut4">' + s + '<text x="21" y="20" text-anchor="middle" font-family="Fraunces,Georgia,serif" font-size="5.2" font-weight="700" fill="' + INK + '">' + regs.length + '</text><text x="21" y="25" text-anchor="middle" font-family="Inter,sans-serif" font-size="3" fill="' + MUT + '">regions</text></svg>';
+}
+export function page4(C, name, dateText) {
+  const nm = name || (C && (C.label || C.official)) || "this community";
+  if (!C || !(Array.isArray(C.mix) && C.mix.length || Array.isArray(C.regions) && C.regions.length)) {
+    return mkPage(4, "Who lives here", nm + " · nationality mix", true,
+      card("bd-c-nat", head("11", "Nationality mix", "na", "people"), '<div class="bd-ynote">This community has too few residential accounts with a nationality on record, so no mix is shown. We never estimate one.</div>', "DEWA residential accounts, community level"), dateText);
+  }
+  const regs = (C.regions || []).filter((r) => +r.pct > 0);
+  const top = (C.mix || []).map((m) => '<div class="bd-n4t"><b>' + esc(m[1]) + '%</b><span>' + esc(m[0]) + "</span></div>").join("")
+    + (C.other ? '<div class="bd-n4t bd-n4o"><b>' + esc(C.other) + '%</b><span>Others, each under 5%</span></div>' : "");
+  const leg = regs.map((r, i) => {
+    const cs = (r.countries || []).map((c) => '<span class="bd-n4c">' + esc(c[0]) + " <b>" + esc(c[1]) + "%</b></span>").join("")
+      + (r.others ? '<span class="bd-n4c bd-mut">other ' + esc(r.name) + " <b>" + esc(r.others) + "%</b></span>" : "");
+    return '<div class="bd-n4r"><div class="bd-n4h"><i style="background:' + RC[i % RC.length] + '"></i><b>' + esc(r.name) + '</b><span>' + esc(r.pct) + '%</span></div>' + (cs ? '<div class="bd-n4cs">' + cs + "</div>" : "") + "</div>";
+  }).join("");
+  const inner = card("bd-c-nat", head("11", "Nationality mix · " + (C.label || C.official || nm), "dewa", "people"),
+      '<div class="bd-n4top">' + top + "</div>"
+      + (regs.length ? '<div class="bd-n4grid"><div class="bd-n4d">' + regionDonut(regs) + '</div><div class="bd-n4leg">' + leg + "</div></div>" : ""),
+      "DEWA residential accounts in " + esc(C.official || C.name || nm) + ", community level" + (C.noNationalityPct ? " · " + esc(C.noNationalityPct) + "% of accounts record no nationality" : ""))
+    + card("bd-c-natcav", "", '<div class="bd-ynote">' + ic("people", 13, T) + " These are account holders, not every resident. Shown for market understanding and planning content, never for recommending a home to anyone.</div>");
+  return mkPage(4, "Who lives here", nm + " · nationality mix", true, inner, dateText);
+}
+
 export const PAGES_CSS = '<style id="bpp-det">'
   + ".bd-page{position:relative;background:#F6F2E9;padding:7mm 9mm 14mm;font-family:Inter,Arial,sans-serif;color:" + INK + "}"
   + ".bd-top{display:flex;align-items:center;gap:3mm;border-bottom:.3mm solid " + G + ";padding-bottom:2mm;margin-bottom:2.6mm}.bd-logo{height:10mm;width:auto}"
@@ -283,11 +324,14 @@ export const PAGES_CSS = '<style id="bpp-det">'
   + ".bd-t{font-size:15px}.bd-sv{font-size:20px}.bd-sl{font-size:11px}.bd-ss,.bd-src,.bd-pls{font-size:10px}.bd-leg,.bd-key,.bd-key3,.bd-roi,.bd-kv,.bd-kv2,.bd-gn,.bd-bro,.bd-hb,.bd-ykv{font-size:12px}.bd-chip,.bd-na,.bd-tag,.bd-nx,.bd-stale{font-size:10px}"
   + ".bd-pln{font-size:11px}.bd-pln b{font-size:14px}.bd-title{font-size:22px}.bd-kick{font-size:10px}.bd-hl{width:40%}.bd-hv{width:auto}.bd-bars{height:auto}.bd-donut,.bd-ring{width:120px;height:120px}.bd-cap,.bd-next{font-size:11px}.bd-yv{font-size:15px}.bd-idc{font-size:11px}.bd-stack{height:16px}.bd-disc{font-size:10px}"
   + ".bpp-story{height:auto!important}.bpp-story-in{height:auto!important;overflow-x:auto!important}.bpp-story-in svg{min-width:640px;max-height:none!important}.bd-ycls{grid-template-columns:1fr}.bd-ycl{display:grid;grid-template-columns:1fr 1fr;column-gap:10px}.bd-ycb,.bd-yg{grid-column:1/-1}.bd-ykv b{font-size:13px}}"
+  + ".bd-n4top{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-bottom:3mm}.bd-n4t{background:#F6F2E9;border-radius:2.4mm;padding:2.4mm 3mm;display:flex;flex-direction:column;gap:.6mm}.bd-n4t b{font:700 15pt Fraunces,Georgia,serif;color:" + T + "}.bd-n4t span{font:600 7.6pt Inter,sans-serif;color:" + INK + "}.bd-n4o b{color:" + GD + "}"
+  + ".bd-n4grid{display:grid;grid-template-columns:62mm 1fr;gap:5mm;align-items:start}.bd-donut4{width:60mm;height:60mm}.bd-n4leg{display:flex;flex-direction:column;gap:2.2mm}.bd-n4h{display:flex;align-items:center;gap:1.6mm;font:600 8.6pt Inter,sans-serif;color:" + INK + "}.bd-n4h i{width:3mm;height:3mm;border-radius:.7mm;display:inline-block}.bd-n4h span{margin-left:auto;font:700 9pt Inter,sans-serif;color:" + T + "}.bd-n4cs{display:flex;flex-wrap:wrap;gap:1mm 2.4mm;margin:1mm 0 0 4.6mm}.bd-n4c{font:500 7.2pt Inter,sans-serif;color:" + MUT + "}.bd-n4c b{color:" + INK + "}"
+  + "@media screen and (max-width:800px){.bd-n4top{grid-template-columns:1fr 1fr}.bd-n4grid{grid-template-columns:1fr}.bd-donut4{width:200px;height:200px;margin:0 auto;display:block}.bd-n4t b{font-size:20px}.bd-n4t span,.bd-n4h{font-size:13px}.bd-n4c{font-size:12px}}"
   + "</style>";
 
 // keep the writer's page 1 (header, photo, dashboard), drop whatever it wrote after it, put pages 2 and 3 in
 const PAGE_OPEN = /<(section|div)\b[^>]*\bclass=["']?[^"'>]*(?<![\w-])page(?![\w-])[^>]*>/gi;
-export function placePages(html, p2, p3) {
+export function placePages(html, p2, p3, p4) {
   let h = String(html || "");
   if (!p2 || !p3) return h;
   h = h.replace(/<style id="bpp-det">[\s\S]*?<\/style>/g, "");
@@ -295,15 +339,17 @@ export function placePages(html, p2, p3) {
   const starts = []; let m; PAGE_OPEN.lastIndex = 0;
   while ((m = PAGE_OPEN.exec(h))) starts.push(m.index);
   const bodyEnd = h.search(/<\/body>/i), end = bodyEnd >= 0 ? bodyEnd : h.length;
-  if (starts.length >= 2) return h.slice(0, starts[1]) + p2 + p3 + h.slice(end);
-  return h.slice(0, end) + p2 + p3 + h.slice(end);
+  h = h.replace(/page (\d) of 3\b/g, "page $1 of " + (p4 ? 4 : 3));   // the writer's page 1 footer
+  if (starts.length >= 2) return h.slice(0, starts[1]) + p2 + p3 + (p4 || "") + h.slice(end);
+  return h.slice(0, end) + p2 + p3 + (p4 || "") + h.slice(end);
 }
 
 // the two pages for one plot, from the same rows the facts and the dashboard read
-export function pagesBlocks(pp, pack, today, f, dateText) {
+export function pagesBlocks(pp, pack, today, f, dateText, mixFile) {
   const F = pageFigures(pp, pack, today, f);
   const st = storySvg(pp, pack, today);
   const story = st ? st.svg.replace(/<svg /, '<svg style="width:100%;height:auto;max-height:' + (STORY_H_MM - 6) + 'mm" ') + '<div style="font:500 5.6pt Inter,sans-serif;color:#5F6B66;margin-top:.6mm">Diamonds = milestones · bars = construction (dashed = planned) · Land Department and Ejari registers</div>' : "";
   let fin = null; try { fin = brokerView(pp, pack, today); } catch (e) { fin = null; }
-  return { p2: page2(F, story, dateText), p3: page3(F, fin || { classes: [] }, dateText), F };
+  const plotId = (pp && (pp.id || pp.plot_id)) || "";
+  return { p2: page2(F, story, dateText), p3: page3(F, fin || { classes: [] }, dateText), p4: page4(communityMix(mixFile, plotId), F.identity && F.identity.name, dateText), F };
 }

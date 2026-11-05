@@ -114,7 +114,7 @@ ok(B.bppTtl("u-bora-3466876").expirationTtl === 86400 && B.bppTtl("t-test") === 
   const deps = { person: () => "kendall", page: (k, rk, b) => b };
   const res = await B.bppRoute(new Request("https://x/momo/work/passports/api", { method: "POST", body: JSON.stringify({ op: "status", ids: ["bbbbbb1", "zzzzzz9", "../bad"] }) }), { MEETINGS: kv }, new URL("https://x/momo/work/passports/api"), deps);
   const j = await res.json();
-  ok(j.ok && j.requests.length === 1 && j.requests[0].status === "fixing" && j.requests[0].label === "Being made (fitting to 3 pages)" && j.requests[0].reader_used === "developer" && /developer/.test(j.requests[0].who), "status op returns the live rows", j);
+  ok(j.ok && j.requests.length === 1 && j.requests[0].status === "fixing" && j.requests[0].label === "Being made (fitting the pages)" && j.requests[0].reader_used === "developer" && /developer/.test(j.requests[0].who), "status op returns the live rows", j);
   const src = fs.readFileSync(new URL("../src/building_passports.js", import.meta.url), "utf8");
   ok(!/(msg = |new Error\()"ChatGPT/.test(src) && !/msg = "[^"]*(ChatGPT|OpenAI|GPT)/.test(src), "no AI model named in any user-visible message");
   ok(/ASSUMPTIONS table goes on PAGE 3, never page 2/.test(src) && /two-column grid/.test(src), "assumptions table compact, on page 3");

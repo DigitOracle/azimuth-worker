@@ -25,7 +25,7 @@ ok(F.brokers.length === 4 && F.brokers[0].agent && F.brokers[0].firm && F.broker
 
 // 2. the pages: two .page boxes, numbered 2 and 3, own footer, no emoji, nothing invented
 const { p2, p3 } = pagesBlocks(d.pp, pack, TODAY, f, B.bppDate(TODAY));
-ok(/data-bpp-det="2"/.test(p2) && /page 2 of 3/.test(p2) && /data-bpp-det="3"/.test(p3) && /page 3 of 3/.test(p3), "pages 2 and 3 with their own footers");
+ok(/data-bpp-det="2"/.test(p2) && /page 2 of 4/.test(p2) && /data-bpp-det="3"/.test(p3) && /page 3 of 4/.test(p3), "pages 2 and 3 with their own footers");
 ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(p2 + p3), "no emoji characters");
 ok(/Not available yet/.test(p3) && /Service charge/.test(p3), "service charge stays a grey Not available yet pill");
 ok(!/gpt|openai|claude|gemini/i.test(p2 + p3 + PAGES_CSS), "no AI model named");
@@ -41,7 +41,7 @@ ok((S1.match(/class="page/g) || []).length === 3, "a page-1-only writer document
 
 // 4. the tick draws the pages before the logo is inlined; the prompt asks the writer for page 1 only
 const src = fs.readFileSync(new URL("../src/building_passports.js", import.meta.url), "utf8");
-ok(/const pages = await bppPages\(env, r\.plot_id, now\)/.test(src) && /withLogo\(env, pages \? placePages\(html, pages\.p2, pages\.p3\) : html\)/.test(src), "tick: pages placed, then the logo");
+ok(/const pages = await bppPages\(env, r\.plot_id, now\)/.test(src) && /withLogo\(env, pages \? placePages\(html, pages\.p2, pages\.p3, pages\.p4\) : html\)/.test(src), "tick: pages placed, then the logo");
 const pr = B.bppPrompt(f, "4 Nov 2026");
 ok(/write ONLY page 1/.test(pr) && !/page 3 = the detail/.test(pr), "prompt: page 1 only");
 console.log("v751 passport pages: " + pass + " passed, " + fail + " failed");
