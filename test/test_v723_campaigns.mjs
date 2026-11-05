@@ -227,8 +227,9 @@ ok(ho[0].d === "971500000012" && ho[0].path.join() === "s1.selling,b1.listed,b2.
 ok(calls.every((c) => c.body.to !== "971500000099"), "the handover never messages Najjuko");
 // (c) another Palm investment -> tracked link to the /cb/ brief, then a call offer
 calls.length = 0; await tap("971500000013", 2, pids[2]);
-const dc = calls[0].body;   // v772 - a light PDF document, not a link to an app page
-ok(dc.type === "document" && dc.document.link === "https://w/dp/f/palm-springs-investor-one.pdf" && dc.document.filename === "Palm Springs - Investor one-pager - Najjuko.pdf" && calls[1].body.interactive.action.buttons[0].reply.title === "Book a call", "(c) brief sent as a PDF document + call offer", calls.map((c) => c.body));
+const dc = calls[0].body;   // v774 - the stored illustration as a picture, the thank-you and a short personal link /p/<code>
+const pcode = (/\/p\/([a-z2-9]{8})$/.exec((dc.image && dc.image.caption) || "") || [])[1];
+ok(dc.type === "image" && dc.image.link === "https://w/dp/img/palm-springs" && /^Thank you(, \w+)?\. Your Palm Springs passport is ready:/.test(dc.image.caption) && pcode && JSON.parse(store.get("dp_doc_" + pcode)).reader === "investor" && !/971500000013/.test(dc.image.caption) && calls[1].body.interactive.action.buttons[0].reply.title === "Book a call", "(c) picture + personal short link (no number in it) + call offer", calls.map((c) => c.body));
 // (d) not now -> one gentle ask
 calls.length = 0; await tap("971500000014", 3, pids[3]);
 ok(calls.length === 1 && /every two weeks/.test(calls[0].body.interactive.body.text), "(d) one gentle updates ask");

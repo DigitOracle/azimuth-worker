@@ -47,6 +47,7 @@ export const BACKOFF_STEPS = [30000, 120000, 600000, 1800000, 3600000];   // 30 
 export const NAJ_BRN = "98949", NAJ_BRN_EXPIRES = "2027-07-22";
 
 import { DP_SETS, dpReader, dpFileName } from "./district_passport.js";   // v771, v772
+import { docCreate, docCaption } from "./district_doc.js";   // v774 - the personal passport page /p/<code>
 
 // ---------- phone numbers ----------
 // UAE mobile: 05X XXX XXXX, 5X XXX XXXX, 9715..., 009715..., +9715... -> +9715XXXXXXXX. Other countries need a full + or 00 prefix.
@@ -909,20 +910,26 @@ async function flowRun(env, c, f, nid, k, deps, now, trail) {
     let link = "";
     if (n.type === "doc" || n.type === "brief") { const target = n.type === "brief" ? originOf(env, deps) + "/dp/" + n.brief + "?r=" + dpReader(n.reader) + "&ty=1" : n.link; const code = await makeLink(env, c.id, d, target); link = originOf(env, deps) + "/c/" + code; }   // v771 - the district passport
     let payload = nodePayload(c.id, nid, n, k, link, facts);
-    let fallback = null;
-    if (payload && n.type === "brief" && DP_SETS[n.brief]) {   // v772 (Kendall 5 Nov: no link to an app page; it went dark on a dark-mode phone) - a light PDF document, the thank-you as its caption
-      const one = n.brief === "palm-springs" || n.one === true, rd = dpReader(n.reader);
-      fallback = payload;
-      payload = { messaging_product: "whatsapp", to: payload.to, type: "document", document: { link: originOf(env, deps) + "/dp/f/" + n.brief + "-" + rd + "-" + (one ? "one" : "full") + ".pdf", filename: dpFileName(n.brief, rd, one), caption: fill(n.text, k, facts) } };
+    let fallback = null, fallback2 = null;
+    if (payload && n.type === "brief" && DP_SETS[n.brief]) {   // v774 (Kendall 5 Nov) - the stored illustration as a picture, "Thank you, <name>. Your <district> passport is ready:" and a short personal link
+      const rd = dpReader(n.reader), one = n.brief === "palm-springs" || n.one === true, first = String(k.name || "").trim().split(/\s+/)[0] || "";
+      const stp = await getJ(env, "camp_state_" + c.id + "_" + d, { path: [] }), last = (stp.path || []).slice(-1)[0] || "", [ln, lo] = last.split(".");
+      const lopt = ln && f.nodes[ln] ? (f.nodes[ln].buttons || f.nodes[ln].rows || []).find((x) => String(x.id) === lo) : null;
+      const pc = await docCreate(env, { cid: c.id, d, slug: n.brief, reader: rd, name: first, answer: lopt ? lopt.title : "", now });
+      fallback = { messaging_product: "whatsapp", to: payload.to, type: "document", document: { link: originOf(env, deps) + "/dp/f/" + n.brief + "-" + rd + "-" + (one ? "one" : "full") + ".pdf", filename: dpFileName(n.brief, rd, one), caption: fill(n.text, k, facts) } };
+      fallback2 = payload;
+      payload = { messaging_product: "whatsapp", to: payload.to, type: "image", image: { link: originOf(env, deps) + "/dp/img/" + (n.image || (DP_SETS[n.brief] || {}).img), caption: docCaption(first, n.brief) + "\n" + originOf(env, deps) + "/p/" + pc } };
     }
     if (payload) {
       let ok = false, code = 0;
       try { const r = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         const j = await r.json().catch(() => ({})); ok = r.ok && !!(j.messages && j.messages[0]); code = Number(j.error && j.error.code) || 0; } catch (e) {}
-      if (!ok && fallback) {   // v772 - the PDF did not go: send the link instead, so the owner is never left with nothing
-        try { const r2 = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(fallback) });
-          const j2 = await r2.json().catch(() => ({})); ok = r2.ok && !!(j2.messages && j2.messages[0]); trail.push({ fallback_link: ok }); } catch (e) {}
-      } else if (ok && fallback) { await bump(env, c.id, (x) => { x.docs = (x.docs || 0) + 1; }); }
+      for (const fb of [fallback, fallback2]) {   // v774 - the picture + link did not go: the PDF document, then the plain link, so the owner is never left with nothing
+        if (ok || !fb) continue;
+        try { const r2 = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(fb) });
+          const j2 = await r2.json().catch(() => ({})); ok = r2.ok && !!(j2.messages && j2.messages[0]); trail.push({ fallback: fb.type, sent: ok }); } catch (e) {}
+      }
+      if (ok && fallback) await bump(env, c.id, (x) => { x.passports = (x.passports || 0) + 1; });
       trail.push({ node: nid, sent: ok, code: code || undefined });
     }
     if (n.type === "brief") { await sendCard(env, c, f, k, deps, now, trail, f2, graph, pid); await followTask(env, c, f, k, { opened: (DP_SETS[n.brief] || {}).name || n.brief, reader: dpReader(n.reader) }, now); }
@@ -939,6 +946,14 @@ async function sendCard(env, c, f, k, deps, now, trail, f2, graph, pid) {
   const payload = { messaging_product: "whatsapp", to: d, type: "image", image: { link: originOf(env, deps) + "/dp/img/card.jpg", caption: "My broker card: BRN " + NAJ_BRN + ", Faez Noorzad Real Estate. You can check it with the QR code on the card. Najjuko" } };
   let ok = false; try { const r = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); const j = await r.json().catch(() => ({})); ok = r.ok && !!(j.messages && j.messages[0]); } catch (e) {}
   if (ok) await env.MEETINGS.put(sk, new Date(now).toISOString()); trail.push({ card: ok });
+}
+// v774 - /p/<code> was opened: the follow-up says so (time and how many opens)
+export async function dpOpened(env, rec) {
+  if (!rec || !rec.cid || !rec.d) return;
+  const c = await getJ(env, "camp_" + rec.cid, null), k = await getJ(env, "camp_contact_" + rec.d, null); if (!c || !k || !c.flow) return;
+  const f = await getJ(env, "camp_flow_" + c.flow, null); if (!f) return;
+  await followTask(env, c, f, k, { opened: (DP_SETS[rec.slug] || {}).name + " passport, opened " + rec.opens + (rec.opens === 1 ? " time" : " times") + ", last " + String(rec.last_open).slice(11, 16) + " UTC", reader: rec.reader }, Date.now());
+  await bump(env, c.id, (x) => { x.passport_opens = (x.passport_opens || 0) + 1; });
 }
 // v771 - every engaged owner becomes ONE follow-up for Najjuko: the campaign handover list (People "Follow up", the "To Najjuko" row) AND a task in her Work.
 // Keyed by campaign + contact, so later taps update the same task instead of adding new ones.

@@ -12,7 +12,7 @@ import { SHEETS_ICON, sheetsPublic } from "./work_sheets.js";   // v672 - Produc
 import { BROKERS_ICON } from "./work_brokers.js";   // v682 - the Brokers card on Najjuko's front door
 import { PRES_ICON, presPublic } from "./work_presentations.js";
 import { REELS_ICON, reelPublic } from "./work_reels.js";   // v700 - the Reels card and its public /reel/ pages
-import { CAMP_ICON, campaignRoute, campWebhook, campTick, optOut as campOptOut, isOptedOut as campIsOptedOut } from "./campaigns.js"; import { dpRoute } from "./district_passport.js";   // v771   // v723 - the WhatsApp campaign engine (Najjuko's card; sends only when Kendall sets a campaign live)
+import { CAMP_ICON, campaignRoute, campWebhook, campTick, optOut as campOptOut, isOptedOut as campIsOptedOut } from "./campaigns.js"; import { dpRoute } from "./district_passport.js";   // v771 import { docRoute } from "./district_doc.js"; import { dpOpened } from "./campaigns.js";   // v774   // v723 - the WhatsApp campaign engine (Najjuko's card; sends only when Kendall sets a campaign live)
 import { BPP_ICON, bppPublic, bppTick } from "./building_passports.js";   // v697 - the Building Passports card, its public /bp/ pages and the minute-tick job   // v684 - the Presentations card and its public /pres/ pages
 import { BRIEFS_ICON, briefsPublic } from "./work_briefs.js";   // v667 - Product briefs card (Kendall) + public /pb/ pictures   // v650 - the GGU card (Kendall's key only)   // v646 - the Speaking card (Kendall's key only)   // v641 - the temporary client card (v643: Najjuko key only)
 import { workRoute, WORK_CSS, workEveningCheck, recSweep } from "./work_log.js";
@@ -4929,7 +4929,8 @@ export default {
     if (url.pathname.startsWith("/live/")) { const _lv = await liveRoute(request, env, url); if (_lv) return _lv; }   // v659 - public, before every key gate
     if (url.pathname === "/momo/checkin.js") return new Response(CK_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });   // v764 - the WhatsApp check-in picker (no data in it)
     if (url.pathname.startsWith("/momo/checkin/")) return checkinRoute(request, env, url);   // v764 - public by design: one task, one person, 7 days, no key
-    if (url.pathname.startsWith("/dp/")) { const _dp = await dpRoute(request, env, url); if (_dp) return _dp; }   // v771 - district passport (public, like /cb/)
+    if (url.pathname.startsWith("/dp/")) { const _dp = await dpRoute(request, env, url); if (_dp) return _dp; }
+    if (url.pathname.startsWith("/p/")) { const _pd = await docRoute(request, env, url, { onOpen: (rec) => dpOpened(env, rec) }); if (_pd) return _pd; }   // v774 - the personal passport page   // v771 - district passport (public, like /cb/)
     if (url.pathname.startsWith("/c/") || url.pathname.startsWith("/cb/") || url.pathname.startsWith("/momo/campaigns")) { const _cp = await campaignRoute(request, env, url, { person: personOfKey, isNaj: isNajjuko, ctEq, page: momoPage, graph: WA_GRAPH }); if (_cp) return _cp; }   // v723 - tracked links (public) and the Campaigns card (her key, Kendall's key or READ_KEY; its own gate)
     if (url.pathname.startsWith("/momo/bridge/")) { const _br = await bridgeRoute(request, env, url); return _br || new Response(JSON.stringify({ ok: false, code: "not_found", error: "Unknown route." }), { status: 404, headers: { "Content-Type": "application/json" } }); }   // v654 - first, before every key gate: the bridge has its own header auth
     { const _wd = await deskRegRoutes(request, env, url, { graph: WA_GRAPH }); if (_wd) return _wd; }   // v409
