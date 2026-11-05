@@ -5,7 +5,7 @@
 // optional note. The answer updates the task (Done -> Done 100%, Stuck -> Stuck) or ticks the planner step (Done), and is logged on it as
 // "Vishant: Done, 11:42". The page shows only the item's name and the person's own name: never another task, never her data.
 // The message opens "Najjuko here." - never "Black Coffee", which is only how Kendall's messages TO her open.
-import { applyAction, fmtDay } from "./content_planner.js";
+import { applyAction, fmtDay, MAKER as PLAN_MAKER, OWNER as PLAN_OWNER } from "./content_planner.js";
 
 const TEAM = "ck_team", TOK = "ck_tok_", TTL = 7 * 86400;
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -17,7 +17,104 @@ export function phoneDigits(p) {
   if (d.startsWith("+")) d = d.slice(1); else if (d.startsWith("00")) d = d.slice(2); else if (/^05\d{8}$/.test(d)) d = "971" + d.slice(1); else if (/^5\d{8}$/.test(d)) d = "971" + d;
   return /^\d{8,15}$/.test(d) ? d : "";
 }
-export async function readTeam(env) { try { return JSON.parse((await env.MEETINGS.get(TEAM)) || "[]"); } catch (e) { return []; } }
+export async function readTeam(env) {
+  try { const r = JSON.parse((await env.MEETINGS.get(ROSTER)) || "null"); if (r && !Array.isArray(r)) return Object.entries(r).filter(([, v]) => v && v.phone).map(([name, v]) => ({ name, phone: v.phone })); } catch (e) {}
+  try { return JSON.parse((await env.MEETINGS.get(TEAM)) || "[]"); } catch (e) { return []; }
+}
+
+// v775 (Kendall 5 Nov: "you already know who the teammates are ... she just has to put in the WhatsApp number") - the TEAM ROSTER.
+// Seeded ONCE from the FN Realty org chart Momo already holds (PEOPLE in work_log.js, from the handover's org chart draft v8) and the
+// planner's own names (TEAM / MAKER in content_planner.js), cross-referenced with "Who's in it" on her imported planner items.
+// Numbers are NEVER filled in automatically: she types or pastes them. Najjuko herself is not on it.
+const ROSTER = "ck_roster";
+const first = (n) => String(n || "").toLowerCase().replace(/\(.*?\)/g, "").trim().split(/\s+/)[0] || "";
+function lev(a, b) { const d = Array.from({ length: a.length + 1 }, (_, i) => [i]); for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length]; }
+// a short name (Kareem, Rouba) -> the roster person it means, or null; exact first name first, then one-letter-off spellings (Kareem/Karim)
+export function matchPerson(list, name) {
+  const n = String(name || "").toLowerCase().replace(/\s+/g, " ").trim(); if (!n) return null;
+  const full = list.find((p) => p.name.toLowerCase() === n); if (full) return full;
+  const f = first(n), byFirst = list.filter((p) => first(p.name) === f); if (byFirst.length === 1) return byFirst[0];
+  const near = list.filter((p) => f.length >= 4 && lev(first(p.name), f) <= 2); return near.length === 1 ? near[0] : null;
+}
+// v775b (Kendall 5 Nov: only the people she actually works with) - the roster is the people NAMED in her items, never the whole org chart:
+// "Who's in it" and "How it's made" (-> its maker) on planner items, the planner's step owners, and the owners / people on her Work tasks.
+// The org chart (PEOPLE) only fills in each one's full name and role. Someone newly named appears by themselves on the next read.
+// Stored: ck_roster = { "<full name>": { phone, skip } }; nothing but what she typed or pasted.
+function words(v) { const out = []; for (const w of String(v || "").split(/[,/&+;]|\band\b/i)) { const t = w.replace(/[^A-Za-z' -]/g, " ").trim(); if (/^[A-Z][a-z']{2,}/.test(t)) out.push(t); } return out; }
+async function plannerNames(env) {
+  const c = await env.MEETINGS.get("ck_named"); if (c) { try { return JSON.parse(c); } catch (e) {} }
+  let idx = []; try { idx = JSON.parse((await env.MEETINGS.get("cp_index")) || "[]"); } catch (e) {}
+  const items = await Promise.all(idx.slice(0, 400).map((k) => env.MEETINGS.get("cp_item_" + k).then((v) => { try { return JSON.parse(v || "null"); } catch (e) { return null; } }).catch(() => null)));
+  const names = new Set();
+  for (const it of items) { if (!it || it.deleted) continue;
+    for (const w of words(it.who)) names.add(w);
+    if (it.how && PLAN_MAKER && PLAN_MAKER[it.how]) names.add(PLAN_MAKER[it.how]);
+    for (const st of Object.values(it.status || {})) if (st && st.by) for (const w of words(st.by)) names.add(w); }
+  if (items.some((it) => it && !it.deleted)) for (const o of Object.values(PLAN_OWNER || {})) if (o && o !== "maker") names.add(o);   // the planner step owners
+  const out = [...names]; await env.MEETINGS.put("ck_named", JSON.stringify(out), { expirationTtl: 600 }); return out;   // 10 min cache: a new name shows within minutes
+}
+export function namedRoster(people, named, stored) {
+  const org = (people || []).filter(([n]) => n && !/^all /i.test(n)).map(([name, role, group]) => ({ name, role: role || "", group: group || "other" }));
+  const out = [], seen = new Set();
+  for (const w of named || []) {
+    if (/^najjuko/i.test(w) || /^(ai|agent|agents|staff|team|none|tbc|n\/a|voice)/i.test(w)) continue;
+    const m = matchPerson(org, w), p = m ? { name: m.name, role: m.role } : { name: w, role: "" };
+    if (seen.has(p.name.toLowerCase())) continue; seen.add(p.name.toLowerCase());
+    const st = (stored || {})[p.name] || {}; out.push({ name: p.name, role: p.role, phone: st.phone || "", skip: !!st.skip });
+  }
+  for (const [name, st] of Object.entries(stored || {})) if (st && st.phone && !seen.has(name.toLowerCase())) { seen.add(name.toLowerCase()); const m = matchPerson(org, name); out.push({ name, role: m ? m.role : "", phone: st.phone, skip: false }); }   // someone she added by hand stays
+  return out.sort((a, b) => (!!b.phone - !!a.phone) || a.name.localeCompare(b.name));
+}
+async function readStored(env) {
+  let st = null; try { st = JSON.parse((await env.MEETINGS.get(ROSTER)) || "null"); } catch (e) {}
+  if (st && !Array.isArray(st)) return st;
+  st = {}; try { for (const t of JSON.parse((await env.MEETINGS.get(TEAM)) || "[]")) if (t.phone) st[t.name] = { phone: t.phone }; } catch (e) {}   // numbers she already added carry over
+  return st;
+}
+export async function readRoster(env, people, taskNames) {
+  const stored = await readStored(env), named = [...new Set([...(taskNames || []), ...(await plannerNames(env))])];
+  const r = namedRoster(people, named, stored);
+  // a stored short name (Vishant) moves onto the full name (Vishant Singh) once
+  let moved = false; for (const p of r) if (!p.phone) { const k = Object.keys(stored).find((n) => stored[n].phone && matchPerson([{ name: p.name }], n)); if (k) { p.phone = stored[k].phone; stored[p.name] = stored[k]; delete stored[k]; moved = true; } }
+  const r2 = moved ? namedRoster(people, named, stored) : r; if (moved || !(await env.MEETINGS.get(ROSTER))) await env.MEETINGS.put(ROSTER, JSON.stringify(stored));
+  return { list: r2, stored };
+}
+// "Name - 050 123 4567" lines -> who they match (nothing is saved here)
+export function pasteMatches(roster, text) {
+  const out = [];
+  for (const line of String(text || "").split(/\r?\n/).slice(0, 200)) {
+    const l = line.trim(); if (!l) continue;
+    const mm = /^(.*?)[\s:,\-\u2013\u2014]*((?:\+|00)?[\d][\d\s().-]{6,})\s*$/.exec(l); if (!mm) { out.push({ line: l, ok: false, why: "no number found" }); continue; }
+    const phone = phoneDigits(mm[2]), who = mm[1].replace(/[\s:,\-\u2013\u2014]+$/, "").trim(), p = matchPerson(roster, who);
+    out.push(p && phone ? { line: l, ok: true, name: p.name, role: p.role, phone } : { line: l, ok: false, why: !phone ? "number not recognised" : "no one called \u201c" + who + "\u201d on the list" });
+  }
+  return out;
+}
+// v775c (Kendall 5 Nov: "no upfront setup") - who is named on THIS task / step: shown first in the picker, with a number box if needed
+export async function namesOn(env, b, tasks) {
+  if (b.kind === "task") { const t = (tasks || []).find((x) => x.name === String(b.name || "")); return t ? [...new Set([...(t.owners || []), ...(t.touched || [])])] : []; }
+  if (b.kind === "step") { let it = null; try { it = JSON.parse((await env.MEETINGS.get("cp_item_" + String(b.code || "").toUpperCase())) || "null"); } catch (e) {}
+    if (!it) return []; const o = (PLAN_OWNER || {})[String(b.step || "")], out = [];
+    if (o === "maker") { if (it.how && PLAN_MAKER[it.how]) out.push(PLAN_MAKER[it.how]); } else if (o) out.push(o);
+    for (const w of words(it.who)) out.push(w); return [...new Set(out)]; }
+  return [];
+}
+export async function rosterAction(env, b, people, taskNames) {
+  const { list, stored } = await readRoster(env, people, taskNames);
+  const save = async () => { await env.MEETINGS.put(ROSTER, JSON.stringify(stored)); };
+  const find = (n) => list.find((x) => x.name === String(n || ""));
+  if (b.op === "set") { const p = find(b.name); if (!p) return [404, { ok: false, error: "Not on the list." }];
+    const ph = b.phone ? phoneDigits(b.phone) : ""; if (b.phone && !ph) return [400, { ok: false, error: "That number does not look right." }]; stored[p.name] = { phone: ph }; await save(); }
+  else if (b.op === "skip") { const p = find(b.name); if (p) { stored[p.name] = Object.assign({}, stored[p.name] || {}, { skip: !p.skip }); await save(); } }
+  else if (b.op === "paste") return [200, { ok: true, matches: pasteMatches(list, b.text) }];
+  else if (b.op === "apply") { for (const m of (Array.isArray(b.matches) ? b.matches : []).slice(0, 200)) { const p = find(m.name), ph = phoneDigits(m.phone); if (p && ph) stored[p.name] = { phone: ph }; } await save(); }
+  else if (b.op === "add") { const name = String(b.name || "").replace(/\s+/g, " ").trim().slice(0, 50), ph = phoneDigits(b.phone); if (!name || !ph) return [400, { ok: false, error: "A name and a number." }]; stored[(matchPerson(list, name) || { name }).name] = { phone: ph }; await save(); }
+  const r = namedRoster(people, [...new Set([...(taskNames || []), ...(await plannerNames(env))])], stored);
+  const here = b.here ? namedRoster(people, b.here, stored).filter((p) => !/^najjuko/i.test(p.name)) : [];
+  return [200, { ok: true, roster: r, here, added: r.filter((p) => p.phone).length, total: r.length }];
+}
 export async function saveTeam(env, list) {
   const out = [], seen = new Set();
   for (const p of (Array.isArray(list) ? list : []).slice(0, 30)) {
@@ -57,7 +154,7 @@ async function ckToken(env, x, via) {
 export async function ckMake(env, origin, b, tasks) {
   const x = await ckBuild(env, b, tasks); if (x.err) return x.err;
   const { person, subject, what, due } = x, tok = await ckToken(env, x, "link");
-  const link = origin + "/momo/checkin/" + tok;
+  const link = env.CHECKIN_LINK_BASE ? String(env.CHECKIN_LINK_BASE).replace(/\/+$/, "") + "/" + tok : origin + "/momo/checkin/" + tok;   // v775 - fnrealty-dubai.vercel.app/c/<token>
   return [200, { ok: true, url: "https://wa.me/" + person.phone + "?text=" + encodeURIComponent(ckMessage(subject, what, due, link)), link }];
 }
 
@@ -203,20 +300,46 @@ export const CK_JS = String.raw`;(function(){
 var K=(new URLSearchParams(location.search)).get("key")||"";
 function capi(o){return fetch("/momo/work/api?key="+encodeURIComponent(K),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)}).then(function(r){return r.json()})}
 function h(s){return String(s==null?"":s).replace(/[<>&"]/g,function(c){return {"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]})}
-var st=document.createElement("style");st.textContent=".ckb{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:1px solid #1F8F5F;color:#1F8F5F;background:#fff;cursor:pointer;padding:0;vertical-align:middle;margin-left:6px}.ckbg{position:fixed;inset:0;background:rgba(28,40,38,.35);z-index:95;display:flex;align-items:flex-end;justify-content:center}.ckp{background:#FAF6EE;width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:18px 16px 22px;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif;color:#1C2826;max-height:88vh;overflow:auto}.ckp h3{font:600 1.15rem Fraunces,serif;color:#0A4F4A;margin:0 0 4px}.ckp p{margin:0 0 10px;font-size:.84rem;color:#5F6B66}.ckg{display:grid;grid-template-columns:1fr;gap:8px}.ckr{display:flex;flex-direction:column;gap:6px;border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:12px}.ckr b{font:600 1rem Fraunces,serif;color:#0A4F4A}.ckr small{color:#5F6B66;font-size:.78rem}.ckr span{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ckr span button{border:1px solid #1F8F5F;background:#fff;color:#1F8F5F;border-radius:999px;padding:10px 8px;font:600 .86rem 'IBM Plex Sans',sans-serif;cursor:pointer}.ckr span button.ckd{background:#1F8F5F;color:#fff}.ckg button{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:14px 10px;font:600 .95rem 'IBM Plex Sans',sans-serif;color:#0A4F4A;cursor:pointer;text-align:left}.ckg button small{display:block;font-weight:500;color:#5F6B66;font-size:.74rem;margin-top:2px}.cka{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.cka input{border:1px solid #D8D1C4;border-radius:12px;padding:11px;font:500 .95rem 'IBM Plex Sans',sans-serif;min-width:0}.ckx{display:block;width:100%;margin-top:12px;border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:999px;padding:11px;font:600 .9rem 'IBM Plex Sans',sans-serif}.ckx.go{background:#0A4F4A;color:#fff}.ckm{font-size:.84rem;color:#8A3E3E;min-height:1em}.ckchip{display:inline-block;font:600 .62rem 'IBM Plex Mono',monospace;border-radius:999px;padding:2px 8px;border:1px solid #1F8F5F;color:#1F8F5F;margin-left:4px}.ckchip.stuck{border-color:#B4533C;color:#B4533C}.ckchip.notyet{border-color:#C5A56A;color:#8A6F3E}";document.head.appendChild(st);
+var st=document.createElement("style");st.textContent=".cks{max-height:88vh;overflow:auto}.ckh{font:600 .7rem monospace;letter-spacing:.08em;text-transform:uppercase;color:#8A6F3E;margin:12px 0 6px}.ckne{border-color:#C5A56A}.ckl1{display:block;font-size:.82rem;color:#0A4F4A;margin:6px 0 4px}.cktn{display:block;text-align:center;margin-top:8px;font-size:.8rem;color:#5F6B66}.ckpr{height:8px;border-radius:99px;background:#EFE9DE;overflow:hidden;margin:8px 0 2px}.ckpr i{display:block;height:100%;background:#1F8F5F}.cks1{margin:0 0 10px;font-size:.85rem;color:#5F6B66}.ckl{display:flex;flex-direction:column;gap:8px;margin:10px 0}.ckc{border:1px solid #E7E1D6;border-radius:14px;padding:10px 12px;background:#FFFDF9;display:flex;flex-direction:column;gap:8px}.ckc.on{border-color:#1F8F5F}.ckc.sk{opacity:.55}.ckc small{display:block;color:#5F6B66;font-size:.78rem}.ckin{display:flex;gap:6px;flex-wrap:wrap}.ckin input{flex:1 1 140px;min-width:0;border:1px solid #D8D1C4;border-radius:10px;padding:9px;font:inherit}.ckin button,.ckrest button{border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:999px;padding:8px 12px;font:600 .8rem inherit;cursor:pointer}.ckskip{border-color:#C5A56A!important;color:#8A6F3E!important}.ckpaste textarea{width:100%;box-sizing:border-box;min-height:110px;border:1px solid #D8D1C4;border-radius:10px;padding:9px;font:inherit;margin:8px 0}.ckmt{display:block;font-size:.85rem;margin:4px 0}.ckrest summary,.ckpaste summary{cursor:pointer;font-weight:600;color:#0A4F4A;margin:10px 0 6px}.ckb{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:1px solid #1F8F5F;color:#1F8F5F;background:#fff;cursor:pointer;padding:0;vertical-align:middle;margin-left:6px}.ckbg{position:fixed;inset:0;background:rgba(28,40,38,.35);z-index:95;display:flex;align-items:flex-end;justify-content:center}.ckp{background:#FAF6EE;width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:18px 16px 22px;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif;color:#1C2826;max-height:88vh;overflow:auto}.ckp h3{font:600 1.15rem Fraunces,serif;color:#0A4F4A;margin:0 0 4px}.ckp p{margin:0 0 10px;font-size:.84rem;color:#5F6B66}.ckg{display:grid;grid-template-columns:1fr;gap:8px}.ckr{display:flex;flex-direction:column;gap:6px;border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:12px}.ckr b{font:600 1rem Fraunces,serif;color:#0A4F4A}.ckr small{color:#5F6B66;font-size:.78rem}.ckr span{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ckr span button{border:1px solid #1F8F5F;background:#fff;color:#1F8F5F;border-radius:999px;padding:10px 8px;font:600 .86rem 'IBM Plex Sans',sans-serif;cursor:pointer}.ckr span button.ckd{background:#1F8F5F;color:#fff}.ckg button{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:14px 10px;font:600 .95rem 'IBM Plex Sans',sans-serif;color:#0A4F4A;cursor:pointer;text-align:left}.ckg button small{display:block;font-weight:500;color:#5F6B66;font-size:.74rem;margin-top:2px}.cka{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.cka input{border:1px solid #D8D1C4;border-radius:12px;padding:11px;font:500 .95rem 'IBM Plex Sans',sans-serif;min-width:0}.ckx{display:block;width:100%;margin-top:12px;border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:999px;padding:11px;font:600 .9rem 'IBM Plex Sans',sans-serif}.ckx.go{background:#0A4F4A;color:#fff}.ckm{font-size:.84rem;color:#8A3E3E;min-height:1em}.ckchip{display:inline-block;font:600 .62rem 'IBM Plex Mono',monospace;border-radius:999px;padding:2px 8px;border:1px solid #1F8F5F;color:#1F8F5F;margin-left:4px}.ckchip.stuck{border-color:#B4533C;color:#B4533C}.ckchip.notyet{border-color:#C5A56A;color:#8A6F3E}";document.head.appendChild(st);
 window.CK_ICON='<svg viewBox="0 0 24 24" width=16 height=16 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c.3 1.8 1.7 3.6 3.6 4.4l1.2-1.1 1.8.8-.4 1.6c-3 .2-6.4-2.8-6.8-6l1.5-.6.9 1.7z"/></svg>';
 window.ckBtn=function(v,label){return '<button type=button class=ckb data-ck="'+h(v)+'" aria-label="Check in on WhatsApp'+(label?": "+h(label):"")+'">'+window.CK_ICON+'</button>'};
 window.ckChip=function(c){if(!c)return "";return '<span class="ckchip '+h(c.ans)+'">'+h(c.who)+": "+h({done:"Done",notyet:"Not yet",stuck:"Stuck"}[c.ans]||c.ans)+" "+h(String(c.at||"").slice(11,16))+'</span>'};
 function close(){var x=document.getElementById("ck_bg");if(x)x.remove()}
 function open(v){var p=v.split("|"),b=p[0]==="task"?{kind:"task",name:p.slice(1).join("|")}:{kind:"step",code:p[1],step:p.slice(2).join("|")};
-capi({action:"ck_team"}).then(function(j){draw(b,j.team||[])}).catch(function(){draw(b,[])})}
-function draw(b,team){close();var bg=document.createElement("div");bg.className="ckbg";bg.id="ck_bg";bg.onclick=function(e){if(e.target===bg)close()};
-bg.innerHTML='<div class=ckp role=dialog aria-modal=true aria-label="Check in on WhatsApp"><h3>Check in on WhatsApp</h3><p>'+h(b.kind==="task"?b.name:b.code+" · "+b.step)+'. <b>Ask (desk)</b> sends it now from the desk number with Done / In progress / Stuck buttons, and the answer updates this by itself. <b>My WhatsApp</b> opens your own chat with the message ready.</p><div class=ckg id=ck_g>'+(team.length?team.map(function(t,i){return '<div class=ckr><b>'+h(t.name)+'</b><small>+'+h(t.phone)+'</small><span><button type=button class=ckd data-i='+i+' data-w=desk>Ask (desk)</button><button type=button data-i='+i+' data-w=me>My WhatsApp</button></span></div>'}).join(""):'<p style="grid-column:1/-1">No one on your team list yet. Add them below.</p>')+'</div><div class=cka><input id=ck_n placeholder="Name" maxlength=40 autocomplete=off><input id=ck_p placeholder="Phone, e.g. 0501234567" inputmode=tel maxlength=20 autocomplete=off></div><button type=button class=ckx id=ck_add>Add to my team</button>'+(team.length?'<button type=button class=ckx id=ck_ed>Remove someone</button>':'')+'<p class=ckm id=ck_m></p></div>';document.body.appendChild(bg);
+var q={action:"ck_roster"};for(var kq in b)q[kq]=b[kq];capi(q).then(function(j){draw(b,j.roster||[],j.here||[])}).catch(function(){draw(b,[],[])})}
+// v775c (Kendall 5 Nov: just in time, no setup chore) - the people named on THIS task first; no number yet = one box right here, saved once, then WhatsApp opens
+function draw(b,R,HERE){close();var hn={};HERE.forEach(function(p){hn[p.name]=1});var others=R.filter(function(p){return p.phone&&!hn[p.name]}),L=HERE.concat(others);
+function row(t,i){if(t.phone)return '<div class=ckr><b>'+h(t.name)+'</b><small>'+h(t.role||"")+'</small><span><button type=button class=ckd data-i='+i+' data-w=desk>Ask (desk)</button><button type=button data-i='+i+' data-w=me>My WhatsApp</button></span></div>';
+var f=String(t.name).split(" ")[0];return '<div class="ckr ckne"><b>'+h(t.name)+'</b><small>'+h(t.role||"")+'</small><label class=ckl1 for=ck_np'+i+'>Add '+h(f)+'\u2019s WhatsApp number</label><div class=ckin><input id=ck_np'+i+' inputmode=tel placeholder="05x xxx xxxx" autocomplete=off><button type=button class=ckd data-sv='+i+'>Save and open WhatsApp</button></div></div>'}
+var bg=document.createElement("div");bg.className="ckbg";bg.id="ck_bg";bg.onclick=function(e){if(e.target===bg)close()};
+bg.innerHTML='<div class=ckp role=dialog aria-modal=true aria-label="Check in on WhatsApp"><h3>Check in on WhatsApp</h3><p>'+h(b.kind==="task"?b.name:b.code+" \u00b7 "+b.step)+'</p>'
++(HERE.length?'<p class=ckh>On this '+(b.kind==="task"?"task":"step")+'</p><div class=ckg id=ck_g>'+HERE.map(row).join("")+'</div>':'')
++(others.length?'<p class=ckh>'+(HERE.length?"Others":"Your team")+'</p><div class=ckg>'+others.map(function(t,k){return row(t,HERE.length+k)}).join("")+'</div>':'')
++(!L.length?'<p>No one is named on this yet. Add someone below.</p>':'')
++'<details class=ckrest><summary>Someone else</summary><div class=ckin><input id=ck_n placeholder="Name" maxlength=40 autocomplete=off><input id=ck_p placeholder="WhatsApp, e.g. 0501234567" inputmode=tel maxlength=20 autocomplete=off><button type=button id=ck_add>Add</button></div></details>'
++'<p class=ckm id=ck_m></p><a href="#" class=cktn id=ck_set>Team numbers</a></div>';document.body.appendChild(bg);
 var m=document.getElementById("ck_m");
-[].forEach.call(bg.querySelectorAll("#ck_g [data-i]"),function(x){x.onclick=function(){var t=team[+x.getAttribute("data-i")],w=x.getAttribute("data-w");if(bg.getAttribute("data-rm")){if(!confirm("Remove "+t.name+" from your team list?"))return;var L=team.filter(function(y){return y!==t});capi({action:"ck_team",team:L}).then(function(j){draw(b,j.team||L)});return}
-if(w==="desk"){m.style.color="#5F6B66";m.textContent="Sending from the desk...";var od={action:"ck_desk",person:t.name};for(var kd in b)od[kd]=b[kd];capi(od).then(function(j){if(!j.ok){m.style.color="#B4533C";m.textContent=(j.error||"Not sent.")+(j.waiting?" Tap My WhatsApp beside "+t.name+".":"");return}m.style.color="#1F8F5F";m.textContent="\u2713 Sent to "+t.name+" from the desk. Their answer shows here.";setTimeout(close,1800)}).catch(function(){m.textContent="No connection."});return}
-m.textContent="Opening WhatsApp...";var o={action:"ck_make",person:t.name};for(var k in b)o[k]=b[k];capi(o).then(function(j){if(!j.ok){m.textContent=j.error||"Could not make the link.";return}close();location.href=j.url}).catch(function(){m.textContent="No connection."})}});
-document.getElementById("ck_add").onclick=function(){var n=document.getElementById("ck_n").value.trim(),ph=document.getElementById("ck_p").value.trim();if(!n||!ph){m.textContent="Type a name and a phone number.";return}capi({action:"ck_team",team:team.concat({name:n,phone:ph})}).then(function(j){if(!j.ok){m.textContent=j.error||"Not saved.";return}if((j.team||[]).length===team.length){m.textContent="That phone number does not look right, or the name is already on the list.";return}draw(b,j.team)})};
-var ed=document.getElementById("ck_ed");if(ed)ed.onclick=function(){bg.setAttribute("data-rm","1");m.textContent="Tap the person to remove.";m.style.color="#5F6B66"}}
+function send(t,w){if(w==="desk"){m.style.color="#5F6B66";m.textContent="Sending from the desk...";var od={action:"ck_desk",person:t.name};for(var kd in b)if(kd!=="here")od[kd]=b[kd];capi(od).then(function(j){if(!j.ok){m.style.color="#B4533C";m.textContent=(j.error||"Not sent.")+(j.waiting?" Tap My WhatsApp beside "+t.name+".":"");return}m.style.color="#1F8F5F";m.textContent="\u2713 Sent to "+t.name+" from the desk. Their answer shows here.";setTimeout(close,1800)}).catch(function(){m.textContent="No connection."});return}
+m.style.color="#5F6B66";m.textContent="Opening WhatsApp...";var o={action:"ck_make",person:t.name};for(var k in b)if(k!=="here")o[k]=b[k];capi(o).then(function(j){if(!j.ok){m.style.color="#B4533C";m.textContent=j.error||"Could not make the link.";return}close();location.href=j.url}).catch(function(){m.textContent="No connection."})}
+[].forEach.call(bg.querySelectorAll("[data-i]"),function(x){x.onclick=function(){send(L[+x.getAttribute("data-i")],x.getAttribute("data-w"))}});
+[].forEach.call(bg.querySelectorAll("[data-sv]"),function(x){x.onclick=function(){var i=+x.getAttribute("data-sv"),t=L[i],v=document.getElementById("ck_np"+i).value.trim();if(!v){m.style.color="#B4533C";m.textContent="Type "+t.name.split(" ")[0]+"\u2019s number first.";return}x.disabled=true;
+capi({action:"ck_roster",op:"set",name:t.name,phone:v}).then(function(j){if(!j.ok){x.disabled=false;m.style.color="#B4533C";m.textContent=j.error||"That number does not look right.";return}send(t,"me")}).catch(function(){x.disabled=false;m.textContent="No connection."})}});
+document.getElementById("ck_add").onclick=function(){var n=document.getElementById("ck_n").value.trim(),ph=document.getElementById("ck_p").value.trim();if(!n||!ph){m.textContent="Type a name and a WhatsApp number.";return}capi({action:"ck_roster",op:"add",name:n,phone:ph}).then(function(j){if(!j.ok){m.style.color="#B4533C";m.textContent=j.error||"Not saved.";return}draw(b,j.roster||[],HERE)})};
+document.getElementById("ck_set").onclick=function(e){e.preventDefault();setup(R,function(R2){draw(b,R2,HERE)})}}
+// the one-time setup: every person from the org chart with a number box, skip, and paste-from-contacts with a match preview
+window.ckSetup=function(){capi({action:"ck_roster"}).then(function(j){setup(j.roster||[],null)})};
+function setup(R,back){close();var bg=document.createElement("div");bg.className="ckbg";bg.id="ck_bg";var done=R.filter(function(p){return p.phone}).length;
+bg.innerHTML='<div class="ckp cks" role=dialog aria-modal=true aria-label="Team numbers"><h3>Team numbers</h3><p>These are the people named in your tasks and your content calendar (full names and roles from the FN Realty org chart). Only their WhatsApp numbers are missing. Someone new appears here as soon as they are named.</p>'
+
++'<details class=ckpaste><summary>Paste from your contacts</summary><textarea id=ck_pt placeholder="One per line, e.g.&#10;Vishant Singh - 050 123 4567&#10;Monaza: +971 55 765 4321"></textarea><button type=button class=ckx id=ck_pm>Match names</button><div id=ck_pv></div></details>'
++'<div class=ckl>'+R.map(function(t,i){return '<div class="ckc'+(t.phone?' on':'')+(t.skip?' sk':'')+'"><div><b>'+h(t.name)+'</b><small>'+h(t.role||"")+'</small></div><div class=ckin><input data-ph='+i+' inputmode=tel placeholder="05x xxx xxxx" value="'+h(t.phone?("+"+t.phone):"")+'"><button type=button data-sv='+i+'>Save</button><button type=button class=ckskip data-sk='+i+'>'+(t.skip?"Unskip":"Skip for now")+'</button></div></div>'}).join("")+'</div>'
++'<button type=button class=ckx id=ck_done>Done</button><p class=ckm id=ck_m></p></div>';document.body.appendChild(bg);
+var m=document.getElementById("ck_m");function fin(){if(back)back(R);else close()}
+document.getElementById("ck_done").onclick=fin;
+[].forEach.call(bg.querySelectorAll("[data-sv]"),function(x){x.onclick=function(){var t=R[+x.getAttribute("data-sv")],v=bg.querySelector('[data-ph="'+x.getAttribute("data-sv")+'"]').value.trim();capi({action:"ck_roster",op:"set",name:t.name,phone:v}).then(function(j){if(!j.ok){m.style.color="#B4533C";m.textContent=j.error||"Not saved.";return}setup(j.roster,back)})}});
+[].forEach.call(bg.querySelectorAll("[data-sk]"),function(x){x.onclick=function(){var t=R[+x.getAttribute("data-sk")];capi({action:"ck_roster",op:"skip",name:t.name}).then(function(j){if(j.ok)setup(j.roster,back)})}});
+document.getElementById("ck_pm").onclick=function(){var tx=document.getElementById("ck_pt").value;capi({action:"ck_roster",op:"paste",text:tx}).then(function(j){var M=j.matches||[],pv=document.getElementById("ck_pv"),ok=M.filter(function(x){return x.ok});
+pv.innerHTML=M.map(function(x,i){return '<label class=ckmt><input type=checkbox data-mi='+i+(x.ok?' checked':' disabled')+'> '+(x.ok?'<b>'+h(x.name)+'</b> +'+h(x.phone):'<s>'+h(x.line)+'</s> <small>'+h(x.why)+'</small>')+'</label>'}).join("")+(ok.length?'<button type=button class=ckx id=ck_pa>Add '+ok.length+' number'+(ok.length>1?'s':'')+'</button>':'');
+var pa=document.getElementById("ck_pa");if(pa)pa.onclick=function(){var sel=[].filter.call(pv.querySelectorAll("[data-mi]:checked"),function(c){return true}).map(function(c){return M[+c.getAttribute("data-mi")]});capi({action:"ck_roster",op:"apply",matches:sel}).then(function(j2){if(j2.ok)setup(j2.roster,back)})}})}}
 document.addEventListener("click",function(e){var x=e.target.closest?e.target.closest("[data-ck]"):null;if(!x)return;e.preventDefault();e.stopPropagation();open(x.getAttribute("data-ck"))},true);
 })();`;
