@@ -2353,7 +2353,7 @@ async function appFetch(request, env, ctx) {
     { const _ak = await askRoute(request, env, url, { keyTier }); if (_ak) return _ak; }   // v555 - Ask Najma (stub engine, owner only)
     // v564.1 - Momo Work's saves and filings are POSTs: answered here, before the POST guard further down refuses them
     // v785 - the shared Thailand trip card: Kendall's and Najjuko's keys only (tripRoute refuses anyone else)
-    if (url.pathname === "/momo/today.js" || url.pathname.startsWith("/momo/work/today/")) { const _td = await todayFullRoute(request, env, url, { person: personOfKey }); if (_td) return _td; }   // v786
+    if (url.pathname === "/momo/today.js" || url.pathname.startsWith("/momo/work/today/") || url.pathname === "/momo/work/briefing") { const _td = await todayFullRoute(request, env, url, { person: personOfKey }); if (_td) return _td; }   // v786
     if (url.pathname.startsWith("/momo/work/trip") && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _tr = await tripRoute(request, env, url, { page: momoPage, person: personOfKey }); if (_tr) return _tr; }
     // v773 (Kendall 5 Nov: the content planner and the sheet connect were never let through the POST guard - every save, the sheet-link paste and Import answered 401)
     if (request.method === "POST" && (url.pathname === "/momo/work/calendar" || url.pathname.startsWith("/momo/work/planner")) && ["najjuko", "kendall"].includes(personOfKey(env, url))) {

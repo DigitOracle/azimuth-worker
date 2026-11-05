@@ -1,3 +1,4 @@
+import { briefingPage } from "./dev_briefing.js";   // v786a
 // v786 (Kendall 5 Nov 2026: "build the full today card") - Najjuko's FULL Today card at the top of her Work.
 // 1 Meetings & visits (her own visits list + today's Meeting entries + tasks due today naming a developer; calendar in v786b)
 // 2 Broker: calls due (campaign follow-ups), leads gone quiet 7+ days, deals in progress by stage, new developer stock for her leads' projects
@@ -95,8 +96,9 @@ export async function todayFullApi(env, b, who) {
 export async function todayFullRoute(request, env, url, deps) {
   const p = url.pathname;
   if (p === "/momo/today.js") return new Response("var __name=function(f){return f};(" + TODAY_CLIENT.toString() + ")();", { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
-  if (p !== "/momo/work/today/data" && p !== "/momo/work/today/api") return null;
+  if (p !== "/momo/work/today/data" && p !== "/momo/work/today/api" && p !== "/momo/work/briefing") return null;
   const who = deps.person(env, url); if (who !== "najjuko" && who !== "kendall") return new Response("not found", { status: 404 });
+  if (p === "/momo/work/briefing") return new Response(await briefingPage(env, url), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   if (p === "/momo/work/today/data" && request.method === "GET") return J({ ok: true, ...(await todayFullData(env)) });
   if (p === "/momo/work/today/api" && request.method === "POST") { let b = {}; try { b = await request.json(); } catch (e) {} return todayFullApi(env, b, who === "najjuko" ? "Najjuko" : "Kendall"); }
   return new Response("not found", { status: 404 });
@@ -175,7 +177,7 @@ function TODAY_CLIENT() {
     var DEV = ["Sobha", "Nakheel", "DAMAC", "Emaar", "Beyond", "Binghatti", "Arada", "Imtiaz", "Select", "Fakhruddin", "Prestige One", "Object 1", "Ellington", "Meraas", "Danube", "Aldar", "Azizi", "Omniyat", "Samana"];
     TK.forEach(function (t) { if (t.status !== "Done" && t.due === today) { var dv = DEV.filter(function (d) { return (" " + t.name + " ").toLowerCase().indexOf(" " + d.toLowerCase()) >= 0; })[0]; if (dv) M.push({ time: "", with: dv, kind: "Developer", src: "task", task: t.name }); } });
     var mh = M.map(function (m, i) { var dev = m.kind === "Developer";
-      var acts = (dev ? btn("Open briefing", 'data-brief="' + esc(m.with) + '"', "tbp") : m.kind === "Client" ? btn("Prepare me", 'data-prep="' + esc(m.with) + '"', "tbp") : "") + btn("Record", "data-rec=1") + (m.src === "visit" ? btn("Edit", "data-ev=" + i) : "");
+      var acts = (dev ? btn("Open briefing", 'data-brief="' + esc(m.with) + '" data-bt="' + esc(m.time || "") + '"', "tbp") : m.kind === "Client" ? btn("Prepare me", 'data-prep="' + esc(m.with) + '"', "tbp") : "") + btn("Record", "data-rec=1") + (m.src === "visit" ? btn("Edit", "data-ev=" + i) : "");
       return row(I.cal, esc((m.time || "--:--") + " " + m.with), (dev ? "Briefing ready" : m.kind === "Client" ? "Pack ready" : "Internal") + (m.src === "task" ? " · from your task " + esc(m.task) : ""), acts); }).join("");
     h += sec(1, "Meetings & visits", mh, "No meetings yet today. + Add one, and a developer gets a briefing.");
     // 2 Broker
@@ -218,7 +220,7 @@ function TODAY_CLIENT() {
     var W = $("wtoday2"), D = window.D || {}, TK = D.tasks || [];
     $("tdadd").onclick = addMenu;
     W.onclick = function (e) { var t = e.target.closest ? e.target.closest("button,a") : null; if (!t) return; var g = function (a) { return t.getAttribute(a); };
-      if (g("data-brief") != null) { location.href = "/momo/work/briefing" + Q + "&dev=" + encodeURIComponent(g("data-brief")); return; }
+      if (g("data-brief") != null) { location.href = "/momo/work/briefing" + Q + "&dev=" + encodeURIComponent(g("data-brief")) + (g("data-bt") ? "&time=" + encodeURIComponent(g("data-bt")) : ""); return; }
       if (g("data-prep") != null) { var pb = document.getElementById("wprep") || document.querySelector("[data-prep-open],#prepbtn"); if (pb) pb.click(); else location.href = "/momo/work" + Q + "#prep"; return; }
       if (g("data-rec") != null) { location.href = "/momo/work/rec" + Q; return; }
       if (g("data-ev") != null) { var m = M[+g("data-ev")]; if (m && m.v) visitSheet(m.v); return; }
