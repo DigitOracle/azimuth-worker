@@ -881,6 +881,8 @@ export function cleanFlow(x) {
 }
 export const factText = (facts, key) => { const f = facts && facts[key]; const v = f && typeof f === "object" && "value" in f ? f.value : f; return v == null || v === "" || typeof v === "object" ? TBC : String(v); };
 const fill = (t, k, facts) => String(t || "").replace(/\{first\}/g, firstName(k.name)).replace(/\{name\}/g, k.name || "there").replace(/\{company\}/g, k.company || "your company").replace(/\{\{1\}\}/g, firstName(k.name)).replace(/\{fact:([a-z0-9_]+)\}/g, (m, key) => factText(facts, key));
+// v774c (Kendall 5 Nov: "the web address is really long") - SHORT_LINK_BASE (e.g. https://najma.digitalabbot.io) maps /<code> to /p/<code>; unset = the worker address
+const passLink = (env, deps, pc) => env.SHORT_LINK_BASE ? String(env.SHORT_LINK_BASE).replace(/\/+$/, "") + "/" + pc : originOf(env, deps) + "/p/" + pc;
 const originOf = (env, deps) => String(env.PUBLIC_ORIGIN || (deps && deps.origin) || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "");
 // The payload for one free-form node (no send): what flowRun posts and what the simulator returns.
 export function nodePayload(cid, nid, n, k, linkUrl, facts, pfx) {
@@ -918,7 +920,7 @@ async function flowRun(env, c, f, nid, k, deps, now, trail) {
       const pc = await docCreate(env, { cid: c.id, d, slug: n.brief, reader: rd, name: first, answer: lopt ? lopt.title : "", now });
       fallback = { messaging_product: "whatsapp", to: payload.to, type: "document", document: { link: originOf(env, deps) + "/dp/f/" + n.brief + "-" + rd + "-" + (one ? "one" : "full") + ".pdf", filename: dpFileName(n.brief, rd, one), caption: fill(n.text, k, facts) } };
       fallback2 = payload;
-      payload = { messaging_product: "whatsapp", to: payload.to, type: "image", image: { link: originOf(env, deps) + "/dp/img/" + (n.image || (DP_SETS[n.brief] || {}).img), caption: docCaption(first, n.brief) + "\n" + originOf(env, deps) + "/p/" + pc } };
+      payload = { messaging_product: "whatsapp", to: payload.to, type: "image", image: { link: originOf(env, deps) + "/dp/img/" + (n.image || (DP_SETS[n.brief] || {}).img), caption: docCaption(first, n.brief) + "\n" + passLink(env, deps, pc) } };
     }
     if (payload) {
       let ok = false, code = 0;
