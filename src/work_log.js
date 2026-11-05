@@ -626,6 +626,7 @@ async function recFinish(env, deps, m, clientSecs, opt) {
   m.secs = Math.max(Math.round(Number(clientSecs) || 0), segs.reduce((a, g) => a + (g.secs || 0), 0)); m.ended_hm = (opt && opt.endedHm) || dubaiHM(); m.chars = text.length; m.parts = segs.length;
   const segSecs = segs.reduce((a, g) => a + (g.secs || 0), 0), lostSecs = Math.max(0, Math.round(Number(clientSecs) || 0) - segSecs);   // v629 - time the phone's microphone ran but gave no sound (parts that came back empty are never stored)
   if (lostSecs >= 60 && segSecs > 0) m.lost = { secs: lostSecs, from: segSecs }; else delete m.lost;
+  { const ow = recOwed(m, segs); if (ow.owed) m.parts_missing = ow.owed; else delete m.parts_missing; }   // v779
   if (m.status === "recording") m.status = "transcribed";
   if (deps && deps.claudeJSON && segs.some((g) => g.utts && g.utts.length)) { try { const sp = await matchSpeakers(env, deps, m, segs); if (sp) m.speakers = sp; } catch (e) {} }   // v663 - the "match speakers" step
   await recPut(env, m);
@@ -636,7 +637,18 @@ async function recFinish(env, deps, m, clientSecs, opt) {
 // (one of hers: 26 Oct, one part, never finished). Every 15 minutes the minute tick finishes, for each person, any recording that has had no audio for
 // an hour: it retries the failed parts while their audio still exists and marks it auto_finished so the list can say so. Notes and minutes stay on
 // request, exactly as before. At most six recordings a sweep.
-export const REC_IDLE_MS = 3600e3;
+export const REC_IDLE_MS = 3600e3, REC_WAIT_PARTS_MS = 6 * 3600e3;
+// v779 (Kendall 5 Nov: a slow phone lost the last 2 parts of a 19-min meeting) - a recording is not finished while the phone still owes parts,
+// for up to 6 hours after Stop; then it is finished with what arrived and says which parts are missing.
+export function recExpected(m) {
+  let n = Math.max(0, parseInt(m && m.expect_parts, 10) || 0);
+  for (const l of (m && Array.isArray(m.log) ? m.log : [])) { const x = /part (\d+) ended: (\d+) bytes/.exec(String(l)); if (x && +x[2] >= 1000) n = Math.max(n, +x[1] + 1); }
+  return n;
+}
+export function recOwed(m, segs, now) {
+  const exp = recExpected(m), have = new Set((segs || []).map((g) => g.n)).size, from = Date.parse(m.stopped_at || "") || (Date.parse(m.started || "") + ((segs || []).reduce((a, g) => a + (g.secs || 0), 0)) * 1000) || 0;
+  return { expect: exp, have, owed: Math.max(0, exp - have), waiting: exp > have && (!from || (now || Date.now()) < from + REC_WAIT_PARTS_MS) };
+}
 export async function recSweep(env, deps, nowMs) {
   const now = nowMs || Date.now(), out = [];
   if (Math.floor(now / 60000) % 15 !== 7) return out;
@@ -650,6 +662,7 @@ export async function recSweep(env, deps, nowMs) {
         if (!m || m.status !== "recording") continue;
         const segs = await recSegs(e, m.id), segSecs = segs.reduce((a, g) => a + (g.secs || 0), 0), began = Date.parse(m.started || "");
         if (!began || began + segSecs * 1000 + REC_IDLE_MS > now) continue;   // still live, or not an hour since its last audio
+        if (recOwed(m, segs, now).waiting) continue;   // v779 - parts still on the phone: wait (up to 6 h after Stop)
         const endHm = new Date(began + segSecs * 1000 + 4 * 3600e3).toISOString().slice(11, 16);
         m.auto_finished = new Date(now).toISOString();
         const f = await recFinish(e, deps, m, 0, { endedHm: endHm });
@@ -694,7 +707,13 @@ async function recApi(request, env, J, deps) {
   if (b.action === "delete") {
     await recPurge(env, id, m); return J({ ok: true });   // v627
   }
+  if (b.action === "expect") {   // v779 - Stop: the phone says how many parts it made, so the server knows what is still on the way
+    m.expect_parts = Math.max(0, Math.min(999, parseInt(b.parts, 10) || 0)); m.stopped_at = m.stopped_at || new Date().toISOString(); await recPut(env, m);
+    const segs0 = await recSegs(env, id); return J({ ok: true, ...recOwed(m, segs0) });
+  }
+  if (b.action === "owed") { const segs0 = await recSegs(env, id); return J({ ok: true, ...recOwed(m, segs0) }); }
   if (b.action === "finish") {
+    { const segs0 = await recSegs(env, id), ow = recOwed(m, segs0); if (ow.waiting && !b.force) return J({ ok: false, waiting: true, ...ow, error: ow.owed + (ow.owed === 1 ? " part is" : " parts are") + " still on the phone. Keep Momo open on that phone until they are sent." }, 409); }
     const { segs, text, missing } = await recFinish(env, deps, m, b.secs);
     if (text.length < 40) return J({ error: segs.length ? "I could not hear any speech in that recording. Check the microphone, or try again." : "No audio reached the server for that recording: the phone sent empty audio (a locked screen or another app can cut the microphone). Nothing can be read from it.", parts: segs.length }, 422);
     return J({ ok: true, parts: segs.length, chars: text.length, secs: m.secs, missing, lost: m.lost || null });
