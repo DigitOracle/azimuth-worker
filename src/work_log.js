@@ -697,7 +697,7 @@ async function recDraftEntries(env, deps, J, m) {
     for (const e of list) for (const o of e.external) {
       const k = known.find((p) => slug(p.name) === slug(o.name) || (p.aliases || []).some((a) => slug(a) === slug(o.name)));
       if (k) { Object.assign(o, { name: k.name, kind: k.kind || o.kind, what: k.what || "", where: k.where || "", site: k.site || "", confirmed: true, known: true }); continue; }
-      const key = slug(o.name); if (!seen[key]) seen[key] = lookupParty(env, o.name, o.kind);
+      const key = slug(o.name); if (deps.noPartyLookup) { Object.assign(o, { suggested: "", what: "", confirmed: false }); continue; } if (!seen[key]) seen[key] = lookupParty(env, o.name, o.kind);
       const f = await seen[key]; if (f) Object.assign(o, { suggested: f.name, kind: f.kind || o.kind, what: f.what, where: f.where, site: f.site, confidence: f.confidence, confirmed: false });
       else Object.assign(o, { suggested: "", what: "", confirmed: false, notfound: true });
     }
@@ -711,7 +711,7 @@ async function recDraftEntries(env, deps, J, m) {
 export async function recAutoFile(env, deps, nowMs) {
   const now = nowMs || Date.now(), out = [];
   if (!deps || !deps.claudeJSON) return out;
-  const d2 = Object.assign({}, deps, { prof: NAJ_PROF }), J = (o, st) => Object.assign({ _status: st || 200 }, o);
+  const d2 = Object.assign({}, deps, { prof: NAJ_PROF, noPartyLookup: true }), J = (o, st) => Object.assign({ _status: st || 200 }, o);
   const since = new Date(now - 3 * 86400e3 + 4 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
   const r = await env.MEETINGS.list({ prefix: RECW });
   for (const k of r.keys) {
