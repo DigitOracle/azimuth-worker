@@ -1,3 +1,4 @@
+import { askRoute as askReportRoute, askWebhook as askReportWebhook, askTick as askReportTick } from "./ask_report.js";   // v783 - Ask report -> WhatsApp with the PDF
 import { MOMO_CONFIRM_JS } from "./momo_confirm.js";   // v778
 import { calendarRoute } from "./content_calendar.js";   // v754
 import { plannerRoute, plannerEveningCheck } from "./content_planner.js";   // v758 - FN Content Planner
@@ -3892,6 +3893,7 @@ async function appFetch(request, env, ctx) {
         if (!_viaForward && !(await waVerifySig(env, raw, request.headers.get("X-Hub-Signature-256")))) return new Response("bad sig", { status: 401 });
         let body; try { body = JSON.parse(raw); } catch (e) { return new Response("ok"); }
         { let _ck = null; try { _ck = await ckWebhook(env, body, { taskAnswer: (n, a, w, no, l) => ckTaskAnswer(env, n, a, w, no, l) }, { send: (to, t) => waSend(env, to, t, String(env.WA_DESK_PHONE_ID || "").replace(/[^0-9]/g, "")), optOut: (d) => campOptOut(env, d, "checkin_stop", {}, Date.now()) }); } catch (e) {} if (_ck && _ck.consumed) return new Response("ok"); }   // v770 - desk check-in buttons and replies (only those)
+        { let _ak2 = null; try { _ak2 = await askReportWebhook(env, body, { optOut: (e2, d) => campOptOut(e2, d, "ask_stop", {}, Date.now()) }); } catch (e) {} if (_ak2 && _ak2.consumed) return new Response("ok"); }   // v783 - Ask report receipts -> callback queue; inbound opens the 24 h window; STOP opts out
         { let _cw = null; try { _cw = await campWebhook(env, body, { send: (e2, to, t, pid) => waSend(e2, to, t, pid || undefined), post: (e2, pl, pid) => waPost(e2, pl, "camp-preview", pid || undefined), alert: campAlertSend }); } catch (e) {} if (_cw && _cw.consumed) return new Response("ok"); }   // v723 - campaign receipts, replies and opt-outs (never consumes those); v724 - consumes ONLY a preview keyword or a pv: tap from Najjuko or Kendall
         if (isDeskEvent(env, body)) { try { const _dv = body.entry[0].changes[0].value; for (const _s of ((_dv && _dv.statuses) || [])) await noteReceipt(env, _s); } catch (e) {}   // v470 - desk receipts were dropped, so every desk send stayed "accepted"
           await deskHandle(env, body, { waSend, post: deskPostDeps(env), lab: deskLabDeps(env) }); return new Response("ok"); }   // v388 - the desk number: consumed here BEFORE the shape probe and the router, never handed to the ordinary handlers, never routed on, no stranger digits stored
@@ -4929,6 +4931,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/price_slider") return new Response(PRICE_SLIDER_HTML, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Robots-Tag": "noindex" } });   // v661 - public, no key
     if (url.pathname.startsWith("/live/")) { const _lv = await liveRoute(request, env, url); if (_lv) return _lv; }   // v659 - public, before every key gate
+    if (url.pathname === "/ask/report-ready") { const _ar = await askReportRoute(request, env, url, { graph: WA_GRAPH, isOptedOut: (e, d) => campIsOptedOut(e, d), post: async (e, pl, pid) => { const r = await waPost(e, pl, "ask-report", pid); let j = {}; try { j = await r.clone().json(); } catch (x) {} return { ok: r.ok, status: r.status, id: j && j.messages && j.messages[0] && j.messages[0].id, error: j && j.error && j.error.message }; } }); if (_ar) return _ar; }   // v783 - signed webhook from digitalabbot.io
     if (url.pathname === "/momo/checkin.js") return new Response(CK_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });   // v764 - the WhatsApp check-in picker (no data in it)
     if (url.pathname.startsWith("/momo/checkin/")) return checkinRoute(request, env, url);   // v764 - public by design: one task, one person, 7 days, no key
     if (url.pathname.startsWith("/dp/")) { const _dp = await dpRoute(request, env, url); if (_dp) return _dp; }
@@ -4983,6 +4986,7 @@ export default {
         try { await fitReminders(env, fitDeps(), event.scheduledTime || Date.now()); } catch (e) {}   // v351 - the daily "write in my book" reminder, inside the 24-hour window only   // v328 - the 21:00 GST FIT verdict; once a day, only while the 24-hour window is open
         try { await picResume(env, "", 90000); } catch (e) {}
         try { await campTick(env, { graph: WA_GRAPH, alert: campAlertSend }); } catch (e) {}
+        try { await askReportTick(env); } catch (e) {}   // v783 - signed status callbacks to digitalabbot.io, with back-off
         try { await plannerEveningCheck(env, event.scheduledTime || Date.now()); } catch (e) {}   // v782b - the planner check at 18:00 Dubai (stored for the Today card; no messages)   // v723 - campaigns: one small batch per LIVE campaign (status "live" only, send window, daily + shared caps)
         try { await bppTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v697 - one step of a building passport (ChatGPT in background mode, then the PDF)
         try { await deliveryWatch(env); } catch (e) {}   // v186 - accepted then failed is not sent

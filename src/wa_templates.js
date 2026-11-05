@@ -64,6 +64,12 @@ export const WA_TEMPLATES = {
     example: ["Ahmed", "ISO 19650 asks for one shared information model from day one, not at handover"], footer: "DigitAlchemy® · Complexity into clarity",
     buttons: [{ type: "URL", text: "Read more", url: "https://digitalabbot.io" }, { type: "QUICK_REPLY", text: "Unsubscribe" }],
   },
+  ask_report_ready: {   // v783 - Ask report -> WhatsApp (utility). Kendall submits it himself in WhatsApp Manager; /ask/report-ready uses it once APPROVED.
+    name: "ask_report_ready", language: "en", category: "UTILITY", header_document: true,
+    body: "Hi {{1}}, your report is ready: {{2}} ({{3}} pages). You can also open it in your Ask portal.",
+    example: ["Ali", "Palm Jebel Ali: buyer outlook", "4"],
+    buttons: [{ type: "URL", text: "Open in portal", url: "https://digitalabbot.io/ask/r/{{1}}", example: ["rpt_2026_11_05_0001"] }, { type: "QUICK_REPLY", text: "Got it" }],
+  },
   najjuko_task_checkin: {   // v770 - the desk check-in (utility). Kendall submits it himself; Momo only uses it once APPROVED.
     name: "najjuko_task_checkin", language: "en", category: "UTILITY",
     body: "Hi {{1}}, Najjuko here. Quick check on {{2}}, due {{3}}. Where is it?",
@@ -87,6 +93,7 @@ export function buildCreatePayload(name, headerHandle) {
   const t = WA_TEMPLATES[name]; if (!t) return null;
   const c = [];
   if (t.header_video_key) c.push({ type: "HEADER", format: "VIDEO", example: { header_handle: [headerHandle || "<uploaded at submit>"] } });
+  if (t.header_document) c.push({ type: "HEADER", format: "DOCUMENT", example: { header_handle: [headerHandle || "<sample PDF uploaded at submit>"] } });   // v783
   if (t.header_image_key) c.push({ type: "HEADER", format: "IMAGE", example: { header_handle: [headerHandle || "<uploaded at submit>"] } });   // v492
   c.push(Object.assign({ type: "BODY", text: t.body }, t.example ? { example: { body_text: [t.example] } } : {}));
   if (t.footer) c.push({ type: "FOOTER", text: t.footer });
