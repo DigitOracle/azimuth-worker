@@ -411,6 +411,30 @@ function client(CFG) {
   }
   function collect() { var g = function (id) { var e = $(id); return e ? e.value : undefined; }; return { action: "save", code: $("sheet").dataset.code || "", kind: $("sheet").dataset.kind, date: g("p_date"), time: g("p_time"), format: g("p_format"), story_type: g("p_story_type"), pillar: g("p_pillar"), series: g("p_series"), topic: g("p_topic"), cta: g("p_cta"), campaign: g("p_campaign"), developer: g("p_developer"), who: g("p_who"), how: g("p_how") }; }
   function closeP() { $("sheet").classList.remove("open"); $("scrim").classList.remove("open"); OPEN = null; }
+
+  // v774h - before any cell in her workbook is rewritten: "You changed A, B and C. Rewrite these cells in the workbook?" Yes / No
+  var FLD = { date: "Date", time: "Time", format: "Format", story_type: "Story type", pillar: "Pillar", series: "Series", topic: "Topic", cta: "Call to action", campaign: "Campaign", developer: "Developer / project", who: "Who's in it", how: "How it's made" };
+  function writeAsk(code, afterSave) {
+    api({ action: "push", code: code }).then(function (j) {
+      if (!j.ok) { toast((afterSave ? "✓ Saved " + code + " in Momo. " : "") + (j.error || "Could not read the sheet"), true); return; }
+      if (!j.changes || !j.changes.length) { toast(afterSave ? "✓ Saved " + code + " · the workbook already matches" : "The workbook already matches."); return; }
+      var w = document.createElement("div"); w.id = "askw";
+      w.setAttribute("style", "position:fixed;inset:0;z-index:80;background:rgba(28,40,38,.45);display:flex;align-items:flex-end;justify-content:center");
+      var rows = j.changes.map(function (c) { return '<div style="border-top:1px solid #EFE9DE;padding:9px 0"><b style="font:600 .82rem IBM Plex Sans,sans-serif;color:#0A4F4A">' + esc(FLD[c.field] || c.field) + '</b> <span style="font:500 .72rem IBM Plex Mono,monospace;color:#8A6F3E">cell ' + esc(c.cell) + '</span><div style="font:500 .86rem IBM Plex Sans,sans-serif;color:#5F6B66;margin-top:3px"><s>' + esc(c.old || "empty") + '</s> &rarr; <b style="color:#1C2826">' + esc(c["new"] || "empty") + '</b></div></div>'; }).join("");
+      w.innerHTML = '<div style="background:#FFFDF9;border-radius:20px 20px 0 0;max-width:560px;width:100%;padding:18px 18px 22px;box-shadow:0 -8px 30px rgba(0,0,0,.15);max-height:80vh;overflow:auto">'
+        + '<div style="font:600 1.1rem Fraunces,serif;color:#0A4F4A;margin-bottom:4px">Update the workbook?</div>'
+        + '<div style="font:500 .88rem IBM Plex Sans,sans-serif;color:#1C2826;margin-bottom:6px">You changed ' + j.changes.length + (j.changes.length === 1 ? ' thing' : ' things') + ' on ' + esc(code) + '. Rewrite ' + (j.changes.length === 1 ? 'this cell' : 'these cells') + ' in “' + esc(j.tab) + '”?</div>' + rows
+        + '<div style="font:500 .76rem IBM Plex Sans,sans-serif;color:#5F6B66;margin:10px 0 14px">Each change is also added to the Change log tab.</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button type=button id=askw_no style="border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:999px;padding:12px;font:600 .92rem IBM Plex Sans,sans-serif">No, keep it in Momo</button>'
+        + '<button type=button id=askw_yes style="border:0;background:#0A4F4A;color:#fff;border-radius:999px;padding:12px;font:600 .92rem IBM Plex Sans,sans-serif">Yes, update</button></div></div>';
+      document.body.appendChild(w);
+      var done = function () { if (w.parentNode) w.parentNode.removeChild(w); };
+      document.getElementById("askw_no").onclick = function () { done(); toast(afterSave ? "✓ Saved " + code + " in Momo only. The workbook is unchanged." : "The workbook is unchanged."); };
+      document.getElementById("askw_yes").onclick = function () { var b = this; b.disabled = true; b.textContent = "Writing…";
+        api({ action: "push", code: code, apply: true, why: "Changed in Momo" }).then(function (k) { done(); if (k.ok) toast("✓ " + k.written + " cell(s) updated in the workbook"); else toast(k.error || "Not written", true); load(true); })
+          .catch(function () { done(); toast("Not reached. Try Write to sheet again.", true); }); };
+    }).catch(function () { toast("Could not reach the workbook. Try Write to sheet.", true); });
+  }
   document.addEventListener("click", function (e) {
     var t = e.target.closest("[data-tick],[data-open],[data-add],[data-act],[data-day],[data-month],[data-goday],[data-v],[data-kind],[data-rf]"); if (!t) return;
     if (t.dataset.v) { V = t.dataset.v; document.querySelectorAll("#tabs button").forEach(function (b) { b.classList.toggle("on", b === t); }); draw(); return; }
@@ -423,7 +447,7 @@ function client(CFG) {
     if (t.dataset.goday) { if (e.target.closest("[data-open]")) return; DAY = t.dataset.goday; V = "day"; document.querySelectorAll("#tabs button").forEach(function (b) { b.classList.toggle("on", b.dataset.v === "day"); }); draw(); return; }
     if (t.dataset.rf) { RF = t.dataset.rf; fetch(CFG.base + "/data" + CFG.q + "&range=" + RF + "&day=" + DAY).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) { D.report = j.report; draw(); } }); return; }
     var a = t.dataset.act;
-    if (a === "save") { var b = collect(); t.disabled = true; api(b).then(function (j) { t.disabled = false; if (!j.ok) { toast(j.error || "Not saved", true); return; } var cd = j.item.code; closeP(); load(true); if (!D.connected) { toast("✓ Saved " + cd); return; } api({ action: "push", code: cd, apply: true, why: "Changed in Momo" }).then(function (k) { if (k.ok) toast("✓ Saved " + cd + (k.written ? " · " + k.written + " cell(s) written to the sheet" : " · sheet already matches")); else toast("✓ Saved " + cd + " in Momo. Sheet: " + (k.error || "not written"), true); }).catch(function () { toast("✓ Saved " + cd + " in Momo. Sheet not reached, try Write to sheet.", true); }); }); }
+    if (a === "save") { var b = collect(); t.disabled = true; api(b).then(function (j) { t.disabled = false; if (!j.ok) { toast(j.error || "Not saved", true); return; } var cd = j.item.code; closeP(); load(true); if (!D.connected) { toast("✓ Saved " + cd); return; } writeAsk(cd, true); }); }
     if (a === "del") { if (!confirm("Delete this item from the planner?")) return; api({ action: "delete", code: $("sheet").dataset.code }).then(function (j) { if (j.ok) { toast("✓ Deleted"); closeP(); load(true); } else toast(j.error || "Not deleted", true); }); }
     if (a === "settings") { var sx = ($("st_sx").value || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean);
       api({ action: "settings", settings: { pro_video_allowance: $("st_pv").value, on_camera_limit: $("st_oc").value, best_from: $("st_bf").value, best_to: $("st_bt").value, evening_from: $("st_ef").value, evening_to: $("st_et").value, story_times: sx, feed_target: $("st_ft").value } }).then(function (j) { if (j.ok) { toast("✓ Settings saved"); load(true); } else toast(j.error || "Not saved", true); }); }
@@ -431,9 +455,7 @@ function client(CFG) {
     if (a === "import") { t.disabled = true; toast("Reading the content calendar…"); api({ action: "import" }).then(function (j) { t.disabled = false; if (!j.ok) { toast(j.error === "not_connected" ? "Connect the content calendar first." : (j.error || "Could not read the sheet"), true); return; }
       var p = j.preview; if (!confirm("Import from the sheet?\n\n" + p.feed + " feed posts (" + (p.tabs.feed || "no Feed tab") + ")\n" + p.stories + " stories (" + (p.tabs.stories || "no Stories tab") + ")\n\nColumns found: " + Object.keys(p.columns).map(function (k) { return k + ": " + p.columns[k].join(", "); }).join(" | ") + "\n\nNothing is written to the sheet.")) return;
       api({ action: "import", apply: true }).then(function (k) { if (k.ok) { toast("✓ Imported: " + k.created + " new, " + k.updated + " updated"); load(true); } else toast(k.error || "Import failed", true); }); }); }
-    if (a === "push") { var code = $("sheet").dataset.code; api({ action: "push", code: code }).then(function (j) { if (!j.ok) { toast(j.error || "Could not read the sheet", true); return; } if (!j.changes.length) { toast("The sheet already matches."); return; }
-      if (!confirm("Write these cells in “" + j.tab + "”?\n\n" + j.changes.map(function (c) { return c.cell + " " + c.field + ": " + (c.old || "empty") + " → " + (c.new || "empty"); }).join("\n") + "\n\nEach change is also added to the Change log tab.")) return;
-      api({ action: "push", code: code, apply: true, why: "Changed in Momo" }).then(function (k) { if (k.ok) toast("✓ " + k.written + " cell(s) written to the sheet"); else toast(k.error || "Not written", true); load(true); }); }); }
+    if (a === "push") { writeAsk($("sheet").dataset.code, false); }
   });
   document.addEventListener("dragstart", function (e) { var t = e.target.closest("[data-drag]"); if (t) e.dataTransfer.setData("text/plain", t.dataset.drag); });
   document.addEventListener("dragover", function (e) { if (e.target.closest(".wc")) e.preventDefault(); });
