@@ -227,8 +227,8 @@ ok(ho[0].d === "971500000012" && ho[0].path.join() === "s1.selling,b1.listed,b2.
 ok(calls.every((c) => c.body.to !== "971500000099"), "the handover never messages Najjuko");
 // (c) another Palm investment -> tracked link to the /cb/ brief, then a call offer
 calls.length = 0; await tap("971500000013", 2, pids[2]);
-const lk = calls[0].body.text.body.match(/https:\/\/w\/c\/([0-9A-Za-z]{8})/);
-ok(lk && JSON.parse(store.get("camp_link_" + lk[1])).url === "https://w/dp/palm-springs?r=investor&ty=1" && calls[1].body.interactive.action.buttons[0].reply.title === "Book a call", "(c) brief sent as a tracked link + call offer", calls.map((c) => c.body));
+const dc = calls[0].body;   // v772 - a light PDF document, not a link to an app page
+ok(dc.type === "document" && dc.document.link === "https://w/dp/f/palm-springs-investor-one.pdf" && dc.document.filename === "Palm Springs - Investor one-pager - Najjuko.pdf" && calls[1].body.interactive.action.buttons[0].reply.title === "Book a call", "(c) brief sent as a PDF document + call offer", calls.map((c) => c.body));
 // (d) not now -> one gentle ask
 calls.length = 0; await tap("971500000014", 3, pids[3]);
 ok(calls.length === 1 && /every two weeks/.test(calls[0].body.interactive.body.text), "(d) one gentle updates ask");

@@ -46,7 +46,7 @@ export const BACKOFF_STEPS = [30000, 120000, 600000, 1800000, 3600000];   // 30 
 // RENEW BY 22 Jul 2027: after that date the campaign must stop quoting it. A campaign may still set its own brn.
 export const NAJ_BRN = "98949", NAJ_BRN_EXPIRES = "2027-07-22";
 
-import { DP_SETS, dpReader } from "./district_passport.js";   // v771
+import { DP_SETS, dpReader, dpFileName } from "./district_passport.js";   // v771, v772
 
 // ---------- phone numbers ----------
 // UAE mobile: 05X XXX XXXX, 5X XXX XXXX, 9715..., 009715..., +9715... -> +9715XXXXXXXX. Other countries need a full + or 00 prefix.
@@ -909,11 +909,20 @@ async function flowRun(env, c, f, nid, k, deps, now, trail) {
     let link = "";
     if (n.type === "doc" || n.type === "brief") { const target = n.type === "brief" ? originOf(env, deps) + "/dp/" + n.brief + "?r=" + dpReader(n.reader) + "&ty=1" : n.link; const code = await makeLink(env, c.id, d, target); link = originOf(env, deps) + "/c/" + code; }   // v771 - the district passport
     let payload = nodePayload(c.id, nid, n, k, link, facts);
-    if (payload && n.type === "brief" && n.image) payload = { messaging_product: "whatsapp", to: payload.to, type: "image", image: { link: originOf(env, deps) + "/dp/img/" + n.image, caption: payload.text.body } };   // v771 - illustration as the header
+    let fallback = null;
+    if (payload && n.type === "brief" && DP_SETS[n.brief]) {   // v772 (Kendall 5 Nov: no link to an app page; it went dark on a dark-mode phone) - a light PDF document, the thank-you as its caption
+      const one = n.brief === "palm-springs" || n.one === true, rd = dpReader(n.reader);
+      fallback = payload;
+      payload = { messaging_product: "whatsapp", to: payload.to, type: "document", document: { link: originOf(env, deps) + "/dp/f/" + n.brief + "-" + rd + "-" + (one ? "one" : "full") + ".pdf", filename: dpFileName(n.brief, rd, one), caption: fill(n.text, k, facts) } };
+    }
     if (payload) {
       let ok = false, code = 0;
       try { const r = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         const j = await r.json().catch(() => ({})); ok = r.ok && !!(j.messages && j.messages[0]); code = Number(j.error && j.error.code) || 0; } catch (e) {}
+      if (!ok && fallback) {   // v772 - the PDF did not go: send the link instead, so the owner is never left with nothing
+        try { const r2 = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(fallback) });
+          const j2 = await r2.json().catch(() => ({})); ok = r2.ok && !!(j2.messages && j2.messages[0]); trail.push({ fallback_link: ok }); } catch (e) {}
+      } else if (ok && fallback) { await bump(env, c.id, (x) => { x.docs = (x.docs || 0) + 1; }); }
       trail.push({ node: nid, sent: ok, code: code || undefined });
     }
     if (n.type === "brief") { await sendCard(env, c, f, k, deps, now, trail, f2, graph, pid); await followTask(env, c, f, k, { opened: (DP_SETS[n.brief] || {}).name || n.brief, reader: dpReader(n.reader) }, now); }

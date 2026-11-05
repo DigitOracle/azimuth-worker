@@ -1,7 +1,7 @@
 // v771: district passport from stored data. Fixtures are the REAL stored KV values pulled 5 Nov 2026 (camp_brief_*, camp_facts_pja) when present
 // in DP_FIX (a folder), else small stand-ins; checks the rules: no file names, no "to confirm", one soft line, Talk to Najjuko, thank-you, cream.
 import fs from "fs";
-import { dpRoute, srcLabel, DP_SETS, THANKS } from "../src/district_passport.js";
+import { dpRoute, srcLabel, DP_SETS, THANKS, dpFileName } from "../src/district_passport.js";
 import { followTask, nodePayload } from "../src/campaigns.js";
 let fail = 0; const ok = (c, m) => { if (!c) { fail++; console.log("FAIL", m); } else console.log("ok", m); };
 const DIR = process.env.DP_FIX || "";
@@ -42,5 +42,8 @@ ok(t1.key === t2.key, "same task key on a second tap");
 const e = JSON.parse(store[t1.key]); ok(e.works[0] === "Call Test (+971 ••• 1159), PJA test" && /Open to selling/.test(e.text) && /Opened: Palm Jebel Ali/.test(e.text), "task names the person, answer and version");
 const hi = JSON.parse(store.camp_handover_index); ok(hi.length === 1 && hi[0].kind === "follow_up" && hi[0].answers[0] === "Open to selling", "one handover entry, updated");
 ok(THANKS.endsWith("Najjuko"), "thank-you text signed Najjuko");
+// v772 - always light, and clean PDF file names
+ok(/<meta name=color-scheme content="light only">/.test(one) && /color-scheme:light only/.test(one), "v772: light only, never dark mode");
+ok(dpFileName("palm-jebel-ali", "seller", false) === "Palm Jebel Ali - Seller passport - Najjuko.pdf" && dpFileName("palm-jebel-ali", "keeper", false) === "Palm Jebel Ali - Keeper passport - Najjuko.pdf" && dpFileName("palm-springs", "investor", true) === "Palm Springs - Investor one-pager - Najjuko.pdf", "v772: file names");
 if (DIR) { fs.writeFileSync(DIR + "/out_onepager.html", one); fs.writeFileSync(DIR + "/out_full.html", full); }
 console.log("test_v771_district_passport:", fail ? fail + " failed" : "all passed"); process.exit(fail ? 1 : 0);

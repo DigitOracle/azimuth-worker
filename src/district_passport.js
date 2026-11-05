@@ -6,6 +6,7 @@
 // Data, stored only, never invented: camp_brief_<slug> (developer capture), camp_facts_<set> (register rollups), pp_dna[<district>] (district DNA).
 // A fact that is missing is LEFT OFF. A missing deciding fact (payment plan, handover) gets at most ONE soft line naming Najjuko. Never "to confirm".
 import { NAJ_BRN, NAJ_BRN_EXPIRES } from "./campaigns.js";
+import puppeteer from "@cloudflare/puppeteer";   // v772 - the PDF, through the same Browser Rendering binding as building passports
 
 export const DP_READERS = {
   investor: { label: "Investor", line: "For an investor: prices, price per sq ft, supply, handover and rent comparables" },
@@ -140,7 +141,9 @@ export function dpFull(d, reader, ty) {
   return page("Palm Jebel Ali · district passport", order.map((k, i) => '<div class="ph pp">' + head(i + 1) + P[k]() + foot + "</div>").join(""));
 }
 
-const CSS = ':root{--cream:#F7F3EA;--card:#FFFDF9;--line:#E7E1D6;--teal:#0A4F4A;--gold:#C5A56A;--gold2:#8A6F3E;--ink:#1C2826;--mute:#5F6B66;--green:#2F7D5B}*{box-sizing:border-box}'
+const CSS = ':root{color-scheme:light only}html,body{background:#F7F3EA!important;color:#1C2826!important}'
+  + '@media print{@page{size:A4;margin:10mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.ph{max-width:none;padding:0 2mm}.pp{border:0;break-after:page}.pp:last-child{break-after:auto}.cta,.full{display:none}}'
+  + ':root{--cream:#F7F3EA;--card:#FFFDF9;--line:#E7E1D6;--teal:#0A4F4A;--gold:#C5A56A;--gold2:#8A6F3E;--ink:#1C2826;--mute:#5F6B66;--green:#2F7D5B}*{box-sizing:border-box}'
   + 'body{margin:0;background:var(--cream);font-family:"IBM Plex Sans",sans-serif;color:var(--ink)}.ph{max-width:560px;margin:0 auto;padding:18px 16px 26px}.pp{border-bottom:8px solid #EDE7DA}'
   + '.top{display:flex;justify-content:space-between;gap:8px;font:500 .66rem "IBM Plex Mono",monospace;color:var(--gold2);letter-spacing:.1em}h1{font:600 1.8rem/1.1 Fraunces,serif;color:var(--teal);margin:10px 0 4px}'
   + 'h2{font:600 1.1rem Fraunces,serif;color:var(--teal);margin:16px 0 8px}.sub{color:var(--mute);font-size:.88rem;margin:0 0 12px}.n{font-size:.68rem;color:var(--mute);margin:6px 0}'
@@ -156,13 +159,41 @@ const CSS = ':root{--cream:#F7F3EA;--card:#FFFDF9;--line:#E7E1D6;--teal:#0A4F4A;
   + '.bar{display:flex;align-items:center;gap:6px;font-size:.76rem;margin:4px 0}.bar i{height:9px;background:var(--teal);border-radius:4px;display:block}.bar span{width:60px;color:var(--mute)}'
   + 'table{width:100%;border-collapse:collapse;font-size:.78rem}td,th{border-bottom:1px solid var(--line);padding:7px 4px;text-align:left;vertical-align:top}th{font:600 .6rem "IBM Plex Mono",monospace;color:var(--gold2);text-transform:uppercase}';
 function page(title, body) {
-  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content=noindex><meta name=theme-color content="#F7F3EA"><title>' + esc(title) + "</title>"
+  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content=noindex><meta name=theme-color content="#F7F3EA"><meta name=color-scheme content="light only"><title>' + esc(title) + "</title>"
     + '<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel=stylesheet><style>' + CSS + "</style></head><body>" + body + "</body></html>";
+}
+
+export const dpFileName = (slug, reader, one) => (DP_SETS[slug] ? (one ? DP_SETS[slug].name : "Palm Jebel Ali") : slug) + " - " + DP_READERS[dpReader(reader)].label.replace("Keeping it", "Keeper").replace("Selling", "Seller") + (one ? " one-pager" : " passport") + " - Najjuko.pdf";
+async function dataVer(d) { const t = JSON.stringify([d.brief, d.facts, d.dna ? d.dna.live : null, d.hasImg, "v772"]); let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+let LAUNCH = (b) => puppeteer.launch(b);
+export function __setDpLauncher(fn) { LAUNCH = fn || ((b) => puppeteer.launch(b)); }
+// the stored PDF for one district + reader (+ one-pager or the 4 pages); renders only when the data changed since the last render
+export async function dpPdf(env, slug, reader, one, origin) {
+  const d = await dpLoad(env, slug); if (!d) return null; reader = dpReader(reader);
+  const v = await dataVer(d), key = "dp_pdf_" + slug + "_" + reader + "_" + (one ? "one" : "full");
+  const meta = await J(env, key + "_meta");
+  if (meta && meta.v === v) { const b = await env.MEETINGS.get(key, "arrayBuffer"); if (b) return { pdf: b, name: dpFileName(slug, reader, one), cached: true }; }
+  let html = one ? dpOnePager(d, reader, false) : dpFull(d, reader, false);
+  html = html.replace(/(src|href)="\/dp\//g, '$1="' + origin + "/dp/");
+  const browser = await LAUNCH(env.BROWSER);
+  try {
+    const page = await browser.newPage();
+    try { await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]); } catch (e) {}
+    try { await page.emulateMediaType("print"); } catch (e) {}
+    try { await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 }); } catch (e) { if (!/timeout/i.test(String((e && e.message) || e))) throw e; }
+    try { await page.evaluate(() => document.fonts.ready.then(() => true)); } catch (e) {}
+    const pdf = await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true });
+    await env.MEETINGS.put(key, pdf); await env.MEETINGS.put(key + "_meta", JSON.stringify({ v, at: new Date().toISOString(), bytes: pdf.byteLength || pdf.length }));
+    return { pdf, name: dpFileName(slug, reader, one), cached: false };
+  } finally { try { await browser.close(); } catch (e) {} }
 }
 
 export async function dpRoute(request, env, url) {
   const p = url.pathname;
-  let m = p.match(/^\/dp\/img\/([a-z0-9-]{1,40})(?:\.(?:jpg|png))?$/);
+  let m = p.match(/^\/dp\/f\/([a-z0-9-]{1,60})-(investor|keeper|seller)-(one|full)\.pdf$/);   // v772 - the PDF WhatsApp fetches as a document
+  if (m) { const r = await dpPdf(env, m[1], m[2], m[3] === "one", url.origin); if (!r) return new Response("not found", { status: 404 });
+    return new Response(r.pdf, { headers: { "Content-Type": "application/pdf", "Content-Disposition": 'inline; filename="' + r.name + '"', "Cache-Control": "public, max-age=3600", "X-Dp-Cached": r.cached ? "1" : "0" } }); }
+  m = p.match(/^\/dp\/img\/([a-z0-9-]{1,40})(?:\.(?:jpg|png))?$/);
   if (m) {
     const name = m[1] === "card" ? "card_najjuko" : m[1];
     if (m[1] === "card" && Date.now() > Date.parse(NAJ_BRN_EXPIRES + "T23:59:59+04:00")) return new Response("not found", { status: 404 });
