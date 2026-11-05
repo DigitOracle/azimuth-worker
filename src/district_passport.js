@@ -36,10 +36,12 @@ export function srcLabel(src, asOf) {
 }
 async function J(env, k) { try { const v = await env.MEETINGS.get(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
 
+import { avCommunity, availRollupWeb, AV_WEB_CSS, avCommKey } from "./avail_view.js";   // v784 - developer availability
 export async function dpLoad(env, slug) {
   const S = DP_SETS[slug]; if (!S) return null;
   const [brief, facts, dnaAll, imgMeta] = await Promise.all([J(env, "camp_brief_" + S.brief), J(env, "camp_facts_" + S.facts), J(env, "pp_dna"), env.MEETINGS.get("dp_img_" + S.img + "_meta")]);
-  return { slug, S, brief: brief || {}, facts: facts || {}, dna: dnaAll && dnaAll[S.dna] ? dnaAll[S.dna] : null, hasImg: !!imgMeta };
+  const av = await avCommunity(env, [].concat(S.avc || [], [S.name])).catch(() => null);   // v784 - only when a developer sheet covers it
+  return { slug, S, brief: brief || {}, facts: facts || {}, dna: dnaAll && dnaAll[S.dna] ? dnaAll[S.dna] : null, hasImg: !!imgMeta, av };
 }
 
 // ---- small builders ----
@@ -118,6 +120,7 @@ export function dpOnePager(d, reader, ty) {
     + heroHtml(d) + "<h1>" + esc(d.S.name) + "</h1><p class=sub>" + esc(d.S.sub) + "</p>"
     + (ty ? '<div class=ty>' + esc(THANKS.replace(/ Najjuko$/, "")) + " <i>Najjuko</i></div>" : "")
     + "<div class=g>" + g + "</div>" + softLine(d)
+    + (d.av ? "<style>" + AV_WEB_CSS + "</style>" + availRollupWeb(d.av) : "")   // v784
     + '<a class=full href="?r=' + reader + "&v=full" + (ty ? "&ty=1" : "") + '">See the full ' + (d.slug === "palm-springs" ? "Palm Jebel Ali " : "") + "passport (4 pages)</a>"
     + closeHtml(d, reader === "seller" ? "About selling your Palm Jebel Ali home" : reader === "keeper" ? "Handover, snagging and leasing help" : "About " + d.S.name + ", or your Palm Jebel Ali home")
     + '<div class=foot><span>' + (d.S.kind === "project" ? "Pre-launch guidance only; prices and homes may change on release." : "Estimate, not a valuation.") + "</span><span class=pg>1 / 1</span></div>";
@@ -200,6 +203,12 @@ export async function dpRoute(request, env, url) {
     const buf = await env.MEETINGS.get("dp_img_" + name, "arrayBuffer"); if (!buf) return new Response("not found", { status: 404 });
     return new Response(buf, { headers: { "Content-Type": (await env.MEETINGS.get("dp_img_" + name + "_meta")) || "image/jpeg", "Cache-Control": "public, max-age=86400" } });
   }
+  // v784 - an area page for any community a developer sheet covers: availability rolled up by project, from the developers' own sheets
+  m = p.match(/^\/dp\/area\/([a-z0-9_]{2,60})\/?$/);
+  if (m) { const C = await avCommunity(env, [m[1]]); if (!C) return new Response("not found", { status: 404 });
+    const body = '<div class=top><span>NAJMA \u00b7 AREA AVAILABILITY</span><span>' + dpDate(new Date().toISOString()) + "</span></div><h1>" + esc(C.community || m[1]) + "</h1>"
+      + "<style>" + AV_WEB_CSS + "</style>" + availRollupWeb(C, { title: "Available now", bare: false }) + '<div class=foot><span>Developer asking prices from their own sheets. Not a valuation.</span><span class=pg>1 / 1</span></div>';
+    return new Response(page((C.community || "Area") + " \u00b7 available now", "<div class=ph>" + body + "</div>"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }); }
   m = p.match(/^\/dp\/([a-z0-9-]{1,60})\/?$/); if (!m) return null;
   const d = await dpLoad(env, m[1]); if (!d) return new Response("not found", { status: 404 });
   const reader = dpReader(url.searchParams.get("r")), ty = url.searchParams.get("ty") === "1";

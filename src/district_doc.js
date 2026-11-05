@@ -63,6 +63,7 @@ function areaCards(d) {
     + (al ? stat("Active life", al.s.replace(/^.*?: /, ""), S(al.src, al.as_of)) : "");
 }
 
+import { availRollupWeb, AV_WEB_CSS } from "./avail_view.js";   // v784
 export function docHtml(d, rec, origin) {
   const b = d.brief, f = d.facts, r = dpReader(rec.reader), W = DOC_WHY[r], name = rec.name || "", when = dpDate(rec.at), O = origin || "";
   const isPS = d.slug === "palm-springs", title = docTitle(d.slug);
@@ -77,11 +78,11 @@ export function docHtml(d, rec, origin) {
       + "<p class=soft>Najjuko will confirm the payment plan and handover date with you as soon as Nakheel releases them.</p>"
     : r === "keeper" ? stat("First planned handover", Array.isArray(pipe) ? dpDate(pipe[0].planned_end) : null, f.pja_supply_pipeline, true, Array.isArray(pipe) ? pipe[0].project.replace(/^Palm Central Private Residences - /, "Palm Central · ") : "") + stat("Median price per sq ft this year", psf, f.pja_median_psf) + stat("Home sales this year", n ? n + ", all off-plan" : null, f.pja_home_sales)
     : stat("Median price per sq ft this year", psf, f.pja_median_psf, true) + stat("Median sale price", med, f.pja_median_price) + stat("Home sales this year", n ? n + ", all off-plan" : null, f.pja_home_sales) + stat("Homes registered", fv(f.pja_units_registered), f.pja_units_registered);
-  const secs = [["overview", "Overview", ov], ["prices", "Prices", psfChart(f)], ["handover", "Handover", projectRows(f, isPS ? null : b) ? "<p class=hint>Tap a building to see what its homes sold for, by bedroom.</p>" + projectRows(f, isPS ? null : b) : ""],
+  const secs = [["overview", "Overview", ov], ["available", "Available", d.av ? "<style>" + AV_WEB_CSS + "</style>" + availRollupWeb(d.av, { bare: true }) : ""], ["prices", "Prices", psfChart(f)], ["handover", "Handover", projectRows(f, isPS ? null : b) ? "<p class=hint>Tap a building to see what its homes sold for, by bedroom.</p>" + projectRows(f, isPS ? null : b) : ""],
     ["rent", "Rent", rentCards(f) ? "<p class=soft>No home on Palm Jebel Ali is rented yet, so the nearest comparable is Palm Jumeirah.</p>" + rentCards(f) : ""], ["area", "Area", areaCards(d) ? areaCards(d) + '<p class=nt>Area figures are the Jebel Ali district, not Palm Jebel Ali alone.</p>' : ""]].filter((s) => s[2]);
-  const order = r === "seller" ? ["overview", "prices", "handover", "rent", "area"] : r === "keeper" ? ["overview", "handover", "rent", "prices", "area"] : ["overview", "prices", "handover", "rent", "area"];
+  const order = r === "seller" ? ["overview", "available", "prices", "handover", "rent", "area"] : r === "keeper" ? ["overview", "handover", "available", "rent", "prices", "area"] : ["overview", "available", "prices", "handover", "rent", "area"];
   secs.sort((a, x) => order.indexOf(a[0]) - order.indexOf(x[0]));
-  const H = { overview: isPS ? "Palm Springs at a glance" : r === "keeper" ? "Your home, until handover" : r === "seller" ? "What your home could sell for" : "The numbers that matter", prices: "How Palm Jebel Ali has priced this year", handover: "What is being built, and when", rent: "What homes nearby rent for", area: "Living around Jebel Ali" };
+  const H = { available: "Available now, from the developer’s own sheet", overview: isPS ? "Palm Springs at a glance" : r === "keeper" ? "Your home, until handover" : r === "seller" ? "What your home could sell for" : "The numbers that matter", prices: "How Palm Jebel Ali has priced this year", handover: "What is being built, and when", rent: "What homes nearby rent for", area: "Living around Jebel Ali" };
   const card = Date.now() <= Date.parse(NAJ_BRN_EXPIRES + "T23:59:59+04:00");
   const ICON_WA = '<svg width=20 height=20 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.8 aria-hidden=true><path d="M4 20l1.3-3.8A8 8 0 1 1 8 19z"/><path d="M9 9.5c.3 2 2 3.8 4.5 4.5l1-1.2 1.8.8"/></svg>';
   const ICON_MAP = '<svg width=18 height=18 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.8 aria-hidden=true><path d="M12 21s-6-5.6-6-10.5a6 6 0 0 1 12 0C18 15.4 12 21 12 21z"/><circle cx=12 cy=10.5 r=2.2 /></svg>';

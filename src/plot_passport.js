@@ -54,10 +54,12 @@ export async function ppSearchGaz(env, n, meta) {
   }
   const all = [...best.values()].sort((a, b) => (b.exact - a.exact) || ((GZ_RANK[a.e[3]] ?? 9) - (GZ_RANK[b.e[3]] ?? 9)) || (b.e[5] - a.e[5]) || a.e[0].localeCompare(b.e[0]));
   const groups = [], results = [];
+  let AVI = {}; try { AVI = JSON.parse((await env.MEETINGS.get("av_idx")) || "{}") || {}; } catch (x) { AVI = {}; }   // v784 - units on developer sheets
+  const avOf = (...ks) => { for (const k of ks) { if (!k) continue; if (AVI[k]) return AVI[k]; const m = /^naj:plot:(\d{3})-(\d+)$/.exec(k); if (m && AVI["naj:plot:" + m[1] + m[2].padStart(4, "0")]) return AVI["naj:plot:" + m[1] + m[2].padStart(4, "0")]; } return 0; };
   for (const { e, exact } of all) {
     const isGroup = e[3] === "community" || e[3] === "cluster" || (e[3] === "building" && e[5] > 1);
-    if (isGroup) { if (groups.length < 8) groups.push({ id: e[2], level: e[3], name: e[1], path: e[4], plots: e[5], district: e[7] || "", districts: 1 }); }
-    else if (results.length < 12) results.push({ label: e[1] + (e[7] ? " \u00b7 " + e[7] : ""), id: e[6], kind: e[3] === "plot" ? "number" : "name", exact: !!exact, path: e[4], level: e[3] });
+    if (isGroup) { if (groups.length < 8) groups.push({ id: e[2], level: e[3], name: e[1], path: e[4], plots: e[5], district: e[7] || "", districts: 1, avail: avOf(e[2]) }); }
+    else if (results.length < 12) results.push({ label: e[1] + (e[7] ? " \u00b7 " + e[7] : ""), id: e[6], kind: e[3] === "plot" ? "number" : "name", exact: !!exact, path: e[4], level: e[3], avail: avOf(e[2], e[6]) });
   }
   const w0 = key, near = new Map();
   if (w0.length >= 4 && all.length < 4) for (const e of sh) for (const w of e[0].split(" ")) {

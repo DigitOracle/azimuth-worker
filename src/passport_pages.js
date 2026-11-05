@@ -46,6 +46,8 @@ const CHIP = { reg: ["From the registers", "#E3F0EA", "#0F5A3F"], ads: ["From th
 const chip = (k) => { const c = CHIP[k]; return '<span class="bd-chip" style="background:' + c[1] + ";color:" + c[2] + '">' + c[0] + "</span>"; };
 
 // ---------------------------------------------------------------------------------------------------- the figures (from stored rows only)
+import { availCardPdf, AV_PDF_CSS } from "./avail_view.js";   // v784 - developer availability on passports
+export function regPsfOf(F) { const S = (F && F.sales) || {}, x = (S.ready && S.ready.aed_m2_12m) || (S.offplan && S.offplan.aed_m2_12m); return x ? x / 10.7639 : null; }
 export function pageFigures(pp, pack, today, f) {
   pp = pp || {}; pack = pack || {}; f = f || {};
   const pj = pack.project || {}, nb = pack.nb || {}, dna = pack.dna || null, asof = pack.asof || {};
@@ -193,7 +195,7 @@ export function page2(F, story, dateText) {
 }
 
 // ---------------------------------------------------------------------------------------------------- page 3: what it means
-export function page3(F, fin, dateText) {
+export function page3(F, fin, dateText, AV) {
   const O = F.occupancy, N = F.neighbourhood, Gg = F.google, D = F.district, V = F.developer, E = F.evidence;
   const occ = card("bd-c-occ", head("06", "Occupancy signals", "reg", "people"), O ? '<div class="bd-stack"><span style="flex:' + O.let + ";background:" + T + '"></span><span style="flex:' + O.adverts + ";background:" + G + '"></span><span style="flex:' + O.rest + ';background:#D9D4C7"></span></div>'
     + '<div class="bd-key bd-key3"><span><i style="background:' + T + '"></i><b>' + int(O.let) + "</b> let (tenancies)</span><span><i style=\"background:" + G + '"></i><b>' + int(O.adverts) + "</b> advertised to let</span><span><i style=\"background:#D9D4C7\"></i><b>" + int(O.rest) + "</b> no signal</span><span class=\"bd-mut\">of " + int(O.homes) + " homes</span></div>" : NA,
@@ -234,7 +236,7 @@ export function page3(F, fin, dateText) {
   const bro = F.brokers.length ? card("bd-c-bro", head("", "Brokers advertising now", "ads", "phone"), '<div class="bd-bros">' + F.brokers.map((b) => '<div class="bd-bro"><b>' + esc(short(b.agent || b.firm, 26)) + '</b><span>' + esc(short(b.firm, 30)) + "</span>"
       + (b.phone ? '<span class="bd-ph">' + ic("phone", 10, T) + esc(b.phone) + "</span>" : "") + '<span class="bd-mut">' + esc((b.beds === 0 ? "Studio" : b.beds != null ? b.beds + " bed" : "") + (b.price ? " · AED " + aedK(b.price) + (b.mode === "rent" ? "/yr" : "") : "") + (b.date ? " · " + dS(b.date) : "")) + "</span></div>").join("") + "</div>", "adverts on " + esc(F.brokers[0].portal || "the portals") + ", broker details as published · Research use only; not a valuation, legal title or offer") : "";
   return mkPage(3, "What it means", F.identity.name + " · detail and evidence", true,
-    occ + invest + ro + '<div class="bd-row bd-r21">' + nbh + goo + "</div>" + dna + '<div class="bd-row bd-r3">' + dev + ops + evd + "</div>" + bro
+    occ + invest + ro + '<div class="bd-row bd-r21">' + nbh + goo + "</div>" + dna + '<div class="bd-row bd-r3">' + dev + ops + evd + "</div>" + bro + (AV && AV.length ? availCardPdf(AV, regPsfOf(F)) : "")   // v784 - Available now
     + (F.brokers.length ? "" : '<div class="bd-disc">Research use only. Not a valuation, legal title or offer. Registered deals are actual prices; adverts are asking prices.</div>'), dateText);
 }
 
@@ -282,7 +284,7 @@ export function page4(C, name, dateText) {
 // ---------------------------------------------------------------------------------------------------- the ONE-PAGER (v767)
 // Kendall 5 Nov: "One-pager (instant)" beside "Full passport". One A4 page made inside the request, no writer and no queue: only facts already
 // in the stored plot record, its pack and the community mix file. A fact that is missing is left out, never filled.
-export function onePage(F, C, dateText, title, path) {
+export function onePage(F, C, dateText, title, path, AV) {
   const I = F.identity, P = F.physical, K = F.construction, S = F.sales, R = F.rentals;
   const kv = (k, v) => (v == null || v === "" ? "" : '<div class="o1-kv"><span>' + esc(k) + "</span><b>" + v + "</b></div>");
   const facts = [
@@ -302,6 +304,7 @@ export function onePage(F, C, dateText, title, path) {
   const inner = card("bd-c-o1", head("", "The plot at a glance", "reg", "doc"), '<div class="o1-kvs">' + facts + "</div>", "Land Department registers")
     + (price ? card("bd-c-o1p", head("", "Registered sale prices (median)", "reg", "coin"), price, esc(S.src || "Land Department sales register")) : "")
     + (rents ? card("bd-c-o1r", head("", "Registered rents (median, yearly)", "reg", "coin"), rents, "Ejari tenancy register") : "")
+    + (AV && AV.length ? availCardPdf(AV, regPsfOf(F)) : "")   // v784
     + (nat ? card("bd-c-o1n", "", nat, "DEWA residential accounts, community level · account holders, not every resident") : "")
     + '<div class="o1-asof">Facts as stored on ' + esc(dateText) + ". Only facts on record are shown; anything missing is left out, not estimated. For prices, neighbourhood, investment view and the full nationality mix, generate the Full passport.</div>";
   return mkPage(1, title || I.name, path || "Building Passport · one-pager", true, inner, dateText, 1);
@@ -369,7 +372,7 @@ export function placePages(html, p2, p3, p4) {
   let h = String(html || "");
   if (!p2 || !p3) return h;
   h = h.replace(/<style id="bpp-det">[\s\S]*?<\/style>/g, "");
-  h = /<\/head>/i.test(h) ? h.replace(/<\/head>/i, PAGES_CSS + "</head>") : PAGES_CSS + h;
+  h = /<\/head>/i.test(h) ? h.replace(/<\/head>/i, PAGES_CSS + AV_PDF_CSS + "</head>") : PAGES_CSS + AV_PDF_CSS + h;
   const starts = []; let m; PAGE_OPEN.lastIndex = 0;
   while ((m = PAGE_OPEN.exec(h))) starts.push(m.index);
   const bodyEnd = h.search(/<\/body>/i), end = bodyEnd >= 0 ? bodyEnd : h.length;
@@ -379,11 +382,11 @@ export function placePages(html, p2, p3, p4) {
 }
 
 // the two pages for one plot, from the same rows the facts and the dashboard read
-export function pagesBlocks(pp, pack, today, f, dateText, mixFile) {
+export function pagesBlocks(pp, pack, today, f, dateText, mixFile, AV) {
   const F = pageFigures(pp, pack, today, f);
   const st = storySvg(pp, pack, today);
   const story = st ? st.svg.replace(/<svg /, '<svg style="width:100%;height:auto;max-height:' + (STORY_H_MM - 6) + 'mm" ') + '<div style="font:500 5.6pt Inter,sans-serif;color:#5F6B66;margin-top:.6mm">Diamonds = milestones · bars = construction (dashed = planned) · Land Department and Ejari registers</div>' : "";
   let fin = null; try { fin = brokerView(pp, pack, today); } catch (e) { fin = null; }
   const plotId = (pp && (pp.id || pp.plot_id)) || "";
-  return { p2: page2(F, story, dateText), p3: page3(F, fin || { classes: [] }, dateText), p4: page4(communityMix(mixFile, plotId), F.identity && F.identity.name, dateText), F };
+  return { p2: page2(F, story, dateText), p3: page3(F, fin || { classes: [] }, dateText, AV), p4: page4(communityMix(mixFile, plotId), F.identity && F.identity.name, dateText), F };
 }
