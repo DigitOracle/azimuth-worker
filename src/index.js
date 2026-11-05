@@ -1,3 +1,4 @@
+import { MOMO_CONFIRM_JS } from "./momo_confirm.js";   // v778
 import { calendarRoute } from "./content_calendar.js";   // v754
 import { plannerRoute } from "./content_planner.js";   // v758 - FN Content Planner
 import { creamTheme } from "./cream_theme.js";   // v728
@@ -5086,7 +5087,7 @@ function momoPage(key, rk, body) {
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FAF7F1"><title>Momo</title>' + NAJ_FONTS
     + '<style>body{margin:0;background:#FAF7F1;color:#1C2321;font-family:"IBM Plex Sans",sans-serif;padding:22px 14px 120px}.w{max-width:560px;margin:0 auto}.tag{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.14em;color:#8A6F3E;font-weight:600}'
     + 'h1{font-family:Fraunces,serif;font-weight:600;font-size:1.7rem;margin:4px 0 14px;color:#0A4F4A}.back{color:#5F6B66;text-decoration:none;font-size:.85rem}.empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:48px 0;border:1px dashed #D8D1C4;border-radius:18px;color:#5F6B66}.empty p{margin:0}'
-    + WORK_CSS + NAJ_NAV_CSS + '</style></head><body><div class=w>' + body + '</div>' + najNav(key, "fit", rk) + '</body></html>';
+    + WORK_CSS + NAJ_NAV_CSS + '</style></head><body><div class=w>' + body + '</div>' + najNav(key, "fit", rk) + '<script>' + MOMO_CONFIRM_JS + '</script></body></html>';   // v778 - one shared save confirmation for every Momo page
 }
 function momoHtml(key, rk, work, anne, speaking, briefs, sheets, brokers, products) {
   briefs = Array.isArray(briefs) ? briefs : [];
