@@ -64,7 +64,7 @@ const t = buildCreatePayload("najjuko_task_checkin");
 ok(WA_TEMPLATES.najjuko_task_checkin && t.category === "UTILITY" && t.components[0].text === "Hi {{1}}, Najjuko here. Quick check on {{2}}, due {{3}}. Where is it?" && t.components[1].buttons.map((b) => b.text).join("|") === "Done|In progress|Stuck", "template: utility, exact body, three quick replies", t);
 ok(!/offer|discount|buy|sale|promo/i.test(t.components[0].text), "no promotional wording");
 let parsed = true; try { new Function(CK_JS); } catch (e) { parsed = false; console.log(e.message); }
-ok(parsed && CK_JS.includes('data-w=desk>Ask (desk)') && CK_JS.includes('action:"ck_desk"'), "served picker parses and has Ask (desk)");
+ok(parsed && CK_JS.includes('action:"ck_desk"') && !CK_JS.includes('data-w=desk>Ask (desk)'), "served picker parses; Ask (desk) hidden until the desk template is approved (v775d), its send path kept");
 ok(ckTemplatePayload("1", "x".repeat(24), "", "", "").template.components[0].parameters.every((p) => p.text === "-"), "empty variables become - (Meta refuses empty)");
 ok(ckInteractive("1", "t".repeat(24), "x").interactive.action.buttons.length === 3, "interactive payload has 3 buttons");
 console.log("test_v770_desk_checkin: " + (n - fail) + " passed, " + fail + " failed");
