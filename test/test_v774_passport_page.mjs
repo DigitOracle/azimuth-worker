@@ -13,7 +13,7 @@ ok(/^[a-z2-9]{8}$/.test(c1) && c1 === c2, "one 8-character code per person + ver
 let opened = null;
 const u = new URL("https://x/p/" + c1); const r = await docRoute(new Request(u), env, u, { onOpen: (rec) => { opened = rec; } }); const h = await r.text();
 ok(r.status === 200 && h.includes("Prepared for <b>Test</b>") && h.includes("You told me you&#39;re keeping") === false && /keeping your home until handover/.test(h), "personalised: prepared for, their answer reflected");
-ok(/color-scheme content="light only"/.test(h) && !/to confirm/i.test(h) && !/\.pdf\b/.test(h), "light only, no 'to confirm', no file names");
+ok(/color-scheme content="only light"/.test(h) && !/to confirm/i.test(h) && !/\.pdf\b/.test(h), "light only, no 'to confirm', no file names");
 ok(/wa\.me\/971565484397\?text=Hi%20Najjuko/.test(h) && /window\.print\(\)/.test(h) && /google\.com\/maps/.test(h) && /<nav class=nav>/.test(h), "WhatsApp pre-filled, Save as PDF, map, section anchors");
 ok(opened && opened.opens === 1 && JSON.parse(store["dp_doc_" + c1]).opens === 1, "an open is counted and passed to the follow-up");
 const u2 = new URL("https://x/p/zzzzzzzz"); const r2 = await docRoute(new Request(u2), env, u2, {}); ok(r2.status === 404, "unknown code: a kind expiry message");

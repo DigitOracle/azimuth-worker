@@ -141,7 +141,7 @@ export function dpFull(d, reader, ty) {
   return page("Palm Jebel Ali · district passport", order.map((k, i) => '<div class="ph pp">' + head(i + 1) + P[k]() + foot + "</div>").join(""));
 }
 
-const CSS = ':root{color-scheme:light only}html,body{background:#F7F3EA!important;color:#1C2826!important}'
+const CSS = ':root{color-scheme:only light}html,body{background:#F7F3EA!important;color:#1C2826!important}'
   + ':root{--cream:#F7F3EA;--card:#FFFDF9;--line:#E7E1D6;--teal:#0A4F4A;--gold:#C5A56A;--gold2:#8A6F3E;--ink:#1C2826;--mute:#5F6B66;--green:#2F7D5B}*{box-sizing:border-box}'
   + 'body{margin:0;background:var(--cream);font-family:"IBM Plex Sans",sans-serif;color:var(--ink)}.ph{max-width:560px;margin:0 auto;padding:18px 16px 26px}.pp{border-bottom:8px solid #EDE7DA}'
   + '.top{display:flex;justify-content:space-between;gap:8px;font:500 .66rem "IBM Plex Mono",monospace;color:var(--gold2);letter-spacing:.1em}h1{font:600 1.8rem/1.1 Fraunces,serif;color:var(--teal);margin:10px 0 4px}'
@@ -159,8 +159,8 @@ const CSS = ':root{color-scheme:light only}html,body{background:#F7F3EA!importan
   + 'table{width:100%;border-collapse:collapse;font-size:.78rem}td,th{border-bottom:1px solid var(--line);padding:7px 4px;text-align:left;vertical-align:top}th{font:600 .6rem "IBM Plex Mono",monospace;color:var(--gold2);text-transform:uppercase}'
   + '@media print{@page{size:A4;margin:9mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.ph{max-width:none!important;padding:0 2mm!important}.pp{border:0!important;break-after:page}.pp:last-child{break-after:auto}.full{display:none!important}.hero img{aspect-ratio:16/7!important}.c{padding:7px 9px!important}.g{gap:6px!important}h1{margin-top:6px!important}.vb img{width:80px!important}}';   // v772b - print rules LAST so they win
 function page(title, body) {
-  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content=noindex><meta name=theme-color content="#F7F3EA"><meta name=color-scheme content="light only"><title>' + esc(title) + "</title>"
-    + '<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel=stylesheet><style>' + CSS + "</style></head><body>" + body + "</body></html>";
+  return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content=noindex><meta name=theme-color content="#F7F3EA"><meta name=color-scheme content="only light"><meta name=supported-color-schemes content="light"><title>' + esc(title) + "</title>"
+    + '<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel=stylesheet><style>html,body{background:#F7F3EA!important;color:#1C2826}@media (prefers-color-scheme:dark){html,body{background:#F7F3EA!important;color:#1C2826!important}}' + CSS + "</style></head><body>" + body + "</body></html>";
 }
 
 export const dpFileName = (slug, reader, one) => (DP_SETS[slug] ? (one ? DP_SETS[slug].name : "Palm Jebel Ali") : slug) + " - " + DP_READERS[dpReader(reader)].label.replace("Keeping it", "Keeper").replace("Selling", "Seller") + (one ? " one-pager" : " passport") + " - Najjuko.pdf";
