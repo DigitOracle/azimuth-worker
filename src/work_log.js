@@ -349,7 +349,12 @@ async function listEntries(env, from, to) {
     for (const k of r.keys) { const d = k.name.slice(PFX.length, PFX.length + 10); if ((!from || d >= from) && (!to || d <= to)) out.push(k.name); }
   } while (cursor);
   const vals = await Promise.all(out.map((n) => env.MEETINGS.get(n).then((v) => { try { return JSON.parse(v); } catch (e) { return null; } })));
-  return vals.filter(Boolean).sort((a, b) => (a.date + a.created < b.date + b.created ? 1 : -1));
+  // v776a (Kendall 5 Nov: "her tasks disappeared") - an entry written by another feature (the campaign follow-up) lacked deliverables/summary/title,
+  // and the page stopped drawing at it, BEFORE My tasks. Every entry is filled to the full shape here, so one odd record can never blank the page.
+  return vals.filter(Boolean).map((e) => Object.assign({ type: "Other" }, e, {
+    deliverables: Array.isArray(e.deliverables) ? e.deliverables : [], people: Array.isArray(e.people) ? e.people : [], kpis: Array.isArray(e.kpis) ? e.kpis : [],
+    tasks: Array.isArray(e.tasks) ? e.tasks : [], external: Array.isArray(e.external) ? e.external : [], title: String(e.title || e.task || e.name || "Follow-up"), summary: String(e.summary || e.note || "") }))
+    .sort((a, b) => (a.date + a.created < b.date + b.created ? 1 : -1));
 }
 
 // v565 - every task across her entries: latest status and percent, first and last day, the distinct days worked, rough hours
