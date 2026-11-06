@@ -5718,7 +5718,12 @@ function deskPostDeps(env) {
 function ckDeskDeps(env) {
   const pid = String(env.WA_DESK_PHONE_ID || "").replace(/[^0-9]/g, "");
   return { post: (payload) => waPost(env, payload, "checkin", pid), tplStatus: () => templateStatus(env, WA_GRAPH, "najjuko_task_checkin", env.WABA_ID || "1588773749592854"),
-    optedOut: (d) => campIsOptedOut(env, d), cap: parseInt(env.CAMP_SHARED_CAP, 10) || 250 };
+    optedOut: (d) => campIsOptedOut(env, d), cap: parseInt(env.CAMP_SHARED_CAP, 10) || 250,
+    // v790 - the workflow picture: drawn by the page renderer, kept 7 days, served from /img/
+    picture: async (html, tok) => { const png = await renderCardPng(env, html, 1200, 628); if (!png || png.byteLength < 5000) return null;
+      const k = "ck_" + String(tok || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 22); await env.MEETINGS.put("img_" + k, png, { expirationTtl: 7 * 86400 }); await env.MEETINGS.put("img_ct_" + k, "image/png", { expirationTtl: 7 * 86400 });
+      return pubOrigin(env, "") + "/img/" + k; },
+    pictureErr: () => RENDER_LAST_ERR };
 }
 function campAlertSend(env, text) { const pid = String(env.WA_DESK_PHONE_ID || "").replace(/[^0-9]/g, ""), owner = String(env.WA_DESK_OWNER || "").replace(/[^0-9]/g, ""); if (!pid || !owner) return null; return waSend(env, owner, text, pid); }
 // v428 - the desk lab's sends: everything to WA_DESK_OWNER from WA_DESK_PHONE_ID. raw() returns Meta's own JSON (with .error when refused),

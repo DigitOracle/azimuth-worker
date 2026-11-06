@@ -6,6 +6,7 @@
 // "Vishant: Done, 11:42". The page shows only the item's name and the person's own name: never another task, never her data.
 // The message opens "Najjuko here." - never "Black Coffee", which is only how Kendall's messages TO her open.
 import { applyAction, fmtDay, MAKER as PLAN_MAKER, OWNER as PLAN_OWNER } from "./content_planner.js";
+import { ckCardModel, ckCardHtml } from "./checkin_card.js";   // v790 - the workflow picture on a desk check-in
 
 const TEAM = "ck_team", TOK = "ck_tok_", TTL = 7 * 86400;
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -137,14 +138,14 @@ async function ckBuild(env, b, tasks) {
   if (b.kind === "task") {
     const name = String(b.name || "").trim().slice(0, 80), t = (tasks || []).find((x) => x.name === name);
     if (!t) return { err: [404, { error: "No task called that." }] };
-    rec = { kind: "task", name }; subject = name; what = t.status === "Done" ? "" : t.status.toLowerCase() + " at " + t.percent + "%";
+    rec = { kind: "task", name }; subject = name; what = t.status === "Done" ? "" : t.status.toLowerCase() + " at " + t.percent + "%"; var ctx = { task: t };
   } else if (b.kind === "step") {
     const code = String(b.code || "").toUpperCase(), step = String(b.step || "").slice(0, 40);
     let it = null; try { it = JSON.parse((await env.MEETINGS.get("cp_item_" + code)) || "null"); } catch (e) {}
     if (!it || it.deleted) return { err: [404, { error: "No planner item " + code + "." }] };
-    rec = { kind: "step", code, step }; subject = code + (it.topic ? " (" + String(it.topic).slice(0, 60) + ")" : ""); what = step; due = [fmtDay(it.date), it.time].filter(Boolean).join(" ");
+    rec = { kind: "step", code, step }; subject = code + (it.topic ? " (" + String(it.topic).slice(0, 60) + ")" : ""); what = step; due = [fmtDay(it.date), it.time].filter(Boolean).join(" "); var ctx = { item: it };
   } else return { err: [400, { error: "A task or a planner step." }] };
-  return { person, rec, subject, what, due };
+  return { person, rec, subject, what, due, ctx };
 }
 async function ckToken(env, x, via) {
   const tok = newToken();
@@ -204,8 +205,8 @@ export function ckDeskText(first, subject, due) {
   return "Hi " + first + ", Najjuko here. Quick check on " + subject + ", due " + due + ". Where is it?";
 }
 const BTNS = [["done", "Done"], ["progress", "In progress"], ["stuck", "Stuck"]];
-export function ckInteractive(to, tok, text) {
-  return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text },
+export function ckInteractive(to, tok, text, img) {
+  return { messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", ...(img ? { header: { type: "image", image: { link: img } } } : {}), body: { text },
     action: { buttons: BTNS.map(([a, t]) => ({ type: "reply", reply: { id: "ck:" + tok + ":" + a, title: t } })) } } };
 }
 export function ckTemplatePayload(to, tok, first, subject, due) {
@@ -222,7 +223,12 @@ async function tplApproved(env, deps) {
   await env.MEETINGS.put(ok ? "ck_tpl_ok" : "ck_tpl_no", st && st.status ? String(st.status) : "?", { expirationTtl: ok ? 6 * 3600 : 600 });
   return ok;
 }
-// deps: { post(payload) -> Response (sent from the desk), tplStatus() -> {ok,status}, optedOut(digits) -> bool, cap }
+// v790 - the workflow picture: drawn from the record, stored, and returned as a public link. null when there is no renderer or it fails.
+export async function ckPicture(deps, rec, ctx, asked, tok) {
+  if (!deps || !deps.picture) return null;
+  try { return (await deps.picture(ckCardHtml(ckCardModel(rec, ctx, asked)), tok)) || null; } catch (e) { return null; }
+}
+// deps: { post(payload) -> Response (sent from the desk), tplStatus() -> {ok,status}, optedOut(digits) -> bool, cap, picture(html, tok) -> url }
 export async function ckDesk(env, b, tasks, deps) {
   const x = await ckBuild(env, b, tasks); if (x.err) return x.err;
   const d = DIGS(x.person.phone);
@@ -235,13 +241,14 @@ export async function ckDesk(env, b, tasks, deps) {
   const tok = await ckToken(env, x, "desk"), first = x.person.name.split(" ")[0];
   const due = x.due || "today";
   const subj = x.subject + (x.what && x.rec.kind === "step" ? " (" + x.what + ")" : "");
-  const payload = open ? ckInteractive(d, tok, ckDeskText(first, subj, due)) : ckTemplatePayload(d, tok, first, subj, due);
+  const pic = open ? await ckPicture(deps, x.rec, x.ctx, x.person.name, tok) : null;   // v790 - inside the 24 h window the picture rides on the buttons; the picture template waits for Meta
+  const payload = open ? ckInteractive(d, tok, ckDeskText(first, subj, due), pic) : ckTemplatePayload(d, tok, first, subj, due);
   let r = null, j = null; try { r = await deps.post(payload); j = r && r.clone ? await r.clone().json().catch(() => null) : null; } catch (e) {}
   if (!r || !r.ok) { await env.MEETINGS.delete(TOK + tok); return [502, { ok: false, error: "WhatsApp did not take it: " + String((j && j.error && (j.error.error_user_msg || j.error.message)) || (r ? "HTTP " + r.status : "no connection")).slice(0, 160) }]; }
   const wamid = j && j.messages && j.messages[0] && j.messages[0].id || "";
   s24.push(now); await env.MEETINGS.put("camp_sent24", JSON.stringify(s24));
   await env.MEETINGS.put("ck_last_" + d, JSON.stringify({ tok, at: new Date(now).toISOString(), wamid }), { expirationTtl: 86400 });
-  return [200, { ok: true, sent: open ? "buttons" : "template", to: x.person.name }];
+  return [200, { ok: true, sent: open ? "buttons" : "template", picture: !!pic, to: x.person.name }];
 }
 // v789 (Kendall 6 Nov 2026: "send a test check-in to my number") - the OWNER's test: the same approved template, from the desk, to one UAE
 // mobile he types. The token is kind "test": a button tap is thanked and nothing of Najjuko's is read or changed. Meta's status is asked fresh.
@@ -257,11 +264,12 @@ export async function ckDeskTest(env, b, deps) {
   await env.MEETINGS.put("ck_tpl_ok", "APPROVED", { expirationTtl: 6 * 3600 }); await env.MEETINGS.delete("ck_tpl_no");
   const tok = newToken(), subject = "Test check-in (ignore)";
   await env.MEETINGS.put(TOK + tok, JSON.stringify({ kind: "test", name: subject, person: first, phone: d, via: "test", made: new Date(now).toISOString(), exp: new Date(now + DAY).toISOString(), answers: [] }), { expirationTtl: 86400 });
-  let r = null, j = null; try { r = await deps.post(ckTemplatePayload(d, tok, first, subject, "today")); j = r && r.clone ? await r.clone().json().catch(() => null) : null; } catch (e) {}
-  if (!r || !r.ok) { await env.MEETINGS.delete(TOK + tok); return [502, { ok: false, error: "WhatsApp did not take it: " + String((j && j.error && (j.error.error_user_msg || j.error.message)) || (r ? "HTTP " + r.status : "no connection")).slice(0, 160) }]; }
+  let pic = null; if (b && b.picture) { pic = await ckPicture(deps, { kind: "test" }, {}, first, tok); if (!pic) { await env.MEETINGS.delete(TOK + tok); return [502, { ok: false, error: "The picture could not be drawn" + (deps && deps.pictureErr ? ": " + String(deps.pictureErr() || "").slice(0, 120) : "") + "." }]; } }
+  let r = null, j = null; try { r = await deps.post(pic ? ckInteractive(d, tok, ckDeskText(first, subject, "today"), pic) : ckTemplatePayload(d, tok, first, subject, "today")); j = r && r.clone ? await r.clone().json().catch(() => null) : null; } catch (e) {}
+  if (!r || !r.ok) { await env.MEETINGS.delete(TOK + tok); return [502, { ok: false, picture: pic || undefined, error: "WhatsApp did not take it: " + String((j && j.error && (j.error.error_user_msg || j.error.message)) || (r ? "HTTP " + r.status : "no connection")).slice(0, 160) }]; }
   const wamid = j && j.messages && j.messages[0] && j.messages[0].id || "";
   s24.push(now); await env.MEETINGS.put("camp_sent24", JSON.stringify(s24));
-  return [200, { ok: true, sent: "template", to: d, wamid }];
+  return [200, { ok: true, sent: pic ? "picture" : "template", picture: pic || undefined, to: d, wamid }];
 }
 const ACK = { done: "Thank you. Najjuko can see it is done.", progress: "Thank you. Najjuko can see it is in progress.", stuck: "Thank you. Najjuko can see it is stuck; reply here with what is in the way.", note: "Thank you, your note is with Najjuko." };
 // the desk webhook: consumes ONLY check-in buttons, and text from a teammate inside 24 h of a check-in. Everything else falls through untouched.
