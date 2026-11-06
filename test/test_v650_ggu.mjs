@@ -60,7 +60,7 @@ ok(candidateChip({ due: [] }, T).cls === "ok", "candidate with nothing due is gr
 // page and report
 ok(GGU_JS.startsWith("var __name=function(f){return f};"), "page script defines __name first (v647 rule)");
 try { new Function(GGU_JS); ok(true, "page script parses"); } catch (e) { ok(false, "page script parses", e.message); }
-const page = await (await get("/momo/work/ggu", KEN)).text(); ok(/<h1>GGU<\/h1>/.test(page) && /Candidates/.test(page) && /My DBA/.test(page), "page renders sections");
+const page = await (await get("/momo/work/ggu", KEN)).text(); ok(/<h1>GGU<\/h1>/.test(page) && /My learners/.test(page) && /My graduation/.test(page) && /id=gcand/.test(page), "page renders sections");
 const rep = await (await get("/momo/work/ggu/report", KEN)).text(); ok(/Save as PDF/.test(rep) && /Alex Example/.test(rep) && /A4/.test(rep) && !/@example\.com/.test(rep), "report renders, no emails");
 ok(/Nothing due/.test(gguReport(cleanGgu({}), T)), "empty report says nothing due");
 

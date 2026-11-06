@@ -3,7 +3,7 @@ import { emptyGgu, cleanGgu, gguApi, readGgu, gguRoute, GGU_JS, GGU_BODY } from 
 let fail = 0; const ok = (c, m, x) => { if (!c) { fail++; console.log("FAIL", m, x === undefined ? "" : JSON.stringify(x)); } else console.log("ok", m); };
 let parsed = true; try { new Function(GGU_JS); } catch (e) { parsed = false; console.log(e.message); }
 ok(parsed && !/__name\(/.test(GGU_JS.replace("var __name=function(f){return f};", "")) || parsed, "client script parses");
-ok(GGU_BODY.includes("Cohort 8 · Dissertation (Chair)") && GGU_BODY.includes("id=glearn") && GGU_BODY.includes("id=lsheet"), "Chair section + learner grid + sheet on the page");
+ok(GGU_BODY.includes("My learners") && GGU_BODY.includes("id=gchair") && GGU_BODY.includes("id=glearn") && GGU_BODY.includes("id=lsheet"), "learners section (v788 name) + learner grid + sheet on the page");
 const e = emptyGgu();
 ok(e.chair.learners.length === 3 && e.chair.learners.map((l) => l.name).join("|") === "Noaman Kazi|John Nova|Abdullah Albar", "three learners as GGU sent them", e.chair.learners.map((l) => l.name));
 ok(e.chair.learners[0].email === "noaman.kazi@gmail.com" && e.chair.learners[2].email === "a_al_bar@hotmail.com" && e.chair.learners[1].country === "Canada", "e-mails and countries kept");
