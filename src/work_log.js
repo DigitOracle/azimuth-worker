@@ -902,7 +902,7 @@ export async function workRoute(request, env, url, deps) {
   if (who === "kendall" && p === "/momo/work/simple.js") return new Response(SIMPLE_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   const cfg = await readCfg(env, who), prof = profOf(cfg), wenv = workEnv(env, who);
   const cj = deps.claudeJSON;
-  const wdeps = Object.assign({}, deps, { prof, claudeJSON: cj ? (e, sys, ...rest) => cj(e, swapPrompt(sys, cfg, nameFixLine()), ...rest) : cj });
+  const wdeps = Object.assign({}, deps, { prof, baseEnv: env, claudeJSON: cj ? (e, sys, ...rest) => cj(e, swapPrompt(sys, cfg, nameFixLine()), ...rest) : cj });
   if (!(await wenv.MEETINGS.get("work_naj_planseed"))) await wenv.MEETINGS.put("work_naj_planseed", "1");   // her campaign seed never lands in anyone else's plan
   const res = await workInner(request, wenv, url, wdeps, prof, J, key, rk);
   const ct = (res && res.headers.get("Content-Type")) || "";
@@ -969,7 +969,8 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
     if (b.action === "ck_desk_test") {   // v789 - the owner's test of the desk check-in: one template to one number he types; touches nothing of hers
       if (prof.person !== "kendall") return J({ ok: false, error: "This test is on Kendall's Work." }, 403);
       if (!deps.ckDesk) return J({ ok: false, error: "The desk is not connected here." }, 503);
-      const [st, o] = await ckDeskTest(env, b, deps.ckDesk(env)); return J(o, st);
+      const be = deps.baseEnv || env;   // v789a - desk keys (cap, approval, token) live outside his Work namespace
+      const [st, o] = await ckDeskTest(be, b, deps.ckDesk(be)); return J(o, st);
     }
     if (/^(sync_|ck_)/.test(String(b.action || "")) && prof.person !== "najjuko") return J({ ok: false, error: "This is on Najjuko's Work." }, 403);
     if (b.action === "ck_roster") { const all = await listEntries(env, prof.phases[0].from, prof.term_end), tks = applyOverrides(tasksOf(all), await taskOverrides(env)), tn = [...new Set(tks.flatMap((t) => [...(t.owners || []), ...(t.touched || [])]))];

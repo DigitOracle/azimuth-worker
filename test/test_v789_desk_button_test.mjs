@@ -44,5 +44,16 @@ ok(out.consumed && sent.length === 1 && touched === 0, "the same button from ano
 const wl = fs.readFileSync(new URL("../src/work_log.js", import.meta.url), "utf8");
 const iTest = wl.indexOf('b.action === "ck_desk_test"'), iGate = wl.indexOf('/^(sync_|ck_)/.test(String(b.action || "")) && prof.person !== "najjuko"');
 ok(iTest > 0 && iGate > iTest && /b\.action === "ck_desk_test"\) \{[^}]*prof\.person !== "kendall"\) return J\(\{ ok: false[^}]*\}, 403\)/.test(wl), "ck_desk_test sits before the Najjuko-only gate and refuses everyone but Kendall");
+// v789a - through the real Work route with Kendall's own (scoped) store: the first release threw "key outside the Work namespace"
+const { workRoute } = await import("../src/work_log.js");
+const env2 = Object.assign({}, env, { INSIDER_KEY: "ins_kendall_TESTKEY0123456789abcd,ins_najjuko_TESTKEY0123456789abcd" }), posts2 = [];
+const mk = (person) => ({ isNaj: () => person === "najjuko", isAny: () => true, person: () => person, page: (k, r, b) => b,
+  ckDesk: () => ({ post: async (p2) => { posts2.push(p2); return new Response(JSON.stringify({ messages: [{ id: "wamid.R" }] }), { status: 200 }); }, tplStatus: async () => ({ ok: true, status: "APPROVED" }), optedOut: async () => false, cap: 250 }) });
+const call = async (person) => { const u = new URL("https://x/momo/work/api?key=ins_" + person + "_TESTKEY0123456789abcd");
+  const r = await workRoute(new Request(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ck_desk_test", to: "971562270000", name: "Kendall" }) }), env2, u, mk(person)); return [r.status, await r.json()]; };
+let [rs, rj] = await call("kendall");
+ok(rs === 200 && rj.ok && rj.wamid === "wamid.R" && posts2.length === 1, "through the Work route with Kendall's key: sent", rj);
+[rs, rj] = await call("najjuko");
+ok(rs === 403 && posts2.length === 1, "through the Work route with Najjuko's key: refused, nothing sent", rj);
 console.log("test_v789_desk_button_test: " + (n - fail) + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);
