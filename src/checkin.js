@@ -97,7 +97,7 @@ export function pasteMatches(roster, text) {
 export async function namesOn(env, b, tasks) {
   if (b.kind === "task") { const t = (tasks || []).find((x) => x.name === String(b.name || "")); return t ? [...new Set([...(t.owners || []), ...(t.touched || [])])] : []; }
   if (b.kind === "step") { let it = null; try { it = JSON.parse((await env.MEETINGS.get("cp_item_" + String(b.code || "").toUpperCase())) || "null"); } catch (e) {}
-    if (!it) return []; const o = (PLAN_OWNER || {})[String(b.step || "")], out = [];
+    if (!it) return []; const o = (PLAN_OWNER || {})[String(b.step || "")], out = []; if (it.owners && it.owners[String(b.step || "")]) return [it.owners[String(b.step || "")]];   // v791
     if (o === "maker") { if (it.how && PLAN_MAKER[it.how]) out.push(PLAN_MAKER[it.how]); } else if (o) out.push(o);
     for (const w of words(it.who)) out.push(w); return [...new Set(out)]; }
   return [];

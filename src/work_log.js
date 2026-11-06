@@ -384,7 +384,20 @@ export function tasksOf(es) {
     .sort((a, b) => (a.status === "Done") - (b.status === "Done") || (a.last < b.last ? 1 : -1));
 }
 // v600 - a progress set by hand wins over the entries until an entry newer than it moves the task again
+// v791 - a quick task lives only as a task record (quick: true): it is on the list at once, with no log entry and no hours, until work is logged on it
+export function quickTaskRecord(b, names, nowIso, by) {
+  const text = String((b && b.text) || "").replace(/\s+/g, " ").trim(); if (text.length < 3) return { error: "Type or say the task first." };
+  const name = text.length > 80 ? text.slice(0, 79).trimEnd() + "\u2026" : text, who = (names || []).includes(String(b.who || "")) ? String(b.who) : "";
+  const due = /^\d{4}-\d{2}-\d{2}$/.test(String(b.due || "")) ? String(b.due) : "";
+  return { rec: { name, percent: 0, status: "Started", updated: nowIso, created: nowIso, quick: true, detail: text.length > 80 ? text.slice(0, 400) : "", owners: who ? [who] : [], due, by: by || "" } };
+}
 export function applyOverrides(tasks, ovs) {
+  const have = new Set((tasks || []).map((t) => t.name));
+  const extra = (ovs || []).filter((o) => o && o.quick && !o.deleted && o.name && !have.has(o.name)).map((o) => { const d = String(o.created || o.updated || "").slice(0, 10);
+    return { name: o.name, first: d, last: d, lastc: "", days: 0, hours: 0, status: "Started", percent: 0, entries: 0, kpis: [], owners: Array.isArray(o.owners) ? o.owners : [], touched: [], quick: true, ...(o.due ? { due: o.due } : {}), ...(o.detail ? { detail: o.detail } : {}) }; });
+  return applyOverridesBase((tasks || []).concat(extra), ovs);
+}
+function applyOverridesBase(tasks, ovs) {
   const m = {}; (ovs || []).forEach((o) => { if (o && o.name) m[o.name] = o; });
   // v674 - Stuck set by hand holds while she logs more work on the task (chasing a reply is still being stuck), until she changes it or an entry marks it Done;
   // the stuck history (stuck_log) always rides along so the report can time it
@@ -1026,6 +1039,15 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
       return J({ ...r, connected: !!(await env.MEETINGS.get("gsheet_token")) });
     }
     if (b.action === "sync_sheet") { const [st, o] = await syncSheet(env, b.code, !!b.apply, prof.person === "najjuko" ? "Najjuko" : "Kendall"); return J(o, st); }
+    if (b.action === "task_quick") {   // v791 - the Quick task button on every Work screen: typed or spoken, on the list at once
+      const names = (prof.people || []).map((p) => p[0]);
+      if (b.peek) return J({ ok: true, people: names });
+      const r = quickTaskRecord(b, names, new Date().toISOString(), prof.person === "najjuko" ? "Najjuko" : "Kendall"); if (r.error) return J({ error: r.error }, 400);
+      let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(TPFX + slug(r.rec.name))) || "null"); } catch (e) {}
+      if (prev && !prev.deleted) return J({ error: "You already have a task called that." }, 409);
+      if (!slug(r.rec.name)) return J({ error: "Use letters or numbers in the task." }, 400);
+      await env.MEETINGS.put(TPFX + slug(r.rec.name), JSON.stringify(r.rec)); return J({ ok: true, task: r.rec });
+    }
     if (b.action === "task_delete") {   // v757 - kept as a record marked deleted (not erased), so the log entries behind it stay intact
       const name = String(b.name || "").trim().slice(0, 80); if (!name) return J({ error: "Which task?" }, 400);
       let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(TPFX + slug(name))) || "null"); } catch (e) {}
@@ -1035,6 +1057,7 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
       const name = String(b.name || "").trim().slice(0, 80); if (!name) return J({ error: "Which task?" }, 400);
       let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(TPFX + slug(name))) || "null"); } catch (e) {}
       const r = taskRecord(prev, b, new Date().toISOString(), true); if (r.error) return J({ error: r.error }, 400);   // v674 - Stuck needs its reason
+      if (prev && prev.quick && !prev.deleted) Object.assign(r.rec, { quick: true, created: prev.created || r.rec.updated, owners: prev.owners || [], due: prev.due || "", by: prev.by || "", detail: prev.detail || "" });   // v791 - a quick task keeps what it was made with
       await env.MEETINGS.put(TPFX + slug(name), JSON.stringify(r.rec)); return J({ ok: true, task: r.rec });
     }
     // v583 UPLOAD (Kendall 14 Oct: "upload an existing PDF ... extract activities, tasks ... the morning huddle PDF ... build out a DNA for that type of

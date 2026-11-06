@@ -209,7 +209,7 @@ function TODAY_CLIENT() {
     var ch = "";
     (T.posts || []).forEach(function (p) { ch += row(I.post, esc((p.time || "--:--") + " " + p.label) + " · " + esc(p.topic || "No topic yet"), p.step === "Done" ? "All steps done" : "Next: " + esc(p.step) + " · " + esc(p.owner),
       (p.step && p.step !== "Done" ? btn("Done", 'data-pd="' + esc(p.code) + '" data-ps="' + esc(p.step) + '"', "tbp") : "") + '<a class=tb href="' + pl + "&day=" + esc(p.date) + "&open=" + encodeURIComponent(p.code) + '">Open</a>'); });
-    if (T.checks) { var bad = T.checks.fix || T.checks.check; ch += row(bad ? I.warn : I.task, esc(T.checks.line), bad ? "Set times, fill from meetings, or skip" : "", bad ? '<a class="tb tbp" href="' + pl + "&day=" + esc(T.checks.from || "") + '">Fix now</a>' + '<a class=tb href="' + pl + "&day=" + esc(T.checks.from || "") + '&fix=time">Set time</a>' + btn("Fill from meeting", "data-pop=1") : ""); }
+    if (T.checks) { var bad = T.checks.fix || T.checks.check; ch += row(bad ? I.warn : I.task, esc(T.checks.line), bad ? "Set times, fill from meetings, or skip" : "", bad ? '<a class="tb tbp" href="' + pl + "&day=" + esc(T.checks.from || "") + '">Check now</a>' + '<a class=tb href="' + pl + "&day=" + esc(T.checks.from || "") + '&fix=time">Set time</a>' + btn("Fill from meeting", "data-pop=1") : ""); }
     h += sec(4, "Content", ch, "No posts today.");
     // 5 Your week
     var hw = D.hoursweek || {}, wh = "";

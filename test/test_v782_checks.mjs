@@ -29,7 +29,7 @@ ok(has("T", /Trial Reel goes out/, "fix"), "trial reel not Made by its date -> f
 ok((r.days["2026-11-06"] || []).some((p) => /meeting change/.test(p.what)), "unanswered meeting pop-ups flagged on the day");
 const r3 = plannerChecks(items, Object.assign({}, S, { skip_days: ["2026-11-06"] }), today, {});
 ok(!(r3.days["2026-11-06"] || []).length, "skipped day never flagged");
-ok(/to fix for tomorrow/.test(r.line), "summary line", r.line);
+ok(/to check for tomorrow/.test(r.line) && !/fix/i.test(r.line), "summary line", r.line);   // v791: to check, never to fix
 // only the next step is checked for being overdue
 const late = it({ code: "L", date: "2026-11-06", done: { Planned: { done: 1 }, "Who & how": { done: 1 }, Brief: { done: 1 } } });
 const r4 = plannerChecks([late], S, today, {});

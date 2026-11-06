@@ -41,7 +41,9 @@ export const fmtDay = (d) => okDate(d) ? DOW[dowOf(d)] + " " + parseInt(d.slice(
 // ---------- pure rules (tested) ----------
 export const stepsOf = (it) => (it.kind === "story" ? STORY_STEPS : FEED_STEPS).filter((s) => s !== "Trial" || (it.kind === "feed" && it.format === "Reel"));
 export const makerOf = (it) => MAKER[it && it.how] || "";
-export function ownerOf(it, step) { const o = OWNER[step]; return o === "maker" ? (makerOf(it) || "the maker (choose how it's made)") : o; }
+// v791 (Kendall 6 Nov, promised to Najjuko) - the person responsible for one step can be changed on the item (it.owners[step]); the usual owner is the fallback
+export const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "";
+export function ownerOf(it, step) { const ov = it && it.owners && it.owners[step]; if (ov) return ov; const o = OWNER[step]; return o === "maker" ? (makerOf(it) || "the maker (choose how it's made)") : o; }
 // v758 - "Who & how" ticks itself when both are chosen
 export function doneSet(it) { const d = new Set(Object.keys(it.done || {}).filter((k) => it.done[k] && it.done[k].done)); if (it.who && it.how) d.add("Who & how"); return d; }
 export function statusOf(it) {
@@ -87,7 +89,8 @@ export function onCamera(items, month) {
 }
 export function derive(it, settings, today) {
   const st = statusOf(it), qa = qaOf(it, settings, today), tr = trialOf(it, settings);
-  return Object.assign({}, it, { maker: makerOf(it), steps: stepsOf(it), status: st, qa, qa_level: qaLevel(qa), trial: tr });
+  const so = {}; stepsOf(it).forEach((x) => { so[x] = ownerOf(it, x); });
+  return Object.assign({}, it, { maker: makerOf(it), steps: stepsOf(it), status: st, qa, qa_level: qaLevel(qa), trial: tr, step_owner: so });
 }
 
 // ---------- store ----------
@@ -148,8 +151,18 @@ export async function applyAction(env, b, who) {
     if (step === "Approved" && who !== "Najjuko" && who !== "Kendall") return [403, { error: "Only Najjuko can tick Approved." }];
     const on = b.done !== false; it.done = it.done || {};
     if (step === "Who & how" && !on && it.who && it.how) return [400, { error: "Who & how ticks itself while both are chosen: clear one to undo it." }];
-    it.done[step] = on ? { done: true, by: who, at: nowIso() } : { done: false, by: who, at: nowIso() };
+    it.done[step] = on ? { done: true, by: who, at: nowIso(), assigned: ownerOf(it, step) } : { done: false, by: who, at: nowIso() };   // v791 - who it was assigned to when it was ticked, for the report
     logAdd(it, who, (on ? "ticked " : "unticked ") + step); it.updated = nowIso(); await saveItem(env, it);
+    return [200, { ok: true, item: derive(it, S) }];
+  }
+  if (b.action === "owner") {   // v791 - change who is responsible for one step of one item; an empty name puts the usual owner back
+    const code = String(b.code || "").toUpperCase(), step = String(b.step || "");
+    const it = await getJ(env, "cp_item_" + code, null); if (!it || it.deleted) return [404, { error: "No item " + code + "." }];
+    if (!stepsOf(it).includes(step)) return [400, { error: "Step " + step + " is not on this item." }];
+    const name = String(b.name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (name && !/^[\p{L}][\p{L} .'-]*$/u.test(name)) return [400, { error: "Type the person's name." }];
+    const before = ownerOf(it, step); it.owners = Object.assign({}, it.owners || {}); if (name) it.owners[step] = name; else delete it.owners[step];
+    const after = ownerOf(it, step); logAdd(it, who, step + " responsible: " + before + " \u2192 " + after); it.updated = nowIso(); await saveItem(env, it);
     return [200, { ok: true, item: derive(it, S) }];
   }
   if (b.action === "delete") {
@@ -184,11 +197,14 @@ export function report(items, S, from, to, today) {
   const posted = its.filter((i) => i.status.step === "Done" || doneSet(i).has("Live") || doneSet(i).has("Posted")).length;
   const late = its.filter((i) => i.date < today && i.status.step !== "Done" && !doneSet(i).has("Live") && !doneSet(i).has("Posted")).length;
   const waiting = {}; its.forEach((i) => { if (i.status.step !== "Done") (waiting[i.status.owner] = waiting[i.status.owner] || []).push({ code: i.code, date: i.date, step: i.status.step, name: i.topic || "" }); });
+  // v791 - "assigned to X, done by Najjuko": every step in the range ticked by someone other than the person it was assigned to
+  const handovers = []; its.forEach((i) => { stepsOf(i).forEach((st) => { const d = i.done && i.done[st]; if (!d || !d.done || !d.by) return; const as = d.assigned || ownerOf(i, st);
+    if (!as || /^the maker/.test(as) || firstName(as).toLowerCase() === firstName(d.by).toLowerCase()) return; handovers.push({ code: i.code, date: i.date, step: st, name: i.topic || "", assigned: as, by: d.by, at: d.at }); }); });
   const allFeed = items.filter((i) => i.kind === "feed").map((i) => derive(i, S, today));
   const how = {}; allFeed.forEach((i) => { if (i.how) how[i.how] = (how[i.how] || 0) + 1; });
   return {
     from, to, totals: { feed: feed.length, stories: stories.length, trials: trials.length, posted_pct: its.length ? Math.round(posted * 100 / its.length) : 0, late, qa_fix: feed.filter((i) => i.qa_level === "fix").length, qa_check: feed.filter((i) => i.qa_level === "check").length },
-    waiting, qa: feed.filter((i) => i.qa.length).map((i) => ({ code: i.code, date: i.date, time: i.time, topic: i.topic, format: i.format, level: i.qa_level, rules: i.qa })),
+    waiting, handovers, qa: feed.filter((i) => i.qa.length).map((i) => ({ code: i.code, date: i.date, time: i.time, topic: i.topic, format: i.format, level: i.qa_level, rules: i.qa })),
     plan: { feed_planned: allFeed.length, feed_target: S.feed_target, reels: allFeed.filter((i) => i.format === "Reel").length, carousels: allFeed.filter((i) => i.format === "Carousel").length,
       added: items.filter((i) => i.added).length, chosen_pct: allFeed.length ? Math.round(allFeed.filter((i) => i.who && i.how).length * 100 / allFeed.length) : 0 },
     how, pro_used: items.filter((i) => i.how === "Professional video").length, pro_allowance: S.pro_video_allowance,
@@ -326,10 +342,10 @@ function client(CFG) {
   // v782b - planner checks: Fix (red) / Check (amber) chips, day dots, one-tap fixes
   function chk(code) { return ((D.checks || {}).items || {})[code] || []; }
   function dayChk(d) { return ((D.checks || {}).days || {})[d] || []; }
-  function chips(code) { var a = chk(code); if (!a.length) return ''; return '<div class=pcx>' + a.slice(0, 3).map(function (p) { return '<span class="pcc ' + p.lvl + '">' + (p.lvl === 'fix' ? 'Fix' : 'Check') + ' · ' + esc(p.what) + '</span>'; }).join('') + (a.length > 3 ? '<span class="pcc more">+' + (a.length - 3) + ' more</span>' : '') + '</div>'; }
+  function chips(code) { var a = chk(code); if (!a.length) return ''; return '<div class=pcx>' + a.slice(0, 3).map(function (p) { return '<span class="pcc ' + p.lvl + '">' + (p.lvl === 'fix' ? 'Check' : 'Note') + ' · ' + esc(p.what) + '</span>'; }).join('') + (a.length > 3 ? '<span class="pcc more">+' + (a.length - 3) + ' more</span>' : '') + '</div>'; }
   function dot(d) { var a = dayChk(d); if (!a.length) return ''; return '<span class="pdot ' + (a.some(function (p) { return p.lvl === 'fix'; }) ? 'fix' : 'check') + '" title="' + a.length + ' to look at"></span>'; }
   function dayBox(d) { var a = dayChk(d).filter(function (p) { return !p.code; }); if (!a.length) return '';
-    return '<div class=pcd>' + a.map(function (p) { return '<div class=pcr><span class="pcc ' + p.lvl + '">' + (p.lvl === 'fix' ? 'Fix' : 'Check') + '</span><div>' + esc(p.what) + '</div>'
+    return '<div class=pcd>' + a.map(function (p) { return '<div class=pcr><span class="pcc ' + p.lvl + '">' + (p.lvl === 'fix' ? 'Check' : 'Note') + '</span><div>' + esc(p.what) + '</div>'
       + (p.fix === 'add' ? '<button class=bo data-add="' + (p.kind || 'feed') + '" data-adday="' + esc(d) + '">Add post</button>' : '') + (p.fix === 'popups' ? '<button class=bo data-act=popups>Answer them</button>' : '')
       + '<button class=bo data-act=skipday data-skip="' + esc(d) + '">Skip this day</button></div>'; }).join('') + '</div>'; }
   function fixBox(it) { var a = chk(it.code); if (!a.length) return '';
@@ -339,7 +355,7 @@ function client(CFG) {
       if ((p.fix === 'ask' || p.fix === 'made') && window.ckBtn) b = window.ckBtn('step|' + it.code + '|' + (p.step || 'Made'), p.step || 'Made') + '<small> ask ' + esc(p.owner || '') + ' on WhatsApp (message ready, you press send)</small>';
       if (p.fix === 'camera') b = '<button class=bo data-focus=p_who>Choose someone else</button><button class=bo data-focus=p_date>Move to another day</button>';
       if (p.fix === 'step') b = '<button class=bo data-focus=p_how>Choose how it\u2019s made</button>';
-      return '<div class=pcr><span class="pcc ' + p.lvl + '">' + (p.lvl === 'fix' ? 'Fix' : 'Check') + '</span><div>' + esc(p.what) + '<div class=pfx>' + b + '</div></div></div>'; }).join('')
+      return '<div class=pcr><span class="pcc ' + p.lvl + '">' + (p.lvl === 'fix' ? 'Check' : 'Note') + '</span><div>' + esc(p.what) + '<div class=pfx>' + b + '</div></div></div>'; }).join('')
       + '<p class=mt>Fixes go through Save, then the workbook question.</p></div>'; }
   function card(it, trial) {
     if (trial) return '<div class=c data-open="' + esc(it.code) + '"><div class=h><span class=t>' + esc(it.trial.time || "") + '</span><span class=k>Trial Reel · goes live ' + esc(fd(it.date)) + '</span></div><div class=n>' + esc(nameOf(it)) + '</div><div class=nx>' + (it.done && it.done.Trial && it.done.Trial.done ? '<b>Trial posted</b>' : 'Next: <b>Trial</b> · Rouba') + '</div></div>';
@@ -390,9 +406,10 @@ function client(CFG) {
     var oc = r.on_camera || {}, ppl = Object.keys(oc).sort();
     return '<div class=seg2>' + ["day", "week", "month"].map(function (x) { return '<button class="' + (RF === x ? 'on' : '') + '" data-rf=' + x + '>' + x.charAt(0).toUpperCase() + x.slice(1) + '</button>'; }).join("") + '</div>'
       + '<div class=db><b>' + esc(fd(r.from)) + (r.to !== r.from ? ' – ' + esc(fd(r.to)) : '') + '</b><button class=bo data-act=print>PDF</button></div>'
-      + '<div class=tiles>' + tile(t.feed || 0, "Feed posts") + tile(t.stories || 0, "Stories") + tile(t.trials || 0, "Trial Reels due") + tile((t.posted_pct || 0) + "%", "Posted", t.posted_pct || 0) + tile(t.late || 0, "Late") + tile((t.qa_fix || 0) + " / " + (t.qa_check || 0), "QA/QC fix / check") + '</div>'
-      + '<div class=sec>QA/QC · AGAINST THE AUDIT</div><div class=qa>' + ((r.qa || []).filter(function (q) { return q.level !== "clear"; }).map(function (q) { return '<div class=qq data-open="' + esc(q.code) + '"><span class="pl ' + q.level + '">' + q.level.toUpperCase() + '</span><div><b>' + esc(fd(q.date)) + ' · ' + esc(q.topic || q.code) + '</b><br>' + q.rules.filter(function (x) { return x[0] !== "note"; }).map(function (x) { return esc(x[1]) + ' <small>(' + esc(x[2]) + ')</small>'; }).join("<br>") + '</div></div>'; }).join("") || '<div class=qq><span class="pl clear">CLEAR</span><div>No fixes or checks.</div></div>') + '</div>'
+      + '<div class=tiles>' + tile(t.feed || 0, "Feed posts") + tile(t.stories || 0, "Stories") + tile(t.trials || 0, "Trial Reels due") + tile((t.posted_pct || 0) + "%", "Posted", t.posted_pct || 0) + tile(t.late || 0, "Late") + tile((t.qa_fix || 0) + " / " + (t.qa_check || 0), "QA/QC to check / notes") + '</div>'
+      + '<div class=sec>QA/QC · AGAINST THE AUDIT</div><div class=qa>' + ((r.qa || []).filter(function (q) { return q.level !== "clear"; }).map(function (q) { return '<div class=qq data-open="' + esc(q.code) + '"><span class="pl ' + q.level + '">' + (q.level === 'fix' ? 'CHECK' : q.level === 'check' ? 'NOTE' : q.level.toUpperCase()) + '</span><div><b>' + esc(fd(q.date)) + ' · ' + esc(q.topic || q.code) + '</b><br>' + q.rules.filter(function (x) { return x[0] !== "note"; }).map(function (x) { return esc(x[1]) + ' <small>(' + esc(x[2]) + ')</small>'; }).join("<br>") + '</div></div>'; }).join("") || '<div class=qq><span class="pl clear">CLEAR</span><div>Nothing to check.</div></div>') + '</div>'
       + '<div class=sec>WAITING ON</div><div class=ppl>' + Object.keys(r.waiting || {}).map(function (o) { return '<div class=pe><i>' + esc(o.charAt(0)) + '</i>' + esc(o) + '<em>' + r.waiting[o].length + '</em></div>'; }).join("") + '</div>'
+      + ((r.handovers || []).length ? '<div class=sec>DONE BY SOMEONE ELSE · ' + r.handovers.length + '</div><div class=qa>' + r.handovers.map(function (x) { return '<div class=qq data-open="' + esc(x.code) + '"><span class="pl note">' + esc(x.step.toUpperCase()) + '</span><div><b>' + esc(fd(x.date)) + ' · ' + esc(x.name || x.code) + '</b><br>Assigned to ' + esc(x.assigned) + ', done by ' + esc(x.by) + '</div></div>'; }).join('') + '</div>' : '')
       + '<div class=sec>PLANNING TOOLS</div><div class=tiles>' + tile((p.feed_planned || 0) + ' <small>/ ' + (p.feed_target || 0) + '</small>', "Feed plan to " + esc(fd(D.settings.plan_end)) + ' · ' + Math.max(0, (p.feed_target || 0) - (p.feed_planned || 0)) + ' to go', p.feed_target ? (p.feed_planned || 0) * 100 / p.feed_target : 0)
       + tile((r.pro_used || 0) + ' <small>/ ' + (r.pro_allowance || 0) + '</small>', "Professional videos used", r.pro_allowance ? (r.pro_used || 0) * 100 / r.pro_allowance : 0) + tile((p.reels || 0) + ' · ' + (p.carousels || 0), "Reels · carousels") + tile((p.chosen_pct || 0) + '%', "Who & how chosen · " + (p.added || 0) + " added", p.chosen_pct || 0) + '</div>'
       + '<div class=sec>HOW FEED POSTS ARE MADE</div><div class=ppl>' + Object.keys(r.how || {}).map(function (h) { return '<div class=pe>' + esc(h) + '<em>' + r.how[h] + ' · ' + esc(D.maker[h] || "") + '</em></div>'; }).join("") + '</div>'
@@ -431,10 +448,12 @@ function client(CFG) {
     if (!isNew) {
       h += fixBox(it);
       var __fx = chk(it.code).map(function (p) { return String(p.what || '').toLowerCase(); }), __qa = (it.qa || []).filter(function (x) { var w = String(x[1] || '').toLowerCase(); return !__fx.some(function (f) { return f === w || (w === 'no time set' && f.indexOf('no time') === 0); }); });
-      h += (__qa.length ? '<div class=qa>' + __qa.map(function (x) { return '<div class=qq><span class="pl ' + x[0] + '">' + x[0].toUpperCase() + '</span><div>' + esc(x[1]) + '<br><small>' + esc(x[2]) + '</small></div></div>'; }).join("") + '</div>' : '')
+      h += (__qa.length ? '<div class=qa>' + __qa.map(function (x) { return '<div class=qq><span class="pl ' + x[0] + '">' + (x[0] === 'fix' ? 'CHECK' : x[0] === 'check' ? 'NOTE' : x[0].toUpperCase()) + '</span><div>' + esc(x[1]) + '<br><small>' + esc(x[2]) + '</small></div></div>'; }).join("") + '</div>' : '')
         + (feed ? '<div class=sec>CAPTION CHECKLIST</div><ul class=ck><li>Under 100 characters</li><li>No questions</li><li>1–2 hashtags naming the developer</li><li>Persian or Arabic caption where it fits</li></ul>' : '')
         + '<div class=sec>STEPS</div>' + it.steps.map(function (s) { var dn = it.done && it.done[s] && it.done[s].done, auto = s === "Who & how" && it.who && it.how;
-          return '<div class=srow><span class="' + (dn || auto ? 'dn' : (it.status.step === s ? 'cu' : '')) + '">' + esc(s) + '</span><small>' + esc(s === "Made" ? (it.maker || "the maker") : D.owner[s]) + (dn ? ' · ' + esc(it.done[s].by) + ' ' + esc(String(it.done[s].at).slice(5, 16).replace("T", " ")) : auto ? ' · ticks itself' : '') + '</small>' + (window.ckChip ? window.ckChip((it.checkins || []).filter(function (c) { return c.step === s; })[0]) : '') + '<button class=bo data-tick="' + esc(it.code) + '" data-step="' + esc(s) + '" data-on="' + (dn || auto ? 0 : 1) + '">' + (dn || auto ? 'Undo' : 'Done') + '</button>' + (window.ckBtn && !dn && !auto ? window.ckBtn("step|" + it.code + "|" + s, s) : '') + '</div>'; }).join("");
+          return '<div class=srow><span class="' + (dn || auto ? 'dn' : (it.status.step === s ? 'cu' : '')) + '">' + esc(s) + '</span><small>' + (function () { var ow = (it.step_owner || {})[s] || (s === "Made" ? (it.maker || "the maker") : D.owner[s]), ch = !!(it.owners && it.owners[s]), by = dn ? it.done[s].by : '', as = dn ? (it.done[s].assigned || ow) : '', other = dn && as && !/^the maker/.test(as) && String(as).split(' ')[0].toLowerCase() !== String(by).split(' ')[0].toLowerCase();
+            return '<button type=button class="sow' + (ch ? ' ch' : '') + '" data-own="' + esc(it.code) + '" data-step="' + esc(s) + '" data-cur="' + esc(ch ? ow : '') + '" aria-label="Change who is responsible for ' + esc(s) + '">' + esc(String(ow).replace(/ \(choose.*$/, '')) + '</button>'
+              + (dn ? ' · ' + (other ? 'assigned to ' + esc(as) + ', done by ' + esc(by) : esc(by)) + ' ' + esc(String(it.done[s].at).slice(5, 16).replace("T", " ")) : auto ? ' · ticks itself' : ''); })() + '</small>' + (window.ckChip ? window.ckChip((it.checkins || []).filter(function (c) { return c.step === s; })[0]) : '') + '<button class=bo data-tick="' + esc(it.code) + '" data-step="' + esc(s) + '" data-on="' + (dn || auto ? 0 : 1) + '">' + (dn || auto ? 'Undo' : 'Done') + '</button>' + (window.ckBtn && !dn && !auto ? window.ckBtn("step|" + it.code + "|" + s, s) : '') + '</div>'; }).join("");
     }
     h += '<div class=row2 id=p_actions><button class=bt data-act=save>' + (isNew ? 'Save' : 'Save') + '</button>' + (isNew ? '' : (D.connected ? '<button class=bo data-act=push>Write to sheet</button>' : '') + '<button class="bo red" data-act=del>Delete</button>' + '') + '<div id=p_status style="grid-column:1/-1"></div></div>'
       + (!isNew && it.log && it.log.length ? '<div class=log><b>Activity</b>' + it.log.slice(0, 30).map(function (l) { return '<div>' + esc(String(l.at).slice(5, 16).replace("T", " ")) + ' · ' + esc(l.who) + ' · ' + esc(l.what) + '</div>'; }).join("") + '</div>' : '');
@@ -471,6 +490,17 @@ function client(CFG) {
           .catch(function () { done(); toast("Not reached. Try Write to sheet again.", true); }); };
     }).catch(function () { toast("Could not reach the workbook. Try Write to sheet.", true); });
   }
+  // v791 - change who is responsible for a step: tap the name, pick a person (or type one), saved at once
+  function ownPick(code, step, cur) {
+    var o = document.createElement("div"); o.className = "sowp"; o.innerHTML = '<div class=sowc role=dialog aria-modal=true aria-label="Who is responsible"><b>Who is responsible for ' + esc(step) + '?</b>'
+      + '<div class=sowg>' + (D.team || []).map(function (n) { return '<button type=button data-n="' + esc(n) + '"' + (n === cur ? ' class=on' : '') + '>' + esc(n) + '</button>'; }).join("") + '</div>'
+      + '<input id=sow_in maxlength=40 placeholder="Someone else: type the name" autocomplete=off><div class=sowa><button type=button data-n="" class=bo>Back to the usual person</button><button type=button id=sow_ok class=bp>Save</button><button type=button id=sow_x class=bo>Cancel</button></div></div>';
+    function shut() { if (o.parentNode) o.parentNode.removeChild(o); }
+    function save(n) { api({ action: "owner", code: code, step: step, name: n }).then(function (j) { shut(); if (!j.ok) { toast(j.error || "Not saved", true); return; } toast("\u2713 " + step + ": " + ((j.item.step_owner || {})[step] || "")); load(true).then(function () { var it = D.items.filter(function (x) { return x.code === code; })[0]; if (it && $("sheet") && $("sheet").dataset.code === code) panel(it); }); }).catch(function () { shut(); toast("No connection: not saved", true); }); }
+    o.onclick = function (ev) { if (ev.target === o || ev.target.id === "sow_x") { shut(); return; } if (ev.target.id === "sow_ok") { var v = (o.querySelector("#sow_in").value || "").trim(); if (!v) { o.querySelector("#sow_in").focus(); return; } save(v); return; } var b = ev.target.closest("[data-n]"); if (b) save(b.dataset.n); };
+    document.body.appendChild(o);
+  }
+  document.addEventListener("click", function (e) { var w = e.target.closest && e.target.closest("[data-own]"); if (!w) return; e.stopPropagation(); e.preventDefault(); ownPick(w.dataset.own, w.dataset.step, w.dataset.cur || ""); }, true);
   document.addEventListener("click", function (e) {
     var t = e.target.closest("[data-tick],[data-open],[data-add],[data-act],[data-day],[data-month],[data-goday],[data-v],[data-kind],[data-rf]"); if (!t) return;
     if (e.target.closest && e.target.closest("[data-settime]")) { var st = e.target.closest("[data-settime]"); var pt = $("p_time"); if (pt) { pt.value = st.dataset.settime; pt.focus(); } return; }
@@ -529,6 +559,10 @@ const CSS = ':root{--cr:#FAF7F1;--cd:#FFFDF9;--ln:#E7E1D6;--ink:#1C2321;--mu:#5F
   + '.cp .ppl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}.cp .pe{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--ln);border-radius:10px;padding:6px 8px;font-size:.76rem;min-width:0}.cp .pe i{flex:0 0 24px;width:24px;height:24px;border-radius:50%;background:var(--te);color:#fff;font:600 .62rem "IBM Plex Sans",sans-serif;font-style:normal;display:flex;align-items:center;justify-content:center}.cp .pe em{margin-left:auto;font-style:normal;font-size:.66rem;color:var(--mu);text-align:right}.cp .pe.lim{opacity:.6}.cp .pe.lim em{color:#9A3F2A}'
   + '.cp .seg2{display:flex;gap:6px;margin:4px 0}.cp .seg2 button{border:1px solid var(--ln);background:#fff;border-radius:999px;padding:6px 12px;font:600 .76rem "IBM Plex Sans",sans-serif;color:var(--mu);cursor:pointer}.cp .seg2 button.on{background:var(--go);color:#fff;border-color:var(--go)}'
   + '.cp .set{display:flex;flex-direction:column;gap:8px;background:#fff;border:1px solid var(--ln);border-radius:12px;padding:10px;font-size:.8rem}.cp .set label{display:flex;flex-direction:column;gap:4px;color:var(--mu)}.cp .set input{font:inherit;font-size:16px;border:1px solid var(--ln);border-radius:8px;padding:6px}'
+  + '.sow{border:1px dashed #C5A56A;background:#FFFDF9;color:#1C2826;border-radius:999px;padding:2px 9px;font:600 .74rem IBM Plex Sans,sans-serif;cursor:pointer;min-height:26px}.sow.ch{border-style:solid;background:#F5ECD9}'
+  + '.sowp{position:fixed;inset:0;z-index:2147482000;background:rgba(28,40,38,.28);display:flex;align-items:flex-end;justify-content:center;padding:12px}.sowc{background:#FFFDF9;border:1px solid #C5A56A;border-radius:18px;padding:16px;width:100%;max-width:420px;font-family:IBM Plex Sans,sans-serif;color:#1C2826}.sowc b{font:600 1.05rem Fraunces,serif;color:#0A4F4A}'
+  + '.sowg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}.sowg button{border:1px solid #D8D1C4;background:#FAF7F1;border-radius:12px;padding:11px 8px;font:600 .92rem IBM Plex Sans,sans-serif;color:#1C2826;min-height:44px}.sowg button.on{border-color:#0A4F4A;background:#E4EFEC}'
+  + '.sowc input{width:100%;box-sizing:border-box;border:1px solid #D8D1C4;border-radius:12px;padding:11px;font:500 1rem IBM Plex Sans,sans-serif;background:#fff}.sowa{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.sowa button{min-height:42px}'
   + '.pcx{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0 2px}.pcc{font:600 .7rem IBM Plex Sans,sans-serif;border-radius:999px;padding:2px 8px;line-height:1.5}.pcc.fix{background:#F6DEDA;color:#8A3E3E}.pcc.check{background:#F5E9CF;color:#7A5A1E}.pcc.more{background:#EFE9DE;color:#5F6B66}.pdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:4px;vertical-align:middle}.pdot.fix{background:#B4533C}.pdot.check{background:#C5A56A}.pcd{border:1px solid #EFE2C9;background:#FFFDF6;border-radius:14px;padding:8px 10px;margin:8px 0}.pcr{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid #F2EBDD;flex-wrap:wrap}.pcr:first-child{border-top:0}.pcr>div{flex:1 1 60%;font-size:.86rem}.pfx{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.pts{display:flex;flex-wrap:wrap;gap:6px}.psd{display:flex;flex-direction:column;gap:4px;margin-bottom:6px}.psq{text-align:left;border:1px dashed #C5A56A;background:#fff;border-radius:10px;padding:6px 8px;font-size:.8rem;color:#1C2826}.pdw{display:flex;flex-wrap:wrap;gap:6px}.pdc{display:inline-flex;gap:4px;align-items:center;font-size:.82rem}.pdc input{width:auto!important}#scrim{position:fixed;inset:0;background:rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .2s;z-index:60}#scrim.open{opacity:1;pointer-events:auto}'
   + '#sheet{position:fixed;left:0;right:0;bottom:0;max-height:85vh;max-height:85dvh;max-width:560px;margin:0 auto;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.2);transform:translateY(105%);visibility:hidden;transition:transform .22s,visibility 0s .22s;overflow-y:auto;padding:12px 16px 28px;z-index:61}#sheet.open{transform:translateY(0);visibility:visible;transition:transform .22s}'
   + '#p_actions{position:sticky;bottom:0;background:#fff;padding:10px 0 calc(14px + env(safe-area-inset-bottom));margin-top:8px;box-shadow:0 -8px 12px -8px rgba(0,0,0,.12);z-index:2}#p_actions .bt{min-height:48px;font-size:1rem}#p_status{font:500 .82rem IBM Plex Sans,sans-serif;color:#5F6B66;min-height:1.1em;margin-top:6px;text-align:center}#sheet .grab{width:40px;height:4px;border-radius:9px;background:#DDD6C8;margin:0 auto 10px}#sheet .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--te);border-radius:999px;overflow:hidden;margin-bottom:10px}#sheet .seg button{border:0;background:#fff;padding:8px;font:600 .8rem "IBM Plex Sans",sans-serif;color:var(--te);cursor:pointer}#sheet .seg button.on{background:var(--te);color:#fff}'

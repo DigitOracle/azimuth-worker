@@ -104,12 +104,12 @@ export function plannerChecks(items, settings, today, opt) {
   });
 
   const tomorrow = from, fixT = list.filter((p) => p.lvl === "fix" && p.date === tomorrow).length, fixAll = list.filter((p) => p.lvl === "fix").length, chk = list.filter((p) => p.lvl === "check").length;
-  const line = fixT || fixAll || chk ? [fixT ? fixT + " thing" + (fixT === 1 ? "" : "s") + " to fix for tomorrow" : (fixAll ? fixAll + " to fix this week" : ""), chk ? chk + " to check this week" : ""].filter(Boolean).join(" · ") : "Nothing to fix for tomorrow or this week";
+  const line = fixT || fixAll || chk ? [fixT ? fixT + " thing" + (fixT === 1 ? "" : "s") + " to check for tomorrow" : (fixAll ? fixAll + " to check this week" : ""), chk ? chk + " note" + (chk === 1 ? "" : "s") + " for this week" : ""].filter(Boolean).join(" · ") : "Nothing to check for tomorrow or this week";   // v791 (Kendall 6 Nov): "to check", never "to fix"
   return { from, to, items: byItem, days: byDay, list, fix_tomorrow: fixT, fix: fixAll, check: chk, line, posting_days: pdays, best: suggestTimes(S) };
 }
 
 const OWNER = { "Planned": "Najjuko", "Who & how": "Najjuko", "Brief": "Najjuko", "Caption": "Sousan", "Approved": "Najjuko", "Trial": "Rouba", "Scheduled": "Rouba", "Live": "Rouba", "Results": "Sousan", "Posted": "Sousan" };
 const MAKER = { "Design (carousel / graphic)": "Monaza", "AI video": "Vishant", "In-house video (office)": "Liam", "Professional video": "Kareem", "Edit of existing footage": "Vishant", "Repost / photo / text card": "Sousan" };
-function ownerName(it, st) { return st === "Made" ? (MAKER[it.how] || "the maker") : (OWNER[st] || "Najjuko"); }
+function ownerName(it, st) { if (it && it.owners && it.owners[st]) return it.owners[st]; return st === "Made" ? (MAKER[it.how] || "the maker") : (OWNER[st] || "Najjuko"); }
 // suggested time slots inside the best window, on the hour
 export function suggestTimes(S) { const a = tm(S.best_from), b = tm(S.best_to), out = []; if (a == null || b == null) return out; for (let t = a; t < b && out.length < 6; t += 60) out.push(String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0")); return out; }
