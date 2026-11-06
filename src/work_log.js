@@ -966,6 +966,11 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
     }
     if (b.action === "parties") return J({ parties: await knownParties(env) });
     // v764 MEETING SYNC - propose (nothing written), apply what she ticked, check / write one sheet item
+    if (b.action === "ck_desk_test") {   // v789 - the owner's test of the desk check-in: one template to one number he types; touches nothing of hers
+      if (prof.person !== "kendall") return J({ ok: false, error: "This test is on Kendall's Work." }, 403);
+      if (!deps.ckDesk) return J({ ok: false, error: "The desk is not connected here." }, 503);
+      const [st, o] = await ckDeskTest(env, b, deps.ckDesk(env)); return J(o, st);
+    }
     if (/^(sync_|ck_)/.test(String(b.action || "")) && prof.person !== "najjuko") return J({ ok: false, error: "This is on Najjuko's Work." }, 403);
     if (b.action === "ck_roster") { const all = await listEntries(env, prof.phases[0].from, prof.term_end), tks = applyOverrides(tasksOf(all), await taskOverrides(env)), tn = [...new Set(tks.flatMap((t) => [...(t.owners || []), ...(t.touched || [])]))];
       if (b.kind) b.here = await namesOn(env, b, tks); const [st, o] = await rosterAction(env, b, PEOPLE, tn); return J(o, st); }   // v775c - the people named in her tasks and planner items; b.kind = this task / step   // v775 - the team roster from the org chart; she adds only the numbers
@@ -1249,7 +1254,7 @@ const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.open
 import { planRoute } from "./work_plan.js";
 import { syncPropose, syncApply, syncSheet, SYNC_JS, autoScan, autoAnswer, autoBadges, matchToChanges } from "./meeting_sync.js";
 import { readItems as readPlannerItems, readSettings as readPlannerSettings, derive as derivePlanner, plannerChecksNow } from "./content_planner.js";   // v781 / v782 Today card
-import { ckMake, ckDesk, ckRoute, readTeam, saveTeam, rosterAction, namesOn, CK_JS } from "./checkin.js";   // v764 - WhatsApp check-in from her own phone   // v764 - meeting Sync: meeting -> planner, tasks, sheet
+import { ckMake, ckDesk, ckDeskTest, ckRoute, readTeam, saveTeam, rosterAction, namesOn, CK_JS } from "./checkin.js";   // v764 - WhatsApp check-in from her own phone   // v764 - meeting Sync: meeting -> planner, tasks, sheet
 import { jobsRoute } from "./work_jobs.js";
 import { anneRoute, readAnne } from "./work_anne.js";
 import { dossierRoute } from "./work_dossier.js";
