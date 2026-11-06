@@ -42,7 +42,7 @@ window.fetch=function(u,o){
   if(m!=="POST"||!/\/momo\//.test(url)||/\/momo\/work\/rec\//.test(url)||/\/momo\/work\/voicetest/.test(url)) return of.apply(this,arguments);
   var body=null; try{ body=o&&typeof o.body==="string"&&o.body.charAt(0)==="{"?JSON.parse(o.body):null }catch(e){}
   var quiet=o&&o.headers&&(o.headers["X-Momo-Confirm"]==="page"||(o.headers.get&&o.headers.get("X-Momo-Confirm")==="page"));
-  var isRead=body&&(READ.test(String(body.action||""))||body.apply===false||(body.action==="push"&&!body.apply)||(body.action==="import"&&!body.apply));
+  var isRead=body&&(READ.test(String(body.action||body.op||""))||body.apply===false||(body.action==="push"&&!body.apply)||(body.action==="import"&&!body.apply));
   return of.apply(this,arguments).then(function(r){
     if(isRead) return r;
     r.clone().text().then(function(t){var j=null;try{j=JSON.parse(t)}catch(e){}
