@@ -186,6 +186,11 @@ export async function bppCleanup(env, confirm) {
 }
 
 // ------------------------------------------------------------------------------------------------ public pages
+// v794 (Kendall 6 Nov 2026, on his phone: "that first page is too wide on my mobile") - page 1 of a passport is an A4 sheet (210 mm) and only pages 2+
+// (.bd-page) had a phone layout, so page 1 ran off the right edge. This phone-only style is added when the page is SERVED, so every passport
+// already made is fixed too; the stored page and the PDF (which prints the stored page) are untouched.
+export const BPP_MOBILE_CSS = '<style id="bpp-mob">@media screen and (max-width:800px){html,body{overflow-x:hidden!important;max-width:100%!important}.page:not(.bd-page){width:100%!important;max-width:100%!important;height:auto!important;min-height:0!important;overflow:visible!important;box-sizing:border-box!important;padding:18px 14px 22px!important;margin:0 0 18px!important;transform:none!important}.page:not(.bd-page) header.bpp-hero{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:14px!important;position:static!important;width:auto!important;height:auto!important;max-height:none!important;padding:0!important;margin:0!important;border-bottom:0!important}.page:not(.bd-page) .bpp-title-block{position:static!important;width:auto!important;max-width:100%!important;height:auto!important}.page:not(.bd-page) .bpp-photo{position:static!important;box-sizing:border-box!important;width:100%!important;height:62vw!important;overflow:hidden!important}.page:not(.bd-page) .bpp-main-title{font-size:28px!important;line-height:1.1!important}.page:not(.bd-page) .bpp-building-name{font-size:20px!important;white-space:normal!important;overflow:visible!important;line-height:1.15!important}.page:not(.bd-page) .bpp-purpose{max-width:none!important;font-size:13px!important}.page:not(.bd-page) .bpp-dash,.page:not(.bd-page) .bpp-dash-in{height:auto!important;overflow:visible!important}.page:not(.bd-page) .bpp-dash{margin-top:16px!important}.bpp-dash-in>div[style*="grid-template-columns"]{grid-template-columns:1fr 1fr!important;grid-auto-rows:auto!important}.bpp-dash-in>div[style*="1.05fr"]{grid-template-columns:1fr!important}.bpp-dash-in>div[style*="grid-template-columns"]>div{overflow:visible!important}.bpp-dash-in [style*="white-space:nowrap"]{white-space:normal!important}.bpp-dash-in [style*="font:600 20pt"]{font-size:20px!important}.page:not(.bd-page) .footer,.page:not(.bd-page) .bpp-snap{position:static!important;width:auto!important;height:auto!important;margin-top:14px!important;white-space:normal!important;overflow:visible!important;left:auto!important;right:auto!important;bottom:auto!important;font-size:10px!important;line-height:1.3!important}.page:not(.bd-page) .footer{display:flex!important;flex-direction:column!important;align-items:flex-start!important;gap:4px!important}}</style>';
+export function withMobile(html) { const h = String(html || ""); if (h.indexOf('id="bpp-mob"') >= 0 || h.indexOf("bpp-dash") < 0) return h; const i = h.search(/<\/head>/i); return i < 0 ? h : h.slice(0, i) + BPP_MOBILE_CSS + h.slice(i); }
 export async function bppPublic(request, env, url) {
   const p = url.pathname;
   let m = p.match(/^\/bp\/f\/([a-z0-9-]{1,80})\.pdf$/);
@@ -207,7 +212,7 @@ export async function bppPublic(request, env, url) {
   m = p.match(/^\/bp\/([a-z0-9-]{1,80})\/?$/);
   if (m) {
     const h = await env.MEETINGS.get("bpp_file_" + m[1] + "_html");
-    return h ? new Response(h, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=600" } }) : new Response("not found", { status: 404 });
+    return h ? new Response(withMobile(h), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=600" } }) : new Response("not found", { status: 404 });
   }
   return null;
 }
