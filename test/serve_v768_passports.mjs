@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 const B = await import("../src/building_passports.js");
 const PP = await import("../src/plot_passport.js");
 const { WORK_CSS } = await import("../src/work_log.js");
+const { MOMO_CONFIRM_JS } = await import("../src/momo_confirm.js");
 const KVD = process.argv[2] || "./v768_kv"; fs.mkdirSync(KVD, { recursive: true });
 const NS = "2cdf36a27f834b5f9c726294d36770fb", PUT = {}, FRESH = new Set(["bpp_index", "bpp_requests"]);
 function kvGet(k, bin) {
@@ -26,7 +27,7 @@ const env = { MEETINGS: {
 const src = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 const grab = (name) => { const m = new RegExp("^const " + name + " = [\\s\\S]*?;\\r?$", "m").exec(src); return m ? m[0] : ""; };
 let shell = null;
-try { shell = new Function("WORK_CSS", "const askFloatHtml = () => \"\";\n" + grab("NAJ_ICONS") + "\n" + grab("najIcon") + "\n" + (/^const OWNER_LINK_RE = .*$/m.exec(src) || [""])[0] + "\n" + grab("NAJ_FONTS") + "\n" + grab("NAJ_NAV_CSS") + "\n" + (/^const najNav = [\s\S]*?^};\r?$/m.exec(src) || [""])[0] + "\n" + (/^function momoPage\(key, rk, body\) \{[\s\S]*?^\}\r?$/m.exec(src) || [""])[0] + "\nreturn momoPage;")(WORK_CSS); } catch (e) { console.log("shell fallback:", e.message); }
+try { shell = new Function("WORK_CSS", "MOMO_CONFIRM_JS", "QUICK_TASK_JS", "const askFloatHtml = () => \"\";\n" + grab("NAJ_ICONS") + "\n" + grab("najIcon") + "\n" + (/^const OWNER_LINK_RE = .*$/m.exec(src) || [""])[0] + "\n" + grab("NAJ_FONTS") + "\n" + grab("NAJ_NAV_CSS") + "\n" + (/^const najNav = [\s\S]*?^};\r?$/m.exec(src) || [""])[0] + "\n" + (/^function momoPage\(key, rk, body\) \{[\s\S]*?^\}\r?$/m.exec(src) || [""])[0] + "\nreturn momoPage;")(WORK_CSS, MOMO_CONFIRM_JS, ""); } catch (e) { console.log("shell fallback:", e.message); }
 const page = (k, rk, b) => (shell ? shell(k, rk, b) : '<!doctype html><html><head><meta name=viewport content="width=device-width,initial-scale=1"></head><body style="background:#FAF7F1;font-family:sans-serif;padding:22px 14px"><div style="max-width:560px;margin:0 auto">' + b + "</div></body></html>");
 const deps = { person: () => "kendall", isNaj: () => true, page, clientOk: () => true, clientResp: (e, u, h, o) => new Response(h, o), residentsKeyOf: () => "", najNav: () => "", NAJ_NAV_CSS: "", NAJ_FONTS: "" };
 http.createServer(async (req, res) => {

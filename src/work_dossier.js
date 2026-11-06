@@ -77,7 +77,8 @@ export function mdToHtml(md) {
   return out.join("");
 }
 
-export async function readList(env) { try { const v = await env.MEETINGS.get(LIST); const a = v ? JSON.parse(v) : []; return Array.isArray(a) ? a.filter((x) => x && slugOk(x.slug)) : []; } catch (e) { return []; } }
+const KLIST = "dossier_list_kendall";   // v795 (Kendall 6 Nov 2026: "a card in Momo for myself and Najjuko") - the slugs listed here open with his key too (same record, same notes); every other card stays hers
+export async function readList(env, who) { try { const v = await env.MEETINGS.get(who === "kendall" ? KLIST : LIST); const a = v ? JSON.parse(v) : []; return Array.isArray(a) ? a.filter((x) => x && slugOk(x.slug)) : []; } catch (e) { return []; } }
 export async function readDossier(env, slug) { const s = slugOk(slug); if (!s) return null; try { const v = await env.MEETINGS.get(REC + s); return v ? cleanDossier(JSON.parse(v)) : null; } catch (e) { return null; } }
 async function readNotes(env, slug) { try { const v = await env.MEETINGS.get(NOTES + slug); const a = v ? JSON.parse(v) : []; return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 
@@ -125,8 +126,8 @@ export async function dossierRoute(request, env, url, deps) {
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   const NF = () => new Response("not found", { status: 404 });
   const person = typeof deps.person === "function" ? deps.person(env, url) : "";
-  if (person !== "najjuko") return NF();   // Najjuko's key only, as the client card
-  const slug = slugOk(url.searchParams.get("b")); if (!slug) return NF();
+  if (person !== "najjuko" && person !== "kendall") return NF();   // Najjuko's key; Kendall's only for the cards shared with him (v795)
+  const slug = slugOk(url.searchParams.get("b")); if (!slug) return NF(); if (person === "kendall" && !(await readList(env, "kendall")).some((x) => x.slug === slug)) return NF();
   const rec = await readDossier(env, slug); if (!rec) return NF();
   if (p === "/momo/work/brief" && request.method === "GET") return new Response(deps.page(key, rk, dossierPage(rec) + "<script>" + DOSSIER_JS + "</script>"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   if (p === "/momo/work/brief/rec" && request.method === "GET") return J({ rec, notes: await readNotes(env, slug) });
