@@ -215,7 +215,9 @@ function TODAY_CLIENT() {
     var hw = D.hoursweek || {}, wh = "";
     if (hw.total != null) { var pct = Math.min(100, Math.round((+hw.total || 0) / (+hw.min || 15) * 100));
       wh += '<div class=twk><b>' + esc(hw.total) + " / " + esc(hw.min || 15) + " h</b><span>this week</span><i style=\"width:" + pct + '%"></i></div>';
-      var roles = hw.roles || hw.by_role || hw.split || null; if (roles && typeof roles === "object") wh += '<div class=tsub>' + Object.keys(roles).map(function (k) { var v = roles[k]; return esc(k) + " " + esc(typeof v === "object" ? (v.hours || v.h || "") : v) + " h"; }).join(" · ") + "</div>"; }
+      var KD = Array.isArray(hw.kinds) ? hw.kinds.filter(function (k) { return k && +k.hours; }) : [];   // v787 - the same split as the Work page hours line (hoursPicture kinds)
+      if (KD.length) wh += '<div class=tsub>' + KD.map(function (k) { return esc(k.hours) + " h " + esc(k.name === "Strategic Lead" ? "as Strategic Lead" : k.name === "Broker" ? "as a broker" : "supporting others"); }).join(" \u00b7 ") + "</div>";
+      var roles = KD.length ? null : (hw.roles || hw.by_role || hw.split || null); if (roles && typeof roles === "object") wh += '<div class=tsub>' + Object.keys(roles).map(function (k) { var v = roles[k]; return esc(k) + " " + esc(typeof v === "object" ? (v.hours || v.h || "") : v) + " h"; }).join(" · ") + "</div>"; }
     var TL = D.tally || []; if (TL.length) { wh += '<div class=tg2>' + TL.map(function (k) { return '<div class="tfa' + (k.week ? "" : " t0") + '"><b>' + (k.week || 0) + "</b><span>" + esc(k.name) + "</span></div>"; }).join("") + "</div>";
       var empty = TL.filter(function (k) { return !k.week; }); if (empty.length) wh += '<div class=tnudge>' + I.warn + "<span>Nothing logged this week for <b>" + esc(empty.map(function (k) { return k.name; }).join(", ")) + "</b>. Your review counts each area.</span></div>"; }
     h += sec(5, "Your week", wh, "Log your work and your week fills in here.");
