@@ -17,9 +17,12 @@ ok(r.angles.length === 0 && /^no new launches/.test(r.note), "quiet day adds not
 ok(/no img_launches/.test(launchAngles(null, d, [], today).note), "missing snapshot noted");
 
 // never old, never low, never registered, never padded
-const rows = [row({ key: "ap_a" }), row({ key: "ap_old", first_seen: "2026-10-20" }), row({ key: "ap_low", confidence: "low" }), row({ key: "ap_reg", status: "registered" })];
+const rows = [row({ key: "ap_a" }), row({ key: "ap_old", first_seen: "2026-10-20" }), row({ key: "ap_low", confidence: "low" }), row({ key: "ap_bare", area: "", from_aed: null })];
 r = launchAngles({ rows }, d, [], today);
-ok(r.angles.length === 1 && r.angles[0].fact === "launch:ap_a", "only the fresh medium+ unregistered launch");
+ok(r.angles.length === 1 && r.angles[0].fact === "launch:ap_a", "only the fresh medium+ launch with an area or a price");
+const rg = launchAngles({ rows: [row({ key: "ap_r", registered: true, status: "registered", confidence: "high", from_aed: null })] }, d, [], today).angles[0];
+ok(rg && /new on the Dubai Land Department register/.test(rg.hook) && /Dubai Land Department project register/.test(rg.source), "a registered launch is worded as on the register");
+ok(/launches data check: zero rows/.test(launchAngles({ rows: [], qa: ["zero rows from every source today"] }, d, [], today).note), "data-check alert reaches the QA line");
 const a = r.angles[0];
 ok(/as advertised/.test(a.hook) && /price as advertised/i.test(a.source), "price as advertised wording");
 ok(/AED 679,000/.test(a.figure) && /AED 880,000/.test(a.hook) && /DLD Open Data/.test(a.source), "tied to the register: 1-bedroom median in the area");
@@ -41,15 +44,24 @@ ok(/Across Dubai/.test(r.angles[0].hook), "city median fallback");
 ok(launchArea(d, "Business Bay").area === "BUSINESS BAY" && launchArea(d, "") === null, "area matcher");
 
 // the Momo card
-const html = launchesPage("k", "", { generated: today, rows: [row({ key: "ap_a", confidence: "high" }), row({ key: "ap_b", developer: "Samana", project: "Ocean Crest", first_seen: "2026-10-01" })] }, today);
-ok((html.match(/class=lc /g) || []).length === 2, "one card per launch");
+const html = launchesPage("k", "", { generated: today, qa: ["no launches run recorded for 2026-11-06 (a missed day)"], rows: [
+  row({ key: "ap_a", confidence: "high", pic: "https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg", pic_credit: "Some Channel", pic_link: "https://www.youtube.com/watch?v=AAAAAAAAAAA", zone: "Dubai Silicon Oasis Centre", sizes: "650-1,400 sq ft" }),
+  row({ key: "ap_b", developer: "Samana", project: "Ocean Crest", first_seen: "2026-10-01", registered: true, status: "registered", kinds: ["dld_register", "youtube"] }),
+  row({ key: "ap_bare", project: "Bare", area: "", from_aed: null })] }, today);
+ok((html.match(/class=lc /g) || []).length === 2, "one card per launch; a card without area or price is hidden");
+ok(/<img src="https:\/\/i\.ytimg\.com\/vi\/AAAAAAAAAAA\/hqdefault\.jpg"/.test(html) && /mqdefault/.test(html) && /href="https:\/\/www\.youtube\.com\/watch\?v=AAAAAAAAAAA"[^>]*><img/.test(html), "video thumbnail picture, tap opens the video, mqdefault fallback");
+ok(/Image: Some Channel/.test(html) && /class="pic none"/.test(html), "credit line; initial tile when there is no picture");
+ok(/On the register &middot; seen on YouTube/.test(html) && /Not yet registered/.test(html), "status chips, registered + YouTube merged on one card");
+ok(/By Dubai 2040 zone/.test(html) && /data-zone="Dubai Silicon Oasis Centre"/.test(html) && /Dubai 2040: Dubai Silicon Oasis Centre/.test(html), "zone filter and zone on the card");
+ok(/Dubai Land Department register/.test(html) && !/\bDLD\b/.test(html), "header spells out the register, no DLD");
+ok(/Check: no launches run recorded/.test(html) && /650-1,400 sq ft/.test(html), "QA line and sizes");
 ok(/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(html), "2-up cards, not a list");
 ok(/data-f=week>This week/.test(html) && /data-f=all>All/.test(html) && /By developer/.test(html), "filters This week / All / By developer");
 ok(/cf-high/.test(html) && /from AED 679,000/.test(html) && /50\/50 plan/.test(html) && /handover Q4 2028/.test(html) && /2 sources/.test(html) && /seen today/.test(html) && /Video/.test(html), "card fields");
 ok(/#FFFDF9/.test(html) && !/#0C1413/.test(html), "light cream");
 ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(html), "icons, never emojis");
 ok(!/motherduck/i.test(html) && !/claude|gpt|gemini/i.test(html), "no lake vendor or model names on the card");
-ok(launchCards([{ project: "<x>", developer: "a" }], today).includes("&lt;x&gt;"), "escaped");
+ok(launchCards([{ project: "<x>", developer: "a", area: "Arjan" }], today).includes("&lt;x&gt;"), "escaped");
 
 const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 ok(/\/momo\/work\/launches" && \["najjuko", "kendall"\]/.test(idx), "route for Kendall and Najjuko only");

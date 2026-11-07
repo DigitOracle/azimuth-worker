@@ -259,7 +259,7 @@ export function launchAngles(snap, d, famh, today, opts) {
   const DAY = 86400000, cut = new Date(Date.parse(today + "T00:00:00Z") - (opts.days || 2) * DAY).toISOString().slice(0, 10);
   const used = new Set((famh || []).filter((x) => x && x.d && (Date.parse(today) - Date.parse(x.d)) < 14 * DAY).map((x) => x.id).filter(Boolean));
   const t = d && d.transactions, per = t ? span(t.periodFrom, t.periodTo) : "", perSrc = t ? "DLD Open Data, " + t.periodFrom + " to " + t.periodTo : "DLD Open Data";
-  const fresh = rows.filter((r) => r && r.project && r.developer && r.first_seen >= cut && r.first_seen <= today && (r.confidence === "high" || r.confidence === "medium") && r.status !== "registered");
+  const fresh = rows.filter((r) => r && r.project && r.developer && r.first_seen >= cut && r.first_seen <= today && (r.confidence === "high" || r.confidence === "medium") && (r.area || r.from_aed));   // v799.1 - registered launches count too; a card needs an area or a price
   const skipped = { repeat: 0, untied: 0 };
   const out = [];
   for (const r of fresh.sort((a, b) => (b.confidence === "high") - (a.confidence === "high") || String(b.first_seen).localeCompare(String(a.first_seen)))) {
@@ -277,13 +277,14 @@ export function launchAngles(snap, d, famh, today, opts) {
     if (!tie) { skipped.untied++; continue; }
     const bits = [r.units, r.plan ? r.plan + " plan" : "", r.handover ? "handover " + r.handover : ""].filter(Boolean).join(", ");
     out.push({ launch: true, fact: id, family: "developer", subject: low(r.developer), reader: "invest",
-      hook: r.developer + " has launched " + r.project + where + (price ? ", from " + price + " as advertised" : "") + (bits ? " (" + bits + ")" : "") + ". " + tie,
+      hook: r.developer + (r.registered ? "'s " + r.project + " is new on the Dubai Land Department register" + where : " has launched " + r.project + where) + (price ? ", from " + price + " as advertised" : "") + (bits ? " (" + bits + ")" : "") + ". " + tie,
       figure: price ? price + " (as advertised)" : r.project,
-      source: "Launched; price as advertised (" + (r.kinds || []).join(", ") + ", " + (r.sources_n || 0) + " source" + (r.sources_n === 1 ? "" : "s") + ", first seen " + dSay(r.first_seen) + "); " + tieSrc,
+      source: (r.registered ? "Dubai Land Department project register" + (r.from_aed ? "; price as advertised" : "") + " (" : "Launched; price as advertised (") + (r.kinds || []).join(", ") + ", " + (r.sources_n || 0) + " source" + (r.sources_n === 1 ? "" : "s") + ", first seen " + dSay(r.first_seen) + "); " + tieSrc,
       buyer: "A new launch set against what the register says the area actually sells for - not on the DLD register yet, so check the developer's sheet before quoting it.",
       links: (r.links || []).slice(0, 2) });
   }
   const note = out.length ? "launches: " + out.length + " new (" + out.map((a) => a.fact.slice(7, 19)).join(",") + ")" + (skipped.repeat ? ", " + skipped.repeat + " repeats held back" : "")
     : "no new launches" + (rows.length ? " (" + fresh.length + " first seen in 48 h at medium or better" + (skipped.repeat ? ", " + skipped.repeat + " already sent in 14 days" : "") + ")" : snap ? "" : " (no img_launches snapshot)");
-  return { angles: out, note, fresh: fresh.length };
+  const alerts = (snap && Array.isArray(snap.qa)) ? snap.qa : [];
+  return { angles: out, note: note + (alerts.length ? " | launches data check: " + alerts.join("; ") : ""), fresh: fresh.length };
 }
