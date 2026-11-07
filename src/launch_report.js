@@ -36,7 +36,15 @@ function facts(r) {
   return [["bed", "Unit types", r.units || "Not stated"], ["ruler", "Sizes", r.sizes || "Not stated"], ["plan", "Payment plan", r.plan ? r.plan + " plan" : "Not stated"],
     ["key", "Handover", r.handover || "Not stated"]];
 }
-const picsOf = (r, e) => ((e && e.pics) || []).filter((p) => p && safePic(p.url));
+// v802 (Kendall 7 Nov: a Meraas masterplan aerial was on two different projects): a picture that appears under more than one launch is a
+// developer's generic image, never this project's own, so it is left out everywhere (SHARED is filled by reportHtml from the whole data doc)
+let SHARED = new Set();
+export function sharedPics(data) {
+  const by = new Map();
+  for (const [k, e] of Object.entries(data || {})) for (const p of (e && e.pics) || []) if (p && p.url) by.set(p.url, (by.get(p.url) || new Set()).add(k));
+  return new Set([...by].filter(([, ks]) => ks.size > 1).map(([u]) => u));
+}
+const picsOf = (r, e) => ((e && e.pics) || []).filter((p) => p && safePic(p.url) && !SHARED.has(p.url));
 
 // THE MAP: rings at 1, 2 and 3 km round the pin, the amenity points within 3.2 km, far landmarks as edge arrows, a compass, a legend
 export function mapSvg(e) {
@@ -138,6 +146,7 @@ const ZOOM_JS = '<script>(function(){function z(){var s=Math.min(1,(window.inner
 export function reportHtml(rows, data, opts) {
   opts = opts || {};
   const total = rows.length + 1, sub = opts.sub || "";
+  SHARED = sharedPics(data);   // v802
   const pages = [coverPage(rows, data, opts.title || "Najma Launch Report", sub, total, opts.by)].concat(rows.map((r, i) => launchPage(r, data[r.key], i + 1, total, sub, opts.by)));
   const bar = opts.bar ? '<div class=bar><a href="' + esc(opts.pdfHref) + '">' + I('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', 18, "#fff") + 'Download PDF</a><a class=wa href="' + esc(opts.waHref) + '">' + I('<path d="M4 20l1.5-4.5A8 8 0 1 1 9 19z"/>', 18, "#0A4F4A") + "Send on WhatsApp</a></div>" : "";
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>' + esc(opts.title || "Najma Launch Report") + '</title>'

@@ -259,7 +259,7 @@ export function launchAngles(snap, d, famh, today, opts) {
   const DAY = 86400000, cut = new Date(Date.parse(today + "T00:00:00Z") - (opts.days || 2) * DAY).toISOString().slice(0, 10);
   const used = new Set((famh || []).filter((x) => x && x.d && (Date.parse(today) - Date.parse(x.d)) < 14 * DAY).map((x) => x.id).filter(Boolean));
   const t = d && d.transactions, per = t ? span(t.periodFrom, t.periodTo) : "", perSrc = t ? "DLD Open Data, " + t.periodFrom + " to " + t.periodTo : "DLD Open Data";
-  const fresh = rows.filter((r) => r && r.project && r.developer && r.first_seen >= cut && r.first_seen <= today && (r.confidence === "high" || r.confidence === "medium") && (r.area || r.from_aed));   // v799.1 - registered launches count too; a card needs an area or a price
+  const fresh = rows.filter((r) => r && r.project && r.developer && r.first_seen >= cut && r.first_seen <= today && (r.confidence === "high" || r.confidence === "medium") && (r.area || r.from_aed) && r.launch !== false);   // v799.1 - registered launches count too; a card needs an area or a price. v802 - a developer-website portfolio project (launch:false in the snapshot: first seen by us over 30 days ago, an old page, or a past handover) is never a launch
   const skipped = { repeat: 0, untied: 0 };
   const out = [];
   for (const r of fresh.sort((a, b) => (b.confidence === "high") - (a.confidence === "high") || String(b.first_seen).localeCompare(String(a.first_seen)))) {

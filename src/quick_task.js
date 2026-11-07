@@ -65,6 +65,12 @@ function show() {
   setTimeout(function () { try { T.focus(); } catch (e) {} }, 60);
 }
 btn.onclick = show; window.momoQuickTask = show;
+// v802 (Kendall 7 Nov): the button must never sit on top of what she is reading. On every Work page it slides away while she scrolls
+// down and comes back when she scrolls up (or reaches the top); on the New launches page it is also a smaller round button (icon only).
+if (/^\/momo\/work\/launches\/?$/.test(location.pathname)) { btn.style.padding = "0"; btn.style.width = "44px"; btn.style.height = "44px"; btn.style.minHeight = "44px"; btn.style.justifyContent = "center"; btn.style.bottom = "84px"; btn.innerHTML = PLUS; }
+btn.style.transition = "transform .25s ease, opacity .25s ease";
+var lastY = window.scrollY || 0;
+window.addEventListener("scroll", function () { var y = window.scrollY || 0; var down = y > lastY + 4, up = y < lastY - 4; if (down && y > 40) { btn.style.transform = "translateY(160px)"; btn.style.opacity = "0"; btn.style.pointerEvents = "none"; } else if (up || y <= 40) { btn.style.transform = ""; btn.style.opacity = ""; btn.style.pointerEvents = ""; } if (down || up) lastY = y; }, { passive: true });
 function mount() { if (document.body && !document.getElementById("qt_btn")) document.body.appendChild(btn); }
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount); else mount();
 })();`;

@@ -51,13 +51,13 @@ const html = launchesPage("k", "", { generated: today, qa: ["no launches run rec
 ok((html.match(/class=lc /g) || []).length === 2, "one card per launch; a card without area or price is hidden");
 ok(/<img src="https:\/\/azimuth-2\.digitalchemy\.workers\.dev\/img\/lpic_AAAAAAAAAAA_0"/.test(html) && /href="https:\/\/www\.youtube\.com\/watch\?v=AAAAAAAAAAA"[^>]*><img/.test(html), "v800: the face-checked video frame, tap opens the video");
 ok(/Image: Some Channel/.test(html) && /class="pic none"/.test(html), "credit line; initial tile when there is no picture");
-ok(/On the register &middot; seen on YouTube/.test(html) && /Not yet registered/.test(html), "status chips, registered + YouTube merged on one card");
+ok(/>On the register</.test(html) && /Not yet registered/.test(html) && !/seen on YouTube/.test(html), "v802: status chip only (registered + YouTube still one card)");
 ok(/By Dubai 2040 zone/.test(html) && /data-zone="Dubai Silicon Oasis Centre"/.test(html) && /Dubai 2040: Dubai Silicon Oasis Centre/.test(html), "zone filter and zone on the card");
-ok(/Dubai Land Department register/.test(html) && !/\bDLD\b/.test(html), "header spells out the register, no DLD");
+ok(/New and registered launches &middot; prices as advertised/.test(html) && !/\bDLD\b/.test(html), "v802: one short intro line, no DLD");
 ok(/Check: no launches run recorded/.test(html) && /650-1,400 sq ft/.test(html), "QA line and sizes");
 ok(/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(html), "2-up cards, not a list");
 ok(/data-f=week>This week/.test(html) && /data-f=all>All/.test(html) && /By developer/.test(html), "filters This week / All / By developer");
-ok(/cf-high/.test(html) && /from AED 679,000/.test(html) && /50\/50 plan/.test(html) && /handover Q4 2028/.test(html) && /2 sources/.test(html) && /seen today/.test(html) && /Video/.test(html), "card fields");
+ok(!/cf-high|class="cf/.test(html) && /data-conf="high"/.test(html) && /from AED 679K/.test(html) && /50\/50 plan/.test(html) && /handover Q4 2028/.test(html) && /2 sources/.test(html) && /seen today/.test(html) && /Video/.test(html), "card fields");
 ok(/#FFFDF9/.test(html) && !/#0C1413/.test(html), "light cream");
 ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(html), "icons, never emojis");
 ok(!/motherduck/i.test(html) && !/claude|gpt|gemini/i.test(html), "no lake vendor or model names on the card");

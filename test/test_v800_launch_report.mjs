@@ -69,13 +69,13 @@ ok(rendered === 1, "second download comes from the stored PDF");
 // the card
 const card = launchCards([r1, row({ key: "ap_cccccccccccc", pic: "https://i.ytimg.com/vi/C/hqdefault.jpg" })], today, "?key=K");
 ok(/lpic_AAAAAAAAAAA_0/.test(card) && !/i\.ytimg\.com\/vi\/C/.test(card) && (card.match(/class="pic none"/g) || []).length === 1, "card: our copy shown, a raw thumbnail never");
-ok(/href="\/momo\/work\/launches\/report\?key=K&amp;k=ap_aaaaaaaaaaaa">/.test(card) && /k=ap_aaaaaaaaaaaa&amp;wa=1/.test(card), "card: PDF and WhatsApp buttons");
+ok(/href="\/momo\/work\/launches\/report\?key=K&amp;k=ap_aaaaaaaaaaaa" aria-label="Report as PDF"/.test(card) && /k=ap_aaaaaaaaaaaa&amp;wa=1/.test(card), "card: PDF and WhatsApp buttons");
 const pg = launchesPage("K", "", { generated: today, rows: [r1] }, today);
-ok(/Make a report/.test(pg) && /data-p=month>This month/.test(pg) && /data-p=30>Last 30 days/.test(pg) && /data-p=custom>Custom/.test(pg) && /up to 10/.test(pg) && /Send on WhatsApp/.test(pg), "the Make a report panel");
-ok(/id=qs type=search/.test(pg) && /Search project, developer, area or zone/.test(pg) && /id=rs>Reset</.test(pg), "search box and Reset");
+ok(/Make a report/.test(pg) && /data-p=month>This month/.test(pg) && /data-p=30>Last 30 days/.test(pg) && /data-p=custom>Custom/.test(pg) && /Tick up to 10/.test(pg) && /Send on WhatsApp/.test(pg), "the Make a report panel");
+ok(/id=qs type=search/.test(pg) && /Search project, developer or area"/.test(pg) && /id=rs class=rs>Reset</.test(pg), "search box and Reset");
 ok(/<input id=dv list=dvl/.test(pg) && /<datalist id=dvl><option value="Samana">/.test(pg) && !/<select id=dv/.test(pg), "developer filter is a searchable picker");
 ok(/data-q="ocean crest samana dubai islands deira and bur dubai"/.test(pg), "each card carries its search words (project, developer, area, zone)");
-ok(/Q\.oninput=run/.test(pg) && /f="week"/.test(pg) && /Q\.value="";s\.value="";z\.value=""/.test(pg), "instant search; Reset clears everything back to This week");
+ok(/Q\.oninput=function\(\)\{run\(\)\}/.test(pg) && /f="week"/.test(pg) && /Q\.value="";s\.value="";z\.value=""/.test(pg), "instant search; Reset clears everything back to This week");
 const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 ok(/\/momo\/work\/launches\/report" && \["najjuko", "kendall"\]/.test(idx) && /url\.pathname\.startsWith\("\/lr\/"\)\) \{ const _lp = await publicReportRoute/.test(idx), "routes wired: make (their keys), open (the link)");
 console.log("v800 launch report:", n, "checks passed");
