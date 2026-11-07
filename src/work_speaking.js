@@ -35,6 +35,8 @@ export function cleanItem(x, prev) {
   else if (!Array.isArray(o.outline)) o.outline = [];
   if (has("materials")) o.materials = (Array.isArray(g.materials) ? g.materials : []).slice(0, 20).map((m) => ({ label: S(m && m.label, 120).trim(), url: url(m && m.url) })).filter((m) => m.label && m.url);
   else if (!Array.isArray(o.materials)) o.materials = [];
+  if (has("photos")) o.photos = (Array.isArray(g.photos) ? g.photos : []).slice(0, 200).map((p) => ({ f: slug(p && p.f), cap: S(p && p.cap, 160).trim() })).filter((p) => p.f);   // v797 event photos, files in KV speaking_file_<person>_<f>
+  else if (!Array.isArray(o.photos)) o.photos = [];
   if (has("due")) o.due = cleanDue(g.due);   // v648 - absent = defaults by type (dueOf); [] = nothing due
   if (o.due == null) delete o.due;
   o.id = slug(g.id || o.id) || ("s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
@@ -229,7 +231,7 @@ const SPK_CSS = '<style>.inv{background:#fff;border:1px solid #D8E3DE;border-rad
   + 'h2{font-family:Fraunces,serif;font-size:1.05rem;color:#0A4F4A;margin:18px 0 8px}.sc{background:#fff;border:1px solid #E5DFD3;border-left:4px solid #C5A56A;border-radius:14px;padding:12px 14px;margin:0 0 10px;cursor:pointer}'
   + '.sc h3{margin:0 0 4px;font-size:.98rem}.sc p{margin:2px 0;color:#5F6B66;font-size:.82rem}.sc i{font-style:normal;font-size:.7rem;font-weight:700;border-radius:999px;padding:2px 8px;margin-right:5px;background:#E6F0EE;color:#0A4F4A}'
   + '.sc i.st{background:#F6EEDC;color:#7A5B1E}.sd{display:none;margin-top:10px;border-top:1px solid #EEE7DA;padding-top:10px;font-size:.84rem}.sc.open .sd{display:block}.sd table{width:100%;border-collapse:collapse;font-size:.76rem}'
-  + '.sd th,.sd td{border-bottom:1px solid #EEE7DA;text-align:left;padding:5px 4px;vertical-align:top}.sd th{color:#0A4F4A}.sb{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}'
+  + '.sd th,.sd td{border-bottom:1px solid #EEE7DA;text-align:left;padding:5px 4px;vertical-align:top}.sd th{color:#0A4F4A}.sb{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.sph{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:6px 0 10px}.sph img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;background:#EEE7DA}'
   + '.sb a,.sb button{border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:999px;padding:7px 12px;font:600 .78rem "IBM Plex Sans",sans-serif;text-decoration:none;cursor:pointer}'
   + '.sb .pri{background:#0A4F4A;color:#fff}.fm{display:none;background:#fff;border:1px solid #E5DFD3;border-radius:14px;padding:12px;margin:10px 0}.fm.on{display:block}.fm label{display:block;font-size:.74rem;color:#5F6B66;margin:8px 0 2px}'
   + '.fm input,.fm select,.fm textarea{width:100%;box-sizing:border-box;border:1px solid #D8D1C4;border-radius:10px;padding:8px;font:400 .86rem "IBM Plex Sans",sans-serif}.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc{display:inline-block;border-radius:999px;padding:3px 10px;font-weight:700;font-size:.74rem;margin-top:6px}.dc.ok{background:#E3F1E7;color:#1F6B3A}.dc.amber{background:#FBEFD5;color:#8A5A00}.dc.red{background:#FBE1DE;color:#A12A1D}.nx .dc{margin-right:6px}.nx .yd{border:0;background:#C5A56A;color:#0A4F4A;border-radius:999px;padding:5px 12px;font-weight:700;font-size:.78rem;cursor:pointer}.dl label{display:flex;gap:8px;align-items:center;margin:4px 0;font-size:.84rem}.dl .add{display:flex;gap:6px;margin-top:6px}.dl .add input{flex:1;border:1px solid #D8D1C4;border-radius:10px;padding:6px}.dl .add button{border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:999px;padding:5px 12px;font-weight:600;cursor:pointer}.em{color:#5F6B66;font-size:.85rem;padding:16px 0}</style>';
@@ -264,6 +266,7 @@ if(i.outline&&i.outline.length){var tb=el("table"),h=el("tr");["Time","Min","Seg
 i.outline.forEach(function(s){var r=el("tr");[s.time,s.mins||"",s.segment,s.covers,s.interactive].forEach(function(x){r.appendChild(el("td","",x))});tb.appendChild(r)});d.appendChild(tb)}
 if(i.website){var w=el("a","",i.website);w.href=i.website;w.target="_blank";w.rel="noopener noreferrer";var wp=el("p");wp.appendChild(w);d.appendChild(wp)}
 (i.materials||[]).forEach(function(m){var mp=el("p"),ma=el("a","",m.label);ma.href=/\/momo\/work\/speaking\/file\?/.test(m.url)?m.url.replace(/^https?:\/\/[^\/]+/,"")+"&key="+encodeURIComponent(KEY):m.url;ma.target="_blank";ma.rel="noopener noreferrer";mp.appendChild(ma);d.appendChild(mp)});
+if(i.photos&&i.photos.length){d.appendChild(el("p","","Photos ("+i.photos.length+")"));var pg=el("div","sph");i.photos.forEach(function(p){var pa=el("a");pa.href="/momo/work/speaking/file?f="+encodeURIComponent(p.f)+"&key="+encodeURIComponent(KEY);pa.target="_blank";pa.rel="noopener noreferrer";pa.onclick=function(e){e.stopPropagation()};var im=el("img");im.loading="lazy";im.alt=p.cap||"Event photo";im.src=pa.href;pa.appendChild(im);pg.appendChild(pa)});d.appendChild(pg)}
 if(i.folder)d.appendChild(el("p","","Folder: "+i.folder));if(i.notes)d.appendChild(el("p","","Notes: "+i.notes));
 var sb=el("div","sb"),pdf=el("a","pri","Brief (PDF)");pdf.href="/momo/work/speaking/report?id="+encodeURIComponent(i.id)+"&key="+encodeURIComponent(KEY);pdf.target="_blank";sb.appendChild(pdf);
 var ed=el("button","","Edit");ed.type="button";ed.onclick=function(e){e.stopPropagation();openForm(i)};sb.appendChild(ed);
@@ -349,6 +352,22 @@ export async function speakingRoute(request, env, url, deps) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   const person = typeof deps.person === "function" ? deps.person(env, url) : "";
+  if (p === "/momo/work/speaking/album" || p === "/momo/work/speaking/afile") {   // v797 shared photo album: anyone the album names (its own gate)
+    const aid = slug(url.searchParams.get("a") || ""); let al = null;
+    try { al = aid ? JSON.parse((await env.MEETINGS.get("photo_album_" + aid)) || "null") : null; } catch (e) { al = null; }
+    if (!al || !Array.isArray(al.who) || !al.who.includes(person) || !Array.isArray(al.photos)) return new Response("not found", { status: 404 });
+    if (p === "/momo/work/speaking/afile") {
+      const f = slug(url.searchParams.get("f") || ""); if (!f || !al.photos.some((x) => x && x.f === f)) return new Response("not found", { status: 404 });
+      const r = await env.MEETINGS.getWithMetadata(SPK_FILE + "kendall_" + f); if (!r || !r.value) return new Response("not found", { status: 404 });
+      return new Response(Uint8Array.from(atob(r.value), (c) => c.charCodeAt(0)), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400", "X-Robots-Tag": "noindex" } });
+    }
+    const e = (t) => String(t == null ? "" : t).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]);
+    const q = "key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "") + "&a=" + encodeURIComponent(aid);
+    const body = '<style>.alg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:12px 0}.alg img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;background:#EEE7DA}.alh{color:#0A4F4A;font-family:Fraunces,serif;margin:6px 0 2px}.als{color:#5F6B66;font-size:.85rem;margin:0}</style>'
+      + '<a class=back href="/momo?door=1&key=' + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "") + '">&#8592; Momo</a><h1 class=alh>' + e(al.title || "Photos") + '</h1><p class=als>' + e(al.sub || "") + (al.sub ? " | " : "") + al.photos.length + ' photos. Tap one to open it full size.</p><div class=alg>'
+      + al.photos.map((x) => { const h = "/momo/work/speaking/afile?" + q + "&f=" + encodeURIComponent(x.f); return '<a href="' + h + '" target=_blank rel="noopener noreferrer"><img loading=lazy src="' + h + '" alt="' + e(x.cap || al.title || "Photo") + '"></a>'; }).join("") + '</div>';
+    return new Response(deps.page(key, rk, body), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  }
   if (person !== "kendall") return new Response("not found", { status: 404 });   // Kendall's key only
   const H = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" };
   if (p === "/momo/work/speaking" && request.method === "GET") return new Response(deps.page(key, rk, SPK_BODY + "<script>" + SPK_JS + "</script>"), { headers: H });
