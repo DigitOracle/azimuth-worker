@@ -234,7 +234,7 @@ const SPK_CSS = '<style>.inv{background:#fff;border:1px solid #D8E3DE;border-rad
   + 'h2{font-family:Fraunces,serif;font-size:1.05rem;color:#0A4F4A;margin:18px 0 8px}.sc{background:#fff;border:1px solid #E5DFD3;border-left:4px solid #C5A56A;border-radius:14px;padding:12px 14px;margin:0 0 10px;cursor:pointer}'
   + '.sc h3{margin:0 0 4px;font-size:.98rem}.sc p{margin:2px 0;color:#5F6B66;font-size:.82rem}.sc i{font-style:normal;font-size:.7rem;font-weight:700;border-radius:999px;padding:2px 8px;margin-right:5px;background:#E6F0EE;color:#0A4F4A}'
   + '.sc i.st{background:#F6EEDC;color:#7A5B1E}.sd{display:none;margin-top:10px;border-top:1px solid #EEE7DA;padding-top:10px;font-size:.84rem}.sc.open .sd{display:block}.sd table{width:100%;border-collapse:collapse;font-size:.76rem}'
-  + '.sd th,.sd td{border-bottom:1px solid #EEE7DA;text-align:left;padding:5px 4px;vertical-align:top}.sd th{color:#0A4F4A}.sb{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.sphc{border:1px solid #EEE7DA;border-radius:12px;padding:8px 10px;margin:8px 0}.sphc>summary{cursor:pointer;font-weight:600;color:#0A4F4A}.sph{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:6px 0 10px}.sph img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;background:#EEE7DA}'
+  + '.sd th,.sd td{border-bottom:1px solid #EEE7DA;text-align:left;padding:5px 4px;vertical-align:top}.sd th{color:#0A4F4A}.sb{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.zipb{display:inline-block;margin:8px 0 2px;padding:8px 14px;border-radius:999px;background:#0A4F4A;color:#fff;font-weight:600;font-size:.85rem;text-decoration:none}.sphc{border:1px solid #EEE7DA;border-radius:12px;padding:8px 10px;margin:8px 0}.sphc>summary{cursor:pointer;font-weight:600;color:#0A4F4A}.sph{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:6px 0 10px}.sph img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;background:#EEE7DA}'
   + '.sb a,.sb button{border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:999px;padding:7px 12px;font:600 .78rem "IBM Plex Sans",sans-serif;text-decoration:none;cursor:pointer}'
   + '.sb .pri{background:#0A4F4A;color:#fff}.fm{display:none;background:#fff;border:1px solid #E5DFD3;border-radius:14px;padding:12px;margin:10px 0}.fm.on{display:block}.fm label{display:block;font-size:.74rem;color:#5F6B66;margin:8px 0 2px}'
   + '.fm input,.fm select,.fm textarea{width:100%;box-sizing:border-box;border:1px solid #D8D1C4;border-radius:10px;padding:8px;font:400 .86rem "IBM Plex Sans",sans-serif}.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc{display:inline-block;border-radius:999px;padding:3px 10px;font-weight:700;font-size:.74rem;margin-top:6px}.dc.ok{background:#E3F1E7;color:#1F6B3A}.dc.amber{background:#FBEFD5;color:#8A5A00}.dc.red{background:#FBE1DE;color:#A12A1D}.nx .dc{margin-right:6px}.nx .yd{border:0;background:#C5A56A;color:#0A4F4A;border-radius:999px;padding:5px 12px;font-weight:700;font-size:.78rem;cursor:pointer}.dl label{display:flex;gap:8px;align-items:center;margin:4px 0;font-size:.84rem}.dl .add{display:flex;gap:6px;margin-top:6px}.dl .add input{flex:1;border:1px solid #D8D1C4;border-radius:10px;padding:6px}.dl .add button{border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:999px;padding:5px 12px;font-weight:600;cursor:pointer}.em{color:#5F6B66;font-size:.85rem;padding:16px 0}</style>';
@@ -269,7 +269,7 @@ if(i.outline&&i.outline.length){var tb=el("table"),h=el("tr");["Time","Min","Seg
 i.outline.forEach(function(s){var r=el("tr");[s.time,s.mins||"",s.segment,s.covers,s.interactive].forEach(function(x){r.appendChild(el("td","",x))});tb.appendChild(r)});d.appendChild(tb)}
 if(i.website){var w=el("a","",i.website);w.href=i.website;w.target="_blank";w.rel="noopener noreferrer";var wp=el("p");wp.appendChild(w);d.appendChild(wp)}
 (i.materials||[]).forEach(function(m){var mp=el("p"),ma=el("a","",m.label);ma.href=/\/momo\/work\/speaking\/file\?/.test(m.url)?m.url.replace(/^https?:\/\/[^\/]+/,"")+"&key="+encodeURIComponent(KEY):m.url;ma.target="_blank";ma.rel="noopener noreferrer";mp.appendChild(ma);d.appendChild(mp)});
-if(i.photos&&i.photos.length){var pc=el("details","sphc");pc.onclick=function(e){e.stopPropagation()};pc.appendChild(el("summary","","Photos ("+i.photos.length+")"+(i.shareWith&&i.shareWith.length?" | shared with Najjuko":"")));var pg=el("div","sph");i.photos.forEach(function(p){var pa=el("a");pa.href="/momo/work/speaking/file?f="+encodeURIComponent(p.f)+"&key="+encodeURIComponent(KEY);pa.target="_blank";pa.rel="noopener noreferrer";pa.onclick=function(e){e.stopPropagation()};var im=el("img");im.loading="lazy";im.alt=p.cap||"Event photo";im.src=pa.href;pa.appendChild(im);pg.appendChild(pa)});pc.appendChild(pg);d.appendChild(pc)}
+if(i.photos&&i.photos.length){var pc=el("details","sphc");pc.onclick=function(e){e.stopPropagation()};pc.appendChild(el("summary","","Photos ("+i.photos.length+")"+(i.shareWith&&i.shareWith.length?" | shared with Najjuko":"")));var zb=el("a","zipb","Download all ("+i.photos.length+" photos)");zb.href="/momo/work/speaking/zip?id="+encodeURIComponent(i.id)+"&key="+encodeURIComponent(KEY);zb.onclick=function(e){e.stopPropagation()};pc.appendChild(zb);var pg=el("div","sph");i.photos.forEach(function(p){var pa=el("a");pa.href="/momo/work/speaking/file?f="+encodeURIComponent(p.f)+"&key="+encodeURIComponent(KEY);pa.target="_blank";pa.rel="noopener noreferrer";pa.onclick=function(e){e.stopPropagation()};var im=el("img");im.loading="lazy";im.alt=p.cap||"Event photo";im.src=pa.href;pa.appendChild(im);pg.appendChild(pa)});pc.appendChild(pg);d.appendChild(pc)}
 if(i.folder)d.appendChild(el("p","","Folder: "+i.folder));if(i.notes)d.appendChild(el("p","","Notes: "+i.notes));
 var sb=el("div","sb"),pdf=el("a","pri","Brief (PDF)");pdf.href="/momo/work/speaking/report?id="+encodeURIComponent(i.id)+"&key="+encodeURIComponent(KEY);pdf.target="_blank";sb.appendChild(pdf);
 var ed=el("button","","Edit");ed.type="button";ed.onclick=function(e){e.stopPropagation();openForm(i)};sb.appendChild(ed);
@@ -351,6 +351,28 @@ export function spkReport(rec, id) {
     + '<script>if(new URLSearchParams(location.search).get("print")==="1")setTimeout(function(){window.print()},400)</script></body></html>';
 }
 
+// v798 - a plain stored zip (no compression: JPEGs do not shrink), built from the photo files of one event
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+export function storedZip(files) {   // files: [{name, data: Uint8Array}]
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  for (const f of files) {
+    const nm = enc.encode(f.name), crc = crc32(f.data), h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(8, 0, true); h.setUint32(14, crc, true); h.setUint32(18, f.data.length, true); h.setUint32(22, f.data.length, true); h.setUint16(26, nm.length, true);
+    parts.push(new Uint8Array(h.buffer), nm, f.data);
+    const c = new DataView(new ArrayBuffer(46)); c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint32(16, crc, true); c.setUint32(20, f.data.length, true); c.setUint32(24, f.data.length, true); c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+    cen.push(new Uint8Array(c.buffer), nm); off += 30 + nm.length + f.data.length;
+  }
+  const csz = cen.reduce((a, b) => a + b.length, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, csz, true); e.setUint32(16, off, true);
+  const all = parts.concat(cen, [new Uint8Array(e.buffer)]), out = new Uint8Array(all.reduce((a, b) => a + b.length, 0)); let p = 0; for (const b of all) { out.set(b, p); p += b.length; } return out;
+}
+async function photoZip(env, item) {
+  const files = []; for (const x of item.photos || []) { const v = await env.MEETINGS.get(SPK_FILE + "kendall_" + x.f); if (v) files.push({ name: x.f.replace(/^[a-z0-9]+_/, "") + ".jpg", data: Uint8Array.from(atob(v), (c) => c.charCodeAt(0)) }); }
+  const nm = String(item.title || "photos").replace(/[^\w -]/g, "").trim().slice(0, 60).replace(/\s+/g, "_") || "photos";
+  return new Response(storedZip(files), { headers: { "Content-Type": "application/zip", "Content-Disposition": 'attachment; filename="' + nm + '_photos.zip"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+}
+
 export async function speakingRoute(request, env, url, deps) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
@@ -362,14 +384,15 @@ export async function speakingRoute(request, env, url, deps) {
       const r = await env.MEETINGS.getWithMetadata(SPK_FILE + "kendall_" + f); if (!r || !r.value) return new Response("not found", { status: 404 });
       return new Response(Uint8Array.from(atob(r.value), (c) => c.charCodeAt(0)), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400", "X-Robots-Tag": "noindex" } });
     }
+    if (p === "/momo/work/speaking/zip" && request.method === "GET") { const it = mine.find((i) => i.id === slug(url.searchParams.get("id") || "")); return it && (it.photos || []).length ? photoZip(env, it) : new Response("not found", { status: 404 }); }
     if (p !== "/momo/work/speaking" || request.method !== "GET" || !mine.length) return new Response("not found", { status: 404 });
     const e = (t) => String(t == null ? "" : t).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]);
     const kq = "key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
     const ev = (i) => '<details class=nsc><summary><b>' + e(i.title) + '</b><span>' + e(whenLabel(i)) + (i.venue ? " | " + e(i.venue) : "") + '</span></summary>'
-      + (i.summary ? '<p>' + e(i.summary) + '</p>' : '') + ((i.photos || []).length ? '<details class=nph open><summary>Photos (' + i.photos.length + ')</summary><div class=sph>'
+      + (i.summary ? '<p>' + e(i.summary) + '</p>' : '') + ((i.photos || []).length ? '<details class=nph open><summary>Photos (' + i.photos.length + ')</summary><a class=zipb href="/momo/work/speaking/zip?' + kq + '&id=' + encodeURIComponent(i.id) + '">Download all (' + i.photos.length + ' photos)</a><div class=sph>'
       + i.photos.map((x) => { const h = "/momo/work/speaking/file?" + kq + "&f=" + encodeURIComponent(x.f); return '<a href="' + h + '" target=_blank rel="noopener noreferrer"><img loading=lazy src="' + h + '" alt="' + e(x.cap || i.title) + '"></a>'; }).join("") + '</div></details>' : '') + '</details>';
     const body = '<style>.nsc{background:#fff;border:1px solid #E5DFD3;border-left:4px solid #C5A56A;border-radius:14px;padding:12px 14px;margin:0 0 10px}.nsc>summary{list-style:none;cursor:pointer}.nsc>summary::-webkit-details-marker{display:none}.nsc>summary b{display:block;color:#0A4F4A}.nsc>summary span{color:#5F6B66;font-size:.85rem}'
-      + '.nph{border:1px solid #EEE7DA;border-radius:12px;padding:8px 10px;margin-top:10px}.nph>summary{cursor:pointer;font-weight:600;color:#0A4F4A}.sph{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:8px 0 2px}.sph img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;background:#EEE7DA}</style>'
+      + '.nph{border:1px solid #EEE7DA;border-radius:12px;padding:8px 10px;margin-top:10px}.nph>summary{cursor:pointer;font-weight:600;color:#0A4F4A}.zipb{display:inline-block;margin:8px 0 2px;padding:8px 14px;border-radius:999px;background:#0A4F4A;color:#fff;font-weight:600;font-size:.85rem;text-decoration:none}.sph{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:8px 0 2px}.sph img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;background:#EEE7DA}</style>'
       + '<a class=back href="/momo?door=1&' + kq + '">&#8592; Momo</a><h1>Speaking</h1>' + mine.map(ev).join("");
     return new Response(deps.page(key, rk, body), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
@@ -384,6 +407,7 @@ export async function speakingRoute(request, env, url, deps) {
     const bin = Uint8Array.from(atob(r.value), (c) => c.charCodeAt(0)), m = r.metadata || {};
     return new Response(bin, { headers: { "Content-Type": m.type || "application/pdf", "Content-Disposition": 'inline; filename="' + String(m.name || f).replace(/[^\w. -]/g, "") + '"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
+  if (p === "/momo/work/speaking/zip" && request.method === "GET") { const it = ((await readSpk(env, person)) || emptySpk()).items.find((i) => i.id === slug(url.searchParams.get("id") || "")); return it && (it.photos || []).length ? photoZip(env, it) : new Response("not found", { status: 404 }); }   // v798
   if (p === "/momo/work/speaking/report" && request.method === "GET") return new Response(spkReport((await readSpk(env, person)) || emptySpk(), url.searchParams.get("id") || ""), { headers: H });
   if (p === "/momo/work/speaking/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
