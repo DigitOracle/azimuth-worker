@@ -6,6 +6,7 @@ import { todayFullRoute } from "./today_full.js";
 import { calStart, calCallback } from "./today_cal.js";   // v786b   // v786 - the full Today card   // v785 - the shared Thailand trip card (Kendall + Najjuko)   // v778
 import { calendarRoute } from "./content_calendar.js";   // v754
 import { launchesRoute, LAUNCH_ICONS } from "./launches_card.js";   // v799 - Momo New launches
+import { makeReportRoute, publicReportRoute } from "./launch_report.js";   // v800 - the Najma Launch Report on demand, PDF and WhatsApp share
 import { plannerRoute, plannerEveningCheck } from "./content_planner.js";   // v758 - FN Content Planner
 import { creamTheme } from "./cream_theme.js";   // v728
 import { plotIntelRoutes, PLOT_ROOMS } from "./plot_intel.js";   // v691 - Activity radar + Land scanner (MORE)
@@ -3449,6 +3450,7 @@ async function appFetch(request, env, ctx) {
         return clientResp(env, url, najMoreHtml(url.searchParams.get("key") || "", _mrk, keyTier(env, url) === "admin"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
       }
       if (url.pathname.startsWith("/bp/")) { const _bp = await bppPublic(request, env, url); if (_bp) return _bp; }   // v697 - public building passports (no key: what she sends)
+      if (url.pathname.startsWith("/lr/")) { const _lp = await publicReportRoute(request, env, url, { kv: briefKvJson }); if (_lp) return _lp; }   // v800 - a launch report link (random token, 120 days; no key, like /bp/)
       if (url.pathname.startsWith("/reel/")) { const _rl = await reelPublic(request, env, url); if (_rl) return _rl; }   // v700 - public reel pages (no key)
       if (url.pathname.startsWith("/pres/")) { const _pr = await presPublic(request, env, url); if (_pr) return _pr; }   // v684 - public presentation pages and files (no key: what she sends)
       if (url.pathname.startsWith("/pds/")) { const _pd = await sheetsPublic(request, env, url); if (_pd) return _pd; }   // v672 - public product data sheets (no key: what she sends)
@@ -3459,6 +3461,7 @@ async function appFetch(request, env, ctx) {
         // v652 (Kendall 27 Oct): her Momo link opens the front door (Work, Play, Ascend and the one client card) instead of jumping into Work.
         if (url.pathname === "/momo/work/calendar" && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _cc = await calendarRoute(request, env, url, { page: momoPage }); if (_cc) return _cc; }   // v754 - content calendar connect
         if (url.pathname === "/momo/work/launches" && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _ln = await launchesRoute(request, env, url, { page: momoPage, kv: briefKvJson }); if (_ln) return _ln; }   // v799 - New launches (Kendall and Najjuko)
+        if (url.pathname === "/momo/work/launches/report" && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _lr = await makeReportRoute(request, env, url, { kv: briefKvJson, person: personOfKey }); if (_lr) return _lr; }   // v800 - make a report (period, developer, zone, up to 10)
         if (url.pathname.startsWith("/momo/work/planner") && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _cp = await plannerRoute(request, env, url, { page: momoPage, person: personOfKey }); if (_cp) return _cp; }   // v758 - FN Content Planner
         const _prod = url.pathname === "/momo/work/products";   // v754 (Kendall 4 Nov 2026: "merge the cards") - Product sheets: briefs, data sheets and building briefings behind one card
         if (url.pathname.startsWith("/momo/work") && !_prod) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr, ckDesk: ckDeskDeps }); if (_wr) return _wr; }

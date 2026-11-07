@@ -45,11 +45,11 @@ ok(launchArea(d, "Business Bay").area === "BUSINESS BAY" && launchArea(d, "") ==
 
 // the Momo card
 const html = launchesPage("k", "", { generated: today, qa: ["no launches run recorded for 2026-11-06 (a missed day)"], rows: [
-  row({ key: "ap_a", confidence: "high", pic: "https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg", pic_credit: "Some Channel", pic_link: "https://www.youtube.com/watch?v=AAAAAAAAAAA", zone: "Dubai Silicon Oasis Centre", sizes: "650-1,400 sq ft" }),
+  row({ key: "ap_a", confidence: "high", pic: "https://azimuth-2.digitalchemy.workers.dev/img/lpic_AAAAAAAAAAA_0", pic_credit: "Some Channel", pic_link: "https://www.youtube.com/watch?v=AAAAAAAAAAA", zone: "Dubai Silicon Oasis Centre", sizes: "650-1,400 sq ft" }),
   row({ key: "ap_b", developer: "Samana", project: "Ocean Crest", first_seen: "2026-10-01", registered: true, status: "registered", kinds: ["dld_register", "youtube"] }),
   row({ key: "ap_bare", project: "Bare", area: "", from_aed: null })] }, today);
 ok((html.match(/class=lc /g) || []).length === 2, "one card per launch; a card without area or price is hidden");
-ok(/<img src="https:\/\/i\.ytimg\.com\/vi\/AAAAAAAAAAA\/hqdefault\.jpg"/.test(html) && /mqdefault/.test(html) && /href="https:\/\/www\.youtube\.com\/watch\?v=AAAAAAAAAAA"[^>]*><img/.test(html), "video thumbnail picture, tap opens the video, mqdefault fallback");
+ok(/<img src="https:\/\/azimuth-2\.digitalchemy\.workers\.dev\/img\/lpic_AAAAAAAAAAA_0"/.test(html) && /href="https:\/\/www\.youtube\.com\/watch\?v=AAAAAAAAAAA"[^>]*><img/.test(html), "v800: the face-checked video frame, tap opens the video");
 ok(/Image: Some Channel/.test(html) && /class="pic none"/.test(html), "credit line; initial tile when there is no picture");
 ok(/On the register &middot; seen on YouTube/.test(html) && /Not yet registered/.test(html), "status chips, registered + YouTube merged on one card");
 ok(/By Dubai 2040 zone/.test(html) && /data-zone="Dubai Silicon Oasis Centre"/.test(html) && /Dubai 2040: Dubai Silicon Oasis Centre/.test(html), "zone filter and zone on the card");
