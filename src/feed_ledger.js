@@ -235,3 +235,55 @@ export function factMenu(fresh, opts) {
   const P = planR.slice(0, 8);   // the news is never crowded out by the register: the cap trims the register blocks, not the stories
   return P.concat(pickRe.slice(0, Math.max(0, cap - P.length - news.length)), news);
 }
+
+// v799 - LAUNCHES (Kendall, 7 Nov 2026: "YouTube yes, Instagram yes"). The 04:00 refresh writes KV img_launches (announced projects
+// layer: developer sheets, news, YouTube, Instagram), one row per developer + project with first_seen and a confidence. Up to FIVE
+// angles a morning, each a launch FIRST SEEN in the last 48 hours at medium confidence or better, never padded, never old, never
+// invented: a quiet day gives none and the QA line says "no new launches". Every angle is tied to the register (the area's settled
+// price from areaIntel, else the city median) and says "price as advertised" - a broker video is a market signal, not a sheet.
+// The 14-day repeat guard is the famhist id ("launch:<key>"), the same history every other angle is checked against.
+const LAUNCH_AREA_ALIAS = { "jumeirah village circle": ["al barsha south fourth", "jumeirah village circle"], "jumeirah village triangle": ["al barsha south fifth", "jumeirah village triangle"],
+  "dubai hills estate": ["hadaeq sheikh mohammed bin rashid", "dubai hills"], "downtown dubai": ["burj khalifa", "downtown"], "dubai marina": ["marsa dubai", "dubai marina"],
+  "jumeirah lake towers": ["al thanyah fifth", "jumeirah lake towers"], "meydan": ["meydan", "nad al sheba first", "mohammed bin rashid city"], "dubailand": ["wadi al safa", "dubailand"],
+  "dubai creek harbour": ["al khairan first", "dubai creek harbour"], "dubai islands": ["dubai islands", "deira islands"], "palm jumeirah": ["palm jumeirah", "nakhlat jumeira"],
+  "dubai south": ["madinat al mataar", "dubai south"], "arjan": ["al barshaa south third", "arjan"], "business bay": ["business bay"], "al furjan": ["al furjan", "jabal ali first"] };
+export function launchArea(d, area) {
+  const a = low(area); if (!a) return null;
+  const want = LAUNCH_AREA_ALIAS[a] || [a];
+  const list = (d && d.areaIntel && d.areaIntel.areas) || [];
+  return list.find((x) => want.some((w) => low(x.area) === w)) || list.find((x) => want.some((w) => w.length >= 6 && (low(x.area).includes(w) || w.includes(low(x.area))))) || null;
+}
+export function launchAngles(snap, d, famh, today, opts) {
+  opts = opts || {};
+  const rows = (snap && Array.isArray(snap.rows)) ? snap.rows : [];
+  const DAY = 86400000, cut = new Date(Date.parse(today + "T00:00:00Z") - (opts.days || 2) * DAY).toISOString().slice(0, 10);
+  const used = new Set((famh || []).filter((x) => x && x.d && (Date.parse(today) - Date.parse(x.d)) < 14 * DAY).map((x) => x.id).filter(Boolean));
+  const t = d && d.transactions, per = t ? span(t.periodFrom, t.periodTo) : "", perSrc = t ? "DLD Open Data, " + t.periodFrom + " to " + t.periodTo : "DLD Open Data";
+  const fresh = rows.filter((r) => r && r.project && r.developer && r.first_seen >= cut && r.first_seen <= today && (r.confidence === "high" || r.confidence === "medium") && r.status !== "registered");
+  const skipped = { repeat: 0, untied: 0 };
+  const out = [];
+  for (const r of fresh.sort((a, b) => (b.confidence === "high") - (a.confidence === "high") || String(b.first_seen).localeCompare(String(a.first_seen)))) {
+    if (out.length >= 5) break;
+    const id = "launch:" + r.key;
+    if (used.has(id)) { skipped.repeat++; continue; }
+    const where = r.area ? " in " + r.area : "";
+    const price = r.from_aed ? aed(r.from_aed) : "";
+    const ai = launchArea(d, r.area);
+    let tie = "", tieSrc = "";
+    const one = ai && ai.byRoom && ai.byRoom["1 B/R"];
+    if (ai && one && one.sales >= 20 && /1BR/.test(String(r.units || ""))) { tie = "1-bedrooms in " + titleCase(ai.area) + " settled at a median " + aed(one.medianAed) + " on the register from " + per + " (" + nf(one.sales) + " sales)."; tieSrc = perSrc + " (settled prices by area)"; }
+    else if (ai && ai.medianAedSqft) { tie = "Homes in " + titleCase(ai.area) + " settled at a median " + aed(ai.medianAedSqft) + " per sq ft on the register from " + per + "."; tieSrc = perSrc + " (settled prices by area)"; }
+    else if (t && t.medianResidentialAedSqft) { tie = "Across Dubai, homes settled at a median " + aed(t.medianResidentialAedSqft) + " per sq ft from " + per + "."; tieSrc = perSrc; }
+    if (!tie) { skipped.untied++; continue; }
+    const bits = [r.units, r.plan ? r.plan + " plan" : "", r.handover ? "handover " + r.handover : ""].filter(Boolean).join(", ");
+    out.push({ launch: true, fact: id, family: "developer", subject: low(r.developer), reader: "invest",
+      hook: r.developer + " has launched " + r.project + where + (price ? ", from " + price + " as advertised" : "") + (bits ? " (" + bits + ")" : "") + ". " + tie,
+      figure: price ? price + " (as advertised)" : r.project,
+      source: "Launched; price as advertised (" + (r.kinds || []).join(", ") + ", " + (r.sources_n || 0) + " source" + (r.sources_n === 1 ? "" : "s") + ", first seen " + dSay(r.first_seen) + "); " + tieSrc,
+      buyer: "A new launch set against what the register says the area actually sells for - not on the DLD register yet, so check the developer's sheet before quoting it.",
+      links: (r.links || []).slice(0, 2) });
+  }
+  const note = out.length ? "launches: " + out.length + " new (" + out.map((a) => a.fact.slice(7, 19)).join(",") + ")" + (skipped.repeat ? ", " + skipped.repeat + " repeats held back" : "")
+    : "no new launches" + (rows.length ? " (" + fresh.length + " first seen in 48 h at medium or better" + (skipped.repeat ? ", " + skipped.repeat + " already sent in 14 days" : "") + ")" : snap ? "" : " (no img_launches snapshot)");
+  return { angles: out, note, fresh: fresh.length };
+}
