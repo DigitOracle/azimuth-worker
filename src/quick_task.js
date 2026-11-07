@@ -24,6 +24,7 @@ function show() {
     + '<div style="font:600 1.2rem Fraunces,serif;color:#0A4F4A">Quick task</div><div style="font:500 .85rem IBM Plex Sans,sans-serif;color:#5F6B66;margin-top:2px">Type it or tap the microphone and say it.</div>'
     + '<div style="display:flex;gap:8px;align-items:flex-start;margin-top:12px"><textarea id="qt_text" rows="3" maxlength="400" placeholder="What needs doing?" style="' + IN + ';resize:vertical;flex:1"></textarea>'
     + '<button type="button" id="qt_mic" aria-label="Speak the task" style="flex:0 0 48px;height:48px;border-radius:14px;border:1px solid #C5A56A;background:#FAF7F1;color:#0A4F4A;display:flex;align-items:center;justify-content:center;cursor:pointer">' + MIC + '</button></div>'
+    + '<button type="button" id="qt_rec" style="width:100%;margin-top:10px;min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid #C5A56A;border-radius:12px;background:#FAF7F1;color:#0A4F4A;font:600 .95rem IBM Plex Sans,sans-serif;cursor:pointer"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Record a meeting instead</button>'
     + '<div id="qt_hint" style="font:500 .78rem IBM Plex Sans,sans-serif;color:#5F6B66;min-height:1.1em;margin-top:4px"></div>'
     + '<label style="' + LB + '" for="qt_who">WHO IS IT FOR</label><select id="qt_who" style="' + IN + '"><option value="">Me</option></select>'
     + '<label style="' + LB + '" for="qt_due">DUE (IF THERE IS A DATE)</label><input id="qt_due" type="date" style="' + IN + '">'
@@ -46,6 +47,11 @@ function show() {
     } catch (e) { stop(); H.textContent = "The microphone did not start. Type it instead."; }
   };
   o.onclick = function (ev) { if (ev.target === o || ev.target.id === "qt_x") { stop(); shut(); } };
+  o.querySelector("#qt_rec").onclick = function () {   // v801 - straight into the meeting recorder (Momo Work, v617)
+    stop(); shut(); var w = document.getElementById("wrec");
+    if (w) { w.click(); return; }
+    var s = new URLSearchParams(location.search); s.set("rec", "1"); location.href = "/momo/work?" + s.toString();
+  };
   S.onclick = function () {
     var text = (T.value || "").replace(/\s+/g, " ").trim(); if (text.length < 3) { H.textContent = "Type or say the task first."; T.focus(); return; }
     stop(); S.disabled = true; S.textContent = "Adding...";

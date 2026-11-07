@@ -216,7 +216,8 @@ function makeEntries2(id,btn,fin){
   if(!QUEUE.length){fail("Nothing to file from that recording.");return}
   closeOv();$("wt").value="Recording read ("+mins(j.secs)+"): "+QUEUE.length+(QUEUE.length===1?" activity":" activities")+". Check each one. Notes and transcript: tap Record, then the recording in today's list.";
   preview(QUEUE[0]);scrollTo(0,0);toast("Meeting read. Check the entry below and save it.");loadList()}).catch(function(){if(btn){btn.disabled=false;btn.textContent="Make entry"}fail("Could not read it just now. Your recording is safe: try again from the list.")})}
-$("wrec").onclick=function(){drawStart();loadList(function(){drawList()})};   // v619: draw once; only the list refreshes, so a quick tap or a typed title is never wiped
+$("wrec").onclick=function(){drawStart();loadList(function(){drawList()})};
+if(new URLSearchParams(location.search).get("rec")==="1"){setTimeout(function(){var w=$("wrec");if(w)w.click()},250)}   // v801 - opened from Quick task: open the recorder straight away   // v619: draw once; only the list refreshes, so a quick tap or a typed title is never wiped
 loadList();
 })();
 `;
