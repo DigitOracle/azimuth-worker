@@ -22,6 +22,39 @@ const nf = (v) => Math.round(Number(v) || 0).toLocaleString("en-US");
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dSay = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? Number(m[3]) + " " + MON[Number(m[2]) - 1] + " " + m[1] : ""; };
 const aedShort = (v) => { v = Number(v); return v >= 1e6 ? "AED " + (v / 1e6).toFixed(2) + "M" : "AED " + Math.round(v / 1e3) + "K"; };
+// v803 (Kendall 7 Nov, "yes do v803"): register names arrive in capitals ("RAW DISTRICT 2 TOWER C BY IMTIAZ"); shown as "Raw District 2,
+// Tower C" with the developer Imtiaz. The 04:00 job does this (announced_social.nice_name, which also prefers a marketing name from the
+// project's own video / website / press titles); this is the same rule for a snapshot written before v803. JVC, DIFC and brand words stay
+// in capitals; brand styling with digits in a word (O1NE, V1EW, BAYZ101) is left as written.
+const KEEP_CAPS = new Set(["JVC", "JVT", "JLT", "JBR", "JGE", "DIFC", "DIP", "DSO", "DLRC", "DWC", "DXB", "MBR", "UAE", "RAK", "SZR", "MAG", "SLS", "DAMAC", "AYS",
+  "II", "III", "IV", "VI", "VII", "VIII", "IX", "XI", "XII", "LLC", "FZE", "FZ", "GCC", "W", "ME", "B2B", "HQ", "LIV", "IGO", "ARK"]);
+const SMALL = new Set(["by", "at", "of", "the", "and", "in", "on", "de", "la", "le", "du", "for", "a"]);
+const capWord = (w, first) => {
+  const core = w.replace(/[^A-Za-z0-9&'.-]/g, "");
+  if (KEEP_CAPS.has(core.toUpperCase())) return w;
+  if (!first && SMALL.has(core.toLowerCase())) return w.toLowerCase();
+  if (/^(?:\d+[A-Z]{1,2}|[A-Z]{1,2}\d+|[A-Z])$/.test(core)) return w;
+  return w.split("-").map((p) => p.slice(0, 1).toUpperCase() + p.slice(1).toLowerCase()).join("-");
+};
+const words = (s) => new Set(String(s || "").toLowerCase().match(/[a-z0-9]+/g) || []);
+export function niceName(name, developer) {
+  let n = String(name || "").replace(/\s+/g, " ").trim(), dev = developer;
+  if (!n || n !== n.toUpperCase() || !/[A-Z]/.test(n)) return [n, dev];
+  const m = n.match(/^(.+?)\s+BY\s+([A-Z][A-Z0-9 &.'-]{1,40})$/);
+  if (m) {
+    const dw = words(dev), bw = words(m[2]);
+    if (!dev) { dev = m[2].split(" ").map((w, i) => capWord(w, i === 0)).join(" "); n = m[1]; }
+    else if ([...bw].some((x) => dw.has(x))) n = m[1];
+  }
+  if (n.split(" ").some((w) => /[A-Z]\d|\d[A-Z]/.test(w) && !/^(?:\d+[A-Z]{1,2}|[A-Z]{1,2}\d+)$/.test(w))) return [n, dev];
+  const ws = n.split(" "); let out = ws.map((w, i) => capWord(w, i === 0 || ["-", "|", ":"].includes(ws[i - 1]))).join(" ");
+  if (out.split(" ").length >= 3) out = out.replace(/(\S)\s+(Tower|Building|Block|Phase|Plot|Cluster)\s+([A-Z0-9]{1,3})\b/g, "$1, $2 $3");
+  return [out, dev];
+}
+export function tidyLaunches(snap) {
+  if (!snap || !Array.isArray(snap.rows)) return snap;
+  return Object.assign({}, snap, { rows: snap.rows.map((r) => { if (!r || !r.project) return r; const [p, d] = niceName(r.project, r.developer); return (p === r.project && d === r.developer) ? r : Object.assign({}, r, { project: p, developer: d }); }) });
+}
 export const safePic = (u) => /\/img\/l(?:pic|thumb)_[\w-]+$/.test(String(u || ""));   // our own face-checked copies only
 const NAVY = "#1F2B44", GOLD = "#C5A56A", CREAM = "#FAF6EE", INK = "#202020", MUTE = "#5F6B66", PALE = "#EEE7D8";
 const I = (d, s, c) => '<svg viewBox="0 0 24 24" width="' + (s || 34) + '" height="' + (s || 34) + '" fill="none" stroke="' + (c || GOLD) + '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
@@ -175,7 +208,7 @@ async function kvj(env, k) { try { return JSON.parse((await env.MEETINGS.get(k))
 async function withLogo(env, html) { const b64 = await env.MEETINGS.get("bpp_logo_png"); return b64 ? html.replace(/(["'])najma_logo\.png\1/g, '"data:image/png;base64,' + b64 + '"') : html; }
 
 async function buildFor(env, rec, deps, origin, bar) {
-  const snap = await deps.kv(env, "launches"), rep = await deps.kv(env, "launch_report_data");
+  const snap = tidyLaunches(await deps.kv(env, "launches")), rep = await deps.kv(env, "launch_report_data");
   const rows = pickRows(snap && snap.rows, rec.keys), data = (rep && rep.rows) || {};
   const pdfHref = origin + "/lr/" + rec.token + ".pdf";
   const text = (rec.title || "Najma Launch Report") + (rec.sub ? " (" + rec.sub + ")" : "") + ": " + rows.length + " Dubai launch" + (rows.length === 1 ? "" : "es") + ", prices as advertised. " + origin + "/lr/" + rec.token;
@@ -191,7 +224,7 @@ export async function makeReportRoute(request, env, url, deps) {
   const [, , label] = periodRange(url.searchParams.get("period") || (keys.length === 1 ? "" : "week"), today, url.searchParams.get("from"), url.searchParams.get("to"));
   const by = deps.person ? deps.person(env, url) : "";
   const one = keys.length === 1;
-  const snap = await deps.kv(env, "launches");
+  const snap = tidyLaunches(await deps.kv(env, "launches"));
   const first = pickRows(snap && snap.rows, keys)[0];
   const rec = { token: newToken(), keys, by, at: new Date().toISOString(), title: one && first ? first.project + " · Najma Launch Report" : "Najma Launch Report", sub: one ? dSay(today) : label + " · " + dSay(today) };
   await env.MEETINGS.put("lr_" + rec.token, JSON.stringify(rec), { expirationTtl: 120 * 86400 });

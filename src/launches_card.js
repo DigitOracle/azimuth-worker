@@ -26,7 +26,7 @@ const ago = (iso, today) => { const d = Math.round((Date.parse(today) - Date.par
 // Kendall 7 Nov (on the 375 px preview): a picture on every card (the newest video's thumbnail, tap = open the video; an Instagram
 // picture copied into KV; else the developer's initial), small "Image: <channel>" credit; only cards with an area or a starting price;
 // registered launches too, one card per project, with a status chip; filter by Dubai 2040 zone.
-import { safePic } from "./launch_report.js";   // v800 - only our own face-checked picture copies are ever shown (Kendall 7 Nov: no faces)
+import { safePic, tidyLaunches } from "./launch_report.js";   // v800 - only our own face-checked picture copies are ever shown (Kendall 7 Nov: no faces)
 const shown = (r) => r && r.project && (r.area || r.from_aed);
 const mq = (u) => String(u || "").replace("/hqdefault.jpg", "/mqdefault.jpg");
 const seenOn = (k) => (k || []).filter((x) => x === "youtube" || x === "instagram" || x === "news").map((x) => x === "youtube" ? "YouTube" : x === "instagram" ? "Instagram" : "the news");
@@ -162,7 +162,7 @@ export function launchesPage(key, rk, snap, today) {
 
 export async function launchesRoute(request, env, url, deps) {
   if (url.pathname !== "/momo/work/launches" || request.method !== "GET") return null;
-  let snap = null; try { snap = await deps.kv(env, "launches"); } catch (e) {}
+  let snap = null; try { snap = tidyLaunches(await deps.kv(env, "launches")); } catch (e) {}   // v803: register names in proper case
   const today = new Date(Date.now() + 4 * 3600000).toISOString().slice(0, 10);
   return new Response(deps.page(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", launchesPage(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", snap, today)),
     { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });

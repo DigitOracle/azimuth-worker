@@ -65,6 +65,6 @@ ok(launchCards([{ project: "<x>", developer: "a", area: "Arjan" }], today).inclu
 
 const idx = fs.readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 ok(/\/momo\/work\/launches" && \["najjuko", "kendall"\]/.test(idx), "route for Kendall and Najjuko only");
-ok(/launchAngles\(await briefKvJson\(env, "launches"\)/.test(idx) && /angles\.push\(\.\.\._la\.angles\)/.test(idx), "feed reads img_launches and appends after the five");
+ok(/launchAngles\((?:tidyLaunches\()?await briefKvJson\(env, "launches"\)/.test(idx) && /angles\.push\(\.\.\._la\.angles\)/.test(idx), "feed reads img_launches and appends after the five");
 ok(/id=card_launches/.test(idx) && /\+ CMP \+ LNC \+ TRIP/.test(idx), "front-door card");
 console.log("v799 launches:", n, "checks passed");

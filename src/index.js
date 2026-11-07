@@ -6,7 +6,7 @@ import { todayFullRoute } from "./today_full.js";
 import { calStart, calCallback } from "./today_cal.js";   // v786b   // v786 - the full Today card   // v785 - the shared Thailand trip card (Kendall + Najjuko)   // v778
 import { calendarRoute } from "./content_calendar.js";   // v754
 import { launchesRoute, LAUNCH_ICONS } from "./launches_card.js";   // v799 - Momo New launches
-import { makeReportRoute, publicReportRoute } from "./launch_report.js";   // v800 - the Najma Launch Report on demand, PDF and WhatsApp share
+import { makeReportRoute, publicReportRoute, tidyLaunches } from "./launch_report.js";   // v800 - the Najma Launch Report on demand, PDF and WhatsApp share
 import { plannerRoute, plannerEveningCheck } from "./content_planner.js";   // v758 - FN Content Planner
 import { creamTheme } from "./cream_theme.js";   // v728
 import { plotIntelRoutes, PLOT_ROOMS } from "./plot_intel.js";   // v691 - Activity radar + Land scanner (MORE)
@@ -6896,7 +6896,7 @@ async function dailyFeedTick(env, force, dry) {
   // v799 - LAUNCHES: up to five new launches (first seen in 48 h, medium+), after the five and outside the gate (built from the data, never
   // by the generator); a quiet day adds nothing and says so. See launchAngles in feed_ledger.js.
   const _nMain = angles.length;
-  try { const _la = launchAngles(await briefKvJson(env, "launches"), d, famh, gstDateStr(n)); qa.launches = { added: _la.angles.length, fresh: _la.fresh }; qa.note += " | " + _la.note; angles.push(..._la.angles); }
+  try { const _la = launchAngles(tidyLaunches(await briefKvJson(env, "launches")), d, famh, gstDateStr(n)); qa.launches = { added: _la.angles.length, fresh: _la.fresh }; qa.note += " | " + _la.note; angles.push(..._la.angles); }
   catch (e) { qa.note += " | launches step failed: " + String((e && e.message) || e).slice(0, 80); }
   if (dry) return angles.map((a, i) => (i + 1) + ". " + (a.campaign ? "[VALLEY] " : "") + (a.launch ? "[LAUNCH] " : "") + "[" + (a.family || "-") + "] " + a.hook + "\n   " + a.figure + " · " + a.source + (a.trend ? "\n   trend: " + a.trend : "") + (a.shot ? "\n   shot: " + a.shot : "")).join("\n") + "\n\nQA: " + qa.note + (qa.repaired.length ? " | repaired " + qa.repaired.join(",") : "") + " | before " + qa.before.join(",") + " | after " + qa.after.join(",") + "\n\n" + (await feedEjariStep(env, true));   // v281 - what the card would say
   // store as the drafting context (draftFromAngle reads this) + remember the hooks
