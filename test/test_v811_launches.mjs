@@ -61,7 +61,14 @@ eq(launchStatus({ registered: true, sales_n: 0, planned_units: 300, start_date: 
 eq(launchStatus({ registered: true, sales_n: 12, planned_units: 300, launch_date: "2026-10-01", eoi_note: "x mentions sold out" }, TODAY).status, "eoi", "sold out claimed, 12 register sales: EOI pending");
 eq(launchStatus({ registered: true, sales_n: 280, planned_units: 300, launch_date: "2026-06-01", eoi_note: "x" }, TODAY).status, "nearly_sold_out", "after allocation the register decides");
 const eoiCard = launchCards([row({ key: "ap_e1", project: "Allocation Tower", area: "JVC", sales_n: 12, planned_units: 300, launch_date: "2026-10-01", launch_basis_kind: "register_sale", eoi_note: "developer_site mentions sold out; the register shows 12 sales", dev_vs_register: "Developer: sold out (EOI) · Register: 12 sold so far" })], TODAY, "");
-ok(eoiCard.includes("EOI / allocation pending") && eoiCard.includes("Developer: sold out (EOI) · Register: 12 sold so far"), "both facts side by side on the card");
+ok(eoiCard.includes("EOI / allocation pending") && eoiCard.includes("Developer statement (EOI) differs from the register · Register: 12 sales registered so far") && !/sold/i.test(eoiCard), "v824: both facts side by side, evidence wording, no 'sold'");
+// v824: no "sold out" / "% sold" anywhere on a card; the register count with its date instead
+{ const C = await import("../src/launches_card.js");
+  const hi = C.cardStatus({ registered: true, sales_n: 1162, planned_units: 1282, launch_date: "2026-03-01", sales_as_of: "2026-10-15" }, TODAY);
+  eq([hi.status, hi.label], ["high_sales", "1,162 sales registered to 15 Oct"], "v824: the old nearly_sold_out reads as registered sales");
+  eq(C.cardStatus({ registered: true, sales_n: 0, planned_units: 300, launch_date: "2026-06-01", launch_basis_kind: "register_start" }, TODAY).label, "Registered · no sales yet", "v824: no sales");
+  const cards = launchCards(rd.concat(rd2).map((x) => Object.assign({}, x, { sales_as_of: "2026-10-15" })), TODAY, "");
+  ok(!/sold/i.test(cards.replace(/<style[\s\S]*?<\/style>/g, "")) && cards.includes("448 sales registered to 15 Oct"), "v824: no sold / sold-out / % sold wording on the cards", cards.match(/[^>]{0,40}sold[^<]{0,40}/gi)); }
 const camp = launchCards([Object.assign({}, rd2[0], { campaign_note: "Seen in a campaign today, but already 448 sold on the register since 13 Aug 2026: not a new launch" })], TODAY, "");
 ok(camp.includes("not a new launch"), "a campaign sighting of a selling project says so");
 

@@ -3,8 +3,8 @@
 // project, developer, area, from AED (as advertised), unit types, plan, handover, a confidence chip, sources count, last seen, links.
 // Filters (v802): This week / All / Filter (a sheet: developer, Dubai 2040 zone, sort) / Reset; first 20, then Show more.
 // v811 (Kendall 8 Nov 2026, "Go ahead"): truthful launches. One card per project (name variants merged), the launch date by its basis
-// ("Launched 13 Aug 2026 · 448 sold", "Launched 2 Feb (Khaleej Times)", "Launch date unknown") and a status pill (EOI / allocation pending,
-// Coming soon, Just launched, Selling with % sold, Nearly sold out) on every card; sorted by launch_date, not first_seen. Tabs This week /
+// ("Launched 13 Aug 2026 · 448 sales registered", "Launched 2 Feb (Khaleej Times)", "Launch date unknown") and a status pill (EOI / allocation pending,
+// Coming soon, Just launched, Selling with registered sales; v824: no % sold, no sold-out wording) on every card; sorted by launch_date, not first_seen. Tabs This week /
 // Hot this month (off-plan register sales, last 30 days) / Coming soon / All; Filter: developer, Area (register area and district: the
 // Dubai 2040 zone stays in the data, off the filter), launch dates (last 30 days / 4 months / 12 months / custom), sort. Nothing here is for a client sheet: prices are as advertised until the developer's sheet confirms.
 
@@ -32,6 +32,28 @@ const ago = (iso, today) => { const d = Math.round((Date.parse(today) - Date.par
 // picture copied into KV; else the developer's initial), small "Image: <channel>" credit; only cards with an area or a starting price;
 // registered launches too, one card per project, with a status chip; filter by Dubai 2040 zone.
 import { safePic, tidyLaunches, launchStatus, launchSay, salesTo } from "./launch_report.js";   // v800 - only our own face-checked picture copies are ever shown (Kendall 7 Nov: no faces)
+// v824 (Launch Radar audit, Kendall 8 Nov): NO "sold out" and NO "% sold" on the card. Sale count / planned units is an inference (planned units
+// change, one register project can be several towers), so the card says only what the register shows: "448 sales registered to 15 Oct",
+// "Registered · no sales yet". The old nearly_sold_out state becomes high_sales and reads like any other selling project.
+const nfE = (n) => Number(n || 0).toLocaleString("en-US");
+export function cardStatus(r, today) {
+  const ls = launchStatus(r, today), n = Number(r.sales_n) || 0;
+  const status = ls.status === "nearly_sold_out" ? "high_sales" : ls.status;
+  let label = ls.label;
+  if (status === "selling" || status === "high_sales") label = n ? nfE(n) + " sales registered" + salesTo(r) : "Registered · no sales yet";
+  else if (status === "just_launched" && n) label = "Just launched · " + nfE(n) + " sales registered" + salesTo(r);
+  return { status, label };
+}
+// rewrites any "N sold" / "sold out" wording (launch line, warnings from the collector) into evidence wording
+export function evidenceSay(t) {
+  return String(t || "")
+    .replace(/Developer: sold out( \(EOI\))?/g, (m, e) => "Developer statement" + (e ? " (EOI)" : "") + " differs from the register")
+    .replace(/\b(?:nearly |almost )?(?:sold[ -]out|fully booked|sells out)\b/gi, "an allocation claim")
+    .replace(/(\d[\d,]*) sold so far/g, "$1 sales registered so far")
+    .replace(/already (\d[\d,]*) sold on the register/g, "already $1 sales registered")
+    .replace(/(\d[\d,]*) sold\b/g, "$1 sales registered")
+    .replace(/\s*·?\s*\d+(?:\.\d+)?% sold/g, "");
+}
 const shown = (r) => r && r.project && (r.area || r.from_aed);
 const mq = (u) => String(u || "").replace("/hqdefault.jpg", "/mqdefault.jpg");
 const seenOn = (k) => (k || []).filter((x) => x === "youtube" || x === "instagram" || x === "news").map((x) => x === "youtube" ? "YouTube" : x === "instagram" ? "Instagram" : "the news");
@@ -74,7 +96,7 @@ export const areaOptions = (rows) => [...new Set((rows || []).flatMap((r) => [r.
 // v811b sort (Kendall 8 Nov): LAUNCHED projects first, newest launch_date first; then Coming soon (soonest first, it has its own tab);
 // "Announced · no date yet" at the bottom.
 export function launchRank(r, today) {
-  const la = r.launch_date || "", st = launchStatus(r, today).status;
+  const la = r.launch_date || "", st = cardStatus(r, today).status;
   if (st === "announced" || !la) return [2, String(r.first_seen || "")];
   if (la > today || st === "coming_soon") return [1, la];
   return [0, la];
@@ -89,7 +111,7 @@ export function selectLaunches(rows, o, today) {
   o = o || {};
   const back = (n) => new Date(Date.parse(today) - n * 864e5).toISOString().slice(0, 10), week = back(7);
   const list = (rows || []).filter(shown).filter((r) => {
-    const la = r.launch_date || "", st = launchStatus(r, today).status;
+    const la = r.launch_date || "", st = cardStatus(r, today).status;
     if (o.tab === "week" && !(la >= week && la <= today && isLaunch(r))) return false;
     if (o.tab === "hot" && !(Number(r.sales_30d) > 0)) return false;
     if (o.tab === "soon" && !(st === "coming_soon" || st === "eoi")) return false;
@@ -112,9 +134,9 @@ export function launchCards(rows, today, q) {
     const links = (r.links || []).slice(0, 2).map((u, i) => '<a class=lk href="' + esc(u) + '" target=_blank rel="noopener noreferrer">' + svg(LAUNCH_ICONS.link, 12) + (/youtube|youtu\.be/.test(u) ? "Video" : /instagram/.test(u) ? "Post" : "Source") + (i ? " " + (i + 1) : "") + "</a>").join("");
     const ini = '<span class=pini>' + esc(String(r.developer || "?").slice(0, 1)) + '</span>';
     const fresh = r.launch_date && r.launch_date >= day && r.launch_date <= today && isLaunch(r);   // v811: launched in the last day, never "first seen"
-    const ls = launchStatus(r, today), say = launchSay(r, today);
-    const pill = '<span class="st st-' + ls.status + '">' + esc(ls.label) + ((ls.status === "selling" || ls.status === "nearly_sold_out") && ls.pct !== null ? " · " + ls.pct.toFixed(0) + "% sold" : "") + "</span>";
-    const warn = [r.dev_vs_register, r.campaign_note, ls.status === "eoi" ? r.eoi_note : ""].filter(Boolean).map((t) => '<div class=wn>' + esc(t) + "</div>").join("");
+    const ls = cardStatus(r, today), say = evidenceSay(launchSay(r, today));
+    const pill = '<span class="st st-' + ls.status + '">' + esc(ls.label) + "</span>";
+    const warn = [r.dev_vs_register, r.campaign_note, ls.status === "eoi" ? r.eoi_note : ""].filter(Boolean).map((t) => '<div class=wn>' + esc(evidenceSay(t)) + "</div>").join("");
     const towers = (r.towers || []).length > 1 ? '<div class=tw>' + esc(r.towers.length + " parts: " + r.towers.map((t) => t.name).join(", ")) + "</div>" : "";
     const badge = fresh ? '<span class=nw>New</span>' : "";
     const ok = picOk(r, counts);
@@ -132,7 +154,7 @@ export function launchCards(rows, today, q) {
       + (price ? '<div class=pr>from ' + esc(price) + '<small>as advertised</small></div>' : "")
       + line("pin", [r.area, r.district && r.district !== r.area ? r.district : ""].filter(Boolean).join(" · ")) + line("bed", r.units)
       + line("size", r.sizes) + line("plan", r.plan ? r.plan + " plan" : "") + line("key", r.handover ? "handover " + r.handover : "")
-      + '<div class=ft>' + svg(LAUNCH_ICONS.eye, 12) + '<span>' + (Number(r.sales_30d) ? nf(r.sales_30d) + " sold in 30 days" + esc(salesTo(r)) + " &middot; " : "") + (r.registered ? "on the register" : "not yet registered") + ' &middot; ' + nf(r.sources_n) + ' source' + (r.sources_n === 1 ? "" : "s") + '</span></div>'
+      + '<div class=ft>' + svg(LAUNCH_ICONS.eye, 12) + '<span>' + (Number(r.sales_30d) ? nf(r.sales_30d) + " sales registered in 30 days" + esc(salesTo(r)) + " &middot; " : "") + (r.registered ? "on the register" : "not yet registered") + ' &middot; ' + nf(r.sources_n) + ' source' + (r.sources_n === 1 ? "" : "s") + '</span></div>'
       + '<div class=ac>' + (links ? '<div class=lks>' + links + '</div>' : "<span></span>") + share + '</div></div></div>';
   }).join("");
 }
@@ -222,7 +244,7 @@ export function launchesPage(key, rk, snap, today, radar) {
     + '.pic{position:relative;display:block;aspect-ratio:16/10;background:#EFE6D4;overflow:hidden}.pic img{width:100%;height:100%;object-fit:cover;display:block}.pic .pini{display:none}.pic.none{display:flex;align-items:center;justify-content:center}.pic.none .pini{display:flex;width:40px;height:40px;border-radius:50%;background:#0A4F4A;color:#F3E7CF;align-items:center;justify-content:center;font:600 1.1rem Fraunces,serif}'
     + '.cr{position:absolute;left:0;right:0;bottom:0;padding:10px 6px 3px;font-size:.58rem;line-height:1.2;color:#fff;background:linear-gradient(transparent,rgba(28,35,33,.62));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + '.play{position:absolute;right:6px;top:6px;width:26px;height:26px;border-radius:50%;background:rgba(10,79,74,.85);color:#fff;display:flex;align-items:center;justify-content:center}.nw{position:absolute;left:6px;top:6px;background:#C5A56A;color:#fff;font:700 .62rem "IBM Plex Sans",sans-serif;letter-spacing:.04em;border-radius:999px;padding:3px 8px;box-shadow:0 1px 4px rgba(0,0,0,.18)}'
-    + '.st{align-self:flex-start;font:600 .62rem "IBM Plex Sans",sans-serif;border-radius:999px;padding:2px 7px;line-height:1.3}.st-on{background:#DCEBE4;color:#0A4F4A}.st-off{background:#F3E7CF;color:#8A6F3E}.st-just_launched{background:#0A4F4A;color:#fff}.st-selling{background:#DCEBE4;color:#0A4F4A}.st-nearly_sold_out{background:#F6DCCB;color:#8A3E1E}.st-coming_soon{background:#F3E7CF;color:#8A6F3E}.st-eoi{background:#E7E1F3;color:#4A3E8A}.st-no_sales{background:#EEE7D8;color:#5F6B66}.st-announced{background:#F1EEE8;color:#8FA39B}.hn{font-size:.76rem;color:#8A6F3E;margin:-2px 0 8px}.hn[hidden]{display:none}'
+    + '.st{align-self:flex-start;font:600 .62rem "IBM Plex Sans",sans-serif;border-radius:999px;padding:2px 7px;line-height:1.3}.st-on{background:#DCEBE4;color:#0A4F4A}.st-off{background:#F3E7CF;color:#8A6F3E}.st-just_launched{background:#0A4F4A;color:#fff}.st-selling{background:#DCEBE4;color:#0A4F4A}.st-high_sales{background:#DCEBE4;color:#0A4F4A}.st-coming_soon{background:#F3E7CF;color:#8A6F3E}.st-eoi{background:#E7E1F3;color:#4A3E8A}.st-no_sales{background:#EEE7D8;color:#5F6B66}.st-announced{background:#F1EEE8;color:#8FA39B}.hn{font-size:.76rem;color:#8A6F3E;margin:-2px 0 8px}.hn[hidden]{display:none}'
     + '.lt{display:flex;gap:5px;align-items:flex-start;font:600 .74rem "IBM Plex Sans",sans-serif;color:#0A4F4A}.lt svg{flex:0 0 12px;margin-top:2px;color:#C5A56A}.lt.unk{color:#8FA39B;font-weight:500}.wn{font-size:.68rem;line-height:1.3;color:#8A3E1E;background:#FBF0E6;border-radius:8px;padding:3px 6px}.tw{font-size:.66rem;color:#5F6B66}'
     + '.pj{font:600 .98rem/1.2 Fraunces,serif;color:#0A4F4A;margin-top:2px;overflow-wrap:anywhere}.dv{font-size:.76rem;color:#8A6F3E;font-weight:600}.pr{font:700 1.02rem Fraunces,serif;color:#1C2321;margin:2px 0}.pr small{display:block;font:500 .64rem "IBM Plex Sans",sans-serif;color:#8FA39B}'
     + '.ln{display:flex;gap:6px;align-items:flex-start;font-size:.78rem;color:#1C2321}.ln svg{flex:0 0 14px;color:#C5A56A;margin-top:2px}.ln span{min-width:0;overflow-wrap:anywhere}'

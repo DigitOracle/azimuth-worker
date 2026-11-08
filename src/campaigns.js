@@ -354,6 +354,7 @@ export async function campWebhook(env, body, deps) {
   const out = { statuses: 0, optouts: 0, replies: 0, taps: 0, stopped: "" };
   try {
     const pv = await campPreview(env, body, deps); if (pv && pv.consumed) { out.consumed = true; out.preview = pv; return out; }
+    const ro = await campReOptIn(env, body, deps); if (ro && ro.consumed) { out.consumed = true; out.reoptin = ro; return out; }   // v824
     const oi = await campOptIn(env, body, deps); if (oi && oi.consumed) { out.consumed = true; out.optin = oi; return out; }   // v821
     const now = (deps && deps.now) || Date.now();
     for (const en of (body && body.entry) || []) for (const ch of (en && en.changes) || []) {
@@ -1323,6 +1324,51 @@ export async function campOptIn(env, body, deps) {
   await putJ(env, "camp_state_" + c.id + "_" + d, { path: [], node: f.start, at, optin: true });
   await bump(env, c.id, (x) => { x.sent += okN; x.failed += sent.length - okN; x.optins = (x.optins || 0) + 1; x.replies += 1; x.day[date] = (x.day[date] || 0) + okN; x.rday = x.rday || {}; x.rday[date] = (x.rday[date] || 0) + 1; if (frond) { x.fronds = x.fronds || {}; x.fronds[frond] = (x.fronds[frond] || 0) + 1; } });
   return { consumed: true, cid: c.id, fresh: !prev, frond, sent };
+}
+
+// ---------- v824 (Kendall 8 Nov): START re-opt-in ----------
+// Someone who opted out (camp_optout_<d>, or the hashed camp_optout_h_ of a forgotten number) sends EXACTLY "START" / "ابدأ" to the desk number:
+// the opt-out is removed, new consent is recorded (their own message, quoted, with the Dubai date) and ONE confirmation is sent. Nothing else is
+// ever sent to an opted-out person: any other text from them is left to the existing handling, which never messages them. CAMP_REOPTIN="off" stops it.
+export const REOPTIN_REPLY = "Welcome back. You'll receive Palm Jebel Ali updates from Najjuko again. Reply STOP any time.";
+const REOPT_SET = new Set(["start", "ابدأ", "ابدا"].map(optOutNorm));
+export function isReOptInText(s) { const n = optOutNorm(s); return !!n && REOPT_SET.has(n); }
+export async function campReOptIn(env, body, deps) {
+  if (env.CAMP_REOPTIN === "off" || env.CAMPAIGNS_OFF === "1") return null;
+  const now = (deps && deps.now) || Date.now();
+  const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
+  const msg = val && val.messages && val.messages[0]; if (!msg || msg.type !== "text") return null;
+  const pid = DIG(val.metadata && val.metadata.phone_number_id); if (!pid || pid !== DIG(env.WA_DESK_PHONE_ID)) return null;   // the desk number only
+  const txt = String((msg.text && msg.text.body) || "").trim(); if (!isReOptInText(txt)) return null;
+  const d = DIG(msg.from); if (!d) return null;
+  const okey = "camp_optout_" + d, hkey = "camp_optout_h_" + (await optHash(env, d));
+  const plain = await getJ(env, okey, null), hashed = await getJ(env, hkey, null);
+  if (!plain && !hashed) return null;   // not opted out: START means nothing special here
+  if (msg.id) { const sk = "camp_reoptin_seen_" + msg.id; if (await env.MEETINGS.get(sk)) return { consumed: true, repeat: true }; await env.MEETINGS.put(sk, "1", { expirationTtl: 3 * 86400 }); }
+  const at = new Date(now).toISOString(), date = dubaiDate(now);
+  if (plain) await env.MEETINGS.delete(okey);
+  if (hashed) await env.MEETINGS.delete(hkey);
+  const oi = await getJ(env, "camp_optout_index", []); if (oi.includes(d)) await putJ(env, "camp_optout_index", oi.filter((x) => x !== d));
+  const consent = { text: "re-joined by sending START: \"" + txt.slice(0, 60) + "\"", date, by: "self, START re-opt-in", import_id: "reoptin", msg_id: msg.id ? String(msg.id).slice(0, 80) : undefined };
+  const ck = "camp_contact_" + d, prev = await getJ(env, ck, null);
+  const pname = String((val.contacts && val.contacts[0] && val.contacts[0].profile && val.contacts[0].profile.name) || "").slice(0, 80);
+  let k;
+  if (prev) { k = Object.assign({}, prev, { consent, consent_history: (prev.consent_history || []).concat(prev.consent ? [prev.consent] : []).slice(-5), reoptin_at: at });
+    delete k.opted_out; delete k.removed; if (!k.name && pname) k.name = pname; }
+  else { k = { e164: "+" + d, name: pname, company: "", role: "", source: "START re-opt-in", tags: ["pja-optin"], consent, added: at, reoptin_at: at };
+    const ix = await getJ(env, "camp_contact_index", []); if (!ix.includes(d)) { ix.push(d); await putJ(env, "camp_contact_index", ix); } }
+  const prior = plain ? { at: plain.at, how: plain.how } : { at: hashed.at, how: hashed.how, forgotten: true };
+  const rl = await getJ(env, "camp_reoptin_log", []); rl.unshift({ at, d4: d.slice(-4), text: txt.slice(0, 20), prior_how: prior.how, forgotten: !!prior.forgotten || undefined }); await putJ(env, "camp_reoptin_log", rl.slice(0, 1000));
+  k.reoptin_prior = prior;
+  const cl = await getJ(env, "camp_consentlog_" + d, []); cl.push(Object.assign({ topic: "reoptin", at }, consent)); await putJ(env, "camp_consentlog_" + d, cl.slice(-50));
+  const f2 = (deps && deps.fetch) || fetch, graph = (deps && deps.graph) || "https://graph.facebook.com/v21.0";
+  let ok = false, w = "";
+  try { const r = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to: d, type: "text", text: { body: REOPTIN_REPLY } }) });
+    const j = await r.json().catch(() => ({})); w = (j.messages && j.messages[0] && j.messages[0].id) || ""; ok = r.ok && !!w; } catch (e) {}
+  if (ok) k.last_reoptin_sent = at;
+  await putJ(env, ck, k);
+  return { consumed: true, reoptin: true, forgotten: !!prior.forgotten, sent: ok };
 }
 
 // ---------- v816 (Kendall 8 Nov): WHO GETS THIS and CONTACTS - owner only (isCampOwner), Back + Home, cards at 375 px ----------
