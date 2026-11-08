@@ -482,7 +482,10 @@ export function cleanCampaign(x, prev) {
   if (x.stop_forgets != null) c.stop_forgets = !!x.stop_forgets;
   if (x.phone != null) c.phone = x.phone === "main" ? "main" : "desk";
   if (x.flow != null) c.flow = ID_RE.test(String(x.flow)) ? String(x.flow) : "";
-  if (x.freq_days != null) c.freq_days = Math.max(1, Math.min(60, parseInt(x.freq_days, 10) || DEFAULTS.freqDays));
+  if (x.api != null) c.api = x.api === "mm" ? "mm" : "cloud";   // v817 - "mm" = Marketing Messages API; absent = env CAMP_MM_API
+  if (x.retry_131049 != null) c.retry_131049 = !!x.retry_131049 && x.retry_131049 !== "off";
+  if (x.retry_days != null) c.retry_days = Math.max(1, Math.min(60, parseInt(x.retry_days, 10) || 2));
+  if (x.freq_days != null) c.freq_days =Math.max(1, Math.min(60, parseInt(x.freq_days, 10) || DEFAULTS.freqDays));
   if (x.qr != null) c.qr = Math.max(0, Math.min(10, parseInt(x.qr, 10) || 0));
   if (x.link_url != null) c.link_url = cleanTarget(x.link_url);
   if (x.header != null) c.header = x.header && /^(image|video|document)$/.test(x.header.type) && (cleanTarget(x.header.link) || /^\d{5,30}$/.test(String(x.header.id || ""))) ? { type: x.header.type, link: cleanTarget(x.header.link) || undefined, id: x.header.id ? String(x.header.id) : undefined } : null;
@@ -513,6 +516,16 @@ export function buildPayload(c, contact, link) {
   if (comps.length) p.template.components = comps;
   return p;
 }
+// v817 - Marketing Messages API (Meta docs, send-marketing-messages): POST /<PHONE_NUMBER_ID>/marketing_messages, same template payload.
+// Only MARKETING templates go there; utility / authentication templates and free-form flow replies stay on /messages.
+export function templateCategory(c, ts) { const def = WA_TEMPLATES[c.template]; return String((def && def.category) || (ts && ts.category) || "MARKETING").toUpperCase(); }
+export function useMm(env, c, cat) { const on = c.api ? c.api === "mm" : String(env.CAMP_MM_API || "") === "1"; return on && cat === "MARKETING"; }
+// An MM refusal that means "this account / number cannot use MM yet": send once more on /messages and record why.
+export function mmNotReady(e) { if (!e) return false; const code = Number(e.code) || 0, msg = String(e.message || "") + " " + String(e.error_user_msg || "") + " " + String((e.error_data && e.error_data.details) || "");
+  if (code >= 130000) return false;   // per-message delivery codes (131049, 131026, 130429, 131063 ...) are real answers, not "MM not ready"
+  return code === 10 || code === 200 || /onboard|terms of service|not (yet )?(eligible|enabled|supported)|marketing[_ ]messages|unsupported post request|nonexisting field|unknown path/i.test(msg); }
+// v817 - retry a person Meta held back for its per-user marketing limit (131049), once at least retry_days (default 2) have passed
+export function retry131049Ok(c, k, now) { return !!(c.retry_131049 && k && Number(k.skip_code) === 131049 && k.last_mkt && now - Date.parse(k.last_mkt) >= (c.retry_days || 2) * DAY); }
 async function buildQueue(env, c) {
   const ix = await getJ(env, "camp_contact_index", []), list = [];
   for (const d of ix) { const k = await getJ(env, "camp_contact_" + d, null); if (k && !k.opted_out && !k.undeliverable && !k.removed && (k.tags || []).some((t) => c.tags.includes(t))) list.push(d); }   // v816 - removed contacts skipped
@@ -565,6 +578,7 @@ export async function campStep(env, c, deps, dry) {
   if (room <= 0) { r.note = (shared - s24.length <= 0) ? "shared 24 h cap reached" : "daily cap reached"; return r; }
   let q = await getJ(env, "camp_q_" + c.id, null); if (!q) { q = await buildQueue(env, c); if (!dry) await putJ(env, "camp_q_" + c.id, q); }
   let pos = q.pos || 0; const sentIds = [];
+  const tcat = templateCategory(c, await getJ(env, "camp_tpl_" + c.template, null)), mmOn = useMm(env, c, tcat); let mmDown = false; r.api_mode = mmOn ? "mm" : "cloud";
   const freq = (c.freq_days != null ? c.freq_days : DEFAULTS.freqDays) * DAY;
   // v726 - owners whose own local time is outside 10:00-19:00 Mon-Fri wait in q.wait (worked first on every tick; the number alone gives the zone)
   const wait = (q.wait || []).slice(), keepWait = []; let wi = 0;
@@ -580,24 +594,32 @@ export async function campStep(env, c, deps, dry) {
     if (c.vars.includes("why") && !k.why) { skip("no_reason_line"); continue; }   // the template must say why they are receiving it
     if (!k.consent || !k.consent.text || !k.consent.date) { skip("no_consent"); continue; }
     if (!(k.tags || []).some((t) => c.tags.includes(t))) { skip("tags_changed"); continue; }
-    if (k.last_mkt && now - Date.parse(k.last_mkt) < freq) { skip("messaged_this_week"); continue; }
+    if (k.last_mkt && now - Date.parse(k.last_mkt) < freq && !retry131049Ok(c, k, now)) { skip(c.retry_131049 && Number(k.skip_code) === 131049 ? "retry_131049_too_soon" : "messaged_this_week"); continue; }
     let code = "", link = "";
     if (c.vars.includes("link")) { const base = String(env.PUBLIC_ORIGIN || (deps && deps.origin) || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "");
       if (dry) { code = "DRYRUN00"; } else { code = await makeLink(env, c.id, d, c.link_url); } link = base + "/c/" + code; }
     const payload = buildPayload(c, k, link);
-    if (dry) { r.would.push({ from_phone_id: pid, url: graph + "/" + pid + "/messages", payload }); room--; continue; }
-    let res = null, j = {}, code0 = 0;
-    try { res = await f(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); j = await res.json().catch(() => ({})); } catch (e) { j = { error: { code: 0, message: String(e && e.message || e) } }; }
+    const api = mmOn && !mmDown ? "mm" : "cloud", ep = api === "mm" ? "/marketing_messages" : "/messages";
+    if (dry) { r.would.push({ from_phone_id: pid, url: graph + "/" + pid + ep, api, payload }); room--; continue; }
+    let res = null, j = {}, code0 = 0, usedApi = api, fbWhy = "";
+    const post = async (path) => { let rs = null, jj = {}; try { rs = await f(graph + "/" + pid + path, { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); jj = await rs.json().catch(() => ({})); } catch (e) { jj = { error: { code: 0, message: String(e && e.message || e) } }; } return [rs, jj]; };
+    [res, j] = await post(ep);
+    if (api === "mm" && !(res && res.ok) && mmNotReady(j && j.error)) {   // v817 - MM refused as "not set up": once more on /messages, and stay there this step
+      fbWhy = ("code " + (Number(j.error.code) || 0) + ": " + String(j.error.message || "")).slice(0, 200); mmDown = true; usedApi = "cloud_fallback";
+      r.mm_fallback = fbWhy; await putJ(env, "camp_mm_fallback_" + c.id, { at: new Date(now).toISOString(), why: fbWhy });
+      [res, j] = await post("/messages");
+    }
     const wamid = j && j.messages && j.messages[0] && j.messages[0].id;
     if (res && res.ok && wamid) {
-      room--; r.sent++; s24.push(now); sentIds.push(wamid);
-      await putJ(env, "camp_msg_" + wamid, { cid: c.id, d, at: new Date(now).toISOString(), st: "sent", link: code || undefined });
+      room--; r.sent++; s24.push(now); sentIds.push(wamid); r.api = Object.assign(r.api || {}, { [usedApi]: ((r.api || {})[usedApi] || 0) + 1 });
+      await putJ(env, "camp_msg_" + wamid, { cid: c.id, d, at: new Date(now).toISOString(), st: "sent", link: code || undefined, api: usedApi, fallback: fbWhy || undefined });
+      if (k.skip_code) delete k.skip_code;   // v817 - a delivered send clears the 131049 mark
       await statusRow(env, wamid, { cid: c.id, d, sent: new Date(now).toISOString() });
       k.last_mkt = new Date(now).toISOString(); k.last_camp = c.id; k.last_wamid = wamid; await putJ(env, "camp_contact_" + d, k);
       if (code) { const L = await getJ(env, "camp_link_" + code, null); if (L) { L.wamid = wamid; await putJ(env, "camp_link_" + code, L); } }
       if (bo && bo.n) { await env.MEETINGS.delete("camp_backoff_" + c.id); bo.n = 0; }   // a good send ends the back-off run
     } else {
-      code0 = Number(j && j.error && j.error.code) || 0; r.errors = (r.errors || []).concat([{ d: d.slice(0, 5) + "...", code: code0, msg: String(j && j.error && j.error.message || "").slice(0, 100) }]).slice(-10);
+      code0 = Number(j && j.error && j.error.code) || 0; r.errors = (r.errors || []).concat([{ d: d.slice(0, 5) + "...", code: code0, api: usedApi, msg: String(j && j.error && j.error.message || "").slice(0, 100) }]).slice(-10);
       if (BACKOFF.includes(code0)) {   // v726 - nothing was sent: not a send, not a failure; this person goes first next time; wait and retry
         await bump(env, c.id, (x) => { x.err[code0] = (x.err[code0] || 0) + 1; x.backoffs = (x.backoffs || 0) + 1; });
         if (fromWait) wi--; else pos--;
