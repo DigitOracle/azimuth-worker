@@ -53,6 +53,9 @@ export const SECTIONS = [
   { id: "schedule", name: "Schedule", slides: [12], prefixes: ["schedule", "week_", "day_", "focus"], source: "Weekly schedule" },
   { id: "mantra", name: "Mantra & close", slides: [14, 15], prefixes: ["mantra", "challenge", "close", "closing"], source: "Team mantra (fixed)" },
 ];
+// v813 (Najjuko's walkthrough 8 Nov: "slide one and slide three" meant nothing to her) - each section says in plain words where it shows in the deck
+export const WHERE = { theme: "the opening slide and the theme slide", market: "the four market slides", recognition: "the recognition slide", announcements: "the announcements slide",
+  celebrations: "the celebrations slide", tip: "the tip-of-the-week slide", schedule: "the week-ahead slide", mantra: "the mantra and closing slides" };
 export const FIXED_SLIDES = [2, 13];   // agenda and Q&A: locked, nothing to fill
 // the run of show (about 30 minutes)
 export const SEGMENTS = [
@@ -280,7 +283,7 @@ export async function cardAction(env, b, nowIso) {
   const c = await getCard(env, b.date); if (!c) return [404, { ok: false, error: "There is no huddle card for that date." }];
   const now = nowIso || new Date().toISOString(), a = String(b.action || ""), sid = String(b.section || "");
   const locked = ["Presented", "Closed"].includes(c.status);
-  const formActs = ["same", "edit", "skip", "pick", "accept", "accept_momo"];
+  const formActs = ["same", "edit", "skip", "pick", "accept", "accept_momo", "momo_edit"];
   if (locked && formActs.includes(a)) return [409, { ok: false, error: "This huddle has been presented; the form is closed." }];
   if (formActs.includes(a) && a !== "pick" && a !== "accept" && !SEC[sid]) return [400, { ok: false, error: "Which section?" }];
   if (a === "same") {
@@ -310,6 +313,12 @@ export async function cardAction(env, b, nowIso) {
     if (sid === "market") { if (!c.market.momo_pending) return [409, { ok: false, error: "Nothing to accept." }]; c.market.momo_pending = false; c.market.by = "her"; await marketOutputs(env, c); }
     else { const d = c.momo && c.momo[sid]; if (!d || !d.lines) return [404, { ok: false, error: "Momo has no draft for that section." }]; d.accepted = true; c.sections[sid] = { state: "momo", at: now }; }
     logIt(c, "accept momo " + sid); formChanged(c);
+  } else if (a === "momo_edit") {   // v813 - her own wording for a section Momo drafted (or a section with no form fields yet): saved only when she taps Save
+    if (sid === "market") return [400, { ok: false, error: "Change the market topics with the ticks." }];
+    const lines = (Array.isArray(b.lines) ? b.lines : String(b.text || "").split("\n")).map((x) => String(x).replace(/\s+/g, " ").trim().slice(0, 300)).filter(Boolean).slice(0, 12);
+    if (!lines.length) return [400, { ok: false, error: "Nothing to save: type the text first." }];
+    c.momo = c.momo || {}; c.momo[sid] = Object.assign({}, c.momo[sid] || {}, { lines, accepted: true, edited: true });
+    c.sections[sid] = { state: "edit", at: now }; logIt(c, "momo edit " + sid); formChanged(c);
   } else if (a === "review") {   // v812 - last week's action: done / notdone / carry (carried items join this week's actions)
     const x = (c.last_actions || []).find((y) => y.id === String(b.id || "")), v = String(b.verdict || "");
     if (!x || !["done", "notdone", "carry"].includes(v)) return [400, { ok: false, error: "Which action, and done, not done or carry?" }];
@@ -444,7 +453,7 @@ const CSS = '<style>:root{--gr:#2F7D5B;--ink:#1C2321;--gold:#C5A56A;--teal:#0A4F
 export function cardPage(c, key) {
   const k = encodeURIComponent(key);
   if (!c || c.stub) return '<a class=back href="/momo?key=' + k + '">&#8592; Momo</a><div class=tag>MONDAY HUDDLE</div><h1>Huddle</h1><div class=hc><p class=hs>' + esc(c ? nextStep(c) : "No card yet.") + "</p></div>";
-  const D = { card: cardOut(c), prev: null, key, sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, source: s.source })) };
+  const D = { card: cardOut(c), prev: null, key, sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, source: s.source, where: WHERE[s.id] || "" })) };
   return '<a class=back href="/momo?key=' + k + '">&#8592; Momo</a><div class=tag>MONDAY HUDDLE · PRIVATE</div>' + CSS
     + '<div id=hud></div><div class=sheet id=sh><div class=in id=shi></div></div>'
     + '<script>var HD=' + jsonIn(D) + ';</script><script>' + CARD_JS + '</script>';
@@ -489,17 +498,21 @@ function openSec(id){var s=sec(id),src=(HD.sections.filter(function(x){return x.
  if(id==="market")return openMarket();
  var keys=s.keys.concat(Object.keys(P).filter(function(k){return ((HD.secOf||{})[k]===id)&&s.keys.indexOf(k)<0}));
  var skipped=(C.skip_slides||[]).length&&s.slides.every(function(n){return C.skip_slides.indexOf(n)>=0});
- var h='<h2>'+e(s.name)+'</h2><p class=hs>Slides '+s.slides.join(", ")+' · '+e(src)+'</p>';
+ var wh=(HD.sections.filter(function(x){return x.id===id})[0]||{}).where||"";var h='<h2>'+e(s.name)+'</h2><p class=hs>Shown on '+e(wh)+' (slide'+(s.slides.length>1?'s ':' ')+s.slides.join(" and ")+') · '+e(src)+'</p>';
  var md=(C.momo||{})[id];if(md&&md.lines)h+='<div class=mo><label>'+(md.accepted?"Momo's draft · accepted":"Drafted by Momo")+'</label>'+md.lines.map(function(l){return '<p>'+e(l)+'</p>'}).join("")+(md.note?'<p class=mn>'+e(md.note)+'</p>':'')+(md.accepted?'':'<button type=button class=btn id=bmomo>Accept</button>')+'</div>';
  if(!keys.length)h+='<p class=hs>No fields of this section are in the form yet.</p>';
  keys.forEach(function(k){var dr=C.drafted_by_claude.indexOf(k)>=0;h+='<div class=fv><label>'+e(k)+(dr?'<span class=dc>drafted by Claude</span>':'')+'</label><div class=lw>Last week: '+show(P[k])+'</div><textarea data-k="'+e(k)+'" style="display:none">'+e(typeof C.form[k]==="string"?C.form[k]:C.form[k]==null?"":JSON.stringify(C.form[k]))+'</textarea></div>'});
- h+='<div class=two><button type=button class=btn id=bsame>Same</button><button type=button class="btn alt" id=bedit>Edit</button></div>';
+ h+='<div class=two id=bsr><button type=button class=btn id=bsame>Same as last week</button><button type=button class="btn alt" id=bedit>Edit</button></div>';
+ var mdl=(md&&md.lines)?md.lines.join("\n"):"";
+ h+='<div id=bedw style="display:none"><p class=hs>'+(keys.length?'Change the text above, then tap Save.':'Write what goes on '+e(wh)+', one line per point, then tap Save.')+'</p>'+(keys.length?'':'<textarea id=bmed style="width:100%;box-sizing:border-box;min-height:120px;border:1px solid #E3DDD1;border-radius:10px;padding:8px;font:500 .9rem IBM Plex Sans,sans-serif;background:#FFFDF9">'+e(mdl)+'</textarea>')+'<div class=two><button type=button class=btn id=bsave>Save</button><button type=button class="btn alt" id=bcancel>Cancel</button></div></div>';
  h+='<div class=sw><span>Skip slide'+(s.slides.length>1?"s":"")+' this week</span><input type=checkbox id=bskip '+(skipped?"checked":"")+'></div>';
  if(s.done)h+='<button type=button class="btn alt" id=breo>Mark not done</button>';
  $("shi").innerHTML=h;$("sh").classList.add("on");
  if($("bmomo"))$("bmomo").onclick=function(){api({action:"accept_momo",section:id},closeSh)};
  $("bsame").onclick=function(){api({action:"same",section:id},closeSh)};
- $("bedit").onclick=function(){var tas=$("shi").querySelectorAll("textarea");if(tas.length&&tas[0].style.display==="none"){tas.forEach(function(t){t.style.display="block"});$("bedit").textContent="Save";return}var v={};tas.forEach(function(t){var k=t.getAttribute("data-k"),x=t.value,o=C.form[k];if(o!=null&&typeof o!=="string"){try{x=JSON.parse(x)}catch(er){}}v[k]=x});api({action:"edit",section:id,values:v},closeSh)};
+ $("bedit").onclick=function(){$("shi").querySelectorAll("textarea[data-k]").forEach(function(t){t.style.display="block"});$("bsr").style.display="none";$("bedw").style.display="block";var f=$("shi").querySelector("textarea[data-k]")||$("bmed");if(f)f.focus()};   // v813 - Edit opens the text; only Save saves
+ $("bcancel").onclick=function(){openSec(id)};
+ $("bsave").onclick=function(){var tas=$("shi").querySelectorAll("textarea[data-k]");if(tas.length){var v={};tas.forEach(function(t){var k=t.getAttribute("data-k"),x=t.value,o=C.form[k];if(o!=null&&typeof o!=="string"){try{x=JSON.parse(x)}catch(er){}}v[k]=x});api({action:"edit",section:id,values:v},closeSh)}else{var tx=$("bmed").value;if(!tx.trim()){$("bmed").focus();return}api({action:"momo_edit",section:id,text:tx},closeSh)}};
  $("bskip").onchange=function(){api({action:"skip",section:id,on:this.checked},closeSh)};
  if($("breo"))$("breo").onclick=function(){api({action:"reopen",section:id},closeSh)};
 }
