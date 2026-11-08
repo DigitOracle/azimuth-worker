@@ -55,7 +55,106 @@ export function niceName(name, developer) {
 }
 export function tidyLaunches(snap) {
   if (!snap || !Array.isArray(snap.rows)) return snap;
-  return Object.assign({}, snap, { rows: snap.rows.map((r) => { if (!r || !r.project) return r; const [p, d] = niceName(r.project, r.developer); return (p === r.project && d === r.developer) ? r : Object.assign({}, r, { project: p, developer: d }); }) });
+  const rows = snap.rows.map((r) => { if (!r || !r.project) return r; const [p, d] = niceName(r.project, r.developer); return (p === r.project && d === r.developer) ? r : Object.assign({}, r, { project: p, developer: d }); });
+  return Object.assign({}, snap, { rows: mergeLaunches(rows) });   // v811
+}
+
+// v811 (Kendall 8 Nov 2026, "Go ahead"): TRUTHFUL LAUNCHES. Najjuko: "Raw District 2" showed as new, but it is two months old and mostly sold.
+// The 04:00 collector (naj-market-pulse scripts/launch_truth.py) now merges name variants into one project, dates each project by order of
+// trust (first off-plan sale on the register ~ a news article that states the launch > register start date > the developer's earliest post >
+// our first sighting) and sets a status from the register. The same rules are here so a card ages correctly between runs and an older
+// snapshot (no project_id) still shows one card per project.
+const ROMAN = { ii: "2", iii: "3", iv: "4", vi: "6", vii: "7", viii: "8", ix: "9" };
+const DEV_STOP = new Set(["developments", "development", "properties", "real", "estate", "group", "llc", "the"]);
+const plain = (s) => String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const devWords = (d) => new Set((plain(d).match(/[a-z0-9]+/g) || []).filter((w) => !DEV_STOP.has(w)));
+export function baseName(name, dev) {
+  let s = plain(name).replace(/\([^)]*\)/g, " "), phase = "";
+  const m = s.match(/\s+by\s+(.+)$/);
+  if (m) { const tail = m[1].match(/[a-z0-9]+/g) || [], dw = devWords(dev); if (dw.size && tail.some((w) => dw.has(w))) { phase = tail.filter((w) => !dw.has(w)).join(" "); s = s.slice(0, m.index); } }
+  s = (s.match(/[a-z0-9]+/g) || []).map((w) => ROMAN[w] || w).join(" ");
+  const pm = s.match(/\b(tower|phase|building|block|cluster|bldg)\s+([a-z0-9]{1,3})\b/);
+  if (pm) { phase = (pm[1] + " " + pm[2] + (phase ? " " + phase : "")).trim(); s = (s.slice(0, pm.index) + " " + s.slice(pm.index + pm[0].length)).trim(); }
+  return [s.replace(/\s+/g, " ").trim(), phase];
+}
+// one card per project: the collector's project_id when present; else the same scheme by base name and developer whose register areas agree
+// (a variant with no register area joins a single-area scheme). Two register areas are never merged.
+export function mergeLaunches(rows) {
+  const list = (rows || []).filter(Boolean), groups = new Map(), order = [];
+  const keyOf = (r) => {
+    if (!r.project) return "k:" + (r.key || Math.random());
+    if (r.project_id) return "id:" + r.project_id;
+    const [b] = baseName(r.project, r.developer), dw = [...devWords(r.developer)].sort().join(" ");
+    return dw && b.length >= 3 ? "nm:" + dw + "|" + b : "k:" + (r.key || r.project);
+  };
+  for (const r of list) { const k = keyOf(r); if (!groups.has(k)) { groups.set(k, []); order.push(k); } groups.get(k).push(r); }
+  const out = [];
+  for (const k of order) {
+    const rs = groups.get(k);
+    if (rs.length === 1) { out.push(rs[0]); continue; }
+    const areas = [...new Set(rs.map((r) => plain(r.area_dld).trim()).filter(Boolean))];
+    const parts = areas.length > 1 ? areas.map((a) => rs.filter((r) => plain(r.area_dld).trim() === a)).concat([rs.filter((r) => !plain(r.area_dld).trim())]).filter((x) => x.length) : [rs];
+    for (const p of parts) out.push(p.length === 1 ? p[0] : combine(p));
+  }
+  return out;
+}
+function combine(rs) {
+  const rank = (r) => (r.pic ? 4 : 0) + (r.registered ? 2 : 0) + (baseName(r.project, r.developer)[1] ? 0 : 1);
+  const s = rs.slice().sort((a, b) => rank(b) - rank(a) || (b.sources_n || 0) - (a.sources_n || 0));
+  const c = Object.assign({}, s[0]);
+  const plainOne = s.find((r) => !baseName(r.project, r.developer)[1]);
+  c.project = plainOne ? plainOne.project : String(c.project || "").replace(/\s*,?\s*(Tower|Phase|Building|Block|Cluster)\b.*$/i, "");
+  const minD = (f) => rs.map((r) => r[f]).filter(Boolean).sort()[0] || null;
+  for (const o of s.slice(1)) {
+    for (const f of ["area", "area_dld", "district", "zone", "units", "sizes", "plan", "handover", "pic", "pic_credit", "pic_link", "brochure", "start_date"]) if (!c[f] && o[f]) c[f] = o[f];
+    if (o.from_aed && (!c.from_aed || o.from_aed < c.from_aed)) c.from_aed = o.from_aed;
+    c.links = [...new Set([...(c.links || []), ...(o.links || [])])].slice(0, 4);
+    c.sources_n = (c.sources_n || 0) + (o.sources_n || 0);
+    c.registered = c.registered || o.registered;
+  }
+  c.first_seen = minD("first_seen");
+  if (!c.project_id) {   // an older snapshot: recompute from the parts (never invents a date)
+    c.first_sale_date = minD("first_sale_date");
+    c.sales_n = rs.reduce((a, r) => a + (Number(r.sales_n) || 0), 0);
+    c.planned_units = rs.reduce((a, r) => a + (Number(r.planned_units) || 0), 0);
+    c.sales_30d = rs.reduce((a, r) => a + (Number(r.sales_30d) || 0), 0);
+    const ld = minD("launch_date");
+    if (c.first_sale_date && (!ld || c.first_sale_date <= ld)) { c.launch_date = c.first_sale_date; c.launch_basis_kind = "register_sale"; }
+    else if (ld) { c.launch_date = ld; c.launch_basis_kind = (rs.find((r) => r.launch_date === ld) || {}).launch_basis_kind; }
+    c.towers = rs.filter((r) => r.dld_project_number).map((r) => ({ name: r.project, dld_project_number: r.dld_project_number, planned_units: r.planned_units, sold: r.sales_n }));
+  }
+  c.merged_keys = [...new Set([...(c.merged_keys || []), ...rs.map((r) => r.key)])];
+  return c;
+}
+export const STATUS_LABEL = { eoi: "EOI / allocation pending", coming_soon: "Coming soon", nearly_sold_out: "Nearly sold out", just_launched: "Just launched", selling: "Selling" };
+// the same rules as launch_truth.status_of: EOI first (0 register sales is not unsold), then nothing selling, nearly sold out, just launched, selling
+export function launchStatus(r, today) {
+  const sold = Number(r.sales_n) || 0, planned = Number(r.planned_units) || 0;
+  const pct = planned > 0 ? Math.round(1000 * sold / planned) / 10 : null;
+  const ld = r.launch_date || null, sd = r.start_date || null, dd = (a) => Math.round((Date.parse(today) - Date.parse(a)) / 864e5);
+  const eoi = !!(r.eoi_note || r.status === "eoi" || r.eoi);
+  let st;
+  if (eoi && sold < Math.max(20, 0.05 * planned)) st = "eoi";
+  else if (!sold) st = (!r.registered || (sd && sd > today) || !ld || ld > today) ? "coming_soon" : (dd(ld) <= 30 ? "just_launched" : "selling");
+  else if (pct !== null && pct >= 85) st = "nearly_sold_out";
+  else if (ld && dd(ld) >= 0 && dd(ld) <= 30) st = "just_launched";
+  else st = "selling";
+  return { status: st, label: STATUS_LABEL[st], pct };
+}
+// "Launched 13 Aug 2026 · 448 sold", "Launched 2 Feb 2026 (Khaleej Times)", "Register start 15 Nov 2026", "Launch date unknown"
+export function launchSay(r, today) {
+  const d = dSay(r.launch_date), k = r.launch_basis_kind || "";
+  if (!d) return "Launch date unknown";
+  const sold = Number(r.sales_n) || 0, sl = sold ? " · " + nf(sold) + " sold" : "";
+  if (today && r.launch_date > today) return (k === "register_start" ? "Register start " : "Launches ") + d;
+  if (k === "news") return "Launched " + d + (r.launch_source ? " (" + r.launch_source + ")" : "") + sl;
+  if (k === "register_sale") return "Launched " + d + sl;
+  if (k === "register_start") return "Register start " + d + sl;
+  return "Seen since " + d + " (no register or press launch date)";
+}
+export function statusSay(r, today) {
+  const s = launchStatus(r, today);
+  return s.label + ((s.status === "selling" || s.status === "nearly_sold_out") && s.pct !== null ? " · " + s.pct.toFixed(0) + "% sold" : "");
 }
 export const safePic = (u) => /\/img\/l(?:pic|thumb)_[\w-]+$/.test(String(u || ""));   // our own face-checked copies only
 const NAVY = "#1F2B44", GOLD = "#C5A56A", CREAM = "#FAF6EE", INK = "#202020", MUTE = "#5F6B66", PALE = "#EEE7D8";
@@ -67,8 +166,10 @@ const IC = {
 };
 
 // one launch's facts, from the card row and its report-data entry
+const gstToday = () => new Date(Date.now() + 4 * 3600000).toISOString().slice(0, 10);
 function facts(r) {
-  return [["bed", "Unit types", r.units || "Not stated"], ["ruler", "Sizes", r.sizes || "Not stated"], ["plan", "Payment plan", r.plan ? r.plan + " plan" : "Not stated"],
+  const t = gstToday();   // v811: the launch date (by its basis) and the register status / % sold lead the facts; "first seen" is not shown
+  return [["note", "Launch", launchSay(r, t)], ["pin", "Status", statusSay(r, t)], ["bed", "Unit types", r.units || "Not stated"], ["ruler", "Sizes", r.sizes || "Not stated"], ["plan", "Payment plan", r.plan ? r.plan + " plan" : "Not stated"],
     ["key", "Handover", r.handover || "Not stated"]];
 }
 // v802 (Kendall 7 Nov: a Meraas masterplan aerial was on two different projects): a picture that appears under more than one launch is a
@@ -199,7 +300,7 @@ export function launchPage(r, e, n, total, sub, by) {
   const price = r.from_aed ? "from " + aedShort(r.from_aed) : "";
   const tiles = facts(r).map(([ic, lab, v]) => '<div class=tl>' + I(IC[ic]) + '<div><b>' + lab.toUpperCase() + '</b><p>' + esc(v) + "</p></div></div>").join("");
   const status = r.registered ? "On the Dubai Land Department register" + (r.dld_project_number ? " (project " + esc(r.dld_project_number) + ")" : "") : "Launched, not yet on the Dubai Land Department register";
-  const notes = [status, r.zone ? "Dubai 2040: " + r.zone : "", (r.sources_n || 0) + " source" + (r.sources_n === 1 ? "" : "s") + ", first seen " + dSay(r.first_seen)].filter(Boolean).join(" · ");
+  const notes = [status, r.dev_vs_register || "", r.campaign_note || "", r.eoi_note || "", (r.sources_n || 0) + " source" + (r.sources_n === 1 ? "" : "s")].filter(Boolean).join(" · ");   // v811: no "first seen"
   const near = ((e && e.near) || []).map((x) => '<tr><th>' + esc(x.lab) + '</th><td class=nm>' + esc(x.name) + '</td><td>' + x.km.toFixed(1) + " km " + esc(cmp(x.dir)) + "</td></tr>").join("")
     + ((e && e.marks) || []).map((x) => '<tr><th>' + esc(x.name) + '</th><td class=nm></td><td>' + x.km.toFixed(1) + " km " + esc(cmp(x.dir)) + "</td></tr>").join("");
   const src = (e && e.source ? e.source : "") + ((r.links || []).length ? " · " + (r.links || []).slice(0, 2).map((u) => esc(u.replace(/^https?:\/\/(www\.)?/, ""))).join(" · ") : "");
@@ -287,7 +388,7 @@ export function coverPage(rows, data, title, sub, total, by, dna) {
   if (rows.length === 1) {
     const r = rows[0], e = data[r.key], p = picsOf(r, e)[0], d = dnaFor(dna, r.developer);
     const price = r.from_aed ? "from " + aedShort(r.from_aed) : "";
-    const chips = [r.handover ? ["key", "Handover " + r.handover] : null, r.registered ? ["note", "On the register" + (r.dld_project_number ? ", project " + r.dld_project_number : "")] : ["note", "Launched, not yet on the register"],
+    const chips = [["note", launchSay(r, gstToday())], ["pin", statusSay(r, gstToday())], r.handover ? ["key", "Handover " + r.handover] : null, r.registered ? ["note", "On the register" + (r.dld_project_number ? ", project " + r.dld_project_number : "")] : ["note", "Launched, not yet on the register"],
       r.zone ? ["pin", "Dubai 2040: " + r.zone] : null].filter(Boolean).map(([ic, t]) => "<span class=chip>" + I(IC[ic], 22) + esc(t) + "</span>").join("");
     return '<section class="pg cover one">' + head
       + (p ? '<div class=chero><img src="' + esc(p.url) + '" alt=""><span class=cr>Image: ' + esc(p.credit || (e && e.credit) || "") + "</span></div>" : '<div class="chero none"><span>' + esc(String(r.developer || "?").slice(0, 1)) + "</span></div>")
@@ -361,6 +462,7 @@ export function periodRange(period, today, from, to) {
 }
 export function pickRows(snapRows, keys) {
   const by = new Map((snapRows || []).map((r) => [r.key, r]));
+  for (const r of snapRows || []) for (const k of (r && r.merged_keys) || []) if (!by.has(k)) by.set(k, r);   // v811: a merged variant's key opens its project
   return [...new Set(keys || [])].map((k) => by.get(k)).filter((r) => r && r.project && (r.area || r.from_aed)).slice(0, 10);
 }
 

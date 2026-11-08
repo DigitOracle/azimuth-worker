@@ -1,7 +1,12 @@
 // v799 - MOMO "NEW LAUNCHES" (Kendall, 7 Nov 2026), for Kendall and Najjuko. Reads the same snapshot the 05:00 feed reads (KV img_launches,
 // written by the 04:00 refresh from the announced projects layer): one store, two views. Light cream, 2-up cards, icons not emojis. Each card:
 // project, developer, area, from AED (as advertised), unit types, plan, handover, a confidence chip, sources count, last seen, links.
-// Filters (v802): This week / All / Filter (a sheet: developer, Dubai 2040 zone, sort) / Reset; first 20, then Show more. Nothing here is for a client sheet: prices are as advertised until the developer's sheet confirms.
+// Filters (v802): This week / All / Filter (a sheet: developer, Dubai 2040 zone, sort) / Reset; first 20, then Show more.
+// v811 (Kendall 8 Nov 2026, "Go ahead"): truthful launches. One card per project (name variants merged), the launch date by its basis
+// ("Launched 13 Aug 2026 · 448 sold", "Launched 2 Feb (Khaleej Times)", "Launch date unknown") and a status pill (EOI / allocation pending,
+// Coming soon, Just launched, Selling with % sold, Nearly sold out) on every card; sorted by launch_date, not first_seen. Tabs This week /
+// Hot this month (off-plan register sales, last 30 days) / Coming soon / All; Filter: developer, Area (register area and district: the
+// Dubai 2040 zone stays in the data, off the filter), launch dates (last 30 days / 4 months / 12 months / custom), sort. Nothing here is for a client sheet: prices are as advertised until the developer's sheet confirms.
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const svg = (d, s) => '<svg viewBox="0 0 24 24" width="' + (s || 14) + '" height="' + (s || 14) + '" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
@@ -26,7 +31,7 @@ const ago = (iso, today) => { const d = Math.round((Date.parse(today) - Date.par
 // Kendall 7 Nov (on the 375 px preview): a picture on every card (the newest video's thumbnail, tap = open the video; an Instagram
 // picture copied into KV; else the developer's initial), small "Image: <channel>" credit; only cards with an area or a starting price;
 // registered launches too, one card per project, with a status chip; filter by Dubai 2040 zone.
-import { safePic, tidyLaunches } from "./launch_report.js";   // v800 - only our own face-checked picture copies are ever shown (Kendall 7 Nov: no faces)
+import { safePic, tidyLaunches, launchStatus, launchSay } from "./launch_report.js";   // v800 - only our own face-checked picture copies are ever shown (Kendall 7 Nov: no faces)
 const shown = (r) => r && r.project && (r.area || r.from_aed);
 const mq = (u) => String(u || "").replace("/hqdefault.jpg", "/mqdefault.jpg");
 const seenOn = (k) => (k || []).filter((x) => x === "youtube" || x === "instagram" || x === "news").map((x) => x === "youtube" ? "YouTube" : x === "instagram" ? "Instagram" : "the news");
@@ -61,6 +66,43 @@ export function picCounts(rows) {
 export const picOk = (r, counts) => safePic(r.pic) && picBelongs(r) && (!counts || !counts.get(r.pic) || counts.get(r.pic).size <= 1);
 export const isLaunch = (r) => !r || r.launch !== false;   // v802: the snapshot marks portfolio rows launch:false (kept for "All", off "This week" and the feed)
 
+// v811: the Area filter value of a card (register area and district, lower case, "|" separated) and the options offered
+export const areaKey = (r) => [...new Set([r.area_dld, r.district].filter(Boolean).map((x) => String(x).toLowerCase()))].join("|");
+export const areaOptions = (rows) => [...new Set((rows || []).flatMap((r) => [r.district, r.area_dld]).filter(Boolean))].sort();
+// v811: the page's lists as one pure function (the page script does the same on the cards): tab week | hot | soon | all; dev; area; days
+// (launch_date within the last N days) or from / to on launch_date; sorted by launch_date newest first (unknown dates last), hot by sales.
+// v811 sort: launched (date <= today) newest first; a launch due within 30 days (Kore, register start 15 Nov) counts as today, so it leads;
+// a date further out (a 2027 register start) is not a launch yet: after the dated ones, soonest first; unknown dates last.
+export function launchRank(la, today) {
+  if (!la) return [2, ""];
+  if (la <= today) return [0, la];
+  const soon = new Date(Date.parse(today) + 30 * 864e5).toISOString().slice(0, 10);
+  return la <= soon ? [0, today + "~" + String(99999999 - Number(la.replace(/-/g, "")))] : [1, la];   // soonest first
+}
+const byLaunch = (today) => (a, b) => {
+  const x = launchRank(a.launch_date, today), y = launchRank(b.launch_date, today);
+  if (x[0] !== y[0]) return x[0] - y[0];
+  if (x[0] === 1) return x[1].localeCompare(y[1]);
+  return y[1].localeCompare(x[1]) || String(b.first_seen || "").localeCompare(String(a.first_seen || ""));
+};
+export function selectLaunches(rows, o, today) {
+  o = o || {};
+  const back = (n) => new Date(Date.parse(today) - n * 864e5).toISOString().slice(0, 10), week = back(7);
+  const list = (rows || []).filter(shown).filter((r) => {
+    const la = r.launch_date || "", st = launchStatus(r, today).status;
+    if (o.tab === "week" && !(la >= week && la <= today && isLaunch(r))) return false;
+    if (o.tab === "hot" && !(Number(r.sales_30d) > 0)) return false;
+    if (o.tab === "soon" && !(st === "coming_soon" || st === "eoi")) return false;
+    if (o.dev && String(r.developer || "").toLowerCase().indexOf(String(o.dev).toLowerCase()) < 0) return false;
+    if (o.area && ("|" + areaKey(r) + "|").indexOf("|" + String(o.area).toLowerCase() + "|") < 0) return false;
+    if (o.days && !(la && la >= back(o.days))) return false;
+    if ((o.from || o.to) && !(la && (!o.from || la >= o.from) && (!o.to || la <= o.to))) return false;
+    return true;
+  });
+  if (o.tab === "hot") return list.sort((a, b) => (Number(b.sales_30d) || 0) - (Number(a.sales_30d) || 0));
+  return list.sort(byLaunch(today));
+}
+
 export function launchCards(rows, today, q) {
   q = q || "";
   const list = (rows || []).filter(shown), counts = picCounts(list);
@@ -69,7 +111,11 @@ export function launchCards(rows, today, q) {
     const line = (ic, v) => (v ? '<div class=ln>' + svg(LAUNCH_ICONS[ic]) + '<span>' + esc(v) + '</span></div>' : "");
     const links = (r.links || []).slice(0, 2).map((u, i) => '<a class=lk href="' + esc(u) + '" target=_blank rel="noopener noreferrer">' + svg(LAUNCH_ICONS.link, 12) + (/youtube|youtu\.be/.test(u) ? "Video" : /instagram/.test(u) ? "Post" : "Source") + (i ? " " + (i + 1) : "") + "</a>").join("");
     const ini = '<span class=pini>' + esc(String(r.developer || "?").slice(0, 1)) + '</span>';
-    const fresh = r.first_seen && r.first_seen >= day && r.first_seen <= today && isLaunch(r);
+    const fresh = r.launch_date && r.launch_date >= day && r.launch_date <= today && isLaunch(r);   // v811: launched in the last day, never "first seen"
+    const ls = launchStatus(r, today), say = launchSay(r, today);
+    const pill = '<span class="st st-' + ls.status + '">' + esc(ls.label) + ((ls.status === "selling" || ls.status === "nearly_sold_out") && ls.pct !== null ? " · " + ls.pct.toFixed(0) + "% sold" : "") + "</span>";
+    const warn = [r.dev_vs_register, r.campaign_note, ls.status === "eoi" ? r.eoi_note : ""].filter(Boolean).map((t) => '<div class=wn>' + esc(t) + "</div>").join("");
+    const towers = (r.towers || []).length > 1 ? '<div class=tw>' + esc(r.towers.length + " parts: " + r.towers.map((t) => t.name).join(", ")) + "</div>" : "";
     const badge = fresh ? '<span class=nw>New</span>' : "";
     const ok = picOk(r, counts);
     const pic = ok
@@ -78,14 +124,15 @@ export function launchCards(rows, today, q) {
     const price = aedShort(r.from_aed);
     const rq = "/momo/work/launches/report" + q + (q ? "&" : "?") + "k=" + encodeURIComponent(r.key || "");
     const share = r.key ? '<div class=sh><a class=ib href="' + esc(rq) + '" aria-label="Report as PDF" title="Report as PDF">' + svg(LAUNCH_ICONS.pdf, 16) + '</a><a class="ib wa" href="' + esc(rq + "&wa=1") + '" aria-label="Send on WhatsApp" title="Send on WhatsApp">' + svg(LAUNCH_ICONS.wa, 16) + '</a></div>' : "";   // v800, v802 icons
-    return '<div class=lc data-i="' + i + '" data-key="' + esc(r.key || "") + '" data-project="' + esc(r.project) + '" data-dev="' + esc(r.developer) + '" data-first="' + esc(r.first_seen) + '" data-zone="' + esc(r.zone || "") + '" data-l="' + (isLaunch(r) ? 1 : 0) + '" data-price="' + (Number(r.from_aed) || "") + '" data-ps="' + esc(price) + '" data-pic="' + (ok ? esc(r.pic) : "") + '" data-conf="' + esc(r.confidence || "") + '" data-q="' + esc([r.project, r.developer, r.area, r.area_dld, r.district, r.zone].filter(Boolean).join(" ").toLowerCase()) + '">'
+    return '<div class=lc data-i="' + i + '" data-key="' + esc(r.key || "") + '" data-project="' + esc(r.project) + '" data-dev="' + esc(r.developer) + '" data-first="' + esc(r.first_seen) + '" data-launch="' + esc(r.launch_date || "") + '" data-rk="' + launchRank(r.launch_date, today).join("|") + '" data-st="' + ls.status + '" data-s30="' + (Number(r.sales_30d) || 0) + '" data-area="' + esc(areaKey(r)) + '" data-zone="' + esc(r.zone || "") + '" data-l="' + (isLaunch(r) ? 1 : 0) + '" data-price="' + (Number(r.from_aed) || "") + '" data-ps="' + esc(price) + '" data-pic="' + (ok ? esc(r.pic) : "") + '" data-conf="' + esc(r.confidence || "") + '" data-q="' + esc([r.project, r.developer, r.area, r.area_dld, r.district, r.zone].filter(Boolean).join(" ").toLowerCase()) + '">'
       + pic + '<div class=bd>'
-      + '<span class="st ' + (r.registered ? "st-on" : "st-off") + '">' + (r.registered ? "On the register" : "Not yet registered") + '</span>'
+      + pill
       + '<b class=pj>' + esc(r.project) + '</b><div class=dv>' + esc(r.developer) + '</div>'
+      + '<div class="lt' + (r.launch_date ? "" : " unk") + '">' + svg(LAUNCH_ICONS.launch, 12) + '<span>' + esc(say) + '</span></div>' + warn + towers
       + (price ? '<div class=pr>from ' + esc(price) + '<small>as advertised</small></div>' : "")
-      + line("pin", r.area) + line("zone", r.zone ? "Dubai 2040: " + r.zone : "") + line("bed", r.units)
+      + line("pin", [r.area, r.district && r.district !== r.area ? r.district : ""].filter(Boolean).join(" · ")) + line("bed", r.units)
       + line("size", r.sizes) + line("plan", r.plan ? r.plan + " plan" : "") + line("key", r.handover ? "handover " + r.handover : "")
-      + '<div class=ft>' + svg(LAUNCH_ICONS.eye, 12) + '<span>seen ' + esc(ago(r.last_seen, today)) + ' &middot; ' + nf(r.sources_n) + ' source' + (r.sources_n === 1 ? "" : "s") + '</span></div>'
+      + '<div class=ft>' + svg(LAUNCH_ICONS.eye, 12) + '<span>' + (Number(r.sales_30d) ? nf(r.sales_30d) + " sold last 30 days &middot; " : "") + (r.registered ? "on the register" : "not yet registered") + ' &middot; ' + nf(r.sources_n) + ' source' + (r.sources_n === 1 ? "" : "s") + '</span></div>'
       + '<div class=ac>' + (links ? '<div class=lks>' + links + '</div>' : "<span></span>") + share + '</div></div></div>';
   }).join("");
 }
@@ -94,48 +141,51 @@ export function launchCards(rows, today, q) {
 const REPORT_PANEL = '<div id=rpp class=rpp hidden>'
   + '<div class=rpl>Period</div><div class=rpb><button type=button data-p=week class=on>This week</button><button type=button data-p=month>This month</button><button type=button data-p=30>Last 30 days</button><button type=button data-p=custom>Custom</button></div>'
   + '<div id=rpc hidden class=rpd><input type=date id=rpf aria-label=From><input type=date id=rpt aria-label=To></div>'
-  + '<div class=rpl>Launches <span id=rpn></span></div><div class=rph>Tick up to 10. The developer and zone in Filter apply.</div><div id=rpk class=rpk></div>'
+  + '<div class=rpl>Launches <span id=rpn></span></div><div class=rph>Tick up to 10. By launch date; the developer and area in Filter apply.</div><div id=rpk class=rpk></div>'
   + '<div class=rpa><a id=rpm class=bt href="#">' + svg(LAUNCH_ICONS.report, 14) + 'Make the report</a><a id=rpw class="bt wa" href="#">' + svg(LAUNCH_ICONS.wa, 14) + 'Send on WhatsApp</a></div></div>';
 
 const FILTER_SHEET = '<div id=fs class=fs hidden><div class=fsb role=dialog aria-modal=true aria-label="Filter launches"><div class=fsh><b>Filter</b><button type=button id=fsx class=fsx aria-label=Close>' + svg('<path d="M6 6l12 12M18 6L6 18"/>', 18) + '</button></div>'
   + '<label class=rpl for=dv>Developer</label><input id=dv list=dvl autocomplete=off placeholder="By developer" aria-label="By developer"><datalist id=dvl>__DEVS__</datalist>'
-  + '<label class=rpl for=zn>Dubai 2040 zone</label><select id=zn aria-label="By Dubai 2040 zone"><option value="">By Dubai 2040 zone</option>__ZONES__</select>'
-  + '<div class=rpl>Sort</div><div class=rpb id=so><button type=button data-s=new class=on>Newest</button><button type=button data-s=lo>Lowest price</button><button type=button data-s=hi>Highest price</button></div>'
+  + '<label class=rpl for=zn>Area</label><select id=zn aria-label="By area"><option value="">Any area</option>__ZONES__</select>'
+  + '<div class=rpl>Launch date</div><div class=rpb id=lr><button type=button data-r="" class=on>Any</button><button type=button data-r=30>Last 30 days</button><button type=button data-r=122>Last 4 months</button><button type=button data-r=365>Last 12 months</button><button type=button data-r=custom>Custom</button></div>'
+  + '<div id=lrc hidden class=rpd><input type=date id=lrf aria-label="Launched from"><input type=date id=lrt aria-label="Launched to"></div>'
+  + '<div class=rpl>Sort</div><div class=rpb id=so><button type=button data-s=new class=on>Newest launch</button><button type=button data-s=lo>Lowest price</button><button type=button data-s=hi>Highest price</button></div>'
   + '<div class=rpa><button type=button id=fsg class=bt>Show launches</button><button type=button id=fsc class="bt wa">Clear</button></div></div></div>';
 
 export function launchesPage(key, rk, snap, today) {
   const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const rows = ((snap && snap.rows) || []).filter(shown);
   const devs = [...new Set(rows.map((r) => r.developer).filter(Boolean))].sort();
-  const zones = [...new Set(rows.map((r) => r.zone).filter(Boolean))].sort();
+  const zones = areaOptions(rows);   // v811: register areas and districts in the data (the 2040 zone is off the filter)
   const week = new Date(Date.parse(today) - 7 * 86400000).toISOString().slice(0, 10);
   const qa = (snap && Array.isArray(snap.qa) && snap.qa.length) ? '<p class=qa>' + svg(LAUNCH_ICONS.eye, 12) + ' Check: ' + esc(snap.qa.join("; ")) + '</p>' : "";
   return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO &middot; MARKET</div><h1>New launches</h1>'
-    + '<p class=ld>New and registered launches &middot; prices as advertised</p>' + qa
+    + '<p class=ld>Dated by the register\'s first sale or the press, newest first &middot; prices as advertised</p>' + qa
     + '<div class=sr>' + svg('<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>', 16) + '<input id=qs type=search autocomplete=off placeholder="Search project, developer or area" aria-label="Search launches"></div>'
     + '<div id=qsl class=qsl hidden role=listbox aria-label="Matching launches"></div>'
-    + '<div class=fl><button type=button class=on data-f=week>This week</button><button type=button data-f=all>All</button><button type=button id=fo class=fo>' + svg('<path d="M4 6h16M7 12h10M10 18h4"/>', 14) + '<span id=fol>Filter</span></button><button type=button id=rs class=rs>Reset</button></div>'
+    + '<div class=fl><button type=button class=on data-f=week>This week</button><button type=button data-f=hot>Hot this month</button><button type=button data-f=soon>Coming soon</button><button type=button data-f=all>All</button><button type=button id=fo class=fo>' + svg('<path d="M4 6h16M7 12h10M10 18h4"/>', 14) + '<span id=fol>Filter</span></button><button type=button id=rs class=rs>Reset</button></div>'
     + '<div class=cl><span id=cn class=cn></span><button type=button id=rpo class=rpo>' + svg(LAUNCH_ICONS.report, 14) + 'Make a report</button></div>'
-    + REPORT_PANEL + FILTER_SHEET.replace("__DEVS__", devs.map((d) => '<option value="' + esc(d) + '">').join("")).replace("__ZONES__", zones.map((z) => '<option>' + esc(z) + '</option>').join(""))
-    + '<div class=grid id=lg data-week="' + week + '">' + launchCards(rows, today, q) + '</div><div class=em id=le hidden>' + svg(LAUNCH_ICONS.launch, 28) + '<p>No new launches this week.</p></div>'
+    + REPORT_PANEL + FILTER_SHEET.replace("__DEVS__", devs.map((d) => '<option value="' + esc(d) + '">').join("")).replace("__ZONES__", zones.map((z) => '<option value="' + esc(z.toLowerCase()) + '">' + esc(z) + '</option>').join(""))
+    + '<div class=grid id=lg data-today="' + today + '" data-week="' + week + '">' + launchCards(selectLaunches(rows, {}, today), today, q) + '</div><div class=em id=le hidden>' + svg(LAUNCH_ICONS.launch, 28) + '<p>No launches match.</p></div>'
     + '<button type=button id=mo class=mo hidden>Show more</button>'
     + '<p class=nt>Updated ' + esc((snap && snap.generated) || "not yet") + ' by the 04:00 refresh.</p>'
     + '<style>.ld{color:#5F6B66;font-size:.88rem;margin:0 0 10px}.qa{font-size:.78rem;color:#8A6F3E;background:#F4E9D2;border-radius:10px;padding:6px 10px;margin:0 0 10px}'
     + '.qsl{background:#fff;border:1px solid #C5A56A;border-radius:16px;margin:-4px 0 10px;overflow:hidden;box-shadow:0 8px 20px rgba(0,0,0,.08)}.qsl button{display:flex;width:100%;gap:10px;align-items:center;text-align:left;border:0;border-bottom:1px solid #EEE7D8;background:#fff;padding:10px 14px;font:500 .9rem "IBM Plex Sans",sans-serif;color:#1C2321}.qsl button:last-child{border-bottom:0}.qsl b{display:block;color:#0A4F4A}.qsl i{display:block;font-style:normal;font-size:.78rem;color:#5F6B66}.qsl .qn{padding:12px 14px;font-size:.85rem;color:#5F6B66}.lc.hit{outline:3px solid #C5A56A;outline-offset:2px}'
     + '.sr{display:flex;align-items:center;gap:8px;background:#FFFDF9;border:1px solid #C5A56A;border-radius:999px;padding:4px 12px;margin:0 0 10px;color:#8A6F3E}.sr input{flex:1;min-width:0;border:0;background:transparent;font:500 .9rem "IBM Plex Sans",sans-serif;color:#1C2321;outline:none;padding:6px 0}'
-    + '.fl{display:flex;gap:6px;margin:0 0 8px;flex-wrap:nowrap}.fl button{flex:0 1 auto;min-width:0;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;border:1px solid #C5A56A;background:#FFFDF9;color:#0A4F4A;border-radius:999px;padding:7px 12px;font:600 .8rem "IBM Plex Sans",sans-serif}.fl button.on{background:#0A4F4A;color:#fff;border-color:#0A4F4A}.fl .rs{margin-left:auto;border-color:#D8D1C4;color:#5F6B66}'
+    + '.fl{display:flex;gap:6px;margin:0 0 8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.fl button{flex:0 0 auto;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;border:1px solid #C5A56A;background:#FFFDF9;color:#0A4F4A;border-radius:999px;padding:7px 12px;font:600 .8rem "IBM Plex Sans",sans-serif}.fl button.on{background:#0A4F4A;color:#fff;border-color:#0A4F4A}.fl .rs{margin-left:auto;border-color:#D8D1C4;color:#5F6B66}'
     + '.cl{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px}.cn{font:600 .8rem "IBM Plex Sans",sans-serif;color:#5F6B66}.rpo{display:inline-flex;gap:6px;align-items:center;border:1px solid #0A4F4A;background:#FFFDF9;color:#0A4F4A;border-radius:999px;padding:7px 12px;font:600 .8rem "IBM Plex Sans",sans-serif}.rpo.on{background:#0A4F4A;color:#fff}'
     + '.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.lc{background:#FFFDF9;border:1px solid #E7E1D6;border-radius:16px;display:flex;flex-direction:column;min-width:0;overflow:hidden}.bd{padding:8px 10px 10px;display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}'
     + '.pic{position:relative;display:block;aspect-ratio:16/10;background:#EFE6D4;overflow:hidden}.pic img{width:100%;height:100%;object-fit:cover;display:block}.pic .pini{display:none}.pic.none{display:flex;align-items:center;justify-content:center}.pic.none .pini{display:flex;width:40px;height:40px;border-radius:50%;background:#0A4F4A;color:#F3E7CF;align-items:center;justify-content:center;font:600 1.1rem Fraunces,serif}'
     + '.cr{position:absolute;left:0;right:0;bottom:0;padding:10px 6px 3px;font-size:.58rem;line-height:1.2;color:#fff;background:linear-gradient(transparent,rgba(28,35,33,.62));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + '.play{position:absolute;right:6px;top:6px;width:26px;height:26px;border-radius:50%;background:rgba(10,79,74,.85);color:#fff;display:flex;align-items:center;justify-content:center}.nw{position:absolute;left:6px;top:6px;background:#C5A56A;color:#fff;font:700 .62rem "IBM Plex Sans",sans-serif;letter-spacing:.04em;border-radius:999px;padding:3px 8px;box-shadow:0 1px 4px rgba(0,0,0,.18)}'
-    + '.st{align-self:flex-start;font:600 .62rem "IBM Plex Sans",sans-serif;border-radius:999px;padding:2px 7px;line-height:1.3}.st-on{background:#DCEBE4;color:#0A4F4A}.st-off{background:#F3E7CF;color:#8A6F3E}'
+    + '.st{align-self:flex-start;font:600 .62rem "IBM Plex Sans",sans-serif;border-radius:999px;padding:2px 7px;line-height:1.3}.st-on{background:#DCEBE4;color:#0A4F4A}.st-off{background:#F3E7CF;color:#8A6F3E}.st-just_launched{background:#0A4F4A;color:#fff}.st-selling{background:#DCEBE4;color:#0A4F4A}.st-nearly_sold_out{background:#F6DCCB;color:#8A3E1E}.st-coming_soon{background:#F3E7CF;color:#8A6F3E}.st-eoi{background:#E7E1F3;color:#4A3E8A}'
+    + '.lt{display:flex;gap:5px;align-items:flex-start;font:600 .74rem "IBM Plex Sans",sans-serif;color:#0A4F4A}.lt svg{flex:0 0 12px;margin-top:2px;color:#C5A56A}.lt.unk{color:#8FA39B;font-weight:500}.wn{font-size:.68rem;line-height:1.3;color:#8A3E1E;background:#FBF0E6;border-radius:8px;padding:3px 6px}.tw{font-size:.66rem;color:#5F6B66}'
     + '.pj{font:600 .98rem/1.2 Fraunces,serif;color:#0A4F4A;margin-top:2px;overflow-wrap:anywhere}.dv{font-size:.76rem;color:#8A6F3E;font-weight:600}.pr{font:700 1.02rem Fraunces,serif;color:#1C2321;margin:2px 0}.pr small{display:block;font:500 .64rem "IBM Plex Sans",sans-serif;color:#8FA39B}'
     + '.ln{display:flex;gap:6px;align-items:flex-start;font-size:.78rem;color:#1C2321}.ln svg{flex:0 0 14px;color:#C5A56A;margin-top:2px}.ln span{min-width:0;overflow-wrap:anywhere}'
     + '.ft{display:flex;gap:5px;align-items:center;font-size:.7rem;color:#5F6B66;margin-top:auto;border-top:1px solid #EFE9DE;padding-top:6px}.ac{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}.lks{display:flex;gap:4px;flex-wrap:wrap;min-width:0}.lk{display:inline-flex;gap:3px;align-items:center;font-size:.7rem;color:#0A4F4A;text-decoration:none;border:1px solid #D8CDB8;border-radius:999px;padding:2px 7px}'
     + '.sh{display:flex;gap:6px;flex:0 0 auto}.ib{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#0A4F4A;color:#fff;text-decoration:none}.ib.wa{background:#FFFDF9;color:#0A4F4A;border:1px solid #0A4F4A;box-sizing:border-box}'
     + '.bt{display:inline-flex;gap:5px;align-items:center;justify-content:center;font:600 .82rem "IBM Plex Sans",sans-serif;color:#fff;background:#0A4F4A;text-decoration:none;border:1px solid #0A4F4A;border-radius:999px;padding:9px 14px;flex:1}.bt.wa{background:#FFFDF9;color:#0A4F4A}'
-    + '.rpp{background:#FFFDF9;border:1px solid #E7E1D6;border-radius:16px;padding:12px;margin:0 0 12px}.rpp[hidden],#rpc[hidden],.fs[hidden],.mo[hidden]{display:none}'
+    + '.rpp{background:#FFFDF9;border:1px solid #E7E1D6;border-radius:16px;padding:12px;margin:0 0 12px}.rpp[hidden],#rpc[hidden],#lrc[hidden],.fs[hidden],.mo[hidden]{display:none}'
     + '.rpl{display:block;font:600 .7rem "IBM Plex Mono",monospace;letter-spacing:.08em;color:#8A6F3E;text-transform:uppercase;margin:10px 0 6px}.rph{font-size:.74rem;color:#5F6B66;margin:-2px 0 6px}.rpb{display:flex;gap:6px;flex-wrap:wrap}.rpb button{border:1px solid #C5A56A;background:#fff;color:#0A4F4A;border-radius:999px;padding:6px 12px;font:600 .8rem "IBM Plex Sans",sans-serif}.rpb button.on{background:#0A4F4A;color:#fff;border-color:#0A4F4A}'
     + '.rpd{display:flex;gap:6px;margin-top:6px}.rpd input{flex:1;min-width:0;border:1px solid #C5A56A;border-radius:10px;padding:6px}'
     + '.rpk{border:1px solid #EFE9DE;border-radius:12px;background:#fff;max-height:340px;overflow:auto}.rk{display:grid;grid-template-columns:40px minmax(0,1fr) auto 22px;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid #EFE9DE;cursor:pointer}.rk:last-child{border-bottom:0}'
@@ -145,14 +195,16 @@ export function launchesPage(key, rk, snap, today) {
     + '.fsb input,.fsb select{width:100%;box-sizing:border-box;border:1px solid #C5A56A;background:#fff;color:#0A4F4A;border-radius:12px;padding:10px 12px;font:600 .88rem "IBM Plex Sans",sans-serif}'
     + '.mo{display:block;width:100%;margin:12px 0 0;border:1px solid #0A4F4A;background:#FFFDF9;color:#0A4F4A;border-radius:999px;padding:10px;font:600 .86rem "IBM Plex Sans",sans-serif}'
     + '.em{display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px 0;border:1px dashed #D8D1C4;border-radius:18px;color:#5F6B66}.em[hidden]{display:none}.em p{margin:0}.nt{font-size:.72rem;color:#8FA39B;margin-top:14px}</style>'
-    + '<script>(function(){var g=document.getElementById("lg"),e=document.getElementById("le"),s=document.getElementById("dv"),z=document.getElementById("zn"),Q=document.getElementById("qs"),M=document.getElementById("mo"),CN=document.getElementById("cn"),FS=document.getElementById("fs"),FL=document.getElementById("fol"),f="week",srt="new",lim=20,W=g.getAttribute("data-week");function has(c,a,v){return !v||String(c.getAttribute(a)||"").toLowerCase().indexOf(v.trim().toLowerCase())>=0}'
-    + 'function num(c){var p=Number(c.getAttribute("data-price"));return p>0?p:null}function order(){var L=[].slice.call(g.children);L.sort(function(a,b){var ia=+a.getAttribute("data-i"),ib=+b.getAttribute("data-i");if(srt==="new"){var fa=a.getAttribute("data-first")||"",fb=b.getAttribute("data-first")||"";return fa<fb?1:fa>fb?-1:ia-ib}var pa=num(a),pb=num(b);if(pa===null&&pb===null)return ia-ib;if(pa===null)return 1;if(pb===null)return -1;return srt==="lo"?pa-pb:pb-pa});L.forEach(function(c){g.appendChild(c)})}'
-    + 'function run(keep){if(!keep)lim=20;var n=0;[].forEach.call(g.children,function(c){var ok=(f==="all"||(c.getAttribute("data-first")>=W&&c.getAttribute("data-l")==="1"))&&has(c,"data-dev",s.value)&&(!z.value||c.getAttribute("data-zone")===z.value)&&Q.value.trim().toLowerCase().split(/\\s+/).every(function(w){return has(c,"data-q",w)});c.setAttribute("data-ok",ok?"1":"0");if(ok)n++;c.style.display=ok&&n<=lim?"":"none"});e.hidden=n>0;M.hidden=n<=lim;M.textContent="Show more ("+(n-lim)+" more)";CN.textContent=f==="week"?n+" this week":n+" launch"+(n===1?"":"es");var a=(s.value?1:0)+(z.value?1:0)+(srt!=="new"?1:0);FL.textContent=a?"Filter \\u00b7 "+a:"Filter"}'
-    + 'M.onclick=function(){lim+=20;run(true)};[].forEach.call(document.querySelectorAll(".fl button[data-f]"),function(b){b.onclick=function(){f=b.getAttribute("data-f");[].forEach.call(document.querySelectorAll(".fl button[data-f]"),function(x){x.classList.toggle("on",x===b)});run()}});'
+    + '<script>(function(){var g=document.getElementById("lg"),e=document.getElementById("le"),s=document.getElementById("dv"),z=document.getElementById("zn"),Q=document.getElementById("qs"),M=document.getElementById("mo"),CN=document.getElementById("cn"),FS=document.getElementById("fs"),FL=document.getElementById("fol"),f="week",srt="new",lim=20,W=g.getAttribute("data-week"),TD=g.getAttribute("data-today"),LR="",LF=document.getElementById("lrf"),LT=document.getElementById("lrt"),LC=document.getElementById("lrc");function has(c,a,v){return !v||String(c.getAttribute(a)||"").toLowerCase().indexOf(v.trim().toLowerCase())>=0}'
+    + 'function num(c){var p=Number(c.getAttribute("data-price"));return p>0?p:null}function order(){var L=[].slice.call(g.children);L.sort(function(a,b){var ia=+a.getAttribute("data-i"),ib=+b.getAttribute("data-i");if(f==="hot"&&srt==="new"){return (+b.getAttribute("data-s30"))-(+a.getAttribute("data-s30"))||ia-ib}if(srt==="new"){var ka=(a.getAttribute("data-rk")||"2|").split("|"),kb=(b.getAttribute("data-rk")||"2|").split("|");if(ka[0]!==kb[0])return ka[0]<kb[0]?-1:1;if(ka[0]==="1")return ka[1]<kb[1]?-1:ka[1]>kb[1]?1:ia-ib;return ka[1]<kb[1]?1:ka[1]>kb[1]?-1:ia-ib}var pa=num(a),pb=num(b);if(pa===null&&pb===null)return ia-ib;if(pa===null)return 1;if(pb===null)return -1;return srt==="lo"?pa-pb:pb-pa});L.forEach(function(c){g.appendChild(c)})}'
+    + 'function run(keep){if(!keep)lim=20;var n=0;[].forEach.call(g.children,function(c){var la=c.getAttribute("data-launch")||"",st=c.getAttribute("data-st"),ok=(f==="all"||(f==="week"&&la>=W&&la<=TD&&c.getAttribute("data-l")==="1")||(f==="hot"&&+c.getAttribute("data-s30")>0)||(f==="soon"&&(st==="coming_soon"||st==="eoi")))&&has(c,"data-dev",s.value)&&(!z.value||("|"+c.getAttribute("data-area")+"|").indexOf("|"+z.value+"|")>=0)&&inRange(la)&&Q.value.trim().toLowerCase().split(/\\s+/).every(function(w){return has(c,"data-q",w)});c.setAttribute("data-ok",ok?"1":"0");if(ok)n++;c.style.display=ok&&n<=lim?"":"none"});e.hidden=n>0;M.hidden=n<=lim;M.textContent="Show more ("+(n-lim)+" more)";CN.textContent=f==="week"?n+" this week":f==="hot"?n+" selling this month":f==="soon"?n+" coming soon":n+" launch"+(n===1?"":"es");var a=(s.value?1:0)+(z.value?1:0)+(srt!=="new"?1:0)+(LR?1:0);FL.textContent=a?"Filter \\u00b7 "+a:"Filter"}'
+    + 'M.onclick=function(){lim+=20;run(true)};[].forEach.call(document.querySelectorAll(".fl button[data-f]"),function(b){b.onclick=function(){f=b.getAttribute("data-f");[].forEach.call(document.querySelectorAll(".fl button[data-f]"),function(x){x.classList.toggle("on",x===b)});order();run()}});'
+    + 'function back(n){return new Date(Date.parse(TD)-n*864e5).toISOString().slice(0,10)}function inRange(la){if(!LR)return true;if(LR==="custom"){if(!LF.value&&!LT.value)return true;return !!la&&(!LF.value||la>=LF.value)&&(!LT.value||la<=LT.value)}return !!la&&la>=back(+LR)}window.__lrange=inRange;'
+    + 'function setLR(v){LR=v;[].forEach.call(document.querySelectorAll("#lr button"),function(x){x.classList.toggle("on",x.getAttribute("data-r")===v)});LC.hidden=v!=="custom";run()}[].forEach.call(document.querySelectorAll("#lr button"),function(b){b.onclick=function(){setLR(b.getAttribute("data-r"))}});LF.onchange=function(){run()};LT.onchange=function(){run()};'
     + 'function sheet(o){FS.hidden=!o}document.getElementById("fo").onclick=function(){sheet(true)};document.getElementById("fsx").onclick=function(){sheet(false)};document.getElementById("fsg").onclick=function(){sheet(false)};FS.onclick=function(ev){if(ev.target===FS)sheet(false)};'
     + 'function setSort(v){srt=v;[].forEach.call(document.querySelectorAll("#so button"),function(x){x.classList.toggle("on",x.getAttribute("data-s")===v)});order();run()}[].forEach.call(document.querySelectorAll("#so button"),function(b){b.onclick=function(){setSort(b.getAttribute("data-s"))}});'
-    + 'document.getElementById("fsc").onclick=function(){s.value="";z.value="";setSort("new");s.dispatchEvent(new Event("change"))};s.oninput=function(){run()};s.onchange=function(){run()};z.onchange=function(){run()};Q.oninput=function(){run()};'
-    + 'document.getElementById("rs").onclick=function(){Q.value="";s.value="";z.value="";f="week";[].forEach.call(document.querySelectorAll(".fl button[data-f]"),function(x){x.classList.toggle("on",x.getAttribute("data-f")==="week")});setSort("new");s.dispatchEvent(new Event("change"))};order();run()})()</script>'
+    + 'document.getElementById("fsc").onclick=function(){s.value="";z.value="";LF.value="";LT.value="";setLR("");setSort("new");s.dispatchEvent(new Event("change"))};s.oninput=function(){run()};s.onchange=function(){run()};z.onchange=function(){run()};Q.oninput=function(){run()};'
+    + 'document.getElementById("rs").onclick=function(){Q.value="";s.value="";z.value="";LF.value="";LT.value="";setLR("");f="week";[].forEach.call(document.querySelectorAll(".fl button[data-f]"),function(x){x.classList.toggle("on",x.getAttribute("data-f")==="week")});setSort("new");s.dispatchEvent(new Event("change"))};order();run()})()</script>'
     + '<script>(function(){var Q=document.getElementById("qs"),L=document.getElementById("qsl"),g=document.getElementById("lg");if(!Q||!L||!g)return;'
     + 'function hide(){L.hidden=true;L.innerHTML=""}'
     + 'function show(){var v=Q.value.trim().toLowerCase();if(v.length<2){hide();return}var hits=[];[].forEach.call(g.children,function(c){var t=((c.getAttribute("data-q")||"")+" "+(c.getAttribute("data-project")||"")+" "+(c.getAttribute("data-dev")||"")).toLowerCase();if(t.indexOf(v)>=0)hits.push(c)});'
@@ -164,7 +216,7 @@ export function launchesPage(key, rk, snap, today) {
     + '<script>(function(){var o=document.getElementById("rpo"),P=document.getElementById("rpp"),g=document.getElementById("lg"),K=document.getElementById("rpk"),N=document.getElementById("rpn"),C=document.getElementById("rpc"),F=document.getElementById("rpf"),T=document.getElementById("rpt"),s=document.getElementById("dv"),z=document.getElementById("zn"),per="week",today=' + JSON.stringify(today) + ';'
     + 'function ago(n){return new Date(Date.parse(today)-n*864e5).toISOString().slice(0,10)}function range(){if(per==="month")return[today.slice(0,8)+"01",today];if(per==="30")return[ago(30),today];if(per==="custom"&&F.value&&T.value)return[F.value,T.value];return[ago(7),today]}'
     + 'function mk(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}'
-    + 'function list(){var r=range(),out=[];[].forEach.call(g.children,function(c){var f=c.getAttribute("data-first");if(f>=r[0]&&f<=r[1]&&(per!=="week"||c.getAttribute("data-l")==="1")&&(!s.value||String(c.getAttribute("data-dev")||"").toLowerCase().indexOf(s.value.trim().toLowerCase())>=0)&&(!z.value||c.getAttribute("data-zone")===z.value))out.push(c)});'
+    + 'function list(){var r=range(),out=[];[].forEach.call(g.children,function(c){var f=c.getAttribute("data-launch");if(f&&f>=r[0]&&f<=r[1]&&(per!=="week"||c.getAttribute("data-l")==="1")&&(!s.value||String(c.getAttribute("data-dev")||"").toLowerCase().indexOf(s.value.trim().toLowerCase())>=0)&&(!z.value||("|"+c.getAttribute("data-area")+"|").indexOf("|"+z.value+"|")>=0))out.push(c)});'
     + 'K.innerHTML="";if(!out.length)K.appendChild(mk("div","rke","No launches in this period."));out.forEach(function(c,i){var l=mk("label","rk"),p=mk("span","rkp"),pic=c.getAttribute("data-pic");if(pic)p.style.backgroundImage="url(\\""+pic+"\\")";else p.textContent=String(c.getAttribute("data-dev")||"?").slice(0,1);var t=mk("span","rkt");t.appendChild(mk("b","",c.getAttribute("data-project")));t.appendChild(mk("i","",c.getAttribute("data-dev")));var b=document.createElement("input");b.type="checkbox";b.value=c.getAttribute("data-key");b.checked=i<10;b.onchange=cap;b.setAttribute("aria-label",c.getAttribute("data-project"));l.appendChild(p);l.appendChild(t);l.appendChild(mk("span","rkv",c.getAttribute("data-ps")||""));l.appendChild(b);K.appendChild(l)});cap()}'
     + 'function cap(){var on=K.querySelectorAll("input:checked");if(on.length>10)this.checked=false;on=K.querySelectorAll("input:checked");N.textContent="("+on.length+" ticked)";var k=[].map.call(on,function(b){return b.value}).join(","),r=range(),u=' + JSON.stringify("/momo/work/launches/report" + q + (q ? "&" : "?")) + '+"k="+encodeURIComponent(k)+"&period="+per+(per==="custom"?"&from="+r[0]+"&to="+r[1]:"");document.getElementById("rpm").href=u;document.getElementById("rpw").href=u+"&wa=1"}'
     + 'o.onclick=function(){P.hidden=!P.hidden;o.classList.toggle("on",!P.hidden);if(!P.hidden)list()};[].forEach.call(document.querySelectorAll(".rpb button[data-p]"),function(b){b.onclick=function(){per=b.getAttribute("data-p");[].forEach.call(document.querySelectorAll(".rpb button[data-p]"),function(x){x.classList.toggle("on",x===b)});C.hidden=per!=="custom";list()}});F.onchange=list;T.onchange=list;s.addEventListener("change",function(){if(!P.hidden)list()});z.addEventListener("change",function(){if(!P.hidden)list()})})()</script>';
